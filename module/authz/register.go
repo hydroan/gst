@@ -3,7 +3,6 @@ package authz
 import (
 	"os"
 	"regexp"
-	"time"
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
@@ -146,17 +145,7 @@ func Register() {
 	)
 
 	log := zap.S()
-	go func() {
-		for !database.Inited() {
-			zap.S().Infow("waiting database inited", "module", "authz")
-			time.Sleep(500 * time.Millisecond)
-		}
-
-		for !router.Started() {
-			zap.S().Infow("waiting router started", "module", "authz")
-			time.Sleep(500 * time.Millisecond)
-		}
-
+	router.OnRoutesReady(func(routes map[string][]string) error {
 		// re-create all permissions
 		if err := database.Database[*modelauthz.Permission](nil).Transaction(func(tx types.Database[*modelauthz.Permission]) error {
 			// list all permissions.
@@ -174,7 +163,7 @@ func Register() {
 
 			// create permissions.
 			permissions = make([]*modelauthz.Permission, 0)
-			for endpoint, methods := range model.Routes {
+			for endpoint, methods := range routes {
 				for _, method := range methods {
 					permissions = append(permissions, &modelauthz.Permission{
 						Resource: convertGinPathToCasbinKeyMatch3(endpoint),
@@ -190,9 +179,10 @@ func Register() {
 			return nil
 		}); err != nil {
 			log.Error(err)
-			panic(err)
+			return err
 		}
-	}()
+		return nil
+	})
 }
 
 func convertGinPathToCasbinKeyMatch3(ginPath string) string {

@@ -164,6 +164,10 @@ func Exec(db *gorm.DB, sql string, values any) error { return db.Exec(sql, value
 // NOTE: This function should be called after InitDatabase() has been invoked, as it
 // relies on the background goroutine started by InitDatabase to process the channels.
 // Calling Wait() before InitDatabase() will return immediately with a warning.
+//
+// Wait only observes database queues that already contain work. If another
+// subsystem, such as module registration, can still call model.Register, drain
+// that subsystem first and then call Wait so its tables and records are visible.
 func Wait() {
 	// Check if InitDatabase has been called and the processing goroutine has started
 	if startedTable.Load() == 0 {

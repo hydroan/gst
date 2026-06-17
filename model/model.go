@@ -19,11 +19,6 @@ var ErrMobileLength = errors.New("mobile number length must be 11")
 var (
 	mu sync.Mutex
 
-	// Routes map an API path to its allowed HTTP methods.
-	// The key is the API endpoint path (e.g., "/user/:id")
-	// and the value is a list of supported HTTP methods (e.g., GET, POST, DELETE).
-	Routes = make(map[string][]string)
-
 	// TableChan is a buffered channel for asynchronous table registration.
 	// It receives table models from Register() function for processing by InitDatabase.
 	// The channel supports concurrent registration and real-time processing during initialization.

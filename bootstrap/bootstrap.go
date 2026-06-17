@@ -84,7 +84,8 @@ func Bootstrap() error {
 	if err := Init(); err != nil {
 		return err
 	}
-	// Wait for all database table and records to be created.
+	// First database drain: create tables and seed records registered before
+	// provider/module initialization, typically by model package init functions.
 	helper.Wait()
 
 	Register(
@@ -145,14 +146,31 @@ func Bootstrap() error {
 
 	initialized = true
 
-	return Init()
+	if err := Init(); err != nil {
+		return err
+	}
+
+	// module.Init has released module.Use goroutines. Wait for module registration
+	// first because modules can call model.Register and enqueue tables/records.
+	// This must run before the following helper.Wait; otherwise helper.Wait may
+	// check the database queues before modules have added their entries.
+	module.Wait()
+
+	// Second database drain: create tables and seed records added by modules
+	// during Bootstrap after module.Wait has made those registrations visible.
+	helper.Wait()
+
+	return nil
 }
 
 func Run() error {
 	defer Cleanup()
 
-	// Module system may register model after initialization.
-	// Wait for all tables and records registered by module system to be created.
+	// Final pre-server drain for modules registered after Bootstrap but before
+	// Run. Keep module.Wait before helper.Wait: late modules may enqueue database
+	// tables/records, and helper.Wait can only process entries that already exist.
+	// Routes-ready hooks run inside router.Run after this barrier.
+	module.Wait()
 	helper.Wait()
 
 	RegisterGo(

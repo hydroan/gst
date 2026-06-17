@@ -16,7 +16,6 @@ import (
 	"github.com/hydroan/gst/controller"
 	"github.com/hydroan/gst/internal/openapigen"
 	"github.com/hydroan/gst/middleware"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -35,11 +34,38 @@ var (
 
 	started atomic.Uint32
 	mu      sync.Mutex
+
+	routeMu sync.RWMutex
+	routes  = make(map[string][]string)
+
+	routesReadyMu    sync.Mutex
+	routesReadyHooks []func(routes map[string][]string) error
 )
 
 var globalErrors = make([]error, 0)
 
-func Started() bool { return started.Load() > 0 }
+func routesSnapshot() map[string][]string {
+	routeMu.RLock()
+	defer routeMu.RUnlock()
+
+	snapshot := make(map[string][]string, len(routes))
+	for endpoint, methods := range routes {
+		snapshot[endpoint] = append([]string(nil), methods...)
+	}
+	return snapshot
+}
+
+// OnRoutesReady registers a hook that runs after all routes are registered and before the server starts.
+// The hook receives a route snapshot; mutating it does not change the router registry.
+func OnRoutesReady(fn func(routes map[string][]string) error) {
+	if fn == nil {
+		return
+	}
+
+	routesReadyMu.Lock()
+	defer routesReadyMu.Unlock()
+	routesReadyHooks = append(routesReadyHooks, fn)
+}
 
 func Init() error {
 	gin.SetMode(gin.ReleaseMode)
@@ -91,9 +117,19 @@ func Run() error {
 	}
 
 	addr := net.JoinHostPort(config.App.Server.Listen, strconv.Itoa(config.App.Server.Port))
-	log.Infow("backend server started", "addr", addr, "mode", config.App.Mode, "domain", config.App.Domain)
 	for _, r := range root.Routes() {
 		log.Debugw("", "method", r.Method, "path", r.Path)
+	}
+
+	routesReadyMu.Lock()
+	hooks := append([]func(routes map[string][]string) error(nil), routesReadyHooks...)
+	routesReadyMu.Unlock()
+
+	for _, hook := range hooks {
+		if err := hook(routesSnapshot()); err != nil {
+			log.Errorw("failed to run routes ready hooks", "err", err)
+			return err
+		}
 	}
 
 	server = &http.Server{
@@ -107,6 +143,7 @@ func Run() error {
 
 	// mark the server as started.
 	started.Store(1)
+	log.Infow("backend server started", "addr", addr, "mode", config.App.Mode, "domain", config.App.Domain)
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Errorw("failed to start server", "err", err)
@@ -166,21 +203,6 @@ func Register[M types.Model, REQ types.Request, RSP types.Response](router gin.I
 	}
 }
 
-// func RegisterWithConfig[M types.Model, REQ types.Request, RSP types.Response](router gin.IRouter, rawPath string, cfg *types.ControllerConfig[M], verbs ...consts.HTTPVerb) {
-// 	if validPath(rawPath) {
-// 		register[M, REQ, RSP](router, buildPath(rawPath), buildVerbMap(verbs...), cfg)
-// 	}
-// }
-
-func validPath(rawPath string) bool {
-	rawPath = strings.TrimSpace(rawPath)
-	if len(rawPath) == 0 {
-		zap.S().Warn("empty path, skip register routes")
-		return false
-	}
-	return true
-}
-
 func register[M types.Model, REQ types.Request, RSP types.Response](router gin.IRouter, path string, verbMap map[consts.HTTPVerb]bool, cfg ...*types.ControllerConfig[M]) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -207,35 +229,35 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router gin.I
 	if verbMap[consts.Create] {
 		endpoint := gopath.Join(base, path)
 		router.POST(path, controller.CreateFactory[M, REQ, RSP](cfg...))
-		model.Routes[endpoint] = append(model.Routes[endpoint], http.MethodPost)
+		registerRoute(endpoint, http.MethodPost)
 		middleware.RouteManager.Add(endpoint)
 		go openapigen.Set[M, REQ, RSP](endpoint, consts.Create)
 	}
 	if verbMap[consts.Delete] {
 		endpoint := gopath.Join(base, path)
 		router.DELETE(path, controller.DeleteFactory[M, REQ, RSP](cfg...))
-		model.Routes[endpoint] = append(model.Routes[endpoint], http.MethodDelete)
+		registerRoute(endpoint, http.MethodDelete)
 		middleware.RouteManager.Add(endpoint)
 		go openapigen.Set[M, REQ, RSP](endpoint, consts.Delete)
 	}
 	if verbMap[consts.Update] {
 		endpoint := gopath.Join(base, path)
 		router.PUT(path, controller.UpdateFactory[M, REQ, RSP](cfg...))
-		model.Routes[endpoint] = append(model.Routes[endpoint], http.MethodPut)
+		registerRoute(endpoint, http.MethodPut)
 		middleware.RouteManager.Add(endpoint)
 		go openapigen.Set[M, REQ, RSP](endpoint, consts.Update)
 	}
 	if verbMap[consts.Patch] {
 		endpoint := gopath.Join(base, path)
 		router.PATCH(path, controller.PatchFactory[M, REQ, RSP](cfg...))
-		model.Routes[endpoint] = append(model.Routes[endpoint], http.MethodPatch)
+		registerRoute(endpoint, http.MethodPatch)
 		middleware.RouteManager.Add(endpoint)
 		go openapigen.Set[M, REQ, RSP](endpoint, consts.Patch)
 	}
 	if verbMap[consts.List] {
 		endpoint := gopath.Join(base, path)
 		router.GET(path, controller.ListFactory[M, REQ, RSP](cfg...))
-		model.Routes[endpoint] = append(model.Routes[endpoint], http.MethodGet)
+		registerRoute(endpoint, http.MethodGet)
 		middleware.RouteManager.Add(endpoint)
 		go openapigen.Set[M, REQ, RSP](endpoint, consts.List)
 	}
@@ -243,7 +265,7 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router gin.I
 	if verbMap[consts.Get] {
 		endpoint := gopath.Join(base, path)
 		router.GET(path, controller.GetFactory[M, REQ, RSP](cfg...))
-		model.Routes[endpoint] = append(model.Routes[endpoint], http.MethodGet)
+		registerRoute(endpoint, http.MethodGet)
 		middleware.RouteManager.Add(endpoint)
 		go openapigen.Set[M, REQ, RSP](endpoint, consts.Get)
 	}
@@ -251,28 +273,28 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router gin.I
 	if verbMap[consts.CreateMany] {
 		endpoint := gopath.Join(base, path)
 		router.POST(path, controller.CreateManyFactory[M, REQ, RSP](cfg...))
-		model.Routes[endpoint] = append(model.Routes[endpoint], http.MethodPost)
+		registerRoute(endpoint, http.MethodPost)
 		middleware.RouteManager.Add(endpoint)
 		go openapigen.Set[M, REQ, RSP](endpoint, consts.CreateMany)
 	}
 	if verbMap[consts.DeleteMany] {
 		endpoint := gopath.Join(base, path)
 		router.DELETE(path, controller.DeleteManyFactory[M, REQ, RSP](cfg...))
-		model.Routes[endpoint] = append(model.Routes[endpoint], http.MethodDelete)
+		registerRoute(endpoint, http.MethodDelete)
 		middleware.RouteManager.Add(endpoint)
 		go openapigen.Set[M, REQ, RSP](endpoint, consts.DeleteMany)
 	}
 	if verbMap[consts.UpdateMany] {
 		endpoint := gopath.Join(base, path)
 		router.PUT(path, controller.UpdateManyFactory[M, REQ, RSP](cfg...))
-		model.Routes[endpoint] = append(model.Routes[endpoint], http.MethodPut)
+		registerRoute(endpoint, http.MethodPut)
 		middleware.RouteManager.Add(endpoint)
 		go openapigen.Set[M, REQ, RSP](endpoint, consts.UpdateMany)
 	}
 	if verbMap[consts.PatchMany] {
 		endpoint := gopath.Join(base, path)
 		router.PATCH(path, controller.PatchManyFactory[M, REQ, RSP](cfg...))
-		model.Routes[endpoint] = append(model.Routes[endpoint], http.MethodPatch)
+		registerRoute(endpoint, http.MethodPatch)
 		middleware.RouteManager.Add(endpoint)
 		go openapigen.Set[M, REQ, RSP](endpoint, consts.PatchMany)
 	}
@@ -280,17 +302,33 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router gin.I
 	if verbMap[consts.Import] {
 		endpoint := gopath.Join(base, path)
 		router.POST(path, controller.ImportFactory[M, REQ, RSP](cfg...))
-		model.Routes[endpoint] = append(model.Routes[endpoint], http.MethodPost)
+		registerRoute(endpoint, http.MethodPost)
 		middleware.RouteManager.Add(endpoint)
 		go openapigen.Set[M, REQ, RSP](endpoint, consts.Import)
 	}
 	if verbMap[consts.Export] {
 		endpoint := gopath.Join(base, path)
 		router.GET(path, controller.ExportFactory[M, REQ, RSP](cfg...))
-		model.Routes[endpoint] = append(model.Routes[endpoint], http.MethodGet)
+		registerRoute(endpoint, http.MethodGet)
 		middleware.RouteManager.Add(endpoint)
 		go openapigen.Set[M, REQ, RSP](endpoint, consts.Export)
 	}
+}
+
+func validPath(rawPath string) bool {
+	rawPath = strings.TrimSpace(rawPath)
+	if len(rawPath) == 0 {
+		zap.S().Warn("empty path, skip register routes")
+		return false
+	}
+	return true
+}
+
+func registerRoute(endpoint, method string) {
+	routeMu.Lock()
+	defer routeMu.Unlock()
+
+	routes[endpoint] = append(routes[endpoint], method)
 }
 
 // buildPath normalizes the API path.

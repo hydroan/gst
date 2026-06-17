@@ -29,6 +29,8 @@ package module
 import (
 	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/router"
@@ -37,14 +39,43 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
-var notify = make(chan struct{})
+var (
+	notify      = make(chan struct{})
+	initialized atomic.Bool
 
-// Init notifies the module system that the framework is initialized.
-// After calling Init, modules can start registering models, services, and routes.
+	registerMu      sync.Mutex
+	registerCond    = sync.NewCond(&registerMu)
+	pendingRegister int
+)
+
+// Init releases pending module registrations.
+//
+// Module registration runs asynchronously because module.Use can be called before
+// the framework router and service registries are initialized. Init only opens
+// that gate; callers that need registered models, services, or routes to be
+// visible must call Wait after Init.
 func Init() error {
-	close(notify)
+	if initialized.CompareAndSwap(false, true) {
+		close(notify)
+	}
 
 	return nil
+}
+
+// Wait blocks until pending module.Use and module.UseCustom registrations are complete.
+//
+// It waits for model, service, and route registration only. Database table
+// creation and seed record insertion are handled separately by helper.Wait.
+// Callers that need module-provided tables and seed records to exist must call
+// helper.Wait after Wait, not before it, because module registration can enqueue
+// new model.Register work.
+func Wait() {
+	registerMu.Lock()
+	defer registerMu.Unlock()
+
+	for pendingRegister != 0 {
+		registerCond.Wait()
+	}
 }
 
 // Use registers a module with the framework, automatically setting up model,
@@ -67,7 +98,7 @@ func Init() error {
 //
 // Must be called during application initialization, typically in a Register() function.
 func Use[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[M, REQ, RSP], phases ...consts.Phase) {
-	go func() {
+	startRegister(func() {
 		<-notify
 
 		model.Register[M]()
@@ -113,7 +144,7 @@ func Use[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[
 				registerRouter(mod, route+"/batch", nil, consts.PatchMany)
 			}
 		}
-	}()
+	})
 }
 
 // UseCustom registers a service phase using the module route and the HTTP verb
@@ -121,7 +152,7 @@ func Use[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[
 // It is intended for endpoints that reuse the module route but do not follow the
 // default CRUD route registration pattern.
 func UseCustom[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[M, REQ, RSP], phase consts.Phase) {
-	go func() {
+	startRegister(func() {
 		<-notify
 
 		service.RegisterService[M, REQ, RSP](phase, mod.Service())
@@ -132,7 +163,28 @@ func UseCustom[M types.Model, REQ types.Request, RSP types.Response](mod types.M
 		route = strings.TrimPrefix(route, "/")
 
 		registerRouter(mod, route, nil, phase.ToHTTPVerb())
+	})
+}
+
+func startRegister(fn func()) {
+	registerMu.Lock()
+	pendingRegister++
+	registerMu.Unlock()
+
+	go func() {
+		defer finishRegister()
+		fn()
 	}()
+}
+
+func finishRegister() {
+	registerMu.Lock()
+	defer registerMu.Unlock()
+
+	pendingRegister--
+	if pendingRegister == 0 {
+		registerCond.Broadcast()
+	}
 }
 
 // registerRouter registers an HTTP route with the appropriate router based on mod.Pub().
