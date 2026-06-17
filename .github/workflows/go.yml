@@ -1,0 +1,103 @@
+# This workflow builds and validates a Go project
+# It checks formatting, builds the project, and verifies that the generated demo project compiles
+
+name: Go
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout the repository
+      - uses: actions/checkout@v4
+
+      # Set up Go environment
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Add Go bin to PATH
+        run: echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Install tools and gg
+        run: make install
+
+      - name: Run CI checks
+        run: make check
+
+      # Generate demo project
+      - name: Generate demo project
+        run: |
+          cd examples
+          gg new demo-ci
+
+      # Add user model to demo project
+      - name: Add user model
+        run: |
+          cat > examples/demo-ci/model/user.go <<'EOF'
+          package model
+
+          import (
+            . "github.com/hydroan/gst/dsl"
+            "github.com/hydroan/gst/model"
+          )
+
+          type User struct {
+            Name string
+            Age  string
+
+            model.Base
+          }
+
+          func (User) Design() {
+            Migrate(true)
+
+            Create(func() {
+              Enabled(true)
+            })
+            Delete(func() {
+              Enabled(true)
+            })
+            Update(func() {
+              Enabled(true)
+            })
+            Patch(func() {
+              Enabled(true)
+            })
+            List(func() {
+              Enabled(true)
+            })
+            Get(func() {
+              Enabled(true)
+            })
+            CreateMany(func() {
+              Enabled(true)
+            })
+            DeleteMany(func() {
+              Enabled(true)
+            })
+            UpdateMany(func() {
+              Enabled(true)
+            })
+            PatchMany(func() {
+              Enabled(true)
+            })
+          }
+          EOF
+
+      # Run gg gen inside demo project
+      - name: Run gg gen
+        run: |
+          cd examples/demo-ci
+          gg gen
+
+      # Ensure the generated demo project compiles
+      - name: Build demo project
+        run: go build -C examples/demo-ci ./...

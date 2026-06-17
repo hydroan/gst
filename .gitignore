@@ -1,0 +1,23 @@
+.DS_Store
+*.nogit
+*.nopush
+*.nosync
+*.bak
+*.log
+*.local
+
+logs
+bin
+tmp
+
+resources
+rsync.sh
+TODO
+.dccache
+*.db
+docs
+.trae
+pkg/filetype/testdata/
+
+# Added by ggshield
+.cache_ggshield

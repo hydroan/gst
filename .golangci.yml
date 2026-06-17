@@ -1,0 +1,162 @@
+# golangci-lint configuration for v2.5.0+
+# See: https://golangci-lint.run/docs/configuration/
+
+version: "2"
+
+run:
+  timeout: 10m
+  modules-download-mode: readonly
+
+severity:
+  default: error
+
+linters:
+  # v2 config does not support `disable-all`; use `default: none` instead
+  default: none
+  enable:
+    # Core quality gate.
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+
+    # Error handling.
+    - errorlint
+    - errname
+    - nilerr
+    - nilnil
+    - nilnesserr
+
+    # Resource safety and security.
+    - bodyclose
+    - gosec
+    - rowserrcheck
+    - sqlclosecheck
+
+    # Code hygiene.
+    - misspell
+    - nolintlint
+    - predeclared
+    - revive
+    - unconvert
+
+    # Go modernization.
+    - exptostd
+    - intrange
+    - perfsprint
+    - usestdlibvars
+
+    # Test quality.
+    - testifylint
+    - thelper
+    - usetesting
+
+    # Project constraints.
+    - depguard
+    - gomoddirectives
+    - gomodguard_v2
+
+    # Project-specific checks.
+    - canonicalheader
+    - loggercheck
+    - spancheck
+
+    # Documentation.
+    - godoclint
+
+    # Additional low-noise safeguards.
+    - asciicheck
+    - durationcheck
+    - wastedassign
+
+  # Linter-specific settings (moved under linters.settings for v2)
+  settings:
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: "github.com/pkg/errors"
+              desc: "Use github.com/cockroachdb/errors instead"
+
+    errcheck:
+      check-type-assertions: true
+      exclude-functions:
+        - io.Copy(*bytes.Buffer)
+        - io.Copy(os.Stdout)
+
+    revive:
+      rules:
+        - name: dot-imports
+          arguments:
+            - allowedPackages:
+                - "github.com/hydroan/gst/dsl"
+                - "github.com/hydroan/gst/response"
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: indent-error-flow
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: var-declaration
+        - name: var-naming
+
+    godoclint:
+      # Default set of rules to enable.
+      # Possible values are: `basic`, `all` or `none`.
+      # Default: `basic` (enables `pkg-doc`, `single-pkg-doc`, `start-with-name`, and `deprecated`)
+      default: basic
+      # List of rules to enable in addition to the default set.
+      enable:
+        # Check proper package-level godoc, if any.
+        - pkg-doc
+        # Assert at most one godoc per package.
+        - single-pkg-doc
+        # Check godocs start with the corresponding symbol name.
+        - start-with-name
+        # Check deprecated symbols have proper deprecation notice.
+        - deprecated
+
+    misspell:
+      locale: US
+
+    staticcheck:
+      checks: ["all", "-QF1008", "-ST1001"]
+
+  # Exclusions moved under linters.exclusions for v2
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - std-error-handling
+      - common-false-positives
+      - legacy
+    rules:
+      # Relax complexity in tests
+      - path: _test\.go
+        linters:
+          - gosec
+          - godoclint
+      # Ignore nilerr in specific patterns (example)
+      # - linters:
+      #     - nilerr
+      #   text: "error is not nil but it returns nil"
+      # Revive var-naming: ignore ALL_CAPS (redundant with staticcheck) and underscores in names.
+      - linters:
+          - revive
+        text: "don't use (ALL_CAPS|underscores) in Go names"
+      # Allow package names "types" and "util" (meaningful in our context).
+      - linters:
+          - revive
+        text: "avoid meaningless package names"
+        path: "^(types|util)/|.*/(types|util)/"
+
+issues:
+  # Increase max issues to avoid truncation
+  max-same-issues: 100

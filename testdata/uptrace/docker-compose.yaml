@@ -1,0 +1,80 @@
+services:
+  # ClickHouse database for storing metrics and traces
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.3.3
+    container_name: uptrace-clickhouse
+    restart: on-failure
+    environment:
+      CLICKHOUSE_DB: uptrace
+      CLICKHOUSE_USER: uptrace
+      CLICKHOUSE_PASSWORD: uptrace
+      SHARD: shard1
+      REPLICA: replica1
+      KEEPER_ID: 1
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'localhost:8123/ping']
+      interval: 1s
+      timeout: 1s
+      retries: 30
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+
+  # PostgreSQL database for Uptrace metadata
+  postgres:
+    image: postgres:15-alpine
+    container_name: uptrace-postgres
+    restart: on-failure
+    environment:
+      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_USER: uptrace
+      POSTGRES_PASSWORD: uptrace
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/pgdata
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U uptrace"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Uptrace observability platform
+  uptrace:
+    image: uptrace/uptrace:1.6.0
+    container_name: uptrace-server
+    restart: on-failure
+    volumes:
+      - ./uptrace.yml:/etc/uptrace/uptrace.yml:ro
+    ports:
+      - "14317:14317" # OTLP gRPC receiver
+      - "14318:14318" # Uptrace web UI and OTLP HTTP receiver
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:14318/",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  clickhouse_data:
+    driver: local
+  postgres_data:
+    driver: local
+
+networks:
+  default:
+    name: uptrace-network

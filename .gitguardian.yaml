@@ -1,0 +1,5 @@
+secret:
+  ignored_paths:
+  - tests/**
+  - examples/**
+version: 2

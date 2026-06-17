@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  jaeger:
+    image: jaegertracing/jaeger:latest
+    container_name: jaeger
+    ports:
+      - "5778:5778" # agent admin
+      - "16686:16686" # web UI
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+      - "14250:14250" # gRPC model
+      - "14268:14268" # HTTP model
+      - "9411:9411" # Zipkin
+    command:
+      - "--set"
+      - "receivers.otlp.protocols.http.endpoint=0.0.0.0:4318"
+      - "--set"
+      - "receivers.otlp.protocols.grpc.endpoint=0.0.0.0:4317"
+    environment:
+      - TZ=Asia/Shanghai # ✅ 设置时区，确保和宿主机一致
+    volumes:
+      - /etc/localtime:/etc/localtime:ro # ✅ 同步宿主机时间
+      - /etc/timezone:/etc/timezone:ro # ✅ 同步宿主机时区
+    restart: unless-stopped

@@ -1,0 +1,12 @@
+---
+alwaysApply: true
+---
+
+- 修改完 cmd/gg、internal/codegen、dsl 包的代码后, 需要及时执行 `go install ./cmd/gg` 安装最新版本的 gg 命令.
+- ~/repository/nebula/nebula-backend 项目是以当前框架开发的后端项目, 这个项目通过执行 `gg gen` 命令生成代码, 请记住这个项目的路径, 我们经常需要用到它. 我已经把这个项目软链接到了 examples/nebula.local 目录, 你可以通过 examples/nebula.local 来访问这个项目.
+- 任务完成后需要确保 `make check` 命令运行成功, 代码能编译通过, 代码分析能通过, 执行代码格式化, 代码 lint 能通过, 代码 shadow 能通过.
+- router/router.go, service/service.go, model/model.go 代码是自动生成的, 不用手动删除
+- 禁止在 golib 项目根目录执行 cmd/gg 的任何命令, cmd/gg 很容易破环当前项目代码, 测试 cmd/gg 命令请到 examples/demo 或者 examples/nebula-backend 项目目录下执行.
+- 优先使用 "github.com/cockroachdb/errors" 包来处理错误, 而不是标准库的 errors 包.
+- 注释/文档必须是英文的
+- 系统中使用的 shell 是 fish shell

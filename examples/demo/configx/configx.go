@@ -1,0 +1,4 @@
+package configx
+
+func init() {
+}

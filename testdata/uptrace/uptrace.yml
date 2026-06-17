@@ -1,0 +1,82 @@
+##
+## Uptrace configuration file
+##
+
+##
+## Service configuration
+##
+service:
+  secret: 'your-secret-key-here'
+
+##
+## Site configuration
+##
+site:
+  url: 'http://localhost:14318'
+
+##
+## Listen configuration for HTTP and gRPC servers
+##
+listen:
+  # OTLP/gRPC API for receiving telemetry data
+  grpc:
+    addr: ':14317'
+
+  # OTLP/HTTP API and Uptrace API with Vue UI
+  http:
+    addr: ':14318'
+
+##
+## PostgreSQL database configuration
+##
+pg:
+  addr: 'postgres:5432'
+  user: 'uptrace'
+  password: 'uptrace'
+  database: 'uptrace'
+
+##
+## ClickHouse cluster configuration
+##
+ch_cluster:
+  cluster: 'uptrace_cluster'
+  replicated: false
+  distributed: false
+  shards:
+    - replicas:
+        - addr: 'clickhouse:9000'
+          database: 'uptrace'
+          user: 'uptrace'
+          password: 'uptrace'
+
+##
+## ClickHouse configuration for Uptrace 1.6.0
+##
+ch:
+  addr: 'clickhouse:9000'
+  user: 'uptrace'
+  password: 'uptrace'
+  database: 'uptrace'
+  max_execution_time: 30s
+
+##
+## Authentication configuration
+##
+auth:
+  users:
+    - email: 'admin@uptrace.dev'
+      name: 'Admin'
+      password: 'admin123'
+      notify_by_email: true
+
+##
+## Projects configuration
+##
+projects:
+  - id: 1
+    name: 'Default Project'
+    token: 'project1_secret_token'
+    pinned_attrs:
+      - service_name
+      - host_name
+      - deployment_environment
