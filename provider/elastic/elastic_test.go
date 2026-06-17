@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/araddon/dateparse"
-	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger/zap"
 	"github.com/hydroan/gst/provider/elastic"
@@ -22,12 +21,13 @@ const Index = "test"
 
 func init() {
 	config.SetConfigFile("../../config.ini")
-	bootstrap.Register(
-		config.Init,
-		zap.Init,
-		elastic.Init,
-	)
-	if err := bootstrap.Init(); err != nil {
+	if err := config.Init(); err != nil {
+		panic(err)
+	}
+	if err := zap.Init(); err != nil {
+		panic(err)
+	}
+	if err := elastic.Init(); err != nil {
 		panic(err)
 	}
 }

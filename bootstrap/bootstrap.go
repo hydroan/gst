@@ -65,7 +65,7 @@ func Bootstrap() error {
 		return nil
 	}
 
-	Register(
+	ins.Register(
 		config.Init,
 		pkgzap.Init,
 		logrus.Init,
@@ -81,14 +81,14 @@ func Bootstrap() error {
 		clickhouse.Init,
 		sqlserver.Init,
 	)
-	if err := Init(); err != nil {
+	if err := ins.Init(); err != nil {
 		return err
 	}
 	// First database drain: create tables and seed records registered before
 	// provider/module initialization, typically by model package init functions.
 	helper.Wait()
 
-	Register(
+	ins.Register(
 		// provider
 		redis.Init,
 		gstotel.Init,
@@ -129,24 +129,24 @@ func Bootstrap() error {
 		module.Init,
 	)
 
-	RegisterCleanup(redis.Close)
-	RegisterCleanup(gstotel.Close)
-	RegisterCleanup(kafka.Close)
-	RegisterCleanup(etcd.Close)
-	RegisterCleanup(nats.Close)
-	RegisterCleanup(cassandra.Close)
-	RegisterCleanup(influxdb.Close)
-	RegisterCleanup(memcached.Close)
-	RegisterCleanup(rethinkdb.Close)
-	RegisterCleanup(rocketmq.Close)
-	RegisterCleanup(ldap.Close)
-	RegisterCleanup(controller.Clean)
-	RegisterCleanup(pkgzap.Clean)
-	RegisterCleanup(config.Clean)
+	registerCleanup(redis.Close)
+	registerCleanup(gstotel.Close)
+	registerCleanup(kafka.Close)
+	registerCleanup(etcd.Close)
+	registerCleanup(nats.Close)
+	registerCleanup(cassandra.Close)
+	registerCleanup(influxdb.Close)
+	registerCleanup(memcached.Close)
+	registerCleanup(rethinkdb.Close)
+	registerCleanup(rocketmq.Close)
+	registerCleanup(ldap.Close)
+	registerCleanup(controller.Clean)
+	registerCleanup(pkgzap.Clean)
+	registerCleanup(config.Clean)
 
 	initialized = true
 
-	if err := Init(); err != nil {
+	if err := ins.Init(); err != nil {
 		return err
 	}
 
@@ -164,7 +164,7 @@ func Bootstrap() error {
 }
 
 func Run() error {
-	defer Cleanup()
+	defer clean()
 
 	// Final pre-server drain for modules registered after Bootstrap but before
 	// Run. Keep module.Wait before helper.Wait: late modules may enqueue database
@@ -173,7 +173,7 @@ func Run() error {
 	module.Wait()
 	helper.Wait()
 
-	RegisterGo(
+	ins.RegisterGo(
 		router.Run,
 		grpc.Run,
 		statsviz.Run,
@@ -181,18 +181,18 @@ func Run() error {
 		gops.Run,
 	)
 
-	RegisterCleanup(router.Stop)
-	RegisterCleanup(grpc.Stop)
-	RegisterCleanup(statsviz.Stop)
-	RegisterCleanup(debugpprof.Stop)
-	RegisterCleanup(gops.Stop)
+	registerCleanup(router.Stop)
+	registerCleanup(grpc.Stop)
+	registerCleanup(statsviz.Stop)
+	registerCleanup(debugpprof.Stop)
+	registerCleanup(gops.Stop)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	errCh := make(chan error, 1)
 
 	go func() {
-		errCh <- Go()
+		errCh <- ins.Go()
 	}()
 	select {
 	case sig := <-sigCh:

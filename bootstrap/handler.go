@@ -14,26 +14,30 @@ var (
 	once     sync.Once
 )
 
-// Exit will call all registered cleanup handlers and then exit.
-func Exit(code int) {
+// exit will call all registered cleanup handlers and then exit.
+//
+//nolint:unused
+func exit(code int) {
 	runHandlers()
 	os.Exit(code)
 }
 
-// RegisterCleanup append custom cleanup handler, the handler will be invoked by `Cleanup` function.
+// clean will call all registered clean handlers.
+func clean() {
+	once.Do(runHandlers)
+}
+
+// registerCleanup append custom cleanup handler, the handler will be invoked by `Cleanup` function.
 // first handler will be called first
-func RegisterCleanup(handler func()) {
+func registerCleanup(handler func()) {
 	handlers = append(handlers, handler)
 }
 
-// DeferCleanup same as RegisterCleanup, but last handler will be called first.
-func DeferCleanup(handler func()) {
+// deferCleanup same as RegisterCleanup, but last handler will be called first.
+//
+//nolint:unused
+func deferCleanup(handler func()) {
 	handlers = append([]func(){handler}, handlers...)
-}
-
-// Cleanup will call all registered cleanup handlers.
-func Cleanup() {
-	once.Do(runHandlers)
 }
 
 func runHandlers() {

@@ -12,7 +12,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var _initializer = new(initializer)
+var ins = new(initializer)
 
 type initializer struct {
 	fns []func() error // run init function in current goroutine.
@@ -98,8 +98,3 @@ func (i *initializer) getFunctionName(fn func() error) string {
 
 	return fullName
 }
-
-func Register(fn ...func() error)   { _initializer.Register(fn...) }
-func RegisterGo(fn ...func() error) { _initializer.RegisterGo(fn...) }
-func Init() (err error)             { return _initializer.Init() }
-func Go() (err error)               { return _initializer.Go() }
