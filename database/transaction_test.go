@@ -62,6 +62,18 @@ func TestDatabaseTransaction(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](nil).List(&users))
 	require.Empty(t, users, "should have 0 records after rollback")
 
+	// Test Transaction - panic rolls back and propagates
+	require.PanicsWithValue(t, "transaction panic", func() {
+		err = database.Database[*TestUser](nil).Transaction(func(tx types.Database[*TestUser]) error {
+			require.NoError(t, tx.Create(ul...))
+			panic("transaction panic")
+		})
+		require.NoError(t, err)
+	})
+	users = make([]*TestUser, 0)
+	require.NoError(t, database.Database[*TestUser](nil).List(&users))
+	require.Empty(t, users, "should have 0 records after panic rollback")
+
 	// Test Transaction - multiple operations in transaction
 	err = database.Database[*TestUser](nil).Transaction(func(tx types.Database[*TestUser]) error {
 		// Create users
@@ -184,6 +196,18 @@ func TestDatabaseTransactionFunc(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](nil).List(&users))
 	require.Empty(t, users, "should have 0 records after rollback")
 	require.Equal(t, 0, flag, "rollback function should not be called without WithRollback")
+
+	// Test TransactionFunc - panic rolls back and propagates
+	require.PanicsWithValue(t, "transaction func panic", func() {
+		err = database.Database[*TestUser](nil).TransactionFunc(func(tx any) error {
+			require.NoError(t, database.Database[*TestUser](nil).WithTx(tx).Create(ul...))
+			panic("transaction func panic")
+		})
+		require.NoError(t, err)
+	})
+	users = make([]*TestUser, 0)
+	require.NoError(t, database.Database[*TestUser](nil).List(&users))
+	require.Empty(t, users, "should have 0 records after panic rollback")
 
 	// Test TransactionFunc - incorrect use (not using WithTx)
 	// Rollback will not execute if not using WithTx option, so resources will be created outside transaction

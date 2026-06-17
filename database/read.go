@@ -26,7 +26,9 @@ func (db *database[M]) dryRunReadSession() *gorm.DB {
 // Supports caching, pagination, sorting, and eager loading of associations.
 //
 // Parameters:
-//   - dest: Pointer to slice where results will be stored
+//   - dest: Pointer to the result slice. The pointer itself must not be nil.
+//     The slice value may be nil or initialized with make; List replaces its
+//     contents with the query result.
 //
 // Features:
 //   - Automatic result caching when enabled
@@ -37,8 +39,10 @@ func (db *database[M]) dryRunReadSession() *gorm.DB {
 //
 // Example:
 //
-//	var users []User
+//	var users []*User
 //	List(&users)  // Get all users
+//
+//	users := make([]*User, 0)
 //	WithQuery(&User{Status: "active"}).List(&users)  // Get active users
 //	WithLimit(10).WithOffset(20).List(&users)  // Paginated results
 func (db *database[M]) List(dest *[]M) (err error) {

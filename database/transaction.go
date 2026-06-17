@@ -25,7 +25,9 @@ import (
 // Transaction behavior:
 // - If the function returns nil: transaction is automatically committed
 // - If the function returns an error: transaction is automatically rolled back
-// - Custom rollback function (set via WithRollback) is executed only when transaction fails
+// - If the function panics: the underlying GORM transaction is rolled back before the panic propagates
+// - Transaction locks acquired by tx are released by commit or rollback, including panic rollback
+// - Custom rollback function (set via WithRollback) is executed only when the function returns an error
 // - All operations through tx are automatically within the transaction
 //
 // Use cases:
@@ -127,7 +129,11 @@ func (db *database[M]) Transaction(fn func(tx types.Database[M]) error) error {
 // Transaction behavior:
 // - If the function returns nil: transaction is automatically committed
 // - If the function returns an error: transaction is automatically rolled back
+// - If the function panics: the underlying GORM transaction is rolled back before the panic propagates
+// - Transaction locks acquired by operations using WithTx(tx) are released by commit or rollback, including panic rollback
 // - Operations that call WithTx(tx) are executed in the same transaction
+// - Operations that do not call WithTx(tx) execute outside this transaction and are not affected by its rollback
+// - Custom rollback function (set via WithRollback) is executed only when the function returns an error
 //
 // Relationship with other transaction methods:
 // - Use Transaction: For single-model transactions (recommended, safer - auto WithTx)
