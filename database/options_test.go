@@ -765,7 +765,7 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 
 	t.Run("TransactionUnsupported", func(t *testing.T) {
 		var stmts []types.SQLStatement
-		err := database.Database[*TestUser](nil).WithBuildSQL(&stmts).Transaction(func(txDB types.Database[*TestUser]) error {
+		err := database.Database[*TestUser](nil).WithBuildSQL(&stmts).Transaction(func(tx types.Database[*TestUser]) error {
 			return nil
 		})
 

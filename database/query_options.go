@@ -609,15 +609,15 @@ func (db *database[M]) WithSelect(columns ...string) types.Database[M] {
 //
 // Example with Transaction:
 //
-//	err := database.Database[*model.User](nil).Transaction(func(txDB types.Database[*model.User]) error {
+//	err := database.Database[*model.User](nil).Transaction(func(tx types.Database[*model.User]) error {
 //	    // Get and lock user with FOR UPDATE
 //	    user := new(model.User)
-//	    if err := txDB.WithLock(consts.LockUpdate).Get(user, userID); err != nil {
+//	    if err := tx.WithLock(consts.LockUpdate).Get(user, userID); err != nil {
 //	        return err
 //	    }
 //	    // Update the locked user
 //	    user.Name = "updated"
-//	    return txDB.Update(user)
+//	    return tx.Update(user)
 //	})
 //
 // Example with TransactionFunc:

@@ -21,10 +21,10 @@ func TestDatabaseTransaction(t *testing.T) {
 	require.ErrorIs(t, err, database.ErrNilTransactionFunc)
 
 	// Test Transaction - transaction success
-	// Transaction automatically injects txDB, no need for WithTx
-	err = database.Database[*TestUser](nil).Transaction(func(txDB types.Database[*TestUser]) error {
-		// No need to call WithTx - txDB already has transaction context
-		return txDB.Create(ul...)
+	// Transaction automatically injects tx, no need for WithTx
+	err = database.Database[*TestUser](nil).Transaction(func(tx types.Database[*TestUser]) error {
+		// No need to call WithTx - tx already has transaction context
+		return tx.Create(ul...)
 	})
 	require.NoError(t, err, "transaction should succeed")
 	require.NoError(t, database.Database[*TestUser](nil).List(&users))
@@ -52,8 +52,8 @@ func TestDatabaseTransaction(t *testing.T) {
 	// Test Transaction - transaction failed with rollback
 	// Rollback will execute if transaction failed, so resources will not be created
 	errTest := errors.New("test error")
-	err = database.Database[*TestUser](nil).Transaction(func(txDB types.Database[*TestUser]) error {
-		require.NoError(t, txDB.Create(ul...))
+	err = database.Database[*TestUser](nil).Transaction(func(tx types.Database[*TestUser]) error {
+		require.NoError(t, tx.Create(ul...))
 		return errTest
 	})
 	require.Error(t, err, "transaction should fail")
@@ -63,18 +63,18 @@ func TestDatabaseTransaction(t *testing.T) {
 	require.Empty(t, users, "should have 0 records after rollback")
 
 	// Test Transaction - multiple operations in transaction
-	err = database.Database[*TestUser](nil).Transaction(func(txDB types.Database[*TestUser]) error {
+	err = database.Database[*TestUser](nil).Transaction(func(tx types.Database[*TestUser]) error {
 		// Create users
-		if txErr := txDB.Create(u1); txErr != nil {
+		if txErr := tx.Create(u1); txErr != nil {
 			return txErr
 		}
 		// Update user in the same transaction
 		u1.Name = "user1_updated"
-		if txErr := txDB.Update(u1); txErr != nil {
+		if txErr := tx.Update(u1); txErr != nil {
 			return txErr
 		}
 		// UpdateByID in the same transaction
-		return txDB.UpdateByID(u1.ID, "age", 25)
+		return tx.UpdateByID(u1.ID, "age", 25)
 	})
 	require.NoError(t, err, "transaction should succeed")
 
@@ -90,8 +90,8 @@ func TestDatabaseTransaction(t *testing.T) {
 	// Rollback function should not execute if transaction succeeds
 	err = database.Database[*TestUser](nil).WithRollback(func() {
 		flag++
-	}).Transaction(func(txDB types.Database[*TestUser]) error {
-		return txDB.Create(ul...)
+	}).Transaction(func(tx types.Database[*TestUser]) error {
+		return tx.Create(ul...)
 	})
 	require.NoError(t, err, "transaction should succeed")
 	require.NoError(t, database.Database[*TestUser](nil).List(&users))
@@ -104,8 +104,8 @@ func TestDatabaseTransaction(t *testing.T) {
 	// Rollback function should execute if transaction fails
 	err = database.Database[*TestUser](nil).WithRollback(func() {
 		flag++
-	}).Transaction(func(txDB types.Database[*TestUser]) error {
-		require.NoError(t, txDB.Create(ul...))
+	}).Transaction(func(tx types.Database[*TestUser]) error {
+		require.NoError(t, tx.Create(ul...))
 		return errors.New("test error")
 	})
 	require.Error(t, err, "transaction should fail")
@@ -116,14 +116,14 @@ func TestDatabaseTransaction(t *testing.T) {
 	// Test Transaction - with query options (WithLock, WithQuery, etc.)
 	flag = 0
 	require.NoError(t, database.Database[*TestUser](nil).Create(u1))
-	err = database.Database[*TestUser](nil).Transaction(func(txDB types.Database[*TestUser]) error {
+	err = database.Database[*TestUser](nil).Transaction(func(tx types.Database[*TestUser]) error {
 		lockedUser := new(TestUser)
 		// Test WithLock works in transaction
-		if lockErr := txDB.WithLock(consts.LockUpdate).Get(lockedUser, u1.ID); lockErr != nil {
+		if lockErr := tx.WithLock(consts.LockUpdate).Get(lockedUser, u1.ID); lockErr != nil {
 			return lockErr
 		}
 		lockedUser.Name = "locked_update"
-		return txDB.Update(lockedUser)
+		return tx.Update(lockedUser)
 	})
 	require.NoError(t, err, "transaction with lock should succeed")
 	u = new(TestUser)
@@ -365,8 +365,8 @@ func TestDatabaseWithRollback(t *testing.T) {
 			flag := 0
 			err := database.Database[*TestUser](nil).WithRollback(func() {
 				flag++
-			}).Transaction(func(txDB types.Database[*TestUser]) error {
-				require.NoError(t, txDB.Create(ul...))
+			}).Transaction(func(tx types.Database[*TestUser]) error {
+				require.NoError(t, tx.Create(ul...))
 				return nil
 			})
 
@@ -384,8 +384,8 @@ func TestDatabaseWithRollback(t *testing.T) {
 			errTest := errors.New("test error")
 			err := database.Database[*TestUser](nil).WithRollback(func() {
 				flag++
-			}).Transaction(func(txDB types.Database[*TestUser]) error {
-				require.NoError(t, txDB.Create(ul...))
+			}).Transaction(func(tx types.Database[*TestUser]) error {
+				require.NoError(t, tx.Create(ul...))
 				return errTest
 			})
 
@@ -475,16 +475,16 @@ func TestDatabaseWithLock(t *testing.T) {
 			defer cleanupTestData()
 			setupTestData(t)
 
-			err := database.Database[*TestUser](nil).Transaction(func(txDB types.Database[*TestUser]) error {
+			err := database.Database[*TestUser](nil).Transaction(func(tx types.Database[*TestUser]) error {
 				// Get and lock user with FOR UPDATE
 				user := new(TestUser)
-				require.NoError(t, txDB.WithLock(consts.LockUpdate).Get(user, u1.ID))
+				require.NoError(t, tx.WithLock(consts.LockUpdate).Get(user, u1.ID))
 				require.Equal(t, u1.ID, user.ID)
 				require.Equal(t, u1.Name, user.Name)
 
 				// Update the locked user
 				user.Name = "locked_update"
-				return txDB.Update(user)
+				return tx.Update(user)
 			})
 			require.NoError(t, err)
 
@@ -498,10 +498,10 @@ func TestDatabaseWithLock(t *testing.T) {
 			defer cleanupTestData()
 			setupTestData(t)
 
-			err := database.Database[*TestUser](nil).Transaction(func(txDB types.Database[*TestUser]) error {
+			err := database.Database[*TestUser](nil).Transaction(func(tx types.Database[*TestUser]) error {
 				// Get user with default lock (FOR UPDATE)
 				user := new(TestUser)
-				require.NoError(t, txDB.WithLock().Get(user, u1.ID))
+				require.NoError(t, tx.WithLock().Get(user, u1.ID))
 				require.Equal(t, u1.ID, user.ID)
 				return nil
 			})
@@ -512,10 +512,10 @@ func TestDatabaseWithLock(t *testing.T) {
 			defer cleanupTestData()
 			setupTestData(t)
 
-			err := database.Database[*TestUser](nil).Transaction(func(txDB types.Database[*TestUser]) error {
+			err := database.Database[*TestUser](nil).Transaction(func(tx types.Database[*TestUser]) error {
 				// List users with lock
 				users := make([]*TestUser, 0)
-				require.NoError(t, txDB.WithLock(consts.LockUpdate).List(&users))
+				require.NoError(t, tx.WithLock(consts.LockUpdate).List(&users))
 				require.Len(t, users, 3)
 				return nil
 			})

@@ -263,8 +263,8 @@ func (db *database[M]) WithDebug() types.Database[M] {
 //	err := db.WithRollback(func() {
 //	    // Custom rollback logic (e.g., cleanup external resources, send notifications)
 //	    // This function is called automatically when transaction fails
-//	}).Transaction(func(txDB types.Database[*model.User]) error {
-//	    if err := txDB.Create(&user); err != nil {
+//	}).Transaction(func(tx types.Database[*model.User]) error {
+//	    if err := tx.Create(&user); err != nil {
 //	        return err // automatic rollback, rollback function will be called
 //	    }
 //	    return nil // automatic commit, rollback function will NOT be called
