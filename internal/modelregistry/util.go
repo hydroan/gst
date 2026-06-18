@@ -1,61 +1,23 @@
-package model
+package modelregistry
 
 import (
-	"database/sql/driver"
-	"encoding/json"
 	"reflect"
 
-	"github.com/cockroachdb/errors"
 	"github.com/gertd/go-pluralize"
 	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/util"
 	"github.com/stoewer/go-strcase"
 )
 
 var pluralizeCli = pluralize.NewClient()
 
-// GormScannerWrapper converts object to GormScanner that can be used in GORM.
-// WARN: you must pass pointer to object.
-func GormScannerWrapper(object any) *GormScanner {
-	return &GormScanner{Object: object}
-}
-
-type GormScanner struct {
-	Object any
-}
-
-func (g *GormScanner) Scan(value any) (err error) {
-	if value == nil {
-		return nil
-	}
-	switch v := value.(type) {
-	case string:
-		err = json.Unmarshal(util.StringToBytes(v), g.Object)
-	case []byte:
-		err = json.Unmarshal(v, g.Object)
-	default:
-		err = errors.New("unsupported type, expected string or []byte")
-	}
-	return err
-}
-
-func (g *GormScanner) Value() (driver.Value, error) {
-	data, err := json.Marshal(g.Object)
-	if err != nil {
-		return nil, err
-	}
-	return util.BytesToString(data), nil
-}
-
+// GetTableName returns the default table name for a model type.
 func GetTableName[M types.Model]() string {
 	return strcase.SnakeCase(pluralizeCli.Plural(reflect.TypeOf(*new(M)).Elem().Name()))
 }
 
-// AreTypesEqual checks if the types of M, REQ and RSP are equal
+// AreTypesEqual reports whether M, REQ, and RSP are the same concrete type.
 //
-// If M "Empty" or "Any", return false directly.
-//
-// NOTE: "Empty" or "Any" will cause always use custom controller operations.
+// Empty and Any models always return false so custom controller operations are used.
 func AreTypesEqual[M types.Model, REQ types.Request, RSP types.Response]() bool {
 	if IsEmpty[M]() {
 		return false
@@ -66,12 +28,9 @@ func AreTypesEqual[M types.Model, REQ types.Request, RSP types.Response]() bool 
 	return typ1 == typ2 && typ2 == typ3
 }
 
-// IsEmpty check the T is a valid struct that has at least one valid field.
-// What is a valid field?
-// 1. the field is not a `Empty` or pointer to `Empty`.
-// 2. the field is not a `Any` or pointer to `Any`.
+// IsEmpty reports whether T has no fields beyond Empty or Any markers.
 //
-// For example, those bellow struct will returns true:
+// For example, these structs return true:
 //
 //	type Login struct {
 //		model.Empty
@@ -116,12 +75,9 @@ func IsEmpty[T any]() bool {
 	return typ.NumField() == invalidFieldCount
 }
 
-// IsValid check whether the T is valid model.
+// IsValid reports whether T is a database-backed model.
 //
-// If T is not pointer to struct, return false.
-// If T has no fields, return false.
-// If T fields contains `Empty` or `Any`, return false,
-// otherwise return true.
+// T must be a pointer to a non-empty struct and must not embed Empty or Any.
 func IsValid[T any]() bool {
 	typ := reflect.TypeFor[T]()
 

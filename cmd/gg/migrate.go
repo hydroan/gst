@@ -197,22 +197,9 @@ func initComponents() {
 	}
 }
 
-// collectModels collects all models registered in model.TableChan.
+// collectModels collects snapshots of models registered through model.Register.
 func collectModels() []any {
-	models := make([]any, 0)
-	maxCount := len(model.TableChan)
-	if maxCount == 0 {
-		return models
-	}
-	count := 0
-	for m := range model.TableChan {
-		models = append(models, m)
-		count++
-		if count >= maxCount {
-			break
-		}
-	}
-	return models
+	return model.RegisteredModels()
 }
 
 // dumpSchema creates a schema dump for the provided models using the configured database type.

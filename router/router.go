@@ -216,16 +216,6 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router gin.I
 		panic("unknown router type")
 	}
 
-	// // AutoMigrate ensures the table structure exists in the database.
-	// // This automatically creates or updates the table based on the model structure.
-	// // Alternatively, you can use model.Register() to manually control table creation.
-	// if model.IsValid[M]() {
-	// 	m := reflect.New(reflect.TypeOf(*new(M)).Elem()).Interface().(M)
-	// 	if err := database.DB().Table(m.GetTableName()).AutoMigrate(m); err != nil {
-	// 		globalErrors = append(globalErrors, err)
-	// 	}
-	// }
-
 	if verbMap[consts.Create] {
 		endpoint := gopath.Join(base, path)
 		router.POST(path, controller.CreateFactory[M, REQ, RSP](cfg...))

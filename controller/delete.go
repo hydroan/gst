@@ -11,8 +11,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/model"
 	gstotel "github.com/hydroan/gst/provider/otel"
 	. "github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/service"
@@ -56,7 +56,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		log := logger.Controller.WithControllerContext(cctx, consts.PHASE_DELETE)
 		svc := service.NewFactory[M, REQ, RSP]().Service(consts.PHASE_DELETE)
 
-		if !model.AreTypesEqual[M, REQ, RSP]() {
+		if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
 			var err error
 			var req REQ
 			var rsp RSP

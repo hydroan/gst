@@ -9,8 +9,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/model"
 	gstotel "github.com/hydroan/gst/provider/otel"
 	. "github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/service"
@@ -45,7 +45,7 @@ func UpdateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		log := logger.Controller.WithControllerContext(types.NewControllerContext(c), consts.PHASE_UPDATE_MANY)
 		svc := service.NewFactory[M, REQ, RSP]().Service(consts.PHASE_UPDATE_MANY)
 
-		if !model.AreTypesEqual[M, REQ, RSP]() {
+		if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
 			var req REQ
 			var rsp RSP
 

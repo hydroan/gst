@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/util"
 	cmap "github.com/orcaman/concurrent-map/v2"
 	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
@@ -19,8 +19,8 @@ import (
 
 // DB holds the framework-managed default GORM database handle.
 //
-// It is kept in the internal runtime package so framework initialization can
-// update it while public packages expose read-only accessors.
+// The database runtime updates it during initialization, and public packages
+// expose read-only accessors for application code.
 var DB *gorm.DB
 
 // startedTable is an atomic flag to ensure table processing goroutine starts only once
@@ -59,7 +59,7 @@ func InitDatabase(db *gorm.DB, dbmap map[string]*gorm.DB) (err error) {
 		go func() {
 			for {
 				select {
-				case m := <-model.TableChan:
+				case m := <-modelregistry.TableChan:
 					// create table automatically in default database.
 					begin := time.Now()
 
@@ -72,7 +72,7 @@ func InitDatabase(db *gorm.DB, dbmap map[string]*gorm.DB) (err error) {
 
 					initedTable.Set(typ.String(), "")
 
-				case v := <-model.TableDBChan:
+				case v := <-modelregistry.TableDBChan:
 					if v == nil {
 						continue
 					}
@@ -94,7 +94,7 @@ func InitDatabase(db *gorm.DB, dbmap map[string]*gorm.DB) (err error) {
 
 					initedTable.Set(typ.String(), v.DBName)
 
-				case r := <-model.RecordChan:
+				case r := <-modelregistry.RecordChan:
 					if r == nil {
 						continue
 					}
@@ -103,7 +103,7 @@ func InitDatabase(db *gorm.DB, dbmap map[string]*gorm.DB) (err error) {
 					// NOTE: we should always creates records after table migration finished.
 					//
 					// We should running this goroutine in a separate goroutine to avoid blocking the main goroutine.
-					go func(r *model.Record) {
+					go func(r *modelregistry.Record) {
 						typ := reflect.TypeOf(r.Table).Elem()
 						for {
 							dbname, e := initedTable.Get(typ.String())
@@ -142,9 +142,9 @@ func InitDatabase(db *gorm.DB, dbmap map[string]*gorm.DB) (err error) {
 // Wait blocks until all pending database initialization operations are completed.
 // It monitors three channels used by the InitDatabase function's background goroutine:
 //
-//   - model.TableChan: Contains models waiting for table creation in the default database
-//   - model.TableDBChan: Contains models waiting for table creation in custom databases
-//   - model.RecordChan: Contains records waiting for insertion after table creation
+//   - modelregistry.TableChan: Contains models waiting for table creation in the default database
+//   - modelregistry.TableDBChan: Contains models waiting for table creation in custom databases
+//   - modelregistry.RecordChan: Contains records waiting for insertion after table creation
 //
 // This function is useful in scenarios where you need to ensure that all database
 // tables and initial records are fully created before proceeding with application logic.
@@ -176,10 +176,10 @@ func Wait() {
 	startTime := time.Now()
 	var lastLogTime time.Time
 
-	for len(model.TableChan) != 0 || len(model.TableDBChan) != 0 || len(model.RecordChan) != 0 {
-		tablePending := len(model.TableChan)
-		tableDBPending := len(model.TableDBChan)
-		recordPending := len(model.RecordChan)
+	for len(modelregistry.TableChan) != 0 || len(modelregistry.TableDBChan) != 0 || len(modelregistry.RecordChan) != 0 {
+		tablePending := len(modelregistry.TableChan)
+		tableDBPending := len(modelregistry.TableDBChan)
+		recordPending := len(modelregistry.RecordChan)
 
 		// Log progress every 500ms to avoid spam
 		if time.Since(lastLogTime) >= 500*time.Millisecond {

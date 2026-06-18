@@ -10,6 +10,7 @@ import (
 	"github.com/gertd/go-pluralize"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3gen"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
@@ -354,7 +355,7 @@ func setList[M types.Model, REQ types.Request, RSP types.Response](path string, 
 	rspKey := fmt.Sprintf("%s_%s", strings.ToLower(name), consts.PHASE_LIST)
 
 	var rspSchemaRef *openapi3.SchemaRef
-	if model.AreTypesEqual[M, REQ, RSP]() {
+	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
 		rspSchemaRef, _ = openapi3gen.NewSchemaRefForValue(*new(apiListResponse[M]), nil)
 		// if rspSchemaRef.Value != nil && rspSchemaRef.Value.Properties != nil {
 		// 	if dataProperty, exists := rspSchemaRef.Value.Properties["data"]; exists {
@@ -418,7 +419,7 @@ func setList[M types.Model, REQ types.Request, RSP types.Response](path string, 
 		// Responses: func() *openapi3.Responses {
 		// 	var schemaRef200 *openapi3.SchemaRef
 		// 	var err error
-		// 	if model.AreTypesEqual[M, REQ, RSP]() {
+		// 	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
 		// 		if schemaRef200, err = openapi3gen.NewSchemaRefForValue(*new(apiListResponse[M]), nil); err == nil {
 		// 			// Add field descriptions to response data schema
 		// 			if schemaRef200.Value != nil && schemaRef200.Value.Properties != nil {
@@ -565,7 +566,7 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 
 	var reqSchemaRef *openapi3.SchemaRef
 	var rspSchemaRef *openapi3.SchemaRef
-	if model.AreTypesEqual[M, REQ, RSP]() {
+	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
 		reqSchemaRef, _ = openapi3gen.NewSchemaRefForValue(*new(apiBatchRequest[REQ]), nil)
 		// if reqSchemaRef.Value != nil && reqSchemaRef.Value.Properties != nil {
 		// 	if itemsProperty, exists := reqSchemaRef.Value.Properties["items"]; exists && itemsProperty.Value != nil && itemsProperty.Value.Items != nil {
@@ -649,7 +650,7 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		// 	// var schemaRef404 *openapi3.SchemaRef
 		// 	var err error
 		//
-		// 	if model.AreTypesEqual[M, REQ, RSP]() {
+		// 	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
 		// 		if rspSchemaRef200, err = openapi3gen.NewSchemaRefForValue(*new(apiBatchResponse[M]), nil); err == nil {
 		// 			// Add field descriptions to response data schema
 		// 			if rspSchemaRef200.Value != nil && rspSchemaRef200.Value.Properties != nil {
@@ -738,7 +739,7 @@ func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		},
 	}
 	var rspSchemaRef *openapi3.SchemaRef
-	if model.AreTypesEqual[M, REQ, RSP]() {
+	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
 		rspSchemaRef, _ = openapi3gen.NewSchemaRefForValue(*new(apiBatchResponse[RSP]), nil)
 		// if rspSchemaRef.Value != nil && rspSchemaRef.Value.Properties != nil {
 		// 	if dataProperty, exists := rspSchemaRef.Value.Properties["data"]; exists && dataProperty.Value != nil && dataProperty.Value.Properties != nil {
@@ -776,7 +777,7 @@ func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		// 	var schemaRef200 *openapi3.SchemaRef
 		// 	var err error
 		//
-		// 	if model.AreTypesEqual[M, REQ, RSP]() {
+		// 	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
 		// 		if schemaRef200, err = openapi3gen.NewSchemaRefForValue(*new(apiBatchResponse[M]), nil); err == nil {
 		// 			// Add field descriptions to response data schema
 		// 			if schemaRef200.Value != nil && schemaRef200.Value.Properties != nil {
@@ -836,7 +837,7 @@ func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 
 	var reqSchemaRef *openapi3.SchemaRef
 	var rspSchemaRef *openapi3.SchemaRef
-	if model.AreTypesEqual[M, REQ, RSP]() {
+	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
 		reqSchemaRef, _ = gen.NewSchemaRefForValue(*new(apiBatchRequest[REQ]), nil)
 		// if reqSchemaRef.Value != nil && reqSchemaRef.Value.Properties != nil {
 		// 	if itemsProperty, exists := reqSchemaRef.Value.Properties["items"]; exists && itemsProperty.Value != nil && itemsProperty.Value.Items != nil {
@@ -886,7 +887,7 @@ func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		// 	// var schemaRef400 *openapi3.SchemaRef
 		// 	// var schemaRef404 *openapi3.SchemaRef
 		//
-		// 	if model.AreTypesEqual[M, REQ, RSP]() {
+		// 	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
 		// 		if rspSchemaRef200, err = openapi3gen.NewSchemaRefForValue(*new(apiBatchResponse[RSP]), nil); err == nil {
 		// 			// Add field descriptions to response data schema
 		// 			if rspSchemaRef200.Value != nil && rspSchemaRef200.Value.Properties != nil {
@@ -961,7 +962,7 @@ func setPatchMany[M types.Model, REQ types.Request, RSP types.Response](path str
 
 	var reqSchemaRef *openapi3.SchemaRef
 	var rspSchemaRef *openapi3.SchemaRef
-	if model.AreTypesEqual[M, REQ, RSP]() {
+	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
 		reqSchemaRef, _ = gen.NewSchemaRefForValue(*new(apiBatchRequest[REQ]), nil)
 		// if reqSchemaRef.Value != nil && reqSchemaRef.Value.Properties != nil {
 		// 	if itemsProperty, exists := reqSchemaRef.Value.Properties["items"]; exists && itemsProperty.Value != nil && itemsProperty.Value.Items != nil {
@@ -1012,7 +1013,7 @@ func setPatchMany[M types.Model, REQ types.Request, RSP types.Response](path str
 		// 	// var schemaRef404 *openapi3.SchemaRef
 		// 	var err error
 		//
-		// 	if model.AreTypesEqual[M, REQ, RSP]() {
+		// 	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
 		// 		if rspSchemaRef200, err = openapi3gen.NewSchemaRefForValue(*new(apiBatchResponse[RSP]), nil); err == nil {
 		// 			// Add field descriptions to response data schema
 		// 			if rspSchemaRef200.Value != nil && rspSchemaRef200.Value.Properties != nil {
@@ -1165,7 +1166,7 @@ func setExport[M types.Model, REQ types.Request, RSP types.Response](path string
 
 // register Model, Model Payload, Model Result into openapi3 schema.
 func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey, rspKey string, reqSchemaRef *openapi3.SchemaRef, rspSchemaRef *openapi3.SchemaRef) {
-	if !model.IsEmpty[M]() {
+	if !modelregistry.IsEmpty[M]() {
 		typ := reflect.TypeOf(*new(M))
 		for typ.Kind() == reflect.Pointer {
 			typ = typ.Elem()
@@ -1184,7 +1185,7 @@ func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey
 		docMutex.Unlock()
 	}
 
-	if !model.IsEmpty[REQ]() {
+	if !modelregistry.IsEmpty[REQ]() {
 		typ := reflect.TypeOf(*new(M))
 		for typ.Kind() == reflect.Pointer {
 			typ = typ.Elem()
@@ -1202,7 +1203,7 @@ func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey
 			doc.Components.RequestBodies[reqKey] = &openapi3.RequestBodyRef{
 				Value: &openapi3.RequestBody{
 					Description: name + " Payload",
-					Required:    !model.IsEmpty[REQ](),
+					Required:    !modelregistry.IsEmpty[REQ](),
 					Content:     openapi3.NewContentWithJSONSchemaRef(reqSchemaRef),
 				},
 			}
@@ -1211,7 +1212,7 @@ func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey
 		docMutex.Unlock()
 	}
 
-	if !model.IsEmpty[RSP]() {
+	if !modelregistry.IsEmpty[RSP]() {
 		typ := reflect.TypeOf(*new(M))
 		for typ.Kind() == reflect.Pointer {
 			typ = typ.Elem()
@@ -1943,7 +1944,7 @@ func schemaFromType(dataType reflect.Type) *openapi3.SchemaRef {
 // addQueryParameters adds query parameters for List operation.
 func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op *openapi3.Operation) {
 	// 只有使用默认的逻辑才支持通过结构体字段过滤
-	if !model.AreTypesEqual[M, REQ, RSP]() {
+	if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
 		return
 	}
 
@@ -2202,7 +2203,7 @@ func fieldType2openapiType(field reflect.StructField) *openapi3.Types {
 }
 
 func newRequestBody[REQ types.Request](reqKey string) *openapi3.RequestBodyRef {
-	if model.IsEmpty[REQ]() {
+	if modelregistry.IsEmpty[REQ]() {
 		return nil
 	}
 	return &openapi3.RequestBodyRef{
@@ -2211,7 +2212,7 @@ func newRequestBody[REQ types.Request](reqKey string) *openapi3.RequestBodyRef {
 }
 
 func newResponses[RSP types.Response](status int, rspKey string) *openapi3.Responses {
-	if model.IsEmpty[RSP]() {
+	if modelregistry.IsEmpty[RSP]() {
 		return nil
 	}
 	return openapi3.NewResponses(openapi3.WithStatus(status, &openapi3.ResponseRef{Ref: "#/components/responses/" + rspKey}))
