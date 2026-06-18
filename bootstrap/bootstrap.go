@@ -46,7 +46,6 @@ import (
 	"github.com/hydroan/gst/provider/rocketmq"
 	"github.com/hydroan/gst/router"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/task" //nolint:staticcheck
 	"go.uber.org/automaxprocs/maxprocs"
 	"go.uber.org/zap"
 )
@@ -121,8 +120,7 @@ func Bootstrap() error {
 		router.Init,
 		grpc.Init,
 
-		// job
-		task.Init, //nolint:staticcheck
+		// task
 		cronjob.Init,
 
 		// module system must be the last to be initialized.
