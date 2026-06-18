@@ -42,7 +42,7 @@ func Init() (err error) {
 	db.SetConnMaxIdleTime(config.App.Database.ConnMaxIdleTime)
 
 	// Optimize database performance with PRAGMA settings
-	if err = OptimizeDatabase(Default); err != nil {
+	if err = optimizeDatabase(Default); err != nil {
 		zap.S().Warnw("failed to optimize sqlite database", "error", err)
 	}
 
@@ -56,9 +56,9 @@ func New(cfg config.Sqlite) (*gorm.DB, error) {
 	return gorm.Open(sqlite.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm})
 }
 
-// OptimizeDatabase applies performance optimization settings to the SQLite database.
+// optimizeDatabase applies performance optimization settings to the SQLite database.
 // This function executes PRAGMA optimize to collect statistics and improve query planning.
-func OptimizeDatabase(db *gorm.DB) error {
+func optimizeDatabase(db *gorm.DB) error {
 	// Execute PRAGMA optimize to collect statistics for better query planning
 	if err := db.Exec("PRAGMA optimize").Error; err != nil {
 		return errors.Wrap(err, "failed to execute PRAGMA optimize")
