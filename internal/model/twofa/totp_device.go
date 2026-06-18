@@ -8,7 +8,11 @@ import (
 	"gorm.io/datatypes"
 )
 
-// TOTPDevice represents a TOTP device for 2FA
+// TOTPDevice stores a registered TOTP authenticator for an IAM user.
+//
+// The model is registered for storage only. Device management is exposed through
+// dedicated twofa actions instead of default CRUD routes so sensitive fields stay
+// behind service-level checks.
 type TOTPDevice struct {
 	UserID      string                      `json:"user_id" gorm:"type:varchar(191);not null;index" schema:"user_id"`
 	DeviceName  string                      `json:"device_name" gorm:"type:varchar(100);not null" schema:"device_name"`
@@ -22,25 +26,4 @@ type TOTPDevice struct {
 
 func (TOTPDevice) Design() {
 	Migrate(true)
-
-	Route("2fa/totp/devices", func() {
-		Create(func() {
-			Enabled(true)
-		})
-		Delete(func() {
-			Enabled(true)
-		})
-		Update(func() {
-			Enabled(true)
-		})
-		Patch(func() {
-			Enabled(true)
-		})
-		List(func() {
-			Enabled(true)
-		})
-		Get(func() {
-			Enabled(true)
-		})
-	})
 }

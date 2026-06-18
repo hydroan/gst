@@ -1,18 +1,16 @@
 /*
 用户登录流程：
 1. POST /api/login → 普通登录
-2. POST /api/2fa/totp/verify → 验证TOTP码（如果启用2FA）
+2. 登录时通过 totp_code 或 backup_code 完成 2FA 验证（如果启用2FA）
 3. 登录成功
 
 2FA管理流程：
 1. POST /api/2fa/totp/check → 检查用户是否启用2FA
 2. POST /api/2fa/totp/bind → 绑定设备
 3. POST /api/2fa/totp/confirm → 确认绑定
-4. POST /api/2fa/totp/verify → 日常验证使用 ⭐
+4. POST /api/2fa/totp/verify → 日常验证使用
 5. POST /api/2fa/totp/unbind → 解绑设备
-6. GET /api/2fa/totp/status → 查看状态
-
-
+6. GET /api/2fa/totp/status → 查看状态和设备摘要
 
 核心接口
 
@@ -27,12 +25,8 @@
 - POST /api/2fa/totp/check - 检查用户是否启用 2FA
 
 管理接口：
-- GET /api/2fa/totp/status - 获取用户 2FA 状态
+- GET /api/2fa/totp/status - 获取用户 2FA 状态和脱敏设备摘要
 - POST /api/2fa/totp/unbind - 解绑 TOTP 设备
-- GET /api/2fa/totp/devices - 获取设备列表
-- DELETE /api/2fa/totp/devices/:id - 删除设备
-
-
 
 核心服务逻辑
 
@@ -74,18 +68,19 @@ F. TOTP 状态服务
 package twofa
 
 import (
+	modeltwofa "github.com/hydroan/gst/internal/model/twofa"
 	servicetwofa "github.com/hydroan/gst/internal/service/twofa"
+	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module"
 	"github.com/hydroan/gst/types/consts"
 )
 
-// Register registers the models: TOTPBind, TOTPCheck, TOTPConfirm, TOTPDevice, TOTPStatus, TOTPUnbind and TOTPVerify.
+// Register registers TOTP routes and the internal TOTP device table.
 //
 // Modules, Payload and Result:
 //   - TOTPBind, TOTPBindRsp
 //   - TOTPCheck, TOTPCheckReq, TOTPCheckRsp
 //   - TOTPConfirm, TOTPConfirmReq, TOTPConfirmRsp
-//   - TOTPDevice
 //   - TOTPStatus, TOTPStatusRsp
 //   - TOTPUnbind, TOTPUnbindReq, TOTPUnbindRsp
 //   - TOTPVerify, TOTPVerifyReq, TOTPVerifyRsp
@@ -94,17 +89,12 @@ import (
 //   - POST     /api/2fa/totp/bind
 //   - POST     /api/2fa/totp/check
 //   - POST     /api/2fa/totp/confirm
-//   - POST     /api/2fa/totp/status
+//   - GET      /api/2fa/totp/status
 //   - POST     /api/2fa/totp/unbind
 //   - POST     /api/2fa/totp/verify
-//   - POST     /api/2fa/totp/devices
-//   - DELETE   /api/2fa/totp/devices/:id
-//   - PUT      /api/2fa/totp/devices/:id
-//   - PATCH    /api/2fa/totp/devices/:id
-//   - GET      /api/2fa/totp/devices
-//   - GET      /api/2fa/totp/devices/:id
 func Register() {
 	servicetwofa.Enabled = true
+	model.Register[*modeltwofa.TOTPDevice]()
 
 	module.Use[
 		*TOTPBind,
@@ -128,19 +118,6 @@ func Register() {
 		*TOTPConfirmRsp](
 		&TOTPConfirmModule{},
 		consts.PHASE_CREATE,
-	)
-
-	module.Use[
-		*TOTPDevice,
-		*TOTPDevice,
-		*TOTPDevice](
-		&TOTPDeviceModule{},
-		consts.PHASE_CREATE,
-		consts.PHASE_DELETE,
-		consts.PHASE_UPDATE,
-		consts.PHASE_PATCH,
-		consts.PHASE_LIST,
-		consts.PHASE_GET,
 	)
 
 	module.Use[
