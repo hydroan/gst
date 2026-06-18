@@ -55,9 +55,3 @@ func buildDSN(cfg config.Postgres) string {
 		cfg.Host, cfg.Username, cfg.Password, cfg.Database, cfg.Port, cfg.SSLMode, cfg.TimeZone,
 	)
 }
-
-// Transaction runs fn in a transaction on the default PostgreSQL connection.
-func Transaction(fn func(tx *gorm.DB) error) error { return helper.Transaction(Default, fn) }
-
-// Exec executes raw SQL on the default PostgreSQL connection without returning rows.
-func Exec(sql string, values any) error { return helper.Exec(Default, sql, values) }

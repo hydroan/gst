@@ -55,9 +55,3 @@ func buildDSN(cfg config.MySQL) string {
 		cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database, cfg.Charset,
 	)
 }
-
-// Transaction runs fn in a transaction on the default MySQL connection.
-func Transaction(fn func(tx *gorm.DB) error) error { return helper.Transaction(Default, fn) }
-
-// Exec executes raw SQL on the default MySQL connection without returning rows.
-func Exec(sql string, values any) error { return helper.Exec(Default, sql, values) }

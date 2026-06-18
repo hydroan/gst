@@ -62,9 +62,3 @@ func buildDSN(cfg config.Clickhouse) string {
 		cfg.Debug, cfg.Compress, cfg.ReadTimeout, cfg.WriteTimeout, cfg.DialTimeout,
 	)
 }
-
-// Transaction runs fn in a transaction on the default ClickHouse connection.
-func Transaction(fn func(tx *gorm.DB) error) error { return helper.Transaction(Default, fn) }
-
-// Exec executes raw SQL on the default ClickHouse connection without returning rows.
-func Exec(sql string, values any) error { return helper.Exec(Default, sql, values) }
