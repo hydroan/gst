@@ -24,26 +24,33 @@ type TOTPConfirmService struct {
 func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modeltwofa.TOTPConfirmReq) (rsp *modeltwofa.TOTPConfirmRsp, err error) {
 	log := t.WithServiceContext(ctx, ctx.GetPhase())
 
-	// 1. 验证用户身份
 	if len(ctx.UserID) == 0 {
 		log.Errorz("user_id not found in context")
 		return nil, types.NewServiceError(http.StatusUnauthorized, "authentication required")
 	}
-
-	// 2. 验证 secret 格式（Base32 编码，通常32字符）
-	if len(req.Secret) == 0 {
-		log.Errorz("secret is empty")
-		return nil, errors.New("secret is required")
+	sessionID, err := currentTOTPBindSessionID(ctx)
+	if err != nil {
+		log.Errorz("session_id not found in context")
+		return nil, err
 	}
 
-	// // 验证 secret 是否为有效的 Base32 格式
-	// if len(req.Secret) != 32 {
-	// 	log.Errorz("invalid secret length", zap.Int("length", len(req.Secret)))
-	// 	return nil, fmt.Errorf("invalid secret format")
-	// }
+	challenge, err := loadTOTPBindChallenge(ctx.Context(), req.ChallengeID)
+	if err != nil {
+		if errors.Is(err, errTOTPBindChallengeNotFound) ||
+			errors.Is(err, errTOTPBindChallengeExpired) ||
+			errors.Is(err, errTOTPBindChallengeInvalid) {
+			log.Warnz("invalid or expired totp bind challenge", zap.String("user_id", ctx.UserID))
+			return nil, errors.New("invalid or expired TOTP binding challenge")
+		}
+		log.Errorz("failed to load TOTP bind challenge", zap.Error(err))
+		return nil, errors.Wrap(err, "failed to load TOTP binding challenge")
+	}
+	if challenge.UserID != ctx.UserID || challenge.SessionID != sessionID {
+		log.Warnz("totp bind challenge does not match current session", zap.String("user_id", ctx.UserID))
+		return nil, errors.New("invalid or expired TOTP binding challenge")
+	}
 
-	// 3. 验证 TOTP 代码
-	valid := totp.Validate(req.Code, req.Secret)
+	valid := totp.Validate(req.Code, challenge.Secret)
 	if !valid {
 		log.Warnz("invalid totp code", zap.String("user_id", ctx.UserID))
 		return nil, errors.New("invalid TOTP code")
@@ -55,7 +62,7 @@ func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modeltwofa.T
 	devices := make([]*modeltwofa.TOTPDevice, 0)
 	if err = database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext()).WithQuery(&modeltwofa.TOTPDevice{
 		UserID: ctx.UserID,
-		Secret: req.Secret,
+		Secret: challenge.Secret,
 	}).WithLimit(1).List(&devices); err != nil {
 		log.Errorz("failed to list devices", zap.Error(err))
 		return nil, fmt.Errorf("failed to list devices: %w", err)
@@ -77,7 +84,7 @@ func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modeltwofa.T
 	device := &modeltwofa.TOTPDevice{
 		UserID:      ctx.UserID,
 		DeviceName:  req.DeviceName,
-		Secret:      req.Secret,
+		Secret:      challenge.Secret,
 		BackupCodes: backupCodes,
 		IsActive:    true,
 		LastUsedAt:  &now,
@@ -92,7 +99,11 @@ func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modeltwofa.T
 		zap.String("user_id", ctx.UserID),
 		zap.String("device_id", device.ID))
 
-	// 8. 返回响应
+	if err = consumeTOTPBindChallenge(ctx.Context(), req.ChallengeID); err != nil {
+		log.Errorz("failed to consume TOTP bind challenge", zap.Error(err))
+		return nil, errors.Wrap(err, "failed to consume TOTP binding challenge")
+	}
+
 	rsp = &modeltwofa.TOTPConfirmRsp{
 		DeviceID:    device.ID,
 		Message:     "TOTP device confirmed and activated successfully",

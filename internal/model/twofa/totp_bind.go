@@ -5,16 +5,18 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-// TOTPBind 绑定 TOTP 设备
+// TOTPBind starts TOTP device binding for the current user.
 type TOTPBind struct {
 	model.Empty
 }
+
+// TOTPBindRsp returns the pending binding challenge and authenticator setup data.
 type TOTPBindRsp struct {
-	Secret      string `json:"secret,omitempty"`
-	OtpauthURL  string `json:"otpauth_url,omitempty"`   // TOTP 认证 URL
-	QRCodeImage string `json:"qr_code_image,omitempty"` // Base64 编码的二维码图片数据
-	Issuer      string `json:"issuer,omitempty"`        // 应用发行者名称（如 "Nebula"）
-	AccountName string `json:"account_name,omitempty"`  // 用户账户名称
+	ChallengeID string `json:"challenge_id,omitempty"`
+	OtpauthURL  string `json:"otpauth_url,omitempty"`   // TOTP provisioning URL
+	QRCodeImage string `json:"qr_code_image,omitempty"` // Base64-encoded QR code image data
+	Issuer      string `json:"issuer,omitempty"`        // Application issuer name
+	AccountName string `json:"account_name,omitempty"`  // User account name
 }
 
 func (TOTPBind) Design() {

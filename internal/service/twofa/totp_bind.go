@@ -24,20 +24,22 @@ type TOTPBindService struct {
 func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *modeltwofa.TOTPBind) (rsp *modeltwofa.TOTPBindRsp, err error) {
 	log := t.WithServiceContext(ctx, ctx.GetPhase())
 
-	// 获取当前用户信息
 	if len(ctx.UserID) == 0 {
 		log.Errorz("user_id not found in context")
 		return nil, types.NewServiceError(http.StatusUnauthorized, "authentication required")
 	}
-
 	if len(ctx.Username) == 0 {
 		log.Errorz("username not found in context")
 		return nil, types.NewServiceError(http.StatusUnauthorized, "authentication required")
 	}
+	sessionID, err := currentTOTPBindSessionID(ctx)
+	if err != nil {
+		log.Errorz("session_id not found in context")
+		return nil, err
+	}
 
 	log.Infoz("generating TOTP for user", zap.String("user_id", ctx.UserID), zap.String("username", ctx.Username))
 
-	// 生成 TOTP 密钥
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      consts.FrameworkName,
 		AccountName: ctx.Username,
@@ -48,40 +50,47 @@ func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *modeltwofa.TOTP
 		return nil, errors.New("failed to generate TOTP key")
 	}
 
-	// 生成 QR 码 URL
 	qrCodeURL := key.URL()
-	log.Infoz("generated QR code URL", zap.String("url", qrCodeURL))
 
-	// 生成 QR 码图片数据
 	qrCodeImage, err := generateQRCode(qrCodeURL)
 	if err != nil {
 		log.Errorz("failed to generate QR code image", zap.Error(err))
 		return nil, errors.New("failed to generate QR code image")
 	}
 
+	challengeID, _, err := issueTOTPBindChallenge(ctx.Context(), totpBindChallenge{
+		UserID:    ctx.UserID,
+		SessionID: sessionID,
+		Username:  ctx.Username,
+		Secret:    key.Secret(),
+	})
+	if err != nil {
+		log.Errorz("failed to issue TOTP bind challenge", zap.Error(err))
+		return nil, err
+	}
+
 	rsp = &modeltwofa.TOTPBindRsp{
-		Secret:      key.Secret(),
+		ChallengeID: challengeID,
 		OtpauthURL:  qrCodeURL,
 		QRCodeImage: qrCodeImage,
 		Issuer:      consts.FrameworkName,
 		AccountName: ctx.Username,
 	}
 
-	log.Infoz("TOTP bind response generated successfully",
-		zap.String("user_id", ctx.UserID))
+	log.Infoz("generated TOTP bind challenge",
+		zap.String("user_id", ctx.UserID),
+		zap.String("challenge_id", challengeID))
 
 	return rsp, nil
 }
 
-// generateQRCode 生成 QR 码的 Data URL
+// generateQRCode generates a QR code data URL.
 func generateQRCode(url string) (string, error) {
-	// 生成 QR 码 PNG 数据
 	qrBytes, err := qrcode.Encode(url, qrcode.Medium, 256)
 	if err != nil {
 		return "", err
 	}
 
-	// 转换为 base64 Data URL
 	var buf bytes.Buffer
 	buf.WriteString("data:image/png;base64,")
 	buf.WriteString(base64.StdEncoding.EncodeToString(qrBytes))

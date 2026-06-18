@@ -18,6 +18,7 @@ import (
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/module/twofa"
 	"github.com/hydroan/gst/types/consts"
+	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/require"
 )
@@ -86,10 +87,11 @@ func Test2fa(t *testing.T) {
 	userID := ""
 	sessionID := ""
 	secret := ""
+	challengeID := ""
 	deviceID := ""
 	var backupCodes []string
 
-	_, _, _, _, _, _ = sessionID, password, userID, secret, deviceID, backupCodes
+	_, _, _, _, _, _, _ = sessionID, password, userID, secret, challengeID, deviceID, backupCodes
 
 	t.Run("signup", func(t *testing.T) {
 		cli, err := client.New(signupAPI)
@@ -210,17 +212,18 @@ func Test2fa(t *testing.T) {
 		helper.TestResp(t, resp, func(t *testing.T, rsp *twofa.TOTPBindRsp) {
 			t.Helper()
 			require.NotNil(t, rsp)
-			require.NotEmpty(t, rsp.Secret)
+			require.NotEmpty(t, rsp.ChallengeID)
 			require.NotEmpty(t, rsp.OtpauthURL)
 			require.NotEmpty(t, rsp.QRCodeImage)
 			require.Equal(t, consts.FrameworkName, rsp.Issuer)
 			require.Equal(t, username, rsp.AccountName)
-			secret = rsp.Secret
+			challengeID = rsp.ChallengeID
+			secret = extractSecretFromOtpauthURL(t, rsp.OtpauthURL)
 		})
 	})
 
 	t.Run("confirm", func(t *testing.T) {
-		t.Run("valid_code", func(t *testing.T) {
+		t.Run("invalid_challenge", func(t *testing.T) {
 			cli, err := client.New(confirmAPI, client.WithCookie(&http.Cookie{
 				Name:  "session_id",
 				Value: sessionID,
@@ -231,9 +234,40 @@ func Test2fa(t *testing.T) {
 			require.NoError(t, err)
 
 			resp, err := cli.Create(twofa.TOTPConfirmReq{
-				Secret:     secret,
-				Code:       code,
-				DeviceName: "test-device",
+				ChallengeID: "missing-challenge",
+				Code:        code,
+				DeviceName:  "test-device-missing-challenge",
+			})
+			require.Error(t, err)
+			require.Nil(t, resp)
+		})
+
+		t.Run("invalid_code_does_not_consume_challenge", func(t *testing.T) {
+			cli, err := client.New(confirmAPI, client.WithCookie(&http.Cookie{
+				Name:  "session_id",
+				Value: sessionID,
+			}))
+			require.NoError(t, err)
+
+			code, err := totp.GenerateCode(secret, time.Now())
+			require.NoError(t, err)
+			invalidCode := "000000"
+			if code == invalidCode {
+				invalidCode = "000001"
+			}
+
+			resp, err := cli.Create(twofa.TOTPConfirmReq{
+				ChallengeID: challengeID,
+				Code:        invalidCode,
+				DeviceName:  "test-device-2",
+			})
+			require.Error(t, err)
+			require.Nil(t, resp)
+
+			resp, err = cli.Create(twofa.TOTPConfirmReq{
+				ChallengeID: challengeID,
+				Code:        code,
+				DeviceName:  "test-device",
 			})
 			require.NoError(t, err)
 			helper.TestResp(t, resp, func(t *testing.T, rsp *twofa.TOTPConfirmRsp) {
@@ -266,23 +300,7 @@ func Test2fa(t *testing.T) {
 			})
 		})
 
-		t.Run("invalid_code", func(t *testing.T) {
-			cli, err := client.New(confirmAPI, client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: sessionID,
-			}))
-			require.NoError(t, err)
-
-			resp, err := cli.Create(twofa.TOTPConfirmReq{
-				Secret:     secret,
-				Code:       "000000",
-				DeviceName: "test-device-2",
-			})
-			require.Error(t, err)
-			require.Nil(t, resp)
-		})
-
-		t.Run("duplicate_bind", func(t *testing.T) {
+		t.Run("duplicate_challenge", func(t *testing.T) {
 			cli, err := client.New(confirmAPI, client.WithCookie(&http.Cookie{
 				Name:  "session_id",
 				Value: sessionID,
@@ -293,9 +311,9 @@ func Test2fa(t *testing.T) {
 			require.NoError(t, err)
 
 			resp, err := cli.Create(twofa.TOTPConfirmReq{
-				Secret:     secret,
-				Code:       code,
-				DeviceName: "test-device-dup",
+				ChallengeID: challengeID,
+				Code:        code,
+				DeviceName:  "test-device-dup",
 			})
 			require.Error(t, err)
 			require.Nil(t, resp)
@@ -526,4 +544,14 @@ func Test2fa(t *testing.T) {
 			require.Equal(t, 0, rsp.DeviceCount)
 		})
 	})
+}
+
+func extractSecretFromOtpauthURL(t *testing.T, otpauthURL string) string {
+	t.Helper()
+
+	key, err := otp.NewKeyFromURL(otpauthURL)
+	require.NoError(t, err)
+	require.NotEmpty(t, key.Secret())
+
+	return key.Secret()
 }
