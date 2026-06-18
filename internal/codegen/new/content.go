@@ -92,9 +92,17 @@ linters:
     misspell:
       locale: US
 
+    staticcheck:
+      dot-import-whitelist:
+        - github.com/hydroan/gst/dsl
+
     revive:
       rules:
         - name: blank-imports
+        - name: dot-imports
+          arguments:
+            - allowedPackages:
+                - github.com/hydroan/gst/dsl
         - name: context-as-argument
         - name: context-keys-type
         - name: error-naming
@@ -297,6 +305,7 @@ Thumbs.db
 
 # Log files
 *.log
+/logs/
 
 # Temporary files
 tmp/
