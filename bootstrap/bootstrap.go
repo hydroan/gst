@@ -14,7 +14,6 @@ import (
 	"github.com/hydroan/gst/controller"
 	"github.com/hydroan/gst/cronjob"
 	"github.com/hydroan/gst/database/clickhouse"
-	"github.com/hydroan/gst/database/helper"
 	"github.com/hydroan/gst/database/mysql"
 	"github.com/hydroan/gst/database/postgres"
 	"github.com/hydroan/gst/database/sqlite"
@@ -23,6 +22,7 @@ import (
 	debugpprof "github.com/hydroan/gst/debug/pprof"
 	"github.com/hydroan/gst/debug/statsviz"
 	"github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/logger/logrus"
 	pkgzap "github.com/hydroan/gst/logger/zap"
 	prommetrics "github.com/hydroan/gst/metrics"
@@ -85,7 +85,7 @@ func Bootstrap() error {
 	}
 	// First database drain: create tables and seed records registered before
 	// provider/module initialization, typically by model package init functions.
-	helper.Wait()
+	dbruntime.Wait()
 
 	ins.Register(
 		// provider
@@ -150,13 +150,13 @@ func Bootstrap() error {
 
 	// module.Init has released module.Use goroutines. Wait for module registration
 	// first because modules can call model.Register and enqueue tables/records.
-	// This must run before the following helper.Wait; otherwise helper.Wait may
+	// This must run before the following database drain; otherwise dbruntime.Wait may
 	// check the database queues before modules have added their entries.
 	module.Wait()
 
 	// Second database drain: create tables and seed records added by modules
 	// during Bootstrap after module.Wait has made those registrations visible.
-	helper.Wait()
+	dbruntime.Wait()
 
 	return nil
 }
@@ -165,11 +165,11 @@ func Run() error {
 	defer clean()
 
 	// Final pre-server drain for modules registered after Bootstrap but before
-	// Run. Keep module.Wait before helper.Wait: late modules may enqueue database
-	// tables/records, and helper.Wait can only process entries that already exist.
+	// Run. Keep module.Wait before dbruntime.Wait: late modules may enqueue database
+	// tables/records, and dbruntime.Wait can only process entries that already exist.
 	// Routes-ready hooks run inside router.Run after this barrier.
 	module.Wait()
-	helper.Wait()
+	dbruntime.Wait()
 
 	ins.RegisterGo(
 		router.Run,

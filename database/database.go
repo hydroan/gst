@@ -9,6 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/types"
 	"gorm.io/gorm"
 )
@@ -41,8 +42,6 @@ var (
 var migratedModelMap sync.Map
 
 var (
-	DB *gorm.DB
-
 	defaultLimit           = -1
 	defaultBatchSize       = 1000
 	defaultDeleteBatchSize = 10000
@@ -55,6 +54,15 @@ var (
 		"deleted_at",
 	}
 )
+
+// DB returns the framework-managed default GORM database handle.
+//
+// The returned handle exposes the current runtime connection for advanced
+// integrations, but framework initialization owns the underlying pointer.
+// Callers should use Database[M](ctx) for normal CRUD operations.
+func DB() *gorm.DB {
+	return dbruntime.DB
+}
 
 // database implements types.Database[M].
 type database[M types.Model] struct {
@@ -253,7 +261,7 @@ func (db *database[M]) prepare() error {
 //	// Non-service layer
 //	_ = Database[*User](nil).WithQuery(&User{Name: "John"}).List(&users)
 func Database[M types.Model](ctx *types.DatabaseContext) types.Database[M] {
-	if DB == nil || DB == new(gorm.DB) {
+	if DB() == nil || DB() == new(gorm.DB) {
 		panic("database is not initialized")
 	}
 	dbctx := new(types.DatabaseContext)
@@ -265,9 +273,9 @@ func Database[M types.Model](ctx *types.DatabaseContext) types.Database[M] {
 
 	var ins *gorm.DB
 	if strings.ToLower(config.App.Logger.Level) == "debug" {
-		ins = DB.Debug().WithContext(gctx).Limit(defaultLimit)
+		ins = DB().Debug().WithContext(gctx).Limit(defaultLimit)
 	} else {
-		ins = DB.WithContext(gctx).Limit(defaultLimit)
+		ins = DB().WithContext(gctx).Limit(defaultLimit)
 	}
 
 	db := &database[M]{
@@ -276,7 +284,7 @@ func Database[M types.Model](ctx *types.DatabaseContext) types.Database[M] {
 	}
 
 	// Track database identifier + model type for compatibility with existing setup bookkeeping.
-	dbIdentifier := getDBIdentifier(DB)
+	dbIdentifier := getDBIdentifier(DB())
 	modelType := reflect.TypeFor[M]().String()
 	migrationKey := fmt.Sprintf("%s:%s", dbIdentifier, modelType)
 	if _, loaded := migratedModelMap.LoadOrStore(migrationKey, struct{}{}); !loaded {
@@ -286,9 +294,4 @@ func Database[M types.Model](ctx *types.DatabaseContext) types.Database[M] {
 	}
 
 	return db
-}
-
-// Inited reports whether the package-level default database has been initialized.
-func Inited() bool {
-	return DB != nil
 }

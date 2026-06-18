@@ -6,7 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/database/helper"
+	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 	"gorm.io/driver/clickhouse"
@@ -44,7 +44,7 @@ func Init() (err error) {
 	db.SetConnMaxIdleTime(config.App.Database.ConnMaxIdleTime)
 
 	zap.S().Infow("successfully connect to clickhouse", "host", cfg.Host, "port", cfg.Port, "database", cfg.Database)
-	return helper.InitDatabase(Default, dbmap)
+	return dbruntime.InitDatabase(Default, dbmap)
 }
 
 // New creates and returns a new Clickhouse database connection with the given configuration.

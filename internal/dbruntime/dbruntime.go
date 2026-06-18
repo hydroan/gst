@@ -1,4 +1,4 @@
-package helper
+package dbruntime
 
 import (
 	"fmt"
@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/util"
 	cmap "github.com/orcaman/concurrent-map/v2"
@@ -17,6 +16,12 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+// DB holds the framework-managed default GORM database handle.
+//
+// It is kept in the internal runtime package so framework initialization can
+// update it while public packages expose read-only accessors.
+var DB *gorm.DB
 
 // startedTable is an atomic flag to ensure table processing goroutine starts only once
 var startedTable atomic.Int32
@@ -129,7 +134,7 @@ func InitDatabase(db *gorm.DB, dbmap map[string]*gorm.DB) (err error) {
 	}
 
 	// set default database to 'Default'.
-	database.DB = db
+	DB = db
 
 	return nil
 }

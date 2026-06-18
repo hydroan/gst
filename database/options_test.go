@@ -629,13 +629,13 @@ func TestDatabaseWithDryRun(t *testing.T) {
 		setupTestData(t)
 
 		const callbackName = "gst:test:dry_run_get_sql"
-		_ = database.DB.Callback().Query().Remove(callbackName)
+		_ = database.DB().Callback().Query().Remove(callbackName)
 		var gotVars []any
-		require.NoError(t, database.DB.Callback().Query().After("gorm:query").Register(callbackName, func(tx *gorm.DB) {
+		require.NoError(t, database.DB().Callback().Query().After("gorm:query").Register(callbackName, func(tx *gorm.DB) {
 			gotVars = append([]any(nil), tx.Statement.Vars...)
 		}))
 		t.Cleanup(func() {
-			require.NoError(t, database.DB.Callback().Query().Remove(callbackName))
+			require.NoError(t, database.DB().Callback().Query().Remove(callbackName))
 		})
 
 		existingID := u1.ID

@@ -1347,7 +1347,7 @@ func TestDatabaseWithPurge(t *testing.T) {
 
 		// Verify record is permanently deleted (not found even with Unscoped)
 		var unscopedUser TestUser
-		err := database.DB.Unscoped().Where("id = ?", u1.ID).First(&unscopedUser).Error
+		err := database.DB().Unscoped().Where("id = ?", u1.ID).First(&unscopedUser).Error
 		require.Error(t, err, "hard-deleted record should not exist even with Unscoped")
 		require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 	})
@@ -1366,11 +1366,11 @@ func TestDatabaseWithPurge(t *testing.T) {
 
 		// Verify records are not found even with Unscoped
 		var unscopedUser TestUser
-		err := database.DB.Unscoped().Where("id = ?", u1.ID).First(&unscopedUser).Error
+		err := database.DB().Unscoped().Where("id = ?", u1.ID).First(&unscopedUser).Error
 		require.Error(t, err)
 		require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 
-		err = database.DB.Unscoped().Where("id = ?", u2.ID).First(&unscopedUser).Error
+		err = database.DB().Unscoped().Where("id = ?", u2.ID).First(&unscopedUser).Error
 		require.Error(t, err)
 		require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 
@@ -1399,7 +1399,7 @@ func TestDatabaseWithPurge(t *testing.T) {
 
 		// Verify record still exists in database (found with Unscoped)
 		var unscopedUser TestUser
-		require.NoError(t, database.DB.Unscoped().Where("id = ?", u1.ID).First(&unscopedUser).Error)
+		require.NoError(t, database.DB().Unscoped().Where("id = ?", u1.ID).First(&unscopedUser).Error)
 		require.Equal(t, u1.ID, unscopedUser.ID, "soft-deleted record should exist with Unscoped")
 		require.NotNil(t, unscopedUser.DeletedAt, "soft-deleted record should have deleted_at set")
 	})
@@ -1418,7 +1418,7 @@ func TestDatabaseWithPurge(t *testing.T) {
 
 		// Verify all records are not found even with Unscoped
 		var countUnscoped int64
-		require.NoError(t, database.DB.Unscoped().Model(&TestUser{}).Count(&countUnscoped).Error)
+		require.NoError(t, database.DB().Unscoped().Model(&TestUser{}).Count(&countUnscoped).Error)
 		require.Equal(t, int64(0), countUnscoped, "all records should be permanently deleted")
 	})
 
@@ -1436,12 +1436,12 @@ func TestDatabaseWithPurge(t *testing.T) {
 
 		// Verify all records still exist in database (found with Unscoped)
 		var countUnscoped int64
-		require.NoError(t, database.DB.Unscoped().Model(&TestUser{}).Count(&countUnscoped).Error)
+		require.NoError(t, database.DB().Unscoped().Model(&TestUser{}).Count(&countUnscoped).Error)
 		require.Equal(t, int64(3), countUnscoped, "all records should still exist with Unscoped")
 
 		// Verify all records have deleted_at set
 		var users []TestUser
-		require.NoError(t, database.DB.Unscoped().Find(&users).Error)
+		require.NoError(t, database.DB().Unscoped().Find(&users).Error)
 		require.Len(t, users, 3)
 		for _, u := range users {
 			require.NotNil(t, u.DeletedAt, "soft-deleted record should have deleted_at set")

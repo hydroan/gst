@@ -221,7 +221,7 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router gin.I
 	// // Alternatively, you can use model.Register() to manually control table creation.
 	// if model.IsValid[M]() {
 	// 	m := reflect.New(reflect.TypeOf(*new(M)).Elem()).Interface().(M)
-	// 	if err := database.DB.Table(m.GetTableName()).AutoMigrate(m); err != nil {
+	// 	if err := database.DB().Table(m.GetTableName()).AutoMigrate(m); err != nil {
 	// 		globalErrors = append(globalErrors, err)
 	// 	}
 	// }

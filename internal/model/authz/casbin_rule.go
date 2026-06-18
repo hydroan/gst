@@ -2,22 +2,26 @@ package modelauthz
 
 import "github.com/hydroan/gst/model"
 
-// CasbinRule 对象
-// RBAC 包中会通过 gormadapter.NewAdapterByDBWithCustomTable(database.DB, &model.CasbinRule{})
-// 或 gormadapter.NewAdapterByDB(database.DB) 来创建;
-// NOTE: ID 类型必须是整型
+// CasbinRule stores Casbin policy and grouping rules.
 //
-// -- 权限策略
+// The RBAC module creates this table through
+// gormadapter.NewAdapterByDBWithCustomTable(database.DB(), new(modelauthz.CasbinRule)).
+// The ID must be an integer because the GORM adapter creates an auto-increment
+// primary key for the policy table.
+//
+// Policy example:
+//
 // INSERT INTO casbin_rule (ptype, v0, v1, v2, v3) VALUES
 // ('p', 'role_admin', '/api/config/*', 'GET', 'allow'),
 // ('p', 'role_admin', '/api/config/*', 'POST', 'allow'),
 // ('p', 'role_user', '/api/config/file', 'GET', 'allow');
 //
-// -- 角色关系
+// Grouping example:
+//
 // INSERT INTO casbin_rule (ptype, v0, v1) VALUES
 // ('g', 'alice', 'role_admin'),
 // ('g', 'bob', 'role_user'),
-// ('g', 'role_admin', 'admin');  -- admin 超级角色
+// ('g', 'role_admin', 'admin'); -- admin super role.
 type CasbinRule struct {
 	// ID uint64 `json:"id" gorm:"primaryKey"`
 	ID    uint64 `json:"id" gorm:"primaryKey;autoIncrement:true"`
@@ -29,18 +33,19 @@ type CasbinRule struct {
 	V4    string `json:"v4,omitempty" gorm:"size:100" schema:"v4"`
 	V5    string `json:"v5,omitempty" gorm:"size:100" schema:"v5"`
 
-	User   string  `json:"user,omitempty" schema:"user"`                       // 只是用来记录一些信息, V0 为 user_id
-	Role   string  `json:"role,omitempty" schema:"role"`                       // 只是用来记录一些信息, V1 为 role code
+	User   string  `json:"user,omitempty" schema:"user"`                       // Informational user value copied from V0.
+	Role   string  `json:"role,omitempty" schema:"role"`                       // Informational role value copied from V1.
 	Remark *string `json:"remark,omitempty" gorm:"size:10240" schema:"remark"` // Optional policy summary.
 
 	model.Base
 }
 
-// SetID 为一个空的函数,不允许自动设置ID, 因为 gormadapter.NewAdapterByDBWithCustomTable 创建的表的ID总是为 autoIncrement.
-// 如果设置了自定义ID则会报错.
+// SetID intentionally ignores custom IDs because the Casbin GORM adapter manages
+// this table with an auto-incrementing primary key.
 func (cr *CasbinRule) SetID(id ...string) {}
 
-// GetTableName 用来指定 CasbinRule 在数据库中的表名为 casbin_rule.
-// gormadapter.NewAdapterByDBWithCustomTable 创建的表名总是 casbin_rule, 但是 gorm 默认创建的表名为 casbin_rules,
-// 为了统一,直接就用 casbin_rule 了.
+// GetTableName returns the Casbin adapter table name.
+//
+// gormadapter.NewAdapterByDBWithCustomTable uses casbin_rule, while GORM's
+// default pluralized table name would be casbin_rules.
 func (cr CasbinRule) GetTableName() string { return "casbin_rule" }

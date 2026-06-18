@@ -65,10 +65,10 @@ func Init() error {
 // Wait blocks until pending module.Use and module.UseCustom registrations are complete.
 //
 // It waits for model, service, and route registration only. Database table
-// creation and seed record insertion are handled separately by helper.Wait.
+// creation and seed record insertion are handled separately by the database runtime.
 // Callers that need module-provided tables and seed records to exist must call
-// helper.Wait after Wait, not before it, because module registration can enqueue
-// new model.Register work.
+// the database runtime drain after Wait, not before it, because module registration
+// can enqueue new model.Register work.
 func Wait() {
 	registerMu.Lock()
 	defer registerMu.Unlock()

@@ -8,6 +8,6 @@
 //
 // Tables used by Database[M](ctx), WithDB, and WithTable are expected to exist
 // before an operation chain runs. Framework startup prepares registered tables
-// through the database/helper package; callers using custom database instances
+// through the internal database runtime; callers using custom database instances
 // are responsible for preparing their schemas before using them.
 package database

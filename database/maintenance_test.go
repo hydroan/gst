@@ -62,9 +62,9 @@ func TestDatabaseCleanup(t *testing.T) {
 }
 
 func TestDatabaseCleanupWithDryRun(t *testing.T) {
-	require.NoError(t, database.DB.AutoMigrate(&cleanupSoftDeleteUser{}))
+	require.NoError(t, database.DB().AutoMigrate(&cleanupSoftDeleteUser{}))
 	t.Cleanup(func() {
-		require.NoError(t, database.DB.Migrator().DropTable(&cleanupSoftDeleteUser{}))
+		require.NoError(t, database.DB().Migrator().DropTable(&cleanupSoftDeleteUser{}))
 	})
 
 	u1 := &cleanupSoftDeleteUser{Name: "cleanup-user-1", Base: model.Base{ID: "cleanup-user-1"}}
@@ -108,6 +108,6 @@ func countSoftDeletedCleanupUsers(t *testing.T) int64 {
 	t.Helper()
 
 	var count int64
-	require.NoError(t, database.DB.Model(&cleanupSoftDeleteUser{}).Unscoped().Where("deleted_at IS NOT NULL").Count(&count).Error)
+	require.NoError(t, database.DB().Model(&cleanupSoftDeleteUser{}).Unscoped().Where("deleted_at IS NOT NULL").Count(&count).Error)
 	return count
 }

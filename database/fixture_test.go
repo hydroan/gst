@@ -7,7 +7,7 @@ import (
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/database/helper"
+	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
@@ -62,19 +62,19 @@ func cleanupTestData() {
 	// disable foreign key check
 	switch config.App.Database.Type {
 	case config.DBMySQL:
-		database.DB.Exec("SET FOREIGN_KEY_CHECKS=0")
+		database.DB().Exec("SET FOREIGN_KEY_CHECKS=0")
 	case config.DBPostgres:
-		database.DB.Exec("SET CONSTRAINTS ALL DEFERRED")
+		database.DB().Exec("SET CONSTRAINTS ALL DEFERRED")
 	case config.DBSqlite:
-		database.DB.Exec("PRAGMA foreign_keys = OFF")
+		database.DB().Exec("PRAGMA foreign_keys = OFF")
 	}
 	defer func() {
 		// enable foreign key check
 		switch config.App.Database.Type {
 		case config.DBMySQL:
-			database.DB.Exec("SET FOREIGN_KEY_CHECKS=1")
+			database.DB().Exec("SET FOREIGN_KEY_CHECKS=1")
 		case config.DBSqlite:
-			database.DB.Exec("PRAGMA foreign_keys = ON")
+			database.DB().Exec("PRAGMA foreign_keys = ON")
 		}
 	}()
 	// delete all categories, we must temporarily disable foreign key check
@@ -186,7 +186,7 @@ func init() {
 	model.Register[*TestCategory]()
 
 	// block here until database migration is ready
-	helper.Wait()
+	dbruntime.Wait()
 
 	if err := bootstrap.Bootstrap(); err != nil {
 		panic(err)
