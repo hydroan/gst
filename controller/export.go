@@ -9,10 +9,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/schema"
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/provider/otel"
 	. "github.com/hydroan/gst/response"
-	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 )
@@ -128,7 +128,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			// fmt.Println("expands: ", expands)
 		}
 
-		svc := service.NewFactory[M, REQ, RSP]().Service(consts.PHASE_EXPORT)
+		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_EXPORT)
 		svcCtx := types.NewServiceContext(c)
 		// 1.Perform business logic processing before list resources.
 		if err = traceServiceHook[M](ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) error {

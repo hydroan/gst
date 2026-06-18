@@ -32,9 +32,9 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/router"
-	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 )
@@ -104,7 +104,7 @@ func Use[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[
 		model.Register[M]()
 
 		for _, p := range phases {
-			service.RegisterService[M, REQ, RSP](p, mod.Service())
+			serviceregistry.Register[M, REQ, RSP](p, mod.Service())
 		}
 
 		route := mod.Route()
@@ -155,7 +155,7 @@ func UseCustom[M types.Model, REQ types.Request, RSP types.Response](mod types.M
 	startRegister(func() {
 		<-notify
 
-		service.RegisterService[M, REQ, RSP](phase, mod.Service())
+		serviceregistry.Register[M, REQ, RSP](phase, mod.Service())
 
 		route := mod.Route()
 		route = strings.TrimPrefix(route, "/")

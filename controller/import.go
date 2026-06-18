@@ -7,11 +7,11 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/pkg/filetype"
 	gstotel "github.com/hydroan/gst/provider/otel"
 	. "github.com/hydroan/gst/response"
-	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 )
@@ -72,7 +72,7 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// check filetype
 
 		ml, err := traceServiceImport(ctrlSpanCtx, consts.PHASE_IMPORT, func(spanCtx context.Context) ([]M, error) {
-			return service.NewFactory[M, REQ, RSP]().Service(consts.PHASE_IMPORT).
+			return serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_IMPORT).
 				Import(types.NewServiceContext(c, spanCtx).WithPhase(consts.PHASE_IMPORT), buf)
 		})
 		if err != nil {

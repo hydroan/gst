@@ -1,8 +1,10 @@
 package service
 
 import (
+	"reflect"
 	"testing"
 
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/logger/zap"
 	"github.com/hydroan/gst/model"
@@ -24,6 +26,14 @@ func TestRegister(t *testing.T) {
 	t.Run("struct", func(t *testing.T) {
 		Register[svc](consts.PHASE_CREATE)
 	})
+}
+
+func TestBaseAliasesServiceRegistryBase(t *testing.T) {
+	require.Equal(
+		t,
+		reflect.TypeFor[serviceregistry.Base[*testUser, *testUser, *testUser]](),
+		reflect.TypeFor[Base[*testUser, *testUser, *testUser]](),
+	)
 }
 
 func TestRegister2(t *testing.T) {
@@ -60,8 +70,8 @@ func TestService(t *testing.T) {
 	Register[*svc](consts.PHASE_DELETE)
 
 	t.Run("logger", func(t *testing.T) {
-		for _, v := range serviceMap {
-			s, ok := v.(*svc)
+		for _, phase := range []consts.Phase{consts.PHASE_CREATE, consts.PHASE_DELETE} {
+			s, ok := serviceregistry.Resolve[*testUser, *testUser, *testUser](phase).(*svc)
 			require.True(t, ok)
 			require.NotNil(t, s)
 			require.NotNil(t, s.Logger) // service logger was set

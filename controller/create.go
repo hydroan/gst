@@ -12,10 +12,10 @@ import (
 	"github.com/gin-gonic/gin"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/provider/otel"
 	. "github.com/hydroan/gst/response"
-	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
@@ -48,7 +48,7 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		defer span.End()
 
 		log := logger.Controller.WithControllerContext(types.NewControllerContext(c), consts.PHASE_CREATE)
-		svc := service.NewFactory[M, REQ, RSP]().Service(consts.PHASE_CREATE)
+		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_CREATE)
 
 		if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
 			var req REQ

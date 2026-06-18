@@ -14,10 +14,10 @@ import (
 	"github.com/gorilla/schema"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/provider/otel"
 	. "github.com/hydroan/gst/response"
-	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
@@ -77,7 +77,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		defer span.End()
 
 		log := logger.Controller.WithControllerContext(types.NewControllerContext(c), consts.PHASE_LIST)
-		svc := service.NewFactory[M, REQ, RSP]().Service(consts.PHASE_LIST)
+		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_LIST)
 		ctx := types.NewServiceContext(c)
 
 		if !modelregistry.AreTypesEqual[M, REQ, RSP]() {

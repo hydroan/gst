@@ -3,11 +3,15 @@ package service
 import (
 	"testing"
 
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/types/consts"
 )
 
-func BenchmarkServiceKey(b *testing.B) {
+func BenchmarkResolveRegisteredService(b *testing.B) {
+	type svc = Base[*testUser, *testUser, *testUser]
+	Register[*svc](consts.PHASE_CREATE)
+
 	for b.Loop() {
-		_ = serviceKey[*testUser, *testUser, *testUser](consts.PHASE_CREATE)
+		_ = serviceregistry.Resolve[*testUser, *testUser, *testUser](consts.PHASE_CREATE)
 	}
 }

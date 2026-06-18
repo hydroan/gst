@@ -211,6 +211,10 @@ service.Base[M, REQ, RSP]
 
 其中 `M` 是模型类型，`REQ` 是请求类型，`RSP` 是响应类型。
 
+业务项目只需要关注 `service.Base` 和生成代码里的 `service.Register`。controller 会
+通过框架内部 registry 找到对应 service；service 查找、registry map、实例注入和
+logger 注入等状态属于框架内部实现，不作为业务项目 API 暴露，也不建议业务代码直接持有或修改。
+
 需要特别注意 controller 的两种执行方式：
 
 - 默认资源 CRUD：当 `M`、`REQ`、`RSP` 是同一个类型时，controller 走框架默认
