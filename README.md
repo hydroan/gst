@@ -211,9 +211,11 @@ service.Base[M, REQ, RSP]
 
 其中 `M` 是模型类型，`REQ` 是请求类型，`RSP` 是响应类型。
 
-业务项目只需要关注 `service.Base` 和生成代码里的 `service.Register`。controller 会
-通过框架内部 registry 找到对应 service；service 查找、registry map、实例注入和
-logger 注入等状态属于框架内部实现，不作为业务项目 API 暴露，也不建议业务代码直接持有或修改。
+业务项目只需要关注 DSL、生成代码里的 `router.Register` / `service.Register`，以及
+业务实现里的 `service.Base`。controller 是框架内部执行层，业务代码不需要也不应该导入
+controller 包；手写高级路由时也应通过 `router.Register` 接入。controller 会通过框架内部
+registry 找到对应 service；service 查找、registry map、实例注入和 logger 注入等状态属于
+框架内部实现，不作为业务项目 API 暴露，也不建议业务代码直接持有或修改。
 
 需要特别注意 controller 的两种执行方式：
 
@@ -387,8 +389,8 @@ action 是自定义动作时再开启 `Service(true)`。
 
 ### 为什么我写了 service 的 Create 方法但没有被调用？
 
-如果 `M`、`REQ`、`RSP` 是同一个类型，controller 会走默认资源 CRUD 分支，只调用
-service hook 和过滤方法。要让 action 主方法被调用，需要用 `Payload[T]()` 或
+如果 `M`、`REQ`、`RSP` 是同一个类型，框架内部 controller 会走默认资源 CRUD 分支，
+只调用 service hook 和过滤方法。要让 action 主方法被调用，需要用 `Payload[T]()` 或
 `Result[T]()` 绑定当前接口专用的 REQ/RSP，让它成为自定义动作。
 
 ### Route 和 Endpoint 有什么区别？

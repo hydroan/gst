@@ -13,7 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/controller"
+	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/openapigen"
 	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/types"
@@ -170,8 +170,13 @@ func Stop() {
 	server = nil
 }
 
-// Register registers HTTP routes for a given model type with specified verbs
-// using default controller configuration.
+// Register registers HTTP routes for a model/action pair.
+//
+// Register is the public route registration entry point for generated code,
+// modules, and advanced application code. It binds model metadata to
+// framework-owned internal handlers; application code should use Register
+// instead of importing the internal controller package.
+//
 // It supports common CRUD operations along with import/export functionality.
 //
 // Parameters:

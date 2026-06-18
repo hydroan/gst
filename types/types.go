@@ -8,9 +8,15 @@ import (
 // This allows users to use types.Event instead of importing internal/sse directly.
 type Event = sse.Event
 
+// ControllerConfig customizes how router.Register builds an internal handler for
+// a route. It is the public configuration surface for controller behavior; the
+// concrete controller handlers and their runtime state remain framework-owned.
 type ControllerConfig[M Model] struct {
-	DB        any // only support *gorm.DB
+	// DB overrides the database handle used by the route. Only *gorm.DB is supported.
+	DB any
+	// TableName overrides the model table name used by the route.
 	TableName string
+	// ParamName names the route parameter that carries the resource ID.
 	ParamName string
 }
 
