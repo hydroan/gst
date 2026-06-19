@@ -17,10 +17,22 @@ import (
 
 var Enabled bool
 
+// TOTPBindService starts the TOTP binding flow for an authenticated user.
+//
+// The service validates the current user and session, generates a new TOTP
+// secret, renders the provisioning URL as a QR code, and stores the secret in a
+// short-lived binding challenge tied to the current user and session. The
+// response returns only the challenge ID and authenticator setup data, never the
+// raw secret as a standalone field.
 type TOTPBindService struct {
 	service.Base[*modeltwofa.TOTPBind, *modeltwofa.TOTPBind, *modeltwofa.TOTPBindRsp]
 }
 
+// Create creates a pending TOTP binding challenge and returns setup metadata.
+//
+// The method requires an authenticated user and session, generates a new
+// server-held secret, stores it in the binding challenge, and returns the
+// challenge ID with the provisioning URL and QR image for authenticator setup.
 func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *modeltwofa.TOTPBind) (rsp *modeltwofa.TOTPBindRsp, err error) {
 	log := t.WithServiceContext(ctx, ctx.GetPhase())
 

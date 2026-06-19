@@ -32,12 +32,19 @@ type LoginService struct {
 	service.Base[*model.Empty, *modeliamaccount.LoginReq, *modeliamaccount.LoginRsp]
 }
 
+// Create authenticates an IAM account and creates a new session.
+//
+// The local login path verifies username, password, account status, and any
+// required 2FA proof before creating the session. TOTP backup-code verification
+// is delegated to the twofa service so recovery codes are consumed through the
+// same one-time transactional path used by other twofa flows.
 func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.LoginReq) (rsp *modeliamaccount.LoginRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
 	// return keycloakLogin(ctx, log, req)
 	return localLogin(ctx, log, req)
 }
 
+// localLogin performs username/password authentication and optional 2FA verification.
 func localLogin(ctx *types.ServiceContext, log types.Logger, req *modeliamaccount.LoginReq) (rsp *modeliamaccount.LoginRsp, err error) {
 	// Validate input
 	if req.Username == "" {

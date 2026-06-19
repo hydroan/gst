@@ -18,6 +18,10 @@ const (
 )
 
 // totpBindChallenge stores one pending TOTP binding attempt in cache.
+//
+// The value keeps the generated TOTP secret on the server and binds it to the
+// user and session that started the flow. Confirm requests must present the
+// challenge ID and a valid TOTP code; they never provide the secret directly.
 type totpBindChallenge struct {
 	UserID    string    `json:"user_id"`
 	SessionID string    `json:"session_id"`
@@ -39,6 +43,10 @@ var (
 )
 
 // currentTOTPBindSessionID returns the session that owns the current binding flow.
+//
+// Service context is the preferred source. The cookie fallback keeps the helper
+// usable in routes where middleware has authenticated the request but the
+// session ID has not been copied into the context field.
 func currentTOTPBindSessionID(ctx *types.ServiceContext) (string, error) {
 	if ctx == nil {
 		return "", types.NewServiceError(http.StatusUnauthorized, "authentication required")
@@ -58,6 +66,10 @@ func currentTOTPBindSessionID(ctx *types.ServiceContext) (string, error) {
 }
 
 // issueTOTPBindChallenge creates a cache-backed challenge for a pending TOTP binding flow.
+//
+// It validates the user, session, username, and generated secret, records
+// issue/expiry timestamps, and stores the challenge with the same TTL in Redis.
+// The returned challenge ID is the only value clients submit during confirm.
 func issueTOTPBindChallenge(ctx context.Context, challenge totpBindChallenge) (string, totpBindChallenge, error) {
 	if strings.TrimSpace(challenge.UserID) == "" ||
 		strings.TrimSpace(challenge.SessionID) == "" ||
@@ -84,6 +96,10 @@ func issueTOTPBindChallenge(ctx context.Context, challenge totpBindChallenge) (s
 }
 
 // loadTOTPBindChallenge returns a pending challenge after validating its required fields and expiry.
+//
+// Missing, malformed, or expired challenges are mapped to local sentinel errors
+// so public services can expose the same generic "invalid or expired" response.
+// Expired values are best-effort deleted from cache after detection.
 func loadTOTPBindChallenge(ctx context.Context, challengeID string) (totpBindChallenge, error) {
 	challengeID = strings.TrimSpace(challengeID)
 	if challengeID == "" {
@@ -113,6 +129,9 @@ func loadTOTPBindChallenge(ctx context.Context, challengeID string) (totpBindCha
 }
 
 // consumeTOTPBindChallenge deletes a confirmed challenge so it cannot be reused.
+//
+// Confirm calls this only after the active device has been created, preserving
+// the challenge when the user submits a wrong TOTP code or storage fails.
 func consumeTOTPBindChallenge(ctx context.Context, challengeID string) error {
 	challengeID = strings.TrimSpace(challengeID)
 	if challengeID == "" {

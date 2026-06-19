@@ -17,12 +17,26 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// TOTPUnbindService removes an active TOTP device after fresh authentication.
+//
+// The request must provide exactly one verification method: current password,
+// TOTP code, or recovery code. Password verification is performed before the
+// device transaction to avoid cross-model database work inside the device lock.
+// TOTP and recovery-code verification run against the current user's active
+// devices; recovery-code removal and target-device deletion share the same
+// transaction so the code is consumed only when the unbind operation succeeds.
 type TOTPUnbindService struct {
 	service.Base[*modeltwofa.TOTPUnbind, *modeltwofa.TOTPUnbindReq, *modeltwofa.TOTPUnbindRsp]
 }
 
 var errTOTPUnbindVerificationInvalid = errors.New("invalid verification")
 
+// Create validates fresh authentication, removes the target device, and returns the remaining active count.
+//
+// The method rejects requests with zero or multiple verification methods,
+// verifies the chosen proof, locks the current user's active devices, removes
+// the target device, and reports how many active devices remain. Backup-code
+// verification is performed in the same transaction as the device removal.
 func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modeltwofa.TOTPUnbindReq) (rsp *modeltwofa.TOTPUnbindRsp, err error) {
 	log := t.WithServiceContext(ctx, ctx.GetPhase())
 
@@ -138,6 +152,7 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 	return rsp, nil
 }
 
+// countTOTPUnbindVerificationMethods counts which fresh-auth methods are present.
 func countTOTPUnbindVerificationMethods(req *modeltwofa.TOTPUnbindReq) int {
 	count := 0
 	if req.Password != "" {
@@ -152,6 +167,11 @@ func countTOTPUnbindVerificationMethods(req *modeltwofa.TOTPUnbindReq) int {
 	return count
 }
 
+// verifyTOTPUnbindFreshAuth validates the selected fresh-auth method in the device transaction.
+//
+// Password has already been validated before the transaction. TOTP verification
+// accepts any active device owned by the current user. Recovery-code verification
+// consumes the matching hash through the transaction-bound backup-code helper.
 func verifyTOTPUnbindFreshAuth(
 	ctx *types.ServiceContext,
 	tx types.Database[*modeltwofa.TOTPDevice],
@@ -171,6 +191,7 @@ func verifyTOTPUnbindFreshAuth(
 	}
 }
 
+// verifyTOTPUnbindPassword validates the current user's password for fresh auth.
 func verifyTOTPUnbindPassword(ctx *types.ServiceContext, userID, password string) error {
 	user := new(modeliamuser.User)
 	if err := database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(user, userID); err != nil {
@@ -185,6 +206,11 @@ func verifyTOTPUnbindPassword(ctx *types.ServiceContext, userID, password string
 	return nil
 }
 
+// activeTOTPUnbindDeviceExists checks target ownership before password validation.
+//
+// The password path performs this preflight outside the device transaction to
+// keep IAM user lookup out of the TOTPDevice transaction while preserving the
+// same device-not-found response semantics.
 func activeTOTPUnbindDeviceExists(ctx *types.ServiceContext, userID, deviceID string) bool {
 	deviceID = strings.TrimSpace(deviceID)
 	if deviceID == "" {
@@ -200,6 +226,7 @@ func activeTOTPUnbindDeviceExists(ctx *types.ServiceContext, userID, deviceID st
 	return database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext()).WithQuery(query).First(device) == nil
 }
 
+// findTOTPUnbindDevice selects the target active device from the locked device list.
 func findTOTPUnbindDevice(devices []*modeltwofa.TOTPDevice, deviceID string) *modeltwofa.TOTPDevice {
 	deviceID = strings.TrimSpace(deviceID)
 	for _, device := range devices {
@@ -213,6 +240,7 @@ func findTOTPUnbindDevice(devices []*modeltwofa.TOTPDevice, deviceID string) *mo
 	return nil
 }
 
+// countRemainingTOTPDevices returns the active-device count after removing one device.
 func countRemainingTOTPDevices(devices []*modeltwofa.TOTPDevice, removedDeviceID string) int {
 	count := 0
 	for _, device := range devices {

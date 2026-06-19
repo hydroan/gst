@@ -14,14 +14,24 @@ import (
 	"go.uber.org/zap"
 )
 
+// TOTPVerifyService verifies a logged-in user's 2FA code.
+//
+// Standard TOTP verification checks the submitted code against the user's
+// active devices and updates the matching device's last-used timestamp.
+// Backup-code verification delegates to the recovery-code service, which
+// validates and consumes the matching hash transactionally.
 type TOTPVerifyService struct {
 	service.Base[*modeltwofa.TOTPVerify, *modeltwofa.TOTPVerifyReq, *modeltwofa.TOTPVerifyRsp]
 }
 
+// Create verifies either a TOTP code or a one-time recovery code.
+//
+// The method first enforces authentication and non-empty input. Recovery codes
+// are consumed through the shared backup-code helper; normal TOTP codes are
+// checked against the selected device or all active devices for the user.
 func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modeltwofa.TOTPVerifyReq) (rsp *modeltwofa.TOTPVerifyRsp, err error) {
 	log := t.WithServiceContext(ctx, ctx.GetPhase())
 
-	// 1. 验证用户身份
 	if len(ctx.UserID) == 0 {
 		log.Errorz("user_id not found in context")
 		return &modeltwofa.TOTPVerifyRsp{
@@ -30,7 +40,6 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 		}, types.NewServiceError(http.StatusUnauthorized, "authentication required")
 	}
 
-	// 2. 验证输入参数
 	if len(req.Code) == 0 {
 		log.Errorz("code is empty")
 		return &modeltwofa.TOTPVerifyRsp{
@@ -54,14 +63,12 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 		}, nil
 	}
 
-	// 3. 查询用户的 TOTP 设备
 	devices := make([]*modeltwofa.TOTPDevice, 0)
 	query := &modeltwofa.TOTPDevice{
 		UserID:   ctx.UserID,
 		IsActive: true,
 	}
 
-	// 如果指定了设备ID，则只查询该设备
 	if len(req.DeviceID) > 0 {
 		query.Base.ID = req.DeviceID
 	}
@@ -82,11 +89,9 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 		}, errors.New("no active TOTP devices found")
 	}
 
-	// 4. 验证代码
 	var validDevice *modeltwofa.TOTPDevice
 
 	for _, device := range devices {
-		// 验证 TOTP 代码
 		if totp.Validate(req.Code, device.Secret) {
 			validDevice = device
 			break
@@ -103,14 +108,11 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 		}, nil
 	}
 
-	// 5. 更新设备状态
 	now := time.Now()
 	validDevice.LastUsedAt = &now
 
-	// 保存设备更新
 	if err = database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext()).Update(validDevice); err != nil {
 		log.Errorz("failed to update device", zap.Error(err))
-		// 即使更新失败，验证仍然成功，只记录错误
 		log.Warnz("device update failed but verification succeeded")
 	}
 

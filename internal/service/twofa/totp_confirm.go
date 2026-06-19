@@ -14,10 +14,22 @@ import (
 	"go.uber.org/zap"
 )
 
+// TOTPConfirmService completes a pending TOTP binding flow.
+//
+// The service loads the cached binding challenge, ensures it belongs to the
+// current user and session, validates the submitted TOTP code against the
+// server-held secret, and then creates the active device. It returns one-time
+// recovery codes only in this response while storing bcrypt hashes in the device
+// record. The binding challenge is consumed only after the device is saved.
 type TOTPConfirmService struct {
 	service.Base[*modeltwofa.TOTPConfirm, *modeltwofa.TOTPConfirmReq, *modeltwofa.TOTPConfirmRsp]
 }
 
+// Create turns a valid binding challenge into an active TOTP device.
+//
+// The method verifies challenge ownership, checks the submitted TOTP code,
+// prevents duplicate binding for the same secret, creates recovery codes, stores
+// only their hashes, persists the device, and then consumes the challenge.
 func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modeltwofa.TOTPConfirmReq) (rsp *modeltwofa.TOTPConfirmRsp, err error) {
 	log := t.WithServiceContext(ctx, ctx.GetPhase())
 
@@ -55,7 +67,6 @@ func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modeltwofa.T
 
 	log.Infoz("totp code validated successfully", zap.String("user_id", ctx.UserID))
 
-	// 4. 检查是否已存在相同 secret 的设备（防止重复绑定）
 	devices := make([]*modeltwofa.TOTPDevice, 0)
 	if err = database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext()).WithQuery(&modeltwofa.TOTPDevice{
 		UserID: ctx.UserID,

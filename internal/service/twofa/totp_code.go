@@ -14,6 +14,10 @@ import (
 var errTOTPCodeInvalid = errors.New("invalid TOTP code")
 
 // ValidateUserTOTPCode verifies a TOTP code against any active device owned by the user.
+//
+// This helper is for flows that need proof the current user still controls at
+// least one active authenticator, such as fresh authentication before unbinding
+// a different device. It never accepts a device ID from the caller.
 func ValidateUserTOTPCode(ctx *types.ServiceContext, userID, code string) error {
 	if ctx == nil || strings.TrimSpace(userID) == "" {
 		return types.NewServiceError(http.StatusUnauthorized, "authentication required")
@@ -30,6 +34,10 @@ func ValidateUserTOTPCode(ctx *types.ServiceContext, userID, code string) error 
 	return validateTOTPCodeForDevices(code, devices)
 }
 
+// validateTOTPCodeForDevices checks a code against an already-loaded active device list.
+//
+// Transactional callers use this to avoid issuing another query while holding a
+// TOTPDevice lock.
 func validateTOTPCodeForDevices(code string, devices []*modeltwofa.TOTPDevice) error {
 	if strings.TrimSpace(code) == "" {
 		return errTOTPCodeInvalid

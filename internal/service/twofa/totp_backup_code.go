@@ -26,6 +26,10 @@ const (
 var errTOTPBackupCodeInvalid = errors.New("invalid backup code")
 
 // GenerateTOTPBackupCodes creates one-time recovery codes for a new TOTP device.
+//
+// The codes use a 16-character unambiguous Base32 alphabet and are formatted in
+// groups for manual entry. Callers return these raw codes only once to the user
+// during device confirmation.
 func GenerateTOTPBackupCodes() ([]string, error) {
 	codes := make([]string, totpBackupCodeCount)
 	for i := range codes {
@@ -39,6 +43,9 @@ func GenerateTOTPBackupCodes() ([]string, error) {
 }
 
 // HashTOTPBackupCodes normalizes and hashes recovery codes before storage.
+//
+// Stored devices keep only bcrypt hashes of normalized recovery codes. This
+// keeps database reads from exposing usable recovery credentials.
 func HashTOTPBackupCodes(codes []string) ([]string, error) {
 	hashes := make([]string, 0, len(codes))
 	for _, code := range codes {
@@ -56,6 +63,11 @@ func HashTOTPBackupCodes(codes []string) ([]string, error) {
 }
 
 // ConsumeTOTPBackupCode verifies and removes one recovery code for the user.
+//
+// The exported path opens a TOTPDevice transaction, locks the user's active
+// devices, compares the normalized code against stored bcrypt hashes, removes
+// the matching hash, and updates LastUsedAt. Replays fail because the hash is
+// removed in the same transaction that validates the code.
 func ConsumeTOTPBackupCode(ctx *types.ServiceContext, userID, code string) error {
 	if ctx == nil || strings.TrimSpace(userID) == "" {
 		return types.NewServiceError(http.StatusUnauthorized, "authentication required")
@@ -66,6 +78,11 @@ func ConsumeTOTPBackupCode(ctx *types.ServiceContext, userID, code string) error
 	})
 }
 
+// consumeTOTPBackupCodeInTx consumes a recovery code inside an existing device transaction.
+//
+// Unbind uses this path so backup-code consumption and device removal commit or
+// roll back together. The caller supplies the timestamp so all updates in the
+// higher-level transaction can share the same logical operation time.
 func consumeTOTPBackupCodeInTx(tx types.Database[*modeltwofa.TOTPDevice], userID, code string, now time.Time) error {
 	normalizedCode, err := normalizeTOTPBackupCode(code)
 	if err != nil {
@@ -98,6 +115,7 @@ func consumeTOTPBackupCodeInTx(tx types.Database[*modeltwofa.TOTPDevice], userID
 	return errTOTPBackupCodeInvalid
 }
 
+// generateTOTPBackupCode creates one formatted recovery code from random bytes.
 func generateTOTPBackupCode() (string, error) {
 	var b strings.Builder
 	b.Grow(totpBackupCodeRawLength)
@@ -111,6 +129,10 @@ func generateTOTPBackupCode() (string, error) {
 	return formatTOTPBackupCode(b.String()), nil
 }
 
+// normalizeTOTPBackupCode prepares user input for hash comparison.
+//
+// The normalizer trims surrounding whitespace, removes hyphens, uppercases the
+// code, and rejects anything outside the configured unambiguous Base32 alphabet.
 func normalizeTOTPBackupCode(code string) (string, error) {
 	code = strings.TrimSpace(code)
 	code = strings.ReplaceAll(code, "-", "")
@@ -126,6 +148,7 @@ func normalizeTOTPBackupCode(code string) (string, error) {
 	return code, nil
 }
 
+// formatTOTPBackupCode groups a normalized recovery code for display.
 func formatTOTPBackupCode(code string) string {
 	var b strings.Builder
 	b.Grow(totpBackupCodeRawLength + (totpBackupCodeRawLength / totpBackupCodeGroupSize) - 1)
@@ -138,6 +161,7 @@ func formatTOTPBackupCode(code string) string {
 	return b.String()
 }
 
+// isTOTPBackupCodeChar reports whether r belongs to the recovery-code alphabet.
 func isTOTPBackupCodeChar(r rune) bool {
 	return strings.ContainsRune(totpBackupCodeAlphabet, r)
 }
