@@ -1,14 +1,14 @@
 /*
 用户登录流程：
-1. POST /api/login → 普通登录
-2. 登录时通过 totp_code 或 backup_code 完成 2FA 验证（如果启用2FA）
+1. POST /api/login → 提交用户名和密码
+2. 如果用户已启用 2FA，登录请求必须同时提交 totp_code 或 backup_code 其中一个
 3. 登录成功
 
 2FA管理流程：
 1. POST /api/2fa/totp/check → 检查用户是否启用2FA
 2. POST /api/2fa/totp/bind → 绑定设备
 3. POST /api/2fa/totp/confirm → 确认绑定
-4. POST /api/2fa/totp/verify → 日常验证使用
+4. POST /api/2fa/totp/verify → 已登录用户日常验证使用
 5. POST /api/2fa/totp/unbind → 解绑设备
 6. GET /api/2fa/totp/status → 查看状态和设备摘要
 
@@ -19,7 +19,7 @@
 - POST /api/2fa/totp/confirm - 确认绑定 TOTP 设备
 
 验证流程：
-- POST /api/2fa/totp/verify - 验证 TOTP 代码
+- POST /api/2fa/totp/verify - 已登录用户验证 TOTP 代码或恢复码，不参与登录流程
 
 检查接口：
 - POST /api/2fa/totp/check - 检查用户是否启用 2FA
@@ -34,22 +34,24 @@ A. TOTP 绑定服务
 - 生成随机密钥
 - 创建 QR 码 URL
 - 创建待确认绑定挑战
-- 返回挑战 ID 和绑定信息
+- 返回挑战 ID、二维码和绑定信息
 
 B. TOTP 确认服务
+- 读取并校验待确认绑定挑战
 - 验证用户输入的 TOTP 代码
 - 生成一次性恢复码
+- 将恢复码哈希后保存
 - 保存设备信息到数据库
 - 激活 2FA 功能
 
 C. TOTP 验证服务
-- 验证 TOTP 代码或恢复码
+- 验证已登录用户提交的 TOTP 代码或恢复码
 - 更新设备使用时间
 - 返回验证结果
 
 D. TOTP 解绑服务
 - 验证用户身份和权限
-- 通过密码、TOTP 代码或恢复码完成 fresh auth
+- 通过密码、TOTP 代码或恢复码三选一完成 fresh auth
 - 查找并解绑指定设备
 - 统计剩余活跃设备数量
 - 返回解绑结果

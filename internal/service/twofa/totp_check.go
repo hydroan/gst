@@ -10,10 +10,19 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// TOTPCheckService handles the public pre-login check for whether a user must
+// complete a TOTP second-factor challenge. The service first verifies the
+// supplied username and password, then only reports the TOTP requirement for
+// the authenticated account so callers cannot use the endpoint to enumerate
+// which users have MFA enabled.
 type TOTPCheckService struct {
 	service.Base[*modeltwofa.TOTPCheck, *modeltwofa.TOTPCheckReq, *modeltwofa.TOTPCheckRsp]
 }
 
+// Create validates the primary credentials and returns whether the matched
+// user currently has any active TOTP devices. It does not issue login tokens or
+// verify second-factor codes; it only tells the login flow whether a follow-up
+// TOTP verification step is required.
 func (c *TOTPCheckService) Create(ctx *types.ServiceContext, req *modeltwofa.TOTPCheckReq) (rsp *modeltwofa.TOTPCheckRsp, err error) {
 	log := c.WithServiceContext(ctx, ctx.GetPhase())
 

@@ -11,10 +11,18 @@ import (
 	"go.uber.org/zap"
 )
 
+// TOTPStatusService returns the current authenticated user's TOTP enrollment
+// state. The service keeps the status view scoped to ctx.UserID, counts only
+// active devices as enabling MFA, and returns device metadata without exposing
+// secrets or recovery-code hashes.
 type TOTPStatusService struct {
 	service.Base[*modeltwofa.TOTPStatus, *modeltwofa.TOTPStatus, *modeltwofa.TOTPStatusRsp]
 }
 
+// List loads the current user's TOTP devices and builds the status response
+// used by clients to render MFA settings. It requires an authenticated request,
+// includes inactive devices for management visibility, and derives Enabled from
+// the number of active devices.
 func (t *TOTPStatusService) List(ctx *types.ServiceContext, req *modeltwofa.TOTPStatus) (rsp *modeltwofa.TOTPStatusRsp, err error) {
 	log := t.WithServiceContext(ctx, ctx.GetPhase())
 
