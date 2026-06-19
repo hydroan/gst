@@ -60,38 +60,42 @@ func ConsumeTOTPBackupCode(ctx *types.ServiceContext, userID, code string) error
 	if ctx == nil || strings.TrimSpace(userID) == "" {
 		return types.NewServiceError(http.StatusUnauthorized, "authentication required")
 	}
+
+	return database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext()).Transaction(func(tx types.Database[*modeltwofa.TOTPDevice]) error {
+		return consumeTOTPBackupCodeInTx(tx, userID, code, time.Now())
+	})
+}
+
+func consumeTOTPBackupCodeInTx(tx types.Database[*modeltwofa.TOTPDevice], userID, code string, now time.Time) error {
 	normalizedCode, err := normalizeTOTPBackupCode(code)
 	if err != nil {
 		return errTOTPBackupCodeInvalid
 	}
 
-	return database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext()).Transaction(func(tx types.Database[*modeltwofa.TOTPDevice]) error {
-		devices := make([]*modeltwofa.TOTPDevice, 0)
-		if err := tx.WithLock(consts.LockUpdate).WithQuery(&modeltwofa.TOTPDevice{
-			UserID:   strings.TrimSpace(userID),
-			IsActive: true,
-		}).List(&devices); err != nil {
-			return errors.Wrap(err, "list TOTP devices for backup code")
-		}
+	devices := make([]*modeltwofa.TOTPDevice, 0)
+	if err := tx.WithLock(consts.LockUpdate).WithQuery(&modeltwofa.TOTPDevice{
+		UserID:   strings.TrimSpace(userID),
+		IsActive: true,
+	}).List(&devices); err != nil {
+		return errors.Wrap(err, "list TOTP devices for backup code")
+	}
 
-		for _, device := range devices {
-			for i, hash := range device.BackupCodeHashes {
-				if bcrypt.CompareHashAndPassword([]byte(hash), []byte(normalizedCode)) != nil {
-					continue
-				}
-
-				device.BackupCodeHashes = append(device.BackupCodeHashes[:i], device.BackupCodeHashes[i+1:]...)
-				now := time.Now()
-				device.LastUsedAt = &now
-				if err := tx.Update(device); err != nil {
-					return errors.Wrap(err, "consume TOTP backup code")
-				}
-				return nil
+	for _, device := range devices {
+		for i, hash := range device.BackupCodeHashes {
+			if bcrypt.CompareHashAndPassword([]byte(hash), []byte(normalizedCode)) != nil {
+				continue
 			}
-		}
 
-		return errTOTPBackupCodeInvalid
-	})
+			device.BackupCodeHashes = append(device.BackupCodeHashes[:i], device.BackupCodeHashes[i+1:]...)
+			device.LastUsedAt = &now
+			if err := tx.Update(device); err != nil {
+				return errors.Wrap(err, "consume TOTP backup code")
+			}
+			return nil
+		}
+	}
+
+	return errTOTPBackupCodeInvalid
 }
 
 func generateTOTPBackupCode() (string, error) {

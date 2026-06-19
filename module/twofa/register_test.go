@@ -507,6 +507,52 @@ func Test2fa(t *testing.T) {
 	})
 
 	t.Run("unbind", func(t *testing.T) {
+		t.Run("missing_fresh_auth", func(t *testing.T) {
+			cli, err := client.New(unbindAPI, client.WithCookie(&http.Cookie{
+				Name:  "session_id",
+				Value: sessionID,
+			}))
+			require.NoError(t, err)
+
+			resp, err := cli.Create(twofa.TOTPUnbindReq{
+				DeviceID: deviceID,
+			})
+			require.NoError(t, err)
+			helper.TestResp(t, resp, func(t *testing.T, rsp *twofa.TOTPUnbindRsp) {
+				t.Helper()
+
+				require.False(t, rsp.Success)
+				require.NotEmpty(t, rsp.Message)
+			})
+			assertTOTPDeviceActive(t, deviceID)
+		})
+
+		t.Run("multiple_verification_methods", func(t *testing.T) {
+			if len(backupCodes) < 3 {
+				t.Skip("not enough backup codes available")
+			}
+			cli, err := client.New(unbindAPI, client.WithCookie(&http.Cookie{
+				Name:  "session_id",
+				Value: sessionID,
+			}))
+			require.NoError(t, err)
+
+			resp, err := cli.Create(twofa.TOTPUnbindReq{
+				DeviceID:   deviceID,
+				Password:   password,
+				BackupCode: backupCodes[2],
+			})
+			require.NoError(t, err)
+			helper.TestResp(t, resp, func(t *testing.T, rsp *twofa.TOTPUnbindRsp) {
+				t.Helper()
+
+				require.False(t, rsp.Success)
+				require.NotEmpty(t, rsp.Message)
+			})
+			assertTOTPDeviceActive(t, deviceID)
+			assertBackupCodeHashCount(t, deviceID, 8)
+		})
+
 		t.Run("invalid_totp", func(t *testing.T) {
 			cli, err := client.New(unbindAPI, client.WithCookie(&http.Cookie{
 				Name:  "session_id",
@@ -529,6 +575,29 @@ func Test2fa(t *testing.T) {
 				)
 
 				require.False(t, rsp.Success)
+				require.NotEmpty(t, rsp.Message)
+			})
+			assertTOTPDeviceActive(t, deviceID)
+		})
+
+		t.Run("valid_password", func(t *testing.T) {
+			secondDeviceID, _, _ := bindTOTPDeviceForTest(t, sessionID, "test-device-password")
+			cli, err := client.New(unbindAPI, client.WithCookie(&http.Cookie{
+				Name:  "session_id",
+				Value: sessionID,
+			}))
+			require.NoError(t, err)
+
+			resp, err := cli.Create(twofa.TOTPUnbindReq{
+				DeviceID: secondDeviceID,
+				Password: password,
+			})
+			require.NoError(t, err)
+			helper.TestResp(t, resp, func(t *testing.T, rsp *twofa.TOTPUnbindRsp) {
+				t.Helper()
+
+				require.True(t, rsp.Success)
+				require.Equal(t, 1, rsp.DeviceCount)
 				require.NotEmpty(t, rsp.Message)
 			})
 		})
@@ -616,6 +685,66 @@ func assertBackupCodeHashCount(t *testing.T, deviceID string, want int) {
 
 	device := getTOTPDeviceForTest(t, deviceID)
 	require.Len(t, device.BackupCodeHashes, want)
+}
+
+func assertTOTPDeviceActive(t *testing.T, deviceID string) {
+	t.Helper()
+
+	device := getTOTPDeviceForTest(t, deviceID)
+	require.True(t, device.IsActive)
+}
+
+func bindTOTPDeviceForTest(t *testing.T, sessionID, deviceName string) (string, string, []string) {
+	t.Helper()
+
+	bindCli, err := client.New(bindAPI, client.WithCookie(&http.Cookie{
+		Name:  "session_id",
+		Value: sessionID,
+	}))
+	require.NoError(t, err)
+
+	bindResp, err := bindCli.Create(twofa.TOTPBind{})
+	require.NoError(t, err)
+
+	var challengeID string
+	var secret string
+	helper.TestResp(t, bindResp, func(t *testing.T, rsp *twofa.TOTPBindRsp) {
+		t.Helper()
+
+		require.NotEmpty(t, rsp.ChallengeID)
+		require.NotEmpty(t, rsp.OtpauthURL)
+		challengeID = rsp.ChallengeID
+		secret = extractSecretFromOtpauthURL(t, rsp.OtpauthURL)
+	})
+
+	code, err := totp.GenerateCode(secret, time.Now())
+	require.NoError(t, err)
+
+	confirmCli, err := client.New(confirmAPI, client.WithCookie(&http.Cookie{
+		Name:  "session_id",
+		Value: sessionID,
+	}))
+	require.NoError(t, err)
+
+	confirmResp, err := confirmCli.Create(twofa.TOTPConfirmReq{
+		ChallengeID: challengeID,
+		Code:        code,
+		DeviceName:  deviceName,
+	})
+	require.NoError(t, err)
+
+	var deviceID string
+	var backupCodes []string
+	helper.TestResp(t, confirmResp, func(t *testing.T, rsp *twofa.TOTPConfirmRsp) {
+		t.Helper()
+
+		require.NotEmpty(t, rsp.DeviceID)
+		require.NotEmpty(t, rsp.BackupCodes)
+		deviceID = rsp.DeviceID
+		backupCodes = rsp.BackupCodes
+	})
+
+	return deviceID, secret, backupCodes
 }
 
 func getTOTPDeviceForTest(t *testing.T, deviceID string) *modeltwofa.TOTPDevice {
