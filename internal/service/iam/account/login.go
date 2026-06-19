@@ -12,7 +12,6 @@ import (
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
-	modeltwofa "github.com/hydroan/gst/internal/model/twofa"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	servicelogmgmt "github.com/hydroan/gst/internal/service/logmgmt"
 	servicetwofa "github.com/hydroan/gst/internal/service/twofa"
@@ -23,7 +22,6 @@ import (
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/util"
 	"github.com/mssola/useragent"
-	"github.com/pquerna/otp/totp"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -35,9 +33,9 @@ type LoginService struct {
 // Create authenticates an IAM account and creates a new session.
 //
 // The local login path verifies username, password, account status, and any
-// required 2FA proof before creating the session. TOTP backup-code verification
-// is delegated to the twofa service so recovery codes are consumed through the
-// same one-time transactional path used by other twofa flows.
+// required 2FA proof before creating the session. The twofa service owns the
+// login second-factor decision, including disabled-module behavior, active
+// device checks, TOTP validation, and recovery-code consumption.
 func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.LoginReq) (rsp *modeliamaccount.LoginRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
 	// return keycloakLogin(ctx, log, req)
@@ -102,35 +100,24 @@ func localLogin(ctx *types.ServiceContext, log types.Logger, req *modeliamaccoun
 		return nil, errors.New("invalid username or password")
 	}
 
-	// Check if user has 2FA enabled
-	has2FA, err := checkUserHas2FA(ctx, user.ID)
-	if err != nil {
-		log.Errorz("failed to check 2FA status", zap.String("user_id", user.ID), zap.Error(err))
-		return nil, errors.New("internal server error")
-	}
-
-	// If user has 2FA enabled, validate the 2FA code
-	if has2FA {
-		// Check if either TOTP code or backup code is provided
-		if req.TOTPCode == "" && req.BackupCode == "" {
+	if err = servicetwofa.VerifyLoginSecondFactor(ctx, user.ID, servicetwofa.LoginSecondFactor{
+		TOTPCode:   req.TOTPCode,
+		BackupCode: req.BackupCode,
+	}); err != nil {
+		switch {
+		case errors.Is(err, servicetwofa.ErrLoginSecondFactorRequired):
 			log.Infoz("2FA required but no code provided", zap.String("username", req.Username))
 			return nil, errors.New("2FA verification required")
-		}
-
-		// Validate TOTP code if provided
-		if req.TOTPCode != "" {
-			if err = validateTOTPCode(ctx, user.ID, req.TOTPCode); err != nil {
-				log.Warnz("invalid TOTP code", zap.String("username", req.Username), zap.Error(err))
-				return nil, errors.New("invalid 2FA code")
-			}
-			log.Infoz("TOTP code validated successfully", zap.String("username", req.Username))
-		} else if req.BackupCode != "" {
-			// Validate backup code if provided
-			if err = servicetwofa.ConsumeTOTPBackupCode(ctx, user.ID, req.BackupCode); err != nil {
-				log.Warnz("invalid backup code", zap.String("username", req.Username), zap.Error(err))
-				return nil, errors.New("invalid backup code")
-			}
-			log.Infoz("backup code validated successfully", zap.String("username", req.Username))
+		case errors.Is(err, servicetwofa.ErrLoginSecondFactorConflict),
+			errors.Is(err, servicetwofa.ErrLoginTOTPCodeInvalid):
+			log.Warnz("invalid TOTP code", zap.String("username", req.Username), zap.Error(err))
+			return nil, errors.New("invalid 2FA code")
+		case errors.Is(err, servicetwofa.ErrLoginBackupCodeInvalid):
+			log.Warnz("invalid backup code", zap.String("username", req.Username), zap.Error(err))
+			return nil, errors.New("invalid backup code")
+		default:
+			log.Errorz("failed to verify login 2FA", zap.String("user_id", user.ID), zap.Error(err))
+			return nil, errors.New("internal server error")
 		}
 	}
 
@@ -222,55 +209,6 @@ func localLogin(ctx *types.ServiceContext, log types.Logger, req *modeliamaccoun
 	return &modeliamaccount.LoginRsp{
 		SessionID: sessionID,
 	}, nil
-}
-
-// checkUserHas2FA checks if the user has active TOTP devices
-func checkUserHas2FA(ctx *types.ServiceContext, userID string) (bool, error) {
-	if !servicetwofa.Enabled {
-		return false, nil
-	}
-
-	db := database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext())
-	devices := make([]*modeltwofa.TOTPDevice, 0)
-
-	if err := db.WithQuery(&modeltwofa.TOTPDevice{
-		UserID:   userID,
-		IsActive: true,
-	}).List(&devices); err != nil {
-		return false, fmt.Errorf("failed to query TOTP devices: %w", err)
-	}
-
-	return len(devices) > 0, nil
-}
-
-// validateTOTPCode validates the provided TOTP code for the user
-func validateTOTPCode(ctx *types.ServiceContext, userID, code string) error {
-	if code == "" {
-		return errors.New("TOTP code is required")
-	}
-
-	db := database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext())
-	devices := make([]*modeltwofa.TOTPDevice, 0)
-
-	if err := db.WithQuery(&modeltwofa.TOTPDevice{
-		UserID:   userID,
-		IsActive: true,
-	}).List(&devices); err != nil {
-		return fmt.Errorf("failed to query TOTP devices: %w", err)
-	}
-
-	if len(devices) == 0 {
-		return errors.New("no active TOTP devices found")
-	}
-
-	// Try to validate the code against all active devices
-	for _, device := range devices {
-		if totp.Validate(code, device.Secret) {
-			return nil
-		}
-	}
-
-	return errors.New("invalid TOTP code")
 }
 
 // func keycloakLogin(ctx *types.ServiceContext, log types.Logger, req *iam.LoginReq) (rsp *iam.LoginRsp, err error) {

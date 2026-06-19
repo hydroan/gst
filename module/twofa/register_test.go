@@ -382,6 +382,59 @@ func Test2fa(t *testing.T) {
 		})
 	})
 
+	t.Run("login_requires_second_factor", func(t *testing.T) {
+		cli, err := client.New(loginAPI)
+		require.NoError(t, err)
+
+		resp, err := cli.Create(iam.LoginReq{
+			Username: username,
+			Password: password,
+		})
+		require.Error(t, err)
+		require.Nil(t, resp)
+	})
+
+	t.Run("login_with_totp_code", func(t *testing.T) {
+		cli, err := client.New(loginAPI)
+		require.NoError(t, err)
+
+		code, err := totp.GenerateCode(secret, time.Now())
+		require.NoError(t, err)
+
+		resp, err := cli.Create(iam.LoginReq{
+			Username: username,
+			Password: password,
+			TOTPCode: code,
+		})
+		require.NoError(t, err)
+		helper.TestResp(t, resp, func(t *testing.T, rsp *iam.LoginRsp) {
+			t.Helper()
+
+			require.NotEmpty(t, rsp.SessionID)
+		})
+	})
+
+	t.Run("login_rejects_conflicting_second_factors", func(t *testing.T) {
+		if len(backupCodes) == 0 {
+			t.Skip("no backup codes available")
+		}
+		cli, err := client.New(loginAPI)
+		require.NoError(t, err)
+
+		code, err := totp.GenerateCode(secret, time.Now())
+		require.NoError(t, err)
+
+		resp, err := cli.Create(iam.LoginReq{
+			Username:   username,
+			Password:   password,
+			TOTPCode:   code,
+			BackupCode: backupCodes[0],
+		})
+		require.Error(t, err)
+		require.Nil(t, resp)
+		assertBackupCodeHashCount(t, deviceID, 10)
+	})
+
 	t.Run("verify", func(t *testing.T) {
 		t.Run("valid_code", func(t *testing.T) {
 			cli, err := client.New(verifyAPI, client.WithCookie(&http.Cookie{
