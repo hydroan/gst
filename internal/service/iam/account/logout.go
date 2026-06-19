@@ -23,12 +23,6 @@ type LogoutService struct {
 func (s *LogoutService) Create(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamaccount.LogoutRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
 
-	// return keycloakLogout(ctx, log, req)
-	return localLogout(ctx, log, req)
-}
-
-// localLogout removes the current session from storage, records a logout log, and clears the cookie.
-func localLogout(ctx *types.ServiceContext, log types.Logger, req *model.Empty) (rsp *modeliamaccount.LogoutRsp, err error) {
 	// Get session_id from cookie
 	sessionID, err := ctx.Cookie("session_id")
 	if err != nil {
@@ -73,31 +67,3 @@ func localLogout(ctx *types.ServiceContext, log types.Logger, req *model.Empty) 
 	log.Info("user logged out successfully", "session_id", sessionID)
 	return &modeliamaccount.LogoutRsp{Msg: "logout successful"}, nil
 }
-
-// func keycloakLogout(ctx *types.ServiceContext, log types.Logger, req *iam.Logout) (rsp *iam.LogoutRsp, err error) {
-// 	// 获取前端 cookie 中的 session	id
-// 	sessionID, err := ctx.Cookie("session_id")
-// 	if err != nil {
-// 		log.Error(err)
-// 		return rsp, err
-// 	}
-//
-// 	redisKey := modeliamsession.SessionIDKey(sessionID)
-// 	// 获取 redis 中的 session
-// 	session, e := redis.Cache[iam.Session]().Get(redisKey)
-// 	if e != nil {
-// 		log.Error(e)
-// 		return nil, e
-// 	}
-//
-// 	// keycloak 中退出登录
-// 	if err := keycloak.IdentityLogout(log, session.Token.RefreshToken); err != nil {
-// 		log.Error(err)
-// 		return nil, err
-// 	}
-//
-// 	// 删除 redis 中的 session
-// 	redis.Cache[iam.Session]().Delete(redisKey)
-//
-// 	return rsp, nil
-// }

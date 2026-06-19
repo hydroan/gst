@@ -38,12 +38,6 @@ type LoginService struct {
 // device checks, TOTP validation, and recovery-code consumption.
 func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.LoginReq) (rsp *modeliamaccount.LoginRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
-	// return keycloakLogin(ctx, log, req)
-	return localLogin(ctx, log, req)
-}
-
-// localLogin performs username/password authentication and optional 2FA verification.
-func localLogin(ctx *types.ServiceContext, log types.Logger, req *modeliamaccount.LoginReq) (rsp *modeliamaccount.LoginRsp, err error) {
 	// Validate input
 	if req.Username == "" {
 		return nil, errors.New("username is required")
@@ -210,67 +204,3 @@ func localLogin(ctx *types.ServiceContext, log types.Logger, req *modeliamaccoun
 		SessionID: sessionID,
 	}, nil
 }
-
-// func keycloakLogin(ctx *types.ServiceContext, log types.Logger, req *iam.LoginReq) (rsp *iam.LoginRsp, err error) {
-// 	kccfg := config.Get[configx.Keycloak]()
-//
-// 	// keycloak 校验用户名和密码
-// 	tokens, err := keycloak.IdentityLogin(log, req.Username, req.Password)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	// 获取用户信息
-// 	userInfo, err := keycloak.UserInfo(log, tokens.AccessToken)
-// 	if err != nil {
-// 		log.Error(err)
-// 		return nil, err
-// 	}
-//
-// 	// 解析 token、解析前端浏览器信息
-// 	jwksURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/certs", kccfg.Addr, kccfg.Realm)
-// 	claims := &helper.Claims{}
-// 	if _, err := jwt.ParseWithClaims(tokens.AccessToken, claims, helper.KeyFuncForKeycloak(jwksURL)); err != nil {
-// 		log.Error(err)
-// 		return nil, err
-// 	}
-// 	ua := useragent.New(ctx.UserAgent)
-// 	engineName, _ := ua.Engine()
-// 	browserName, _ := ua.Browser()
-//
-// 	// 存入 redis
-// 	sessionID := util.UUID()
-// 	redisKey := modeliamsession.SessionIDKey(sessionID)
-// 	if err := redis.Cache[iam.Session]().Set(redisKey, iam.Session{
-// 		UserID:      claims.Sub,
-// 		Username:    claims.PreferredUsername,
-// 		Email:       claims.Email,
-// 		OS:          ua.OS(),
-// 		Platform:    ua.Platform(),
-// 		EngineName:  engineName,
-// 		BrowserName: browserName,
-// 		Token:       *tokens,
-// 		UserInfo:    userInfo,
-// 	}, 8*time.Hour); err != nil {
-// 		log.Error("failed to set session in redis", zap.Error(err))
-// 		return nil, fmt.Errorf("failed to set session in redis")
-// 	}
-//
-// 	// 设置前端 cookie
-// 	http.SetCookie(ctx.Writer, &http.Cookie{
-// 		Name:  "session_id",
-// 		Value: sessionID,
-// 		Path:  "/",
-// 		// MaxAge:   tokens.RefreshExpiresIn,
-// 		MaxAge:   8 * 60 * 60,          // 8 hours
-// 		HttpOnly: true,                 // 建议设为 true，更安全
-// 		Secure:   false,                // 本地开发设为 false
-// 		SameSite: http.SameSiteLaxMode, // 改为 Lax
-// 	})
-//
-// 	// 返回给前端
-// 	rsp = &iam.LoginRsp{
-// 		SessionID: sessionID,
-// 	}
-//
-// 	return rsp, nil
-// }
