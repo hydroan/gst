@@ -275,7 +275,7 @@ func genRun() {
 	// ============================================================
 	// Prune disabled service files
 	// ============================================================
-	if prune && len(oldServiceFiles) > 0 {
+	if prune {
 		pruneServiceFiles(oldServiceFiles, allModels)
 	}
 

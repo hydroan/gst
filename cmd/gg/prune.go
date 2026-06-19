@@ -45,11 +45,7 @@ func pruneRun() {
 
 	// Prune disabled service files
 	clioutput.Section("Prune Disabled Service Files")
-	if len(oldServiceFiles) > 0 {
-		pruneServiceFiles(oldServiceFiles, allModels)
-	} else {
-		clioutput.Success("", "No service files found to prune")
-	}
+	pruneServiceFiles(oldServiceFiles, allModels)
 
 	clioutput.Done("Code pruning completed successfully!")
 }
