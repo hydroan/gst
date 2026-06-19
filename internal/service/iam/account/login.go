@@ -14,7 +14,7 @@ import (
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	servicelogmgmt "github.com/hydroan/gst/internal/service/logmgmt"
-	servicetwofa "github.com/hydroan/gst/internal/service/twofa"
+	servicemfa "github.com/hydroan/gst/internal/service/mfa"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/response"
@@ -33,7 +33,7 @@ type LoginService struct {
 // Create authenticates an IAM account and creates a new session.
 //
 // The local login path verifies username, password, account status, and any
-// required 2FA proof before creating the session. The twofa service owns the
+// required MFA proof before creating the session. The MFA service owns the
 // login second-factor decision, including disabled-module behavior, active
 // device checks, TOTP validation, and recovery-code consumption.
 func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.LoginReq) (rsp *modeliamaccount.LoginRsp, err error) {
@@ -94,23 +94,23 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		return nil, errors.New("invalid username or password")
 	}
 
-	if err = servicetwofa.VerifyLoginSecondFactor(ctx, user.ID, servicetwofa.LoginSecondFactor{
+	if err = servicemfa.VerifyLoginSecondFactor(ctx, user.ID, servicemfa.LoginSecondFactor{
 		TOTPCode:   req.TOTPCode,
 		BackupCode: req.BackupCode,
 	}); err != nil {
 		switch {
-		case errors.Is(err, servicetwofa.ErrLoginSecondFactorRequired):
-			log.Infoz("2FA required but no code provided", zap.String("username", req.Username))
-			return nil, errors.New("2FA verification required")
-		case errors.Is(err, servicetwofa.ErrLoginSecondFactorConflict),
-			errors.Is(err, servicetwofa.ErrLoginTOTPCodeInvalid):
+		case errors.Is(err, servicemfa.ErrLoginSecondFactorRequired):
+			log.Infoz("MFA required but no code provided", zap.String("username", req.Username))
+			return nil, errors.New("MFA verification required")
+		case errors.Is(err, servicemfa.ErrLoginSecondFactorConflict),
+			errors.Is(err, servicemfa.ErrLoginTOTPCodeInvalid):
 			log.Warnz("invalid TOTP code", zap.String("username", req.Username), zap.Error(err))
-			return nil, errors.New("invalid 2FA code")
-		case errors.Is(err, servicetwofa.ErrLoginBackupCodeInvalid):
+			return nil, errors.New("invalid MFA code")
+		case errors.Is(err, servicemfa.ErrLoginBackupCodeInvalid):
 			log.Warnz("invalid backup code", zap.String("username", req.Username), zap.Error(err))
 			return nil, errors.New("invalid backup code")
 		default:
-			log.Errorz("failed to verify login 2FA", zap.String("user_id", user.ID), zap.Error(err))
+			log.Errorz("failed to verify login MFA", zap.String("user_id", user.ID), zap.Error(err))
 			return nil, errors.New("internal server error")
 		}
 	}

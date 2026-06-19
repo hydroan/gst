@@ -1,4 +1,4 @@
-package servicetwofa
+package servicemfa
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
-	modeltwofa "github.com/hydroan/gst/internal/model/twofa"
+	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/pquerna/otp/totp"
@@ -22,7 +22,7 @@ import (
 // recovery codes only in this response while storing bcrypt hashes in the device
 // record. The binding challenge is consumed only after the device is saved.
 type TOTPConfirmService struct {
-	service.Base[*modeltwofa.TOTPConfirm, *modeltwofa.TOTPConfirmReq, *modeltwofa.TOTPConfirmRsp]
+	service.Base[*modelmfa.TOTPConfirm, *modelmfa.TOTPConfirmReq, *modelmfa.TOTPConfirmRsp]
 }
 
 // Create turns a valid binding challenge into an active TOTP device.
@@ -30,7 +30,7 @@ type TOTPConfirmService struct {
 // The method verifies challenge ownership, checks the submitted TOTP code,
 // prevents duplicate binding for the same secret, creates recovery codes, stores
 // only their hashes, persists the device, and then consumes the challenge.
-func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modeltwofa.TOTPConfirmReq) (rsp *modeltwofa.TOTPConfirmRsp, err error) {
+func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPConfirmReq) (rsp *modelmfa.TOTPConfirmRsp, err error) {
 	log := t.WithServiceContext(ctx, ctx.GetPhase())
 
 	if len(ctx.UserID) == 0 {
@@ -67,8 +67,8 @@ func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modeltwofa.T
 
 	log.Infoz("totp code validated successfully", zap.String("user_id", ctx.UserID))
 
-	devices := make([]*modeltwofa.TOTPDevice, 0)
-	if err = database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext()).WithQuery(&modeltwofa.TOTPDevice{
+	devices := make([]*modelmfa.TOTPDevice, 0)
+	if err = database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).WithQuery(&modelmfa.TOTPDevice{
 		UserID: ctx.UserID,
 		Secret: challenge.Secret,
 	}).WithLimit(1).List(&devices); err != nil {
@@ -92,7 +92,7 @@ func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modeltwofa.T
 	}
 
 	now := time.Now()
-	device := &modeltwofa.TOTPDevice{
+	device := &modelmfa.TOTPDevice{
 		UserID:           ctx.UserID,
 		DeviceName:       req.DeviceName,
 		Secret:           challenge.Secret,
@@ -101,7 +101,7 @@ func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modeltwofa.T
 		LastUsedAt:       &now,
 	}
 
-	if err = database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext()).Create(device); err != nil {
+	if err = database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).Create(device); err != nil {
 		log.Errorz("failed to create totp device", zap.Error(err))
 		return nil, fmt.Errorf("failed to save device: %w", err)
 	}
@@ -115,7 +115,7 @@ func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modeltwofa.T
 		return nil, errors.Wrap(err, "failed to consume TOTP binding challenge")
 	}
 
-	rsp = &modeltwofa.TOTPConfirmRsp{
+	rsp = &modelmfa.TOTPConfirmRsp{
 		DeviceID:    device.ID,
 		Message:     "TOTP device confirmed and activated successfully",
 		BackupCodes: backupCodes,

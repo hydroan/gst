@@ -1,4 +1,4 @@
-package modeltwofa
+package modelmfa
 
 import (
 	"time"
@@ -11,7 +11,7 @@ import (
 // TOTPDevice stores a registered TOTP authenticator for an IAM user.
 //
 // The model is registered for storage only. Device management is exposed through
-// dedicated twofa actions instead of default CRUD routes so sensitive fields stay
+// dedicated MFA actions instead of default CRUD routes so sensitive fields stay
 // behind service-level checks.
 type TOTPDevice struct {
 	UserID           string                      `json:"user_id" gorm:"type:varchar(191);not null;index" schema:"user_id"`

@@ -1,4 +1,4 @@
-package modeltwofa
+package modelmfa
 
 import (
 	. "github.com/hydroan/gst/dsl"
@@ -26,7 +26,7 @@ type TOTPUnbindRsp struct {
 }
 
 func (TOTPUnbind) Design() {
-	Route("2fa/totp/unbind", func() {
+	Route("mfa/totp/unbind", func() {
 		Create(func() {
 			Enabled(true)
 			Service(true)

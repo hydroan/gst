@@ -1,10 +1,10 @@
-package servicetwofa
+package servicemfa
 
 import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
-	modeltwofa "github.com/hydroan/gst/internal/model/twofa"
+	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"golang.org/x/crypto/bcrypt"
@@ -16,17 +16,17 @@ import (
 // the authenticated account so callers cannot use the endpoint to enumerate
 // which users have MFA enabled.
 type TOTPCheckService struct {
-	service.Base[*modeltwofa.TOTPCheck, *modeltwofa.TOTPCheckReq, *modeltwofa.TOTPCheckRsp]
+	service.Base[*modelmfa.TOTPCheck, *modelmfa.TOTPCheckReq, *modelmfa.TOTPCheckRsp]
 }
 
 // Create validates the primary credentials and returns whether the matched
 // user currently has any active TOTP devices. It does not issue login tokens or
 // verify second-factor codes; it only tells the login flow whether a follow-up
 // TOTP verification step is required.
-func (c *TOTPCheckService) Create(ctx *types.ServiceContext, req *modeltwofa.TOTPCheckReq) (rsp *modeltwofa.TOTPCheckRsp, err error) {
+func (c *TOTPCheckService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPCheckReq) (rsp *modelmfa.TOTPCheckRsp, err error) {
 	log := c.WithServiceContext(ctx, ctx.GetPhase())
 
-	// 验证输入参数
+	// Validate input.
 	if req.Username == "" {
 		log.Warnw("empty username provided", "client_ip", ctx.ClientIP)
 		return nil, errors.New("username is required")
@@ -36,7 +36,7 @@ func (c *TOTPCheckService) Create(ctx *types.ServiceContext, req *modeltwofa.TOT
 		return nil, errors.New("password is required")
 	}
 
-	// 查找用户
+	// Find the user.
 	db := database.Database[*modeliamuser.User](ctx.DatabaseContext())
 	users := make([]*modeliamuser.User, 0)
 	if err = db.WithLimit(1).WithQuery(&modeliamuser.User{Username: req.Username}).List(&users); err != nil {
@@ -49,40 +49,40 @@ func (c *TOTPCheckService) Create(ctx *types.ServiceContext, req *modeltwofa.TOT
 	}
 	user := users[0]
 
-	// 验证密码
+	// Verify the password.
 	if err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 		log.Warnw("invalid password", "username", req.Username, "client_ip", ctx.ClientIP)
 		return nil, errors.New("authentication failed")
 	}
 
-	// 检查用户是否有活跃的TOTP设备
-	totpDB := database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext())
-	devices := make([]*modeltwofa.TOTPDevice, 0)
-	if err = totpDB.WithQuery(&modeltwofa.TOTPDevice{UserID: user.ID, IsActive: true}).List(&devices); err != nil {
+	// Check whether the user has active TOTP devices.
+	totpDB := database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext())
+	devices := make([]*modelmfa.TOTPDevice, 0)
+	if err = totpDB.WithQuery(&modelmfa.TOTPDevice{UserID: user.ID, IsActive: true}).List(&devices); err != nil {
 		log.Errorw("failed to query TOTP devices", "user_id", user.ID, "error", err)
-		return nil, errors.New("failed to check 2FA status")
+		return nil, errors.New("failed to check MFA status")
 	}
 
-	requires2FA := len(devices) > 0
+	requiresMFA := len(devices) > 0
 
-	// 记录检查日志
+	// Log the check result.
 	log.Infow(
 		"TOTP check completed",
 		"username", req.Username,
 		"user_id", user.ID,
-		"requires_2fa", requires2FA,
+		"requires_mfa", requiresMFA,
 		"active_devices", len(devices),
 		"client_ip", ctx.ClientIP,
 	)
 
-	// 返回检查结果
-	message := "2FA is not enabled"
-	if requires2FA {
-		message = "2FA is enabled"
+	// Return the check result.
+	message := "MFA is not enabled"
+	if requiresMFA {
+		message = "MFA is enabled"
 	}
 
-	return &modeltwofa.TOTPCheckRsp{
-		Requires2FA: requires2FA,
+	return &modelmfa.TOTPCheckRsp{
+		RequiresMFA: requiresMFA,
 		Message:     message,
 	}, nil
 }

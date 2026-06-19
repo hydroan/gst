@@ -1,11 +1,11 @@
-package modeltwofa
+package modelmfa
 
 import (
 	. "github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 )
 
-// TOTPVerify 验证 TOTP 代码
+// TOTPVerify represents a request to verify a TOTP or recovery code.
 type TOTPVerify struct {
 	model.Empty
 }
@@ -22,7 +22,7 @@ type TOTPVerifyRsp struct {
 }
 
 func (TOTPVerify) Design() {
-	Route("2fa/totp/verify", func() {
+	Route("mfa/totp/verify", func() {
 		Create(func() {
 			Enabled(true)
 			Service(true)

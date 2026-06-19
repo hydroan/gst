@@ -1,4 +1,4 @@
-package servicetwofa
+package servicemfa
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
-	modeltwofa "github.com/hydroan/gst/internal/model/twofa"
+	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
@@ -26,7 +26,7 @@ import (
 // devices; recovery-code removal and target-device deletion share the same
 // transaction so the code is consumed only when the unbind operation succeeds.
 type TOTPUnbindService struct {
-	service.Base[*modeltwofa.TOTPUnbind, *modeltwofa.TOTPUnbindReq, *modeltwofa.TOTPUnbindRsp]
+	service.Base[*modelmfa.TOTPUnbind, *modelmfa.TOTPUnbindReq, *modelmfa.TOTPUnbindRsp]
 }
 
 var errTOTPUnbindVerificationInvalid = errors.New("invalid verification")
@@ -37,7 +37,7 @@ var errTOTPUnbindVerificationInvalid = errors.New("invalid verification")
 // verifies the chosen proof, locks the current user's active devices, removes
 // the target device, and reports how many active devices remain. Backup-code
 // verification is performed in the same transaction as the device removal.
-func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modeltwofa.TOTPUnbindReq) (rsp *modeltwofa.TOTPUnbindRsp, err error) {
+func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPUnbindReq) (rsp *modelmfa.TOTPUnbindRsp, err error) {
 	log := t.WithServiceContext(ctx, ctx.GetPhase())
 
 	if len(ctx.UserID) == 0 {
@@ -47,13 +47,13 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 
 	switch countTOTPUnbindVerificationMethods(req) {
 	case 0:
-		return &modeltwofa.TOTPUnbindRsp{
+		return &modelmfa.TOTPUnbindRsp{
 			Success: false,
 			Message: "fresh authentication required",
 		}, nil
 	case 1:
 	default:
-		return &modeltwofa.TOTPUnbindRsp{
+		return &modelmfa.TOTPUnbindRsp{
 			Success: false,
 			Message: "provide exactly one verification method",
 		}, nil
@@ -64,7 +64,7 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 			log.Warnz("device not found or not active",
 				zap.String("user_id", ctx.UserID),
 				zap.String("device_id", req.DeviceID))
-			return &modeltwofa.TOTPUnbindRsp{
+			return &modelmfa.TOTPUnbindRsp{
 				Success: false,
 				Message: "Device not found or already unbound",
 			}, nil
@@ -74,16 +74,16 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 				zap.String("user_id", ctx.UserID),
 				zap.String("device_id", req.DeviceID),
 				zap.Error(verifyErr))
-			return &modeltwofa.TOTPUnbindRsp{
+			return &modelmfa.TOTPUnbindRsp{
 				Success: false,
 				Message: "invalid verification",
 			}, nil
 		}
 	}
 
-	err = database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext()).Transaction(func(tx types.Database[*modeltwofa.TOTPDevice]) error {
-		devices := make([]*modeltwofa.TOTPDevice, 0)
-		if listErr := tx.WithLock(consts.LockUpdate).WithQuery(&modeltwofa.TOTPDevice{
+	err = database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).Transaction(func(tx types.Database[*modelmfa.TOTPDevice]) error {
+		devices := make([]*modelmfa.TOTPDevice, 0)
+		if listErr := tx.WithLock(consts.LockUpdate).WithQuery(&modelmfa.TOTPDevice{
 			UserID:   ctx.UserID,
 			IsActive: true,
 		}).List(&devices); listErr != nil {
@@ -95,7 +95,7 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 			log.Warnz("device not found or not active",
 				zap.String("user_id", ctx.UserID),
 				zap.String("device_id", req.DeviceID))
-			rsp = &modeltwofa.TOTPUnbindRsp{
+			rsp = &modelmfa.TOTPUnbindRsp{
 				Success: false,
 				Message: "Device not found or already unbound",
 			}
@@ -111,7 +111,7 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 					zap.String("user_id", ctx.UserID),
 					zap.String("device_id", req.DeviceID),
 					zap.Error(verifyErr))
-				rsp = &modeltwofa.TOTPUnbindRsp{
+				rsp = &modelmfa.TOTPUnbindRsp{
 					Success: false,
 					Message: "invalid verification",
 				}
@@ -124,7 +124,7 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 			return fmt.Errorf("failed to unbind device: %w", deleteErr)
 		}
 
-		rsp = &modeltwofa.TOTPUnbindRsp{
+		rsp = &modelmfa.TOTPUnbindRsp{
 			Success:     true,
 			Message:     fmt.Sprintf("Device '%s' unbound successfully", device.DeviceName),
 			DeviceCount: countRemainingTOTPDevices(devices, device.ID),
@@ -153,7 +153,7 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 }
 
 // countTOTPUnbindVerificationMethods counts which fresh-auth methods are present.
-func countTOTPUnbindVerificationMethods(req *modeltwofa.TOTPUnbindReq) int {
+func countTOTPUnbindVerificationMethods(req *modelmfa.TOTPUnbindReq) int {
 	count := 0
 	if req.Password != "" {
 		count++
@@ -174,9 +174,9 @@ func countTOTPUnbindVerificationMethods(req *modeltwofa.TOTPUnbindReq) int {
 // consumes the matching hash through the transaction-bound backup-code helper.
 func verifyTOTPUnbindFreshAuth(
 	ctx *types.ServiceContext,
-	tx types.Database[*modeltwofa.TOTPDevice],
-	req *modeltwofa.TOTPUnbindReq,
-	devices []*modeltwofa.TOTPDevice,
+	tx types.Database[*modelmfa.TOTPDevice],
+	req *modelmfa.TOTPUnbindReq,
+	devices []*modelmfa.TOTPDevice,
 	now time.Time,
 ) error {
 	switch {
@@ -217,17 +217,17 @@ func activeTOTPUnbindDeviceExists(ctx *types.ServiceContext, userID, deviceID st
 		return false
 	}
 
-	device := new(modeltwofa.TOTPDevice)
-	query := &modeltwofa.TOTPDevice{
+	device := new(modelmfa.TOTPDevice)
+	query := &modelmfa.TOTPDevice{
 		UserID:   userID,
 		IsActive: true,
 	}
 	query.Base.ID = deviceID
-	return database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext()).WithQuery(query).First(device) == nil
+	return database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).WithQuery(query).First(device) == nil
 }
 
 // findTOTPUnbindDevice selects the target active device from the locked device list.
-func findTOTPUnbindDevice(devices []*modeltwofa.TOTPDevice, deviceID string) *modeltwofa.TOTPDevice {
+func findTOTPUnbindDevice(devices []*modelmfa.TOTPDevice, deviceID string) *modelmfa.TOTPDevice {
 	deviceID = strings.TrimSpace(deviceID)
 	for _, device := range devices {
 		if device == nil {
@@ -241,7 +241,7 @@ func findTOTPUnbindDevice(devices []*modeltwofa.TOTPDevice, deviceID string) *mo
 }
 
 // countRemainingTOTPDevices returns the active-device count after removing one device.
-func countRemainingTOTPDevices(devices []*modeltwofa.TOTPDevice, removedDeviceID string) int {
+func countRemainingTOTPDevices(devices []*modelmfa.TOTPDevice, removedDeviceID string) int {
 	count := 0
 	for _, device := range devices {
 		if device == nil || device.ID == removedDeviceID {

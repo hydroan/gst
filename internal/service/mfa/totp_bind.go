@@ -1,4 +1,4 @@
-package servicetwofa
+package servicemfa
 
 import (
 	"bytes"
@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/errors"
-	modeltwofa "github.com/hydroan/gst/internal/model/twofa"
+	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
@@ -25,7 +25,7 @@ var Enabled bool
 // response returns only the challenge ID and authenticator setup data, never the
 // raw secret as a standalone field.
 type TOTPBindService struct {
-	service.Base[*modeltwofa.TOTPBind, *modeltwofa.TOTPBind, *modeltwofa.TOTPBindRsp]
+	service.Base[*modelmfa.TOTPBind, *modelmfa.TOTPBind, *modelmfa.TOTPBindRsp]
 }
 
 // Create creates a pending TOTP binding challenge and returns setup metadata.
@@ -33,7 +33,7 @@ type TOTPBindService struct {
 // The method requires an authenticated user and session, generates a new
 // server-held secret, stores it in the binding challenge, and returns the
 // challenge ID with the provisioning URL and QR image for authenticator setup.
-func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *modeltwofa.TOTPBind) (rsp *modeltwofa.TOTPBindRsp, err error) {
+func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPBind) (rsp *modelmfa.TOTPBindRsp, err error) {
 	log := t.WithServiceContext(ctx, ctx.GetPhase())
 
 	if len(ctx.UserID) == 0 {
@@ -81,7 +81,7 @@ func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *modeltwofa.TOTP
 		return nil, err
 	}
 
-	rsp = &modeltwofa.TOTPBindRsp{
+	rsp = &modelmfa.TOTPBindRsp{
 		ChallengeID: challengeID,
 		OtpauthURL:  qrCodeURL,
 		QRCodeImage: qrCodeImage,

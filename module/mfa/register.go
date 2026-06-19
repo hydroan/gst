@@ -1,32 +1,32 @@
 /*
 用户登录流程：
 1. POST /api/login → 提交用户名和密码
-2. 如果用户已启用 2FA，登录请求必须同时提交 totp_code 或 backup_code 其中一个
+2. 如果用户已启用 MFA，登录请求必须同时提交 totp_code 或 backup_code 其中一个
 3. 登录成功
 
-2FA管理流程：
-1. POST /api/2fa/totp/check → 检查用户是否启用2FA
-2. POST /api/2fa/totp/bind → 绑定设备
-3. POST /api/2fa/totp/confirm → 确认绑定
-4. POST /api/2fa/totp/verify → 已登录用户日常验证使用
-5. POST /api/2fa/totp/unbind → 解绑设备
-6. GET /api/2fa/totp/status → 查看状态和设备摘要
+MFA管理流程：
+1. POST /api/mfa/totp/check → 检查用户是否启用MFA
+2. POST /api/mfa/totp/bind → 绑定设备
+3. POST /api/mfa/totp/confirm → 确认绑定
+4. POST /api/mfa/totp/verify → 已登录用户日常验证使用
+5. POST /api/mfa/totp/unbind → 解绑设备
+6. GET /api/mfa/totp/status → 查看状态和设备摘要
 
 核心接口
 
 绑定流程：
-- POST /api/2fa/totp/bind - 初始化 TOTP 绑定
-- POST /api/2fa/totp/confirm - 确认绑定 TOTP 设备
+- POST /api/mfa/totp/bind - 初始化 TOTP 绑定
+- POST /api/mfa/totp/confirm - 确认绑定 TOTP 设备
 
 验证流程：
-- POST /api/2fa/totp/verify - 已登录用户验证 TOTP 代码或恢复码，不参与登录流程
+- POST /api/mfa/totp/verify - 已登录用户验证 TOTP 代码或恢复码，不参与登录流程
 
 检查接口：
-- POST /api/2fa/totp/check - 检查用户是否启用 2FA
+- POST /api/mfa/totp/check - 检查用户是否启用 MFA
 
 管理接口：
-- GET /api/2fa/totp/status - 获取用户 2FA 状态和脱敏设备摘要
-- POST /api/2fa/totp/unbind - 解绑 TOTP 设备
+- GET /api/mfa/totp/status - 获取用户 MFA 状态和脱敏设备摘要
+- POST /api/mfa/totp/unbind - 解绑 TOTP 设备
 
 核心服务逻辑
 
@@ -42,7 +42,7 @@ B. TOTP 确认服务
 - 生成一次性恢复码
 - 将恢复码哈希后保存
 - 保存设备信息到数据库
-- 激活 2FA 功能
+- 激活 MFA 功能
 
 C. TOTP 验证服务
 - 验证已登录用户提交的 TOTP 代码或恢复码
@@ -59,18 +59,18 @@ D. TOTP 解绑服务
 E. TOTP 检查服务
 - 验证用户身份（用户名和密码）
 - 查询用户的活跃 TOTP 设备
-- 返回是否启用 2FA 的状态
+- 返回是否启用 MFA 的状态
 
 F. TOTP 状态服务
-- 查询用户的 2FA 状态
+- 查询用户的 MFA 状态
 - 返回设备列表信息
 */
 
-package twofa
+package mfa
 
 import (
-	modeltwofa "github.com/hydroan/gst/internal/model/twofa"
-	servicetwofa "github.com/hydroan/gst/internal/service/twofa"
+	modelmfa "github.com/hydroan/gst/internal/model/mfa"
+	servicemfa "github.com/hydroan/gst/internal/service/mfa"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module"
 	"github.com/hydroan/gst/types/consts"
@@ -87,15 +87,15 @@ import (
 //   - TOTPVerify, TOTPVerifyReq, TOTPVerifyRsp
 //
 // Routes
-//   - POST     /api/2fa/totp/bind
-//   - POST     /api/2fa/totp/check
-//   - POST     /api/2fa/totp/confirm
-//   - GET      /api/2fa/totp/status
-//   - POST     /api/2fa/totp/unbind
-//   - POST     /api/2fa/totp/verify
+//   - POST     /api/mfa/totp/bind
+//   - POST     /api/mfa/totp/check
+//   - POST     /api/mfa/totp/confirm
+//   - GET      /api/mfa/totp/status
+//   - POST     /api/mfa/totp/unbind
+//   - POST     /api/mfa/totp/verify
 func Register() {
-	servicetwofa.Enabled = true
-	model.Register[*modeltwofa.TOTPDevice]()
+	servicemfa.Enabled = true
+	model.Register[*modelmfa.TOTPDevice]()
 
 	module.Use[
 		*TOTPBind,

@@ -1,4 +1,4 @@
-package servicetwofa
+package servicemfa
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 
 const (
 	totpBindChallengeTTL     = 10 * time.Minute
-	totpBindChallengeKeyBase = "twofa:totp:bind"
+	totpBindChallengeKeyBase = "mfa:totp:bind"
 )
 
 // totpBindChallenge stores one pending TOTP binding attempt in cache.

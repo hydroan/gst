@@ -1,4 +1,4 @@
-package servicetwofa
+package servicemfa
 
 import (
 	"fmt"
@@ -7,21 +7,21 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
-	modeltwofa "github.com/hydroan/gst/internal/model/twofa"
+	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/pquerna/otp/totp"
 	"go.uber.org/zap"
 )
 
-// TOTPVerifyService verifies a logged-in user's 2FA code.
+// TOTPVerifyService verifies a logged-in user's MFA code.
 //
 // Standard TOTP verification checks the submitted code against the user's
 // active devices and updates the matching device's last-used timestamp.
 // Backup-code verification delegates to the recovery-code service, which
 // validates and consumes the matching hash transactionally.
 type TOTPVerifyService struct {
-	service.Base[*modeltwofa.TOTPVerify, *modeltwofa.TOTPVerifyReq, *modeltwofa.TOTPVerifyRsp]
+	service.Base[*modelmfa.TOTPVerify, *modelmfa.TOTPVerifyReq, *modelmfa.TOTPVerifyRsp]
 }
 
 // Create verifies either a TOTP code or a one-time recovery code.
@@ -29,12 +29,12 @@ type TOTPVerifyService struct {
 // The method first enforces authentication and non-empty input. Recovery codes
 // are consumed through the shared backup-code helper; normal TOTP codes are
 // checked against the selected device or all active devices for the user.
-func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modeltwofa.TOTPVerifyReq) (rsp *modeltwofa.TOTPVerifyRsp, err error) {
+func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPVerifyReq) (rsp *modelmfa.TOTPVerifyRsp, err error) {
 	log := t.WithServiceContext(ctx, ctx.GetPhase())
 
 	if len(ctx.UserID) == 0 {
 		log.Errorz("user_id not found in context")
-		return &modeltwofa.TOTPVerifyRsp{
+		return &modelmfa.TOTPVerifyRsp{
 			Valid:   false,
 			Message: "authentication required",
 		}, types.NewServiceError(http.StatusUnauthorized, "authentication required")
@@ -42,7 +42,7 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 
 	if len(req.Code) == 0 {
 		log.Errorz("code is empty")
-		return &modeltwofa.TOTPVerifyRsp{
+		return &modelmfa.TOTPVerifyRsp{
 			Valid:   false,
 			Message: "verification code is required",
 		}, errors.New("verification code is required")
@@ -51,20 +51,20 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 	if req.IsBackup {
 		if err = ConsumeTOTPBackupCode(ctx, ctx.UserID, req.Code); err != nil {
 			log.Warnz("invalid backup code", zap.String("user_id", ctx.UserID), zap.Error(err))
-			return &modeltwofa.TOTPVerifyRsp{
+			return &modelmfa.TOTPVerifyRsp{
 				Valid:   false,
 				Message: "invalid verification code",
 			}, nil
 		}
 		log.Infoz("backup code verification successful", zap.String("user_id", ctx.UserID))
-		return &modeltwofa.TOTPVerifyRsp{
+		return &modelmfa.TOTPVerifyRsp{
 			Valid:   true,
 			Message: "verification successful",
 		}, nil
 	}
 
-	devices := make([]*modeltwofa.TOTPDevice, 0)
-	query := &modeltwofa.TOTPDevice{
+	devices := make([]*modelmfa.TOTPDevice, 0)
+	query := &modelmfa.TOTPDevice{
 		UserID:   ctx.UserID,
 		IsActive: true,
 	}
@@ -73,9 +73,9 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 		query.Base.ID = req.DeviceID
 	}
 
-	if err = database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext()).WithQuery(query).List(&devices); err != nil {
+	if err = database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).WithQuery(query).List(&devices); err != nil {
 		log.Errorz("failed to list totp devices", zap.Error(err))
-		return &modeltwofa.TOTPVerifyRsp{
+		return &modelmfa.TOTPVerifyRsp{
 			Valid:   false,
 			Message: "failed to retrieve device information",
 		}, fmt.Errorf("failed to list devices: %w", err)
@@ -83,13 +83,13 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 
 	if len(devices) == 0 {
 		log.Warnz("no active totp devices found", zap.String("user_id", ctx.UserID))
-		return &modeltwofa.TOTPVerifyRsp{
+		return &modelmfa.TOTPVerifyRsp{
 			Valid:   false,
 			Message: "no active TOTP devices found",
 		}, errors.New("no active TOTP devices found")
 	}
 
-	var validDevice *modeltwofa.TOTPDevice
+	var validDevice *modelmfa.TOTPDevice
 
 	for _, device := range devices {
 		if totp.Validate(req.Code, device.Secret) {
@@ -102,7 +102,7 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 		log.Warnz("invalid verification code",
 			zap.String("user_id", ctx.UserID),
 			zap.Bool("is_backup", req.IsBackup))
-		return &modeltwofa.TOTPVerifyRsp{
+		return &modelmfa.TOTPVerifyRsp{
 			Valid:   false,
 			Message: "invalid verification code",
 		}, nil
@@ -111,7 +111,7 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 	now := time.Now()
 	validDevice.LastUsedAt = &now
 
-	if err = database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext()).Update(validDevice); err != nil {
+	if err = database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).Update(validDevice); err != nil {
 		log.Errorz("failed to update device", zap.Error(err))
 		log.Warnz("device update failed but verification succeeded")
 	}
@@ -121,7 +121,7 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 		zap.String("device_id", validDevice.ID),
 		zap.Bool("is_backup", req.IsBackup))
 
-	return &modeltwofa.TOTPVerifyRsp{
+	return &modelmfa.TOTPVerifyRsp{
 		Valid:   true,
 		Message: "verification successful",
 	}, nil

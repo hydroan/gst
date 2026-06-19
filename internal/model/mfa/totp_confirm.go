@@ -1,4 +1,4 @@
-package modeltwofa
+package modelmfa
 
 import (
 	. "github.com/hydroan/gst/dsl"
@@ -25,7 +25,7 @@ type TOTPConfirmRsp struct {
 }
 
 func (TOTPConfirm) Design() {
-	Route("2fa/totp/confirm", func() {
+	Route("mfa/totp/confirm", func() {
 		Create(func() {
 			Enabled(true)
 			Service(true)

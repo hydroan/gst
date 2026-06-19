@@ -1,4 +1,4 @@
-package twofa_test
+package mfa_test
 
 import (
 	"errors"
@@ -17,9 +17,9 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/helper"
-	modeltwofa "github.com/hydroan/gst/internal/model/twofa"
+	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/module/iam"
-	"github.com/hydroan/gst/module/twofa"
+	"github.com/hydroan/gst/module/mfa"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
@@ -33,12 +33,12 @@ var (
 
 	signupAPI  = fmt.Sprintf("http://localhost:%d/api/signup", port)
 	loginAPI   = fmt.Sprintf("http://localhost:%d/api/login", port)
-	verifyAPI  = fmt.Sprintf("http://localhost:%d/api/2fa/totp/verify", port)
-	checkAPI   = fmt.Sprintf("http://localhost:%d/api/2fa/totp/check", port)
-	bindAPI    = fmt.Sprintf("http://localhost:%d/api/2fa/totp/bind", port)
-	confirmAPI = fmt.Sprintf("http://localhost:%d/api/2fa/totp/confirm", port)
-	unbindAPI  = fmt.Sprintf("http://localhost:%d/api/2fa/totp/unbind", port)
-	statusAPI  = fmt.Sprintf("http://localhost:%d/api/2fa/totp/status", port)
+	verifyAPI  = fmt.Sprintf("http://localhost:%d/api/mfa/totp/verify", port)
+	checkAPI   = fmt.Sprintf("http://localhost:%d/api/mfa/totp/check", port)
+	bindAPI    = fmt.Sprintf("http://localhost:%d/api/mfa/totp/bind", port)
+	confirmAPI = fmt.Sprintf("http://localhost:%d/api/mfa/totp/confirm", port)
+	unbindAPI  = fmt.Sprintf("http://localhost:%d/api/mfa/totp/unbind", port)
+	statusAPI  = fmt.Sprintf("http://localhost:%d/api/mfa/totp/status", port)
 )
 
 type ListResponse[T any] struct {
@@ -63,7 +63,7 @@ func init() {
 
 	go func() {
 		iam.Register()
-		twofa.Register()
+		mfa.Register()
 
 		if err := bootstrap.Run(); err != nil {
 			panic(err)
@@ -85,7 +85,7 @@ func init() {
 	}
 }
 
-func Test2fa(t *testing.T) {
+func TestTOTP(t *testing.T) {
 	username := "user01"
 	password := "12345678"
 	userID := ""
@@ -154,12 +154,12 @@ func Test2fa(t *testing.T) {
 
 		resp, err := cli.Request(http.MethodGet, nil)
 		require.NoError(t, err)
-		helper.TestResp[*twofa.TOTPStatusRsp](t, resp, func(t *testing.T, rsp *twofa.TOTPStatusRsp) {
+		helper.TestResp[*mfa.TOTPStatusRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPStatusRsp) {
 			t.Helper(
-			// #*modeltwofa.TOTPStatusRsp {
+			// #*modelmfa.TOTPStatusRsp {
 			//   +Enabled     => false #bool
 			//   +DeviceCount => 0 #int
-			//   +Devices     => []modeltwofa.TOTPDeviceInfo(nil)
+			//   +Devices     => []modelmfa.TOTPDeviceInfo(nil)
 			// }
 			)
 
@@ -176,19 +176,19 @@ func Test2fa(t *testing.T) {
 		}))
 		require.NoError(t, err)
 
-		resp, err := cli.Create(twofa.TOTPCheckReq{
+		resp, err := cli.Create(mfa.TOTPCheckReq{
 			Username: username,
 			Password: password,
 		})
 		require.NoError(t, err)
 
-		helper.TestResp[*twofa.TOTPCheckRsp](t, resp, func(t *testing.T, rsp *twofa.TOTPCheckRsp) {
+		helper.TestResp[*mfa.TOTPCheckRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPCheckRsp) {
 			t.Helper(
-			// *modeltwofa.TOTPStatusRsp {
+			// *modelmfa.TOTPStatusRsp {
 			//   +Enabled     => true #bool
 			//   +DeviceCount => 1 #int
-			//   +Devices     => #[]modeltwofa.TOTPDeviceInfo [
-			//     0 => #modeltwofa.TOTPDeviceInfo {
+			//   +Devices     => #[]modelmfa.TOTPDeviceInfo [
+			//     0 => #modelmfa.TOTPDeviceInfo {
 			//       +ID         => "019cb9a5-b52f-7e73-8ee2-e18a8971dd82" #string
 			//       +DeviceName => "test-device" #string
 			//       +IsActive   => true #bool
@@ -199,7 +199,7 @@ func Test2fa(t *testing.T) {
 			// }
 			)
 
-			require.False(t, rsp.Requires2FA)
+			require.False(t, rsp.RequiresMFA)
 			require.NotEmpty(t, rsp.Message)
 		})
 	})
@@ -213,7 +213,7 @@ func Test2fa(t *testing.T) {
 
 		resp, err := cli.Create(nil)
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp *twofa.TOTPBindRsp) {
+		helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPBindRsp) {
 			t.Helper()
 			require.NotNil(t, rsp)
 			require.NotEmpty(t, rsp.ChallengeID)
@@ -237,7 +237,7 @@ func Test2fa(t *testing.T) {
 			code, err := totp.GenerateCode(secret, time.Now())
 			require.NoError(t, err)
 
-			resp, err := cli.Create(twofa.TOTPConfirmReq{
+			resp, err := cli.Create(mfa.TOTPConfirmReq{
 				ChallengeID: "missing-challenge",
 				Code:        code,
 				DeviceName:  "test-device-missing-challenge",
@@ -260,7 +260,7 @@ func Test2fa(t *testing.T) {
 				invalidCode = "000001"
 			}
 
-			resp, err := cli.Create(twofa.TOTPConfirmReq{
+			resp, err := cli.Create(mfa.TOTPConfirmReq{
 				ChallengeID: challengeID,
 				Code:        invalidCode,
 				DeviceName:  "test-device-2",
@@ -268,15 +268,15 @@ func Test2fa(t *testing.T) {
 			require.Error(t, err)
 			require.Nil(t, resp)
 
-			resp, err = cli.Create(twofa.TOTPConfirmReq{
+			resp, err = cli.Create(mfa.TOTPConfirmReq{
 				ChallengeID: challengeID,
 				Code:        code,
 				DeviceName:  "test-device",
 			})
 			require.NoError(t, err)
-			helper.TestResp(t, resp, func(t *testing.T, rsp *twofa.TOTPConfirmRsp) {
+			helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPConfirmRsp) {
 				t.Helper(
-				// #*modeltwofa.TOTPConfirmRsp {
+				// #*modelmfa.TOTPConfirmRsp {
 				//   +DeviceID    => "019cbc8d-857e-7e29-b2dc-ff983097a2e9" #string
 				//   +Message     => "TOTP device confirmed and activated successfully" #string
 				//   +BackupCodes => #[]string [
@@ -309,7 +309,7 @@ func Test2fa(t *testing.T) {
 			code, err := totp.GenerateCode(secret, time.Now())
 			require.NoError(t, err)
 
-			resp, err := cli.Create(twofa.TOTPConfirmReq{
+			resp, err := cli.Create(mfa.TOTPConfirmReq{
 				ChallengeID: challengeID,
 				Code:        code,
 				DeviceName:  "test-device-dup",
@@ -328,13 +328,13 @@ func Test2fa(t *testing.T) {
 
 		resp, err := cli.Request(http.MethodGet, nil)
 		require.NoError(t, err)
-		helper.TestResp[*twofa.TOTPStatusRsp](t, resp, func(t *testing.T, rsp *twofa.TOTPStatusRsp) {
+		helper.TestResp[*mfa.TOTPStatusRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPStatusRsp) {
 			t.Helper(
-			// #*modeltwofa.TOTPStatusRsp {
+			// #*modelmfa.TOTPStatusRsp {
 			//   +Enabled     => true #bool
 			//   +DeviceCount => 1 #int
-			//   +Devices     => #[]modeltwofa.TOTPDeviceInfo [
-			//     0 => #modeltwofa.TOTPDeviceInfo {
+			//   +Devices     => #[]modelmfa.TOTPDeviceInfo [
+			//     0 => #modelmfa.TOTPDeviceInfo {
 			//       +ID         => "019cbc88-e885-7d4a-8811-5d4e23b177dc" #string
 			//       +DeviceName => "test-device" #string
 			//       +IsActive   => true #bool
@@ -363,21 +363,21 @@ func Test2fa(t *testing.T) {
 		}))
 		require.NoError(t, err)
 
-		resp, err := cli.Create(twofa.TOTPCheckReq{
+		resp, err := cli.Create(mfa.TOTPCheckReq{
 			Username: username,
 			Password: password,
 		})
 		require.NoError(t, err)
 
-		helper.TestResp[*twofa.TOTPCheckRsp](t, resp, func(t *testing.T, rsp *twofa.TOTPCheckRsp) {
+		helper.TestResp[*mfa.TOTPCheckRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPCheckRsp) {
 			t.Helper(
-			// #*modeltwofa.TOTPCheckRsp {
-			//   +Requires2FA => true #bool
-			//   +Message     => "2FA is enabled" #string
+			// #*modelmfa.TOTPCheckRsp {
+			//   +RequiresMFA => true #bool
+			//   +Message     => "MFA is enabled" #string
 			// }
 			)
 
-			require.True(t, rsp.Requires2FA)
+			require.True(t, rsp.RequiresMFA)
 			require.NotEmpty(t, rsp.Message)
 		})
 	})
@@ -446,13 +446,13 @@ func Test2fa(t *testing.T) {
 			code, err := totp.GenerateCode(secret, time.Now())
 			require.NoError(t, err)
 
-			resp, err := cli.Create(twofa.TOTPVerifyReq{
+			resp, err := cli.Create(mfa.TOTPVerifyReq{
 				Code: code,
 			})
 			require.NoError(t, err)
-			helper.TestResp(t, resp, func(t *testing.T, rsp *twofa.TOTPVerifyRsp) {
+			helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPVerifyRsp) {
 				t.Helper(
-				// #*modeltwofa.TOTPVerifyRsp {
+				// #*modelmfa.TOTPVerifyRsp {
 				//   +Valid   => true #bool
 				//   +Message => "verification successful" #string
 				// }
@@ -470,13 +470,13 @@ func Test2fa(t *testing.T) {
 			}))
 			require.NoError(t, err)
 
-			resp, err := cli.Create(twofa.TOTPVerifyReq{
+			resp, err := cli.Create(mfa.TOTPVerifyReq{
 				Code: "000000",
 			})
 			require.NoError(t, err)
-			helper.TestResp(t, resp, func(t *testing.T, rsp *twofa.TOTPVerifyRsp) {
+			helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPVerifyRsp) {
 				t.Helper(
-				// #*modeltwofa.TOTPVerifyRsp {
+				// #*modelmfa.TOTPVerifyRsp {
 				//   +Valid   => false #bool
 				//   +Message => "invalid verification code" #string
 				// }
@@ -498,14 +498,14 @@ func Test2fa(t *testing.T) {
 			require.NoError(t, err)
 
 			normalizedInput := strings.ToLower(strings.ReplaceAll(backupCodes[0], "-", ""))
-			resp, err := cli.Create(twofa.TOTPVerifyReq{
+			resp, err := cli.Create(mfa.TOTPVerifyReq{
 				Code:     normalizedInput,
 				IsBackup: true,
 			})
 			require.NoError(t, err)
-			helper.TestResp(t, resp, func(t *testing.T, rsp *twofa.TOTPVerifyRsp) {
+			helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPVerifyRsp) {
 				t.Helper(
-				// #*modeltwofa.TOTPVerifyRsp {
+				// #*modelmfa.TOTPVerifyRsp {
 				//   +Valid   => true #bool
 				//   +Message => "verification successful" #string
 				// }
@@ -515,12 +515,12 @@ func Test2fa(t *testing.T) {
 				require.NotEmpty(t, rsp.Message)
 			})
 
-			resp, err = cli.Create(twofa.TOTPVerifyReq{
+			resp, err = cli.Create(mfa.TOTPVerifyReq{
 				Code:     backupCodes[0],
 				IsBackup: true,
 			})
 			require.NoError(t, err)
-			helper.TestResp(t, resp, func(t *testing.T, rsp *twofa.TOTPVerifyRsp) {
+			helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPVerifyRsp) {
 				t.Helper()
 
 				require.False(t, rsp.Valid)
@@ -567,11 +567,11 @@ func Test2fa(t *testing.T) {
 			}))
 			require.NoError(t, err)
 
-			resp, err := cli.Create(twofa.TOTPUnbindReq{
+			resp, err := cli.Create(mfa.TOTPUnbindReq{
 				DeviceID: deviceID,
 			})
 			require.NoError(t, err)
-			helper.TestResp(t, resp, func(t *testing.T, rsp *twofa.TOTPUnbindRsp) {
+			helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
 				t.Helper()
 
 				require.False(t, rsp.Success)
@@ -590,13 +590,13 @@ func Test2fa(t *testing.T) {
 			}))
 			require.NoError(t, err)
 
-			resp, err := cli.Create(twofa.TOTPUnbindReq{
+			resp, err := cli.Create(mfa.TOTPUnbindReq{
 				DeviceID:   deviceID,
 				Password:   password,
 				BackupCode: backupCodes[2],
 			})
 			require.NoError(t, err)
-			helper.TestResp(t, resp, func(t *testing.T, rsp *twofa.TOTPUnbindRsp) {
+			helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
 				t.Helper()
 
 				require.False(t, rsp.Success)
@@ -613,14 +613,14 @@ func Test2fa(t *testing.T) {
 			}))
 			require.NoError(t, err)
 
-			resp, err := cli.Create(twofa.TOTPUnbindReq{
+			resp, err := cli.Create(mfa.TOTPUnbindReq{
 				DeviceID: deviceID,
 				TOTPCode: "000000",
 			})
 			require.NoError(t, err)
-			helper.TestResp(t, resp, func(t *testing.T, rsp *twofa.TOTPUnbindRsp) {
+			helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
 				t.Helper(
-				// #*modeltwofa.TOTPUnbindRsp {
+				// #*modelmfa.TOTPUnbindRsp {
 				//   +Success     => false #bool
 				//   +Message     => "Invalid TOTP code" #string
 				//   +DeviceCount => 0 #int
@@ -641,12 +641,12 @@ func Test2fa(t *testing.T) {
 			}))
 			require.NoError(t, err)
 
-			resp, err := cli.Create(twofa.TOTPUnbindReq{
+			resp, err := cli.Create(mfa.TOTPUnbindReq{
 				DeviceID: secondDeviceID,
 				Password: password,
 			})
 			require.NoError(t, err)
-			helper.TestResp(t, resp, func(t *testing.T, rsp *twofa.TOTPUnbindRsp) {
+			helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
 				t.Helper()
 
 				require.True(t, rsp.Success)
@@ -665,14 +665,14 @@ func Test2fa(t *testing.T) {
 			code, err := totp.GenerateCode(secret, time.Now())
 			require.NoError(t, err)
 
-			resp, err := cli.Create(twofa.TOTPUnbindReq{
+			resp, err := cli.Create(mfa.TOTPUnbindReq{
 				DeviceID: deviceID,
 				TOTPCode: code,
 			})
 			require.NoError(t, err)
-			helper.TestResp(t, resp, func(t *testing.T, rsp *twofa.TOTPUnbindRsp) {
+			helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
 				t.Helper(
-				// #*modeltwofa.TOTPUnbindRsp {
+				// #*modelmfa.TOTPUnbindRsp {
 				//   +Success     => true #bool
 				//   +Message     => "Device 'test-device' unbound successfully" #string
 				//   +DeviceCount => 0 #int
@@ -695,12 +695,12 @@ func Test2fa(t *testing.T) {
 
 		resp, err := cli.Request(http.MethodGet, nil)
 		require.NoError(t, err)
-		helper.TestResp[*twofa.TOTPStatusRsp](t, resp, func(t *testing.T, rsp *twofa.TOTPStatusRsp) {
+		helper.TestResp[*mfa.TOTPStatusRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPStatusRsp) {
 			t.Helper(
-			// #*modeltwofa.TOTPStatusRsp {
+			// #*modelmfa.TOTPStatusRsp {
 			//   +Enabled     => false #bool
 			//   +DeviceCount => 0 #int
-			//   +Devices     => []modeltwofa.TOTPDeviceInfo(nil)
+			//   +Devices     => []modelmfa.TOTPDeviceInfo(nil)
 			// }
 			)
 
@@ -756,12 +756,12 @@ func bindTOTPDeviceForTest(t *testing.T, sessionID, deviceName string) (string, 
 	}))
 	require.NoError(t, err)
 
-	bindResp, err := bindCli.Create(twofa.TOTPBind{})
+	bindResp, err := bindCli.Create(mfa.TOTPBind{})
 	require.NoError(t, err)
 
 	var challengeID string
 	var secret string
-	helper.TestResp(t, bindResp, func(t *testing.T, rsp *twofa.TOTPBindRsp) {
+	helper.TestResp(t, bindResp, func(t *testing.T, rsp *mfa.TOTPBindRsp) {
 		t.Helper()
 
 		require.NotEmpty(t, rsp.ChallengeID)
@@ -779,7 +779,7 @@ func bindTOTPDeviceForTest(t *testing.T, sessionID, deviceName string) (string, 
 	}))
 	require.NoError(t, err)
 
-	confirmResp, err := confirmCli.Create(twofa.TOTPConfirmReq{
+	confirmResp, err := confirmCli.Create(mfa.TOTPConfirmReq{
 		ChallengeID: challengeID,
 		Code:        code,
 		DeviceName:  deviceName,
@@ -788,7 +788,7 @@ func bindTOTPDeviceForTest(t *testing.T, sessionID, deviceName string) (string, 
 
 	var deviceID string
 	var backupCodes []string
-	helper.TestResp(t, confirmResp, func(t *testing.T, rsp *twofa.TOTPConfirmRsp) {
+	helper.TestResp(t, confirmResp, func(t *testing.T, rsp *mfa.TOTPConfirmRsp) {
 		t.Helper()
 
 		require.NotEmpty(t, rsp.DeviceID)
@@ -800,11 +800,11 @@ func bindTOTPDeviceForTest(t *testing.T, sessionID, deviceName string) (string, 
 	return deviceID, secret, backupCodes
 }
 
-func getTOTPDeviceForTest(t *testing.T, deviceID string) *modeltwofa.TOTPDevice {
+func getTOTPDeviceForTest(t *testing.T, deviceID string) *modelmfa.TOTPDevice {
 	t.Helper()
 
-	device := new(modeltwofa.TOTPDevice)
-	require.NoError(t, database.Database[*modeltwofa.TOTPDevice](nil).Get(device, deviceID))
+	device := new(modelmfa.TOTPDevice)
+	require.NoError(t, database.Database[*modelmfa.TOTPDevice](nil).Get(device, deviceID))
 	return device
 }
 

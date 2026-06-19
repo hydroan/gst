@@ -1,4 +1,4 @@
-package servicetwofa
+package servicemfa
 
 import (
 	"crypto/rand"
@@ -10,7 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
-	modeltwofa "github.com/hydroan/gst/internal/model/twofa"
+	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"golang.org/x/crypto/bcrypt"
@@ -73,7 +73,7 @@ func ConsumeTOTPBackupCode(ctx *types.ServiceContext, userID, code string) error
 		return types.NewServiceError(http.StatusUnauthorized, "authentication required")
 	}
 
-	return database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext()).Transaction(func(tx types.Database[*modeltwofa.TOTPDevice]) error {
+	return database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).Transaction(func(tx types.Database[*modelmfa.TOTPDevice]) error {
 		return consumeTOTPBackupCodeInTx(tx, userID, code, time.Now())
 	})
 }
@@ -83,14 +83,14 @@ func ConsumeTOTPBackupCode(ctx *types.ServiceContext, userID, code string) error
 // Unbind uses this path so backup-code consumption and device removal commit or
 // roll back together. The caller supplies the timestamp so all updates in the
 // higher-level transaction can share the same logical operation time.
-func consumeTOTPBackupCodeInTx(tx types.Database[*modeltwofa.TOTPDevice], userID, code string, now time.Time) error {
+func consumeTOTPBackupCodeInTx(tx types.Database[*modelmfa.TOTPDevice], userID, code string, now time.Time) error {
 	normalizedCode, err := normalizeTOTPBackupCode(code)
 	if err != nil {
 		return errTOTPBackupCodeInvalid
 	}
 
-	devices := make([]*modeltwofa.TOTPDevice, 0)
-	if err := tx.WithLock(consts.LockUpdate).WithQuery(&modeltwofa.TOTPDevice{
+	devices := make([]*modelmfa.TOTPDevice, 0)
+	if err := tx.WithLock(consts.LockUpdate).WithQuery(&modelmfa.TOTPDevice{
 		UserID:   strings.TrimSpace(userID),
 		IsActive: true,
 	}).List(&devices); err != nil {

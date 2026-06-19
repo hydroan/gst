@@ -1,4 +1,4 @@
-package servicetwofa
+package servicemfa
 
 import (
 	"net/http"
@@ -7,7 +7,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
-	modeltwofa "github.com/hydroan/gst/internal/model/twofa"
+	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/types"
 	"github.com/pquerna/otp/totp"
 )
@@ -25,11 +25,11 @@ type LoginSecondFactor struct {
 	BackupCode string
 }
 
-// VerifyLoginSecondFactor enforces the 2FA rules used during IAM login.
+// VerifyLoginSecondFactor enforces the MFA rules used during IAM login.
 //
 // The helper is intentionally login-specific: it skips all checks when the
-// twofa module is disabled or the user has no active TOTP devices, requires
-// exactly one submitted proof when 2FA is active, updates LastUsedAt after a
+// MFA module is disabled or the user has no active TOTP devices, requires
+// exactly one submitted proof when MFA is active, updates LastUsedAt after a
 // successful TOTP proof, and delegates recovery-code consumption to the shared
 // transactional backup-code helper.
 func VerifyLoginSecondFactor(ctx *types.ServiceContext, userID string, factor LoginSecondFactor) error {
@@ -64,10 +64,10 @@ func VerifyLoginSecondFactor(ctx *types.ServiceContext, userID string, factor Lo
 	}
 }
 
-// listActiveLoginTOTPDevices loads the active devices that make login 2FA mandatory.
-func listActiveLoginTOTPDevices(ctx *types.ServiceContext, userID string) ([]*modeltwofa.TOTPDevice, error) {
-	devices := make([]*modeltwofa.TOTPDevice, 0)
-	if err := database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext()).WithQuery(&modeltwofa.TOTPDevice{
+// listActiveLoginTOTPDevices loads the active devices that make login MFA mandatory.
+func listActiveLoginTOTPDevices(ctx *types.ServiceContext, userID string) ([]*modelmfa.TOTPDevice, error) {
+	devices := make([]*modelmfa.TOTPDevice, 0)
+	if err := database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).WithQuery(&modelmfa.TOTPDevice{
 		UserID:   userID,
 		IsActive: true,
 	}).List(&devices); err != nil {
@@ -77,7 +77,7 @@ func listActiveLoginTOTPDevices(ctx *types.ServiceContext, userID string) ([]*mo
 }
 
 // verifyLoginTOTPCode validates a login TOTP code and records the matched device usage.
-func verifyLoginTOTPCode(ctx *types.ServiceContext, devices []*modeltwofa.TOTPDevice, code string) error {
+func verifyLoginTOTPCode(ctx *types.ServiceContext, devices []*modelmfa.TOTPDevice, code string) error {
 	device := findLoginTOTPDeviceByCode(devices, code)
 	if device == nil {
 		return ErrLoginTOTPCodeInvalid
@@ -85,7 +85,7 @@ func verifyLoginTOTPCode(ctx *types.ServiceContext, devices []*modeltwofa.TOTPDe
 
 	now := time.Now()
 	device.LastUsedAt = &now
-	if err := database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext()).Update(device); err != nil {
+	if err := database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).Update(device); err != nil {
 		return errors.Wrap(err, "update login TOTP device usage")
 	}
 	return nil
@@ -103,7 +103,7 @@ func verifyLoginBackupCode(ctx *types.ServiceContext, userID, code string) error
 }
 
 // findLoginTOTPDeviceByCode returns the first active device that accepts the code.
-func findLoginTOTPDeviceByCode(devices []*modeltwofa.TOTPDevice, code string) *modeltwofa.TOTPDevice {
+func findLoginTOTPDeviceByCode(devices []*modelmfa.TOTPDevice, code string) *modelmfa.TOTPDevice {
 	for _, device := range devices {
 		if device == nil || !device.IsActive {
 			continue

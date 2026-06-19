@@ -1,23 +1,23 @@
-package twofa
+package mfa
 
 import (
-	modeltwofa "github.com/hydroan/gst/internal/model/twofa"
-	servicetwofa "github.com/hydroan/gst/internal/service/twofa"
+	modelmfa "github.com/hydroan/gst/internal/model/mfa"
+	servicemfa "github.com/hydroan/gst/internal/service/mfa"
 	"github.com/hydroan/gst/types"
 )
 
 var _ types.Module[*TOTPCheck, *TOTPCheckReq, *TOTPCheckRsp] = (*TOTPCheckModule)(nil)
 
 type (
-	TOTPCheck       = modeltwofa.TOTPCheck
-	TOTPCheckReq    = modeltwofa.TOTPCheckReq
-	TOTPCheckRsp    = modeltwofa.TOTPCheckRsp
+	TOTPCheck       = modelmfa.TOTPCheck
+	TOTPCheckReq    = modelmfa.TOTPCheckReq
+	TOTPCheckRsp    = modelmfa.TOTPCheckRsp
 	TOTPCheckModule struct{}
 )
 
 func (*TOTPCheckModule) Service() types.Service[*TOTPCheck, *TOTPCheckReq, *TOTPCheckRsp] {
-	return &servicetwofa.TOTPCheckService{}
+	return &servicemfa.TOTPCheckService{}
 }
-func (*TOTPCheckModule) Route() string { return "2fa/totp/check" }
+func (*TOTPCheckModule) Route() string { return "mfa/totp/check" }
 func (*TOTPCheckModule) Pub() bool     { return true }
 func (*TOTPCheckModule) Param() string { return "id" }

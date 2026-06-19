@@ -1,4 +1,4 @@
-package servicetwofa
+package servicemfa
 
 import (
 	"net/http"
@@ -6,7 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
-	modeltwofa "github.com/hydroan/gst/internal/model/twofa"
+	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/types"
 	"github.com/pquerna/otp/totp"
 )
@@ -23,8 +23,8 @@ func ValidateUserTOTPCode(ctx *types.ServiceContext, userID, code string) error 
 		return types.NewServiceError(http.StatusUnauthorized, "authentication required")
 	}
 
-	devices := make([]*modeltwofa.TOTPDevice, 0)
-	if err := database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext()).WithQuery(&modeltwofa.TOTPDevice{
+	devices := make([]*modelmfa.TOTPDevice, 0)
+	if err := database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).WithQuery(&modelmfa.TOTPDevice{
 		UserID:   strings.TrimSpace(userID),
 		IsActive: true,
 	}).List(&devices); err != nil {
@@ -38,7 +38,7 @@ func ValidateUserTOTPCode(ctx *types.ServiceContext, userID, code string) error 
 //
 // Transactional callers use this to avoid issuing another query while holding a
 // TOTPDevice lock.
-func validateTOTPCodeForDevices(code string, devices []*modeltwofa.TOTPDevice) error {
+func validateTOTPCodeForDevices(code string, devices []*modelmfa.TOTPDevice) error {
 	if strings.TrimSpace(code) == "" {
 		return errTOTPCodeInvalid
 	}

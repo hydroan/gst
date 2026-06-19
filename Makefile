@@ -106,7 +106,7 @@ test:
 	go test ./internal/codegen/gen/
 	go test ./module/helloworld
 	go test ./module/iam
-	go test ./module/twofa
+	go test ./module/mfa
 	go test ./module/logmgmt
 	go test ./module/version
 	go test ./pkg/dbmigrate
@@ -124,7 +124,7 @@ testv:
 	go test -v ./internal/codegen/gen/
 	go test -v ./module/helloworld
 	go test -v ./module/iam
-	go test -v ./module/twofa
+	go test -v ./module/mfa
 	go test -v ./module/logmgmt
 	go test -v ./module/version
 	go test -v ./pkg/dbmigrate
