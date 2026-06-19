@@ -20,9 +20,9 @@ type TOTPUnbindReq struct {
 
 // TOTPUnbindRsp returns the device removal result.
 type TOTPUnbindRsp struct {
-	Success     bool   `json:"success,omitempty"`
+	Success     bool   `json:"success"`
 	Message     string `json:"message,omitempty"`
-	DeviceCount int    `json:"device_count,omitempty"`
+	DeviceCount int    `json:"device_count"`
 }
 
 func (TOTPUnbind) Design() {

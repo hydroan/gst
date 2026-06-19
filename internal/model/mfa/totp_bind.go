@@ -12,11 +12,11 @@ type TOTPBind struct {
 
 // TOTPBindRsp returns the pending binding challenge and authenticator setup data.
 type TOTPBindRsp struct {
-	ChallengeID string `json:"challenge_id,omitempty"`
-	OtpauthURL  string `json:"otpauth_url,omitempty"`   // TOTP provisioning URL
-	QRCodeImage string `json:"qr_code_image,omitempty"` // Base64-encoded QR code image data
-	Issuer      string `json:"issuer,omitempty"`        // Application issuer name
-	AccountName string `json:"account_name,omitempty"`  // User account name
+	ChallengeID        string `json:"challenge_id,omitempty"`
+	OtpauthURL         string `json:"otpauth_url,omitempty"`            // TOTP provisioning URL
+	QRCodeImageDataURL string `json:"qr_code_image_data_url,omitempty"` // PNG QR code as a data URL
+	Issuer             string `json:"issuer,omitempty"`                 // Application issuer name
+	AccountName        string `json:"account_name,omitempty"`           // User account name
 }
 
 func (TOTPBind) Design() {

@@ -82,11 +82,11 @@ func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPBi
 	}
 
 	rsp = &modelmfa.TOTPBindRsp{
-		ChallengeID: challengeID,
-		OtpauthURL:  qrCodeURL,
-		QRCodeImage: qrCodeImage,
-		Issuer:      consts.FrameworkName,
-		AccountName: ctx.Username,
+		ChallengeID:        challengeID,
+		OtpauthURL:         qrCodeURL,
+		QRCodeImageDataURL: qrCodeImage,
+		Issuer:             consts.FrameworkName,
+		AccountName:        ctx.Username,
 	}
 
 	log.Infoz("generated TOTP bind challenge",

@@ -47,16 +47,10 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 
 	switch countTOTPUnbindVerificationMethods(req) {
 	case 0:
-		return &modelmfa.TOTPUnbindRsp{
-			Success: false,
-			Message: "fresh authentication required",
-		}, nil
+		return newTOTPUnbindFailureRsp(ctx, "fresh authentication required")
 	case 1:
 	default:
-		return &modelmfa.TOTPUnbindRsp{
-			Success: false,
-			Message: "provide exactly one verification method",
-		}, nil
+		return newTOTPUnbindFailureRsp(ctx, "provide exactly one verification method")
 	}
 
 	if req.Password != "" {
@@ -64,20 +58,14 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 			log.Warnz("device not found or not active",
 				zap.String("user_id", ctx.UserID),
 				zap.String("device_id", req.DeviceID))
-			return &modelmfa.TOTPUnbindRsp{
-				Success: false,
-				Message: "Device not found or already unbound",
-			}, nil
+			return newTOTPUnbindFailureRsp(ctx, "Device not found or already unbound")
 		}
 		if verifyErr := verifyTOTPUnbindPassword(ctx, ctx.UserID, req.Password); verifyErr != nil {
 			log.Warnz("invalid password for unbind",
 				zap.String("user_id", ctx.UserID),
 				zap.String("device_id", req.DeviceID),
 				zap.Error(verifyErr))
-			return &modelmfa.TOTPUnbindRsp{
-				Success: false,
-				Message: "invalid verification",
-			}, nil
+			return newTOTPUnbindFailureRsp(ctx, "invalid verification")
 		}
 	}
 
@@ -96,8 +84,9 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 				zap.String("user_id", ctx.UserID),
 				zap.String("device_id", req.DeviceID))
 			rsp = &modelmfa.TOTPUnbindRsp{
-				Success: false,
-				Message: "Device not found or already unbound",
+				Success:     false,
+				Message:     "Device not found or already unbound",
+				DeviceCount: len(devices),
 			}
 			return nil
 		}
@@ -112,8 +101,9 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 					zap.String("device_id", req.DeviceID),
 					zap.Error(verifyErr))
 				rsp = &modelmfa.TOTPUnbindRsp{
-					Success: false,
-					Message: "invalid verification",
+					Success:     false,
+					Message:     "invalid verification",
+					DeviceCount: len(devices),
 				}
 				return nil
 			}
@@ -150,6 +140,31 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 	}
 
 	return rsp, nil
+}
+
+// newTOTPUnbindFailureRsp builds a failed response with the current active-device count.
+func newTOTPUnbindFailureRsp(ctx *types.ServiceContext, message string) (*modelmfa.TOTPUnbindRsp, error) {
+	count, err := countActiveTOTPUnbindDevices(ctx, ctx.UserID)
+	if err != nil {
+		return nil, err
+	}
+	return &modelmfa.TOTPUnbindRsp{
+		Success:     false,
+		Message:     message,
+		DeviceCount: count,
+	}, nil
+}
+
+// countActiveTOTPUnbindDevices returns the current user's active TOTP device count.
+func countActiveTOTPUnbindDevices(ctx *types.ServiceContext, userID string) (int, error) {
+	devices := make([]*modelmfa.TOTPDevice, 0)
+	if err := database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).WithQuery(&modelmfa.TOTPDevice{
+		UserID:   userID,
+		IsActive: true,
+	}).List(&devices); err != nil {
+		return 0, errors.Wrap(err, "count active TOTP devices")
+	}
+	return len(devices), nil
 }
 
 // countTOTPUnbindVerificationMethods counts which fresh-auth methods are present.

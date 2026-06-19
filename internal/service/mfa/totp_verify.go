@@ -3,6 +3,7 @@ package servicemfa
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -18,17 +19,15 @@ import (
 //
 // Standard TOTP verification checks the submitted code against the user's
 // active devices and updates the matching device's last-used timestamp.
-// Backup-code verification delegates to the recovery-code service, which
-// validates and consumes the matching hash transactionally.
 type TOTPVerifyService struct {
 	service.Base[*modelmfa.TOTPVerify, *modelmfa.TOTPVerifyReq, *modelmfa.TOTPVerifyRsp]
 }
 
-// Create verifies either a TOTP code or a one-time recovery code.
+// Create verifies a 6-digit TOTP code.
 //
-// The method first enforces authentication and non-empty input. Recovery codes
-// are consumed through the shared backup-code helper; normal TOTP codes are
-// checked against the selected device or all active devices for the user.
+// The method first enforces authentication and validates the submitted code
+// shape. Codes that are well-formed but do not match any selected active device
+// return a negative verification response instead of a service error.
 func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPVerifyReq) (rsp *modelmfa.TOTPVerifyRsp, err error) {
 	log := t.WithServiceContext(ctx, ctx.GetPhase())
 
@@ -40,27 +39,20 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 		}, types.NewServiceError(http.StatusUnauthorized, "authentication required")
 	}
 
-	if len(req.Code) == 0 {
-		log.Errorz("code is empty")
+	code := strings.TrimSpace(req.TOTPCode)
+	if code == "" {
+		log.Errorz("totp code is empty")
 		return &modelmfa.TOTPVerifyRsp{
 			Valid:   false,
-			Message: "verification code is required",
-		}, errors.New("verification code is required")
+			Message: "TOTP code is required",
+		}, errors.New("TOTP code is required")
 	}
-
-	if req.IsBackup {
-		if err = ConsumeTOTPBackupCode(ctx, ctx.UserID, req.Code); err != nil {
-			log.Warnz("invalid backup code", zap.String("user_id", ctx.UserID), zap.Error(err))
-			return &modelmfa.TOTPVerifyRsp{
-				Valid:   false,
-				Message: "invalid verification code",
-			}, nil
-		}
-		log.Infoz("backup code verification successful", zap.String("user_id", ctx.UserID))
+	if !isSixDigitTOTPCode(code) {
+		log.Warnz("invalid totp code format", zap.String("user_id", ctx.UserID))
 		return &modelmfa.TOTPVerifyRsp{
-			Valid:   true,
-			Message: "verification successful",
-		}, nil
+			Valid:   false,
+			Message: "TOTP code must be 6 digits",
+		}, errors.New("TOTP code must be 6 digits")
 	}
 
 	devices := make([]*modelmfa.TOTPDevice, 0)
@@ -69,8 +61,8 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 		IsActive: true,
 	}
 
-	if len(req.DeviceID) > 0 {
-		query.Base.ID = req.DeviceID
+	if strings.TrimSpace(req.DeviceID) != "" {
+		query.Base.ID = strings.TrimSpace(req.DeviceID)
 	}
 
 	if err = database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).WithQuery(query).List(&devices); err != nil {
@@ -92,7 +84,7 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 	var validDevice *modelmfa.TOTPDevice
 
 	for _, device := range devices {
-		if totp.Validate(req.Code, device.Secret) {
+		if totp.Validate(code, device.Secret) {
 			validDevice = device
 			break
 		}
@@ -100,8 +92,7 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 
 	if validDevice == nil {
 		log.Warnz("invalid verification code",
-			zap.String("user_id", ctx.UserID),
-			zap.Bool("is_backup", req.IsBackup))
+			zap.String("user_id", ctx.UserID))
 		return &modelmfa.TOTPVerifyRsp{
 			Valid:   false,
 			Message: "invalid verification code",
@@ -118,11 +109,23 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 
 	log.Infoz("totp verification successful",
 		zap.String("user_id", ctx.UserID),
-		zap.String("device_id", validDevice.ID),
-		zap.Bool("is_backup", req.IsBackup))
+		zap.String("device_id", validDevice.ID))
 
 	return &modelmfa.TOTPVerifyRsp{
 		Valid:   true,
 		Message: "verification successful",
 	}, nil
+}
+
+// isSixDigitTOTPCode reports whether code is exactly six ASCII digits.
+func isSixDigitTOTPCode(code string) bool {
+	if len(code) != 6 {
+		return false
+	}
+	for _, r := range code {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }

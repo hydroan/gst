@@ -8,7 +8,7 @@ MFA管理流程：
 1. POST /api/mfa/totp/check → 检查用户是否启用MFA
 2. POST /api/mfa/totp/bind → 绑定设备
 3. POST /api/mfa/totp/confirm → 确认绑定
-4. POST /api/mfa/totp/verify → 已登录用户日常验证使用
+4. POST /api/mfa/totp/verify → 已登录用户日常 TOTP 验证使用
 5. POST /api/mfa/totp/unbind → 解绑设备
 6. GET /api/mfa/totp/status → 查看状态和设备摘要
 
@@ -19,7 +19,7 @@ MFA管理流程：
 - POST /api/mfa/totp/confirm - 确认绑定 TOTP 设备
 
 验证流程：
-- POST /api/mfa/totp/verify - 已登录用户验证 TOTP 代码或恢复码，不参与登录流程
+- POST /api/mfa/totp/verify - 已登录用户验证 TOTP 代码，不参与登录流程
 
 检查接口：
 - POST /api/mfa/totp/check - 检查用户是否启用 MFA
@@ -45,7 +45,7 @@ B. TOTP 确认服务
 - 激活 MFA 功能
 
 C. TOTP 验证服务
-- 验证已登录用户提交的 TOTP 代码或恢复码
+- 验证已登录用户提交的 TOTP 代码
 - 更新设备使用时间
 - 返回验证结果
 

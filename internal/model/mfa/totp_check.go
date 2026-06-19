@@ -16,8 +16,8 @@ type TOTPCheckReq struct {
 }
 
 type TOTPCheckRsp struct {
-	RequiresMFA bool   `json:"requires_mfa,omitempty"` // Whether MFA verification is required
-	Message     string `json:"message,omitempty"`      // Response message
+	RequiresMFA bool   `json:"requires_mfa"`      // Whether MFA verification is required
+	Message     string `json:"message,omitempty"` // Response message
 }
 
 func (TOTPCheck) Design() {

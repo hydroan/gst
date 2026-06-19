@@ -1,6 +1,7 @@
 package mfa_test
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -167,6 +168,9 @@ func TestTOTP(t *testing.T) {
 			require.Empty(t, rsp.Devices)
 			require.False(t, rsp.Enabled)
 		})
+		assertResponseDataFieldExists(t, resp, "enabled")
+		assertResponseDataFieldExists(t, resp, "device_count")
+		assertResponseDataArrayField(t, resp, "devices")
 	})
 
 	t.Run("check_not_enabled", func(t *testing.T) {
@@ -191,7 +195,6 @@ func TestTOTP(t *testing.T) {
 			//     0 => #modelmfa.TOTPDeviceInfo {
 			//       +ID         => "019cb9a5-b52f-7e73-8ee2-e18a8971dd82" #string
 			//       +DeviceName => "test-device" #string
-			//       +IsActive   => true #bool
 			//       +LastUsedAt => "2026-03-05T00:19:30+08:00" #*string
 			//       +CreatedAt  => "2026-03-05T00:19:30+08:00" #string
 			//     }
@@ -202,6 +205,7 @@ func TestTOTP(t *testing.T) {
 			require.False(t, rsp.RequiresMFA)
 			require.NotEmpty(t, rsp.Message)
 		})
+		assertResponseDataFieldExists(t, resp, "requires_mfa")
 	})
 
 	t.Run("bind", func(t *testing.T) {
@@ -218,12 +222,13 @@ func TestTOTP(t *testing.T) {
 			require.NotNil(t, rsp)
 			require.NotEmpty(t, rsp.ChallengeID)
 			require.NotEmpty(t, rsp.OtpauthURL)
-			require.NotEmpty(t, rsp.QRCodeImage)
+			require.NotEmpty(t, rsp.QRCodeImageDataURL)
 			require.Equal(t, consts.FrameworkName, rsp.Issuer)
 			require.Equal(t, username, rsp.AccountName)
 			challengeID = rsp.ChallengeID
 			secret = extractSecretFromOtpauthURL(t, rsp.OtpauthURL)
 		})
+		assertResponseDataFieldExists(t, resp, "qr_code_image_data_url")
 	})
 
 	t.Run("confirm", func(t *testing.T) {
@@ -337,7 +342,6 @@ func TestTOTP(t *testing.T) {
 			//     0 => #modelmfa.TOTPDeviceInfo {
 			//       +ID         => "019cbc88-e885-7d4a-8811-5d4e23b177dc" #string
 			//       +DeviceName => "test-device" #string
-			//       +IsActive   => true #bool
 			//       +LastUsedAt => "2026-03-05T13:46:54+08:00" #*string
 			//       +CreatedAt  => "2026-03-05T13:46:54+08:00" #string
 			//     }
@@ -350,10 +354,12 @@ func TestTOTP(t *testing.T) {
 			for _, d := range rsp.Devices {
 				require.NotEmpty(t, d.ID)
 				require.NotEmpty(t, d.DeviceName)
-				require.True(t, d.IsActive)
 				require.NotEmpty(t, d.LastUsedAt)
 			}
 		})
+		assertResponseDataFieldExists(t, resp, "enabled")
+		assertResponseDataFieldExists(t, resp, "device_count")
+		assertResponseDataArrayField(t, resp, "devices")
 	})
 
 	t.Run("check_enabled", func(t *testing.T) {
@@ -380,6 +386,7 @@ func TestTOTP(t *testing.T) {
 			require.True(t, rsp.RequiresMFA)
 			require.NotEmpty(t, rsp.Message)
 		})
+		assertResponseDataFieldExists(t, resp, "requires_mfa")
 	})
 
 	t.Run("login_requires_second_factor", func(t *testing.T) {
@@ -447,7 +454,7 @@ func TestTOTP(t *testing.T) {
 			require.NoError(t, err)
 
 			resp, err := cli.Create(mfa.TOTPVerifyReq{
-				Code: code,
+				TOTPCode: code,
 			})
 			require.NoError(t, err)
 			helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPVerifyRsp) {
@@ -461,6 +468,7 @@ func TestTOTP(t *testing.T) {
 				require.True(t, rsp.Valid)
 				require.NotEmpty(t, rsp.Message)
 			})
+			assertResponseDataFieldExists(t, resp, "valid")
 		})
 
 		t.Run("invalid_code", func(t *testing.T) {
@@ -471,7 +479,7 @@ func TestTOTP(t *testing.T) {
 			require.NoError(t, err)
 
 			resp, err := cli.Create(mfa.TOTPVerifyReq{
-				Code: "000000",
+				TOTPCode: "000000",
 			})
 			require.NoError(t, err)
 			helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPVerifyRsp) {
@@ -485,48 +493,21 @@ func TestTOTP(t *testing.T) {
 				require.False(t, rsp.Valid)
 				require.NotEmpty(t, rsp.Message)
 			})
+			assertResponseDataFieldExists(t, resp, "valid")
 		})
 
-		t.Run("valid_backup_code", func(t *testing.T) {
-			if len(backupCodes) == 0 {
-				t.Skip("no backup codes available")
-			}
+		t.Run("invalid_format", func(t *testing.T) {
 			cli, err := client.New(verifyAPI, client.WithCookie(&http.Cookie{
 				Name:  "session_id",
 				Value: sessionID,
 			}))
 			require.NoError(t, err)
 
-			normalizedInput := strings.ToLower(strings.ReplaceAll(backupCodes[0], "-", ""))
 			resp, err := cli.Create(mfa.TOTPVerifyReq{
-				Code:     normalizedInput,
-				IsBackup: true,
+				TOTPCode: "abc123",
 			})
-			require.NoError(t, err)
-			helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPVerifyRsp) {
-				t.Helper(
-				// #*modelmfa.TOTPVerifyRsp {
-				//   +Valid   => true #bool
-				//   +Message => "verification successful" #string
-				// }
-				)
-
-				require.True(t, rsp.Valid)
-				require.NotEmpty(t, rsp.Message)
-			})
-
-			resp, err = cli.Create(mfa.TOTPVerifyReq{
-				Code:     backupCodes[0],
-				IsBackup: true,
-			})
-			require.NoError(t, err)
-			helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPVerifyRsp) {
-				t.Helper()
-
-				require.False(t, rsp.Valid)
-				require.NotEmpty(t, rsp.Message)
-			})
-			assertBackupCodeHashCount(t, deviceID, 9)
+			require.Error(t, err)
+			require.Nil(t, resp)
 		})
 	})
 
@@ -556,7 +537,7 @@ func TestTOTP(t *testing.T) {
 		})
 		require.Error(t, err)
 		require.Nil(t, resp)
-		assertBackupCodeHashCount(t, deviceID, 8)
+		assertBackupCodeHashCount(t, deviceID, 9)
 	})
 
 	t.Run("unbind", func(t *testing.T) {
@@ -575,8 +556,11 @@ func TestTOTP(t *testing.T) {
 				t.Helper()
 
 				require.False(t, rsp.Success)
+				require.Equal(t, 1, rsp.DeviceCount)
 				require.NotEmpty(t, rsp.Message)
 			})
+			assertResponseDataFieldExists(t, resp, "success")
+			assertResponseDataFieldExists(t, resp, "device_count")
 			assertTOTPDeviceActive(t, deviceID)
 		})
 
@@ -600,10 +584,13 @@ func TestTOTP(t *testing.T) {
 				t.Helper()
 
 				require.False(t, rsp.Success)
+				require.Equal(t, 1, rsp.DeviceCount)
 				require.NotEmpty(t, rsp.Message)
 			})
+			assertResponseDataFieldExists(t, resp, "success")
+			assertResponseDataFieldExists(t, resp, "device_count")
 			assertTOTPDeviceActive(t, deviceID)
-			assertBackupCodeHashCount(t, deviceID, 8)
+			assertBackupCodeHashCount(t, deviceID, 9)
 		})
 
 		t.Run("invalid_totp", func(t *testing.T) {
@@ -623,13 +610,16 @@ func TestTOTP(t *testing.T) {
 				// #*modelmfa.TOTPUnbindRsp {
 				//   +Success     => false #bool
 				//   +Message     => "Invalid TOTP code" #string
-				//   +DeviceCount => 0 #int
+				//   +DeviceCount => 1 #int
 				// }
 				)
 
 				require.False(t, rsp.Success)
+				require.Equal(t, 1, rsp.DeviceCount)
 				require.NotEmpty(t, rsp.Message)
 			})
+			assertResponseDataFieldExists(t, resp, "success")
+			assertResponseDataFieldExists(t, resp, "device_count")
 			assertTOTPDeviceActive(t, deviceID)
 		})
 
@@ -653,6 +643,8 @@ func TestTOTP(t *testing.T) {
 				require.Equal(t, 1, rsp.DeviceCount)
 				require.NotEmpty(t, rsp.Message)
 			})
+			assertResponseDataFieldExists(t, resp, "success")
+			assertResponseDataFieldExists(t, resp, "device_count")
 		})
 
 		t.Run("valid_totp", func(t *testing.T) {
@@ -683,6 +675,8 @@ func TestTOTP(t *testing.T) {
 				require.Equal(t, 0, rsp.DeviceCount)
 				require.NotEmpty(t, rsp.Message)
 			})
+			assertResponseDataFieldExists(t, resp, "success")
+			assertResponseDataFieldExists(t, resp, "device_count")
 		})
 	})
 
@@ -706,7 +700,11 @@ func TestTOTP(t *testing.T) {
 
 			require.False(t, rsp.Enabled)
 			require.Equal(t, 0, rsp.DeviceCount)
+			require.Empty(t, rsp.Devices)
 		})
+		assertResponseDataFieldExists(t, resp, "enabled")
+		assertResponseDataFieldExists(t, resp, "device_count")
+		assertResponseDataArrayField(t, resp, "devices")
 	})
 }
 
@@ -812,4 +810,32 @@ func normalizeBackupCodeForTest(code string) string {
 	code = strings.TrimSpace(code)
 	code = strings.ReplaceAll(code, "-", "")
 	return strings.ToUpper(code)
+}
+
+func assertResponseDataFieldExists(t *testing.T, resp *client.Resp, field string) {
+	t.Helper()
+
+	data := responseDataMap(t, resp)
+	require.Contains(t, data, field, "response data: %s", string(resp.Data))
+}
+
+func assertResponseDataArrayField(t *testing.T, resp *client.Resp, field string) {
+	t.Helper()
+
+	data := responseDataMap(t, resp)
+	raw, ok := data[field]
+	require.True(t, ok, "response data: %s", string(resp.Data))
+	require.NotEqual(t, "null", strings.TrimSpace(string(raw)), "response data: %s", string(resp.Data))
+	var values []json.RawMessage
+	require.NoError(t, json.Unmarshal(raw, &values), "response data: %s", string(resp.Data))
+	require.NotNil(t, values, "response data: %s", string(resp.Data))
+}
+
+func responseDataMap(t *testing.T, resp *client.Resp) map[string]json.RawMessage {
+	t.Helper()
+
+	require.NotNil(t, resp)
+	var data map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(resp.Data, &data), "response data: %s", string(resp.Data))
+	return data
 }

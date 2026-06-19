@@ -21,8 +21,7 @@ type TOTPStatusService struct {
 
 // List loads the current user's TOTP devices and builds the status response
 // used by clients to render MFA settings. It requires an authenticated request,
-// includes inactive devices for management visibility, and derives Enabled from
-// the number of active devices.
+// returns active devices only, and derives Enabled from the active device count.
 func (t *TOTPStatusService) List(ctx *types.ServiceContext, req *modelmfa.TOTPStatus) (rsp *modelmfa.TOTPStatusRsp, err error) {
 	log := t.WithServiceContext(ctx, ctx.GetPhase())
 
@@ -32,10 +31,11 @@ func (t *TOTPStatusService) List(ctx *types.ServiceContext, req *modelmfa.TOTPSt
 		return nil, types.NewServiceError(http.StatusUnauthorized, "authentication required")
 	}
 
-	// 2. Load all TOTP devices for the user.
+	// 2. Load active TOTP devices for the user.
 	devices := make([]*modelmfa.TOTPDevice, 0)
 	query := &modelmfa.TOTPDevice{
-		UserID: ctx.UserID,
+		UserID:   ctx.UserID,
+		IsActive: true,
 	}
 
 	if err = database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).WithQuery(query).List(&devices); err != nil {
@@ -44,20 +44,14 @@ func (t *TOTPStatusService) List(ctx *types.ServiceContext, req *modelmfa.TOTPSt
 	}
 
 	// 3. Count device states and build the public device view.
-	activeDeviceCount := 0
+	activeDeviceCount := len(devices)
 	deviceInfos := make([]modelmfa.TOTPDeviceInfo, 0, len(devices))
 
 	for _, device := range devices {
-		// Count active devices.
-		if device.IsActive {
-			activeDeviceCount++
-		}
-
 		// Convert device metadata without sensitive fields.
 		deviceInfo := modelmfa.TOTPDeviceInfo{
 			ID:         device.ID,
 			DeviceName: device.DeviceName,
-			IsActive:   device.IsActive,
 			CreatedAt:  device.CreatedAt.Format("2006-01-02T15:04:05Z07:00"), // RFC3339 format
 		}
 
