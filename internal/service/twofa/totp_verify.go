@@ -3,7 +3,6 @@ package servicetwofa
 import (
 	"fmt"
 	"net/http"
-	"slices"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -40,6 +39,21 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 		}, errors.New("verification code is required")
 	}
 
+	if req.IsBackup {
+		if err = ConsumeTOTPBackupCode(ctx, ctx.UserID, req.Code); err != nil {
+			log.Warnz("invalid backup code", zap.String("user_id", ctx.UserID), zap.Error(err))
+			return &modeltwofa.TOTPVerifyRsp{
+				Valid:   false,
+				Message: "invalid verification code",
+			}, nil
+		}
+		log.Infoz("backup code verification successful", zap.String("user_id", ctx.UserID))
+		return &modeltwofa.TOTPVerifyRsp{
+			Valid:   true,
+			Message: "verification successful",
+		}, nil
+	}
+
 	// 3. 查询用户的 TOTP 设备
 	devices := make([]*modeltwofa.TOTPDevice, 0)
 	query := &modeltwofa.TOTPDevice{
@@ -70,22 +84,12 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 
 	// 4. 验证代码
 	var validDevice *modeltwofa.TOTPDevice
-	var isBackupCodeUsed bool
 
 	for _, device := range devices {
-		if req.IsBackup {
-			// 验证备份码
-			if t.validateBackupCode(req.Code, device) {
-				validDevice = device
-				isBackupCodeUsed = true
-				break
-			}
-		} else {
-			// 验证 TOTP 代码
-			if totp.Validate(req.Code, device.Secret) {
-				validDevice = device
-				break
-			}
+		// 验证 TOTP 代码
+		if totp.Validate(req.Code, device.Secret) {
+			validDevice = device
+			break
 		}
 	}
 
@@ -103,11 +107,6 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 	now := time.Now()
 	validDevice.LastUsedAt = &now
 
-	// 如果使用了备份码，从列表中移除
-	if isBackupCodeUsed {
-		t.removeUsedBackupCode(req.Code, validDevice)
-	}
-
 	// 保存设备更新
 	if err = database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext()).Update(validDevice); err != nil {
 		log.Errorz("failed to update device", zap.Error(err))
@@ -124,26 +123,4 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modeltwofa.TO
 		Valid:   true,
 		Message: "verification successful",
 	}, nil
-}
-
-// validateBackupCode 验证备份码
-func (t *TOTPVerifyService) validateBackupCode(code string, device *modeltwofa.TOTPDevice) bool {
-	// 备份码应该是8位数字
-	if len(code) != 8 {
-		return false
-	}
-
-	// 检查是否在备份码列表中
-	return slices.Contains(device.BackupCodes, code)
-}
-
-// removeUsedBackupCode 从备份码列表中移除已使用的码
-func (t *TOTPVerifyService) removeUsedBackupCode(code string, device *modeltwofa.TOTPDevice) {
-	for i, backupCode := range device.BackupCodes {
-		if backupCode == code {
-			// 移除已使用的备份码
-			device.BackupCodes = slices.Delete(device.BackupCodes, i, i+1)
-			break
-		}
-	}
 }

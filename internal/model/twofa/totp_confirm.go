@@ -21,7 +21,7 @@ type TOTPConfirmReq struct {
 type TOTPConfirmRsp struct {
 	DeviceID    string   `json:"device_id,omitempty"`
 	Message     string   `json:"message,omitempty"`
-	BackupCodes []string `json:"backup_codes,omitempty"` // 8-digit backup codes
+	BackupCodes []string `json:"backup_codes,omitempty"` // One-time recovery codes shown only after binding
 }
 
 func (TOTPConfirm) Design() {

@@ -1,11 +1,8 @@
 package servicetwofa
 
 import (
-	"crypto/rand"
 	"fmt"
-	"math/big"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -72,22 +69,25 @@ func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modeltwofa.T
 		return nil, errors.New("device already bound")
 	}
 
-	// 5. 生成备份码
-	backupCodes, err := generateBackupCodes()
+	backupCodes, err := GenerateTOTPBackupCodes()
 	if err != nil {
 		log.Errorz("failed to generate backup codes", zap.Error(err))
 		return nil, fmt.Errorf("failed to generate backup codes: %w", err)
 	}
+	backupCodeHashes, err := HashTOTPBackupCodes(backupCodes)
+	if err != nil {
+		log.Errorz("failed to hash backup codes", zap.Error(err))
+		return nil, fmt.Errorf("failed to hash backup codes: %w", err)
+	}
 
-	// 6. 创建 TOTP 设备记录
 	now := time.Now()
 	device := &modeltwofa.TOTPDevice{
-		UserID:      ctx.UserID,
-		DeviceName:  req.DeviceName,
-		Secret:      challenge.Secret,
-		BackupCodes: backupCodes,
-		IsActive:    true,
-		LastUsedAt:  &now,
+		UserID:           ctx.UserID,
+		DeviceName:       req.DeviceName,
+		Secret:           challenge.Secret,
+		BackupCodeHashes: backupCodeHashes,
+		IsActive:         true,
+		LastUsedAt:       &now,
 	}
 
 	if err = database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext()).Create(device); err != nil {
@@ -111,25 +111,4 @@ func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modeltwofa.T
 	}
 
 	return rsp, nil
-}
-
-// generateBackupCodes generates 8 backup codes, each of 8 numeric digits.
-//
-//lint:ignore modernize Keep classic loops and string concatenation for explicit clarity.
-func generateBackupCodes() ([]string, error) {
-	codes := make([]string, 8)
-	for i := range 8 {
-		// 生成8位随机数字
-		var b strings.Builder
-		b.Grow(8)
-		for range 8 {
-			digit, err := rand.Int(rand.Reader, big.NewInt(10))
-			if err != nil {
-				return nil, fmt.Errorf("failed to generate random digit: %w", err)
-			}
-			b.WriteByte('0' + byte(digit.Int64())) //nolint:gosec // G115: d is explicitly validated to be in [0,9] before conversion
-		}
-		codes[i] = b.String()
-	}
-	return codes, nil
 }

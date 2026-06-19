@@ -119,7 +119,7 @@ func localLogin(ctx *types.ServiceContext, log types.Logger, req *modeliamaccoun
 			log.Infoz("TOTP code validated successfully", zap.String("username", req.Username))
 		} else if req.BackupCode != "" {
 			// Validate backup code if provided
-			if err = validateBackupCode(ctx, user.ID, req.BackupCode); err != nil {
+			if err = servicetwofa.ConsumeTOTPBackupCode(ctx, user.ID, req.BackupCode); err != nil {
 				log.Warnz("invalid backup code", zap.String("username", req.Username), zap.Error(err))
 				return nil, errors.New("invalid backup code")
 			}
@@ -264,54 +264,6 @@ func validateTOTPCode(ctx *types.ServiceContext, userID, code string) error {
 	}
 
 	return errors.New("invalid TOTP code")
-}
-
-// validateBackupCode validates the provided backup code for the user
-func validateBackupCode(ctx *types.ServiceContext, userID, code string) error {
-	if code == "" {
-		return errors.New("backup code is required")
-	}
-
-	db := database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext())
-	devices := make([]*modeltwofa.TOTPDevice, 0)
-
-	if err := db.WithQuery(&modeltwofa.TOTPDevice{
-		UserID:   userID,
-		IsActive: true,
-	}).List(&devices); err != nil {
-		return fmt.Errorf("failed to query TOTP devices: %w", err)
-	}
-
-	if len(devices) == 0 {
-		return errors.New("no active TOTP devices found")
-	}
-
-	// Check backup codes for all active devices
-	for _, device := range devices {
-		if len(device.BackupCodes) > 0 {
-			for i, backupCode := range device.BackupCodes {
-				if backupCode == code {
-					// Mark backup code as used by removing it
-					updatedCodes := make([]string, 0, len(device.BackupCodes)-1)
-					for j, bc := range device.BackupCodes {
-						if j != i {
-							updatedCodes = append(updatedCodes, bc)
-						}
-					}
-					device.BackupCodes = updatedCodes
-
-					// Update the device in database (fresh handle; do not reuse db after List).
-					if err := database.Database[*modeltwofa.TOTPDevice](ctx.DatabaseContext()).Update(device); err != nil {
-						return fmt.Errorf("failed to update backup codes: %w", err)
-					}
-
-					return nil
-				}
-			}
-		}
-	}
-
-	return errors.New("invalid backup code")
 }
 
 // func keycloakLogin(ctx *types.ServiceContext, log types.Logger, req *iam.LoginReq) (rsp *iam.LoginRsp, err error) {

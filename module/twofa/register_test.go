@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -14,13 +15,16 @@ import (
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/helper"
+	modeltwofa "github.com/hydroan/gst/internal/model/twofa"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/module/twofa"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var (
@@ -276,14 +280,8 @@ func Test2fa(t *testing.T) {
 				//   +DeviceID    => "019cbc8d-857e-7e29-b2dc-ff983097a2e9" #string
 				//   +Message     => "TOTP device confirmed and activated successfully" #string
 				//   +BackupCodes => #[]string [
-				//     0 => "50284603" #string
-				//     1 => "02604950" #string
-				//     2 => "74121206" #string
-				//     3 => "41109596" #string
-				//     4 => "69628319" #string
-				//     5 => "27678030" #string
-				//     6 => "01293508" #string
-				//     7 => "26604878" #string
+				//     0 => "J7KQ-4M2D-9VXA-P3RT" #string
+				//     1 => "R8WP-B6ZD-7H3M-KQ2Y" #string
 				//   ]
 				// }
 				)
@@ -291,12 +289,13 @@ func Test2fa(t *testing.T) {
 				require.NotEmpty(t, rsp.DeviceID)
 				require.NotEmpty(t, rsp.Message)
 				require.NotEmpty(t, rsp.BackupCodes)
-				require.Len(t, rsp.BackupCodes, 8)
+				require.Len(t, rsp.BackupCodes, 10)
 				for _, bc := range rsp.BackupCodes {
-					require.Len(t, bc, 8)
+					require.Regexp(t, `^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}(-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}){3}$`, bc)
 				}
 				deviceID = rsp.DeviceID
 				backupCodes = rsp.BackupCodes
+				assertBackupCodeHashesStored(t, deviceID, backupCodes)
 			})
 		})
 
@@ -445,8 +444,9 @@ func Test2fa(t *testing.T) {
 			}))
 			require.NoError(t, err)
 
+			normalizedInput := strings.ToLower(strings.ReplaceAll(backupCodes[0], "-", ""))
 			resp, err := cli.Create(twofa.TOTPVerifyReq{
-				Code:     backupCodes[0],
+				Code:     normalizedInput,
 				IsBackup: true,
 			})
 			require.NoError(t, err)
@@ -461,7 +461,49 @@ func Test2fa(t *testing.T) {
 				require.True(t, rsp.Valid)
 				require.NotEmpty(t, rsp.Message)
 			})
+
+			resp, err = cli.Create(twofa.TOTPVerifyReq{
+				Code:     backupCodes[0],
+				IsBackup: true,
+			})
+			require.NoError(t, err)
+			helper.TestResp(t, resp, func(t *testing.T, rsp *twofa.TOTPVerifyRsp) {
+				t.Helper()
+
+				require.False(t, rsp.Valid)
+				require.NotEmpty(t, rsp.Message)
+			})
+			assertBackupCodeHashCount(t, deviceID, 9)
 		})
+	})
+
+	t.Run("login_with_backup_code", func(t *testing.T) {
+		if len(backupCodes) < 2 {
+			t.Skip("not enough backup codes available")
+		}
+		cli, err := client.New(loginAPI)
+		require.NoError(t, err)
+
+		resp, err := cli.Create(iam.LoginReq{
+			Username:   username,
+			Password:   password,
+			BackupCode: backupCodes[1],
+		})
+		require.NoError(t, err)
+		helper.TestResp(t, resp, func(t *testing.T, rsp *iam.LoginRsp) {
+			t.Helper()
+
+			require.NotEmpty(t, rsp.SessionID)
+		})
+
+		resp, err = cli.Create(iam.LoginReq{
+			Username:   username,
+			Password:   password,
+			BackupCode: backupCodes[1],
+		})
+		require.Error(t, err)
+		require.Nil(t, resp)
+		assertBackupCodeHashCount(t, deviceID, 8)
 	})
 
 	t.Run("unbind", func(t *testing.T) {
@@ -554,4 +596,38 @@ func extractSecretFromOtpauthURL(t *testing.T, otpauthURL string) string {
 	require.NotEmpty(t, key.Secret())
 
 	return key.Secret()
+}
+
+func assertBackupCodeHashesStored(t *testing.T, deviceID string, backupCodes []string) {
+	t.Helper()
+
+	device := getTOTPDeviceForTest(t, deviceID)
+	require.Len(t, device.BackupCodeHashes, len(backupCodes))
+	for i, code := range backupCodes {
+		normalizedCode := normalizeBackupCodeForTest(code)
+		require.NotEqual(t, code, device.BackupCodeHashes[i])
+		require.NotEqual(t, normalizedCode, device.BackupCodeHashes[i])
+		require.NoError(t, bcrypt.CompareHashAndPassword([]byte(device.BackupCodeHashes[i]), []byte(normalizedCode)))
+	}
+}
+
+func assertBackupCodeHashCount(t *testing.T, deviceID string, want int) {
+	t.Helper()
+
+	device := getTOTPDeviceForTest(t, deviceID)
+	require.Len(t, device.BackupCodeHashes, want)
+}
+
+func getTOTPDeviceForTest(t *testing.T, deviceID string) *modeltwofa.TOTPDevice {
+	t.Helper()
+
+	device := new(modeltwofa.TOTPDevice)
+	require.NoError(t, database.Database[*modeltwofa.TOTPDevice](nil).Get(device, deviceID))
+	return device
+}
+
+func normalizeBackupCodeForTest(code string) string {
+	code = strings.TrimSpace(code)
+	code = strings.ReplaceAll(code, "-", "")
+	return strings.ToUpper(code)
 }
