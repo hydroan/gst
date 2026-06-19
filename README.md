@@ -19,17 +19,10 @@ model 注册和 service 注册，再在 `service` 中补充业务逻辑。
 go install github.com/hydroan/gst/cmd/gg@latest
 ```
 
-需要验证当前仓库源码时，在 gst 源码仓库安装本地版本：
+如果需要基于当前源码验证 `gg` 命令，可以在 gst 源码仓库安装本地版本：
 
 ```bash
 make install
-```
-
-业务项目需要引用这份本地源码时，在业务项目目录添加 `replace`：
-
-```bash
-go mod edit -replace github.com/hydroan/gst=/path/to/gst
-go mod tidy
 ```
 
 ### 创建业务项目
@@ -86,8 +79,8 @@ git init
 7. 修改 `Migrate(true)` 的数据库模型字段后，先运行 `gg migrate --dry-run`，
    确认无误后再运行 `gg migrate`。
 
-开发时可以用 `gg dev` 监听 `model` 目录变更并自动执行 `gg gen`，同时通过
-Air 启动热重载服务。
+开发时可以用 `gg dev` 监听 `model` 目录变更并自动执行 `gg gen`；如果本地已安装
+Air，也可以配合它启动热重载服务。
 
 ## 模型 DSL
 
@@ -212,18 +205,16 @@ service.Base[M, REQ, RSP]
 其中 `M` 是模型类型，`REQ` 是请求类型，`RSP` 是响应类型。
 
 业务项目只需要关注 DSL、生成代码里的 `router.Register` / `service.Register`，以及
-业务实现里的 `service.Base`。controller 是框架内部执行层，业务代码不需要也不应该导入
-controller 包；手写高级路由时也应通过 `router.Register` 接入。controller 会通过框架内部
-registry 找到对应 service；service 查找、registry map、实例注入和 logger 注入等状态属于
-框架内部实现，不作为业务项目 API 暴露，也不建议业务代码直接持有或修改。
+业务实现里的 `service.Base`。业务代码不需要依赖更底层的框架执行包；手写高级路由时
+也应通过 `router.Register` 接入。
 
-需要特别注意 controller 的两种执行方式：
+需要特别注意默认资源和自定义动作的 service 写法不同：
 
-- 默认资源 CRUD：当 `M`、`REQ`、`RSP` 是同一个类型时，controller 走框架默认
+- 默认资源 CRUD：当 `M`、`REQ`、`RSP` 是同一个类型时，框架会执行默认
   数据库流程，业务侧主要实现 `CreateBefore`、`CreateAfter`、`ListAfter`、
   `Filter`、`FilterRaw` 等 hook。
 - 自定义动作：当 `Payload` 或 `Result` 让 `REQ`、`RSP` 不同于 `M` 时，
-  controller 会把请求交给 service 的 `Create`、`List`、`Delete` 等 action 方法。
+  框架会调用 service 的 `Create`、`List`、`Delete` 等 action 方法。
 
 默认资源的 hook 示例：
 
@@ -368,8 +359,10 @@ REQ/RSP 命名和业务项目根目录结构；根目录结构检查会跳过 Gi
 - [模块注册](./examples/demo/module/module.go)
 - [资源模型：Conversation](./examples/demo/model/conversation.go)
 - [嵌套资源模型：Message](./examples/demo/model/conversation/message.go)
+- [配置文件资源模型：File](./examples/demo/model/config/file.go)
 - [公开动作模型：Login](./examples/demo/model/auth/login.go)
 - [自定义动作模型：搜索去重](./examples/demo/model/common/search.go)
+- [自定义动作模型：文件加密](./examples/demo/model/config/file/encrypt.go)
 - [资源 service hook](./examples/demo/service/conversation/create.go)
 - [自定义动作 service](./examples/demo/service/common/search/dedup.go)
 - [生成的路由注册](./examples/demo/router/router.go)
@@ -389,7 +382,7 @@ action 是自定义动作时再开启 `Service(true)`。
 
 ### 为什么我写了 service 的 Create 方法但没有被调用？
 
-如果 `M`、`REQ`、`RSP` 是同一个类型，框架内部 controller 会走默认资源 CRUD 分支，
+如果 `M`、`REQ`、`RSP` 是同一个类型，默认资源 CRUD 会执行框架内置流程，
 只调用 service hook 和过滤方法。要让 action 主方法被调用，需要用 `Payload[T]()` 或
 `Result[T]()` 绑定当前接口专用的 REQ/RSP，让它成为自定义动作。
 
