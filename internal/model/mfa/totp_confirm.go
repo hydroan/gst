@@ -1,7 +1,6 @@
 package modelmfa
 
 import (
-	. "github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 )
 
@@ -22,15 +21,4 @@ type TOTPConfirmRsp struct {
 	DeviceID    string   `json:"device_id,omitempty"`
 	Message     string   `json:"message,omitempty"`
 	BackupCodes []string `json:"backup_codes,omitempty"` // One-time recovery codes shown only after binding
-}
-
-func (TOTPConfirm) Design() {
-	Route("mfa/totp/confirm", func() {
-		Create(func() {
-			Enabled(true)
-			Service(true)
-			Payload[*TOTPConfirmReq]()
-			Result[*TOTPConfirmRsp]()
-		})
-	})
 }

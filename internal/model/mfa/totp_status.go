@@ -1,7 +1,6 @@
 package modelmfa
 
 import (
-	. "github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 )
 
@@ -23,11 +22,4 @@ type TOTPDeviceInfo struct {
 }
 
 func (TOTPStatus) Design() {
-	Route("mfa/totp/status", func() {
-		List(func() {
-			Enabled(true)
-			Service(true)
-			Result[*TOTPStatusRsp]()
-		})
-	})
 }

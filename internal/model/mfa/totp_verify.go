@@ -1,7 +1,6 @@
 package modelmfa
 
 import (
-	. "github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 )
 
@@ -23,13 +22,4 @@ type TOTPVerifyRsp struct {
 }
 
 func (TOTPVerify) Design() {
-	Route("mfa/totp/verify", func() {
-		Create(func() {
-			Enabled(true)
-			Service(true)
-			Public(false) // Requires authentication
-			Payload[*TOTPVerifyReq]()
-			Result[*TOTPVerifyRsp]()
-		})
-	})
 }
