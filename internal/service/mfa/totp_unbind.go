@@ -208,14 +208,14 @@ func verifyTOTPUnbindFreshAuth(
 
 // verifyTOTPUnbindPassword validates the current user's password for fresh auth.
 func verifyTOTPUnbindPassword(ctx *types.ServiceContext, userID, password string) error {
-	user := new(modeliamuser.User)
-	if err := database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(user, userID); err != nil {
+	u := new(modeliamuser.User)
+	if err := database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(u, userID); err != nil {
 		return errTOTPUnbindVerificationInvalid
 	}
-	if user.Status != modeliamuser.UserStatusActive {
+	if u.Status != modeliamuser.UserStatusActive {
 		return errTOTPUnbindVerificationInvalid
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
 		return errTOTPUnbindVerificationInvalid
 	}
 	return nil
