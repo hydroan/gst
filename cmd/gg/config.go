@@ -554,7 +554,8 @@ type GGConfig struct {
 
 // PruneConfig contains service pruning options for gg.
 type PruneConfig struct {
-	Ignore []string `mapstructure:"ignore" yaml:"ignore"`
+	Ignore       []string `mapstructure:"ignore" yaml:"ignore"`
+	OrphanIgnore []string `mapstructure:"orphan_ignore" yaml:"orphan_ignore"`
 }
 
 var ggConfig *GGConfig
@@ -575,7 +576,8 @@ func loadGGConfig() (*GGConfig, error) {
 		if errors.As(err, &configFileNotFoundError) {
 			ggConfig = &GGConfig{
 				Prune: PruneConfig{
-					Ignore: []string{},
+					Ignore:       []string{},
+					OrphanIgnore: []string{},
 				},
 			}
 			return ggConfig, nil
@@ -599,4 +601,13 @@ func getPruneIgnorePatterns() []string {
 		return []string{}
 	}
 	return cfg.Prune.Ignore
+}
+
+// getPruneOrphanIgnorePatterns returns orphan service directories ignored by gg prune.
+func getPruneOrphanIgnorePatterns() []string {
+	cfg, err := loadGGConfig()
+	if err != nil {
+		return []string{}
+	}
+	return cfg.Prune.OrphanIgnore
 }
