@@ -2,9 +2,11 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"sort"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/ggmodule"
@@ -23,6 +25,33 @@ var moduleCmd = &cobra.Command{
 	Short: "manage gst modules",
 }
 
+var moduleListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "list framework modules",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runModuleList(cmd)
+	},
+}
+
+var moduleAddCmd = &cobra.Command{
+	Use:   "add <name>",
+	Short: "register a framework module in the current project",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runModuleAdd(args[0])
+	},
+}
+
+var moduleRemoveCmd = &cobra.Command{
+	Use:   "remove <name>",
+	Short: "unregister a framework module from the current project",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runModuleRemove(args[0])
+	},
+}
+
 var moduleCopyCmd = &cobra.Command{
 	Use:   "copy <name>",
 	Short: "copy a framework module into the current project",
@@ -36,7 +65,56 @@ func init() {
 	moduleCopyCmd.Flags().BoolVar(&moduleCopyOpts.Force, "force", false, "overwrite copied module files when they differ")
 	moduleCopyCmd.Flags().BoolVar(&moduleCopyOpts.Yes, "yes", false, "copy without prompting for confirmation")
 
-	moduleCmd.AddCommand(moduleCopyCmd)
+	moduleCmd.AddCommand(moduleListCmd, moduleAddCmd, moduleRemoveCmd, moduleCopyCmd)
+}
+
+func runModuleList(cmd *cobra.Command) error {
+	modules, err := ggmodule.ListModules()
+	if err != nil {
+		return err
+	}
+
+	// Use Cobra's command writer for list output so tests and shell completion
+	// wrappers can capture the table without intercepting process stdout.
+	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+	if _, err := fmt.Fprintln(w, "NAME\tPACKAGE\tADDABLE\tIMPORT"); err != nil {
+		return err
+	}
+	for _, module := range modules {
+		addable := "yes"
+		if !module.Addable {
+			addable = "no"
+		}
+		if _, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", module.Name, module.PackageName, addable, module.ImportPath); err != nil {
+			return err
+		}
+	}
+	return w.Flush()
+}
+
+func runModuleAdd(name string) error {
+	result, err := ggmodule.AddModule(".", name)
+	if err != nil {
+		return err
+	}
+
+	switch result.Status {
+	case ggmodule.ChangeSkipped:
+		clioutput.Item("SKIP", "%s already registered in %s", result.Module.Name, result.Path)
+	default:
+		clioutput.Success("ADD", "%s registered in %s", result.Module.Name, result.Path)
+	}
+	return nil
+}
+
+func runModuleRemove(name string) error {
+	result, err := ggmodule.RemoveModule(".", name)
+	if err != nil {
+		return err
+	}
+
+	clioutput.Success("REMOVE", "%s unregistered from %s", result.Module.Name, result.Path)
+	return nil
 }
 
 // runModuleCopy owns the command-level workflow only: build a checked plan,

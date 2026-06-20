@@ -192,16 +192,35 @@ func findFrameworkRoot() (string, error) {
 		".",
 	}
 	for _, candidate := range candidates {
-		modFile := filepath.Join(candidate, "go.mod")
-		data, err := os.ReadFile(modFile)
-		if err != nil {
-			continue
-		}
-		if strings.Contains(string(data), "module "+frameworkModulePath) {
+		if isFrameworkRoot(candidate) {
 			return filepath.Clean(candidate), nil
 		}
 	}
+
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	for {
+		if isFrameworkRoot(wd) {
+			return filepath.Clean(wd), nil
+		}
+		parent := filepath.Dir(wd)
+		if parent == wd {
+			break
+		}
+		wd = parent
+	}
 	return "", errors.New("framework source not found; expected internal/gst/go.mod")
+}
+
+func isFrameworkRoot(candidate string) bool {
+	modFile := filepath.Join(candidate, "go.mod")
+	data, err := os.ReadFile(modFile)
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(data), "module "+frameworkModulePath)
 }
 
 func (p *CopyPlan) checkSourceDirs() error {
