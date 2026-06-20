@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"go/ast"
-	"go/format"
+	goformat "go/format"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
 	"strings"
+
+	gofumpt "mvdan.cc/gofumpt/format"
 )
 
 // ChangeStatus describes whether a module command changed module/module.go.
@@ -191,18 +193,45 @@ func removeRegisterCall(file *ast.File, alias string) bool {
 		if !ok || fn.Name == nil || fn.Name.Name != "init" || fn.Body == nil {
 			continue
 		}
+		var removedFromInit bool
 		stmts := fn.Body.List[:0]
 		for _, stmt := range fn.Body.List {
 			call, ok := callExprFromStmt(stmt)
 			if ok && isRegisterCall(call, alias) {
 				changed = true
+				removedFromInit = true
 				continue
 			}
 			stmts = append(stmts, stmt)
 		}
 		fn.Body.List = stmts
+		if removedFromInit && len(fn.Body.List) == 0 {
+			compactEmptyInitBody(file, fn.Body)
+		}
 	}
 	return changed
+}
+
+func compactEmptyInitBody(file *ast.File, body *ast.BlockStmt) {
+	var lastCommentEnd token.Pos
+	for _, group := range file.Comments {
+		if group.Pos() <= body.Lbrace || group.End() >= body.Rbrace {
+			continue
+		}
+		if group.End() > lastCommentEnd {
+			lastCommentEnd = group.End()
+		}
+	}
+	if lastCommentEnd == token.NoPos {
+		return
+	}
+
+	// Removing the only statement leaves the block's right brace at the old
+	// statement line. gofmt preserves that position as a blank line after the
+	// placeholder comments, so collapse the brace back to the final in-body
+	// comment. This keeps user comments while making add/remove a clean round
+	// trip for the default module template.
+	body.Rbrace = lastCommentEnd
 }
 
 func callExprFromStmt(stmt ast.Stmt) (*ast.CallExpr, bool) {
@@ -242,13 +271,17 @@ func registerCallStmt(alias string, pos token.Pos) ast.Stmt {
 
 func writeGoFile(path string, fset *token.FileSet, file *ast.File) error {
 	var buf bytes.Buffer
-	if err := format.Node(&buf, fset, file); err != nil {
+	if err := goformat.Node(&buf, fset, file); err != nil {
+		return err
+	}
+	formatted, err := gofumpt.Source(buf.Bytes(), gofumpt.Options{})
+	if err != nil {
 		return err
 	}
 	if err := ensureParentDir(path); err != nil {
 		return err
 	}
-	return os.WriteFile(path, buf.Bytes(), 0o600)
+	return os.WriteFile(path, formatted, 0o600)
 }
 
 func identName(ident *ast.Ident) string {
