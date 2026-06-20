@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -41,46 +42,70 @@ func init() {
 	genCmd.AddCommand(tsCmd)
 }
 
+type genRunOptions struct {
+	Quiet bool
+}
+
 func genRun() {
-	if cleanOrphans && !prune {
-		clioutput.Error("", "--clean-orphans requires --prune when used with gg gen")
+	if err := genRunWithOptions(genRunOptions{}); err != nil {
+		clioutput.Error("", "%v", err)
 		os.Exit(1)
+	}
+}
+
+func genRunWithOptions(opts genRunOptions) error {
+	if cleanOrphans && !prune {
+		return errors.New("--clean-orphans requires --prune when used with gg gen")
 	}
 
 	if len(module) == 0 {
 		var err error
 		module, err = gen.GetModulePath()
-		checkErr(err)
+		if err != nil {
+			return err
+		}
 	}
 
-	if runProjectChecks() > 0 {
-		os.Exit(1)
+	checks := runProjectChecks
+	if opts.Quiet {
+		checks = runProjectChecksQuiet
+	}
+	if checks() > 0 {
+		return errors.New("project checks failed")
 	}
 
 	// Ensure required files exist
-	clioutput.Section("Ensure Required Files")
+	if !opts.Quiet {
+		clioutput.Section("Ensure Required Files")
+	}
 	createdFiles, err := pkgnew.EnsureFileExists()
-	checkErr(err)
-	if len(createdFiles) == 0 {
-		clioutput.Success("", "Required files are present")
-	} else {
-		for _, file := range createdFiles {
-			clioutput.Success("CREATE", "%s", file)
+	if err != nil {
+		return err
+	}
+	if !opts.Quiet {
+		if len(createdFiles) == 0 {
+			clioutput.Success("", "Required files are present")
+		} else {
+			for _, file := range createdFiles {
+				clioutput.Success("CREATE", "%s", file)
+			}
 		}
 	}
 
 	if !fileExists(modelDir) {
-		clioutput.Error("", "model dir not found: %s", modelDir)
-		os.Exit(1)
+		return fmt.Errorf("model dir not found: %s", modelDir)
 	}
 
 	// Scan all models
-	clioutput.Section("Scan Models")
+	if !opts.Quiet {
+		clioutput.Section("Scan Models")
+	}
 	allModels, err := codegen.FindModels(module, modelDir, serviceDir, excludes)
 	buildHierarchicalEndpoints(allModels)
 	propagateParentParams(allModels)
-
-	checkErr(err)
+	if err != nil {
+		return err
+	}
 
 	// Record old service files list (if prune option is enabled)
 	var oldServiceFiles []string
@@ -88,10 +113,12 @@ func genRun() {
 		oldServiceFiles = scanExistingServiceFiles(serviceDir)
 	}
 
-	if len(allModels) == 0 {
-		clioutput.Item("", "No models found, generating empty registration files")
-	} else {
-		clioutput.Success("", "%d models found", len(allModels))
+	if !opts.Quiet {
+		if len(allModels) == 0 {
+			clioutput.Item("", "No models found, generating empty registration files")
+		} else {
+			clioutput.Success("", "%d models found", len(allModels))
+		}
 	}
 
 	modelStmts := make([]ast.Stmt, 0)
@@ -100,6 +127,13 @@ func genRun() {
 	modelImportMap := make(map[string]struct{})
 	routerImportMap := make(map[string]struct{})
 	serviceImportMap := make(map[string]struct{})
+	writeGenFile := func(filename string, content string) error {
+		if opts.Quiet {
+			return writeGeneratedFile(filename, content, false)
+		}
+		writeFileWithLog(filename, content)
+		return nil
+	}
 
 	for _, m := range allModels {
 		if m.Design.Enabled && m.Design.Migrate {
@@ -184,20 +218,29 @@ func genRun() {
 	// ============================================================
 	// Generate model/service/router/main files
 	// ============================================================
-	clioutput.Section("Generate Files")
-
+	if !opts.Quiet {
+		clioutput.Section("Generate Files")
+	}
 	modelImports := lo.Keys(modelImportMap)
 	sort.Strings(modelImports)
 	modelCode, err := gen.BuildModelFile("model", modelImports, modelStmts...)
-	checkErr(err)
-	writeFileWithLog(filepath.Join(modelDir, "model.go"), modelCode)
+	if err != nil {
+		return err
+	}
+	if writeErr := writeGenFile(filepath.Join(modelDir, "model.go"), modelCode); writeErr != nil {
+		return writeErr
+	}
 
 	// generate service/service.go
 	serviceImports = lo.Keys(serviceImportMap)
 	sort.Strings(serviceImports)
 	serviceCode, err := gen.BuildServiceFile("service", serviceImports, serviceStmts...)
-	checkErr(err)
-	writeFileWithLog(filepath.Join(serviceDir, "service.go"), serviceCode)
+	if err != nil {
+		return err
+	}
+	if writeErr := writeGenFile(filepath.Join(serviceDir, "service.go"), serviceCode); writeErr != nil {
+		return writeErr
+	}
 
 	// generate router/router.go
 	// router always imports "github.com/hydroan/gst/types"
@@ -205,30 +248,46 @@ func genRun() {
 	routerImports := lo.Keys(routerImportMap)
 	sort.Strings(routerImports)
 	routerCode, err := gen.BuildRouterFile("router", routerImports, routerStmts...)
-	checkErr(err)
-	writeFileWithLog(filepath.Join(routerDir, "router.go"), routerCode)
+	if err != nil {
+		return err
+	}
+	if writeErr := writeGenFile(filepath.Join(routerDir, "router.go"), routerCode); writeErr != nil {
+		return writeErr
+	}
 
 	// generate main.go
 	mainCode, err := gen.BuildMainFile(module)
-	checkErr(err)
-	writeFileWithLog("main.go", mainCode)
+	if err != nil {
+		return err
+	}
+	if err := writeGenFile("main.go", mainCode); err != nil {
+		return err
+	}
 
 	// ============================================================
 	// Apply actions to services
 	// ============================================================
-	clioutput.Section("Apply Actions To Services")
+	if !opts.Quiet {
+		clioutput.Section("Apply Actions To Services")
+	}
 
 	fset := token.NewFileSet()
-	applyFile := func(filename string, code string, action *dsl.Action, servicePkgName string, modelInfo *gen.ModelInfo) {
+	applyFile := func(filename string, code string, action *dsl.Action, servicePkgName string, modelInfo *gen.ModelInfo) error {
 		safePath, err := pathUnderRoot(filename, serviceDir)
-		checkErr(err)
+		if err != nil {
+			return err
+		}
 
 		if fileExists(safePath) {
 			// Read original file content to preserve comments and formatting
 			src, err := os.ReadFile(safePath)
-			checkErr(err)
+			if err != nil {
+				return err
+			}
 			f, err := parser.ParseFile(fset, safePath, src, parser.ParseComments)
-			checkErr(err)
+			if err != nil {
+				return err
+			}
 
 			// Calculate the correct model import path and package name
 			correctModelImportPath := filepath.Join(modelInfo.ModulePath, modelInfo.ModelFileDir)
@@ -236,34 +295,55 @@ func genRun() {
 
 			// Apply changes and sync model imports to handle import path and package name updates
 			changed := gen.ApplyServiceFileWithModelSync(f, action, servicePkgName, correctModelImportPath, correctModelPkgName)
-
 			if changed {
 				// Only reformat and write file when there are changes
 				// Use original FileSet to preserve comment positions
 				code, err = gen.FormatNodeExtraWithFileSet(f, fset)
-				checkErr(err)
-				clioutput.Status(clioutput.StyleWarn, clioutput.SymbolSuccess, "UPDATE", "%s", safePath)
-				checkErr(ensureParentDir(safePath))
+				if err != nil {
+					return err
+				}
+				if !opts.Quiet {
+					clioutput.Status(clioutput.StyleWarn, clioutput.SymbolSuccess, "UPDATE", "%s", safePath)
+				}
+				if err := ensureParentDir(safePath); err != nil {
+					return err
+				}
 				// #nosec G703 -- safePath validated under serviceDir by pathUnderRoot
-				checkErr(os.WriteFile(safePath, []byte(code), 0o600))
-			} else {
+				if err := os.WriteFile(safePath, []byte(code), 0o600); err != nil {
+					return err
+				}
+			} else if !opts.Quiet {
 				clioutput.Item("SKIP", "%s", safePath)
 			}
 		} else {
-			clioutput.Success("CREATE", "%s", safePath)
-			checkErr(ensureParentDir(safePath))
+			if !opts.Quiet {
+				clioutput.Success("CREATE", "%s", safePath)
+			}
+			if err := ensureParentDir(safePath); err != nil {
+				return err
+			}
 			// #nosec G703 -- safePath validated under serviceDir by pathUnderRoot
-			checkErr(os.WriteFile(safePath, []byte(code), 0o600))
+			if err := os.WriteFile(safePath, []byte(code), 0o600); err != nil {
+				return err
+			}
 		}
+		return nil
 	}
 
+	var applyErr error
 	for _, m := range allModels {
 		m.Design.Range(func(route string, act *dsl.Action) {
+			if applyErr != nil {
+				return
+			}
 			if file := gen.GenerateService(m, act, act.Phase); file != nil {
 				fset := token.NewFileSet()
 				code, err := gen.FormatNodeExtraWithFileSet(file, fset)
 				// pretty.Println(file)
-				checkErr(err)
+				if err != nil {
+					applyErr = err
+					return
+				}
 				// code = gen.MethodAddComments(code, m.ModelName)
 				dir := filepath.Join(serviceDir, gen.ServiceOutputRel(m.ModelFilePath, modelDir))
 				filename := filepath.Join(dir, act.ServiceFilename())
@@ -271,9 +351,12 @@ func genRun() {
 				// with service registration logic and maintain original naming style
 				// For example: ModelName "ConfigSetting" -> package name "configsetting"
 				servicePkgName := strings.ToLower(m.ModelName)
-				applyFile(filename, code, act, servicePkgName, m)
+				applyErr = applyFile(filename, code, act, servicePkgName, m)
 			}
 		})
+		if applyErr != nil {
+			return applyErr
+		}
 	}
 
 	// ============================================================
@@ -286,8 +369,11 @@ func genRun() {
 	// ============================================================
 	// Completion message
 	// ============================================================
-	clioutput.Section("Done")
-	clioutput.Done("Code generation completed successfully!")
+	if !opts.Quiet {
+		clioutput.Section("Done")
+		clioutput.Done("Code generation completed successfully!")
+	}
+	return nil
 }
 
 // pathUnderRoot returns path cleaned and verified to be under root (no path traversal).

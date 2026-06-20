@@ -35,20 +35,39 @@ func ensureParentDir(filename string) error {
 }
 
 func writeFileWithLog(filename string, content string) {
+	checkErr(writeGeneratedFile(filename, content, true))
+}
+
+func writeGeneratedFile(filename string, content string, log bool) error {
 	if fileExists(filename) {
 		oldData, err := os.ReadFile(filename)
-		checkErr(err)
+		if err != nil {
+			return err
+		}
 		if string(oldData) == content {
-			clioutput.Item("SKIP", "%s", filename)
+			if log {
+				clioutput.Item("SKIP", "%s", filename)
+			}
 		} else {
-			clioutput.Status(clioutput.StyleWarn, clioutput.SymbolSuccess, "UPDATE", "%s", filename)
-			checkErr(os.WriteFile(filename, []byte(content), 0o600))
+			if log {
+				clioutput.Status(clioutput.StyleWarn, clioutput.SymbolSuccess, "UPDATE", "%s", filename)
+			}
+			if err := os.WriteFile(filename, []byte(content), 0o600); err != nil {
+				return err
+			}
 		}
 	} else {
-		clioutput.Success("CREATE", "%s", filename)
-		checkErr(ensureParentDir(filename))
-		checkErr(os.WriteFile(filename, []byte(content), 0o600))
+		if log {
+			clioutput.Success("CREATE", "%s", filename)
+		}
+		if err := ensureParentDir(filename); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filename, []byte(content), 0o600); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func getModuleName() (string, error) {

@@ -39,5 +39,6 @@ func init() {
 		releaseCmd,
 		configCmd,
 		migrateCmd,
+		moduleCmd,
 	)
 }

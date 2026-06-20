@@ -60,6 +60,21 @@ type projectCheckResult struct {
 
 // runProjectChecks runs all project checks shared by gg check and gg gen.
 func runProjectChecks() int {
+	results := collectProjectChecks()
+	printProjectCheckResults(results)
+	return totalProjectCheckViolations(results)
+}
+
+func runProjectChecksQuiet() int {
+	results := collectProjectChecks()
+	total := totalProjectCheckViolations(results)
+	if total > 0 {
+		printProjectCheckResults(results)
+	}
+	return total
+}
+
+func collectProjectChecks() []projectCheckResult {
 	results := []projectCheckResult{
 		{Name: "Architecture dependencies", Violations: CheckArchitectureDependency()},
 		{Name: "Model singular naming", Violations: CheckModelSingularNaming()},
@@ -70,9 +85,7 @@ func runProjectChecks() int {
 		{Name: "Model package naming", Violations: CheckModelPackageNaming()},
 		{Name: "Directory restrictions", Violations: CheckAllowedDirectories()},
 	}
-
-	printProjectCheckResults(results)
-	return totalProjectCheckViolations(results)
+	return results
 }
 
 func printProjectCheckResults(results []projectCheckResult) {
