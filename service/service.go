@@ -20,6 +20,9 @@ var _ types.Service[*model.Empty, any, any] = (*Base[*model.Empty, any, any])(ni
 
 var once sync.Once
 
+// Base is the default no-op service implementation exposed to application services.
+type Base[M types.Model, REQ types.Request, RSP types.Response] = serviceregistry.Base[M, REQ, RSP]
+
 // Register registers a service type for the specified phase.
 //
 // Register is the public service registration entry point for application and
@@ -74,6 +77,3 @@ func Init() error {
 	})
 	return nil
 }
-
-// Base is the default no-op service implementation exposed to application services.
-type Base[M types.Model, REQ types.Request, RSP types.Response] = serviceregistry.Base[M, REQ, RSP]
