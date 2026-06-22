@@ -59,6 +59,7 @@ type CopyPlan struct {
 	TargetModelImportPath string
 	Actions               []moduleCopyAction
 	Files                 []moduleCopyFile
+	PostCopyNotes         []string
 }
 
 // moduleCopyAction connects one DSL action to the framework service file that
@@ -128,6 +129,12 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 	if sourceDirErr := plan.checkSourceDirs(); sourceDirErr != nil {
 		return nil, sourceDirErr
 	}
+	postCopyNotes, err := loadModuleCopyMetadata(filepath.Join(frameworkRoot, "module", name))
+	if err != nil {
+		return nil, err
+	}
+	plan.PostCopyNotes = postCopyNotes
+
 	if registerErr := checkModuleNotRegistered(name); registerErr != nil {
 		return nil, registerErr
 	}

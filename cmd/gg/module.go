@@ -144,6 +144,7 @@ func runModuleCopy(name string, opts moduleCopyOptions) error {
 	clioutput.Section("Done")
 	clioutput.Done("Module copied successfully")
 	printModuleCopyCleanup(name)
+	printModuleCopyPostNotes(plan.PostCopyNotes)
 	return nil
 }
 
@@ -200,4 +201,14 @@ func printModuleCopyPlanGroup(title string, files []string) {
 
 func printModuleCopyCleanup(name string) {
 	clioutput.Item("", "To remove copied module code, delete model/%s, then run: gg prune --clean-orphans", name)
+}
+
+func printModuleCopyPostNotes(notes []string) {
+	if len(notes) == 0 {
+		return
+	}
+	fmt.Println()
+	for _, note := range notes {
+		fmt.Println(note)
+	}
 }
