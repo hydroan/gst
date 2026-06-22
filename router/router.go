@@ -5,6 +5,8 @@ import (
 	"net"
 	"net/http"
 	gopath "path"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,6 +42,8 @@ var (
 
 	routesReadyMu    sync.Mutex
 	routesReadyHooks []func(routes map[string][]string) error
+
+	ginParamPattern = regexp.MustCompile(`:([a-zA-Z0-9_]+)`)
 )
 
 var globalErrors = make([]error, 0)
@@ -53,6 +57,21 @@ func routesSnapshot() map[string][]string {
 		snapshot[endpoint] = append([]string(nil), methods...)
 	}
 	return snapshot
+}
+
+// Routes returns a read-only snapshot of registered business API routes.
+//
+// Route parameters are converted from Gin's ":id" format to "{id}" so the
+// returned paths can be reused by Casbin keyMatch3 policies and menu route
+// bindings. Mutating the returned map or method slices does not affect router
+// state.
+func Routes() map[string][]string {
+	snapshot := routesSnapshot()
+	result := make(map[string][]string, len(snapshot))
+	for endpoint, methods := range snapshot {
+		result[normalizeRoutePath(endpoint)] = sortedHTTPMethods(methods)
+	}
+	return result
 }
 
 // OnRoutesReady registers a hook that runs after all routes are registered and before the server starts.
@@ -126,7 +145,7 @@ func Run() error {
 	routesReadyMu.Unlock()
 
 	for _, hook := range hooks {
-		if err := hook(routesSnapshot()); err != nil {
+		if err := hook(Routes()); err != nil {
 			log.Errorw("failed to run routes ready hooks", "err", err)
 			return err
 		}
@@ -324,6 +343,58 @@ func registerRoute(endpoint, method string) {
 	defer routeMu.Unlock()
 
 	routes[endpoint] = append(routes[endpoint], method)
+}
+
+func normalizeRoutePath(endpoint string) string {
+	return ginParamPattern.ReplaceAllString(endpoint, `{$1}`)
+}
+
+func sortedHTTPMethods(methods []string) []string {
+	seen := make(map[string]struct{}, len(methods))
+	result := make([]string, 0, len(methods))
+	for _, method := range methods {
+		method = strings.ToUpper(strings.TrimSpace(method))
+		if len(method) == 0 {
+			continue
+		}
+		if _, ok := seen[method]; ok {
+			continue
+		}
+		seen[method] = struct{}{}
+		result = append(result, method)
+	}
+	sort.Slice(result, func(i int, j int) bool {
+		left, leftOK := httpMethodRank(result[i])
+		right, rightOK := httpMethodRank(result[j])
+		if leftOK && rightOK {
+			return left < right
+		}
+		if leftOK {
+			return true
+		}
+		if rightOK {
+			return false
+		}
+		return result[i] < result[j]
+	})
+	return result
+}
+
+func httpMethodRank(method string) (int, bool) {
+	switch method {
+	case http.MethodGet:
+		return 0, true
+	case http.MethodPost:
+		return 1, true
+	case http.MethodPut:
+		return 2, true
+	case http.MethodPatch:
+		return 3, true
+	case http.MethodDelete:
+		return 4, true
+	default:
+		return 0, false
+	}
 }
 
 // buildPath normalizes the API path.

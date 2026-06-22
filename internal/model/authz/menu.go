@@ -29,30 +29,32 @@ var MenuRoot = &Menu{ParentID: model.RootID, Base: model.Base{ID: RootID}}
 type MenuPlatform string
 
 const (
-	MenuPlatformAll     = "all"
-	MenuPlatformWeb     = "web"
-	MenuPlatformMobile  = "mobile"
-	MenuPlatformDesktop = "desktop"
+	MenuPlatformWeb     MenuPlatform = "web"
+	MenuPlatformMobile  MenuPlatform = "mobile"
+	MenuPlatformDesktop MenuPlatform = "desktop"
 )
 
 type Menu struct {
-	API   datatypes.JSONSlice[string] `json:"api,omitempty" schema:"api"`     // 后端路由, 如果为空则使用 "/api" + Path
-	Path  string                      `json:"path,omitempty" schema:"path"`   // path should not add `omitempty` tag, empty value means default router in react route6.x.
-	Label string                      `json:"label,omitempty" schema:"label"` // 页面组件左侧的菜单名
-	Icon  string                      `json:"icon,omitempty" schema:"icon"`   // 页面组件左侧的菜单图标
+	// Frontend route path. The empty value means default route in React Router 6.x.
+	Path    string `json:"path" schema:"path"`
+	Default string `json:"default,omitempty" schema:"default"` // Default child route when the menu has children.
 
-	Visiable *bool  `json:"visiable,omitempty" schema:"visiable" gorm:"default:1"`                                                   // 前端页面路由是否可见
-	Default  string `json:"default,omitempty" schema:"default"`                                                                      // 子路由中的默认路由, 如果有 Children, Default 才可能存在
-	Status   *uint  `json:"status,omitempty" gorm:"type:smallint;default:1;comment:status(0: disabled, 1: enabled)" schema:"status"` // 该路由是否启用
+	// Backend routes used by this menu.
+	Routes datatypes.JSONSlice[Route] `json:"routes,omitempty" schema:"routes"`
+
+	// Display metadata.
+	Label string `json:"label,omitempty" schema:"label"`
+	Icon  string `json:"icon,omitempty" schema:"icon"`
+
+	// Visibility metadata. Runtime filtering behavior is handled by service logic.
+	Visible       *bool                             `json:"visible,omitempty" schema:"visible" gorm:"default:1"`
+	Enabled       *bool                             `json:"enabled,omitempty" schema:"enabled" gorm:"default:1"`
+	Platforms     datatypes.JSONSlice[MenuPlatform] `json:"platforms,omitempty" schema:"platforms"` // Empty means all platforms.
+	DomainPattern string                            `json:"domain_pattern,omitempty" schema:"domain_pattern" gorm:"default:.*"`
 
 	ParentID string  `json:"parent_id,omitempty" gorm:"size:191" schema:"parent_id"`
 	Children []*Menu `json:"children,omitempty" gorm:"foreignKey:ParentID"`             // 子路由
 	Parent   *Menu   `json:"parent,omitempty" gorm:"foreignKey:ParentID;references:ID"` // 父路由
-
-	// the empty value of `Platform` means all.
-	Platform MenuPlatform `json:"platform,omitempty" schema:"platform"`
-
-	DomainPattern string `json:"domain_pattern,omitempty" schema:"domain_pattern" gorm:"default:.*"`
 
 	model.Base
 }
@@ -61,31 +63,8 @@ func (m *Menu) Purge() bool                                      { return true }
 func (m *Menu) CreateBefore(ctx *types.ModelContext) (err error) { return m.validate() }
 func (m *Menu) UpdateBefore(ctx *types.ModelContext) error       { return m.validate() }
 
-// UpdateAfter will query all roles and check whether the role contains the current menu.
-// If role contains current menu and the menu's API changed,
-// then call "role.UpdatePermission" to updates the role's permissions.
+// UpdateAfter refreshes permissions for roles that contain the current menu.
 func (m *Menu) UpdateAfter(ctx *types.ModelContext) error {
-	// // // if update not contains "API", skip update role's permissions
-	// // if len(m.API) == 0 {
-	// // 	return nil
-	// // }
-	//
-	// // update "API" but we should check whether the original menu's API and
-	// // current updates menu's API are the same.
-	// //
-	// // query the original menu from database.
-	// orig := new(Menu)
-	// if err := database.Database[*Menu](ctx.DatabaseContext()).Get(orig, m.ID); err != nil {
-	// 	return err
-	// }
-	//
-	// // // if the original menu's API and current updates menu's API are the same,
-	// // // skip update role's permissions
-	// // if reflect.DeepEqual(orig.API, m.API) {
-	// // 	zap.S().Info("menu's api not changed, skip update role's permissions")
-	// // 	return nil
-	// // }
-
 	roles := make([]*Role, 0)
 	if err := database.Database[*Role](ctx.DatabaseContext()).List(&roles); err != nil {
 		return err
@@ -147,8 +126,11 @@ func (m *Menu) validate() error {
 	if len(m.ParentID) == 0 {
 		m.ParentID = RootID
 	}
-	if m.Visiable == nil {
-		m.Visiable = new(true)
+	if m.Visible == nil {
+		m.Visible = new(true)
+	}
+	if m.Enabled == nil {
+		m.Enabled = new(true)
 	}
 	if len(m.DomainPattern) == 0 {
 		m.DomainPattern = ".*"
@@ -163,10 +145,20 @@ func (m *Menu) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	if m == nil {
 		return nil
 	}
-	enc.AddString("api", strings.Join(m.API, ","))
+	enc.AddString("routes", strings.Join(routePaths(m.Routes), ","))
 	enc.AddString("path", m.Path)
 	enc.AddString("label", m.Label)
 	enc.AddInt("children len", len(m.Children))
 
 	return nil
+}
+
+func routePaths(routes []Route) []string {
+	paths := make([]string, 0, len(routes))
+	for _, route := range routes {
+		if len(route.Path) != 0 {
+			paths = append(paths, route.Path)
+		}
+	}
+	return paths
 }

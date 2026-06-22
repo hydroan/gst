@@ -1,7 +1,6 @@
 package modelauthz
 
 import (
-	serrors "errors"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -48,7 +47,7 @@ func (r *Role) CreateAfter(ctx *types.ModelContext) error {
 	}
 	e1 := r.UpdatePermission(ctx)
 	e2 := rbac.RBAC().AddRole(r.Code)
-	return serrors.Join(e1, e2)
+	return errors.Join(e1, e2)
 }
 
 // UpdateBefore will delete the old role's permissions and create the new role's permissions.
@@ -56,7 +55,7 @@ func (r *Role) CreateAfter(ctx *types.ModelContext) error {
 func (r *Role) UpdateBefore(ctx *types.ModelContext) error {
 	e1 := r.UpdatePermission(ctx)
 	e2 := rbac.RBAC().AddRole(r.Code)
-	return serrors.Join(e1, e2)
+	return errors.Join(e1, e2)
 }
 
 // DeleteBefore will delete the role's permissions
@@ -79,12 +78,8 @@ func (r *Role) DeleteBefore(ctx *types.ModelContext) error {
 		return err
 	}
 	for _, m := range menus {
-		result := make([]*Permission, 0)
-		// query multiple permissions
-		if err := database.Database[*Permission](ctx.DatabaseContext()).
-			WithQuery(&Permission{Resource: strings.Join(m.API, ",")}).
-			List(&result); err != nil {
-			zap.S().Error(err)
+		result, err := permissionsForRoutes(ctx, m.Routes)
+		if err != nil {
 			return err
 		}
 		permissions = append(permissions, result...)
@@ -106,7 +101,7 @@ func (r *Role) DeleteBefore(ctx *types.ModelContext) error {
 func (r *Role) UpdatePermission(ctx *types.ModelContext) error {
 	// We should always iterate role's "MenuIds", not "MenuPartialIds".
 	// "MenuIds" is the frontend menus, "MenuPartialIds" is the frontend menus group that has no menus.
-	// A "Menu" contains one or multiple backend apis, each api binding one or multiple permissions.
+	// A "Menu" contains one or multiple backend routes, each route binding one or multiple permissions.
 
 	var (
 		newMenus       = make([]*Menu, 0)
@@ -129,13 +124,8 @@ func (r *Role) UpdatePermission(ctx *types.ModelContext) error {
 
 	// query the new role's permissions
 	for _, m := range newMenus {
-		// zap.S().Infow("menu", "label", m.Label, "api", m.API)
-		result := make([]*Permission, 0)
-		if err := database.Database[*Permission](ctx.DatabaseContext()).
-			// query the menu's permissions, multiple resources separated by ","
-			WithQuery(&Permission{Resource: strings.Join(m.API, ",")}).
-			List(&result); err != nil {
-			zap.S().Error(err)
+		result, err := permissionsForRoutes(ctx, m.Routes)
+		if err != nil {
 			return err
 		}
 		newPermissions = append(newPermissions, result...)
@@ -161,6 +151,30 @@ func (r *Role) UpdatePermission(ctx *types.ModelContext) error {
 	zap.S().Infow("update role", "old", o.Code, "new", r.Code)
 
 	return nil
+}
+
+func permissionsForRoutes(ctx *types.ModelContext, routes []Route) ([]*Permission, error) {
+	permissions := make([]*Permission, 0)
+	for _, route := range routes {
+		if len(route.Path) == 0 {
+			continue
+		}
+		for _, method := range route.Methods {
+			method = strings.ToUpper(strings.TrimSpace(method))
+			if len(method) == 0 {
+				continue
+			}
+			result := make([]*Permission, 0)
+			if err := database.Database[*Permission](ctx.DatabaseContext()).
+				WithQuery(&Permission{Resource: route.Path, Action: method}).
+				List(&result); err != nil {
+				zap.S().Error(err)
+				return nil, err
+			}
+			permissions = append(permissions, result...)
+		}
+	}
+	return permissions, nil
 }
 
 // validate will validate the role's name and code and ensure the role not exists.

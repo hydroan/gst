@@ -2,7 +2,6 @@ package authz
 
 import (
 	"os"
-	"regexp"
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
@@ -24,8 +23,10 @@ import (
 //   - UserRole
 //   - CasbinRule
 //   - Menu
+//   - Routes
 //
 // Routes:
+//   - GET    /api/routes
 //   - GET    /api/authz/permissions
 //   - GET    /api/authz/permissions/:id
 //   - POST   /api/authz/roles
@@ -46,7 +47,6 @@ import (
 //   - PATCH  /api/menus/:id
 //   - GET    /api/menus
 //   - GET    /api/menus/:id
-//   - GET    /api/apis
 //   - POST   /api/buttons
 //   - DELETE /api/buttons/:id
 //   - PUT    /api/buttons/:id
@@ -124,10 +124,10 @@ func Register() {
 	)
 
 	module.Use[
-		*API,
-		*API,
-		APIRsp](
-		&APIModule{},
+		*Routes,
+		*Routes,
+		RoutesRsp](
+		&RoutesModule{},
 		consts.PHASE_LIST,
 	)
 
@@ -166,7 +166,7 @@ func Register() {
 			for endpoint, methods := range routes {
 				for _, method := range methods {
 					permissions = append(permissions, &modelauthz.Permission{
-						Resource: convertGinPathToCasbinKeyMatch3(endpoint),
+						Resource: endpoint,
 						Action:   method,
 					})
 				}
@@ -183,10 +183,4 @@ func Register() {
 		}
 		return nil
 	})
-}
-
-func convertGinPathToCasbinKeyMatch3(ginPath string) string {
-	// Match :param style and replace with {param}
-	re := regexp.MustCompile(`:([a-zA-Z0-9_]+)`)
-	return re.ReplaceAllString(ginPath, `{$1}`)
 }

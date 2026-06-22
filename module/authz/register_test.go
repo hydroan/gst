@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
@@ -31,7 +32,7 @@ var (
 	signupAPI = fmt.Sprintf("http://localhost:%d/api/signup", port)
 	loginAPI  = fmt.Sprintf("http://localhost:%d/api/login", port)
 
-	apiAPI        = fmt.Sprintf("http://localhost:%d/api/apis", port)
+	routesAPI     = fmt.Sprintf("http://localhost:%d/api/routes", port)
 	menuAPI       = fmt.Sprintf("http://localhost:%d/api/menus", port)
 	permissionAPI = fmt.Sprintf("http://localhost:%d/api/authz/permissions", port)
 	roleAPI       = fmt.Sprintf("http://localhost:%d/api/authz/roles", port)
@@ -161,8 +162,8 @@ func TestAuthz(t *testing.T) {
 			adminSessionID = rsp.SessionID
 		})
 	})
-	t.Run("api", func(t *testing.T) {
-		cli, err := client.New(apiAPI, client.WithCookie(&http.Cookie{
+	t.Run("routes", func(t *testing.T) {
+		cli, err := client.New(routesAPI, client.WithCookie(&http.Cookie{
 			Name:  "session_id",
 			Value: adminSessionID,
 		}))
@@ -170,35 +171,23 @@ func TestAuthz(t *testing.T) {
 
 		resp, err := cli.Request(http.MethodGet, nil)
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp []string) {
+		helper.TestResp(t, resp, func(t *testing.T, rsp authz.RoutesRsp) {
 			t.Helper(
-			// #[]string [
-			//   0 => "/api/iam/session/heartbeat" #string
-			//   1 => "/api/signup" #string
-			//   2 => "/api/iam/groups" #string
-			//   3 => "/api/menus/{id}" #string
-			//   4 => "/api/authz/user-roles" #string
-			//   5 => "/api/authz/user-roles/{id}" #string
-			//   6 => "/api/login" #string
-			//   7 => "/api/iam/session/current" #string
-			//   8 => "/api/iam/groups/{id}" #string
-			//   9 => "/api/iam/users/{id}" #string
-			//   10 => "/api/online-users" #string
-			//   11 => "/api/authz/roles/{id}" #string
-			//   12 => "/api/apis" #string
-			//   13 => "/api/iam/change-password" #string
-			//   14 => "/api/logout" #string
-			//   15 => "/api/authz/permissions" #string
-			//   16 => "/api/iam/users" #string
-			//   17 => "/api/buttons" #string
-			//   18 => "/api/buttons/{id}" #string
-			//   19 => "/api/authz/permissions/{id}" #string
-			//   20 => "/api/menus" #string
-			//   21 => "/api/authz/roles" #string
-			// ]
+			// #modelauthz.RoutesRsp {
+			//   +Items => []modelauthz.Route [
+			//     0 => {
+			//       +Path    => "/api/authz/roles" #string
+			//       +Methods => ["GET", "POST"] #[]string
+			//     }
+			//   ]
+			// }
 			)
 
-			require.NotEmpty(t, rsp, "apis list should not be empty")
+			require.NotEmpty(t, rsp.Items, "routes list should not be empty")
+			requireRoute(t, rsp.Items, "/api/routes", []string{http.MethodGet})
+			requireRoute(t, rsp.Items, "/api/authz/roles", []string{http.MethodGet, http.MethodPost})
+			requireRoute(t, rsp.Items, "/api/authz/roles/{id}", []string{http.MethodGet, http.MethodPut, http.MethodPatch, http.MethodDelete})
+			requireNoRoute(t, rsp.Items, "/api/authz/roles/:id")
 		})
 	})
 
@@ -247,7 +236,9 @@ func TestAuthz(t *testing.T) {
 				ParentID: "root",
 				Label:    "Test Menu",
 				Path:     "/test",
-				API:      []string{"/api/test"},
+				Routes: []authz.Route{
+					{Path: "/api/routes", Methods: []string{http.MethodGet}},
+				},
 			}
 			resp, err = cli.Create(createReq)
 			require.NoError(t, err)
@@ -257,6 +248,7 @@ func TestAuthz(t *testing.T) {
 				require.Equal(t, createReq.Label, rsp.Label)
 				require.Equal(t, createReq.Path, rsp.Path)
 				require.Equal(t, createReq.ParentID, rsp.ParentID)
+				require.Equal(t, createReq.Routes, rsp.Routes)
 				menuID = rsp.ID
 			})
 		})
@@ -270,6 +262,7 @@ func TestAuthz(t *testing.T) {
 				require.Equal(t, menuID, rsp.ID)
 				require.Equal(t, "Test Menu", rsp.Label)
 				require.Equal(t, "/test", rsp.Path)
+				require.Equal(t, []authz.Route{{Path: "/api/routes", Methods: []string{http.MethodGet}}}, []authz.Route(rsp.Routes))
 			})
 		})
 
@@ -278,7 +271,10 @@ func TestAuthz(t *testing.T) {
 				ParentID: "root",
 				Label:    "Test Menu Updated",
 				Path:     "/test-updated",
-				API:      []string{"/api/test", "/api/test-updated"},
+				Routes: []authz.Route{
+					{Path: "/api/routes", Methods: []string{http.MethodGet}},
+					{Path: "/api/authz/roles", Methods: []string{http.MethodGet}},
+				},
 			}
 			resp, err = cli.Update(menuID, updateReq)
 			require.NoError(t, err)
@@ -287,6 +283,7 @@ func TestAuthz(t *testing.T) {
 				require.Equal(t, menuID, rsp.ID)
 				require.Equal(t, updateReq.Label, rsp.Label)
 				require.Equal(t, updateReq.Path, rsp.Path)
+				require.Equal(t, updateReq.Routes, rsp.Routes)
 			})
 		})
 
@@ -335,6 +332,27 @@ func TestAuthz(t *testing.T) {
 		require.NoError(t, err)
 		var roleID string
 		var resp *client.Resp
+		var roleMenuID string
+
+		cliMenu, err := client.New(menuAPI, client.WithCookie(&http.Cookie{
+			Name:  "session_id",
+			Value: adminSessionID,
+		}))
+		require.NoError(t, err)
+		resp, err = cliMenu.Create(&authz.Menu{
+			ParentID: "root",
+			Label:    "Role Test Menu",
+			Path:     "/role-test",
+			Routes: []authz.Route{
+				{Path: "/api/authz/roles", Methods: []string{http.MethodGet}},
+			},
+		})
+		require.NoError(t, err)
+		helper.TestResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
+			t.Helper()
+			require.NotEmpty(t, rsp.ID)
+			roleMenuID = rsp.ID
+		})
 
 		t.Run("list", func(t *testing.T) {
 			items := make([]*authz.Role, 0)
@@ -350,8 +368,9 @@ func TestAuthz(t *testing.T) {
 
 		t.Run("create", func(t *testing.T) {
 			createReq := &authz.Role{
-				Name: "Test Role",
-				Code: "test_role",
+				Name:    "Test Role",
+				Code:    "test_role",
+				MenuIDs: []string{roleMenuID},
 			}
 			resp, err = cli.Create(createReq)
 			require.NoError(t, err)
@@ -362,6 +381,10 @@ func TestAuthz(t *testing.T) {
 				require.Equal(t, createReq.Code, rsp.Code)
 				roleID = rsp.ID
 			})
+			policies, policyErr := rbac.Enforcer.GetPermissionsForUser(createReq.Code)
+			require.NoError(t, policyErr)
+			requirePolicy(t, policies, createReq.Code, "/api/authz/roles", http.MethodGet, "allow")
+			requireNoPolicy(t, policies, createReq.Code, "/api/authz/roles", http.MethodPost, "allow")
 		})
 
 		t.Run("get", func(t *testing.T) {
@@ -421,6 +444,10 @@ func TestAuthz(t *testing.T) {
 			require.NotNil(t, resp)
 			require.Equal(t, response.CodeSuccess.Code(), resp.Code, "delete should return success")
 		})
+
+		resp, err = cliMenu.Delete(roleMenuID)
+		require.NoError(t, err)
+		require.NotNil(t, resp)
 	})
 
 	t.Run("user_role", func(t *testing.T) {
@@ -535,4 +562,51 @@ func TestAuthz(t *testing.T) {
 			require.Equal(t, response.CodeSuccess.Code(), resp.Code, "delete should return success")
 		})
 	})
+}
+
+func requireRoute(t *testing.T, routes []authz.Route, path string, methods []string) {
+	t.Helper()
+	for _, route := range routes {
+		if route.Path == path {
+			require.Equal(t, methods, route.Methods)
+			return
+		}
+	}
+	require.Failf(t, "route not found", "path: %s", path)
+}
+
+func requireNoRoute(t *testing.T, routes []authz.Route, path string) {
+	t.Helper()
+	for _, route := range routes {
+		require.NotEqual(t, path, route.Path)
+	}
+}
+
+func requirePolicy(t *testing.T, policies [][]string, want ...string) {
+	t.Helper()
+	for _, policy := range policies {
+		if equalStrings(policy, want) {
+			return
+		}
+	}
+	require.Failf(t, "policy not found", "policy: %v", want)
+}
+
+func requireNoPolicy(t *testing.T, policies [][]string, want ...string) {
+	t.Helper()
+	for _, policy := range policies {
+		require.Falsef(t, equalStrings(policy, want), "unexpected policy: %v", want)
+	}
+}
+
+func equalStrings(left []string, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
 }
