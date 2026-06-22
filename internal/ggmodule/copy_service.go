@@ -77,6 +77,7 @@ func mergeModuleActionServiceSource(input moduleActionMergeInput) ([]byte, error
 		return nil, fmt.Errorf("target action service file %s has no %s method", input.TargetPath, input.MethodName)
 	}
 
+	structDoc := retargetDocLines(commentGroupLines(serviceStructDoc(sourceFile, sourceStruct)), sourceStruct, targetStruct)
 	targetRecv := methodReceiverName(targetMethod)
 	sourceRecv := methodReceiverName(sourceMethod)
 	if sourceRecv != "" && targetRecv != "" && sourceRecv != targetRecv && sourceMethod.Body != nil {
@@ -93,6 +94,7 @@ func mergeModuleActionServiceSource(input moduleActionMergeInput) ([]byte, error
 	if err != nil {
 		return nil, err
 	}
+	code = insertStructDoc(code, targetStruct, structDoc)
 	code = insertMethodDoc(code, targetStruct, input.MethodName, methodDoc)
 	return []byte(code), nil
 }
@@ -106,6 +108,38 @@ func commentGroupLines(doc *ast.CommentGroup) []string {
 		lines = append(lines, comment.Text)
 	}
 	return lines
+}
+
+func retargetDocLines(docLines []string, sourceName string, targetName string) []string {
+	if len(docLines) == 0 || sourceName == "" || targetName == "" || sourceName == targetName {
+		return docLines
+	}
+	retargeted := append([]string{}, docLines...)
+	sourcePrefix := "// " + sourceName
+	if suffix, ok := strings.CutPrefix(retargeted[0], sourcePrefix); ok {
+		retargeted[0] = "// " + targetName + suffix
+	}
+	return retargeted
+}
+
+func insertStructDoc(code string, typeName string, docLines []string) string {
+	if len(docLines) == 0 {
+		return code
+	}
+	lines := strings.Split(code, "\n")
+	typePrefix := "type " + typeName + " struct"
+	for i, line := range lines {
+		if !strings.HasPrefix(strings.TrimSpace(line), typePrefix) {
+			continue
+		}
+		if i > 0 && strings.TrimSpace(lines[i-1]) == docLines[len(docLines)-1] {
+			return code
+		}
+		insert := append([]string{}, docLines...)
+		lines = append(lines[:i], append(insert, lines[i:]...)...)
+		return strings.Join(lines, "\n")
+	}
+	return code
 }
 
 func insertMethodDoc(code string, receiverType string, methodName string, docLines []string) string {
@@ -245,6 +279,26 @@ func findServiceStructName(file *ast.File) string {
 		}
 	}
 	return ""
+}
+
+func serviceStructDoc(file *ast.File, structName string) *ast.CommentGroup {
+	for _, decl := range file.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+		for _, spec := range genDecl.Specs {
+			typeSpec, ok := spec.(*ast.TypeSpec)
+			if !ok || typeSpec.Name == nil || typeSpec.Name.Name != structName || !isServiceTypeSpec(typeSpec) {
+				continue
+			}
+			if typeSpec.Doc != nil {
+				return typeSpec.Doc
+			}
+			return genDecl.Doc
+		}
+	}
+	return nil
 }
 
 func countServiceStructsInFile(path string) (int, error) {

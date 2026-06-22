@@ -66,6 +66,9 @@ import (
 
 const helperValue = "copied"
 
+// TOTPBindService starts the source binding flow.
+//
+// It should be copied to the target service struct comment.
 type TOTPBindService struct {
 	service.Base[*modelmfa.TOTPBind, *modelmfa.TOTPBind, *modelmfa.TOTPBindRsp]
 }
@@ -112,6 +115,12 @@ func (t *TotpBind) Create(ctx *types.ServiceContext, req *mfa.MFA) (rsp *mfa.TOT
 
 	if !strings.Contains(code, "func (t *TotpBind) Create(ctx *types.ServiceContext, req *mfa.MFA) (rsp *mfa.TOTPBindRsp, err error)") {
 		t.Fatalf("target signature was not preserved:\n%s", code)
+	}
+	if !strings.Contains(code, "// TotpBind starts the source binding flow.") {
+		t.Fatalf("source service struct doc was not copied and retargeted:\n%s", code)
+	}
+	if !strings.Contains(code, "// TotpBind starts the source binding flow.\n//\n// It should be copied to the target service struct comment.\ntype TotpBind struct") {
+		t.Fatalf("source service struct doc was not placed before target struct:\n%s", code)
 	}
 	if !strings.Contains(code, "// Create copies the source business logic.") {
 		t.Fatalf("source method doc was not copied:\n%s", code)
