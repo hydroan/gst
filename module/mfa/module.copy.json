@@ -1,0 +1,6 @@
+{
+  "postCopyNotes": [
+    "Password-based MFA checks require servicemfa.SetUserAuthenticator(...).",
+    "Create a project-owned adapter outside service/mfa, for example module/mfa_user_authenticator.go."
+  ]
+}

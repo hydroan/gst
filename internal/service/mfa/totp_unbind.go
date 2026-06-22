@@ -8,13 +8,11 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
-	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // TOTPUnbindService removes an active TOTP device after fresh authentication.
@@ -61,6 +59,13 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 			return newTOTPUnbindFailureRsp(ctx, "Device not found or already unbound")
 		}
 		if verifyErr := verifyTOTPUnbindPassword(ctx, ctx.UserID, req.Password); verifyErr != nil {
+			if isTOTPUnbindPasswordSystemError(verifyErr) {
+				log.Errorz("failed to verify password for unbind",
+					zap.String("user_id", ctx.UserID),
+					zap.String("device_id", req.DeviceID),
+					zap.Error(verifyErr))
+				return nil, verifyErr
+			}
 			log.Warnz("invalid password for unbind",
 				zap.String("user_id", ctx.UserID),
 				zap.String("device_id", req.DeviceID),
@@ -208,17 +213,25 @@ func verifyTOTPUnbindFreshAuth(
 
 // verifyTOTPUnbindPassword validates the current user's password for fresh auth.
 func verifyTOTPUnbindPassword(ctx *types.ServiceContext, userID, password string) error {
-	u := new(modeliamuser.User)
-	if err := database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(u, userID); err != nil {
-		return errTOTPUnbindVerificationInvalid
+	user, err := currentUserAuthenticator().AuthenticateByUserID(ctx, userID, password)
+	if err != nil {
+		if errors.Is(err, ErrUserAuthenticatorNotConfigured) {
+			return newUserAuthenticatorNotConfiguredServiceError(err)
+		}
+		if errors.Is(err, ErrUserAuthenticationFailed) {
+			return errTOTPUnbindVerificationInvalid
+		}
+		return types.NewServiceErrorWithCause(http.StatusInternalServerError, "failed to verify password", err)
 	}
-	if u.Status != modeliamuser.UserStatusActive {
-		return errTOTPUnbindVerificationInvalid
-	}
-	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
-		return errTOTPUnbindVerificationInvalid
+	if err := validateAuthenticatedUser(user, userID); err != nil {
+		return newUserAuthenticatorInvalidUserServiceError(err)
 	}
 	return nil
+}
+
+func isTOTPUnbindPasswordSystemError(err error) bool {
+	var serviceErr *types.ServiceError
+	return errors.As(err, &serviceErr)
 }
 
 // activeTOTPUnbindDeviceExists checks target ownership before password validation.
