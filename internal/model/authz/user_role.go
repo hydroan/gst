@@ -1,9 +1,9 @@
 package modelauthz
 
 import (
-	"errors"
 	"fmt"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"

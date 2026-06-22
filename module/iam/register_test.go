@@ -1,7 +1,6 @@
 package iam_test
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -9,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/goforj/godump"
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/config"

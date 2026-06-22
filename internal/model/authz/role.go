@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/model"
