@@ -1,6 +1,9 @@
 package main
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/cockroachdb/errors"
+	"github.com/spf13/cobra"
+)
 
 var (
 	modelDir     = "model"
@@ -15,10 +18,11 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:     "gg",
-	Short:   "gst code generator",
-	Long:    "gst code generator",
-	Version: "1.0.0",
+	Use:               "gg",
+	Short:             "gst code generator",
+	Long:              "gst code generator",
+	Version:           "1.0.0",
+	PersistentPreRunE: rejectFrameworkRootCommand,
 }
 
 func init() {
@@ -41,4 +45,21 @@ func init() {
 		migrateCmd,
 		moduleCmd,
 	)
+}
+
+func rejectFrameworkRootCommand(cmd *cobra.Command, args []string) error {
+	if isMetadataCommand(cmd) {
+		return nil
+	}
+	if isGstFrameworkProject(".") {
+		return errors.New("gg commands cannot run in the gst framework repository root")
+	}
+	return nil
+}
+
+func isMetadataCommand(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	return cmd.Name() == "help"
 }
