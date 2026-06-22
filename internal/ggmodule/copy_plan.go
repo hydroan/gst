@@ -300,6 +300,9 @@ func (p *CopyPlan) collectActions(models []*gen.ModelInfo) ([]moduleCopyAction, 
 
 	actions := make([]moduleCopyAction, 0)
 	aggregate.Design.Range(func(route string, action *dsl.Action) {
+		if !action.Service {
+			return
+		}
 		sourcePath := filepath.Join(p.SourceServiceDir, action.ServiceFilename())
 		targetPath := filepath.Join(p.TargetServiceDir, action.ServiceFilename())
 		actions = append(actions, moduleCopyAction{

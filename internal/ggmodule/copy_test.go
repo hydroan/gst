@@ -5,6 +5,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/types/consts"
 )
 
 func TestValidateModuleCopyNameRejectsPaths(t *testing.T) {
@@ -136,6 +140,73 @@ func (t *TotpBind) Create(ctx *types.ServiceContext, req *mfa.MFA) (rsp *mfa.TOT
 	}
 	if strings.Contains(code, "modelmfa") || strings.Contains(code, "TOTPBindService") {
 		t.Fatalf("source package artifacts leaked into target:\n%s", code)
+	}
+}
+
+func TestCollectActionsIgnoresActionsWithoutService(t *testing.T) {
+	sourceServiceDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(sourceServiceDir, "custom.go"), []byte(`package servicecopytest
+
+import (
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+)
+
+type CustomService struct {
+	service.Base[any, any, any]
+}
+
+func (s *CustomService) List(ctx *types.ServiceContext, req any) (rsp any, err error) {
+	return nil, nil
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	plan := &CopyPlan{
+		Name:              "copytest",
+		ProjectModulePath: "tmpapp",
+		SourceServiceDir:  sourceServiceDir,
+		TargetModelDir:    filepath.Join("model", "copytest"),
+		TargetServiceDir:  filepath.Join("service", "copytest"),
+	}
+	modelInfo := &gen.ModelInfo{
+		ModulePath:    frameworkModulePath,
+		ModelFileDir:  filepath.Join("internal", "model", "copytest"),
+		ModelFilePath: filepath.Join("internal", "model", "copytest", "copytest.go"),
+		ModelPkgName:  "modelcopytest",
+		ModelName:     "CopyTest",
+		ModelVarName:  "c",
+		Design: &dsl.Design{
+			Enabled:    true,
+			Endpoint:   "copytest",
+			Create:     &dsl.Action{Enabled: true, Phase: consts.PHASE_CREATE},
+			Delete:     &dsl.Action{},
+			Update:     &dsl.Action{},
+			Patch:      &dsl.Action{},
+			List:       &dsl.Action{Enabled: true, Service: true, Filename: "custom.go", Phase: consts.PHASE_LIST},
+			Get:        &dsl.Action{},
+			CreateMany: &dsl.Action{},
+			DeleteMany: &dsl.Action{},
+			UpdateMany: &dsl.Action{},
+			PatchMany:  &dsl.Action{},
+			Import:     &dsl.Action{},
+			Export:     &dsl.Action{},
+		},
+	}
+
+	actions, err := plan.collectActions([]*gen.ModelInfo{modelInfo})
+	if err != nil {
+		t.Fatalf("collectActions() error = %v", err)
+	}
+	if len(actions) != 1 {
+		t.Fatalf("collectActions() returned %d actions, want 1: %#v", len(actions), actions)
+	}
+	if got := filepath.Base(actions[0].SourcePath); got != "custom.go" {
+		t.Fatalf("collected source file = %q, want custom.go", got)
+	}
+	if got := actions[0].MethodName; got != "List" {
+		t.Fatalf("collected method = %q, want List", got)
 	}
 }
 
