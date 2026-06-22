@@ -10,28 +10,38 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hydroan/gst/dsl"
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"golang.org/x/tools/go/packages"
 )
 
-type moduleActionMergeInput struct {
+type moduleServiceMergeInput struct {
 	SourcePath            string
 	Source                []byte
 	TargetPath            string
 	Target                []byte
 	ModuleName            string
 	TargetModelImportPath string
-	MethodName            string
 }
 
-// generateTargetServiceShell builds the same empty service action file that gg
-// gen will create in the current project. The merge step then keeps its struct
-// name, method signature, package, and current-project model import.
-func generateTargetServiceShell(modelInfo *gen.ModelInfo, action *dsl.Action) ([]byte, error) {
-	file := gen.GenerateService(modelInfo, action, action.Phase)
-	if file == nil {
-		return nil, fmt.Errorf("failed to generate service shell for %s", action.ServiceFilename())
+// generateTargetServiceShell builds the same service file shell that gg gen will
+// create in the current project for all actions sharing one service filename.
+func generateTargetServiceShell(actions []moduleCopyAction) ([]byte, error) {
+	if len(actions) == 0 {
+		return nil, errors.New("failed to generate service shell: no actions")
+	}
+	var file *ast.File
+	for _, action := range actions {
+		next := gen.GenerateService(action.ModelInfo, action.Action, action.Action.Phase)
+		if next == nil {
+			return nil, fmt.Errorf("failed to generate service shell for %s", action.Action.ServiceFilename())
+		}
+		if file == nil {
+			file = next
+			continue
+		}
+		mergeImports(file, next.Imports)
+		appendGeneratedServiceDecls(file, next)
 	}
 	fset := token.NewFileSet()
 	code, err := gen.FormatNodeExtraWithFileSet(file, fset, true)
@@ -41,11 +51,34 @@ func generateTargetServiceShell(modelInfo *gen.ModelInfo, action *dsl.Action) ([
 	return []byte(code), nil
 }
 
-// mergeModuleActionServiceSource overlays source business logic onto a generated
-// current-project service shell. It copies method docs and bodies, ordinary
-// declarations from the source action file, and imports needed by that logic,
-// while preserving the target service struct and method signature.
-func mergeModuleActionServiceSource(input moduleActionMergeInput) ([]byte, error) {
+func appendGeneratedServiceDecls(targetFile *ast.File, generatedFile *ast.File) {
+	targetStruct := findServiceStructName(targetFile)
+	for _, decl := range generatedFile.Decls {
+		switch d := decl.(type) {
+		case *ast.GenDecl:
+			if d.Tok == token.IMPORT {
+				continue
+			}
+			filtered := filterSourceSpecs(d, targetStruct)
+			if filtered != nil {
+				targetFile.Decls = append(targetFile.Decls, filtered)
+			}
+		case *ast.FuncDecl:
+			if d.Recv != nil && receiverTypeName(d) == targetStruct && findMethod(targetFile, targetStruct, d.Name.Name) != nil {
+				continue
+			}
+			targetFile.Decls = append(targetFile.Decls, d)
+		default:
+			targetFile.Decls = append(targetFile.Decls, d)
+		}
+	}
+}
+
+// mergeModuleServiceSource overlays the framework service source onto a generated
+// current-project service shell. The target shell owns package naming, imports,
+// service struct identity, and generated action signatures. The source file owns
+// business logic, hooks, receiver helper methods, ordinary declarations, and comments.
+func mergeModuleServiceSource(input moduleServiceMergeInput) ([]byte, error) {
 	fset := token.NewFileSet()
 	targetFile, err := parser.ParseFile(fset, input.TargetPath, input.Target, parser.ParseComments)
 	if err != nil {
@@ -68,34 +101,26 @@ func mergeModuleActionServiceSource(input moduleActionMergeInput) ([]byte, error
 		return nil, fmt.Errorf("target action service file %s has no service struct", input.TargetPath)
 	}
 
-	sourceMethod := findMethod(sourceFile, sourceStruct, input.MethodName)
-	if sourceMethod == nil {
-		return nil, fmt.Errorf("source action service file %s has no %s method", input.SourcePath, input.MethodName)
-	}
-	targetMethod := findMethod(targetFile, targetStruct, input.MethodName)
-	if targetMethod == nil {
-		return nil, fmt.Errorf("target action service file %s has no %s method", input.TargetPath, input.MethodName)
-	}
-
 	structDoc := retargetDocLines(commentGroupLines(serviceStructDoc(sourceFile, sourceStruct)), sourceStruct, targetStruct)
-	targetRecv := methodReceiverName(targetMethod)
-	sourceRecv := methodReceiverName(sourceMethod)
-	if sourceRecv != "" && targetRecv != "" && sourceRecv != targetRecv && sourceMethod.Body != nil {
-		renameIdent(sourceMethod.Body, sourceRecv, targetRecv)
-	}
-	methodDoc := commentGroupLines(sourceMethod.Doc)
-	targetMethod.Doc = nil
-	targetMethod.Body = sourceMethod.Body
+	sourceComments := ast.NewCommentMap(fset, sourceFile, sourceFile.Comments)
 
 	mergeImports(targetFile, sourceFile.Imports)
-	appendSourceOrdinaryDecls(targetFile, sourceFile, sourceStruct)
+	docInserts := mergeSourceServiceDecls(targetFile, sourceFile, sourceStruct, targetStruct, sourceComments)
 
 	code, err := gen.FormatNodeExtraWithFileSet(targetFile, fset, true)
 	if err != nil {
 		return nil, err
 	}
 	code = insertStructDoc(code, targetStruct, structDoc)
-	code = insertMethodDoc(code, targetStruct, input.MethodName, methodDoc)
+	for _, declDoc := range docInserts.decls {
+		code = insertDeclDoc(code, declDoc, targetStruct)
+	}
+	for _, functionName := range sortedDocNames(docInserts.functions) {
+		code = insertFunctionDoc(code, functionName, docInserts.functions[functionName])
+	}
+	for _, methodName := range sortedDocNames(docInserts.methods) {
+		code = insertMethodDoc(code, targetStruct, methodName, docInserts.methods[methodName])
+	}
 	return []byte(code), nil
 }
 
@@ -165,10 +190,73 @@ func insertMethodDoc(code string, receiverType string, methodName string, docLin
 	return code
 }
 
-func appendSourceOrdinaryDecls(targetFile *ast.File, sourceFile *ast.File, sourceStruct string) {
-	// Action service files use near-whole-file copy semantics for local business
-	// declarations, but the generated target service shell owns the service struct
-	// and receiver methods.
+func insertFunctionDoc(code string, functionName string, docLines []string) string {
+	if len(docLines) == 0 {
+		return code
+	}
+	lines := strings.Split(code, "\n")
+	funcPrefix := "func " + functionName + "("
+	for i, line := range lines {
+		if !strings.HasPrefix(strings.TrimSpace(line), funcPrefix) {
+			continue
+		}
+		if i > 0 && strings.TrimSpace(lines[i-1]) == docLines[len(docLines)-1] {
+			return code
+		}
+		insert := append([]string{}, docLines...)
+		lines = append(lines[:i], append(insert, lines[i:]...)...)
+		return strings.Join(lines, "\n")
+	}
+	return code
+}
+
+type sourceDocInserts struct {
+	decls     []declDocInsert
+	functions map[string][]string
+	methods   map[string][]string
+}
+
+type declDocInsert struct {
+	kind token.Token
+	name string
+	doc  []string
+}
+
+func newSourceDocInserts() sourceDocInserts {
+	return sourceDocInserts{
+		functions: make(map[string][]string),
+		methods:   make(map[string][]string),
+	}
+}
+
+func insertDeclDoc(code string, insertDoc declDocInsert, serviceStruct string) string {
+	if len(insertDoc.doc) == 0 || len(insertDoc.name) == 0 || insertDoc.name == serviceStruct {
+		return code
+	}
+	lines := strings.Split(code, "\n")
+	prefix := strings.ToLower(insertDoc.kind.String()) + " " + insertDoc.name
+	for i, line := range lines {
+		if !strings.HasPrefix(strings.TrimSpace(line), prefix) {
+			continue
+		}
+		if i > 0 && strings.TrimSpace(lines[i-1]) == insertDoc.doc[len(insertDoc.doc)-1] {
+			return code
+		}
+		doc := append([]string{}, insertDoc.doc...)
+		lines = append(lines[:i], append(doc, lines[i:]...)...)
+		return strings.Join(lines, "\n")
+	}
+	return code
+}
+
+func mergeSourceServiceDecls(
+	targetFile *ast.File,
+	sourceFile *ast.File,
+	sourceStruct string,
+	targetStruct string,
+	sourceComments ast.CommentMap,
+) sourceDocInserts {
+	docInserts := newSourceDocInserts()
 	for _, decl := range sourceFile.Decls {
 		switch d := decl.(type) {
 		case *ast.GenDecl:
@@ -177,16 +265,91 @@ func appendSourceOrdinaryDecls(targetFile *ast.File, sourceFile *ast.File, sourc
 			}
 			filtered := filterSourceSpecs(d, sourceStruct)
 			if filtered != nil {
+				docInserts.decls = append(docInserts.decls, declDocInsert{
+					kind: d.Tok,
+					name: firstGenDeclSpecName(filtered),
+					doc:  commentGroupLines(d.Doc),
+				})
 				targetFile.Decls = append(targetFile.Decls, filtered)
 			}
 		case *ast.FuncDecl:
 			if d.Recv != nil && receiverTypeName(d) == sourceStruct {
-				continue
+				if targetMethod := findMethod(targetFile, targetStruct, d.Name.Name); targetMethod != nil {
+					sourceRecv := methodReceiverName(d)
+					targetRecv := methodReceiverName(targetMethod)
+					if sourceRecv != "" && targetRecv != "" && sourceRecv != targetRecv && d.Body != nil {
+						renameIdent(d.Body, sourceRecv, targetRecv)
+					}
+					docInserts.methods[d.Name.Name] = commentGroupLines(d.Doc)
+					targetMethod.Doc = nil
+					targetMethod.Body = d.Body
+					appendSourceComments(targetFile, sourceComments, d.Body)
+					continue
+				}
+				retargetReceiver(d, targetStruct)
+				docInserts.methods[d.Name.Name] = commentGroupLines(d.Doc)
+				d.Doc = nil
+			} else {
+				docInserts.functions[d.Name.Name] = commentGroupLines(d.Doc)
+				d.Doc = nil
 			}
+			appendSourceComments(targetFile, sourceComments, d.Body)
 			targetFile.Decls = append(targetFile.Decls, d)
 		default:
 			targetFile.Decls = append(targetFile.Decls, d)
 		}
+	}
+	return docInserts
+}
+
+func appendSourceComments(targetFile *ast.File, sourceComments ast.CommentMap, node ast.Node) {
+	if targetFile == nil || sourceComments == nil || node == nil {
+		return
+	}
+	targetFile.Comments = append(targetFile.Comments, sourceComments.Filter(node).Comments()...)
+}
+
+func firstGenDeclSpecName(decl *ast.GenDecl) string {
+	if decl == nil {
+		return ""
+	}
+	for _, spec := range decl.Specs {
+		switch s := spec.(type) {
+		case *ast.TypeSpec:
+			return s.Name.Name
+		case *ast.ValueSpec:
+			if len(s.Names) > 0 {
+				return s.Names[0].Name
+			}
+		}
+	}
+	return ""
+}
+
+func sortedDocNames(methodDocs map[string][]string) []string {
+	names := make([]string, 0, len(methodDocs))
+	for name := range methodDocs {
+		if len(methodDocs[name]) == 0 {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func retargetReceiver(fn *ast.FuncDecl, targetStruct string) {
+	if fn == nil || fn.Recv == nil || len(fn.Recv.List) == 0 {
+		return
+	}
+	recv := fn.Recv.List[0]
+	switch typ := recv.Type.(type) {
+	case *ast.StarExpr:
+		if ident, ok := typ.X.(*ast.Ident); ok {
+			ident.Name = targetStruct
+		}
+	case *ast.Ident:
+		typ.Name = targetStruct
 	}
 }
 
@@ -321,16 +484,6 @@ func countServiceStructsInFile(path string) (int, error) {
 		}
 	}
 	return count, nil
-}
-
-func sourceServiceMethodExists(path string, methodName string) bool {
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
-	if err != nil {
-		return false
-	}
-	serviceStruct := findServiceStructName(file)
-	return serviceStruct != "" && findMethod(file, serviceStruct, methodName) != nil
 }
 
 func isServiceTypeSpec(typeSpec *ast.TypeSpec) bool {

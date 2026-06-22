@@ -57,7 +57,7 @@ type MFA struct {
 	}
 }
 
-func TestMergeModuleActionServiceSourceKeepsTargetSignature(t *testing.T) {
+func TestMergeModuleServiceSourceCopiesWholeServiceFile(t *testing.T) {
 	source := []byte(`package servicemfa
 
 import (
@@ -79,8 +79,27 @@ type TOTPBindService struct {
 
 // Create copies the source business logic.
 func (s *TOTPBindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPBind) (rsp *modelmfa.TOTPBindRsp, err error) {
+	// Keep source method body comments.
 	fmt.Println(helperValue)
+	fmt.Println(s.describe("bind"))
 	return &modelmfa.TOTPBindRsp{}, nil
+}
+
+// CreateAfter copies source hook logic.
+func (s *TOTPBindService) CreateAfter(ctx *types.ServiceContext, req *modelmfa.TOTPBind) error {
+	// Keep source hook body comments.
+	fmt.Println(s.describe("after"))
+	return nil
+}
+
+// describe copies source receiver helpers.
+func (s *TOTPBindService) describe(step string) string {
+	return helperValue + ":" + step
+}
+
+// packageHelper copies ordinary package functions.
+func packageHelper() string {
+	return helperValue
 }
 `)
 	target := []byte(`package mfa
@@ -101,19 +120,24 @@ func (t *TotpBind) Create(ctx *types.ServiceContext, req *mfa.MFA) (rsp *mfa.TOT
 	log.Info("mfa: totp bind")
 	return rsp, nil
 }
+
+func (t *TotpBind) CreateAfter(ctx *types.ServiceContext, req *mfa.MFA) error {
+	log := t.WithServiceContext(ctx, ctx.GetPhase())
+	log.Info("mfa: totp bind after")
+	return nil
+}
 `)
 
-	got, err := mergeModuleActionServiceSource(moduleActionMergeInput{
+	got, err := mergeModuleServiceSource(moduleServiceMergeInput{
 		SourcePath:            "totp_bind.go",
 		Source:                source,
 		TargetPath:            "service/mfa/totp_bind.go",
 		Target:                target,
 		ModuleName:            "mfa",
 		TargetModelImportPath: "dice/model/mfa",
-		MethodName:            "Create",
 	})
 	if err != nil {
-		t.Fatalf("mergeModuleActionServiceSource() error = %v", err)
+		t.Fatalf("mergeModuleServiceSource() error = %v", err)
 	}
 	code := string(got)
 
@@ -132,6 +156,21 @@ func (t *TotpBind) Create(ctx *types.ServiceContext, req *mfa.MFA) (rsp *mfa.TOT
 	if !strings.Contains(code, "// Create copies the source business logic.\nfunc (t *TotpBind) Create") {
 		t.Fatalf("source method doc was not placed before target method:\n%s", code)
 	}
+	if !strings.Contains(code, "// Keep source method body comments.") {
+		t.Fatalf("source method body comment was not copied:\n%s", code)
+	}
+	if !strings.Contains(code, "// CreateAfter copies source hook logic.\nfunc (t *TotpBind) CreateAfter") {
+		t.Fatalf("source hook method was not copied onto target receiver:\n%s", code)
+	}
+	if !strings.Contains(code, "// Keep source hook body comments.") {
+		t.Fatalf("source hook body comment was not copied:\n%s", code)
+	}
+	if !strings.Contains(code, "// describe copies source receiver helpers.\nfunc (s *TotpBind) describe(step string) string") {
+		t.Fatalf("source receiver helper was not copied onto target receiver:\n%s", code)
+	}
+	if !strings.Contains(code, "// packageHelper copies ordinary package functions.\nfunc packageHelper() string") {
+		t.Fatalf("ordinary package function comment was not copied:\n%s", code)
+	}
 	if !strings.Contains(code, `const helperValue = "copied"`) {
 		t.Fatalf("ordinary source declaration was not copied:\n%s", code)
 	}
@@ -139,6 +178,81 @@ func (t *TotpBind) Create(ctx *types.ServiceContext, req *mfa.MFA) (rsp *mfa.TOT
 		t.Fatalf("source model selector was not rewritten:\n%s", code)
 	}
 	if strings.Contains(code, "modelmfa") || strings.Contains(code, "TOTPBindService") {
+		t.Fatalf("source package artifacts leaked into target:\n%s", code)
+	}
+}
+
+func TestMergeModuleServiceSourceAllowsHookOnlySource(t *testing.T) {
+	source := []byte(`package serviceauthz
+
+import (
+	modelauthz "github.com/hydroan/gst/internal/model/authz"
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+)
+
+// MenuService filters menus after the built-in list flow.
+type MenuService struct {
+	service.Base[*modelauthz.Menu, *modelauthz.Menu, *modelauthz.Menu]
+}
+
+// ListAfter copies hook-only service logic.
+func (m *MenuService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.Menu) error {
+	// Keep hook-only body comments.
+	return m.filterByRole(ctx, data)
+}
+
+// filterByRole copies hook helper methods.
+func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauthz.Menu) error {
+	return nil
+}
+`)
+	target := []byte(`package authz
+
+import (
+	"dice/model/authz"
+
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+)
+
+type Menu struct {
+	service.Base[*authz.Authz, *authz.Authz, *authz.Authz]
+}
+
+func (m *Menu) List(ctx *types.ServiceContext, req *authz.Authz) (rsp *authz.Authz, err error) {
+	log := m.WithServiceContext(ctx, ctx.GetPhase())
+	log.Info("authz: menu")
+	return rsp, nil
+}
+`)
+
+	got, err := mergeModuleServiceSource(moduleServiceMergeInput{
+		SourcePath:            "menu.go",
+		Source:                source,
+		TargetPath:            "service/authz/menu.go",
+		Target:                target,
+		ModuleName:            "authz",
+		TargetModelImportPath: "dice/model/authz",
+	})
+	if err != nil {
+		t.Fatalf("mergeModuleServiceSource() error = %v", err)
+	}
+	code := string(got)
+
+	if !strings.Contains(code, "func (m *Menu) List(ctx *types.ServiceContext, req *authz.Authz) (rsp *authz.Authz, err error)") {
+		t.Fatalf("target list method was not preserved:\n%s", code)
+	}
+	if !strings.Contains(code, "// ListAfter copies hook-only service logic.\nfunc (m *Menu) ListAfter") {
+		t.Fatalf("hook-only method was not copied:\n%s", code)
+	}
+	if !strings.Contains(code, "// Keep hook-only body comments.") {
+		t.Fatalf("hook-only body comment was not copied:\n%s", code)
+	}
+	if !strings.Contains(code, "// filterByRole copies hook helper methods.\nfunc (m *Menu) filterByRole") {
+		t.Fatalf("hook helper method was not copied:\n%s", code)
+	}
+	if strings.Contains(code, "modelauthz") || strings.Contains(code, "MenuService") {
 		t.Fatalf("source package artifacts leaked into target:\n%s", code)
 	}
 }
@@ -156,8 +270,8 @@ type CustomService struct {
 	service.Base[any, any, any]
 }
 
-func (s *CustomService) List(ctx *types.ServiceContext, req any) (rsp any, err error) {
-	return nil, nil
+func (s *CustomService) ListAfter(ctx *types.ServiceContext, data *[]any) error {
+	return nil
 }
 `), 0o600); err != nil {
 		t.Fatal(err)
@@ -171,10 +285,10 @@ func (s *CustomService) List(ctx *types.ServiceContext, req any) (rsp any, err e
 		TargetServiceDir:  filepath.Join("service", "copytest"),
 	}
 	modelInfo := &gen.ModelInfo{
-		ModulePath:    frameworkModulePath,
-		ModelFileDir:  filepath.Join("internal", "model", "copytest"),
-		ModelFilePath: filepath.Join("internal", "model", "copytest", "copytest.go"),
-		ModelPkgName:  "modelcopytest",
+		ModulePath:    "tmpapp",
+		ModelFileDir:  filepath.Join("model", "copytest"),
+		ModelFilePath: filepath.Join("model", "copytest", "copytest.go"),
+		ModelPkgName:  "copytest",
 		ModelName:     "CopyTest",
 		ModelVarName:  "c",
 		Design: &dsl.Design{
@@ -205,8 +319,203 @@ func (s *CustomService) List(ctx *types.ServiceContext, req any) (rsp any, err e
 	if got := filepath.Base(actions[0].SourcePath); got != "custom.go" {
 		t.Fatalf("collected source file = %q, want custom.go", got)
 	}
-	if got := actions[0].MethodName; got != "List" {
-		t.Fatalf("collected method = %q, want List", got)
+}
+
+func TestCollectActionsAllowsMultipleModelDesigns(t *testing.T) {
+	sourceServiceDir := t.TempDir()
+	for name, source := range map[string]string{
+		"role.go": `package servicecopytest
+
+import "github.com/hydroan/gst/service"
+
+type RoleService struct {
+	service.Base[any, any, any]
+}
+`,
+		"menu.go": `package servicecopytest
+
+import "github.com/hydroan/gst/service"
+
+type MenuService struct {
+	service.Base[any, any, any]
+}
+`,
+	} {
+		if err := os.WriteFile(filepath.Join(sourceServiceDir, name), []byte(source), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	plan := &CopyPlan{
+		Name:              "copytest",
+		ProjectModulePath: "tmpapp",
+		SourceServiceDir:  sourceServiceDir,
+		TargetModelDir:    filepath.Join("model", "copytest"),
+		TargetServiceDir:  filepath.Join("service", "copytest"),
+	}
+	models := []*gen.ModelInfo{
+		{
+			ModulePath:    "tmpapp",
+			ModelFileDir:  filepath.Join("model", "copytest"),
+			ModelFilePath: filepath.Join("model", "copytest", "role.go"),
+			ModelPkgName:  "copytest",
+			ModelName:     "Role",
+			ModelVarName:  "r",
+			Design: &dsl.Design{
+				Enabled:    true,
+				Endpoint:   "roles",
+				Create:     &dsl.Action{Enabled: true, Service: true, Filename: "role.go", Phase: consts.PHASE_CREATE},
+				Delete:     &dsl.Action{},
+				Update:     &dsl.Action{},
+				Patch:      &dsl.Action{},
+				List:       &dsl.Action{},
+				Get:        &dsl.Action{},
+				CreateMany: &dsl.Action{},
+				DeleteMany: &dsl.Action{},
+				UpdateMany: &dsl.Action{},
+				PatchMany:  &dsl.Action{},
+				Import:     &dsl.Action{},
+				Export:     &dsl.Action{},
+			},
+		},
+		{
+			ModulePath:    "tmpapp",
+			ModelFileDir:  filepath.Join("model", "copytest"),
+			ModelFilePath: filepath.Join("model", "copytest", "menu.go"),
+			ModelPkgName:  "copytest",
+			ModelName:     "Menu",
+			ModelVarName:  "m",
+			Design: &dsl.Design{
+				Enabled:    true,
+				Endpoint:   "menus",
+				Create:     &dsl.Action{},
+				Delete:     &dsl.Action{},
+				Update:     &dsl.Action{},
+				Patch:      &dsl.Action{},
+				List:       &dsl.Action{Enabled: true, Service: true, Filename: "menu.go", Phase: consts.PHASE_LIST},
+				Get:        &dsl.Action{},
+				CreateMany: &dsl.Action{},
+				DeleteMany: &dsl.Action{},
+				UpdateMany: &dsl.Action{},
+				PatchMany:  &dsl.Action{},
+				Import:     &dsl.Action{},
+				Export:     &dsl.Action{},
+			},
+		},
+	}
+
+	actions, err := plan.collectActions(models)
+	if err != nil {
+		t.Fatalf("collectActions() error = %v", err)
+	}
+	if len(actions) != 2 {
+		t.Fatalf("collectActions() returned %d actions, want 2: %#v", len(actions), actions)
+	}
+
+	gotModelsByFile := make(map[string]string)
+	for _, action := range actions {
+		gotModelsByFile[filepath.Base(action.TargetPath)] = action.ModelInfo.ModelName
+	}
+	if gotModelsByFile["role.go"] != "Role" {
+		t.Fatalf("role.go action model = %q, want Role", gotModelsByFile["role.go"])
+	}
+	if gotModelsByFile["menu.go"] != "Menu" {
+		t.Fatalf("menu.go action model = %q, want Menu", gotModelsByFile["menu.go"])
+	}
+}
+
+func TestAddServiceFilesMergesActionsSharingServiceFile(t *testing.T) {
+	sourceServiceDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(sourceServiceDir, "role.go"), []byte(`package servicecopytest
+
+import (
+	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+)
+
+// RoleService owns role hooks.
+type RoleService struct {
+	service.Base[*modelcopytest.CopyTest, *modelcopytest.CopyTest, *modelcopytest.CopyTest]
+}
+
+// CreateAfter copies create hook logic.
+func (s *RoleService) CreateAfter(ctx *types.ServiceContext, req *modelcopytest.CopyTest) error {
+	return nil
+}
+
+// DeleteAfter copies delete hook logic.
+func (s *RoleService) DeleteAfter(ctx *types.ServiceContext, req *modelcopytest.CopyTest) error {
+	return nil
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	modelInfo := &gen.ModelInfo{
+		ModulePath:    "tmpapp",
+		ModelFileDir:  filepath.Join("model", "copytest"),
+		ModelFilePath: filepath.Join("model", "copytest", "copytest.go"),
+		ModelPkgName:  "copytest",
+		ModelName:     "CopyTest",
+		ModelVarName:  "c",
+		Design:        &dsl.Design{Enabled: true},
+	}
+	createAction := &dsl.Action{
+		Enabled:  true,
+		Service:  true,
+		Filename: "role.go",
+		Payload:  "*CopyTest",
+		Result:   "*CopyTest",
+		Phase:    consts.PHASE_CREATE,
+	}
+	deleteAction := &dsl.Action{
+		Enabled:  true,
+		Service:  true,
+		Filename: "role.go",
+		Payload:  "*CopyTest",
+		Result:   "*CopyTest",
+		Phase:    consts.PHASE_DELETE,
+	}
+	plan := &CopyPlan{
+		Name:                  "copytest",
+		ProjectModulePath:     "tmpapp",
+		SourceServiceDir:      sourceServiceDir,
+		TargetServiceDir:      filepath.Join("service", "copytest"),
+		TargetModelImportPath: filepath.Join("tmpapp", "model", "copytest"),
+		Actions: []moduleCopyAction{
+			{
+				Action:     createAction,
+				SourcePath: filepath.Join(sourceServiceDir, "role.go"),
+				TargetPath: filepath.Join("service", "copytest", "role.go"),
+				ModelInfo:  modelInfo,
+			},
+			{
+				Action:     deleteAction,
+				SourcePath: filepath.Join(sourceServiceDir, "role.go"),
+				TargetPath: filepath.Join("service", "copytest", "role.go"),
+				ModelInfo:  modelInfo,
+			},
+		},
+	}
+
+	if err := plan.addServiceFiles(nil); err != nil {
+		t.Fatalf("addServiceFiles() error = %v", err)
+	}
+	targets := plan.ServiceTargets()
+	if len(targets) != 1 {
+		t.Fatalf("ServiceTargets() = %v, want one merged role.go target", targets)
+	}
+	code := string(plan.Files[0].Content)
+	for _, want := range []string{
+		"func (r *Role) Create(ctx *types.ServiceContext, req *copytest.CopyTest) (rsp *copytest.CopyTest, err error)",
+		"func (r *Role) Delete(ctx *types.ServiceContext, req *copytest.CopyTest) (rsp *copytest.CopyTest, err error)",
+		"// CreateAfter copies create hook logic.\nfunc (r *Role) CreateAfter",
+		"// DeleteAfter copies delete hook logic.\nfunc (r *Role) DeleteAfter",
+	} {
+		if !strings.Contains(code, want) {
+			t.Fatalf("merged service file missing %q:\n%s", want, code)
+		}
 	}
 }
 

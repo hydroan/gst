@@ -70,7 +70,6 @@ type moduleCopyAction struct {
 	Action     *dsl.Action
 	SourcePath string
 	TargetPath string
-	MethodName string
 	ModelInfo  *gen.ModelInfo
 }
 
@@ -142,9 +141,6 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 	models, err := codegen.FindModels(frameworkModulePath, plan.SourceModelDir, plan.SourceServiceDir, nil)
 	if err != nil {
 		return nil, err
-	}
-	if readyErr := checkModuleCopyReadyModels(plan.SourceModelDir, models); readyErr != nil {
-		return nil, readyErr
 	}
 
 	if addModelErr := plan.addModelFiles(); addModelErr != nil {
@@ -284,42 +280,36 @@ func (p *CopyPlan) addModelFiles() error {
 }
 
 func (p *CopyPlan) collectActions(models []*gen.ModelInfo) ([]moduleCopyAction, error) {
-	var aggregate *gen.ModelInfo
+	actions := make([]moduleCopyAction, 0)
 	for _, modelInfo := range models {
-		if countDesignActions(modelInfo.Design) == 0 {
+		if modelInfo.Design == nil {
 			continue
 		}
-		if aggregate != nil {
-			return nil, fmt.Errorf("module %s has multiple model designs with actions: %s and %s", p.Name, aggregate.ModelName, modelInfo.ModelName)
-		}
-		aggregate = modelInfo
-	}
-	if aggregate == nil {
-		return nil, fmt.Errorf("module %s has no aggregate model design with actions", p.Name)
-	}
-
-	actions := make([]moduleCopyAction, 0)
-	aggregate.Design.Range(func(route string, action *dsl.Action) {
-		if !action.Service {
-			return
-		}
-		sourcePath := filepath.Join(p.SourceServiceDir, action.ServiceFilename())
-		targetPath := filepath.Join(p.TargetServiceDir, action.ServiceFilename())
-		actions = append(actions, moduleCopyAction{
-			Route:      route,
-			Action:     action,
-			SourcePath: sourcePath,
-			TargetPath: targetPath,
-			MethodName: action.Phase.MethodName(),
-			ModelInfo:  p.targetModelInfo(aggregate),
+		targetModel := p.targetModelInfo(modelInfo)
+		modelInfo.Design.Range(func(route string, action *dsl.Action) {
+			if !action.Service {
+				return
+			}
+			sourcePath := filepath.Join(p.SourceServiceDir, action.ServiceFilename())
+			targetPath := filepath.Join(p.TargetServiceDir, action.ServiceFilename())
+			actions = append(actions, moduleCopyAction{
+				Route:      route,
+				Action:     action,
+				SourcePath: sourcePath,
+				TargetPath: targetPath,
+				ModelInfo:  targetModel,
+			})
 		})
-	})
+	}
 	sort.Slice(actions, func(i, j int) bool {
+		if actions[i].TargetPath == actions[j].TargetPath {
+			return actions[i].Route < actions[j].Route
+		}
 		return actions[i].TargetPath < actions[j].TargetPath
 	})
 
 	for _, action := range actions {
-		if err := requireActionSourceFile(action); err != nil {
+		if err := requireServiceSourceFile(action); err != nil {
 			return nil, err
 		}
 	}
@@ -327,9 +317,9 @@ func (p *CopyPlan) collectActions(models []*gen.ModelInfo) ([]moduleCopyAction, 
 }
 
 func (p *CopyPlan) targetModelInfo(source *gen.ModelInfo) *gen.ModelInfo {
-	// Reuse gg gen's service generator by projecting the framework aggregate model
-	// into the current project's model layout. The source model still drives the
-	// action DSL; only module/package/path metadata changes.
+	// Reuse gg gen's service generator by projecting the framework model into
+	// the current project's model layout. The source model still drives action
+	// DSL; only module/package/path metadata changes.
 	target := *source
 	target.ModulePath = p.ProjectModulePath
 	target.ModelPkgName = p.Name
@@ -338,10 +328,10 @@ func (p *CopyPlan) targetModelInfo(source *gen.ModelInfo) *gen.ModelInfo {
 	return &target
 }
 
-// requireActionSourceFile enforces the module-copy convention that each action
-// service file has exactly one service struct and the method matching its DSL
-// phase. Helper files are discovered separately by type-based dependency scan.
-func requireActionSourceFile(action moduleCopyAction) error {
+// requireServiceSourceFile enforces the module-copy convention that each action
+// service source file has exactly one service struct. The whole service file is
+// merged later, so hook-only files do not need to declare the action's main method.
+func requireServiceSourceFile(action moduleCopyAction) error {
 	if _, err := os.Stat(action.SourcePath); err != nil {
 		return fmt.Errorf("source action service file not found for %s: %w", action.Action.ServiceFilename(), err)
 	}
@@ -352,39 +342,36 @@ func requireActionSourceFile(action moduleCopyAction) error {
 	if count != 1 {
 		return fmt.Errorf("source action service file %s must contain exactly one service struct, found %d", action.SourcePath, count)
 	}
-	if !sourceServiceMethodExists(action.SourcePath, action.MethodName) {
-		return fmt.Errorf("source action service file %s has no %s method", action.SourcePath, action.MethodName)
-	}
 	return nil
 }
 
 func (p *CopyPlan) addServiceFiles(helperFiles []string) error {
-	for _, action := range p.Actions {
-		source, err := os.ReadFile(action.SourcePath)
+	for _, actions := range groupActionsByTargetPath(p.Actions) {
+		first := actions[0]
+		source, err := os.ReadFile(first.SourcePath)
 		if err != nil {
 			return err
 		}
-		target, err := generateTargetServiceShell(action.ModelInfo, action.Action)
+		target, err := generateTargetServiceShell(actions)
 		if err != nil {
 			return err
 		}
-		content, err := mergeModuleActionServiceSource(moduleActionMergeInput{
-			SourcePath:            action.SourcePath,
+		content, err := mergeModuleServiceSource(moduleServiceMergeInput{
+			SourcePath:            first.SourcePath,
 			Source:                source,
-			TargetPath:            action.TargetPath,
+			TargetPath:            first.TargetPath,
 			Target:                target,
 			ModuleName:            p.Name,
 			TargetModelImportPath: p.TargetModelImportPath,
-			MethodName:            action.MethodName,
 		})
 		if err != nil {
 			return err
 		}
 		p.Files = append(p.Files, moduleCopyFile{
 			Kind:        moduleCopyFileService,
-			TargetPath:  action.TargetPath,
+			TargetPath:  first.TargetPath,
 			Content:     content,
-			Preexisting: fileExists(action.TargetPath),
+			Preexisting: fileExists(first.TargetPath),
 		})
 	}
 
@@ -407,6 +394,26 @@ func (p *CopyPlan) addServiceFiles(helperFiles []string) error {
 		})
 	}
 	return nil
+}
+
+func groupActionsByTargetPath(actions []moduleCopyAction) [][]moduleCopyAction {
+	if len(actions) == 0 {
+		return nil
+	}
+	groups := make([][]moduleCopyAction, 0)
+	for _, action := range actions {
+		if len(groups) == 0 {
+			groups = append(groups, []moduleCopyAction{action})
+			continue
+		}
+		last := groups[len(groups)-1]
+		if last[0].TargetPath == action.TargetPath {
+			groups[len(groups)-1] = append(last, action)
+			continue
+		}
+		groups = append(groups, []moduleCopyAction{action})
+	}
+	return groups
 }
 
 func (p *CopyPlan) checkConflicts(force bool) error {
@@ -476,17 +483,6 @@ func isModuleCopyGoSource(name string) bool {
 	return strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") && !strings.HasPrefix(name, ".")
 }
 
-func countDesignActions(design *dsl.Design) int {
-	if design == nil {
-		return 0
-	}
-	var count int
-	design.Range(func(string, *dsl.Action) {
-		count++
-	})
-	return count
-}
-
 func actionSourcePaths(actions []moduleCopyAction) []string {
 	paths := make([]string, 0, len(actions))
 	seen := make(map[string]bool, len(actions))
@@ -499,91 +495,6 @@ func actionSourcePaths(actions []moduleCopyAction) []string {
 	}
 	sort.Strings(paths)
 	return paths
-}
-
-func checkModuleCopyReadyModels(modelRoot string, models []*gen.ModelInfo) error {
-	actionDesigns := make(map[string]bool)
-	for _, modelInfo := range models {
-		if countDesignActions(modelInfo.Design) > 0 {
-			actionDesigns[modelInfo.ModelName] = true
-		}
-	}
-	if len(actionDesigns) != 1 {
-		return fmt.Errorf("module model source must contain exactly one Design with actions, found %d", len(actionDesigns))
-	}
-
-	files, err := goFilesInDir(modelRoot)
-	if err != nil {
-		return err
-	}
-	for _, file := range files {
-		if err := checkModelFileActionDesigns(file, actionDesigns); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// checkModelFileActionDesigns allows non-aggregate models to keep ordinary DSL
-// settings, but rejects action declarations outside the single aggregate model.
-func checkModelFileActionDesigns(path string, aggregate map[string]bool) error {
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
-	if err != nil {
-		return err
-	}
-	for _, decl := range file.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Recv == nil || fn.Name == nil || fn.Name.Name != "Design" {
-			continue
-		}
-		recvName := receiverTypeName(fn)
-		if recvName == "" || aggregate[recvName] {
-			continue
-		}
-		if designHasActionCall(fn) {
-			return fmt.Errorf("non-aggregate Design %s in %s contains action DSL", recvName, path)
-		}
-	}
-	return nil
-}
-
-func designHasActionCall(fn *ast.FuncDecl) bool {
-	found := false
-	ast.Inspect(fn.Body, func(node ast.Node) bool {
-		if found {
-			return false
-		}
-		call, ok := node.(*ast.CallExpr)
-		if !ok {
-			return true
-		}
-		found = isActionCall(call)
-		return !found
-	})
-	return found
-}
-
-func isActionCall(call *ast.CallExpr) bool {
-	name := callName(call.Fun)
-	switch name {
-	case "Create", "Delete", "Update", "Patch", "List", "Get",
-		"CreateMany", "DeleteMany", "UpdateMany", "PatchMany", "Import", "Export":
-		return true
-	default:
-		return false
-	}
-}
-
-func callName(expr ast.Expr) string {
-	switch x := expr.(type) {
-	case *ast.Ident:
-		return x.Name
-	case *ast.SelectorExpr:
-		return x.Sel.Name
-	default:
-		return ""
-	}
 }
 
 func receiverTypeName(fn *ast.FuncDecl) string {
