@@ -10,7 +10,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func TestIAMUserSnapshotMapsMinimalEmailUserState(t *testing.T) {
+func TestIAMAccountSnapshotMapsMinimalEmailAccountState(t *testing.T) {
 	email := "User@Example.COM"
 	verified := true
 	user := &modeliamuser.User{
@@ -20,7 +20,7 @@ func TestIAMUserSnapshotMapsMinimalEmailUserState(t *testing.T) {
 		EmailVerified: &verified,
 	}
 
-	snapshot := iamUserSnapshot(user)
+	snapshot := iamAccountSnapshot(user)
 
 	require.Equal(t, "user-1", snapshot.ID)
 	require.Equal(t, "User@Example.COM", snapshot.Email)
@@ -28,22 +28,22 @@ func TestIAMUserSnapshotMapsMinimalEmailUserState(t *testing.T) {
 	require.True(t, snapshot.EmailVerified)
 }
 
-func TestIAMUserSnapshotMarksInactiveAccountsInactive(t *testing.T) {
+func TestIAMAccountSnapshotMarksInactiveAccountsInactive(t *testing.T) {
 	user := &modeliamuser.User{
 		Base:   model.Base{ID: "user-2"},
 		Status: modeliamuser.UserStatusLocked,
 	}
 
-	snapshot := iamUserSnapshot(user)
+	snapshot := iamAccountSnapshot(user)
 
 	require.Equal(t, "user-2", snapshot.ID)
 	require.False(t, snapshot.Active)
 }
 
-func TestApplyIAMPasswordResetHashesPasswordAndClearsChangeFlag(t *testing.T) {
+func TestApplyIAMPasswordUpdateHashesPasswordAndClearsChangeFlag(t *testing.T) {
 	user := &modeliamuser.User{MustChangePassword: true}
 
-	err := applyIAMPasswordReset(user, "new-password-123")
+	err := applyIAMPasswordUpdate(user, "new-password-123")
 
 	require.NoError(t, err)
 	require.False(t, user.MustChangePassword)

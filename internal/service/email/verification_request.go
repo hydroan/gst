@@ -33,19 +33,19 @@ func (s *VerificationRequestService) Create(ctx *types.ServiceContext, req *mode
 		return nil, errors.Wrap(err, "failed to reserve verification request throttle")
 	}
 
-	user, err := currentUserProvider().FindByEmail(ctx, email)
+	user, err := currentAccountGateway().FindByEmail(ctx, email)
 	if err != nil {
-		if errors.Is(err, ErrUserNotFound) {
+		if errors.Is(err, ErrAccountNotFound) {
 			return rsp, nil
 		}
-		if errors.Is(err, ErrUserProviderNotConfigured) {
-			log.Error("email user provider is not configured", err)
-			return nil, newUserProviderNotConfiguredServiceError(err)
+		if errors.Is(err, ErrAccountGatewayNotConfigured) {
+			log.Error("email account gateway is not configured", err)
+			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		log.Error("failed to load verification user", err)
-		return nil, errors.Wrap(err, "failed to load verification user")
+		log.Error("failed to load verification account", err)
+		return nil, errors.Wrap(err, "failed to load verification account")
 	}
-	if !eligibleVerificationUser(user, email) {
+	if !eligibleVerificationAccount(user, email) {
 		return rsp, nil
 	}
 
@@ -66,14 +66,14 @@ func (s *VerificationRequestService) Create(ctx *types.ServiceContext, req *mode
 	return rsp, nil
 }
 
-// eligibleVerificationUser ensures the verification flow is only sent to an
+// eligibleVerificationAccount ensures the verification flow is only sent to an
 // active account whose current email still matches the normalized request email
 // and has not already been verified.
-func eligibleVerificationUser(user *UserSnapshot, email string) bool {
+func eligibleVerificationAccount(user *AccountSnapshot, email string) bool {
 	if user == nil || user.ID == "" {
 		return false
 	}
-	if normalizeUserEmail(user.Email) != email {
+	if normalizeAccountEmail(user.Email) != email {
 		return false
 	}
 	if !user.Active {
@@ -97,7 +97,7 @@ func verificationDelivery(token string, flow iamEmailFlowState) emailDelivery {
 	}
 }
 
-// userEmailVerified safely returns the email verification flag for a user snapshot.
-func userEmailVerified(user *UserSnapshot) bool {
+// accountEmailVerified safely returns the email verification flag for a account snapshot.
+func accountEmailVerified(user *AccountSnapshot) bool {
 	return user != nil && user.EmailVerified
 }

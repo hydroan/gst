@@ -33,42 +33,42 @@ func (s *VerificationConfirmService) Create(ctx *types.ServiceContext, req *mode
 		return nil, errors.Wrap(err, "failed to consume verification flow")
 	}
 	if strings.TrimSpace(flow.UserID) == "" {
-		return nil, errors.New("verification user id is required")
+		return nil, errors.New("verification account id is required")
 	}
 
-	provider := currentUserProvider()
-	user, err := provider.GetByID(ctx, flow.UserID)
+	gateway := currentAccountGateway()
+	user, err := gateway.GetByID(ctx, flow.UserID)
 	if err != nil {
-		if errors.Is(err, ErrUserProviderNotConfigured) {
-			log.Error("email user provider is not configured", err)
-			return nil, newUserProviderNotConfiguredServiceError(err)
+		if errors.Is(err, ErrAccountGatewayNotConfigured) {
+			log.Error("email account gateway is not configured", err)
+			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		log.Error("failed to load verification user", err)
-		return nil, errors.Wrap(err, "failed to load verification user")
+		log.Error("failed to load verification account", err)
+		return nil, errors.Wrap(err, "failed to load verification account")
 	}
-	if err = validUserSnapshot(user, flow.UserID); err != nil {
-		log.Error("email user provider returned invalid verification user", err)
-		return nil, newUserProviderInvalidUserServiceError(err)
+	if err = validAccountSnapshot(user, flow.UserID); err != nil {
+		log.Error("email account gateway returned invalid verification account", err)
+		return nil, newAccountGatewayInvalidAccountServiceError(err)
 	}
-	if normalizeUserEmail(user.Email) != normalizeEmailScope(flow.Email) {
+	if normalizeAccountEmail(user.Email) != normalizeEmailScope(flow.Email) {
 		return &modelemail.VerificationConfirmRsp{
 			Verified: false,
 			Msg:      "invalid or expired verification token",
 		}, nil
 	}
-	if userEmailVerified(user) {
+	if accountEmailVerified(user) {
 		return &modelemail.VerificationConfirmRsp{
 			Verified: true,
 			Msg:      "email already verified",
 		}, nil
 	}
 
-	if err = provider.MarkEmailVerified(ctx, user.ID, emailNow()); err != nil {
-		if errors.Is(err, ErrUserProviderNotConfigured) {
-			log.Error("email user provider is not configured", err)
-			return nil, newUserProviderNotConfiguredServiceError(err)
+	if err = gateway.MarkEmailVerified(ctx, user.ID, emailNow()); err != nil {
+		if errors.Is(err, ErrAccountGatewayNotConfigured) {
+			log.Error("email account gateway is not configured", err)
+			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		log.Error("failed to update verification user", err)
+		log.Error("failed to update verification account", err)
 		return nil, errors.Wrap(err, "failed to update email verification state")
 	}
 

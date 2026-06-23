@@ -13,50 +13,50 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// iamUserProvider adapts the framework IAM user model for the built-in email
+// iamAccountGateway adapts the framework IAM user model for the built-in email
 // module. It lives under module/email so copied email service code does not
 // import the framework IAM user model, password hashing policy, or session store.
-type iamUserProvider struct{}
+type iamAccountGateway struct{}
 
-func (iamUserProvider) FindByEmail(ctx *types.ServiceContext, email string) (*serviceemail.UserSnapshot, error) {
+func (iamAccountGateway) FindByEmail(ctx *types.ServiceContext, email string) (*serviceemail.AccountSnapshot, error) {
 	user, err := loadIAMUserByEmail(ctx, email)
 	if err != nil {
 		return nil, err
 	}
-	return iamUserSnapshot(user), nil
+	return iamAccountSnapshot(user), nil
 }
 
-func (iamUserProvider) GetByID(ctx *types.ServiceContext, userID string) (*serviceemail.UserSnapshot, error) {
+func (iamAccountGateway) GetByID(ctx *types.ServiceContext, userID string) (*serviceemail.AccountSnapshot, error) {
 	user, err := loadIAMUserByID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	return iamUserSnapshot(user), nil
+	return iamAccountSnapshot(user), nil
 }
 
-func (iamUserProvider) VerifyPassword(ctx *types.ServiceContext, userID, password string) error {
+func (iamAccountGateway) VerifyPassword(ctx *types.ServiceContext, userID, password string) error {
 	user, err := loadIAMUserByID(ctx, userID)
 	if err != nil {
-		if errors.Is(err, serviceemail.ErrUserNotFound) {
-			return serviceemail.ErrUserAuthenticationFailed
+		if errors.Is(err, serviceemail.ErrAccountNotFound) {
+			return serviceemail.ErrAccountAuthenticationFailed
 		}
 		return err
 	}
 	if !iamUserActive(user) {
-		return serviceemail.ErrUserAuthenticationFailed
+		return serviceemail.ErrAccountAuthenticationFailed
 	}
 	if err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
-		return serviceemail.ErrUserAuthenticationFailed
+		return serviceemail.ErrAccountAuthenticationFailed
 	}
 	return nil
 }
 
-func (iamUserProvider) ResetPassword(ctx *types.ServiceContext, userID, newPassword string) error {
+func (iamAccountGateway) UpdatePassword(ctx *types.ServiceContext, userID, newPassword string) error {
 	user, err := loadIAMUserByID(ctx, userID)
 	if err != nil {
 		return err
 	}
-	if err := applyIAMPasswordReset(user, newPassword); err != nil {
+	if err := applyIAMPasswordUpdate(user, newPassword); err != nil {
 		return err
 	}
 	return database.Database[*modeliamuser.User](ctx.DatabaseContext()).
@@ -65,7 +65,7 @@ func (iamUserProvider) ResetPassword(ctx *types.ServiceContext, userID, newPassw
 		Update(user)
 }
 
-func (iamUserProvider) MarkEmailVerified(ctx *types.ServiceContext, userID string, verifiedAt time.Time) error {
+func (iamAccountGateway) MarkEmailVerified(ctx *types.ServiceContext, userID string, verifiedAt time.Time) error {
 	user := newIAMUserWithID(userID)
 	applyIAMEmailVerification(user, verifiedAt)
 	return database.Database[*modeliamuser.User](ctx.DatabaseContext()).
@@ -74,7 +74,7 @@ func (iamUserProvider) MarkEmailVerified(ctx *types.ServiceContext, userID strin
 		Update(user)
 }
 
-func (iamUserProvider) ChangeEmail(ctx *types.ServiceContext, userID, newEmail string, changedAt time.Time) error {
+func (iamAccountGateway) ApplyEmailChange(ctx *types.ServiceContext, userID, newEmail string, changedAt time.Time) error {
 	user := newIAMUserWithID(userID)
 	if err := applyIAMEmailChange(user, newEmail, changedAt); err != nil {
 		return err
@@ -85,7 +85,7 @@ func (iamUserProvider) ChangeEmail(ctx *types.ServiceContext, userID, newEmail s
 		Update(user)
 }
 
-func (iamUserProvider) InvalidateSessions(userID string) {
+func (iamAccountGateway) InvalidateSessions(userID string) {
 	serviceiamsession.InvalidateUserSessions(userID)
 }
 
@@ -99,7 +99,7 @@ func loadIAMUserByEmail(ctx *types.ServiceContext, email string) (*modeliamuser.
 		return nil, err
 	}
 	if len(users) == 0 {
-		return nil, serviceemail.ErrUserNotFound
+		return nil, serviceemail.ErrAccountNotFound
 	}
 	return users[0], nil
 }
@@ -116,12 +116,12 @@ func loadIAMUserByID(ctx *types.ServiceContext, userID string) (*modeliamuser.Us
 		return nil, err
 	}
 	if len(users) == 0 {
-		return nil, serviceemail.ErrUserNotFound
+		return nil, serviceemail.ErrAccountNotFound
 	}
 	return users[0], nil
 }
 
-func iamUserSnapshot(user *modeliamuser.User) *serviceemail.UserSnapshot {
+func iamAccountSnapshot(user *modeliamuser.User) *serviceemail.AccountSnapshot {
 	if user == nil {
 		return nil
 	}
@@ -131,7 +131,7 @@ func iamUserSnapshot(user *modeliamuser.User) *serviceemail.UserSnapshot {
 		email = *user.Email
 	}
 
-	return &serviceemail.UserSnapshot{
+	return &serviceemail.AccountSnapshot{
 		ID:            user.ID,
 		Email:         email,
 		Active:        iamUserActive(user),
@@ -149,9 +149,9 @@ func newIAMUserWithID(userID string) *modeliamuser.User {
 	return user
 }
 
-func applyIAMPasswordReset(user *modeliamuser.User, newPassword string) error {
+func applyIAMPasswordUpdate(user *modeliamuser.User, newPassword string) error {
 	if user == nil {
-		return errors.New("password reset user is required")
+		return errors.New("password update account is required")
 	}
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
@@ -171,7 +171,7 @@ func applyIAMEmailVerification(user *modeliamuser.User, verifiedAt time.Time) {
 
 func applyIAMEmailChange(user *modeliamuser.User, newEmail string, changedAt time.Time) error {
 	if user == nil {
-		return errors.New("email change user is required")
+		return errors.New("email change account is required")
 	}
 
 	normalizedNewEmail := normalizeEmailScope(newEmail)

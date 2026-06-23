@@ -39,22 +39,22 @@ func (s *ChangeRequestService) Create(ctx *types.ServiceContext, req *modelemail
 	return rsp, nil
 }
 
-// prepareEmailChangeRequest loads the current user and validates whether the new
+// prepareEmailChangeRequest loads the current account and validates whether the new
 // email can enter the change flow.
-func prepareEmailChangeRequest(ctx *types.ServiceContext, newEmail string) (*UserSnapshot, string, *modelemail.ChangeRequestRsp, error) {
+func prepareEmailChangeRequest(ctx *types.ServiceContext, newEmail string) (*AccountSnapshot, string, *modelemail.ChangeRequestRsp, error) {
 	if ctx == nil || strings.TrimSpace(ctx.UserID) == "" {
 		return nil, "", nil, errors.New("authentication required")
 	}
 
-	user, err := currentUserProvider().GetByID(ctx, ctx.UserID)
+	user, err := currentAccountGateway().GetByID(ctx, ctx.UserID)
 	if err != nil {
-		if errors.Is(err, ErrUserProviderNotConfigured) {
-			return nil, "", nil, newUserProviderNotConfiguredServiceError(err)
+		if errors.Is(err, ErrAccountGatewayNotConfigured) {
+			return nil, "", nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		return nil, "", nil, errors.Wrap(err, "failed to load current user")
+		return nil, "", nil, errors.Wrap(err, "failed to load current account")
 	}
-	if err = validUserSnapshot(user, ctx.UserID); err != nil {
-		return nil, "", nil, newUserProviderInvalidUserServiceError(err)
+	if err = validAccountSnapshot(user, ctx.UserID); err != nil {
+		return nil, "", nil, newAccountGatewayInvalidAccountServiceError(err)
 	}
 
 	normalizedNewEmail := normalizeEmailScope(newEmail)
@@ -69,14 +69,14 @@ func prepareEmailChangeRequest(ctx *types.ServiceContext, newEmail string) (*Use
 
 // validateEmailChangeTarget ensures the current account can start an email
 // change flow to the requested target address.
-func validateEmailChangeTarget(ctx *types.ServiceContext, user *UserSnapshot, newEmail string) error {
+func validateEmailChangeTarget(ctx *types.ServiceContext, user *AccountSnapshot, newEmail string) error {
 	if user == nil || strings.TrimSpace(user.ID) == "" {
-		return errors.New("current user is required")
+		return errors.New("current account is required")
 	}
 	if !user.Active {
-		return errors.New("current user is not active")
+		return errors.New("current account is not active")
 	}
-	currentEmail := normalizeUserEmail(user.Email)
+	currentEmail := normalizeAccountEmail(user.Email)
 	if currentEmail == "" {
 		return errors.New("current email is required")
 	}
@@ -87,13 +87,13 @@ func validateEmailChangeTarget(ctx *types.ServiceContext, user *UserSnapshot, ne
 		return errors.New("new email must be different from current email")
 	}
 
-	existingUser, err := currentUserProvider().FindByEmail(ctx, newEmail)
+	existingUser, err := currentAccountGateway().FindByEmail(ctx, newEmail)
 	if err != nil {
-		if errors.Is(err, ErrUserNotFound) {
+		if errors.Is(err, ErrAccountNotFound) {
 			return nil
 		}
-		if errors.Is(err, ErrUserProviderNotConfigured) {
-			return newUserProviderNotConfiguredServiceError(err)
+		if errors.Is(err, ErrAccountGatewayNotConfigured) {
+			return newAccountGatewayNotConfiguredServiceError(err)
 		}
 		return errors.Wrap(err, "failed to lookup target email")
 	}
@@ -104,18 +104,18 @@ func validateEmailChangeTarget(ctx *types.ServiceContext, user *UserSnapshot, ne
 	return nil
 }
 
-// verifyEmailChangePassword re-authenticates the current user before issuing
+// verifyEmailChangePassword re-authenticates the current account before issuing
 // email change tokens.
 func verifyEmailChangePassword(ctx *types.ServiceContext, userID, password string) error {
 	if strings.TrimSpace(userID) == "" {
-		return errors.New("current user id is required")
+		return errors.New("current account id is required")
 	}
-	if err := currentUserProvider().VerifyPassword(ctx, userID, password); err != nil {
-		if errors.Is(err, ErrUserAuthenticationFailed) {
+	if err := currentAccountGateway().VerifyPassword(ctx, userID, password); err != nil {
+		if errors.Is(err, ErrAccountAuthenticationFailed) {
 			return errors.New("current password is incorrect")
 		}
-		if errors.Is(err, ErrUserProviderNotConfigured) {
-			return newUserProviderNotConfiguredServiceError(err)
+		if errors.Is(err, ErrAccountGatewayNotConfigured) {
+			return newAccountGatewayNotConfiguredServiceError(err)
 		}
 		return errors.Wrap(err, "failed to verify current password")
 	}
@@ -127,8 +127,8 @@ func verifyEmailChangePassword(ctx *types.ServiceContext, userID, password strin
 
 // startEmailChangeFlow issues the required tokens and dispatches the email
 // change notifications for the target flow.
-func startEmailChangeFlow(ctx *types.ServiceContext, user *UserSnapshot, newEmail string, includeCancel bool) error {
-	currentEmail := normalizeUserEmail(user.Email)
+func startEmailChangeFlow(ctx *types.ServiceContext, user *AccountSnapshot, newEmail string, includeCancel bool) error {
+	currentEmail := normalizeAccountEmail(user.Email)
 	if err := clearEmailChangeCancellation(ctx.Context(), user.ID, currentEmail, newEmail); err != nil {
 		return errors.Wrap(err, "failed to clear previous email change cancellation")
 	}

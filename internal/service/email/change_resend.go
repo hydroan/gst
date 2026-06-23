@@ -15,7 +15,7 @@ type ChangeResendService struct {
 	service.Base[*modelemail.ChangeResend, *modelemail.ChangeResendReq, *modelemail.ChangeResendRsp]
 }
 
-// Create revalidates the current user and reissues the confirmation email for
+// Create revalidates the current account and reissues the confirmation email for
 // the target new email address.
 func (s *ChangeResendService) Create(ctx *types.ServiceContext, req *modelemail.ChangeResendReq) (rsp *modelemail.ChangeResendRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
@@ -23,18 +23,18 @@ func (s *ChangeResendService) Create(ctx *types.ServiceContext, req *modelemail.
 		return nil, errors.New("authentication required")
 	}
 
-	user, err := currentUserProvider().GetByID(ctx, ctx.UserID)
+	user, err := currentAccountGateway().GetByID(ctx, ctx.UserID)
 	if err != nil {
-		if errors.Is(err, ErrUserProviderNotConfigured) {
-			log.Error("email user provider is not configured", err)
-			return nil, newUserProviderNotConfiguredServiceError(err)
+		if errors.Is(err, ErrAccountGatewayNotConfigured) {
+			log.Error("email account gateway is not configured", err)
+			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		log.Error("failed to load email change resend user", err)
-		return nil, errors.Wrap(err, "failed to load current user")
+		log.Error("failed to load email change resend account", err)
+		return nil, errors.Wrap(err, "failed to load current account")
 	}
-	if err = validUserSnapshot(user, ctx.UserID); err != nil {
-		log.Error("email user provider returned invalid email change resend user", err)
-		return nil, newUserProviderInvalidUserServiceError(err)
+	if err = validAccountSnapshot(user, ctx.UserID); err != nil {
+		log.Error("email account gateway returned invalid email change resend account", err)
+		return nil, newAccountGatewayInvalidAccountServiceError(err)
 	}
 
 	newEmail := normalizeEmailScope(req.NewEmail)
@@ -53,7 +53,7 @@ func (s *ChangeResendService) Create(ctx *types.ServiceContext, req *modelemail.
 
 	confirmToken, confirmFlow, err := issueEmailFlow(ctx.Context(), iamEmailFlowKindChangeConfirm, iamEmailFlowState{
 		UserID:   user.ID,
-		OldEmail: normalizeUserEmail(user.Email),
+		OldEmail: normalizeAccountEmail(user.Email),
 		NewEmail: newEmail,
 		Email:    newEmail,
 	}, 0)

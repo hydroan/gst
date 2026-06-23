@@ -19,7 +19,7 @@ import (
 //   - POST /api/iam/email/change-cancel
 //   - POST /api/iam/email/change-confirm
 func Registry() {
-	serviceemail.SetUserProvider(iamUserProvider{})
+	serviceemail.SetAccountGateway(iamAccountGateway{})
 
 	module.Use(module.NewWrapper("/iam/email/verification-request", "id", true, &serviceemail.VerificationRequestService{}), consts.PHASE_CREATE)
 	module.Use(module.NewWrapper("/iam/email/verification-resend", "id", true, &serviceemail.VerificationResendService{}), consts.PHASE_CREATE)

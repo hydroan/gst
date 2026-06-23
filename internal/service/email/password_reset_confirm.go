@@ -16,7 +16,7 @@ type PasswordResetConfirmService struct {
 }
 
 // Create completes the password reset flow by consuming the one-time token,
-// delegating the password update to the configured user provider, and
+// delegating the password update to the configured account gateway, and
 // invalidating active sessions.
 func (s *PasswordResetConfirmService) Create(ctx *types.ServiceContext, req *modelemail.PasswordResetConfirmReq) (rsp *modelemail.PasswordResetConfirmRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
@@ -33,40 +33,40 @@ func (s *PasswordResetConfirmService) Create(ctx *types.ServiceContext, req *mod
 		return nil, errors.Wrap(err, "failed to consume password reset flow")
 	}
 	if strings.TrimSpace(flow.UserID) == "" {
-		return nil, errors.New("password reset user id is required")
+		return nil, errors.New("password reset account id is required")
 	}
 
-	provider := currentUserProvider()
-	user, err := provider.GetByID(ctx, flow.UserID)
+	gateway := currentAccountGateway()
+	user, err := gateway.GetByID(ctx, flow.UserID)
 	if err != nil {
-		if errors.Is(err, ErrUserProviderNotConfigured) {
-			log.Error("email user provider is not configured", err)
-			return nil, newUserProviderNotConfiguredServiceError(err)
+		if errors.Is(err, ErrAccountGatewayNotConfigured) {
+			log.Error("email account gateway is not configured", err)
+			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		log.Error("failed to load password reset user", err)
-		return nil, errors.Wrap(err, "failed to load password reset user")
+		log.Error("failed to load password reset account", err)
+		return nil, errors.Wrap(err, "failed to load password reset account")
 	}
-	if err = validUserSnapshot(user, flow.UserID); err != nil {
-		log.Error("email user provider returned invalid password reset user", err)
-		return nil, newUserProviderInvalidUserServiceError(err)
+	if err = validAccountSnapshot(user, flow.UserID); err != nil {
+		log.Error("email account gateway returned invalid password reset account", err)
+		return nil, newAccountGatewayInvalidAccountServiceError(err)
 	}
-	if normalizeUserEmail(user.Email) != normalizeEmailScope(flow.Email) {
+	if normalizeAccountEmail(user.Email) != normalizeEmailScope(flow.Email) {
 		return &modelemail.PasswordResetConfirmRsp{
 			Reset: false,
 			Msg:   "invalid or expired password reset token",
 		}, nil
 	}
 
-	if err = provider.ResetPassword(ctx, user.ID, req.NewPassword); err != nil {
-		if errors.Is(err, ErrUserProviderNotConfigured) {
-			log.Error("email user provider is not configured", err)
-			return nil, newUserProviderNotConfiguredServiceError(err)
+	if err = gateway.UpdatePassword(ctx, user.ID, req.NewPassword); err != nil {
+		if errors.Is(err, ErrAccountGatewayNotConfigured) {
+			log.Error("email account gateway is not configured", err)
+			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		log.Error("failed to update password reset user", err)
+		log.Error("failed to update password reset account", err)
 		return nil, errors.Wrap(err, "failed to update password")
 	}
 
-	provider.InvalidateSessions(user.ID)
+	gateway.InvalidateSessions(user.ID)
 	return &modelemail.PasswordResetConfirmRsp{
 		Reset: true,
 		Msg:   "password reset successfully",

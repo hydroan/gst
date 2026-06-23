@@ -33,19 +33,19 @@ func (s *VerificationResendService) Create(ctx *types.ServiceContext, req *model
 		return nil, errors.Wrap(err, "failed to reserve verification resend throttle")
 	}
 
-	user, err := currentUserProvider().FindByEmail(ctx, email)
+	user, err := currentAccountGateway().FindByEmail(ctx, email)
 	if err != nil {
-		if errors.Is(err, ErrUserNotFound) {
+		if errors.Is(err, ErrAccountNotFound) {
 			return rsp, nil
 		}
-		if errors.Is(err, ErrUserProviderNotConfigured) {
-			log.Error("email user provider is not configured", err)
-			return nil, newUserProviderNotConfiguredServiceError(err)
+		if errors.Is(err, ErrAccountGatewayNotConfigured) {
+			log.Error("email account gateway is not configured", err)
+			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		log.Error("failed to load verification resend user", err)
-		return nil, errors.Wrap(err, "failed to load verification resend user")
+		log.Error("failed to load verification resend account", err)
+		return nil, errors.Wrap(err, "failed to load verification resend account")
 	}
-	if !eligibleVerificationUser(user, email) {
+	if !eligibleVerificationAccount(user, email) {
 		return rsp, nil
 	}
 

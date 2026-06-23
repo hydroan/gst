@@ -36,19 +36,19 @@ func (s *PasswordResetRequestService) Create(ctx *types.ServiceContext, req *mod
 		return nil, errors.Wrap(err, "failed to reserve password reset throttle")
 	}
 
-	user, err := currentUserProvider().FindByEmail(ctx, email)
+	user, err := currentAccountGateway().FindByEmail(ctx, email)
 	if err != nil {
-		if errors.Is(err, ErrUserNotFound) {
+		if errors.Is(err, ErrAccountNotFound) {
 			return rsp, nil
 		}
-		if errors.Is(err, ErrUserProviderNotConfigured) {
-			log.Error("email user provider is not configured", err)
-			return nil, newUserProviderNotConfiguredServiceError(err)
+		if errors.Is(err, ErrAccountGatewayNotConfigured) {
+			log.Error("email account gateway is not configured", err)
+			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		log.Error("failed to load password reset user", err)
-		return nil, errors.Wrap(err, "failed to load password reset user")
+		log.Error("failed to load password reset account", err)
+		return nil, errors.Wrap(err, "failed to load password reset account")
 	}
-	if !eligiblePasswordResetUser(user, email) {
+	if !eligiblePasswordResetAccount(user, email) {
 		return rsp, nil
 	}
 
@@ -69,13 +69,13 @@ func (s *PasswordResetRequestService) Create(ctx *types.ServiceContext, req *mod
 	return rsp, nil
 }
 
-// eligiblePasswordResetUser ensures the reset flow is only issued for an active
+// eligiblePasswordResetAccount ensures the reset flow is only issued for an active
 // account whose persisted email still matches the normalized request email.
-func eligiblePasswordResetUser(user *UserSnapshot, email string) bool {
+func eligiblePasswordResetAccount(user *AccountSnapshot, email string) bool {
 	if user == nil || user.ID == "" {
 		return false
 	}
-	if normalizeUserEmail(user.Email) != email {
+	if normalizeAccountEmail(user.Email) != email {
 		return false
 	}
 	return user.Active
@@ -98,8 +98,8 @@ func passwordResetDelivery(token string, flow iamEmailFlowState) emailDelivery {
 	}
 }
 
-// normalizeUserEmail normalizes an email address loaded from the host user store.
-func normalizeUserEmail(email string) string {
+// normalizeAccountEmail normalizes an email address loaded from the host user store.
+func normalizeAccountEmail(email string) string {
 	return normalizeEmailScope(email)
 }
 

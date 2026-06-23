@@ -47,22 +47,22 @@ func (s *ChangeConfirmService) Create(ctx *types.ServiceContext, req *modelemail
 		}, nil
 	}
 
-	provider := currentUserProvider()
-	user, err := provider.GetByID(ctx, flow.UserID)
+	gateway := currentAccountGateway()
+	user, err := gateway.GetByID(ctx, flow.UserID)
 	if err != nil {
-		if errors.Is(err, ErrUserProviderNotConfigured) {
-			log.Error("email user provider is not configured", err)
-			return nil, newUserProviderNotConfiguredServiceError(err)
+		if errors.Is(err, ErrAccountGatewayNotConfigured) {
+			log.Error("email account gateway is not configured", err)
+			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		log.Error("failed to load email change confirmation user", err)
-		return nil, errors.Wrap(err, "failed to load email change confirmation user")
+		log.Error("failed to load email change confirmation account", err)
+		return nil, errors.Wrap(err, "failed to load email change confirmation account")
 	}
-	if err = validUserSnapshot(user, flow.UserID); err != nil {
-		log.Error("email user provider returned invalid email change confirmation user", err)
-		return nil, newUserProviderInvalidUserServiceError(err)
+	if err = validAccountSnapshot(user, flow.UserID); err != nil {
+		log.Error("email account gateway returned invalid email change confirmation account", err)
+		return nil, newAccountGatewayInvalidAccountServiceError(err)
 	}
 
-	currentEmail := normalizeUserEmail(user.Email)
+	currentEmail := normalizeAccountEmail(user.Email)
 	switch currentEmail {
 	case normalizeEmailScope(flow.NewEmail):
 		return &modelemail.ChangeConfirmRsp{
@@ -77,13 +77,13 @@ func (s *ChangeConfirmService) Create(ctx *types.ServiceContext, req *modelemail
 		}, nil
 	}
 
-	existingUser, err := provider.FindByEmail(ctx, normalizeEmailScope(flow.NewEmail))
+	existingUser, err := gateway.FindByEmail(ctx, normalizeEmailScope(flow.NewEmail))
 	if err != nil {
-		if errors.Is(err, ErrUserProviderNotConfigured) {
-			log.Error("email user provider is not configured", err)
-			return nil, newUserProviderNotConfiguredServiceError(err)
+		if errors.Is(err, ErrAccountGatewayNotConfigured) {
+			log.Error("email account gateway is not configured", err)
+			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		if !errors.Is(err, ErrUserNotFound) {
+		if !errors.Is(err, ErrAccountNotFound) {
 			log.Error("failed to lookup target email for confirmation", err)
 			return nil, errors.Wrap(err, "failed to lookup target email for confirmation")
 		}
@@ -95,10 +95,10 @@ func (s *ChangeConfirmService) Create(ctx *types.ServiceContext, req *modelemail
 		}, nil
 	}
 
-	if err = provider.ChangeEmail(ctx, user.ID, flow.NewEmail, emailNow()); err != nil {
-		if errors.Is(err, ErrUserProviderNotConfigured) {
-			log.Error("email user provider is not configured", err)
-			return nil, newUserProviderNotConfiguredServiceError(err)
+	if err = gateway.ApplyEmailChange(ctx, user.ID, flow.NewEmail, emailNow()); err != nil {
+		if errors.Is(err, ErrAccountGatewayNotConfigured) {
+			log.Error("email account gateway is not configured", err)
+			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
 		log.Error("failed to persist confirmed email change", err)
 		return nil, errors.Wrap(err, "failed to update email change state")
@@ -118,7 +118,7 @@ func (s *ChangeConfirmService) Create(ctx *types.ServiceContext, req *modelemail
 // the minimum state required to safely process the request.
 func validateEmailChangeFlow(flow iamEmailFlowState) error {
 	if strings.TrimSpace(flow.UserID) == "" {
-		return errors.New("email change user id is required")
+		return errors.New("email change account id is required")
 	}
 	if normalizeEmailScope(flow.OldEmail) == "" {
 		return errors.New("email change old email is required")

@@ -36,21 +36,21 @@ func (s *ChangeCancelService) Create(ctx *types.ServiceContext, req *modelemail.
 		return nil, err
 	}
 
-	user, err := currentUserProvider().GetByID(ctx, flow.UserID)
+	user, err := currentAccountGateway().GetByID(ctx, flow.UserID)
 	if err != nil {
-		if errors.Is(err, ErrUserProviderNotConfigured) {
-			log.Error("email user provider is not configured", err)
-			return nil, newUserProviderNotConfiguredServiceError(err)
+		if errors.Is(err, ErrAccountGatewayNotConfigured) {
+			log.Error("email account gateway is not configured", err)
+			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		log.Error("failed to load email change cancellation user", err)
-		return nil, errors.Wrap(err, "failed to load email change cancellation user")
+		log.Error("failed to load email change cancellation account", err)
+		return nil, errors.Wrap(err, "failed to load email change cancellation account")
 	}
-	if err = validUserSnapshot(user, flow.UserID); err != nil {
-		log.Error("email user provider returned invalid email change cancellation user", err)
-		return nil, newUserProviderInvalidUserServiceError(err)
+	if err = validAccountSnapshot(user, flow.UserID); err != nil {
+		log.Error("email account gateway returned invalid email change cancellation account", err)
+		return nil, newAccountGatewayInvalidAccountServiceError(err)
 	}
 
-	currentEmail := normalizeUserEmail(user.Email)
+	currentEmail := normalizeAccountEmail(user.Email)
 	switch currentEmail {
 	case normalizeEmailScope(flow.NewEmail):
 		return &modelemail.ChangeCancelRsp{
@@ -77,7 +77,7 @@ func (s *ChangeCancelService) Create(ctx *types.ServiceContext, req *modelemail.
 }
 
 // emailChangeCancellationKey returns the cache key that records a canceled
-// change pair for the current user.
+// change pair for the current account.
 func emailChangeCancellationKey(userID, oldEmail, newEmail string) string {
 	return strings.Join([]string{
 		"iam",
