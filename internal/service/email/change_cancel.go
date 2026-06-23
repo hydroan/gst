@@ -1,11 +1,11 @@
-package serviceiamemail
+package serviceemail
 
 import (
 	"context"
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	modeliamemail "github.com/hydroan/gst/internal/model/iam/email"
+	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
@@ -13,18 +13,18 @@ import (
 // ChangeCancelService handles the token cancellation step that revokes a
 // pending email change before confirmation happens.
 type ChangeCancelService struct {
-	service.Base[*modeliamemail.ChangeCancel, *modeliamemail.ChangeCancelReq, *modeliamemail.ChangeCancelRsp]
+	service.Base[*modelemail.ChangeCancel, *modelemail.ChangeCancelReq, *modelemail.ChangeCancelRsp]
 }
 
 // Create consumes the cancellation token and records that matching
 // confirmation tokens must no longer complete the email change.
-func (s *ChangeCancelService) Create(ctx *types.ServiceContext, req *modeliamemail.ChangeCancelReq) (rsp *modeliamemail.ChangeCancelRsp, err error) {
+func (s *ChangeCancelService) Create(ctx *types.ServiceContext, req *modelemail.ChangeCancelReq) (rsp *modelemail.ChangeCancelRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
 
 	flow, err := consumeEmailFlow(passwordResetContext(ctx), iamEmailFlowKindChangeCancel, req.Token)
 	if err != nil {
 		if errors.Is(err, errEmailFlowNotFound) || errors.Is(err, errEmailFlowExpired) {
-			return &modeliamemail.ChangeCancelRsp{
+			return &modelemail.ChangeCancelRsp{
 				Canceled: false,
 				Msg:      "invalid or expired email change cancellation token",
 			}, nil
@@ -45,13 +45,13 @@ func (s *ChangeCancelService) Create(ctx *types.ServiceContext, req *modeliamema
 	currentEmail := normalizePasswordResetEmail(user.Email)
 	switch currentEmail {
 	case normalizeEmailScope(flow.NewEmail):
-		return &modeliamemail.ChangeCancelRsp{
+		return &modelemail.ChangeCancelRsp{
 			Canceled: false,
 			Msg:      "email already changed",
 		}, nil
 	case normalizeEmailScope(flow.OldEmail):
 	default:
-		return &modeliamemail.ChangeCancelRsp{
+		return &modelemail.ChangeCancelRsp{
 			Canceled: false,
 			Msg:      "email change is no longer pending",
 		}, nil
@@ -62,7 +62,7 @@ func (s *ChangeCancelService) Create(ctx *types.ServiceContext, req *modeliamema
 		return nil, errors.Wrap(err, "failed to mark email change as canceled")
 	}
 
-	return &modeliamemail.ChangeCancelRsp{
+	return &modelemail.ChangeCancelRsp{
 		Canceled: true,
 		Msg:      "email change canceled successfully",
 	}, nil

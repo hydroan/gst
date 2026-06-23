@@ -1,8 +1,8 @@
-package serviceiamemail
+package serviceemail
 
 import (
 	"github.com/cockroachdb/errors"
-	modeliamemail "github.com/hydroan/gst/internal/model/iam/email"
+	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
@@ -11,14 +11,14 @@ import (
 // VerificationResendService handles public requests that resend verification
 // emails for accounts that are still pending verification.
 type VerificationResendService struct {
-	service.Base[*model.Empty, *modeliamemail.VerificationResendReq, *modeliamemail.VerificationResendRsp]
+	service.Base[*model.Empty, *modelemail.VerificationResendReq, *modelemail.VerificationResendRsp]
 }
 
 // Create resends a verification email for an eligible account while keeping the
 // response stable for unknown or already verified accounts.
-func (s *VerificationResendService) Create(ctx *types.ServiceContext, req *modeliamemail.VerificationResendReq) (rsp *modeliamemail.VerificationResendRsp, err error) {
+func (s *VerificationResendService) Create(ctx *types.ServiceContext, req *modelemail.VerificationResendReq) (rsp *modelemail.VerificationResendRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
-	rsp = &modeliamemail.VerificationResendRsp{Msg: publicAcceptedMessage(iamEmailFlowKindVerification)}
+	rsp = &modelemail.VerificationResendRsp{Msg: publicAcceptedMessage(iamEmailFlowKindVerification)}
 
 	email := normalizeEmailScope(req.Email)
 	if email == "" {

@@ -1,4 +1,4 @@
-package serviceiamemail
+package serviceemail
 
 import (
 	"strings"
@@ -6,7 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
-	modeliamemail "github.com/hydroan/gst/internal/model/iam/email"
+	modelemail "github.com/hydroan/gst/internal/model/email"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
@@ -15,7 +15,7 @@ import (
 // ChangeConfirmService handles the token confirmation step that finalizes a
 // pending email change.
 type ChangeConfirmService struct {
-	service.Base[*modeliamemail.ChangeConfirm, *modeliamemail.ChangeConfirmReq, *modeliamemail.ChangeConfirmRsp]
+	service.Base[*modelemail.ChangeConfirm, *modelemail.ChangeConfirmReq, *modelemail.ChangeConfirmRsp]
 }
 
 // changeUpdateUser persists the confirmed email state for the target account.
@@ -28,13 +28,13 @@ var changeUpdateUser = func(ctx *types.ServiceContext, user *modeliamuser.User) 
 
 // Create consumes the confirmation token and updates the account email when the
 // current database state still matches the pending change flow.
-func (s *ChangeConfirmService) Create(ctx *types.ServiceContext, req *modeliamemail.ChangeConfirmReq) (rsp *modeliamemail.ChangeConfirmRsp, err error) {
+func (s *ChangeConfirmService) Create(ctx *types.ServiceContext, req *modelemail.ChangeConfirmReq) (rsp *modelemail.ChangeConfirmRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
 
 	flow, err := consumeEmailFlow(passwordResetContext(ctx), iamEmailFlowKindChangeConfirm, req.Token)
 	if err != nil {
 		if errors.Is(err, errEmailFlowNotFound) || errors.Is(err, errEmailFlowExpired) {
-			return &modeliamemail.ChangeConfirmRsp{
+			return &modelemail.ChangeConfirmRsp{
 				Changed: false,
 				Msg:     "invalid or expired email change token",
 			}, nil
@@ -52,7 +52,7 @@ func (s *ChangeConfirmService) Create(ctx *types.ServiceContext, req *modeliamem
 		return nil, errors.Wrap(err, "failed to check email change cancellation state")
 	}
 	if canceled {
-		return &modeliamemail.ChangeConfirmRsp{
+		return &modelemail.ChangeConfirmRsp{
 			Changed: false,
 			Msg:     "email change was canceled",
 		}, nil
@@ -67,13 +67,13 @@ func (s *ChangeConfirmService) Create(ctx *types.ServiceContext, req *modeliamem
 	currentEmail := normalizePasswordResetEmail(user.Email)
 	switch currentEmail {
 	case normalizeEmailScope(flow.NewEmail):
-		return &modeliamemail.ChangeConfirmRsp{
+		return &modelemail.ChangeConfirmRsp{
 			Changed: true,
 			Msg:     "email already changed",
 		}, nil
 	case normalizeEmailScope(flow.OldEmail):
 	default:
-		return &modeliamemail.ChangeConfirmRsp{
+		return &modelemail.ChangeConfirmRsp{
 			Changed: false,
 			Msg:     "email change can no longer be completed",
 		}, nil
@@ -87,7 +87,7 @@ func (s *ChangeConfirmService) Create(ctx *types.ServiceContext, req *modeliamem
 		}
 	}
 	if existingUser != nil && existingUser.ID != user.ID {
-		return &modeliamemail.ChangeConfirmRsp{
+		return &modelemail.ChangeConfirmRsp{
 			Changed: false,
 			Msg:     "email change can no longer be completed",
 		}, nil
@@ -106,7 +106,7 @@ func (s *ChangeConfirmService) Create(ctx *types.ServiceContext, req *modeliamem
 		return nil, errors.Wrap(err, "failed to clear email change cancellation marker")
 	}
 
-	return &modeliamemail.ChangeConfirmRsp{
+	return &modelemail.ChangeConfirmRsp{
 		Changed: true,
 		Msg:     "email changed successfully",
 	}, nil

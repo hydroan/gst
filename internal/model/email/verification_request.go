@@ -1,4 +1,4 @@
-package modeliamemail
+package modelemail
 
 // VerificationRequestReq is the payload for POST /api/iam/email/verification-request.
 // It accepts the email address that should receive the verification message.

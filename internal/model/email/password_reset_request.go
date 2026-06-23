@@ -1,4 +1,4 @@
-package modeliamemail
+package modelemail
 
 import "github.com/hydroan/gst/model"
 

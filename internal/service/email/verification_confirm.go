@@ -1,4 +1,4 @@
-package serviceiamemail
+package serviceemail
 
 import (
 	"strings"
@@ -6,7 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
-	modeliamemail "github.com/hydroan/gst/internal/model/iam/email"
+	modelemail "github.com/hydroan/gst/internal/model/email"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
@@ -16,7 +16,7 @@ import (
 // VerificationConfirmService handles the token confirmation step that finalizes
 // the email verification flow.
 type VerificationConfirmService struct {
-	service.Base[*model.Empty, *modeliamemail.VerificationConfirmReq, *modeliamemail.VerificationConfirmRsp]
+	service.Base[*model.Empty, *modelemail.VerificationConfirmReq, *modelemail.VerificationConfirmRsp]
 }
 
 var (
@@ -39,13 +39,13 @@ var (
 
 // Create consumes the one-time verification token and marks the corresponding
 // email address as verified when the current account state still matches.
-func (s *VerificationConfirmService) Create(ctx *types.ServiceContext, req *modeliamemail.VerificationConfirmReq) (rsp *modeliamemail.VerificationConfirmRsp, err error) {
+func (s *VerificationConfirmService) Create(ctx *types.ServiceContext, req *modelemail.VerificationConfirmReq) (rsp *modelemail.VerificationConfirmRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
 
 	flow, err := consumeEmailFlow(passwordResetContext(ctx), iamEmailFlowKindVerification, req.Token)
 	if err != nil {
 		if errors.Is(err, errEmailFlowNotFound) || errors.Is(err, errEmailFlowExpired) {
-			return &modeliamemail.VerificationConfirmRsp{
+			return &modelemail.VerificationConfirmRsp{
 				Verified: false,
 				Msg:      "invalid or expired verification token",
 			}, nil
@@ -63,13 +63,13 @@ func (s *VerificationConfirmService) Create(ctx *types.ServiceContext, req *mode
 		return nil, errors.Wrap(err, "failed to load verification user")
 	}
 	if normalizePasswordResetEmail(user.Email) != normalizeEmailScope(flow.Email) {
-		return &modeliamemail.VerificationConfirmRsp{
+		return &modelemail.VerificationConfirmRsp{
 			Verified: false,
 			Msg:      "invalid or expired verification token",
 		}, nil
 	}
 	if userEmailVerified(user) {
-		return &modeliamemail.VerificationConfirmRsp{
+		return &modelemail.VerificationConfirmRsp{
 			Verified: true,
 			Msg:      "email already verified",
 		}, nil
@@ -84,7 +84,7 @@ func (s *VerificationConfirmService) Create(ctx *types.ServiceContext, req *mode
 		return nil, errors.Wrap(err, "failed to update email verification state")
 	}
 
-	return &modeliamemail.VerificationConfirmRsp{
+	return &modelemail.VerificationConfirmRsp{
 		Verified: true,
 		Msg:      "email verified successfully",
 	}, nil

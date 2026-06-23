@@ -1,4 +1,4 @@
-package serviceiamemail
+package serviceemail
 
 import (
 	"context"

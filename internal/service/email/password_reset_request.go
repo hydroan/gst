@@ -1,11 +1,11 @@
-package serviceiamemail
+package serviceemail
 
 import (
 	"context"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
-	modeliamemail "github.com/hydroan/gst/internal/model/iam/email"
+	modelemail "github.com/hydroan/gst/internal/model/email"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
@@ -14,7 +14,7 @@ import (
 // PasswordResetRequestService handles public password reset requests that start
 // the email-driven password recovery flow.
 type PasswordResetRequestService struct {
-	service.Base[*modeliamemail.PasswordResetRequest, *modeliamemail.PasswordResetRequestReq, *modeliamemail.PasswordResetRequestRsp]
+	service.Base[*modelemail.PasswordResetRequest, *modelemail.PasswordResetRequestReq, *modelemail.PasswordResetRequestRsp]
 }
 
 // passwordResetLookupUserByEmail resolves the account bound to the requested email
@@ -40,9 +40,9 @@ var passwordResetLookupUserByEmail = func(ctx *types.ServiceContext, email strin
 // It always returns the same public-facing message for accepted requests so the
 // caller cannot infer whether the account exists, while still enforcing throttle
 // limits before any token is created or email is sent.
-func (s *PasswordResetRequestService) Create(ctx *types.ServiceContext, req *modeliamemail.PasswordResetRequestReq) (rsp *modeliamemail.PasswordResetRequestRsp, err error) {
+func (s *PasswordResetRequestService) Create(ctx *types.ServiceContext, req *modelemail.PasswordResetRequestReq) (rsp *modelemail.PasswordResetRequestRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
-	rsp = &modeliamemail.PasswordResetRequestRsp{Msg: publicAcceptedMessage(iamEmailFlowKindPasswordReset)}
+	rsp = &modelemail.PasswordResetRequestRsp{Msg: publicAcceptedMessage(iamEmailFlowKindPasswordReset)}
 
 	email := normalizeEmailScope(req.Email)
 	if email == "" {

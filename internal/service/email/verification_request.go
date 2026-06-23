@@ -1,9 +1,9 @@
-package serviceiamemail
+package serviceemail
 
 import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
-	modeliamemail "github.com/hydroan/gst/internal/model/iam/email"
+	modelemail "github.com/hydroan/gst/internal/model/email"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
@@ -13,7 +13,7 @@ import (
 // VerificationRequestService handles public requests that start the email
 // verification flow for an eligible user account.
 type VerificationRequestService struct {
-	service.Base[*model.Empty, *modeliamemail.VerificationRequestReq, *modeliamemail.VerificationRequestRsp]
+	service.Base[*model.Empty, *modelemail.VerificationRequestReq, *modelemail.VerificationRequestRsp]
 }
 
 // verificationLookupUserByEmail resolves the user bound to the requested email
@@ -36,9 +36,9 @@ var verificationLookupUserByEmail = func(ctx *types.ServiceContext, email string
 
 // Create starts an email verification flow and returns a generic acceptance
 // message so callers cannot infer whether the target account exists.
-func (s *VerificationRequestService) Create(ctx *types.ServiceContext, req *modeliamemail.VerificationRequestReq) (rsp *modeliamemail.VerificationRequestRsp, err error) {
+func (s *VerificationRequestService) Create(ctx *types.ServiceContext, req *modelemail.VerificationRequestReq) (rsp *modelemail.VerificationRequestRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
-	rsp = &modeliamemail.VerificationRequestRsp{Msg: publicAcceptedMessage(iamEmailFlowKindVerification)}
+	rsp = &modelemail.VerificationRequestRsp{Msg: publicAcceptedMessage(iamEmailFlowKindVerification)}
 
 	email := normalizeEmailScope(req.Email)
 	if email == "" {

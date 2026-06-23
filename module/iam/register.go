@@ -7,7 +7,6 @@ import (
 	cronjobiam "github.com/hydroan/gst/internal/cronjob/iam"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
-	serviceiamemail "github.com/hydroan/gst/internal/service/iam/email"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	serviceiamuser "github.com/hydroan/gst/internal/service/iam/user"
 	"github.com/hydroan/gst/middleware"
@@ -55,17 +54,6 @@ type Config struct {
 //   - PATCH  /api/iam/users/:id
 //   - GET    /api/iam/users
 //   - GET    /api/iam/users/:id
-//
-// Email workflow routes:
-//   - POST   /api/iam/email/verification-confirm
-//   - POST   /api/iam/email/verification-request
-//   - POST   /api/iam/email/verification-resend
-//   - POST   /api/iam/email/password-reset-confirm
-//   - POST   /api/iam/email/password-reset-request
-//   - POST   /api/iam/email/change-request
-//   - POST   /api/iam/email/change-resend
-//   - POST   /api/iam/email/change-cancel
-//   - POST   /api/iam/email/change-confirm
 //
 // Middleware:
 //   - IAMSession for protected IAM routes and session-aware APIs
@@ -128,16 +116,6 @@ func Register(config ...Config) {
 	module.UseCustom(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsDeleteAllService{}), consts.PHASE_DELETE)
 	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsDeleteService{}), consts.PHASE_DELETE)
 	module.Use(module.NewWrapper("/online-users", "id", false, &service.Base[*OnlineUser, *OnlineUser, *OnlineUser]{}), consts.PHASE_LIST)
-
-	module.Use(module.NewWrapper("/iam/email/verification-request", "id", true, &serviceiamemail.VerificationRequestService{}), consts.PHASE_CREATE)
-	module.Use(module.NewWrapper("/iam/email/verification-resend", "id", true, &serviceiamemail.VerificationResendService{}), consts.PHASE_CREATE)
-	module.Use(module.NewWrapper("/iam/email/verification-confirm", "id", true, &serviceiamemail.VerificationConfirmService{}), consts.PHASE_CREATE)
-	module.Use(module.NewWrapper("/iam/email/password-reset-confirm", "id", true, &serviceiamemail.PasswordResetConfirmService{}), consts.PHASE_CREATE)
-	module.Use(module.NewWrapper("/iam/email/password-reset-request", "id", true, &serviceiamemail.PasswordResetRequestService{}), consts.PHASE_CREATE)
-	module.Use(module.NewWrapper("/iam/email/change-request", "id", false, &serviceiamemail.ChangeRequestService{}), consts.PHASE_CREATE)
-	module.Use(module.NewWrapper("/iam/email/change-resend", "id", false, &serviceiamemail.ChangeResendService{}), consts.PHASE_CREATE)
-	module.Use(module.NewWrapper("/iam/email/change-cancel", "id", true, &serviceiamemail.ChangeCancelService{}), consts.PHASE_CREATE)
-	module.Use(module.NewWrapper("/iam/email/change-confirm", "id", false, &serviceiamemail.ChangeConfirmService{}), consts.PHASE_CREATE)
 
 	// create default users
 	if len(cfg.DefaultUsers) > 0 {

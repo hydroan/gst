@@ -1,4 +1,4 @@
-package modeliamemail
+package modelemail
 
 // VerificationResendReq is the payload for POST /api/iam/email/verification-resend.
 // It identifies the email address that should receive a new verification message.

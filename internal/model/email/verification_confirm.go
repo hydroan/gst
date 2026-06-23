@@ -1,4 +1,4 @@
-package modeliamemail
+package modelemail
 
 // VerificationConfirmReq is the payload for POST /api/iam/email/verification-confirm.
 // It carries the verification token from the email link or client-side confirmation flow.

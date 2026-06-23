@@ -1,10 +1,10 @@
-package serviceiamemail
+package serviceemail
 
 import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	modeliamemail "github.com/hydroan/gst/internal/model/iam/email"
+	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
@@ -12,12 +12,12 @@ import (
 // ChangeResendService handles authenticated requests that resend confirmation
 // emails for an in-progress email change flow.
 type ChangeResendService struct {
-	service.Base[*modeliamemail.ChangeResend, *modeliamemail.ChangeResendReq, *modeliamemail.ChangeResendRsp]
+	service.Base[*modelemail.ChangeResend, *modelemail.ChangeResendReq, *modelemail.ChangeResendRsp]
 }
 
 // Create revalidates the current user and reissues the confirmation email for
 // the target new email address.
-func (s *ChangeResendService) Create(ctx *types.ServiceContext, req *modeliamemail.ChangeResendReq) (rsp *modeliamemail.ChangeResendRsp, err error) {
+func (s *ChangeResendService) Create(ctx *types.ServiceContext, req *modelemail.ChangeResendReq) (rsp *modelemail.ChangeResendRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
 	if ctx == nil || strings.TrimSpace(ctx.UserID) == "" {
 		return nil, errors.New("authentication required")
@@ -37,7 +37,7 @@ func (s *ChangeResendService) Create(ctx *types.ServiceContext, req *modeliamema
 
 	if _, err = reserveEmailThrottle(ctx.Context(), iamEmailFlowKindChangeConfirm, emailThrottleResend, newEmail, 0); err != nil {
 		if errors.Is(err, errEmailFlowThrottled) {
-			return &modeliamemail.ChangeResendRsp{Msg: "email change confirmation resent successfully"}, nil
+			return &modelemail.ChangeResendRsp{Msg: "email change confirmation resent successfully"}, nil
 		}
 		log.Error("failed to reserve email change resend throttle", err)
 		return nil, errors.Wrap(err, "failed to reserve email change resend throttle")
@@ -58,5 +58,5 @@ func (s *ChangeResendService) Create(ctx *types.ServiceContext, req *modeliamema
 		return nil, errors.Wrap(err, "failed to dispatch email change resend confirmation")
 	}
 
-	return &modeliamemail.ChangeResendRsp{Msg: "email change confirmation resent successfully"}, nil
+	return &modelemail.ChangeResendRsp{Msg: "email change confirmation resent successfully"}, nil
 }

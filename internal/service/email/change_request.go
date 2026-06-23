@@ -1,11 +1,11 @@
-package serviceiamemail
+package serviceemail
 
 import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
-	modeliamemail "github.com/hydroan/gst/internal/model/iam/email"
+	modelemail "github.com/hydroan/gst/internal/model/email"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
@@ -15,7 +15,7 @@ import (
 // ChangeRequestService handles authenticated requests that start the email
 // change flow for the current account.
 type ChangeRequestService struct {
-	service.Base[*modeliamemail.ChangeRequest, *modeliamemail.ChangeRequestReq, *modeliamemail.ChangeRequestRsp]
+	service.Base[*modelemail.ChangeRequest, *modelemail.ChangeRequestReq, *modelemail.ChangeRequestRsp]
 }
 
 var (
@@ -47,7 +47,7 @@ var (
 
 // Create validates the current password, checks the target email, and issues
 // one-time confirmation and cancellation tokens for the email change flow.
-func (s *ChangeRequestService) Create(ctx *types.ServiceContext, req *modeliamemail.ChangeRequestReq) (rsp *modeliamemail.ChangeRequestRsp, err error) {
+func (s *ChangeRequestService) Create(ctx *types.ServiceContext, req *modelemail.ChangeRequestReq) (rsp *modelemail.ChangeRequestRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
 	user, newEmail, rsp, err := prepareEmailChangeRequest(ctx, req.NewEmail)
 	if err != nil || user == nil {
@@ -71,7 +71,7 @@ func (s *ChangeRequestService) Create(ctx *types.ServiceContext, req *modeliamem
 
 // prepareEmailChangeRequest loads the current user and validates whether the new
 // email can enter the change flow.
-func prepareEmailChangeRequest(ctx *types.ServiceContext, newEmail string) (*modeliamuser.User, string, *modeliamemail.ChangeRequestRsp, error) {
+func prepareEmailChangeRequest(ctx *types.ServiceContext, newEmail string) (*modeliamuser.User, string, *modelemail.ChangeRequestRsp, error) {
 	if ctx == nil || strings.TrimSpace(ctx.UserID) == "" {
 		return nil, "", nil, errors.New("authentication required")
 	}
@@ -86,7 +86,7 @@ func prepareEmailChangeRequest(ctx *types.ServiceContext, newEmail string) (*mod
 		return nil, "", nil, err
 	}
 
-	return user, normalizedNewEmail, &modeliamemail.ChangeRequestRsp{
+	return user, normalizedNewEmail, &modelemail.ChangeRequestRsp{
 		Msg: "email change request submitted successfully",
 	}, nil
 }

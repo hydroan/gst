@@ -1,11 +1,11 @@
-package serviceiamemail
+package serviceemail
 
 import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
-	modeliamemail "github.com/hydroan/gst/internal/model/iam/email"
+	modelemail "github.com/hydroan/gst/internal/model/email"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/service"
@@ -16,7 +16,7 @@ import (
 // PasswordResetConfirmService handles the token confirmation step that finalizes
 // the email-driven password reset flow.
 type PasswordResetConfirmService struct {
-	service.Base[*modeliamemail.PasswordResetConfirm, *modeliamemail.PasswordResetConfirmReq, *modeliamemail.PasswordResetConfirmRsp]
+	service.Base[*modelemail.PasswordResetConfirm, *modelemail.PasswordResetConfirmReq, *modelemail.PasswordResetConfirmRsp]
 }
 
 var (
@@ -43,13 +43,13 @@ var (
 
 // Create completes the password reset flow by consuming the one-time token,
 // updating the stored password hash, and invalidating active sessions.
-func (s *PasswordResetConfirmService) Create(ctx *types.ServiceContext, req *modeliamemail.PasswordResetConfirmReq) (rsp *modeliamemail.PasswordResetConfirmRsp, err error) {
+func (s *PasswordResetConfirmService) Create(ctx *types.ServiceContext, req *modelemail.PasswordResetConfirmReq) (rsp *modelemail.PasswordResetConfirmRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
 
 	flow, err := consumeEmailFlow(passwordResetContext(ctx), iamEmailFlowKindPasswordReset, req.Token)
 	if err != nil {
 		if errors.Is(err, errEmailFlowNotFound) || errors.Is(err, errEmailFlowExpired) {
-			return &modeliamemail.PasswordResetConfirmRsp{
+			return &modelemail.PasswordResetConfirmRsp{
 				Reset: false,
 				Msg:   "invalid or expired password reset token",
 			}, nil
@@ -67,7 +67,7 @@ func (s *PasswordResetConfirmService) Create(ctx *types.ServiceContext, req *mod
 		return nil, errors.Wrap(err, "failed to load password reset user")
 	}
 	if normalizePasswordResetEmail(user.Email) != normalizeEmailScope(flow.Email) {
-		return &modeliamemail.PasswordResetConfirmRsp{
+		return &modelemail.PasswordResetConfirmRsp{
 			Reset: false,
 			Msg:   "invalid or expired password reset token",
 		}, nil
@@ -83,7 +83,7 @@ func (s *PasswordResetConfirmService) Create(ctx *types.ServiceContext, req *mod
 	}
 
 	passwordResetInvalidateSessions(user.ID)
-	return &modeliamemail.PasswordResetConfirmRsp{
+	return &modelemail.PasswordResetConfirmRsp{
 		Reset: true,
 		Msg:   "password reset successfully",
 	}, nil

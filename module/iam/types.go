@@ -2,7 +2,6 @@ package iam
 
 import (
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
-	modeliamemail "github.com/hydroan/gst/internal/model/iam/email"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 )
@@ -58,25 +57,4 @@ type (
 	AdminUserSessionsListRsp   = modeliamsession.AdminUserSessionsListRsp
 	AdminUserSessionsDeleteReq = modeliamsession.AdminUserSessionsDeleteReq
 	AdminUserSessionsDeleteRsp = modeliamsession.AdminUserSessionsDeleteRsp
-
-	EmailChangeConfirmReq = modeliamemail.ChangeConfirmReq
-	EmailChangeConfirmRsp = modeliamemail.ChangeConfirmRsp
-	EmailChangeCancelReq  = modeliamemail.ChangeCancelReq
-	EmailChangeCancelRsp  = modeliamemail.ChangeCancelRsp
-	EmailChangeRequestReq = modeliamemail.ChangeRequestReq
-	EmailChangeRequestRsp = modeliamemail.ChangeRequestRsp
-	EmailChangeResendReq  = modeliamemail.ChangeResendReq
-	EmailChangeResendRsp  = modeliamemail.ChangeResendRsp
-
-	EmailPasswordResetConfirmReq = modeliamemail.PasswordResetConfirmReq
-	EmailPasswordResetConfirmRsp = modeliamemail.PasswordResetConfirmRsp
-	EmailPasswordResetRequestReq = modeliamemail.PasswordResetRequestReq
-	EmailPasswordResetRequestRsp = modeliamemail.PasswordResetRequestRsp
-
-	EmailVerificationConfirmReq = modeliamemail.VerificationConfirmReq
-	EmailVerificationConfirmRsp = modeliamemail.VerificationConfirmRsp
-	EmailVerificationResendReq  = modeliamemail.VerificationResendReq
-	EmailVerificationResendRsp  = modeliamemail.VerificationResendRsp
-	EmailVerificationRequestReq = modeliamemail.VerificationRequestReq
-	EmailVerificationRequestRsp = modeliamemail.VerificationRequestRsp
 )

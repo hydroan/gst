@@ -1,4 +1,4 @@
-package serviceiamemail
+package serviceemail
 
 import (
 	"bytes"
@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	modeliamemail "github.com/hydroan/gst/internal/model/iam/email"
+	modelemail "github.com/hydroan/gst/internal/model/email"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	loggerzap "github.com/hydroan/gst/logger/zap"
 	"github.com/hydroan/gst/model"
@@ -269,7 +269,7 @@ func TestVerificationRequestCreate(t *testing.T) {
 	ctx := new(types.ServiceContext)
 	ctx.SetPhase(consts.PHASE_CREATE)
 
-	rsp, err := svc.Create(ctx, &modeliamemail.VerificationRequestReq{Email: " USER@example.com "})
+	rsp, err := svc.Create(ctx, &modelemail.VerificationRequestReq{Email: " USER@example.com "})
 	require.NoError(t, err)
 	require.Equal(t, publicAcceptedMessage(iamEmailFlowKindVerification), rsp.Msg)
 	require.Equal(t, "user@example.com", sender.last.To)
@@ -309,7 +309,7 @@ func TestVerificationRequestCreateVerifiedUser(t *testing.T) {
 	ctx := new(types.ServiceContext)
 	ctx.SetPhase(consts.PHASE_CREATE)
 
-	rsp, err := svc.Create(ctx, &modeliamemail.VerificationRequestReq{Email: "user@example.com"})
+	rsp, err := svc.Create(ctx, &modelemail.VerificationRequestReq{Email: "user@example.com"})
 	require.NoError(t, err)
 	require.Equal(t, publicAcceptedMessage(iamEmailFlowKindVerification), rsp.Msg)
 	require.Equal(t, 0, flowCache.Len())
@@ -340,7 +340,7 @@ func TestVerificationRequestCreateUnknownUser(t *testing.T) {
 	ctx := new(types.ServiceContext)
 	ctx.SetPhase(consts.PHASE_CREATE)
 
-	rsp, err := svc.Create(ctx, &modeliamemail.VerificationRequestReq{Email: "user@example.com"})
+	rsp, err := svc.Create(ctx, &modelemail.VerificationRequestReq{Email: "user@example.com"})
 	require.NoError(t, err)
 	require.Equal(t, publicAcceptedMessage(iamEmailFlowKindVerification), rsp.Msg)
 	require.Equal(t, 0, flowCache.Len())
@@ -378,7 +378,7 @@ func TestVerificationResendCreate(t *testing.T) {
 	ctx := new(types.ServiceContext)
 	ctx.SetPhase(consts.PHASE_CREATE)
 
-	rsp, err := svc.Create(ctx, &modeliamemail.VerificationResendReq{Email: "user@example.com"})
+	rsp, err := svc.Create(ctx, &modelemail.VerificationResendReq{Email: "user@example.com"})
 	require.NoError(t, err)
 	require.Equal(t, publicAcceptedMessage(iamEmailFlowKindVerification), rsp.Msg)
 	require.Equal(t, "user@example.com", sender.last.To)
@@ -410,7 +410,7 @@ func TestVerificationResendCreateUnknownUser(t *testing.T) {
 	ctx := new(types.ServiceContext)
 	ctx.SetPhase(consts.PHASE_CREATE)
 
-	rsp, err := svc.Create(ctx, &modeliamemail.VerificationResendReq{Email: "user@example.com"})
+	rsp, err := svc.Create(ctx, &modelemail.VerificationResendReq{Email: "user@example.com"})
 	require.NoError(t, err)
 	require.Equal(t, publicAcceptedMessage(iamEmailFlowKindVerification), rsp.Msg)
 	require.Equal(t, 0, flowCache.Len())
@@ -456,7 +456,7 @@ func TestVerificationResendCreateThrottled(t *testing.T) {
 	ctx := new(types.ServiceContext)
 	ctx.SetPhase(consts.PHASE_CREATE)
 
-	rsp, err := svc.Create(ctx, &modeliamemail.VerificationResendReq{Email: "user@example.com"})
+	rsp, err := svc.Create(ctx, &modelemail.VerificationResendReq{Email: "user@example.com"})
 	require.NoError(t, err)
 	require.Equal(t, publicAcceptedMessage(iamEmailFlowKindVerification), rsp.Msg)
 	require.Equal(t, 0, flowCache.Len())
@@ -509,7 +509,7 @@ func TestVerificationConfirmCreate(t *testing.T) {
 	ctx := new(types.ServiceContext)
 	ctx.SetPhase(consts.PHASE_CREATE)
 
-	rsp, err := svc.Create(ctx, &modeliamemail.VerificationConfirmReq{Token: token})
+	rsp, err := svc.Create(ctx, &modelemail.VerificationConfirmReq{Token: token})
 	require.NoError(t, err)
 	require.True(t, rsp.Verified)
 	require.Equal(t, "email verified successfully", rsp.Msg)
@@ -532,7 +532,7 @@ func TestVerificationConfirmCreateInvalidToken(t *testing.T) {
 	ctx := new(types.ServiceContext)
 	ctx.SetPhase(consts.PHASE_CREATE)
 
-	rsp, err := svc.Create(ctx, &modeliamemail.VerificationConfirmReq{Token: "missing"})
+	rsp, err := svc.Create(ctx, &modelemail.VerificationConfirmReq{Token: "missing"})
 	require.NoError(t, err)
 	require.False(t, rsp.Verified)
 	require.Equal(t, "invalid or expired verification token", rsp.Msg)
@@ -585,7 +585,7 @@ func TestVerificationConfirmCreateAlreadyVerified(t *testing.T) {
 	ctx := new(types.ServiceContext)
 	ctx.SetPhase(consts.PHASE_CREATE)
 
-	rsp, err := svc.Create(ctx, &modeliamemail.VerificationConfirmReq{Token: token})
+	rsp, err := svc.Create(ctx, &modelemail.VerificationConfirmReq{Token: token})
 	require.NoError(t, err)
 	require.True(t, rsp.Verified)
 	require.Equal(t, "email already verified", rsp.Msg)
@@ -633,7 +633,7 @@ func TestChangeRequestCreate(t *testing.T) {
 	ctx.SetPhase(consts.PHASE_CREATE)
 	ctx.UserID = "user-change-1"
 
-	rsp, err := svc.Create(ctx, &modeliamemail.ChangeRequestReq{
+	rsp, err := svc.Create(ctx, &modelemail.ChangeRequestReq{
 		NewEmail:        " NEW@example.com ",
 		CurrentPassword: "current-password",
 	})
@@ -692,7 +692,7 @@ func TestChangeRequestCreateEmailAlreadyUsed(t *testing.T) {
 	ctx.SetPhase(consts.PHASE_CREATE)
 	ctx.UserID = "user-change-2"
 
-	_, err = svc.Create(ctx, &modeliamemail.ChangeRequestReq{
+	_, err = svc.Create(ctx, &modelemail.ChangeRequestReq{
 		NewEmail:        "new@example.com",
 		CurrentPassword: "current-password",
 	})
@@ -739,7 +739,7 @@ func TestChangeResendCreate(t *testing.T) {
 	ctx.SetPhase(consts.PHASE_CREATE)
 	ctx.UserID = "user-change-3"
 
-	rsp, err := svc.Create(ctx, &modeliamemail.ChangeResendReq{NewEmail: "new@example.com"})
+	rsp, err := svc.Create(ctx, &modelemail.ChangeResendReq{NewEmail: "new@example.com"})
 	require.NoError(t, err)
 	require.Equal(t, "email change confirmation resent successfully", rsp.Msg)
 	require.Equal(t, 1, flowCache.Len())
@@ -793,7 +793,7 @@ func TestChangeResendCreateThrottled(t *testing.T) {
 	ctx.SetPhase(consts.PHASE_CREATE)
 	ctx.UserID = "user-change-4"
 
-	rsp, err := svc.Create(ctx, &modeliamemail.ChangeResendReq{NewEmail: "new@example.com"})
+	rsp, err := svc.Create(ctx, &modelemail.ChangeResendReq{NewEmail: "new@example.com"})
 	require.NoError(t, err)
 	require.Equal(t, "email change confirmation resent successfully", rsp.Msg)
 	require.Zero(t, flowCache.Len())
@@ -855,7 +855,7 @@ func TestChangeConfirmCreate(t *testing.T) {
 	ctx := new(types.ServiceContext)
 	ctx.SetPhase(consts.PHASE_CREATE)
 
-	rsp, err := svc.Create(ctx, &modeliamemail.ChangeConfirmReq{Token: token})
+	rsp, err := svc.Create(ctx, &modelemail.ChangeConfirmReq{Token: token})
 	require.NoError(t, err)
 	require.True(t, rsp.Changed)
 	require.Equal(t, "email changed successfully", rsp.Msg)
@@ -917,7 +917,7 @@ func TestChangeConfirmCreateCanceled(t *testing.T) {
 	ctx := new(types.ServiceContext)
 	ctx.SetPhase(consts.PHASE_CREATE)
 
-	rsp, err := svc.Create(ctx, &modeliamemail.ChangeConfirmReq{Token: token})
+	rsp, err := svc.Create(ctx, &modelemail.ChangeConfirmReq{Token: token})
 	require.NoError(t, err)
 	require.False(t, rsp.Changed)
 	require.Equal(t, "email change was canceled", rsp.Msg)
@@ -965,7 +965,7 @@ func TestChangeCancelCreate(t *testing.T) {
 	ctx := new(types.ServiceContext)
 	ctx.SetPhase(consts.PHASE_CREATE)
 
-	rsp, err := svc.Create(ctx, &modeliamemail.ChangeCancelReq{Token: token})
+	rsp, err := svc.Create(ctx, &modelemail.ChangeCancelReq{Token: token})
 	require.NoError(t, err)
 	require.True(t, rsp.Canceled)
 	require.Equal(t, "email change canceled successfully", rsp.Msg)
@@ -1022,7 +1022,7 @@ func TestChangeRequestCreateClearsCancellationMarker(t *testing.T) {
 	ctx.SetPhase(consts.PHASE_CREATE)
 	ctx.UserID = "user-change-8"
 
-	rsp, err := svc.Create(ctx, &modeliamemail.ChangeRequestReq{
+	rsp, err := svc.Create(ctx, &modelemail.ChangeRequestReq{
 		NewEmail:        "new@example.com",
 		CurrentPassword: "current-password",
 	})
@@ -1063,7 +1063,7 @@ func TestPasswordResetRequestCreate(t *testing.T) {
 	ctx := new(types.ServiceContext)
 	ctx.SetPhase(consts.PHASE_CREATE)
 
-	rsp, err := svc.Create(ctx, &modeliamemail.PasswordResetRequestReq{Email: " USER@example.com "})
+	rsp, err := svc.Create(ctx, &modelemail.PasswordResetRequestReq{Email: " USER@example.com "})
 	require.NoError(t, err)
 	require.Equal(t, publicAcceptedMessage(iamEmailFlowKindPasswordReset), rsp.Msg)
 	require.Equal(t, "user@example.com", sender.last.To)
@@ -1096,7 +1096,7 @@ func TestPasswordResetRequestCreateUnknownUser(t *testing.T) {
 	ctx := new(types.ServiceContext)
 	ctx.SetPhase(consts.PHASE_CREATE)
 
-	rsp, err := svc.Create(ctx, &modeliamemail.PasswordResetRequestReq{Email: "user@example.com"})
+	rsp, err := svc.Create(ctx, &modelemail.PasswordResetRequestReq{Email: "user@example.com"})
 	require.NoError(t, err)
 	require.Equal(t, publicAcceptedMessage(iamEmailFlowKindPasswordReset), rsp.Msg)
 	require.Equal(t, 0, flowCache.Len())
@@ -1153,7 +1153,7 @@ func TestPasswordResetConfirmCreate(t *testing.T) {
 	ctx := new(types.ServiceContext)
 	ctx.SetPhase(consts.PHASE_CREATE)
 
-	rsp, err := svc.Create(ctx, &modeliamemail.PasswordResetConfirmReq{
+	rsp, err := svc.Create(ctx, &modelemail.PasswordResetConfirmReq{
 		Token:       token,
 		NewPassword: "new-password-123",
 	})
@@ -1179,7 +1179,7 @@ func TestPasswordResetConfirmCreateInvalidToken(t *testing.T) {
 	ctx := new(types.ServiceContext)
 	ctx.SetPhase(consts.PHASE_CREATE)
 
-	rsp, err := svc.Create(ctx, &modeliamemail.PasswordResetConfirmReq{
+	rsp, err := svc.Create(ctx, &modelemail.PasswordResetConfirmReq{
 		Token:       "missing",
 		NewPassword: "new-password-123",
 	})
