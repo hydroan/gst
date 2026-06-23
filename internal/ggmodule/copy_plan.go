@@ -8,12 +8,13 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/internal/codegen"
+	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
 )
 
@@ -60,6 +61,7 @@ type CopyPlan struct {
 	Actions               []moduleCopyAction
 	Files                 []moduleCopyFile
 	ExtraModelFiles       []string
+	IgnoreFiles           []string
 	PostCopyNotes         []string
 }
 
@@ -129,17 +131,18 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 	if sourceDirErr := plan.checkSourceDirs(); sourceDirErr != nil {
 		return nil, sourceDirErr
 	}
-	postCopyNotes, err := loadModuleCopyMetadata(filepath.Join(frameworkRoot, "module", name))
+	metadata, err := loadModuleCopyMetadata(filepath.Join(frameworkRoot, "module", name))
 	if err != nil {
 		return nil, err
 	}
-	plan.PostCopyNotes = postCopyNotes
+	plan.PostCopyNotes = metadata.PostCopyNotes
+	plan.IgnoreFiles = metadata.IgnoreFiles
 
 	if registerErr := checkModuleNotRegistered(name); registerErr != nil {
 		return nil, registerErr
 	}
 
-	models, err := codegen.FindModels(frameworkModulePath, plan.SourceModelDir, plan.SourceServiceDir, nil)
+	models, err := plan.findModels()
 	if err != nil {
 		return nil, err
 	}
@@ -260,6 +263,9 @@ func (p *CopyPlan) addModelFiles() error {
 		return err
 	}
 	for _, sourcePath := range files {
+		if p.ignoredSourcePath(sourcePath) {
+			continue
+		}
 		rel, err := filepath.Rel(p.SourceModelDir, sourcePath)
 		if err != nil {
 			return err
@@ -281,6 +287,36 @@ func (p *CopyPlan) addModelFiles() error {
 		})
 	}
 	return nil
+}
+
+func (p *CopyPlan) findModels() ([]*gen.ModelInfo, error) {
+	allModels := make([]*gen.ModelInfo, 0)
+	if err := filepath.Walk(p.SourceModelDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		base := filepath.Base(path)
+		if path != p.SourceModelDir && (base == constants.DirVendor || base == constants.DirTestData) {
+			return filepath.SkipDir
+		}
+		if info.IsDir() || !isModuleCopyGoSource(info.Name()) || p.ignoredSourcePath(path) {
+			return nil
+		}
+
+		models, err := gen.FindModels(frameworkModulePath, p.SourceModelDir, path)
+		if err != nil {
+			return err
+		}
+		for _, m := range models {
+			m.ModelFilePath = path
+			allModels = append(allModels, m)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return allModels, nil
 }
 
 func (p *CopyPlan) addExtraModelFiles() error {
@@ -336,6 +372,9 @@ func (p *CopyPlan) collectActions(models []*gen.ModelInfo) ([]moduleCopyAction, 
 				return
 			}
 			sourcePath := filepath.Join(p.SourceServiceDir, action.ServiceFilename())
+			if p.ignoredSourcePath(sourcePath) {
+				return
+			}
 			targetPath := filepath.Join(p.TargetServiceDir, action.ServiceFilename())
 			actions = append(actions, moduleCopyAction{
 				Route:      route,
@@ -422,6 +461,9 @@ func (p *CopyPlan) addServiceFiles(helperFiles []string) error {
 
 	sort.Strings(helperFiles)
 	for _, sourcePath := range helperFiles {
+		if p.ignoredSourcePath(sourcePath) {
+			continue
+		}
 		targetPath := filepath.Join(p.TargetServiceDir, filepath.Base(sourcePath))
 		src, err := os.ReadFile(sourcePath)
 		if err != nil {
@@ -508,6 +550,22 @@ func (p *CopyPlan) targetsByKind(kind moduleCopyFileKind) []string {
 		}
 	}
 	return targets
+}
+
+// ignoredSourcePath matches module.copy.json ignoreFiles against source files
+// relative to the framework root. This keeps metadata stable across projects:
+// "internal/model/authz/button.go" means the same source file no matter where
+// the current app's model/service directories are configured.
+func (p *CopyPlan) ignoredSourcePath(sourcePath string) bool {
+	if len(p.IgnoreFiles) == 0 {
+		return false
+	}
+	rel, err := filepath.Rel(p.FrameworkRoot, sourcePath)
+	if err != nil {
+		return false
+	}
+	rel = filepath.ToSlash(filepath.Clean(rel))
+	return slices.Contains(p.IgnoreFiles, rel)
 }
 
 func goFilesInDir(root string) ([]string, error) {

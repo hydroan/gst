@@ -7,7 +7,6 @@ import (
 
 	"github.com/hydroan/gst/database"
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
-	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
@@ -29,13 +28,13 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 	}
 
 	var (
-		user      = new(modeliamuser.User)
+		user      = new(modelauthz.User)
 		userRoles = make([]*modelauthz.UserRole, 0)
 		roles     = make([]*modelauthz.Role, 0)
 	)
 
 	// query the current user
-	if err := database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(user, ctx.UserID); err != nil {
+	if err := database.Database[*modelauthz.User](ctx.DatabaseContext()).Get(user, ctx.UserID); err != nil {
 		log.Error(err)
 		return err
 	}

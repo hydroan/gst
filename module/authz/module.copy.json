@@ -1,0 +1,5 @@
+{
+  "ignoreFiles": [
+    "internal/model/authz/button.go"
+  ]
+}

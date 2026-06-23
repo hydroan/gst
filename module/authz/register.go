@@ -47,12 +47,6 @@ import (
 //   - PATCH  /api/menus/:id
 //   - GET    /api/menus
 //   - GET    /api/menus/:id
-//   - POST   /api/buttons
-//   - DELETE /api/buttons/:id
-//   - PUT    /api/buttons/:id
-//   - PATCH  /api/buttons/:id
-//   - GET    /api/buttons
-//   - GET    /api/buttons/:id
 //
 // Middleware:
 //   - Authz

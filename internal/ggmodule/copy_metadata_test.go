@@ -9,10 +9,11 @@ import (
 )
 
 func TestLoadModuleCopyMetadataMissingFile(t *testing.T) {
-	notes, err := loadModuleCopyMetadata(t.TempDir())
+	metadata, err := loadModuleCopyMetadata(t.TempDir())
 
 	require.NoError(t, err)
-	require.Empty(t, notes)
+	require.Empty(t, metadata.PostCopyNotes)
+	require.Empty(t, metadata.IgnoreFiles)
 }
 
 func TestLoadModuleCopyMetadataReadsPostCopyNotes(t *testing.T) {
@@ -27,14 +28,33 @@ func TestLoadModuleCopyMetadataReadsPostCopyNotes(t *testing.T) {
 		"unknownFutureField": true
 	}`)
 
-	notes, err := loadModuleCopyMetadata(moduleDir)
+	metadata, err := loadModuleCopyMetadata(moduleDir)
 
 	require.NoError(t, err)
 	require.Equal(t, []string{
 		"Password-based MFA checks require servicemfa.SetUserAuthenticator(...).",
 		"Create a project-owned adapter outside service/mfa.",
 		"multi\nline",
-	}, notes)
+	}, metadata.PostCopyNotes)
+}
+
+func TestLoadModuleCopyMetadataReadsIgnoreFiles(t *testing.T) {
+	moduleDir := t.TempDir()
+	writeModuleCopyMetadataForTest(t, moduleDir, `{
+		"ignoreFiles": [
+			" internal/model/authz/button.go ",
+			"",
+			"internal/model/authz/../authz/menu.go"
+		]
+	}`)
+
+	metadata, err := loadModuleCopyMetadata(moduleDir)
+
+	require.NoError(t, err)
+	require.Equal(t, []string{
+		"internal/model/authz/button.go",
+		"internal/model/authz/menu.go",
+	}, metadata.IgnoreFiles)
 }
 
 func TestLoadModuleCopyMetadataRejectsInvalidJSON(t *testing.T) {
@@ -55,6 +75,17 @@ func TestLoadModuleCopyMetadataRejectsNonStringArrayNotes(t *testing.T) {
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), moduleCopyMetadataFilename)
+}
+
+func TestLoadModuleCopyMetadataRejectsUnsafeIgnoreFiles(t *testing.T) {
+	moduleDir := t.TempDir()
+	writeModuleCopyMetadataForTest(t, moduleDir, `{"ignoreFiles":["../internal/model/authz/button.go"]}`)
+
+	_, err := loadModuleCopyMetadata(moduleDir)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), moduleCopyMetadataFilename)
+	require.Contains(t, err.Error(), "ignoreFiles")
 }
 
 func writeModuleCopyMetadataForTest(t *testing.T, moduleDir, content string) {

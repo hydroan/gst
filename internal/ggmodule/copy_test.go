@@ -3,6 +3,7 @@ package ggmodule
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -898,5 +899,81 @@ replace github.com/hydroan/gst => ./internal/gst
 	want := filepath.Join("model", "authz", "design.go")
 	if extraTargets[0] != want {
 		t.Fatalf("ExtraModelTargets()[0] = %q, want %q", extraTargets[0], want)
+	}
+}
+
+func TestBuildModuleCopyPlanIgnoresFrameworkRootRelativeFiles(t *testing.T) {
+	projectDir := t.TempDir()
+	frameworkRoot := filepath.Join(projectDir, "internal", "gst")
+	for _, dir := range []string{
+		filepath.Join(frameworkRoot, "module", "copytest"),
+		filepath.Join(frameworkRoot, "internal", "model", "copytest"),
+		filepath.Join(frameworkRoot, "internal", "service", "copytest"),
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, "go.mod"), []byte("module tmpapp\n\ngo 1.26\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "go.mod"), []byte("module github.com/hydroan/gst\n\ngo 1.26\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "module", "copytest", moduleCopyMetadataFilename), []byte(`{
+		"ignoreFiles": ["internal/model/copytest/ignored.go"]
+	}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "internal", "service", "copytest", "service.go"), []byte("package servicecopytest\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "internal", "model", "copytest", "kept.go"), []byte(`package modelcopytest
+
+import "github.com/hydroan/gst/model"
+
+type Kept struct {
+	model.Empty
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "internal", "model", "copytest", "ignored.go"), []byte(`package modelcopytest
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Ignored struct {
+	model.Empty
+}
+
+func (Ignored) Design() {
+	dsl.Create(func() {
+		dsl.Service(true)
+		dsl.Filename("missing.go")
+	})
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Chdir(projectDir)
+
+	plan, err := BuildCopyPlan("copytest", CopyOptions{})
+	if err != nil {
+		t.Fatalf("BuildCopyPlan() error = %v", err)
+	}
+
+	targets := plan.ModelTargets()
+	if !slices.Contains(targets, filepath.Join("model", "copytest", "kept.go")) {
+		t.Fatalf("ModelTargets() = %v, want kept.go", targets)
+	}
+	if slices.Contains(targets, filepath.Join("model", "copytest", "ignored.go")) {
+		t.Fatalf("ModelTargets() = %v, ignored.go should not be copied", targets)
+	}
+	if len(plan.ServiceTargets()) != 0 {
+		t.Fatalf("ServiceTargets() = %v, ignored model action should not be collected", plan.ServiceTargets())
 	}
 }
