@@ -78,7 +78,6 @@ var (
 	errEmailFlowExpired     = errors.New("email flow expired")
 	errEmailFlowThrottled   = errors.New("email flow throttled")
 	errEmailFlowKindInvalid = errors.New("email flow kind invalid")
-	errEmailUserNotFound    = errors.New("email user not found")
 
 	defaultEmailPolicy = emailPolicy{
 		VerificationTokenTTL:  24 * time.Hour,

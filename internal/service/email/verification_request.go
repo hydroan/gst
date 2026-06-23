@@ -2,9 +2,7 @@ package serviceemail
 
 import (
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/database"
 	modelemail "github.com/hydroan/gst/internal/model/email"
-	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
@@ -14,24 +12,6 @@ import (
 // verification flow for an eligible user account.
 type VerificationRequestService struct {
 	service.Base[*model.Empty, *modelemail.VerificationRequestReq, *modelemail.VerificationRequestRsp]
-}
-
-// verificationLookupUserByEmail resolves the user bound to the requested email
-// and returns errEmailUserNotFound when no account uses it. Tests can replace
-// this function to avoid database fixtures.
-var verificationLookupUserByEmail = func(ctx *types.ServiceContext, email string) (*modeliamuser.User, error) {
-	users := make([]*modeliamuser.User, 0, 1)
-	queryEmail := email
-	if err := database.Database[*modeliamuser.User](ctx.DatabaseContext()).
-		WithLimit(1).
-		WithQuery(&modeliamuser.User{Email: &queryEmail}).
-		List(&users); err != nil {
-		return nil, err
-	}
-	if len(users) == 0 {
-		return nil, errEmailUserNotFound
-	}
-	return users[0], nil
 }
 
 // Create starts an email verification flow and returns a generic acceptance
@@ -53,10 +33,14 @@ func (s *VerificationRequestService) Create(ctx *types.ServiceContext, req *mode
 		return nil, errors.Wrap(err, "failed to reserve verification request throttle")
 	}
 
-	user, err := verificationLookupUserByEmail(ctx, email)
+	user, err := currentUserProvider().FindByEmail(ctx, email)
 	if err != nil {
-		if errors.Is(err, errEmailUserNotFound) {
+		if errors.Is(err, ErrUserNotFound) {
 			return rsp, nil
+		}
+		if errors.Is(err, ErrUserProviderNotConfigured) {
+			log.Error("email user provider is not configured", err)
+			return nil, newUserProviderNotConfiguredServiceError(err)
 		}
 		log.Error("failed to load verification user", err)
 		return nil, errors.Wrap(err, "failed to load verification user")
@@ -85,17 +69,17 @@ func (s *VerificationRequestService) Create(ctx *types.ServiceContext, req *mode
 // eligibleVerificationUser ensures the verification flow is only sent to an
 // active account whose current email still matches the normalized request email
 // and has not already been verified.
-func eligibleVerificationUser(user *modeliamuser.User, email string) bool {
+func eligibleVerificationUser(user *UserSnapshot, email string) bool {
 	if user == nil || user.ID == "" {
 		return false
 	}
-	if normalizePasswordResetEmail(user.Email) != email {
+	if normalizeUserEmail(user.Email) != email {
 		return false
 	}
-	if user.Status != "" && user.Status != modeliamuser.UserStatusActive {
+	if !user.Active {
 		return false
 	}
-	return !userEmailVerified(user)
+	return !user.EmailVerified
 }
 
 // verificationDelivery builds the email payload for the verification sender.
@@ -113,7 +97,7 @@ func verificationDelivery(token string, flow iamEmailFlowState) emailDelivery {
 	}
 }
 
-// userEmailVerified safely returns the email verification flag for the user.
-func userEmailVerified(user *modeliamuser.User) bool {
-	return user != nil && user.EmailVerified != nil && *user.EmailVerified
+// userEmailVerified safely returns the email verification flag for a user snapshot.
+func userEmailVerified(user *UserSnapshot) bool {
+	return user != nil && user.EmailVerified
 }

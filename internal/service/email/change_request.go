@@ -4,12 +4,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/database"
 	modelemail "github.com/hydroan/gst/internal/model/email"
-	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // ChangeRequestService handles authenticated requests that start the email
@@ -17,33 +14,6 @@ import (
 type ChangeRequestService struct {
 	service.Base[*modelemail.ChangeRequest, *modelemail.ChangeRequestReq, *modelemail.ChangeRequestRsp]
 }
-
-var (
-	// changeLoadUserByID loads the authenticated user that initiated the change flow.
-	changeLoadUserByID = func(ctx *types.ServiceContext, userID string) (*modeliamuser.User, error) {
-		user := new(modeliamuser.User)
-		if err := database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(user, userID); err != nil {
-			return nil, err
-		}
-		return user, nil
-	}
-	// changeLookupUserByEmail loads the account currently bound to an email
-	// address and returns errEmailUserNotFound when no account uses it.
-	changeLookupUserByEmail = func(ctx *types.ServiceContext, email string) (*modeliamuser.User, error) {
-		users := make([]*modeliamuser.User, 0, 1)
-		queryEmail := email
-		if err := database.Database[*modeliamuser.User](ctx.DatabaseContext()).
-			WithLimit(1).
-			WithQuery(&modeliamuser.User{Email: &queryEmail}).
-			List(&users); err != nil {
-			return nil, err
-		}
-		if len(users) == 0 {
-			return nil, errEmailUserNotFound
-		}
-		return users[0], nil
-	}
-)
 
 // Create validates the current password, checks the target email, and issues
 // one-time confirmation and cancellation tokens for the email change flow.
@@ -57,7 +27,7 @@ func (s *ChangeRequestService) Create(ctx *types.ServiceContext, req *modelemail
 		return rsp, err
 	}
 
-	if err = verifyEmailChangePassword(user, req.CurrentPassword); err != nil {
+	if err = verifyEmailChangePassword(ctx, user.ID, req.CurrentPassword); err != nil {
 		log.Error("failed to verify email change password", err)
 		return nil, err
 	}
@@ -71,14 +41,20 @@ func (s *ChangeRequestService) Create(ctx *types.ServiceContext, req *modelemail
 
 // prepareEmailChangeRequest loads the current user and validates whether the new
 // email can enter the change flow.
-func prepareEmailChangeRequest(ctx *types.ServiceContext, newEmail string) (*modeliamuser.User, string, *modelemail.ChangeRequestRsp, error) {
+func prepareEmailChangeRequest(ctx *types.ServiceContext, newEmail string) (*UserSnapshot, string, *modelemail.ChangeRequestRsp, error) {
 	if ctx == nil || strings.TrimSpace(ctx.UserID) == "" {
 		return nil, "", nil, errors.New("authentication required")
 	}
 
-	user, err := changeLoadUserByID(ctx, ctx.UserID)
+	user, err := currentUserProvider().GetByID(ctx, ctx.UserID)
 	if err != nil {
+		if errors.Is(err, ErrUserProviderNotConfigured) {
+			return nil, "", nil, newUserProviderNotConfiguredServiceError(err)
+		}
 		return nil, "", nil, errors.Wrap(err, "failed to load current user")
+	}
+	if err = validUserSnapshot(user, ctx.UserID); err != nil {
+		return nil, "", nil, newUserProviderInvalidUserServiceError(err)
 	}
 
 	normalizedNewEmail := normalizeEmailScope(newEmail)
@@ -93,14 +69,14 @@ func prepareEmailChangeRequest(ctx *types.ServiceContext, newEmail string) (*mod
 
 // validateEmailChangeTarget ensures the current account can start an email
 // change flow to the requested target address.
-func validateEmailChangeTarget(ctx *types.ServiceContext, user *modeliamuser.User, newEmail string) error {
+func validateEmailChangeTarget(ctx *types.ServiceContext, user *UserSnapshot, newEmail string) error {
 	if user == nil || strings.TrimSpace(user.ID) == "" {
 		return errors.New("current user is required")
 	}
-	if user.Status != "" && user.Status != modeliamuser.UserStatusActive {
+	if !user.Active {
 		return errors.New("current user is not active")
 	}
-	currentEmail := normalizePasswordResetEmail(user.Email)
+	currentEmail := normalizeUserEmail(user.Email)
 	if currentEmail == "" {
 		return errors.New("current email is required")
 	}
@@ -111,10 +87,13 @@ func validateEmailChangeTarget(ctx *types.ServiceContext, user *modeliamuser.Use
 		return errors.New("new email must be different from current email")
 	}
 
-	existingUser, err := changeLookupUserByEmail(ctx, newEmail)
+	existingUser, err := currentUserProvider().FindByEmail(ctx, newEmail)
 	if err != nil {
-		if errors.Is(err, errEmailUserNotFound) {
+		if errors.Is(err, ErrUserNotFound) {
 			return nil
+		}
+		if errors.Is(err, ErrUserProviderNotConfigured) {
+			return newUserProviderNotConfiguredServiceError(err)
 		}
 		return errors.Wrap(err, "failed to lookup target email")
 	}
@@ -127,11 +106,20 @@ func validateEmailChangeTarget(ctx *types.ServiceContext, user *modeliamuser.Use
 
 // verifyEmailChangePassword re-authenticates the current user before issuing
 // email change tokens.
-func verifyEmailChangePassword(user *modeliamuser.User, password string) error {
-	if user == nil {
-		return errors.New("current user is required")
+func verifyEmailChangePassword(ctx *types.ServiceContext, userID, password string) error {
+	if strings.TrimSpace(userID) == "" {
+		return errors.New("current user id is required")
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+	if err := currentUserProvider().VerifyPassword(ctx, userID, password); err != nil {
+		if errors.Is(err, ErrUserAuthenticationFailed) {
+			return errors.New("current password is incorrect")
+		}
+		if errors.Is(err, ErrUserProviderNotConfigured) {
+			return newUserProviderNotConfiguredServiceError(err)
+		}
+		return errors.Wrap(err, "failed to verify current password")
+	}
+	if strings.TrimSpace(password) == "" {
 		return errors.New("current password is incorrect")
 	}
 	return nil
@@ -139,8 +127,8 @@ func verifyEmailChangePassword(user *modeliamuser.User, password string) error {
 
 // startEmailChangeFlow issues the required tokens and dispatches the email
 // change notifications for the target flow.
-func startEmailChangeFlow(ctx *types.ServiceContext, user *modeliamuser.User, newEmail string, includeCancel bool) error {
-	currentEmail := normalizePasswordResetEmail(user.Email)
+func startEmailChangeFlow(ctx *types.ServiceContext, user *UserSnapshot, newEmail string, includeCancel bool) error {
+	currentEmail := normalizeUserEmail(user.Email)
 	if err := clearEmailChangeCancellation(ctx.Context(), user.ID, currentEmail, newEmail); err != nil {
 		return errors.Wrap(err, "failed to clear previous email change cancellation")
 	}

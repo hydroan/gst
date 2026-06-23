@@ -36,13 +36,21 @@ func (s *ChangeCancelService) Create(ctx *types.ServiceContext, req *modelemail.
 		return nil, err
 	}
 
-	user, err := changeLoadUserByID(ctx, flow.UserID)
+	user, err := currentUserProvider().GetByID(ctx, flow.UserID)
 	if err != nil {
+		if errors.Is(err, ErrUserProviderNotConfigured) {
+			log.Error("email user provider is not configured", err)
+			return nil, newUserProviderNotConfiguredServiceError(err)
+		}
 		log.Error("failed to load email change cancellation user", err)
 		return nil, errors.Wrap(err, "failed to load email change cancellation user")
 	}
+	if err = validUserSnapshot(user, flow.UserID); err != nil {
+		log.Error("email user provider returned invalid email change cancellation user", err)
+		return nil, newUserProviderInvalidUserServiceError(err)
+	}
 
-	currentEmail := normalizePasswordResetEmail(user.Email)
+	currentEmail := normalizeUserEmail(user.Email)
 	switch currentEmail {
 	case normalizeEmailScope(flow.NewEmail):
 		return &modelemail.ChangeCancelRsp{

@@ -4,9 +4,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/database"
 	modelemail "github.com/hydroan/gst/internal/model/email"
-	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
@@ -15,25 +13,6 @@ import (
 // the email-driven password recovery flow.
 type PasswordResetRequestService struct {
 	service.Base[*modelemail.PasswordResetRequest, *modelemail.PasswordResetRequestReq, *modelemail.PasswordResetRequestRsp]
-}
-
-// passwordResetLookupUserByEmail resolves the account bound to the requested email
-// and returns errEmailUserNotFound when no account uses it. The indirection keeps
-// the production query simple and allows focused tests to stub the lookup without
-// requiring a database fixture.
-var passwordResetLookupUserByEmail = func(ctx *types.ServiceContext, email string) (*modeliamuser.User, error) {
-	users := make([]*modeliamuser.User, 0, 1)
-	queryEmail := email
-	if err := database.Database[*modeliamuser.User](ctx.DatabaseContext()).
-		WithLimit(1).
-		WithQuery(&modeliamuser.User{Email: &queryEmail}).
-		List(&users); err != nil {
-		return nil, err
-	}
-	if len(users) == 0 {
-		return nil, errEmailUserNotFound
-	}
-	return users[0], nil
 }
 
 // Create starts the password reset flow for the provided email address.
@@ -57,10 +36,14 @@ func (s *PasswordResetRequestService) Create(ctx *types.ServiceContext, req *mod
 		return nil, errors.Wrap(err, "failed to reserve password reset throttle")
 	}
 
-	user, err := passwordResetLookupUserByEmail(ctx, email)
+	user, err := currentUserProvider().FindByEmail(ctx, email)
 	if err != nil {
-		if errors.Is(err, errEmailUserNotFound) {
+		if errors.Is(err, ErrUserNotFound) {
 			return rsp, nil
+		}
+		if errors.Is(err, ErrUserProviderNotConfigured) {
+			log.Error("email user provider is not configured", err)
+			return nil, newUserProviderNotConfiguredServiceError(err)
 		}
 		log.Error("failed to load password reset user", err)
 		return nil, errors.Wrap(err, "failed to load password reset user")
@@ -88,14 +71,14 @@ func (s *PasswordResetRequestService) Create(ctx *types.ServiceContext, req *mod
 
 // eligiblePasswordResetUser ensures the reset flow is only issued for an active
 // account whose persisted email still matches the normalized request email.
-func eligiblePasswordResetUser(user *modeliamuser.User, email string) bool {
+func eligiblePasswordResetUser(user *UserSnapshot, email string) bool {
 	if user == nil || user.ID == "" {
 		return false
 	}
-	if normalizePasswordResetEmail(user.Email) != email {
+	if normalizeUserEmail(user.Email) != email {
 		return false
 	}
-	return user.Status == "" || user.Status == modeliamuser.UserStatusActive
+	return user.Active
 }
 
 // passwordResetDelivery builds the delivery payload consumed by the configured
@@ -115,12 +98,9 @@ func passwordResetDelivery(token string, flow iamEmailFlowState) emailDelivery {
 	}
 }
 
-// normalizePasswordResetEmail safely normalizes a nullable user email field.
-func normalizePasswordResetEmail(email *string) string {
-	if email == nil {
-		return ""
-	}
-	return normalizeEmailScope(*email)
+// normalizeUserEmail normalizes an email address loaded from the host user store.
+func normalizeUserEmail(email string) string {
+	return normalizeEmailScope(email)
 }
 
 // passwordResetContext returns a non-nil context for flow operations triggered by

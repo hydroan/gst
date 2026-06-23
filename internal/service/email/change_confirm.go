@@ -2,12 +2,9 @@ package serviceemail
 
 import (
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/database"
 	modelemail "github.com/hydroan/gst/internal/model/email"
-	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
@@ -16,14 +13,6 @@ import (
 // pending email change.
 type ChangeConfirmService struct {
 	service.Base[*modelemail.ChangeConfirm, *modelemail.ChangeConfirmReq, *modelemail.ChangeConfirmRsp]
-}
-
-// changeUpdateUser persists the confirmed email state for the target account.
-var changeUpdateUser = func(ctx *types.ServiceContext, user *modeliamuser.User) error {
-	return database.Database[*modeliamuser.User](ctx.DatabaseContext()).
-		WithoutHook().
-		WithSelect("email", "email_verified", "email_verified_at", "last_email_changed_at").
-		Update(user)
 }
 
 // Create consumes the confirmation token and updates the account email when the
@@ -58,13 +47,22 @@ func (s *ChangeConfirmService) Create(ctx *types.ServiceContext, req *modelemail
 		}, nil
 	}
 
-	user, err := changeLoadUserByID(ctx, flow.UserID)
+	provider := currentUserProvider()
+	user, err := provider.GetByID(ctx, flow.UserID)
 	if err != nil {
+		if errors.Is(err, ErrUserProviderNotConfigured) {
+			log.Error("email user provider is not configured", err)
+			return nil, newUserProviderNotConfiguredServiceError(err)
+		}
 		log.Error("failed to load email change confirmation user", err)
 		return nil, errors.Wrap(err, "failed to load email change confirmation user")
 	}
+	if err = validUserSnapshot(user, flow.UserID); err != nil {
+		log.Error("email user provider returned invalid email change confirmation user", err)
+		return nil, newUserProviderInvalidUserServiceError(err)
+	}
 
-	currentEmail := normalizePasswordResetEmail(user.Email)
+	currentEmail := normalizeUserEmail(user.Email)
 	switch currentEmail {
 	case normalizeEmailScope(flow.NewEmail):
 		return &modelemail.ChangeConfirmRsp{
@@ -79,9 +77,13 @@ func (s *ChangeConfirmService) Create(ctx *types.ServiceContext, req *modelemail
 		}, nil
 	}
 
-	existingUser, err := changeLookupUserByEmail(ctx, normalizeEmailScope(flow.NewEmail))
+	existingUser, err := provider.FindByEmail(ctx, normalizeEmailScope(flow.NewEmail))
 	if err != nil {
-		if !errors.Is(err, errEmailUserNotFound) {
+		if errors.Is(err, ErrUserProviderNotConfigured) {
+			log.Error("email user provider is not configured", err)
+			return nil, newUserProviderNotConfiguredServiceError(err)
+		}
+		if !errors.Is(err, ErrUserNotFound) {
 			log.Error("failed to lookup target email for confirmation", err)
 			return nil, errors.Wrap(err, "failed to lookup target email for confirmation")
 		}
@@ -93,11 +95,11 @@ func (s *ChangeConfirmService) Create(ctx *types.ServiceContext, req *modelemail
 		}, nil
 	}
 
-	if err = applyConfirmedEmailChange(user, flow.NewEmail, emailNow()); err != nil {
-		log.Error("failed to apply confirmed email change", err)
-		return nil, err
-	}
-	if err = changeUpdateUser(ctx, user); err != nil {
+	if err = provider.ChangeEmail(ctx, user.ID, flow.NewEmail, emailNow()); err != nil {
+		if errors.Is(err, ErrUserProviderNotConfigured) {
+			log.Error("email user provider is not configured", err)
+			return nil, newUserProviderNotConfiguredServiceError(err)
+		}
 		log.Error("failed to persist confirmed email change", err)
 		return nil, errors.Wrap(err, "failed to update email change state")
 	}
@@ -127,26 +129,5 @@ func validateEmailChangeFlow(flow iamEmailFlowState) error {
 	if normalizeEmailScope(flow.OldEmail) == normalizeEmailScope(flow.NewEmail) {
 		return errors.New("email change old and new email must be different")
 	}
-	return nil
-}
-
-// applyConfirmedEmailChange mutates the in-memory user model to the confirmed
-// email state before persistence.
-func applyConfirmedEmailChange(user *modeliamuser.User, newEmail string, changedAt time.Time) error {
-	if user == nil {
-		return errors.New("email change user is required")
-	}
-
-	normalizedNewEmail := normalizeEmailScope(newEmail)
-	if normalizedNewEmail == "" {
-		return errors.New("email change new email is required")
-	}
-
-	verified := true
-	changedAt = changedAt.UTC()
-	user.Email = &normalizedNewEmail
-	user.EmailVerified = &verified
-	user.EmailVerifiedAt = &changedAt
-	user.LastEmailChangedAt = &changedAt
 	return nil
 }

@@ -1,0 +1,6 @@
+{
+  "postCopyNotes": [
+    "Email account operations require serviceemail.SetUserProvider(...).",
+    "Create a project-owned adapter outside service/email, for example module/email_user_provider.go."
+  ]
+}

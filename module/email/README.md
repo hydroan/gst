@@ -2,21 +2,21 @@
 
 本文档汇总独立 `module/email` 模块提供的 email 相关接口，并按当前实现说明请求入口、请求/响应字段、令牌流转、节流控制与最终状态变化。
 
-业务项目需要这些接口时，需要在模块初始化阶段单独调用 `email.Registry()`；`iam.Register(...)` 只注册账号、用户和 session 相关接口。
+业务项目需要这些接口时，需要在模块初始化阶段单独调用 `email.Registry()`；`iam.Register(...)` 只注册账号、用户和 session 相关接口。内置 `module/email` 会在注册时安装默认 IAM `UserProvider`，复制到业务项目后的 email service 代码应由项目侧安装自己的 `serviceemail.UserProvider`。
 
 ## 接口总览
 
-| 场景 | 路由 | 是否公开 | 请求字段 | 响应字段 |
-| --- | --- | --- | --- | --- |
-| 邮箱验证申请 | `POST /api/iam/email/verification-request` | 是 | `email` | `msg` |
-| 邮箱验证重发 | `POST /api/iam/email/verification-resend` | 是 | `email` | `msg` |
-| 邮箱验证确认 | `POST /api/iam/email/verification-confirm` | 是 | `token` | `verified`, `msg` |
-| 邮箱变更申请 | `POST /api/iam/email/change-request` | 否 | `new_email`, `current_password` | `msg` |
-| 邮箱变更重发 | `POST /api/iam/email/change-resend` | 否 | `new_email` | `msg` |
-| 邮箱变更确认 | `POST /api/iam/email/change-confirm` | 否 | `token` | `changed`, `msg` |
-| 邮箱变更取消 | `POST /api/iam/email/change-cancel` | 是 | `token` | `canceled`, `msg` |
-| 密码重置申请 | `POST /api/iam/email/password-reset-request` | 是 | `email` | `msg` |
-| 密码重置确认 | `POST /api/iam/email/password-reset-confirm` | 是 | `token`, `new_password` | `reset`, `msg` |
+| 场景         | 路由                                         | 是否公开 | 请求字段                        | 响应字段          |
+| ------------ | -------------------------------------------- | -------- | ------------------------------- | ----------------- |
+| 邮箱验证申请 | `POST /api/iam/email/verification-request`   | 是       | `email`                         | `msg`             |
+| 邮箱验证重发 | `POST /api/iam/email/verification-resend`    | 是       | `email`                         | `msg`             |
+| 邮箱验证确认 | `POST /api/iam/email/verification-confirm`   | 是       | `token`                         | `verified`, `msg` |
+| 邮箱变更申请 | `POST /api/iam/email/change-request`         | 否       | `new_email`, `current_password` | `msg`             |
+| 邮箱变更重发 | `POST /api/iam/email/change-resend`          | 否       | `new_email`                     | `msg`             |
+| 邮箱变更确认 | `POST /api/iam/email/change-confirm`         | 否       | `token`                         | `changed`, `msg`  |
+| 邮箱变更取消 | `POST /api/iam/email/change-cancel`          | 是       | `token`                         | `canceled`, `msg` |
+| 密码重置申请 | `POST /api/iam/email/password-reset-request` | 是       | `email`                         | `msg`             |
+| 密码重置确认 | `POST /api/iam/email/password-reset-confirm` | 是       | `token`, `new_password`         | `reset`, `msg`    |
 
 ## 通用机制
 
@@ -26,6 +26,7 @@
 - token 默认有效期按流程区分：邮箱验证 24 小时，密码重置 30 分钟，邮箱变更确认/取消 30 分钟。
 - 公开申请接口返回通用 `msg`，避免暴露账号是否存在、邮箱是否可用、账号是否已验证等敏感信息。账号未知、账号不符合条件或被节流时，接口仍返回同类 accepted message，并且不会创建 token 或发信。
 - 确认/取消类接口会先消费一次性 token，再校验当前账号状态。即使后续状态校验失败，旧 token 也不可重复使用。
+- email service 只通过 `serviceemail.UserProvider` 读取账号快照、验证密码、更新密码或邮箱状态；具体用户表、密码哈希策略和 session 失效策略由 provider/adapter 实现。
 
 ## 总体关系图
 
@@ -60,11 +61,11 @@ sequenceDiagram
     participant API as Verification API
     participant Cache as Flow Cache
     participant Mail as Mail Sender
-    participant User as User Store
+    participant User as UserProvider
 
     Client->>API: POST verification-request / resend(email)
     API->>API: Normalize email and apply throttle
-    API->>User: Lookup active unverified user by email
+    API->>User: Lookup active unverified account by email
     alt Eligible account
         API->>Cache: Store verification flow token
         API->>Mail: Send verification email
@@ -74,7 +75,7 @@ sequenceDiagram
     end
     Client->>API: POST verification-confirm(token)
     API->>Cache: Load and consume token
-    API->>User: Load user and verify current email
+    API->>User: Load account snapshot and verify current email
     API->>User: Mark email as verified
     API-->>Client: Verification result
 ```
@@ -94,12 +95,12 @@ sequenceDiagram
     participant API as Password Reset API
     participant Cache as Flow Cache
     participant Mail as Mail Sender
-    participant User as User Store
-    participant Session as Session Cache
+    participant User as UserProvider
+    participant Session as Session Adapter
 
     Client->>API: POST password-reset-request(email)
     API->>API: Normalize email and reserve throttle
-    API->>User: Lookup active user by email
+    API->>User: Lookup active account by email
     alt Eligible account
         API->>Cache: Store reset token and flow state
         API->>Mail: Send password reset email
@@ -108,8 +109,8 @@ sequenceDiagram
     end
     Client->>API: POST password-reset-confirm(token, new_password)
     API->>Cache: Load and consume reset token
-    API->>User: Load user and verify current email
-    API->>User: Update password hash and clear must-change-password
+    API->>User: Load account snapshot and verify current email
+    API->>User: Reset password through provider
     API->>Session: Invalidate active sessions
     API-->>Client: Password reset result
 ```
@@ -131,10 +132,10 @@ sequenceDiagram
     participant API as Email Change API
     participant Cache as Flow Cache
     participant Mail as Mail Sender
-    participant User as User Store
+    participant User as UserProvider
 
     Client->>API: POST change-request(new_email, current_password)
-    API->>API: Validate authenticated user, target email, password, and throttle
+    API->>API: Validate authenticated user snapshot, target email, password, and throttle
     API->>Cache: Store confirm token
     API->>Cache: Store cancel token
     API->>Mail: Send confirm email to new address
@@ -147,7 +148,7 @@ sequenceDiagram
         Client->>API: POST change-confirm(token)
         API->>Cache: Load and consume confirm token
         API->>Cache: Check cancellation marker
-        API->>User: Update email to new address
+        API->>User: Change email to new address
     else Cancel path
         Client->>API: POST change-cancel(token)
         API->>Cache: Load and consume cancel token

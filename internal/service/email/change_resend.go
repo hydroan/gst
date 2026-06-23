@@ -23,10 +23,18 @@ func (s *ChangeResendService) Create(ctx *types.ServiceContext, req *modelemail.
 		return nil, errors.New("authentication required")
 	}
 
-	user, err := changeLoadUserByID(ctx, ctx.UserID)
+	user, err := currentUserProvider().GetByID(ctx, ctx.UserID)
 	if err != nil {
+		if errors.Is(err, ErrUserProviderNotConfigured) {
+			log.Error("email user provider is not configured", err)
+			return nil, newUserProviderNotConfiguredServiceError(err)
+		}
 		log.Error("failed to load email change resend user", err)
 		return nil, errors.Wrap(err, "failed to load current user")
+	}
+	if err = validUserSnapshot(user, ctx.UserID); err != nil {
+		log.Error("email user provider returned invalid email change resend user", err)
+		return nil, newUserProviderInvalidUserServiceError(err)
 	}
 
 	newEmail := normalizeEmailScope(req.NewEmail)
@@ -45,7 +53,7 @@ func (s *ChangeResendService) Create(ctx *types.ServiceContext, req *modelemail.
 
 	confirmToken, confirmFlow, err := issueEmailFlow(ctx.Context(), iamEmailFlowKindChangeConfirm, iamEmailFlowState{
 		UserID:   user.ID,
-		OldEmail: normalizePasswordResetEmail(user.Email),
+		OldEmail: normalizeUserEmail(user.Email),
 		NewEmail: newEmail,
 		Email:    newEmail,
 	}, 0)
