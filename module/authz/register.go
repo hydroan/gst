@@ -1,9 +1,6 @@
 package authz
 
 import (
-	"os"
-
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
 	"github.com/hydroan/gst/middleware"
@@ -53,18 +50,8 @@ import (
 //
 // Panic if creates table records failed.
 func Register() {
-	// Enable RBAC
-	os.Setenv(config.AUTH_RBAC_ENABLE, "true")
-
 	// creates table "casbin_rule".
 	model.Register[*CasbinRule]()
-
-	// create table "menus" and creates three records.
-	model.Register[*Menu](
-		&Menu{Base: model.Base{ID: model.RootID}, ParentID: model.RootID},
-		&Menu{Base: model.Base{ID: model.NoneID}, ParentID: model.RootID},
-		&Menu{Base: model.Base{ID: model.UnknownID}, ParentID: model.RootID},
-	)
 
 	// Register auth middleware before protected routes so auth handlers are attached deterministically.
 	middleware.RegisterAuth(middleware.Authz())

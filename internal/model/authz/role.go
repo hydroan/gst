@@ -38,6 +38,7 @@ type Role struct {
 }
 
 func (Role) Design() {
+	dsl.Migrate(true)
 	dsl.Route("authz/roles", func() {
 		dsl.Create(func() {
 			dsl.Service(true)

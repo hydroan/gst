@@ -19,6 +19,7 @@ type Permission struct {
 }
 
 func (Permission) Design() {
+	dsl.Migrate(true)
 	dsl.Route("authz/permissions", func() {
 		dsl.List(func() {})
 		dsl.Get(func() {})

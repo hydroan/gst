@@ -28,6 +28,7 @@ type UserRole struct {
 
 func (r *UserRole) Purge() bool { return true }
 func (UserRole) Design() {
+	dsl.Migrate(true)
 	dsl.Route("/authz/user_roles", func() {
 		dsl.Create(func() {})
 		dsl.Delete(func() {

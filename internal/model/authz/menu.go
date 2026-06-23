@@ -13,6 +13,13 @@ import (
 	"gorm.io/datatypes"
 )
 
+func init() {
+	// create table "menus" and creates records.
+	model.Register[*Menu](
+		&Menu{Base: model.Base{ID: model.RootID}, ParentID: model.RootID},
+	)
+}
+
 var (
 	RootID      = model.RootID
 	RootName    = model.RootName
@@ -61,6 +68,7 @@ type Menu struct {
 }
 
 func (Menu) Design() {
+	dsl.Migrate(true)
 	dsl.Route("authz/menus", func() {
 		dsl.Create(func() {})
 		dsl.Delete(func() {})

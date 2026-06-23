@@ -1,8 +1,11 @@
 package middleware
 
 import (
+	"os"
+
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/authz/rbac"
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
 	. "github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/types/consts"
@@ -11,7 +14,11 @@ import (
 
 // Authz authorizes requests using RBAC.
 // It derives subject from context or headers, falling back to system user.
+// Authz must be called before config.Init so config.Init can read
+// AUTH_RBAC_ENABLE from the environment and enable RBAC initialization.
 func Authz() gin.HandlerFunc {
+	os.Setenv(config.AUTH_RBAC_ENABLE, "true")
+
 	return func(c *gin.Context) {
 		var allow bool
 		var err error
