@@ -63,9 +63,20 @@ type CopyPlan struct {
 	Actions               []moduleCopyAction
 	Middleware            []moduleCopyMiddleware
 	Files                 []moduleCopyFile
-	ExtraModelFiles       []string
-	IgnoreFiles           []string
-	PostCopyNotes         []string
+	// ExtraModelFiles is warning-only upgrade guidance for files already
+	// present in TargetModelDir that do not have a matching source file under
+	// SourceModelDir in this copy plan. Module copy reports these files so
+	// callers can clean up stale local copies after framework module changes,
+	// but it must not delete them automatically because model directories can
+	// intentionally contain project-owned files.
+	ExtraModelFiles []string
+	// ExtraServiceFiles is warning-only upgrade guidance for target service
+	// files that are already present but are not produced by this copy plan.
+	// Module copy must not delete them automatically because service packages can
+	// intentionally contain project-owned adapters next to copied module code.
+	ExtraServiceFiles []string
+	IgnoreFiles       []string
+	PostCopyNotes     []string
 }
 
 // moduleCopyAction connects one DSL action to the framework service file that
@@ -191,6 +202,9 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 
 	if addServiceErr := plan.addServiceFiles(helperFiles); addServiceErr != nil {
 		return nil, addServiceErr
+	}
+	if extraServiceErr := plan.addExtraServiceFiles(); extraServiceErr != nil {
+		return nil, extraServiceErr
 	}
 	if addMiddlewareErr := plan.addMiddlewareFiles(); addMiddlewareErr != nil {
 		return nil, addMiddlewareErr
@@ -355,7 +369,13 @@ func (p *CopyPlan) addExtraModelFiles() error {
 		return fmt.Errorf("%s is not a directory", p.TargetModelDir)
 	}
 
-	sourceTargets := make(map[string]bool)
+	// Model copy is a SourceModelDir -> TargetModelDir mirror after applying the
+	// module.copy.json ignore rules and source normalization. At this point
+	// p.Files already contains every model file that this copy plan will write,
+	// so comparing TargetModelDir against those planned model targets gives a
+	// precise stale-file warning without treating ignored or project-owned files
+	// as something module copy can delete automatically.
+	expectedTargets := make(map[string]bool)
 	for _, file := range p.Files {
 		if file.Kind != moduleCopyFileModel {
 			continue
@@ -364,7 +384,7 @@ func (p *CopyPlan) addExtraModelFiles() error {
 		if relErr != nil {
 			return relErr
 		}
-		sourceTargets[rel] = true
+		expectedTargets[rel] = true
 	}
 
 	targetFiles, err := goFilesInDir(p.TargetModelDir)
@@ -376,11 +396,58 @@ func (p *CopyPlan) addExtraModelFiles() error {
 		if err != nil {
 			return err
 		}
-		if !sourceTargets[rel] {
+		if !expectedTargets[rel] {
 			p.ExtraModelFiles = append(p.ExtraModelFiles, targetPath)
 		}
 	}
 	sort.Strings(p.ExtraModelFiles)
+	return nil
+}
+
+func (p *CopyPlan) addExtraServiceFiles() error {
+	info, err := os.Stat(p.TargetServiceDir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s is not a directory", p.TargetServiceDir)
+	}
+
+	// Service copy is intentionally not a raw SourceServiceDir -> TargetServiceDir
+	// directory mirror. Action service files come from DSL ServiceFilename(),
+	// helper files come from type-based dependency discovery, and ignored source
+	// files should not become expected targets. Therefore the authoritative
+	// "current module copy output" set is the final plan.Files service/helper
+	// targets computed above, not the full list of source service files.
+	expectedTargets := make(map[string]bool)
+	for _, file := range p.Files {
+		if file.Kind != moduleCopyFileService && file.Kind != moduleCopyFileHelper {
+			continue
+		}
+		rel, relErr := filepath.Rel(p.TargetServiceDir, file.TargetPath)
+		if relErr != nil {
+			return relErr
+		}
+		expectedTargets[rel] = true
+	}
+
+	targetFiles, err := goFilesInDir(p.TargetServiceDir)
+	if err != nil {
+		return err
+	}
+	for _, targetPath := range targetFiles {
+		rel, err := filepath.Rel(p.TargetServiceDir, targetPath)
+		if err != nil {
+			return err
+		}
+		if !expectedTargets[rel] {
+			p.ExtraServiceFiles = append(p.ExtraServiceFiles, targetPath)
+		}
+	}
+	sort.Strings(p.ExtraServiceFiles)
 	return nil
 }
 
@@ -610,9 +677,20 @@ func (p *CopyPlan) ModelTargets() []string {
 	return p.targetsByKind(moduleCopyFileModel)
 }
 
-// ExtraModelTargets returns current-project model files not present in the source module.
+// ExtraModelTargets returns current-project model files that are not part of
+// the current copy plan. These are warnings only: copied model packages can
+// contain project-owned files, and module copy cannot prove an extra file is
+// obsolete just because the framework source no longer produces it.
 func (p *CopyPlan) ExtraModelTargets() []string {
 	return append([]string(nil), p.ExtraModelFiles...)
+}
+
+// ExtraServiceTargets returns current-project service files that are not part
+// of the current copy plan. These are warnings only: copied service packages can
+// contain project-owned adapters, and module copy cannot prove an extra file is
+// obsolete just because the framework source no longer produces it.
+func (p *CopyPlan) ExtraServiceTargets() []string {
+	return append([]string(nil), p.ExtraServiceFiles...)
 }
 
 // ServiceTargets returns current-project action service files that copy will merge.

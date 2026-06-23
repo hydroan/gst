@@ -145,6 +145,7 @@ func runModuleCopy(name string, opts moduleCopyOptions) error {
 	clioutput.Done("Module copied successfully")
 	printModuleCopyCleanup(name)
 	printModuleCopyExtraModelReminder(plan)
+	printModuleCopyExtraServiceReminder(plan)
 	printModuleCopyPostNotes(plan.PostCopyNotes)
 	return nil
 }
@@ -188,6 +189,7 @@ func printModuleCopyPlan(plan *ggmodule.CopyPlan) {
 	printModuleCopyPlanGroup("Service files", plan.ServiceTargets())
 	printModuleCopyPlanGroup("Helper files", plan.HelperTargets())
 	printModuleCopyExtraModelReminder(plan)
+	printModuleCopyExtraServiceReminder(plan)
 }
 
 func printModuleCopyPlanGroup(title string, files []string) {
@@ -214,6 +216,20 @@ func printModuleCopyExtraModelReminder(plan *ggmodule.CopyPlan) {
 	clioutput.Section("Extra Target Model Files")
 	clioutput.Warn("", "The target model directory contains files not present in the framework source")
 	for _, file := range extraModelFiles {
+		clioutput.Item("", "%s", file)
+	}
+	clioutput.Item("", "These files are not deleted automatically; review them before deleting")
+}
+
+func printModuleCopyExtraServiceReminder(plan *ggmodule.CopyPlan) {
+	extraServiceFiles := plan.ExtraServiceTargets()
+	if len(extraServiceFiles) == 0 {
+		return
+	}
+
+	clioutput.Section("Extra Target Service Files")
+	clioutput.Warn("", "The target service directory contains files not produced by this module copy plan")
+	for _, file := range extraServiceFiles {
 		clioutput.Item("", "%s", file)
 	}
 	clioutput.Item("", "These files are not deleted automatically; review them before deleting")

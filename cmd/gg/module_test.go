@@ -34,6 +34,30 @@ func TestPrintModuleCopyPlanReportsExtraTargetModelFilesAsWarningSection(t *test
 	}
 }
 
+func TestPrintModuleCopyPlanReportsExtraTargetServiceFilesAsWarningSection(t *testing.T) {
+	plan := &ggmodule.CopyPlan{
+		ExtraServiceFiles: []string{filepath.Join("service", "mfa", "user_authenticator.go")},
+	}
+
+	output := captureStdout(t, func() {
+		printModuleCopyPlan(plan)
+	})
+
+	for _, want := range []string{
+		"Extra Target Service Files",
+		filepath.Join("service", "mfa", "user_authenticator.go"),
+		"not produced by this module copy plan",
+		"not deleted automatically",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output missing %q:\n%s", want, output)
+		}
+	}
+	if strings.Contains(output, "Extra target service files:") {
+		t.Fatalf("output should not show extra service files as a normal plan group:\n%s", output)
+	}
+}
+
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 

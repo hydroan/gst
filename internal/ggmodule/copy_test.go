@@ -1017,6 +1017,58 @@ replace github.com/hydroan/gst => ./internal/gst
 	}
 }
 
+func TestBuildModuleCopyPlanReportsExtraTargetServiceFiles(t *testing.T) {
+	frameworkRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectDir := t.TempDir()
+	if mkdirErr := os.Mkdir(filepath.Join(projectDir, "internal"), 0o755); mkdirErr != nil {
+		t.Fatal(mkdirErr)
+	}
+	if symlinkErr := os.Symlink(frameworkRoot, filepath.Join(projectDir, "internal", "gst")); symlinkErr != nil {
+		t.Skipf("symlink not available: %v", symlinkErr)
+	}
+	if writeErr := os.WriteFile(filepath.Join(projectDir, "go.mod"), []byte(`module tmpapp
+
+go 1.26
+
+require github.com/hydroan/gst v0.0.0
+
+replace github.com/hydroan/gst => ./internal/gst
+`), 0o600); writeErr != nil {
+		t.Fatal(writeErr)
+	}
+
+	targetServiceDir := filepath.Join(projectDir, "service", "mfa")
+	if mkdirErr := os.MkdirAll(targetServiceDir, 0o755); mkdirErr != nil {
+		t.Fatal(mkdirErr)
+	}
+	extraTarget := filepath.Join(targetServiceDir, "user_authenticator.go")
+	if writeErr := os.WriteFile(extraTarget, []byte("package mfa\n"), 0o600); writeErr != nil {
+		t.Fatal(writeErr)
+	}
+	if writeErr := os.WriteFile(filepath.Join(targetServiceDir, "account_authenticator_test.go"), []byte("package mfa\n"), 0o600); writeErr != nil {
+		t.Fatal(writeErr)
+	}
+
+	t.Chdir(projectDir)
+
+	plan, err := BuildCopyPlan("mfa", CopyOptions{})
+	if err != nil {
+		t.Fatalf("BuildCopyPlan() error = %v", err)
+	}
+
+	extraTargets := plan.ExtraServiceTargets()
+	if len(extraTargets) != 1 {
+		t.Fatalf("ExtraServiceTargets() = %v, want one extra target", extraTargets)
+	}
+	want := filepath.Join("service", "mfa", "user_authenticator.go")
+	if extraTargets[0] != want {
+		t.Fatalf("ExtraServiceTargets()[0] = %q, want %q", extraTargets[0], want)
+	}
+}
+
 func TestBuildModuleCopyPlanIgnoresFrameworkRootRelativeFiles(t *testing.T) {
 	projectDir := t.TempDir()
 	frameworkRoot := filepath.Join(projectDir, "internal", "gst")

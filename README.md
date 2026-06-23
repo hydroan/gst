@@ -340,6 +340,7 @@ func init() {
 | --- | --- |
 | `gg gen` | 根据 `model` DSL 生成注册文件和 service action 文件 |
 | `gg gen --prune` | 生成后联动清理废弃 service action 文件 |
+| `gg module copy <name>` | 将内置模块复制为业务项目本地源码，并提示目标目录中的额外 model/service 文件 |
 | `gg check` | 检查业务项目结构、命名、依赖边界和 tag 约束 |
 | `gg prune` | 只扫描并清理废弃 service action 文件 |
 | `gg routes` | 按 model 层级打印当前生成的接口路径 |
