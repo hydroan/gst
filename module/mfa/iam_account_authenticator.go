@@ -8,12 +8,12 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// iamUserAuthenticator adapts the framework IAM user model for the built-in MFA
+// iamAccountAuthenticator adapts the framework IAM user model for the built-in MFA
 // module. It lives under module/mfa so copied MFA service code does not import
 // the framework IAM model or password hashing policy.
-type iamUserAuthenticator struct{}
+type iamAccountAuthenticator struct{}
 
-func (iamUserAuthenticator) AuthenticateByUsername(ctx *types.ServiceContext, username, password string) (*servicemfa.AuthenticatedUser, error) {
+func (iamAccountAuthenticator) AuthenticateByUsername(ctx *types.ServiceContext, username, password string) (*servicemfa.AuthenticatedAccount, error) {
 	users := make([]*modeliamuser.User, 0)
 	if err := database.Database[*modeliamuser.User](ctx.DatabaseContext()).
 		WithLimit(1).
@@ -22,14 +22,14 @@ func (iamUserAuthenticator) AuthenticateByUsername(ctx *types.ServiceContext, us
 		return nil, err
 	}
 	if len(users) == 0 {
-		return nil, servicemfa.ErrUserAuthenticationFailed
+		return nil, servicemfa.ErrAccountAuthenticationFailed
 	}
-	return authenticateIAMUser(users[0], password)
+	return authenticateIAMAccount(users[0], password)
 }
 
-func (iamUserAuthenticator) AuthenticateByUserID(ctx *types.ServiceContext, userID, password string) (*servicemfa.AuthenticatedUser, error) {
+func (iamAccountAuthenticator) AuthenticateByAccountID(ctx *types.ServiceContext, accountID, password string) (*servicemfa.AuthenticatedAccount, error) {
 	query := &modeliamuser.User{}
-	query.ID = userID
+	query.ID = accountID
 
 	users := make([]*modeliamuser.User, 0)
 	if err := database.Database[*modeliamuser.User](ctx.DatabaseContext()).
@@ -39,19 +39,19 @@ func (iamUserAuthenticator) AuthenticateByUserID(ctx *types.ServiceContext, user
 		return nil, err
 	}
 	if len(users) == 0 {
-		return nil, servicemfa.ErrUserAuthenticationFailed
+		return nil, servicemfa.ErrAccountAuthenticationFailed
 	}
-	return authenticateIAMUser(users[0], password)
+	return authenticateIAMAccount(users[0], password)
 }
 
-func authenticateIAMUser(user *modeliamuser.User, password string) (*servicemfa.AuthenticatedUser, error) {
+func authenticateIAMAccount(user *modeliamuser.User, password string) (*servicemfa.AuthenticatedAccount, error) {
 	if user == nil || user.Status != modeliamuser.UserStatusActive {
-		return nil, servicemfa.ErrUserAuthenticationFailed
+		return nil, servicemfa.ErrAccountAuthenticationFailed
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
-		return nil, servicemfa.ErrUserAuthenticationFailed
+		return nil, servicemfa.ErrAccountAuthenticationFailed
 	}
-	return &servicemfa.AuthenticatedUser{
+	return &servicemfa.AuthenticatedAccount{
 		ID:       user.ID,
 		Username: user.Username,
 	}, nil

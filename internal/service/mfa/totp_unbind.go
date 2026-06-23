@@ -211,20 +211,20 @@ func verifyTOTPUnbindFreshAuth(
 	}
 }
 
-// verifyTOTPUnbindPassword validates the current user's password for fresh auth.
+// verifyTOTPUnbindPassword validates the current account's password for fresh auth.
 func verifyTOTPUnbindPassword(ctx *types.ServiceContext, userID, password string) error {
-	user, err := currentUserAuthenticator().AuthenticateByUserID(ctx, userID, password)
+	account, err := currentAccountAuthenticator().AuthenticateByAccountID(ctx, userID, password)
 	if err != nil {
-		if errors.Is(err, ErrUserAuthenticatorNotConfigured) {
-			return newUserAuthenticatorNotConfiguredServiceError(err)
+		if errors.Is(err, ErrAccountAuthenticatorNotConfigured) {
+			return newAccountAuthenticatorNotConfiguredServiceError(err)
 		}
-		if errors.Is(err, ErrUserAuthenticationFailed) {
+		if errors.Is(err, ErrAccountAuthenticationFailed) {
 			return errTOTPUnbindVerificationInvalid
 		}
 		return types.NewServiceErrorWithCause(http.StatusInternalServerError, "failed to verify password", err)
 	}
-	if err := validateAuthenticatedUser(user, userID); err != nil {
-		return newUserAuthenticatorInvalidUserServiceError(err)
+	if err := validateAuthenticatedAccount(account, userID); err != nil {
+		return newAccountAuthenticatorInvalidAccountServiceError(err)
 	}
 	return nil
 }

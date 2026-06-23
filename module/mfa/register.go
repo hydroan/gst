@@ -95,10 +95,10 @@ import (
 //   - POST     /api/mfa/totp/verify
 func Register() {
 	servicemfa.Enabled = true
-	// The built-in module wires MFA to the framework IAM user store. Projects
-	// using copied MFA source should install their own UserAuthenticator from
+	// The built-in module wires MFA to the framework IAM account store. Projects
+	// using copied MFA source should install their own AccountAuthenticator from
 	// project-owned code instead of editing service/mfa.
-	servicemfa.SetUserAuthenticator(iamUserAuthenticator{})
+	servicemfa.SetAccountAuthenticator(iamAccountAuthenticator{})
 	model.Register[*modelmfa.TOTPDevice]()
 
 	module.Use[

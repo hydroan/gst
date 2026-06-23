@@ -20,7 +20,7 @@ func TestLoadModuleCopyMetadataReadsPostCopyNotes(t *testing.T) {
 	moduleDir := t.TempDir()
 	writeModuleCopyMetadataForTest(t, moduleDir, `{
 		"postCopyNotes": [
-			"Password-based MFA checks require servicemfa.SetUserAuthenticator(...).",
+				"Password-based MFA checks require servicemfa.SetAccountAuthenticator(...).",
 			"   ",
 			"Create a project-owned adapter outside service/mfa.",
 			"multi\nline"
@@ -32,7 +32,7 @@ func TestLoadModuleCopyMetadataReadsPostCopyNotes(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, []string{
-		"Password-based MFA checks require servicemfa.SetUserAuthenticator(...).",
+		"Password-based MFA checks require servicemfa.SetAccountAuthenticator(...).",
 		"Create a project-owned adapter outside service/mfa.",
 		"multi\nline",
 	}, metadata.PostCopyNotes)

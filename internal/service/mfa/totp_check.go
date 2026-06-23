@@ -8,17 +8,17 @@ import (
 	"github.com/hydroan/gst/types"
 )
 
-// TOTPCheckService handles the public pre-login check for whether a user must
+// TOTPCheckService handles the public pre-login check for whether an account must
 // complete a TOTP second-factor challenge. The service delegates primary
-// credential verification to the configured UserAuthenticator, then only reports
+// credential verification to the configured AccountAuthenticator, then only reports
 // the TOTP requirement for the authenticated account so callers cannot use the
-// endpoint to enumerate which users have MFA enabled.
+// endpoint to enumerate which accounts have MFA enabled.
 type TOTPCheckService struct {
 	service.Base[*modelmfa.TOTPCheck, *modelmfa.TOTPCheckReq, *modelmfa.TOTPCheckRsp]
 }
 
 // Create validates the primary credentials and returns whether the matched
-// user currently has any active TOTP devices. It does not issue login tokens or
+// account currently has any active TOTP devices. It does not issue login tokens or
 // verify second-factor codes; it only tells the login flow whether a follow-up
 // TOTP verification step is required.
 func (c *TOTPCheckService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPCheckReq) (rsp *modelmfa.TOTPCheckRsp, err error) {
@@ -34,36 +34,36 @@ func (c *TOTPCheckService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPC
 		return nil, errors.New("password is required")
 	}
 
-	user, err := currentUserAuthenticator().AuthenticateByUsername(ctx, req.Username, req.Password)
+	account, err := currentAccountAuthenticator().AuthenticateByUsername(ctx, req.Username, req.Password)
 	if err != nil {
-		if errors.Is(err, ErrUserAuthenticatorNotConfigured) {
-			log.Errorw("mfa user authenticator is not configured", "username", req.Username, "error", err)
-			return nil, newUserAuthenticatorNotConfiguredServiceError(err)
+		if errors.Is(err, ErrAccountAuthenticatorNotConfigured) {
+			log.Errorw("mfa account authenticator is not configured", "username", req.Username, "error", err)
+			return nil, newAccountAuthenticatorNotConfiguredServiceError(err)
 		}
-		if errors.Is(err, ErrUserAuthenticationFailed) {
+		if errors.Is(err, ErrAccountAuthenticationFailed) {
 			log.Warnw("authentication failed", "username", req.Username, "client_ip", ctx.ClientIP, "error", err)
 			return nil, errors.New("authentication failed")
 		}
-		log.Errorw("failed to authenticate user", "username", req.Username, "error", err)
+		log.Errorw("failed to authenticate account", "username", req.Username, "error", err)
 		return nil, errors.New("authentication failed")
 	}
-	if err = validateAuthenticatedUser(user, ""); err != nil {
-		log.Errorw("mfa user authenticator returned invalid user", "username", req.Username, "error", err)
-		return nil, newUserAuthenticatorInvalidUserServiceError(err)
+	if err = validateAuthenticatedAccount(account, ""); err != nil {
+		log.Errorw("mfa account authenticator returned invalid account", "username", req.Username, "error", err)
+		return nil, newAccountAuthenticatorInvalidAccountServiceError(err)
 	}
 
 	devices := make([]*modelmfa.TOTPDevice, 0)
 	if err = database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).
-		WithQuery(&modelmfa.TOTPDevice{UserID: user.ID, IsActive: true}).
+		WithQuery(&modelmfa.TOTPDevice{UserID: account.ID, IsActive: true}).
 		List(&devices); err != nil {
-		log.Errorw("failed to query TOTP devices", "user_id", user.ID, "error", err)
+		log.Errorw("failed to query TOTP devices", "user_id", account.ID, "error", err)
 		return nil, errors.New("failed to check MFA status")
 	}
 
 	requiresMFA := len(devices) > 0
 
 	// Log the check result.
-	username := user.Username
+	username := account.Username
 	if username == "" {
 		username = req.Username
 	}
@@ -71,7 +71,7 @@ func (c *TOTPCheckService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPC
 		"TOTP check completed",
 		"username", username,
 		"request_username", req.Username,
-		"user_id", user.ID,
+		"user_id", account.ID,
 		"requires_mfa", requiresMFA,
 		"active_devices", len(devices),
 		"client_ip", ctx.ClientIP,
