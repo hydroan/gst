@@ -88,8 +88,8 @@ go install ./cmd/gg
 
 ```bash
 repomix \
-  --include "**/*.go,go.mod,go.sum,Makefile,*.md,**/*.md,**/*.ini" \
-  --ignore "**/*.log,**/.env*,**/*secret*,**/*credential*,**/*key*,**/vendor/**,**/tmp/**,**/.git/**,**/node_modules/**,**/dist/**,**/coverage/**,**/testdata/**,**/testcode/**,examples/**" \
+  --include "**/*.go,go.mod,Makefile,*.md,**/*.md" \
+  --ignore "AGENTS.md,**/*_test.go,go.sum,**/*.log,**/.env*,**/*secret*,**/*credential*,**/*key*,**/vendor/**,**/tmp/**,**/.git/**,**/node_modules/**,**/dist/**,**/coverage/**,**/testdata/**,**/testcode/**,examples/**" \
   --skill-generate gst \
   --skill-output ~/.codex/skills/gst \
   --force
