@@ -1,6 +1,7 @@
 package modelmfa
 
 import (
+	. "github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 )
 
@@ -25,4 +26,13 @@ type TOTPUnbindRsp struct {
 }
 
 func (TOTPUnbind) Design() {
+	Route("mfa/totp/unbind", func() {
+		Create(func() {
+			Service(true)
+			Flatten()
+			Filename("totp_unbind.go")
+			Payload[*TOTPUnbindReq]()
+			Result[*TOTPUnbindRsp]()
+		})
+	})
 }
