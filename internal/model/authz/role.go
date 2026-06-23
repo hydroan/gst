@@ -6,6 +6,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
@@ -34,6 +35,33 @@ type Role struct {
 	Remark *string `json:"remark,omitempty" gorm:"size:10240" schema:"remark"` // Optional role description generated from menus.
 
 	model.Base
+}
+
+func (Role) Design() {
+	dsl.Route("authz/roles", func() {
+		dsl.Create(func() {
+			dsl.Service(true)
+			dsl.Flatten()
+			dsl.Filename("role.go")
+		})
+		dsl.Delete(func() {
+			dsl.Service(true)
+			dsl.Flatten()
+			dsl.Filename("role.go")
+		})
+		dsl.Update(func() {
+			dsl.Service(true)
+			dsl.Flatten()
+			dsl.Filename("role.go")
+		})
+		dsl.Patch(func() {
+			dsl.Service(true)
+			dsl.Flatten()
+			dsl.Filename("role.go")
+		})
+		dsl.List(func() {})
+		dsl.Get(func() {})
+	})
 }
 
 func (r *Role) Purge() bool                                { return true }

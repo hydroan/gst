@@ -131,19 +131,6 @@ func Register() {
 		consts.PHASE_LIST,
 	)
 
-	module.Use[
-		*Button,
-		*Button,
-		*Button](
-		&ButtonModule{},
-		consts.PHASE_CREATE,
-		consts.PHASE_DELETE,
-		consts.PHASE_UPDATE,
-		consts.PHASE_PATCH,
-		consts.PHASE_LIST,
-		consts.PHASE_GET,
-	)
-
 	log := zap.S()
 	router.OnRoutesReady(func(routes map[string][]string) error {
 		// re-create all permissions

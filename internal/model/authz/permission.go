@@ -3,6 +3,7 @@ package modelauthz
 import (
 	"fmt"
 
+	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/util"
@@ -17,7 +18,15 @@ type Permission struct {
 	model.Base
 }
 
+func (Permission) Design() {
+	dsl.Route("authz/permissions", func() {
+		dsl.List(func() {})
+		dsl.Get(func() {})
+	})
+}
+
 func (p *Permission) Purge() bool { return true }
+
 func (p *Permission) CreateBefore(*types.ModelContext) error {
 	p.SetID(util.HashID(p.Resource, p.Action))
 	p.Remark = new(fmt.Sprintf("%s %s", p.Action, p.Resource))

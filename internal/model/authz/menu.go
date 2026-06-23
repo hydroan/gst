@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"go.uber.org/zap"
@@ -57,6 +58,21 @@ type Menu struct {
 	Parent   *Menu   `json:"parent,omitempty" gorm:"foreignKey:ParentID;references:ID"` // 父路由
 
 	model.Base
+}
+
+func (Menu) Design() {
+	dsl.Route("authz/menus", func() {
+		dsl.Create(func() {})
+		dsl.Delete(func() {})
+		dsl.Update(func() {})
+		dsl.Patch(func() {})
+		dsl.List(func() {
+			dsl.Service(true)
+			dsl.Flatten()
+			dsl.Filename("menu.go")
+		})
+		dsl.Get(func() {})
+	})
 }
 
 func (m *Menu) Purge() bool                                      { return true }

@@ -1,10 +1,9 @@
 package serviceauthz
 
 import (
+	gstdao "github.com/hydroan/gst/dao"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/dao"
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
-	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
@@ -39,12 +38,12 @@ func (s *UserRoleService) DeleteAfter(ctx *types.ServiceContext, userRole *model
 func (s *UserRoleService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.UserRole) error {
 	log := s.WithServiceContext(ctx, consts.PHASE_LIST_AFTER)
 
-	userMap, err := dao.QueryModelsToMap(ctx.DatabaseContext(), func(u *modeliamuser.User) string { return u.ID }, nil)
+	userMap, err := gstdao.QueryModelsMap(ctx.DatabaseContext(), func(u *modelauthz.User) string { return u.ID }, nil)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
-	roleMap, err := dao.QueryModelsToMap(ctx.DatabaseContext(), func(r *modelauthz.Role) string { return r.ID }, nil)
+	roleMap, err := gstdao.QueryModelsMap(ctx.DatabaseContext(), func(r *modelauthz.Role) string { return r.ID }, nil)
 	if err != nil {
 		log.Error(err)
 		return err

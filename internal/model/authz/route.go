@@ -1,10 +1,20 @@
 package modelauthz
 
-import "github.com/hydroan/gst/model"
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
 
 // Routes represents the list action model for registered backend routes.
 type Routes struct {
 	model.Empty
+}
+
+func (Routes) Design() {
+	dsl.Route("routes", func() {
+		dsl.List(func() {})
+		dsl.Get(func() {})
+	})
 }
 
 // Route is a registered backend route that can be bound to a menu.

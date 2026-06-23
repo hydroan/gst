@@ -6,7 +6,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
-	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/util"
@@ -20,13 +20,32 @@ type UserRole struct {
 	RoleCode string `json:"rolecode,omitempty" schema:"rolecode"` // 角色Code, 用于 RBAC 角色控制和前端查询
 	Username string `json:"username,omitempty" schema:"username"` // 用户名, 用于 RBAC 用户控制和前端查询
 
-	User *modeliamuser.User `json:"user,omitempty" gorm:"-"`
-	Role *Role              `json:"role,omitempty" gorm:"-"`
+	User *User `json:"user,omitempty" gorm:"-"`
+	Role *Role `json:"role,omitempty" gorm:"-"`
 
 	model.Base
 }
 
 func (r *UserRole) Purge() bool { return true }
+func (UserRole) Design() {
+	dsl.Route("/authz/user_roles", func() {
+		dsl.Create(func() {})
+		dsl.Delete(func() {
+			dsl.Service(true)
+			dsl.Flatten()
+			dsl.Filename("user_role.go")
+		})
+		dsl.Update(func() {})
+		dsl.Patch(func() {})
+		dsl.List(func() {
+			dsl.Service(true)
+			dsl.Flatten()
+			dsl.Filename("user_role.go")
+		})
+		dsl.Get(func() {})
+	})
+}
+
 func (r *UserRole) CreateBefore(ctx *types.ModelContext) error {
 	if len(r.UserID) == 0 {
 		return errors.New("user_id is required")
@@ -35,8 +54,8 @@ func (r *UserRole) CreateBefore(ctx *types.ModelContext) error {
 		return errors.New("role_id is required")
 	}
 	// expands field: user and role
-	user, role := new(modeliamuser.User), new(Role)
-	if err := database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(user, r.UserID); err != nil {
+	user, role := new(User), new(Role)
+	if err := database.Database[*User](ctx.DatabaseContext()).Get(user, r.UserID); err != nil {
 		return err
 	}
 	if err := database.Database[*Role](ctx.DatabaseContext()).Get(role, r.RoleID); err != nil {
@@ -60,8 +79,8 @@ func (r *UserRole) CreateAfter(ctx *types.ModelContext) error {
 	}
 
 	// update casbin_rule field: `user`, `role`, `remark`
-	user := new(modeliamuser.User)
-	if err := database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(user, r.UserID); err != nil {
+	user := new(User)
+	if err := database.Database[*User](ctx.DatabaseContext()).Get(user, r.UserID); err != nil {
 		return err
 	}
 	casbinRules := make([]*CasbinRule, 0)

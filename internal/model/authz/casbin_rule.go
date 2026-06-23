@@ -1,6 +1,9 @@
 package modelauthz
 
-import "github.com/hydroan/gst/model"
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
 
 // CasbinRule stores Casbin policy and grouping rules.
 //
@@ -38,6 +41,10 @@ type CasbinRule struct {
 	Remark *string `json:"remark,omitempty" gorm:"size:10240" schema:"remark"` // Optional policy summary.
 
 	model.Base
+}
+
+func (CasbinRule) Design() {
+	dsl.Migrate(true)
 }
 
 // SetID intentionally ignores custom IDs because the Casbin GORM adapter manages

@@ -17,8 +17,8 @@ type RoleService struct {
 }
 
 // DeleteAfter support filter and delete multiple roles by query parameter `name`.
-func (s *RoleService) DeleteAfter(ctx *types.ServiceContext, role *modelauthz.Role) error {
-	log := s.WithServiceContext(ctx, consts.PHASE_DELETE_AFTER)
+func (r *RoleService) DeleteAfter(ctx *types.ServiceContext, role *modelauthz.Role) error {
+	log := r.WithServiceContext(ctx, consts.PHASE_DELETE_AFTER)
 	name := ctx.URL.Query().Get("name")
 	if len(name) == 0 {
 		return nil
@@ -40,21 +40,21 @@ func (s *RoleService) DeleteAfter(ctx *types.ServiceContext, role *modelauthz.Ro
 	return nil
 }
 
-func (s *RoleService) CreateAfter(ctx *types.ServiceContext, role *modelauthz.Role) error {
-	return s.remarkMenus(ctx, role)
+func (r *RoleService) CreateAfter(ctx *types.ServiceContext, role *modelauthz.Role) error {
+	return r.remarkMenus(ctx, role)
 }
 
-func (s *RoleService) UpdateAfter(ctx *types.ServiceContext, role *modelauthz.Role) error {
-	return s.remarkMenus(ctx, role)
+func (r *RoleService) UpdateAfter(ctx *types.ServiceContext, role *modelauthz.Role) error {
+	return r.remarkMenus(ctx, role)
 }
 
-func (s *RoleService) PatchAfter(ctx *types.ServiceContext, role *modelauthz.Role) error {
-	return s.remarkMenus(ctx, role)
+func (r *RoleService) PatchAfter(ctx *types.ServiceContext, role *modelauthz.Role) error {
+	return r.remarkMenus(ctx, role)
 }
 
 // remarkMenus remark role about menus
-func (s *RoleService) remarkMenus(ctx *types.ServiceContext, role *modelauthz.Role) error {
-	log := s.WithServiceContext(ctx, ctx.GetPhase())
+func (r *RoleService) remarkMenus(ctx *types.ServiceContext, role *modelauthz.Role) error {
+	log := r.WithServiceContext(ctx, ctx.GetPhase())
 
 	menus := make([]*modelauthz.Menu, 0)
 	if err := database.Database[*modelauthz.Menu](ctx.DatabaseContext()).List(&menus); err != nil {
