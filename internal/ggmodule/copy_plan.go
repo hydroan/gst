@@ -59,6 +59,7 @@ type CopyPlan struct {
 	TargetModelImportPath string
 	Actions               []moduleCopyAction
 	Files                 []moduleCopyFile
+	ExtraModelFiles       []string
 	PostCopyNotes         []string
 }
 
@@ -145,6 +146,9 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 
 	if addModelErr := plan.addModelFiles(); addModelErr != nil {
 		return nil, addModelErr
+	}
+	if extraModelErr := plan.addExtraModelFiles(); extraModelErr != nil {
+		return nil, extraModelErr
 	}
 
 	actions, err := plan.collectActions(models)
@@ -276,6 +280,47 @@ func (p *CopyPlan) addModelFiles() error {
 			Preexisting: fileExists(targetPath),
 		})
 	}
+	return nil
+}
+
+func (p *CopyPlan) addExtraModelFiles() error {
+	info, err := os.Stat(p.TargetModelDir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s is not a directory", p.TargetModelDir)
+	}
+
+	sourceTargets := make(map[string]bool)
+	for _, file := range p.Files {
+		if file.Kind != moduleCopyFileModel {
+			continue
+		}
+		rel, relErr := filepath.Rel(p.TargetModelDir, file.TargetPath)
+		if relErr != nil {
+			return relErr
+		}
+		sourceTargets[rel] = true
+	}
+
+	targetFiles, err := goFilesInDir(p.TargetModelDir)
+	if err != nil {
+		return err
+	}
+	for _, targetPath := range targetFiles {
+		rel, err := filepath.Rel(p.TargetModelDir, targetPath)
+		if err != nil {
+			return err
+		}
+		if !sourceTargets[rel] {
+			p.ExtraModelFiles = append(p.ExtraModelFiles, targetPath)
+		}
+	}
+	sort.Strings(p.ExtraModelFiles)
 	return nil
 }
 
@@ -438,6 +483,11 @@ func (p *CopyPlan) checkConflicts(force bool) error {
 // ModelTargets returns current-project model files that copy will write.
 func (p *CopyPlan) ModelTargets() []string {
 	return p.targetsByKind(moduleCopyFileModel)
+}
+
+// ExtraModelTargets returns current-project model files not present in the source module.
+func (p *CopyPlan) ExtraModelTargets() []string {
+	return append([]string(nil), p.ExtraModelFiles...)
 }
 
 // ServiceTargets returns current-project action service files that copy will merge.

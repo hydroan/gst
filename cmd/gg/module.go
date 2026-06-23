@@ -144,6 +144,7 @@ func runModuleCopy(name string, opts moduleCopyOptions) error {
 	clioutput.Section("Done")
 	clioutput.Done("Module copied successfully")
 	printModuleCopyCleanup(name)
+	printModuleCopyExtraModelReminder(plan)
 	printModuleCopyPostNotes(plan.PostCopyNotes)
 	return nil
 }
@@ -186,6 +187,7 @@ func printModuleCopyPlan(plan *ggmodule.CopyPlan) {
 	printModuleCopyPlanGroup("Model files", plan.ModelTargets())
 	printModuleCopyPlanGroup("Service files", plan.ServiceTargets())
 	printModuleCopyPlanGroup("Helper files", plan.HelperTargets())
+	printModuleCopyExtraModelReminder(plan)
 }
 
 func printModuleCopyPlanGroup(title string, files []string) {
@@ -201,6 +203,20 @@ func printModuleCopyPlanGroup(title string, files []string) {
 
 func printModuleCopyCleanup(name string) {
 	clioutput.Item("", "To remove copied module code, delete model/%s, then run: gg prune --clean-orphans", name)
+}
+
+func printModuleCopyExtraModelReminder(plan *ggmodule.CopyPlan) {
+	extraModelFiles := plan.ExtraModelTargets()
+	if len(extraModelFiles) == 0 {
+		return
+	}
+
+	clioutput.Section("Extra Target Model Files")
+	clioutput.Warn("", "The target model directory contains files not present in the framework source")
+	for _, file := range extraModelFiles {
+		clioutput.Item("", "%s", file)
+	}
+	clioutput.Item("", "These files are not deleted automatically; review them before deleting")
 }
 
 func printModuleCopyPostNotes(notes []string) {

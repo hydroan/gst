@@ -257,6 +257,67 @@ func (m *Menu) List(ctx *types.ServiceContext, req *authz.Authz) (rsp *authz.Aut
 	}
 }
 
+func TestMergeModuleServiceSourceRetargetsMethodBodyParameterNames(t *testing.T) {
+	source := []byte(`package serviceauthz
+
+import (
+	modelauthz "github.com/hydroan/gst/internal/model/authz"
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+)
+
+type UserRoleService struct {
+	service.Base[*modelauthz.UserRole, *modelauthz.UserRole, *modelauthz.UserRole]
+}
+
+func (s *UserRoleService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.UserRole) error {
+	for _, ur := range *data {
+		_ = ur
+	}
+	return nil
+}
+`)
+	target := []byte(`package authz
+
+import (
+	"dice/model/authz"
+
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+)
+
+type UserRole struct {
+	service.Base[*authz.UserRole, *authz.UserRole, *authz.UserRole]
+}
+
+func (u *UserRole) ListAfter(ctx *types.ServiceContext, userroles *[]*authz.UserRole) error {
+	return nil
+}
+`)
+
+	got, err := mergeModuleServiceSource(moduleServiceMergeInput{
+		SourcePath:            "user_role.go",
+		Source:                source,
+		TargetPath:            "service/authz/user_role.go",
+		Target:                target,
+		ModuleName:            "authz",
+		TargetModelImportPath: "dice/model/authz",
+	})
+	if err != nil {
+		t.Fatalf("mergeModuleServiceSource() error = %v", err)
+	}
+	code := string(got)
+	if !strings.Contains(code, "func (u *UserRole) ListAfter(ctx *types.ServiceContext, userroles *[]*authz.UserRole) error") {
+		t.Fatalf("target method signature was not preserved:\n%s", code)
+	}
+	if !strings.Contains(code, "for _, ur := range *userroles") {
+		t.Fatalf("source body parameter reference was not retargeted:\n%s", code)
+	}
+	if strings.Contains(code, "*data") {
+		t.Fatalf("source parameter name leaked into target body:\n%s", code)
+	}
+}
+
 func TestCollectActionsIgnoresActionsWithoutService(t *testing.T) {
 	sourceServiceDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(sourceServiceDir, "custom.go"), []byte(`package servicecopytest
@@ -519,6 +580,73 @@ func (s *RoleService) DeleteAfter(ctx *types.ServiceContext, req *modelcopytest.
 	}
 }
 
+func TestAddServiceFilesUsesFlattenServicePackage(t *testing.T) {
+	sourceServiceDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(sourceServiceDir, "role.go"), []byte(`package servicecopytest
+
+import (
+	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+)
+
+type RoleService struct {
+	service.Base[*modelcopytest.Role, *modelcopytest.Role, *modelcopytest.Role]
+}
+
+func (s *RoleService) CreateAfter(ctx *types.ServiceContext, req *modelcopytest.Role) error {
+	return nil
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	modelInfo := &gen.ModelInfo{
+		ModulePath:    "tmpapp",
+		ModelFileDir:  filepath.Join("model", "copytest"),
+		ModelFilePath: filepath.Join("model", "copytest", "role.go"),
+		ModelPkgName:  "copytest",
+		ModelName:     "Role",
+		ModelVarName:  "r",
+		Design:        &dsl.Design{Enabled: true},
+	}
+	createAction := &dsl.Action{
+		Enabled:  true,
+		Service:  true,
+		Filename: "role.go",
+		Flatten:  true,
+		Payload:  "*Role",
+		Result:   "*Role",
+		Phase:    consts.PHASE_CREATE,
+	}
+	plan := &CopyPlan{
+		Name:                  "copytest",
+		ProjectModulePath:     "tmpapp",
+		SourceServiceDir:      sourceServiceDir,
+		TargetServiceDir:      filepath.Join("service", "copytest"),
+		TargetModelImportPath: filepath.Join("tmpapp", "model", "copytest"),
+		Actions: []moduleCopyAction{
+			{
+				Action:     createAction,
+				SourcePath: filepath.Join(sourceServiceDir, "role.go"),
+				TargetPath: filepath.Join("service", "copytest", "role.go"),
+				ModelInfo:  modelInfo,
+			},
+		},
+	}
+
+	if err := plan.addServiceFiles(nil); err != nil {
+		t.Fatalf("addServiceFiles() error = %v", err)
+	}
+	code := string(plan.Files[0].Content)
+	if !strings.HasPrefix(code, "package copytest\n") {
+		t.Fatalf("flattened merged service package mismatch:\n%s", code)
+	}
+	if strings.HasPrefix(code, "package role\n") {
+		t.Fatalf("flattened merged service kept role package:\n%s", code)
+	}
+}
+
 func TestModuleCopyHelperDependencyFilesUsesTypes(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name string, content string) {
@@ -718,5 +846,57 @@ replace github.com/hydroan/gst => ./internal/gst
 		if !found {
 			t.Fatalf("plan helperTargets() = %v, want %s", helpers, helper)
 		}
+	}
+}
+
+func TestBuildModuleCopyPlanReportsExtraTargetModelFiles(t *testing.T) {
+	frameworkRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectDir := t.TempDir()
+	if mkdirErr := os.Mkdir(filepath.Join(projectDir, "internal"), 0o755); mkdirErr != nil {
+		t.Fatal(mkdirErr)
+	}
+	if symlinkErr := os.Symlink(frameworkRoot, filepath.Join(projectDir, "internal", "gst")); symlinkErr != nil {
+		t.Skipf("symlink not available: %v", symlinkErr)
+	}
+	if writeErr := os.WriteFile(filepath.Join(projectDir, "go.mod"), []byte(`module tmpapp
+
+go 1.26
+
+require github.com/hydroan/gst v0.0.0
+
+replace github.com/hydroan/gst => ./internal/gst
+`), 0o600); writeErr != nil {
+		t.Fatal(writeErr)
+	}
+
+	targetModelDir := filepath.Join(projectDir, "model", "authz")
+	if mkdirErr := os.MkdirAll(targetModelDir, 0o755); mkdirErr != nil {
+		t.Fatal(mkdirErr)
+	}
+	extraTarget := filepath.Join(targetModelDir, "design.go")
+	if writeErr := os.WriteFile(extraTarget, []byte("package authz\n"), 0o600); writeErr != nil {
+		t.Fatal(writeErr)
+	}
+	if writeErr := os.WriteFile(filepath.Join(targetModelDir, "design_test.go"), []byte("package authz\n"), 0o600); writeErr != nil {
+		t.Fatal(writeErr)
+	}
+
+	t.Chdir(projectDir)
+
+	plan, err := BuildCopyPlan("authz", CopyOptions{})
+	if err != nil {
+		t.Fatalf("BuildCopyPlan() error = %v", err)
+	}
+
+	extraTargets := plan.ExtraModelTargets()
+	if len(extraTargets) != 1 {
+		t.Fatalf("ExtraModelTargets() = %v, want one extra target", extraTargets)
+	}
+	want := filepath.Join("model", "authz", "design.go")
+	if extraTargets[0] != want {
+		t.Fatalf("ExtraModelTargets()[0] = %q, want %q", extraTargets[0], want)
 	}
 }

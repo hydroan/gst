@@ -32,7 +32,7 @@ func generateTargetServiceShell(actions []moduleCopyAction) ([]byte, error) {
 	}
 	var file *ast.File
 	for _, action := range actions {
-		next := gen.GenerateService(action.ModelInfo, action.Action, action.Action.Phase)
+		next := gen.GenerateServiceWithPackage(action.ModelInfo, action.Action, action.Action.Phase, moduleCopyServicePackageName(action))
 		if next == nil {
 			return nil, fmt.Errorf("failed to generate service shell for %s", action.Action.ServiceFilename())
 		}
@@ -49,6 +49,16 @@ func generateTargetServiceShell(actions []moduleCopyAction) ([]byte, error) {
 		return nil, err
 	}
 	return []byte(code), nil
+}
+
+func moduleCopyServicePackageName(action moduleCopyAction) string {
+	if action.Action != nil && action.Action.Flatten && action.ModelInfo != nil {
+		return action.ModelInfo.ModelPkgName
+	}
+	if action.ModelInfo == nil {
+		return ""
+	}
+	return strings.ToLower(action.ModelInfo.ModelName)
 }
 
 func appendGeneratedServiceDecls(targetFile *ast.File, generatedFile *ast.File) {
@@ -280,6 +290,11 @@ func mergeSourceServiceDecls(
 					if sourceRecv != "" && targetRecv != "" && sourceRecv != targetRecv && d.Body != nil {
 						renameIdent(d.Body, sourceRecv, targetRecv)
 					}
+					// The generated target shell owns method signatures. When a
+					// source body is grafted onto that signature, source parameter
+					// names like "data" must be retargeted to generated names like
+					// "userroles" so the copied body still compiles.
+					retargetMethodBodySignatureNames(d, targetMethod)
 					docInserts.methods[d.Name.Name] = commentGroupLines(d.Doc)
 					targetMethod.Doc = nil
 					targetMethod.Body = d.Body
@@ -538,6 +553,48 @@ func methodReceiverName(fn *ast.FuncDecl) string {
 		return ""
 	}
 	return fn.Recv.List[0].Names[0].Name
+}
+
+func retargetMethodBodySignatureNames(sourceMethod *ast.FuncDecl, targetMethod *ast.FuncDecl) {
+	if sourceMethod == nil || targetMethod == nil || sourceMethod.Body == nil || sourceMethod.Type == nil || targetMethod.Type == nil {
+		return
+	}
+	renameFieldListIdents(sourceMethod.Body, sourceMethod.Type.Params, targetMethod.Type.Params)
+	renameFieldListIdents(sourceMethod.Body, sourceMethod.Type.Results, targetMethod.Type.Results)
+}
+
+func renameFieldListIdents(body ast.Node, sourceFields *ast.FieldList, targetFields *ast.FieldList) {
+	sourceNames := fieldListNames(sourceFields)
+	targetNames := fieldListNames(targetFields)
+	for idx := 0; idx < len(sourceNames) && idx < len(targetNames); idx++ {
+		sourceName := sourceNames[idx]
+		targetName := targetNames[idx]
+		if sourceName == "" || targetName == "" || sourceName == targetName {
+			continue
+		}
+		renameIdent(body, sourceName, targetName)
+	}
+}
+
+func fieldListNames(fields *ast.FieldList) []string {
+	if fields == nil {
+		return nil
+	}
+	names := make([]string, 0, len(fields.List))
+	for _, field := range fields.List {
+		if len(field.Names) == 0 {
+			names = append(names, "")
+			continue
+		}
+		for _, name := range field.Names {
+			if name == nil {
+				names = append(names, "")
+				continue
+			}
+			names = append(names, name.Name)
+		}
+	}
+	return names
 }
 
 func renameIdent(node ast.Node, oldName string, newName string) {
