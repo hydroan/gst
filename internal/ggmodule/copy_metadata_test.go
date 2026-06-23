@@ -57,6 +57,30 @@ func TestLoadModuleCopyMetadataReadsIgnoreFiles(t *testing.T) {
 	}, metadata.IgnoreFiles)
 }
 
+func TestLoadModuleCopyMetadataReadsMiddleware(t *testing.T) {
+	moduleDir := t.TempDir()
+	writeModuleCopyMetadataForTest(t, moduleDir, `{
+		"middleware": [
+			{
+				"source": " middleware/authz.go ",
+				"auth": true,
+				"function": " Authz "
+			}
+		]
+	}`)
+
+	metadata, err := loadModuleCopyMetadata(moduleDir)
+
+	require.NoError(t, err)
+	require.Equal(t, []moduleCopyMiddlewareMetadata{
+		{
+			Source:   "middleware/authz.go",
+			Auth:     true,
+			Function: "Authz",
+		},
+	}, metadata.Middleware)
+}
+
 func TestLoadModuleCopyMetadataRejectsInvalidJSON(t *testing.T) {
 	moduleDir := t.TempDir()
 	writeModuleCopyMetadataForTest(t, moduleDir, `{`)
@@ -86,6 +110,36 @@ func TestLoadModuleCopyMetadataRejectsUnsafeIgnoreFiles(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), moduleCopyMetadataFilename)
 	require.Contains(t, err.Error(), "ignoreFiles")
+}
+
+func TestLoadModuleCopyMetadataRejectsUnsafeMiddlewareSource(t *testing.T) {
+	moduleDir := t.TempDir()
+	writeModuleCopyMetadataForTest(t, moduleDir, `{
+		"middleware": [
+			{"source": "../middleware/authz.go", "function": "Authz"}
+		]
+	}`)
+
+	_, err := loadModuleCopyMetadata(moduleDir)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), moduleCopyMetadataFilename)
+	require.Contains(t, err.Error(), "middleware")
+}
+
+func TestLoadModuleCopyMetadataRejectsInvalidMiddlewareFunction(t *testing.T) {
+	moduleDir := t.TempDir()
+	writeModuleCopyMetadataForTest(t, moduleDir, `{
+		"middleware": [
+			{"source": "middleware/authz.go", "function": "Authz()"}
+		]
+	}`)
+
+	_, err := loadModuleCopyMetadata(moduleDir)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), moduleCopyMetadataFilename)
+	require.Contains(t, err.Error(), "function")
 }
 
 func writeModuleCopyMetadataForTest(t *testing.T, moduleDir, content string) {

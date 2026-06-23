@@ -21,8 +21,9 @@ import (
 const frameworkModulePath = "github.com/hydroan/gst"
 
 const (
-	defaultModelDir   = "model"
-	defaultServiceDir = "service"
+	defaultModelDir      = "model"
+	defaultServiceDir    = "service"
+	defaultMiddlewareDir = "middleware"
 )
 
 // CopyOptions configures the local-source copy workflow.
@@ -57,8 +58,10 @@ type CopyPlan struct {
 	SourceServiceDir      string
 	TargetModelDir        string
 	TargetServiceDir      string
+	TargetMiddlewareDir   string
 	TargetModelImportPath string
 	Actions               []moduleCopyAction
+	Middleware            []moduleCopyMiddleware
 	Files                 []moduleCopyFile
 	ExtraModelFiles       []string
 	IgnoreFiles           []string
@@ -76,6 +79,17 @@ type moduleCopyAction struct {
 	ModelInfo  *gen.ModelInfo
 }
 
+// moduleCopyMiddleware connects one manifest-declared framework middleware file
+// to the project-owned file and registration call that module copy will create.
+// Unlike action service files, middleware files are copied byte-for-byte because
+// the project middleware package is the same package shape as the framework one.
+type moduleCopyMiddleware struct {
+	SourcePath string
+	TargetPath string
+	Function   string
+	Auth       bool
+}
+
 // moduleCopyFile stores final target content. Conflict checks run against this
 // final content before any file is written, so pre-existing files only need
 // --force when the copy would actually change them.
@@ -89,9 +103,10 @@ type moduleCopyFile struct {
 type moduleCopyFileKind string
 
 const (
-	moduleCopyFileModel   moduleCopyFileKind = "model"
-	moduleCopyFileService moduleCopyFileKind = "service"
-	moduleCopyFileHelper  moduleCopyFileKind = "helper"
+	moduleCopyFileModel      moduleCopyFileKind = "model"
+	moduleCopyFileService    moduleCopyFileKind = "service"
+	moduleCopyFileHelper     moduleCopyFileKind = "helper"
+	moduleCopyFileMiddleware moduleCopyFileKind = "middleware"
 )
 
 // BuildCopyPlan is the copy-ready preflight. It resolves framework source
@@ -125,6 +140,7 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 		SourceServiceDir:      filepath.Join(frameworkRoot, "internal", "service", name),
 		TargetModelDir:        filepath.Join(opts.modelDir(), name),
 		TargetServiceDir:      filepath.Join(opts.serviceDir(), name),
+		TargetMiddlewareDir:   defaultMiddlewareDir,
 		TargetModelImportPath: filepath.Join(projectModule, opts.modelDir(), name),
 	}
 
@@ -137,6 +153,11 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 	}
 	plan.PostCopyNotes = metadata.PostCopyNotes
 	plan.IgnoreFiles = metadata.IgnoreFiles
+	middleware, err := plan.resolveMiddleware(metadata.Middleware)
+	if err != nil {
+		return nil, err
+	}
+	plan.Middleware = middleware
 
 	if registerErr := checkModuleNotRegistered(name); registerErr != nil {
 		return nil, registerErr
@@ -170,6 +191,9 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 
 	if addServiceErr := plan.addServiceFiles(helperFiles); addServiceErr != nil {
 		return nil, addServiceErr
+	}
+	if addMiddlewareErr := plan.addMiddlewareFiles(); addMiddlewareErr != nil {
+		return nil, addMiddlewareErr
 	}
 	if conflictErr := plan.checkConflicts(opts.Force); conflictErr != nil {
 		return nil, conflictErr
@@ -483,6 +507,65 @@ func (p *CopyPlan) addServiceFiles(helperFiles []string) error {
 	return nil
 }
 
+func (p *CopyPlan) resolveMiddleware(metadata []moduleCopyMiddlewareMetadata) ([]moduleCopyMiddleware, error) {
+	middleware := make([]moduleCopyMiddleware, 0, len(metadata))
+	for _, item := range metadata {
+		// The manifest stores framework-root relative paths so module.copy.json
+		// remains stable no matter whether copy runs from gst itself or from a
+		// consumer project with internal/gst symlinked in.
+		sourcePath := filepath.Join(p.FrameworkRoot, filepath.FromSlash(item.Source))
+		targetPath := filepath.Join(p.TargetMiddlewareDir, filepath.Base(item.Source))
+		if err := requireMiddlewareSourceFile(sourcePath, item.Function); err != nil {
+			return nil, err
+		}
+		middleware = append(middleware, moduleCopyMiddleware{
+			SourcePath: sourcePath,
+			TargetPath: targetPath,
+			Function:   item.Function,
+			Auth:       item.Auth,
+		})
+	}
+	sort.Slice(middleware, func(i, j int) bool {
+		return middleware[i].TargetPath < middleware[j].TargetPath
+	})
+	return middleware, nil
+}
+
+func requireMiddlewareSourceFile(sourcePath string, function string) error {
+	if _, err := os.Stat(sourcePath); err != nil {
+		return fmt.Errorf("source middleware file not found for %s: %w", filepath.Base(sourcePath), err)
+	}
+
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, sourcePath, nil, parser.ParseComments)
+	if err != nil {
+		return err
+	}
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if ok && fn.Recv == nil && fn.Name != nil && fn.Name.Name == function {
+			return nil
+		}
+	}
+	return fmt.Errorf("source middleware file %s does not declare function %s", sourcePath, function)
+}
+
+func (p *CopyPlan) addMiddlewareFiles() error {
+	for _, middleware := range p.Middleware {
+		src, err := os.ReadFile(middleware.SourcePath)
+		if err != nil {
+			return err
+		}
+		p.Files = append(p.Files, moduleCopyFile{
+			Kind:        moduleCopyFileMiddleware,
+			TargetPath:  middleware.TargetPath,
+			Content:     src,
+			Preexisting: fileExists(middleware.TargetPath),
+		})
+	}
+	return nil
+}
+
 func groupActionsByTargetPath(actions []moduleCopyAction) [][]moduleCopyAction {
 	if len(actions) == 0 {
 		return nil
@@ -540,6 +623,12 @@ func (p *CopyPlan) ServiceTargets() []string {
 // HelperTargets returns current-project helper service files that copy will write.
 func (p *CopyPlan) HelperTargets() []string {
 	return p.targetsByKind(moduleCopyFileHelper)
+}
+
+// MiddlewareTargets returns manifest-declared middleware files copied into the
+// current project's middleware package.
+func (p *CopyPlan) MiddlewareTargets() []string {
+	return p.targetsByKind(moduleCopyFileMiddleware)
 }
 
 func (p *CopyPlan) targetsByKind(kind moduleCopyFileKind) []string {

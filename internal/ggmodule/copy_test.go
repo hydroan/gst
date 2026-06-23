@@ -850,6 +850,121 @@ replace github.com/hydroan/gst => ./internal/gst
 	}
 }
 
+func TestBuildModuleCopyPlanIncludesAuthzMiddlewareFiles(t *testing.T) {
+	frameworkRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectDir := t.TempDir()
+	if mkdirErr := os.Mkdir(filepath.Join(projectDir, "internal"), 0o755); mkdirErr != nil {
+		t.Fatal(mkdirErr)
+	}
+	if symlinkErr := os.Symlink(frameworkRoot, filepath.Join(projectDir, "internal", "gst")); symlinkErr != nil {
+		t.Skipf("symlink not available: %v", symlinkErr)
+	}
+	if writeErr := os.WriteFile(filepath.Join(projectDir, "go.mod"), []byte(`module tmpapp
+
+go 1.26
+
+require github.com/hydroan/gst v0.0.0
+
+replace github.com/hydroan/gst => ./internal/gst
+`), 0o600); writeErr != nil {
+		t.Fatal(writeErr)
+	}
+
+	t.Chdir(projectDir)
+
+	plan, err := BuildCopyPlan("authz", CopyOptions{})
+	if err != nil {
+		t.Fatalf("BuildCopyPlan() error = %v", err)
+	}
+
+	targets := plan.MiddlewareTargets()
+	if !slices.Contains(targets, filepath.Join("middleware", "authz.go")) {
+		t.Fatalf("MiddlewareTargets() = %v, want middleware/authz.go", targets)
+	}
+}
+
+func TestCopyExecutionCopiesMiddlewareAndRegistersAuth(t *testing.T) {
+	projectDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(projectDir, "middleware"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, "middleware", "middleware.go"), []byte(`package middleware
+
+func init() {
+	// keep existing comments
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Chdir(projectDir)
+
+	source := []byte(`package middleware
+
+func Authz() any {
+	return nil
+}
+`)
+	plan := &CopyPlan{
+		Name:                "authz",
+		ModelDir:            "model",
+		ServiceDir:          "service",
+		TargetMiddlewareDir: "middleware",
+		Files: []moduleCopyFile{
+			{
+				Kind:       moduleCopyFileMiddleware,
+				TargetPath: filepath.Join("middleware", "authz.go"),
+				Content:    source,
+			},
+		},
+		Middleware: []moduleCopyMiddleware{
+			{
+				SourcePath: filepath.Join("internal", "gst", "middleware", "authz.go"),
+				TargetPath: filepath.Join("middleware", "authz.go"),
+				Function:   "Authz",
+				Auth:       true,
+			},
+		},
+	}
+	exec := &CopyExecution{
+		Plan:    plan,
+		Options: CopyOptions{},
+		RunGen: func() error {
+			return nil
+		},
+	}
+
+	if err := exec.Run(); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	copied, err := os.ReadFile(filepath.Join(projectDir, "middleware", "authz.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(copied) != string(source) {
+		t.Fatalf("copied middleware source changed:\n%s", copied)
+	}
+
+	registered, err := os.ReadFile(filepath.Join(projectDir, "middleware", "middleware.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	code := string(registered)
+	if !strings.Contains(code, `"github.com/hydroan/gst/middleware"`) {
+		t.Fatalf("middleware registration import missing:\n%s", code)
+	}
+	if !strings.Contains(code, "middleware.RegisterAuth(Authz())") {
+		t.Fatalf("auth middleware registration missing:\n%s", code)
+	}
+	if strings.Contains(code, "gstmiddleware") {
+		t.Fatalf("middleware registration used an unnecessary alias:\n%s", code)
+	}
+}
+
 func TestBuildModuleCopyPlanReportsExtraTargetModelFiles(t *testing.T) {
 	frameworkRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {

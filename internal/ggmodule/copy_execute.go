@@ -63,6 +63,32 @@ func (e *CopyExecution) Run() error {
 		}
 	}
 
+	if len(e.Plan.Middleware) > 0 {
+		clioutput.Section("Copy Middleware Files")
+		for _, file := range e.Plan.Files {
+			if file.Kind != moduleCopyFileMiddleware {
+				continue
+			}
+			if err := e.write(file); err != nil {
+				return err
+			}
+		}
+
+		clioutput.Section("Register Middleware")
+		status, path, err := e.registerMiddleware()
+		if err != nil {
+			return err
+		}
+		switch status {
+		case "SKIP":
+			clioutput.Item("SKIP", "%s", path)
+		case "UPDATE":
+			clioutput.Status(clioutput.StyleWarn, clioutput.SymbolSuccess, "UPDATE", "%s", path)
+		case "CREATE":
+			clioutput.Success("CREATE", "%s", path)
+		}
+	}
+
 	return nil
 }
 
@@ -76,6 +102,13 @@ func (e *CopyExecution) write(file moduleCopyFile) error {
 	}
 	if file.Kind == moduleCopyFileModel {
 		safePath, err := pathUnderRoot(file.TargetPath, e.Plan.ModelDir)
+		if err != nil {
+			return err
+		}
+		file.TargetPath = safePath
+	}
+	if file.Kind == moduleCopyFileMiddleware {
+		safePath, err := pathUnderRoot(file.TargetPath, e.Plan.targetMiddlewareDir())
 		if err != nil {
 			return err
 		}

@@ -1,5 +1,12 @@
 {
   "ignoreFiles": [
     "internal/model/authz/button.go"
+  ],
+  "middleware": [
+    {
+      "source": "middleware/authz.go",
+      "auth": true,
+      "function": "Authz"
+    }
   ]
 }
