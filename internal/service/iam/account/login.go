@@ -8,7 +8,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
-	modeliamgroup "github.com/hydroan/gst/internal/model/iam/group"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
@@ -123,10 +122,6 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		// Don't fail the login for this
 	}
 
-	// Query the group of the user
-	group := new(modeliamgroup.Group)
-	_ = database.Database[*modeliamgroup.Group](ctx.DatabaseContext()).Get(group, user.GroupID)
-
 	// Parse user agent for session info
 
 	// Create session
@@ -144,8 +139,6 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		Status:             string(user.Status),
 		FirstName:          user.FirstName,
 		LastName:           user.LastName,
-		GroupID:            user.GroupID,
-		GroupName:          group.Name,
 		MustChangePassword: user.MustChangePassword,
 		ClientIP:           ctx.ClientIP,
 		UserAgent:          ctx.Request.UserAgent(),

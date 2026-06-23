@@ -141,10 +141,6 @@ func (UserPatchService) Patch(ctx *types.ServiceContext, req *modeliamuser.UserP
 	}
 
 	columns := []string{"username"}
-	if req.GroupID != nil {
-		target.GroupID = *req.GroupID
-		columns = append(columns, "group_id")
-	}
 	if req.Email != nil {
 		target.Email = req.Email
 		columns = append(columns, "email")
@@ -180,10 +176,6 @@ func (UserPatchService) Patch(ctx *types.ServiceContext, req *modeliamuser.UserP
 	if req.Gender != nil {
 		target.Gender = req.Gender
 		columns = append(columns, "gender")
-	}
-	if req.TenantID != nil {
-		target.TenantID = req.TenantID
-		columns = append(columns, "tenant_id")
 	}
 	if len(columns) == 1 {
 		return nil, types.NewServiceError(http.StatusBadRequest, "patch fields are required")

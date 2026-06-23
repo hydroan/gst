@@ -31,8 +31,6 @@ type AdminSessionUserView struct {
 	Email              string        `json:"email"`
 	FirstName          *string       `json:"first_name,omitempty"`
 	LastName           *string       `json:"last_name,omitempty"`
-	GroupID            string        `json:"group_id,omitempty"`
-	GroupName          string        `json:"group_name,omitempty"`
 	Status             string        `json:"status"`
 	MustChangePassword bool          `json:"must_change_password"`
 	SessionTotal       int64         `json:"session_total"`

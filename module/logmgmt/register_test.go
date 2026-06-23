@@ -14,9 +14,10 @@ import (
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/helper"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
+	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/module/logmgmt"
 	"github.com/hydroan/gst/types/consts"
@@ -24,15 +25,17 @@ import (
 )
 
 var (
-	token = "-"
-	port  = 8000
+	token        = "-"
+	port         = 8000
+	rootUsername = "root"
+	rootPassword = "12345678"
 
 	signupAPI       = fmt.Sprintf("http://localhost:%d/api/signup", port)
 	loginAPI        = fmt.Sprintf("http://localhost:%d/api/login", port)
 	logoutAPI       = fmt.Sprintf("http://localhost:%d/api/logout", port)
 	loginlogAPI     = fmt.Sprintf("http://localhost:%d/api/log/loginlog", port)
 	operationlogAPI = fmt.Sprintf("http://localhost:%d/api/log/operationlog", port)
-	groupAPI        = fmt.Sprintf("http://localhost:%d/api/iam/groups", port)
+	roleAPI         = fmt.Sprintf("http://localhost:%d/api/authz/roles", port)
 )
 
 type ListResponse[T any] struct {
@@ -56,7 +59,17 @@ func init() {
 	}
 
 	go func() {
-		iam.Register()
+		iam.Register(iam.Config{
+			DefaultUsers: []*iam.User{
+				{
+					Base:     model.Base{ID: "root"},
+					Type:     "admin",
+					Username: rootUsername,
+					Password: rootPassword,
+				},
+			},
+		})
+		authz.Register()
 		logmgmt.Register()
 
 		if err := bootstrap.Run(); err != nil {
@@ -84,6 +97,7 @@ func TestLogmgmt(t *testing.T) {
 	password := "12345678"
 	userID := ""
 	var sessionID string
+	var adminSessionID string
 
 	t.Run("loginlog", func(t *testing.T) {
 		// signup a user
@@ -278,40 +292,51 @@ func TestLogmgmt(t *testing.T) {
 			})
 		})
 
-		t.Run("create-group", func(t *testing.T) {
-			logmgmtSetSuperuser(t, username, true)
-
-			cli, err := client.New(groupAPI, client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: sessionID,
-			}))
+		t.Run("login-root", func(t *testing.T) {
+			cli, err := client.New(loginAPI)
 			require.NoError(t, err)
 
-			resp, err := cli.Create(iam.Group{
-				Name: "g1",
+			resp, err := cli.Create(iam.LoginReq{
+				Username: rootUsername,
+				Password: rootPassword,
 			})
 			require.NoError(t, err)
 
-			helper.TestResp(t, resp, func(t *testing.T, rsp *iam.Group) {
+			helper.TestResp(t, resp, func(t *testing.T, rsp *iam.LoginRsp) {
+				t.Helper()
+				require.NotEmpty(t, rsp.SessionID)
+				adminSessionID = rsp.SessionID
+			})
+		})
+
+		t.Run("create-role", func(t *testing.T) {
+			cli, err := client.New(roleAPI, client.WithCookie(&http.Cookie{
+				Name:  "session_id",
+				Value: adminSessionID,
+			}))
+			require.NoError(t, err)
+
+			createReq := &authz.Role{
+				Name: "Logmgmt Test Role",
+				Code: "logmgmt_test_role",
+			}
+			resp, err := cli.Create(createReq)
+			require.NoError(t, err)
+
+			helper.TestResp(t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper(
-				// #*modeliamgroup.Group {
-				//   +Name        => "g1" #string
-				//   +Type        => "regular" #modeliamgroup.GroupType
-				//   +Status      => "active" #modeliamgroup.GroupStatus
-				//   +ParentID    => *string(nil)
-				//   +Path        => "" #string
-				//   +Level       => 0 #int
-				//   +TenantID    => *string(nil)
-				//   +Tenant      => *modeliam.Tenant(nil)
-				//   +Base        => #model.Base {
-				//     +ID        => "019cbcc5-0da0-7874-bd81-740fa7fdfe1f" #string
-				//     +CreatedBy => "user01" #string
+				// #*modelauthz.Role {
+				//   +Name => "Logmgmt Test Role" #string
+				//   +Code => "logmgmt_test_role" #string
+				//   +Base => #model.Base {
+				//     +ID => "019cbcc5-0da0-7874-bd81-740fa7fdfe1f" #string
 				//   }
 				// }
 				)
 
 				require.NotNil(t, rsp)
-				require.Equal(t, "g1", rsp.Name)
+				require.Equal(t, createReq.Name, rsp.Name)
+				require.Equal(t, createReq.Code, rsp.Code)
 			})
 		})
 
@@ -336,20 +361,20 @@ func TestLogmgmt(t *testing.T) {
 				// #logmgmt_test.ListResponse[*github.com/hydroan/gst/internal/model/logmgmt.OperationLog] {
 				//   +Items => #[]*modellogmgmt.OperationLog [
 				//     0 => #*modellogmgmt.OperationLog {
-				//       +User        => "user01" #string
+				//       +User        => "root" #string
 				//       +IP          => "::1" #string
 				//       +OP          => "create" #consts.OP
-				//       +Table       => "groups" #string
-				//       +Model       => "Group" #string
+				//       +Table       => "roles" #string
+				//       +Model       => "Role" #string
 				//       +RecordID    => "019cbcc7-3f8e-7c96-b369-e3e16b543a23" #string
 				//       +RecordName  => "" #string
-				//       +Record      => "{"name":"g1","type":"regular","status":"active","parent_id":null,"path":"","level":0,"tenant_id":null,"id":"019cbcc7-3f8e-7c96-b369-e3e16b543a23","created_by":"user01","updated_by":"user01","created_at":"2026-03-05T14:55:00.494825+08:00","updated_at":"2026-03-05T14:55:00.494848+08:00"}" #string
-				//       +Request     => "{"name":"g1","type":"regular","status":"active","parent_id":null,"path":"","level":0,"tenant_id":null,"id":"019cbcc7-3f8e-7c96-b369-e3e16b543a23","created_by":"user01","updated_by":"user01","created_at":"2026-03-05T14:55:00.494825+08:00","updated_at":"2026-03-05T14:55:00.494848+08:00"}" #string
-				//       +Response    => "{"name":"g1","type":"regular","status":"active","parent_id":null,"path":"","level":0,"tenant_id":null,"id":"019cbcc7-3f8e-7c96-b369-e3e16b543a23","created_by":"user01","updated_by":"user01","created_at":"2026-03-05T14:55:00.494825+08:00","updated_at":"2026-03-05T14:55:00.494848+08:00"}" #string
+				//       +Record      => "{"name":"Logmgmt Test Role","code":"logmgmt_test_role","id":"019cbcc7-3f8e-7c96-b369-e3e16b543a23","created_by":"root","updated_by":"root","created_at":"2026-03-05T14:55:00.494825+08:00","updated_at":"2026-03-05T14:55:00.494848+08:00"}" #string
+				//       +Request     => "{"name":"Logmgmt Test Role","code":"logmgmt_test_role","id":"019cbcc7-3f8e-7c96-b369-e3e16b543a23","created_by":"root","updated_by":"root","created_at":"2026-03-05T14:55:00.494825+08:00","updated_at":"2026-03-05T14:55:00.494848+08:00"}" #string
+				//       +Response    => "{"name":"Logmgmt Test Role","code":"logmgmt_test_role","id":"019cbcc7-3f8e-7c96-b369-e3e16b543a23","created_by":"root","updated_by":"root","created_at":"2026-03-05T14:55:00.494825+08:00","updated_at":"2026-03-05T14:55:00.494848+08:00"}" #string
 				//       +OldRecord   => "" #string
 				//       +NewRecord   => "" #string
 				//       +Method      => "POST" #string
-				//       +URI         => "/api/iam/groups" #string
+				//       +URI         => "/api/authz/roles" #string
 				//       +UserAgent   => "gst" #string
 				//       +RequestID   => "d6kihh65shg82oca209g" #string
 				//       +Base        => #model.Base {
@@ -364,22 +389,12 @@ func TestLogmgmt(t *testing.T) {
 				require.Len(t, rsp.Items, 1)
 				l := rsp.Items[0]
 				require.NotNil(t, l)
-				require.Equal(t, l.User, username)
+				require.Equal(t, rootUsername, l.User)
 				require.Equal(t, consts.OP_CREATE, l.OP)
-				require.Equal(t, "groups", l.Table)
-				require.Equal(t, "Group", l.Model)
+				require.Equal(t, "roles", l.Table)
+				require.Equal(t, "Role", l.Model)
+				require.Equal(t, "/api/authz/roles", l.URI)
 			})
 		})
 	})
-}
-
-func logmgmtSetSuperuser(t *testing.T, username string, enabled bool) {
-	t.Helper()
-
-	users := make([]*iam.User, 0)
-	require.NoError(t, database.Database[*iam.User](nil).WithLimit(1).WithQuery(&iam.User{Username: username}).List(&users))
-	require.Len(t, users, 1)
-
-	users[0].IsSuperuser = &enabled
-	require.NoError(t, database.Database[*iam.User](nil).Update(users[0]))
 }

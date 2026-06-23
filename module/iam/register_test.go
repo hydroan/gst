@@ -26,8 +26,6 @@ var (
 	resetpasswordAPI  = fmt.Sprintf("http://localhost:%d/api/iam/reset-password", port)
 	accountstatusAPI  = fmt.Sprintf("http://localhost:%d/api/iam/account-status", port)
 	userAPI           = fmt.Sprintf("http://localhost:%d/api/iam/users", port)
-	groupAPI          = fmt.Sprintf("http://localhost:%d/api/iam/groups", port)
-	tenantAPI         = fmt.Sprintf("http://localhost:%d/api/iam/tenants", port)
 	currentAPI        = fmt.Sprintf("http://localhost:%d/api/iam/session/current", port)
 )
 
@@ -46,7 +44,7 @@ func init() {
 	os.Setenv(config.LOGGER_DIR, "./logs")
 	os.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)
 
-	iam.Register(iam.Config{EnableTenant: true})
+	iam.Register()
 	if err := bootstrap.Bootstrap(); err != nil {
 		panic(err)
 	}

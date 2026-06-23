@@ -11,6 +11,7 @@ import (
 	"github.com/hydroan/gst/internal/helper"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/response"
@@ -67,6 +68,9 @@ func accountCleanupUser(t *testing.T, username string) {
 		return
 	}
 
+	for _, user := range users {
+		serviceiamsession.InvalidateUserSessions(user.ID)
+	}
 	require.NoError(t, database.Database[*iam.User](nil).Delete(users...))
 }
 
@@ -132,6 +136,22 @@ func TestAccountSignup(t *testing.T) {
 
 	require.NotEmpty(t, user.UserID)
 	require.NotEmpty(t, user.Username)
+}
+
+func TestAccountCleanupUserRevokesSessions(t *testing.T) {
+	require.NoError(t, redis.RemovePrefix(modeliamsession.SessionNamespacePrefix))
+	t.Cleanup(func() {
+		require.NoError(t, redis.RemovePrefix(modeliamsession.SessionNamespacePrefix))
+	})
+
+	user := accountSignupUser(t, "acct_cleanup_session", "12345678")
+	user.SessionID = accountLoginUser(t, &user, user.Password)
+	accountRequireUserSessionContains(t, user.UserID, user.SessionID)
+
+	accountCleanupUser(t, user.Username)
+
+	accountRequireSessionNotFound(t, user.SessionID)
+	accountRequireUserSessionNotContains(t, user.UserID, user.SessionID)
 }
 
 func TestAccountLogin(t *testing.T) {
@@ -226,39 +246,6 @@ func TestAccountChangePassword(t *testing.T) {
 		_, err = cli.List(&items, total)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
-	})
-}
-
-func TestAccountGroups(t *testing.T) {
-	user := accountSignupUser(t, "acct_groups", "12345678")
-	user.SessionID = accountLoginUser(t, &user, user.Password)
-
-	cli, err := client.New(groupAPI, client.WithCookie(&http.Cookie{
-		Name:  "session_id",
-		Value: user.SessionID,
-	}))
-	require.NoError(t, err)
-
-	t.Run("forbidden_when_not_superuser", func(t *testing.T) {
-		items := make([]*iam.Group, 0)
-		total := new(int64)
-		_, err = cli.List(&items, total)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-	})
-
-	t.Run("list_groups_after_promote_superuser", func(t *testing.T) {
-		userSetSuperuser(t, user.Username, true)
-
-		items := make([]*iam.Group, 0)
-		total := new(int64)
-		resp, err := cli.List(&items, total)
-		require.NoError(t, err)
-
-		helper.TestResp(t, resp, func(t *testing.T, rsp ListResponse[*iam.Group]) {
-			t.Helper()
-			require.Empty(t, rsp.Items)
-		})
 	})
 }
 

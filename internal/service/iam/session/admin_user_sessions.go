@@ -6,7 +6,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
-	modeliamgroup "github.com/hydroan/gst/internal/model/iam/group"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/model"
@@ -117,17 +116,9 @@ func buildAdminUserSessionsView(ctx *types.ServiceContext, user *modeliamuser.Us
 		Email:              util.Deref(user.Email),
 		FirstName:          user.FirstName,
 		LastName:           user.LastName,
-		GroupID:            user.GroupID,
 		Status:             string(user.Status),
 		MustChangePassword: user.MustChangePassword,
 		Sessions:           make([]modeliamsession.SessionView, 0),
-	}
-
-	if user.GroupID != "" {
-		group := new(modeliamgroup.Group)
-		if err := database.Database[*modeliamgroup.Group](ctx.DatabaseContext()).Get(group, user.GroupID); err == nil {
-			view.GroupName = group.Name
-		}
 	}
 
 	sessionIDs, err := listUserSessionIDs(user.ID)
@@ -153,10 +144,6 @@ func buildAdminUserSessionsView(ctx *types.ServiceContext, user *modeliamuser.Us
 		if session.UserID != user.ID {
 			_ = redis.ZRem(modeliamsession.SessionUserKey(user.ID), sessionID)
 			continue
-		}
-
-		if view.GroupName == "" {
-			view.GroupName = session.GroupName
 		}
 
 		view.Sessions = append(view.Sessions, buildCurrentSessionView(session, currentSessionID))

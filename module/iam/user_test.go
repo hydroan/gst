@@ -11,6 +11,7 @@ import (
 	"github.com/hydroan/gst/internal/helper"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/response"
@@ -641,6 +642,9 @@ func userCleanupUser(t *testing.T, username string) {
 		return
 	}
 
+	for _, user := range users {
+		serviceiamsession.InvalidateUserSessions(user.ID)
+	}
 	require.NoError(t, database.Database[*iam.User](nil).Delete(users...))
 }
 

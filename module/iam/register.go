@@ -8,9 +8,7 @@ import (
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	serviceiamemail "github.com/hydroan/gst/internal/service/iam/email"
-	serviceiamgroup "github.com/hydroan/gst/internal/service/iam/group"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
-	serviceiamtenant "github.com/hydroan/gst/internal/service/iam/tenant"
 	serviceiamuser "github.com/hydroan/gst/internal/service/iam/user"
 	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/model"
@@ -24,7 +22,6 @@ var iamConfig Config
 
 // Config is the configuration for iam module.
 type Config struct {
-	EnableTenant      bool          // EnableTenant enables tenant module, default is false
 	DefaultUsers      []*User       // DefaultUsers are default users to create on registration
 	SessionExpiration time.Duration // SessionExpiration is the session expiration time, default is 8 hours
 }
@@ -58,18 +55,6 @@ type Config struct {
 //   - PATCH  /api/iam/users/:id
 //   - GET    /api/iam/users
 //   - GET    /api/iam/users/:id
-//   - POST   /api/iam/groups
-//   - DELETE /api/iam/groups/:id
-//   - PUT    /api/iam/groups/:id
-//   - PATCH  /api/iam/groups/:id
-//   - GET    /api/iam/groups
-//   - GET    /api/iam/groups/:id
-//   - POST   /api/iam/tenants
-//   - DELETE /api/iam/tenants/:id
-//   - PUT    /api/iam/tenants/:id
-//   - PATCH  /api/iam/tenants/:id
-//   - GET    /api/iam/tenants
-//   - GET    /api/iam/tenants/:id
 //
 // Email workflow routes:
 //   - POST   /api/iam/email/verification-confirm
@@ -89,7 +74,6 @@ type Config struct {
 //   - CleanupOnlineUser runs every 30 seconds and starts immediately after bootstrap
 //
 // Configuration:
-//   - Tenant routes are registered only when EnableTenant is true
 //   - SessionExpiration defaults to 8 hours when not configured
 //
 // NOTE: Register IAM modules before authz modules because authz middleware depends on IAMSession.
@@ -130,34 +114,6 @@ func Register(config ...Config) {
 		consts.PHASE_DELETE_MANY,
 	)
 	module.UseCustom(module.NewWrapper("/iam/users/:id", "id", false, &serviceiamuser.UserPatchService{}), consts.PHASE_PATCH)
-	module.Use(
-		module.NewWrapper("/iam/groups", "id", false, &serviceiamgroup.GroupService{}),
-		consts.PHASE_CREATE,
-		consts.PHASE_DELETE,
-		consts.PHASE_UPDATE,
-		consts.PHASE_PATCH,
-		consts.PHASE_LIST,
-		consts.PHASE_GET,
-		consts.PHASE_CREATE_MANY,
-		consts.PHASE_UPDATE_MANY,
-		consts.PHASE_PATCH_MANY,
-		consts.PHASE_DELETE_MANY,
-	)
-	if cfg.EnableTenant {
-		module.Use(
-			module.NewWrapper("/iam/tenants", "id", false, &serviceiamtenant.TenantService{}),
-			consts.PHASE_CREATE,
-			consts.PHASE_DELETE,
-			consts.PHASE_UPDATE,
-			consts.PHASE_PATCH,
-			consts.PHASE_LIST,
-			consts.PHASE_GET,
-			consts.PHASE_CREATE_MANY,
-			consts.PHASE_UPDATE_MANY,
-			consts.PHASE_PATCH_MANY,
-			consts.PHASE_DELETE_MANY,
-		)
-	}
 
 	module.Use(module.NewWrapper("/iam/session/heartbeat", "id", false, &serviceiamsession.HeartbeatService{}), consts.PHASE_CREATE)
 	module.Use(module.NewWrapper("/iam/session/current", "id", false, &serviceiamsession.CurrentListService{}), consts.PHASE_LIST)

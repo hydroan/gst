@@ -3,9 +3,7 @@ package iam
 import (
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamemail "github.com/hydroan/gst/internal/model/iam/email"
-	modeliamgroup "github.com/hydroan/gst/internal/model/iam/group"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
-	modeliamtenant "github.com/hydroan/gst/internal/model/iam/tenant"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 )
 
@@ -26,9 +24,7 @@ type (
 	AccountStatusReq = modeliamaccount.AccountStatusReq
 	AccountStatusRsp = modeliamaccount.AccountStatusRsp
 
-	User   = modeliamuser.User
-	Group  = modeliamgroup.Group
-	Tenant = modeliamtenant.Tenant
+	User = modeliamuser.User
 
 	Session     = modeliamsession.Session
 	SessionView = modeliamsession.SessionView

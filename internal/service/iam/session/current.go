@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/hydroan/gst/database"
-	modeliamgroup "github.com/hydroan/gst/internal/model/iam/group"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/model"
@@ -41,22 +40,12 @@ func (s *CurrentListService) List(ctx *types.ServiceContext, req *modeliamsessio
 		return nil, types.NewServiceError(http.StatusForbidden, "", response.CodeAccountLocked)
 	}
 
-	groupName := session.GroupName
-	if session.GroupID != "" && groupName == "" {
-		group := new(modeliamgroup.Group)
-		if err := database.Database[*modeliamgroup.Group](ctx.DatabaseContext()).Get(group, session.GroupID); err == nil {
-			groupName = group.Name
-		}
-	}
-
 	return buildCurrentListRsp(session, sessionID, &modeliamsession.CurrentPrincipal{
 		UserID:             user.ID,
 		Username:           user.Username,
 		Email:              util.Deref(user.Email),
 		FirstName:          user.FirstName,
 		LastName:           user.LastName,
-		GroupID:            user.GroupID,
-		GroupName:          groupName,
 		Status:             string(user.Status),
 		MustChangePassword: user.MustChangePassword,
 	}), nil

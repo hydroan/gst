@@ -36,8 +36,6 @@ type Session struct {
 
 	FirstName *string `json:"first_name,omitempty"`
 	LastName  *string `json:"last_name,omitempty"`
-	GroupID   string  `json:"group_id,omitempty"`
-	GroupName string  `json:"group_name,omitempty"`
 
 	MustChangePassword bool `json:"must_change_password"`
 

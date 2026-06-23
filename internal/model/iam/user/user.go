@@ -5,8 +5,6 @@ import (
 	"time"
 
 	. "github.com/hydroan/gst/dsl"
-	modeliamgroup "github.com/hydroan/gst/internal/model/iam/group"
-	modeliamtenant "github.com/hydroan/gst/internal/model/iam/tenant"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"golang.org/x/crypto/bcrypt"
@@ -39,17 +37,15 @@ type UserReq struct {
 
 	Status           UserStatus `json:"status"`
 	Type             UserType   `json:"type"`
-	GroupID          string     `json:"group_id"`
 	Avatar           string     `json:"avatar"`
 	TwoFactorEnabled bool       `json:"two_factor_enabled"`
 	IsSuperuser      bool       `json:"is_superuser"`
 }
 
-// UserPatchReq is the allow-listed request payload for patching IAM user profile fields.
+// UserPatchReq is the allow-listed request payload for patching IAM user display and contact fields.
 // It intentionally excludes security-sensitive fields such as username, status, password,
 // superuser flags, verification state, and login counters.
 type UserPatchReq struct {
-	GroupID     *string    `json:"group_id,omitempty"`
 	Email       *string    `json:"email,omitempty"`
 	Phone       *string    `json:"phone,omitempty"`
 	FirstName   *string    `json:"first_name,omitempty"`
@@ -59,15 +55,12 @@ type UserPatchReq struct {
 	Bio         *string    `json:"bio,omitempty"`
 	Birthday    *time.Time `json:"birthday,omitempty"`
 	Gender      *string    `json:"gender,omitempty"`
-	TenantID    *string    `json:"tenant_id,omitempty"`
 }
 
 type User struct {
-	Username string               `json:"username" gorm:"type:varchar(50);uniqueIndex;not null"`
-	Status   UserStatus           `json:"status" gorm:"type:varchar(20);default:'active';index"`
-	Type     UserType             `json:"type" gorm:"type:varchar(20);default:'regular';index"`
-	GroupID  string               `json:"group_id" gorm:"type:varchar(100);index"`
-	Group    *modeliamgroup.Group `json:"group,omitempty" gorm:"-"`
+	Username string     `json:"username" gorm:"type:varchar(50);uniqueIndex;not null"`
+	Status   UserStatus `json:"status" gorm:"type:varchar(20);default:'active';index"`
+	Type     UserType   `json:"type" gorm:"type:varchar(20);default:'regular';index"`
 
 	Email       *string    `json:"email" gorm:"type:varchar(100);uniqueIndex"`
 	Phone       *string    `json:"phone" gorm:"type:varchar(20);index"`
@@ -93,9 +86,6 @@ type User struct {
 	IsStaff     *bool `json:"is_staff" gorm:"default:false"`
 	IsSuperuser *bool `json:"is_superuser" gorm:"default:false"`
 
-	TenantID *string                `json:"tenant_id" gorm:"index"`
-	Tenant   *modeliamtenant.Tenant `json:"tenant,omitempty" gorm:"-"`
-
 	LastLoginAt      *time.Time `json:"last_login_at"`
 	LastLoginIP      *string    `json:"last_login_ip" gorm:"type:varchar(45)"`
 	LoginCount       *int       `json:"login_count" gorm:"default:0"`
@@ -108,11 +98,9 @@ type User struct {
 // MarshalJSON keeps write-only credential fields out of API responses.
 func (u User) MarshalJSON() ([]byte, error) {
 	type userResponse struct {
-		Username string               `json:"username"`
-		Status   UserStatus           `json:"status"`
-		Type     UserType             `json:"type"`
-		GroupID  string               `json:"group_id"`
-		Group    *modeliamgroup.Group `json:"group,omitempty"`
+		Username string     `json:"username"`
+		Status   UserStatus `json:"status"`
+		Type     UserType   `json:"type"`
 
 		Email       *string    `json:"email"`
 		Phone       *string    `json:"phone"`
@@ -135,9 +123,6 @@ func (u User) MarshalJSON() ([]byte, error) {
 		IsStaff     *bool `json:"is_staff"`
 		IsSuperuser *bool `json:"is_superuser"`
 
-		TenantID *string                `json:"tenant_id"`
-		Tenant   *modeliamtenant.Tenant `json:"tenant,omitempty"`
-
 		LastLoginAt      *time.Time `json:"last_login_at"`
 		LastLoginIP      *string    `json:"last_login_ip"`
 		LoginCount       *int       `json:"login_count"`
@@ -151,8 +136,6 @@ func (u User) MarshalJSON() ([]byte, error) {
 		Username:           u.Username,
 		Status:             u.Status,
 		Type:               u.Type,
-		GroupID:            u.GroupID,
-		Group:              u.Group,
 		Email:              u.Email,
 		Phone:              u.Phone,
 		FirstName:          u.FirstName,
@@ -170,8 +153,6 @@ func (u User) MarshalJSON() ([]byte, error) {
 		LastEmailChangedAt: u.LastEmailChangedAt,
 		IsStaff:            u.IsStaff,
 		IsSuperuser:        u.IsSuperuser,
-		TenantID:           u.TenantID,
-		Tenant:             u.Tenant,
 		LastLoginAt:        u.LastLoginAt,
 		LastLoginIP:        u.LastLoginIP,
 		LoginCount:         u.LoginCount,
