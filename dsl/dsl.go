@@ -235,6 +235,36 @@ func Service(bool) {}
 //	})
 func Filename(string) {}
 
+// Flatten changes the service output layout for the current action.
+//
+// By default, gg treats each model file as its own service package:
+//
+//	model/authz/role.go + Filename("role.go")
+//	  -> service/authz/role/role.go
+//	  -> package role
+//
+// Flatten removes the final model-file segment from the generated service path, so the
+// action service is generated in the service package that mirrors the current model
+// package:
+//
+//	model/authz/role.go + Filename("role.go") + Flatten()
+//	  -> service/authz/role.go
+//	  -> package authz
+//
+// Flatten never accepts a directory name and cannot redirect output to another domain.
+// The target directory and package are derived from the current model file's package.
+// For example, model/authz/role.go cannot generate into service/mfa or service/authz2.
+//
+// Flatten only affects service generation. It does not change routes, model registration,
+// payload/result types, or Filename's meaning. Filename still controls only the generated
+// file basename and service struct name. gg requires Flatten to be used with an explicit
+// Filename(...) and Service(true) in the same action.
+//
+// Flatten is only valid for model files under model/<package>/<file>.go. Root model files
+// such as model/user.go cannot be flattened because service/ is reserved for generated
+// registration code and should not contain business service files.
+func Flatten() {}
+
 // Public controls whether the current action requires authentication/authorization.
 // When false, the action will be processed by auth middleware if registered via middleware.RegisterAuth.
 // When true, the action is publicly accessible without authentication.
@@ -447,6 +477,11 @@ type Action struct {
 	// Default: "" (uses Phase-based filename)
 	Filename string
 
+	// Flatten indicates whether the generated service file should be written directly
+	// into the service package that mirrors the current model package.
+	// It only affects service output layout and requires Service(true) plus Filename(...).
+	Flatten bool
+
 	// The phase of the action
 	// not part of DSL, just used to identify the current Action.
 	Phase consts.Phase
@@ -486,9 +521,12 @@ var methodList = []string{
 	"Param",
 	"Route",
 	"Migrate",
+	"Service",
+	"Public",
 	"Payload",
 	"Result",
 	"Filename",
+	"Flatten",
 
 	consts.PHASE_CREATE.MethodName(),
 	consts.PHASE_DELETE.MethodName(),

@@ -110,14 +110,14 @@ func emitRouteActions(route string, actions []*Action, fn func(string, *Action))
 	}
 }
 
-// is checks if the given name is a valid DSL method name.
-// It verifies against the predefined list of supported DSL methods.
+// is checks if the given name is a valid DSL keywords.
+// It verifies against the predefined list of supported DSL keywords.
 //
 // Parameters:
-//   - name: The method name to check
+//   - name: The keyword to check
 //
 // Returns:
-//   - bool: true if the name is a valid DSL method, false otherwise
+//   - bool: true if the name is a valid DSL keyword, false otherwise
 func is(name string) bool {
 	return slices.Contains(methodList, name)
 }

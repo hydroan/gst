@@ -15,7 +15,7 @@ import (
 func FindModels(module, modelDir, serviceDir string, excludes []string) ([]*gen.ModelInfo, error) {
 	allModels := make([]*gen.ModelInfo, 0)
 
-	_ = filepath.Walk(modelDir, func(path string, info fs.FileInfo, err error) error {
+	if err := filepath.Walk(modelDir, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -36,7 +36,7 @@ func FindModels(module, modelDir, serviceDir string, excludes []string) ([]*gen.
 
 		models, err := gen.FindModels(module, modelDir, path)
 		if err != nil {
-			return nil //nolint:nilerr
+			return err
 		}
 		for _, m := range models {
 			m.ModelFilePath = path
@@ -44,7 +44,9 @@ func FindModels(module, modelDir, serviceDir string, excludes []string) ([]*gen.
 		}
 
 		return nil
-	})
+	}); err != nil {
+		return nil, err
+	}
 
 	return allModels, nil
 }

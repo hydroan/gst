@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/types/consts"
@@ -54,12 +55,20 @@ func currentServiceDirs(allModels []*gen.ModelInfo) serviceDirSet {
 		filepath.Clean(serviceDir): true,
 	}
 	modelDirs := make([]string, 0, len(allModels))
+	modelDirSet := make(map[string]bool)
 
 	for _, m := range allModels {
-		dir := filepath.Join(serviceDir, gen.ServiceOutputRel(m.ModelFilePath, modelDir))
-		dir = filepath.Clean(dir)
-		modelDirs = append(modelDirs, dir)
-		addServiceDirAncestors(knownDirs, dir)
+		m.Design.Range(func(route string, act *dsl.Action) {
+			if !act.Enabled || !act.Service {
+				return
+			}
+			dir := filepath.Clean(gen.ServiceTarget(m, act, modelDir, serviceDir).Dir)
+			if !modelDirSet[dir] {
+				modelDirSet[dir] = true
+				modelDirs = append(modelDirs, dir)
+			}
+			addServiceDirAncestors(knownDirs, dir)
+		})
 	}
 
 	sort.Strings(modelDirs)

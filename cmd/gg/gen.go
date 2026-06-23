@@ -101,11 +101,11 @@ func genRunWithOptions(opts genRunOptions) error {
 		clioutput.Section("Scan Models")
 	}
 	allModels, err := codegen.FindModels(module, modelDir, serviceDir, excludes)
-	buildHierarchicalEndpoints(allModels)
-	propagateParentParams(allModels)
 	if err != nil {
 		return err
 	}
+	buildHierarchicalEndpoints(allModels)
+	propagateParentParams(allModels)
 
 	// Record old service files list (if prune option is enabled)
 	var oldServiceFiles []string
@@ -157,7 +157,8 @@ func genRunWithOptions(opts genRunOptions) error {
 
 		m.Design.Range(func(s string, a *dsl.Action) {
 			if a.Service {
-				serviceImportMap[m.ServiceImportPath(modelDir, serviceDir)] = struct{}{}
+				target := gen.ServiceTarget(m, a, modelDir, serviceDir)
+				serviceImportMap[target.ImportPath] = struct{}{}
 			}
 			routerImportMap[m.RouterImportPath()] = struct{}{}
 		})
@@ -170,15 +171,14 @@ func genRunWithOptions(opts genRunOptions) error {
 	for _, m := range allModels {
 		m.Design.Range(func(route string, act *dsl.Action) {
 			if act.Service {
-				if alias := serviceAliasMap[m.ServiceImportPath(modelDir, serviceDir)]; len(alias) > 0 {
+				target := gen.ServiceTarget(m, act, modelDir, serviceDir)
+				if alias := serviceAliasMap[target.ImportPath]; len(alias) > 0 {
 					// alias import package, eg:
 					// pkg1_user "service/pkg1/user"
 					// pkg2_user "service/pkg2/user"
 					serviceStmts = append(serviceStmts, gen.StmtServiceRegister(fmt.Sprintf("%s.%s", alias, act.RoleName()), act.Phase))
 				} else {
-					// Use lowercase ModelName as package name to maintain original naming style
-					// For example: ModelName "ConfigSetting" -> package name "configsetting"
-					serviceStmts = append(serviceStmts, gen.StmtServiceRegister(fmt.Sprintf("%s.%s", strings.ToLower(m.ModelName), act.RoleName()), act.Phase))
+					serviceStmts = append(serviceStmts, gen.StmtServiceRegister(fmt.Sprintf("%s.%s", target.PackageName, act.RoleName()), act.Phase))
 				}
 			}
 			base := "Auth"
@@ -336,7 +336,8 @@ func genRunWithOptions(opts genRunOptions) error {
 			if applyErr != nil {
 				return
 			}
-			if file := gen.GenerateService(m, act, act.Phase); file != nil {
+			target := gen.ServiceTarget(m, act, modelDir, serviceDir)
+			if file := gen.GenerateServiceWithPackage(m, act, act.Phase, target.PackageName); file != nil {
 				fset := token.NewFileSet()
 				code, err := gen.FormatNodeExtraWithFileSet(file, fset)
 				// pretty.Println(file)
@@ -345,13 +346,7 @@ func genRunWithOptions(opts genRunOptions) error {
 					return
 				}
 				// code = gen.MethodAddComments(code, m.ModelName)
-				dir := filepath.Join(serviceDir, gen.ServiceOutputRel(m.ModelFilePath, modelDir))
-				filename := filepath.Join(dir, act.ServiceFilename())
-				// Use lowercase ModelName as service package name to ensure consistency
-				// with service registration logic and maintain original naming style
-				// For example: ModelName "ConfigSetting" -> package name "configsetting"
-				servicePkgName := strings.ToLower(m.ModelName)
-				applyErr = applyFile(filename, code, act, servicePkgName, m)
+				applyErr = applyFile(target.FilePath, code, act, target.PackageName, m)
 			}
 		})
 		if applyErr != nil {

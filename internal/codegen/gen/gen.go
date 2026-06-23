@@ -2,6 +2,7 @@ package gen
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -40,6 +41,13 @@ type ModelInfo struct {
 	Design *dsl.Design
 }
 
+type ServiceTargetInfo struct {
+	Dir         string
+	FilePath    string
+	ImportPath  string
+	PackageName string
+}
+
 // ServiceOutputRel returns the path under the service root where generated service .go files
 // for a model file should live, relative to the service directory (e.g. "common" for
 // model/common/common.go, or "config/namespace/app/env/item" for model/.../env/item.go).
@@ -74,6 +82,37 @@ func ServiceOutputRel(modelFilePath, modelDir string) string {
 func (m *ModelInfo) ServiceImportPath(modelDir, serviceDir string) string {
 	rel := ServiceOutputRel(m.ModelFilePath, modelDir)
 	return filepath.Join(m.ModulePath, serviceDir, rel)
+}
+
+func ServiceTarget(m *ModelInfo, action *dsl.Action, modelDir, serviceDir string) ServiceTargetInfo {
+	rel := ServiceOutputRel(m.ModelFilePath, modelDir)
+	packageName := strings.ToLower(m.ModelName)
+	if action != nil && action.Flatten {
+		rel = flattenedServiceOutputRel(m.ModelFilePath, modelDir)
+		packageName = m.ModelPkgName
+	}
+
+	dir := filepath.Join(serviceDir, rel)
+	return ServiceTargetInfo{
+		Dir:         dir,
+		FilePath:    filepath.Join(dir, action.ServiceFilename()),
+		ImportPath:  filepath.Join(m.ModulePath, serviceDir, rel),
+		PackageName: packageName,
+	}
+}
+
+func flattenedServiceOutputRel(modelFilePath, modelDir string) string {
+	modelDir = filepath.Clean(modelDir)
+	modelFilePath = filepath.Clean(modelFilePath)
+	rel, err := filepath.Rel(modelDir, modelFilePath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		rel = strings.TrimPrefix(modelFilePath, modelDir+string(filepath.Separator))
+	}
+	dir := filepath.Dir(rel)
+	if dir == "." {
+		return ""
+	}
+	return dir
 }
 
 func (m *ModelInfo) RouterImportPath() string {
@@ -238,6 +277,10 @@ func FindModels(module string, modelDir string, filename string) ([]*ModelInfo, 
 	f, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
 	if err != nil {
 		return nil, err
+	}
+
+	if errs := dsl.Validate(f, modelDir, filename); len(errs) > 0 {
+		return nil, errors.Join(errs...)
 	}
 
 	designs := dsl.Parse(f, "")
@@ -439,6 +482,10 @@ func genServiceMethod8(info *ModelInfo, phase consts.Phase, roleName string) *as
 }
 
 func GenerateService(info *ModelInfo, action *dsl.Action, phase consts.Phase) *ast.File {
+	return GenerateServiceWithPackage(info, action, phase, strings.ToLower(info.ModelName))
+}
+
+func GenerateServiceWithPackage(info *ModelInfo, action *dsl.Action, phase consts.Phase, servicePkgName string) *ast.File {
 	if !action.Enabled || !action.Service {
 		return nil
 	}
@@ -563,7 +610,7 @@ func GenerateService(info *ModelInfo, action *dsl.Action, phase consts.Phase) *a
 	}
 
 	return &ast.File{
-		Name:  ast.NewIdent(strings.ToLower(info.ModelName)),
+		Name:  ast.NewIdent(servicePkgName),
 		Decls: decls,
 	}
 }

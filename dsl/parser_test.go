@@ -540,6 +540,26 @@ func TestParseFilenameDefault(t *testing.T) {
 	}
 }
 
+func TestParseFlatten(t *testing.T) {
+	design := parseDesignFromSource(t, flattenSource, "Role")
+
+	var got *Action
+	design.Range(func(route string, act *Action) {
+		if route == "authz/roles" && act.Phase == consts.PHASE_CREATE {
+			got = act
+		}
+	})
+	if got == nil {
+		t.Fatal("expected create action for authz/roles")
+	}
+	if !got.Flatten {
+		t.Fatal("expected Flatten to be parsed on the action")
+	}
+	if got.Filename != "role.go" {
+		t.Fatalf("Filename = %q, want role.go", got.Filename)
+	}
+}
+
 func TestRoleName(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -639,6 +659,29 @@ func (SimpleModel) Design() {
 	Create(func() {
 		Enabled(true)
 		Service(true)
+	})
+}
+`
+
+const flattenSource = `
+package authz
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Role struct {
+	model.Base
+}
+
+func (Role) Design() {
+	Route("authz/roles", func() {
+		Create(func() {
+			Service(true)
+			Filename("role.go")
+			Flatten()
+		})
 	})
 }
 `

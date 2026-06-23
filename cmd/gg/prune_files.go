@@ -82,21 +82,12 @@ func filterIgnoredFiles(files []string, ignorePatterns []string) (filtered []str
 // pruneServiceFiles prunes disabled service files.
 func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo) {
 	// Get list of service files that should currently exist
-	currentServiceFiles := make(map[string]bool)
-	for _, m := range allModels {
-		m.Design.Range(func(route string, act *dsl.Action) {
-			if act.Enabled && act.Service {
-				dir := filepath.Join(serviceDir, gen.ServiceOutputRel(m.ModelFilePath, modelDir))
-				filename := filepath.Join(dir, act.ServiceFilename())
-				currentServiceFiles[filename] = true
-			}
-		})
-	}
+	currentFiles := currentServiceFiles(allModels)
 
 	// Find files to delete (exist in old list but not in current list)
 	filesToDelete := make([]string, 0)
 	for _, oldFile := range oldServiceFiles {
-		if !currentServiceFiles[oldFile] {
+		if !currentFiles[oldFile] {
 			filesToDelete = append(filesToDelete, oldFile)
 		}
 	}
@@ -157,6 +148,19 @@ func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo) {
 	// Remove empty directories after deleting files
 	removeEmptyDirectories(serviceDir)
 	handleOrphanServiceDirs(allModels)
+}
+
+func currentServiceFiles(allModels []*gen.ModelInfo) map[string]bool {
+	current := make(map[string]bool)
+	for _, m := range allModels {
+		m.Design.Range(func(route string, act *dsl.Action) {
+			if act.Enabled && act.Service {
+				target := gen.ServiceTarget(m, act, modelDir, serviceDir)
+				current[target.FilePath] = true
+			}
+		})
+	}
+	return current
 }
 
 // removeEmptyDirectories removes empty child directories below the given root directory.

@@ -472,6 +472,7 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 	var service bool    // default to false
 	var public bool     // default to false
 	var filename string // default to ""
+	var flatten bool    // default to false
 
 	if phase.MethodName() != funcName {
 		return nil, false
@@ -572,6 +573,24 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 					}
 				}
 
+				// Parse Flatten()
+				var isFlattenCall bool
+				switch fun := call.Fun.(type) {
+				case *ast.Ident:
+					// anonymous import: Flatten()
+					if fun != nil && fun.Name == "Flatten" {
+						isFlattenCall = true
+					}
+				case *ast.SelectorExpr:
+					// non-anonymous import: dsl.Flatten()
+					if fun != nil && fun.Sel != nil && fun.Sel.Name == "Flatten" {
+						isFlattenCall = true
+					}
+				}
+				if isFlattenCall {
+					flatten = true
+				}
+
 				// Parse Payload[User] or Result[*User].
 				if indexExpr, ok := call.Fun.(*ast.IndexExpr); ok && indexExpr != nil {
 					var isPayload bool
@@ -625,6 +644,7 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 		Service:  service,
 		Public:   public,
 		Filename: filename,
+		Flatten:  flatten,
 		Phase:    phase,
 	}, true
 }
