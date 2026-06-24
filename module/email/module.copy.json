@@ -1,6 +1,0 @@
-{
-  "postCopyNotes": [
-    "Email account operations require serviceemail.SetAccountGateway(...).",
-    "Create a project-owned adapter outside service/email, for example module/email_account_gateway.go."
-  ]
-}

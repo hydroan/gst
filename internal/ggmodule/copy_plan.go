@@ -74,9 +74,9 @@ type CopyPlan struct {
 	// files that are already present but are not produced by this copy plan.
 	// Module copy must not delete them automatically because service packages can
 	// intentionally contain project-owned adapters next to copied module code.
-	ExtraServiceFiles []string
-	IgnoreFiles       []string
-	PostCopyNotes     []string
+	ExtraServiceFiles  []string
+	ExcludeSourceFiles []string
+	PostNotes          []string
 }
 
 // moduleCopyAction connects one DSL action to the framework service file that
@@ -97,8 +97,8 @@ type moduleCopyAction struct {
 type moduleCopyMiddleware struct {
 	SourcePath string
 	TargetPath string
-	Function   string
-	Auth       bool
+	Scope      moduleCopyMiddlewareScope
+	Handler    string
 }
 
 // moduleCopyFile stores final target content. Conflict checks run against this
@@ -158,13 +158,13 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 	if sourceDirErr := plan.checkSourceDirs(); sourceDirErr != nil {
 		return nil, sourceDirErr
 	}
-	metadata, err := loadModuleCopyMetadata(filepath.Join(frameworkRoot, "module", name))
+	manifest, err := loadModuleManifest(filepath.Join(frameworkRoot, "module", name))
 	if err != nil {
 		return nil, err
 	}
-	plan.PostCopyNotes = metadata.PostCopyNotes
-	plan.IgnoreFiles = metadata.IgnoreFiles
-	middleware, err := plan.resolveMiddleware(metadata.Middleware)
+	plan.PostNotes = manifest.Copy.PostNotes
+	plan.ExcludeSourceFiles = manifest.Copy.ExcludeSourceFiles
+	middleware, err := plan.resolveMiddleware(manifest.Copy.Middleware)
 	if err != nil {
 		return nil, err
 	}
@@ -369,12 +369,12 @@ func (p *CopyPlan) addExtraModelFiles() error {
 		return fmt.Errorf("%s is not a directory", p.TargetModelDir)
 	}
 
-	// Model copy is a SourceModelDir -> TargetModelDir mirror after applying the
-	// module.copy.json ignore rules and source normalization. At this point
-	// p.Files already contains every model file that this copy plan will write,
-	// so comparing TargetModelDir against those planned model targets gives a
-	// precise stale-file warning without treating ignored or project-owned files
-	// as something module copy can delete automatically.
+	// Model copy is a SourceModelDir -> TargetModelDir mirror after applying
+	// module.json copy.excludeSourceFiles rules and source normalization. At this
+	// point p.Files already contains every model file that this copy plan will
+	// write, so comparing TargetModelDir against those planned model targets gives
+	// a precise stale-file warning without treating excluded or project-owned
+	// files as something module copy can delete automatically.
 	expectedTargets := make(map[string]bool)
 	for _, file := range p.Files {
 		if file.Kind != moduleCopyFileModel {
@@ -574,22 +574,22 @@ func (p *CopyPlan) addServiceFiles(helperFiles []string) error {
 	return nil
 }
 
-func (p *CopyPlan) resolveMiddleware(metadata []moduleCopyMiddlewareMetadata) ([]moduleCopyMiddleware, error) {
-	middleware := make([]moduleCopyMiddleware, 0, len(metadata))
-	for _, item := range metadata {
-		// The manifest stores framework-root relative paths so module.copy.json
+func (p *CopyPlan) resolveMiddleware(manifest []moduleCopyMiddlewareManifest) ([]moduleCopyMiddleware, error) {
+	middleware := make([]moduleCopyMiddleware, 0, len(manifest))
+	for _, item := range manifest {
+		// The manifest stores framework-root relative paths so module.json
 		// remains stable no matter whether copy runs from gst itself or from a
 		// consumer project with internal/gst symlinked in.
-		sourcePath := filepath.Join(p.FrameworkRoot, filepath.FromSlash(item.Source))
-		targetPath := filepath.Join(p.TargetMiddlewareDir, filepath.Base(item.Source))
-		if err := requireMiddlewareSourceFile(sourcePath, item.Function); err != nil {
+		sourcePath := filepath.Join(p.FrameworkRoot, filepath.FromSlash(item.SourceFile))
+		targetPath := filepath.Join(p.TargetMiddlewareDir, filepath.Base(item.SourceFile))
+		if err := requireMiddlewareSourceFile(sourcePath, item.Handler); err != nil {
 			return nil, err
 		}
 		middleware = append(middleware, moduleCopyMiddleware{
 			SourcePath: sourcePath,
 			TargetPath: targetPath,
-			Function:   item.Function,
-			Auth:       item.Auth,
+			Scope:      item.Scope,
+			Handler:    item.Handler,
 		})
 	}
 	sort.Slice(middleware, func(i, j int) bool {
@@ -598,7 +598,7 @@ func (p *CopyPlan) resolveMiddleware(metadata []moduleCopyMiddlewareMetadata) ([
 	return middleware, nil
 }
 
-func requireMiddlewareSourceFile(sourcePath string, function string) error {
+func requireMiddlewareSourceFile(sourcePath string, handler string) error {
 	if _, err := os.Stat(sourcePath); err != nil {
 		return fmt.Errorf("source middleware file not found for %s: %w", filepath.Base(sourcePath), err)
 	}
@@ -610,11 +610,11 @@ func requireMiddlewareSourceFile(sourcePath string, function string) error {
 	}
 	for _, decl := range file.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
-		if ok && fn.Recv == nil && fn.Name != nil && fn.Name.Name == function {
+		if ok && fn.Recv == nil && fn.Name != nil && fn.Name.Name == handler {
 			return nil
 		}
 	}
-	return fmt.Errorf("source middleware file %s does not declare function %s", sourcePath, function)
+	return fmt.Errorf("source middleware file %s does not declare handler %s", sourcePath, handler)
 }
 
 func (p *CopyPlan) addMiddlewareFiles() error {
@@ -719,12 +719,12 @@ func (p *CopyPlan) targetsByKind(kind moduleCopyFileKind) []string {
 	return targets
 }
 
-// ignoredSourcePath matches module.copy.json ignoreFiles against source files
-// relative to the framework root. This keeps metadata stable across projects:
+// ignoredSourcePath matches module.json copy.excludeSourceFiles against source files
+// relative to the framework root. This keeps the manifest stable across projects:
 // "internal/model/authz/button.go" means the same source file no matter where
 // the current app's model/service directories are configured.
 func (p *CopyPlan) ignoredSourcePath(sourcePath string) bool {
-	if len(p.IgnoreFiles) == 0 {
+	if len(p.ExcludeSourceFiles) == 0 {
 		return false
 	}
 	rel, err := filepath.Rel(p.FrameworkRoot, sourcePath)
@@ -732,7 +732,7 @@ func (p *CopyPlan) ignoredSourcePath(sourcePath string) bool {
 		return false
 	}
 	rel = filepath.ToSlash(filepath.Clean(rel))
-	return slices.Contains(p.IgnoreFiles, rel)
+	return slices.Contains(p.ExcludeSourceFiles, rel)
 }
 
 func goFilesInDir(root string) ([]string, error) {

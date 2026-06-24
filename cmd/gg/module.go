@@ -146,7 +146,7 @@ func runModuleCopy(name string, opts moduleCopyOptions) error {
 	printModuleCopyCleanup(name)
 	printModuleCopyExtraModelReminder(plan)
 	printModuleCopyExtraServiceReminder(plan)
-	printModuleCopyPostNotes(plan.PostCopyNotes)
+	printModuleCopyPostNotes(plan.PostNotes)
 	return nil
 }
 

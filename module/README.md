@@ -19,13 +19,44 @@
 - request/response 契约必须一致。自定义请求、响应类型要通过 `Payload[T]()`、`Result[T]()` 写进 `Design()`，避免 copy 后生成默认模型签名。
 - service 文件目标必须一致。存在自定义 service 代码的 action 必须写 `Service(true)`；如果多个 action 共用一个 service 文件，所有相关 action 都要写相同的 `Filename(...)`。
 
-修改模块时要同时检查三处：
+修改模块时要同时检查四处：
 
 - `internal/model/<name>` 的 `Design()`。
 - `module/<name>` 的注册代码和 wrapper。
 - `internal/service/<name>` 中真实存在的 service 文件和 helper 文件。
+- `module/<name>/module.json` 中的 copy manifest。
 
 目标是保证同一个模块通过 `gg module add` 使用，和通过 `gg module copy` 后再 `gg gen` 使用，得到相同的路由、鉴权和 service 行为。
+
+## Copy manifest
+
+如果模块复制需要跳过框架源文件、复制中间件或输出复制后的接入提示，在模块目录放置 `module.json`：
+
+```json
+{
+  "copy": {
+    "excludeSourceFiles": [
+      "internal/model/authz/button.go"
+    ],
+    "middleware": [
+      {
+        "sourceFile": "middleware/authz.go",
+        "scope": "auth",
+        "handler": "Authz"
+      }
+    ],
+    "postNotes": [
+      "Create a project-owned adapter outside service/mfa."
+    ]
+  }
+}
+```
+
+- `excludeSourceFiles` 使用 framework root 相对路径，表示 `gg module copy` 不复制这些源文件，也不让它们参与 model/action 规划。
+- `middleware[].sourceFile` 只能指向 framework `middleware/*.go` 源文件，目标固定复制到项目 `middleware/` 下的同名文件。
+- `middleware[].scope` 只能是 `global` 或 `auth`，分别对应 `middleware.Register(...)` 和 `middleware.RegisterAuth(...)`。
+- `middleware[].handler` 是 `sourceFile` 中返回 gin handler 的零参函数名，例如 `Authz`。
+- `postNotes` 只在复制成功后输出，用于提示项目侧必须补齐的 adapter、配置或初始化步骤。
 
 ## Service 文件边界
 

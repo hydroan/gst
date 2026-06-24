@@ -1,0 +1,15 @@
+{
+  "copy": {
+    "excludeSourceFiles": [
+      "internal/model/authz/button.go"
+    ],
+    "middleware": [
+      {
+        "sourceFile": "middleware/authz.go",
+        "scope": "auth",
+        "handler": "Authz"
+      }
+    ],
+    "postNotes": []
+  }
+}

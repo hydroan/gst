@@ -41,8 +41,8 @@ func (e *CopyExecution) registerMiddleware() (status string, path string, err er
 		changed = astutil.AddImport(fset, file, frameworkModulePath+"/middleware")
 		importAlias = "middleware"
 	}
-	for _, middleware := range e.Plan.Middleware {
-		if ensureMiddlewareRegisterCall(file, importAlias, middleware) {
+	for _, item := range e.Plan.Middleware {
+		if ensureMiddlewareRegisterCall(file, importAlias, item) {
 			changed = true
 		}
 	}
@@ -120,7 +120,7 @@ func middlewareRegisterCallExists(fn *ast.FuncDecl, importAlias string, middlewa
 		if !ok {
 			continue
 		}
-		if !isMiddlewareRegisterCall(call, importAlias, method, middleware.Function) {
+		if !isMiddlewareRegisterCall(call, importAlias, method, middleware.Handler) {
 			continue
 		}
 		return true
@@ -128,7 +128,7 @@ func middlewareRegisterCallExists(fn *ast.FuncDecl, importAlias string, middlewa
 	return false
 }
 
-func isMiddlewareRegisterCall(call *ast.CallExpr, importAlias string, method string, function string) bool {
+func isMiddlewareRegisterCall(call *ast.CallExpr, importAlias string, method string, handlerName string) bool {
 	sel, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok || sel.Sel.Name != method || len(call.Args) != 1 {
 		return false
@@ -143,7 +143,7 @@ func isMiddlewareRegisterCall(call *ast.CallExpr, importAlias string, method str
 		return false
 	}
 	handlerIdent, ok := handler.Fun.(*ast.Ident)
-	return ok && handlerIdent.Name == function
+	return ok && handlerIdent.Name == handlerName
 }
 
 func middlewareRegisterCallStmt(importAlias string, middleware moduleCopyMiddleware, pos token.Pos) ast.Stmt {
@@ -154,7 +154,7 @@ func middlewareRegisterCallStmt(importAlias string, middleware moduleCopyMiddlew
 		},
 		Args: []ast.Expr{
 			&ast.CallExpr{
-				Fun:    &ast.Ident{NamePos: pos, Name: middleware.Function},
+				Fun:    &ast.Ident{NamePos: pos, Name: middleware.Handler},
 				Lparen: pos,
 				Rparen: pos,
 			},
@@ -165,7 +165,7 @@ func middlewareRegisterCallStmt(importAlias string, middleware moduleCopyMiddlew
 }
 
 func middlewareRegisterMethod(middleware moduleCopyMiddleware) string {
-	if middleware.Auth {
+	if middleware.Scope == moduleCopyMiddlewareScopeAuth {
 		return "RegisterAuth"
 	}
 	return "Register"

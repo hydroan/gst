@@ -924,8 +924,8 @@ func Authz() any {
 			{
 				SourcePath: filepath.Join("internal", "gst", "middleware", "authz.go"),
 				TargetPath: filepath.Join("middleware", "authz.go"),
-				Function:   "Authz",
-				Auth:       true,
+				Scope:      moduleCopyMiddlewareScopeAuth,
+				Handler:    "Authz",
 			},
 		},
 	}
@@ -1087,8 +1087,10 @@ func TestBuildModuleCopyPlanIgnoresFrameworkRootRelativeFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(frameworkRoot, "go.mod"), []byte("module github.com/hydroan/gst\n\ngo 1.26\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(frameworkRoot, "module", "copytest", moduleCopyMetadataFilename), []byte(`{
-		"ignoreFiles": ["internal/model/copytest/ignored.go"]
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "module", "copytest", moduleManifestFilename), []byte(`{
+		"copy": {
+			"excludeSourceFiles": ["internal/model/copytest/ignored.go"]
+		}
 	}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
