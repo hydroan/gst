@@ -24,6 +24,7 @@ type VerificationConfirm struct {
 func (VerificationConfirm) Design() {
 	Route("/iam/email/verification-confirm", func() {
 		Create(func() {
+			Public(true)
 			Service(true)
 			Flatten()
 			Filename("verification_confirm.go")
