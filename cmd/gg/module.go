@@ -204,7 +204,7 @@ func printModuleCopyPlanGroup(title string, files []string) {
 }
 
 func printModuleCopyCleanup(name string) {
-	clioutput.Item("", "To remove copied module code, delete model/%s, then run: gg prune --clean-orphans", name)
+	clioutput.Item("", "To remove copied module code, delete model/%s, then run: gg gen --prune --clean-orphans", name)
 }
 
 func printModuleCopyExtraModelReminder(plan *ggmodule.CopyPlan) {
