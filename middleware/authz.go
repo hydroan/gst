@@ -1,12 +1,12 @@
 package middleware
 
 import (
+	"net/http"
 	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/config"
-	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
@@ -51,8 +51,12 @@ func Authz() gin.HandlerFunc {
 		}
 		if allow, err = rbac.Enforcer.Enforce(sub, obj, act); err != nil {
 			zap.S().Error(err)
-			JSON(c, CodeFailure)
-			c.Abort()
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+				"code":            -1,
+				"msg":             "authorization failed",
+				"data":            nil,
+				consts.REQUEST_ID: c.GetString(consts.REQUEST_ID),
+			})
 			return
 		}
 		if allow {
@@ -67,8 +71,12 @@ func Authz() gin.HandlerFunc {
 				zap.String("trace_id", c.GetString(consts.TRACE_ID)),
 			)
 		} else {
-			JSON(c, CodeForbidden)
-			c.Abort()
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"code":            -1,
+				"msg":             "permission denied",
+				"data":            nil,
+				consts.REQUEST_ID: c.GetString(consts.REQUEST_ID),
+			})
 			logger.Authz.Infoz(
 				"",
 				zap.String("sub", sub),

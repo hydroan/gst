@@ -1,13 +1,14 @@
 package ratelimiter
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/cache/ristretto"
-	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/types/consts"
 	"golang.org/x/time/rate"
 )
 
@@ -52,7 +53,7 @@ type Config struct {
 
 	// OnLimitReached is called when the rate limit is exceeded.
 	// If set, it is responsible for writing the response; the default 429 response is skipped.
-	// Defaults to responding with CodeTooManyRequests if not set.
+	// Defaults to a 429 JSON response if not set.
 	OnLimitReached gin.HandlerFunc
 
 	// SkipFunc determines whether rate limiting should be skipped for a request.
@@ -106,8 +107,12 @@ func RateLimiter(opts ...Option) gin.HandlerFunc {
 			limiter = rate.NewLimiter(conf.Rate, conf.Burst)
 			_ = ratelimiterMap.Set(key, limiter, conf.TTL)
 		} else if err != nil {
-			JSON(c, CodeFailure)
-			c.Abort()
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+				"code":            -1,
+				"msg":             "rate limiter unavailable",
+				"data":            nil,
+				consts.REQUEST_ID: c.GetString(consts.REQUEST_ID),
+			})
 			return
 		}
 		if !limiter.Allow() {
@@ -116,8 +121,12 @@ func RateLimiter(opts ...Option) gin.HandlerFunc {
 				c.Abort()
 				return
 			}
-			JSON(c, CodeTooManyRequests)
-			c.Abort()
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+				"code":            -1,
+				"msg":             "too many requests",
+				"data":            nil,
+				consts.REQUEST_ID: c.GetString(consts.REQUEST_ID),
+			})
 			return
 		}
 		c.Next()

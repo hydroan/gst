@@ -68,7 +68,7 @@ func WithSkipFunc(skipFunc func(c *gin.Context) bool) Option {
 
 // WithOnLimitReached sets a custom handler called when the rate limit is exceeded.
 // The handler is responsible for writing the response; the default 429 response is skipped.
-// A nil handler is ignored; the default CodeTooManyRequests response is used instead.
+// A nil handler is ignored; the default 429 JSON response is used instead.
 func WithOnLimitReached(onLimitReached gin.HandlerFunc) Option {
 	return func(conf *Config) {
 		if conf == nil || onLimitReached == nil {

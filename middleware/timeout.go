@@ -2,10 +2,11 @@ package middleware
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	. "github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
 )
 
@@ -65,8 +66,12 @@ func Timeout(timeout time.Duration) gin.HandlerFunc {
 					"method", c.Request.Method,
 					"timeout", timeout,
 				)
-				JSON(c, CodeContextTimeout)
-				c.Abort()
+				c.AbortWithStatusJSON(http.StatusGatewayTimeout, gin.H{
+					"code":            -1,
+					"msg":             "request timeout",
+					"data":            nil,
+					consts.REQUEST_ID: c.GetString(consts.REQUEST_ID),
+				})
 			}
 			// Cancel the context to signal handlers to stop
 			cancel()
