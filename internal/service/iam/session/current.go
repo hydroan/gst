@@ -59,10 +59,10 @@ type CurrentDeleteService struct {
 func (s *CurrentDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.CurrentDeleteReq) (rsp *modeliamsession.CurrentDeleteRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
 
-	sessionID, err := ctx.Cookie("session_id")
+	sessionID, err := ReadSessionID(ctx)
 	if err != nil {
 		log.Error(err)
-		return nil, service.NewError(http.StatusUnauthorized, err.Error())
+		return nil, err
 	}
 
 	if _, err = DeleteSession(sessionID); err != nil {
@@ -70,7 +70,7 @@ func (s *CurrentDeleteService) Delete(ctx *types.ServiceContext, req *modeliamse
 		return nil, service.NewErrorWithCause(http.StatusUnauthorized, "session not exists", err)
 	}
 
-	ctx.SetCookie("session_id", "", -1, "/", "", false, true)
+	ClearSessionCookie(ctx)
 
 	return &modeliamsession.CurrentDeleteRsp{}, nil
 }
@@ -84,32 +84,5 @@ func buildCurrentListRsp(session modeliamsession.Session, fallbackSessionID stri
 	return &modeliamsession.CurrentListRsp{
 		Session:   buildCurrentSessionView(session, fallbackSessionID),
 		Principal: *principal,
-	}
-}
-
-// buildCurrentSessionView builds the response snapshot for a session query endpoint.
-func buildCurrentSessionView(session modeliamsession.Session, currentSessionID string) modeliamsession.SessionView {
-	sessionID := session.ID
-	if sessionID == "" {
-		sessionID = currentSessionID
-	}
-	state := session.State
-	if state == "" {
-		state = modeliamsession.SessionStatusActive
-	}
-
-	return modeliamsession.SessionView{
-		ID:          sessionID,
-		State:       state,
-		IssuedAt:    session.IssuedAt,
-		LastSeenAt:  session.LastSeenAt,
-		ExpiresAt:   session.ExpiresAt,
-		ClientIP:    session.ClientIP,
-		UserAgent:   session.UserAgent,
-		Platform:    session.Platform,
-		OS:          session.OS,
-		EngineName:  session.EngineName,
-		BrowserName: session.BrowserName,
-		IsCurrent:   sessionID == currentSessionID,
 	}
 }

@@ -103,7 +103,7 @@ func (s *AdminUserSessionsDeleteService) Delete(ctx *types.ServiceContext, req *
 		return nil, err
 	}
 	if currentSession.UserID == targetUserID {
-		ctx.SetCookie("session_id", "", -1, "/", "", false, true)
+		ClearSessionCookie(ctx)
 	}
 
 	return &modeliamsession.AdminUserSessionsDeleteRsp{}, nil
@@ -140,6 +140,10 @@ func buildAdminUserSessionsView(ctx *types.ServiceContext, user *modeliamuser.Us
 				continue
 			}
 			return modeliamsession.AdminSessionUserView{}, getErr
+		}
+		if validateErr := ValidateActiveSession(sessionID, session); validateErr != nil {
+			_, _ = DeleteSession(sessionID)
+			continue
 		}
 		if session.UserID != user.ID {
 			_ = redis.ZRem(modeliamsession.SessionUserKey(user.ID), sessionID)

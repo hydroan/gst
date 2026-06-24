@@ -155,22 +155,13 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		log.Errorz("failed to set session in redis", zap.Error(err))
 		return nil, errors.New("failed to set session in redis")
 	}
-	if err = serviceiamsession.TrackUserSession(sessionData); err != nil {
+	if err = serviceiamsession.IndexSession(sessionData); err != nil {
+		_ = redis.Cache[modeliamsession.Session]().Delete(prefixedSessionID)
 		log.Errorz("failed to track user session in redis", zap.Error(err))
 		return nil, errors.New("failed to track user session in redis")
 	}
 
-	// Set cookie
-	//nolint:gosec // Secure is intentionally false so local HTTP development keeps session cookies.
-	http.SetCookie(ctx.Writer, &http.Cookie{
-		Name:     "session_id",
-		Value:    sessionID,
-		Path:     "/",
-		MaxAge:   int(expire.Seconds()), // Use configured expiration time
-		HttpOnly: true,                  // More secure
-		Secure:   false,                 // Set to false for local development
-		SameSite: http.SameSiteLaxMode,  // Lax mode
-	})
+	serviceiamsession.SetSessionCookie(ctx, sessionID, expire)
 
 	log.Infoz("user logged in successfully", zap.String("username", req.Username), zap.String("user_id", user.ID))
 

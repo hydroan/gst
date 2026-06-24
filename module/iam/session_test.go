@@ -1,6 +1,8 @@
 package iam_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
@@ -85,6 +87,63 @@ func TestSessionCurrent(t *testing.T) {
 			require.Equal(t, sessionID, rsp.Session.ID)
 		})
 	})
+
+	t.Run("reject_session_when_stored_snapshot_is_not_active", func(t *testing.T) {
+		account := newSessionTestAccount(t)
+		sessionID := loginSession(t, account.Username, account.Password)
+		sessionKey := modeliamsession.SessionIDKey(sessionID)
+
+		session, err := redis.Cache[modeliamsession.Session]().Get(sessionKey)
+		require.NoError(t, err)
+		session.State = modeliamsession.SessionStatusRevoked
+		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(sessionKey, session, time.Hour))
+
+		cli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{
+			Name:  "session_id",
+			Value: sessionID,
+		}))
+		require.NoError(t, err)
+
+		_, err = cli.Request(http.MethodGet, new(struct{}))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "401")
+	})
+
+	t.Run("reject_session_when_stored_snapshot_is_expired", func(t *testing.T) {
+		account := newSessionTestAccount(t)
+		sessionID := loginSession(t, account.Username, account.Password)
+		sessionKey := modeliamsession.SessionIDKey(sessionID)
+
+		session, err := redis.Cache[modeliamsession.Session]().Get(sessionKey)
+		require.NoError(t, err)
+		session.ExpiresAt = time.Now().Add(-time.Minute)
+		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(sessionKey, session, time.Hour))
+
+		cli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{
+			Name:  "session_id",
+			Value: sessionID,
+		}))
+		require.NoError(t, err)
+
+		_, err = cli.Request(http.MethodGet, new(struct{}))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "401")
+	})
+}
+
+func TestSessionLoginCookie(t *testing.T) {
+	setupSessionRedisCleanup(t)
+
+	account := newSessionTestAccount(t)
+	cookie := loginSessionCookie(t, account.Username, account.Password)
+
+	require.Equal(t, "session_id", cookie.Name)
+	require.NotEmpty(t, cookie.Value)
+	require.Equal(t, "/", cookie.Path)
+	require.True(t, cookie.HttpOnly)
+	require.True(t, cookie.Secure)
+	require.Equal(t, http.SameSiteLaxMode, cookie.SameSite)
+	require.Positive(t, cookie.MaxAge)
 }
 
 func TestSessionGet(t *testing.T) {
@@ -199,6 +258,41 @@ func TestSessionList(t *testing.T) {
 			require.True(t, sessionMap[currentSessionID].IsCurrent)
 			require.False(t, sessionMap[otherSessionID].IsCurrent)
 		})
+	})
+
+	t.Run("prune_invalid_indexed_session", func(t *testing.T) {
+		account := newSessionTestAccount(t)
+		expiredSessionID := loginSession(t, account.Username, account.Password)
+		currentSessionID := loginSession(t, account.Username, account.Password)
+
+		sessionKey := modeliamsession.SessionIDKey(expiredSessionID)
+		session, err := redis.Cache[modeliamsession.Session]().Get(sessionKey)
+		require.NoError(t, err)
+		session.ExpiresAt = time.Now().Add(-time.Minute)
+		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(sessionKey, session, time.Hour))
+		requireUserSessionContains(t, account.UserID, expiredSessionID)
+		requireAllSessionContains(t, expiredSessionID)
+
+		cli, err := client.New(sessionsAPI, client.WithCookie(&http.Cookie{
+			Name:  "session_id",
+			Value: currentSessionID,
+		}))
+		require.NoError(t, err)
+
+		items := make([]iam.SessionView, 0)
+		total := new(int64)
+		resp, err := cli.List(&items, total)
+		require.NoError(t, err)
+
+		helper.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
+			t.Helper()
+			require.Len(t, rsp.Items, 1)
+			require.EqualValues(t, 1, rsp.Total)
+			require.Equal(t, currentSessionID, rsp.Items[0].ID)
+			require.True(t, rsp.Items[0].IsCurrent)
+		})
+		requireUserSessionNotContains(t, account.UserID, expiredSessionID)
+		requireAllSessionNotContains(t, expiredSessionID)
 	})
 }
 
@@ -1129,6 +1223,34 @@ func newSessionTestAccount(t *testing.T) sessionTestAccount {
 	})
 
 	return account
+}
+
+func loginSessionCookie(t *testing.T, username, password string) *http.Cookie {
+	t.Helper()
+
+	payload, err := json.Marshal(iam.LoginReq{
+		Username: username,
+		Password: password,
+	})
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodPost, loginAPI, bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Forwarded-Proto", "https")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Less(t, resp.StatusCode, http.StatusMultipleChoices)
+
+	for _, cookie := range resp.Cookies() {
+		if cookie.Name == "session_id" {
+			return cookie
+		}
+	}
+	require.FailNow(t, "session cookie not found")
+	return nil
 }
 
 func loginSession(t *testing.T, username, password string) string {

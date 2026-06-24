@@ -419,6 +419,18 @@ func ZRem(key string, members ...string) error {
 	return client.ZRem(ctx, key, memberArgs...).Err()
 }
 
+// ZRemRangeByScore removes sorted set members whose score is between minScore and maxScore.
+func ZRemRangeByScore(key, minScore, maxScore string) error {
+	if !config.App.Redis.Enable {
+		zap.S().Warn(ErrRedisIsDisabled.Error())
+		return nil
+	}
+	if config.App.Redis.ClusterMode {
+		return cluster.ZRemRangeByScore(ctx, key, minScore, maxScore).Err()
+	}
+	return client.ZRemRangeByScore(ctx, key, minScore, maxScore).Err()
+}
+
 // RemovePrefix will scan and delete all redis key that matchs the `prefix`.
 // for example: myprefix*
 func RemovePrefix(prefix string) (err error) {

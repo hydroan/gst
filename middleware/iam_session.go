@@ -2,10 +2,11 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
-	"github.com/hydroan/gst/provider/redis"
+	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/mssola/useragent"
 )
@@ -36,14 +37,25 @@ func mustChangePasswordExempt(method, path string) bool {
 func IAMSession() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// fmt.Println("----- identifySession middleware", c.Request.RequestURI)
-		sessionID, err := c.Cookie("session_id")
+		sessionID, err := c.Cookie(serviceiamsession.SessionCookieName)
+		sessionID = strings.TrimSpace(sessionID)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "no session"})
 			return
 		}
-		session, e := redis.Cache[modeliamsession.Session]().WithContext(c.Request.Context()).Get(modeliamsession.SessionIDKey(sessionID))
+		if sessionID == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "no session"})
+			return
+		}
+
+		session, e := serviceiamsession.LoadSession(sessionID)
 		if e != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": e.Error()})
+			return
+		}
+		if err = serviceiamsession.ValidateActiveSession(sessionID, session); err != nil {
+			_, _ = serviceiamsession.DeleteSession(sessionID)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 			return
 		}
 
@@ -77,6 +89,7 @@ func IAMSession() gin.HandlerFunc {
 
 		c.Set(consts.CTX_USER_ID, session.UserID)
 		c.Set(consts.CTX_USERNAME, session.Username)
+		c.Set(consts.CTX_SESSION_ID, sessionID)
 		c.Next()
 	}
 }

@@ -44,10 +44,6 @@ var (
 )
 
 // currentTOTPBindSessionID returns the session that owns the current binding flow.
-//
-// Service context is the preferred source. The cookie fallback keeps the helper
-// usable in routes where middleware has authenticated the request but the
-// session ID has not been copied into the context field.
 func currentTOTPBindSessionID(ctx *types.ServiceContext) (string, error) {
 	if ctx == nil {
 		return "", service.NewError(http.StatusUnauthorized, "authentication required")
@@ -55,15 +51,7 @@ func currentTOTPBindSessionID(ctx *types.ServiceContext) (string, error) {
 	if strings.TrimSpace(ctx.SessionID) != "" {
 		return strings.TrimSpace(ctx.SessionID), nil
 	}
-	sessionID, err := ctx.Cookie("session_id")
-	if err != nil {
-		return "", service.NewError(http.StatusUnauthorized, "authentication required")
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return "", service.NewError(http.StatusUnauthorized, "authentication required")
-	}
-	return sessionID, nil
+	return "", service.NewError(http.StatusUnauthorized, "authentication required")
 }
 
 // issueTOTPBindChallenge creates a cache-backed challenge for a pending TOTP binding flow.

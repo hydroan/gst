@@ -13,7 +13,6 @@ import (
 	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
 )
 
@@ -69,8 +68,8 @@ func (s *AdminSessionsListService) List(ctx *types.ServiceContext, req *modeliam
 			log.Error("failed to load session from redis", getErr)
 			return nil, getErr
 		}
-		if session.UserID == "" {
-			_ = redis.ZRem(modeliamsession.SessionAllKey(), sessionID)
+		if validateErr := ValidateActiveSession(sessionID, session); validateErr != nil {
+			_, _ = DeleteSession(sessionID)
 			continue
 		}
 
@@ -163,6 +162,10 @@ func (s *AdminSessionsGetService) Get(ctx *types.ServiceContext, req *modeliamse
 		log.Error("failed to load target session", err)
 		return nil, err
 	}
+	if err = ValidateActiveSession(targetSessionID, targetSession); err != nil {
+		_, _ = DeleteSession(targetSessionID)
+		return nil, service.NewError(http.StatusNotFound, "session not found")
+	}
 
 	return &modeliamsession.AdminSessionsGetRsp{
 		Session: buildCurrentSessionView(targetSession, currentSessionID),
@@ -188,12 +191,17 @@ func (s *AdminSessionsDeleteService) Delete(ctx *types.ServiceContext, req *mode
 		return nil, service.NewError(http.StatusBadRequest, "session id is required")
 	}
 
-	if _, err = redis.Cache[modeliamsession.Session]().Get(modeliamsession.SessionIDKey(targetSessionID)); err != nil {
+	targetSession, err := redis.Cache[modeliamsession.Session]().Get(modeliamsession.SessionIDKey(targetSessionID))
+	if err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
 			return nil, service.NewError(http.StatusNotFound, "session not found")
 		}
 		log.Error("failed to load target session", err)
 		return nil, err
+	}
+	if err = ValidateActiveSession(targetSessionID, targetSession); err != nil {
+		_, _ = DeleteSession(targetSessionID)
+		return nil, service.NewError(http.StatusNotFound, "session not found")
 	}
 
 	if _, err = DeleteSession(targetSessionID); err != nil {
@@ -204,31 +212,10 @@ func (s *AdminSessionsDeleteService) Delete(ctx *types.ServiceContext, req *mode
 		return nil, err
 	}
 	if targetSessionID == currentSessionID {
-		ctx.SetCookie("session_id", "", -1, "/", "", false, true)
+		ClearSessionCookie(ctx)
 	}
 
 	return &modeliamsession.AdminSessionsDeleteRsp{}, nil
-}
-
-func ensureAdminSessionActor(ctx *types.ServiceContext) error {
-	_, session, err := GetCurrentSession(ctx)
-	if err != nil {
-		return err
-	}
-
-	user := new(modeliamuser.User)
-	if err = database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(user, session.UserID); err != nil || user.GetID() == "" {
-		return service.NewError(http.StatusUnauthorized, "session invalid")
-	}
-
-	if session.Username == consts.AUTHZ_USER_ROOT || session.Username == consts.AUTHZ_USER_ADMIN {
-		return nil
-	}
-	if user.IsSuperuser != nil && *user.IsSuperuser {
-		return nil
-	}
-
-	return service.NewError(http.StatusForbidden, "forbidden")
 }
 
 func buildAdminSessionUserItem(ctx *types.ServiceContext, session modeliamsession.Session) (*adminSessionUserItem, error) {

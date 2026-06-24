@@ -38,7 +38,7 @@ func (s *SessionsListService) List(ctx *types.ServiceContext, req *modeliamsessi
 
 	// GetCurrentSession already guarantees that the resolved session is bound to
 	// an authenticated user, so the service can directly use currentSession.UserID.
-	sessionID, currentSession, err := GetCurrentSession(ctx)
+	currentSessionID, currentSession, err := GetCurrentSession(ctx)
 	if err != nil {
 		log.Error("failed to get current session", err)
 		return nil, err
@@ -52,17 +52,23 @@ func (s *SessionsListService) List(ctx *types.ServiceContext, req *modeliamsessi
 
 	items := make([]modeliamsession.SessionView, 0, len(sessionIDs))
 	for i := range sessionIDs {
-		sessionKey := modeliamsession.SessionIDKey(sessionIDs[i])
+		sessionID := sessionIDs[i]
+		sessionKey := modeliamsession.SessionIDKey(sessionID)
 		session, getErr := redis.Cache[modeliamsession.Session]().Get(sessionKey)
 		if getErr != nil {
 			if errors.Is(getErr, types.ErrEntryNotFound) {
-				_ = redis.ZRem(modeliamsession.SessionUserKey(currentSession.UserID), sessionIDs[i])
+				_ = redis.ZRem(modeliamsession.SessionUserKey(currentSession.UserID), sessionID)
+				_ = redis.ZRem(modeliamsession.SessionAllKey(), sessionID)
 				continue
 			}
 			log.Error("failed to load session from redis", getErr)
 			return nil, getErr
 		}
-		items = append(items, buildCurrentSessionView(session, sessionID))
+		if validateErr := ValidateActiveSession(sessionID, session); validateErr != nil {
+			_, _ = DeleteSession(sessionID)
+			continue
+		}
+		items = append(items, buildCurrentSessionView(session, currentSessionID))
 	}
 
 	sort.Slice(items, func(i, j int) bool {
@@ -109,6 +115,10 @@ func (s *SessionsGetService) Get(ctx *types.ServiceContext, req *modeliamsession
 		log.Error("failed to load target session", err)
 		return nil, err
 	}
+	if err = ValidateActiveSession(targetSessionID, targetSession); err != nil {
+		_, _ = DeleteSession(targetSessionID)
+		return nil, service.NewError(http.StatusNotFound, "session not found")
+	}
 	if targetSession.UserID != currentSession.UserID {
 		return nil, service.NewError(http.StatusForbidden, "forbidden")
 	}
@@ -150,12 +160,19 @@ func (s *SessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliams
 	if err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
 			if targetSessionID == currentSessionID {
-				ctx.SetCookie("session_id", "", -1, "/", "", false, true)
+				ClearSessionCookie(ctx)
 			}
 			return &modeliamsession.SessionsDeleteRsp{}, nil
 		}
 		log.Error("failed to load target session", err)
 		return nil, err
+	}
+	if err = ValidateActiveSession(targetSessionID, targetSession); err != nil {
+		_, _ = DeleteSession(targetSessionID)
+		if targetSessionID == currentSessionID {
+			ClearSessionCookie(ctx)
+		}
+		return &modeliamsession.SessionsDeleteRsp{}, nil
 	}
 	if targetSession.UserID != currentSession.UserID {
 		return nil, service.NewError(http.StatusForbidden, "forbidden")
@@ -164,7 +181,7 @@ func (s *SessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliams
 	if _, err = DeleteSession(targetSessionID); err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
 			if targetSessionID == currentSessionID {
-				ctx.SetCookie("session_id", "", -1, "/", "", false, true)
+				ClearSessionCookie(ctx)
 			}
 			return &modeliamsession.SessionsDeleteRsp{}, nil
 		}
@@ -172,7 +189,7 @@ func (s *SessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliams
 		return nil, err
 	}
 	if targetSessionID == currentSessionID {
-		ctx.SetCookie("session_id", "", -1, "/", "", false, true)
+		ClearSessionCookie(ctx)
 	}
 
 	return &modeliamsession.SessionsDeleteRsp{}, nil
@@ -193,7 +210,7 @@ func (s *SessionsDeleteAllService) Delete(ctx *types.ServiceContext, req *modeli
 		return nil, err
 	}
 
-	ctx.SetCookie("session_id", "", -1, "/", "", false, true)
+	ClearSessionCookie(ctx)
 
 	return &modeliamsession.SessionsDeleteAllRsp{}, nil
 }
