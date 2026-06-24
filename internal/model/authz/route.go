@@ -12,8 +12,12 @@ type Routes struct {
 
 func (Routes) Design() {
 	dsl.Route("routes", func() {
-		dsl.List(func() {})
-		dsl.Get(func() {})
+		dsl.List(func() {
+			dsl.Service(true)
+			dsl.Flatten()
+			dsl.Filename("routes.go")
+			dsl.Result[RoutesRsp]()
+		})
 	})
 }
 
