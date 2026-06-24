@@ -383,8 +383,7 @@ type Module[M Model, REQ Request, RSP Response] interface {
 	Param() string
 }
 
-// Coder is implemented by API response code types (e.g. response.Code) so service errors
-// can attach a stable client-facing numeric code and default message.
+// Coder describes an API envelope code, HTTP status, and client-safe message.
 type Coder interface {
 	Code() int
 	Status() int

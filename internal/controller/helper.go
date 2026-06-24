@@ -9,8 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
+	. "github.com/hydroan/gst/internal/response"
 	gstotel "github.com/hydroan/gst/provider/otel"
-	. "github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"

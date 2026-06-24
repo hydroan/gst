@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	. "github.com/hydroan/gst/response"
+	. "github.com/hydroan/gst/internal/response"
 	"go.uber.org/zap"
 )
 

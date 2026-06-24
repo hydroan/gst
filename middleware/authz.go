@@ -6,8 +6,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/config"
+	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/logger"
-	. "github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
 )

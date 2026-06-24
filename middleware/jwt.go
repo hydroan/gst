@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/authn/jwt"
-	. "github.com/hydroan/gst/response"
+	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/types/consts"
 )
 

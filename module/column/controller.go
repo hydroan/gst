@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	. "github.com/hydroan/gst/response"
+	. "github.com/hydroan/gst/internal/response"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"

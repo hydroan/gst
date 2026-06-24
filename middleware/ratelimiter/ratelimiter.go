@@ -6,7 +6,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/cache/ristretto"
-	. "github.com/hydroan/gst/response"
+	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/types"
 	"golang.org/x/time/rate"
 )

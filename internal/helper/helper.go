@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/client"
-	"github.com/hydroan/gst/response"
+	"github.com/hydroan/gst/internal/response"
 	"github.com/stretchr/testify/require"
 )
 

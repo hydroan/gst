@@ -7,11 +7,11 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/pkg/filetype"
 	gstotel "github.com/hydroan/gst/provider/otel"
-	. "github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 )
@@ -26,7 +26,7 @@ func Import[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 // The handler reads the multipart form file named "file", rejects files larger
 // than MAX_IMPORT_SIZE, passes the file content to the phase service's Import
 // method, fills creator/updater fields on the returned models, updates those
-// models through the configured database handler, and returns a success response.
+// models through the configured database handler, and returns a success
 func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	handler, _ := extractConfig(cfg...)
 	return func(c *gin.Context) {

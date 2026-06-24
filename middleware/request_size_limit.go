@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	. "github.com/hydroan/gst/response"
+	. "github.com/hydroan/gst/internal/response"
 )
 
 // RequestSizeLimit returns a middleware that limits the size of incoming request bodies.

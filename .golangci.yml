@@ -91,7 +91,7 @@ linters:
           arguments:
             - allowedPackages:
                 - "github.com/hydroan/gst/dsl"
-                - "github.com/hydroan/gst/response"
+                - "github.com/hydroan/gst/internal/response"
         - name: blank-imports
         - name: context-as-argument
         - name: context-keys-type

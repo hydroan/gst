@@ -14,11 +14,12 @@ import (
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/provider/redis"
-	"github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 )
+
+const testSuccessCode = 0
 
 type userTestAccount struct {
 	UserID    string
@@ -249,7 +250,7 @@ func TestUserGet(t *testing.T) {
 		resp, err := cli.Get(victim.UserID, got)
 		require.NoError(t, err)
 		require.NotNil(t, resp)
-		require.Equal(t, response.CodeSuccess.Code(), resp.Code)
+		require.Equal(t, testSuccessCode, resp.Code)
 		require.Equal(t, victim.UserID, got.ID)
 		require.Equal(t, victim.Username, got.Username)
 		require.Equal(t, modeliamuser.UserStatusActive, got.Status)
@@ -290,7 +291,7 @@ func TestUserPatch(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.NotNil(t, resp)
-		require.Equal(t, response.CodeSuccess.Code(), resp.Code)
+		require.Equal(t, testSuccessCode, resp.Code)
 		helper.TestResp(t, resp, func(t *testing.T, rsp iam.User) {
 			t.Helper()
 			require.Equal(t, victim.UserID, rsp.ID)
@@ -462,7 +463,7 @@ func TestUserDeleteMany(t *testing.T) {
 		resp, err := cli.DeleteMany([]string{victim1.UserID, victim2.UserID})
 		require.NoError(t, err)
 		require.NotNil(t, resp)
-		require.Equal(t, response.CodeSuccess.Code(), resp.Code)
+		require.Equal(t, testSuccessCode, resp.Code)
 
 		userRequireDeleted(t, victim1.Username)
 		userRequireDeleted(t, victim2.Username)
@@ -558,7 +559,7 @@ func TestUserSuperuserTargetProtection(t *testing.T) {
 		got := new(iam.User)
 		resp, err := adminCli.Get(victim.UserID, got)
 		require.NoError(t, err)
-		require.Equal(t, response.CodeSuccess.Code(), resp.Code)
+		require.Equal(t, testSuccessCode, resp.Code)
 		require.Equal(t, victim.UserID, got.ID)
 		require.True(t, got.IsSuperuser != nil && *got.IsSuperuser)
 	})
@@ -569,7 +570,7 @@ func TestUserSuperuserTargetProtection(t *testing.T) {
 			DisplayName: &adminPatchedDisplayName,
 		})
 		require.NoError(t, err)
-		require.Equal(t, response.CodeSuccess.Code(), resp.Code)
+		require.Equal(t, testSuccessCode, resp.Code)
 
 		got := userLoadByID(t, victim.UserID)
 		require.NotNil(t, got.DisplayName)
@@ -583,7 +584,7 @@ func TestUserSuperuserTargetProtection(t *testing.T) {
 
 		resp, err := adminCli.DeleteMany([]string{adminDeleteVictim.UserID})
 		require.NoError(t, err)
-		require.Equal(t, response.CodeSuccess.Code(), resp.Code)
+		require.Equal(t, testSuccessCode, resp.Code)
 		userRequireDeleted(t, adminDeleteVictim.Username)
 		userRequireSessionNotFound(t, adminDeleteVictim.SessionID)
 	})

@@ -9,10 +9,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/schema"
+	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/provider/otel"
-	. "github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 )
@@ -27,7 +27,7 @@ func Export[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 // The handler decodes query parameters into M, applies service filters, runs
 // list hooks, queries the configured database handler with export-oriented limit
 // and query options, delegates byte generation to the phase service's Export
-// method, and writes the result as an attachment response.
+// method, and writes the result as an attachment
 func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	handler, _ := extractConfig(cfg...)
 	return func(c *gin.Context) {

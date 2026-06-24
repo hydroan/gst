@@ -36,7 +36,7 @@ type Base[M types.Model, REQ types.Request, RSP types.Response] = serviceregistr
 // Example usage with pointer type:
 //
 //	type myService struct {
-//	    service.Base[*model.User, *request.CreateUserReq, *response.CreateUserRsp]
+//	    service.Base[*model.User, *model.UserCreateReq, *model.UserCreateRsp]
 //	}
 //
 //	func init() {
@@ -46,7 +46,7 @@ type Base[M types.Model, REQ types.Request, RSP types.Response] = serviceregistr
 // Example usage with non-pointer type:
 //
 //	type myService struct {
-//	    service.Base[*model.User, *request.CreateUserReq, *response.CreateUserRsp]
+//	    service.Base[*model.User, *model.UserCreateReq, *model.UserCreateRsp]
 //	}
 //
 //	func init() {

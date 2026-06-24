@@ -19,9 +19,10 @@ import (
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/module/iam"
-	"github.com/hydroan/gst/response"
 	"github.com/stretchr/testify/require"
 )
+
+const testSuccessCode = 0
 
 var (
 	token        = "-"
@@ -320,7 +321,7 @@ func TestAuthz(t *testing.T) {
 			resp, err = cli.Delete(menuID)
 			require.NoError(t, err)
 			require.NotNil(t, resp)
-			require.Equal(t, response.CodeSuccess.Code(), resp.Code, "delete should return success")
+			require.Equal(t, testSuccessCode, resp.Code, "delete should return success")
 		})
 	})
 
@@ -442,7 +443,7 @@ func TestAuthz(t *testing.T) {
 			resp, err = cli.Delete(roleID)
 			require.NoError(t, err)
 			require.NotNil(t, resp)
-			require.Equal(t, response.CodeSuccess.Code(), resp.Code, "delete should return success")
+			require.Equal(t, testSuccessCode, resp.Code, "delete should return success")
 		})
 
 		resp, err = cliMenu.Delete(roleMenuID)
@@ -559,7 +560,7 @@ func TestAuthz(t *testing.T) {
 			resp, err = cli.Delete(userRoleID)
 			require.NoError(t, err)
 			require.NotNil(t, resp)
-			require.Equal(t, response.CodeSuccess.Code(), resp.Code, "delete should return success")
+			require.Equal(t, testSuccessCode, resp.Code, "delete should return success")
 		})
 	})
 }

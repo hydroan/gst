@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	. "github.com/hydroan/gst/response"
+	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 )
