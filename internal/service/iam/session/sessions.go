@@ -98,19 +98,19 @@ func (s *SessionsGetService) Get(ctx *types.ServiceContext, req *modeliamsession
 
 	targetSessionID := ctx.Params["id"]
 	if targetSessionID == "" {
-		return nil, types.NewServiceError(http.StatusBadRequest, "session id is required")
+		return nil, service.NewError(http.StatusBadRequest, "session id is required")
 	}
 
 	targetSession, err := redis.Cache[modeliamsession.Session]().Get(modeliamsession.SessionIDKey(targetSessionID))
 	if err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
-			return nil, types.NewServiceError(http.StatusNotFound, "session not found")
+			return nil, service.NewError(http.StatusNotFound, "session not found")
 		}
 		log.Error("failed to load target session", err)
 		return nil, err
 	}
 	if targetSession.UserID != currentSession.UserID {
-		return nil, types.NewServiceError(http.StatusForbidden, "forbidden")
+		return nil, service.NewError(http.StatusForbidden, "forbidden")
 	}
 
 	return &modeliamsession.SessionsGetRsp{
@@ -133,7 +133,7 @@ func (s *SessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliams
 
 	targetSessionID := ctx.Params["id"]
 	if targetSessionID == "" {
-		return nil, types.NewServiceError(http.StatusBadRequest, "session id is required")
+		return nil, service.NewError(http.StatusBadRequest, "session id is required")
 	}
 	if targetSessionID == "others" {
 		// DELETE /api/iam/sessions/others is a bulk self-service logout for
@@ -158,7 +158,7 @@ func (s *SessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliams
 		return nil, err
 	}
 	if targetSession.UserID != currentSession.UserID {
-		return nil, types.NewServiceError(http.StatusForbidden, "forbidden")
+		return nil, service.NewError(http.StatusForbidden, "forbidden")
 	}
 
 	if _, err = DeleteSession(targetSessionID); err != nil {

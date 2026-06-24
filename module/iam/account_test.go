@@ -14,7 +14,6 @@ import (
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/provider/redis"
-	"github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 )
@@ -471,7 +470,7 @@ func TestAccountStatus(t *testing.T) {
 		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), fmt.Sprintf(`"code":%d`, response.CodeAccountInactive.Code()))
+		require.Contains(t, err.Error(), `"code":-1`)
 		require.Contains(t, err.Error(), "disabled")
 	})
 
@@ -523,7 +522,7 @@ func TestAccountStatus(t *testing.T) {
 		_, err = cli.Request(http.MethodGet, new(struct{}))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), fmt.Sprintf(`"code":%d`, response.CodeAccountInactive.Code()))
+		require.Contains(t, err.Error(), `"code":-1`)
 	})
 
 	t.Run("current_forbidden_when_db_locked_but_redis_session_valid", func(t *testing.T) {
@@ -549,7 +548,7 @@ func TestAccountStatus(t *testing.T) {
 		_, err = cli.Request(http.MethodGet, new(struct{}))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), fmt.Sprintf(`"code":%d`, response.CodeAccountLocked.Code()))
+		require.Contains(t, err.Error(), `"code":-1`)
 	})
 
 	t.Run("invalid_status_rejected", func(t *testing.T) {
@@ -613,7 +612,7 @@ func TestAccountStatus(t *testing.T) {
 		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), fmt.Sprintf(`"code":%d`, response.CodeAccountLocked.Code()))
+		require.Contains(t, err.Error(), `"code":-1`)
 		require.Contains(t, err.Error(), "locked")
 	})
 

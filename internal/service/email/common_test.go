@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/errors"
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	loggerzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
@@ -159,10 +160,10 @@ func testEmailAccount(id, email string, verified bool) *AccountSnapshot {
 func requireServiceError(t *testing.T, err error, status int, message string) {
 	t.Helper()
 
-	var serviceErr *types.ServiceError
+	var serviceErr *service.Error
 	require.ErrorAs(t, err, &serviceErr)
-	require.Equal(t, status, serviceErr.StatusCode)
-	require.Equal(t, message, serviceErr.Message)
+	require.Equal(t, status, serviceErr.Status())
+	require.Equal(t, message, serviceErr.Msg())
 }
 
 func TestIssueLoadConsumeEmailFlow(t *testing.T) {

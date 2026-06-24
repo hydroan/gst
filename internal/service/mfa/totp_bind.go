@@ -38,11 +38,11 @@ func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPBi
 
 	if len(ctx.UserID) == 0 {
 		log.Errorz("user_id not found in context")
-		return nil, types.NewServiceError(http.StatusUnauthorized, "authentication required")
+		return nil, service.NewError(http.StatusUnauthorized, "authentication required")
 	}
 	if len(ctx.Username) == 0 {
 		log.Errorz("username not found in context")
-		return nil, types.NewServiceError(http.StatusUnauthorized, "authentication required")
+		return nil, service.NewError(http.StatusUnauthorized, "authentication required")
 	}
 	sessionID, err := currentTOTPBindSessionID(ctx)
 	if err != nil {

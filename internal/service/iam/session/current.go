@@ -7,7 +7,6 @@ import (
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/util"
@@ -31,13 +30,13 @@ func (s *CurrentListService) List(ctx *types.ServiceContext, req *modeliamsessio
 	user := new(modeliamuser.User)
 	if err := database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(user, session.UserID); err != nil || user.GetID() == "" {
 		log.Error("failed to load user for current session")
-		return nil, types.NewServiceError(http.StatusUnauthorized, "session invalid")
+		return nil, service.NewError(http.StatusUnauthorized, "session invalid")
 	}
 	switch user.Status {
 	case modeliamuser.UserStatusInactive:
-		return nil, types.NewServiceError(http.StatusForbidden, "", response.CodeAccountInactive)
+		return nil, service.NewError(http.StatusForbidden, "account disabled")
 	case modeliamuser.UserStatusLocked:
-		return nil, types.NewServiceError(http.StatusForbidden, "", response.CodeAccountLocked)
+		return nil, service.NewError(http.StatusForbidden, "account locked")
 	}
 
 	return buildCurrentListRsp(session, sessionID, &modeliamsession.CurrentPrincipal{
@@ -63,12 +62,12 @@ func (s *CurrentDeleteService) Delete(ctx *types.ServiceContext, req *modeliamse
 	sessionID, err := ctx.Cookie("session_id")
 	if err != nil {
 		log.Error(err)
-		return nil, types.NewServiceError(http.StatusUnauthorized, err.Error())
+		return nil, service.NewError(http.StatusUnauthorized, err.Error())
 	}
 
 	if _, err = DeleteSession(sessionID); err != nil {
 		log.Error("failed to delete current session", err)
-		return nil, types.NewServiceErrorWithCause(http.StatusUnauthorized, "session not exists", err)
+		return nil, service.NewErrorWithCause(http.StatusUnauthorized, "session not exists", err)
 	}
 
 	ctx.SetCookie("session_id", "", -1, "/", "", false, true)

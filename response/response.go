@@ -53,9 +53,6 @@ const (
 	CodeAlreadyExistsRole
 
 	CodeTooLargeFile
-
-	CodeAccountInactive
-	CodeAccountLocked
 )
 
 type codeValue struct {
@@ -93,8 +90,6 @@ var defaultCodeValueMap = map[Code]codeValue{
 	CodeAlreadyExistsUser:   {http.StatusConflict, "user already exists"},
 	CodeAlreadyExistsRole:   {http.StatusConflict, "role already exists"},
 	CodeTooLargeFile:        {http.StatusBadRequest, "too large file"},
-	CodeAccountInactive:     {http.StatusForbidden, "user account is disabled"},
-	CodeAccountLocked:       {http.StatusForbidden, "user account is locked"},
 }
 
 // customCodeValueMap holds app-defined overrides from Code to HTTP status and message.

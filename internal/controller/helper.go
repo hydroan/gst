@@ -11,6 +11,7 @@ import (
 	"github.com/hydroan/gst/database"
 	gstotel "github.com/hydroan/gst/provider/otel"
 	. "github.com/hydroan/gst/response"
+	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"go.opentelemetry.io/otel/trace"
@@ -389,40 +390,10 @@ func traceServiceImport[M types.Model](parentCtx context.Context, phase consts.P
 	return ml, err
 }
 
-// handleServiceError handles ServiceError
+// handleServiceError handles service-layer errors.
 func handleServiceError(c *gin.Context, ctx *types.ServiceContext, err error) {
-	// Check if it's a ServiceError
-	if serviceErr, ok := errors.AsType[*types.ServiceError](err); ok {
-		if serviceErr.Coder != nil {
-			// Code and CodeInstance both expose WithStatus → CodeInstance; same handling.
-			switch co := serviceErr.Coder.(type) {
-			case interface {
-				WithStatus(int) CodeInstance
-			}:
-				ci := co.WithStatus(serviceErr.StatusCode)
-				if serviceErr.Message != "" {
-					ci = ci.WithMsg(serviceErr.Message)
-				}
-				JSON(c, ci)
-			default:
-				msg := serviceErr.Message
-				if msg == "" {
-					msg = serviceErr.Coder.Msg()
-				}
-				st := serviceErr.StatusCode
-				if st == 0 {
-					st = serviceErr.Coder.Status()
-				}
-				c.JSON(st, gin.H{
-					"code":            serviceErr.Coder.Code(),
-					"msg":             msg,
-					"data":            nil,
-					consts.REQUEST_ID: c.GetString(consts.REQUEST_ID),
-				})
-			}
-			return
-		}
-		JSON(c, CodeFailure.WithStatus(serviceErr.StatusCode).WithErr(err))
+	if serviceErr, ok := errors.AsType[*service.Error](err); ok {
+		JSON(c, serviceErr)
 		return
 	}
 

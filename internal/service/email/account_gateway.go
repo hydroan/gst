@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
 
@@ -109,12 +110,12 @@ func validAccountSnapshot(account *AccountSnapshot, expectedUserID string) error
 	return nil
 }
 
-func newAccountGatewayNotConfiguredServiceError(err error) *types.ServiceError {
-	return types.NewServiceErrorWithCause(http.StatusInternalServerError, "Email account gateway is not configured", err)
+func newAccountGatewayNotConfiguredServiceError(err error) *service.Error {
+	return service.NewErrorWithCause(http.StatusInternalServerError, "Email account gateway is not configured", err)
 }
 
-func newAccountGatewayInvalidAccountServiceError(err error) *types.ServiceError {
-	return types.NewServiceErrorWithCause(http.StatusInternalServerError, "Email account gateway returned invalid account", err)
+func newAccountGatewayInvalidAccountServiceError(err error) *service.Error {
+	return service.NewErrorWithCause(http.StatusInternalServerError, "Email account gateway returned invalid account", err)
 }
 
 // missingAccountGateway is the safe default used until the host application

@@ -7,7 +7,6 @@ import (
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
@@ -121,20 +120,20 @@ func (UserPatchService) Patch(ctx *types.ServiceContext, req *modeliamuser.UserP
 	}
 
 	if req == nil {
-		return nil, types.NewServiceError(http.StatusBadRequest, "user patch request is required")
+		return nil, service.NewError(http.StatusBadRequest, "user patch request is required")
 	}
 
 	targetID := ctx.Params["id"]
 	if targetID == "" {
-		return nil, types.NewServiceError(http.StatusBadRequest, "user id is required")
+		return nil, service.NewError(http.StatusBadRequest, "user id is required")
 	}
 
 	target := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(target, targetID); err != nil {
-		return nil, types.NewServiceErrorWithCause(http.StatusInternalServerError, "failed to load target user", err)
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load target user", err)
 	}
 	if target.ID == "" {
-		return nil, types.NewServiceError(http.StatusNotFound, "user not found")
+		return nil, service.NewError(http.StatusNotFound, "user not found")
 	}
 	if target.IsSuperuser != nil && *target.IsSuperuser && !isRootOrAdmin(actorUsername) {
 		return nil, userSuperuserTargetForbidden()
@@ -178,12 +177,12 @@ func (UserPatchService) Patch(ctx *types.ServiceContext, req *modeliamuser.UserP
 		columns = append(columns, "gender")
 	}
 	if len(columns) == 1 {
-		return nil, types.NewServiceError(http.StatusBadRequest, "patch fields are required")
+		return nil, service.NewError(http.StatusBadRequest, "patch fields are required")
 	}
 
 	target.SetUpdatedBy(ctx.Username)
 	if err = database.Database[*modeliamuser.User](ctx.DatabaseContext()).WithSelect(columns...).Update(target); err != nil {
-		return nil, types.NewServiceErrorWithCause(http.StatusInternalServerError, "failed to patch user", err)
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to patch user", err)
 	}
 	return target, nil
 }
@@ -196,10 +195,10 @@ func userResourceActor(ctx *types.ServiceContext) (string, *modeliamuser.User, e
 
 	actor := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(actor, session.UserID); err != nil {
-		return "", nil, types.NewServiceErrorWithCause(http.StatusUnauthorized, "current user not found", err)
+		return "", nil, service.NewErrorWithCause(http.StatusUnauthorized, "current user not found", err)
 	}
 	if actor.ID == "" {
-		return "", nil, types.NewServiceError(http.StatusUnauthorized, "current user not found")
+		return "", nil, service.NewError(http.StatusUnauthorized, "current user not found")
 	}
 	return actor.Username, actor, nil
 }
@@ -211,7 +210,7 @@ func ensureUserModuleSuperuser(actorUsername string, actor *modeliamuser.User) e
 	if actor != nil && actor.IsSuperuser != nil && *actor.IsSuperuser {
 		return nil
 	}
-	return types.NewServiceError(http.StatusForbidden, "forbidden: superuser privileges required", response.CodeForbidden)
+	return service.NewError(http.StatusForbidden, "superuser required")
 }
 
 func ensureUserTargetAccessible(ctx *types.ServiceContext, req *modeliamuser.User) error {
@@ -234,14 +233,14 @@ func ensureUserCreateAllowed(actorUsername string, req *modeliamuser.User) error
 
 func ensureExistingUserTargetAllowed(ctx *types.ServiceContext, actorUsername string, req *modeliamuser.User) error {
 	if req == nil || req.GetID() == "" {
-		return types.NewServiceError(http.StatusBadRequest, "user id is required")
+		return service.NewError(http.StatusBadRequest, "user id is required")
 	}
 	target := new(modeliamuser.User)
 	if err := database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(target, req.GetID()); err != nil {
-		return types.NewServiceErrorWithCause(http.StatusInternalServerError, "failed to load target user", err)
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to load target user", err)
 	}
 	if target.ID == "" {
-		return types.NewServiceError(http.StatusNotFound, "user not found")
+		return service.NewError(http.StatusNotFound, "user not found")
 	}
 	if target.IsSuperuser != nil && *target.IsSuperuser && !isRootOrAdmin(actorUsername) {
 		return userSuperuserTargetForbidden()
@@ -250,7 +249,7 @@ func ensureExistingUserTargetAllowed(ctx *types.ServiceContext, actorUsername st
 }
 
 func userSuperuserTargetForbidden() error {
-	return types.NewServiceError(http.StatusForbidden, "forbidden: only root or admin may operate on a superuser", response.CodeForbidden)
+	return service.NewError(http.StatusForbidden, "superuser is protected")
 }
 
 func isRootOrAdmin(username string) bool {

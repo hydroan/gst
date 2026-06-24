@@ -16,7 +16,6 @@ import (
 	servicemfa "github.com/hydroan/gst/internal/service/mfa"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/provider/redis"
-	"github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/util"
@@ -81,10 +80,10 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 
 	// Check if user is enabled
 	if user.Status == modeliamuser.UserStatusInactive {
-		return nil, types.NewServiceError(http.StatusForbidden, "", response.CodeAccountInactive)
+		return nil, service.NewError(http.StatusForbidden, "account disabled")
 	}
 	if user.Status == modeliamuser.UserStatusLocked {
-		return nil, types.NewServiceError(http.StatusForbidden, "", response.CodeAccountLocked)
+		return nil, service.NewError(http.StatusForbidden, "account locked")
 	}
 
 	// Verify password

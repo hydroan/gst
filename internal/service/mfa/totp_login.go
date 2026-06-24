@@ -8,6 +8,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
+	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/pquerna/otp/totp"
 )
@@ -39,7 +40,7 @@ func VerifyLoginSecondFactor(ctx *types.ServiceContext, userID string, factor Lo
 
 	userID = strings.TrimSpace(userID)
 	if ctx == nil || userID == "" {
-		return types.NewServiceError(http.StatusUnauthorized, "authentication required")
+		return service.NewError(http.StatusUnauthorized, "authentication required")
 	}
 
 	devices, err := listActiveLoginTOTPDevices(ctx, userID)

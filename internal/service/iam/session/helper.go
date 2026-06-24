@@ -8,6 +8,7 @@ import (
 	"github.com/cockroachdb/errors"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	"github.com/hydroan/gst/provider/redis"
+	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
 
@@ -38,18 +39,18 @@ func listAllSessionIDs() ([]string, error) {
 func GetCurrentSession(ctx *types.ServiceContext) (string, modeliamsession.Session, error) {
 	sessionID, err := ctx.Cookie("session_id")
 	if err != nil {
-		return "", modeliamsession.Session{}, types.NewServiceError(http.StatusUnauthorized, err.Error())
+		return "", modeliamsession.Session{}, service.NewError(http.StatusUnauthorized, err.Error())
 	}
 
 	sessionKey := modeliamsession.SessionIDKey(sessionID)
 	session, err := redis.Cache[modeliamsession.Session]().Get(sessionKey)
 	if err != nil {
-		return "", modeliamsession.Session{}, types.NewServiceErrorWithCause(http.StatusUnauthorized, "session not exists", err)
+		return "", modeliamsession.Session{}, service.NewErrorWithCause(http.StatusUnauthorized, "session not exists", err)
 	}
 	// An IAM current-session lookup must resolve to an authenticated user
 	// session. An empty UserID indicates incomplete or stale session data.
 	if session.UserID == "" {
-		return "", modeliamsession.Session{}, types.NewServiceError(http.StatusUnauthorized, "user not authenticated")
+		return "", modeliamsession.Session{}, service.NewError(http.StatusUnauthorized, "user not authenticated")
 	}
 
 	return sessionID, session, nil

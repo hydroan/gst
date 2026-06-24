@@ -8,6 +8,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/provider/redis"
+	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/util"
 )
@@ -49,18 +50,18 @@ var (
 // session ID has not been copied into the context field.
 func currentTOTPBindSessionID(ctx *types.ServiceContext) (string, error) {
 	if ctx == nil {
-		return "", types.NewServiceError(http.StatusUnauthorized, "authentication required")
+		return "", service.NewError(http.StatusUnauthorized, "authentication required")
 	}
 	if strings.TrimSpace(ctx.SessionID) != "" {
 		return strings.TrimSpace(ctx.SessionID), nil
 	}
 	sessionID, err := ctx.Cookie("session_id")
 	if err != nil {
-		return "", types.NewServiceError(http.StatusUnauthorized, "authentication required")
+		return "", service.NewError(http.StatusUnauthorized, "authentication required")
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
-		return "", types.NewServiceError(http.StatusUnauthorized, "authentication required")
+		return "", service.NewError(http.StatusUnauthorized, "authentication required")
 	}
 	return sessionID, nil
 }

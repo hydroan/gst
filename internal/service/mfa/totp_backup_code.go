@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
+	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"golang.org/x/crypto/bcrypt"
@@ -70,7 +71,7 @@ func HashTOTPBackupCodes(codes []string) ([]string, error) {
 // removed in the same transaction that validates the code.
 func ConsumeTOTPBackupCode(ctx *types.ServiceContext, userID, code string) error {
 	if ctx == nil || strings.TrimSpace(userID) == "" {
-		return types.NewServiceError(http.StatusUnauthorized, "authentication required")
+		return service.NewError(http.StatusUnauthorized, "authentication required")
 	}
 
 	return database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).Transaction(func(tx types.Database[*modelmfa.TOTPDevice]) error {

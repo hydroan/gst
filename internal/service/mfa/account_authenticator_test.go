@@ -7,6 +7,7 @@ import (
 	"github.com/cockroachdb/errors"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	loggerzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 )
@@ -40,10 +41,10 @@ func resetAccountAuthenticatorAfterTest(t *testing.T) {
 func requireServiceError(t *testing.T, err error, status int, message string) {
 	t.Helper()
 
-	var serviceErr *types.ServiceError
+	var serviceErr *service.Error
 	require.ErrorAs(t, err, &serviceErr)
-	require.Equal(t, status, serviceErr.StatusCode)
-	require.Equal(t, message, serviceErr.Message)
+	require.Equal(t, status, serviceErr.Status())
+	require.Equal(t, message, serviceErr.Msg())
 }
 
 func TestTOTPCheckCreateReturnsConfigurationErrorWhenAccountAuthenticatorMissing(t *testing.T) {

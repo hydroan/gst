@@ -35,7 +35,7 @@ func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modelmfa.TOT
 
 	if len(ctx.UserID) == 0 {
 		log.Errorz("user_id not found in context")
-		return nil, types.NewServiceError(http.StatusUnauthorized, "authentication required")
+		return nil, service.NewError(http.StatusUnauthorized, "authentication required")
 	}
 	sessionID, err := currentTOTPBindSessionID(ctx)
 	if err != nil {

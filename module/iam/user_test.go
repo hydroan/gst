@@ -749,7 +749,7 @@ func userRequireForbidden(t *testing.T, err error) {
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "403")
-	require.Contains(t, err.Error(), fmt.Sprintf(`"code":%d`, response.CodeForbidden.Code()))
+	require.Contains(t, err.Error(), `"code":-1`)
 }
 
 func userRequirePatchRejected(t *testing.T, err error) {

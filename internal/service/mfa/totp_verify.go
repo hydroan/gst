@@ -36,7 +36,7 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 		return &modelmfa.TOTPVerifyRsp{
 			Valid:   false,
 			Message: "authentication required",
-		}, types.NewServiceError(http.StatusUnauthorized, "authentication required")
+		}, service.NewError(http.StatusUnauthorized, "authentication required")
 	}
 
 	code := strings.TrimSpace(req.TOTPCode)

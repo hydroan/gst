@@ -28,7 +28,7 @@ func (t *TOTPStatusService) List(ctx *types.ServiceContext, req *modelmfa.TOTPSt
 	// 1. Verify the authenticated account.
 	if len(ctx.UserID) == 0 {
 		log.Errorz("user_id not found in context")
-		return nil, types.NewServiceError(http.StatusUnauthorized, "authentication required")
+		return nil, service.NewError(http.StatusUnauthorized, "authentication required")
 	}
 
 	// 2. Load active TOTP devices for the user.

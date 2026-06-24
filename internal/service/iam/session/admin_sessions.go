@@ -152,13 +152,13 @@ func (s *AdminSessionsGetService) Get(ctx *types.ServiceContext, req *modeliamse
 
 	targetSessionID := ctx.Params["id"]
 	if targetSessionID == "" {
-		return nil, types.NewServiceError(http.StatusBadRequest, "session id is required")
+		return nil, service.NewError(http.StatusBadRequest, "session id is required")
 	}
 
 	targetSession, err := redis.Cache[modeliamsession.Session]().Get(modeliamsession.SessionIDKey(targetSessionID))
 	if err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
-			return nil, types.NewServiceError(http.StatusNotFound, "session not found")
+			return nil, service.NewError(http.StatusNotFound, "session not found")
 		}
 		log.Error("failed to load target session", err)
 		return nil, err
@@ -185,12 +185,12 @@ func (s *AdminSessionsDeleteService) Delete(ctx *types.ServiceContext, req *mode
 
 	targetSessionID := ctx.Params["id"]
 	if targetSessionID == "" {
-		return nil, types.NewServiceError(http.StatusBadRequest, "session id is required")
+		return nil, service.NewError(http.StatusBadRequest, "session id is required")
 	}
 
 	if _, err = redis.Cache[modeliamsession.Session]().Get(modeliamsession.SessionIDKey(targetSessionID)); err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
-			return nil, types.NewServiceError(http.StatusNotFound, "session not found")
+			return nil, service.NewError(http.StatusNotFound, "session not found")
 		}
 		log.Error("failed to load target session", err)
 		return nil, err
@@ -198,7 +198,7 @@ func (s *AdminSessionsDeleteService) Delete(ctx *types.ServiceContext, req *mode
 
 	if _, err = DeleteSession(targetSessionID); err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
-			return nil, types.NewServiceError(http.StatusNotFound, "session not found")
+			return nil, service.NewError(http.StatusNotFound, "session not found")
 		}
 		log.Error("failed to delete target session", err)
 		return nil, err
@@ -218,7 +218,7 @@ func ensureAdminSessionActor(ctx *types.ServiceContext) error {
 
 	user := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(user, session.UserID); err != nil || user.GetID() == "" {
-		return types.NewServiceError(http.StatusUnauthorized, "session invalid")
+		return service.NewError(http.StatusUnauthorized, "session invalid")
 	}
 
 	if session.Username == consts.AUTHZ_USER_ROOT || session.Username == consts.AUTHZ_USER_ADMIN {
@@ -228,7 +228,7 @@ func ensureAdminSessionActor(ctx *types.ServiceContext) error {
 		return nil
 	}
 
-	return types.NewServiceError(http.StatusForbidden, "forbidden")
+	return service.NewError(http.StatusForbidden, "forbidden")
 }
 
 func buildAdminSessionUserItem(ctx *types.ServiceContext, session modeliamsession.Session) (*adminSessionUserItem, error) {

@@ -40,7 +40,7 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 
 	if len(ctx.UserID) == 0 {
 		log.Errorz("user_id not found in context")
-		return nil, types.NewServiceError(http.StatusUnauthorized, "authentication required")
+		return nil, service.NewError(http.StatusUnauthorized, "authentication required")
 	}
 
 	switch countTOTPUnbindVerificationMethods(req) {
@@ -221,7 +221,7 @@ func verifyTOTPUnbindPassword(ctx *types.ServiceContext, userID, password string
 		if errors.Is(err, ErrAccountAuthenticationFailed) {
 			return errTOTPUnbindVerificationInvalid
 		}
-		return types.NewServiceErrorWithCause(http.StatusInternalServerError, "failed to verify password", err)
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify password", err)
 	}
 	if err := validateAuthenticatedAccount(account, userID); err != nil {
 		return newAccountAuthenticatorInvalidAccountServiceError(err)
@@ -230,7 +230,7 @@ func verifyTOTPUnbindPassword(ctx *types.ServiceContext, userID, password string
 }
 
 func isTOTPUnbindPasswordSystemError(err error) bool {
-	var serviceErr *types.ServiceError
+	var serviceErr *service.Error
 	return errors.As(err, &serviceErr)
 }
 

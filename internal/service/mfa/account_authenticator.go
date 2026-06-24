@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
 
@@ -91,12 +92,12 @@ func validateAuthenticatedAccount(account *AuthenticatedAccount, expectedAccount
 	return nil
 }
 
-func newAccountAuthenticatorNotConfiguredServiceError(err error) *types.ServiceError {
-	return types.NewServiceErrorWithCause(http.StatusInternalServerError, "MFA account authenticator is not configured", err)
+func newAccountAuthenticatorNotConfiguredServiceError(err error) *service.Error {
+	return service.NewErrorWithCause(http.StatusInternalServerError, "MFA account authenticator is not configured", err)
 }
 
-func newAccountAuthenticatorInvalidAccountServiceError(err error) *types.ServiceError {
-	return types.NewServiceErrorWithCause(http.StatusInternalServerError, "MFA account authenticator returned invalid account", err)
+func newAccountAuthenticatorInvalidAccountServiceError(err error) *service.Error {
+	return service.NewErrorWithCause(http.StatusInternalServerError, "MFA account authenticator returned invalid account", err)
 }
 
 // missingAccountAuthenticator is the safe default used until the host application

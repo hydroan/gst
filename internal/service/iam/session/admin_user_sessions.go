@@ -41,19 +41,19 @@ func (s *AdminUserSessionsListService) List(ctx *types.ServiceContext, req *mode
 
 	targetUserID := ctx.Params["id"]
 	if targetUserID == "" {
-		return nil, types.NewServiceError(http.StatusBadRequest, "user id is required")
+		return nil, service.NewError(http.StatusBadRequest, "user id is required")
 	}
 
 	user := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(user, targetUserID); err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
-			return nil, types.NewServiceError(http.StatusNotFound, "user not found")
+			return nil, service.NewError(http.StatusNotFound, "user not found")
 		}
 		log.Error("failed to load target user", err)
 		return nil, err
 	}
 	if user.GetID() == "" {
-		return nil, types.NewServiceError(http.StatusNotFound, "user not found")
+		return nil, service.NewError(http.StatusNotFound, "user not found")
 	}
 
 	view, err := buildAdminUserSessionsView(ctx, user, currentSessionID)
@@ -83,19 +83,19 @@ func (s *AdminUserSessionsDeleteService) Delete(ctx *types.ServiceContext, req *
 
 	targetUserID := ctx.Params["id"]
 	if targetUserID == "" {
-		return nil, types.NewServiceError(http.StatusBadRequest, "user id is required")
+		return nil, service.NewError(http.StatusBadRequest, "user id is required")
 	}
 
 	targetUser := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(targetUser, targetUserID); err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
-			return nil, types.NewServiceError(http.StatusNotFound, "user not found")
+			return nil, service.NewError(http.StatusNotFound, "user not found")
 		}
 		log.Error("failed to load target user", err)
 		return nil, err
 	}
 	if targetUser.GetID() == "" {
-		return nil, types.NewServiceError(http.StatusNotFound, "user not found")
+		return nil, service.NewError(http.StatusNotFound, "user not found")
 	}
 
 	if err = DeleteAllSessions(targetUserID); err != nil {

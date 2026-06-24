@@ -7,6 +7,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
+	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/pquerna/otp/totp"
 )
@@ -20,7 +21,7 @@ var errTOTPCodeInvalid = errors.New("invalid TOTP code")
 // a different device. It never accepts a device ID from the caller.
 func ValidateUserTOTPCode(ctx *types.ServiceContext, userID, code string) error {
 	if ctx == nil || strings.TrimSpace(userID) == "" {
-		return types.NewServiceError(http.StatusUnauthorized, "authentication required")
+		return service.NewError(http.StatusUnauthorized, "authentication required")
 	}
 
 	devices := make([]*modelmfa.TOTPDevice, 0)
