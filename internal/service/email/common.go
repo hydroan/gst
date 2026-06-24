@@ -94,14 +94,6 @@ var (
 	activeEmailSender  iamEmailDeliverySender = noopEmailSender{}
 )
 
-func setEmailSender(sender iamEmailDeliverySender) {
-	if sender == nil {
-		activeEmailSender = noopEmailSender{}
-		return
-	}
-	activeEmailSender = sender
-}
-
 func dispatchEmail(ctx context.Context, delivery emailDelivery) error {
 	delivery.To = normalizeEmailScope(delivery.To)
 	if delivery.To == "" {
@@ -245,8 +237,20 @@ func normalizeContext(ctx context.Context) context.Context {
 	return ctx
 }
 
+func emailServiceContext(ctx *types.ServiceContext) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx.Context()
+}
+
 func normalizeEmailScope(scope string) string {
 	return strings.ToLower(strings.TrimSpace(scope))
+}
+
+// normalizeAccountEmail normalizes an email address loaded from the host user store.
+func normalizeAccountEmail(email string) string {
+	return normalizeEmailScope(email)
 }
 
 func validEmailFlowKind(kind iamEmailFlowKind) bool {

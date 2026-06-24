@@ -1,12 +1,9 @@
 package modelemail
 
-import "github.com/hydroan/gst/model"
-
-// PasswordResetConfirm is the model for POST /api/iam/email/password-reset-confirm.
-// It completes an email-based password reset flow with the issued reset token.
-type PasswordResetConfirm struct {
-	model.Empty
-}
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
 
 // PasswordResetConfirmReq is the payload for POST /api/iam/email/password-reset-confirm.
 // It carries the reset token and the new password from the password reset flow.
@@ -20,4 +17,22 @@ type PasswordResetConfirmReq struct {
 type PasswordResetConfirmRsp struct {
 	Reset bool   `json:"reset"`
 	Msg   string `json:"msg,omitempty"`
+}
+
+// PasswordResetConfirm is the model for POST /api/iam/email/password-reset-confirm.
+// It completes an email-based password reset flow with the issued reset token.
+type PasswordResetConfirm struct {
+	model.Empty
+}
+
+func (PasswordResetConfirm) Design() {
+	Route("/iam/email/password-reset-confirm", func() {
+		Create(func() {
+			Service(true)
+			Flatten()
+			Filename("password_reset_confirm.go")
+			Payload[*PasswordResetConfirmReq]()
+			Result[*PasswordResetConfirmRsp]()
+		})
+	})
 }

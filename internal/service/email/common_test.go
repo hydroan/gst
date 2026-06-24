@@ -248,7 +248,7 @@ func TestDispatchEmail(t *testing.T) {
 	t.Cleanup(restore)
 
 	sender := new(testEmailSender)
-	setEmailSender(sender)
+	activeEmailSender = sender
 
 	err := dispatchEmail(context.Background(), emailDelivery{To: "  USER@Example.COM  ", Subject: "Verify"})
 	require.NoError(t, err)
@@ -262,6 +262,11 @@ func TestDispatchEmail(t *testing.T) {
 func TestPublicAcceptedMessage(t *testing.T) {
 	require.Equal(t, "If the email is eligible, a verification message will be sent shortly.", publicAcceptedMessage(iamEmailFlowKindVerification))
 	require.Equal(t, "If the email is eligible, a password reset message will be sent shortly.", publicAcceptedMessage(iamEmailFlowKindPasswordReset))
+}
+
+func TestEmailServiceContext(t *testing.T) {
+	require.NotNil(t, emailServiceContext(nil))
+	require.NotNil(t, emailServiceContext(&types.ServiceContext{}))
 }
 
 func stubEmailGlobals(flowCache types.Cache[iamEmailFlowState], throttleCache types.Cache[emailThrottleRecord], now time.Time, reader *bytes.Reader) func() {
@@ -344,7 +349,7 @@ func TestVerificationRequestCreate(t *testing.T) {
 	t.Cleanup(restore)
 
 	sender := new(testEmailSender)
-	setEmailSender(sender)
+	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
 		findByEmail: func(_ *types.ServiceContext, email string) (*AccountSnapshot, error) {
@@ -376,7 +381,7 @@ func TestVerificationRequestCreateVerifiedAccount(t *testing.T) {
 	t.Cleanup(restore)
 
 	sender := new(testEmailSender)
-	setEmailSender(sender)
+	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
 		findByEmail: func(*types.ServiceContext, string) (*AccountSnapshot, error) {
@@ -404,7 +409,7 @@ func TestVerificationRequestCreateUnknownAccount(t *testing.T) {
 	t.Cleanup(restore)
 
 	sender := new(testEmailSender)
-	setEmailSender(sender)
+	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
 		findByEmail: func(_ *types.ServiceContext, email string) (*AccountSnapshot, error) {
@@ -433,7 +438,7 @@ func TestVerificationResendCreate(t *testing.T) {
 	t.Cleanup(restore)
 
 	sender := new(testEmailSender)
-	setEmailSender(sender)
+	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
 		findByEmail: func(_ *types.ServiceContext, email string) (*AccountSnapshot, error) {
@@ -463,7 +468,7 @@ func TestVerificationResendCreateUnknownAccount(t *testing.T) {
 	t.Cleanup(restore)
 
 	sender := new(testEmailSender)
-	setEmailSender(sender)
+	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
 		findByEmail: func(_ *types.ServiceContext, email string) (*AccountSnapshot, error) {
@@ -492,7 +497,7 @@ func TestVerificationResendCreateThrottled(t *testing.T) {
 	t.Cleanup(restore)
 
 	sender := new(testEmailSender)
-	setEmailSender(sender)
+	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
 		findByEmail: func(*types.ServiceContext, string) (*AccountSnapshot, error) {
@@ -633,7 +638,7 @@ func TestChangeRequestCreate(t *testing.T) {
 	t.Cleanup(restore)
 
 	sender := new(testEmailSender)
-	setEmailSender(sender)
+	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
 		getByID: func(_ *types.ServiceContext, userID string) (*AccountSnapshot, error) {
@@ -679,7 +684,7 @@ func TestChangeRequestCreateEmailAlreadyUsed(t *testing.T) {
 	t.Cleanup(restore)
 
 	sender := new(testEmailSender)
-	setEmailSender(sender)
+	activeEmailSender = sender
 
 	var passwordVerified bool
 	SetAccountGateway(testAccountGateway{
@@ -719,7 +724,7 @@ func TestChangeResendCreate(t *testing.T) {
 	t.Cleanup(restore)
 
 	sender := new(testEmailSender)
-	setEmailSender(sender)
+	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
 		getByID: func(_ *types.ServiceContext, userID string) (*AccountSnapshot, error) {
@@ -755,7 +760,7 @@ func TestChangeResendCreateThrottled(t *testing.T) {
 	t.Cleanup(restore)
 
 	sender := new(testEmailSender)
-	setEmailSender(sender)
+	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
 		getByID: func(*types.ServiceContext, string) (*AccountSnapshot, error) {
@@ -943,7 +948,7 @@ func TestChangeRequestCreateClearsCancellationMarker(t *testing.T) {
 	t.Cleanup(restore)
 
 	sender := new(testEmailSender)
-	setEmailSender(sender)
+	activeEmailSender = sender
 
 	oldEmail := "old@example.com"
 
@@ -992,7 +997,7 @@ func TestPasswordResetRequestCreate(t *testing.T) {
 	t.Cleanup(restore)
 
 	sender := new(testEmailSender)
-	setEmailSender(sender)
+	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
 		findByEmail: func(_ *types.ServiceContext, email string) (*AccountSnapshot, error) {
@@ -1024,7 +1029,7 @@ func TestPasswordResetRequestCreateUnknownAccount(t *testing.T) {
 	t.Cleanup(restore)
 
 	sender := new(testEmailSender)
-	setEmailSender(sender)
+	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
 		findByEmail: func(*types.ServiceContext, string) (*AccountSnapshot, error) {

@@ -21,7 +21,7 @@ type PasswordResetConfirmService struct {
 func (s *PasswordResetConfirmService) Create(ctx *types.ServiceContext, req *modelemail.PasswordResetConfirmReq) (rsp *modelemail.PasswordResetConfirmRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
 
-	flow, err := consumeEmailFlow(passwordResetContext(ctx), iamEmailFlowKindPasswordReset, req.Token)
+	flow, err := consumeEmailFlow(emailServiceContext(ctx), iamEmailFlowKindPasswordReset, req.Token)
 	if err != nil {
 		if errors.Is(err, errEmailFlowNotFound) || errors.Is(err, errEmailFlowExpired) {
 			return &modelemail.PasswordResetConfirmRsp{

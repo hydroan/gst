@@ -1,12 +1,9 @@
 package modelemail
 
-import "github.com/hydroan/gst/model"
-
-// ChangeResend is the model for POST /api/iam/email/change-resend.
-// It resends a confirmation message for a pending email change request.
-type ChangeResend struct {
-	model.Empty
-}
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
 
 // ChangeResendReq is the payload for POST /api/iam/email/change-resend.
 // It identifies the pending target email address that should receive a new confirmation message.
@@ -18,4 +15,22 @@ type ChangeResendReq struct {
 // It returns the resend result message for the email change flow.
 type ChangeResendRsp struct {
 	Msg string `json:"msg,omitempty"`
+}
+
+// ChangeResend is the model for POST /api/iam/email/change-resend.
+// It resends a confirmation message for a pending email change request.
+type ChangeResend struct {
+	model.Empty
+}
+
+func (ChangeResend) Design() {
+	Route("/iam/email/change-resend", func() {
+		Create(func() {
+			Service(true)
+			Flatten()
+			Filename("change_resend.go")
+			Payload[*ChangeResendReq]()
+			Result[*ChangeResendRsp]()
+		})
+	})
 }

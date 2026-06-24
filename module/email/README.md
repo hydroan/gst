@@ -2,7 +2,7 @@
 
 本文档汇总独立 `module/email` 模块提供的 email 相关接口，并按当前实现说明请求入口、请求/响应字段、令牌流转、节流控制与最终状态变化。
 
-业务项目需要这些接口时，需要在模块初始化阶段单独调用 `email.Registry()`；`iam.Register(...)` 只注册账号、用户和 session 相关接口。内置 `module/email` 会在注册时安装默认 IAM `AccountGateway`，复制到业务项目后的 email service 代码应由项目侧安装自己的 `serviceemail.AccountGateway`。
+业务项目需要这些接口时，需要在模块初始化阶段单独调用 `email.Register()`；`iam.Register(...)` 只注册账号、用户和 session 相关接口。内置 `module/email` 会在注册时安装默认 IAM `AccountGateway`，复制到业务项目后的 email service 代码应由项目侧安装自己的 `serviceemail.AccountGateway`。
 
 ## 接口总览
 

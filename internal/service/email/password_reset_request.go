@@ -1,8 +1,6 @@
 package serviceemail
 
 import (
-	"context"
-
 	"github.com/cockroachdb/errors"
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/service"
@@ -96,18 +94,4 @@ func passwordResetDelivery(token string, flow iamEmailFlowState) emailDelivery {
 			"expires_at": flow.ExpiresAt,
 		},
 	}
-}
-
-// normalizeAccountEmail normalizes an email address loaded from the host user store.
-func normalizeAccountEmail(email string) string {
-	return normalizeEmailScope(email)
-}
-
-// passwordResetContext returns a non-nil context for flow operations triggered by
-// the password reset services.
-func passwordResetContext(ctx *types.ServiceContext) context.Context {
-	if ctx == nil {
-		return context.Background()
-	}
-	return ctx.Context()
 }

@@ -21,7 +21,7 @@ type VerificationConfirmService struct {
 func (s *VerificationConfirmService) Create(ctx *types.ServiceContext, req *modelemail.VerificationConfirmReq) (rsp *modelemail.VerificationConfirmRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
 
-	flow, err := consumeEmailFlow(passwordResetContext(ctx), iamEmailFlowKindVerification, req.Token)
+	flow, err := consumeEmailFlow(emailServiceContext(ctx), iamEmailFlowKindVerification, req.Token)
 	if err != nil {
 		if errors.Is(err, errEmailFlowNotFound) || errors.Is(err, errEmailFlowExpired) {
 			return &modelemail.VerificationConfirmRsp{

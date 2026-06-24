@@ -1,8 +1,6 @@
 package serviceemail
 
 import (
-	"strings"
-
 	"github.com/cockroachdb/errors"
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/service"
@@ -20,7 +18,7 @@ type ChangeConfirmService struct {
 func (s *ChangeConfirmService) Create(ctx *types.ServiceContext, req *modelemail.ChangeConfirmReq) (rsp *modelemail.ChangeConfirmRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
 
-	flow, err := consumeEmailFlow(passwordResetContext(ctx), iamEmailFlowKindChangeConfirm, req.Token)
+	flow, err := consumeEmailFlow(emailServiceContext(ctx), iamEmailFlowKindChangeConfirm, req.Token)
 	if err != nil {
 		if errors.Is(err, errEmailFlowNotFound) || errors.Is(err, errEmailFlowExpired) {
 			return &modelemail.ChangeConfirmRsp{
@@ -112,22 +110,4 @@ func (s *ChangeConfirmService) Create(ctx *types.ServiceContext, req *modelemail
 		Changed: true,
 		Msg:     "email changed successfully",
 	}, nil
-}
-
-// validateEmailChangeFlow ensures the confirmation or cancellation flow carries
-// the minimum state required to safely process the request.
-func validateEmailChangeFlow(flow iamEmailFlowState) error {
-	if strings.TrimSpace(flow.UserID) == "" {
-		return errors.New("email change account id is required")
-	}
-	if normalizeEmailScope(flow.OldEmail) == "" {
-		return errors.New("email change old email is required")
-	}
-	if normalizeEmailScope(flow.NewEmail) == "" {
-		return errors.New("email change new email is required")
-	}
-	if normalizeEmailScope(flow.OldEmail) == normalizeEmailScope(flow.NewEmail) {
-		return errors.New("email change old and new email must be different")
-	}
-	return nil
 }
