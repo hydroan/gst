@@ -94,17 +94,6 @@ func (l *Logger) With(fields ...string) types.Logger {
 	return &Logger{zlog: l.zlog.With(zapFields...)}
 }
 
-// WithRequestMetadata creates a new logger with request metadata fields.
-// It extends the base logger with phase, route, username, user ID, trace ID,
-// params, and query values.
-//
-// examples:
-//
-// log := logger.Controller.WithRequestMetadata(meta, consts.PHASE_LIST)
-func (l *Logger) WithRequestMetadata(meta types.RequestMetadata, phase consts.Phase) types.Logger {
-	return l.withRequestMetadata(meta, phase, meta.TraceID())
-}
-
 func (l *Logger) withRequestMetadata(meta types.RequestMetadata, phase consts.Phase, traceID string) types.Logger {
 	return l.With(
 		consts.PHASE, string(phase),

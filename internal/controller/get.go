@@ -59,7 +59,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		defer span.End()
 
 		meta := types.NewRequestMetadata(c)
-		log := logger.Controller.WithRequestMetadata(meta, consts.PHASE_GET)
+		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_GET)
 		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_GET)
 
 		if !modelregistry.AreTypesEqual[M, REQ, RSP]() {

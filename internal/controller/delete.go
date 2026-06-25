@@ -53,7 +53,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		defer span.End()
 
 		meta := types.NewRequestMetadata(c)
-		log := logger.Controller.WithRequestMetadata(meta, consts.PHASE_DELETE)
+		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_DELETE)
 		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_DELETE)
 
 		if !modelregistry.AreTypesEqual[M, REQ, RSP]() {

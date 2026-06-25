@@ -68,7 +68,6 @@ type Logger interface {
 	WithArray(name string, arr zapcore.ArrayMarshaler) Logger
 
 	WithContext(context.Context, consts.Phase) Logger
-	WithRequestMetadata(RequestMetadata, consts.Phase) Logger
 
 	StandardLogger
 	StructuredLogger

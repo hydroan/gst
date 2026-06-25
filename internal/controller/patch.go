@@ -54,7 +54,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		defer span.End()
 
 		meta := types.NewRequestMetadata(c)
-		log := logger.Controller.WithRequestMetadata(meta, consts.PHASE_PATCH)
+		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_PATCH)
 		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_PATCH)
 
 		if !modelregistry.AreTypesEqual[M, REQ, RSP]() {

@@ -36,7 +36,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 
 		var page, size, limit int
 		var startTime, endTime time.Time
-		log := logger.Controller.WithRequestMetadata(types.NewRequestMetadata(c), consts.PHASE_EXPORT)
+		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_EXPORT)
 		if pageStr, ok := c.GetQuery(consts.QUERY_PAGE); ok {
 			page, _ = strconv.Atoi(pageStr)
 		}

@@ -47,7 +47,7 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		ctrlSpanCtx, span := startControllerSpan[M](c, consts.PHASE_CREATE)
 		defer span.End()
 
-		log := logger.Controller.WithRequestMetadata(types.NewRequestMetadata(c), consts.PHASE_CREATE)
+		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_CREATE)
 		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_CREATE)
 
 		if !modelregistry.AreTypesEqual[M, REQ, RSP]() {

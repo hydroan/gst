@@ -67,7 +67,7 @@ func CreateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		ctrlSpanCtx, span := startControllerSpan[M](c, consts.PHASE_CREATE_MANY)
 		defer span.End()
 
-		log := logger.Controller.WithRequestMetadata(types.NewRequestMetadata(c), consts.PHASE_CREATE_MANY)
+		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_CREATE_MANY)
 		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_CREATE_MANY)
 
 		if !modelregistry.AreTypesEqual[M, REQ, RSP]() {

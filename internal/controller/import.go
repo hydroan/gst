@@ -33,7 +33,7 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		ctrlSpanCtx, span := startControllerSpan[M](c, consts.PHASE_IMPORT)
 		defer span.End()
 
-		log := logger.Controller.WithRequestMetadata(types.NewRequestMetadata(c), consts.PHASE_IMPORT)
+		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_IMPORT)
 		// NOTE:字段为 file 必须和前端协商好.
 		file, err := c.FormFile("file")
 		if err != nil {
