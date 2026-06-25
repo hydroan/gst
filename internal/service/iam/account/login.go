@@ -56,7 +56,7 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 				Username: req.Username,
 				ClientIP: ctx.ClientIP(),
 				Status:   modellogmgmt.LoginStatusFailure,
-				Source:   ctx.Request().UserAgent(),
+				Source:   ctx.UserAgent(),
 				Platform: fmt.Sprintf("%s %s", ua.Platform(), ua.OS()),
 				Engine:   fmt.Sprintf("%s %s", engineName, engineVersion),
 				Browser:  fmt.Sprintf("%s %s", browserName, browserVersion),
@@ -140,7 +140,7 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		LastName:           user.LastName,
 		MustChangePassword: user.MustChangePassword,
 		ClientIP:           ctx.ClientIP(),
-		UserAgent:          ctx.Request().UserAgent(),
+		UserAgent:          ctx.UserAgent(),
 		OS:                 ua.OS(),
 		Platform:           ua.Platform(),
 		EngineName:         engineName,
@@ -151,12 +151,12 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		ExpiresAt:          expiresAt,
 	}
 	// Store session in Redis
-	redisCache := redis.Cache[modeliamsession.Session]().WithContext(ctx.Context())
+	redisCache := redis.Cache[modeliamsession.Session]().WithContext(ctx)
 	if err = redisCache.Set(prefixedSessionID, sessionData, expire); err != nil {
 		log.Errorz("failed to set session in redis", zap.Error(err))
 		return nil, errors.New("failed to set session in redis")
 	}
-	if err = serviceiamsession.IndexSession(ctx.Context(), sessionData); err != nil {
+	if err = serviceiamsession.IndexSession(ctx, sessionData); err != nil {
 		_ = redisCache.Delete(prefixedSessionID)
 		log.Errorz("failed to track user session in redis", zap.Error(err))
 		return nil, errors.New("failed to track user session in redis")
@@ -175,7 +175,7 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 			ClientIP: ctx.ClientIP(),
 			Status:   modellogmgmt.LoginStatusSuccess,
 
-			Source:   ctx.Request().UserAgent(),
+			Source:   ctx.UserAgent(),
 			Platform: fmt.Sprintf("%s %s", ua.Platform(), ua.OS()),
 			Engine:   fmt.Sprintf("%s %s", engineName, engineVersion),
 			Browser:  fmt.Sprintf("%s %s", browserName, browserVersion),

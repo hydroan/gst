@@ -26,7 +26,7 @@ func (s *PasswordResetRequestService) Create(ctx *types.ServiceContext, req *mod
 		return rsp, nil
 	}
 
-	if _, err = reserveEmailThrottle(ctx.Context(), iamEmailFlowKindPasswordReset, emailThrottleRequest, email, 0); err != nil {
+	if _, err = reserveEmailThrottle(ctx, iamEmailFlowKindPasswordReset, emailThrottleRequest, email, 0); err != nil {
 		if errors.Is(err, errEmailFlowThrottled) {
 			return rsp, nil
 		}
@@ -50,7 +50,7 @@ func (s *PasswordResetRequestService) Create(ctx *types.ServiceContext, req *mod
 		return rsp, nil
 	}
 
-	token, flow, err := issueEmailFlow(ctx.Context(), iamEmailFlowKindPasswordReset, iamEmailFlowState{
+	token, flow, err := issueEmailFlow(ctx, iamEmailFlowKindPasswordReset, iamEmailFlowState{
 		UserID: user.ID,
 		Email:  email,
 	}, 0)
@@ -59,7 +59,7 @@ func (s *PasswordResetRequestService) Create(ctx *types.ServiceContext, req *mod
 		return nil, errors.Wrap(err, "failed to issue password reset flow")
 	}
 
-	if err = dispatchEmail(ctx.Context(), passwordResetDelivery(token, flow)); err != nil {
+	if err = dispatchEmail(ctx, passwordResetDelivery(token, flow)); err != nil {
 		log.Error("failed to dispatch password reset email", err)
 		return nil, errors.Wrap(err, "failed to dispatch password reset email")
 	}

@@ -43,7 +43,7 @@ func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modelmfa.TOT
 		return nil, err
 	}
 
-	challenge, err := loadTOTPBindChallenge(ctx.Context(), req.ChallengeID)
+	challenge, err := loadTOTPBindChallenge(ctx, req.ChallengeID)
 	if err != nil {
 		if errors.Is(err, errTOTPBindChallengeNotFound) ||
 			errors.Is(err, errTOTPBindChallengeExpired) ||
@@ -110,7 +110,7 @@ func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modelmfa.TOT
 		zap.String("user_id", ctx.UserID()),
 		zap.String("device_id", device.ID))
 
-	if err = consumeTOTPBindChallenge(ctx.Context(), req.ChallengeID); err != nil {
+	if err = consumeTOTPBindChallenge(ctx, req.ChallengeID); err != nil {
 		log.Errorz("failed to consume TOTP bind challenge", zap.Error(err))
 		return nil, errors.Wrap(err, "failed to consume TOTP binding challenge")
 	}

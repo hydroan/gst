@@ -121,7 +121,7 @@ func streamSSE(sc *ServiceContext, fn func(io.Writer) bool) {
 	if sc == nil || sc.ginCtx == nil {
 		return
 	}
-	sse.StreamSSE(sc.Context(), sc.ginCtx.Writer, sc.ginCtx.Stream, fn)
+	sse.StreamSSE(sc, sc.ginCtx.Writer, sc.ginCtx.Stream, fn)
 }
 
 // streamSSEWithInterval starts a Server-Sent Events stream with a fixed interval between events.
@@ -130,7 +130,7 @@ func streamSSEWithInterval(sc *ServiceContext, interval time.Duration, fn func(i
 	if sc == nil || sc.ginCtx == nil {
 		return
 	}
-	sse.StreamSSEWithInterval(sc.Context(), sc.ginCtx.Writer, sc.ginCtx.Stream, interval, fn)
+	sse.StreamSSEWithInterval(sc, sc.ginCtx.Writer, sc.ginCtx.Stream, interval, fn)
 }
 
 // sendSSEDone sends a [DONE] marker to indicate the end of an SSE stream.

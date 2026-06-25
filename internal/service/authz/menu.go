@@ -97,7 +97,7 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 			var exists, matched, ok bool
 			_, exists = menuMap[item.ID]
 			if exists {
-				if matched, _ = regexp.MatchString(item.DomainPattern, ctx.Request().Host); matched {
+				if matched, _ = regexp.MatchString(item.DomainPattern, ctx.Host()); matched {
 					ok = true
 				}
 			}
@@ -124,7 +124,7 @@ func filter(ctx *types.ServiceContext, menu *modelauthz.Menu, menuMap map[string
 			var exists, matched, ok bool
 			_, exists = menuMap[item.ID]
 			if exists {
-				if matched, _ = regexp.MatchString(item.DomainPattern, ctx.Request().Host); matched {
+				if matched, _ = regexp.MatchString(item.DomainPattern, ctx.Host()); matched {
 					ok = true
 				}
 			}

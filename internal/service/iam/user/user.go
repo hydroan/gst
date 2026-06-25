@@ -78,7 +78,7 @@ func (UserService) DeleteAfter(ctx *types.ServiceContext, u *modeliamuser.User) 
 	if u == nil {
 		return nil
 	}
-	serviceiamsession.InvalidateUserSessions(ctx.Context(), u.GetID())
+	serviceiamsession.InvalidateUserSessions(ctx, u.GetID())
 	return nil
 }
 
@@ -104,7 +104,7 @@ func (UserService) DeleteManyAfter(ctx *types.ServiceContext, users ...*modeliam
 		if u == nil {
 			continue
 		}
-		serviceiamsession.InvalidateUserSessions(ctx.Context(), u.GetID())
+		serviceiamsession.InvalidateUserSessions(ctx, u.GetID())
 	}
 	return nil
 }

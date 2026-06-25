@@ -62,7 +62,7 @@ func (s *ChangeCancelService) Create(ctx *types.ServiceContext, req *modelemail.
 		}, nil
 	}
 
-	if err = markEmailChangeCanceled(ctx.Context(), flow); err != nil {
+	if err = markEmailChangeCanceled(ctx, flow); err != nil {
 		log.Error("failed to mark email change as canceled", err)
 		return nil, errors.Wrap(err, "failed to mark email change as canceled")
 	}

@@ -76,13 +76,12 @@ func GetCurrentSession(ctx *types.ServiceContext) (string, modeliamsession.Sessi
 		return "", modeliamsession.Session{}, err
 	}
 
-	redisCtx := ctx.Context()
-	session, err := LoadSession(redisCtx, sessionID)
+	session, err := LoadSession(ctx, sessionID)
 	if err != nil {
 		return "", modeliamsession.Session{}, service.NewErrorWithCause(http.StatusUnauthorized, "session not exists", err)
 	}
 	if err = ValidateActiveSession(sessionID, session); err != nil {
-		_, _ = DeleteSession(redisCtx, sessionID)
+		_, _ = DeleteSession(ctx, sessionID)
 		return "", modeliamsession.Session{}, service.NewErrorWithCause(http.StatusUnauthorized, "session invalid", err)
 	}
 

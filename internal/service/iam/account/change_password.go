@@ -60,7 +60,7 @@ func (s *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 		return nil, errors.New("failed to update password")
 	}
 
-	if syncErr := serviceiamsession.UpdateSessionMustChangePassword(ctx.Context(), sessionID, false); syncErr != nil {
+	if syncErr := serviceiamsession.UpdateSessionMustChangePassword(ctx, sessionID, false); syncErr != nil {
 		log.Error("failed to sync session after password change", syncErr)
 		return nil, errors.Wrap(syncErr, "failed to refresh session")
 	}

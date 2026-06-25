@@ -47,7 +47,7 @@ func (s *ResetPasswordService) Create(ctx *types.ServiceContext, req *modeliamac
 		return nil, errors.Wrap(err, "failed to update password")
 	}
 
-	serviceiamsession.InvalidateUserSessions(ctx.Context(), req.UserID)
+	serviceiamsession.InvalidateUserSessions(ctx, req.UserID)
 
 	log.Info("password reset successfully", "target_user_id", req.UserID, "actor", actorUsername)
 	return &modeliamaccount.ResetPasswordRsp{Msg: "password reset successfully"}, nil

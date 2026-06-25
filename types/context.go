@@ -6,6 +6,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,13 +17,10 @@ import (
 var _ context.Context = (*ServiceContext)(nil)
 
 type ServiceContext struct {
-	method       string
-	request      *http.Request
-	url          *url.URL
-	header       http.Header
-	writerHeader http.Header
-	clientIP     string
-	userAgent    string
+	method    string
+	request   *http.Request
+	clientIP  string
+	userAgent string
 
 	context context.Context
 	writer  http.ResponseWriter
@@ -51,14 +49,10 @@ func NewServiceContext(c *gin.Context, ctxs ...context.Context) *ServiceContext 
 	ctx = ContextWithRequestMetadata(ctx, meta)
 
 	return &ServiceContext{
-		request: c.Request,
-
-		method:       c.Request.Method,
-		url:          c.Request.URL,
-		header:       c.Request.Header,
-		writerHeader: c.Writer.Header(),
-		clientIP:     c.ClientIP(),
-		userAgent:    c.Request.UserAgent(),
+		request:   c.Request,
+		method:    c.Request.Method,
+		clientIP:  c.ClientIP(),
+		userAgent: c.Request.UserAgent(),
 
 		ginCtx:  c,
 		context: ctx,
@@ -68,14 +62,6 @@ func NewServiceContext(c *gin.Context, ctxs ...context.Context) *ServiceContext 
 		// Determined by checking if there's a flag set by authentication middleware in gin.Context
 		requiresAuth: c.GetBool(consts.CTX_REQUIRES_AUTH),
 	}
-}
-
-// Context returns sc as context.Context.
-func (sc *ServiceContext) Context() context.Context {
-	if sc == nil {
-		return context.Background()
-	}
-	return sc
 }
 
 func (sc *ServiceContext) baseContext() context.Context {
@@ -101,33 +87,11 @@ func (sc *ServiceContext) Method() string {
 	return sc.method
 }
 
-func (sc *ServiceContext) Request() *http.Request {
+func (sc *ServiceContext) Host() string {
 	if sc == nil || sc.request == nil {
-		return nil
+		return ""
 	}
-	return sc.request.Clone(sc.baseContext())
-}
-
-func (sc *ServiceContext) URL() *url.URL {
-	if sc == nil || sc.url == nil {
-		return nil
-	}
-	u := *sc.url
-	return &u
-}
-
-func (sc *ServiceContext) Header() http.Header {
-	if sc == nil || sc.header == nil {
-		return nil
-	}
-	return sc.header.Clone()
-}
-
-func (sc *ServiceContext) WriterHeader() http.Header {
-	if sc == nil || sc.writerHeader == nil {
-		return nil
-	}
-	return sc.writerHeader.Clone()
+	return sc.request.Host
 }
 
 func (sc *ServiceContext) ClientIP() string {
@@ -144,11 +108,20 @@ func (sc *ServiceContext) UserAgent() string {
 	return sc.userAgent
 }
 
-func (sc *ServiceContext) ResponseWriter() http.ResponseWriter {
-	if sc == nil {
-		return nil
+func (sc *ServiceContext) IsHTTPS() bool {
+	if sc == nil || sc.request == nil {
+		return false
 	}
-	return sc.writer
+	if sc.request.TLS != nil {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(sc.request.Header.Get("X-Forwarded-Proto")), "https") {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(sc.request.Header.Get("X-Forwarded-Ssl")), "on") {
+		return true
+	}
+	return strings.Contains(strings.ToLower(sc.request.Header.Get("Forwarded")), "proto=https")
 }
 
 func (sc *ServiceContext) Params() map[string]string { return sc.RequestMetadata().Params() }
@@ -170,16 +143,11 @@ func (sc *ServiceContext) Data(code int, contentType string, data []byte) {
 	sc.ginCtx.Data(code, contentType, data)
 }
 
-func (sc *ServiceContext) HTML(code int, name string, obj any) {
-	sc.ginCtx.HTML(code, name, obj)
-}
-
-func (sc *ServiceContext) Redirect(code int, location string) {
-	sc.ginCtx.Redirect(code, location)
-}
-
-func (sc *ServiceContext) SetCookie(name, value string, maxAge int, path, domain string, secure, httpOnly bool) {
-	sc.ginCtx.SetCookie(name, value, maxAge, path, domain, secure, httpOnly)
+func (sc *ServiceContext) SetCookie(cookie *http.Cookie) {
+	if sc == nil || sc.writer == nil || cookie == nil {
+		return
+	}
+	http.SetCookie(sc.writer, cookie)
 }
 
 func (sc *ServiceContext) Cookie(name string) (string, error) {
@@ -192,14 +160,6 @@ func (sc *ServiceContext) PostForm(key string) string {
 
 func (sc *ServiceContext) FormFile(name string) (*multipart.FileHeader, error) {
 	return sc.ginCtx.FormFile(name)
-}
-
-func (sc *ServiceContext) SSEvent(name string, message any) {
-	sc.ginCtx.SSEvent(name, message)
-}
-
-func (sc *ServiceContext) Stream(step func(io.Writer) bool) {
-	sc.ginCtx.Stream(step)
 }
 
 func (sc *ServiceContext) GetPhase() consts.Phase {
@@ -228,12 +188,6 @@ func (sc *ServiceContext) clone() *ServiceContext {
 		return &ServiceContext{context: context.Background()}
 	}
 	next := *sc
-	if sc.header != nil {
-		next.header = sc.header.Clone()
-	}
-	if sc.writerHeader != nil {
-		next.writerHeader = sc.writerHeader.Clone()
-	}
 	if next.context == nil {
 		next.context = context.Background()
 	}

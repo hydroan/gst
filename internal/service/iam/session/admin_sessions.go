@@ -39,20 +39,19 @@ type adminSessionUserItem struct {
 // List returns all indexed sessions grouped by user for a privileged administrator.
 func (s *AdminSessionsListService) List(ctx *types.ServiceContext, req *modeliamsession.AdminSessionsListReq) (rsp *modeliamsession.AdminSessionsListRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
-	redisCtx := ctx.Context()
 
 	if err = ensureAdminSessionActor(ctx); err != nil {
 		log.Error("failed to verify admin session actor", err)
 		return nil, err
 	}
 
-	sessionIDs, err := listAllSessionIDs(redisCtx)
+	sessionIDs, err := listAllSessionIDs(ctx)
 	if err != nil {
 		log.Error("failed to list all sessions", err)
 		return nil, err
 	}
 
-	cache := redis.Cache[modeliamsession.Session]().WithContext(redisCtx)
+	cache := redis.Cache[modeliamsession.Session]().WithContext(ctx)
 	users := make(map[string]*adminSessionUserItem, len(sessionIDs))
 	var sessionTotal int64
 	for i := range sessionIDs {
@@ -64,14 +63,14 @@ func (s *AdminSessionsListService) List(ctx *types.ServiceContext, req *modeliam
 		session, getErr := cache.Get(modeliamsession.SessionIDKey(sessionID))
 		if getErr != nil {
 			if errors.Is(getErr, types.ErrEntryNotFound) {
-				_ = redis.ZRem(redisCtx, modeliamsession.SessionAllKey(), sessionID)
+				_ = redis.ZRem(ctx, modeliamsession.SessionAllKey(), sessionID)
 				continue
 			}
 			log.Error("failed to load session from redis", getErr)
 			return nil, getErr
 		}
 		if validateErr := ValidateActiveSession(sessionID, session); validateErr != nil {
-			_, _ = DeleteSession(redisCtx, sessionID)
+			_, _ = DeleteSession(ctx, sessionID)
 			continue
 		}
 
@@ -140,7 +139,6 @@ func (s *AdminSessionsListService) List(ctx *types.ServiceContext, req *modeliam
 // Get returns the detail of a specified session for a privileged administrator.
 func (s *AdminSessionsGetService) Get(ctx *types.ServiceContext, req *modeliamsession.AdminSessionsGetReq) (rsp *modeliamsession.AdminSessionsGetRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
-	redisCtx := ctx.Context()
 
 	currentSessionID, _, err := GetCurrentSession(ctx)
 	if err != nil {
@@ -157,7 +155,7 @@ func (s *AdminSessionsGetService) Get(ctx *types.ServiceContext, req *modeliamse
 		return nil, service.NewError(http.StatusBadRequest, "session id is required")
 	}
 
-	targetSession, err := redis.Cache[modeliamsession.Session]().WithContext(redisCtx).Get(modeliamsession.SessionIDKey(targetSessionID))
+	targetSession, err := redis.Cache[modeliamsession.Session]().WithContext(ctx).Get(modeliamsession.SessionIDKey(targetSessionID))
 	if err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
 			return nil, service.NewError(http.StatusNotFound, "session not found")
@@ -166,7 +164,7 @@ func (s *AdminSessionsGetService) Get(ctx *types.ServiceContext, req *modeliamse
 		return nil, err
 	}
 	if err = ValidateActiveSession(targetSessionID, targetSession); err != nil {
-		_, _ = DeleteSession(redisCtx, targetSessionID)
+		_, _ = DeleteSession(ctx, targetSessionID)
 		return nil, service.NewError(http.StatusNotFound, "session not found")
 	}
 
@@ -178,7 +176,6 @@ func (s *AdminSessionsGetService) Get(ctx *types.ServiceContext, req *modeliamse
 // Delete invalidates a specified session for a privileged administrator.
 func (s *AdminSessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.AdminSessionsDeleteReq) (rsp *modeliamsession.AdminSessionsDeleteRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
-	redisCtx := ctx.Context()
 
 	currentSessionID, _, err := GetCurrentSession(ctx)
 	if err != nil {
@@ -195,7 +192,7 @@ func (s *AdminSessionsDeleteService) Delete(ctx *types.ServiceContext, req *mode
 		return nil, service.NewError(http.StatusBadRequest, "session id is required")
 	}
 
-	targetSession, err := redis.Cache[modeliamsession.Session]().WithContext(redisCtx).Get(modeliamsession.SessionIDKey(targetSessionID))
+	targetSession, err := redis.Cache[modeliamsession.Session]().WithContext(ctx).Get(modeliamsession.SessionIDKey(targetSessionID))
 	if err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
 			return nil, service.NewError(http.StatusNotFound, "session not found")
@@ -204,11 +201,11 @@ func (s *AdminSessionsDeleteService) Delete(ctx *types.ServiceContext, req *mode
 		return nil, err
 	}
 	if err = ValidateActiveSession(targetSessionID, targetSession); err != nil {
-		_, _ = DeleteSession(redisCtx, targetSessionID)
+		_, _ = DeleteSession(ctx, targetSessionID)
 		return nil, service.NewError(http.StatusNotFound, "session not found")
 	}
 
-	if _, err = DeleteSession(redisCtx, targetSessionID); err != nil {
+	if _, err = DeleteSession(ctx, targetSessionID); err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
 			return nil, service.NewError(http.StatusNotFound, "session not found")
 		}

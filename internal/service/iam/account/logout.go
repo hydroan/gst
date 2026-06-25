@@ -30,7 +30,7 @@ func (s *LogoutService) Create(ctx *types.ServiceContext, req *model.Empty) (rsp
 		return &modeliamaccount.LogoutRsp{Msg: "logout successful"}, nil // Return success even if no session
 	}
 
-	session, err := serviceiamsession.DeleteSession(ctx.Context(), sessionID)
+	session, err := serviceiamsession.DeleteSession(ctx, sessionID)
 
 	// Parse user agent for logging
 	ua := useragent.New(ctx.UserAgent())
@@ -49,7 +49,7 @@ func (s *LogoutService) Create(ctx *types.ServiceContext, req *model.Empty) (rsp
 		Username: username,
 		ClientIP: ctx.ClientIP(),
 		Status:   modellogmgmt.LoginStatusLogout,
-		Source:   ctx.Request().UserAgent(),
+		Source:   ctx.UserAgent(),
 		Platform: fmt.Sprintf("%s %s", ua.Platform(), ua.OS()),
 		Engine:   fmt.Sprintf("%s %s", engineName, engineVersion),
 		Browser:  fmt.Sprintf("%s %s", browserName, browserVersion),

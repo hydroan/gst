@@ -139,3 +139,31 @@ func TestServiceContextWithPhaseReturnsClone(t *testing.T) {
 	require.Empty(t, serviceCtx.GetPhase())
 	require.Equal(t, consts.PHASE_LIST, phased.GetPhase())
 }
+
+func TestServiceContextRequestAccessorsAndSetCookie(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "https://example.com/api/users?tag=blue", nil)
+
+	serviceCtx := NewServiceContext(ctx)
+	serviceCtx.SetCookie(&http.Cookie{
+		Name:     "session_id",
+		Value:    "session-1",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   serviceCtx.IsHTTPS(),
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	require.Equal(t, "example.com", serviceCtx.Host())
+	require.True(t, serviceCtx.IsHTTPS())
+	require.Equal(t, "blue", serviceCtx.Query().Get("tag"))
+
+	setCookie := recorder.Header().Get("Set-Cookie")
+	require.Contains(t, setCookie, "session_id=session-1")
+	require.Contains(t, setCookie, "Path=/")
+	require.Contains(t, setCookie, "HttpOnly")
+	require.Contains(t, setCookie, "Secure")
+	require.Contains(t, setCookie, "SameSite=Lax")
+}

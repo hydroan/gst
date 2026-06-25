@@ -25,7 +25,7 @@ func (s *VerificationResendService) Create(ctx *types.ServiceContext, req *model
 		return rsp, nil
 	}
 
-	if _, err = reserveEmailThrottle(ctx.Context(), iamEmailFlowKindVerification, emailThrottleResend, email, 0); err != nil {
+	if _, err = reserveEmailThrottle(ctx, iamEmailFlowKindVerification, emailThrottleResend, email, 0); err != nil {
 		if errors.Is(err, errEmailFlowThrottled) {
 			return rsp, nil
 		}
@@ -49,7 +49,7 @@ func (s *VerificationResendService) Create(ctx *types.ServiceContext, req *model
 		return rsp, nil
 	}
 
-	token, flow, err := issueEmailFlow(ctx.Context(), iamEmailFlowKindVerification, iamEmailFlowState{
+	token, flow, err := issueEmailFlow(ctx, iamEmailFlowKindVerification, iamEmailFlowState{
 		UserID: user.ID,
 		Email:  email,
 	}, 0)
@@ -58,7 +58,7 @@ func (s *VerificationResendService) Create(ctx *types.ServiceContext, req *model
 		return nil, errors.Wrap(err, "failed to issue verification resend flow")
 	}
 
-	if err = dispatchEmail(ctx.Context(), verificationDelivery(token, flow)); err != nil {
+	if err = dispatchEmail(ctx, verificationDelivery(token, flow)); err != nil {
 		log.Error("failed to dispatch verification resend email", err)
 		return nil, errors.Wrap(err, "failed to dispatch verification resend email")
 	}

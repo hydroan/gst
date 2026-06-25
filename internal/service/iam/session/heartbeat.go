@@ -25,7 +25,7 @@ func (s *HeartbeatService) Create(ctx *types.ServiceContext, req *modeliamsessio
 		return nil, err
 	}
 
-	ua := useragent.New(ctx.Request().UserAgent())
+	ua := useragent.New(ctx.UserAgent())
 	engineName, engineVersion := ua.Engine()
 	browserName, browserVersion := ua.Browser()
 
@@ -33,7 +33,7 @@ func (s *HeartbeatService) Create(ctx *types.ServiceContext, req *modeliamsessio
 		UserID:   ctx.UserID(),
 		ClientIP: ctx.ClientIP(),
 		Username: ctx.Username(),
-		Source:   ctx.Request().UserAgent(),
+		Source:   ctx.UserAgent(),
 		Platform: fmt.Sprintf("%s %s", ua.Platform(), ua.OS()),
 		Engine:   fmt.Sprintf("%s %s", engineName, engineVersion),
 		Browser:  fmt.Sprintf("%s %s", browserName, browserVersion),

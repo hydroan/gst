@@ -70,7 +70,7 @@ func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPBi
 		return nil, errors.New("failed to generate QR code image")
 	}
 
-	challengeID, _, err := issueTOTPBindChallenge(ctx.Context(), totpBindChallenge{
+	challengeID, _, err := issueTOTPBindChallenge(ctx, totpBindChallenge{
 		UserID:    ctx.UserID(),
 		SessionID: sessionID,
 		Username:  ctx.Username(),

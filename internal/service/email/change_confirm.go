@@ -33,7 +33,7 @@ func (s *ChangeConfirmService) Create(ctx *types.ServiceContext, req *modelemail
 		return nil, err
 	}
 
-	canceled, err := emailChangeCanceled(ctx.Context(), flow.UserID, flow.OldEmail, flow.NewEmail)
+	canceled, err := emailChangeCanceled(ctx, flow.UserID, flow.OldEmail, flow.NewEmail)
 	if err != nil {
 		log.Error("failed to check email change cancellation state", err)
 		return nil, errors.Wrap(err, "failed to check email change cancellation state")
@@ -101,7 +101,7 @@ func (s *ChangeConfirmService) Create(ctx *types.ServiceContext, req *modelemail
 		log.Error("failed to persist confirmed email change", err)
 		return nil, errors.Wrap(err, "failed to update email change state")
 	}
-	if err = clearEmailChangeCancellation(ctx.Context(), flow.UserID, flow.OldEmail, flow.NewEmail); err != nil {
+	if err = clearEmailChangeCancellation(ctx, flow.UserID, flow.OldEmail, flow.NewEmail); err != nil {
 		log.Error("failed to clear email change cancellation marker", err)
 		return nil, errors.Wrap(err, "failed to clear email change cancellation marker")
 	}

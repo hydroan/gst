@@ -241,7 +241,7 @@ func emailServiceContext(ctx *types.ServiceContext) context.Context {
 	if ctx == nil {
 		return context.Background()
 	}
-	return ctx.Context()
+	return ctx
 }
 
 func normalizeEmailScope(scope string) string {

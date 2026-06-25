@@ -92,17 +92,17 @@ func verifyEmailChangePassword(ctx *types.ServiceContext, userID, password strin
 // change notifications for the target flow.
 func startEmailChangeFlow(ctx *types.ServiceContext, user *AccountSnapshot, newEmail string, includeCancel bool) error {
 	currentEmail := normalizeAccountEmail(user.Email)
-	if err := clearEmailChangeCancellation(ctx.Context(), user.ID, currentEmail, newEmail); err != nil {
+	if err := clearEmailChangeCancellation(ctx, user.ID, currentEmail, newEmail); err != nil {
 		return errors.Wrap(err, "failed to clear previous email change cancellation")
 	}
-	if _, err := reserveEmailThrottle(ctx.Context(), iamEmailFlowKindChangeConfirm, emailThrottleRequest, newEmail, 0); err != nil {
+	if _, err := reserveEmailThrottle(ctx, iamEmailFlowKindChangeConfirm, emailThrottleRequest, newEmail, 0); err != nil {
 		if errors.Is(err, errEmailFlowThrottled) {
 			return errors.Wrap(err, "email change confirmation throttled")
 		}
 		return errors.Wrap(err, "failed to reserve email change confirmation throttle")
 	}
 	if includeCancel {
-		if _, err := reserveEmailThrottle(ctx.Context(), iamEmailFlowKindChangeCancel, emailThrottleRequest, currentEmail, 0); err != nil {
+		if _, err := reserveEmailThrottle(ctx, iamEmailFlowKindChangeCancel, emailThrottleRequest, currentEmail, 0); err != nil {
 			if errors.Is(err, errEmailFlowThrottled) {
 				return errors.Wrap(err, "email change cancellation throttled")
 			}
@@ -110,7 +110,7 @@ func startEmailChangeFlow(ctx *types.ServiceContext, user *AccountSnapshot, newE
 		}
 	}
 
-	confirmToken, confirmFlow, err := issueEmailFlow(ctx.Context(), iamEmailFlowKindChangeConfirm, iamEmailFlowState{
+	confirmToken, confirmFlow, err := issueEmailFlow(ctx, iamEmailFlowKindChangeConfirm, iamEmailFlowState{
 		UserID:   user.ID,
 		OldEmail: currentEmail,
 		NewEmail: newEmail,
@@ -119,7 +119,7 @@ func startEmailChangeFlow(ctx *types.ServiceContext, user *AccountSnapshot, newE
 	if err != nil {
 		return errors.Wrap(err, "failed to issue email change confirmation flow")
 	}
-	if err = dispatchEmail(ctx.Context(), changeConfirmDelivery(confirmToken, confirmFlow)); err != nil {
+	if err = dispatchEmail(ctx, changeConfirmDelivery(confirmToken, confirmFlow)); err != nil {
 		return errors.Wrap(err, "failed to dispatch email change confirmation")
 	}
 
@@ -127,7 +127,7 @@ func startEmailChangeFlow(ctx *types.ServiceContext, user *AccountSnapshot, newE
 		return nil
 	}
 
-	cancelToken, cancelFlow, err := issueEmailFlow(ctx.Context(), iamEmailFlowKindChangeCancel, iamEmailFlowState{
+	cancelToken, cancelFlow, err := issueEmailFlow(ctx, iamEmailFlowKindChangeCancel, iamEmailFlowState{
 		UserID:   user.ID,
 		OldEmail: currentEmail,
 		NewEmail: newEmail,
@@ -136,7 +136,7 @@ func startEmailChangeFlow(ctx *types.ServiceContext, user *AccountSnapshot, newE
 	if err != nil {
 		return errors.Wrap(err, "failed to issue email change cancellation flow")
 	}
-	if err = dispatchEmail(ctx.Context(), changeCancelDelivery(cancelToken, cancelFlow)); err != nil {
+	if err = dispatchEmail(ctx, changeCancelDelivery(cancelToken, cancelFlow)); err != nil {
 		return errors.Wrap(err, "failed to dispatch email change cancellation")
 	}
 

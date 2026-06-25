@@ -31,13 +31,13 @@ func ReadSessionID(ctx *types.ServiceContext) (string, error) {
 // SetSessionCookie writes the current session cookie with hardened defaults.
 func SetSessionCookie(ctx *types.ServiceContext, sessionID string, maxAge time.Duration) {
 	//nolint:gosec // Secure is derived from TLS/proxy headers; local HTTP cannot set a Secure cookie.
-	http.SetCookie(ctx.ResponseWriter(), &http.Cookie{
+	ctx.SetCookie(&http.Cookie{
 		Name:     SessionCookieName,
 		Value:    sessionID,
 		Path:     sessionCookiePath,
 		MaxAge:   int(maxAge.Seconds()),
 		HttpOnly: true,
-		Secure:   requestUsesHTTPS(ctx.Request()),
+		Secure:   ctx.IsHTTPS(),
 		SameSite: http.SameSiteLaxMode,
 	})
 }
@@ -45,29 +45,13 @@ func SetSessionCookie(ctx *types.ServiceContext, sessionID string, maxAge time.D
 // ClearSessionCookie removes the current session cookie using the same path and security attributes.
 func ClearSessionCookie(ctx *types.ServiceContext) {
 	//nolint:gosec // Secure is derived from TLS/proxy headers and must match deployment transport.
-	http.SetCookie(ctx.ResponseWriter(), &http.Cookie{
+	ctx.SetCookie(&http.Cookie{
 		Name:     SessionCookieName,
 		Value:    "",
 		Path:     sessionCookiePath,
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   requestUsesHTTPS(ctx.Request()),
+		Secure:   ctx.IsHTTPS(),
 		SameSite: http.SameSiteLaxMode,
 	})
-}
-
-func requestUsesHTTPS(req *http.Request) bool {
-	if req == nil {
-		return false
-	}
-	if req.TLS != nil {
-		return true
-	}
-	if strings.EqualFold(strings.TrimSpace(req.Header.Get("X-Forwarded-Proto")), "https") {
-		return true
-	}
-	if strings.EqualFold(strings.TrimSpace(req.Header.Get("X-Forwarded-Ssl")), "on") {
-		return true
-	}
-	return strings.Contains(strings.ToLower(req.Header.Get("Forwarded")), "proto=https")
 }

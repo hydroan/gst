@@ -98,7 +98,7 @@ func (s *AdminUserSessionsDeleteService) Delete(ctx *types.ServiceContext, req *
 		return nil, service.NewError(http.StatusNotFound, "user not found")
 	}
 
-	if err = DeleteAllSessions(ctx.Context(), targetUserID); err != nil {
+	if err = DeleteAllSessions(ctx, targetUserID); err != nil {
 		log.Error("failed to delete target user sessions", err)
 		return nil, err
 	}
@@ -110,7 +110,6 @@ func (s *AdminUserSessionsDeleteService) Delete(ctx *types.ServiceContext, req *
 }
 
 func buildAdminUserSessionsView(ctx *types.ServiceContext, user *modeliamuser.User, currentSessionID string) (modeliamsession.AdminSessionUserView, error) {
-	redisCtx := ctx.Context()
 	view := modeliamsession.AdminSessionUserView{
 		UserID:             user.ID,
 		Username:           user.Username,
@@ -122,12 +121,12 @@ func buildAdminUserSessionsView(ctx *types.ServiceContext, user *modeliamuser.Us
 		Sessions:           make([]modeliamsession.SessionView, 0),
 	}
 
-	sessionIDs, err := listUserSessionIDs(redisCtx, user.ID)
+	sessionIDs, err := listUserSessionIDs(ctx, user.ID)
 	if err != nil {
 		return modeliamsession.AdminSessionUserView{}, err
 	}
 
-	cache := redis.Cache[modeliamsession.Session]().WithContext(redisCtx)
+	cache := redis.Cache[modeliamsession.Session]().WithContext(ctx)
 	for i := range sessionIDs {
 		sessionID := sessionIDs[i]
 		if sessionID == "" {
@@ -137,18 +136,18 @@ func buildAdminUserSessionsView(ctx *types.ServiceContext, user *modeliamuser.Us
 		session, getErr := cache.Get(modeliamsession.SessionIDKey(sessionID))
 		if getErr != nil {
 			if errors.Is(getErr, types.ErrEntryNotFound) {
-				_ = redis.ZRem(redisCtx, modeliamsession.SessionUserKey(user.ID), sessionID)
-				_ = redis.ZRem(redisCtx, modeliamsession.SessionAllKey(), sessionID)
+				_ = redis.ZRem(ctx, modeliamsession.SessionUserKey(user.ID), sessionID)
+				_ = redis.ZRem(ctx, modeliamsession.SessionAllKey(), sessionID)
 				continue
 			}
 			return modeliamsession.AdminSessionUserView{}, getErr
 		}
 		if validateErr := ValidateActiveSession(sessionID, session); validateErr != nil {
-			_, _ = DeleteSession(redisCtx, sessionID)
+			_, _ = DeleteSession(ctx, sessionID)
 			continue
 		}
 		if session.UserID != user.ID {
-			_ = redis.ZRem(redisCtx, modeliamsession.SessionUserKey(user.ID), sessionID)
+			_ = redis.ZRem(ctx, modeliamsession.SessionUserKey(user.ID), sessionID)
 			continue
 		}
 

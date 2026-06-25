@@ -43,7 +43,7 @@ func (s *ChangeResendService) Create(ctx *types.ServiceContext, req *modelemail.
 		return nil, err
 	}
 
-	if _, err = reserveEmailThrottle(ctx.Context(), iamEmailFlowKindChangeConfirm, emailThrottleResend, newEmail, 0); err != nil {
+	if _, err = reserveEmailThrottle(ctx, iamEmailFlowKindChangeConfirm, emailThrottleResend, newEmail, 0); err != nil {
 		if errors.Is(err, errEmailFlowThrottled) {
 			return &modelemail.ChangeResendRsp{Msg: "email change confirmation resent successfully"}, nil
 		}
@@ -51,7 +51,7 @@ func (s *ChangeResendService) Create(ctx *types.ServiceContext, req *modelemail.
 		return nil, errors.Wrap(err, "failed to reserve email change resend throttle")
 	}
 
-	confirmToken, confirmFlow, err := issueEmailFlow(ctx.Context(), iamEmailFlowKindChangeConfirm, iamEmailFlowState{
+	confirmToken, confirmFlow, err := issueEmailFlow(ctx, iamEmailFlowKindChangeConfirm, iamEmailFlowState{
 		UserID:   user.ID,
 		OldEmail: normalizeAccountEmail(user.Email),
 		NewEmail: newEmail,
@@ -61,7 +61,7 @@ func (s *ChangeResendService) Create(ctx *types.ServiceContext, req *modelemail.
 		log.Error("failed to issue email change resend flow", err)
 		return nil, errors.Wrap(err, "failed to issue email change resend flow")
 	}
-	if err = dispatchEmail(ctx.Context(), changeConfirmDelivery(confirmToken, confirmFlow)); err != nil {
+	if err = dispatchEmail(ctx, changeConfirmDelivery(confirmToken, confirmFlow)); err != nil {
 		log.Error("failed to dispatch email change resend confirmation", err)
 		return nil, errors.Wrap(err, "failed to dispatch email change resend confirmation")
 	}
