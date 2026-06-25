@@ -3,6 +3,7 @@ package serviceiamuser
 import (
 	"net/http"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
@@ -130,10 +131,10 @@ func (UserPatchService) Patch(ctx *types.ServiceContext, req *modeliamuser.UserP
 
 	target := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx).Get(target, targetID); err != nil {
+		if errors.Is(err, database.ErrRecordNotFound) {
+			return nil, service.NewError(http.StatusNotFound, "user not found")
+		}
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load target user", err)
-	}
-	if target.ID == "" {
-		return nil, service.NewError(http.StatusNotFound, "user not found")
 	}
 	if target.IsSuperuser != nil && *target.IsSuperuser && !isRootUserID(actorID) {
 		return nil, userSuperuserTargetForbidden()
@@ -197,9 +198,6 @@ func userResourceActor(ctx *types.ServiceContext) (string, *modeliamuser.User, e
 	if err = database.Database[*modeliamuser.User](ctx).Get(actor, session.UserID); err != nil {
 		return "", nil, service.NewErrorWithCause(http.StatusUnauthorized, "current user not found", err)
 	}
-	if actor.ID == "" {
-		return "", nil, service.NewError(http.StatusUnauthorized, "current user not found")
-	}
 	return actor.GetID(), actor, nil
 }
 
@@ -237,10 +235,10 @@ func ensureExistingUserTargetAllowed(ctx *types.ServiceContext, actorID string, 
 	}
 	target := new(modeliamuser.User)
 	if err := database.Database[*modeliamuser.User](ctx).Get(target, req.GetID()); err != nil {
+		if errors.Is(err, database.ErrRecordNotFound) {
+			return service.NewError(http.StatusNotFound, "user not found")
+		}
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to load target user", err)
-	}
-	if target.ID == "" {
-		return service.NewError(http.StatusNotFound, "user not found")
 	}
 	if target.IsSuperuser != nil && *target.IsSuperuser && !isRootUserID(actorID) {
 		return userSuperuserTargetForbidden()

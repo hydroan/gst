@@ -28,7 +28,7 @@ func (s *CurrentListService) List(ctx *types.ServiceContext, req *modeliamsessio
 	}
 
 	user := new(modeliamuser.User)
-	if err := database.Database[*modeliamuser.User](ctx).Get(user, session.UserID); err != nil || user.GetID() == "" {
+	if err := database.Database[*modeliamuser.User](ctx).Get(user, session.UserID); err != nil {
 		log.Error("failed to load user for current session")
 		return nil, service.NewError(http.StatusUnauthorized, "session invalid")
 	}

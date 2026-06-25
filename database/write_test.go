@@ -138,7 +138,6 @@ func TestDatabaseDelete(t *testing.T) {
 	// Verify soft-deleted record is not accessible via Get
 	u := new(TestUser)
 	require.ErrorIs(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID), database.ErrRecordNotFound)
-	require.Empty(t, u.ID, "soft-deleted record should not be accessible via Get")
 
 	// Test Delete - batch delete multiple records
 	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(u2, u3))

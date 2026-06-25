@@ -225,7 +225,6 @@ func TestDatabaseGet(t *testing.T) {
 	u = new(TestUser)
 	err = database.Database[*TestUser](context.Background()).Get(u, "non-existent-id")
 	require.ErrorIs(t, err, database.ErrRecordNotFound)
-	require.Empty(t, u.ID)
 	require.Empty(t, u.CreatedAt)
 	require.Empty(t, u.UpdatedAt)
 	require.Empty(t, u.Name)
@@ -236,7 +235,6 @@ func TestDatabaseGet(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(u1))
 	u = new(TestUser)
 	require.ErrorIs(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID), database.ErrRecordNotFound)
-	require.Empty(t, u.ID)
 	require.Empty(t, u.CreatedAt)
 	require.Empty(t, u.UpdatedAt)
 	require.Empty(t, u.Name)
@@ -254,7 +252,6 @@ func TestDatabaseGet(t *testing.T) {
 	// Test Get with different model types
 	p := new(TestProduct)
 	require.ErrorIs(t, database.Database[*TestProduct](context.Background()).Get(p, "non-existent-id"), database.ErrRecordNotFound)
-	require.Empty(t, p.ID)
 	require.Empty(t, p.CreatedAt)
 	require.Empty(t, p.UpdatedAt)
 

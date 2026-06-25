@@ -1344,7 +1344,6 @@ func TestDatabaseWithPurge(t *testing.T) {
 		// Verify record is not accessible via Get
 		u := new(TestUser)
 		require.ErrorIs(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID), database.ErrRecordNotFound)
-		require.Empty(t, u.ID, "hard-deleted record should not be accessible via Get")
 
 		// Verify record is permanently deleted (not found even with Unscoped)
 		var unscopedUser TestUser
@@ -1396,7 +1395,6 @@ func TestDatabaseWithPurge(t *testing.T) {
 		// Verify record is not accessible via Get
 		u := new(TestUser)
 		require.ErrorIs(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID), database.ErrRecordNotFound)
-		require.Empty(t, u.ID, "soft-deleted record should not be accessible via Get")
 
 		// Verify record still exists in database (found with Unscoped)
 		var unscopedUser TestUser
@@ -1802,7 +1800,6 @@ func TestDatabaseWithOmit(t *testing.T) {
 			// Verify record is soft-deleted (not accessible via Get)
 			uu := new(TestUser)
 			require.ErrorIs(t, database.Database[*TestUser](context.Background()).Get(uu, u1.ID), database.ErrRecordNotFound)
-			require.Empty(t, uu.ID, "soft-deleted record should not be accessible via Get")
 		})
 
 		t.Run("HardDelete", func(t *testing.T) {
@@ -1821,7 +1818,6 @@ func TestDatabaseWithOmit(t *testing.T) {
 			// Verify record is permanently deleted (not accessible via Get)
 			uu := new(TestUser)
 			require.ErrorIs(t, database.Database[*TestUser](context.Background()).Get(uu, u1.ID), database.ErrRecordNotFound)
-			require.Empty(t, uu.ID, "hard-deleted record should not be accessible via Get")
 		})
 	})
 

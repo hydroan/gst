@@ -46,14 +46,11 @@ func (s *AdminUserSessionsListService) List(ctx *types.ServiceContext, req *mode
 
 	user := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx).Get(user, targetUserID); err != nil {
-		if errors.Is(err, types.ErrEntryNotFound) {
+		if errors.Is(err, database.ErrRecordNotFound) {
 			return nil, service.NewError(http.StatusNotFound, "user not found")
 		}
 		log.Error("failed to load target user", err)
 		return nil, err
-	}
-	if user.GetID() == "" {
-		return nil, service.NewError(http.StatusNotFound, "user not found")
 	}
 
 	view, err := buildAdminUserSessionsView(ctx, user, currentSessionID)
@@ -88,14 +85,11 @@ func (s *AdminUserSessionsDeleteService) Delete(ctx *types.ServiceContext, req *
 
 	targetUser := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx).Get(targetUser, targetUserID); err != nil {
-		if errors.Is(err, types.ErrEntryNotFound) {
+		if errors.Is(err, database.ErrRecordNotFound) {
 			return nil, service.NewError(http.StatusNotFound, "user not found")
 		}
 		log.Error("failed to load target user", err)
 		return nil, err
-	}
-	if targetUser.GetID() == "" {
-		return nil, service.NewError(http.StatusNotFound, "user not found")
 	}
 
 	if err = DeleteAllSessions(ctx, targetUserID); err != nil {

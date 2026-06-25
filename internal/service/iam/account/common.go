@@ -42,10 +42,10 @@ func loadPrivilegedActorAndTarget(ctx *types.ServiceContext, targetUserID string
 
 	actor := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx).Get(actor, session.UserID); err != nil {
+		if errors.Is(err, database.ErrRecordNotFound) {
+			return nil, nil, errors.New("actor user not found")
+		}
 		return nil, nil, errors.Wrap(err, "database error")
-	}
-	if actor.GetID() == "" {
-		return nil, nil, errors.New("actor user not found")
 	}
 
 	target := new(modeliamuser.User)
