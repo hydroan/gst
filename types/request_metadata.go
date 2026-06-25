@@ -33,7 +33,18 @@ type RequestMetadataFields struct {
 	Query     url.Values
 }
 
-type requestMetadataContextKey struct{}
+// NewRequestMetadata creates RequestMetadata from explicit fields.
+func NewRequestMetadata(fields RequestMetadataFields) RequestMetadata {
+	return RequestMetadata{
+		route:     fields.Route,
+		username:  fields.Username,
+		userID:    fields.UserID,
+		sessionID: fields.SessionID,
+		traceID:   fields.TraceID,
+		params:    cloneStringMap(fields.Params),
+		query:     cloneURLValues(fields.Query),
+	}
+}
 
 // RequestMetadataFromGin extracts RequestMetadata from gin.Context.
 func RequestMetadataFromGin(c *gin.Context) RequestMetadata {
@@ -62,18 +73,23 @@ func RequestMetadataFromGin(c *gin.Context) RequestMetadata {
 	})
 }
 
-// NewRequestMetadata creates RequestMetadata from explicit fields.
-func NewRequestMetadata(fields RequestMetadataFields) RequestMetadata {
-	return RequestMetadata{
-		route:     fields.Route,
-		username:  fields.Username,
-		userID:    fields.UserID,
-		sessionID: fields.SessionID,
-		traceID:   fields.TraceID,
-		params:    cloneStringMap(fields.Params),
-		query:     cloneURLValues(fields.Query),
+func (m RequestMetadata) Route() string     { return m.route }
+func (m RequestMetadata) Username() string  { return m.username }
+func (m RequestMetadata) UserID() string    { return m.userID }
+func (m RequestMetadata) SessionID() string { return m.sessionID }
+func (m RequestMetadata) TraceID() string   { return m.traceID }
+
+func (m RequestMetadata) Param(key string) string {
+	if m.params == nil {
+		return ""
 	}
+	return m.params[key]
 }
+
+func (m RequestMetadata) Params() map[string]string { return cloneStringMap(m.params) }
+func (m RequestMetadata) Query() url.Values         { return cloneURLValues(m.query) }
+
+type requestMetadataContextKey struct{}
 
 // ContextWithRequestMetadata returns a context carrying immutable request metadata.
 func ContextWithRequestMetadata(ctx context.Context, meta RequestMetadata) context.Context {
@@ -104,22 +120,6 @@ func RequestMetadataFromContext(ctx context.Context) RequestMetadata {
 	}
 	return meta
 }
-
-func (m RequestMetadata) Route() string     { return m.route }
-func (m RequestMetadata) Username() string  { return m.username }
-func (m RequestMetadata) UserID() string    { return m.userID }
-func (m RequestMetadata) SessionID() string { return m.sessionID }
-func (m RequestMetadata) TraceID() string   { return m.traceID }
-
-func (m RequestMetadata) Param(key string) string {
-	if m.params == nil {
-		return ""
-	}
-	return m.params[key]
-}
-
-func (m RequestMetadata) Params() map[string]string { return cloneStringMap(m.params) }
-func (m RequestMetadata) Query() url.Values         { return cloneURLValues(m.query) }
 
 func cloneStringMap(src map[string]string) map[string]string {
 	if src == nil {
