@@ -18,7 +18,7 @@ type PasswordResetRequestService struct {
 // caller cannot infer whether the account exists, while still enforcing throttle
 // limits before any token is created or email is sent.
 func (s *PasswordResetRequestService) Create(ctx *types.ServiceContext, req *modelemail.PasswordResetRequestReq) (rsp *modelemail.PasswordResetRequestRsp, err error) {
-	log := s.WithServiceContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.GetPhase())
 	rsp = &modelemail.PasswordResetRequestRsp{Msg: publicAcceptedMessage(iamEmailFlowKindPasswordReset)}
 
 	email := normalizeEmailScope(req.Email)

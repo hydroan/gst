@@ -16,7 +16,7 @@ type ChangeConfirmService struct {
 // Create consumes the confirmation token and updates the account email when the
 // current database state still matches the pending change flow.
 func (s *ChangeConfirmService) Create(ctx *types.ServiceContext, req *modelemail.ChangeConfirmReq) (rsp *modelemail.ChangeConfirmRsp, err error) {
-	log := s.WithServiceContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.GetPhase())
 
 	flow, err := consumeEmailFlow(emailServiceContext(ctx), iamEmailFlowKindChangeConfirm, req.Token)
 	if err != nil {

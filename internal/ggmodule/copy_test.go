@@ -117,13 +117,13 @@ type TotpBind struct {
 }
 
 func (t *TotpBind) Create(ctx *types.ServiceContext, req *mfa.MFA) (rsp *mfa.TOTPBindRsp, err error) {
-	log := t.WithServiceContext(ctx, ctx.GetPhase())
+	log := t.WithContext(ctx, ctx.GetPhase())
 	log.Info("mfa: totp bind")
 	return rsp, nil
 }
 
 func (t *TotpBind) CreateAfter(ctx *types.ServiceContext, req *mfa.MFA) error {
-	log := t.WithServiceContext(ctx, ctx.GetPhase())
+	log := t.WithContext(ctx, ctx.GetPhase())
 	log.Info("mfa: totp bind after")
 	return nil
 }
@@ -222,7 +222,7 @@ type Menu struct {
 }
 
 func (m *Menu) List(ctx *types.ServiceContext, req *authz.Authz) (rsp *authz.Authz, err error) {
-	log := m.WithServiceContext(ctx, ctx.GetPhase())
+	log := m.WithContext(ctx, ctx.GetPhase())
 	log.Info("authz: menu")
 	return rsp, nil
 }

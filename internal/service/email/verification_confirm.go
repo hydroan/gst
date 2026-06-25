@@ -19,7 +19,7 @@ type VerificationConfirmService struct {
 // Create consumes the one-time verification token and marks the corresponding
 // email address as verified when the current account state still matches.
 func (s *VerificationConfirmService) Create(ctx *types.ServiceContext, req *modelemail.VerificationConfirmReq) (rsp *modelemail.VerificationConfirmRsp, err error) {
-	log := s.WithServiceContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.GetPhase())
 
 	flow, err := consumeEmailFlow(emailServiceContext(ctx), iamEmailFlowKindVerification, req.Token)
 	if err != nil {

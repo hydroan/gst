@@ -69,7 +69,6 @@ type Logger interface {
 
 	WithContext(context.Context, consts.Phase) Logger
 	WithRequestMetadata(RequestMetadata, consts.Phase) Logger
-	WithServiceContext(*ServiceContext, consts.Phase) Logger
 
 	StandardLogger
 	StructuredLogger

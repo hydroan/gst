@@ -12,19 +12,19 @@ type Creator struct {
 }
 
 func (c *Creator) Create(ctx *types.ServiceContext, req *model.Conversation) (rsp *model.Conversation, err error) {
-	log := c.WithServiceContext(ctx, ctx.GetPhase())
+	log := c.WithContext(ctx, ctx.GetPhase())
 	log.Info("conversation create")
 	return rsp, nil
 }
 
 func (c *Creator) CreateBefore(ctx *types.ServiceContext, conversation *model.Conversation) error {
-	log := c.WithServiceContext(ctx, ctx.GetPhase())
+	log := c.WithContext(ctx, ctx.GetPhase())
 	log.Info("conversation create before")
 	return nil
 }
 
 func (c *Creator) CreateAfter(ctx *types.ServiceContext, conversation *model.Conversation) error {
-	log := c.WithServiceContext(ctx, ctx.GetPhase())
+	log := c.WithContext(ctx, ctx.GetPhase())
 	log.Info("conversation create after")
 	return nil
 }

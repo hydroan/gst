@@ -124,7 +124,7 @@ func TestReturns(t *testing.T) {
 	}
 }
 
-func TestStmtLogWithServiceContext(t *testing.T) {
+func TestStmtLogWithContext(t *testing.T) {
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for target function.
@@ -134,24 +134,24 @@ func TestStmtLogWithServiceContext(t *testing.T) {
 		{
 			name:         "u",
 			modelVarName: `u`,
-			want:         `log := u.WithServiceContext(ctx, ctx.GetPhase())`,
+			want:         `log := u.WithContext(ctx, ctx.GetPhase())`,
 		},
 		{
 			name:         "g",
 			modelVarName: `g`,
-			want:         `log := g.WithServiceContext(ctx, ctx.GetPhase())`,
+			want:         `log := g.WithContext(ctx, ctx.GetPhase())`,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := StmtLogWithServiceContext(tt.modelVarName)
+			res := StmtLogWithContext(tt.modelVarName)
 			got, err := FormatNode(res)
 			if err != nil {
 				t.Error(err)
 				return
 			}
 			if got != tt.want {
-				t.Errorf("StmtLogWithServiceContext() = %v, want %v", got, tt.want)
+				t.Errorf("StmtLogWithContext() = %v, want %v", got, tt.want)
 			}
 		})
 	}

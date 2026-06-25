@@ -16,7 +16,7 @@ type UserRoleService struct {
 
 // DeleteAfter support filter and delete multiple user_roles by query parameter `username` and `rolecode`.
 func (s *UserRoleService) DeleteAfter(ctx *types.ServiceContext, userRole *modelauthz.UserRole) error {
-	log := s.WithServiceContext(ctx, consts.PHASE_DELETE_AFTER)
+	log := s.WithContext(ctx, consts.PHASE_DELETE_AFTER)
 	username := ctx.Query().Get("username")
 	roleCode := ctx.Query().Get("rolecode")
 
@@ -36,7 +36,7 @@ func (s *UserRoleService) DeleteAfter(ctx *types.ServiceContext, userRole *model
 }
 
 func (s *UserRoleService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.UserRole) error {
-	log := s.WithServiceContext(ctx, consts.PHASE_LIST_AFTER)
+	log := s.WithContext(ctx, consts.PHASE_LIST_AFTER)
 
 	userMap, err := gstdao.QueryModelsMap(ctx, func(u *modelauthz.User) string { return u.ID }, nil)
 	if err != nil {

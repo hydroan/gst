@@ -23,10 +23,11 @@ func (g *GormLogger) Info(_ context.Context, str string, args ...any)  { g.l.Inf
 func (g *GormLogger) Warn(_ context.Context, str string, args ...any)  { g.l.Warnw(str, args) }
 func (g *GormLogger) Error(_ context.Context, str string, args ...any) { g.l.Errorw(str, args) }
 func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
-	username, _ := ctx.Value(consts.CTX_USERNAME).(string)
-	userID, _ := ctx.Value(consts.CTX_USER_ID).(string)
-	traceID, _ := ctx.Value(consts.TRACE_ID).(string)
-	// Fallback to OTEL span context trace ID when not present in ctx values
+	meta := types.RequestMetadataFromContext(ctx)
+	username := meta.Username()
+	userID := meta.UserID()
+	traceID := meta.TraceID()
+	// Fallback to OTEL span context trace ID when request metadata has no trace ID.
 	if len(traceID) == 0 {
 		spanCtx := trace.SpanFromContext(ctx).SpanContext()
 		if spanCtx.HasTraceID() {

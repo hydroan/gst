@@ -21,7 +21,7 @@ type LogoutService struct {
 
 // Create logs out the current session and always clears the session cookie on success.
 func (s *LogoutService) Create(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamaccount.LogoutRsp, err error) {
-	log := s.WithServiceContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.GetPhase())
 
 	sessionID, err := serviceiamsession.ReadSessionID(ctx)
 	if err != nil {

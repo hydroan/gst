@@ -39,9 +39,9 @@ func Returns(exprs ...ast.Expr) *ast.ReturnStmt {
 	}
 }
 
-// StmtLogWithServiceContext create *ast.AssignStmt represents `log := u.WithServiceContext(ctx, ctx.GetPhase())`
+// StmtLogWithContext create *ast.AssignStmt represents `log := u.WithContext(ctx, ctx.GetPhase())`
 // modelVarName is model variable name.
-func StmtLogWithServiceContext(modelVarName string) *ast.AssignStmt {
+func StmtLogWithContext(modelVarName string) *ast.AssignStmt {
 	return &ast.AssignStmt{
 		Lhs: []ast.Expr{
 			ast.NewIdent("log"),
@@ -51,7 +51,7 @@ func StmtLogWithServiceContext(modelVarName string) *ast.AssignStmt {
 			&ast.CallExpr{
 				Fun: &ast.SelectorExpr{
 					X:   ast.NewIdent(modelVarName),
-					Sel: ast.NewIdent("WithServiceContext"),
+					Sel: ast.NewIdent("WithContext"),
 				},
 				Args: []ast.Expr{
 					ast.NewIdent("ctx"),

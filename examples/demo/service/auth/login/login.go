@@ -12,7 +12,7 @@ type Login struct {
 }
 
 func (l *Login) List(ctx *types.ServiceContext, req *auth.Login) (rsp *auth.LoginRsp, err error) {
-	log := l.WithServiceContext(ctx, ctx.GetPhase())
+	log := l.WithContext(ctx, ctx.GetPhase())
 	log.Info("login: login")
 	return rsp, nil
 }

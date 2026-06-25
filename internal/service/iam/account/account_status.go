@@ -16,7 +16,7 @@ type AccountStatusService struct {
 }
 
 func (s *AccountStatusService) Create(ctx *types.ServiceContext, req *modeliamaccount.AccountStatusReq) (rsp *modeliamaccount.AccountStatusRsp, err error) {
-	log := s.WithServiceContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.GetPhase())
 	log.Info("account status create")
 
 	if req.UserID == "" {

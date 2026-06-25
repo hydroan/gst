@@ -12,7 +12,7 @@ type Creator struct {
 }
 
 func (e *Creator) Create(ctx *types.ServiceContext, req *file.EncryptReq) (rsp *file.EncryptRsp, err error) {
-	log := e.WithServiceContext(ctx, ctx.GetPhase())
+	log := e.WithContext(ctx, ctx.GetPhase())
 	log.Info("encrypt create")
 	return rsp, nil
 }

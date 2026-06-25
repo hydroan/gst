@@ -391,7 +391,7 @@ func TestGenServiceMethod1(t *testing.T) {
 			},
 			phase: consts.PHASE_CREATE_BEFORE,
 			want: `func (u *Creator) CreateBefore(ctx *types.ServiceContext, user *model.User) error {
-	log := u.WithServiceContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.GetPhase())
 	log.Info("user create before")
 	return nil
 }`,
@@ -430,7 +430,7 @@ func TestGenServiceMethod2(t *testing.T) {
 			},
 			phase: consts.PHASE_LIST_BEFORE,
 			want: `func (u *Lister) ListBefore(ctx *types.ServiceContext, users *[]*model.User) error {
-	log := u.WithServiceContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.GetPhase())
 	log.Info("user list before")
 	return nil
 }`,
@@ -469,7 +469,7 @@ func TestGenServiceMethod3(t *testing.T) {
 			},
 			phase: consts.PHASE_CREATE_MANY_BEFORE,
 			want: `func (u *ManyCreator) CreateManyBefore(ctx *types.ServiceContext, users ...*model.User) error {
-	log := u.WithServiceContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.GetPhase())
 	log.Info("user create many before")
 	return nil
 }`,
@@ -512,7 +512,7 @@ func TestGenServiceMethod4(t *testing.T) {
 			rspName: "User",
 			phase:   consts.PHASE_CREATE,
 			want: `func (u *Creator) Create(ctx *types.ServiceContext, req *model.User) (rsp *model.User, err error) {
-	log := u.WithServiceContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.GetPhase())
 	log.Info("user create")
 	return rsp, nil
 }`,
@@ -530,7 +530,7 @@ func TestGenServiceMethod4(t *testing.T) {
 			rspName: "GroupResponse",
 			phase:   consts.PHASE_UPDATE,
 			want: `func (g *Updater) Update(ctx *types.ServiceContext, req model.GroupRequest) (rsp model.GroupResponse, err error) {
-	log := g.WithServiceContext(ctx, ctx.GetPhase())
+	log := g.WithContext(ctx, ctx.GetPhase())
 	log.Info("group update")
 	return rsp, nil
 }`,
@@ -548,7 +548,7 @@ func TestGenServiceMethod4(t *testing.T) {
 			rspName: "*GroupResponse",
 			phase:   consts.PHASE_UPDATE,
 			want: `func (g *Updater) Update(ctx *types.ServiceContext, req *model.GroupRequest) (rsp *model.GroupResponse, err error) {
-	log := g.WithServiceContext(ctx, ctx.GetPhase())
+	log := g.WithContext(ctx, ctx.GetPhase())
 	log.Info("group update")
 	return rsp, nil
 }`,
@@ -588,7 +588,7 @@ func TestGenServiceMethod5(t *testing.T) {
 			},
 			phase: consts.PHASE_IMPORT,
 			want: `func (u *Importer) Import(ctx *types.ServiceContext, reader io.Reader) (users []*model.User, err error) {
-	log := u.WithServiceContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.GetPhase())
 	log.Info("user import")
 	return users, err
 }`,
@@ -627,7 +627,7 @@ func TestGenServiceMethod6(t *testing.T) {
 			},
 			phase: consts.PHASE_EXPORT,
 			want: `func (u *Exporter) Export(ctx *types.ServiceContext, users ...*model.User) (data []byte, err error) {
-	log := u.WithServiceContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.GetPhase())
 	log.Info("user export")
 	return data, err
 }`,

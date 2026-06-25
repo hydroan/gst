@@ -138,6 +138,38 @@ func TestWithContextAddsRequestMetadataFields(t *testing.T) {
 	require.Equal(t, map[string]any{"tag": "blue,green"}, fields[consts.QUERY])
 }
 
+func TestGormTraceUsesRequestMetadataFromContext(t *testing.T) {
+	core, logs := observer.New(zapcore.InfoLevel)
+	log := &Logger{zlog: zap.New(core)}
+	meta := types.NewRequestMetadataFromValues(types.RequestMetadataValues{
+		Username: "admin",
+		UserID:   "user-1",
+		TraceID:  "trace-1",
+	})
+	ctx := types.ContextWithRequestMetadata(context.Background(), meta)
+
+	oldThreshold := config.App.Database.SlowQueryThreshold
+	config.App.Database.SlowQueryThreshold = time.Hour
+	t.Cleanup(func() {
+		config.App.Database.SlowQueryThreshold = oldThreshold
+	})
+
+	gormLog := &GormLogger{l: log}
+	gormLog.Trace(ctx, time.Now(), func() (string, int64) {
+		return "select 1", 1
+	}, nil)
+
+	entries := logs.All()
+	require.Len(t, entries, 1)
+
+	fields := entries[0].ContextMap()
+	require.Equal(t, "admin", fields[consts.CTX_USERNAME])
+	require.Equal(t, "user-1", fields[consts.CTX_USER_ID])
+	require.Equal(t, "trace-1", fields[consts.TRACE_ID])
+	require.Equal(t, "select 1", fields["sql"])
+	require.Equal(t, int64(1), fields["rows"])
+}
+
 func withLogWriterConfig(t *testing.T, dir, file string) {
 	t.Helper()
 

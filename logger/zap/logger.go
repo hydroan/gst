@@ -135,24 +135,6 @@ func (l *Logger) WithContext(ctx context.Context, phase consts.Phase) types.Logg
 	return l.withRequestMetadata(meta, phase, traceID)
 }
 
-// WithServiceContext creates a new logger with service context fields.
-// It extends the base logger with phase, username, user ID, and trace ID from *types.ServiceContext.
-//
-// examples:
-//
-// log := logger.Service.WithServiceContext(ctx, consts.PHASE_LIST_BEFORE)
-func (l *Logger) WithServiceContext(ctx *types.ServiceContext, phase consts.Phase) types.Logger {
-	return l.With(
-		consts.PHASE, string(phase),
-		consts.CTX_ROUTE, ctx.Route(),
-		consts.CTX_USERNAME, ctx.Username(),
-		consts.CTX_USER_ID, ctx.UserID(),
-		consts.TRACE_ID, ctx.TraceID(),
-	).
-		WithObject(consts.PARAMS, paramsObject(ctx.Params())).
-		WithObject(consts.QUERY, queryObject(ctx.Query()))
-}
-
 type paramsObject map[string]string
 
 func (o paramsObject) MarshalLogObject(enc zapcore.ObjectEncoder) error {

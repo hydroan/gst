@@ -399,7 +399,7 @@ func serviceActionLogQuoted(modelName string, phase consts.Phase, action *dsl.Ac
 func genServiceMethod1(info *ModelInfo, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod1(
 		info.ModelVarName, info.ModelName, info.ModelPkgName, phase, roleName,
-		StmtLogWithServiceContext(info.ModelVarName),
+		StmtLogWithContext(info.ModelVarName),
 		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
 		EmptyLine(),
 		Returns(ast.NewIdent("nil")),
@@ -410,7 +410,7 @@ func genServiceMethod1(info *ModelInfo, action *dsl.Action, phase consts.Phase, 
 func genServiceMethod2(info *ModelInfo, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod2(
 		info.ModelVarName, info.ModelName, info.ModelPkgName, phase, roleName,
-		StmtLogWithServiceContext(info.ModelVarName),
+		StmtLogWithContext(info.ModelVarName),
 		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
 		EmptyLine(),
 		Returns(ast.NewIdent("nil")),
@@ -422,7 +422,7 @@ func genServiceMethod2(info *ModelInfo, action *dsl.Action, phase consts.Phase, 
 func genServiceMethod3(info *ModelInfo, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod3(
 		info.ModelVarName, info.ModelName, info.ModelPkgName, phase, roleName,
-		StmtLogWithServiceContext(info.ModelVarName),
+		StmtLogWithContext(info.ModelVarName),
 		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
 		EmptyLine(),
 		Returns(ast.NewIdent("nil")),
@@ -433,7 +433,7 @@ func genServiceMethod3(info *ModelInfo, action *dsl.Action, phase consts.Phase, 
 func genServiceMethod4(info *ModelInfo, action *dsl.Action, reqName, rspName string, phase consts.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod4(
 		info.ModelVarName, info.ModelName, info.ModelPkgName, reqName, rspName, phase, roleName,
-		StmtLogWithServiceContext(info.ModelVarName),
+		StmtLogWithContext(info.ModelVarName),
 		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
 		EmptyLine(),
 		Returns(
@@ -447,7 +447,7 @@ func genServiceMethod4(info *ModelInfo, action *dsl.Action, reqName, rspName str
 func genServiceMethod5(info *ModelInfo, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod5(
 		info.ModelVarName, info.ModelName, info.ModelPkgName, phase, roleName,
-		StmtLogWithServiceContext(info.ModelVarName),
+		StmtLogWithContext(info.ModelVarName),
 		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
 		EmptyLine(),
 		Returns(ast.NewIdent(pluralizeCli.Plural(strings.ToLower(info.ModelName))), ast.NewIdent("err")),
@@ -458,7 +458,7 @@ func genServiceMethod5(info *ModelInfo, action *dsl.Action, phase consts.Phase, 
 func genServiceMethod6(info *ModelInfo, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod6(
 		info.ModelVarName, info.ModelName, info.ModelPkgName, phase, roleName,
-		StmtLogWithServiceContext(info.ModelVarName),
+		StmtLogWithContext(info.ModelVarName),
 		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
 		EmptyLine(),
 		Returns(ast.NewIdent("data"), ast.NewIdent("err")),

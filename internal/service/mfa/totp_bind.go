@@ -34,7 +34,7 @@ type TOTPBindService struct {
 // server-held secret, stores it in the binding challenge, and returns the
 // challenge ID with the provisioning URL and QR image for authenticator setup.
 func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPBind) (rsp *modelmfa.TOTPBindRsp, err error) {
-	log := t.WithServiceContext(ctx, ctx.GetPhase())
+	log := t.WithContext(ctx, ctx.GetPhase())
 
 	if len(ctx.UserID()) == 0 {
 		log.Errorz("user_id not found in context")

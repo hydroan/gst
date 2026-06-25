@@ -18,7 +18,7 @@ type HeartbeatService struct {
 // Create validates the current session and updates the online-user record without
 // extending the Redis session lifetime.
 func (s *HeartbeatService) Create(ctx *types.ServiceContext, req *modeliamsession.Heartbeat) (rsp *modeliamsession.Heartbeat, err error) {
-	log := s.WithServiceContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.GetPhase())
 
 	if _, _, err = GetCurrentSession(ctx); err != nil {
 		log.Error("failed to get current session", err)

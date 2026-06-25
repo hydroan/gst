@@ -18,7 +18,7 @@ type RoleService struct {
 
 // DeleteAfter support filter and delete multiple roles by query parameter `name`.
 func (r *RoleService) DeleteAfter(ctx *types.ServiceContext, role *modelauthz.Role) error {
-	log := r.WithServiceContext(ctx, consts.PHASE_DELETE_AFTER)
+	log := r.WithContext(ctx, consts.PHASE_DELETE_AFTER)
 	name := ctx.Query().Get("name")
 	if len(name) == 0 {
 		return nil
@@ -54,7 +54,7 @@ func (r *RoleService) PatchAfter(ctx *types.ServiceContext, role *modelauthz.Rol
 
 // remarkMenus remark role about menus
 func (r *RoleService) remarkMenus(ctx *types.ServiceContext, role *modelauthz.Role) error {
-	log := r.WithServiceContext(ctx, ctx.GetPhase())
+	log := r.WithContext(ctx, ctx.GetPhase())
 
 	menus := make([]*modelauthz.Menu, 0)
 	if err := database.Database[*modelauthz.Menu](ctx).List(&menus); err != nil {

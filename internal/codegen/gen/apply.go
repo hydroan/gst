@@ -18,7 +18,7 @@ import (
 //  1. Renames the struct type declaration (e.g., type Creator struct → type Upload struct)
 //  2. Renames receiver types in all methods (e.g., func (a *Creator) → func (u *Upload))
 //  3. Renames receiver variable names and all references in method bodies
-//     (e.g., "a" → "u", a.WithServiceContext → u.WithServiceContext)
+//     (e.g., "a" → "u", a.WithContext → u.WithContext)
 func applyServiceRoleName(file *ast.File, action *dsl.Action) bool {
 	if file == nil || action == nil || len(action.Filename) == 0 {
 		return false

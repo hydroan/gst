@@ -12,19 +12,19 @@ type Lister struct {
 }
 
 func (f *Lister) List(ctx *types.ServiceContext, req *config.File) (rsp *config.File, err error) {
-	log := f.WithServiceContext(ctx, ctx.GetPhase())
+	log := f.WithContext(ctx, ctx.GetPhase())
 	log.Info("file list")
 	return rsp, nil
 }
 
 func (f *Lister) ListBefore(ctx *types.ServiceContext, files *[]*config.File) error {
-	log := f.WithServiceContext(ctx, ctx.GetPhase())
+	log := f.WithContext(ctx, ctx.GetPhase())
 	log.Info("file list before")
 	return nil
 }
 
 func (f *Lister) ListAfter(ctx *types.ServiceContext, files *[]*config.File) error {
-	log := f.WithServiceContext(ctx, ctx.GetPhase())
+	log := f.WithContext(ctx, ctx.GetPhase())
 	log.Info("file list after")
 	return nil
 }

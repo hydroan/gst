@@ -19,7 +19,7 @@ type CurrentListService struct {
 
 // List returns the current authenticated session together with the latest user snapshot.
 func (s *CurrentListService) List(ctx *types.ServiceContext, req *modeliamsession.CurrentListReq) (rsp *modeliamsession.CurrentListRsp, err error) {
-	log := s.WithServiceContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.GetPhase())
 
 	sessionID, session, err := GetCurrentSession(ctx)
 	if err != nil {
@@ -57,7 +57,7 @@ type CurrentDeleteService struct {
 
 // Delete invalidates the current authenticated session and clears the session cookie.
 func (s *CurrentDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.CurrentDeleteReq) (rsp *modeliamsession.CurrentDeleteRsp, err error) {
-	log := s.WithServiceContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.GetPhase())
 
 	sessionID, err := ReadSessionID(ctx)
 	if err != nil {

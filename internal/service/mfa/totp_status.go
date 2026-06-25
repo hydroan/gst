@@ -23,7 +23,7 @@ type TOTPStatusService struct {
 // used by clients to render MFA settings. It requires an authenticated request,
 // returns active devices only, and derives Enabled from the active device count.
 func (t *TOTPStatusService) List(ctx *types.ServiceContext, req *modelmfa.TOTPStatus) (rsp *modelmfa.TOTPStatusRsp, err error) {
-	log := t.WithServiceContext(ctx, ctx.GetPhase())
+	log := t.WithContext(ctx, ctx.GetPhase())
 
 	// 1. Verify the authenticated account.
 	if len(ctx.UserID()) == 0 {

@@ -34,7 +34,7 @@ type SessionsDeleteAllService struct {
 
 // List returns all active sessions for the current authenticated user.
 func (s *SessionsListService) List(ctx *types.ServiceContext, req *modeliamsession.SessionsListReq) (rsp *modeliamsession.SessionsListRsp, err error) {
-	log := s.WithServiceContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.GetPhase())
 
 	// GetCurrentSession already guarantees that the resolved session is bound to
 	// an authenticated user, so the service can directly use currentSession.UserID.
@@ -95,7 +95,7 @@ func (s *SessionsListService) List(ctx *types.ServiceContext, req *modeliamsessi
 
 // Get returns the detail of a specified session for the current authenticated user.
 func (s *SessionsGetService) Get(ctx *types.ServiceContext, req *modeliamsession.SessionsGetReq) (rsp *modeliamsession.SessionsGetRsp, err error) {
-	log := s.WithServiceContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.GetPhase())
 
 	currentSessionID, currentSession, err := GetCurrentSession(ctx)
 	if err != nil {
@@ -134,7 +134,7 @@ func (s *SessionsGetService) Get(ctx *types.ServiceContext, req *modeliamsession
 // revokes every other indexed session of the same user. The endpoint remains
 // idempotent: deleting a missing session still returns success.
 func (s *SessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.SessionsDeleteReq) (rsp *modeliamsession.SessionsDeleteRsp, err error) {
-	log := s.WithServiceContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.GetPhase())
 
 	currentSessionID, currentSession, err := GetCurrentSession(ctx)
 	if err != nil {
@@ -198,7 +198,7 @@ func (s *SessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliams
 
 // Delete invalidates all sessions for the current authenticated user.
 func (s *SessionsDeleteAllService) Delete(ctx *types.ServiceContext, req *modeliamsession.SessionsDeleteAllReq) (rsp *modeliamsession.SessionsDeleteAllRsp, err error) {
-	log := s.WithServiceContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.GetPhase())
 
 	_, currentSession, err := GetCurrentSession(ctx)
 	if err != nil {
