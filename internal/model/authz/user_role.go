@@ -1,6 +1,7 @@
 package modelauthz
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/errors"
@@ -8,7 +9,6 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap/zapcore"
 )
@@ -47,7 +47,7 @@ func (UserRole) Design() {
 	})
 }
 
-func (r *UserRole) CreateBefore(ctx *types.ModelContext) error {
+func (r *UserRole) CreateBefore(ctx context.Context) error {
 	if len(r.UserID) == 0 {
 		return errors.New("user_id is required")
 	}
@@ -70,7 +70,7 @@ func (r *UserRole) CreateBefore(ctx *types.ModelContext) error {
 	return nil
 }
 
-func (r *UserRole) CreateAfter(ctx *types.ModelContext) error {
+func (r *UserRole) CreateAfter(ctx context.Context) error {
 	if err := database.Database[*UserRole](ctx).Update(r); err != nil {
 		return err
 	}
@@ -97,7 +97,7 @@ func (r *UserRole) CreateAfter(ctx *types.ModelContext) error {
 	return nil
 }
 
-func (r *UserRole) DeleteBefore(ctx *types.ModelContext) error {
+func (r *UserRole) DeleteBefore(ctx context.Context) error {
 	// The delete request always don't have user_id and role_id, so we should get the role from database.
 	if err := database.Database[*UserRole](ctx).Get(r, r.ID); err != nil {
 		return err

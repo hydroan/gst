@@ -1,11 +1,12 @@
 package modelauthz
 
 import (
+	"context"
+
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap/zapcore"
@@ -27,7 +28,7 @@ type RolePermission struct {
 }
 
 func (r *RolePermission) Purge() bool { return true }
-func (r *RolePermission) CreateBefore(*types.ModelContext) error {
+func (r *RolePermission) CreateBefore(context.Context) error {
 	if len(r.Role) == 0 {
 		return errors.New("role_id is required")
 	}
@@ -50,12 +51,12 @@ func (r *RolePermission) CreateBefore(*types.ModelContext) error {
 	return nil
 }
 
-func (r *RolePermission) CreateAfter(*types.ModelContext) error {
+func (r *RolePermission) CreateAfter(context.Context) error {
 	// grant the permission: (role, resource, action)
 	return rbac.RBAC().GrantPermission(r.Role, r.Resource, r.Action)
 }
 
-func (r *RolePermission) DeleteBefore(ctx *types.ModelContext) error {
+func (r *RolePermission) DeleteBefore(ctx context.Context) error {
 	// The request always only contains id, so we should get the RolePermission from database.
 	if err := database.Database[*RolePermission](ctx).Get(r, r.ID); err != nil {
 		return err

@@ -1,13 +1,13 @@
 package config
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"path/filepath"
 
 	. "github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/types"
 
 	"github.com/cockroachdb/errors"
 )
@@ -64,10 +64,10 @@ func (File) Design() {
 	})
 }
 
-func (f *File) CreateBefore(ctx *types.ModelContext) error { return f.prepare(ctx) }
-func (f *File) UpdateBefore(ctx *types.ModelContext) error { return f.prepare(ctx) }
+func (f *File) CreateBefore(ctx context.Context) error { return f.prepare(ctx) }
+func (f *File) UpdateBefore(ctx context.Context) error { return f.prepare(ctx) }
 
-func (f *File) prepare(_ *types.ModelContext) error {
+func (f *File) prepare(_ context.Context) error {
 	if len(f.NamespaceID) == 0 {
 		return errors.New("namespace id is required")
 	}

@@ -1,6 +1,7 @@
 package modelauthz
 
 import (
+	"context"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -8,7 +9,6 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -65,11 +65,11 @@ func (Role) Design() {
 	})
 }
 
-func (r *Role) Purge() bool                                { return true }
-func (r *Role) CreateBefore(ctx *types.ModelContext) error { return r.validate(ctx) }
+func (r *Role) Purge() bool                            { return true }
+func (r *Role) CreateBefore(ctx context.Context) error { return r.validate(ctx) }
 
 // CreateAfter will creates the role's permissions.
-func (r *Role) CreateAfter(ctx *types.ModelContext) error {
+func (r *Role) CreateAfter(ctx context.Context) error {
 	if err := database.Database[*Role](ctx).Get(r, r.ID); err != nil {
 		return err
 	}
@@ -80,14 +80,14 @@ func (r *Role) CreateAfter(ctx *types.ModelContext) error {
 
 // UpdateBefore will delete the old role's permissions and create the new role's permissions.
 // more details see "UpdatePermission".
-func (r *Role) UpdateBefore(ctx *types.ModelContext) error {
+func (r *Role) UpdateBefore(ctx context.Context) error {
 	e1 := r.UpdatePermission(ctx)
 	e2 := rbac.RBAC().AddRole(r.Code)
 	return errors.Join(e1, e2)
 }
 
 // DeleteBefore will delete the role's permissions
-func (r *Role) DeleteBefore(ctx *types.ModelContext) error {
+func (r *Role) DeleteBefore(ctx context.Context) error {
 	// The delete request always don't have role id, so we should get the role from database.
 	if err := database.Database[*Role](ctx).Get(r, r.ID); err != nil {
 		return err
@@ -126,7 +126,7 @@ func (r *Role) DeleteBefore(ctx *types.ModelContext) error {
 // It uses a brute-force strategy: revoke all existing policies for the role,
 // then grant permissions derived from the current menus. This avoids any
 // unknown leftovers in the casbin_rule table and ensures strong consistency.
-func (r *Role) UpdatePermission(ctx *types.ModelContext) error {
+func (r *Role) UpdatePermission(ctx context.Context) error {
 	// We should always iterate role's "MenuIds", not "MenuPartialIds".
 	// "MenuIds" is the frontend menus, "MenuPartialIds" is the frontend menus group that has no menus.
 	// A "Menu" contains one or multiple backend routes, each route binding one or multiple permissions.
@@ -181,7 +181,7 @@ func (r *Role) UpdatePermission(ctx *types.ModelContext) error {
 	return nil
 }
 
-func permissionsForRoutes(ctx *types.ModelContext, routes []Route) ([]*Permission, error) {
+func permissionsForRoutes(ctx context.Context, routes []Route) ([]*Permission, error) {
 	permissions := make([]*Permission, 0)
 	for _, route := range routes {
 		if len(route.Path) == 0 {
@@ -206,7 +206,7 @@ func permissionsForRoutes(ctx *types.ModelContext, routes []Route) ([]*Permissio
 }
 
 // validate will validate the role's name and code and ensure the role not exists.
-func (r *Role) validate(ctx *types.ModelContext) error {
+func (r *Role) validate(ctx context.Context) error {
 	r.Name = strings.TrimSpace(r.Name)
 	r.Code = strings.TrimSpace(r.Code)
 	if len(r.Name) == 0 {

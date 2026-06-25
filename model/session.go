@@ -1,11 +1,10 @@
 package model
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"strings"
-
-	"github.com/hydroan/gst/types"
 )
 
 // Session is deprecated
@@ -32,9 +31,9 @@ func (s *Session) initDefault() error {
 	return nil
 }
 
-func (s *Session) CreateBefore(*types.ModelContext) error { return s.initDefault() }
-func (s *Session) UpdateBefore(*types.ModelContext) error { return s.initDefault() }
-func (s *Session) DeleteBefore(*types.ModelContext) error {
+func (s *Session) CreateBefore(context.Context) error { return s.initDefault() }
+func (s *Session) UpdateBefore(context.Context) error { return s.initDefault() }
+func (s *Session) DeleteBefore(context.Context) error {
 	s.ID = s.id()
 	return nil
 }

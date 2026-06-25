@@ -1,13 +1,13 @@
 package modelauthz
 
 import (
+	"context"
 	"slices"
 	"strings"
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gorm.io/datatypes"
@@ -83,12 +83,12 @@ func (Menu) Design() {
 	})
 }
 
-func (m *Menu) Purge() bool                                      { return true }
-func (m *Menu) CreateBefore(ctx *types.ModelContext) (err error) { return m.validate() }
-func (m *Menu) UpdateBefore(ctx *types.ModelContext) error       { return m.validate() }
+func (m *Menu) Purge() bool                                  { return true }
+func (m *Menu) CreateBefore(ctx context.Context) (err error) { return m.validate() }
+func (m *Menu) UpdateBefore(ctx context.Context) error       { return m.validate() }
 
 // UpdateAfter refreshes permissions for roles that contain the current menu.
-func (m *Menu) UpdateAfter(ctx *types.ModelContext) error {
+func (m *Menu) UpdateAfter(ctx context.Context) error {
 	roles := make([]*Role, 0)
 	if err := database.Database[*Role](ctx).List(&roles); err != nil {
 		return err
@@ -107,7 +107,7 @@ func (m *Menu) UpdateAfter(ctx *types.ModelContext) error {
 }
 
 // DeleteBefore will delete the role's permissions
-func (m *Menu) DeleteBefore(ctx *types.ModelContext) error {
+func (m *Menu) DeleteBefore(ctx context.Context) error {
 	roles := make([]*Role, 0)
 	if err := database.Database[*Role](ctx).List(&roles); err != nil {
 		return err

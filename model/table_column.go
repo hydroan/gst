@@ -1,7 +1,8 @@
 package model
 
 import (
-	"github.com/hydroan/gst/types"
+	"context"
+
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap/zapcore"
 )
@@ -28,7 +29,7 @@ type TableColumn struct {
 	Base
 }
 
-func (t *TableColumn) CreateBefore(*types.ModelContext) error {
+func (t *TableColumn) CreateBefore(context.Context) error {
 	if t.Visiable == nil {
 		t.Visiable = new(true)
 	}
@@ -39,7 +40,7 @@ func (t *TableColumn) CreateBefore(*types.ModelContext) error {
 	return nil
 }
 
-func (t *TableColumn) UpdateBefore(*types.ModelContext) error {
+func (t *TableColumn) UpdateBefore(context.Context) error {
 	// id cannot be hidden
 	if t.Key == "id" {
 		t.Visiable = util.Pointer(true)

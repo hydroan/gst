@@ -1,11 +1,14 @@
 package modelregistry
 
 import (
+	"context"
 	"time"
 
 	"github.com/hydroan/gst/types"
 	"go.uber.org/zap/zapcore"
 )
+
+var _ types.Model = (*Empty)(nil)
 
 // Empty is a no-op types.Model implementation for non-persistent actions.
 //
@@ -42,13 +45,13 @@ func (*Empty) Excludes() map[string][]any                       { return nil }
 func (*Empty) Purge() bool                                      { return false }
 func (*Empty) MarshalLogObject(enc zapcore.ObjectEncoder) error { return nil }
 
-func (*Empty) CreateBefore(*types.ModelContext) error { return nil }
-func (*Empty) CreateAfter(*types.ModelContext) error  { return nil }
-func (*Empty) DeleteBefore(*types.ModelContext) error { return nil }
-func (*Empty) DeleteAfter(*types.ModelContext) error  { return nil }
-func (*Empty) UpdateBefore(*types.ModelContext) error { return nil }
-func (*Empty) UpdateAfter(*types.ModelContext) error  { return nil }
-func (*Empty) ListBefore(*types.ModelContext) error   { return nil }
-func (*Empty) ListAfter(*types.ModelContext) error    { return nil }
-func (*Empty) GetBefore(*types.ModelContext) error    { return nil }
-func (*Empty) GetAfter(*types.ModelContext) error     { return nil }
+func (*Empty) CreateBefore(context.Context) error { return nil }
+func (*Empty) CreateAfter(context.Context) error  { return nil }
+func (*Empty) DeleteBefore(context.Context) error { return nil }
+func (*Empty) DeleteAfter(context.Context) error  { return nil }
+func (*Empty) UpdateBefore(context.Context) error { return nil }
+func (*Empty) UpdateAfter(context.Context) error  { return nil }
+func (*Empty) ListBefore(context.Context) error   { return nil }
+func (*Empty) ListAfter(context.Context) error    { return nil }
+func (*Empty) GetBefore(context.Context) error    { return nil }
+func (*Empty) GetAfter(context.Context) error     { return nil }

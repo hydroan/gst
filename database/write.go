@@ -99,7 +99,7 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 	if !db.noHook {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_CREATE_BEFORE, span, func(spanCtx context.Context) error {
 			for i := range objs {
-				if err = objs[i].CreateBefore(types.NewModelContext(spanCtx)); err != nil {
+				if err = objs[i].CreateBefore(spanCtx); err != nil {
 					return err
 				}
 			}
@@ -172,7 +172,7 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 	if !db.noHook {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_CREATE_AFTER, span, func(spanCtx context.Context) error {
 			for i := range objs {
-				if err = objs[i].CreateAfter(types.NewModelContext(spanCtx)); err != nil {
+				if err = objs[i].CreateAfter(spanCtx); err != nil {
 					return err
 				}
 			}
@@ -279,7 +279,7 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 	if !db.noHook {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_DELETE_BEFORE, span, func(spanCtx context.Context) error {
 			for i := range objs {
-				if err = objs[i].DeleteBefore(types.NewModelContext(spanCtx)); err != nil {
+				if err = objs[i].DeleteBefore(spanCtx); err != nil {
 					return err
 				}
 			}
@@ -342,7 +342,7 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 	if !db.noHook {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_DELETE_AFTER, span, func(spanCtx context.Context) error {
 			for i := range objs {
-				if err = objs[i].DeleteAfter(types.NewModelContext(spanCtx)); err != nil {
+				if err = objs[i].DeleteAfter(spanCtx); err != nil {
 					return err
 				}
 			}
@@ -446,7 +446,7 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 	if !db.noHook {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_UPDATE_BEFORE, span, func(spanCtx context.Context) error {
 			for i := range objs {
-				if err = objs[i].UpdateBefore(types.NewModelContext(spanCtx)); err != nil {
+				if err = objs[i].UpdateBefore(spanCtx); err != nil {
 					return err
 				}
 			}
@@ -491,7 +491,7 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 	if !db.noHook {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_UPDATE_AFTER, span, func(spanCtx context.Context) error {
 			for i := range objs {
-				if err = objs[i].UpdateAfter(types.NewModelContext(spanCtx)); err != nil {
+				if err = objs[i].UpdateAfter(spanCtx); err != nil {
 					return err
 				}
 			}

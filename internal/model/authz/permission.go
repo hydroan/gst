@@ -1,11 +1,11 @@
 package modelauthz
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap/zapcore"
 )
@@ -28,7 +28,7 @@ func (Permission) Design() {
 
 func (p *Permission) Purge() bool { return true }
 
-func (p *Permission) CreateBefore(*types.ModelContext) error {
+func (p *Permission) CreateBefore(context.Context) error {
 	p.SetID(util.HashID(p.Resource, p.Action))
 	p.Remark = new(fmt.Sprintf("%s %s", p.Action, p.Resource))
 	return nil

@@ -204,16 +204,16 @@ type Model interface {
 	Purge() bool                                  // Purge indicates whether to permanently delete records (hard delete). Default is false (soft delete).
 	MarshalLogObject(zapcore.ObjectEncoder) error // MarshalLogObject implements zap.ObjectMarshaler.
 
-	CreateBefore(*ModelContext) error
-	CreateAfter(*ModelContext) error
-	DeleteBefore(*ModelContext) error
-	DeleteAfter(*ModelContext) error
-	UpdateBefore(*ModelContext) error
-	UpdateAfter(*ModelContext) error
-	ListBefore(*ModelContext) error
-	ListAfter(*ModelContext) error
-	GetBefore(*ModelContext) error
-	GetAfter(*ModelContext) error
+	CreateBefore(context.Context) error
+	CreateAfter(context.Context) error
+	DeleteBefore(context.Context) error
+	DeleteAfter(context.Context) error
+	UpdateBefore(context.Context) error
+	UpdateAfter(context.Context) error
+	ListBefore(context.Context) error
+	ListAfter(context.Context) error
+	GetBefore(context.Context) error
+	GetAfter(context.Context) error
 }
 
 type (

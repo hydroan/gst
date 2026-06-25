@@ -1,11 +1,14 @@
 package modelregistry
 
 import (
+	"context"
 	"time"
 
 	"github.com/hydroan/gst/types"
 	"go.uber.org/zap/zapcore"
 )
+
+var _ types.Model = (*Any)(nil)
 
 // Any is a special placeholder model type used for database transactions
 // when you don't need to specify a concrete model type.
@@ -53,13 +56,13 @@ func (*Any) Excludes() map[string][]any                       { return nil }
 func (*Any) Purge() bool                                      { return false }
 func (*Any) MarshalLogObject(enc zapcore.ObjectEncoder) error { return nil }
 
-func (*Any) CreateBefore(*types.ModelContext) error { return nil }
-func (*Any) CreateAfter(*types.ModelContext) error  { return nil }
-func (*Any) DeleteBefore(*types.ModelContext) error { return nil }
-func (*Any) DeleteAfter(*types.ModelContext) error  { return nil }
-func (*Any) UpdateBefore(*types.ModelContext) error { return nil }
-func (*Any) UpdateAfter(*types.ModelContext) error  { return nil }
-func (*Any) ListBefore(*types.ModelContext) error   { return nil }
-func (*Any) ListAfter(*types.ModelContext) error    { return nil }
-func (*Any) GetBefore(*types.ModelContext) error    { return nil }
-func (*Any) GetAfter(*types.ModelContext) error     { return nil }
+func (*Any) CreateBefore(context.Context) error { return nil }
+func (*Any) CreateAfter(context.Context) error  { return nil }
+func (*Any) DeleteBefore(context.Context) error { return nil }
+func (*Any) DeleteAfter(context.Context) error  { return nil }
+func (*Any) UpdateBefore(context.Context) error { return nil }
+func (*Any) UpdateAfter(context.Context) error  { return nil }
+func (*Any) ListBefore(context.Context) error   { return nil }
+func (*Any) ListAfter(context.Context) error    { return nil }
+func (*Any) GetBefore(context.Context) error    { return nil }
+func (*Any) GetAfter(context.Context) error     { return nil }

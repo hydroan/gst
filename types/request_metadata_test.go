@@ -104,21 +104,3 @@ func TestServiceContextImplementsContextAndCarriesMetadata(t *testing.T) {
 	require.Equal(t, "42", meta.Param("id"))
 	require.Equal(t, []string{"blue"}, meta.Query()["tag"])
 }
-
-func TestModelContextImplementsContextAndCarriesMetadata(t *testing.T) {
-	var _ context.Context = (*ModelContext)(nil)
-
-	meta := NewRequestMetadataFromValues(RequestMetadataValues{
-		Username: "admin",
-		UserID:   "user-1",
-		TraceID:  "trace-1",
-	})
-	ctx := ContextWithRequestMetadata(context.Background(), meta)
-
-	modelCtx := NewModelContext(ctx)
-	got := RequestMetadataFromContext(modelCtx)
-
-	require.Equal(t, "admin", got.Username())
-	require.Equal(t, "user-1", got.UserID())
-	require.Equal(t, "trace-1", got.TraceID())
-}

@@ -1,6 +1,7 @@
 package modelregistry
 
 import (
+	"context"
 	"reflect"
 	"time"
 
@@ -10,6 +11,8 @@ import (
 	"go.uber.org/zap/zapcore"
 	"gorm.io/gorm"
 )
+
+var _ types.Model = (*Base)(nil)
 
 // Base implements types.Model for database-backed resources.
 // Custom models can override these default methods when needed.
@@ -75,16 +78,16 @@ func (b *Base) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	return nil
 }
 
-func (*Base) CreateBefore(*types.ModelContext) error { return nil }
-func (*Base) CreateAfter(*types.ModelContext) error  { return nil }
-func (*Base) DeleteBefore(*types.ModelContext) error { return nil }
-func (*Base) DeleteAfter(*types.ModelContext) error  { return nil }
-func (*Base) UpdateBefore(*types.ModelContext) error { return nil }
-func (*Base) UpdateAfter(*types.ModelContext) error  { return nil }
-func (*Base) ListBefore(*types.ModelContext) error   { return nil }
-func (*Base) ListAfter(*types.ModelContext) error    { return nil }
-func (*Base) GetBefore(*types.ModelContext) error    { return nil }
-func (*Base) GetAfter(*types.ModelContext) error     { return nil }
+func (*Base) CreateBefore(context.Context) error { return nil }
+func (*Base) CreateAfter(context.Context) error  { return nil }
+func (*Base) DeleteBefore(context.Context) error { return nil }
+func (*Base) DeleteAfter(context.Context) error  { return nil }
+func (*Base) UpdateBefore(context.Context) error { return nil }
+func (*Base) UpdateAfter(context.Context) error  { return nil }
+func (*Base) ListBefore(context.Context) error   { return nil }
+func (*Base) ListAfter(context.Context) error    { return nil }
+func (*Base) GetBefore(context.Context) error    { return nil }
+func (*Base) GetAfter(context.Context) error     { return nil }
 
 func setID(m types.Model, id ...string) {
 	val := reflect.ValueOf(m).Elem()

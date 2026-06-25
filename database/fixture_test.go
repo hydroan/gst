@@ -10,7 +10,6 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
 )
@@ -124,12 +123,12 @@ type TestUser struct {
 }
 
 func (t *TestUser) Purge() bool { return true }
-func (t *TestUser) CreateBefore(ctx *types.ModelContext) error {
+func (t *TestUser) CreateBefore(ctx context.Context) error {
 	t.Remark = new(string(remarkUserCreateBefore))
 	return nil
 }
 
-func (t *TestUser) UpdateBefore(ctx *types.ModelContext) error {
+func (t *TestUser) UpdateBefore(ctx context.Context) error {
 	t.Remark = new(string(remarkUserUpdateBefore))
 	return nil
 }

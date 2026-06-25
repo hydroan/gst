@@ -1,12 +1,12 @@
 package modeliamuser
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 
 	. "github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/types"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -190,8 +190,8 @@ func (User) Design() {
 
 func (User) Purge() bool { return true }
 
-func (u *User) CreateBefore(ctx *types.ModelContext) error { return GenerateHashedPassword(u) }
-func (u *User) UpdateBefore(ctx *types.ModelContext) error { return GenerateHashedPassword(u) }
+func (u *User) CreateBefore(ctx context.Context) error { return GenerateHashedPassword(u) }
+func (u *User) UpdateBefore(ctx context.Context) error { return GenerateHashedPassword(u) }
 
 func GenerateHashedPassword(u *User) error {
 	if len(u.Password) > 0 && len(u.PasswordHash) == 0 {

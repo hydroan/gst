@@ -13,6 +13,8 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
+var _ context.Context = (*ServiceContext)(nil)
+
 type ServiceContext struct {
 	Method       string        // http method
 	Request      *http.Request // http request
@@ -204,34 +206,3 @@ func (sc *ServiceContext) Encode(w io.Writer, event Event) error {
 
 	return sse.Encode(w, event)
 }
-
-type ModelContext struct {
-	context context.Context
-}
-
-func NewModelContext(ctx context.Context) *ModelContext {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	return &ModelContext{context: ctx}
-}
-
-func (mc *ModelContext) Context() context.Context {
-	if mc == nil {
-		return context.Background()
-	}
-	return mc
-}
-
-func (mc *ModelContext) baseContext() context.Context {
-	if mc == nil || mc.context == nil {
-		return context.Background()
-	}
-	return mc.context
-}
-
-func (mc *ModelContext) Deadline() (time.Time, bool) { return mc.baseContext().Deadline() }
-func (mc *ModelContext) Done() <-chan struct{}       { return mc.baseContext().Done() }
-func (mc *ModelContext) Err() error                  { return mc.baseContext().Err() }
-func (mc *ModelContext) Value(key any) any           { return mc.baseContext().Value(key) }

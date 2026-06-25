@@ -9,7 +9,6 @@ import (
 	"github.com/hydroan/gst/cache"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
 	"gorm.io/gorm"
@@ -157,7 +156,7 @@ QUERY:
 		if err = traceModelHook[M](db.ctx, consts.PHASE_LIST_BEFORE, span, func(spanCtx context.Context) error {
 			for i := range *dest {
 				if !reflect.DeepEqual(empty, (*dest)[i]) {
-					if err = (*dest)[i].ListBefore(types.NewModelContext(spanCtx)); err != nil {
+					if err = (*dest)[i].ListBefore(spanCtx); err != nil {
 						return err
 					}
 				}
@@ -188,7 +187,7 @@ QUERY:
 		if err = traceModelHook[M](db.ctx, consts.PHASE_LIST_AFTER, span, func(spanCtx context.Context) error {
 			for i := range *dest {
 				if !reflect.DeepEqual(empty, (*dest)[i]) {
-					if err = (*dest)[i].ListAfter(types.NewModelContext(spanCtx)); err != nil {
+					if err = (*dest)[i].ListAfter(spanCtx); err != nil {
 						return err
 					}
 				}
@@ -366,7 +365,7 @@ QUERY:
 	// Invoke model hook: GetBefore.
 	if !db.noHook && !reflect.DeepEqual(empty, dest) {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_BEFORE, span, func(spanCtx context.Context) error {
-			return dest.GetBefore(types.NewModelContext(spanCtx))
+			return dest.GetBefore(spanCtx)
 		}); err != nil {
 			return err
 		}
@@ -393,7 +392,7 @@ QUERY:
 	// Invoke model hook: GetAfter.
 	if !db.noHook && !reflect.DeepEqual(empty, dest) {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_AFTER, span, func(spanCtx context.Context) error {
-			return dest.GetAfter(types.NewModelContext(spanCtx))
+			return dest.GetAfter(spanCtx)
 		}); err != nil {
 			return err
 		}
@@ -663,7 +662,7 @@ QUERY:
 	// Invoke model hook: GetBefore
 	if !db.noHook && !reflect.DeepEqual(empty, dest) {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_BEFORE, span, func(spanCtx context.Context) error {
-			return dest.GetBefore(types.NewModelContext(spanCtx))
+			return dest.GetBefore(spanCtx)
 		}); err != nil {
 			return err
 		}
@@ -679,7 +678,7 @@ QUERY:
 	// Invoke model hook: GetAfter
 	if !db.noHook && !reflect.DeepEqual(empty, dest) {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_AFTER, span, func(spanCtx context.Context) error {
-			return dest.GetAfter(types.NewModelContext(spanCtx))
+			return dest.GetAfter(spanCtx)
 		}); err != nil {
 			return err
 		}
@@ -834,7 +833,7 @@ QUERY:
 	// Invoke model hook: GetBefore.
 	if !db.noHook && !reflect.DeepEqual(empty, dest) {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_BEFORE, span, func(spanCtx context.Context) error {
-			return dest.GetBefore(types.NewModelContext(spanCtx))
+			return dest.GetBefore(spanCtx)
 		}); err != nil {
 			return err
 		}
@@ -850,7 +849,7 @@ QUERY:
 	// Invoke model hook: GetAfter
 	if !db.noHook && !reflect.DeepEqual(empty, dest) {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_AFTER, span, func(spanCtx context.Context) error {
-			return dest.GetAfter(types.NewModelContext(spanCtx))
+			return dest.GetAfter(spanCtx)
 		}); err != nil {
 			return err
 		}
@@ -1005,7 +1004,7 @@ QUERY:
 	// Invoke model hook: GetBefore.
 	if !db.noHook && !reflect.DeepEqual(empty, dest) {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_BEFORE, span, func(spanCtx context.Context) error {
-			return dest.GetBefore(types.NewModelContext(spanCtx))
+			return dest.GetBefore(spanCtx)
 		}); err != nil {
 			return err
 		}
@@ -1021,7 +1020,7 @@ QUERY:
 	// Invoke model hook: GetAfter.
 	if !db.noHook && !reflect.DeepEqual(empty, dest) {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_AFTER, span, func(spanCtx context.Context) error {
-			return dest.GetAfter(types.NewModelContext(spanCtx))
+			return dest.GetAfter(spanCtx)
 		}); err != nil {
 			return err
 		}

@@ -1,12 +1,12 @@
 package modeliamsession
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/types"
 )
 
 type OnlineUser struct {
@@ -24,11 +24,11 @@ type OnlineUser struct {
 	model.Base
 }
 
-func (ou *OnlineUser) Purge() bool                                { return true }
-func (ou *OnlineUser) CreateBefore(ctx *types.ModelContext) error { return ou.validate(ctx) }
-func (ou *OnlineUser) UpdateBefore(ctx *types.ModelContext) error { return ou.validate(ctx) }
+func (ou *OnlineUser) Purge() bool                            { return true }
+func (ou *OnlineUser) CreateBefore(ctx context.Context) error { return ou.validate(ctx) }
+func (ou *OnlineUser) UpdateBefore(ctx context.Context) error { return ou.validate(ctx) }
 
-func (ou *OnlineUser) validate(_ *types.ModelContext) error {
+func (ou *OnlineUser) validate(_ context.Context) error {
 	// Uniquely identifies an active online user by combining userID, clientIP and source(UserAgent).
 	sum := sha256.Sum256(fmt.Appendf(nil, "%s:%s:%s", ou.UserID, ou.ClientIP, ou.Source))
 	id := hex.EncodeToString(sum[:])
