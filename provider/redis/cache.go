@@ -26,7 +26,8 @@ type cache[T any] struct {
 //	cache := redis.Cache[T]().WithContext(ctx)
 //
 // This guarantee is specific to this Redis provider and should not be assumed
-// for other cache implementations.
+// for other cache implementations. The generic types.Cache contract does not
+// require WithContext to return an independent handle.
 func Cache[T any]() types.Cache[T] {
 	return tracing.NewWrapper(&cache[T]{ctx: context.Background()}, "redis")
 }
@@ -133,4 +134,5 @@ func (c *cache[T]) Clear() {
 }
 
 // WithContext returns a new handle bound to ctx without mutating the receiver.
+// This is a stronger guarantee than the generic types.Cache interface requires.
 func (c *cache[T]) WithContext(ctx context.Context) types.Cache[T] { return &cache[T]{ctx: ctx} }

@@ -312,6 +312,10 @@ type Cache[T any] interface {
 	Clear()
 
 	// WithContext returns a cache handle that uses ctx for tracing or cancellation propagation.
+	//
+	// Implementations may return a new handle or mutate and return the receiver.
+	// Callers must not assume the returned handle is independent unless a concrete
+	// provider documents that stronger guarantee.
 	WithContext(ctx context.Context) Cache[T]
 }
 
