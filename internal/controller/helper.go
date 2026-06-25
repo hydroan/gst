@@ -152,7 +152,7 @@ func requestContext(c *gin.Context) context.Context {
 	if c == nil || c.Request == nil {
 		return context.Background()
 	}
-	return types.ContextWithRequestMetadata(c.Request.Context(), types.NewRequestMetadata(c))
+	return types.ContextWithRequestMetadata(c.Request.Context(), types.RequestMetadataFromGin(c))
 }
 
 // startControllerSpan starts a span for controller operations
@@ -166,7 +166,7 @@ func startControllerSpan[M types.Model](c *gin.Context, phase consts.Phase) (con
 	spanCtx, span := gstotel.StartSpan(parentCtx, spanName)
 
 	// Update request context with new span context
-	c.Request = c.Request.WithContext(types.ContextWithRequestMetadata(spanCtx, types.NewRequestMetadata(c)))
+	c.Request = c.Request.WithContext(types.ContextWithRequestMetadata(spanCtx, types.RequestMetadataFromGin(c)))
 
 	if gstotel.IsSpanRecording(span) {
 		// Add controller-specific attributes

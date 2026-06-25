@@ -58,7 +58,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		ctrlSpanCtx, span := startControllerSpan[M](c, consts.PHASE_GET)
 		defer span.End()
 
-		meta := types.NewRequestMetadata(c)
+		meta := types.RequestMetadataFromGin(c)
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_GET)
 		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_GET)
 

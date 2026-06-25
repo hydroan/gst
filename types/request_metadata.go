@@ -21,9 +21,9 @@ type RequestMetadata struct {
 	query     url.Values
 }
 
-// RequestMetadataValues contains request metadata values for non-gin callers
+// RequestMetadataFields contains request metadata fields for non-gin callers
 // and tests.
-type RequestMetadataValues struct {
+type RequestMetadataFields struct {
 	Route     string
 	Username  string
 	UserID    string
@@ -35,8 +35,8 @@ type RequestMetadataValues struct {
 
 type requestMetadataContextKey struct{}
 
-// NewRequestMetadata creates RequestMetadata from gin.Context.
-func NewRequestMetadata(c *gin.Context) RequestMetadata {
+// RequestMetadataFromGin extracts RequestMetadata from gin.Context.
+func RequestMetadataFromGin(c *gin.Context) RequestMetadata {
 	if c == nil {
 		return RequestMetadata{}
 	}
@@ -51,7 +51,7 @@ func NewRequestMetadata(c *gin.Context) RequestMetadata {
 		query = c.Request.URL.Query()
 	}
 
-	return NewRequestMetadataFromValues(RequestMetadataValues{
+	return NewRequestMetadata(RequestMetadataFields{
 		Route:     c.GetString(consts.CTX_ROUTE),
 		Username:  c.GetString(consts.CTX_USERNAME),
 		UserID:    c.GetString(consts.CTX_USER_ID),
@@ -62,16 +62,16 @@ func NewRequestMetadata(c *gin.Context) RequestMetadata {
 	})
 }
 
-// NewRequestMetadataFromValues creates RequestMetadata from explicit values.
-func NewRequestMetadataFromValues(values RequestMetadataValues) RequestMetadata {
+// NewRequestMetadata creates RequestMetadata from explicit fields.
+func NewRequestMetadata(fields RequestMetadataFields) RequestMetadata {
 	return RequestMetadata{
-		route:     values.Route,
-		username:  values.Username,
-		userID:    values.UserID,
-		sessionID: values.SessionID,
-		traceID:   values.TraceID,
-		params:    cloneStringMap(values.Params),
-		query:     cloneURLValues(values.Query),
+		route:     fields.Route,
+		username:  fields.Username,
+		userID:    fields.UserID,
+		sessionID: fields.SessionID,
+		traceID:   fields.TraceID,
+		params:    cloneStringMap(fields.Params),
+		query:     cloneURLValues(fields.Query),
 	}
 }
 
@@ -81,7 +81,7 @@ func ContextWithRequestMetadata(ctx context.Context, meta RequestMetadata) conte
 		ctx = context.Background()
 	}
 
-	return context.WithValue(ctx, requestMetadataContextKey{}, NewRequestMetadataFromValues(RequestMetadataValues{
+	return context.WithValue(ctx, requestMetadataContextKey{}, NewRequestMetadata(RequestMetadataFields{
 		Route:     meta.Route(),
 		Username:  meta.Username(),
 		UserID:    meta.UserID(),

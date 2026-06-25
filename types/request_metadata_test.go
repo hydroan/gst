@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewRequestMetadataExtractsRequestFields(t *testing.T) {
+func TestRequestMetadataFromGinExtractsRequestFields(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	recorder := httptest.NewRecorder()
@@ -25,7 +25,7 @@ func TestNewRequestMetadataExtractsRequestFields(t *testing.T) {
 	ctx.Set(consts.CTX_SESSION_ID, "session-1")
 	ctx.Set(consts.TRACE_ID, "trace-1")
 
-	meta := NewRequestMetadata(ctx)
+	meta := RequestMetadataFromGin(ctx)
 
 	require.Equal(t, "/api/users/:id", meta.Route())
 	require.Equal(t, "admin", meta.Username())
@@ -45,7 +45,7 @@ func TestRequestMetadataProtectsParamsAndQuery(t *testing.T) {
 	ctx.Params = gin.Params{{Key: "id", Value: "42"}}
 	ctx.Set(consts.PARAMS, []string{"id"})
 
-	meta := NewRequestMetadata(ctx)
+	meta := RequestMetadataFromGin(ctx)
 
 	params := meta.Params()
 	params["id"] = "mutated"
@@ -57,7 +57,7 @@ func TestRequestMetadataProtectsParamsAndQuery(t *testing.T) {
 }
 
 func TestRequestMetadataContextRoundTrip(t *testing.T) {
-	meta := NewRequestMetadataFromValues(RequestMetadataValues{
+	meta := NewRequestMetadata(RequestMetadataFields{
 		Route:    "/api/users/:id",
 		Username: "admin",
 		UserID:   "user-1",

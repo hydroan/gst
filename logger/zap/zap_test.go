@@ -78,7 +78,7 @@ func TestCleanFlushesBufferedFileSink(t *testing.T) {
 func TestWithContextAddsRequestMetadataFields(t *testing.T) {
 	core, logs := observer.New(zapcore.InfoLevel)
 	log := &Logger{zlog: zap.New(core)}
-	meta := types.NewRequestMetadataFromValues(types.RequestMetadataValues{
+	meta := types.NewRequestMetadata(types.RequestMetadataFields{
 		Route:    "/api/users/:id",
 		Username: "admin",
 		UserID:   "user-1",
@@ -110,7 +110,7 @@ func TestWithContextAddsRequestMetadataFields(t *testing.T) {
 func TestGormTraceUsesRequestMetadataFromContext(t *testing.T) {
 	core, logs := observer.New(zapcore.InfoLevel)
 	log := &Logger{zlog: zap.New(core)}
-	meta := types.NewRequestMetadataFromValues(types.RequestMetadataValues{
+	meta := types.NewRequestMetadata(types.RequestMetadataFields{
 		Username: "admin",
 		UserID:   "user-1",
 		TraceID:  "trace-1",

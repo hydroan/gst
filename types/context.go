@@ -45,7 +45,7 @@ func NewServiceContext(c *gin.Context, ctxs ...context.Context) *ServiceContext 
 	if len(ctxs) > 0 && ctxs[0] != nil {
 		ctx = ctxs[0]
 	}
-	meta := NewRequestMetadata(c)
+	meta := RequestMetadataFromGin(c)
 	ctx = ContextWithRequestMetadata(ctx, meta)
 
 	return &ServiceContext{
