@@ -36,8 +36,6 @@ import (
 //   - GET    /api/authz/roles/:id
 //   - POST   /api/authz/user-roles
 //   - DELETE /api/authz/user-roles/:id
-//   - PUT    /api/authz/user-roles/:id
-//   - PATCH  /api/authz/user-roles/:id
 //   - GET    /api/authz/user-roles
 //   - GET    /api/authz/user-roles/:id
 //   - POST   /api/menus
@@ -87,8 +85,6 @@ func Register() {
 		&UserRoleModule{},
 		consts.PHASE_CREATE,
 		consts.PHASE_DELETE,
-		consts.PHASE_UPDATE,
-		consts.PHASE_PATCH,
 		consts.PHASE_LIST,
 		consts.PHASE_GET,
 	)

@@ -36,9 +36,8 @@ type CasbinRule struct {
 	V4    string `json:"v4,omitempty" gorm:"size:100" schema:"v4"`
 	V5    string `json:"v5,omitempty" gorm:"size:100" schema:"v5"`
 
-	User   string  `json:"user,omitempty" schema:"user"`                       // Informational user value copied from V0.
-	Role   string  `json:"role,omitempty" schema:"role"`                       // Informational role value copied from V1.
-	Remark *string `json:"remark,omitempty" gorm:"size:10240" schema:"remark"` // Optional policy summary.
+	User string `json:"user,omitempty" schema:"user"` // Informational user value copied from V0.
+	Role string `json:"role,omitempty" schema:"role"` // Informational role value copied from V1.
 
 	model.Base
 }

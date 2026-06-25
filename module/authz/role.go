@@ -2,7 +2,7 @@ package authz
 
 import (
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
-	serviceauthz "github.com/hydroan/gst/internal/service/authz"
+	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
 
@@ -14,7 +14,7 @@ type (
 )
 
 func (*RoleModule) Service() types.Service[*Role, *Role, *Role] {
-	return &serviceauthz.RoleService{}
+	return service.Base[*Role, *Role, *Role]{}
 }
 func (*RoleModule) Route() string { return "authz/roles" }
 func (*RoleModule) Pub() bool     { return false }

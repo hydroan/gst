@@ -32,43 +32,25 @@ type Role struct {
 	Menus        []*Menu `json:"menus,omitempty" gorm:"-"`
 	MenuPartials []*Menu `json:"menu_partials,omitempty" gorm:"-"`
 
-	Remark *string `json:"remark,omitempty" gorm:"size:10240" schema:"remark"` // Optional role description generated from menus.
-
 	model.Base
 }
 
 func (Role) Design() {
 	dsl.Migrate(true)
 	dsl.Route("authz/roles", func() {
-		dsl.Create(func() {
-			dsl.Service(true)
-			dsl.Flatten()
-			dsl.Filename("role.go")
-		})
-		dsl.Delete(func() {
-			dsl.Service(true)
-			dsl.Flatten()
-			dsl.Filename("role.go")
-		})
-		dsl.Update(func() {
-			dsl.Service(true)
-			dsl.Flatten()
-			dsl.Filename("role.go")
-		})
-		dsl.Patch(func() {
-			dsl.Service(true)
-			dsl.Flatten()
-			dsl.Filename("role.go")
-		})
+		dsl.Create(func() {})
+		dsl.Delete(func() {})
+		dsl.Update(func() {})
+		dsl.Patch(func() {})
 		dsl.List(func() {})
 		dsl.Get(func() {})
 	})
 }
 
 func (r *Role) Purge() bool                            { return true }
-func (r *Role) CreateBefore(ctx context.Context) error { return r.validate(ctx) }
+func (r *Role) CreateBefore(ctx context.Context) error { return r.validateCreate(ctx) }
 
-// CreateAfter will creates the role's permissions.
+// CreateAfter creates the role's permissions after the role row has been persisted.
 func (r *Role) CreateAfter(ctx context.Context) error {
 	if err := database.Database[*Role](ctx).Get(r, r.ID); err != nil {
 		return err
@@ -78,9 +60,13 @@ func (r *Role) CreateAfter(ctx context.Context) error {
 	return errors.Join(e1, e2)
 }
 
-// UpdateBefore will delete the old role's permissions and create the new role's permissions.
-// more details see "UpdatePermission".
+// UpdateBefore validates role updates before database writes. Role code is immutable.
 func (r *Role) UpdateBefore(ctx context.Context) error {
+	return r.validateUpdate(ctx)
+}
+
+// UpdateAfter refreshes the role's permissions after the role row has been persisted.
+func (r *Role) UpdateAfter(ctx context.Context) error {
 	e1 := r.UpdatePermission(ctx)
 	e2 := rbac.RBAC().AddRole(r.Code)
 	return errors.Join(e1, e2)
@@ -122,7 +108,7 @@ func (r *Role) DeleteBefore(ctx context.Context) error {
 	return nil
 }
 
-// UpdatePermission must run in the "UpdateBefore" hook.
+// UpdatePermission refreshes permissions for the current role code.
 // It uses a brute-force strategy: revoke all existing policies for the role,
 // then grant permissions derived from the current menus. This avoids any
 // unknown leftovers in the casbin_rule table and ensures strong consistency.
@@ -205,8 +191,25 @@ func permissionsForRoutes(ctx context.Context, routes []Route) ([]*Permission, e
 	return permissions, nil
 }
 
-// validate will validate the role's name and code and ensure the role not exists.
-func (r *Role) validate(ctx context.Context) error {
+func (r *Role) validateCreate(ctx context.Context) error {
+	return r.validateFields()
+}
+
+func (r *Role) validateUpdate(ctx context.Context) error {
+	if err := r.validateFields(); err != nil {
+		return err
+	}
+	current := new(Role)
+	if err := database.Database[*Role](ctx).Get(current, r.ID); err != nil {
+		return err
+	}
+	if current.Code != r.Code {
+		return errors.New("role code is immutable")
+	}
+	return nil
+}
+
+func (r *Role) validateFields() error {
 	r.Name = strings.TrimSpace(r.Name)
 	r.Code = strings.TrimSpace(r.Code)
 	if len(r.Name) == 0 {
@@ -215,19 +218,6 @@ func (r *Role) validate(ctx context.Context) error {
 	if len(r.Code) == 0 {
 		return errors.New("role code is required")
 	}
-
-	// Ensure uniqueness on (name, code)
-	roles := make([]*Role, 0)
-	if err := database.Database[*Role](ctx).
-		WithLimit(1).
-		WithQuery(&Role{Name: r.Name, Code: r.Code}).
-		List(&roles); err != nil {
-		return err
-	}
-	if len(roles) > 0 {
-		return errors.New("role already exists")
-	}
-
 	return nil
 }
 

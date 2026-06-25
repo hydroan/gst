@@ -2,7 +2,6 @@ package modelauthz
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/authz/rbac"
@@ -17,8 +16,8 @@ type UserRole struct {
 	UserID string `json:"user_id,omitempty" schema:"user_id"`
 	RoleID string `json:"role_id,omitempty" schema:"role_id"`
 
-	RoleCode string `json:"rolecode,omitempty" schema:"rolecode"` // 角色Code, 用于 RBAC 角色控制和前端查询
-	Username string `json:"username,omitempty" schema:"username"` // 用户名, 用于 RBAC 用户控制和前端查询
+	RoleCode string `json:"rolecode,omitempty" schema:"rolecode"` // Role code snapshot for display and query.
+	Username string `json:"username,omitempty" schema:"username"` // Username snapshot for display and query; authorization uses UserID.
 
 	User *User `json:"user,omitempty" gorm:"-"`
 	Role *Role `json:"role,omitempty" gorm:"-"`
@@ -36,8 +35,6 @@ func (UserRole) Design() {
 			dsl.Flatten()
 			dsl.Filename("user_role.go")
 		})
-		dsl.Update(func() {})
-		dsl.Patch(func() {})
 		dsl.List(func() {
 			dsl.Service(true)
 			dsl.Flatten()
@@ -79,7 +76,7 @@ func (r *UserRole) CreateAfter(ctx context.Context) error {
 		return err
 	}
 
-	// update casbin_rule field: `user`, `role`, `remark`
+	// update casbin_rule display fields.
 	user := new(User)
 	if err := database.Database[*User](ctx).Get(user, r.UserID); err != nil {
 		return err
@@ -91,7 +88,6 @@ func (r *UserRole) CreateAfter(ctx context.Context) error {
 	if len(casbinRules) > 0 {
 		casbinRules[0].User = user.Username
 		casbinRules[0].Role = r.RoleCode
-		casbinRules[0].Remark = new(fmt.Sprintf("%s -> %s", r.Username, r.RoleCode))
 		return database.Database[*CasbinRule](ctx).Update(casbinRules[0])
 	}
 	return nil

@@ -188,6 +188,8 @@ func TestAuthz(t *testing.T) {
 			requireRoute(t, rsp.Items, "/api/routes", []string{http.MethodGet})
 			requireRoute(t, rsp.Items, "/api/authz/roles", []string{http.MethodGet, http.MethodPost})
 			requireRoute(t, rsp.Items, "/api/authz/roles/{id}", []string{http.MethodGet, http.MethodPut, http.MethodPatch, http.MethodDelete})
+			requireRoute(t, rsp.Items, "/api/authz/user-roles", []string{http.MethodGet, http.MethodPost})
+			requireRoute(t, rsp.Items, "/api/authz/user-roles/{id}", []string{http.MethodGet, http.MethodDelete})
 			requireNoRoute(t, rsp.Items, "/api/authz/roles/:id")
 		})
 	})
@@ -332,6 +334,7 @@ func TestAuthz(t *testing.T) {
 		}))
 		require.NoError(t, err)
 		var roleID string
+		var conflictRoleID string
 		var resp *client.Resp
 		var roleMenuID string
 
@@ -388,6 +391,16 @@ func TestAuthz(t *testing.T) {
 			requireNoPolicy(t, policies, createReq.Code, "/api/authz/roles", http.MethodPost, "allow")
 		})
 
+		t.Run("create_conflict_role", func(t *testing.T) {
+			resp, err = cli.Create(&authz.Role{Name: "Test Role Conflict", Code: "test_role_conflict"})
+			require.NoError(t, err)
+			helper.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
+				t.Helper()
+				require.NotEmpty(t, rsp.ID)
+				conflictRoleID = rsp.ID
+			})
+		})
+
 		t.Run("get", func(t *testing.T) {
 			got := new(authz.Role)
 			resp, err = cli.Get(roleID, got)
@@ -402,8 +415,9 @@ func TestAuthz(t *testing.T) {
 
 		t.Run("update", func(t *testing.T) {
 			updateReq := &authz.Role{
-				Name: "Test Role Updated",
-				Code: "test_role_updated",
+				Name:    "Test Role Updated",
+				Code:    "test_role",
+				MenuIDs: []string{roleMenuID},
 			}
 			resp, err = cli.Update(roleID, updateReq)
 			require.NoError(t, err)
@@ -415,6 +429,35 @@ func TestAuthz(t *testing.T) {
 			})
 		})
 
+		t.Run("update_code_forbidden", func(t *testing.T) {
+			_, err = cli.Update(roleID, &authz.Role{
+				Name: "Test Role Code Changed",
+				Code: "test_role_updated",
+			})
+			require.Error(t, err)
+
+			got := new(authz.Role)
+			resp, err = cli.Get(roleID, got)
+			require.NoError(t, err)
+			helper.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
+				t.Helper()
+				require.Equal(t, "test_role", rsp.Code)
+			})
+		})
+
+		t.Run("failed_update_keeps_existing_policy", func(t *testing.T) {
+			_, err = cli.Update(roleID, &authz.Role{
+				Name:    "Test Role Conflict",
+				Code:    "test_role",
+				MenuIDs: nil,
+			})
+			require.Error(t, err)
+
+			policies, policyErr := rbac.Enforcer.GetPermissionsForUser("test_role")
+			require.NoError(t, policyErr)
+			requirePolicy(t, policies, "test_role", "/api/authz/roles", http.MethodGet, "allow")
+		})
+
 		t.Run("patch", func(t *testing.T) {
 			patchReq := &authz.Role{Name: "Test Role Patched"}
 			resp, err = cli.Patch(roleID, patchReq)
@@ -423,7 +466,20 @@ func TestAuthz(t *testing.T) {
 				t.Helper()
 				require.Equal(t, roleID, rsp.ID)
 				require.Equal(t, patchReq.Name, rsp.Name)
-				require.Equal(t, "test_role_updated", rsp.Code)
+				require.Equal(t, "test_role", rsp.Code)
+			})
+		})
+
+		t.Run("patch_code_forbidden", func(t *testing.T) {
+			_, err = cli.Patch(roleID, &authz.Role{Code: "test_role_patched"})
+			require.Error(t, err)
+
+			got := new(authz.Role)
+			resp, err = cli.Get(roleID, got)
+			require.NoError(t, err)
+			helper.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
+				t.Helper()
+				require.Equal(t, "test_role", rsp.Code)
 			})
 		})
 
@@ -445,6 +501,10 @@ func TestAuthz(t *testing.T) {
 			require.NotNil(t, resp)
 			require.Equal(t, testSuccessCode, resp.Code, "delete should return success")
 		})
+
+		resp, err = cli.Delete(conflictRoleID)
+		require.NoError(t, err)
+		require.NotNil(t, resp)
 
 		resp, err = cliMenu.Delete(roleMenuID)
 		require.NoError(t, err)
@@ -508,33 +568,6 @@ func TestAuthz(t *testing.T) {
 		t.Run("get", func(t *testing.T) {
 			got := new(authz.UserRole)
 			resp, err = cli.Get(userRoleID, got)
-			require.NoError(t, err)
-			helper.TestResp[*authz.UserRole](t, resp, func(t *testing.T, rsp *authz.UserRole) {
-				t.Helper()
-				require.Equal(t, userRoleID, rsp.ID)
-				require.Equal(t, userID, rsp.UserID)
-				require.Equal(t, roleID, rsp.RoleID)
-			})
-		})
-
-		t.Run("update", func(t *testing.T) {
-			updateReq := &authz.UserRole{
-				UserID: userID,
-				RoleID: roleID,
-			}
-			resp, err = cli.Update(userRoleID, updateReq)
-			require.NoError(t, err)
-			helper.TestResp[*authz.UserRole](t, resp, func(t *testing.T, rsp *authz.UserRole) {
-				t.Helper()
-				require.Equal(t, userRoleID, rsp.ID)
-				require.Equal(t, userID, rsp.UserID)
-				require.Equal(t, roleID, rsp.RoleID)
-			})
-		})
-
-		t.Run("patch", func(t *testing.T) {
-			patchReq := &authz.UserRole{UserID: userID}
-			resp, err = cli.Patch(userRoleID, patchReq)
 			require.NoError(t, err)
 			helper.TestResp[*authz.UserRole](t, resp, func(t *testing.T, rsp *authz.UserRole) {
 				t.Helper()
