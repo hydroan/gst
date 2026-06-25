@@ -36,5 +36,11 @@ func Init() error {
 	router.Register[*model.Conversation, *model.Conversation, *model.Conversation](router.Auth(), "conversations", &types.ControllerConfig[*model.Conversation]{}, consts.List)
 	router.Register[*model.Conversation, *model.Conversation, *model.Conversation](router.Auth(), "conversations/:conv", &types.ControllerConfig[*model.Conversation]{ParamName: "conv"}, consts.Get)
 	router.Register[*model.Ping, *model.Ping, *model.PingRsp](router.Pub(), "ping", &types.ControllerConfig[*model.Ping]{}, consts.List)
+	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes", &types.ControllerConfig[*model.TraceProbe]{}, consts.Create)
+	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes/:trace_probe", &types.ControllerConfig[*model.TraceProbe]{ParamName: "trace_probe"}, consts.Delete)
+	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes/:trace_probe", &types.ControllerConfig[*model.TraceProbe]{ParamName: "trace_probe"}, consts.Update)
+	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes/:trace_probe", &types.ControllerConfig[*model.TraceProbe]{ParamName: "trace_probe"}, consts.Patch)
+	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes", &types.ControllerConfig[*model.TraceProbe]{}, consts.List)
+	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes/:trace_probe", &types.ControllerConfig[*model.TraceProbe]{ParamName: "trace_probe"}, consts.Get)
 	return nil
 }

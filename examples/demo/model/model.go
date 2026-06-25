@@ -12,4 +12,5 @@ func init() {
 	model.Register[*config.File]()
 	model.Register[*conversation.Message]()
 	model.Register[*Conversation]()
+	model.Register[*TraceProbe]()
 }

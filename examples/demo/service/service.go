@@ -9,6 +9,7 @@ import (
 	"demo/service/conversation"
 	"demo/service/conversation/message"
 	"demo/service/ping"
+	"demo/service/trace_probe"
 
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types/consts"
@@ -29,4 +30,10 @@ func init() {
 	service.Register[*conversation.Patcher](consts.PHASE_PATCH)
 	service.Register[*conversation.Lister](consts.PHASE_LIST)
 	service.Register[*ping.Lister](consts.PHASE_LIST)
+	service.Register[*traceprobe.TraceProbe](consts.PHASE_CREATE)
+	service.Register[*traceprobe.TraceProbe](consts.PHASE_DELETE)
+	service.Register[*traceprobe.TraceProbe](consts.PHASE_UPDATE)
+	service.Register[*traceprobe.TraceProbe](consts.PHASE_PATCH)
+	service.Register[*traceprobe.TraceProbe](consts.PHASE_LIST)
+	service.Register[*traceprobe.TraceProbe](consts.PHASE_GET)
 }
