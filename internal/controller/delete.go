@@ -52,8 +52,8 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		ctrlSpanCtx, span := startControllerSpan[M](c, consts.PHASE_DELETE)
 		defer span.End()
 
-		cctx := types.NewControllerContext(c)
-		log := logger.Controller.WithControllerContext(cctx, consts.PHASE_DELETE)
+		meta := types.NewRequestMetadata(c)
+		log := logger.Controller.WithRequestMetadata(meta, consts.PHASE_DELETE)
 		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_DELETE)
 
 		if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
@@ -121,7 +121,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		// Delete one record accoding to "route parameter `id`".
 		if len(cfg) > 0 {
-			addID(cctx.Params[util.Deref(cfg[0]).ParamName])
+			addID(meta.Param(util.Deref(cfg[0]).ParamName))
 		}
 		// Delete multiple records accoding to "http body data".
 		bodyIDs := make([]string, 0)

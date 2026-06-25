@@ -58,8 +58,8 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		ctrlSpanCtx, span := startControllerSpan[M](c, consts.PHASE_GET)
 		defer span.End()
 
-		cctx := types.NewControllerContext(c)
-		log := logger.Controller.WithControllerContext(cctx, consts.PHASE_GET)
+		meta := types.NewRequestMetadata(c)
+		log := logger.Controller.WithRequestMetadata(meta, consts.PHASE_GET)
 		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_GET)
 
 		if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
@@ -103,7 +103,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 
 		var param string
 		if len(cfg) > 0 {
-			param = cctx.Params[util.Deref(cfg[0]).ParamName]
+			param = meta.Param(util.Deref(cfg[0]).ParamName)
 		}
 		if len(param) == 0 {
 			log.Error(CodeNotFoundRouteParam)

@@ -8,7 +8,12 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/types/consts"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestNewLogWriterBuffersFileSink(t *testing.T) {
@@ -67,6 +72,37 @@ func TestCleanFlushesBufferedFileSink(t *testing.T) {
 	if !strings.Contains(string(data), "flush through clean") {
 		t.Fatalf("expected flushed log file to contain message, got %q", string(data))
 	}
+}
+
+func TestWithRequestMetadataAddsControllerLogFields(t *testing.T) {
+	core, logs := observer.New(zapcore.InfoLevel)
+	log := &Logger{zlog: zap.New(core)}
+	meta := types.NewRequestMetadataFromValues(types.RequestMetadataValues{
+		Route:    "/api/users/:id",
+		Username: "admin",
+		UserID:   "user-1",
+		TraceID:  "trace-1",
+		Params: map[string]string{
+			"id": "42",
+		},
+		Query: map[string][]string{
+			"tag": {"blue", "green"},
+		},
+	})
+
+	log.WithRequestMetadata(meta, consts.PHASE_GET).Infoz("controller request")
+
+	entries := logs.All()
+	require.Len(t, entries, 1)
+
+	fields := entries[0].ContextMap()
+	require.Equal(t, string(consts.PHASE_GET), fields[consts.PHASE])
+	require.Equal(t, "/api/users/:id", fields[consts.CTX_ROUTE])
+	require.Equal(t, "admin", fields[consts.CTX_USERNAME])
+	require.Equal(t, "user-1", fields[consts.CTX_USER_ID])
+	require.Equal(t, "trace-1", fields[consts.TRACE_ID])
+	require.Equal(t, map[string]any{"id": "42"}, fields[consts.PARAMS])
+	require.Equal(t, map[string]any{"tag": "blue,green"}, fields[consts.QUERY])
 }
 
 func withLogWriterConfig(t *testing.T, dir, file string) {

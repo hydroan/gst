@@ -52,8 +52,8 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		ctrlSpanCtx, span := startControllerSpan[M](c, consts.PHASE_UPDATE)
 		defer span.End()
 
-		cctx := types.NewControllerContext(c)
-		log := logger.Controller.WithControllerContext(cctx, consts.PHASE_UPDATE)
+		meta := types.NewRequestMetadata(c)
+		log := logger.Controller.WithRequestMetadata(meta, consts.PHASE_UPDATE)
 		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_UPDATE)
 
 		if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
@@ -109,7 +109,7 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// param id has more priority than http body data id
 		var paramID string
 		if len(cfg) > 0 {
-			paramID = cctx.Params[util.Deref(cfg[0]).ParamName]
+			paramID = meta.Param(util.Deref(cfg[0]).ParamName)
 		}
 		bodyID := req.GetID()
 		var id string

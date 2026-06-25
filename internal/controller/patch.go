@@ -53,8 +53,8 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		ctrlSpanCtx, span := startControllerSpan[M](c, consts.PHASE_PATCH)
 		defer span.End()
 
-		cctx := types.NewControllerContext(c)
-		log := logger.Controller.WithControllerContext(cctx, consts.PHASE_PATCH)
+		meta := types.NewRequestMetadata(c)
+		log := logger.Controller.WithRequestMetadata(meta, consts.PHASE_PATCH)
 		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_PATCH)
 
 		if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
@@ -103,7 +103,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		typ := reflect.TypeOf(*new(M)).Elem()
 		req := reflect.New(typ).Interface().(M) //nolint:errcheck
 		if len(cfg) > 0 {
-			id = cctx.Params[util.Deref(cfg[0]).ParamName]
+			id = meta.Param(util.Deref(cfg[0]).ParamName)
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			log.Error(err)

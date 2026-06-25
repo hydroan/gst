@@ -93,22 +93,23 @@ func (l *Logger) With(fields ...string) types.Logger {
 	return &Logger{zlog: l.zlog.With(zapFields...)}
 }
 
-// WithControllerContext creates a new logger with controller context fields.
-// It extends the base logger with phase, username, user ID, and trace ID from *types.ControllerContext.
+// WithRequestMetadata creates a new logger with request metadata fields.
+// It extends the base logger with phase, route, username, user ID, trace ID,
+// params, and query values.
 //
 // examples:
 //
-// log := logger.Controller.WithControllerContext(ctx, consts.PHASE_LIST)
-func (l *Logger) WithControllerContext(ctx *types.ControllerContext, phase consts.Phase) types.Logger {
+// log := logger.Controller.WithRequestMetadata(meta, consts.PHASE_LIST)
+func (l *Logger) WithRequestMetadata(meta types.RequestMetadata, phase consts.Phase) types.Logger {
 	return l.With(
 		consts.PHASE, string(phase),
-		consts.CTX_ROUTE, ctx.Route,
-		consts.CTX_USERNAME, ctx.Username,
-		consts.CTX_USER_ID, ctx.UserID,
-		consts.TRACE_ID, ctx.TraceID,
+		consts.CTX_ROUTE, meta.Route(),
+		consts.CTX_USERNAME, meta.Username(),
+		consts.CTX_USER_ID, meta.UserID(),
+		consts.TRACE_ID, meta.TraceID(),
 	).
-		WithObject(consts.PARAMS, paramsObject(ctx.Params)).
-		WithObject(consts.QUERY, queryObject(ctx.Query))
+		WithObject(consts.PARAMS, paramsObject(meta.Params())).
+		WithObject(consts.QUERY, queryObject(meta.Query()))
 }
 
 // WithServiceContext creates a new logger with service context fields.

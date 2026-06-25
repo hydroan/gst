@@ -76,7 +76,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		ctrlSpanCtx, span := startControllerSpan[M](c, consts.PHASE_LIST)
 		defer span.End()
 
-		log := logger.Controller.WithControllerContext(types.NewControllerContext(c), consts.PHASE_LIST)
+		log := logger.Controller.WithRequestMetadata(types.NewRequestMetadata(c), consts.PHASE_LIST)
 		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_LIST)
 		ctx := types.NewServiceContext(c)
 

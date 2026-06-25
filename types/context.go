@@ -12,40 +12,6 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
-type ControllerContext struct {
-	Username string // currrent login user.
-	UserID   string // currrent login user id
-	Route    string
-	Params   map[string]string
-	Query    url.Values
-
-	TraceID string
-	PSpanID string
-	SpanID  string
-	Seq     int
-}
-
-// NewControllerContext creates a ControllerContext from gin.Context
-func NewControllerContext(c *gin.Context) *ControllerContext {
-	if c == nil {
-		return new(ControllerContext)
-	}
-
-	params := make(map[string]string)
-	for _, key := range c.GetStringSlice(consts.PARAMS) {
-		params[key] = c.Param(key)
-	}
-
-	return &ControllerContext{
-		Route:    c.GetString(consts.CTX_ROUTE),
-		Username: c.GetString(consts.CTX_USERNAME),
-		UserID:   c.GetString(consts.CTX_USER_ID),
-		TraceID:  c.GetString(consts.TRACE_ID),
-		Params:   params,
-		Query:    c.Request.URL.Query(),
-	}
-}
-
 type DatabaseContext struct {
 	Username string // currrent login user.
 	UserID   string // currrent login user id
