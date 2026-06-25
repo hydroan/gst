@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/sse"
 	"github.com/hydroan/gst/types/consts"
@@ -17,16 +18,15 @@ import (
 var _ context.Context = (*ServiceContext)(nil)
 
 type ServiceContext struct {
-	method    string
+	baseCtx        context.Context
+	ginCtx         *gin.Context
+	responseWriter http.ResponseWriter
+
 	request   *http.Request
+	method    string
 	clientIP  string
 	userAgent string
 
-	context context.Context
-	writer  http.ResponseWriter
-	// Body    []byte
-
-	ginCtx       *gin.Context
 	phase        consts.Phase
 	requiresAuth bool // indicates whether the current API requires authentication
 }
@@ -38,37 +38,50 @@ type ServiceContext struct {
 // otherwise use the c.Request.Context().
 func NewServiceContext(c *gin.Context, ctxs ...context.Context) *ServiceContext {
 	if c == nil {
-		return &ServiceContext{context: context.Background()}
+		return &ServiceContext{baseCtx: context.Background()}
 	}
 
-	ctx := c.Request.Context()
+	ctx := context.Background()
+	if c.Request != nil {
+		ctx = c.Request.Context()
+	}
 	if len(ctxs) > 0 && ctxs[0] != nil {
 		ctx = ctxs[0]
 	}
 	meta := RequestMetadataFromGin(c)
 	ctx = ContextWithRequestMetadata(ctx, meta)
 
-	return &ServiceContext{
-		request:   c.Request,
-		method:    c.Request.Method,
-		clientIP:  c.ClientIP(),
-		userAgent: c.Request.UserAgent(),
-
-		ginCtx:  c,
-		context: ctx,
-		writer:  c.Writer,
-
-		// Check if the current route requires authentication
-		// Determined by checking if there's a flag set by authentication middleware in gin.Context
-		requiresAuth: c.GetBool(consts.CTX_REQUIRES_AUTH),
+	serviceCtx := &ServiceContext{
+		baseCtx:        ctx,
+		ginCtx:         c,
+		responseWriter: c.Writer,
+		requiresAuth:   c.GetBool(consts.CTX_REQUIRES_AUTH),
 	}
+	if c.Request != nil {
+		serviceCtx.request = c.Request
+		serviceCtx.method = c.Request.Method
+		serviceCtx.clientIP = c.ClientIP()
+		serviceCtx.userAgent = c.Request.UserAgent()
+	}
+	return serviceCtx
 }
 
 func (sc *ServiceContext) baseContext() context.Context {
-	if sc == nil || sc.context == nil {
+	if sc == nil || sc.baseCtx == nil {
 		return context.Background()
 	}
-	return sc.context
+	return sc.baseCtx
+}
+
+func (sc *ServiceContext) clone() *ServiceContext {
+	if sc == nil {
+		return &ServiceContext{baseCtx: context.Background()}
+	}
+	next := *sc
+	if next.baseCtx == nil {
+		next.baseCtx = context.Background()
+	}
+	return &next
 }
 
 func (sc *ServiceContext) Deadline() (time.Time, bool) { return sc.baseContext().Deadline() }
@@ -76,9 +89,45 @@ func (sc *ServiceContext) Done() <-chan struct{}       { return sc.baseContext()
 func (sc *ServiceContext) Err() error                  { return sc.baseContext().Err() }
 func (sc *ServiceContext) Value(key any) any           { return sc.baseContext().Value(key) }
 
+func (sc *ServiceContext) GetPhase() consts.Phase {
+	if sc == nil {
+		return ""
+	}
+	return sc.phase
+}
+
+func (sc *ServiceContext) WithPhase(phase consts.Phase) *ServiceContext {
+	next := sc.clone()
+	next.phase = phase
+	return next
+}
+
+// RequiresAuth returns whether the current API requires authentication.
+func (sc *ServiceContext) RequiresAuth() bool {
+	if sc == nil {
+		return false
+	}
+	return sc.requiresAuth
+}
+
 func (sc *ServiceContext) RequestMetadata() RequestMetadata {
 	return RequestMetadataFromContext(sc)
 }
+
+func (sc *ServiceContext) WithRequestMetadata(meta RequestMetadata) *ServiceContext {
+	next := sc.clone()
+	next.baseCtx = ContextWithRequestMetadata(next.baseContext(), meta)
+	return next
+}
+
+func (sc *ServiceContext) Params() map[string]string { return sc.RequestMetadata().Params() }
+func (sc *ServiceContext) Query() url.Values         { return sc.RequestMetadata().Query() }
+func (sc *ServiceContext) Param(key string) string   { return sc.RequestMetadata().Param(key) }
+func (sc *ServiceContext) Route() string             { return sc.RequestMetadata().Route() }
+func (sc *ServiceContext) Username() string          { return sc.RequestMetadata().Username() }
+func (sc *ServiceContext) UserID() string            { return sc.RequestMetadata().UserID() }
+func (sc *ServiceContext) SessionID() string         { return sc.RequestMetadata().SessionID() }
+func (sc *ServiceContext) TraceID() string           { return sc.RequestMetadata().TraceID() }
 
 func (sc *ServiceContext) Method() string {
 	if sc == nil {
@@ -124,79 +173,43 @@ func (sc *ServiceContext) IsHTTPS() bool {
 	return strings.Contains(strings.ToLower(sc.request.Header.Get("Forwarded")), "proto=https")
 }
 
-func (sc *ServiceContext) Params() map[string]string { return sc.RequestMetadata().Params() }
-func (sc *ServiceContext) Query() url.Values         { return sc.RequestMetadata().Query() }
-func (sc *ServiceContext) Param(key string) string   { return sc.RequestMetadata().Param(key) }
-func (sc *ServiceContext) Route() string             { return sc.RequestMetadata().Route() }
-func (sc *ServiceContext) Username() string          { return sc.RequestMetadata().Username() }
-func (sc *ServiceContext) UserID() string            { return sc.RequestMetadata().UserID() }
-func (sc *ServiceContext) SessionID() string         { return sc.RequestMetadata().SessionID() }
-func (sc *ServiceContext) TraceID() string           { return sc.RequestMetadata().TraceID() }
-
-func (sc *ServiceContext) WithRequestMetadata(meta RequestMetadata) *ServiceContext {
-	next := sc.clone()
-	next.context = ContextWithRequestMetadata(next.baseContext(), meta)
-	return next
-}
-
 func (sc *ServiceContext) Data(code int, contentType string, data []byte) {
+	if sc == nil || sc.ginCtx == nil {
+		return
+	}
 	sc.ginCtx.Data(code, contentType, data)
 }
 
 func (sc *ServiceContext) SetCookie(cookie *http.Cookie) {
-	if sc == nil || sc.writer == nil || cookie == nil {
+	if sc == nil || sc.responseWriter == nil || cookie == nil {
 		return
 	}
-	http.SetCookie(sc.writer, cookie)
+	http.SetCookie(sc.responseWriter, cookie)
 }
 
 func (sc *ServiceContext) Cookie(name string) (string, error) {
+	if sc == nil || sc.ginCtx == nil {
+		return "", errors.New("service context has no gin context")
+	}
 	return sc.ginCtx.Cookie(name)
 }
 
 func (sc *ServiceContext) PostForm(key string) string {
+	if sc == nil || sc.ginCtx == nil {
+		return ""
+	}
 	return sc.ginCtx.PostForm(key)
 }
 
 func (sc *ServiceContext) FormFile(name string) (*multipart.FileHeader, error) {
+	if sc == nil || sc.ginCtx == nil {
+		return nil, errors.New("service context has no gin context")
+	}
 	return sc.ginCtx.FormFile(name)
 }
 
-func (sc *ServiceContext) GetPhase() consts.Phase {
-	if sc == nil {
-		return ""
-	}
-	return sc.phase
-}
-
-func (sc *ServiceContext) WithPhase(phase consts.Phase) *ServiceContext {
-	next := sc.clone()
-	next.phase = phase
-	return next
-}
-
-// RequiresAuth returns whether the current API requires authentication
-func (sc *ServiceContext) RequiresAuth() bool {
-	if sc == nil {
-		return false
-	}
-	return sc.requiresAuth
-}
-
-func (sc *ServiceContext) clone() *ServiceContext {
-	if sc == nil {
-		return &ServiceContext{context: context.Background()}
-	}
-	next := *sc
-	if next.context == nil {
-		next.context = context.Background()
-	}
-	return &next
-}
-
 // Encode writes an SSE event to the given writer.
-// This is a convenience method that wraps sse.Encode for use within
-// SSE stream callbacks.
+// This is a convenience method that wraps sse.Encode.
 //
 // The event is formatted according to the SSE specification:
 //   - Fields are written in recommended order: id, event, retry, data
@@ -210,16 +223,13 @@ func (sc *ServiceContext) clone() *ServiceContext {
 //
 // Example:
 //
-//	ctx.SSE().WithInterval(1*time.Second).Stream(func(w io.Writer) bool {
-//	    _ = ctx.Encode(w, types.Event{
-//	        Event: "message",
-//	        Data:  "Hello",
-//	    })
-//	    return true
+//	err := ctx.Encode(w, types.Event{
+//		Event: "message",
+//		Data:  "Hello",
 //	})
 //
 // Parameters:
-//   - w: Writer to write the event to (typically from SSE stream callback)
+//   - w: Writer to write the event to
 //   - event: SSE event to encode
 //
 // Returns:

@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestServiceContextImplementsContextAndCarriesMetadata(t *testing.T) {
+func TestServiceContextContextMethods(t *testing.T) {
 	var _ context.Context = (*ServiceContext)(nil)
 
 	gin.SetMode(gin.TestMode)
@@ -35,7 +35,7 @@ func TestServiceContextImplementsContextAndCarriesMetadata(t *testing.T) {
 	require.Equal(t, []string{"blue"}, meta.Query()["tag"])
 }
 
-func TestServiceContextAccessorsReturnCopies(t *testing.T) {
+func TestServiceContextMetadataAccessorsReturnCopies(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
@@ -70,7 +70,36 @@ func TestServiceContextWithPhaseReturnsClone(t *testing.T) {
 	require.Equal(t, consts.PHASE_LIST, phased.GetPhase())
 }
 
-func TestServiceContextRequestAccessorsAndSetCookie(t *testing.T) {
+func TestServiceContextRequestAccessors(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "https://example.com/api/users?tag=blue", nil)
+
+	serviceCtx := NewServiceContext(ctx)
+
+	require.Equal(t, http.MethodGet, serviceCtx.Method())
+	require.Equal(t, "example.com", serviceCtx.Host())
+	require.True(t, serviceCtx.IsHTTPS())
+	require.Equal(t, "blue", serviceCtx.Query().Get("tag"))
+}
+
+func TestServiceContextNilRequest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+
+	serviceCtx := NewServiceContext(ctx)
+
+	require.Empty(t, serviceCtx.Method())
+	require.Empty(t, serviceCtx.Host())
+	require.Empty(t, serviceCtx.ClientIP())
+	require.Empty(t, serviceCtx.UserAgent())
+	require.False(t, serviceCtx.IsHTTPS())
+	require.Empty(t, serviceCtx.Query())
+}
+
+func TestServiceContextResponseHelpers(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
@@ -85,10 +114,7 @@ func TestServiceContextRequestAccessorsAndSetCookie(t *testing.T) {
 		Secure:   serviceCtx.IsHTTPS(),
 		SameSite: http.SameSiteLaxMode,
 	})
-
-	require.Equal(t, "example.com", serviceCtx.Host())
-	require.True(t, serviceCtx.IsHTTPS())
-	require.Equal(t, "blue", serviceCtx.Query().Get("tag"))
+	serviceCtx.Data(http.StatusCreated, "text/plain", []byte("created"))
 
 	setCookie := recorder.Header().Get("Set-Cookie")
 	require.Contains(t, setCookie, "session_id=session-1")
@@ -96,4 +122,36 @@ func TestServiceContextRequestAccessorsAndSetCookie(t *testing.T) {
 	require.Contains(t, setCookie, "HttpOnly")
 	require.Contains(t, setCookie, "Secure")
 	require.Contains(t, setCookie, "SameSite=Lax")
+	require.Equal(t, http.StatusCreated, recorder.Code)
+	require.Equal(t, "created", recorder.Body.String())
+}
+
+func TestServiceContextNilGinHelpers(t *testing.T) {
+	serviceCtx := NewServiceContext(nil)
+
+	serviceCtx.Data(http.StatusCreated, "text/plain", []byte("created"))
+	serviceCtx.SetCookie(&http.Cookie{Name: "session_id", Value: "session-1"})
+
+	require.Empty(t, serviceCtx.PostForm("name"))
+
+	cookie, err := serviceCtx.Cookie("session_id")
+	require.Error(t, err)
+	require.Empty(t, cookie)
+
+	file, err := serviceCtx.FormFile("file")
+	require.Error(t, err)
+	require.Nil(t, file)
+
+	var nilCtx *ServiceContext
+	nilCtx.Data(http.StatusCreated, "text/plain", []byte("created"))
+	nilCtx.SetCookie(&http.Cookie{Name: "session_id", Value: "session-1"})
+	require.Empty(t, nilCtx.PostForm("name"))
+
+	cookie, err = nilCtx.Cookie("session_id")
+	require.Error(t, err)
+	require.Empty(t, cookie)
+
+	file, err = nilCtx.FormFile("file")
+	require.Error(t, err)
+	require.Nil(t, file)
 }
