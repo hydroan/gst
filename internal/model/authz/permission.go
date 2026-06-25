@@ -2,7 +2,6 @@ package modelauthz
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
@@ -11,9 +10,8 @@ import (
 )
 
 type Permission struct {
-	Resource string  `json:"resource,omitempty" schema:"resource"`
-	Action   string  `json:"action,omitempty" schema:"action"`
-	Remark   *string `json:"remark,omitempty" gorm:"size:10240" schema:"remark"`
+	Resource string `json:"resource,omitempty" schema:"resource"`
+	Action   string `json:"action,omitempty" schema:"action"`
 
 	model.Base
 }
@@ -30,7 +28,6 @@ func (p *Permission) Purge() bool { return true }
 
 func (p *Permission) CreateBefore(context.Context) error {
 	p.SetID(util.HashID(p.Resource, p.Action))
-	p.Remark = new(fmt.Sprintf("%s %s", p.Action, p.Resource))
 	return nil
 }
 

@@ -559,8 +559,6 @@ func TestAuthz(t *testing.T) {
 				require.NotEmpty(t, rsp.ID)
 				require.Equal(t, userID, rsp.UserID)
 				require.Equal(t, roleID, rsp.RoleID)
-				require.NotEmpty(t, rsp.Username)
-				require.NotEmpty(t, rsp.RoleCode)
 				userRoleID = rsp.ID
 			})
 		})

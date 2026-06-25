@@ -9,7 +9,6 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gorm.io/datatypes"
@@ -47,12 +46,21 @@ func (Role) Design() {
 	})
 }
 
-func (r *Role) Purge() bool                            { return true }
-func (r *Role) CreateBefore(ctx context.Context) error { return r.validateCreate(ctx) }
+func (r *Role) Purge() bool { return true }
+func (r *Role) CreateBefore(ctx context.Context) error {
+	// validate fields
+	if err := r.validate(); err != nil {
+		return err
+	}
+	// ensure role id always equal to role code.
+	r.SetID(r.Code)
+	return nil
+}
 
 // CreateAfter creates the role's permissions after the role row has been persisted.
 func (r *Role) CreateAfter(ctx context.Context) error {
-	if err := database.Database[*Role](ctx).Get(r, r.ID); err != nil {
+	// get the full role info before UpdatePermission.
+	if err := database.Database[*Role](ctx).WithoutHook().Get(r, r.ID); err != nil {
 		return err
 	}
 	e1 := r.UpdatePermission(ctx)
@@ -62,53 +70,63 @@ func (r *Role) CreateAfter(ctx context.Context) error {
 
 // UpdateBefore validates role updates before database writes. Role code is immutable.
 func (r *Role) UpdateBefore(ctx context.Context) error {
-	return r.validateUpdate(ctx)
+	// validate fields
+	if err := r.validate(); err != nil {
+		return err
+	}
+
+	// query the full role.
+	current := new(Role)
+	if err := database.Database[*Role](ctx).Get(current, r.ID); err != nil {
+		return err
+	}
+
+	// ensure role code is immutable
+	if current.Code != r.Code {
+		return errors.New("role code is immutable")
+	}
+	return nil
 }
 
 // UpdateAfter refreshes the role's permissions after the role row has been persisted.
 func (r *Role) UpdateAfter(ctx context.Context) error {
+	// get the full role info before UpdatePermission.
+	if err := database.Database[*Role](ctx).WithoutHook().Get(r, r.ID); err != nil {
+		return err
+	}
 	e1 := r.UpdatePermission(ctx)
 	e2 := rbac.RBAC().AddRole(r.Code)
 	return errors.Join(e1, e2)
 }
 
 // DeleteBefore will delete the role's permissions
+// We must remove role in DeleteBefore hook, otherwise database.Database[*Role](ctx).Get(r, r.ID) will failed.
 func (r *Role) DeleteBefore(ctx context.Context) error {
-	// The delete request always don't have role id, so we should get the role from database.
-	if err := database.Database[*Role](ctx).Get(r, r.ID); err != nil {
-		return err
+	if r.ID == "" {
+		return errors.New("role id is required")
 	}
-
-	if err := rbac.RBAC().RemoveRole(r.Code); err != nil {
-		return err
-	}
-
 	// removes the role's permissions
-	menus := make([]*Menu, 0)
-	permissions := make([]*Permission, 0)
-	if err := database.Database[*Menu](ctx).
-		WithQuery(&Menu{Base: model.Base{ID: strings.Join(r.MenuIDs, ",")}}).
-		List(&menus); err != nil {
+	if err := rbac.RBAC().RevokePermission(r.ID, "", ""); err != nil {
 		return err
 	}
-	for _, m := range menus {
-		result, err := permissionsForRoutes(ctx, m.Routes)
-		if err != nil {
-			return err
-		}
-		permissions = append(permissions, result...)
+	return rbac.RBAC().RemoveRole(r.ID)
+}
+
+func (r *Role) validate() error {
+	r.Name = strings.TrimSpace(r.Name)
+	r.Code = strings.TrimSpace(r.Code)
+
+	if len(r.Name) == 0 {
+		return errors.New("role name is required")
+	}
+	if len(r.Code) == 0 {
+		return errors.New("role code is required")
 	}
 
-	// revoke the role's permissions
-	for _, p := range permissions {
-		if err := rbac.RBAC().RevokePermission(r.Code, p.Resource, p.Action); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
-// UpdatePermission refreshes permissions for the current role code.
+// UpdatePermission refreshes permissions for the current role.
 // It uses a brute-force strategy: revoke all existing policies for the role,
 // then grant permissions derived from the current menus. This avoids any
 // unknown leftovers in the casbin_rule table and ensures strong consistency.
@@ -117,11 +135,6 @@ func (r *Role) UpdatePermission(ctx context.Context) error {
 	// "MenuIds" is the frontend menus, "MenuPartialIds" is the frontend menus group that has no menus.
 	// A "Menu" contains one or multiple backend routes, each route binding one or multiple permissions.
 
-	var (
-		newMenus       = make([]*Menu, 0)
-		newPermissions = make([]*Permission, 0)
-	)
-
 	o := new(Role)
 	if err := database.Database[*Role](ctx).Get(o, r.ID); err != nil {
 		zap.S().Error(err)
@@ -129,48 +142,51 @@ func (r *Role) UpdatePermission(ctx context.Context) error {
 	}
 
 	// query the new role's menus
-	if err := database.Database[*Menu](ctx).
-		WithQuery(&Menu{Base: model.Base{ID: strings.Join(r.MenuIDs, ",")}}).
-		List(&newMenus); err != nil {
+	newMenus := make([]*Menu, 0)
+	if err := database.Database[*Menu](ctx).WithQuery(&Menu{Base: model.Base{ID: strings.Join(r.MenuIDs, ",")}}).List(&newMenus); err != nil {
 		zap.S().Error(err)
 		return err
 	}
-
 	// query the new role's permissions
+	newPermissions := make([]*Permission, 0)
 	for _, m := range newMenus {
-		result, err := permissionsForRoutes(ctx, m.Routes)
+		result, err := queryMenuPermissions(ctx, m)
 		if err != nil {
 			return err
 		}
 		newPermissions = append(newPermissions, result...)
 	}
 
-	for _, p := range newPermissions {
-		zap.S().Infow("new permission", "role", r.Code, "resource", p.Resource, "action", p.Action, "effect", consts.EffectAllow)
-	}
+	// for _, p := range newPermissions {
+	// 	zap.S().Infow("new permission", "role", r.Code, "resource", p.Resource, "action", p.Action, "effect", consts.EffectAllow)
+	// }
 
 	// revoke all existing policies for this role to avoid leftovers
-	if err := rbac.RBAC().RevokePermission(r.Code, "", ""); err != nil {
+	if err := rbac.RBAC().RevokePermission(r.ID, "", ""); err != nil {
 		zap.S().Error(err)
 		return err
 	}
 	// grant the new role's permissions
 	for _, p := range newPermissions {
-		if err := rbac.RBAC().GrantPermission(r.Code, p.Resource, p.Action); err != nil {
+		if err := rbac.RBAC().GrantPermission(r.ID, p.Resource, p.Action); err != nil {
 			zap.S().Error(err)
 			return err
 		}
 	}
 
-	zap.S().Infow("update role", "old", o.Code, "new", r.Code)
-
 	return nil
 }
 
-func permissionsForRoutes(ctx context.Context, routes []Route) ([]*Permission, error) {
+// queryMenuPermissions query all permissions for given menu.
+func queryMenuPermissions(ctx context.Context, m *Menu) ([]*Permission, error) {
+	if m == nil {
+		return make([]*Permission, 0), nil
+	}
+
 	permissions := make([]*Permission, 0)
-	for _, route := range routes {
-		if len(route.Path) == 0 {
+	for _, route := range m.Routes {
+		resource := strings.TrimSpace(route.Path)
+		if len(resource) == 0 {
 			continue
 		}
 		for _, method := range route.Methods {
@@ -179,9 +195,7 @@ func permissionsForRoutes(ctx context.Context, routes []Route) ([]*Permission, e
 				continue
 			}
 			result := make([]*Permission, 0)
-			if err := database.Database[*Permission](ctx).
-				WithQuery(&Permission{Resource: route.Path, Action: method}).
-				List(&result); err != nil {
+			if err := database.Database[*Permission](ctx).WithQuery(&Permission{Resource: resource, Action: method}).List(&result); err != nil {
 				zap.S().Error(err)
 				return nil, err
 			}
@@ -189,36 +203,6 @@ func permissionsForRoutes(ctx context.Context, routes []Route) ([]*Permission, e
 		}
 	}
 	return permissions, nil
-}
-
-func (r *Role) validateCreate(ctx context.Context) error {
-	return r.validateFields()
-}
-
-func (r *Role) validateUpdate(ctx context.Context) error {
-	if err := r.validateFields(); err != nil {
-		return err
-	}
-	current := new(Role)
-	if err := database.Database[*Role](ctx).Get(current, r.ID); err != nil {
-		return err
-	}
-	if current.Code != r.Code {
-		return errors.New("role code is immutable")
-	}
-	return nil
-}
-
-func (r *Role) validateFields() error {
-	r.Name = strings.TrimSpace(r.Name)
-	r.Code = strings.TrimSpace(r.Code)
-	if len(r.Name) == 0 {
-		return errors.New("role name is required")
-	}
-	if len(r.Code) == 0 {
-		return errors.New("role code is required")
-	}
-	return nil
 }
 
 func (r *Role) MarshalLogObject(enc zapcore.ObjectEncoder) error {

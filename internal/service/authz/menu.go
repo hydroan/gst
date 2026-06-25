@@ -29,16 +29,9 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 	}
 
 	var (
-		user      = new(modelauthz.User)
 		userRoles = make([]*modelauthz.UserRole, 0)
 		roles     = make([]*modelauthz.Role, 0)
 	)
-
-	// query the current user
-	if err := database.Database[*modelauthz.User](ctx).Get(user, ctx.UserID()); err != nil {
-		log.Error(err)
-		return err
-	}
 
 	// query all "UserRole" according to the current user id.
 	if err := database.Database[*modelauthz.UserRole](ctx).

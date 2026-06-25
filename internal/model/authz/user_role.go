@@ -16,12 +16,6 @@ type UserRole struct {
 	UserID string `json:"user_id,omitempty" schema:"user_id"`
 	RoleID string `json:"role_id,omitempty" schema:"role_id"`
 
-	RoleCode string `json:"rolecode,omitempty" schema:"rolecode"` // Role code snapshot for display and query.
-	Username string `json:"username,omitempty" schema:"username"` // Username snapshot for display and query; authorization uses UserID.
-
-	User *User `json:"user,omitempty" gorm:"-"`
-	Role *Role `json:"role,omitempty" gorm:"-"`
-
 	model.Base
 }
 
@@ -30,16 +24,8 @@ func (UserRole) Design() {
 	dsl.Migrate(true)
 	dsl.Route("/authz/user-roles", func() {
 		dsl.Create(func() {})
-		dsl.Delete(func() {
-			dsl.Service(true)
-			dsl.Flatten()
-			dsl.Filename("user_role.go")
-		})
-		dsl.List(func() {
-			dsl.Service(true)
-			dsl.Flatten()
-			dsl.Filename("user_role.go")
-		})
+		dsl.Delete(func() {})
+		dsl.List(func() {})
 		dsl.Get(func() {})
 	})
 }
@@ -51,15 +37,12 @@ func (r *UserRole) CreateBefore(ctx context.Context) error {
 	if len(r.RoleID) == 0 {
 		return errors.New("role_id is required")
 	}
-	// expands field: user and role
-	user, role := new(User), new(Role)
-	if err := database.Database[*User](ctx).Get(user, r.UserID); err != nil {
+
+	// ensure role exists
+	var role Role
+	if err := database.Database[*Role](ctx).Get(&role, r.RoleID); err != nil {
 		return err
 	}
-	if err := database.Database[*Role](ctx).Get(role, r.RoleID); err != nil {
-		return err
-	}
-	r.Username, r.RoleCode = user.Username, role.Code
 
 	// If the user already has the role, set same id to just update it.
 	r.SetID(util.HashID(r.UserID, r.RoleID))
@@ -68,28 +51,11 @@ func (r *UserRole) CreateBefore(ctx context.Context) error {
 }
 
 func (r *UserRole) CreateAfter(ctx context.Context) error {
-	if err := database.Database[*UserRole](ctx).Update(r); err != nil {
-		return err
-	}
-	// NOTE: must be role name not role id.
-	if err := rbac.RBAC().AssignRole(r.UserID, r.RoleCode); err != nil {
+	// role.ID always equal role.Code
+	if err := rbac.RBAC().AssignRole(r.UserID, r.RoleID); err != nil {
 		return err
 	}
 
-	// update casbin_rule display fields.
-	user := new(User)
-	if err := database.Database[*User](ctx).Get(user, r.UserID); err != nil {
-		return err
-	}
-	casbinRules := make([]*CasbinRule, 0)
-	if err := database.Database[*CasbinRule](ctx).WithLimit(1).WithQuery(&CasbinRule{V0: r.UserID, V1: r.RoleCode}).List(&casbinRules); err != nil {
-		return err
-	}
-	if len(casbinRules) > 0 {
-		casbinRules[0].User = user.Username
-		casbinRules[0].Role = r.RoleCode
-		return database.Database[*CasbinRule](ctx).Update(casbinRules[0])
-	}
 	return nil
 }
 
@@ -98,8 +64,8 @@ func (r *UserRole) DeleteBefore(ctx context.Context) error {
 	if err := database.Database[*UserRole](ctx).Get(r, r.ID); err != nil {
 		return err
 	}
-	// NOTE: must be role name not role id.
-	return rbac.RBAC().UnassignRole(r.UserID, r.RoleCode)
+	// role.ID always equal role.Code
+	return rbac.RBAC().UnassignRole(r.UserID, r.RoleID)
 }
 
 func (r *UserRole) MarshalLogObject(enc zapcore.ObjectEncoder) error {
@@ -108,8 +74,6 @@ func (r *UserRole) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	}
 	enc.AddString("user_id", r.UserID)
 	enc.AddString("role_id", r.RoleID)
-	enc.AddString("user", r.Username)
-	enc.AddString("role", r.RoleCode)
 	_ = enc.AddObject("base", &r.Base)
 	return nil
 }
