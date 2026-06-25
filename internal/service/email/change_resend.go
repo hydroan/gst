@@ -19,11 +19,11 @@ type ChangeResendService struct {
 // the target new email address.
 func (s *ChangeResendService) Create(ctx *types.ServiceContext, req *modelemail.ChangeResendReq) (rsp *modelemail.ChangeResendRsp, err error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
-	if ctx == nil || strings.TrimSpace(ctx.UserID) == "" {
+	if ctx == nil || strings.TrimSpace(ctx.UserID()) == "" {
 		return nil, errors.New("authentication required")
 	}
 
-	user, err := currentAccountGateway().GetByID(ctx, ctx.UserID)
+	user, err := currentAccountGateway().GetByID(ctx, ctx.UserID())
 	if err != nil {
 		if errors.Is(err, ErrAccountGatewayNotConfigured) {
 			log.Error("email account gateway is not configured", err)
@@ -32,7 +32,7 @@ func (s *ChangeResendService) Create(ctx *types.ServiceContext, req *modelemail.
 		log.Error("failed to load email change resend account", err)
 		return nil, errors.Wrap(err, "failed to load current account")
 	}
-	if err = validAccountSnapshot(user, ctx.UserID); err != nil {
+	if err = validAccountSnapshot(user, ctx.UserID()); err != nil {
 		log.Error("email account gateway returned invalid email change resend account", err)
 		return nil, newAccountGatewayInvalidAccountServiceError(err)
 	}

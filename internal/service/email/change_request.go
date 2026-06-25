@@ -42,18 +42,18 @@ func (s *ChangeRequestService) Create(ctx *types.ServiceContext, req *modelemail
 // prepareEmailChangeRequest loads the current account and validates whether the new
 // email can enter the change flow.
 func prepareEmailChangeRequest(ctx *types.ServiceContext, newEmail string) (*AccountSnapshot, string, *modelemail.ChangeRequestRsp, error) {
-	if ctx == nil || strings.TrimSpace(ctx.UserID) == "" {
+	if ctx == nil || strings.TrimSpace(ctx.UserID()) == "" {
 		return nil, "", nil, errors.New("authentication required")
 	}
 
-	user, err := currentAccountGateway().GetByID(ctx, ctx.UserID)
+	user, err := currentAccountGateway().GetByID(ctx, ctx.UserID())
 	if err != nil {
 		if errors.Is(err, ErrAccountGatewayNotConfigured) {
 			return nil, "", nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
 		return nil, "", nil, errors.Wrap(err, "failed to load current account")
 	}
-	if err = validAccountSnapshot(user, ctx.UserID); err != nil {
+	if err = validAccountSnapshot(user, ctx.UserID()); err != nil {
 		return nil, "", nil, newAccountGatewayInvalidAccountServiceError(err)
 	}
 

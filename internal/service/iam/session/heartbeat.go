@@ -25,15 +25,15 @@ func (s *HeartbeatService) Create(ctx *types.ServiceContext, req *modeliamsessio
 		return nil, err
 	}
 
-	ua := useragent.New(ctx.Request.UserAgent())
+	ua := useragent.New(ctx.Request().UserAgent())
 	engineName, engineVersion := ua.Engine()
 	browserName, browserVersion := ua.Browser()
 
 	if err = database.Database[*modeliamsession.OnlineUser](ctx).Update(&modeliamsession.OnlineUser{
-		UserID:   ctx.UserID,
-		ClientIP: ctx.ClientIP,
-		Username: ctx.Username,
-		Source:   ctx.Request.UserAgent(),
+		UserID:   ctx.UserID(),
+		ClientIP: ctx.ClientIP(),
+		Username: ctx.Username(),
+		Source:   ctx.Request().UserAgent(),
 		Platform: fmt.Sprintf("%s %s", ua.Platform(), ua.OS()),
 		Engine:   fmt.Sprintf("%s %s", engineName, engineVersion),
 		Browser:  fmt.Sprintf("%s %s", browserName, browserVersion),

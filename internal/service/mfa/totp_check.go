@@ -26,11 +26,11 @@ func (c *TOTPCheckService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPC
 
 	// Validate input.
 	if req.Username == "" {
-		log.Warnw("empty username provided", "client_ip", ctx.ClientIP)
+		log.Warnw("empty username provided", "client_ip", ctx.ClientIP())
 		return nil, errors.New("username is required")
 	}
 	if req.Password == "" {
-		log.Warnw("empty password provided", "username", req.Username, "client_ip", ctx.ClientIP)
+		log.Warnw("empty password provided", "username", req.Username, "client_ip", ctx.ClientIP())
 		return nil, errors.New("password is required")
 	}
 
@@ -41,7 +41,7 @@ func (c *TOTPCheckService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPC
 			return nil, newAccountAuthenticatorNotConfiguredServiceError(err)
 		}
 		if errors.Is(err, ErrAccountAuthenticationFailed) {
-			log.Warnw("authentication failed", "username", req.Username, "client_ip", ctx.ClientIP, "error", err)
+			log.Warnw("authentication failed", "username", req.Username, "client_ip", ctx.ClientIP(), "error", err)
 			return nil, errors.New("authentication failed")
 		}
 		log.Errorw("failed to authenticate account", "username", req.Username, "error", err)
@@ -74,7 +74,7 @@ func (c *TOTPCheckService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPC
 		"user_id", account.ID,
 		"requires_mfa", requiresMFA,
 		"active_devices", len(devices),
-		"client_ip", ctx.ClientIP,
+		"client_ip", ctx.ClientIP(),
 	)
 
 	// Return the check result.

@@ -45,7 +45,7 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	}
 
 	var success bool
-	ua := useragent.New(ctx.UserAgent)
+	ua := useragent.New(ctx.UserAgent())
 	engineName, engineVersion := ua.Engine()
 	browserName, browserVersion := ua.Browser()
 
@@ -54,9 +54,9 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		if !success && servicelogmgmt.Enabled {
 			if logErr := database.Database[*modellogmgmt.LoginLog](ctx).Create(&modellogmgmt.LoginLog{
 				Username: req.Username,
-				ClientIP: ctx.ClientIP,
+				ClientIP: ctx.ClientIP(),
 				Status:   modellogmgmt.LoginStatusFailure,
-				Source:   ctx.Request.UserAgent(),
+				Source:   ctx.Request().UserAgent(),
 				Platform: fmt.Sprintf("%s %s", ua.Platform(), ua.OS()),
 				Engine:   fmt.Sprintf("%s %s", engineName, engineVersion),
 				Browser:  fmt.Sprintf("%s %s", browserName, browserVersion),
@@ -139,8 +139,8 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		FirstName:          user.FirstName,
 		LastName:           user.LastName,
 		MustChangePassword: user.MustChangePassword,
-		ClientIP:           ctx.ClientIP,
-		UserAgent:          ctx.Request.UserAgent(),
+		ClientIP:           ctx.ClientIP(),
+		UserAgent:          ctx.Request().UserAgent(),
 		OS:                 ua.OS(),
 		Platform:           ua.Platform(),
 		EngineName:         engineName,
@@ -172,10 +172,10 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		if err = database.Database[*modellogmgmt.LoginLog](ctx).Create(&modellogmgmt.LoginLog{
 			UserID:   user.ID,
 			Username: user.Username,
-			ClientIP: ctx.ClientIP,
+			ClientIP: ctx.ClientIP(),
 			Status:   modellogmgmt.LoginStatusSuccess,
 
-			Source:   ctx.Request.UserAgent(),
+			Source:   ctx.Request().UserAgent(),
 			Platform: fmt.Sprintf("%s %s", ua.Platform(), ua.OS()),
 			Engine:   fmt.Sprintf("%s %s", engineName, engineVersion),
 			Browser:  fmt.Sprintf("%s %s", browserName, browserVersion),

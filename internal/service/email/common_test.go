@@ -334,7 +334,7 @@ func TestVerificationRequestCreateReturnsProviderConfigurationError(t *testing.T
 	svc := &VerificationRequestService{}
 	svc.Logger = loggerzap.New("")
 	ctx := new(types.ServiceContext)
-	ctx.SetPhase(consts.PHASE_CREATE)
+	ctx = ctx.WithPhase(consts.PHASE_CREATE)
 
 	_, err := svc.Create(ctx, &modelemail.VerificationRequestReq{Email: "user@example.com"})
 
@@ -362,7 +362,7 @@ func TestVerificationRequestCreate(t *testing.T) {
 	svc := &VerificationRequestService{}
 	svc.Logger = loggerzap.New("")
 	ctx := new(types.ServiceContext)
-	ctx.SetPhase(consts.PHASE_CREATE)
+	ctx = ctx.WithPhase(consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationRequestReq{Email: " USER@example.com "})
 	require.NoError(t, err)
@@ -393,7 +393,7 @@ func TestVerificationRequestCreateVerifiedAccount(t *testing.T) {
 	svc := &VerificationRequestService{}
 	svc.Logger = loggerzap.New("")
 	ctx := new(types.ServiceContext)
-	ctx.SetPhase(consts.PHASE_CREATE)
+	ctx = ctx.WithPhase(consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationRequestReq{Email: "user@example.com"})
 	require.NoError(t, err)
@@ -422,7 +422,7 @@ func TestVerificationRequestCreateUnknownAccount(t *testing.T) {
 	svc := &VerificationRequestService{}
 	svc.Logger = loggerzap.New("")
 	ctx := new(types.ServiceContext)
-	ctx.SetPhase(consts.PHASE_CREATE)
+	ctx = ctx.WithPhase(consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationRequestReq{Email: "user@example.com"})
 	require.NoError(t, err)
@@ -451,7 +451,7 @@ func TestVerificationResendCreate(t *testing.T) {
 	svc := &VerificationResendService{}
 	svc.Logger = loggerzap.New("")
 	ctx := new(types.ServiceContext)
-	ctx.SetPhase(consts.PHASE_CREATE)
+	ctx = ctx.WithPhase(consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationResendReq{Email: "user@example.com"})
 	require.NoError(t, err)
@@ -481,7 +481,7 @@ func TestVerificationResendCreateUnknownAccount(t *testing.T) {
 	svc := &VerificationResendService{}
 	svc.Logger = loggerzap.New("")
 	ctx := new(types.ServiceContext)
-	ctx.SetPhase(consts.PHASE_CREATE)
+	ctx = ctx.WithPhase(consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationResendReq{Email: "user@example.com"})
 	require.NoError(t, err)
@@ -518,7 +518,7 @@ func TestVerificationResendCreateThrottled(t *testing.T) {
 	svc := &VerificationResendService{}
 	svc.Logger = loggerzap.New("")
 	ctx := new(types.ServiceContext)
-	ctx.SetPhase(consts.PHASE_CREATE)
+	ctx = ctx.WithPhase(consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationResendReq{Email: "user@example.com"})
 	require.NoError(t, err)
@@ -562,7 +562,7 @@ func TestVerificationConfirmCreate(t *testing.T) {
 	svc := &VerificationConfirmService{}
 	svc.Logger = loggerzap.New("")
 	ctx := new(types.ServiceContext)
-	ctx.SetPhase(consts.PHASE_CREATE)
+	ctx = ctx.WithPhase(consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationConfirmReq{Token: token})
 	require.NoError(t, err)
@@ -584,7 +584,7 @@ func TestVerificationConfirmCreateInvalidToken(t *testing.T) {
 	svc := &VerificationConfirmService{}
 	svc.Logger = loggerzap.New("")
 	ctx := new(types.ServiceContext)
-	ctx.SetPhase(consts.PHASE_CREATE)
+	ctx = ctx.WithPhase(consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationConfirmReq{Token: "missing"})
 	require.NoError(t, err)
@@ -623,7 +623,7 @@ func TestVerificationConfirmCreateAlreadyVerified(t *testing.T) {
 	svc := &VerificationConfirmService{}
 	svc.Logger = loggerzap.New("")
 	ctx := new(types.ServiceContext)
-	ctx.SetPhase(consts.PHASE_CREATE)
+	ctx = ctx.WithPhase(consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationConfirmReq{Token: token})
 	require.NoError(t, err)
@@ -660,8 +660,8 @@ func TestChangeRequestCreate(t *testing.T) {
 	svc := &ChangeRequestService{}
 	svc.Logger = loggerzap.New("")
 	ctx := new(types.ServiceContext)
-	ctx.SetPhase(consts.PHASE_CREATE)
-	ctx.UserID = "user-change-1"
+	ctx = ctx.WithPhase(consts.PHASE_CREATE)
+	ctx = ctx.WithRequestMetadata(types.NewRequestMetadataFromValues(types.RequestMetadataValues{UserID: "user-change-1"}))
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeRequestReq{
 		NewEmail:        " NEW@example.com ",
@@ -704,8 +704,8 @@ func TestChangeRequestCreateEmailAlreadyUsed(t *testing.T) {
 	svc := &ChangeRequestService{}
 	svc.Logger = loggerzap.New("")
 	ctx := new(types.ServiceContext)
-	ctx.SetPhase(consts.PHASE_CREATE)
-	ctx.UserID = "user-change-2"
+	ctx = ctx.WithPhase(consts.PHASE_CREATE)
+	ctx = ctx.WithRequestMetadata(types.NewRequestMetadataFromValues(types.RequestMetadataValues{UserID: "user-change-2"}))
 
 	_, err := svc.Create(ctx, &modelemail.ChangeRequestReq{
 		NewEmail:        "new@example.com",
@@ -741,8 +741,8 @@ func TestChangeResendCreate(t *testing.T) {
 	svc := &ChangeResendService{}
 	svc.Logger = loggerzap.New("")
 	ctx := new(types.ServiceContext)
-	ctx.SetPhase(consts.PHASE_CREATE)
-	ctx.UserID = "user-change-3"
+	ctx = ctx.WithPhase(consts.PHASE_CREATE)
+	ctx = ctx.WithRequestMetadata(types.NewRequestMetadataFromValues(types.RequestMetadataValues{UserID: "user-change-3"}))
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeResendReq{NewEmail: "new@example.com"})
 	require.NoError(t, err)
@@ -784,8 +784,8 @@ func TestChangeResendCreateThrottled(t *testing.T) {
 	svc := &ChangeResendService{}
 	svc.Logger = loggerzap.New("")
 	ctx := new(types.ServiceContext)
-	ctx.SetPhase(consts.PHASE_CREATE)
-	ctx.UserID = "user-change-4"
+	ctx = ctx.WithPhase(consts.PHASE_CREATE)
+	ctx = ctx.WithRequestMetadata(types.NewRequestMetadataFromValues(types.RequestMetadataValues{UserID: "user-change-4"}))
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeResendReq{NewEmail: "new@example.com"})
 	require.NoError(t, err)
@@ -837,7 +837,7 @@ func TestChangeConfirmCreate(t *testing.T) {
 	svc := &ChangeConfirmService{}
 	svc.Logger = loggerzap.New("")
 	ctx := new(types.ServiceContext)
-	ctx.SetPhase(consts.PHASE_CREATE)
+	ctx = ctx.WithPhase(consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeConfirmReq{Token: token})
 	require.NoError(t, err)
@@ -890,7 +890,7 @@ func TestChangeConfirmCreateCanceled(t *testing.T) {
 	svc := &ChangeConfirmService{}
 	svc.Logger = loggerzap.New("")
 	ctx := new(types.ServiceContext)
-	ctx.SetPhase(consts.PHASE_CREATE)
+	ctx = ctx.WithPhase(consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeConfirmReq{Token: token})
 	require.NoError(t, err)
@@ -929,7 +929,7 @@ func TestChangeCancelCreate(t *testing.T) {
 	svc := &ChangeCancelService{}
 	svc.Logger = loggerzap.New("")
 	ctx := new(types.ServiceContext)
-	ctx.SetPhase(consts.PHASE_CREATE)
+	ctx = ctx.WithPhase(consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeCancelReq{Token: token})
 	require.NoError(t, err)
@@ -975,8 +975,8 @@ func TestChangeRequestCreateClearsCancellationMarker(t *testing.T) {
 	svc := &ChangeRequestService{}
 	svc.Logger = loggerzap.New("")
 	ctx := new(types.ServiceContext)
-	ctx.SetPhase(consts.PHASE_CREATE)
-	ctx.UserID = "user-change-8"
+	ctx = ctx.WithPhase(consts.PHASE_CREATE)
+	ctx = ctx.WithRequestMetadata(types.NewRequestMetadataFromValues(types.RequestMetadataValues{UserID: "user-change-8"}))
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeRequestReq{
 		NewEmail:        "new@example.com",
@@ -1010,7 +1010,7 @@ func TestPasswordResetRequestCreate(t *testing.T) {
 	svc := &PasswordResetRequestService{}
 	svc.Logger = loggerzap.New("")
 	ctx := new(types.ServiceContext)
-	ctx.SetPhase(consts.PHASE_CREATE)
+	ctx = ctx.WithPhase(consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.PasswordResetRequestReq{Email: " USER@example.com "})
 	require.NoError(t, err)
@@ -1041,7 +1041,7 @@ func TestPasswordResetRequestCreateUnknownAccount(t *testing.T) {
 	svc := &PasswordResetRequestService{}
 	svc.Logger = loggerzap.New("")
 	ctx := new(types.ServiceContext)
-	ctx.SetPhase(consts.PHASE_CREATE)
+	ctx = ctx.WithPhase(consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.PasswordResetRequestReq{Email: "user@example.com"})
 	require.NoError(t, err)
@@ -1087,7 +1087,7 @@ func TestPasswordResetConfirmCreate(t *testing.T) {
 	svc := &PasswordResetConfirmService{}
 	svc.Logger = loggerzap.New("")
 	ctx := new(types.ServiceContext)
-	ctx.SetPhase(consts.PHASE_CREATE)
+	ctx = ctx.WithPhase(consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.PasswordResetConfirmReq{
 		Token:       token,
@@ -1113,7 +1113,7 @@ func TestPasswordResetConfirmCreateInvalidToken(t *testing.T) {
 	svc := &PasswordResetConfirmService{}
 	svc.Logger = loggerzap.New("")
 	ctx := new(types.ServiceContext)
-	ctx.SetPhase(consts.PHASE_CREATE)
+	ctx = ctx.WithPhase(consts.PHASE_CREATE)
 
 	rsp, err := svc.Create(ctx, &modelemail.PasswordResetConfirmReq{
 		Token:       "missing",

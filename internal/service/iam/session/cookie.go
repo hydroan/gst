@@ -31,13 +31,13 @@ func ReadSessionID(ctx *types.ServiceContext) (string, error) {
 // SetSessionCookie writes the current session cookie with hardened defaults.
 func SetSessionCookie(ctx *types.ServiceContext, sessionID string, maxAge time.Duration) {
 	//nolint:gosec // Secure is derived from TLS/proxy headers; local HTTP cannot set a Secure cookie.
-	http.SetCookie(ctx.Writer, &http.Cookie{
+	http.SetCookie(ctx.ResponseWriter(), &http.Cookie{
 		Name:     SessionCookieName,
 		Value:    sessionID,
 		Path:     sessionCookiePath,
 		MaxAge:   int(maxAge.Seconds()),
 		HttpOnly: true,
-		Secure:   requestUsesHTTPS(ctx.Request),
+		Secure:   requestUsesHTTPS(ctx.Request()),
 		SameSite: http.SameSiteLaxMode,
 	})
 }
@@ -45,13 +45,13 @@ func SetSessionCookie(ctx *types.ServiceContext, sessionID string, maxAge time.D
 // ClearSessionCookie removes the current session cookie using the same path and security attributes.
 func ClearSessionCookie(ctx *types.ServiceContext) {
 	//nolint:gosec // Secure is derived from TLS/proxy headers and must match deployment transport.
-	http.SetCookie(ctx.Writer, &http.Cookie{
+	http.SetCookie(ctx.ResponseWriter(), &http.Cookie{
 		Name:     SessionCookieName,
 		Value:    "",
 		Path:     sessionCookiePath,
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   requestUsesHTTPS(ctx.Request),
+		Secure:   requestUsesHTTPS(ctx.Request()),
 		SameSite: http.SameSiteLaxMode,
 	})
 }

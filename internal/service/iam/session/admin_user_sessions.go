@@ -39,7 +39,7 @@ func (s *AdminUserSessionsListService) List(ctx *types.ServiceContext, req *mode
 		return nil, err
 	}
 
-	targetUserID := ctx.Params["id"]
+	targetUserID := ctx.Param("id")
 	if targetUserID == "" {
 		return nil, service.NewError(http.StatusBadRequest, "user id is required")
 	}
@@ -81,7 +81,7 @@ func (s *AdminUserSessionsDeleteService) Delete(ctx *types.ServiceContext, req *
 		return nil, err
 	}
 
-	targetUserID := ctx.Params["id"]
+	targetUserID := ctx.Param("id")
 	if targetUserID == "" {
 		return nil, service.NewError(http.StatusBadRequest, "user id is required")
 	}

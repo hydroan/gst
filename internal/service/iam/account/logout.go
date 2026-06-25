@@ -33,7 +33,7 @@ func (s *LogoutService) Create(ctx *types.ServiceContext, req *model.Empty) (rsp
 	session, err := serviceiamsession.DeleteSession(ctx.Context(), sessionID)
 
 	// Parse user agent for logging
-	ua := useragent.New(ctx.UserAgent)
+	ua := useragent.New(ctx.UserAgent())
 	engineName, engineVersion := ua.Engine()
 	browserName, browserVersion := ua.Browser()
 
@@ -47,9 +47,9 @@ func (s *LogoutService) Create(ctx *types.ServiceContext, req *model.Empty) (rsp
 	if logErr := database.Database[*modellogmgmt.LoginLog](ctx).Create(&modellogmgmt.LoginLog{
 		UserID:   userID,
 		Username: username,
-		ClientIP: ctx.ClientIP,
+		ClientIP: ctx.ClientIP(),
 		Status:   modellogmgmt.LoginStatusLogout,
-		Source:   ctx.Request.UserAgent(),
+		Source:   ctx.Request().UserAgent(),
 		Platform: fmt.Sprintf("%s %s", ua.Platform(), ua.OS()),
 		Engine:   fmt.Sprintf("%s %s", engineName, engineVersion),
 		Browser:  fmt.Sprintf("%s %s", browserName, browserVersion),

@@ -38,7 +38,7 @@ var errTOTPUnbindVerificationInvalid = errors.New("invalid verification")
 func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPUnbindReq) (rsp *modelmfa.TOTPUnbindRsp, err error) {
 	log := t.WithServiceContext(ctx, ctx.GetPhase())
 
-	if len(ctx.UserID) == 0 {
+	if len(ctx.UserID()) == 0 {
 		log.Errorz("user_id not found in context")
 		return nil, service.NewError(http.StatusUnauthorized, "authentication required")
 	}
@@ -52,22 +52,22 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 	}
 
 	if req.Password != "" {
-		if !activeTOTPUnbindDeviceExists(ctx, ctx.UserID, req.DeviceID) {
+		if !activeTOTPUnbindDeviceExists(ctx, ctx.UserID(), req.DeviceID) {
 			log.Warnz("device not found or not active",
-				zap.String("user_id", ctx.UserID),
+				zap.String("user_id", ctx.UserID()),
 				zap.String("device_id", req.DeviceID))
 			return newTOTPUnbindFailureRsp(ctx, "Device not found or already unbound")
 		}
-		if verifyErr := verifyTOTPUnbindPassword(ctx, ctx.UserID, req.Password); verifyErr != nil {
+		if verifyErr := verifyTOTPUnbindPassword(ctx, ctx.UserID(), req.Password); verifyErr != nil {
 			if isTOTPUnbindPasswordSystemError(verifyErr) {
 				log.Errorz("failed to verify password for unbind",
-					zap.String("user_id", ctx.UserID),
+					zap.String("user_id", ctx.UserID()),
 					zap.String("device_id", req.DeviceID),
 					zap.Error(verifyErr))
 				return nil, verifyErr
 			}
 			log.Warnz("invalid password for unbind",
-				zap.String("user_id", ctx.UserID),
+				zap.String("user_id", ctx.UserID()),
 				zap.String("device_id", req.DeviceID),
 				zap.Error(verifyErr))
 			return newTOTPUnbindFailureRsp(ctx, "invalid verification")
@@ -77,7 +77,7 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 	err = database.Database[*modelmfa.TOTPDevice](ctx).Transaction(func(tx types.Database[*modelmfa.TOTPDevice]) error {
 		devices := make([]*modelmfa.TOTPDevice, 0)
 		if listErr := tx.WithLock(consts.LockUpdate).WithQuery(&modelmfa.TOTPDevice{
-			UserID:   ctx.UserID,
+			UserID:   ctx.UserID(),
 			IsActive: true,
 		}).List(&devices); listErr != nil {
 			return errors.Wrap(listErr, "list active TOTP devices")
@@ -86,7 +86,7 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 		device := findTOTPUnbindDevice(devices, req.DeviceID)
 		if device == nil {
 			log.Warnz("device not found or not active",
-				zap.String("user_id", ctx.UserID),
+				zap.String("user_id", ctx.UserID()),
 				zap.String("device_id", req.DeviceID))
 			rsp = &modelmfa.TOTPUnbindRsp{
 				Success:     false,
@@ -102,7 +102,7 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 				errors.Is(verifyErr, errTOTPCodeInvalid) ||
 				errors.Is(verifyErr, errTOTPBackupCodeInvalid) {
 				log.Warnz("invalid fresh authentication for unbind",
-					zap.String("user_id", ctx.UserID),
+					zap.String("user_id", ctx.UserID()),
 					zap.String("device_id", req.DeviceID),
 					zap.Error(verifyErr))
 				rsp = &modelmfa.TOTPUnbindRsp{
@@ -128,7 +128,7 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 	})
 	if err != nil {
 		log.Errorz("failed to unbind device",
-			zap.String("user_id", ctx.UserID),
+			zap.String("user_id", ctx.UserID()),
 			zap.String("device_id", req.DeviceID),
 			zap.Error(err))
 		return nil, err
@@ -139,7 +139,7 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 	}
 	if rsp.Success {
 		log.Infoz("totp device unbound successfully",
-			zap.String("user_id", ctx.UserID),
+			zap.String("user_id", ctx.UserID()),
 			zap.String("device_id", req.DeviceID),
 			zap.Int("device_count", rsp.DeviceCount))
 	}
@@ -149,7 +149,7 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 
 // newTOTPUnbindFailureRsp builds a failed response with the current active-device count.
 func newTOTPUnbindFailureRsp(ctx *types.ServiceContext, message string) (*modelmfa.TOTPUnbindRsp, error) {
-	count, err := countActiveTOTPUnbindDevices(ctx, ctx.UserID)
+	count, err := countActiveTOTPUnbindDevices(ctx, ctx.UserID())
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +205,7 @@ func verifyTOTPUnbindFreshAuth(
 	case strings.TrimSpace(req.TOTPCode) != "":
 		return validateTOTPCodeForDevices(req.TOTPCode, devices)
 	case strings.TrimSpace(req.BackupCode) != "":
-		return consumeTOTPBackupCodeInTx(tx, ctx.UserID, req.BackupCode, now)
+		return consumeTOTPBackupCodeInTx(tx, ctx.UserID(), req.BackupCode, now)
 	default:
 		return errTOTPUnbindVerificationInvalid
 	}

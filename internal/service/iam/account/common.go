@@ -39,7 +39,7 @@ func loadPrivilegedActorAndTarget(ctx *types.ServiceContext, targetUserID string
 
 	actorUsername := session.Username
 	if actorUsername == "" {
-		actorUsername = ctx.Username
+		actorUsername = ctx.Username()
 	}
 	if actorUsername == "" {
 		return "", nil, nil, errors.New("actor username not found")

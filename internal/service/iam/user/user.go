@@ -123,7 +123,7 @@ func (UserPatchService) Patch(ctx *types.ServiceContext, req *modeliamuser.UserP
 		return nil, service.NewError(http.StatusBadRequest, "user patch request is required")
 	}
 
-	targetID := ctx.Params["id"]
+	targetID := ctx.Param("id")
 	if targetID == "" {
 		return nil, service.NewError(http.StatusBadRequest, "user id is required")
 	}
@@ -180,7 +180,7 @@ func (UserPatchService) Patch(ctx *types.ServiceContext, req *modeliamuser.UserP
 		return nil, service.NewError(http.StatusBadRequest, "patch fields are required")
 	}
 
-	target.SetUpdatedBy(ctx.Username)
+	target.SetUpdatedBy(ctx.Username())
 	if err = database.Database[*modeliamuser.User](ctx).WithSelect(columns...).Update(target); err != nil {
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to patch user", err)
 	}

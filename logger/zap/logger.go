@@ -144,13 +144,13 @@ func (l *Logger) WithContext(ctx context.Context, phase consts.Phase) types.Logg
 func (l *Logger) WithServiceContext(ctx *types.ServiceContext, phase consts.Phase) types.Logger {
 	return l.With(
 		consts.PHASE, string(phase),
-		consts.CTX_ROUTE, ctx.Route,
-		consts.CTX_USERNAME, ctx.Username,
-		consts.CTX_USER_ID, ctx.UserID,
-		consts.TRACE_ID, ctx.TraceID,
+		consts.CTX_ROUTE, ctx.Route(),
+		consts.CTX_USERNAME, ctx.Username(),
+		consts.CTX_USER_ID, ctx.UserID(),
+		consts.TRACE_ID, ctx.TraceID(),
 	).
-		WithObject(consts.PARAMS, paramsObject(ctx.Params)).
-		WithObject(consts.QUERY, queryObject(ctx.Query))
+		WithObject(consts.PARAMS, paramsObject(ctx.Params())).
+		WithObject(consts.QUERY, queryObject(ctx.Query()))
 }
 
 type paramsObject map[string]string

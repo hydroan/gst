@@ -23,7 +23,7 @@ func (m *MenuService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.M
 
 func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauthz.Menu, log types.Logger) error {
 	// If Username is "root" or "admin", return directly
-	if ctx.Username == "root" || ctx.Username == "admin" {
+	if ctx.Username() == "root" || ctx.Username() == "admin" {
 		return nil
 	}
 
@@ -34,14 +34,14 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 	)
 
 	// query the current user
-	if err := database.Database[*modelauthz.User](ctx).Get(user, ctx.UserID); err != nil {
+	if err := database.Database[*modelauthz.User](ctx).Get(user, ctx.UserID()); err != nil {
 		log.Error(err)
 		return err
 	}
 
 	// query all "UserRole" according to the current user id.
 	if err := database.Database[*modelauthz.UserRole](ctx).
-		WithQuery(&modelauthz.UserRole{UserID: ctx.UserID}).
+		WithQuery(&modelauthz.UserRole{UserID: ctx.UserID()}).
 		List(&userRoles); err != nil {
 		log.Error(err)
 		return err
@@ -77,7 +77,7 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 		return nil
 	}
 	for _, r := range roles {
-		log.Infow("role", "username", ctx.Username, "role_name", r.Name, "role_code", r.Code)
+		log.Infow("role", "username", ctx.Username(), "role_name", r.Name, "role_code", r.Code)
 	}
 
 	{
@@ -97,7 +97,7 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 			var exists, matched, ok bool
 			_, exists = menuMap[item.ID]
 			if exists {
-				if matched, _ = regexp.MatchString(item.DomainPattern, ctx.Request.Host); matched {
+				if matched, _ = regexp.MatchString(item.DomainPattern, ctx.Request().Host); matched {
 					ok = true
 				}
 			}
@@ -124,7 +124,7 @@ func filter(ctx *types.ServiceContext, menu *modelauthz.Menu, menuMap map[string
 			var exists, matched, ok bool
 			_, exists = menuMap[item.ID]
 			if exists {
-				if matched, _ = regexp.MatchString(item.DomainPattern, ctx.Request.Host); matched {
+				if matched, _ = regexp.MatchString(item.DomainPattern, ctx.Request().Host); matched {
 					ok = true
 				}
 			}

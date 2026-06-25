@@ -16,37 +16,17 @@ import (
 var _ context.Context = (*ServiceContext)(nil)
 
 type ServiceContext struct {
-	Method       string        // http method
-	Request      *http.Request // http request
-	URL          *url.URL      // request url
-	Header       http.Header   // http request header
-	WriterHeader http.Header   // http writer header
-	ClientIP     string        // client ip
-	UserAgent    string        // user agent
+	method       string
+	request      *http.Request
+	url          *url.URL
+	header       http.Header
+	writerHeader http.Header
+	clientIP     string
+	userAgent    string
 
 	context context.Context
-	Writer  http.ResponseWriter
+	writer  http.ResponseWriter
 	// Body    []byte
-
-	// route parameters,
-	//
-	// eg: PUT /api/gists/:id/star
-	// Params: map[string]string{"id": "xxxxx-mygistid-xxxxx"}
-	//
-	// eg: DELETE /api/user/:userid/shelf/:shelfid/book
-	// Params: map[string]string{"userid": "xxxxx-myuserid-xxxxx", "shelfid": "xxxxx-myshelfid-xxxxx"}
-	Params map[string]string
-	Query  url.Values
-
-	SessionID string // session id
-	Username  string // currrent login user.
-	UserID    string // currrent login user id
-	Route     string
-
-	TraceID string
-	PSpanID string
-	SpanID  string
-	Seq     int
 
 	ginCtx       *gin.Context
 	phase        consts.Phase
@@ -71,27 +51,18 @@ func NewServiceContext(c *gin.Context, ctxs ...context.Context) *ServiceContext 
 	ctx = ContextWithRequestMetadata(ctx, meta)
 
 	return &ServiceContext{
-		Request: c.Request,
+		request: c.Request,
 
-		Method:       c.Request.Method,
-		URL:          c.Request.URL,
-		Header:       c.Request.Header,
-		WriterHeader: c.Writer.Header(),
-		ClientIP:     c.ClientIP(),
-		UserAgent:    c.Request.UserAgent(),
-		Params:       meta.Params(),
-		Query:        meta.Query(),
-
-		Route:     meta.Route(),
-		Username:  meta.Username(),
-		UserID:    meta.UserID(),
-		SessionID: meta.SessionID(),
-
-		TraceID: meta.TraceID(),
+		method:       c.Request.Method,
+		url:          c.Request.URL,
+		header:       c.Request.Header,
+		writerHeader: c.Writer.Header(),
+		clientIP:     c.ClientIP(),
+		userAgent:    c.Request.UserAgent(),
 
 		ginCtx:  c,
 		context: ctx,
-		Writer:  c.Writer,
+		writer:  c.Writer,
 
 		// Check if the current route requires authentication
 		// Determined by checking if there's a flag set by authentication middleware in gin.Context
@@ -121,6 +92,78 @@ func (sc *ServiceContext) Value(key any) any           { return sc.baseContext()
 
 func (sc *ServiceContext) RequestMetadata() RequestMetadata {
 	return RequestMetadataFromContext(sc)
+}
+
+func (sc *ServiceContext) Method() string {
+	if sc == nil {
+		return ""
+	}
+	return sc.method
+}
+
+func (sc *ServiceContext) Request() *http.Request {
+	if sc == nil || sc.request == nil {
+		return nil
+	}
+	return sc.request.Clone(sc.baseContext())
+}
+
+func (sc *ServiceContext) URL() *url.URL {
+	if sc == nil || sc.url == nil {
+		return nil
+	}
+	u := *sc.url
+	return &u
+}
+
+func (sc *ServiceContext) Header() http.Header {
+	if sc == nil || sc.header == nil {
+		return nil
+	}
+	return sc.header.Clone()
+}
+
+func (sc *ServiceContext) WriterHeader() http.Header {
+	if sc == nil || sc.writerHeader == nil {
+		return nil
+	}
+	return sc.writerHeader.Clone()
+}
+
+func (sc *ServiceContext) ClientIP() string {
+	if sc == nil {
+		return ""
+	}
+	return sc.clientIP
+}
+
+func (sc *ServiceContext) UserAgent() string {
+	if sc == nil {
+		return ""
+	}
+	return sc.userAgent
+}
+
+func (sc *ServiceContext) ResponseWriter() http.ResponseWriter {
+	if sc == nil {
+		return nil
+	}
+	return sc.writer
+}
+
+func (sc *ServiceContext) Params() map[string]string { return sc.RequestMetadata().Params() }
+func (sc *ServiceContext) Query() url.Values         { return sc.RequestMetadata().Query() }
+func (sc *ServiceContext) Param(key string) string   { return sc.RequestMetadata().Param(key) }
+func (sc *ServiceContext) Route() string             { return sc.RequestMetadata().Route() }
+func (sc *ServiceContext) Username() string          { return sc.RequestMetadata().Username() }
+func (sc *ServiceContext) UserID() string            { return sc.RequestMetadata().UserID() }
+func (sc *ServiceContext) SessionID() string         { return sc.RequestMetadata().SessionID() }
+func (sc *ServiceContext) TraceID() string           { return sc.RequestMetadata().TraceID() }
+
+func (sc *ServiceContext) WithRequestMetadata(meta RequestMetadata) *ServiceContext {
+	next := sc.clone()
+	next.context = ContextWithRequestMetadata(next.baseContext(), meta)
+	return next
 }
 
 func (sc *ServiceContext) Data(code int, contentType string, data []byte) {
@@ -159,15 +202,43 @@ func (sc *ServiceContext) Stream(step func(io.Writer) bool) {
 	sc.ginCtx.Stream(step)
 }
 
-func (sc *ServiceContext) SetPhase(phase consts.Phase) { sc.phase = phase }
-func (sc *ServiceContext) GetPhase() consts.Phase      { return sc.phase }
+func (sc *ServiceContext) GetPhase() consts.Phase {
+	if sc == nil {
+		return ""
+	}
+	return sc.phase
+}
+
 func (sc *ServiceContext) WithPhase(phase consts.Phase) *ServiceContext {
-	sc.phase = phase
-	return sc
+	next := sc.clone()
+	next.phase = phase
+	return next
 }
 
 // RequiresAuth returns whether the current API requires authentication
-func (sc *ServiceContext) RequiresAuth() bool { return sc.requiresAuth }
+func (sc *ServiceContext) RequiresAuth() bool {
+	if sc == nil {
+		return false
+	}
+	return sc.requiresAuth
+}
+
+func (sc *ServiceContext) clone() *ServiceContext {
+	if sc == nil {
+		return &ServiceContext{context: context.Background()}
+	}
+	next := *sc
+	if sc.header != nil {
+		next.header = sc.header.Clone()
+	}
+	if sc.writerHeader != nil {
+		next.writerHeader = sc.writerHeader.Clone()
+	}
+	if next.context == nil {
+		next.context = context.Background()
+	}
+	return &next
+}
 
 // Encode writes an SSE event to the given writer.
 // This is a convenience method that wraps sse.Encode for use within

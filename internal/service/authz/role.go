@@ -19,7 +19,7 @@ type RoleService struct {
 // DeleteAfter support filter and delete multiple roles by query parameter `name`.
 func (r *RoleService) DeleteAfter(ctx *types.ServiceContext, role *modelauthz.Role) error {
 	log := r.WithServiceContext(ctx, consts.PHASE_DELETE_AFTER)
-	name := ctx.URL.Query().Get("name")
+	name := ctx.URL().Query().Get("name")
 	if len(name) == 0 {
 		return nil
 	}

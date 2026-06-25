@@ -31,7 +31,7 @@ type TOTPVerifyService struct {
 func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPVerifyReq) (rsp *modelmfa.TOTPVerifyRsp, err error) {
 	log := t.WithServiceContext(ctx, ctx.GetPhase())
 
-	if len(ctx.UserID) == 0 {
+	if len(ctx.UserID()) == 0 {
 		log.Errorz("user_id not found in context")
 		return &modelmfa.TOTPVerifyRsp{
 			Valid:   false,
@@ -48,7 +48,7 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 		}, errors.New("TOTP code is required")
 	}
 	if !isSixDigitTOTPCode(code) {
-		log.Warnz("invalid totp code format", zap.String("user_id", ctx.UserID))
+		log.Warnz("invalid totp code format", zap.String("user_id", ctx.UserID()))
 		return &modelmfa.TOTPVerifyRsp{
 			Valid:   false,
 			Message: "TOTP code must be 6 digits",
@@ -57,7 +57,7 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 
 	devices := make([]*modelmfa.TOTPDevice, 0)
 	query := &modelmfa.TOTPDevice{
-		UserID:   ctx.UserID,
+		UserID:   ctx.UserID(),
 		IsActive: true,
 	}
 
@@ -74,7 +74,7 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 	}
 
 	if len(devices) == 0 {
-		log.Warnz("no active totp devices found", zap.String("user_id", ctx.UserID))
+		log.Warnz("no active totp devices found", zap.String("user_id", ctx.UserID()))
 		return &modelmfa.TOTPVerifyRsp{
 			Valid:   false,
 			Message: "no active TOTP devices found",
@@ -92,7 +92,7 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 
 	if validDevice == nil {
 		log.Warnz("invalid verification code",
-			zap.String("user_id", ctx.UserID))
+			zap.String("user_id", ctx.UserID()))
 		return &modelmfa.TOTPVerifyRsp{
 			Valid:   false,
 			Message: "invalid verification code",
@@ -108,7 +108,7 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 	}
 
 	log.Infoz("totp verification successful",
-		zap.String("user_id", ctx.UserID),
+		zap.String("user_id", ctx.UserID()),
 		zap.String("device_id", validDevice.ID))
 
 	return &modelmfa.TOTPVerifyRsp{

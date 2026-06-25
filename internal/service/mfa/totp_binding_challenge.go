@@ -48,8 +48,8 @@ func currentTOTPBindSessionID(ctx *types.ServiceContext) (string, error) {
 	if ctx == nil {
 		return "", service.NewError(http.StatusUnauthorized, "authentication required")
 	}
-	if strings.TrimSpace(ctx.SessionID) != "" {
-		return strings.TrimSpace(ctx.SessionID), nil
+	if strings.TrimSpace(ctx.SessionID()) != "" {
+		return strings.TrimSpace(ctx.SessionID()), nil
 	}
 	return "", service.NewError(http.StatusUnauthorized, "authentication required")
 }

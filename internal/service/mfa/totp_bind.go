@@ -36,11 +36,11 @@ type TOTPBindService struct {
 func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPBind) (rsp *modelmfa.TOTPBindRsp, err error) {
 	log := t.WithServiceContext(ctx, ctx.GetPhase())
 
-	if len(ctx.UserID) == 0 {
+	if len(ctx.UserID()) == 0 {
 		log.Errorz("user_id not found in context")
 		return nil, service.NewError(http.StatusUnauthorized, "authentication required")
 	}
-	if len(ctx.Username) == 0 {
+	if len(ctx.Username()) == 0 {
 		log.Errorz("username not found in context")
 		return nil, service.NewError(http.StatusUnauthorized, "authentication required")
 	}
@@ -50,11 +50,11 @@ func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPBi
 		return nil, err
 	}
 
-	log.Infoz("generating TOTP for user", zap.String("user_id", ctx.UserID), zap.String("username", ctx.Username))
+	log.Infoz("generating TOTP for user", zap.String("user_id", ctx.UserID()), zap.String("username", ctx.Username()))
 
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      consts.FrameworkName,
-		AccountName: ctx.Username,
+		AccountName: ctx.Username(),
 		SecretSize:  32, // 32 bytes = 256 bits
 	})
 	if err != nil {
@@ -71,9 +71,9 @@ func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPBi
 	}
 
 	challengeID, _, err := issueTOTPBindChallenge(ctx.Context(), totpBindChallenge{
-		UserID:    ctx.UserID,
+		UserID:    ctx.UserID(),
 		SessionID: sessionID,
-		Username:  ctx.Username,
+		Username:  ctx.Username(),
 		Secret:    key.Secret(),
 	})
 	if err != nil {
@@ -86,11 +86,11 @@ func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPBi
 		OtpauthURL:         qrCodeURL,
 		QRCodeImageDataURL: qrCodeImage,
 		Issuer:             consts.FrameworkName,
-		AccountName:        ctx.Username,
+		AccountName:        ctx.Username(),
 	}
 
 	log.Infoz("generated TOTP bind challenge",
-		zap.String("user_id", ctx.UserID),
+		zap.String("user_id", ctx.UserID()),
 		zap.String("challenge_id", challengeID))
 
 	return rsp, nil

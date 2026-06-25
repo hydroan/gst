@@ -9,11 +9,11 @@ import (
 func (s *srv) Get(ctx *types.ServiceContext, req *empty) (rsp, error) {
 	log := s.WithServiceContext(ctx, ctx.GetPhase())
 
-	table := strings.ReplaceAll(ctx.Params["id"], "-", "_")
+	table := strings.ReplaceAll(ctx.Param("id"), "-", "_")
 	columns, ok := tableColumns[table]
 	if !ok {
 		log.Warnw("not register table", "table", table)
 	}
 
-	return new(column).QueryColumns(ctx.Query, table, columns)
+	return new(column).QueryColumns(ctx.Query(), table, columns)
 }

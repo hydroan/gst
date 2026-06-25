@@ -152,7 +152,7 @@ func (s *AdminSessionsGetService) Get(ctx *types.ServiceContext, req *modeliamse
 		return nil, err
 	}
 
-	targetSessionID := ctx.Params["id"]
+	targetSessionID := ctx.Param("id")
 	if targetSessionID == "" {
 		return nil, service.NewError(http.StatusBadRequest, "session id is required")
 	}
@@ -190,7 +190,7 @@ func (s *AdminSessionsDeleteService) Delete(ctx *types.ServiceContext, req *mode
 		return nil, err
 	}
 
-	targetSessionID := ctx.Params["id"]
+	targetSessionID := ctx.Param("id")
 	if targetSessionID == "" {
 		return nil, service.NewError(http.StatusBadRequest, "session id is required")
 	}
