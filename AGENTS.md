@@ -21,7 +21,7 @@
 1. 修改完 `dsl`、`cmd/gg`、`internal/codegen`、 `internal/ggmodule` 包的代码后，需要及时安装最新版本的 `gg` 工具
 2. 优先使用的包: 错误处理使用 `github.com/cockroachdb/errors `而不是 golang 内置的 errors 包.
 3. 开发完后：必须执行 `make check` 确保代码检查能通过。如果没有修改代码，例如只修改了 Makefile、Markdown 等和代码无关的文件则不需要执行 `make check`
-4. 代码修改后需要重新生成 `gst` skill，如果是测试代码变动则不需要。生成 skill 必须在 `make check` 成功之后执行
+4. 代码修改后需要重新生成 `gst` skill，如果是测试代码、examples 代码变动则不需要。生成 skill 必须在 `make check` 成功之后执行。
 
 
 
