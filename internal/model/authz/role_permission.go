@@ -41,7 +41,9 @@ func (r *RolePermission) CreateBefore(context.Context) error {
 
 	// default effect is allow.
 	switch r.Effect {
-	case consts.EffectAllow, consts.EffectDeny:
+	case consts.EffectAllow:
+	case consts.EffectDeny:
+		return errors.New("deny effect is not supported")
 	default:
 		r.Effect = consts.EffectAllow
 	}

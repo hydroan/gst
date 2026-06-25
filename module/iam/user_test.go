@@ -497,14 +497,14 @@ func TestUserSuperuserTargetProtection(t *testing.T) {
 	blockedDisplayName := "blocked-superuser-update"
 	blockedUsername := fmt.Sprintf("user_super_target_create_%d", time.Now().UnixNano())
 	superuserEnabled := true
-	adminActor := userSignupUser(t, "user_super_target_admin", "12345678")
-	adminActor.SessionID = userLoginUser(t, &adminActor, adminActor.Password)
-	adminOriginalUsername := adminActor.Username
-	userSetUsername(t, adminActor.UserID, consts.AUTHZ_USER_ADMIN)
+	spoofedRootActor := userSignupUser(t, "user_super_target_spoofed_root", "12345678")
+	spoofedRootActor.SessionID = userLoginUser(t, &spoofedRootActor, spoofedRootActor.Password)
+	spoofedRootOriginalUsername := spoofedRootActor.Username
+	userSetUsername(t, spoofedRootActor.UserID, consts.AUTHZ_USER_ROOT)
 	t.Cleanup(func() {
-		userSetUsername(t, adminActor.UserID, adminOriginalUsername)
+		userSetUsername(t, spoofedRootActor.UserID, spoofedRootOriginalUsername)
 	})
-	adminCli := userNewClient(t, adminActor.SessionID)
+	spoofedRootCli := userNewClient(t, spoofedRootActor.SessionID)
 
 	t.Run("create_superuser_forbidden", func(t *testing.T) {
 		_, err := cli.Create(iam.User{
@@ -537,57 +537,38 @@ func TestUserSuperuserTargetProtection(t *testing.T) {
 		userRequireForbidden(t, err)
 	})
 
-	t.Run("admin_can_create_superuser", func(t *testing.T) {
-		adminCreatedUsername := fmt.Sprintf("user_super_target_admin_created_%d", time.Now().UnixNano())
-		resp, err := adminCli.Create(iam.User{
-			Username:    adminCreatedUsername,
+	t.Run("root_username_without_root_user_id_cannot_create_superuser", func(t *testing.T) {
+		spoofedRootCreatedUsername := fmt.Sprintf("user_super_target_spoofed_root_created_%d", time.Now().UnixNano())
+		_, err := spoofedRootCli.Create(iam.User{
+			Username:    spoofedRootCreatedUsername,
 			Password:    "example-UserSuperCreate-local-02",
 			IsSuperuser: &superuserEnabled,
 		})
-		require.NoError(t, err)
-		t.Cleanup(func() {
-			userCleanupUser(t, adminCreatedUsername)
-		})
-
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.User) {
-			t.Helper()
-			require.Equal(t, adminCreatedUsername, rsp.Username)
-			require.True(t, rsp.IsSuperuser != nil && *rsp.IsSuperuser)
-		})
+		userRequireForbidden(t, err)
+		userRequireMissingByUsername(t, spoofedRootCreatedUsername)
 	})
 
-	t.Run("admin_can_get_superuser", func(t *testing.T) {
-		got := new(iam.User)
-		resp, err := adminCli.Get(victim.UserID, got)
-		require.NoError(t, err)
-		require.Equal(t, testSuccessCode, resp.Code)
-		require.Equal(t, victim.UserID, got.ID)
-		require.True(t, got.IsSuperuser != nil && *got.IsSuperuser)
+	t.Run("root_username_without_root_user_id_cannot_get_superuser", func(t *testing.T) {
+		_, err := spoofedRootCli.Get(victim.UserID, new(iam.User))
+		userRequireForbidden(t, err)
 	})
 
-	t.Run("admin_can_patch_superuser", func(t *testing.T) {
-		adminPatchedDisplayName := "admin-updated-superuser"
-		resp, err := adminCli.Patch(victim.UserID, modeliamuser.UserPatchReq{
-			DisplayName: &adminPatchedDisplayName,
+	t.Run("root_username_without_root_user_id_cannot_patch_superuser", func(t *testing.T) {
+		spoofedRootPatchedDisplayName := "spoofed-root-updated-superuser"
+		_, err := spoofedRootCli.Patch(victim.UserID, modeliamuser.UserPatchReq{
+			DisplayName: &spoofedRootPatchedDisplayName,
 		})
-		require.NoError(t, err)
-		require.Equal(t, testSuccessCode, resp.Code)
-
-		got := userLoadByID(t, victim.UserID)
-		require.NotNil(t, got.DisplayName)
-		require.Equal(t, adminPatchedDisplayName, *got.DisplayName)
+		userRequireForbidden(t, err)
 	})
 
-	t.Run("admin_can_delete_many_superuser", func(t *testing.T) {
-		adminDeleteVictim := userSignupUser(t, "user_super_target_delete_many", "example-UserSuper-local-02")
-		adminDeleteVictim.SessionID = userLoginUser(t, &adminDeleteVictim, adminDeleteVictim.Password)
-		userSetSuperuser(t, adminDeleteVictim.Username, true)
+	t.Run("root_username_without_root_user_id_cannot_delete_many_superuser", func(t *testing.T) {
+		spoofedRootDeleteVictim := userSignupUser(t, "user_super_target_delete_many", "example-UserSuper-local-02")
+		spoofedRootDeleteVictim.SessionID = userLoginUser(t, &spoofedRootDeleteVictim, spoofedRootDeleteVictim.Password)
+		userSetSuperuser(t, spoofedRootDeleteVictim.Username, true)
 
-		resp, err := adminCli.DeleteMany([]string{adminDeleteVictim.UserID})
-		require.NoError(t, err)
-		require.Equal(t, testSuccessCode, resp.Code)
-		userRequireDeleted(t, adminDeleteVictim.Username)
-		userRequireSessionNotFound(t, adminDeleteVictim.SessionID)
+		_, err := spoofedRootCli.DeleteMany([]string{spoofedRootDeleteVictim.UserID})
+		userRequireForbidden(t, err)
+		require.NotEmpty(t, userLoadByID(t, spoofedRootDeleteVictim.UserID).ID)
 	})
 }
 

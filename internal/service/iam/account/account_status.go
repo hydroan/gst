@@ -28,13 +28,13 @@ func (s *AccountStatusService) Create(ctx *types.ServiceContext, req *modeliamac
 		return nil, errors.New("invalid status: must be active, inactive, or locked")
 	}
 
-	actorUsername, actor, target, err := loadPrivilegedActorAndTarget(ctx, req.UserID)
+	actor, target, err := loadPrivilegedActorAndTarget(ctx, req.UserID)
 	if err != nil {
 		log.Error("failed to resolve actor or target user", err)
 		return nil, err
 	}
 
-	if err = mayManageProtectedUser(actorUsername, actor, target); err != nil {
+	if err = mayManageProtectedUser(actor, target); err != nil {
 		log.Error("account status change denied", err)
 		return nil, err
 	}
@@ -60,6 +60,6 @@ func (s *AccountStatusService) Create(ctx *types.ServiceContext, req *modeliamac
 		serviceiamsession.InvalidateUserSessions(ctx, req.UserID)
 	}
 
-	log.Info("account status updated", "target_user_id", req.UserID, "status", req.Status, "actor", actorUsername)
+	log.Info("account status updated", "target_user_id", req.UserID, "status", req.Status, "actor_user_id", actor.GetID(), "actor_username", actor.Username)
 	return &modeliamaccount.AccountStatusRsp{Msg: "account status updated successfully"}, nil
 }

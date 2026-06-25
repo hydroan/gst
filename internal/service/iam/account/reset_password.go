@@ -20,13 +20,13 @@ func (s *ResetPasswordService) Create(ctx *types.ServiceContext, req *modeliamac
 	log := s.WithContext(ctx, ctx.Phase())
 	log.Info("resetpassword create")
 
-	actorUsername, actor, target, err := loadPrivilegedActorAndTarget(ctx, req.UserID)
+	actor, target, err := loadPrivilegedActorAndTarget(ctx, req.UserID)
 	if err != nil {
 		log.Error("failed to resolve actor or target user", err)
 		return nil, err
 	}
 
-	if err = mayManageProtectedUser(actorUsername, actor, target); err != nil {
+	if err = mayManageProtectedUser(actor, target); err != nil {
 		log.Error("reset password denied", err)
 		return nil, err
 	}
@@ -49,6 +49,6 @@ func (s *ResetPasswordService) Create(ctx *types.ServiceContext, req *modeliamac
 
 	serviceiamsession.InvalidateUserSessions(ctx, req.UserID)
 
-	log.Info("password reset successfully", "target_user_id", req.UserID, "actor", actorUsername)
+	log.Info("password reset successfully", "target_user_id", req.UserID, "actor_user_id", actor.GetID(), "actor_username", actor.Username)
 	return &modeliamaccount.ResetPasswordRsp{Msg: "password reset successfully"}, nil
 }

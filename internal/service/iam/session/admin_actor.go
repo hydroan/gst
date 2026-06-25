@@ -22,7 +22,7 @@ func ensureAdminSessionActor(ctx *types.ServiceContext) error {
 		return service.NewError(http.StatusUnauthorized, "session invalid")
 	}
 
-	if session.Username == consts.AUTHZ_USER_ROOT || session.Username == consts.AUTHZ_USER_ADMIN {
+	if session.UserID == consts.AUTHZ_USER_ROOT {
 		return nil
 	}
 	if user.IsSuperuser != nil && *user.IsSuperuser {

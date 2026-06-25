@@ -10,6 +10,7 @@ import (
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/types/consts"
 	"github.com/samber/lo"
 )
 
@@ -22,8 +23,8 @@ func (m *MenuService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.M
 }
 
 func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauthz.Menu, log types.Logger) error {
-	// If Username is "root" or "admin", return directly
-	if ctx.Username() == "root" || ctx.Username() == "admin" {
+	// The built-in root account is identified by the stable user ID.
+	if ctx.UserID() == consts.AUTHZ_USER_ROOT {
 		return nil
 	}
 

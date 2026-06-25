@@ -23,22 +23,22 @@ type UserPatchService struct {
 }
 
 func (UserService) CreateBefore(ctx *types.ServiceContext, req *modeliamuser.User) error {
-	actorUsername, actor, err := userResourceActor(ctx)
+	actorID, actor, err := userResourceActor(ctx)
 	if err != nil {
 		return err
 	}
-	if err = ensureUserModuleSuperuser(actorUsername, actor); err != nil {
+	if err = ensureUserModuleSuperuser(actorID, actor); err != nil {
 		return err
 	}
-	return ensureUserCreateAllowed(actorUsername, req)
+	return ensureUserCreateAllowed(actorID, req)
 }
 
 func (UserService) ListBefore(ctx *types.ServiceContext, _ *[]*modeliamuser.User) error {
-	actorUsername, actor, err := userResourceActor(ctx)
+	actorID, actor, err := userResourceActor(ctx)
 	if err != nil {
 		return err
 	}
-	return ensureUserModuleSuperuser(actorUsername, actor)
+	return ensureUserModuleSuperuser(actorID, actor)
 }
 
 func (UserService) GetBefore(ctx *types.ServiceContext, req *modeliamuser.User) error {
@@ -46,26 +46,26 @@ func (UserService) GetBefore(ctx *types.ServiceContext, req *modeliamuser.User) 
 }
 
 func (UserService) DeleteBefore(ctx *types.ServiceContext, req *modeliamuser.User) error {
-	actorUsername, actor, err := userResourceActor(ctx)
+	actorID, actor, err := userResourceActor(ctx)
 	if err != nil {
 		return err
 	}
-	if err = ensureUserModuleSuperuser(actorUsername, actor); err != nil {
+	if err = ensureUserModuleSuperuser(actorID, actor); err != nil {
 		return err
 	}
-	return ensureExistingUserTargetAllowed(ctx, actorUsername, req)
+	return ensureExistingUserTargetAllowed(ctx, actorID, req)
 }
 
 func (UserService) DeleteManyBefore(ctx *types.ServiceContext, users ...*modeliamuser.User) error {
-	actorUsername, actor, err := userResourceActor(ctx)
+	actorID, actor, err := userResourceActor(ctx)
 	if err != nil {
 		return err
 	}
-	if err = ensureUserModuleSuperuser(actorUsername, actor); err != nil {
+	if err = ensureUserModuleSuperuser(actorID, actor); err != nil {
 		return err
 	}
 	for _, user := range users {
-		if err = ensureExistingUserTargetAllowed(ctx, actorUsername, user); err != nil {
+		if err = ensureExistingUserTargetAllowed(ctx, actorID, user); err != nil {
 			return err
 		}
 	}
@@ -83,15 +83,15 @@ func (UserService) DeleteAfter(ctx *types.ServiceContext, u *modeliamuser.User) 
 }
 
 func (UserService) CreateManyBefore(ctx *types.ServiceContext, users ...*modeliamuser.User) error {
-	actorUsername, actor, err := userResourceActor(ctx)
+	actorID, actor, err := userResourceActor(ctx)
 	if err != nil {
 		return err
 	}
-	if err = ensureUserModuleSuperuser(actorUsername, actor); err != nil {
+	if err = ensureUserModuleSuperuser(actorID, actor); err != nil {
 		return err
 	}
 	for _, user := range users {
-		if err = ensureUserCreateAllowed(actorUsername, user); err != nil {
+		if err = ensureUserCreateAllowed(actorID, user); err != nil {
 			return err
 		}
 	}
@@ -111,11 +111,11 @@ func (UserService) DeleteManyAfter(ctx *types.ServiceContext, users ...*modeliam
 
 // Patch updates only allow-listed user profile fields.
 func (UserPatchService) Patch(ctx *types.ServiceContext, req *modeliamuser.UserPatchReq) (*modeliamuser.User, error) {
-	actorUsername, actor, err := userResourceActor(ctx)
+	actorID, actor, err := userResourceActor(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err = ensureUserModuleSuperuser(actorUsername, actor); err != nil {
+	if err = ensureUserModuleSuperuser(actorID, actor); err != nil {
 		return nil, err
 	}
 
@@ -135,7 +135,7 @@ func (UserPatchService) Patch(ctx *types.ServiceContext, req *modeliamuser.UserP
 	if target.ID == "" {
 		return nil, service.NewError(http.StatusNotFound, "user not found")
 	}
-	if target.IsSuperuser != nil && *target.IsSuperuser && !isRootOrAdmin(actorUsername) {
+	if target.IsSuperuser != nil && *target.IsSuperuser && !isRootUserID(actorID) {
 		return nil, userSuperuserTargetForbidden()
 	}
 
@@ -200,11 +200,11 @@ func userResourceActor(ctx *types.ServiceContext) (string, *modeliamuser.User, e
 	if actor.ID == "" {
 		return "", nil, service.NewError(http.StatusUnauthorized, "current user not found")
 	}
-	return actor.Username, actor, nil
+	return actor.GetID(), actor, nil
 }
 
-func ensureUserModuleSuperuser(actorUsername string, actor *modeliamuser.User) error {
-	if isRootOrAdmin(actorUsername) {
+func ensureUserModuleSuperuser(actorID string, actor *modeliamuser.User) error {
+	if isRootUserID(actorID) {
 		return nil
 	}
 	if actor != nil && actor.IsSuperuser != nil && *actor.IsSuperuser {
@@ -214,24 +214,24 @@ func ensureUserModuleSuperuser(actorUsername string, actor *modeliamuser.User) e
 }
 
 func ensureUserTargetAccessible(ctx *types.ServiceContext, req *modeliamuser.User) error {
-	actorUsername, actor, err := userResourceActor(ctx)
+	actorID, actor, err := userResourceActor(ctx)
 	if err != nil {
 		return err
 	}
-	if err = ensureUserModuleSuperuser(actorUsername, actor); err != nil {
+	if err = ensureUserModuleSuperuser(actorID, actor); err != nil {
 		return err
 	}
-	return ensureExistingUserTargetAllowed(ctx, actorUsername, req)
+	return ensureExistingUserTargetAllowed(ctx, actorID, req)
 }
 
-func ensureUserCreateAllowed(actorUsername string, req *modeliamuser.User) error {
-	if req != nil && req.IsSuperuser != nil && *req.IsSuperuser && !isRootOrAdmin(actorUsername) {
+func ensureUserCreateAllowed(actorID string, req *modeliamuser.User) error {
+	if req != nil && req.IsSuperuser != nil && *req.IsSuperuser && !isRootUserID(actorID) {
 		return userSuperuserTargetForbidden()
 	}
 	return nil
 }
 
-func ensureExistingUserTargetAllowed(ctx *types.ServiceContext, actorUsername string, req *modeliamuser.User) error {
+func ensureExistingUserTargetAllowed(ctx *types.ServiceContext, actorID string, req *modeliamuser.User) error {
 	if req == nil || req.GetID() == "" {
 		return service.NewError(http.StatusBadRequest, "user id is required")
 	}
@@ -242,7 +242,7 @@ func ensureExistingUserTargetAllowed(ctx *types.ServiceContext, actorUsername st
 	if target.ID == "" {
 		return service.NewError(http.StatusNotFound, "user not found")
 	}
-	if target.IsSuperuser != nil && *target.IsSuperuser && !isRootOrAdmin(actorUsername) {
+	if target.IsSuperuser != nil && *target.IsSuperuser && !isRootUserID(actorID) {
 		return userSuperuserTargetForbidden()
 	}
 	return nil
@@ -252,6 +252,6 @@ func userSuperuserTargetForbidden() error {
 	return service.NewError(http.StatusForbidden, "superuser is protected")
 }
 
-func isRootOrAdmin(username string) bool {
-	return username == consts.AUTHZ_USER_ROOT || username == consts.AUTHZ_USER_ADMIN
+func isRootUserID(userID string) bool {
+	return userID == consts.AUTHZ_USER_ROOT
 }

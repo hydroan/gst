@@ -17,6 +17,7 @@ import (
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 )
 
@@ -299,6 +300,27 @@ func TestSessionList(t *testing.T) {
 
 func TestAdminSessionList(t *testing.T) {
 	setupSessionRedisCleanup(t)
+
+	t.Run("root_username_without_root_user_id_forbidden", func(t *testing.T) {
+		account := newSessionTestAccount(t)
+		originalUsername := account.Username
+		userSetUsername(t, account.UserID, consts.AUTHZ_USER_ROOT)
+		t.Cleanup(func() {
+			userSetUsername(t, account.UserID, originalUsername)
+		})
+		sessionID := loginSession(t, consts.AUTHZ_USER_ROOT, account.Password)
+
+		cli, err := client.New(adminSessionsAPI, client.WithCookie(&http.Cookie{
+			Name:  "session_id",
+			Value: sessionID,
+		}))
+		require.NoError(t, err)
+
+		items := make([]iam.AdminSessionUserView, 0)
+		total := new(int64)
+		_, err = cli.List(&items, total)
+		userRequireForbidden(t, err)
+	})
 
 	t.Run("list_all_sessions_grouped_by_user", func(t *testing.T) {
 		adminAccount := newSessionTestAccount(t)

@@ -1,10 +1,8 @@
 package basic
 
 import (
-	"os"
-	"path/filepath"
-
 	"github.com/casbin/casbin/v3"
+	casbinmodel "github.com/casbin/casbin/v3/model"
 	gormadapter "github.com/casbin/gorm-adapter/v3"
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/authz/rbac"
@@ -17,14 +15,13 @@ import (
 
 var defaultAdmins = []string{
 	consts.AUTHZ_USER_ROOT,
-	consts.AUTHZ_USER_ADMIN,
 }
 
 var defaultAdminRole = consts.AUTHZ_ROLE_ADMIN
 
-// addGroupingPolicy adds a user-role relationship while skipping self-referential
-// entries such as admin -> admin. Casbin v3.10 rejects these self loops as role
-// hierarchy cycles, and they do not provide any additional authorization value.
+// addGroupingPolicy adds a user-role relationship while skipping self-referential entries.
+// Casbin treats identical subject and role names as a link, but gst keeps users and
+// roles distinct so role names cannot grant permissions to same-named subjects.
 func addGroupingPolicy(enforcer *casbin.Enforcer, subject string, role string) error {
 	if subject == role {
 		return nil
@@ -46,7 +43,7 @@ r = sub, obj, act
 # sub: policy subject (typically a role name, e.g., "editor")
 # obj: policy object (resource template, e.g., /api/users/{id})
 # act: policy action (HTTP method)
-# eft: effect ("allow" or "deny")
+# eft: effect ("allow")
 p = sub, obj, act, eft
 
 [role_definition]
@@ -56,20 +53,18 @@ g = _, _
 
 [policy_effect]
 # Effect aggregator: allow if any matched policy’s eft is "allow".
-# With this, explicit "deny" does not override an existing allow.
-# Alternative examples (commented):
-# - priority-based: e = priority(p_eft) || some(where (p_eft == allow))
-# - deny-precedence: e = some(where (p_eft == deny)) == false && some(where (p_eft == allow))
 e = some(where (p.eft == allow))
 
 [matchers]
 # Matcher logic:
 # 1) Admin bypass: if subject belongs to "admin", allow
 # 2) Otherwise: require role match AND path match AND method match
+# 3) Subjects must not equal role names, preventing Casbin's self-match behavior
+#    from turning a username or user id like "admin" into the admin role.
 #    - g(r.sub, p.sub): subject belongs to policy role
 #    - keyMatch3(r.obj, p.obj): REST path template matches (e.g., /api/users/{id})
 #    - r.act == p.act: HTTP method equals
-m = g(r.sub, "admin") || (g(r.sub, p.sub) && keyMatch3(r.obj, p.obj) && r.act == p.act)
+m = (r.sub != "admin" && g(r.sub, "admin")) || (r.sub != p.sub && g(r.sub, p.sub) && keyMatch3(r.obj, p.obj) && r.act == p.act)
 `)
 
 func Init() (err error) {
@@ -77,22 +72,20 @@ func Init() (err error) {
 		return nil
 	}
 
-	filename := filepath.Join(config.Tempdir(), "casbin_model.conf")
-	if err = os.WriteFile(filename, modelData, 0o600); err != nil {
-		return errors.Wrapf(err, "failed to write model file %s", filename)
-	}
 	// NOTE: gormadapter.NewAdapterByDBWithCustomTable creates the Casbin policy table with an auto-incrementing primary key.
 	if rbac.Adapter, err = gormadapter.NewAdapterByDBWithCustomTable(database.DB(), new(modelauthz.CasbinRule)); err != nil {
 		return errors.Wrap(err, "failed to create casbin adapter")
 	}
-	if rbac.Enforcer, err = casbin.NewEnforcer(filename, rbac.Adapter); err != nil {
+	model, err := casbinmodel.NewModelFromString(string(modelData))
+	if err != nil {
+		return errors.Wrap(err, "failed to create casbin model")
+	}
+	if rbac.Enforcer, err = casbin.NewEnforcer(model, rbac.Adapter); err != nil {
 		return errors.Wrap(err, "failed to create casbin enforcer")
 	}
 
 	rbac.Enforcer.SetLogger(logger.Casbin)
 	rbac.Enforcer.EnableAutoSave(true)
-	rbac.Enforcer.EnableAutoNotifyDispatcher(true)
-	rbac.Enforcer.EnableAutoNotifyWatcher(true)
 	rbac.Enforcer.EnableEnforce(true)
 
 	for _, user := range defaultAdmins {
@@ -104,5 +97,5 @@ func Init() (err error) {
 		return errors.Wrap(err, "failed to add blocked grouping policy")
 	}
 
-	return rbac.Enforcer.LoadPolicy()
+	return nil
 }
