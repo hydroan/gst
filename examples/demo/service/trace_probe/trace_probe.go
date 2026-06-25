@@ -10,6 +10,23 @@ import (
 	"go.uber.org/zap"
 )
 
+// TraceProbe service
+//
+//	curl -s -i -c ./cookies.txt \
+//	  -X POST http://localhost:8090/api/login \
+//	  -H 'Content-Type: application/json' \
+//	  -d '{"username":"root","password":"toor"}'
+//
+//	curl -s -i -b ./cookies.txt \
+//	  -X POST http://localhost:8090/api/trace-probes \
+//	  -H 'Content-Type: application/json' \
+//	  -d '{"name":"trace-probe-codex","note":"standard-crud-context"}'
+//
+//	curl -s -i -b ./demo-cookies.txt \
+//	  'http://localhost:8090/api/trace-probes?name=trace-probe-codex'
+//
+//	curl -s -i -b ./cookies.txt \
+//	  http://localhost:8090/api/trace-probes/019efee7-76e5-7520-a405-9d4c7bead437
 type TraceProbe struct {
 	service.Base[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe]
 }
