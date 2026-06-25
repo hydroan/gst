@@ -217,7 +217,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 		// Get first record's created_at as cursor
 		// Format time to match database format (YYYY-MM-DD HH:MM:SS.ffffff)
 		firstUser := users[0]
-		require.NotNil(t, firstUser.CreatedAt, "first user should have created_at")
+		require.False(t, firstUser.CreatedAt.IsZero(), "first user should have created_at")
 		cursorValue := firstUser.CreatedAt.Format("2006-01-02 15:04:05.000000")
 
 		// Fetch next page using created_at as cursor field
@@ -228,9 +228,9 @@ func TestDatabaseWithCursor(t *testing.T) {
 			List(&nextUsers))
 		if len(nextUsers) > 0 {
 			require.NotEqual(t, firstUser.ID, nextUsers[0].ID, "should fetch different record when available")
-			require.NotNil(t, nextUsers[0].CreatedAt, "next user should have created_at")
-			require.True(t, nextUsers[0].CreatedAt.After(*firstUser.CreatedAt) ||
-				nextUsers[0].CreatedAt.Equal(*firstUser.CreatedAt),
+			require.False(t, nextUsers[0].CreatedAt.IsZero(), "next user should have created_at")
+			require.True(t, nextUsers[0].CreatedAt.After(firstUser.CreatedAt) ||
+				nextUsers[0].CreatedAt.Equal(firstUser.CreatedAt),
 				"next record should have created_at >= cursor value")
 		}
 	})

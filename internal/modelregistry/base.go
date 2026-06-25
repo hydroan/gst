@@ -26,8 +26,8 @@ type Base struct {
 
 	CreatedBy string         `json:"created_by,omitempty" gorm:"size:191;index" schema:"created_by" url:"-"` // User ID who created the record
 	UpdatedBy string         `json:"updated_by,omitempty" gorm:"size:191;index" schema:"updated_by" url:"-"` // User ID who last updated the record
-	CreatedAt *time.Time     `json:"created_at,omitempty" gorm:"index" schema:"-" url:"-"`                   // Timestamp when the record was created
-	UpdatedAt *time.Time     `json:"updated_at,omitempty" gorm:"index" schema:"-" url:"-"`                   // Timestamp when the record was last updated
+	CreatedAt time.Time      `json:"created_at,omitzero" gorm:"index" schema:"-" url:"-"`                    // Timestamp when the record was created
+	UpdatedAt time.Time      `json:"updated_at,omitzero" gorm:"index" schema:"-" url:"-"`                    // Timestamp when the record was last updated
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index" schema:"-" url:"-"`                                      // Timestamp when the record was deleted
 
 	// Query parameter
@@ -54,12 +54,12 @@ type Base struct {
 func (b *Base) GetTableName() string       { return "" }
 func (b *Base) GetCreatedBy() string       { return b.CreatedBy }
 func (b *Base) GetUpdatedBy() string       { return b.UpdatedBy }
-func (b *Base) GetCreatedAt() time.Time    { return util.Deref(b.CreatedAt) }
-func (b *Base) GetUpdatedAt() time.Time    { return util.Deref(b.UpdatedAt) }
+func (b *Base) GetCreatedAt() time.Time    { return b.CreatedAt }
+func (b *Base) GetUpdatedAt() time.Time    { return b.UpdatedAt }
 func (b *Base) SetCreatedBy(s string)      { b.CreatedBy = s }
 func (b *Base) SetUpdatedBy(s string)      { b.UpdatedBy = s }
-func (b *Base) SetCreatedAt(t time.Time)   { b.CreatedAt = &t }
-func (b *Base) SetUpdatedAt(t time.Time)   { b.UpdatedAt = &t }
+func (b *Base) SetCreatedAt(t time.Time)   { b.CreatedAt = t }
+func (b *Base) SetUpdatedAt(t time.Time)   { b.UpdatedAt = t }
 func (b *Base) GetID() string              { return b.ID }
 func (b *Base) SetID(id ...string)         { setID(b, id...) }
 func (b *Base) ClearID()                   { clearID(b) }

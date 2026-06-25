@@ -488,8 +488,8 @@ func TestDatabaseWithDryRun(t *testing.T) {
 		dryRunUser := &TestUser{Name: "dry-run-create", Email: "dry-run-create@example.com"}
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithDryRun().Create(dryRunUser))
 		require.Empty(t, dryRunUser.ID, "Create should not set ID in dry-run mode")
-		require.Nil(t, dryRunUser.CreatedAt, "Create should not set created_at in dry-run mode")
-		require.Nil(t, dryRunUser.UpdatedAt, "Create should not set updated_at in dry-run mode")
+		require.True(t, dryRunUser.CreatedAt.IsZero(), "Create should not set created_at in dry-run mode")
+		require.True(t, dryRunUser.UpdatedAt.IsZero(), "Create should not set updated_at in dry-run mode")
 		require.Nil(t, dryRunUser.Remark, "Create should not run model hooks in dry-run mode")
 	})
 
@@ -530,8 +530,8 @@ func TestDatabaseWithDryRun(t *testing.T) {
 		dryRunUser := &TestUser{Name: "dry-run-update", Email: "dry-run-update@example.com"}
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithDryRun().Update(dryRunUser))
 		require.Empty(t, dryRunUser.ID, "Update should not set ID in dry-run mode")
-		require.Nil(t, dryRunUser.CreatedAt, "Update should not set created_at in dry-run mode")
-		require.Nil(t, dryRunUser.UpdatedAt, "Update should not set updated_at in dry-run mode")
+		require.True(t, dryRunUser.CreatedAt.IsZero(), "Update should not set created_at in dry-run mode")
+		require.True(t, dryRunUser.UpdatedAt.IsZero(), "Update should not set updated_at in dry-run mode")
 		require.Nil(t, dryRunUser.Remark, "Update should not run model hooks in dry-run mode")
 	})
 
@@ -729,8 +729,8 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 		require.Contains(t, stmts[0].Args, user.Name)
 		require.Contains(t, stmts[0].RenderedSQL, user.Name)
 		require.Empty(t, user.ID, "WithBuildSQL should not fill model IDs")
-		require.Nil(t, user.CreatedAt, "WithBuildSQL should not fill created_at")
-		require.Nil(t, user.UpdatedAt, "WithBuildSQL should not fill updated_at")
+		require.True(t, user.CreatedAt.IsZero(), "WithBuildSQL should not fill created_at")
+		require.True(t, user.UpdatedAt.IsZero(), "WithBuildSQL should not fill updated_at")
 		require.Nil(t, user.Remark, "WithBuildSQL should not run model hooks")
 
 		users := make([]*TestUser, 0)
@@ -828,8 +828,8 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 		require.Contains(t, stmts[0].Args, user.Name)
 		require.Contains(t, stmts[0].RenderedSQL, user.Name)
 		require.Empty(t, user.ID, "WithBuildSQL should not fill model IDs")
-		require.Nil(t, user.CreatedAt, "WithBuildSQL should not fill created_at")
-		require.Nil(t, user.UpdatedAt, "WithBuildSQL should not fill updated_at")
+		require.True(t, user.CreatedAt.IsZero(), "WithBuildSQL should not fill created_at")
+		require.True(t, user.UpdatedAt.IsZero(), "WithBuildSQL should not fill updated_at")
 		require.Nil(t, user.Remark, "WithBuildSQL should not run model hooks")
 
 		gotList, err := listCache.Get("build-sql-list-cache")
