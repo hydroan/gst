@@ -40,19 +40,19 @@ type user struct {
 }
 
 func (u *user) Create(ctx *types.ServiceContext, req model.UserReq) (rsp model.UserRsp, err error) {
-	log := u.WithContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create")
 	return rsp, nil
 }
 
 func (u *user) CreateBefore(ctx *types.ServiceContext, user *model.User) error {
-	log := u.WithContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create before")
 	return nil
 }
 
 func (u *user) CreateAfter(ctx *types.ServiceContext, user *model.User) error {
-	log := u.WithContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create after")
 	return nil
 }
@@ -81,19 +81,19 @@ type user struct {
 }
 
 func (u *user) Create(ctx *types.ServiceContext, req model.User) (rsp model.User, err error) {
-	log := u.WithContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create")
 	return rsp, nil
 }
 
 func (u *user) CreateBefore(ctx *types.ServiceContext, user *model.User) error {
-	log := u.WithContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create before")
 	return nil
 }
 
 func (u *user) CreateAfter(ctx *types.ServiceContext, user *model.User) error {
-	log := u.WithContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create after")
 	return nil
 }
@@ -158,19 +158,19 @@ type Creator struct {
 }
 
 func (c *Creator) Create(ctx *types.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
-	log := c.WithContext(ctx, ctx.GetPhase())
+	log := c.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create")
 	return rsp, nil
 }
 
 func (c *Creator) CreateBefore(ctx *types.ServiceContext, attachment *shared.Attachment) error {
-	log := c.WithContext(ctx, ctx.GetPhase())
+	log := c.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create before")
 	return nil
 }
 
 func (c *Creator) CreateAfter(ctx *types.ServiceContext, attachment *shared.Attachment) error {
-	log := c.WithContext(ctx, ctx.GetPhase())
+	log := c.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create after")
 	return nil
 }
@@ -196,19 +196,19 @@ type Upload struct {
 }
 
 func (u *Upload) Create(ctx *types.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
-	log := u.WithContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create")
 	return rsp, nil
 }
 
 func (u *Upload) CreateBefore(ctx *types.ServiceContext, attachment *shared.Attachment) error {
-	log := u.WithContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create before")
 	return nil
 }
 
 func (u *Upload) CreateAfter(ctx *types.ServiceContext, attachment *shared.Attachment) error {
-	log := u.WithContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create after")
 	return nil
 }
@@ -230,7 +230,7 @@ type Creator struct {
 }
 
 func (c *Creator) Create(ctx *types.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
-	log := c.WithContext(ctx, ctx.GetPhase())
+	log := c.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create")
 	return rsp, nil
 }
@@ -256,7 +256,7 @@ type Upload struct {
 }
 
 func (u *Upload) Create(ctx *types.ServiceContext, req *shared.AttachmentReq) (rsp *shared.AttachmentRsp, err error) {
-	log := u.WithContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create")
 	return rsp, nil
 }
@@ -278,7 +278,7 @@ type Creator struct {
 }
 
 func (c *Creator) Create(ctx *types.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
-	log := c.WithContext(ctx, ctx.GetPhase())
+	log := c.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create")
 	return rsp, nil
 }
@@ -303,7 +303,7 @@ type Creator struct {
 }
 
 func (c *Creator) Create(ctx *types.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
-	log := c.WithContext(ctx, ctx.GetPhase())
+	log := c.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create")
 	return rsp, nil
 }
@@ -325,7 +325,7 @@ type Upload struct {
 }
 
 func (u *Upload) Create(ctx *types.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
-	log := u.WithContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create")
 	return rsp, nil
 }
@@ -351,7 +351,7 @@ type Upload struct {
 }
 
 func (u *Upload) Create(ctx *types.ServiceContext, req *shared.Attachment) (rsp *shared.Attachment, err error) {
-	log := u.WithContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create")
 	return rsp, nil
 }
@@ -373,19 +373,19 @@ type Upload struct {
 }
 
 func (a *Upload) Create(ctx *types.ServiceContext, req *shared.AttachmentReq) (rsp *shared.AttachmentRsp, err error) {
-	log := a.WithContext(ctx, ctx.GetPhase())
+	log := a.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create")
 	return rsp, nil
 }
 
 func (a *Upload) CreateBefore(ctx *types.ServiceContext, attachment *shared.Attachment) error {
-	log := a.WithContext(ctx, ctx.GetPhase())
+	log := a.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create before")
 	return nil
 }
 
 func (a *Upload) CreateAfter(ctx *types.ServiceContext, attachment *shared.Attachment) error {
-	log := a.WithContext(ctx, ctx.GetPhase())
+	log := a.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create after")
 	return nil
 }
@@ -411,19 +411,19 @@ type Upload struct {
 }
 
 func (u *Upload) Create(ctx *types.ServiceContext, req *shared.AttachmentReq) (rsp *shared.AttachmentRsp, err error) {
-	log := u.WithContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create")
 	return rsp, nil
 }
 
 func (u *Upload) CreateBefore(ctx *types.ServiceContext, attachment *shared.Attachment) error {
-	log := u.WithContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create before")
 	return nil
 }
 
 func (u *Upload) CreateAfter(ctx *types.ServiceContext, attachment *shared.Attachment) error {
-	log := u.WithContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("attachment create after")
 	return nil
 }
@@ -520,7 +520,7 @@ type Creator struct {
 }
 
 func (u *Creator) Create(ctx *types.ServiceContext, req *identity.UserReq) (rsp *identity.UserRsp, err error) {
-	log := u.WithContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.Phase())
 	return rsp, nil
 }
 `,
@@ -546,7 +546,7 @@ type Creator struct {
 }
 
 func (u *Creator) Create(ctx *types.ServiceContext, req *auth.UserReq) (rsp *auth.UserRsp, err error) {
-	log := u.WithContext(ctx, ctx.GetPhase())
+	log := u.WithContext(ctx, ctx.Phase())
 	return rsp, nil
 }
 `,

@@ -17,7 +17,7 @@ type ResetPasswordService struct {
 }
 
 func (s *ResetPasswordService) Create(ctx *types.ServiceContext, req *modeliamaccount.ResetPasswordReq) (rsp *modeliamaccount.ResetPasswordRsp, err error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 	log.Info("resetpassword create")
 
 	actorUsername, actor, target, err := loadPrivilegedActorAndTarget(ctx, req.UserID)

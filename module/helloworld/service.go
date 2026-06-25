@@ -7,7 +7,7 @@ import (
 var counter = 0
 
 func (s *Service) Create(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("helloworld module create")
 	defer func() {
@@ -21,7 +21,7 @@ func (s *Service) Create(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
 }
 
 func (s *Service) Delete(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("helloworld module delete")
 	defer func() {
@@ -35,7 +35,7 @@ func (s *Service) Delete(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
 }
 
 func (s *Service) Update(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("helloworld module update")
 	counter = req.Field2
@@ -47,7 +47,7 @@ func (s *Service) Update(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
 }
 
 func (s *Service) Patch(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("helloworld module patch")
 	counter = req.Field2
@@ -59,7 +59,7 @@ func (s *Service) Patch(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
 }
 
 func (s *Service) List(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("helloworld module list")
 
@@ -70,7 +70,7 @@ func (s *Service) List(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
 }
 
 func (s *Service) Get(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("helloworld module get")
 
@@ -81,7 +81,7 @@ func (s *Service) Get(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
 }
 
 func (s *Service) CreateMany(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("helloworld module many creator")
 	counter = counter + req.Field2*req.Field2
@@ -93,7 +93,7 @@ func (s *Service) CreateMany(ctx *types.ServiceContext, req *Req) (*Rsp, error) 
 }
 
 func (s *Service) DeleteMany(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("helloworld module many deleter")
 	counter = counter - req.Field2*req.Field2
@@ -105,7 +105,7 @@ func (s *Service) DeleteMany(ctx *types.ServiceContext, req *Req) (*Rsp, error) 
 }
 
 func (s *Service) UpdateMany(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("helloworld module many updater")
 	counter = req.Field2
@@ -117,7 +117,7 @@ func (s *Service) UpdateMany(ctx *types.ServiceContext, req *Req) (*Rsp, error) 
 }
 
 func (s *Service) PatchMany(ctx *types.ServiceContext, req *Req) (*Rsp, error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("helloworld module many patcher")
 	counter = req.Field2

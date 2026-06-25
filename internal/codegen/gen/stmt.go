@@ -39,7 +39,7 @@ func Returns(exprs ...ast.Expr) *ast.ReturnStmt {
 	}
 }
 
-// StmtLogWithContext create *ast.AssignStmt represents `log := u.WithContext(ctx, ctx.GetPhase())`
+// StmtLogWithContext create *ast.AssignStmt represents `log := u.WithContext(ctx, ctx.Phase())`
 // modelVarName is model variable name.
 func StmtLogWithContext(modelVarName string) *ast.AssignStmt {
 	return &ast.AssignStmt{
@@ -58,7 +58,7 @@ func StmtLogWithContext(modelVarName string) *ast.AssignStmt {
 					&ast.CallExpr{
 						Fun: &ast.SelectorExpr{
 							X:   ast.NewIdent("ctx"),
-							Sel: ast.NewIdent("GetPhase"),
+							Sel: ast.NewIdent("Phase"),
 						},
 					},
 				},

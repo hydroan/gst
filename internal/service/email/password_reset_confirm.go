@@ -19,7 +19,7 @@ type PasswordResetConfirmService struct {
 // delegating the password update to the configured account gateway, and
 // invalidating active sessions.
 func (s *PasswordResetConfirmService) Create(ctx *types.ServiceContext, req *modelemail.PasswordResetConfirmReq) (rsp *modelemail.PasswordResetConfirmRsp, err error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 
 	flow, err := consumeEmailFlow(emailServiceContext(ctx), iamEmailFlowKindPasswordReset, req.Token)
 	if err != nil {

@@ -18,7 +18,7 @@ type ChangeResendService struct {
 // Create revalidates the current account and reissues the confirmation email for
 // the target new email address.
 func (s *ChangeResendService) Create(ctx *types.ServiceContext, req *modelemail.ChangeResendReq) (rsp *modelemail.ChangeResendRsp, err error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 	if ctx == nil || strings.TrimSpace(ctx.UserID()) == "" {
 		return nil, errors.New("authentication required")
 	}

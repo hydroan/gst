@@ -17,7 +17,7 @@ type ChangePasswordService struct {
 }
 
 func (s *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliamaccount.ChangePasswordReq) (rsp *modeliamaccount.ChangePasswordRsp, err error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 	log.Info("changepassword create")
 
 	// Get current session

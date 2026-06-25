@@ -54,7 +54,7 @@ func (r *RoleService) PatchAfter(ctx *types.ServiceContext, role *modelauthz.Rol
 
 // remarkMenus remark role about menus
 func (r *RoleService) remarkMenus(ctx *types.ServiceContext, role *modelauthz.Role) error {
-	log := r.WithContext(ctx, ctx.GetPhase())
+	log := r.WithContext(ctx, ctx.Phase())
 
 	menus := make([]*modelauthz.Menu, 0)
 	if err := database.Database[*modelauthz.Menu](ctx).List(&menus); err != nil {

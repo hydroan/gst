@@ -18,7 +18,7 @@ type MenuService struct {
 }
 
 func (m *MenuService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.Menu) error {
-	return m.filterByRole(ctx, data, m.WithContext(ctx, ctx.GetPhase()))
+	return m.filterByRole(ctx, data, m.WithContext(ctx, ctx.Phase()))
 }
 
 func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauthz.Menu, log types.Logger) error {

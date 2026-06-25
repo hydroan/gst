@@ -89,7 +89,7 @@ func (sc *ServiceContext) Done() <-chan struct{}       { return sc.baseContext()
 func (sc *ServiceContext) Err() error                  { return sc.baseContext().Err() }
 func (sc *ServiceContext) Value(key any) any           { return sc.baseContext().Value(key) }
 
-func (sc *ServiceContext) GetPhase() consts.Phase {
+func (sc *ServiceContext) Phase() consts.Phase {
 	if sc == nil {
 		return ""
 	}

@@ -38,7 +38,7 @@ type adminSessionUserItem struct {
 
 // List returns all indexed sessions grouped by user for a privileged administrator.
 func (s *AdminSessionsListService) List(ctx *types.ServiceContext, req *modeliamsession.AdminSessionsListReq) (rsp *modeliamsession.AdminSessionsListRsp, err error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 
 	if err = ensureAdminSessionActor(ctx); err != nil {
 		log.Error("failed to verify admin session actor", err)
@@ -138,7 +138,7 @@ func (s *AdminSessionsListService) List(ctx *types.ServiceContext, req *modeliam
 
 // Get returns the detail of a specified session for a privileged administrator.
 func (s *AdminSessionsGetService) Get(ctx *types.ServiceContext, req *modeliamsession.AdminSessionsGetReq) (rsp *modeliamsession.AdminSessionsGetRsp, err error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 
 	currentSessionID, _, err := GetCurrentSession(ctx)
 	if err != nil {
@@ -175,7 +175,7 @@ func (s *AdminSessionsGetService) Get(ctx *types.ServiceContext, req *modeliamse
 
 // Delete invalidates a specified session for a privileged administrator.
 func (s *AdminSessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.AdminSessionsDeleteReq) (rsp *modeliamsession.AdminSessionsDeleteRsp, err error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 
 	currentSessionID, _, err := GetCurrentSession(ctx)
 	if err != nil {

@@ -12,7 +12,7 @@ type Dedup struct {
 }
 
 func (d *Dedup) Create(ctx *types.ServiceContext, req *common.SearchDedupReq) (rsp *common.SearchDedupRsp, err error) {
-	log := d.WithContext(ctx, ctx.GetPhase())
+	log := d.WithContext(ctx, ctx.Phase())
 	log.Info("search: dedup")
 	return rsp, nil
 }

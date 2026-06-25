@@ -66,8 +66,8 @@ func TestServiceContextWithPhaseReturnsClone(t *testing.T) {
 	phased := serviceCtx.WithPhase(consts.PHASE_LIST)
 
 	require.NotSame(t, serviceCtx, phased)
-	require.Empty(t, serviceCtx.GetPhase())
-	require.Equal(t, consts.PHASE_LIST, phased.GetPhase())
+	require.Empty(t, serviceCtx.Phase())
+	require.Equal(t, consts.PHASE_LIST, phased.Phase())
 }
 
 func TestServiceContextRequestAccessors(t *testing.T) {

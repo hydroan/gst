@@ -16,7 +16,7 @@ type ChangeCancelService struct {
 // Create consumes the cancellation token and records that matching
 // confirmation tokens must no longer complete the email change.
 func (s *ChangeCancelService) Create(ctx *types.ServiceContext, req *modelemail.ChangeCancelReq) (rsp *modelemail.ChangeCancelRsp, err error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 
 	flow, err := consumeEmailFlow(emailServiceContext(ctx), iamEmailFlowKindChangeCancel, req.Token)
 	if err != nil {

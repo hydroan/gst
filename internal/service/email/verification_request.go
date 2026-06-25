@@ -17,7 +17,7 @@ type VerificationRequestService struct {
 // Create starts an email verification flow and returns a generic acceptance
 // message so callers cannot infer whether the target account exists.
 func (s *VerificationRequestService) Create(ctx *types.ServiceContext, req *modelemail.VerificationRequestReq) (rsp *modelemail.VerificationRequestRsp, err error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 	rsp = &modelemail.VerificationRequestRsp{Msg: publicAcceptedMessage(iamEmailFlowKindVerification)}
 
 	email := normalizeEmailScope(req.Email)

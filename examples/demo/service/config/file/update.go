@@ -12,19 +12,19 @@ type Updater struct {
 }
 
 func (f *Updater) Update(ctx *types.ServiceContext, req *config.File) (rsp *config.File, err error) {
-	log := f.WithContext(ctx, ctx.GetPhase())
+	log := f.WithContext(ctx, ctx.Phase())
 	log.Info("file update")
 	return rsp, nil
 }
 
 func (f *Updater) UpdateBefore(ctx *types.ServiceContext, file *config.File) error {
-	log := f.WithContext(ctx, ctx.GetPhase())
+	log := f.WithContext(ctx, ctx.Phase())
 	log.Info("file update before")
 	return nil
 }
 
 func (f *Updater) UpdateAfter(ctx *types.ServiceContext, file *config.File) error {
-	log := f.WithContext(ctx, ctx.GetPhase())
+	log := f.WithContext(ctx, ctx.Phase())
 	log.Info("file update after")
 	return nil
 }

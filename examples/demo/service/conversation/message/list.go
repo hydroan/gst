@@ -12,19 +12,19 @@ type Lister struct {
 }
 
 func (m *Lister) List(ctx *types.ServiceContext, req *conversation.Message) (rsp *conversation.Message, err error) {
-	log := m.WithContext(ctx, ctx.GetPhase())
+	log := m.WithContext(ctx, ctx.Phase())
 	log.Info("message list")
 	return rsp, nil
 }
 
 func (m *Lister) ListBefore(ctx *types.ServiceContext, messages *[]*conversation.Message) error {
-	log := m.WithContext(ctx, ctx.GetPhase())
+	log := m.WithContext(ctx, ctx.Phase())
 	log.Info("message list before")
 	return nil
 }
 
 func (m *Lister) ListAfter(ctx *types.ServiceContext, messages *[]*conversation.Message) error {
-	log := m.WithContext(ctx, ctx.GetPhase())
+	log := m.WithContext(ctx, ctx.Phase())
 	log.Info("message list after")
 	return nil
 }

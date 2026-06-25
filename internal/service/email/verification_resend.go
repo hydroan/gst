@@ -17,7 +17,7 @@ type VerificationResendService struct {
 // Create resends a verification email for an eligible account while keeping the
 // response stable for unknown or already verified accounts.
 func (s *VerificationResendService) Create(ctx *types.ServiceContext, req *modelemail.VerificationResendReq) (rsp *modelemail.VerificationResendRsp, err error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 	rsp = &modelemail.VerificationResendRsp{Msg: publicAcceptedMessage(iamEmailFlowKindVerification)}
 
 	email := normalizeEmailScope(req.Email)

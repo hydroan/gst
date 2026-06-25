@@ -29,7 +29,7 @@ type TOTPVerifyService struct {
 // shape. Codes that are well-formed but do not match any selected active device
 // return a negative verification response instead of a service error.
 func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPVerifyReq) (rsp *modelmfa.TOTPVerifyRsp, err error) {
-	log := t.WithContext(ctx, ctx.GetPhase())
+	log := t.WithContext(ctx, ctx.Phase())
 
 	if len(ctx.UserID()) == 0 {
 		log.Errorz("user_id not found in context")

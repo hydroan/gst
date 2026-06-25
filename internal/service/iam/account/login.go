@@ -35,7 +35,7 @@ type LoginService struct {
 // login second-factor decision, including disabled-module behavior, active
 // device checks, TOTP validation, and recovery-code consumption.
 func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.LoginReq) (rsp *modeliamaccount.LoginRsp, err error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 	// Validate input
 	if req.Username == "" {
 		return nil, errors.New("username is required")

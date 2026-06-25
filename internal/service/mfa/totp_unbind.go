@@ -36,7 +36,7 @@ var errTOTPUnbindVerificationInvalid = errors.New("invalid verification")
 // the target device, and reports how many active devices remain. Backup-code
 // verification is performed in the same transaction as the device removal.
 func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPUnbindReq) (rsp *modelmfa.TOTPUnbindRsp, err error) {
-	log := t.WithContext(ctx, ctx.GetPhase())
+	log := t.WithContext(ctx, ctx.Phase())
 
 	if len(ctx.UserID()) == 0 {
 		log.Errorz("user_id not found in context")

@@ -22,7 +22,7 @@ type TOTPCheckService struct {
 // verify second-factor codes; it only tells the login flow whether a follow-up
 // TOTP verification step is required.
 func (c *TOTPCheckService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPCheckReq) (rsp *modelmfa.TOTPCheckRsp, err error) {
-	log := c.WithContext(ctx, ctx.GetPhase())
+	log := c.WithContext(ctx, ctx.Phase())
 
 	// Validate input.
 	if req.Username == "" {

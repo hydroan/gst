@@ -7,7 +7,7 @@ import (
 )
 
 func (s *srv) Get(ctx *types.ServiceContext, req *empty) (rsp, error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 
 	table := strings.ReplaceAll(ctx.Param("id"), "-", "_")
 	columns, ok := tableColumns[table]

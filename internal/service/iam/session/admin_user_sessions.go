@@ -27,7 +27,7 @@ type AdminUserSessionsDeleteService struct {
 
 // List returns all indexed sessions of a specified user for a privileged administrator.
 func (s *AdminUserSessionsListService) List(ctx *types.ServiceContext, req *modeliamsession.AdminUserSessionsListReq) (rsp *modeliamsession.AdminUserSessionsListRsp, err error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 
 	currentSessionID, _, err := GetCurrentSession(ctx)
 	if err != nil {
@@ -69,7 +69,7 @@ func (s *AdminUserSessionsListService) List(ctx *types.ServiceContext, req *mode
 
 // Delete invalidates all indexed sessions of a specified user for a privileged administrator.
 func (s *AdminUserSessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.AdminUserSessionsDeleteReq) (rsp *modeliamsession.AdminUserSessionsDeleteRsp, err error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 
 	_, currentSession, err := GetCurrentSession(ctx)
 	if err != nil {

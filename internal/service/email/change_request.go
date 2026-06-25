@@ -18,7 +18,7 @@ type ChangeRequestService struct {
 // Create validates the current password, checks the target email, and issues
 // one-time confirmation and cancellation tokens for the email change flow.
 func (s *ChangeRequestService) Create(ctx *types.ServiceContext, req *modelemail.ChangeRequestReq) (rsp *modelemail.ChangeRequestRsp, err error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 	user, newEmail, rsp, err := prepareEmailChangeRequest(ctx, req.NewEmail)
 	if err != nil || user == nil {
 		if err != nil {

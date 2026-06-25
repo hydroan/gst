@@ -31,7 +31,7 @@ type TOTPConfirmService struct {
 // prevents duplicate binding for the same secret, creates recovery codes, stores
 // only their hashes, persists the device, and then consumes the challenge.
 func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPConfirmReq) (rsp *modelmfa.TOTPConfirmRsp, err error) {
-	log := t.WithContext(ctx, ctx.GetPhase())
+	log := t.WithContext(ctx, ctx.Phase())
 
 	if len(ctx.UserID()) == 0 {
 		log.Errorz("user_id not found in context")

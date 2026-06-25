@@ -17,7 +17,7 @@ type SignupService struct {
 }
 
 func (s *SignupService) Create(ctx *types.ServiceContext, req *modeliamaccount.SignupReq) (rsp *modeliamaccount.SignupRsp, err error) {
-	log := s.WithContext(ctx, ctx.GetPhase())
+	log := s.WithContext(ctx, ctx.Phase())
 
 	// Validate input
 	if req.Username == "" {

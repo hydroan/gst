@@ -134,12 +134,12 @@ func TestStmtLogWithContext(t *testing.T) {
 		{
 			name:         "u",
 			modelVarName: `u`,
-			want:         `log := u.WithContext(ctx, ctx.GetPhase())`,
+			want:         `log := u.WithContext(ctx, ctx.Phase())`,
 		},
 		{
 			name:         "g",
 			modelVarName: `g`,
-			want:         `log := g.WithContext(ctx, ctx.GetPhase())`,
+			want:         `log := g.WithContext(ctx, ctx.Phase())`,
 		},
 	}
 	for _, tt := range tests {
