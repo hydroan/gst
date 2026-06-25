@@ -15,7 +15,7 @@ func TestResp[RSP any](t *testing.T, resp *client.Resp, checkFn func(t *testing.
 	require.NotNil(t, resp)
 	require.Equal(t, response.CodeSuccess.Code(), resp.Code)
 	require.Equal(t, response.CodeSuccess.Msg(), resp.Msg)
-	require.NotEmpty(t, resp.RequestID)
+	require.NotEmpty(t, resp.TraceID)
 	require.NotEmpty(t, resp.Data)
 
 	var rsp RSP

@@ -67,10 +67,10 @@ func Timeout(timeout time.Duration) gin.HandlerFunc {
 					"timeout", timeout,
 				)
 				c.AbortWithStatusJSON(http.StatusGatewayTimeout, gin.H{
-					"code":            -1,
-					"msg":             "request timeout",
-					"data":            nil,
-					consts.REQUEST_ID: c.GetString(consts.REQUEST_ID),
+					"code":          -1,
+					"msg":           "request timeout",
+					"data":          nil,
+					consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 				})
 			}
 			// Cancel the context to signal handlers to stop

@@ -16,19 +16,19 @@ func JwtAuth() gin.HandlerFunc {
 		accessToken, claims, err := jwt.ParseTokenFromHeader(c.Request.Header)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"code":            -1,
-				"msg":             err.Error(),
-				"data":            nil,
-				consts.REQUEST_ID: c.GetString(consts.REQUEST_ID),
+				"code":          -1,
+				"msg":           err.Error(),
+				"data":          nil,
+				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 			})
 			return
 		}
 		if err := jwt.Verify(claims, accessToken, c.Request.UserAgent()); err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"code":            -1,
-				"msg":             err.Error(),
-				"data":            nil,
-				consts.REQUEST_ID: c.GetString(consts.REQUEST_ID),
+				"code":          -1,
+				"msg":           err.Error(),
+				"data":          nil,
+				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 			})
 			return
 		}

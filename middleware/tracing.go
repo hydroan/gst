@@ -110,7 +110,7 @@ func Tracing() gin.HandlerFunc {
 			}()
 		} else {
 			// Fallback to custom ID generation if OTEL is not enabled
-			customTraceID := c.Request.Header.Get(consts.TRACE_ID)
+			customTraceID := c.Request.Header.Get(consts.HEADER_TRACE_ID)
 			customSpanID := util.SpanID()
 			if len(customTraceID) == 0 {
 				customTraceID = customSpanID
@@ -119,14 +119,13 @@ func Tracing() gin.HandlerFunc {
 			spanID = customSpanID
 		}
 
-		// Set unified trace ID and request ID in gin context
-		c.Set(consts.REQUEST_ID, traceID) // Use traceId as requestId
+		// Set trace fields in gin context.
 		c.Set(consts.TRACE_ID, traceID)
 		c.Set(consts.SPAN_ID, spanID)
 		c.Set(consts.SEQ, 0)
 
-		// Set X-Trace-ID header for frontend
-		c.Header("X-Trace-ID", traceID)
+		// Set X-Trace-ID header for callers.
+		c.Header(consts.HEADER_TRACE_ID, traceID)
 
 		// Add gst trace IDs as span attributes if OTEL is enabled
 		if gstotel.IsEnabled() && span != nil {
@@ -136,7 +135,6 @@ func Tracing() gin.HandlerFunc {
 				span.SetAttributes(
 					attribute.String(config.App.OTEL.ServiceName+".trace_id", traceID),
 					attribute.String(config.App.OTEL.ServiceName+".span_id", spanID),
-					attribute.String(config.App.OTEL.ServiceName+".request_id", traceID),
 				)
 
 				// Record start time for duration calculation
@@ -167,9 +165,6 @@ func extractRequestTraceContext(ctx context.Context, header http.Header) context
 
 	traceIDValue := strings.TrimSpace(header.Get(consts.HEADER_TRACE_ID))
 	if len(traceIDValue) == 0 {
-		traceIDValue = strings.TrimSpace(header.Get(consts.TRACE_ID))
-	}
-	if len(traceIDValue) == 0 {
 		return parentCtx
 	}
 
@@ -179,9 +174,6 @@ func extractRequestTraceContext(ctx context.Context, header http.Header) context
 	}
 
 	spanIDValue := strings.TrimSpace(header.Get(consts.HEADER_SPAN_ID))
-	if len(spanIDValue) == 0 {
-		spanIDValue = strings.TrimSpace(header.Get(consts.SPAN_ID))
-	}
 	if len(spanIDValue) == 0 {
 		spanIDValue = "0000000000000001"
 	}

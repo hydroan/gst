@@ -376,7 +376,7 @@ func TestLogmgmt(t *testing.T) {
 				//       +Method      => "POST" #string
 				//       +URI         => "/api/authz/roles" #string
 				//       +UserAgent   => "gst" #string
-				//       +RequestID   => "d6kihh65shg82oca209g" #string
+				//       +TraceID   => "d6kihh65shg82oca209g" #string
 				//       +Base        => #model.Base {
 				//         +ID        => "019cbcc7-3f8f-7130-a72a-d68ec0a7c0f9" #string
 				//       }

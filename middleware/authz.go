@@ -52,10 +52,10 @@ func Authz() gin.HandlerFunc {
 		if allow, err = rbac.Enforcer.Enforce(sub, obj, act); err != nil {
 			zap.S().Error(err)
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-				"code":            -1,
-				"msg":             "authorization failed",
-				"data":            nil,
-				consts.REQUEST_ID: c.GetString(consts.REQUEST_ID),
+				"code":          -1,
+				"msg":           "authorization failed",
+				"data":          nil,
+				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 			})
 			return
 		}
@@ -72,10 +72,10 @@ func Authz() gin.HandlerFunc {
 			)
 		} else {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-				"code":            -1,
-				"msg":             "permission denied",
-				"data":            nil,
-				consts.REQUEST_ID: c.GetString(consts.REQUEST_ID),
+				"code":          -1,
+				"msg":           "permission denied",
+				"data":          nil,
+				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 			})
 			logger.Authz.Infoz(
 				"",

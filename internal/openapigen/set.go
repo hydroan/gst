@@ -1720,8 +1720,8 @@ func addHeaderParameters(op *openapi3.Operation) {
 		// {
 		// 	Value: &openapi3.Parameter{
 		// 		In:          "header",
-		// 		Name:        "X-Request-ID",
-		// 		Description: "Optional request ID for tracing",
+		// 		Name:        "X-Trace-ID",
+		// 		Description: "Optional trace ID for tracing",
 		// 		Required:    false,
 		// 		Schema: &openapi3.SchemaRef{
 		// 			Value: &openapi3.Schema{
@@ -2230,17 +2230,17 @@ type apiBatchRequest[T any] struct {
 }
 
 type apiResponse[T any] struct {
-	Code      int    `json:"code"`
-	Data      T      `json:"data"`
-	Msg       string `json:"msg"`
-	RequestID string `json:"request_id"`
+	Code    int    `json:"code"`
+	Data    T      `json:"data"`
+	Msg     string `json:"msg"`
+	TraceID string `json:"trace_id"`
 }
 
 type apiListResponse[T any] struct {
-	Code      int         `json:"code"`
-	Data      listData[T] `json:"data"`
-	Msg       string      `json:"msg"`
-	RequestID string      `json:"request_id"`
+	Code    int         `json:"code"`
+	Data    listData[T] `json:"data"`
+	Msg     string      `json:"msg"`
+	TraceID string      `json:"trace_id"`
 }
 type listData[T any] struct {
 	Items []T   `json:"items"`
@@ -2248,10 +2248,10 @@ type listData[T any] struct {
 }
 
 type apiBatchResponse[T any] struct {
-	Code      int          `json:"code"`
-	Data      batchData[T] `json:"data"`
-	Msg       string       `json:"msg"`
-	RequestID string       `json:"request_id"`
+	Code    int          `json:"code"`
+	Data    batchData[T] `json:"data"`
+	Msg     string       `json:"msg"`
+	TraceID string       `json:"trace_id"`
 }
 type listSummary struct {
 	Total     int `json:"total"`

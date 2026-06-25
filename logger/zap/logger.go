@@ -59,14 +59,14 @@ func (l *Logger) WithArray(name string, arr zapcore.ArrayMarshaler) types.Logger
 //
 //	logger.With("phase", "update").
 //	      With("user", "admin").
-//	      With("request_id", "123")
+//	      With("trace_id", "123")
 //
 // Example 2 - Single With call with multiple fields:
 //
 //	logger.With(
 //	    "phase", "update",
 //	    "user", "admin",
-//	    "request_id", "123",
+//	    "trace_id", "123",
 //	)
 //
 // Returns the original logger if no fields are provided or if only an empty key is provided.
@@ -94,7 +94,7 @@ func (l *Logger) With(fields ...string) types.Logger {
 }
 
 // WithControllerContext creates a new logger with controller context fields.
-// It extends the base logger with phase, username, user ID, and request ID from *types.ControllerContext.
+// It extends the base logger with phase, username, user ID, and trace ID from *types.ControllerContext.
 //
 // examples:
 //
@@ -112,7 +112,7 @@ func (l *Logger) WithControllerContext(ctx *types.ControllerContext, phase const
 }
 
 // WithServiceContext creates a new logger with service context fields.
-// It extends the base logger with phase, username, user ID, and request ID from *types.ServiceContext.
+// It extends the base logger with phase, username, user ID, and trace ID from *types.ServiceContext.
 //
 // examples:
 //
@@ -130,7 +130,7 @@ func (l *Logger) WithServiceContext(ctx *types.ServiceContext, phase consts.Phas
 }
 
 // WithDatabaseContext creates a new logger with database context fields.
-// It extends the base logger with phase, username, user ID, and request ID from *types.DatabaseContext.
+// It extends the base logger with phase, username, user ID, and trace ID from *types.DatabaseContext.
 //
 // examples:
 //

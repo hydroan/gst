@@ -22,7 +22,7 @@ type OperationLog struct {
 	Method     string    `json:"method,omitempty" schema:"method"`
 	URI        string    `json:"uri,omitempty" schema:"uri"` // request uri
 	UserAgent  string    `json:"user_agent,omitempty" schema:"user_agent"`
-	RequestID  string    `json:"request_id,omitempty" schema:"request_id"`
+	TraceID    string    `json:"trace_id,omitempty" schema:"trace_id"`
 
 	model.Base
 }

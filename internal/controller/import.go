@@ -108,7 +108,7 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// 	Record:    util.BytesToString(record),
 		// 	IP:        c.ClientIP(),
 		// 	User:      c.GetString(consts.CTX_USERNAME),
-		// 	RequestId: c.GetString(consts.REQUEST_ID),
+		// 	TraceID: c.GetString(consts.TRACE_ID),
 		// 	URI:       c.Request.RequestURI,
 		// 	Method:    c.Request.Method,
 		// 	UserAgent: c.Request.UserAgent(),

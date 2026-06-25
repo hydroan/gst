@@ -27,15 +27,18 @@ func Logger(filename ...string) gin.HandlerFunc {
 		prommetrics.HTTPRequestsTotal.WithLabelValues(c.Request.Method, labelPath, strconv.Itoa(c.Writer.Status())).Inc()
 		prommetrics.HTTPRequestDuration.WithLabelValues(c.Request.Method, labelPath, strconv.Itoa(c.Writer.Status())).Observe(time.Since(start).Seconds())
 
-		// Add tracing information to logs
+		// Add tracing information to logs.
 		span := GetSpanFromContext(c)
+		traceID := c.GetString(consts.TRACE_ID)
 		traceFields := []zapcore.Field{}
 		if span != nil && span.IsRecording() {
 			spanContext := span.SpanContext()
 			if spanContext.HasTraceID() {
+				if traceID == "" {
+					traceID = spanContext.TraceID().String()
+				}
 				traceFields = append(
 					traceFields,
-					zap.String("trace_id", spanContext.TraceID().String()),
 					zap.String("span_id", spanContext.SpanID().String()),
 				)
 			}
@@ -47,7 +50,7 @@ func Logger(filename ...string) gin.HandlerFunc {
 			zap.String("method", c.Request.Method),
 			zap.String(consts.CTX_USERNAME, c.GetString(consts.CTX_USERNAME)),
 			zap.String(consts.CTX_USER_ID, c.GetString(consts.CTX_USER_ID)),
-			zap.String(consts.REQUEST_ID, c.GetString(consts.REQUEST_ID)),
+			zap.String(consts.TRACE_ID, traceID),
 			zap.String("path", path),
 			zap.String("query", query),
 			zap.String("ip", c.ClientIP()),

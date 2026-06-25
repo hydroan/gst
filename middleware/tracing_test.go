@@ -29,7 +29,6 @@ func TestTracingUsesIncomingTraceparent(t *testing.T) {
 		require.True(t, spanContext.HasTraceID())
 		require.Equal(t, incomingTraceID, spanContext.TraceID().String())
 		require.Equal(t, incomingTraceID, c.GetString(consts.TRACE_ID))
-		require.Equal(t, incomingTraceID, c.GetString(consts.REQUEST_ID))
 		c.Status(http.StatusNoContent)
 	})
 
@@ -54,7 +53,6 @@ func TestTracingUsesIncomingTraceIDHeader(t *testing.T) {
 		require.True(t, spanContext.HasTraceID())
 		require.Equal(t, incomingTraceID, spanContext.TraceID().String())
 		require.Equal(t, incomingTraceID, c.GetString(consts.TRACE_ID))
-		require.Equal(t, incomingTraceID, c.GetString(consts.REQUEST_ID))
 		c.Status(http.StatusNoContent)
 	})
 

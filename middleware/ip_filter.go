@@ -140,10 +140,10 @@ func IPFilter(config *IPFilterConfig) gin.HandlerFunc {
 		if ip == nil {
 			zap.S().Warnw("failed to parse client IP", "ip", clientIP)
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-				"code":            -1,
-				"msg":             "invalid client IP",
-				"data":            nil,
-				consts.REQUEST_ID: c.GetString(consts.REQUEST_ID),
+				"code":          -1,
+				"msg":           "invalid client IP",
+				"data":          nil,
+				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 			})
 			return
 		}
@@ -154,10 +154,10 @@ func IPFilter(config *IPFilterConfig) gin.HandlerFunc {
 		}) {
 			zap.S().Warnw("request blocked by blacklist", "ip", clientIP)
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-				"code":            -1,
-				"msg":             "access denied",
-				"data":            nil,
-				consts.REQUEST_ID: c.GetString(consts.REQUEST_ID),
+				"code":          -1,
+				"msg":           "access denied",
+				"data":          nil,
+				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 			})
 			return
 		}
@@ -165,10 +165,10 @@ func IPFilter(config *IPFilterConfig) gin.HandlerFunc {
 			if blockedNet.Contains(ip) {
 				zap.S().Warnw("request blocked by blacklist", "ip", clientIP, "cidr", blockedNet.String())
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-					"code":            -1,
-					"msg":             "access denied",
-					"data":            nil,
-					consts.REQUEST_ID: c.GetString(consts.REQUEST_ID),
+					"code":          -1,
+					"msg":           "access denied",
+					"data":          nil,
+					consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 				})
 				return
 			}
@@ -191,10 +191,10 @@ func IPFilter(config *IPFilterConfig) gin.HandlerFunc {
 			if !allowed {
 				zap.S().Warnw("request blocked by whitelist", "ip", clientIP)
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-					"code":            -1,
-					"msg":             "access denied",
-					"data":            nil,
-					consts.REQUEST_ID: c.GetString(consts.REQUEST_ID),
+					"code":          -1,
+					"msg":           "access denied",
+					"data":          nil,
+					consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 				})
 				return
 			}

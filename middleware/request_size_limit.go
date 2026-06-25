@@ -28,10 +28,10 @@ func RequestSizeLimit(maxSize int64) gin.HandlerFunc {
 		// Check Content-Length header first (if available and valid)
 		if c.Request.ContentLength > 0 && c.Request.ContentLength > maxSize {
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-				"code":            -1,
-				"msg":             "request body too large",
-				"data":            nil,
-				consts.REQUEST_ID: c.GetString(consts.REQUEST_ID),
+				"code":          -1,
+				"msg":           "request body too large",
+				"data":          nil,
+				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 			})
 			return
 		}

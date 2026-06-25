@@ -108,10 +108,10 @@ func RateLimiter(opts ...Option) gin.HandlerFunc {
 			_ = ratelimiterMap.Set(key, limiter, conf.TTL)
 		} else if err != nil {
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-				"code":            -1,
-				"msg":             "rate limiter unavailable",
-				"data":            nil,
-				consts.REQUEST_ID: c.GetString(consts.REQUEST_ID),
+				"code":          -1,
+				"msg":           "rate limiter unavailable",
+				"data":          nil,
+				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 			})
 			return
 		}
@@ -122,10 +122,10 @@ func RateLimiter(opts ...Option) gin.HandlerFunc {
 				return
 			}
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
-				"code":            -1,
-				"msg":             "too many requests",
-				"data":            nil,
-				consts.REQUEST_ID: c.GetString(consts.REQUEST_ID),
+				"code":          -1,
+				"msg":           "too many requests",
+				"data":          nil,
+				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 			})
 			return
 		}

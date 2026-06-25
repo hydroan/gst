@@ -22,7 +22,7 @@ func TestHandleServiceErrorDoesNotExposeCause(t *testing.T) {
 	handleServiceError(ctx, nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause))
 
 	require.Equal(t, http.StatusInternalServerError, recorder.Code)
-	require.JSONEq(t, `{"code":-1,"msg":"failed to load user","data":null,"request_id":""}`, recorder.Body.String())
+	require.JSONEq(t, `{"code":-1,"msg":"failed to load user","data":null,"trace_id":""}`, recorder.Body.String())
 	require.NotContains(t, recorder.Body.String(), cause.Error())
 }
 

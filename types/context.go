@@ -19,11 +19,10 @@ type ControllerContext struct {
 	Params   map[string]string
 	Query    url.Values
 
-	RequestID string
-	TraceID   string
-	PSpanID   string
-	SpanID    string
-	Seq       int
+	TraceID string
+	PSpanID string
+	SpanID  string
+	Seq     int
 }
 
 // NewControllerContext creates a ControllerContext from gin.Context
@@ -38,13 +37,12 @@ func NewControllerContext(c *gin.Context) *ControllerContext {
 	}
 
 	return &ControllerContext{
-		Route:     c.GetString(consts.CTX_ROUTE),
-		Username:  c.GetString(consts.CTX_USERNAME),
-		UserID:    c.GetString(consts.CTX_USER_ID),
-		RequestID: c.GetString(consts.REQUEST_ID),
-		TraceID:   c.GetString(consts.TRACE_ID),
-		Params:    params,
-		Query:     c.Request.URL.Query(),
+		Route:    c.GetString(consts.CTX_ROUTE),
+		Username: c.GetString(consts.CTX_USERNAME),
+		UserID:   c.GetString(consts.CTX_USER_ID),
+		TraceID:  c.GetString(consts.TRACE_ID),
+		Params:   params,
+		Query:    c.Request.URL.Query(),
 	}
 }
 
@@ -55,12 +53,11 @@ type DatabaseContext struct {
 	Params   map[string]string
 	Query    url.Values
 
-	context   context.Context
-	RequestID string
-	TraceID   string
-	PSpanID   string
-	SpanID    string
-	Seq       int
+	context context.Context
+	TraceID string
+	PSpanID string
+	SpanID  string
+	Seq     int
 }
 
 // NewDatabaseContext creates a DatabaseContext from gin.Context
@@ -83,14 +80,13 @@ func NewDatabaseContext(c *gin.Context, ctxs ...context.Context) *DatabaseContex
 	}
 
 	return &DatabaseContext{
-		context:   ctx,
-		Route:     c.GetString(consts.CTX_ROUTE),
-		Username:  c.GetString(consts.CTX_USERNAME),
-		UserID:    c.GetString(consts.CTX_USER_ID),
-		RequestID: c.GetString(consts.REQUEST_ID),
-		TraceID:   c.GetString(consts.TRACE_ID),
-		Params:    params,
-		Query:     c.Request.URL.Query(),
+		context:  ctx,
+		Route:    c.GetString(consts.CTX_ROUTE),
+		Username: c.GetString(consts.CTX_USERNAME),
+		UserID:   c.GetString(consts.CTX_USER_ID),
+		TraceID:  c.GetString(consts.TRACE_ID),
+		Params:   params,
+		Query:    c.Request.URL.Query(),
 	}
 }
 
@@ -107,9 +103,6 @@ func (dc *DatabaseContext) Context() context.Context {
 	}
 	if len(dc.UserID) != 0 {
 		c = context.WithValue(c, consts.CTX_USER_ID, dc.UserID) //nolint:staticcheck
-	}
-	if len(dc.RequestID) != 0 {
-		c = context.WithValue(c, consts.REQUEST_ID, dc.RequestID) //nolint:staticcheck
 	}
 	if len(dc.TraceID) != 0 {
 		c = context.WithValue(c, consts.TRACE_ID, dc.TraceID) //nolint:staticcheck
@@ -146,11 +139,10 @@ type ServiceContext struct {
 	UserID    string // currrent login user id
 	Route     string
 
-	RequestID string
-	TraceID   string
-	PSpanID   string
-	SpanID    string
-	Seq       int
+	TraceID string
+	PSpanID string
+	SpanID  string
+	Seq     int
 
 	ginCtx       *gin.Context
 	phase        consts.Phase
@@ -194,8 +186,7 @@ func NewServiceContext(c *gin.Context, ctxs ...context.Context) *ServiceContext 
 		UserID:    c.GetString(consts.CTX_USER_ID),
 		SessionID: c.GetString(consts.CTX_SESSION_ID),
 
-		RequestID: c.GetString(consts.REQUEST_ID),
-		TraceID:   c.GetString(consts.TRACE_ID),
+		TraceID: c.GetString(consts.TRACE_ID),
 
 		ginCtx:  c,
 		context: ctx,
@@ -220,9 +211,6 @@ func (sc *ServiceContext) Context() context.Context {
 	}
 	if len(sc.UserID) != 0 {
 		c = context.WithValue(c, consts.CTX_USER_ID, sc.UserID) //nolint:staticcheck
-	}
-	if len(sc.RequestID) != 0 {
-		c = context.WithValue(c, consts.REQUEST_ID, sc.RequestID) //nolint:staticcheck
 	}
 	if len(sc.TraceID) != 0 {
 		c = context.WithValue(c, consts.TRACE_ID, sc.TraceID) //nolint:staticcheck
@@ -337,11 +325,10 @@ func NewModelContext(ctx context.Context, dbctx *DatabaseContext) *ModelContext 
 			Params:   dbctx.Params,
 			Query:    dbctx.Query,
 
-			RequestID: dbctx.RequestID,
-			TraceID:   dbctx.TraceID,
-			PSpanID:   dbctx.PSpanID,
-			SpanID:    dbctx.SpanID,
-			Seq:       dbctx.Seq,
+			TraceID: dbctx.TraceID,
+			PSpanID: dbctx.PSpanID,
+			SpanID:  dbctx.SpanID,
+			Seq:     dbctx.Seq,
 		},
 	}
 }

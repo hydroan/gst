@@ -46,9 +46,8 @@ func UUID(prefix ...string) string {
 	return id.String()
 }
 
-func RequestID() string { return xid.New().String() }
-func TraceID() string   { return xid.New().String() }
-func SpanID() string    { return xid.New().String() }
+func TraceID() string { return xid.New().String() }
+func SpanID() string  { return xid.New().String() }
 
 func IndexedUUID() string { return ksuid.New().String() }
 

@@ -55,10 +55,10 @@ func TestHTTPBodyLoggerLogsJSONRequestAndResponse(t *testing.T) {
 		c.Set(consts.CTX_USER_ID, "u-1")
 		c.Set(consts.TRACE_ID, "trace-1")
 		c.JSON(http.StatusOK, gin.H{
-			"code":       0,
-			"msg":        "success",
-			"data":       gin.H{"sum": 3},
-			"request_id": "trace-1",
+			"code":     0,
+			"msg":      "success",
+			"data":     gin.H{"sum": 3},
+			"trace_id": "trace-1",
 		})
 	})
 
@@ -81,10 +81,10 @@ func TestHTTPBodyLoggerLogsJSONRequestAndResponse(t *testing.T) {
 	require.Equal(t, "response", entries[1].Message)
 	require.Equal(t, int64(http.StatusOK), responseCtx["status"])
 	require.Equal(t, map[string]any{
-		"code":       float64(0),
-		"msg":        "success",
-		"data":       map[string]any{"sum": float64(3)},
-		"request_id": "trace-1",
+		"code":     float64(0),
+		"msg":      "success",
+		"data":     map[string]any{"sum": float64(3)},
+		"trace_id": "trace-1",
 	}, responseCtx["response"])
 }
 

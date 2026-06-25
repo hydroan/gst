@@ -195,17 +195,17 @@ func NewCode(code Code, status int, msg string) Code {
 func JSON(c *gin.Context, coder types.Coder, data ...any) {
 	if len(data) > 0 {
 		c.JSON(coder.Status(), gin.H{
-			"code":            coder.Code(),
-			"msg":             coder.Msg(),
-			"data":            data[0],
-			consts.REQUEST_ID: c.GetString(consts.REQUEST_ID),
+			"code":          coder.Code(),
+			"msg":           coder.Msg(),
+			"data":          data[0],
+			consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 		})
 	} else {
 		c.JSON(coder.Status(), gin.H{
-			"code":            coder.Code(),
-			"msg":             coder.Msg(),
-			"data":            nil,
-			consts.REQUEST_ID: c.GetString(consts.REQUEST_ID),
+			"code":          coder.Code(),
+			"msg":           coder.Msg(),
+			"data":          nil,
+			consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 		})
 	}
 }
@@ -215,9 +215,9 @@ func Bytes(c *gin.Context, coder types.Coder, data ...[]byte) {
 	c.Header("X-cached", "true")
 	var dataStr string
 	if len(data) > 0 {
-		dataStr = fmt.Sprintf(`{"code":%d,"msg":"%s","data":%s,"request_id":"%s"}`, coder.Code(), coder.Msg(), util.BytesToString(data[0]), c.GetString(consts.REQUEST_ID))
+		dataStr = fmt.Sprintf(`{"code":%d,"msg":"%s","data":%s,"trace_id":"%s"}`, coder.Code(), coder.Msg(), util.BytesToString(data[0]), c.GetString(consts.TRACE_ID))
 	} else {
-		dataStr = fmt.Sprintf(`{"code":%d,"msg":"%s","data":"","request_id":"%s"}`, coder.Code(), coder.Msg(), c.GetString(consts.REQUEST_ID))
+		dataStr = fmt.Sprintf(`{"code":%d,"msg":"%s","data":"","trace_id":"%s"}`, coder.Code(), coder.Msg(), c.GetString(consts.TRACE_ID))
 	}
 	c.Writer.WriteHeader(coder.Status())
 	_, _ = c.Writer.Write(util.StringToBytes(dataStr))
@@ -227,9 +227,9 @@ func BytesList(c *gin.Context, coder types.Coder, total int64, data ...[]byte) {
 	c.Header("Content-Type", "application/json; charset=utf-8")
 	var dataStr string
 	if len(data) > 0 {
-		dataStr = fmt.Sprintf(`{"code":%d,"msg":"%s","data":{"total":%d,"items":%s},"request_id":"%s"}`, coder.Code(), coder.Msg(), total, util.BytesToString(data[0]), c.GetString(consts.REQUEST_ID))
+		dataStr = fmt.Sprintf(`{"code":%d,"msg":"%s","data":{"total":%d,"items":%s},"trace_id":"%s"}`, coder.Code(), coder.Msg(), total, util.BytesToString(data[0]), c.GetString(consts.TRACE_ID))
 	} else {
-		dataStr = fmt.Sprintf(`{"code":%d,"msg":"%s","data":{"total":0,"items":[]},"request_id":"%s"}`, coder.Code(), coder.Msg(), c.GetString(consts.REQUEST_ID))
+		dataStr = fmt.Sprintf(`{"code":%d,"msg":"%s","data":{"total":0,"items":[]},"trace_id":"%s"}`, coder.Code(), coder.Msg(), c.GetString(consts.TRACE_ID))
 	}
 	c.Writer.WriteHeader(coder.Status())
 	_, _ = c.Writer.Write(util.StringToBytes(dataStr))

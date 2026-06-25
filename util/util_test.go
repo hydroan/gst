@@ -13,7 +13,7 @@ import (
 
 func TestUtil(t *testing.T) {
 	fmt.Println(UUID())
-	fmt.Println(RequestID())
+	fmt.Println(TraceID())
 	fmt.Println(IndexedUUID())
 }
 
@@ -29,9 +29,9 @@ func BenchmarkIndexedUUID(b *testing.B) {
 	}
 }
 
-func BenchmarkLightUUID(b *testing.B) {
+func BenchmarkTraceID(b *testing.B) {
 	for b.Loop() {
-		RequestID()
+		TraceID()
 	}
 }
 
