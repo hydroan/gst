@@ -88,7 +88,7 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 	// 			begin := time.Now()
 	// 			prefix, _ := buildCacheKey(db.db.Model(*new(M)).Session(&gorm.Session{DryRun: true}).Statement, "create")
 	// 			defer logger.Cache.Infow("remove cache after create", "cost", time.Since(begin).String(), "prefix", prefix)
-	// 			if err = redis.RemovePrefix(prefix); err != nil {
+	// 			if err = redis.RemovePrefix(db.ctx.Context(), prefix); err != nil {
 	// 				logger.Cache.Errorw("failed to remove cache keys", err, "action", "create")
 	// 			}
 	// 		}()
@@ -268,7 +268,7 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 	// 			begin := time.Now()
 	// 			prefix, _ := buildCacheKey(db.db.Model(*new(M)).Session(&gorm.Session{DryRun: true}).Statement, "delete")
 	// 			defer logger.Cache.Infow("remove cache after delete", "cost", time.Since(begin).String(), "prefix", prefix)
-	// 			if err = redis.RemovePrefix(prefix); err != nil {
+	// 			if err = redis.RemovePrefix(db.ctx.Context(), prefix); err != nil {
 	// 				logger.Cache.Errorw("failed to remove cache keys", err, "action", "delete")
 	// 			}
 	// 		}()
@@ -435,7 +435,7 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 	// 			begin := time.Now()
 	// 			prefix, _ := buildCacheKey(db.db.Model(*new(M)).Session(&gorm.Session{DryRun: true}).Statement, "update")
 	// 			defer logger.Cache.Infow("remove cache after update", "cost", time.Since(begin).String(), "prefix", prefix)
-	// 			if err = redis.RemovePrefix(prefix); err != nil {
+	// 			if err = redis.RemovePrefix(db.ctx.Context(), prefix); err != nil {
 	// 				logger.Cache.Errorw("failed to remove cache keys", err, "action", "update")
 	// 			}
 	// 		}()
@@ -564,7 +564,7 @@ func (db *database[M]) UpdateByID(id string, name string, value any) (err error)
 	// 			begin := time.Now()
 	// 			prefix, _ := buildCacheKey(db.db.Model(*new(M)).Session(&gorm.Session{DryRun: true}).Statement, "update_by_id")
 	// 			defer logger.Cache.Infow("remove cache after update_by_id", "cost", time.Since(begin).String(), "prefix", prefix)
-	// 			if err = redis.RemovePrefix(prefix); err != nil {
+	// 			if err = redis.RemovePrefix(db.ctx.Context(), prefix); err != nil {
 	// 				logger.Cache.Errorw("failed to remove cache keys", err, "action", "update")
 	// 			}
 	// 		}()

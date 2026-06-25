@@ -65,7 +65,7 @@ func (s *CurrentDeleteService) Delete(ctx *types.ServiceContext, req *modeliamse
 		return nil, err
 	}
 
-	if _, err = DeleteSession(sessionID); err != nil {
+	if _, err = DeleteSession(ctx.Context(), sessionID); err != nil {
 		log.Error("failed to delete current session", err)
 		return nil, service.NewErrorWithCause(http.StatusUnauthorized, "session not exists", err)
 	}

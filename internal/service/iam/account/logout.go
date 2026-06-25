@@ -30,7 +30,7 @@ func (s *LogoutService) Create(ctx *types.ServiceContext, req *model.Empty) (rsp
 		return &modeliamaccount.LogoutRsp{Msg: "logout successful"}, nil // Return success even if no session
 	}
 
-	session, err := serviceiamsession.DeleteSession(sessionID)
+	session, err := serviceiamsession.DeleteSession(ctx.Context(), sessionID)
 
 	// Parse user agent for logging
 	ua := useragent.New(ctx.UserAgent)

@@ -48,13 +48,14 @@ func IAMSession() gin.HandlerFunc {
 			return
 		}
 
-		session, e := serviceiamsession.LoadSession(sessionID)
+		ctx := c.Request.Context()
+		session, e := serviceiamsession.LoadSession(ctx, sessionID)
 		if e != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": e.Error()})
 			return
 		}
 		if err = serviceiamsession.ValidateActiveSession(sessionID, session); err != nil {
-			_, _ = serviceiamsession.DeleteSession(sessionID)
+			_, _ = serviceiamsession.DeleteSession(ctx, sessionID)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 			return
 		}

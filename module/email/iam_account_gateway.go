@@ -1,6 +1,7 @@
 package email
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -86,7 +87,7 @@ func (iamAccountGateway) ApplyEmailChange(ctx *types.ServiceContext, userID, new
 }
 
 func (iamAccountGateway) InvalidateSessions(userID string) {
-	serviceiamsession.InvalidateUserSessions(userID)
+	serviceiamsession.InvalidateUserSessions(context.Background(), userID)
 }
 
 func loadIAMUserByEmail(ctx *types.ServiceContext, email string) (*modeliamuser.User, error) {

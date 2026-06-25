@@ -74,11 +74,11 @@ func (UserService) DeleteManyBefore(ctx *types.ServiceContext, users ...*modelia
 
 // DeleteAfter revokes Redis sessions for the deleted user. The controller only guarantees
 // M with ID set (route/query/body id); no other fields are required.
-func (UserService) DeleteAfter(_ *types.ServiceContext, u *modeliamuser.User) error {
+func (UserService) DeleteAfter(ctx *types.ServiceContext, u *modeliamuser.User) error {
 	if u == nil {
 		return nil
 	}
-	serviceiamsession.InvalidateUserSessions(u.GetID())
+	serviceiamsession.InvalidateUserSessions(ctx.Context(), u.GetID())
 	return nil
 }
 
@@ -99,12 +99,12 @@ func (UserService) CreateManyBefore(ctx *types.ServiceContext, users ...*modelia
 }
 
 // DeleteManyAfter revokes sessions for each deleted user. Items contain only IDs from the batch request.
-func (UserService) DeleteManyAfter(_ *types.ServiceContext, users ...*modeliamuser.User) error {
+func (UserService) DeleteManyAfter(ctx *types.ServiceContext, users ...*modeliamuser.User) error {
 	for _, u := range users {
 		if u == nil {
 			continue
 		}
-		serviceiamsession.InvalidateUserSessions(u.GetID())
+		serviceiamsession.InvalidateUserSessions(ctx.Context(), u.GetID())
 	}
 	return nil
 }

@@ -1,6 +1,7 @@
 package iam_test
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"testing"
@@ -68,7 +69,7 @@ func accountCleanupUser(t *testing.T, username string) {
 	}
 
 	for _, user := range users {
-		serviceiamsession.InvalidateUserSessions(user.ID)
+		serviceiamsession.InvalidateUserSessions(t.Context(), user.ID)
 	}
 	require.NoError(t, database.Database[*iam.User](nil).Delete(users...))
 }
@@ -99,14 +100,14 @@ func accountRequireSessionNotFound(t *testing.T, sessionID string) {
 	t.Helper()
 
 	sessionKey := modeliamsession.SessionIDKey(sessionID)
-	_, err := redis.Cache[modeliamsession.Session]().Get(sessionKey)
+	_, err := redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Get(sessionKey)
 	require.ErrorIs(t, err, types.ErrEntryNotFound)
 }
 
 func accountRequireUserSessionContains(t *testing.T, userID, sessionID string) {
 	t.Helper()
 
-	userSessionIDs, err := redis.ZRange(modeliamsession.SessionUserKey(userID), 0, -1)
+	userSessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionUserKey(userID), 0, -1)
 	require.NoError(t, err)
 	require.Contains(t, userSessionIDs, sessionID)
 }
@@ -114,7 +115,7 @@ func accountRequireUserSessionContains(t *testing.T, userID, sessionID string) {
 func accountRequireUserSessionNotContains(t *testing.T, userID, sessionID string) {
 	t.Helper()
 
-	userSessionIDs, err := redis.ZRange(modeliamsession.SessionUserKey(userID), 0, -1)
+	userSessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionUserKey(userID), 0, -1)
 	require.NoError(t, err)
 	require.NotContains(t, userSessionIDs, sessionID)
 }
@@ -138,9 +139,9 @@ func TestAccountSignup(t *testing.T) {
 }
 
 func TestAccountCleanupUserRevokesSessions(t *testing.T) {
-	require.NoError(t, redis.RemovePrefix(modeliamsession.SessionNamespacePrefix))
+	require.NoError(t, redis.RemovePrefix(t.Context(), modeliamsession.SessionNamespacePrefix))
 	t.Cleanup(func() {
-		require.NoError(t, redis.RemovePrefix(modeliamsession.SessionNamespacePrefix))
+		require.NoError(t, redis.RemovePrefix(context.Background(), modeliamsession.SessionNamespacePrefix))
 	})
 
 	user := accountSignupUser(t, "acct_cleanup_session", "12345678")

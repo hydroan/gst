@@ -32,8 +32,6 @@ var (
 	mu          sync.Mutex
 	initialized bool
 
-	ctx = context.Background()
-
 	ErrKeyNotExists    = errors.New("key no loger exists, may be expired")
 	ErrRedisIsDisabled = errors.New("redis is disabled")
 )
@@ -192,7 +190,7 @@ func Close() {
 
 // Set set any data into redis with specific key.
 // If the data type is custom type or structure, you must implement the interface encoding.BinaryMarshaler.
-func Set(key string, data any, expiration ...time.Duration) error {
+func Set(ctx context.Context, key string, data any, expiration ...time.Duration) error {
 	if !config.App.Redis.Enable {
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return nil
@@ -208,7 +206,7 @@ func Set(key string, data any, expiration ...time.Duration) error {
 }
 
 // SetM set types.Model into redis with specific key.
-func SetM[M types.Model](key string, m M, expiration ...time.Duration) error {
+func SetM[M types.Model](ctx context.Context, key string, m M, expiration ...time.Duration) error {
 	if !config.App.Redis.Enable {
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return nil
@@ -224,7 +222,7 @@ func SetM[M types.Model](key string, m M, expiration ...time.Duration) error {
 }
 
 // SetML set one or multiple types.Model into redis with specific key.
-func SetML[M types.Model](key string, ml []M, expiration ...time.Duration) error {
+func SetML[M types.Model](ctx context.Context, key string, ml []M, expiration ...time.Duration) error {
 	if !config.App.Redis.Enable {
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return nil
@@ -244,7 +242,7 @@ func SetML[M types.Model](key string, ml []M, expiration ...time.Duration) error
 }
 
 // Get will get raw cache([]byte) from redis.
-func Get(key string) (cache []byte, err error) {
+func Get(ctx context.Context, key string) (cache []byte, err error) {
 	if !config.App.Redis.Enable {
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return make([]byte, 0), nil
@@ -261,7 +259,7 @@ func Get(key string) (cache []byte, err error) {
 }
 
 // GetInt get cache from redis and decode into integer.
-func GetInt(key string) (int64, error) {
+func GetInt(ctx context.Context, key string) (int64, error) {
 	if !config.App.Redis.Enable {
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return 0, nil
@@ -284,7 +282,7 @@ func GetInt(key string) (int64, error) {
 }
 
 // GetM will get cache from redis and decode into types.Model.
-func GetM[M types.Model](key string) (M, error) {
+func GetM[M types.Model](ctx context.Context, key string) (M, error) {
 	if !config.App.Redis.Enable {
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return *new(M), nil
@@ -313,7 +311,7 @@ func GetM[M types.Model](key string) (M, error) {
 }
 
 // GetML will get cache from redis and decode into []types.Model.
-func GetML[M types.Model](key string) ([]M, error) {
+func GetML[M types.Model](ctx context.Context, key string) ([]M, error) {
 	if !config.App.Redis.Enable {
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return make([]M, 0), nil
@@ -346,7 +344,7 @@ func GetML[M types.Model](key string) ([]M, error) {
 	return ml, nil
 }
 
-func Del(keys ...string) error {
+func Del(ctx context.Context, keys ...string) error {
 	if !config.App.Redis.Enable {
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return nil
@@ -358,7 +356,7 @@ func Del(keys ...string) error {
 }
 
 // Expire updates the ttl for an existing key.
-func Expire(key string, expiration time.Duration) error {
+func Expire(ctx context.Context, key string, expiration time.Duration) error {
 	if !config.App.Redis.Enable {
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return nil
@@ -370,7 +368,7 @@ func Expire(key string, expiration time.Duration) error {
 }
 
 // ZAdd adds one or multiple string members with the same score into a sorted set.
-func ZAdd(key string, score float64, members ...string) error {
+func ZAdd(ctx context.Context, key string, score float64, members ...string) error {
 	if !config.App.Redis.Enable {
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return nil
@@ -389,7 +387,7 @@ func ZAdd(key string, score float64, members ...string) error {
 }
 
 // ZRange returns sorted set members in ascending score order.
-func ZRange(key string, start, stop int64) ([]string, error) {
+func ZRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
 	if !config.App.Redis.Enable {
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return make([]string, 0), nil
@@ -401,7 +399,7 @@ func ZRange(key string, start, stop int64) ([]string, error) {
 }
 
 // ZRem removes one or multiple members from a sorted set.
-func ZRem(key string, members ...string) error {
+func ZRem(ctx context.Context, key string, members ...string) error {
 	if !config.App.Redis.Enable {
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return nil
@@ -420,7 +418,7 @@ func ZRem(key string, members ...string) error {
 }
 
 // ZRemRangeByScore removes sorted set members whose score is between minScore and maxScore.
-func ZRemRangeByScore(key, minScore, maxScore string) error {
+func ZRemRangeByScore(ctx context.Context, key, minScore, maxScore string) error {
 	if !config.App.Redis.Enable {
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return nil
@@ -433,7 +431,7 @@ func ZRemRangeByScore(key, minScore, maxScore string) error {
 
 // RemovePrefix will scan and delete all redis key that matchs the `prefix`.
 // for example: myprefix*
-func RemovePrefix(prefix string) (err error) {
+func RemovePrefix(ctx context.Context, prefix string) (err error) {
 	if !config.App.Redis.Enable {
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return nil

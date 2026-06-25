@@ -29,7 +29,7 @@ func BenchmarkRedis(b *testing.B) {
 	}
 
 	for b.Loop() {
-		if err := redis.SetML("groups", groups); err != nil {
+		if err := redis.SetML(b.Context(), "groups", groups); err != nil {
 			b.Fatalf("%+v\n", err)
 		}
 	}

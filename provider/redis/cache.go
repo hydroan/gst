@@ -17,6 +17,16 @@ type cache[T any] struct {
 	ctx context.Context
 }
 
+// Cache returns a new Redis-backed typed cache handle.
+//
+// Each call creates a fresh handle, so callers may bind a context once and
+// reuse the returned value for multiple related Redis cache operations in the
+// same flow:
+//
+//	cache := redis.Cache[T]().WithContext(ctx)
+//
+// This guarantee is specific to this Redis provider and should not be assumed
+// for other cache implementations.
 func Cache[T any]() types.Cache[T] {
 	return tracing.NewWrapper(&cache[T]{ctx: context.Background()}, "redis")
 }
@@ -122,4 +132,5 @@ func (c *cache[T]) Clear() {
 	}
 }
 
+// WithContext returns a new handle bound to ctx without mutating the receiver.
 func (c *cache[T]) WithContext(ctx context.Context) types.Cache[T] { return &cache[T]{ctx: ctx} }
