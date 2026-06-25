@@ -101,6 +101,9 @@ type Database[M Model] interface {
 	// List retrieves multiple records matching the query conditions.
 	List(dest *[]M) error
 	// Get retrieves a single record by its ID.
+	// The destination must be a non-nil pointer matching M. When M is *T,
+	// both &value and new(T) are valid destinations; a nil *T returns ErrNilDest.
+	// Get returns database.ErrRecordNotFound when no matching record exists.
 	Get(dest M, id string) error
 	// First retrieves the first record matching the current query conditions.
 	First(dest M) error

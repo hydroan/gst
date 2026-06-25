@@ -196,6 +196,10 @@ func TestDatabaseGet(t *testing.T) {
 	require.Equal(t, u1.Age, u.Age)
 	require.Equal(t, u1.Email, u.Email)
 
+	var stackUser TestUser
+	require.NoError(t, database.Database[*TestUser](context.Background()).Get(&stackUser, u1.ID))
+	require.Equal(t, u1.ID, stackUser.ID, "should accept an addressable model value")
+
 	// Test Get with different IDs
 	u = new(TestUser)
 	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u2.ID))
@@ -217,10 +221,10 @@ func TestDatabaseGet(t *testing.T) {
 	require.Error(t, err, "should return error when id is empty")
 	require.ErrorIs(t, err, database.ErrIDRequired, "error should be ErrIDRequired")
 
-	// Test Get with non-existent ID - should not return error
+	// Test Get with non-existent ID - should return not found error
 	u = new(TestUser)
 	err = database.Database[*TestUser](context.Background()).Get(u, "non-existent-id")
-	require.NoError(t, err)
+	require.ErrorIs(t, err, database.ErrRecordNotFound)
 	require.Empty(t, u.ID)
 	require.Empty(t, u.CreatedAt)
 	require.Empty(t, u.UpdatedAt)
@@ -228,10 +232,10 @@ func TestDatabaseGet(t *testing.T) {
 	require.Empty(t, u.Age)
 	require.Empty(t, u.Email)
 
-	// Test Get after soft delete - should not return soft-deleted records
+	// Test Get after soft delete - should return not found error
 	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(u1))
 	u = new(TestUser)
-	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID)) // not returns error
+	require.ErrorIs(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID), database.ErrRecordNotFound)
 	require.Empty(t, u.ID)
 	require.Empty(t, u.CreatedAt)
 	require.Empty(t, u.UpdatedAt)
@@ -249,7 +253,7 @@ func TestDatabaseGet(t *testing.T) {
 
 	// Test Get with different model types
 	p := new(TestProduct)
-	require.NoError(t, database.Database[*TestProduct](context.Background()).Get(p, "non-existent-id"))
+	require.ErrorIs(t, database.Database[*TestProduct](context.Background()).Get(p, "non-existent-id"), database.ErrRecordNotFound)
 	require.Empty(t, p.ID)
 	require.Empty(t, p.CreatedAt)
 	require.Empty(t, p.UpdatedAt)

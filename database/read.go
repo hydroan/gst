@@ -225,11 +225,12 @@ QUERY:
 // Executes GetBefore and GetAfter model hooks unless disabled with WithoutHook.
 //
 // Parameters:
-//   - dest: Pointer to model instance where the result will be stored
+//   - dest: Non-nil pointer where the result will be stored. When M is *T,
+//     both &value and new(T) are valid destinations; a nil *T returns ErrNilDest.
 //   - id: Primary key value of the record to retrieve
 //
-// Returns ErrIDRequired if id is empty. A missing record leaves dest empty and does not return
-// gorm.ErrRecordNotFound because Get uses GORM Find.
+// Returns ErrIDRequired if id is empty. Returns ErrRecordNotFound when no
+// matching record exists.
 //
 // Features:
 //   - Automatic result caching when enabled
@@ -237,11 +238,11 @@ QUERY:
 //   - Supports eager loading with WithExpand
 //   - Supports field selection with WithSelect
 //
-// Example:
+// Destination forms when M is *T:
+//   - &value, where value is an addressable T
+//   - new(T)
 //
-//	var user User
-//	Get(&user, "user123")  // Get user by ID
-//	WithExpand([]string{"Orders"}).Get(&user, "user123")  // Get user with orders
+// Do not pass a nil *T.
 func (db *database[M]) Get(dest M, id string) (err error) {
 	defer db.reset()
 
@@ -386,8 +387,12 @@ QUERY:
 		_, tableName, _ = buildCacheKey(db.ins.Session(&gorm.Session{DryRun: true, Logger: glogger.Default.LogMode(glogger.Silent)}).Where("id = ?", id).Find(dest).Statement, "get", id)
 	}
 	dest.ClearID()
-	if err = db.ins.Table(tableName).Where(db.quoteTableColumn(tableName, "id")+" = ?", id).Find(dest).Error; err != nil {
+	tx := db.ins.Table(tableName).Where(db.quoteTableColumn(tableName, "id")+" = ?", id).Find(dest)
+	if err = tx.Error; err != nil {
 		return err
+	}
+	if tx.RowsAffected == 0 {
+		return ErrRecordNotFound
 	}
 	// Invoke model hook: GetAfter.
 	if !db.noHook && !reflect.DeepEqual(empty, dest) {
