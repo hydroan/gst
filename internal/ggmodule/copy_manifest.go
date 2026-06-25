@@ -52,7 +52,7 @@ func loadModuleManifest(moduleDir string) (moduleManifest, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return moduleManifest{}, nil
+			return moduleManifest{}, fmt.Errorf("module copy requires %s: %w", path, err)
 		}
 		return moduleManifest{}, err
 	}

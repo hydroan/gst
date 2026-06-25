@@ -8,13 +8,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoadModuleManifestMissingFile(t *testing.T) {
-	manifest, err := loadModuleManifest(t.TempDir())
+func TestLoadModuleManifestRequiresFile(t *testing.T) {
+	_, err := loadModuleManifest(t.TempDir())
 
-	require.NoError(t, err)
-	require.Empty(t, manifest.Copy.PostNotes)
-	require.Empty(t, manifest.Copy.ExcludeSourceFiles)
-	require.Empty(t, manifest.Copy.Middleware)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), moduleManifestFilename)
+}
+
+func TestLoadModuleManifestReadsEmptyConfig(t *testing.T) {
+	for name, content := range map[string]string{
+		"empty root": `{}`,
+		"empty copy": `{"copy":{}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			moduleDir := t.TempDir()
+			writeModuleManifestForTest(t, moduleDir, content)
+
+			manifest, err := loadModuleManifest(moduleDir)
+
+			require.NoError(t, err)
+			require.Empty(t, manifest.Copy.PostNotes)
+			require.Empty(t, manifest.Copy.ExcludeSourceFiles)
+			require.Empty(t, manifest.Copy.Middleware)
+		})
+	}
 }
 
 func TestLoadModuleManifestReadsPostNotes(t *testing.T) {
