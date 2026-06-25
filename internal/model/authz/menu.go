@@ -90,7 +90,7 @@ func (m *Menu) UpdateBefore(ctx *types.ModelContext) error       { return m.vali
 // UpdateAfter refreshes permissions for roles that contain the current menu.
 func (m *Menu) UpdateAfter(ctx *types.ModelContext) error {
 	roles := make([]*Role, 0)
-	if err := database.Database[*Role](ctx.DatabaseContext()).List(&roles); err != nil {
+	if err := database.Database[*Role](ctx).List(&roles); err != nil {
 		return err
 	}
 	for _, r := range roles {
@@ -109,7 +109,7 @@ func (m *Menu) UpdateAfter(ctx *types.ModelContext) error {
 // DeleteBefore will delete the role's permissions
 func (m *Menu) DeleteBefore(ctx *types.ModelContext) error {
 	roles := make([]*Role, 0)
-	if err := database.Database[*Role](ctx.DatabaseContext()).List(&roles); err != nil {
+	if err := database.Database[*Role](ctx).List(&roles); err != nil {
 		return err
 	}
 	for _, r := range roles {
@@ -132,7 +132,7 @@ func (m *Menu) DeleteBefore(ctx *types.ModelContext) error {
 			}
 			r.MenuPartialIDs = menuPartialIDs
 
-			if err := database.Database[*Role](ctx.DatabaseContext()).Update(r); err != nil {
+			if err := database.Database[*Role](ctx).Update(r); err != nil {
 				return err
 			}
 		}

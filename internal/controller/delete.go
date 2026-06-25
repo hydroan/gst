@@ -157,7 +157,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		for i := range ml {
 			m := reflect.New(typ).Interface().(M) //nolint:errcheck
 			m.SetID(ml[i].GetID())
-			if err := handler(types.NewDatabaseContext(c)).WithExpand(m.Expands()).Get(m, ml[i].GetID()); err != nil {
+			if err := handler(requestContext(c)).WithExpand(m.Expands()).Get(m, ml[i].GetID()); err != nil {
 				log.Error(err)
 				gstotel.RecordError(span, err)
 			}
@@ -165,7 +165,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 
 		// 2.Delete resources in database.
-		if err := handler(types.NewDatabaseContext(c)).Delete(ml...); err != nil {
+		if err := handler(requestContext(c)).Delete(ml...); err != nil {
 			log.Error(err)
 			JSON(c, CodeFailure.WithErr(err))
 			gstotel.RecordError(span, err)
@@ -203,7 +203,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			// 	UserAgent: c.Request.UserAgent(),
 			// })
 			m := reflect.New(typ).Interface().(M) //nolint:errcheck
-			if err := am.RecordOperation(types.NewDatabaseContext(c), m, &modellogmgmt.OperationLog{
+			if err := am.RecordOperation(requestContext(c), m, &modellogmgmt.OperationLog{
 				OP:        consts.OP_DELETE,
 				Model:     typ.Name(),
 				RecordID:  ml[i].GetID(),

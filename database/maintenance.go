@@ -90,7 +90,7 @@ func (db *database[M]) Health() error {
 
 	// 1.check database connection
 	if err := db.ins.Exec("SELECT 1").Error; err != nil {
-		logger.Database.WithDatabaseContext(db.ctx, consts.Phase("Health")).Errorz(
+		logger.Database.WithContext(db.ctx, consts.Phase("Health")).Errorz(
 			"database connection check failed",
 			zap.Error(err),
 			zap.String("cost", util.FormatDurationSmart(time.Since(begin))),
@@ -101,7 +101,7 @@ func (db *database[M]) Health() error {
 	// 2.check database connection pool
 	sqlDB, err := db.ins.DB()
 	if err != nil {
-		logger.Database.WithDatabaseContext(db.ctx, consts.Phase("Health")).Errorz(
+		logger.Database.WithContext(db.ctx, consts.Phase("Health")).Errorz(
 			"get sql.DB instance failed",
 			zap.Error(err),
 			zap.String("cost", util.FormatDurationSmart(time.Since(begin))),
@@ -112,7 +112,7 @@ func (db *database[M]) Health() error {
 	// check database connection pool config
 	stats := sqlDB.Stats()
 	if stats.OpenConnections >= stats.MaxOpenConnections {
-		logger.Database.WithDatabaseContext(db.ctx, consts.Phase("Health")).Warnz(
+		logger.Database.WithContext(db.ctx, consts.Phase("Health")).Warnz(
 			"database connection pool is full",
 			zap.Int("open", stats.OpenConnections),
 			zap.Int("max", stats.MaxOpenConnections),
@@ -125,10 +125,10 @@ func (db *database[M]) Health() error {
 	// 3.check database response time
 	ctx := context.Background()
 	if db.ctx != nil {
-		ctx = db.ctx.Context()
+		ctx = db.ctx
 	}
 	if err := sqlDB.PingContext(ctx); err != nil {
-		logger.Database.WithDatabaseContext(db.ctx, consts.Phase("Health")).Errorz(
+		logger.Database.WithContext(db.ctx, consts.Phase("Health")).Errorz(
 			"database ping failed",
 			zap.Error(err),
 			zap.String("cost", util.FormatDurationSmart(time.Since(begin))),
@@ -136,7 +136,7 @@ func (db *database[M]) Health() error {
 		return fmt.Errorf("database ping failed: %w", err)
 	}
 
-	logger.Database.WithDatabaseContext(db.ctx, consts.Phase("Health")).Infoz(
+	logger.Database.WithContext(db.ctx, consts.Phase("Health")).Infoz(
 		"database health check passed",
 		zap.Int("open_connections", stats.OpenConnections),
 		zap.Int("in_use_connections", stats.InUse),

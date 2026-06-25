@@ -12,10 +12,10 @@ import (
 //
 // Usage example:
 //
-//	_ = database.Database[*model.Any](ctx.DatabaseContext()).TransactionFunc(func(tx any) error {
+//	_ = database.Database[*model.Any](ctx).TransactionFunc(func(tx any) error {
 //	    // Perform database operations within transaction
 //	    files := make([]*namespace.File, 0)
-//	    if err = database.Database[*namespace.File](ctx.DatabaseContext()).
+//	    if err = database.Database[*namespace.File](ctx).
 //	        WithTx(tx).
 //	        WithQuery(&namespace.File{Format: namespace.FileFormat("kv")}).
 //	        List(&files); err != nil {
@@ -24,7 +24,7 @@ import (
 //	    for _, f := range files {
 //	        f.Format = namespace.FileFomatShell
 //	    }
-//	    return database.Database[*namespace.File](ctx.DatabaseContext()).
+//	    return database.Database[*namespace.File](ctx).
 //	        WithSelect("format").
 //	        WithTx(tx).
 //	        Update(files...)

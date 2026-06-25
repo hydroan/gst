@@ -110,7 +110,7 @@ func UpdateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		}
 		// 2.Batch update resource in database.
 		if !errors.Is(reqErr, io.EOF) {
-			if err = handler(types.NewDatabaseContext(c)).Update(req.Items...); err != nil {
+			if err = handler(requestContext(c)).Update(req.Items...); err != nil {
 				log.Error(err)
 				JSON(c, CodeFailure.WithErr(err))
 				gstotel.RecordError(span, err)
@@ -149,7 +149,7 @@ func UpdateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		// 	UserAgent: c.Request.UserAgent(),
 		// })
 		m := reflect.New(typ).Interface().(M) //nolint:errcheck
-		if err = am.RecordOperation(types.NewDatabaseContext(c), m, &modellogmgmt.OperationLog{
+		if err = am.RecordOperation(requestContext(c), m, &modellogmgmt.OperationLog{
 			OP:        consts.OP_UPDATE_MANY,
 			Model:     typ.Name(),
 			Record:    util.BytesToString(record),

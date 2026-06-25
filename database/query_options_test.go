@@ -1,6 +1,7 @@
 package database_test
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"testing"
@@ -24,7 +25,7 @@ func TestDatabaseWithIndex(t *testing.T) {
 
 	// Test WithIndex with default hint (USE INDEX)
 	// Note: Index hints only work on MySQL. On SQLite/PostgreSQL, it will skip silently.
-	require.NoError(t, database.Database[*TestUser](nil).WithIndex(existsIndex).List(&users))
+	require.NoError(t, database.Database[*TestUser](context.Background()).WithIndex(existsIndex).List(&users))
 	require.Len(t, users, 3)
 	// Verify returned data integrity
 	var foundU1, foundU2, foundU3 bool
@@ -62,32 +63,32 @@ func TestDatabaseWithIndex(t *testing.T) {
 
 	// Test WithIndex with explicit USE hint
 	users = make([]*TestUser, 0)
-	require.NoError(t, database.Database[*TestUser](nil).WithIndex(existsIndex, consts.IndexHintUse).List(&users))
+	require.NoError(t, database.Database[*TestUser](context.Background()).WithIndex(existsIndex, consts.IndexHintUse).List(&users))
 	require.Len(t, users, 3)
 
 	// Test WithIndex with FORCE hint
 	users = make([]*TestUser, 0)
-	require.NoError(t, database.Database[*TestUser](nil).WithIndex(existsIndex, consts.IndexHintForce).List(&users))
+	require.NoError(t, database.Database[*TestUser](context.Background()).WithIndex(existsIndex, consts.IndexHintForce).List(&users))
 	require.Len(t, users, 3)
 
 	// Test WithIndex with IGNORE hint
 	users = make([]*TestUser, 0)
-	require.NoError(t, database.Database[*TestUser](nil).WithIndex(existsIndex, consts.IndexHintIgnore).List(&users))
+	require.NoError(t, database.Database[*TestUser](context.Background()).WithIndex(existsIndex, consts.IndexHintIgnore).List(&users))
 	require.Len(t, users, 3)
 
 	// Test WithIndex with empty index name (should be ignored)
 	users = make([]*TestUser, 0)
-	require.NoError(t, database.Database[*TestUser](nil).WithIndex("").List(&users))
+	require.NoError(t, database.Database[*TestUser](context.Background()).WithIndex("").List(&users))
 	require.Len(t, users, 3, "empty index name should be ignored and query should work normally")
 
 	// Test WithIndex with whitespace-only index name (should be ignored)
 	users = make([]*TestUser, 0)
-	require.NoError(t, database.Database[*TestUser](nil).WithIndex("   ").List(&users))
+	require.NoError(t, database.Database[*TestUser](context.Background()).WithIndex("   ").List(&users))
 	require.Len(t, users, 3, "whitespace-only index name should be ignored and query should work normally")
 
 	// Test WithIndex combined with WithQuery
 	users = make([]*TestUser, 0)
-	require.NoError(t, database.Database[*TestUser](nil).
+	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithIndex(existsIndex).
 		WithQuery(&TestUser{Name: u1.Name}).
 		List(&users))
@@ -101,20 +102,20 @@ func TestDatabaseWithIndex(t *testing.T) {
 	users = make([]*TestUser, 0)
 	// On SQLite, this will skip the index hint and work normally
 	// On MySQL, this might cause an error depending on the index existence
-	err := database.Database[*TestUser](nil).WithIndex(notExistsIndex).List(&users)
+	err := database.Database[*TestUser](context.Background()).WithIndex(notExistsIndex).List(&users)
 	// We don't assert error here because behavior differs by database type
 	_ = err
 
 	// Test WithIndex with empty result set
-	require.NoError(t, database.Database[*TestUser](nil).Delete(ul...))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(ul...))
 	users = make([]*TestUser, 0)
-	require.NoError(t, database.Database[*TestUser](nil).WithIndex(existsIndex).List(&users))
+	require.NoError(t, database.Database[*TestUser](context.Background()).WithIndex(existsIndex).List(&users))
 	require.Empty(t, users, "should return empty result when no records exist")
 
 	// Test WithIndex with Get method (single record)
-	require.NoError(t, database.Database[*TestUser](nil).Create(ul...))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Create(ul...))
 	user := new(TestUser)
-	require.NoError(t, database.Database[*TestUser](nil).WithIndex(existsIndex).Get(user, u1.ID))
+	require.NoError(t, database.Database[*TestUser](context.Background()).WithIndex(existsIndex).Get(user, u1.ID))
 	require.NotNil(t, user)
 	require.Equal(t, u1.ID, user.ID)
 	require.Equal(t, u1.Name, user.Name)
@@ -123,18 +124,18 @@ func TestDatabaseWithIndex(t *testing.T) {
 
 	// Test WithIndex with Count method
 	count := new(int64)
-	require.NoError(t, database.Database[*TestUser](nil).WithIndex(existsIndex).Count(count))
+	require.NoError(t, database.Database[*TestUser](context.Background()).WithIndex(existsIndex).Count(count))
 	require.Equal(t, int64(3), *count)
 
 	// Test WithIndex with First method
 	firstUser := new(TestUser)
-	require.NoError(t, database.Database[*TestUser](nil).WithIndex(existsIndex).First(firstUser))
+	require.NoError(t, database.Database[*TestUser](context.Background()).WithIndex(existsIndex).First(firstUser))
 	require.NotNil(t, firstUser)
 	require.NotEmpty(t, firstUser.ID)
 
 	// Test WithIndex with Last method
 	lastUser := new(TestUser)
-	require.NoError(t, database.Database[*TestUser](nil).WithIndex(existsIndex).Last(lastUser))
+	require.NoError(t, database.Database[*TestUser](context.Background()).WithIndex(existsIndex).Last(lastUser))
 	require.NotNil(t, lastUser)
 	require.NotEmpty(t, lastUser.ID)
 }
@@ -150,11 +151,11 @@ func TestDatabaseWithCursor(t *testing.T) {
 			name := fmt.Sprintf("user%05d", i)
 			data = append(data, &TestUser{Name: name, Base: model.Base{ID: name}})
 		}
-		require.NoError(t, database.Database[*TestUser](nil).WithBatchSize(1000).Create(data...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithBatchSize(1000).Create(data...))
 
 		// Get first record as starting cursor
 		u := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).First(u))
+		require.NoError(t, database.Database[*TestUser](context.Background()).First(u))
 		cursorValue := u.ID
 		require.Equal(t, "user00000", cursorValue, "first record should be user00000")
 
@@ -162,7 +163,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 		users := make([]*TestUser, 0)
 		for i := range 10 {
 			users = make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](nil).
+			require.NoError(t, database.Database[*TestUser](context.Background()).
 				WithLimit(1).
 				WithCursor(cursorValue, true).
 				List(&users))
@@ -181,11 +182,11 @@ func TestDatabaseWithCursor(t *testing.T) {
 			name := fmt.Sprintf("user%05d", i)
 			data = append(data, &TestUser{Name: name, Base: model.Base{ID: name}})
 		}
-		require.NoError(t, database.Database[*TestUser](nil).WithBatchSize(1000).Create(data...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithBatchSize(1000).Create(data...))
 
 		// Get last record as starting cursor
 		u := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).Last(u))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Last(u))
 		cursorValue := u.ID
 		require.Equal(t, fmt.Sprintf("user%05d", count-1), cursorValue, "last record should be user00099")
 
@@ -193,7 +194,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 		users := make([]*TestUser, 0)
 		for i := range 10 {
 			users = make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](nil).
+			require.NoError(t, database.Database[*TestUser](context.Background()).
 				WithLimit(1).
 				WithCursor(cursorValue, false).
 				List(&users))
@@ -210,7 +211,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 
 		// Test cursor pagination with custom field (created_at)
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 		require.Len(t, users, 3)
 
 		// Get first record's created_at as cursor
@@ -221,7 +222,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 
 		// Fetch next page using created_at as cursor field
 		nextUsers := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).
+		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithLimit(1).
 			WithCursor(cursorValue, true, "created_at").
 			List(&nextUsers))
@@ -240,7 +241,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 
 		// Test with empty cursor value (should be ignored)
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).
+		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithLimit(10).
 			WithCursor("", true).
 			List(&users))
@@ -253,14 +254,14 @@ func TestDatabaseWithCursor(t *testing.T) {
 
 		// Test cursor pagination combined with WithQuery
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).
+		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithQuery(&TestUser{Name: u1.Name}).
 			List(&users))
 		require.Len(t, users, 1)
 
 		cursorValue := users[0].ID
 		nextUsers := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).
+		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithQuery(&TestUser{Name: u1.Name}).
 			WithLimit(1).
 			WithCursor(cursorValue, true).
@@ -276,7 +277,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 			name := fmt.Sprintf("user%05d", i)
 			data = append(data, &TestUser{Name: name, Base: model.Base{ID: name}})
 		}
-		require.NoError(t, database.Database[*TestUser](nil).WithBatchSize(1000).Create(data...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithBatchSize(1000).Create(data...))
 
 		// Test pagination with page size > 1
 		pageSize := 10
@@ -285,7 +286,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 
 		for range 5 {
 			users := make([]*TestUser, 0)
-			db := database.Database[*TestUser](nil).WithLimit(pageSize)
+			db := database.Database[*TestUser](context.Background()).WithLimit(pageSize)
 			if cursorValue != "" {
 				db = db.WithCursor(cursorValue, true)
 			}
@@ -319,16 +320,16 @@ func TestDatabaseWithSelect(t *testing.T) {
 	t.Run("Create", func(t *testing.T) {
 		t.Run("with existing column", func(t *testing.T) {
 			defer cleanupTestData()
-			require.NoError(t, database.Database[*TestUser](nil).WithSelect("name").Create(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("name").Create(ul...))
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](nil).List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 			require.Len(t, users, 3)
 		})
 		t.Run("with non-existing column", func(t *testing.T) {
 			defer cleanupTestData()
-			require.NoError(t, database.Database[*TestUser](nil).WithSelect("notexists").Create(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("notexists").Create(ul...))
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](nil).List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 			require.Len(t, users, 3)
 		})
 	})
@@ -337,18 +338,18 @@ func TestDatabaseWithSelect(t *testing.T) {
 	t.Run("Delete", func(t *testing.T) {
 		t.Run("with existing column", func(t *testing.T) {
 			defer cleanupTestData()
-			require.NoError(t, database.Database[*TestUser](nil).WithSelect("name").Create(ul...))
-			require.NoError(t, database.Database[*TestUser](nil).WithSelect("name").Delete(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("name").Create(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("name").Delete(ul...))
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](nil).List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 			require.Empty(t, users)
 		})
 		t.Run("with non-existing column", func(t *testing.T) {
 			defer cleanupTestData()
-			require.NoError(t, database.Database[*TestUser](nil).WithSelect("notexists").Create(ul...))
-			require.NoError(t, database.Database[*TestUser](nil).WithSelect("notexists").Delete(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("notexists").Create(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("notexists").Delete(ul...))
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](nil).List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 			require.Empty(t, users)
 		})
 	})
@@ -361,10 +362,10 @@ func TestDatabaseWithSelect(t *testing.T) {
 			u1.Name = "user1_modified"
 			u2.Name = "user2_modified"
 			u3.Name = "user3_modified"
-			require.NoError(t, database.Database[*TestUser](nil).WithSelect("name").Update(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("name").Update(ul...))
 
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](nil).List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 			require.Len(t, users, 3)
 			u11, u22, u33 := findUsersByID(users)
 			require.NotNil(t, u11)
@@ -391,10 +392,10 @@ func TestDatabaseWithSelect(t *testing.T) {
 			u2.Name = "user2_modified"
 			u3.Name = "user3_modified"
 			// Only update column "age", the modified name will not be updated.
-			require.NoError(t, database.Database[*TestUser](nil).WithSelect("age").Update(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("age").Update(ul...))
 
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](nil).List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 			require.Len(t, users, 3)
 			u11, u22, u33 := findUsersByID(users)
 			require.NotNil(t, u11)
@@ -421,10 +422,10 @@ func TestDatabaseWithSelect(t *testing.T) {
 			u2.Name = "user2_modified"
 			u3.Name = "user3_modified"
 			// The non-existing fields will be ignored, and only default columns will be selected.
-			require.NoError(t, database.Database[*TestUser](nil).WithSelect("nonexistent").Update(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("nonexistent").Update(ul...))
 
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](nil).List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 			require.Len(t, users, 3)
 			u11, u22, u33 := findUsersByID(users)
 			require.NotNil(t, u11)
@@ -453,10 +454,10 @@ func TestDatabaseWithSelect(t *testing.T) {
 			u3.Name = "user3_modified"
 			u3.Age = 27
 			// Update both "name" and "age" columns.
-			require.NoError(t, database.Database[*TestUser](nil).WithSelect("name", "age").Update(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("name", "age").Update(ul...))
 
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](nil).List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 			require.Len(t, users, 3)
 			u11, u22, u33 := findUsersByID(users)
 			require.NotNil(t, u11)
@@ -481,7 +482,7 @@ func TestDatabaseWithSelect(t *testing.T) {
 			setupTestData(t)
 			// Only select column "name", other columns will be ignored.
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](nil).WithSelect("name").List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("name").List(&users))
 			require.Len(t, users, 3)
 			u11, u22, u33 := findUsersByID(users)
 			require.NotNil(t, u11)
@@ -503,7 +504,7 @@ func TestDatabaseWithSelect(t *testing.T) {
 			setupTestData(t)
 			// Only select column "age", other columns will be ignored.
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](nil).WithSelect("age").List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("age").List(&users))
 			require.Len(t, users, 3)
 			u11, u22, u33 := findUsersByID(users)
 			require.NotNil(t, u11)
@@ -525,7 +526,7 @@ func TestDatabaseWithSelect(t *testing.T) {
 			setupTestData(t)
 			// Select both "name" and "age" columns.
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](nil).WithSelect("name", "age").List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("name", "age").List(&users))
 			require.Len(t, users, 3)
 			u11, u22, u33 := findUsersByID(users)
 			require.NotNil(t, u11)
@@ -547,14 +548,14 @@ func TestDatabaseWithSelect(t *testing.T) {
 			setupTestData(t)
 			// Selecting non-existing column will cause error.
 			users := make([]*TestUser, 0)
-			require.Error(t, database.Database[*TestUser](nil).WithSelect("notexists").List(&users))
+			require.Error(t, database.Database[*TestUser](context.Background()).WithSelect("notexists").List(&users))
 		})
 		t.Run("with empty columns", func(t *testing.T) {
 			defer cleanupTestData()
 			setupTestData(t)
 			// WithSelect with no columns is a no-op, so all columns should be selected (default behavior).
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](nil).WithSelect().List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect().List(&users))
 			require.Len(t, users, 3)
 			u11, u22, u33 := findUsersByID(users)
 			require.NotNil(t, u11)
@@ -596,20 +597,20 @@ func TestDatabaseWithOrder(t *testing.T) {
 		setupTestData(t)
 
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).WithOrder("name").List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder("name").List(&users))
 		assertNameOrder(t, users, []string{u1.Name, u2.Name, u3.Name})
 
 		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).WithOrder("name asc").List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder("name asc").List(&users))
 		assertNameOrder(t, users, []string{u1.Name, u2.Name, u3.Name})
 
 		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).WithOrder("name desc").List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder("name desc").List(&users))
 		assertNameOrder(t, users, []string{u3.Name, u2.Name, u1.Name})
 
 		// WithOrder should also affect First/Last style queries.
 		user := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).WithOrder("name desc").First(user))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder("name desc").First(user))
 		require.Equal(t, u3.ID, user.ID)
 	})
 
@@ -625,7 +626,7 @@ func TestDatabaseWithOrder(t *testing.T) {
 			setupTestData(t)
 
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](nil).WithOrder("age desc, name asc").List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder("age desc, name asc").List(&users))
 			assertNameOrder(t, users, []string{u1.Name, u2.Name, u3.Name})
 		})
 
@@ -643,7 +644,7 @@ func TestDatabaseWithOrder(t *testing.T) {
 			setupTestData(t)
 
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](nil).WithOrder("age DESC, name asc, email desc").List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder("age DESC, name asc, email desc").List(&users))
 			assertIDOrder(t, users, []string{u2.ID, u1.ID, u3.ID})
 		})
 	})
@@ -653,7 +654,7 @@ func TestDatabaseWithOrder(t *testing.T) {
 		setupTestData(t)
 
 		users := make([]*TestUser, 0)
-		require.Error(t, database.Database[*TestUser](nil).WithOrder("name invalid_direction").List(&users))
+		require.Error(t, database.Database[*TestUser](context.Background()).WithOrder("name invalid_direction").List(&users))
 	})
 }
 
@@ -685,7 +686,7 @@ func TestDatabaseWithPagination(t *testing.T) {
 	runPage := func(t *testing.T, page, size int) []*TestUser {
 		t.Helper()
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).
+		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithOrder("id asc").
 			WithPagination(page, size).
 			List(&users))
@@ -695,7 +696,7 @@ func TestDatabaseWithPagination(t *testing.T) {
 	t.Run("BasicPaging", func(t *testing.T) {
 		defer cleanupTestData()
 		records, ids := newSeqUsers("pg_basic", 10)
-		require.NoError(t, database.Database[*TestUser](nil).Create(records...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(records...))
 
 		assertIDs(t, runPage(t, 1, 3), ids[:3])
 		assertIDs(t, runPage(t, 2, 3), ids[3:6])
@@ -705,7 +706,7 @@ func TestDatabaseWithPagination(t *testing.T) {
 	t.Run("PageOutOfRange", func(t *testing.T) {
 		defer cleanupTestData()
 		records, ids := newSeqUsers("pg_out_of_range", 5)
-		require.NoError(t, database.Database[*TestUser](nil).Create(records...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(records...))
 
 		assertIDs(t, runPage(t, 2, 3), ids[3:])
 		assertIDs(t, runPage(t, 3, 3), []string{})
@@ -714,7 +715,7 @@ func TestDatabaseWithPagination(t *testing.T) {
 	t.Run("NonPositivePageDefaultsToOne", func(t *testing.T) {
 		defer cleanupTestData()
 		records, ids := newSeqUsers("pg_non_positive", 6)
-		require.NoError(t, database.Database[*TestUser](nil).Create(records...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(records...))
 
 		assertIDs(t, runPage(t, 0, 3), ids[:3])
 		assertIDs(t, runPage(t, -5, 3), ids[:3])
@@ -723,7 +724,7 @@ func TestDatabaseWithPagination(t *testing.T) {
 	t.Run("NonPositiveSizeUsesDefaultLimit", func(t *testing.T) {
 		defer cleanupTestData()
 		records, ids := newSeqUsers("pg_size", 7)
-		require.NoError(t, database.Database[*TestUser](nil).Create(records...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(records...))
 
 		assertIDs(t, runPage(t, 1, 0), ids)
 		assertIDs(t, runPage(t, 1, -10), ids)
@@ -732,7 +733,7 @@ func TestDatabaseWithPagination(t *testing.T) {
 	t.Run("LargePageSize", func(t *testing.T) {
 		defer cleanupTestData()
 		records, ids := newSeqUsers("pg_large_size", 8)
-		require.NoError(t, database.Database[*TestUser](nil).Create(records...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(records...))
 
 		assertIDs(t, runPage(t, 1, 50), ids)
 		assertIDs(t, runPage(t, 2, 50), []string{})
@@ -741,11 +742,11 @@ func TestDatabaseWithPagination(t *testing.T) {
 	t.Run("EquivalentToOffsetAndLimit", func(t *testing.T) {
 		defer cleanupTestData()
 		records, ids := newSeqUsers("pg_offset", 9)
-		require.NoError(t, database.Database[*TestUser](nil).Create(records...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(records...))
 
 		pageUsers := runPage(t, 3, 2)
 		offsetUsers := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).
+		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithOrder("id asc").
 			WithOffset(4).
 			WithLimit(2).
@@ -785,10 +786,10 @@ func TestDatabaseWithOffset(t *testing.T) {
 	t.Run("BasicOffset", func(t *testing.T) {
 		defer cleanupTestData()
 		records, ids := newSeqUsers("offset_basic", 8)
-		require.NoError(t, database.Database[*TestUser](nil).Create(records...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(records...))
 
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).
+		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithOrder("id asc").
 			WithOffset(2).
 			WithLimit(3).
@@ -800,10 +801,10 @@ func TestDatabaseWithOffset(t *testing.T) {
 	t.Run("NonPositiveOffsetDoesNotSkip", func(t *testing.T) {
 		defer cleanupTestData()
 		records, ids := newSeqUsers("offset_non_positive", 5)
-		require.NoError(t, database.Database[*TestUser](nil).Create(records...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(records...))
 
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).
+		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithOrder("id asc").
 			WithOffset(0).
 			WithLimit(3).
@@ -811,7 +812,7 @@ func TestDatabaseWithOffset(t *testing.T) {
 		assertIDs(t, users, ids[:3])
 
 		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).
+		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithOrder("id asc").
 			WithOffset(-10).
 			WithLimit(3).
@@ -822,17 +823,17 @@ func TestDatabaseWithOffset(t *testing.T) {
 	t.Run("ChainOrder", func(t *testing.T) {
 		defer cleanupTestData()
 		records, _ := newSeqUsers("offset_chain", 8)
-		require.NoError(t, database.Database[*TestUser](nil).Create(records...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(records...))
 
 		users1 := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).
+		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithOrder("id asc").
 			WithOffset(3).
 			WithLimit(2).
 			List(&users1))
 
 		users2 := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).
+		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithOrder("id asc").
 			WithLimit(2).
 			WithOffset(3).
@@ -871,10 +872,10 @@ func TestDatabaseWithLimit(t *testing.T) {
 	t.Run("BasicLimit", func(t *testing.T) {
 		defer cleanupTestData()
 		testUsers, testIDs := newSeqUsers("test", 10)
-		require.NoError(t, database.Database[*TestUser](nil).Create(testUsers...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(testUsers...))
 
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).WithOrder("id asc").WithLimit(3).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder("id asc").WithLimit(3).List(&users))
 		require.Len(t, users, 3)
 		assertIDs(t, users, testIDs[0:3])
 	})
@@ -882,10 +883,10 @@ func TestDatabaseWithLimit(t *testing.T) {
 	t.Run("WithOrderAsc", func(t *testing.T) {
 		defer cleanupTestData()
 		testUsers, testIDs := newSeqUsers("test", 10)
-		require.NoError(t, database.Database[*TestUser](nil).Create(testUsers...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(testUsers...))
 
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).WithOrder("id asc").WithLimit(5).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder("id asc").WithLimit(5).List(&users))
 		require.Len(t, users, 5)
 		assertIDs(t, users, testIDs[0:5])
 	})
@@ -893,10 +894,10 @@ func TestDatabaseWithLimit(t *testing.T) {
 	t.Run("WithOrderDesc", func(t *testing.T) {
 		defer cleanupTestData()
 		testUsers, testIDs := newSeqUsers("test", 10)
-		require.NoError(t, database.Database[*TestUser](nil).Create(testUsers...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(testUsers...))
 
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).WithOrder("id desc").WithLimit(5).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder("id desc").WithLimit(5).List(&users))
 		require.Len(t, users, 5)
 		// Reverse expected IDs for desc order
 		expected := make([]string, 5)
@@ -909,10 +910,10 @@ func TestDatabaseWithLimit(t *testing.T) {
 	t.Run("LimitExceedsTotal", func(t *testing.T) {
 		defer cleanupTestData()
 		testUsers, testIDs := newSeqUsers("test", 5)
-		require.NoError(t, database.Database[*TestUser](nil).Create(testUsers...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(testUsers...))
 
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).WithOrder("id asc").WithLimit(10).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder("id asc").WithLimit(10).List(&users))
 		require.Len(t, users, 5)
 		assertIDs(t, users, testIDs)
 	})
@@ -920,21 +921,21 @@ func TestDatabaseWithLimit(t *testing.T) {
 	t.Run("NonPositiveLimitUsesDefault", func(t *testing.T) {
 		defer cleanupTestData()
 		testUsers, testIDs := newSeqUsers("test", 10)
-		require.NoError(t, database.Database[*TestUser](nil).Create(testUsers...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(testUsers...))
 
 		users := make([]*TestUser, 0)
 		// limit <= 0 should use defaultLimit (-1, unlimited)
-		require.NoError(t, database.Database[*TestUser](nil).WithOrder("id asc").WithLimit(0).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder("id asc").WithLimit(0).List(&users))
 		require.Len(t, users, 10)
 		assertIDs(t, users, testIDs)
 
 		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).WithOrder("id asc").WithLimit(-1).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder("id asc").WithLimit(-1).List(&users))
 		require.Len(t, users, 10)
 		assertIDs(t, users, testIDs)
 
 		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).WithOrder("id asc").WithLimit(-99).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder("id asc").WithLimit(-99).List(&users))
 		require.Len(t, users, 10)
 		assertIDs(t, users, testIDs)
 	})
@@ -942,10 +943,10 @@ func TestDatabaseWithLimit(t *testing.T) {
 	t.Run("LimitOne", func(t *testing.T) {
 		defer cleanupTestData()
 		testUsers, testIDs := newSeqUsers("test", 5)
-		require.NoError(t, database.Database[*TestUser](nil).Create(testUsers...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(testUsers...))
 
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).WithOrder("id asc").WithLimit(1).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder("id asc").WithLimit(1).List(&users))
 		require.Len(t, users, 1)
 		assertIDs(t, users, testIDs[0:1])
 	})
@@ -953,14 +954,14 @@ func TestDatabaseWithLimit(t *testing.T) {
 	t.Run("ChainOrder", func(t *testing.T) {
 		defer cleanupTestData()
 		testUsers, _ := newSeqUsers("test", 10)
-		require.NoError(t, database.Database[*TestUser](nil).Create(testUsers...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(testUsers...))
 
 		// Test that WithOrder can be chained before or after WithLimit
 		users1 := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).WithOrder("id desc").WithLimit(3).List(&users1))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder("id desc").WithLimit(3).List(&users1))
 
 		users2 := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).WithLimit(3).WithOrder("id desc").List(&users2))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithLimit(3).WithOrder("id desc").List(&users2))
 
 		// Both should produce the same result
 		require.Len(t, users2, len(users1))
@@ -975,8 +976,8 @@ func TestDatabaseWithExpand(t *testing.T) {
 
 	setupCategoryData := func(t *testing.T) {
 		t.Helper()
-		require.NoError(t, database.Database[*TestCategory](nil).Create(categoryRoot))
-		require.NoError(t, database.Database[*TestCategory](nil).Create(categoryParent))
+		require.NoError(t, database.Database[*TestCategory](context.Background()).Create(categoryRoot))
+		require.NoError(t, database.Database[*TestCategory](context.Background()).Create(categoryParent))
 
 		children := []*TestCategory{
 			{
@@ -990,7 +991,7 @@ func TestDatabaseWithExpand(t *testing.T) {
 				Base:     model.Base{ID: "child2"},
 			},
 		}
-		require.NoError(t, database.Database[*TestCategory](nil).Create(children...))
+		require.NoError(t, database.Database[*TestCategory](context.Background()).Create(children...))
 	}
 
 	t.Run("Parent", func(t *testing.T) {
@@ -999,7 +1000,7 @@ func TestDatabaseWithExpand(t *testing.T) {
 
 		categories := make([]*TestCategory, 0)
 		// Expand parent with single depth
-		require.NoError(t, database.Database[*TestCategory](nil).
+		require.NoError(t, database.Database[*TestCategory](context.Background()).
 			WithQuery(&TestCategory{Name: "child"}, types.QueryConfig{FuzzyMatch: true}).
 			WithExpand([]string{"Parent"}).
 			List(&categories))
@@ -1023,7 +1024,7 @@ func TestDatabaseWithExpand(t *testing.T) {
 
 		categories := make([]*TestCategory, 0)
 		// Expand parent with two depth (Parent.Parent)
-		require.NoError(t, database.Database[*TestCategory](nil).
+		require.NoError(t, database.Database[*TestCategory](context.Background()).
 			WithQuery(&TestCategory{Name: "child"}, types.QueryConfig{FuzzyMatch: true}).
 			WithExpand([]string{"Parent.Parent"}).
 			List(&categories))
@@ -1049,7 +1050,7 @@ func TestDatabaseWithExpand(t *testing.T) {
 
 		categories := make([]*TestCategory, 0)
 		// Expand with more depth than available (should only expand available depth)
-		require.NoError(t, database.Database[*TestCategory](nil).
+		require.NoError(t, database.Database[*TestCategory](context.Background()).
 			WithQuery(&TestCategory{Name: "child"}, types.QueryConfig{FuzzyMatch: true}).
 			WithExpand([]string{"Parent.Parent.Parent.Parent"}).
 			List(&categories))
@@ -1075,7 +1076,7 @@ func TestDatabaseWithExpand(t *testing.T) {
 
 		categories := make([]*TestCategory, 0)
 		// Association names are case sensitive
-		require.Error(t, database.Database[*TestCategory](nil).
+		require.Error(t, database.Database[*TestCategory](context.Background()).
 			WithQuery(&TestCategory{Name: "child"}, types.QueryConfig{FuzzyMatch: true}).
 			WithExpand([]string{"parent"}).
 			List(&categories))
@@ -1086,7 +1087,7 @@ func TestDatabaseWithExpand(t *testing.T) {
 		setupCategoryData(t)
 
 		c := new(TestCategory)
-		require.NoError(t, database.Database[*TestCategory](nil).WithExpand([]string{"Children"}).Get(c, categoryRootID))
+		require.NoError(t, database.Database[*TestCategory](context.Background()).WithExpand([]string{"Children"}).Get(c, categoryRootID))
 		require.Len(t, c.Children, 2)
 		// Root has two children: itself and "parent"
 		require.NotNil(t, c.Children[0])
@@ -1118,10 +1119,10 @@ func TestDatabaseWithExpand(t *testing.T) {
 		setupCategoryData(t)
 
 		c := new(TestCategory)
-		require.NoError(t, database.Database[*TestCategory](nil).Get(c, categoryRootID))
+		require.NoError(t, database.Database[*TestCategory](context.Background()).Get(c, categoryRootID))
 		require.Empty(t, c.Children)
 
-		require.NoError(t, database.Database[*TestCategory](nil).WithExpand([]string{"Children.Children"}).Get(c, categoryRootID))
+		require.NoError(t, database.Database[*TestCategory](context.Background()).WithExpand([]string{"Children.Children"}).Get(c, categoryRootID))
 		require.Len(t, c.Children, 2)
 		// Root has two children: itself and "parent"
 		require.NotNil(t, c.Children[0])
@@ -1160,10 +1161,10 @@ func TestDatabaseWithExpand(t *testing.T) {
 		setupCategoryData(t)
 
 		c := new(TestCategory)
-		require.NoError(t, database.Database[*TestCategory](nil).Get(c, categoryRootID))
+		require.NoError(t, database.Database[*TestCategory](context.Background()).Get(c, categoryRootID))
 		require.Empty(t, c.Children)
 
-		require.NoError(t, database.Database[*TestCategory](nil).WithExpand([]string{"Children.Children.Children.Children"}).Get(c, categoryRootID))
+		require.NoError(t, database.Database[*TestCategory](context.Background()).WithExpand([]string{"Children.Children.Children.Children"}).Get(c, categoryRootID))
 		require.Len(t, c.Children, 2)
 		// Root has two children: itself and "parent"
 		require.NotNil(t, c.Children[0])
@@ -1203,7 +1204,7 @@ func TestDatabaseWithExpand(t *testing.T) {
 
 		c := new(TestCategory)
 		// Association names are case sensitive
-		require.Error(t, database.Database[*TestCategory](nil).WithExpand([]string{"children"}).Get(c, categoryRootID))
+		require.Error(t, database.Database[*TestCategory](context.Background()).WithExpand([]string{"children"}).Get(c, categoryRootID))
 	})
 
 	t.Run("ParentAndChildren", func(t *testing.T) {
@@ -1211,11 +1212,11 @@ func TestDatabaseWithExpand(t *testing.T) {
 		setupCategoryData(t)
 
 		c := new(TestCategory)
-		require.NoError(t, database.Database[*TestCategory](nil).Get(c, categoryParentID))
+		require.NoError(t, database.Database[*TestCategory](context.Background()).Get(c, categoryParentID))
 		require.Empty(t, c.Children)
 		require.Nil(t, c.Parent)
 
-		require.NoError(t, database.Database[*TestCategory](nil).WithExpand([]string{"Parent", "Children"}).Get(c, categoryParentID))
+		require.NoError(t, database.Database[*TestCategory](context.Background()).WithExpand([]string{"Parent", "Children"}).Get(c, categoryParentID))
 		require.Len(t, c.Children, 2)
 		require.NotNil(t, c.Children[0])
 		require.NotNil(t, c.Children[1])
@@ -1232,7 +1233,7 @@ func TestDatabaseWithExclude(t *testing.T) {
 		setupTestData(t)
 
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).WithExclude(map[string][]any{
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithExclude(map[string][]any{
 			"id": {u1.ID},
 		}).List(&users))
 
@@ -1250,7 +1251,7 @@ func TestDatabaseWithExclude(t *testing.T) {
 		setupTestData(t)
 
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).WithExclude(map[string][]any{
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithExclude(map[string][]any{
 			"name": {u2.Name},
 		}).List(&users))
 
@@ -1268,7 +1269,7 @@ func TestDatabaseWithExclude(t *testing.T) {
 		setupTestData(t)
 
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).WithExclude(map[string][]any{
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithExclude(map[string][]any{
 			"id": {u1.ID, u2.ID},
 		}).List(&users))
 
@@ -1285,7 +1286,7 @@ func TestDatabaseWithExclude(t *testing.T) {
 		setupTestData(t)
 
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).WithExclude(map[string][]any{
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithExclude(map[string][]any{
 			"id":   {u1.ID},
 			"name": {u2.Name},
 		}).List(&users))
@@ -1303,7 +1304,7 @@ func TestDatabaseWithExclude(t *testing.T) {
 		setupTestData(t)
 
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).WithExclude(map[string][]any{
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithExclude(map[string][]any{
 			"id": {u1.ID, u2.ID, u3.ID},
 		}).List(&users))
 
@@ -1315,7 +1316,7 @@ func TestDatabaseWithExclude(t *testing.T) {
 		setupTestData(t)
 
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).WithExclude(map[string][]any{}).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithExclude(map[string][]any{}).List(&users))
 
 		require.Len(t, users, 3, "empty exclude map should not filter any records")
 		u11, u22, u33 := findUsersByID(users)
@@ -1333,16 +1334,16 @@ func TestDatabaseWithPurge(t *testing.T) {
 		setupTestData(t)
 
 		// WithPurge() defaults to true (hard delete)
-		require.NoError(t, database.Database[*TestUser](nil).WithPurge().Delete(u1))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge().Delete(u1))
 
 		// Verify record is permanently deleted (not visible in normal queries)
 		count := new(int64)
-		require.NoError(t, database.Database[*TestUser](nil).Count(count))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 		require.Equal(t, int64(2), *count, "should have 2 records after hard delete")
 
 		// Verify record is not accessible via Get
 		u := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).Get(u, u1.ID))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID))
 		require.Empty(t, u.ID, "hard-deleted record should not be accessible via Get")
 
 		// Verify record is permanently deleted (not found even with Unscoped)
@@ -1357,11 +1358,11 @@ func TestDatabaseWithPurge(t *testing.T) {
 		setupTestData(t)
 
 		// WithPurge(true) explicitly enables hard delete
-		require.NoError(t, database.Database[*TestUser](nil).WithPurge(true).Delete(u1, u2))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge(true).Delete(u1, u2))
 
 		// Verify records are permanently deleted
 		count := new(int64)
-		require.NoError(t, database.Database[*TestUser](nil).Count(count))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 		require.Equal(t, int64(1), *count, "should have 1 record after hard delete")
 
 		// Verify records are not found even with Unscoped
@@ -1376,7 +1377,7 @@ func TestDatabaseWithPurge(t *testing.T) {
 
 		// Verify u3 still exists
 		u := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).Get(u, u3.ID))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u3.ID))
 		require.Equal(t, u3.ID, u.ID)
 	})
 
@@ -1385,16 +1386,16 @@ func TestDatabaseWithPurge(t *testing.T) {
 		setupTestData(t)
 
 		// WithPurge(false) explicitly enables soft delete (overrides model.Purge())
-		require.NoError(t, database.Database[*TestUser](nil).WithPurge(false).Delete(u1))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge(false).Delete(u1))
 
 		// Verify record is soft-deleted (not visible in normal queries)
 		count := new(int64)
-		require.NoError(t, database.Database[*TestUser](nil).Count(count))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 		require.Equal(t, int64(2), *count, "should have 2 records after soft delete")
 
 		// Verify record is not accessible via Get
 		u := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).Get(u, u1.ID))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID))
 		require.Empty(t, u.ID, "soft-deleted record should not be accessible via Get")
 
 		// Verify record still exists in database (found with Unscoped)
@@ -1409,11 +1410,11 @@ func TestDatabaseWithPurge(t *testing.T) {
 		setupTestData(t)
 
 		// Batch hard delete all records
-		require.NoError(t, database.Database[*TestUser](nil).WithPurge(true).Delete(ul...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge(true).Delete(ul...))
 
 		// Verify all records are permanently deleted
 		count := new(int64)
-		require.NoError(t, database.Database[*TestUser](nil).Count(count))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 		require.Equal(t, int64(0), *count, "should have 0 records after batch hard delete")
 
 		// Verify all records are not found even with Unscoped
@@ -1427,11 +1428,11 @@ func TestDatabaseWithPurge(t *testing.T) {
 		setupTestData(t)
 
 		// Batch soft delete all records
-		require.NoError(t, database.Database[*TestUser](nil).WithPurge(false).Delete(ul...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge(false).Delete(ul...))
 
 		// Verify all records are soft-deleted (not visible in normal queries)
 		count := new(int64)
-		require.NoError(t, database.Database[*TestUser](nil).Count(count))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 		require.Equal(t, int64(0), *count, "should have 0 records after batch soft delete")
 
 		// Verify all records still exist in database (found with Unscoped)
@@ -1453,19 +1454,19 @@ func TestDatabaseWithPurge(t *testing.T) {
 
 		// WithPurge should not affect Create operations
 		// Create with WithPurge() - should work normally
-		require.NoError(t, database.Database[*TestUser](nil).WithPurge().Create(ul...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge().Create(ul...))
 		count := new(int64)
-		require.NoError(t, database.Database[*TestUser](nil).Count(count))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 		require.Equal(t, int64(3), *count, "should have 3 records after Create with WithPurge()")
 
 		// Create with WithPurge(true) - should work normally
-		require.NoError(t, database.Database[*TestUser](nil).WithPurge(true).Create(ul...))
-		require.NoError(t, database.Database[*TestUser](nil).Count(count))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge(true).Create(ul...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 		require.Equal(t, int64(3), *count, "should have 3 records after Create with WithPurge(true)")
 
 		// Create with WithPurge(false) - should work normally
-		require.NoError(t, database.Database[*TestUser](nil).WithPurge(false).Create(ul...))
-		require.NoError(t, database.Database[*TestUser](nil).Count(count))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge(false).Create(ul...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 		require.Equal(t, int64(3), *count, "should have 3 records after Create with WithPurge(false)")
 	})
 
@@ -1476,15 +1477,15 @@ func TestDatabaseWithPurge(t *testing.T) {
 		// WithPurge should not affect Update operations
 		u1.Name = "updated1"
 		u2.Name = "updated2"
-		require.NoError(t, database.Database[*TestUser](nil).WithPurge().Update(u1, u2))
-		require.NoError(t, database.Database[*TestUser](nil).WithPurge(true).Update(u1, u2))
-		require.NoError(t, database.Database[*TestUser](nil).WithPurge(false).Update(u1, u2))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge().Update(u1, u2))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge(true).Update(u1, u2))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge(false).Update(u1, u2))
 
 		// Verify records are updated successfully
 		u11 := new(TestUser)
 		u22 := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).Get(u11, u1.ID))
-		require.NoError(t, database.Database[*TestUser](nil).Get(u22, u2.ID))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Get(u11, u1.ID))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Get(u22, u2.ID))
 		require.Equal(t, "updated1", u11.Name)
 		require.Equal(t, "updated2", u22.Name)
 	})
@@ -1495,13 +1496,13 @@ func TestDatabaseWithPurge(t *testing.T) {
 
 		// WithPurge should not affect List operations
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).WithPurge().List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge().List(&users))
 		require.Len(t, users, 3, "WithPurge should not affect List")
 
-		require.NoError(t, database.Database[*TestUser](nil).WithPurge(true).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge(true).List(&users))
 		require.Len(t, users, 3, "WithPurge(true) should not affect List")
 
-		require.NoError(t, database.Database[*TestUser](nil).WithPurge(false).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge(false).List(&users))
 		require.Len(t, users, 3, "WithPurge(false) should not affect List")
 	})
 
@@ -1511,14 +1512,14 @@ func TestDatabaseWithPurge(t *testing.T) {
 
 		// WithPurge should not affect Get operations
 		u := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).WithPurge().Get(u, u1.ID))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge().Get(u, u1.ID))
 		require.NotNil(t, u)
 		require.Equal(t, u1.ID, u.ID)
 
-		require.NoError(t, database.Database[*TestUser](nil).WithPurge(true).Get(u, u2.ID))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge(true).Get(u, u2.ID))
 		require.Equal(t, u2.ID, u.ID)
 
-		require.NoError(t, database.Database[*TestUser](nil).WithPurge(false).Get(u, u3.ID))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge(false).Get(u, u3.ID))
 		require.Equal(t, u3.ID, u.ID)
 	})
 }
@@ -1530,21 +1531,21 @@ func TestDatabaseWithCache(t *testing.T) {
 		defer cleanupTestData()
 
 		// WithCache should not affect Create operations
-		require.NoError(t, database.Database[*TestUser](nil).WithCache().Create(ul...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache().Create(ul...))
 		count := new(int64)
-		require.NoError(t, database.Database[*TestUser](nil).Count(count))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 		require.Equal(t, int64(3), *count, "should have 3 records after Create with WithCache()")
 
 		// Create with WithCache(true) - should work normally
-		require.NoError(t, database.Database[*TestUser](nil).Delete(ul...))
-		require.NoError(t, database.Database[*TestUser](nil).WithCache(true).Create(ul...))
-		require.NoError(t, database.Database[*TestUser](nil).Count(count))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Delete(ul...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache(true).Create(ul...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 		require.Equal(t, int64(3), *count, "should have 3 records after Create with WithCache(true)")
 
 		// Create with WithCache(false) - should work normally
-		require.NoError(t, database.Database[*TestUser](nil).Delete(ul...))
-		require.NoError(t, database.Database[*TestUser](nil).WithCache(false).Create(ul...))
-		require.NoError(t, database.Database[*TestUser](nil).Count(count))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Delete(ul...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache(false).Create(ul...))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 		require.Equal(t, int64(3), *count, "should have 3 records after Create with WithCache(false)")
 	})
 
@@ -1554,11 +1555,11 @@ func TestDatabaseWithCache(t *testing.T) {
 
 		// WithCache should not affect Delete operations (but Delete clears cache)
 		count := new(int64)
-		require.NoError(t, database.Database[*TestUser](nil).Count(count))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 		require.Equal(t, int64(3), *count, "should have 3 records initially")
 
-		require.NoError(t, database.Database[*TestUser](nil).WithCache().Delete(u1))
-		require.NoError(t, database.Database[*TestUser](nil).Count(count))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache().Delete(u1))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 		require.Equal(t, int64(2), *count, "should have 2 records after Delete with WithCache()")
 	})
 
@@ -1569,13 +1570,13 @@ func TestDatabaseWithCache(t *testing.T) {
 		// WithCache should not affect Update operations (but Update clears cache)
 		u1.Name = "updated1"
 		u2.Name = "updated2"
-		require.NoError(t, database.Database[*TestUser](nil).WithCache().Update(u1, u2))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache().Update(u1, u2))
 
 		// Verify records are updated successfully
 		u11 := new(TestUser)
 		u22 := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).Get(u11, u1.ID))
-		require.NoError(t, database.Database[*TestUser](nil).Get(u22, u2.ID))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Get(u11, u1.ID))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Get(u22, u2.ID))
 		require.Equal(t, "updated1", u11.Name)
 		require.Equal(t, "updated2", u22.Name)
 	})
@@ -1586,17 +1587,17 @@ func TestDatabaseWithCache(t *testing.T) {
 
 		// Test List with cache enabled - results should be consistent
 		users1 := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).List(&users1))
+		require.NoError(t, database.Database[*TestUser](context.Background()).List(&users1))
 		require.Len(t, users1, 3, "should have 3 records without cache")
 
 		users2 := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).WithCache().List(&users2))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache().List(&users2))
 		require.Len(t, users2, 3, "should have 3 records with cache enabled")
 		require.True(t, reflect.DeepEqual(users1, users2), "results should be identical")
 
 		// Test List with cache disabled - should still work
 		users3 := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](nil).WithCache(false).List(&users3))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache(false).List(&users3))
 		require.Len(t, users3, 3, "should have 3 records with cache disabled")
 		require.True(t, reflect.DeepEqual(users1, users3), "results should be identical")
 	})
@@ -1607,18 +1608,18 @@ func TestDatabaseWithCache(t *testing.T) {
 
 		// Test Get with cache enabled - results should be consistent
 		uu1 := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).Get(uu1, u1.ID))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Get(uu1, u1.ID))
 		require.NotNil(t, uu1)
 		require.Equal(t, u1.ID, uu1.ID)
 
 		uu2 := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).WithCache().Get(uu2, u1.ID))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache().Get(uu2, u1.ID))
 		require.NotNil(t, uu2)
 		require.True(t, reflect.DeepEqual(uu1, uu2), "results should be identical")
 
 		// Test Get with cache disabled - should still work
 		uu3 := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).WithCache(false).Get(uu3, u1.ID))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache(false).Get(uu3, u1.ID))
 		require.NotNil(t, uu3)
 		require.True(t, reflect.DeepEqual(uu1, uu3), "results should be identical")
 	})
@@ -1629,17 +1630,17 @@ func TestDatabaseWithCache(t *testing.T) {
 
 		// Test Count with cache enabled
 		count1 := new(int64)
-		require.NoError(t, database.Database[*TestUser](nil).Count(count1))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count1))
 		require.Equal(t, int64(3), *count1, "should have 3 records without cache")
 
 		count2 := new(int64)
-		require.NoError(t, database.Database[*TestUser](nil).WithCache().Count(count2))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache().Count(count2))
 		require.Equal(t, int64(3), *count2, "should have 3 records with cache enabled")
 		require.Equal(t, *count1, *count2, "counts should be identical")
 
 		// Test Count with cache disabled - should still work
 		count3 := new(int64)
-		require.NoError(t, database.Database[*TestUser](nil).WithCache(false).Count(count3))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache(false).Count(count3))
 		require.Equal(t, int64(3), *count3, "should have 3 records with cache disabled")
 		require.Equal(t, *count1, *count3, "counts should be identical")
 	})
@@ -1650,18 +1651,18 @@ func TestDatabaseWithCache(t *testing.T) {
 
 		// Test First with cache enabled - results should be consistent
 		uu1 := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).First(uu1))
+		require.NoError(t, database.Database[*TestUser](context.Background()).First(uu1))
 		require.NotNil(t, uu1)
 		require.NotEmpty(t, uu1.ID)
 
 		uu2 := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).WithCache().First(uu2))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache().First(uu2))
 		require.NotNil(t, uu2)
 		require.True(t, reflect.DeepEqual(uu1, uu2), "results should be identical")
 
 		// Test First with cache disabled - should still work
 		uu3 := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).WithCache(false).First(uu3))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache(false).First(uu3))
 		require.NotNil(t, uu3)
 		require.True(t, reflect.DeepEqual(uu1, uu3), "results should be identical")
 	})
@@ -1672,18 +1673,18 @@ func TestDatabaseWithCache(t *testing.T) {
 
 		// Test Last with cache enabled - results should be consistent
 		uu1 := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).Last(uu1))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Last(uu1))
 		require.NotNil(t, uu1)
 		require.NotEmpty(t, uu1.ID)
 
 		uu2 := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).WithCache().Last(uu2))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache().Last(uu2))
 		require.NotNil(t, uu2)
 		require.True(t, reflect.DeepEqual(uu1, uu2), "results should be identical")
 
 		// Test Last with cache disabled - should still work
 		uu3 := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).WithCache(false).Last(uu3))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache(false).Last(uu3))
 		require.NotNil(t, uu3)
 		require.True(t, reflect.DeepEqual(uu1, uu3), "results should be identical")
 	})
@@ -1694,18 +1695,18 @@ func TestDatabaseWithCache(t *testing.T) {
 
 		// Test Take with cache enabled - results should be consistent
 		uu1 := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).Take(uu1))
+		require.NoError(t, database.Database[*TestUser](context.Background()).Take(uu1))
 		require.NotNil(t, uu1)
 		require.NotEmpty(t, uu1.ID)
 
 		uu2 := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).WithCache().Take(uu2))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache().Take(uu2))
 		require.NotNil(t, uu2)
 		require.True(t, reflect.DeepEqual(uu1, uu2), "results should be identical")
 
 		// Test Take with cache disabled - should still work
 		uu3 := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).WithCache(false).Take(uu3))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache(false).Take(uu3))
 		require.NotNil(t, uu3)
 		require.True(t, reflect.DeepEqual(uu1, uu3), "results should be identical")
 	})
@@ -1718,9 +1719,9 @@ func TestDatabaseWithOmit(t *testing.T) {
 		t.Run("OmitName", func(t *testing.T) {
 			defer cleanupTestData()
 
-			require.NoError(t, database.Database[*TestUser](nil).WithOmit("name").Create(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("name").Create(ul...))
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](nil).List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 			require.Len(t, users, 3)
 
 			for _, u := range users {
@@ -1736,9 +1737,9 @@ func TestDatabaseWithOmit(t *testing.T) {
 		t.Run("OmitAge", func(t *testing.T) {
 			defer cleanupTestData()
 
-			require.NoError(t, database.Database[*TestUser](nil).WithOmit("age").Create(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("age").Create(ul...))
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](nil).List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 			require.Len(t, users, 3)
 
 			for _, u := range users {
@@ -1760,10 +1761,10 @@ func TestDatabaseWithOmit(t *testing.T) {
 			// Update with omit name - name should remain unchanged
 			originalName := u1.Name
 			u1.Age = 25
-			require.NoError(t, database.Database[*TestUser](nil).WithOmit("name").Update(u1))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("name").Update(u1))
 
 			uu := new(TestUser)
-			require.NoError(t, database.Database[*TestUser](nil).Get(uu, u1.ID))
+			require.NoError(t, database.Database[*TestUser](context.Background()).Get(uu, u1.ID))
 			require.Equal(t, originalName, uu.Name, "name should remain unchanged when omitted")
 			require.Equal(t, int(25), uu.Age, "age should be updated")
 		})
@@ -1775,10 +1776,10 @@ func TestDatabaseWithOmit(t *testing.T) {
 			// Update with omit age - age should remain unchanged
 			originalAge := u1.Age
 			u1.Name = "updated_name"
-			require.NoError(t, database.Database[*TestUser](nil).WithOmit("age").Update(u1))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("age").Update(u1))
 
 			uu := new(TestUser)
-			require.NoError(t, database.Database[*TestUser](nil).Get(uu, u1.ID))
+			require.NoError(t, database.Database[*TestUser](context.Background()).Get(uu, u1.ID))
 			require.Equal(t, originalAge, uu.Age, "age should remain unchanged when omitted")
 			require.Equal(t, "updated_name", uu.Name, "name should be updated")
 		})
@@ -1791,16 +1792,16 @@ func TestDatabaseWithOmit(t *testing.T) {
 
 			// WithOmit should not affect Delete operation (soft delete)
 			count := new(int64)
-			require.NoError(t, database.Database[*TestUser](nil).Count(count))
+			require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 			require.Equal(t, int64(3), *count, "should have 3 records initially")
 
-			require.NoError(t, database.Database[*TestUser](nil).WithOmit("name", "age").Delete(u1))
-			require.NoError(t, database.Database[*TestUser](nil).Count(count))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("name", "age").Delete(u1))
+			require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 			require.Equal(t, int64(2), *count, "should have 2 records after soft delete")
 
 			// Verify record is soft-deleted (not accessible via Get)
 			uu := new(TestUser)
-			require.NoError(t, database.Database[*TestUser](nil).Get(uu, u1.ID))
+			require.NoError(t, database.Database[*TestUser](context.Background()).Get(uu, u1.ID))
 			require.Empty(t, uu.ID, "soft-deleted record should not be accessible via Get")
 		})
 
@@ -1810,16 +1811,16 @@ func TestDatabaseWithOmit(t *testing.T) {
 
 			// WithOmit should not affect Delete operation (hard delete)
 			count := new(int64)
-			require.NoError(t, database.Database[*TestUser](nil).Count(count))
+			require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 			require.Equal(t, int64(3), *count, "should have 3 records initially")
 
-			require.NoError(t, database.Database[*TestUser](nil).WithOmit("name", "age").WithPurge().Delete(u1))
-			require.NoError(t, database.Database[*TestUser](nil).Count(count))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("name", "age").WithPurge().Delete(u1))
+			require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 			require.Equal(t, int64(2), *count, "should have 2 records after hard delete")
 
 			// Verify record is permanently deleted (not accessible via Get)
 			uu := new(TestUser)
-			require.NoError(t, database.Database[*TestUser](nil).Get(uu, u1.ID))
+			require.NoError(t, database.Database[*TestUser](context.Background()).Get(uu, u1.ID))
 			require.Empty(t, uu.ID, "hard-deleted record should not be accessible via Get")
 		})
 	})
@@ -1830,7 +1831,7 @@ func TestDatabaseWithOmit(t *testing.T) {
 			setupTestData(t)
 
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](nil).WithOmit("name").List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("name").List(&users))
 			require.Len(t, users, 3)
 
 			for _, u := range users {
@@ -1846,7 +1847,7 @@ func TestDatabaseWithOmit(t *testing.T) {
 			setupTestData(t)
 
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](nil).WithOmit("age").List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("age").List(&users))
 			require.Len(t, users, 3)
 
 			for _, u := range users {
@@ -1863,7 +1864,7 @@ func TestDatabaseWithOmit(t *testing.T) {
 		setupTestData(t)
 
 		uu := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).WithOmit("name").Get(uu, u1.ID))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("name").Get(uu, u1.ID))
 		require.NotNil(t, uu)
 		require.Equal(t, u1.ID, uu.ID)
 		require.Empty(t, uu.Name, "name should be omitted")
@@ -1877,7 +1878,7 @@ func TestDatabaseWithOmit(t *testing.T) {
 
 		// WithOmit should not affect Count operation
 		count := new(int64)
-		require.NoError(t, database.Database[*TestUser](nil).WithOmit("name", "age").Count(count))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("name", "age").Count(count))
 		require.Equal(t, int64(3), *count, "count should not be affected by WithOmit")
 	})
 
@@ -1886,7 +1887,7 @@ func TestDatabaseWithOmit(t *testing.T) {
 		setupTestData(t)
 
 		uu := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).WithOmit("name").First(uu))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("name").First(uu))
 		require.NotNil(t, uu)
 		require.NotEmpty(t, uu.ID)
 		require.Empty(t, uu.Name, "name should be omitted")
@@ -1899,7 +1900,7 @@ func TestDatabaseWithOmit(t *testing.T) {
 		setupTestData(t)
 
 		uu := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).WithOmit("age").Last(uu))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("age").Last(uu))
 		require.NotNil(t, uu)
 		require.NotEmpty(t, uu.ID)
 		require.NotEmpty(t, uu.Name, "name should not be empty")
@@ -1912,7 +1913,7 @@ func TestDatabaseWithOmit(t *testing.T) {
 		setupTestData(t)
 
 		uu := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](nil).WithOmit("name").Take(uu))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("name").Take(uu))
 		require.NotNil(t, uu)
 		require.NotEmpty(t, uu.ID)
 		require.Empty(t, uu.Name, "name should be omitted")

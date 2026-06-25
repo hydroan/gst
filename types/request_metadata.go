@@ -1,6 +1,7 @@
 package types
 
 import (
+	"context"
 	"maps"
 	"net/url"
 
@@ -31,6 +32,8 @@ type RequestMetadataValues struct {
 	Params    map[string]string
 	Query     url.Values
 }
+
+type requestMetadataContextKey struct{}
 
 // NewRequestMetadata creates RequestMetadata from gin.Context.
 func NewRequestMetadata(c *gin.Context) RequestMetadata {
@@ -70,6 +73,36 @@ func NewRequestMetadataFromValues(values RequestMetadataValues) RequestMetadata 
 		params:    cloneStringMap(values.Params),
 		query:     cloneURLValues(values.Query),
 	}
+}
+
+// ContextWithRequestMetadata returns a context carrying immutable request metadata.
+func ContextWithRequestMetadata(ctx context.Context, meta RequestMetadata) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	return context.WithValue(ctx, requestMetadataContextKey{}, NewRequestMetadataFromValues(RequestMetadataValues{
+		Route:     meta.Route(),
+		Username:  meta.Username(),
+		UserID:    meta.UserID(),
+		SessionID: meta.SessionID(),
+		TraceID:   meta.TraceID(),
+		Params:    meta.Params(),
+		Query:     meta.Query(),
+	}))
+}
+
+// RequestMetadataFromContext extracts request metadata from ctx.
+func RequestMetadataFromContext(ctx context.Context) RequestMetadata {
+	if ctx == nil {
+		return RequestMetadata{}
+	}
+
+	meta, ok := ctx.Value(requestMetadataContextKey{}).(RequestMetadata)
+	if !ok {
+		return RequestMetadata{}
+	}
+	return meta
 }
 
 func (m RequestMetadata) Route() string     { return m.route }

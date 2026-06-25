@@ -109,7 +109,7 @@ func (db *database[M]) List(dest *[]M) (err error) {
 	// }
 	// if shouldDecode {
 	// 	var _dest []M
-	// 	if _dest, err = redis.GetML[M](db.ctx.Context(), key); err == nil {
+	// 	if _dest, err = redis.GetML[M](db.ctx, key); err == nil {
 	// 		val := reflect.ValueOf(dest)
 	// 		if val.Kind() != reflect.Pointer || val.Elem().Kind() != reflect.Slice {
 	// 			return ErrNotPtrSlice
@@ -125,7 +125,7 @@ func (db *database[M]) List(dest *[]M) (err error) {
 	// 		return nil // Found cache and return.
 	// 	}
 	// } else {
-	// 	if _cache, err = redis.Get(db.ctx.Context(), key); err == nil {
+	// 	if _cache, err = redis.Get(db.ctx, key); err == nil {
 	// 		val := reflect.ValueOf(cache[0])
 	// 		if val.Kind() != reflect.Pointer || val.Elem().Kind() != reflect.Slice {
 	// 			return ErrNotPtrSlice
@@ -157,7 +157,7 @@ QUERY:
 		if err = traceModelHook[M](db.ctx, consts.PHASE_LIST_BEFORE, span, func(spanCtx context.Context) error {
 			for i := range *dest {
 				if !reflect.DeepEqual(empty, (*dest)[i]) {
-					if err = (*dest)[i].ListBefore(types.NewModelContext(spanCtx, db.ctx)); err != nil {
+					if err = (*dest)[i].ListBefore(types.NewModelContext(spanCtx)); err != nil {
 						return err
 					}
 				}
@@ -188,7 +188,7 @@ QUERY:
 		if err = traceModelHook[M](db.ctx, consts.PHASE_LIST_AFTER, span, func(spanCtx context.Context) error {
 			for i := range *dest {
 				if !reflect.DeepEqual(empty, (*dest)[i]) {
-					if err = (*dest)[i].ListAfter(types.NewModelContext(spanCtx, db.ctx)); err != nil {
+					if err = (*dest)[i].ListAfter(types.NewModelContext(spanCtx)); err != nil {
 						return err
 					}
 				}
@@ -339,7 +339,7 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 	// 	}
 	// } else {
 	// 	var _cache []byte
-	// 	if _cache, err = redis.Get(db.ctx.Context(), key); err == nil {
+	// 	if _cache, err = redis.Get(db.ctx, key); err == nil {
 	// 		val := reflect.ValueOf(cache[0])
 	// 		if val.Kind() != reflect.Pointer {
 	// 			return ErrNotPtrSlice
@@ -366,7 +366,7 @@ QUERY:
 	// Invoke model hook: GetBefore.
 	if !db.noHook && !reflect.DeepEqual(empty, dest) {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_BEFORE, span, func(spanCtx context.Context) error {
-			return dest.GetBefore(types.NewModelContext(spanCtx, db.ctx))
+			return dest.GetBefore(types.NewModelContext(spanCtx))
 		}); err != nil {
 			return err
 		}
@@ -393,7 +393,7 @@ QUERY:
 	// Invoke model hook: GetAfter.
 	if !db.noHook && !reflect.DeepEqual(empty, dest) {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_AFTER, span, func(spanCtx context.Context) error {
-			return dest.GetAfter(types.NewModelContext(spanCtx, db.ctx))
+			return dest.GetAfter(types.NewModelContext(spanCtx))
 		}); err != nil {
 			return err
 		}
@@ -489,7 +489,7 @@ func (db *database[M]) Count(count *int64) (err error) {
 	// }
 	// fmt.Println("---- buildCacheKey count")
 	// _, key = buildCacheKey(db.db.Session(&gorm.Session{DryRun: true}).Model(*new(M)).Count(count).Statement, "count")
-	// if _cache, err = redis.GetInt(db.ctx.Context(), key); err == nil {
+	// if _cache, err = redis.GetInt(db.ctx, key); err == nil {
 	// 	*count = _cache
 	// 	logger.Cache.Infow("count from cache", "cost", time.Since(begin).String(), "key", key)
 	// 	return
@@ -516,7 +516,7 @@ QUERY:
 	// if db.enableCache && config.App.RedisConfig.Enable {
 	// 	logger.Cache.Infow("count from database", "cost", time.Since(begin).String(), "key", key)
 	// 	go func() {
-	// 		if err = redis.Set(db.ctx.Context(), key, *count); err != nil {
+	// 		if err = redis.Set(db.ctx, key, *count); err != nil {
 	// 			logger.Cache.Error(err)
 	// 		}
 	// 	}()
@@ -636,7 +636,7 @@ func (db *database[M]) First(dest M) (err error) {
 	// 	}
 	// } else {
 	// 	var _cache []byte
-	// 	if _cache, err = redis.Get(db.ctx.Context(), key); err == nil {
+	// 	if _cache, err = redis.Get(db.ctx, key); err == nil {
 	// 		val := reflect.ValueOf(cache[0])
 	// 		if val.Kind() != reflect.Pointer {
 	// 			return ErrNotPtrSlice
@@ -663,7 +663,7 @@ QUERY:
 	// Invoke model hook: GetBefore
 	if !db.noHook && !reflect.DeepEqual(empty, dest) {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_BEFORE, span, func(spanCtx context.Context) error {
-			return dest.GetBefore(types.NewModelContext(spanCtx, db.ctx))
+			return dest.GetBefore(types.NewModelContext(spanCtx))
 		}); err != nil {
 			return err
 		}
@@ -679,7 +679,7 @@ QUERY:
 	// Invoke model hook: GetAfter
 	if !db.noHook && !reflect.DeepEqual(empty, dest) {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_AFTER, span, func(spanCtx context.Context) error {
-			return dest.GetAfter(types.NewModelContext(spanCtx, db.ctx))
+			return dest.GetAfter(types.NewModelContext(spanCtx))
 		}); err != nil {
 			return err
 		}
@@ -807,7 +807,7 @@ func (db *database[M]) Last(dest M) (err error) {
 	// 	}
 	// } else {
 	// 	var _cache []byte
-	// 	if _cache, err = redis.Get(db.ctx.Context(), key); err == nil {
+	// 	if _cache, err = redis.Get(db.ctx, key); err == nil {
 	// 		val := reflect.ValueOf(cache[0])
 	// 		if val.Kind() != reflect.Pointer {
 	// 			return ErrNotPtrSlice
@@ -834,7 +834,7 @@ QUERY:
 	// Invoke model hook: GetBefore.
 	if !db.noHook && !reflect.DeepEqual(empty, dest) {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_BEFORE, span, func(spanCtx context.Context) error {
-			return dest.GetBefore(types.NewModelContext(spanCtx, db.ctx))
+			return dest.GetBefore(types.NewModelContext(spanCtx))
 		}); err != nil {
 			return err
 		}
@@ -850,7 +850,7 @@ QUERY:
 	// Invoke model hook: GetAfter
 	if !db.noHook && !reflect.DeepEqual(empty, dest) {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_AFTER, span, func(spanCtx context.Context) error {
-			return dest.GetAfter(types.NewModelContext(spanCtx, db.ctx))
+			return dest.GetAfter(types.NewModelContext(spanCtx))
 		}); err != nil {
 			return err
 		}
@@ -978,7 +978,7 @@ func (db *database[M]) Take(dest M) (err error) {
 	// 	}
 	// } else {
 	// 	var _cache []byte
-	// 	if _cache, err = redis.Get(db.ctx.Context(), key); err == nil {
+	// 	if _cache, err = redis.Get(db.ctx, key); err == nil {
 	// 		val := reflect.ValueOf(cache[0])
 	// 		if val.Kind() != reflect.Pointer {
 	// 			return ErrNotPtrSlice
@@ -1005,7 +1005,7 @@ QUERY:
 	// Invoke model hook: GetBefore.
 	if !db.noHook && !reflect.DeepEqual(empty, dest) {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_BEFORE, span, func(spanCtx context.Context) error {
-			return dest.GetBefore(types.NewModelContext(spanCtx, db.ctx))
+			return dest.GetBefore(types.NewModelContext(spanCtx))
 		}); err != nil {
 			return err
 		}
@@ -1021,7 +1021,7 @@ QUERY:
 	// Invoke model hook: GetAfter.
 	if !db.noHook && !reflect.DeepEqual(empty, dest) {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_AFTER, span, func(spanCtx context.Context) error {
-			return dest.GetAfter(types.NewModelContext(spanCtx, db.ctx))
+			return dest.GetAfter(types.NewModelContext(spanCtx))
 		}); err != nil {
 			return err
 		}

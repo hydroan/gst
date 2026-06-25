@@ -46,7 +46,7 @@ func loadPrivilegedActorAndTarget(ctx *types.ServiceContext, targetUserID string
 	}
 
 	actors := make([]*modeliamuser.User, 0)
-	if err = database.Database[*modeliamuser.User](ctx.DatabaseContext()).
+	if err = database.Database[*modeliamuser.User](ctx).
 		WithLimit(1).
 		WithQuery(&modeliamuser.User{Username: actorUsername}).
 		List(&actors); err != nil {
@@ -57,7 +57,7 @@ func loadPrivilegedActorAndTarget(ctx *types.ServiceContext, targetUserID string
 	}
 
 	target := new(modeliamuser.User)
-	if err = database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(target, targetUserID); err != nil {
+	if err = database.Database[*modeliamuser.User](ctx).Get(target, targetUserID); err != nil {
 		return "", nil, nil, errors.Wrap(err, "user not found")
 	}
 

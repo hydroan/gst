@@ -25,7 +25,7 @@ func ValidateUserTOTPCode(ctx *types.ServiceContext, userID, code string) error 
 	}
 
 	devices := make([]*modelmfa.TOTPDevice, 0)
-	if err := database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).WithQuery(&modelmfa.TOTPDevice{
+	if err := database.Database[*modelmfa.TOTPDevice](ctx).WithQuery(&modelmfa.TOTPDevice{
 		UserID:   strings.TrimSpace(userID),
 		IsActive: true,
 	}).List(&devices); err != nil {

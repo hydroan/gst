@@ -68,7 +68,7 @@ func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modelmfa.TOT
 	log.Infoz("totp code validated successfully", zap.String("user_id", ctx.UserID))
 
 	devices := make([]*modelmfa.TOTPDevice, 0)
-	if err = database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).WithQuery(&modelmfa.TOTPDevice{
+	if err = database.Database[*modelmfa.TOTPDevice](ctx).WithQuery(&modelmfa.TOTPDevice{
 		UserID: ctx.UserID,
 		Secret: challenge.Secret,
 	}).WithLimit(1).List(&devices); err != nil {
@@ -101,7 +101,7 @@ func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modelmfa.TOT
 		LastUsedAt:       &now,
 	}
 
-	if err = database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).Create(device); err != nil {
+	if err = database.Database[*modelmfa.TOTPDevice](ctx).Create(device); err != nil {
 		log.Errorz("failed to create totp device", zap.Error(err))
 		return nil, fmt.Errorf("failed to save device: %w", err)
 	}

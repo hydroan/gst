@@ -147,7 +147,7 @@ func CreateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 
 		// 2.Batch create resource in database.
 		if !errors.Is(reqErr, io.EOF) {
-			if err = handler(types.NewDatabaseContext(c)).WithExpand(val.Expands()).Create(req.Items...); err != nil {
+			if err = handler(requestContext(c)).WithExpand(val.Expands()).Create(req.Items...); err != nil {
 				log.Error(err)
 				JSON(c, CodeFailure.WithErr(err))
 				gstotel.RecordError(span, err)
@@ -184,7 +184,7 @@ func CreateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		// 	Method:    c.Request.Method,
 		// 	UserAgent: c.Request.UserAgent(),
 		// })
-		if err = am.RecordOperation(types.NewDatabaseContext(c), val, &modellogmgmt.OperationLog{
+		if err = am.RecordOperation(requestContext(c), val, &modellogmgmt.OperationLog{
 			OP:        consts.OP_CREATE_MANY,
 			Model:     typ.Name(),
 			Record:    util.BytesToString(record),

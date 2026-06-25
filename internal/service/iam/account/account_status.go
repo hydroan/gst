@@ -48,7 +48,7 @@ func (s *AccountStatusService) Create(ctx *types.ServiceContext, req *modeliamac
 	}
 
 	target.Status = req.Status
-	if err = database.Database[*modeliamuser.User](ctx.DatabaseContext()).
+	if err = database.Database[*modeliamuser.User](ctx).
 		WithoutHook().
 		WithSelect("username", "status").
 		Update(target); err != nil {

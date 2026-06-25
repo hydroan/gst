@@ -74,7 +74,7 @@ func ConsumeTOTPBackupCode(ctx *types.ServiceContext, userID, code string) error
 		return service.NewError(http.StatusUnauthorized, "authentication required")
 	}
 
-	return database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).Transaction(func(tx types.Database[*modelmfa.TOTPDevice]) error {
+	return database.Database[*modelmfa.TOTPDevice](ctx).Transaction(func(tx types.Database[*modelmfa.TOTPDevice]) error {
 		return consumeTOTPBackupCodeInTx(tx, userID, code, time.Now())
 	})
 }

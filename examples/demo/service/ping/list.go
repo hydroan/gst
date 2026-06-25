@@ -16,14 +16,14 @@ type Lister struct {
 func (p *Lister) List(ctx *types.ServiceContext, req *model.Ping) (rsp *model.PingRsp, err error) {
 	users := make([]*iam.User, 0)
 	n := new(int64)
-	_ = database.Database[*iam.User](ctx.DatabaseContext()).WithDryRun().List(&users)
-	_ = database.Database[*iam.User](ctx.DatabaseContext()).WithDryRun().Count(n)
+	_ = database.Database[*iam.User](ctx).WithDryRun().List(&users)
+	_ = database.Database[*iam.User](ctx).WithDryRun().Count(n)
 
 	// sqls := make([]types.SQLStatement, 0)
 	//
-	// _ = database.Database[*iam.User](ctx.DatabaseContext()).WithBuildSQL(&sqls).WithQuery(&iam.User{Username: "test"}).List(&users)
+	// _ = database.Database[*iam.User](ctx).WithBuildSQL(&sqls).WithQuery(&iam.User{Username: "test"}).List(&users)
 	// pretty.Println(sqls)
-	// _ = database.Database[*iam.User](ctx.DatabaseContext()).WithBuildSQL(&sqls).Count(n)
+	// _ = database.Database[*iam.User](ctx).WithBuildSQL(&sqls).Count(n)
 	// pretty.Println(sqls)
 
 	return &model.PingRsp{

@@ -29,7 +29,7 @@ func (s *HeartbeatService) Create(ctx *types.ServiceContext, req *modeliamsessio
 	engineName, engineVersion := ua.Engine()
 	browserName, browserVersion := ua.Browser()
 
-	if err = database.Database[*modeliamsession.OnlineUser](ctx.DatabaseContext()).Update(&modeliamsession.OnlineUser{
+	if err = database.Database[*modeliamsession.OnlineUser](ctx).Update(&modeliamsession.OnlineUser{
 		UserID:   ctx.UserID,
 		ClientIP: ctx.ClientIP,
 		Username: ctx.Username,

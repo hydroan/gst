@@ -63,7 +63,7 @@ func accountCleanupUser(t *testing.T, username string) {
 	t.Helper()
 
 	users := make([]*iam.User, 0)
-	require.NoError(t, database.Database[*iam.User](nil).WithQuery(&iam.User{Username: username}).List(&users))
+	require.NoError(t, database.Database[*iam.User](context.Background()).WithQuery(&iam.User{Username: username}).List(&users))
 	if len(users) == 0 {
 		return
 	}
@@ -71,7 +71,7 @@ func accountCleanupUser(t *testing.T, username string) {
 	for _, user := range users {
 		serviceiamsession.InvalidateUserSessions(t.Context(), user.ID)
 	}
-	require.NoError(t, database.Database[*iam.User](nil).Delete(users...))
+	require.NoError(t, database.Database[*iam.User](context.Background()).Delete(users...))
 }
 
 func accountLoginUser(t *testing.T, user *accountTestUser, password string) string {
@@ -124,11 +124,11 @@ func accountSetSuperuser(t *testing.T, username string, enabled bool) {
 	t.Helper()
 
 	actors := make([]*iam.User, 0)
-	require.NoError(t, database.Database[*iam.User](nil).WithLimit(1).WithQuery(&iam.User{Username: username}).List(&actors))
+	require.NoError(t, database.Database[*iam.User](context.Background()).WithLimit(1).WithQuery(&iam.User{Username: username}).List(&actors))
 	require.Len(t, actors, 1)
 
 	actors[0].IsSuperuser = &enabled
-	require.NoError(t, database.Database[*iam.User](nil).Update(actors[0]))
+	require.NoError(t, database.Database[*iam.User](context.Background()).Update(actors[0]))
 }
 
 func TestAccountSignup(t *testing.T) {
@@ -502,16 +502,16 @@ func TestAccountStatus(t *testing.T) {
 
 	t.Run("current_forbidden_when_db_inactive_but_redis_session_valid", func(t *testing.T) {
 		victims := make([]*iam.User, 0)
-		require.NoError(t, database.Database[*iam.User](nil).WithLimit(1).WithQuery(&iam.User{Username: victim.Username}).List(&victims))
+		require.NoError(t, database.Database[*iam.User](context.Background()).WithLimit(1).WithQuery(&iam.User{Username: victim.Username}).List(&victims))
 		require.Len(t, victims, 1)
 
 		victimModel := victims[0]
 		prevStatus := victimModel.Status
 		victimModel.Status = modeliamuser.UserStatusInactive
-		require.NoError(t, database.Database[*iam.User](nil).WithoutHook().WithSelect("username", "status").Update(victimModel))
+		require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect("username", "status").Update(victimModel))
 		t.Cleanup(func() {
 			victimModel.Status = prevStatus
-			require.NoError(t, database.Database[*iam.User](nil).WithoutHook().WithSelect("username", "status").Update(victimModel))
+			require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect("username", "status").Update(victimModel))
 		})
 
 		cli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{
@@ -528,16 +528,16 @@ func TestAccountStatus(t *testing.T) {
 
 	t.Run("current_forbidden_when_db_locked_but_redis_session_valid", func(t *testing.T) {
 		victims := make([]*iam.User, 0)
-		require.NoError(t, database.Database[*iam.User](nil).WithLimit(1).WithQuery(&iam.User{Username: victim.Username}).List(&victims))
+		require.NoError(t, database.Database[*iam.User](context.Background()).WithLimit(1).WithQuery(&iam.User{Username: victim.Username}).List(&victims))
 		require.Len(t, victims, 1)
 
 		victimModel := victims[0]
 		prevStatus := victimModel.Status
 		victimModel.Status = modeliamuser.UserStatusLocked
-		require.NoError(t, database.Database[*iam.User](nil).WithoutHook().WithSelect("username", "status").Update(victimModel))
+		require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect("username", "status").Update(victimModel))
 		t.Cleanup(func() {
 			victimModel.Status = prevStatus
-			require.NoError(t, database.Database[*iam.User](nil).WithoutHook().WithSelect("username", "status").Update(victimModel))
+			require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect("username", "status").Update(victimModel))
 		})
 
 		cli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{

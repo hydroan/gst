@@ -70,7 +70,7 @@ func (r *Role) CreateBefore(ctx *types.ModelContext) error { return r.validate(c
 
 // CreateAfter will creates the role's permissions.
 func (r *Role) CreateAfter(ctx *types.ModelContext) error {
-	if err := database.Database[*Role](ctx.DatabaseContext()).Get(r, r.ID); err != nil {
+	if err := database.Database[*Role](ctx).Get(r, r.ID); err != nil {
 		return err
 	}
 	e1 := r.UpdatePermission(ctx)
@@ -89,7 +89,7 @@ func (r *Role) UpdateBefore(ctx *types.ModelContext) error {
 // DeleteBefore will delete the role's permissions
 func (r *Role) DeleteBefore(ctx *types.ModelContext) error {
 	// The delete request always don't have role id, so we should get the role from database.
-	if err := database.Database[*Role](ctx.DatabaseContext()).Get(r, r.ID); err != nil {
+	if err := database.Database[*Role](ctx).Get(r, r.ID); err != nil {
 		return err
 	}
 
@@ -100,7 +100,7 @@ func (r *Role) DeleteBefore(ctx *types.ModelContext) error {
 	// removes the role's permissions
 	menus := make([]*Menu, 0)
 	permissions := make([]*Permission, 0)
-	if err := database.Database[*Menu](ctx.DatabaseContext()).
+	if err := database.Database[*Menu](ctx).
 		WithQuery(&Menu{Base: model.Base{ID: strings.Join(r.MenuIDs, ",")}}).
 		List(&menus); err != nil {
 		return err
@@ -137,13 +137,13 @@ func (r *Role) UpdatePermission(ctx *types.ModelContext) error {
 	)
 
 	o := new(Role)
-	if err := database.Database[*Role](ctx.DatabaseContext()).Get(o, r.ID); err != nil {
+	if err := database.Database[*Role](ctx).Get(o, r.ID); err != nil {
 		zap.S().Error(err)
 		return err
 	}
 
 	// query the new role's menus
-	if err := database.Database[*Menu](ctx.DatabaseContext()).
+	if err := database.Database[*Menu](ctx).
 		WithQuery(&Menu{Base: model.Base{ID: strings.Join(r.MenuIDs, ",")}}).
 		List(&newMenus); err != nil {
 		zap.S().Error(err)
@@ -193,7 +193,7 @@ func permissionsForRoutes(ctx *types.ModelContext, routes []Route) ([]*Permissio
 				continue
 			}
 			result := make([]*Permission, 0)
-			if err := database.Database[*Permission](ctx.DatabaseContext()).
+			if err := database.Database[*Permission](ctx).
 				WithQuery(&Permission{Resource: route.Path, Action: method}).
 				List(&result); err != nil {
 				zap.S().Error(err)
@@ -218,7 +218,7 @@ func (r *Role) validate(ctx *types.ModelContext) error {
 
 	// Ensure uniqueness on (name, code)
 	roles := make([]*Role, 0)
-	if err := database.Database[*Role](ctx.DatabaseContext()).
+	if err := database.Database[*Role](ctx).
 		WithLimit(1).
 		WithQuery(&Role{Name: r.Name, Code: r.Code}).
 		List(&roles); err != nil {

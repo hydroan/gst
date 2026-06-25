@@ -126,13 +126,13 @@ func patchValue(log types.Logger, typ reflect.Type, oldVal reflect.Value, newVal
 	}
 }
 
-func extractConfig[M types.Model](cfg ...*types.ControllerConfig[M]) (handler func(ctx *types.DatabaseContext) types.Database[M], db any) {
+func extractConfig[M types.Model](cfg ...*types.ControllerConfig[M]) (handler func(ctx context.Context) types.Database[M], db any) {
 	if len(cfg) > 0 {
 		if cfg[0] != nil {
 			db = cfg[0].DB
 		}
 	}
-	handler = func(ctx *types.DatabaseContext) types.Database[M] {
+	handler = func(ctx context.Context) types.Database[M] {
 		fn := database.Database[M](ctx)
 		if len(cfg) > 0 {
 			if cfg[0] != nil {
@@ -148,6 +148,13 @@ func extractConfig[M types.Model](cfg ...*types.ControllerConfig[M]) (handler fu
 	return handler, db
 }
 
+func requestContext(c *gin.Context) context.Context {
+	if c == nil || c.Request == nil {
+		return context.Background()
+	}
+	return types.ContextWithRequestMetadata(c.Request.Context(), types.NewRequestMetadata(c))
+}
+
 // startControllerSpan starts a span for controller operations
 func startControllerSpan[M types.Model](c *gin.Context, phase consts.Phase) (context.Context, trace.Span) {
 	// Get the model name(struct name).
@@ -159,7 +166,7 @@ func startControllerSpan[M types.Model](c *gin.Context, phase consts.Phase) (con
 	spanCtx, span := gstotel.StartSpan(parentCtx, spanName)
 
 	// Update request context with new span context
-	c.Request = c.Request.WithContext(spanCtx)
+	c.Request = c.Request.WithContext(types.ContextWithRequestMetadata(spanCtx, types.NewRequestMetadata(c)))
 
 	if gstotel.IsSpanRecording(span) {
 		// Add controller-specific attributes

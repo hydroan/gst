@@ -44,7 +44,7 @@ func (s *LogoutService) Create(ctx *types.ServiceContext, req *model.Empty) (rsp
 		username = session.Username
 	}
 
-	if logErr := database.Database[*modellogmgmt.LoginLog](ctx.DatabaseContext()).Create(&modellogmgmt.LoginLog{
+	if logErr := database.Database[*modellogmgmt.LoginLog](ctx).Create(&modellogmgmt.LoginLog{
 		UserID:   userID,
 		Username: username,
 		ClientIP: ctx.ClientIP,

@@ -65,7 +65,7 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 		query.Base.ID = strings.TrimSpace(req.DeviceID)
 	}
 
-	if err = database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).WithQuery(query).List(&devices); err != nil {
+	if err = database.Database[*modelmfa.TOTPDevice](ctx).WithQuery(query).List(&devices); err != nil {
 		log.Errorz("failed to list totp devices", zap.Error(err))
 		return &modelmfa.TOTPVerifyRsp{
 			Valid:   false,
@@ -102,7 +102,7 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 	now := time.Now()
 	validDevice.LastUsedAt = &now
 
-	if err = database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).Update(validDevice); err != nil {
+	if err = database.Database[*modelmfa.TOTPDevice](ctx).Update(validDevice); err != nil {
 		log.Errorz("failed to update device", zap.Error(err))
 		log.Warnz("device update failed but verification succeeded")
 	}

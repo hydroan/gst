@@ -36,7 +36,7 @@ import (
 //
 // Example - Simple transaction:
 //
-//	err := database.Database[*model.User](nil).Transaction(func(tx types.Database[*model.User]) error {
+//	err := database.Database[*model.User](context.Background()).Transaction(func(tx types.Database[*model.User]) error {
 //	    // tx already has transaction context - no need for WithTx!
 //	    if err := tx.Create(&user); err != nil {
 //	        return err // Automatic rollback
@@ -46,7 +46,7 @@ import (
 //
 // Example - Complex transaction with query options:
 //
-//	err := database.Database[*model.Order](nil).Transaction(func(tx types.Database[*model.Order]) error {
+//	err := database.Database[*model.Order](context.Background()).Transaction(func(tx types.Database[*model.Order]) error {
 //	    // All query options work as expected
 //	    if err := tx.WithLock(consts.LockUpdate).Get(&order, orderID); err != nil {
 //	        return err
@@ -57,7 +57,7 @@ import (
 //
 // Example - With custom rollback:
 //
-//	err := database.Database[*model.User](nil).WithRollback(func() {
+//	err := database.Database[*model.User](context.Background()).WithRollback(func() {
 //	    // Custom cleanup logic
 //	}).Transaction(func(tx types.Database[*model.User]) error {
 //	    return tx.Create(&user)
@@ -96,7 +96,7 @@ func (db *database[M]) Transaction(fn func(tx types.Database[M]) error) error {
 			if db.rollbackFunc != nil {
 				db.rollbackFunc()
 			}
-			logger.Database.WithDatabaseContext(db.ctx, consts.Phase("Transaction")).Errorz(
+			logger.Database.WithContext(db.ctx, consts.Phase("Transaction")).Errorz(
 				"transaction rolled back due to error",
 				zap.Error(err),
 				zap.String("cost", util.FormatDurationSmart(time.Since(begin))),
@@ -104,7 +104,7 @@ func (db *database[M]) Transaction(fn func(tx types.Database[M]) error) error {
 			return err
 		}
 
-		logger.Database.WithDatabaseContext(db.ctx, consts.Phase("Transaction")).Infoz(
+		logger.Database.WithContext(db.ctx, consts.Phase("Transaction")).Infoz(
 			"transaction committed successfully",
 			zap.String("cost", util.FormatDurationSmart(time.Since(begin))),
 		)
@@ -142,9 +142,9 @@ func (db *database[M]) Transaction(fn func(tx types.Database[M]) error) error {
 //
 // Example - Multi-model transaction:
 //
-//	err := database.Database[*model.User](nil).TransactionFunc(func(tx any) error {
-//	    userDB := database.Database[*model.User](nil).WithTx(tx)    // Must use WithTx!
-//	    orderDB := database.Database[*model.Order](nil).WithTx(tx)  // Must use WithTx!
+//	err := database.Database[*model.User](context.Background()).TransactionFunc(func(tx any) error {
+//	    userDB := database.Database[*model.User](context.Background()).WithTx(tx)    // Must use WithTx!
+//	    orderDB := database.Database[*model.Order](context.Background()).WithTx(tx)  // Must use WithTx!
 //
 //	    if err := userDB.Create(&user); err != nil {
 //	        return err // Automatic rollback
@@ -157,9 +157,9 @@ func (db *database[M]) Transaction(fn func(tx types.Database[M]) error) error {
 //
 // Example - Complex multi-model transaction:
 //
-//	err := database.Database[*model.Order](nil).TransactionFunc(func(tx any) error {
-//	    orderDB := database.Database[*model.Order](nil).WithTx(tx)
-//	    userDB := database.Database[*model.User](nil).WithTx(tx)
+//	err := database.Database[*model.Order](context.Background()).TransactionFunc(func(tx any) error {
+//	    orderDB := database.Database[*model.Order](context.Background()).WithTx(tx)
+//	    userDB := database.Database[*model.User](context.Background()).WithTx(tx)
 //
 //	    // Get and lock order
 //	    if err := orderDB.WithLock(consts.LockUpdate).Get(&order, orderID); err != nil {
@@ -179,7 +179,7 @@ func (db *database[M]) Transaction(fn func(tx types.Database[M]) error) error {
 //	err := db.WithRollback(func() {
 //	    // Custom rollback logic
 //	}).TransactionFunc(func(tx any) error {
-//	    userDB := database.Database[*model.User](nil)
+//	    userDB := database.Database[*model.User](context.Background())
 //	    if err := userDB.WithTx(tx).Create(&user); err != nil {
 //	        return err // Automatic rollback, rollback function will be called
 //	    }
@@ -209,7 +209,7 @@ func (db *database[M]) TransactionFunc(fn func(tx any) error) error {
 			if db.rollbackFunc != nil {
 				db.rollbackFunc()
 			}
-			logger.Database.WithDatabaseContext(db.ctx, consts.Phase("TransactionFunc")).Errorz(
+			logger.Database.WithContext(db.ctx, consts.Phase("TransactionFunc")).Errorz(
 				"transaction rolled back due to error",
 				zap.Error(err),
 				zap.String("cost", util.FormatDurationSmart(time.Since(begin))),
@@ -217,7 +217,7 @@ func (db *database[M]) TransactionFunc(fn func(tx any) error) error {
 			return err
 		}
 
-		logger.Database.WithDatabaseContext(db.ctx, consts.Phase("TransactionFunc")).Infoz(
+		logger.Database.WithContext(db.ctx, consts.Phase("TransactionFunc")).Infoz(
 			"transaction committed successfully",
 			zap.String("cost", util.FormatDurationSmart(time.Since(begin))),
 		)

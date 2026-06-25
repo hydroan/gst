@@ -1,6 +1,7 @@
 package iam_test
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"testing"
@@ -638,7 +639,7 @@ func userCleanupUser(t *testing.T, username string) {
 	t.Helper()
 
 	users := make([]*iam.User, 0)
-	require.NoError(t, database.Database[*iam.User](nil).WithQuery(&iam.User{Username: username}).List(&users))
+	require.NoError(t, database.Database[*iam.User](context.Background()).WithQuery(&iam.User{Username: username}).List(&users))
 	if len(users) == 0 {
 		return
 	}
@@ -646,14 +647,14 @@ func userCleanupUser(t *testing.T, username string) {
 	for _, user := range users {
 		serviceiamsession.InvalidateUserSessions(t.Context(), user.ID)
 	}
-	require.NoError(t, database.Database[*iam.User](nil).Delete(users...))
+	require.NoError(t, database.Database[*iam.User](context.Background()).Delete(users...))
 }
 
 func userLoadByID(t *testing.T, userID string) *iam.User {
 	t.Helper()
 
 	user := new(iam.User)
-	require.NoError(t, database.Database[*iam.User](nil).Get(user, userID))
+	require.NoError(t, database.Database[*iam.User](context.Background()).Get(user, userID))
 	require.NotEmpty(t, user.ID)
 	return user
 }
@@ -662,7 +663,7 @@ func userLoadByUsername(t *testing.T, username string) *iam.User {
 	t.Helper()
 
 	users := make([]*iam.User, 0)
-	require.NoError(t, database.Database[*iam.User](nil).WithLimit(1).WithQuery(&iam.User{Username: username}).List(&users))
+	require.NoError(t, database.Database[*iam.User](context.Background()).WithLimit(1).WithQuery(&iam.User{Username: username}).List(&users))
 	require.Len(t, users, 1)
 	require.NotNil(t, users[0])
 	require.NotEmpty(t, users[0].ID)
@@ -695,11 +696,11 @@ func userSetSuperuser(t *testing.T, username string, enabled bool) {
 	t.Helper()
 
 	users := make([]*iam.User, 0)
-	require.NoError(t, database.Database[*iam.User](nil).WithLimit(1).WithQuery(&iam.User{Username: username}).List(&users))
+	require.NoError(t, database.Database[*iam.User](context.Background()).WithLimit(1).WithQuery(&iam.User{Username: username}).List(&users))
 	require.Len(t, users, 1)
 
 	users[0].IsSuperuser = &enabled
-	require.NoError(t, database.Database[*iam.User](nil).Update(users[0]))
+	require.NoError(t, database.Database[*iam.User](context.Background()).Update(users[0]))
 }
 
 func userSetUsername(t *testing.T, userID, username string) {
@@ -707,14 +708,14 @@ func userSetUsername(t *testing.T, userID, username string) {
 
 	user := userLoadByID(t, userID)
 	user.Username = username
-	require.NoError(t, database.Database[*iam.User](nil).WithSelect("username").Update(user))
+	require.NoError(t, database.Database[*iam.User](context.Background()).WithSelect("username").Update(user))
 }
 
 func userRequireDeleted(t *testing.T, username string) {
 	t.Helper()
 
 	users := make([]*iam.User, 0)
-	require.NoError(t, database.Database[*iam.User](nil).WithQuery(&iam.User{Username: username}).List(&users))
+	require.NoError(t, database.Database[*iam.User](context.Background()).WithQuery(&iam.User{Username: username}).List(&users))
 	require.Empty(t, users)
 }
 
@@ -770,7 +771,7 @@ func userRequireMissingByUsername(t *testing.T, username string) {
 	t.Helper()
 
 	users := make([]*iam.User, 0)
-	require.NoError(t, database.Database[*iam.User](nil).WithQuery(&iam.User{Username: username}).List(&users))
+	require.NoError(t, database.Database[*iam.User](context.Background()).WithQuery(&iam.User{Username: username}).List(&users))
 	require.Empty(t, users)
 }
 

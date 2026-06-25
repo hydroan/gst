@@ -88,7 +88,7 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 	// 			begin := time.Now()
 	// 			prefix, _ := buildCacheKey(db.db.Model(*new(M)).Session(&gorm.Session{DryRun: true}).Statement, "create")
 	// 			defer logger.Cache.Infow("remove cache after create", "cost", time.Since(begin).String(), "prefix", prefix)
-	// 			if err = redis.RemovePrefix(db.ctx.Context(), prefix); err != nil {
+	// 			if err = redis.RemovePrefix(db.ctx, prefix); err != nil {
 	// 				logger.Cache.Errorw("failed to remove cache keys", err, "action", "create")
 	// 			}
 	// 		}()
@@ -99,7 +99,7 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 	if !db.noHook {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_CREATE_BEFORE, span, func(spanCtx context.Context) error {
 			for i := range objs {
-				if err = objs[i].CreateBefore(types.NewModelContext(spanCtx, db.ctx)); err != nil {
+				if err = objs[i].CreateBefore(types.NewModelContext(spanCtx)); err != nil {
 					return err
 				}
 			}
@@ -172,7 +172,7 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 	if !db.noHook {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_CREATE_AFTER, span, func(spanCtx context.Context) error {
 			for i := range objs {
-				if err = objs[i].CreateAfter(types.NewModelContext(spanCtx, db.ctx)); err != nil {
+				if err = objs[i].CreateAfter(types.NewModelContext(spanCtx)); err != nil {
 					return err
 				}
 			}
@@ -268,7 +268,7 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 	// 			begin := time.Now()
 	// 			prefix, _ := buildCacheKey(db.db.Model(*new(M)).Session(&gorm.Session{DryRun: true}).Statement, "delete")
 	// 			defer logger.Cache.Infow("remove cache after delete", "cost", time.Since(begin).String(), "prefix", prefix)
-	// 			if err = redis.RemovePrefix(db.ctx.Context(), prefix); err != nil {
+	// 			if err = redis.RemovePrefix(db.ctx, prefix); err != nil {
 	// 				logger.Cache.Errorw("failed to remove cache keys", err, "action", "delete")
 	// 			}
 	// 		}()
@@ -279,7 +279,7 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 	if !db.noHook {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_DELETE_BEFORE, span, func(spanCtx context.Context) error {
 			for i := range objs {
-				if err = objs[i].DeleteBefore(types.NewModelContext(spanCtx, db.ctx)); err != nil {
+				if err = objs[i].DeleteBefore(types.NewModelContext(spanCtx)); err != nil {
 					return err
 				}
 			}
@@ -342,7 +342,7 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 	if !db.noHook {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_DELETE_AFTER, span, func(spanCtx context.Context) error {
 			for i := range objs {
-				if err = objs[i].DeleteAfter(types.NewModelContext(spanCtx, db.ctx)); err != nil {
+				if err = objs[i].DeleteAfter(types.NewModelContext(spanCtx)); err != nil {
 					return err
 				}
 			}
@@ -435,7 +435,7 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 	// 			begin := time.Now()
 	// 			prefix, _ := buildCacheKey(db.db.Model(*new(M)).Session(&gorm.Session{DryRun: true}).Statement, "update")
 	// 			defer logger.Cache.Infow("remove cache after update", "cost", time.Since(begin).String(), "prefix", prefix)
-	// 			if err = redis.RemovePrefix(db.ctx.Context(), prefix); err != nil {
+	// 			if err = redis.RemovePrefix(db.ctx, prefix); err != nil {
 	// 				logger.Cache.Errorw("failed to remove cache keys", err, "action", "update")
 	// 			}
 	// 		}()
@@ -446,7 +446,7 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 	if !db.noHook {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_UPDATE_BEFORE, span, func(spanCtx context.Context) error {
 			for i := range objs {
-				if err = objs[i].UpdateBefore(types.NewModelContext(spanCtx, db.ctx)); err != nil {
+				if err = objs[i].UpdateBefore(types.NewModelContext(spanCtx)); err != nil {
 					return err
 				}
 			}
@@ -491,7 +491,7 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 	if !db.noHook {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_UPDATE_AFTER, span, func(spanCtx context.Context) error {
 			for i := range objs {
-				if err = objs[i].UpdateAfter(types.NewModelContext(spanCtx, db.ctx)); err != nil {
+				if err = objs[i].UpdateAfter(types.NewModelContext(spanCtx)); err != nil {
 					return err
 				}
 			}
@@ -564,7 +564,7 @@ func (db *database[M]) UpdateByID(id string, name string, value any) (err error)
 	// 			begin := time.Now()
 	// 			prefix, _ := buildCacheKey(db.db.Model(*new(M)).Session(&gorm.Session{DryRun: true}).Statement, "update_by_id")
 	// 			defer logger.Cache.Infow("remove cache after update_by_id", "cost", time.Since(begin).String(), "prefix", prefix)
-	// 			if err = redis.RemovePrefix(db.ctx.Context(), prefix); err != nil {
+	// 			if err = redis.RemovePrefix(db.ctx, prefix); err != nil {
 	// 				logger.Cache.Errorw("failed to remove cache keys", err, "action", "update")
 	// 			}
 	// 		}()

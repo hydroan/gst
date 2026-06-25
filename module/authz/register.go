@@ -1,6 +1,8 @@
 package authz
 
 import (
+	"context"
+
 	"github.com/hydroan/gst/database"
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
 	"github.com/hydroan/gst/middleware"
@@ -115,7 +117,7 @@ func Register() {
 	log := zap.S()
 	router.OnRoutesReady(func(routes map[string][]string) error {
 		// re-create all permissions
-		if err := database.Database[*modelauthz.Permission](nil).Transaction(func(tx types.Database[*modelauthz.Permission]) error {
+		if err := database.Database[*modelauthz.Permission](context.Background()).Transaction(func(tx types.Database[*modelauthz.Permission]) error {
 			// list all permissions.
 			permissions := make([]*modelauthz.Permission, 0)
 			if err := tx.List(&permissions); err != nil {

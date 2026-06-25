@@ -224,7 +224,7 @@ func (s *AdminSessionsDeleteService) Delete(ctx *types.ServiceContext, req *mode
 
 func buildAdminSessionUserItem(ctx *types.ServiceContext, session modeliamsession.Session) (*adminSessionUserItem, error) {
 	user := new(modeliamuser.User)
-	if err := database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(user, session.UserID); err == nil && user.GetID() != "" {
+	if err := database.Database[*modeliamuser.User](ctx).Get(user, session.UserID); err == nil && user.GetID() != "" {
 		return &adminSessionUserItem{
 			view: modeliamsession.AdminSessionUserView{
 				UserID:             user.ID,

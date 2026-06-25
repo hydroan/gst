@@ -6,6 +6,7 @@
 package controller
 
 import (
+	"context"
 	"sync"
 
 	"github.com/hydroan/gst/config"
@@ -72,7 +73,7 @@ func Clean() {
 		operationLogs = append(operationLogs, ol)
 	}
 	if len(operationLogs) > 0 {
-		if err := database.Database[*modellogmgmt.OperationLog](nil).WithLimit(-1).WithBatchSize(100).Create(operationLogs...); err != nil {
+		if err := database.Database[*modellogmgmt.OperationLog](context.Background()).WithLimit(-1).WithBatchSize(100).Create(operationLogs...); err != nil {
 			zap.S().Error(err)
 		}
 	}

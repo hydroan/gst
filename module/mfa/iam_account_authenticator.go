@@ -15,7 +15,7 @@ type iamAccountAuthenticator struct{}
 
 func (iamAccountAuthenticator) AuthenticateByUsername(ctx *types.ServiceContext, username, password string) (*servicemfa.AuthenticatedAccount, error) {
 	users := make([]*modeliamuser.User, 0)
-	if err := database.Database[*modeliamuser.User](ctx.DatabaseContext()).
+	if err := database.Database[*modeliamuser.User](ctx).
 		WithLimit(1).
 		WithQuery(&modeliamuser.User{Username: username}).
 		List(&users); err != nil {
@@ -32,7 +32,7 @@ func (iamAccountAuthenticator) AuthenticateByAccountID(ctx *types.ServiceContext
 	query.ID = accountID
 
 	users := make([]*modeliamuser.User, 0)
-	if err := database.Database[*modeliamuser.User](ctx.DatabaseContext()).
+	if err := database.Database[*modeliamuser.User](ctx).
 		WithLimit(1).
 		WithQuery(query).
 		List(&users); err != nil {

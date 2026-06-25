@@ -1,15 +1,17 @@
 package dao
 
 import (
+	"context"
+
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/types"
 )
 
-func QueryModelsMap[M types.Model](ctx *types.DatabaseContext, keyFunc func(M) string, queryFunc func() M) (map[string]M, error) {
+func QueryModelsMap[M types.Model](ctx context.Context, keyFunc func(M) string, queryFunc func() M) (map[string]M, error) {
 	return QueryModelsMapWithConfig[M](ctx, keyFunc, queryFunc, types.QueryConfig{AllowEmpty: true})
 }
 
-func QueryModelsMapWithConfig[M types.Model](ctx *types.DatabaseContext, keyFunc func(M) string, queryFunc func() M, config types.QueryConfig) (map[string]M, error) {
+func QueryModelsMapWithConfig[M types.Model](ctx context.Context, keyFunc func(M) string, queryFunc func() M, config types.QueryConfig) (map[string]M, error) {
 	if keyFunc == nil {
 		keyFunc = func(m M) string {
 			return m.GetID()

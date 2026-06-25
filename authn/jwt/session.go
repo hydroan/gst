@@ -1,6 +1,8 @@
 package jwt
 
 import (
+	"context"
+
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/model"
 )
@@ -43,7 +45,7 @@ func setSession(userID string, s *model.Session) {
 	if len(userID) == 0 || s == nil {
 		return
 	}
-	_ = database.Database[*model.Session](nil).Update(s)
+	_ = database.Database[*model.Session](context.Background()).Update(s)
 	// sessionCache.Add 必须在 database.Update 之后, 因为它的ID会在 database.Database 之后生成
 	sessionCache.Add(userID, s)
 }
@@ -56,7 +58,7 @@ func GetSession(userID string) (*model.Session, bool) {
 func removeSession(userID string) {
 	sessionCache.Remove(userID)
 	sessions := make([]*model.Session, 0)
-	if err := database.Database[*model.Session](nil).WithLimit(-1).WithSelect("id").WithQuery(&model.Session{UserID: userID}).List(&sessions); err == nil {
-		_ = database.Database[*model.Session](nil).WithPurge().Delete(sessions...)
+	if err := database.Database[*model.Session](context.Background()).WithLimit(-1).WithSelect("id").WithQuery(&model.Session{UserID: userID}).List(&sessions); err == nil {
+		_ = database.Database[*model.Session](context.Background()).WithPurge().Delete(sessions...)
 	}
 }

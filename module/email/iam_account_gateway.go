@@ -60,7 +60,7 @@ func (iamAccountGateway) UpdatePassword(ctx *types.ServiceContext, userID, newPa
 	if err := applyIAMPasswordUpdate(user, newPassword); err != nil {
 		return err
 	}
-	return database.Database[*modeliamuser.User](ctx.DatabaseContext()).
+	return database.Database[*modeliamuser.User](ctx).
 		WithoutHook().
 		WithSelect("username", "password_hash", "must_change_password").
 		Update(user)
@@ -69,7 +69,7 @@ func (iamAccountGateway) UpdatePassword(ctx *types.ServiceContext, userID, newPa
 func (iamAccountGateway) MarkEmailVerified(ctx *types.ServiceContext, userID string, verifiedAt time.Time) error {
 	user := newIAMUserWithID(userID)
 	applyIAMEmailVerification(user, verifiedAt)
-	return database.Database[*modeliamuser.User](ctx.DatabaseContext()).
+	return database.Database[*modeliamuser.User](ctx).
 		WithoutHook().
 		WithSelect("email_verified", "email_verified_at").
 		Update(user)
@@ -80,7 +80,7 @@ func (iamAccountGateway) ApplyEmailChange(ctx *types.ServiceContext, userID, new
 	if err := applyIAMEmailChange(user, newEmail, changedAt); err != nil {
 		return err
 	}
-	return database.Database[*modeliamuser.User](ctx.DatabaseContext()).
+	return database.Database[*modeliamuser.User](ctx).
 		WithoutHook().
 		WithSelect("email", "email_verified", "email_verified_at", "last_email_changed_at").
 		Update(user)
@@ -93,7 +93,7 @@ func (iamAccountGateway) InvalidateSessions(userID string) {
 func loadIAMUserByEmail(ctx *types.ServiceContext, email string) (*modeliamuser.User, error) {
 	users := make([]*modeliamuser.User, 0, 1)
 	queryEmail := email
-	if err := database.Database[*modeliamuser.User](ctx.DatabaseContext()).
+	if err := database.Database[*modeliamuser.User](ctx).
 		WithLimit(1).
 		WithQuery(&modeliamuser.User{Email: &queryEmail}).
 		List(&users); err != nil {
@@ -110,7 +110,7 @@ func loadIAMUserByID(ctx *types.ServiceContext, userID string) (*modeliamuser.Us
 	query.ID = userID
 
 	users := make([]*modeliamuser.User, 0, 1)
-	if err := database.Database[*modeliamuser.User](ctx.DatabaseContext()).
+	if err := database.Database[*modeliamuser.User](ctx).
 		WithLimit(1).
 		WithQuery(query).
 		List(&users); err != nil {

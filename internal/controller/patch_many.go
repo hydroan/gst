@@ -104,7 +104,7 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 			var results []M
 			v := reflect.New(typ).Interface().(M) //nolint:errcheck
 			v.SetID(m.GetID())
-			if err = handler(types.NewDatabaseContext(c)).WithLimit(1).WithQuery(v).List(&results); err != nil {
+			if err = handler(requestContext(c)).WithLimit(1).WithQuery(v).List(&results); err != nil {
 				log.Error(err)
 				gstotel.RecordError(span, err)
 				continue
@@ -135,7 +135,7 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 		}
 		// 2.Batch partial update resource in database.
 		if !errors.Is(reqErr, io.EOF) {
-			if err = handler(types.NewDatabaseContext(c)).Update(shouldUpdates...); err != nil {
+			if err = handler(requestContext(c)).Update(shouldUpdates...); err != nil {
 				log.Error(err)
 				JSON(c, CodeFailure.WithErr(err))
 				gstotel.RecordError(span, err)
@@ -174,7 +174,7 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 		// 	UserAgent: c.Request.UserAgent(),
 		// })
 		m := reflect.New(typ).Interface().(M) //nolint:errcheck
-		if err = am.RecordOperation(types.NewDatabaseContext(c), m, &modellogmgmt.OperationLog{
+		if err = am.RecordOperation(requestContext(c), m, &modellogmgmt.OperationLog{
 			OP:        consts.OP_PATCH_MANY,
 			Model:     typ.Name(),
 			Record:    util.BytesToString(record),

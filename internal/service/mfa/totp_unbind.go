@@ -74,7 +74,7 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 		}
 	}
 
-	err = database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).Transaction(func(tx types.Database[*modelmfa.TOTPDevice]) error {
+	err = database.Database[*modelmfa.TOTPDevice](ctx).Transaction(func(tx types.Database[*modelmfa.TOTPDevice]) error {
 		devices := make([]*modelmfa.TOTPDevice, 0)
 		if listErr := tx.WithLock(consts.LockUpdate).WithQuery(&modelmfa.TOTPDevice{
 			UserID:   ctx.UserID,
@@ -163,7 +163,7 @@ func newTOTPUnbindFailureRsp(ctx *types.ServiceContext, message string) (*modelm
 // countActiveTOTPUnbindDevices returns the current user's active TOTP device count.
 func countActiveTOTPUnbindDevices(ctx *types.ServiceContext, userID string) (int, error) {
 	devices := make([]*modelmfa.TOTPDevice, 0)
-	if err := database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).WithQuery(&modelmfa.TOTPDevice{
+	if err := database.Database[*modelmfa.TOTPDevice](ctx).WithQuery(&modelmfa.TOTPDevice{
 		UserID:   userID,
 		IsActive: true,
 	}).List(&devices); err != nil {
@@ -251,7 +251,7 @@ func activeTOTPUnbindDeviceExists(ctx *types.ServiceContext, userID, deviceID st
 		IsActive: true,
 	}
 	query.Base.ID = deviceID
-	return database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).WithQuery(query).First(device) == nil
+	return database.Database[*modelmfa.TOTPDevice](ctx).WithQuery(query).First(device) == nil
 }
 
 // findTOTPUnbindDevice selects the target active device from the locked device list.

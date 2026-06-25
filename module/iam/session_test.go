@@ -1188,11 +1188,11 @@ func sessionSetSuperuser(t *testing.T, username string, enabled bool) {
 	t.Helper()
 
 	users := make([]*iam.User, 0)
-	require.NoError(t, database.Database[*iam.User](nil).WithLimit(1).WithQuery(&iam.User{Username: username}).List(&users))
+	require.NoError(t, database.Database[*iam.User](context.Background()).WithLimit(1).WithQuery(&iam.User{Username: username}).List(&users))
 	require.Len(t, users, 1)
 
 	users[0].IsSuperuser = &enabled
-	require.NoError(t, database.Database[*iam.User](nil).Update(users[0]))
+	require.NoError(t, database.Database[*iam.User](context.Background()).Update(users[0]))
 }
 
 func newSessionTestAccount(t *testing.T) sessionTestAccount {

@@ -1,6 +1,7 @@
 package database_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/hydroan/gst/database"
@@ -14,35 +15,35 @@ func TestDatabaseCleanup(t *testing.T) {
 
 	// Verify initial count - should have 3 records
 	count := new(int64)
-	require.NoError(t, database.Database[*TestUser](nil).Count(count))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 	require.Equal(t, int64(3), *count)
 
 	// Soft delete some records (u1 and u2)
-	require.NoError(t, database.Database[*TestUser](nil).Delete(u1, u2))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(u1, u2))
 
 	// Verify soft-deleted records are not visible in normal queries
-	require.NoError(t, database.Database[*TestUser](nil).Count(count))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 	require.Equal(t, int64(1), *count, "only u3 should be visible after soft delete")
 
 	// Verify u3 is still accessible
 	u := new(TestUser)
-	require.NoError(t, database.Database[*TestUser](nil).Get(u, u3.ID))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u3.ID))
 	require.NotNil(t, u)
 	require.Equal(t, u3.ID, u.ID)
 	require.Equal(t, u3.Name, u.Name)
 
 	// Test Cleanup - should permanently delete soft-deleted records (u1 and u2)
-	require.NoError(t, database.Database[*TestUser](nil).Cleanup())
+	require.NoError(t, database.Database[*TestUser](context.Background()).Cleanup())
 
 	// Verify soft-deleted records are permanently removed
 	// After Cleanup, u1 and u2 should be permanently deleted
 	// u3 should still exist
-	require.NoError(t, database.Database[*TestUser](nil).Count(count))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 	require.Equal(t, int64(1), *count, "u3 should still exist after Cleanup")
 
 	// Verify u3 is still accessible
 	u = new(TestUser)
-	require.NoError(t, database.Database[*TestUser](nil).Get(u, u3.ID))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u3.ID))
 	require.NotNil(t, u)
 	require.Equal(t, u3.ID, u.ID)
 	require.Equal(t, u3.Name, u.Name)
@@ -50,15 +51,15 @@ func TestDatabaseCleanup(t *testing.T) {
 	require.Equal(t, u3.Email, u.Email)
 
 	// Test Cleanup with no soft-deleted records - should not error
-	require.NoError(t, database.Database[*TestUser](nil).Cleanup())
+	require.NoError(t, database.Database[*TestUser](context.Background()).Cleanup())
 
 	// Verify u3 still exists after second Cleanup
-	require.NoError(t, database.Database[*TestUser](nil).Count(count))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 	require.Equal(t, int64(1), *count, "u3 should still exist after second Cleanup")
 
 	// Test Cleanup with different model types
-	require.NoError(t, database.Database[*TestProduct](nil).Cleanup())
-	require.NoError(t, database.Database[*TestCategory](nil).Cleanup())
+	require.NoError(t, database.Database[*TestProduct](context.Background()).Cleanup())
+	require.NoError(t, database.Database[*TestCategory](context.Background()).Cleanup())
 }
 
 func TestDatabaseCleanupWithDryRun(t *testing.T) {
@@ -69,33 +70,33 @@ func TestDatabaseCleanupWithDryRun(t *testing.T) {
 
 	u1 := &cleanupSoftDeleteUser{Name: "cleanup-user-1", Base: model.Base{ID: "cleanup-user-1"}}
 	u2 := &cleanupSoftDeleteUser{Name: "cleanup-user-2", Base: model.Base{ID: "cleanup-user-2"}}
-	require.NoError(t, database.Database[*cleanupSoftDeleteUser](nil).Create(u1, u2))
-	require.NoError(t, database.Database[*cleanupSoftDeleteUser](nil).Delete(u1, u2))
+	require.NoError(t, database.Database[*cleanupSoftDeleteUser](context.Background()).Create(u1, u2))
+	require.NoError(t, database.Database[*cleanupSoftDeleteUser](context.Background()).Delete(u1, u2))
 	require.Equal(t, int64(2), countSoftDeletedCleanupUsers(t), "setup should leave two soft-deleted users")
 
-	require.NoError(t, database.Database[*cleanupSoftDeleteUser](nil).WithDryRun().Cleanup())
+	require.NoError(t, database.Database[*cleanupSoftDeleteUser](context.Background()).WithDryRun().Cleanup())
 	require.Equal(t, int64(2), countSoftDeletedCleanupUsers(t), "dry-run Cleanup should not remove soft-deleted users")
 
-	require.NoError(t, database.Database[*cleanupSoftDeleteUser](nil).Cleanup())
+	require.NoError(t, database.Database[*cleanupSoftDeleteUser](context.Background()).Cleanup())
 	require.Equal(t, int64(0), countSoftDeletedCleanupUsers(t), "Cleanup should permanently remove soft-deleted users")
 }
 
 func TestDatabaseHealth(t *testing.T) {
 	// Test basic health check - should pass when database is healthy
-	require.NoError(t, database.Database[*TestUser](nil).Health())
+	require.NoError(t, database.Database[*TestUser](context.Background()).Health())
 
 	// Test health check multiple times - should be idempotent
-	require.NoError(t, database.Database[*TestUser](nil).Health())
-	require.NoError(t, database.Database[*TestUser](nil).Health())
+	require.NoError(t, database.Database[*TestUser](context.Background()).Health())
+	require.NoError(t, database.Database[*TestUser](context.Background()).Health())
 
 	// Test health check after database operations - should still pass
 	defer cleanupTestData()
 	setupTestData(t)
-	require.NoError(t, database.Database[*TestUser](nil).Health())
+	require.NoError(t, database.Database[*TestUser](context.Background()).Health())
 
 	// Test health check with different model types - should work for all models
-	require.NoError(t, database.Database[*TestProduct](nil).Health())
-	require.NoError(t, database.Database[*TestCategory](nil).Health())
+	require.NoError(t, database.Database[*TestProduct](context.Background()).Health())
+	require.NoError(t, database.Database[*TestCategory](context.Background()).Health())
 }
 
 type cleanupSoftDeleteUser struct {

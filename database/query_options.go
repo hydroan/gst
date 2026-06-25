@@ -45,14 +45,14 @@ import (
 // Examples:
 //
 //	// Default USE INDEX hint
-//	database.Database[*model.User](nil).WithIndex("idx_name").List(&users)
+//	database.Database[*model.User](context.Background()).WithIndex("idx_name").List(&users)
 //
 //	// Explicit hint modes
-//	database.Database[*model.User](nil).WithIndex("idx_name", consts.IndexHintForce).List(&users)
-//	database.Database[*model.User](nil).WithIndex("idx_name", consts.IndexHintIgnore).List(&users)
+//	database.Database[*model.User](context.Background()).WithIndex("idx_name", consts.IndexHintForce).List(&users)
+//	database.Database[*model.User](context.Background()).WithIndex("idx_name", consts.IndexHintIgnore).List(&users)
 //
 //	// Combined with other methods
-//	database.Database[*model.User](nil).
+//	database.Database[*model.User](context.Background()).
 //	    WithIndex("idx_name").
 //	    WithQuery(&model.User{Name: "John"}).
 //	    List(&users)
@@ -81,7 +81,7 @@ func (db *database[M]) WithIndex(indexName string, hint ...consts.IndexHintMode)
 	if driverName != "mysql" {
 		// Index hints are only supported by MySQL
 		// For other databases (SQLite, PostgreSQL, etc.), log a warning and skip
-		logger.Database.WithDatabaseContext(db.ctx, consts.Phase("WithIndex")).Warnf(
+		logger.Database.WithContext(db.ctx, consts.Phase("WithIndex")).Warnf(
 			"index hints are not supported by %s database, skipping index hint for: %s",
 			driverName, indexName,
 		)
@@ -257,12 +257,12 @@ func (db *database[M]) WithQuery(query M, config ...types.QueryConfig) types.Dat
 		}
 		// No RawQuery and empty query: apply safety check
 		if !cfg.AllowEmpty {
-			logger.Database.WithDatabaseContext(db.ctx, consts.Phase("WithQuery")).Warn("query is nil or empty, adding safety condition to prevent matching all records")
+			logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("query is nil or empty, adding safety condition to prevent matching all records")
 			db.ins = db.ins.Where("1 = 0")
 			return db
 		}
 		// AllowEmpty=true: allow matching all records
-		logger.Database.WithDatabaseContext(db.ctx, consts.Phase("WithQuery")).Info("query is nil or empty but AllowEmpty=true, allowing full table scan")
+		logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Info("query is nil or empty but AllowEmpty=true, allowing full table scan")
 		return db
 	}
 
@@ -298,12 +298,12 @@ func (db *database[M]) WithQuery(query M, config ...types.QueryConfig) types.Dat
 		}
 		// No RawQuery and empty query: apply safety check
 		if !cfg.AllowEmpty {
-			logger.Database.WithDatabaseContext(db.ctx, consts.Phase("WithQuery")).Warn("all query fields are empty, adding safety condition to prevent matching all records")
+			logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("all query fields are empty, adding safety condition to prevent matching all records")
 			db.ins = db.ins.Where("1 = 0")
 			return db
 		}
 		// AllowEmpty=true: allow matching all records
-		logger.Database.WithDatabaseContext(db.ctx, consts.Phase("WithQuery")).Info("all query fields are empty but AllowEmpty=true, allowing full table scan")
+		logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Info("all query fields are empty but AllowEmpty=true, allowing full table scan")
 		return db
 	}
 
@@ -368,10 +368,10 @@ func (db *database[M]) WithQuery(query M, config ...types.QueryConfig) types.Dat
 		// Example: &User{Name: "", Email: ""} has fields but all values are empty
 		if !hasValidCondition {
 			if !cfg.AllowEmpty {
-				logger.Database.WithDatabaseContext(db.ctx, consts.Phase("WithQuery")).Warn("all query values are empty, adding safety condition to prevent matching all records")
+				logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("all query values are empty, adding safety condition to prevent matching all records")
 				db.ins = db.ins.Where("1 = 0")
 			} else {
-				logger.Database.WithDatabaseContext(db.ctx, consts.Phase("WithQuery")).Info("all query values are empty but AllowEmpty=true, allowing full table scan")
+				logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Info("all query values are empty but AllowEmpty=true, allowing full table scan")
 			}
 		}
 	} else {
@@ -404,10 +404,10 @@ func (db *database[M]) WithQuery(query M, config ...types.QueryConfig) types.Dat
 		// Example: &User{Name: "", Email: ""} has fields but all values are empty
 		if !hasValidCondition {
 			if !cfg.AllowEmpty {
-				logger.Database.WithDatabaseContext(db.ctx, consts.Phase("WithQuery")).Warn("all query values are empty, adding safety condition to prevent matching all records")
+				logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("all query values are empty, adding safety condition to prevent matching all records")
 				db.ins = db.ins.Where("1 = 0")
 			} else {
-				logger.Database.WithDatabaseContext(db.ctx, consts.Phase("WithQuery")).Info("all query values are empty but AllowEmpty=true, allowing full table scan")
+				logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Info("all query values are empty but AllowEmpty=true, allowing full table scan")
 			}
 		}
 	}
@@ -609,7 +609,7 @@ func (db *database[M]) WithSelect(columns ...string) types.Database[M] {
 //
 // Example with Transaction:
 //
-//	err := database.Database[*model.User](nil).Transaction(func(tx types.Database[*model.User]) error {
+//	err := database.Database[*model.User](context.Background()).Transaction(func(tx types.Database[*model.User]) error {
 //	    // Get and lock user with FOR UPDATE
 //	    user := new(model.User)
 //	    if err := tx.WithLock(consts.LockUpdate).Get(user, userID); err != nil {
@@ -622,10 +622,10 @@ func (db *database[M]) WithSelect(columns ...string) types.Database[M] {
 //
 // Example with TransactionFunc:
 //
-//	err := database.Database[*model.Order](nil).TransactionFunc(func(tx any) error {
+//	err := database.Database[*model.Order](context.Background()).TransactionFunc(func(tx any) error {
 //	    // Get and lock order with FOR UPDATE NOWAIT
 //	    order := new(model.Order)
-//	    if err := database.Database[*model.Order](nil).
+//	    if err := database.Database[*model.Order](context.Background()).
 //	        WithTx(tx).
 //	        WithLock(consts.LockUpdateNoWait).
 //	        Get(order, orderID); err != nil {
@@ -633,7 +633,7 @@ func (db *database[M]) WithSelect(columns ...string) types.Database[M] {
 //	    }
 //	    // Update the locked order
 //	    order.Status = "processed"
-//	    return database.Database[*model.Order](nil).WithTx(tx).Update(order)
+//	    return database.Database[*model.Order](context.Background()).WithTx(tx).Update(order)
 //	})
 func (db *database[M]) WithLock(mode ...consts.LockMode) types.Database[M] {
 	db.mu.Lock()

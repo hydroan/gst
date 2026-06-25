@@ -21,14 +21,14 @@ func (s *UserRoleService) DeleteAfter(ctx *types.ServiceContext, userRole *model
 	roleCode := ctx.URL.Query().Get("rolecode")
 
 	userRoles := make([]*modelauthz.UserRole, 0)
-	if err := database.Database[*modelauthz.UserRole](ctx.DatabaseContext()).WithQuery(&modelauthz.UserRole{Username: username, RoleCode: roleCode}).List(&userRoles); err != nil {
+	if err := database.Database[*modelauthz.UserRole](ctx).WithQuery(&modelauthz.UserRole{Username: username, RoleCode: roleCode}).List(&userRoles); err != nil {
 		log.Error(err)
 		return err
 	}
 	for _, rb := range userRoles {
 		log.Infoz("will delete user role", zap.Object("user_role", rb))
 	}
-	if err := database.Database[*modelauthz.UserRole](ctx.DatabaseContext()).WithPurge().Delete(userRoles...); err != nil {
+	if err := database.Database[*modelauthz.UserRole](ctx).WithPurge().Delete(userRoles...); err != nil {
 		return err
 	}
 
@@ -38,12 +38,12 @@ func (s *UserRoleService) DeleteAfter(ctx *types.ServiceContext, userRole *model
 func (s *UserRoleService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.UserRole) error {
 	log := s.WithServiceContext(ctx, consts.PHASE_LIST_AFTER)
 
-	userMap, err := gstdao.QueryModelsMap(ctx.DatabaseContext(), func(u *modelauthz.User) string { return u.ID }, nil)
+	userMap, err := gstdao.QueryModelsMap(ctx, func(u *modelauthz.User) string { return u.ID }, nil)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
-	roleMap, err := gstdao.QueryModelsMap(ctx.DatabaseContext(), func(r *modelauthz.Role) string { return r.ID }, nil)
+	roleMap, err := gstdao.QueryModelsMap(ctx, func(r *modelauthz.Role) string { return r.ID }, nil)
 	if err != nil {
 		log.Error(err)
 		return err

@@ -1,6 +1,7 @@
 package zap
 
 import (
+	"context"
 	"strings"
 
 	"github.com/hydroan/gst/types"
@@ -101,15 +102,37 @@ func (l *Logger) With(fields ...string) types.Logger {
 //
 // log := logger.Controller.WithRequestMetadata(meta, consts.PHASE_LIST)
 func (l *Logger) WithRequestMetadata(meta types.RequestMetadata, phase consts.Phase) types.Logger {
+	return l.withRequestMetadata(meta, phase, meta.TraceID())
+}
+
+func (l *Logger) withRequestMetadata(meta types.RequestMetadata, phase consts.Phase, traceID string) types.Logger {
 	return l.With(
 		consts.PHASE, string(phase),
 		consts.CTX_ROUTE, meta.Route(),
 		consts.CTX_USERNAME, meta.Username(),
 		consts.CTX_USER_ID, meta.UserID(),
-		consts.TRACE_ID, meta.TraceID(),
+		consts.TRACE_ID, traceID,
 	).
 		WithObject(consts.PARAMS, paramsObject(meta.Params())).
 		WithObject(consts.QUERY, queryObject(meta.Query()))
+}
+
+// WithContext creates a new logger with request metadata fields from ctx.
+func (l *Logger) WithContext(ctx context.Context, phase consts.Phase) types.Logger {
+	if ctx == nil {
+		return l.With(consts.PHASE, string(phase))
+	}
+
+	meta := types.RequestMetadataFromContext(ctx)
+	traceID := meta.TraceID()
+	if len(traceID) == 0 {
+		spanCtx := trace.SpanFromContext(ctx).SpanContext()
+		if spanCtx.HasTraceID() {
+			traceID = spanCtx.TraceID().String()
+		}
+	}
+
+	return l.withRequestMetadata(meta, phase, traceID)
 }
 
 // WithServiceContext creates a new logger with service context fields.
@@ -125,38 +148,6 @@ func (l *Logger) WithServiceContext(ctx *types.ServiceContext, phase consts.Phas
 		consts.CTX_USERNAME, ctx.Username,
 		consts.CTX_USER_ID, ctx.UserID,
 		consts.TRACE_ID, ctx.TraceID,
-	).
-		WithObject(consts.PARAMS, paramsObject(ctx.Params)).
-		WithObject(consts.QUERY, queryObject(ctx.Query))
-}
-
-// WithDatabaseContext creates a new logger with database context fields.
-// It extends the base logger with phase, username, user ID, and trace ID from *types.DatabaseContext.
-//
-// examples:
-//
-// log := logger.Database.WithDatabaseContext(ctx, consts.PHASE_LIST_BEFORE)
-func (l *Logger) WithDatabaseContext(ctx *types.DatabaseContext, phase consts.Phase) (clone types.Logger) {
-	if ctx == nil {
-		return l.With(consts.PHASE, string(phase))
-	}
-
-	// Prefer trace ID from DatabaseContext; fall back to OTEL span context
-	traceID := ctx.TraceID
-	// Safely derive trace ID from OTEL span in context when not provided
-	if len(traceID) == 0 {
-		spanCtx := trace.SpanFromContext(ctx.Context()).SpanContext()
-		if spanCtx.HasTraceID() {
-			traceID = spanCtx.TraceID().String()
-		}
-	}
-
-	return l.With(
-		consts.PHASE, string(phase),
-		consts.CTX_ROUTE, ctx.Route,
-		consts.CTX_USERNAME, ctx.Username,
-		consts.CTX_USER_ID, ctx.UserID,
-		consts.TRACE_ID, traceID,
 	).
 		WithObject(consts.PARAMS, paramsObject(ctx.Params)).
 		WithObject(consts.QUERY, queryObject(ctx.Query))

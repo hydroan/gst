@@ -123,8 +123,8 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		if !errors.Is(reqErr, io.EOF) {
 			// purge mode is current not allowed in request.
 			//
-			// if err = handler(types.NewDatabaseContext(c)).WithPurge(req.Options.Purge).Delete(req.Items...); err != nil {
-			if err = handler(types.NewDatabaseContext(c)).Delete(req.Items...); err != nil {
+			// if err = handler(requestContext(c)).WithPurge(req.Options.Purge).Delete(req.Items...); err != nil {
+			if err = handler(requestContext(c)).Delete(req.Items...); err != nil {
 				log.Error(err)
 				JSON(c, CodeFailure.WithErr(err))
 				gstotel.RecordError(span, err)
@@ -158,7 +158,7 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		// 	UserAgent: c.Request.UserAgent(),
 		// })
 		m := reflect.New(typ).Interface().(M) //nolint:errcheck
-		if err = am.RecordOperation(types.NewDatabaseContext(c), m, &modellogmgmt.OperationLog{
+		if err = am.RecordOperation(requestContext(c), m, &modellogmgmt.OperationLog{
 			OP:        consts.OP_DELETE_MANY,
 			Model:     typ.Name(),
 			Record:    util.BytesToString(record),

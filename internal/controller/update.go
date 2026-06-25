@@ -139,7 +139,7 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		m := reflect.New(typ).Interface().(M) //nolint:errcheck
 		m.SetID(id)
 		// Make sure the record must be already exists.
-		if err = handler(types.NewDatabaseContext(c)).WithLimit(1).WithQuery(m).List(&data); err != nil {
+		if err = handler(requestContext(c)).WithLimit(1).WithQuery(m).List(&data); err != nil {
 			log.Error(err)
 			JSON(c, CodeFailure.WithErr(err))
 			gstotel.RecordError(span, err)
@@ -168,7 +168,7 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		// 2.Update resource in database.
 		log.Infoz("update in database", zap.Object(typ.Name(), req))
-		if err = handler(types.NewDatabaseContext(c)).Update(req); err != nil {
+		if err = handler(requestContext(c)).Update(req); err != nil {
 			log.Error(err)
 			JSON(c, CodeFailure.WithErr(err))
 			gstotel.RecordError(span, err)
@@ -205,7 +205,7 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// 	Method:    c.Request.Method,
 		// 	UserAgent: c.Request.UserAgent(),
 		// })
-		if err = am.RecordOperation(types.NewDatabaseContext(c), req, &modellogmgmt.OperationLog{
+		if err = am.RecordOperation(requestContext(c), req, &modellogmgmt.OperationLog{
 			OP:        consts.OP_UPDATE,
 			Model:     typ.Name(),
 			RecordID:  req.GetID(),

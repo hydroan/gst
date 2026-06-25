@@ -29,16 +29,16 @@ import (
 //
 //	// Use custom database instance
 //	customDB := sqlite.New(config.Sqlite{...})
-//	database.Database[*model.User](nil).WithDB(customDB).Create(&user)
+//	database.Database[*model.User](context.Background()).WithDB(customDB).Create(&user)
 //
 //	// Combined with WithTable
-//	database.Database[*model.User](nil).WithDB(customDB).WithTable("users").List(&users)
+//	database.Database[*model.User](context.Background()).WithDB(customDB).WithTable("users").List(&users)
 //
 //	// Multiple database instances
 //	db1 := sqlite.New(config.Sqlite{Path: "/tmp/db1.db"})
 //	db2 := sqlite.New(config.Sqlite{Path: "/tmp/db2.db"})
-//	database.Database[*model.User](nil).WithDB(db1).Create(&user1)
-//	database.Database[*model.User](nil).WithDB(db2).Create(&user2)
+//	database.Database[*model.User](context.Background()).WithDB(db1).Create(&user1)
+//	database.Database[*model.User](context.Background()).WithDB(db2).Create(&user2)
 //
 // NOTE: WithDB expects the required tables to already exist in the target database.
 // NOTE: Invalid database type (not *gorm.DB) will log a warning and return the original instance.
@@ -56,7 +56,7 @@ func (db *database[M]) WithDB(x any) types.Database[M] {
 	// }
 	_db, ok := x.(*gorm.DB)
 	if !ok {
-		logger.Database.WithDatabaseContext(db.ctx, consts.Phase("WithDB")).Warn("invalid database type, expect *gorm.DB")
+		logger.Database.WithContext(db.ctx, consts.Phase("WithDB")).Warn("invalid database type, expect *gorm.DB")
 		return db
 	}
 	db.mu.Lock()
@@ -66,7 +66,7 @@ func (db *database[M]) WithDB(x any) types.Database[M] {
 	if ctx == nil {
 		ctx = context.Background()
 		if db.ctx != nil {
-			ctx = db.ctx.Context()
+			ctx = db.ctx
 		}
 	}
 	// Keep existing setup bookkeeping for compatibility with prior operation-chain state.
@@ -103,15 +103,15 @@ func (db *database[M]) WithDB(x any) types.Database[M] {
 // Examples:
 //
 //	// Use custom table name
-//	database.Database[*model.User](nil).WithTable("custom_users").List(&users)
+//	database.Database[*model.User](context.Background()).WithTable("custom_users").List(&users)
 //
 //	// Combined with WithDB
 //	customDB := sqlite.New(config.Sqlite{...})
 //	// Assume the "users" table already exists in customDB.
-//	database.Database[*model.User](nil).WithDB(customDB).WithTable("users").Create(&user)
+//	database.Database[*model.User](context.Background()).WithDB(customDB).WithTable("users").Create(&user)
 //
 //	// Chainable with other methods
-//	database.Database[*model.User](nil).
+//	database.Database[*model.User](context.Background()).
 //	    WithDB(customDB).
 //	    WithTable("users").
 //	    WithQuery(&model.User{Name: "John"}).
@@ -140,24 +140,24 @@ func (db *database[M]) WithTable(name string) types.Database[M] {
 // Examples:
 //
 //	// Single resource type transaction
-//	database.Database[*User](nil).TransactionFunc(func(tx any) error {
-//	    return database.Database[*User](nil).WithTx(tx).Create(&user)
+//	database.Database[*User](context.Background()).TransactionFunc(func(tx any) error {
+//	    return database.Database[*User](context.Background()).WithTx(tx).Create(&user)
 //	})
 //
 //	// Multiple resource types in the same transaction
-//	database.Database[*User](nil).TransactionFunc(func(tx any) error {
-//	    if err := database.Database[*User](nil).WithTx(tx).Create(&user); err != nil {
+//	database.Database[*User](context.Background()).TransactionFunc(func(tx any) error {
+//	    if err := database.Database[*User](context.Background()).WithTx(tx).Create(&user); err != nil {
 //	        return err
 //	    }
-//	    if err := database.Database[*Order](nil).WithTx(tx).Create(&order); err != nil {
+//	    if err := database.Database[*Order](context.Background()).WithTx(tx).Create(&order); err != nil {
 //	        return err
 //	    }
 //	    return nil
 //	})
 //
 //	// Chainable with other methods
-//	database.Database[*User](nil).TransactionFunc(func(tx any) error {
-//	    return database.Database[*User](nil).
+//	database.Database[*User](context.Background()).TransactionFunc(func(tx any) error {
+//	    return database.Database[*User](context.Background()).
 //	        WithTx(tx).
 //	        WithQuery(&User{Name: "John"}).
 //	        Update(&user)
@@ -171,13 +171,13 @@ func (db *database[M]) WithTable(name string) types.Database[M] {
 func (db *database[M]) WithTx(tx any) types.Database[M] {
 	var empty *gorm.DB
 	if tx == nil || tx == new(gorm.DB) || tx == empty {
-		logger.Database.WithDatabaseContext(db.ctx, consts.Phase("WithTx")).Warn("invalid database type, expect *gorm.DB")
+		logger.Database.WithContext(db.ctx, consts.Phase("WithTx")).Warn("invalid database type, expect *gorm.DB")
 		return db
 	}
 
 	_tx, ok := tx.(*gorm.DB)
 	if !ok || _tx == nil {
-		logger.Database.WithDatabaseContext(db.ctx, consts.Phase("WithTx")).Warn("invalid database type, expect *gorm.DB")
+		logger.Database.WithContext(db.ctx, consts.Phase("WithTx")).Warn("invalid database type, expect *gorm.DB")
 		return db
 	}
 
@@ -219,16 +219,16 @@ func (db *database[M]) WithTx(tx any) types.Database[M] {
 // Examples:
 //
 //	// Set batch size for Create operation
-//	database.Database[*model.User](nil).WithBatchSize(1000).Create(users...)
+//	database.Database[*model.User](context.Background()).WithBatchSize(1000).Create(users...)
 //
 //	// Set batch size for Update operation
-//	database.Database[*model.User](nil).WithBatchSize(500).Update(users...)
+//	database.Database[*model.User](context.Background()).WithBatchSize(500).Update(users...)
 //
 //	// Set batch size for Delete operation
-//	database.Database[*model.User](nil).WithBatchSize(2000).Delete(users...)
+//	database.Database[*model.User](context.Background()).WithBatchSize(2000).Delete(users...)
 //
 //	// Combined with other methods
-//	database.Database[*model.User](nil).
+//	database.Database[*model.User](context.Background()).
 //	    WithBatchSize(1000).
 //	    WithDebug().
 //	    Create(users...)
@@ -275,7 +275,7 @@ func (db *database[M]) WithDebug() types.Database[M] {
 //	err := db.WithRollback(func() {
 //	    // Custom rollback logic
 //	}).TransactionFunc(func(tx any) error {
-//	    userDB := database.Database[*model.User](nil)
+//	    userDB := database.Database[*model.User](context.Background())
 //	    if err := userDB.WithTx(tx).Create(&user); err != nil {
 //	        return err // automatic rollback, rollback function will be called
 //	    }
@@ -330,7 +330,7 @@ func (db *database[M]) WithDryRun() types.Database[M] {
 // Example:
 //
 //	var statements []types.SQLStatement
-//	err := database.Database[*User](nil).
+//	err := database.Database[*User](context.Background()).
 //	    WithBuildSQL(&statements).
 //	    WithQuery(&User{Name: "John"}).
 //	    List(&users)

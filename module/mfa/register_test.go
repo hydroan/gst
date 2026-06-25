@@ -1,6 +1,7 @@
 package mfa_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -802,7 +803,7 @@ func getTOTPDeviceForTest(t *testing.T, deviceID string) *modelmfa.TOTPDevice {
 	t.Helper()
 
 	device := new(modelmfa.TOTPDevice)
-	require.NoError(t, database.Database[*modelmfa.TOTPDevice](nil).Get(device, deviceID))
+	require.NoError(t, database.Database[*modelmfa.TOTPDevice](context.Background()).Get(device, deviceID))
 	return device
 }
 

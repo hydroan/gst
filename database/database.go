@@ -69,7 +69,7 @@ type database[M types.Model] struct {
 	ins *gorm.DB
 	m   M
 	typ reflect.Type
-	ctx *types.DatabaseContext
+	ctx context.Context
 	mu  sync.Mutex
 
 	// options
@@ -228,8 +228,8 @@ func (db *database[M]) prepare() error {
 //   - M: Model type that implements types.Model interface
 //
 // Parameters:
-//   - ctx: Required database context for request tracing and metadata.
-//     In service layer operations, pass a valid DatabaseContext to track requests.
+//   - ctx: Required context for cancellation, tracing, and request metadata.
+//     In service layer operations, pass the ServiceContext directly.
 //     For non-service layer operations, pass nil.
 //
 // Returns a database manipulator with full CRUD and query capabilities.
@@ -254,21 +254,19 @@ func (db *database[M]) prepare() error {
 //
 //	var users []*User
 //	// Service layer: one Database() call per operation chain (required; anything else is wrong).
-//	_ = Database[*User](ctx.DatabaseContext()).WithQuery(&User{Name: "John"}).List(&users)
+//	_ = Database[*User](ctx).WithQuery(&User{Name: "John"}).List(&users)
 //	u := new(User)
-//	_ = Database[*User](ctx.DatabaseContext()).Get(u, id)
+//	_ = Database[*User](ctx).Get(u, id)
 //
 //	// Non-service layer
-//	_ = Database[*User](nil).WithQuery(&User{Name: "John"}).List(&users)
-func Database[M types.Model](ctx *types.DatabaseContext) types.Database[M] {
+//	_ = Database[*User](context.Background()).WithQuery(&User{Name: "John"}).List(&users)
+func Database[M types.Model](ctx context.Context) types.Database[M] {
 	if DB() == nil || DB() == new(gorm.DB) {
 		panic("database is not initialized")
 	}
-	dbctx := new(types.DatabaseContext)
 	gctx := context.Background()
 	if ctx != nil {
-		dbctx = ctx
-		gctx = dbctx.Context()
+		gctx = ctx
 	}
 
 	var ins *gorm.DB
@@ -280,7 +278,7 @@ func Database[M types.Model](ctx *types.DatabaseContext) types.Database[M] {
 
 	db := &database[M]{
 		ins: ins,
-		ctx: dbctx,
+		ctx: gctx,
 	}
 
 	// Track database identifier + model type for compatibility with existing setup bookkeeping.

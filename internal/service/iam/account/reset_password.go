@@ -39,7 +39,7 @@ func (s *ResetPasswordService) Create(ctx *types.ServiceContext, req *modeliamac
 
 	target.PasswordHash = string(hashedPassword)
 	target.MustChangePassword = true
-	if err = database.Database[*modeliamuser.User](ctx.DatabaseContext()).
+	if err = database.Database[*modeliamuser.User](ctx).
 		WithoutHook().
 		WithSelect("username", "password_hash", "must_change_password").
 		Update(target); err != nil {

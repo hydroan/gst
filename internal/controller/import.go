@@ -87,7 +87,7 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			ml[i].SetCreatedBy(c.GetString(consts.CTX_USERNAME))
 			ml[i].SetUpdatedBy(c.GetString(consts.CTX_USERNAME))
 		}
-		if err := handler(types.NewDatabaseContext(c)).Update(ml...); err != nil {
+		if err := handler(requestContext(c)).Update(ml...); err != nil {
 			log.Error(err)
 			JSON(c, CodeFailure.WithErr(err))
 			gstotel.RecordError(span, err)

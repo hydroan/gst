@@ -1,6 +1,7 @@
 package database_test
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -45,8 +46,8 @@ var (
 // This function should be called in defer to ensure cleanup after each test.
 func cleanupTestData() {
 	users := make([]*TestUser, 0)
-	_ = database.Database[*TestUser](nil).List(&users)
-	_ = database.Database[*TestUser](nil).Delete(users...)
+	_ = database.Database[*TestUser](context.Background()).List(&users)
+	_ = database.Database[*TestUser](context.Background()).Delete(users...)
 	// Restore original values
 	u1 = &TestUser{Name: "user1", Email: "user1@example.com", Age: 18, Base: model.Base{ID: "u1"}}
 	u2 = &TestUser{Name: "user2", Email: "user2@example.com", Age: 19, Base: model.Base{ID: "u2"}}
@@ -54,7 +55,7 @@ func cleanupTestData() {
 	ul = []*TestUser{u1, u2, u3}
 
 	categories := make([]*TestCategory, 0)
-	err := database.Database[*TestCategory](nil).List(&categories)
+	err := database.Database[*TestCategory](context.Background()).List(&categories)
 	if err != nil {
 		panic(err)
 	}
@@ -78,21 +79,21 @@ func cleanupTestData() {
 		}
 	}()
 	// delete all categories, we must temporarily disable foreign key check
-	if err = database.Database[*TestCategory](nil).Delete(categories...); err != nil {
+	if err = database.Database[*TestCategory](context.Background()).Delete(categories...); err != nil {
 		panic(err)
 	}
 
 	products := make([]*TestProduct, 0)
-	_ = database.Database[*TestProduct](nil).List(&products)
-	_ = database.Database[*TestProduct](nil).Delete(products...)
+	_ = database.Database[*TestProduct](context.Background()).List(&products)
+	_ = database.Database[*TestProduct](context.Background()).Delete(products...)
 }
 
 // setupTestData deletes existing test data and creates all test users (ul).
 // This is a common setup pattern used in most test cases.
 func setupTestData(t *testing.T) {
 	t.Helper()
-	require.NoError(t, database.Database[*TestUser](nil).Delete(ul...))
-	require.NoError(t, database.Database[*TestUser](nil).Create(ul...))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(ul...))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Create(ul...))
 }
 
 // findUsersByID finds users from a slice by their IDs and returns them in order (u1, u2, u3).

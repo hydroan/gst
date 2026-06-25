@@ -52,7 +52,7 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	defer func() {
 		// write login log.
 		if !success && servicelogmgmt.Enabled {
-			if logErr := database.Database[*modellogmgmt.LoginLog](ctx.DatabaseContext()).Create(&modellogmgmt.LoginLog{
+			if logErr := database.Database[*modellogmgmt.LoginLog](ctx).Create(&modellogmgmt.LoginLog{
 				Username: req.Username,
 				ClientIP: ctx.ClientIP,
 				Status:   modellogmgmt.LoginStatusFailure,
@@ -68,7 +68,7 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 
 	// Find user by username
 	users := make([]*modeliamuser.User, 0)
-	if err = database.Database[*modeliamuser.User](ctx.DatabaseContext()).WithLimit(1).WithQuery(&modeliamuser.User{Username: req.Username}).List(&users); err != nil {
+	if err = database.Database[*modeliamuser.User](ctx).WithLimit(1).WithQuery(&modeliamuser.User{Username: req.Username}).List(&users); err != nil {
 		log.Errorz("failed to query user", zap.Error(err))
 		return nil, errors.New("invalid username or password")
 	}
@@ -116,7 +116,7 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	// Update last login time
 	now := time.Now()
 	user.LastLoginAt = &now
-	if err = database.Database[*modeliamuser.User](ctx.DatabaseContext()).Update(user); err != nil {
+	if err = database.Database[*modeliamuser.User](ctx).Update(user); err != nil {
 		log.Errorz("failed to update last login time", zap.Error(err))
 		// Don't fail the login for this
 	}
@@ -169,7 +169,7 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	// write login log
 	success = true
 	if servicelogmgmt.Enabled {
-		if err = database.Database[*modellogmgmt.LoginLog](ctx.DatabaseContext()).Create(&modellogmgmt.LoginLog{
+		if err = database.Database[*modellogmgmt.LoginLog](ctx).Create(&modellogmgmt.LoginLog{
 			UserID:   user.ID,
 			Username: user.Username,
 			ClientIP: ctx.ClientIP,

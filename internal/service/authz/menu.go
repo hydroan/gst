@@ -34,13 +34,13 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 	)
 
 	// query the current user
-	if err := database.Database[*modelauthz.User](ctx.DatabaseContext()).Get(user, ctx.UserID); err != nil {
+	if err := database.Database[*modelauthz.User](ctx).Get(user, ctx.UserID); err != nil {
 		log.Error(err)
 		return err
 	}
 
 	// query all "UserRole" according to the current user id.
-	if err := database.Database[*modelauthz.UserRole](ctx.DatabaseContext()).
+	if err := database.Database[*modelauthz.UserRole](ctx).
 		WithQuery(&modelauthz.UserRole{UserID: ctx.UserID}).
 		List(&userRoles); err != nil {
 		log.Error(err)
@@ -55,7 +55,7 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 				roleIDs = append(roleIDs, ur.RoleID)
 			}
 		}
-		if err := database.Database[*modelauthz.Role](ctx.DatabaseContext()).
+		if err := database.Database[*modelauthz.Role](ctx).
 			WithQuery(&modelauthz.Role{Base: model.Base{ID: strings.Join(roleIDs, ",")}}).List(&roles); err != nil {
 			log.Error(err)
 			return err
@@ -63,7 +63,7 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 	}
 	// the user has no roles, use the default role.
 	if len(roles) == 0 {
-		if err := database.Database[*modelauthz.Role](ctx.DatabaseContext()).
+		if err := database.Database[*modelauthz.Role](ctx).
 			WithQuery(&modelauthz.Role{Default: new(true)}).
 			List(&roles); err != nil {
 			log.Error(err)

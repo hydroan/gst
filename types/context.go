@@ -6,76 +6,12 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/sse"
 	"github.com/hydroan/gst/types/consts"
 )
-
-type DatabaseContext struct {
-	Username string // currrent login user.
-	UserID   string // currrent login user id
-	Route    string
-	Params   map[string]string
-	Query    url.Values
-
-	context context.Context
-	TraceID string
-	PSpanID string
-	SpanID  string
-	Seq     int
-}
-
-// NewDatabaseContext creates a DatabaseContext from gin.Context
-//
-// You can pass the custom context.Context to propagate span tracing,
-// otherwise use the c.Request.Context().
-func NewDatabaseContext(c *gin.Context, ctxs ...context.Context) *DatabaseContext {
-	if c == nil {
-		return new(DatabaseContext)
-	}
-
-	ctx := c.Request.Context()
-	if len(ctxs) > 0 && ctxs[0] != nil {
-		ctx = ctxs[0]
-	}
-
-	params := make(map[string]string)
-	for _, key := range c.GetStringSlice(consts.PARAMS) {
-		params[key] = c.Param(key)
-	}
-
-	return &DatabaseContext{
-		context:  ctx,
-		Route:    c.GetString(consts.CTX_ROUTE),
-		Username: c.GetString(consts.CTX_USERNAME),
-		UserID:   c.GetString(consts.CTX_USER_ID),
-		TraceID:  c.GetString(consts.TRACE_ID),
-		Params:   params,
-		Query:    c.Request.URL.Query(),
-	}
-}
-
-// Context converts *DatabaseContext to context.Context.
-// It starts from the underlying ctx.context and conditionally injects extra metadata.
-func (dc *DatabaseContext) Context() context.Context {
-	if dc == nil || dc.context == nil {
-		return context.Background()
-	}
-
-	c := dc.context
-	if len(dc.Username) != 0 {
-		c = context.WithValue(c, consts.CTX_USERNAME, dc.Username) //nolint:staticcheck
-	}
-	if len(dc.UserID) != 0 {
-		c = context.WithValue(c, consts.CTX_USER_ID, dc.UserID) //nolint:staticcheck
-	}
-	if len(dc.TraceID) != 0 {
-		c = context.WithValue(c, consts.TRACE_ID, dc.TraceID) //nolint:staticcheck
-	}
-
-	return c
-}
 
 type ServiceContext struct {
 	Method       string        // http method
@@ -122,18 +58,15 @@ type ServiceContext struct {
 // otherwise use the c.Request.Context().
 func NewServiceContext(c *gin.Context, ctxs ...context.Context) *ServiceContext {
 	if c == nil {
-		return new(ServiceContext)
-	}
-
-	params := make(map[string]string)
-	for _, key := range c.GetStringSlice(consts.PARAMS) {
-		params[key] = c.Param(key)
+		return &ServiceContext{context: context.Background()}
 	}
 
 	ctx := c.Request.Context()
 	if len(ctxs) > 0 && ctxs[0] != nil {
 		ctx = ctxs[0]
 	}
+	meta := NewRequestMetadata(c)
+	ctx = ContextWithRequestMetadata(ctx, meta)
 
 	return &ServiceContext{
 		Request: c.Request,
@@ -144,15 +77,15 @@ func NewServiceContext(c *gin.Context, ctxs ...context.Context) *ServiceContext 
 		WriterHeader: c.Writer.Header(),
 		ClientIP:     c.ClientIP(),
 		UserAgent:    c.Request.UserAgent(),
-		Params:       params,
-		Query:        c.Request.URL.Query(),
+		Params:       meta.Params(),
+		Query:        meta.Query(),
 
-		Route:     c.GetString(consts.CTX_ROUTE),
-		Username:  c.GetString(consts.CTX_USERNAME),
-		UserID:    c.GetString(consts.CTX_USER_ID),
-		SessionID: c.GetString(consts.CTX_SESSION_ID),
+		Route:     meta.Route(),
+		Username:  meta.Username(),
+		UserID:    meta.UserID(),
+		SessionID: meta.SessionID(),
 
-		TraceID: c.GetString(consts.TRACE_ID),
+		TraceID: meta.TraceID(),
 
 		ginCtx:  c,
 		context: ctx,
@@ -164,29 +97,28 @@ func NewServiceContext(c *gin.Context, ctxs ...context.Context) *ServiceContext 
 	}
 }
 
-// Context converts *ServiceContex to context.Context.
-// It starts from the underlying ctx.context and conditionally injects extra metadata.
+// Context returns sc as context.Context.
 func (sc *ServiceContext) Context() context.Context {
+	if sc == nil {
+		return context.Background()
+	}
+	return sc
+}
+
+func (sc *ServiceContext) baseContext() context.Context {
 	if sc == nil || sc.context == nil {
 		return context.Background()
 	}
-
-	c := sc.context
-	if len(sc.Username) != 0 {
-		c = context.WithValue(c, consts.CTX_USERNAME, sc.Username) //nolint:staticcheck
-	}
-	if len(sc.UserID) != 0 {
-		c = context.WithValue(c, consts.CTX_USER_ID, sc.UserID) //nolint:staticcheck
-	}
-	if len(sc.TraceID) != 0 {
-		c = context.WithValue(c, consts.TRACE_ID, sc.TraceID) //nolint:staticcheck
-	}
-
-	return c
+	return sc.context
 }
 
-func (sc *ServiceContext) DatabaseContext() *DatabaseContext {
-	return NewDatabaseContext(sc.ginCtx, sc.context)
+func (sc *ServiceContext) Deadline() (time.Time, bool) { return sc.baseContext().Deadline() }
+func (sc *ServiceContext) Done() <-chan struct{}       { return sc.baseContext().Done() }
+func (sc *ServiceContext) Err() error                  { return sc.baseContext().Err() }
+func (sc *ServiceContext) Value(key any) any           { return sc.baseContext().Value(key) }
+
+func (sc *ServiceContext) RequestMetadata() RequestMetadata {
+	return RequestMetadataFromContext(sc)
 }
 
 func (sc *ServiceContext) Data(code int, contentType string, data []byte) {
@@ -274,35 +206,32 @@ func (sc *ServiceContext) Encode(w io.Writer, event Event) error {
 }
 
 type ModelContext struct {
-	dbctx *DatabaseContext
+	context context.Context
 }
 
-func NewModelContext(ctx context.Context, dbctx *DatabaseContext) *ModelContext {
+func NewModelContext(ctx context.Context) *ModelContext {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	return &ModelContext{
-		dbctx: &DatabaseContext{
-			context:  ctx,
-			Username: dbctx.Username,
-			UserID:   dbctx.UserID,
-			Route:    dbctx.Route,
-			Params:   dbctx.Params,
-			Query:    dbctx.Query,
-
-			TraceID: dbctx.TraceID,
-			PSpanID: dbctx.PSpanID,
-			SpanID:  dbctx.SpanID,
-			Seq:     dbctx.Seq,
-		},
-	}
+	return &ModelContext{context: ctx}
 }
 
 func (mc *ModelContext) Context() context.Context {
-	return mc.dbctx.context
+	if mc == nil {
+		return context.Background()
+	}
+	return mc
 }
 
-func (mc *ModelContext) DatabaseContext() *DatabaseContext {
-	return mc.dbctx
+func (mc *ModelContext) baseContext() context.Context {
+	if mc == nil || mc.context == nil {
+		return context.Background()
+	}
+	return mc.context
 }
+
+func (mc *ModelContext) Deadline() (time.Time, bool) { return mc.baseContext().Deadline() }
+func (mc *ModelContext) Done() <-chan struct{}       { return mc.baseContext().Done() }
+func (mc *ModelContext) Err() error                  { return mc.baseContext().Err() }
+func (mc *ModelContext) Value(key any) any           { return mc.baseContext().Value(key) }

@@ -128,7 +128,7 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// NOTE: WithExpand(req.Expands()...) is not a good choices.
 		// if err := database.Database[M]().WithExpand(req.Expands()...).Update(req); err != nil {
 		if !errors.Is(reqErr, io.EOF) {
-			if err = handler(types.NewDatabaseContext(c)).WithExpand(req.Expands()).Create(req); err != nil {
+			if err = handler(requestContext(c)).WithExpand(req.Expands()).Create(req); err != nil {
 				log.Error(err)
 				JSON(c, CodeFailure.WithErr(err))
 				gstotel.RecordError(span, err)
@@ -166,7 +166,7 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// 	Method:    c.Request.Method,
 		// 	UserAgent: c.Request.UserAgent(),
 		// })
-		if err = am.RecordOperation(types.NewDatabaseContext(c), req, &modellogmgmt.OperationLog{
+		if err = am.RecordOperation(requestContext(c), req, &modellogmgmt.OperationLog{
 			OP:        consts.OP_CREATE,
 			Model:     typ.Name(),
 			RecordID:  req.GetID(),

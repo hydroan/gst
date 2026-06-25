@@ -56,10 +56,10 @@ func (r *UserRole) CreateBefore(ctx *types.ModelContext) error {
 	}
 	// expands field: user and role
 	user, role := new(User), new(Role)
-	if err := database.Database[*User](ctx.DatabaseContext()).Get(user, r.UserID); err != nil {
+	if err := database.Database[*User](ctx).Get(user, r.UserID); err != nil {
 		return err
 	}
-	if err := database.Database[*Role](ctx.DatabaseContext()).Get(role, r.RoleID); err != nil {
+	if err := database.Database[*Role](ctx).Get(role, r.RoleID); err != nil {
 		return err
 	}
 	r.Username, r.RoleCode = user.Username, role.Code
@@ -71,7 +71,7 @@ func (r *UserRole) CreateBefore(ctx *types.ModelContext) error {
 }
 
 func (r *UserRole) CreateAfter(ctx *types.ModelContext) error {
-	if err := database.Database[*UserRole](ctx.DatabaseContext()).Update(r); err != nil {
+	if err := database.Database[*UserRole](ctx).Update(r); err != nil {
 		return err
 	}
 	// NOTE: must be role name not role id.
@@ -81,25 +81,25 @@ func (r *UserRole) CreateAfter(ctx *types.ModelContext) error {
 
 	// update casbin_rule field: `user`, `role`, `remark`
 	user := new(User)
-	if err := database.Database[*User](ctx.DatabaseContext()).Get(user, r.UserID); err != nil {
+	if err := database.Database[*User](ctx).Get(user, r.UserID); err != nil {
 		return err
 	}
 	casbinRules := make([]*CasbinRule, 0)
-	if err := database.Database[*CasbinRule](ctx.DatabaseContext()).WithLimit(1).WithQuery(&CasbinRule{V0: r.UserID, V1: r.RoleCode}).List(&casbinRules); err != nil {
+	if err := database.Database[*CasbinRule](ctx).WithLimit(1).WithQuery(&CasbinRule{V0: r.UserID, V1: r.RoleCode}).List(&casbinRules); err != nil {
 		return err
 	}
 	if len(casbinRules) > 0 {
 		casbinRules[0].User = user.Username
 		casbinRules[0].Role = r.RoleCode
 		casbinRules[0].Remark = new(fmt.Sprintf("%s -> %s", r.Username, r.RoleCode))
-		return database.Database[*CasbinRule](ctx.DatabaseContext()).Update(casbinRules[0])
+		return database.Database[*CasbinRule](ctx).Update(casbinRules[0])
 	}
 	return nil
 }
 
 func (r *UserRole) DeleteBefore(ctx *types.ModelContext) error {
 	// The delete request always don't have user_id and role_id, so we should get the role from database.
-	if err := database.Database[*UserRole](ctx.DatabaseContext()).Get(r, r.ID); err != nil {
+	if err := database.Database[*UserRole](ctx).Get(r, r.ID); err != nil {
 		return err
 	}
 	// NOTE: must be role name not role id.

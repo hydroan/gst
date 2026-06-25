@@ -68,7 +68,7 @@ func VerifyLoginSecondFactor(ctx *types.ServiceContext, userID string, factor Lo
 // listActiveLoginTOTPDevices loads the active devices that make login MFA mandatory.
 func listActiveLoginTOTPDevices(ctx *types.ServiceContext, userID string) ([]*modelmfa.TOTPDevice, error) {
 	devices := make([]*modelmfa.TOTPDevice, 0)
-	if err := database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).WithQuery(&modelmfa.TOTPDevice{
+	if err := database.Database[*modelmfa.TOTPDevice](ctx).WithQuery(&modelmfa.TOTPDevice{
 		UserID:   userID,
 		IsActive: true,
 	}).List(&devices); err != nil {
@@ -86,7 +86,7 @@ func verifyLoginTOTPCode(ctx *types.ServiceContext, devices []*modelmfa.TOTPDevi
 
 	now := time.Now()
 	device.LastUsedAt = &now
-	if err := database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).Update(device); err != nil {
+	if err := database.Database[*modelmfa.TOTPDevice](ctx).Update(device); err != nil {
 		return errors.Wrap(err, "update login TOTP device usage")
 	}
 	return nil

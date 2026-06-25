@@ -57,7 +57,7 @@ func (r *RolePermission) CreateAfter(*types.ModelContext) error {
 
 func (r *RolePermission) DeleteBefore(ctx *types.ModelContext) error {
 	// The request always only contains id, so we should get the RolePermission from database.
-	if err := database.Database[*RolePermission](ctx.DatabaseContext()).Get(r, r.ID); err != nil {
+	if err := database.Database[*RolePermission](ctx).Get(r, r.ID); err != nil {
 		return err
 	}
 	// revoke the role's permission

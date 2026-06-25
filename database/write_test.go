@@ -1,6 +1,7 @@
 package database_test
 
 import (
+	"context"
 	"strconv"
 	"testing"
 	"time"
@@ -15,14 +16,14 @@ func TestDatabaseCreate(t *testing.T) {
 	defer cleanupTestData()
 
 	// Test basic Create - single record
-	require.NoError(t, database.Database[*TestUser](nil).Create(u1))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Create(u1))
 	count := new(int64)
-	require.NoError(t, database.Database[*TestUser](nil).Count(count))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 	require.Equal(t, int64(1), *count, "should have 1 record after creating single record")
 
 	// Verify single record was created correctly
 	u := new(TestUser)
-	require.NoError(t, database.Database[*TestUser](nil).Get(u, u1.ID))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID))
 	require.NotNil(t, u)
 	require.NotEmpty(t, u.ID, "id should not be empty")
 	require.NotEmpty(t, u.CreatedAt, "created_at should not be empty")
@@ -36,8 +37,8 @@ func TestDatabaseCreate(t *testing.T) {
 
 	// Test Create - batch create multiple records
 	u1.Remark, u2.Remark, u3.Remark = nil, nil, nil // clear remark to test hook
-	require.NoError(t, database.Database[*TestUser](nil).Create(ul...))
-	require.NoError(t, database.Database[*TestUser](nil).Count(count))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Create(ul...))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 	require.Equal(t, int64(3), *count, "should have 3 records after batch create")
 
 	// Check the create hook results for batch create
@@ -47,7 +48,7 @@ func TestDatabaseCreate(t *testing.T) {
 
 	// Verify created data in the database
 	users := make([]*TestUser, 0)
-	require.NoError(t, database.Database[*TestUser](nil).List(&users))
+	require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 	require.Len(t, users, 3, "should have 3 records")
 	var u11, u22, u33 *TestUser
 	for _, u := range users {
@@ -98,15 +99,15 @@ func TestDatabaseCreate(t *testing.T) {
 			Name: strconv.Itoa(int(now + 2)),
 		},
 	}
-	require.NoError(t, database.Database[*TestUser](nil).Create(list...))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Create(list...))
 	for _, u := range list {
 		require.NotEmpty(t, u.ID, "id should not be empty")
 	}
 
 	// Test Create with empty resources - should not return error
-	require.NoError(t, database.Database[*TestUser](nil).Create(nil))
-	require.NoError(t, database.Database[*TestUser](nil).Create([]*TestUser{nil, nil, nil}...))
-	require.NoError(t, database.Database[*TestUser](nil).Create([]*TestUser{nil, u1, nil}...))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Create(nil))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Create([]*TestUser{nil, nil, nil}...))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Create([]*TestUser{nil, u1, nil}...))
 }
 
 func TestDatabaseDelete(t *testing.T) {
@@ -115,16 +116,16 @@ func TestDatabaseDelete(t *testing.T) {
 
 	// Test basic Delete - single record (soft delete)
 	count := new(int64)
-	require.NoError(t, database.Database[*TestUser](nil).Count(count))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 	require.Equal(t, int64(3), *count, "should have 3 records initially")
 
-	require.NoError(t, database.Database[*TestUser](nil).Delete(u1))
-	require.NoError(t, database.Database[*TestUser](nil).Count(count))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(u1))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 	require.Equal(t, int64(2), *count, "should have 2 records after soft delete")
 
 	// Verify soft-deleted record is not visible in List
 	users := make([]*TestUser, 0)
-	require.NoError(t, database.Database[*TestUser](nil).List(&users))
+	require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 	require.Len(t, users, 2, "should have 2 records in List after soft delete")
 	var foundU1 bool
 	for _, u := range users {
@@ -136,33 +137,33 @@ func TestDatabaseDelete(t *testing.T) {
 
 	// Verify soft-deleted record is not accessible via Get
 	u := new(TestUser)
-	require.NoError(t, database.Database[*TestUser](nil).Get(u, u1.ID))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID))
 	require.Empty(t, u.ID, "soft-deleted record should not be accessible via Get")
 
 	// Test Delete - batch delete multiple records
-	require.NoError(t, database.Database[*TestUser](nil).Delete(u2, u3))
-	require.NoError(t, database.Database[*TestUser](nil).Count(count))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(u2, u3))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 	require.Equal(t, int64(0), *count, "should have 0 records after batch soft delete")
 
 	// Verify all records are soft-deleted
 	users = make([]*TestUser, 0)
-	require.NoError(t, database.Database[*TestUser](nil).List(&users))
+	require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 	require.Empty(t, users, "should have 0 records in List after all soft deleted")
 
 	// Recreate data for next test
 	setupTestData(t)
-	require.NoError(t, database.Database[*TestUser](nil).Count(count))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 	require.Equal(t, int64(3), *count, "should have 3 records after recreate")
 
 	// Test Delete - batch delete with slice
-	require.NoError(t, database.Database[*TestUser](nil).Delete(ul...))
-	require.NoError(t, database.Database[*TestUser](nil).Count(count))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(ul...))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 	require.Equal(t, int64(0), *count, "should have 0 records after batch delete with slice")
 
 	// Test Delete with empty resources - should not return error
-	require.NoError(t, database.Database[*TestUser](nil).Delete(nil))
-	require.NoError(t, database.Database[*TestUser](nil).Delete([]*TestUser{nil, nil, nil}...))
-	require.NoError(t, database.Database[*TestUser](nil).Delete([]*TestUser{nil, u1, nil}...))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(nil))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Delete([]*TestUser{nil, nil, nil}...))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Delete([]*TestUser{nil, u1, nil}...))
 }
 
 func TestDatabaseUpdate(t *testing.T) {
@@ -171,7 +172,7 @@ func TestDatabaseUpdate(t *testing.T) {
 
 	// Test basic Update - single record
 	u := new(TestUser)
-	require.NoError(t, database.Database[*TestUser](nil).Get(u, u1.ID))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID))
 	require.NotNil(t, u)
 	require.NotEmpty(t, u.CreatedAt)
 	require.NotEmpty(t, u.UpdatedAt)
@@ -184,9 +185,9 @@ func TestDatabaseUpdate(t *testing.T) {
 	u.Name = "user1_updated"
 	u.Age = 25
 	u.Email = "user1_updated@example.com"
-	require.NoError(t, database.Database[*TestUser](nil).Update(u))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Update(u))
 	u = new(TestUser)
-	require.NoError(t, database.Database[*TestUser](nil).Get(u, u1.ID))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID))
 	require.NotNil(t, u)
 	require.NotEmpty(t, u.CreatedAt)
 	require.NotEmpty(t, u.UpdatedAt)
@@ -200,9 +201,9 @@ func TestDatabaseUpdate(t *testing.T) {
 	u2.Name = "user2_batch"
 	u3.Name = "user3_batch"
 	u1.Remark, u2.Remark, u3.Remark = nil, nil, nil // clear remark to test hook
-	require.NoError(t, database.Database[*TestUser](nil).Update(ul...))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Update(ul...))
 	count := new(int64)
-	require.NoError(t, database.Database[*TestUser](nil).Count(count))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 	require.Equal(t, int64(3), *count, "should have 3 records after batch update")
 
 	// Check the update hook result
@@ -212,7 +213,7 @@ func TestDatabaseUpdate(t *testing.T) {
 
 	// Verify updated data in the database
 	users := make([]*TestUser, 0)
-	require.NoError(t, database.Database[*TestUser](nil).List(&users))
+	require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 	require.Len(t, users, 3, "should have 3 records")
 	var u11, u22, u33 *TestUser
 	for _, u := range users {
@@ -263,24 +264,24 @@ func TestDatabaseUpdate(t *testing.T) {
 			Name: strconv.Itoa(int(now + 2)),
 		},
 	}
-	require.NoError(t, database.Database[*TestUser](nil).Update(list...))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Update(list...))
 	for _, u := range list {
 		require.NotEmpty(t, u.ID, "id should not be empty")
 	}
 
 	// Test Update with empty resources - should not return error
-	require.NoError(t, database.Database[*TestUser](nil).Update(nil))
-	require.NoError(t, database.Database[*TestUser](nil).Update([]*TestUser{nil, nil, nil}...))
-	require.NoError(t, database.Database[*TestUser](nil).Update([]*TestUser{nil, u1, nil}...))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Update(nil))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Update([]*TestUser{nil, nil, nil}...))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Update([]*TestUser{nil, u1, nil}...))
 }
 
 func TestDatabaseUpdateByID(t *testing.T) {
 	defer cleanupTestData()
 
-	require.NoError(t, database.Database[*TestUser](nil).Create(u1))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Create(u1))
 	// Test basic UpdateByID - update name field
 	u := new(TestUser)
-	require.NoError(t, database.Database[*TestUser](nil).Get(u, u1.ID))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID))
 	require.NotNil(t, u)
 	require.NotEmpty(t, u.CreatedAt)
 	require.NotEmpty(t, u.UpdatedAt)
@@ -291,9 +292,9 @@ func TestDatabaseUpdateByID(t *testing.T) {
 	originalUpdatedAt := u.UpdatedAt
 
 	newName := "user1_modified"
-	require.NoError(t, database.Database[*TestUser](nil).UpdateByID(u.ID, "name", newName))
+	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID(u.ID, "name", newName))
 	u = new(TestUser)
-	require.NoError(t, database.Database[*TestUser](nil).Get(u, u1.ID))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID))
 	require.NotNil(t, u)
 	require.NotEmpty(t, u.CreatedAt)
 	require.NotEmpty(t, u.UpdatedAt)
@@ -306,9 +307,9 @@ func TestDatabaseUpdateByID(t *testing.T) {
 	// Test UpdateByID - update age field
 	newAge := 25
 	previousUpdatedAt := u.UpdatedAt
-	require.NoError(t, database.Database[*TestUser](nil).UpdateByID(u.ID, "age", newAge))
+	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID(u.ID, "age", newAge))
 	u = new(TestUser)
-	require.NoError(t, database.Database[*TestUser](nil).Get(u, u1.ID))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID))
 	require.Equal(t, newName, u.Name, "name should not be changed")
 	require.Equal(t, newAge, u.Age, "age should be updated")
 	require.Equal(t, u1.Email, u.Email, "email should not be changed")
@@ -317,27 +318,27 @@ func TestDatabaseUpdateByID(t *testing.T) {
 	// Test UpdateByID - update email field
 	newEmail := "user1_new@example.com"
 	previousUpdatedAt = u.UpdatedAt
-	require.NoError(t, database.Database[*TestUser](nil).UpdateByID(u.ID, "email", newEmail))
+	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID(u.ID, "email", newEmail))
 	u = new(TestUser)
-	require.NoError(t, database.Database[*TestUser](nil).Get(u, u1.ID))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID))
 	require.Equal(t, newName, u.Name, "name should not be changed")
 	require.Equal(t, newAge, u.Age, "age should not be changed")
 	require.Equal(t, newEmail, u.Email, "email should be updated")
 	require.NotEqual(t, previousUpdatedAt, u.UpdatedAt, "updated_at should be updated again")
 
 	// Test UpdateByID with non-existent ID - should not return error
-	require.NoError(t, database.Database[*TestUser](nil).UpdateByID("non-existent-id", "name", "test"))
+	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID("non-existent-id", "name", "test"))
 
 	// Test UpdateByID with empty parameters - should return errors
-	err := database.Database[*TestUser](nil).UpdateByID("", "name", "value")
+	err := database.Database[*TestUser](context.Background()).UpdateByID("", "name", "value")
 	require.Error(t, err, "should return error when id is empty")
 	require.ErrorIs(t, err, database.ErrIDRequired, "error should be ErrIDRequired")
 
-	err = database.Database[*TestUser](nil).UpdateByID("id", "", "value")
+	err = database.Database[*TestUser](context.Background()).UpdateByID("id", "", "value")
 	require.Error(t, err, "should return error when name is empty")
 	require.ErrorIs(t, err, database.ErrEmptyFieldName, "error should be ErrEmptyFieldName")
 
-	err = database.Database[*TestUser](nil).UpdateByID("id", "name", nil)
+	err = database.Database[*TestUser](context.Background()).UpdateByID("id", "name", nil)
 	require.Error(t, err, "should return error when value is nil")
 	require.ErrorIs(t, err, database.ErrNilValue, "error should be ErrNilValue")
 }

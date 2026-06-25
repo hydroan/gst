@@ -45,7 +45,7 @@ func (s *AdminUserSessionsListService) List(ctx *types.ServiceContext, req *mode
 	}
 
 	user := new(modeliamuser.User)
-	if err = database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(user, targetUserID); err != nil {
+	if err = database.Database[*modeliamuser.User](ctx).Get(user, targetUserID); err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
 			return nil, service.NewError(http.StatusNotFound, "user not found")
 		}
@@ -87,7 +87,7 @@ func (s *AdminUserSessionsDeleteService) Delete(ctx *types.ServiceContext, req *
 	}
 
 	targetUser := new(modeliamuser.User)
-	if err = database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(targetUser, targetUserID); err != nil {
+	if err = database.Database[*modeliamuser.User](ctx).Get(targetUser, targetUserID); err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
 			return nil, service.NewError(http.StatusNotFound, "user not found")
 		}

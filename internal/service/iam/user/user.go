@@ -129,7 +129,7 @@ func (UserPatchService) Patch(ctx *types.ServiceContext, req *modeliamuser.UserP
 	}
 
 	target := new(modeliamuser.User)
-	if err = database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(target, targetID); err != nil {
+	if err = database.Database[*modeliamuser.User](ctx).Get(target, targetID); err != nil {
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load target user", err)
 	}
 	if target.ID == "" {
@@ -181,7 +181,7 @@ func (UserPatchService) Patch(ctx *types.ServiceContext, req *modeliamuser.UserP
 	}
 
 	target.SetUpdatedBy(ctx.Username)
-	if err = database.Database[*modeliamuser.User](ctx.DatabaseContext()).WithSelect(columns...).Update(target); err != nil {
+	if err = database.Database[*modeliamuser.User](ctx).WithSelect(columns...).Update(target); err != nil {
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to patch user", err)
 	}
 	return target, nil
@@ -194,7 +194,7 @@ func userResourceActor(ctx *types.ServiceContext) (string, *modeliamuser.User, e
 	}
 
 	actor := new(modeliamuser.User)
-	if err = database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(actor, session.UserID); err != nil {
+	if err = database.Database[*modeliamuser.User](ctx).Get(actor, session.UserID); err != nil {
 		return "", nil, service.NewErrorWithCause(http.StatusUnauthorized, "current user not found", err)
 	}
 	if actor.ID == "" {
@@ -236,7 +236,7 @@ func ensureExistingUserTargetAllowed(ctx *types.ServiceContext, actorUsername st
 		return service.NewError(http.StatusBadRequest, "user id is required")
 	}
 	target := new(modeliamuser.User)
-	if err := database.Database[*modeliamuser.User](ctx.DatabaseContext()).Get(target, req.GetID()); err != nil {
+	if err := database.Database[*modeliamuser.User](ctx).Get(target, req.GetID()); err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to load target user", err)
 	}
 	if target.ID == "" {

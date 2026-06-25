@@ -53,7 +53,7 @@ func (c *TOTPCheckService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPC
 	}
 
 	devices := make([]*modelmfa.TOTPDevice, 0)
-	if err = database.Database[*modelmfa.TOTPDevice](ctx.DatabaseContext()).
+	if err = database.Database[*modelmfa.TOTPDevice](ctx).
 		WithQuery(&modelmfa.TOTPDevice{UserID: account.ID, IsActive: true}).
 		List(&devices); err != nil {
 		log.Errorw("failed to query TOTP devices", "user_id", account.ID, "error", err)

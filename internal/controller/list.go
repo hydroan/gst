@@ -240,7 +240,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		if size == 0 {
 			size = defaultLimit
 		}
-		if err = handler(types.NewDatabaseContext(c)).
+		if err = handler(requestContext(c)).
 			WithPagination(page, size).
 			WithIndex(index).
 			WithSelect(strings.Split(selects, ",")...).
@@ -278,7 +278,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		nototal, _ = strconv.ParseBool(nototalStr)
 		// NOTE: Total count is not provided when using cursor-based pagination.
 		if !nototal && len(cursorValue) == 0 {
-			if err = handler(types.NewDatabaseContext(c)).
+			if err = handler(requestContext(c)).
 				// WithPagination(page, size). // NOTE: WithPagination should not apply in Count method.
 				// WithSelect(strings.Split(selects, ",")...). // NOTE: WithSelect should not apply in Count method.
 				WithIndex(index).
@@ -311,7 +311,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		// 	Method:    c.Request.Method,
 		// 	UserAgent: c.Request.UserAgent(),
 		// })
-		if err = am.RecordOperation(types.NewDatabaseContext(c), m, &modellogmgmt.OperationLog{
+		if err = am.RecordOperation(requestContext(c), m, &modellogmgmt.OperationLog{
 			OP:        consts.OP_LIST,
 			Model:     typ.Name(),
 			IP:        c.ClientIP(),

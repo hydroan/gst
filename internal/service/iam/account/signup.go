@@ -35,7 +35,7 @@ func (s *SignupService) Create(ctx *types.ServiceContext, req *modeliamaccount.S
 
 	// Check if username already exists
 	existingUsers := make([]*modeliamuser.User, 0)
-	if err = database.Database[*modeliamuser.User](ctx.DatabaseContext()).WithLimit(1).WithQuery(&modeliamuser.User{Username: req.Username}).List(&existingUsers); err != nil {
+	if err = database.Database[*modeliamuser.User](ctx).WithLimit(1).WithQuery(&modeliamuser.User{Username: req.Username}).List(&existingUsers); err != nil {
 		log.Error("failed to check existing user", zap.Error(err))
 		return nil, errors.New("failed to create user")
 	}
@@ -68,7 +68,7 @@ func (s *SignupService) Create(ctx *types.ServiceContext, req *modeliamaccount.S
 	}
 
 	// Save to database
-	if err = database.Database[*modeliamuser.User](ctx.DatabaseContext()).Create(newUser); err != nil {
+	if err = database.Database[*modeliamuser.User](ctx).Create(newUser); err != nil {
 		log.Error("failed to create user", zap.Error(err))
 		return nil, errors.New("failed to create user")
 	}

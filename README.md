@@ -275,7 +275,7 @@ func (d *Dedup) Create(ctx *types.ServiceContext, req *common.SearchDedupReq) (*
 查询和写库优先使用：
 
 ```go
-database.Database[*appmodel.Conversation](ctx.DatabaseContext())
+database.Database[*appmodel.Conversation](ctx)
 ```
 
 并按需要组合 `WithQuery`、`WithSelect`、`WithPagination`、`WithOrder`、

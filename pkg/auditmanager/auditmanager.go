@@ -1,6 +1,7 @@
 package auditmanager
 
 import (
+	"context"
 	"reflect"
 	"slices"
 	"strings"
@@ -39,7 +40,7 @@ func New(auditConfig *config.Audit, cb *circularbuffer.CircularBuffer[*modellogm
 // RecordOperation records a single operation audit log.
 // This method is now used by all Factory functions instead of directly enqueuing OperationLog records.
 // It provides centralized audit logging with configurable filtering and supports both sync and async writing.
-func (am *AuditManager) RecordOperation(ctx *types.DatabaseContext, m types.Model, operationLog *modellogmgmt.OperationLog) error {
+func (am *AuditManager) RecordOperation(ctx context.Context, m types.Model, operationLog *modellogmgmt.OperationLog) error {
 	// Skip if audit is disabled
 	if !am.config.Enable {
 		return nil
@@ -75,7 +76,7 @@ func (am *AuditManager) RecordOperation(ctx *types.DatabaseContext, m types.Mode
 }
 
 // RecordBatchOperations records multiple operations audit logs
-func (am *AuditManager) RecordBatchOperations(ctx *types.DatabaseContext, m types.Model, operationLogs []*modellogmgmt.OperationLog) error {
+func (am *AuditManager) RecordBatchOperations(ctx context.Context, m types.Model, operationLogs []*modellogmgmt.OperationLog) error {
 	if !am.config.Enable {
 		return nil
 	}
@@ -124,7 +125,7 @@ func (am *AuditManager) Consume() {
 			operationLogs = append(operationLogs, ol)
 		}
 		if len(operationLogs) > 0 {
-			if err := database.Database[*modellogmgmt.OperationLog](nil).WithBatchSize(1000).Create(operationLogs...); err != nil {
+			if err := database.Database[*modellogmgmt.OperationLog](context.Background()).WithBatchSize(1000).Create(operationLogs...); err != nil {
 				zap.S().Error(err)
 			}
 		}

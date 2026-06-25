@@ -1,6 +1,7 @@
 package zap
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -97,6 +98,38 @@ func TestWithRequestMetadataAddsControllerLogFields(t *testing.T) {
 
 	fields := entries[0].ContextMap()
 	require.Equal(t, string(consts.PHASE_GET), fields[consts.PHASE])
+	require.Equal(t, "/api/users/:id", fields[consts.CTX_ROUTE])
+	require.Equal(t, "admin", fields[consts.CTX_USERNAME])
+	require.Equal(t, "user-1", fields[consts.CTX_USER_ID])
+	require.Equal(t, "trace-1", fields[consts.TRACE_ID])
+	require.Equal(t, map[string]any{"id": "42"}, fields[consts.PARAMS])
+	require.Equal(t, map[string]any{"tag": "blue,green"}, fields[consts.QUERY])
+}
+
+func TestWithContextAddsRequestMetadataFields(t *testing.T) {
+	core, logs := observer.New(zapcore.InfoLevel)
+	log := &Logger{zlog: zap.New(core)}
+	meta := types.NewRequestMetadataFromValues(types.RequestMetadataValues{
+		Route:    "/api/users/:id",
+		Username: "admin",
+		UserID:   "user-1",
+		TraceID:  "trace-1",
+		Params: map[string]string{
+			"id": "42",
+		},
+		Query: map[string][]string{
+			"tag": {"blue", "green"},
+		},
+	})
+	ctx := types.ContextWithRequestMetadata(context.Background(), meta)
+
+	log.WithContext(ctx, consts.PHASE_LIST).Infoz("database request")
+
+	entries := logs.All()
+	require.Len(t, entries, 1)
+
+	fields := entries[0].ContextMap()
+	require.Equal(t, string(consts.PHASE_LIST), fields[consts.PHASE])
 	require.Equal(t, "/api/users/:id", fields[consts.CTX_ROUTE])
 	require.Equal(t, "admin", fields[consts.CTX_USERNAME])
 	require.Equal(t, "user-1", fields[consts.CTX_USER_ID])

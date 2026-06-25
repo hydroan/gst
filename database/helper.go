@@ -48,8 +48,8 @@ import (
 //   - Propagates span context to GORM operations for complete tracing hierarchy
 //   - Automatically handles span lifecycle (creation, attribute setting, completion)
 //   - Integrates with existing tracing infrastructure (controller and service layers)
-//   - Ensures trace_id is available in database logs by backfilling DatabaseContext.TraceID
-//     from the span context when missing
+//   - Ensures trace_id is available in database logs through request metadata or
+//     the active OTEL span context
 //
 // Usage Pattern:
 //
@@ -69,23 +69,17 @@ func (db *database[M]) trace(op string, batch ...int) (func(error), context.Cont
 		_batch = batch[0]
 	}
 
-	// Create database operation span if Jaeger is enabled
-	var ctx context.Context
+	ctx := db.ctx
 	var span trace.Span
-	if gstotel.IsEnabled() && db.ctx != nil {
+	if gstotel.IsEnabled() && ctx != nil {
 		modelName := reflect.TypeOf(*new(M)).Elem().Name()
 		spanName := "Database." + op + " " + modelName
-		ctx, span = gstotel.StartSpan(db.ctx.Context(), spanName)
-
-		// Propagate OTEL trace ID to DatabaseContext so database logs carry trace_id
-		if len(db.ctx.TraceID) == 0 {
-			if sc := span.SpanContext(); sc.HasTraceID() {
-				db.ctx.TraceID = sc.TraceID().String()
-			}
-		}
+		ctx, span = gstotel.StartSpan(ctx, spanName)
+		ctx = types.ContextWithRequestMetadata(ctx, types.RequestMetadataFromContext(db.ctx))
+		db.ctx = ctx
 
 		// Update GORM database context with new span context
-		db.ins = db.ins.WithContext(ctx)
+		db.ins = db.ins.WithContext(db.ctx)
 
 		if gstotel.IsSpanRecording(span) {
 			attrs := []attribute.KeyValue{
@@ -126,7 +120,7 @@ func (db *database[M]) trace(op string, batch ...int) (func(error), context.Cont
 
 		// Log operation results
 		if err != nil {
-			logger.Database.WithDatabaseContext(db.ctx, consts.Phase(op)).Errorz(
+			logger.Database.WithContext(db.ctx, consts.Phase(op)).Errorz(
 				"",
 				zap.Error(err),
 				zap.String("table", reflect.TypeOf(*new(M)).Elem().Name()),
@@ -136,7 +130,7 @@ func (db *database[M]) trace(op string, batch ...int) (func(error), context.Cont
 				zap.Bool("dry_run", db.dryRun),
 			)
 		} else {
-			logger.Database.WithDatabaseContext(db.ctx, consts.Phase(op)).Infoz(
+			logger.Database.WithContext(db.ctx, consts.Phase(op)).Infoz(
 				"",
 				zap.String("table", reflect.TypeOf(*new(M)).Elem().Name()),
 				zap.String("batch", strconv.Itoa(_batch)),
@@ -151,7 +145,7 @@ func (db *database[M]) trace(op string, batch ...int) (func(error), context.Cont
 // structFieldToMap extracts the field tags from a struct and writes them into a map.
 // This map can then be used to build SQL query conditions.
 // FIXME: if the field type is boolean or integer, disable the fuzzy matching.
-func structFieldToMap(ctx *types.DatabaseContext, typ reflect.Type, val reflect.Value, q map[string]string) {
+func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, q map[string]string) {
 	if q == nil {
 		q = make(map[string]string)
 	}
@@ -243,7 +237,7 @@ func structFieldToMap(ctx *types.DatabaseContext, typ reflect.Type, val reflect.
 			schemaTag = schemaTagItems[0]
 		}
 		if len(schemaTag) > 0 && schemaTag != jsonTag {
-			logger.Database.WithDatabaseContext(ctx, consts.Phase("StructFieldToMap")).Infoz("json tag replace by schema tag", zap.String("old", jsonTag), zap.String("new", schemaTag))
+			logger.Database.WithContext(ctx, consts.Phase("StructFieldToMap")).Infoz("json tag replace by schema tag", zap.String("old", jsonTag), zap.String("new", schemaTag))
 			jsonTag = schemaTag
 		}
 
@@ -283,7 +277,7 @@ func structFieldToMap(ctx *types.DatabaseContext, typ reflect.Type, val reflect.
 		case reflect.Slice:
 			_len := fieldVal.Len()
 			if _len == 0 {
-				logger.Database.WithDatabaseContext(ctx, consts.Phase("WithQuery")).Warn("reflect.Slice length is 0")
+				logger.Database.WithContext(ctx, consts.Phase("WithQuery")).Warn("reflect.Slice length is 0")
 				_len = 1
 			}
 			slice := reflect.MakeSlice(fieldVal.Type(), _len, _len)
@@ -406,10 +400,10 @@ func boolToInt(b bool) int {
 //	err := traceModelHook(db.ctx, "CreateBefore", "User", func() error {
 //		return obj.CreateBefore()
 //	})
-func traceModelHook[M types.Model](ctx *types.DatabaseContext, phase consts.Phase, parentSpan trace.Span, fn func(ctx context.Context) error) error {
+func traceModelHook[M types.Model](ctx context.Context, phase consts.Phase, parentSpan trace.Span, fn func(ctx context.Context) error) error {
 	hookCtx := context.Background()
 	if ctx != nil {
-		hookCtx = ctx.Context()
+		hookCtx = ctx
 	}
 	if !gstotel.IsEnabled() || ctx == nil || parentSpan == nil {
 		return fn(hookCtx)
@@ -459,7 +453,7 @@ func traceModelHook[M types.Model](ctx *types.DatabaseContext, phase consts.Phas
 	return err
 }
 
-// func traceModelHook[M types.Model](ctx *types.DatabaseContext, phase consts.Phase, parentSpan trace.Span, fn func() error) error {
+// func traceModelHook[M types.Model](ctx context.Context, phase consts.Phase, parentSpan trace.Span, fn func() error) error {
 // 	if !gstotel.IsEnabled() || ctx == nil || parentSpan == nil {
 // 		return fn()
 // 	}

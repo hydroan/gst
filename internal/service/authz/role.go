@@ -25,14 +25,14 @@ func (r *RoleService) DeleteAfter(ctx *types.ServiceContext, role *modelauthz.Ro
 	}
 
 	roles := make([]*modelauthz.Role, 0)
-	if err := database.Database[*modelauthz.Role](ctx.DatabaseContext()).WithQuery(&modelauthz.Role{Name: name}).List(&roles); err != nil {
+	if err := database.Database[*modelauthz.Role](ctx).WithQuery(&modelauthz.Role{Name: name}).List(&roles); err != nil {
 		log.Error(err)
 		return err
 	}
 	for _, role := range roles {
 		log.Infoz("will delete role", zap.Object("role", role))
 	}
-	if err := database.Database[*modelauthz.Role](ctx.DatabaseContext()).WithPurge().Delete(roles...); err != nil {
+	if err := database.Database[*modelauthz.Role](ctx).WithPurge().Delete(roles...); err != nil {
 		log.Error(err)
 		return err
 	}
@@ -57,7 +57,7 @@ func (r *RoleService) remarkMenus(ctx *types.ServiceContext, role *modelauthz.Ro
 	log := r.WithServiceContext(ctx, ctx.GetPhase())
 
 	menus := make([]*modelauthz.Menu, 0)
-	if err := database.Database[*modelauthz.Menu](ctx.DatabaseContext()).List(&menus); err != nil {
+	if err := database.Database[*modelauthz.Menu](ctx).List(&menus); err != nil {
 		log.Error(err)
 		return err
 	}
@@ -89,7 +89,7 @@ func (r *RoleService) remarkMenus(ctx *types.ServiceContext, role *modelauthz.Ro
 
 	// NOTE: Role has "UpdateBefore" hook to update role's permissions.
 	// this service operations just update role's remark, so we should not invoke any "hooks" here.
-	if err := database.Database[*modelauthz.Role](ctx.DatabaseContext()).WithoutHook().Update(role); err != nil {
+	if err := database.Database[*modelauthz.Role](ctx).WithoutHook().Update(role); err != nil {
 		log.Error(err)
 		return err
 	}
