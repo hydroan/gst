@@ -21,7 +21,6 @@
 1. 修改完 `dsl`、`cmd/gg`、`internal/codegen`、 `internal/ggmodule` 包的代码后，需要及时安装最新版本的 `gg` 工具
 2. 优先使用的包: 错误处理使用 `github.com/cockroachdb/errors `而不是 golang 内置的 errors 包.
 3. 开发完后：必须执行 `make check` 确保代码检查能通过。如果没有修改代码，例如只修改了 Makefile、Markdown 等和代码无关的文件则不需要执行 `make check`
-4. 代码修改后需要重新生成 `gst` skill，如果是测试代码、examples 代码变动则不需要。生成 skill 必须在 `make check` 成功之后执行。
 
 
 
@@ -63,17 +62,6 @@ module 包中的接口测试用例规范：
 - 测试用到的辅助函数应该放在其对应的测试文件中，例如 session 子模块相关的测试辅助函数应该放在 session_test.go 中，account 子模块相关的测试辅助函数应该放在 account_test.go 中。并且测试用例使用到的辅助函数尽量放在顶层测试函数之后。
 
 
-
-### 生成 skill
-
-```bash
-repomix \
-  --include "**/*.go,go.mod,Makefile,*.md,**/*.md" \
-  --ignore "AGENTS.md,**/*_test.go,go.sum,**/*.log,**/.env*,**/*secret*,**/*credential*,**/*key*,**/vendor/**,**/tmp/**,**/.git/**,**/node_modules/**,**/dist/**,**/coverage/**,**/testdata/**,**/testcode/**,examples/**" \
-  --skill-generate gst \
-  --skill-output ~/.codex/skills/gst \
-  --force
-```
 
 ### README.md
 
