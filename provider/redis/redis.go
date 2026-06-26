@@ -36,6 +36,32 @@ var (
 	ErrRedisIsDisabled = errors.New("redis is disabled")
 )
 
+func redisKey(key string) string {
+	namespace := strings.Trim(config.App.Redis.Namespace, ": ")
+	if namespace == "" || strings.HasPrefix(key, namespace+":") {
+		return key
+	}
+	return namespace + ":" + key
+}
+
+func redisKeys(keys []string) []string {
+	if len(keys) == 0 {
+		return keys
+	}
+	result := make([]string, len(keys))
+	for i := range keys {
+		result[i] = redisKey(keys[i])
+	}
+	return result
+}
+
+func redisPattern(prefix string) string {
+	if !strings.HasSuffix(prefix, "*") {
+		prefix += "*"
+	}
+	return redisKey(prefix)
+}
+
 // sonic library is about 2 times faster than standard library encoding/json.
 // var json = sonic.ConfigStd
 
@@ -199,6 +225,7 @@ func Set(ctx context.Context, key string, data any, expiration ...time.Duration)
 	if len(expiration) > 0 {
 		_expiration = expiration[0]
 	}
+	key = redisKey(key)
 	if config.App.Redis.ClusterMode {
 		return cluster.Set(ctx, key, data, _expiration).Err()
 	}
@@ -215,6 +242,7 @@ func SetM[M types.Model](ctx context.Context, key string, m M, expiration ...tim
 	if len(expiration) > 0 {
 		_expiration = expiration[0]
 	}
+	key = redisKey(key)
 	if config.App.Redis.ClusterMode {
 		return cluster.Set(ctx, key, modelMarshaler[M]{Model: m}, _expiration).Err()
 	}
@@ -235,6 +263,7 @@ func SetML[M types.Model](ctx context.Context, key string, ml []M, expiration ..
 	for i := range ml {
 		bl = append(bl, modelMarshaler[M]{Model: ml[i]})
 	}
+	key = redisKey(key)
 	if config.App.Redis.ClusterMode {
 		return cluster.Set(ctx, key, modelMarshalerList[M](bl), _expiration).Err()
 	}
@@ -247,6 +276,7 @@ func Get(ctx context.Context, key string) (cache []byte, err error) {
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return make([]byte, 0), nil
 	}
+	key = redisKey(key)
 	if config.App.Redis.ClusterMode {
 		cache, err = cluster.Get(ctx, key).Bytes()
 	} else {
@@ -264,6 +294,7 @@ func GetInt(ctx context.Context, key string) (int64, error) {
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return 0, nil
 	}
+	key = redisKey(key)
 	var cache string
 	var err error
 	if config.App.Redis.ClusterMode {
@@ -287,6 +318,7 @@ func GetM[M types.Model](ctx context.Context, key string) (M, error) {
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return *new(M), nil
 	}
+	key = redisKey(key)
 	var data []byte
 	var err error
 	if config.App.Redis.ClusterMode {
@@ -316,6 +348,7 @@ func GetML[M types.Model](ctx context.Context, key string) ([]M, error) {
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return make([]M, 0), nil
 	}
+	key = redisKey(key)
 	var data []byte
 	var err error
 	if config.App.Redis.ClusterMode {
@@ -349,6 +382,7 @@ func Del(ctx context.Context, keys ...string) error {
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return nil
 	}
+	keys = redisKeys(keys)
 	if config.App.Redis.ClusterMode {
 		return cluster.Del(ctx, keys...).Err()
 	}
@@ -361,6 +395,7 @@ func Expire(ctx context.Context, key string, expiration time.Duration) error {
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return nil
 	}
+	key = redisKey(key)
 	if config.App.Redis.ClusterMode {
 		return cluster.Expire(ctx, key, expiration).Err()
 	}
@@ -376,6 +411,7 @@ func ZAdd(ctx context.Context, key string, score float64, members ...string) err
 	if len(members) == 0 {
 		return nil
 	}
+	key = redisKey(key)
 	entries := make([]goredis.Z, 0, len(members))
 	for i := range members {
 		entries = append(entries, goredis.Z{Score: score, Member: members[i]})
@@ -392,6 +428,7 @@ func ZRange(ctx context.Context, key string, start, stop int64) ([]string, error
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return make([]string, 0), nil
 	}
+	key = redisKey(key)
 	if config.App.Redis.ClusterMode {
 		return cluster.ZRange(ctx, key, start, stop).Result()
 	}
@@ -407,6 +444,7 @@ func ZRem(ctx context.Context, key string, members ...string) error {
 	if len(members) == 0 {
 		return nil
 	}
+	key = redisKey(key)
 	memberArgs := make([]any, 0, len(members))
 	for i := range members {
 		memberArgs = append(memberArgs, members[i])
@@ -423,6 +461,7 @@ func ZRemRangeByScore(ctx context.Context, key, minScore, maxScore string) error
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return nil
 	}
+	key = redisKey(key)
 	if config.App.Redis.ClusterMode {
 		return cluster.ZRemRangeByScore(ctx, key, minScore, maxScore).Err()
 	}
@@ -436,16 +475,10 @@ func RemovePrefix(ctx context.Context, prefix string) (err error) {
 		zap.S().Warn(ErrRedisIsDisabled.Error())
 		return nil
 	}
-	if !strings.HasSuffix(prefix, "*") {
-		prefix = prefix + "*"
-	}
-	iter := client.Scan(ctx, 0, prefix, 0).Iterator()
+	prefix = redisPattern(prefix)
+	iter := cli.Scan(ctx, 0, prefix, 0).Iterator()
 	for iter.Next(ctx) {
-		if config.App.Redis.ClusterMode {
-			err = cluster.Del(ctx, iter.Val()).Err()
-		} else {
-			err = client.Del(ctx, iter.Val()).Err()
-		}
+		err = cli.Del(ctx, iter.Val()).Err()
 		if err != nil {
 			zap.S().Error(err)
 			return err

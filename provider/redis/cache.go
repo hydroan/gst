@@ -45,7 +45,7 @@ func (c *cache[T]) Set(key string, data T, ttl time.Duration) error {
 	if len(val) == 0 {
 		return errors.New("cannot store empty value in redis")
 	}
-	if err = cli.Set(c.ctx, key, val, ttl).Err(); err != nil {
+	if err = cli.Set(c.ctx, redisKey(key), val, ttl).Err(); err != nil {
 		zap.S().Error(err)
 		return err
 	}
@@ -58,7 +58,7 @@ func (c *cache[T]) Get(key string) (T, error) {
 		zap.S().Warn("redis not initialized")
 		return zero, errors.New("redis not initialized")
 	}
-	data, err := cli.Get(c.ctx, key).Bytes()
+	data, err := cli.Get(c.ctx, redisKey(key)).Bytes()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return zero, types.ErrEntryNotFound
@@ -90,7 +90,7 @@ func (c *cache[T]) Delete(key string) error {
 		zap.S().Warn("redis not initialized")
 		return errors.New("redis not initialized")
 	}
-	if err := cli.Del(c.ctx, key).Err(); err != nil {
+	if err := cli.Del(c.ctx, redisKey(key)).Err(); err != nil {
 		zap.S().Error(err)
 		return err
 	}
@@ -102,7 +102,7 @@ func (c *cache[T]) Exists(key string) bool {
 		zap.S().Warn("redis not initialized")
 		return false
 	}
-	res, err := cli.Exists(c.ctx, key).Result()
+	res, err := cli.Exists(c.ctx, redisKey(key)).Result()
 	if err != nil {
 		return false
 	}
@@ -128,7 +128,7 @@ func (c *cache[T]) Clear() {
 		zap.S().Warn("redis not initialized")
 		return
 	}
-	if _, err := cli.FlushAll(c.ctx).Result(); err != nil {
+	if err := RemovePrefix(c.ctx, ""); err != nil {
 		zap.S().Error(err)
 	}
 }
