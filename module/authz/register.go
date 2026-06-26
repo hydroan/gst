@@ -1,23 +1,15 @@
 package authz
 
 import (
-	"context"
-
-	"github.com/hydroan/gst/database"
-	modelauthz "github.com/hydroan/gst/internal/model/authz"
 	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module"
-	"github.com/hydroan/gst/router"
-	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
-	"go.uber.org/zap"
 )
 
-// Register register modules: Permission, Role, UserRole.
+// Register register authz modules.
 //
 // Modules:
-//   - Permission
 //   - Role
 //   - UserRole
 //   - CasbinRule
@@ -26,8 +18,6 @@ import (
 //
 // Routes:
 //   - GET    /api/routes
-//   - GET    /api/authz/permissions
-//   - GET    /api/authz/permissions/:id
 //   - POST   /api/authz/roles
 //   - DELETE /api/authz/roles/:id
 //   - PUT    /api/authz/roles/:id
@@ -55,15 +45,6 @@ func Register() {
 
 	// Register auth middleware before protected routes so auth handlers are attached deterministically.
 	middleware.RegisterAuth(middleware.Authz())
-
-	module.Use[
-		*Permission,
-		*Permission,
-		*Permission](
-		&PermissionModule{},
-		consts.PHASE_LIST,
-		consts.PHASE_GET,
-	)
 
 	module.Use[
 		*Role,
@@ -109,44 +90,4 @@ func Register() {
 		&RoutesModule{},
 		consts.PHASE_LIST,
 	)
-
-	log := zap.S()
-	router.OnRoutesReady(func(routes map[string][]string) error {
-		// re-create all permissions
-		if err := database.Database[*modelauthz.Permission](context.Background()).Transaction(func(tx types.Database[*modelauthz.Permission]) error {
-			// list all permissions.
-			permissions := make([]*modelauthz.Permission, 0)
-			if err := tx.List(&permissions); err != nil {
-				log.Error(err)
-				return err
-			}
-
-			// delete all permissions
-			if err := tx.WithBatchSize(100).WithPurge().Delete(permissions...); err != nil {
-				log.Error(err)
-				return err
-			}
-
-			// create permissions.
-			permissions = make([]*modelauthz.Permission, 0)
-			for endpoint, methods := range routes {
-				for _, method := range methods {
-					permissions = append(permissions, &modelauthz.Permission{
-						Resource: endpoint,
-						Action:   method,
-					})
-				}
-			}
-			if err := tx.WithBatchSize(100).Create(permissions...); err != nil {
-				log.Error(err)
-				return err
-			}
-
-			return nil
-		}); err != nil {
-			log.Error(err)
-			return err
-		}
-		return nil
-	})
 }

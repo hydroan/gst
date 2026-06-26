@@ -33,11 +33,10 @@ var (
 	signupAPI = fmt.Sprintf("http://localhost:%d/api/signup", port)
 	loginAPI  = fmt.Sprintf("http://localhost:%d/api/login", port)
 
-	routesAPI     = fmt.Sprintf("http://localhost:%d/api/routes", port)
-	menuAPI       = fmt.Sprintf("http://localhost:%d/api/menus", port)
-	permissionAPI = fmt.Sprintf("http://localhost:%d/api/authz/permissions", port)
-	roleAPI       = fmt.Sprintf("http://localhost:%d/api/authz/roles", port)
-	userRoleAPI   = fmt.Sprintf("http://localhost:%d/api/authz/user-roles", port)
+	routesAPI   = fmt.Sprintf("http://localhost:%d/api/routes", port)
+	menuAPI     = fmt.Sprintf("http://localhost:%d/api/menus", port)
+	roleAPI     = fmt.Sprintf("http://localhost:%d/api/authz/roles", port)
+	userRoleAPI = fmt.Sprintf("http://localhost:%d/api/authz/user-roles", port)
 )
 
 type ListResponse[T any] struct {
@@ -190,25 +189,9 @@ func TestAuthz(t *testing.T) {
 			requireRoute(t, rsp.Items, "/api/authz/roles/{id}", []string{http.MethodGet, http.MethodPut, http.MethodPatch, http.MethodDelete})
 			requireRoute(t, rsp.Items, "/api/authz/user-roles", []string{http.MethodGet, http.MethodPost})
 			requireRoute(t, rsp.Items, "/api/authz/user-roles/{id}", []string{http.MethodGet, http.MethodDelete})
+			requireNoRoute(t, rsp.Items, "/api/authz/permissions")
+			requireNoRoute(t, rsp.Items, "/api/authz/permissions/{id}")
 			requireNoRoute(t, rsp.Items, "/api/authz/roles/:id")
-		})
-	})
-
-	t.Run("permission", func(t *testing.T) {
-		cli, err := client.New(permissionAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: adminSessionID,
-		}))
-		require.NoError(t, err)
-
-		items := make([]*authz.Permission, 0)
-		total := new(int64)
-		resp, err := cli.List(&items, total)
-		require.NoError(t, err)
-		helper.TestResp[ListResponse[*authz.Permission]](t, resp, func(t *testing.T, rsp ListResponse[*authz.Permission]) {
-			t.Helper()
-			require.NotNil(t, rsp.Items)
-			require.GreaterOrEqual(t, rsp.Total, int64(0))
 		})
 	})
 

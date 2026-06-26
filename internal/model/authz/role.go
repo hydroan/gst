@@ -147,19 +147,11 @@ func (r *Role) UpdatePermission(ctx context.Context) error {
 		zap.S().Error(err)
 		return err
 	}
-	// query the new role's permissions
-	newPermissions := make([]*Permission, 0)
+	// derive new role policies from menu routes.
+	newPolicies := make([]routePolicy, 0)
 	for _, m := range newMenus {
-		result, err := queryMenuPermissions(ctx, m)
-		if err != nil {
-			return err
-		}
-		newPermissions = append(newPermissions, result...)
+		newPolicies = append(newPolicies, routePoliciesForMenu(m)...)
 	}
-
-	// for _, p := range newPermissions {
-	// 	zap.S().Infow("new permission", "role", r.Code, "resource", p.Resource, "action", p.Action, "effect", consts.EffectAllow)
-	// }
 
 	// revoke all existing policies for this role to avoid leftovers
 	if err := rbac.RBAC().RevokePermission(r.ID, "", ""); err != nil {
@@ -167,8 +159,8 @@ func (r *Role) UpdatePermission(ctx context.Context) error {
 		return err
 	}
 	// grant the new role's permissions
-	for _, p := range newPermissions {
-		if err := rbac.RBAC().GrantPermission(r.ID, p.Resource, p.Action); err != nil {
+	for _, p := range newPolicies {
+		if err := rbac.RBAC().GrantPermission(r.ID, p.resource, p.action); err != nil {
 			zap.S().Error(err)
 			return err
 		}
@@ -177,13 +169,17 @@ func (r *Role) UpdatePermission(ctx context.Context) error {
 	return nil
 }
 
-// queryMenuPermissions query all permissions for given menu.
-func queryMenuPermissions(ctx context.Context, m *Menu) ([]*Permission, error) {
+type routePolicy struct {
+	resource string
+	action   string
+}
+
+func routePoliciesForMenu(m *Menu) []routePolicy {
 	if m == nil {
-		return make([]*Permission, 0), nil
+		return make([]routePolicy, 0)
 	}
 
-	permissions := make([]*Permission, 0)
+	policies := make([]routePolicy, 0)
 	for _, route := range m.Routes {
 		resource := strings.TrimSpace(route.Path)
 		if len(resource) == 0 {
@@ -194,15 +190,10 @@ func queryMenuPermissions(ctx context.Context, m *Menu) ([]*Permission, error) {
 			if len(method) == 0 {
 				continue
 			}
-			result := make([]*Permission, 0)
-			if err := database.Database[*Permission](ctx).WithQuery(&Permission{Resource: resource, Action: method}).List(&result); err != nil {
-				zap.S().Error(err)
-				return nil, err
-			}
-			permissions = append(permissions, result...)
+			policies = append(policies, routePolicy{resource: resource, action: method})
 		}
 	}
-	return permissions, nil
+	return policies
 }
 
 func (r *Role) MarshalLogObject(enc zapcore.ObjectEncoder) error {
