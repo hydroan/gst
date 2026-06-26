@@ -148,9 +148,6 @@ func (r *Role) DeleteBefore(ctx context.Context) error {
 		}
 	}
 
-	if err := rbac.RBAC().RevokePermission(r.tenant(), r.ID, "", ""); err != nil {
-		return err
-	}
 	return rbac.RBAC().RemoveRole(r.tenant(), r.ID)
 }
 
@@ -180,7 +177,7 @@ func (r *Role) syncPermissions(ctx context.Context) error {
 		newPolicies = append(newPolicies, routePoliciesForMenu(m)...)
 	}
 
-	if err := rbac.RBAC().RevokePermission(r.tenant(), r.ID, "", ""); err != nil {
+	if err := rbac.RBAC().RevokeRolePermissions(r.tenant(), r.ID); err != nil {
 		zap.S().Error(err)
 		return err
 	}

@@ -348,16 +348,14 @@ type DistributedCache[T any] interface {
 //   - Object: Protected resources or endpoints
 //   - Action: Operations on resources
 type RBAC interface {
+	Authorize(tenant string, subject string, object string, action string) (bool, error)
+
 	AddRole(tenant string, role string) error
 	RemoveRole(tenant string, role string) error
 
 	GrantPermission(tenant string, role string, object string, action string) error
-	// RevokePermission removes policies for the given role with flexible behaviors:
-	// - object=="" && action=="" : remove all policies for role in tenant
-	// - object=="" && action!="" : remove policies matching tenant, role, and action
-	// - object!="" && action=="" : remove policies matching tenant, role, and object
-	// - object!="" && action!="" : remove the exact tenant, role, object, action policy
 	RevokePermission(tenant string, role string, object string, action string) error
+	RevokeRolePermissions(tenant string, role string) error
 
 	AssignRole(tenant string, subject string, role string) error
 	UnassignRole(tenant string, subject string, role string) error

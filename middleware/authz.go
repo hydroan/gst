@@ -30,17 +30,7 @@ func Authz() gin.HandlerFunc {
 		obj := c.Request.URL.Path
 		act := c.Request.Method
 
-		if rbac.Enforcer == nil {
-			zap.S().Error("Authz middleware invoked but RBAC enforcer is nil")
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-				"code":          -1,
-				"msg":           "authorization failed",
-				"data":          nil,
-				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
-			})
-			return
-		}
-		if allow, err = rbac.Enforcer.Enforce(tenant, sub, obj, act); err != nil {
+		if allow, err = rbac.RBAC().Authorize(tenant, sub, obj, act); err != nil {
 			zap.S().Error(err)
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 				"code":          -1,

@@ -27,6 +27,10 @@ type rbac struct {
 // has not been initialized yet to avoid nil pointer panics.
 type noop struct{}
 
+func (noop) Authorize(tenant string, subject string, object string, action string) (bool, error) {
+	return false, nil
+}
+
 func (noop) AddRole(tenant string, role string) error    { return nil }
 func (noop) RemoveRole(tenant string, role string) error { return nil }
 func (noop) GrantPermission(tenant string, role string, object string, action string) error {
@@ -36,6 +40,7 @@ func (noop) GrantPermission(tenant string, role string, object string, action st
 func (noop) RevokePermission(tenant string, role string, object string, action string) error {
 	return nil
 }
+func (noop) RevokeRolePermissions(tenant string, role string) error        { return nil }
 func (noop) AssignRole(tenant string, subject string, role string) error   { return nil }
 func (noop) UnassignRole(tenant string, subject string, role string) error { return nil }
 
@@ -51,6 +56,11 @@ func RBAC() types.RBAC {
 	}
 }
 
+// Authorize evaluates whether subject may perform action on object in tenant.
+func (r *rbac) Authorize(tenant string, subject string, object string, action string) (bool, error) {
+	return r.enforcer.Enforce(tenant, subject, object, action)
+}
+
 // AddRole is a no-op because Casbin creates roles implicitly when a tenant
 // receives permissions or grouping policies for that role.
 func (r *rbac) AddRole(tenant string, role string) error {
@@ -59,7 +69,7 @@ func (r *rbac) AddRole(tenant string, role string) error {
 
 // RemoveRole removes all policies and subject assignments for role in tenant.
 func (r *rbac) RemoveRole(tenant string, role string) error {
-	policyErr := r.RevokePermission(tenant, role, "", "")
+	policyErr := r.RevokeRolePermissions(tenant, role)
 	_, groupingErr := r.enforcer.RemoveFilteredGroupingPolicy(1, role, tenant)
 	return errors.Join(policyErr, groupingErr)
 }
@@ -72,35 +82,41 @@ func (r *rbac) GrantPermission(tenant string, role string, object string, action
 	return nil
 }
 
-// RevokePermission removes policies for the given role with flexible behaviors:
-// - object=="" && action=="" : remove all policies for role in tenant
-// - object=="" && action!="" : remove policies matching tenant, role, and action
-// - object!="" && action=="" : remove policies matching tenant, role, and object
-// - object!="" && action!="" : remove the exact tenant, role, object, action policy
+// RevokePermission removes the exact tenant, role, object, action permission.
 func (r *rbac) RevokePermission(tenant string, role string, object string, action string) error {
-	if len(object) == 0 && len(action) == 0 {
-		if _, err := r.enforcer.RemoveFilteredPolicy(0, tenant, role); err != nil {
-			return err
-		}
-		return nil
-	}
-	if len(object) == 0 && len(action) > 0 {
-		if _, err := r.enforcer.RemoveFilteredPolicy(0, tenant, role, "", action); err != nil {
-			return err
-		}
-		return nil
-	}
-	if len(action) == 0 && len(object) > 0 {
-		if _, err := r.enforcer.RemoveFilteredPolicy(0, tenant, role, object); err != nil {
-			return err
-		}
-		return nil
-	}
 	if _, err := r.enforcer.RemovePolicy(tenant, role, object, action, string(consts.EffectAllow)); err != nil {
 		return err
 	}
 	return nil
 }
+
+// RevokeRolePermissions removes every permission policy granted to role in tenant.
+// It is the explicit form of revoking a role's full permission set. Use
+// RevokePermission when removing one concrete object/action grant.
+func (r *rbac) RevokeRolePermissions(tenant string, role string) error {
+	if _, err := r.enforcer.RemoveFilteredPolicy(0, tenant, role); err != nil {
+		return err
+	}
+	return nil
+}
+
+// | Operation                    | Casbin function                                           |
+// | ---------------------------- | --------------------------------------------------------- |
+// | Grant role permission        | `AddPolicy(tenant, role, obj, act, eft)`                  |
+// | Revoke role permission       | `RemovePolicy(tenant, role, obj, act, eft)`               |
+// | Revoke all role permissions  | `RemoveFilteredPolicy(0, tenant, role)`                   |
+// | Assign role to subject       | `AddGroupingPolicy(subject, role, tenant)`                |
+// | Unassign role from subject   | `RemoveGroupingPolicy(subject, role, tenant)`             |
+// | Query subject role in tenant | `GetFilteredGroupingPolicy(0, subject, role, tenant)`     |
+// | Query role permissions       | `GetFilteredPolicy(0, tenant, role)`                      |
+// | Authorize request            | `Enforce(tenant, subject, obj, act)`                      |
+//
+// // Query subject role bindings in a tenant.
+// RBAC.enforcer.GetFilteredGroupingPolicy(0, "root", "admin", DefaultTenant)
+// // Query permissions granted to a role in a tenant.
+// RBAC.enforcer.GetFilteredPolicy(0, DefaultTenant, "admin")
+// // Authorize a subject against a tenant-scoped permission.
+// RBAC.enforcer.Enforce(DefaultTenant, "root", "/api/authz/routes", "GET")
 
 // AssignRole assigns subject to role inside tenant.
 func (r *rbac) AssignRole(tenant string, subject string, role string) error {
@@ -120,20 +136,3 @@ func (r *rbac) UnassignRole(tenant string, subject string, role string) error {
 	}
 	return nil
 }
-
-// | 操作             | 函数                                  |
-// | ---------------- | ------------------------------------- |
-// | 添加角色权限     | `AddPolicy(role, obj, act)`           |
-// | 删除角色权限     | `RemovePolicy(...)`                   |
-// | 给用户授权角色   | `AddGroupingPolicy(user, role)`       |
-// | 删除用户授权     | `RemoveGroupingPolicy(user, role)`    |
-// | 查询用户角色     | `GetRolesForUser(user)`               |
-// | 查询角色权限     | `GetPermissionsForUser(role)`         |
-// | 查询用户所有权限 | `GetImplicitPermissionsForUser(user)` |
-
-// // 查询用户拥有的角色
-// RBAC.enforcer.GetRolesForUser("root")
-// // 查询角色拥有的权限
-// RBAC.enforcer.GetFilteredPolicy(0, "admin")
-// // 查询用户拥有的权限（继承）
-// RBAC.enforcer.GetImplicitPermissionsForUser("root")
