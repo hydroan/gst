@@ -82,18 +82,6 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 	if db.enableCache {
 		defer cache.Cache[[]M]().WithContext(ctx).Clear()
 	}
-	// if config.App.RedisConfig.Enable {
-	// 	defer func() {
-	// 		go func() {
-	// 			begin := time.Now()
-	// 			prefix, _ := buildCacheKey(db.db.Model(*new(M)).Session(&gorm.Session{DryRun: true}).Statement, "create")
-	// 			defer logger.Cache.Infow("remove cache after create", "cost", time.Since(begin).String(), "prefix", prefix)
-	// 			if err = redis.RemovePrefix(db.ctx, prefix); err != nil {
-	// 				logger.Cache.Errorw("failed to remove cache keys", err, "action", "create")
-	// 			}
-	// 		}()
-	// 	}()
-	// }
 
 	// Invoke model hook: CreateBefore for the entire batch.
 	if !db.noHook {
@@ -261,19 +249,6 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 	if db.enableCache {
 		defer cache.Cache[[]M]().WithContext(ctx).Clear()
 	}
-	// if config.App.RedisConfig.Enable {
-	// 	defer func() {
-	// 		// TODO:only delete cache of all list statement and cache for current get statements.
-	// 		go func() {
-	// 			begin := time.Now()
-	// 			prefix, _ := buildCacheKey(db.db.Model(*new(M)).Session(&gorm.Session{DryRun: true}).Statement, "delete")
-	// 			defer logger.Cache.Infow("remove cache after delete", "cost", time.Since(begin).String(), "prefix", prefix)
-	// 			if err = redis.RemovePrefix(db.ctx, prefix); err != nil {
-	// 				logger.Cache.Errorw("failed to remove cache keys", err, "action", "delete")
-	// 			}
-	// 		}()
-	// 	}()
-	// }
 
 	// Invoke model hook: DeleteBefore.
 	if !db.noHook {
@@ -429,18 +404,6 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 	if db.enableCache {
 		defer cache.Cache[[]M]().WithContext(ctx).Clear()
 	}
-	// if config.App.RedisConfig.Enable {
-	// 	defer func() {
-	// 		go func() {
-	// 			begin := time.Now()
-	// 			prefix, _ := buildCacheKey(db.db.Model(*new(M)).Session(&gorm.Session{DryRun: true}).Statement, "update")
-	// 			defer logger.Cache.Infow("remove cache after update", "cost", time.Since(begin).String(), "prefix", prefix)
-	// 			if err = redis.RemovePrefix(db.ctx, prefix); err != nil {
-	// 				logger.Cache.Errorw("failed to remove cache keys", err, "action", "update")
-	// 			}
-	// 		}()
-	// 	}()
-	// }
 
 	// Invoke model hook: UpdateBefore.
 	if !db.noHook {
@@ -558,18 +521,6 @@ func (db *database[M]) UpdateByID(id string, name string, value any) (err error)
 	if db.enableCache {
 		defer cache.Cache[[]M]().WithContext(ctx).Clear()
 	}
-	// if config.App.RedisConfig.Enable {
-	// 	defer func() {
-	// 		go func() {
-	// 			begin := time.Now()
-	// 			prefix, _ := buildCacheKey(db.db.Model(*new(M)).Session(&gorm.Session{DryRun: true}).Statement, "update_by_id")
-	// 			defer logger.Cache.Infow("remove cache after update_by_id", "cost", time.Since(begin).String(), "prefix", prefix)
-	// 			if err = redis.RemovePrefix(db.ctx, prefix); err != nil {
-	// 				logger.Cache.Errorw("failed to remove cache keys", err, "action", "update")
-	// 			}
-	// 		}()
-	// 	}()
-	// }
 
 	if err = db.ins.Session(&gorm.Session{}).Table(tableName).Model(*new(M)).Where("id = ?", id).Update(name, value).Error; err != nil {
 		return err

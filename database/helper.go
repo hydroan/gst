@@ -312,22 +312,6 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 	}
 }
 
-// // User returns a generic database manipulator with the `curd` capabilities
-// // for *model.User to create/delete/update/list/get in database.
-// // The database type deponds on the value of config.Server.DBType.
-// func User(ctx ...context.Context) types.Database[*model.User] {
-// 	c := context.TODO()
-// 	if len(ctx) > 0 {
-// 		if ctx[0] != nil {
-// 			c = ctx[0]
-// 		}
-// 	}
-// 	if strings.ToLower(config.App.LogLevel) == "debug" {
-// 		return &database[*model.User]{db: DB.WithContext(c).Debug().Limit(defaultLimit)}
-// 	}
-// 	return &database[*model.User]{db: DB.WithContext(c).Limit(defaultLimit)}
-// }
-
 // buildCacheKey constructs Redis cache keys for database operations.
 // Generates both prefix and full key based on GORM statement and operation type.
 // Uses consistent naming convention for cache key organization and collision avoidance.
@@ -452,49 +436,6 @@ func traceModelHook[M types.Model](ctx context.Context, phase consts.Phase, pare
 
 	return err
 }
-
-// func traceModelHook[M types.Model](ctx context.Context, phase consts.Phase, parentSpan trace.Span, fn func() error) error {
-// 	if !gstotel.IsEnabled() || ctx == nil || parentSpan == nil {
-// 		return fn()
-// 	}
-//
-// 	modelName := reflect.TypeOf(*new(M)).Elem().Name()
-// 	// Create child span under database span for hook execution
-// 	spanName := "Model." + phase.MethodName() + " " + modelName
-// 	parentCtx := trace.ContextWithSpan(context.Background(), parentSpan)
-// 	_, span := gstotel.StartSpan(parentCtx, spanName)
-// 	defer span.End()
-//
-// 	// Add hook-specific attributes
-// 	span.SetAttributes(
-// 		attribute.String("component", "model"),
-// 		attribute.String("model.model", modelName),
-// 		attribute.String("model.phase", phase.MethodName()),
-// 	)
-//
-// 	// Record start time
-// 	start := time.Now()
-//
-// 	// Execute hook function
-// 	err := fn()
-//
-// 	// Record execution results
-// 	duration := time.Since(start)
-// 	span.SetAttributes(
-// 		attribute.Int64("model.duration_ms", duration.Milliseconds()),
-// 		attribute.Bool("model.success", err == nil),
-// 	)
-//
-// 	if err != nil {
-// 		span.SetStatus(codes.Error, err.Error())
-// 		gstotel.RecordError(span, err)
-// 		span.SetAttributes(attribute.Bool("error", true))
-// 	} else {
-// 		span.SetStatus(codes.Ok, "")
-// 	}
-//
-// 	return err
-// }
 
 // contains checks if a string item exists in a string slice.
 // Uses a map-based approach for O(n) time complexity with O(n) space complexity.

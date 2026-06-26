@@ -85,70 +85,6 @@ func (db *database[M]) List(dest *[]M) (err error) {
 		return nil
 	}
 
-	// =============================
-	// ===== BEGIN redis cache =====
-	// =============================
-	// begin := time.Now()
-	// var key string
-	// var shouldDecode bool // if cache is nil or cache[0] is nil, we should decod the queryed cache in to "dest".
-	// var _cache []byte
-	// if !db.enableCache {
-	// 	goto QUERY
-	// }
-	// if !config.App.RedisConfig.Enable {
-	// 	goto QUERY
-	// }
-	// _, key = buildCacheKey(db.db.Session(&gorm.Session{DryRun: true}).Find(dest).Statement, "list")
-	// if len(cache) == 0 {
-	// 	shouldDecode = true
-	// } else {
-	// 	if cache[0] == nil {
-	// 		shouldDecode = true
-	// 	}
-	// }
-	// if shouldDecode {
-	// 	var _dest []M
-	// 	if _dest, err = redis.GetML[M](db.ctx, key); err == nil {
-	// 		val := reflect.ValueOf(dest)
-	// 		if val.Kind() != reflect.Pointer || val.Elem().Kind() != reflect.Slice {
-	// 			return ErrNotPtrSlice
-	// 		}
-	// 		if !val.Elem().CanAddr() {
-	// 			return ErrNotAddressableSlice
-	// 		}
-	// 		if !val.Elem().CanSet() {
-	// 			return ErrNotSetSlice
-	// 		}
-	// 		val.Elem().Set(reflect.ValueOf(_dest))
-	// 		logger.Cache.Infow("list and decode from cache", "cost", time.Since(begin).String(), "key", key)
-	// 		return nil // Found cache and return.
-	// 	}
-	// } else {
-	// 	if _cache, err = redis.Get(db.ctx, key); err == nil {
-	// 		val := reflect.ValueOf(cache[0])
-	// 		if val.Kind() != reflect.Pointer || val.Elem().Kind() != reflect.Slice {
-	// 			return ErrNotPtrSlice
-	// 		}
-	// 		if !val.Elem().CanAddr() {
-	// 			return ErrNotAddressableSlice
-	// 		}
-	// 		if !val.Elem().CanSet() {
-	// 			return ErrNotSetSlice
-	// 		}
-	// 		val.Elem().Set(reflect.ValueOf(_cache))
-	// 		logger.Cache.Infow("list from cache", "cost", time.Since(begin).String(), "key", key)
-	// 		return nil // Found cache and return.
-	// 	}
-	// }
-	// if !errors.Is(err, redis.ErrKeyNotExists) {
-	// 	logger.Cache.Error(err)
-	// 	return err
-	// }
-	// // Not Found cache and continue.
-	// ===========================
-	// ===== END redis cache =====
-	// ===========================
-
 QUERY:
 	var empty M // call nil value M will cause panic.
 	// Invoke model hook: ListBefore.
@@ -300,67 +236,6 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 		return nil
 	}
 
-	// =============================
-	// ===== BEGIN redis cache =====
-	// =============================
-	// begin := time.Now()
-	// var key string
-	// var shouldDecode bool // if cache is nil or cache[0] is nil, we should decod the queryed cache in to "dest".
-	// if !db.enableCache {
-	// 	goto QUERY
-	// }
-	// if !config.App.RedisConfig.Enable {
-	// 	goto QUERY
-	// }
-	// // _, key = BuildKey(db.db.Session(&gorm.Session{DryRun: true}).Where("id = ?", id).Find(dest).Statement, "get")
-	// // 我发现这个 id 的值怎么都无法填充到 sql 语句中, 所以直接用 id 作为 key 的一部分,而不是用 sql 语句
-	// // 如果不用 id 作为 redis key, 那么多个 get 的语句相同则 key 相同,获取到的都是同一个缓存.
-	// _, key = buildCacheKey(db.db.Session(&gorm.Session{DryRun: true}).Where("id = ?", id).Find(dest).Statement, "get", id)
-	// if len(cache) == 0 {
-	// 	shouldDecode = true
-	// } else {
-	// 	if cache[0] == nil {
-	// 		shouldDecode = true
-	// 	}
-	// }
-	// if shouldDecode { // query cache from redis and decoded into 'dest'.
-	// 	var _dest M
-	// 	if _dest, err = redis.GetM[M](key); err == nil {
-	// 		val := reflect.ValueOf(dest)
-	// 		if val.Kind() != reflect.Pointer {
-	// 			return ErrNotPtrStruct
-	// 		}
-	// 		if !val.Elem().CanAddr() {
-	// 			return ErrNotAddressableModel
-	// 		}
-	// 		val.Elem().Set(reflect.ValueOf(_dest).Elem()) // the type of M is pointer to struct.
-	// 		logger.Cache.Infow("get and decode from cache", "cost", time.Since(begin).String(), "key", key)
-	// 		return nil // Found cache and return.
-	// 	}
-	// } else {
-	// 	var _cache []byte
-	// 	if _cache, err = redis.Get(db.ctx, key); err == nil {
-	// 		val := reflect.ValueOf(cache[0])
-	// 		if val.Kind() != reflect.Pointer {
-	// 			return ErrNotPtrSlice
-	// 		}
-	// 		if !val.Elem().CanAddr() {
-	// 			return ErrNotAddressableSlice
-	// 		}
-	// 		val.Elem().Set(reflect.ValueOf(_cache))
-	// 		logger.Cache.Infow("get from cache", "cost", time.Since(begin).String(), "key", key)
-	// 		return nil // Found cache and return.
-	// 	}
-	// }
-	// if err != redis.ErrKeyNotExists {
-	// 	logger.Cache.Error(err)
-	// 	return err
-	// }
-	// // Not Found cache, continue query database.
-	// ===========================
-	// ===== END redis cache =====
-	// ===========================
-
 QUERY:
 	var empty M // call nil value M will cause panic.
 	// Invoke model hook: GetBefore.
@@ -476,37 +351,6 @@ func (db *database[M]) Count(count *int64) (err error) {
 		return err
 	}
 
-	// =============================
-	// ===== BEGIN redis cache =====
-	// =============================
-	// begin := time.Now()
-	// var key string
-	// var _cache int64
-	// if count == nil {
-	// 	return nil
-	// }
-	// if !db.enableCache {
-	// 	goto QUERY
-	// }
-	// if !config.App.RedisConfig.Enable {
-	// 	goto QUERY
-	// }
-	// fmt.Println("---- buildCacheKey count")
-	// _, key = buildCacheKey(db.db.Session(&gorm.Session{DryRun: true}).Model(*new(M)).Count(count).Statement, "count")
-	// if _cache, err = redis.GetInt(db.ctx, key); err == nil {
-	// 	*count = _cache
-	// 	logger.Cache.Infow("count from cache", "cost", time.Since(begin).String(), "key", key)
-	// 	return
-	// }
-	// if !errors.Is(err, redis.ErrKeyNotExists) {
-	// 	logger.Cache.Error(err)
-	// 	return err
-	// }
-	// // NOT FOUND cache, continue query.
-	// ===========================
-	// ===== END redis cache =====
-	// ===========================
-
 QUERY:
 	// if err = db.db.Model(*new(M)).Count(count).Error; err != nil {
 	tableName := db.m.GetTableName()
@@ -603,64 +447,6 @@ func (db *database[M]) First(dest M) (err error) {
 		logger.Cache.Infow("first from cache", "cost", util.FormatDurationSmart(time.Since(begin)), "key", key)
 		return nil // Found cache and return.
 	}
-
-	// =============================
-	// ===== BEGIN redis cache =====
-	// =============================
-	// begin := time.Now()
-	// var key string
-	// var shouldDecode bool // if cache is nil or cache[0] is nil, we should decod the queryed cache in to "dest".
-	// if !db.enableCache {
-	// 	goto QUERY
-	// }
-	// if !config.App.RedisConfig.Enable {
-	// 	goto QUERY
-	// }
-	// _, key = buildCacheKey(db.db.Session(&gorm.Session{DryRun: true}).First(dest).Statement, "first")
-	// if len(cache) == 0 {
-	// 	shouldDecode = true
-	// } else {
-	// 	if cache[0] == nil {
-	// 		shouldDecode = true
-	// 	}
-	// }
-	// if shouldDecode { // query cache from redis and decode into 'dest'.
-	// 	var _dest M
-	// 	if _dest, err = redis.GetM[M](key); err == nil {
-	// 		val := reflect.ValueOf(dest)
-	// 		if val.Kind() != reflect.Pointer {
-	// 			return ErrNotPtrStruct
-	// 		}
-	// 		if !val.Elem().CanAddr() {
-	// 			return ErrNotAddressableModel
-	// 		}
-	// 		val.Elem().Set(reflect.ValueOf(_dest).Elem()) // the type of M is pointer to struct.
-	// 		logger.Cache.Infow("first and decode from cache", "cost", time.Since(begin).String(), "key", key)
-	// 		return nil // Found cache and return.
-	// 	}
-	// } else {
-	// 	var _cache []byte
-	// 	if _cache, err = redis.Get(db.ctx, key); err == nil {
-	// 		val := reflect.ValueOf(cache[0])
-	// 		if val.Kind() != reflect.Pointer {
-	// 			return ErrNotPtrSlice
-	// 		}
-	// 		if !val.Elem().CanAddr() {
-	// 			return ErrNotAddressableSlice
-	// 		}
-	// 		val.Elem().Set(reflect.ValueOf(_cache))
-	// 		logger.Cache.Infow("first from cache", "cost", time.Since(begin).String(), "key", key)
-	// 		return nil // Found cache and return.
-	// 	}
-	// 	if err != redis.ErrKeyNotExists {
-	// 		logger.Cache.Error(err)
-	// 		return err
-	// 	}
-	// }
-	// Not Found cache, continue query database.
-	// ===========================
-	// ===== END redis cache =====
-	// ===========================
 
 QUERY:
 	var empty M // call nil value M will cause panic.
@@ -775,64 +561,6 @@ func (db *database[M]) Last(dest M) (err error) {
 		return nil // Found cache and return.
 	}
 
-	// =============================
-	// ===== BEGIN redis cache =====
-	// =============================
-	// begin := time.Now()
-	// var key string
-	// var shouldDecode bool // if cache is nil or cache[0] is nil, we should decod the queryed cache in to "dest".
-	// if !db.enableCache {
-	// 	goto QUERY
-	// }
-	// if !config.App.RedisConfig.Enable {
-	// 	goto QUERY
-	// }
-	// _, key = buildCacheKey(db.db.Session(&gorm.Session{DryRun: true}).First(dest).Statement, "last")
-	// if len(cache) == 0 {
-	// 	shouldDecode = true
-	// } else {
-	// 	if cache[0] == nil {
-	// 		shouldDecode = true
-	// 	}
-	// }
-	// if shouldDecode { // query cache from redis and decode into 'dest'.
-	// 	var _dest M
-	// 	if _dest, err = redis.GetM[M](key); err == nil {
-	// 		val := reflect.ValueOf(dest)
-	// 		if val.Kind() != reflect.Pointer {
-	// 			return ErrNotPtrStruct
-	// 		}
-	// 		if !val.Elem().CanAddr() {
-	// 			return ErrNotAddressableModel
-	// 		}
-	// 		val.Elem().Set(reflect.ValueOf(_dest).Elem()) // the type of M is pointer to struct.
-	// 		logger.Cache.Infow("last and decode from cache", "cost", time.Since(begin).String(), "key", key)
-	// 		return nil // Found cache and return.
-	// 	}
-	// } else {
-	// 	var _cache []byte
-	// 	if _cache, err = redis.Get(db.ctx, key); err == nil {
-	// 		val := reflect.ValueOf(cache[0])
-	// 		if val.Kind() != reflect.Pointer {
-	// 			return ErrNotPtrSlice
-	// 		}
-	// 		if !val.Elem().CanAddr() {
-	// 			return ErrNotAddressableSlice
-	// 		}
-	// 		val.Elem().Set(reflect.ValueOf(_cache))
-	// 		logger.Cache.Infow("last from cache", "cost", time.Since(begin).String(), "key", key)
-	// 		return nil // Found cache and return.
-	// 	}
-	// }
-	// if err != redis.ErrKeyNotExists {
-	// 	logger.Cache.Error(err)
-	// 	return err
-	// }
-	// // Not Found cache, continue query database.
-	// ===========================
-	// ===== END redis cache =====
-	// ===========================
-
 QUERY:
 	var empty M // call nil value M will cause panic.
 	// Invoke model hook: GetBefore.
@@ -945,64 +673,6 @@ func (db *database[M]) Take(dest M) (err error) {
 		logger.Cache.Infow("take from cache", "cost", util.FormatDurationSmart(time.Since(begin)), "key", key)
 		return nil // Found cache and return.
 	}
-
-	// =============================
-	// ===== BEGIN redis cache =====
-	// =============================
-	// begin := time.Now()
-	// var key string
-	// var shouldDecode bool // if cache is nil or cache[0] is nil, we should decod the queryed cache in to "dest".
-	// if !db.enableCache {
-	// 	goto QUERY
-	// }
-	// if !config.App.RedisConfig.Enable {
-	// 	goto QUERY
-	// }
-	// _, key = buildCacheKey(db.db.Session(&gorm.Session{DryRun: true}).First(dest).Statement, "take")
-	// if len(cache) == 0 {
-	// 	shouldDecode = true
-	// } else {
-	// 	if cache[0] == nil {
-	// 		shouldDecode = true
-	// 	}
-	// }
-	// if shouldDecode { // query cache from redis and decode into 'dest'.
-	// 	var _dest M
-	// 	if _dest, err = redis.GetM[M](key); err == nil {
-	// 		val := reflect.ValueOf(dest)
-	// 		if val.Kind() != reflect.Pointer {
-	// 			return ErrNotPtrStruct
-	// 		}
-	// 		if !val.Elem().CanAddr() {
-	// 			return ErrNotAddressableModel
-	// 		}
-	// 		val.Elem().Set(reflect.ValueOf(_dest).Elem()) // the type of M is pointer to struct.
-	// 		logger.Cache.Infow("get and decode from cache", "cost", time.Since(begin).String(), "key", key)
-	// 		return nil // Found cache and return.
-	// 	}
-	// } else {
-	// 	var _cache []byte
-	// 	if _cache, err = redis.Get(db.ctx, key); err == nil {
-	// 		val := reflect.ValueOf(cache[0])
-	// 		if val.Kind() != reflect.Pointer {
-	// 			return ErrNotPtrSlice
-	// 		}
-	// 		if !val.Elem().CanAddr() {
-	// 			return ErrNotAddressableSlice
-	// 		}
-	// 		val.Elem().Set(reflect.ValueOf(_cache))
-	// 		logger.Cache.Infow("take from cache", "cost", time.Since(begin).String(), "key", key)
-	// 		return nil // Found cache and return.
-	// 	}
-	// }
-	// if err != redis.ErrKeyNotExists {
-	// 	logger.Cache.Error(err)
-	// 	return err
-	// }
-	// // Not Found cache, continue query database.
-	// ===========================
-	// ===== END redis cache =====
-	// ===========================
 
 QUERY:
 	var empty M // call nil value M will cause panic.
