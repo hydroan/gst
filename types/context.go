@@ -78,17 +78,6 @@ func (sc *ServiceContext) baseContext() context.Context {
 	return sc.baseCtx
 }
 
-func (sc *ServiceContext) clone() *ServiceContext {
-	if sc == nil {
-		return &ServiceContext{baseCtx: context.Background()}
-	}
-	next := *sc
-	if next.baseCtx == nil {
-		next.baseCtx = context.Background()
-	}
-	return &next
-}
-
 func (sc *ServiceContext) Deadline() (time.Time, bool) { return sc.baseContext().Deadline() }
 func (sc *ServiceContext) Done() <-chan struct{}       { return sc.baseContext().Done() }
 func (sc *ServiceContext) Err() error                  { return sc.baseContext().Err() }
@@ -107,12 +96,6 @@ func (sc *ServiceContext) RequiresAuth() bool {
 		return false
 	}
 	return sc.requiresAuth
-}
-
-func (sc *ServiceContext) WithRequestMetadata(meta RequestMetadata) *ServiceContext {
-	next := sc.clone()
-	next.baseCtx = ContextWithRequestMetadata(next.baseContext(), meta)
-	return next
 }
 
 func (sc *ServiceContext) Params() map[string]string { return RequestMetadataFromContext(sc).Params() }
