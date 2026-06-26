@@ -47,70 +47,6 @@ func (Role) Design() {
 }
 
 func (r *Role) Purge() bool { return true }
-func (r *Role) CreateBefore(ctx context.Context) error {
-	// validate fields
-	if err := r.validate(); err != nil {
-		return err
-	}
-	// ensure role id always equal to role code.
-	r.SetID(r.Code)
-	return nil
-}
-
-// CreateAfter creates the role's permissions after the role row has been persisted.
-func (r *Role) CreateAfter(ctx context.Context) error {
-	// get the full role info before UpdatePermission.
-	if err := database.Database[*Role](ctx).WithoutHook().Get(r, r.ID); err != nil {
-		return err
-	}
-	e1 := r.UpdatePermission(ctx)
-	e2 := rbac.RBAC().AddRole(r.Code)
-	return errors.Join(e1, e2)
-}
-
-// UpdateBefore validates role updates before database writes. Role code is immutable.
-func (r *Role) UpdateBefore(ctx context.Context) error {
-	// validate fields
-	if err := r.validate(); err != nil {
-		return err
-	}
-
-	// query the full role.
-	current := new(Role)
-	if err := database.Database[*Role](ctx).Get(current, r.ID); err != nil {
-		return err
-	}
-
-	// ensure role code is immutable
-	if current.Code != r.Code {
-		return errors.New("role code is immutable")
-	}
-	return nil
-}
-
-// UpdateAfter refreshes the role's permissions after the role row has been persisted.
-func (r *Role) UpdateAfter(ctx context.Context) error {
-	// get the full role info before UpdatePermission.
-	if err := database.Database[*Role](ctx).WithoutHook().Get(r, r.ID); err != nil {
-		return err
-	}
-	e1 := r.UpdatePermission(ctx)
-	e2 := rbac.RBAC().AddRole(r.Code)
-	return errors.Join(e1, e2)
-}
-
-// DeleteBefore will delete the role's permissions
-// We must remove role in DeleteBefore hook, otherwise database.Database[*Role](ctx).Get(r, r.ID) will failed.
-func (r *Role) DeleteBefore(ctx context.Context) error {
-	if r.ID == "" {
-		return errors.New("role id is required")
-	}
-	// removes the role's permissions
-	if err := rbac.RBAC().RevokePermission(r.ID, "", ""); err != nil {
-		return err
-	}
-	return rbac.RBAC().RemoveRole(r.ID)
-}
 
 func (r *Role) validate() error {
 	r.Name = strings.TrimSpace(r.Name)
@@ -126,39 +62,102 @@ func (r *Role) validate() error {
 	return nil
 }
 
-// UpdatePermission refreshes permissions for the current role.
-// It uses a brute-force strategy: revoke all existing policies for the role,
-// then grant permissions derived from the current menus. This avoids any
-// unknown leftovers in the casbin_rule table and ensures strong consistency.
-func (r *Role) UpdatePermission(ctx context.Context) error {
-	// We should always iterate role's "MenuIds", not "MenuPartialIds".
-	// "MenuIds" is the frontend menus, "MenuPartialIds" is the frontend menus group that has no menus.
-	// A "Menu" contains one or multiple backend routes, each route binding one or multiple permissions.
+func (r *Role) CreateBefore(ctx context.Context) error {
+	if err := r.validate(); err != nil {
+		return err
+	}
 
+	r.SetID(r.Code)
+	return nil
+}
+
+// CreateAfter syncs the role's permissions after the role row has been persisted.
+func (r *Role) CreateAfter(ctx context.Context) error {
+	// Get the full role info before syncing permissions.
+	if err := database.Database[*Role](ctx).WithoutHook().Get(r, r.ID); err != nil {
+		return err
+	}
+	e1 := r.syncPermissions(ctx)
+	e2 := rbac.RBAC().AddRole(r.Code)
+	return errors.Join(e1, e2)
+}
+
+// UpdateBefore validates role updates before database writes. Role code is immutable.
+func (r *Role) UpdateBefore(ctx context.Context) error {
+	if err := r.validate(); err != nil {
+		return err
+	}
+
+	current := new(Role)
+	if err := database.Database[*Role](ctx).Get(current, r.ID); err != nil {
+		return err
+	}
+
+	if current.Code != r.Code {
+		return errors.New("role code is immutable")
+	}
+	return nil
+}
+
+// UpdateAfter syncs the role's permissions after the role row has been persisted.
+func (r *Role) UpdateAfter(ctx context.Context) error {
+	// Get the full role info before syncing permissions.
+	if err := database.Database[*Role](ctx).WithoutHook().Get(r, r.ID); err != nil {
+		return err
+	}
+	e1 := r.syncPermissions(ctx)
+	e2 := rbac.RBAC().AddRole(r.Code)
+	return errors.Join(e1, e2)
+}
+
+// DeleteBefore deletes the role's RBAC policies before the role row is removed.
+func (r *Role) DeleteBefore(ctx context.Context) error {
+	if r.ID == "" {
+		return errors.New("role id is required")
+	}
+
+	if err := rbac.RBAC().RevokePermission(r.ID, "", ""); err != nil {
+		return err
+	}
+	return rbac.RBAC().RemoveRole(r.ID)
+}
+
+type routePolicy struct {
+	resource string
+	action   string
+}
+
+// syncPermissions rebuilds Casbin policy rows for this role from Menu.Routes.
+// Role.MenuIDs is the authoritative source for backend route grants. MenuPartialIDs
+// only keeps partially selected parent menus visible in the frontend tree and must
+// not grant backend API access by itself.
+//
+// The method intentionally uses revoke-all-then-grant. Menu routes can be removed,
+// renamed, or have methods changed, and a diff-based update can leave stale Casbin
+// rows behind. Rebuilding the role's policy set keeps casbin_rule consistent with
+// the current menu bindings.
+func (r *Role) syncPermissions(ctx context.Context) error {
 	o := new(Role)
 	if err := database.Database[*Role](ctx).Get(o, r.ID); err != nil {
 		zap.S().Error(err)
 		return err
 	}
 
-	// query the new role's menus
 	newMenus := make([]*Menu, 0)
 	if err := database.Database[*Menu](ctx).WithQuery(&Menu{Base: model.Base{ID: strings.Join(r.MenuIDs, ",")}}).List(&newMenus); err != nil {
 		zap.S().Error(err)
 		return err
 	}
-	// derive new role policies from menu routes.
+
 	newPolicies := make([]routePolicy, 0)
 	for _, m := range newMenus {
 		newPolicies = append(newPolicies, routePoliciesForMenu(m)...)
 	}
 
-	// revoke all existing policies for this role to avoid leftovers
 	if err := rbac.RBAC().RevokePermission(r.ID, "", ""); err != nil {
 		zap.S().Error(err)
 		return err
 	}
-	// grant the new role's permissions
 	for _, p := range newPolicies {
 		if err := rbac.RBAC().GrantPermission(r.ID, p.resource, p.action); err != nil {
 			zap.S().Error(err)
@@ -169,16 +168,13 @@ func (r *Role) UpdatePermission(ctx context.Context) error {
 	return nil
 }
 
-type routePolicy struct {
-	resource string
-	action   string
-}
-
 func routePoliciesForMenu(m *Menu) []routePolicy {
 	if m == nil {
 		return make([]routePolicy, 0)
 	}
 
+	// A menu can bind multiple backend routes, and each route can bind multiple
+	// HTTP methods. Casbin stores those as individual path + method policies.
 	policies := make([]routePolicy, 0)
 	for _, route := range m.Routes {
 		resource := strings.TrimSpace(route.Path)

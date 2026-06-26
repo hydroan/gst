@@ -7,7 +7,7 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
-// Register register authz modules.
+// Register registers RBAC authorization modules and middleware.
 //
 // Modules:
 //   - Role
@@ -37,10 +37,9 @@ import (
 //
 // Middleware:
 //   - Authz
-//
-// Panic if creates table records failed.
 func Register() {
-	// creates table "casbin_rule".
+	// Register CasbinRule explicitly because Casbin manages this table through
+	// the GORM adapter instead of a public CRUD module.
 	model.Register[*CasbinRule]()
 
 	// Register auth middleware before protected routes so auth handlers are attached deterministically.

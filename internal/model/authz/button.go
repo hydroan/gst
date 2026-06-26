@@ -7,8 +7,8 @@ type Button struct {
 	Code string // unique button code/identifier
 	Icon string // icon name from backend
 
-	Status   int   // 0: disabled, 1: enabled
-	Visiable *bool // whether the button is rendered in UI
+	Status  int   // 0: disabled, 1: enabled
+	Visible *bool // whether the button is rendered in UI
 
 	MenuID string // parent menu id
 

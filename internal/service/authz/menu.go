@@ -1,7 +1,6 @@
 package serviceauthz
 
 import (
-	"reflect"
 	"regexp"
 	"strings"
 
@@ -22,6 +21,15 @@ func (m *MenuService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.M
 	return m.filterByRole(ctx, data, m.WithContext(ctx, ctx.Phase()))
 }
 
+// filterByRole reduces the menu tree to the menus visible to the current user.
+//
+// The flow deliberately mirrors the RBAC data model:
+//   - root is a built-in user ID and bypasses menu filtering completely.
+//   - UserRole maps the current user ID to role IDs.
+//   - when the user has no roles, default roles provide the fallback menu set.
+//   - Role.MenuIDs grants fully selected menus; Role.MenuPartialIDs keeps parent
+//     menu nodes visible when only part of their children are selected.
+//   - Menu.DomainPattern still constrains visibility by the current request host.
 func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauthz.Menu, log types.Logger) error {
 	// The built-in root account is identified by the stable user ID.
 	if ctx.UserID() == consts.AUTHZ_USER_ROOT {
@@ -33,7 +41,6 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 		roles     = make([]*modelauthz.Role, 0)
 	)
 
-	// query all "UserRole" according to the current user id.
 	if err := database.Database[*modelauthz.UserRole](ctx).
 		WithQuery(&modelauthz.UserRole{UserID: ctx.UserID()}).
 		List(&userRoles); err != nil {
@@ -41,7 +48,6 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 		return err
 	}
 
-	// query all "Role" according to the "UserRole"
 	if len(userRoles) > 0 {
 		roleIDs := make([]string, 0)
 		for _, ur := range userRoles {
@@ -55,7 +61,6 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 			return err
 		}
 	}
-	// the user has no roles, use the default role.
 	if len(roles) == 0 {
 		if err := database.Database[*modelauthz.Role](ctx).
 			WithQuery(&modelauthz.Role{Default: new(true)}).
@@ -66,7 +71,6 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 	}
 	if len(roles) == 0 {
 		log.Warn("user has no roles and don't have default role")
-		// Clear the slice by dereferencing the pointer and assigning a new empty slice
 		*data = make([]*modelauthz.Menu, 0)
 		return nil
 	}
@@ -74,63 +78,48 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 		log.Infow("role", "username", ctx.Username(), "role_name", r.Name, "role_code", r.Code)
 	}
 
-	{
-		menuMap := make(map[string]struct{})
-		for _, role := range roles {
-			for _, id := range role.MenuIDs {
-				menuMap[id] = struct{}{}
-			}
-			// 这里需要把 MenuPartialIds 加进去, 父菜单下面有多个菜单, 如果只选中了部分, 则是将 id 放在 MenuPartialIds.
-			for _, id := range role.MenuPartialIDs {
-				menuMap[id] = struct{}{}
-			}
+	// MenuIDs and MenuPartialIDs both affect menu visibility. Only MenuIDs grants
+	// backend route permissions; this service is only shaping the frontend menu tree.
+	menuMap := make(map[string]struct{})
+	for _, role := range roles {
+		for _, id := range role.MenuIDs {
+			menuMap[id] = struct{}{}
 		}
-		// fmt.Println("---- menuMap", len(menuMap))
+		for _, id := range role.MenuPartialIDs {
+			menuMap[id] = struct{}{}
+		}
+	}
 
-		_data := lo.Filter[*modelauthz.Menu](*data, func(item *modelauthz.Menu, _ int) bool {
-			var exists, matched, ok bool
-			_, exists = menuMap[item.ID]
-			if exists {
-				if matched, _ = regexp.MatchString(item.DomainPattern, ctx.Host()); matched {
-					ok = true
-				}
-			}
-			return ok
-			// if _, ok := menuMap[item.ID]; ok {
-			// 	return true
-			// } else {
-			// 	return false
-			// }
+	filtered := lo.Filter[*modelauthz.Menu](*data, func(item *modelauthz.Menu, _ int) bool {
+		return menuAllowed(ctx, item, menuMap)
+	})
+	for i := range filtered {
+		filterMenuTree(ctx, filtered[i], menuMap)
+	}
+	*data = filtered
+	return nil
+}
+
+// filterMenuTree applies the same role and domain visibility rules recursively to
+// children. The top-level list has already been filtered before this function runs.
+func filterMenuTree(ctx *types.ServiceContext, menu *modelauthz.Menu, menuMap map[string]struct{}) {
+	if len(menu.Children) > 0 {
+		menu.Children = lo.Filter[*modelauthz.Menu](menu.Children, func(item *modelauthz.Menu, _ int) bool {
+			return menuAllowed(ctx, item, menuMap)
 		})
-		for i := range _data {
-			filter(ctx, _data[i], menuMap)
+		for i := range menu.Children {
+			filterMenuTree(ctx, menu.Children[i], menuMap)
 		}
-		val := reflect.ValueOf(data)
-		val.Elem().Set(reflect.ValueOf(_data))
-		return nil
 	}
 }
 
-// 递归过滤出当前角色所拥有的菜单. 作用于 menu.Children 字段.
-func filter(ctx *types.ServiceContext, menu *modelauthz.Menu, menuMap map[string]struct{}) {
-	if len(menu.Children) > 0 {
-		menu.Children = lo.Filter[*modelauthz.Menu](menu.Children, func(item *modelauthz.Menu, _ int) bool {
-			var exists, matched, ok bool
-			_, exists = menuMap[item.ID]
-			if exists {
-				if matched, _ = regexp.MatchString(item.DomainPattern, ctx.Host()); matched {
-					ok = true
-				}
-			}
-			return ok
-			// if _, ok := menuMap[item.ID]; ok {
-			// 	return true
-			// } else {
-			// 	return false
-			// }
-		})
-		for i := range menu.Children {
-			filter(ctx, menu.Children[i], menuMap)
-		}
+// menuAllowed requires both a role/menu match and a host match. This keeps menu
+// visibility aligned with role assignment while still allowing one menu table to
+// serve different domains.
+func menuAllowed(ctx *types.ServiceContext, menu *modelauthz.Menu, menuMap map[string]struct{}) bool {
+	if _, exists := menuMap[menu.ID]; !exists {
+		return false
 	}
+	matched, _ := regexp.MatchString(menu.DomainPattern, ctx.Host())
+	return matched
 }

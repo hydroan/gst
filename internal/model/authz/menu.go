@@ -14,7 +14,7 @@ import (
 )
 
 func init() {
-	// create table "menus" and creates records.
+	// Register the root menu seed row.
 	model.Register[*Menu](
 		&Menu{Base: model.Base{ID: model.RootID}, ParentID: model.RootID},
 	)
@@ -61,8 +61,8 @@ type Menu struct {
 	DomainPattern string                            `json:"domain_pattern,omitempty" schema:"domain_pattern" gorm:"default:.*"`
 
 	ParentID string  `json:"parent_id,omitempty" gorm:"size:191" schema:"parent_id"`
-	Children []*Menu `json:"children,omitempty" gorm:"foreignKey:ParentID"`             // 子路由
-	Parent   *Menu   `json:"parent,omitempty" gorm:"foreignKey:ParentID;references:ID"` // 父路由
+	Children []*Menu `json:"children,omitempty" gorm:"foreignKey:ParentID"`             // Child menus.
+	Parent   *Menu   `json:"parent,omitempty" gorm:"foreignKey:ParentID;references:ID"` // Parent menu.
 
 	model.Base
 }
@@ -94,9 +94,8 @@ func (m *Menu) UpdateAfter(ctx context.Context) error {
 		return err
 	}
 	for _, r := range roles {
-		// If the role contains the current menu, then update role's permissions
 		if slices.Contains(r.MenuIDs, m.ID) {
-			if err := r.UpdatePermission(ctx); err != nil {
+			if err := r.syncPermissions(ctx); err != nil {
 				return err
 			}
 			zap.L().Info("successfully update role's permissions", zap.Object("role", r))
@@ -106,16 +105,14 @@ func (m *Menu) UpdateAfter(ctx context.Context) error {
 	return nil
 }
 
-// DeleteBefore will delete the role's permissions
+// DeleteBefore removes the menu from roles before the menu row is deleted.
 func (m *Menu) DeleteBefore(ctx context.Context) error {
 	roles := make([]*Role, 0)
 	if err := database.Database[*Role](ctx).List(&roles); err != nil {
 		return err
 	}
 	for _, r := range roles {
-		// If the role contains the current menu, then update role's permissions
 		if slices.Contains(r.MenuIDs, m.ID) {
-			// update the role's MenuIDs to remove the current menu
 			menuIDs := make([]string, 0)
 			for _, mid := range r.MenuIDs {
 				if mid != m.ID {
@@ -123,7 +120,7 @@ func (m *Menu) DeleteBefore(ctx context.Context) error {
 				}
 			}
 			r.MenuIDs = menuIDs
-			// update the role's MenuPartialIDs to remove the current menu
+
 			menuPartialIDs := make([]string, 0)
 			for _, mid := range r.MenuPartialIDs {
 				if mid != m.ID {

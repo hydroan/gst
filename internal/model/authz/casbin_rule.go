@@ -5,28 +5,29 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-// CasbinRule stores Casbin policy and grouping rules.
+// CasbinRule stores Casbin policy and grouping rules in the adapter table.
 //
 // The RBAC module creates this table through
 // gormadapter.NewAdapterByDBWithCustomTable(database.DB(), new(modelauthz.CasbinRule)).
-// The ID must be an integer because the GORM adapter creates an auto-increment
-// primary key for the policy table.
+// Ptype identifies policy or grouping rows, and V0 through V5 map directly to
+// Casbin's policy fields. The ID must be an integer because the GORM adapter
+// creates an auto-increment primary key for the policy table.
 //
-// Policy example:
+// Policy rows use ptype "p":
+//   - V0: role code, for example "admin"
+//   - V1: resource path, for example "/api/routes"
+//   - V2: action, usually the HTTP method such as "GET"
+//   - V3: effect, currently "allow"
 //
-// INSERT INTO casbin_rule (ptype, v0, v1, v2, v3) VALUES
-// ('p', 'role_admin', '/api/config/*', 'GET', 'allow'),
-// ('p', 'role_admin', '/api/config/*', 'POST', 'allow'),
-// ('p', 'role_user', '/api/config/file', 'GET', 'allow');
+// Grouping rows use ptype "g":
+//   - V0: subject, currently the stable user ID such as "root"
+//   - V1: role code, for example "admin"
 //
-// Grouping example:
-//
-// INSERT INTO casbin_rule (ptype, v0, v1) VALUES
-// ('g', 'alice', 'role_admin'),
-// ('g', 'bob', 'role_user'),
-// ('g', 'role_admin', 'admin'); -- admin super role.
+// Example rows:
+//   - p, admin, /api/routes, GET, allow
+//   - p, admin, /api/authz/roles, POST, allow
+//   - g, root, admin
 type CasbinRule struct {
-	// ID uint64 `json:"id" gorm:"primaryKey"`
 	ID    uint64 `json:"id" gorm:"primaryKey;autoIncrement:true"`
 	Ptype string `json:"ptype" gorm:"size:100" schema:"ptype"`
 	V0    string `json:"v0,omitempty" gorm:"size:100" schema:"v0"`
