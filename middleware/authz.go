@@ -13,7 +13,7 @@ import (
 )
 
 // Authz authorizes requests using RBAC.
-// It derives subject from context or headers, falling back to system user.
+// It derives subject from trusted request context and blocks anonymous requests.
 // Authz must be called before config.Init so config.Init can read
 // AUTH_RBAC_ENABLE from the environment and enable RBAC initialization.
 func Authz() gin.HandlerFunc {
@@ -22,7 +22,10 @@ func Authz() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var allow bool
 		var err error
-		sub := authzSubject(c)
+		sub := c.GetString(consts.CTX_USER_ID)
+		if len(sub) == 0 {
+			sub = consts.AUTHZ_USER_BLOCKED
+		}
 		obj := c.Request.URL.Path
 		act := c.Request.Method
 
@@ -77,14 +80,4 @@ func Authz() gin.HandlerFunc {
 			)
 		}
 	}
-}
-
-func authzSubject(c *gin.Context) string {
-	if userID := c.GetString(consts.CTX_USER_ID); len(userID) > 0 {
-		return userID
-	}
-	if userID := c.GetHeader("X-User-Id"); len(userID) > 0 {
-		return userID
-	}
-	return consts.AUTHZ_USER_BLOCKED
 }
