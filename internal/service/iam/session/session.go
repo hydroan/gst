@@ -1,8 +1,11 @@
 package serviceiamsession
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hydroan/gst/service"
@@ -13,6 +16,12 @@ const (
 	// SessionCookieName is the HTTP cookie carrying the opaque IAM session id.
 	SessionCookieName = "session_id"
 	sessionCookiePath = "/"
+	sessionIDBytes    = 32
+)
+
+var (
+	sessionExpiration   time.Duration
+	sessionExpirationMu sync.RWMutex
 )
 
 // ReadSessionID returns a non-empty trimmed session id from the request cookie.
@@ -54,4 +63,32 @@ func ClearSessionCookie(ctx *types.ServiceContext) {
 		Secure:   ctx.IsHTTPS(),
 		SameSite: http.SameSiteLaxMode,
 	})
+}
+
+// NewSessionID returns an opaque random session identifier.
+func NewSessionID() (string, error) {
+	buf := make([]byte, sessionIDBytes)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf), nil
+}
+
+// GetSessionExpiration returns the configured session expiration time.
+// If not configured, it returns the default value of 8 hours.
+func GetSessionExpiration() time.Duration {
+	sessionExpirationMu.RLock()
+	defer sessionExpirationMu.RUnlock()
+	if sessionExpiration == 0 {
+		return 8 * time.Hour
+	}
+	return sessionExpiration
+}
+
+// SetSessionExpiration sets the session expiration time for iam module.
+// This function should be called during module registration.
+func SetSessionExpiration(expiration time.Duration) {
+	sessionExpirationMu.Lock()
+	defer sessionExpirationMu.Unlock()
+	sessionExpiration = expiration
 }
