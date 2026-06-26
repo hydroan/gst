@@ -14,11 +14,11 @@ import (
 
 func TestValidateModuleCopyNameRejectsPaths(t *testing.T) {
 	tests := []string{
-		"module/mfa",
-		"./mfa",
-		"../mfa",
-		`module\mfa`,
-		".mfa",
+		"module/copytest",
+		"./copytest",
+		"../copytest",
+		`module\copytest`,
+		".copytest",
 		"",
 	}
 
@@ -30,71 +30,71 @@ func TestValidateModuleCopyNameRejectsPaths(t *testing.T) {
 		})
 	}
 
-	if err := validateModuleCopyName("mfa"); err != nil {
-		t.Fatalf("validateModuleCopyName(%q) = %v, want nil", "mfa", err)
+	if err := validateModuleCopyName("copytest"); err != nil {
+		t.Fatalf("validateModuleCopyName(%q) = %v, want nil", "copytest", err)
 	}
 }
 
 func TestNormalizeModuleModelSourceUsesTargetPackage(t *testing.T) {
-	src := []byte(`// Package modelmfa contains MFA models.
-package modelmfa
+	src := []byte(`// Package modelcopytest contains copytest models.
+package modelcopytest
 
 import "github.com/hydroan/gst/model"
 
-type MFA struct {
+type CopyTest struct {
 	model.Empty
 }
 `)
 
-	got, err := normalizeModuleModelSource("mfa.go", src, "mfa")
+	got, err := normalizeModuleModelSource("copytest.go", src, "copytest")
 	if err != nil {
 		t.Fatalf("normalizeModuleModelSource() error = %v", err)
 	}
-	if !strings.Contains(string(got), "package mfa") {
+	if !strings.Contains(string(got), "package copytest") {
 		t.Fatalf("normalized source missing target package:\n%s", got)
 	}
-	if strings.Contains(string(got), "package modelmfa") {
+	if strings.Contains(string(got), "package modelcopytest") {
 		t.Fatalf("normalized source kept source package:\n%s", got)
 	}
 }
 
 func TestMergeModuleServiceSourceCopiesWholeServiceFile(t *testing.T) {
-	source := []byte(`package servicemfa
+	source := []byte(`package servicecopytest
 
 import (
 	"fmt"
 
-	modelmfa "github.com/hydroan/gst/internal/model/mfa"
+	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
 
 const helperValue = "copied"
 
-// TOTPBindService starts the source binding flow.
+// ActionService starts the source action flow.
 //
 // It should be copied to the target service struct comment.
-type TOTPBindService struct {
-	service.Base[*modelmfa.TOTPBind, *modelmfa.TOTPBind, *modelmfa.TOTPBindRsp]
+type ActionService struct {
+	service.Base[*modelcopytest.Action, *modelcopytest.Action, *modelcopytest.ActionRsp]
 }
 
 // Create copies the source business logic.
-func (s *TOTPBindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPBind) (rsp *modelmfa.TOTPBindRsp, err error) {
+func (s *ActionService) Create(ctx *types.ServiceContext, req *modelcopytest.Action) (rsp *modelcopytest.ActionRsp, err error) {
 	// Keep source method body comments.
 	fmt.Println(helperValue)
 	fmt.Println(s.describe("bind"))
-	return &modelmfa.TOTPBindRsp{}, nil
+	return &modelcopytest.ActionRsp{}, nil
 }
 
 // CreateAfter copies source hook logic.
-func (s *TOTPBindService) CreateAfter(ctx *types.ServiceContext, req *modelmfa.TOTPBind) error {
+func (s *ActionService) CreateAfter(ctx *types.ServiceContext, req *modelcopytest.Action) error {
 	// Keep source hook body comments.
 	fmt.Println(s.describe("after"))
 	return nil
 }
 
 // describe copies source receiver helpers.
-func (s *TOTPBindService) describe(step string) string {
+func (s *ActionService) describe(step string) string {
 	return helperValue + ":" + step
 }
 
@@ -103,70 +103,70 @@ func packageHelper() string {
 	return helperValue
 }
 `)
-	target := []byte(`package mfa
+	target := []byte(`package copytest
 
 import (
-	"dice/model/mfa"
+	"dice/model/copytest"
 
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
 
-type TotpBind struct {
-	service.Base[*mfa.MFA, *mfa.MFA, *mfa.TOTPBindRsp]
+type Creator struct {
+	service.Base[*copytest.CopyTest, *copytest.CopyTest, *copytest.ActionRsp]
 }
 
-func (t *TotpBind) Create(ctx *types.ServiceContext, req *mfa.MFA) (rsp *mfa.TOTPBindRsp, err error) {
-	log := t.WithContext(ctx, ctx.Phase())
-	log.Info("mfa: totp bind")
+func (c *Creator) Create(ctx *types.ServiceContext, req *copytest.CopyTest) (rsp *copytest.ActionRsp, err error) {
+	log := c.WithContext(ctx, ctx.Phase())
+	log.Info("copytest: create")
 	return rsp, nil
 }
 
-func (t *TotpBind) CreateAfter(ctx *types.ServiceContext, req *mfa.MFA) error {
-	log := t.WithContext(ctx, ctx.Phase())
-	log.Info("mfa: totp bind after")
+func (c *Creator) CreateAfter(ctx *types.ServiceContext, req *copytest.CopyTest) error {
+	log := c.WithContext(ctx, ctx.Phase())
+	log.Info("copytest: create after")
 	return nil
 }
 `)
 
 	got, err := mergeModuleServiceSource(moduleServiceMergeInput{
-		SourcePath:            "totp_bind.go",
+		SourcePath:            "action.go",
 		Source:                source,
-		TargetPath:            "service/mfa/totp_bind.go",
+		TargetPath:            "service/copytest/action.go",
 		Target:                target,
-		ModuleName:            "mfa",
-		TargetModelImportPath: "dice/model/mfa",
+		ModuleName:            "copytest",
+		TargetModelImportPath: "dice/model/copytest",
 	})
 	if err != nil {
 		t.Fatalf("mergeModuleServiceSource() error = %v", err)
 	}
 	code := string(got)
 
-	if !strings.Contains(code, "func (t *TotpBind) Create(ctx *types.ServiceContext, req *mfa.MFA) (rsp *mfa.TOTPBindRsp, err error)") {
+	if !strings.Contains(code, "func (c *Creator) Create(ctx *types.ServiceContext, req *copytest.CopyTest) (rsp *copytest.ActionRsp, err error)") {
 		t.Fatalf("target signature was not preserved:\n%s", code)
 	}
-	if !strings.Contains(code, "// TotpBind starts the source binding flow.") {
+	if !strings.Contains(code, "// Creator starts the source action flow.") {
 		t.Fatalf("source service struct doc was not copied and retargeted:\n%s", code)
 	}
-	if !strings.Contains(code, "// TotpBind starts the source binding flow.\n//\n// It should be copied to the target service struct comment.\ntype TotpBind struct") {
+	if !strings.Contains(code, "// Creator starts the source action flow.\n//\n// It should be copied to the target service struct comment.\ntype Creator struct") {
 		t.Fatalf("source service struct doc was not placed before target struct:\n%s", code)
 	}
 	if !strings.Contains(code, "// Create copies the source business logic.") {
 		t.Fatalf("source method doc was not copied:\n%s", code)
 	}
-	if !strings.Contains(code, "// Create copies the source business logic.\nfunc (t *TotpBind) Create") {
+	if !strings.Contains(code, "// Create copies the source business logic.\nfunc (c *Creator) Create") {
 		t.Fatalf("source method doc was not placed before target method:\n%s", code)
 	}
 	if !strings.Contains(code, "// Keep source method body comments.") {
 		t.Fatalf("source method body comment was not copied:\n%s", code)
 	}
-	if !strings.Contains(code, "// CreateAfter copies source hook logic.\nfunc (t *TotpBind) CreateAfter") {
+	if !strings.Contains(code, "// CreateAfter copies source hook logic.\nfunc (c *Creator) CreateAfter") {
 		t.Fatalf("source hook method was not copied onto target receiver:\n%s", code)
 	}
 	if !strings.Contains(code, "// Keep source hook body comments.") {
 		t.Fatalf("source hook body comment was not copied:\n%s", code)
 	}
-	if !strings.Contains(code, "// describe copies source receiver helpers.\nfunc (s *TotpBind) describe(step string) string") {
+	if !strings.Contains(code, "// describe copies source receiver helpers.\nfunc (s *Creator) describe(step string) string") {
 		t.Fatalf("source receiver helper was not copied onto target receiver:\n%s", code)
 	}
 	if !strings.Contains(code, "// packageHelper copies ordinary package functions.\nfunc packageHelper() string") {
@@ -175,143 +175,143 @@ func (t *TotpBind) CreateAfter(ctx *types.ServiceContext, req *mfa.MFA) error {
 	if !strings.Contains(code, `const helperValue = "copied"`) {
 		t.Fatalf("ordinary source declaration was not copied:\n%s", code)
 	}
-	if !strings.Contains(code, "return &mfa.TOTPBindRsp{}, nil") {
+	if !strings.Contains(code, "return &copytest.ActionRsp{}, nil") {
 		t.Fatalf("source model selector was not rewritten:\n%s", code)
 	}
-	if strings.Contains(code, "modelmfa") || strings.Contains(code, "TOTPBindService") {
+	if strings.Contains(code, "modelcopytest") || strings.Contains(code, "ActionService") {
 		t.Fatalf("source package artifacts leaked into target:\n%s", code)
 	}
 }
 
 func TestMergeModuleServiceSourceAllowsHookOnlySource(t *testing.T) {
-	source := []byte(`package serviceauthz
+	source := []byte(`package servicecopytest
 
 import (
-	modelauthz "github.com/hydroan/gst/internal/model/authz"
+	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
 
-// MenuService filters menus after the built-in list flow.
-type MenuService struct {
-	service.Base[*modelauthz.Menu, *modelauthz.Menu, *modelauthz.Menu]
+// ListingService filters items after the built-in list flow.
+type ListingService struct {
+	service.Base[*modelcopytest.CopyTest, *modelcopytest.CopyTest, *modelcopytest.CopyTest]
 }
 
 // ListAfter copies hook-only service logic.
-func (m *MenuService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.Menu) error {
+func (l *ListingService) ListAfter(ctx *types.ServiceContext, data *[]*modelcopytest.CopyTest) error {
 	// Keep hook-only body comments.
-	return m.filterByRole(ctx, data)
+	return l.filterByOwner(ctx, data)
 }
 
-// filterByRole copies hook helper methods.
-func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauthz.Menu) error {
+// filterByOwner copies hook helper methods.
+func (l *ListingService) filterByOwner(ctx *types.ServiceContext, data *[]*modelcopytest.CopyTest) error {
 	return nil
 }
 `)
-	target := []byte(`package authz
+	target := []byte(`package copytest
 
 import (
-	"dice/model/authz"
+	"dice/model/copytest"
 
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
 
-type Menu struct {
-	service.Base[*authz.Authz, *authz.Authz, *authz.Authz]
+type Lister struct {
+	service.Base[*copytest.CopyTest, *copytest.CopyTest, *copytest.CopyTest]
 }
 
-func (m *Menu) List(ctx *types.ServiceContext, req *authz.Authz) (rsp *authz.Authz, err error) {
-	log := m.WithContext(ctx, ctx.Phase())
-	log.Info("authz: menu")
+func (l *Lister) List(ctx *types.ServiceContext, req *copytest.CopyTest) (rsp *copytest.CopyTest, err error) {
+	log := l.WithContext(ctx, ctx.Phase())
+	log.Info("copytest: list")
 	return rsp, nil
 }
 `)
 
 	got, err := mergeModuleServiceSource(moduleServiceMergeInput{
-		SourcePath:            "menu.go",
+		SourcePath:            "list.go",
 		Source:                source,
-		TargetPath:            "service/authz/menu.go",
+		TargetPath:            "service/copytest/list.go",
 		Target:                target,
-		ModuleName:            "authz",
-		TargetModelImportPath: "dice/model/authz",
+		ModuleName:            "copytest",
+		TargetModelImportPath: "dice/model/copytest",
 	})
 	if err != nil {
 		t.Fatalf("mergeModuleServiceSource() error = %v", err)
 	}
 	code := string(got)
 
-	if !strings.Contains(code, "func (m *Menu) List(ctx *types.ServiceContext, req *authz.Authz) (rsp *authz.Authz, err error)") {
+	if !strings.Contains(code, "func (l *Lister) List(ctx *types.ServiceContext, req *copytest.CopyTest) (rsp *copytest.CopyTest, err error)") {
 		t.Fatalf("target list method was not preserved:\n%s", code)
 	}
-	if !strings.Contains(code, "// ListAfter copies hook-only service logic.\nfunc (m *Menu) ListAfter") {
+	if !strings.Contains(code, "// ListAfter copies hook-only service logic.\nfunc (l *Lister) ListAfter") {
 		t.Fatalf("hook-only method was not copied:\n%s", code)
 	}
 	if !strings.Contains(code, "// Keep hook-only body comments.") {
 		t.Fatalf("hook-only body comment was not copied:\n%s", code)
 	}
-	if !strings.Contains(code, "// filterByRole copies hook helper methods.\nfunc (m *Menu) filterByRole") {
+	if !strings.Contains(code, "// filterByOwner copies hook helper methods.\nfunc (l *Lister) filterByOwner") {
 		t.Fatalf("hook helper method was not copied:\n%s", code)
 	}
-	if strings.Contains(code, "modelauthz") || strings.Contains(code, "MenuService") {
+	if strings.Contains(code, "modelcopytest") || strings.Contains(code, "ListingService") {
 		t.Fatalf("source package artifacts leaked into target:\n%s", code)
 	}
 }
 
 func TestMergeModuleServiceSourceRetargetsMethodBodyParameterNames(t *testing.T) {
-	source := []byte(`package serviceauthz
+	source := []byte(`package servicecopytest
 
 import (
-	modelauthz "github.com/hydroan/gst/internal/model/authz"
+	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
 
-type UserRoleService struct {
-	service.Base[*modelauthz.UserRole, *modelauthz.UserRole, *modelauthz.UserRole]
+type BindingService struct {
+	service.Base[*modelcopytest.Binding, *modelcopytest.Binding, *modelcopytest.Binding]
 }
 
-func (s *UserRoleService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.UserRole) error {
-	for _, ur := range *data {
-		_ = ur
+func (s *BindingService) ListAfter(ctx *types.ServiceContext, data *[]*modelcopytest.Binding) error {
+	for _, binding := range *data {
+		_ = binding
 	}
 	return nil
 }
 `)
-	target := []byte(`package authz
+	target := []byte(`package copytest
 
 import (
-	"dice/model/authz"
+	"dice/model/copytest"
 
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
 
-type UserRole struct {
-	service.Base[*authz.UserRole, *authz.UserRole, *authz.UserRole]
+type Binding struct {
+	service.Base[*copytest.Binding, *copytest.Binding, *copytest.Binding]
 }
 
-func (u *UserRole) ListAfter(ctx *types.ServiceContext, userroles *[]*authz.UserRole) error {
+func (b *Binding) ListAfter(ctx *types.ServiceContext, bindings *[]*copytest.Binding) error {
 	return nil
 }
 `)
 
 	got, err := mergeModuleServiceSource(moduleServiceMergeInput{
-		SourcePath:            "user_role.go",
+		SourcePath:            "binding.go",
 		Source:                source,
-		TargetPath:            "service/authz/user_role.go",
+		TargetPath:            "service/copytest/binding.go",
 		Target:                target,
-		ModuleName:            "authz",
-		TargetModelImportPath: "dice/model/authz",
+		ModuleName:            "copytest",
+		TargetModelImportPath: "dice/model/copytest",
 	})
 	if err != nil {
 		t.Fatalf("mergeModuleServiceSource() error = %v", err)
 	}
 	code := string(got)
-	if !strings.Contains(code, "func (u *UserRole) ListAfter(ctx *types.ServiceContext, userroles *[]*authz.UserRole) error") {
+	if !strings.Contains(code, "func (b *Binding) ListAfter(ctx *types.ServiceContext, bindings *[]*copytest.Binding) error") {
 		t.Fatalf("target method signature was not preserved:\n%s", code)
 	}
-	if !strings.Contains(code, "for _, ur := range *userroles") {
+	if !strings.Contains(code, "for _, binding := range *bindings") {
 		t.Fatalf("source body parameter reference was not retargeted:\n%s", code)
 	}
 	if strings.Contains(code, "*data") {
@@ -720,9 +720,189 @@ const helperValue = "copied"
 	}
 }
 
-func TestModuleCopyHelperDependencyFilesFindsMFAHelpers(t *testing.T) {
-	sourceServiceDir := filepath.Join("..", "service", "mfa")
-	actionFile := filepath.Join(sourceServiceDir, "totp_bind.go")
+func writeCopyTestServiceDependencyFiles(t *testing.T) string {
+	t.Helper()
+	sourceServiceDir := t.TempDir()
+	write := func(name string, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(sourceServiceDir, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("go.mod", "module example.com/servicecopytest\n\ngo 1.26\n")
+	write("bind.go", `package servicecopytest
+
+func Bind() string {
+	return bindingChallenge() + verificationCode()
+}
+`)
+	write("check.go", `package servicecopytest
+
+func Check() string {
+	return backupCode()
+}
+`)
+	write("confirm.go", `package servicecopytest
+
+func Confirm() string {
+	return verificationCode()
+}
+`)
+	write("binding_challenge.go", `package servicecopytest
+
+func bindingChallenge() string {
+	return "challenge"
+}
+`)
+	write("backup_code.go", `package servicecopytest
+
+func backupCode() string {
+	return "backup"
+}
+`)
+	write("verification_code.go", `package servicecopytest
+
+func verificationCode() string {
+	return "code"
+}
+`)
+	return sourceServiceDir
+}
+
+func newModuleCopyPlanProject(t *testing.T) string {
+	t.Helper()
+	projectDir := t.TempDir()
+	frameworkRoot := filepath.Join(projectDir, "internal", "gst")
+	for _, dir := range []string{
+		filepath.Join(frameworkRoot, "module", "copytest"),
+		filepath.Join(frameworkRoot, "internal", "model", "copytest"),
+		filepath.Join(frameworkRoot, "internal", "service", "copytest"),
+		filepath.Join(frameworkRoot, "service"),
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, "go.mod"), []byte("module tmpapp\n\ngo 1.26\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "go.mod"), []byte("module github.com/hydroan/gst\n\ngo 1.26\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "service", "base.go"), []byte(`package service
+
+type Base[M any, REQ any, RSP any] struct{}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return projectDir
+}
+
+func writeCopyTestModuleSource(t *testing.T, projectDir string, manifest []byte) {
+	t.Helper()
+	frameworkRoot := filepath.Join(projectDir, "internal", "gst")
+	if manifest == nil {
+		manifest = []byte(`{"copy":{}}`)
+	}
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "module", "copytest", moduleManifestFilename), manifest, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "internal", "model", "copytest", "copytest.go"), []byte(`package modelcopytest
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type CopyTest struct {
+	model.Empty
+}
+
+func (CopyTest) Design() {
+	dsl.Route("copytest", func() {
+		dsl.Create(func() {
+			dsl.Service(true)
+			dsl.Filename("bind.go")
+		})
+		dsl.List(func() {
+			dsl.Service(true)
+			dsl.Filename("check.go")
+		})
+		dsl.Get(func() {
+			dsl.Service(true)
+			dsl.Filename("confirm.go")
+		})
+	})
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sourceServiceDir := filepath.Join(frameworkRoot, "internal", "service", "copytest")
+	write := func(name string, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(sourceServiceDir, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("bind.go", `package servicecopytest
+
+import "github.com/hydroan/gst/service"
+
+type Binder struct {
+	service.Base[any, any, any]
+}
+
+func (b *Binder) Create() string {
+	return bindingChallenge() + verificationCode()
+}
+`)
+	write("check.go", `package servicecopytest
+
+import "github.com/hydroan/gst/service"
+
+type Checker struct {
+	service.Base[any, any, any]
+}
+
+func (c *Checker) List() string {
+	return backupCode()
+}
+`)
+	write("confirm.go", `package servicecopytest
+
+import "github.com/hydroan/gst/service"
+
+type Confirmer struct {
+	service.Base[any, any, any]
+}
+
+func (c *Confirmer) Get() string {
+	return verificationCode()
+}
+`)
+	write("binding_challenge.go", `package servicecopytest
+
+func bindingChallenge() string {
+	return "challenge"
+}
+`)
+	write("backup_code.go", `package servicecopytest
+
+func backupCode() string {
+	return "backup"
+}
+`)
+	write("verification_code.go", `package servicecopytest
+
+func verificationCode() string {
+	return "code"
+}
+	`)
+}
+
+func TestModuleCopyHelperDependencyFilesFindsServiceHelpers(t *testing.T) {
+	sourceServiceDir := writeCopyTestServiceDependencyFiles(t)
+	actionFile := filepath.Join(sourceServiceDir, "bind.go")
 
 	got, err := moduleCopyHelperDependencyFiles(sourceServiceDir, []string{actionFile})
 	if err != nil {
@@ -731,53 +911,46 @@ func TestModuleCopyHelperDependencyFilesFindsMFAHelpers(t *testing.T) {
 
 	var found bool
 	for _, file := range got {
-		if filepath.Base(file) == "totp_binding_challenge.go" {
+		if filepath.Base(file) == "binding_challenge.go" {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("moduleCopyHelperDependencyFiles() = %v, want totp_binding_challenge.go", got)
+		t.Fatalf("moduleCopyHelperDependencyFiles() = %v, want binding_challenge.go", got)
 	}
 }
 
-func TestModuleCopyHelperDependencyFilesFindsMFAHelpersThroughSymlink(t *testing.T) {
-	realRoot, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestModuleCopyHelperDependencyFilesFindsServiceHelpersThroughSymlink(t *testing.T) {
+	sourceServiceDir := writeCopyTestServiceDependencyFiles(t)
 	linkParent := t.TempDir()
-	linkRoot := filepath.Join(linkParent, "gst")
-	if symlinkErr := os.Symlink(realRoot, linkRoot); symlinkErr != nil {
+	linkRoot := filepath.Join(linkParent, "servicecopytest")
+	if symlinkErr := os.Symlink(sourceServiceDir, linkRoot); symlinkErr != nil {
 		t.Skipf("symlink not available: %v", symlinkErr)
 	}
 
-	sourceServiceDir := filepath.Join(linkRoot, "internal", "service", "mfa")
-	actionFile := filepath.Join(sourceServiceDir, "totp_bind.go")
-	got, err := moduleCopyHelperDependencyFiles(sourceServiceDir, []string{actionFile})
+	actionFile := filepath.Join(linkRoot, "bind.go")
+	got, err := moduleCopyHelperDependencyFiles(linkRoot, []string{actionFile})
 	if err != nil {
 		t.Fatalf("moduleCopyHelperDependencyFiles() error = %v", err)
 	}
 
 	var found bool
 	for _, file := range got {
-		if filepath.Base(file) == "totp_binding_challenge.go" {
+		if filepath.Base(file) == "binding_challenge.go" {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("moduleCopyHelperDependencyFiles() = %v, want totp_binding_challenge.go", got)
+		t.Fatalf("moduleCopyHelperDependencyFiles() = %v, want binding_challenge.go", got)
 	}
 }
 
-func TestModuleCopyHelperDependencyFilesFindsMFAHelpersFromAllActions(t *testing.T) {
-	sourceServiceDir := filepath.Join("..", "service", "mfa")
+func TestModuleCopyHelperDependencyFilesFindsServiceHelpersFromAllActions(t *testing.T) {
+	sourceServiceDir := writeCopyTestServiceDependencyFiles(t)
 	actionFiles := []string{
-		filepath.Join(sourceServiceDir, "totp_bind.go"),
-		filepath.Join(sourceServiceDir, "totp_check.go"),
-		filepath.Join(sourceServiceDir, "totp_confirm.go"),
-		filepath.Join(sourceServiceDir, "totp_status.go"),
-		filepath.Join(sourceServiceDir, "totp_unbind.go"),
-		filepath.Join(sourceServiceDir, "totp_verify.go"),
+		filepath.Join(sourceServiceDir, "bind.go"),
+		filepath.Join(sourceServiceDir, "check.go"),
+		filepath.Join(sourceServiceDir, "confirm.go"),
 	}
 
 	got, err := moduleCopyHelperDependencyFiles(sourceServiceDir, actionFiles)
@@ -786,9 +959,9 @@ func TestModuleCopyHelperDependencyFilesFindsMFAHelpersFromAllActions(t *testing
 	}
 
 	want := map[string]bool{
-		"totp_backup_code.go":       false,
-		"totp_binding_challenge.go": false,
-		"totp_code.go":              false,
+		"backup_code.go":       false,
+		"binding_challenge.go": false,
+		"verification_code.go": false,
 	}
 	for _, file := range got {
 		if _, ok := want[filepath.Base(file)]; ok {
@@ -802,41 +975,21 @@ func TestModuleCopyHelperDependencyFilesFindsMFAHelpersFromAllActions(t *testing
 	}
 }
 
-func TestBuildModuleCopyPlanIncludesMFAHelperFiles(t *testing.T) {
-	frameworkRoot, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
-	projectDir := t.TempDir()
-	if mkdirErr := os.Mkdir(filepath.Join(projectDir, "internal"), 0o755); mkdirErr != nil {
-		t.Fatal(mkdirErr)
-	}
-	if symlinkErr := os.Symlink(frameworkRoot, filepath.Join(projectDir, "internal", "gst")); symlinkErr != nil {
-		t.Skipf("symlink not available: %v", symlinkErr)
-	}
-	if writeErr := os.WriteFile(filepath.Join(projectDir, "go.mod"), []byte(`module tmpapp
-
-go 1.26
-
-require github.com/hydroan/gst v0.0.0
-
-replace github.com/hydroan/gst => ./internal/gst
-`), 0o600); writeErr != nil {
-		t.Fatal(writeErr)
-	}
-
+func TestBuildModuleCopyPlanIncludesServiceHelperFiles(t *testing.T) {
+	projectDir := newModuleCopyPlanProject(t)
+	writeCopyTestModuleSource(t, projectDir, nil)
 	t.Chdir(projectDir)
 
-	plan, err := BuildCopyPlan("mfa", CopyOptions{})
+	plan, err := BuildCopyPlan("copytest", CopyOptions{})
 	if err != nil {
 		t.Fatalf("buildModuleCopyPlan() error = %v", err)
 	}
 
 	helpers := plan.HelperTargets()
 	want := map[string]bool{
-		filepath.Join("service", "mfa", "totp_backup_code.go"):       false,
-		filepath.Join("service", "mfa", "totp_binding_challenge.go"): false,
-		filepath.Join("service", "mfa", "totp_code.go"):              false,
+		filepath.Join("service", "copytest", "backup_code.go"):       false,
+		filepath.Join("service", "copytest", "binding_challenge.go"): false,
+		filepath.Join("service", "copytest", "verification_code.go"): false,
 	}
 	for _, helper := range helpers {
 		if _, ok := want[helper]; ok {
@@ -850,39 +1003,39 @@ replace github.com/hydroan/gst => ./internal/gst
 	}
 }
 
-func TestBuildModuleCopyPlanIncludesAuthzMiddlewareFiles(t *testing.T) {
-	frameworkRoot, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
+func TestBuildModuleCopyPlanIncludesMiddlewareFiles(t *testing.T) {
+	projectDir := newModuleCopyPlanProject(t)
+	frameworkRoot := filepath.Join(projectDir, "internal", "gst")
+	manifest := []byte(`{
+		"copy": {
+			"middleware": [
+				{"sourceFile": "middleware/copy_auth.go", "scope": "auth", "handler": "CopyAuth"}
+			]
+		}
+	}`)
+	writeCopyTestModuleSource(t, projectDir, manifest)
+	if err := os.MkdirAll(filepath.Join(frameworkRoot, "middleware"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	projectDir := t.TempDir()
-	if mkdirErr := os.Mkdir(filepath.Join(projectDir, "internal"), 0o755); mkdirErr != nil {
-		t.Fatal(mkdirErr)
-	}
-	if symlinkErr := os.Symlink(frameworkRoot, filepath.Join(projectDir, "internal", "gst")); symlinkErr != nil {
-		t.Skipf("symlink not available: %v", symlinkErr)
-	}
-	if writeErr := os.WriteFile(filepath.Join(projectDir, "go.mod"), []byte(`module tmpapp
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "middleware", "copy_auth.go"), []byte(`package middleware
 
-go 1.26
-
-require github.com/hydroan/gst v0.0.0
-
-replace github.com/hydroan/gst => ./internal/gst
-`), 0o600); writeErr != nil {
-		t.Fatal(writeErr)
+func CopyAuth() any {
+	return nil
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
 	}
 
 	t.Chdir(projectDir)
 
-	plan, err := BuildCopyPlan("authz", CopyOptions{})
+	plan, err := BuildCopyPlan("copytest", CopyOptions{})
 	if err != nil {
 		t.Fatalf("BuildCopyPlan() error = %v", err)
 	}
 
 	targets := plan.MiddlewareTargets()
-	if !slices.Contains(targets, filepath.Join("middleware", "authz.go")) {
-		t.Fatalf("MiddlewareTargets() = %v, want middleware/authz.go", targets)
+	if !slices.Contains(targets, filepath.Join("middleware", "copy_auth.go")) {
+		t.Fatalf("MiddlewareTargets() = %v, want middleware/copy_auth.go", targets)
 	}
 }
 
@@ -904,28 +1057,28 @@ func init() {
 
 	source := []byte(`package middleware
 
-func Authz() any {
+func CopyAuth() any {
 	return nil
 }
 `)
 	plan := &CopyPlan{
-		Name:                "authz",
+		Name:                "copytest",
 		ModelDir:            "model",
 		ServiceDir:          "service",
 		TargetMiddlewareDir: "middleware",
 		Files: []moduleCopyFile{
 			{
 				Kind:       moduleCopyFileMiddleware,
-				TargetPath: filepath.Join("middleware", "authz.go"),
+				TargetPath: filepath.Join("middleware", "copy_auth.go"),
 				Content:    source,
 			},
 		},
 		Middleware: []moduleCopyMiddleware{
 			{
-				SourcePath: filepath.Join("internal", "gst", "middleware", "authz.go"),
-				TargetPath: filepath.Join("middleware", "authz.go"),
+				SourcePath: filepath.Join("internal", "gst", "middleware", "copy_auth.go"),
+				TargetPath: filepath.Join("middleware", "copy_auth.go"),
 				Scope:      moduleCopyMiddlewareScopeAuth,
-				Handler:    "Authz",
+				Handler:    "CopyAuth",
 			},
 		},
 	}
@@ -941,7 +1094,7 @@ func Authz() any {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	copied, err := os.ReadFile(filepath.Join(projectDir, "middleware", "authz.go"))
+	copied, err := os.ReadFile(filepath.Join(projectDir, "middleware", "copy_auth.go"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -957,7 +1110,7 @@ func Authz() any {
 	if !strings.Contains(code, `"github.com/hydroan/gst/middleware"`) {
 		t.Fatalf("middleware registration import missing:\n%s", code)
 	}
-	if !strings.Contains(code, "middleware.RegisterAuth(Authz())") {
+	if !strings.Contains(code, "middleware.RegisterAuth(CopyAuth())") {
 		t.Fatalf("auth middleware registration missing:\n%s", code)
 	}
 	if strings.Contains(code, "gstmiddleware") {
@@ -966,43 +1119,24 @@ func Authz() any {
 }
 
 func TestBuildModuleCopyPlanReportsExtraTargetModelFiles(t *testing.T) {
-	frameworkRoot, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
-	projectDir := t.TempDir()
-	if mkdirErr := os.Mkdir(filepath.Join(projectDir, "internal"), 0o755); mkdirErr != nil {
-		t.Fatal(mkdirErr)
-	}
-	if symlinkErr := os.Symlink(frameworkRoot, filepath.Join(projectDir, "internal", "gst")); symlinkErr != nil {
-		t.Skipf("symlink not available: %v", symlinkErr)
-	}
-	if writeErr := os.WriteFile(filepath.Join(projectDir, "go.mod"), []byte(`module tmpapp
+	projectDir := newModuleCopyPlanProject(t)
+	writeCopyTestModuleSource(t, projectDir, nil)
 
-go 1.26
-
-require github.com/hydroan/gst v0.0.0
-
-replace github.com/hydroan/gst => ./internal/gst
-`), 0o600); writeErr != nil {
-		t.Fatal(writeErr)
-	}
-
-	targetModelDir := filepath.Join(projectDir, "model", "authz")
+	targetModelDir := filepath.Join(projectDir, "model", "copytest")
 	if mkdirErr := os.MkdirAll(targetModelDir, 0o755); mkdirErr != nil {
 		t.Fatal(mkdirErr)
 	}
 	extraTarget := filepath.Join(targetModelDir, "design.go")
-	if writeErr := os.WriteFile(extraTarget, []byte("package authz\n"), 0o600); writeErr != nil {
+	if writeErr := os.WriteFile(extraTarget, []byte("package copytest\n"), 0o600); writeErr != nil {
 		t.Fatal(writeErr)
 	}
-	if writeErr := os.WriteFile(filepath.Join(targetModelDir, "design_test.go"), []byte("package authz\n"), 0o600); writeErr != nil {
+	if writeErr := os.WriteFile(filepath.Join(targetModelDir, "design_test.go"), []byte("package copytest\n"), 0o600); writeErr != nil {
 		t.Fatal(writeErr)
 	}
 
 	t.Chdir(projectDir)
 
-	plan, err := BuildCopyPlan("authz", CopyOptions{})
+	plan, err := BuildCopyPlan("copytest", CopyOptions{})
 	if err != nil {
 		t.Fatalf("BuildCopyPlan() error = %v", err)
 	}
@@ -1011,50 +1145,31 @@ replace github.com/hydroan/gst => ./internal/gst
 	if len(extraTargets) != 1 {
 		t.Fatalf("ExtraModelTargets() = %v, want one extra target", extraTargets)
 	}
-	want := filepath.Join("model", "authz", "design.go")
+	want := filepath.Join("model", "copytest", "design.go")
 	if extraTargets[0] != want {
 		t.Fatalf("ExtraModelTargets()[0] = %q, want %q", extraTargets[0], want)
 	}
 }
 
 func TestBuildModuleCopyPlanReportsExtraTargetServiceFiles(t *testing.T) {
-	frameworkRoot, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
-	projectDir := t.TempDir()
-	if mkdirErr := os.Mkdir(filepath.Join(projectDir, "internal"), 0o755); mkdirErr != nil {
-		t.Fatal(mkdirErr)
-	}
-	if symlinkErr := os.Symlink(frameworkRoot, filepath.Join(projectDir, "internal", "gst")); symlinkErr != nil {
-		t.Skipf("symlink not available: %v", symlinkErr)
-	}
-	if writeErr := os.WriteFile(filepath.Join(projectDir, "go.mod"), []byte(`module tmpapp
+	projectDir := newModuleCopyPlanProject(t)
+	writeCopyTestModuleSource(t, projectDir, nil)
 
-go 1.26
-
-require github.com/hydroan/gst v0.0.0
-
-replace github.com/hydroan/gst => ./internal/gst
-`), 0o600); writeErr != nil {
-		t.Fatal(writeErr)
-	}
-
-	targetServiceDir := filepath.Join(projectDir, "service", "mfa")
+	targetServiceDir := filepath.Join(projectDir, "service", "copytest")
 	if mkdirErr := os.MkdirAll(targetServiceDir, 0o755); mkdirErr != nil {
 		t.Fatal(mkdirErr)
 	}
-	extraTarget := filepath.Join(targetServiceDir, "user_authenticator.go")
-	if writeErr := os.WriteFile(extraTarget, []byte("package mfa\n"), 0o600); writeErr != nil {
+	extraTarget := filepath.Join(targetServiceDir, "project_adapter.go")
+	if writeErr := os.WriteFile(extraTarget, []byte("package copytest\n"), 0o600); writeErr != nil {
 		t.Fatal(writeErr)
 	}
-	if writeErr := os.WriteFile(filepath.Join(targetServiceDir, "account_authenticator_test.go"), []byte("package mfa\n"), 0o600); writeErr != nil {
+	if writeErr := os.WriteFile(filepath.Join(targetServiceDir, "project_adapter_test.go"), []byte("package copytest\n"), 0o600); writeErr != nil {
 		t.Fatal(writeErr)
 	}
 
 	t.Chdir(projectDir)
 
-	plan, err := BuildCopyPlan("mfa", CopyOptions{})
+	plan, err := BuildCopyPlan("copytest", CopyOptions{})
 	if err != nil {
 		t.Fatalf("BuildCopyPlan() error = %v", err)
 	}
@@ -1063,7 +1178,7 @@ replace github.com/hydroan/gst => ./internal/gst
 	if len(extraTargets) != 1 {
 		t.Fatalf("ExtraServiceTargets() = %v, want one extra target", extraTargets)
 	}
-	want := filepath.Join("service", "mfa", "user_authenticator.go")
+	want := filepath.Join("service", "copytest", "project_adapter.go")
 	if extraTargets[0] != want {
 		t.Fatalf("ExtraServiceTargets()[0] = %q, want %q", extraTargets[0], want)
 	}

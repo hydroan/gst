@@ -14,7 +14,7 @@ import (
 //
 // Name is the directory under the framework's module/ tree. PackageName is the
 // actual Go package declared by register.go; those can differ, for example
-// module/version uses package versionmod. ImportPath is the framework import
+// module/aliased uses package aliasedmod. ImportPath is the framework import
 // path a project module/module.go should import when it wants to use the module.
 // Addable is deliberately separate from discovery: gg module list should show
 // every discoverable framework module, while gg module add can only automate

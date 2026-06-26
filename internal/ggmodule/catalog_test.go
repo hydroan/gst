@@ -3,6 +3,8 @@ package ggmodule
 import "testing"
 
 func TestListModulesFindsAddableModulesAndPackageNames(t *testing.T) {
+	newModuleCommandProjectWithFramework(t)
+
 	modules, err := ListModules()
 	if err != nil {
 		t.Fatalf("ListModules() error = %v", err)
@@ -13,18 +15,18 @@ func TestListModulesFindsAddableModulesAndPackageNames(t *testing.T) {
 		byName[module.Name] = module
 	}
 
-	mfa := byName["mfa"]
-	if mfa.Name != "mfa" || mfa.PackageName != "mfa" || !mfa.Addable {
-		t.Fatalf("mfa module = %#v, want addable package mfa", mfa)
+	copytest := byName["copytest"]
+	if copytest.Name != "copytest" || copytest.PackageName != "copytest" || !copytest.Addable {
+		t.Fatalf("copytest module = %#v, want addable package copytest", copytest)
 	}
 
-	version := byName["version"]
-	if version.Name != "version" || version.PackageName != "versionmod" || !version.Addable {
-		t.Fatalf("version module = %#v, want addable package versionmod", version)
+	aliased := byName["aliased"]
+	if aliased.Name != "aliased" || aliased.PackageName != "aliasedmod" || !aliased.Addable {
+		t.Fatalf("aliased module = %#v, want addable package aliasedmod", aliased)
 	}
 
-	column := byName["column"]
-	if column.Name != "column" || column.Addable {
-		t.Fatalf("column module = %#v, want non-addable because Register requires arguments", column)
+	configured := byName["configured"]
+	if configured.Name != "configured" || configured.Addable {
+		t.Fatalf("configured module = %#v, want non-addable because Register requires arguments", configured)
 	}
 }

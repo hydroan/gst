@@ -18,7 +18,7 @@ type moduleManifest struct {
 
 type moduleCopyManifest struct {
 	// ExcludeSourceFiles lists framework-root relative source files that module
-	// copy should skip, for example "internal/model/authz/button.go". Excluded
+	// copy should skip, for example "internal/model/copytest/ignored.go". Excluded
 	// files are not copied and do not participate in copy-time model/action
 	// planning.
 	ExcludeSourceFiles []string                       `json:"excludeSourceFiles"`
@@ -43,7 +43,7 @@ type moduleCopyMiddlewareManifest struct {
 	// ("global") when module copy wires the handler into middleware/middleware.go.
 	Scope moduleCopyMiddlewareScope `json:"scope"`
 	// Handler is the zero-argument function in SourceFile that returns the
-	// handler registered in middleware/middleware.go, for example Authz.
+	// handler registered in middleware/middleware.go, for example CopyAuth.
 	Handler string `json:"handler"`
 }
 
@@ -113,7 +113,7 @@ func cleanModuleCopyMiddleware(values []moduleCopyMiddlewareManifest) ([]moduleC
 		// Keep middleware copy intentionally narrow: sources must come from the
 		// framework middleware package and targets always land in the project
 		// middleware package with the same filename. That avoids hidden copy-time
-		// routing rules in authz/register.go or arbitrary manifest target paths.
+		// routing rules in copytest/register.go or arbitrary manifest target paths.
 		if pathpkg.Dir(sourceFile) != "middleware" || !strings.HasSuffix(pathpkg.Base(sourceFile), ".go") || strings.HasSuffix(pathpkg.Base(sourceFile), "_test.go") {
 			return nil, fmt.Errorf("middleware[%d].sourceFile must match middleware/*.go: %s", i, sourceFile)
 		}

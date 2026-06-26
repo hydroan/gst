@@ -8,9 +8,9 @@ import (
 )
 
 func TestAddModuleRegistersFrameworkModule(t *testing.T) {
-	projectDir := newModuleCommandProject(t)
+	projectDir := newModuleCommandProjectWithFramework(t)
 
-	result, err := AddModule(projectDir, "mfa")
+	result, err := AddModule(projectDir, "copytest")
 	if err != nil {
 		t.Fatalf("AddModule() error = %v", err)
 	}
@@ -19,14 +19,14 @@ func TestAddModuleRegistersFrameworkModule(t *testing.T) {
 	}
 
 	content := readProjectModuleFile(t, projectDir)
-	if !strings.Contains(content, `"github.com/hydroan/gst/module/mfa"`) {
-		t.Fatalf("module.go missing mfa import:\n%s", content)
+	if !strings.Contains(content, `"github.com/hydroan/gst/module/copytest"`) {
+		t.Fatalf("module.go missing copytest import:\n%s", content)
 	}
-	if !strings.Contains(content, "mfa.Register()") {
-		t.Fatalf("module.go missing mfa.Register call:\n%s", content)
+	if !strings.Contains(content, "copytest.Register()") {
+		t.Fatalf("module.go missing copytest.Register call:\n%s", content)
 	}
 
-	second, err := AddModule(projectDir, "mfa")
+	second, err := AddModule(projectDir, "copytest")
 	if err != nil {
 		t.Fatalf("second AddModule() error = %v", err)
 	}
@@ -36,27 +36,27 @@ func TestAddModuleRegistersFrameworkModule(t *testing.T) {
 }
 
 func TestAddModuleUsesAliasWhenPackageNameDiffers(t *testing.T) {
-	projectDir := newModuleCommandProject(t)
+	projectDir := newModuleCommandProjectWithFramework(t)
 
-	result, err := AddModule(projectDir, "version")
+	result, err := AddModule(projectDir, "aliased")
 	if err != nil {
-		t.Fatalf("AddModule(version) error = %v", err)
+		t.Fatalf("AddModule(aliased) error = %v", err)
 	}
 	if result.Status != ChangeCreated {
-		t.Fatalf("AddModule(version) status = %s, want %s", result.Status, ChangeCreated)
+		t.Fatalf("AddModule(aliased) status = %s, want %s", result.Status, ChangeCreated)
 	}
 
 	content := readProjectModuleFile(t, projectDir)
-	if !strings.Contains(content, `versionmod "github.com/hydroan/gst/module/version"`) {
-		t.Fatalf("module.go missing versionmod alias import:\n%s", content)
+	if !strings.Contains(content, `aliasedmod "github.com/hydroan/gst/module/aliased"`) {
+		t.Fatalf("module.go missing aliasedmod alias import:\n%s", content)
 	}
-	if !strings.Contains(content, "versionmod.Register()") {
-		t.Fatalf("module.go missing versionmod.Register call:\n%s", content)
+	if !strings.Contains(content, "aliasedmod.Register()") {
+		t.Fatalf("module.go missing aliasedmod.Register call:\n%s", content)
 	}
 }
 
 func TestAddModuleKeepsExistingInitCommentsIntact(t *testing.T) {
-	projectDir := newModuleCommandProject(t)
+	projectDir := newModuleCommandProjectWithFramework(t)
 	moduleFile := filepath.Join(projectDir, "module", "module.go")
 	if err := os.WriteFile(moduleFile, []byte(`// Package module provides business logic modules for the application.
 //
@@ -65,7 +65,7 @@ func TestAddModuleKeepsExistingInitCommentsIntact(t *testing.T) {
 //   - Inside each subpackage, expose a Register() function that calls module.Use.
 //   - Call these Register() functions from module.Init() to centralize startup.
 //
-// See module/helloworld for a complete example.
+// See module/copytest for a complete example.
 package module
 
 func init() {
@@ -78,19 +78,19 @@ func init() {
 		t.Fatal(err)
 	}
 
-	result, err := AddModule(projectDir, "logmgmt")
+	result, err := AddModule(projectDir, "copytest")
 	if err != nil {
-		t.Fatalf("AddModule(logmgmt) error = %v", err)
+		t.Fatalf("AddModule(copytest) error = %v", err)
 	}
 	if result.Status != ChangeCreated {
-		t.Fatalf("AddModule(logmgmt) status = %s, want %s", result.Status, ChangeCreated)
+		t.Fatalf("AddModule(copytest) status = %s, want %s", result.Status, ChangeCreated)
 	}
 
 	content := readProjectModuleFile(t, projectDir)
-	if !strings.Contains(content, "logmgmt.Register()") {
-		t.Fatalf("module.go missing contiguous logmgmt.Register call:\n%s", content)
+	if !strings.Contains(content, "copytest.Register()") {
+		t.Fatalf("module.go missing contiguous copytest.Register call:\n%s", content)
 	}
-	if strings.Contains(content, "logmgmt.\n") {
+	if strings.Contains(content, "copytest.\n") {
 		t.Fatalf("module.go split selector from Register call:\n%s", content)
 	}
 	if !strings.Contains(content, "// TODO: Call your module Register() functions here") {
@@ -99,11 +99,11 @@ func init() {
 }
 
 func TestAddModuleReusesExistingImportAlias(t *testing.T) {
-	projectDir := newModuleCommandProject(t)
+	projectDir := newModuleCommandProjectWithFramework(t)
 	moduleFile := filepath.Join(projectDir, "module", "module.go")
 	if err := os.WriteFile(moduleFile, []byte(`package module
 
-import mfamod "github.com/hydroan/gst/module/mfa"
+import copytestmod "github.com/hydroan/gst/module/copytest"
 
 func init() {
 }
@@ -111,7 +111,7 @@ func init() {
 		t.Fatal(err)
 	}
 
-	result, err := AddModule(projectDir, "mfa")
+	result, err := AddModule(projectDir, "copytest")
 	if err != nil {
 		t.Fatalf("AddModule() error = %v", err)
 	}
@@ -120,24 +120,24 @@ func init() {
 	}
 
 	content := readProjectModuleFile(t, projectDir)
-	if !strings.Contains(content, "mfamod.Register()") {
+	if !strings.Contains(content, "copytestmod.Register()") {
 		t.Fatalf("module.go missing existing alias Register call:\n%s", content)
 	}
-	if strings.Contains(content, "mfa.Register()") {
+	if strings.Contains(content, "copytest.Register()") {
 		t.Fatalf("module.go used package name instead of existing import alias:\n%s", content)
 	}
 }
 
 func TestAddModuleRejectsLocalSourceCopy(t *testing.T) {
-	projectDir := newModuleCommandProject(t)
-	if err := os.MkdirAll(filepath.Join(projectDir, "model", "mfa"), 0o755); err != nil {
+	projectDir := newModuleCommandProjectWithFramework(t)
+	if err := os.MkdirAll(filepath.Join(projectDir, "model", "copytest"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(projectDir, "model", "mfa", "mfa.go"), []byte("package mfa\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(projectDir, "model", "copytest", "copytest.go"), []byte("package copytest\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	_, err := AddModule(projectDir, "mfa")
+	_, err := AddModule(projectDir, "copytest")
 	if err == nil || !strings.Contains(err.Error(), "already exists as local source") {
 		t.Fatalf("AddModule() error = %v, want local source conflict", err)
 	}

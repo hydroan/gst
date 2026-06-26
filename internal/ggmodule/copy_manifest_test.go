@@ -39,9 +39,9 @@ func TestLoadModuleManifestReadsPostNotes(t *testing.T) {
 	writeModuleManifestForTest(t, moduleDir, `{
 		"copy": {
 			"postNotes": [
-				"Password-based MFA checks require servicemfa.SetAccountAuthenticator(...).",
+				"Copytest checks require servicecopytest.SetAdapter(...).",
 				"   ",
-				"Create a project-owned adapter outside service/mfa.",
+				"Create a project-owned adapter outside service/copytest.",
 				"multi\nline"
 			],
 			"unknownFutureField": true
@@ -53,8 +53,8 @@ func TestLoadModuleManifestReadsPostNotes(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, []string{
-		"Password-based MFA checks require servicemfa.SetAccountAuthenticator(...).",
-		"Create a project-owned adapter outside service/mfa.",
+		"Copytest checks require servicecopytest.SetAdapter(...).",
+		"Create a project-owned adapter outside service/copytest.",
 		"multi\nline",
 	}, manifest.Copy.PostNotes)
 }
@@ -64,9 +64,9 @@ func TestLoadModuleManifestReadsExcludeSourceFiles(t *testing.T) {
 	writeModuleManifestForTest(t, moduleDir, `{
 		"copy": {
 			"excludeSourceFiles": [
-				" internal/model/authz/button.go ",
+				" internal/model/copytest/ignored.go ",
 				"",
-				"internal/model/authz/../authz/menu.go"
+				"internal/model/copytest/../copytest/helper.go"
 			]
 		}
 	}`)
@@ -75,8 +75,8 @@ func TestLoadModuleManifestReadsExcludeSourceFiles(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, []string{
-		"internal/model/authz/button.go",
-		"internal/model/authz/menu.go",
+		"internal/model/copytest/ignored.go",
+		"internal/model/copytest/helper.go",
 	}, manifest.Copy.ExcludeSourceFiles)
 }
 
@@ -86,9 +86,9 @@ func TestLoadModuleManifestReadsMiddleware(t *testing.T) {
 		"copy": {
 			"middleware": [
 				{
-					"sourceFile": " middleware/authz.go ",
+					"sourceFile": " middleware/copy_auth.go ",
 					"scope": " auth ",
-					"handler": " Authz "
+					"handler": " CopyAuth "
 				}
 			]
 		}
@@ -99,9 +99,9 @@ func TestLoadModuleManifestReadsMiddleware(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []moduleCopyMiddlewareManifest{
 		{
-			SourceFile: "middleware/authz.go",
+			SourceFile: "middleware/copy_auth.go",
 			Scope:      moduleCopyMiddlewareScopeAuth,
-			Handler:    "Authz",
+			Handler:    "CopyAuth",
 		},
 	}, manifest.Copy.Middleware)
 }
@@ -128,7 +128,7 @@ func TestLoadModuleManifestRejectsNonStringArrayPostNotes(t *testing.T) {
 
 func TestLoadModuleManifestRejectsUnsafeExcludeSourceFiles(t *testing.T) {
 	moduleDir := t.TempDir()
-	writeModuleManifestForTest(t, moduleDir, `{"copy":{"excludeSourceFiles":["../internal/model/authz/button.go"]}}`)
+	writeModuleManifestForTest(t, moduleDir, `{"copy":{"excludeSourceFiles":["../internal/model/copytest/ignored.go"]}}`)
 
 	_, err := loadModuleManifest(moduleDir)
 
@@ -142,7 +142,7 @@ func TestLoadModuleManifestRejectsUnsafeMiddlewareSourceFile(t *testing.T) {
 	writeModuleManifestForTest(t, moduleDir, `{
 		"copy": {
 			"middleware": [
-				{"sourceFile": "../middleware/authz.go", "scope": "auth", "handler": "Authz"}
+				{"sourceFile": "../middleware/copy_auth.go", "scope": "auth", "handler": "CopyAuth"}
 			]
 		}
 	}`)
@@ -159,7 +159,7 @@ func TestLoadModuleManifestRejectsInvalidMiddlewareHandler(t *testing.T) {
 	writeModuleManifestForTest(t, moduleDir, `{
 		"copy": {
 			"middleware": [
-				{"sourceFile": "middleware/authz.go", "scope": "auth", "handler": "Authz()"}
+				{"sourceFile": "middleware/copy_auth.go", "scope": "auth", "handler": "CopyAuth()"}
 			]
 		}
 	}`)
@@ -176,7 +176,7 @@ func TestLoadModuleManifestRejectsInvalidMiddlewareScope(t *testing.T) {
 	writeModuleManifestForTest(t, moduleDir, `{
 		"copy": {
 			"middleware": [
-				{"sourceFile": "middleware/authz.go", "scope": "admin", "handler": "Authz"}
+				{"sourceFile": "middleware/copy_auth.go", "scope": "admin", "handler": "CopyAuth"}
 			]
 		}
 	}`)

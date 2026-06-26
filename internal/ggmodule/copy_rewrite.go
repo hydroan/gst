@@ -11,7 +11,7 @@ import (
 
 // normalizeModuleModelSource converts framework model files into the current
 // project package layout. The model directory name is the package name, so
-// internal/model/mfa package modelmfa becomes model/mfa package mfa.
+// internal/model/copytest package modelcopytest becomes model/copytest package copytest.
 func normalizeModuleModelSource(filename string, src []byte, targetPackage string) ([]byte, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, filename, src, parser.ParseComments)

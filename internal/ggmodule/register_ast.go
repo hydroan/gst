@@ -54,7 +54,7 @@ func moduleForRegistration(name string) (Module, error) {
 
 // validateModuleName keeps add/remove on catalog entries instead of arbitrary
 // filesystem paths. This avoids ambiguous commands such as `gg module add
-// module/mfa` and prevents path traversal from reaching outside the module
+// module/copytest` and prevents path traversal from reaching outside the module
 // catalog.
 func validateModuleName(name string) error {
 	if strings.TrimSpace(name) == "" {
@@ -256,7 +256,7 @@ func registerCallStmt(alias string, pos token.Pos) ast.Stmt {
 	// The position is not cosmetic. go/printer merges comments into the output by
 	// token position; a newly-created AST node with token.NoPos can be printed
 	// around existing init comments in surprising ways, including splitting
-	// `logmgmt.Register()` into `logmgmt.` + comment + `Register()`. Anchoring the
+	// `copytest.Register()` into `copytest.` + comment + `Register()`. Anchoring the
 	// generated call at the init block's closing brace makes the call a normal
 	// statement after any placeholder comments while preserving those comments.
 	return &ast.ExprStmt{X: &ast.CallExpr{

@@ -217,7 +217,7 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 
 // validateModuleCopyName intentionally rejects anything path-like. The first
 // copy implementation only supports built-in framework modules addressed by
-// name, such as "mfa".
+// name, such as "copytest".
 func validateModuleCopyName(name string) error {
 	if strings.TrimSpace(name) == "" {
 		return errors.New("module name is required")
@@ -721,7 +721,7 @@ func (p *CopyPlan) targetsByKind(kind moduleCopyFileKind) []string {
 
 // ignoredSourcePath matches module.json copy.excludeSourceFiles against source files
 // relative to the framework root. This keeps the manifest stable across projects:
-// "internal/model/authz/button.go" means the same source file no matter where
+// "internal/model/copytest/ignored.go" means the same source file no matter where
 // the current app's model/service directories are configured.
 func (p *CopyPlan) ignoredSourcePath(sourcePath string) bool {
 	if len(p.ExcludeSourceFiles) == 0 {

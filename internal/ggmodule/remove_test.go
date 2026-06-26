@@ -6,12 +6,12 @@ import (
 )
 
 func TestRemoveModuleUnregistersFrameworkModule(t *testing.T) {
-	projectDir := newModuleCommandProject(t)
-	if _, err := AddModule(projectDir, "mfa"); err != nil {
+	projectDir := newModuleCommandProjectWithFramework(t)
+	if _, err := AddModule(projectDir, "copytest"); err != nil {
 		t.Fatalf("AddModule() error = %v", err)
 	}
 
-	result, err := RemoveModule(projectDir, "mfa")
+	result, err := RemoveModule(projectDir, "copytest")
 	if err != nil {
 		t.Fatalf("RemoveModule() error = %v", err)
 	}
@@ -20,11 +20,11 @@ func TestRemoveModuleUnregistersFrameworkModule(t *testing.T) {
 	}
 
 	content := readProjectModuleFile(t, projectDir)
-	if strings.Contains(content, "mfa.Register()") || strings.Contains(content, `"github.com/hydroan/gst/module/mfa"`) {
-		t.Fatalf("module.go still contains mfa registration:\n%s", content)
+	if strings.Contains(content, "copytest.Register()") || strings.Contains(content, `"github.com/hydroan/gst/module/copytest"`) {
+		t.Fatalf("module.go still contains copytest registration:\n%s", content)
 	}
 
-	_, err = RemoveModule(projectDir, "mfa")
+	_, err = RemoveModule(projectDir, "copytest")
 	if err == nil || !strings.Contains(err.Error(), "is not registered as a framework module") {
 		t.Fatalf("second RemoveModule() error = %v, want not registered", err)
 	}

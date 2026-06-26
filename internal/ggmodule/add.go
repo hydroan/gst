@@ -64,8 +64,8 @@ func AddModule(projectDir string, name string) (ChangeResult, error) {
 }
 
 // checkNoLocalSource prevents mixing the two ownership modes for the same
-// module. If model/mfa or service/mfa already exists locally, registering the
-// framework's mfa module would create two competing implementations with the
+// module. If model/copytest or service/copytest already exists locally, registering the
+// framework's copytest module would create two competing implementations with the
 // same conceptual name.
 func checkNoLocalSource(projectDir string, name string) error {
 	for _, dir := range []string{
