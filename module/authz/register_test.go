@@ -128,6 +128,7 @@ func TestAuthz(t *testing.T) {
 	// in signup only covers the authentication flow, so the tests keep a dedicated
 	// root session for listing and mutating authz resources.
 	var adminSessionID string
+	var userSessionID string
 	t.Run("login", func(t *testing.T) {
 		cli, err := client.New(loginAPI)
 		require.NoError(t, err)
@@ -146,6 +147,7 @@ func TestAuthz(t *testing.T) {
 			)
 
 			require.NotEmpty(t, rsp.SessionID)
+			userSessionID = rsp.SessionID
 		})
 	})
 	t.Run("login_root", func(t *testing.T) {
@@ -325,7 +327,8 @@ func TestAuthz(t *testing.T) {
 				partialMenuID = rsp.ID
 			})
 
-			cliRole, err := client.New(roleAPI, client.WithCookie(&http.Cookie{
+			var cliRole *client.Client
+			cliRole, err = client.New(roleAPI, client.WithCookie(&http.Cookie{
 				Name:  "session_id",
 				Value: adminSessionID,
 			}))
@@ -358,6 +361,76 @@ func TestAuthz(t *testing.T) {
 			resp, err = cliRole.Delete(partialRoleID)
 			require.NoError(t, err)
 			require.NotNil(t, resp)
+		})
+
+		t.Run("invalid_user_role_does_not_fallback_to_default_role", func(t *testing.T) {
+			resp, err = cli.Create(&authz.Menu{
+				ParentID: "root",
+				Label:    "Default Fallback Menu",
+				Path:     "/default-fallback-menu",
+			})
+			require.NoError(t, err)
+			var defaultMenuID string
+			helper.TestResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
+				t.Helper()
+				require.NotEmpty(t, rsp.ID)
+				defaultMenuID = rsp.ID
+			})
+
+			var cliRole *client.Client
+			cliRole, err = client.New(roleAPI, client.WithCookie(&http.Cookie{
+				Name:  "session_id",
+				Value: adminSessionID,
+			}))
+			require.NoError(t, err)
+			defaultRole := true
+			resp, err = cliRole.Create(&authz.Role{
+				Name:    "Default Fallback Role",
+				Code:    "default_fallback_role",
+				Default: &defaultRole,
+				MenuIDs: []string{defaultMenuID},
+			})
+			require.NoError(t, err)
+			var defaultRoleID string
+			helper.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
+				t.Helper()
+				require.NotEmpty(t, rsp.ID)
+				defaultRoleID = rsp.ID
+			})
+
+			missingRoleID := "missing_default_fallback_role"
+			invalidUserRole := &authz.UserRole{
+				UserID: userID,
+				RoleID: missingRoleID,
+				Base:   model.Base{ID: "invalid_default_fallback_user_role"},
+			}
+			require.NoError(t, database.Database[*authz.UserRole](context.Background()).WithoutHook().Create(invalidUserRole))
+			_, err = rbac.Enforcer.AddRoleForUser(userID, missingRoleID)
+			require.NoError(t, err)
+			_, err = rbac.Enforcer.AddPermissionForUser(missingRoleID, "/api/menus", http.MethodGet, "allow")
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				_ = database.Database[*authz.UserRole](context.Background()).WithoutHook().WithPurge().Delete(invalidUserRole)
+				_, _ = rbac.Enforcer.DeleteRoleForUser(userID, missingRoleID)
+				_, _ = rbac.Enforcer.DeletePermissionForUser(missingRoleID, "/api/menus", http.MethodGet, "allow")
+				_, _ = cliRole.Delete(defaultRoleID)
+				_, _ = cli.Delete(defaultMenuID)
+			})
+
+			var userMenuCli *client.Client
+			userMenuCli, err = client.New(menuAPI, client.WithCookie(&http.Cookie{
+				Name:  "session_id",
+				Value: userSessionID,
+			}))
+			require.NoError(t, err)
+			items := make([]*authz.Menu, 0)
+			total := new(int64)
+			resp, err = userMenuCli.List(&items, total)
+			require.NoError(t, err)
+			helper.TestResp[ListResponse[*authz.Menu]](t, resp, func(t *testing.T, rsp ListResponse[*authz.Menu]) {
+				t.Helper()
+				requireNoMenu(t, rsp.Items, defaultMenuID)
+			})
 		})
 	})
 
@@ -677,6 +750,13 @@ func requireNoRoute(t *testing.T, routes []authz.Route, path string) {
 	t.Helper()
 	for _, route := range routes {
 		require.NotEqual(t, path, route.Path)
+	}
+}
+
+func requireNoMenu(t *testing.T, menus []*authz.Menu, menuID string) {
+	t.Helper()
+	for _, menu := range menus {
+		require.NotEqual(t, menuID, menu.ID)
 	}
 }
 

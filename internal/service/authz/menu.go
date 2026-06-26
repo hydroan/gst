@@ -26,7 +26,7 @@ func (m *MenuService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.M
 // The flow deliberately mirrors the RBAC data model:
 //   - root is a built-in user ID and bypasses menu filtering completely.
 //   - UserRole maps the current user ID to role IDs.
-//   - when the user has no roles, default roles provide the fallback menu set.
+//   - when the user has no UserRole records, default roles provide the fallback menu set.
 //   - Role.MenuIDs grants fully selected menus; Role.MenuPartialIDs keeps parent
 //     menu nodes visible when only part of their children are selected.
 //   - Menu.DomainPattern still constrains visibility by the current request host.
@@ -55,13 +55,23 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 				roleIDs = append(roleIDs, ur.RoleID)
 			}
 		}
+		if len(roleIDs) == 0 {
+			log.Warn("user has user-role records but no valid role ids")
+			*data = make([]*modelauthz.Menu, 0)
+			return nil
+		}
 		if err := database.Database[*modelauthz.Role](ctx).
 			WithQuery(&modelauthz.Role{Base: model.Base{ID: strings.Join(roleIDs, ",")}}).List(&roles); err != nil {
 			log.Error(err)
 			return err
 		}
+		if len(roles) == 0 {
+			log.Warn("user has user-role records but no matching roles")
+			*data = make([]*modelauthz.Menu, 0)
+			return nil
+		}
 	}
-	if len(roles) == 0 {
+	if len(userRoles) == 0 {
 		if err := database.Database[*modelauthz.Role](ctx).
 			WithQuery(&modelauthz.Role{Default: new(true)}).
 			List(&roles); err != nil {
