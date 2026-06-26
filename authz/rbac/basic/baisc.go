@@ -22,7 +22,7 @@ var defaultAdminRole = consts.AUTHZ_ROLE_ADMIN
 // addGroupingPolicy adds a user-role relationship while skipping self-referential entries.
 // Casbin treats identical subject and role names as a link, but gst keeps users and
 // roles distinct so role names cannot grant permissions to same-named subjects.
-func addGroupingPolicy(enforcer *casbin.Enforcer, subject string, role string) error {
+func addGroupingPolicy(enforcer *casbin.SyncedEnforcer, subject string, role string) error {
 	if subject == role {
 		return nil
 	}
@@ -80,7 +80,7 @@ func Init() (err error) {
 	if err != nil {
 		return errors.Wrap(err, "failed to create casbin model")
 	}
-	if rbac.Enforcer, err = casbin.NewEnforcer(model, rbac.Adapter); err != nil {
+	if rbac.Enforcer, err = casbin.NewSyncedEnforcer(model, rbac.Adapter); err != nil {
 		return errors.Wrap(err, "failed to create casbin enforcer")
 	}
 

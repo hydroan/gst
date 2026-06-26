@@ -8,12 +8,12 @@ import (
 )
 
 var (
-	Enforcer *casbin.Enforcer
+	Enforcer *casbin.SyncedEnforcer
 	Adapter  *gormadapter.Adapter
 )
 
 type rbac struct {
-	enforcer *casbin.Enforcer
+	enforcer *casbin.SyncedEnforcer
 	addapter *gormadapter.Adapter
 }
 
