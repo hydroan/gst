@@ -1,14 +1,17 @@
 # 模块开发指南
 
-本文档记录内置模块开发约定，尤其是会通过 `gg module copy <name>` 复制到业务项目中的模块。目标读者包括维护者和 agents；阅读时优先按本文顺序检查，不要只看某一个文件。
+本文档记录内置模块开发约定，尤其是会通过 `gg module copy <name>` 复制到业务项目中的模块。
+
+`module/<name>` 表示一套可复用的通用业务能力，不是单个 model、service 或 middleware 文件的简单集合。一个模块可以由 model、service、middleware、cronjob、provider/adapter、复制清单和接入说明共同组成；这些内容作为整体实现同一个业务域的对外契约。
+
+
 
 ## 核心规则
 
-- 同一个模块通过 `gg module add <name>` 使用，和通过 `gg module copy <name>` 后再 `gg gen` 使用，必须得到相同的路由、鉴权和 service 行为。
-- 可复制模块的 `internal/service/<name>` 不应依赖业务项目的具体领域模型或基础设施实现。需要访问宿主项目能力时，定义最小 provider/adapter 接口，并只返回模块真正需要的稳定数据。
-- 具体 adapter 应放在模块注册、初始化或项目接入层，不要放进 `internal/service/<name>` 的业务逻辑文件；文档只描述职责边界，不规定文件命名。
-- adapter 接口必须对外返回模块定义的稳定错误，不泄露宿主实现的内部判断细节，避免模块接口变成探测宿主状态的通道。
-- 修改模块时必须同时检查 model、service、module 注册、复制清单、测试和文档，避免 add 路径正常但 copy 路径缺文件、缺 adapter、缺 middleware。
+- 同一个模块通过 `gg module add <name>` 使用，和通过 `gg module copy <name>` 后再 `gg gen` 使用，必须得到相同的数据库表、路由、中间件、和 service 行为。
+- 修改模块时必须同时检查 model、service、middleware、路由、module 注册、复制清单、测试和文档，避免 add 路径正常但 copy 路径缺文件、缺 adapter、缺 middleware。
+
+
 
 ## Design 契约
 
@@ -27,6 +30,25 @@
 - request/response 契约必须一致。自定义请求、响应类型要通过 `Payload[T]()`、`Result[T]()` 写进 `Design()`，避免 copy 后生成默认模型签名。
 - service 文件目标必须一致。存在自定义 service 代码的 action 必须写 `Service(true)`；如果多个 action 共用一个 service 文件，所有相关 action 都要写相同的 `Filename(...)`。
 - middleware 注册必须一致。内置 module 如果调用 `middleware.Register(...)` 或 `middleware.RegisterAuth(...)`，对应 middleware 源文件、作用域和 handler 必须写进 copy manifest，避免 `gg module copy` 后少挂全局或鉴权中间件。
+
+
+
+## Service 文件边界
+
+**公用辅助代码不要放进具体 action service 文件**
+
+开发可复制模块时，多个 service action 共享的函数、类型、常量不要放在某一个具体 action 的 service 文件里，这类代码应放到独立 helper 文件中。
+
+原因是 `gg module copy` 会根据 action service 文件的依赖关系复制 helper 文件。如果一个未被当前 DSL `Service(true)` 声明的 action service 文件里放了公用函数，它可能会被当成 helper 复制到业务项目；随后 `gg gen --prune` 又会因为当前模型没有对应 service target，把这个文件识别成应清理的 service 文件。
+
+简单规则：
+
+- action service 文件只放该 action 自身的 service struct、action 方法、hook 方法和强绑定该 action 的私有逻辑。
+- 多个 action 共享的逻辑必须放到非 action service 文件中。
+- provider/adapter 接口可以放在 service helper 文件中，但具体宿主 adapter 不要放在 `internal/service/<name>`。
+- 复制模块前要确认 `gg module copy <name>` 产出的辅助文件列表不包含未被 DSL action 声明的 action service 文件。
+
+
 
 ## Provider 和 Adapter 边界
 
@@ -47,6 +69,8 @@
 - service 层必须提供安全默认实现。没有安装 adapter 时应返回明确配置错误，不应 panic，也不应悄悄放行安全流程。
 - adapter 负责调用宿主项目能力并做错误归一；service 负责模块自身状态和业务规则。
 - 如果 copy 后项目必须实现 adapter，需要在 `module.json` 的 `postNotes` 中写清楚接入入口和必要步骤，不规定具体文件名。
+
+
 
 ## 复制清单
 
@@ -78,17 +102,3 @@
 - `middleware[].handler` 是 `sourceFile` 中返回 gin handler 的零参函数名，例如 `Authz`。
 - `postNotes` 只在复制成功后输出，用于提示项目侧必须补齐的 adapter、配置或初始化步骤。
 
-## Service 文件边界
-
-### 公用辅助代码不要放进具体 action service 文件
-
-开发可复制模块时，多个 service action 共享的函数、类型、常量不要放在某一个具体 action 的 service 文件里，这类代码应放到独立 helper 文件中。
-
-原因是 `gg module copy` 会根据 action service 文件的依赖关系复制 helper 文件。如果一个未被当前 DSL `Service(true)` 声明的 action service 文件里放了公用函数，它可能会被当成 helper 复制到业务项目；随后 `gg gen --prune` 又会因为当前模型没有对应 service target，把这个文件识别成应清理的 service 文件。
-
-简单规则：
-
-- action service 文件只放该 action 自身的 service struct、action 方法、hook 方法和强绑定该 action 的私有逻辑。
-- 多个 action 共享的逻辑必须放到非 action service 文件中。
-- provider/adapter 接口可以放在 service helper 文件中，但具体宿主 adapter 不要放在 `internal/service/<name>`。
-- 复制模块前要确认 `gg module copy <name>` 产出的辅助文件列表不包含未被 DSL action 声明的 action service 文件。
