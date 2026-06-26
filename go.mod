@@ -57,6 +57,7 @@ require (
 	github.com/h2non/filetype v1.1.3
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/influxdata/influxdb-client-go/v2 v2.14.0
+	github.com/jedib0t/go-pretty/v6 v6.8.1
 	github.com/jinzhu/copier v0.4.0
 	github.com/json-iterator/go v1.1.12
 	github.com/karlseguin/ccache/v3 v3.0.8

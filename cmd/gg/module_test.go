@@ -28,10 +28,14 @@ func TestRunModuleListReportsCopyableModules(t *testing.T) {
 
 	got := output.String()
 	for _, want := range []string{
+		"Framework Modules",
+		"┌",
+		"│",
+		"└",
 		"NAME",
 		"PACKAGE",
-		"ADDABLE",
-		"COPYABLE",
+		"ADD",
+		"COPY",
 		"IMPORT",
 		"copytest",
 		"yes",
@@ -42,10 +46,13 @@ func TestRunModuleListReportsCopyableModules(t *testing.T) {
 			t.Fatalf("module list output missing %q:\n%s", want, got)
 		}
 	}
-	if !strings.Contains(got, "copytest") || !strings.Contains(got, "copytest  yes      yes") {
+	if strings.Contains(got, "ADDABLE") || strings.Contains(got, "COPYABLE") {
+		t.Fatalf("module list output should use short ADD/COPY columns:\n%s", got)
+	}
+	if !strings.Contains(got, "copytest") || !strings.Contains(got, "github.com/hydroan/gst/module/copytest") {
 		t.Fatalf("module list output should mark copytest copyable:\n%s", got)
 	}
-	if !strings.Contains(got, "plain") || !strings.Contains(got, "plain     yes      no") {
+	if !strings.Contains(got, "plain") || !strings.Contains(got, "github.com/hydroan/gst/module/plain") {
 		t.Fatalf("module list output should mark plain non-copyable:\n%s", got)
 	}
 }

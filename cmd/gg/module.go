@@ -6,10 +6,10 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/ggmodule"
+	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 )
 
@@ -74,12 +74,13 @@ func runModuleList(cmd *cobra.Command) error {
 		return err
 	}
 
-	// Use Cobra's command writer for list output so tests and shell completion
-	// wrappers can capture the table without intercepting process stdout.
-	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-	if _, err := fmt.Fprintln(w, "NAME\tPACKAGE\tADDABLE\tCOPYABLE\tIMPORT"); err != nil {
-		return err
+	w := cmd.OutOrStdout()
+	if _, writeErr := fmt.Fprintf(w, "\n%s %s\n\n", clioutput.Text(clioutput.StyleInfo, "%s", clioutput.SymbolSection), clioutput.Text(clioutput.StyleBold, "Framework Modules")); writeErr != nil {
+		return writeErr
 	}
+	tableWriter := table.NewWriter()
+	tableWriter.SetStyle(table.StyleLight)
+	tableWriter.AppendHeader(table.Row{"NAME", "PACKAGE", "ADD", "COPY", "IMPORT"})
 	for _, module := range modules {
 		addable := "yes"
 		if !module.Addable {
@@ -89,11 +90,10 @@ func runModuleList(cmd *cobra.Command) error {
 		if !module.Copyable {
 			copyable = "no"
 		}
-		if _, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", module.Name, module.PackageName, addable, copyable, module.ImportPath); err != nil {
-			return err
-		}
+		tableWriter.AppendRow(table.Row{module.Name, module.PackageName, addable, copyable, module.ImportPath})
 	}
-	return w.Flush()
+	_, err = fmt.Fprintln(w, tableWriter.Render())
+	return err
 }
 
 func runModuleAdd(name string) error {

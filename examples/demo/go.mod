@@ -6,6 +6,7 @@ require (
 	github.com/cockroachdb/errors v1.13.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/hydroan/gst v0.0.0-00010101000000-000000000000
+	go.uber.org/zap v1.28.0
 )
 
 require (
@@ -218,7 +219,6 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.28.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/arch v0.22.0 // indirect
