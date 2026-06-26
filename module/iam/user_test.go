@@ -9,10 +9,10 @@ import (
 
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/helper"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
+	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/types"
@@ -63,7 +63,7 @@ func TestUserList(t *testing.T) {
 		resp, err := cli.List(&items, total)
 		require.NoError(t, err)
 
-		helper.TestResp(t, resp, func(t *testing.T, rsp ListResponse[*iam.User]) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[*iam.User]) {
 			t.Helper()
 			actorItem := userFindByUsername(rsp.Items, actor.Username)
 			require.NotNil(t, actorItem)
@@ -118,7 +118,7 @@ func TestUserCreate(t *testing.T) {
 			userCleanupUser(t, targetUsername)
 		})
 
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.User) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.User) {
 			t.Helper()
 			require.NotEmpty(t, rsp.ID)
 			require.Equal(t, targetUsername, rsp.Username)
@@ -188,7 +188,7 @@ func TestUserCreateMany(t *testing.T) {
 			userCleanupUser(t, username2)
 		})
 
-		helper.TestResp(t, resp, func(t *testing.T, rsp userBatchRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp userBatchRsp) {
 			t.Helper()
 			require.Len(t, rsp.Items, 2)
 			require.Equal(t, 2, rsp.Summary.Total)
@@ -293,7 +293,7 @@ func TestUserPatch(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, resp)
 		require.Equal(t, testSuccessCode, resp.Code)
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.User) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.User) {
 			t.Helper()
 			require.Equal(t, victim.UserID, rsp.ID)
 			require.Empty(t, rsp.Password)
@@ -590,7 +590,7 @@ func userSignupUser(t *testing.T, prefix, password string) userTestAccount {
 	})
 	require.NoError(t, err)
 
-	helper.TestResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
+	testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
 		t.Helper()
 		require.Equal(t, user.Username, rsp.Username)
 		require.NotEmpty(t, rsp.UserID)

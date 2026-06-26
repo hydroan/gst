@@ -3,23 +3,18 @@ package mfa_test
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"net"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/helper"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
+	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/module/mfa"
@@ -32,16 +27,16 @@ import (
 
 var (
 	token = "-"
-	port  = 8000
+	port  = testutil.SetupRandomServerPort()
 
-	signupAPI  = fmt.Sprintf("http://localhost:%d/api/signup", port)
-	loginAPI   = fmt.Sprintf("http://localhost:%d/api/login", port)
-	verifyAPI  = fmt.Sprintf("http://localhost:%d/api/mfa/totp/verify", port)
-	checkAPI   = fmt.Sprintf("http://localhost:%d/api/mfa/totp/check", port)
-	bindAPI    = fmt.Sprintf("http://localhost:%d/api/mfa/totp/bind", port)
-	confirmAPI = fmt.Sprintf("http://localhost:%d/api/mfa/totp/confirm", port)
-	unbindAPI  = fmt.Sprintf("http://localhost:%d/api/mfa/totp/unbind", port)
-	statusAPI  = fmt.Sprintf("http://localhost:%d/api/mfa/totp/status", port)
+	signupAPI  = testutil.URL(port, "/api/signup")
+	loginAPI   = testutil.URL(port, "/api/login")
+	verifyAPI  = testutil.URL(port, "/api/mfa/totp/verify")
+	checkAPI   = testutil.URL(port, "/api/mfa/totp/check")
+	bindAPI    = testutil.URL(port, "/api/mfa/totp/bind")
+	confirmAPI = testutil.URL(port, "/api/mfa/totp/confirm")
+	unbindAPI  = testutil.URL(port, "/api/mfa/totp/unbind")
+	statusAPI  = testutil.URL(port, "/api/mfa/totp/status")
 )
 
 type ListResponse[T any] struct {
@@ -52,8 +47,8 @@ type ListResponse[T any] struct {
 func init() {
 	os.Setenv(config.DATABASE_TYPE, string(config.DBSqlite))
 	os.Setenv(config.SQLITE_IS_MEMORY, "true")
-	os.Setenv(config.SERVER_PORT, strconv.Itoa(port))
 	os.Setenv(config.REDIS_ENABLE, "true")
+	testutil.SetupRandomRedisNamespace()
 	os.Setenv(config.LOGGER_DIR, "./logs")
 	os.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)
 	// Enable audit and sync write before Bootstrap so operationlog test can list logs immediately.
@@ -73,19 +68,7 @@ func init() {
 		}
 	}()
 
-	for {
-		l, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-		if err == nil {
-			l.Close()
-			time.Sleep(1 * time.Second)
-			continue
-		}
-		if errors.Is(err, syscall.EADDRINUSE) {
-			break
-		}
-		panic(err)
-
-	}
+	testutil.MustWaitForServer(port)
 }
 
 func TestTOTP(t *testing.T) {
@@ -110,7 +93,7 @@ func TestTOTP(t *testing.T) {
 			RePassword: password,
 		})
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
 			t.Helper(
 			// #modeliam.SignupRsp {
 			//   +UserID   => "019cbc8e-0659-7989-b112-12e889ef4f21" #string
@@ -142,7 +125,7 @@ func TestTOTP(t *testing.T) {
 
 		resp, err := cli.Request(http.MethodGet, nil)
 		require.NoError(t, err)
-		helper.TestResp[*mfa.TOTPStatusRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPStatusRsp) {
+		testutil.TestResp[*mfa.TOTPStatusRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPStatusRsp) {
 			t.Helper(
 			// #*modelmfa.TOTPStatusRsp {
 			//   +Enabled     => false #bool
@@ -173,7 +156,7 @@ func TestTOTP(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		helper.TestResp[*mfa.TOTPCheckRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPCheckRsp) {
+		testutil.TestResp[*mfa.TOTPCheckRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPCheckRsp) {
 			t.Helper(
 			// *modelmfa.TOTPStatusRsp {
 			//   +Enabled     => true #bool
@@ -204,7 +187,7 @@ func TestTOTP(t *testing.T) {
 
 		resp, err := cli.Create(nil)
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPBindRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPBindRsp) {
 			t.Helper()
 			require.NotNil(t, rsp)
 			require.NotEmpty(t, rsp.ChallengeID)
@@ -266,7 +249,7 @@ func TestTOTP(t *testing.T) {
 				DeviceName:  "test-device",
 			})
 			require.NoError(t, err)
-			helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPConfirmRsp) {
+			testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPConfirmRsp) {
 				t.Helper(
 				// #*modelmfa.TOTPConfirmRsp {
 				//   +DeviceID    => "019cbc8d-857e-7e29-b2dc-ff983097a2e9" #string
@@ -320,7 +303,7 @@ func TestTOTP(t *testing.T) {
 
 		resp, err := cli.Request(http.MethodGet, nil)
 		require.NoError(t, err)
-		helper.TestResp[*mfa.TOTPStatusRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPStatusRsp) {
+		testutil.TestResp[*mfa.TOTPStatusRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPStatusRsp) {
 			t.Helper(
 			// #*modelmfa.TOTPStatusRsp {
 			//   +Enabled     => true #bool
@@ -362,7 +345,7 @@ func TestTOTP(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		helper.TestResp[*mfa.TOTPCheckRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPCheckRsp) {
+		testutil.TestResp[*mfa.TOTPCheckRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPCheckRsp) {
 			t.Helper(
 			// #*modelmfa.TOTPCheckRsp {
 			//   +RequiresMFA => true #bool
@@ -435,7 +418,7 @@ func TestTOTP(t *testing.T) {
 				TOTPCode: code,
 			})
 			require.NoError(t, err)
-			helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPVerifyRsp) {
+			testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPVerifyRsp) {
 				t.Helper(
 				// #*modelmfa.TOTPVerifyRsp {
 				//   +Valid   => true #bool
@@ -460,7 +443,7 @@ func TestTOTP(t *testing.T) {
 				TOTPCode: "000000",
 			})
 			require.NoError(t, err)
-			helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPVerifyRsp) {
+			testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPVerifyRsp) {
 				t.Helper(
 				// #*modelmfa.TOTPVerifyRsp {
 				//   +Valid   => false #bool
@@ -525,7 +508,7 @@ func TestTOTP(t *testing.T) {
 				DeviceID: deviceID,
 			})
 			require.NoError(t, err)
-			helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
+			testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
 				t.Helper()
 
 				require.False(t, rsp.Success)
@@ -553,7 +536,7 @@ func TestTOTP(t *testing.T) {
 				BackupCode: backupCodes[2],
 			})
 			require.NoError(t, err)
-			helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
+			testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
 				t.Helper()
 
 				require.False(t, rsp.Success)
@@ -578,7 +561,7 @@ func TestTOTP(t *testing.T) {
 				TOTPCode: "000000",
 			})
 			require.NoError(t, err)
-			helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
+			testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
 				t.Helper(
 				// #*modelmfa.TOTPUnbindRsp {
 				//   +Success     => false #bool
@@ -609,7 +592,7 @@ func TestTOTP(t *testing.T) {
 				Password: password,
 			})
 			require.NoError(t, err)
-			helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
+			testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
 				t.Helper()
 
 				require.True(t, rsp.Success)
@@ -635,7 +618,7 @@ func TestTOTP(t *testing.T) {
 				TOTPCode: code,
 			})
 			require.NoError(t, err)
-			helper.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
+			testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
 				t.Helper(
 				// #*modelmfa.TOTPUnbindRsp {
 				//   +Success     => true #bool
@@ -662,7 +645,7 @@ func TestTOTP(t *testing.T) {
 
 		resp, err := cli.Request(http.MethodGet, nil)
 		require.NoError(t, err)
-		helper.TestResp[*mfa.TOTPStatusRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPStatusRsp) {
+		testutil.TestResp[*mfa.TOTPStatusRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPStatusRsp) {
 			t.Helper(
 			// #*modelmfa.TOTPStatusRsp {
 			//   +Enabled     => false #bool
@@ -690,7 +673,7 @@ func loginSessionIDFromCookie(t *testing.T, reqPayload iam.LoginReq) string {
 	apiResp, err := cli.Create(reqPayload)
 	require.NoError(t, err)
 
-	helper.TestResp(t, apiResp, func(t *testing.T, rsp *model.Empty) {
+	testutil.TestResp(t, apiResp, func(t *testing.T, rsp *model.Empty) {
 		t.Helper()
 	})
 
@@ -762,7 +745,7 @@ func bindTOTPDeviceForTest(t *testing.T, sessionID, deviceName string) (string, 
 
 	var challengeID string
 	var secret string
-	helper.TestResp(t, bindResp, func(t *testing.T, rsp *mfa.TOTPBindRsp) {
+	testutil.TestResp(t, bindResp, func(t *testing.T, rsp *mfa.TOTPBindRsp) {
 		t.Helper()
 
 		require.NotEmpty(t, rsp.ChallengeID)
@@ -789,7 +772,7 @@ func bindTOTPDeviceForTest(t *testing.T, sessionID, deviceName string) (string, 
 
 	var deviceID string
 	var backupCodes []string
-	helper.TestResp(t, confirmResp, func(t *testing.T, rsp *mfa.TOTPConfirmRsp) {
+	testutil.TestResp(t, confirmResp, func(t *testing.T, rsp *mfa.TOTPConfirmRsp) {
 		t.Helper()
 
 		require.NotEmpty(t, rsp.DeviceID)

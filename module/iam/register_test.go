@@ -1,32 +1,27 @@
 package iam_test
 
 import (
-	"fmt"
-	"net"
 	"os"
-	"strconv"
-	"syscall"
-	"time"
 
-	"github.com/cockroachdb/errors"
 	"github.com/goforj/godump"
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/module/iam"
 )
 
 var (
 	token = "-"
-	port  = 8000
+	port  = testutil.SetupRandomServerPort()
 
-	signupAPI         = fmt.Sprintf("http://localhost:%d/api/signup", port)
-	loginAPI          = fmt.Sprintf("http://localhost:%d/api/login", port)
-	logoutAPI         = fmt.Sprintf("http://localhost:%d/api/logout", port)
-	changepasswordAPI = fmt.Sprintf("http://localhost:%d/api/iam/change-password", port)
-	resetpasswordAPI  = fmt.Sprintf("http://localhost:%d/api/iam/reset-password", port)
-	accountstatusAPI  = fmt.Sprintf("http://localhost:%d/api/iam/account-status", port)
-	userAPI           = fmt.Sprintf("http://localhost:%d/api/iam/users", port)
-	currentAPI        = fmt.Sprintf("http://localhost:%d/api/iam/session/current", port)
+	signupAPI         = testutil.URL(port, "/api/signup")
+	loginAPI          = testutil.URL(port, "/api/login")
+	logoutAPI         = testutil.URL(port, "/api/logout")
+	changepasswordAPI = testutil.URL(port, "/api/iam/change-password")
+	resetpasswordAPI  = testutil.URL(port, "/api/iam/reset-password")
+	accountstatusAPI  = testutil.URL(port, "/api/iam/account-status")
+	userAPI           = testutil.URL(port, "/api/iam/users")
+	currentAPI        = testutil.URL(port, "/api/iam/session/current")
 )
 
 type ListResponse[T any] struct {
@@ -39,8 +34,8 @@ func init() {
 	godump.Dump()
 	os.Setenv(config.DATABASE_TYPE, string(config.DBSqlite))
 	os.Setenv(config.SQLITE_IS_MEMORY, "true")
-	os.Setenv(config.SERVER_PORT, strconv.Itoa(port))
 	os.Setenv(config.REDIS_ENABLE, "true")
+	testutil.SetupRandomRedisNamespace()
 	os.Setenv(config.LOGGER_DIR, "./logs")
 	os.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)
 
@@ -55,17 +50,5 @@ func init() {
 		}
 	}()
 
-	for {
-		l, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-		if err == nil {
-			l.Close()
-			time.Sleep(1 * time.Second)
-			continue
-		}
-		if errors.Is(err, syscall.EADDRINUSE) {
-			break
-		}
-		panic(err)
-
-	}
+	testutil.MustWaitForServer(port)
 }

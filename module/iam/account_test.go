@@ -9,10 +9,10 @@ import (
 
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/helper"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
+	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/types"
@@ -44,7 +44,7 @@ func accountSignupUser(t *testing.T, prefix, password string) accountTestUser {
 	})
 	require.NoError(t, err)
 
-	helper.TestResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
+	testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
 		t.Helper()
 		require.Equal(t, user.Username, rsp.Username)
 		require.NotEmpty(t, rsp.UserID)
@@ -161,7 +161,7 @@ func TestAccountLogout(t *testing.T) {
 		resp, err := cli.Create(nil)
 		require.NoError(t, err)
 
-		helper.TestResp[*iam.LogoutRsp](t, resp, func(t *testing.T, rsp *iam.LogoutRsp) {
+		testutil.TestResp[*iam.LogoutRsp](t, resp, func(t *testing.T, rsp *iam.LogoutRsp) {
 			t.Helper()
 			require.NotEmpty(t, rsp.Msg)
 		})
@@ -207,7 +207,7 @@ func TestAccountChangePassword(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		helper.TestResp(t, resp, func(t *testing.T, rsp *iam.ChangePasswordRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp *iam.ChangePasswordRsp) {
 			t.Helper()
 			require.NotEmpty(t, rsp.Msg)
 		})
@@ -281,7 +281,7 @@ func TestAccountResetPassword(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		helper.TestResp(t, resp, func(t *testing.T, rsp *iam.ResetPasswordRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp *iam.ResetPasswordRsp) {
 			t.Helper()
 			require.NotEmpty(t, rsp.Msg)
 		})
@@ -336,7 +336,7 @@ func TestAccountResetPassword(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		helper.TestResp(t, resp, func(t *testing.T, rsp *iam.ChangePasswordRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp *iam.ChangePasswordRsp) {
 			t.Helper()
 			require.NotEmpty(t, rsp.Msg)
 		})
@@ -403,7 +403,7 @@ func TestAccountStatus(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.AccountStatusRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AccountStatusRsp) {
 			t.Helper()
 			require.Contains(t, rsp.Msg, "success")
 		})
@@ -439,7 +439,7 @@ func TestAccountStatus(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.AccountStatusRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AccountStatusRsp) {
 			t.Helper()
 			require.Contains(t, rsp.Msg, "unchanged")
 		})
@@ -472,7 +472,7 @@ func TestAccountStatus(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.AccountStatusRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AccountStatusRsp) {
 			t.Helper()
 			require.Contains(t, rsp.Msg, "success")
 		})
@@ -564,7 +564,7 @@ func TestAccountStatus(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.AccountStatusRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AccountStatusRsp) {
 			t.Helper()
 			require.Contains(t, rsp.Msg, "success")
 		})
@@ -614,7 +614,7 @@ func TestAccountStatus(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.AccountStatusRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AccountStatusRsp) {
 			t.Helper()
 			require.Contains(t, rsp.Msg, "success")
 		})
@@ -633,7 +633,7 @@ func TestAccountStatus(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.AccountStatusRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AccountStatusRsp) {
 			t.Helper()
 			require.Contains(t, rsp.Msg, "unchanged")
 		})

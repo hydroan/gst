@@ -2,22 +2,17 @@ package logmgmt_test
 
 import (
 	"encoding/json"
-	"fmt"
-	"net"
 	"net/http"
 	"os"
-	"strconv"
-	"syscall"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/helper"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
+	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/module/iam"
@@ -28,16 +23,16 @@ import (
 
 var (
 	token        = "-"
-	port         = 8000
+	port         = testutil.SetupRandomServerPort()
 	rootUsername = "root"
 	rootPassword = "12345678"
 
-	signupAPI       = fmt.Sprintf("http://localhost:%d/api/signup", port)
-	loginAPI        = fmt.Sprintf("http://localhost:%d/api/login", port)
-	logoutAPI       = fmt.Sprintf("http://localhost:%d/api/logout", port)
-	loginlogAPI     = fmt.Sprintf("http://localhost:%d/api/log/loginlog", port)
-	operationlogAPI = fmt.Sprintf("http://localhost:%d/api/log/operationlog", port)
-	roleAPI         = fmt.Sprintf("http://localhost:%d/api/authz/roles", port)
+	signupAPI       = testutil.URL(port, "/api/signup")
+	loginAPI        = testutil.URL(port, "/api/login")
+	logoutAPI       = testutil.URL(port, "/api/logout")
+	loginlogAPI     = testutil.URL(port, "/api/log/loginlog")
+	operationlogAPI = testutil.URL(port, "/api/log/operationlog")
+	roleAPI         = testutil.URL(port, "/api/authz/roles")
 )
 
 const (
@@ -53,8 +48,8 @@ type ListResponse[T any] struct {
 func init() {
 	os.Setenv(config.DATABASE_TYPE, string(config.DBSqlite))
 	os.Setenv(config.SQLITE_IS_MEMORY, "true")
-	os.Setenv(config.SERVER_PORT, strconv.Itoa(port))
 	os.Setenv(config.REDIS_ENABLE, "true")
+	testutil.SetupRandomRedisNamespace()
 	os.Setenv(config.LOGGER_DIR, "./logs")
 	os.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)
 	// Enable audit and sync write before Bootstrap so operationlog test can list logs immediately.
@@ -84,19 +79,7 @@ func init() {
 		}
 	}()
 
-	for {
-		l, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-		if err == nil {
-			l.Close()
-			time.Sleep(1 * time.Second)
-			continue
-		}
-		if errors.Is(err, syscall.EADDRINUSE) {
-			break
-		}
-		panic(err)
-
-	}
+	testutil.MustWaitForServer(port)
 }
 
 func TestLogmgmt(t *testing.T) {
@@ -119,7 +102,7 @@ func TestLogmgmt(t *testing.T) {
 				RePassword: password,
 			})
 			require.NoError(t, err)
-			helper.TestResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
+			testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
 				t.Helper(
 				// #modeliam.SignupRsp {
 				//   +UserID   => "019cbcc0-d2dd-7399-a4be-fc4ba2cd6775" #string
@@ -157,7 +140,7 @@ func TestLogmgmt(t *testing.T) {
 			resp, err := cli.List(&items, total)
 			require.NoError(t, err)
 
-			helper.TestResp(t, resp, func(t *testing.T, rsp ListResponse[*logmgmt.LoginLog]) {
+			testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[*logmgmt.LoginLog]) {
 				t.Helper(
 				// #logmgmt_test.ListResponse[*github.com/hydroan/gst/internal/model/logmgmt.LoginLog] {
 				//   +Items => #[]*modellogmgmt.LoginLog [
@@ -199,7 +182,7 @@ func TestLogmgmt(t *testing.T) {
 				resp, err := cli.Create(nil)
 				require.NoError(t, err)
 
-				helper.TestResp(t, resp, func(t *testing.T, rsp *iam.LogoutRsp) {
+				testutil.TestResp(t, resp, func(t *testing.T, rsp *iam.LogoutRsp) {
 					t.Helper(
 					// #*modeliam.LogoutRsp {
 					//   +Msg => "logout successful" #string
@@ -230,7 +213,7 @@ func TestLogmgmt(t *testing.T) {
 			resp, err := cli.List(&items, total)
 			require.NoError(t, err)
 
-			helper.TestResp(t, resp, func(t *testing.T, rsp ListResponse[*logmgmt.LoginLog]) {
+			testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[*logmgmt.LoginLog]) {
 				t.Helper()
 				require.Len(t, rsp.Items, 3)
 				l1, l2, l3 := rsp.Items[0], rsp.Items[1], rsp.Items[2]
@@ -265,7 +248,7 @@ func TestLogmgmt(t *testing.T) {
 			require.NoError(t, err)
 
 			// operation log count is 0
-			helper.TestResp(t, resp, func(t *testing.T, rsp ListResponse[*logmgmt.OperationLog]) {
+			testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[*logmgmt.OperationLog]) {
 				t.Helper()
 				require.Empty(t, rsp.Items)
 			})
@@ -292,7 +275,7 @@ func TestLogmgmt(t *testing.T) {
 			resp, err := cli.Create(createReq)
 			require.NoError(t, err)
 
-			helper.TestResp(t, resp, func(t *testing.T, rsp *authz.Role) {
+			testutil.TestResp(t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper(
 				// #*modelauthz.Role {
 				//   +Name => "Logmgmt Test Role" #string
@@ -325,7 +308,7 @@ func TestLogmgmt(t *testing.T) {
 			require.NoError(t, err)
 
 			// operation log count is 1
-			helper.TestResp(t, resp, func(t *testing.T, rsp ListResponse[*logmgmt.OperationLog]) {
+			testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[*logmgmt.OperationLog]) {
 				t.Helper(
 				// #logmgmt_test.ListResponse[*github.com/hydroan/gst/internal/model/logmgmt.OperationLog] {
 				//   +Items => #[]*modellogmgmt.OperationLog [
@@ -377,7 +360,7 @@ func loginSessionIDFromCookie(t *testing.T, reqPayload iam.LoginReq) string {
 	apiResp, err := cli.Create(reqPayload)
 	require.NoError(t, err)
 
-	helper.TestResp(t, apiResp, func(t *testing.T, rsp *model.Empty) {
+	testutil.TestResp(t, apiResp, func(t *testing.T, rsp *model.Empty) {
 		t.Helper()
 	})
 

@@ -11,9 +11,9 @@ import (
 
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/helper"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/provider/redis"
@@ -23,11 +23,15 @@ import (
 )
 
 var (
-	sessionsAPI      = fmt.Sprintf("http://localhost:%d/api/iam/sessions", port)
-	adminSessionsAPI = fmt.Sprintf("http://localhost:%d/api/iam/admin/sessions", port)
-	heartbeatAPI     = fmt.Sprintf("http://localhost:%d/api/iam/session/heartbeat", port)
-	onlineuserAPI    = fmt.Sprintf("http://localhost:%d/api/online-users", port)
+	sessionsAPI      = testutil.URL(port, "/api/iam/sessions")
+	adminSessionsAPI = testutil.URL(port, "/api/iam/admin/sessions")
+	heartbeatAPI     = testutil.URL(port, "/api/iam/session/heartbeat")
+	onlineuserAPI    = testutil.URL(port, "/api/online-users")
 )
+
+func adminUserSessionsAPI(userID string) string {
+	return testutil.URL(port, fmt.Sprintf("/api/iam/admin/users/%s/sessions", userID))
+}
 
 type sessionTestAccount struct {
 	UserID   string
@@ -56,7 +60,7 @@ func TestSessionHeartbeat(t *testing.T) {
 	resp, err := cli.Create(nil)
 	require.NoError(t, err)
 
-	helper.TestResp[*iam.Heartbeat](t, resp, func(t *testing.T, rsp *iam.Heartbeat) { t.Helper() })
+	testutil.TestResp[*iam.Heartbeat](t, resp, func(t *testing.T, rsp *iam.Heartbeat) { t.Helper() })
 
 	after, err := redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Get(sessionKey)
 	require.NoError(t, err)
@@ -80,7 +84,7 @@ func TestSessionCurrent(t *testing.T) {
 		resp, err := cli.Request(http.MethodGet, new(struct{}))
 		require.NoError(t, err)
 
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.CurrentListRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.CurrentListRsp) {
 			t.Helper()
 			require.NotEmpty(t, rsp.Principal.UserID)
 			require.Equal(t, account.Username, rsp.Principal.Username)
@@ -166,7 +170,7 @@ func TestSessionGet(t *testing.T) {
 		got := new(iam.SessionsGetRsp)
 		resp, err := cli.Get(otherSessionID, got)
 		require.NoError(t, err)
-		helper.TestResp[*iam.SessionsGetRsp](t, resp, func(t *testing.T, rsp *iam.SessionsGetRsp) {
+		testutil.TestResp[*iam.SessionsGetRsp](t, resp, func(t *testing.T, rsp *iam.SessionsGetRsp) {
 			t.Helper()
 			require.Equal(t, otherSessionID, rsp.Session.ID)
 			require.False(t, rsp.Session.IsCurrent)
@@ -186,7 +190,7 @@ func TestSessionGet(t *testing.T) {
 		got := new(iam.SessionsGetRsp)
 		resp, err := cli.Get(currentSessionID, got)
 		require.NoError(t, err)
-		helper.TestResp[*iam.SessionsGetRsp](t, resp, func(t *testing.T, rsp *iam.SessionsGetRsp) {
+		testutil.TestResp[*iam.SessionsGetRsp](t, resp, func(t *testing.T, rsp *iam.SessionsGetRsp) {
 			t.Helper()
 			require.Equal(t, currentSessionID, rsp.Session.ID)
 			require.True(t, rsp.Session.IsCurrent)
@@ -246,7 +250,7 @@ func TestSessionList(t *testing.T) {
 		resp, err := cli.List(&items, total)
 		require.NoError(t, err)
 
-		helper.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 2)
 			require.EqualValues(t, 2, rsp.Total)
@@ -287,7 +291,7 @@ func TestSessionList(t *testing.T) {
 		resp, err := cli.List(&items, total)
 		require.NoError(t, err)
 
-		helper.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 1)
 			require.EqualValues(t, 1, rsp.Total)
@@ -351,7 +355,7 @@ func TestAdminSessionList(t *testing.T) {
 		resp, err := cli.List(&items, total)
 		require.NoError(t, err)
 
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.AdminSessionsListRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AdminSessionsListRsp) {
 			t.Helper()
 			require.GreaterOrEqual(t, rsp.Total, int64(3))
 			require.GreaterOrEqual(t, rsp.SessionTotal, int64(4))
@@ -424,7 +428,7 @@ func TestAdminSessionGet(t *testing.T) {
 
 		resp, err := cli.Get(targetSessionID, new(modeliamsession.AdminSessionsGetRsp))
 		require.NoError(t, err)
-		helper.TestResp[*modeliamsession.AdminSessionsGetRsp](t, resp, func(t *testing.T, rsp *modeliamsession.AdminSessionsGetRsp) {
+		testutil.TestResp[*modeliamsession.AdminSessionsGetRsp](t, resp, func(t *testing.T, rsp *modeliamsession.AdminSessionsGetRsp) {
 			t.Helper()
 			require.Equal(t, targetSessionID, rsp.Session.ID)
 			require.False(t, rsp.Session.IsCurrent)
@@ -490,7 +494,7 @@ func TestAdminSessionDelete(t *testing.T) {
 
 		resp, err := cli.Delete(targetSessionID)
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.AdminSessionsDeleteRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AdminSessionsDeleteRsp) {
 			t.Helper()
 			require.Equal(t, iam.AdminSessionsDeleteRsp{}, rsp)
 		})
@@ -550,7 +554,7 @@ func TestAdminUserSessionsList(t *testing.T) {
 		targetSessionID2 := loginSession(t, targetAccount.Username, targetAccount.Password)
 
 		cli, err := client.New(
-			fmt.Sprintf("http://localhost:%d/api/iam/admin/users/%s/sessions", port, targetAccount.UserID),
+			adminUserSessionsAPI(targetAccount.UserID),
 			client.WithCookie(&http.Cookie{
 				Name:  "session_id",
 				Value: adminSessionID,
@@ -560,7 +564,7 @@ func TestAdminUserSessionsList(t *testing.T) {
 
 		resp, err := cli.Request(http.MethodGet, new(struct{}))
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.AdminUserSessionsListRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AdminUserSessionsListRsp) {
 			t.Helper()
 			require.Equal(t, targetAccount.UserID, rsp.User.UserID)
 			require.Equal(t, targetAccount.Username, rsp.User.Username)
@@ -586,7 +590,7 @@ func TestAdminUserSessionsList(t *testing.T) {
 		_ = loginSession(t, victim.Username, victim.Password)
 
 		cli, err := client.New(
-			fmt.Sprintf("http://localhost:%d/api/iam/admin/users/%s/sessions", port, victim.UserID),
+			adminUserSessionsAPI(victim.UserID),
 			client.WithCookie(&http.Cookie{
 				Name:  "session_id",
 				Value: attackerSessionID,
@@ -605,7 +609,7 @@ func TestAdminUserSessionsList(t *testing.T) {
 		adminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
 
 		cli, err := client.New(
-			fmt.Sprintf("http://localhost:%d/api/iam/admin/users/%s/sessions", port, "missing-user-id"),
+			adminUserSessionsAPI("missing-user-id"),
 			client.WithCookie(&http.Cookie{
 				Name:  "session_id",
 				Value: adminSessionID,
@@ -626,7 +630,7 @@ func TestAdminUserSessionsList(t *testing.T) {
 		targetAccount := newSessionTestAccount(t)
 
 		cli, err := client.New(
-			fmt.Sprintf("http://localhost:%d/api/iam/admin/users/%s/sessions", port, targetAccount.UserID),
+			adminUserSessionsAPI(targetAccount.UserID),
 			client.WithCookie(&http.Cookie{
 				Name:  "session_id",
 				Value: adminSessionID,
@@ -636,7 +640,7 @@ func TestAdminUserSessionsList(t *testing.T) {
 
 		resp, err := cli.Request(http.MethodGet, new(struct{}))
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.AdminUserSessionsListRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AdminUserSessionsListRsp) {
 			t.Helper()
 			require.Equal(t, targetAccount.UserID, rsp.User.UserID)
 			require.Equal(t, targetAccount.Username, rsp.User.Username)
@@ -652,7 +656,7 @@ func TestAdminUserSessionsList(t *testing.T) {
 		otherAdminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
 
 		cli, err := client.New(
-			fmt.Sprintf("http://localhost:%d/api/iam/admin/users/%s/sessions", port, adminAccount.UserID),
+			adminUserSessionsAPI(adminAccount.UserID),
 			client.WithCookie(&http.Cookie{
 				Name:  "session_id",
 				Value: currentAdminSessionID,
@@ -662,7 +666,7 @@ func TestAdminUserSessionsList(t *testing.T) {
 
 		resp, err := cli.Request(http.MethodGet, new(struct{}))
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.AdminUserSessionsListRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AdminUserSessionsListRsp) {
 			t.Helper()
 			require.EqualValues(t, 2, rsp.User.SessionTotal)
 			require.Len(t, rsp.User.Sessions, 2)
@@ -696,7 +700,7 @@ func TestAdminUserSessionsDelete(t *testing.T) {
 		requireAllSessionContains(t, targetSessionID2)
 
 		cli, err := client.New(
-			fmt.Sprintf("http://localhost:%d/api/iam/admin/users/%s/sessions", port, targetAccount.UserID),
+			adminUserSessionsAPI(targetAccount.UserID),
 			client.WithCookie(&http.Cookie{
 				Name:  "session_id",
 				Value: adminSessionID,
@@ -706,7 +710,7 @@ func TestAdminUserSessionsDelete(t *testing.T) {
 
 		resp, err := cli.Request(http.MethodDelete, new(struct{}))
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.AdminUserSessionsDeleteRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AdminUserSessionsDeleteRsp) {
 			t.Helper()
 			require.Equal(t, iam.AdminUserSessionsDeleteRsp{}, rsp)
 		})
@@ -728,7 +732,7 @@ func TestAdminUserSessionsDelete(t *testing.T) {
 		requireUserSessionContains(t, victim.UserID, victimSessionID)
 
 		cli, err := client.New(
-			fmt.Sprintf("http://localhost:%d/api/iam/admin/users/%s/sessions", port, victim.UserID),
+			adminUserSessionsAPI(victim.UserID),
 			client.WithCookie(&http.Cookie{
 				Name:  "session_id",
 				Value: attackerSessionID,
@@ -749,7 +753,7 @@ func TestAdminUserSessionsDelete(t *testing.T) {
 		adminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
 
 		cli, err := client.New(
-			fmt.Sprintf("http://localhost:%d/api/iam/admin/users/%s/sessions", port, "missing-user-id"),
+			adminUserSessionsAPI("missing-user-id"),
 			client.WithCookie(&http.Cookie{
 				Name:  "session_id",
 				Value: adminSessionID,
@@ -770,7 +774,7 @@ func TestAdminUserSessionsDelete(t *testing.T) {
 		targetAccount := newSessionTestAccount(t)
 
 		cli, err := client.New(
-			fmt.Sprintf("http://localhost:%d/api/iam/admin/users/%s/sessions", port, targetAccount.UserID),
+			adminUserSessionsAPI(targetAccount.UserID),
 			client.WithCookie(&http.Cookie{
 				Name:  "session_id",
 				Value: adminSessionID,
@@ -780,7 +784,7 @@ func TestAdminUserSessionsDelete(t *testing.T) {
 
 		resp, err := cli.Request(http.MethodDelete, new(struct{}))
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.AdminUserSessionsDeleteRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AdminUserSessionsDeleteRsp) {
 			t.Helper()
 			require.Equal(t, iam.AdminUserSessionsDeleteRsp{}, rsp)
 		})
@@ -796,7 +800,7 @@ func TestAdminUserSessionsDelete(t *testing.T) {
 		requireUserSessionContains(t, adminAccount.UserID, otherAdminSessionID)
 
 		cli, err := client.New(
-			fmt.Sprintf("http://localhost:%d/api/iam/admin/users/%s/sessions", port, adminAccount.UserID),
+			adminUserSessionsAPI(adminAccount.UserID),
 			client.WithCookie(&http.Cookie{
 				Name:  "session_id",
 				Value: currentAdminSessionID,
@@ -806,7 +810,7 @@ func TestAdminUserSessionsDelete(t *testing.T) {
 
 		resp, err := cli.Request(http.MethodDelete, new(struct{}))
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.AdminUserSessionsDeleteRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AdminUserSessionsDeleteRsp) {
 			t.Helper()
 			require.Equal(t, iam.AdminUserSessionsDeleteRsp{}, rsp)
 		})
@@ -848,7 +852,7 @@ func TestSessionOnlineUsers(t *testing.T) {
 		resp, err := cli.List(&items, total)
 		require.NoError(t, err)
 
-		helper.TestResp(t, resp, func(t *testing.T, rsp ListResponse[*iam.OnlineUser]) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[*iam.OnlineUser]) {
 			t.Helper()
 			require.NotEmpty(t, rsp.Items)
 		})
@@ -874,7 +878,7 @@ func TestSessionDelete(t *testing.T) {
 
 		resp, err := cli.Delete(otherSessionID)
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.SessionsDeleteRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SessionsDeleteRsp) {
 			t.Helper()
 			require.Equal(t, iam.SessionsDeleteRsp{}, rsp)
 		})
@@ -883,7 +887,7 @@ func TestSessionDelete(t *testing.T) {
 		total := new(int64)
 		resp, err = cli.List(&items, total)
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 1)
 			require.EqualValues(t, 1, rsp.Total)
@@ -912,7 +916,7 @@ func TestSessionDelete(t *testing.T) {
 
 		resp, err := cli.Delete(missingSessionID)
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.SessionsDeleteRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SessionsDeleteRsp) {
 			t.Helper()
 			require.Equal(t, iam.SessionsDeleteRsp{}, rsp)
 		})
@@ -921,7 +925,7 @@ func TestSessionDelete(t *testing.T) {
 		total := new(int64)
 		resp, err = cli.List(&items, total)
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 1)
 			require.EqualValues(t, 1, rsp.Total)
@@ -964,7 +968,7 @@ func TestSessionDelete(t *testing.T) {
 
 		resp, err := cli.Delete(sessionID)
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.SessionsDeleteRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SessionsDeleteRsp) {
 			t.Helper()
 			require.Equal(t, iam.SessionsDeleteRsp{}, rsp)
 		})
@@ -1005,7 +1009,7 @@ func TestSessionDeleteOthers(t *testing.T) {
 
 		resp, err := cli.Delete("others")
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.SessionsDeleteRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SessionsDeleteRsp) {
 			t.Helper()
 			require.Equal(t, iam.SessionsDeleteRsp{}, rsp)
 		})
@@ -1014,7 +1018,7 @@ func TestSessionDeleteOthers(t *testing.T) {
 		total := new(int64)
 		resp, err = cli.List(&items, total)
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 1)
 			require.EqualValues(t, 1, rsp.Total)
@@ -1041,7 +1045,7 @@ func TestSessionDeleteOthers(t *testing.T) {
 
 		resp, err := cli.Delete("others")
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.SessionsDeleteRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SessionsDeleteRsp) {
 			t.Helper()
 			require.Equal(t, iam.SessionsDeleteRsp{}, rsp)
 		})
@@ -1050,7 +1054,7 @@ func TestSessionDeleteOthers(t *testing.T) {
 		total := new(int64)
 		resp, err = cli.List(&items, total)
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 1)
 			require.EqualValues(t, 1, rsp.Total)
@@ -1079,7 +1083,7 @@ func TestSessionDeleteAll(t *testing.T) {
 
 		resp, err := cli.Request(http.MethodDelete, new(struct{}))
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.SessionsDeleteAllRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SessionsDeleteAllRsp) {
 			t.Helper()
 			require.Equal(t, iam.SessionsDeleteAllRsp{}, rsp)
 		})
@@ -1113,7 +1117,7 @@ func TestSessionDeleteAll(t *testing.T) {
 
 		resp, err := cli.Request(http.MethodDelete, new(struct{}))
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.SessionsDeleteAllRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SessionsDeleteAllRsp) {
 			t.Helper()
 			require.Equal(t, iam.SessionsDeleteAllRsp{}, rsp)
 		})
@@ -1145,7 +1149,7 @@ func TestSessionCurrentDelete(t *testing.T) {
 
 		resp, err := cli.Request(http.MethodDelete, new(struct{}))
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp iam.CurrentDeleteRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.CurrentDeleteRsp) {
 			t.Helper()
 			require.Equal(t, iam.CurrentDeleteRsp{}, rsp)
 		})
@@ -1238,7 +1242,7 @@ func newSessionTestAccount(t *testing.T) sessionTestAccount {
 		Username: username,
 		Password: password,
 	}
-	helper.TestResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
+	testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
 		t.Helper()
 		require.Equal(t, username, rsp.Username)
 		require.NotEmpty(t, rsp.UserID)
@@ -1295,7 +1299,7 @@ func loginSessionIDFromCookie(t *testing.T, username, password string) string {
 	})
 	require.NoError(t, err)
 
-	helper.TestResp(t, apiResp, func(t *testing.T, rsp *model.Empty) {
+	testutil.TestResp(t, apiResp, func(t *testing.T, rsp *model.Empty) {
 		t.Helper()
 	})
 

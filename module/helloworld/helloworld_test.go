@@ -2,20 +2,15 @@ package helloworld_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"os"
-	"strconv"
-	"syscall"
 	"testing"
-	"time"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/module/helloworld"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,15 +18,14 @@ import (
 
 var (
 	token = "-"
-	port  = 8000
-	addr  = fmt.Sprintf("http://localhost:%d/api/hello-world", port)
-	addr2 = fmt.Sprintf("http://localhost:%d/api/hello-world2", port)
+	port  = testutil.SetupRandomServerPort()
+	addr  = testutil.URL(port, "/api/hello-world")
+	addr2 = testutil.URL(port, "/api/hello-world2")
 )
 
 func init() {
 	os.Setenv(config.DATABASE_TYPE, string(config.DBSqlite))
 	os.Setenv(config.SQLITE_IS_MEMORY, "true")
-	os.Setenv(config.SERVER_PORT, strconv.Itoa(port))
 	os.Setenv(config.LOGGER_DIR, "/tmp/test_module")
 	os.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)
 
@@ -46,19 +40,7 @@ func init() {
 		}
 	}()
 
-	for {
-		l, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-		if err == nil {
-			l.Close()
-			time.Sleep(1 * time.Second)
-			continue
-		}
-		if errors.Is(err, syscall.EADDRINUSE) {
-			break
-		}
-		panic(err)
-
-	}
+	testutil.MustWaitForServer(port)
 }
 
 func TestHelloworldModule(t *testing.T) {
