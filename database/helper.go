@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/types"
@@ -75,7 +76,7 @@ func (db *database[M]) trace(op string, batch ...int) (func(error), context.Cont
 		modelName := reflect.TypeOf(*new(M)).Elem().Name()
 		spanName := "Database." + op + " " + modelName
 		ctx, span = gstotel.StartSpan(ctx, spanName)
-		ctx = types.ContextWithRequestMetadata(ctx, types.RequestMetadataFromContext(db.ctx))
+		ctx = requestctx.WithMetadata(ctx, requestctx.FromContext(db.ctx))
 		db.ctx = ctx
 
 		// Update GORM database context with new span context

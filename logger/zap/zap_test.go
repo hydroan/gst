@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -75,10 +75,10 @@ func TestCleanFlushesBufferedFileSink(t *testing.T) {
 	}
 }
 
-func TestWithContextAddsRequestMetadataFields(t *testing.T) {
+func TestWithContextAddsMetadataFields(t *testing.T) {
 	core, logs := observer.New(zapcore.InfoLevel)
 	log := &Logger{zlog: zap.New(core)}
-	meta := types.NewRequestMetadata(types.RequestMetadataFields{
+	meta := requestctx.New(requestctx.Fields{
 		Route:    "/api/users/:id",
 		Username: "admin",
 		UserID:   "user-1",
@@ -90,7 +90,7 @@ func TestWithContextAddsRequestMetadataFields(t *testing.T) {
 			"tag": {"blue", "green"},
 		},
 	})
-	ctx := types.ContextWithRequestMetadata(context.Background(), meta)
+	ctx := requestctx.WithMetadata(context.Background(), meta)
 
 	log.WithContext(ctx, consts.PHASE_LIST).Infoz("database request")
 
@@ -107,15 +107,15 @@ func TestWithContextAddsRequestMetadataFields(t *testing.T) {
 	require.Equal(t, map[string]any{"tag": "blue,green"}, fields[consts.QUERY])
 }
 
-func TestGormTraceUsesRequestMetadataFromContext(t *testing.T) {
+func TestGormTraceUsesMetadata(t *testing.T) {
 	core, logs := observer.New(zapcore.InfoLevel)
 	log := &Logger{zlog: zap.New(core)}
-	meta := types.NewRequestMetadata(types.RequestMetadataFields{
+	meta := requestctx.New(requestctx.Fields{
 		Username: "admin",
 		UserID:   "user-1",
 		TraceID:  "trace-1",
 	})
-	ctx := types.ContextWithRequestMetadata(context.Background(), meta)
+	ctx := requestctx.WithMetadata(context.Background(), meta)
 
 	oldThreshold := config.App.Database.SlowQueryThreshold
 	config.App.Database.SlowQueryThreshold = time.Hour

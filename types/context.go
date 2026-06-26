@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/sse"
 	"github.com/hydroan/gst/types/consts"
 )
@@ -52,8 +53,7 @@ func NewServiceContext(c *gin.Context, ctx context.Context, phase consts.Phase) 
 			ctx = c.Request.Context()
 		}
 	}
-	meta := RequestMetadataFromGin(c)
-	ctx = ContextWithRequestMetadata(ctx, meta)
+	ctx = requestctx.WithMetadata(ctx, requestctx.FromGin(c))
 
 	serviceCtx := &ServiceContext{
 		baseCtx:        ctx,
@@ -98,22 +98,14 @@ func (sc *ServiceContext) RequiresAuth() bool {
 	return sc.requiresAuth
 }
 
-func (sc *ServiceContext) Params() map[string]string { return RequestMetadataFromContext(sc).Params() }
-
-func (sc *ServiceContext) Query() url.Values { return RequestMetadataFromContext(sc).Query() }
-
-func (sc *ServiceContext) Param(key string) string { return RequestMetadataFromContext(sc).Param(key) }
-
-func (sc *ServiceContext) Route() string { return RequestMetadataFromContext(sc).Route() }
-
-func (sc *ServiceContext) Username() string { return RequestMetadataFromContext(sc).Username() }
-
-func (sc *ServiceContext) UserID() string { return RequestMetadataFromContext(sc).UserID() }
-
-func (sc *ServiceContext) SessionID() string { return RequestMetadataFromContext(sc).SessionID() }
-
-func (sc *ServiceContext) TraceID() string { return RequestMetadataFromContext(sc).TraceID() }
-
+func (sc *ServiceContext) Params() map[string]string { return requestctx.FromContext(sc).Params() }
+func (sc *ServiceContext) Query() url.Values         { return requestctx.FromContext(sc).Query() }
+func (sc *ServiceContext) Param(key string) string   { return requestctx.FromContext(sc).Param(key) }
+func (sc *ServiceContext) Route() string             { return requestctx.FromContext(sc).Route() }
+func (sc *ServiceContext) Username() string          { return requestctx.FromContext(sc).Username() }
+func (sc *ServiceContext) UserID() string            { return requestctx.FromContext(sc).UserID() }
+func (sc *ServiceContext) SessionID() string         { return requestctx.FromContext(sc).SessionID() }
+func (sc *ServiceContext) TraceID() string           { return requestctx.FromContext(sc).TraceID() }
 func (sc *ServiceContext) Method() string {
 	if sc == nil {
 		return ""

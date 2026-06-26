@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
@@ -23,7 +24,7 @@ func (g *GormLogger) Info(_ context.Context, str string, args ...any)  { g.l.Inf
 func (g *GormLogger) Warn(_ context.Context, str string, args ...any)  { g.l.Warnw(str, args) }
 func (g *GormLogger) Error(_ context.Context, str string, args ...any) { g.l.Errorw(str, args) }
 func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
-	meta := types.RequestMetadataFromContext(ctx)
+	meta := requestctx.FromContext(ctx)
 	username := meta.Username()
 	userID := meta.UserID()
 	traceID := meta.TraceID()

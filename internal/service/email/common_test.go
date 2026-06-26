@@ -8,6 +8,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	modelemail "github.com/hydroan/gst/internal/model/email"
+	"github.com/hydroan/gst/internal/requestctx"
 	loggerzap "github.com/hydroan/gst/logger/zap"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
@@ -29,7 +30,7 @@ func newTestCache[T any]() *testCache[T] {
 }
 
 func newEmailServiceContext(userID string) *types.ServiceContext {
-	baseCtx := types.ContextWithRequestMetadata(context.Background(), types.NewRequestMetadata(types.RequestMetadataFields{
+	baseCtx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{
 		UserID: userID,
 	}))
 	return types.NewServiceContext(nil, baseCtx, consts.PHASE_CREATE)

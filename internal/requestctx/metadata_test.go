@@ -1,4 +1,4 @@
-package types
+package requestctx
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRequestMetadataFromGinExtractsRequestFields(t *testing.T) {
+func TestFromGinExtractsRequestFields(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	recorder := httptest.NewRecorder()
@@ -25,7 +25,7 @@ func TestRequestMetadataFromGinExtractsRequestFields(t *testing.T) {
 	ctx.Set(consts.CTX_SESSION_ID, "session-1")
 	ctx.Set(consts.TRACE_ID, "trace-1")
 
-	meta := RequestMetadataFromGin(ctx)
+	meta := FromGin(ctx)
 
 	require.Equal(t, "/api/users/:id", meta.Route())
 	require.Equal(t, "admin", meta.Username())
@@ -36,7 +36,7 @@ func TestRequestMetadataFromGinExtractsRequestFields(t *testing.T) {
 	require.Equal(t, []string{"blue", "green"}, meta.Query()["tag"])
 }
 
-func TestRequestMetadataProtectsParamsAndQuery(t *testing.T) {
+func TestMetadataProtectsParamsAndQuery(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	recorder := httptest.NewRecorder()
@@ -45,7 +45,7 @@ func TestRequestMetadataProtectsParamsAndQuery(t *testing.T) {
 	ctx.Params = gin.Params{{Key: "id", Value: "42"}}
 	ctx.Set(consts.PARAMS, []string{"id"})
 
-	meta := RequestMetadataFromGin(ctx)
+	meta := FromGin(ctx)
 
 	params := meta.Params()
 	params["id"] = "mutated"
@@ -56,8 +56,8 @@ func TestRequestMetadataProtectsParamsAndQuery(t *testing.T) {
 	require.Equal(t, []string{"blue"}, meta.Query()["tag"])
 }
 
-func TestRequestMetadataContextRoundTrip(t *testing.T) {
-	meta := NewRequestMetadata(RequestMetadataFields{
+func TestMetadataContextRoundTrip(t *testing.T) {
+	meta := New(Fields{
 		Route:    "/api/users/:id",
 		Username: "admin",
 		UserID:   "user-1",
@@ -70,8 +70,8 @@ func TestRequestMetadataContextRoundTrip(t *testing.T) {
 		},
 	})
 
-	ctx := ContextWithRequestMetadata(context.Background(), meta)
-	got := RequestMetadataFromContext(ctx)
+	ctx := WithMetadata(context.Background(), meta)
+	got := FromContext(ctx)
 
 	require.Equal(t, "/api/users/:id", got.Route())
 	require.Equal(t, "admin", got.Username())

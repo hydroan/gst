@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/requestctx"
 	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/logger"
@@ -53,7 +54,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		ctrlSpanCtx, span := startControllerSpan[M](c, consts.PHASE_PATCH)
 		defer span.End()
 
-		meta := types.RequestMetadataFromGin(c)
+		meta := requestctx.FromGin(c)
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_PATCH)
 		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_PATCH)
 

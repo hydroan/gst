@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/requestctx"
 	. "github.com/hydroan/gst/internal/response"
 	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/service"
@@ -152,7 +153,7 @@ func requestContext(c *gin.Context) context.Context {
 	if c == nil || c.Request == nil {
 		return context.Background()
 	}
-	return types.ContextWithRequestMetadata(c.Request.Context(), types.RequestMetadataFromGin(c))
+	return requestctx.WithMetadata(c.Request.Context(), requestctx.FromGin(c))
 }
 
 // startControllerSpan starts a span for controller operations
@@ -166,7 +167,7 @@ func startControllerSpan[M types.Model](c *gin.Context, phase consts.Phase) (con
 	spanCtx, span := gstotel.StartSpan(parentCtx, spanName)
 
 	// Update request context with new span context
-	c.Request = c.Request.WithContext(types.ContextWithRequestMetadata(spanCtx, types.RequestMetadataFromGin(c)))
+	c.Request = c.Request.WithContext(requestctx.WithMetadata(spanCtx, requestctx.FromGin(c)))
 
 	if gstotel.IsSpanRecording(span) {
 		// Add controller-specific attributes

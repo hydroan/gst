@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 )
@@ -26,7 +27,7 @@ func TestServiceContextContextMethods(t *testing.T) {
 	ctx.Set(consts.TRACE_ID, "trace-1")
 
 	serviceCtx := NewServiceContext(ctx, nil, "")
-	meta := RequestMetadataFromContext(serviceCtx)
+	meta := requestctx.FromContext(serviceCtx)
 
 	require.Equal(t, "admin", serviceCtx.Username())
 	require.Equal(t, "user-1", serviceCtx.UserID())

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"go.opentelemetry.io/otel/trace"
@@ -94,7 +95,7 @@ func (l *Logger) With(fields ...string) types.Logger {
 	return &Logger{zlog: l.zlog.With(zapFields...)}
 }
 
-func (l *Logger) withRequestMetadata(meta types.RequestMetadata, phase consts.Phase, traceID string) types.Logger {
+func (l *Logger) withMetadata(meta requestctx.Metadata, phase consts.Phase, traceID string) types.Logger {
 	return l.With(
 		consts.PHASE, string(phase),
 		consts.CTX_ROUTE, meta.Route(),
@@ -112,7 +113,7 @@ func (l *Logger) WithContext(ctx context.Context, phase consts.Phase) types.Logg
 		return l.With(consts.PHASE, string(phase))
 	}
 
-	meta := types.RequestMetadataFromContext(ctx)
+	meta := requestctx.FromContext(ctx)
 	traceID := meta.TraceID()
 	if len(traceID) == 0 {
 		spanCtx := trace.SpanFromContext(ctx).SpanContext()
@@ -121,7 +122,7 @@ func (l *Logger) WithContext(ctx context.Context, phase consts.Phase) types.Logg
 		}
 	}
 
-	return l.withRequestMetadata(meta, phase, traceID)
+	return l.withMetadata(meta, phase, traceID)
 }
 
 type paramsObject map[string]string

@@ -1,4 +1,4 @@
-package types
+package requestctx
 
 import (
 	"context"
@@ -9,9 +9,8 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
-// RequestMetadata contains immutable request-scoped fields shared by logging
-// and lower-level infrastructure.
-type RequestMetadata struct {
+// Metadata contains immutable request-scoped fields shared by logging and lower-level infrastructure.
+type Metadata struct {
 	route     string
 	username  string
 	userID    string
@@ -21,9 +20,8 @@ type RequestMetadata struct {
 	query     url.Values
 }
 
-// RequestMetadataFields contains request metadata fields for non-gin callers
-// and tests.
-type RequestMetadataFields struct {
+// Fields contains request metadata fields for non-gin callers and tests.
+type Fields struct {
 	Route     string
 	Username  string
 	UserID    string
@@ -33,9 +31,9 @@ type RequestMetadataFields struct {
 	Query     url.Values
 }
 
-// NewRequestMetadata creates RequestMetadata from explicit fields.
-func NewRequestMetadata(fields RequestMetadataFields) RequestMetadata {
-	return RequestMetadata{
+// New creates Metadata from explicit fields.
+func New(fields Fields) Metadata {
+	return Metadata{
 		route:     fields.Route,
 		username:  fields.Username,
 		userID:    fields.UserID,
@@ -46,10 +44,10 @@ func NewRequestMetadata(fields RequestMetadataFields) RequestMetadata {
 	}
 }
 
-// RequestMetadataFromGin extracts RequestMetadata from gin.Context.
-func RequestMetadataFromGin(c *gin.Context) RequestMetadata {
+// FromGin extracts Metadata from gin.Context.
+func FromGin(c *gin.Context) Metadata {
 	if c == nil {
-		return RequestMetadata{}
+		return Metadata{}
 	}
 
 	params := make(map[string]string)
@@ -62,7 +60,7 @@ func RequestMetadataFromGin(c *gin.Context) RequestMetadata {
 		query = c.Request.URL.Query()
 	}
 
-	return NewRequestMetadata(RequestMetadataFields{
+	return New(Fields{
 		Route:     c.GetString(consts.CTX_ROUTE),
 		Username:  c.GetString(consts.CTX_USERNAME),
 		UserID:    c.GetString(consts.CTX_USER_ID),
@@ -73,31 +71,31 @@ func RequestMetadataFromGin(c *gin.Context) RequestMetadata {
 	})
 }
 
-func (m RequestMetadata) Route() string     { return m.route }
-func (m RequestMetadata) Username() string  { return m.username }
-func (m RequestMetadata) UserID() string    { return m.userID }
-func (m RequestMetadata) SessionID() string { return m.sessionID }
-func (m RequestMetadata) TraceID() string   { return m.traceID }
+func (m Metadata) Route() string     { return m.route }
+func (m Metadata) Username() string  { return m.username }
+func (m Metadata) UserID() string    { return m.userID }
+func (m Metadata) SessionID() string { return m.sessionID }
+func (m Metadata) TraceID() string   { return m.traceID }
 
-func (m RequestMetadata) Param(key string) string {
+func (m Metadata) Param(key string) string {
 	if m.params == nil {
 		return ""
 	}
 	return m.params[key]
 }
 
-func (m RequestMetadata) Params() map[string]string { return cloneStringMap(m.params) }
-func (m RequestMetadata) Query() url.Values         { return cloneURLValues(m.query) }
+func (m Metadata) Params() map[string]string { return cloneStringMap(m.params) }
+func (m Metadata) Query() url.Values         { return cloneURLValues(m.query) }
 
-type requestMetadataContextKey struct{}
+type metadataContextKey struct{}
 
-// ContextWithRequestMetadata returns a context carrying immutable request metadata.
-func ContextWithRequestMetadata(ctx context.Context, meta RequestMetadata) context.Context {
+// WithMetadata returns a context carrying immutable request metadata.
+func WithMetadata(ctx context.Context, meta Metadata) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	return context.WithValue(ctx, requestMetadataContextKey{}, NewRequestMetadata(RequestMetadataFields{
+	return context.WithValue(ctx, metadataContextKey{}, New(Fields{
 		Route:     meta.Route(),
 		Username:  meta.Username(),
 		UserID:    meta.UserID(),
@@ -108,15 +106,15 @@ func ContextWithRequestMetadata(ctx context.Context, meta RequestMetadata) conte
 	}))
 }
 
-// RequestMetadataFromContext extracts request metadata from ctx.
-func RequestMetadataFromContext(ctx context.Context) RequestMetadata {
+// FromContext extracts request metadata from ctx.
+func FromContext(ctx context.Context) Metadata {
 	if ctx == nil {
-		return RequestMetadata{}
+		return Metadata{}
 	}
 
-	meta, ok := ctx.Value(requestMetadataContextKey{}).(RequestMetadata)
+	meta, ok := ctx.Value(metadataContextKey{}).(Metadata)
 	if !ok {
-		return RequestMetadata{}
+		return Metadata{}
 	}
 	return meta
 }
