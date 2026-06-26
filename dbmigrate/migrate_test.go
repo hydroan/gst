@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/pkg/dbmigrate"
+	"github.com/hydroan/gst/dbmigrate"
 	"github.com/stretchr/testify/require"
 )
 

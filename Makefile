@@ -109,7 +109,7 @@ test:
 	go test ./module/mfa
 	go test ./module/logmgmt
 	go test ./module/version
-	go test ./pkg/dbmigrate
+	go test ./dbmigrate
 
 # Run unit tests with verbose output
 testv:
@@ -127,7 +127,7 @@ testv:
 	go test -v ./module/mfa
 	go test -v ./module/logmgmt
 	go test -v ./module/version
-	go test -v ./pkg/dbmigrate
+	go test -v ./dbmigrate
 
 # Auto-fix code issues
 fix:
