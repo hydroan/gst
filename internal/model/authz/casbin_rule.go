@@ -15,16 +15,16 @@ import (
 //
 // Policy rows use ptype "p":
 //   - V0: role code, for example "admin"
-//   - V1: resource path, for example "/api/routes"
+//   - V1: resource path, for example "/api/authz/routes"
 //   - V2: action, usually the HTTP method such as "GET"
 //   - V3: effect, currently "allow"
 //
 // Grouping rows use ptype "g":
-//   - V0: subject, currently the stable user ID such as "root"
+//   - V0: subject, currently the stable subject ID such as "root"
 //   - V1: role code, for example "admin"
 //
 // Example rows:
-//   - p, admin, /api/routes, GET, allow
+//   - p, admin, /api/authz/routes, GET, allow
 //   - p, admin, /api/authz/roles, POST, allow
 //   - g, root, admin
 type CasbinRule struct {

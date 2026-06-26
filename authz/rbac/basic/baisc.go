@@ -19,7 +19,7 @@ var defaultAdmins = []string{
 
 var defaultAdminRole = consts.AUTHZ_ROLE_ADMIN
 
-// addGroupingPolicy adds a user-role relationship while skipping self-referential entries.
+// addGroupingPolicy adds a subject-role relationship while skipping self-referential entries.
 // Casbin treats identical subject and role names as a link, but gst keeps users and
 // roles distinct so role names cannot grant permissions to same-named subjects.
 func addGroupingPolicy(enforcer *casbin.SyncedEnforcer, subject string, role string) error {

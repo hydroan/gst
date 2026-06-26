@@ -16,6 +16,6 @@ type (
 func (*MenuModule) Service() types.Service[*Menu, *Menu, *Menu] {
 	return &serviceauthz.MenuService{}
 }
-func (*MenuModule) Route() string { return "menus" }
+func (*MenuModule) Route() string { return "authz/menus" }
 func (*MenuModule) Pub() bool     { return false }
 func (*MenuModule) Param() string { return "id" }

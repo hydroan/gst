@@ -35,10 +35,10 @@ var (
 	signupAPI = fmt.Sprintf("http://localhost:%d/api/signup", port)
 	loginAPI  = fmt.Sprintf("http://localhost:%d/api/login", port)
 
-	routesAPI   = fmt.Sprintf("http://localhost:%d/api/routes", port)
-	menuAPI     = fmt.Sprintf("http://localhost:%d/api/menus", port)
-	roleAPI     = fmt.Sprintf("http://localhost:%d/api/authz/roles", port)
-	userRoleAPI = fmt.Sprintf("http://localhost:%d/api/authz/user-roles", port)
+	routesAPI      = fmt.Sprintf("http://localhost:%d/api/authz/routes", port)
+	menuAPI        = fmt.Sprintf("http://localhost:%d/api/authz/menus", port)
+	roleAPI        = fmt.Sprintf("http://localhost:%d/api/authz/roles", port)
+	roleBindingAPI = fmt.Sprintf("http://localhost:%d/api/authz/role-bindings", port)
 )
 
 type ListResponse[T any] struct {
@@ -188,14 +188,13 @@ func TestAuthz(t *testing.T) {
 			)
 
 			require.NotEmpty(t, rsp.Items, "routes list should not be empty")
-			requireRoute(t, rsp.Items, "/api/routes", []string{http.MethodGet})
+			requireRoute(t, rsp.Items, "/api/authz/routes", []string{http.MethodGet})
 			requireRoute(t, rsp.Items, "/api/authz/roles", []string{http.MethodGet, http.MethodPost})
 			requireRoute(t, rsp.Items, "/api/authz/roles/{id}", []string{http.MethodGet, http.MethodPut, http.MethodPatch, http.MethodDelete})
-			requireRoute(t, rsp.Items, "/api/authz/user-roles", []string{http.MethodGet, http.MethodPost})
-			requireRoute(t, rsp.Items, "/api/authz/user-roles/{id}", []string{http.MethodGet, http.MethodDelete})
-			requireNoRoute(t, rsp.Items, "/api/authz/permissions")
-			requireNoRoute(t, rsp.Items, "/api/authz/permissions/{id}")
-			requireNoRoute(t, rsp.Items, "/api/authz/roles/:id")
+			requireRoute(t, rsp.Items, "/api/authz/role-bindings", []string{http.MethodGet, http.MethodPost})
+			requireRoute(t, rsp.Items, "/api/authz/role-bindings/{id}", []string{http.MethodGet, http.MethodDelete})
+			requireRoute(t, rsp.Items, "/api/authz/menus", []string{http.MethodGet, http.MethodPost})
+			requireRoute(t, rsp.Items, "/api/authz/menus/{id}", []string{http.MethodGet, http.MethodPut, http.MethodPatch, http.MethodDelete})
 		})
 	})
 
@@ -227,7 +226,7 @@ func TestAuthz(t *testing.T) {
 				Label:    "Test Menu",
 				Path:     "/test",
 				Routes: []authz.Route{
-					{Path: "/api/routes", Methods: []string{http.MethodGet}},
+					{Path: "/api/authz/routes", Methods: []string{http.MethodGet}},
 				},
 			}
 			resp, err = cli.Create(createReq)
@@ -252,7 +251,7 @@ func TestAuthz(t *testing.T) {
 				require.Equal(t, menuID, rsp.ID)
 				require.Equal(t, "Test Menu", rsp.Label)
 				require.Equal(t, "/test", rsp.Path)
-				require.Equal(t, []authz.Route{{Path: "/api/routes", Methods: []string{http.MethodGet}}}, []authz.Route(rsp.Routes))
+				require.Equal(t, []authz.Route{{Path: "/api/authz/routes", Methods: []string{http.MethodGet}}}, []authz.Route(rsp.Routes))
 			})
 		})
 
@@ -262,7 +261,7 @@ func TestAuthz(t *testing.T) {
 				Label:    "Test Menu Updated",
 				Path:     "/test-updated",
 				Routes: []authz.Route{
-					{Path: "/api/routes", Methods: []string{http.MethodGet}},
+					{Path: "/api/authz/routes", Methods: []string{http.MethodGet}},
 					{Path: "/api/authz/roles", Methods: []string{http.MethodGet}},
 				},
 			}
@@ -363,7 +362,7 @@ func TestAuthz(t *testing.T) {
 			require.NotNil(t, resp)
 		})
 
-		t.Run("invalid_user_role_does_not_fallback_to_default_role", func(t *testing.T) {
+		t.Run("invalid_role_binding_does_not_fallback_to_default_role", func(t *testing.T) {
 			resp, err = cli.Create(&authz.Menu{
 				ParentID: "root",
 				Label:    "Default Fallback Menu",
@@ -399,20 +398,20 @@ func TestAuthz(t *testing.T) {
 			})
 
 			missingRoleID := "missing_default_fallback_role"
-			invalidUserRole := &authz.UserRole{
-				UserID: userID,
-				RoleID: missingRoleID,
-				Base:   model.Base{ID: "invalid_default_fallback_user_role"},
+			invalidRoleBinding := &authz.RoleBinding{
+				SubjectID: userID,
+				RoleID:    missingRoleID,
+				Base:      model.Base{ID: "invalid_default_fallback_role_binding"},
 			}
-			require.NoError(t, database.Database[*authz.UserRole](context.Background()).WithoutHook().Create(invalidUserRole))
+			require.NoError(t, database.Database[*authz.RoleBinding](context.Background()).WithoutHook().Create(invalidRoleBinding))
 			_, err = rbac.Enforcer.AddRoleForUser(userID, missingRoleID)
 			require.NoError(t, err)
-			_, err = rbac.Enforcer.AddPermissionForUser(missingRoleID, "/api/menus", http.MethodGet, "allow")
+			_, err = rbac.Enforcer.AddPermissionForUser(missingRoleID, "/api/authz/menus", http.MethodGet, "allow")
 			require.NoError(t, err)
 			t.Cleanup(func() {
-				_ = database.Database[*authz.UserRole](context.Background()).WithoutHook().WithPurge().Delete(invalidUserRole)
+				_ = database.Database[*authz.RoleBinding](context.Background()).WithoutHook().WithPurge().Delete(invalidRoleBinding)
 				_, _ = rbac.Enforcer.DeleteRoleForUser(userID, missingRoleID)
-				_, _ = rbac.Enforcer.DeletePermissionForUser(missingRoleID, "/api/menus", http.MethodGet, "allow")
+				_, _ = rbac.Enforcer.DeletePermissionForUser(missingRoleID, "/api/authz/menus", http.MethodGet, "allow")
 				_, _ = cliRole.Delete(defaultRoleID)
 				_, _ = cli.Delete(defaultMenuID)
 			})
@@ -618,13 +617,13 @@ func TestAuthz(t *testing.T) {
 		require.NotNil(t, resp)
 	})
 
-	t.Run("user_role", func(t *testing.T) {
-		cli, err := client.New(userRoleAPI, client.WithCookie(&http.Cookie{
+	t.Run("role_binding", func(t *testing.T) {
+		cli, err := client.New(roleBindingAPI, client.WithCookie(&http.Cookie{
 			Name:  "session_id",
 			Value: adminSessionID,
 		}))
 		require.NoError(t, err)
-		var userRoleID string
+		var roleBindingID string
 		var roleID string
 		var resp *client.Resp
 
@@ -634,7 +633,7 @@ func TestAuthz(t *testing.T) {
 			Value: adminSessionID,
 		}))
 		require.NoError(t, err)
-		resp, err = cliRole.Create(&authz.Role{Name: "UserRole Test Role", Code: "userrole_test_role"})
+		resp, err = cliRole.Create(&authz.Role{Name: "RoleBinding Test Role", Code: "role_binding_test_role"})
 		require.NoError(t, err)
 		helper.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 			t.Helper()
@@ -643,11 +642,11 @@ func TestAuthz(t *testing.T) {
 		})
 
 		t.Run("list", func(t *testing.T) {
-			items := make([]*authz.UserRole, 0)
+			items := make([]*authz.RoleBinding, 0)
 			total := new(int64)
 			resp, err = cli.List(&items, total)
 			require.NoError(t, err)
-			helper.TestResp[ListResponse[*authz.UserRole]](t, resp, func(t *testing.T, rsp ListResponse[*authz.UserRole]) {
+			helper.TestResp[ListResponse[*authz.RoleBinding]](t, resp, func(t *testing.T, rsp ListResponse[*authz.RoleBinding]) {
 				t.Helper()
 				require.NotNil(t, rsp.Items)
 				require.GreaterOrEqual(t, rsp.Total, int64(0))
@@ -655,46 +654,46 @@ func TestAuthz(t *testing.T) {
 		})
 
 		t.Run("create", func(t *testing.T) {
-			createReq := &authz.UserRole{
-				UserID: userID,
-				RoleID: roleID,
+			createReq := &authz.RoleBinding{
+				SubjectID: userID,
+				RoleID:    roleID,
 			}
 			resp, err = cli.Create(createReq)
 			require.NoError(t, err)
-			helper.TestResp[*authz.UserRole](t, resp, func(t *testing.T, rsp *authz.UserRole) {
+			helper.TestResp[*authz.RoleBinding](t, resp, func(t *testing.T, rsp *authz.RoleBinding) {
 				t.Helper()
 				require.NotEmpty(t, rsp.ID)
-				require.Equal(t, userID, rsp.UserID)
+				require.Equal(t, userID, rsp.SubjectID)
 				require.Equal(t, roleID, rsp.RoleID)
-				userRoleID = rsp.ID
+				roleBindingID = rsp.ID
 			})
 		})
 
 		t.Run("get", func(t *testing.T) {
-			got := new(authz.UserRole)
-			resp, err = cli.Get(userRoleID, got)
+			got := new(authz.RoleBinding)
+			resp, err = cli.Get(roleBindingID, got)
 			require.NoError(t, err)
-			helper.TestResp[*authz.UserRole](t, resp, func(t *testing.T, rsp *authz.UserRole) {
+			helper.TestResp[*authz.RoleBinding](t, resp, func(t *testing.T, rsp *authz.RoleBinding) {
 				t.Helper()
-				require.Equal(t, userRoleID, rsp.ID)
-				require.Equal(t, userID, rsp.UserID)
+				require.Equal(t, roleBindingID, rsp.ID)
+				require.Equal(t, userID, rsp.SubjectID)
 				require.Equal(t, roleID, rsp.RoleID)
 			})
 		})
 
 		t.Run("list_expand", func(t *testing.T) {
-			items := make([]*authz.UserRole, 0)
+			items := make([]*authz.RoleBinding, 0)
 			total := new(int64)
 			resp, err = cli.List(&items, total)
 			require.NoError(t, err)
-			helper.TestResp[ListResponse[*authz.UserRole]](t, resp, func(t *testing.T, rsp ListResponse[*authz.UserRole]) {
+			helper.TestResp[ListResponse[*authz.RoleBinding]](t, resp, func(t *testing.T, rsp ListResponse[*authz.RoleBinding]) {
 				t.Helper()
 				require.NotNil(t, rsp.Items)
 				require.GreaterOrEqual(t, rsp.Total, int64(0))
 			})
 		})
 
-		t.Run("delete_role_cleans_user_roles", func(t *testing.T) {
+		t.Run("delete_role_cleans_role_bindings", func(t *testing.T) {
 			resp, err = cliRole.Create(&authz.Role{Name: "Deleted Role", Code: "deleted_role"})
 			require.NoError(t, err)
 			var deletedRoleID string
@@ -704,12 +703,12 @@ func TestAuthz(t *testing.T) {
 				deletedRoleID = rsp.ID
 			})
 
-			resp, err = cli.Create(&authz.UserRole{
-				UserID: userID,
-				RoleID: deletedRoleID,
+			resp, err = cli.Create(&authz.RoleBinding{
+				SubjectID: userID,
+				RoleID:    deletedRoleID,
 			})
 			require.NoError(t, err)
-			helper.TestResp[*authz.UserRole](t, resp, func(t *testing.T, rsp *authz.UserRole) {
+			helper.TestResp[*authz.RoleBinding](t, resp, func(t *testing.T, rsp *authz.RoleBinding) {
 				t.Helper()
 				require.NotEmpty(t, rsp.ID)
 			})
@@ -718,16 +717,16 @@ func TestAuthz(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, resp)
 
-			remaining := make([]*authz.UserRole, 0)
-			err = database.Database[*authz.UserRole](context.Background()).
-				WithQuery(&authz.UserRole{RoleID: deletedRoleID}).
+			remaining := make([]*authz.RoleBinding, 0)
+			err = database.Database[*authz.RoleBinding](context.Background()).
+				WithQuery(&authz.RoleBinding{RoleID: deletedRoleID}).
 				List(&remaining)
 			require.NoError(t, err)
 			require.Empty(t, remaining)
 		})
 
 		t.Run("delete", func(t *testing.T) {
-			resp, err = cli.Delete(userRoleID)
+			resp, err = cli.Delete(roleBindingID)
 			require.NoError(t, err)
 			require.NotNil(t, resp)
 			require.Equal(t, testSuccessCode, resp.Code, "delete should return success")
@@ -744,13 +743,6 @@ func requireRoute(t *testing.T, routes []authz.Route, path string, methods []str
 		}
 	}
 	require.Failf(t, "route not found", "path: %s", path)
-}
-
-func requireNoRoute(t *testing.T, routes []authz.Route, path string) {
-	t.Helper()
-	for _, route := range routes {
-		require.NotEqual(t, path, route.Path)
-	}
 }
 
 func requireNoMenu(t *testing.T, menus []*authz.Menu, menuID string) {

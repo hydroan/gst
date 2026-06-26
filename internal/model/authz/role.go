@@ -116,12 +116,12 @@ func (r *Role) DeleteBefore(ctx context.Context) error {
 		return errors.New("role id is required")
 	}
 
-	userRoles := make([]*UserRole, 0)
-	if err := database.Database[*UserRole](ctx).WithQuery(&UserRole{RoleID: r.ID}).List(&userRoles); err != nil {
+	roleBindings := make([]*RoleBinding, 0)
+	if err := database.Database[*RoleBinding](ctx).WithQuery(&RoleBinding{RoleID: r.ID}).List(&roleBindings); err != nil {
 		return err
 	}
-	if len(userRoles) > 0 {
-		if err := database.Database[*UserRole](ctx).Delete(userRoles...); err != nil {
+	if len(roleBindings) > 0 {
+		if err := database.Database[*RoleBinding](ctx).Delete(roleBindings...); err != nil {
 			return err
 		}
 	}

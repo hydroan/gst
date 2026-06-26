@@ -11,7 +11,7 @@ type Routes struct {
 }
 
 func (Routes) Design() {
-	dsl.Route("routes", func() {
+	dsl.Route("authz/routes", func() {
 		dsl.List(func() {
 			dsl.Service(true)
 			dsl.Flatten()
@@ -27,7 +27,7 @@ type Route struct {
 	Methods []string `json:"methods" schema:"methods"`
 }
 
-// RoutesRsp is the response returned by GET /api/routes.
+// RoutesRsp is the response returned by GET /api/authz/routes.
 type RoutesRsp struct {
 	Items []Route `json:"items"`
 }

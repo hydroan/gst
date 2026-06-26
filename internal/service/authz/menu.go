@@ -25,8 +25,8 @@ func (m *MenuService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.M
 //
 // The flow deliberately mirrors the RBAC data model:
 //   - root is a built-in user ID and bypasses menu filtering completely.
-//   - UserRole maps the current user ID to role IDs.
-//   - when the user has no UserRole records, default roles provide the fallback menu set.
+//   - RoleBinding maps the current subject ID to role IDs.
+//   - when the subject has no RoleBinding records, default roles provide the fallback menu set.
 //   - Role.MenuIDs grants fully selected menus; Role.MenuPartialIDs keeps parent
 //     menu nodes visible when only part of their children are selected.
 //   - Menu.DomainPattern still constrains visibility by the current request host.
@@ -37,26 +37,26 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 	}
 
 	var (
-		userRoles = make([]*modelauthz.UserRole, 0)
-		roles     = make([]*modelauthz.Role, 0)
+		roleBindings = make([]*modelauthz.RoleBinding, 0)
+		roles        = make([]*modelauthz.Role, 0)
 	)
 
-	if err := database.Database[*modelauthz.UserRole](ctx).
-		WithQuery(&modelauthz.UserRole{UserID: ctx.UserID()}).
-		List(&userRoles); err != nil {
+	if err := database.Database[*modelauthz.RoleBinding](ctx).
+		WithQuery(&modelauthz.RoleBinding{SubjectID: ctx.UserID()}).
+		List(&roleBindings); err != nil {
 		log.Error(err)
 		return err
 	}
 
-	if len(userRoles) > 0 {
+	if len(roleBindings) > 0 {
 		roleIDs := make([]string, 0)
-		for _, ur := range userRoles {
-			if len(ur.RoleID) > 0 {
-				roleIDs = append(roleIDs, ur.RoleID)
+		for _, binding := range roleBindings {
+			if len(binding.RoleID) > 0 {
+				roleIDs = append(roleIDs, binding.RoleID)
 			}
 		}
 		if len(roleIDs) == 0 {
-			log.Warn("user has user-role records but no valid role ids")
+			log.Warn("subject has role-binding records but no valid role ids")
 			*data = make([]*modelauthz.Menu, 0)
 			return nil
 		}
@@ -66,12 +66,12 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 			return err
 		}
 		if len(roles) == 0 {
-			log.Warn("user has user-role records but no matching roles")
+			log.Warn("subject has role-binding records but no matching roles")
 			*data = make([]*modelauthz.Menu, 0)
 			return nil
 		}
 	}
-	if len(userRoles) == 0 {
+	if len(roleBindings) == 0 {
 		if err := database.Database[*modelauthz.Role](ctx).
 			WithQuery(&modelauthz.Role{Default: new(true)}).
 			List(&roles); err != nil {

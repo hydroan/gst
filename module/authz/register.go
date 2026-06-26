@@ -11,29 +11,29 @@ import (
 //
 // Modules:
 //   - Role
-//   - UserRole
+//   - RoleBinding
 //   - CasbinRule
 //   - Menu
 //   - Routes
 //
 // Routes:
-//   - GET    /api/routes
+//   - GET    /api/authz/routes
 //   - POST   /api/authz/roles
 //   - DELETE /api/authz/roles/:id
 //   - PUT    /api/authz/roles/:id
 //   - PATCH  /api/authz/roles/:id
 //   - GET    /api/authz/roles
 //   - GET    /api/authz/roles/:id
-//   - POST   /api/authz/user-roles
-//   - DELETE /api/authz/user-roles/:id
-//   - GET    /api/authz/user-roles
-//   - GET    /api/authz/user-roles/:id
-//   - POST   /api/menus
-//   - DELETE /api/menus/:id
-//   - PUT    /api/menus/:id
-//   - PATCH  /api/menus/:id
-//   - GET    /api/menus
-//   - GET    /api/menus/:id
+//   - POST   /api/authz/role-bindings
+//   - DELETE /api/authz/role-bindings/:id
+//   - GET    /api/authz/role-bindings
+//   - GET    /api/authz/role-bindings/:id
+//   - POST   /api/authz/menus
+//   - DELETE /api/authz/menus/:id
+//   - PUT    /api/authz/menus/:id
+//   - PATCH  /api/authz/menus/:id
+//   - GET    /api/authz/menus
+//   - GET    /api/authz/menus/:id
 //
 // Middleware:
 //   - Authz
@@ -59,10 +59,10 @@ func Register() {
 	)
 
 	module.Use[
-		*UserRole,
-		*UserRole,
-		*UserRole](
-		&UserRoleModule{},
+		*RoleBinding,
+		*RoleBinding,
+		*RoleBinding](
+		&RoleBindingModule{},
 		consts.PHASE_CREATE,
 		consts.PHASE_DELETE,
 		consts.PHASE_LIST,

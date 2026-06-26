@@ -18,6 +18,6 @@ type (
 func (*RoutesModule) Service() types.Service[*Routes, *Routes, RoutesRsp] {
 	return &serviceauthz.RoutesService{}
 }
-func (*RoutesModule) Route() string { return "routes" }
+func (*RoutesModule) Route() string { return "authz/routes" }
 func (*RoutesModule) Pub() bool     { return false }
 func (*RoutesModule) Param() string { return "id" }
