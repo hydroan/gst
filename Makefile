@@ -104,6 +104,7 @@ test:
 	go test ./database/...
 	go test ./ds/...
 	go test ./internal/codegen/gen/
+	go test ./internal/ggmodule
 	go test ./module/helloworld
 	go test ./module/iam
 	go test ./module/mfa
@@ -122,6 +123,7 @@ testv:
 	go test -v ./database/...
 	go test -v ./ds/...
 	go test -v ./internal/codegen/gen/
+	go test -v ./internal/ggmodule
 	go test -v ./module/helloworld
 	go test -v ./module/iam
 	go test -v ./module/mfa
