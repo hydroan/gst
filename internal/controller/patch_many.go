@@ -73,7 +73,7 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 			}
 			var serviceCtx *types.ServiceContext
 			if rsp, err = traceServiceOperation[M, RSP](ctrlSpanCtx, consts.PHASE_PATCH_MANY, func(spanCtx context.Context) (RSP, error) {
-				serviceCtx = types.NewServiceContext(c, spanCtx).WithPhase(consts.PHASE_PATCH_MANY)
+				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_PATCH_MANY)
 				return svc.PatchMany(serviceCtx, req)
 			}); err != nil {
 				log.Error(err)
@@ -125,7 +125,7 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 		// 1.Perform business logic processing before batch patch resource.
 		var serviceCtxBefore *types.ServiceContext
 		if err = traceServiceHook[M](ctrlSpanCtx, consts.PHASE_PATCH_MANY_BEFORE, func(spanCtx context.Context) error {
-			serviceCtxBefore = types.NewServiceContext(c, spanCtx).WithPhase(consts.PHASE_PATCH_MANY_BEFORE)
+			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_PATCH_MANY_BEFORE)
 			return svc.PatchManyBefore(serviceCtxBefore, shouldUpdates...)
 		}); err != nil {
 			log.Error(err)
@@ -145,7 +145,7 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 		// 3.Perform business logic processing after batch patch resource.
 		var serviceCtxAfter *types.ServiceContext
 		if err = traceServiceHook[M](ctrlSpanCtx, consts.PHASE_PATCH_MANY_AFTER, func(spanCtx context.Context) error {
-			serviceCtxAfter = types.NewServiceContext(c, spanCtx).WithPhase(consts.PHASE_PATCH_MANY_AFTER)
+			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_PATCH_MANY_AFTER)
 			return svc.PatchManyAfter(serviceCtxAfter, shouldUpdates...)
 		}); err != nil {
 			log.Error(err)

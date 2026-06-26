@@ -32,21 +32,25 @@ type ServiceContext struct {
 }
 
 // NewServiceContext creates ServiceContext from gin.Context.
-// Including request details, headers and user information.
+// Including request details, headers, phase, and user information.
 //
-// You can pass the custom context.Context to propagate span tracing,
-// otherwise use the c.Request.Context().
-func NewServiceContext(c *gin.Context, ctxs ...context.Context) *ServiceContext {
+// You can pass a custom context.Context to propagate span tracing.
+// If ctx is nil, the request context is used when available.
+//
+//nolint:revive // ServiceContext is constructed from the Gin request first.
+func NewServiceContext(c *gin.Context, ctx context.Context, phase consts.Phase) *ServiceContext {
 	if c == nil {
-		return &ServiceContext{baseCtx: context.Background()}
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		return &ServiceContext{baseCtx: ctx, phase: phase}
 	}
 
-	ctx := context.Background()
-	if c.Request != nil {
-		ctx = c.Request.Context()
-	}
-	if len(ctxs) > 0 && ctxs[0] != nil {
-		ctx = ctxs[0]
+	if ctx == nil {
+		ctx = context.Background()
+		if c.Request != nil {
+			ctx = c.Request.Context()
+		}
 	}
 	meta := RequestMetadataFromGin(c)
 	ctx = ContextWithRequestMetadata(ctx, meta)
@@ -55,6 +59,7 @@ func NewServiceContext(c *gin.Context, ctxs ...context.Context) *ServiceContext 
 		baseCtx:        ctx,
 		ginCtx:         c,
 		responseWriter: c.Writer,
+		phase:          phase,
 		requiresAuth:   c.GetBool(consts.CTX_REQUIRES_AUTH),
 	}
 	if c.Request != nil {
@@ -96,12 +101,6 @@ func (sc *ServiceContext) Phase() consts.Phase {
 	return sc.phase
 }
 
-func (sc *ServiceContext) WithPhase(phase consts.Phase) *ServiceContext {
-	next := sc.clone()
-	next.phase = phase
-	return next
-}
-
 // RequiresAuth returns whether the current API requires authentication.
 func (sc *ServiceContext) RequiresAuth() bool {
 	if sc == nil {
@@ -110,24 +109,27 @@ func (sc *ServiceContext) RequiresAuth() bool {
 	return sc.requiresAuth
 }
 
-func (sc *ServiceContext) RequestMetadata() RequestMetadata {
-	return RequestMetadataFromContext(sc)
-}
-
 func (sc *ServiceContext) WithRequestMetadata(meta RequestMetadata) *ServiceContext {
 	next := sc.clone()
 	next.baseCtx = ContextWithRequestMetadata(next.baseContext(), meta)
 	return next
 }
 
-func (sc *ServiceContext) Params() map[string]string { return sc.RequestMetadata().Params() }
-func (sc *ServiceContext) Query() url.Values         { return sc.RequestMetadata().Query() }
-func (sc *ServiceContext) Param(key string) string   { return sc.RequestMetadata().Param(key) }
-func (sc *ServiceContext) Route() string             { return sc.RequestMetadata().Route() }
-func (sc *ServiceContext) Username() string          { return sc.RequestMetadata().Username() }
-func (sc *ServiceContext) UserID() string            { return sc.RequestMetadata().UserID() }
-func (sc *ServiceContext) SessionID() string         { return sc.RequestMetadata().SessionID() }
-func (sc *ServiceContext) TraceID() string           { return sc.RequestMetadata().TraceID() }
+func (sc *ServiceContext) Params() map[string]string { return RequestMetadataFromContext(sc).Params() }
+
+func (sc *ServiceContext) Query() url.Values { return RequestMetadataFromContext(sc).Query() }
+
+func (sc *ServiceContext) Param(key string) string { return RequestMetadataFromContext(sc).Param(key) }
+
+func (sc *ServiceContext) Route() string { return RequestMetadataFromContext(sc).Route() }
+
+func (sc *ServiceContext) Username() string { return RequestMetadataFromContext(sc).Username() }
+
+func (sc *ServiceContext) UserID() string { return RequestMetadataFromContext(sc).UserID() }
+
+func (sc *ServiceContext) SessionID() string { return RequestMetadataFromContext(sc).SessionID() }
+
+func (sc *ServiceContext) TraceID() string { return RequestMetadataFromContext(sc).TraceID() }
 
 func (sc *ServiceContext) Method() string {
 	if sc == nil {

@@ -78,7 +78,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_LIST)
 		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_LIST)
-		ctx := types.NewServiceContext(c)
+		ctx := types.NewServiceContext(c, nil, consts.PHASE_LIST)
 
 		if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
 			var err error
@@ -104,7 +104,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			}
 			var serviceCtx *types.ServiceContext
 			if rsp, err = traceServiceOperation[M, RSP](ctrlSpanCtx, consts.PHASE_LIST, func(spanCtx context.Context) (RSP, error) {
-				serviceCtx = types.NewServiceContext(c, spanCtx).WithPhase(consts.PHASE_LIST)
+				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_LIST)
 				return svc.List(serviceCtx, req)
 			}); err != nil {
 				log.Error(err)
@@ -227,7 +227,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		// 1.Perform business logic processing before list resources.
 		var serviceCtxBefore *types.ServiceContext
 		if err = traceServiceHook[M](ctrlSpanCtx, consts.PHASE_LIST_BEFORE, func(spanCtx context.Context) error {
-			serviceCtxBefore = types.NewServiceContext(c, spanCtx).WithPhase(consts.PHASE_LIST_BEFORE)
+			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_LIST_BEFORE)
 			return svc.ListBefore(serviceCtxBefore, &data)
 		}); err != nil {
 			log.Error(err)
@@ -265,7 +265,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		// 3.Perform business logic processing after list resources.
 		var serviceCtxAfter *types.ServiceContext
 		if err = traceServiceHook[M](ctrlSpanCtx, consts.PHASE_LIST_AFTER, func(spanCtx context.Context) error {
-			serviceCtxAfter = types.NewServiceContext(c, spanCtx).WithPhase(consts.PHASE_LIST_AFTER)
+			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_LIST_AFTER)
 			return svc.ListAfter(serviceCtxAfter, &data)
 		}); err != nil {
 			log.Error(err)

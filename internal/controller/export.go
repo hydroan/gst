@@ -129,10 +129,10 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 
 		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_EXPORT)
-		svcCtx := types.NewServiceContext(c)
+		svcCtx := types.NewServiceContext(c, nil, consts.PHASE_EXPORT)
 		// 1.Perform business logic processing before list resources.
 		if err = traceServiceHook[M](ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) error {
-			return svc.ListBefore(types.NewServiceContext(c, spanCtx).WithPhase(consts.PHASE_EXPORT), &data)
+			return svc.ListBefore(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), &data)
 		}); err != nil {
 			log.Error(err)
 			JSON(c, CodeFailure.WithErr(err))
@@ -165,7 +165,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		// 3.Perform business logic processing after list resources.
 		if err = traceServiceHook[M](ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) error {
-			return svc.ListAfter(types.NewServiceContext(c, spanCtx).WithPhase(consts.PHASE_EXPORT), &data)
+			return svc.ListAfter(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), &data)
 		}); err != nil {
 			log.Error(err)
 			JSON(c, CodeFailure.WithErr(err))
@@ -175,7 +175,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		log.Info("export data length: ", len(data))
 		// 4.Export
 		exported, err := traceServiceExport[M](ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) ([]byte, error) {
-			return svc.Export(types.NewServiceContext(c, spanCtx).WithPhase(consts.PHASE_EXPORT), data...)
+			return svc.Export(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), data...)
 		})
 		if err != nil {
 			log.Error(err)

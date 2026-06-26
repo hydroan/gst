@@ -72,7 +72,7 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 			}
 			var serviceCtx *types.ServiceContext
 			if rsp, err = traceServiceOperation[M, RSP](ctrlSpanCtx, consts.PHASE_DELETE_MANY, func(spanCtx context.Context) (RSP, error) {
-				serviceCtx = types.NewServiceContext(c, spanCtx).WithPhase(consts.PHASE_DELETE_MANY)
+				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE_MANY)
 				return svc.DeleteMany(serviceCtx, req)
 			}); err != nil {
 				log.Error(err)
@@ -108,7 +108,7 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		}
 		var serviceCtxBefore *types.ServiceContext
 		if err = traceServiceHook[M](ctrlSpanCtx, consts.PHASE_DELETE_MANY_BEFORE, func(spanCtx context.Context) error {
-			serviceCtxBefore = types.NewServiceContext(c, spanCtx).WithPhase(consts.PHASE_DELETE_MANY_BEFORE)
+			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE_MANY_BEFORE)
 			return svc.DeleteManyBefore(serviceCtxBefore, req.Items...)
 		}); err != nil {
 			log.Error(err)
@@ -134,7 +134,7 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		// 3.Perform business logic processing after batch delete resources.
 		var serviceCtxAfter *types.ServiceContext
 		if err = traceServiceHook[M](ctrlSpanCtx, consts.PHASE_DELETE_MANY_AFTER, func(spanCtx context.Context) error {
-			serviceCtxAfter = types.NewServiceContext(c, spanCtx).WithPhase(consts.PHASE_DELETE_MANY_AFTER)
+			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE_MANY_AFTER)
 			return svc.DeleteManyAfter(serviceCtxAfter, req.Items...)
 		}); err != nil {
 			log.Error(err)

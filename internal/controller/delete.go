@@ -80,7 +80,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			}
 			var serviceCtx *types.ServiceContext
 			if rsp, err = traceServiceOperation[M, RSP](ctrlSpanCtx, consts.PHASE_DELETE, func(spanCtx context.Context) (RSP, error) {
-				serviceCtx = types.NewServiceContext(c, spanCtx).WithPhase(consts.PHASE_DELETE)
+				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE)
 				return svc.Delete(serviceCtx, req)
 			}); err != nil {
 				log.Error(err)
@@ -142,7 +142,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		for _, m := range ml {
 			var serviceCtxBefore *types.ServiceContext
 			if err := traceServiceHook[M](ctrlSpanCtx, consts.PHASE_DELETE_BEFORE, func(spanCtx context.Context) error {
-				serviceCtxBefore = types.NewServiceContext(c, spanCtx).WithPhase(consts.PHASE_DELETE_BEFORE)
+				serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE_BEFORE)
 				return svc.DeleteBefore(serviceCtxBefore, m)
 			}); err != nil {
 				log.Error(err)
@@ -176,7 +176,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		for _, m := range ml {
 			var serviceCtxAfter *types.ServiceContext
 			if err := traceServiceHook[M](ctrlSpanCtx, consts.PHASE_DELETE_AFTER, func(spanCtx context.Context) error {
-				serviceCtxAfter = types.NewServiceContext(c, spanCtx).WithPhase(consts.PHASE_DELETE_AFTER)
+				serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE_AFTER)
 				return svc.DeleteAfter(serviceCtxAfter, m)
 			}); err != nil {
 				log.Error(err)

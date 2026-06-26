@@ -73,7 +73,7 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 
 		ml, err := traceServiceImport(ctrlSpanCtx, consts.PHASE_IMPORT, func(spanCtx context.Context) ([]M, error) {
 			return serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_IMPORT).
-				Import(types.NewServiceContext(c, spanCtx).WithPhase(consts.PHASE_IMPORT), buf)
+				Import(types.NewServiceContext(c, spanCtx, consts.PHASE_IMPORT), buf)
 		})
 		if err != nil {
 			log.Error(err)

@@ -25,7 +25,7 @@ func TestServiceContextContextMethods(t *testing.T) {
 	ctx.Set(consts.CTX_USER_ID, "user-1")
 	ctx.Set(consts.TRACE_ID, "trace-1")
 
-	serviceCtx := NewServiceContext(ctx)
+	serviceCtx := NewServiceContext(ctx, nil, "")
 	meta := RequestMetadataFromContext(serviceCtx)
 
 	require.Equal(t, "admin", serviceCtx.Username())
@@ -47,7 +47,7 @@ func TestServiceContextMetadataAccessorsReturnCopies(t *testing.T) {
 	ctx.Set(consts.CTX_USER_ID, "user-1")
 	ctx.Set(consts.TRACE_ID, "trace-1")
 
-	serviceCtx := NewServiceContext(ctx)
+	serviceCtx := NewServiceContext(ctx, nil, "")
 
 	params := serviceCtx.Params()
 	params["id"] = "mutated"
@@ -60,14 +60,10 @@ func TestServiceContextMetadataAccessorsReturnCopies(t *testing.T) {
 	require.Equal(t, "trace-1", serviceCtx.TraceID())
 }
 
-func TestServiceContextWithPhaseReturnsClone(t *testing.T) {
-	serviceCtx := NewServiceContext(nil)
+func TestNewServiceContextStoresPhase(t *testing.T) {
+	serviceCtx := NewServiceContext(nil, nil, consts.PHASE_LIST)
 
-	phased := serviceCtx.WithPhase(consts.PHASE_LIST)
-
-	require.NotSame(t, serviceCtx, phased)
-	require.Empty(t, serviceCtx.Phase())
-	require.Equal(t, consts.PHASE_LIST, phased.Phase())
+	require.Equal(t, consts.PHASE_LIST, serviceCtx.Phase())
 }
 
 func TestServiceContextRequestAccessors(t *testing.T) {
@@ -76,7 +72,7 @@ func TestServiceContextRequestAccessors(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodGet, "https://example.com/api/users?tag=blue", nil)
 
-	serviceCtx := NewServiceContext(ctx)
+	serviceCtx := NewServiceContext(ctx, nil, "")
 
 	require.Equal(t, http.MethodGet, serviceCtx.Method())
 	require.Equal(t, "example.com", serviceCtx.Host())
@@ -89,7 +85,7 @@ func TestServiceContextNilRequest(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 
-	serviceCtx := NewServiceContext(ctx)
+	serviceCtx := NewServiceContext(ctx, nil, "")
 
 	require.Empty(t, serviceCtx.Method())
 	require.Empty(t, serviceCtx.Host())
@@ -105,7 +101,7 @@ func TestServiceContextResponseHelpers(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodGet, "https://example.com/api/users?tag=blue", nil)
 
-	serviceCtx := NewServiceContext(ctx)
+	serviceCtx := NewServiceContext(ctx, nil, "")
 	serviceCtx.SetCookie(&http.Cookie{
 		Name:     "session_id",
 		Value:    "session-1",
@@ -127,7 +123,7 @@ func TestServiceContextResponseHelpers(t *testing.T) {
 }
 
 func TestServiceContextNilGinHelpers(t *testing.T) {
-	serviceCtx := NewServiceContext(nil)
+	serviceCtx := NewServiceContext(nil, nil, "")
 
 	serviceCtx.Data(http.StatusCreated, "text/plain", []byte("created"))
 	serviceCtx.SetCookie(&http.Cookie{Name: "session_id", Value: "session-1"})

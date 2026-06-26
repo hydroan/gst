@@ -86,7 +86,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			}
 			var serviceCtx *types.ServiceContext
 			if rsp, err = traceServiceOperation[M, RSP](ctrlSpanCtx, consts.PHASE_GET, func(spanCtx context.Context) (RSP, error) {
-				serviceCtx = types.NewServiceContext(c, spanCtx).WithPhase(consts.PHASE_GET)
+				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_GET)
 				return svc.Get(serviceCtx, req)
 			}); err != nil {
 				log.Error(err)
@@ -184,7 +184,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		// 1.Perform business logic processing before get resource.
 		var serviceCtxBefore *types.ServiceContext
 		if err = traceServiceHook[M](ctrlSpanCtx, consts.PHASE_GET_BEFORE, func(spanCtx context.Context) error {
-			serviceCtxBefore = types.NewServiceContext(c, spanCtx).WithPhase(consts.PHASE_GET_BEFORE)
+			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_GET_BEFORE)
 			return svc.GetBefore(serviceCtxBefore, m)
 		}); err != nil {
 			log.Error(err)
@@ -207,7 +207,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		// 3.Perform business logic processing after get resource.
 		var serviceCtxAfter *types.ServiceContext
 		if err = traceServiceHook[M](ctrlSpanCtx, consts.PHASE_GET_AFTER, func(spanCtx context.Context) error {
-			serviceCtxAfter = types.NewServiceContext(c, spanCtx).WithPhase(consts.PHASE_GET_AFTER)
+			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_GET_AFTER)
 			return svc.GetAfter(serviceCtxAfter, m)
 		}); err != nil {
 			log.Error(err)
