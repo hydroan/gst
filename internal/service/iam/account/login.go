@@ -25,7 +25,7 @@ import (
 )
 
 type LoginService struct {
-	service.Base[*model.Empty, *modeliamaccount.LoginReq, *modeliamaccount.LoginRsp]
+	service.Base[*model.Empty, *modeliamaccount.LoginReq, *model.Empty]
 }
 
 // Create authenticates an IAM account and creates a new session.
@@ -34,7 +34,7 @@ type LoginService struct {
 // required MFA proof before creating the session. The MFA service owns the
 // login second-factor decision, including disabled-module behavior, active
 // device checks, TOTP validation, and recovery-code consumption.
-func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.LoginReq) (rsp *modeliamaccount.LoginRsp, err error) {
+func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.LoginReq) (rsp *model.Empty, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 	// Validate input
 	if req.Username == "" {
@@ -124,7 +124,11 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	// Parse user agent for session info
 
 	// Create session
-	sessionID := util.UUID()
+	sessionID, err := serviceiamsession.NewSessionID()
+	if err != nil {
+		log.Errorz("failed to create session id", zap.Error(err))
+		return nil, errors.New("failed to create session id")
+	}
 	prefixedSessionID := modeliamsession.SessionIDKey(sessionID)
 	expire := serviceiamsession.GetSessionExpiration()
 	expiresAt := now.Add(expire)
@@ -184,7 +188,5 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		}
 	}
 
-	return &modeliamaccount.LoginRsp{
-		SessionID: sessionID,
-	}, nil
+	return &model.Empty{}, nil
 }

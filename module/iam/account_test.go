@@ -77,23 +77,7 @@ func accountCleanupUser(t *testing.T, username string) {
 func accountLoginUser(t *testing.T, user *accountTestUser, password string) string {
 	t.Helper()
 
-	cli, err := client.New(loginAPI)
-	require.NoError(t, err)
-
-	resp, err := cli.Create(iam.LoginReq{
-		Username: user.Username,
-		Password: password,
-	})
-	require.NoError(t, err)
-
-	sessionID := ""
-	helper.TestResp(t, resp, func(t *testing.T, rsp *iam.LoginRsp) {
-		t.Helper()
-		require.NotEmpty(t, rsp.SessionID)
-		sessionID = rsp.SessionID
-	})
-
-	return sessionID
+	return loginSessionIDFromCookie(t, user.Username, password)
 }
 
 func accountRequireSessionNotFound(t *testing.T, sessionID string) {

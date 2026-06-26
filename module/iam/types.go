@@ -9,7 +9,6 @@ import (
 // account
 type (
 	LoginReq  = modeliamaccount.LoginReq
-	LoginRsp  = modeliamaccount.LoginRsp
 	LogoutRsp = modeliamaccount.LogoutRsp
 	SignupReq = modeliamaccount.SignupReq
 	SignupRsp = modeliamaccount.SignupRsp

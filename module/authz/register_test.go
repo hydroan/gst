@@ -2,6 +2,7 @@ package authz_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -130,40 +131,15 @@ func TestAuthz(t *testing.T) {
 	var adminSessionID string
 	var userSessionID string
 	t.Run("login", func(t *testing.T) {
-		cli, err := client.New(loginAPI)
-		require.NoError(t, err)
-
-		resp, err := cli.Create(iam.LoginReq{
+		userSessionID = loginSessionIDFromCookie(t, iam.LoginReq{
 			Username: username,
 			Password: password,
 		})
-		require.NoError(t, err)
-
-		helper.TestResp(t, resp, func(t *testing.T, rsp *iam.LoginRsp) {
-			t.Helper(
-			// #*modeliam.LoginRsp {
-			//   +SessionID => "019cbca0-1a0b-7a12-8264-4c0525076cd6" #string
-			// }
-			)
-
-			require.NotEmpty(t, rsp.SessionID)
-			userSessionID = rsp.SessionID
-		})
 	})
 	t.Run("login_root", func(t *testing.T) {
-		cli, err := client.New(loginAPI)
-		require.NoError(t, err)
-
-		resp, err := cli.Create(iam.LoginReq{
+		adminSessionID = loginSessionIDFromCookie(t, iam.LoginReq{
 			Username: rootUsername,
 			Password: rootPassword,
-		})
-		require.NoError(t, err)
-
-		helper.TestResp(t, resp, func(t *testing.T, rsp *iam.LoginRsp) {
-			t.Helper()
-			require.NotEmpty(t, rsp.SessionID)
-			adminSessionID = rsp.SessionID
 		})
 	})
 	t.Run("routes", func(t *testing.T) {
@@ -725,6 +701,36 @@ func TestAuthz(t *testing.T) {
 			require.Equal(t, testSuccessCode, resp.Code, "delete should return success")
 		})
 	})
+}
+
+func loginSessionIDFromCookie(t *testing.T, reqPayload iam.LoginReq) string {
+	t.Helper()
+
+	cli, err := client.New(loginAPI)
+	require.NoError(t, err)
+
+	apiResp, err := cli.Create(reqPayload)
+	require.NoError(t, err)
+
+	helper.TestResp(t, apiResp, func(t *testing.T, rsp *model.Empty) {
+		t.Helper()
+	})
+
+	var data map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(apiResp.Data, &data), "response data: %s", string(apiResp.Data))
+	require.NotContains(t, data, "session_id")
+
+	for _, cookie := range apiResp.Cookies {
+		if cookie.Name != "session_id" {
+			continue
+		}
+		require.NotEmpty(t, cookie.Value)
+		require.Regexp(t, `^[0-9a-f]{64}$`, cookie.Value)
+		return cookie.Value
+	}
+
+	require.FailNow(t, "session cookie not found")
+	return ""
 }
 
 func requireRoute(t *testing.T, routes []authz.Route, path string, methods []string) {

@@ -1,6 +1,7 @@
 package logmgmt_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
@@ -38,6 +40,11 @@ var (
 	roleAPI         = fmt.Sprintf("http://localhost:%d/api/authz/roles", port)
 )
 
+const (
+	logmgmtTestReaderRole = "logmgmt_test_reader"
+	logmgmtTestAdminRole  = "logmgmt_test_admin"
+)
+
 type ListResponse[T any] struct {
 	Items []T   `json:"items"`
 	Total int64 `json:"total"`
@@ -54,24 +61,24 @@ func init() {
 	os.Setenv(config.AUDIT_ENABLE, "true")
 	os.Setenv(config.AUDIT_ASYNC_WRITE, "false")
 
+	iam.Register(iam.Config{
+		DefaultUsers: []*iam.User{
+			{
+				Base:     model.Base{ID: "root"},
+				Type:     "admin",
+				Username: rootUsername,
+				Password: rootPassword,
+			},
+		},
+	})
+	authz.Register()
+	logmgmt.Register()
+
 	if err := bootstrap.Bootstrap(); err != nil {
 		panic(err)
 	}
 
 	go func() {
-		iam.Register(iam.Config{
-			DefaultUsers: []*iam.User{
-				{
-					Base:     model.Base{ID: "root"},
-					Type:     "admin",
-					Username: rootUsername,
-					Password: rootPassword,
-				},
-			},
-		})
-		authz.Register()
-		logmgmt.Register()
-
 		if err := bootstrap.Run(); err != nil {
 			panic(err)
 		}
@@ -93,6 +100,7 @@ func init() {
 }
 
 func TestLogmgmt(t *testing.T) {
+	testT := t
 	username := "user01"
 	password := "12345678"
 	userID := ""
@@ -125,28 +133,14 @@ func TestLogmgmt(t *testing.T) {
 				userID = rsp.UserID
 				require.NotEmpty(t, rsp.Message)
 			})
+			grantLogmgmtTestPermissions(testT, userID)
 		})
 
 		// user login
 		t.Run("login1", func(t *testing.T) {
-			cli, err := client.New(loginAPI)
-			require.NoError(t, err)
-
-			resp, err := cli.Create(iam.LoginReq{
+			sessionID = loginSessionIDFromCookie(t, iam.LoginReq{
 				Username: username,
 				Password: password,
-			})
-			require.NoError(t, err)
-
-			helper.TestResp(t, resp, func(t *testing.T, rsp *iam.LoginRsp) {
-				t.Helper(
-				// #*modeliam.LoginRsp {
-				//   +SessionID => "019cbcc0-d312-7b46-a67d-57877893c929" #string
-				// }
-				)
-
-				require.NotEmpty(t, rsp.SessionID)
-				sessionID = rsp.SessionID
 			})
 		})
 
@@ -217,24 +211,9 @@ func TestLogmgmt(t *testing.T) {
 
 		// login again to query the login log
 		t.Run("login2", func(t *testing.T) {
-			cli, err := client.New(loginAPI)
-			require.NoError(t, err)
-
-			resp, err := cli.Create(iam.LoginReq{
+			sessionID = loginSessionIDFromCookie(t, iam.LoginReq{
 				Username: username,
 				Password: password,
-			})
-			require.NoError(t, err)
-
-			helper.TestResp(t, resp, func(t *testing.T, rsp *iam.LoginRsp) {
-				t.Helper(
-				// #*modeliam.LoginRsp {
-				//   +SessionID => "019cbcc0-d34d-7e0d-9b9e-89d08c3ada3c" #string
-				// }
-				)
-
-				require.NotEmpty(t, rsp.SessionID)
-				sessionID = rsp.SessionID
 			})
 		})
 
@@ -293,19 +272,9 @@ func TestLogmgmt(t *testing.T) {
 		})
 
 		t.Run("login-root", func(t *testing.T) {
-			cli, err := client.New(loginAPI)
-			require.NoError(t, err)
-
-			resp, err := cli.Create(iam.LoginReq{
+			adminSessionID = loginSessionIDFromCookie(t, iam.LoginReq{
 				Username: rootUsername,
 				Password: rootPassword,
-			})
-			require.NoError(t, err)
-
-			helper.TestResp(t, resp, func(t *testing.T, rsp *iam.LoginRsp) {
-				t.Helper()
-				require.NotEmpty(t, rsp.SessionID)
-				adminSessionID = rsp.SessionID
 			})
 		})
 
@@ -396,5 +365,68 @@ func TestLogmgmt(t *testing.T) {
 				require.Equal(t, "/api/authz/roles", l.URI)
 			})
 		})
+	})
+}
+
+func loginSessionIDFromCookie(t *testing.T, reqPayload iam.LoginReq) string {
+	t.Helper()
+
+	cli, err := client.New(loginAPI)
+	require.NoError(t, err)
+
+	apiResp, err := cli.Create(reqPayload)
+	require.NoError(t, err)
+
+	helper.TestResp(t, apiResp, func(t *testing.T, rsp *model.Empty) {
+		t.Helper()
+	})
+
+	var data map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(apiResp.Data, &data), "response data: %s", string(apiResp.Data))
+	require.NotContains(t, data, "session_id")
+
+	for _, cookie := range apiResp.Cookies {
+		if cookie.Name != "session_id" {
+			continue
+		}
+		require.NotEmpty(t, cookie.Value)
+		require.Regexp(t, `^[0-9a-f]{64}$`, cookie.Value)
+		return cookie.Value
+	}
+
+	require.FailNow(t, "session cookie not found")
+	return ""
+}
+
+func grantLogmgmtTestPermissions(t *testing.T, userID string) {
+	t.Helper()
+
+	perm := rbac.RBAC()
+	require.NoError(t, perm.AssignRole(rbac.DefaultTenant, userID, logmgmtTestReaderRole))
+	require.NoError(t, perm.GrantPermission(rbac.DefaultTenant, logmgmtTestReaderRole, "/api/log/loginlog", http.MethodGet))
+	require.NoError(t, perm.GrantPermission(rbac.DefaultTenant, logmgmtTestReaderRole, "/api/log/operationlog", http.MethodGet))
+	require.NoError(t, perm.GrantPermission(rbac.DefaultTenant, logmgmtTestReaderRole, "/api/logout", http.MethodPost))
+
+	require.NoError(t, perm.AssignRole(rbac.DefaultTenant, "root", logmgmtTestAdminRole))
+	require.NoError(t, perm.GrantPermission(rbac.DefaultTenant, logmgmtTestAdminRole, "/api/authz/roles", http.MethodPost))
+
+	allowed, err := perm.Authorize(rbac.DefaultTenant, userID, "/api/log/loginlog", http.MethodGet)
+	require.NoError(t, err)
+	require.True(t, allowed)
+	allowed, err = perm.Authorize(rbac.DefaultTenant, userID, "/api/log/operationlog", http.MethodGet)
+	require.NoError(t, err)
+	require.True(t, allowed)
+	allowed, err = perm.Authorize(rbac.DefaultTenant, userID, "/api/logout", http.MethodPost)
+	require.NoError(t, err)
+	require.True(t, allowed)
+	allowed, err = perm.Authorize(rbac.DefaultTenant, "root", "/api/authz/roles", http.MethodPost)
+	require.NoError(t, err)
+	require.True(t, allowed)
+
+	t.Cleanup(func() {
+		require.NoError(t, perm.UnassignRole(rbac.DefaultTenant, userID, logmgmtTestReaderRole))
+		require.NoError(t, perm.UnassignRole(rbac.DefaultTenant, "root", logmgmtTestAdminRole))
+		require.NoError(t, perm.RevokeRolePermissions(rbac.DefaultTenant, logmgmtTestReaderRole))
+		require.NoError(t, perm.RevokeRolePermissions(rbac.DefaultTenant, logmgmtTestAdminRole))
 	})
 }

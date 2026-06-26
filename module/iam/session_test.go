@@ -14,6 +14,7 @@ import (
 	"github.com/hydroan/gst/internal/helper"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/types"
@@ -1279,21 +1280,38 @@ func loginSessionCookie(t *testing.T, username, password string) *http.Cookie {
 func loginSession(t *testing.T, username, password string) string {
 	t.Helper()
 
+	return loginSessionIDFromCookie(t, username, password)
+}
+
+func loginSessionIDFromCookie(t *testing.T, username, password string) string {
+	t.Helper()
+
 	cli, err := client.New(loginAPI)
 	require.NoError(t, err)
 
-	resp, err := cli.Create(iam.LoginReq{
+	apiResp, err := cli.Create(iam.LoginReq{
 		Username: username,
 		Password: password,
 	})
 	require.NoError(t, err)
 
-	sessionID := ""
-	helper.TestResp(t, resp, func(t *testing.T, rsp *iam.LoginRsp) {
+	helper.TestResp(t, apiResp, func(t *testing.T, rsp *model.Empty) {
 		t.Helper()
-		require.NotEmpty(t, rsp.SessionID)
-		sessionID = rsp.SessionID
 	})
 
-	return sessionID
+	var data map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(apiResp.Data, &data), "response data: %s", string(apiResp.Data))
+	require.NotContains(t, data, "session_id")
+
+	for _, cookie := range apiResp.Cookies {
+		if cookie.Name != "session_id" {
+			continue
+		}
+		require.NotEmpty(t, cookie.Value)
+		require.Regexp(t, `^[0-9a-f]{64}$`, cookie.Value)
+		return cookie.Value
+	}
+
+	require.FailNow(t, "session cookie not found")
+	return ""
 }

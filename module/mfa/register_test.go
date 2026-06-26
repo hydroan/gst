@@ -20,6 +20,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/helper"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
+	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/module/mfa"
 	"github.com/hydroan/gst/types/consts"
@@ -126,24 +127,9 @@ func TestTOTP(t *testing.T) {
 	})
 
 	t.Run("login", func(t *testing.T) {
-		cli, err := client.New(loginAPI)
-		require.NoError(t, err)
-
-		resp, err := cli.Create(iam.LoginReq{
+		sessionID = loginSessionIDFromCookie(t, iam.LoginReq{
 			Username: username,
 			Password: password,
-		})
-		require.NoError(t, err)
-
-		helper.TestResp(t, resp, func(t *testing.T, rsp *iam.LoginRsp) {
-			t.Helper(
-			// #*modeliam.LoginRsp {
-			//   +SessionID => "019cbc8c-98d5-72ee-813c-c2a098780bfc" #string
-			// }
-			)
-
-			require.NotEmpty(t, rsp.SessionID)
-			sessionID = rsp.SessionID
 		})
 	})
 
@@ -403,22 +389,13 @@ func TestTOTP(t *testing.T) {
 	})
 
 	t.Run("login_with_totp_code", func(t *testing.T) {
-		cli, err := client.New(loginAPI)
-		require.NoError(t, err)
-
 		code, err := totp.GenerateCode(secret, time.Now())
 		require.NoError(t, err)
 
-		resp, err := cli.Create(iam.LoginReq{
+		_ = loginSessionIDFromCookie(t, iam.LoginReq{
 			Username: username,
 			Password: password,
 			TOTPCode: code,
-		})
-		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp *iam.LoginRsp) {
-			t.Helper()
-
-			require.NotEmpty(t, rsp.SessionID)
 		})
 	})
 
@@ -516,22 +493,17 @@ func TestTOTP(t *testing.T) {
 		if len(backupCodes) < 2 {
 			t.Skip("not enough backup codes available")
 		}
-		cli, err := client.New(loginAPI)
-		require.NoError(t, err)
 
-		resp, err := cli.Create(iam.LoginReq{
+		_ = loginSessionIDFromCookie(t, iam.LoginReq{
 			Username:   username,
 			Password:   password,
 			BackupCode: backupCodes[1],
 		})
+
+		cli, err := client.New(loginAPI)
 		require.NoError(t, err)
-		helper.TestResp(t, resp, func(t *testing.T, rsp *iam.LoginRsp) {
-			t.Helper()
 
-			require.NotEmpty(t, rsp.SessionID)
-		})
-
-		resp, err = cli.Create(iam.LoginReq{
+		resp, err := cli.Create(iam.LoginReq{
 			Username:   username,
 			Password:   password,
 			BackupCode: backupCodes[1],
@@ -707,6 +679,36 @@ func TestTOTP(t *testing.T) {
 		assertResponseDataFieldExists(t, resp, "device_count")
 		assertResponseDataArrayField(t, resp, "devices")
 	})
+}
+
+func loginSessionIDFromCookie(t *testing.T, reqPayload iam.LoginReq) string {
+	t.Helper()
+
+	cli, err := client.New(loginAPI)
+	require.NoError(t, err)
+
+	apiResp, err := cli.Create(reqPayload)
+	require.NoError(t, err)
+
+	helper.TestResp(t, apiResp, func(t *testing.T, rsp *model.Empty) {
+		t.Helper()
+	})
+
+	var data map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(apiResp.Data, &data), "response data: %s", string(apiResp.Data))
+	require.NotContains(t, data, "session_id")
+
+	for _, cookie := range apiResp.Cookies {
+		if cookie.Name != "session_id" {
+			continue
+		}
+		require.NotEmpty(t, cookie.Value)
+		require.Regexp(t, `^[0-9a-f]{64}$`, cookie.Value)
+		return cookie.Value
+	}
+
+	require.FailNow(t, "session cookie not found")
+	return ""
 }
 
 func extractSecretFromOtpauthURL(t *testing.T, otpauthURL string) string {

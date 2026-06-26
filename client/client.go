@@ -71,6 +71,7 @@ type Resp struct {
 	Msg     string          `json:"msg,omitempty"`
 	Data    json.RawMessage `json:"data,omitempty"`
 	TraceID string          `json:"trace_id,omitempty"`
+	Cookies []*http.Cookie  `json:"-"`
 }
 type batchReq struct {
 	// IDs is the id list that should be batch delete.
@@ -447,11 +448,12 @@ func (c *Client) request(action action, payload any) (*Resp, error) {
 		if res.Code != 0 {
 			return nil, fmt.Errorf("response status code: %d, code: %d, msg: %s, body: %s", resp.StatusCode, res.Code, res.Msg, buf.String())
 		}
+		res.Cookies = resp.Cookies()
 		return res, nil
 	}
 
 	// Delete or BatchDelete response is empty with http status 204.
-	return &Resp{}, nil
+	return &Resp{Cookies: resp.Cookies()}, nil
 }
 
 // StreamCallback is a function type for handling stream events.
