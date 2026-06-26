@@ -13,16 +13,25 @@ import (
 )
 
 type RoleBinding struct {
-	SubjectID string `json:"subject_id,omitempty" schema:"subject_id"`
-	RoleID    string `json:"role_id,omitempty" schema:"role_id"`
+	TenantID  string `json:"tenant_id,omitempty" schema:"tenant_id" gorm:"size:191;default:default;uniqueIndex:idx_authz_role_bindings_tenant_subject_role"`
+	SubjectID string `json:"subject_id,omitempty" schema:"subject_id" gorm:"size:191;uniqueIndex:idx_authz_role_bindings_tenant_subject_role"`
+	RoleID    string `json:"role_id,omitempty" schema:"role_id" gorm:"size:191;uniqueIndex:idx_authz_role_bindings_tenant_subject_role"`
 
 	model.Base
 }
 
 func (r *RoleBinding) Purge() bool { return true }
+
+func (r *RoleBinding) tenant() string {
+	if r != nil && len(r.TenantID) > 0 {
+		return r.TenantID
+	}
+	return rbac.DefaultTenant
+}
+
 func (RoleBinding) Design() {
 	dsl.Migrate(true)
-	dsl.Route("/authz/role-bindings", func() {
+	dsl.Route("authz/role-bindings", func() {
 		dsl.Create(func() {})
 		dsl.Delete(func() {})
 		dsl.List(func() {})
@@ -43,16 +52,18 @@ func (r *RoleBinding) CreateBefore(ctx context.Context) error {
 	if err := database.Database[*Role](ctx).Get(&role, r.RoleID); err != nil {
 		return err
 	}
+	if role.tenant() != r.tenant() {
+		return errors.New("role tenant does not match binding tenant")
+	}
 
 	// If the subject already has the role, set the same ID to update it.
-	r.SetID(util.HashID(r.SubjectID, r.RoleID))
+	r.SetID(util.HashID(r.tenant(), r.SubjectID, r.RoleID))
 
 	return nil
 }
 
 func (r *RoleBinding) CreateAfter(ctx context.Context) error {
-	// role.ID always equal role.Code
-	if err := rbac.RBAC().AssignRole(r.SubjectID, r.RoleID); err != nil {
+	if err := rbac.RBAC().AssignRole(r.tenant(), r.SubjectID, r.RoleID); err != nil {
 		return err
 	}
 
@@ -64,14 +75,14 @@ func (r *RoleBinding) DeleteBefore(ctx context.Context) error {
 	if err := database.Database[*RoleBinding](ctx).Get(r, r.ID); err != nil {
 		return err
 	}
-	// role.ID always equal role.Code
-	return rbac.RBAC().UnassignRole(r.SubjectID, r.RoleID)
+	return rbac.RBAC().UnassignRole(r.tenant(), r.SubjectID, r.RoleID)
 }
 
 func (r *RoleBinding) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	if r == nil {
 		return nil
 	}
+	enc.AddString("tenant_id", r.TenantID)
 	enc.AddString("subject_id", r.SubjectID)
 	enc.AddString("role_id", r.RoleID)
 	_ = enc.AddObject("base", &r.Base)

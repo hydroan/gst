@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
 	"github.com/hydroan/gst/model"
@@ -25,8 +26,9 @@ func (m *MenuService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.M
 //
 // The flow deliberately mirrors the RBAC data model:
 //   - root is a built-in user ID and bypasses menu filtering completely.
-//   - RoleBinding maps the current subject ID to role IDs.
-//   - when the subject has no RoleBinding records, default roles provide the fallback menu set.
+//   - RoleBinding maps the current subject ID to role IDs inside the default tenant.
+//   - when the subject has no RoleBinding records, default roles in the default
+//     tenant provide the fallback menu set.
 //   - Role.MenuIDs grants fully selected menus; Role.MenuPartialIDs keeps parent
 //     menu nodes visible when only part of their children are selected.
 //   - Menu.DomainPattern still constrains visibility by the current request host.
@@ -42,7 +44,7 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 	)
 
 	if err := database.Database[*modelauthz.RoleBinding](ctx).
-		WithQuery(&modelauthz.RoleBinding{SubjectID: ctx.UserID()}).
+		WithQuery(&modelauthz.RoleBinding{TenantID: rbac.DefaultTenant, SubjectID: ctx.UserID()}).
 		List(&roleBindings); err != nil {
 		log.Error(err)
 		return err
@@ -61,7 +63,7 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 			return nil
 		}
 		if err := database.Database[*modelauthz.Role](ctx).
-			WithQuery(&modelauthz.Role{Base: model.Base{ID: strings.Join(roleIDs, ",")}}).List(&roles); err != nil {
+			WithQuery(&modelauthz.Role{TenantID: rbac.DefaultTenant, Base: model.Base{ID: strings.Join(roleIDs, ",")}}).List(&roles); err != nil {
 			log.Error(err)
 			return err
 		}
@@ -73,7 +75,7 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 	}
 	if len(roleBindings) == 0 {
 		if err := database.Database[*modelauthz.Role](ctx).
-			WithQuery(&modelauthz.Role{Default: new(true)}).
+			WithQuery(&modelauthz.Role{TenantID: rbac.DefaultTenant, Default: new(true)}).
 			List(&roles); err != nil {
 			log.Error(err)
 			return err

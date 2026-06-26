@@ -399,19 +399,20 @@ func TestAuthz(t *testing.T) {
 
 			missingRoleID := "missing_default_fallback_role"
 			invalidRoleBinding := &authz.RoleBinding{
+				TenantID:  rbac.DefaultTenant,
 				SubjectID: userID,
 				RoleID:    missingRoleID,
 				Base:      model.Base{ID: "invalid_default_fallback_role_binding"},
 			}
 			require.NoError(t, database.Database[*authz.RoleBinding](context.Background()).WithoutHook().Create(invalidRoleBinding))
-			_, err = rbac.Enforcer.AddRoleForUser(userID, missingRoleID)
+			_, err = rbac.Enforcer.AddGroupingPolicy(userID, missingRoleID, rbac.DefaultTenant)
 			require.NoError(t, err)
-			_, err = rbac.Enforcer.AddPermissionForUser(missingRoleID, "/api/authz/menus", http.MethodGet, "allow")
+			_, err = rbac.Enforcer.AddPolicy(rbac.DefaultTenant, missingRoleID, "/api/authz/menus", http.MethodGet, "allow")
 			require.NoError(t, err)
 			t.Cleanup(func() {
 				_ = database.Database[*authz.RoleBinding](context.Background()).WithoutHook().WithPurge().Delete(invalidRoleBinding)
-				_, _ = rbac.Enforcer.DeleteRoleForUser(userID, missingRoleID)
-				_, _ = rbac.Enforcer.DeletePermissionForUser(missingRoleID, "/api/authz/menus", http.MethodGet, "allow")
+				_, _ = rbac.Enforcer.RemoveGroupingPolicy(userID, missingRoleID, rbac.DefaultTenant)
+				_, _ = rbac.Enforcer.RemovePolicy(rbac.DefaultTenant, missingRoleID, "/api/authz/menus", http.MethodGet, "allow")
 				_, _ = cliRole.Delete(defaultRoleID)
 				_, _ = cli.Delete(defaultMenuID)
 			})
@@ -440,7 +441,6 @@ func TestAuthz(t *testing.T) {
 		}))
 		require.NoError(t, err)
 		var roleID string
-		var conflictRoleID string
 		var resp *client.Resp
 		var roleMenuID string
 
@@ -487,24 +487,15 @@ func TestAuthz(t *testing.T) {
 			helper.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper()
 				require.NotEmpty(t, rsp.ID)
+				require.Equal(t, rbac.DefaultTenant, rsp.TenantID)
 				require.Equal(t, createReq.Name, rsp.Name)
 				require.Equal(t, createReq.Code, rsp.Code)
 				roleID = rsp.ID
 			})
-			policies, policyErr := rbac.Enforcer.GetPermissionsForUser(createReq.Code)
+			policies, policyErr := rbac.Enforcer.GetFilteredPolicy(0, rbac.DefaultTenant, createReq.Code)
 			require.NoError(t, policyErr)
-			requirePolicy(t, policies, createReq.Code, "/api/authz/roles", http.MethodGet, "allow")
-			requireNoPolicy(t, policies, createReq.Code, "/api/authz/roles", http.MethodPost, "allow")
-		})
-
-		t.Run("create_conflict_role", func(t *testing.T) {
-			resp, err = cli.Create(&authz.Role{Name: "Test Role Conflict", Code: "test_role_conflict"})
-			require.NoError(t, err)
-			helper.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
-				t.Helper()
-				require.NotEmpty(t, rsp.ID)
-				conflictRoleID = rsp.ID
-			})
+			requirePolicy(t, policies, rbac.DefaultTenant, createReq.Code, "/api/authz/roles", http.MethodGet, "allow")
+			requireNoPolicy(t, policies, rbac.DefaultTenant, createReq.Code, "/api/authz/roles", http.MethodPost, "allow")
 		})
 
 		t.Run("get", func(t *testing.T) {
@@ -551,17 +542,18 @@ func TestAuthz(t *testing.T) {
 			})
 		})
 
-		t.Run("failed_update_keeps_existing_policy", func(t *testing.T) {
+		t.Run("failed_tenant_update_keeps_existing_policy", func(t *testing.T) {
 			_, err = cli.Update(roleID, &authz.Role{
-				Name:    "Test Role Conflict",
-				Code:    "test_role",
-				MenuIDs: nil,
+				TenantID: "other",
+				Name:     "Test Role Updated",
+				Code:     "test_role",
+				MenuIDs:  nil,
 			})
 			require.Error(t, err)
 
-			policies, policyErr := rbac.Enforcer.GetPermissionsForUser("test_role")
+			policies, policyErr := rbac.Enforcer.GetFilteredPolicy(0, rbac.DefaultTenant, "test_role")
 			require.NoError(t, policyErr)
-			requirePolicy(t, policies, "test_role", "/api/authz/roles", http.MethodGet, "allow")
+			requirePolicy(t, policies, rbac.DefaultTenant, "test_role", "/api/authz/roles", http.MethodGet, "allow")
 		})
 
 		t.Run("patch", func(t *testing.T) {
@@ -607,10 +599,6 @@ func TestAuthz(t *testing.T) {
 			require.NotNil(t, resp)
 			require.Equal(t, testSuccessCode, resp.Code, "delete should return success")
 		})
-
-		resp, err = cli.Delete(conflictRoleID)
-		require.NoError(t, err)
-		require.NotNil(t, resp)
 
 		resp, err = cliMenu.Delete(roleMenuID)
 		require.NoError(t, err)
@@ -663,10 +651,14 @@ func TestAuthz(t *testing.T) {
 			helper.TestResp[*authz.RoleBinding](t, resp, func(t *testing.T, rsp *authz.RoleBinding) {
 				t.Helper()
 				require.NotEmpty(t, rsp.ID)
+				require.Equal(t, rbac.DefaultTenant, rsp.TenantID)
 				require.Equal(t, userID, rsp.SubjectID)
 				require.Equal(t, roleID, rsp.RoleID)
 				roleBindingID = rsp.ID
 			})
+			groupingPolicies, policyErr := rbac.Enforcer.GetFilteredGroupingPolicy(0, userID, roleID, rbac.DefaultTenant)
+			require.NoError(t, policyErr)
+			require.Equal(t, [][]string{{userID, roleID, rbac.DefaultTenant}}, groupingPolicies)
 		})
 
 		t.Run("get", func(t *testing.T) {
@@ -676,6 +668,7 @@ func TestAuthz(t *testing.T) {
 			helper.TestResp[*authz.RoleBinding](t, resp, func(t *testing.T, rsp *authz.RoleBinding) {
 				t.Helper()
 				require.Equal(t, roleBindingID, rsp.ID)
+				require.Equal(t, rbac.DefaultTenant, rsp.TenantID)
 				require.Equal(t, userID, rsp.SubjectID)
 				require.Equal(t, roleID, rsp.RoleID)
 			})
@@ -719,7 +712,7 @@ func TestAuthz(t *testing.T) {
 
 			remaining := make([]*authz.RoleBinding, 0)
 			err = database.Database[*authz.RoleBinding](context.Background()).
-				WithQuery(&authz.RoleBinding{RoleID: deletedRoleID}).
+				WithQuery(&authz.RoleBinding{TenantID: rbac.DefaultTenant, RoleID: deletedRoleID}).
 				List(&remaining)
 			require.NoError(t, err)
 			require.Empty(t, remaining)

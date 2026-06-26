@@ -7,8 +7,7 @@ import (
 	"syscall"
 
 	"github.com/hydroan/gst/authn/jwt"
-	"github.com/hydroan/gst/authz/rbac/basic"
-	"github.com/hydroan/gst/authz/rbac/tenant"
+	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/cache"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/cronjob"
@@ -108,8 +107,7 @@ func Bootstrap() error {
 		ldap.Init,
 
 		// Authorization and Authentication
-		basic.Init,
-		tenant.Init,
+		rbac.Init,
 		jwt.Init,
 
 		// service

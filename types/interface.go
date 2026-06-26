@@ -337,29 +337,30 @@ type DistributedCache[T any] interface {
 	DeleteWithSync(key string) error
 }
 
-// RBAC provides role, permission, and subject assignment operations.
+// RBAC provides tenant-scoped role, permission, and subject assignment operations.
 // When RBAC is disabled or not initialized, the framework may provide a safe
 // no-op implementation whose methods succeed without side effects.
 //
 // RBAC Model:
+//   - Tenant: Authorization domain for roles, permissions, and assignments
 //   - Subject: Users or entities that need access
 //   - Role: Named collection of permissions
-//   - Resource: Protected objects or endpoints
+//   - Object: Protected resources or endpoints
 //   - Action: Operations on resources
 type RBAC interface {
-	AddRole(name string) error
-	RemoveRole(name string) error
+	AddRole(tenant string, role string) error
+	RemoveRole(tenant string, role string) error
 
-	GrantPermission(role string, resource string, action string) error
+	GrantPermission(tenant string, role string, object string, action string) error
 	// RevokePermission removes policies for the given role with flexible behaviors:
-	// - resource=="" && action=="" : remove all policies for the role
-	// - resource=="" && action!="" : remove policies matching the role and action
-	// - resource!="" && action=="" : remove policies matching the role and resource
-	// - resource!="" && action!="" : remove the exact (role, resource, action, "allow") policy
-	RevokePermission(role string, resource string, action string) error
+	// - object=="" && action=="" : remove all policies for role in tenant
+	// - object=="" && action!="" : remove policies matching tenant, role, and action
+	// - object!="" && action=="" : remove policies matching tenant, role, and object
+	// - object!="" && action!="" : remove the exact tenant, role, object, action policy
+	RevokePermission(tenant string, role string, object string, action string) error
 
-	AssignRole(subject string, role string) error
-	UnassignRole(subject string, role string) error
+	AssignRole(tenant string, subject string, role string) error
+	UnassignRole(tenant string, subject string, role string) error
 }
 
 // Module describes a registered API module: route metadata, auth exposure,

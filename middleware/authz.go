@@ -26,6 +26,7 @@ func Authz() gin.HandlerFunc {
 		if len(sub) == 0 {
 			sub = consts.AUTHZ_USER_BLOCKED
 		}
+		tenant := rbac.DefaultTenant
 		obj := c.Request.URL.Path
 		act := c.Request.Method
 
@@ -39,7 +40,7 @@ func Authz() gin.HandlerFunc {
 			})
 			return
 		}
-		if allow, err = rbac.Enforcer.Enforce(sub, obj, act); err != nil {
+		if allow, err = rbac.Enforcer.Enforce(tenant, sub, obj, act); err != nil {
 			zap.S().Error(err)
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 				"code":          -1,
@@ -54,6 +55,7 @@ func Authz() gin.HandlerFunc {
 			if logger.Authz != nil {
 				logger.Authz.Infoz(
 					"",
+					zap.String("tenant", tenant),
 					zap.String("sub", sub),
 					zap.String("obj", obj),
 					zap.String("act", act),
@@ -73,6 +75,7 @@ func Authz() gin.HandlerFunc {
 		if logger.Authz != nil {
 			logger.Authz.Infoz(
 				"",
+				zap.String("tenant", tenant),
 				zap.String("sub", sub),
 				zap.String("obj", obj),
 				zap.String("act", act),

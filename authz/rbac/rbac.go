@@ -3,9 +3,14 @@ package rbac
 import (
 	"github.com/casbin/casbin/v3"
 	gormadapter "github.com/casbin/gorm-adapter/v3"
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 )
+
+// DefaultTenant is the built-in authorization domain used when no tenant
+// resolver is configured by the application.
+const DefaultTenant = "default"
 
 var (
 	Enforcer *casbin.SyncedEnforcer
@@ -14,7 +19,7 @@ var (
 
 type rbac struct {
 	enforcer *casbin.SyncedEnforcer
-	addapter *gormadapter.Adapter
+	adapter  *gormadapter.Adapter
 }
 
 // noop implements a no-op RBAC that safely does nothing.
@@ -22,12 +27,17 @@ type rbac struct {
 // has not been initialized yet to avoid nil pointer panics.
 type noop struct{}
 
-func (noop) AddRole(name string) error                                          { return nil }
-func (noop) RemoveRole(name string) error                                       { return nil }
-func (noop) GrantPermission(role string, resource string, action string) error  { return nil }
-func (noop) RevokePermission(role string, resource string, action string) error { return nil }
-func (noop) AssignRole(subject string, role string) error                       { return nil }
-func (noop) UnassignRole(subject string, role string) error                     { return nil }
+func (noop) AddRole(tenant string, role string) error    { return nil }
+func (noop) RemoveRole(tenant string, role string) error { return nil }
+func (noop) GrantPermission(tenant string, role string, object string, action string) error {
+	return nil
+}
+
+func (noop) RevokePermission(tenant string, role string, object string, action string) error {
+	return nil
+}
+func (noop) AssignRole(tenant string, subject string, role string) error   { return nil }
+func (noop) UnassignRole(tenant string, subject string, role string) error { return nil }
 
 func RBAC() types.RBAC {
 	// When RBAC is disabled or Enforcer is not initialized,
@@ -37,68 +47,75 @@ func RBAC() types.RBAC {
 	}
 	return &rbac{
 		enforcer: Enforcer,
-		addapter: Adapter,
+		adapter:  Adapter,
 	}
 }
 
-// AddRole is a no-op in Casbin, roles are created implicitly when used.
-func (r *rbac) AddRole(name string) error {
+// AddRole is a no-op because Casbin creates roles implicitly when a tenant
+// receives permissions or grouping policies for that role.
+func (r *rbac) AddRole(tenant string, role string) error {
 	return nil
 }
 
-func (r *rbac) RemoveRole(name string) error {
-	if _, err := r.enforcer.DeleteRole(name); err != nil {
-		return err
-	}
-	return nil
+// RemoveRole removes all policies and subject assignments for role in tenant.
+func (r *rbac) RemoveRole(tenant string, role string) error {
+	policyErr := r.RevokePermission(tenant, role, "", "")
+	_, groupingErr := r.enforcer.RemoveFilteredGroupingPolicy(1, role, tenant)
+	return errors.Join(policyErr, groupingErr)
 }
 
-func (r *rbac) GrantPermission(role string, resource string, action string) error {
-	if _, err := r.enforcer.AddPermissionForUser(role, resource, action, "allow"); err != nil {
+// GrantPermission grants role access to object/action inside tenant.
+func (r *rbac) GrantPermission(tenant string, role string, object string, action string) error {
+	if _, err := r.enforcer.AddPolicy(tenant, role, object, action, string(consts.EffectAllow)); err != nil {
 		return err
 	}
 	return nil
 }
 
 // RevokePermission removes policies for the given role with flexible behaviors:
-// - resource=="" && action=="" : remove all policies for the role
-// - resource=="" && action!="" : remove policies matching the role and action
-// - resource!="" && action=="" : remove policies matching the role and resource
-// - resource!="" && action!="" : remove the exact (role, resource, action, "allow") policy
-func (r *rbac) RevokePermission(role string, resource string, action string) error {
-	if len(resource) == 0 && len(action) == 0 {
-		if _, err := r.enforcer.RemoveFilteredPolicy(0, role); err != nil {
+// - object=="" && action=="" : remove all policies for role in tenant
+// - object=="" && action!="" : remove policies matching tenant, role, and action
+// - object!="" && action=="" : remove policies matching tenant, role, and object
+// - object!="" && action!="" : remove the exact tenant, role, object, action policy
+func (r *rbac) RevokePermission(tenant string, role string, object string, action string) error {
+	if len(object) == 0 && len(action) == 0 {
+		if _, err := r.enforcer.RemoveFilteredPolicy(0, tenant, role); err != nil {
 			return err
 		}
 		return nil
 	}
-	if len(resource) == 0 && len(action) > 0 {
-		if _, err := r.enforcer.RemoveFilteredPolicy(0, role, "", action); err != nil {
+	if len(object) == 0 && len(action) > 0 {
+		if _, err := r.enforcer.RemoveFilteredPolicy(0, tenant, role, "", action); err != nil {
 			return err
 		}
 		return nil
 	}
-	if len(action) == 0 && len(resource) > 0 {
-		if _, err := r.enforcer.RemoveFilteredPolicy(0, role, resource); err != nil {
+	if len(action) == 0 && len(object) > 0 {
+		if _, err := r.enforcer.RemoveFilteredPolicy(0, tenant, role, object); err != nil {
 			return err
 		}
 		return nil
 	}
-	if _, err := r.enforcer.DeletePermissionForUser(role, resource, action, string(consts.EffectAllow)); err != nil {
+	if _, err := r.enforcer.RemovePolicy(tenant, role, object, action, string(consts.EffectAllow)); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *rbac) AssignRole(subject string, role string) error {
-	if _, err := r.enforcer.AddRoleForUser(subject, role); err != nil {
+// AssignRole assigns subject to role inside tenant.
+func (r *rbac) AssignRole(tenant string, subject string, role string) error {
+	if subject == role {
+		return nil
+	}
+	if _, err := r.enforcer.AddGroupingPolicy(subject, role, tenant); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *rbac) UnassignRole(subject string, role string) error {
-	if _, err := r.enforcer.DeleteRoleForUser(subject, role); err != nil {
+// UnassignRole removes a subject-role assignment from tenant.
+func (r *rbac) UnassignRole(tenant string, subject string, role string) error {
+	if _, err := r.enforcer.RemoveGroupingPolicy(subject, role, tenant); err != nil {
 		return err
 	}
 	return nil

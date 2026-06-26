@@ -7,26 +7,27 @@ import (
 
 // CasbinRule stores Casbin policy and grouping rules in the adapter table.
 //
-// The RBAC module creates this table through
-// gormadapter.NewAdapterByDBWithCustomTable(database.DB(), new(modelauthz.CasbinRule)).
+// The RBAC module creates this table through the Casbin GORM adapter.
 // Ptype identifies policy or grouping rows, and V0 through V5 map directly to
 // Casbin's policy fields. The ID must be an integer because the GORM adapter
 // creates an auto-increment primary key for the policy table.
 //
 // Policy rows use ptype "p":
-//   - V0: role code, for example "admin"
-//   - V1: resource path, for example "/api/authz/routes"
-//   - V2: action, usually the HTTP method such as "GET"
-//   - V3: effect, currently "allow"
+//   - V0: tenant, for example "default"
+//   - V1: role, for example "admin"
+//   - V2: object path, for example "/api/authz/routes"
+//   - V3: action, usually the HTTP method such as "GET"
+//   - V4: effect, currently "allow"
 //
 // Grouping rows use ptype "g":
-//   - V0: subject, currently the stable subject ID such as "root"
-//   - V1: role code, for example "admin"
+//   - V0: subject, usually the stable subject ID such as "root"
+//   - V1: role, for example "admin"
+//   - V2: tenant, for example "default"
 //
 // Example rows:
-//   - p, admin, /api/authz/routes, GET, allow
-//   - p, admin, /api/authz/roles, POST, allow
-//   - g, root, admin
+//   - p, default, admin, /api/authz/routes, GET, allow
+//   - p, default, admin, /api/authz/roles, POST, allow
+//   - g, root, admin, default
 type CasbinRule struct {
 	ID    uint64 `json:"id" gorm:"primaryKey;autoIncrement:true"`
 	Ptype string `json:"ptype" gorm:"size:100" schema:"ptype"`

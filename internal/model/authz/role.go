@@ -15,9 +15,10 @@ import (
 )
 
 type Role struct {
-	Name    string `json:"name,omitempty" schema:"name" gorm:"size:191;unique"`
-	Code    string `json:"code,omitempty" schema:"code" gorm:"size:191;unique"`
-	Default *bool  `json:"default,omitempty" schema:"default"`
+	TenantID string `json:"tenant_id,omitempty" schema:"tenant_id" gorm:"size:191;default:default;uniqueIndex:idx_authz_roles_tenant_code"`
+	Name     string `json:"name,omitempty" schema:"name" gorm:"size:191"`
+	Code     string `json:"code,omitempty" schema:"code" gorm:"size:191;uniqueIndex:idx_authz_roles_tenant_code"`
+	Default  *bool  `json:"default,omitempty" schema:"default"`
 
 	// Scope holds generic constraints for regional roles.
 	// Keys and values are user-defined and framework-agnostic.
@@ -47,6 +48,13 @@ func (Role) Design() {
 }
 
 func (r *Role) Purge() bool { return true }
+
+func (r *Role) tenant() string {
+	if r != nil && len(r.TenantID) > 0 {
+		return r.TenantID
+	}
+	return rbac.DefaultTenant
+}
 
 func (r *Role) validate() error {
 	r.Name = strings.TrimSpace(r.Name)
@@ -78,7 +86,7 @@ func (r *Role) CreateAfter(ctx context.Context) error {
 		return err
 	}
 	e1 := r.syncPermissions(ctx)
-	e2 := rbac.RBAC().AddRole(r.Code)
+	e2 := rbac.RBAC().AddRole(r.tenant(), r.ID)
 	return errors.Join(e1, e2)
 }
 
@@ -96,6 +104,12 @@ func (r *Role) UpdateBefore(ctx context.Context) error {
 	if current.Code != r.Code {
 		return errors.New("role code is immutable")
 	}
+	if len(r.TenantID) == 0 {
+		r.TenantID = current.TenantID
+	}
+	if current.tenant() != r.tenant() {
+		return errors.New("role tenant is immutable")
+	}
 	return nil
 }
 
@@ -106,7 +120,7 @@ func (r *Role) UpdateAfter(ctx context.Context) error {
 		return err
 	}
 	e1 := r.syncPermissions(ctx)
-	e2 := rbac.RBAC().AddRole(r.Code)
+	e2 := rbac.RBAC().AddRole(r.tenant(), r.ID)
 	return errors.Join(e1, e2)
 }
 
@@ -116,8 +130,16 @@ func (r *Role) DeleteBefore(ctx context.Context) error {
 		return errors.New("role id is required")
 	}
 
+	current := new(Role)
+	if err := database.Database[*Role](ctx).WithoutHook().Get(current, r.ID); err != nil {
+		return err
+	}
+	if len(r.TenantID) == 0 {
+		r.TenantID = current.TenantID
+	}
+
 	roleBindings := make([]*RoleBinding, 0)
-	if err := database.Database[*RoleBinding](ctx).WithQuery(&RoleBinding{RoleID: r.ID}).List(&roleBindings); err != nil {
+	if err := database.Database[*RoleBinding](ctx).WithQuery(&RoleBinding{TenantID: r.tenant(), RoleID: r.ID}).List(&roleBindings); err != nil {
 		return err
 	}
 	if len(roleBindings) > 0 {
@@ -126,15 +148,15 @@ func (r *Role) DeleteBefore(ctx context.Context) error {
 		}
 	}
 
-	if err := rbac.RBAC().RevokePermission(r.ID, "", ""); err != nil {
+	if err := rbac.RBAC().RevokePermission(r.tenant(), r.ID, "", ""); err != nil {
 		return err
 	}
-	return rbac.RBAC().RemoveRole(r.ID)
+	return rbac.RBAC().RemoveRole(r.tenant(), r.ID)
 }
 
 type routePolicy struct {
-	resource string
-	action   string
+	object string
+	action string
 }
 
 // syncPermissions rebuilds Casbin policy rows for this role from Menu.Routes.
@@ -158,12 +180,12 @@ func (r *Role) syncPermissions(ctx context.Context) error {
 		newPolicies = append(newPolicies, routePoliciesForMenu(m)...)
 	}
 
-	if err := rbac.RBAC().RevokePermission(r.ID, "", ""); err != nil {
+	if err := rbac.RBAC().RevokePermission(r.tenant(), r.ID, "", ""); err != nil {
 		zap.S().Error(err)
 		return err
 	}
 	for _, p := range newPolicies {
-		if err := rbac.RBAC().GrantPermission(r.ID, p.resource, p.action); err != nil {
+		if err := rbac.RBAC().GrantPermission(r.tenant(), r.ID, p.object, p.action); err != nil {
 			zap.S().Error(err)
 			return err
 		}
@@ -181,8 +203,8 @@ func routePoliciesForMenu(m *Menu) []routePolicy {
 	// HTTP methods. Casbin stores those as individual path + method policies.
 	policies := make([]routePolicy, 0)
 	for _, route := range m.Routes {
-		resource := strings.TrimSpace(route.Path)
-		if len(resource) == 0 {
+		object := strings.TrimSpace(route.Path)
+		if len(object) == 0 {
 			continue
 		}
 		for _, method := range route.Methods {
@@ -190,7 +212,7 @@ func routePoliciesForMenu(m *Menu) []routePolicy {
 			if len(method) == 0 {
 				continue
 			}
-			policies = append(policies, routePolicy{resource: resource, action: method})
+			policies = append(policies, routePolicy{object: object, action: method})
 		}
 	}
 	return policies
@@ -200,6 +222,7 @@ func (r *Role) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	if r == nil {
 		return nil
 	}
+	enc.AddString("tenant_id", r.TenantID)
 	enc.AddString("code", r.Code)
 	enc.AddString("name", r.Name)
 	enc.AddString("id", r.ID)
