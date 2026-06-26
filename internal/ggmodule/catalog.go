@@ -19,11 +19,14 @@ import (
 // Addable is deliberately separate from discovery: gg module list should show
 // every discoverable framework module, while gg module add can only automate
 // modules whose Register function can be called without project-specific args.
+// Copyable is true only when module/<name>/module.json exists, which is the
+// explicit copy contract required by gg module copy.
 type Module struct {
 	Name        string
 	PackageName string
 	ImportPath  string
 	Addable     bool
+	Copyable    bool
 }
 
 // ListModules returns built-in framework modules discovered from module/*/register.go.
@@ -61,6 +64,10 @@ func listModulesFromRoot(frameworkRoot string) ([]Module, error) {
 		}
 		info.Name = entry.Name()
 		info.ImportPath = filepath.ToSlash(filepath.Join(frameworkModulePath, "module", entry.Name()))
+		info.Copyable, err = moduleHasCopyManifest(filepath.Join(moduleRoot, entry.Name()))
+		if err != nil {
+			return nil, err
+		}
 		modules = append(modules, info)
 	}
 
@@ -87,6 +94,17 @@ func inspectModuleRegister(path string) (Module, error) {
 		return info, nil
 	}
 	return info, nil
+}
+
+func moduleHasCopyManifest(moduleDir string) (bool, error) {
+	info, err := os.Stat(filepath.Join(moduleDir, moduleManifestFilename))
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return !info.IsDir(), nil
 }
 
 // registerCanBeCalledWithoutArgs decides whether gg module add can emit a plain

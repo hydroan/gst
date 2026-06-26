@@ -77,7 +77,7 @@ func runModuleList(cmd *cobra.Command) error {
 	// Use Cobra's command writer for list output so tests and shell completion
 	// wrappers can capture the table without intercepting process stdout.
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-	if _, err := fmt.Fprintln(w, "NAME\tPACKAGE\tADDABLE\tIMPORT"); err != nil {
+	if _, err := fmt.Fprintln(w, "NAME\tPACKAGE\tADDABLE\tCOPYABLE\tIMPORT"); err != nil {
 		return err
 	}
 	for _, module := range modules {
@@ -85,7 +85,11 @@ func runModuleList(cmd *cobra.Command) error {
 		if !module.Addable {
 			addable = "no"
 		}
-		if _, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", module.Name, module.PackageName, addable, module.ImportPath); err != nil {
+		copyable := "yes"
+		if !module.Copyable {
+			copyable = "no"
+		}
+		if _, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", module.Name, module.PackageName, addable, copyable, module.ImportPath); err != nil {
 			return err
 		}
 	}

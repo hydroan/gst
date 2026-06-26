@@ -38,7 +38,7 @@ func newModuleCommandProjectWithFramework(t *testing.T) string {
 
 func writeFakeFrameworkModule(t *testing.T, projectDir string, name string, packageName string, registerParam string) {
 	t.Helper()
-	moduleDir := filepath.Join(projectDir, "internal", "gst", "module", name)
+	moduleDir := frameworkModuleDir(t, projectDir, name)
 	if err := os.MkdirAll(moduleDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -56,6 +56,11 @@ func writeFakeFrameworkModule(t *testing.T, projectDir string, name string, pack
 	if err := os.WriteFile(frameworkMod, []byte("module github.com/hydroan/gst\n\ngo 1.26\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func frameworkModuleDir(t *testing.T, projectDir string, name string) string {
+	t.Helper()
+	return filepath.Join(projectDir, "internal", "gst", "module", name)
 }
 
 func readProjectModuleFile(t *testing.T, projectDir string) string {
