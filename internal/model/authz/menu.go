@@ -112,26 +112,15 @@ func (m *Menu) DeleteBefore(ctx context.Context) error {
 		return err
 	}
 	for _, r := range roles {
-		if slices.Contains(r.MenuIDs, m.ID) {
-			menuIDs := make([]string, 0)
-			for _, mid := range r.MenuIDs {
-				if mid != m.ID {
-					menuIDs = append(menuIDs, mid)
-				}
-			}
-			r.MenuIDs = menuIDs
+		if !slices.Contains(r.MenuIDs, m.ID) && !slices.Contains(r.MenuPartialIDs, m.ID) {
+			continue
+		}
 
-			menuPartialIDs := make([]string, 0)
-			for _, mid := range r.MenuPartialIDs {
-				if mid != m.ID {
-					menuPartialIDs = append(menuPartialIDs, mid)
-				}
-			}
-			r.MenuPartialIDs = menuPartialIDs
+		r.MenuIDs = removeMenuID(r.MenuIDs, m.ID)
+		r.MenuPartialIDs = removeMenuID(r.MenuPartialIDs, m.ID)
 
-			if err := database.Database[*Role](ctx).Update(r); err != nil {
-				return err
-			}
+		if err := database.Database[*Role](ctx).Update(r); err != nil {
+			return err
 		}
 	}
 
@@ -182,4 +171,14 @@ func routePaths(routes []Route) []string {
 		}
 	}
 	return paths
+}
+
+func removeMenuID(ids datatypes.JSONSlice[string], menuID string) datatypes.JSONSlice[string] {
+	filtered := make(datatypes.JSONSlice[string], 0, len(ids))
+	for _, id := range ids {
+		if id != menuID {
+			filtered = append(filtered, id)
+		}
+	}
+	return filtered
 }

@@ -116,6 +116,16 @@ func (r *Role) DeleteBefore(ctx context.Context) error {
 		return errors.New("role id is required")
 	}
 
+	userRoles := make([]*UserRole, 0)
+	if err := database.Database[*UserRole](ctx).WithQuery(&UserRole{RoleID: r.ID}).List(&userRoles); err != nil {
+		return err
+	}
+	if len(userRoles) > 0 {
+		if err := database.Database[*UserRole](ctx).Delete(userRoles...); err != nil {
+			return err
+		}
+	}
+
 	if err := rbac.RBAC().RevokePermission(r.ID, "", ""); err != nil {
 		return err
 	}
@@ -137,12 +147,6 @@ type routePolicy struct {
 // rows behind. Rebuilding the role's policy set keeps casbin_rule consistent with
 // the current menu bindings.
 func (r *Role) syncPermissions(ctx context.Context) error {
-	o := new(Role)
-	if err := database.Database[*Role](ctx).Get(o, r.ID); err != nil {
-		zap.S().Error(err)
-		return err
-	}
-
 	newMenus := make([]*Menu, 0)
 	if err := database.Database[*Menu](ctx).WithQuery(&Menu{Base: model.Base{ID: strings.Join(r.MenuIDs, ",")}}).List(&newMenus); err != nil {
 		zap.S().Error(err)

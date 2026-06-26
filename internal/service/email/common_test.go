@@ -28,6 +28,13 @@ func newTestCache[T any]() *testCache[T] {
 	return &testCache[T]{items: make(map[string]testCacheEntry[T])}
 }
 
+func newEmailServiceContext(userID string) *types.ServiceContext {
+	baseCtx := types.ContextWithRequestMetadata(context.Background(), types.NewRequestMetadata(types.RequestMetadataFields{
+		UserID: userID,
+	}))
+	return types.NewServiceContext(nil, baseCtx, consts.PHASE_CREATE)
+}
+
 func (c *testCache[T]) Get(key string) (T, error) {
 	var zero T
 	entry, ok := c.items[key]
@@ -649,8 +656,7 @@ func TestChangeRequestCreate(t *testing.T) {
 
 	svc := &ChangeRequestService{}
 	svc.Logger = loggerzap.New("")
-	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
-	ctx = ctx.WithRequestMetadata(types.NewRequestMetadata(types.RequestMetadataFields{UserID: "user-change-1"}))
+	ctx := newEmailServiceContext("user-change-1")
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeRequestReq{
 		NewEmail:        " NEW@example.com ",
@@ -692,8 +698,7 @@ func TestChangeRequestCreateEmailAlreadyUsed(t *testing.T) {
 
 	svc := &ChangeRequestService{}
 	svc.Logger = loggerzap.New("")
-	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
-	ctx = ctx.WithRequestMetadata(types.NewRequestMetadata(types.RequestMetadataFields{UserID: "user-change-2"}))
+	ctx := newEmailServiceContext("user-change-2")
 
 	_, err := svc.Create(ctx, &modelemail.ChangeRequestReq{
 		NewEmail:        "new@example.com",
@@ -728,8 +733,7 @@ func TestChangeResendCreate(t *testing.T) {
 
 	svc := &ChangeResendService{}
 	svc.Logger = loggerzap.New("")
-	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
-	ctx = ctx.WithRequestMetadata(types.NewRequestMetadata(types.RequestMetadataFields{UserID: "user-change-3"}))
+	ctx := newEmailServiceContext("user-change-3")
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeResendReq{NewEmail: "new@example.com"})
 	require.NoError(t, err)
@@ -770,8 +774,7 @@ func TestChangeResendCreateThrottled(t *testing.T) {
 
 	svc := &ChangeResendService{}
 	svc.Logger = loggerzap.New("")
-	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
-	ctx = ctx.WithRequestMetadata(types.NewRequestMetadata(types.RequestMetadataFields{UserID: "user-change-4"}))
+	ctx := newEmailServiceContext("user-change-4")
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeResendReq{NewEmail: "new@example.com"})
 	require.NoError(t, err)
@@ -957,8 +960,7 @@ func TestChangeRequestCreateClearsCancellationMarker(t *testing.T) {
 
 	svc := &ChangeRequestService{}
 	svc.Logger = loggerzap.New("")
-	ctx := types.NewServiceContext(nil, nil, consts.PHASE_CREATE)
-	ctx = ctx.WithRequestMetadata(types.NewRequestMetadata(types.RequestMetadataFields{UserID: "user-change-8"}))
+	ctx := newEmailServiceContext("user-change-8")
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeRequestReq{
 		NewEmail:        "new@example.com",
