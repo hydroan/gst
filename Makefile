@@ -105,11 +105,7 @@ test:
 	go test ./ds/...
 	go test ./internal/codegen/gen/
 	go test ./internal/ggmodule
-	go test ./module/helloworld
-	go test ./module/iam
-	go test ./module/mfa
-	go test ./module/logmgmt
-	go test ./module/version
+	go test ./module/...
 	go test ./dbmigrate
 
 # Run unit tests with verbose output
@@ -124,11 +120,7 @@ testv:
 	go test -v ./ds/...
 	go test -v ./internal/codegen/gen/
 	go test -v ./internal/ggmodule
-	go test -v ./module/helloworld
-	go test -v ./module/iam
-	go test -v ./module/mfa
-	go test -v ./module/logmgmt
-	go test -v ./module/version
+	go test -v ./module/...
 	go test -v ./dbmigrate
 
 # Auto-fix code issues
