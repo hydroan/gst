@@ -110,6 +110,7 @@ func Init() error {
 
 	base := root.Group("/api")
 	auth = base.Group("")
+	auth.Use(middleware.AuthMarker())
 	pub = base.Group("")
 	middleware.SetApplyHandlers(
 		func(mid gin.HandlerFunc) {
