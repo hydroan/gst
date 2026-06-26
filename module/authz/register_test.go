@@ -1,6 +1,7 @@
 package authz_test
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/helper"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module/authz"
@@ -308,6 +310,55 @@ func TestAuthz(t *testing.T) {
 			require.NotNil(t, resp)
 			require.Equal(t, testSuccessCode, resp.Code, "delete should return success")
 		})
+
+		t.Run("delete_removes_partial_menu_references", func(t *testing.T) {
+			resp, err = cli.Create(&authz.Menu{
+				ParentID: "root",
+				Label:    "Partial Menu",
+				Path:     "/partial-menu",
+			})
+			require.NoError(t, err)
+			var partialMenuID string
+			helper.TestResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
+				t.Helper()
+				require.NotEmpty(t, rsp.ID)
+				partialMenuID = rsp.ID
+			})
+
+			cliRole, err := client.New(roleAPI, client.WithCookie(&http.Cookie{
+				Name:  "session_id",
+				Value: adminSessionID,
+			}))
+			require.NoError(t, err)
+			resp, err = cliRole.Create(&authz.Role{
+				Name:           "Partial Menu Role",
+				Code:           "partial_menu_role",
+				MenuPartialIDs: []string{partialMenuID},
+			})
+			require.NoError(t, err)
+			var partialRoleID string
+			helper.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
+				t.Helper()
+				require.NotEmpty(t, rsp.ID)
+				partialRoleID = rsp.ID
+			})
+
+			resp, err = cli.Delete(partialMenuID)
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+
+			got := new(authz.Role)
+			resp, err = cliRole.Get(partialRoleID, got)
+			require.NoError(t, err)
+			helper.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
+				t.Helper()
+				require.NotContains(t, []string(rsp.MenuPartialIDs), partialMenuID)
+			})
+
+			resp, err = cliRole.Delete(partialRoleID)
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+		})
 	})
 
 	t.Run("role", func(t *testing.T) {
@@ -568,6 +619,38 @@ func TestAuthz(t *testing.T) {
 				require.NotNil(t, rsp.Items)
 				require.GreaterOrEqual(t, rsp.Total, int64(0))
 			})
+		})
+
+		t.Run("delete_role_cleans_user_roles", func(t *testing.T) {
+			resp, err = cliRole.Create(&authz.Role{Name: "Deleted Role", Code: "deleted_role"})
+			require.NoError(t, err)
+			var deletedRoleID string
+			helper.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
+				t.Helper()
+				require.NotEmpty(t, rsp.ID)
+				deletedRoleID = rsp.ID
+			})
+
+			resp, err = cli.Create(&authz.UserRole{
+				UserID: userID,
+				RoleID: deletedRoleID,
+			})
+			require.NoError(t, err)
+			helper.TestResp[*authz.UserRole](t, resp, func(t *testing.T, rsp *authz.UserRole) {
+				t.Helper()
+				require.NotEmpty(t, rsp.ID)
+			})
+
+			resp, err = cliRole.Delete(deletedRoleID)
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+
+			remaining := make([]*authz.UserRole, 0)
+			err = database.Database[*authz.UserRole](context.Background()).
+				WithQuery(&authz.UserRole{RoleID: deletedRoleID}).
+				List(&remaining)
+			require.NoError(t, err)
+			require.Empty(t, remaining)
 		})
 
 		t.Run("delete", func(t *testing.T) {
