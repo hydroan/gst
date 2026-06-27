@@ -448,6 +448,25 @@ func ZRange(ctx context.Context, key string, start, stop int64) ([]string, error
 	return client.ZRange(ctx, key, start, stop).Result()
 }
 
+// ZRangeByScore returns sorted set members whose scores are between minScore and maxScore.
+func ZRangeByScore(ctx context.Context, key, minScore, maxScore string) ([]string, error) {
+	if !config.App.Redis.Enable {
+		zap.S().Warn(ErrRedisIsDisabled.Error())
+		return make([]string, 0), nil
+	}
+	key = redisKey(key)
+	args := goredis.ZRangeArgs{
+		Key:     key,
+		Start:   minScore,
+		Stop:    maxScore,
+		ByScore: true,
+	}
+	if config.App.Redis.ClusterMode {
+		return cluster.ZRangeArgs(ctx, args).Result()
+	}
+	return client.ZRangeArgs(ctx, args).Result()
+}
+
 // ZRem removes one or multiple members from a sorted set.
 func ZRem(ctx context.Context, key string, members ...string) error {
 	if !config.App.Redis.Enable {

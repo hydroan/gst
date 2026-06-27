@@ -62,6 +62,25 @@ func listAllSessionIDs(ctx context.Context) ([]string, error) {
 	return redis.ZRange(ctx, modeliamsession.SessionAllKey(), 0, -1)
 }
 
+// listOnlineSessionIDs loads session ids whose last-seen score falls inside the requested window.
+//
+// SessionLastSeenKey is a global ZSET scored by Session.LastSeenAt in Unix
+// milliseconds. This helper intentionally returns only candidate ids; callers
+// must still load and validate each session snapshot because the last-seen
+// index can outlive expired payload keys or contain ids from partially written
+// Redis state.
+func listOnlineSessionIDs(ctx context.Context, since time.Time) ([]string, error) {
+	if since.IsZero() {
+		return make([]string, 0), nil
+	}
+	return redis.ZRangeByScore(
+		redisContext(ctx),
+		modeliamsession.SessionLastSeenKey(),
+		strconv.FormatInt(since.UnixMilli(), 10),
+		"+inf",
+	)
+}
+
 // pruneExpiredSessionIDs removes expired session ids from a session index ZSET.
 //
 // It relies on the invariant established by IndexSession: every member's
@@ -71,6 +90,43 @@ func listAllSessionIDs(ctx context.Context) ([]string, error) {
 // Redis state can drift after partial writes, manual cache edits, or old data.
 func pruneExpiredSessionIDs(ctx context.Context, key string) error {
 	return redis.ZRemRangeByScore(redisContext(ctx), key, "-inf", strconv.FormatInt(time.Now().UnixMilli(), 10))
+}
+
+// removeSessionIndexes removes a live session id from every Redis index.
+//
+// The user and global indexes are scored by ExpiresAt and drive ordinary
+// session list/delete operations. The last-seen index is scored by LastSeenAt
+// and drives online-window queries. Deleting a session must clear all three so
+// online queries cannot return revoked or explicitly deleted sessions.
+func removeSessionIndexes(ctx context.Context, userID, sessionID string) error {
+	if sessionID == "" {
+		return nil
+	}
+	if userID != "" {
+		if err := redis.ZRem(ctx, modeliamsession.SessionUserKey(userID), sessionID); err != nil {
+			return err
+		}
+	}
+	if err := redis.ZRem(ctx, modeliamsession.SessionAllKey(), sessionID); err != nil {
+		return err
+	}
+	return redis.ZRem(ctx, modeliamsession.SessionLastSeenKey(), sessionID)
+}
+
+// removeStaleSessionIndexes best-effort removes a stale session id from known Redis indexes.
+//
+// Stale index entries are expected because Redis expires session payload keys
+// independently from ZSET members. Cleanup on read/delete paths must not fail
+// the user-facing request when an index member is already stale.
+func removeStaleSessionIndexes(ctx context.Context, userID, sessionID string) {
+	if sessionID == "" {
+		return
+	}
+	if userID != "" {
+		_ = redis.ZRem(ctx, modeliamsession.SessionUserKey(userID), sessionID)
+	}
+	_ = redis.ZRem(ctx, modeliamsession.SessionAllKey(), sessionID)
+	_ = redis.ZRem(ctx, modeliamsession.SessionLastSeenKey(), sessionID)
 }
 
 // GetCurrentSession loads and validates the current authenticated user session
@@ -124,7 +180,13 @@ func ValidateActiveSession(sessionID string, session modeliamsession.Session) er
 	}
 }
 
-// IndexSession adds the session id into the user and global session indexes.
+// IndexSession stores a session id in every Redis index used by IAM session queries.
+//
+// SessionUserKey and SessionAllKey use ExpiresAt as the ZSET score so list
+// paths can prune expired ids before loading payloads. SessionLastSeenKey uses
+// LastSeenAt as the score so admin online-window queries can avoid scanning all
+// active sessions. The session payload key owns the TTL; index cleanup is lazy
+// because Redis ZSET members do not expire independently.
 func IndexSession(ctx context.Context, session modeliamsession.Session) error {
 	if session.UserID == "" || session.ID == "" {
 		return nil
@@ -145,14 +207,17 @@ func IndexSession(ctx context.Context, session modeliamsession.Session) error {
 		_ = redis.ZRem(ctx, userKey, session.ID)
 		return err
 	}
+	lastSeenScore := float64(session.LastSeenAt.UnixMilli())
+	if err := redis.ZAdd(ctx, modeliamsession.SessionLastSeenKey(), lastSeenScore, session.ID); err != nil {
+		removeStaleSessionIndexes(ctx, session.UserID, session.ID)
+		return err
+	}
 	if err := redis.Expire(ctx, userKey, ttl); err != nil {
-		_ = redis.ZRem(ctx, userKey, session.ID)
-		_ = redis.ZRem(ctx, modeliamsession.SessionAllKey(), session.ID)
+		removeStaleSessionIndexes(ctx, session.UserID, session.ID)
 		return err
 	}
 	if err := redis.Expire(ctx, modeliamsession.SessionAllKey(), ttl); err != nil {
-		_ = redis.ZRem(ctx, userKey, session.ID)
-		_ = redis.ZRem(ctx, modeliamsession.SessionAllKey(), session.ID)
+		removeStaleSessionIndexes(ctx, session.UserID, session.ID)
 		return err
 	}
 	return nil
@@ -183,6 +248,11 @@ func UpdateSessionMustChangePassword(ctx context.Context, sessionID string, must
 }
 
 // TouchSession refreshes LastSeenAt for an active session at most once per touch interval.
+//
+// The touch key is a short-lived SetNX lock. It throttles repeated reads of the
+// current session and protects against concurrent requests writing older
+// snapshots over a fresher LastSeenAt. When a touch is accepted, both the stored
+// session snapshot and the global last-seen ZSET are updated with the same time.
 func TouchSession(ctx context.Context, sessionID string, session modeliamsession.Session, now time.Time) error {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
@@ -218,6 +288,10 @@ func TouchSession(ctx context.Context, sessionID string, session modeliamsession
 		_ = redis.Del(ctx, touchKey)
 		return err
 	}
+	if err = redis.ZAdd(ctx, modeliamsession.SessionLastSeenKey(), float64(now.UnixMilli()), sessionID); err != nil {
+		_ = redis.Del(ctx, touchKey)
+		return err
+	}
 	return nil
 }
 
@@ -238,13 +312,7 @@ func DeleteSession(ctx context.Context, sessionID string) (modeliamsession.Sessi
 		return session, err
 	}
 
-	if session.UserID != "" {
-		userKey := modeliamsession.SessionUserKey(session.UserID)
-		if err = redis.ZRem(ctx, userKey, sessionID); err != nil {
-			return session, err
-		}
-	}
-	if err = redis.ZRem(ctx, modeliamsession.SessionAllKey(), sessionID); err != nil {
+	if err = removeSessionIndexes(ctx, session.UserID, sessionID); err != nil {
 		return session, err
 	}
 
@@ -276,8 +344,7 @@ func DeleteOtherSessions(ctx context.Context, userID, currentSessionID string) e
 				// The session payload may already be gone while the user-session
 				// index still references it. Remove the stale index entry and
 				// continue deleting the remaining sessions.
-				_ = redis.ZRem(ctx, modeliamsession.SessionUserKey(userID), sessionID)
-				_ = redis.ZRem(ctx, modeliamsession.SessionAllKey(), sessionID)
+				removeStaleSessionIndexes(ctx, userID, sessionID)
 				continue
 			}
 			return err
@@ -309,8 +376,7 @@ func DeleteAllSessions(ctx context.Context, userID string) error {
 
 		if _, err = DeleteSession(ctx, sessionID); err != nil {
 			if errors.Is(err, types.ErrEntryNotFound) {
-				_ = redis.ZRem(ctx, modeliamsession.SessionUserKey(userID), sessionID)
-				_ = redis.ZRem(ctx, modeliamsession.SessionAllKey(), sessionID)
+				removeStaleSessionIndexes(ctx, userID, sessionID)
 				continue
 			}
 			return err
@@ -333,7 +399,7 @@ func InvalidateUserSessions(ctx context.Context, userID string) {
 		for i := range sessionIDs {
 			sessionKey := modeliamsession.SessionIDKey(sessionIDs[i])
 			_ = cache.Delete(sessionKey)
-			_ = redis.ZRem(ctx, modeliamsession.SessionAllKey(), sessionIDs[i])
+			removeStaleSessionIndexes(ctx, userID, sessionIDs[i])
 		}
 	}
 	_ = redis.Del(ctx, modeliamsession.SessionUserKey(userID))

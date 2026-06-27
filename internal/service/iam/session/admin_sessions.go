@@ -3,6 +3,7 @@ package serviceiamsession
 import (
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -46,6 +47,8 @@ type adminSessionUserItem struct {
 	lastActive time.Time
 }
 
+const adminSessionsOnlineWithinQuery = "online_within"
+
 // List returns all indexed sessions grouped by user for a privileged administrator.
 func (s *AdminSessionsListService) List(ctx *types.ServiceContext, req *modeliamsession.AdminSessionsListReq) (rsp *modeliamsession.AdminSessionsListRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
@@ -55,7 +58,17 @@ func (s *AdminSessionsListService) List(ctx *types.ServiceContext, req *modeliam
 		return nil, err
 	}
 
-	sessionIDs, err := listAllSessionIDs(ctx)
+	onlineSince, onlineOnly, err := parseAdminSessionsOnlineSince(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var sessionIDs []string
+	if onlineOnly {
+		sessionIDs, err = listOnlineSessionIDs(ctx, onlineSince)
+	} else {
+		sessionIDs, err = listAllSessionIDs(ctx)
+	}
 	if err != nil {
 		log.Error("failed to list all sessions", err)
 		return nil, err
@@ -73,7 +86,7 @@ func (s *AdminSessionsListService) List(ctx *types.ServiceContext, req *modeliam
 		session, getErr := cache.Get(modeliamsession.SessionIDKey(sessionID))
 		if getErr != nil {
 			if errors.Is(getErr, types.ErrEntryNotFound) {
-				_ = redis.ZRem(ctx, modeliamsession.SessionAllKey(), sessionID)
+				removeStaleSessionIndexes(ctx, "", sessionID)
 				continue
 			}
 			log.Error("failed to load session from redis", getErr)
@@ -81,6 +94,9 @@ func (s *AdminSessionsListService) List(ctx *types.ServiceContext, req *modeliam
 		}
 		if validateErr := ValidateActiveSession(sessionID, session); validateErr != nil {
 			_, _ = DeleteSession(ctx, sessionID)
+			continue
+		}
+		if onlineOnly && !sessionSeenSince(session, onlineSince) {
 			continue
 		}
 
@@ -99,10 +115,7 @@ func (s *AdminSessionsListService) List(ctx *types.ServiceContext, req *modeliam
 		item.view.SessionTotal++
 		sessionTotal++
 
-		activeAt := view.LastSeenAt
-		if activeAt.IsZero() {
-			activeAt = view.IssuedAt
-		}
+		activeAt := sessionViewActiveAt(view)
 		if item.lastActive.IsZero() || activeAt.After(item.lastActive) {
 			item.lastActive = activeAt
 		}
@@ -111,14 +124,8 @@ func (s *AdminSessionsListService) List(ctx *types.ServiceContext, req *modeliam
 	items := make([]adminSessionUserItem, 0, len(users))
 	for _, item := range users {
 		sort.Slice(item.view.Sessions, func(i, j int) bool {
-			left := item.view.Sessions[i].LastSeenAt
-			if left.IsZero() {
-				left = item.view.Sessions[i].IssuedAt
-			}
-			right := item.view.Sessions[j].LastSeenAt
-			if right.IsZero() {
-				right = item.view.Sessions[j].IssuedAt
-			}
+			left := sessionViewActiveAt(item.view.Sessions[i])
+			right := sessionViewActiveAt(item.view.Sessions[j])
 			if left.Equal(right) {
 				return item.view.Sessions[i].ID > item.view.Sessions[j].ID
 			}
@@ -242,6 +249,10 @@ func (s *AdminUserSessionsListService) List(ctx *types.ServiceContext, req *mode
 		log.Error("failed to verify admin session actor", err)
 		return nil, err
 	}
+	onlineSince, onlineOnly, err := parseAdminSessionsOnlineSince(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	targetUserID := ctx.Param("id")
 	if targetUserID == "" {
@@ -257,7 +268,7 @@ func (s *AdminUserSessionsListService) List(ctx *types.ServiceContext, req *mode
 		return nil, err
 	}
 
-	view, err := buildAdminUserSessionsView(ctx, user, currentSessionID)
+	view, err := buildAdminUserSessionsView(ctx, user, currentSessionID, onlineSince, onlineOnly)
 	if err != nil {
 		log.Error("failed to build target user sessions view", err)
 		return nil, err
@@ -338,7 +349,51 @@ func buildAdminSessionUserItem(ctx *types.ServiceContext, session modeliamsessio
 	}, nil
 }
 
-func buildAdminUserSessionsView(ctx *types.ServiceContext, user *modeliamuser.User, currentSessionID string) (modeliamsession.AdminSessionUserView, error) {
+// parseAdminSessionsOnlineSince parses the admin-only online session window.
+//
+// The public contract is a Go duration in the online_within query parameter,
+// for example "5m". A missing value means the caller wants the normal full
+// session list instead of an online-only view.
+func parseAdminSessionsOnlineSince(ctx *types.ServiceContext) (time.Time, bool, error) {
+	raw := ""
+	if ctx != nil {
+		raw = strings.TrimSpace(ctx.Query().Get(adminSessionsOnlineWithinQuery))
+	}
+	if raw == "" {
+		return time.Time{}, false, nil
+	}
+
+	onlineWithin, err := time.ParseDuration(raw)
+	if err != nil || onlineWithin <= 0 {
+		return time.Time{}, false, service.NewError(http.StatusBadRequest, "online_within must be a positive duration")
+	}
+	return time.Now().Add(-onlineWithin), true, nil
+}
+
+// sessionSeenSince verifies the loaded session snapshot still matches the online window.
+//
+// The Redis last-seen ZSET is only a candidate index. This snapshot check keeps
+// the response correct if the index score and session payload drift apart.
+func sessionSeenSince(session modeliamsession.Session, since time.Time) bool {
+	return !session.LastSeenAt.IsZero() && !session.LastSeenAt.Before(since)
+}
+
+// sessionViewActiveAt returns the timestamp used for stable admin session ordering.
+func sessionViewActiveAt(view modeliamsession.SessionView) time.Time {
+	if !view.LastSeenAt.IsZero() {
+		return view.LastSeenAt
+	}
+	return view.IssuedAt
+}
+
+// buildAdminUserSessionsView builds a target user's session view for admin APIs.
+//
+// Without online filtering it reads the user's own session index. With
+// online_within it reads the global last-seen candidate index first, then
+// filters by user after loading each session snapshot. That keeps the online
+// path bounded by recently active sessions instead of scanning every session
+// owned by the target user.
+func buildAdminUserSessionsView(ctx *types.ServiceContext, user *modeliamuser.User, currentSessionID string, onlineSince time.Time, onlineOnly bool) (modeliamsession.AdminSessionUserView, error) {
 	view := modeliamsession.AdminSessionUserView{
 		UserID:             user.ID,
 		Username:           user.Username,
@@ -350,7 +405,15 @@ func buildAdminUserSessionsView(ctx *types.ServiceContext, user *modeliamuser.Us
 		Sessions:           make([]modeliamsession.SessionView, 0),
 	}
 
-	sessionIDs, err := listUserSessionIDs(ctx, user.ID)
+	var indexUserID string
+	var sessionIDs []string
+	var err error
+	if onlineOnly {
+		sessionIDs, err = listOnlineSessionIDs(ctx, onlineSince)
+	} else {
+		indexUserID = user.ID
+		sessionIDs, err = listUserSessionIDs(ctx, user.ID)
+	}
 	if err != nil {
 		return modeliamsession.AdminSessionUserView{}, err
 	}
@@ -365,8 +428,7 @@ func buildAdminUserSessionsView(ctx *types.ServiceContext, user *modeliamuser.Us
 		session, getErr := cache.Get(modeliamsession.SessionIDKey(sessionID))
 		if getErr != nil {
 			if errors.Is(getErr, types.ErrEntryNotFound) {
-				_ = redis.ZRem(ctx, modeliamsession.SessionUserKey(user.ID), sessionID)
-				_ = redis.ZRem(ctx, modeliamsession.SessionAllKey(), sessionID)
+				removeStaleSessionIndexes(ctx, indexUserID, sessionID)
 				continue
 			}
 			return modeliamsession.AdminSessionUserView{}, getErr
@@ -376,7 +438,12 @@ func buildAdminUserSessionsView(ctx *types.ServiceContext, user *modeliamuser.Us
 			continue
 		}
 		if session.UserID != user.ID {
-			_ = redis.ZRem(ctx, modeliamsession.SessionUserKey(user.ID), sessionID)
+			if indexUserID != "" {
+				_ = redis.ZRem(ctx, modeliamsession.SessionUserKey(indexUserID), sessionID)
+			}
+			continue
+		}
+		if onlineOnly && !sessionSeenSince(session, onlineSince) {
 			continue
 		}
 
@@ -384,14 +451,8 @@ func buildAdminUserSessionsView(ctx *types.ServiceContext, user *modeliamuser.Us
 	}
 
 	sort.Slice(view.Sessions, func(i, j int) bool {
-		left := view.Sessions[i].LastSeenAt
-		if left.IsZero() {
-			left = view.Sessions[i].IssuedAt
-		}
-		right := view.Sessions[j].LastSeenAt
-		if right.IsZero() {
-			right = view.Sessions[j].IssuedAt
-		}
+		left := sessionViewActiveAt(view.Sessions[i])
+		right := sessionViewActiveAt(view.Sessions[j])
 		if left.Equal(right) {
 			return view.Sessions[i].ID > view.Sessions[j].ID
 		}
