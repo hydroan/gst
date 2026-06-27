@@ -7,9 +7,10 @@ import (
 	"sort"
 	"strings"
 
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/ggmodule"
-	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 )
 
@@ -78,9 +79,7 @@ func runModuleList(cmd *cobra.Command) error {
 	if _, writeErr := fmt.Fprintf(w, "\n%s %s\n\n", clioutput.Text(clioutput.StyleInfo, "%s", clioutput.SymbolSection), clioutput.Text(clioutput.StyleBold, "Framework Modules")); writeErr != nil {
 		return writeErr
 	}
-	tableWriter := table.NewWriter()
-	tableWriter.SetStyle(table.StyleLight)
-	tableWriter.AppendHeader(table.Row{"NAME", "PACKAGE", "ADD", "COPY", "IMPORT"})
+	rows := make([][]string, 0, len(modules))
 	for _, module := range modules {
 		addable := "yes"
 		if !module.Addable {
@@ -90,9 +89,16 @@ func runModuleList(cmd *cobra.Command) error {
 		if !module.Copyable {
 			copyable = "no"
 		}
-		tableWriter.AppendRow(table.Row{module.Name, module.PackageName, addable, copyable, module.ImportPath})
+		rows = append(rows, []string{module.Name, module.PackageName, addable, copyable, module.ImportPath})
 	}
-	_, err = fmt.Fprintln(w, tableWriter.Render())
+	tableWriter := table.New().
+		Border(lipgloss.NormalBorder()).
+		StyleFunc(func(_, _ int) lipgloss.Style {
+			return lipgloss.NewStyle().Padding(0, 1)
+		}).
+		Headers("NAME", "PACKAGE", "ADD", "COPY", "IMPORT").
+		Rows(rows...)
+	_, err = fmt.Fprintln(w, tableWriter)
 	return err
 }
 

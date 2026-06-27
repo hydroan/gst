@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	runtimedebug "runtime/debug"
 	"strings"
 	"testing"
 
@@ -54,6 +55,28 @@ func TestRunModuleListReportsCopyableModules(t *testing.T) {
 	}
 	if !strings.Contains(got, "plain") || !strings.Contains(got, "github.com/hydroan/gst/module/plain") {
 		t.Fatalf("module list output should mark plain non-copyable:\n%s", got)
+	}
+	for _, want := range []string{
+		"│ NAME",
+		" NAME ",
+		"│ copytest",
+		" copytest ",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("module list output should pad table cells, missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestRunModuleListDoesNotDependOnGoPretty(t *testing.T) {
+	buildInfo, ok := runtimedebug.ReadBuildInfo()
+	if !ok {
+		t.Fatal("read build info")
+	}
+	for _, dep := range buildInfo.Deps {
+		if dep.Path == "github.com/jedib0t/go-pretty/v6" {
+			t.Fatalf("cmd/gg should not depend on %s", dep.Path)
+		}
 	}
 }
 
