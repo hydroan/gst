@@ -20,6 +20,6 @@ func Register() {
 		*Version,
 		*VersionRsp](
 		&VersionModule{},
-		consts.PHASE_LIST,
+		module.CRUD(consts.PHASE_LIST),
 	)
 }

@@ -40,16 +40,18 @@ func Register() {
 		*Req,
 		*Rsp](
 		&Module{},
-		consts.PHASE_CREATE,
-		consts.PHASE_DELETE,
-		consts.PHASE_UPDATE,
-		consts.PHASE_PATCH,
-		consts.PHASE_LIST,
-		consts.PHASE_GET,
-		consts.PHASE_CREATE_MANY,
-		consts.PHASE_DELETE_MANY,
-		consts.PHASE_UPDATE_MANY,
-		consts.PHASE_PATCH_MANY,
+		module.CRUD(
+			consts.PHASE_CREATE,
+			consts.PHASE_DELETE,
+			consts.PHASE_UPDATE,
+			consts.PHASE_PATCH,
+			consts.PHASE_LIST,
+			consts.PHASE_GET,
+			consts.PHASE_CREATE_MANY,
+			consts.PHASE_DELETE_MANY,
+			consts.PHASE_UPDATE_MANY,
+			consts.PHASE_PATCH_MANY,
+		),
 	)
 
 	module.Use[
@@ -57,15 +59,17 @@ func Register() {
 		*Helloworld2,
 		*Helloworld2](
 		&Module2{},
-		consts.PHASE_CREATE,
-		consts.PHASE_DELETE,
-		consts.PHASE_UPDATE,
-		consts.PHASE_PATCH,
-		consts.PHASE_LIST,
-		consts.PHASE_GET,
-		consts.PHASE_CREATE_MANY,
-		consts.PHASE_DELETE_MANY,
-		consts.PHASE_UPDATE_MANY,
-		consts.PHASE_PATCH_MANY,
+		module.CRUD(
+			consts.PHASE_CREATE,
+			consts.PHASE_DELETE,
+			consts.PHASE_UPDATE,
+			consts.PHASE_PATCH,
+			consts.PHASE_LIST,
+			consts.PHASE_GET,
+			consts.PHASE_CREATE_MANY,
+			consts.PHASE_DELETE_MANY,
+			consts.PHASE_UPDATE_MANY,
+			consts.PHASE_PATCH_MANY,
+		),
 	)
 }

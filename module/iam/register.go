@@ -78,34 +78,36 @@ func Register(config ...Config) {
 	// Register auth middleware before protected routes so auth handlers are attached deterministically.
 	middleware.RegisterAuth(middleware.IAMSession())
 
-	module.Use(module.NewWrapper("/login", "id", true, &serviceiamaccount.LoginService{}), consts.PHASE_CREATE)
-	module.Use(module.NewWrapper("/logout", "id", false, &serviceiamaccount.LogoutService{}), consts.PHASE_CREATE)
-	module.Use(module.NewWrapper("/signup", "id", true, &serviceiamaccount.SignupService{}), consts.PHASE_CREATE)
-	module.Use(module.NewWrapper("/iam/change-password", "id", false, &serviceiamaccount.ChangePasswordService{}), consts.PHASE_CREATE)
-	module.Use(module.NewWrapper("/iam/reset-password", "id", false, &serviceiamaccount.ResetPasswordService{}), consts.PHASE_CREATE)
-	module.Use(module.NewWrapper("/iam/account-status", "id", false, &serviceiamaccount.AccountStatusService{}), consts.PHASE_CREATE)
+	module.Use(module.NewWrapper("/login", "id", true, &serviceiamaccount.LoginService{}), module.CRUD(consts.PHASE_CREATE))
+	module.Use(module.NewWrapper("/logout", "id", false, &serviceiamaccount.LogoutService{}), module.CRUD(consts.PHASE_CREATE))
+	module.Use(module.NewWrapper("/signup", "id", true, &serviceiamaccount.SignupService{}), module.CRUD(consts.PHASE_CREATE))
+	module.Use(module.NewWrapper("/iam/change-password", "id", false, &serviceiamaccount.ChangePasswordService{}), module.CRUD(consts.PHASE_CREATE))
+	module.Use(module.NewWrapper("/iam/reset-password", "id", false, &serviceiamaccount.ResetPasswordService{}), module.CRUD(consts.PHASE_CREATE))
+	module.Use(module.NewWrapper("/iam/account-status", "id", false, &serviceiamaccount.AccountStatusService{}), module.CRUD(consts.PHASE_CREATE))
 	module.Use(
 		module.NewWrapper("/iam/users", "id", false, &serviceiamuser.UserService{}),
-		consts.PHASE_CREATE,
-		consts.PHASE_DELETE,
-		consts.PHASE_LIST,
-		consts.PHASE_GET,
-		consts.PHASE_CREATE_MANY,
-		consts.PHASE_DELETE_MANY,
+		module.CRUD(
+			consts.PHASE_CREATE,
+			consts.PHASE_DELETE,
+			consts.PHASE_LIST,
+			consts.PHASE_GET,
+			consts.PHASE_CREATE_MANY,
+			consts.PHASE_DELETE_MANY,
+		),
 	)
-	module.UseCustom(module.NewWrapper("/iam/users/:id", "id", false, &serviceiamuser.UserPatchService{}), consts.PHASE_PATCH)
+	module.Use(module.NewWrapper("/iam/users/:id", "id", false, &serviceiamuser.UserPatchService{}), module.Exact(consts.PHASE_PATCH))
 
-	module.Use(module.NewWrapper("/iam/session/current", "id", false, &serviceiamsession.CurrentListService{}), consts.PHASE_LIST)
-	module.UseCustom(module.NewWrapper("/iam/session/current", "id", false, &serviceiamsession.CurrentDeleteService{}), consts.PHASE_DELETE)
-	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsListService{}), consts.PHASE_LIST)
-	module.Use(module.NewWrapper("/iam/admin/sessions", "id", false, &serviceiamsession.AdminSessionsListService{}), consts.PHASE_LIST)
-	module.Use(module.NewWrapper("/iam/admin/sessions", "id", false, &serviceiamsession.AdminSessionsGetService{}), consts.PHASE_GET)
-	module.Use(module.NewWrapper("/iam/admin/sessions", "id", false, &serviceiamsession.AdminSessionsDeleteService{}), consts.PHASE_DELETE)
-	module.UseCustom(module.NewWrapper("/iam/admin/users/:id/sessions", "id", false, &serviceiamsession.AdminUserSessionsListService{}), consts.PHASE_LIST)
-	module.UseCustom(module.NewWrapper("/iam/admin/users/:id/sessions", "id", false, &serviceiamsession.AdminUserSessionsDeleteService{}), consts.PHASE_DELETE)
-	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsGetService{}), consts.PHASE_GET)
-	module.UseCustom(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsDeleteAllService{}), consts.PHASE_DELETE)
-	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsDeleteService{}), consts.PHASE_DELETE)
+	module.Use(module.NewWrapper("/iam/session/current", "id", false, &serviceiamsession.CurrentListService{}), module.CRUD(consts.PHASE_LIST))
+	module.Use(module.NewWrapper("/iam/session/current", "id", false, &serviceiamsession.CurrentDeleteService{}), module.Exact(consts.PHASE_DELETE))
+	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsListService{}), module.CRUD(consts.PHASE_LIST))
+	module.Use(module.NewWrapper("/iam/admin/sessions", "id", false, &serviceiamsession.AdminSessionsListService{}), module.CRUD(consts.PHASE_LIST))
+	module.Use(module.NewWrapper("/iam/admin/sessions", "id", false, &serviceiamsession.AdminSessionsGetService{}), module.CRUD(consts.PHASE_GET))
+	module.Use(module.NewWrapper("/iam/admin/sessions", "id", false, &serviceiamsession.AdminSessionsDeleteService{}), module.CRUD(consts.PHASE_DELETE))
+	module.Use(module.NewWrapper("/iam/admin/users/:id/sessions", "id", false, &serviceiamsession.AdminUserSessionsListService{}), module.Exact(consts.PHASE_LIST))
+	module.Use(module.NewWrapper("/iam/admin/users/:id/sessions", "id", false, &serviceiamsession.AdminUserSessionsDeleteService{}), module.Exact(consts.PHASE_DELETE))
+	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsGetService{}), module.CRUD(consts.PHASE_GET))
+	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsDeleteAllService{}), module.Exact(consts.PHASE_DELETE))
+	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsDeleteService{}), module.CRUD(consts.PHASE_DELETE))
 
 	// create default users
 	if len(cfg.DefaultUsers) > 0 {

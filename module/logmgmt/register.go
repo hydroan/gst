@@ -37,8 +37,10 @@ func Register() {
 		*LoginLog,
 		*LoginLog](
 		&LoginLogModule{},
-		consts.PHASE_LIST,
-		consts.PHASE_GET,
+		module.CRUD(
+			consts.PHASE_LIST,
+			consts.PHASE_GET,
+		),
 	)
 
 	module.Use[
@@ -46,8 +48,10 @@ func Register() {
 		*OperationLog,
 		*OperationLog](
 		&OperationLogModule{},
-		consts.PHASE_LIST,
-		consts.PHASE_GET,
+		module.CRUD(
+			consts.PHASE_LIST,
+			consts.PHASE_GET,
+		),
 	)
 
 	cronjob.Register(cronjoblogmgmt.Cleanup, "0 0 * * * *", "cleanup operationlog and loginlog hourly")

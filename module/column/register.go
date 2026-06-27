@@ -21,5 +21,5 @@ var tableColumns = make(map[string][]string)
 func Register(m map[string][]string) {
 	maps.Copy(tableColumns, m)
 
-	module.Use[*empty, *empty, rsp](&mod{}, consts.PHASE_GET)
+	module.Use[*empty, *empty, rsp](&mod{}, module.CRUD(consts.PHASE_GET))
 }

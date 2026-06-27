@@ -50,12 +50,14 @@ func Register() {
 		*Role,
 		*Role](
 		&RoleModule{},
-		consts.PHASE_CREATE,
-		consts.PHASE_DELETE,
-		consts.PHASE_UPDATE,
-		consts.PHASE_PATCH,
-		consts.PHASE_LIST,
-		consts.PHASE_GET,
+		module.CRUD(
+			consts.PHASE_CREATE,
+			consts.PHASE_DELETE,
+			consts.PHASE_UPDATE,
+			consts.PHASE_PATCH,
+			consts.PHASE_LIST,
+			consts.PHASE_GET,
+		),
 	)
 
 	module.Use[
@@ -63,10 +65,12 @@ func Register() {
 		*RoleBinding,
 		*RoleBinding](
 		&RoleBindingModule{},
-		consts.PHASE_CREATE,
-		consts.PHASE_DELETE,
-		consts.PHASE_LIST,
-		consts.PHASE_GET,
+		module.CRUD(
+			consts.PHASE_CREATE,
+			consts.PHASE_DELETE,
+			consts.PHASE_LIST,
+			consts.PHASE_GET,
+		),
 	)
 
 	module.Use[
@@ -74,12 +78,14 @@ func Register() {
 		*Menu,
 		*Menu](
 		&MenuModule{},
-		consts.PHASE_CREATE,
-		consts.PHASE_DELETE,
-		consts.PHASE_UPDATE,
-		consts.PHASE_PATCH,
-		consts.PHASE_LIST,
-		consts.PHASE_GET,
+		module.CRUD(
+			consts.PHASE_CREATE,
+			consts.PHASE_DELETE,
+			consts.PHASE_UPDATE,
+			consts.PHASE_PATCH,
+			consts.PHASE_LIST,
+			consts.PHASE_GET,
+		),
 	)
 
 	module.Use[
@@ -87,6 +93,6 @@ func Register() {
 		*Routes,
 		RoutesRsp](
 		&RoutesModule{},
-		consts.PHASE_LIST,
+		module.CRUD(consts.PHASE_LIST),
 	)
 }
