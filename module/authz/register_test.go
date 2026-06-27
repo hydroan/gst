@@ -3,9 +3,11 @@ package authz_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/bootstrap"
@@ -76,55 +78,10 @@ func init() {
 	testutil.MustWaitForServer(port)
 }
 
-func TestAuthz(t *testing.T) {
-	username := "user01"
-	password := "12345678"
-	userID := ""
+func TestAuthzRoutes(t *testing.T) {
+	adminSessionID := authzAdminSessionID(t)
 
-	t.Run("signup", func(t *testing.T) {
-		cli, err := client.New(signupAPI)
-		require.NoError(t, err)
-
-		resp, err := cli.Create(iam.SignupReq{
-			Username:   username,
-			Password:   password,
-			RePassword: password,
-		})
-		require.NoError(t, err)
-		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
-			t.Helper(
-			// #modeliam.SignupRsp {
-			//   +UserID   => "019cbca0-19d4-7971-8be5-65b148027a27" #string
-			//   +Username => "user01" #string
-			//   +Message  => "User created successfully" #string
-			// }
-			)
-
-			require.Equal(t, rsp.Username, username)
-			require.NotEmpty(t, rsp.UserID)
-			require.NotEmpty(t, rsp.Message)
-			userID = rsp.UserID
-		})
-	})
-
-	// Authz management endpoints require the built-in admin role. The user created
-	// in signup only covers the authentication flow, so the tests keep a dedicated
-	// root session for listing and mutating authz resources.
-	var adminSessionID string
-	var userSessionID string
-	t.Run("login", func(t *testing.T) {
-		userSessionID = loginSessionIDFromCookie(t, iam.LoginReq{
-			Username: username,
-			Password: password,
-		})
-	})
-	t.Run("login_root", func(t *testing.T) {
-		adminSessionID = loginSessionIDFromCookie(t, iam.LoginReq{
-			Username: rootUsername,
-			Password: rootPassword,
-		})
-	})
-	t.Run("routes", func(t *testing.T) {
+	t.Run("list", func(t *testing.T) {
 		cli, err := client.New(routesAPI, client.WithCookie(&http.Cookie{
 			Name:  "session_id",
 			Value: adminSessionID,
@@ -155,6 +112,11 @@ func TestAuthz(t *testing.T) {
 			requireRoute(t, rsp.Items, "/api/authz/menus/{id}", []string{http.MethodGet, http.MethodPut, http.MethodPatch, http.MethodDelete})
 		})
 	})
+}
+
+func TestAuthzMenu(t *testing.T) {
+	adminSessionID := authzAdminSessionID(t)
+	userID, userSessionID := authzSignupAndLoginUser(t, authzTestUsername("authz_menu_user"), "12345678")
 
 	t.Run("menu", func(t *testing.T) {
 		cli, err := client.New(menuAPI, client.WithCookie(&http.Cookie{
@@ -391,6 +353,10 @@ func TestAuthz(t *testing.T) {
 			})
 		})
 	})
+}
+
+func TestAuthzRole(t *testing.T) {
+	adminSessionID := authzAdminSessionID(t)
 
 	t.Run("role", func(t *testing.T) {
 		cli, err := client.New(roleAPI, client.WithCookie(&http.Cookie{
@@ -562,6 +528,11 @@ func TestAuthz(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, resp)
 	})
+}
+
+func TestAuthzRoleBinding(t *testing.T) {
+	adminSessionID := authzAdminSessionID(t)
+	userID, _ := authzSignupAndLoginUser(t, authzTestUsername("authz_role_binding_user"), "12345678")
 
 	t.Run("role_binding", func(t *testing.T) {
 		cli, err := client.New(roleBindingAPI, client.WithCookie(&http.Cookie{
@@ -683,6 +654,53 @@ func TestAuthz(t *testing.T) {
 			require.Equal(t, testSuccessCode, resp.Code, "delete should return success")
 		})
 	})
+}
+
+func authzAdminSessionID(t *testing.T) string {
+	t.Helper()
+
+	return loginSessionIDFromCookie(t, iam.LoginReq{
+		Username: rootUsername,
+		Password: rootPassword,
+	})
+}
+
+func authzSignupAndLoginUser(t *testing.T, username, password string) (string, string) {
+	t.Helper()
+
+	userID := authzSignupUser(t, username, password)
+	sessionID := loginSessionIDFromCookie(t, iam.LoginReq{
+		Username: username,
+		Password: password,
+	})
+	return userID, sessionID
+}
+
+func authzSignupUser(t *testing.T, username, password string) string {
+	t.Helper()
+
+	cli, err := client.New(signupAPI)
+	require.NoError(t, err)
+	resp, err := cli.Create(iam.SignupReq{
+		Username:   username,
+		Password:   password,
+		RePassword: password,
+	})
+	require.NoError(t, err)
+
+	var userID string
+	testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
+		t.Helper()
+		require.Equal(t, username, rsp.Username)
+		require.NotEmpty(t, rsp.UserID)
+		require.NotEmpty(t, rsp.Message)
+		userID = rsp.UserID
+	})
+	return userID
+}
+
+func authzTestUsername(prefix string) string {
+	return fmt.Sprintf("%s_%d", prefix, time.Now().UnixNano())
 }
 
 func loginSessionIDFromCookie(t *testing.T, reqPayload iam.LoginReq) string {

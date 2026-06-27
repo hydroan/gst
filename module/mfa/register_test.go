@@ -3,6 +3,7 @@ package mfa_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -44,6 +45,13 @@ type ListResponse[T any] struct {
 	Total int64 `json:"total"`
 }
 
+type totpTestAccount struct {
+	Username  string
+	Password  string
+	UserID    string
+	SessionID string
+}
+
 func init() {
 	os.Setenv(config.DATABASE_TYPE, string(config.DBSqlite))
 	os.Setenv(config.SQLITE_IS_MEMORY, "true")
@@ -71,69 +79,13 @@ func init() {
 	testutil.MustWaitForServer(port)
 }
 
-func TestTOTP(t *testing.T) {
-	username := "user01"
-	password := "12345678"
-	userID := ""
-	sessionID := ""
-	secret := ""
-	challengeID := ""
-	deviceID := ""
-	var backupCodes []string
+func TestTOTPStatus(t *testing.T) {
+	account := newTOTPTestAccount(t, "totp_status_user")
 
-	_, _, _, _, _, _, _ = sessionID, password, userID, secret, challengeID, deviceID, backupCodes
-
-	t.Run("signup", func(t *testing.T) {
-		cli, err := client.New(signupAPI)
-		require.NoError(t, err)
-
-		resp, err := cli.Create(iam.SignupReq{
-			Username:   username,
-			Password:   password,
-			RePassword: password,
-		})
-		require.NoError(t, err)
-		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
-			t.Helper(
-			// #modeliam.SignupRsp {
-			//   +UserID   => "019cbc8e-0659-7989-b112-12e889ef4f21" #string
-			//   +Username => "user01" #string
-			//   +Message  => "User created successfully" #string
-			// }
-			)
-
-			require.Equal(t, rsp.Username, username)
-			require.NotEmpty(t, rsp.UserID)
-			require.NotEmpty(t, rsp.Message)
-			userID = rsp.UserID
-		})
-	})
-
-	t.Run("login", func(t *testing.T) {
-		sessionID = loginSessionIDFromCookie(t, iam.LoginReq{
-			Username: username,
-			Password: password,
-		})
-	})
-
-	t.Run("status_not_enabled", func(t *testing.T) {
-		cli, err := client.New(statusAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
-		require.NoError(t, err)
-
-		resp, err := cli.Request(http.MethodGet, nil)
-		require.NoError(t, err)
+	t.Run("not_enabled", func(t *testing.T) {
+		resp := requestTOTPStatus(t, account.SessionID)
 		testutil.TestResp[*mfa.TOTPStatusRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPStatusRsp) {
-			t.Helper(
-			// #*modelmfa.TOTPStatusRsp {
-			//   +Enabled     => false #bool
-			//   +DeviceCount => 0 #int
-			//   +Devices     => []modelmfa.TOTPDeviceInfo(nil)
-			// }
-			)
-
+			t.Helper()
 			require.Equal(t, 0, rsp.DeviceCount)
 			require.Empty(t, rsp.Devices)
 			require.False(t, rsp.Enabled)
@@ -143,182 +95,12 @@ func TestTOTP(t *testing.T) {
 		assertResponseDataArrayField(t, resp, "devices")
 	})
 
-	t.Run("check_not_enabled", func(t *testing.T) {
-		cli, err := client.New(checkAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
-		require.NoError(t, err)
+	deviceID, _, _ := bindTOTPDeviceForTest(t, account.SessionID, "test-device-status")
 
-		resp, err := cli.Create(mfa.TOTPCheckReq{
-			Username: username,
-			Password: password,
-		})
-		require.NoError(t, err)
-
-		testutil.TestResp[*mfa.TOTPCheckRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPCheckRsp) {
-			t.Helper(
-			// *modelmfa.TOTPStatusRsp {
-			//   +Enabled     => true #bool
-			//   +DeviceCount => 1 #int
-			//   +Devices     => #[]modelmfa.TOTPDeviceInfo [
-			//     0 => #modelmfa.TOTPDeviceInfo {
-			//       +ID         => "019cb9a5-b52f-7e73-8ee2-e18a8971dd82" #string
-			//       +DeviceName => "test-device" #string
-			//       +LastUsedAt => "2026-03-05T00:19:30+08:00" #*string
-			//       +CreatedAt  => "2026-03-05T00:19:30+08:00" #string
-			//     }
-			//   ]
-			// }
-			)
-
-			require.False(t, rsp.RequiresMFA)
-			require.NotEmpty(t, rsp.Message)
-		})
-		assertResponseDataFieldExists(t, resp, "requires_mfa")
-	})
-
-	t.Run("bind", func(t *testing.T) {
-		cli, err := client.New(bindAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
-		require.NoError(t, err)
-
-		resp, err := cli.Create(nil)
-		require.NoError(t, err)
-		testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPBindRsp) {
-			t.Helper()
-			require.NotNil(t, rsp)
-			require.NotEmpty(t, rsp.ChallengeID)
-			require.NotEmpty(t, rsp.OtpauthURL)
-			require.NotEmpty(t, rsp.QRCodeImageDataURL)
-			require.Equal(t, consts.FrameworkName, rsp.Issuer)
-			require.Equal(t, username, rsp.AccountName)
-			challengeID = rsp.ChallengeID
-			secret = extractSecretFromOtpauthURL(t, rsp.OtpauthURL)
-		})
-		assertResponseDataFieldExists(t, resp, "qr_code_image_data_url")
-	})
-
-	t.Run("confirm", func(t *testing.T) {
-		t.Run("invalid_challenge", func(t *testing.T) {
-			cli, err := client.New(confirmAPI, client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: sessionID,
-			}))
-			require.NoError(t, err)
-
-			code, err := totp.GenerateCode(secret, time.Now())
-			require.NoError(t, err)
-
-			resp, err := cli.Create(mfa.TOTPConfirmReq{
-				ChallengeID: "missing-challenge",
-				Code:        code,
-				DeviceName:  "test-device-missing-challenge",
-			})
-			require.Error(t, err)
-			require.Nil(t, resp)
-		})
-
-		t.Run("invalid_code_does_not_consume_challenge", func(t *testing.T) {
-			cli, err := client.New(confirmAPI, client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: sessionID,
-			}))
-			require.NoError(t, err)
-
-			code, err := totp.GenerateCode(secret, time.Now())
-			require.NoError(t, err)
-			invalidCode := "000000"
-			if code == invalidCode {
-				invalidCode = "000001"
-			}
-
-			resp, err := cli.Create(mfa.TOTPConfirmReq{
-				ChallengeID: challengeID,
-				Code:        invalidCode,
-				DeviceName:  "test-device-2",
-			})
-			require.Error(t, err)
-			require.Nil(t, resp)
-
-			resp, err = cli.Create(mfa.TOTPConfirmReq{
-				ChallengeID: challengeID,
-				Code:        code,
-				DeviceName:  "test-device",
-			})
-			require.NoError(t, err)
-			testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPConfirmRsp) {
-				t.Helper(
-				// #*modelmfa.TOTPConfirmRsp {
-				//   +DeviceID    => "019cbc8d-857e-7e29-b2dc-ff983097a2e9" #string
-				//   +Message     => "TOTP device confirmed and activated successfully" #string
-				//   +BackupCodes => #[]string [
-				//     0 => "J7KQ-4M2D-9VXA-P3RT" #string
-				//     1 => "R8WP-B6ZD-7H3M-KQ2Y" #string
-				//   ]
-				// }
-				)
-
-				require.NotEmpty(t, rsp.DeviceID)
-				require.NotEmpty(t, rsp.Message)
-				require.NotEmpty(t, rsp.BackupCodes)
-				require.Len(t, rsp.BackupCodes, 10)
-				for _, bc := range rsp.BackupCodes {
-					require.Regexp(t, `^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}(-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}){3}$`, bc)
-				}
-				deviceID = rsp.DeviceID
-				backupCodes = rsp.BackupCodes
-				assertBackupCodeHashesStored(t, deviceID, backupCodes)
-			})
-		})
-
-		t.Run("duplicate_challenge", func(t *testing.T) {
-			cli, err := client.New(confirmAPI, client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: sessionID,
-			}))
-			require.NoError(t, err)
-
-			code, err := totp.GenerateCode(secret, time.Now())
-			require.NoError(t, err)
-
-			resp, err := cli.Create(mfa.TOTPConfirmReq{
-				ChallengeID: challengeID,
-				Code:        code,
-				DeviceName:  "test-device-dup",
-			})
-			require.Error(t, err)
-			require.Nil(t, resp)
-		})
-	})
-
-	t.Run("status_enabled", func(t *testing.T) {
-		cli, err := client.New(statusAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
-		require.NoError(t, err)
-
-		resp, err := cli.Request(http.MethodGet, nil)
-		require.NoError(t, err)
+	t.Run("enabled", func(t *testing.T) {
+		resp := requestTOTPStatus(t, account.SessionID)
 		testutil.TestResp[*mfa.TOTPStatusRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPStatusRsp) {
-			t.Helper(
-			// #*modelmfa.TOTPStatusRsp {
-			//   +Enabled     => true #bool
-			//   +DeviceCount => 1 #int
-			//   +Devices     => #[]modelmfa.TOTPDeviceInfo [
-			//     0 => #modelmfa.TOTPDeviceInfo {
-			//       +ID         => "019cbc88-e885-7d4a-8811-5d4e23b177dc" #string
-			//       +DeviceName => "test-device" #string
-			//       +LastUsedAt => "2026-03-05T13:46:54+08:00" #*string
-			//       +CreatedAt  => "2026-03-05T13:46:54+08:00" #string
-			//     }
-			//   ]
-			// }
-			)
-
+			t.Helper()
 			require.True(t, rsp.Enabled)
 			require.NotEmpty(t, rsp.DeviceCount)
 			for _, d := range rsp.Devices {
@@ -332,69 +114,201 @@ func TestTOTP(t *testing.T) {
 		assertResponseDataArrayField(t, resp, "devices")
 	})
 
-	t.Run("check_enabled", func(t *testing.T) {
-		cli, err := client.New(checkAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
-		require.NoError(t, err)
+	unbindTOTPDeviceWithPassword(t, account.SessionID, deviceID, account.Password)
 
-		resp, err := cli.Create(mfa.TOTPCheckReq{
-			Username: username,
-			Password: password,
+	t.Run("disabled_after_unbind", func(t *testing.T) {
+		resp := requestTOTPStatus(t, account.SessionID)
+		testutil.TestResp[*mfa.TOTPStatusRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPStatusRsp) {
+			t.Helper()
+			require.False(t, rsp.Enabled)
+			require.Equal(t, 0, rsp.DeviceCount)
+			require.Empty(t, rsp.Devices)
 		})
-		require.NoError(t, err)
+		assertResponseDataFieldExists(t, resp, "enabled")
+		assertResponseDataFieldExists(t, resp, "device_count")
+		assertResponseDataArrayField(t, resp, "devices")
+	})
+}
 
+func TestTOTPCheck(t *testing.T) {
+	account := newTOTPTestAccount(t, "totp_check_user")
+
+	t.Run("not_enabled", func(t *testing.T) {
+		resp := requestTOTPCheck(t, account)
 		testutil.TestResp[*mfa.TOTPCheckRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPCheckRsp) {
-			t.Helper(
-			// #*modelmfa.TOTPCheckRsp {
-			//   +RequiresMFA => true #bool
-			//   +Message     => "MFA is enabled" #string
-			// }
-			)
-
-			require.True(t, rsp.RequiresMFA)
+			t.Helper()
+			require.False(t, rsp.RequiresMFA)
 			require.NotEmpty(t, rsp.Message)
 		})
 		assertResponseDataFieldExists(t, resp, "requires_mfa")
 	})
 
-	t.Run("login_requires_second_factor", func(t *testing.T) {
-		cli, err := client.New(loginAPI)
-		require.NoError(t, err)
+	bindTOTPDeviceForTest(t, account.SessionID, "test-device-check")
 
-		resp, err := cli.Create(iam.LoginReq{
-			Username: username,
-			Password: password,
+	t.Run("enabled", func(t *testing.T) {
+		resp := requestTOTPCheck(t, account)
+		testutil.TestResp[*mfa.TOTPCheckRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPCheckRsp) {
+			t.Helper()
+			require.True(t, rsp.RequiresMFA)
+			require.NotEmpty(t, rsp.Message)
+		})
+		assertResponseDataFieldExists(t, resp, "requires_mfa")
+	})
+}
+
+func TestTOTPBind(t *testing.T) {
+	account := newTOTPTestAccount(t, "totp_bind_user")
+	cli := newTOTPClient(t, bindAPI, account.SessionID)
+
+	resp, err := cli.Create(nil)
+	require.NoError(t, err)
+	testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPBindRsp) {
+		t.Helper()
+		require.NotNil(t, rsp)
+		require.NotEmpty(t, rsp.ChallengeID)
+		require.NotEmpty(t, rsp.OtpauthURL)
+		require.NotEmpty(t, rsp.QRCodeImageDataURL)
+		require.Equal(t, consts.FrameworkName, rsp.Issuer)
+		require.Equal(t, account.Username, rsp.AccountName)
+		require.NotEmpty(t, extractSecretFromOtpauthURL(t, rsp.OtpauthURL))
+	})
+	assertResponseDataFieldExists(t, resp, "qr_code_image_data_url")
+}
+
+func TestTOTPConfirm(t *testing.T) {
+	account := newTOTPTestAccount(t, "totp_confirm_user")
+	challengeID, secret := createTOTPBindingChallenge(t, account.SessionID)
+	cli := newTOTPClient(t, confirmAPI, account.SessionID)
+
+	t.Run("invalid_challenge", func(t *testing.T) {
+		code, err := totp.GenerateCode(secret, time.Now())
+		require.NoError(t, err)
+		resp, err := cli.Create(mfa.TOTPConfirmReq{
+			ChallengeID: "missing-challenge",
+			Code:        code,
+			DeviceName:  "test-device-missing-challenge",
 		})
 		require.Error(t, err)
 		require.Nil(t, resp)
 	})
 
-	t.Run("login_with_totp_code", func(t *testing.T) {
+	t.Run("invalid_code_does_not_consume_challenge", func(t *testing.T) {
 		code, err := totp.GenerateCode(secret, time.Now())
 		require.NoError(t, err)
+		invalidCode := "000000"
+		if code == invalidCode {
+			invalidCode = "000001"
+		}
+		resp, err := cli.Create(mfa.TOTPConfirmReq{
+			ChallengeID: challengeID,
+			Code:        invalidCode,
+			DeviceName:  "test-device-2",
+		})
+		require.Error(t, err)
+		require.Nil(t, resp)
 
+		resp, err = cli.Create(mfa.TOTPConfirmReq{
+			ChallengeID: challengeID,
+			Code:        code,
+			DeviceName:  "test-device",
+		})
+		require.NoError(t, err)
+		testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPConfirmRsp) {
+			t.Helper()
+			require.NotEmpty(t, rsp.DeviceID)
+			require.NotEmpty(t, rsp.Message)
+			require.NotEmpty(t, rsp.BackupCodes)
+			require.Len(t, rsp.BackupCodes, 10)
+			for _, bc := range rsp.BackupCodes {
+				require.Regexp(t, `^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}(-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}){3}$`, bc)
+			}
+			assertBackupCodeHashesStored(t, rsp.DeviceID, rsp.BackupCodes)
+		})
+	})
+
+	t.Run("duplicate_challenge", func(t *testing.T) {
+		code, err := totp.GenerateCode(secret, time.Now())
+		require.NoError(t, err)
+		resp, err := cli.Create(mfa.TOTPConfirmReq{
+			ChallengeID: challengeID,
+			Code:        code,
+			DeviceName:  "test-device-dup",
+		})
+		require.Error(t, err)
+		require.Nil(t, resp)
+	})
+}
+
+func TestTOTPVerify(t *testing.T) {
+	account := newTOTPTestAccount(t, "totp_verify_user")
+	_, secret, _ := bindTOTPDeviceForTest(t, account.SessionID, "test-device-verify")
+	cli := newTOTPClient(t, verifyAPI, account.SessionID)
+
+	t.Run("valid_code", func(t *testing.T) {
+		code, err := totp.GenerateCode(secret, time.Now())
+		require.NoError(t, err)
+		resp, err := cli.Create(mfa.TOTPVerifyReq{TOTPCode: code})
+		require.NoError(t, err)
+		testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPVerifyRsp) {
+			t.Helper()
+			require.True(t, rsp.Valid)
+			require.NotEmpty(t, rsp.Message)
+		})
+		assertResponseDataFieldExists(t, resp, "valid")
+	})
+
+	t.Run("invalid_code", func(t *testing.T) {
+		resp, err := cli.Create(mfa.TOTPVerifyReq{TOTPCode: "000000"})
+		require.NoError(t, err)
+		testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPVerifyRsp) {
+			t.Helper()
+			require.False(t, rsp.Valid)
+			require.NotEmpty(t, rsp.Message)
+		})
+		assertResponseDataFieldExists(t, resp, "valid")
+	})
+
+	t.Run("invalid_format", func(t *testing.T) {
+		resp, err := cli.Create(mfa.TOTPVerifyReq{TOTPCode: "abc123"})
+		require.Error(t, err)
+		require.Nil(t, resp)
+	})
+}
+
+func TestTOTPLogin(t *testing.T) {
+	account := newTOTPTestAccount(t, "totp_login_user")
+	deviceID, secret, backupCodes := bindTOTPDeviceForTest(t, account.SessionID, "test-device-login")
+
+	t.Run("requires_second_factor", func(t *testing.T) {
+		cli, err := client.New(loginAPI)
+		require.NoError(t, err)
+		resp, err := cli.Create(iam.LoginReq{
+			Username: account.Username,
+			Password: account.Password,
+		})
+		require.Error(t, err)
+		require.Nil(t, resp)
+	})
+
+	t.Run("with_totp_code", func(t *testing.T) {
+		code, err := totp.GenerateCode(secret, time.Now())
+		require.NoError(t, err)
 		_ = loginSessionIDFromCookie(t, iam.LoginReq{
-			Username: username,
-			Password: password,
+			Username: account.Username,
+			Password: account.Password,
 			TOTPCode: code,
 		})
 	})
 
-	t.Run("login_rejects_conflicting_second_factors", func(t *testing.T) {
-		if len(backupCodes) == 0 {
-			t.Skip("no backup codes available")
-		}
+	t.Run("rejects_conflicting_second_factors", func(t *testing.T) {
+		require.NotEmpty(t, backupCodes)
 		cli, err := client.New(loginAPI)
 		require.NoError(t, err)
-
 		code, err := totp.GenerateCode(secret, time.Now())
 		require.NoError(t, err)
-
 		resp, err := cli.Create(iam.LoginReq{
-			Username:   username,
-			Password:   password,
+			Username:   account.Username,
+			Password:   account.Password,
 			TOTPCode:   code,
 			BackupCode: backupCodes[0],
 		})
@@ -403,264 +317,213 @@ func TestTOTP(t *testing.T) {
 		assertBackupCodeHashCount(t, deviceID, 10)
 	})
 
-	t.Run("verify", func(t *testing.T) {
-		t.Run("valid_code", func(t *testing.T) {
-			cli, err := client.New(verifyAPI, client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: sessionID,
-			}))
-			require.NoError(t, err)
-
-			code, err := totp.GenerateCode(secret, time.Now())
-			require.NoError(t, err)
-
-			resp, err := cli.Create(mfa.TOTPVerifyReq{
-				TOTPCode: code,
-			})
-			require.NoError(t, err)
-			testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPVerifyRsp) {
-				t.Helper(
-				// #*modelmfa.TOTPVerifyRsp {
-				//   +Valid   => true #bool
-				//   +Message => "verification successful" #string
-				// }
-				)
-
-				require.True(t, rsp.Valid)
-				require.NotEmpty(t, rsp.Message)
-			})
-			assertResponseDataFieldExists(t, resp, "valid")
-		})
-
-		t.Run("invalid_code", func(t *testing.T) {
-			cli, err := client.New(verifyAPI, client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: sessionID,
-			}))
-			require.NoError(t, err)
-
-			resp, err := cli.Create(mfa.TOTPVerifyReq{
-				TOTPCode: "000000",
-			})
-			require.NoError(t, err)
-			testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPVerifyRsp) {
-				t.Helper(
-				// #*modelmfa.TOTPVerifyRsp {
-				//   +Valid   => false #bool
-				//   +Message => "invalid verification code" #string
-				// }
-				)
-
-				require.False(t, rsp.Valid)
-				require.NotEmpty(t, rsp.Message)
-			})
-			assertResponseDataFieldExists(t, resp, "valid")
-		})
-
-		t.Run("invalid_format", func(t *testing.T) {
-			cli, err := client.New(verifyAPI, client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: sessionID,
-			}))
-			require.NoError(t, err)
-
-			resp, err := cli.Create(mfa.TOTPVerifyReq{
-				TOTPCode: "abc123",
-			})
-			require.Error(t, err)
-			require.Nil(t, resp)
-		})
-	})
-
-	t.Run("login_with_backup_code", func(t *testing.T) {
-		if len(backupCodes) < 2 {
-			t.Skip("not enough backup codes available")
-		}
-
+	t.Run("with_backup_code", func(t *testing.T) {
+		require.Len(t, backupCodes, 10)
 		_ = loginSessionIDFromCookie(t, iam.LoginReq{
-			Username:   username,
-			Password:   password,
+			Username:   account.Username,
+			Password:   account.Password,
 			BackupCode: backupCodes[1],
 		})
-
 		cli, err := client.New(loginAPI)
 		require.NoError(t, err)
-
 		resp, err := cli.Create(iam.LoginReq{
-			Username:   username,
-			Password:   password,
+			Username:   account.Username,
+			Password:   account.Password,
 			BackupCode: backupCodes[1],
 		})
 		require.Error(t, err)
 		require.Nil(t, resp)
 		assertBackupCodeHashCount(t, deviceID, 9)
 	})
+}
 
-	t.Run("unbind", func(t *testing.T) {
-		t.Run("missing_fresh_auth", func(t *testing.T) {
-			cli, err := client.New(unbindAPI, client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: sessionID,
-			}))
-			require.NoError(t, err)
+func TestTOTPUnbind(t *testing.T) {
+	account := newTOTPTestAccount(t, "totp_unbind_user")
+	deviceID, secret, backupCodes := bindTOTPDeviceForTest(t, account.SessionID, "test-device")
+	cli := newTOTPClient(t, unbindAPI, account.SessionID)
 
-			resp, err := cli.Create(mfa.TOTPUnbindReq{
-				DeviceID: deviceID,
-			})
-			require.NoError(t, err)
-			testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
-				t.Helper()
-
-				require.False(t, rsp.Success)
-				require.Equal(t, 1, rsp.DeviceCount)
-				require.NotEmpty(t, rsp.Message)
-			})
-			assertResponseDataFieldExists(t, resp, "success")
-			assertResponseDataFieldExists(t, resp, "device_count")
-			assertTOTPDeviceActive(t, deviceID)
+	t.Run("missing_fresh_auth", func(t *testing.T) {
+		resp, err := cli.Create(mfa.TOTPUnbindReq{DeviceID: deviceID})
+		require.NoError(t, err)
+		testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
+			t.Helper()
+			require.False(t, rsp.Success)
+			require.Equal(t, 1, rsp.DeviceCount)
+			require.NotEmpty(t, rsp.Message)
 		})
-
-		t.Run("multiple_verification_methods", func(t *testing.T) {
-			if len(backupCodes) < 3 {
-				t.Skip("not enough backup codes available")
-			}
-			cli, err := client.New(unbindAPI, client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: sessionID,
-			}))
-			require.NoError(t, err)
-
-			resp, err := cli.Create(mfa.TOTPUnbindReq{
-				DeviceID:   deviceID,
-				Password:   password,
-				BackupCode: backupCodes[2],
-			})
-			require.NoError(t, err)
-			testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
-				t.Helper()
-
-				require.False(t, rsp.Success)
-				require.Equal(t, 1, rsp.DeviceCount)
-				require.NotEmpty(t, rsp.Message)
-			})
-			assertResponseDataFieldExists(t, resp, "success")
-			assertResponseDataFieldExists(t, resp, "device_count")
-			assertTOTPDeviceActive(t, deviceID)
-			assertBackupCodeHashCount(t, deviceID, 9)
-		})
-
-		t.Run("invalid_totp", func(t *testing.T) {
-			cli, err := client.New(unbindAPI, client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: sessionID,
-			}))
-			require.NoError(t, err)
-
-			resp, err := cli.Create(mfa.TOTPUnbindReq{
-				DeviceID: deviceID,
-				TOTPCode: "000000",
-			})
-			require.NoError(t, err)
-			testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
-				t.Helper(
-				// #*modelmfa.TOTPUnbindRsp {
-				//   +Success     => false #bool
-				//   +Message     => "Invalid TOTP code" #string
-				//   +DeviceCount => 1 #int
-				// }
-				)
-
-				require.False(t, rsp.Success)
-				require.Equal(t, 1, rsp.DeviceCount)
-				require.NotEmpty(t, rsp.Message)
-			})
-			assertResponseDataFieldExists(t, resp, "success")
-			assertResponseDataFieldExists(t, resp, "device_count")
-			assertTOTPDeviceActive(t, deviceID)
-		})
-
-		t.Run("valid_password", func(t *testing.T) {
-			secondDeviceID, _, _ := bindTOTPDeviceForTest(t, sessionID, "test-device-password")
-			cli, err := client.New(unbindAPI, client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: sessionID,
-			}))
-			require.NoError(t, err)
-
-			resp, err := cli.Create(mfa.TOTPUnbindReq{
-				DeviceID: secondDeviceID,
-				Password: password,
-			})
-			require.NoError(t, err)
-			testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
-				t.Helper()
-
-				require.True(t, rsp.Success)
-				require.Equal(t, 1, rsp.DeviceCount)
-				require.NotEmpty(t, rsp.Message)
-			})
-			assertResponseDataFieldExists(t, resp, "success")
-			assertResponseDataFieldExists(t, resp, "device_count")
-		})
-
-		t.Run("valid_totp", func(t *testing.T) {
-			cli, err := client.New(unbindAPI, client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: sessionID,
-			}))
-			require.NoError(t, err)
-
-			code, err := totp.GenerateCode(secret, time.Now())
-			require.NoError(t, err)
-
-			resp, err := cli.Create(mfa.TOTPUnbindReq{
-				DeviceID: deviceID,
-				TOTPCode: code,
-			})
-			require.NoError(t, err)
-			testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
-				t.Helper(
-				// #*modelmfa.TOTPUnbindRsp {
-				//   +Success     => true #bool
-				//   +Message     => "Device 'test-device' unbound successfully" #string
-				//   +DeviceCount => 0 #int
-				// }
-				)
-
-				require.True(t, rsp.Success)
-				require.Equal(t, 0, rsp.DeviceCount)
-				require.NotEmpty(t, rsp.Message)
-			})
-			assertResponseDataFieldExists(t, resp, "success")
-			assertResponseDataFieldExists(t, resp, "device_count")
-		})
+		assertResponseDataFieldExists(t, resp, "success")
+		assertResponseDataFieldExists(t, resp, "device_count")
+		assertTOTPDeviceActive(t, deviceID)
 	})
 
-	t.Run("status_disabled_after_unbind", func(t *testing.T) {
-		cli, err := client.New(statusAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
-		require.NoError(t, err)
-
-		resp, err := cli.Request(http.MethodGet, nil)
-		require.NoError(t, err)
-		testutil.TestResp[*mfa.TOTPStatusRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPStatusRsp) {
-			t.Helper(
-			// #*modelmfa.TOTPStatusRsp {
-			//   +Enabled     => false #bool
-			//   +DeviceCount => 0 #int
-			//   +Devices     => []modelmfa.TOTPDeviceInfo(nil)
-			// }
-			)
-
-			require.False(t, rsp.Enabled)
-			require.Equal(t, 0, rsp.DeviceCount)
-			require.Empty(t, rsp.Devices)
+	t.Run("multiple_verification_methods", func(t *testing.T) {
+		require.NotEmpty(t, backupCodes)
+		resp, err := cli.Create(mfa.TOTPUnbindReq{
+			DeviceID:   deviceID,
+			Password:   account.Password,
+			BackupCode: backupCodes[0],
 		})
-		assertResponseDataFieldExists(t, resp, "enabled")
+		require.NoError(t, err)
+		testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
+			t.Helper()
+			require.False(t, rsp.Success)
+			require.Equal(t, 1, rsp.DeviceCount)
+			require.NotEmpty(t, rsp.Message)
+		})
+		assertResponseDataFieldExists(t, resp, "success")
 		assertResponseDataFieldExists(t, resp, "device_count")
-		assertResponseDataArrayField(t, resp, "devices")
+		assertTOTPDeviceActive(t, deviceID)
+		assertBackupCodeHashCount(t, deviceID, 10)
+	})
+
+	t.Run("invalid_totp", func(t *testing.T) {
+		resp, err := cli.Create(mfa.TOTPUnbindReq{
+			DeviceID: deviceID,
+			TOTPCode: "000000",
+		})
+		require.NoError(t, err)
+		testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
+			t.Helper()
+			require.False(t, rsp.Success)
+			require.Equal(t, 1, rsp.DeviceCount)
+			require.NotEmpty(t, rsp.Message)
+		})
+		assertResponseDataFieldExists(t, resp, "success")
+		assertResponseDataFieldExists(t, resp, "device_count")
+		assertTOTPDeviceActive(t, deviceID)
+	})
+
+	t.Run("valid_password", func(t *testing.T) {
+		secondDeviceID, _, _ := bindTOTPDeviceForTest(t, account.SessionID, "test-device-password")
+		resp, err := cli.Create(mfa.TOTPUnbindReq{
+			DeviceID: secondDeviceID,
+			Password: account.Password,
+		})
+		require.NoError(t, err)
+		testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
+			t.Helper()
+			require.True(t, rsp.Success)
+			require.Equal(t, 1, rsp.DeviceCount)
+			require.NotEmpty(t, rsp.Message)
+		})
+		assertResponseDataFieldExists(t, resp, "success")
+		assertResponseDataFieldExists(t, resp, "device_count")
+	})
+
+	t.Run("valid_totp", func(t *testing.T) {
+		code, err := totp.GenerateCode(secret, time.Now())
+		require.NoError(t, err)
+		resp, err := cli.Create(mfa.TOTPUnbindReq{
+			DeviceID: deviceID,
+			TOTPCode: code,
+		})
+		require.NoError(t, err)
+		testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
+			t.Helper()
+			require.True(t, rsp.Success)
+			require.Equal(t, 0, rsp.DeviceCount)
+			require.NotEmpty(t, rsp.Message)
+		})
+		assertResponseDataFieldExists(t, resp, "success")
+		assertResponseDataFieldExists(t, resp, "device_count")
+	})
+}
+
+func newTOTPTestAccount(t *testing.T, prefix string) totpTestAccount {
+	t.Helper()
+
+	account := totpTestAccount{
+		Username: fmt.Sprintf("%s_%d", prefix, time.Now().UnixNano()),
+		Password: "12345678",
+	}
+
+	cli, err := client.New(signupAPI)
+	require.NoError(t, err)
+	resp, err := cli.Create(iam.SignupReq{
+		Username:   account.Username,
+		Password:   account.Password,
+		RePassword: account.Password,
+	})
+	require.NoError(t, err)
+	testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
+		t.Helper()
+		require.Equal(t, account.Username, rsp.Username)
+		require.NotEmpty(t, rsp.UserID)
+		require.NotEmpty(t, rsp.Message)
+		account.UserID = rsp.UserID
+	})
+
+	account.SessionID = loginSessionIDFromCookie(t, iam.LoginReq{
+		Username: account.Username,
+		Password: account.Password,
+	})
+	return account
+}
+
+func newTOTPClient(t *testing.T, api, sessionID string) *client.Client {
+	t.Helper()
+
+	cli, err := client.New(api, client.WithCookie(&http.Cookie{
+		Name:  "session_id",
+		Value: sessionID,
+	}))
+	require.NoError(t, err)
+	return cli
+}
+
+func requestTOTPStatus(t *testing.T, sessionID string) *client.Resp {
+	t.Helper()
+
+	cli := newTOTPClient(t, statusAPI, sessionID)
+	resp, err := cli.Request(http.MethodGet, nil)
+	require.NoError(t, err)
+	return resp
+}
+
+func requestTOTPCheck(t *testing.T, account totpTestAccount) *client.Resp {
+	t.Helper()
+
+	cli := newTOTPClient(t, checkAPI, account.SessionID)
+	resp, err := cli.Create(mfa.TOTPCheckReq{
+		Username: account.Username,
+		Password: account.Password,
+	})
+	require.NoError(t, err)
+	return resp
+}
+
+func createTOTPBindingChallenge(t *testing.T, sessionID string) (string, string) {
+	t.Helper()
+
+	cli := newTOTPClient(t, bindAPI, sessionID)
+	resp, err := cli.Create(mfa.TOTPBind{})
+	require.NoError(t, err)
+
+	var challengeID string
+	var secret string
+	testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPBindRsp) {
+		t.Helper()
+		require.NotEmpty(t, rsp.ChallengeID)
+		require.NotEmpty(t, rsp.OtpauthURL)
+		challengeID = rsp.ChallengeID
+		secret = extractSecretFromOtpauthURL(t, rsp.OtpauthURL)
+	})
+	return challengeID, secret
+}
+
+func unbindTOTPDeviceWithPassword(t *testing.T, sessionID, deviceID, password string) {
+	t.Helper()
+
+	cli := newTOTPClient(t, unbindAPI, sessionID)
+	resp, err := cli.Create(mfa.TOTPUnbindReq{
+		DeviceID: deviceID,
+		Password: password,
+	})
+	require.NoError(t, err)
+	testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
+		t.Helper()
+		require.True(t, rsp.Success)
+		require.NotEmpty(t, rsp.Message)
 	})
 }
 
