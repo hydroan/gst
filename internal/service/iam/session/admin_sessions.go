@@ -320,30 +320,33 @@ func (s *AdminUserSessionsDeleteService) Delete(ctx *types.ServiceContext, req *
 
 func buildAdminSessionUserItem(ctx *types.ServiceContext, session modeliamsession.Session) (*adminSessionUserItem, error) {
 	user := new(modeliamuser.User)
-	if err := database.Database[*modeliamuser.User](ctx).Get(user, session.UserID); err == nil {
-		return &adminSessionUserItem{
-			view: modeliamsession.AdminSessionUserView{
-				UserID:             user.ID,
-				Username:           user.Username,
-				Email:              util.Deref(user.Email),
-				FirstName:          user.FirstName,
-				LastName:           user.LastName,
-				Status:             string(user.Status),
-				MustChangePassword: user.MustChangePassword,
-				Sessions:           make([]modeliamsession.SessionView, 0, 1),
-			},
-		}, nil
+	if err := database.Database[*modeliamuser.User](ctx).Get(user, session.UserID); err != nil {
+		if errors.Is(err, database.ErrRecordNotFound) {
+			return &adminSessionUserItem{
+				view: modeliamsession.AdminSessionUserView{
+					UserID:             session.UserID,
+					Username:           session.Username,
+					Email:              session.Email,
+					FirstName:          session.FirstName,
+					LastName:           session.LastName,
+					Status:             session.Status,
+					MustChangePassword: session.MustChangePassword,
+					Sessions:           make([]modeliamsession.SessionView, 0, 1),
+				},
+			}, nil
+		}
+		return nil, err
 	}
 
 	return &adminSessionUserItem{
 		view: modeliamsession.AdminSessionUserView{
-			UserID:             session.UserID,
-			Username:           session.Username,
-			Email:              session.Email,
-			FirstName:          session.FirstName,
-			LastName:           session.LastName,
-			Status:             session.Status,
-			MustChangePassword: session.MustChangePassword,
+			UserID:             user.ID,
+			Username:           user.Username,
+			Email:              util.Deref(user.Email),
+			FirstName:          user.FirstName,
+			LastName:           user.LastName,
+			Status:             string(user.Status),
+			MustChangePassword: user.MustChangePassword,
 			Sessions:           make([]modeliamsession.SessionView, 0, 1),
 		},
 	}, nil
