@@ -58,8 +58,7 @@ func (s *SessionsListService) List(ctx *types.ServiceContext, req *modeliamsessi
 		session, getErr := cache.Get(sessionKey)
 		if getErr != nil {
 			if errors.Is(getErr, types.ErrEntryNotFound) {
-				_ = redis.ZRem(ctx, modeliamsession.SessionUserKey(currentSession.UserID), sessionID)
-				_ = redis.ZRem(ctx, modeliamsession.SessionAllKey(), sessionID)
+				removeStaleSessionIndexes(ctx, currentSession.UserID, sessionID)
 				continue
 			}
 			log.Error("failed to load session from redis", getErr)
