@@ -14,7 +14,10 @@ import (
 	"github.com/hydroan/gst/types"
 )
 
-const sessionTouchInterval = 30 * time.Second
+const (
+	sessionTouchInterval        = 30 * time.Second
+	sessionLastSeenPruneLockTTL = time.Minute
+)
 
 func redisContext(ctx context.Context) context.Context {
 	if ctx == nil {
@@ -25,6 +28,10 @@ func redisContext(ctx context.Context) context.Context {
 
 func sessionTouchKey(sessionID string) string {
 	return modeliamsession.SessionNamespacePrefix + ":touch:" + sessionID
+}
+
+func sessionLastSeenPruneKey() string {
+	return modeliamsession.SessionNamespacePrefix + ":last_seen:prune"
 }
 
 // listUserSessionIDs loads all indexed session ids for a user.
@@ -73,8 +80,10 @@ func listOnlineSessionIDs(ctx context.Context, since time.Time) ([]string, error
 	if since.IsZero() {
 		return make([]string, 0), nil
 	}
+	ctx = redisContext(ctx)
+	pruneStaleLastSeenSessionIDs(ctx, time.Now())
 	return redis.ZRangeByScore(
-		redisContext(ctx),
+		ctx,
 		modeliamsession.SessionLastSeenKey(),
 		strconv.FormatInt(since.UnixMilli(), 10),
 		"+inf",
@@ -90,6 +99,28 @@ func listOnlineSessionIDs(ctx context.Context, since time.Time) ([]string, error
 // Redis state can drift after partial writes, manual cache edits, or old data.
 func pruneExpiredSessionIDs(ctx context.Context, key string) error {
 	return redis.ZRemRangeByScore(redisContext(ctx), key, "-inf", strconv.FormatInt(time.Now().UnixMilli(), 10))
+}
+
+// pruneStaleLastSeenSessionIDs bounds the global last-seen index by the maximum session lifetime.
+//
+// SessionLastSeenKey is scored by LastSeenAt instead of ExpiresAt so online
+// queries can search by recent activity. Redis cannot expire individual ZSET
+// members when session payload keys naturally expire, so this helper lazily
+// removes members whose last-seen timestamp is older than any valid session can
+// still be. A short Redis lock keeps high-frequency request paths from pruning
+// the same global index on every request.
+func pruneStaleLastSeenSessionIDs(ctx context.Context, now time.Time) {
+	ctx = redisContext(ctx)
+	acquired, err := redis.SetNX(ctx, sessionLastSeenPruneKey(), "1", sessionLastSeenPruneLockTTL)
+	if err != nil || !acquired {
+		return
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	retention := GetSessionExpiration() + sessionTouchInterval
+	cutoff := now.Add(-retention)
+	_ = redis.ZRemRangeByScore(ctx, modeliamsession.SessionLastSeenKey(), "-inf", strconv.FormatInt(cutoff.UnixMilli(), 10))
 }
 
 // removeSessionIndexes removes a live session id from every Redis index.
@@ -200,6 +231,7 @@ func IndexSession(ctx context.Context, session modeliamsession.Session) error {
 		return nil
 	}
 	ctx = redisContext(ctx)
+	pruneStaleLastSeenSessionIDs(ctx, time.Now())
 	ttl := time.Until(session.ExpiresAt)
 	if ttl <= 0 {
 		return errors.New("session expired")
@@ -300,6 +332,7 @@ func TouchSession(ctx context.Context, sessionID string, session modeliamsession
 		_ = redis.Del(ctx, touchKey)
 		return err
 	}
+	pruneStaleLastSeenSessionIDs(ctx, now)
 	return nil
 }
 

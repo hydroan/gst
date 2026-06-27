@@ -75,6 +75,39 @@ func TestTouchSession(t *testing.T) {
 	})
 }
 
+func TestIndexSessionPrunesStaleLastSeenIndex(t *testing.T) {
+	setupRedis(t)
+
+	previousExpiration := serviceiamsession.GetSessionExpiration()
+	serviceiamsession.SetSessionExpiration(time.Hour)
+	t.Cleanup(func() {
+		serviceiamsession.SetSessionExpiration(previousExpiration)
+	})
+
+	now := time.Now().UTC()
+	staleSessionID := "stale-last-seen-session"
+	retainedSessionID := "retained-last-seen-session"
+	currentSessionID := "current-session"
+	require.NoError(t, redis.ZAdd(t.Context(), modeliamsession.SessionLastSeenKey(), float64(now.Add(-2*time.Hour).UnixMilli()), staleSessionID))
+	require.NoError(t, redis.ZAdd(t.Context(), modeliamsession.SessionLastSeenKey(), float64(now.Add(-30*time.Minute).UnixMilli()), retainedSessionID))
+
+	session := modeliamsession.Session{
+		ID:         currentSessionID,
+		UserID:     "user-1",
+		State:      modeliamsession.SessionStatusActive,
+		IssuedAt:   now.Add(-time.Minute),
+		LastSeenAt: now,
+		ExpiresAt:  now.Add(time.Hour),
+	}
+	require.NoError(t, serviceiamsession.IndexSession(t.Context(), session))
+
+	lastSeenSessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionLastSeenKey(), 0, -1)
+	require.NoError(t, err)
+	require.NotContains(t, lastSeenSessionIDs, staleSessionID)
+	require.Contains(t, lastSeenSessionIDs, retainedSessionID)
+	require.Contains(t, lastSeenSessionIDs, currentSessionID)
+}
+
 func TestGetCurrentSessionUsesRequestCache(t *testing.T) {
 	now := time.Now().UTC()
 	sessionID := "cached-session"
