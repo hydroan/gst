@@ -14,11 +14,17 @@ import (
 	"github.com/hydroan/gst/types"
 )
 
+const sessionTouchInterval = 30 * time.Second
+
 func redisContext(ctx context.Context) context.Context {
 	if ctx == nil {
 		return context.Background()
 	}
 	return ctx
+}
+
+func sessionTouchKey(sessionID string) string {
+	return modeliamsession.SessionNamespacePrefix + ":touch:" + sessionID
 }
 
 // listUserSessionIDs loads all indexed session ids for a user.
@@ -174,6 +180,45 @@ func UpdateSessionMustChangePassword(ctx context.Context, sessionID string, must
 		return types.ErrEntryNotFound
 	}
 	return cache.Set(sessionKey, session, ttl)
+}
+
+// TouchSession refreshes LastSeenAt for an active session at most once per touch interval.
+func TouchSession(ctx context.Context, sessionID string, session modeliamsession.Session, now time.Time) error {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return nil
+	}
+	ctx = redisContext(ctx)
+	if now.IsZero() {
+		now = time.Now()
+	}
+	if now.Sub(session.LastSeenAt) < sessionTouchInterval {
+		return nil
+	}
+
+	ttl := time.Until(session.ExpiresAt)
+	if ttl <= 0 {
+		_, _ = DeleteSession(ctx, sessionID)
+		return types.ErrEntryNotFound
+	}
+
+	touchKey := sessionTouchKey(sessionID)
+	acquired, err := redis.SetNX(ctx, touchKey, "1", sessionTouchInterval)
+	if err != nil {
+		return err
+	}
+	if !acquired {
+		return nil
+	}
+
+	session.LastSeenAt = now
+	if err = redis.Cache[modeliamsession.Session]().
+		WithContext(ctx).
+		Set(modeliamsession.SessionIDKey(sessionID), session, ttl); err != nil {
+		_ = redis.Del(ctx, touchKey)
+		return err
+	}
+	return nil
 }
 
 // DeleteSession deletes the stored session and removes the indexed user-session relation.

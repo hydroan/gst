@@ -17,7 +17,6 @@ const (
 var (
 	State                 prometheus.Gauge
 	Uptime                prometheus.Gauge
-	CountOnlineUser       prometheus.Gauge
 	HTTPRequestsTotal     *prometheus.CounterVec
 	HTTPRequestDuration   *prometheus.HistogramVec
 	ResponseTime          prometheus.Histogram
@@ -68,13 +67,6 @@ func Init() error {
 		},
 		[]string{"method", "path", "status"},
 	)
-
-	CountOnlineUser = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: NAMESPACE,
-		Subsystem: SUBSYSTEM,
-		Name:      "count_online",
-		Help:      "The count of online user",
-	})
 
 	ResponseTime = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Namespace: NAMESPACE,
@@ -150,11 +142,10 @@ func Init() error {
 		Help:      "Current size of the task queue",
 	})
 
-	errs := make([]error, 0, 18)
+	errs := make([]error, 0, 17)
 	errs = append(errs, prometheus.Register(State))
 	errs = append(errs, prometheus.Register(Uptime))
 	errs = append(errs, prometheus.Register(HTTPRequestsTotal))
-	errs = append(errs, prometheus.Register(CountOnlineUser))
 	errs = append(errs, prometheus.Register(ResponseTime))
 	errs = append(errs, prometheus.Register(ErrorRate))
 	errs = append(errs, prometheus.Register(MemoryTotal))

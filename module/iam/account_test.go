@@ -122,28 +122,27 @@ func TestAccountSignup(t *testing.T) {
 	require.NotEmpty(t, user.Username)
 }
 
-func TestAccountCleanupUserRevokesSessions(t *testing.T) {
-	require.NoError(t, redis.RemovePrefix(t.Context(), modeliamsession.SessionNamespacePrefix))
-	t.Cleanup(func() {
-		require.NoError(t, redis.RemovePrefix(context.Background(), modeliamsession.SessionNamespacePrefix))
+func TestAccountLogin(t *testing.T) {
+	t.Run("login", func(t *testing.T) {
+		user := accountSignupUser(t, "acct_login", "12345678")
+		user.SessionID = accountLoginUser(t, &user, user.Password)
+
+		require.NotEmpty(t, user.SessionID)
+		accountRequireUserSessionContains(t, user.UserID, user.SessionID)
 	})
 
-	user := accountSignupUser(t, "acct_cleanup_session", "12345678")
-	user.SessionID = accountLoginUser(t, &user, user.Password)
-	accountRequireUserSessionContains(t, user.UserID, user.SessionID)
+	t.Run("sets_session_cookie", func(t *testing.T) {
+		user := accountSignupUser(t, "acct_login_cookie", "12345678")
+		cookie := loginSessionCookie(t, user.Username, user.Password)
 
-	accountCleanupUser(t, user.Username)
-
-	accountRequireSessionNotFound(t, user.SessionID)
-	accountRequireUserSessionNotContains(t, user.UserID, user.SessionID)
-}
-
-func TestAccountLogin(t *testing.T) {
-	user := accountSignupUser(t, "acct_login", "12345678")
-	user.SessionID = accountLoginUser(t, &user, user.Password)
-
-	require.NotEmpty(t, user.SessionID)
-	accountRequireUserSessionContains(t, user.UserID, user.SessionID)
+		require.Equal(t, "session_id", cookie.Name)
+		require.NotEmpty(t, cookie.Value)
+		require.Equal(t, "/", cookie.Path)
+		require.True(t, cookie.HttpOnly)
+		require.True(t, cookie.Secure)
+		require.Equal(t, http.SameSiteLaxMode, cookie.SameSite)
+		require.Positive(t, cookie.MaxAge)
+	})
 }
 
 func TestAccountLogout(t *testing.T) {

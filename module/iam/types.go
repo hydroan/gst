@@ -27,8 +27,6 @@ type (
 	Session     = modeliamsession.Session
 	SessionView = modeliamsession.SessionView
 	Token       = modeliamsession.Token
-	Heartbeat   = modeliamsession.Heartbeat
-	OnlineUser  = modeliamsession.OnlineUser
 
 	CurrentListReq   = modeliamsession.CurrentListReq
 	CurrentListRsp   = modeliamsession.CurrentListRsp

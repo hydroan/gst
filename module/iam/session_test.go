@@ -13,6 +13,7 @@ import (
 	"github.com/hydroan/gst/database"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module/iam"
@@ -25,8 +26,6 @@ import (
 var (
 	sessionsAPI      = testutil.URL(port, "/api/iam/sessions")
 	adminSessionsAPI = testutil.URL(port, "/api/iam/admin/sessions")
-	heartbeatAPI     = testutil.URL(port, "/api/iam/session/heartbeat")
-	onlineuserAPI    = testutil.URL(port, "/api/online-users")
 )
 
 func adminUserSessionsAPI(userID string) string {
@@ -39,33 +38,99 @@ type sessionTestAccount struct {
 	Password string
 }
 
-func TestSessionHeartbeat(t *testing.T) {
+func TestSessionTouch(t *testing.T) {
 	setupSessionRedisCleanup(t)
 
-	account := newSessionTestAccount(t)
-	sessionID := loginSession(t, account.Username, account.Password)
+	t.Run("touches_stale_current_session", func(t *testing.T) {
+		account := newSessionTestAccount(t)
+		sessionID := loginSession(t, account.Username, account.Password)
 
-	sessionKey := modeliamsession.SessionIDKey(sessionID)
-	before, err := redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Get(sessionKey)
-	require.NoError(t, err)
+		sessionKey := modeliamsession.SessionIDKey(sessionID)
+		session, err := redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Get(sessionKey)
+		require.NoError(t, err)
 
-	time.Sleep(10 * time.Millisecond)
+		staleLastSeenAt := time.Now().Add(-time.Minute).UTC()
+		session.LastSeenAt = staleLastSeenAt
+		require.NoError(t, redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Set(sessionKey, session, time.Until(session.ExpiresAt)))
 
-	cli, err := client.New(heartbeatAPI, client.WithCookie(&http.Cookie{
-		Name:  "session_id",
-		Value: sessionID,
-	}))
-	require.NoError(t, err)
+		cli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{
+			Name:  "session_id",
+			Value: sessionID,
+		}))
+		require.NoError(t, err)
 
-	resp, err := cli.Create(nil)
-	require.NoError(t, err)
+		resp, err := cli.Request(http.MethodGet, new(struct{}))
+		require.NoError(t, err)
 
-	testutil.TestResp[*iam.Heartbeat](t, resp, func(t *testing.T, rsp *iam.Heartbeat) { t.Helper() })
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.CurrentListRsp) {
+			t.Helper()
+			require.Equal(t, sessionID, rsp.Session.ID)
+		})
 
-	after, err := redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Get(sessionKey)
-	require.NoError(t, err)
-	require.Equal(t, before.ExpiresAt, after.ExpiresAt)
-	require.Equal(t, before.LastSeenAt, after.LastSeenAt)
+		after, err := redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Get(sessionKey)
+		require.NoError(t, err)
+		require.Equal(t, session.ExpiresAt, after.ExpiresAt)
+		require.True(t, after.LastSeenAt.After(staleLastSeenAt), "expected current session request to touch last_seen_at")
+	})
+
+	t.Run("skips_recent_current_session_touch", func(t *testing.T) {
+		account := newSessionTestAccount(t)
+		sessionID := loginSession(t, account.Username, account.Password)
+
+		sessionKey := modeliamsession.SessionIDKey(sessionID)
+		session, err := redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Get(sessionKey)
+		require.NoError(t, err)
+
+		recentLastSeenAt := time.Now().Add(-time.Second).UTC()
+		session.LastSeenAt = recentLastSeenAt
+		require.NoError(t, redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Set(sessionKey, session, time.Until(session.ExpiresAt)))
+
+		cli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{
+			Name:  "session_id",
+			Value: sessionID,
+		}))
+		require.NoError(t, err)
+
+		resp, err := cli.Request(http.MethodGet, new(struct{}))
+		require.NoError(t, err)
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.CurrentListRsp) {
+			t.Helper()
+			require.Equal(t, sessionID, rsp.Session.ID)
+		})
+
+		after, err := redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Get(sessionKey)
+		require.NoError(t, err)
+		require.Equal(t, session.ExpiresAt, after.ExpiresAt)
+		require.Equal(t, recentLastSeenAt, after.LastSeenAt)
+	})
+
+	t.Run("throttles_stale_concurrent_snapshot", func(t *testing.T) {
+		account := newSessionTestAccount(t)
+		sessionID := loginSession(t, account.Username, account.Password)
+
+		sessionKey := modeliamsession.SessionIDKey(sessionID)
+		session, err := redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Get(sessionKey)
+		require.NoError(t, err)
+
+		staleLastSeenAt := time.Now().Add(-time.Minute).UTC()
+		session.LastSeenAt = staleLastSeenAt
+		require.NoError(t, redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Set(sessionKey, session, time.Until(session.ExpiresAt)))
+
+		firstTouchAt := time.Now().UTC()
+		require.NoError(t, serviceiamsession.TouchSession(t.Context(), sessionID, session, firstTouchAt))
+
+		afterFirstTouch, err := redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Get(sessionKey)
+		require.NoError(t, err)
+		require.True(t, afterFirstTouch.LastSeenAt.Equal(firstTouchAt))
+
+		staleSnapshot := afterFirstTouch
+		staleSnapshot.LastSeenAt = staleLastSeenAt
+		require.NoError(t, serviceiamsession.TouchSession(t.Context(), sessionID, staleSnapshot, firstTouchAt.Add(time.Second)))
+
+		afterSecondTouch, err := redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Get(sessionKey)
+		require.NoError(t, err)
+		require.True(t, afterSecondTouch.LastSeenAt.Equal(afterFirstTouch.LastSeenAt))
+	})
 }
 
 func TestSessionCurrent(t *testing.T) {
@@ -136,21 +201,6 @@ func TestSessionCurrent(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "401")
 	})
-}
-
-func TestSessionLoginCookie(t *testing.T) {
-	setupSessionRedisCleanup(t)
-
-	account := newSessionTestAccount(t)
-	cookie := loginSessionCookie(t, account.Username, account.Password)
-
-	require.Equal(t, "session_id", cookie.Name)
-	require.NotEmpty(t, cookie.Value)
-	require.Equal(t, "/", cookie.Path)
-	require.True(t, cookie.HttpOnly)
-	require.True(t, cookie.Secure)
-	require.Equal(t, http.SameSiteLaxMode, cookie.SameSite)
-	require.Positive(t, cookie.MaxAge)
 }
 
 func TestSessionGet(t *testing.T) {
@@ -831,31 +881,6 @@ func TestAdminUserSessionsDelete(t *testing.T) {
 		_, err = currentCli.Request(http.MethodGet, new(struct{}))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "401")
-	})
-}
-
-func TestSessionOnlineUsers(t *testing.T) {
-	setupSessionRedisCleanup(t)
-
-	t.Run("list_online_users", func(t *testing.T) {
-		account := newSessionTestAccount(t)
-		sessionID := loginSession(t, account.Username, account.Password)
-
-		cli, err := client.New(onlineuserAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
-		require.NoError(t, err)
-
-		items := make([]*iam.OnlineUser, 0)
-		total := new(int64)
-		resp, err := cli.List(&items, total)
-		require.NoError(t, err)
-
-		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[*iam.OnlineUser]) {
-			t.Helper()
-			require.NotEmpty(t, rsp.Items)
-		})
 	})
 }
 

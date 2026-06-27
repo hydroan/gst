@@ -3,8 +3,6 @@ package iam
 import (
 	"time"
 
-	"github.com/hydroan/gst/cronjob"
-	cronjobiam "github.com/hydroan/gst/internal/cronjob/iam"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
@@ -12,7 +10,6 @@ import (
 	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module"
-	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types/consts"
 )
 
@@ -30,7 +27,6 @@ type Config struct {
 // API Routes:
 //
 // Session routes:
-//   - POST   /api/iam/session/heartbeat
 //   - GET    /api/iam/session/current
 //   - DELETE /api/iam/session/current
 //   - GET    /api/iam/sessions
@@ -38,7 +34,6 @@ type Config struct {
 //   - GET    /api/iam/admin/sessions/:id
 //   - DELETE /api/iam/sessions
 //   - DELETE /api/iam/sessions/:id
-//   - GET    /api/online-users
 //
 // Account management routes:
 //   - POST   /api/login
@@ -57,9 +52,6 @@ type Config struct {
 //
 // Middleware:
 //   - IAMSession for protected IAM routes and session-aware APIs
-//
-// Scheduled jobs:
-//   - CleanupOnlineUser runs every 30 seconds and starts immediately after bootstrap
 //
 // Configuration:
 //   - SessionExpiration defaults to 8 hours when not configured
@@ -103,7 +95,6 @@ func Register(config ...Config) {
 	)
 	module.UseCustom(module.NewWrapper("/iam/users/:id", "id", false, &serviceiamuser.UserPatchService{}), consts.PHASE_PATCH)
 
-	module.Use(module.NewWrapper("/iam/session/heartbeat", "id", false, &serviceiamsession.HeartbeatService{}), consts.PHASE_CREATE)
 	module.Use(module.NewWrapper("/iam/session/current", "id", false, &serviceiamsession.CurrentListService{}), consts.PHASE_LIST)
 	module.UseCustom(module.NewWrapper("/iam/session/current", "id", false, &serviceiamsession.CurrentDeleteService{}), consts.PHASE_DELETE)
 	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsListService{}), consts.PHASE_LIST)
@@ -115,7 +106,6 @@ func Register(config ...Config) {
 	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsGetService{}), consts.PHASE_GET)
 	module.UseCustom(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsDeleteAllService{}), consts.PHASE_DELETE)
 	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsDeleteService{}), consts.PHASE_DELETE)
-	module.Use(module.NewWrapper("/online-users", "id", false, &service.Base[*OnlineUser, *OnlineUser, *OnlineUser]{}), consts.PHASE_LIST)
 
 	// create default users
 	if len(cfg.DefaultUsers) > 0 {
@@ -126,9 +116,6 @@ func Register(config ...Config) {
 		}
 		model.Register(cfg.DefaultUsers...)
 	}
-
-	// cleanup the oneline user that not active every 30 seconds, will run immediately after application bootstrap.
-	cronjob.Register(cronjobiam.CleanupOnlineUser, "*/30 * * * * *", "cleanup online user", cronjob.Config{RunImmediately: true})
 }
 
 // GetSessionExpiration returns the configured session expiration time.

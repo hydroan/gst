@@ -3,12 +3,14 @@ package middleware
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/mssola/useragent"
+	"go.uber.org/zap"
 )
 
 // sessionRequiresPasswordChange reads the flag stored on the session snapshot.
@@ -26,8 +28,6 @@ func mustChangePasswordExempt(method, path string) bool {
 	case method == http.MethodGet && path == "/api/iam/session/current":
 		return true
 	case method == http.MethodDelete && path == "/api/iam/session/current":
-		return true
-	case method == http.MethodPost && path == "/api/iam/session/heartbeat":
 		return true
 	default:
 		return false
@@ -86,6 +86,10 @@ func IAMSession() gin.HandlerFunc {
 				"error": "password change required before using this resource",
 			})
 			return
+		}
+
+		if err = serviceiamsession.TouchSession(ctx, sessionID, session, time.Now()); err != nil {
+			zap.S().Warnw("failed to touch iam session", "session_id", sessionID, "error", err)
 		}
 
 		c.Set(consts.CTX_USER_ID, session.UserID)

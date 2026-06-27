@@ -389,6 +389,19 @@ func Del(ctx context.Context, keys ...string) error {
 	return client.Del(ctx, keys...).Err()
 }
 
+// SetNX sets key to value with expiration only when the key does not already exist.
+func SetNX(ctx context.Context, key, value string, expiration time.Duration) (bool, error) {
+	if !config.App.Redis.Enable {
+		zap.S().Warn(ErrRedisIsDisabled.Error())
+		return true, nil
+	}
+	key = redisKey(key)
+	if config.App.Redis.ClusterMode {
+		return cluster.SetNX(ctx, key, value, expiration).Result()
+	}
+	return client.SetNX(ctx, key, value, expiration).Result()
+}
+
 // Expire updates the ttl for an existing key.
 func Expire(ctx context.Context, key string, expiration time.Duration) error {
 	if !config.App.Redis.Enable {
