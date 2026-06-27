@@ -138,6 +138,14 @@ func GetCurrentSession(ctx *types.ServiceContext) (string, modeliamsession.Sessi
 		return "", modeliamsession.Session{}, err
 	}
 
+	if cachedSessionID, session, ok := currentSessionFromContext(ctx); ok && cachedSessionID == sessionID {
+		if err = ValidateActiveSession(sessionID, session); err != nil {
+			_, _ = DeleteSession(ctx, sessionID)
+			return "", modeliamsession.Session{}, service.NewErrorWithCause(http.StatusUnauthorized, "session invalid", err)
+		}
+		return sessionID, session, nil
+	}
+
 	session, err := LoadSession(ctx, sessionID)
 	if err != nil {
 		return "", modeliamsession.Session{}, service.NewErrorWithCause(http.StatusUnauthorized, "session not exists", err)

@@ -92,6 +92,7 @@ func IAMSession() gin.HandlerFunc {
 			zap.S().Warnw("failed to touch iam session", "session_id", sessionID, "error", err)
 		}
 
+		c.Request = c.Request.WithContext(serviceiamsession.WithCurrentSession(ctx, sessionID, session))
 		c.Set(consts.CTX_USER_ID, session.UserID)
 		c.Set(consts.CTX_USERNAME, session.Username)
 		c.Set(consts.CTX_SESSION_ID, sessionID)

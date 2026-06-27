@@ -54,6 +54,10 @@ func (s *SessionsListService) List(ctx *types.ServiceContext, req *modeliamsessi
 	items := make([]modeliamsession.SessionView, 0, len(sessionIDs))
 	for i := range sessionIDs {
 		sessionID := sessionIDs[i]
+		if sessionID == currentSessionID {
+			items = append(items, buildCurrentSessionView(currentSession, currentSessionID))
+			continue
+		}
 		sessionKey := modeliamsession.SessionIDKey(sessionID)
 		session, getErr := cache.Get(sessionKey)
 		if getErr != nil {
