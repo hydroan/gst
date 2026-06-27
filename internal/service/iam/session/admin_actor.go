@@ -21,6 +21,9 @@ func ensureAdminSessionActor(ctx *types.ServiceContext) error {
 	if err = database.Database[*modeliamuser.User](ctx).Get(user, session.UserID); err != nil {
 		return service.NewError(http.StatusUnauthorized, "session invalid")
 	}
+	if err = ensureSessionUserActive(user); err != nil {
+		return err
+	}
 
 	if session.UserID == consts.AUTHZ_USER_ROOT {
 		return nil

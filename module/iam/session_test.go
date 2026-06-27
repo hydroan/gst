@@ -466,6 +466,42 @@ func TestAdminSessionList(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
 	})
+
+	t.Run("forbidden_for_inactive_superuser", func(t *testing.T) {
+		adminAccount := newSessionTestAccount(t)
+		sessionSetSuperuser(t, adminAccount.Username, true)
+		adminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
+		sessionSetUserStatus(t, adminAccount.Username, modeliamuser.UserStatusInactive)
+
+		cli, err := client.New(adminSessionsAPI, client.WithCookie(&http.Cookie{
+			Name:  "session_id",
+			Value: adminSessionID,
+		}))
+		require.NoError(t, err)
+
+		_, err = cli.List(new([]iam.AdminSessionUserView), new(int64))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "403")
+		require.Contains(t, err.Error(), "account disabled")
+	})
+
+	t.Run("forbidden_for_locked_superuser", func(t *testing.T) {
+		adminAccount := newSessionTestAccount(t)
+		sessionSetSuperuser(t, adminAccount.Username, true)
+		adminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
+		sessionSetUserStatus(t, adminAccount.Username, modeliamuser.UserStatusLocked)
+
+		cli, err := client.New(adminSessionsAPI, client.WithCookie(&http.Cookie{
+			Name:  "session_id",
+			Value: adminSessionID,
+		}))
+		require.NoError(t, err)
+
+		_, err = cli.List(new([]iam.AdminSessionUserView), new(int64))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "403")
+		require.Contains(t, err.Error(), "account locked")
+	})
 }
 
 func TestAdminSessionGet(t *testing.T) {
@@ -1311,6 +1347,17 @@ func sessionSetSuperuser(t *testing.T, username string, enabled bool) {
 
 	users[0].IsSuperuser = &enabled
 	require.NoError(t, database.Database[*iam.User](context.Background()).Update(users[0]))
+}
+
+func sessionSetUserStatus(t *testing.T, username string, status modeliamuser.UserStatus) {
+	t.Helper()
+
+	users := make([]*iam.User, 0)
+	require.NoError(t, database.Database[*iam.User](context.Background()).WithLimit(1).WithQuery(&iam.User{Username: username}).List(&users))
+	require.Len(t, users, 1)
+
+	users[0].Status = status
+	require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect("username", "status").Update(users[0]))
 }
 
 func newSessionTestAccount(t *testing.T) sessionTestAccount {

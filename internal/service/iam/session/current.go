@@ -28,15 +28,12 @@ func (s *CurrentListService) List(ctx *types.ServiceContext, req *modeliamsessio
 	}
 
 	user := new(modeliamuser.User)
-	if err := database.Database[*modeliamuser.User](ctx).Get(user, session.UserID); err != nil {
+	if err = database.Database[*modeliamuser.User](ctx).Get(user, session.UserID); err != nil {
 		log.Error("failed to load user for current session")
 		return nil, service.NewError(http.StatusUnauthorized, "session invalid")
 	}
-	switch user.Status {
-	case modeliamuser.UserStatusInactive:
-		return nil, service.NewError(http.StatusForbidden, "account disabled")
-	case modeliamuser.UserStatusLocked:
-		return nil, service.NewError(http.StatusForbidden, "account locked")
+	if err = ensureSessionUserActive(user); err != nil {
+		return nil, err
 	}
 
 	return buildCurrentListRsp(session, sessionID, &modeliamsession.CurrentPrincipal{
