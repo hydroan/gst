@@ -495,6 +495,7 @@ func TestAccountStatus(t *testing.T) {
 		t.Cleanup(func() {
 			victimModel.Status = prevStatus
 			require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect("username", "status").Update(victimModel))
+			serviceiamsession.InvalidateUserStateCache(context.Background(), victim.UserID)
 		})
 
 		cli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{
@@ -506,10 +507,12 @@ func TestAccountStatus(t *testing.T) {
 		_, err = cli.Request(http.MethodGet, new(struct{}))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), `"code":-1`)
+		require.Contains(t, err.Error(), "account disabled")
+		accountRequireSessionNotFound(t, victimSessionAfterEnable)
 	})
 
 	t.Run("current_forbidden_when_db_locked_but_redis_session_valid", func(t *testing.T) {
+		sessionID := accountLoginUser(t, &victim, victim.Password)
 		victims := make([]*iam.User, 0)
 		require.NoError(t, database.Database[*iam.User](context.Background()).WithLimit(1).WithQuery(&iam.User{Username: victim.Username}).List(&victims))
 		require.Len(t, victims, 1)
@@ -521,18 +524,20 @@ func TestAccountStatus(t *testing.T) {
 		t.Cleanup(func() {
 			victimModel.Status = prevStatus
 			require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect("username", "status").Update(victimModel))
+			serviceiamsession.InvalidateUserStateCache(context.Background(), victim.UserID)
 		})
 
 		cli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{
 			Name:  "session_id",
-			Value: victimSessionAfterEnable,
+			Value: sessionID,
 		}))
 		require.NoError(t, err)
 
 		_, err = cli.Request(http.MethodGet, new(struct{}))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), `"code":-1`)
+		require.Contains(t, err.Error(), "account locked")
+		accountRequireSessionNotFound(t, sessionID)
 	})
 
 	t.Run("invalid_status_rejected", func(t *testing.T) {

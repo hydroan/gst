@@ -272,6 +272,44 @@ func TestSessionList(t *testing.T) {
 		})
 	})
 
+	t.Run("reject_when_user_disabled_after_session_created", func(t *testing.T) {
+		account := newSessionTestAccount(t)
+		sessionID := loginSession(t, account.Username, account.Password)
+		sessionSetUserStatus(t, account.Username, modeliamuser.UserStatusInactive)
+
+		cli, err := client.New(sessionsAPI, client.WithCookie(&http.Cookie{
+			Name:  "session_id",
+			Value: sessionID,
+		}))
+		require.NoError(t, err)
+
+		items := make([]iam.SessionView, 0)
+		total := new(int64)
+		_, err = cli.List(&items, total)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "403")
+		require.Contains(t, err.Error(), "account disabled")
+	})
+
+	t.Run("reject_when_user_locked_after_session_created", func(t *testing.T) {
+		account := newSessionTestAccount(t)
+		sessionID := loginSession(t, account.Username, account.Password)
+		sessionSetUserStatus(t, account.Username, modeliamuser.UserStatusLocked)
+
+		cli, err := client.New(sessionsAPI, client.WithCookie(&http.Cookie{
+			Name:  "session_id",
+			Value: sessionID,
+		}))
+		require.NoError(t, err)
+
+		items := make([]iam.SessionView, 0)
+		total := new(int64)
+		_, err = cli.List(&items, total)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "403")
+		require.Contains(t, err.Error(), "account locked")
+	})
+
 	t.Run("prune_invalid_indexed_session", func(t *testing.T) {
 		account := newSessionTestAccount(t)
 		expiredSessionID := loginSession(t, account.Username, account.Password)

@@ -5,9 +5,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
+	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/mssola/useragent"
 	"go.uber.org/zap"
@@ -78,6 +80,17 @@ func IAMSession() gin.HandlerFunc {
 		}
 		if browserName != session.BrowserName {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "browser mismatch"})
+			return
+		}
+
+		if session, err = serviceiamsession.ValidateSessionUserState(ctx, session); err != nil {
+			_, _ = serviceiamsession.DeleteSession(ctx, sessionID)
+			status := http.StatusForbidden
+			var serviceErr *service.Error
+			if errors.As(err, &serviceErr) {
+				status = serviceErr.Status()
+			}
+			c.AbortWithStatusJSON(status, gin.H{"error": err.Error()})
 			return
 		}
 

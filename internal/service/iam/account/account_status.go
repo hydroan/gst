@@ -43,6 +43,8 @@ func (s *AccountStatusService) Create(ctx *types.ServiceContext, req *modeliamac
 		// Still revoke sessions when the target state is inactive or locked so Redis cannot drift.
 		if shouldInvalidateUserSessions(req.Status) {
 			serviceiamsession.InvalidateUserSessions(ctx, req.UserID)
+		} else {
+			serviceiamsession.InvalidateUserStateCache(ctx, req.UserID)
 		}
 		return &modeliamaccount.AccountStatusRsp{Msg: "account status unchanged"}, nil
 	}
@@ -58,6 +60,8 @@ func (s *AccountStatusService) Create(ctx *types.ServiceContext, req *modeliamac
 
 	if shouldInvalidateUserSessions(req.Status) {
 		serviceiamsession.InvalidateUserSessions(ctx, req.UserID)
+	} else {
+		serviceiamsession.InvalidateUserStateCache(ctx, req.UserID)
 	}
 
 	log.Info("account status updated", "target_user_id", req.UserID, "status", req.Status, "actor_user_id", actor.GetID(), "actor_username", actor.Username)

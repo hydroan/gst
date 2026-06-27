@@ -401,6 +401,7 @@ func InvalidateUserSessions(ctx context.Context, userID string) {
 		return
 	}
 	ctx = redisContext(ctx)
+	InvalidateUserStateCache(ctx, userID)
 	cache := redis.Cache[modeliamsession.Session]().WithContext(ctx)
 	sessionIDs, err := listUserSessionIDs(ctx, userID)
 	if err == nil {
