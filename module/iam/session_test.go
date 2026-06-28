@@ -158,6 +158,36 @@ func TestSessionCurrent(t *testing.T) {
 	})
 }
 
+func TestSessionCurrentDelete(t *testing.T) {
+	setupSessionRedisCleanup(t)
+
+	t.Run("delete_current_session", func(t *testing.T) {
+		account := newSessionTestAccount(t)
+		sessionID := loginSession(t, account.Username, account.Password)
+		requireUserSessionContains(t, account.UserID, sessionID)
+
+		cli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{
+			Name:  "session_id",
+			Value: sessionID,
+		}))
+		require.NoError(t, err)
+
+		resp, err := cli.Request(http.MethodDelete, new(struct{}))
+		require.NoError(t, err)
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.CurrentDeleteRsp) {
+			t.Helper()
+			require.Equal(t, iam.CurrentDeleteRsp{}, rsp)
+		})
+
+		requireSessionNotFound(t, sessionID)
+		requireUserSessionNotContains(t, account.UserID, sessionID)
+
+		_, err = cli.Request(http.MethodGet, new(struct{}))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "401")
+	})
+}
+
 func TestSessionGet(t *testing.T) {
 	setupSessionRedisCleanup(t)
 
@@ -1268,36 +1298,6 @@ func TestSessionDeleteAll(t *testing.T) {
 		requireSessionNotFound(t, staleSessionID)
 		requireUserSessionNotContains(t, account.UserID, currentSessionID)
 		requireUserSessionNotContains(t, account.UserID, staleSessionID)
-
-		_, err = cli.Request(http.MethodGet, new(struct{}))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "401")
-	})
-}
-
-func TestSessionCurrentDelete(t *testing.T) {
-	setupSessionRedisCleanup(t)
-
-	t.Run("delete_current_session", func(t *testing.T) {
-		account := newSessionTestAccount(t)
-		sessionID := loginSession(t, account.Username, account.Password)
-		requireUserSessionContains(t, account.UserID, sessionID)
-
-		cli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
-		require.NoError(t, err)
-
-		resp, err := cli.Request(http.MethodDelete, new(struct{}))
-		require.NoError(t, err)
-		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.CurrentDeleteRsp) {
-			t.Helper()
-			require.Equal(t, iam.CurrentDeleteRsp{}, rsp)
-		})
-
-		requireSessionNotFound(t, sessionID)
-		requireUserSessionNotContains(t, account.UserID, sessionID)
 
 		_, err = cli.Request(http.MethodGet, new(struct{}))
 		require.Error(t, err)

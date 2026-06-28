@@ -32,8 +32,13 @@ type Config struct {
 //   - GET    /api/iam/sessions
 //   - GET    /api/iam/admin/sessions
 //   - GET    /api/iam/admin/sessions/:id
+//   - DELETE /api/iam/admin/sessions/:id
+//   - GET    /api/iam/admin/users/:id/sessions
+//   - DELETE /api/iam/admin/users/:id/sessions
+//   - GET    /api/iam/sessions/:id
 //   - DELETE /api/iam/sessions
 //   - DELETE /api/iam/sessions/:id
+//   - DELETE /api/iam/sessions/others
 //
 // Account management routes:
 //   - POST   /api/login

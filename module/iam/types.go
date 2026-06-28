@@ -6,7 +6,7 @@ import (
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 )
 
-// account
+// Account API aliases.
 type (
 	LoginReq  = modeliamaccount.LoginReq
 	LogoutRsp = modeliamaccount.LogoutRsp
@@ -21,9 +21,15 @@ type (
 
 	AccountStatusReq = modeliamaccount.AccountStatusReq
 	AccountStatusRsp = modeliamaccount.AccountStatusRsp
+)
 
+// User API aliases.
+type (
 	User = modeliamuser.User
+)
 
+// Session API aliases.
+type (
 	Session     = modeliamsession.Session
 	SessionView = modeliamsession.SessionView
 	Token       = modeliamsession.Token
@@ -41,7 +47,10 @@ type (
 	SessionsDeleteRsp    = modeliamsession.SessionsDeleteRsp
 	SessionsDeleteAllReq = modeliamsession.SessionsDeleteAllReq
 	SessionsDeleteAllRsp = modeliamsession.SessionsDeleteAllRsp
+)
 
+// Admin session API aliases.
+type (
 	AdminSessionUserView   = modeliamsession.AdminSessionUserView
 	AdminSessionsListReq   = modeliamsession.AdminSessionsListReq
 	AdminSessionsListRsp   = modeliamsession.AdminSessionsListRsp
