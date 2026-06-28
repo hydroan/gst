@@ -1,7 +1,9 @@
 package iam_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
@@ -25,6 +27,8 @@ type accountTestUser struct {
 	Password  string
 	SessionID string
 }
+
+const accountTestUserAgent = "gst-account-test"
 
 func accountSignupUser(t *testing.T, prefix, password string) accountTestUser {
 	t.Helper()
@@ -77,7 +81,49 @@ func accountCleanupUser(t *testing.T, username string) {
 func accountLoginUser(t *testing.T, user *accountTestUser, password string) string {
 	t.Helper()
 
-	return loginSessionIDFromCookie(t, user.Username, password)
+	return accountLoginSessionCookie(t, user.Username, password).Value
+}
+
+func accountLoginSessionCookie(t *testing.T, username, password string) *http.Cookie {
+	t.Helper()
+
+	payload, err := json.Marshal(iam.LoginReq{
+		Username: username,
+		Password: password,
+	})
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodPost, loginAPI, bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("User-Agent", accountTestUserAgent)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Less(t, resp.StatusCode, http.StatusMultipleChoices)
+
+	for _, cookie := range resp.Cookies() {
+		if cookie.Name == "session_id" {
+			return cookie
+		}
+	}
+	require.FailNow(t, "session cookie not found")
+	return nil
+}
+
+func accountNewAuthenticatedClient(t *testing.T, api, sessionID string) *client.Client {
+	t.Helper()
+
+	header := http.Header{}
+	header.Set("User-Agent", accountTestUserAgent)
+	cli, err := client.New(api, client.WithHeader(header), client.WithCookie(&http.Cookie{
+		Name:  "session_id",
+		Value: sessionID,
+	}))
+	require.NoError(t, err)
+	return cli
 }
 
 func accountRequireSessionNotFound(t *testing.T, sessionID string) {
@@ -161,7 +207,7 @@ func TestAccountLogin(t *testing.T) {
 
 	t.Run("sets_session_cookie", func(t *testing.T) {
 		user := accountSignupUser(t, "acct_login_cookie", "12345678")
-		cookie := loginSessionCookie(t, user.Username, user.Password)
+		cookie := accountLoginSessionCookie(t, user.Username, user.Password)
 
 		require.Equal(t, "session_id", cookie.Name)
 		require.NotEmpty(t, cookie.Value)
@@ -210,11 +256,7 @@ func TestAccountLogout(t *testing.T) {
 	accountRequireUserSessionContains(t, user.UserID, user.SessionID)
 
 	t.Run("logout", func(t *testing.T) {
-		cli, err := client.New(logoutAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: user.SessionID,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, logoutAPI, user.SessionID)
 
 		resp, err := cli.Create(nil)
 		require.NoError(t, err)
@@ -229,15 +271,11 @@ func TestAccountLogout(t *testing.T) {
 	})
 
 	t.Run("users_unauthorized_after_logout", func(t *testing.T) {
-		cli, err := client.New(userAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: user.SessionID,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, userAPI, user.SessionID)
 
 		items := make([]*iam.User, 0)
 		total := new(int64)
-		_, err = cli.List(&items, total)
+		_, err := cli.List(&items, total)
 		require.Error(t, err)
 	})
 
@@ -261,13 +299,9 @@ func TestAccountLogout(t *testing.T) {
 		require.NoError(t, redis.Del(t.Context(), userSessionKey))
 		require.NoError(t, redis.Set(t.Context(), userSessionKey, "not-a-zset", time.Hour))
 
-		cli, err := client.New(logoutAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: brokenIndexUser.SessionID,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, logoutAPI, brokenIndexUser.SessionID)
 
-		_, err = cli.Create(nil)
+		_, err := cli.Create(nil)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "500")
 		require.Contains(t, err.Error(), "failed to logout")
@@ -282,12 +316,50 @@ func TestAccountChangePassword(t *testing.T) {
 	accountRequireUserSessionContains(t, user.UserID, user.SessionID)
 	accountRequireUserSessionContains(t, user.UserID, otherSessionID)
 
+	t.Run("rejects_empty_old_password", func(t *testing.T) {
+		invalidUser := accountSignupUser(t, "acct_changepwd_empty_old", "12345678")
+		invalidUser.SessionID = accountLoginUser(t, &invalidUser, invalidUser.Password)
+
+		cli := accountNewAuthenticatedClient(t, changepasswordAPI, invalidUser.SessionID)
+
+		_, err := cli.Create(iam.ChangePasswordReq{
+			OldPassword: "",
+			NewPassword: newPassword,
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "old password is required")
+	})
+
+	t.Run("rejects_empty_new_password", func(t *testing.T) {
+		invalidUser := accountSignupUser(t, "acct_changepwd_empty_new", "12345678")
+		invalidUser.SessionID = accountLoginUser(t, &invalidUser, invalidUser.Password)
+
+		cli := accountNewAuthenticatedClient(t, changepasswordAPI, invalidUser.SessionID)
+
+		_, err := cli.Create(iam.ChangePasswordReq{
+			OldPassword: invalidUser.Password,
+			NewPassword: "",
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "new password is required")
+	})
+
+	t.Run("rejects_short_new_password", func(t *testing.T) {
+		invalidUser := accountSignupUser(t, "acct_changepwd_short_new", "12345678")
+		invalidUser.SessionID = accountLoginUser(t, &invalidUser, invalidUser.Password)
+
+		cli := accountNewAuthenticatedClient(t, changepasswordAPI, invalidUser.SessionID)
+
+		_, err := cli.Create(iam.ChangePasswordReq{
+			OldPassword: invalidUser.Password,
+			NewPassword: "12345",
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "password must be at least 6 characters long")
+	})
+
 	t.Run("change_password", func(t *testing.T) {
-		cli, err := client.New(changepasswordAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: user.SessionID,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, changepasswordAPI, user.SessionID)
 
 		resp, err := cli.Create(iam.ChangePasswordReq{
 			OldPassword: user.Password,
@@ -312,18 +384,16 @@ func TestAccountChangePassword(t *testing.T) {
 		require.NotEmpty(t, user.SessionID)
 	})
 
-	t.Run("user_module_forbidden_with_new_session", func(t *testing.T) {
-		cli, err := client.New(userAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: user.SessionID,
-		}))
-		require.NoError(t, err)
+	t.Run("account_status_forbidden_with_new_session", func(t *testing.T) {
+		cli := accountNewAuthenticatedClient(t, accountstatusAPI, user.SessionID)
 
-		items := make([]iam.User, 0)
-		total := new(int64)
-		_, err = cli.List(&items, total)
+		_, err := cli.Create(iam.AccountStatusReq{
+			UserID: user.UserID,
+			Status: modeliamuser.UserStatusActive,
+		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
+		require.Contains(t, err.Error(), "superuser required")
 	})
 }
 
@@ -338,13 +408,9 @@ func TestAccountResetPassword(t *testing.T) {
 	victimSessionAfterReset := ""
 
 	t.Run("forbidden_when_not_superuser", func(t *testing.T) {
-		cli, err := client.New(resetpasswordAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: actor.SessionID,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, actor.SessionID)
 
-		_, err = cli.Create(iam.ResetPasswordReq{
+		_, err := cli.Create(iam.ResetPasswordReq{
 			UserID:      victim.UserID,
 			NewPassword: resetPass,
 		})
@@ -363,14 +429,47 @@ func TestAccountResetPassword(t *testing.T) {
 		accountSetSuperuser(t, actor.Username, true)
 	})
 
-	t.Run("missing_target_returns_not_found", func(t *testing.T) {
-		cli, err := client.New(resetpasswordAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: actor.SessionID,
-		}))
-		require.NoError(t, err)
+	t.Run("rejects_empty_target_user_id", func(t *testing.T) {
+		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, actor.SessionID)
 
-		_, err = cli.Create(iam.ResetPasswordReq{
+		_, err := cli.Create(iam.ResetPasswordReq{
+			UserID:      "",
+			NewPassword: resetPass,
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "user_id is required")
+	})
+
+	t.Run("rejects_empty_new_password", func(t *testing.T) {
+		invalidVictim := accountSignupUser(t, "acct_reset_empty_new", "87654321")
+
+		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, actor.SessionID)
+
+		_, err := cli.Create(iam.ResetPasswordReq{
+			UserID:      invalidVictim.UserID,
+			NewPassword: "",
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "new password is required")
+	})
+
+	t.Run("rejects_short_new_password", func(t *testing.T) {
+		invalidVictim := accountSignupUser(t, "acct_reset_short_new", "87654321")
+
+		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, actor.SessionID)
+
+		_, err := cli.Create(iam.ResetPasswordReq{
+			UserID:      invalidVictim.UserID,
+			NewPassword: "12345",
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "password must be at least 6 characters long")
+	})
+
+	t.Run("missing_target_returns_not_found", func(t *testing.T) {
+		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, actor.SessionID)
+
+		_, err := cli.Create(iam.ResetPasswordReq{
 			UserID:      "missing-reset-password-target",
 			NewPassword: resetPass,
 		})
@@ -383,13 +482,9 @@ func TestAccountResetPassword(t *testing.T) {
 		protected := accountSignupUser(t, "acct_reset_protected", "12345678")
 		accountSetSuperuser(t, protected.Username, true)
 
-		cli, err := client.New(resetpasswordAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: actor.SessionID,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, actor.SessionID)
 
-		_, err = cli.Create(iam.ResetPasswordReq{
+		_, err := cli.Create(iam.ResetPasswordReq{
 			UserID:      protected.UserID,
 			NewPassword: resetPass,
 		})
@@ -399,11 +494,7 @@ func TestAccountResetPassword(t *testing.T) {
 	})
 
 	t.Run("reset_success", func(t *testing.T) {
-		cli, err := client.New(resetpasswordAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: actor.SessionID,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, actor.SessionID)
 
 		resp, err := cli.Create(iam.ResetPasswordReq{
 			UserID:      victim.UserID,
@@ -421,15 +512,9 @@ func TestAccountResetPassword(t *testing.T) {
 		accountRequireSessionNotFound(t, victimSessionBeforeReset)
 		accountRequireUserSessionNotContains(t, victim.UserID, victimSessionBeforeReset)
 
-		cli, err := client.New(userAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: victimSessionBeforeReset,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, currentAPI, victimSessionBeforeReset)
 
-		items := make([]iam.User, 0)
-		total := new(int64)
-		_, err = cli.List(&items, total)
+		_, err := cli.Request(http.MethodGet, new(struct{}))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "401")
 	})
@@ -440,25 +525,19 @@ func TestAccountResetPassword(t *testing.T) {
 	})
 
 	t.Run("must_change_password_blocks_list", func(t *testing.T) {
-		cli, err := client.New(userAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: victimSessionAfterReset,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, accountstatusAPI, victimSessionAfterReset)
 
-		items := make([]iam.User, 0)
-		total := new(int64)
-		_, err = cli.List(&items, total)
+		_, err := cli.Create(iam.AccountStatusReq{
+			UserID: victim.UserID,
+			Status: modeliamuser.UserStatusActive,
+		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
+		require.Contains(t, err.Error(), "password change required")
 	})
 
 	t.Run("victim_change_password", func(t *testing.T) {
-		cli, err := client.New(changepasswordAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: victimSessionAfterReset,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, changepasswordAPI, victimSessionAfterReset)
 
 		resp, err := cli.Create(iam.ChangePasswordReq{
 			OldPassword: resetPass,
@@ -472,18 +551,16 @@ func TestAccountResetPassword(t *testing.T) {
 		})
 	})
 
-	t.Run("victim_user_module_forbidden_after_change_password", func(t *testing.T) {
-		cli, err := client.New(userAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: victimSessionAfterReset,
-		}))
-		require.NoError(t, err)
+	t.Run("victim_account_status_forbidden_after_change_password", func(t *testing.T) {
+		cli := accountNewAuthenticatedClient(t, accountstatusAPI, victimSessionAfterReset)
 
-		items := make([]iam.User, 0)
-		total := new(int64)
-		_, err = cli.List(&items, total)
+		_, err := cli.Create(iam.AccountStatusReq{
+			UserID: victim.UserID,
+			Status: modeliamuser.UserStatusActive,
+		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
+		require.Contains(t, err.Error(), "superuser required")
 	})
 
 	t.Run("demote_actor_superuser", func(t *testing.T) {
@@ -502,13 +579,9 @@ func TestAccountStatus(t *testing.T) {
 	victimSessionAfterEnable := ""
 
 	t.Run("forbidden_when_not_superuser", func(t *testing.T) {
-		cli, err := client.New(accountstatusAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: actor.SessionID,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, accountstatusAPI, actor.SessionID)
 
-		_, err = cli.Create(iam.AccountStatusReq{
+		_, err := cli.Create(iam.AccountStatusReq{
 			UserID: victim.UserID,
 			Status: modeliamuser.UserStatusInactive,
 		})
@@ -522,13 +595,9 @@ func TestAccountStatus(t *testing.T) {
 	})
 
 	t.Run("missing_target_returns_not_found", func(t *testing.T) {
-		cli, err := client.New(accountstatusAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: actor.SessionID,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, accountstatusAPI, actor.SessionID)
 
-		_, err = cli.Create(iam.AccountStatusReq{
+		_, err := cli.Create(iam.AccountStatusReq{
 			UserID: "missing-account-status-target",
 			Status: modeliamuser.UserStatusInactive,
 		})
@@ -541,13 +610,9 @@ func TestAccountStatus(t *testing.T) {
 		protected := accountSignupUser(t, "acct_status_protected", "12345678")
 		accountSetSuperuser(t, protected.Username, true)
 
-		cli, err := client.New(accountstatusAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: actor.SessionID,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, accountstatusAPI, actor.SessionID)
 
-		_, err = cli.Create(iam.AccountStatusReq{
+		_, err := cli.Create(iam.AccountStatusReq{
 			UserID: protected.UserID,
 			Status: modeliamuser.UserStatusInactive,
 		})
@@ -557,11 +622,7 @@ func TestAccountStatus(t *testing.T) {
 	})
 
 	t.Run("disable_account", func(t *testing.T) {
-		cli, err := client.New(accountstatusAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: actor.SessionID,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, accountstatusAPI, actor.SessionID)
 
 		resp, err := cli.Create(iam.AccountStatusReq{
 			UserID: victim.UserID,
@@ -579,25 +640,15 @@ func TestAccountStatus(t *testing.T) {
 		accountRequireSessionNotFound(t, victim.SessionID)
 		accountRequireUserSessionNotContains(t, victim.UserID, victim.SessionID)
 
-		cli, err := client.New(userAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: victim.SessionID,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, currentAPI, victim.SessionID)
 
-		items := make([]iam.User, 0)
-		total := new(int64)
-		_, err = cli.List(&items, total)
+		_, err := cli.Request(http.MethodGet, new(struct{}))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "401")
 	})
 
 	t.Run("inactive_already_inactive_unchanged_still_ok", func(t *testing.T) {
-		cli, err := client.New(accountstatusAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: actor.SessionID,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, accountstatusAPI, actor.SessionID)
 
 		resp, err := cli.Create(iam.AccountStatusReq{
 			UserID: victim.UserID,
@@ -626,11 +677,7 @@ func TestAccountStatus(t *testing.T) {
 	})
 
 	t.Run("enable_account", func(t *testing.T) {
-		cli, err := client.New(accountstatusAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: actor.SessionID,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, accountstatusAPI, actor.SessionID)
 
 		resp, err := cli.Create(iam.AccountStatusReq{
 			UserID: victim.UserID,
@@ -665,13 +712,9 @@ func TestAccountStatus(t *testing.T) {
 			serviceiamsession.InvalidateUserStateCache(context.Background(), victim.UserID)
 		})
 
-		cli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: victimSessionAfterEnable,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, currentAPI, victimSessionAfterEnable)
 
-		_, err = cli.Request(http.MethodGet, new(struct{}))
+		_, err := cli.Request(http.MethodGet, new(struct{}))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
 		require.Contains(t, err.Error(), "account disabled")
@@ -694,13 +737,9 @@ func TestAccountStatus(t *testing.T) {
 			serviceiamsession.InvalidateUserStateCache(context.Background(), victim.UserID)
 		})
 
-		cli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, currentAPI, sessionID)
 
-		_, err = cli.Request(http.MethodGet, new(struct{}))
+		_, err := cli.Request(http.MethodGet, new(struct{}))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
 		require.Contains(t, err.Error(), "account locked")
@@ -708,13 +747,9 @@ func TestAccountStatus(t *testing.T) {
 	})
 
 	t.Run("invalid_status_rejected", func(t *testing.T) {
-		cli, err := client.New(accountstatusAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: actor.SessionID,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, accountstatusAPI, actor.SessionID)
 
-		_, err = cli.Create(iam.AccountStatusReq{
+		_, err := cli.Create(iam.AccountStatusReq{
 			UserID: victim.UserID,
 			Status: modeliamuser.UserStatus("not-a-valid-status"),
 		})
@@ -723,11 +758,7 @@ func TestAccountStatus(t *testing.T) {
 	})
 
 	t.Run("lock_account", func(t *testing.T) {
-		cli, err := client.New(accountstatusAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: actor.SessionID,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, accountstatusAPI, actor.SessionID)
 
 		resp, err := cli.Create(iam.AccountStatusReq{
 			UserID: victim.UserID,
@@ -745,15 +776,9 @@ func TestAccountStatus(t *testing.T) {
 		accountRequireSessionNotFound(t, victimSessionAfterEnable)
 		accountRequireUserSessionNotContains(t, victim.UserID, victimSessionAfterEnable)
 
-		cli, err := client.New(userAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: victimSessionAfterEnable,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, currentAPI, victimSessionAfterEnable)
 
-		items := make([]iam.User, 0)
-		total := new(int64)
-		_, err = cli.List(&items, total)
+		_, err := cli.Request(http.MethodGet, new(struct{}))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "401")
 	})
@@ -773,11 +798,7 @@ func TestAccountStatus(t *testing.T) {
 	})
 
 	t.Run("unlock_account", func(t *testing.T) {
-		cli, err := client.New(accountstatusAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: actor.SessionID,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, accountstatusAPI, actor.SessionID)
 
 		resp, err := cli.Create(iam.AccountStatusReq{
 			UserID: victim.UserID,
@@ -792,11 +813,7 @@ func TestAccountStatus(t *testing.T) {
 	})
 
 	t.Run("status_unchanged_idempotent", func(t *testing.T) {
-		cli, err := client.New(accountstatusAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: actor.SessionID,
-		}))
-		require.NoError(t, err)
+		cli := accountNewAuthenticatedClient(t, accountstatusAPI, actor.SessionID)
 
 		resp, err := cli.Create(iam.AccountStatusReq{
 			UserID: victim.UserID,

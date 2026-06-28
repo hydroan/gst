@@ -22,6 +22,10 @@ func (s *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 	log := s.WithContext(ctx, ctx.Phase())
 	log.Info("changepassword create")
 
+	if err = validateChangePasswordInput(req); err != nil {
+		return nil, err
+	}
+
 	// Get current session
 	sessionID, session, err := serviceiamsession.SessionManager.Current(ctx)
 	if err != nil {

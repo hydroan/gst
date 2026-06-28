@@ -20,6 +20,10 @@ func (s *ResetPasswordService) Create(ctx *types.ServiceContext, req *modeliamac
 	log := s.WithContext(ctx, ctx.Phase())
 	log.Info("resetpassword create")
 
+	if err = validateResetPasswordInput(req); err != nil {
+		return nil, err
+	}
+
 	actor, target, err := loadPrivilegedActorAndTarget(ctx, req.UserID)
 	if err != nil {
 		log.Error("failed to resolve actor or target user", err)

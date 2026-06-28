@@ -1,7 +1,6 @@
 package iam_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -1427,34 +1426,6 @@ func newSessionTestAccount(t *testing.T) sessionTestAccount {
 	return account
 }
 
-func loginSessionCookie(t *testing.T, username, password string) *http.Cookie {
-	t.Helper()
-
-	payload, err := json.Marshal(iam.LoginReq{
-		Username: username,
-		Password: password,
-	})
-	require.NoError(t, err)
-
-	req, err := http.NewRequest(http.MethodPost, loginAPI, bytes.NewReader(payload))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Forwarded-Proto", "https")
-
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	require.Less(t, resp.StatusCode, http.StatusMultipleChoices)
-
-	for _, cookie := range resp.Cookies() {
-		if cookie.Name == "session_id" {
-			return cookie
-		}
-	}
-	require.FailNow(t, "session cookie not found")
-	return nil
-}
-
 func loginSession(t *testing.T, username, password string) string {
 	t.Helper()
 
@@ -1501,4 +1472,29 @@ func loginSessionIDFromCookie(t *testing.T, username, password string) string {
 
 	require.FailNow(t, "session cookie not found")
 	return ""
+}
+
+func userSetUsername(t *testing.T, userID, username string) {
+	t.Helper()
+
+	user := userLoadByID(t, userID)
+	user.Username = username
+	require.NoError(t, database.Database[*iam.User](context.Background()).WithSelect("username").Update(user))
+}
+
+func userLoadByID(t *testing.T, userID string) *iam.User {
+	t.Helper()
+
+	user := new(iam.User)
+	require.NoError(t, database.Database[*iam.User](context.Background()).Get(user, userID))
+	require.NotEmpty(t, user.ID)
+	return user
+}
+
+func userRequireForbidden(t *testing.T, err error) {
+	t.Helper()
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "403")
+	require.Contains(t, err.Error(), `"code":-1`)
 }

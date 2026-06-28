@@ -1,8 +1,8 @@
 package modeliamaccount
 
 type ChangePasswordReq struct {
-	OldPassword string `json:"old_password" validate:"required"`
-	NewPassword string `json:"new_password" validate:"required,min=6"`
+	OldPassword string `json:"old_password"`
+	NewPassword string `json:"new_password"`
 }
 
 type ChangePasswordRsp struct {
