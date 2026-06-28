@@ -96,9 +96,5 @@ func Init() (err error) {
 			return errors.Wrapf(err, "failed to add default admin role for %s", subject)
 		}
 	}
-	if err := RBAC().AssignRole(DefaultTenant, consts.AUTHZ_USER_BLOCKED, consts.AUTHZ_ROLE_BLOCKED); err != nil {
-		return errors.Wrap(err, "failed to add blocked role")
-	}
-
 	return nil
 }

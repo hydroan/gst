@@ -446,8 +446,7 @@ const (
 	AUTHZ_USER_ROOT    = "root"
 	AUTHZ_USER_BLOCKED = "blocked"
 
-	AUTHZ_ROLE_ADMIN   = "admin"
-	AUTHZ_ROLE_BLOCKED = "blocked"
+	AUTHZ_ROLE_ADMIN = "admin"
 )
 
 type Effect string
