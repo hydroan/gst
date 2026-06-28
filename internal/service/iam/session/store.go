@@ -336,7 +336,7 @@ func TouchSession(ctx context.Context, sessionID string, session modeliamsession
 	return nil
 }
 
-// DeleteSession deletes the stored session and removes the indexed user-session relation.
+// DeleteSession deletes the stored session payload and removes it from every Redis index.
 func DeleteSession(ctx context.Context, sessionID string) (modeliamsession.Session, error) {
 	if sessionID == "" {
 		return modeliamsession.Session{}, nil
@@ -360,10 +360,10 @@ func DeleteSession(ctx context.Context, sessionID string) (modeliamsession.Sessi
 	return session, nil
 }
 
-// DeleteOtherSessions deletes all indexed sessions of a user except the current session.
+// deleteOtherSessions deletes all indexed sessions of a user except the current session.
 // Missing session records are treated as stale index entries and cleaned up
 // from the user's ZSET so the operation remains idempotent.
-func DeleteOtherSessions(ctx context.Context, userID, currentSessionID string) error {
+func deleteOtherSessions(ctx context.Context, userID, currentSessionID string) error {
 	if userID == "" {
 		return nil
 	}
@@ -395,10 +395,10 @@ func DeleteOtherSessions(ctx context.Context, userID, currentSessionID string) e
 	return nil
 }
 
-// DeleteAllSessions deletes all indexed sessions of a user.
+// deleteAllSessions deletes all indexed sessions of a user.
 // Missing session records are treated as stale index entries and cleaned up
 // from the user's ZSET so the operation remains idempotent.
-func DeleteAllSessions(ctx context.Context, userID string) error {
+func deleteAllSessions(ctx context.Context, userID string) error {
 	if userID == "" {
 		return nil
 	}

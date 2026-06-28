@@ -97,7 +97,7 @@ func (s *AdminUserSessionsDeleteService) Delete(ctx *types.ServiceContext, req *
 		return nil, err
 	}
 
-	if err = DeleteAllSessions(ctx, targetUserID); err != nil {
+	if err = deleteAllSessions(ctx, targetUserID); err != nil {
 		log.Error("failed to delete target user sessions", err)
 		return nil, err
 	}
