@@ -95,22 +95,8 @@ func TestAccountLogin(t *testing.T) {
 		require.Positive(t, cookie.MaxAge)
 	})
 
-	t.Run("updates_login_statistics_after_successful_session_create", func(t *testing.T) {
+	t.Run("resets_failed_login_count_after_successful_session_create", func(t *testing.T) {
 		user := accountSignupUser(t, "acct_login_stats", "12345678")
-
-		users := make([]*iam.User, 0)
-		require.NoError(t, database.Database[*iam.User](context.Background()).
-			WithLimit(1).
-			WithQuery(&iam.User{Username: user.Username}).
-			List(&users))
-		require.Len(t, users, 1)
-
-		loginCount := 2
-		users[0].LoginCount = &loginCount
-		require.NoError(t, database.Database[*iam.User](context.Background()).
-			WithoutHook().
-			WithSelect("username", "login_count").
-			Update(users[0]))
 
 		credential := accountRequirePasswordCredential(t, user.UserID)
 		credential.FailedLoginCount = 3
@@ -121,14 +107,6 @@ func TestAccountLogin(t *testing.T) {
 
 		sessionID := accountLoginUser(t, &user, user.Password)
 		accountRequireUserSessionContains(t, user.UserID, sessionID)
-
-		got := new(iam.User)
-		require.NoError(t, database.Database[*iam.User](context.Background()).Get(got, user.UserID))
-		require.NotNil(t, got.LastLoginAt)
-		require.NotNil(t, got.LastLoginIP)
-		require.NotEmpty(t, *got.LastLoginIP)
-		require.NotNil(t, got.LoginCount)
-		require.Equal(t, loginCount+1, *got.LoginCount)
 
 		credential = accountRequirePasswordCredential(t, user.UserID)
 		require.Zero(t, credential.FailedLoginCount)
@@ -310,10 +288,9 @@ func TestAccountChangePassword(t *testing.T) {
 	})
 
 	t.Run("account_status_forbidden_with_new_session", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, accountstatusAPI, user.SessionID)
+		cli := accountNewAuthenticatedClient(t, userStatusAPI(user.UserID), user.SessionID)
 
-		_, err := cli.Create(iam.AccountStatusReq{
-			UserID: user.UserID,
+		_, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusActive,
 		})
 		require.Error(t, err)
@@ -478,10 +455,9 @@ func TestAccountResetPassword(t *testing.T) {
 	})
 
 	t.Run("must_change_password_blocks_list", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, accountstatusAPI, victimSessionAfterReset)
+		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), victimSessionAfterReset)
 
-		_, err := cli.Create(iam.AccountStatusReq{
-			UserID: victim.UserID,
+		_, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusActive,
 		})
 		require.Error(t, err)
@@ -505,279 +481,14 @@ func TestAccountResetPassword(t *testing.T) {
 	})
 
 	t.Run("victim_account_status_forbidden_after_change_password", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, accountstatusAPI, victimSessionAfterReset)
+		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), victimSessionAfterReset)
 
-		_, err := cli.Create(iam.AccountStatusReq{
-			UserID: victim.UserID,
+		_, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusActive,
 		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
 		require.Contains(t, err.Error(), "superuser required")
-	})
-
-	t.Run("demote_actor_superuser", func(t *testing.T) {
-		accountSetSuperuser(t, actor.Username, false)
-	})
-}
-
-func TestAccountStatus(t *testing.T) {
-	actor := accountSignupUser(t, "acct_status_actor", "12345678")
-	actor.SessionID = accountLoginUser(t, &actor, actor.Password)
-
-	victim := accountSignupUser(t, "acct_status_victim", "acctpass11")
-	victim.SessionID = accountLoginUser(t, &victim, victim.Password)
-	accountRequireUserSessionContains(t, victim.UserID, victim.SessionID)
-
-	victimSessionAfterEnable := ""
-
-	t.Run("forbidden_when_not_superuser", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, accountstatusAPI, actor.SessionID)
-
-		_, err := cli.Create(iam.AccountStatusReq{
-			UserID: victim.UserID,
-			Status: modeliamuser.UserStatusInactive,
-		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "superuser required")
-	})
-
-	t.Run("promote_actor_superuser", func(t *testing.T) {
-		accountSetSuperuser(t, actor.Username, true)
-	})
-
-	t.Run("missing_target_returns_not_found", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, accountstatusAPI, actor.SessionID)
-
-		_, err := cli.Create(iam.AccountStatusReq{
-			UserID: "missing-account-status-target",
-			Status: modeliamuser.UserStatusInactive,
-		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "404")
-		require.Contains(t, err.Error(), "user not found")
-	})
-
-	t.Run("superuser_target_is_protected", func(t *testing.T) {
-		protected := accountSignupUser(t, "acct_status_protected", "12345678")
-		accountSetSuperuser(t, protected.Username, true)
-
-		cli := accountNewAuthenticatedClient(t, accountstatusAPI, actor.SessionID)
-
-		_, err := cli.Create(iam.AccountStatusReq{
-			UserID: protected.UserID,
-			Status: modeliamuser.UserStatusInactive,
-		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "superuser is protected")
-	})
-
-	t.Run("disable_account", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, accountstatusAPI, actor.SessionID)
-
-		resp, err := cli.Create(iam.AccountStatusReq{
-			UserID: victim.UserID,
-			Status: modeliamuser.UserStatusInactive,
-		})
-		require.NoError(t, err)
-
-		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AccountStatusRsp) {
-			t.Helper()
-			require.Contains(t, rsp.Msg, "success")
-		})
-	})
-
-	t.Run("session_invalid_after_disable", func(t *testing.T) {
-		accountRequireSessionNotFound(t, victim.SessionID)
-		accountRequireUserSessionNotContains(t, victim.UserID, victim.SessionID)
-
-		cli := accountNewAuthenticatedClient(t, currentAPI, victim.SessionID)
-
-		_, err := cli.Request(http.MethodGet, new(struct{}))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "401")
-	})
-
-	t.Run("inactive_already_inactive_unchanged_still_ok", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, accountstatusAPI, actor.SessionID)
-
-		resp, err := cli.Create(iam.AccountStatusReq{
-			UserID: victim.UserID,
-			Status: modeliamuser.UserStatusInactive,
-		})
-		require.NoError(t, err)
-
-		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AccountStatusRsp) {
-			t.Helper()
-			require.Contains(t, rsp.Msg, "unchanged")
-		})
-	})
-
-	t.Run("login_fails_when_inactive", func(t *testing.T) {
-		cli, err := client.New(loginAPI)
-		require.NoError(t, err)
-
-		_, err = cli.Create(iam.LoginReq{
-			Username: victim.Username,
-			Password: victim.Password,
-		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), `"code":-1`)
-		require.Contains(t, err.Error(), "disabled")
-	})
-
-	t.Run("enable_account", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, accountstatusAPI, actor.SessionID)
-
-		resp, err := cli.Create(iam.AccountStatusReq{
-			UserID: victim.UserID,
-			Status: modeliamuser.UserStatusActive,
-		})
-		require.NoError(t, err)
-
-		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AccountStatusRsp) {
-			t.Helper()
-			require.Contains(t, rsp.Msg, "success")
-		})
-	})
-
-	t.Run("login_after_enable", func(t *testing.T) {
-		victimSessionAfterEnable = accountLoginUser(t, &victim, victim.Password)
-		require.NotEmpty(t, victimSessionAfterEnable)
-		accountRequireUserSessionContains(t, victim.UserID, victimSessionAfterEnable)
-	})
-
-	t.Run("current_forbidden_when_db_inactive_but_redis_session_valid", func(t *testing.T) {
-		victims := make([]*iam.User, 0)
-		require.NoError(t, database.Database[*iam.User](context.Background()).WithLimit(1).WithQuery(&iam.User{Username: victim.Username}).List(&victims))
-		require.Len(t, victims, 1)
-
-		victimModel := victims[0]
-		prevStatus := victimModel.Status
-		victimModel.Status = modeliamuser.UserStatusInactive
-		require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect("username", "status").Update(victimModel))
-		t.Cleanup(func() {
-			victimModel.Status = prevStatus
-			require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect("username", "status").Update(victimModel))
-			serviceiamsession.InvalidateUserStateCache(context.Background(), victim.UserID)
-		})
-
-		cli := accountNewAuthenticatedClient(t, currentAPI, victimSessionAfterEnable)
-
-		_, err := cli.Request(http.MethodGet, new(struct{}))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "account disabled")
-		accountRequireSessionNotFound(t, victimSessionAfterEnable)
-	})
-
-	t.Run("current_forbidden_when_db_locked_but_redis_session_valid", func(t *testing.T) {
-		sessionID := accountLoginUser(t, &victim, victim.Password)
-		victims := make([]*iam.User, 0)
-		require.NoError(t, database.Database[*iam.User](context.Background()).WithLimit(1).WithQuery(&iam.User{Username: victim.Username}).List(&victims))
-		require.Len(t, victims, 1)
-
-		victimModel := victims[0]
-		prevStatus := victimModel.Status
-		victimModel.Status = modeliamuser.UserStatusLocked
-		require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect("username", "status").Update(victimModel))
-		t.Cleanup(func() {
-			victimModel.Status = prevStatus
-			require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect("username", "status").Update(victimModel))
-			serviceiamsession.InvalidateUserStateCache(context.Background(), victim.UserID)
-		})
-
-		cli := accountNewAuthenticatedClient(t, currentAPI, sessionID)
-
-		_, err := cli.Request(http.MethodGet, new(struct{}))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "account locked")
-		accountRequireSessionNotFound(t, sessionID)
-	})
-
-	t.Run("invalid_status_rejected", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, accountstatusAPI, actor.SessionID)
-
-		_, err := cli.Create(iam.AccountStatusReq{
-			UserID: victim.UserID,
-			Status: modeliamuser.UserStatus("not-a-valid-status"),
-		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "invalid")
-	})
-
-	t.Run("lock_account", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, accountstatusAPI, actor.SessionID)
-
-		resp, err := cli.Create(iam.AccountStatusReq{
-			UserID: victim.UserID,
-			Status: modeliamuser.UserStatusLocked,
-		})
-		require.NoError(t, err)
-
-		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AccountStatusRsp) {
-			t.Helper()
-			require.Contains(t, rsp.Msg, "success")
-		})
-	})
-
-	t.Run("session_invalid_after_lock", func(t *testing.T) {
-		accountRequireSessionNotFound(t, victimSessionAfterEnable)
-		accountRequireUserSessionNotContains(t, victim.UserID, victimSessionAfterEnable)
-
-		cli := accountNewAuthenticatedClient(t, currentAPI, victimSessionAfterEnable)
-
-		_, err := cli.Request(http.MethodGet, new(struct{}))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "401")
-	})
-
-	t.Run("login_fails_when_locked", func(t *testing.T) {
-		cli, err := client.New(loginAPI)
-		require.NoError(t, err)
-
-		_, err = cli.Create(iam.LoginReq{
-			Username: victim.Username,
-			Password: victim.Password,
-		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), `"code":-1`)
-		require.Contains(t, err.Error(), "locked")
-	})
-
-	t.Run("unlock_account", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, accountstatusAPI, actor.SessionID)
-
-		resp, err := cli.Create(iam.AccountStatusReq{
-			UserID: victim.UserID,
-			Status: modeliamuser.UserStatusActive,
-		})
-		require.NoError(t, err)
-
-		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AccountStatusRsp) {
-			t.Helper()
-			require.Contains(t, rsp.Msg, "success")
-		})
-	})
-
-	t.Run("status_unchanged_idempotent", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, accountstatusAPI, actor.SessionID)
-
-		resp, err := cli.Create(iam.AccountStatusReq{
-			UserID: victim.UserID,
-			Status: modeliamuser.UserStatusActive,
-		})
-		require.NoError(t, err)
-
-		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AccountStatusRsp) {
-			t.Helper()
-			require.Contains(t, rsp.Msg, "unchanged")
-		})
 	})
 
 	t.Run("demote_actor_superuser", func(t *testing.T) {

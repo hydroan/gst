@@ -1,8 +1,6 @@
 package modeliamuser
 
 import (
-	"time"
-
 	. "github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 )
@@ -21,10 +19,6 @@ type User struct {
 	Status   UserStatus `json:"status" gorm:"type:varchar(20);default:'active';index"`
 
 	IsSuperuser *bool `json:"is_superuser" gorm:"default:false"`
-
-	LastLoginAt *time.Time `json:"last_login_at"`
-	LastLoginIP *string    `json:"last_login_ip" gorm:"type:varchar(45)"`
-	LoginCount  *int       `json:"login_count" gorm:"default:0"`
 
 	model.Base
 }

@@ -160,22 +160,6 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		return nil, errors.New("failed to track user session in redis")
 	}
 
-	// Update login statistics only after the session payload and indexes are stored.
-	clientIP := ctx.ClientIP()
-	user.LastLoginAt = &now
-	user.LastLoginIP = &clientIP
-	if user.LoginCount == nil {
-		loginCount := 1
-		user.LoginCount = &loginCount
-	} else {
-		(*user.LoginCount)++
-	}
-	if err = database.Database[*modeliamuser.User](ctx).
-		WithoutHook().
-		WithSelect("username", "last_login_at", "last_login_ip", "login_count").
-		Update(user); err != nil {
-		log.Warnz("failed to update login statistics", zap.Error(err))
-	}
 	credential.FailedLoginCount = 0
 	if err = database.Database[*modeliamaccount.PasswordCredential](ctx).
 		WithoutHook().
