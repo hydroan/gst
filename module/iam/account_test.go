@@ -21,146 +21,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type accountTestUser struct {
-	UserID    string
-	Username  string
-	Password  string
-	SessionID string
-}
-
-const accountTestUserAgent = "gst-account-test"
-
-func accountSignupUser(t *testing.T, prefix, password string) accountTestUser {
-	t.Helper()
-
-	user := accountTestUser{
-		Username: fmt.Sprintf("%s_%d", prefix, time.Now().UnixNano()),
-		Password: password,
-	}
-
-	cli, err := client.New(signupAPI)
-	require.NoError(t, err)
-
-	resp, err := cli.Create(iam.SignupReq{
-		Username:   user.Username,
-		Password:   user.Password,
-		RePassword: user.Password,
-	})
-	require.NoError(t, err)
-
-	testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
-		t.Helper()
-		require.Equal(t, user.Username, rsp.Username)
-		require.NotEmpty(t, rsp.UserID)
-		require.NotEmpty(t, rsp.Message)
-		user.UserID = rsp.UserID
-	})
-
-	t.Cleanup(func() {
-		accountCleanupUser(t, user.Username)
-	})
-
-	return user
-}
-
-func accountCleanupUser(t *testing.T, username string) {
-	t.Helper()
-
-	users := make([]*iam.User, 0)
-	require.NoError(t, database.Database[*iam.User](context.Background()).WithQuery(&iam.User{Username: username}).List(&users))
-	if len(users) == 0 {
-		return
-	}
-
-	for _, user := range users {
-		serviceiamsession.InvalidateUserSessions(t.Context(), user.ID)
-	}
-	require.NoError(t, database.Database[*iam.User](context.Background()).Delete(users...))
-}
-
-func accountLoginUser(t *testing.T, user *accountTestUser, password string) string {
-	t.Helper()
-
-	return accountLoginSessionCookie(t, user.Username, password).Value
-}
-
-func accountLoginSessionCookie(t *testing.T, username, password string) *http.Cookie {
-	t.Helper()
-
-	payload, err := json.Marshal(iam.LoginReq{
-		Username: username,
-		Password: password,
-	})
-	require.NoError(t, err)
-
-	req, err := http.NewRequest(http.MethodPost, loginAPI, bytes.NewReader(payload))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Forwarded-Proto", "https")
-	req.Header.Set("User-Agent", accountTestUserAgent)
-
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	require.Less(t, resp.StatusCode, http.StatusMultipleChoices)
-
-	for _, cookie := range resp.Cookies() {
-		if cookie.Name == "session_id" {
-			return cookie
-		}
-	}
-	require.FailNow(t, "session cookie not found")
-	return nil
-}
-
-func accountNewAuthenticatedClient(t *testing.T, api, sessionID string) *client.Client {
-	t.Helper()
-
-	header := http.Header{}
-	header.Set("User-Agent", accountTestUserAgent)
-	cli, err := client.New(api, client.WithHeader(header), client.WithCookie(&http.Cookie{
-		Name:  "session_id",
-		Value: sessionID,
-	}))
-	require.NoError(t, err)
-	return cli
-}
-
-func accountRequireSessionNotFound(t *testing.T, sessionID string) {
-	t.Helper()
-
-	sessionKey := modeliamsession.SessionIDKey(sessionID)
-	_, err := redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Get(sessionKey)
-	require.ErrorIs(t, err, types.ErrEntryNotFound)
-}
-
-func accountRequireUserSessionContains(t *testing.T, userID, sessionID string) {
-	t.Helper()
-
-	userSessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionUserKey(userID), 0, -1)
-	require.NoError(t, err)
-	require.Contains(t, userSessionIDs, sessionID)
-}
-
-func accountRequireUserSessionNotContains(t *testing.T, userID, sessionID string) {
-	t.Helper()
-
-	userSessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionUserKey(userID), 0, -1)
-	require.NoError(t, err)
-	require.NotContains(t, userSessionIDs, sessionID)
-}
-
-func accountSetSuperuser(t *testing.T, username string, enabled bool) {
-	t.Helper()
-
-	actors := make([]*iam.User, 0)
-	require.NoError(t, database.Database[*iam.User](context.Background()).WithLimit(1).WithQuery(&iam.User{Username: username}).List(&actors))
-	require.Len(t, actors, 1)
-
-	actors[0].IsSuperuser = &enabled
-	require.NoError(t, database.Database[*iam.User](context.Background()).Update(actors[0]))
-}
-
 func TestAccountSignup(t *testing.T) {
 	user := accountSignupUser(t, "acct_signup", "12345678")
 
@@ -491,6 +351,34 @@ func TestAccountResetPassword(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
 		require.Contains(t, err.Error(), "superuser is protected")
+	})
+
+	t.Run("returns_error_when_session_revoke_fails", func(t *testing.T) {
+		accountSetSuperuser(t, actor.Username, true)
+
+		brokenIndexVictim := accountSignupUser(t, "acct_reset_broken_index", "87654321")
+		brokenSessionID := accountLoginUser(t, &brokenIndexVictim, brokenIndexVictim.Password)
+
+		userSessionKey := modeliamsession.SessionUserKey(brokenIndexVictim.UserID)
+		t.Cleanup(func() {
+			require.NoError(t, redis.Del(context.Background(), userSessionKey, modeliamsession.SessionIDKey(brokenSessionID)))
+			require.NoError(t, redis.ZRem(context.Background(), modeliamsession.SessionAllKey(), brokenSessionID))
+			require.NoError(t, redis.ZRem(context.Background(), modeliamsession.SessionLastSeenKey(), brokenSessionID))
+			serviceiamsession.InvalidateUserSessions(context.Background(), brokenIndexVictim.UserID)
+		})
+
+		require.NoError(t, redis.Del(t.Context(), userSessionKey))
+		require.NoError(t, redis.Set(t.Context(), userSessionKey, "not-a-zset", time.Hour))
+
+		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, actor.SessionID)
+
+		_, err := cli.Create(iam.ResetPasswordReq{
+			UserID:      brokenIndexVictim.UserID,
+			NewPassword: resetPass,
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "500")
+		require.Contains(t, err.Error(), "failed to revoke user sessions")
 	})
 
 	t.Run("reset_success", func(t *testing.T) {
@@ -830,4 +718,144 @@ func TestAccountStatus(t *testing.T) {
 	t.Run("demote_actor_superuser", func(t *testing.T) {
 		accountSetSuperuser(t, actor.Username, false)
 	})
+}
+
+type accountTestUser struct {
+	UserID    string
+	Username  string
+	Password  string
+	SessionID string
+}
+
+const accountTestUserAgent = "gst-account-test"
+
+func accountSignupUser(t *testing.T, prefix, password string) accountTestUser {
+	t.Helper()
+
+	user := accountTestUser{
+		Username: fmt.Sprintf("%s_%d", prefix, time.Now().UnixNano()),
+		Password: password,
+	}
+
+	cli, err := client.New(signupAPI)
+	require.NoError(t, err)
+
+	resp, err := cli.Create(iam.SignupReq{
+		Username:   user.Username,
+		Password:   user.Password,
+		RePassword: user.Password,
+	})
+	require.NoError(t, err)
+
+	testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
+		t.Helper()
+		require.Equal(t, user.Username, rsp.Username)
+		require.NotEmpty(t, rsp.UserID)
+		require.NotEmpty(t, rsp.Message)
+		user.UserID = rsp.UserID
+	})
+
+	t.Cleanup(func() {
+		accountCleanupUser(t, user.Username)
+	})
+
+	return user
+}
+
+func accountCleanupUser(t *testing.T, username string) {
+	t.Helper()
+
+	users := make([]*iam.User, 0)
+	require.NoError(t, database.Database[*iam.User](context.Background()).WithQuery(&iam.User{Username: username}).List(&users))
+	if len(users) == 0 {
+		return
+	}
+
+	for _, user := range users {
+		serviceiamsession.InvalidateUserSessions(t.Context(), user.ID)
+	}
+	require.NoError(t, database.Database[*iam.User](context.Background()).Delete(users...))
+}
+
+func accountLoginUser(t *testing.T, user *accountTestUser, password string) string {
+	t.Helper()
+
+	return accountLoginSessionCookie(t, user.Username, password).Value
+}
+
+func accountLoginSessionCookie(t *testing.T, username, password string) *http.Cookie {
+	t.Helper()
+
+	payload, err := json.Marshal(iam.LoginReq{
+		Username: username,
+		Password: password,
+	})
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodPost, loginAPI, bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("User-Agent", accountTestUserAgent)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Less(t, resp.StatusCode, http.StatusMultipleChoices)
+
+	for _, cookie := range resp.Cookies() {
+		if cookie.Name == "session_id" {
+			return cookie
+		}
+	}
+	require.FailNow(t, "session cookie not found")
+	return nil
+}
+
+func accountNewAuthenticatedClient(t *testing.T, api, sessionID string) *client.Client {
+	t.Helper()
+
+	header := http.Header{}
+	header.Set("User-Agent", accountTestUserAgent)
+	cli, err := client.New(api, client.WithHeader(header), client.WithCookie(&http.Cookie{
+		Name:  "session_id",
+		Value: sessionID,
+	}))
+	require.NoError(t, err)
+	return cli
+}
+
+func accountRequireSessionNotFound(t *testing.T, sessionID string) {
+	t.Helper()
+
+	sessionKey := modeliamsession.SessionIDKey(sessionID)
+	_, err := redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Get(sessionKey)
+	require.ErrorIs(t, err, types.ErrEntryNotFound)
+}
+
+func accountRequireUserSessionContains(t *testing.T, userID, sessionID string) {
+	t.Helper()
+
+	userSessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionUserKey(userID), 0, -1)
+	require.NoError(t, err)
+	require.Contains(t, userSessionIDs, sessionID)
+}
+
+func accountRequireUserSessionNotContains(t *testing.T, userID, sessionID string) {
+	t.Helper()
+
+	userSessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionUserKey(userID), 0, -1)
+	require.NoError(t, err)
+	require.NotContains(t, userSessionIDs, sessionID)
+}
+
+func accountSetSuperuser(t *testing.T, username string, enabled bool) {
+	t.Helper()
+
+	actors := make([]*iam.User, 0)
+	require.NoError(t, database.Database[*iam.User](context.Background()).WithLimit(1).WithQuery(&iam.User{Username: username}).List(&actors))
+	require.Len(t, actors, 1)
+
+	actors[0].IsSuperuser = &enabled
+	require.NoError(t, database.Database[*iam.User](context.Background()).Update(actors[0]))
 }

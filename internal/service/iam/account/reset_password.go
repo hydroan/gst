@@ -1,6 +1,8 @@
 package serviceiamaccount
 
 import (
+	"net/http"
+
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
@@ -51,7 +53,10 @@ func (s *ResetPasswordService) Create(ctx *types.ServiceContext, req *modeliamac
 		return nil, errors.Wrap(err, "failed to update password")
 	}
 
-	serviceiamsession.InvalidateUserSessions(ctx, req.UserID)
+	if err = serviceiamsession.DeleteUserSessions(ctx, req.UserID); err != nil {
+		log.Error("failed to revoke user sessions after password reset", err)
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to revoke user sessions", err)
+	}
 
 	log.Info("password reset successfully", "target_user_id", req.UserID, "actor_user_id", actor.GetID(), "actor_username", actor.Username)
 	return &modeliamaccount.ResetPasswordRsp{Msg: "password reset successfully"}, nil

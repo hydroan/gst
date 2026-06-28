@@ -295,14 +295,15 @@ func DeleteUserSessionsExceptCurrent(ctx context.Context, userID, currentSession
 	return nil
 }
 
-// deleteUserSessions deletes all indexed sessions of a user.
+// DeleteUserSessions deletes all indexed sessions of a user.
 // Missing session records are treated as stale index entries and cleaned up
 // from the user's ZSET so the operation remains idempotent.
-func deleteUserSessions(ctx context.Context, userID string) error {
+func DeleteUserSessions(ctx context.Context, userID string) error {
 	if userID == "" {
 		return nil
 	}
 	ctx = redisContext(ctx)
+	InvalidateUserStateCache(ctx, userID)
 
 	sessionIDs, err := listUserSessionIDs(ctx, userID)
 	if err != nil {
@@ -328,7 +329,7 @@ func deleteUserSessions(ctx context.Context, userID string) error {
 }
 
 // InvalidateUserSessions removes all indexed sessions for a user.
-// It is best-effort: failures to talk to Redis do not block password updates.
+// It is best-effort: failures to talk to Redis do not block callers.
 func InvalidateUserSessions(ctx context.Context, userID string) {
 	if userID == "" {
 		return

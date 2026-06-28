@@ -206,7 +206,7 @@ func (s *SessionsDeleteAllService) Delete(ctx *types.ServiceContext, req *modeli
 		return nil, err
 	}
 
-	if err = deleteUserSessions(ctx, currentSession.UserID); err != nil {
+	if err = DeleteUserSessions(ctx, currentSession.UserID); err != nil {
 		log.Error("failed to delete all sessions", err)
 		return nil, err
 	}
