@@ -12,6 +12,8 @@ import (
 	"github.com/hydroan/gst/types"
 )
 
+const sessionsDeleteOthersID = "others"
+
 // SessionsListService handles retrieval of all active sessions for the current authenticated user.
 type SessionsListService struct {
 	service.Base[*model.Empty, *modeliamsession.SessionsListReq, *modeliamsession.SessionsListRsp]
@@ -127,9 +129,10 @@ func (s *SessionsGetService) Get(ctx *types.ServiceContext, req *modeliamsession
 }
 
 // Delete invalidates a specified session for the current authenticated user.
-// When the route id is "others", it keeps the current session active and
-// revokes every other indexed session of the same user. The endpoint remains
-// idempotent: deleting a missing session still returns success.
+// DELETE /api/iam/sessions/:id revokes the target session, while
+// DELETE /api/iam/sessions/others revokes every other indexed session of the
+// same user and keeps the current cookie-backed session active. The endpoint
+// remains idempotent: deleting a missing session still returns success.
 func (s *SessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.SessionsDeleteReq) (rsp *modeliamsession.SessionsDeleteRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
@@ -143,11 +146,11 @@ func (s *SessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliams
 	if targetSessionID == "" {
 		return nil, service.NewError(http.StatusBadRequest, "session id is required")
 	}
-	if targetSessionID == "others" {
+	if targetSessionID == sessionsDeleteOthersID {
 		// DELETE /api/iam/sessions/others is a bulk self-service logout for
 		// secondary sessions. The current cookie-backed session must survive so
 		// the caller can continue using the API after the request completes.
-		if err = deleteOtherSessions(ctx, currentSession.UserID, currentSessionID); err != nil {
+		if err = deleteUserSessionsExceptCurrent(ctx, currentSession.UserID, currentSessionID); err != nil {
 			log.Error("failed to delete other sessions", err)
 			return nil, err
 		}
@@ -203,7 +206,7 @@ func (s *SessionsDeleteAllService) Delete(ctx *types.ServiceContext, req *modeli
 		return nil, err
 	}
 
-	if err = deleteAllSessions(ctx, currentSession.UserID); err != nil {
+	if err = deleteUserSessions(ctx, currentSession.UserID); err != nil {
 		log.Error("failed to delete all sessions", err)
 		return nil, err
 	}

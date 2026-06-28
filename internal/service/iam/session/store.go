@@ -360,10 +360,10 @@ func DeleteSession(ctx context.Context, sessionID string) (modeliamsession.Sessi
 	return session, nil
 }
 
-// deleteOtherSessions deletes all indexed sessions of a user except the current session.
+// deleteUserSessionsExceptCurrent deletes all indexed sessions of a user except the current session.
 // Missing session records are treated as stale index entries and cleaned up
 // from the user's ZSET so the operation remains idempotent.
-func deleteOtherSessions(ctx context.Context, userID, currentSessionID string) error {
+func deleteUserSessionsExceptCurrent(ctx context.Context, userID, currentSessionID string) error {
 	if userID == "" {
 		return nil
 	}
@@ -395,10 +395,10 @@ func deleteOtherSessions(ctx context.Context, userID, currentSessionID string) e
 	return nil
 }
 
-// deleteAllSessions deletes all indexed sessions of a user.
+// deleteUserSessions deletes all indexed sessions of a user.
 // Missing session records are treated as stale index entries and cleaned up
 // from the user's ZSET so the operation remains idempotent.
-func deleteAllSessions(ctx context.Context, userID string) error {
+func deleteUserSessions(ctx context.Context, userID string) error {
 	if userID == "" {
 		return nil
 	}
