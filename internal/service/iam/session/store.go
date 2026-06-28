@@ -200,7 +200,7 @@ func ValidateActiveSession(sessionID string, session modeliamsession.Session) er
 		return errors.New("session id mismatch")
 	case session.UserID == "":
 		return errors.New("user not authenticated")
-	case session.State != modeliamsession.SessionStatusActive:
+	case session.Status != modeliamsession.SessionStatusActive:
 		return errors.New("session is not active")
 	case session.ExpiresAt.IsZero():
 		return errors.New("session expiration is required")

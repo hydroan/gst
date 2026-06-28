@@ -42,20 +42,18 @@ const (
 type Session struct {
 	ID string `json:"id"`
 
-	UserID   string `json:"user_id"`
-	Username string `json:"username"`
+	UserID             string `json:"user_id"`
+	Username           string `json:"username"`
+	MustChangePassword bool   `json:"must_change_password"`
 
-	MustChangePassword bool `json:"must_change_password"`
-
-	ClientIP  string `json:"client_ip"`
-	UserAgent string `json:"user_agent"`
-
+	ClientIP    string `json:"client_ip"`
+	UserAgent   string `json:"user_agent"`
 	Platform    string `json:"platform"`
 	OS          string `json:"os"`
 	EngineName  string `json:"engine_name"`
 	BrowserName string `json:"browser_name"`
 
-	State      SessionStatus `json:"state"`
+	Status     SessionStatus `json:"status"`
 	IssuedAt   time.Time     `json:"issued_at"`
 	LastSeenAt time.Time     `json:"last_seen_at"`
 	ExpiresAt  time.Time     `json:"expires_at"`
@@ -76,6 +74,22 @@ type Token struct {
 
 	NotBeforePolicy int    `json:"not-before-policy"`
 	SessionState    string `json:"session_state"`
+}
+
+// AuthenticatedSessionRsp returns the authenticated session timing contract and principal snapshot.
+type AuthenticatedSessionRsp struct {
+	ServerTime time.Time                `json:"server_time"`
+	Session    AuthenticatedSessionView `json:"session"`
+	Principal  PrincipalView            `json:"principal"`
+}
+
+// AuthenticatedSessionView describes the current authenticated session without exposing its bearer session id.
+type AuthenticatedSessionView struct {
+	Status           SessionStatus `json:"status"`
+	IssuedAt         time.Time     `json:"issued_at"`
+	LastSeenAt       time.Time     `json:"last_seen_at"`
+	ExpiresAt        time.Time     `json:"expires_at"`
+	ExpiresInSeconds int64         `json:"expires_in_seconds"`
 }
 
 // sessionRedisKey builds a Redis key for the specified namespace and identifier.

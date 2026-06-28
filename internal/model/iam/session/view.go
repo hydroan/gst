@@ -27,3 +27,14 @@ type SessionView struct {
 	BrowserName string        `json:"browser_name"`
 	IsCurrent   bool          `json:"is_current"`
 }
+
+// PrincipalView describes the authenticated principal bound to the current session.
+type PrincipalView struct {
+	UserID             string  `json:"user_id"`
+	Username           string  `json:"username"`
+	Email              string  `json:"email"`
+	FirstName          *string `json:"first_name,omitempty"`
+	LastName           *string `json:"last_name,omitempty"`
+	Status             string  `json:"status"`
+	MustChangePassword bool    `json:"must_change_password"`
+}

@@ -33,7 +33,7 @@ func BuildAuthenticatedSessionView(session modeliamsession.Session, now time.Tim
 		expiresIn = 0
 	}
 	return modeliamsession.AuthenticatedSessionView{
-		State:            session.State,
+		Status:           session.Status,
 		IssuedAt:         session.IssuedAt,
 		LastSeenAt:       session.LastSeenAt,
 		ExpiresAt:        session.ExpiresAt,

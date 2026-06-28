@@ -14,7 +14,7 @@ func buildSessionView(session modeliamsession.Session, currentSessionID string) 
 	}
 	return modeliamsession.SessionView{
 		ID:          sessionID,
-		Status:      session.State,
+		Status:      session.Status,
 		IssuedAt:    session.IssuedAt,
 		LastSeenAt:  session.LastSeenAt,
 		ExpiresAt:   session.ExpiresAt,

@@ -45,7 +45,7 @@ func TestTouchSession(t *testing.T) {
 		session := modeliamsession.Session{
 			ID:         sessionID,
 			UserID:     "user-1",
-			State:      modeliamsession.SessionStatusActive,
+			Status:     modeliamsession.SessionStatusActive,
 			IssuedAt:   now.Add(-time.Hour),
 			LastSeenAt: now.Add(-time.Minute),
 			ExpiresAt:  now.Add(time.Hour),
@@ -94,7 +94,7 @@ func TestIndexSessionPrunesStaleLastSeenIndex(t *testing.T) {
 	session := modeliamsession.Session{
 		ID:         currentSessionID,
 		UserID:     "user-1",
-		State:      modeliamsession.SessionStatusActive,
+		Status:     modeliamsession.SessionStatusActive,
 		IssuedAt:   now.Add(-time.Minute),
 		LastSeenAt: now,
 		ExpiresAt:  now.Add(time.Hour),
@@ -114,7 +114,7 @@ func TestGetCurrentSessionUsesRequestCache(t *testing.T) {
 	session := modeliamsession.Session{
 		ID:        sessionID,
 		UserID:    "user-1",
-		State:     modeliamsession.SessionStatusActive,
+		Status:    modeliamsession.SessionStatusActive,
 		IssuedAt:  now.Add(-time.Minute),
 		ExpiresAt: now.Add(time.Hour),
 	}
@@ -135,7 +135,7 @@ func TestGetCurrentSessionIgnoresMismatchedRequestCache(t *testing.T) {
 	cookieSession := modeliamsession.Session{
 		ID:        cookieSessionID,
 		UserID:    "user-1",
-		State:     modeliamsession.SessionStatusActive,
+		Status:    modeliamsession.SessionStatusActive,
 		IssuedAt:  now.Add(-time.Minute),
 		ExpiresAt: now.Add(time.Hour),
 	}
@@ -147,7 +147,7 @@ func TestGetCurrentSessionIgnoresMismatchedRequestCache(t *testing.T) {
 	cachedSession := modeliamsession.Session{
 		ID:        cachedSessionID,
 		UserID:    "user-2",
-		State:     modeliamsession.SessionStatusActive,
+		Status:    modeliamsession.SessionStatusActive,
 		IssuedAt:  now.Add(-time.Minute),
 		ExpiresAt: now.Add(time.Hour),
 	}

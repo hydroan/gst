@@ -147,7 +147,7 @@ func TestAccountLogin(t *testing.T) {
 			t.Helper()
 
 			require.False(t, rsp.ServerTime.IsZero())
-			require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.State)
+			require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
 			require.False(t, rsp.Session.IssuedAt.IsZero())
 			require.False(t, rsp.Session.LastSeenAt.IsZero())
 			require.False(t, rsp.Session.ExpiresAt.IsZero())

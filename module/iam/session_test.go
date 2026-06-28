@@ -59,7 +59,7 @@ func TestCurrentSessionGet(t *testing.T) {
 			require.Equal(t, account.Username, rsp.Principal.Username)
 			require.Equal(t, string(modeliamuser.UserStatusActive), rsp.Principal.Status)
 			require.False(t, rsp.Principal.MustChangePassword)
-			require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.State)
+			require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
 			require.False(t, rsp.Session.IssuedAt.IsZero())
 			require.False(t, rsp.Session.LastSeenAt.IsZero())
 			require.False(t, rsp.Session.ExpiresAt.IsZero())
@@ -86,7 +86,7 @@ func TestCurrentSessionGet(t *testing.T) {
 
 		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.CurrentGetRsp) {
 			t.Helper()
-			require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.State)
+			require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
 			require.False(t, rsp.Session.LastSeenAt.IsZero())
 		})
 
@@ -112,7 +112,7 @@ func TestCurrentSessionGet(t *testing.T) {
 		require.NoError(t, err)
 		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.CurrentGetRsp) {
 			t.Helper()
-			require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.State)
+			require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
 			require.False(t, rsp.Session.LastSeenAt.IsZero())
 		})
 
@@ -128,7 +128,7 @@ func TestCurrentSessionGet(t *testing.T) {
 
 		session, err := redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Get(sessionKey)
 		require.NoError(t, err)
-		session.State = modeliamsession.SessionStatusRevoked
+		session.Status = modeliamsession.SessionStatusRevoked
 		require.NoError(t, redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Set(sessionKey, session, time.Hour))
 
 		cli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{
@@ -1477,7 +1477,7 @@ func loginSessionIDFromCookie(t *testing.T, username, password string) string {
 	testutil.TestResp(t, apiResp, func(t *testing.T, rsp iam.LoginRsp) {
 		t.Helper()
 		require.False(t, rsp.ServerTime.IsZero())
-		require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.State)
+		require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
 		require.False(t, rsp.Session.IssuedAt.IsZero())
 		require.False(t, rsp.Session.LastSeenAt.IsZero())
 		require.False(t, rsp.Session.ExpiresAt.IsZero())
