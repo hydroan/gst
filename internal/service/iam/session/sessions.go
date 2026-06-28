@@ -150,7 +150,7 @@ func (s *SessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliams
 		// DELETE /api/iam/sessions/others is a bulk self-service logout for
 		// secondary sessions. The current cookie-backed session must survive so
 		// the caller can continue using the API after the request completes.
-		if err = deleteUserSessionsExceptCurrent(ctx, currentSession.UserID, currentSessionID); err != nil {
+		if err = DeleteUserSessionsExceptCurrent(ctx, currentSession.UserID, currentSessionID); err != nil {
 			log.Error("failed to delete other sessions", err)
 			return nil, err
 		}

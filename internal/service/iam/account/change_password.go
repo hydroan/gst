@@ -1,6 +1,8 @@
 package serviceiamaccount
 
 import (
+	"net/http"
+
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
@@ -28,16 +30,11 @@ func (s *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 	}
 
 	// Get user from database
-	users := make([]*modeliamuser.User, 0)
-	if err = database.Database[*modeliamuser.User](ctx).WithLimit(1).WithQuery(&modeliamuser.User{Username: session.Username}).List(&users); err != nil {
+	user := new(modeliamuser.User)
+	if err = database.Database[*modeliamuser.User](ctx).Get(user, session.UserID); err != nil {
 		log.Error("failed to query user", err)
 		return nil, errors.New("database error")
 	}
-	if len(users) == 0 {
-		log.Error("user not found", "username", session.Username)
-		return nil, errors.New("user not found")
-	}
-	user := users[0]
 
 	// Verify old password
 	if err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.OldPassword)); err != nil {
@@ -52,10 +49,18 @@ func (s *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 		return nil, errors.New("failed to process new password")
 	}
 
+	if err = serviceiamsession.DeleteUserSessionsExceptCurrent(ctx, user.GetID(), sessionID); err != nil {
+		log.Error("failed to revoke other sessions after password change", err)
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to revoke other sessions", err)
+	}
+
 	// Update password in database
 	user.PasswordHash = string(hashedPassword)
 	user.MustChangePassword = false
-	if err := database.Database[*modeliamuser.User](ctx).Update(user); err != nil {
+	if err := database.Database[*modeliamuser.User](ctx).
+		WithoutHook().
+		WithSelect("username", "password_hash", "must_change_password").
+		Update(user); err != nil {
 		log.Error("failed to update password", err)
 		return nil, errors.New("failed to update password")
 	}

@@ -220,6 +220,9 @@ func TestAccountChangePassword(t *testing.T) {
 	user := accountSignupUser(t, "acct_changepwd", "12345678")
 	newPassword := "123456789"
 	user.SessionID = accountLoginUser(t, &user, user.Password)
+	otherSessionID := accountLoginUser(t, &user, user.Password)
+	accountRequireUserSessionContains(t, user.UserID, user.SessionID)
+	accountRequireUserSessionContains(t, user.UserID, otherSessionID)
 
 	t.Run("change_password", func(t *testing.T) {
 		cli, err := client.New(changepasswordAPI, client.WithCookie(&http.Cookie{
@@ -238,6 +241,12 @@ func TestAccountChangePassword(t *testing.T) {
 			t.Helper()
 			require.NotEmpty(t, rsp.Msg)
 		})
+	})
+
+	t.Run("keeps_current_session_and_revokes_other_sessions", func(t *testing.T) {
+		accountRequireUserSessionContains(t, user.UserID, user.SessionID)
+		accountRequireSessionNotFound(t, otherSessionID)
+		accountRequireUserSessionNotContains(t, user.UserID, otherSessionID)
 	})
 
 	t.Run("login_with_new_password", func(t *testing.T) {

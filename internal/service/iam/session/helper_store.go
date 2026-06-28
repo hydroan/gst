@@ -260,10 +260,10 @@ func TouchSession(ctx context.Context, sessionID string, session modeliamsession
 	return nil
 }
 
-// deleteUserSessionsExceptCurrent deletes all indexed sessions of a user except the current session.
+// DeleteUserSessionsExceptCurrent deletes all indexed sessions of a user except the current session.
 // Missing session records are treated as stale index entries and cleaned up
 // from the user's ZSET so the operation remains idempotent.
-func deleteUserSessionsExceptCurrent(ctx context.Context, userID, currentSessionID string) error {
+func DeleteUserSessionsExceptCurrent(ctx context.Context, userID, currentSessionID string) error {
 	if userID == "" {
 		return nil
 	}
