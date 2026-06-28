@@ -20,11 +20,15 @@ const SessionAllNamespace = SessionNamespacePrefix + ":all"
 // SessionLastSeenNamespace stores the global last-seen index by session ID.
 const SessionLastSeenNamespace = SessionNamespacePrefix + ":last_seen"
 
+// SessionStatus describes the lifecycle state of an IAM session snapshot.
 type SessionStatus string
 
 const (
-	SessionStatusActive  SessionStatus = "active"
+	// SessionStatusActive marks a session that can still be used.
+	SessionStatusActive SessionStatus = "active"
+	// SessionStatusRevoked marks a session that was explicitly invalidated.
 	SessionStatusRevoked SessionStatus = "revoked"
+	// SessionStatusExpired marks a session whose expiration time has passed.
 	SessionStatusExpired SessionStatus = "expired"
 )
 
@@ -58,6 +62,7 @@ type Session struct {
 	Token Token `json:"token"`
 }
 
+// Token stores the token payload associated with an IAM session.
 type Token struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`

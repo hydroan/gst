@@ -1,9 +1,13 @@
 package serviceiamsession
 
-import modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
+import (
+	"time"
 
-// buildCurrentSessionView builds the shared response snapshot for session query endpoints.
-func buildCurrentSessionView(session modeliamsession.Session, currentSessionID string) modeliamsession.SessionView {
+	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
+)
+
+// buildSessionView builds the shared response snapshot for session query endpoints.
+func buildSessionView(session modeliamsession.Session, currentSessionID string) modeliamsession.SessionView {
 	sessionID := session.ID
 	if sessionID == "" {
 		sessionID = currentSessionID
@@ -22,4 +26,12 @@ func buildCurrentSessionView(session modeliamsession.Session, currentSessionID s
 		BrowserName: session.BrowserName,
 		IsCurrent:   sessionID == currentSessionID,
 	}
+}
+
+// sessionViewActiveAt returns the timestamp used for stable session ordering.
+func sessionViewActiveAt(view modeliamsession.SessionView) time.Time {
+	if !view.LastSeenAt.IsZero() {
+		return view.LastSeenAt
+	}
+	return view.IssuedAt
 }

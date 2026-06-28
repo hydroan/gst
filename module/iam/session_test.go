@@ -37,7 +37,7 @@ type sessionTestAccount struct {
 	Password string
 }
 
-func TestSessionCurrent(t *testing.T) {
+func TestCurrentSessionGet(t *testing.T) {
 	setupSessionRedisCleanup(t)
 
 	t.Run("get_current_session", func(t *testing.T) {
@@ -53,7 +53,7 @@ func TestSessionCurrent(t *testing.T) {
 		resp, err := cli.Request(http.MethodGet, new(struct{}))
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.CurrentListRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.CurrentGetRsp) {
 			t.Helper()
 			require.NotEmpty(t, rsp.Principal.UserID)
 			require.Equal(t, account.Username, rsp.Principal.Username)
@@ -80,7 +80,7 @@ func TestSessionCurrent(t *testing.T) {
 		resp, err := cli.Request(http.MethodGet, new(struct{}))
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.CurrentListRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.CurrentGetRsp) {
 			t.Helper()
 			require.Equal(t, sessionID, rsp.Session.ID)
 		})
@@ -105,7 +105,7 @@ func TestSessionCurrent(t *testing.T) {
 
 		resp, err := cli.Request(http.MethodGet, new(struct{}))
 		require.NoError(t, err)
-		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.CurrentListRsp) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.CurrentGetRsp) {
 			t.Helper()
 			require.Equal(t, sessionID, rsp.Session.ID)
 		})
@@ -158,7 +158,7 @@ func TestSessionCurrent(t *testing.T) {
 	})
 }
 
-func TestSessionCurrentDelete(t *testing.T) {
+func TestCurrentSessionDelete(t *testing.T) {
 	setupSessionRedisCleanup(t)
 
 	t.Run("delete_current_session", func(t *testing.T) {
@@ -188,7 +188,7 @@ func TestSessionCurrentDelete(t *testing.T) {
 	})
 }
 
-func TestSessionGet(t *testing.T) {
+func TestSessionsGet(t *testing.T) {
 	setupSessionRedisCleanup(t)
 
 	t.Run("get_current_user_session_detail", func(t *testing.T) {
@@ -266,7 +266,7 @@ func TestSessionGet(t *testing.T) {
 	})
 }
 
-func TestSessionList(t *testing.T) {
+func TestSessionsList(t *testing.T) {
 	setupSessionRedisCleanup(t)
 
 	t.Run("list_current_user_sessions", func(t *testing.T) {
@@ -376,7 +376,7 @@ func TestSessionList(t *testing.T) {
 	})
 }
 
-func TestAdminSessionList(t *testing.T) {
+func TestAdminSessionsList(t *testing.T) {
 	setupSessionRedisCleanup(t)
 
 	t.Run("root_username_without_root_user_id_forbidden", func(t *testing.T) {
@@ -572,7 +572,7 @@ func TestAdminSessionList(t *testing.T) {
 	})
 }
 
-func TestAdminSessionGet(t *testing.T) {
+func TestAdminSessionsGet(t *testing.T) {
 	setupSessionRedisCleanup(t)
 
 	t.Run("get_other_user_session_detail", func(t *testing.T) {
@@ -635,7 +635,7 @@ func TestAdminSessionGet(t *testing.T) {
 	})
 }
 
-func TestAdminSessionDelete(t *testing.T) {
+func TestAdminSessionsDelete(t *testing.T) {
 	setupSessionRedisCleanup(t)
 
 	t.Run("delete_other_user_session", func(t *testing.T) {
@@ -1031,7 +1031,7 @@ func TestAdminUserSessionsDelete(t *testing.T) {
 	})
 }
 
-func TestSessionDelete(t *testing.T) {
+func TestSessionsDelete(t *testing.T) {
 	setupSessionRedisCleanup(t)
 
 	t.Run("delete_non_current_session", func(t *testing.T) {
@@ -1160,7 +1160,7 @@ func TestSessionDelete(t *testing.T) {
 	})
 }
 
-func TestSessionDeleteOthers(t *testing.T) {
+func TestSessionsDeleteOthers(t *testing.T) {
 	setupSessionRedisCleanup(t)
 
 	t.Run("delete_all_other_sessions", func(t *testing.T) {
@@ -1236,7 +1236,7 @@ func TestSessionDeleteOthers(t *testing.T) {
 	})
 }
 
-func TestSessionDeleteAll(t *testing.T) {
+func TestSessionsDeleteAll(t *testing.T) {
 	setupSessionRedisCleanup(t)
 
 	t.Run("delete_all_sessions", func(t *testing.T) {

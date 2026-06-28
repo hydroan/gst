@@ -34,8 +34,8 @@ type (
 	SessionView = modeliamsession.SessionView
 	Token       = modeliamsession.Token
 
-	CurrentListReq   = modeliamsession.CurrentListReq
-	CurrentListRsp   = modeliamsession.CurrentListRsp
+	CurrentGetReq    = modeliamsession.CurrentGetReq
+	CurrentGetRsp    = modeliamsession.CurrentGetRsp
 	CurrentDeleteReq = modeliamsession.CurrentDeleteReq
 	CurrentDeleteRsp = modeliamsession.CurrentDeleteRsp
 

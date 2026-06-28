@@ -102,7 +102,7 @@ func Register(config ...Config) {
 	)
 	module.Use(module.NewWrapper("/iam/users/:id", "id", false, &serviceiamuser.UserPatchService{}), module.Exact(consts.PHASE_PATCH))
 
-	module.Use(module.NewWrapper("/iam/session/current", "id", false, &serviceiamsession.CurrentListService{}), module.CRUD(consts.PHASE_LIST))
+	module.Use(module.NewWrapper("/iam/session/current", "id", false, &serviceiamsession.CurrentGetService{}), module.Exact(consts.PHASE_GET))
 	module.Use(module.NewWrapper("/iam/session/current", "id", false, &serviceiamsession.CurrentDeleteService{}), module.Exact(consts.PHASE_DELETE))
 	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsListService{}), module.CRUD(consts.PHASE_LIST))
 	module.Use(module.NewWrapper("/iam/admin/sessions", "id", false, &serviceiamsession.AdminSessionsListService{}), module.CRUD(consts.PHASE_LIST))

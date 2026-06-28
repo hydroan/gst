@@ -55,7 +55,7 @@ func (s *SessionsListService) List(ctx *types.ServiceContext, req *modeliamsessi
 	for i := range sessionIDs {
 		sessionID := sessionIDs[i]
 		if sessionID == currentSessionID {
-			items = append(items, buildCurrentSessionView(currentSession, currentSessionID))
+			items = append(items, buildSessionView(currentSession, currentSessionID))
 			continue
 		}
 		sessionKey := modeliamsession.SessionIDKey(sessionID)
@@ -72,18 +72,12 @@ func (s *SessionsListService) List(ctx *types.ServiceContext, req *modeliamsessi
 			_, _ = DeleteSession(ctx, sessionID)
 			continue
 		}
-		items = append(items, buildCurrentSessionView(session, currentSessionID))
+		items = append(items, buildSessionView(session, currentSessionID))
 	}
 
 	sort.Slice(items, func(i, j int) bool {
-		left := items[i].LastSeenAt
-		if left.IsZero() {
-			left = items[i].IssuedAt
-		}
-		right := items[j].LastSeenAt
-		if right.IsZero() {
-			right = items[j].IssuedAt
-		}
+		left := sessionViewActiveAt(items[i])
+		right := sessionViewActiveAt(items[j])
 		if left.Equal(right) {
 			return items[i].ID > items[j].ID
 		}
@@ -128,7 +122,7 @@ func (s *SessionsGetService) Get(ctx *types.ServiceContext, req *modeliamsession
 	}
 
 	return &modeliamsession.SessionsGetRsp{
-		Session: buildCurrentSessionView(targetSession, currentSessionID),
+		Session: buildSessionView(targetSession, currentSessionID),
 	}, nil
 }
 
