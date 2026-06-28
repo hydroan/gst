@@ -57,7 +57,6 @@ func TestCurrentSessionGet(t *testing.T) {
 			require.False(t, rsp.ServerTime.IsZero())
 			require.NotEmpty(t, rsp.Principal.UserID)
 			require.Equal(t, account.Username, rsp.Principal.Username)
-			require.Equal(t, string(modeliamuser.UserStatusActive), rsp.Principal.Status)
 			require.False(t, rsp.Principal.MustChangePassword)
 			require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
 			require.False(t, rsp.Session.IssuedAt.IsZero())

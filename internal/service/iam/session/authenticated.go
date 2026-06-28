@@ -52,7 +52,6 @@ func BuildPrincipalView(user *modeliamuser.User) modeliamsession.PrincipalView {
 		Email:              util.Deref(user.Email),
 		FirstName:          user.FirstName,
 		LastName:           user.LastName,
-		Status:             string(user.Status),
 		MustChangePassword: user.MustChangePassword,
 	}
 }

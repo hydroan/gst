@@ -155,7 +155,6 @@ func TestAccountLogin(t *testing.T) {
 			require.True(t, rsp.Session.ExpiresAt.After(rsp.ServerTime))
 			require.Equal(t, user.UserID, rsp.Principal.UserID)
 			require.Equal(t, user.Username, rsp.Principal.Username)
-			require.Equal(t, string(modeliamuser.UserStatusActive), rsp.Principal.Status)
 			require.False(t, rsp.Principal.MustChangePassword)
 		})
 	})
