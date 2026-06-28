@@ -40,7 +40,6 @@ func ValidateSessionUserState(ctx context.Context, session modeliamsession.Sessi
 		}
 	}
 
-	session.Status = string(state.Status)
 	session.MustChangePassword = state.MustChangePassword
 	return session, ensureSessionUserActive(&modeliamuser.User{Status: state.Status})
 }

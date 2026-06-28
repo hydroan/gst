@@ -5,9 +5,9 @@ type AdminSessionsListReq struct{}
 
 // AdminSessionsListRsp returns all active sessions grouped by user for privileged administrators.
 type AdminSessionsListRsp struct {
-	Items        []AdminSessionUserView `json:"items"`
-	Total        int64                  `json:"total"`
-	SessionTotal int64                  `json:"session_total"`
+	Items        []AdminSessionOwnerView `json:"items"`
+	Total        int64                   `json:"total"`
+	SessionTotal int64                   `json:"session_total"`
 }
 
 // AdminSessionsGetReq is the request payload for loading a specified session as a privileged administrator.

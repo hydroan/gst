@@ -400,7 +400,7 @@ func TestAdminSessionsList(t *testing.T) {
 		}))
 		require.NoError(t, err)
 
-		items := make([]iam.AdminSessionUserView, 0)
+		items := make([]iam.AdminSessionOwnerView, 0)
 		total := new(int64)
 		_, err = cli.List(&items, total)
 		userRequireForbidden(t, err)
@@ -429,7 +429,7 @@ func TestAdminSessionsList(t *testing.T) {
 		}))
 		require.NoError(t, err)
 
-		items := make([]iam.AdminSessionUserView, 0)
+		items := make([]iam.AdminSessionOwnerView, 0)
 		total := new(int64)
 		resp, err := cli.List(&items, total)
 		require.NoError(t, err)
@@ -439,7 +439,7 @@ func TestAdminSessionsList(t *testing.T) {
 			require.GreaterOrEqual(t, rsp.Total, int64(3))
 			require.GreaterOrEqual(t, rsp.SessionTotal, int64(4))
 
-			userMap := make(map[string]iam.AdminSessionUserView, len(rsp.Items))
+			userMap := make(map[string]iam.AdminSessionOwnerView, len(rsp.Items))
 			for i := range rsp.Items {
 				userMap[rsp.Items[i].Username] = rsp.Items[i]
 			}
@@ -448,7 +448,6 @@ func TestAdminSessionsList(t *testing.T) {
 			require.Contains(t, userMap, firstUser.Username)
 			require.Contains(t, userMap, secondUser.Username)
 
-			require.EqualValues(t, 1, userMap[adminAccount.Username].SessionTotal)
 			require.Len(t, userMap[adminAccount.Username].Sessions, 1)
 			require.Equal(t, adminSessionID, userMap[adminAccount.Username].Sessions[0].ID)
 			require.False(t, userMap[adminAccount.Username].Sessions[0].IsCurrent)
@@ -458,14 +457,12 @@ func TestAdminSessionsList(t *testing.T) {
 				firstUserSessionIDs[userMap[firstUser.Username].Sessions[i].ID] = struct{}{}
 				require.False(t, userMap[firstUser.Username].Sessions[i].IsCurrent)
 			}
-			require.EqualValues(t, 2, userMap[firstUser.Username].SessionTotal)
 			require.Len(t, userMap[firstUser.Username].Sessions, 2)
 			_, ok := firstUserSessionIDs[firstUserSessionID1]
 			require.True(t, ok)
 			_, ok = firstUserSessionIDs[firstUserSessionID2]
 			require.True(t, ok)
 
-			require.EqualValues(t, 1, userMap[secondUser.Username].SessionTotal)
 			require.Len(t, userMap[secondUser.Username].Sessions, 1)
 			require.Equal(t, secondUserSessionID, userMap[secondUser.Username].Sessions[0].ID)
 			require.False(t, userMap[secondUser.Username].Sessions[0].IsCurrent)
@@ -491,20 +488,19 @@ func TestAdminSessionsList(t *testing.T) {
 		}))
 		require.NoError(t, err)
 
-		items := make([]iam.AdminSessionUserView, 0)
+		items := make([]iam.AdminSessionOwnerView, 0)
 		total := new(int64)
 		resp, err := cli.List(&items, total)
 		require.NoError(t, err)
 
 		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AdminSessionsListRsp) {
 			t.Helper()
-			userMap := make(map[string]iam.AdminSessionUserView, len(rsp.Items))
+			userMap := make(map[string]iam.AdminSessionOwnerView, len(rsp.Items))
 			for i := range rsp.Items {
 				userMap[rsp.Items[i].Username] = rsp.Items[i]
 			}
 
 			require.Contains(t, userMap, targetAccount.Username)
-			require.EqualValues(t, 1, userMap[targetAccount.Username].SessionTotal)
 			require.Len(t, userMap[targetAccount.Username].Sessions, 1)
 			require.Equal(t, recentSessionID, userMap[targetAccount.Username].Sessions[0].ID)
 		})
@@ -521,7 +517,7 @@ func TestAdminSessionsList(t *testing.T) {
 		}))
 		require.NoError(t, err)
 
-		_, err = cli.List(new([]iam.AdminSessionUserView), new(int64))
+		_, err = cli.List(new([]iam.AdminSessionOwnerView), new(int64))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "400")
 	})
@@ -536,7 +532,7 @@ func TestAdminSessionsList(t *testing.T) {
 		}))
 		require.NoError(t, err)
 
-		_, err = cli.List(new([]iam.AdminSessionUserView), new(int64))
+		_, err = cli.List(new([]iam.AdminSessionOwnerView), new(int64))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
 	})
@@ -553,7 +549,7 @@ func TestAdminSessionsList(t *testing.T) {
 		}))
 		require.NoError(t, err)
 
-		_, err = cli.List(new([]iam.AdminSessionUserView), new(int64))
+		_, err = cli.List(new([]iam.AdminSessionOwnerView), new(int64))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
 		require.Contains(t, err.Error(), "account disabled")
@@ -571,7 +567,7 @@ func TestAdminSessionsList(t *testing.T) {
 		}))
 		require.NoError(t, err)
 
-		_, err = cli.List(new([]iam.AdminSessionUserView), new(int64))
+		_, err = cli.List(new([]iam.AdminSessionOwnerView), new(int64))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
 		require.Contains(t, err.Error(), "account locked")
@@ -600,9 +596,10 @@ func TestAdminSessionsGet(t *testing.T) {
 		testutil.TestResp[*modeliamsession.AdminSessionsGetRsp](t, resp, func(t *testing.T, rsp *modeliamsession.AdminSessionsGetRsp) {
 			t.Helper()
 			require.Equal(t, targetSessionID, rsp.Session.ID)
+			require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
 			require.False(t, rsp.Session.IsCurrent)
 			require.NotEmpty(t, rsp.Session.ClientIP)
-			require.NotEmpty(t, rsp.Session.UserAgent)
+			require.NotEmpty(t, rsp.Session.BrowserName)
 		})
 	})
 
@@ -737,7 +734,6 @@ func TestAdminUserSessionsList(t *testing.T) {
 			t.Helper()
 			require.Equal(t, targetAccount.UserID, rsp.User.UserID)
 			require.Equal(t, targetAccount.Username, rsp.User.Username)
-			require.EqualValues(t, 2, rsp.User.SessionTotal)
 			require.Len(t, rsp.User.Sessions, 2)
 
 			sessionMap := make(map[string]iam.SessionView, len(rsp.User.Sessions))
@@ -779,7 +775,6 @@ func TestAdminUserSessionsList(t *testing.T) {
 			t.Helper()
 			require.Equal(t, targetAccount.UserID, rsp.User.UserID)
 			require.Equal(t, targetAccount.Username, rsp.User.Username)
-			require.EqualValues(t, 1, rsp.User.SessionTotal)
 			require.Len(t, rsp.User.Sessions, 1)
 			require.Equal(t, recentSessionID, rsp.User.Sessions[0].ID)
 		})
@@ -847,7 +842,6 @@ func TestAdminUserSessionsList(t *testing.T) {
 			t.Helper()
 			require.Equal(t, targetAccount.UserID, rsp.User.UserID)
 			require.Equal(t, targetAccount.Username, rsp.User.Username)
-			require.Zero(t, rsp.User.SessionTotal)
 			require.Empty(t, rsp.User.Sessions)
 		})
 	})
@@ -871,7 +865,6 @@ func TestAdminUserSessionsList(t *testing.T) {
 		require.NoError(t, err)
 		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AdminUserSessionsListRsp) {
 			t.Helper()
-			require.EqualValues(t, 2, rsp.User.SessionTotal)
 			require.Len(t, rsp.User.Sessions, 2)
 
 			sessionMap := make(map[string]iam.SessionView, len(rsp.User.Sessions))

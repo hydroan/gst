@@ -55,7 +55,7 @@ type (
 
 // Admin session API aliases.
 type (
-	AdminSessionUserView   = modeliamsession.AdminSessionUserView
+	AdminSessionOwnerView  = modeliamsession.AdminSessionOwnerView
 	AdminSessionsListReq   = modeliamsession.AdminSessionsListReq
 	AdminSessionsListRsp   = modeliamsession.AdminSessionsListRsp
 	AdminSessionsGetReq    = modeliamsession.AdminSessionsGetReq

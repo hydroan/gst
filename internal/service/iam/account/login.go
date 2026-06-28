@@ -18,7 +18,6 @@ import (
 	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/util"
 	"github.com/mssola/useragent"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
@@ -138,10 +137,6 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		ID:                 sessionID,
 		UserID:             user.ID,
 		Username:           user.Username,
-		Email:              util.Deref(user.Email),
-		Status:             string(user.Status),
-		FirstName:          user.FirstName,
-		LastName:           user.LastName,
 		MustChangePassword: user.MustChangePassword,
 		ClientIP:           ctx.ClientIP(),
 		UserAgent:          ctx.UserAgent(),

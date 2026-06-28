@@ -115,8 +115,8 @@ func (s *AdminUserSessionsDeleteService) Delete(ctx *types.ServiceContext, req *
 // filters by user after loading each session snapshot. That keeps the online
 // path bounded by recently active sessions instead of scanning every session
 // owned by the target user.
-func buildAdminUserSessionsView(ctx *types.ServiceContext, user *modeliamuser.User, currentSessionID string, onlineSince time.Time, onlineOnly bool) (modeliamsession.AdminSessionUserView, error) {
-	view := modeliamsession.AdminSessionUserView{
+func buildAdminUserSessionsView(ctx *types.ServiceContext, user *modeliamuser.User, currentSessionID string, onlineSince time.Time, onlineOnly bool) (modeliamsession.AdminSessionOwnerView, error) {
+	view := modeliamsession.AdminSessionOwnerView{
 		UserID:             user.ID,
 		Username:           user.Username,
 		Email:              util.Deref(user.Email),
@@ -137,7 +137,7 @@ func buildAdminUserSessionsView(ctx *types.ServiceContext, user *modeliamuser.Us
 		sessionIDs, err = listUserSessionIDs(ctx, user.ID)
 	}
 	if err != nil {
-		return modeliamsession.AdminSessionUserView{}, err
+		return modeliamsession.AdminSessionOwnerView{}, err
 	}
 
 	cache := redis.Cache[modeliamsession.Session]().WithContext(ctx)
@@ -153,7 +153,7 @@ func buildAdminUserSessionsView(ctx *types.ServiceContext, user *modeliamuser.Us
 				removeStaleSessionIndexes(ctx, indexUserID, sessionID)
 				continue
 			}
-			return modeliamsession.AdminSessionUserView{}, getErr
+			return modeliamsession.AdminSessionOwnerView{}, getErr
 		}
 		if validateErr := ValidateActiveSession(sessionID, session); validateErr != nil {
 			_, _ = DeleteSession(ctx, sessionID)
@@ -180,8 +180,6 @@ func buildAdminUserSessionsView(ctx *types.ServiceContext, user *modeliamuser.Us
 		}
 		return left.After(right)
 	})
-
-	view.SessionTotal = int64(len(view.Sessions))
 
 	return view, nil
 }

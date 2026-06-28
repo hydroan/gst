@@ -44,11 +44,6 @@ type Session struct {
 
 	UserID   string `json:"user_id"`
 	Username string `json:"username"`
-	Email    string `json:"email"`
-	Status   string `json:"status"`
-
-	FirstName *string `json:"first_name,omitempty"`
-	LastName  *string `json:"last_name,omitempty"`
 
 	MustChangePassword bool `json:"must_change_password"`
 

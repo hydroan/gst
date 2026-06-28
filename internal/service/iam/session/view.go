@@ -14,15 +14,13 @@ func buildSessionView(session modeliamsession.Session, currentSessionID string) 
 	}
 	return modeliamsession.SessionView{
 		ID:          sessionID,
-		State:       session.State,
+		Status:      session.State,
 		IssuedAt:    session.IssuedAt,
 		LastSeenAt:  session.LastSeenAt,
 		ExpiresAt:   session.ExpiresAt,
 		ClientIP:    session.ClientIP,
-		UserAgent:   session.UserAgent,
 		Platform:    session.Platform,
 		OS:          session.OS,
-		EngineName:  session.EngineName,
 		BrowserName: session.BrowserName,
 		IsCurrent:   sessionID == currentSessionID,
 	}

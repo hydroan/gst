@@ -31,8 +31,8 @@ type AdminSessionsDeleteService struct {
 	service.Base[*model.Empty, *modeliamsession.AdminSessionsDeleteReq, *modeliamsession.AdminSessionsDeleteRsp]
 }
 
-type adminSessionUserItem struct {
-	view       modeliamsession.AdminSessionUserView
+type adminSessionOwnerItem struct {
+	view       modeliamsession.AdminSessionOwnerView
 	lastActive time.Time
 }
 
@@ -62,7 +62,7 @@ func (s *AdminSessionsListService) List(ctx *types.ServiceContext, req *modeliam
 	}
 
 	cache := redis.Cache[modeliamsession.Session]().WithContext(ctx)
-	users := make(map[string]*adminSessionUserItem, len(sessionIDs))
+	owners := make(map[string]*adminSessionOwnerItem, len(sessionIDs))
 	var sessionTotal int64
 	for i := range sessionIDs {
 		sessionID := sessionIDs[i]
@@ -87,19 +87,22 @@ func (s *AdminSessionsListService) List(ctx *types.ServiceContext, req *modeliam
 			continue
 		}
 
-		item, exists := users[session.UserID]
+		item, exists := owners[session.UserID]
 		if !exists {
-			item, err = buildAdminSessionUserItem(ctx, session)
+			var ok bool
+			item, ok, err = buildAdminSessionOwnerItem(ctx, session)
 			if err != nil {
-				log.Error("failed to build admin session user view", err)
+				log.Error("failed to build admin session owner view", err)
 				return nil, err
 			}
-			users[session.UserID] = item
+			if !ok {
+				continue
+			}
+			owners[session.UserID] = item
 		}
 
 		view := buildSessionView(session, "")
 		item.view.Sessions = append(item.view.Sessions, view)
-		item.view.SessionTotal++
 		sessionTotal++
 
 		activeAt := sessionViewActiveAt(view)
@@ -108,8 +111,8 @@ func (s *AdminSessionsListService) List(ctx *types.ServiceContext, req *modeliam
 		}
 	}
 
-	items := make([]adminSessionUserItem, 0, len(users))
-	for _, item := range users {
+	items := make([]adminSessionOwnerItem, 0, len(owners))
+	for _, item := range owners {
 		sort.Slice(item.view.Sessions, func(i, j int) bool {
 			left := sessionViewActiveAt(item.view.Sessions[i])
 			right := sessionViewActiveAt(item.view.Sessions[j])
@@ -128,7 +131,7 @@ func (s *AdminSessionsListService) List(ctx *types.ServiceContext, req *modeliam
 		return items[i].lastActive.After(items[j].lastActive)
 	})
 
-	rspItems := make([]modeliamsession.AdminSessionUserView, 0, len(items))
+	rspItems := make([]modeliamsession.AdminSessionOwnerView, 0, len(items))
 	for i := range items {
 		rspItems = append(rspItems, items[i].view)
 	}
@@ -223,28 +226,18 @@ func (s *AdminSessionsDeleteService) Delete(ctx *types.ServiceContext, req *mode
 	return &modeliamsession.AdminSessionsDeleteRsp{}, nil
 }
 
-func buildAdminSessionUserItem(ctx *types.ServiceContext, session modeliamsession.Session) (*adminSessionUserItem, error) {
+func buildAdminSessionOwnerItem(ctx *types.ServiceContext, session modeliamsession.Session) (*adminSessionOwnerItem, bool, error) {
 	user := new(modeliamuser.User)
 	if err := database.Database[*modeliamuser.User](ctx).Get(user, session.UserID); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
-			return &adminSessionUserItem{
-				view: modeliamsession.AdminSessionUserView{
-					UserID:             session.UserID,
-					Username:           session.Username,
-					Email:              session.Email,
-					FirstName:          session.FirstName,
-					LastName:           session.LastName,
-					Status:             session.Status,
-					MustChangePassword: session.MustChangePassword,
-					Sessions:           make([]modeliamsession.SessionView, 0, 1),
-				},
-			}, nil
+			_, _ = DeleteSession(ctx, session.ID)
+			return nil, false, nil
 		}
-		return nil, err
+		return nil, false, err
 	}
 
-	return &adminSessionUserItem{
-		view: modeliamsession.AdminSessionUserView{
+	return &adminSessionOwnerItem{
+		view: modeliamsession.AdminSessionOwnerView{
 			UserID:             user.ID,
 			Username:           user.Username,
 			Email:              util.Deref(user.Email),
@@ -254,5 +247,5 @@ func buildAdminSessionUserItem(ctx *types.ServiceContext, session modeliamsessio
 			MustChangePassword: user.MustChangePassword,
 			Sessions:           make([]modeliamsession.SessionView, 0, 1),
 		},
-	}, nil
+	}, true, nil
 }
