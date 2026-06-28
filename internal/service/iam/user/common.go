@@ -9,16 +9,7 @@ import (
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
 )
-
-// EnsureRootActor allows only the built-in root user to run privileged user operations.
-func EnsureRootActor(actor *modeliamuser.User) error {
-	if actor == nil || actor.GetID() != consts.AUTHZ_USER_ROOT {
-		return service.NewError(http.StatusForbidden, "root required")
-	}
-	return nil
-}
 
 // LoadActorAndTarget resolves the current actor from session context and loads the requested target user.
 func LoadActorAndTarget(ctx *types.ServiceContext, targetUserID string) (*modeliamuser.User, *modeliamuser.User, error) {

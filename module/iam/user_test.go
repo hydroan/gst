@@ -25,7 +25,7 @@ func TestUserStatusPatch(t *testing.T) {
 
 	victimSessionAfterEnable := ""
 
-	t.Run("forbidden_when_not_root", func(t *testing.T) {
+	t.Run("forbidden_without_admin_permission", func(t *testing.T) {
 		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), actor.SessionID)
 
 		_, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
@@ -33,7 +33,7 @@ func TestUserStatusPatch(t *testing.T) {
 		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "root required")
+		require.Contains(t, err.Error(), "permission denied")
 	})
 
 	t.Run("missing_target_returns_not_found", func(t *testing.T) {

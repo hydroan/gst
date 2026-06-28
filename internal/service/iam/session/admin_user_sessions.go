@@ -34,10 +34,6 @@ func (s *AdminUserSessionsListService) List(ctx *types.ServiceContext, req *mode
 		log.Error("failed to get current session", err)
 		return nil, err
 	}
-	if err = ensureAdminSessionActor(ctx); err != nil {
-		log.Error("failed to verify admin session actor", err)
-		return nil, err
-	}
 	onlineSince, onlineOnly, err := parseAdminSessionsOnlineSince(ctx)
 	if err != nil {
 		return nil, err
@@ -54,6 +50,10 @@ func (s *AdminUserSessionsListService) List(ctx *types.ServiceContext, req *mode
 			return nil, service.NewError(http.StatusNotFound, "user not found")
 		}
 		log.Error("failed to load target user", err)
+		return nil, err
+	}
+	if err = ensureAdminSessionTarget(ctx, user); err != nil {
+		log.Error("failed to verify admin session target", err)
 		return nil, err
 	}
 
@@ -77,10 +77,6 @@ func (s *AdminUserSessionsDeleteService) Delete(ctx *types.ServiceContext, req *
 		log.Error("failed to get current session", err)
 		return nil, err
 	}
-	if err = ensureAdminSessionActor(ctx); err != nil {
-		log.Error("failed to verify admin session actor", err)
-		return nil, err
-	}
 
 	targetUserID := ctx.Param("id")
 	if targetUserID == "" {
@@ -93,6 +89,10 @@ func (s *AdminUserSessionsDeleteService) Delete(ctx *types.ServiceContext, req *
 			return nil, service.NewError(http.StatusNotFound, "user not found")
 		}
 		log.Error("failed to load target user", err)
+		return nil, err
+	}
+	if err = ensureAdminSessionTarget(ctx, targetUser); err != nil {
+		log.Error("failed to verify admin session target", err)
 		return nil, err
 	}
 

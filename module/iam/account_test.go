@@ -287,7 +287,7 @@ func TestAccountChangePassword(t *testing.T) {
 		require.NotEmpty(t, user.SessionID)
 	})
 
-	t.Run("user_status_forbidden_with_new_session", func(t *testing.T) {
+	t.Run("user_status_forbidden_without_admin_permission", func(t *testing.T) {
 		cli := accountNewAuthenticatedClient(t, userStatusAPI(user.UserID), user.SessionID)
 
 		_, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
@@ -295,7 +295,7 @@ func TestAccountChangePassword(t *testing.T) {
 		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "root required")
+		require.Contains(t, err.Error(), "permission denied")
 	})
 }
 
@@ -310,7 +310,7 @@ func TestAccountResetPassword(t *testing.T) {
 	victimSessionBeforeReset := ""
 	victimSessionAfterReset := ""
 
-	t.Run("forbidden_when_not_root", func(t *testing.T) {
+	t.Run("forbidden_without_admin_permission", func(t *testing.T) {
 		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, actor.SessionID)
 
 		_, err := cli.Create(iam.ResetPasswordReq{
@@ -319,7 +319,7 @@ func TestAccountResetPassword(t *testing.T) {
 		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "root required")
+		require.Contains(t, err.Error(), "permission denied")
 	})
 
 	t.Run("victim_login_before_reset", func(t *testing.T) {
@@ -460,7 +460,7 @@ func TestAccountResetPassword(t *testing.T) {
 		})
 	})
 
-	t.Run("victim_account_status_forbidden_after_change_password", func(t *testing.T) {
+	t.Run("victim_account_status_forbidden_without_admin_permission_after_change_password", func(t *testing.T) {
 		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), victimSessionAfterReset)
 
 		_, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
@@ -468,7 +468,7 @@ func TestAccountResetPassword(t *testing.T) {
 		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "root required")
+		require.Contains(t, err.Error(), "permission denied")
 	})
 }
 

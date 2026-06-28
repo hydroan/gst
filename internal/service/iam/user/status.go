@@ -6,6 +6,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	"github.com/hydroan/gst/internal/service/iam/adminauth"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
@@ -36,7 +37,7 @@ func (s *UserStatusPatchService) Patch(ctx *types.ServiceContext, req *modeliamu
 		return nil, err
 	}
 
-	if err = EnsureRootActor(actor); err != nil {
+	if err = adminauth.EnsureTenantAdmin(ctx, actor, target); err != nil {
 		log.Error("user status change denied", err)
 		return nil, err
 	}

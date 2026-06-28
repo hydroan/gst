@@ -6,6 +6,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
+	"github.com/hydroan/gst/internal/service/iam/adminauth"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	serviceiamuser "github.com/hydroan/gst/internal/service/iam/user"
 	"github.com/hydroan/gst/model"
@@ -31,7 +32,7 @@ func (s *ResetPasswordService) Create(ctx *types.ServiceContext, req *modeliamac
 		return nil, err
 	}
 
-	if err = serviceiamuser.EnsureRootActor(actor); err != nil {
+	if err = adminauth.EnsureTenantAdmin(ctx, actor, target); err != nil {
 		log.Error("reset password denied", err)
 		return nil, err
 	}

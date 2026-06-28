@@ -36,6 +36,11 @@ var (
 	menuAPI        = testutil.URL(port, "/api/authz/menus")
 	roleAPI        = testutil.URL(port, "/api/authz/roles")
 	roleBindingAPI = testutil.URL(port, "/api/authz/role-bindings")
+
+	userAdminAPI = testutil.URL(port, "/api/iam/admin/users")
+
+	tenantHeader    = "X-Tenant-ID"
+	tenantUserAgent = "gst-authz-tenant-test"
 )
 
 type ListResponse[T any] struct {
@@ -63,7 +68,9 @@ func init() {
 			},
 		},
 	})
-	authz.Register()
+	authz.Register(authz.Config{
+		TenantResolver: authz.HeaderTenantResolver(tenantHeader),
+	})
 	if err := bootstrap.Bootstrap(); err != nil {
 		panic(err)
 	}
@@ -110,6 +117,29 @@ func TestAuthzRoutes(t *testing.T) {
 			requireRoute(t, rsp.Items, "/api/authz/menus", []string{http.MethodGet, http.MethodPost})
 			requireRoute(t, rsp.Items, "/api/authz/menus/{id}", []string{http.MethodGet, http.MethodPut, http.MethodPatch, http.MethodDelete})
 		})
+	})
+
+	t.Run("uses_header_tenant", func(t *testing.T) {
+		tenantA := authzTestUsername("tenant_routes_a")
+		tenantB := authzTestUsername("tenant_routes_b")
+		userID, userSessionID := authzSignupAndLoginUserWithUserAgent(t, authzTestUsername("tenant_routes_user"), "12345678", tenantUserAgent)
+		roleID := authzCreateTenantRole(t, tenantA, authzTestUsername("tenant_routes_role"))
+		authzBindTenantRole(t, tenantA, userID, roleID)
+		authzGrantTenantPolicy(t, tenantA, roleID, "/api/authz/routes", http.MethodGet)
+
+		cli, err := authzTenantClient(routesAPI, userSessionID, tenantA)
+		require.NoError(t, err)
+		resp, err := cli.Request(http.MethodGet, nil)
+		require.NoError(t, err)
+		testutil.TestResp(t, resp, func(t *testing.T, rsp authz.RoutesRsp) {
+			t.Helper()
+			requireRoute(t, rsp.Items, "/api/authz/routes", []string{http.MethodGet})
+		})
+
+		cli, err = authzTenantClient(routesAPI, userSessionID, tenantB)
+		require.NoError(t, err)
+		_, err = cli.Request(http.MethodGet, nil)
+		require.Error(t, err)
 	})
 }
 
@@ -349,6 +379,78 @@ func TestAuthzMenu(t *testing.T) {
 			testutil.TestResp[ListResponse[*authz.Menu]](t, resp, func(t *testing.T, rsp ListResponse[*authz.Menu]) {
 				t.Helper()
 				requireNoMenu(t, rsp.Items, defaultMenuID)
+			})
+		})
+
+		t.Run("list_uses_current_tenant_roles", func(t *testing.T) {
+			tenantA := authzTestUsername("tenant_menu_a")
+			tenantB := authzTestUsername("tenant_menu_b")
+			tenantUserID, tenantUserSessionID := authzSignupAndLoginUserWithUserAgent(t, authzTestUsername("tenant_menu_user"), "12345678", tenantUserAgent)
+			resp, err = cli.Create(&authz.Menu{
+				ParentID: "root",
+				Label:    "Tenant A Menu",
+				Path:     "/tenant-a-menu",
+				Routes: []authz.Route{
+					{Path: "/api/authz/menus", Methods: []string{http.MethodGet}},
+				},
+			})
+			require.NoError(t, err)
+			var tenantAMenuID string
+			testutil.TestResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
+				t.Helper()
+				require.NotEmpty(t, rsp.ID)
+				tenantAMenuID = rsp.ID
+			})
+			t.Cleanup(func() {
+				_, _ = cli.Delete(tenantAMenuID)
+			})
+
+			resp, err = cli.Create(&authz.Menu{
+				ParentID: "root",
+				Label:    "Tenant B Menu",
+				Path:     "/tenant-b-menu",
+				Routes: []authz.Route{
+					{Path: "/api/authz/menus", Methods: []string{http.MethodGet}},
+				},
+			})
+			require.NoError(t, err)
+			var tenantBMenuID string
+			testutil.TestResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
+				t.Helper()
+				require.NotEmpty(t, rsp.ID)
+				tenantBMenuID = rsp.ID
+			})
+			t.Cleanup(func() {
+				_, _ = cli.Delete(tenantBMenuID)
+			})
+
+			tenantARoleID := authzCreateTenantRole(t, tenantA, authzTestUsername("tenant_menu_a_role"), tenantAMenuID)
+			authzBindTenantRole(t, tenantA, tenantUserID, tenantARoleID)
+			tenantBRoleID := authzCreateTenantRole(t, tenantB, authzTestUsername("tenant_menu_b_role"), tenantBMenuID)
+			authzBindTenantRole(t, tenantB, tenantUserID, tenantBRoleID)
+
+			userMenuCli, err := authzTenantClient(menuAPI, tenantUserSessionID, tenantA)
+			require.NoError(t, err)
+			items := make([]*authz.Menu, 0)
+			total := new(int64)
+			resp, err = userMenuCli.List(&items, total)
+			require.NoError(t, err)
+			testutil.TestResp[ListResponse[*authz.Menu]](t, resp, func(t *testing.T, rsp ListResponse[*authz.Menu]) {
+				t.Helper()
+				requireMenu(t, rsp.Items, tenantAMenuID)
+				requireNoMenu(t, rsp.Items, tenantBMenuID)
+			})
+
+			userMenuCli, err = authzTenantClient(menuAPI, tenantUserSessionID, tenantB)
+			require.NoError(t, err)
+			items = make([]*authz.Menu, 0)
+			total = new(int64)
+			resp, err = userMenuCli.List(&items, total)
+			require.NoError(t, err)
+			testutil.TestResp[ListResponse[*authz.Menu]](t, resp, func(t *testing.T, rsp ListResponse[*authz.Menu]) {
+				t.Helper()
+				requireMenu(t, rsp.Items, tenantBMenuID)
+				requireNoMenu(t, rsp.Items, tenantAMenuID)
 			})
 		})
 	})
@@ -655,6 +757,39 @@ func TestAuthzRoleBinding(t *testing.T) {
 	})
 }
 
+func TestIAMUserStatusTenantAuthorization(t *testing.T) {
+	tenantA := authzTestUsername("tenant_iam_a")
+	tenantB := authzTestUsername("tenant_iam_b")
+	adminUserID, adminSessionID := authzSignupAndLoginUserWithUserAgent(t, authzTestUsername("tenant_iam_admin"), "12345678", tenantUserAgent)
+	targetTenantAUserID := authzSignupUser(t, authzTestUsername("tenant_iam_target_a"), "12345678")
+	targetTenantBUserID := authzSignupUser(t, authzTestUsername("tenant_iam_target_b"), "12345678")
+
+	adminRoleID := authzCreateTenantRole(t, tenantA, authzTestUsername("tenant_iam_admin_role"))
+	authzBindTenantRole(t, tenantA, adminUserID, adminRoleID)
+	authzGrantTenantPolicy(t, tenantA, adminRoleID, "/api/iam/admin/users/{id}/status", http.MethodPatch)
+	tenantAMemberRoleID := authzCreateTenantRole(t, tenantA, authzTestUsername("tenant_iam_member_a_role"))
+	authzBindTenantRole(t, tenantA, targetTenantAUserID, tenantAMemberRoleID)
+	tenantBMemberRoleID := authzCreateTenantRole(t, tenantB, authzTestUsername("tenant_iam_member_b_role"))
+	authzBindTenantRole(t, tenantB, targetTenantBUserID, tenantBMemberRoleID)
+
+	cli, err := authzTenantClient(userAdminAPI, adminSessionID, tenantA)
+	require.NoError(t, err)
+	resp, err := cli.Patch(targetTenantAUserID+"/status", iam.UserStatusPatchReq{Status: iam.UserStatusActive})
+	require.NoError(t, err)
+	testutil.TestResp[iam.UserStatusPatchRsp](t, resp, func(t *testing.T, rsp iam.UserStatusPatchRsp) {
+		t.Helper()
+		require.NotEmpty(t, rsp.Msg)
+	})
+
+	_, err = cli.Patch(targetTenantBUserID+"/status", iam.UserStatusPatchReq{Status: iam.UserStatusActive})
+	require.Error(t, err)
+
+	cli, err = authzTenantClient(userAdminAPI, adminSessionID, tenantB)
+	require.NoError(t, err)
+	_, err = cli.Patch(targetTenantAUserID+"/status", iam.UserStatusPatchReq{Status: iam.UserStatusActive})
+	require.Error(t, err)
+}
+
 func authzAdminSessionID(t *testing.T) string {
 	t.Helper()
 
@@ -672,6 +807,17 @@ func authzSignupAndLoginUser(t *testing.T, username, password string) (string, s
 		Username: username,
 		Password: password,
 	})
+	return userID, sessionID
+}
+
+func authzSignupAndLoginUserWithUserAgent(t *testing.T, username, password, userAgent string) (string, string) {
+	t.Helper()
+
+	userID := authzSignupUser(t, username, password)
+	sessionID := loginSessionIDFromCookieWithUserAgent(t, iam.LoginReq{
+		Username: username,
+		Password: password,
+	}, userAgent)
 	return userID, sessionID
 }
 
@@ -705,7 +851,17 @@ func authzTestUsername(prefix string) string {
 func loginSessionIDFromCookie(t *testing.T, reqPayload iam.LoginReq) string {
 	t.Helper()
 
-	cli, err := client.New(loginAPI)
+	return loginSessionIDFromCookieWithUserAgent(t, reqPayload, "")
+}
+
+func loginSessionIDFromCookieWithUserAgent(t *testing.T, reqPayload iam.LoginReq, userAgent string) string {
+	t.Helper()
+
+	options := make([]client.Option, 0, 1)
+	if userAgent != "" {
+		options = append(options, client.WithUserAgent(userAgent))
+	}
+	cli, err := client.New(loginAPI, options...)
 	require.NoError(t, err)
 
 	apiResp, err := cli.Create(reqPayload)
@@ -734,6 +890,57 @@ func loginSessionIDFromCookie(t *testing.T, reqPayload iam.LoginReq) string {
 	return ""
 }
 
+func authzTenantClient(api, sessionID, tenantID string) (*client.Client, error) {
+	return client.New(
+		api,
+		client.WithHeader(http.Header{
+			tenantHeader: []string{tenantID},
+		}),
+		client.WithUserAgent(tenantUserAgent),
+		client.WithCookie(&http.Cookie{
+			Name:  "session_id",
+			Value: sessionID,
+		}),
+	)
+}
+
+func authzCreateTenantRole(t *testing.T, tenantID, code string, menuIDs ...string) string {
+	t.Helper()
+
+	role := &authz.Role{
+		TenantID: tenantID,
+		Name:     code,
+		Code:     code,
+		MenuIDs:  menuIDs,
+	}
+	require.NoError(t, database.Database[*authz.Role](context.Background()).Create(role))
+	t.Cleanup(func() {
+		_ = database.Database[*authz.Role](context.Background()).WithPurge().Delete(role)
+	})
+	return role.ID
+}
+
+func authzBindTenantRole(t *testing.T, tenantID, subjectID, roleID string) {
+	t.Helper()
+
+	roleBinding := &authz.RoleBinding{
+		TenantID:  tenantID,
+		SubjectID: subjectID,
+		RoleID:    roleID,
+	}
+	require.NoError(t, database.Database[*authz.RoleBinding](context.Background()).Create(roleBinding))
+	t.Cleanup(func() {
+		_ = database.Database[*authz.RoleBinding](context.Background()).WithPurge().Delete(roleBinding)
+	})
+}
+
+func authzGrantTenantPolicy(t *testing.T, tenantID, roleID, object, action string) {
+	t.Helper()
+
+	_, err := rbac.Enforcer.AddPolicy(tenantID, roleID, object, action, "allow")
+	require.NoError(t, err)
+}
+
 func requireRoute(t *testing.T, routes []authz.Route, path string, methods []string) {
 	t.Helper()
 	for _, route := range routes {
@@ -743,6 +950,16 @@ func requireRoute(t *testing.T, routes []authz.Route, path string, methods []str
 		}
 	}
 	require.Failf(t, "route not found", "path: %s", path)
+}
+
+func requireMenu(t *testing.T, menus []*authz.Menu, menuID string) {
+	t.Helper()
+	for _, menu := range menus {
+		if menu.ID == menuID {
+			return
+		}
+	}
+	require.Failf(t, "menu not found", "menu_id: %s", menuID)
 }
 
 func requireNoMenu(t *testing.T, menus []*authz.Menu, menuID string) {

@@ -8,6 +8,7 @@ import (
 	"github.com/hydroan/gst/database"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	"github.com/hydroan/gst/internal/service/iam/adminauth"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
@@ -17,24 +18,39 @@ const adminSessionsOnlineWithinQuery = "online_within"
 
 // ensureAdminSessionActor verifies that the current session belongs to the built-in root user.
 func ensureAdminSessionActor(ctx *types.ServiceContext) error {
-	_, session, err := SessionManager.Current(ctx)
+	user, err := loadAdminSessionActor(ctx)
 	if err != nil {
 		return err
+	}
+	if user.GetID() == consts.AUTHZ_USER_ROOT {
+		return nil
+	}
+	return service.NewError(http.StatusForbidden, "forbidden")
+}
+
+func ensureAdminSessionTarget(ctx *types.ServiceContext, target *modeliamuser.User) error {
+	actor, err := loadAdminSessionActor(ctx)
+	if err != nil {
+		return err
+	}
+	return adminauth.EnsureTenantAdmin(ctx, actor, target)
+}
+
+func loadAdminSessionActor(ctx *types.ServiceContext) (*modeliamuser.User, error) {
+	_, session, err := SessionManager.Current(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	user := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx).Get(user, session.UserID); err != nil {
-		return service.NewError(http.StatusUnauthorized, "session invalid")
+		return nil, service.NewError(http.StatusUnauthorized, "session invalid")
 	}
 	if err = ensureSessionUserActive(user); err != nil {
-		return err
+		return nil, err
 	}
 
-	if session.UserID == consts.AUTHZ_USER_ROOT {
-		return nil
-	}
-
-	return service.NewError(http.StatusForbidden, "forbidden")
+	return user, nil
 }
 
 // parseAdminSessionsOnlineSince parses the admin-only online session window.
