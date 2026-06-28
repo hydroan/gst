@@ -2,6 +2,19 @@ package modeliamsession
 
 import "time"
 
+// AdminSessionUserView describes a user together with all indexed sessions owned by the user.
+type AdminSessionUserView struct {
+	UserID             string        `json:"user_id"`
+	Username           string        `json:"username"`
+	Email              string        `json:"email"`
+	FirstName          *string       `json:"first_name,omitempty"`
+	LastName           *string       `json:"last_name,omitempty"`
+	Status             string        `json:"status"`
+	MustChangePassword bool          `json:"must_change_password"`
+	SessionTotal       int64         `json:"session_total"`
+	Sessions           []SessionView `json:"sessions"`
+}
+
 // SessionView describes a session snapshot returned by session query endpoints.
 type SessionView struct {
 	ID          string        `json:"id"`
