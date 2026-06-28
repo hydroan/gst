@@ -24,6 +24,7 @@ func TestServiceContextContextMethods(t *testing.T) {
 	ctx.Set(consts.CTX_ROUTE, "/api/users/:id")
 	ctx.Set(consts.CTX_USERNAME, "admin")
 	ctx.Set(consts.CTX_USER_ID, "user-1")
+	ctx.Set(consts.CTX_TENANT_ID, "tenant-1")
 	ctx.Set(consts.TRACE_ID, "trace-1")
 
 	serviceCtx := NewServiceContext(ctx, nil, "")
@@ -31,6 +32,7 @@ func TestServiceContextContextMethods(t *testing.T) {
 
 	require.Equal(t, "admin", serviceCtx.Username())
 	require.Equal(t, "user-1", serviceCtx.UserID())
+	require.Equal(t, "tenant-1", serviceCtx.TenantID())
 	require.Equal(t, "trace-1", meta.TraceID())
 	require.Equal(t, "42", meta.Param("id"))
 	require.Equal(t, []string{"blue"}, meta.Query()["tag"])
@@ -76,6 +78,7 @@ func TestServiceContextRequestAccessors(t *testing.T) {
 	serviceCtx := NewServiceContext(ctx, nil, "")
 
 	require.Equal(t, http.MethodGet, serviceCtx.Method())
+	require.Equal(t, "/api/users", serviceCtx.Path())
 	require.Equal(t, "example.com", serviceCtx.Host())
 	require.True(t, serviceCtx.IsHTTPS())
 	require.Equal(t, "blue", serviceCtx.Query().Get("tag"))
@@ -89,6 +92,7 @@ func TestServiceContextNilRequest(t *testing.T) {
 	serviceCtx := NewServiceContext(ctx, nil, "")
 
 	require.Empty(t, serviceCtx.Method())
+	require.Empty(t, serviceCtx.Path())
 	require.Empty(t, serviceCtx.Host())
 	require.Empty(t, serviceCtx.ClientIP())
 	require.Empty(t, serviceCtx.UserAgent())

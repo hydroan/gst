@@ -8,8 +8,7 @@ import (
 
 // Profile stores the generic self-service profile data for an IAM user.
 type Profile struct {
-	UserID string `json:"user_id" schema:"user_id" gorm:"size:191;uniqueIndex;not null"`
-
+	UserID      string            `json:"user_id" schema:"user_id" gorm:"size:191;uniqueIndex;not null"`
 	DisplayName string            `json:"display_name,omitempty" schema:"display_name" gorm:"size:191"`
 	FirstName   string            `json:"first_name,omitempty" schema:"first_name" gorm:"size:191"`
 	LastName    string            `json:"last_name,omitempty" schema:"last_name" gorm:"size:191"`

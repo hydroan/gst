@@ -26,6 +26,7 @@ const (
 	CTX_USERNAME      = "username"
 	CTX_USER_ID       = "user_id"
 	CTX_SESSION_ID    = "session_id"
+	CTX_TENANT_ID     = "tenant_id"
 	CTX_REQUIRES_AUTH = "requires_auth"
 
 	DATE_TIME_LAYOUT = "2006-01-02 15:04:05"

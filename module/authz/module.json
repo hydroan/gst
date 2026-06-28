@@ -10,6 +10,10 @@
         "handler": "Authz"
       }
     ],
-    "postNotes": []
+    "postNotes": [
+      "Copy mode registers middleware.Authz() without arguments.",
+      "Set the project tenant source in project-owned initialization code with middleware.SetAuthzTenantResolver(...).",
+      "Use trusted tenant data such as session state, JWT claims, subdomain, or gateway-injected headers; do not trust arbitrary client headers as identity."
+    ]
   }
 }

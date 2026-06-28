@@ -15,6 +15,7 @@ type Metadata struct {
 	username  string
 	userID    string
 	sessionID string
+	tenantID  string
 	traceID   string
 	params    map[string]string
 	query     url.Values
@@ -26,6 +27,7 @@ type Fields struct {
 	Username  string
 	UserID    string
 	SessionID string
+	TenantID  string
 	TraceID   string
 	Params    map[string]string
 	Query     url.Values
@@ -38,6 +40,7 @@ func New(fields Fields) Metadata {
 		username:  fields.Username,
 		userID:    fields.UserID,
 		sessionID: fields.SessionID,
+		tenantID:  fields.TenantID,
 		traceID:   fields.TraceID,
 		params:    cloneStringMap(fields.Params),
 		query:     cloneURLValues(fields.Query),
@@ -65,6 +68,7 @@ func FromGin(c *gin.Context) Metadata {
 		Username:  c.GetString(consts.CTX_USERNAME),
 		UserID:    c.GetString(consts.CTX_USER_ID),
 		SessionID: c.GetString(consts.CTX_SESSION_ID),
+		TenantID:  c.GetString(consts.CTX_TENANT_ID),
 		TraceID:   c.GetString(consts.TRACE_ID),
 		Params:    params,
 		Query:     query,
@@ -75,6 +79,7 @@ func (m Metadata) Route() string     { return m.route }
 func (m Metadata) Username() string  { return m.username }
 func (m Metadata) UserID() string    { return m.userID }
 func (m Metadata) SessionID() string { return m.sessionID }
+func (m Metadata) TenantID() string  { return m.tenantID }
 func (m Metadata) TraceID() string   { return m.traceID }
 
 func (m Metadata) Param(key string) string {
@@ -100,6 +105,7 @@ func WithMetadata(ctx context.Context, meta Metadata) context.Context {
 		Username:  meta.Username(),
 		UserID:    meta.UserID(),
 		SessionID: meta.SessionID(),
+		TenantID:  meta.TenantID(),
 		TraceID:   meta.TraceID(),
 		Params:    meta.Params(),
 		Query:     meta.Query(),

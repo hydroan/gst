@@ -9,7 +9,7 @@ func init() {
 		DefaultUsers: []*iam.DefaultUser{
 			{
 				Username: "root",
-				Password: "toor", // gitguardian:ignore
+				Password: "abc123.com", // gitguardian:ignore
 			},
 		},
 	})

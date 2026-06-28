@@ -7,6 +7,11 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
+// Config is the configuration for authz module.
+type Config struct {
+	TenantResolver middleware.TenantResolver
+}
+
 // Register registers RBAC authorization modules and middleware.
 //
 // Modules:
@@ -37,13 +42,18 @@ import (
 //
 // Middleware:
 //   - Authz
-func Register() {
+func Register(config ...Config) {
+	cfg := Config{}
+	if len(config) > 0 {
+		cfg = config[0]
+	}
+
 	// Register CasbinRule explicitly because Casbin manages this table through
 	// the GORM adapter instead of a public CRUD module.
 	model.Register[*CasbinRule]()
 
 	// Register auth middleware before protected routes so auth handlers are attached deterministically.
-	middleware.RegisterAuth(middleware.Authz())
+	middleware.RegisterAuth(middleware.Authz(middleware.WithTenantResolver(cfg.TenantResolver)))
 
 	module.Use[
 		*Role,

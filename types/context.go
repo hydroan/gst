@@ -25,6 +25,7 @@ type ServiceContext struct {
 
 	request   *http.Request
 	method    string
+	path      string
 	clientIP  string
 	userAgent string
 
@@ -65,6 +66,9 @@ func NewServiceContext(c *gin.Context, ctx context.Context, phase consts.Phase) 
 	if c.Request != nil {
 		serviceCtx.request = c.Request
 		serviceCtx.method = c.Request.Method
+		if c.Request.URL != nil {
+			serviceCtx.path = c.Request.URL.Path
+		}
 		serviceCtx.clientIP = c.ClientIP()
 		serviceCtx.userAgent = c.Request.UserAgent()
 	}
@@ -105,12 +109,21 @@ func (sc *ServiceContext) Route() string             { return requestctx.FromCon
 func (sc *ServiceContext) Username() string          { return requestctx.FromContext(sc).Username() }
 func (sc *ServiceContext) UserID() string            { return requestctx.FromContext(sc).UserID() }
 func (sc *ServiceContext) SessionID() string         { return requestctx.FromContext(sc).SessionID() }
-func (sc *ServiceContext) TraceID() string           { return requestctx.FromContext(sc).TraceID() }
+
+func (sc *ServiceContext) TenantID() string { return requestctx.FromContext(sc).TenantID() }
+func (sc *ServiceContext) TraceID() string  { return requestctx.FromContext(sc).TraceID() }
 func (sc *ServiceContext) Method() string {
 	if sc == nil {
 		return ""
 	}
 	return sc.method
+}
+
+func (sc *ServiceContext) Path() string {
+	if sc == nil {
+		return ""
+	}
+	return sc.path
 }
 
 func (sc *ServiceContext) Host() string {

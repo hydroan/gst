@@ -23,6 +23,7 @@ func TestFromGinExtractsRequestFields(t *testing.T) {
 	ctx.Set(consts.CTX_USERNAME, "admin")
 	ctx.Set(consts.CTX_USER_ID, "user-1")
 	ctx.Set(consts.CTX_SESSION_ID, "session-1")
+	ctx.Set(consts.CTX_TENANT_ID, "tenant-1")
 	ctx.Set(consts.TRACE_ID, "trace-1")
 
 	meta := FromGin(ctx)
@@ -31,6 +32,7 @@ func TestFromGinExtractsRequestFields(t *testing.T) {
 	require.Equal(t, "admin", meta.Username())
 	require.Equal(t, "user-1", meta.UserID())
 	require.Equal(t, "session-1", meta.SessionID())
+	require.Equal(t, "tenant-1", meta.TenantID())
 	require.Equal(t, "trace-1", meta.TraceID())
 	require.Equal(t, "42", meta.Param("id"))
 	require.Equal(t, []string{"blue", "green"}, meta.Query()["tag"])
@@ -61,6 +63,7 @@ func TestMetadataContextRoundTrip(t *testing.T) {
 		Route:    "/api/users/:id",
 		Username: "admin",
 		UserID:   "user-1",
+		TenantID: "tenant-1",
 		TraceID:  "trace-1",
 		Params: map[string]string{
 			"id": "42",
@@ -76,6 +79,7 @@ func TestMetadataContextRoundTrip(t *testing.T) {
 	require.Equal(t, "/api/users/:id", got.Route())
 	require.Equal(t, "admin", got.Username())
 	require.Equal(t, "user-1", got.UserID())
+	require.Equal(t, "tenant-1", got.TenantID())
 	require.Equal(t, "trace-1", got.TraceID())
 	require.Equal(t, "42", got.Param("id"))
 	require.Equal(t, []string{"blue", "green"}, got.Query()["tag"])
