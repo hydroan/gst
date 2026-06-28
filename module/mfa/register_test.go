@@ -16,7 +16,6 @@ import (
 	"github.com/hydroan/gst/database"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/internal/testutil"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/module/mfa"
 	"github.com/hydroan/gst/types/consts"
@@ -536,8 +535,10 @@ func loginSessionIDFromCookie(t *testing.T, reqPayload iam.LoginReq) string {
 	apiResp, err := cli.Create(reqPayload)
 	require.NoError(t, err)
 
-	testutil.TestResp(t, apiResp, func(t *testing.T, rsp *model.Empty) {
+	testutil.TestResp(t, apiResp, func(t *testing.T, rsp iam.LoginRsp) {
 		t.Helper()
+		require.False(t, rsp.ServerTime.IsZero())
+		require.False(t, rsp.Session.ExpiresAt.IsZero())
 	})
 
 	var data map[string]json.RawMessage

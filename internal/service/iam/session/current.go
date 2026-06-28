@@ -2,6 +2,7 @@ package serviceiamsession
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/hydroan/gst/database"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
@@ -9,7 +10,6 @@ import (
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/util"
 )
 
 // CurrentGetService handles retrieval of the current authenticated session.
@@ -21,7 +21,7 @@ type CurrentGetService struct {
 func (s *CurrentGetService) Get(ctx *types.ServiceContext, req *modeliamsession.CurrentGetReq) (rsp *modeliamsession.CurrentGetRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
-	sessionID, session, err := GetCurrentSession(ctx)
+	_, session, err := GetCurrentSession(ctx)
 	if err != nil {
 		log.Error("failed to get current session", err)
 		return nil, err
@@ -36,15 +36,7 @@ func (s *CurrentGetService) Get(ctx *types.ServiceContext, req *modeliamsession.
 		return nil, err
 	}
 
-	return buildCurrentGetRsp(session, sessionID, &modeliamsession.CurrentPrincipal{
-		UserID:             user.ID,
-		Username:           user.Username,
-		Email:              util.Deref(user.Email),
-		FirstName:          user.FirstName,
-		LastName:           user.LastName,
-		Status:             string(user.Status),
-		MustChangePassword: user.MustChangePassword,
-	}), nil
+	return BuildAuthenticatedSessionRsp(session, user, time.Now()), nil
 }
 
 // CurrentDeleteService handles invalidation of the current authenticated session.
@@ -70,16 +62,4 @@ func (s *CurrentDeleteService) Delete(ctx *types.ServiceContext, req *modeliamse
 	ClearSessionCookie(ctx)
 
 	return &modeliamsession.CurrentDeleteRsp{}, nil
-}
-
-// buildCurrentGetRsp builds the API response for getting the current session from the stored session snapshot.
-func buildCurrentGetRsp(session modeliamsession.Session, fallbackSessionID string, principal *modeliamsession.CurrentPrincipal) *modeliamsession.CurrentGetRsp {
-	if principal == nil {
-		principal = &modeliamsession.CurrentPrincipal{}
-	}
-
-	return &modeliamsession.CurrentGetRsp{
-		Session:   buildSessionView(session, fallbackSessionID),
-		Principal: *principal,
-	}
 }

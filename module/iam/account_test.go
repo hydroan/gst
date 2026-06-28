@@ -131,6 +131,35 @@ func TestAccountLogin(t *testing.T) {
 		accountRequireUserSessionContains(t, user.UserID, user.SessionID)
 	})
 
+	t.Run("returns_authenticated_session", func(t *testing.T) {
+		user := accountSignupUser(t, "acct_login_response", "12345678")
+
+		cli, err := client.New(loginAPI)
+		require.NoError(t, err)
+
+		resp, err := cli.Create(iam.LoginReq{
+			Username: user.Username,
+			Password: user.Password,
+		})
+		require.NoError(t, err)
+
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.LoginRsp) {
+			t.Helper()
+
+			require.False(t, rsp.ServerTime.IsZero())
+			require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.State)
+			require.False(t, rsp.Session.IssuedAt.IsZero())
+			require.False(t, rsp.Session.LastSeenAt.IsZero())
+			require.False(t, rsp.Session.ExpiresAt.IsZero())
+			require.Positive(t, rsp.Session.ExpiresInSeconds)
+			require.True(t, rsp.Session.ExpiresAt.After(rsp.ServerTime))
+			require.Equal(t, user.UserID, rsp.Principal.UserID)
+			require.Equal(t, user.Username, rsp.Principal.Username)
+			require.Equal(t, string(modeliamuser.UserStatusActive), rsp.Principal.Status)
+			require.False(t, rsp.Principal.MustChangePassword)
+		})
+	})
+
 	t.Run("sets_session_cookie", func(t *testing.T) {
 		user := accountSignupUser(t, "acct_login_cookie", "12345678")
 		cookie := loginSessionCookie(t, user.Username, user.Password)

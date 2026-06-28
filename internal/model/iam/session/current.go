@@ -1,22 +1,25 @@
 package modeliamsession
 
-// CurrentGetReq is the request payload for getting the current session.
-type CurrentGetReq struct{}
+import "time"
 
-// CurrentGetRsp returns the current session together with the latest principal snapshot.
-type CurrentGetRsp struct {
-	Session   SessionView      `json:"session"`
-	Principal CurrentPrincipal `json:"principal"`
+// AuthenticatedSessionRsp returns the authenticated session timing contract and principal snapshot.
+type AuthenticatedSessionRsp struct {
+	ServerTime time.Time                `json:"server_time"`
+	Session    AuthenticatedSessionView `json:"session"`
+	Principal  PrincipalView            `json:"principal"`
 }
 
-// CurrentDeleteReq is the request payload for deleting the current session.
-type CurrentDeleteReq struct{}
+// AuthenticatedSessionView describes the current authenticated session without exposing its bearer session id.
+type AuthenticatedSessionView struct {
+	State            SessionStatus `json:"state"`
+	IssuedAt         time.Time     `json:"issued_at"`
+	LastSeenAt       time.Time     `json:"last_seen_at"`
+	ExpiresAt        time.Time     `json:"expires_at"`
+	ExpiresInSeconds int64         `json:"expires_in_seconds"`
+}
 
-// CurrentDeleteRsp is the response payload for deleting the current session.
-type CurrentDeleteRsp struct{}
-
-// CurrentPrincipal describes the authenticated principal bound to the current session.
-type CurrentPrincipal struct {
+// PrincipalView describes the authenticated principal bound to the current session.
+type PrincipalView struct {
 	UserID             string  `json:"user_id"`
 	Username           string  `json:"username"`
 	Email              string  `json:"email"`
@@ -25,3 +28,15 @@ type CurrentPrincipal struct {
 	Status             string  `json:"status"`
 	MustChangePassword bool    `json:"must_change_password"`
 }
+
+// CurrentGetReq is the request payload for getting the current session.
+type CurrentGetReq struct{}
+
+// CurrentGetRsp returns the current session together with the latest principal snapshot.
+type CurrentGetRsp = AuthenticatedSessionRsp
+
+// CurrentDeleteReq is the request payload for deleting the current session.
+type CurrentDeleteReq struct{}
+
+// CurrentDeleteRsp is the response payload for deleting the current session.
+type CurrentDeleteRsp struct{}

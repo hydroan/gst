@@ -14,7 +14,6 @@ import (
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/internal/testutil"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/types"
@@ -55,12 +54,17 @@ func TestCurrentSessionGet(t *testing.T) {
 
 		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.CurrentGetRsp) {
 			t.Helper()
+			require.False(t, rsp.ServerTime.IsZero())
 			require.NotEmpty(t, rsp.Principal.UserID)
 			require.Equal(t, account.Username, rsp.Principal.Username)
 			require.Equal(t, string(modeliamuser.UserStatusActive), rsp.Principal.Status)
 			require.False(t, rsp.Principal.MustChangePassword)
-			require.True(t, rsp.Session.IsCurrent)
-			require.Equal(t, sessionID, rsp.Session.ID)
+			require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.State)
+			require.False(t, rsp.Session.IssuedAt.IsZero())
+			require.False(t, rsp.Session.LastSeenAt.IsZero())
+			require.False(t, rsp.Session.ExpiresAt.IsZero())
+			require.Positive(t, rsp.Session.ExpiresInSeconds)
+			require.True(t, rsp.Session.ExpiresAt.After(rsp.ServerTime))
 		})
 	})
 
@@ -82,7 +86,8 @@ func TestCurrentSessionGet(t *testing.T) {
 
 		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.CurrentGetRsp) {
 			t.Helper()
-			require.Equal(t, sessionID, rsp.Session.ID)
+			require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.State)
+			require.False(t, rsp.Session.LastSeenAt.IsZero())
 		})
 
 		after := loadStoredSession(t, sessionID)
@@ -107,7 +112,8 @@ func TestCurrentSessionGet(t *testing.T) {
 		require.NoError(t, err)
 		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.CurrentGetRsp) {
 			t.Helper()
-			require.Equal(t, sessionID, rsp.Session.ID)
+			require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.State)
+			require.False(t, rsp.Session.LastSeenAt.IsZero())
 		})
 
 		after := loadStoredSession(t, sessionID)
@@ -1475,8 +1481,17 @@ func loginSessionIDFromCookie(t *testing.T, username, password string) string {
 	})
 	require.NoError(t, err)
 
-	testutil.TestResp(t, apiResp, func(t *testing.T, rsp *model.Empty) {
+	testutil.TestResp(t, apiResp, func(t *testing.T, rsp iam.LoginRsp) {
 		t.Helper()
+		require.False(t, rsp.ServerTime.IsZero())
+		require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.State)
+		require.False(t, rsp.Session.IssuedAt.IsZero())
+		require.False(t, rsp.Session.LastSeenAt.IsZero())
+		require.False(t, rsp.Session.ExpiresAt.IsZero())
+		require.Positive(t, rsp.Session.ExpiresInSeconds)
+		require.True(t, rsp.Session.ExpiresAt.After(rsp.ServerTime))
+		require.NotEmpty(t, rsp.Principal.UserID)
+		require.Equal(t, username, rsp.Principal.Username)
 	})
 
 	var data map[string]json.RawMessage

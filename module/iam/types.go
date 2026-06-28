@@ -9,6 +9,7 @@ import (
 // Account API aliases.
 type (
 	LoginReq  = modeliamaccount.LoginReq
+	LoginRsp  = modeliamaccount.LoginRsp
 	LogoutRsp = modeliamaccount.LogoutRsp
 	SignupReq = modeliamaccount.SignupReq
 	SignupRsp = modeliamaccount.SignupRsp
@@ -30,9 +31,12 @@ type (
 
 // Session API aliases.
 type (
-	Session     = modeliamsession.Session
-	SessionView = modeliamsession.SessionView
-	Token       = modeliamsession.Token
+	Session                  = modeliamsession.Session
+	SessionView              = modeliamsession.SessionView
+	AuthenticatedSessionRsp  = modeliamsession.AuthenticatedSessionRsp
+	AuthenticatedSessionView = modeliamsession.AuthenticatedSessionView
+	PrincipalView            = modeliamsession.PrincipalView
+	Token                    = modeliamsession.Token
 
 	CurrentGetReq    = modeliamsession.CurrentGetReq
 	CurrentGetRsp    = modeliamsession.CurrentGetRsp
