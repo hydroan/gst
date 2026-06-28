@@ -15,7 +15,7 @@ import (
 
 const adminSessionsOnlineWithinQuery = "online_within"
 
-// ensureAdminSessionActor verifies that the current session belongs to a privileged IAM actor.
+// ensureAdminSessionActor verifies that the current session belongs to the built-in root user.
 func ensureAdminSessionActor(ctx *types.ServiceContext) error {
 	_, session, err := SessionManager.Current(ctx)
 	if err != nil {
@@ -31,9 +31,6 @@ func ensureAdminSessionActor(ctx *types.ServiceContext) error {
 	}
 
 	if session.UserID == consts.AUTHZ_USER_ROOT {
-		return nil
-	}
-	if user.IsSuperuser != nil && *user.IsSuperuser {
 		return nil
 	}
 

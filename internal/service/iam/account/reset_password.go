@@ -25,13 +25,13 @@ func (s *ResetPasswordService) Create(ctx *types.ServiceContext, req *modeliamac
 		return nil, err
 	}
 
-	actor, target, err := serviceiamuser.LoadPrivilegedActorAndTarget(ctx, req.UserID)
+	actor, target, err := serviceiamuser.LoadActorAndTarget(ctx, req.UserID)
 	if err != nil {
 		log.Error("failed to resolve actor or target user", err)
 		return nil, err
 	}
 
-	if err = serviceiamuser.MayManageProtectedUser(actor, target); err != nil {
+	if err = serviceiamuser.EnsureRootActor(actor); err != nil {
 		log.Error("reset password denied", err)
 		return nil, err
 	}

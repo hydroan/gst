@@ -9,7 +9,10 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/module/iam"
+	"github.com/hydroan/gst/types/consts"
 )
+
+const rootPassword = "rootpass"
 
 var (
 	token = "-"
@@ -43,7 +46,15 @@ func init() {
 	os.Setenv(config.LOGGER_DIR, "./logs")
 	os.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)
 
-	iam.Register()
+	iam.Register(iam.Config{
+		DefaultUsers: []*iam.DefaultUser{
+			{
+				ID:       consts.AUTHZ_USER_ROOT,
+				Username: consts.AUTHZ_USER_ROOT,
+				Password: rootPassword,
+			},
+		},
+	})
 	if err := bootstrap.Bootstrap(); err != nil {
 		panic(err)
 	}

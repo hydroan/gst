@@ -18,8 +18,6 @@ type User struct {
 	Username string     `json:"username" gorm:"type:varchar(50);uniqueIndex;not null"`
 	Status   UserStatus `json:"status" gorm:"type:varchar(20);default:'active';index"`
 
-	IsSuperuser *bool `json:"is_superuser" gorm:"default:false"`
-
 	model.Base
 }
 

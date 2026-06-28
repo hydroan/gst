@@ -408,31 +408,9 @@ func TestSessionUserStateRefresh(t *testing.T) {
 func TestAdminSessionsList(t *testing.T) {
 	setupSessionRedisCleanup(t)
 
-	t.Run("root_username_without_root_user_id_forbidden", func(t *testing.T) {
-		account := newSessionTestAccount(t)
-		originalUsername := account.Username
-		userSetUsername(t, account.UserID, consts.AUTHZ_USER_ROOT)
-		t.Cleanup(func() {
-			userSetUsername(t, account.UserID, originalUsername)
-		})
-		sessionID := loginSession(t, consts.AUTHZ_USER_ROOT, account.Password)
-
-		cli, err := client.New(adminSessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
-		require.NoError(t, err)
-
-		items := make([]iam.AdminSessionOwnerView, 0)
-		total := new(int64)
-		_, err = cli.List(&items, total)
-		userRequireForbidden(t, err)
-	})
-
 	t.Run("list_all_sessions_grouped_by_user", func(t *testing.T) {
-		adminAccount := newSessionTestAccount(t)
-		sessionSetSuperuser(t, adminAccount.Username, true)
-		adminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
+		adminAccount := rootSessionTestAccount()
+		adminSessionID := sessionLoginRoot(t)
 
 		firstUser := newSessionTestAccount(t)
 		firstUserSessionID1 := loginSession(t, firstUser.Username, firstUser.Password)
@@ -493,9 +471,7 @@ func TestAdminSessionsList(t *testing.T) {
 	})
 
 	t.Run("list_online_sessions_within_window", func(t *testing.T) {
-		adminAccount := newSessionTestAccount(t)
-		sessionSetSuperuser(t, adminAccount.Username, true)
-		adminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
+		adminSessionID := sessionLoginRoot(t)
 
 		targetAccount := newSessionTestAccount(t)
 		recentSessionID := loginSession(t, targetAccount.Username, targetAccount.Password)
@@ -530,9 +506,7 @@ func TestAdminSessionsList(t *testing.T) {
 	})
 
 	t.Run("reject_invalid_online_within", func(t *testing.T) {
-		adminAccount := newSessionTestAccount(t)
-		sessionSetSuperuser(t, adminAccount.Username, true)
-		adminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
+		adminSessionID := sessionLoginRoot(t)
 
 		cli, err := client.New(adminSessionsAPI+"?online_within=bad", client.WithCookie(&http.Cookie{
 			Name:  "session_id",
@@ -560,11 +534,13 @@ func TestAdminSessionsList(t *testing.T) {
 		require.Contains(t, err.Error(), "403")
 	})
 
-	t.Run("forbidden_for_inactive_superuser", func(t *testing.T) {
-		adminAccount := newSessionTestAccount(t)
-		sessionSetSuperuser(t, adminAccount.Username, true)
-		adminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
+	t.Run("forbidden_for_inactive_root", func(t *testing.T) {
+		adminAccount := rootSessionTestAccount()
+		adminSessionID := sessionLoginRoot(t)
 		sessionSetUserStatus(t, adminAccount.Username, modeliamuser.UserStatusInactive)
+		t.Cleanup(func() {
+			sessionSetUserStatus(t, adminAccount.Username, modeliamuser.UserStatusActive)
+		})
 
 		cli, err := client.New(adminSessionsAPI, client.WithCookie(&http.Cookie{
 			Name:  "session_id",
@@ -578,11 +554,13 @@ func TestAdminSessionsList(t *testing.T) {
 		require.Contains(t, err.Error(), "account disabled")
 	})
 
-	t.Run("forbidden_for_locked_superuser", func(t *testing.T) {
-		adminAccount := newSessionTestAccount(t)
-		sessionSetSuperuser(t, adminAccount.Username, true)
-		adminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
+	t.Run("forbidden_for_locked_root", func(t *testing.T) {
+		adminAccount := rootSessionTestAccount()
+		adminSessionID := sessionLoginRoot(t)
 		sessionSetUserStatus(t, adminAccount.Username, modeliamuser.UserStatusLocked)
+		t.Cleanup(func() {
+			sessionSetUserStatus(t, adminAccount.Username, modeliamuser.UserStatusActive)
+		})
 
 		cli, err := client.New(adminSessionsAPI, client.WithCookie(&http.Cookie{
 			Name:  "session_id",
@@ -601,9 +579,7 @@ func TestAdminSessionsGet(t *testing.T) {
 	setupSessionRedisCleanup(t)
 
 	t.Run("get_other_user_session_detail", func(t *testing.T) {
-		adminAccount := newSessionTestAccount(t)
-		sessionSetSuperuser(t, adminAccount.Username, true)
-		adminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
+		adminSessionID := sessionLoginRoot(t)
 
 		targetAccount := newSessionTestAccount(t)
 		targetSessionID := loginSession(t, targetAccount.Username, targetAccount.Password)
@@ -645,9 +621,7 @@ func TestAdminSessionsGet(t *testing.T) {
 	})
 
 	t.Run("not_found_when_session_missing", func(t *testing.T) {
-		adminAccount := newSessionTestAccount(t)
-		sessionSetSuperuser(t, adminAccount.Username, true)
-		adminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
+		adminSessionID := sessionLoginRoot(t)
 
 		cli, err := client.New(adminSessionsAPI, client.WithCookie(&http.Cookie{
 			Name:  "session_id",
@@ -665,9 +639,7 @@ func TestAdminSessionsDelete(t *testing.T) {
 	setupSessionRedisCleanup(t)
 
 	t.Run("delete_other_user_session", func(t *testing.T) {
-		adminAccount := newSessionTestAccount(t)
-		sessionSetSuperuser(t, adminAccount.Username, true)
-		adminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
+		adminSessionID := sessionLoginRoot(t)
 
 		targetAccount := newSessionTestAccount(t)
 		targetSessionID := loginSession(t, targetAccount.Username, targetAccount.Password)
@@ -714,9 +686,7 @@ func TestAdminSessionsDelete(t *testing.T) {
 	})
 
 	t.Run("not_found_when_session_missing", func(t *testing.T) {
-		adminAccount := newSessionTestAccount(t)
-		sessionSetSuperuser(t, adminAccount.Username, true)
-		adminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
+		adminSessionID := sessionLoginRoot(t)
 
 		cli, err := client.New(adminSessionsAPI, client.WithCookie(&http.Cookie{
 			Name:  "session_id",
@@ -734,9 +704,7 @@ func TestAdminUserSessionsList(t *testing.T) {
 	setupSessionRedisCleanup(t)
 
 	t.Run("list_all_sessions_of_target_user", func(t *testing.T) {
-		adminAccount := newSessionTestAccount(t)
-		sessionSetSuperuser(t, adminAccount.Username, true)
-		adminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
+		adminSessionID := sessionLoginRoot(t)
 
 		targetAccount := newSessionTestAccount(t)
 		targetSessionID1 := loginSession(t, targetAccount.Username, targetAccount.Password)
@@ -771,9 +739,7 @@ func TestAdminUserSessionsList(t *testing.T) {
 	})
 
 	t.Run("list_online_sessions_within_window", func(t *testing.T) {
-		adminAccount := newSessionTestAccount(t)
-		sessionSetSuperuser(t, adminAccount.Username, true)
-		adminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
+		adminSessionID := sessionLoginRoot(t)
 
 		targetAccount := newSessionTestAccount(t)
 		recentSessionID := loginSession(t, targetAccount.Username, targetAccount.Password)
@@ -825,9 +791,7 @@ func TestAdminUserSessionsList(t *testing.T) {
 	})
 
 	t.Run("not_found_when_user_missing", func(t *testing.T) {
-		adminAccount := newSessionTestAccount(t)
-		sessionSetSuperuser(t, adminAccount.Username, true)
-		adminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
+		adminSessionID := sessionLoginRoot(t)
 
 		cli, err := client.New(
 			adminUserSessionsAPI("missing-user-id"),
@@ -844,9 +808,7 @@ func TestAdminUserSessionsList(t *testing.T) {
 	})
 
 	t.Run("list_target_user_with_no_sessions", func(t *testing.T) {
-		adminAccount := newSessionTestAccount(t)
-		sessionSetSuperuser(t, adminAccount.Username, true)
-		adminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
+		adminSessionID := sessionLoginRoot(t)
 
 		targetAccount := newSessionTestAccount(t)
 
@@ -870,9 +832,8 @@ func TestAdminUserSessionsList(t *testing.T) {
 	})
 
 	t.Run("mark_current_session_when_admin_views_self", func(t *testing.T) {
-		adminAccount := newSessionTestAccount(t)
-		sessionSetSuperuser(t, adminAccount.Username, true)
-		currentAdminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
+		adminAccount := rootSessionTestAccount()
+		currentAdminSessionID := sessionLoginRoot(t)
 		otherAdminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
 
 		cli, err := client.New(
@@ -905,9 +866,7 @@ func TestAdminUserSessionsDelete(t *testing.T) {
 	setupSessionRedisCleanup(t)
 
 	t.Run("delete_all_sessions_of_target_user", func(t *testing.T) {
-		adminAccount := newSessionTestAccount(t)
-		sessionSetSuperuser(t, adminAccount.Username, true)
-		adminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
+		adminSessionID := sessionLoginRoot(t)
 
 		targetAccount := newSessionTestAccount(t)
 		targetSessionID1 := loginSession(t, targetAccount.Username, targetAccount.Password)
@@ -967,9 +926,7 @@ func TestAdminUserSessionsDelete(t *testing.T) {
 	})
 
 	t.Run("not_found_when_user_missing", func(t *testing.T) {
-		adminAccount := newSessionTestAccount(t)
-		sessionSetSuperuser(t, adminAccount.Username, true)
-		adminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
+		adminSessionID := sessionLoginRoot(t)
 
 		cli, err := client.New(
 			adminUserSessionsAPI("missing-user-id"),
@@ -986,9 +943,7 @@ func TestAdminUserSessionsDelete(t *testing.T) {
 	})
 
 	t.Run("idempotent_when_target_user_has_no_sessions", func(t *testing.T) {
-		adminAccount := newSessionTestAccount(t)
-		sessionSetSuperuser(t, adminAccount.Username, true)
-		adminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
+		adminSessionID := sessionLoginRoot(t)
 
 		targetAccount := newSessionTestAccount(t)
 
@@ -1010,9 +965,8 @@ func TestAdminUserSessionsDelete(t *testing.T) {
 	})
 
 	t.Run("delete_all_sessions_of_current_admin", func(t *testing.T) {
-		adminAccount := newSessionTestAccount(t)
-		sessionSetSuperuser(t, adminAccount.Username, true)
-		currentAdminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
+		adminAccount := rootSessionTestAccount()
+		currentAdminSessionID := sessionLoginRoot(t)
 		otherAdminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
 
 		requireUserSessionContains(t, adminAccount.UserID, currentAdminSessionID)
@@ -1398,17 +1352,6 @@ func requireAllSessionNotContains(t *testing.T, sessionID string) {
 	require.NotContains(t, sessionIDs, sessionID)
 }
 
-func sessionSetSuperuser(t *testing.T, username string, enabled bool) {
-	t.Helper()
-
-	users := make([]*iam.User, 0)
-	require.NoError(t, database.Database[*iam.User](context.Background()).WithLimit(1).WithQuery(&iam.User{Username: username}).List(&users))
-	require.Len(t, users, 1)
-
-	users[0].IsSuperuser = &enabled
-	require.NoError(t, database.Database[*iam.User](context.Background()).Update(users[0]))
-}
-
 func sessionSetUserStatus(t *testing.T, username string, status modeliamuser.UserStatus) {
 	t.Helper()
 
@@ -1418,6 +1361,14 @@ func sessionSetUserStatus(t *testing.T, username string, status modeliamuser.Use
 
 	users[0].Status = status
 	require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect("username", "status").Update(users[0]))
+}
+
+func rootSessionTestAccount() sessionTestAccount {
+	return sessionTestAccount{
+		UserID:   consts.AUTHZ_USER_ROOT,
+		Username: consts.AUTHZ_USER_ROOT,
+		Password: rootPassword,
+	}
 }
 
 func newSessionTestAccount(t *testing.T) sessionTestAccount {
@@ -1455,6 +1406,16 @@ func loginSession(t *testing.T, username, password string) string {
 	t.Helper()
 
 	return loginSessionIDFromCookie(t, username, password)
+}
+
+func sessionLoginRoot(t *testing.T) string {
+	t.Helper()
+
+	sessionID := loginSession(t, consts.AUTHZ_USER_ROOT, rootPassword)
+	t.Cleanup(func() {
+		serviceiamsession.InvalidateUserSessions(context.Background(), consts.AUTHZ_USER_ROOT)
+	})
+	return sessionID
 }
 
 func loginSessionIDFromCookie(t *testing.T, username, password string) string {
@@ -1497,29 +1458,4 @@ func loginSessionIDFromCookie(t *testing.T, username, password string) string {
 
 	require.FailNow(t, "session cookie not found")
 	return ""
-}
-
-func userSetUsername(t *testing.T, userID, username string) {
-	t.Helper()
-
-	user := userLoadByID(t, userID)
-	user.Username = username
-	require.NoError(t, database.Database[*iam.User](context.Background()).WithSelect("username").Update(user))
-}
-
-func userLoadByID(t *testing.T, userID string) *iam.User {
-	t.Helper()
-
-	user := new(iam.User)
-	require.NoError(t, database.Database[*iam.User](context.Background()).Get(user, userID))
-	require.NotEmpty(t, user.ID)
-	return user
-}
-
-func userRequireForbidden(t *testing.T, err error) {
-	t.Helper()
-
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "403")
-	require.Contains(t, err.Error(), `"code":-1`)
 }

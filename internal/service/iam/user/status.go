@@ -30,13 +30,13 @@ func (s *UserStatusPatchService) Patch(ctx *types.ServiceContext, req *modeliamu
 		return nil, errors.New("invalid status: must be active, inactive, or locked")
 	}
 
-	actor, target, err := LoadPrivilegedActorAndTarget(ctx, targetUserID)
+	actor, target, err := LoadActorAndTarget(ctx, targetUserID)
 	if err != nil {
 		log.Error("failed to resolve actor or target user", err)
 		return nil, err
 	}
 
-	if err = MayManageProtectedUser(actor, target); err != nil {
+	if err = EnsureRootActor(actor); err != nil {
 		log.Error("user status change denied", err)
 		return nil, err
 	}

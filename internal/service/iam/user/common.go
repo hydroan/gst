@@ -12,21 +12,16 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
-// MayManageProtectedUser allows privileged actors to act on another user; superuser targets require root.
-func MayManageProtectedUser(actor, target *modeliamuser.User) error {
-	if !privilegedActor(actor) {
-		return service.NewError(http.StatusForbidden, "superuser required")
-	}
-	if target.IsSuperuser != nil && *target.IsSuperuser {
-		if actor.GetID() != consts.AUTHZ_USER_ROOT {
-			return service.NewError(http.StatusForbidden, "superuser is protected")
-		}
+// EnsureRootActor allows only the built-in root user to run privileged user operations.
+func EnsureRootActor(actor *modeliamuser.User) error {
+	if actor == nil || actor.GetID() != consts.AUTHZ_USER_ROOT {
+		return service.NewError(http.StatusForbidden, "root required")
 	}
 	return nil
 }
 
-// LoadPrivilegedActorAndTarget resolves the current actor from session context and loads the requested target user.
-func LoadPrivilegedActorAndTarget(ctx *types.ServiceContext, targetUserID string) (*modeliamuser.User, *modeliamuser.User, error) {
+// LoadActorAndTarget resolves the current actor from session context and loads the requested target user.
+func LoadActorAndTarget(ctx *types.ServiceContext, targetUserID string) (*modeliamuser.User, *modeliamuser.User, error) {
 	_, session, err := serviceiamsession.SessionManager.Current(ctx)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "invalid session")
@@ -52,14 +47,6 @@ func LoadPrivilegedActorAndTarget(ctx *types.ServiceContext, targetUserID string
 	}
 
 	return actor, target, nil
-}
-
-// privilegedActor reports whether the actor can manage privileged user operations.
-func privilegedActor(actor *modeliamuser.User) bool {
-	if actor.GetID() == consts.AUTHZ_USER_ROOT {
-		return true
-	}
-	return actor.IsSuperuser != nil && *actor.IsSuperuser
 }
 
 // shouldInvalidateUserSessions returns whether a user status transition must revoke all active sessions.

@@ -17,6 +17,7 @@ import (
 func TestUserStatusPatch(t *testing.T) {
 	actor := accountSignupUser(t, "user_status_actor", "12345678")
 	actor.SessionID = accountLoginUser(t, &actor, actor.Password)
+	rootSessionID := accountLoginRoot(t)
 
 	victim := accountSignupUser(t, "user_status_victim", "acctpass11")
 	victim.SessionID = accountLoginUser(t, &victim, victim.Password)
@@ -24,7 +25,7 @@ func TestUserStatusPatch(t *testing.T) {
 
 	victimSessionAfterEnable := ""
 
-	t.Run("forbidden_when_not_superuser", func(t *testing.T) {
+	t.Run("forbidden_when_not_root", func(t *testing.T) {
 		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), actor.SessionID)
 
 		_, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
@@ -32,15 +33,11 @@ func TestUserStatusPatch(t *testing.T) {
 		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "superuser required")
-	})
-
-	t.Run("promote_actor_superuser", func(t *testing.T) {
-		accountSetSuperuser(t, actor.Username, true)
+		require.Contains(t, err.Error(), "root required")
 	})
 
 	t.Run("missing_target_returns_not_found", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, userStatusAPI("missing-user-status-target"), actor.SessionID)
+		cli := accountNewAuthenticatedClient(t, userStatusAPI("missing-user-status-target"), rootSessionID)
 
 		_, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusInactive,
@@ -50,22 +47,8 @@ func TestUserStatusPatch(t *testing.T) {
 		require.Contains(t, err.Error(), "user not found")
 	})
 
-	t.Run("superuser_target_is_protected", func(t *testing.T) {
-		protected := accountSignupUser(t, "user_status_protected", "12345678")
-		accountSetSuperuser(t, protected.Username, true)
-
-		cli := accountNewAuthenticatedClient(t, userStatusAPI(protected.UserID), actor.SessionID)
-
-		_, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
-			Status: modeliamuser.UserStatusInactive,
-		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "superuser is protected")
-	})
-
 	t.Run("disable_user", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), actor.SessionID)
+		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), rootSessionID)
 
 		resp, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusInactive,
@@ -90,7 +73,7 @@ func TestUserStatusPatch(t *testing.T) {
 	})
 
 	t.Run("inactive_already_inactive_unchanged_still_ok", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), actor.SessionID)
+		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), rootSessionID)
 
 		resp, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusInactive,
@@ -118,7 +101,7 @@ func TestUserStatusPatch(t *testing.T) {
 	})
 
 	t.Run("enable_user", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), actor.SessionID)
+		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), rootSessionID)
 
 		resp, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusActive,
@@ -179,7 +162,7 @@ func TestUserStatusPatch(t *testing.T) {
 	})
 
 	t.Run("invalid_status_rejected", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), actor.SessionID)
+		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), rootSessionID)
 
 		_, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatus("not-a-valid-status"),
@@ -189,7 +172,7 @@ func TestUserStatusPatch(t *testing.T) {
 	})
 
 	t.Run("lock_user", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), actor.SessionID)
+		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), rootSessionID)
 
 		resp, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusLocked,
@@ -228,7 +211,7 @@ func TestUserStatusPatch(t *testing.T) {
 	})
 
 	t.Run("unlock_user", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), actor.SessionID)
+		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), rootSessionID)
 
 		resp, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusActive,
@@ -242,7 +225,7 @@ func TestUserStatusPatch(t *testing.T) {
 	})
 
 	t.Run("status_unchanged_idempotent", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), actor.SessionID)
+		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), rootSessionID)
 
 		resp, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusActive,
@@ -253,10 +236,6 @@ func TestUserStatusPatch(t *testing.T) {
 			t.Helper()
 			require.Contains(t, rsp.Msg, "unchanged")
 		})
-	})
-
-	t.Run("demote_actor_superuser", func(t *testing.T) {
-		accountSetSuperuser(t, actor.Username, false)
 	})
 }
 

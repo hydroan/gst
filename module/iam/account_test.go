@@ -287,7 +287,7 @@ func TestAccountChangePassword(t *testing.T) {
 		require.NotEmpty(t, user.SessionID)
 	})
 
-	t.Run("account_status_forbidden_with_new_session", func(t *testing.T) {
+	t.Run("user_status_forbidden_with_new_session", func(t *testing.T) {
 		cli := accountNewAuthenticatedClient(t, userStatusAPI(user.UserID), user.SessionID)
 
 		_, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
@@ -295,13 +295,14 @@ func TestAccountChangePassword(t *testing.T) {
 		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "superuser required")
+		require.Contains(t, err.Error(), "root required")
 	})
 }
 
 func TestAccountResetPassword(t *testing.T) {
 	actor := accountSignupUser(t, "acct_reset_actor", "12345678")
 	actor.SessionID = accountLoginUser(t, &actor, actor.Password)
+	rootSessionID := accountLoginRoot(t)
 
 	victim := accountSignupUser(t, "acct_reset_victim", "87654321")
 	resetPass := "resetpass9"
@@ -309,7 +310,7 @@ func TestAccountResetPassword(t *testing.T) {
 	victimSessionBeforeReset := ""
 	victimSessionAfterReset := ""
 
-	t.Run("forbidden_when_not_superuser", func(t *testing.T) {
+	t.Run("forbidden_when_not_root", func(t *testing.T) {
 		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, actor.SessionID)
 
 		_, err := cli.Create(iam.ResetPasswordReq{
@@ -318,7 +319,7 @@ func TestAccountResetPassword(t *testing.T) {
 		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "superuser required")
+		require.Contains(t, err.Error(), "root required")
 	})
 
 	t.Run("victim_login_before_reset", func(t *testing.T) {
@@ -327,12 +328,8 @@ func TestAccountResetPassword(t *testing.T) {
 		accountRequireUserSessionContains(t, victim.UserID, victimSessionBeforeReset)
 	})
 
-	t.Run("promote_actor_superuser", func(t *testing.T) {
-		accountSetSuperuser(t, actor.Username, true)
-	})
-
 	t.Run("rejects_empty_target_user_id", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, actor.SessionID)
+		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, rootSessionID)
 
 		_, err := cli.Create(iam.ResetPasswordReq{
 			UserID:      "",
@@ -345,7 +342,7 @@ func TestAccountResetPassword(t *testing.T) {
 	t.Run("rejects_empty_new_password", func(t *testing.T) {
 		invalidVictim := accountSignupUser(t, "acct_reset_empty_new", "87654321")
 
-		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, actor.SessionID)
+		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, rootSessionID)
 
 		_, err := cli.Create(iam.ResetPasswordReq{
 			UserID:      invalidVictim.UserID,
@@ -358,7 +355,7 @@ func TestAccountResetPassword(t *testing.T) {
 	t.Run("rejects_short_new_password", func(t *testing.T) {
 		invalidVictim := accountSignupUser(t, "acct_reset_short_new", "87654321")
 
-		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, actor.SessionID)
+		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, rootSessionID)
 
 		_, err := cli.Create(iam.ResetPasswordReq{
 			UserID:      invalidVictim.UserID,
@@ -369,7 +366,7 @@ func TestAccountResetPassword(t *testing.T) {
 	})
 
 	t.Run("missing_target_returns_not_found", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, actor.SessionID)
+		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, rootSessionID)
 
 		_, err := cli.Create(iam.ResetPasswordReq{
 			UserID:      "missing-reset-password-target",
@@ -380,24 +377,7 @@ func TestAccountResetPassword(t *testing.T) {
 		require.Contains(t, err.Error(), "user not found")
 	})
 
-	t.Run("superuser_target_is_protected", func(t *testing.T) {
-		protected := accountSignupUser(t, "acct_reset_protected", "12345678")
-		accountSetSuperuser(t, protected.Username, true)
-
-		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, actor.SessionID)
-
-		_, err := cli.Create(iam.ResetPasswordReq{
-			UserID:      protected.UserID,
-			NewPassword: resetPass,
-		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "superuser is protected")
-	})
-
 	t.Run("returns_error_when_session_revoke_fails", func(t *testing.T) {
-		accountSetSuperuser(t, actor.Username, true)
-
 		brokenIndexVictim := accountSignupUser(t, "acct_reset_broken_index", "87654321")
 		brokenSessionID := accountLoginUser(t, &brokenIndexVictim, brokenIndexVictim.Password)
 
@@ -412,7 +392,7 @@ func TestAccountResetPassword(t *testing.T) {
 		require.NoError(t, redis.Del(t.Context(), userSessionKey))
 		require.NoError(t, redis.Set(t.Context(), userSessionKey, "not-a-zset", time.Hour))
 
-		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, actor.SessionID)
+		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, rootSessionID)
 
 		_, err := cli.Create(iam.ResetPasswordReq{
 			UserID:      brokenIndexVictim.UserID,
@@ -424,7 +404,7 @@ func TestAccountResetPassword(t *testing.T) {
 	})
 
 	t.Run("reset_success", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, actor.SessionID)
+		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, rootSessionID)
 
 		resp, err := cli.Create(iam.ResetPasswordReq{
 			UserID:      victim.UserID,
@@ -488,11 +468,7 @@ func TestAccountResetPassword(t *testing.T) {
 		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "superuser required")
-	})
-
-	t.Run("demote_actor_superuser", func(t *testing.T) {
-		accountSetSuperuser(t, actor.Username, false)
+		require.Contains(t, err.Error(), "root required")
 	})
 }
 
@@ -606,6 +582,16 @@ func accountLoginUser(t *testing.T, user *accountTestUser, password string) stri
 	return accountLoginSessionCookie(t, user.Username, password).Value
 }
 
+func accountLoginRoot(t *testing.T) string {
+	t.Helper()
+
+	sessionID := accountLoginSessionCookie(t, consts.AUTHZ_USER_ROOT, rootPassword).Value
+	t.Cleanup(func() {
+		serviceiamsession.InvalidateUserSessions(context.Background(), consts.AUTHZ_USER_ROOT)
+	})
+	return sessionID
+}
+
 func accountLoginSessionCookie(t *testing.T, username, password string) *http.Cookie {
 	t.Helper()
 
@@ -684,15 +670,4 @@ func accountRequireUserSessionNotContains(t *testing.T, userID, sessionID string
 	userSessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionUserKey(userID), 0, -1)
 	require.NoError(t, err)
 	require.NotContains(t, userSessionIDs, sessionID)
-}
-
-func accountSetSuperuser(t *testing.T, username string, enabled bool) {
-	t.Helper()
-
-	actors := make([]*iam.User, 0)
-	require.NoError(t, database.Database[*iam.User](context.Background()).WithLimit(1).WithQuery(&iam.User{Username: username}).List(&actors))
-	require.Len(t, actors, 1)
-
-	actors[0].IsSuperuser = &enabled
-	require.NoError(t, database.Database[*iam.User](context.Background()).Update(actors[0]))
 }
