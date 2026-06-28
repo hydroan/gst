@@ -189,7 +189,7 @@ func (UserPatchService) Patch(ctx *types.ServiceContext, req *modeliamuser.UserP
 }
 
 func userResourceActor(ctx *types.ServiceContext) (string, *modeliamuser.User, error) {
-	_, session, err := serviceiamsession.GetCurrentSession(ctx)
+	_, session, err := serviceiamsession.SessionManager.Current(ctx)
 	if err != nil {
 		return "", nil, err
 	}

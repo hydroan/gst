@@ -79,8 +79,8 @@ func (s *AdminSessionsListService) List(ctx *types.ServiceContext, req *modeliam
 			log.Error("failed to load session from redis", getErr)
 			return nil, getErr
 		}
-		if validateErr := ValidateActiveSession(sessionID, session); validateErr != nil {
-			_, _ = DeleteSession(ctx, sessionID)
+		if validateErr := SessionManager.Validate(sessionID, session); validateErr != nil {
+			_, _ = SessionManager.Delete(ctx, sessionID)
 			continue
 		}
 		if onlineOnly && !sessionSeenSince(session, onlineSince) {
@@ -90,7 +90,7 @@ func (s *AdminSessionsListService) List(ctx *types.ServiceContext, req *modeliam
 		item, exists := owners[session.UserID]
 		if !exists {
 			var ok bool
-			item, ok, err = buildAdminSessionOwnerItem(ctx, session)
+			item, ok, err = s.buildItem(ctx, session)
 			if err != nil {
 				log.Error("failed to build admin session owner view", err)
 				return nil, err
@@ -147,7 +147,7 @@ func (s *AdminSessionsListService) List(ctx *types.ServiceContext, req *modeliam
 func (s *AdminSessionsGetService) Get(ctx *types.ServiceContext, req *modeliamsession.AdminSessionsGetReq) (rsp *modeliamsession.AdminSessionsGetRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
-	currentSessionID, _, err := GetCurrentSession(ctx)
+	currentSessionID, _, err := SessionManager.Current(ctx)
 	if err != nil {
 		log.Error("failed to get current session", err)
 		return nil, err
@@ -170,8 +170,8 @@ func (s *AdminSessionsGetService) Get(ctx *types.ServiceContext, req *modeliamse
 		log.Error("failed to load target session", err)
 		return nil, err
 	}
-	if err = ValidateActiveSession(targetSessionID, targetSession); err != nil {
-		_, _ = DeleteSession(ctx, targetSessionID)
+	if err = SessionManager.Validate(targetSessionID, targetSession); err != nil {
+		_, _ = SessionManager.Delete(ctx, targetSessionID)
 		return nil, service.NewError(http.StatusNotFound, "session not found")
 	}
 
@@ -184,7 +184,7 @@ func (s *AdminSessionsGetService) Get(ctx *types.ServiceContext, req *modeliamse
 func (s *AdminSessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.AdminSessionsDeleteReq) (rsp *modeliamsession.AdminSessionsDeleteRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
-	currentSessionID, _, err := GetCurrentSession(ctx)
+	currentSessionID, _, err := SessionManager.Current(ctx)
 	if err != nil {
 		log.Error("failed to get current session", err)
 		return nil, err
@@ -207,12 +207,12 @@ func (s *AdminSessionsDeleteService) Delete(ctx *types.ServiceContext, req *mode
 		log.Error("failed to load target session", err)
 		return nil, err
 	}
-	if err = ValidateActiveSession(targetSessionID, targetSession); err != nil {
-		_, _ = DeleteSession(ctx, targetSessionID)
+	if err = SessionManager.Validate(targetSessionID, targetSession); err != nil {
+		_, _ = SessionManager.Delete(ctx, targetSessionID)
 		return nil, service.NewError(http.StatusNotFound, "session not found")
 	}
 
-	if _, err = DeleteSession(ctx, targetSessionID); err != nil {
+	if _, err = SessionManager.Delete(ctx, targetSessionID); err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
 			return nil, service.NewError(http.StatusNotFound, "session not found")
 		}
@@ -220,17 +220,17 @@ func (s *AdminSessionsDeleteService) Delete(ctx *types.ServiceContext, req *mode
 		return nil, err
 	}
 	if targetSessionID == currentSessionID {
-		ClearSessionCookie(ctx)
+		SessionManager.ClearCookie(ctx)
 	}
 
 	return &modeliamsession.AdminSessionsDeleteRsp{}, nil
 }
 
-func buildAdminSessionOwnerItem(ctx *types.ServiceContext, session modeliamsession.Session) (*adminSessionOwnerItem, bool, error) {
+func (s *AdminSessionsListService) buildItem(ctx *types.ServiceContext, session modeliamsession.Session) (*adminSessionOwnerItem, bool, error) {
 	user := new(modeliamuser.User)
 	if err := database.Database[*modeliamuser.User](ctx).Get(user, session.UserID); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
-			_, _ = DeleteSession(ctx, session.ID)
+			_, _ = SessionManager.Delete(ctx, session.ID)
 			return nil, false, nil
 		}
 		return nil, false, err

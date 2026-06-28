@@ -15,13 +15,13 @@ func BuildAuthenticatedSessionRsp(session modeliamsession.Session, user *modelia
 	}
 	return &modeliamsession.AuthenticatedSessionRsp{
 		ServerTime: now,
-		Session:    BuildAuthenticatedSessionView(session, now),
-		Principal:  BuildPrincipalView(user),
+		Session:    buildAuthenticatedSessionView(session, now),
+		Principal:  buildPrincipalView(user),
 	}
 }
 
-// BuildAuthenticatedSessionView builds a session timing view without exposing the bearer session id.
-func BuildAuthenticatedSessionView(session modeliamsession.Session, now time.Time) modeliamsession.AuthenticatedSessionView {
+// buildAuthenticatedSessionView builds a session timing view without exposing the bearer session id.
+func buildAuthenticatedSessionView(session modeliamsession.Session, now time.Time) modeliamsession.AuthenticatedSessionView {
 	if now.IsZero() {
 		now = time.Now()
 	}
@@ -41,8 +41,8 @@ func BuildAuthenticatedSessionView(session modeliamsession.Session, now time.Tim
 	}
 }
 
-// BuildPrincipalView builds the principal snapshot returned by authentication state APIs.
-func BuildPrincipalView(user *modeliamuser.User) modeliamsession.PrincipalView {
+// buildPrincipalView builds the principal snapshot returned by authentication state APIs.
+func buildPrincipalView(user *modeliamuser.User) modeliamsession.PrincipalView {
 	if user == nil {
 		return modeliamsession.PrincipalView{}
 	}

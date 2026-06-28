@@ -108,7 +108,7 @@ func TestIndexSessionPrunesStaleLastSeenIndex(t *testing.T) {
 	require.Contains(t, lastSeenSessionIDs, currentSessionID)
 }
 
-func TestGetCurrentSessionUsesRequestCache(t *testing.T) {
+func TestSessionManagerCurrentUsesRequestCache(t *testing.T) {
 	now := time.Now().UTC()
 	sessionID := "cached-session"
 	session := modeliamsession.Session{
@@ -121,13 +121,13 @@ func TestGetCurrentSessionUsesRequestCache(t *testing.T) {
 	ctx := serviceiamsession.WithCurrentSession(t.Context(), sessionID, session)
 	serviceCtx := newSessionServiceContext(ctx, t, sessionID)
 
-	gotSessionID, gotSession, err := serviceiamsession.GetCurrentSession(serviceCtx)
+	gotSessionID, gotSession, err := serviceiamsession.SessionManager.Current(serviceCtx)
 	require.NoError(t, err)
 	require.Equal(t, sessionID, gotSessionID)
 	require.Equal(t, session, gotSession)
 }
 
-func TestGetCurrentSessionIgnoresMismatchedRequestCache(t *testing.T) {
+func TestSessionManagerCurrentIgnoresMismatchedRequestCache(t *testing.T) {
 	setupRedis(t)
 
 	now := time.Now().UTC()
@@ -154,7 +154,7 @@ func TestGetCurrentSessionIgnoresMismatchedRequestCache(t *testing.T) {
 	ctx := serviceiamsession.WithCurrentSession(t.Context(), cachedSessionID, cachedSession)
 	serviceCtx := newSessionServiceContext(ctx, t, cookieSessionID)
 
-	gotSessionID, gotSession, err := serviceiamsession.GetCurrentSession(serviceCtx)
+	gotSessionID, gotSession, err := serviceiamsession.SessionManager.Current(serviceCtx)
 	require.NoError(t, err)
 	require.Equal(t, cookieSessionID, gotSessionID)
 	require.Equal(t, cookieSession, gotSession)

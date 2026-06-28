@@ -21,7 +21,7 @@ func (s *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 	log.Info("changepassword create")
 
 	// Get current session
-	sessionID, session, err := serviceiamsession.GetCurrentSession(ctx)
+	sessionID, session, err := serviceiamsession.SessionManager.Current(ctx)
 	if err != nil {
 		log.Error("failed to get current session", err)
 		return nil, errors.New("invalid session")

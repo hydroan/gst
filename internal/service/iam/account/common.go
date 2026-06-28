@@ -32,7 +32,7 @@ func mayManageProtectedUser(actor, target *modeliamuser.User) error {
 
 // loadPrivilegedActorAndTarget resolves the current actor from session context and loads the requested target user.
 func loadPrivilegedActorAndTarget(ctx *types.ServiceContext, targetUserID string) (*modeliamuser.User, *modeliamuser.User, error) {
-	_, session, err := serviceiamsession.GetCurrentSession(ctx)
+	_, session, err := serviceiamsession.SessionManager.Current(ctx)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "invalid session")
 	}

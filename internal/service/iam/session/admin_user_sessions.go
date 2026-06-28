@@ -30,7 +30,7 @@ type AdminUserSessionsDeleteService struct {
 func (s *AdminUserSessionsListService) List(ctx *types.ServiceContext, req *modeliamsession.AdminUserSessionsListReq) (rsp *modeliamsession.AdminUserSessionsListRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
-	currentSessionID, _, err := GetCurrentSession(ctx)
+	currentSessionID, _, err := SessionManager.Current(ctx)
 	if err != nil {
 		log.Error("failed to get current session", err)
 		return nil, err
@@ -58,7 +58,7 @@ func (s *AdminUserSessionsListService) List(ctx *types.ServiceContext, req *mode
 		return nil, err
 	}
 
-	view, err := buildAdminUserSessionsView(ctx, user, currentSessionID, onlineSince, onlineOnly)
+	view, err := s.buildView(ctx, user, currentSessionID, onlineSince, onlineOnly)
 	if err != nil {
 		log.Error("failed to build target user sessions view", err)
 		return nil, err
@@ -73,7 +73,7 @@ func (s *AdminUserSessionsListService) List(ctx *types.ServiceContext, req *mode
 func (s *AdminUserSessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.AdminUserSessionsDeleteReq) (rsp *modeliamsession.AdminUserSessionsDeleteRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
-	_, currentSession, err := GetCurrentSession(ctx)
+	_, currentSession, err := SessionManager.Current(ctx)
 	if err != nil {
 		log.Error("failed to get current session", err)
 		return nil, err
@@ -102,20 +102,20 @@ func (s *AdminUserSessionsDeleteService) Delete(ctx *types.ServiceContext, req *
 		return nil, err
 	}
 	if currentSession.UserID == targetUserID {
-		ClearSessionCookie(ctx)
+		SessionManager.ClearCookie(ctx)
 	}
 
 	return &modeliamsession.AdminUserSessionsDeleteRsp{}, nil
 }
 
-// buildAdminUserSessionsView builds a target user's session view for admin APIs.
+// buildView builds a target user's session view for admin APIs.
 //
 // Without online filtering it reads the user's own session index. With
 // online_within it reads the global last-seen candidate index first, then
 // filters by user after loading each session snapshot. That keeps the online
 // path bounded by recently active sessions instead of scanning every session
 // owned by the target user.
-func buildAdminUserSessionsView(ctx *types.ServiceContext, user *modeliamuser.User, currentSessionID string, onlineSince time.Time, onlineOnly bool) (modeliamsession.AdminSessionOwnerView, error) {
+func (s *AdminUserSessionsListService) buildView(ctx *types.ServiceContext, user *modeliamuser.User, currentSessionID string, onlineSince time.Time, onlineOnly bool) (modeliamsession.AdminSessionOwnerView, error) {
 	view := modeliamsession.AdminSessionOwnerView{
 		UserID:             user.ID,
 		Username:           user.Username,
@@ -155,8 +155,8 @@ func buildAdminUserSessionsView(ctx *types.ServiceContext, user *modeliamuser.Us
 			}
 			return modeliamsession.AdminSessionOwnerView{}, getErr
 		}
-		if validateErr := ValidateActiveSession(sessionID, session); validateErr != nil {
-			_, _ = DeleteSession(ctx, sessionID)
+		if validateErr := SessionManager.Validate(sessionID, session); validateErr != nil {
+			_, _ = SessionManager.Delete(ctx, sessionID)
 			continue
 		}
 		if session.UserID != user.ID {

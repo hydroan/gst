@@ -2,7 +2,6 @@ package serviceiamsession
 
 import (
 	"context"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -10,7 +9,6 @@ import (
 	"github.com/cockroachdb/errors"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	"github.com/hydroan/gst/provider/redis"
-	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
 
@@ -18,13 +16,6 @@ const (
 	sessionTouchInterval        = 30 * time.Second
 	sessionLastSeenPruneLockTTL = time.Minute
 )
-
-func redisContext(ctx context.Context) context.Context {
-	if ctx == nil {
-		return context.Background()
-	}
-	return ctx
-}
 
 // listUserSessionIDs loads all indexed session ids for a user.
 //
@@ -152,65 +143,6 @@ func removeStaleSessionIndexes(ctx context.Context, userID, sessionID string) {
 	_ = redis.ZRem(ctx, modeliamsession.SessionLastSeenKey(), sessionID)
 }
 
-// GetCurrentSession loads and validates the current authenticated user session
-// from the request cookie and Redis storage. Database-level checks such as user
-// status, permission, or account existence remain the responsibility of the caller.
-func GetCurrentSession(ctx *types.ServiceContext) (string, modeliamsession.Session, error) {
-	sessionID, err := ReadSessionID(ctx)
-	if err != nil {
-		return "", modeliamsession.Session{}, err
-	}
-
-	if cachedSessionID, session, ok := currentSessionFromContext(ctx); ok && cachedSessionID == sessionID {
-		if err = ValidateActiveSession(sessionID, session); err != nil {
-			_, _ = DeleteSession(ctx, sessionID)
-			return "", modeliamsession.Session{}, service.NewErrorWithCause(http.StatusUnauthorized, "session invalid", err)
-		}
-		return sessionID, session, nil
-	}
-
-	session, err := LoadSession(ctx, sessionID)
-	if err != nil {
-		return "", modeliamsession.Session{}, service.NewErrorWithCause(http.StatusUnauthorized, "session not exists", err)
-	}
-	if err = ValidateActiveSession(sessionID, session); err != nil {
-		_, _ = DeleteSession(ctx, sessionID)
-		return "", modeliamsession.Session{}, service.NewErrorWithCause(http.StatusUnauthorized, "session invalid", err)
-	}
-
-	return sessionID, session, nil
-}
-
-// LoadSession loads the Redis session snapshot for a session id.
-func LoadSession(ctx context.Context, sessionID string) (modeliamsession.Session, error) {
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return modeliamsession.Session{}, types.ErrEntryNotFound
-	}
-	return redis.Cache[modeliamsession.Session]().WithContext(redisContext(ctx)).Get(modeliamsession.SessionIDKey(sessionID))
-}
-
-// ValidateActiveSession verifies that a Redis session snapshot is the active session for the given id.
-func ValidateActiveSession(sessionID string, session modeliamsession.Session) error {
-	sessionID = strings.TrimSpace(sessionID)
-	switch {
-	case sessionID == "":
-		return errors.New("session id is required")
-	case session.ID != sessionID:
-		return errors.New("session id mismatch")
-	case session.UserID == "":
-		return errors.New("user not authenticated")
-	case session.Status != modeliamsession.SessionStatusActive:
-		return errors.New("session is not active")
-	case session.ExpiresAt.IsZero():
-		return errors.New("session expiration is required")
-	case !session.ExpiresAt.After(time.Now()):
-		return errors.New("session expired")
-	default:
-		return nil
-	}
-}
-
 // IndexSession stores a session id in every Redis index used by IAM session queries.
 //
 // SessionUserKey and SessionAllKey use ExpiresAt as the ZSET score so list
@@ -273,7 +205,7 @@ func UpdateSessionMustChangePassword(ctx context.Context, sessionID string, must
 	session.MustChangePassword = mustChange
 	ttl := time.Until(session.ExpiresAt)
 	if ttl <= 0 {
-		_, _ = DeleteSession(ctx, sessionID)
+		_, _ = SessionManager.Delete(ctx, sessionID)
 		return types.ErrEntryNotFound
 	}
 	return cache.Set(sessionKey, session, ttl)
@@ -300,7 +232,7 @@ func TouchSession(ctx context.Context, sessionID string, session modeliamsession
 
 	ttl := time.Until(session.ExpiresAt)
 	if ttl <= 0 {
-		_, _ = DeleteSession(ctx, sessionID)
+		_, _ = SessionManager.Delete(ctx, sessionID)
 		return types.ErrEntryNotFound
 	}
 
@@ -328,30 +260,6 @@ func TouchSession(ctx context.Context, sessionID string, session modeliamsession
 	return nil
 }
 
-// DeleteSession deletes the stored session payload and removes it from every Redis index.
-func DeleteSession(ctx context.Context, sessionID string) (modeliamsession.Session, error) {
-	if sessionID == "" {
-		return modeliamsession.Session{}, nil
-	}
-	ctx = redisContext(ctx)
-	cache := redis.Cache[modeliamsession.Session]().WithContext(ctx)
-
-	sessionKey := modeliamsession.SessionIDKey(sessionID)
-	session, err := cache.Get(sessionKey)
-	if err != nil {
-		return modeliamsession.Session{}, err
-	}
-	if err = cache.Delete(sessionKey); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
-		return session, err
-	}
-
-	if err = removeSessionIndexes(ctx, session.UserID, sessionID); err != nil {
-		return session, err
-	}
-
-	return session, nil
-}
-
 // deleteUserSessionsExceptCurrent deletes all indexed sessions of a user except the current session.
 // Missing session records are treated as stale index entries and cleaned up
 // from the user's ZSET so the operation remains idempotent.
@@ -372,7 +280,7 @@ func deleteUserSessionsExceptCurrent(ctx context.Context, userID, currentSession
 			continue
 		}
 
-		if _, err = DeleteSession(ctx, sessionID); err != nil {
+		if _, err = SessionManager.Delete(ctx, sessionID); err != nil {
 			if errors.Is(err, types.ErrEntryNotFound) {
 				// The session payload may already be gone while the user-session
 				// index still references it. Remove the stale index entry and
@@ -407,7 +315,7 @@ func deleteUserSessions(ctx context.Context, userID string) error {
 			continue
 		}
 
-		if _, err = DeleteSession(ctx, sessionID); err != nil {
+		if _, err = SessionManager.Delete(ctx, sessionID); err != nil {
 			if errors.Is(err, types.ErrEntryNotFound) {
 				removeStaleSessionIndexes(ctx, userID, sessionID)
 				continue

@@ -38,9 +38,9 @@ type SessionsDeleteAllService struct {
 func (s *SessionsListService) List(ctx *types.ServiceContext, req *modeliamsession.SessionsListReq) (rsp *modeliamsession.SessionsListRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
-	// GetCurrentSession already guarantees that the resolved session is bound to
+	// SessionManager.Current already guarantees that the resolved session is bound to
 	// an authenticated user, so the service can directly use currentSession.UserID.
-	currentSessionID, currentSession, err := GetCurrentSession(ctx)
+	currentSessionID, currentSession, err := SessionManager.Current(ctx)
 	if err != nil {
 		log.Error("failed to get current session", err)
 		return nil, err
@@ -70,8 +70,8 @@ func (s *SessionsListService) List(ctx *types.ServiceContext, req *modeliamsessi
 			log.Error("failed to load session from redis", getErr)
 			return nil, getErr
 		}
-		if validateErr := ValidateActiveSession(sessionID, session); validateErr != nil {
-			_, _ = DeleteSession(ctx, sessionID)
+		if validateErr := SessionManager.Validate(sessionID, session); validateErr != nil {
+			_, _ = SessionManager.Delete(ctx, sessionID)
 			continue
 		}
 		items = append(items, buildSessionView(session, currentSessionID))
@@ -96,7 +96,7 @@ func (s *SessionsListService) List(ctx *types.ServiceContext, req *modeliamsessi
 func (s *SessionsGetService) Get(ctx *types.ServiceContext, req *modeliamsession.SessionsGetReq) (rsp *modeliamsession.SessionsGetRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
-	currentSessionID, currentSession, err := GetCurrentSession(ctx)
+	currentSessionID, currentSession, err := SessionManager.Current(ctx)
 	if err != nil {
 		log.Error("failed to get current session", err)
 		return nil, err
@@ -115,8 +115,8 @@ func (s *SessionsGetService) Get(ctx *types.ServiceContext, req *modeliamsession
 		log.Error("failed to load target session", err)
 		return nil, err
 	}
-	if err = ValidateActiveSession(targetSessionID, targetSession); err != nil {
-		_, _ = DeleteSession(ctx, targetSessionID)
+	if err = SessionManager.Validate(targetSessionID, targetSession); err != nil {
+		_, _ = SessionManager.Delete(ctx, targetSessionID)
 		return nil, service.NewError(http.StatusNotFound, "session not found")
 	}
 	if targetSession.UserID != currentSession.UserID {
@@ -136,7 +136,7 @@ func (s *SessionsGetService) Get(ctx *types.ServiceContext, req *modeliamsession
 func (s *SessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.SessionsDeleteReq) (rsp *modeliamsession.SessionsDeleteRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
-	currentSessionID, currentSession, err := GetCurrentSession(ctx)
+	currentSessionID, currentSession, err := SessionManager.Current(ctx)
 	if err != nil {
 		log.Error("failed to get current session", err)
 		return nil, err
@@ -161,17 +161,17 @@ func (s *SessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliams
 	if err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
 			if targetSessionID == currentSessionID {
-				ClearSessionCookie(ctx)
+				SessionManager.ClearCookie(ctx)
 			}
 			return &modeliamsession.SessionsDeleteRsp{}, nil
 		}
 		log.Error("failed to load target session", err)
 		return nil, err
 	}
-	if err = ValidateActiveSession(targetSessionID, targetSession); err != nil {
-		_, _ = DeleteSession(ctx, targetSessionID)
+	if err = SessionManager.Validate(targetSessionID, targetSession); err != nil {
+		_, _ = SessionManager.Delete(ctx, targetSessionID)
 		if targetSessionID == currentSessionID {
-			ClearSessionCookie(ctx)
+			SessionManager.ClearCookie(ctx)
 		}
 		return &modeliamsession.SessionsDeleteRsp{}, nil
 	}
@@ -179,10 +179,10 @@ func (s *SessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliams
 		return nil, service.NewError(http.StatusForbidden, "forbidden")
 	}
 
-	if _, err = DeleteSession(ctx, targetSessionID); err != nil {
+	if _, err = SessionManager.Delete(ctx, targetSessionID); err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
 			if targetSessionID == currentSessionID {
-				ClearSessionCookie(ctx)
+				SessionManager.ClearCookie(ctx)
 			}
 			return &modeliamsession.SessionsDeleteRsp{}, nil
 		}
@@ -190,7 +190,7 @@ func (s *SessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliams
 		return nil, err
 	}
 	if targetSessionID == currentSessionID {
-		ClearSessionCookie(ctx)
+		SessionManager.ClearCookie(ctx)
 	}
 
 	return &modeliamsession.SessionsDeleteRsp{}, nil
@@ -200,7 +200,7 @@ func (s *SessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliams
 func (s *SessionsDeleteAllService) Delete(ctx *types.ServiceContext, req *modeliamsession.SessionsDeleteAllReq) (rsp *modeliamsession.SessionsDeleteAllRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
-	_, currentSession, err := GetCurrentSession(ctx)
+	_, currentSession, err := SessionManager.Current(ctx)
 	if err != nil {
 		log.Error("failed to get current session", err)
 		return nil, err
@@ -211,7 +211,7 @@ func (s *SessionsDeleteAllService) Delete(ctx *types.ServiceContext, req *modeli
 		return nil, err
 	}
 
-	ClearSessionCookie(ctx)
+	SessionManager.ClearCookie(ctx)
 
 	return &modeliamsession.SessionsDeleteAllRsp{}, nil
 }

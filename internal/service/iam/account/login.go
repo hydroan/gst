@@ -161,7 +161,7 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		return nil, errors.New("failed to track user session in redis")
 	}
 
-	serviceiamsession.SetSessionCookie(ctx, sessionID, expire)
+	serviceiamsession.SessionManager.SetCookie(ctx, sessionID, expire)
 
 	log.Infoz("user logged in successfully", zap.String("username", req.Username), zap.String("user_id", user.ID))
 

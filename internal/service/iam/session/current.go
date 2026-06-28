@@ -21,7 +21,7 @@ type CurrentGetService struct {
 func (s *CurrentGetService) Get(ctx *types.ServiceContext, req *modeliamsession.CurrentGetReq) (rsp *modeliamsession.CurrentGetRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
-	_, session, err := GetCurrentSession(ctx)
+	_, session, err := SessionManager.Current(ctx)
 	if err != nil {
 		log.Error("failed to get current session", err)
 		return nil, err
@@ -48,18 +48,18 @@ type CurrentDeleteService struct {
 func (s *CurrentDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.CurrentDeleteReq) (rsp *modeliamsession.CurrentDeleteRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
-	sessionID, err := ReadSessionID(ctx)
+	sessionID, err := SessionManager.SessionID(ctx)
 	if err != nil {
 		log.Error(err)
 		return nil, err
 	}
 
-	if _, err = DeleteSession(ctx, sessionID); err != nil {
+	if _, err = SessionManager.Delete(ctx, sessionID); err != nil {
 		log.Error("failed to delete current session", err)
 		return nil, service.NewErrorWithCause(http.StatusUnauthorized, "session not exists", err)
 	}
 
-	ClearSessionCookie(ctx)
+	SessionManager.ClearCookie(ctx)
 
 	return &modeliamsession.CurrentDeleteRsp{}, nil
 }

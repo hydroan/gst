@@ -23,14 +23,14 @@ type LogoutService struct {
 func (s *LogoutService) Create(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamaccount.LogoutRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
-	sessionID, err := serviceiamsession.ReadSessionID(ctx)
+	sessionID, err := serviceiamsession.SessionManager.SessionID(ctx)
 	if err != nil {
 		log.Error("failed to get session_id from cookie", err)
-		serviceiamsession.ClearSessionCookie(ctx)
+		serviceiamsession.SessionManager.ClearCookie(ctx)
 		return &modeliamaccount.LogoutRsp{Msg: "logout successful"}, nil // Return success even if no session
 	}
 
-	session, err := serviceiamsession.DeleteSession(ctx, sessionID)
+	session, err := serviceiamsession.SessionManager.Delete(ctx, sessionID)
 
 	// Parse user agent for logging
 	ua := useragent.New(ctx.UserAgent())
@@ -61,7 +61,7 @@ func (s *LogoutService) Create(ctx *types.ServiceContext, req *model.Empty) (rsp
 		log.Warnz("failed to delete session from redis", zap.Error(err))
 	}
 
-	serviceiamsession.ClearSessionCookie(ctx)
+	serviceiamsession.SessionManager.ClearCookie(ctx)
 
 	log.Info("user logged out successfully", "session_id", sessionID)
 	return &modeliamaccount.LogoutRsp{Msg: "logout successful"}, nil
