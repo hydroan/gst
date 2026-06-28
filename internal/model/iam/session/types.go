@@ -20,6 +20,12 @@ const SessionAllNamespace = SessionNamespacePrefix + ":all"
 // SessionLastSeenNamespace stores the global last-seen index by session ID.
 const SessionLastSeenNamespace = SessionNamespacePrefix + ":last_seen"
 
+// SessionTouchNamespace stores short-lived touch locks by session ID.
+const SessionTouchNamespace = SessionNamespacePrefix + ":touch"
+
+// SessionUserStateNamespace stores short-lived mutable user-state cache by user ID.
+const SessionUserStateNamespace = SessionNamespacePrefix + ":user_state"
+
 // SessionStatus describes the lifecycle state of an IAM session snapshot.
 type SessionStatus string
 
@@ -100,4 +106,19 @@ func SessionAllKey() string {
 // SessionLastSeenKey builds the Redis key for the global session last-seen index.
 func SessionLastSeenKey() string {
 	return SessionLastSeenNamespace
+}
+
+// SessionTouchKey builds the Redis key for throttling LastSeenAt updates by session ID.
+func SessionTouchKey(sessionID string) string {
+	return sessionRedisKey(SessionTouchNamespace, sessionID)
+}
+
+// SessionLastSeenPruneKey builds the Redis key for throttling last-seen index pruning.
+func SessionLastSeenPruneKey() string {
+	return sessionRedisKey(SessionLastSeenNamespace, "prune")
+}
+
+// SessionUserStateKey builds the Redis key for cached mutable user state by user ID.
+func SessionUserStateKey(userID string) string {
+	return sessionRedisKey(SessionUserStateNamespace, userID)
 }

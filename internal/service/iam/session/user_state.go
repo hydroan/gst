@@ -22,10 +22,6 @@ type sessionUserState struct {
 	MustChangePassword bool                    `json:"must_change_password"`
 }
 
-func sessionUserStateKey(userID string) string {
-	return modeliamsession.SessionNamespacePrefix + ":user_state:" + userID
-}
-
 // ValidateSessionUserState refreshes the mutable user state required to keep using a session.
 func ValidateSessionUserState(ctx context.Context, session modeliamsession.Session) (modeliamsession.Session, error) {
 	if session.UserID == "" {
@@ -56,13 +52,13 @@ func InvalidateUserStateCache(ctx context.Context, userID string) {
 	}
 	_ = redis.Cache[sessionUserState]().
 		WithContext(redisContext(ctx)).
-		Delete(sessionUserStateKey(userID))
+		Delete(modeliamsession.SessionUserStateKey(userID))
 }
 
 func loadCachedSessionUserState(ctx context.Context, userID string) (sessionUserState, bool) {
 	state, err := redis.Cache[sessionUserState]().
 		WithContext(redisContext(ctx)).
-		Get(sessionUserStateKey(userID))
+		Get(modeliamsession.SessionUserStateKey(userID))
 	if err == nil {
 		return state, true
 	}
@@ -88,7 +84,7 @@ func refreshSessionUserState(ctx context.Context, userID string) (sessionUserSta
 	}
 	if err := redis.Cache[sessionUserState]().
 		WithContext(redisContext(ctx)).
-		Set(sessionUserStateKey(userID), state, sessionUserStateTTL); err != nil {
+		Set(modeliamsession.SessionUserStateKey(userID), state, sessionUserStateTTL); err != nil {
 		zap.S().Warnw("failed to cache iam session user state", "user_id", userID, "error", err)
 	}
 	return state, true, nil

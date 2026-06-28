@@ -26,14 +26,6 @@ func redisContext(ctx context.Context) context.Context {
 	return ctx
 }
 
-func sessionTouchKey(sessionID string) string {
-	return modeliamsession.SessionNamespacePrefix + ":touch:" + sessionID
-}
-
-func sessionLastSeenPruneKey() string {
-	return modeliamsession.SessionNamespacePrefix + ":last_seen:prune"
-}
-
 // listUserSessionIDs loads all indexed session ids for a user.
 //
 // Session indexes are stored as Redis ZSETs. Redis can automatically expire the
@@ -111,7 +103,7 @@ func pruneExpiredSessionIDs(ctx context.Context, key string) error {
 // the same global index on every request.
 func pruneStaleLastSeenSessionIDs(ctx context.Context, now time.Time) {
 	ctx = redisContext(ctx)
-	acquired, err := redis.SetNX(ctx, sessionLastSeenPruneKey(), "1", sessionLastSeenPruneLockTTL)
+	acquired, err := redis.SetNX(ctx, modeliamsession.SessionLastSeenPruneKey(), "1", sessionLastSeenPruneLockTTL)
 	if err != nil || !acquired {
 		return
 	}
@@ -312,7 +304,7 @@ func TouchSession(ctx context.Context, sessionID string, session modeliamsession
 		return types.ErrEntryNotFound
 	}
 
-	touchKey := sessionTouchKey(sessionID)
+	touchKey := modeliamsession.SessionTouchKey(sessionID)
 	acquired, err := redis.SetNX(ctx, touchKey, "1", sessionTouchInterval)
 	if err != nil {
 		return err
