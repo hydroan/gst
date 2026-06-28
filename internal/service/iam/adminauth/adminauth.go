@@ -15,10 +15,13 @@ import (
 
 // EnsureTenantAdmin verifies that actor may manage target inside the current tenant.
 func EnsureTenantAdmin(ctx *types.ServiceContext, actor *modeliamuser.User, target *modeliamuser.User) error {
-	if isRoot(actor) {
+	if isRootUser(actor) {
 		return nil
 	}
 	if actor == nil || actor.GetID() == "" {
+		return service.NewError(http.StatusForbidden, "permission denied")
+	}
+	if isRootUser(target) {
 		return service.NewError(http.StatusForbidden, "permission denied")
 	}
 
@@ -83,6 +86,6 @@ func targetBelongsToTenant(ctx *types.ServiceContext, tenant string, userID stri
 	return len(roleBindings) > 0, nil
 }
 
-func isRoot(actor *modeliamuser.User) bool {
-	return actor != nil && actor.GetID() == consts.AUTHZ_USER_ROOT
+func isRootUser(user *modeliamuser.User) bool {
+	return user != nil && user.GetID() == consts.AUTHZ_USER_ROOT
 }

@@ -771,6 +771,8 @@ func TestIAMUserStatusTenantAuthorization(t *testing.T) {
 	authzBindTenantRole(t, tenantA, targetTenantAUserID, tenantAMemberRoleID)
 	tenantBMemberRoleID := authzCreateTenantRole(t, tenantB, authzTestUsername("tenant_iam_member_b_role"))
 	authzBindTenantRole(t, tenantB, targetTenantBUserID, tenantBMemberRoleID)
+	rootMemberRoleID := authzCreateTenantRole(t, tenantA, authzTestUsername("tenant_iam_root_member_role"))
+	authzBindTenantRole(t, tenantA, rootUsername, rootMemberRoleID)
 
 	cli, err := authzTenantClient(userAdminAPI, adminSessionID, tenantA)
 	require.NoError(t, err)
@@ -780,6 +782,10 @@ func TestIAMUserStatusTenantAuthorization(t *testing.T) {
 		t.Helper()
 		require.NotEmpty(t, rsp.Msg)
 	})
+
+	_, err = cli.Patch(rootUsername+"/status", iam.UserStatusPatchReq{Status: iam.UserStatusActive})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "403")
 
 	_, err = cli.Patch(targetTenantBUserID+"/status", iam.UserStatusPatchReq{Status: iam.UserStatusActive})
 	require.Error(t, err)
