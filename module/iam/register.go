@@ -6,7 +6,6 @@ import (
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
-	serviceiamuser "github.com/hydroan/gst/internal/service/iam/user"
 	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module"
@@ -48,13 +47,6 @@ type Config struct {
 //   - POST   /api/iam/reset-password
 //   - POST   /api/iam/account-status
 //
-// IAM resource routes:
-//   - POST   /api/iam/users
-//   - DELETE /api/iam/users/:id
-//   - PATCH  /api/iam/users/:id
-//   - GET    /api/iam/users
-//   - GET    /api/iam/users/:id
-//
 // Middleware:
 //   - IAMSession for protected IAM routes and session-aware APIs
 //
@@ -89,18 +81,6 @@ func Register(config ...Config) {
 	module.Use(module.NewWrapper("/iam/change-password", "id", false, &serviceiamaccount.ChangePasswordService{}), module.CRUD(consts.PHASE_CREATE))
 	module.Use(module.NewWrapper("/iam/reset-password", "id", false, &serviceiamaccount.ResetPasswordService{}), module.CRUD(consts.PHASE_CREATE))
 	module.Use(module.NewWrapper("/iam/account-status", "id", false, &serviceiamaccount.AccountStatusService{}), module.CRUD(consts.PHASE_CREATE))
-	module.Use(
-		module.NewWrapper("/iam/users", "id", false, &serviceiamuser.UserService{}),
-		module.CRUD(
-			consts.PHASE_CREATE,
-			consts.PHASE_DELETE,
-			consts.PHASE_LIST,
-			consts.PHASE_GET,
-			consts.PHASE_CREATE_MANY,
-			consts.PHASE_DELETE_MANY,
-		),
-	)
-	module.Use(module.NewWrapper("/iam/users/:id", "id", false, &serviceiamuser.UserPatchService{}), module.Exact(consts.PHASE_PATCH))
 
 	module.Use(module.NewWrapper("/iam/session/current", "id", false, &serviceiamsession.CurrentGetService{}), module.Exact(consts.PHASE_GET))
 	module.Use(module.NewWrapper("/iam/session/current", "id", false, &serviceiamsession.CurrentDeleteService{}), module.Exact(consts.PHASE_DELETE))

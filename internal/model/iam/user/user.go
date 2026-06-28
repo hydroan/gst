@@ -2,7 +2,6 @@ package modeliamuser
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	. "github.com/hydroan/gst/dsl"
@@ -29,33 +28,6 @@ const (
 	UserTypeMerchant UserType = "merchant"
 	UserTypeGuest    UserType = "guest"
 )
-
-type UserReq struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Email    string `json:"email"`
-
-	Status           UserStatus `json:"status"`
-	Type             UserType   `json:"type"`
-	Avatar           string     `json:"avatar"`
-	TwoFactorEnabled bool       `json:"two_factor_enabled"`
-	IsSuperuser      bool       `json:"is_superuser"`
-}
-
-// UserPatchReq is the allow-listed request payload for patching IAM user display and contact fields.
-// It intentionally excludes security-sensitive fields such as username, status, password,
-// superuser flags, verification state, and login counters.
-type UserPatchReq struct {
-	Email       *string    `json:"email,omitempty"`
-	Phone       *string    `json:"phone,omitempty"`
-	FirstName   *string    `json:"first_name,omitempty"`
-	LastName    *string    `json:"last_name,omitempty"`
-	DisplayName *string    `json:"display_name,omitempty"`
-	Avatar      *string    `json:"avatar,omitempty"`
-	Bio         *string    `json:"bio,omitempty"`
-	Birthday    *time.Time `json:"birthday,omitempty"`
-	Gender      *string    `json:"gender,omitempty"`
-}
 
 type User struct {
 	Username string     `json:"username" gorm:"type:varchar(50);uniqueIndex;not null"`
@@ -95,97 +67,9 @@ type User struct {
 	model.Base
 }
 
-// MarshalJSON keeps write-only credential fields out of API responses.
-func (u User) MarshalJSON() ([]byte, error) {
-	type userResponse struct {
-		Username string     `json:"username"`
-		Status   UserStatus `json:"status"`
-		Type     UserType   `json:"type"`
-
-		Email       *string    `json:"email"`
-		Phone       *string    `json:"phone"`
-		FirstName   *string    `json:"first_name"`
-		LastName    *string    `json:"last_name"`
-		DisplayName *string    `json:"display_name"`
-		Avatar      *string    `json:"avatar"`
-		Bio         *string    `json:"bio"`
-		Birthday    *time.Time `json:"birthday"`
-		Gender      *string    `json:"gender"`
-
-		TwoFactorEnabled   *bool `json:"two_factor_enabled"`
-		MustChangePassword bool  `json:"must_change_password"`
-
-		EmailVerified      *bool      `json:"email_verified"`
-		EmailVerifiedAt    *time.Time `json:"email_verified_at"`
-		PhoneVerified      *bool      `json:"phone_verified"`
-		LastEmailChangedAt *time.Time `json:"last_email_changed_at"`
-
-		IsStaff     *bool `json:"is_staff"`
-		IsSuperuser *bool `json:"is_superuser"`
-
-		LastLoginAt      *time.Time `json:"last_login_at"`
-		LastLoginIP      *string    `json:"last_login_ip"`
-		LoginCount       *int       `json:"login_count"`
-		FailedLoginCount int        `json:"failed_login_count"`
-		LockedUntil      *time.Time `json:"locked_until"`
-
-		model.Base
-	}
-
-	return json.Marshal(userResponse{
-		Username:           u.Username,
-		Status:             u.Status,
-		Type:               u.Type,
-		Email:              u.Email,
-		Phone:              u.Phone,
-		FirstName:          u.FirstName,
-		LastName:           u.LastName,
-		DisplayName:        u.DisplayName,
-		Avatar:             u.Avatar,
-		Bio:                u.Bio,
-		Birthday:           u.Birthday,
-		Gender:             u.Gender,
-		TwoFactorEnabled:   u.TwoFactorEnabled,
-		MustChangePassword: u.MustChangePassword,
-		EmailVerified:      u.EmailVerified,
-		EmailVerifiedAt:    u.EmailVerifiedAt,
-		PhoneVerified:      u.PhoneVerified,
-		LastEmailChangedAt: u.LastEmailChangedAt,
-		IsStaff:            u.IsStaff,
-		IsSuperuser:        u.IsSuperuser,
-		LastLoginAt:        u.LastLoginAt,
-		LastLoginIP:        u.LastLoginIP,
-		LoginCount:         u.LoginCount,
-		FailedLoginCount:   u.FailedLoginCount,
-		LockedUntil:        u.LockedUntil,
-		Base:               u.Base,
-	})
-}
-
 func (User) Design() {
 	Migrate(true)
 	Endpoint("users")
-
-	Create(func() {
-		Enabled(true)
-	})
-	Delete(func() {
-		Enabled(true)
-	})
-	Update(func() {
-		Enabled(true)
-	})
-	Patch(func() {
-		Enabled(true)
-	})
-	List(func() {
-		Enabled(true)
-		Service(true)
-	})
-	Get(func() {
-		Enabled(true)
-		Service(true)
-	})
 }
 
 func (User) Purge() bool { return true }
