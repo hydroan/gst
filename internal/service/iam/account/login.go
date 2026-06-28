@@ -206,5 +206,15 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		}
 	}
 
-	return serviceiamsession.BuildAuthenticatedSessionRsp(sessionData, user, now), nil
+	email := ""
+	emailIdentity, err := LoadEmailIdentity(ctx, user.ID)
+	if err != nil {
+		if !errors.Is(err, database.ErrRecordNotFound) {
+			log.Warnz("failed to load email identity for login response", zap.String("user_id", user.ID), zap.Error(err))
+		}
+	} else {
+		email = emailIdentity.Email
+	}
+
+	return serviceiamsession.BuildAuthenticatedSessionRsp(sessionData, user, email, now), nil
 }

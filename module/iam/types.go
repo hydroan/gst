@@ -29,6 +29,7 @@ type (
 	User               = modeliamuser.User
 	UserStatus         = modeliamuser.UserStatus
 	PasswordCredential = modeliamaccount.PasswordCredential
+	EmailIdentity      = modeliamaccount.EmailIdentity
 )
 
 const (

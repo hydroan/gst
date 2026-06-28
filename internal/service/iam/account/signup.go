@@ -48,9 +48,6 @@ func (s *SignupService) Create(ctx *types.ServiceContext, req *modeliamaccount.S
 	}
 
 	// Set optional fields
-	if req.Email != "" {
-		newUser.Email = &req.Email
-	}
 	if req.FirstName != "" {
 		newUser.FirstName = &req.FirstName
 	}
@@ -68,7 +65,18 @@ func (s *SignupService) Create(ctx *types.ServiceContext, req *modeliamaccount.S
 		if createErr != nil {
 			return createErr
 		}
-		return database.Database[*modeliamaccount.PasswordCredential](ctx).WithTx(tx).Create(passwordCredential)
+		if createErr = database.Database[*modeliamaccount.PasswordCredential](ctx).WithTx(tx).Create(passwordCredential); createErr != nil {
+			return createErr
+		}
+		if req.Email == "" {
+			return nil
+		}
+
+		emailIdentity, createErr := NewEmailIdentity(newUser.ID, req.Email)
+		if createErr != nil {
+			return createErr
+		}
+		return database.Database[*modeliamaccount.EmailIdentity](ctx).WithTx(tx).Create(emailIdentity)
 	}); err != nil {
 		log.Error("failed to create user", zap.Error(err))
 		return nil, errors.New("failed to create user")

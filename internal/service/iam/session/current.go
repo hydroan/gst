@@ -35,8 +35,13 @@ func (s *CurrentGetService) Get(ctx *types.ServiceContext, req *modeliamsession.
 	if err = ensureSessionUserActive(user); err != nil {
 		return nil, err
 	}
+	email, err := loadSessionEmail(ctx, user.ID)
+	if err != nil {
+		log.Error("failed to load email identity for current session")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load email identity", err)
+	}
 
-	return BuildAuthenticatedSessionRsp(session, user, time.Now()), nil
+	return BuildAuthenticatedSessionRsp(session, user, email, time.Now()), nil
 }
 
 // CurrentDeleteService handles invalidation of the current authenticated session.

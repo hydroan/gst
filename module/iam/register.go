@@ -27,6 +27,7 @@ type DefaultUser struct {
 	ID                 string
 	Username           string
 	Password           string
+	Email              string
 	Status             modeliamuser.UserStatus
 	MustChangePassword bool
 }
@@ -105,9 +106,10 @@ func Register(config ...Config) {
 	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsDeleteService{}), module.CRUD(consts.PHASE_DELETE))
 
 	// Register the backing IAM account tables and optional default users.
-	defaultUsers, defaultCredentials := buildDefaultUserRecords(cfg.DefaultUsers)
+	defaultUsers, defaultCredentials, defaultEmailIdentities := buildDefaultUserRecords(cfg.DefaultUsers)
 	model.Register[*modeliamuser.User](defaultUsers...)
 	model.Register[*modeliamaccount.PasswordCredential](defaultCredentials...)
+	model.Register[*modeliamaccount.EmailIdentity](defaultEmailIdentities...)
 }
 
 // GetSessionExpiration returns the configured session expiration time.
@@ -119,9 +121,10 @@ func GetSessionExpiration() time.Duration {
 	return iamConfig.SessionExpiration
 }
 
-func buildDefaultUserRecords(configs []*DefaultUser) ([]*modeliamuser.User, []*modeliamaccount.PasswordCredential) {
+func buildDefaultUserRecords(configs []*DefaultUser) ([]*modeliamuser.User, []*modeliamaccount.PasswordCredential, []*modeliamaccount.EmailIdentity) {
 	users := make([]*modeliamuser.User, 0, len(configs))
 	credentials := make([]*modeliamaccount.PasswordCredential, 0, len(configs))
+	emailIdentities := make([]*modeliamaccount.EmailIdentity, 0, len(configs))
 	for _, cfg := range configs {
 		if cfg == nil {
 			continue
@@ -148,9 +151,16 @@ func buildDefaultUserRecords(configs []*DefaultUser) ([]*modeliamuser.User, []*m
 		if err != nil {
 			panic(err)
 		}
+		if cfg.Email != "" {
+			emailIdentity, err := serviceiamaccount.NewEmailIdentity(userID, cfg.Email)
+			if err != nil {
+				panic(err)
+			}
+			emailIdentities = append(emailIdentities, emailIdentity)
+		}
 
 		users = append(users, user)
 		credentials = append(credentials, credential)
 	}
-	return users, credentials
+	return users, credentials, emailIdentities
 }

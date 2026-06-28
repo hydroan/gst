@@ -5,18 +5,17 @@ import (
 
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
-	"github.com/hydroan/gst/util"
 )
 
 // BuildAuthenticatedSessionRsp builds the shared login/current response contract.
-func BuildAuthenticatedSessionRsp(session modeliamsession.Session, user *modeliamuser.User, now time.Time) *modeliamsession.AuthenticatedSessionRsp {
+func BuildAuthenticatedSessionRsp(session modeliamsession.Session, user *modeliamuser.User, email string, now time.Time) *modeliamsession.AuthenticatedSessionRsp {
 	if now.IsZero() {
 		now = time.Now()
 	}
 	return &modeliamsession.AuthenticatedSessionRsp{
 		ServerTime: now,
 		Session:    buildAuthenticatedSessionView(session, now),
-		Principal:  buildPrincipalView(user, session.MustChangePassword),
+		Principal:  buildPrincipalView(user, email, session.MustChangePassword),
 	}
 }
 
@@ -42,14 +41,14 @@ func buildAuthenticatedSessionView(session modeliamsession.Session, now time.Tim
 }
 
 // buildPrincipalView builds the principal snapshot returned by authentication state APIs.
-func buildPrincipalView(user *modeliamuser.User, mustChangePassword bool) modeliamsession.PrincipalView {
+func buildPrincipalView(user *modeliamuser.User, email string, mustChangePassword bool) modeliamsession.PrincipalView {
 	if user == nil {
 		return modeliamsession.PrincipalView{}
 	}
 	return modeliamsession.PrincipalView{
 		UserID:             user.ID,
 		Username:           user.Username,
-		Email:              util.Deref(user.Email),
+		Email:              email,
 		FirstName:          user.FirstName,
 		LastName:           user.LastName,
 		MustChangePassword: mustChangePassword,

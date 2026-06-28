@@ -2,7 +2,6 @@ package email
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -21,11 +20,18 @@ import (
 type iamAccountGateway struct{}
 
 func (iamAccountGateway) FindByEmail(ctx *types.ServiceContext, email string) (*serviceemail.AccountSnapshot, error) {
-	user, err := loadIAMUserByEmail(ctx, email)
+	identity, err := serviceiamaccount.LoadEmailIdentityByEmail(ctx, email)
+	if err != nil {
+		if errors.Is(err, database.ErrRecordNotFound) {
+			return nil, serviceemail.ErrAccountNotFound
+		}
+		return nil, err
+	}
+	user, err := loadIAMUserByID(ctx, identity.UserID)
 	if err != nil {
 		return nil, err
 	}
-	return iamAccountSnapshot(user), nil
+	return iamAccountSnapshot(user, identity), nil
 }
 
 func (iamAccountGateway) GetByID(ctx *types.ServiceContext, userID string) (*serviceemail.AccountSnapshot, error) {
@@ -33,7 +39,14 @@ func (iamAccountGateway) GetByID(ctx *types.ServiceContext, userID string) (*ser
 	if err != nil {
 		return nil, err
 	}
-	return iamAccountSnapshot(user), nil
+	identity, err := serviceiamaccount.LoadEmailIdentity(ctx, userID)
+	if err != nil {
+		if !errors.Is(err, database.ErrRecordNotFound) {
+			return nil, err
+		}
+		identity = nil
+	}
+	return iamAccountSnapshot(user, identity), nil
 }
 
 func (iamAccountGateway) VerifyPassword(ctx *types.ServiceContext, userID, password string) error {
@@ -75,42 +88,41 @@ func (iamAccountGateway) UpdatePassword(ctx *types.ServiceContext, userID, newPa
 }
 
 func (iamAccountGateway) MarkEmailVerified(ctx *types.ServiceContext, userID string, verifiedAt time.Time) error {
-	user := newIAMUserWithID(userID)
-	applyIAMEmailVerification(user, verifiedAt)
-	return database.Database[*modeliamuser.User](ctx).
+	identity, err := serviceiamaccount.LoadEmailIdentity(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if err := serviceiamaccount.ApplyEmailIdentityVerification(identity, verifiedAt); err != nil {
+		return err
+	}
+	return database.Database[*modeliamaccount.EmailIdentity](ctx).
 		WithoutHook().
-		WithSelect("email_verified", "email_verified_at").
-		Update(user)
+		WithSelect("user_id", "verified_at").
+		Update(identity)
 }
 
 func (iamAccountGateway) ApplyEmailChange(ctx *types.ServiceContext, userID, newEmail string, changedAt time.Time) error {
-	user := newIAMUserWithID(userID)
-	if err := applyIAMEmailChange(user, newEmail, changedAt); err != nil {
+	identity, err := serviceiamaccount.LoadEmailIdentity(ctx, userID)
+	if err != nil {
+		if !errors.Is(err, database.ErrRecordNotFound) {
+			return err
+		}
+		identity = &modeliamaccount.EmailIdentity{UserID: userID}
+	}
+	if err := applyIAMEmailChange(identity, newEmail, changedAt); err != nil {
 		return err
 	}
-	return database.Database[*modeliamuser.User](ctx).
+	if identity.ID == "" {
+		return database.Database[*modeliamaccount.EmailIdentity](ctx).Create(identity)
+	}
+	return database.Database[*modeliamaccount.EmailIdentity](ctx).
 		WithoutHook().
-		WithSelect("email", "email_verified", "email_verified_at", "last_email_changed_at").
-		Update(user)
+		WithSelect("user_id", "email", "normalized_email", "verified_at", "last_changed_at").
+		Update(identity)
 }
 
 func (iamAccountGateway) InvalidateSessions(userID string) {
 	serviceiamsession.InvalidateUserSessions(context.Background(), userID)
-}
-
-func loadIAMUserByEmail(ctx *types.ServiceContext, email string) (*modeliamuser.User, error) {
-	users := make([]*modeliamuser.User, 0, 1)
-	queryEmail := email
-	if err := database.Database[*modeliamuser.User](ctx).
-		WithLimit(1).
-		WithQuery(&modeliamuser.User{Email: &queryEmail}).
-		List(&users); err != nil {
-		return nil, err
-	}
-	if len(users) == 0 {
-		return nil, serviceemail.ErrAccountNotFound
-	}
-	return users[0], nil
 }
 
 func loadIAMUserByID(ctx *types.ServiceContext, userID string) (*modeliamuser.User, error) {
@@ -130,32 +142,28 @@ func loadIAMUserByID(ctx *types.ServiceContext, userID string) (*modeliamuser.Us
 	return users[0], nil
 }
 
-func iamAccountSnapshot(user *modeliamuser.User) *serviceemail.AccountSnapshot {
+func iamAccountSnapshot(user *modeliamuser.User, identity *modeliamaccount.EmailIdentity) *serviceemail.AccountSnapshot {
 	if user == nil {
 		return nil
 	}
 
 	email := ""
-	if user.Email != nil {
-		email = *user.Email
+	emailVerified := false
+	if identity != nil {
+		email = identity.Email
+		emailVerified = identity.VerifiedAt != nil
 	}
 
 	return &serviceemail.AccountSnapshot{
 		ID:            user.ID,
 		Email:         email,
 		Active:        iamUserActive(user),
-		EmailVerified: user.EmailVerified != nil && *user.EmailVerified,
+		EmailVerified: emailVerified,
 	}
 }
 
 func iamUserActive(user *modeliamuser.User) bool {
 	return user != nil && (user.Status == "" || user.Status == modeliamuser.UserStatusActive)
-}
-
-func newIAMUserWithID(userID string) *modeliamuser.User {
-	user := new(modeliamuser.User)
-	user.ID = userID
-	return user
 }
 
 func applyIAMPasswordUpdate(credential *modeliamaccount.PasswordCredential, newPassword string) error {
@@ -165,29 +173,9 @@ func applyIAMPasswordUpdate(credential *modeliamaccount.PasswordCredential, newP
 	return serviceiamaccount.ApplyPasswordCredentialUpdate(credential, newPassword, false)
 }
 
-func applyIAMEmailVerification(user *modeliamuser.User, verifiedAt time.Time) {
-	verified := true
-	verifiedAt = verifiedAt.UTC()
-	user.EmailVerified = &verified
-	user.EmailVerifiedAt = &verifiedAt
-}
-
-func applyIAMEmailChange(user *modeliamuser.User, newEmail string, changedAt time.Time) error {
-	if user == nil {
+func applyIAMEmailChange(identity *modeliamaccount.EmailIdentity, newEmail string, changedAt time.Time) error {
+	if identity == nil {
 		return errors.New("email change account is required")
 	}
-
-	normalizedNewEmail := normalizeEmailScope(newEmail)
-	if normalizedNewEmail == "" {
-		return errors.New("email change new email is required")
-	}
-
-	applyIAMEmailVerification(user, changedAt)
-	user.Email = &normalizedNewEmail
-	user.LastEmailChangedAt = user.EmailVerifiedAt
-	return nil
-}
-
-func normalizeEmailScope(scope string) string {
-	return strings.ToLower(strings.TrimSpace(scope))
+	return serviceiamaccount.ApplyEmailIdentityChange(identity, newEmail, changedAt)
 }

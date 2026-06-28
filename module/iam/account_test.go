@@ -29,7 +29,7 @@ import (
 )
 
 func TestAccountSignup(t *testing.T) {
-	user := accountSignupUser(t, "acct_signup", "12345678")
+	user := accountSignupUserWithEmail(t, "acct_signup", "12345678", "Acct.Signup@Example.COM")
 
 	require.NotEmpty(t, user.UserID)
 	require.NotEmpty(t, user.Username)
@@ -37,6 +37,11 @@ func TestAccountSignup(t *testing.T) {
 	credential := accountRequirePasswordCredential(t, user.UserID)
 	require.NoError(t, bcrypt.CompareHashAndPassword([]byte(credential.PasswordHash), []byte(user.Password)))
 	require.False(t, credential.MustChangePassword)
+
+	identity := accountRequireEmailIdentity(t, user.UserID)
+	require.Equal(t, "Acct.Signup@Example.COM", identity.Email)
+	require.Equal(t, "acct.signup@example.com", identity.NormalizedEmail)
+	require.Nil(t, identity.VerifiedAt)
 }
 
 func TestAccountLogin(t *testing.T) {
@@ -49,7 +54,7 @@ func TestAccountLogin(t *testing.T) {
 	})
 
 	t.Run("returns_authenticated_session", func(t *testing.T) {
-		user := accountSignupUser(t, "acct_login_response", "12345678")
+		user := accountSignupUserWithEmail(t, "acct_login_response", "12345678", "Acct.Login@Example.COM")
 
 		cli, err := client.New(loginAPI)
 		require.NoError(t, err)
@@ -72,6 +77,7 @@ func TestAccountLogin(t *testing.T) {
 			require.True(t, rsp.Session.ExpiresAt.After(rsp.ServerTime))
 			require.Equal(t, user.UserID, rsp.Principal.UserID)
 			require.Equal(t, user.Username, rsp.Principal.Username)
+			require.Equal(t, "Acct.Login@Example.COM", rsp.Principal.Email)
 			require.False(t, rsp.Principal.MustChangePassword)
 		})
 	})
@@ -783,6 +789,7 @@ type accountTestUser struct {
 	UserID    string
 	Username  string
 	Password  string
+	Email     string
 	SessionID string
 }
 
@@ -791,9 +798,16 @@ const accountTestUserAgent = "gst-account-test"
 func accountSignupUser(t *testing.T, prefix, password string) accountTestUser {
 	t.Helper()
 
+	return accountSignupUserWithEmail(t, prefix, password, "")
+}
+
+func accountSignupUserWithEmail(t *testing.T, prefix, password, email string) accountTestUser {
+	t.Helper()
+
 	user := accountTestUser{
 		Username: fmt.Sprintf("%s_%d", prefix, time.Now().UnixNano()),
 		Password: password,
+		Email:    email,
 	}
 
 	cli, err := client.New(signupAPI)
@@ -803,6 +817,7 @@ func accountSignupUser(t *testing.T, prefix, password string) accountTestUser {
 		Username:   user.Username,
 		Password:   user.Password,
 		RePassword: user.Password,
+		Email:      user.Email,
 	})
 	require.NoError(t, err)
 
@@ -839,6 +854,13 @@ func accountCleanupUser(t *testing.T, username string) {
 		if len(credentials) > 0 {
 			require.NoError(t, database.Database[*modeliamaccount.PasswordCredential](context.Background()).Delete(credentials...))
 		}
+		identities := make([]*modeliamaccount.EmailIdentity, 0)
+		require.NoError(t, database.Database[*modeliamaccount.EmailIdentity](context.Background()).
+			WithQuery(&modeliamaccount.EmailIdentity{UserID: user.ID}).
+			List(&identities))
+		if len(identities) > 0 {
+			require.NoError(t, database.Database[*modeliamaccount.EmailIdentity](context.Background()).Delete(identities...))
+		}
 	}
 	require.NoError(t, database.Database[*iam.User](context.Background()).Delete(users...))
 }
@@ -853,6 +875,18 @@ func accountRequirePasswordCredential(t *testing.T, userID string) *modeliamacco
 		List(&credentials))
 	require.Len(t, credentials, 1)
 	return credentials[0]
+}
+
+func accountRequireEmailIdentity(t *testing.T, userID string) *modeliamaccount.EmailIdentity {
+	t.Helper()
+
+	identities := make([]*modeliamaccount.EmailIdentity, 0, 1)
+	require.NoError(t, database.Database[*modeliamaccount.EmailIdentity](context.Background()).
+		WithLimit(1).
+		WithQuery(&modeliamaccount.EmailIdentity{UserID: userID}).
+		List(&identities))
+	require.Len(t, identities, 1)
+	return identities[0]
 }
 
 func accountLoginUser(t *testing.T, user *accountTestUser, password string) string {

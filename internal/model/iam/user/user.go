@@ -20,7 +20,6 @@ type User struct {
 	Username string     `json:"username" gorm:"type:varchar(50);uniqueIndex;not null"`
 	Status   UserStatus `json:"status" gorm:"type:varchar(20);default:'active';index"`
 
-	Email       *string    `json:"email" gorm:"type:varchar(100);uniqueIndex"`
 	Phone       *string    `json:"phone" gorm:"type:varchar(20);index"`
 	FirstName   *string    `json:"first_name" gorm:"type:varchar(50)"`
 	LastName    *string    `json:"last_name" gorm:"type:varchar(50)"`
@@ -32,10 +31,7 @@ type User struct {
 
 	TwoFactorEnabled *bool `json:"two_factor_enabled" gorm:"default:false"`
 
-	EmailVerified      *bool      `json:"email_verified" gorm:"default:false"`
-	EmailVerifiedAt    *time.Time `json:"email_verified_at"`
-	PhoneVerified      *bool      `json:"phone_verified" gorm:"default:false"`
-	LastEmailChangedAt *time.Time `json:"last_email_changed_at"`
+	PhoneVerified *bool `json:"phone_verified" gorm:"default:false"`
 
 	IsSuperuser *bool `json:"is_superuser" gorm:"default:false"`
 

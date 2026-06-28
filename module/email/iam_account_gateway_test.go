@@ -13,15 +13,18 @@ import (
 
 func TestIAMAccountSnapshotMapsMinimalEmailAccountState(t *testing.T) {
 	email := "User@Example.COM"
-	verified := true
+	verifiedAt := time.Date(2026, 3, 31, 15, 30, 0, 0, time.UTC)
 	user := &modeliamuser.User{
-		Base:          model.Base{ID: "user-1"},
-		Status:        modeliamuser.UserStatusActive,
-		Email:         &email,
-		EmailVerified: &verified,
+		Base:   model.Base{ID: "user-1"},
+		Status: modeliamuser.UserStatusActive,
+	}
+	identity := &modeliamaccount.EmailIdentity{
+		UserID:     user.ID,
+		Email:      email,
+		VerifiedAt: &verifiedAt,
 	}
 
-	snapshot := iamAccountSnapshot(user)
+	snapshot := iamAccountSnapshot(user, identity)
 
 	require.Equal(t, "user-1", snapshot.ID)
 	require.Equal(t, "User@Example.COM", snapshot.Email)
@@ -35,7 +38,7 @@ func TestIAMAccountSnapshotMarksInactiveAccountsInactive(t *testing.T) {
 		Status: modeliamuser.UserStatusLocked,
 	}
 
-	snapshot := iamAccountSnapshot(user)
+	snapshot := iamAccountSnapshot(user, nil)
 
 	require.Equal(t, "user-2", snapshot.ID)
 	require.False(t, snapshot.Active)
@@ -53,18 +56,16 @@ func TestApplyIAMPasswordUpdateHashesPasswordAndClearsChangeFlag(t *testing.T) {
 }
 
 func TestApplyIAMEmailChangeNormalizesAndMarksVerified(t *testing.T) {
-	user := new(modeliamuser.User)
+	identity := new(modeliamaccount.EmailIdentity)
 	changedAt := time.Date(2026, 3, 31, 15, 30, 0, 0, time.FixedZone("CST", 8*60*60))
 
-	err := applyIAMEmailChange(user, " New@Example.COM ", changedAt)
+	err := applyIAMEmailChange(identity, " New@Example.COM ", changedAt)
 
 	require.NoError(t, err)
-	require.NotNil(t, user.Email)
-	require.Equal(t, "new@example.com", *user.Email)
-	require.NotNil(t, user.EmailVerified)
-	require.True(t, *user.EmailVerified)
-	require.NotNil(t, user.EmailVerifiedAt)
-	require.Equal(t, changedAt.UTC(), *user.EmailVerifiedAt)
-	require.NotNil(t, user.LastEmailChangedAt)
-	require.Equal(t, changedAt.UTC(), *user.LastEmailChangedAt)
+	require.Equal(t, "New@Example.COM", identity.Email)
+	require.Equal(t, "new@example.com", identity.NormalizedEmail)
+	require.NotNil(t, identity.VerifiedAt)
+	require.Equal(t, changedAt.UTC(), *identity.VerifiedAt)
+	require.NotNil(t, identity.LastChangedAt)
+	require.Equal(t, changedAt.UTC(), *identity.LastChangedAt)
 }

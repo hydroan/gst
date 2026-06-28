@@ -9,14 +9,14 @@ import (
 
 // PasswordCredential stores password authentication state for an IAM user.
 type PasswordCredential struct {
-	model.Base
-
 	UserID             string     `json:"user_id" gorm:"uniqueIndex;not null" binding:"required"`
 	PasswordHash       string     `json:"-" binding:"required"`
 	MustChangePassword bool       `json:"must_change_password"`
 	FailedLoginCount   int        `json:"failed_login_count"`
 	LockedUntil        *time.Time `json:"locked_until,omitempty"`
 	PasswordChangedAt  *time.Time `json:"password_changed_at,omitempty"`
+
+	model.Base
 }
 
 func (PasswordCredential) Design() {

@@ -13,7 +13,6 @@ import (
 	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/util"
 )
 
 // AdminSessionsListService handles retrieval of all sessions grouped by user for privileged administrators.
@@ -243,12 +242,16 @@ func (s *AdminSessionsListService) buildItem(ctx *types.ServiceContext, session 
 		}
 		return nil, false, err
 	}
+	email, err := loadSessionEmail(ctx, user.ID)
+	if err != nil {
+		return nil, false, err
+	}
 
 	return &adminSessionOwnerItem{
 		view: modeliamsession.AdminSessionOwnerView{
 			UserID:             user.ID,
 			Username:           user.Username,
-			Email:              util.Deref(user.Email),
+			Email:              email,
 			FirstName:          user.FirstName,
 			LastName:           user.LastName,
 			Status:             string(user.Status),

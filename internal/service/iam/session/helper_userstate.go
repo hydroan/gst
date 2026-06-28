@@ -112,3 +112,28 @@ func loadSessionPasswordCredential(ctx context.Context, userID string) (*modelia
 	}
 	return credentials[0], nil
 }
+
+func loadSessionEmailIdentity(ctx context.Context, userID string) (*modeliamaccount.EmailIdentity, error) {
+	identities := make([]*modeliamaccount.EmailIdentity, 0, 1)
+	if err := database.Database[*modeliamaccount.EmailIdentity](ctx).
+		WithLimit(1).
+		WithQuery(&modeliamaccount.EmailIdentity{UserID: userID}).
+		List(&identities); err != nil {
+		return nil, err
+	}
+	if len(identities) == 0 {
+		return nil, database.ErrRecordNotFound
+	}
+	return identities[0], nil
+}
+
+func loadSessionEmail(ctx context.Context, userID string) (string, error) {
+	identity, err := loadSessionEmailIdentity(ctx, userID)
+	if err != nil {
+		if errors.Is(err, database.ErrRecordNotFound) {
+			return "", nil
+		}
+		return "", err
+	}
+	return identity.Email, nil
+}
