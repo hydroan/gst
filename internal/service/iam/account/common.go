@@ -1,10 +1,13 @@
 package serviceiamaccount
 
 import (
+	"net/http"
+
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
+	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 )
@@ -20,11 +23,11 @@ func privilegedActor(actor *modeliamuser.User) bool {
 // mayManageProtectedUser allows privileged actors to act on another user; superuser targets require root.
 func mayManageProtectedUser(actor, target *modeliamuser.User) error {
 	if !privilegedActor(actor) {
-		return errors.New("forbidden: superuser privileges required")
+		return service.NewError(http.StatusForbidden, "superuser required")
 	}
 	if target.IsSuperuser != nil && *target.IsSuperuser {
 		if actor.GetID() != consts.AUTHZ_USER_ROOT {
-			return errors.New("forbidden: only root may modify a superuser")
+			return service.NewError(http.StatusForbidden, "superuser is protected")
 		}
 	}
 	return nil
@@ -37,20 +40,23 @@ func loadPrivilegedActorAndTarget(ctx *types.ServiceContext, targetUserID string
 		return nil, nil, errors.Wrap(err, "invalid session")
 	}
 	if session.UserID == "" {
-		return nil, nil, errors.New("actor user id not found")
+		return nil, nil, service.NewError(http.StatusUnauthorized, "current user not found")
 	}
 
 	actor := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx).Get(actor, session.UserID); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
-			return nil, nil, errors.New("actor user not found")
+			return nil, nil, service.NewError(http.StatusUnauthorized, "current user not found")
 		}
-		return nil, nil, errors.Wrap(err, "database error")
+		return nil, nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load current user", err)
 	}
 
 	target := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx).Get(target, targetUserID); err != nil {
-		return nil, nil, errors.Wrap(err, "user not found")
+		if errors.Is(err, database.ErrRecordNotFound) {
+			return nil, nil, service.NewError(http.StatusNotFound, "user not found")
+		}
+		return nil, nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load target user", err)
 	}
 
 	return actor, target, nil

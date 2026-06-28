@@ -291,7 +291,8 @@ func TestAccountResetPassword(t *testing.T) {
 			NewPassword: resetPass,
 		})
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "code:")
+		require.Contains(t, err.Error(), "403")
+		require.Contains(t, err.Error(), "superuser required")
 	})
 
 	t.Run("victim_login_before_reset", func(t *testing.T) {
@@ -302,6 +303,41 @@ func TestAccountResetPassword(t *testing.T) {
 
 	t.Run("promote_actor_superuser", func(t *testing.T) {
 		accountSetSuperuser(t, actor.Username, true)
+	})
+
+	t.Run("missing_target_returns_not_found", func(t *testing.T) {
+		cli, err := client.New(resetpasswordAPI, client.WithCookie(&http.Cookie{
+			Name:  "session_id",
+			Value: actor.SessionID,
+		}))
+		require.NoError(t, err)
+
+		_, err = cli.Create(iam.ResetPasswordReq{
+			UserID:      "missing-reset-password-target",
+			NewPassword: resetPass,
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "404")
+		require.Contains(t, err.Error(), "user not found")
+	})
+
+	t.Run("superuser_target_is_protected", func(t *testing.T) {
+		protected := accountSignupUser(t, "acct_reset_protected", "12345678")
+		accountSetSuperuser(t, protected.Username, true)
+
+		cli, err := client.New(resetpasswordAPI, client.WithCookie(&http.Cookie{
+			Name:  "session_id",
+			Value: actor.SessionID,
+		}))
+		require.NoError(t, err)
+
+		_, err = cli.Create(iam.ResetPasswordReq{
+			UserID:      protected.UserID,
+			NewPassword: resetPass,
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "403")
+		require.Contains(t, err.Error(), "superuser is protected")
 	})
 
 	t.Run("reset_success", func(t *testing.T) {
@@ -419,11 +455,47 @@ func TestAccountStatus(t *testing.T) {
 			Status: modeliamuser.UserStatusInactive,
 		})
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "code:")
+		require.Contains(t, err.Error(), "403")
+		require.Contains(t, err.Error(), "superuser required")
 	})
 
 	t.Run("promote_actor_superuser", func(t *testing.T) {
 		accountSetSuperuser(t, actor.Username, true)
+	})
+
+	t.Run("missing_target_returns_not_found", func(t *testing.T) {
+		cli, err := client.New(accountstatusAPI, client.WithCookie(&http.Cookie{
+			Name:  "session_id",
+			Value: actor.SessionID,
+		}))
+		require.NoError(t, err)
+
+		_, err = cli.Create(iam.AccountStatusReq{
+			UserID: "missing-account-status-target",
+			Status: modeliamuser.UserStatusInactive,
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "404")
+		require.Contains(t, err.Error(), "user not found")
+	})
+
+	t.Run("superuser_target_is_protected", func(t *testing.T) {
+		protected := accountSignupUser(t, "acct_status_protected", "12345678")
+		accountSetSuperuser(t, protected.Username, true)
+
+		cli, err := client.New(accountstatusAPI, client.WithCookie(&http.Cookie{
+			Name:  "session_id",
+			Value: actor.SessionID,
+		}))
+		require.NoError(t, err)
+
+		_, err = cli.Create(iam.AccountStatusReq{
+			UserID: protected.UserID,
+			Status: modeliamuser.UserStatusInactive,
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "403")
+		require.Contains(t, err.Error(), "superuser is protected")
 	})
 
 	t.Run("disable_account", func(t *testing.T) {
