@@ -2,7 +2,9 @@ package serviceiamaccount
 
 import (
 	"fmt"
+	"net/http"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
@@ -31,6 +33,15 @@ func (s *LogoutService) Create(ctx *types.ServiceContext, req *model.Empty) (rsp
 	}
 
 	session, err := serviceiamsession.SessionManager.Delete(ctx, sessionID)
+	if err != nil {
+		if errors.Is(err, types.ErrEntryNotFound) {
+			serviceiamsession.SessionManager.ClearCookie(ctx)
+			return &modeliamaccount.LogoutRsp{Msg: "logout successful"}, nil
+		}
+
+		log.Error("failed to delete session from redis", err)
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to logout", err)
+	}
 
 	// Parse user agent for logging
 	ua := useragent.New(ctx.UserAgent())
@@ -38,15 +49,9 @@ func (s *LogoutService) Create(ctx *types.ServiceContext, req *model.Empty) (rsp
 	browserName, browserVersion := ua.Browser()
 
 	// Record logout log
-	var userID, username string
-	if err == nil {
-		userID = session.UserID
-		username = session.Username
-	}
-
 	if logErr := database.Database[*modellogmgmt.LoginLog](ctx).Create(&modellogmgmt.LoginLog{
-		UserID:   userID,
-		Username: username,
+		UserID:   session.UserID,
+		Username: session.Username,
 		ClientIP: ctx.ClientIP(),
 		Status:   modellogmgmt.LoginStatusLogout,
 		Source:   ctx.UserAgent(),
@@ -55,10 +60,6 @@ func (s *LogoutService) Create(ctx *types.ServiceContext, req *model.Empty) (rsp
 		Browser:  fmt.Sprintf("%s %s", browserName, browserVersion),
 	}); logErr != nil {
 		log.Warnz("failed to write logout log", zap.Error(logErr))
-	}
-
-	if err != nil {
-		log.Warnz("failed to delete session from redis", zap.Error(err))
 	}
 
 	serviceiamsession.SessionManager.ClearCookie(ctx)

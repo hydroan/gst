@@ -245,6 +245,33 @@ func TestAccountLogout(t *testing.T) {
 		user.SessionID = accountLoginUser(t, &user, user.Password)
 		require.NotEmpty(t, user.SessionID)
 	})
+
+	t.Run("returns_error_when_session_index_delete_fails", func(t *testing.T) {
+		brokenIndexUser := accountSignupUser(t, "acct_logout_broken_index", "12345678")
+		brokenIndexUser.SessionID = accountLoginUser(t, &brokenIndexUser, brokenIndexUser.Password)
+
+		userSessionKey := modeliamsession.SessionUserKey(brokenIndexUser.UserID)
+		t.Cleanup(func() {
+			require.NoError(t, redis.Del(context.Background(), userSessionKey, modeliamsession.SessionIDKey(brokenIndexUser.SessionID)))
+			require.NoError(t, redis.ZRem(context.Background(), modeliamsession.SessionAllKey(), brokenIndexUser.SessionID))
+			require.NoError(t, redis.ZRem(context.Background(), modeliamsession.SessionLastSeenKey(), brokenIndexUser.SessionID))
+			serviceiamsession.InvalidateUserSessions(context.Background(), brokenIndexUser.UserID)
+		})
+
+		require.NoError(t, redis.Del(t.Context(), userSessionKey))
+		require.NoError(t, redis.Set(t.Context(), userSessionKey, "not-a-zset", time.Hour))
+
+		cli, err := client.New(logoutAPI, client.WithCookie(&http.Cookie{
+			Name:  "session_id",
+			Value: brokenIndexUser.SessionID,
+		}))
+		require.NoError(t, err)
+
+		_, err = cli.Create(nil)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "500")
+		require.Contains(t, err.Error(), "failed to logout")
+	})
 }
 
 func TestAccountChangePassword(t *testing.T) {
