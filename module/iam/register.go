@@ -94,15 +94,13 @@ func Register(config ...Config) {
 	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsDeleteAllService{}), module.Exact(consts.PHASE_DELETE))
 	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsDeleteService{}), module.CRUD(consts.PHASE_DELETE))
 
-	// create default users
-	if len(cfg.DefaultUsers) > 0 {
-		for _, u := range cfg.DefaultUsers {
-			if err := modeliamuser.GenerateHashedPassword(u); err != nil {
-				panic(err)
-			}
+	// Register the backing IAM user table and optional default users.
+	for _, u := range cfg.DefaultUsers {
+		if err := modeliamuser.GenerateHashedPassword(u); err != nil {
+			panic(err)
 		}
-		model.Register(cfg.DefaultUsers...)
 	}
+	model.Register[*modeliamuser.User](cfg.DefaultUsers...)
 }
 
 // GetSessionExpiration returns the configured session expiration time.
