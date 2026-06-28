@@ -4,8 +4,10 @@ import (
 	"time"
 
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
+	modeliamprofile "github.com/hydroan/gst/internal/model/iam/profile"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
+	serviceiamprofile "github.com/hydroan/gst/internal/service/iam/profile"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/model"
@@ -57,6 +59,8 @@ type DefaultUser struct {
 //   - POST   /api/iam/change-password
 //   - POST   /api/iam/reset-password
 //   - POST   /api/iam/account-status
+//   - GET    /api/iam/profile
+//   - PATCH  /api/iam/profile
 //
 // Middleware:
 //   - IAMSession for protected IAM routes and session-aware APIs
@@ -92,6 +96,8 @@ func Register(config ...Config) {
 	module.Use(module.NewWrapper("/iam/change-password", "id", false, &serviceiamaccount.ChangePasswordService{}), module.CRUD(consts.PHASE_CREATE))
 	module.Use(module.NewWrapper("/iam/reset-password", "id", false, &serviceiamaccount.ResetPasswordService{}), module.CRUD(consts.PHASE_CREATE))
 	module.Use(module.NewWrapper("/iam/account-status", "id", false, &serviceiamaccount.AccountStatusService{}), module.CRUD(consts.PHASE_CREATE))
+	module.Use(module.NewWrapper("/iam/profile", "id", false, &serviceiamprofile.ProfileGetService{}), module.Exact(consts.PHASE_GET))
+	module.Use(module.NewWrapper("/iam/profile", "id", false, &serviceiamprofile.ProfilePatchService{}), module.Exact(consts.PHASE_PATCH))
 
 	module.Use(module.NewWrapper("/iam/session/current", "id", false, &serviceiamsession.CurrentGetService{}), module.Exact(consts.PHASE_GET))
 	module.Use(module.NewWrapper("/iam/session/current", "id", false, &serviceiamsession.CurrentDeleteService{}), module.Exact(consts.PHASE_DELETE))
@@ -105,11 +111,12 @@ func Register(config ...Config) {
 	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsDeleteAllService{}), module.Exact(consts.PHASE_DELETE))
 	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsDeleteService{}), module.CRUD(consts.PHASE_DELETE))
 
-	// Register the backing IAM account tables and optional default users.
+	// Register the backing IAM tables and optional default users.
 	defaultUsers, defaultCredentials, defaultEmailIdentities := buildDefaultUserRecords(cfg.DefaultUsers)
 	model.Register[*modeliamuser.User](defaultUsers...)
 	model.Register[*modeliamaccount.PasswordCredential](defaultCredentials...)
 	model.Register[*modeliamaccount.EmailIdentity](defaultEmailIdentities...)
+	model.Register[*modeliamprofile.Profile]()
 }
 
 // GetSessionExpiration returns the configured session expiration time.

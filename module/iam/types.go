@@ -2,6 +2,7 @@ package iam
 
 import (
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
+	modeliamprofile "github.com/hydroan/gst/internal/model/iam/profile"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 )
@@ -36,6 +37,15 @@ const (
 	UserStatusActive   = modeliamuser.UserStatusActive
 	UserStatusInactive = modeliamuser.UserStatusInactive
 	UserStatusLocked   = modeliamuser.UserStatusLocked
+)
+
+// Profile API aliases.
+type (
+	Profile         = modeliamprofile.Profile
+	ProfileGetReq   = modeliamprofile.ProfileGetReq
+	ProfileGetRsp   = modeliamprofile.ProfileGetRsp
+	ProfilePatchReq = modeliamprofile.ProfilePatchReq
+	ProfilePatchRsp = modeliamprofile.ProfilePatchRsp
 )
 
 // Session API aliases.
