@@ -7,6 +7,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
+	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/provider/redis"
@@ -77,9 +78,18 @@ func refreshSessionUserState(ctx context.Context, userID string) (sessionUserSta
 		return sessionUserState{}, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to refresh session user state", err)
 	}
 
+	credential, err := loadSessionPasswordCredential(ctx, userID)
+	if err != nil {
+		if errors.Is(err, database.ErrRecordNotFound) {
+			return sessionUserState{}, false, service.NewError(http.StatusUnauthorized, "session invalid")
+		}
+		zap.S().Warnw("failed to refresh iam session password credential state", "user_id", userID, "error", err)
+		return sessionUserState{}, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to refresh session user state", err)
+	}
+
 	state := sessionUserState{
 		Status:             user.Status,
-		MustChangePassword: user.MustChangePassword,
+		MustChangePassword: credential.MustChangePassword,
 	}
 	if err := redis.Cache[sessionUserState]().
 		WithContext(redisContext(ctx)).
@@ -87,4 +97,18 @@ func refreshSessionUserState(ctx context.Context, userID string) (sessionUserSta
 		zap.S().Warnw("failed to cache iam session user state", "user_id", userID, "error", err)
 	}
 	return state, true, nil
+}
+
+func loadSessionPasswordCredential(ctx context.Context, userID string) (*modeliamaccount.PasswordCredential, error) {
+	credentials := make([]*modeliamaccount.PasswordCredential, 0, 1)
+	if err := database.Database[*modeliamaccount.PasswordCredential](ctx).
+		WithLimit(1).
+		WithQuery(&modeliamaccount.PasswordCredential{UserID: userID}).
+		List(&credentials); err != nil {
+		return nil, err
+	}
+	if len(credentials) == 0 {
+		return nil, database.ErrRecordNotFound
+	}
+	return credentials[0], nil
 }

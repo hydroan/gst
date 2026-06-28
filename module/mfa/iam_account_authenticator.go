@@ -3,9 +3,9 @@ package mfa
 import (
 	"github.com/hydroan/gst/database"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	servicemfa "github.com/hydroan/gst/internal/service/mfa"
 	"github.com/hydroan/gst/types"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // iamAccountAuthenticator adapts the framework IAM user model for the built-in MFA
@@ -24,7 +24,7 @@ func (iamAccountAuthenticator) AuthenticateByUsername(ctx *types.ServiceContext,
 	if len(users) == 0 {
 		return nil, servicemfa.ErrAccountAuthenticationFailed
 	}
-	return authenticateIAMAccount(users[0], password)
+	return authenticateIAMAccount(ctx, users[0], password)
 }
 
 func (iamAccountAuthenticator) AuthenticateByAccountID(ctx *types.ServiceContext, accountID, password string) (*servicemfa.AuthenticatedAccount, error) {
@@ -41,14 +41,18 @@ func (iamAccountAuthenticator) AuthenticateByAccountID(ctx *types.ServiceContext
 	if len(users) == 0 {
 		return nil, servicemfa.ErrAccountAuthenticationFailed
 	}
-	return authenticateIAMAccount(users[0], password)
+	return authenticateIAMAccount(ctx, users[0], password)
 }
 
-func authenticateIAMAccount(user *modeliamuser.User, password string) (*servicemfa.AuthenticatedAccount, error) {
+func authenticateIAMAccount(ctx *types.ServiceContext, user *modeliamuser.User, password string) (*servicemfa.AuthenticatedAccount, error) {
 	if user == nil || user.Status != modeliamuser.UserStatusActive {
 		return nil, servicemfa.ErrAccountAuthenticationFailed
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+	credential, err := serviceiamaccount.LoadPasswordCredential(ctx, user.ID)
+	if err != nil {
+		return nil, servicemfa.ErrAccountAuthenticationFailed
+	}
+	if err := serviceiamaccount.VerifyPasswordCredential(credential, password); err != nil {
 		return nil, servicemfa.ErrAccountAuthenticationFailed
 	}
 	return &servicemfa.AuthenticatedAccount{

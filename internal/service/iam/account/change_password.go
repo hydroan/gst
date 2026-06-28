@@ -11,7 +11,6 @@ import (
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type ChangePasswordService struct {
@@ -40,15 +39,19 @@ func (s *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 		return nil, errors.New("database error")
 	}
 
+	credential, err := LoadPasswordCredential(ctx, user.ID)
+	if err != nil {
+		log.Error("failed to query password credential", err)
+		return nil, errors.New("database error")
+	}
+
 	// Verify old password
-	if err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.OldPassword)); err != nil {
+	if err = VerifyPasswordCredential(credential, req.OldPassword); err != nil {
 		log.Error("old password verification failed", "username", user.Username)
 		return nil, errors.New("old password is incorrect")
 	}
 
-	// Hash new password
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
-	if err != nil {
+	if err = ApplyPasswordCredentialUpdate(credential, req.NewPassword, false); err != nil {
 		log.Error("failed to hash new password", err)
 		return nil, errors.New("failed to process new password")
 	}
@@ -59,12 +62,10 @@ func (s *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 	}
 
 	// Update password in database
-	user.PasswordHash = string(hashedPassword)
-	user.MustChangePassword = false
-	if err := database.Database[*modeliamuser.User](ctx).
+	if err := database.Database[*modeliamaccount.PasswordCredential](ctx).
 		WithoutHook().
-		WithSelect("username", "password_hash", "must_change_password").
-		Update(user); err != nil {
+		WithSelect("user_id", "password_hash", "must_change_password", "password_changed_at").
+		Update(credential); err != nil {
 		log.Error("failed to update password", err)
 		return nil, errors.New("failed to update password")
 	}

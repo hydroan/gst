@@ -116,6 +116,11 @@ func (s *AdminUserSessionsDeleteService) Delete(ctx *types.ServiceContext, req *
 // path bounded by recently active sessions instead of scanning every session
 // owned by the target user.
 func (s *AdminUserSessionsListService) buildView(ctx *types.ServiceContext, user *modeliamuser.User, currentSessionID string, onlineSince time.Time, onlineOnly bool) (modeliamsession.AdminSessionOwnerView, error) {
+	credential, err := loadSessionPasswordCredential(ctx, user.ID)
+	if err != nil {
+		return modeliamsession.AdminSessionOwnerView{}, err
+	}
+
 	view := modeliamsession.AdminSessionOwnerView{
 		UserID:             user.ID,
 		Username:           user.Username,
@@ -123,13 +128,12 @@ func (s *AdminUserSessionsListService) buildView(ctx *types.ServiceContext, user
 		FirstName:          user.FirstName,
 		LastName:           user.LastName,
 		Status:             string(user.Status),
-		MustChangePassword: user.MustChangePassword,
+		MustChangePassword: credential.MustChangePassword,
 		Sessions:           make([]modeliamsession.SessionView, 0),
 	}
 
 	var indexUserID string
 	var sessionIDs []string
-	var err error
 	if onlineOnly {
 		sessionIDs, err = listOnlineSessionIDs(ctx, onlineSince)
 	} else {

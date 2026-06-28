@@ -16,7 +16,7 @@ func BuildAuthenticatedSessionRsp(session modeliamsession.Session, user *modelia
 	return &modeliamsession.AuthenticatedSessionRsp{
 		ServerTime: now,
 		Session:    buildAuthenticatedSessionView(session, now),
-		Principal:  buildPrincipalView(user),
+		Principal:  buildPrincipalView(user, session.MustChangePassword),
 	}
 }
 
@@ -42,7 +42,7 @@ func buildAuthenticatedSessionView(session modeliamsession.Session, now time.Tim
 }
 
 // buildPrincipalView builds the principal snapshot returned by authentication state APIs.
-func buildPrincipalView(user *modeliamuser.User) modeliamsession.PrincipalView {
+func buildPrincipalView(user *modeliamuser.User, mustChangePassword bool) modeliamsession.PrincipalView {
 	if user == nil {
 		return modeliamsession.PrincipalView{}
 	}
@@ -52,6 +52,6 @@ func buildPrincipalView(user *modeliamuser.User) modeliamsession.PrincipalView {
 		Email:              util.Deref(user.Email),
 		FirstName:          user.FirstName,
 		LastName:           user.LastName,
-		MustChangePassword: user.MustChangePassword,
+		MustChangePassword: mustChangePassword,
 	}
 }

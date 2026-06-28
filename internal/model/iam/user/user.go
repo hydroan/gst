@@ -1,12 +1,10 @@
 package modeliamuser
 
 import (
-	"context"
 	"time"
 
 	. "github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // UserStatus is the account lifecycle state for IAM users.
@@ -18,21 +16,9 @@ const (
 	UserStatusLocked   UserStatus = "locked"
 )
 
-// UserType defines IAM user categories.
-type UserType string
-
-const (
-	UserTypeRegular  UserType = "regular"
-	UserTypeAdmin    UserType = "admin"
-	UserTypeSystem   UserType = "system"
-	UserTypeMerchant UserType = "merchant"
-	UserTypeGuest    UserType = "guest"
-)
-
 type User struct {
 	Username string     `json:"username" gorm:"type:varchar(50);uniqueIndex;not null"`
 	Status   UserStatus `json:"status" gorm:"type:varchar(20);default:'active';index"`
-	Type     UserType   `json:"type" gorm:"type:varchar(20);default:'regular';index"`
 
 	Email       *string    `json:"email" gorm:"type:varchar(100);uniqueIndex"`
 	Phone       *string    `json:"phone" gorm:"type:varchar(20);index"`
@@ -44,25 +30,18 @@ type User struct {
 	Birthday    *time.Time `json:"birthday"`
 	Gender      *string    `json:"gender" gorm:"type:varchar(10)"`
 
-	Password           string `json:"password,omitempty" gorm:"-"`
-	PasswordHash       string `json:"-" gorm:"type:varchar(255)"`
-	Salt               string `json:"-" gorm:"type:varchar(50)"`
-	TwoFactorEnabled   *bool  `json:"two_factor_enabled" gorm:"default:false"`
-	MustChangePassword bool   `json:"must_change_password" gorm:"default:false;not null"`
+	TwoFactorEnabled *bool `json:"two_factor_enabled" gorm:"default:false"`
 
 	EmailVerified      *bool      `json:"email_verified" gorm:"default:false"`
 	EmailVerifiedAt    *time.Time `json:"email_verified_at"`
 	PhoneVerified      *bool      `json:"phone_verified" gorm:"default:false"`
 	LastEmailChangedAt *time.Time `json:"last_email_changed_at"`
 
-	IsStaff     *bool `json:"is_staff" gorm:"default:false"`
 	IsSuperuser *bool `json:"is_superuser" gorm:"default:false"`
 
-	LastLoginAt      *time.Time `json:"last_login_at"`
-	LastLoginIP      *string    `json:"last_login_ip" gorm:"type:varchar(45)"`
-	LoginCount       *int       `json:"login_count" gorm:"default:0"`
-	FailedLoginCount int        `json:"failed_login_count" gorm:"default:0"`
-	LockedUntil      *time.Time `json:"locked_until"`
+	LastLoginAt *time.Time `json:"last_login_at"`
+	LastLoginIP *string    `json:"last_login_ip" gorm:"type:varchar(45)"`
+	LoginCount  *int       `json:"login_count" gorm:"default:0"`
 
 	model.Base
 }
@@ -73,18 +52,3 @@ func (User) Design() {
 }
 
 func (User) Purge() bool { return true }
-
-func (u *User) CreateBefore(ctx context.Context) error { return GenerateHashedPassword(u) }
-func (u *User) UpdateBefore(ctx context.Context) error { return GenerateHashedPassword(u) }
-
-func GenerateHashedPassword(u *User) error {
-	if len(u.Password) > 0 && len(u.PasswordHash) == 0 {
-		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(u.Password), bcrypt.DefaultCost)
-		if err != nil {
-			return err
-		}
-		u.PasswordHash = string(hashedPassword)
-		return nil
-	}
-	return nil
-}

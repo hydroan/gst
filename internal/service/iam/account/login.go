@@ -20,7 +20,6 @@ import (
 	"github.com/hydroan/gst/types"
 	"github.com/mssola/useragent"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type LoginService struct {
@@ -85,8 +84,17 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		return nil, service.NewError(http.StatusForbidden, "account locked")
 	}
 
+	credential, err := LoadPasswordCredential(ctx, user.ID)
+	if err != nil {
+		log.Warnz("password credential not found", zap.String("username", req.Username), zap.Error(err))
+		return nil, errors.New("invalid username or password")
+	}
+	if credential.LockedUntil != nil && credential.LockedUntil.After(time.Now()) {
+		return nil, service.NewError(http.StatusForbidden, "account locked")
+	}
+
 	// Verify password
-	if err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+	if err = VerifyPasswordCredential(credential, req.Password); err != nil {
 		log.Warnz("invalid password", zap.String("username", req.Username))
 		return nil, errors.New("invalid username or password")
 	}
@@ -128,7 +136,7 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		ID:                 sessionID,
 		UserID:             user.ID,
 		Username:           user.Username,
-		MustChangePassword: user.MustChangePassword,
+		MustChangePassword: credential.MustChangePassword,
 		ClientIP:           ctx.ClientIP(),
 		UserAgent:          ctx.UserAgent(),
 		OS:                 ua.OS(),
@@ -162,12 +170,18 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	} else {
 		(*user.LoginCount)++
 	}
-	user.FailedLoginCount = 0
 	if err = database.Database[*modeliamuser.User](ctx).
 		WithoutHook().
-		WithSelect("username", "last_login_at", "last_login_ip", "login_count", "failed_login_count").
+		WithSelect("username", "last_login_at", "last_login_ip", "login_count").
 		Update(user); err != nil {
 		log.Warnz("failed to update login statistics", zap.Error(err))
+	}
+	credential.FailedLoginCount = 0
+	if err = database.Database[*modeliamaccount.PasswordCredential](ctx).
+		WithoutHook().
+		WithSelect("user_id", "failed_login_count").
+		Update(credential); err != nil {
+		log.Warnz("failed to update password credential statistics", zap.Error(err))
 	}
 
 	serviceiamsession.SessionManager.SetCookie(ctx, sessionID, expire)

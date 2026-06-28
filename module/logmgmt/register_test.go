@@ -14,7 +14,6 @@ import (
 	"github.com/hydroan/gst/config"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/testutil"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/module/logmgmt"
@@ -58,12 +57,11 @@ func init() {
 	os.Setenv(config.AUDIT_ASYNC_WRITE, "false")
 
 	iam.Register(iam.Config{
-		DefaultUsers: []*iam.User{
+		DefaultUsers: []*iam.DefaultUser{
 			{
-				Base:     model.Base{ID: "root"},
-				Type:     "admin",
 				Username: rootUsername,
 				Password: rootPassword,
+				ID:       "root",
 			},
 		},
 	})

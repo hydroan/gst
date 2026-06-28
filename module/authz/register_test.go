@@ -55,12 +55,11 @@ func init() {
 	os.Setenv(config.AUDIT_ASYNC_WRITE, "false")
 
 	iam.Register(iam.Config{
-		DefaultUsers: []*iam.User{
+		DefaultUsers: []*iam.DefaultUser{
 			{
-				Base:     model.Base{ID: "root"},
-				Type:     "admin",
 				Username: rootUsername,
 				Password: rootPassword,
+				ID:       "root",
 			},
 		},
 	})

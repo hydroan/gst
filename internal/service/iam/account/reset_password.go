@@ -6,12 +6,10 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
-	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type ResetPasswordService struct {
@@ -37,20 +35,31 @@ func (s *ResetPasswordService) Create(ctx *types.ServiceContext, req *modeliamac
 		return nil, err
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	credential, err := LoadPasswordCredential(ctx, target.ID)
 	if err != nil {
+		if !errors.Is(err, database.ErrRecordNotFound) {
+			log.Error("failed to query password credential", err)
+			return nil, errors.Wrap(err, "failed to update password")
+		}
+		credential = &modeliamaccount.PasswordCredential{UserID: target.ID}
+	}
+	if err = ApplyPasswordCredentialUpdate(credential, req.NewPassword, true); err != nil {
 		log.Error("failed to hash new password", err)
 		return nil, errors.Wrap(err, "failed to process new password")
 	}
-
-	target.PasswordHash = string(hashedPassword)
-	target.MustChangePassword = true
-	if err = database.Database[*modeliamuser.User](ctx).
-		WithoutHook().
-		WithSelect("username", "password_hash", "must_change_password").
-		Update(target); err != nil {
-		log.Error("failed to update user password fields", err)
-		return nil, errors.Wrap(err, "failed to update password")
+	if credential.ID == "" {
+		if err = database.Database[*modeliamaccount.PasswordCredential](ctx).Create(credential); err != nil {
+			log.Error("failed to create password credential", err)
+			return nil, errors.Wrap(err, "failed to update password")
+		}
+	} else {
+		if err = database.Database[*modeliamaccount.PasswordCredential](ctx).
+			WithoutHook().
+			WithSelect("user_id", "password_hash", "must_change_password", "password_changed_at").
+			Update(credential); err != nil {
+			log.Error("failed to update password credential", err)
+			return nil, errors.Wrap(err, "failed to update password")
+		}
 	}
 
 	if err = serviceiamsession.DeleteUserSessions(ctx, req.UserID); err != nil {

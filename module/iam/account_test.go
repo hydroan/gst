@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
+	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
@@ -32,6 +33,10 @@ func TestAccountSignup(t *testing.T) {
 
 	require.NotEmpty(t, user.UserID)
 	require.NotEmpty(t, user.Username)
+
+	credential := accountRequirePasswordCredential(t, user.UserID)
+	require.NoError(t, bcrypt.CompareHashAndPassword([]byte(credential.PasswordHash), []byte(user.Password)))
+	require.False(t, credential.MustChangePassword)
 }
 
 func TestAccountLogin(t *testing.T) {
@@ -96,11 +101,17 @@ func TestAccountLogin(t *testing.T) {
 
 		loginCount := 2
 		users[0].LoginCount = &loginCount
-		users[0].FailedLoginCount = 3
 		require.NoError(t, database.Database[*iam.User](context.Background()).
 			WithoutHook().
-			WithSelect("username", "login_count", "failed_login_count").
+			WithSelect("username", "login_count").
 			Update(users[0]))
+
+		credential := accountRequirePasswordCredential(t, user.UserID)
+		credential.FailedLoginCount = 3
+		require.NoError(t, database.Database[*modeliamaccount.PasswordCredential](context.Background()).
+			WithoutHook().
+			WithSelect("user_id", "failed_login_count").
+			Update(credential))
 
 		sessionID := accountLoginUser(t, &user, user.Password)
 		accountRequireUserSessionContains(t, user.UserID, sessionID)
@@ -112,7 +123,9 @@ func TestAccountLogin(t *testing.T) {
 		require.NotEmpty(t, *got.LastLoginIP)
 		require.NotNil(t, got.LoginCount)
 		require.Equal(t, loginCount+1, *got.LoginCount)
-		require.Zero(t, got.FailedLoginCount)
+
+		credential = accountRequirePasswordCredential(t, user.UserID)
+		require.Zero(t, credential.FailedLoginCount)
 	})
 }
 
@@ -232,17 +245,12 @@ func TestAccountChangePassword(t *testing.T) {
 		session, err := serviceiamsession.SessionManager.Load(t.Context(), syncFailUser.SessionID)
 		require.NoError(t, err)
 
-		users := make([]*iam.User, 0)
-		require.NoError(t, database.Database[*iam.User](context.Background()).
-			WithLimit(1).
-			WithQuery(&iam.User{Username: syncFailUser.Username}).
-			List(&users))
-		require.Len(t, users, 1)
-		users[0].MustChangePassword = true
-		require.NoError(t, database.Database[*iam.User](context.Background()).
+		credential := accountRequirePasswordCredential(t, syncFailUser.UserID)
+		credential.MustChangePassword = true
+		require.NoError(t, database.Database[*modeliamaccount.PasswordCredential](context.Background()).
 			WithoutHook().
-			WithSelect("username", "must_change_password").
-			Update(users[0]))
+			WithSelect("user_id", "must_change_password").
+			Update(credential))
 
 		serviceCtx := accountNewServiceContext(
 			serviceiamsession.WithCurrentSession(t.Context(), syncFailUser.SessionID, session),
@@ -264,8 +272,7 @@ func TestAccountChangePassword(t *testing.T) {
 		require.NotNil(t, resp)
 		require.NotEmpty(t, resp.Msg)
 
-		changed := new(iam.User)
-		require.NoError(t, database.Database[*iam.User](context.Background()).Get(changed, syncFailUser.UserID))
+		changed := accountRequirePasswordCredential(t, syncFailUser.UserID)
 		require.NoError(t, bcrypt.CompareHashAndPassword([]byte(changed.PasswordHash), []byte(syncFailPassword)))
 		require.False(t, changed.MustChangePassword)
 	})
@@ -825,8 +832,27 @@ func accountCleanupUser(t *testing.T, username string) {
 
 	for _, user := range users {
 		serviceiamsession.InvalidateUserSessions(t.Context(), user.ID)
+		credentials := make([]*modeliamaccount.PasswordCredential, 0)
+		require.NoError(t, database.Database[*modeliamaccount.PasswordCredential](context.Background()).
+			WithQuery(&modeliamaccount.PasswordCredential{UserID: user.ID}).
+			List(&credentials))
+		if len(credentials) > 0 {
+			require.NoError(t, database.Database[*modeliamaccount.PasswordCredential](context.Background()).Delete(credentials...))
+		}
 	}
 	require.NoError(t, database.Database[*iam.User](context.Background()).Delete(users...))
+}
+
+func accountRequirePasswordCredential(t *testing.T, userID string) *modeliamaccount.PasswordCredential {
+	t.Helper()
+
+	credentials := make([]*modeliamaccount.PasswordCredential, 0, 1)
+	require.NoError(t, database.Database[*modeliamaccount.PasswordCredential](context.Background()).
+		WithLimit(1).
+		WithQuery(&modeliamaccount.PasswordCredential{UserID: userID}).
+		List(&credentials))
+	require.Len(t, credentials, 1)
+	return credentials[0]
 }
 
 func accountLoginUser(t *testing.T, user *accountTestUser, password string) string {

@@ -6,7 +6,7 @@ import (
 
 func init() {
 	iam.Register(iam.Config{
-		DefaultUsers: []*iam.User{
+		DefaultUsers: []*iam.DefaultUser{
 			{
 				Username: "root",
 				Password: "toor", // gitguardian:ignore

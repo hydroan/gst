@@ -26,7 +26,15 @@ type (
 
 // User API aliases.
 type (
-	User = modeliamuser.User
+	User               = modeliamuser.User
+	UserStatus         = modeliamuser.UserStatus
+	PasswordCredential = modeliamaccount.PasswordCredential
+)
+
+const (
+	UserStatusActive   = modeliamuser.UserStatusActive
+	UserStatusInactive = modeliamuser.UserStatusInactive
+	UserStatusLocked   = modeliamuser.UserStatusLocked
 )
 
 // Session API aliases.

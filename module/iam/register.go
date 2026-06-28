@@ -3,6 +3,7 @@ package iam
 import (
 	"time"
 
+	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
@@ -17,8 +18,17 @@ var iamConfig Config
 
 // Config is the configuration for iam module.
 type Config struct {
-	DefaultUsers      []*User       // DefaultUsers are default users to create on registration
-	SessionExpiration time.Duration // SessionExpiration is the session expiration time, default is 8 hours
+	DefaultUsers      []*DefaultUser // DefaultUsers are default users to create on registration.
+	SessionExpiration time.Duration  // SessionExpiration is the session expiration time, default is 8 hours
+}
+
+// DefaultUser describes a user and password credential created during module registration.
+type DefaultUser struct {
+	ID                 string
+	Username           string
+	Password           string
+	Status             modeliamuser.UserStatus
+	MustChangePassword bool
 }
 
 // Register registers IAM models, API routes, middleware, and scheduled jobs.
@@ -66,8 +76,8 @@ func Register(config ...Config) {
 		}
 	}
 
-	// Store config globally
-	iamConfig = cfg
+	// Store only runtime configuration needed after registration.
+	iamConfig = Config{SessionExpiration: cfg.SessionExpiration}
 
 	// Set session expiration in service layer
 	serviceiamsession.SetSessionExpiration(cfg.SessionExpiration)
@@ -94,13 +104,10 @@ func Register(config ...Config) {
 	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsDeleteAllService{}), module.Exact(consts.PHASE_DELETE))
 	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsDeleteService{}), module.CRUD(consts.PHASE_DELETE))
 
-	// Register the backing IAM user table and optional default users.
-	for _, u := range cfg.DefaultUsers {
-		if err := modeliamuser.GenerateHashedPassword(u); err != nil {
-			panic(err)
-		}
-	}
-	model.Register[*modeliamuser.User](cfg.DefaultUsers...)
+	// Register the backing IAM account tables and optional default users.
+	defaultUsers, defaultCredentials := buildDefaultUserRecords(cfg.DefaultUsers)
+	model.Register[*modeliamuser.User](defaultUsers...)
+	model.Register[*modeliamaccount.PasswordCredential](defaultCredentials...)
 }
 
 // GetSessionExpiration returns the configured session expiration time.
@@ -110,4 +117,40 @@ func GetSessionExpiration() time.Duration {
 		return 8 * time.Hour
 	}
 	return iamConfig.SessionExpiration
+}
+
+func buildDefaultUserRecords(configs []*DefaultUser) ([]*modeliamuser.User, []*modeliamaccount.PasswordCredential) {
+	users := make([]*modeliamuser.User, 0, len(configs))
+	credentials := make([]*modeliamaccount.PasswordCredential, 0, len(configs))
+	for _, cfg := range configs {
+		if cfg == nil {
+			continue
+		}
+		if cfg.Username == "" {
+			panic("default user username is required")
+		}
+
+		userID := cfg.ID
+		if userID == "" {
+			userID = cfg.Username
+		}
+		status := cfg.Status
+		if status == "" {
+			status = modeliamuser.UserStatusActive
+		}
+
+		user := &modeliamuser.User{
+			Username: cfg.Username,
+			Status:   status,
+		}
+		user.ID = userID
+		credential, err := serviceiamaccount.NewPasswordCredential(userID, cfg.Password, cfg.MustChangePassword)
+		if err != nil {
+			panic(err)
+		}
+
+		users = append(users, user)
+		credentials = append(credentials, credential)
+	}
+	return users, credentials
 }

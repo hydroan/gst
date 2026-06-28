@@ -9,7 +9,6 @@ import (
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type SignupService struct {
@@ -43,17 +42,9 @@ func (s *SignupService) Create(ctx *types.ServiceContext, req *modeliamaccount.S
 		return nil, errors.New("username already exists")
 	}
 
-	// Hash password
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		log.Error("failed to hash password", zap.Error(err))
-		return nil, errors.New("failed to create user")
-	}
-
 	// Create new user
 	newUser := &modeliamuser.User{
-		Username:     req.Username,
-		PasswordHash: string(hashedPassword),
+		Username: req.Username,
 	}
 
 	// Set optional fields
@@ -67,8 +58,18 @@ func (s *SignupService) Create(ctx *types.ServiceContext, req *modeliamaccount.S
 		newUser.LastName = &req.LastName
 	}
 
-	// Save to database
-	if err = database.Database[*modeliamuser.User](ctx).Create(newUser); err != nil {
+	// Save the user and password credential atomically.
+	if err = database.Database[*modeliamuser.User](ctx).TransactionFunc(func(tx any) error {
+		if createErr := database.Database[*modeliamuser.User](ctx).WithTx(tx).Create(newUser); createErr != nil {
+			return createErr
+		}
+
+		passwordCredential, createErr := NewPasswordCredential(newUser.ID, req.Password, false)
+		if createErr != nil {
+			return createErr
+		}
+		return database.Database[*modeliamaccount.PasswordCredential](ctx).WithTx(tx).Create(passwordCredential)
+	}); err != nil {
 		log.Error("failed to create user", zap.Error(err))
 		return nil, errors.New("failed to create user")
 	}

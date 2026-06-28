@@ -235,6 +235,14 @@ func (s *AdminSessionsListService) buildItem(ctx *types.ServiceContext, session 
 		}
 		return nil, false, err
 	}
+	credential, err := loadSessionPasswordCredential(ctx, user.ID)
+	if err != nil {
+		if errors.Is(err, database.ErrRecordNotFound) {
+			_, _ = SessionManager.Delete(ctx, session.ID)
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
 
 	return &adminSessionOwnerItem{
 		view: modeliamsession.AdminSessionOwnerView{
@@ -244,7 +252,7 @@ func (s *AdminSessionsListService) buildItem(ctx *types.ServiceContext, session 
 			FirstName:          user.FirstName,
 			LastName:           user.LastName,
 			Status:             string(user.Status),
-			MustChangePassword: user.MustChangePassword,
+			MustChangePassword: credential.MustChangePassword,
 			Sessions:           make([]modeliamsession.SessionView, 0, 1),
 		},
 	}, true, nil

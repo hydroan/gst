@@ -7,11 +7,12 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
+	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceemail "github.com/hydroan/gst/internal/service/email"
+	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/types"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // iamAccountGateway adapts the framework IAM user model for the built-in email
@@ -46,24 +47,31 @@ func (iamAccountGateway) VerifyPassword(ctx *types.ServiceContext, userID, passw
 	if !iamUserActive(user) {
 		return serviceemail.ErrAccountAuthenticationFailed
 	}
-	if err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+	credential, err := serviceiamaccount.LoadPasswordCredential(ctx, user.ID)
+	if err != nil {
+		return serviceemail.ErrAccountAuthenticationFailed
+	}
+	if err = serviceiamaccount.VerifyPasswordCredential(credential, password); err != nil {
 		return serviceemail.ErrAccountAuthenticationFailed
 	}
 	return nil
 }
 
 func (iamAccountGateway) UpdatePassword(ctx *types.ServiceContext, userID, newPassword string) error {
-	user, err := loadIAMUserByID(ctx, userID)
+	if _, err := loadIAMUserByID(ctx, userID); err != nil {
+		return err
+	}
+	credential, err := serviceiamaccount.LoadPasswordCredential(ctx, userID)
 	if err != nil {
 		return err
 	}
-	if err := applyIAMPasswordUpdate(user, newPassword); err != nil {
+	if err := applyIAMPasswordUpdate(credential, newPassword); err != nil {
 		return err
 	}
-	return database.Database[*modeliamuser.User](ctx).
+	return database.Database[*modeliamaccount.PasswordCredential](ctx).
 		WithoutHook().
-		WithSelect("username", "password_hash", "must_change_password").
-		Update(user)
+		WithSelect("user_id", "password_hash", "must_change_password", "password_changed_at").
+		Update(credential)
 }
 
 func (iamAccountGateway) MarkEmailVerified(ctx *types.ServiceContext, userID string, verifiedAt time.Time) error {
@@ -150,17 +158,11 @@ func newIAMUserWithID(userID string) *modeliamuser.User {
 	return user
 }
 
-func applyIAMPasswordUpdate(user *modeliamuser.User, newPassword string) error {
-	if user == nil {
+func applyIAMPasswordUpdate(credential *modeliamaccount.PasswordCredential, newPassword string) error {
+	if credential == nil {
 		return errors.New("password update account is required")
 	}
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return errors.Wrap(err, "failed to process new password")
-	}
-	user.PasswordHash = string(hashedPassword)
-	user.MustChangePassword = false
-	return nil
+	return serviceiamaccount.ApplyPasswordCredentialUpdate(credential, newPassword, false)
 }
 
 func applyIAMEmailVerification(user *modeliamuser.User, verifiedAt time.Time) {
