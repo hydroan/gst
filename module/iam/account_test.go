@@ -171,6 +171,37 @@ func TestAccountLogin(t *testing.T) {
 		require.Equal(t, http.SameSiteLaxMode, cookie.SameSite)
 		require.Positive(t, cookie.MaxAge)
 	})
+
+	t.Run("updates_login_statistics_after_successful_session_create", func(t *testing.T) {
+		user := accountSignupUser(t, "acct_login_stats", "12345678")
+
+		users := make([]*iam.User, 0)
+		require.NoError(t, database.Database[*iam.User](context.Background()).
+			WithLimit(1).
+			WithQuery(&iam.User{Username: user.Username}).
+			List(&users))
+		require.Len(t, users, 1)
+
+		loginCount := 2
+		users[0].LoginCount = &loginCount
+		users[0].FailedLoginCount = 3
+		require.NoError(t, database.Database[*iam.User](context.Background()).
+			WithoutHook().
+			WithSelect("username", "login_count", "failed_login_count").
+			Update(users[0]))
+
+		sessionID := accountLoginUser(t, &user, user.Password)
+		accountRequireUserSessionContains(t, user.UserID, sessionID)
+
+		got := new(iam.User)
+		require.NoError(t, database.Database[*iam.User](context.Background()).Get(got, user.UserID))
+		require.NotNil(t, got.LastLoginAt)
+		require.NotNil(t, got.LastLoginIP)
+		require.NotEmpty(t, *got.LastLoginIP)
+		require.NotNil(t, got.LoginCount)
+		require.Equal(t, loginCount+1, *got.LoginCount)
+		require.Zero(t, got.FailedLoginCount)
+	})
 }
 
 func TestAccountLogout(t *testing.T) {

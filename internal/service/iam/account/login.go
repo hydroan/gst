@@ -112,16 +112,7 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		}
 	}
 
-	// Update last login time
 	now := time.Now()
-	user.LastLoginAt = &now
-	if err = database.Database[*modeliamuser.User](ctx).Update(user); err != nil {
-		log.Errorz("failed to update last login time", zap.Error(err))
-		// Don't fail the login for this
-	}
-
-	// Parse user agent for session info
-
 	// Create session
 	sessionID, err := serviceiamsession.NewSessionID()
 	if err != nil {
@@ -159,6 +150,24 @@ func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		_ = redisCache.Delete(prefixedSessionID)
 		log.Errorz("failed to track user session in redis", zap.Error(err))
 		return nil, errors.New("failed to track user session in redis")
+	}
+
+	// Update login statistics only after the session payload and indexes are stored.
+	clientIP := ctx.ClientIP()
+	user.LastLoginAt = &now
+	user.LastLoginIP = &clientIP
+	if user.LoginCount == nil {
+		loginCount := 1
+		user.LoginCount = &loginCount
+	} else {
+		(*user.LoginCount)++
+	}
+	user.FailedLoginCount = 0
+	if err = database.Database[*modeliamuser.User](ctx).
+		WithoutHook().
+		WithSelect("username", "last_login_at", "last_login_ip", "login_count", "failed_login_count").
+		Update(user); err != nil {
+		log.Warnz("failed to update login statistics", zap.Error(err))
 	}
 
 	serviceiamsession.SessionManager.SetCookie(ctx, sessionID, expire)
