@@ -128,8 +128,6 @@ func (s *AdminUserSessionsListService) buildView(ctx *types.ServiceContext, user
 		UserID:             user.ID,
 		Username:           user.Username,
 		Email:              email,
-		FirstName:          user.FirstName,
-		LastName:           user.LastName,
 		Status:             string(user.Status),
 		MustChangePassword: credential.MustChangePassword,
 		Sessions:           make([]modeliamsession.SessionView, 0),

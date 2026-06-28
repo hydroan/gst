@@ -7,8 +7,6 @@ type AdminSessionOwnerView struct {
 	UserID             string        `json:"user_id"`
 	Username           string        `json:"username"`
 	Email              string        `json:"email"`
-	FirstName          *string       `json:"first_name,omitempty"`
-	LastName           *string       `json:"last_name,omitempty"`
 	Status             string        `json:"status"`
 	MustChangePassword bool          `json:"must_change_password"`
 	Sessions           []SessionView `json:"sessions"`
@@ -30,10 +28,8 @@ type SessionView struct {
 
 // PrincipalView describes the authenticated principal bound to the current session.
 type PrincipalView struct {
-	UserID             string  `json:"user_id"`
-	Username           string  `json:"username"`
-	Email              string  `json:"email"`
-	FirstName          *string `json:"first_name,omitempty"`
-	LastName           *string `json:"last_name,omitempty"`
-	MustChangePassword bool    `json:"must_change_password"`
+	UserID             string `json:"user_id"`
+	Username           string `json:"username"`
+	Email              string `json:"email"`
+	MustChangePassword bool   `json:"must_change_password"`
 }

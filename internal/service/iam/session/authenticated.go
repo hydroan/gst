@@ -49,8 +49,6 @@ func buildPrincipalView(user *modeliamuser.User, email string, mustChangePasswor
 		UserID:             user.ID,
 		Username:           user.Username,
 		Email:              email,
-		FirstName:          user.FirstName,
-		LastName:           user.LastName,
 		MustChangePassword: mustChangePassword,
 	}
 }

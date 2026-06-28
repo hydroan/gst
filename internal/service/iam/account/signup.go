@@ -47,14 +47,6 @@ func (s *SignupService) Create(ctx *types.ServiceContext, req *modeliamaccount.S
 		Username: req.Username,
 	}
 
-	// Set optional fields
-	if req.FirstName != "" {
-		newUser.FirstName = &req.FirstName
-	}
-	if req.LastName != "" {
-		newUser.LastName = &req.LastName
-	}
-
 	// Save the user and password credential atomically.
 	if err = database.Database[*modeliamuser.User](ctx).TransactionFunc(func(tx any) error {
 		if createErr := database.Database[*modeliamuser.User](ctx).WithTx(tx).Create(newUser); createErr != nil {

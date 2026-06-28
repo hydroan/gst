@@ -252,8 +252,6 @@ func (s *AdminSessionsListService) buildItem(ctx *types.ServiceContext, session 
 			UserID:             user.ID,
 			Username:           user.Username,
 			Email:              email,
-			FirstName:          user.FirstName,
-			LastName:           user.LastName,
 			Status:             string(user.Status),
 			MustChangePassword: credential.MustChangePassword,
 			Sessions:           make([]modeliamsession.SessionView, 0, 1),
