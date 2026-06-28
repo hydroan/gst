@@ -6,19 +6,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/internal/testutil"
+	loggerzap "github.com/hydroan/gst/logger/zap"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func TestAccountSignup(t *testing.T) {
@@ -216,6 +222,52 @@ func TestAccountChangePassword(t *testing.T) {
 		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "password must be at least 6 characters long")
+	})
+
+	t.Run("succeeds_when_current_session_sync_fails_after_db_update", func(t *testing.T) {
+		syncFailUser := accountSignupUser(t, "acct_changepwd_sync_fail", "12345678")
+		syncFailUser.SessionID = accountLoginUser(t, &syncFailUser, syncFailUser.Password)
+		syncFailPassword := "syncpass9"
+
+		session, err := serviceiamsession.SessionManager.Load(t.Context(), syncFailUser.SessionID)
+		require.NoError(t, err)
+
+		users := make([]*iam.User, 0)
+		require.NoError(t, database.Database[*iam.User](context.Background()).
+			WithLimit(1).
+			WithQuery(&iam.User{Username: syncFailUser.Username}).
+			List(&users))
+		require.Len(t, users, 1)
+		users[0].MustChangePassword = true
+		require.NoError(t, database.Database[*iam.User](context.Background()).
+			WithoutHook().
+			WithSelect("username", "must_change_password").
+			Update(users[0]))
+
+		serviceCtx := accountNewServiceContext(
+			serviceiamsession.WithCurrentSession(t.Context(), syncFailUser.SessionID, session),
+			http.MethodPost,
+			"/api/iam/change-password",
+			syncFailUser.SessionID,
+			consts.PHASE_CREATE,
+		)
+		require.NoError(t, redis.Set(t.Context(), modeliamsession.SessionIDKey(syncFailUser.SessionID), "not-a-session", time.Hour))
+
+		svc := &serviceiamaccount.ChangePasswordService{}
+		svc.Logger = loggerzap.New("")
+
+		resp, err := svc.Create(serviceCtx, &iam.ChangePasswordReq{
+			OldPassword: syncFailUser.Password,
+			NewPassword: syncFailPassword,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.NotEmpty(t, resp.Msg)
+
+		changed := new(iam.User)
+		require.NoError(t, database.Database[*iam.User](context.Background()).Get(changed, syncFailUser.UserID))
+		require.NoError(t, bcrypt.CompareHashAndPassword([]byte(changed.PasswordHash), []byte(syncFailPassword)))
+		require.False(t, changed.MustChangePassword)
 	})
 
 	t.Run("change_password", func(t *testing.T) {
@@ -823,6 +875,20 @@ func accountNewAuthenticatedClient(t *testing.T, api, sessionID string) *client.
 	}))
 	require.NoError(t, err)
 	return cli
+}
+
+func accountNewServiceContext(baseCtx context.Context, method, path, sessionID string, phase consts.Phase) *types.ServiceContext {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ginCtx, _ := gin.CreateTestContext(recorder)
+	req := httptest.NewRequest(method, path, nil).WithContext(baseCtx)
+	req.Header.Set("User-Agent", accountTestUserAgent)
+	req.AddCookie(&http.Cookie{
+		Name:  serviceiamsession.SessionCookieName,
+		Value: sessionID,
+	})
+	ginCtx.Request = req
+	return types.NewServiceContext(ginCtx, nil, phase)
 }
 
 func accountRequireSessionNotFound(t *testing.T, sessionID string) {
