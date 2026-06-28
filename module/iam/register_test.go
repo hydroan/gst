@@ -1,6 +1,7 @@
 package iam_test
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/goforj/godump"
@@ -19,10 +20,13 @@ var (
 	logoutAPI         = testutil.URL(port, "/api/logout")
 	changepasswordAPI = testutil.URL(port, "/api/iam/change-password")
 	resetpasswordAPI  = testutil.URL(port, "/api/iam/reset-password")
-	accountstatusAPI  = testutil.URL(port, "/api/iam/account-status")
 	userAPI           = testutil.URL(port, "/api/iam/users")
 	currentAPI        = testutil.URL(port, "/api/iam/session/current")
 )
+
+func userStatusAPI(userID string) string {
+	return testutil.URL(port, fmt.Sprintf("/api/iam/admin/users/%s/status", userID))
+}
 
 type ListResponse[T any] struct {
 	Items []T   `json:"items"`

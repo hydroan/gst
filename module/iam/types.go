@@ -20,15 +20,14 @@ type (
 
 	ResetPasswordReq = modeliamaccount.ResetPasswordReq
 	ResetPasswordRsp = modeliamaccount.ResetPasswordRsp
-
-	AccountStatusReq = modeliamaccount.AccountStatusReq
-	AccountStatusRsp = modeliamaccount.AccountStatusRsp
 )
 
 // User API aliases.
 type (
 	User               = modeliamuser.User
 	UserStatus         = modeliamuser.UserStatus
+	UserStatusPatchReq = modeliamuser.UserStatusPatchReq
+	UserStatusPatchRsp = modeliamuser.UserStatusPatchRsp
 	PasswordCredential = modeliamaccount.PasswordCredential
 	EmailIdentity      = modeliamaccount.EmailIdentity
 )

@@ -1,4 +1,4 @@
-package serviceiamaccount
+package serviceiamuser
 
 import (
 	"net/http"
@@ -12,16 +12,8 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
-// privilegedActor reports whether the actor can manage privileged account operations.
-func privilegedActor(actor *modeliamuser.User) bool {
-	if actor.GetID() == consts.AUTHZ_USER_ROOT {
-		return true
-	}
-	return actor.IsSuperuser != nil && *actor.IsSuperuser
-}
-
-// mayManageProtectedUser allows privileged actors to act on another user; superuser targets require root.
-func mayManageProtectedUser(actor, target *modeliamuser.User) error {
+// MayManageProtectedUser allows privileged actors to act on another user; superuser targets require root.
+func MayManageProtectedUser(actor, target *modeliamuser.User) error {
 	if !privilegedActor(actor) {
 		return service.NewError(http.StatusForbidden, "superuser required")
 	}
@@ -33,8 +25,8 @@ func mayManageProtectedUser(actor, target *modeliamuser.User) error {
 	return nil
 }
 
-// loadPrivilegedActorAndTarget resolves the current actor from session context and loads the requested target user.
-func loadPrivilegedActorAndTarget(ctx *types.ServiceContext, targetUserID string) (*modeliamuser.User, *modeliamuser.User, error) {
+// LoadPrivilegedActorAndTarget resolves the current actor from session context and loads the requested target user.
+func LoadPrivilegedActorAndTarget(ctx *types.ServiceContext, targetUserID string) (*modeliamuser.User, *modeliamuser.User, error) {
 	_, session, err := serviceiamsession.SessionManager.Current(ctx)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "invalid session")
@@ -60,6 +52,14 @@ func loadPrivilegedActorAndTarget(ctx *types.ServiceContext, targetUserID string
 	}
 
 	return actor, target, nil
+}
+
+// privilegedActor reports whether the actor can manage privileged user operations.
+func privilegedActor(actor *modeliamuser.User) bool {
+	if actor.GetID() == consts.AUTHZ_USER_ROOT {
+		return true
+	}
+	return actor.IsSuperuser != nil && *actor.IsSuperuser
 }
 
 // shouldInvalidateUserSessions returns whether a user status transition must revoke all active sessions.

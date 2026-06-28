@@ -7,6 +7,7 @@ import (
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
+	serviceiamuser "github.com/hydroan/gst/internal/service/iam/user"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
@@ -24,13 +25,13 @@ func (s *ResetPasswordService) Create(ctx *types.ServiceContext, req *modeliamac
 		return nil, err
 	}
 
-	actor, target, err := loadPrivilegedActorAndTarget(ctx, req.UserID)
+	actor, target, err := serviceiamuser.LoadPrivilegedActorAndTarget(ctx, req.UserID)
 	if err != nil {
 		log.Error("failed to resolve actor or target user", err)
 		return nil, err
 	}
 
-	if err = mayManageProtectedUser(actor, target); err != nil {
+	if err = serviceiamuser.MayManageProtectedUser(actor, target); err != nil {
 		log.Error("reset password denied", err)
 		return nil, err
 	}

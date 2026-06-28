@@ -9,6 +9,7 @@ import (
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	serviceiamprofile "github.com/hydroan/gst/internal/service/iam/profile"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
+	serviceiamuser "github.com/hydroan/gst/internal/service/iam/user"
 	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module"
@@ -58,7 +59,7 @@ type DefaultUser struct {
 //   - POST   /api/signup
 //   - POST   /api/iam/change-password
 //   - POST   /api/iam/reset-password
-//   - POST   /api/iam/account-status
+//   - PATCH  /api/iam/admin/users/:id/status
 //   - GET    /api/iam/profile
 //   - PATCH  /api/iam/profile
 //
@@ -95,7 +96,7 @@ func Register(config ...Config) {
 	module.Use(module.NewWrapper("/signup", "id", true, &serviceiamaccount.SignupService{}), module.CRUD(consts.PHASE_CREATE))
 	module.Use(module.NewWrapper("/iam/change-password", "id", false, &serviceiamaccount.ChangePasswordService{}), module.CRUD(consts.PHASE_CREATE))
 	module.Use(module.NewWrapper("/iam/reset-password", "id", false, &serviceiamaccount.ResetPasswordService{}), module.CRUD(consts.PHASE_CREATE))
-	module.Use(module.NewWrapper("/iam/account-status", "id", false, &serviceiamaccount.AccountStatusService{}), module.CRUD(consts.PHASE_CREATE))
+	module.Use(module.NewWrapper("/iam/admin/users/:id/status", "id", false, &serviceiamuser.UserStatusPatchService{}), module.Exact(consts.PHASE_PATCH))
 	module.Use(module.NewWrapper("/iam/profile", "id", false, &serviceiamprofile.ProfileGetService{}), module.Exact(consts.PHASE_GET))
 	module.Use(module.NewWrapper("/iam/profile", "id", false, &serviceiamprofile.ProfilePatchService{}), module.Exact(consts.PHASE_PATCH))
 
