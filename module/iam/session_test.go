@@ -8,13 +8,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/provider/redis"
+	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
@@ -377,6 +380,28 @@ func TestSessionsList(t *testing.T) {
 		})
 		requireUserSessionNotContains(t, account.UserID, expiredSessionID)
 		requireAllSessionNotContains(t, expiredSessionID)
+	})
+}
+
+func TestSessionUserStateRefresh(t *testing.T) {
+	setupSessionRedisCleanup(t)
+
+	t.Run("returns_error_when_db_refresh_fails", func(t *testing.T) {
+		account := newSessionTestAccount(t)
+		sessionID := loginSession(t, account.Username, account.Password)
+		session := loadStoredSession(t, sessionID)
+		serviceiamsession.InvalidateUserStateCache(context.Background(), account.UserID)
+
+		canceledCtx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		_, err := serviceiamsession.ValidateSessionUserState(canceledCtx, session)
+		require.Error(t, err)
+
+		var serviceErr *service.Error
+		require.True(t, errors.As(err, &serviceErr))
+		require.Equal(t, http.StatusInternalServerError, serviceErr.Status())
+		require.Contains(t, err.Error(), "failed to refresh session user state")
 	})
 }
 

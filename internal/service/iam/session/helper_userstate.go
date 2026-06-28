@@ -74,7 +74,7 @@ func refreshSessionUserState(ctx context.Context, userID string) (sessionUserSta
 			return sessionUserState{}, false, service.NewError(http.StatusUnauthorized, "session invalid")
 		}
 		zap.S().Warnw("failed to refresh iam session user state", "user_id", userID, "error", err)
-		return sessionUserState{}, false, nil
+		return sessionUserState{}, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to refresh session user state", err)
 	}
 
 	state := sessionUserState{
