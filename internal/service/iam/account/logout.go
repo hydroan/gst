@@ -1,18 +1,18 @@
 package serviceiamaccount
 
 import (
-	"fmt"
+	// "fmt"
 	"net/http"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/database"
+	// "github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
-	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
+	// modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
-	"github.com/mssola/useragent"
-	"go.uber.org/zap"
+	// "github.com/mssola/useragent"
+	// "go.uber.org/zap"
 )
 
 // LogoutService handles logout requests for the current authenticated session.
@@ -42,24 +42,25 @@ func (s *LogoutService) Create(ctx *types.ServiceContext, req *modeliamaccount.L
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to logout", err)
 	}
 
-	// Parse user agent for logging
-	ua := useragent.New(ctx.UserAgent())
-	engineName, engineVersion := ua.Engine()
-	browserName, browserVersion := ua.Browser()
-
-	// Record logout log
-	if logErr := database.Database[*modellogmgmt.LoginLog](ctx).Create(&modellogmgmt.LoginLog{
-		UserID:   session.UserID,
-		Username: session.Username,
-		ClientIP: ctx.ClientIP(),
-		Status:   modellogmgmt.LoginStatusLogout,
-		Source:   ctx.UserAgent(),
-		Platform: fmt.Sprintf("%s %s", ua.Platform(), ua.OS()),
-		Engine:   fmt.Sprintf("%s %s", engineName, engineVersion),
-		Browser:  fmt.Sprintf("%s %s", browserName, browserVersion),
-	}); logErr != nil {
-		log.Warnz("failed to write logout log", zap.Error(logErr))
-	}
+	// Logmgmt integration is disabled while IAM is decoupled from optional modules.
+	//
+	// ua := useragent.New(ctx.UserAgent())
+	// engineName, engineVersion := ua.Engine()
+	// browserName, browserVersion := ua.Browser()
+	//
+	// if logErr := database.Database[*modellogmgmt.LoginLog](ctx).Create(&modellogmgmt.LoginLog{
+	// 	UserID:   session.UserID,
+	// 	Username: session.Username,
+	// 	ClientIP: ctx.ClientIP(),
+	// 	Status:   modellogmgmt.LoginStatusLogout,
+	// 	Source:   ctx.UserAgent(),
+	// 	Platform: fmt.Sprintf("%s %s", ua.Platform(), ua.OS()),
+	// 	Engine:   fmt.Sprintf("%s %s", engineName, engineVersion),
+	// 	Browser:  fmt.Sprintf("%s %s", browserName, browserVersion),
+	// }); logErr != nil {
+	// 	log.Warnz("failed to write logout log", zap.Error(logErr))
+	// }
+	_ = session
 
 	serviceiamsession.SessionManager.ClearCookie(ctx)
 

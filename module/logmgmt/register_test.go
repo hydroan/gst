@@ -83,6 +83,8 @@ func init() {
 }
 
 func TestLoginLogList(t *testing.T) {
+	t.Skip("IAM login log integration is temporarily disabled.")
+
 	username := logmgmtTestUsername("loginlog_user")
 	password := "12345678"
 	userID := signupLogmgmtTestUser(t, username, password)

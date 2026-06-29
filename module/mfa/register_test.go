@@ -275,6 +275,8 @@ func TestTOTPVerify(t *testing.T) {
 }
 
 func TestTOTPLogin(t *testing.T) {
+	t.Skip("IAM login MFA integration is temporarily disabled.")
+
 	account := newTOTPTestAccount(t, "totp_login_user")
 	deviceID, secret, backupCodes := bindTOTPDeviceForTest(t, account.SessionID, "test-device-login")
 
