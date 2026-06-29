@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -381,16 +382,16 @@ func routerTargetForAction(route string, design *dsl.Design, action *dsl.Action)
 
 func routerPathParamName(route string) string {
 	parts := strings.Split(route, "/")
-	for i := len(parts) - 1; i >= 0; i-- {
-		part := strings.TrimSpace(parts[i])
+	for _, part := range slices.Backward(parts) {
+		trimmedPart := strings.TrimSpace(part)
 		switch {
-		case strings.HasPrefix(part, ":"):
-			name := strings.TrimPrefix(part, ":")
+		case strings.HasPrefix(trimmedPart, ":"):
+			name := strings.TrimPrefix(trimmedPart, ":")
 			if name != "" {
 				return name
 			}
-		case strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}"):
-			name := strings.TrimSuffix(strings.TrimPrefix(part, "{"), "}")
+		case strings.HasPrefix(trimmedPart, "{") && strings.HasSuffix(trimmedPart, "}"):
+			name := strings.TrimSuffix(strings.TrimPrefix(trimmedPart, "{"), "}")
 			if name != "" {
 				return name
 			}

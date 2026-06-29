@@ -247,7 +247,7 @@ func checkFileForArchitectureImports(filePath, layerType, modulePath string) []s
 	for _, imp := range node.Imports {
 		importPath := strings.Trim(imp.Path.Value, `"`)
 
-		if forbiddenLayer := forbiddenArchitectureImportLayer(importPath, layerType, modulePath); forbiddenLayer != "" {
+		if forbiddenLayer := forbiddenArchitectureImportLayer(filePath, importPath, layerType, modulePath); forbiddenLayer != "" {
 			violation := fmt.Sprintf("%s file '%s' imports forbidden %s layer: %s",
 				cases.Title(language.English).String(layerType), filePath, forbiddenLayer, importPath)
 			violations = append(violations, violation)
@@ -361,7 +361,7 @@ func currentProjectModulePath() string {
 	return strings.Trim(modulePath, "/")
 }
 
-func forbiddenArchitectureImportLayer(importPath, layerType, modulePath string) string {
+func forbiddenArchitectureImportLayer(filePath, importPath, layerType, modulePath string) string {
 	importLayer := projectImportLayer(importPath, modulePath)
 	if importLayer == "" {
 		return ""
@@ -370,6 +370,9 @@ func forbiddenArchitectureImportLayer(importPath, layerType, modulePath string) 
 	switch layerType {
 	case "service":
 		if importLayer == "service" {
+			if sameServiceModuleImport(filePath, importPath, modulePath) {
+				return ""
+			}
 			return importLayer
 		}
 	case "dao":
@@ -383,6 +386,38 @@ func forbiddenArchitectureImportLayer(importPath, layerType, modulePath string) 
 	}
 
 	return ""
+}
+
+func sameServiceModuleImport(filePath, importPath, modulePath string) bool {
+	// Copied modules can have multiple cooperating packages under one service
+	// module, such as service/iam/account importing service/iam/session. The
+	// architecture boundary is service/<module>: internal imports stay allowed,
+	// while imports across different service/<module> trees remain forbidden.
+	sourceModule := serviceModuleNameFromPath(filePath)
+	importModule := serviceModuleNameFromImport(importPath, modulePath)
+	return sourceModule != "" && sourceModule == importModule
+}
+
+func serviceModuleNameFromPath(filePath string) string {
+	rel, err := filepath.Rel(filepath.Clean(serviceDir), filepath.Clean(filePath))
+	if err != nil || rel == "." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return ""
+	}
+	moduleName, _, ok := strings.Cut(rel, string(filepath.Separator))
+	if !ok || moduleName == "" || strings.HasSuffix(moduleName, ".go") {
+		return ""
+	}
+	return moduleName
+}
+
+func serviceModuleNameFromImport(importPath, modulePath string) string {
+	prefix := strings.Trim(modulePath, "/") + "/service/"
+	if !strings.HasPrefix(importPath, prefix) {
+		return ""
+	}
+	rel := strings.TrimPrefix(importPath, prefix)
+	moduleName, _, _ := strings.Cut(rel, "/")
+	return moduleName
 }
 
 func projectImportLayer(importPath, modulePath string) string {
