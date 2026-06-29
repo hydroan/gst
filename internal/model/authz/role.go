@@ -9,6 +9,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gorm.io/datatypes"
@@ -16,7 +17,6 @@ import (
 
 type Role struct {
 	TenantID string `json:"tenant_id,omitempty" schema:"tenant_id" gorm:"size:191;default:default;uniqueIndex:idx_authz_roles_tenant_code"`
-	Name     string `json:"name,omitempty" schema:"name" gorm:"size:191"`
 	Code     string `json:"code,omitempty" schema:"code" gorm:"size:191;uniqueIndex:idx_authz_roles_tenant_code"`
 	Default  *bool  `json:"default,omitempty" schema:"default"`
 
@@ -57,25 +57,30 @@ func (r *Role) tenant() string {
 }
 
 func (r *Role) validate() error {
-	r.Name = strings.TrimSpace(r.Name)
+	r.ID = strings.TrimSpace(r.ID)
 	r.Code = strings.TrimSpace(r.Code)
-
-	if len(r.Name) == 0 {
-		return errors.New("role name is required")
+	if len(r.Code) == 0 {
+		r.Code = r.ID
 	}
+
 	if len(r.Code) == 0 {
 		return errors.New("role code is required")
+	}
+	if r.ID == consts.AUTHZ_SYSTEM_ROLE_ROOT {
+		return errors.New("system_root is reserved for system role")
 	}
 
 	return nil
 }
 
 func (r *Role) CreateBefore(ctx context.Context) error {
+	if strings.TrimSpace(r.ID) == "" {
+		return errors.New("role id is required")
+	}
 	if err := r.validate(); err != nil {
 		return err
 	}
 
-	r.SetID(r.Code)
 	return nil
 }
 
@@ -90,7 +95,7 @@ func (r *Role) CreateAfter(ctx context.Context) error {
 	return errors.Join(e1, e2)
 }
 
-// UpdateBefore validates role updates before database writes. Role code is immutable.
+// UpdateBefore validates role updates before database writes. Role ID is immutable.
 func (r *Role) UpdateBefore(ctx context.Context) error {
 	if err := r.validate(); err != nil {
 		return err
@@ -101,9 +106,6 @@ func (r *Role) UpdateBefore(ctx context.Context) error {
 		return err
 	}
 
-	if current.Code != r.Code {
-		return errors.New("role code is immutable")
-	}
 	if len(r.TenantID) == 0 {
 		r.TenantID = current.TenantID
 	}
@@ -221,7 +223,6 @@ func (r *Role) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	}
 	enc.AddString("tenant_id", r.TenantID)
 	enc.AddString("code", r.Code)
-	enc.AddString("name", r.Name)
 	enc.AddString("id", r.ID)
 	return nil
 }

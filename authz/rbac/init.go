@@ -24,11 +24,11 @@ type casbinRule struct {
 
 func (casbinRule) TableName() string { return "casbin_rule" }
 
-var defaultAdmins = []string{
+var defaultSystemRootSubjects = []string{
 	consts.AUTHZ_USER_ROOT,
 }
 
-var defaultAdminRole = consts.AUTHZ_ROLE_ADMIN
+var defaultSystemRole = consts.AUTHZ_SYSTEM_ROLE_ROOT
 
 var modelData = []byte(`
 [request_definition]
@@ -52,6 +52,9 @@ p = tenant, role, obj, act, eft
 # g defines role membership inside a tenant:
 # g(subject, role, tenant) means subject has role in tenant.
 g = _, _, _
+# g2 defines system-level role membership:
+# g2(subject, role) means subject has role outside any tenant.
+g2 = _, _
 
 [policy_effect]
 # Allow the request if any matched policy effect is "allow".
@@ -59,13 +62,15 @@ e = some(where (p.eft == allow))
 
 [matchers]
 # Allow a request when either:
-# 1) the subject belongs to the built-in admin role in the request tenant, or
-# 2) the subject belongs to the policy role in the same tenant, and the object
+# 1) the subject belongs to the system_root role through g2. This branch does
+#    not compare tenant, so system_root is intentionally cross-tenant.
+# 2) the subject belongs to the built-in admin role in the request tenant, or
+# 3) the subject belongs to the policy role in the same tenant, and the object
 #    and action match the stored permission.
 #
 # The subject/role inequality checks keep a subject named like a role from
 # receiving that role through Casbin's self-match behavior.
-m = (r.sub != "admin" && g(r.sub, "admin", r.tenant)) || (r.sub != p.role && r.tenant == p.tenant && g(r.sub, p.role, r.tenant) && keyMatch3(r.obj, p.obj) && r.act == p.act)
+m = (r.sub != "system_root" && g2(r.sub, "system_root")) || (r.sub != "admin" && g(r.sub, "admin", r.tenant)) || (r.sub != p.role && r.tenant == p.tenant && g(r.sub, p.role, r.tenant) && keyMatch3(r.obj, p.obj) && r.act == p.act)
 `)
 
 // Init initializes the tenant-aware Casbin enforcer when RBAC is enabled.
@@ -91,9 +96,9 @@ func Init() (err error) {
 	Enforcer.EnableAutoSave(true)
 	Enforcer.EnableEnforce(true)
 
-	for _, subject := range defaultAdmins {
-		if err := RBAC().AssignRole(DefaultTenant, subject, defaultAdminRole); err != nil {
-			return errors.Wrapf(err, "failed to add default admin role for %s", subject)
+	for _, subject := range defaultSystemRootSubjects {
+		if err := RBAC().AssignSystemRole(subject, defaultSystemRole); err != nil {
+			return errors.Wrapf(err, "failed to add default system role for %s", subject)
 		}
 	}
 	return nil

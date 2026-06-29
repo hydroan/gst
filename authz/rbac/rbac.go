@@ -12,6 +12,8 @@ import (
 // resolver is configured by the application.
 const DefaultTenant = "default"
 
+const systemRoleGrouping = "g2"
+
 var (
 	Enforcer *casbin.SyncedEnforcer
 	Adapter  *gormadapter.Adapter
@@ -22,9 +24,9 @@ type rbac struct {
 	adapter  *gormadapter.Adapter
 }
 
-// noop implements a no-op RBAC that safely does nothing.
-// It is used when RBAC is disabled or the Casbin enforcer
-// has not been initialized yet to avoid nil pointer panics.
+// noop implements RBAC behavior before Casbin is initialized.
+// It keeps the built-in root subject as system_root so modules that do not
+// register authz can still use root-only administrative flows.
 type noop struct{}
 
 func (noop) Authorize(tenant string, subject string, object string, action string) (bool, error) {
@@ -43,6 +45,11 @@ func (noop) RevokePermission(tenant string, role string, object string, action s
 func (noop) RevokeRolePermissions(tenant string, role string) error        { return nil }
 func (noop) AssignRole(tenant string, subject string, role string) error   { return nil }
 func (noop) UnassignRole(tenant string, subject string, role string) error { return nil }
+func (noop) AssignSystemRole(subject string, role string) error            { return nil }
+func (noop) UnassignSystemRole(subject string, role string) error          { return nil }
+func (noop) HasSystemRole(subject string, role string) (bool, error) {
+	return isBuiltInSystemRole(subject, role), nil
+}
 
 func RBAC() types.RBAC {
 	// When RBAC is disabled or Enforcer is not initialized,
@@ -107,16 +114,21 @@ func (r *rbac) RevokeRolePermissions(tenant string, role string) error {
 // | Revoke all role permissions  | `RemoveFilteredPolicy(0, tenant, role)`                   |
 // | Assign role to subject       | `AddGroupingPolicy(subject, role, tenant)`                |
 // | Unassign role from subject   | `RemoveGroupingPolicy(subject, role, tenant)`             |
+// | Assign system role           | `AddNamedGroupingPolicy("g2", subject, role)`             |
+// | Unassign system role         | `RemoveNamedGroupingPolicy("g2", subject, role)`          |
 // | Query subject role in tenant | `GetFilteredGroupingPolicy(0, subject, role, tenant)`     |
 // | Query role permissions       | `GetFilteredPolicy(0, tenant, role)`                      |
+// | Query system role assignment | `HasNamedGroupingPolicy("g2", subject, role)`             |
 // | Authorize request            | `Enforce(tenant, subject, obj, act)`                      |
 //
 // // Query subject role bindings in a tenant.
-// RBAC.enforcer.GetFilteredGroupingPolicy(0, "root", "admin", DefaultTenant)
+// RBAC.enforcer.GetFilteredGroupingPolicy(0, "user1", consts.AUTHZ_ROLE_ADMIN, DefaultTenant)
+// // Query a subject's system-level role binding.
+// RBAC.enforcer.HasNamedGroupingPolicy(systemRoleGrouping, consts.AUTHZ_USER_ROOT, consts.AUTHZ_SYSTEM_ROLE_ROOT)
 // // Query permissions granted to a role in a tenant.
 // RBAC.enforcer.GetFilteredPolicy(0, DefaultTenant, "admin")
 // // Authorize a subject against a tenant-scoped permission.
-// RBAC.enforcer.Enforce(DefaultTenant, "root", "/api/authz/routes", "GET")
+// RBAC.enforcer.Enforce(DefaultTenant, "user1", "/api/authz/routes", "GET")
 
 // AssignRole assigns subject to role inside tenant.
 func (r *rbac) AssignRole(tenant string, subject string, role string) error {
@@ -135,4 +147,35 @@ func (r *rbac) UnassignRole(tenant string, subject string, role string) error {
 		return err
 	}
 	return nil
+}
+
+// AssignSystemRole assigns a subject to a system-level role outside any tenant.
+func (r *rbac) AssignSystemRole(subject string, role string) error {
+	if subject == role {
+		return nil
+	}
+	if _, err := r.enforcer.AddNamedGroupingPolicy(systemRoleGrouping, subject, role); err != nil {
+		return err
+	}
+	return nil
+}
+
+// UnassignSystemRole removes a subject's system-level role assignment.
+func (r *rbac) UnassignSystemRole(subject string, role string) error {
+	if _, err := r.enforcer.RemoveNamedGroupingPolicy(systemRoleGrouping, subject, role); err != nil {
+		return err
+	}
+	return nil
+}
+
+// HasSystemRole reports whether subject explicitly holds a system-level role.
+func (r *rbac) HasSystemRole(subject string, role string) (bool, error) {
+	if subject == role {
+		return false, nil
+	}
+	return r.enforcer.HasNamedGroupingPolicy(systemRoleGrouping, subject, role)
+}
+
+func isBuiltInSystemRole(subject string, role string) bool {
+	return subject == consts.AUTHZ_USER_ROOT && role == consts.AUTHZ_SYSTEM_ROLE_ROOT
 }

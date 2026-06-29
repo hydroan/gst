@@ -359,6 +359,10 @@ type RBAC interface {
 
 	AssignRole(tenant string, subject string, role string) error
 	UnassignRole(tenant string, subject string, role string) error
+
+	AssignSystemRole(subject string, role string) error
+	UnassignSystemRole(subject string, role string) error
+	HasSystemRole(subject string, role string) (bool, error)
 }
 
 // Module describes a registered API module: route metadata, auth exposure,

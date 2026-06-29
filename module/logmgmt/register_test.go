@@ -14,6 +14,7 @@ import (
 	"github.com/hydroan/gst/config"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/testutil"
+	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/module/logmgmt"
@@ -184,16 +185,16 @@ func TestOperationLogList(t *testing.T) {
 		Value: adminSessionID,
 	}))
 	require.NoError(t, err)
+	roleID := logmgmtTestUsername("logmgmt_test_role")
 	createReq := &authz.Role{
-		Name: "Logmgmt Test Role",
-		Code: logmgmtTestUsername("logmgmt_test_role"),
+		Base: model.Base{ID: roleID},
+		Code: roleID,
 	}
 	resp, err := cli.Create(createReq)
 	require.NoError(t, err)
 	testutil.TestResp(t, resp, func(t *testing.T, rsp *authz.Role) {
 		t.Helper()
 		require.NotNil(t, rsp)
-		require.Equal(t, createReq.Name, rsp.Name)
 		require.Equal(t, createReq.Code, rsp.Code)
 	})
 

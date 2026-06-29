@@ -69,9 +69,15 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var allow bool
 		var err error
-		sub := c.GetString(consts.CTX_USER_ID)
-		if len(sub) == 0 {
-			sub = consts.AUTHZ_USER_BLOCKED
+		sub := strings.TrimSpace(c.GetString(consts.CTX_USER_ID))
+		if sub == "" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"code":          -1,
+				"msg":           "permission denied",
+				"data":          nil,
+				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
+			})
+			return
 		}
 		tenant, err := resolveAuthzTenant(c, cfg.TenantResolver)
 		if err != nil {

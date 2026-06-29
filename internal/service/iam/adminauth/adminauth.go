@@ -15,13 +15,21 @@ import (
 
 // EnsureTenantAdmin verifies that actor may manage target inside the current tenant.
 func EnsureTenantAdmin(ctx *types.ServiceContext, actor *modeliamuser.User, target *modeliamuser.User) error {
-	if isRootUser(actor) {
+	systemRootActor, err := isSystemRoot(actor)
+	if err != nil {
+		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+	}
+	if systemRootActor {
 		return nil
 	}
 	if actor == nil || actor.GetID() == "" {
 		return service.NewError(http.StatusForbidden, "permission denied")
 	}
-	if isRootUser(target) {
+	systemRootTarget, err := isSystemRoot(target)
+	if err != nil {
+		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+	}
+	if systemRootTarget {
 		return service.NewError(http.StatusForbidden, "permission denied")
 	}
 
@@ -86,6 +94,9 @@ func targetBelongsToTenant(ctx *types.ServiceContext, tenant string, userID stri
 	return len(roleBindings) > 0, nil
 }
 
-func isRootUser(user *modeliamuser.User) bool {
-	return user != nil && user.GetID() == consts.AUTHZ_USER_ROOT
+func isSystemRoot(user *modeliamuser.User) (bool, error) {
+	if user == nil || strings.TrimSpace(user.GetID()) == "" {
+		return false, nil
+	}
+	return rbac.RBAC().HasSystemRole(user.GetID(), consts.AUTHZ_SYSTEM_ROLE_ROOT)
 }

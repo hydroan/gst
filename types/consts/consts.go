@@ -444,10 +444,10 @@ const (
 )
 
 const (
-	AUTHZ_USER_ROOT    = "root"
-	AUTHZ_USER_BLOCKED = "blocked"
+	AUTHZ_USER_ROOT = "root"
 
-	AUTHZ_ROLE_ADMIN = "admin"
+	AUTHZ_ROLE_ADMIN       = "admin"
+	AUTHZ_SYSTEM_ROLE_ROOT = "system_root"
 )
 
 type Effect string

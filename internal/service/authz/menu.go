@@ -25,7 +25,7 @@ func (m *MenuService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.M
 // filterByRole reduces the menu tree to the menus visible to the current user.
 //
 // The flow deliberately mirrors the RBAC data model:
-//   - root is a built-in user ID and bypasses menu filtering completely.
+//   - system_root is a system-level role and bypasses menu filtering completely.
 //   - RoleBinding maps the current subject ID to role IDs inside the request tenant.
 //   - when the subject has no RoleBinding records, default roles in the request
 //     tenant provide the fallback menu set.
@@ -33,8 +33,12 @@ func (m *MenuService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.M
 //     menu nodes visible when only part of their children are selected.
 //   - Menu.DomainPattern still constrains visibility by the current request host.
 func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauthz.Menu, log types.Logger) error {
-	// The built-in root account is identified by the stable user ID.
-	if ctx.UserID() == consts.AUTHZ_USER_ROOT {
+	systemRoot, err := rbac.RBAC().HasSystemRole(ctx.UserID(), consts.AUTHZ_SYSTEM_ROLE_ROOT)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	if systemRoot {
 		return nil
 	}
 	tenant := currentTenant(ctx)
@@ -88,7 +92,7 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 		return nil
 	}
 	for _, r := range roles {
-		log.Infow("role", "username", ctx.Username(), "role_name", r.Name, "role_code", r.Code)
+		log.Infow("role", "username", ctx.Username(), "role_code", r.Code)
 	}
 
 	// MenuIDs and MenuPartialIDs both affect menu visibility. Only MenuIDs grants

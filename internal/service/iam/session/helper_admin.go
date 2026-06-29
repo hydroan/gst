@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
@@ -16,13 +17,17 @@ import (
 
 const adminSessionsOnlineWithinQuery = "online_within"
 
-// ensureAdminSessionActor verifies that the current session belongs to the built-in root user.
+// ensureAdminSessionActor verifies that the current session belongs to a system-root user.
 func ensureAdminSessionActor(ctx *types.ServiceContext) error {
 	user, err := loadAdminSessionActor(ctx)
 	if err != nil {
 		return err
 	}
-	if user.GetID() == consts.AUTHZ_USER_ROOT {
+	systemRoot, err := rbac.RBAC().HasSystemRole(user.GetID(), consts.AUTHZ_SYSTEM_ROLE_ROOT)
+	if err != nil {
+		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+	}
+	if systemRoot {
 		return nil
 	}
 	return service.NewError(http.StatusForbidden, "forbidden")
