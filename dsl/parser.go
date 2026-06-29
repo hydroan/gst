@@ -454,6 +454,7 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 //   - Enabled(true/false): Sets whether the action is enabled. Declared actions default to enabled.
 //   - Service(true/false): Sets whether to generate service layer code
 //   - Public(): Marks the API endpoint as public
+//   - Exact(): Registers the action route exactly as declared
 //   - Filename("name"): Sets a custom filename for the generated service file
 //   - Payload[Type]: Sets the request payload type
 //   - Result[Type]: Sets the response result type
@@ -471,6 +472,7 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 	enabled := true     // declared actions are enabled by default
 	var service bool    // default to false
 	var public bool     // default to false
+	var exact bool      // default to false
 	var filename string // default to ""
 	var flatten bool    // default to false
 
@@ -548,6 +550,25 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 
 				if isPublicCall && len(call.Args) == 0 {
 					public = true
+				}
+
+				// Parse Exact().
+				var isExactCall bool
+				switch fun := call.Fun.(type) {
+				case *ast.Ident:
+					// anonymous import: Exact()
+					if fun != nil && fun.Name == "Exact" {
+						isExactCall = true
+					}
+				case *ast.SelectorExpr:
+					// non-anonymous import: dsl.Exact()
+					if fun != nil && fun.Sel != nil && fun.Sel.Name == "Exact" {
+						isExactCall = true
+					}
+				}
+
+				if isExactCall && len(call.Args) == 0 {
+					exact = true
 				}
 
 				// Parse Filename("upload")/Filename("parse")
@@ -640,6 +661,7 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 		Enabled:  enabled,
 		Service:  service,
 		Public:   public,
+		Exact:    exact,
 		Filename: filename,
 		Flatten:  flatten,
 		Phase:    phase,

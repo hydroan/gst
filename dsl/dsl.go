@@ -158,6 +158,9 @@ func Param(string) {}
 //   - /api/config/apps (for List operations)
 //   - /api/config/apps/:app (for Get, Update, Delete, Patch operations)
 //
+// Use Exact() inside an action block when the action should use the route path
+// exactly as declared instead of appending the default phase suffix.
+//
 // Usage Examples:
 //   - Route("apps", func() {...}) - Global app listing endpoint
 //   - Route("config/apps", func() {...}) - Configuration-scoped app endpoint
@@ -276,6 +279,18 @@ func Flatten() {}
 // actions are registered on the authenticated router unless they explicitly opt
 // in to public access.
 func Public() {}
+
+// Exact marks the current action route as exact.
+//
+// Exact is an action-scoped marker and must be used inside an action block such
+// as Delete, Patch, or Get. Calling Exact() tells gg gen to register the route
+// exactly as declared by Endpoint or Route, without appending the default phase
+// suffix such as "/:id", "/batch", "/import", or "/export" for that action.
+//
+// Omit Exact() for normal CRUD-style route generation. Exact does not change
+// Param, Public, Service, Payload, Result, Filename, Flatten, or any other DSL
+// keyword; it only controls the current action's generated router path.
+func Exact() {}
 
 // Payload specifies the request payload type for the current action.
 // The type parameter T defines the structure of incoming request data.
@@ -466,6 +481,11 @@ type Action struct {
 	// Default: false, meaning the action requires authentication.
 	Public bool
 
+	// Exact indicates whether this action uses the route exactly as declared.
+	// It is true only when the action's DSL block contains Exact().
+	// Default: false, meaning the action uses the normal phase route pattern.
+	Exact bool
+
 	// Payload specifies the type name for the request payload.
 	// This determines the structure of incoming request data.
 	// Example: "CreateUserRequest", "*User", "User"
@@ -528,6 +548,7 @@ var methodList = []string{
 	"Migrate",
 	"Service",
 	"Public",
+	"Exact",
 	"Payload",
 	"Result",
 	"Filename",

@@ -34,6 +34,7 @@ var designOnlyMethodNames = map[string]bool{
 var actionOnlyMethodNames = map[string]bool{
 	"Service":  true,
 	"Public":   true,
+	"Exact":    true,
 	"Filename": true,
 	"Payload":  true,
 	"Result":   true,
@@ -160,7 +161,7 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile boo
 			filenameValue = stringArgValue(child, filenameValue)
 		case name == "Flatten":
 			flatten = true
-		case name == "Enabled" || name == "Public" || name == "Payload" || name == "Result":
+		case name == "Enabled" || name == "Public" || name == "Exact" || name == "Payload" || name == "Result":
 			continue
 		case actionMethodNames[name]:
 			errs = append(errs, fmt.Errorf("%s: %s action cannot contain nested %s action", filename, actionName, name))

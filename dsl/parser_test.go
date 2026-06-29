@@ -560,6 +560,24 @@ func TestParseFlatten(t *testing.T) {
 	}
 }
 
+func TestParseExact(t *testing.T) {
+	design := parseDesignFromSource(t, exactSource, "AdminUserSessions")
+
+	var got *Action
+	design.Range(func(route string, act *Action) {
+		if route == "iam/admin/users/:id/sessions" && act.Phase == consts.PHASE_DELETE {
+			got = act
+		}
+	})
+	if got == nil {
+		t.Fatal("expected delete action for iam/admin/users/:id/sessions")
+	}
+
+	if !got.Exact {
+		t.Fatal("expected Exact to be parsed on the action")
+	}
+}
+
 func TestRoleName(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -681,6 +699,30 @@ func (Role) Design() {
 			Service(true)
 			Filename("role.go")
 			Flatten()
+		})
+	})
+}
+`
+
+const exactSource = `
+package session
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type AdminUserSessions struct {
+	model.Empty
+}
+
+func (AdminUserSessions) Design() {
+	Route("/iam/admin/users/:id/sessions", func() {
+		Delete(func() {
+			Exact()
+			Service(true)
+			Payload[*AdminUserSessionsDeleteReq]()
+			Result[*AdminUserSessionsDeleteRsp]()
 		})
 	})
 }

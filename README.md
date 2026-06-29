@@ -189,6 +189,7 @@ func (Search) Design() {
 - `Endpoint("conversations")` 定义默认资源路径。
 - `Route("/config/files", func() {...})` 定义额外路径或完全自定义路径。
 - `Public()` 表示公开接口，不走认证中间件；默认不写则需要认证。
+- `Exact()` 表示当前 action 按声明路径原样注册，不追加默认的 `/:id`、`/batch` 等后缀。
 - `Payload[T]()` 定义请求体类型；`Result[T]()` 定义响应体类型。
 - `Service(true)` 表示当前 action 需要生成并注册业务 service。
 - 只声明 `Create(func(){})`、`List(func(){})` 等 action 就会启用对应接口；

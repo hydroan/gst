@@ -185,33 +185,8 @@ func genRunWithOptions(opts genRunOptions) error {
 			if act.Public {
 				base = "Pub"
 			}
-			// If the phase is matched, the model endpoint will append the param, eg:
-			// Endpoint: tenant, param is ":tenant", new endpoint is "tenant/:tenant"
-			// Endpoint: tenant, param is ":id", new endpoint is "tenant/:id"
-			switch act.Phase {
-			case consts.PHASE_DELETE, consts.PHASE_UPDATE, consts.PHASE_PATCH, consts.PHASE_GET:
-				if len(m.Design.Param) == 0 {
-					route = filepath.Join(route, ":id") // empty param will append default ":id" to endpoint.
-				} else {
-					route = filepath.Join(route, m.Design.Param)
-				}
-			case consts.PHASE_CREATE_MANY, consts.PHASE_DELETE_MANY, consts.PHASE_UPDATE_MANY, consts.PHASE_PATCH_MANY:
-				route = filepath.Join(route, "batch")
-			case consts.PHASE_IMPORT:
-				route = filepath.Join(route, "import")
-			case consts.PHASE_EXPORT:
-				route = filepath.Join(route, "export")
-
-			}
-
-			switch act.Phase {
-			case consts.PHASE_DELETE, consts.PHASE_UPDATE, consts.PHASE_PATCH, consts.PHASE_GET:
-				items := strings.Split(route, "/")
-				lastSegment := strings.TrimLeft(items[len(items)-1], ":")
-				routerStmts = append(routerStmts, gen.StmtRouterRegister(m.ModelPkgName, m.ModelName, act.Payload, act.Result, base, route, lastSegment, act.Phase.MethodName()))
-			default:
-				routerStmts = append(routerStmts, gen.StmtRouterRegister(m.ModelPkgName, m.ModelName, act.Payload, act.Result, base, route, "", act.Phase.MethodName()))
-			}
+			route, paramName := routerTargetForAction(route, m.Design, act)
+			routerStmts = append(routerStmts, gen.StmtRouterRegister(m.ModelPkgName, m.ModelName, act.Payload, act.Result, base, route, paramName, act.Phase.MethodName()))
 		})
 	}
 
@@ -369,6 +344,59 @@ func genRunWithOptions(opts genRunOptions) error {
 		clioutput.Done("Code generation completed successfully!")
 	}
 	return nil
+}
+
+func routerTargetForAction(route string, design *dsl.Design, action *dsl.Action) (string, string) {
+	if action == nil {
+		return route, ""
+	}
+
+	if action.Exact {
+		return route, routerPathParamName(route)
+	}
+
+	paramName := ""
+
+	// If the phase is matched, the model endpoint will append the param, eg:
+	// Endpoint: tenant, param is ":tenant", new endpoint is "tenant/:tenant"
+	// Endpoint: tenant, param is ":id", new endpoint is "tenant/:id"
+	switch action.Phase {
+	case consts.PHASE_DELETE, consts.PHASE_UPDATE, consts.PHASE_PATCH, consts.PHASE_GET:
+		param := ":id"
+		if design != nil && len(design.Param) > 0 {
+			param = design.Param
+		}
+		route = filepath.Join(route, param)
+		paramName = routerPathParamName(route)
+	case consts.PHASE_CREATE_MANY, consts.PHASE_DELETE_MANY, consts.PHASE_UPDATE_MANY, consts.PHASE_PATCH_MANY:
+		route = filepath.Join(route, "batch")
+	case consts.PHASE_IMPORT:
+		route = filepath.Join(route, "import")
+	case consts.PHASE_EXPORT:
+		route = filepath.Join(route, "export")
+	}
+
+	return route, paramName
+}
+
+func routerPathParamName(route string) string {
+	parts := strings.Split(route, "/")
+	for i := len(parts) - 1; i >= 0; i-- {
+		part := strings.TrimSpace(parts[i])
+		switch {
+		case strings.HasPrefix(part, ":"):
+			name := strings.TrimPrefix(part, ":")
+			if name != "" {
+				return name
+			}
+		case strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}"):
+			name := strings.TrimSuffix(strings.TrimPrefix(part, "{"), "}")
+			if name != "" {
+				return name
+			}
+		}
+	}
+	return ""
 }
 
 // pathUnderRoot returns path cleaned and verified to be under root (no path traversal).

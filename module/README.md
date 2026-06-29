@@ -26,6 +26,7 @@
 
 - 路由路径必须一致。`Design()` 中的 `Route(...)` 要和内置 module 的 `Route()` 或 `module.NewWrapper(...)` 路径一致，包括单复数、连字符、下划线和是否带业务前缀。
 - action 集合必须一致。内置 module 注册了哪些 phase，`Design()` 就应该声明哪些 action；没有真实语义的 action 不要为了默认 CRUD 随手声明。
+- exact 路由语义必须一致。内置 module 使用 `module.Exact(...)` 原样注册路径时，`Design()` 对应 action 必须写 `Exact()`，避免 `gg gen` 追加默认 CRUD 后缀。
 - public/auth 语义必须一致。内置 module 的 `Pub()` 或 `module.NewWrapper(..., pub, ...)` 是 public 时，`Design()` 对应 action 必须写 `Public()`；需要登录的 action 不写 `Public()`。
 - request/response 契约必须一致。自定义请求、响应类型要通过 `Payload[T]()`、`Result[T]()` 写进 `Design()`，避免 copy 后生成默认模型签名。
 - service 文件目标必须一致。存在自定义 service 代码的 action 必须写 `Service(true)`；如果多个 action 共用一个 service 文件，所有相关 action 都要写相同的 `Filename(...)`。
