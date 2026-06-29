@@ -30,8 +30,8 @@ type LoginService struct {
 //
 // The local login path verifies username, password, and account status before
 // creating the session.
-func (s *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.LoginReq) (rsp *modeliamaccount.LoginRsp, err error) {
-	log := s.WithContext(ctx, ctx.Phase())
+func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.LoginReq) (rsp *modeliamaccount.LoginRsp, err error) {
+	log := l.WithContext(ctx, ctx.Phase())
 	// Validate input
 	if req.Username == "" {
 		return nil, errors.New("username is required")

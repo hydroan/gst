@@ -16,8 +16,8 @@ type UserStatusPatchService struct {
 	service.Base[*modeliamuser.User, *modeliamuser.UserStatusPatchReq, *modeliamuser.UserStatusPatchRsp]
 }
 
-func (s *UserStatusPatchService) Patch(ctx *types.ServiceContext, req *modeliamuser.UserStatusPatchReq) (rsp *modeliamuser.UserStatusPatchRsp, err error) {
-	log := s.WithContext(ctx, ctx.Phase())
+func (u *UserStatusPatchService) Patch(ctx *types.ServiceContext, req *modeliamuser.UserStatusPatchReq) (rsp *modeliamuser.UserStatusPatchRsp, err error) {
+	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user status patch")
 
 	targetUserID := ctx.Param("id")

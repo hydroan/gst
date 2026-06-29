@@ -20,8 +20,8 @@ type ProfilePatchService struct {
 
 // Get returns the current user's profile. Missing profiles are represented by an
 // empty profile payload and are not persisted until PATCH.
-func (s *ProfileGetService) Get(ctx *types.ServiceContext, req *modeliamprofile.ProfileGetReq) (rsp *modeliamprofile.ProfileGetRsp, err error) {
-	log := s.WithContext(ctx, ctx.Phase())
+func (p *ProfileGetService) Get(ctx *types.ServiceContext, req *modeliamprofile.ProfileGetReq) (rsp *modeliamprofile.ProfileGetRsp, err error) {
+	log := p.WithContext(ctx, ctx.Phase())
 
 	_, session, err := serviceiamsession.SessionManager.Current(ctx)
 	if err != nil {
@@ -42,8 +42,8 @@ func (s *ProfileGetService) Get(ctx *types.ServiceContext, req *modeliamprofile.
 }
 
 // Patch creates or updates the current user's profile with only the requested fields.
-func (s *ProfilePatchService) Patch(ctx *types.ServiceContext, req *modeliamprofile.ProfilePatchReq) (rsp *modeliamprofile.ProfilePatchRsp, err error) {
-	log := s.WithContext(ctx, ctx.Phase())
+func (p *ProfilePatchService) Patch(ctx *types.ServiceContext, req *modeliamprofile.ProfilePatchReq) (rsp *modeliamprofile.ProfilePatchRsp, err error) {
+	log := p.WithContext(ctx, ctx.Phase())
 
 	_, session, err := serviceiamsession.SessionManager.Current(ctx)
 	if err != nil {

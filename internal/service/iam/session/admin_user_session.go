@@ -25,8 +25,8 @@ type AdminUserSessionDeleteService struct {
 }
 
 // List returns all indexed sessions of a specified user for a privileged administrator.
-func (s *AdminUserSessionListService) List(ctx *types.ServiceContext, req *modeliamsession.AdminUserSessionListReq) (rsp *modeliamsession.AdminUserSessionListRsp, err error) {
-	log := s.WithContext(ctx, ctx.Phase())
+func (a *AdminUserSessionListService) List(ctx *types.ServiceContext, req *modeliamsession.AdminUserSessionListReq) (rsp *modeliamsession.AdminUserSessionListRsp, err error) {
+	log := a.WithContext(ctx, ctx.Phase())
 
 	currentSessionID, _, err := SessionManager.Current(ctx)
 	if err != nil {
@@ -56,7 +56,7 @@ func (s *AdminUserSessionListService) List(ctx *types.ServiceContext, req *model
 		return nil, err
 	}
 
-	view, err := s.buildView(ctx, user, currentSessionID, onlineSince, onlineOnly)
+	view, err := a.buildView(ctx, user, currentSessionID, onlineSince, onlineOnly)
 	if err != nil {
 		log.Error("failed to build target user sessions view", err)
 		return nil, err
@@ -68,8 +68,8 @@ func (s *AdminUserSessionListService) List(ctx *types.ServiceContext, req *model
 }
 
 // Delete invalidates all indexed sessions of a specified user for a privileged administrator.
-func (s *AdminUserSessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.AdminUserSessionDeleteReq) (rsp *modeliamsession.AdminUserSessionDeleteRsp, err error) {
-	log := s.WithContext(ctx, ctx.Phase())
+func (a *AdminUserSessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.AdminUserSessionDeleteReq) (rsp *modeliamsession.AdminUserSessionDeleteRsp, err error) {
+	log := a.WithContext(ctx, ctx.Phase())
 
 	_, currentSession, err := SessionManager.Current(ctx)
 	if err != nil {
@@ -113,7 +113,7 @@ func (s *AdminUserSessionDeleteService) Delete(ctx *types.ServiceContext, req *m
 // filters by user after loading each session snapshot. That keeps the online
 // path bounded by recently active sessions instead of scanning every session
 // owned by the target user.
-func (s *AdminUserSessionListService) buildView(ctx *types.ServiceContext, user *modeliamuser.User, currentSessionID string, onlineSince time.Time, onlineOnly bool) (modeliamsession.AdminSessionOwnerView, error) {
+func (a *AdminUserSessionListService) buildView(ctx *types.ServiceContext, user *modeliamuser.User, currentSessionID string, onlineSince time.Time, onlineOnly bool) (modeliamsession.AdminSessionOwnerView, error) {
 	credential, err := loadSessionPasswordCredential(ctx, user.ID)
 	if err != nil {
 		return modeliamsession.AdminSessionOwnerView{}, err

@@ -35,8 +35,8 @@ type adminSessionOwnerItem struct {
 }
 
 // List returns all indexed sessions grouped by user for a privileged administrator.
-func (s *AdminSessionListService) List(ctx *types.ServiceContext, req *modeliamsession.AdminSessionListReq) (rsp *modeliamsession.AdminSessionListRsp, err error) {
-	log := s.WithContext(ctx, ctx.Phase())
+func (a *AdminSessionListService) List(ctx *types.ServiceContext, req *modeliamsession.AdminSessionListReq) (rsp *modeliamsession.AdminSessionListRsp, err error) {
+	log := a.WithContext(ctx, ctx.Phase())
 
 	if err = ensureAdminSessionActor(ctx); err != nil {
 		log.Error("failed to verify admin session actor", err)
@@ -88,7 +88,7 @@ func (s *AdminSessionListService) List(ctx *types.ServiceContext, req *modeliams
 		item, exists := owners[session.UserID]
 		if !exists {
 			var ok bool
-			item, ok, err = s.buildItem(ctx, session)
+			item, ok, err = a.buildItem(ctx, session)
 			if err != nil {
 				log.Error("failed to build admin session owner view", err)
 				return nil, err
@@ -142,8 +142,8 @@ func (s *AdminSessionListService) List(ctx *types.ServiceContext, req *modeliams
 }
 
 // Get returns the detail of a specified session for a privileged administrator.
-func (s *AdminSessionGetService) Get(ctx *types.ServiceContext, req *modeliamsession.AdminSessionGetReq) (rsp *modeliamsession.AdminSessionGetRsp, err error) {
-	log := s.WithContext(ctx, ctx.Phase())
+func (a *AdminSessionGetService) Get(ctx *types.ServiceContext, req *modeliamsession.AdminSessionGetReq) (rsp *modeliamsession.AdminSessionGetRsp, err error) {
+	log := a.WithContext(ctx, ctx.Phase())
 
 	currentSessionID, _, err := SessionManager.Current(ctx)
 	if err != nil {
@@ -179,8 +179,8 @@ func (s *AdminSessionGetService) Get(ctx *types.ServiceContext, req *modeliamses
 }
 
 // Delete invalidates a specified session for a privileged administrator.
-func (s *AdminSessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.AdminSessionDeleteReq) (rsp *modeliamsession.AdminSessionDeleteRsp, err error) {
-	log := s.WithContext(ctx, ctx.Phase())
+func (a *AdminSessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.AdminSessionDeleteReq) (rsp *modeliamsession.AdminSessionDeleteRsp, err error) {
+	log := a.WithContext(ctx, ctx.Phase())
 
 	currentSessionID, _, err := SessionManager.Current(ctx)
 	if err != nil {
@@ -224,7 +224,7 @@ func (s *AdminSessionDeleteService) Delete(ctx *types.ServiceContext, req *model
 	return &modeliamsession.AdminSessionDeleteRsp{}, nil
 }
 
-func (s *AdminSessionListService) buildItem(ctx *types.ServiceContext, session modeliamsession.Session) (*adminSessionOwnerItem, bool, error) {
+func (a *AdminSessionListService) buildItem(ctx *types.ServiceContext, session modeliamsession.Session) (*adminSessionOwnerItem, bool, error) {
 	user := new(modeliamuser.User)
 	if err := database.Database[*modeliamuser.User](ctx).Get(user, session.UserID); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {

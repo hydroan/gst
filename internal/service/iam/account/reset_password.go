@@ -17,8 +17,8 @@ type ResetPasswordService struct {
 	service.Base[*modeliamaccount.ResetPassword, *modeliamaccount.ResetPasswordReq, *modeliamaccount.ResetPasswordRsp]
 }
 
-func (s *ResetPasswordService) Create(ctx *types.ServiceContext, req *modeliamaccount.ResetPasswordReq) (rsp *modeliamaccount.ResetPasswordRsp, err error) {
-	log := s.WithContext(ctx, ctx.Phase())
+func (r *ResetPasswordService) Create(ctx *types.ServiceContext, req *modeliamaccount.ResetPasswordReq) (rsp *modeliamaccount.ResetPasswordRsp, err error) {
+	log := r.WithContext(ctx, ctx.Phase())
 	log.Info("resetpassword create")
 
 	if err = validateResetPasswordInput(req); err != nil {

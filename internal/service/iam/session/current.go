@@ -22,8 +22,8 @@ type CurrentDeleteService struct {
 }
 
 // Get returns the current authenticated session together with the latest user snapshot.
-func (s *CurrentGetService) Get(ctx *types.ServiceContext, req *modeliamsession.CurrentGetReq) (rsp *modeliamsession.CurrentGetRsp, err error) {
-	log := s.WithContext(ctx, ctx.Phase())
+func (c *CurrentGetService) Get(ctx *types.ServiceContext, req *modeliamsession.CurrentGetReq) (rsp *modeliamsession.CurrentGetRsp, err error) {
+	log := c.WithContext(ctx, ctx.Phase())
 
 	_, session, err := SessionManager.Current(ctx)
 	if err != nil {
@@ -49,8 +49,8 @@ func (s *CurrentGetService) Get(ctx *types.ServiceContext, req *modeliamsession.
 }
 
 // Delete invalidates the current authenticated session and clears the session cookie.
-func (s *CurrentDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.CurrentDeleteReq) (rsp *modeliamsession.CurrentDeleteRsp, err error) {
-	log := s.WithContext(ctx, ctx.Phase())
+func (c *CurrentDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.CurrentDeleteReq) (rsp *modeliamsession.CurrentDeleteRsp, err error) {
+	log := c.WithContext(ctx, ctx.Phase())
 
 	sessionID, err := SessionManager.SessionID(ctx)
 	if err != nil {

@@ -16,8 +16,8 @@ type ChangePasswordService struct {
 	service.Base[*modeliamaccount.ChangePassword, *modeliamaccount.ChangePasswordReq, *modeliamaccount.ChangePasswordRsp]
 }
 
-func (s *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliamaccount.ChangePasswordReq) (rsp *modeliamaccount.ChangePasswordRsp, err error) {
-	log := s.WithContext(ctx, ctx.Phase())
+func (c *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliamaccount.ChangePasswordReq) (rsp *modeliamaccount.ChangePasswordRsp, err error) {
+	log := c.WithContext(ctx, ctx.Phase())
 	log.Info("changepassword create")
 
 	if err = validateChangePasswordInput(req); err != nil {
