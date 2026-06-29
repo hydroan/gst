@@ -602,7 +602,7 @@ func (s *RoleService) DeleteAfter(ctx *types.ServiceContext, req *modelcopytest.
 		},
 	}
 
-	if err := plan.addServiceFiles(); err != nil {
+	if err := plan.addServiceFiles(nil); err != nil {
 		t.Fatalf("addServiceFiles() error = %v", err)
 	}
 	targets := plan.ServiceTargets()
@@ -618,6 +618,127 @@ func (s *RoleService) DeleteAfter(ctx *types.ServiceContext, req *modelcopytest.
 	} {
 		if !strings.Contains(code, want) {
 			t.Fatalf("merged service file missing %q:\n%s", want, code)
+		}
+	}
+}
+
+func TestAddServiceFilesMergesActionsFromMultipleSourceServiceStructs(t *testing.T) {
+	sourceServiceDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(sourceServiceDir, "profile.go"), []byte(`package servicecopytest
+
+import (
+	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+)
+
+// ProfileGetService handles reads.
+type ProfileGetService struct {
+	service.Base[*modelcopytest.Profile, *modelcopytest.ProfileGetReq, *modelcopytest.ProfileGetRsp]
+}
+
+// ProfilePatchService handles writes.
+type ProfilePatchService struct {
+	service.Base[*modelcopytest.Profile, *modelcopytest.ProfilePatchReq, *modelcopytest.ProfilePatchRsp]
+}
+
+// Get copies get logic.
+func (s *ProfileGetService) Get(ctx *types.ServiceContext, req *modelcopytest.ProfileGetReq) (rsp *modelcopytest.ProfileGetRsp, err error) {
+	return profileGetResult(), nil
+}
+
+// Patch copies patch logic.
+func (s *ProfilePatchService) Patch(ctx *types.ServiceContext, req *modelcopytest.ProfilePatchReq) (rsp *modelcopytest.ProfilePatchRsp, err error) {
+	return profilePatchResult(), nil
+}
+
+func profileGetResult() *modelcopytest.Profile {
+	return nil
+}
+
+func profilePatchResult() *modelcopytest.Profile {
+	return nil
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	modelInfo := &gen.ModelInfo{
+		ModulePath:    "tmpapp",
+		ModelFileDir:  filepath.Join("model", "copytest"),
+		ModelFilePath: filepath.Join("model", "copytest", "profile.go"),
+		ModelPkgName:  "copytest",
+		ModelName:     "Profile",
+		ModelVarName:  "p",
+		Design:        &dsl.Design{Enabled: true},
+	}
+	getAction := &dsl.Action{
+		Enabled:  true,
+		Service:  true,
+		Filename: "profile.go",
+		Flatten:  true,
+		Payload:  "*ProfileGetReq",
+		Result:   "*ProfileGetRsp",
+		Phase:    consts.PHASE_GET,
+	}
+	patchAction := &dsl.Action{
+		Enabled:  true,
+		Service:  true,
+		Filename: "profile.go",
+		Flatten:  true,
+		Payload:  "*ProfilePatchReq",
+		Result:   "*ProfilePatchRsp",
+		Phase:    consts.PHASE_PATCH,
+	}
+	plan := &CopyPlan{
+		Name:                  "copytest",
+		ProjectModulePath:     "tmpapp",
+		SourceServiceDir:      sourceServiceDir,
+		TargetServiceDir:      filepath.Join("service", "copytest"),
+		TargetModelImportPath: filepath.Join("tmpapp", "model", "copytest"),
+		Actions: []moduleCopyAction{
+			{
+				Action:     getAction,
+				SourcePath: filepath.Join(sourceServiceDir, "profile.go"),
+				TargetPath: filepath.Join("service", "copytest", "profile.go"),
+				ModelInfo:  modelInfo,
+			},
+			{
+				Action:     patchAction,
+				SourcePath: filepath.Join(sourceServiceDir, "profile.go"),
+				TargetPath: filepath.Join("service", "copytest", "profile.go"),
+				ModelInfo:  modelInfo,
+			},
+		},
+	}
+
+	for _, action := range plan.Actions {
+		if err := requireServiceSourceFile(action); err != nil {
+			t.Fatalf("requireServiceSourceFile() error = %v", err)
+		}
+	}
+	if err := plan.addServiceFiles(nil); err != nil {
+		t.Fatalf("addServiceFiles() error = %v", err)
+	}
+	code := string(plan.Files[0].Content)
+	for _, want := range []string{
+		"// Get copies get logic.\nfunc (p *Profile) Get",
+		"return profileGetResult(), nil",
+		"// Patch copies patch logic.\nfunc (p *Profile) Patch",
+		"return profilePatchResult(), nil",
+	} {
+		if !strings.Contains(code, want) {
+			t.Fatalf("merged service file missing %q:\n%s", want, code)
+		}
+	}
+	for _, unwanted := range []string{
+		"type ProfileGetService struct",
+		"type ProfilePatchService struct",
+		"func (s *ProfileGetService)",
+		"func (s *ProfilePatchService)",
+	} {
+		if strings.Contains(code, unwanted) {
+			t.Fatalf("merged service file kept source service artifact %q:\n%s", unwanted, code)
 		}
 	}
 }
@@ -677,7 +798,7 @@ func (s *RoleService) CreateAfter(ctx *types.ServiceContext, req *modelcopytest.
 		},
 	}
 
-	if err := plan.addServiceFiles(); err != nil {
+	if err := plan.addServiceFiles(nil); err != nil {
 		t.Fatalf("addServiceFiles() error = %v", err)
 	}
 	code := string(plan.Files[0].Content)
@@ -697,7 +818,10 @@ func newModuleCopyPlanProject(t *testing.T) string {
 		filepath.Join(frameworkRoot, "module", "copytest"),
 		filepath.Join(frameworkRoot, "internal", "model", "copytest"),
 		filepath.Join(frameworkRoot, "internal", "service", "copytest"),
+		filepath.Join(frameworkRoot, "dsl"),
+		filepath.Join(frameworkRoot, "model"),
 		filepath.Join(frameworkRoot, "service"),
+		filepath.Join(frameworkRoot, "types"),
 	} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
@@ -712,6 +836,27 @@ func newModuleCopyPlanProject(t *testing.T) string {
 	if err := os.WriteFile(filepath.Join(frameworkRoot, "service", "base.go"), []byte(`package service
 
 type Base[M any, REQ any, RSP any] struct{}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "types", "types.go"), []byte(`package types
+
+type ServiceContext struct{}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "model", "empty.go"), []byte(`package model
+
+type Empty struct{}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "dsl", "dsl.go"), []byte(`package dsl
+
+func Route(string, func()) {}
+func Create(func()) {}
+func Service(...bool) {}
+func Filename(string) {}
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -886,6 +1031,14 @@ func accountHelper(req *modelcopytestaccount.Account) *modelcopytestaccount.Acco
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(sourceAccountServiceDir, "standalone.go"), []byte(`package servicecopytestaccount
+
+func standaloneAccountHelper() string {
+	return "standalone"
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	sourceAuditServiceDir := filepath.Join(frameworkRoot, "internal", "service", "copytest", "audit")
 	if err := os.MkdirAll(sourceAuditServiceDir, 0o755); err != nil {
@@ -940,7 +1093,7 @@ func TestBuildModuleCopyPlanIncludesServiceHelperFiles(t *testing.T) {
 	}
 }
 
-func TestBuildModuleCopyPlanCopiesNestedPackageTree(t *testing.T) {
+func TestBuildModuleCopyPlanCopiesNestedActionsAndReachableHelpers(t *testing.T) {
 	projectDir := newModuleCopyPlanProject(t)
 	writeNestedCopyTestModuleSource(t, projectDir)
 	t.Chdir(projectDir)
@@ -961,12 +1114,16 @@ func TestBuildModuleCopyPlanCopiesNestedPackageTree(t *testing.T) {
 	}
 
 	helperTargets := plan.HelperTargets()
-	for _, want := range []string{
-		filepath.Join("service", "copytest", "account", "helper.go"),
+	reachableHelper := filepath.Join("service", "copytest", "account", "helper.go")
+	if !slices.Contains(helperTargets, reachableHelper) {
+		t.Fatalf("HelperTargets() = %v, want %s", helperTargets, reachableHelper)
+	}
+	for _, unwanted := range []string{
+		filepath.Join("service", "copytest", "account", "standalone.go"),
 		filepath.Join("service", "copytest", "audit", "audit.go"),
 	} {
-		if !slices.Contains(helperTargets, want) {
-			t.Fatalf("HelperTargets() = %v, want %s", helperTargets, want)
+		if slices.Contains(helperTargets, unwanted) {
+			t.Fatalf("HelperTargets() = %v, should not include unrelated service file %s", helperTargets, unwanted)
 		}
 	}
 
@@ -991,10 +1148,6 @@ func TestBuildModuleCopyPlanCopiesNestedPackageTree(t *testing.T) {
 	accountHelper := moduleCopyPlanFileContent(t, plan, filepath.Join("service", "copytest", "account", "helper.go"))
 	if !strings.Contains(accountHelper, "package account\n") || !strings.Contains(accountHelper, `"tmpapp/model/copytest/account"`) || strings.Contains(accountHelper, "modelcopytestaccount") {
 		t.Fatalf("nested helper was not normalized:\n%s", accountHelper)
-	}
-	auditHelper := moduleCopyPlanFileContent(t, plan, filepath.Join("service", "copytest", "audit", "audit.go"))
-	if !strings.HasPrefix(auditHelper, "package audit\n") {
-		t.Fatalf("service-only package mismatch:\n%s", auditHelper)
 	}
 }
 

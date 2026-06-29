@@ -195,7 +195,12 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 	// Precompute final service/helper contents during preflight so conflict checks
 	// compare against what will actually be written. The execution phase still
 	// runs gg gen for real before writing these merged files.
-	if addServiceErr := plan.addServiceFiles(); addServiceErr != nil {
+	helperFiles, err := plan.helperDependencyFiles(actions)
+	if err != nil {
+		return nil, err
+	}
+
+	if addServiceErr := plan.addServiceFiles(helperFiles); addServiceErr != nil {
 		return nil, addServiceErr
 	}
 	if extraServiceErr := plan.addExtraServiceFiles(); extraServiceErr != nil {
@@ -411,10 +416,12 @@ func (p *CopyPlan) addExtraServiceFiles() error {
 		return fmt.Errorf("%s is not a directory", p.TargetServiceDir)
 	}
 
-	// Service copy mirrors the module's service package tree, except that action
-	// service files are merged with the generated target shell. Excluded source
-	// files should not become expected targets, so the authoritative "current
-	// module copy output" set is the final plan.Files service/helper targets.
+	// Service copy is intentionally not a raw SourceServiceDir -> TargetServiceDir
+	// directory mirror. Action service files come from DSL ServiceFilename(),
+	// helper files come from same-package dependency discovery, and ignored
+	// source files should not become expected targets. Therefore the
+	// authoritative "current module copy output" set is the final plan.Files
+	// service/helper targets computed above.
 	expectedTargets := make(map[string]bool)
 	for _, file := range p.Files {
 		if file.Kind != moduleCopyFileService && file.Kind != moduleCopyFileHelper {
@@ -522,8 +529,9 @@ func (p *CopyPlan) actionServicePaths(sourceModel *gen.ModelInfo, targetModel *g
 }
 
 // requireServiceSourceFile enforces the module-copy convention that each action
-// service source file has exactly one service struct. The whole service file is
-// merged later, so hook-only files do not need to declare the action's main method.
+// service source file declares at least one service struct. The whole service
+// file is merged later, so hook-only files do not need to declare the action's
+// main method, and one file may host multiple action service structs.
 func requireServiceSourceFile(action moduleCopyAction) error {
 	if _, err := os.Stat(action.SourcePath); err != nil {
 		return fmt.Errorf("source action service file not found for %s: %w", action.Action.ServiceFilename(), err)
@@ -532,17 +540,41 @@ func requireServiceSourceFile(action moduleCopyAction) error {
 	if err != nil {
 		return err
 	}
-	if count != 1 {
-		return fmt.Errorf("source action service file %s must contain exactly one service struct, found %d", action.SourcePath, count)
+	if count == 0 {
+		return fmt.Errorf("source action service file %s must contain at least one service struct", action.SourcePath)
 	}
 	return nil
 }
 
-func (p *CopyPlan) addServiceFiles() error {
-	actionSourcePaths := make(map[string]bool, len(p.Actions))
+func (p *CopyPlan) helperDependencyFiles(actions []moduleCopyAction) ([]string, error) {
+	packageActions := make(map[string][]string)
+	for _, sourcePath := range actionSourcePaths(actions) {
+		packageDir := filepath.Dir(sourcePath)
+		packageActions[packageDir] = append(packageActions[packageDir], sourcePath)
+	}
+
+	helperFiles := make([]string, 0)
+	seen := make(map[string]bool)
+	for packageDir, selectedFiles := range packageActions {
+		files, err := moduleCopyHelperDependencyFiles(packageDir, selectedFiles)
+		if err != nil {
+			return nil, err
+		}
+		for _, file := range files {
+			if seen[file] {
+				continue
+			}
+			seen[file] = true
+			helperFiles = append(helperFiles, file)
+		}
+	}
+	sort.Strings(helperFiles)
+	return helperFiles, nil
+}
+
+func (p *CopyPlan) addServiceFiles(helperFiles []string) error {
 	for _, actions := range groupActionsByTargetPath(p.Actions) {
 		first := actions[0]
-		actionSourcePaths[filepath.Clean(first.SourcePath)] = true
 		source, err := os.ReadFile(first.SourcePath)
 		if err != nil {
 			return err
@@ -571,12 +603,8 @@ func (p *CopyPlan) addServiceFiles() error {
 		})
 	}
 
-	sourceFiles, err := goFilesInDir(p.SourceServiceDir)
-	if err != nil {
-		return err
-	}
-	for _, sourcePath := range sourceFiles {
-		if p.ignoredSourcePath(sourcePath) || actionSourcePaths[filepath.Clean(sourcePath)] {
+	for _, sourcePath := range helperFiles {
+		if p.ignoredSourcePath(sourcePath) {
 			continue
 		}
 		targetPath, err := p.targetServicePath(sourcePath)
@@ -619,8 +647,24 @@ func (p *CopyPlan) targetModelPath(sourcePath string) (string, error) {
 
 func (p *CopyPlan) targetServicePath(sourcePath string) (string, error) {
 	rel, err := filepath.Rel(p.SourceServiceDir, sourcePath)
+	if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return filepath.Join(p.TargetServiceDir, rel), nil
+	}
+
+	sourceRoot, rootErr := canonicalModuleCopyPath("", p.SourceServiceDir)
+	cleanSource, sourceErr := canonicalModuleCopyPath("", sourcePath)
+	if rootErr != nil {
+		return "", rootErr
+	}
+	if sourceErr != nil {
+		return "", sourceErr
+	}
+	rel, err = filepath.Rel(sourceRoot, cleanSource)
 	if err != nil {
 		return "", err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("source service file %s is outside %s", sourcePath, p.SourceServiceDir)
 	}
 	return filepath.Join(p.TargetServiceDir, rel), nil
 }
