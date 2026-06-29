@@ -16,19 +16,31 @@ import (
 // normalizeModuleModelSource converts framework model files into the current
 // project package layout. The model directory name is the package name, so
 // internal/model/copytest package modelcopytest becomes model/copytest package copytest.
-func normalizeModuleModelSource(filename string, src []byte, targetPackage string) ([]byte, error) {
+// Copied model files can reference sibling model packages in the same framework
+// module, so those internal model imports must also be rewritten to the target
+// project's model/<module> tree.
+func normalizeModuleModelSource(filename string, src []byte, config moduleCopyRewriteConfig) ([]byte, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, filename, src, parser.ParseComments)
 	if err != nil {
 		return nil, err
 	}
-	file.Name.Name = targetPackage
+
+	selectorNames := rewriteModuleModelFile(file, config)
+	rewriteSelectorPackages(file, selectorNames)
 
 	code, err := gen.FormatNodeExtraWithFileSet(file, fset, true)
 	if err != nil {
 		return nil, err
 	}
 	return []byte(code), nil
+}
+
+func rewriteModuleModelFile(file *ast.File, config moduleCopyRewriteConfig) map[string]string {
+	// Model files intentionally only rewrite copied model imports. If a model file
+	// imports a copied service package, keeping that import untouched preserves the
+	// architecture violation instead of hiding it in generated project code.
+	return rewriteModuleCopyFile(file, config, false)
 }
 
 type moduleCopyRewriteConfig struct {
@@ -60,6 +72,10 @@ func normalizeModuleServiceSource(filename string, src []byte, config moduleCopy
 }
 
 func rewriteModuleServiceFile(file *ast.File, config moduleCopyRewriteConfig) map[string]string {
+	return rewriteModuleCopyFile(file, config, true)
+}
+
+func rewriteModuleCopyFile(file *ast.File, config moduleCopyRewriteConfig, includeServiceImports bool) map[string]string {
 	file.Name.Name = config.TargetPackage
 
 	rewrites := make([]moduleCopyImportRewrite, 0)
@@ -71,6 +87,13 @@ func rewriteModuleServiceFile(file *ast.File, config moduleCopyRewriteConfig) ma
 		}
 		rewrite, ok := buildModuleCopyImportRewrite(imp, path, config)
 		if !ok {
+			name := importLocalName(imp, path)
+			if name != "" && name != "." && name != "_" {
+				usedNames[name] = true
+			}
+			continue
+		}
+		if rewrite.kind == "service" && !includeServiceImports {
 			name := importLocalName(imp, path)
 			if name != "" && name != "." && name != "_" {
 				usedNames[name] = true

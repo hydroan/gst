@@ -46,7 +46,13 @@ type CopyTest struct {
 }
 `)
 
-	got, err := normalizeModuleModelSource("copytest.go", src, "copytest")
+	got, err := normalizeModuleModelSource("copytest.go", src, moduleCopyRewriteConfig{
+		ModuleName:        "copytest",
+		ProjectModulePath: "tmpapp",
+		ModelDir:          "model",
+		ServiceDir:        "service",
+		TargetPackage:     "copytest",
+	})
 	if err != nil {
 		t.Fatalf("normalizeModuleModelSource() error = %v", err)
 	}
@@ -55,6 +61,46 @@ type CopyTest struct {
 	}
 	if strings.Contains(string(got), "package modelcopytest") {
 		t.Fatalf("normalized source kept source package:\n%s", got)
+	}
+}
+
+func TestNormalizeModuleModelSourceRewritesCopiedModelImports(t *testing.T) {
+	src := []byte(`package modelcopytestaccount
+
+import (
+	modelcopytestsession "github.com/hydroan/gst/internal/model/copytest/session"
+	"github.com/hydroan/gst/model"
+)
+
+type AccountAction struct {
+	model.Empty
+}
+
+type ActionRsp = modelcopytestsession.ActionRsp
+`)
+
+	got, err := normalizeModuleModelSource("login.go", src, moduleCopyRewriteConfig{
+		ModuleName:        "copytest",
+		ProjectModulePath: "tmpapp",
+		ModelDir:          "model",
+		ServiceDir:        "service",
+		TargetPackage:     "account",
+	})
+	if err != nil {
+		t.Fatalf("normalizeModuleModelSource() error = %v", err)
+	}
+	code := string(got)
+	for _, want := range []string{
+		"package account\n",
+		`"tmpapp/model/copytest/session"`,
+		"type ActionRsp = session.ActionRsp",
+	} {
+		if !strings.Contains(code, want) {
+			t.Fatalf("normalized model source missing %q:\n%s", want, code)
+		}
+	}
+	if strings.Contains(code, "github.com/hydroan/gst/internal/model/copytest/session") || strings.Contains(code, "modelcopytestsession") {
+		t.Fatalf("normalized model source leaked framework model import artifacts:\n%s", code)
 	}
 }
 

@@ -313,7 +313,13 @@ func (p *CopyPlan) addModelFiles() error {
 		if err != nil {
 			return err
 		}
-		content, err := normalizeModuleModelSource(sourcePath, src, moduleCopyPackageName(filepath.Dir(targetPath)))
+		content, err := normalizeModuleModelSource(sourcePath, src, moduleCopyRewriteConfig{
+			ModuleName:        p.Name,
+			ProjectModulePath: p.ProjectModulePath,
+			ModelDir:          p.ModelDir,
+			ServiceDir:        p.ServiceDir,
+			TargetPackage:     moduleCopyPackageName(filepath.Dir(targetPath)),
+		})
 		if err != nil {
 			return err
 		}
