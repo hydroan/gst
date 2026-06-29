@@ -38,6 +38,22 @@ type ProfilePatchRsp = Profile
 
 func (Profile) Design() {
 	Migrate(true)
+	Route("/iam/profile", func() {
+		Get(func() {
+			Service()
+			Flatten()
+			Filename("profile.go")
+			Payload[*ProfileGetReq]()
+			Result[*ProfileGetRsp]()
+		})
+		Patch(func() {
+			Service()
+			Flatten()
+			Filename("profile.go")
+			Payload[*ProfilePatchReq]()
+			Result[*ProfilePatchRsp]()
+		})
+	})
 }
 
 func (Profile) Purge() bool { return true }

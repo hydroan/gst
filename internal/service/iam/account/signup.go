@@ -5,14 +5,13 @@ import (
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"go.uber.org/zap"
 )
 
 type SignupService struct {
-	service.Base[*model.Empty, *modeliamaccount.SignupReq, *modeliamaccount.SignupRsp]
+	service.Base[*modeliamaccount.Signup, *modeliamaccount.SignupReq, *modeliamaccount.SignupRsp]
 }
 
 func (s *SignupService) Create(ctx *types.ServiceContext, req *modeliamaccount.SignupReq) (rsp *modeliamaccount.SignupRsp, err error) {

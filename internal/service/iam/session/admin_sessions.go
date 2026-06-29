@@ -9,7 +9,6 @@ import (
 	"github.com/hydroan/gst/database"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
@@ -17,17 +16,17 @@ import (
 
 // AdminSessionsListService handles retrieval of all sessions grouped by user for privileged administrators.
 type AdminSessionsListService struct {
-	service.Base[*model.Empty, *modeliamsession.AdminSessionsListReq, *modeliamsession.AdminSessionsListRsp]
+	service.Base[*modeliamsession.AdminSessions, *modeliamsession.AdminSessionsListReq, *modeliamsession.AdminSessionsListRsp]
 }
 
 // AdminSessionsGetService handles retrieval of a specified session for privileged administrators.
 type AdminSessionsGetService struct {
-	service.Base[*model.Empty, *modeliamsession.AdminSessionsGetReq, *modeliamsession.AdminSessionsGetRsp]
+	service.Base[*modeliamsession.AdminSessions, *modeliamsession.AdminSessionsGetReq, *modeliamsession.AdminSessionsGetRsp]
 }
 
 // AdminSessionsDeleteService handles invalidation of a specified session for privileged administrators.
 type AdminSessionsDeleteService struct {
-	service.Base[*model.Empty, *modeliamsession.AdminSessionsDeleteReq, *modeliamsession.AdminSessionsDeleteRsp]
+	service.Base[*modeliamsession.AdminSessions, *modeliamsession.AdminSessionsDeleteReq, *modeliamsession.AdminSessionsDeleteRsp]
 }
 
 type adminSessionOwnerItem struct {

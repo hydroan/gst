@@ -4,19 +4,18 @@ import (
 	"github.com/hydroan/gst/database"
 	modeliamprofile "github.com/hydroan/gst/internal/model/iam/profile"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
 
 // ProfileGetService handles retrieval of the current user's profile.
 type ProfileGetService struct {
-	service.Base[*model.Empty, *modeliamprofile.ProfileGetReq, *modeliamprofile.ProfileGetRsp]
+	service.Base[*modeliamprofile.Profile, *modeliamprofile.ProfileGetReq, *modeliamprofile.ProfileGetRsp]
 }
 
 // ProfilePatchService handles partial updates to the current user's profile.
 type ProfilePatchService struct {
-	service.Base[*model.Empty, *modeliamprofile.ProfilePatchReq, *modeliamprofile.ProfilePatchRsp]
+	service.Base[*modeliamprofile.Profile, *modeliamprofile.ProfilePatchReq, *modeliamprofile.ProfilePatchRsp]
 }
 
 // Get returns the current user's profile. Missing profiles are represented by an

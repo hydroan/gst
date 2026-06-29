@@ -9,13 +9,12 @@ import (
 	"github.com/hydroan/gst/internal/service/iam/adminauth"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	serviceiamuser "github.com/hydroan/gst/internal/service/iam/user"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
 
 type ResetPasswordService struct {
-	service.Base[*model.Empty, *modeliamaccount.ResetPasswordReq, *modeliamaccount.ResetPasswordRsp]
+	service.Base[*modeliamaccount.ResetPassword, *modeliamaccount.ResetPasswordReq, *modeliamaccount.ResetPasswordRsp]
 }
 
 func (s *ResetPasswordService) Create(ctx *types.ServiceContext, req *modeliamaccount.ResetPasswordReq) (rsp *modeliamaccount.ResetPasswordRsp, err error) {

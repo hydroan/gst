@@ -51,7 +51,9 @@ type DefaultUser struct {
 //   - GET    /api/iam/sessions/:id
 //   - DELETE /api/iam/sessions
 //   - DELETE /api/iam/sessions/:id
-//   - DELETE /api/iam/sessions/others
+//
+// Note: DELETE /api/iam/sessions/:id treats id=others as a reserved
+// self-service bulk logout that revokes every other session of the current user.
 //
 // Account management routes:
 //   - POST   /api/login

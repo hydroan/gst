@@ -1,5 +1,11 @@
 package modeliamsession
 
+import "github.com/hydroan/gst/model"
+
+type AdminUserSessions struct {
+	model.Empty
+}
+
 // AdminUserSessionsListReq is the request payload for loading all sessions of a specified user as a privileged administrator.
 type AdminUserSessionsListReq struct{}
 

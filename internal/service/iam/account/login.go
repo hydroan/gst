@@ -14,7 +14,6 @@ import (
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	servicelogmgmt "github.com/hydroan/gst/internal/service/logmgmt"
 	servicemfa "github.com/hydroan/gst/internal/service/mfa"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
@@ -23,7 +22,7 @@ import (
 )
 
 type LoginService struct {
-	service.Base[*model.Empty, *modeliamaccount.LoginReq, *modeliamaccount.LoginRsp]
+	service.Base[*modeliamaccount.Login, *modeliamaccount.LoginReq, *modeliamaccount.LoginRsp]
 }
 
 // Create authenticates an IAM account and creates a new session.
