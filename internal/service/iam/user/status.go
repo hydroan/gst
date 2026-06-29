@@ -8,13 +8,12 @@ import (
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/internal/service/iam/adminauth"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
 
 type UserStatusPatchService struct {
-	service.Base[*model.Empty, *modeliamuser.UserStatusPatchReq, *modeliamuser.UserStatusPatchRsp]
+	service.Base[*modeliamuser.User, *modeliamuser.UserStatusPatchReq, *modeliamuser.UserStatusPatchRsp]
 }
 
 func (s *UserStatusPatchService) Patch(ctx *types.ServiceContext, req *modeliamuser.UserStatusPatchReq) (rsp *modeliamuser.UserStatusPatchRsp, err error) {

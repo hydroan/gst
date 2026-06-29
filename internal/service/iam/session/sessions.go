@@ -6,7 +6,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
@@ -16,22 +15,22 @@ const sessionsDeleteOthersID = "others"
 
 // SessionsListService handles retrieval of all active sessions for the current authenticated user.
 type SessionsListService struct {
-	service.Base[*model.Empty, *modeliamsession.SessionsListReq, *modeliamsession.SessionsListRsp]
+	service.Base[*modeliamsession.Sessions, *modeliamsession.SessionsListReq, *modeliamsession.SessionsListRsp]
 }
 
 // SessionsGetService handles retrieval of a specified session for the current authenticated user.
 type SessionsGetService struct {
-	service.Base[*model.Empty, *modeliamsession.SessionsGetReq, *modeliamsession.SessionsGetRsp]
+	service.Base[*modeliamsession.Sessions, *modeliamsession.SessionsGetReq, *modeliamsession.SessionsGetRsp]
 }
 
 // SessionsDeleteService handles invalidation of a specified session for the current authenticated user.
 type SessionsDeleteService struct {
-	service.Base[*model.Empty, *modeliamsession.SessionsDeleteReq, *modeliamsession.SessionsDeleteRsp]
+	service.Base[*modeliamsession.Sessions, *modeliamsession.SessionsDeleteReq, *modeliamsession.SessionsDeleteRsp]
 }
 
 // SessionsDeleteAllService handles invalidation of all sessions for the current authenticated user.
 type SessionsDeleteAllService struct {
-	service.Base[*model.Empty, *modeliamsession.SessionsDeleteAllReq, *modeliamsession.SessionsDeleteAllRsp]
+	service.Base[*modeliamsession.Sessions, *modeliamsession.SessionsDeleteAllReq, *modeliamsession.SessionsDeleteAllRsp]
 }
 
 // List returns all active sessions for the current authenticated user.

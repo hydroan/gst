@@ -1,6 +1,9 @@
 package modeliamsession
 
-import "github.com/hydroan/gst/model"
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
 
 type AdminUserSessions struct {
 	model.Empty
@@ -19,3 +22,24 @@ type AdminUserSessionsDeleteReq struct{}
 
 // AdminUserSessionsDeleteRsp returns the result of invalidating all sessions of a specified user for a privileged administrator.
 type AdminUserSessionsDeleteRsp struct{}
+
+func (AdminUserSessions) Design() {
+	Route("/iam/admin/users/:id/sessions", func() {
+		List(func() {
+			Service()
+			Flatten()
+			Filename("admin_user_sessions.go")
+			Payload[*AdminUserSessionsListReq]()
+			Result[*AdminUserSessionsListRsp]()
+		})
+
+		Delete(func() {
+			Service()
+			Flatten()
+			Exact()
+			Filename("admin_user_sessions.go")
+			Payload[*AdminUserSessionsDeleteReq]()
+			Result[*AdminUserSessionsDeleteRsp]()
+		})
+	})
+}

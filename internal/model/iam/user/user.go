@@ -23,7 +23,17 @@ type User struct {
 
 func (User) Design() {
 	Migrate(true)
-	Endpoint("users")
+
+	Route("/iam/admin/users/:id/status", func() {
+		Patch(func() {
+			Service()
+			Flatten()
+			Exact()
+			Filename("status.go")
+			Payload[*UserStatusPatchReq]()
+			Result[*UserStatusPatchRsp]()
+		})
+	})
 }
 
 func (User) Purge() bool { return true }

@@ -1,5 +1,14 @@
 package modeliamsession
 
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Current struct {
+	model.Empty
+}
+
 // CurrentGetReq is the request payload for getting the current session.
 type CurrentGetReq struct{}
 
@@ -11,3 +20,24 @@ type CurrentDeleteReq struct{}
 
 // CurrentDeleteRsp is the response payload for deleting the current session.
 type CurrentDeleteRsp struct{}
+
+func (Current) Design() {
+	Route("/iam/session/current", func() {
+		Get(func() {
+			Service()
+			Flatten()
+			Exact()
+			Filename("current.go")
+			Payload[*CurrentGetReq]()
+			Result[*CurrentGetRsp]()
+		})
+		Delete(func() {
+			Service()
+			Flatten()
+			Exact()
+			Filename("current.go")
+			Payload[*CurrentDeleteReq]()
+			Result[*CurrentDeleteRsp]()
+		})
+	})
+}

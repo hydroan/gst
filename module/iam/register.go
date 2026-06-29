@@ -108,7 +108,7 @@ func Register(config ...Config) {
 	module.Use(module.NewWrapper("/iam/admin/sessions", "id", false, &serviceiamsession.AdminSessionsListService{}), module.CRUD(consts.PHASE_LIST))
 	module.Use(module.NewWrapper("/iam/admin/sessions", "id", false, &serviceiamsession.AdminSessionsGetService{}), module.CRUD(consts.PHASE_GET))
 	module.Use(module.NewWrapper("/iam/admin/sessions", "id", false, &serviceiamsession.AdminSessionsDeleteService{}), module.CRUD(consts.PHASE_DELETE))
-	module.Use(module.NewWrapper("/iam/admin/users/:id/sessions", "id", false, &serviceiamsession.AdminUserSessionsListService{}), module.Exact(consts.PHASE_LIST))
+	module.Use(module.NewWrapper("/iam/admin/users/:id/sessions", "id", false, &serviceiamsession.AdminUserSessionsListService{}), module.CRUD(consts.PHASE_LIST))
 	module.Use(module.NewWrapper("/iam/admin/users/:id/sessions", "id", false, &serviceiamsession.AdminUserSessionsDeleteService{}), module.Exact(consts.PHASE_DELETE))
 	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsGetService{}), module.CRUD(consts.PHASE_GET))
 	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionsDeleteAllService{}), module.Exact(consts.PHASE_DELETE))

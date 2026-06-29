@@ -22,7 +22,7 @@ func (Logout) Design() {
 		Create(func() {
 			Service()
 			Flatten()
-			Filename("/logout.go")
+			Filename("logout.go")
 			Payload[*LogoutReq]()
 			Result[*LogoutRsp]()
 		})

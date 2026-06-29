@@ -7,14 +7,18 @@ import (
 	"github.com/hydroan/gst/database"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
 
 // CurrentGetService handles retrieval of the current authenticated session.
 type CurrentGetService struct {
-	service.Base[*model.Empty, *modeliamsession.CurrentGetReq, *modeliamsession.CurrentGetRsp]
+	service.Base[*modeliamsession.Current, *modeliamsession.CurrentGetReq, *modeliamsession.CurrentGetRsp]
+}
+
+// CurrentDeleteService handles invalidation of the current authenticated session.
+type CurrentDeleteService struct {
+	service.Base[*modeliamsession.Current, *modeliamsession.CurrentDeleteReq, *modeliamsession.CurrentDeleteRsp]
 }
 
 // Get returns the current authenticated session together with the latest user snapshot.
@@ -42,11 +46,6 @@ func (s *CurrentGetService) Get(ctx *types.ServiceContext, req *modeliamsession.
 	}
 
 	return BuildAuthenticatedSessionRsp(session, user, email, time.Now()), nil
-}
-
-// CurrentDeleteService handles invalidation of the current authenticated session.
-type CurrentDeleteService struct {
-	service.Base[*model.Empty, *modeliamsession.CurrentDeleteReq, *modeliamsession.CurrentDeleteRsp]
 }
 
 // Delete invalidates the current authenticated session and clears the session cookie.

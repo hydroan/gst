@@ -1,5 +1,14 @@
 package modeliamsession
 
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Sessions struct {
+	model.Empty
+}
+
 // SessionsListReq is the request payload for listing active sessions of the current user.
 type SessionsListReq struct{}
 
@@ -28,3 +37,40 @@ type SessionsDeleteAllReq struct{}
 
 // SessionsDeleteAllRsp returns the delete result for all sessions of the current user.
 type SessionsDeleteAllRsp struct{}
+
+func (Sessions) Design() {
+	Route("/iam/sessions", func() {
+		List(func() {
+			Service()
+			Flatten()
+			Filename("sessions.go")
+			Payload[*SessionsListReq]()
+			Result[*SessionsListRsp]()
+		})
+
+		Get(func() {
+			Service()
+			Flatten()
+			Filename("sessions.go")
+			Payload[*SessionsGetReq]()
+			Result[*SessionsGetRsp]()
+		})
+
+		Delete(func() {
+			Service()
+			Flatten()
+			Filename("sessions.go")
+			Payload[*SessionsDeleteReq]()
+			Result[*SessionsDeleteRsp]()
+		})
+
+		Delete(func() {
+			Service()
+			Flatten()
+			Exact()
+			Filename("sessions.go")
+			Payload[*SessionsDeleteAllReq]()
+			Result[*SessionsDeleteAllRsp]()
+		})
+	})
+}
