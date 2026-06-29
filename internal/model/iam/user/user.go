@@ -20,6 +20,13 @@ type User struct {
 
 	model.Base
 }
+type UserStatusPatchReq struct {
+	Status UserStatus `json:"status" validate:"required"`
+}
+
+type UserStatusPatchRsp struct {
+	Msg string `json:"msg,omitempty"`
+}
 
 func (User) Design() {
 	Migrate(true)

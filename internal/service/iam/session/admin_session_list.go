@@ -1,7 +1,6 @@
 package serviceiamsession
 
 import (
-	"net/http"
 	"sort"
 	"time"
 
@@ -16,17 +15,7 @@ import (
 
 // AdminSessionListService handles retrieval of all sessions grouped by user for privileged administrators.
 type AdminSessionListService struct {
-	service.Base[*modeliamsession.AdminSession, *modeliamsession.AdminSessionListReq, *modeliamsession.AdminSessionListRsp]
-}
-
-// AdminSessionGetService handles retrieval of a specified session for privileged administrators.
-type AdminSessionGetService struct {
-	service.Base[*modeliamsession.AdminSession, *modeliamsession.AdminSessionGetReq, *modeliamsession.AdminSessionGetRsp]
-}
-
-// AdminSessionDeleteService handles invalidation of a specified session for privileged administrators.
-type AdminSessionDeleteService struct {
-	service.Base[*modeliamsession.AdminSession, *modeliamsession.AdminSessionDeleteReq, *modeliamsession.AdminSessionDeleteRsp]
+	service.Base[*modeliamsession.AdminSessionList, *modeliamsession.AdminSessionListReq, *modeliamsession.AdminSessionListRsp]
 }
 
 type adminSessionOwnerItem struct {
@@ -139,89 +128,6 @@ func (a *AdminSessionListService) List(ctx *types.ServiceContext, req *modeliams
 		Total:        int64(len(rspItems)),
 		SessionTotal: sessionTotal,
 	}, nil
-}
-
-// Get returns the detail of a specified session for a privileged administrator.
-func (a *AdminSessionGetService) Get(ctx *types.ServiceContext, req *modeliamsession.AdminSessionGetReq) (rsp *modeliamsession.AdminSessionGetRsp, err error) {
-	log := a.WithContext(ctx, ctx.Phase())
-
-	currentSessionID, _, err := SessionManager.Current(ctx)
-	if err != nil {
-		log.Error("failed to get current session", err)
-		return nil, err
-	}
-	if err = ensureAdminSessionActor(ctx); err != nil {
-		log.Error("failed to verify admin session actor", err)
-		return nil, err
-	}
-
-	targetSessionID := ctx.Param("id")
-	if targetSessionID == "" {
-		return nil, service.NewError(http.StatusBadRequest, "session id is required")
-	}
-
-	targetSession, err := redis.Cache[modeliamsession.Session]().WithContext(ctx).Get(modeliamsession.SessionIDKey(targetSessionID))
-	if err != nil {
-		if errors.Is(err, types.ErrEntryNotFound) {
-			return nil, service.NewError(http.StatusNotFound, "session not found")
-		}
-		log.Error("failed to load target session", err)
-		return nil, err
-	}
-	if err = SessionManager.Validate(targetSessionID, targetSession); err != nil {
-		_, _ = SessionManager.Delete(ctx, targetSessionID)
-		return nil, service.NewError(http.StatusNotFound, "session not found")
-	}
-
-	return &modeliamsession.AdminSessionGetRsp{
-		Session: buildSessionView(targetSession, currentSessionID),
-	}, nil
-}
-
-// Delete invalidates a specified session for a privileged administrator.
-func (a *AdminSessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.AdminSessionDeleteReq) (rsp *modeliamsession.AdminSessionDeleteRsp, err error) {
-	log := a.WithContext(ctx, ctx.Phase())
-
-	currentSessionID, _, err := SessionManager.Current(ctx)
-	if err != nil {
-		log.Error("failed to get current session", err)
-		return nil, err
-	}
-	if err = ensureAdminSessionActor(ctx); err != nil {
-		log.Error("failed to verify admin session actor", err)
-		return nil, err
-	}
-
-	targetSessionID := ctx.Param("id")
-	if targetSessionID == "" {
-		return nil, service.NewError(http.StatusBadRequest, "session id is required")
-	}
-
-	targetSession, err := redis.Cache[modeliamsession.Session]().WithContext(ctx).Get(modeliamsession.SessionIDKey(targetSessionID))
-	if err != nil {
-		if errors.Is(err, types.ErrEntryNotFound) {
-			return nil, service.NewError(http.StatusNotFound, "session not found")
-		}
-		log.Error("failed to load target session", err)
-		return nil, err
-	}
-	if err = SessionManager.Validate(targetSessionID, targetSession); err != nil {
-		_, _ = SessionManager.Delete(ctx, targetSessionID)
-		return nil, service.NewError(http.StatusNotFound, "session not found")
-	}
-
-	if _, err = SessionManager.Delete(ctx, targetSessionID); err != nil {
-		if errors.Is(err, types.ErrEntryNotFound) {
-			return nil, service.NewError(http.StatusNotFound, "session not found")
-		}
-		log.Error("failed to delete target session", err)
-		return nil, err
-	}
-	if targetSessionID == currentSessionID {
-		SessionManager.ClearCookie(ctx)
-	}
-
-	return &modeliamsession.AdminSessionDeleteRsp{}, nil
 }
 
 func (a *AdminSessionListService) buildItem(ctx *types.ServiceContext, sourceSession modeliamsession.Session) (*adminSessionOwnerItem, bool, error) {

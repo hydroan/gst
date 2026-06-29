@@ -18,44 +18,8 @@ type Profile struct {
 	model.Base
 }
 
-// ProfileGetReq is the request payload for getting the current user's profile.
-type ProfileGetReq struct{}
-
-// ProfileGetRsp returns the current user's profile.
-type ProfileGetRsp = Profile
-
-// ProfilePatchReq is the request payload for patching the current user's profile.
-type ProfilePatchReq struct {
-	DisplayName *string           `json:"display_name,omitempty"`
-	FirstName   *string           `json:"first_name,omitempty"`
-	LastName    *string           `json:"last_name,omitempty"`
-	Avatar      *string           `json:"avatar,omitempty"`
-	Metadata    datatypes.JSONMap `json:"metadata,omitempty"`
-}
-
-// ProfilePatchRsp returns the patched current user's profile.
-type ProfilePatchRsp = Profile
-
 func (Profile) Design() {
 	Migrate(true)
-	Route("/iam/profile", func() {
-		Get(func() {
-			Service()
-			Flatten()
-			Exact()
-			Filename("profile.go")
-			Payload[*ProfileGetReq]()
-			Result[*ProfileGetRsp]()
-		})
-		Patch(func() {
-			Service()
-			Flatten()
-			Exact()
-			Filename("profile.go")
-			Payload[*ProfilePatchReq]()
-			Result[*ProfilePatchRsp]()
-		})
-	})
 }
 
 func (Profile) Purge() bool { return true }
