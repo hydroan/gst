@@ -5,8 +5,6 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/authz/rbac"
-	"github.com/hydroan/gst/database"
-	modelauthz "github.com/hydroan/gst/internal/model/authz"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
@@ -45,7 +43,7 @@ func EnsureTenantAdmin(ctx *types.ServiceContext, actor *modeliamuser.User, targ
 	if target == nil {
 		return nil
 	}
-	belongs, err := targetBelongsToTenant(ctx, tenant, target.GetID())
+	belongs, err := targetBelongsToTenant(tenant, target.GetID())
 	if err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify target tenant", err)
 	}
@@ -79,19 +77,11 @@ func operationAction(ctx *types.ServiceContext) string {
 	return strings.TrimSpace(ctx.Method())
 }
 
-func targetBelongsToTenant(ctx *types.ServiceContext, tenant string, userID string) (bool, error) {
+func targetBelongsToTenant(tenant string, userID string) (bool, error) {
 	if strings.TrimSpace(userID) == "" {
 		return false, nil
 	}
-
-	roleBindings := make([]*modelauthz.RoleBinding, 0, 1)
-	if err := database.Database[*modelauthz.RoleBinding](ctx).
-		WithLimit(1).
-		WithQuery(&modelauthz.RoleBinding{TenantID: tenant, SubjectID: userID}).
-		List(&roleBindings); err != nil {
-		return false, err
-	}
-	return len(roleBindings) > 0, nil
+	return rbac.RBAC().SubjectInTenant(tenant, userID)
 }
 
 func isSystemRoot(user *modeliamuser.User) (bool, error) {

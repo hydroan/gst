@@ -1,6 +1,8 @@
 package rbac
 
 import (
+	"strings"
+
 	"github.com/casbin/casbin/v3"
 	gormadapter "github.com/casbin/gorm-adapter/v3"
 	"github.com/cockroachdb/errors"
@@ -45,6 +47,7 @@ func (noop) RevokePermission(tenant string, role string, object string, action s
 func (noop) RevokeRolePermissions(tenant string, role string) error        { return nil }
 func (noop) AssignRole(tenant string, subject string, role string) error   { return nil }
 func (noop) UnassignRole(tenant string, subject string, role string) error { return nil }
+func (noop) SubjectInTenant(tenant string, subject string) (bool, error)   { return false, nil }
 func (noop) AssignSystemRole(subject string, role string) error            { return nil }
 func (noop) UnassignSystemRole(subject string, role string) error          { return nil }
 func (noop) HasSystemRole(subject string, role string) (bool, error) {
@@ -114,6 +117,7 @@ func (r *rbac) RevokeRolePermissions(tenant string, role string) error {
 // | Revoke all role permissions  | `RemoveFilteredPolicy(0, tenant, role)`                   |
 // | Assign role to subject       | `AddGroupingPolicy(subject, role, tenant)`                |
 // | Unassign role from subject   | `RemoveGroupingPolicy(subject, role, tenant)`             |
+// | Check subject tenant member  | `GetFilteredGroupingPolicy(0, subject)`                   |
 // | Assign system role           | `AddNamedGroupingPolicy("g2", subject, role)`             |
 // | Unassign system role         | `RemoveNamedGroupingPolicy("g2", subject, role)`          |
 // | Query subject role in tenant | `GetFilteredGroupingPolicy(0, subject, role, tenant)`     |
@@ -147,6 +151,29 @@ func (r *rbac) UnassignRole(tenant string, subject string, role string) error {
 		return err
 	}
 	return nil
+}
+
+// SubjectInTenant reports whether subject has any role assignment inside tenant.
+func (r *rbac) SubjectInTenant(tenant string, subject string) (bool, error) {
+	subject = strings.TrimSpace(subject)
+	if subject == "" {
+		return false, nil
+	}
+	tenant = strings.TrimSpace(tenant)
+	if tenant == "" {
+		tenant = DefaultTenant
+	}
+
+	groupingPolicies, err := r.enforcer.GetFilteredGroupingPolicy(0, subject)
+	if err != nil {
+		return false, err
+	}
+	for _, policy := range groupingPolicies {
+		if len(policy) >= 3 && strings.TrimSpace(policy[1]) != "" && policy[2] == tenant {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // AssignSystemRole assigns a subject to a system-level role outside any tenant.

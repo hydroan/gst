@@ -359,6 +359,7 @@ type RBAC interface {
 
 	AssignRole(tenant string, subject string, role string) error
 	UnassignRole(tenant string, subject string, role string) error
+	SubjectInTenant(tenant string, subject string) (bool, error)
 
 	AssignSystemRole(subject string, role string) error
 	UnassignSystemRole(subject string, role string) error
