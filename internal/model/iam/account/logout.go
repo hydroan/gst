@@ -9,9 +9,7 @@ type Logout struct {
 	model.Empty
 }
 
-type LogoutReq struct {
-	model.Empty
-}
+type LogoutReq struct{}
 
 type LogoutRsp struct {
 	Msg string `json:"msg,omitempty"`
