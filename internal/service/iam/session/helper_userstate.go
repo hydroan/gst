@@ -69,8 +69,8 @@ func loadCachedSessionUserState(ctx context.Context, userID string) (sessionUser
 }
 
 func refreshSessionUserState(ctx context.Context, userID string) (sessionUserState, bool, error) {
-	user := new(modeliamuser.User)
-	if err := database.Database[*modeliamuser.User](ctx).Get(user, userID); err != nil {
+	targetUser := new(modeliamuser.User)
+	if err := database.Database[*modeliamuser.User](ctx).Get(targetUser, userID); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
 			return sessionUserState{}, false, service.NewError(http.StatusUnauthorized, "session invalid")
 		}
@@ -88,7 +88,7 @@ func refreshSessionUserState(ctx context.Context, userID string) (sessionUserSta
 	}
 
 	state := sessionUserState{
-		Status:             user.Status,
+		Status:             targetUser.Status,
 		MustChangePassword: credential.MustChangePassword,
 	}
 	if err := redis.Cache[sessionUserState]().

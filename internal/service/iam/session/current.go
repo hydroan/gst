@@ -25,27 +25,27 @@ type CurrentDeleteService struct {
 func (c *CurrentGetService) Get(ctx *types.ServiceContext, req *modeliamsession.CurrentGetReq) (rsp *modeliamsession.CurrentGetRsp, err error) {
 	log := c.WithContext(ctx, ctx.Phase())
 
-	_, session, err := SessionManager.Current(ctx)
+	_, currentSession, err := SessionManager.Current(ctx)
 	if err != nil {
 		log.Error("failed to get current session", err)
 		return nil, err
 	}
 
-	user := new(modeliamuser.User)
-	if err = database.Database[*modeliamuser.User](ctx).Get(user, session.UserID); err != nil {
+	currentUser := new(modeliamuser.User)
+	if err = database.Database[*modeliamuser.User](ctx).Get(currentUser, currentSession.UserID); err != nil {
 		log.Error("failed to load user for current session")
 		return nil, service.NewError(http.StatusUnauthorized, "session invalid")
 	}
-	if err = ensureSessionUserActive(user); err != nil {
+	if err = ensureSessionUserActive(currentUser); err != nil {
 		return nil, err
 	}
-	email, err := loadSessionEmail(ctx, user.ID)
+	email, err := loadSessionEmail(ctx, currentUser.ID)
 	if err != nil {
 		log.Error("failed to load email identity for current session")
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load email identity", err)
 	}
 
-	return BuildAuthenticatedSessionRsp(session, user, email, time.Now()), nil
+	return BuildAuthenticatedSessionRsp(currentSession, currentUser, email, time.Now()), nil
 }
 
 // Delete invalidates the current authenticated session and clears the session cookie.

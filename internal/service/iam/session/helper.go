@@ -26,8 +26,8 @@ func redisContext(ctx context.Context) context.Context {
 }
 
 // ensureSessionUserActive verifies that the authenticated user can keep using an existing session.
-func ensureSessionUserActive(user *modeliamuser.User) error {
-	switch user.Status {
+func ensureSessionUserActive(targetUser *modeliamuser.User) error {
+	switch targetUser.Status {
 	case modeliamuser.UserStatusInactive:
 		return service.NewError(http.StatusForbidden, "account disabled")
 	case modeliamuser.UserStatusLocked:
@@ -38,21 +38,21 @@ func ensureSessionUserActive(user *modeliamuser.User) error {
 }
 
 // buildSessionView builds the shared response snapshot for session query endpoints.
-func buildSessionView(session modeliamsession.Session, currentSessionID string) modeliamsession.SessionView {
-	sessionID := session.ID
+func buildSessionView(sessionData modeliamsession.Session, currentSessionID string) modeliamsession.SessionView {
+	sessionID := sessionData.ID
 	if sessionID == "" {
 		sessionID = currentSessionID
 	}
 	return modeliamsession.SessionView{
 		ID:          sessionID,
-		Status:      session.Status,
-		IssuedAt:    session.IssuedAt,
-		LastSeenAt:  session.LastSeenAt,
-		ExpiresAt:   session.ExpiresAt,
-		ClientIP:    session.ClientIP,
-		Platform:    session.Platform,
-		OS:          session.OS,
-		BrowserName: session.BrowserName,
+		Status:      sessionData.Status,
+		IssuedAt:    sessionData.IssuedAt,
+		LastSeenAt:  sessionData.LastSeenAt,
+		ExpiresAt:   sessionData.ExpiresAt,
+		ClientIP:    sessionData.ClientIP,
+		Platform:    sessionData.Platform,
+		OS:          sessionData.OS,
+		BrowserName: sessionData.BrowserName,
 		IsCurrent:   sessionID == currentSessionID,
 	}
 }

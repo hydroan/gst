@@ -150,38 +150,38 @@ func removeStaleSessionIndexes(ctx context.Context, userID, sessionID string) {
 // LastSeenAt as the score so admin online-window queries can avoid scanning all
 // active sessions. The session payload key owns the TTL; index cleanup is lazy
 // because Redis ZSET members do not expire independently.
-func IndexSession(ctx context.Context, session modeliamsession.Session) error {
-	if session.UserID == "" || session.ID == "" {
+func IndexSession(ctx context.Context, sessionData modeliamsession.Session) error {
+	if sessionData.UserID == "" || sessionData.ID == "" {
 		return nil
 	}
 	ctx = redisContext(ctx)
 	pruneStaleLastSeenSessionIDs(ctx, time.Now())
-	ttl := time.Until(session.ExpiresAt)
+	ttl := time.Until(sessionData.ExpiresAt)
 	if ttl <= 0 {
 		return errors.New("session expired")
 	}
 	// Store the expiration timestamp as the index score. The list paths use this
 	// contract to prune expired ZSET members before loading session payloads.
-	score := float64(session.ExpiresAt.UnixMilli())
-	userKey := modeliamsession.SessionUserKey(session.UserID)
-	if err := redis.ZAdd(ctx, userKey, score, session.ID); err != nil {
+	score := float64(sessionData.ExpiresAt.UnixMilli())
+	userKey := modeliamsession.SessionUserKey(sessionData.UserID)
+	if err := redis.ZAdd(ctx, userKey, score, sessionData.ID); err != nil {
 		return err
 	}
-	if err := redis.ZAdd(ctx, modeliamsession.SessionAllKey(), score, session.ID); err != nil {
-		_ = redis.ZRem(ctx, userKey, session.ID)
+	if err := redis.ZAdd(ctx, modeliamsession.SessionAllKey(), score, sessionData.ID); err != nil {
+		_ = redis.ZRem(ctx, userKey, sessionData.ID)
 		return err
 	}
-	lastSeenScore := float64(session.LastSeenAt.UnixMilli())
-	if err := redis.ZAdd(ctx, modeliamsession.SessionLastSeenKey(), lastSeenScore, session.ID); err != nil {
-		removeStaleSessionIndexes(ctx, session.UserID, session.ID)
+	lastSeenScore := float64(sessionData.LastSeenAt.UnixMilli())
+	if err := redis.ZAdd(ctx, modeliamsession.SessionLastSeenKey(), lastSeenScore, sessionData.ID); err != nil {
+		removeStaleSessionIndexes(ctx, sessionData.UserID, sessionData.ID)
 		return err
 	}
 	if err := redis.Expire(ctx, userKey, ttl); err != nil {
-		removeStaleSessionIndexes(ctx, session.UserID, session.ID)
+		removeStaleSessionIndexes(ctx, sessionData.UserID, sessionData.ID)
 		return err
 	}
 	if err := redis.Expire(ctx, modeliamsession.SessionAllKey(), ttl); err != nil {
-		removeStaleSessionIndexes(ctx, session.UserID, session.ID)
+		removeStaleSessionIndexes(ctx, sessionData.UserID, sessionData.ID)
 		return err
 	}
 	return nil
@@ -217,7 +217,7 @@ func UpdateSessionMustChangePassword(ctx context.Context, sessionID string, must
 // current session and protects against concurrent requests writing older
 // snapshots over a fresher LastSeenAt. When a touch is accepted, both the stored
 // session snapshot and the global last-seen ZSET are updated with the same time.
-func TouchSession(ctx context.Context, sessionID string, session modeliamsession.Session, now time.Time) error {
+func TouchSession(ctx context.Context, sessionID string, sessionData modeliamsession.Session, now time.Time) error {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return nil
@@ -226,11 +226,11 @@ func TouchSession(ctx context.Context, sessionID string, session modeliamsession
 	if now.IsZero() {
 		now = time.Now()
 	}
-	if now.Sub(session.LastSeenAt) < sessionTouchInterval {
+	if now.Sub(sessionData.LastSeenAt) < sessionTouchInterval {
 		return nil
 	}
 
-	ttl := time.Until(session.ExpiresAt)
+	ttl := time.Until(sessionData.ExpiresAt)
 	if ttl <= 0 {
 		_, _ = SessionManager.Delete(ctx, sessionID)
 		return types.ErrEntryNotFound
@@ -245,10 +245,10 @@ func TouchSession(ctx context.Context, sessionID string, session modeliamsession
 		return nil
 	}
 
-	session.LastSeenAt = now
+	sessionData.LastSeenAt = now
 	if err = redis.Cache[modeliamsession.Session]().
 		WithContext(ctx).
-		Set(modeliamsession.SessionIDKey(sessionID), session, ttl); err != nil {
+		Set(modeliamsession.SessionIDKey(sessionID), sessionData, ttl); err != nil {
 		_ = redis.Del(ctx, touchKey)
 		return err
 	}

@@ -47,15 +47,15 @@ func loadAdminSessionActor(ctx *types.ServiceContext) (*modeliamuser.User, error
 		return nil, err
 	}
 
-	user := new(modeliamuser.User)
-	if err = database.Database[*modeliamuser.User](ctx).Get(user, session.UserID); err != nil {
+	actor := new(modeliamuser.User)
+	if err = database.Database[*modeliamuser.User](ctx).Get(actor, session.UserID); err != nil {
 		return nil, service.NewError(http.StatusUnauthorized, "session invalid")
 	}
-	if err = ensureSessionUserActive(user); err != nil {
+	if err = ensureSessionUserActive(actor); err != nil {
 		return nil, err
 	}
 
-	return user, nil
+	return actor, nil
 }
 
 // parseAdminSessionOnlineSince parses the admin-only online session window.

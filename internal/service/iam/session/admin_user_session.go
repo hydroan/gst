@@ -43,20 +43,20 @@ func (a *AdminUserSessionListService) List(ctx *types.ServiceContext, req *model
 		return nil, service.NewError(http.StatusBadRequest, "user id is required")
 	}
 
-	user := new(modeliamuser.User)
-	if err = database.Database[*modeliamuser.User](ctx).Get(user, targetUserID); err != nil {
+	targetUser := new(modeliamuser.User)
+	if err = database.Database[*modeliamuser.User](ctx).Get(targetUser, targetUserID); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
 			return nil, service.NewError(http.StatusNotFound, "user not found")
 		}
 		log.Error("failed to load target user", err)
 		return nil, err
 	}
-	if err = ensureAdminSessionTarget(ctx, user); err != nil {
+	if err = ensureAdminSessionTarget(ctx, targetUser); err != nil {
 		log.Error("failed to verify admin session target", err)
 		return nil, err
 	}
 
-	view, err := a.buildView(ctx, user, currentSessionID, onlineSince, onlineOnly)
+	view, err := a.buildView(ctx, targetUser, currentSessionID, onlineSince, onlineOnly)
 	if err != nil {
 		log.Error("failed to build target user sessions view", err)
 		return nil, err
@@ -151,7 +151,7 @@ func (a *AdminUserSessionListService) buildView(ctx *types.ServiceContext, user 
 			continue
 		}
 
-		session, getErr := cache.Get(modeliamsession.SessionIDKey(sessionID))
+		sessionData, getErr := cache.Get(modeliamsession.SessionIDKey(sessionID))
 		if getErr != nil {
 			if errors.Is(getErr, types.ErrEntryNotFound) {
 				removeStaleSessionIndexes(ctx, indexUserID, sessionID)
@@ -159,21 +159,21 @@ func (a *AdminUserSessionListService) buildView(ctx *types.ServiceContext, user 
 			}
 			return modeliamsession.AdminSessionOwnerView{}, getErr
 		}
-		if validateErr := SessionManager.Validate(sessionID, session); validateErr != nil {
+		if validateErr := SessionManager.Validate(sessionID, sessionData); validateErr != nil {
 			_, _ = SessionManager.Delete(ctx, sessionID)
 			continue
 		}
-		if session.UserID != user.ID {
+		if sessionData.UserID != user.ID {
 			if indexUserID != "" {
 				_ = redis.ZRem(ctx, modeliamsession.SessionUserKey(indexUserID), sessionID)
 			}
 			continue
 		}
-		if onlineOnly && !sessionSeenSince(session, onlineSince) {
+		if onlineOnly && !sessionSeenSince(sessionData, onlineSince) {
 			continue
 		}
 
-		view.Sessions = append(view.Sessions, buildSessionView(session, currentSessionID))
+		view.Sessions = append(view.Sessions, buildSessionView(sessionData, currentSessionID))
 	}
 
 	sort.Slice(view.Sessions, func(i, j int) bool {

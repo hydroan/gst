@@ -31,7 +31,7 @@ func (l *LogoutService) Create(ctx *types.ServiceContext, req *modeliamaccount.L
 		return &modeliamaccount.LogoutRsp{Msg: "logout successful"}, nil // Return success even if no session
 	}
 
-	session, err := serviceiamsession.SessionManager.Delete(ctx, sessionID)
+	deletedSession, err := serviceiamsession.SessionManager.Delete(ctx, sessionID)
 	if err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
 			serviceiamsession.SessionManager.ClearCookie(ctx)
@@ -60,7 +60,7 @@ func (l *LogoutService) Create(ctx *types.ServiceContext, req *modeliamaccount.L
 	// }); logErr != nil {
 	// 	log.Warnz("failed to write logout log", zap.Error(logErr))
 	// }
-	_ = session
+	_ = deletedSession
 
 	serviceiamsession.SessionManager.ClearCookie(ctx)
 

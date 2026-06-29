@@ -25,20 +25,20 @@ func (c *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 	}
 
 	// Get current session
-	sessionID, session, err := serviceiamsession.SessionManager.Current(ctx)
+	sessionID, currentSession, err := serviceiamsession.SessionManager.Current(ctx)
 	if err != nil {
 		log.Error("failed to get current session", err)
 		return nil, errors.New("invalid session")
 	}
 
 	// Get user from database
-	user := new(modeliamuser.User)
-	if err = database.Database[*modeliamuser.User](ctx).Get(user, session.UserID); err != nil {
+	currentUser := new(modeliamuser.User)
+	if err = database.Database[*modeliamuser.User](ctx).Get(currentUser, currentSession.UserID); err != nil {
 		log.Error("failed to query user", err)
 		return nil, errors.New("database error")
 	}
 
-	credential, err := LoadPasswordCredential(ctx, user.ID)
+	credential, err := LoadPasswordCredential(ctx, currentUser.ID)
 	if err != nil {
 		log.Error("failed to query password credential", err)
 		return nil, errors.New("database error")
@@ -46,7 +46,7 @@ func (c *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 
 	// Verify old password
 	if err = VerifyPasswordCredential(credential, req.OldPassword); err != nil {
-		log.Error("old password verification failed", "username", user.Username)
+		log.Error("old password verification failed", "username", currentUser.Username)
 		return nil, errors.New("old password is incorrect")
 	}
 
@@ -55,7 +55,7 @@ func (c *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 		return nil, errors.New("failed to process new password")
 	}
 
-	if err = serviceiamsession.DeleteUserSessionsExceptCurrent(ctx, user.GetID(), sessionID); err != nil {
+	if err = serviceiamsession.DeleteUserSessionsExceptCurrent(ctx, currentUser.GetID(), sessionID); err != nil {
 		log.Error("failed to revoke other sessions after password change", err)
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to revoke other sessions", err)
 	}
@@ -69,11 +69,11 @@ func (c *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 		return nil, errors.New("failed to update password")
 	}
 
-	serviceiamsession.InvalidateUserStateCache(ctx, user.GetID())
+	serviceiamsession.InvalidateUserStateCache(ctx, currentUser.GetID())
 	if syncErr := serviceiamsession.UpdateSessionMustChangePassword(ctx, sessionID, false); syncErr != nil {
 		log.Warn("failed to sync session after password change", syncErr)
 	}
 
-	log.Info("password changed successfully", "username", user.Username)
+	log.Info("password changed successfully", "username", currentUser.Username)
 	return &modeliamaccount.ChangePasswordRsp{Msg: "password changed successfully"}, nil
 }

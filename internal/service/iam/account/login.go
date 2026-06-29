@@ -74,17 +74,17 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		log.Warnz("user not found", zap.String("username", req.Username))
 		return nil, errors.New("invalid username or password")
 	}
-	user := users[0]
+	targetUser := users[0]
 
 	// Check if user is enabled
-	if user.Status == modeliamuser.UserStatusInactive {
+	if targetUser.Status == modeliamuser.UserStatusInactive {
 		return nil, service.NewError(http.StatusForbidden, "account disabled")
 	}
-	if user.Status == modeliamuser.UserStatusLocked {
+	if targetUser.Status == modeliamuser.UserStatusLocked {
 		return nil, service.NewError(http.StatusForbidden, "account locked")
 	}
 
-	credential, err := LoadPasswordCredential(ctx, user.ID)
+	credential, err := LoadPasswordCredential(ctx, targetUser.ID)
 	if err != nil {
 		log.Warnz("password credential not found", zap.String("username", req.Username), zap.Error(err))
 		return nil, errors.New("invalid username or password")
@@ -136,8 +136,8 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	// Create session data for local user
 	sessionData := modeliamsession.Session{
 		ID:                 sessionID,
-		UserID:             user.ID,
-		Username:           user.Username,
+		UserID:             targetUser.ID,
+		Username:           targetUser.Username,
 		MustChangePassword: credential.MustChangePassword,
 		ClientIP:           ctx.ClientIP(),
 		UserAgent:          ctx.UserAgent(),
@@ -172,7 +172,7 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 
 	serviceiamsession.SessionManager.SetCookie(ctx, sessionID, expire)
 
-	log.Infoz("user logged in successfully", zap.String("username", req.Username), zap.String("user_id", user.ID))
+	log.Infoz("user logged in successfully", zap.String("username", req.Username), zap.String("user_id", targetUser.ID))
 
 	// Logmgmt integration is disabled while IAM is decoupled from optional modules.
 	//
@@ -194,14 +194,14 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	// }
 
 	email := ""
-	emailIdentity, err := LoadEmailIdentity(ctx, user.ID)
+	emailIdentity, err := LoadEmailIdentity(ctx, targetUser.ID)
 	if err != nil {
 		if !errors.Is(err, database.ErrRecordNotFound) {
-			log.Warnz("failed to load email identity for login response", zap.String("user_id", user.ID), zap.Error(err))
+			log.Warnz("failed to load email identity for login response", zap.String("user_id", targetUser.ID), zap.Error(err))
 		}
 	} else {
 		email = emailIdentity.Email
 	}
 
-	return serviceiamsession.BuildAuthenticatedSessionRsp(sessionData, user, email, now), nil
+	return serviceiamsession.BuildAuthenticatedSessionRsp(sessionData, targetUser, email, now), nil
 }

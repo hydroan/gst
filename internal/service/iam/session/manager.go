@@ -38,20 +38,20 @@ func (sessionManager) SessionID(ctx *types.ServiceContext) (string, error) {
 }
 
 // Validate verifies that a Redis session snapshot is the active session for the given id.
-func (sessionManager) Validate(sessionID string, session modeliamsession.Session) error {
+func (sessionManager) Validate(sessionID string, sessionData modeliamsession.Session) error {
 	sessionID = strings.TrimSpace(sessionID)
 	switch {
 	case sessionID == "":
 		return errors.New("session id is required")
-	case session.ID != sessionID:
+	case sessionData.ID != sessionID:
 		return errors.New("session id mismatch")
-	case session.UserID == "":
+	case sessionData.UserID == "":
 		return errors.New("user not authenticated")
-	case session.Status != modeliamsession.SessionStatusActive:
+	case sessionData.Status != modeliamsession.SessionStatusActive:
 		return errors.New("session is not active")
-	case session.ExpiresAt.IsZero():
+	case sessionData.ExpiresAt.IsZero():
 		return errors.New("session expiration is required")
-	case !session.ExpiresAt.After(time.Now()):
+	case !sessionData.ExpiresAt.After(time.Now()):
 		return errors.New("session expired")
 	default:
 		return nil
@@ -76,19 +76,19 @@ func (sessionManager) Delete(ctx context.Context, sessionID string) (modeliamses
 	cache := redis.Cache[modeliamsession.Session]().WithContext(ctx)
 
 	sessionKey := modeliamsession.SessionIDKey(sessionID)
-	session, err := cache.Get(sessionKey)
+	sessionData, err := cache.Get(sessionKey)
 	if err != nil {
 		return modeliamsession.Session{}, err
 	}
 	if err = cache.Delete(sessionKey); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
-		return session, err
+		return sessionData, err
 	}
 
-	if err = removeSessionIndexes(ctx, session.UserID, sessionID); err != nil {
-		return session, err
+	if err = removeSessionIndexes(ctx, sessionData.UserID, sessionID); err != nil {
+		return sessionData, err
 	}
 
-	return session, nil
+	return sessionData, nil
 }
 
 // Current loads and validates the current authenticated user session
@@ -100,24 +100,24 @@ func (sessionManager) Current(ctx *types.ServiceContext) (string, modeliamsessio
 		return "", modeliamsession.Session{}, err
 	}
 
-	if cachedSessionID, session, ok := currentSessionFromContext(ctx); ok && cachedSessionID == sessionID {
-		if err = SessionManager.Validate(sessionID, session); err != nil {
+	if cachedSessionID, sessionData, ok := currentSessionFromContext(ctx); ok && cachedSessionID == sessionID {
+		if err = SessionManager.Validate(sessionID, sessionData); err != nil {
 			_, _ = SessionManager.Delete(ctx, sessionID)
 			return "", modeliamsession.Session{}, service.NewErrorWithCause(http.StatusUnauthorized, "session invalid", err)
 		}
-		return sessionID, session, nil
+		return sessionID, sessionData, nil
 	}
 
-	session, err := SessionManager.Load(ctx, sessionID)
+	sessionData, err := SessionManager.Load(ctx, sessionID)
 	if err != nil {
 		return "", modeliamsession.Session{}, service.NewErrorWithCause(http.StatusUnauthorized, "session not exists", err)
 	}
-	if err = SessionManager.Validate(sessionID, session); err != nil {
+	if err = SessionManager.Validate(sessionID, sessionData); err != nil {
 		_, _ = SessionManager.Delete(ctx, sessionID)
 		return "", modeliamsession.Session{}, service.NewErrorWithCause(http.StatusUnauthorized, "session invalid", err)
 	}
 
-	return sessionID, session, nil
+	return sessionID, sessionData, nil
 }
 
 // SetCookie writes the current session cookie with hardened defaults.

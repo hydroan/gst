@@ -8,34 +8,34 @@ import (
 )
 
 // BuildAuthenticatedSessionRsp builds the shared login/current response contract.
-func BuildAuthenticatedSessionRsp(session modeliamsession.Session, user *modeliamuser.User, email string, now time.Time) *modeliamsession.AuthenticatedSessionRsp {
+func BuildAuthenticatedSessionRsp(sessionData modeliamsession.Session, user *modeliamuser.User, email string, now time.Time) *modeliamsession.AuthenticatedSessionRsp {
 	if now.IsZero() {
 		now = time.Now()
 	}
 	return &modeliamsession.AuthenticatedSessionRsp{
 		ServerTime: now,
-		Session:    buildAuthenticatedSessionView(session, now),
-		Principal:  buildPrincipalView(user, email, session.MustChangePassword),
+		Session:    buildAuthenticatedSessionView(sessionData, now),
+		Principal:  buildPrincipalView(user, email, sessionData.MustChangePassword),
 	}
 }
 
 // buildAuthenticatedSessionView builds a session timing view without exposing the bearer session id.
-func buildAuthenticatedSessionView(session modeliamsession.Session, now time.Time) modeliamsession.AuthenticatedSessionView {
+func buildAuthenticatedSessionView(sessionData modeliamsession.Session, now time.Time) modeliamsession.AuthenticatedSessionView {
 	if now.IsZero() {
 		now = time.Now()
 	}
 	var expiresIn int64
-	if !session.ExpiresAt.IsZero() {
-		expiresIn = int64(session.ExpiresAt.Sub(now).Seconds())
+	if !sessionData.ExpiresAt.IsZero() {
+		expiresIn = int64(sessionData.ExpiresAt.Sub(now).Seconds())
 	}
 	if expiresIn < 0 {
 		expiresIn = 0
 	}
 	return modeliamsession.AuthenticatedSessionView{
-		Status:           session.Status,
-		IssuedAt:         session.IssuedAt,
-		LastSeenAt:       session.LastSeenAt,
-		ExpiresAt:        session.ExpiresAt,
+		Status:           sessionData.Status,
+		IssuedAt:         sessionData.IssuedAt,
+		LastSeenAt:       sessionData.LastSeenAt,
+		ExpiresAt:        sessionData.ExpiresAt,
 		ExpiresInSeconds: expiresIn,
 	}
 }

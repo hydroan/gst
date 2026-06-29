@@ -224,34 +224,34 @@ func (a *AdminSessionDeleteService) Delete(ctx *types.ServiceContext, req *model
 	return &modeliamsession.AdminSessionDeleteRsp{}, nil
 }
 
-func (a *AdminSessionListService) buildItem(ctx *types.ServiceContext, session modeliamsession.Session) (*adminSessionOwnerItem, bool, error) {
-	user := new(modeliamuser.User)
-	if err := database.Database[*modeliamuser.User](ctx).Get(user, session.UserID); err != nil {
+func (a *AdminSessionListService) buildItem(ctx *types.ServiceContext, sourceSession modeliamsession.Session) (*adminSessionOwnerItem, bool, error) {
+	targetUser := new(modeliamuser.User)
+	if err := database.Database[*modeliamuser.User](ctx).Get(targetUser, sourceSession.UserID); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
-			_, _ = SessionManager.Delete(ctx, session.ID)
+			_, _ = SessionManager.Delete(ctx, sourceSession.ID)
 			return nil, false, nil
 		}
 		return nil, false, err
 	}
-	credential, err := loadSessionPasswordCredential(ctx, user.ID)
+	credential, err := loadSessionPasswordCredential(ctx, targetUser.ID)
 	if err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
-			_, _ = SessionManager.Delete(ctx, session.ID)
+			_, _ = SessionManager.Delete(ctx, sourceSession.ID)
 			return nil, false, nil
 		}
 		return nil, false, err
 	}
-	email, err := loadSessionEmail(ctx, user.ID)
+	email, err := loadSessionEmail(ctx, targetUser.ID)
 	if err != nil {
 		return nil, false, err
 	}
 
 	return &adminSessionOwnerItem{
 		view: modeliamsession.AdminSessionOwnerView{
-			UserID:             user.ID,
-			Username:           user.Username,
+			UserID:             targetUser.ID,
+			Username:           targetUser.Username,
 			Email:              email,
-			Status:             string(user.Status),
+			Status:             string(targetUser.Status),
 			MustChangePassword: credential.MustChangePassword,
 			Sessions:           make([]modeliamsession.SessionView, 0, 1),
 		},
