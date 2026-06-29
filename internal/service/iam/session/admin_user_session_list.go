@@ -16,12 +16,7 @@ import (
 
 // AdminUserSessionListService handles retrieval of all sessions owned by a specified user for privileged administrators.
 type AdminUserSessionListService struct {
-	service.Base[*modeliamsession.AdminUserSession, *modeliamsession.AdminUserSessionListReq, *modeliamsession.AdminUserSessionListRsp]
-}
-
-// AdminUserSessionDeleteService handles invalidation of all sessions owned by a specified user for privileged administrators.
-type AdminUserSessionDeleteService struct {
-	service.Base[*modeliamsession.AdminUserSession, *modeliamsession.AdminUserSessionDeleteReq, *modeliamsession.AdminUserSessionDeleteRsp]
+	service.Base[*modeliamsession.AdminUserSessionList, *modeliamsession.AdminUserSessionListReq, *modeliamsession.AdminUserSessionListRsp]
 }
 
 // List returns all indexed sessions of a specified user for a privileged administrator.
@@ -65,45 +60,6 @@ func (a *AdminUserSessionListService) List(ctx *types.ServiceContext, req *model
 	return &modeliamsession.AdminUserSessionListRsp{
 		User: view,
 	}, nil
-}
-
-// Delete invalidates all indexed sessions of a specified user for a privileged administrator.
-func (a *AdminUserSessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.AdminUserSessionDeleteReq) (rsp *modeliamsession.AdminUserSessionDeleteRsp, err error) {
-	log := a.WithContext(ctx, ctx.Phase())
-
-	_, currentSession, err := SessionManager.Current(ctx)
-	if err != nil {
-		log.Error("failed to get current session", err)
-		return nil, err
-	}
-
-	targetUserID := ctx.Param("id")
-	if targetUserID == "" {
-		return nil, service.NewError(http.StatusBadRequest, "user id is required")
-	}
-
-	targetUser := new(modeliamuser.User)
-	if err = database.Database[*modeliamuser.User](ctx).Get(targetUser, targetUserID); err != nil {
-		if errors.Is(err, database.ErrRecordNotFound) {
-			return nil, service.NewError(http.StatusNotFound, "user not found")
-		}
-		log.Error("failed to load target user", err)
-		return nil, err
-	}
-	if err = ensureAdminSessionTarget(ctx, targetUser); err != nil {
-		log.Error("failed to verify admin session target", err)
-		return nil, err
-	}
-
-	if err = DeleteUserSessions(ctx, targetUserID); err != nil {
-		log.Error("failed to delete target user sessions", err)
-		return nil, err
-	}
-	if currentSession.UserID == targetUserID {
-		SessionManager.ClearCookie(ctx)
-	}
-
-	return &modeliamsession.AdminUserSessionDeleteRsp{}, nil
 }
 
 // buildView builds a target user's session view for admin APIs.

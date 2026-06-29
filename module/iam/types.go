@@ -86,8 +86,10 @@ type (
 	AdminSessionDeleteReq = modeliamsession.AdminSessionDeleteReq
 	AdminSessionDeleteRsp = modeliamsession.AdminSessionDeleteRsp
 
+	AdminUserSessionList      = modeliamsession.AdminUserSessionList
 	AdminUserSessionListReq   = modeliamsession.AdminUserSessionListReq
 	AdminUserSessionListRsp   = modeliamsession.AdminUserSessionListRsp
+	AdminUserSessionDelete    = modeliamsession.AdminUserSessionDelete
 	AdminUserSessionDeleteReq = modeliamsession.AdminUserSessionDeleteReq
 	AdminUserSessionDeleteRsp = modeliamsession.AdminUserSessionDeleteRsp
 )
