@@ -61,28 +61,28 @@ type (
 	CurrentDeleteReq = modeliamsession.CurrentDeleteReq
 	CurrentDeleteRsp = modeliamsession.CurrentDeleteRsp
 
-	SessionsListReq      = modeliamsession.SessionsListReq
-	SessionsListRsp      = modeliamsession.SessionsListRsp
-	SessionsGetReq       = modeliamsession.SessionsGetReq
-	SessionsGetRsp       = modeliamsession.SessionsGetRsp
-	SessionsDeleteReq    = modeliamsession.SessionsDeleteReq
-	SessionsDeleteRsp    = modeliamsession.SessionsDeleteRsp
-	SessionsDeleteAllReq = modeliamsession.SessionsDeleteAllReq
-	SessionsDeleteAllRsp = modeliamsession.SessionsDeleteAllRsp
+	SessionListReq      = modeliamsession.SessionListReq
+	SessionListRsp      = modeliamsession.SessionListRsp
+	SessionGetReq       = modeliamsession.SessionGetReq
+	SessionGetRsp       = modeliamsession.SessionGetRsp
+	SessionDeleteReq    = modeliamsession.SessionDeleteReq
+	SessionDeleteRsp    = modeliamsession.SessionDeleteRsp
+	SessionDeleteAllReq = modeliamsession.SessionDeleteAllReq
+	SessionDeleteAllRsp = modeliamsession.SessionDeleteAllRsp
 )
 
 // Admin session API aliases.
 type (
-	AdminSessionOwnerView  = modeliamsession.AdminSessionOwnerView
-	AdminSessionsListReq   = modeliamsession.AdminSessionsListReq
-	AdminSessionsListRsp   = modeliamsession.AdminSessionsListRsp
-	AdminSessionsGetReq    = modeliamsession.AdminSessionsGetReq
-	AdminSessionsGetRsp    = modeliamsession.AdminSessionsGetRsp
-	AdminSessionsDeleteReq = modeliamsession.AdminSessionsDeleteReq
-	AdminSessionsDeleteRsp = modeliamsession.AdminSessionsDeleteRsp
+	AdminSessionOwnerView = modeliamsession.AdminSessionOwnerView
+	AdminSessionListReq   = modeliamsession.AdminSessionListReq
+	AdminSessionListRsp   = modeliamsession.AdminSessionListRsp
+	AdminSessionGetReq    = modeliamsession.AdminSessionGetReq
+	AdminSessionGetRsp    = modeliamsession.AdminSessionGetRsp
+	AdminSessionDeleteReq = modeliamsession.AdminSessionDeleteReq
+	AdminSessionDeleteRsp = modeliamsession.AdminSessionDeleteRsp
 
-	AdminUserSessionsListReq   = modeliamsession.AdminUserSessionsListReq
-	AdminUserSessionsListRsp   = modeliamsession.AdminUserSessionsListRsp
-	AdminUserSessionsDeleteReq = modeliamsession.AdminUserSessionsDeleteReq
-	AdminUserSessionsDeleteRsp = modeliamsession.AdminUserSessionsDeleteRsp
+	AdminUserSessionListReq   = modeliamsession.AdminUserSessionListReq
+	AdminUserSessionListRsp   = modeliamsession.AdminUserSessionListRsp
+	AdminUserSessionDeleteReq = modeliamsession.AdminUserSessionDeleteReq
+	AdminUserSessionDeleteRsp = modeliamsession.AdminUserSessionDeleteRsp
 )

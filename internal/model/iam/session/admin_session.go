@@ -5,56 +5,57 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-type AdminSessions struct {
+// AdminSession declares administrator APIs for sessions across users.
+type AdminSession struct {
 	model.Empty
 }
 
-// AdminSessionsListReq is the request payload for listing all sessions grouped by user.
-type AdminSessionsListReq struct{}
+// AdminSessionListReq is the request payload for listing all sessions grouped by user.
+type AdminSessionListReq struct{}
 
-// AdminSessionsListRsp returns all active sessions grouped by user for privileged administrators.
-type AdminSessionsListRsp struct {
+// AdminSessionListRsp returns all active sessions grouped by user for privileged administrators.
+type AdminSessionListRsp struct {
 	Items        []AdminSessionOwnerView `json:"items"`
 	Total        int64                   `json:"total"`
 	SessionTotal int64                   `json:"session_total"`
 }
 
-// AdminSessionsGetReq is the request payload for loading a specified session as a privileged administrator.
-type AdminSessionsGetReq struct{}
+// AdminSessionGetReq is the request payload for loading a specified session as a privileged administrator.
+type AdminSessionGetReq struct{}
 
-// AdminSessionsGetRsp returns the detail of a specified session for a privileged administrator.
-type AdminSessionsGetRsp struct {
+// AdminSessionGetRsp returns the detail of a specified session for a privileged administrator.
+type AdminSessionGetRsp struct {
 	Session SessionView `json:"session"`
 }
 
-// AdminSessionsDeleteReq is the request payload for deleting a specified session as a privileged administrator.
-type AdminSessionsDeleteReq struct{}
+// AdminSessionDeleteReq is the request payload for deleting a specified session as a privileged administrator.
+type AdminSessionDeleteReq struct{}
 
-// AdminSessionsDeleteRsp returns the result of deleting a specified session for a privileged administrator.
-type AdminSessionsDeleteRsp struct{}
+// AdminSessionDeleteRsp returns the result of deleting a specified session for a privileged administrator.
+type AdminSessionDeleteRsp struct{}
 
-func (AdminSessions) Design() {
+func (AdminSession) Design() {
 	Route("/iam/admin/sessions", func() {
 		List(func() {
 			Service()
 			Flatten()
 			Filename("admin_session.go")
-			Payload[*AdminSessionsListReq]()
-			Result[*AdminSessionsListRsp]()
+			Payload[*AdminSessionListReq]()
+			Result[*AdminSessionListRsp]()
 		})
 		Get(func() {
 			Service()
 			Flatten()
 			Filename("admin_session.go")
-			Payload[*AdminSessionsGetReq]()
-			Result[*AdminSessionsGetRsp]()
+			Payload[*AdminSessionGetReq]()
+			Result[*AdminSessionGetRsp]()
 		})
 		Delete(func() {
 			Service()
 			Flatten()
 			Filename("admin_session.go")
-			Payload[*AdminSessionsDeleteReq]()
-			Result[*AdminSessionsDeleteRsp]()
+			Payload[*AdminSessionDeleteReq]()
+			Result[*AdminSessionDeleteRsp]()
 		})
 	})
 }

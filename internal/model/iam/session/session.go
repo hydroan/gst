@@ -5,63 +5,65 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-type Sessions struct {
+// Session2 declares the self-service session API routes. The suffix avoids
+// colliding with Session, the stored session snapshot.
+type Session2 struct {
 	model.Empty
 }
 
-// SessionsListReq is the request payload for listing active sessions of the current user.
-type SessionsListReq struct{}
+// SessionListReq is the request payload for listing active sessions of the current user.
+type SessionListReq struct{}
 
-// SessionsListRsp returns all active sessions of the current authenticated user.
-type SessionsListRsp struct {
+// SessionListRsp returns all active sessions of the current authenticated user.
+type SessionListRsp struct {
 	Items []SessionView `json:"items"`
 	Total int64         `json:"total"`
 }
 
-// SessionsGetReq is the request payload for loading a specified session of the current user.
-type SessionsGetReq struct{}
+// SessionGetReq is the request payload for loading a specified session of the current user.
+type SessionGetReq struct{}
 
-// SessionsGetRsp returns the detail of a specified session of the current authenticated user.
-type SessionsGetRsp struct {
+// SessionGetRsp returns the detail of a specified session of the current authenticated user.
+type SessionGetRsp struct {
 	Session SessionView `json:"session"`
 }
 
-// SessionsDeleteReq is the request payload for deleting a specified session of the current user.
-type SessionsDeleteReq struct{}
+// SessionDeleteReq is the request payload for deleting a specified session of the current user.
+type SessionDeleteReq struct{}
 
-// SessionsDeleteRsp returns the delete result for a specified session of the current user.
-type SessionsDeleteRsp struct{}
+// SessionDeleteRsp returns the delete result for a specified session of the current user.
+type SessionDeleteRsp struct{}
 
-// SessionsDeleteAllReq is the request payload for deleting all sessions of the current user.
-type SessionsDeleteAllReq struct{}
+// SessionDeleteAllReq is the request payload for deleting all sessions of the current user.
+type SessionDeleteAllReq struct{}
 
-// SessionsDeleteAllRsp returns the delete result for all sessions of the current user.
-type SessionsDeleteAllRsp struct{}
+// SessionDeleteAllRsp returns the delete result for all sessions of the current user.
+type SessionDeleteAllRsp struct{}
 
-func (Sessions) Design() {
+func (Session2) Design() {
 	Route("/iam/sessions", func() {
 		List(func() {
 			Service()
 			Flatten()
 			Filename("session.go")
-			Payload[*SessionsListReq]()
-			Result[*SessionsListRsp]()
+			Payload[*SessionListReq]()
+			Result[*SessionListRsp]()
 		})
 
 		Get(func() {
 			Service()
 			Flatten()
 			Filename("session.go")
-			Payload[*SessionsGetReq]()
-			Result[*SessionsGetRsp]()
+			Payload[*SessionGetReq]()
+			Result[*SessionGetRsp]()
 		})
 
 		Delete(func() {
 			Service()
 			Flatten()
 			Filename("session.go")
-			Payload[*SessionsDeleteReq]()
-			Result[*SessionsDeleteRsp]()
+			Payload[*SessionDeleteReq]()
+			Result[*SessionDeleteRsp]()
 		})
 
 		Delete(func() {
@@ -69,8 +71,8 @@ func (Sessions) Design() {
 			Flatten()
 			Exact()
 			Filename("session.go")
-			Payload[*SessionsDeleteAllReq]()
-			Result[*SessionsDeleteAllRsp]()
+			Payload[*SessionDeleteAllReq]()
+			Result[*SessionDeleteAllRsp]()
 		})
 	})
 }

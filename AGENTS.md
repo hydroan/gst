@@ -59,10 +59,10 @@
 - 完全不同的业务逻辑和接口：/api/users，/api/groups，那么需要两个 model 文件和两个 service 文件
 - 同一资源对象则走框架提供的 curd：POST /api/configs、DELETE /api/configs/:id、 DELETE /api/configs、PUT /api/configs/:id、PATCH /api/configs/:id、GET /api/configs、GET /api/configs/:id，只需要一个 model 文件且 model 文件中没有自定义 REQ 和 RSP，service 文件中只有一个结构体，在结构体上加上不同的 hooks。
 - 同一资源对象走自定义业务逻辑：GET /api/iam/sessions、DELETE /api/iam/sessions/:id。还是只需要一个 model 文件和一个 service 文件，但是都有自己的 REQ、RSP service结构体：
-  - model 代码文件中的结构体：`SessionsListReq`、`SessionsListRsp`、`SessionsDeleteReq`、`SessionsDeleteRsp`。
+  - model 代码文件中的结构体：`SessionListReq`、`SessionListRsp`、`SessionDeleteReq`、`SessionDeleteRsp`。
   - service 结构体方法：
-    `func (s *SessionsListService) List(ctx *types.ServiceContext, req *modeliamsession.SessionsListReq) (rsp *modeliamsession.SessionsListRsp, err error)`、
-    `func (s *SessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.SessionsDeleteReq) (rsp *modeliamsession.SessionsDeleteRsp, err error)`
+    `func (s *SessionListService) List(ctx *types.ServiceContext, req *modeliamsession.SessionListReq) (rsp *modeliamsession.SessionListRsp, err error)`、
+    `func (s *SessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.SessionDeleteReq) (rsp *modeliamsession.SessionDeleteRsp, err error)`
 
 module 包中的接口测试用例规范：
 

@@ -172,11 +172,11 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-type Sessions struct {
+type Session2 struct {
 	model.Empty
 }
 
-func (Sessions) Design() {
+func (Session2) Design() {
 	dsl.Route("copytest/sessions", func() {
 		dsl.List(func() {
 			dsl.Service()

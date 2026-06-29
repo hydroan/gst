@@ -561,7 +561,7 @@ func TestParseFlatten(t *testing.T) {
 }
 
 func TestParseExact(t *testing.T) {
-	design := parseDesignFromSource(t, exactSource, "AdminUserSessions")
+	design := parseDesignFromSource(t, exactSource, "AdminUserSession")
 
 	var got *Action
 	design.Range(func(route string, act *Action) {
@@ -712,17 +712,17 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-type AdminUserSessions struct {
+type AdminUserSession struct {
 	model.Empty
 }
 
-func (AdminUserSessions) Design() {
+func (AdminUserSession) Design() {
 	Route("/iam/admin/users/:id/sessions", func() {
 		Delete(func() {
 			Exact()
 			Service()
-			Payload[*AdminUserSessionsDeleteReq]()
-			Result[*AdminUserSessionsDeleteRsp]()
+			Payload[*AdminUserSessionDeleteReq]()
+			Result[*AdminUserSessionDeleteRsp]()
 		})
 	})
 }

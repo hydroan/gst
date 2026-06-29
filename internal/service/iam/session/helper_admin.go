@@ -15,7 +15,7 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
-const adminSessionsOnlineWithinQuery = "online_within"
+const adminSessionOnlineWithinQuery = "online_within"
 
 // ensureAdminSessionActor verifies that the current session belongs to a system-root user.
 func ensureAdminSessionActor(ctx *types.ServiceContext) error {
@@ -58,15 +58,15 @@ func loadAdminSessionActor(ctx *types.ServiceContext) (*modeliamuser.User, error
 	return user, nil
 }
 
-// parseAdminSessionsOnlineSince parses the admin-only online session window.
+// parseAdminSessionOnlineSince parses the admin-only online session window.
 //
 // The public contract is a Go duration in the online_within query parameter,
 // for example "5m". A missing value means the caller wants the normal full
 // session list instead of an online-only view.
-func parseAdminSessionsOnlineSince(ctx *types.ServiceContext) (time.Time, bool, error) {
+func parseAdminSessionOnlineSince(ctx *types.ServiceContext) (time.Time, bool, error) {
 	raw := ""
 	if ctx != nil {
-		raw = strings.TrimSpace(ctx.Query().Get(adminSessionsOnlineWithinQuery))
+		raw = strings.TrimSpace(ctx.Query().Get(adminSessionOnlineWithinQuery))
 	}
 	if raw == "" {
 		return time.Time{}, false, nil

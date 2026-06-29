@@ -13,28 +13,28 @@ import (
 
 const sessionsDeleteOthersID = "others"
 
-// SessionsListService handles retrieval of all active sessions for the current authenticated user.
-type SessionsListService struct {
-	service.Base[*modeliamsession.Sessions, *modeliamsession.SessionsListReq, *modeliamsession.SessionsListRsp]
+// SessionListService handles retrieval of all active sessions for the current authenticated user.
+type SessionListService struct {
+	service.Base[*modeliamsession.Session2, *modeliamsession.SessionListReq, *modeliamsession.SessionListRsp]
 }
 
-// SessionsGetService handles retrieval of a specified session for the current authenticated user.
-type SessionsGetService struct {
-	service.Base[*modeliamsession.Sessions, *modeliamsession.SessionsGetReq, *modeliamsession.SessionsGetRsp]
+// SessionGetService handles retrieval of a specified session for the current authenticated user.
+type SessionGetService struct {
+	service.Base[*modeliamsession.Session2, *modeliamsession.SessionGetReq, *modeliamsession.SessionGetRsp]
 }
 
-// SessionsDeleteService handles invalidation of a specified session for the current authenticated user.
-type SessionsDeleteService struct {
-	service.Base[*modeliamsession.Sessions, *modeliamsession.SessionsDeleteReq, *modeliamsession.SessionsDeleteRsp]
+// SessionDeleteService handles invalidation of a specified session for the current authenticated user.
+type SessionDeleteService struct {
+	service.Base[*modeliamsession.Session2, *modeliamsession.SessionDeleteReq, *modeliamsession.SessionDeleteRsp]
 }
 
-// SessionsDeleteAllService handles invalidation of all sessions for the current authenticated user.
-type SessionsDeleteAllService struct {
-	service.Base[*modeliamsession.Sessions, *modeliamsession.SessionsDeleteAllReq, *modeliamsession.SessionsDeleteAllRsp]
+// SessionDeleteAllService handles invalidation of all sessions for the current authenticated user.
+type SessionDeleteAllService struct {
+	service.Base[*modeliamsession.Session2, *modeliamsession.SessionDeleteAllReq, *modeliamsession.SessionDeleteAllRsp]
 }
 
 // List returns all active sessions for the current authenticated user.
-func (s *SessionsListService) List(ctx *types.ServiceContext, req *modeliamsession.SessionsListReq) (rsp *modeliamsession.SessionsListRsp, err error) {
+func (s *SessionListService) List(ctx *types.ServiceContext, req *modeliamsession.SessionListReq) (rsp *modeliamsession.SessionListRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	// SessionManager.Current already guarantees that the resolved session is bound to
@@ -85,14 +85,14 @@ func (s *SessionsListService) List(ctx *types.ServiceContext, req *modeliamsessi
 		return left.After(right)
 	})
 
-	return &modeliamsession.SessionsListRsp{
+	return &modeliamsession.SessionListRsp{
 		Items: items,
 		Total: int64(len(items)),
 	}, nil
 }
 
 // Get returns the detail of a specified session for the current authenticated user.
-func (s *SessionsGetService) Get(ctx *types.ServiceContext, req *modeliamsession.SessionsGetReq) (rsp *modeliamsession.SessionsGetRsp, err error) {
+func (s *SessionGetService) Get(ctx *types.ServiceContext, req *modeliamsession.SessionGetReq) (rsp *modeliamsession.SessionGetRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	currentSessionID, currentSession, err := SessionManager.Current(ctx)
@@ -122,7 +122,7 @@ func (s *SessionsGetService) Get(ctx *types.ServiceContext, req *modeliamsession
 		return nil, service.NewError(http.StatusForbidden, "forbidden")
 	}
 
-	return &modeliamsession.SessionsGetRsp{
+	return &modeliamsession.SessionGetRsp{
 		Session: buildSessionView(targetSession, currentSessionID),
 	}, nil
 }
@@ -132,7 +132,7 @@ func (s *SessionsGetService) Get(ctx *types.ServiceContext, req *modeliamsession
 // DELETE /api/iam/sessions/others revokes every other indexed session of the
 // same user and keeps the current cookie-backed session active. The endpoint
 // remains idempotent: deleting a missing session still returns success.
-func (s *SessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.SessionsDeleteReq) (rsp *modeliamsession.SessionsDeleteRsp, err error) {
+func (s *SessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.SessionDeleteReq) (rsp *modeliamsession.SessionDeleteRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	currentSessionID, currentSession, err := SessionManager.Current(ctx)
@@ -153,7 +153,7 @@ func (s *SessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliams
 			log.Error("failed to delete other sessions", err)
 			return nil, err
 		}
-		return &modeliamsession.SessionsDeleteRsp{}, nil
+		return &modeliamsession.SessionDeleteRsp{}, nil
 	}
 
 	targetSession, err := redis.Cache[modeliamsession.Session]().WithContext(ctx).Get(modeliamsession.SessionIDKey(targetSessionID))
@@ -162,7 +162,7 @@ func (s *SessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliams
 			if targetSessionID == currentSessionID {
 				SessionManager.ClearCookie(ctx)
 			}
-			return &modeliamsession.SessionsDeleteRsp{}, nil
+			return &modeliamsession.SessionDeleteRsp{}, nil
 		}
 		log.Error("failed to load target session", err)
 		return nil, err
@@ -172,7 +172,7 @@ func (s *SessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliams
 		if targetSessionID == currentSessionID {
 			SessionManager.ClearCookie(ctx)
 		}
-		return &modeliamsession.SessionsDeleteRsp{}, nil
+		return &modeliamsession.SessionDeleteRsp{}, nil
 	}
 	if targetSession.UserID != currentSession.UserID {
 		return nil, service.NewError(http.StatusForbidden, "forbidden")
@@ -183,7 +183,7 @@ func (s *SessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliams
 			if targetSessionID == currentSessionID {
 				SessionManager.ClearCookie(ctx)
 			}
-			return &modeliamsession.SessionsDeleteRsp{}, nil
+			return &modeliamsession.SessionDeleteRsp{}, nil
 		}
 		log.Error("failed to delete target session", err)
 		return nil, err
@@ -192,11 +192,11 @@ func (s *SessionsDeleteService) Delete(ctx *types.ServiceContext, req *modeliams
 		SessionManager.ClearCookie(ctx)
 	}
 
-	return &modeliamsession.SessionsDeleteRsp{}, nil
+	return &modeliamsession.SessionDeleteRsp{}, nil
 }
 
 // Delete invalidates all sessions for the current authenticated user.
-func (s *SessionsDeleteAllService) Delete(ctx *types.ServiceContext, req *modeliamsession.SessionsDeleteAllReq) (rsp *modeliamsession.SessionsDeleteAllRsp, err error) {
+func (s *SessionDeleteAllService) Delete(ctx *types.ServiceContext, req *modeliamsession.SessionDeleteAllReq) (rsp *modeliamsession.SessionDeleteAllRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	_, currentSession, err := SessionManager.Current(ctx)
@@ -212,5 +212,5 @@ func (s *SessionsDeleteAllService) Delete(ctx *types.ServiceContext, req *modeli
 
 	SessionManager.ClearCookie(ctx)
 
-	return &modeliamsession.SessionsDeleteAllRsp{}, nil
+	return &modeliamsession.SessionDeleteAllRsp{}, nil
 }

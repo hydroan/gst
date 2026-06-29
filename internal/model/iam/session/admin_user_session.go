@@ -5,32 +5,33 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-type AdminUserSessions struct {
+// AdminUserSession declares administrator APIs for sessions owned by a specified user.
+type AdminUserSession struct {
 	model.Empty
 }
 
-// AdminUserSessionsListReq is the request payload for loading all sessions of a specified user as a privileged administrator.
-type AdminUserSessionsListReq struct{}
+// AdminUserSessionListReq is the request payload for loading all sessions of a specified user as a privileged administrator.
+type AdminUserSessionListReq struct{}
 
-// AdminUserSessionsListRsp returns all sessions of a specified user for a privileged administrator.
-type AdminUserSessionsListRsp struct {
+// AdminUserSessionListRsp returns all sessions of a specified user for a privileged administrator.
+type AdminUserSessionListRsp struct {
 	User AdminSessionOwnerView `json:"user"`
 }
 
-// AdminUserSessionsDeleteReq is the request payload for invalidating all sessions of a specified user as a privileged administrator.
-type AdminUserSessionsDeleteReq struct{}
+// AdminUserSessionDeleteReq is the request payload for invalidating all sessions of a specified user as a privileged administrator.
+type AdminUserSessionDeleteReq struct{}
 
-// AdminUserSessionsDeleteRsp returns the result of invalidating all sessions of a specified user for a privileged administrator.
-type AdminUserSessionsDeleteRsp struct{}
+// AdminUserSessionDeleteRsp returns the result of invalidating all sessions of a specified user for a privileged administrator.
+type AdminUserSessionDeleteRsp struct{}
 
-func (AdminUserSessions) Design() {
+func (AdminUserSession) Design() {
 	Route("/iam/admin/users/:id/session", func() {
 		List(func() {
 			Service()
 			Flatten()
 			Filename("admin_user_session.go")
-			Payload[*AdminUserSessionsListReq]()
-			Result[*AdminUserSessionsListRsp]()
+			Payload[*AdminUserSessionListReq]()
+			Result[*AdminUserSessionListRsp]()
 		})
 
 		Delete(func() {
@@ -38,8 +39,8 @@ func (AdminUserSessions) Design() {
 			Flatten()
 			Exact()
 			Filename("admin_user_session.go")
-			Payload[*AdminUserSessionsDeleteReq]()
-			Result[*AdminUserSessionsDeleteRsp]()
+			Payload[*AdminUserSessionDeleteReq]()
+			Result[*AdminUserSessionDeleteRsp]()
 		})
 	})
 }
