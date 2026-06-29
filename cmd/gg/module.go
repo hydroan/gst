@@ -165,6 +165,9 @@ func runModuleCopy(name string, opts moduleCopyOptions) error {
 func runModuleCopyGen() error {
 	// Module copy needs gg gen to create the target service shell, but it must not
 	// turn this copy operation into a prune/cleanup pass over user service files.
+	// Keep gg check enabled through genRunWithOptions(Quiet: true). If copied
+	// module sources fail project checks, fix the framework module or the check
+	// rule instead of bypassing validation here.
 	oldPrune := prune
 	oldCleanOrphans := cleanOrphans
 	prune = false

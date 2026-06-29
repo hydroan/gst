@@ -128,6 +128,76 @@ func TestPrintModuleCopyPlanReportsExtraTargetServiceFilesAsWarningSection(t *te
 	}
 }
 
+func TestRunModuleCopyGenKeepsQuietProjectChecks(t *testing.T) {
+	oldModelDir := modelDir
+	oldServiceDir := serviceDir
+	oldRouterDir := routerDir
+	oldDaoDir := daoDir
+	oldExcludes := excludes
+	oldModule := module
+	oldPrune := prune
+	oldCleanOrphans := cleanOrphans
+	t.Cleanup(func() {
+		modelDir = oldModelDir
+		serviceDir = oldServiceDir
+		routerDir = oldRouterDir
+		daoDir = oldDaoDir
+		excludes = oldExcludes
+		module = oldModule
+		prune = oldPrune
+		cleanOrphans = oldCleanOrphans
+	})
+
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	modelDir = "model"
+	serviceDir = "service"
+	routerDir = "router"
+	daoDir = "dao"
+	excludes = nil
+	module = ""
+	prune = false
+	cleanOrphans = false
+
+	if err := os.MkdirAll(filepath.Join(projectDir, "model", "copytest", "session"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, "go.mod"), []byte("module tmpapp\n\ngo 1.26\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, "model", "copytest", "session", "sessions.go"), []byte(`package session
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Sessions struct {
+	model.Empty
+}
+
+func (Sessions) Design() {
+	dsl.Route("copytest/sessions", func() {
+		dsl.List(func() {
+			dsl.Service()
+		})
+	})
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if checks := runProjectChecksQuiet(); checks == 0 {
+		t.Fatal("test fixture should fail project checks before module-copy generation")
+	}
+	module = ""
+
+	err := runModuleCopyGen()
+	if err == nil || !strings.Contains(err.Error(), "project checks failed") {
+		t.Fatalf("runModuleCopyGen() error = %v, want project checks failed", err)
+	}
+}
+
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 
