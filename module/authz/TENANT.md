@@ -72,14 +72,14 @@
 
 ## tenant 来源
 
-`module/authz` 支持在注册时传入 `TenantResolver`：
+`module/authz` 的默认 resolver 会优先读取请求上下文中的 `CTX_TENANT_ID`；为空时回退到 `rbac.DefaultTenant`。当项目同时使用 `module/iam` 时，`IAMSession` 会把 `Session.TenantID` 写入该上下文，因此登录时选择的 tenant 可以直接成为 authz 的默认 tenant 来源。
+
+如果项目的 tenant 来源不是 IAM session，例如 JWT claims、子域名或可信网关注入 header，可以在注册时传入 `TenantResolver`：
 
 ```go
 authz.Register(authz.Config{
     TenantResolver: authz.HeaderTenantResolver("X-Tenant-ID"),
 })
 ```
-
-resolver 返回空 tenant 时，authz 会回退到 `rbac.DefaultTenant`。
 
 `HeaderTenantResolver` 只适合测试、demo 或可信网关注入 tenant 的场景。生产项目应优先从 session、JWT claims、子域名或项目自己的 tenant 上下文中解析 tenant，不要把任意客户端 header 当作可信身份来源。

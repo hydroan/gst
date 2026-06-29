@@ -160,6 +160,9 @@ func currentAuthzTenantResolver() TenantResolver {
 	return authzTenantResolver.resolver
 }
 
-func defaultTenantResolver(*gin.Context) (string, error) {
-	return rbac.DefaultTenant, nil
+func defaultTenantResolver(c *gin.Context) (string, error) {
+	if c == nil {
+		return rbac.DefaultTenant, nil
+	}
+	return strings.TrimSpace(c.GetString(consts.CTX_TENANT_ID)), nil
 }

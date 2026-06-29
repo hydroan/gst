@@ -3,9 +3,11 @@ package serviceiamaccount
 import (
 	// "fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
@@ -18,6 +20,7 @@ import (
 	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/types/consts"
 	"github.com/mssola/useragent"
 	"go.uber.org/zap"
 )
@@ -98,6 +101,12 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		log.Warnz("invalid password", zap.String("username", req.Username))
 		return nil, errors.New("invalid username or password")
 	}
+	tenantID := strings.TrimSpace(req.TenantID)
+	if tenantID != "" {
+		if err = ensureLoginTenant(targetUser.ID, tenantID); err != nil {
+			return nil, err
+		}
+	}
 
 	// MFA integration is disabled while IAM is decoupled from optional modules.
 	//
@@ -138,6 +147,7 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		ID:                 sessionID,
 		UserID:             targetUser.ID,
 		Username:           targetUser.Username,
+		TenantID:           tenantID,
 		MustChangePassword: credential.MustChangePassword,
 		ClientIP:           ctx.ClientIP(),
 		UserAgent:          ctx.UserAgent(),
@@ -204,4 +214,23 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	}
 
 	return serviceiamsession.BuildAuthenticatedSessionRsp(sessionData, targetUser, email, now), nil
+}
+
+func ensureLoginTenant(userID string, tenantID string) error {
+	systemRoot, err := rbac.RBAC().HasSystemRole(userID, consts.AUTHZ_SYSTEM_ROLE_ROOT)
+	if err != nil {
+		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+	}
+	if systemRoot {
+		return nil
+	}
+
+	member, err := rbac.RBAC().SubjectInTenant(tenantID, userID)
+	if err != nil {
+		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+	}
+	if !member {
+		return service.NewError(http.StatusForbidden, "user is not a member of tenant")
+	}
+	return nil
 }

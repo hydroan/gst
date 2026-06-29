@@ -15,6 +15,7 @@ type AdminSessionOwnerView struct {
 // SessionView describes a session snapshot returned by session query endpoints.
 type SessionView struct {
 	ID          string        `json:"id"`
+	TenantID    string        `json:"tenant_id,omitempty"`
 	Status      SessionStatus `json:"status"`
 	IssuedAt    time.Time     `json:"issued_at"`
 	LastSeenAt  time.Time     `json:"last_seen_at"`

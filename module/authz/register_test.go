@@ -14,10 +14,12 @@ import (
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
+	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/module/iam"
+	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 )
@@ -828,6 +830,44 @@ func TestIAMUserStatusTenantAuthorization(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestIAMLoginStoresSessionTenant(t *testing.T) {
+	tenantID := authzTestUsername("tenant_login")
+	username := authzTestUsername("tenant_login_user")
+	password := "12345678"
+	userID := authzSignupUser(t, username, password)
+	roleID := authzCreateTenantRole(t, tenantID, authzTestUsername("tenant_login_role"))
+	authzBindTenantRole(t, tenantID, userID, roleID)
+
+	sessionID := loginSessionIDFromCookieWithUserAgent(t, iam.LoginReq{
+		Username: username,
+		Password: password,
+		TenantID: tenantID,
+	}, tenantUserAgent)
+
+	session, err := redis.Cache[modeliamsession.Session]().
+		WithContext(t.Context()).
+		Get(modeliamsession.SessionIDKey(sessionID))
+	require.NoError(t, err)
+	require.Equal(t, tenantID, session.TenantID)
+}
+
+func TestIAMLoginRejectsTenantOutsideMembership(t *testing.T) {
+	username := authzTestUsername("tenant_login_forbidden_user")
+	password := "12345678"
+	authzSignupUser(t, username, password)
+
+	cli, err := client.New(loginAPI, client.WithUserAgent(tenantUserAgent))
+	require.NoError(t, err)
+
+	_, err = cli.Create(iam.LoginReq{
+		Username: username,
+		Password: password,
+		TenantID: authzTestUsername("tenant_login_forbidden"),
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "403")
+}
+
 func authzAdminSessionID(t *testing.T) string {
 	t.Helper()
 
@@ -909,6 +949,9 @@ func loginSessionIDFromCookieWithUserAgent(t *testing.T, reqPayload iam.LoginReq
 		t.Helper()
 		require.False(t, rsp.ServerTime.IsZero())
 		require.False(t, rsp.Session.ExpiresAt.IsZero())
+		if reqPayload.TenantID != "" {
+			require.Equal(t, reqPayload.TenantID, rsp.Session.TenantID)
+		}
 	})
 
 	var data map[string]json.RawMessage

@@ -122,6 +122,27 @@ func TestCurrentSessionGet(t *testing.T) {
 		require.Equal(t, recentLastSeenAt, after.LastSeenAt)
 	})
 
+	t.Run("returns_current_session_tenant", func(t *testing.T) {
+		account := newSessionTestAccount(t)
+		sessionID := loginSession(t, account.Username, account.Password)
+		tenantID := "tenant_current_session"
+		setSessionTenantID(t, sessionID, tenantID)
+
+		cli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{
+			Name:  "session_id",
+			Value: sessionID,
+		}))
+		require.NoError(t, err)
+
+		resp, err := cli.Request(http.MethodGet, new(struct{}))
+		require.NoError(t, err)
+
+		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.CurrentGetRsp) {
+			t.Helper()
+			require.Equal(t, tenantID, rsp.Session.TenantID)
+		})
+	})
+
 	t.Run("reject_session_when_stored_snapshot_is_not_active", func(t *testing.T) {
 		account := newSessionTestAccount(t)
 		sessionID := loginSession(t, account.Username, account.Password)
@@ -202,6 +223,8 @@ func TestSessionGet(t *testing.T) {
 		account := newSessionTestAccount(t)
 		currentSessionID := loginSession(t, account.Username, account.Password)
 		otherSessionID := loginSession(t, account.Username, account.Password)
+		tenantID := "tenant_session_get"
+		setSessionTenantID(t, otherSessionID, tenantID)
 
 		cli, err := client.New(sessionsAPI, client.WithCookie(&http.Cookie{
 			Name:  "session_id",
@@ -215,6 +238,7 @@ func TestSessionGet(t *testing.T) {
 		testutil.TestResp[*iam.SessionGetRsp](t, resp, func(t *testing.T, rsp *iam.SessionGetRsp) {
 			t.Helper()
 			require.Equal(t, otherSessionID, rsp.Session.ID)
+			require.Equal(t, tenantID, rsp.Session.TenantID)
 			require.False(t, rsp.Session.IsCurrent)
 		})
 	})
@@ -1304,6 +1328,19 @@ func setSessionLastSeenAt(t *testing.T, sessionID string, lastSeenAt time.Time) 
 
 	session := loadStoredSession(t, sessionID)
 	session.LastSeenAt = lastSeenAt.UTC()
+	ttl := time.Until(session.ExpiresAt)
+	require.Greater(t, ttl, time.Duration(0))
+	require.NoError(t, redis.Cache[modeliamsession.Session]().
+		WithContext(t.Context()).
+		Set(modeliamsession.SessionIDKey(sessionID), session, ttl))
+	return session
+}
+
+func setSessionTenantID(t *testing.T, sessionID string, tenantID string) modeliamsession.Session {
+	t.Helper()
+
+	session := loadStoredSession(t, sessionID)
+	session.TenantID = tenantID
 	ttl := time.Until(session.ExpiresAt)
 	require.Greater(t, ttl, time.Duration(0))
 	require.NoError(t, redis.Cache[modeliamsession.Session]().

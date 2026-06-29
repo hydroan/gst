@@ -1,6 +1,6 @@
 # IAM 租户边界
 
-本文记录 `module/iam` 在开启多租户后的边界。IAM 的核心原则是：用户、凭证、身份、会话是全局身份主体数据，不直接归属某个 tenant；tenant 成员关系和权限由 `module/authz` 的 RoleBinding、Role 和 Casbin tenant domain 表达。
+本文记录 `module/iam` 在开启多租户后的边界。IAM 的核心原则是：用户、凭证、身份是全局身份主体数据，不直接归属某个 tenant；会话可以保存本次登录选择的当前 tenant，但不表达 tenant 成员关系或权限。tenant 成员关系和权限由 `module/authz` 的 RoleBinding、Role 和 Casbin tenant domain 表达。
 
 ## 不属于 tenant 的接口
 
@@ -21,6 +21,8 @@
 - `DELETE /api/iam/sessions/others`
 
 这些接口的判断依据是当前 session 对应的 user，不应该因为切换 tenant 而改变用户自己的资料、密码或会话列表。
+
+`POST /api/login` 可以携带 `tenant_id` 来选择当前 session tenant。非空 `tenant_id` 会校验登录用户属于该 tenant；登录接口本身仍然不是 tenant-owned API。
 
 ## in tenant 的接口
 
@@ -49,14 +51,16 @@
 - `PasswordCredential` 不增加 `TenantID`，表示用户的登录凭证。
 - `EmailIdentity` 不增加 `TenantID`，表示用户的邮箱身份。
 - `Profile` 不增加 `TenantID`，表示用户的全局基础资料。
-- `Session` 不增加 `TenantID`，表示一次登录会话。
+- `Session` 可以保存 `TenantID`，表示本次登录会话选择的当前 tenant；它不是用户的 tenant membership 或权限来源。
 - 用户属于哪些 tenant、在 tenant 内拥有哪些权限，由 `authz.RoleBinding{TenantID, SubjectID, RoleID}` 表达。
 
 ## tenant 来源
 
-`module/authz` 支持项目提供 TenantResolver。resolver 返回空 tenant 时，authz 会回退到 `rbac.DefaultTenant`。
+`IAMSession` 会把 `Session.TenantID` 写入请求上下文的 `CTX_TENANT_ID`。`module/authz` 的默认 resolver 会优先读取该上下文 tenant；为空时回退到 `rbac.DefaultTenant`。
 
-通过 `gg module add authz` 使用内置模块时，在项目的模块注册处传入 resolver：
+通过 `gg module add iam` 和 `gg module add authz` 使用内置模块时，如果项目使用 IAM session tenant，可以在登录时传入 `tenant_id`，不需要额外配置 resolver。
+
+如果项目的 tenant 来源不是 IAM session，例如 JWT claims、子域名或可信网关注入 header，则在项目的模块注册处传入 resolver：
 
 ```go
 authz.Register(authz.Config{
@@ -64,7 +68,7 @@ authz.Register(authz.Config{
 })
 ```
 
-通过 `gg module copy authz` 复制到业务项目后，copy manifest 会注册零参 `middleware.Authz()`。项目需要在自己的接入文件中设置 resolver：
+通过 `gg module copy authz` 复制到业务项目后，copy manifest 会注册零参 `middleware.Authz()`。零参 `Authz()` 默认读取 `CTX_TENANT_ID`。如果业务项目使用其他 tenant 来源，需要在自己的接入文件中设置 resolver：
 
 ```go
 middleware.SetAuthzTenantResolver(func(c *gin.Context) (string, error) {

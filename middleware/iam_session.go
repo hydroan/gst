@@ -109,6 +109,7 @@ func IAMSession() gin.HandlerFunc {
 		c.Set(consts.CTX_USER_ID, session.UserID)
 		c.Set(consts.CTX_USERNAME, session.Username)
 		c.Set(consts.CTX_SESSION_ID, sessionID)
+		c.Set(consts.CTX_TENANT_ID, session.TenantID)
 		c.Next()
 	}
 }

@@ -44,6 +44,7 @@ type Session struct {
 
 	UserID             string `json:"user_id"`
 	Username           string `json:"username"`
+	TenantID           string `json:"tenant_id,omitempty"`
 	MustChangePassword bool   `json:"must_change_password"`
 
 	ClientIP    string `json:"client_ip"`
@@ -85,6 +86,7 @@ type AuthenticatedSessionRsp struct {
 
 // AuthenticatedSessionView describes the current authenticated session without exposing its bearer session id.
 type AuthenticatedSessionView struct {
+	TenantID         string        `json:"tenant_id,omitempty"`
 	Status           SessionStatus `json:"status"`
 	IssuedAt         time.Time     `json:"issued_at"`
 	LastSeenAt       time.Time     `json:"last_seen_at"`
