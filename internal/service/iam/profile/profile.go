@@ -29,16 +29,16 @@ func (p *ProfileGetService) Get(ctx *types.ServiceContext, req *modeliamprofile.
 		return nil, err
 	}
 
-	profile, found, err := loadProfileByUserID(ctx, session.UserID)
+	record, found, err := loadProfileByUserID(ctx, session.UserID)
 	if err != nil {
 		log.Error("failed to load profile", err)
 		return nil, err
 	}
 	if !found {
-		profile = &modeliamprofile.Profile{UserID: session.UserID}
+		record = &modeliamprofile.Profile{UserID: session.UserID}
 	}
 
-	return profile, nil
+	return record, nil
 }
 
 // Patch creates or updates the current user's profile with only the requested fields.
@@ -51,31 +51,31 @@ func (p *ProfilePatchService) Patch(ctx *types.ServiceContext, req *modeliamprof
 		return nil, err
 	}
 
-	profile, found, err := loadProfileByUserID(ctx, session.UserID)
+	record, found, err := loadProfileByUserID(ctx, session.UserID)
 	if err != nil {
 		log.Error("failed to load profile", err)
 		return nil, err
 	}
 	if !found {
-		profile = &modeliamprofile.Profile{UserID: session.UserID}
-		applyProfilePatch(profile, req)
-		if err = database.Database[*modeliamprofile.Profile](ctx).Create(profile); err != nil {
+		record = &modeliamprofile.Profile{UserID: session.UserID}
+		applyProfilePatch(record, req)
+		if err = database.Database[*modeliamprofile.Profile](ctx).Create(record); err != nil {
 			log.Error("failed to create profile", err)
 			return nil, err
 		}
-		return profile, nil
+		return record, nil
 	}
 
-	columns := applyProfilePatch(profile, req)
+	columns := applyProfilePatch(record, req)
 	if len(columns) == 0 {
-		return profile, nil
+		return record, nil
 	}
-	if err = updateProfileColumns(ctx, profile, columns); err != nil {
+	if err = updateProfileColumns(ctx, record, columns); err != nil {
 		log.Error("failed to update profile", err)
 		return nil, err
 	}
 
-	return profile, nil
+	return record, nil
 }
 
 func loadProfileByUserID(ctx *types.ServiceContext, userID string) (*modeliamprofile.Profile, bool, error) {
@@ -92,15 +92,15 @@ func loadProfileByUserID(ctx *types.ServiceContext, userID string) (*modeliampro
 	return profiles[0], true, nil
 }
 
-func updateProfileColumns(ctx *types.ServiceContext, profile *modeliamprofile.Profile, columns []string) error {
-	if profile == nil {
+func updateProfileColumns(ctx *types.ServiceContext, record *modeliamprofile.Profile, columns []string) error {
+	if record == nil {
 		return nil
 	}
 	return database.Database[*modeliamprofile.Profile](ctx).TransactionFunc(func(tx any) error {
 		for _, column := range columns {
 			if err := database.Database[*modeliamprofile.Profile](ctx).
 				WithTx(tx).
-				UpdateByID(profile.ID, column, profileColumnValue(profile, column)); err != nil {
+				UpdateByID(record.ID, column, profileColumnValue(record, column)); err != nil {
 				return err
 			}
 		}
@@ -108,47 +108,47 @@ func updateProfileColumns(ctx *types.ServiceContext, profile *modeliamprofile.Pr
 	})
 }
 
-func applyProfilePatch(profile *modeliamprofile.Profile, req *modeliamprofile.ProfilePatchReq) []string {
-	if profile == nil || req == nil {
+func applyProfilePatch(record *modeliamprofile.Profile, req *modeliamprofile.ProfilePatchReq) []string {
+	if record == nil || req == nil {
 		return nil
 	}
 
 	columns := make([]string, 0, 5)
 	if req.DisplayName != nil {
-		profile.DisplayName = *req.DisplayName
+		record.DisplayName = *req.DisplayName
 		columns = append(columns, "display_name")
 	}
 	if req.FirstName != nil {
-		profile.FirstName = *req.FirstName
+		record.FirstName = *req.FirstName
 		columns = append(columns, "first_name")
 	}
 	if req.LastName != nil {
-		profile.LastName = *req.LastName
+		record.LastName = *req.LastName
 		columns = append(columns, "last_name")
 	}
 	if req.Avatar != nil {
-		profile.Avatar = *req.Avatar
+		record.Avatar = *req.Avatar
 		columns = append(columns, "avatar")
 	}
 	if req.Metadata != nil {
-		profile.Metadata = req.Metadata
+		record.Metadata = req.Metadata
 		columns = append(columns, "metadata")
 	}
 	return columns
 }
 
-func profileColumnValue(profile *modeliamprofile.Profile, column string) any {
+func profileColumnValue(record *modeliamprofile.Profile, column string) any {
 	switch column {
 	case "display_name":
-		return profile.DisplayName
+		return record.DisplayName
 	case "first_name":
-		return profile.FirstName
+		return record.FirstName
 	case "last_name":
-		return profile.LastName
+		return record.LastName
 	case "avatar":
-		return profile.Avatar
+		return record.Avatar
 	case "metadata":
-		return profile.Metadata
+		return record.Metadata
 	default:
 		return nil
 	}
