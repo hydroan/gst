@@ -26,7 +26,7 @@ type ChangeResend struct {
 func (ChangeResend) Design() {
 	Route("/iam/email/change-resend", func() {
 		Create(func() {
-			Service(true)
+			Service()
 			Flatten()
 			Filename("change_resend.go")
 			Payload[*ChangeResendReq]()

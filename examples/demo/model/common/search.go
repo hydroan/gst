@@ -30,7 +30,7 @@ func (Search) Design() {
 	Route("/search-sources/dedup", func() {
 		Create(func() {
 			Filename("dedup")
-			Service(true)
+			Service()
 			Payload[*SearchDedupReq]()
 			Result[*SearchDedupRsp]()
 		})

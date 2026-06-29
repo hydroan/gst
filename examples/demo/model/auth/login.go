@@ -20,7 +20,7 @@ func (Login) Design() {
 		List(func() {
 			Filename("login")
 			Public()
-			Service(true)
+			Service()
 			Result[*LoginRsp]()
 		})
 	})

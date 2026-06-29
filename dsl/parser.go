@@ -32,7 +32,7 @@ import (
 // The parser supports various DSL patterns:
 //   - Global settings: Enabled(), Endpoint("path"), Migrate(true)
 //   - Action configuration: Create().Payload[Type].Result[Type]
-//   - Service and visibility: Service(true), Public()
+//   - Service and visibility: Service(), Public()
 func Parse(file *ast.File, endpoint string) map[string]*Design {
 	designBase, designEmpty := parse(file)
 
@@ -308,10 +308,10 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 		//
 		// Route("/config/apps", func() {
 		// 	List(func() {
-		// 		Service(true)
+		// 		Service()
 		// 	})
 		// 	Get(func() {
-		// 		Service(true)
+		// 		Service()
 		// 	})
 		// })
 		if funcName == "Route" && len(call.Args) == 2 {
@@ -452,7 +452,7 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 //
 // The function parses DSL calls within the action function body:
 //   - Enabled(true/false): Sets whether the action is enabled. Declared actions default to enabled.
-//   - Service(true/false): Sets whether to generate service layer code
+//   - Service(): Marks the action for custom service generation and registration
 //   - Public(): Marks the API endpoint as public
 //   - Exact(): Registers the action route exactly as declared
 //   - Filename("name"): Sets a custom filename for the generated service file
@@ -462,7 +462,7 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 // Example usage in DSL:
 //
 //	Create(func() {
-//	    Service(true)
+//	    Service()
 //	    Payload[CreateUserRequest]
 //	    Result[*User]
 //	})
@@ -512,25 +512,22 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 					}
 				}
 
-				// Parse Service(true)/Service(false)
+				// Parse Service().
 				var isServiceCall bool
 				switch fun := call.Fun.(type) {
 				case *ast.Ident:
-					// anonymous import: Service(true)
+					// anonymous import: Service()
 					if fun != nil && fun.Name == "Service" {
 						isServiceCall = true
 					}
 				case *ast.SelectorExpr:
-					// non-anonymous import: dsl.Service(true)
+					// non-anonymous import: dsl.Service()
 					if fun != nil && fun.Sel != nil && fun.Sel.Name == "Service" {
 						isServiceCall = true
 					}
 				}
-				if isServiceCall && len(call.Args) > 0 && call.Args[0] != nil {
-					if identExpr, ok := call.Args[0].(*ast.Ident); ok && identExpr != nil {
-						// check the argument of Service() is true.
-						service = identExpr.Name == "true"
-					}
+				if isServiceCall && len(call.Args) == 0 {
+					service = true
 				}
 
 				// Parse Public().

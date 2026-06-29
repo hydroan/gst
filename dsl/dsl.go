@@ -34,7 +34,7 @@
 //
 //		// Configure Create operation
 //		Create(func() {
-//			Service(true) // Generate service code
+//			Service() // Generate service code
 //			// Omit Public() for authenticated APIs.
 //			Payload[CreateUserRequest]()
 //			Result[*User]()
@@ -54,7 +54,7 @@
 //
 //	Route("/attachment/upload", func() {
 //		Create(func() {
-//			Service(true)
+//			Service()
 //			Filename("upload")  // generates upload.go instead of create.go
 //		})
 //	})
@@ -146,10 +146,10 @@ func Param(string) {}
 //
 //	Route("/config/apps", func() {
 //	    List(func() {
-//	        Service(true)
+//	        Service()
 //	    })
 //	    Get(func() {
-//	        Service(true)
+//	        Service()
 //	    })
 //	})
 //
@@ -182,8 +182,8 @@ func Param(string) {}
 //	        Get(func() {})
 //	    })
 //	    Route("config/apps", func() {
-//	        List(func() { Service(true) })
-//	        Get(func() { Service(true) })
+//	        List(func() { Service() })
+//	        Get(func() { Service() })
 //	    })
 //	}
 //
@@ -198,10 +198,17 @@ func Route(string, func()) {}
 // Default: false
 func Migrate(bool) {}
 
-// Service controls whether service layer code should be generated for the current action.
-// This affects the generation of business logic layer code.
-// Default: false
-func Service(bool) {}
+// Service marks the current action as requiring custom service code.
+//
+// Service is an action-scoped marker and must be used inside an action block such
+// as Create, List, or Get. Calling Service() tells gg gen to generate and
+// register a service implementation for that action.
+//
+// Omit Service() when the framework default controller behavior is enough. This
+// marker only controls service generation and registration for the current
+// action; it does not change Payload, Result, Public, Exact, Filename, Flatten,
+// Enabled, or route generation semantics.
+func Service() {}
 
 // Filename specifies a custom filename (without extension) for the generated service file.
 // When used inside an action configuration function (e.g., Create, Update), it overrides the
@@ -226,13 +233,13 @@ func Service(bool) {}
 //	// causing a conflict. With Filename, they produce separate files:
 //	Route("/attachment/upload", func() {
 //	    Create(func() {
-//	        Service(true)
+//	        Service()
 //	        Filename("upload")  // generates service/shared/attachment/upload.go
 //	    })
 //	})
 //	Route("/attachment/parse", func() {
 //	    Create(func() {
-//	        Service(true)
+//	        Service()
 //	        Filename("parse")   // generates service/shared/attachment/parse.go
 //	    })
 //	})
@@ -261,7 +268,7 @@ func Filename(string) {}
 // Flatten only affects service generation. It does not change routes, model registration,
 // payload/result types, or Filename's meaning. Filename still controls only the generated
 // file basename and service struct name. gg requires Flatten to be used with an explicit
-// Filename(...) and Service(true) in the same action.
+// Filename(...) and Service() in the same action.
 //
 // Flatten is only valid for model files under model/<package>/<file>.go. Root model files
 // such as model/user.go cannot be flattened because service/ is reserved for generated
@@ -412,7 +419,7 @@ type Design struct {
 	// Usage in Design():
 	//   Route("/config/apps", func() {
 	//       List(func() {})
-	//       Get(func() { Service(true) })
+	//       Get(func() { Service() })
 	//   })
 	//
 	// This populates routes["/config/apps"] with List and Get Action configurations.
@@ -471,8 +478,9 @@ type Action struct {
 	// Declared actions default to true; actions not declared in Design are disabled.
 	Enabled bool
 
-	// Service indicates whether service layer code should be generated for this action.
-	// The service layer contains business logic and data access code.
+	// Service indicates whether custom service code should be generated and
+	// registered for this action. It is true only when the action's DSL block
+	// contains Service().
 	// Default: false
 	Service bool
 
@@ -504,7 +512,7 @@ type Action struct {
 
 	// Flatten indicates whether the generated service file should be written directly
 	// into the service package that mirrors the current model package.
-	// It only affects service output layout and requires Service(true) plus Filename(...).
+	// It only affects service output layout and requires Service() plus Filename(...).
 	Flatten bool
 
 	// The phase of the action

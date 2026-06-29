@@ -647,14 +647,14 @@ func (Attachment) Design() {
 	Route("/attachment/upload", func() {
 		Create(func() {
 			Enabled(true)
-			Service(true)
+			Service()
 			Filename("upload")
 		})
 	})
 	Route("/attachment/parse", func() {
 		Create(func() {
 			Enabled(true)
-			Service(true)
+			Service()
 			Filename("parse")
 		})
 	})
@@ -676,7 +676,7 @@ type SimpleModel struct {
 func (SimpleModel) Design() {
 	Create(func() {
 		Enabled(true)
-		Service(true)
+		Service()
 	})
 }
 `
@@ -696,7 +696,7 @@ type Role struct {
 func (Role) Design() {
 	Route("authz/roles", func() {
 		Create(func() {
-			Service(true)
+			Service()
 			Filename("role.go")
 			Flatten()
 		})
@@ -720,7 +720,7 @@ func (AdminUserSessions) Design() {
 	Route("/iam/admin/users/:id/sessions", func() {
 		Delete(func() {
 			Exact()
-			Service(true)
+			Service()
 			Payload[*AdminUserSessionsDeleteReq]()
 			Result[*AdminUserSessionsDeleteRsp]()
 		})

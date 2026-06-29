@@ -25,7 +25,7 @@ type TOTPVerifyRsp struct {
 func (TOTPVerify) Design() {
 	Route("mfa/totp/verify", func() {
 		Create(func() {
-			Service(true)
+			Service()
 			Flatten()
 			Filename("totp_verify.go")
 			Payload[*TOTPVerifyReq]()

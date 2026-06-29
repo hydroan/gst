@@ -28,7 +28,7 @@ type PasswordResetConfirm struct {
 func (PasswordResetConfirm) Design() {
 	Route("/iam/email/password-reset-confirm", func() {
 		Create(func() {
-			Service(true)
+			Service()
 			Flatten()
 			Public()
 			Filename("password_reset_confirm.go")

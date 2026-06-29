@@ -27,7 +27,7 @@ type ChangeRequest struct {
 func (ChangeRequest) Design() {
 	Route("/iam/email/change-request", func() {
 		Create(func() {
-			Service(true)
+			Service()
 			Flatten()
 			Filename("change_request.go")
 			Payload[*ChangeRequestReq]()

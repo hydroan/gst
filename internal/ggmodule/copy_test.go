@@ -741,15 +741,15 @@ type CopyTest struct {
 func (CopyTest) Design() {
 	dsl.Route("copytest", func() {
 		dsl.Create(func() {
-			dsl.Service(true)
+			dsl.Service()
 			dsl.Filename("bind.go")
 		})
 		dsl.List(func() {
-			dsl.Service(true)
+			dsl.Service()
 			dsl.Filename("check.go")
 		})
 		dsl.Get(func() {
-			dsl.Service(true)
+			dsl.Service()
 			dsl.Filename("confirm.go")
 		})
 	})
@@ -845,7 +845,7 @@ type Account struct {
 func (Account) Design() {
 	dsl.Route("copytest/account", func() {
 		dsl.Create(func() {
-			dsl.Service(true)
+			dsl.Service()
 			dsl.Filename("create.go")
 		})
 	})
@@ -1230,7 +1230,7 @@ type Ignored struct {
 
 func (Ignored) Design() {
 	dsl.Create(func() {
-		dsl.Service(true)
+		dsl.Service()
 		dsl.Filename("missing.go")
 	})
 }

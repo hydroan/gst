@@ -32,16 +32,16 @@ func (Conversation) Design() {
 	Param("conv")
 
 	Create(func() {
-		Service(true)
+		Service()
 	})
 	Delete(func() {
-		Service(true)
+		Service()
 	})
 	Patch(func() {
-		Service(true)
+		Service()
 	})
 	List(func() {
-		Service(true)
+		Service()
 	})
 	Get(func() {})
 }

@@ -47,14 +47,14 @@ func (File) Design() {
 
 	Route("/config/files", func() {
 		Create(func() {
-			Service(true)
+			Service()
 		})
 		Update(func() {
-			Service(true)
+			Service()
 		})
 		Patch(func() {})
 		List(func() {
-			Service(true)
+			Service()
 		})
 		Get(func() {})
 	})

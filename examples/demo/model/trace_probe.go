@@ -33,27 +33,27 @@ func (TraceProbe) Design() {
 
 	Create(func() {
 		Filename("trace_probe")
-		Service(true)
+		Service()
 	})
 	Delete(func() {
 		Filename("trace_probe")
-		Service(true)
+		Service()
 	})
 	Update(func() {
 		Filename("trace_probe")
-		Service(true)
+		Service()
 	})
 	Patch(func() {
 		Filename("trace_probe")
-		Service(true)
+		Service()
 	})
 	List(func() {
 		Filename("trace_probe")
-		Service(true)
+		Service()
 	})
 	Get(func() {
 		Filename("trace_probe")
-		Service(true)
+		Service()
 	})
 }
 

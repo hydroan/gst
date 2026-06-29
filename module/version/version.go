@@ -35,7 +35,7 @@ func (Version) Design() {
 	Route("version", func() {
 		List(func() {
 			Enabled(true)
-			Service(true)
+			Service()
 			Public() // Allow public access for version checking
 			Result[*VersionRsp]()
 		})

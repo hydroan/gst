@@ -53,7 +53,7 @@ func TestValidateFlattenUsage(t *testing.T) {
 			source:    validateFlattenWithoutServiceSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/authz/role.go",
-			wantError: "does not enable Service(true)",
+			wantError: "does not enable Service()",
 		},
 		{
 			name:      "service outside action",
@@ -109,7 +109,7 @@ type Role struct {
 func (Role) Design() {
 	Route("authz/roles", func() {
 		Create(func() {
-			Service(true)
+			Service()
 			Filename("role.go")
 			Flatten()
 		})
@@ -131,7 +131,7 @@ type Role struct {
 
 func (Role) Design() {
 	Create(func() {
-		Service(true)
+		Service()
 		Filename("role.go")
 		Flatten()
 	})
@@ -153,7 +153,7 @@ type Role struct {
 func (Role) Design() {
 	dsl.Route("authz/roles", func() {
 		dsl.Create(func() {
-			dsl.Service(true)
+			dsl.Service()
 			dsl.Filename("role.go")
 			dsl.Flatten()
 		})
@@ -192,7 +192,7 @@ type Role struct {
 
 func (Role) Design() {
 	Create(func() {
-		Service(true)
+		Service()
 		Flatten()
 	})
 }
@@ -212,7 +212,6 @@ type Role struct {
 
 func (Role) Design() {
 	Create(func() {
-		Service(false)
 		Filename("role.go")
 		Flatten()
 	})
@@ -232,6 +231,6 @@ type Role struct {
 }
 
 func (Role) Design() {
-	Service(true)
+	Service()
 }
 `

@@ -156,7 +156,7 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile boo
 
 		switch {
 		case name == "Service":
-			service = boolArgValue(child, service)
+			service = true
 		case name == "Filename":
 			filenameValue = stringArgValue(child, filenameValue)
 		case name == "Flatten":
@@ -174,7 +174,7 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile boo
 
 	if flatten {
 		if !service {
-			errs = append(errs, fmt.Errorf("%s: %s action uses dsl.Flatten() but does not enable Service(true)", filename, actionName))
+			errs = append(errs, fmt.Errorf("%s: %s action uses dsl.Flatten() but does not enable Service()", filename, actionName))
 		}
 		if filenameValue == "" {
 			errs = append(errs, fmt.Errorf("%s: %s action uses dsl.Flatten() but is missing Filename(...)", filename, actionName))
@@ -222,17 +222,6 @@ func funcName(expr ast.Expr) (string, bool) {
 	default:
 		return "", false
 	}
-}
-
-func boolArgValue(call *ast.CallExpr, current bool) bool {
-	if len(call.Args) == 0 {
-		return current
-	}
-	ident, ok := call.Args[0].(*ast.Ident)
-	if !ok || ident == nil {
-		return current
-	}
-	return ident.Name == "true"
 }
 
 func stringArgValue(call *ast.CallExpr, current string) string {

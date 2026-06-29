@@ -15,7 +15,7 @@ type PingRsp struct {
 func (Ping) Design() {
 	dsl.List(func() {
 		dsl.Public()
-		dsl.Service(true)
+		dsl.Service()
 		dsl.Result[*PingRsp]()
 	})
 }

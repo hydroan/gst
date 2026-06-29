@@ -29,7 +29,7 @@
 - exact 路由语义必须一致。内置 module 使用 `module.Exact(...)` 原样注册路径时，`Design()` 对应 action 必须写 `Exact()`，避免 `gg gen` 追加默认 CRUD 后缀。
 - public/auth 语义必须一致。内置 module 的 `Pub()` 或 `module.NewWrapper(..., pub, ...)` 是 public 时，`Design()` 对应 action 必须写 `Public()`；需要登录的 action 不写 `Public()`。
 - request/response 契约必须一致。自定义请求、响应类型要通过 `Payload[T]()`、`Result[T]()` 写进 `Design()`，避免 copy 后生成默认模型签名。
-- service 文件目标必须一致。存在自定义 service 代码的 action 必须写 `Service(true)`；如果多个 action 共用一个 service 文件，所有相关 action 都要写相同的 `Filename(...)`。
+- service 文件目标必须一致。存在自定义 service 代码的 action 必须写 `Service()`；如果多个 action 共用一个 service 文件，所有相关 action 都要写相同的 `Filename(...)`。
 - middleware 注册必须一致。内置 module 如果调用 `middleware.Register(...)` 或 `middleware.RegisterAuth(...)`，对应 middleware 源文件、作用域和 handler 必须写进 copy manifest，避免 `gg module copy` 后少挂全局或鉴权中间件。
 
 
@@ -40,7 +40,7 @@
 
 开发可复制模块时，多个 service action 共享的函数、类型、常量不要放在某一个具体 action 的 service 文件里，这类代码应放到独立 helper 文件中。
 
-原因是 `gg module copy` 会根据 action service 文件的依赖关系复制 helper 文件。如果一个未被当前 DSL `Service(true)` 声明的 action service 文件里放了公用函数，它可能会被当成 helper 复制到业务项目；随后 `gg gen --prune` 又会因为当前模型没有对应 service target，把这个文件识别成应清理的 service 文件。
+原因是 `gg module copy` 会根据 action service 文件的依赖关系复制 helper 文件。如果一个未被当前 DSL `Service()` 声明的 action service 文件里放了公用函数，它可能会被当成 helper 复制到业务项目；随后 `gg gen --prune` 又会因为当前模型没有对应 service target，把这个文件识别成应清理的 service 文件。
 
 简单规则：
 

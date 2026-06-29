@@ -26,13 +26,13 @@ func (User) Design() {
 	Route("/iam/users", func() {
 		List(func() {
 			Enabled(true)
-			Service(true)
+			Service()
 			Payload[*UserReq]()
 			Result[*UserRsp]()
 		})
 		Get(func() {
 			Enabled(true)
-			Service(true)
+			Service()
 		})
 	})
 	Route("///tenant/users", func() {
@@ -56,7 +56,7 @@ func (User) Design() {
 	// Default payload and result is the model name.
 	Create(func() {
 		Enabled(true)
-		Service(true)
+		Service()
 		Public()
 		Payload[User]()
 		Result[*User]()

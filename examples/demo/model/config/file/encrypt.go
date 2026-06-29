@@ -26,7 +26,7 @@ type EncryptRsp struct {
 func (Encrypt) Design() {
 	Route("/config/files/encrypt", func() {
 		Create(func() {
-			Service(true)
+			Service()
 			Payload[*EncryptReq]()
 			Result[*EncryptRsp]()
 		})

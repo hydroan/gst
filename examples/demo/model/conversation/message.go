@@ -36,17 +36,17 @@ func (Message) Design() {
 	Endpoint("messages")
 
 	Create(func() {
-		Service(true)
+		Service()
 	})
 	Patch(func() {})
 	List(func() {
-		Service(true)
+		Service()
 	})
 	Get(func() {})
 
 	Route("messages", func() {
 		DeleteMany(func() {
-			Service(true)
+			Service()
 		})
 	})
 }

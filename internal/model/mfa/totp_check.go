@@ -23,7 +23,7 @@ type TOTPCheckRsp struct {
 func (TOTPCheck) Design() {
 	Route("mfa/totp/check", func() {
 		Create(func() {
-			Service(true)
+			Service()
 			Flatten()
 			Public()
 			Filename("totp_check.go")

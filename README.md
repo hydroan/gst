@@ -112,13 +112,13 @@ func (Conversation) Design() {
 	Param("conv")
 
 	Create(func() {
-		Service(true)
+		Service()
 	})
 	Patch(func() {
-		Service(true)
+		Service()
 	})
 	List(func() {
-		Service(true)
+		Service()
 	})
 	Get(func() {})
 }
@@ -172,7 +172,7 @@ func (Search) Design() {
 	Route("/search-sources/dedup", func() {
 		Create(func() {
 			Filename("dedup")
-			Service(true)
+			Service()
 			Payload[*SearchDedupReq]()
 			Result[*SearchDedupRsp]()
 		})
@@ -191,7 +191,7 @@ func (Search) Design() {
 - `Public()` 表示公开接口，不走认证中间件；默认不写则需要认证。
 - `Exact()` 表示当前 action 按声明路径原样注册，不追加默认的 `/:id`、`/batch` 等后缀。
 - `Payload[T]()` 定义请求体类型；`Result[T]()` 定义响应体类型。
-- `Service(true)` 表示当前 action 需要生成并注册业务 service。
+- `Service()` 表示当前 action 需要生成并注册业务 service。
 - 只声明 `Create(func(){})`、`List(func(){})` 等 action 就会启用对应接口；
   `Enabled(false)` 主要用于显式关闭已声明 action。
 
@@ -377,10 +377,10 @@ REQ/RSP 命名和业务项目根目录结构；根目录结构检查会跳过 Gi
 需要数据库表、默认 CRUD、迁移和模型生命周期 hook 时使用 `model.Base`。只表示一个
 动作、工具接口、登录跳转、批处理等非数据库接口时使用 `model.Empty`。
 
-### 什么时候需要 Service(true)？
+### 什么时候需要 Service()？
 
 默认 CRUD 没有额外业务逻辑时不需要。需要 hook、过滤、返回补充、复杂查询，或当前
-action 是自定义动作时再开启 `Service(true)`。
+action 是自定义动作时再开启 `Service()`。
 
 ### 为什么我写了 service 的 Create 方法但没有被调用？
 

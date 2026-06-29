@@ -22,7 +22,7 @@ type TOTPBindRsp struct {
 func (TOTPBind) Design() {
 	Route("mfa/totp/bind", func() {
 		Create(func() {
-			Service(true)
+			Service()
 			Flatten()
 			Filename("totp_bind.go")
 			Result[*TOTPBindRsp]()
