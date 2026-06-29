@@ -5,8 +5,8 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-// AdminUserSessionList declares administrator APIs for sessions owned by a specified user.
-type AdminUserSessionList struct {
+// AdminUserSession declares administrator APIs for sessions owned by a specified user.
+type AdminUserSession struct {
 	model.Empty
 }
 
@@ -18,7 +18,13 @@ type AdminUserSessionListRsp struct {
 	User AdminSessionOwnerView `json:"user"`
 }
 
-func (AdminUserSessionList) Design() {
+// AdminUserSessionDeleteReq is the request payload for invalidating all sessions of a specified user as a privileged administrator.
+type AdminUserSessionDeleteReq struct{}
+
+// AdminUserSessionDeleteRsp returns the result of invalidating all sessions of a specified user for a privileged administrator.
+type AdminUserSessionDeleteRsp struct{}
+
+func (AdminUserSession) Design() {
 	Route("/iam/admin/users/:id/sessions", func() {
 		List(func() {
 			Service()
@@ -26,6 +32,14 @@ func (AdminUserSessionList) Design() {
 			Filename("admin_user_session_list.go")
 			Payload[*AdminUserSessionListReq]()
 			Result[*AdminUserSessionListRsp]()
+		})
+		Delete(func() {
+			Service()
+			Flatten()
+			Exact()
+			Filename("admin_user_session_delete.go")
+			Payload[*AdminUserSessionDeleteReq]()
+			Result[*AdminUserSessionDeleteRsp]()
 		})
 	})
 }

@@ -13,7 +13,7 @@ import (
 
 // AdminUserSessionDeleteService handles invalidation of all sessions owned by a specified user for privileged administrators.
 type AdminUserSessionDeleteService struct {
-	service.Base[*modeliamsession.AdminUserSessionDelete, *modeliamsession.AdminUserSessionDeleteReq, *modeliamsession.AdminUserSessionDeleteRsp]
+	service.Base[*modeliamsession.AdminUserSession, *modeliamsession.AdminUserSessionDeleteReq, *modeliamsession.AdminUserSessionDeleteRsp]
 }
 
 // Delete invalidates all indexed sessions of a specified user for a privileged administrator.

@@ -10,22 +10,18 @@ import (
 	"github.com/hydroan/gst/types"
 )
 
-// AdminSessionGetService handles retrieval of a specified session for privileged administrators.
-type AdminSessionGetService struct {
-	service.Base[*modeliamsession.AdminSession, *modeliamsession.AdminSessionGetReq, *modeliamsession.AdminSessionGetRsp]
+// SessionGetService handles retrieval of a specified session for the current authenticated user.
+type SessionGetService struct {
+	service.Base[*modeliamsession.Session2, *modeliamsession.SessionGetReq, *modeliamsession.SessionGetRsp]
 }
 
-// Get returns the detail of a specified session for a privileged administrator.
-func (a *AdminSessionGetService) Get(ctx *types.ServiceContext, req *modeliamsession.AdminSessionGetReq) (rsp *modeliamsession.AdminSessionGetRsp, err error) {
-	log := a.WithContext(ctx, ctx.Phase())
+// Get returns the detail of a specified session for the current authenticated user.
+func (s *SessionGetService) Get(ctx *types.ServiceContext, req *modeliamsession.SessionGetReq) (rsp *modeliamsession.SessionGetRsp, err error) {
+	log := s.WithContext(ctx, ctx.Phase())
 
-	currentSessionID, _, err := SessionManager.Current(ctx)
+	currentSessionID, currentSession, err := SessionManager.Current(ctx)
 	if err != nil {
 		log.Error("failed to get current session", err)
-		return nil, err
-	}
-	if err = ensureAdminSessionActor(ctx); err != nil {
-		log.Error("failed to verify admin session actor", err)
 		return nil, err
 	}
 
@@ -46,8 +42,11 @@ func (a *AdminSessionGetService) Get(ctx *types.ServiceContext, req *modeliamses
 		_, _ = SessionManager.Delete(ctx, targetSessionID)
 		return nil, service.NewError(http.StatusNotFound, "session not found")
 	}
+	if targetSession.UserID != currentSession.UserID {
+		return nil, service.NewError(http.StatusForbidden, "forbidden")
+	}
 
-	return &modeliamsession.AdminSessionGetRsp{
+	return &modeliamsession.SessionGetRsp{
 		Session: buildSessionView(targetSession, currentSessionID),
 	}, nil
 }

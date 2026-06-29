@@ -16,7 +16,7 @@ import (
 
 // AdminUserSessionListService handles retrieval of all sessions owned by a specified user for privileged administrators.
 type AdminUserSessionListService struct {
-	service.Base[*modeliamsession.AdminUserSessionList, *modeliamsession.AdminUserSessionListReq, *modeliamsession.AdminUserSessionListRsp]
+	service.Base[*modeliamsession.AdminUserSession, *modeliamsession.AdminUserSessionListReq, *modeliamsession.AdminUserSessionListRsp]
 }
 
 // List returns all indexed sessions of a specified user for a privileged administrator.

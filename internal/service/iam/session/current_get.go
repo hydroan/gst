@@ -16,11 +16,6 @@ type CurrentGetService struct {
 	service.Base[*modeliamsession.Current, *modeliamsession.CurrentGetReq, *modeliamsession.CurrentGetRsp]
 }
 
-// CurrentDeleteService handles invalidation of the current authenticated session.
-type CurrentDeleteService struct {
-	service.Base[*modeliamsession.Current, *modeliamsession.CurrentDeleteReq, *modeliamsession.CurrentDeleteRsp]
-}
-
 // Get returns the current authenticated session together with the latest user snapshot.
 func (c *CurrentGetService) Get(ctx *types.ServiceContext, req *modeliamsession.CurrentGetReq) (rsp *modeliamsession.CurrentGetRsp, err error) {
 	log := c.WithContext(ctx, ctx.Phase())
@@ -46,24 +41,4 @@ func (c *CurrentGetService) Get(ctx *types.ServiceContext, req *modeliamsession.
 	}
 
 	return BuildAuthenticatedSessionRsp(currentSession, currentUser, email, time.Now()), nil
-}
-
-// Delete invalidates the current authenticated session and clears the session cookie.
-func (c *CurrentDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.CurrentDeleteReq) (rsp *modeliamsession.CurrentDeleteRsp, err error) {
-	log := c.WithContext(ctx, ctx.Phase())
-
-	sessionID, err := SessionManager.SessionID(ctx)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-
-	if _, err = SessionManager.Delete(ctx, sessionID); err != nil {
-		log.Error("failed to delete current session", err)
-		return nil, service.NewErrorWithCause(http.StatusUnauthorized, "session not exists", err)
-	}
-
-	SessionManager.ClearCookie(ctx)
-
-	return &modeliamsession.CurrentDeleteRsp{}, nil
 }

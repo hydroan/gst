@@ -12,7 +12,7 @@ import (
 
 // AdminSessionDeleteService handles invalidation of a specified session for privileged administrators.
 type AdminSessionDeleteService struct {
-	service.Base[*modeliamsession.AdminSessionDelete, *modeliamsession.AdminSessionDeleteReq, *modeliamsession.AdminSessionDeleteRsp]
+	service.Base[*modeliamsession.AdminSession, *modeliamsession.AdminSessionDeleteReq, *modeliamsession.AdminSessionDeleteRsp]
 }
 
 // Delete invalidates a specified session for a privileged administrator.

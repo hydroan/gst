@@ -5,17 +5,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
-	"sync"
 	"time"
 
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/service"
-)
-
-var (
-	sessionExpiration   time.Duration
-	sessionExpirationMu sync.RWMutex
 )
 
 func redisContext(ctx context.Context) context.Context {

@@ -13,13 +13,6 @@ import (
 	"github.com/hydroan/gst/types"
 )
 
-const (
-	// SessionCookieName is the HTTP cookie carrying the opaque IAM session id.
-	SessionCookieName = "session_id"
-	sessionCookiePath = "/"
-	sessionIDBytes    = 32
-)
-
 var SessionManager = sessionManager{}
 
 type sessionManager struct{}

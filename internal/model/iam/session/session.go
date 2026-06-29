@@ -45,7 +45,7 @@ func (Session2) Design() {
 		List(func() {
 			Service()
 			Flatten()
-			Filename("session.go")
+			Filename("session_list.go")
 			Payload[*SessionListReq]()
 			Result[*SessionListRsp]()
 		})
@@ -53,7 +53,7 @@ func (Session2) Design() {
 		Get(func() {
 			Service()
 			Flatten()
-			Filename("session.go")
+			Filename("session_get.go")
 			Payload[*SessionGetReq]()
 			Result[*SessionGetRsp]()
 		})
@@ -61,7 +61,7 @@ func (Session2) Design() {
 		Delete(func() {
 			Service()
 			Flatten()
-			Filename("session.go")
+			Filename("session_delete.go")
 			Payload[*SessionDeleteReq]()
 			Result[*SessionDeleteRsp]()
 		})
@@ -70,7 +70,7 @@ func (Session2) Design() {
 			Service()
 			Flatten()
 			Exact()
-			Filename("session.go")
+			Filename("session_delete_all.go")
 			Payload[*SessionDeleteAllReq]()
 			Result[*SessionDeleteAllRsp]()
 		})

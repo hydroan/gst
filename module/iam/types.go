@@ -41,10 +41,8 @@ const (
 // Profile API aliases.
 type (
 	Profile         = modeliamprofile.Profile
-	ProfileGet      = modeliamprofile.ProfileGet
 	ProfileGetReq   = modeliamprofile.ProfileGetReq
 	ProfileGetRsp   = modeliamprofile.ProfileGetRsp
-	ProfilePatch    = modeliamprofile.ProfilePatch
 	ProfilePatchReq = modeliamprofile.ProfilePatchReq
 	ProfilePatchRsp = modeliamprofile.ProfilePatchRsp
 )
@@ -75,21 +73,18 @@ type (
 
 // Admin session API aliases.
 type (
-	AdminSessionOwnerView = modeliamsession.AdminSessionOwnerView
-	AdminSessionList      = modeliamsession.AdminSessionList
+	AdminSession          = modeliamsession.AdminSession
 	AdminSessionListReq   = modeliamsession.AdminSessionListReq
 	AdminSessionListRsp   = modeliamsession.AdminSessionListRsp
-	AdminSessionGet       = modeliamsession.AdminSessionGet
 	AdminSessionGetReq    = modeliamsession.AdminSessionGetReq
 	AdminSessionGetRsp    = modeliamsession.AdminSessionGetRsp
-	AdminSessionDelete    = modeliamsession.AdminSessionDelete
 	AdminSessionDeleteReq = modeliamsession.AdminSessionDeleteReq
 	AdminSessionDeleteRsp = modeliamsession.AdminSessionDeleteRsp
+	AdminSessionOwnerView = modeliamsession.AdminSessionOwnerView
 
-	AdminUserSessionList      = modeliamsession.AdminUserSessionList
+	AdminUserSession          = modeliamsession.AdminUserSession
 	AdminUserSessionListReq   = modeliamsession.AdminUserSessionListReq
 	AdminUserSessionListRsp   = modeliamsession.AdminUserSessionListRsp
-	AdminUserSessionDelete    = modeliamsession.AdminUserSessionDelete
 	AdminUserSessionDeleteReq = modeliamsession.AdminUserSessionDeleteReq
 	AdminUserSessionDeleteRsp = modeliamsession.AdminUserSessionDeleteRsp
 )
