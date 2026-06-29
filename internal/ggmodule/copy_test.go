@@ -58,6 +58,47 @@ type CopyTest struct {
 	}
 }
 
+func TestNormalizeModuleServiceSourceAliasesConflictingCopiedImports(t *testing.T) {
+	source := []byte(`package servicecopytestaccount
+
+import (
+	modelcopytestsession "github.com/hydroan/gst/internal/model/copytest/session"
+	servicecopytestsession "github.com/hydroan/gst/internal/service/copytest/session"
+)
+
+func useCopiedSessionPackages() {
+	_ = modelcopytestsession.Session{}
+	servicecopytestsession.Touch()
+}
+`)
+
+	got, err := normalizeModuleServiceSource("account.go", source, moduleCopyRewriteConfig{
+		ModuleName:        "copytest",
+		ProjectModulePath: "tmpapp",
+		ModelDir:          "model",
+		ServiceDir:        "service",
+		TargetPackage:     "account",
+	})
+	if err != nil {
+		t.Fatalf("normalizeModuleServiceSource() error = %v", err)
+	}
+	code := string(got)
+	for _, want := range []string{
+		"package account\n",
+		`"tmpapp/model/copytest/session"`,
+		`servicesession "tmpapp/service/copytest/session"`,
+		"_ = session.Session{}",
+		"servicesession.Touch()",
+	} {
+		if !strings.Contains(code, want) {
+			t.Fatalf("normalized service source missing %q:\n%s", want, code)
+		}
+	}
+	if strings.Contains(code, "modelcopytestsession") || strings.Contains(code, "servicecopytestsession") || strings.Contains(code, "modelsession") {
+		t.Fatalf("normalized service source leaked source aliases:\n%s", code)
+	}
+}
+
 func TestMergeModuleServiceSourceCopiesWholeServiceFile(t *testing.T) {
 	source := []byte(`package servicecopytest
 
@@ -561,7 +602,7 @@ func (s *RoleService) DeleteAfter(ctx *types.ServiceContext, req *modelcopytest.
 		},
 	}
 
-	if err := plan.addServiceFiles(nil); err != nil {
+	if err := plan.addServiceFiles(); err != nil {
 		t.Fatalf("addServiceFiles() error = %v", err)
 	}
 	targets := plan.ServiceTargets()
@@ -636,7 +677,7 @@ func (s *RoleService) CreateAfter(ctx *types.ServiceContext, req *modelcopytest.
 		},
 	}
 
-	if err := plan.addServiceFiles(nil); err != nil {
+	if err := plan.addServiceFiles(); err != nil {
 		t.Fatalf("addServiceFiles() error = %v", err)
 	}
 	code := string(plan.Files[0].Content)
@@ -646,127 +687,6 @@ func (s *RoleService) CreateAfter(ctx *types.ServiceContext, req *modelcopytest.
 	if strings.HasPrefix(code, "package role\n") {
 		t.Fatalf("flattened merged service kept role package:\n%s", code)
 	}
-}
-
-func TestModuleCopyHelperDependencyFilesUsesTypes(t *testing.T) {
-	dir := t.TempDir()
-	write := func(name string, content string) {
-		t.Helper()
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	write("go.mod", "module example.com/source\n\ngo 1.26\n")
-	write("action.go", `package source
-
-func Action() string {
-	return helperValue
-}
-`)
-	write("helper.go", `package source
-
-const helperValue = "copied"
-`)
-	write("unused.go", `package source
-
-const unusedValue = "kept out"
-`)
-
-	got, err := moduleCopyHelperDependencyFiles(dir, []string{filepath.Join(dir, "action.go")})
-	if err != nil {
-		t.Fatalf("moduleCopyHelperDependencyFiles() error = %v", err)
-	}
-
-	if len(got) != 1 || filepath.Base(got[0]) != "helper.go" {
-		t.Fatalf("moduleCopyHelperDependencyFiles() = %v, want only helper.go", got)
-	}
-}
-
-func TestModuleCopyHelperDependencyFilesHandlesSymlinkedSourceDir(t *testing.T) {
-	realDir := t.TempDir()
-	write := func(name string, content string) {
-		t.Helper()
-		if err := os.WriteFile(filepath.Join(realDir, name), []byte(content), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	write("go.mod", "module example.com/source\n\ngo 1.26\n")
-	write("action.go", `package source
-
-func Action() string {
-	return helperValue
-}
-`)
-	write("helper.go", `package source
-
-const helperValue = "copied"
-`)
-
-	linkParent := t.TempDir()
-	linkDir := filepath.Join(linkParent, "source")
-	if err := os.Symlink(realDir, linkDir); err != nil {
-		t.Skipf("symlink not available: %v", err)
-	}
-
-	got, err := moduleCopyHelperDependencyFiles(linkDir, []string{filepath.Join(linkDir, "action.go")})
-	if err != nil {
-		t.Fatalf("moduleCopyHelperDependencyFiles() error = %v", err)
-	}
-
-	if len(got) != 1 || filepath.Base(got[0]) != "helper.go" {
-		t.Fatalf("moduleCopyHelperDependencyFiles() = %v, want only helper.go", got)
-	}
-}
-
-func writeCopyTestServiceDependencyFiles(t *testing.T) string {
-	t.Helper()
-	sourceServiceDir := t.TempDir()
-	write := func(name string, content string) {
-		t.Helper()
-		if err := os.WriteFile(filepath.Join(sourceServiceDir, name), []byte(content), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write("go.mod", "module example.com/servicecopytest\n\ngo 1.26\n")
-	write("bind.go", `package servicecopytest
-
-func Bind() string {
-	return bindingChallenge() + verificationCode()
-}
-`)
-	write("check.go", `package servicecopytest
-
-func Check() string {
-	return backupCode()
-}
-`)
-	write("confirm.go", `package servicecopytest
-
-func Confirm() string {
-	return verificationCode()
-}
-`)
-	write("binding_challenge.go", `package servicecopytest
-
-func bindingChallenge() string {
-	return "challenge"
-}
-`)
-	write("backup_code.go", `package servicecopytest
-
-func backupCode() string {
-	return "backup"
-}
-`)
-	write("verification_code.go", `package servicecopytest
-
-func verificationCode() string {
-	return "code"
-}
-`)
-	return sourceServiceDir
 }
 
 func newModuleCopyPlanProject(t *testing.T) string {
@@ -900,79 +820,96 @@ func verificationCode() string {
 	`)
 }
 
-func TestModuleCopyHelperDependencyFilesFindsServiceHelpers(t *testing.T) {
-	sourceServiceDir := writeCopyTestServiceDependencyFiles(t)
-	actionFile := filepath.Join(sourceServiceDir, "bind.go")
-
-	got, err := moduleCopyHelperDependencyFiles(sourceServiceDir, []string{actionFile})
-	if err != nil {
-		t.Fatalf("moduleCopyHelperDependencyFiles() error = %v", err)
+func writeNestedCopyTestModuleSource(t *testing.T, projectDir string) {
+	t.Helper()
+	frameworkRoot := filepath.Join(projectDir, "internal", "gst")
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "module", "copytest", moduleManifestFilename), []byte(`{"copy":{}}`), 0o600); err != nil {
+		t.Fatal(err)
 	}
 
-	var found bool
-	for _, file := range got {
-		if filepath.Base(file) == "binding_challenge.go" {
-			found = true
-		}
+	sourceModelDir := filepath.Join(frameworkRoot, "internal", "model", "copytest", "account")
+	if err := os.MkdirAll(sourceModelDir, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if !found {
-		t.Fatalf("moduleCopyHelperDependencyFiles() = %v, want binding_challenge.go", got)
+	if err := os.WriteFile(filepath.Join(sourceModelDir, "account.go"), []byte(`package modelcopytestaccount
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Account struct {
+	model.Empty
+}
+
+func (Account) Design() {
+	dsl.Route("copytest/account", func() {
+		dsl.Create(func() {
+			dsl.Service(true)
+			dsl.Filename("create.go")
+		})
+	})
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	sourceAccountServiceDir := filepath.Join(frameworkRoot, "internal", "service", "copytest", "account")
+	if err := os.MkdirAll(sourceAccountServiceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceAccountServiceDir, "create.go"), []byte(`package servicecopytestaccount
+
+import (
+	modelcopytestaccount "github.com/hydroan/gst/internal/model/copytest/account"
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+)
+
+type AccountCreateService struct {
+	service.Base[*modelcopytestaccount.Account, *modelcopytestaccount.Account, *modelcopytestaccount.Account]
+}
+
+func (s *AccountCreateService) Create(ctx *types.ServiceContext, req *modelcopytestaccount.Account) (rsp *modelcopytestaccount.Account, err error) {
+	return accountHelper(req), nil
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceAccountServiceDir, "helper.go"), []byte(`package servicecopytestaccount
+
+import modelcopytestaccount "github.com/hydroan/gst/internal/model/copytest/account"
+
+func accountHelper(req *modelcopytestaccount.Account) *modelcopytestaccount.Account {
+	return req
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	sourceAuditServiceDir := filepath.Join(frameworkRoot, "internal", "service", "copytest", "audit")
+	if err := os.MkdirAll(sourceAuditServiceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceAuditServiceDir, "audit.go"), []byte(`package servicecopytestaudit
+
+func Audit() string {
+	return "audit"
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
-func TestModuleCopyHelperDependencyFilesFindsServiceHelpersThroughSymlink(t *testing.T) {
-	sourceServiceDir := writeCopyTestServiceDependencyFiles(t)
-	linkParent := t.TempDir()
-	linkRoot := filepath.Join(linkParent, "servicecopytest")
-	if symlinkErr := os.Symlink(sourceServiceDir, linkRoot); symlinkErr != nil {
-		t.Skipf("symlink not available: %v", symlinkErr)
-	}
-
-	actionFile := filepath.Join(linkRoot, "bind.go")
-	got, err := moduleCopyHelperDependencyFiles(linkRoot, []string{actionFile})
-	if err != nil {
-		t.Fatalf("moduleCopyHelperDependencyFiles() error = %v", err)
-	}
-
-	var found bool
-	for _, file := range got {
-		if filepath.Base(file) == "binding_challenge.go" {
-			found = true
+func moduleCopyPlanFileContent(t *testing.T, plan *CopyPlan, targetPath string) string {
+	t.Helper()
+	for _, file := range plan.Files {
+		if file.TargetPath == targetPath {
+			return string(file.Content)
 		}
 	}
-	if !found {
-		t.Fatalf("moduleCopyHelperDependencyFiles() = %v, want binding_challenge.go", got)
-	}
-}
-
-func TestModuleCopyHelperDependencyFilesFindsServiceHelpersFromAllActions(t *testing.T) {
-	sourceServiceDir := writeCopyTestServiceDependencyFiles(t)
-	actionFiles := []string{
-		filepath.Join(sourceServiceDir, "bind.go"),
-		filepath.Join(sourceServiceDir, "check.go"),
-		filepath.Join(sourceServiceDir, "confirm.go"),
-	}
-
-	got, err := moduleCopyHelperDependencyFiles(sourceServiceDir, actionFiles)
-	if err != nil {
-		t.Fatalf("moduleCopyHelperDependencyFiles() error = %v", err)
-	}
-
-	want := map[string]bool{
-		"backup_code.go":       false,
-		"binding_challenge.go": false,
-		"verification_code.go": false,
-	}
-	for _, file := range got {
-		if _, ok := want[filepath.Base(file)]; ok {
-			want[filepath.Base(file)] = true
-		}
-	}
-	for file, found := range want {
-		if !found {
-			t.Fatalf("moduleCopyHelperDependencyFiles() = %v, want %s", got, file)
-		}
-	}
+	t.Fatalf("copy plan missing target %s", targetPath)
+	return ""
 }
 
 func TestBuildModuleCopyPlanIncludesServiceHelperFiles(t *testing.T) {
@@ -1000,6 +937,64 @@ func TestBuildModuleCopyPlanIncludesServiceHelperFiles(t *testing.T) {
 		if !found {
 			t.Fatalf("plan helperTargets() = %v, want %s", helpers, helper)
 		}
+	}
+}
+
+func TestBuildModuleCopyPlanCopiesNestedPackageTree(t *testing.T) {
+	projectDir := newModuleCopyPlanProject(t)
+	writeNestedCopyTestModuleSource(t, projectDir)
+	t.Chdir(projectDir)
+
+	plan, err := BuildCopyPlan("copytest", CopyOptions{})
+	if err != nil {
+		t.Fatalf("BuildCopyPlan() error = %v", err)
+	}
+
+	modelTargets := plan.ModelTargets()
+	if !slices.Contains(modelTargets, filepath.Join("model", "copytest", "account", "account.go")) {
+		t.Fatalf("ModelTargets() = %v, want nested account model", modelTargets)
+	}
+
+	serviceTargets := plan.ServiceTargets()
+	if !slices.Contains(serviceTargets, filepath.Join("service", "copytest", "account", "create.go")) {
+		t.Fatalf("ServiceTargets() = %v, want nested account action service", serviceTargets)
+	}
+
+	helperTargets := plan.HelperTargets()
+	for _, want := range []string{
+		filepath.Join("service", "copytest", "account", "helper.go"),
+		filepath.Join("service", "copytest", "audit", "audit.go"),
+	} {
+		if !slices.Contains(helperTargets, want) {
+			t.Fatalf("HelperTargets() = %v, want %s", helperTargets, want)
+		}
+	}
+
+	accountModel := moduleCopyPlanFileContent(t, plan, filepath.Join("model", "copytest", "account", "account.go"))
+	if !strings.HasPrefix(accountModel, "package account\n") {
+		t.Fatalf("nested model package mismatch:\n%s", accountModel)
+	}
+	accountService := moduleCopyPlanFileContent(t, plan, filepath.Join("service", "copytest", "account", "create.go"))
+	for _, want := range []string{
+		"package account\n",
+		`"tmpapp/model/copytest/account"`,
+		"func (c *Create) Create(ctx *types.ServiceContext, req *account.Account) (rsp *account.Account, err error)",
+	} {
+		if !strings.Contains(accountService, want) {
+			t.Fatalf("nested action service missing %q:\n%s", want, accountService)
+		}
+	}
+	if strings.Contains(accountService, "modelcopytestaccount") {
+		t.Fatalf("nested action service leaked source package alias:\n%s", accountService)
+	}
+
+	accountHelper := moduleCopyPlanFileContent(t, plan, filepath.Join("service", "copytest", "account", "helper.go"))
+	if !strings.Contains(accountHelper, "package account\n") || !strings.Contains(accountHelper, `"tmpapp/model/copytest/account"`) || strings.Contains(accountHelper, "modelcopytestaccount") {
+		t.Fatalf("nested helper was not normalized:\n%s", accountHelper)
+	}
+	auditHelper := moduleCopyPlanFileContent(t, plan, filepath.Join("service", "copytest", "audit", "audit.go"))
+	if !strings.HasPrefix(auditHelper, "package audit\n") {
+		t.Fatalf("service-only package mismatch:\n%s", auditHelper)
 	}
 }
 

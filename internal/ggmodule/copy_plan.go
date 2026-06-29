@@ -195,12 +195,7 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 	// Precompute final service/helper contents during preflight so conflict checks
 	// compare against what will actually be written. The execution phase still
 	// runs gg gen for real before writing these merged files.
-	helperFiles, err := moduleCopyHelperDependencyFiles(plan.SourceServiceDir, actionSourcePaths(actions))
-	if err != nil {
-		return nil, err
-	}
-
-	if addServiceErr := plan.addServiceFiles(helperFiles); addServiceErr != nil {
+	if addServiceErr := plan.addServiceFiles(); addServiceErr != nil {
 		return nil, addServiceErr
 	}
 	if extraServiceErr := plan.addExtraServiceFiles(); extraServiceErr != nil {
@@ -215,9 +210,9 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 	return plan, nil
 }
 
-// validateModuleCopyName intentionally rejects anything path-like. The first
-// copy implementation only supports built-in framework modules addressed by
-// name, such as "copytest".
+// validateModuleCopyName intentionally rejects anything path-like. Module copy
+// copies a top-level framework module addressed by name, such as "copytest";
+// submodule paths like "iam/user" are outside the command contract.
 func validateModuleCopyName(name string) error {
 	if strings.TrimSpace(name) == "" {
 		return errors.New("module name is required")
@@ -313,7 +308,7 @@ func (p *CopyPlan) addModelFiles() error {
 		if err != nil {
 			return err
 		}
-		content, err := normalizeModuleModelSource(sourcePath, src, p.Name)
+		content, err := normalizeModuleModelSource(sourcePath, src, moduleCopyPackageName(filepath.Dir(targetPath)))
 		if err != nil {
 			return err
 		}
@@ -416,12 +411,10 @@ func (p *CopyPlan) addExtraServiceFiles() error {
 		return fmt.Errorf("%s is not a directory", p.TargetServiceDir)
 	}
 
-	// Service copy is intentionally not a raw SourceServiceDir -> TargetServiceDir
-	// directory mirror. Action service files come from DSL ServiceFilename(),
-	// helper files come from type-based dependency discovery, and ignored source
-	// files should not become expected targets. Therefore the authoritative
-	// "current module copy output" set is the final plan.Files service/helper
-	// targets computed above, not the full list of source service files.
+	// Service copy mirrors the module's service package tree, except that action
+	// service files are merged with the generated target shell. Excluded source
+	// files should not become expected targets, so the authoritative "current
+	// module copy output" set is the final plan.Files service/helper targets.
 	expectedTargets := make(map[string]bool)
 	for _, file := range p.Files {
 		if file.Kind != moduleCopyFileService && file.Kind != moduleCopyFileHelper {
@@ -457,16 +450,18 @@ func (p *CopyPlan) collectActions(models []*gen.ModelInfo) ([]moduleCopyAction, 
 		if modelInfo.Design == nil {
 			continue
 		}
-		targetModel := p.targetModelInfo(modelInfo)
+		targetModel, err := p.targetModelInfo(modelInfo)
+		if err != nil {
+			return nil, err
+		}
 		modelInfo.Design.Range(func(route string, action *dsl.Action) {
 			if !action.Service {
 				return
 			}
-			sourcePath := filepath.Join(p.SourceServiceDir, action.ServiceFilename())
+			sourcePath, targetPath := p.actionServicePaths(modelInfo, targetModel, action)
 			if p.ignoredSourcePath(sourcePath) {
 				return
 			}
-			targetPath := filepath.Join(p.TargetServiceDir, action.ServiceFilename())
 			actions = append(actions, moduleCopyAction{
 				Route:      route,
 				Action:     action,
@@ -491,16 +486,39 @@ func (p *CopyPlan) collectActions(models []*gen.ModelInfo) ([]moduleCopyAction, 
 	return actions, nil
 }
 
-func (p *CopyPlan) targetModelInfo(source *gen.ModelInfo) *gen.ModelInfo {
+func (p *CopyPlan) targetModelInfo(source *gen.ModelInfo) (*gen.ModelInfo, error) {
 	// Reuse gg gen's service generator by projecting the framework model into
 	// the current project's model layout. The source model still drives action
 	// DSL; only module/package/path metadata changes.
+	if p.SourceModelDir == "" {
+		target := *source
+		target.ModulePath = p.ProjectModulePath
+		if p.TargetModelDir != "" {
+			target.ModelPkgName = moduleCopyPackageName(p.TargetModelDir)
+			target.ModelFileDir = p.TargetModelDir
+			target.ModelFilePath = filepath.Join(p.TargetModelDir, filepath.Base(source.ModelFilePath))
+		}
+		return &target, nil
+	}
+	targetPath, err := p.targetModelPath(source.ModelFilePath)
+	if err != nil {
+		return nil, err
+	}
 	target := *source
 	target.ModulePath = p.ProjectModulePath
-	target.ModelPkgName = p.Name
-	target.ModelFileDir = p.TargetModelDir
-	target.ModelFilePath = filepath.Join(p.TargetModelDir, filepath.Base(source.ModelFilePath))
-	return &target
+	target.ModelPkgName = moduleCopyPackageName(filepath.Dir(targetPath))
+	target.ModelFileDir = filepath.Dir(targetPath)
+	target.ModelFilePath = targetPath
+	return &target, nil
+}
+
+func (p *CopyPlan) actionServicePaths(sourceModel *gen.ModelInfo, targetModel *gen.ModelInfo, action *dsl.Action) (sourcePath string, targetPath string) {
+	if p.FrameworkRoot == "" {
+		return filepath.Join(p.SourceServiceDir, action.ServiceFilename()), filepath.Join(p.TargetServiceDir, action.ServiceFilename())
+	}
+	sourceTarget := gen.ServiceTarget(sourceModel, action, p.frameworkModelDir(), p.frameworkServiceDir())
+	targetTarget := gen.ServiceTarget(targetModel, action, p.ModelDir, p.ServiceDir)
+	return sourceTarget.FilePath, targetTarget.FilePath
 }
 
 // requireServiceSourceFile enforces the module-copy convention that each action
@@ -520,9 +538,11 @@ func requireServiceSourceFile(action moduleCopyAction) error {
 	return nil
 }
 
-func (p *CopyPlan) addServiceFiles(helperFiles []string) error {
+func (p *CopyPlan) addServiceFiles() error {
+	actionSourcePaths := make(map[string]bool, len(p.Actions))
 	for _, actions := range groupActionsByTargetPath(p.Actions) {
 		first := actions[0]
+		actionSourcePaths[filepath.Clean(first.SourcePath)] = true
 		source, err := os.ReadFile(first.SourcePath)
 		if err != nil {
 			return err
@@ -538,6 +558,7 @@ func (p *CopyPlan) addServiceFiles(helperFiles []string) error {
 			Target:                target,
 			ModuleName:            p.Name,
 			TargetModelImportPath: p.TargetModelImportPath,
+			Rewrite:               p.serviceRewriteConfig(first.TargetPath),
 		})
 		if err != nil {
 			return err
@@ -550,17 +571,23 @@ func (p *CopyPlan) addServiceFiles(helperFiles []string) error {
 		})
 	}
 
-	sort.Strings(helperFiles)
-	for _, sourcePath := range helperFiles {
-		if p.ignoredSourcePath(sourcePath) {
+	sourceFiles, err := goFilesInDir(p.SourceServiceDir)
+	if err != nil {
+		return err
+	}
+	for _, sourcePath := range sourceFiles {
+		if p.ignoredSourcePath(sourcePath) || actionSourcePaths[filepath.Clean(sourcePath)] {
 			continue
 		}
-		targetPath := filepath.Join(p.TargetServiceDir, filepath.Base(sourcePath))
+		targetPath, err := p.targetServicePath(sourcePath)
+		if err != nil {
+			return err
+		}
 		src, err := os.ReadFile(sourcePath)
 		if err != nil {
 			return err
 		}
-		content, err := normalizeModuleServiceSource(sourcePath, src, p.Name, p.TargetModelImportPath)
+		content, err := normalizeModuleServiceSource(sourcePath, src, p.serviceRewriteConfig(targetPath))
 		if err != nil {
 			return err
 		}
@@ -572,6 +599,47 @@ func (p *CopyPlan) addServiceFiles(helperFiles []string) error {
 		})
 	}
 	return nil
+}
+
+func (p *CopyPlan) frameworkModelDir() string {
+	return filepath.Join(p.FrameworkRoot, "internal", "model")
+}
+
+func (p *CopyPlan) frameworkServiceDir() string {
+	return filepath.Join(p.FrameworkRoot, "internal", "service")
+}
+
+func (p *CopyPlan) targetModelPath(sourcePath string) (string, error) {
+	rel, err := filepath.Rel(p.SourceModelDir, sourcePath)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(p.TargetModelDir, rel), nil
+}
+
+func (p *CopyPlan) targetServicePath(sourcePath string) (string, error) {
+	rel, err := filepath.Rel(p.SourceServiceDir, sourcePath)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(p.TargetServiceDir, rel), nil
+}
+
+func (p *CopyPlan) serviceRewriteConfig(targetPath string) moduleCopyRewriteConfig {
+	return moduleCopyRewriteConfig{
+		ModuleName:        p.Name,
+		ProjectModulePath: p.ProjectModulePath,
+		ModelDir:          copyPlanDirOrDefault(p.ModelDir, defaultModelDir),
+		ServiceDir:        copyPlanDirOrDefault(p.ServiceDir, defaultServiceDir),
+		TargetPackage:     moduleCopyPackageName(filepath.Dir(targetPath)),
+	}
+}
+
+func copyPlanDirOrDefault(value string, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 func (p *CopyPlan) resolveMiddleware(manifest []moduleCopyMiddlewareManifest) ([]moduleCopyMiddleware, error) {
