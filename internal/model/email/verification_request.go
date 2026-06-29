@@ -24,9 +24,9 @@ type VerificationRequest struct {
 func (VerificationRequest) Design() {
 	Route("/iam/email/verification-request", func() {
 		Create(func() {
-			Public(true)
 			Service(true)
 			Flatten()
+			Public()
 			Filename("verification_request.go")
 			Payload[*VerificationRequestReq]()
 			Result[*VerificationRequestRsp]()

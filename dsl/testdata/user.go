@@ -57,7 +57,7 @@ func (User) Design() {
 	Create(func() {
 		Enabled(true)
 		Service(true)
-		Public(true)
+		Public()
 		Payload[User]()
 		Result[*User]()
 	})
@@ -66,7 +66,6 @@ func (User) Design() {
 	Update(func() {
 		Enabled(false)
 		Payload[*User]()
-		Public(false)
 		Result[User]()
 	})
 

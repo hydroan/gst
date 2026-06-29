@@ -36,7 +36,7 @@ func (Version) Design() {
 		List(func() {
 			Enabled(true)
 			Service(true)
-			Public(true) // Allow public access for version checking
+			Public() // Allow public access for version checking
 			Result[*VersionRsp]()
 		})
 	})

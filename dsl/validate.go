@@ -43,6 +43,9 @@ var actionOnlyMethodNames = map[string]bool{
 // Validate checks DSL keyword placement and generation semantics for one model file.
 // It intentionally validates only model Design() methods for structs embedding
 // model.Base or model.Empty, matching Parse's model discovery scope.
+// Do not duplicate Go compiler or type-checker diagnostics here, such as wrong
+// argument counts or incompatible argument types. Keep this validator focused on
+// DSL structure, keyword placement, and generation-specific semantics.
 func Validate(file *ast.File, modelDir string, filename string) []error {
 	designBase, designEmpty := parse(file)
 	for name := range designBase {

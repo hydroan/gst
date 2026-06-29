@@ -27,9 +27,9 @@ type ChangeCancel struct {
 func (ChangeCancel) Design() {
 	Route("/iam/email/change-cancel", func() {
 		Create(func() {
-			Public(true)
 			Service(true)
 			Flatten()
+			Public()
 			Filename("change_cancel.go")
 			Payload[*ChangeCancelReq]()
 			Result[*ChangeCancelRsp]()

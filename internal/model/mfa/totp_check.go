@@ -23,9 +23,9 @@ type TOTPCheckRsp struct {
 func (TOTPCheck) Design() {
 	Route("mfa/totp/check", func() {
 		Create(func() {
-			Public(true)
 			Service(true)
 			Flatten()
+			Public()
 			Filename("totp_check.go")
 			Payload[*TOTPCheckReq]()
 			Result[*TOTPCheckRsp]()

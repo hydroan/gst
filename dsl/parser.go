@@ -32,7 +32,7 @@ import (
 // The parser supports various DSL patterns:
 //   - Global settings: Enabled(), Endpoint("path"), Migrate(true)
 //   - Action configuration: Create().Payload[Type].Result[Type]
-//   - Service and visibility: Service(true), Public(false)
+//   - Service and visibility: Service(true), Public()
 func Parse(file *ast.File, endpoint string) map[string]*Design {
 	designBase, designEmpty := parse(file)
 
@@ -453,7 +453,7 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 // The function parses DSL calls within the action function body:
 //   - Enabled(true/false): Sets whether the action is enabled. Declared actions default to enabled.
 //   - Service(true/false): Sets whether to generate service layer code
-//   - Public(true/false): Sets whether the API endpoint is public
+//   - Public(): Marks the API endpoint as public
 //   - Filename("name"): Sets a custom filename for the generated service file
 //   - Payload[Type]: Sets the request payload type
 //   - Result[Type]: Sets the response result type
@@ -531,26 +531,23 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 					}
 				}
 
-				// Parse Public(true)/Public(false)
+				// Parse Public().
 				var isPublicCall bool
 				switch fun := call.Fun.(type) {
 				case *ast.Ident:
-					// anonymous import: Public(false)
+					// anonymous import: Public()
 					if fun != nil && fun.Name == "Public" {
 						isPublicCall = true
 					}
 				case *ast.SelectorExpr:
-					// non-anonymous import: dsl.Public(false)
+					// non-anonymous import: dsl.Public()
 					if fun != nil && fun.Sel != nil && fun.Sel.Name == "Public" {
 						isPublicCall = true
 					}
 				}
 
-				if isPublicCall && len(call.Args) > 0 && call.Args[0] != nil {
-					if identExpr, ok := call.Args[0].(*ast.Ident); ok && identExpr != nil {
-						// check the argument of Public() is true.
-						public = identExpr.Name == "true"
-					}
+				if isPublicCall && len(call.Args) == 0 {
+					public = true
 				}
 
 				// Parse Filename("upload")/Filename("parse")

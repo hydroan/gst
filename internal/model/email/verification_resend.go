@@ -24,9 +24,9 @@ type VerificationResend struct {
 func (VerificationResend) Design() {
 	Route("/iam/email/verification-resend", func() {
 		Create(func() {
-			Public(true)
 			Service(true)
 			Flatten()
+			Public()
 			Filename("verification_resend.go")
 			Payload[*VerificationResendReq]()
 			Result[*VerificationResendRsp]()

@@ -19,7 +19,7 @@ func (Login) Design() {
 	Route("/auth/login", func() {
 		List(func() {
 			Filename("login")
-			Public(true)
+			Public()
 			Service(true)
 			Result[*LoginRsp]()
 		})

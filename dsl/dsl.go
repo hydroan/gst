@@ -28,14 +28,14 @@
 //
 //		// Define alternative routes for different access patterns
 //		Route("public/users", func() {
-//			List(func() { Public(true) })
-//			Get(func() { Public(true) })
+//			List(func() { Public() })
+//			Get(func() { Public() })
 //		})
 //
 //		// Configure Create operation
 //		Create(func() {
-//			Service(true)   // Generate service code
-//			Public(false)   // Internal API only
+//			Service(true) // Generate service code
+//			// Omit Public() for authenticated APIs.
 //			Payload[CreateUserRequest]()
 //			Result[*User]()
 //		})
@@ -265,11 +265,17 @@ func Filename(string) {}
 // registration code and should not contain business service files.
 func Flatten() {}
 
-// Public controls whether the current action requires authentication/authorization.
-// When false, the action will be processed by auth middleware if registered via middleware.RegisterAuth.
-// When true, the action is publicly accessible without authentication.
-// Default: false (requires authentication)
-func Public(bool) {}
+// Public marks the current action as publicly accessible.
+//
+// Public is an action-scoped marker and must be used inside an action block such
+// as Create, List, or Get. Calling Public() registers the generated route on the
+// public router, so authentication and authorization middleware are not required
+// for that action.
+//
+// Omit Public() for authenticated APIs. The default is intentionally protected:
+// actions are registered on the authenticated router unless they explicitly opt
+// in to public access.
+func Public() {}
 
 // Payload specifies the request payload type for the current action.
 // The type parameter T defines the structure of incoming request data.
@@ -455,10 +461,9 @@ type Action struct {
 	// Default: false
 	Service bool
 
-	// Public indicates whether this action requires authentication/authorization.
-	// When false, the action will be processed by auth middleware if registered via middleware.RegisterAuth.
-	// When true, the action is publicly accessible without authentication.
-	// Default: false (requires authentication)
+	// Public indicates whether this action is registered on the public router.
+	// It is true only when the action's DSL block contains Public().
+	// Default: false, meaning the action requires authentication.
 	Public bool
 
 	// Payload specifies the type name for the request payload.
