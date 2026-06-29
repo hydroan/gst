@@ -1249,6 +1249,7 @@ func (Account) Design() {
 
 import (
 	modelcopytestaccount "github.com/hydroan/gst/internal/model/copytest/account"
+	"github.com/hydroan/gst/internal/service/copytest/adminauth"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
@@ -1258,6 +1259,7 @@ type AccountCreateService struct {
 }
 
 func (s *AccountCreateService) Create(ctx *types.ServiceContext, req *modelcopytestaccount.Account) (rsp *modelcopytestaccount.Account, err error) {
+	adminauth.Ensure(req)
 	return accountHelper(req), nil
 }
 `), 0o600); err != nil {
@@ -1291,6 +1293,17 @@ func standaloneAccountHelper() string {
 func Audit() string {
 	return "audit"
 }
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	sourceAdminAuthServiceDir := filepath.Join(frameworkRoot, "internal", "service", "copytest", "adminauth")
+	if err := os.MkdirAll(sourceAdminAuthServiceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceAdminAuthServiceDir, "adminauth.go"), []byte(`package adminauth
+
+func Ensure(any) {}
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -1360,6 +1373,10 @@ func TestBuildModuleCopyPlanCopiesNestedActionsAndReachableHelpers(t *testing.T)
 	if !slices.Contains(helperTargets, reachableHelper) {
 		t.Fatalf("HelperTargets() = %v, want %s", helperTargets, reachableHelper)
 	}
+	importedHelper := filepath.Join("service", "copytest", "adminauth", "adminauth.go")
+	if !slices.Contains(helperTargets, importedHelper) {
+		t.Fatalf("HelperTargets() = %v, want %s", helperTargets, importedHelper)
+	}
 	for _, unwanted := range []string{
 		filepath.Join("service", "copytest", "account", "standalone.go"),
 		filepath.Join("service", "copytest", "audit", "audit.go"),
@@ -1390,6 +1407,11 @@ func TestBuildModuleCopyPlanCopiesNestedActionsAndReachableHelpers(t *testing.T)
 	accountHelper := moduleCopyPlanFileContent(t, plan, filepath.Join("service", "copytest", "account", "helper.go"))
 	if !strings.Contains(accountHelper, "package account\n") || !strings.Contains(accountHelper, `"tmpapp/model/copytest/account"`) || strings.Contains(accountHelper, "modelcopytestaccount") {
 		t.Fatalf("nested helper was not normalized:\n%s", accountHelper)
+	}
+
+	adminAuthHelper := moduleCopyPlanFileContent(t, plan, importedHelper)
+	if !strings.Contains(adminAuthHelper, "package adminauth\n") {
+		t.Fatalf("imported service helper was not normalized:\n%s", adminAuthHelper)
 	}
 }
 

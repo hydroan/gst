@@ -553,29 +553,125 @@ func requireServiceSourceFile(action moduleCopyAction) error {
 }
 
 func (p *CopyPlan) helperDependencyFiles(actions []moduleCopyAction) ([]string, error) {
+	actionFiles := make(map[string]bool)
+	scanQueue := make([]string, 0)
+	scanned := make(map[string]bool)
+	enqueueScan := func(sourcePath string) error {
+		clean, err := canonicalModuleCopyPath("", sourcePath)
+		if err != nil {
+			return err
+		}
+		if scanned[clean] {
+			return nil
+		}
+		scanned[clean] = true
+		scanQueue = append(scanQueue, clean)
+		return nil
+	}
+
 	packageActions := make(map[string][]string)
 	for _, sourcePath := range actionSourcePaths(actions) {
+		clean, err := canonicalModuleCopyPath("", sourcePath)
+		if err != nil {
+			return nil, err
+		}
+		actionFiles[clean] = true
+		if err = enqueueScan(clean); err != nil {
+			return nil, err
+		}
 		packageDir := filepath.Dir(sourcePath)
 		packageActions[packageDir] = append(packageActions[packageDir], sourcePath)
 	}
 
 	helperFiles := make([]string, 0)
 	seen := make(map[string]bool)
+	addHelperFile := func(sourcePath string) error {
+		clean, err := canonicalModuleCopyPath("", sourcePath)
+		if err != nil {
+			return err
+		}
+		if seen[clean] || actionFiles[clean] {
+			return nil
+		}
+		// Imported service packages can contain action service files too. Those
+		// files must stay owned by explicit module actions; only helper-only files
+		// are safe to copy as imported helper dependencies.
+		if serviceStructs, countErr := countServiceStructsInFile(clean); countErr != nil {
+			return countErr
+		} else if serviceStructs > 0 {
+			return nil
+		}
+		seen[clean] = true
+		helperFiles = append(helperFiles, clean)
+		return enqueueScan(clean)
+	}
 	for packageDir, selectedFiles := range packageActions {
 		files, err := moduleCopyHelperDependencyFiles(packageDir, selectedFiles)
 		if err != nil {
 			return nil, err
 		}
 		for _, file := range files {
-			if seen[file] {
-				continue
+			if err = addHelperFile(file); err != nil {
+				return nil, err
 			}
-			seen[file] = true
-			helperFiles = append(helperFiles, file)
+		}
+	}
+
+	for len(scanQueue) > 0 {
+		current := scanQueue[0]
+		scanQueue = scanQueue[1:]
+		files, err := p.importedServiceHelperFiles(current)
+		if err != nil {
+			return nil, err
+		}
+		for _, file := range files {
+			if err = addHelperFile(file); err != nil {
+				return nil, err
+			}
 		}
 	}
 	sort.Strings(helperFiles)
 	return helperFiles, nil
+}
+
+// importedServiceHelperFiles returns helper candidates from service packages
+// imported through github.com/hydroan/gst/internal/service/<module>/... imports.
+// This lets module copy include shared service helpers such as iam/adminauth
+// without treating every service subtree as part of the copied module action set.
+func (p *CopyPlan) importedServiceHelperFiles(sourcePath string) ([]string, error) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, sourcePath, nil, parser.ImportsOnly)
+	if err != nil {
+		return nil, err
+	}
+
+	helpers := make([]string, 0)
+	for _, imp := range file.Imports {
+		importPath, err := strconv.Unquote(imp.Path.Value)
+		if err != nil {
+			continue
+		}
+		serviceDir, ok := p.moduleServiceImportDir(importPath)
+		if !ok {
+			continue
+		}
+		files, err := goFilesInPackageDir(serviceDir)
+		if err != nil {
+			return nil, err
+		}
+		helpers = append(helpers, files...)
+	}
+	sort.Strings(helpers)
+	return helpers, nil
+}
+
+func (p *CopyPlan) moduleServiceImportDir(importPath string) (string, bool) {
+	prefix := frameworkModulePath + "/internal/service/" + p.Name
+	if importPath != prefix && !strings.HasPrefix(importPath, prefix+"/") {
+		return "", false
+	}
+	suffix := strings.TrimPrefix(importPath, prefix)
+	return filepath.Join(p.SourceServiceDir, filepath.FromSlash(strings.TrimPrefix(suffix, "/"))), true
 }
 
 func (p *CopyPlan) addServiceFiles(helperFiles []string) error {
@@ -870,6 +966,22 @@ func goFilesInDir(root string) ([]string, error) {
 	})
 	sort.Strings(files)
 	return files, err
+}
+
+func goFilesInPackageDir(root string) ([]string, error) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil, err
+	}
+	files := make([]string, 0)
+	for _, entry := range entries {
+		if entry.IsDir() || !isModuleCopyGoSource(entry.Name()) {
+			continue
+		}
+		files = append(files, filepath.Join(root, entry.Name()))
+	}
+	sort.Strings(files)
+	return files, nil
 }
 
 func isModuleCopyGoSource(name string) bool {
