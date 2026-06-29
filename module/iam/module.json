@@ -1,1 +1,18 @@
-{}
+{
+  "copy": {
+    "excludeSourceFiles": [],
+    "middleware": [
+      {
+        "sourceFile": "middleware/iam_session.go",
+        "scope": "auth",
+        "handler": "IAMSession"
+      }
+    ],
+    "postNotes": [
+      "Copy mode registers middleware.IAMSession() without arguments.",
+      "If the project needs a non-default session lifetime, call SetSessionExpiration(...) from the copied IAM session service package during project initialization.",
+      "If the project needs default users, seed the copied IAM User, PasswordCredential, and EmailIdentity models in project-owned initialization code.",
+      "Non-root tenant admin IAM APIs require module/authz RBAC tenant role assignments; without authz they remain root-only through the built-in RBAC fallback."
+    ]
+  }
+}

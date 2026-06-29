@@ -12,7 +12,7 @@
     ],
     "postNotes": [
       "Copy mode registers middleware.Authz() without arguments.",
-      "Set the project tenant source in project-owned initialization code with middleware.SetAuthzTenantResolver(...).",
+      "If copied authz needs tenant-aware authorization, call middleware.SetAuthzTenantResolver(...) from project-owned initialization code before serving requests.",
       "Use trusted tenant data such as session state, JWT claims, subdomain, or gateway-injected headers; do not trust arbitrary client headers as identity."
     ]
   }
