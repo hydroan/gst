@@ -75,6 +75,32 @@ func rewriteModuleServiceFile(file *ast.File, config moduleCopyRewriteConfig) ma
 	return rewriteModuleCopyFile(file, config, true)
 }
 
+// normalizeModuleMiddlewareSource rewrites manifest-declared middleware files
+// into the current project's middleware package. Middleware can legitimately
+// depend on copied model/service packages, so it uses the same import rewrite
+// rules as service helpers while keeping the target package owned by the
+// middleware destination directory.
+func normalizeModuleMiddlewareSource(filename string, src []byte, config moduleCopyRewriteConfig) ([]byte, error) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, filename, src, parser.ParseComments)
+	if err != nil {
+		return nil, err
+	}
+
+	selectorNames := rewriteModuleMiddlewareFile(file, config)
+	rewriteSelectorPackages(file, selectorNames)
+
+	code, err := gen.FormatNodeExtraWithFileSet(file, fset, true)
+	if err != nil {
+		return nil, err
+	}
+	return []byte(code), nil
+}
+
+func rewriteModuleMiddlewareFile(file *ast.File, config moduleCopyRewriteConfig) map[string]string {
+	return rewriteModuleCopyFile(file, config, true)
+}
+
 func rewriteModuleCopyFile(file *ast.File, config moduleCopyRewriteConfig, includeServiceImports bool) map[string]string {
 	file.Name.Name = config.TargetPackage
 

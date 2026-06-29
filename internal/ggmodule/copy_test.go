@@ -1431,8 +1431,14 @@ func TestBuildModuleCopyPlanIncludesMiddlewareFiles(t *testing.T) {
 	}
 	if err := os.WriteFile(filepath.Join(frameworkRoot, "middleware", "copy_auth.go"), []byte(`package middleware
 
+import (
+	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
+	servicecopytest "github.com/hydroan/gst/internal/service/copytest"
+)
+
 func CopyAuth() any {
-	return nil
+	_ = modelcopytest.CopyTest{}
+	return servicecopytest.CopyAuthMarker()
 }
 `), 0o600); err != nil {
 		t.Fatal(err)
@@ -1448,6 +1454,22 @@ func CopyAuth() any {
 	targets := plan.MiddlewareTargets()
 	if !slices.Contains(targets, filepath.Join("middleware", "copy_auth.go")) {
 		t.Fatalf("MiddlewareTargets() = %v, want middleware/copy_auth.go", targets)
+	}
+
+	middleware := moduleCopyPlanFileContent(t, plan, filepath.Join("middleware", "copy_auth.go"))
+	for _, want := range []string{
+		"package middleware\n",
+		`"tmpapp/model/copytest"`,
+		`servicecopytest "tmpapp/service/copytest"`,
+		"_ = copytest.CopyTest{}",
+		"return servicecopytest.CopyAuthMarker()",
+	} {
+		if !strings.Contains(middleware, want) {
+			t.Fatalf("copied middleware missing %q:\n%s", want, middleware)
+		}
+	}
+	if strings.Contains(middleware, "github.com/hydroan/gst/internal/model/copytest") || strings.Contains(middleware, "github.com/hydroan/gst/internal/service/copytest") || strings.Contains(middleware, "modelcopytest") {
+		t.Fatalf("copied middleware leaked framework import artifacts:\n%s", middleware)
 	}
 }
 

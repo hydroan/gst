@@ -837,14 +837,28 @@ func (p *CopyPlan) addMiddlewareFiles() error {
 		if err != nil {
 			return err
 		}
+		content, err := normalizeModuleMiddlewareSource(middleware.SourcePath, src, p.middlewareRewriteConfig(middleware.TargetPath))
+		if err != nil {
+			return err
+		}
 		p.Files = append(p.Files, moduleCopyFile{
 			Kind:        moduleCopyFileMiddleware,
 			TargetPath:  middleware.TargetPath,
-			Content:     src,
+			Content:     content,
 			Preexisting: fileExists(middleware.TargetPath),
 		})
 	}
 	return nil
+}
+
+func (p *CopyPlan) middlewareRewriteConfig(targetPath string) moduleCopyRewriteConfig {
+	return moduleCopyRewriteConfig{
+		ModuleName:        p.Name,
+		ProjectModulePath: p.ProjectModulePath,
+		ModelDir:          copyPlanDirOrDefault(p.ModelDir, defaultModelDir),
+		ServiceDir:        copyPlanDirOrDefault(p.ServiceDir, defaultServiceDir),
+		TargetPackage:     moduleCopyPackageName(filepath.Dir(targetPath)),
+	}
 }
 
 func groupActionsByTargetPath(actions []moduleCopyAction) [][]moduleCopyAction {
