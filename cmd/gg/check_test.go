@@ -45,6 +45,35 @@ import _ "tmpapp/service/iam/session"
 	}
 }
 
+func TestCheckModelSingularNamingAllowsSharedTypesDirectory(t *testing.T) {
+	oldModelDir := modelDir
+	t.Cleanup(func() {
+		modelDir = oldModelDir
+	})
+
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	modelDir = "model"
+
+	if err := os.MkdirAll(filepath.Join(projectDir, "model", "types"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(projectDir, "model", "records"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	violations := CheckModelSingularNaming()
+
+	for _, violation := range violations {
+		if strings.Contains(violation, filepath.Join("model", "types")) {
+			t.Fatalf("shared model types directory should be allowed, got violations: %#v", violations)
+		}
+	}
+	if len(violations) != 1 || !strings.Contains(violations[0], filepath.Join("model", "records")) {
+		t.Fatalf("expected only ordinary plural model directory violation, got %#v", violations)
+	}
+}
+
 func writeCheckFile(t *testing.T, path string, content string) {
 	t.Helper()
 

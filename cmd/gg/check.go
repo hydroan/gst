@@ -288,6 +288,9 @@ func CheckModelSingularNaming() []string {
 		"entities":    true,
 		"records":     true,
 	}
+	allowedPluralDirs := map[string]bool{
+		"types": true,
+	}
 
 	client := pluralize.NewClient()
 
@@ -312,7 +315,7 @@ func CheckModelSingularNaming() []string {
 			// Directory name length must greater than 3 before check.
 			// Check singular must before plural.
 			dirName := info.Name()
-			if len(dirName) > 3 && !client.IsSingular(dirName) && client.IsPlural(dirName) {
+			if len(dirName) > 3 && !allowedPluralDirs[dirName] && !client.IsSingular(dirName) && client.IsPlural(dirName) {
 				violation := fmt.Sprintf("Model directory '%s' should be singular (suggested: %s)",
 					path, client.Singular(dirName))
 				violations = append(violations, violation)
