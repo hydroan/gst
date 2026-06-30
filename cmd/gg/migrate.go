@@ -105,6 +105,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
@@ -199,7 +200,29 @@ func initComponents() {
 
 // collectModels collects snapshots of models registered through model.Register.
 func collectModels() []any {
-	return model.RegisteredModels()
+	return deduplicateModels(model.RegisteredModels())
+}
+
+// deduplicateModels keeps the first registered model for each concrete model type.
+func deduplicateModels(models []any) []any {
+	unique := make([]any, 0, len(models))
+	seen := make(map[reflect.Type]struct{}, len(models))
+	for _, item := range models {
+		typ := reflect.TypeOf(item)
+		if typ == nil {
+			unique = append(unique, item)
+			continue
+		}
+		for typ.Kind() == reflect.Pointer {
+			typ = typ.Elem()
+		}
+		if _, exists := seen[typ]; exists {
+			continue
+		}
+		seen[typ] = struct{}{}
+		unique = append(unique, item)
+	}
+	return unique
 }
 
 // dumpSchema creates a schema dump for the provided models using the configured database type.
