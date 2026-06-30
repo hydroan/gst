@@ -1,10 +1,14 @@
 package controller
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -18,12 +22,25 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-func patchValue(log types.Logger, typ reflect.Type, oldVal reflect.Value, newVal reflect.Value) {
+type patchFieldSet map[string]struct{}
+
+func patchValue(log types.Logger, typ reflect.Type, oldVal reflect.Value, newVal reflect.Value, fieldSets ...patchFieldSet) {
+	var fields patchFieldSet
+	if len(fieldSets) > 0 {
+		fields = fieldSets[0]
+	}
+
 	for i := range typ.NumField() {
 		// fmt.Println(typ.Field(i).Name, typ.Field(i).Type, typ.Field(i).Type.Kind(), newVal.Field(i).IsValid(), newVal.Field(i).CanSet())
-		switch typ.Field(i).Type.Kind() {
+		field := typ.Field(i)
+		if fields != nil {
+			if _, ok := fields[field.Name]; !ok {
+				continue
+			}
+		}
+		switch field.Type.Kind() {
 		case reflect.Struct: // skip update base model.
-			switch typ.Field(i).Type.Name() {
+			switch field.Type.Name() {
 			case "GormTime": // The underlying type of model.GormTime(type of time.Time) is struct, we should continue handle.
 
 			case "Base":
@@ -91,19 +108,11 @@ func patchValue(log types.Logger, typ reflect.Type, oldVal reflect.Value, newVal
 			}
 		}
 		if !oldVal.Field(i).CanSet() {
-			log.Warnf("field %q is cannot set, skip", typ.Field(i).Name)
+			log.Warnf("field %q is cannot set, skip", field.Name)
 			continue
 		}
 		if !newVal.Field(i).IsValid() {
 			// log.Warnf("field %s is invalid, skip", typ.Field(i).Name)
-			continue
-		}
-		// base type such like int and string have default value(zero value).
-		// If the struct field(the field type is golang base type) supported by patch update,
-		// the field type must be pointer to base type, such like *string, *int.
-		if newVal.Field(i).IsZero() {
-			// log.Warnf("field %s is zero value, skip", typ.Field(i).Name)
-			// log.Warnf("DeepEqual: %v : %v : %v : %v", typ.Field(i).Name, newVal.Field(i).Interface(), oldVal.Field(i).Interface(), reflect.DeepEqual(newVal.Field(i), oldVal.Field(i)))
 			continue
 		}
 		// output log must before set value.
@@ -119,12 +128,92 @@ func patchValue(log types.Logger, typ reflect.Type, oldVal reflect.Value, newVal
 			} else {
 				newValue = "<nil>"
 			}
-			log.Info(fmt.Sprintf("[PATCH %s] field: %q: %v --> %v", typ.Name(), typ.Field(i).Name, oldValue, newValue))
+			log.Infof("[PATCH %s] field: %q: %v --> %v", typ.Name(), field.Name, oldValue, newValue)
 		} else {
-			log.Info(fmt.Sprintf("[PATCH %s] field: %q: %v --> %v", typ.Name(), typ.Field(i).Name, oldVal.Field(i).Interface(), newVal.Field(i).Interface()))
+			log.Infof("[PATCH %s] field: %q: %v --> %v", typ.Name(), field.Name, oldVal.Field(i).Interface(), newVal.Field(i).Interface())
 		}
 		oldVal.Field(i).Set(newVal.Field(i)) // set old value by new value
 	}
+}
+
+func readJSONRequestBody(c *gin.Context) ([]byte, error) {
+	if c == nil || c.Request == nil || c.Request.Body == nil {
+		return nil, io.EOF
+	}
+	body, err := io.ReadAll(c.Request.Body)
+	c.Request.Body = io.NopCloser(bytes.NewReader(body))
+	return body, err
+}
+
+func patchFieldSetFromJSONBody(typ reflect.Type, body []byte) (patchFieldSet, error) {
+	if len(bytes.TrimSpace(body)) == 0 {
+		return patchFieldSet{}, io.EOF
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		return nil, err
+	}
+	return patchFieldSetFromJSONFields(typ, fields), nil
+}
+
+func patchManyFieldSetsFromJSONBody(typ reflect.Type, body []byte) ([]patchFieldSet, error) {
+	if len(bytes.TrimSpace(body)) == 0 {
+		return nil, io.EOF
+	}
+	var req struct {
+		Items []map[string]json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		return nil, err
+	}
+	fieldSets := make([]patchFieldSet, 0, len(req.Items))
+	for _, item := range req.Items {
+		fieldSets = append(fieldSets, patchFieldSetFromJSONFields(typ, item))
+	}
+	return fieldSets, nil
+}
+
+func patchFieldSetFromJSONFields(typ reflect.Type, fields map[string]json.RawMessage) patchFieldSet {
+	if len(fields) == 0 {
+		return patchFieldSet{}
+	}
+	jsonFields := patchJSONFieldNames(typ)
+	fieldSet := make(patchFieldSet, len(fields))
+	for name := range fields {
+		if fieldName, ok := jsonFields[name]; ok {
+			fieldSet[fieldName] = struct{}{}
+		}
+	}
+	return fieldSet
+}
+
+func patchJSONFieldNames(typ reflect.Type) map[string]string {
+	fields := make(map[string]string, typ.NumField())
+	for field := range typ.Fields() {
+		if field.PkgPath != "" && !field.Anonymous {
+			continue
+		}
+		name, ok := patchJSONFieldName(field)
+		if !ok {
+			continue
+		}
+		fields[name] = field.Name
+	}
+	return fields
+}
+
+func patchJSONFieldName(field reflect.StructField) (string, bool) {
+	tag := field.Tag.Get("json")
+	if tag == "-" {
+		return "", false
+	}
+	if comma := strings.IndexByte(tag, ','); comma >= 0 {
+		tag = tag[:comma]
+	}
+	if tag != "" {
+		return tag, true
+	}
+	return field.Name, true
 }
 
 func extractConfig[M types.Model](cfg ...*types.ControllerConfig[M]) (handler func(ctx context.Context) types.Database[M], db any) {

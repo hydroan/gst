@@ -29,9 +29,9 @@ func PatchMany[M types.Model, REQ types.Request, RSP types.Response](c *gin.Cont
 //
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into
 // requestData[M], loads matching existing records for the requested items, copies
-// non-zero fields into those records, runs batch patch hooks, updates the patched
-// models through the configured database handler, records an operation log, and
-// returns the request data with a summary when a body was provided.
+// fields present in each item into those records, runs batch patch hooks, updates
+// the patched models through the configured database handler, records an operation
+// log, and returns the request data with a summary when a body was provided.
 //
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's PatchMany method.
@@ -91,6 +91,20 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 		var req requestData[M]
 		var shouldUpdates []M
 		typ := reflect.TypeOf(*new(M)).Elem()
+		body, err := readJSONRequestBody(c)
+		if err != nil {
+			log.Error(err)
+			JSON(c, CodeFailure.WithErr(err))
+			gstotel.RecordError(span, err)
+			return
+		}
+		fieldSets, fieldErr := patchManyFieldSetsFromJSONBody(typ, body)
+		if fieldErr != nil && !errors.Is(fieldErr, io.EOF) {
+			log.Error(fieldErr)
+			JSON(c, CodeFailure.WithErr(fieldErr))
+			gstotel.RecordError(span, fieldErr)
+			return
+		}
 		if reqErr = c.ShouldBindJSON(&req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 			log.Error(reqErr)
 			JSON(c, CodeFailure.WithErr(reqErr))
@@ -100,7 +114,7 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 		if errors.Is(reqErr, io.EOF) {
 			log.Warn(ErrRequestBodyEmpty)
 		}
-		for _, m := range req.Items {
+		for i, m := range req.Items {
 			var results []M
 			v := reflect.New(typ).Interface().(M) //nolint:errcheck
 			v.SetID(m.GetID())
@@ -118,7 +132,11 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 				continue
 			}
 			oldVal, newVal := reflect.ValueOf(results[0]).Elem(), reflect.ValueOf(m).Elem()
-			patchValue(log, typ, oldVal, newVal)
+			fields := patchFieldSet{}
+			if i < len(fieldSets) {
+				fields = fieldSets[i]
+			}
+			patchValue(log, typ, oldVal, newVal, fields)
 			shouldUpdates = append(shouldUpdates, oldVal.Addr().Interface().(M)) //nolint:errcheck
 		}
 

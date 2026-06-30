@@ -39,7 +39,7 @@ func Patch[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context)
 // PatchFactory returns a Gin handler that partially updates one resource.
 //
 // When M, REQ, and RSP are the same type, the handler uses the configured route
-// id before the body id, loads the existing record, copies non-zero fields from
+// id before the body id, loads the existing record, copies fields present in
 // the request model into that record, sets the updater field, runs patch hooks,
 // writes the patched model through the configured database handler, and records
 // an operation log.
@@ -103,6 +103,20 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 
 		typ := reflect.TypeOf(*new(M)).Elem()
 		req := reflect.New(typ).Interface().(M) //nolint:errcheck
+		body, err := readJSONRequestBody(c)
+		if err != nil {
+			log.Error(err)
+			JSON(c, CodeFailure.WithErr(err))
+			gstotel.RecordError(span, err)
+			return
+		}
+		fields, err := patchFieldSetFromJSONBody(typ, body)
+		if err != nil && !errors.Is(err, io.EOF) {
+			log.Error(err)
+			JSON(c, CodeFailure.WithErr(err))
+			gstotel.RecordError(span, err)
+			return
+		}
 		if len(cfg) > 0 {
 			id = meta.Param(util.Deref(cfg[0]).ParamName)
 		}
@@ -147,7 +161,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 
 		newVal := reflect.ValueOf(req).Elem()
 		oldVal := reflect.ValueOf(data[0]).Elem()
-		patchValue(log, typ, oldVal, newVal)
+		patchValue(log, typ, oldVal, newVal, fields)
 		cur := oldVal.Addr().Interface().(M) //nolint:errcheck
 
 		// 1.Perform business logic processing before partial update resource.
