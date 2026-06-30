@@ -9,7 +9,7 @@ import (
 
 // PasswordCredential stores password authentication state for an IAM user.
 type PasswordCredential struct {
-	UserID             string     `json:"user_id" schema:"user_id" gorm:"size:191;uniqueIndex;not null"`
+	UserID             string     `json:"user_id" schema:"user_id" gorm:"type:char(36);uniqueIndex;not null"`
 	PasswordHash       string     `json:"-" binding:"required"`
 	MustChangePassword bool       `json:"must_change_password"`
 	FailedLoginCount   int        `json:"failed_login_count"`
