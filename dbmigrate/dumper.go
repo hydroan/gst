@@ -7,8 +7,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cockroachdb/errors"
-
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/hydroan/gst/config"
 	"github.com/maxrichie5/go-sqlfmt/sqlfmt"
@@ -16,11 +14,9 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
 type SchemaDumper struct {
-	log  logger.Interface
 	db   *sql.DB
 	mock sqlmock.Sqlmock
 
@@ -35,7 +31,6 @@ func NewSchemaDumper() (*SchemaDumper, error) {
 	return &SchemaDumper{
 		db:   db,
 		mock: mock,
-		log:  &dumperLogger{},
 	}, nil
 }
 
@@ -71,7 +66,8 @@ func (s *SchemaDumper) Dump(driver config.DBType, dst ...any) (string, error) {
 		return t1.String() < t2.String()
 	})
 
-	db, err := gorm.Open(dialector, &gorm.Config{DryRun: true, Logger: s.log})
+	dumpLog := &dumperLogger{}
+	db, err := gorm.Open(dialector, &gorm.Config{DryRun: true, Logger: dumpLog})
 	if err != nil {
 		return "", err
 	}
@@ -98,11 +94,7 @@ func (s *SchemaDumper) Dump(driver config.DBType, dst ...any) (string, error) {
 		}
 	}
 
-	l, ok := s.log.(*dumperLogger)
-	if !ok {
-		return "", errors.New("invalid logger type")
-	}
-	sqls := l.SQLs
+	sqls := dumpLog.SQLs
 	if len(sqls) == 0 {
 		return "", nil
 	}
