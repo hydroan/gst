@@ -2,6 +2,9 @@ package servicemfa
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -10,7 +13,6 @@ import (
 	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/util"
 )
 
 const (
@@ -40,7 +42,8 @@ var (
 	totpBindChallengeCache = func() types.Cache[totpBindChallenge] {
 		return redis.Cache[totpBindChallenge]()
 	}
-	totpBindChallengeNow = func() time.Time { return time.Now().UTC() }
+	totpBindChallengeNow          = func() time.Time { return time.Now().UTC() }
+	totpBindChallengeRandomReader = rand.Reader
 )
 
 // currentTOTPBindSessionID returns the session that owns the current binding flow.
@@ -67,7 +70,10 @@ func issueTOTPBindChallenge(ctx context.Context, challenge totpBindChallenge) (s
 		return "", totpBindChallenge{}, errTOTPBindChallengeInvalid
 	}
 
-	challengeID := util.UUID()
+	challengeID, err := newTOTPBindChallengeID()
+	if err != nil {
+		return "", totpBindChallenge{}, errors.Wrap(err, "generate TOTP binding challenge ID")
+	}
 	now := totpBindChallengeNow()
 	challenge.UserID = strings.TrimSpace(challenge.UserID)
 	challenge.SessionID = strings.TrimSpace(challenge.SessionID)
@@ -82,6 +88,15 @@ func issueTOTPBindChallenge(ctx context.Context, challenge totpBindChallenge) (s
 	}
 
 	return challengeID, challenge, nil
+}
+
+// newTOTPBindChallengeID returns an opaque bearer token for a pending bind flow.
+func newTOTPBindChallengeID() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := io.ReadFull(totpBindChallengeRandomReader, buf); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
 // loadTOTPBindChallenge returns a pending challenge after validating its required fields and expiry.
