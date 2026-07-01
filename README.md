@@ -72,15 +72,9 @@ git init
 1. 在 `model/**/*.go` 中声明资源模型或动作模型。
 2. 每次修改 DSL 后运行 `gg gen`。
 3. 在生成的 `service/**` 文件中实现业务逻辑或 hook。
-4. 使用 `gg routes` 检查生成的 model 和接口层级关系。
 5. 使用 `gg check` 检查项目结构和依赖边界。
 6. 删除 model 或关闭 action 后，运行 `gg prune` 或 `gg gen --prune` 清理废弃
    service 文件。
-7. 修改 `Migrate(true)` 的数据库模型字段后，先运行 `gg migrate --dry-run`，
-   确认无误后再运行 `gg migrate`。
-
-开发时可以用 `gg dev` 监听 `model` 目录变更并自动执行 `gg gen`；如果本地已安装
-Air，也可以配合它启动热重载服务。
 
 ## 模型 DSL
 
