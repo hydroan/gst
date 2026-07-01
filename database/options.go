@@ -167,6 +167,11 @@ func (db *database[M]) WithTable(name string) types.Database[M] {
 //
 //	committed when the callback returns nil, or rolled back when it returns an error.
 //
+// WithTx also stores the transaction in this operation chain's context. That
+// context propagation matters for model hooks: if a hook receives this context
+// and calls Database[*OtherModel](ctx), the new operation chain inherits the
+// same transaction instead of opening a separate write.
+//
 // NOTE: Invalid tx parameter (nil or wrong type) will log a warning and skip transaction context.
 func (db *database[M]) WithTx(tx any) types.Database[M] {
 	var empty *gorm.DB
@@ -186,10 +191,11 @@ func (db *database[M]) WithTx(tx any) types.Database[M] {
 	// 	ctx:          db.ctx,
 	// 	rollbackFunc: db.rollbackFunc,
 	// }
+	db.ctx = contextWithTx(db.ctx, _tx)
 	db.ins = _tx.Session(&gorm.Session{
 		SkipDefaultTransaction: false,
 		NewDB:                  false,
-	})
+	}).WithContext(db.ctx)
 
 	return db
 }

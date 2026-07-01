@@ -3,8 +3,10 @@ package database_test
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
@@ -20,6 +22,8 @@ const (
 )
 
 var (
+	errTestHookGroupCreateAfter = errors.New("test hook group create after failed")
+
 	u1 = &TestUser{Name: "user1", Email: "user1@example.com", Age: 18, Base: model.Base{ID: "u1"}}
 	u2 = &TestUser{Name: "user2", Email: "user2@example.com", Age: 19, Base: model.Base{ID: "u2"}}
 	u3 = &TestUser{Name: "user3", Email: "user3@example.com", Age: 20, Base: model.Base{ID: "u3"}}
@@ -85,6 +89,14 @@ func cleanupTestData() {
 	products := make([]*TestProduct, 0)
 	_ = database.Database[*TestProduct](context.Background()).List(&products)
 	_ = database.Database[*TestProduct](context.Background()).Delete(products...)
+
+	hookGroups := make([]*TestHookGroup, 0)
+	_ = database.Database[*TestHookGroup](context.Background()).List(&hookGroups)
+	_ = database.Database[*TestHookGroup](context.Background()).Delete(hookGroups...)
+
+	hookConfigs := make([]*TestHookConfig, 0)
+	_ = database.Database[*TestHookConfig](context.Background()).List(&hookConfigs)
+	_ = database.Database[*TestHookConfig](context.Background()).Delete(hookConfigs...)
 }
 
 // setupTestData deletes existing test data and creates all test users (ul).
@@ -157,9 +169,36 @@ type TestProduct struct {
 
 func (*TestProduct) Purge() bool { return true }
 
+type TestHookConfig struct {
+	Value string `json:"value" gorm:"size:191"`
+
+	model.Base
+}
+
+func (*TestHookConfig) Purge() bool { return true }
+
+type TestHookGroup struct {
+	ConfigID string `json:"config_id" gorm:"size:191"`
+	Value    string `json:"value" gorm:"size:191"`
+
+	model.Base
+}
+
+func (*TestHookGroup) Purge() bool { return true }
+
+func (g *TestHookGroup) CreateAfter(ctx context.Context) error {
+	if strings.TrimSpace(g.ConfigID) == "" {
+		return nil
+	}
+	if err := database.Database[*TestHookConfig](ctx).UpdateByID(g.ConfigID, "value", g.Value); err != nil {
+		return err
+	}
+	return errTestHookGroupCreateAfter
+}
+
 type TestCategory struct {
 	Name     string          `json:"name"`
-	ParentID string          `json:"parent_id" gorm:"not null;index:idx_parent_id,length:191"`
+	ParentID string          `json:"parent_id" gorm:"size:191;not null;index:idx_parent_id"`
 	Children []*TestCategory `json:"children,omitempty" gorm:"foreignKey:ParentID"`
 	Parent   *TestCategory   `json:"parent,omitempty" gorm:"foreignKey:ParentID;references:ID"`
 	model.Base
@@ -183,6 +222,8 @@ func init() {
 
 	model.Register[*TestUser]()
 	model.Register[*TestProduct]()
+	model.Register[*TestHookConfig]()
+	model.Register[*TestHookGroup]()
 	model.Register[*TestCategory]()
 
 	// block here until database migration is ready

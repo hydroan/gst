@@ -83,93 +83,95 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 		defer cache.Cache[[]M]().WithContext(ctx).Clear()
 	}
 
-	// Invoke model hook: CreateBefore for the entire batch.
-	if !db.noHook {
-		if err = traceModelHook[M](db.ctx, consts.PHASE_CREATE_BEFORE, span, func(spanCtx context.Context) error {
-			for i := range objs {
-				if err = objs[i].CreateBefore(spanCtx); err != nil {
-					return err
+	return db.withModelHookTransaction(func() error {
+		// Invoke model hook: CreateBefore for the entire batch.
+		if !db.noHook {
+			if err = traceModelHook[M](db.ctx, consts.PHASE_CREATE_BEFORE, span, func(spanCtx context.Context) error {
+				for i := range objs {
+					if err = objs[i].CreateBefore(spanCtx); err != nil {
+						return err
+					}
 				}
+				return nil
+			}); err != nil {
+				return err
 			}
-			return nil
-		}); err != nil {
-			return err
 		}
-	}
-	for i := range objs {
-		objs[i].SetID() // set id when id is empty.
-	}
-
-	// if err = db.db.Save(objs).Error; err != nil {
-	// if err = db.db.Table(db.tableName).Save(objs).Error; err != nil {
-	// 	return err
-	// }
-	//
-	tableName := db.m.GetTableName()
-	if len(db.tableName) > 0 {
-		tableName = db.tableName
-	}
-	batchSize := defaultBatchSize
-	if db.batchSize > 0 {
-		batchSize = db.batchSize
-	}
-	// update "created_at" and "updated_at"
-	now := time.Now()
-	for i := range objs {
-		objs[i].SetCreatedAt(now)
-		objs[i].SetUpdatedAt(now)
-	}
-	for i := 0; i < len(objs); i += batchSize {
-		end := min(i+batchSize, len(objs))
-		if err = db.ins.Session(&gorm.Session{}).Table(tableName).Save(objs[i:end]).Error; err != nil {
-			return err
-		}
-	}
-	if db.enableCache {
 		for i := range objs {
-			_ = cache.Cache[M]().WithContext(ctx).Delete(objs[i].GetID())
+			objs[i].SetID() // set id when id is empty.
 		}
-	}
 
-	// // because db.db.Delete method just update field "delete_at" to current time,
-	// // not really delete it(soft delete).
-	// // If record already exists, Update method update all fields but exclude "created_at" by
-	// // mysql "ON DUPLICATE KEY UPDATE" mechanism. so we should update the "created_at" field manually.
-	// for i := range objs {
-	// 	// 有些 model 重写 SetID 为一个空函数, 则 GetID() 的值为空字符串. 更新 created_at 则会报错
-	// 	// 例如 casbin_rule 表/结构体: 这张表的 ID 总是 integer 类型, 并且有 autoincrement 属性, 所以必须重写 SetID.
-	// 	if len(objs[i].GetID()) == 0 {
-	// 		continue
-	// 	}
-	//
-	// 	// 这里要重新创建一个 gorm.DB 实例, 否则会出现这种语句, id 出现多次了.
-	// 	// UPDATE `assets` SET `created_at`='2023-11-12 14:35:42.604',`updated_at`='2023-11-12 14:35:42.604' WHERE id = '010103NU000020' AND `assets`.`deleted_at` IS NULL AND id = '010103NU000021' AND id = '010103NU000022' LIMIT 1000
-	// 	var _db *gorm.DB
-	// 	if strings.ToLower(config.App.Logger.Level) == "debug" {
-	// 		_db = DB.Debug()
-	// 	} else {
-	// 		_db = DB
-	// 	}
-	// 	createdAt := time.Now()
-	// 	if err = _db.Table(tableName).Model(*new(M)).Where("id = ?", objs[i].GetID()).Update("created_at", createdAt).Error; err != nil {
-	// 		return err
-	// 	}
-	// }
-
-	// Invoke model hook: CreateAfter for the entire batch.
-	if !db.noHook {
-		if err = traceModelHook[M](db.ctx, consts.PHASE_CREATE_AFTER, span, func(spanCtx context.Context) error {
-			for i := range objs {
-				if err = objs[i].CreateAfter(spanCtx); err != nil {
-					return err
-				}
+		// if err = db.db.Save(objs).Error; err != nil {
+		// if err = db.db.Table(db.tableName).Save(objs).Error; err != nil {
+		// 	return err
+		// }
+		//
+		tableName := db.m.GetTableName()
+		if len(db.tableName) > 0 {
+			tableName = db.tableName
+		}
+		batchSize := defaultBatchSize
+		if db.batchSize > 0 {
+			batchSize = db.batchSize
+		}
+		// update "created_at" and "updated_at"
+		now := time.Now()
+		for i := range objs {
+			objs[i].SetCreatedAt(now)
+			objs[i].SetUpdatedAt(now)
+		}
+		for i := 0; i < len(objs); i += batchSize {
+			end := min(i+batchSize, len(objs))
+			if err = db.ins.Session(&gorm.Session{}).Table(tableName).Save(objs[i:end]).Error; err != nil {
+				return err
 			}
-			return nil
-		}); err != nil {
-			return err
 		}
-	}
-	return nil
+		if db.enableCache {
+			for i := range objs {
+				_ = cache.Cache[M]().WithContext(ctx).Delete(objs[i].GetID())
+			}
+		}
+
+		// // because db.db.Delete method just update field "delete_at" to current time,
+		// // not really delete it(soft delete).
+		// // If record already exists, Update method update all fields but exclude "created_at" by
+		// // mysql "ON DUPLICATE KEY UPDATE" mechanism. so we should update the "created_at" field manually.
+		// for i := range objs {
+		// 	// 有些 model 重写 SetID 为一个空函数, 则 GetID() 的值为空字符串. 更新 created_at 则会报错
+		// 	// 例如 casbin_rule 表/结构体: 这张表的 ID 总是 integer 类型, 并且有 autoincrement 属性, 所以必须重写 SetID.
+		// 	if len(objs[i].GetID()) == 0 {
+		// 		continue
+		// 	}
+		//
+		// 	// 这里要重新创建一个 gorm.DB 实例, 否则会出现这种语句, id 出现多次了.
+		// 	// UPDATE `assets` SET `created_at`='2023-11-12 14:35:42.604',`updated_at`='2023-11-12 14:35:42.604' WHERE id = '010103NU000020' AND `assets`.`deleted_at` IS NULL AND id = '010103NU000021' AND id = '010103NU000022' LIMIT 1000
+		// 	var _db *gorm.DB
+		// 	if strings.ToLower(config.App.Logger.Level) == "debug" {
+		// 		_db = DB.Debug()
+		// 	} else {
+		// 		_db = DB
+		// 	}
+		// 	createdAt := time.Now()
+		// 	if err = _db.Table(tableName).Model(*new(M)).Where("id = ?", objs[i].GetID()).Update("created_at", createdAt).Error; err != nil {
+		// 		return err
+		// 	}
+		// }
+
+		// Invoke model hook: CreateAfter for the entire batch.
+		if !db.noHook {
+			if err = traceModelHook[M](db.ctx, consts.PHASE_CREATE_AFTER, span, func(spanCtx context.Context) error {
+				for i := range objs {
+					if err = objs[i].CreateAfter(spanCtx); err != nil {
+						return err
+					}
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // Delete removes one or multiple records from the database.
@@ -250,83 +252,85 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 		defer cache.Cache[[]M]().WithContext(ctx).Clear()
 	}
 
-	// Invoke model hook: DeleteBefore.
-	if !db.noHook {
-		if err = traceModelHook[M](db.ctx, consts.PHASE_DELETE_BEFORE, span, func(spanCtx context.Context) error {
-			for i := range objs {
-				if err = objs[i].DeleteBefore(spanCtx); err != nil {
-					return err
+	return db.withModelHookTransaction(func() error {
+		// Invoke model hook: DeleteBefore.
+		if !db.noHook {
+			if err = traceModelHook[M](db.ctx, consts.PHASE_DELETE_BEFORE, span, func(spanCtx context.Context) error {
+				for i := range objs {
+					if err = objs[i].DeleteBefore(spanCtx); err != nil {
+						return err
+					}
 				}
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-	}
-	tableName := db.m.GetTableName()
-	if len(db.tableName) > 0 {
-		tableName = db.tableName
-	}
-	if util.Deref(db.enablePurge) {
-		// delete permanently.
-		// if err = db.db.Unscoped().Delete(objs).Error; err != nil {
-		// if err = db.db.Table(db.tableName).Unscoped().Delete(objs).Error; err != nil {
-		// 	return err
-		// }
-		//
-		batchSize := defaultDeleteBatchSize
-		if db.batchSize > 0 {
-			batchSize = db.batchSize
-		}
-		for i := 0; i < len(objs); i += batchSize {
-			end := min(i+batchSize, len(objs))
-			if err = db.ins.Session(&gorm.Session{}).Table(tableName).Unscoped().Delete(objs[i:end]).Error; err != nil {
+				return nil
+			}); err != nil {
 				return err
 			}
-			if db.enableCache {
-				for j := i; j < end; j++ {
-					_ = cache.Cache[M]().WithContext(ctx).Delete(objs[j].GetID())
-				}
-			}
 		}
-	} else {
-		// Delete() method just update field "delete_at" to currrent time.
-		// DO NOT FORGET update the "created_at" field when create/update if record already exists.
-		// if err = db.db.Delete(objs).Error; err != nil {
-		// if err = db.db.Table(db.tableName).Delete(objs).Error; err != nil {
-		// 	return err
-		// }
-		//
-		batchSize := defaultDeleteBatchSize
-		if db.batchSize > 0 {
-			batchSize = db.batchSize
+		tableName := db.m.GetTableName()
+		if len(db.tableName) > 0 {
+			tableName = db.tableName
 		}
-		for i := 0; i < len(objs); i += batchSize {
-			end := min(i+batchSize, len(objs))
-			if err = db.ins.Session(&gorm.Session{}).Table(tableName).Delete(objs[i:end]).Error; err != nil {
-				return err
+		if util.Deref(db.enablePurge) {
+			// delete permanently.
+			// if err = db.db.Unscoped().Delete(objs).Error; err != nil {
+			// if err = db.db.Table(db.tableName).Unscoped().Delete(objs).Error; err != nil {
+			// 	return err
+			// }
+			//
+			batchSize := defaultDeleteBatchSize
+			if db.batchSize > 0 {
+				batchSize = db.batchSize
 			}
-			if db.enableCache {
-				for j := i; j < end; j++ {
-					_ = cache.Cache[M]().WithContext(ctx).Delete(objs[j].GetID())
-				}
-			}
-		}
-	}
-	// Invoke model hook: DeleteAfter.
-	if !db.noHook {
-		if err = traceModelHook[M](db.ctx, consts.PHASE_DELETE_AFTER, span, func(spanCtx context.Context) error {
-			for i := range objs {
-				if err = objs[i].DeleteAfter(spanCtx); err != nil {
+			for i := 0; i < len(objs); i += batchSize {
+				end := min(i+batchSize, len(objs))
+				if err = db.ins.Session(&gorm.Session{}).Table(tableName).Unscoped().Delete(objs[i:end]).Error; err != nil {
 					return err
 				}
+				if db.enableCache {
+					for j := i; j < end; j++ {
+						_ = cache.Cache[M]().WithContext(ctx).Delete(objs[j].GetID())
+					}
+				}
 			}
-			return nil
-		}); err != nil {
-			return err
+		} else {
+			// Delete() method just update field "delete_at" to currrent time.
+			// DO NOT FORGET update the "created_at" field when create/update if record already exists.
+			// if err = db.db.Delete(objs).Error; err != nil {
+			// if err = db.db.Table(db.tableName).Delete(objs).Error; err != nil {
+			// 	return err
+			// }
+			//
+			batchSize := defaultDeleteBatchSize
+			if db.batchSize > 0 {
+				batchSize = db.batchSize
+			}
+			for i := 0; i < len(objs); i += batchSize {
+				end := min(i+batchSize, len(objs))
+				if err = db.ins.Session(&gorm.Session{}).Table(tableName).Delete(objs[i:end]).Error; err != nil {
+					return err
+				}
+				if db.enableCache {
+					for j := i; j < end; j++ {
+						_ = cache.Cache[M]().WithContext(ctx).Delete(objs[j].GetID())
+					}
+				}
+			}
 		}
-	}
-	return nil
+		// Invoke model hook: DeleteAfter.
+		if !db.noHook {
+			if err = traceModelHook[M](db.ctx, consts.PHASE_DELETE_AFTER, span, func(spanCtx context.Context) error {
+				for i := range objs {
+					if err = objs[i].DeleteAfter(spanCtx); err != nil {
+						return err
+					}
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // Update modifies one or multiple records in the database.
@@ -405,65 +409,67 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 		defer cache.Cache[[]M]().WithContext(ctx).Clear()
 	}
 
-	// Invoke model hook: UpdateBefore.
-	if !db.noHook {
-		if err = traceModelHook[M](db.ctx, consts.PHASE_UPDATE_BEFORE, span, func(spanCtx context.Context) error {
-			for i := range objs {
-				if err = objs[i].UpdateBefore(spanCtx); err != nil {
-					return err
+	return db.withModelHookTransaction(func() error {
+		// Invoke model hook: UpdateBefore.
+		if !db.noHook {
+			if err = traceModelHook[M](db.ctx, consts.PHASE_UPDATE_BEFORE, span, func(spanCtx context.Context) error {
+				for i := range objs {
+					if err = objs[i].UpdateBefore(spanCtx); err != nil {
+						return err
+					}
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+		for i := range objs {
+			objs[i].SetID() // set id when id is empty
+		}
+		// if err = db.db.Save(objs).Error; err != nil {
+		// if err = db.db.Table(db.tableName).Save(objs).Error; err != nil {
+		// 	return err
+		// }
+		//
+		tableName := db.m.GetTableName()
+		if len(db.tableName) > 0 {
+			tableName = db.tableName
+		}
+		batchSize := defaultBatchSize
+		if db.batchSize > 0 {
+			batchSize = db.batchSize
+		}
+		// set selected columns.
+		if len(db.selectColumns) > 0 {
+			db.ins = db.ins.Select(db.selectColumns)
+		}
+		for i := 0; i < len(objs); i += batchSize {
+			end := min(i+batchSize, len(objs))
+			if err = db.ins.Session(&gorm.Session{}).Table(tableName).Save(objs[i:end]).Error; err != nil {
+				zap.S().Error(err)
+				return err
+			}
+			if db.enableCache {
+				for j := i; j < end; j++ {
+					_ = cache.Cache[M]().WithContext(ctx).Delete(objs[j].GetID())
 				}
 			}
-			return nil
-		}); err != nil {
-			return err
 		}
-	}
-	for i := range objs {
-		objs[i].SetID() // set id when id is empty
-	}
-	// if err = db.db.Save(objs).Error; err != nil {
-	// if err = db.db.Table(db.tableName).Save(objs).Error; err != nil {
-	// 	return err
-	// }
-	//
-	tableName := db.m.GetTableName()
-	if len(db.tableName) > 0 {
-		tableName = db.tableName
-	}
-	batchSize := defaultBatchSize
-	if db.batchSize > 0 {
-		batchSize = db.batchSize
-	}
-	// set selected columns.
-	if len(db.selectColumns) > 0 {
-		db.ins = db.ins.Select(db.selectColumns)
-	}
-	for i := 0; i < len(objs); i += batchSize {
-		end := min(i+batchSize, len(objs))
-		if err = db.ins.Session(&gorm.Session{}).Table(tableName).Save(objs[i:end]).Error; err != nil {
-			zap.S().Error(err)
-			return err
-		}
-		if db.enableCache {
-			for j := i; j < end; j++ {
-				_ = cache.Cache[M]().WithContext(ctx).Delete(objs[j].GetID())
-			}
-		}
-	}
-	// Invoke model hook: UpdateAfter.
-	if !db.noHook {
-		if err = traceModelHook[M](db.ctx, consts.PHASE_UPDATE_AFTER, span, func(spanCtx context.Context) error {
-			for i := range objs {
-				if err = objs[i].UpdateAfter(spanCtx); err != nil {
-					return err
+		// Invoke model hook: UpdateAfter.
+		if !db.noHook {
+			if err = traceModelHook[M](db.ctx, consts.PHASE_UPDATE_AFTER, span, func(spanCtx context.Context) error {
+				for i := range objs {
+					if err = objs[i].UpdateAfter(spanCtx); err != nil {
+						return err
+					}
 				}
+				return nil
+			}); err != nil {
+				return err
 			}
-			return nil
-		}); err != nil {
-			return err
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 // UpdateByID updates a specific field of a single record identified by ID.

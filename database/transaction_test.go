@@ -252,6 +252,66 @@ func TestDatabaseTransactionFunc(t *testing.T) {
 	require.Equal(t, 1, flag, "rollback function should be called on failure")
 }
 
+func TestDatabaseTransactionModelHook(t *testing.T) {
+	t.Run("CreateAfter rollback", func(t *testing.T) {
+		defer cleanupTestData()
+
+		ctx := context.Background()
+		config := &TestHookConfig{
+			Value: "initial",
+			Base:  model.Base{ID: "hook-config-create-after"},
+		}
+		group := &TestHookGroup{
+			ConfigID: config.ID,
+			Value:    "updated",
+			Base:     model.Base{ID: "hook-group-create-after"},
+		}
+
+		require.NoError(t, database.Database[*TestHookConfig](ctx).Create(config))
+
+		err := database.Database[*TestHookGroup](ctx).Create(group)
+		require.ErrorIs(t, err, errTestHookGroupCreateAfter)
+
+		storedGroup := new(TestHookGroup)
+		err = database.Database[*TestHookGroup](ctx).Get(storedGroup, group.ID)
+		require.ErrorIs(t, err, database.ErrRecordNotFound)
+
+		storedConfig := new(TestHookConfig)
+		require.NoError(t, database.Database[*TestHookConfig](ctx).Get(storedConfig, config.ID))
+		require.Equal(t, "initial", storedConfig.Value)
+	})
+
+	t.Run("WithTx propagates to CreateAfter", func(t *testing.T) {
+		defer cleanupTestData()
+
+		ctx := context.Background()
+		config := &TestHookConfig{
+			Value: "initial",
+			Base:  model.Base{ID: "hook-config-with-tx"},
+		}
+		group := &TestHookGroup{
+			ConfigID: config.ID,
+			Value:    "updated",
+			Base:     model.Base{ID: "hook-group-with-tx"},
+		}
+
+		require.NoError(t, database.Database[*TestHookConfig](ctx).Create(config))
+
+		err := database.Database[*TestHookGroup](ctx).TransactionFunc(func(tx any) error {
+			return database.Database[*TestHookGroup](ctx).WithTx(tx).Create(group)
+		})
+		require.ErrorIs(t, err, errTestHookGroupCreateAfter)
+
+		storedGroup := new(TestHookGroup)
+		err = database.Database[*TestHookGroup](ctx).Get(storedGroup, group.ID)
+		require.ErrorIs(t, err, database.ErrRecordNotFound)
+
+		storedConfig := new(TestHookConfig)
+		require.NoError(t, database.Database[*TestHookConfig](ctx).Get(storedConfig, config.ID))
+		require.Equal(t, "initial", storedConfig.Value)
+	})
+}
+
 func TestDatabaseWithTx(t *testing.T) {
 	defer func() {
 		cleanupTestData()

@@ -120,6 +120,8 @@ type Database[M Model] interface {
 	// Transaction executes fn in a transaction for this model and passes a transaction-bound Database.
 	Transaction(fn func(txDB Database[M]) error) error
 	// TransactionFunc executes fn in a transaction for multi-model work; each Database used inside fn must call WithTx(tx).
+	// WithTx also seeds the returned operation chain's context, so model hooks that receive that context and call
+	// database.Database[*OtherModel](ctx) keep using the same transaction.
 	TransactionFunc(fn func(tx any) error) error
 
 	DatabaseOption[M]
@@ -132,6 +134,8 @@ type DatabaseOption[M Model] interface {
 	// WithDB uses a custom *gorm.DB; callers must migrate custom schemas explicitly.
 	WithDB(any) Database[M]
 	// WithTx binds operations to a *gorm.DB transaction, primarily inside TransactionFunc.
+	// It also stores the transaction in the operation context so model hooks can pass ctx to Database[*OtherModel](ctx)
+	// without manually threading the raw transaction through hook signatures.
 	WithTx(tx any) Database[M]
 	// WithTable sets a custom table name; the table must already exist.
 	WithTable(name string) Database[M]

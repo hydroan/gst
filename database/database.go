@@ -241,6 +241,18 @@ func (db *database[M]) prepare() error {
 //   - Context-aware operations for tracing
 //   - Default query limit protection
 //   - Panic protection for uninitialized database
+//   - Transaction inheritance when ctx was produced by a model-hook write or WithTx
+//
+// Transaction propagation:
+//
+//	Database[M](ctx) checks whether ctx carries an internal GORM transaction.
+//	When present, the returned operation chain uses that transaction instead of
+//	the package-level DB. This is how model hooks remain atomic without changing
+//	their public signature: Create/Update/Delete create a transaction, place it in
+//	the hook context, and hook code keeps calling Database[*OtherModel](ctx).
+//
+//	This inheritance is strictly context-scoped. Passing context.Background()
+//	or any unrelated context starts a normal non-transactional operation chain.
 //
 // Required usage:
 //
@@ -270,11 +282,16 @@ func Database[M types.Model](ctx context.Context) types.Database[M] {
 		gctx = ctx
 	}
 
+	baseDB := DB()
+	if tx, ok := txFromContext(gctx); ok {
+		baseDB = tx
+	}
+
 	var ins *gorm.DB
 	if strings.ToLower(config.App.Logger.Level) == "debug" {
-		ins = DB().Debug().WithContext(gctx).Limit(defaultLimit)
+		ins = baseDB.Debug().WithContext(gctx).Limit(defaultLimit)
 	} else {
-		ins = DB().WithContext(gctx).Limit(defaultLimit)
+		ins = baseDB.WithContext(gctx).Limit(defaultLimit)
 	}
 
 	db := &database[M]{
