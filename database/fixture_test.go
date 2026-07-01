@@ -90,6 +90,14 @@ func cleanupTestData() {
 	_ = database.Database[*TestProduct](context.Background()).List(&products)
 	_ = database.Database[*TestProduct](context.Background()).Delete(products...)
 
+	plainItems := make([]*TestPlainItem, 0)
+	_ = database.Database[*TestPlainItem](context.Background()).List(&plainItems)
+	_ = database.Database[*TestPlainItem](context.Background()).Delete(plainItems...)
+
+	uniqueItems := make([]*TestUniqueItem, 0)
+	_ = database.Database[*TestUniqueItem](context.Background()).List(&uniqueItems)
+	_ = database.Database[*TestUniqueItem](context.Background()).Delete(uniqueItems...)
+
 	hookGroups := make([]*TestHookGroup, 0)
 	_ = database.Database[*TestHookGroup](context.Background()).List(&hookGroups)
 	_ = database.Database[*TestHookGroup](context.Background()).Delete(hookGroups...)
@@ -169,6 +177,42 @@ type TestProduct struct {
 
 func (*TestProduct) Purge() bool { return true }
 
+type TestPlainItem struct {
+	Code          string `json:"code" gorm:"size:191"`
+	Name          string `json:"name" gorm:"size:191"`
+	CreateAfterID string `json:"-" gorm:"-"`
+
+	model.Base
+}
+
+func (*TestPlainItem) Purge() bool { return true }
+
+func (i *TestPlainItem) CreateAfter(ctx context.Context) error {
+	i.CreateAfterID = i.ID
+	return nil
+}
+
+type TestUniqueItem struct {
+	UniqueCode    string `json:"unique_code" gorm:"size:191;uniqueIndex"`
+	Name          string `json:"name" gorm:"size:191"`
+	CreateAfterID string `json:"-" gorm:"-"`
+	UpdateAfterID string `json:"-" gorm:"-"`
+
+	model.Base
+}
+
+func (*TestUniqueItem) Purge() bool { return true }
+
+func (i *TestUniqueItem) CreateAfter(ctx context.Context) error {
+	i.CreateAfterID = i.ID
+	return nil
+}
+
+func (i *TestUniqueItem) UpdateAfter(ctx context.Context) error {
+	i.UpdateAfterID = i.ID
+	return nil
+}
+
 type TestHookConfig struct {
 	Value string `json:"value" gorm:"size:191"`
 
@@ -222,6 +266,8 @@ func init() {
 
 	model.Register[*TestUser]()
 	model.Register[*TestProduct]()
+	model.Register[*TestPlainItem]()
+	model.Register[*TestUniqueItem]()
 	model.Register[*TestHookConfig]()
 	model.Register[*TestHookGroup]()
 	model.Register[*TestCategory]()

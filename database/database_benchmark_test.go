@@ -31,6 +31,56 @@ func BenchmarkDatabaseCreate(b *testing.B) {
 	})
 }
 
+func BenchmarkDatabaseCreateSyncOverhead(b *testing.B) {
+	defer cleanupTestData()
+
+	b.Run("baseline_without_unique_index", func(b *testing.B) {
+		cleanupTestData()
+
+		i := 0
+		for b.Loop() {
+			i++
+			code := strconv.Itoa(i)
+			_ = database.Database[*TestPlainItem](context.Background()).Create(&TestPlainItem{
+				Code: code,
+				Name: code,
+			})
+		}
+	})
+	b.Run("unique_index_insert_with_sync", func(b *testing.B) {
+		cleanupTestData()
+
+		i := 0
+		for b.Loop() {
+			i++
+			code := strconv.Itoa(i)
+			_ = database.Database[*TestUniqueItem](context.Background()).Create(&TestUniqueItem{
+				UniqueCode: code,
+				Name:       code,
+			})
+		}
+	})
+	b.Run("unique_index_conflict_with_sync", func(b *testing.B) {
+		cleanupTestData()
+
+		const code = "same-code"
+		require.NoError(b, database.Database[*TestUniqueItem](context.Background()).Create(&TestUniqueItem{
+			UniqueCode: code,
+			Name:       "seed",
+		}))
+
+		i := 0
+		for b.Loop() {
+			i++
+			name := strconv.Itoa(i)
+			_ = database.Database[*TestUniqueItem](context.Background()).Create(&TestUniqueItem{
+				UniqueCode: code,
+				Name:       name,
+			})
+		}
+	})
+}
+
 func BenchmarkDatabaseDelete(b *testing.B) {
 	defer cleanupTestData()
 

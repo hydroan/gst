@@ -108,6 +108,32 @@ func TestDatabaseCreate(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).Create(nil))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Create([]*TestUser{nil, nil, nil}...))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Create([]*TestUser{nil, u1, nil}...))
+
+	t.Run("syncs upserted unique index record", func(t *testing.T) {
+		first := &TestUniqueItem{
+			UniqueCode: "same-code",
+			Name:       "first",
+		}
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Create(first))
+		require.NotEmpty(t, first.ID)
+		require.Equal(t, first.ID, first.CreateAfterID)
+
+		second := &TestUniqueItem{
+			UniqueCode: "same-code",
+			Name:       "second",
+		}
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Create(second))
+
+		require.Equal(t, first.ID, second.ID, "upserted create should expose the persisted row id")
+		require.Equal(t, first.ID, second.CreateAfterID, "CreateAfter should observe the persisted row id")
+
+		items := make([]*TestUniqueItem, 0)
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).List(&items))
+		require.Len(t, items, 1)
+		require.Equal(t, first.ID, items[0].ID)
+		require.Equal(t, "same-code", items[0].UniqueCode)
+		require.Equal(t, "second", items[0].Name)
+	})
 }
 
 func TestDatabaseDelete(t *testing.T) {
@@ -272,6 +298,31 @@ func TestDatabaseUpdate(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).Update(nil))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Update([]*TestUser{nil, nil, nil}...))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Update([]*TestUser{nil, u1, nil}...))
+
+	t.Run("syncs upserted unique index record", func(t *testing.T) {
+		first := &TestUniqueItem{
+			UniqueCode: "update-same-code",
+			Name:       "first",
+		}
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Create(first))
+		require.NotEmpty(t, first.ID)
+
+		second := &TestUniqueItem{
+			UniqueCode: "update-same-code",
+			Name:       "second",
+		}
+		second.ID = "update-stale-id"
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Update(second))
+
+		require.Equal(t, first.ID, second.ID, "upserted update should expose the persisted row id")
+		require.Equal(t, first.ID, second.UpdateAfterID, "UpdateAfter should observe the persisted row id")
+
+		items := make([]*TestUniqueItem, 0)
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).List(&items))
+		require.Len(t, items, 1)
+		require.Equal(t, first.ID, items[0].ID)
+		require.Equal(t, "second", items[0].Name)
+	})
 }
 
 func TestDatabaseUpdateByID(t *testing.T) {

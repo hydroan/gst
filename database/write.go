@@ -2,7 +2,9 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/hydroan/gst/cache"
@@ -11,6 +13,7 @@ import (
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+	gormschema "gorm.io/gorm/schema"
 )
 
 // Create inserts one or multiple records into the database.
@@ -123,6 +126,9 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 		for i := 0; i < len(objs); i += batchSize {
 			end := min(i+batchSize, len(objs))
 			if err = db.ins.Session(&gorm.Session{}).Table(tableName).Save(objs[i:end]).Error; err != nil {
+				return err
+			}
+			if err = db.syncSaveResultsByUniqueIndexes(tableName, objs[i:end]); err != nil {
 				return err
 			}
 		}
@@ -449,6 +455,9 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 				zap.S().Error(err)
 				return err
 			}
+			if err = db.syncSaveResultsByUniqueIndexes(tableName, objs[i:end]); err != nil {
+				return err
+			}
 			if db.enableCache {
 				for j := i; j < end; j++ {
 					_ = cache.Cache[M]().WithContext(ctx).Delete(objs[j].GetID())
@@ -533,6 +542,195 @@ func (db *database[M]) UpdateByID(id string, name string, value any) (err error)
 	}
 	if db.enableCache {
 		_ = cache.Cache[M]().WithContext(ctx).Delete(id)
+	}
+	return nil
+}
+
+// syncSaveResultsByUniqueIndexes refreshes caller-owned objects after GORM
+// turns Save(slice) into an upsert.
+//
+// Context: database.Create and database.Update both persist batches through
+// GORM Save(slice). For slice values, GORM builds an INSERT ... ON DUPLICATE
+// KEY UPDATE / ON CONFLICT UPDATE statement. If the conflict is on a
+// non-primary unique index, the database updates the already-existing row, but
+// GORM leaves the Go object with the ID supplied by the caller. For Create that
+// ID is usually freshly generated; for Update it may be a stale or incorrect
+// ID. The controller and service layers later reuse that same object for
+// CreateAfter/UpdateAfter hooks, cache invalidation, operation logs, and HTTP
+// responses, so the object must be reconciled before any post-save behavior
+// observes it.
+//
+// The reconciliation is intentionally narrow:
+//   - models without non-primary unique indexes pay no extra query cost;
+//   - only complete unique-index values are used for lookup;
+//   - only GORM-persistent fields are copied back, preserving gorm:"-" values
+//     that hooks or controllers may have placed on the object.
+func (db *database[M]) syncSaveResultsByUniqueIndexes(tableName string, objs []M) error {
+	if len(objs) == 0 {
+		return nil
+	}
+
+	stmt := &gorm.Statement{DB: db.ins}
+	if err := stmt.Parse(db.m); err != nil {
+		return err
+	}
+	indexes := saveResultSyncUniqueIndexes(stmt.Schema)
+	if len(indexes) == 0 {
+		return nil
+	}
+
+	syncedIDs := make(map[string]struct{}, len(objs))
+	for _, index := range indexes {
+		candidatesByKey := make(map[string][]M)
+		query := db.ins.Session(&gorm.Session{})
+		if len(tableName) > 0 {
+			query = query.Table(tableName)
+		}
+		query = query.Limit(-1)
+
+		var hasCondition bool
+		for _, obj := range objs {
+			if _, synced := syncedIDs[obj.GetID()]; synced {
+				continue
+			}
+			values, ok := saveResultSyncUniqueValues(db.ctx, index, obj)
+			if !ok {
+				continue
+			}
+
+			condition, args := db.saveResultSyncUniqueCondition(tableName, index, values)
+			if !hasCondition {
+				query = query.Where(condition, args...)
+				hasCondition = true
+			} else {
+				query = query.Or(condition, args...)
+			}
+			key := saveResultSyncUniqueKey(values)
+			candidatesByKey[key] = append(candidatesByKey[key], obj)
+		}
+		if !hasCondition {
+			continue
+		}
+
+		persisted := make([]M, 0, len(candidatesByKey))
+		if err := query.Find(&persisted).Error; err != nil {
+			return err
+		}
+		for _, current := range persisted {
+			values, ok := saveResultSyncUniqueValues(db.ctx, index, current)
+			if !ok {
+				continue
+			}
+			for _, candidate := range candidatesByKey[saveResultSyncUniqueKey(values)] {
+				originalID := candidate.GetID()
+				if err := copySaveResultPersistentFields(db.ctx, stmt.Schema, candidate, current); err != nil {
+					return err
+				}
+				syncedIDs[originalID] = struct{}{}
+				syncedIDs[candidate.GetID()] = struct{}{}
+			}
+		}
+	}
+
+	return nil
+}
+
+func saveResultSyncUniqueIndexes(schema *gormschema.Schema) []*gormschema.Index {
+	indexes := make([]*gormschema.Index, 0)
+	for _, index := range schema.ParseIndexes() {
+		if !saveResultSyncUniqueIndexUsable(index) {
+			continue
+		}
+		indexes = append(indexes, index)
+	}
+
+	for _, field := range schema.Fields {
+		if !field.Unique || field.UniqueIndex != "" || field.PrimaryKey || field.DBName == "" {
+			continue
+		}
+		indexes = append(indexes, &gormschema.Index{
+			Name:  "unique:" + field.DBName,
+			Class: "UNIQUE",
+			Fields: []gormschema.IndexOption{
+				{Field: field},
+			},
+		})
+	}
+	return indexes
+}
+
+func saveResultSyncUniqueIndexUsable(index *gormschema.Index) bool {
+	if index == nil || index.Class != "UNIQUE" || index.Where != "" || len(index.Fields) == 0 {
+		return false
+	}
+
+	var hasNonPrimaryField bool
+	for _, field := range index.Fields {
+		if field.Field == nil || field.Field.DBName == "" || field.Expression != "" {
+			return false
+		}
+		if !field.Field.PrimaryKey {
+			hasNonPrimaryField = true
+		}
+	}
+	return hasNonPrimaryField
+}
+
+func saveResultSyncUniqueValues(ctx context.Context, index *gormschema.Index, obj any) ([]any, bool) {
+	modelValue := reflect.ValueOf(obj)
+	values := make([]any, 0, len(index.Fields))
+	for _, field := range index.Fields {
+		value, _ := field.Field.ValueOf(ctx, modelValue)
+		if saveResultSyncValueIsNil(value) {
+			return nil, false
+		}
+		values = append(values, value)
+	}
+	return values, true
+}
+
+func saveResultSyncValueIsNil(value any) bool {
+	if value == nil {
+		return true
+	}
+	val := reflect.ValueOf(value)
+	switch val.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return val.IsNil()
+	default:
+		return false
+	}
+}
+
+func (db *database[M]) saveResultSyncUniqueCondition(tableName string, index *gormschema.Index, values []any) (string, []any) {
+	parts := make([]string, 0, len(index.Fields))
+	args := make([]any, 0, len(index.Fields))
+	for i, field := range index.Fields {
+		parts = append(parts, db.quoteTableColumn(tableName, field.Field.DBName)+" = ?")
+		args = append(args, values[i])
+	}
+	return strings.Join(parts, " AND "), args
+}
+
+func saveResultSyncUniqueKey(values []any) string {
+	parts := make([]string, 0, len(values))
+	for _, value := range values {
+		parts = append(parts, fmt.Sprintf("%T:%#v", value, value))
+	}
+	return strings.Join(parts, "\x00")
+}
+
+func copySaveResultPersistentFields(ctx context.Context, schema *gormschema.Schema, dst any, src any) error {
+	dstValue := reflect.ValueOf(dst)
+	srcValue := reflect.ValueOf(src)
+	for _, field := range schema.Fields {
+		if field.DBName == "" {
+			continue
+		}
+		value, _ := field.ValueOf(ctx, srcValue)
+		if err := field.Set(ctx, dstValue, value); err != nil {
+			return err
+		}
 	}
 	return nil
 }
