@@ -24,11 +24,11 @@ var _ types.Model = (*Base)(nil)
 type Base struct {
 	ID string `json:"id" gorm:"primaryKey;type:char(36)" schema:"id" url:"-"` // UUIDv7 identifier for the record
 
-	CreatedBy string         `json:"created_by,omitempty" gorm:"type:char(36);not null" schema:"created_by" url:"-"` // UUIDv7 user ID who created the record
-	UpdatedBy string         `json:"updated_by,omitempty" gorm:"type:char(36);not null" schema:"updated_by" url:"-"` // UUIDv7 user ID who last updated the record
-	CreatedAt time.Time      `json:"created_at,omitzero" gorm:"not null" schema:"-" url:"-"`                         // Timestamp when the record was created
-	UpdatedAt time.Time      `json:"updated_at,omitzero" gorm:"not null" schema:"-" url:"-"`                         // Timestamp when the record was last updated
-	DeletedAt gorm.DeletedAt `json:"-" gorm:"index" schema:"-" url:"-"`                                              // Timestamp when the record was deleted
+	CreatedBy string         `json:"created_by,omitempty" gorm:"type:char(36)" schema:"created_by" url:"-"` // UUIDv7 user ID who created the record
+	UpdatedBy string         `json:"updated_by,omitempty" gorm:"type:char(36)" schema:"updated_by" url:"-"` // UUIDv7 user ID who last updated the record
+	CreatedAt time.Time      `json:"created_at,omitzero" schema:"-" url:"-"`                                // Timestamp when the record was created
+	UpdatedAt time.Time      `json:"updated_at,omitzero" schema:"-" url:"-"`                                // Timestamp when the record was last updated
+	DeletedAt gorm.DeletedAt `json:"-" gorm:"index" schema:"-" url:"-"`                                     // Timestamp when the record was deleted
 
 	// Query parameter
 	Page       uint    `json:"-" gorm:"-" schema:"page" url:"page,omitempty"`                 // Pagination: page number (e.g., page=2)

@@ -36,8 +36,6 @@ func TestDumper(t *testing.T) {
 		require.Contains(t, schema, "-- Model: dbmigrate_test.User\nCREATE TABLE `users`")
 		requireOnlyBaseSoftDeleteIndex(t, schema, "groups")
 		requireOnlyBaseSoftDeleteIndex(t, schema, "users")
-		requireBaseAuditFieldsNotNull(t, schema, "groups")
-		requireBaseAuditFieldsNotNull(t, schema, "users")
 		require.NotContains(t, schema, "DROP TABLE IF EXISTS")
 		// fmt.Println(schema)
 	})
@@ -73,26 +71,6 @@ func requireOnlyBaseSoftDeleteIndex(t *testing.T, schema, table string) {
 	require.NotContains(t, schema, "idx_"+table+"_updated_by")
 	require.NotContains(t, schema, "idx_"+table+"_created_at")
 	require.NotContains(t, schema, "idx_"+table+"_updated_at")
-}
-
-func requireBaseAuditFieldsNotNull(t *testing.T, schema, table string) {
-	t.Helper()
-
-	tableSchema := tableSchema(t, schema, table)
-	require.Contains(t, tableSchema, "`created_by` char(36) NOT NULL")
-	require.Contains(t, tableSchema, "`updated_by` char(36) NOT NULL")
-	require.Contains(t, tableSchema, "`created_at` datetime(3) NOT NULL")
-	require.Contains(t, tableSchema, "`updated_at` datetime(3) NOT NULL")
-}
-
-func tableSchema(t *testing.T, schema, table string) string {
-	t.Helper()
-
-	start := strings.Index(schema, "CREATE TABLE `"+table+"`")
-	require.NotEqual(t, -1, start)
-	end := strings.Index(schema[start:], ") ENGINE")
-	require.NotEqual(t, -1, end)
-	return schema[start : start+end]
 }
 
 func TestDumpOrder(t *testing.T) {
