@@ -24,8 +24,12 @@ type Role struct {
 	// Keys and values are user-defined and framework-agnostic.
 	Scope datatypes.JSONMap `json:"scope,omitempty"`
 
-	// Menu permissions owned by this role
-	MenuIDs        datatypes.JSONSlice[string] `json:"menu_ids,omitempty"`
+	// MenuIDs grants backend route permissions through each selected menu's
+	// Routes, and marks those menus as fully selected in the frontend menu tree.
+	MenuIDs datatypes.JSONSlice[string] `json:"menu_ids,omitempty"`
+
+	// MenuPartialIDs keeps partially selected parent menus visible in the
+	// frontend tree. It does not grant backend API permissions.
 	MenuPartialIDs datatypes.JSONSlice[string] `json:"menu_partial_ids,omitempty"`
 	ButtonIDs      datatypes.JSONSlice[string] `json:"button_ids,omitempty"`
 
