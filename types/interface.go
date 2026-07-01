@@ -348,21 +348,60 @@ type DistributedCache[T any] interface {
 //   - Object: Protected resources or endpoints
 //   - Action: Operations on resources
 type RBAC interface {
+	// Authorize reports whether subject may perform action on object inside tenant.
+	// Implementations should treat tenant as the authorization domain, subject as
+	// the authenticated identity, object as the protected route or resource, and
+	// action as the operation being checked, such as an HTTP method.
 	Authorize(tenant string, subject string, object string, action string) (bool, error)
 
+	// AddRole ensures role is available inside tenant.
+	// Casbin-backed implementations may create roles implicitly when policies or
+	// grouping rules are added, so this method can be a lifecycle hook with no
+	// persistent side effect.
 	AddRole(tenant string, role string) error
+
+	// RemoveRole removes role from tenant, including its permission policies and
+	// subject assignments. Callers should use this when deleting a role record so
+	// authorization state does not retain stale grants.
 	RemoveRole(tenant string, role string) error
 
+	// GrantPermission grants role access to action on object inside tenant.
+	// This represents one exact allow policy for a tenant-scoped role.
 	GrantPermission(tenant string, role string, object string, action string) error
+
+	// RevokePermission removes one exact role permission inside tenant.
+	// Use RevokeRolePermissions when replacing or deleting the full permission set
+	// for a role.
 	RevokePermission(tenant string, role string, object string, action string) error
+
+	// RevokeRolePermissions removes every permission policy granted to role inside
+	// tenant without removing the role's subject assignments.
 	RevokeRolePermissions(tenant string, role string) error
 
+	// AssignRole assigns subject to role inside tenant.
+	// This creates tenant membership for subject and makes the role's
+	// tenant-scoped permissions available to that subject.
 	AssignRole(tenant string, subject string, role string) error
+
+	// UnassignRole removes subject's assignment to role inside tenant.
+	// Other roles held by the same subject in the same tenant are left unchanged.
 	UnassignRole(tenant string, subject string, role string) error
+
+	// SubjectInTenant reports whether subject has at least one role assignment in
+	// tenant. It checks membership, not whether any specific route is authorized.
 	SubjectInTenant(tenant string, subject string) (bool, error)
 
+	// AssignSystemRole assigns subject to a system-level role outside any tenant.
+	// System roles are intended for cross-tenant framework privileges and should
+	// not be used for ordinary tenant-local authorization.
 	AssignSystemRole(subject string, role string) error
+
+	// UnassignSystemRole removes subject's assignment to a system-level role.
 	UnassignSystemRole(subject string, role string) error
+
+	// HasSystemRole reports whether subject holds a system-level role.
+	// This check is separate from Authorize because system roles are not scoped to
+	// tenant route policies.
 	HasSystemRole(subject string, role string) (bool, error)
 }
 
