@@ -56,6 +56,11 @@ func SetAuthzTenantResolver(resolver TenantResolver) {
 // It derives subject from trusted request context and blocks anonymous requests.
 // Authz must be called before config.Init so config.Init can read
 // AUTH_RBAC_ENABLE from the environment and enable RBAC initialization.
+//
+// Authz must run after an authentication middleware that populates
+// consts.CTX_USER_ID. When using built-in IAM sessions, register IAMSession
+// before Authz; otherwise a valid session cookie is rejected as "permission
+// denied" because Authz cannot find the authenticated subject yet.
 func Authz(options ...AuthzOption) gin.HandlerFunc {
 	os.Setenv(config.AUTH_RBAC_ENABLE, "true")
 
