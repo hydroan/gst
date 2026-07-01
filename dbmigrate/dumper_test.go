@@ -34,6 +34,8 @@ func TestDumper(t *testing.T) {
 		require.NotEmpty(t, schema)
 		require.Contains(t, schema, "-- Model: dbmigrate_test.Group\nCREATE TABLE `groups`")
 		require.Contains(t, schema, "-- Model: dbmigrate_test.User\nCREATE TABLE `users`")
+		requireOnlyBaseSoftDeleteIndex(t, schema, "groups")
+		requireOnlyBaseSoftDeleteIndex(t, schema, "users")
 		require.NotContains(t, schema, "DROP TABLE IF EXISTS")
 		// fmt.Println(schema)
 	})
@@ -59,6 +61,16 @@ func TestDumper(t *testing.T) {
 		require.NotEmpty(t, schema)
 		// fmt.Println(schema)
 	})
+}
+
+func requireOnlyBaseSoftDeleteIndex(t *testing.T, schema, table string) {
+	t.Helper()
+
+	require.Contains(t, schema, "INDEX `idx_"+table+"_deleted_at` (`deleted_at`)")
+	require.NotContains(t, schema, "idx_"+table+"_created_by")
+	require.NotContains(t, schema, "idx_"+table+"_updated_by")
+	require.NotContains(t, schema, "idx_"+table+"_created_at")
+	require.NotContains(t, schema, "idx_"+table+"_updated_at")
 }
 
 func TestDumpOrder(t *testing.T) {
