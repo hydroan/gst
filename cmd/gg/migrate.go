@@ -31,6 +31,27 @@ var migrateCmd = &cobra.Command{
 	},
 }
 
+var migrateSchemaCmd = &cobra.Command{
+	Use:           "schema [path]",
+	Short:         "Print schema SQL for registered models",
+	Long:          "Print target schema SQL for all registered models, or only registered models declared in a file or directory",
+	Args:          cobra.MaximumNArgs(1),
+	SilenceUsage:  true,
+	SilenceErrors: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		moduleName, err := gen.GetModulePath()
+		if err != nil {
+			return fmt.Errorf("failed to get module path: %w", err)
+		}
+
+		source := ""
+		if len(args) > 0 {
+			source = args[0]
+		}
+		return runMigrateSchemaProgram(buildMigrateSchemaProgram(moduleName, source))
+	},
+}
+
 var (
 	migrateDryRun bool
 	migrateYes    bool
@@ -39,17 +60,36 @@ var (
 func init() {
 	migrateCmd.Flags().BoolVar(&migrateDryRun, "dry-run", false, "Preview migration SQL without applying changes")
 	migrateCmd.Flags().BoolVar(&migrateYes, "yes", false, "Apply migration without prompting for confirmation")
+	migrateCmd.AddCommand(migrateSchemaCmd)
 }
 
 func buildMigrateProgram(moduleName string) string {
+	return buildMigrateProgramForMode(moduleName, false, "")
+}
+
+func buildMigrateSchemaProgram(moduleName string, source string) string {
+	return buildMigrateProgramForMode(moduleName, true, source)
+}
+
+func buildMigrateProgramForMode(moduleName string, schemaOnly bool, schemaSource string) string {
 	content := migrateTemplate
 	content = strings.ReplaceAll(content, "{{MODULE}}", moduleName)
 	content = strings.ReplaceAll(content, "{{DRY_RUN}}", strconv.FormatBool(migrateDryRun))
 	content = strings.ReplaceAll(content, "{{YES}}", strconv.FormatBool(migrateYes))
+	content = strings.ReplaceAll(content, "{{SCHEMA_ONLY}}", strconv.FormatBool(schemaOnly))
+	content = strings.ReplaceAll(content, "{{SCHEMA_SOURCE}}", strconv.Quote(schemaSource))
 	return fmt.Sprintf("%s\n%s", consts.CodeGeneratedComment(), content)
 }
 
 func runMigrateProgram(content string) error {
+	return runGeneratedMigrateProgram(content, "Migration", "Preparing migration...")
+}
+
+func runMigrateSchemaProgram(content string) error {
+	return runGeneratedMigrateProgram(content, "Migration Schema", "Preparing schema dump...")
+}
+
+func runGeneratedMigrateProgram(content string, section string, message string) error {
 	tempDir, err := os.MkdirTemp("", "gg-migrate-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temporary migration directory: %w", err)
@@ -85,8 +125,8 @@ func runMigrateProgram(content string) error {
 		}
 	}
 
-	clioutput.Section("Migration")
-	clioutput.Info("", "Preparing migration...")
+	clioutput.Section(section)
+	clioutput.Info("", "%s", message)
 
 	runCmd := exec.Command("go", "run", "-mod=mod", "-modfile", modFile, runnerFile)
 	runCmd.Stdout = os.Stdout
@@ -103,9 +143,14 @@ const migrateTemplate = `package main
 import (
 	"bufio"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -123,6 +168,8 @@ import (
 const migrateDryRun = {{DRY_RUN}}
 const migrateYes = {{YES}}
 const migrateModule = "{{MODULE}}"
+const migrateSchemaOnly = {{SCHEMA_ONLY}}
+const migrateSchemaSource = {{SCHEMA_SOURCE}}
 
 func main() {
 	// Initialize system components and suppress stdout during initialization
@@ -138,6 +185,13 @@ func main() {
 
 	// Collect all registered models.
 	models := collectModels()
+
+	if migrateSchemaOnly {
+		if err := runSchemaDump(models); err != nil {
+			exitWithError(err)
+		}
+		return
+	}
 
 	// Dump the schema for the collected models.
 	schema, err := dumpSchema(models)
@@ -224,6 +278,187 @@ func deduplicateModels(models []any) []any {
 		unique = append(unique, item)
 	}
 	return unique
+}
+
+type modelTypeKey struct {
+	PkgPath string
+	Name    string
+}
+
+func runSchemaDump(models []any) error {
+	var err error
+	models, err = filterModelsBySource(models, migrateSchemaSource)
+	if err != nil {
+		return err
+	}
+	if len(models) == 0 {
+		return fmt.Errorf("no registered models found")
+	}
+
+	schema, err := dumpSchema(models)
+	if err != nil {
+		return err
+	}
+	printSchemaDump(schema, len(models), migrateSchemaSource)
+	return nil
+}
+
+func filterModelsBySource(models []any, source string) ([]any, error) {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return models, nil
+	}
+
+	targetTypes, err := collectSourceModelTypes(source)
+	if err != nil {
+		return nil, err
+	}
+
+	selected := make([]any, 0, len(models))
+	for _, item := range models {
+		key, ok := modelKey(item)
+		if !ok {
+			continue
+		}
+		if _, exists := targetTypes[key]; exists {
+			selected = append(selected, item)
+		}
+	}
+	if len(selected) == 0 {
+		return nil, fmt.Errorf("no registered models found under %s", source)
+	}
+	return selected, nil
+}
+
+func modelKey(model any) (modelTypeKey, bool) {
+	typ := reflect.TypeOf(model)
+	if typ == nil {
+		return modelTypeKey{}, false
+	}
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	if typ.PkgPath() == "" || typ.Name() == "" {
+		return modelTypeKey{}, false
+	}
+	return modelTypeKey{
+		PkgPath: typ.PkgPath(),
+		Name:    typ.Name(),
+	}, true
+}
+
+func collectSourceModelTypes(source string) (map[modelTypeKey]struct{}, error) {
+	info, err := os.Stat(source)
+	if err != nil {
+		return nil, fmt.Errorf("failed to inspect model source %s: %w", source, err)
+	}
+
+	var files []string
+	if info.IsDir() {
+		err = filepath.WalkDir(source, func(path string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() {
+				switch entry.Name() {
+				case ".git", "generated", "vendor":
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if isGoModelSource(path) {
+				files = append(files, path)
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to walk model source %s: %w", source, err)
+		}
+	} else {
+		if !isGoModelSource(source) {
+			return nil, fmt.Errorf("model source must be a Go file or directory: %s", source)
+		}
+		files = append(files, source)
+	}
+	sort.Strings(files)
+	if len(files) == 0 {
+		return nil, fmt.Errorf("no Go model files found under %s", source)
+	}
+
+	targetTypes := make(map[modelTypeKey]struct{})
+	for _, file := range files {
+		if err := collectFileModelTypes(file, targetTypes); err != nil {
+			return nil, err
+		}
+	}
+	if len(targetTypes) == 0 {
+		return nil, fmt.Errorf("no model type declarations found under %s", source)
+	}
+	return targetTypes, nil
+}
+
+func isGoModelSource(path string) bool {
+	return strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go")
+}
+
+func collectFileModelTypes(filename string, targetTypes map[modelTypeKey]struct{}) error {
+	parsed, err := parser.ParseFile(token.NewFileSet(), filename, nil, 0)
+	if err != nil {
+		return fmt.Errorf("failed to parse model source %s: %w", filename, err)
+	}
+	pkgPath, err := modelPackagePath(filename)
+	if err != nil {
+		return err
+	}
+
+	for _, decl := range parsed.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+		for _, spec := range genDecl.Specs {
+			typeSpec, ok := spec.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+			targetTypes[modelTypeKey{PkgPath: pkgPath, Name: typeSpec.Name.Name}] = struct{}{}
+		}
+	}
+	return nil
+}
+
+func modelPackagePath(filename string) (string, error) {
+	absFile, err := filepath.Abs(filename)
+	if err != nil {
+		return "", err
+	}
+	root, err := filepath.Abs(".")
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(root, absFile)
+	if err != nil {
+		return "", err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return "", fmt.Errorf("model source %s is outside project root", filename)
+	}
+
+	dir := filepath.Dir(rel)
+	if dir == "." {
+		return migrateModule, nil
+	}
+	return migrateModule + "/" + filepath.ToSlash(dir), nil
+}
+
+func printSchemaDump(schema string, modelCount int, source string) {
+	fmt.Println("\n▶ Model Schema")
+	fmt.Printf("  → Database: %s\n", config.App.Database.Type)
+	if strings.TrimSpace(source) != "" {
+		fmt.Printf("  → Source: %s\n", source)
+	}
+	fmt.Printf("  → Matched models: %d\n\n", modelCount)
+	fmt.Println(strings.TrimRight(schema, "\n"))
 }
 
 // dumpSchema creates a schema dump for the provided models using the configured database type.
