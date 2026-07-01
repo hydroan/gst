@@ -5,8 +5,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/service"
@@ -70,20 +73,43 @@ func NewSessionID() (string, error) {
 }
 
 // GetSessionExpiration returns the configured session expiration time.
-// If not configured, it returns the default value of 8 hours.
+// If not configured, it reads IAM_SESSION_EXPIRATION before falling back to 8 hours.
 func GetSessionExpiration() time.Duration {
 	sessionExpirationMu.RLock()
-	defer sessionExpirationMu.RUnlock()
-	if sessionExpiration == 0 {
-		return 8 * time.Hour
-	}
-	return sessionExpiration
+	expiration := sessionExpiration
+	sessionExpirationMu.RUnlock()
+
+	return resolveSessionExpiration(expiration)
 }
 
 // SetSessionExpiration sets the session expiration time for iam module.
 // This function should be called during module registration.
 func SetSessionExpiration(expiration time.Duration) {
+	if expiration < 0 {
+		panic(errors.New("SessionExpiration must be greater than 0"))
+	}
+
 	sessionExpirationMu.Lock()
 	defer sessionExpirationMu.Unlock()
 	sessionExpiration = expiration
+}
+
+func resolveSessionExpiration(expiration time.Duration) time.Duration {
+	if expiration > 0 {
+		return expiration
+	}
+
+	raw := strings.TrimSpace(os.Getenv(sessionExpirationEnv))
+	if raw == "" {
+		return defaultSessionExpiration
+	}
+
+	duration, err := time.ParseDuration(raw)
+	if err != nil {
+		panic(errors.Wrapf(err, "invalid %s", sessionExpirationEnv))
+	}
+	if duration <= 0 {
+		panic(errors.Errorf("%s must be greater than 0", sessionExpirationEnv))
+	}
+	return duration
 }

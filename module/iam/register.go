@@ -16,13 +16,10 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
-// iamConfig stores the configuration for iam module
-var iamConfig Config
-
 // Config is the configuration for iam module.
 type Config struct {
 	DefaultUsers      []*DefaultUser // DefaultUsers are default users to create on registration.
-	SessionExpiration time.Duration  // SessionExpiration is the session expiration time, default is 8 hours
+	SessionExpiration time.Duration  // SessionExpiration is the session expiration time. It defaults to 8 hours and can be configured by IAM_SESSION_EXPIRATION.
 }
 
 // DefaultUser describes a user and password credential created during module registration.
@@ -69,26 +66,20 @@ type DefaultUser struct {
 //   - IAMSession for protected IAM routes and session-aware APIs
 //
 // Configuration:
-//   - SessionExpiration defaults to 8 hours when not configured
+//   - SessionExpiration defaults to 8 hours when not configured.
+//   - IAM_SESSION_EXPIRATION overrides the default when SessionExpiration is empty.
 //
 // NOTE: Register IAM modules before authz modules because authz middleware depends on IAMSession.
 func Register(config ...Config) {
-	cfg := Config{
-		SessionExpiration: 8 * time.Hour, // default session expiration time
-	}
+	cfg := Config{}
 	if len(config) > 0 {
 		cfg = config[0]
-		// Set default session expiration if not provided
-		if cfg.SessionExpiration == 0 {
-			cfg.SessionExpiration = 8 * time.Hour
-		}
 	}
-
-	// Store only runtime configuration needed after registration.
-	iamConfig = Config{SessionExpiration: cfg.SessionExpiration}
 
 	// Set session expiration in service layer
 	serviceiamsession.SetSessionExpiration(cfg.SessionExpiration)
+	// Resolve once during registration so invalid environment configuration fails during startup.
+	_ = serviceiamsession.GetSessionExpiration()
 
 	// Register auth middleware before protected routes so auth handlers are attached deterministically.
 	middleware.RegisterAuth(middleware.IAMSession())
@@ -125,10 +116,7 @@ func Register(config ...Config) {
 // GetSessionExpiration returns the configured session expiration time.
 // If not configured, it returns the default value of 8 hours.
 func GetSessionExpiration() time.Duration {
-	if iamConfig.SessionExpiration == 0 {
-		return 8 * time.Hour
-	}
-	return iamConfig.SessionExpiration
+	return serviceiamsession.GetSessionExpiration()
 }
 
 func buildDefaultUserRecords(configs []*DefaultUser) ([]*modeliamuser.User, []*modeliamaccount.PasswordCredential, []*modeliamaccount.EmailIdentity) {
