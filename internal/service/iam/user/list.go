@@ -35,7 +35,7 @@ type adminUserListFilters struct {
 // endpoint-level permission. The visible user set is applied later by
 // userVisibilityQueryConfig because list requests do not have one concrete target
 // user to check.
-func (a *AdminUserListService) List(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamuser.AdminUserListRsp, err error) {
+func (a *AdminUserListService) List(ctx *types.ServiceContext, _ *model.Empty) (rsp *modeliamuser.AdminUserListRsp, err error) {
 	log := a.WithContext(ctx, ctx.Phase())
 
 	actor, err := LoadActor(ctx)
@@ -48,7 +48,7 @@ func (a *AdminUserListService) List(ctx *types.ServiceContext, req *model.Empty)
 		return nil, err
 	}
 
-	users, total, err := a.listUsers(ctx, actor)
+	users, total, err := listUsers(ctx, actor)
 	if err != nil {
 		log.Error("failed to list admin users", err)
 		return nil, err
@@ -68,8 +68,8 @@ func (a *AdminUserListService) List(ctx *types.ServiceContext, req *model.Empty)
 // listUsers applies the authorization-derived scope and request filters, counts
 // the full filtered result set, then applies request pagination only to the
 // returned page.
-func (a *AdminUserListService) listUsers(ctx *types.ServiceContext, actor *modeliamuser.User) ([]*modeliamuser.User, int64, error) {
-	cfg, err := a.userVisibilityQueryConfig(ctx, actor)
+func listUsers(ctx *types.ServiceContext, actor *modeliamuser.User) ([]*modeliamuser.User, int64, error) {
+	cfg, err := userVisibilityQueryConfig(ctx, actor)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -134,7 +134,7 @@ func adminUserListQuery(filters adminUserListFilters, cfg types.QueryConfig) (*m
 // assigned to at least one role in the current tenant, then querying users by
 // those subject IDs. System root actors bypass this tenant scope and can list
 // every user.
-func (a *AdminUserListService) userVisibilityQueryConfig(ctx *types.ServiceContext, actor *modeliamuser.User) (types.QueryConfig, error) {
+func userVisibilityQueryConfig(ctx *types.ServiceContext, actor *modeliamuser.User) (types.QueryConfig, error) {
 	systemRoot, err := isSystemRoot(actor)
 	if err != nil {
 		return types.QueryConfig{}, errors.Wrap(err, "failed to resolve actor system role")
