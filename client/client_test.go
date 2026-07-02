@@ -3,20 +3,16 @@ package client_test
 import (
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strconv"
 	"sync"
-	"syscall"
 	"testing"
-	"time"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/router"
 	"github.com/hydroan/gst/types"
@@ -27,8 +23,8 @@ import (
 
 var (
 	token = "-"
-	port  = 8000
-	addr2 = fmt.Sprintf("http://localhost:%d/api/test-user/", port)
+	port  int
+	addr2 string
 
 	id1     = "user1"
 	id2     = "user2"
@@ -66,20 +62,26 @@ var (
 	serverOnce sync.Once
 )
 
-func startServer() {
+func startServer(t *testing.T) {
+	t.Helper()
+
 	serverOnce.Do(func() {
-		startServerOnce()
+		startServerOnce(t)
 	})
 }
 
-func startServerOnce() {
+func startServerOnce(t *testing.T) {
+	t.Helper()
+
 	model.Register[*User]()
 
-	os.Setenv(config.DATABASE_TYPE, string(config.DBSqlite))
-	os.Setenv(config.SQLITE_IS_MEMORY, "true")
-	os.Setenv(config.SERVER_PORT, strconv.Itoa(port))
-	os.Setenv(config.LOGGER_DIR, "/tmp/test_client")
-	os.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)
+	port = testutil.SetupRandomServerPort()
+	addr2 = testutil.URL(port, "/api/test-user/")
+
+	t.Setenv(config.DATABASE_TYPE, string(config.DBSqlite))
+	t.Setenv(config.SQLITE_IS_MEMORY, "true")
+	t.Setenv(config.LOGGER_DIR, "/tmp/test_client")
+	t.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)
 
 	// os.Setenv(config.DATABASE_TYPE, string(config.DBMySQL))
 	// os.Setenv(config.MYSQL_DATABASE, "test")
@@ -87,7 +89,7 @@ func startServerOnce() {
 	// os.Setenv(config.MYSQL_PASSWORD, "test")
 
 	if err := bootstrap.Bootstrap(); err != nil {
-		panic(err)
+		require.NoError(t, err)
 	}
 
 	go func() {
@@ -106,23 +108,11 @@ func startServerOnce() {
 		}
 		os.Exit(0)
 	}()
-	for {
-		l, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-		if err == nil {
-			l.Close()
-			time.Sleep(1 * time.Second)
-			continue
-		}
-		if errors.Is(err, syscall.EADDRINUSE) {
-			break
-		}
-		panic(err)
-
-	}
+	testutil.MustWaitForServer(port)
 }
 
 func Test_Client(t *testing.T) {
-	startServer()
+	startServer(t)
 
 	cli, err := client.New(addr2, client.WithToken(token), client.WithQueryPagination(1, 2))
 	require.NoError(t, err)
@@ -429,9 +419,9 @@ func Test_Client(t *testing.T) {
 }
 
 func Test_Client_WithAPI(t *testing.T) {
-	startServer()
+	startServer(t)
 
-	baseAddr := fmt.Sprintf("http://localhost:%d/api", port)
+	baseAddr := testutil.URL(port, "/api")
 
 	// Create test users first
 	cliSetup, err := client.New(baseAddr+"/test-user", client.WithToken(token))
