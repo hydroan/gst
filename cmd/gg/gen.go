@@ -265,12 +265,8 @@ func genRunWithOptions(opts genRunOptions) error {
 				return err
 			}
 
-			// Calculate the correct model import path and package name
-			correctModelImportPath := filepath.Join(modelInfo.ModulePath, modelInfo.ModelFileDir)
-			correctModelPkgName := modelInfo.ModelPkgName
-
 			// Apply changes and sync model imports to handle import path and package name updates
-			changed := gen.ApplyServiceFileWithModelSync(f, action, servicePkgName, correctModelImportPath, correctModelPkgName)
+			changed := gen.ApplyServiceFileWithModelSync(f, action, servicePkgName, modelInfo)
 			if changed {
 				// Only reformat and write file when there are changes
 				// Use original FileSet to preserve comment positions

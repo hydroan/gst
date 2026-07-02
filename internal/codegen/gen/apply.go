@@ -144,6 +144,10 @@ func renameIdent(node ast.Node, oldName, newName string) {
 // The servicePkgName parameter specifies the expected package name for the service file.
 // This should match the package name used in service registration to maintain consistency.
 func ApplyServiceFile(file *ast.File, action *dsl.Action, servicePkgName string) bool {
+	return applyServiceFile(file, action, servicePkgName, "")
+}
+
+func applyServiceFile(file *ast.File, action *dsl.Action, servicePkgName, correctModelName string) bool {
 	if file == nil || action == nil {
 		return false
 	}
@@ -166,7 +170,7 @@ func ApplyServiceFile(file *ast.File, action *dsl.Action, servicePkgName string)
 			for _, spec := range genDecl.Specs {
 				if typeSpec, ok := spec.(*ast.TypeSpec); ok {
 					if isServiceType(typeSpec) {
-						if applyServiceType(typeSpec, action) {
+						if applyServiceType(typeSpec, action, correctModelName) {
 							changed = true
 						}
 					}
@@ -356,13 +360,14 @@ func applyServiceMethod4(fn *ast.FuncDecl, action *dsl.Action) bool {
 	return changed
 }
 
-// applyServiceType updates a service struct type to match DSL Payload/Result generics.
+// applyServiceType updates a service struct type to match the generated service generics.
 // It transforms: type user struct { service.Base[*model.User, *model.User, *model.User] }
 // into:         type user struct { service.Base[*model.User, *model.UserReq, *model.UserRsp] }
 // or:           type user struct { service.Base[*model.User, model.UserReq, model.UserRsp] }
-// depending on whether action.Payload/Result starts with '*'
-func applyServiceType(spec *ast.TypeSpec, action *dsl.Action) bool {
-	if spec == nil || action == nil || action.Payload == "" || action.Result == "" {
+// depending on whether action.Payload/Result starts with '*'. When correctModelName
+// is provided, it also corrects the first generic parameter to the current model.
+func applyServiceType(spec *ast.TypeSpec, action *dsl.Action, correctModelName ...string) bool {
+	if spec == nil || action == nil {
 		return false
 	}
 	structType, ok := spec.Type.(*ast.StructType)
@@ -382,13 +387,22 @@ func applyServiceType(spec *ast.TypeSpec, action *dsl.Action) bool {
 			if sel, ok := indexListExpr.X.(*ast.SelectorExpr); ok {
 				if pkgIdent, ok := sel.X.(*ast.Ident); ok && pkgIdent.Name == "service" && sel.Sel.Name == "Base" {
 					if len(indexListExpr.Indices) == 3 {
+						if len(correctModelName) > 0 && correctModelName[0] != "" {
+							if changed1 := applyServiceTypeParam(indexListExpr, 0, "*"+correctModelName[0]); changed1 {
+								changed = true
+							}
+						}
 						// Handle second parameter (Payload)
-						if changed2 := applyServiceTypeParam(indexListExpr, 1, action.Payload); changed2 {
-							changed = true
+						if action.Payload != "" {
+							if changed2 := applyServiceTypeParam(indexListExpr, 1, action.Payload); changed2 {
+								changed = true
+							}
 						}
 						// Handle third parameter (Result)
-						if changed3 := applyServiceTypeParam(indexListExpr, 2, action.Result); changed3 {
-							changed = true
+						if action.Result != "" {
+							if changed3 := applyServiceTypeParam(indexListExpr, 2, action.Result); changed3 {
+								changed = true
+							}
 						}
 					}
 				}
@@ -402,7 +416,7 @@ func applyServiceType(spec *ast.TypeSpec, action *dsl.Action) bool {
 // applyServiceTypeParam updates a specific type parameter in service.Base[T1, T2, T3]
 // based on whether the actionType starts with '*' (pointer) or not (non-pointer)
 func applyServiceTypeParam(indexListExpr *ast.IndexListExpr, paramIndex int, actionType string) bool {
-	if paramIndex >= len(indexListExpr.Indices) {
+	if paramIndex >= len(indexListExpr.Indices) || actionType == "" {
 		return false
 	}
 
@@ -486,20 +500,28 @@ func applyServiceTypeParam(indexListExpr *ast.IndexListExpr, paramIndex int, act
 // - file: The AST file to process
 // - action: The DSL action configuration
 // - servicePkgName: The expected service package name
-// - correctModelImportPath: The correct model import path (e.g., "myproject/model/auth")
-// - correctModelPkgName: The correct model package name (e.g., "auth")
+// - modelInfo: The correct model generation context
 //
 // Returns true if any changes were made to the file.
-func ApplyServiceFileWithModelSync(file *ast.File, action *dsl.Action, servicePkgName, correctModelImportPath, correctModelPkgName string) bool {
+func ApplyServiceFileWithModelSync(file *ast.File, action *dsl.Action, servicePkgName string, modelInfo *ModelInfo) bool {
 	if file == nil || action == nil {
 		return false
 	}
 
 	// First apply the original ApplyServiceFile logic
-	changed := ApplyServiceFile(file, action, servicePkgName)
+	correctModelName := ""
+	if modelInfo != nil {
+		correctModelName = modelInfo.ModelName
+	}
+	changed := applyServiceFile(file, action, servicePkgName, correctModelName)
+	if modelInfo == nil || modelInfo.ModulePath == "" || modelInfo.ModelFileDir == "" || modelInfo.ModelPkgName == "" {
+		return changed
+	}
 
 	// Build a map of old package names to new package names
 	// by comparing current imports with the correct model import path
+	correctModelImportPath := filepath.Join(modelInfo.ModulePath, modelInfo.ModelFileDir)
+	correctModelPkgName := modelInfo.ModelPkgName
 	importMapping := buildModelImportMapping(file, correctModelImportPath, correctModelPkgName)
 
 	if len(importMapping) == 0 {

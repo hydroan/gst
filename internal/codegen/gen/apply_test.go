@@ -496,13 +496,12 @@ func (c *configSetting) Create(ctx *types.ServiceContext, req *model.ConfigSetti
 
 func TestApplyServiceFileWithModelSync(t *testing.T) {
 	tests := []struct {
-		name                   string // description of this test case
-		code                   string
-		action                 *dsl.Action
-		servicePkgName         string
-		correctModelImportPath string
-		correctModelPkgName    string
-		want                   string
+		name           string // description of this test case
+		code           string
+		action         *dsl.Action
+		servicePkgName string
+		modelInfo      *ModelInfo
+		want           string
 	}{
 		{
 			name: "update_import_and_package_references",
@@ -529,9 +528,13 @@ func (u *Creator) Create(ctx *types.ServiceContext, req *identity.UserReq) (rsp 
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
 			},
-			servicePkgName:         "user",
-			correctModelImportPath: "helloworld/model/auth",
-			correctModelPkgName:    "auth",
+			servicePkgName: "user",
+			modelInfo: &ModelInfo{
+				ModulePath:   "helloworld",
+				ModelFileDir: "model/auth",
+				ModelPkgName: "auth",
+				ModelName:    "User",
+			},
 			want: `package user
 
 import (
@@ -575,9 +578,13 @@ func (u *Creator) Create(ctx *types.ServiceContext, req *auth.UserReq) (rsp *aut
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
 			},
-			servicePkgName:         "user",
-			correctModelImportPath: "helloworld/model/auth",
-			correctModelPkgName:    "auth",
+			servicePkgName: "user",
+			modelInfo: &ModelInfo{
+				ModulePath:   "helloworld",
+				ModelFileDir: "model/auth",
+				ModelPkgName: "auth",
+				ModelName:    "User",
+			},
 			want: `package user
 
 import (
@@ -620,9 +627,13 @@ func (u *Creator) Create(ctx *types.ServiceContext, req *oldpkg.UserReq) (rsp *o
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
 			},
-			servicePkgName:         "user",
-			correctModelImportPath: "helloworld/model/auth",
-			correctModelPkgName:    "auth",
+			servicePkgName: "user",
+			modelInfo: &ModelInfo{
+				ModulePath:   "helloworld",
+				ModelFileDir: "model/auth",
+				ModelPkgName: "auth",
+				ModelName:    "User",
+			},
 			want: `package user
 
 import (
@@ -667,9 +678,13 @@ func (d *Lister) List(ctx *types.ServiceContext, req *auth.Debug) (rsp *auth.Deb
 				Payload: "*Debug",
 				Result:  "*Debug",
 			},
-			servicePkgName:         "debug",
-			correctModelImportPath: "helloworld/model/auth",
-			correctModelPkgName:    "auth",
+			servicePkgName: "debug",
+			modelInfo: &ModelInfo{
+				ModulePath:   "helloworld",
+				ModelFileDir: "model/auth",
+				ModelPkgName: "auth",
+				ModelName:    "Debug",
+			},
 			want: `package debug
 
 import (
@@ -690,6 +705,55 @@ func (d *Lister) List(ctx *types.ServiceContext, req *auth.Debug) (rsp *auth.Deb
 }
 `,
 		},
+		{
+			name: "update_stale_service_model_type",
+			code: `package debug
+
+import (
+	"helloworld/model/debug"
+
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+)
+
+type Ping struct {
+	service.Base[*debug.Ping, *debug.Debug, *debug.PingRsp]
+}
+
+func (p *Ping) Get(ctx *types.ServiceContext, req *debug.Debug) (rsp *debug.PingRsp, err error) {
+	return rsp, nil
+}
+`,
+			action: &dsl.Action{
+				Enabled: true,
+				Payload: "*Debug",
+				Result:  "*PingRsp",
+			},
+			servicePkgName: "debug",
+			modelInfo: &ModelInfo{
+				ModulePath:   "helloworld",
+				ModelFileDir: "model/debug",
+				ModelPkgName: "debug",
+				ModelName:    "Debug",
+			},
+			want: `package debug
+
+import (
+	"helloworld/model/debug"
+
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+)
+
+type Ping struct {
+	service.Base[*debug.Debug, *debug.Debug, *debug.PingRsp]
+}
+
+func (p *Ping) Get(ctx *types.ServiceContext, req *debug.Debug) (rsp *debug.PingRsp, err error) {
+	return rsp, nil
+}
+`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -699,7 +763,7 @@ func (d *Lister) List(ctx *types.ServiceContext, req *auth.Debug) (rsp *auth.Deb
 				t.Error(err)
 				return
 			}
-			ApplyServiceFileWithModelSync(file, tt.action, tt.servicePkgName, tt.correctModelImportPath, tt.correctModelPkgName)
+			ApplyServiceFileWithModelSync(file, tt.action, tt.servicePkgName, tt.modelInfo)
 			got, err := FormatNodeExtra(file)
 			if err != nil {
 				t.Error(err)
