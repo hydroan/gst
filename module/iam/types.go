@@ -24,8 +24,13 @@ type (
 
 // User API aliases.
 type (
-	User               = modeliamuser.User
-	UserStatus         = modeliamuser.UserStatus
+	User             = modeliamuser.User
+	UserStatus       = modeliamuser.UserStatus
+	AdminUserView    = modeliamuser.AdminUserView
+	AdminUserListRsp = modeliamuser.AdminUserListRsp
+	AdminUserGetReq  = modeliamuser.AdminUserGetReq
+	AdminUserGetRsp  = modeliamuser.AdminUserGetRsp
+
 	UserStatusPatchReq = modeliamuser.UserStatusPatchReq
 	UserStatusPatchRsp = modeliamuser.UserStatusPatchRsp
 	PasswordCredential = modeliamaccount.PasswordCredential

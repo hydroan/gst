@@ -11,7 +11,13 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
-// EnsureTenantAdmin verifies that actor may manage target inside the current tenant.
+// EnsureTenantAdmin verifies admin-user operations inside the current tenant.
+//
+// The helper is shared by user list/get/status flows. System-root actors bypass
+// tenant checks. Tenant administrators must pass route authorization in the
+// current tenant, and when a concrete target is supplied the target must also be
+// a member of that tenant. System-root targets are never manageable through
+// tenant-local admin APIs.
 func EnsureTenantAdmin(ctx *types.ServiceContext, actor *modeliamuser.User, target *modeliamuser.User) error {
 	systemRootActor, err := isSystemRoot(actor)
 	if err != nil {
@@ -23,6 +29,9 @@ func EnsureTenantAdmin(ctx *types.ServiceContext, actor *modeliamuser.User, targ
 	if actor == nil || actor.GetID() == "" {
 		return service.NewError(http.StatusForbidden, "permission denied")
 	}
+
+	// Root may appear in tenant RBAC bindings for setup or bootstrap purposes,
+	// but tenant-local administrators must not manage root as a target user.
 	systemRootTarget, err := isSystemRoot(target)
 	if err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
@@ -32,6 +41,9 @@ func EnsureTenantAdmin(ctx *types.ServiceContext, actor *modeliamuser.User, targ
 	}
 
 	tenant := currentTenant(ctx)
+	// Route permission and target membership are checked separately. A user can
+	// have permission to call the endpoint without being allowed to manage a
+	// particular target outside the current tenant.
 	allowed, err := rbac.RBAC().Authorize(tenant, actor.GetID(), operationObject(ctx), operationAction(ctx))
 	if err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
@@ -53,6 +65,10 @@ func EnsureTenantAdmin(ctx *types.ServiceContext, actor *modeliamuser.User, targ
 	return nil
 }
 
+// currentTenant returns the authorization domain for an admin request.
+//
+// Tenant middleware writes TenantID into ServiceContext. If no tenant resolver is
+// installed, admin APIs operate in the default authorization domain.
 func currentTenant(ctx *types.ServiceContext) string {
 	if ctx != nil && strings.TrimSpace(ctx.TenantID()) != "" {
 		return strings.TrimSpace(ctx.TenantID())
@@ -60,6 +76,11 @@ func currentTenant(ctx *types.ServiceContext) string {
 	return rbac.DefaultTenant
 }
 
+// operationObject returns the object string used for RBAC route authorization.
+//
+// ServiceContext.Path contains the concrete request path in normal HTTP flows.
+// Route is kept as a fallback for service-level tests or callers that construct
+// contexts without an HTTP request.
 func operationObject(ctx *types.ServiceContext) string {
 	if ctx == nil {
 		return ""
@@ -70,6 +91,7 @@ func operationObject(ctx *types.ServiceContext) string {
 	return strings.TrimSpace(ctx.Route())
 }
 
+// operationAction returns the action string used for RBAC route authorization.
 func operationAction(ctx *types.ServiceContext) string {
 	if ctx == nil {
 		return ""
@@ -77,6 +99,10 @@ func operationAction(ctx *types.ServiceContext) string {
 	return strings.TrimSpace(ctx.Method())
 }
 
+// targetBelongsToTenant reports whether the target has any role binding in tenant.
+//
+// User rows do not carry tenant_id, so target visibility is derived from RBAC
+// role bindings rather than from the IAM user table.
 func targetBelongsToTenant(tenant string, userID string) (bool, error) {
 	if strings.TrimSpace(userID) == "" {
 		return false, nil
@@ -84,6 +110,7 @@ func targetBelongsToTenant(tenant string, userID string) (bool, error) {
 	return rbac.RBAC().SubjectInTenant(tenant, userID)
 }
 
+// isSystemRoot reports whether user holds the framework-level root role.
 func isSystemRoot(user *modeliamuser.User) (bool, error) {
 	if user == nil || strings.TrimSpace(user.GetID()) == "" {
 		return false, nil

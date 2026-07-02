@@ -58,6 +58,8 @@ type DefaultUser struct {
 //   - POST   /api/signup
 //   - POST   /api/iam/change-password
 //   - POST   /api/iam/reset-password
+//   - GET    /api/iam/admin/users
+//   - GET    /api/iam/admin/users/:id
 //   - PATCH  /api/iam/admin/users/:id/status
 //   - GET    /api/iam/profile
 //   - PATCH  /api/iam/profile
@@ -89,6 +91,8 @@ func Register(config ...Config) {
 	module.Use(module.NewWrapper("/signup", "id", true, &serviceiamaccount.SignupService{}), module.CRUD(consts.PHASE_CREATE))
 	module.Use(module.NewWrapper("/iam/change-password", "id", false, &serviceiamaccount.ChangePasswordService{}), module.CRUD(consts.PHASE_CREATE))
 	module.Use(module.NewWrapper("/iam/reset-password", "id", false, &serviceiamaccount.ResetPasswordService{}), module.CRUD(consts.PHASE_CREATE))
+	module.Use(module.NewWrapper("/iam/admin/users", "id", false, &serviceiamuser.AdminUserListService{}), module.CRUD(consts.PHASE_LIST))
+	module.Use(module.NewWrapper("/iam/admin/users", "id", false, &serviceiamuser.AdminUserGetService{}), module.CRUD(consts.PHASE_GET))
 	module.Use(module.NewWrapper("/iam/admin/users/:id/status", "id", false, &serviceiamuser.UserStatusPatchService{}), module.Exact(consts.PHASE_PATCH))
 	module.Use(module.NewWrapper("/iam/profile", "id", false, &serviceiamprofile.ProfileGetService{}), module.Exact(consts.PHASE_GET))
 	module.Use(module.NewWrapper("/iam/profile", "id", false, &serviceiamprofile.ProfilePatchService{}), module.Exact(consts.PHASE_PATCH))

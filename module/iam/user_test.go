@@ -14,6 +14,95 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestAdminUserList(t *testing.T) {
+	rootSessionID := accountLoginRoot(t)
+	user := accountSignupUserWithEmail(t, "admin_user_list", "12345678", "admin.user.list@example.com")
+	fuzzyUser := accountSignupUserWithEmail(t, "admin_user_list_fuzzy_match", "12345678", "admin.user.list.fuzzy@example.com")
+	actor := accountSignupUser(t, "admin_user_list_actor", "12345678")
+	actor.SessionID = accountLoginUser(t, &actor, actor.Password)
+
+	t.Run("list_users", func(t *testing.T) {
+		cli := accountNewAuthenticatedClient(t, adminUsersAPI(), rootSessionID)
+
+		items := make([]iam.AdminUserView, 0)
+		total := new(int64)
+		_, err := cli.List(&items, total)
+		require.NoError(t, err)
+		require.Positive(t, *total)
+
+		view := requireAdminUserView(t, items, user.UserID)
+		require.Equal(t, user.UserID, view.ID)
+		require.Equal(t, user.Username, view.Username)
+		require.Equal(t, "admin.user.list@example.com", view.Email)
+		require.Equal(t, modeliamuser.UserStatusActive, view.Status)
+		require.NotZero(t, view.CreatedAt)
+	})
+
+	t.Run("filter_by_username", func(t *testing.T) {
+		cli := accountNewAuthenticatedClient(t, adminUsersAPI()+"?username=fuzzy_match", rootSessionID)
+
+		items := make([]iam.AdminUserView, 0)
+		total := new(int64)
+		_, err := cli.List(&items, total)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, *total)
+		require.Len(t, items, 1)
+		require.Equal(t, fuzzyUser.UserID, items[0].ID)
+		require.Equal(t, fuzzyUser.Username, items[0].Username)
+	})
+
+	t.Run("forbidden_without_admin_permission", func(t *testing.T) {
+		cli := accountNewAuthenticatedClient(t, adminUsersAPI(), actor.SessionID)
+
+		items := make([]iam.AdminUserView, 0)
+		total := new(int64)
+		_, err := cli.List(&items, total)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "403")
+		require.Contains(t, err.Error(), "permission denied")
+	})
+}
+
+func TestAdminUserGet(t *testing.T) {
+	rootSessionID := accountLoginRoot(t)
+	user := accountSignupUserWithEmail(t, "admin_user_get", "12345678", "admin.user.get@example.com")
+	actor := accountSignupUser(t, "admin_user_get_actor", "12345678")
+	actor.SessionID = accountLoginUser(t, &actor, actor.Password)
+
+	t.Run("get_user", func(t *testing.T) {
+		cli := accountNewAuthenticatedClient(t, adminUsersAPI(), rootSessionID)
+
+		got := new(iam.AdminUserGetRsp)
+		_, err := cli.Get(user.UserID, got)
+		require.NoError(t, err)
+		require.Equal(t, user.UserID, got.User.ID)
+		require.Equal(t, user.Username, got.User.Username)
+		require.Equal(t, "admin.user.get@example.com", got.User.Email)
+		require.Equal(t, modeliamuser.UserStatusActive, got.User.Status)
+		require.NotZero(t, got.User.CreatedAt)
+	})
+
+	t.Run("missing_target_returns_not_found", func(t *testing.T) {
+		cli := accountNewAuthenticatedClient(t, adminUsersAPI(), rootSessionID)
+
+		got := new(iam.AdminUserGetRsp)
+		_, err := cli.Get("missing-admin-user-get-target", got)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "404")
+		require.Contains(t, err.Error(), "user not found")
+	})
+
+	t.Run("forbidden_without_admin_permission", func(t *testing.T) {
+		cli := accountNewAuthenticatedClient(t, adminUsersAPI(), actor.SessionID)
+
+		got := new(iam.AdminUserGetRsp)
+		_, err := cli.Get(user.UserID, got)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "403")
+		require.Contains(t, err.Error(), "permission denied")
+	})
+}
+
 func TestUserStatusPatch(t *testing.T) {
 	actor := accountSignupUser(t, "user_status_actor", "12345678")
 	actor.SessionID = accountLoginUser(t, &actor, actor.Password)
@@ -246,4 +335,21 @@ func userLoadByUsername(t *testing.T, username string) *iam.User {
 	require.NoError(t, database.Database[*iam.User](context.Background()).WithLimit(1).WithQuery(&iam.User{Username: username}).List(&users))
 	require.Len(t, users, 1)
 	return users[0]
+}
+
+func adminUsersAPI() string {
+	return testutil.URL(port, "/api/iam/admin/users")
+}
+
+func requireAdminUserView(t *testing.T, items []iam.AdminUserView, userID string) iam.AdminUserView {
+	t.Helper()
+
+	for i := range items {
+		if items[i].ID == userID {
+			return items[i]
+		}
+	}
+
+	require.Failf(t, "admin user view not found", "user_id=%s", userID)
+	return iam.AdminUserView{}
 }
