@@ -395,6 +395,10 @@ type RBAC interface {
 	// tenant. It checks membership, not whether any specific route is authorized.
 	SubjectInTenant(tenant string, subject string) (bool, error)
 
+	// SubjectsInTenant returns subjects with at least one role assignment in
+	// tenant. It checks membership, not whether any specific route is authorized.
+	SubjectsInTenant(tenant string) ([]string, error)
+
 	// AssignSystemRole assigns subject to a system-level role outside any tenant.
 	// System roles are intended for cross-tenant framework privileges and should
 	// not be used for ordinary tenant-local authorization.

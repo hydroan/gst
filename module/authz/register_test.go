@@ -792,6 +792,10 @@ func TestAuthzRoleBinding(t *testing.T) {
 			require.Equal(t, testSuccessCode, resp.Code, "delete should return success")
 		})
 	})
+
+	t.Run("subjects_in_tenant", func(t *testing.T) {
+		requireRBACSubjectsInTenant(t)
+	})
 }
 
 func TestIAMUserStatusTenantAuthorization(t *testing.T) {
@@ -831,6 +835,75 @@ func TestIAMUserStatusTenantAuthorization(t *testing.T) {
 	require.NoError(t, err)
 	_, err = cli.Patch(targetTenantAUserID+"/status", iam.UserStatusPatchReq{Status: iam.UserStatusActive})
 	require.Error(t, err)
+}
+
+func TestIAMAdminUserTenantListGet(t *testing.T) {
+	tenantA := authzTestUsername("tenant_admin_users_a")
+	tenantB := authzTestUsername("tenant_admin_users_b")
+	adminUserID, adminSessionID := authzSignupAndLoginUserWithUserAgent(t, authzTestUsername("tenant_admin_users_admin"), "12345678", tenantUserAgent)
+	targetTenantAUserID := authzSignupUser(t, authzTestUsername("tenant_admin_users_target_a"), "12345678")
+	targetTenantBUserID := authzSignupUser(t, authzTestUsername("tenant_admin_users_target_b"), "12345678")
+
+	adminRoleID := authzCreateTenantRole(t, tenantA, authzTestUsername("tenant_admin_users_admin_role"))
+	authzBindTenantRole(t, tenantA, adminUserID, adminRoleID)
+	authzGrantTenantPolicy(t, tenantA, adminRoleID, "/api/iam/admin/users", http.MethodGet)
+	authzGrantTenantPolicy(t, tenantA, adminRoleID, "/api/iam/admin/users/{id}", http.MethodGet)
+	tenantAMemberRoleID := authzCreateTenantRole(t, tenantA, authzTestUsername("tenant_admin_users_member_a_role"))
+	authzBindTenantRole(t, tenantA, targetTenantAUserID, tenantAMemberRoleID)
+	tenantBMemberRoleID := authzCreateTenantRole(t, tenantB, authzTestUsername("tenant_admin_users_member_b_role"))
+	authzBindTenantRole(t, tenantB, targetTenantBUserID, tenantBMemberRoleID)
+	rootMemberRoleID := authzCreateTenantRole(t, tenantA, authzTestUsername("tenant_admin_users_root_member_role"))
+	authzBindTenantRole(t, tenantA, rootUsername, rootMemberRoleID)
+
+	cli, err := authzTenantClient(userAdminAPI, adminSessionID, tenantA)
+	require.NoError(t, err)
+
+	t.Run("list_tenant_users", func(t *testing.T) {
+		items := make([]iam.AdminUserView, 0)
+		total := new(int64)
+		_, listErr := cli.List(&items, total)
+		require.NoError(t, listErr)
+		require.Positive(t, *total)
+		requireAdminUserView(t, items, adminUserID)
+		requireAdminUserView(t, items, targetTenantAUserID)
+		requireNoAdminUserView(t, items, targetTenantBUserID)
+		requireNoAdminUserView(t, items, rootUsername)
+	})
+
+	t.Run("get_tenant_user", func(t *testing.T) {
+		got := new(iam.AdminUserGetRsp)
+		_, getErr := cli.Get(targetTenantAUserID, got)
+		require.NoError(t, getErr)
+		require.Equal(t, targetTenantAUserID, got.User.ID)
+	})
+
+	t.Run("get_other_tenant_user_forbidden", func(t *testing.T) {
+		got := new(iam.AdminUserGetRsp)
+		_, getErr := cli.Get(targetTenantBUserID, got)
+		require.Error(t, getErr)
+	})
+}
+
+func requireRBACSubjectsInTenant(t *testing.T) {
+	t.Helper()
+
+	tenantA := authzTestUsername("tenant_subjects_a")
+	tenantB := authzTestUsername("tenant_subjects_b")
+	userAID := authzSignupUser(t, authzTestUsername("tenant_subjects_user_a"), "12345678")
+	userBID := authzSignupUser(t, authzTestUsername("tenant_subjects_user_b"), "12345678")
+
+	tenantARoleID := authzCreateTenantRole(t, tenantA, authzTestUsername("tenant_subjects_a_role"))
+	tenantASecondRoleID := authzCreateTenantRole(t, tenantA, authzTestUsername("tenant_subjects_a_second_role"))
+	tenantBRoleID := authzCreateTenantRole(t, tenantB, authzTestUsername("tenant_subjects_b_role"))
+	authzBindTenantRole(t, tenantA, userAID, tenantARoleID)
+	authzBindTenantRole(t, tenantA, userAID, tenantASecondRoleID)
+	authzBindTenantRole(t, tenantB, userBID, tenantBRoleID)
+
+	subjects, err := rbac.RBAC().SubjectsInTenant(tenantA)
+	require.NoError(t, err)
+	require.Contains(t, subjects, userAID)
+	require.NotContains(t, subjects, userBID)
+	require.Len(t, filterSubjects(subjects, userAID), 1)
 }
 
 func TestIAMLoginStoresSessionTenant(t *testing.T) {
@@ -1023,6 +1096,36 @@ func authzGrantTenantPolicy(t *testing.T, tenantID, roleID, object, action strin
 
 	_, err := rbac.Enforcer.AddPolicy(tenantID, roleID, object, action, "allow")
 	require.NoError(t, err)
+}
+
+func filterSubjects(subjects []string, target string) []string {
+	matched := make([]string, 0, 1)
+	for _, subject := range subjects {
+		if subject == target {
+			matched = append(matched, subject)
+		}
+	}
+	return matched
+}
+
+func requireAdminUserView(t *testing.T, users []iam.AdminUserView, userID string) iam.AdminUserView {
+	t.Helper()
+
+	for _, user := range users {
+		if user.ID == userID {
+			return user
+		}
+	}
+	require.Failf(t, "admin user view not found", "user_id=%s", userID)
+	return iam.AdminUserView{}
+}
+
+func requireNoAdminUserView(t *testing.T, users []iam.AdminUserView, userID string) {
+	t.Helper()
+
+	for _, user := range users {
+		require.NotEqual(t, userID, user.ID)
+	}
 }
 
 func requireRoute(t *testing.T, routes []authz.Route, path string, methods []string) {

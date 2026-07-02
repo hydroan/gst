@@ -48,6 +48,7 @@ func (noop) RevokeRolePermissions(tenant string, role string) error        { ret
 func (noop) AssignRole(tenant string, subject string, role string) error   { return nil }
 func (noop) UnassignRole(tenant string, subject string, role string) error { return nil }
 func (noop) SubjectInTenant(tenant string, subject string) (bool, error)   { return false, nil }
+func (noop) SubjectsInTenant(tenant string) ([]string, error)              { return nil, nil }
 func (noop) AssignSystemRole(subject string, role string) error            { return nil }
 func (noop) UnassignSystemRole(subject string, role string) error          { return nil }
 func (noop) HasSystemRole(subject string, role string) (bool, error) {
@@ -154,6 +155,10 @@ func (r *rbac) UnassignRole(tenant string, subject string, role string) error {
 }
 
 // SubjectInTenant reports whether subject has any role assignment inside tenant.
+//
+// Tenant membership is represented by Casbin grouping policies in the form
+// subject, role, tenant. This check does not evaluate route permission; it only
+// answers whether the subject belongs to the tenant authorization domain.
 func (r *rbac) SubjectInTenant(tenant string, subject string) (bool, error) {
 	subject = strings.TrimSpace(subject)
 	if subject == "" {
@@ -174,6 +179,41 @@ func (r *rbac) SubjectInTenant(tenant string, subject string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// SubjectsInTenant returns subjects with at least one role assignment inside tenant.
+//
+// It is used by IAM admin user list because IAM users do not store tenant_id.
+// The tenant-visible user set is therefore derived from role bindings first and
+// then joined back to user rows by subject ID.
+func (r *rbac) SubjectsInTenant(tenant string) ([]string, error) {
+	tenant = strings.TrimSpace(tenant)
+	if tenant == "" {
+		tenant = DefaultTenant
+	}
+
+	groupingPolicies, err := r.enforcer.GetFilteredGroupingPolicy(2, tenant)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]struct{}, len(groupingPolicies))
+	subjects := make([]string, 0, len(groupingPolicies))
+	for _, policy := range groupingPolicies {
+		if len(policy) < 3 || strings.TrimSpace(policy[1]) == "" {
+			continue
+		}
+		subject := strings.TrimSpace(policy[0])
+		if subject == "" {
+			continue
+		}
+		if _, ok := seen[subject]; ok {
+			continue
+		}
+		seen[subject] = struct{}{}
+		subjects = append(subjects, subject)
+	}
+	return subjects, nil
 }
 
 // AssignSystemRole assigns a subject to a system-level role outside any tenant.
