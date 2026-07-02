@@ -82,9 +82,9 @@ func currentTenant(ctx *types.ServiceContext) string {
 // System root is intentionally separate from tenant-local roles: it can bypass
 // tenant list scoping as an actor, and tenant admins must not manage it as a
 // target even if root also has tenant role bindings.
-func isSystemRoot(actor *modeliamuser.User) (bool, error) {
+func isSystemRoot(ctx *types.ServiceContext, actor *modeliamuser.User) (bool, error) {
 	if actor == nil || strings.TrimSpace(actor.GetID()) == "" {
 		return false, nil
 	}
-	return rbac.RBAC().HasSystemRole(actor.GetID(), consts.AUTHZ_SYSTEM_ROLE_ROOT)
+	return rbac.RBAC().HasSystemRole(ctx, actor.GetID(), consts.AUTHZ_SYSTEM_ROLE_ROOT)
 }

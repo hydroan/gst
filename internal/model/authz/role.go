@@ -95,7 +95,7 @@ func (r *Role) CreateAfter(ctx context.Context) error {
 		return err
 	}
 	e1 := r.syncPermissions(ctx)
-	e2 := rbac.RBAC().AddRole(r.tenant(), r.ID)
+	e2 := rbac.RBAC().AddRole(ctx, r.tenant(), r.ID)
 	return errors.Join(e1, e2)
 }
 
@@ -126,7 +126,7 @@ func (r *Role) UpdateAfter(ctx context.Context) error {
 		return err
 	}
 	e1 := r.syncPermissions(ctx)
-	e2 := rbac.RBAC().AddRole(r.tenant(), r.ID)
+	e2 := rbac.RBAC().AddRole(ctx, r.tenant(), r.ID)
 	return errors.Join(e1, e2)
 }
 
@@ -154,7 +154,7 @@ func (r *Role) DeleteBefore(ctx context.Context) error {
 		}
 	}
 
-	return rbac.RBAC().RemoveRole(r.tenant(), r.ID)
+	return rbac.RBAC().RemoveRole(ctx, r.tenant(), r.ID)
 }
 
 type routePolicy struct {
@@ -183,12 +183,12 @@ func (r *Role) syncPermissions(ctx context.Context) error {
 		newPolicies = append(newPolicies, routePoliciesForMenu(m)...)
 	}
 
-	if err := rbac.RBAC().RevokeRolePermissions(r.tenant(), r.ID); err != nil {
+	if err := rbac.RBAC().RevokeRolePermissions(ctx, r.tenant(), r.ID); err != nil {
 		zap.S().Error(err)
 		return err
 	}
 	for _, p := range newPolicies {
-		if err := rbac.RBAC().GrantPermission(r.tenant(), r.ID, p.object, p.action); err != nil {
+		if err := rbac.RBAC().GrantPermission(ctx, r.tenant(), r.ID, p.object, p.action); err != nil {
 			zap.S().Error(err)
 			return err
 		}

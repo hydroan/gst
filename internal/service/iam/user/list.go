@@ -135,7 +135,7 @@ func adminUserListQuery(filters adminUserListFilters, cfg types.QueryConfig) (*m
 // those subject IDs. System root actors bypass this tenant scope and can list
 // every user.
 func userVisibilityQueryConfig(ctx *types.ServiceContext, actor *modeliamuser.User) (types.QueryConfig, error) {
-	systemRoot, err := isSystemRoot(actor)
+	systemRoot, err := isSystemRoot(ctx, actor)
 	if err != nil {
 		return types.QueryConfig{}, errors.Wrap(err, "failed to resolve actor system role")
 	}
@@ -145,14 +145,14 @@ func userVisibilityQueryConfig(ctx *types.ServiceContext, actor *modeliamuser.Us
 
 	// The current tenant comes from the request context and falls back to the
 	// default authorization domain when the application has no tenant resolver.
-	subjectIDs, err := rbac.RBAC().SubjectsInTenant(currentTenant(ctx))
+	subjectIDs, err := rbac.RBAC().SubjectsInTenant(ctx, currentTenant(ctx))
 	if err != nil {
 		return types.QueryConfig{}, errors.Wrap(err, "failed to list tenant subjects")
 	}
 	if len(subjectIDs) == 0 {
 		return emptyUserVisibilityQueryConfig(), nil
 	}
-	subjectIDs, err = excludeSystemRootSubjects(subjectIDs)
+	subjectIDs, err = excludeSystemRootSubjects(ctx, subjectIDs)
 	if err != nil {
 		return types.QueryConfig{}, err
 	}
@@ -170,10 +170,10 @@ func emptyUserVisibilityQueryConfig() types.QueryConfig {
 // never manage through tenant-local user APIs. A root user can be bound to a
 // tenant role for authorization setup, but that binding must not make root
 // visible or manageable from that tenant's admin user list.
-func excludeSystemRootSubjects(subjectIDs []string) ([]string, error) {
+func excludeSystemRootSubjects(ctx *types.ServiceContext, subjectIDs []string) ([]string, error) {
 	filtered := make([]string, 0, len(subjectIDs))
 	for _, subjectID := range subjectIDs {
-		systemRoot, err := rbac.RBAC().HasSystemRole(subjectID, consts.AUTHZ_SYSTEM_ROLE_ROOT)
+		systemRoot, err := rbac.RBAC().HasSystemRole(ctx, subjectID, consts.AUTHZ_SYSTEM_ROLE_ROOT)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to resolve subject system role")
 		}

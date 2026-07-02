@@ -63,7 +63,7 @@ func (r *RoleBinding) CreateBefore(ctx context.Context) error {
 }
 
 func (r *RoleBinding) CreateAfter(ctx context.Context) error {
-	if err := rbac.RBAC().AssignRole(r.tenant(), r.SubjectID, r.RoleID); err != nil {
+	if err := rbac.RBAC().AssignRole(ctx, r.tenant(), r.SubjectID, r.RoleID); err != nil {
 		return err
 	}
 
@@ -75,7 +75,7 @@ func (r *RoleBinding) DeleteBefore(ctx context.Context) error {
 	if err := database.Database[*RoleBinding](ctx).Get(r, r.ID); err != nil {
 		return err
 	}
-	return rbac.RBAC().UnassignRole(r.tenant(), r.SubjectID, r.RoleID)
+	return rbac.RBAC().UnassignRole(ctx, r.tenant(), r.SubjectID, r.RoleID)
 }
 
 func (r *RoleBinding) MarshalLogObject(enc zapcore.ObjectEncoder) error {

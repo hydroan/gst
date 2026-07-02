@@ -33,7 +33,7 @@ func (m *MenuService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.M
 //     menu nodes visible when only part of their children are selected.
 //   - Menu.DomainPattern still constrains visibility by the current request host.
 func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauthz.Menu, log types.Logger) error {
-	systemRoot, err := rbac.RBAC().HasSystemRole(ctx.UserID(), consts.AUTHZ_SYSTEM_ROLE_ROOT)
+	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, ctx.UserID(), consts.AUTHZ_SYSTEM_ROLE_ROOT)
 	if err != nil {
 		log.Error(err)
 		return err

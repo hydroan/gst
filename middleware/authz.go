@@ -104,7 +104,7 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 		obj := c.Request.URL.Path
 		act := c.Request.Method
 
-		if allow, err = rbac.RBAC().Authorize(tenant, sub, obj, act); err != nil {
+		if allow, err = rbac.RBAC().Authorize(c.Request.Context(), tenant, sub, obj, act); err != nil {
 			zap.S().Error(err)
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 				"code":          -1,

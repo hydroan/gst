@@ -103,7 +103,7 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	}
 	tenantID := strings.TrimSpace(req.TenantID)
 	if tenantID != "" {
-		if err = ensureLoginTenant(targetUser.ID, tenantID); err != nil {
+		if err = ensureLoginTenant(ctx, targetUser.ID, tenantID); err != nil {
 			return nil, err
 		}
 	}
@@ -216,8 +216,8 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	return serviceiamsession.BuildAuthenticatedSessionRsp(sessionData, targetUser, email, now), nil
 }
 
-func ensureLoginTenant(userID string, tenantID string) error {
-	systemRoot, err := rbac.RBAC().HasSystemRole(userID, consts.AUTHZ_SYSTEM_ROLE_ROOT)
+func ensureLoginTenant(ctx *types.ServiceContext, userID string, tenantID string) error {
+	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, userID, consts.AUTHZ_SYSTEM_ROLE_ROOT)
 	if err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}
@@ -225,7 +225,7 @@ func ensureLoginTenant(userID string, tenantID string) error {
 		return nil
 	}
 
-	member, err := rbac.RBAC().SubjectInTenant(tenantID, userID)
+	member, err := rbac.RBAC().SubjectInTenant(ctx, tenantID, userID)
 	if err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}

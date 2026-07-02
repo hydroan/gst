@@ -360,14 +360,14 @@ func TestAuthzMenu(t *testing.T) {
 				Base:      model.Base{ID: util.HashID(userID, missingRoleID)},
 			}
 			require.NoError(t, database.Database[*authz.RoleBinding](context.Background()).WithoutHook().Create(invalidRoleBinding))
-			_, err = rbac.Enforcer.AddGroupingPolicy(userID, missingRoleID, rbac.DefaultTenant)
-			require.NoError(t, err)
-			_, err = rbac.Enforcer.AddPolicy(rbac.DefaultTenant, missingRoleID, "/api/authz/menus", http.MethodGet, "allow")
-			require.NoError(t, err)
+			rbacPolicy := rbac.RBAC()
+			rbacCtx := context.Background()
+			require.NoError(t, rbacPolicy.AssignRole(rbacCtx, rbac.DefaultTenant, userID, missingRoleID))
+			require.NoError(t, rbacPolicy.GrantPermission(rbacCtx, rbac.DefaultTenant, missingRoleID, "/api/authz/menus", http.MethodGet))
 			t.Cleanup(func() {
 				_ = database.Database[*authz.RoleBinding](context.Background()).WithoutHook().WithPurge().Delete(invalidRoleBinding)
-				_, _ = rbac.Enforcer.RemoveGroupingPolicy(userID, missingRoleID, rbac.DefaultTenant)
-				_, _ = rbac.Enforcer.RemovePolicy(rbac.DefaultTenant, missingRoleID, "/api/authz/menus", http.MethodGet, "allow")
+				_ = rbacPolicy.UnassignRole(context.Background(), rbac.DefaultTenant, userID, missingRoleID)
+				_ = rbacPolicy.RevokePermission(context.Background(), rbac.DefaultTenant, missingRoleID, "/api/authz/menus", http.MethodGet)
 				_, _ = cliRole.Delete(defaultRoleID)
 				_, _ = cli.Delete(defaultMenuID)
 			})
@@ -540,10 +540,8 @@ func TestAuthzRole(t *testing.T) {
 				roleID = rsp.ID
 				roleCode = rsp.Code
 			})
-			policies, policyErr := rbac.Enforcer.GetFilteredPolicy(0, rbac.DefaultTenant, roleID)
-			require.NoError(t, policyErr)
-			requirePolicy(t, policies, rbac.DefaultTenant, roleID, "/api/authz/roles", http.MethodGet, "allow")
-			requireNoPolicy(t, policies, rbac.DefaultTenant, roleID, "/api/authz/roles", http.MethodPost, "allow")
+			requireCasbinPolicy(t, rbac.DefaultTenant, roleID, "/api/authz/roles", http.MethodGet, "allow")
+			requireNoCasbinPolicy(t, rbac.DefaultTenant, roleID, "/api/authz/roles", http.MethodPost, "allow")
 		})
 
 		t.Run("get", func(t *testing.T) {
@@ -589,13 +587,9 @@ func TestAuthzRole(t *testing.T) {
 				roleCode = rsp.Code
 			})
 
-			policies, policyErr := rbac.Enforcer.GetFilteredPolicy(0, rbac.DefaultTenant, roleID)
-			require.NoError(t, policyErr)
-			requirePolicy(t, policies, rbac.DefaultTenant, roleID, "/api/authz/roles", http.MethodGet, "allow")
+			requireCasbinPolicy(t, rbac.DefaultTenant, roleID, "/api/authz/roles", http.MethodGet, "allow")
 
-			policies, policyErr = rbac.Enforcer.GetFilteredPolicy(0, rbac.DefaultTenant, nextCode)
-			require.NoError(t, policyErr)
-			requireNoPolicy(t, policies, rbac.DefaultTenant, nextCode, "/api/authz/roles", http.MethodGet, "allow")
+			requireNoCasbinPolicy(t, rbac.DefaultTenant, nextCode, "/api/authz/roles", http.MethodGet, "allow")
 		})
 
 		t.Run("failed_tenant_update_keeps_existing_policy", func(t *testing.T) {
@@ -606,9 +600,7 @@ func TestAuthzRole(t *testing.T) {
 			})
 			require.Error(t, err)
 
-			policies, policyErr := rbac.Enforcer.GetFilteredPolicy(0, rbac.DefaultTenant, roleID)
-			require.NoError(t, policyErr)
-			requirePolicy(t, policies, rbac.DefaultTenant, roleID, "/api/authz/roles", http.MethodGet, "allow")
+			requireCasbinPolicy(t, rbac.DefaultTenant, roleID, "/api/authz/roles", http.MethodGet, "allow")
 		})
 
 		t.Run("patch", func(t *testing.T) {
@@ -720,9 +712,7 @@ func TestAuthzRoleBinding(t *testing.T) {
 				require.Equal(t, roleID, rsp.RoleID)
 				roleBindingID = rsp.ID
 			})
-			groupingPolicies, policyErr := rbac.Enforcer.GetFilteredGroupingPolicy(0, userID, roleID, rbac.DefaultTenant)
-			require.NoError(t, policyErr)
-			require.Equal(t, [][]string{{userID, roleID, rbac.DefaultTenant}}, groupingPolicies)
+			requireCasbinGroupingPolicy(t, userID, roleID, rbac.DefaultTenant)
 		})
 
 		t.Run("get", func(t *testing.T) {
@@ -899,7 +889,7 @@ func requireRBACSubjectsInTenant(t *testing.T) {
 	authzBindTenantRole(t, tenantA, userAID, tenantASecondRoleID)
 	authzBindTenantRole(t, tenantB, userBID, tenantBRoleID)
 
-	subjects, err := rbac.RBAC().SubjectsInTenant(tenantA)
+	subjects, err := rbac.RBAC().SubjectsInTenant(context.Background(), tenantA)
 	require.NoError(t, err)
 	require.Contains(t, subjects, userAID)
 	require.NotContains(t, subjects, userBID)
@@ -1094,8 +1084,7 @@ func authzBindTenantRole(t *testing.T, tenantID, subjectID, roleID string) {
 func authzGrantTenantPolicy(t *testing.T, tenantID, roleID, object, action string) {
 	t.Helper()
 
-	_, err := rbac.Enforcer.AddPolicy(tenantID, roleID, object, action, "allow")
-	require.NoError(t, err)
+	require.NoError(t, rbac.RBAC().GrantPermission(context.Background(), tenantID, roleID, object, action))
 }
 
 func filterSubjects(subjects []string, target string) []string {
@@ -1156,31 +1145,43 @@ func requireNoMenu(t *testing.T, menus []*authz.Menu, menuID string) {
 	}
 }
 
-func requirePolicy(t *testing.T, policies [][]string, want ...string) {
+func requireCasbinPolicy(t *testing.T, tenant, role, object, action, effect string) {
 	t.Helper()
-	for _, policy := range policies {
-		if equalStrings(policy, want) {
-			return
-		}
-	}
-	require.Failf(t, "policy not found", "policy: %v", want)
+	requireCasbinRule(t, "p", tenant, role, object, action, effect)
 }
 
-func requireNoPolicy(t *testing.T, policies [][]string, want ...string) {
+func requireNoCasbinPolicy(t *testing.T, tenant, role, object, action, effect string) {
 	t.Helper()
-	for _, policy := range policies {
-		require.Falsef(t, equalStrings(policy, want), "unexpected policy: %v", want)
-	}
+	requireNoCasbinRule(t, "p", tenant, role, object, action, effect)
 }
 
-func equalStrings(left []string, right []string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for i := range left {
-		if left[i] != right[i] {
-			return false
-		}
-	}
-	return true
+func requireCasbinGroupingPolicy(t *testing.T, subject, role, tenant string) {
+	t.Helper()
+	requireCasbinRule(t, "g", subject, role, tenant, "", "")
+}
+
+func requireCasbinRule(t *testing.T, ptype, v0, v1, v2, v3, v4 string) {
+	t.Helper()
+	rules := listCasbinRules(t, ptype, v0, v1, v2, v3, v4)
+	require.NotEmpty(t, rules)
+}
+
+func requireNoCasbinRule(t *testing.T, ptype, v0, v1, v2, v3, v4 string) {
+	t.Helper()
+	rules := listCasbinRules(t, ptype, v0, v1, v2, v3, v4)
+	require.Empty(t, rules)
+}
+
+func listCasbinRules(t *testing.T, ptype, v0, v1, v2, v3, v4 string) []*authz.CasbinRule {
+	t.Helper()
+	rules := make([]*authz.CasbinRule, 0)
+	require.NoError(t, database.Database[*authz.CasbinRule](context.Background()).WithQuery(&authz.CasbinRule{
+		Ptype: ptype,
+		V0:    v0,
+		V1:    v1,
+		V2:    v2,
+		V3:    v3,
+		V4:    v4,
+	}).List(&rules))
+	return rules
 }

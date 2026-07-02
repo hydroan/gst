@@ -23,7 +23,7 @@ func ensureAdminSessionActor(ctx *types.ServiceContext) error {
 	if err != nil {
 		return err
 	}
-	systemRoot, err := rbac.RBAC().HasSystemRole(user.GetID(), consts.AUTHZ_SYSTEM_ROLE_ROOT)
+	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, user.GetID(), consts.AUTHZ_SYSTEM_ROLE_ROOT)
 	if err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}

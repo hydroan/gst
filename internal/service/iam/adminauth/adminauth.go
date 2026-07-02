@@ -19,7 +19,7 @@ import (
 // a member of that tenant. System-root targets are never manageable through
 // tenant-local admin APIs.
 func EnsureTenantAdmin(ctx *types.ServiceContext, actor *modeliamuser.User, target *modeliamuser.User) error {
-	systemRootActor, err := isSystemRoot(actor)
+	systemRootActor, err := isSystemRoot(ctx, actor)
 	if err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}
@@ -32,7 +32,7 @@ func EnsureTenantAdmin(ctx *types.ServiceContext, actor *modeliamuser.User, targ
 
 	// Root may appear in tenant RBAC bindings for setup or bootstrap purposes,
 	// but tenant-local administrators must not manage root as a target user.
-	systemRootTarget, err := isSystemRoot(target)
+	systemRootTarget, err := isSystemRoot(ctx, target)
 	if err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}
@@ -44,7 +44,7 @@ func EnsureTenantAdmin(ctx *types.ServiceContext, actor *modeliamuser.User, targ
 	// Route permission and target membership are checked separately. A user can
 	// have permission to call the endpoint without being allowed to manage a
 	// particular target outside the current tenant.
-	allowed, err := rbac.RBAC().Authorize(tenant, actor.GetID(), operationObject(ctx), operationAction(ctx))
+	allowed, err := rbac.RBAC().Authorize(ctx, tenant, actor.GetID(), operationObject(ctx), operationAction(ctx))
 	if err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}
@@ -55,7 +55,7 @@ func EnsureTenantAdmin(ctx *types.ServiceContext, actor *modeliamuser.User, targ
 	if target == nil {
 		return nil
 	}
-	belongs, err := targetBelongsToTenant(tenant, target.GetID())
+	belongs, err := targetBelongsToTenant(ctx, tenant, target.GetID())
 	if err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify target tenant", err)
 	}
@@ -103,17 +103,17 @@ func operationAction(ctx *types.ServiceContext) string {
 //
 // User rows do not carry tenant_id, so target visibility is derived from RBAC
 // role bindings rather than from the IAM user table.
-func targetBelongsToTenant(tenant string, userID string) (bool, error) {
+func targetBelongsToTenant(ctx *types.ServiceContext, tenant string, userID string) (bool, error) {
 	if strings.TrimSpace(userID) == "" {
 		return false, nil
 	}
-	return rbac.RBAC().SubjectInTenant(tenant, userID)
+	return rbac.RBAC().SubjectInTenant(ctx, tenant, userID)
 }
 
 // isSystemRoot reports whether user holds the framework-level root role.
-func isSystemRoot(user *modeliamuser.User) (bool, error) {
+func isSystemRoot(ctx *types.ServiceContext, user *modeliamuser.User) (bool, error) {
 	if user == nil || strings.TrimSpace(user.GetID()) == "" {
 		return false, nil
 	}
-	return rbac.RBAC().HasSystemRole(user.GetID(), consts.AUTHZ_SYSTEM_ROLE_ROOT)
+	return rbac.RBAC().HasSystemRole(ctx, user.GetID(), consts.AUTHZ_SYSTEM_ROLE_ROOT)
 }

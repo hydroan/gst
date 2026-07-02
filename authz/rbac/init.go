@@ -1,6 +1,8 @@
 package rbac
 
 import (
+	"context"
+
 	"github.com/casbin/casbin/v3"
 	casbinmodel "github.com/casbin/casbin/v3/model"
 	gormadapter "github.com/casbin/gorm-adapter/v3"
@@ -10,6 +12,8 @@ import (
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types/consts"
 )
+
+var adapter *gormadapter.Adapter
 
 type casbinRule struct {
 	ID    uint64 `gorm:"primaryKey;autoIncrement:true"`
@@ -81,23 +85,29 @@ func Init() (err error) {
 
 	// gormadapter.NewAdapterByDBWithCustomTable creates the Casbin policy table
 	// with an auto-incrementing primary key managed by the adapter.
-	if Adapter, err = gormadapter.NewAdapterByDBWithCustomTable(database.DB(), new(casbinRule), "casbin_rule"); err != nil {
+	if adapter, err = gormadapter.NewAdapterByDBWithCustomTable(database.DB(), new(casbinRule), "casbin_rule"); err != nil {
 		return errors.Wrap(err, "failed to create casbin adapter")
 	}
 	model, err := casbinmodel.NewModelFromString(string(modelData))
 	if err != nil {
 		return errors.Wrap(err, "failed to create casbin model")
 	}
-	if Enforcer, err = casbin.NewSyncedEnforcer(model, Adapter); err != nil {
+	contextEnforcer, err := casbin.NewContextEnforcer(model, adapter)
+	if err != nil {
 		return errors.Wrap(err, "failed to create casbin enforcer")
 	}
+	var ok bool
+	enforcer, ok = contextEnforcer.(*casbin.ContextEnforcer)
+	if !ok {
+		return errors.New("failed to create context casbin enforcer")
+	}
 
-	Enforcer.SetLogger(logger.Casbin)
-	Enforcer.EnableAutoSave(true)
-	Enforcer.EnableEnforce(true)
+	enforcer.SetLogger(logger.Casbin)
+	enforcer.EnableAutoSave(true)
+	enforcer.EnableEnforce(true)
 
 	for _, subject := range defaultSystemRootSubjects {
-		if err := RBAC().AssignSystemRole(subject, defaultSystemRole); err != nil {
+		if err := RBAC().AssignSystemRole(context.Background(), subject, defaultSystemRole); err != nil {
 			return errors.Wrapf(err, "failed to add default system role for %s", subject)
 		}
 	}
