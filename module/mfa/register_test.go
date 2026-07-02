@@ -52,8 +52,10 @@ type totpTestAccount struct {
 }
 
 func init() {
-	os.Setenv(config.DATABASE_TYPE, string(config.DBSqlite))
-	os.Setenv(config.SQLITE_IS_MEMORY, "true")
+	os.Setenv(config.DATABASE_TYPE, string(config.DBMySQL))
+	os.Setenv(config.MYSQL_USERNAME, "test_module")
+	os.Setenv(config.MYSQL_PASSWORD, "test_module")
+	os.Setenv(config.MYSQL_DATABASE, "test_module")
 	os.Setenv(config.REDIS_ENABLE, "true")
 	testutil.SetupRandomRedisNamespace()
 	os.Setenv(config.LOGGER_DIR, "./logs")
