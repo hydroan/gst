@@ -3,7 +3,6 @@ package serviceiamsession
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
@@ -15,8 +14,6 @@ import (
 	"github.com/hydroan/gst/types"
 	"go.uber.org/zap"
 )
-
-const sessionUserStateTTL = 5 * time.Second
 
 type sessionUserState struct {
 	Status             modeliamuser.UserStatus `json:"status"`
@@ -93,7 +90,7 @@ func refreshSessionUserState(ctx context.Context, userID string) (sessionUserSta
 	}
 	if err := redis.Cache[sessionUserState]().
 		WithContext(redisContext(ctx)).
-		Set(modeliamsession.SessionUserStateKey(userID), state, sessionUserStateTTL); err != nil {
+		Set(modeliamsession.SessionUserStateKey(userID), state, GetSessionUserStateTTL()); err != nil {
 		zap.S().Warnw("failed to cache iam session user state", "user_id", userID, "error", err)
 	}
 	return state, true, nil

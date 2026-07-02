@@ -11,6 +11,7 @@
     "postNotes": [
       "Copy mode registers middleware.IAMSession() without arguments.",
       "Set IAM_SESSION_EXPIRATION, for example 30m or 24h, to override the default session lifetime without editing copied code.",
+      "Set IAM_SESSION_USER_STATE_TTL, for example 30s or 1m, to tune the user-state cache TTL without editing copied code.",
       "If project-owned initialization calls SetSessionExpiration(...), that explicit value overrides IAM_SESSION_EXPIRATION.",
       "If the project needs default users, seed the copied IAM User, PasswordCredential, and EmailIdentity models in project-owned initialization code.",
       "If copied login accepts tenant_id, non-root users need authz RBAC role binding in that tenant; otherwise tenant selection is rejected.",

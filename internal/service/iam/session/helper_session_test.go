@@ -36,6 +36,20 @@ func TestNewSessionIDGeneratesOpaqueRandomToken(t *testing.T) {
 	require.NotEqual(t, first, second)
 }
 
+func TestGetSessionUserStateTTL(t *testing.T) {
+	t.Run("default", func(t *testing.T) {
+		t.Setenv("IAM_SESSION_USER_STATE_TTL", "")
+
+		require.Equal(t, 30*time.Second, serviceiamsession.GetSessionUserStateTTL())
+	})
+
+	t.Run("environment_override", func(t *testing.T) {
+		t.Setenv("IAM_SESSION_USER_STATE_TTL", "45s")
+
+		require.Equal(t, 45*time.Second, serviceiamsession.GetSessionUserStateTTL())
+	})
+}
+
 func TestTouchSession(t *testing.T) {
 	setupRedis(t)
 

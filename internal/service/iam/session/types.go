@@ -18,6 +18,11 @@ const (
 )
 
 const (
+	defaultSessionUserStateTTL = 30 * time.Second
+	sessionUserStateTTLEnv     = "IAM_SESSION_USER_STATE_TTL"
+)
+
+const (
 	// SessionCookieName is the HTTP cookie carrying the opaque IAM session id.
 	SessionCookieName = "session_id"
 	sessionCookiePath = "/"

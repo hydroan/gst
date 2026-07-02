@@ -82,6 +82,24 @@ func GetSessionExpiration() time.Duration {
 	return resolveSessionExpiration(expiration)
 }
 
+// GetSessionUserStateTTL returns the configured mutable user-state cache TTL.
+// If not configured, it reads IAM_SESSION_USER_STATE_TTL before falling back to 30 seconds.
+func GetSessionUserStateTTL() time.Duration {
+	raw := strings.TrimSpace(os.Getenv(sessionUserStateTTLEnv))
+	if raw == "" {
+		return defaultSessionUserStateTTL
+	}
+
+	duration, err := time.ParseDuration(raw)
+	if err != nil {
+		panic(errors.Wrapf(err, "invalid %s", sessionUserStateTTLEnv))
+	}
+	if duration <= 0 {
+		panic(errors.Errorf("%s must be greater than 0", sessionUserStateTTLEnv))
+	}
+	return duration
+}
+
 // SetSessionExpiration sets the session expiration time for iam module.
 // This function should be called during module registration.
 func SetSessionExpiration(expiration time.Duration) {
