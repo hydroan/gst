@@ -1,6 +1,7 @@
 package logmgmt_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/database"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/model"
@@ -19,6 +21,7 @@ import (
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/module/logmgmt"
 	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -47,8 +50,10 @@ type ListResponse[T any] struct {
 }
 
 func init() {
-	os.Setenv(config.DATABASE_TYPE, string(config.DBSqlite))
-	os.Setenv(config.SQLITE_IS_MEMORY, "true")
+	os.Setenv(config.DATABASE_TYPE, string(config.DBMySQL))
+	os.Setenv(config.MYSQL_USERNAME, "test_module")
+	os.Setenv(config.MYSQL_PASSWORD, "test_module")
+	os.Setenv(config.MYSQL_DATABASE, "test_module")
 	os.Setenv(config.REDIS_ENABLE, "true")
 	testutil.SetupRandomRedisNamespace()
 	os.Setenv(config.LOGGER_DIR, "./logs")
@@ -164,9 +169,15 @@ func TestOperationLogList(t *testing.T) {
 		Username: username,
 		Password: password,
 	})
+	roleCode := logmgmtTestUsername("logmgmt_test_role")
+	roleID := util.HashID(roleCode)
+	clearOperationLogs(t)
+	t.Cleanup(func() {
+		clearOperationLogs(t)
+	})
 
 	t.Run("before_operation", func(t *testing.T) {
-		cli := newOperationLogClient(t, sessionID)
+		cli := newOperationLogClient(t, sessionID, client.WithQuery("record_id", roleID))
 		items := make([]*logmgmt.OperationLog, 0)
 		total := new(int64)
 		resp, err := cli.List(&items, total)
@@ -187,10 +198,9 @@ func TestOperationLogList(t *testing.T) {
 		Value: adminSessionID,
 	}))
 	require.NoError(t, err)
-	roleID := logmgmtTestUsername("logmgmt_test_role")
 	createReq := &authz.Role{
 		Base: model.Base{ID: roleID},
-		Code: roleID,
+		Code: roleCode,
 	}
 	resp, err := cli.Create(createReq)
 	require.NoError(t, err)
@@ -202,7 +212,7 @@ func TestOperationLogList(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 	t.Run("after_operation", func(t *testing.T) {
-		cli := newOperationLogClient(t, sessionID)
+		cli := newOperationLogClient(t, sessionID, client.WithQuery("record_id", roleID))
 		items := make([]*logmgmt.OperationLog, 0)
 		total := new(int64)
 		resp, err := cli.List(&items, total)
@@ -256,15 +266,28 @@ func newLoginLogClient(t *testing.T, sessionID string) *client.Client {
 	return cli
 }
 
-func newOperationLogClient(t *testing.T, sessionID string) *client.Client {
+func newOperationLogClient(t *testing.T, sessionID string, opts ...client.Option) *client.Client {
 	t.Helper()
 
-	cli, err := client.New(operationlogAPI, client.WithCookie(&http.Cookie{
+	options := []client.Option{client.WithCookie(&http.Cookie{
 		Name:  "session_id",
 		Value: sessionID,
-	}))
+	})}
+	options = append(options, opts...)
+	cli, err := client.New(operationlogAPI, options...)
 	require.NoError(t, err)
 	return cli
+}
+
+func clearOperationLogs(t *testing.T) {
+	t.Helper()
+
+	logs := make([]*logmgmt.OperationLog, 0)
+	require.NoError(t, database.Database[*logmgmt.OperationLog](context.Background()).WithLimit(-1).List(&logs))
+	if len(logs) == 0 {
+		return
+	}
+	require.NoError(t, database.Database[*logmgmt.OperationLog](context.Background()).WithPurge().Delete(logs...))
 }
 
 func logmgmtTestUsername(prefix string) string {

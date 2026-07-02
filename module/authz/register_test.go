@@ -21,6 +21,7 @@ import (
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -52,8 +53,10 @@ type ListResponse[T any] struct {
 }
 
 func init() {
-	os.Setenv(config.DATABASE_TYPE, string(config.DBSqlite))
-	os.Setenv(config.SQLITE_IS_MEMORY, "true")
+	os.Setenv(config.DATABASE_TYPE, string(config.DBMySQL))
+	os.Setenv(config.MYSQL_USERNAME, "test_module")
+	os.Setenv(config.MYSQL_PASSWORD, "test_module")
+	os.Setenv(config.MYSQL_DATABASE, "test_module")
 	os.Setenv(config.REDIS_ENABLE, "true")
 	testutil.SetupRandomRedisNamespace()
 	os.Setenv(config.LOGGER_DIR, "./logs")
@@ -229,13 +232,13 @@ func TestAuthzMenu(t *testing.T) {
 		})
 
 		t.Run("patch", func(t *testing.T) {
-			patchReq := &authz.Menu{Label: "Test Menu Patched"}
+			patchReq := map[string]string{"label": "Test Menu Patched"}
 			resp, err = cli.Patch(menuID, patchReq)
 			require.NoError(t, err)
 			testutil.TestResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
 				t.Helper()
 				require.Equal(t, menuID, rsp.ID)
-				require.Equal(t, patchReq.Label, rsp.Label)
+				require.Equal(t, patchReq["label"], rsp.Label)
 				require.Equal(t, "/test-updated", rsp.Path)
 			})
 		})
@@ -354,7 +357,7 @@ func TestAuthzMenu(t *testing.T) {
 				TenantID:  rbac.DefaultTenant,
 				SubjectID: userID,
 				RoleID:    missingRoleID,
-				Base:      model.Base{ID: "invalid_default_fallback_role_binding"},
+				Base:      model.Base{ID: util.HashID(userID, missingRoleID)},
 			}
 			require.NoError(t, database.Database[*authz.RoleBinding](context.Background()).WithoutHook().Create(invalidRoleBinding))
 			_, err = rbac.Enforcer.AddGroupingPolicy(userID, missingRoleID, rbac.DefaultTenant)
@@ -989,7 +992,7 @@ func authzCreateTenantRole(t *testing.T, tenantID, code string, menuIDs ...strin
 	t.Helper()
 
 	role := &authz.Role{
-		Base:     model.Base{ID: code},
+		Base:     model.Base{ID: util.HashID(tenantID, code)},
 		TenantID: tenantID,
 		Code:     code,
 		MenuIDs:  menuIDs,
