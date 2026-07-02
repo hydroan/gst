@@ -2,11 +2,13 @@ package rbac
 
 import (
 	"context"
+	"maps"
 	"strings"
 	"sync"
 
 	"github.com/casbin/casbin/v3"
 	"github.com/cockroachdb/errors"
+	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 )
@@ -126,35 +128,48 @@ func (r *rbac) AddRole(ctx context.Context, tenant string, role string) error {
 }
 
 // RemoveRole removes all policies and subject assignments for role in tenant.
-func (r *rbac) RemoveRole(ctx context.Context, tenant string, role string) error {
-	ctx = contextOrBackground(ctx)
+func (r *rbac) RemoveRole(ctx context.Context, tenant string, role string) (err error) {
+	ctx, finishSpan := traceRBAC(ctx, "remove_role", rbacTraceFields(tenant, role))
+	defer func() {
+		finishSpan(err)
+	}()
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	_, policyErr := r.enforcer.RemoveFilteredPolicyCtx(ctx, 0, tenant, role)
 	_, groupingErr := r.enforcer.RemoveFilteredGroupingPolicyCtx(ctx, 1, role, tenant)
-	return errors.Join(policyErr, groupingErr)
+	err = errors.Join(policyErr, groupingErr)
+	return err
 }
 
 // GrantPermission grants role access to object/action inside tenant.
-func (r *rbac) GrantPermission(ctx context.Context, tenant string, role string, object string, action string) error {
-	ctx = contextOrBackground(ctx)
+func (r *rbac) GrantPermission(ctx context.Context, tenant string, role string, object string, action string) (err error) {
+	ctx, finishSpan := traceRBAC(ctx, "grant_permission", rbacTraceFields(tenant, role))
+	defer func() {
+		finishSpan(err)
+	}()
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, err := r.enforcer.AddPolicyCtx(ctx, tenant, role, object, action, string(consts.EffectAllow)); err != nil {
+	if _, err = r.enforcer.AddPolicyCtx(ctx, tenant, role, object, action, string(consts.EffectAllow)); err != nil {
 		return err
 	}
 	return nil
 }
 
 // RevokePermission removes the exact tenant, role, object, action permission.
-func (r *rbac) RevokePermission(ctx context.Context, tenant string, role string, object string, action string) error {
-	ctx = contextOrBackground(ctx)
+func (r *rbac) RevokePermission(ctx context.Context, tenant string, role string, object string, action string) (err error) {
+	ctx, finishSpan := traceRBAC(ctx, "revoke_permission", rbacTraceFields(tenant, role))
+	defer func() {
+		finishSpan(err)
+	}()
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, err := r.enforcer.RemovePolicyCtx(ctx, tenant, role, object, action, string(consts.EffectAllow)); err != nil {
+	if _, err = r.enforcer.RemovePolicyCtx(ctx, tenant, role, object, action, string(consts.EffectAllow)); err != nil {
 		return err
 	}
 	return nil
@@ -163,39 +178,51 @@ func (r *rbac) RevokePermission(ctx context.Context, tenant string, role string,
 // RevokeRolePermissions removes every permission policy granted to role in tenant.
 // It is the explicit form of revoking a role's full permission set. Use
 // RevokePermission when removing one concrete object/action grant.
-func (r *rbac) RevokeRolePermissions(ctx context.Context, tenant string, role string) error {
-	ctx = contextOrBackground(ctx)
+func (r *rbac) RevokeRolePermissions(ctx context.Context, tenant string, role string) (err error) {
+	ctx, finishSpan := traceRBAC(ctx, "revoke_role_permissions", rbacTraceFields(tenant, role))
+	defer func() {
+		finishSpan(err)
+	}()
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, err := r.enforcer.RemoveFilteredPolicyCtx(ctx, 0, tenant, role); err != nil {
+	if _, err = r.enforcer.RemoveFilteredPolicyCtx(ctx, 0, tenant, role); err != nil {
 		return err
 	}
 	return nil
 }
 
 // AssignRole assigns subject to role inside tenant.
-func (r *rbac) AssignRole(ctx context.Context, tenant string, subject string, role string) error {
+func (r *rbac) AssignRole(ctx context.Context, tenant string, subject string, role string) (err error) {
 	if subject == role {
 		return nil
 	}
-	ctx = contextOrBackground(ctx)
+	ctx, finishSpan := traceRBAC(ctx, "assign_role", rbacTraceFields(tenant, role))
+	defer func() {
+		finishSpan(err)
+	}()
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, err := r.enforcer.AddGroupingPolicyCtx(ctx, subject, role, tenant); err != nil {
+	if _, err = r.enforcer.AddGroupingPolicyCtx(ctx, subject, role, tenant); err != nil {
 		return err
 	}
 	return nil
 }
 
 // UnassignRole removes a subject-role assignment from tenant.
-func (r *rbac) UnassignRole(ctx context.Context, tenant string, subject string, role string) error {
-	ctx = contextOrBackground(ctx)
+func (r *rbac) UnassignRole(ctx context.Context, tenant string, subject string, role string) (err error) {
+	ctx, finishSpan := traceRBAC(ctx, "unassign_role", rbacTraceFields(tenant, role))
+	defer func() {
+		finishSpan(err)
+	}()
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, err := r.enforcer.RemoveGroupingPolicyCtx(ctx, subject, role, tenant); err != nil {
+	if _, err = r.enforcer.RemoveGroupingPolicyCtx(ctx, subject, role, tenant); err != nil {
 		return err
 	}
 	return nil
@@ -270,27 +297,35 @@ func (r *rbac) SubjectsInTenant(ctx context.Context, tenant string) ([]string, e
 }
 
 // AssignSystemRole assigns a subject to a system-level role outside any tenant.
-func (r *rbac) AssignSystemRole(ctx context.Context, subject string, role string) error {
+func (r *rbac) AssignSystemRole(ctx context.Context, subject string, role string) (err error) {
 	if subject == role {
 		return nil
 	}
-	ctx = contextOrBackground(ctx)
+	ctx, finishSpan := traceRBAC(ctx, "assign_system_role", rbacTraceFields("", role))
+	defer func() {
+		finishSpan(err)
+	}()
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, err := r.enforcer.AddNamedGroupingPolicyCtx(ctx, systemRoleGrouping, subject, role); err != nil {
+	if _, err = r.enforcer.AddNamedGroupingPolicyCtx(ctx, systemRoleGrouping, subject, role); err != nil {
 		return err
 	}
 	return nil
 }
 
 // UnassignSystemRole removes a subject's system-level role assignment.
-func (r *rbac) UnassignSystemRole(ctx context.Context, subject string, role string) error {
-	ctx = contextOrBackground(ctx)
+func (r *rbac) UnassignSystemRole(ctx context.Context, subject string, role string) (err error) {
+	ctx, finishSpan := traceRBAC(ctx, "unassign_system_role", rbacTraceFields("", role))
+	defer func() {
+		finishSpan(err)
+	}()
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, err := r.enforcer.RemoveNamedGroupingPolicyCtx(ctx, systemRoleGrouping, subject, role); err != nil {
+	if _, err = r.enforcer.RemoveNamedGroupingPolicyCtx(ctx, systemRoleGrouping, subject, role); err != nil {
 		return err
 	}
 	return nil
@@ -311,6 +346,54 @@ func contextOrBackground(ctx context.Context) context.Context {
 		return context.Background()
 	}
 	return ctx
+}
+
+// traceRBAC starts a gst-owned RBAC span and returns a finish callback.
+// The returned context must be passed to Casbin so adapter and database spans
+// appear under the RBAC operation in the request trace.
+func traceRBAC(ctx context.Context, operation string, fields map[string]any) (context.Context, func(error)) {
+	ctx = contextOrBackground(ctx)
+	if !gstotel.IsEnabled() {
+		return ctx, func(error) {}
+	}
+
+	spanCtx, span := gstotel.StartSpan(ctx, gstotel.OperationSpanName("rbac", operation))
+	recording := gstotel.IsSpanRecording(span)
+	if recording {
+		tags := map[string]any{
+			"component":      "rbac",
+			"rbac.operation": operation,
+		}
+		maps.Copy(tags, fields)
+		gstotel.AddSpanTags(span, tags)
+	}
+
+	return spanCtx, func(err error) {
+		defer span.End()
+		if !recording {
+			return
+		}
+		gstotel.AddSpanTags(span, map[string]any{
+			"rbac.success": err == nil,
+		})
+		if err != nil {
+			gstotel.RecordError(span, err)
+		}
+	}
+}
+
+// rbacTraceFields keeps RBAC span attributes low-cardinality enough for tracing.
+// Subject identifiers are intentionally excluded because they are identity data
+// and would make Jaeger labels noisy for role-binding write paths.
+func rbacTraceFields(tenant string, role string) map[string]any {
+	fields := make(map[string]any, 2)
+	if tenant = strings.TrimSpace(tenant); tenant != "" {
+		fields["rbac.tenant"] = tenant
+	}
+	if role = strings.TrimSpace(role); role != "" {
+		fields["rbac.role"] = role
+	}
+	return fields
 }
 
 func isBuiltInSystemRole(subject string, role string) bool {
