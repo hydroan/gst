@@ -38,7 +38,7 @@ func (tw *Wrapper[T]) WithContext(ctx context.Context) types.Cache[T] {
 
 // Set stores a key-value pair with tracing
 func (tw *Wrapper[T]) Set(key string, value T, ttl time.Duration) error {
-	spanCtx, span := tw.startSpan("Cache.Set")
+	spanCtx, span := tw.startSpan("set")
 	defer span.End()
 
 	// Add span attributes
@@ -77,7 +77,7 @@ func (tw *Wrapper[T]) Set(key string, value T, ttl time.Duration) error {
 
 // Get retrieves a value by key with tracing
 func (tw *Wrapper[T]) Get(key string) (T, error) {
-	spanCtx, span := tw.startSpan("Cache.Get")
+	spanCtx, span := tw.startSpan("get")
 	defer span.End()
 
 	// Add span attributes
@@ -121,7 +121,7 @@ func (tw *Wrapper[T]) Get(key string) (T, error) {
 
 // Peek retrieves a value by key without affecting its position with tracing
 func (tw *Wrapper[T]) Peek(key string) (T, error) {
-	spanCtx, span := tw.startSpan("Cache.Peek")
+	spanCtx, span := tw.startSpan("peek")
 	defer span.End()
 
 	// Add span attributes
@@ -165,7 +165,7 @@ func (tw *Wrapper[T]) Peek(key string) (T, error) {
 
 // Delete removes a key from the cache with tracing
 func (tw *Wrapper[T]) Delete(key string) error {
-	spanCtx, span := tw.startSpan("Cache.Delete")
+	spanCtx, span := tw.startSpan("delete")
 	defer span.End()
 
 	// Add span attributes
@@ -203,7 +203,7 @@ func (tw *Wrapper[T]) Delete(key string) error {
 
 // Exists checks if a key exists in the cache with tracing
 func (tw *Wrapper[T]) Exists(key string) bool {
-	spanCtx, span := tw.startSpan("Cache.Exists")
+	spanCtx, span := tw.startSpan("exists")
 	defer span.End()
 
 	// Add span attributes
@@ -232,7 +232,7 @@ func (tw *Wrapper[T]) Exists(key string) bool {
 
 // Len returns the number of items in the cache with tracing
 func (tw *Wrapper[T]) Len() int {
-	spanCtx, span := tw.startSpan("Cache.Len")
+	spanCtx, span := tw.startSpan("len")
 	defer span.End()
 
 	// Add span attributes
@@ -260,7 +260,7 @@ func (tw *Wrapper[T]) Len() int {
 
 // Clear removes all items from the cache with tracing
 func (tw *Wrapper[T]) Clear() {
-	spanCtx, span := tw.startSpan("Cache.Clear")
+	spanCtx, span := tw.startSpan("clear")
 	defer span.End()
 
 	// Add span attributes
@@ -284,10 +284,11 @@ func (tw *Wrapper[T]) Clear() {
 	span.SetStatus(codes.Ok, "Cache cleared successfully")
 }
 
-// startSpan creates a new span for the given operation. The caller owns the
+// startSpan creates a new span for the given cache operation. The caller owns the
 // returned span and must end it after the cache operation finishes.
-func (tw *Wrapper[T]) startSpan(operationName string) (context.Context, trace.Span) {
+func (tw *Wrapper[T]) startSpan(operation string) (context.Context, trace.Span) {
 	tracer := gstotel.GetTracer()
+	operationName := gstotel.OperationSpanName("cache", operation)
 	ctx, span := tracer.Start(tw.ctx, operationName) //nolint:spancheck // Caller receives and ends the returned span.
 	return ctx, span                                 //nolint:spancheck // Caller receives and ends the returned span.
 }

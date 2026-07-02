@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
+	"github.com/stoewer/go-strcase"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -192,6 +193,19 @@ func IsEnabled() bool {
 	return config.App.OTEL.Enable && initialized
 }
 
+// FrameworkSpanName returns the canonical name for gst-owned resource spans.
+// The format is component.GoModel.GoOperation so Jaeger labels map directly to
+// the framework type and method names used in code.
+func FrameworkSpanName(component string, resource string, operation string) string {
+	return joinSpanName(component, resource, operation)
+}
+
+// OperationSpanName returns the canonical name for gst-owned operation spans
+// that do not have a resource segment, such as middleware, cache, and RBAC.
+func OperationSpanName(component string, operation string) string {
+	return joinSpanName(component, operation)
+}
+
 // StartSpan starts a new span with the given name and options. The caller owns
 // the returned span and must end it after the traced operation finishes.
 func StartSpan(ctx context.Context, name string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
@@ -230,6 +244,44 @@ func RequestRootContext(ctx context.Context) context.Context {
 		return ctx
 	}
 	return trace.ContextWithSpan(ctx, span)
+}
+
+func joinSpanName(component string, symbols ...string) string {
+	names := make([]string, 0, len(symbols)+1)
+	if component = spanComponentName(component); component != "" {
+		names = append(names, component)
+	}
+	for _, symbol := range symbols {
+		if name := spanSymbolName(symbol); name != "" {
+			names = append(names, name)
+		}
+	}
+	return strings.Join(names, ".")
+}
+
+func spanComponentName(segment string) string {
+	segment = strings.TrimSpace(segment)
+	if segment == "" {
+		return ""
+	}
+
+	replacer := strings.NewReplacer(" ", "_", "-", "_", ".", "_", "/", "_")
+	segment = replacer.Replace(segment)
+	return strings.Trim(strcase.SnakeCase(segment), "_")
+}
+
+func spanSymbolName(segment string) string {
+	segment = strings.TrimSpace(segment)
+	if segment == "" {
+		return ""
+	}
+	if !strings.ContainsAny(segment, " _-./") && segment[0] >= 'A' && segment[0] <= 'Z' {
+		return segment
+	}
+
+	replacer := strings.NewReplacer(" ", "_", "-", "_", ".", "_", "/", "_")
+	segment = replacer.Replace(segment)
+	return strcase.UpperCamelCase(segment)
 }
 
 // normalizeConfig applies OTEL defaults and validates startup-only settings.

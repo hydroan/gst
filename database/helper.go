@@ -44,7 +44,7 @@ import (
 //   - Context propagation to GORM operations
 //
 // OTEL Tracing Integration:
-//   - Creates OpenTelemetry spans with naming pattern: "Database.{Operation} {ModelName}"
+//   - Creates OpenTelemetry spans with naming pattern: "database.{Model}.{Operation}"
 //   - Records detailed span attributes: component, operation, model, table, batch_size, etc.
 //   - Propagates span context to GORM operations for complete tracing hierarchy
 //   - Automatically handles span lifecycle (creation, attribute setting, completion)
@@ -74,7 +74,7 @@ func (db *database[M]) trace(op string, batch ...int) (func(error), context.Cont
 	var span trace.Span
 	if gstotel.IsEnabled() && ctx != nil {
 		modelName := reflect.TypeOf(*new(M)).Elem().Name()
-		spanName := "Database." + op + " " + modelName
+		spanName := gstotel.FrameworkSpanName("database", modelName, op)
 		ctx, span = gstotel.StartSpan(ctx, spanName)
 		ctx = requestctx.WithMetadata(ctx, requestctx.FromContext(db.ctx))
 		db.ctx = ctx
@@ -395,8 +395,8 @@ func traceModelHook[M types.Model](ctx context.Context, phase consts.Phase, pare
 	}
 
 	modelName := reflect.TypeOf(*new(M)).Elem().Name()
-	// Create child span under database span for hook execution
-	spanName := "Model." + phase.MethodName() + " " + modelName
+	// Use a structured gst span name under the database span for hook execution.
+	spanName := gstotel.FrameworkSpanName("model", modelName, phase.MethodName())
 	parentCtx := trace.ContextWithSpan(hookCtx, parentSpan)
 	childCtx, span := gstotel.StartSpan(parentCtx, spanName)
 	defer span.End()

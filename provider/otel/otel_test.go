@@ -97,6 +97,85 @@ func TestAddSpanTagsSetsAttributesInOneBatch(t *testing.T) {
 	require.Contains(t, span.attributes, attribute.String("unknown", "unsupported_type"))
 }
 
+func TestFrameworkSpanNameUsesDottedGoNames(t *testing.T) {
+	tests := []struct {
+		name      string
+		component string
+		resource  string
+		operation string
+		want      string
+	}{
+		{
+			name:      "controller create",
+			component: "controller",
+			resource:  "RoleBinding",
+			operation: "Create",
+			want:      "controller.RoleBinding.Create",
+		},
+		{
+			name:      "model create after",
+			component: "model",
+			resource:  "RoleBinding",
+			operation: "CreateAfter",
+			want:      "model.RoleBinding.CreateAfter",
+		},
+		{
+			name:      "service delete many after",
+			component: "service",
+			resource:  "AdminUserSession",
+			operation: "DeleteManyAfter",
+			want:      "service.AdminUserSession.DeleteManyAfter",
+		},
+		{
+			name:      "lower camel inputs",
+			component: "database",
+			resource:  "roleBinding",
+			operation: "createAfter",
+			want:      "database.RoleBinding.CreateAfter",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, FrameworkSpanName(tt.component, tt.resource, tt.operation))
+		})
+	}
+}
+
+func TestOperationSpanNameUsesDottedGoNames(t *testing.T) {
+	tests := []struct {
+		name      string
+		component string
+		operation string
+		want      string
+	}{
+		{
+			name:      "middleware",
+			component: "middleware",
+			operation: "IAMSession",
+			want:      "middleware.IAMSession",
+		},
+		{
+			name:      "cache",
+			component: "cache",
+			operation: "get",
+			want:      "cache.Get",
+		},
+		{
+			name:      "rbac",
+			component: "rbac",
+			operation: "assign_role",
+			want:      "rbac.AssignRole",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, OperationSpanName(tt.component, tt.operation))
+		})
+	}
+}
+
 type attributeCountingSpan struct {
 	oteltrace.Span
 

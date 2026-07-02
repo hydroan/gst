@@ -34,8 +34,8 @@ func middlewareWrapper(name string, middleware gin.HandlerFunc) gin.HandlerFunc 
 			return
 		}
 
-		// Create span name with middleware prefix
-		spanName := "middleware." + name
+		// Use the canonical gst operation name for middleware spans.
+		spanName := gstotel.OperationSpanName("middleware", name)
 
 		// Start new span for middleware execution under the HTTP request span.
 		originalCtx := c.Request.Context()

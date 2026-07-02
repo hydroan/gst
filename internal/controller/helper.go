@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"reflect"
 	"strings"
@@ -250,8 +249,8 @@ func startControllerSpan[M types.Model](c *gin.Context, phase consts.Phase) (con
 	// Get the model name(struct name).
 	modelName := reflect.TypeOf(*new(M)).Elem().Name()
 
-	// Create child span for controller operation
-	spanName := fmt.Sprintf("Controller.%s %s", phase.MethodName(), modelName)
+	// Use the canonical gst span name so Jaeger labels stay structured.
+	spanName := gstotel.FrameworkSpanName("controller", modelName, phase.MethodName())
 	parentCtx := gstotel.RequestRootContext(c.Request.Context())
 	spanCtx, span := gstotel.StartSpan(parentCtx, spanName)
 
@@ -277,8 +276,8 @@ func traceServiceHook[M types.Model](parentCtx context.Context, phase consts.Pha
 	// Get the model name(struct name).
 	modelName := reflect.TypeOf(*new(M)).Elem().Name()
 
-	// Create children span for service operation
-	spanName := fmt.Sprintf("Service.%s %s", phase.MethodName(), modelName)
+	// Use the canonical gst span name so service hooks group by model first.
+	spanName := gstotel.FrameworkSpanName("service", modelName, phase.MethodName())
 	spanCtx, span := gstotel.StartSpan(parentCtx, spanName)
 	defer span.End()
 
@@ -330,8 +329,8 @@ func traceServiceOperation[M types.Model, RSP types.Response](parentCtx context.
 	// Get the model name(struct name).
 	modelName := reflect.TypeOf(*new(M)).Elem().Name()
 
-	// Create children span for service operation
-	spanName := fmt.Sprintf("Service.%s %s", phase.MethodName(), modelName)
+	// Use the canonical gst span name so service operations group by model first.
+	spanName := gstotel.FrameworkSpanName("service", modelName, phase.MethodName())
 	spanCtx, span := gstotel.StartSpan(parentCtx, spanName)
 	defer span.End()
 
@@ -384,8 +383,8 @@ func traceServiceExport[M types.Model, T []byte](parentCtx context.Context, phas
 	// Get the model name(struct name).
 	modelName := reflect.TypeOf(*new(M)).Elem().Name()
 
-	// Create children span for service operation
-	spanName := fmt.Sprintf("Service.%s %s", phase.MethodName(), modelName)
+	// Use the canonical gst span name so service export spans match CRUD spans.
+	spanName := gstotel.FrameworkSpanName("service", modelName, phase.MethodName())
 	spanCtx, span := gstotel.StartSpan(parentCtx, spanName)
 	defer span.End()
 
@@ -438,8 +437,8 @@ func traceServiceImport[M types.Model](parentCtx context.Context, phase consts.P
 	// Get the model name(struct name).
 	modelName := reflect.TypeOf(*new(M)).Elem().Name()
 
-	// Create children span for service operation
-	spanName := fmt.Sprintf("Service.%s %s", phase.MethodName(), modelName)
+	// Use the canonical gst span name so service import spans match CRUD spans.
+	spanName := gstotel.FrameworkSpanName("service", modelName, phase.MethodName())
 	spanCtx, span := gstotel.StartSpan(parentCtx, spanName)
 	defer span.End()
 
