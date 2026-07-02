@@ -2,7 +2,9 @@ package helloworld_test
 
 import (
 	"encoding/json"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/module/helloworld"
@@ -76,12 +78,11 @@ func TestHelloworld2Module(t *testing.T) {
 
 			var resp *client.Resp
 
-			const id = "myid"
-			const id2 = "myid2"
-			res1 := new(helloworld.Helloworld2)
-			res1.SetID(id)
-			res2 := new(helloworld.Helloworld2)
-			res2.SetID(id2)
+			suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
+			id := "hw2_" + suffix
+			id2 := "hw2b_" + suffix
+			res1 := newHelloworld2TestRecord(id)
+			res2 := newHelloworld2TestRecord(id2)
 
 			switch tt.name {
 			case "create":
@@ -90,38 +91,42 @@ func TestHelloworld2Module(t *testing.T) {
 				check1(t, tt, resp)
 
 			case "delete":
+				createHelloworld2TestRecord(t, cli, res1)
 				resp, err = cli.Delete(id)
-				require.NoError(t, err)
-				_, err = cli.Create(res1)
 				require.NoError(t, err)
 				check1(t, tt, resp)
 
 			case "update":
+				createHelloworld2TestRecord(t, cli, res1)
 				resp, err = cli.Update(id, res1)
 				require.NoError(t, err)
 				check1(t, tt, resp)
 
 			case "patch":
+				createHelloworld2TestRecord(t, cli, res1)
 				resp, err = cli.Patch(id, res1)
 				require.NoError(t, err)
 				check1(t, tt, resp)
 
 			case "list":
+				createHelloworld2TestRecord(t, cli, res1)
 				items := make([]*helloworld.Helloworld2, 0)
 				total := new(int64)
 
 				_, err = cli.List(&items, total)
 				require.NoError(t, err)
 
-				require.Len(t, items, 1)
+				item := findHelloworld2TestRecord(items, id)
+				require.NotNil(t, item)
 				var data []byte
-				data, err = json.Marshal(items[0])
+				data, err = json.Marshal(item)
 				require.NoError(t, err)
 				resp = &client.Resp{Data: data}
 
 				check1(t, tt, resp)
 
 			case "get":
+				createHelloworld2TestRecord(t, cli, res1)
 				hw := new(helloworld.Helloworld2)
 				_, err = cli.Get(id, hw)
 				require.NoError(t, err)
@@ -139,22 +144,49 @@ func TestHelloworld2Module(t *testing.T) {
 				check2(t, tt, resp)
 
 			case "delete_many":
+				createHelloworld2TestRecord(t, cli, res1)
+				createHelloworld2TestRecord(t, cli, res2)
 				resp, err = cli.DeleteMany([]string{id, id2})
 				require.NoError(t, err)
 				check2(t, tt, resp)
 
 			case "update_many":
+				createHelloworld2TestRecord(t, cli, res1)
+				createHelloworld2TestRecord(t, cli, res2)
 				resp, err = cli.UpdateMany([]*helloworld.Helloworld2{res1, res2})
 				require.NoError(t, err)
 				check2(t, tt, resp)
 
 			case "patch_many":
+				createHelloworld2TestRecord(t, cli, res1)
+				createHelloworld2TestRecord(t, cli, res2)
 				resp, err = cli.PatchMany([]*helloworld.Helloworld2{res1, res2})
 				require.NoError(t, err)
 				check2(t, tt, resp)
 			}
 		})
 	}
+}
+
+func newHelloworld2TestRecord(id string) *helloworld.Helloworld2 {
+	record := new(helloworld.Helloworld2)
+	record.SetID(id)
+	return record
+}
+
+func createHelloworld2TestRecord(t *testing.T, cli *client.Client, record *helloworld.Helloworld2) {
+	t.Helper()
+	_, err := cli.Create(record)
+	require.NoError(t, err)
+}
+
+func findHelloworld2TestRecord(items []*helloworld.Helloworld2, id string) *helloworld.Helloworld2 {
+	for _, item := range items {
+		if item.GetID() == id {
+			return item
+		}
+	}
+	return nil
 }
 
 func check1(t *testing.T, tt struct {
