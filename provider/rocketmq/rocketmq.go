@@ -30,7 +30,7 @@ var (
 // The function is thread-safe and ensures the producer is initialized only once.
 func Init() (err error) {
 	cfg := config.App.RocketMQ
-	if !cfg.Enable {
+	if !cfg.Enabled {
 		return nil
 	}
 	mu.Lock()
@@ -100,7 +100,7 @@ func NewProducer(cfg config.RocketMQ) (rocketmq.Producer, error) {
 		opts = append(opts, producer.WithTrace(&primitive.TraceConfig{}))
 	}
 
-	// if cfg.EnableTLS {
+	// if cfg.TLSEnabled {
 	// 	var tlsConfig *tls.Config
 	// 	var err error
 	// 	if tlsConfig, err = util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {
@@ -170,7 +170,7 @@ func NewPushConsumer(cfg config.RocketMQ, consumerGroup string) (rocketmq.PushCo
 		opts = append(opts, consumer.WithTrace(&primitive.TraceConfig{}))
 	}
 
-	// if cfg.EnableTLS {
+	// if cfg.TLSEnabled {
 	// 	var tlsConfig *tls.Config
 	// 	var err error
 	// 	if tlsConfig, err = util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {
@@ -201,7 +201,7 @@ func NewAdmin(cfg config.RocketMQ) (admin.Admin, error) {
 		}))
 	}
 
-	// if cfg.EnableTLS {
+	// if cfg.TLSEnabled {
 	// 	var tlsConfig *tls.Config
 	// 	var err error
 	// 	if tlsConfig, err = util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {

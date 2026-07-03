@@ -20,7 +20,7 @@ const (
 	INFLUXDB_PRECISION          = "INFLUXDB_PRECISION"          //nolint:staticcheck
 	INFLUXDB_USE_GZIP           = "INFLUXDB_USE_GZIP"           //nolint:staticcheck
 
-	INFLUXDB_ENABLE_TLS           = "INFLUXDB_ENABLE_TLS"           //nolint:staticcheck
+	INFLUXDB_TLS_ENABLED          = "INFLUXDB_TLS_ENABLED"          //nolint:staticcheck
 	INFLUXDB_CERT_FILE            = "INFLUXDB_CERT_FILE"            //nolint:staticcheck
 	INFLUXDB_KEY_FILE             = "INFLUXDB_KEY_FILE"             //nolint:staticcheck
 	INFLUXDB_CA_FILE              = "INFLUXDB_CA_FILE"              //nolint:staticcheck
@@ -30,7 +30,7 @@ const (
 	INFLUXDB_DEFAULT_TAGS = "INFLUXDB_DEFAULT_TAGS" // format：key1=value1,key2=value2
 	INFLUXDB_APP_NAME     = "INFLUXDB_APP_NAME"     //nolint:staticcheck
 
-	INFLUXDB_ENABLE = "INFLUXDB_ENABLE" //nolint:staticcheck
+	INFLUXDB_ENABLED = "INFLUXDB_ENABLED" //nolint:staticcheck
 )
 
 type Influxdb struct {
@@ -53,7 +53,7 @@ type Influxdb struct {
 	UseGZip          bool          `json:"use_gzip" mapstructure:"use_gzip" ini:"use_gzip" yaml:"use_gzip"`
 
 	// TLS configuration
-	EnableTLS          bool   `json:"enable_tls" mapstructure:"enable_tls" ini:"enable_tls" yaml:"enable_tls"`
+	TLSEnabled         bool   `json:"tls_enabled" mapstructure:"tls_enabled" ini:"tls_enabled" yaml:"tls_enabled"`
 	CertFile           string `json:"cert_file" mapstructure:"cert_file" ini:"cert_file" yaml:"cert_file"`
 	KeyFile            string `json:"key_file" mapstructure:"key_file" ini:"key_file" yaml:"key_file"`
 	CAFile             string `json:"ca_file" mapstructure:"ca_file" ini:"ca_file" yaml:"ca_file"`
@@ -63,7 +63,7 @@ type Influxdb struct {
 	DefaultTags map[string]string `json:"default_tags" mapstructure:"default_tags" ini:"default_tags" yaml:"default_tags"`
 	AppName     string            `json:"app_name" mapstructure:"app_name" ini:"app_name" yaml:"app_name"`
 
-	Enable bool `json:"enable" mapstructure:"enable" ini:"enable" yaml:"enable"`
+	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*Influxdb) setDefault() {
@@ -84,7 +84,7 @@ func (*Influxdb) setDefault() {
 	cv.SetDefault("influxdb.precision", 0)
 	cv.SetDefault("influxdb.use_gzip", false)
 
-	cv.SetDefault("influxdb.enable_tls", false)
+	cv.SetDefault("influxdb.tls_enabled", false)
 	cv.SetDefault("influxdb.cert_file", "")
 	cv.SetDefault("influxdb.key_file", 0)
 	cv.SetDefault("influxdb.ca_file", "")
@@ -93,5 +93,5 @@ func (*Influxdb) setDefault() {
 	cv.SetDefault("influxdb.default_tags", nil)
 	cv.SetDefault("influxdb.app_name", "")
 
-	cv.SetDefault("influxdb.enable", false)
+	cv.SetDefault("influxdb.enabled", false)
 }

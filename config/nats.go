@@ -20,13 +20,13 @@ const (
 	NATS_PING_INTERVAL         = "NATS_PING_INTERVAL"         //nolint:staticcheck
 	NATS_MAX_PINGS_OUTSTANDING = "NATS_MAX_PINGS_OUTSTANDING" //nolint:staticcheck
 
-	NATS_ENABLE_TLS           = "NATS_ENABLE_TLS"           //nolint:staticcheck
+	NATS_TLS_ENABLED          = "NATS_TLS_ENABLED"          //nolint:staticcheck
 	NATS_CERT_FILE            = "NATS_CERT_FILE"            //nolint:staticcheck
 	NATS_KEY_FILE             = "NATS_KEY_FILE"             //nolint:staticcheck
 	NATS_CA_FILE              = "NATS_CA_FILE"              //nolint:staticcheck
 	NATS_INSECURE_SKIP_VERIFY = "NATS_INSECURE_SKIP_VERIFY" //nolint:staticcheck
 
-	NATS_ENABLE = "NATS_ENABLE" //nolint:staticcheck
+	NATS_ENABLED = "NATS_ENABLED" //nolint:staticcheck
 )
 
 type Nats struct {
@@ -47,13 +47,13 @@ type Nats struct {
 	PingInterval        time.Duration `json:"ping_interval" mapstructure:"ping_interval" ini:"ping_interval" yaml:"ping_interval"`
 	MaxPingsOutstanding int           `json:"max_pings_outstanding" mapstructure:"max_pings_outstanding" ini:"max_pings_outstanding" yaml:"max_pings_outstanding"`
 
-	EnableTLS          bool   `json:"enable_tls" mapstructure:"enable_tls" ini:"enable_tls" yaml:"enable_tls"`
+	TLSEnabled         bool   `json:"tls_enabled" mapstructure:"tls_enabled" ini:"tls_enabled" yaml:"tls_enabled"`
 	CertFile           string `json:"cert_file" mapstructure:"cert_file" ini:"cert_file" yaml:"cert_file"`
 	KeyFile            string `json:"key_file" mapstructure:"key_file" ini:"key_file" yaml:"key_file"`
 	CAFile             string `json:"ca_file" mapstructure:"ca_file" ini:"ca_file" yaml:"ca_file"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify" mapstructure:"insecure_skip_verify" ini:"insecure_skip_verify" yaml:"insecure_skip_verify"`
 
-	Enable bool `json:"enable" mapstructure:"enable" ini:"enable" yaml:"enable"`
+	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*Nats) setDefault() {
@@ -74,11 +74,11 @@ func (*Nats) setDefault() {
 	cv.SetDefault("nats.ping_interval", 2*time.Minute)
 	cv.SetDefault("nats.max_pings_outstanding", 2)
 
-	cv.SetDefault("nats.enable_tls", false)
+	cv.SetDefault("nats.tls_enabled", false)
 	cv.SetDefault("nats.cert_file", "")
 	cv.SetDefault("nats.key_file", "")
 	cv.SetDefault("nats.ca_file", "")
 	cv.SetDefault("nats.insecure_skip_verify", false)
 
-	cv.SetDefault("nats.enable", false)
+	cv.SetDefault("nats.enabled", false)
 }

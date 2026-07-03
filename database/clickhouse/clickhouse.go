@@ -24,7 +24,7 @@ var (
 // If the connection is successful, it initializes the database and returns nil.
 func Init() (err error) {
 	cfg := config.App.Clickhouse
-	if !cfg.Enable || config.App.Database.Type != config.DBClickHouse {
+	if !cfg.Enabled || config.App.Database.Type != config.DBClickHouse {
 		return err
 	}
 

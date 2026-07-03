@@ -178,7 +178,7 @@ func setupRedis(t *testing.T) {
 	t.Helper()
 
 	setupRedisOnce.Do(func() {
-		t.Setenv(config.REDIS_ENABLE, "true")
+		t.Setenv(config.REDIS_ENABLED, "true")
 		testutil.SetupRandomRedisNamespace()
 		if errSetupRedis = config.Init(); errSetupRedis != nil {
 			return

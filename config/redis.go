@@ -25,13 +25,13 @@ const (
 	REDIS_MIN_RETRY_BACKOFF = "REDIS_MIN_RETRY_BACKOFF" //nolint:staticcheck
 	REDIS_MAX_RETRY_BACKOFF = "REDIS_MAX_RETRY_BACKOFF" //nolint:staticcheck
 
-	REDIS_ENABLE_TLS           = "REDIS_ENABLE_TLS"           //nolint:staticcheck
+	REDIS_TLS_ENABLED          = "REDIS_TLS_ENABLED"          //nolint:staticcheck
 	REDIS_CERT_FILE            = "REDIS_CERT_FILE"            //nolint:staticcheck
 	REDIS_KEY_FILE             = "REDIS_KEY_FILE"             //nolint:staticcheck
 	REDIS_CA_FILE              = "REDIS_CA_FILE"              //nolint:staticcheck
 	REDIS_INSECURE_SKIP_VERIFY = "REDIS_INSECURE_SKIP_VERIFY" //nolint:staticcheck
 
-	REDIS_ENABLE = "REDIS_ENABLE" //nolint:staticcheck
+	REDIS_ENABLED = "REDIS_ENABLED" //nolint:staticcheck
 )
 
 type Redis struct {
@@ -52,13 +52,13 @@ type Redis struct {
 	MinRetryBackoff time.Duration `json:"min_retry_backoff" mapstructure:"min_retry_backoff" ini:"min_retry_backoff" yaml:"min_retry_backoff"`
 	MaxRetryBackoff time.Duration `json:"max_retry_backoff" mapstructure:"max_retry_backoff" ini:"max_retry_backoff" yaml:"max_retry_backoff"`
 
-	EnableTLS          bool   `json:"enable_tls" mapstructure:"enable_tls" ini:"enable_tls" yaml:"enable_tls"`
+	TLSEnabled         bool   `json:"tls_enabled" mapstructure:"tls_enabled" ini:"tls_enabled" yaml:"tls_enabled"`
 	CertFile           string `json:"cert_file" mapstructure:"cert_file" ini:"cert_file" yaml:"cert_file"`
 	KeyFile            string `json:"key_file" mapstructure:"key_file" ini:"key_file" yaml:"key_file"`
 	CAFile             string `json:"ca_file" mapstructure:"ca_file" ini:"ca_file" yaml:"ca_file"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify" mapstructure:"insecure_skip_verify" ini:"insecure_skip_verify" yaml:"insecure_skip_verify"`
 
-	Enable bool `json:"enable" mapstructure:"enable" ini:"enable" yaml:"enable"`
+	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*Redis) setDefault() {
@@ -79,11 +79,11 @@ func (*Redis) setDefault() {
 	cv.SetDefault("redis.min_retry_backoff", 0)
 	cv.SetDefault("redis.max_retry_backoff", 0)
 
-	cv.SetDefault("redis.enable_tls", false)
+	cv.SetDefault("redis.tls_enabled", false)
 	cv.SetDefault("redis.cert_file", "")
 	cv.SetDefault("redis.key_file", 0)
 	cv.SetDefault("redis.ca_file", "")
 	cv.SetDefault("redis.insecure_skip_verify", false)
 
-	cv.SetDefault("redis.enable", false)
+	cv.SetDefault("redis.enabled", false)
 }

@@ -23,7 +23,7 @@ var (
 // The function is thread-safe and ensures the session is initialized only once.
 func Init() (err error) {
 	cfg := config.App.RethinkDB
-	if !cfg.Enable {
+	if !cfg.Enabled {
 		return nil
 	}
 	mu.Lock()
@@ -82,7 +82,7 @@ func New(cfg config.RethinkDB) (*r.Session, error) {
 		opts.KeepAlivePeriod = cfg.KeepAliveTime
 	}
 
-	if cfg.EnableTLS {
+	if cfg.TLSEnabled {
 		var tlsConfig *tls.Config
 		var err error
 		if tlsConfig, err = util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {

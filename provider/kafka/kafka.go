@@ -18,7 +18,7 @@ var (
 
 func Init() (err error) {
 	cfg := config.App.Kafka
-	if !cfg.Enable {
+	if !cfg.Enabled {
 		return nil
 	}
 	mu.Lock()
@@ -74,7 +74,7 @@ func configureKafka(config *sarama.Config, cfg config.Kafka) error {
 	}
 
 	// Authentication
-	if cfg.SASL.Enable {
+	if cfg.SASL.Enabled {
 		config.Net.SASL.Enable = true
 		config.Net.SASL.Mechanism = sarama.SASLMechanism(cfg.SASL.Mechanism)
 		config.Net.SASL.User = cfg.SASL.Username
@@ -89,7 +89,7 @@ func configureKafka(config *sarama.Config, cfg config.Kafka) error {
 	}
 
 	// TLS configuration
-	if cfg.EnableTLS {
+	if cfg.TLSEnabled {
 		config.Net.TLS.Enable = true
 		tlsConfig, err := util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify)
 		if err != nil {

@@ -16,7 +16,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	os.Setenv(config.MINIO_ENABLE, "true")
+	os.Setenv(config.MINIO_ENABLED, "true")
 	os.Setenv(config.MINIO_BUCKET, "test-bucket")
 
 	if err := config.Init(); err != nil {

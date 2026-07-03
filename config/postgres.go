@@ -8,7 +8,7 @@ const (
 	POSTGRES_PASSWORD = "POSTGRES_PASSWORD" //nolint:staticcheck,gosec
 	POSTGRES_SSLMODE  = "POSTGRES_SSLMODE"  //nolint:staticcheck
 	POSTGRES_TIMEZONE = "POSTGRES_TIMEZONE" //nolint:staticcheck
-	POSTGRES_ENABLE   = "POSTGRES_ENABLE"   //nolint:staticcheck
+	POSTGRES_ENABLED  = "POSTGRES_ENABLED"  //nolint:staticcheck
 )
 
 type Postgres struct {
@@ -19,7 +19,7 @@ type Postgres struct {
 	Password string `json:"password" mapstructure:"password" ini:"password" yaml:"password"`
 	SSLMode  string `json:"sslmode" mapstructure:"sslmode" ini:"sslmode" yaml:"sslmode"`
 	TimeZone string `json:"timezone" mapstructure:"timezone" ini:"timezone" yaml:"timezone"`
-	Enable   bool   `json:"enable" mapstructure:"enable" ini:"enable" yaml:"enable"`
+	Enabled  bool   `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*Postgres) setDefault() {
@@ -30,5 +30,5 @@ func (*Postgres) setDefault() {
 	cv.SetDefault("postgres.password", "")
 	cv.SetDefault("postgres.sslmode", "disable")
 	cv.SetDefault("postgres.timezone", "UTC")
-	cv.SetDefault("postgres.enable", true)
+	cv.SetDefault("postgres.enabled", true)
 }

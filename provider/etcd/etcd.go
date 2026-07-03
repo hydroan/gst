@@ -26,7 +26,7 @@ var (
 // The function is thread-safe and ensures the client is initialized only once.
 func Init() (err error) {
 	cfg := config.App.Etcd
-	if !cfg.Enable {
+	if !cfg.Enabled {
 		return nil
 	}
 	mu.Lock()
@@ -102,7 +102,7 @@ func New(cfg config.Etcd) (*clientv3.Client, error) {
 	etcdConfig.RejectOldCluster = cfg.RejectOldCluster
 
 	// Configure TLS if enabled
-	if cfg.EnableTLS {
+	if cfg.TLSEnabled {
 		tlsConfig, err := util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to build TLS config")

@@ -28,7 +28,7 @@ func init() {
 	os.Setenv(config.LOGGER_DIR, "./logs")
 	os.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)
 	// Enable audit and sync write before Bootstrap so operationlog test can list logs immediately.
-	os.Setenv(config.AUDIT_ENABLE, "true")
+	os.Setenv(config.AUDIT_ENABLED, "true")
 	os.Setenv(config.AUDIT_ASYNC_WRITE, "false")
 
 	if err := bootstrap.Bootstrap(); err != nil {

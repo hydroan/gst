@@ -12,7 +12,7 @@
 // Full sampling configuration:
 //
 //	[otel]
-//	enable = true
+//	enabled = true
 //	service_name = demo
 //	exporter_otlp_protocol = http/protobuf
 //	exporter_otlp_traces_endpoint = http://localhost:4318/v1/traces
@@ -21,7 +21,7 @@
 // Partial sampling configuration:
 //
 //	[otel]
-//	enable = true
+//	enabled = true
 //	service_name = demo
 //	exporter_otlp_protocol = http/protobuf
 //	exporter_otlp_traces_endpoint = http://localhost:4318/v1/traces
@@ -88,7 +88,7 @@ func Init() error {
 	if err != nil {
 		return err
 	}
-	if !cfg.Enable {
+	if !cfg.Enabled {
 		logger.OTEL.Info("otel tracing is disabled")
 		return nil
 	}
@@ -190,7 +190,7 @@ func GetTracer() trace.Tracer {
 
 // IsEnabled returns whether OpenTelemetry tracing is enabled.
 func IsEnabled() bool {
-	return config.App.OTEL.Enable && initialized
+	return config.App.OTEL.Enabled && initialized
 }
 
 // FrameworkSpanName returns the canonical name for gst-owned resource spans.

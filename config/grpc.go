@@ -16,14 +16,14 @@ const (
 	GRPC_MAX_CONNECTION_AGE       = "GRPC_MAX_CONNECTION_AGE"       //nolint:staticcheck
 	GRPC_MAX_CONNECTION_AGE_GRACE = "GRPC_MAX_CONNECTION_AGE_GRACE" //nolint:staticcheck
 
-	GRPC_ENABLE_TLS          = "GRPC_ENABLE_TLS"          //nolint:staticcheck
-	GRPC_CERT_FILE           = "GRPC_CERT_FILE"           //nolint:staticcheck
-	GRPC_KEY_FILE            = "GRPC_KEY_FILE"            //nolint:staticcheck
-	GRPC_CA_FILE             = "GRPC_CA_FILE"             //nolint:staticcheck
-	GRPC_ENABLE_REFLECTION   = "GRPC_ENABLE_REFLECTION"   //nolint:staticcheck
-	GRPC_ENABLE_HEALTH_CHECK = "GRPC_ENABLE_HEALTH_CHECK" //nolint:staticcheck
+	GRPC_TLS_ENABLED          = "GRPC_TLS_ENABLED"          //nolint:staticcheck
+	GRPC_CERT_FILE            = "GRPC_CERT_FILE"            //nolint:staticcheck
+	GRPC_KEY_FILE             = "GRPC_KEY_FILE"             //nolint:staticcheck
+	GRPC_CA_FILE              = "GRPC_CA_FILE"              //nolint:staticcheck
+	GRPC_REFLECTION_ENABLED   = "GRPC_REFLECTION_ENABLED"   //nolint:staticcheck
+	GRPC_HEALTH_CHECK_ENABLED = "GRPC_HEALTH_CHECK_ENABLED" //nolint:staticcheck
 
-	GRPC_ENABLE = "GRPC_ENABLE" //nolint:staticcheck
+	GRPC_ENABLED = "GRPC_ENABLED" //nolint:staticcheck
 )
 
 type Grpc struct {
@@ -40,13 +40,13 @@ type Grpc struct {
 	MaxConnectionAge      time.Duration `json:"max_connection_age" mapstructure:"max_connection_age" ini:"max_connection_age" yaml:"max_connection_age"`
 	MaxConnectionAgeGrace time.Duration `json:"max_connection_age_grace" mapstructure:"max_connection_age_grace" ini:"max_connection_age_grace" yaml:"max_connection_age_grace"`
 
-	EnableTLS         bool   `json:"enable_tls" mapstructure:"enable_tls" ini:"enable_tls" yaml:"enable_tls"`
-	CertFile          string `json:"cert_file" mapstructure:"cert_file" ini:"cert_file" yaml:"cert_file"`
-	KeyFile           string `json:"key_file" mapstructure:"key_file" ini:"key_file" yaml:"key_file"`
-	CAFile            string `json:"ca_file" mapstructure:"ca_file" ini:"ca_file" yaml:"ca_file"`
-	EnableReflection  bool   `json:"enable_reflection" mapstructure:"enable_reflection" ini:"enable_reflection" yaml:"enable_reflection"`
-	EnableHealthCheck bool   `json:"enable_health_check" mapstructure:"enable_health_check" ini:"enable_health_check" yaml:"enable_health_check"`
-	Enable            bool   `json:"enable" mapstructure:"enable" ini:"enable" yaml:"enable"`
+	TLSEnabled         bool   `json:"tls_enabled" mapstructure:"tls_enabled" ini:"tls_enabled" yaml:"tls_enabled"`
+	CertFile           string `json:"cert_file" mapstructure:"cert_file" ini:"cert_file" yaml:"cert_file"`
+	KeyFile            string `json:"key_file" mapstructure:"key_file" ini:"key_file" yaml:"key_file"`
+	CAFile             string `json:"ca_file" mapstructure:"ca_file" ini:"ca_file" yaml:"ca_file"`
+	ReflectionEnabled  bool   `json:"reflection_enabled" mapstructure:"reflection_enabled" ini:"reflection_enabled" yaml:"reflection_enabled"`
+	HealthCheckEnabled bool   `json:"health_check_enabled" mapstructure:"health_check_enabled" ini:"health_check_enabled" yaml:"health_check_enabled"`
+	Enabled            bool   `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*Grpc) setDefault() {
@@ -63,12 +63,12 @@ func (*Grpc) setDefault() {
 	cv.SetDefault("grpc.max_connection_age", 30*time.Second)
 	cv.SetDefault("grpc.max_connection_age_grace", 5*time.Second)
 
-	cv.SetDefault("grpc.enable_tls", false)
+	cv.SetDefault("grpc.tls_enabled", false)
 	cv.SetDefault("grpc.cert_file", "")
 	cv.SetDefault("grpc.key_file", "")
 	cv.SetDefault("grpc.ca_file", "")
-	cv.SetDefault("grpc.enable_reflection", false)
-	cv.SetDefault("grpc.enable_health_check", true)
+	cv.SetDefault("grpc.reflection_enabled", false)
+	cv.SetDefault("grpc.health_check_enabled", true)
 
-	cv.SetDefault("grpc.enable", false)
+	cv.SetDefault("grpc.enabled", false)
 }

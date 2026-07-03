@@ -15,7 +15,7 @@ const (
 	MQTT_CERT_FILE            = "MQTT_CERT_FILE"            //nolint:staticcheck
 	MQTT_KEY_FILE             = "MQTT_KEY_FILE"             //nolint:staticcheck
 	MQTT_INSECURE_SKIP_VERIFY = "MQTT_INSECURE_SKIP_VERIFY" //nolint:staticcheck
-	MQTT_ENABLE               = "MQTT_ENABLE"               //nolint:staticcheck
+	MQTT_ENABLED              = "MQTT_ENABLED"              //nolint:staticcheck
 )
 
 type Mqtt struct {
@@ -31,7 +31,7 @@ type Mqtt struct {
 	CertFile           string        `json:"cert_file" mapstructure:"cert_file" ini:"cert_file" yaml:"cert_file"`
 	KeyFile            string        `json:"key_file" mapstructure:"key_file" ini:"key_file" yaml:"key_file"`
 	InsecureSkipVerify bool          `json:"insecure_skip_verify" mapstructure:"insecure_skip_verify" ini:"insecure_skip_verify" yaml:"insecure_skip_verify"`
-	Enable             bool          `json:"enable" mapstructure:"enable" ini:"enable" yaml:"enable"`
+	Enabled            bool          `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*Mqtt) setDefault() {
@@ -47,5 +47,5 @@ func (*Mqtt) setDefault() {
 	cv.SetDefault("mqtt.cert_file", "")
 	cv.SetDefault("mqtt.key_file", "")
 	cv.SetDefault("mqtt.insecure_skip_verify", true)
-	cv.SetDefault("mqtt.enable", false)
+	cv.SetDefault("mqtt.enabled", false)
 }

@@ -14,7 +14,7 @@ import (
 var server *http.Server
 
 func Run() error {
-	if !config.App.StatsvizEnable {
+	if !config.App.StatsvizEnabled {
 		return nil
 	}
 

@@ -1,19 +1,19 @@
 package config
 
 const (
-	MIDDLEWARE_ENABLE_JWT_AUTH    = "MIDDLEWARE_ENABLE_JWT_AUTH"    //nolint:staticcheck
-	MIDDLEWARE_ENABLE_AUTHZ       = "MIDDLEWARE_ENABLE_AUTHZ"       //nolint:staticcheck
-	MIDDLEWARE_ENABLE_IAM_SESSION = "MIDDLEWARE_ENABLE_IAM_SESSION" //nolint:staticcheck
+	MIDDLEWARE_JWT_AUTH_ENABLED    = "MIDDLEWARE_JWT_AUTH_ENABLED"    //nolint:staticcheck
+	MIDDLEWARE_AUTHZ_ENABLED       = "MIDDLEWARE_AUTHZ_ENABLED"       //nolint:staticcheck
+	MIDDLEWARE_IAM_SESSION_ENABLED = "MIDDLEWARE_IAM_SESSION_ENABLED" //nolint:staticcheck
 )
 
 type Middleware struct {
-	EnableJwtAuth    bool `json:"enable_jwt_auth" mapstructure:"enable_jwt_auth" ini:"enable_jwt_auth" yaml:"enable_jwt_auth"`
-	EnableAuthz      bool `json:"enable_authz" mapstructure:"enable_authz" ini:"enable_authz" yaml:"enable_authz"`
-	EnableIAMSession bool `json:"enable_iam_session" mapstructure:"enable_iam_session" ini:"enable_iam_session" yaml:"enable_iam_session"`
+	JWTAuthEnabled    bool `json:"jwt_auth_enabled" mapstructure:"jwt_auth_enabled" ini:"jwt_auth_enabled" yaml:"jwt_auth_enabled"`
+	AuthzEnabled      bool `json:"authz_enabled" mapstructure:"authz_enabled" ini:"authz_enabled" yaml:"authz_enabled"`
+	IAMSessionEnabled bool `json:"iam_session_enabled" mapstructure:"iam_session_enabled" ini:"iam_session_enabled" yaml:"iam_session_enabled"`
 }
 
 func (*Middleware) setDefault() {
-	cv.SetDefault("middleware.enable_jwt_auth", false)
-	cv.SetDefault("middleware.enable_authz", false)
-	cv.SetDefault("middleware.enable_iam_session", false)
+	cv.SetDefault("middleware.jwt_auth_enabled", false)
+	cv.SetDefault("middleware.authz_enabled", false)
+	cv.SetDefault("middleware.iam_session_enabled", false)
 }

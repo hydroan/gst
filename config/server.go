@@ -31,7 +31,7 @@ const (
 	SERVER_CIRCUIT_BREAKER_TIMEOUT      = "SERVER_CIRCUIT_BREAKER_TIMEOUT"      //nolint:staticcheck
 	SERVER_CIRCUIT_BREAKER_FAILURE_RATE = "SERVER_CIRCUIT_BREAKER_FAILURE_RATE" //nolint:staticcheck
 	SERVER_CIRCUIT_BREAKER_MIN_REQUESTS = "SERVER_CIRCUIT_BREAKER_MIN_REQUESTS" //nolint:staticcheck
-	SERVER_CIRCUIT_BREAKER_ENABLE       = "SERVER_CIRCUIT_BREAKER_ENABLE"       //nolint:staticcheck
+	SERVER_CIRCUIT_BREAKER_ENABLED      = "SERVER_CIRCUIT_BREAKER_ENABLED"      //nolint:staticcheck
 
 	SERVER_CIRCULAR_BUFFER_SIZE_OPERATION_LOG = "SERVER_CIRCULAR_BUFFER_SIZE_OPERATION_LOG" //nolint:staticcheck
 )
@@ -60,7 +60,7 @@ type CircuitBreaker struct {
 	Timeout     time.Duration `json:"timeout" mapstructure:"timeout" ini:"timeout" yaml:"timeout"`
 	FailureRate float64       `json:"failure_rate" mapstructure:"failure_rate" ini:"failure_rate" yaml:"failure_rate"`
 	MinRequests uint32        `json:"min_requests" mapstructure:"min_requests" ini:"min_requests" yaml:"min_requests"`
-	Enable      bool          `json:"enable" mapstructure:"enable" ini:"enable" yaml:"enable"`
+	Enabled     bool          `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 type CircularBuffer struct {
 	SizeOperationLog int64 `json:"size_operation_log" mapstructure:"size_operation_log" ini:"size" yaml:"size_operation_log"`
@@ -82,7 +82,7 @@ func (*Server) setDefault() {
 	cv.SetDefault("server.circuit_breaker.timeout", 30*time.Second)
 	cv.SetDefault("server.circuit_breaker.failure_rate", 0.5)
 	cv.SetDefault("server.circuit_breaker.min_requests", uint32(10))
-	cv.SetDefault("server.circuit_breaker.enable", true)
+	cv.SetDefault("server.circuit_breaker.enabled", true)
 
 	// Circular buffer defaults
 	cv.SetDefault("server.circular_buffer.size_operation_log", int64(10000))

@@ -42,7 +42,7 @@ func New(auditConfig *config.Audit, cb *circularbuffer.CircularBuffer[*modellogm
 // It provides centralized audit logging with configurable filtering and supports both sync and async writing.
 func (am *AuditManager) RecordOperation(ctx context.Context, m types.Model, operationLog *modellogmgmt.OperationLog) error {
 	// Skip if audit is disabled
-	if !am.config.Enable {
+	if !am.config.Enabled {
 		return nil
 	}
 
@@ -77,7 +77,7 @@ func (am *AuditManager) RecordOperation(ctx context.Context, m types.Model, oper
 
 // RecordBatchOperations records multiple operations audit logs
 func (am *AuditManager) RecordBatchOperations(ctx context.Context, m types.Model, operationLogs []*modellogmgmt.OperationLog) error {
-	if !am.config.Enable {
+	if !am.config.Enabled {
 		return nil
 	}
 

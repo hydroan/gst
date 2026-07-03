@@ -19,13 +19,13 @@ const (
 	CASSANDRA_RECONNECT_INTERVAL = "CASSANDRA_RECONNECT_INTERVAL" //nolint:staticcheck
 	CASSANDRA_MAX_RETRY_COUNT    = "CASSANDRA_MAX_RETRY_COUNT"    //nolint:staticcheck
 
-	CASSANDRA_ENABLE_TLS           = "CASSANDRA_ENABLE_TLS"           //nolint:staticcheck
+	CASSANDRA_TLS_ENABLED          = "CASSANDRA_TLS_ENABLED"          //nolint:staticcheck
 	CASSANDRA_CERT_FILE            = "CASSANDRA_CERT_FILE"            //nolint:staticcheck
 	CASSANDRA_KEY_FILE             = "CASSANDRA_KEY_FILE"             //nolint:staticcheck
 	CASSANDRA_CA_FILE              = "CASSANDRA_CA_FILE"              //nolint:staticcheck
 	CASSANDRA_INSECURE_SKIP_VERIFY = "CASSANDRA_INSECURE_SKIP_VERIFY" //nolint:staticcheck
 
-	CASSANDRA_ENABLE = "CASSANDRA_ENABLE" //nolint:staticcheck
+	CASSANDRA_ENABLED = "CASSANDRA_ENABLED" //nolint:staticcheck
 )
 
 type Cassandra struct {
@@ -44,13 +44,13 @@ type Cassandra struct {
 	ReconnectInterval time.Duration `json:"reconnect_interval" mapstructure:"reconnect_interval" ini:"reconnect_interval" yaml:"reconnect_interval"`
 	MaxRetryCount     int           `json:"max_retry_count" mapstructure:"max_retry_count" ini:"max_retry_count" yaml:"max_retry_count"`
 
-	EnableTLS          bool   `json:"enable_tls" mapstructure:"enable_tls" ini:"enable_tls" yaml:"enable_tls"`
+	TLSEnabled         bool   `json:"tls_enabled" mapstructure:"tls_enabled" ini:"tls_enabled" yaml:"tls_enabled"`
 	CertFile           string `json:"cert_file" mapstructure:"cert_file" ini:"cert_file" yaml:"cert_file"`
 	KeyFile            string `json:"key_file" mapstructure:"key_file" ini:"key_file" yaml:"key_file"`
 	CAFile             string `json:"ca_file" mapstructure:"ca_file" ini:"ca_file" yaml:"ca_file"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify" mapstructure:"insecure_skip_verify" ini:"insecure_skip_verify" yaml:"insecure_skip_verify"`
 
-	Enable bool `json:"enable" mapstructure:"enable" ini:"enable" yaml:"enable"`
+	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*Cassandra) setDefault() {
@@ -69,11 +69,11 @@ func (*Cassandra) setDefault() {
 	cv.SetDefault("cassandra.reconnect_interval", 1*time.Second)
 	cv.SetDefault("cassandra.max_retry_count", 3)
 
-	cv.SetDefault("cassandra.enable_tls", false)
+	cv.SetDefault("cassandra.tls_enabled", false)
 	cv.SetDefault("cassandra.cert_file", "")
 	cv.SetDefault("cassandra.key_file", "")
 	cv.SetDefault("cassandra.ca_file", "")
 	cv.SetDefault("cassandra.insecure_skip_verify", false)
 
-	cv.SetDefault("cassandra.enable", false)
+	cv.SetDefault("cassandra.enabled", false)
 }

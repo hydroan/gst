@@ -134,7 +134,7 @@ QUERY:
 		}
 	}
 	// Cache the result.
-	// if db.enableCache && config.App.RedisConfig.Enable {
+	// if db.enableCache && config.App.Redis.Enabled {
 	// 	logger.Cache.Infow("list from database", "cost", time.Since(begin).String(), "key", key)
 	// 	go func() {
 	// 		if err = redis.SetML[M](key, *dest); err != nil {
@@ -278,7 +278,7 @@ QUERY:
 		}
 	}
 	// // Cache the result.
-	// if db.enableCache && config.App.RedisConfig.Enable {
+	// if db.enableCache && config.App.Redis.Enabled {
 	// 	logger.Cache.Infow("get from database", "cost", time.Since(begin).String(), "key", key)
 	// 	go func() {
 	// 		if err = redis.SetM[M](key, dest); err != nil {
@@ -361,7 +361,7 @@ QUERY:
 		logger.Cache.Error(err)
 		return err
 	}
-	// if db.enableCache && config.App.RedisConfig.Enable {
+	// if db.enableCache && config.App.Redis.Enabled {
 	// 	logger.Cache.Infow("count from database", "cost", time.Since(begin).String(), "key", key)
 	// 	go func() {
 	// 		if err = redis.Set(db.ctx, key, *count); err != nil {
@@ -475,7 +475,7 @@ QUERY:
 		}
 	}
 	// // Cache the result.
-	// if db.enableCache && config.App.RedisConfig.Enable {
+	// if db.enableCache && config.App.Redis.Enabled {
 	// 	logger.Cache.Infow("first from database", "cost", time.Since(begin).String(), "key", key)
 	// 	go func() {
 	// 		if err = redis.SetM[M](key, dest); err != nil {
@@ -588,7 +588,7 @@ QUERY:
 		}
 	}
 	// // Cache the result.
-	// if db.enableCache && config.App.RedisConfig.Enable {
+	// if db.enableCache && config.App.Redis.Enabled {
 	// 	logger.Cache.Infow("last from database", "cost", time.Since(begin).String(), "key", key)
 	// 	go func() {
 	// 		if err = redis.SetM[M](key, dest); err != nil {
@@ -701,7 +701,7 @@ QUERY:
 		}
 	}
 	// // Cache the result.
-	// if db.enableCache && config.App.RedisConfig.Enable {
+	// if db.enableCache && config.App.Redis.Enabled {
 	// 	logger.Cache.Infow("take from database", "cost", time.Since(begin).String(), "key", key)
 	// 	go func() {
 	// 		if err = redis.SetM[M](key, dest); err != nil {

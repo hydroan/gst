@@ -79,7 +79,7 @@ m = (r.sub != "system_root" && g2(r.sub, "system_root")) || (r.sub != "admin" &&
 
 // Init initializes the tenant-aware Casbin enforcer when RBAC is enabled.
 func Init() (err error) {
-	if !config.App.Auth.RBACEnable {
+	if !config.App.Auth.RBACEnabled {
 		return nil
 	}
 

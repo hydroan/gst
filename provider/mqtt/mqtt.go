@@ -24,7 +24,7 @@ var (
 
 func Init() (err error) {
 	cfg := config.App.Mqtt
-	if !cfg.Enable {
+	if !cfg.Enabled {
 		return nil
 	}
 

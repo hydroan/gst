@@ -24,7 +24,7 @@ var (
 // If the connection is successful, it initializes the database and returns nil.
 func Init() (err error) {
 	cfg := config.App.Postgres
-	if !cfg.Enable || config.App.Database.Type != config.DBPostgres {
+	if !cfg.Enabled || config.App.Database.Type != config.DBPostgres {
 		return err
 	}
 

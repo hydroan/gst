@@ -43,7 +43,7 @@ var (
 // The functions also starts a background goroutines to ensure connection health.
 func Init() (err error) {
 	cfg := config.App.Elasticsearch
-	if !cfg.Enable {
+	if !cfg.Enabled {
 		return nil
 	}
 
@@ -115,10 +115,10 @@ func New(cfg config.Elasticsearch) (*elasticsearch.Client, error) {
 	}
 
 	// Configure metrics
-	esCfg.EnableMetrics = cfg.EnableMetrics
+	esCfg.EnableMetrics = cfg.MetricsEnabled
 
 	// Configure debug logger
-	if cfg.EnableDebugLogger {
+	if cfg.DebugLoggerEnabled {
 		esCfg.Logger = &elasticLogger{logger.Elastic}
 	}
 
@@ -133,7 +133,7 @@ func New(cfg config.Elasticsearch) (*elasticsearch.Client, error) {
 	}
 
 	// Configure TLS if enabled
-	if cfg.EnableTLS {
+	if cfg.TLSEnabled {
 		var tlsConfig *tls.Config
 		tlsConfig, err := util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify)
 		if err != nil {

@@ -7,7 +7,7 @@ const (
 	MEMCACHED_MAX_IDLE_CONNS = "MEMCACHED_MAX_IDLE_CONNS" //nolint:staticcheck
 	MEMCACHED_TIMEOUT        = "MEMCACHED_TIMEOUT"        //nolint:staticcheck
 	MEMCACHED_MAX_CACHE_SIZE = "MEMCACHED_MAX_CACHE_SIZE" //nolint:staticcheck
-	MEMCACHED_ENABLE         = "MEMCACHED_ENABLE"         //nolint:staticcheck
+	MEMCACHED_ENABLED        = "MEMCACHED_ENABLED"        //nolint:staticcheck
 )
 
 type Memcached struct {
@@ -16,7 +16,7 @@ type Memcached struct {
 	Timeout      time.Duration `json:"timeout" mapstructure:"timeout" ini:"timeout" yaml:"timeout"`
 	MaxCacheSize int           `json:"max_cache_size" mapstructure:"max_cache_size" ini:"max_cache_size" yaml:"max_cache_size"`
 
-	Enable bool `json:"enable" mapstructure:"enable" ini:"enable" yaml:"enable"`
+	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*Memcached) setDefault() {
@@ -24,5 +24,5 @@ func (*Memcached) setDefault() {
 	cv.SetDefault("memcached.max_idle_conns", 100)
 	cv.SetDefault("memcached.timeout", 100*time.Millisecond)
 	cv.SetDefault("memcached.max_cache_size", 0) // 0 is unlimited
-	cv.SetDefault("memcached.enable", false)
+	cv.SetDefault("memcached.enabled", false)
 }

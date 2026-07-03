@@ -47,13 +47,13 @@ const (
 	MONGO_READ_CONCERN  = "MONGO_READ_CONCERN"  //nolint:staticcheck
 	MONGO_WRITE_CONCERN = "MONGO_WRITE_CONCERN" //nolint:staticcheck
 
-	MONGO_ENABLE_TLS           = "MONGO_ENABLE_TLS"           //nolint:staticcheck
+	MONGO_TLS_ENABLED          = "MONGO_TLS_ENABLED"          //nolint:staticcheck
 	MONGO_CERT_FILE            = "MONGO_CERT_FILE"            //nolint:staticcheck
 	MONGO_KEY_FILE             = "MONGO_KEY_FILE"             //nolint:staticcheck
 	MONGO_CA_FILE              = "MONGO_CA_FILE"              //nolint:staticcheck
 	MONGO_INSECURE_SKIP_VERIFY = "MONGO_INSECURE_SKIP_VERIFY" //nolint:staticcheck
 
-	MONGO_ENABLE = "MONGO_ENABLE" //nolint:staticcheck
+	MONGO_ENABLED = "MONGO_ENABLED" //nolint:staticcheck
 )
 
 type Mongo struct {
@@ -74,13 +74,13 @@ type Mongo struct {
 	ReadConcern  ReadConcern  `json:"read_concern" mapstructure:"read_concern" ini:"read_concern" yaml:"read_concern"`
 	WriteConcern WriteConcern `json:"write_concern" mapstructure:"write_concern" ini:"write_concern" yaml:"write_concern"`
 
-	EnableTLS          bool   `json:"enable_tls" mapstructure:"enable_tls" ini:"enable_tls" yaml:"enable_tls"`
+	TLSEnabled         bool   `json:"tls_enabled" mapstructure:"tls_enabled" ini:"tls_enabled" yaml:"tls_enabled"`
 	CertFile           string `json:"cert_file" mapstructure:"cert_file" ini:"cert_file" yaml:"cert_file"`
 	KeyFile            string `json:"key_file" mapstructure:"key_file" ini:"key_file" yaml:"key_file"`
 	CAFile             string `json:"ca_file" mapstructure:"ca_file" ini:"ca_file" yaml:"ca_file"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify" mapstructure:"insecure_skip_verify" ini:"insecure_skip_verify" yaml:"insecure_skip_verify"`
 
-	Enable bool `json:"enable" mapstructure:"enable" ini:"enable" yaml:"enable"`
+	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*Mongo) setDefault() {
@@ -101,11 +101,11 @@ func (*Mongo) setDefault() {
 	cv.SetDefault("mongo.read_concern", "")
 	cv.SetDefault("mongo.write_concern", "")
 
-	cv.SetDefault("mongo.enable_tls", false)
+	cv.SetDefault("mongo.tls_enabled", false)
 	cv.SetDefault("mongo.cert_file", "")
 	cv.SetDefault("mongo.key_file", "")
 	cv.SetDefault("mongo.ca_file", "")
 	cv.SetDefault("mongo.insecure_skip_verify", false)
 
-	cv.SetDefault("mongo.enable", false)
+	cv.SetDefault("mongo.enabled", false)
 }

@@ -178,7 +178,7 @@ type = sqlite
 path = ./data.db
 database = main
 is_memory = true
-enable = true
+enabled = true
 
 [mysql]
 host = 127.0.0.1
@@ -187,7 +187,7 @@ database =
 username = root
 password =
 charset = utf8mb4
-enable = true
+enabled = true
 
 [postgres]
 host = 127.0.0.1
@@ -197,10 +197,10 @@ username = postgres
 password =
 sslmode = disable
 timezone = Asia/Shanghai
-enable = true
+enabled = true
 
 [redis]
-enable = false
+enabled = false
 addr = 127.0.0.1:6379
 db = 0
 password =

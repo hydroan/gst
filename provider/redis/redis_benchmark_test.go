@@ -14,7 +14,7 @@ import (
 func BenchmarkRedis(b *testing.B) {
 	b.Setenv(config.REDIS_ADDR, "127.0.0.1:6378")
 	b.Setenv(config.REDIS_PASSWORD, "password123")
-	b.Setenv(config.REDIS_ENABLE, "true")
+	b.Setenv(config.REDIS_ENABLED, "true")
 	b.Setenv(config.LOGGER_FILE, "/tmp/test.log")
 	b.Setenv(config.REDIS_EXPIRATION, "8h")
 	util.RunOrDie(bootstrap.Bootstrap)

@@ -31,7 +31,7 @@ var (
 // The function is thread-safe and ensures the client is initialized only once.
 func Init() (err error) {
 	cfg := config.App.Mongo
-	if !cfg.Enable {
+	if !cfg.Enabled {
 		return nil
 	}
 	mu.Lock()
@@ -139,7 +139,7 @@ func New(cfg config.Mongo) (*mongo.Client, error) {
 			opts.SetWriteConcern(wc)
 		}
 	}
-	if cfg.EnableTLS {
+	if cfg.TLSEnabled {
 		var tlsConfig *tls.Config
 		if tlsConfig, err = util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {
 			return nil, errors.Wrap(err, "failed to build TLS config")

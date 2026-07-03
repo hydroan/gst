@@ -19,7 +19,7 @@ var (
 func Run() error {
 	mu.Lock()
 	defer mu.Unlock()
-	if !config.App.GopsEnable {
+	if !config.App.GopsEnabled {
 		return nil
 	}
 

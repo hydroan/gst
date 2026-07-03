@@ -18,7 +18,7 @@ app_id = "wx123456789"
 username = "nuser"
 password = "npass"
 ; timeout = "30s"
-enable = true
+enabled = true
 `
 
 var filename = "/tmp/config.ini"
@@ -40,14 +40,14 @@ func TestRegisterStruct(t *testing.T) {
 	wechat := config.Get[*Wechat]()
 	assert.Equal(t, "wx123456789", wechat.AppID)
 	assert.Equal(t, "myappsecret", wechat.AppSecret)
-	assert.False(t, wechat.Enable)
+	assert.False(t, wechat.Enabled)
 
 	nats := config.Get[Nats]()
 	assert.Equal(t, "nats://127.0.0.1:4222", nats.URL)
 	assert.Equal(t, "nuser", nats.Username)
 	assert.Equal(t, "npass", nats.Password)
 	assert.Equal(t, 5*time.Second, nats.Timeout)
-	assert.True(t, nats.Enable)
+	assert.True(t, nats.Enabled)
 }
 
 func TestRegisterStructPointer(t *testing.T) {
@@ -67,14 +67,14 @@ func TestRegisterStructPointer(t *testing.T) {
 
 	assert.Equal(t, "wx123456789", wechat.AppID)
 	assert.Equal(t, "myappsecret", wechat.AppSecret)
-	assert.False(t, wechat.Enable)
+	assert.False(t, wechat.Enabled)
 
 	nats := config.Get[Nats]()
 	assert.Equal(t, "nats://127.0.0.1:4222", nats.URL)
 	assert.Equal(t, "nuser", nats.Username)
 	assert.Equal(t, "npass", nats.Password)
 	assert.Equal(t, 5*time.Second, nats.Timeout)
-	assert.True(t, nats.Enable)
+	assert.True(t, nats.Enabled)
 }
 
 func TestRegisterStructFromEnv(t *testing.T) {
@@ -100,14 +100,14 @@ func TestRegisterStructFromEnv(t *testing.T) {
 
 	assert.Equal(t, "wx123456789", wechat.AppID)
 	assert.Equal(t, "my_app_secret", wechat.AppSecret)
-	assert.False(t, wechat.Enable)
+	assert.False(t, wechat.Enabled)
 
 	nats := config.Get[Nats]()
 	assert.Equal(t, "nats://127.0.0.1:4222", nats.URL)
 	assert.Equal(t, "user_from_env", nats.Username)
 	assert.Equal(t, "pass_from_env", nats.Password)
 	assert.Equal(t, 60*time.Second, nats.Timeout)
-	assert.True(t, nats.Enable)
+	assert.True(t, nats.Enabled)
 }
 
 func TestRegisterNonStructType(t *testing.T) {
@@ -140,7 +140,7 @@ server:
   port: 8091
   mode: test
 redis:
-  enable: true
+  enabled: true
   namespace: yamlapp
 `)
 
@@ -151,7 +151,7 @@ redis:
 
 	assert.Equal(t, 8091, config.App.Server.Port)
 	assert.Equal(t, config.Mode("test"), config.App.Server.Mode)
-	assert.True(t, config.App.Redis.Enable)
+	assert.True(t, config.App.Redis.Enabled)
 	assert.Equal(t, "yamlapp", config.App.Redis.Namespace)
 }
 
@@ -165,7 +165,7 @@ func TestInitReadsJSONConfigFile(t *testing.T) {
     "mode": "local"
   },
   "redis": {
-    "enable": true,
+    "enabled": true,
     "namespace": "jsonapp"
   }
 }`)
@@ -177,7 +177,7 @@ func TestInitReadsJSONConfigFile(t *testing.T) {
 
 	assert.Equal(t, 8092, config.App.Server.Port)
 	assert.Equal(t, config.Mode("local"), config.App.Server.Mode)
-	assert.True(t, config.App.Redis.Enable)
+	assert.True(t, config.App.Redis.Enabled)
 	assert.Equal(t, "jsonapp", config.App.Redis.Namespace)
 }
 
@@ -191,7 +191,7 @@ port = 8095
 mode = "stg"
 
 [redis]
-enable = true
+enabled = true
 namespace = "tomlapp"
 `)
 
@@ -202,7 +202,7 @@ namespace = "tomlapp"
 
 	assert.Equal(t, 8095, config.App.Server.Port)
 	assert.Equal(t, config.Mode("stg"), config.App.Server.Mode)
-	assert.True(t, config.App.Redis.Enable)
+	assert.True(t, config.App.Redis.Enabled)
 	assert.Equal(t, "tomlapp", config.App.Redis.Namespace)
 }
 
@@ -245,7 +245,7 @@ mode = "prod"
 type Wechat struct {
 	AppID     string `json:"app_id" mapstructure:"app_id" default:"myappid"`
 	AppSecret string `json:"app_secret" mapstructure:"app_secret" default:"myappsecret"`
-	Enable    bool   `json:"enable" mapstructure:"enable"`
+	Enabled   bool   `json:"enabled" mapstructure:"enabled"`
 }
 
 type Nats struct {
@@ -253,7 +253,7 @@ type Nats struct {
 	Username string        `json:"username" mapstructure:"username" default:"nats"`
 	Password string        `json:"password" mapstructure:"password" default:"nats"`
 	Timeout  time.Duration `json:"timeout" mapstructure:"timeout" default:"5s"`
-	Enable   bool          `json:"enable" mapstructure:"enable"`
+	Enabled  bool          `json:"enabled" mapstructure:"enabled"`
 }
 
 type TestConfig struct {
@@ -279,7 +279,7 @@ func clearConfigEnvForTest(t *testing.T) {
 	keys := []string{
 		"SERVER_MODE",
 		"SERVER_PORT",
-		"REDIS_ENABLE",
+		"REDIS_ENABLED",
 		"REDIS_NAMESPACE",
 	}
 	for _, key := range keys {

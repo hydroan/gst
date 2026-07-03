@@ -26,13 +26,13 @@ const (
 	LDAP_PAGE_SIZE       = "LDAP_PAGE_SIZE"       //nolint:staticcheck
 	LDAP_HEARTBEAT       = "LDAP_HEARTBEAT"       //nolint:staticcheck
 
-	LDAP_ENABLE_TLS           = "LDAP_ENABLE_TLS"           //nolint:staticcheck
+	LDAP_TLS_ENABLED          = "LDAP_TLS_ENABLED"          //nolint:staticcheck
 	LDAP_CERT_FILE            = "LDAP_CERT_FILE"            //nolint:staticcheck
 	LDAP_KEY_FILE             = "LDAP_KEY_FILE"             //nolint:staticcheck
 	LDAP_CA_FILE              = "LDAP_CA_FILE"              //nolint:staticcheck
 	LDAP_INSECURE_SKIP_VERIFY = "LDAP_INSECURE_SKIP_VERIFY" //nolint:staticcheck
 
-	LDAP_ENABLE = "LDAP_ENABLE" //nolint:staticcheck
+	LDAP_ENABLED = "LDAP_ENABLED" //nolint:staticcheck
 )
 
 // Scope represents the search scope
@@ -83,13 +83,13 @@ type Ldap struct {
 	PageSize       int           `json:"page_size" mapstructure:"page_size" ini:"page_size" yaml:"page_size"`
 	Heartbeat      time.Duration `json:"heartbeat" mapstructure:"heartbeat" ini:"heartbeat" yaml:"heartbeat"`
 
-	EnableTLS          bool   `json:"enable_tls" mapstructure:"enable_tls" ini:"enable_tls" yaml:"enable_tls"`
+	TLSEnabled         bool   `json:"tls_enabled" mapstructure:"tls_enabled" ini:"tls_enabled" yaml:"tls_enabled"`
 	CertFile           string `json:"cert_file" mapstructure:"cert_file" ini:"cert_file" yaml:"cert_file"`
 	KeyFile            string `json:"key_file" mapstructure:"key_file" ini:"key_file" yaml:"key_file"`
 	CAFile             string `json:"ca_file" mapstructure:"ca_file" ini:"ca_file" yaml:"ca_file"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify" mapstructure:"insecure_skip_verify" ini:"insecure_skip_verify" yaml:"insecure_skip_verify"`
 
-	Enable bool `json:"enable" mapstructure:"enable" ini:"enable" yaml:"enable"`
+	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 // setDefault sets default values for the LDAP configuration
@@ -115,11 +115,11 @@ func (*Ldap) setDefault() {
 	cv.SetDefault("ldap.page_size", 1000)
 	cv.SetDefault("ldap.heartbeat", 30*time.Second)
 
-	cv.SetDefault("ldap.enable_tls", false)
+	cv.SetDefault("ldap.tls_enabled", false)
 	cv.SetDefault("ldap.cert_file", "")
 	cv.SetDefault("ldap.key_file", "")
 	cv.SetDefault("ldap.ca_file", "")
 	cv.SetDefault("ldap.insecure_skip_verify", false)
 
-	cv.SetDefault("ldap.enable", false)
+	cv.SetDefault("ldap.enabled", false)
 }

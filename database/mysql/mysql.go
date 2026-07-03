@@ -24,7 +24,7 @@ var (
 // If the connection is successful, it initializes the database and returns nil.
 func Init() (err error) {
 	cfg := config.App.MySQL
-	if !cfg.Enable || config.App.Database.Type != config.DBMySQL {
+	if !cfg.Enabled || config.App.Database.Type != config.DBMySQL {
 		return err
 	}
 

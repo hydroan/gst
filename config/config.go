@@ -239,7 +239,7 @@ func Tempdir() string {
 //	type WechatConfig struct {
 //		AppID     string `json:"app_id" mapstructure:"app_id" default:"myappid"`
 //		AppSecret string `json:"app_secret" mapstructure:"app_secret" default:"myappsecret"`
-//		Enable    bool   `json:"enable" mapstructure:"enable"`
+//		Enabled bool   `json:"enabled" mapstructure:"enabled"`
 //	}
 //
 //	type NatsConfig struct {
@@ -247,7 +247,7 @@ func Tempdir() string {
 //		Username string        `json:"username" mapstructure:"username" default:"nats"`
 //		Password string        `json:"password" mapstructure:"password" default:"nats"`
 //		Timeout  time.Duration `json:"timeout" mapstructure:"timeout" default:"5s"`
-//		Enable   bool          `json:"enable" mapstructure:"enable"`
+//		Enabled bool          `json:"enabled" mapstructure:"enabled"`
 //	}
 //
 //	// Register with struct type

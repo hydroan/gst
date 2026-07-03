@@ -25,7 +25,7 @@ var (
 // The function is thread-safe and ensures the client is initialized only once.
 func Init() (err error) {
 	cfg := config.App.Nats
-	if !cfg.Enable {
+	if !cfg.Enabled {
 		return nil
 	}
 	mu.Lock()
@@ -97,7 +97,7 @@ func New(cfg config.Nats) (*nats.Conn, error) {
 		opts = append(opts, nats.MaxPingsOutstanding(cfg.MaxPingsOutstanding))
 	}
 
-	if cfg.EnableTLS {
+	if cfg.TLSEnabled {
 		var tlsConfig *tls.Config
 		if tlsConfig, err = util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {
 			return nil, errors.Wrap(err, "failed to build TLS config")

@@ -43,7 +43,7 @@ func init() {
 	os.Setenv(config.MYSQL_USERNAME, "test_module")
 	os.Setenv(config.MYSQL_PASSWORD, "test_module")
 	os.Setenv(config.MYSQL_DATABASE, "test_module")
-	os.Setenv(config.REDIS_ENABLE, "true")
+	os.Setenv(config.REDIS_ENABLED, "true")
 	testutil.SetupRandomRedisNamespace()
 	os.Setenv(config.LOGGER_DIR, "./logs")
 	os.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)

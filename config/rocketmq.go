@@ -35,13 +35,13 @@ const (
 	ROCKETMQ_TRACE_ENABLED    = "ROCKETMQ_TRACE_ENABLED"    //nolint:staticcheck
 	ROCKETMQ_CREDENTIALS_FILE = "ROCKETMQ_CREDENTIALS_FILE" //nolint:staticcheck,gosec
 
-	ROCKETMQ_ENABLE_TLS           = "ROCKETMQ_ENABLE_TLS"           //nolint:staticcheck
+	ROCKETMQ_TLS_ENABLED          = "ROCKETMQ_TLS_ENABLED"          //nolint:staticcheck
 	ROCKETMQ_CERT_FILE            = "ROCKETMQ_CERT_FILE"            //nolint:staticcheck
 	ROCKETMQ_KEY_FILE             = "ROCKETMQ_KEY_FILE"             //nolint:staticcheck
 	ROCKETMQ_CA_FILE              = "ROCKETMQ_CA_FILE"              //nolint:staticcheck
 	ROCKETMQ_INSECURE_SKIP_VERIFY = "ROCKETMQ_INSECURE_SKIP_VERIFY" //nolint:staticcheck
 
-	ROCKETMQ_ENABLE = "ROCKETMQ_ENABLE" //nolint:staticcheck
+	ROCKETMQ_ENABLED = "ROCKETMQ_ENABLED" //nolint:staticcheck
 )
 
 type RocketMQ struct {
@@ -68,13 +68,13 @@ type RocketMQ struct {
 	TraceEnabled    bool   `json:"trace_enabled" mapstructure:"trace_enabled" ini:"trace_enabled" yaml:"trace_enabled"`
 	CredentialsFile string `json:"credentials_file" mapstructure:"credentials_file" ini:"credentials_file" yaml:"credentials_file"`
 
-	EnableTLS          bool   `json:"enable_tls" mapstructure:"enable_tls" ini:"enable_tls" yaml:"enable_tls"`
+	TLSEnabled         bool   `json:"tls_enabled" mapstructure:"tls_enabled" ini:"tls_enabled" yaml:"tls_enabled"`
 	CertFile           string `json:"cert_file" mapstructure:"cert_file" ini:"cert_file" yaml:"cert_file"`
 	KeyFile            string `json:"key_file" mapstructure:"key_file" ini:"key_file" yaml:"key_file"`
 	CAFile             string `json:"ca_file" mapstructure:"ca_file" ini:"ca_file" yaml:"ca_file"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify" mapstructure:"insecure_skip_verify" ini:"insecure_skip_verify" yaml:"insecure_skip_verify"`
 
-	Enable bool `json:"enable" mapstructure:"enable" ini:"enable" yaml:"enable"`
+	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*RocketMQ) setDefault() {
@@ -101,11 +101,11 @@ func (*RocketMQ) setDefault() {
 	cv.SetDefault("rocketmq.trace_enabled", false)
 	cv.SetDefault("rocketmq.credentials_file", "")
 
-	cv.SetDefault("rocketmq.enable_tls", false)
+	cv.SetDefault("rocketmq.tls_enabled", false)
 	cv.SetDefault("rocketmq.cert_file", "")
 	cv.SetDefault("rocketmq.key_file", "")
 	cv.SetDefault("rocketmq.ca_file", "")
 	cv.SetDefault("rocketmq.insecure_skip_verify", false)
 
-	cv.SetDefault("rocketmq.enable", false)
+	cv.SetDefault("rocketmq.enabled", false)
 }

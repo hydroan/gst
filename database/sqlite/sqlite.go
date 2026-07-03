@@ -24,7 +24,7 @@ var (
 // If the connection is successful, it initializes the database and returns nil.
 func Init() (err error) {
 	cfg := config.App.Sqlite
-	if !cfg.Enable || config.App.Database.Type != config.DBSqlite {
+	if !cfg.Enabled || config.App.Database.Type != config.DBSqlite {
 		return err
 	}
 

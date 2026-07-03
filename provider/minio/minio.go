@@ -91,7 +91,7 @@ type CopyOptions struct {
 // The function is thread-safe and ensures the client is initialized only once.
 func Init() (err error) {
 	cfg := config.App.Minio
-	if !cfg.Enable {
+	if !cfg.Enabled {
 		return nil
 	}
 	mu.Lock()
@@ -162,7 +162,7 @@ func New(cfg config.Minio) (cli *minio.Client, err error) {
 		Region: cfg.Region,
 	}
 	// Configure transport with TLS if enabled
-	if cfg.EnableTLS {
+	if cfg.TLSEnabled {
 		var tlsConfig *tls.Config
 		var transport *http.Transport
 		if tlsConfig, err = util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {

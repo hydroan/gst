@@ -18,13 +18,13 @@ const (
 	ETCD_PERMIT_WITHOUT_STREAM  = "ETCD_PERMIT_WITHOUT_STREAM"  //nolint:staticcheck
 	ETCD_REJECT_OLD_CLUSTER     = "ETCD_REJECT_OLD_CLUSTER"     //nolint:staticcheck
 
-	ETCD_ENABLE_TLS           = "ETCD_ENABLE_TLS"           //nolint:staticcheck
+	ETCD_TLS_ENABLED          = "ETCD_TLS_ENABLED"          //nolint:staticcheck
 	ETCD_CERT_FILE            = "ETCD_CERT_FILE"            //nolint:staticcheck
 	ETCD_KEY_FILE             = "ETCD_KEY_FILE"             //nolint:staticcheck
 	ETCD_CA_FILE              = "ETCD_CA_FILE"              //nolint:staticcheck
 	ETCD_INSECURE_SKIP_VERIFY = "ETCD_INSECURE_SKIP_VERIFY" //nolint:staticcheck
 
-	ETCD_ENABLE = "ETCD_ENABLE" //nolint:staticcheck
+	ETCD_ENABLED = "ETCD_ENABLED" //nolint:staticcheck
 )
 
 // Etcd 配置结构
@@ -42,13 +42,13 @@ type Etcd struct {
 	PermitWithoutStream bool          `json:"permit_without_stream" mapstructure:"permit_without_stream" ini:"permit_without_stream" yaml:"permit_without_stream"`
 	RejectOldCluster    bool          `json:"reject_old_cluster" mapstructure:"reject_old_cluster" ini:"reject_old_cluster" yaml:"reject_old_cluster"`
 
-	EnableTLS          bool   `json:"enable_tls" mapstructure:"enable_tls" ini:"enable_tls" yaml:"enable_tls"`
+	TLSEnabled         bool   `json:"tls_enabled" mapstructure:"tls_enabled" ini:"tls_enabled" yaml:"tls_enabled"`
 	CertFile           string `json:"cert_file" mapstructure:"cert_file" ini:"cert_file" yaml:"cert_file"`
 	KeyFile            string `json:"key_file" mapstructure:"key_file" ini:"key_file" yaml:"key_file"`
 	CAFile             string `json:"ca_file" mapstructure:"ca_file" ini:"ca_file" yaml:"ca_file"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify" mapstructure:"insecure_skip_verify" ini:"insecure_skip_verify" yaml:"insecure_skip_verify"`
 
-	Enable bool `json:"enable" mapstructure:"enable" ini:"enable" yaml:"enable"`
+	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*Etcd) setDefault() {
@@ -65,11 +65,11 @@ func (*Etcd) setDefault() {
 	cv.SetDefault("etcd.permit_without_stream", false)
 	cv.SetDefault("etcd.reject_old_cluster", false)
 
-	cv.SetDefault("etcd.enable_tls", false)
+	cv.SetDefault("etcd.tls_enabled", false)
 	cv.SetDefault("etcd.cert_file", "")
 	cv.SetDefault("etcd.key_file", "")
 	cv.SetDefault("etcd.ca_file", "")
 	cv.SetDefault("etcd.insecure_skip_verify", false)
 
-	cv.SetDefault("etcd.enable", false)
+	cv.SetDefault("etcd.enabled", false)
 }

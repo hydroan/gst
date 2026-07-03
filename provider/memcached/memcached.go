@@ -21,7 +21,7 @@ var (
 // The function is thread-safe and ensures the client is initialized only once.
 func Init() (err error) {
 	cfg := config.App.Memcached
-	if !cfg.Enable {
+	if !cfg.Enabled {
 		return nil
 	}
 	mu.Lock()

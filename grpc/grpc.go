@@ -49,7 +49,7 @@ func RegisterService(registrar RegisterServiceFunc) {
 
 func Init() error {
 	cfg := config.App.Grpc
-	if !cfg.Enable {
+	if !cfg.Enabled {
 		return nil
 	}
 	mu.Lock()
@@ -114,7 +114,7 @@ func Init() error {
 	))
 
 	// TLS 配置
-	if cfg.EnableTLS {
+	if cfg.TLSEnabled {
 		tlsConfig, err := util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, false)
 		if err != nil {
 			return errors.Wrap(err, "failed to build TLS config")
@@ -130,14 +130,14 @@ func Init() error {
 	server = grpc.NewServer(opts...)
 
 	// 注册健康检查服务
-	if cfg.EnableHealthCheck {
+	if cfg.HealthCheckEnabled {
 		healthServer := health.NewServer()
 		healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
 		healthpb.RegisterHealthServer(server, healthServer)
 	}
 
 	// 注册反射服务（用于 grpcurl 等工具）
-	if cfg.EnableReflection {
+	if cfg.ReflectionEnabled {
 		reflection.Register(server)
 	}
 
@@ -171,7 +171,7 @@ func Run() error {
 	}
 
 	cfg := config.App.Grpc
-	if !cfg.Enable {
+	if !cfg.Enabled {
 		return nil
 	}
 

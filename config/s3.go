@@ -7,7 +7,7 @@ const (
 	S3_SECRET_ACCESS_KEY = "S3_SECRET_ACCESS_KEY" //nolint:staticcheck
 	S3_BUCKET            = "S3_BUCKET"            //nolint:staticcheck
 	S3_USE_SSL           = "S3_USE_SSL"           //nolint:staticcheck
-	S3_ENABLE            = "S3_ENABLE"            //nolint:staticcheck
+	S3_ENABLED           = "S3_ENABLED"           //nolint:staticcheck
 )
 
 type S3 struct {
@@ -17,7 +17,7 @@ type S3 struct {
 	SecretAccessKey string `json:"secret_access_key" mapstructure:"secret_access_key" ini:"secret_access_key" yaml:"secret_access_key"`
 	Bucket          string `json:"bucket" mapstructure:"bucket" ini:"bucket" yaml:"bucket"`
 	UseSsl          bool   `json:"use_ssl" mapstructure:"use_ssl" ini:"use_ssl" yaml:"use_ssl"`
-	Enable          bool   `json:"enable" mapstructure:"enable" ini:"enable" yaml:"enable"`
+	Enabled         bool   `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*S3) setDefault() {
@@ -27,5 +27,5 @@ func (*S3) setDefault() {
 	cv.SetDefault("s3.secret_access_key", "")
 	cv.SetDefault("s3.bucket", "")
 	cv.SetDefault("s3.use_ssl", false)
-	cv.SetDefault("s3.enable", false)
+	cv.SetDefault("s3.enabled", false)
 }

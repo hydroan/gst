@@ -11,7 +11,7 @@ const (
 	CLICKHOUSE_WRITE_TIMEOUT = "CLICKHOUSE_WRITE_TIMEOUT" //nolint:staticcheck
 	CLICKHOUSE_COMPRESS      = "CLICKHOUSE_COMPRESS"      //nolint:staticcheck
 	CLICKHOUSE_DEBUG         = "CLICKHOUSE_DEBUG"         //nolint:staticcheck
-	CLICKHOUSE_ENABLE        = "CLICKHOUSE_ENABLE"        //nolint:staticcheck
+	CLICKHOUSE_ENABLED       = "CLICKHOUSE_ENABLED"       //nolint:staticcheck
 )
 
 type Clickhouse struct {
@@ -25,7 +25,7 @@ type Clickhouse struct {
 	WriteTimeout string `json:"write_timeout" mapstructure:"write_timeout" ini:"write_timeout" yaml:"write_timeout"`
 	Compress     bool   `json:"compress" mapstructure:"compress" ini:"compress" yaml:"compress"`
 	Debug        bool   `json:"debug" mapstructure:"debug" ini:"debug" yaml:"debug"`
-	Enable       bool   `json:"enable" mapstructure:"enable" ini:"enable" yaml:"enable"`
+	Enabled      bool   `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*Clickhouse) setDefault() {
@@ -39,5 +39,5 @@ func (*Clickhouse) setDefault() {
 	cv.SetDefault("clickhouse.write_timeout", "30s")
 	cv.SetDefault("clickhouse.compress", false)
 	cv.SetDefault("clickhouse.debug", false)
-	cv.SetDefault("clickhouse.enable", false)
+	cv.SetDefault("clickhouse.enabled", false)
 }

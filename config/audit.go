@@ -3,7 +3,7 @@ package config
 import "github.com/hydroan/gst/types/consts"
 
 const (
-	AUDIT_ENABLE             = "AUDIT_ENABLE"             //nolint:staticcheck
+	AUDIT_ENABLED            = "AUDIT_ENABLED"            //nolint:staticcheck
 	AUDIT_ASYNC_WRITE        = "AUDIT_ASYNC_WRITE"        //nolint:staticcheck
 	AUDIT_BATCH_SIZE         = "AUDIT_BATCH_SIZE"         //nolint:staticcheck
 	AUDIT_FLUSH_INTERVAL     = "AUDIT_FLUSH_INTERVAL"     //nolint:staticcheck
@@ -22,7 +22,7 @@ const (
 )
 
 type Audit struct {
-	Enable            bool        `json:"enable" mapstructure:"enable" ini:"enable" yaml:"enable"`
+	Enabled           bool        `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 	AsyncWrite        bool        `json:"async_write" mapstructure:"async_write" ini:"async_write" yaml:"async_write"`
 	BatchSize         int         `json:"batch_size" mapstructure:"batch_size" ini:"batch_size" yaml:"batch_size"`
 	FlushInterval     string      `json:"flush_interval" mapstructure:"flush_interval" ini:"flush_interval" yaml:"flush_interval"`
@@ -41,7 +41,7 @@ type Audit struct {
 }
 
 func (*Audit) setDefault() {
-	cv.SetDefault("audit.enable", false)
+	cv.SetDefault("audit.enabled", false)
 	cv.SetDefault("audit.async_write", true)
 	cv.SetDefault("audit.batch_size", 10000)
 	cv.SetDefault("audit.flush_interval", "5s")

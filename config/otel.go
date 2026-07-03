@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	// OTEL_ENABLE enables OpenTelemetry tracing.
-	OTEL_ENABLE = "OTEL_ENABLE" //nolint:staticcheck
+	// OTEL_ENABLED enables OpenTelemetry tracing.
+	OTEL_ENABLED = "OTEL_ENABLED" //nolint:staticcheck
 	// OTEL_SERVICE_NAME configures the OpenTelemetry service.name resource attribute.
 	OTEL_SERVICE_NAME = "OTEL_SERVICE_NAME" //nolint:staticcheck
 	// OTEL_EXPORTER_OTLP_PROTOCOL configures the OTLP traces transport protocol.
@@ -78,8 +78,8 @@ const (
 // OTEL represents OpenTelemetry tracing configuration using OTLP exporters.
 // This configuration supports sending traces to Jaeger, Uptrace, or other OTLP-compatible backends.
 type OTEL struct {
-	// Enable controls whether OpenTelemetry tracing is enabled.
-	Enable bool `json:"enable" mapstructure:"enable" ini:"enable" yaml:"enable"`
+	// Enabled controls whether OpenTelemetry tracing is enabled.
+	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 
 	// ServiceName is the OpenTelemetry service.name resource attribute.
 	ServiceName string `json:"service_name" mapstructure:"service_name" ini:"service_name" yaml:"service_name"`
@@ -122,7 +122,7 @@ type OTEL struct {
 }
 
 func (o *OTEL) setDefault() {
-	cv.SetDefault("otel.enable", false)
+	cv.SetDefault("otel.enabled", false)
 	cv.SetDefault("otel.service_name", consts.FrameworkName)
 	cv.SetDefault("otel.exporter_otlp_protocol", OTLPProtocolHTTPProtobuf)
 	cv.SetDefault("otel.exporter_otlp_traces_endpoint", "http://localhost:4318/v1/traces")

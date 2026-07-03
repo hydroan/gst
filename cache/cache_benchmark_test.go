@@ -31,8 +31,8 @@ type User struct {
 }
 
 func init() {
-	os.Setenv(config.REDIS_ENABLE, "true")
-	os.Setenv(config.MEMCACHED_ENABLE, "false")
+	os.Setenv(config.REDIS_ENABLED, "true")
+	os.Setenv(config.MEMCACHED_ENABLED, "false")
 	os.Setenv(config.REDIS_ADDR, "127.0.0.1:6379")
 	os.Setenv(config.REDIS_PASSWORD, "password123")
 	if err := config.Init(); err != nil {

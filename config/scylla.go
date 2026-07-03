@@ -53,14 +53,14 @@ const (
 	SCYLLA_RECONNECT_MAX_INTERVAL      = "SCYLLA_RECONNECT_MAX_INTERVAL"      //nolint:staticcheck
 	SCYLLA_RECONNECT_CONSTANT_INTERVAL = "SCYLLA_RECONNECT_CONSTANT_INTERVAL" //nolint:staticcheck
 
-	SCYLLA_ENABLE_TRACING       = "SCYLLA_ENABLE_TRACING"       //nolint:staticcheck
-	SCYLLA_ENABLE_TLS           = "SCYLLA_ENABLE_TLS"           //nolint:staticcheck
+	SCYLLA_TRACING_ENABLED      = "SCYLLA_TRACING_ENABLED"      //nolint:staticcheck
+	SCYLLA_TLS_ENABLED          = "SCYLLA_TLS_ENABLED"          //nolint:staticcheck
 	SCYLLA_CERT_FILE            = "SCYLLA_CERT_FILE"            //nolint:staticcheck
 	SCYLLA_KEY_FILE             = "SCYLLA_KEY_FILE"             //nolint:staticcheck
 	SCYLLA_CA_FILE              = "SCYLLA_CA_FILE"              //nolint:staticcheck
 	SCYLLA_INSECURE_SKIP_VERIFY = "SCYLLA_INSECURE_SKIP_VERIFY" //nolint:staticcheck
 
-	SCYLLA_ENABLE = "SCYLLA_ENABLE" //nolint:staticcheck
+	SCYLLA_ENABLED = "SCYLLA_ENABLED" //nolint:staticcheck
 )
 
 type Scylla struct {
@@ -86,14 +86,14 @@ type Scylla struct {
 	ReconnectMaxInterval      time.Duration   `json:"reconnect_max_interval" mapstructure:"reconnect_max_interval" ini:"reconnect_max_interval" yaml:"reconnect_max_interval"`
 	ReconnectConstantInterval time.Duration   `json:"reconnect_constant_interval" mapstructure:"reconnect_constant_interval" ini:"reconnect_constant_interval" yaml:"reconnect_constant_interval"`
 
-	EnableTracing      bool   `json:"enable_tracing" mapstructure:"enable_tracing" ini:"enable_tracing" yaml:"enable_tracing"`
-	EnableTLS          bool   `json:"enable_tls" mapstructure:"enable_tls" ini:"enable_tls" yaml:"enable_tls"`
+	TracingEnabled     bool   `json:"tracing_enabled" mapstructure:"tracing_enabled" ini:"tracing_enabled" yaml:"tracing_enabled"`
+	TLSEnabled         bool   `json:"tls_enabled" mapstructure:"tls_enabled" ini:"tls_enabled" yaml:"tls_enabled"`
 	CertFile           string `json:"cert_file" mapstructure:"cert_file" ini:"cert_file" yaml:"cert_file"`
 	KeyFile            string `json:"key_file" mapstructure:"key_file" ini:"key_file" yaml:"key_file"`
 	CAFile             string `json:"ca_file" mapstructure:"ca_file" ini:"ca_file" yaml:"ca_file"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify" mapstructure:"insecure_skip_verify" ini:"insecure_skip_verify" yaml:"insecure_skip_verify"`
 
-	Enable bool `json:"enable" mapstructure:"enable" ini:"enable" yaml:"enable"`
+	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*Scylla) setDefault() {
@@ -119,12 +119,12 @@ func (*Scylla) setDefault() {
 	cv.SetDefault("scylla.reconnect_max_interval", 10*time.Second)
 	cv.SetDefault("scylla.reconnect_constant_interval", 1*time.Second)
 
-	cv.SetDefault("scylla.enable_tracing", false)
-	cv.SetDefault("scylla.enable_tls", false)
+	cv.SetDefault("scylla.tracing_enabled", false)
+	cv.SetDefault("scylla.tls_enabled", false)
 	cv.SetDefault("scylla.cert_file", "")
 	cv.SetDefault("scylla.key_file", "")
 	cv.SetDefault("scylla.ca_file", "")
 	cv.SetDefault("scylla.insecure_skip_verify", false)
 
-	cv.SetDefault("scylla.enable", false)
+	cv.SetDefault("scylla.enabled", false)
 }

@@ -18,13 +18,13 @@ const (
 	RETHINKDB_WRITE_TIMEOUT   = "RETHINKDB_WRITE_TIMEOUT"   //nolint:staticcheck
 	RETHINKDB_KEEP_ALIVE_TIME = "RETHINKDB_KEEP_ALIVE_TIME" //nolint:staticcheck
 
-	RETHINKDB_ENABLE_TLS           = "RETHINKDB_ENABLE_TLS"           //nolint:staticcheck
+	RETHINKDB_TLS_ENABLED          = "RETHINKDB_TLS_ENABLED"          //nolint:staticcheck
 	RETHINKDB_CERT_FILE            = "RETHINKDB_CERT_FILE"            //nolint:staticcheck
 	RETHINKDB_KEY_FILE             = "RETHINKDB_KEY_FILE"             //nolint:staticcheck
 	RETHINKDB_CA_FILE              = "RETHINKDB_CA_FILE"              //nolint:staticcheck
 	RETHINKDB_INSECURE_SKIP_VERIFY = "RETHINKDB_INSECURE_SKIP_VERIFY" //nolint:staticcheck
 
-	RETHINKDB_ENABLE = "RETHINKDB_ENABLE" //nolint:staticcheck
+	RETHINKDB_ENABLED = "RETHINKDB_ENABLED" //nolint:staticcheck
 )
 
 type RethinkDB struct {
@@ -43,13 +43,13 @@ type RethinkDB struct {
 	WriteTimeout   time.Duration `json:"write_timeout" mapstructure:"write_timeout" ini:"write_timeout" yaml:"write_timeout"`
 	KeepAliveTime  time.Duration `json:"keep_alive_time" mapstructure:"keep_alive_time" ini:"keep_alive_time" yaml:"keep_alive_time"`
 
-	EnableTLS          bool   `json:"enable_tls" mapstructure:"enable_tls" ini:"enable_tls" yaml:"enable_tls"`
+	TLSEnabled         bool   `json:"tls_enabled" mapstructure:"tls_enabled" ini:"tls_enabled" yaml:"tls_enabled"`
 	CertFile           string `json:"cert_file" mapstructure:"cert_file" ini:"cert_file" yaml:"cert_file"`
 	KeyFile            string `json:"key_file" mapstructure:"key_file" ini:"key_file" yaml:"key_file"`
 	CAFile             string `json:"ca_file" mapstructure:"ca_file" ini:"ca_file" yaml:"ca_file"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify" mapstructure:"insecure_skip_verify" ini:"insecure_skip_verify" yaml:"insecure_skip_verify"`
 
-	Enable bool `json:"enable" mapstructure:"enable" ini:"enable" yaml:"enable"`
+	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*RethinkDB) setDefault() {
@@ -68,11 +68,11 @@ func (*RethinkDB) setDefault() {
 	cv.SetDefault("rethinkdb.write_timeout", 10*time.Second)
 	cv.SetDefault("rethinkdb.keep_alive_time", 30*time.Second)
 
-	cv.SetDefault("rethinkdb.enable_tls", false)
+	cv.SetDefault("rethinkdb.tls_enabled", false)
 	cv.SetDefault("rethinkdb.cert_file", "")
 	cv.SetDefault("rethinkdb.key_file", "")
 	cv.SetDefault("rethinkdb.ca_file", "")
 	cv.SetDefault("rethinkdb.insecure_skip_verify", false)
 
-	cv.SetDefault("rethinkdb.enable", false)
+	cv.SetDefault("rethinkdb.enabled", false)
 }

@@ -19,7 +19,7 @@ var (
 
 func Init() (err error) {
 	cfg := config.App.Feishu
-	if !cfg.Enable {
+	if !cfg.Enabled {
 		return nil
 	}
 
@@ -49,7 +49,7 @@ func New(cfg config.Feishu) (*lark.Client, error) {
 	}
 
 	httpClient := new(http.Client)
-	if cfg.EnableTLS {
+	if cfg.TLSEnabled {
 		tlsConf, e := util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify)
 		if e != nil {
 			return nil, errors.Wrap(e, "failed to build tls config")

@@ -23,13 +23,13 @@ const (
 	MINIO_IAM_ENDPOINT  = "MINIO_IAM_ENDPOINT"  //nolint:staticcheck
 	MINIO_STS_ENDPOINT  = "MINIO_STS_ENDPOINT"  //nolint:staticcheck
 
-	MINIO_ENABLE_TLS           = "MINIO_ENABLE_TLS"           //nolint:staticcheck
+	MINIO_TLS_ENABLED          = "MINIO_TLS_ENABLED"          //nolint:staticcheck
 	MINIO_CERT_FILE            = "MINIO_CERT_FILE"            //nolint:staticcheck
 	MINIO_KEY_FILE             = "MINIO_KEY_FILE"             //nolint:staticcheck
 	MINIO_CA_FILE              = "MINIO_CA_FILE"              //nolint:staticcheck
 	MINIO_INSECURE_SKIP_VERIFY = "MINIO_INSECURE_SKIP_VERIFY" //nolint:staticcheck
 
-	MINIO_ENABLE = "MINIO_ENABLE" //nolint:staticcheck
+	MINIO_ENABLED = "MINIO_ENABLED" //nolint:staticcheck
 )
 
 type Minio struct {
@@ -51,13 +51,13 @@ type Minio struct {
 	IAMEndpoint  string        `json:"iam_endpoint" mapstructure:"iam_endpoint" ini:"iam_endpoint" yaml:"iam_endpoint"`
 	STSEndpoint  string        `json:"sts_endpoint" mapstructure:"sts_endpoint" ini:"sts_endpoint" yaml:"sts_endpoint"`
 
-	EnableTLS          bool   `json:"enable_tls" mapstructure:"enable_tls" ini:"enable_tls" yaml:"enable_tls"`
+	TLSEnabled         bool   `json:"tls_enabled" mapstructure:"tls_enabled" ini:"tls_enabled" yaml:"tls_enabled"`
 	CertFile           string `json:"cert_file" mapstructure:"cert_file" ini:"cert_file" yaml:"cert_file"`
 	KeyFile            string `json:"key_file" mapstructure:"key_file" ini:"key_file" yaml:"key_file"`
 	CAFile             string `json:"ca_file" mapstructure:"ca_file" ini:"ca_file" yaml:"ca_file"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify" mapstructure:"insecure_skip_verify" ini:"insecure_skip_verify" yaml:"insecure_skip_verify"`
 
-	Enable bool `json:"enable" mapstructure:"enable" ini:"enable" yaml:"enable"`
+	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*Minio) setDefault() {
@@ -79,11 +79,11 @@ func (*Minio) setDefault() {
 	cv.SetDefault("minio.iam_endpoint", "")
 	cv.SetDefault("minio.sts_endpoint", "")
 
-	cv.SetDefault("minio.enable_tls", false)
+	cv.SetDefault("minio.tls_enabled", false)
 	cv.SetDefault("minio.cert_file", "")
 	cv.SetDefault("minio.key_file", "")
 	cv.SetDefault("minio.ca_file", "")
 	cv.SetDefault("minio.insecure_skip_verify", false)
 
-	cv.SetDefault("minio.enable", false)
+	cv.SetDefault("minio.enabled", false)
 }

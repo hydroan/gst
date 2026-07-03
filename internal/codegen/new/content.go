@@ -186,7 +186,7 @@ const configxContent = `// Package configx provides custom configuration extensi
 //
 //	type Payment struct {
 //		Provider string ` + "`json:\"provider\" mapstructure:\"provider\" default:\"alipay\"`" + `
-//		Enable   bool   ` + "`json:\"enable\" mapstructure:\"enable\" default:\"false\"`" + `
+//		Enabled bool   ` + "`json:\"enabled\" mapstructure:\"enabled\" default:\"false\"`" + `
 //	}
 //
 //	func init() {

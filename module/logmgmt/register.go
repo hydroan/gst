@@ -31,7 +31,7 @@ func Register() {
 	servicelogmgmt.Enabled = true
 
 	// enable audit function to records the operation logs.
-	os.Setenv(config.AUDIT_ENABLE, "true")
+	os.Setenv(config.AUDIT_ENABLED, "true")
 
 	module.Use[*LoginLog,
 		*LoginLog,

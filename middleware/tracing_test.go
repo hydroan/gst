@@ -159,7 +159,7 @@ func setupTracingTestWithEndpointAndSampler(t *testing.T, endpoint string, sampl
 
 	originalConfig := config.App
 	config.App = new(config.Config)
-	config.App.OTEL.Enable = true
+	config.App.OTEL.Enabled = true
 	config.App.OTEL.ServiceName = "gst-test"
 	config.App.OTEL.ExporterOTLPProtocol = config.OTLPProtocolHTTPProtobuf
 	config.App.OTEL.ExporterOTLPTracesEndpoint = endpoint

@@ -30,7 +30,7 @@ var (
 // The function is thread-safe and ensures the client is initialized only once.
 func Init() (err error) {
 	cfg := config.App.Influxdb
-	if !cfg.Enable {
+	if !cfg.Enabled {
 		return nil
 	}
 
@@ -110,7 +110,7 @@ func New(cfg config.Influxdb) (influxdb2.Client, error) {
 	if cfg.UseGZip {
 		opts.SetUseGZip(true)
 	}
-	if cfg.EnableTLS {
+	if cfg.TLSEnabled {
 		var tlsConf *tls.Config
 		var err error
 		if tlsConf, err = util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {

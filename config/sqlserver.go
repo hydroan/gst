@@ -11,7 +11,7 @@ const (
 	SQLSERVER_ENCRYPT      = "SQLSERVER_ENCRYPT"      //nolint:staticcheck
 	SQLSERVER_TRUST_SERVER = "SQLSERVER_TRUST_SERVER" //nolint:staticcheck
 	SQLSERVER_APP_NAME     = "SQLSERVER_APP_NAME"     //nolint:staticcheck
-	SQLSERVER_ENABLE       = "SQLSERVER_ENABLE"       //nolint:staticcheck
+	SQLSERVER_ENABLED      = "SQLSERVER_ENABLED"      //nolint:staticcheck
 )
 
 type SQLServer struct {
@@ -23,7 +23,7 @@ type SQLServer struct {
 	Encrypt     bool   `json:"encrypt" mapstructure:"encrypt" ini:"encrypt" yaml:"encrypt"`
 	TrustServer bool   `json:"trust_server" mapstructure:"trust_server" ini:"trust_server" yaml:"trust_server"`
 	AppName     string `json:"app_name" mapstructure:"app_name" ini:"app_name" yaml:"app_name"`
-	Enable      bool   `json:"enable" mapstructure:"enable" ini:"enable" yaml:"enable"`
+	Enabled     bool   `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*SQLServer) setDefault() {
@@ -35,5 +35,5 @@ func (*SQLServer) setDefault() {
 	cv.SetDefault("sqlserver.encrypt", false)
 	cv.SetDefault("sqlserver.trust_server", true)
 	cv.SetDefault("sqlserver.app_name", consts.FrameworkName)
-	cv.SetDefault("sqlserver.enable", false)
+	cv.SetDefault("sqlserver.enabled", false)
 }

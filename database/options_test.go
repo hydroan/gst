@@ -34,13 +34,13 @@ func TestDatabaseWithDB(t *testing.T) {
 	require.Len(t, users, 3)
 
 	db2, err := sqlite.New(config.Sqlite{
-		Enable:   true,
+		Enabled:  true,
 		Path:     path2,
 		IsMemory: false,
 	})
 	require.NoError(t, err)
 	db3, err := sqlite.New(config.Sqlite{
-		Enable:   true,
+		Enabled:  true,
 		Path:     path3,
 		IsMemory: false,
 	})
@@ -144,13 +144,13 @@ func TestDatabaseWithTable(t *testing.T) {
 	}()
 
 	db2, err := sqlite.New(config.Sqlite{
-		Enable:   true,
+		Enabled:  true,
 		Path:     path2,
 		IsMemory: false,
 	})
 	require.NoError(t, err)
 	db3, err := sqlite.New(config.Sqlite{
-		Enable:   true,
+		Enabled:  true,
 		Path:     path3,
 		IsMemory: false,
 	})

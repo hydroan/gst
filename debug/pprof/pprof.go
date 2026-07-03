@@ -17,7 +17,7 @@ import (
 var server *http.Server
 
 func Run() error {
-	if !config.App.PprofEnable {
+	if !config.App.PprofEnabled {
 		return nil
 	}
 	runtime.SetMutexProfileFraction(1)

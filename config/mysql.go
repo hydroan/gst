@@ -7,7 +7,7 @@ const (
 	MYSQL_USERNAME = "MYSQL_USERNAME" //nolint:staticcheck
 	MYSQL_PASSWORD = "MYSQL_PASSWORD" //nolint:staticcheck
 	MYSQL_CHARSET  = "MYSQL_CHARSET"  //nolint:staticcheck
-	MYSQL_ENABLE   = "MYSQL_ENABLE"   //nolint:staticcheck
+	MYSQL_ENABLED  = "MYSQL_ENABLED"  //nolint:staticcheck
 )
 
 type MySQL struct {
@@ -17,7 +17,7 @@ type MySQL struct {
 	Username string `json:"username" mapstructure:"username" ini:"username" yaml:"username"`
 	Password string `json:"password" mapstructure:"password" ini:"password" yaml:"password"`
 	Charset  string `json:"charset" mapstructure:"charset" ini:"charset" yaml:"charset"`
-	Enable   bool   `json:"enable" mapstructure:"enable" ini:"enable" yaml:"enable"`
+	Enabled  bool   `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*MySQL) setDefault() {
@@ -27,5 +27,5 @@ func (*MySQL) setDefault() {
 	cv.SetDefault("mysql.username", "root")
 	cv.SetDefault("mysql.password", "")
 	cv.SetDefault("mysql.charset", "utf8mb4")
-	cv.SetDefault("mysql.enable", true)
+	cv.SetDefault("mysql.enabled", true)
 }
