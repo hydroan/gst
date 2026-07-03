@@ -23,6 +23,13 @@ type User struct {
 	model.Base
 }
 
+type QueryableUser struct {
+	Name string `json:"name,omitempty"`
+
+	model.Query
+	model.Base
+}
+
 func TestAreTypesEqual(t *testing.T) {
 	require.True(t, modelregistry.AreTypesEqual[*User, *User, *User]())
 	require.False(t, modelregistry.AreTypesEqual[*User, User, *User]())
@@ -67,6 +74,12 @@ func BenchmarkAreTypesEqual(b *testing.B) {
 			modelregistry.AreTypesEqual[*User, *User, int]()
 		}
 	})
+}
+
+func TestQueryable(t *testing.T) {
+	require.NotImplements(t, (*model.Queryable)(nil), new(User))
+	require.Implements(t, (*model.Queryable)(nil), new(QueryableUser))
+	require.Implements(t, (*model.Queryable)(nil), QueryableUser{})
 }
 
 func TestIsEmpty(t *testing.T) {

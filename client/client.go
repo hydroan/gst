@@ -52,7 +52,7 @@ type Client struct {
 	token      string
 
 	header      http.Header
-	query       *model.Base
+	query       *model.Query
 	queryRaw    string
 	param       string
 	apiPath     string

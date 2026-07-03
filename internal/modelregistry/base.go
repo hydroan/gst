@@ -29,26 +29,6 @@ type Base struct {
 	CreatedAt time.Time      `json:"created_at,omitzero" schema:"-" url:"-"`                                // Timestamp when the record was created
 	UpdatedAt time.Time      `json:"updated_at,omitzero" schema:"-" url:"-"`                                // Timestamp when the record was last updated
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index" schema:"-" url:"-"`                                     // Timestamp when the record was deleted
-
-	// Query parameter
-	Page       uint    `json:"-" gorm:"-" schema:"page" url:"page,omitempty"`                 // Pagination: page number (e.g., page=2)
-	Size       uint    `json:"-" gorm:"-" schema:"size" url:"size,omitempty"`                 // Pagination: page size (e.g., size=10)
-	Expand     *string `json:"-" gorm:"-" schema:"_expand" url:"_expand,omitempty"`           // Query parameter: fields to expand (e.g., _expand=children,parent)
-	Depth      *uint   `json:"-" gorm:"-" schema:"_depth" url:"_depth,omitempty"`             // Query parameter: expansion depth (e.g., _depth=3)
-	Fuzzy      *bool   `json:"-" gorm:"-" schema:"_fuzzy" url:"_fuzzy,omitempty"`             // Query parameter: enable fuzzy search (e.g., _fuzzy=true)
-	SortBy     string  `json:"-" gorm:"-" schema:"_sortby" url:"_sortby,omitempty"`           // Query parameter: field to sort by (e.g., _sortby=name)
-	NoCache    bool    `json:"-" gorm:"-" schema:"_nocache" url:"_nocache,omitempty"`         // Query parameter: disable cache (e.g., _nocache=false)
-	ColumnName string  `json:"-" gorm:"-" schema:"_column_name" url:"_column_name,omitempty"` // Query parameter: column name for time range filtering (e.g., _column_name=created_at)
-	StartTime  string  `json:"-" gorm:"-" schema:"_start_time" url:"_start_time,omitempty"`   // Query parameter: start time for range filtering (e.g., _start_time=2024-04-29+23:59:59)
-	EndTime    string  `json:"-" gorm:"-" schema:"_end_time" url:"_end_time,omitempty"`       // Query parameter: end time for range filtering (e.g., _end_time=2024-04-29+23:59:59)
-	Or         *bool   `json:"-" gorm:"-" schema:"_or" url:"_or,omitempty"`                   // Query parameter: use OR logic for conditions (e.g., _or=true)
-	Index      string  `json:"-" gorm:"-" schema:"_index" url:"_index,omitempty"`             // Query parameter: index name for search (e.g., _index=name)
-	Select     string  `json:"-" gorm:"-" schema:"_select" url:"_select,omitempty"`           // Query parameter: specific fields to select (e.g., _select=field1,field2)
-	Nototal    bool    `json:"-" gorm:"-" schema:"_nototal" url:"_nototal,omitempty"`         // Query parameter: skip total count calculation (e.g., _nototal=true)
-	// Cursor pagination
-	CursorValue  *string `json:"-" gorm:"-" schema:"_cursor_value" url:"_cursor_value,omitempty"`   // Query parameter: cursor value for pagination (e.g., _cursor_value=0196a0b3-c9d1-713c-870e-adc76af9f857)
-	CursorFields string  `json:"-" gorm:"-" schema:"_cursor_fields" url:"_cursor_fields,omitempty"` // Query parameter: fields used for cursor pagination (e.g., _cursor_fields=field1,field2)
-	CursorNext   bool    `json:"-" gorm:"-" schema:"_cursor_next" url:"_cursor_next,omitempty"`     // Query parameter: direction for cursor pagination (e.g., _cursor_next=true)
 }
 
 func (b *Base) GetTableName() string       { return "" }
@@ -73,8 +53,6 @@ func (b *Base) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddString("id", b.ID)
 	enc.AddString("created_by", b.CreatedBy)
 	enc.AddString("updated_by", b.UpdatedBy)
-	enc.AddUint("page", b.Page)
-	enc.AddUint("size", b.Size)
 	return nil
 }
 

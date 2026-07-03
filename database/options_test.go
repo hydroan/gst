@@ -716,6 +716,35 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 		require.Empty(t, users, "WithBuildSQL should not execute the query or fill the destination")
 	})
 
+	t.Run("ListWithModelQuery", func(t *testing.T) {
+		var stmts []types.SQLStatement
+		users := make([]*queryableTestUser, 0)
+		fuzzy := true
+		query := &queryableTestUser{
+			Name: "queryable-user",
+			Query: model.Query{
+				Page:   2,
+				Size:   10,
+				Fuzzy:  &fuzzy,
+				SortBy: "created_at desc",
+			},
+		}
+
+		err := database.Database[*queryableTestUser](context.Background()).
+			WithBuildSQL(&stmts).
+			WithQuery(query).
+			List(&users)
+
+		require.NoError(t, err)
+		require.Len(t, stmts, 1)
+		require.Contains(t, stmts[0].Args, query.Name)
+		require.NotContains(t, stmts[0].Args, "2")
+		require.NotContains(t, stmts[0].Args, "10")
+		require.NotContains(t, stmts[0].Args, "1")
+		require.NotContains(t, stmts[0].Args, query.SortBy)
+		require.Empty(t, users, "WithBuildSQL should not execute the query or fill the destination")
+	})
+
 	t.Run("CreateDoesNotExecute", func(t *testing.T) {
 		defer cleanupTestData()
 

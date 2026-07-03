@@ -24,6 +24,12 @@ type (
 	// Base provides common fields and default hooks for database-backed resources.
 	Base = modelregistry.Base
 
+	// Query enables framework-owned list query parameters when embedded by a model.
+	Query = modelregistry.Query
+
+	// Queryable marks models that opt in to framework-owned query parameters.
+	Queryable = modelregistry.Queryable
+
 	// Empty marks a model as an action-only type that does not map to a database table.
 	Empty = modelregistry.Empty
 

@@ -617,6 +617,7 @@ type User struct {
 	Email  string `json:"email,omitempty"`
 	Avatar string `json:"avatar,omitempty"`
 
+	model.Query
 	model.Base
 }
 

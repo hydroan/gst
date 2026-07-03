@@ -64,6 +64,7 @@ type Menu struct {
 	Children []*Menu `json:"children,omitempty" gorm:"foreignKey:ParentID"`             // Child menus.
 	Parent   *Menu   `json:"parent,omitempty" gorm:"foreignKey:ParentID;references:ID"` // Parent menu.
 
+	model.Query
 	model.Base
 }
 

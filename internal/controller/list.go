@@ -23,6 +23,30 @@ import (
 	"go.uber.org/zap"
 )
 
+// listFrameworkQueryKeys are List controller parameters that belong to
+// model.Query rather than to the resource model's own filter fields. A model
+// must embed model.Query to opt in to these keys; otherwise the List controller
+// rejects them as unknown query paths.
+var listFrameworkQueryKeys = map[string]struct{}{
+	consts.QUERY_PAGE:          {},
+	consts.QUERY_SIZE:          {},
+	consts.QUERY_EXPAND:        {},
+	consts.QUERY_DEPTH:         {},
+	consts.QUERY_OR:            {},
+	consts.QUERY_FUZZY:         {},
+	consts.QUERY_SORTBY:        {},
+	consts.QUERY_COLUMN_NAME:   {},
+	consts.QUERY_START_TIME:    {},
+	consts.QUERY_END_TIME:      {},
+	consts.QUERY_NOCACHE:       {},
+	consts.QUERY_NOTOTAL:       {},
+	consts.QUERY_INDEX:         {},
+	consts.QUERY_SELECT:        {},
+	consts.QUERY_CURSOR_VALUE:  {},
+	consts.QUERY_CURSOR_FIELDS: {},
+	consts.QUERY_CURSOR_NEXT:   {},
+}
+
 // List is a generic function to product gin handler to list resources in backend.
 // The resource type deponds on the type of interface types.Model.
 //
@@ -54,6 +78,17 @@ import (
 //     /department/myid?_fuzzy=true
 func List[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
 	ListFactory[M, REQ, RSP]()(c)
+}
+
+func decodeListQuery[M types.Model](m M, query map[string][]string) error {
+	if _, ok := any(m).(modelregistry.Queryable); !ok {
+		for key := range query {
+			if _, isFrameworkKey := listFrameworkQueryKeys[key]; isFrameworkKey {
+				return errors.Newf("schema: invalid path %q", key)
+			}
+		}
+	}
+	return schema.NewDecoder().Decode(m, query)
 }
 
 // ListFactory returns a Gin handler that lists resources.
@@ -143,9 +178,11 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		typ := reflect.TypeOf(*new(M)).Elem() // the real underlying structure type
 		m := reflect.New(typ).Interface().(M) //nolint:errcheck
 
-		// FIXME: failed to convert value when size value is -1.
-		if err := schema.NewDecoder().Decode(m, c.Request.URL.Query()); err != nil {
-			log.Warn(fmt.Sprintf("failed to decode uri query parameter into model: %s", err))
+		if err := decodeListQuery(m, c.Request.URL.Query()); err != nil {
+			log.Error(err)
+			JSON(c, CodeInvalidParam.WithErr(err))
+			gstotel.RecordError(span, err)
+			return
 		}
 		log.Infoz(typ.Name()+": list query parameter", zap.Object(typ.String(), m))
 

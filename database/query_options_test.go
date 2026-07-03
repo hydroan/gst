@@ -14,6 +14,13 @@ import (
 	"gorm.io/gorm"
 )
 
+type queryableTestUser struct {
+	Name string `json:"name" schema:"name"`
+
+	model.Query
+	model.Base
+}
+
 func TestDatabaseWithIndex(t *testing.T) {
 	defer cleanupTestData()
 	setupTestData(t)
