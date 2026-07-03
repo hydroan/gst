@@ -266,7 +266,7 @@ func parseStructComment(t any) string {
 	return ""
 }
 
-// extractCommentText extracts text content from comment group
+// extractCommentText extracts text content from a comment group.
 func extractCommentText(commentGroup *ast.CommentGroup) string {
 	if commentGroup == nil || len(commentGroup.List) == 0 {
 		return ""
@@ -276,30 +276,37 @@ func extractCommentText(commentGroup *ast.CommentGroup) string {
 	for _, comment := range commentGroup.List {
 		text := comment.Text
 
-		// Handle different types of comments
 		if after, ok := strings.CutPrefix(text, "//"); ok {
-			// Line comment
-			text = after
-			text = strings.TrimSpace(text)
-			if text != "" {
-				lines = append(lines, text)
-			}
+			lines = append(lines, normalizeLineComment(after))
 		} else if strings.HasPrefix(text, "/*") && strings.HasSuffix(text, "*/") {
-			// Block comment
 			text = strings.TrimPrefix(text, "/*")
 			text = strings.TrimSuffix(text, "*/")
 
-			// Handle multi-line block comments, split by lines and clean each line
 			blockLines := strings.SplitSeq(text, "\n")
 			for line := range blockLines {
-				line = strings.TrimSpace(line)
-				if line != "" {
-					lines = append(lines, line)
-				}
+				lines = append(lines, normalizeLineComment(line))
 			}
 		}
 	}
 
-	// Merge multi-line comments, separated by spaces
-	return strings.Join(lines, " ")
+	return strings.Join(trimBlankCommentLines(lines), "\n")
+}
+
+func normalizeLineComment(text string) string {
+	text = strings.TrimRight(text, " \t\r")
+	return strings.TrimPrefix(text, " ")
+}
+
+func trimBlankCommentLines(lines []string) []string {
+	start := 0
+	for start < len(lines) && lines[start] == "" {
+		start++
+	}
+
+	end := len(lines)
+	for end > start && lines[end-1] == "" {
+		end--
+	}
+
+	return lines[start:end]
 }
