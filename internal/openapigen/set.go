@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gertd/go-pluralize"
 	"github.com/getkin/kin-openapi/openapi3"
@@ -20,6 +21,8 @@ import (
 var pluralizeCli = pluralize.NewClient()
 
 var idFormat = "" // eg: "uuid"
+
+var timeType = reflect.TypeFor[time.Time]()
 
 var removeFieldMap = map[string]bool{
 	"id":         true,
@@ -1914,6 +1917,10 @@ func schemaFromType(dataType reflect.Type) *openapi3.SchemaRef {
 		dataType = dataType.Elem()
 	}
 
+	if dataType == timeType {
+		return &openapi3.SchemaRef{Value: dateTimeSchema()}
+	}
+
 	switch dataType.Kind() {
 	case reflect.Struct:
 		schema := openapi3.NewObjectSchema()
@@ -1925,7 +1932,7 @@ func schemaFromType(dataType reflect.Type) *openapi3.SchemaRef {
 			if jsonTag == "" {
 				continue
 			}
-			schema.WithPropertyRef(jsonTag, &openapi3.SchemaRef{Value: &openapi3.Schema{Type: fieldType2openapiType(f)}})
+			schema.WithPropertyRef(jsonTag, &openapi3.SchemaRef{Value: fieldToOpenAPISchema(f)})
 		}
 		return &openapi3.SchemaRef{Value: schema}
 	case reflect.Slice, reflect.Array:
@@ -1937,7 +1944,7 @@ func schemaFromType(dataType reflect.Type) *openapi3.SchemaRef {
 		arraySchema.Items = itemRef
 		return &openapi3.SchemaRef{Value: arraySchema}
 	default:
-		return &openapi3.SchemaRef{Value: &openapi3.Schema{Type: fieldType2openapiType(reflect.StructField{Type: dataType})}}
+		return &openapi3.SchemaRef{Value: fieldToOpenAPISchema(reflect.StructField{Type: dataType})}
 	}
 }
 
@@ -1970,7 +1977,7 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 				Name:        queryTag,
 				In:          "query",
 				Required:    false,
-				Schema:      &openapi3.SchemaRef{Value: &openapi3.Schema{Type: fieldType2openapiType(field)}},
+				Schema:      &openapi3.SchemaRef{Value: fieldToOpenAPISchema(field)},
 				Description: description,
 			},
 		})
@@ -1994,7 +2001,7 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 				Name:        queryTag,
 				In:          "query",
 				Required:    false,
-				Schema:      &openapi3.SchemaRef{Value: &openapi3.Schema{Type: fieldType2openapiType(field)}},
+				Schema:      &openapi3.SchemaRef{Value: fieldToOpenAPISchema(field)},
 				Description: description,
 			},
 		})
@@ -2199,6 +2206,26 @@ func fieldType2openapiType(field reflect.StructField) *openapi3.Types {
 	default:
 		// fmt.Println("----- field name", field.Name, field.Type.Kind())
 		return &openapi3.Types{openapi3.TypeNull}
+	}
+}
+
+func fieldToOpenAPISchema(field reflect.StructField) *openapi3.Schema {
+	typ := field.Type
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+
+	if typ == timeType {
+		return dateTimeSchema()
+	}
+
+	return &openapi3.Schema{Type: fieldType2openapiType(field)}
+}
+
+func dateTimeSchema() *openapi3.Schema {
+	return &openapi3.Schema{
+		Type:   &openapi3.Types{openapi3.TypeString},
+		Format: "date-time",
 	}
 }
 
