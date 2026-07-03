@@ -10,8 +10,8 @@
 Content-Type: application/json
 ```
 
-字段名以接口返回或 Swagger 中的 JSON 字段名为准，例如 `id`、`name`、
-`status`，不要使用后端 Go 结构体字段名。
+字段名以接口返回、Swagger 或接口文档中的 JSON 字段名为准，例如 `id`、`name`、
+`status`，不要使用未出现在接口契约中的内部字段名。
 
 请求数据必须放在本文指定的位置。放错位置不属于接口契约的一部分，前端不要依赖后端
 从 body、query 或 URL 之间兜底读取数据。
@@ -90,3 +90,4 @@ Content-Type: application/json
 - 批量创建、批量全量更新、批量部分更新统一使用 `items`。
 - 批量删除统一使用 `ids`。
 - 不要把参数放到“看起来也能传”的其他位置；本文指定的位置就是前端对接时必须遵守的位置。
+
