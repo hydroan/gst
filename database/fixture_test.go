@@ -137,7 +137,7 @@ type TestUser struct {
 	Age      int                         `json:"age"`
 	Addr     datatypes.JSONSlice[string] `json:"addr"`
 	IsActive *bool                       `json:"is_active"`
-	Remark   *string                     `json:"remark,omitempty" gorm:"size:10240" schema:"remark"`
+	Remark   *string                     `json:"remark,omitempty" gorm:"size:10240" query:"remark"`
 
 	model.Base
 }
@@ -158,7 +158,7 @@ type TestUser2 struct {
 	Email    string  `json:"email"`
 	Age      int     `json:"age"`
 	IsActive *bool   `json:"is_active"`
-	Remark   *string `json:"remark,omitempty" gorm:"size:10240" schema:"remark"`
+	Remark   *string `json:"remark,omitempty" gorm:"size:10240" query:"remark"`
 
 	model.Base
 }

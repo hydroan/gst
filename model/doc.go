@@ -8,7 +8,7 @@ package model
     ID string `json:"-" gorm:"-"`
   - 覆盖默认的 SetID() 方法
     func(* FeishuUser)SetID(...string){}
-2.model 结构体对象的字段如果要通过 query parameter 作为查询参数的话, 需要增加 schema tag
+2.model 结构体对象的字段如果要通过 query parameter 作为查询参数的话, 需要增加 query tag
 3.自己定义的 model 继承 Base model 时必须时匿名继承,并且不能加 json tag
   否则在 gin ShouldBindJson 和 json.Unmarshal 时会出问题
 4.如果自定义了 ID 的规则, 那么记住几点:

@@ -7,27 +7,27 @@ import (
 )
 
 type listBenchmarkModel struct {
-	Name string `schema:"name"`
+	Name string `query:"name"`
 
 	model.Base
 }
 
 type listBenchmarkQueryableModel struct {
-	Name string `schema:"name"`
+	Name string `query:"name"`
 
 	model.Query
 	model.Base
 }
 
 type listBenchmarkPaginatableModel struct {
-	Name string `schema:"name"`
+	Name string `query:"name"`
 
 	model.Pagination
 	model.Base
 }
 
 type listBenchmarkCursorableModel struct {
-	Name string `schema:"name"`
+	Name string `query:"name"`
 
 	model.Cursor
 	model.Base

@@ -24,15 +24,15 @@ const (
 
 // File demonstrates a database resource with custom routes and model hooks.
 type File struct {
-	NamespaceID string     `json:"namespace_id,omitempty" schema:"namespace_id"`
-	Environment string     `json:"environment,omitempty" schema:"environment"`
-	Name        string     `json:"name,omitempty" schema:"name"`
-	Format      FileFormat `json:"format,omitempty" schema:"format"`
-	Content     string     `json:"content,omitempty" schema:"content" gorm:"type:text"`
-	Encrypted   bool       `json:"encrypted,omitempty" schema:"encrypted"`
+	NamespaceID string     `json:"namespace_id,omitempty" query:"namespace_id"`
+	Environment string     `json:"environment,omitempty" query:"environment"`
+	Name        string     `json:"name,omitempty" query:"name"`
+	Format      FileFormat `json:"format,omitempty" query:"format"`
+	Content     string     `json:"content,omitempty" query:"content" gorm:"type:text"`
+	Encrypted   bool       `json:"encrypted,omitempty" query:"encrypted"`
 
-	Size     int    `json:"size,omitempty" schema:"size"`
-	Checksum string `json:"checksum,omitempty" schema:"checksum"`
+	Size     int    `json:"size,omitempty" query:"size"`
+	Checksum string `json:"checksum,omitempty" query:"checksum"`
 
 	model.Base
 }

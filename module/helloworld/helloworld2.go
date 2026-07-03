@@ -9,8 +9,8 @@ import (
 var _ types.Module[*Helloworld2, *Helloworld2, *Helloworld2] = (*Module2)(nil)
 
 type Helloworld2 struct {
-	Before string `json:"before" schema:"before"`
-	After  string `json:"after" schema:"after"`
+	Before string `json:"before" query:"before"`
+	After  string `json:"after" query:"after"`
 
 	model.Base
 }

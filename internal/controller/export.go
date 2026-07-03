@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gorilla/schema"
 	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/logger"
@@ -62,7 +61,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		typ := reflect.TypeOf(*new(M)).Elem() // the real underlying structure type
 		m := reflect.New(typ).Interface().(M) //nolint:errcheck
 
-		if err := schema.NewDecoder().Decode(m, c.Request.URL.Query()); err != nil {
+		if err := queryDecoder.Decode(m, c.Request.URL.Query()); err != nil {
 			log.Warn("failed to parse uri query parameter into model: ", err)
 		}
 		log.Info("query parameter: ", m)

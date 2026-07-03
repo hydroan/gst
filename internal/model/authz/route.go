@@ -23,8 +23,8 @@ func (Routes) Design() {
 
 // Route is a registered backend route that can be bound to a menu.
 type Route struct {
-	Path    string   `json:"path" schema:"path"`
-	Methods []string `json:"methods" schema:"methods"`
+	Path    string   `json:"path" query:"path"`
+	Methods []string `json:"methods" query:"methods"`
 }
 
 // RoutesRsp is the response returned by GET /api/authz/routes.

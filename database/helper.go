@@ -234,16 +234,16 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 			// the structure lowercase field name as the query condition.
 			jsonTag = field.Name
 		}
-		// "schema" tag have higher priority than "json" tag
-		schemaTagStr := strings.TrimSpace(field.Tag.Get("schema"))
-		schemaTagItems := strings.Split(schemaTagStr, ",")
-		schemaTag := ""
-		if len(schemaTagItems) > 0 {
-			schemaTag = schemaTagItems[0]
+		// "query" tag have higher priority than "json" tag
+		queryTagStr := strings.TrimSpace(field.Tag.Get("query"))
+		queryTagItems := strings.Split(queryTagStr, ",")
+		queryTag := ""
+		if len(queryTagItems) > 0 {
+			queryTag = queryTagItems[0]
 		}
-		if len(schemaTag) > 0 && schemaTag != jsonTag {
-			logger.Database.WithContext(ctx, consts.Phase("StructFieldToMap")).Infoz("json tag replace by schema tag", zap.String("old", jsonTag), zap.String("new", schemaTag))
-			jsonTag = schemaTag
+		if len(queryTag) > 0 && queryTag != jsonTag {
+			logger.Database.WithContext(ctx, consts.Phase("StructFieldToMap")).Infoz("json tag replace by query tag", zap.String("old", jsonTag), zap.String("new", queryTag))
+			jsonTag = queryTag
 		}
 
 		if !fieldVal.CanInterface() {

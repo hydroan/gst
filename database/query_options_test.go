@@ -15,21 +15,21 @@ import (
 )
 
 type queryableTestUser struct {
-	Name string `json:"name" schema:"name"`
+	Name string `json:"name" query:"name"`
 
 	model.Query
 	model.Base
 }
 
 type paginatableTestUser struct {
-	Name string `json:"name" schema:"name"`
+	Name string `json:"name" query:"name"`
 
 	model.Pagination
 	model.Base
 }
 
 type cursorableTestUser struct {
-	Name string `json:"name" schema:"name"`
+	Name string `json:"name" query:"name"`
 
 	model.Cursor
 	model.Base

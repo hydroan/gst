@@ -57,17 +57,21 @@ var listCursorQueryKeys = map[string]struct{}{
 	consts.QUERY_CURSOR_NEXT:   {},
 }
 
-// listQueryDecoder is shared so gorilla/schema can reuse its protected
-// structure metadata cache across requests. Keep it private and do not mutate
-// decoder options after initialization; the cache itself is concurrency-safe,
-// but option setters and converter registration are not.
-var listQueryDecoder = schema.NewDecoder()
+// queryDecoder is shared so gorilla/schema can reuse its protected structure
+// metadata cache across requests. Keep it private and do not mutate decoder
+// options after initialization; the cache itself is concurrency-safe, but
+// option setters and converter registration are not.
+var queryDecoder = func() *schema.Decoder {
+	decoder := schema.NewDecoder()
+	decoder.SetAliasTag("query")
+	return decoder
+}()
 
 // List is a generic function to product gin handler to list resources in backend.
 // The resource type deponds on the type of interface types.Model.
 //
-// If you want make a structure field as query parameter, you should add a "schema"
-// tag for it. for example: schema:"name"
+// If you want make a structure field as query parameter, you should add a "query"
+// tag for it. for example: query:"name"
 //
 // TODO:combine query parameter 'page' and 'size' into decoded types.Model
 // FIX: retrieve records recursive (current not support in gorm.)
@@ -112,7 +116,7 @@ func decodeListQuery[M types.Model](m M, query map[string][]string) error {
 			return err
 		}
 	}
-	return listQueryDecoder.Decode(m, query)
+	return queryDecoder.Decode(m, query)
 }
 
 func rejectListQueryKeys(query map[string][]string, keys map[string]struct{}) error {

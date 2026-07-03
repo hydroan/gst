@@ -16,9 +16,9 @@ import (
 )
 
 type Role struct {
-	TenantID string `json:"tenant_id,omitempty" schema:"tenant_id" gorm:"size:191;default:default;uniqueIndex:idx_authz_roles_tenant_code"`
-	Code     string `json:"code,omitempty" schema:"code" gorm:"size:191;uniqueIndex:idx_authz_roles_tenant_code"`
-	Default  *bool  `json:"default,omitempty" schema:"default"`
+	TenantID string `json:"tenant_id,omitempty" query:"tenant_id" gorm:"size:191;default:default;uniqueIndex:idx_authz_roles_tenant_code"`
+	Code     string `json:"code,omitempty" query:"code" gorm:"size:191;uniqueIndex:idx_authz_roles_tenant_code"`
+	Default  *bool  `json:"default,omitempty" query:"default"`
 
 	// Scope holds generic constraints for regional roles.
 	// Keys and values are user-defined and framework-agnostic.

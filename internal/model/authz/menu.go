@@ -44,23 +44,23 @@ const (
 
 type Menu struct {
 	// Frontend route path. The empty value means default route in React Router 6.x.
-	Path    string `json:"path" schema:"path"`
-	Default string `json:"default,omitempty" schema:"default"` // Default child route when the menu has children.
+	Path    string `json:"path" query:"path"`
+	Default string `json:"default,omitempty" query:"default"` // Default child route when the menu has children.
 
 	// Backend routes used by this menu.
-	Routes datatypes.JSONSlice[Route] `json:"routes,omitempty" schema:"routes"`
+	Routes datatypes.JSONSlice[Route] `json:"routes,omitempty" query:"routes"`
 
 	// Display metadata.
-	Label string `json:"label,omitempty" schema:"label"`
-	Icon  string `json:"icon,omitempty" schema:"icon"`
+	Label string `json:"label,omitempty" query:"label"`
+	Icon  string `json:"icon,omitempty" query:"icon"`
 
 	// Visibility metadata. Runtime filtering behavior is handled by service logic.
-	Visible       *bool                             `json:"visible,omitempty" schema:"visible" gorm:"default:1"`
-	Enabled       *bool                             `json:"enabled,omitempty" schema:"enabled" gorm:"default:1"`
-	Platforms     datatypes.JSONSlice[MenuPlatform] `json:"platforms,omitempty" schema:"platforms"` // Empty means all platforms.
-	DomainPattern string                            `json:"domain_pattern,omitempty" schema:"domain_pattern" gorm:"default:.*"`
+	Visible       *bool                             `json:"visible,omitempty" query:"visible" gorm:"default:1"`
+	Enabled       *bool                             `json:"enabled,omitempty" query:"enabled" gorm:"default:1"`
+	Platforms     datatypes.JSONSlice[MenuPlatform] `json:"platforms,omitempty" query:"platforms"` // Empty means all platforms.
+	DomainPattern string                            `json:"domain_pattern,omitempty" query:"domain_pattern" gorm:"default:.*"`
 
-	ParentID string  `json:"parent_id,omitempty" gorm:"size:191" schema:"parent_id"`
+	ParentID string  `json:"parent_id,omitempty" gorm:"size:191" query:"parent_id"`
 	Children []*Menu `json:"children,omitempty" gorm:"foreignKey:ParentID"`             // Child menus.
 	Parent   *Menu   `json:"parent,omitempty" gorm:"foreignKey:ParentID;references:ID"` // Parent menu.
 

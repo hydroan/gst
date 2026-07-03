@@ -8,11 +8,11 @@ import (
 
 // Profile stores the generic self-service profile data for an IAM user.
 type Profile struct {
-	UserID      string            `json:"user_id" schema:"user_id" gorm:"type:char(36);uniqueIndex;not null"`
-	DisplayName string            `json:"display_name,omitempty" schema:"display_name" gorm:"size:191"`
-	FirstName   string            `json:"first_name,omitempty" schema:"first_name" gorm:"size:191"`
-	LastName    string            `json:"last_name,omitempty" schema:"last_name" gorm:"size:191"`
-	Avatar      string            `json:"avatar,omitempty" schema:"avatar" gorm:"size:512"`
+	UserID      string            `json:"user_id" query:"user_id" gorm:"type:char(36);uniqueIndex;not null"`
+	DisplayName string            `json:"display_name,omitempty" query:"display_name" gorm:"size:191"`
+	FirstName   string            `json:"first_name,omitempty" query:"first_name" gorm:"size:191"`
+	LastName    string            `json:"last_name,omitempty" query:"last_name" gorm:"size:191"`
+	Avatar      string            `json:"avatar,omitempty" query:"avatar" gorm:"size:512"`
 	Metadata    datatypes.JSONMap `json:"metadata,omitempty"`
 
 	model.Base

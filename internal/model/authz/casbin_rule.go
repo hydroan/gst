@@ -30,13 +30,13 @@ import (
 //   - g, root, admin, default
 type CasbinRule struct {
 	ID    uint64 `json:"id" gorm:"primaryKey;autoIncrement:true"`
-	Ptype string `json:"ptype" gorm:"size:100" schema:"ptype"`
-	V0    string `json:"v0,omitempty" gorm:"size:100" schema:"v0"`
-	V1    string `json:"v1,omitempty" gorm:"size:100" schema:"v1"`
-	V2    string `json:"v2,omitempty" gorm:"size:100" schema:"v2"`
-	V3    string `json:"v3,omitempty" gorm:"size:100" schema:"v3"`
-	V4    string `json:"v4,omitempty" gorm:"size:100" schema:"v4"`
-	V5    string `json:"v5,omitempty" gorm:"size:100" schema:"v5"`
+	Ptype string `json:"ptype" gorm:"size:100" query:"ptype"`
+	V0    string `json:"v0,omitempty" gorm:"size:100" query:"v0"`
+	V1    string `json:"v1,omitempty" gorm:"size:100" query:"v1"`
+	V2    string `json:"v2,omitempty" gorm:"size:100" query:"v2"`
+	V3    string `json:"v3,omitempty" gorm:"size:100" query:"v3"`
+	V4    string `json:"v4,omitempty" gorm:"size:100" query:"v4"`
+	V5    string `json:"v5,omitempty" gorm:"size:100" query:"v5"`
 
 	model.Base
 }

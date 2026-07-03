@@ -14,10 +14,10 @@ import (
 // TraceProbe exercises standard CRUD context propagation through service,
 // database, GORM, and model hooks.
 type TraceProbe struct {
-	Name string `json:"name" schema:"name" gorm:"size:191;index"`
-	Note string `json:"note,omitempty" schema:"note" gorm:"size:1024"`
+	Name string `json:"name" query:"name" gorm:"size:191;index"`
+	Note string `json:"note,omitempty" query:"note" gorm:"size:1024"`
 
-	Hook      string `json:"hook,omitempty" schema:"hook" gorm:"size:64"`
+	Hook      string `json:"hook,omitempty" query:"hook" gorm:"size:64"`
 	HookCount int64  `json:"hook_count,omitempty" gorm:"-"`
 
 	model.Base

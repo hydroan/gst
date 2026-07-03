@@ -22,9 +22,9 @@ type SearchSource struct {
 
 // Message demonstrates a child resource with nested routes and batch actions.
 type Message struct {
-	UserID         string         `json:"user_id" schema:"user_id"`
-	ConversationID string         `json:"conversation_id" schema:"conversation_id"`
-	Role           MessageRole    `json:"role" schema:"role"`
+	UserID         string         `json:"user_id" query:"user_id"`
+	ConversationID string         `json:"conversation_id" query:"conversation_id"`
+	Role           MessageRole    `json:"role" query:"role"`
 	Content        string         `json:"content" gorm:"type:text"`
 	Sources        []SearchSource `json:"sources,omitempty" gorm:"-"`
 

@@ -15,10 +15,10 @@ const (
 
 // Conversation demonstrates a database-backed resource with custom service hooks.
 type Conversation struct {
-	Type ConversationType `json:"type" schema:"type"`
+	Type ConversationType `json:"type" query:"type"`
 
-	UserID string `json:"user_id" schema:"user_id"`
-	Title  string `json:"title" schema:"title"`
+	UserID string `json:"user_id" query:"user_id"`
+	Title  string `json:"title" query:"title"`
 
 	// Username is returned to clients and is not stored in the database.
 	Username string `json:"username,omitempty" gorm:"-"`

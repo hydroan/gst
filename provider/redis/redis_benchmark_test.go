@@ -36,8 +36,8 @@ func BenchmarkRedis(b *testing.B) {
 }
 
 type Group struct {
-	Name        string `json:"name,omitempty" schema:"name" gorm:"unique" binding:"required"`
-	Desc        string `json:"desc,omitempty" schema:"desc"`
+	Name        string `json:"name,omitempty" query:"name" gorm:"unique" binding:"required"`
+	Desc        string `json:"desc,omitempty" query:"desc"`
 	MemberCount int    `json:"member_count" gorm:"default:0"`
 
 	model.Base

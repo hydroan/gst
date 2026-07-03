@@ -13,9 +13,9 @@ import (
 )
 
 type RoleBinding struct {
-	TenantID  string `json:"tenant_id,omitempty" schema:"tenant_id" gorm:"size:191;default:default;uniqueIndex:idx_authz_role_bindings_tenant_subject_role"`
-	SubjectID string `json:"subject_id,omitempty" schema:"subject_id" gorm:"size:191;uniqueIndex:idx_authz_role_bindings_tenant_subject_role"`
-	RoleID    string `json:"role_id,omitempty" schema:"role_id" gorm:"size:191;uniqueIndex:idx_authz_role_bindings_tenant_subject_role"`
+	TenantID  string `json:"tenant_id,omitempty" query:"tenant_id" gorm:"size:191;default:default;uniqueIndex:idx_authz_role_bindings_tenant_subject_role"`
+	SubjectID string `json:"subject_id,omitempty" query:"subject_id" gorm:"size:191;uniqueIndex:idx_authz_role_bindings_tenant_subject_role"`
+	RoleID    string `json:"role_id,omitempty" query:"role_id" gorm:"size:191;uniqueIndex:idx_authz_role_bindings_tenant_subject_role"`
 
 	model.Base
 }
