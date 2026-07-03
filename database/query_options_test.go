@@ -21,6 +21,20 @@ type queryableTestUser struct {
 	model.Base
 }
 
+type paginatableTestUser struct {
+	Name string `json:"name" schema:"name"`
+
+	model.Pagination
+	model.Base
+}
+
+type cursorableTestUser struct {
+	Name string `json:"name" schema:"name"`
+
+	model.Cursor
+	model.Base
+}
+
 func TestDatabaseWithIndex(t *testing.T) {
 	defer cleanupTestData()
 	setupTestData(t)

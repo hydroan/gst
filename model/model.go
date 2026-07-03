@@ -30,6 +30,18 @@ type (
 	// Queryable marks models that opt in to framework-owned query parameters.
 	Queryable = modelregistry.Queryable
 
+	// Pagination enables page and size query parameters when embedded by a model.
+	Pagination = modelregistry.Pagination
+
+	// Paginatable marks models that opt in to page and size query parameters.
+	Paginatable = modelregistry.Paginatable
+
+	// Cursor enables cursor query parameters when embedded by a model.
+	Cursor = modelregistry.Cursor
+
+	// Cursorable marks models that opt in to cursor query parameters.
+	Cursorable = modelregistry.Cursorable
+
 	// Empty marks a model as an action-only type that does not map to a database table.
 	Empty = modelregistry.Empty
 

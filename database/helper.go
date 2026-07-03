@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -316,24 +317,28 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 	}
 }
 
-// queryMarkerType is intentionally structural instead of importing modelregistry:
-// database filtering only needs to know that a nested struct is a controller
-// query marker, not which concrete package defined it. This keeps Query fields
-// out of SQL WHERE conditions while leaving normal schema-tagged model fields
-// available for filtering.
-var queryMarkerType = reflect.TypeFor[interface{ QueryEnabled() }]()
+// queryMarkerTypes are intentionally structural instead of importing
+// modelregistry: database filtering only needs to know that a nested struct is a
+// controller query marker, not which concrete package defined it. This keeps
+// Query, Pagination, and Cursor fields out of SQL WHERE conditions while leaving
+// normal schema-tagged model fields available for filtering.
+var queryMarkerTypes = []reflect.Type{
+	reflect.TypeFor[interface{ QueryEnabled() }](),
+	reflect.TypeFor[interface{ PaginationEnabled() }](),
+	reflect.TypeFor[interface{ CursorEnabled() }](),
+}
 
 func isQueryMarkerType(t reflect.Type) bool {
 	if t == nil {
 		return false
 	}
-	if t.Implements(queryMarkerType) {
+	if slices.ContainsFunc(queryMarkerTypes, t.Implements) {
 		return true
 	}
 	if t.Kind() == reflect.Pointer {
 		return false
 	}
-	return reflect.PointerTo(t).Implements(queryMarkerType)
+	return slices.ContainsFunc(queryMarkerTypes, reflect.PointerTo(t).Implements)
 }
 
 // buildCacheKey constructs Redis cache keys for database operations.

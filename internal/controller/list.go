@@ -23,29 +23,45 @@ import (
 	"go.uber.org/zap"
 )
 
-// listFrameworkQueryKeys are List controller parameters that belong to
-// model.Query rather than to the resource model's own filter fields. A model
-// must embed model.Query to opt in to these keys; otherwise the List controller
-// rejects them as unknown query paths.
-var listFrameworkQueryKeys = map[string]struct{}{
-	consts.QUERY_PAGE:          {},
-	consts.QUERY_SIZE:          {},
-	consts.QUERY_EXPAND:        {},
-	consts.QUERY_DEPTH:         {},
-	consts.QUERY_OR:            {},
-	consts.QUERY_FUZZY:         {},
-	consts.QUERY_SORTBY:        {},
-	consts.QUERY_COLUMN_NAME:   {},
-	consts.QUERY_START_TIME:    {},
-	consts.QUERY_END_TIME:      {},
-	consts.QUERY_NOCACHE:       {},
-	consts.QUERY_NOTOTAL:       {},
-	consts.QUERY_INDEX:         {},
-	consts.QUERY_SELECT:        {},
+// listQueryKeys are List controller parameters that belong to model.Query
+// rather than to the resource model's own filter fields.
+var listQueryKeys = map[string]struct{}{
+	consts.QUERY_EXPAND:      {},
+	consts.QUERY_DEPTH:       {},
+	consts.QUERY_OR:          {},
+	consts.QUERY_FUZZY:       {},
+	consts.QUERY_SORTBY:      {},
+	consts.QUERY_COLUMN_NAME: {},
+	consts.QUERY_START_TIME:  {},
+	consts.QUERY_END_TIME:    {},
+	consts.QUERY_NOCACHE:     {},
+	consts.QUERY_NOTOTAL:     {},
+	consts.QUERY_INDEX:       {},
+	consts.QUERY_SELECT:      {},
+}
+
+// listPaginationQueryKeys are enabled by model.Pagination. They are split from
+// listQueryKeys so a model can allow page and size without enabling fuzzy,
+// sorting, expansion, or other framework-owned List controls.
+var listPaginationQueryKeys = map[string]struct{}{
+	consts.QUERY_PAGE: {},
+	consts.QUERY_SIZE: {},
+}
+
+// listCursorQueryKeys are enabled by model.Cursor. Cursor pagination is
+// intentionally independent from SortBy; the cursor field and direction define
+// the stable order used by the database layer.
+var listCursorQueryKeys = map[string]struct{}{
 	consts.QUERY_CURSOR_VALUE:  {},
 	consts.QUERY_CURSOR_FIELDS: {},
 	consts.QUERY_CURSOR_NEXT:   {},
 }
+
+// listQueryDecoder is shared so gorilla/schema can reuse its protected
+// structure metadata cache across requests. Keep it private and do not mutate
+// decoder options after initialization; the cache itself is concurrency-safe,
+// but option setters and converter registration are not.
+var listQueryDecoder = schema.NewDecoder()
 
 // List is a generic function to product gin handler to list resources in backend.
 // The resource type deponds on the type of interface types.Model.
@@ -82,13 +98,30 @@ func List[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) 
 
 func decodeListQuery[M types.Model](m M, query map[string][]string) error {
 	if _, ok := any(m).(modelregistry.Queryable); !ok {
-		for key := range query {
-			if _, isFrameworkKey := listFrameworkQueryKeys[key]; isFrameworkKey {
-				return errors.Newf("schema: invalid path %q", key)
-			}
+		if err := rejectListQueryKeys(query, listQueryKeys); err != nil {
+			return err
 		}
 	}
-	return schema.NewDecoder().Decode(m, query)
+	if _, ok := any(m).(modelregistry.Paginatable); !ok {
+		if err := rejectListQueryKeys(query, listPaginationQueryKeys); err != nil {
+			return err
+		}
+	}
+	if _, ok := any(m).(modelregistry.Cursorable); !ok {
+		if err := rejectListQueryKeys(query, listCursorQueryKeys); err != nil {
+			return err
+		}
+	}
+	return listQueryDecoder.Decode(m, query)
+}
+
+func rejectListQueryKeys(query map[string][]string, keys map[string]struct{}) error {
+	for key := range query {
+		if _, found := keys[key]; found {
+			return errors.Newf("schema: invalid path %q", key)
+		}
+	}
+	return nil
 }
 
 // ListFactory returns a Gin handler that lists resources.

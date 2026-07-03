@@ -30,6 +30,20 @@ type QueryableUser struct {
 	model.Base
 }
 
+type PaginatableUser struct {
+	Name string `json:"name,omitempty"`
+
+	model.Pagination
+	model.Base
+}
+
+type CursorableUser struct {
+	Name string `json:"name,omitempty"`
+
+	model.Cursor
+	model.Base
+}
+
 func TestAreTypesEqual(t *testing.T) {
 	require.True(t, modelregistry.AreTypesEqual[*User, *User, *User]())
 	require.False(t, modelregistry.AreTypesEqual[*User, User, *User]())
@@ -80,6 +94,17 @@ func TestQueryable(t *testing.T) {
 	require.NotImplements(t, (*model.Queryable)(nil), new(User))
 	require.Implements(t, (*model.Queryable)(nil), new(QueryableUser))
 	require.Implements(t, (*model.Queryable)(nil), QueryableUser{})
+
+	require.Implements(t, (*model.Paginatable)(nil), new(QueryableUser))
+	require.Implements(t, (*model.Cursorable)(nil), new(QueryableUser))
+
+	require.NotImplements(t, (*model.Queryable)(nil), new(PaginatableUser))
+	require.Implements(t, (*model.Paginatable)(nil), new(PaginatableUser))
+	require.NotImplements(t, (*model.Cursorable)(nil), new(PaginatableUser))
+
+	require.NotImplements(t, (*model.Queryable)(nil), new(CursorableUser))
+	require.NotImplements(t, (*model.Paginatable)(nil), new(CursorableUser))
+	require.Implements(t, (*model.Cursorable)(nil), new(CursorableUser))
 }
 
 func TestIsEmpty(t *testing.T) {

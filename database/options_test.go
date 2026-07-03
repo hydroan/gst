@@ -717,32 +717,92 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 	})
 
 	t.Run("ListWithModelQuery", func(t *testing.T) {
-		var stmts []types.SQLStatement
-		users := make([]*queryableTestUser, 0)
-		fuzzy := true
-		query := &queryableTestUser{
-			Name: "queryable-user",
-			Query: model.Query{
-				Page:   2,
-				Size:   10,
-				Fuzzy:  &fuzzy,
-				SortBy: "created_at desc",
-			},
-		}
+		t.Run("Query", func(t *testing.T) {
+			var stmts []types.SQLStatement
+			users := make([]*queryableTestUser, 0)
+			fuzzy := true
+			cursorValue := "cursor-001"
+			query := &queryableTestUser{
+				Name: "queryable-user",
+				Query: model.Query{
+					Pagination: model.Pagination{
+						Page: 2,
+						Size: 10,
+					},
+					Cursor: model.Cursor{
+						CursorValue:  &cursorValue,
+						CursorFields: "id",
+						CursorNext:   true,
+					},
+					Fuzzy:  &fuzzy,
+					SortBy: "created_at desc",
+				},
+			}
 
-		err := database.Database[*queryableTestUser](context.Background()).
-			WithBuildSQL(&stmts).
-			WithQuery(query).
-			List(&users)
+			err := database.Database[*queryableTestUser](context.Background()).
+				WithBuildSQL(&stmts).
+				WithQuery(query).
+				List(&users)
 
-		require.NoError(t, err)
-		require.Len(t, stmts, 1)
-		require.Contains(t, stmts[0].Args, query.Name)
-		require.NotContains(t, stmts[0].Args, "2")
-		require.NotContains(t, stmts[0].Args, "10")
-		require.NotContains(t, stmts[0].Args, "1")
-		require.NotContains(t, stmts[0].Args, query.SortBy)
-		require.Empty(t, users, "WithBuildSQL should not execute the query or fill the destination")
+			require.NoError(t, err)
+			require.Len(t, stmts, 1)
+			require.Contains(t, stmts[0].Args, query.Name)
+			require.NotContains(t, stmts[0].Args, "2")
+			require.NotContains(t, stmts[0].Args, "10")
+			require.NotContains(t, stmts[0].Args, "1")
+			require.NotContains(t, stmts[0].Args, *query.CursorValue)
+			require.NotContains(t, stmts[0].Args, query.CursorFields)
+			require.NotContains(t, stmts[0].Args, query.SortBy)
+			require.Empty(t, users, "WithBuildSQL should not execute the query or fill the destination")
+		})
+
+		t.Run("Pagination", func(t *testing.T) {
+			var stmts []types.SQLStatement
+			users := make([]*paginatableTestUser, 0)
+			query := &paginatableTestUser{
+				Name:       "paginatable-user",
+				Pagination: model.Pagination{Page: 2, Size: 10},
+			}
+
+			err := database.Database[*paginatableTestUser](context.Background()).
+				WithBuildSQL(&stmts).
+				WithQuery(query).
+				List(&users)
+
+			require.NoError(t, err)
+			require.Len(t, stmts, 1)
+			require.Contains(t, stmts[0].Args, query.Name)
+			require.NotContains(t, stmts[0].Args, "2")
+			require.NotContains(t, stmts[0].Args, "10")
+			require.Empty(t, users, "WithBuildSQL should not execute the query or fill the destination")
+		})
+
+		t.Run("Cursor", func(t *testing.T) {
+			var stmts []types.SQLStatement
+			users := make([]*cursorableTestUser, 0)
+			cursorValue := "cursor-001"
+			query := &cursorableTestUser{
+				Name: "cursorable-user",
+				Cursor: model.Cursor{
+					CursorValue:  &cursorValue,
+					CursorFields: "id",
+					CursorNext:   true,
+				},
+			}
+
+			err := database.Database[*cursorableTestUser](context.Background()).
+				WithBuildSQL(&stmts).
+				WithQuery(query).
+				List(&users)
+
+			require.NoError(t, err)
+			require.Len(t, stmts, 1)
+			require.Contains(t, stmts[0].Args, query.Name)
+			require.NotContains(t, stmts[0].Args, *query.CursorValue)
+			require.NotContains(t, stmts[0].Args, query.CursorFields)
+			require.NotContains(t, stmts[0].Args, "1")
+			require.Empty(t, users, "WithBuildSQL should not execute the query or fill the destination")
+		})
 	})
 
 	t.Run("CreateDoesNotExecute", func(t *testing.T) {
