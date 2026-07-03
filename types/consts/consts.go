@@ -85,9 +85,8 @@ const (
 	USER_SYSTEM = "system"
 	USER_ROOT   = "root"
 
-	TAG_JSON   = "json"
-	TAG_SCHEMA = "schema"
-	TAG_QUERY  = "query"
+	TAG_JSON  = "json"
+	TAG_QUERY = "query"
 )
 
 const (

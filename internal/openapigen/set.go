@@ -1956,9 +1956,9 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 
 	typ := reflect.TypeOf(*new(M)).Elem()
 	for field := range typ.Fields() {
-		// 只有增加了 schema 标签的字段才支持通过 request query 参数进行后端查询
-		schemaTag := getFieldTag(field, consts.TAG_SCHEMA)
-		if len(schemaTag) == 0 {
+		// Only fields with query tags are exposed as request query parameters.
+		queryTag := getFieldTag(field, consts.TAG_QUERY)
+		if len(queryTag) == 0 {
 			continue
 		}
 
@@ -1967,7 +1967,7 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 
 		queries = append(queries, &openapi3.ParameterRef{
 			Value: &openapi3.Parameter{
-				Name:        schemaTag,
+				Name:        queryTag,
 				In:          "query",
 				Required:    false,
 				Schema:      &openapi3.SchemaRef{Value: &openapi3.Schema{Type: fieldType2openapiType(field)}},
@@ -1981,8 +1981,8 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 
 	baseType := reflect.TypeFor[model.Base]()
 	for field := range baseType.Fields() {
-		schemaTag := getFieldTag(field, consts.TAG_SCHEMA)
-		if len(schemaTag) == 0 {
+		queryTag := getFieldTag(field, consts.TAG_QUERY)
+		if len(queryTag) == 0 {
 			continue
 		}
 
@@ -1991,7 +1991,7 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 
 		queries = append(queries, &openapi3.ParameterRef{
 			Value: &openapi3.Parameter{
-				Name:        schemaTag,
+				Name:        queryTag,
 				In:          "query",
 				Required:    false,
 				Schema:      &openapi3.SchemaRef{Value: &openapi3.Schema{Type: fieldType2openapiType(field)}},
