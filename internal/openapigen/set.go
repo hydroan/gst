@@ -1372,40 +1372,63 @@ func setupExample(schemaRef *openapi3.SchemaRef) {
 	if schemaRef.Value == nil {
 		schemaRef.Value = new(openapi3.Schema)
 	}
-	props := schemaRef.Value.Properties
+
 	examples := make(map[string]any)
-	for k, v := range props {
-		// if k == "created_at" || k == "created_by" || k == "updated_at" || k == "updated_by" || k == "id" {
-		// 	continue
-		// }
+	for k, v := range schemaRef.Value.Properties {
 		if removeFieldMap[k] {
 			continue
 		}
-		if v.Value == nil || v.Value.Type == nil {
+		if v.Value == nil {
 			continue
 		}
-		if v.Value.Type.Is(openapi3.TypeString) {
-			examples[k] = "string"
+		examples[k] = buildExampleValue(v.Value, 0)
+	}
+	schemaRef.Value.Example = examples
+}
+
+// maxExampleDepth bounds buildExampleValue recursion so a self-referential
+// type (eg. a tree or linked-list struct) can't recurse indefinitely.
+const maxExampleDepth = 10
+
+// buildExampleValue recursively builds an example value for schema so nested
+// arrays, structs, and maps (additionalProperties) show their full shape in
+// Swagger instead of an empty placeholder.
+func buildExampleValue(schema *openapi3.Schema, depth int) any {
+	if schema == nil || schema.Type == nil || depth > maxExampleDepth {
+		return nil
+	}
+
+	switch {
+	case schema.Type.Is(openapi3.TypeString):
+		return "string"
+	case schema.Type.Is(openapi3.TypeInteger):
+		return 0
+	case schema.Type.Is(openapi3.TypeNumber):
+		return 0.0
+	case schema.Type.Is(openapi3.TypeBoolean):
+		return false
+	case schema.Type.Is(openapi3.TypeArray):
+		if schema.Items == nil || schema.Items.Value == nil {
+			return []any{}
 		}
-		if v.Value.Type.Is(openapi3.TypeInteger) {
-			examples[k] = 0
+		return []any{buildExampleValue(schema.Items.Value, depth+1)}
+	case schema.Type.Is(openapi3.TypeObject):
+		if len(schema.Properties) > 0 {
+			example := make(map[string]any, len(schema.Properties))
+			for propName, propRef := range schema.Properties {
+				if removeFieldMap[propName] || propRef.Value == nil {
+					continue
+				}
+				example[propName] = buildExampleValue(propRef.Value, depth+1)
+			}
+			return example
 		}
-		if v.Value.Type.Is(openapi3.TypeNumber) {
-			examples[k] = 0.0
+		if schema.AdditionalProperties.Schema != nil && schema.AdditionalProperties.Schema.Value != nil {
+			return map[string]any{"string": buildExampleValue(schema.AdditionalProperties.Schema.Value, depth+1)}
 		}
-		if v.Value.Type.Is(openapi3.TypeBoolean) {
-			examples[k] = false
-		}
-		if v.Value.Type.Is(openapi3.TypeArray) {
-			examples[k] = []any{}
-		}
-		if v.Value.Type.Is(openapi3.TypeObject) {
-			examples[k] = map[string]any{}
-		}
-		if v.Value.Type.Is(openapi3.TypeNull) {
-			examples[k] = nil
-		}
-		schemaRef.Value.Example = examples
+		return map[string]any{}
+	default:
+		return nil
 	}
 }
 
@@ -1421,33 +1444,10 @@ func setupBatchExample(schemaRef *openapi3.SchemaRef) {
 				// 为数组中的单个元素创建 example
 				example := make(map[string]any)
 				for propName, propRef := range v.Value.Items.Value.Properties {
-					// if propName == "created_at" || propName == "created_by" || propName == "updated_at" || propName == "updated_by" || propName == "id" {
-					// 	continue
-					// }
-					if removeFieldMap[propName] {
+					if removeFieldMap[propName] || propRef.Value == nil {
 						continue
 					}
-
-					if propRef.Value == nil || propRef.Value.Type == nil {
-						continue
-					}
-
-					switch {
-					case propRef.Value.Type.Is(openapi3.TypeString):
-						example[propName] = "string"
-					case propRef.Value.Type.Is(openapi3.TypeInteger):
-						example[propName] = 0
-					case propRef.Value.Type.Is(openapi3.TypeNumber):
-						example[propName] = 0.0
-					case propRef.Value.Type.Is(openapi3.TypeBoolean):
-						example[propName] = false
-					case propRef.Value.Type.Is(openapi3.TypeArray):
-						example[propName] = []any{}
-					case propRef.Value.Type.Is(openapi3.TypeObject):
-						example[propName] = map[string]any{}
-					default:
-						example[propName] = nil
-					}
+					example[propName] = buildExampleValue(propRef.Value, 0)
 				}
 
 				// 设置单个 item 的 example
@@ -1853,9 +1853,7 @@ func addSchemaTitle[T any](schemaRef *openapi3.SchemaRef) {
 		if !exists || description == "" {
 			continue
 		}
-		var field reflect.StructField
-		var hasField bool
-		if field, hasField = fieldByJSON[propName]; hasField {
+		if field, ok := fieldByJSON[propName]; ok {
 			if updatedSchema := convertDatatypesJSONTypeSchema(propRef, field, description); updatedSchema != nil {
 				propRef = updatedSchema
 			}
@@ -1864,29 +1862,9 @@ func addSchemaTitle[T any](schemaRef *openapi3.SchemaRef) {
 		if propRef.Value != nil {
 			newSchema := *propRef.Value
 			newSchema.Title = description
-			if hasField {
-				addMapValueTitle(&newSchema, field, description)
-			}
 			schemaRef.Value.Properties[propName] = &openapi3.SchemaRef{Value: &newSchema}
 		}
 	}
-}
-
-// addMapValueTitle applies a map field's doc comment to its additionalProperties
-// schema. JSON Schema has no name for map values themselves, so without this the
-// value schema (eg. []string) renders in Swagger UI with no description at all.
-func addMapValueTitle(schema *openapi3.Schema, field reflect.StructField, description string) {
-	typ := field.Type
-	for typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
-	}
-	if typ.Kind() != reflect.Map {
-		return
-	}
-	if schema.AdditionalProperties.Schema == nil || schema.AdditionalProperties.Schema.Value == nil {
-		return
-	}
-	schema.AdditionalProperties.Schema.Value.Title = description
 }
 
 // convertDatatypesJSONTypeSchema unwraps gorm datatypes.JSONType[T] so the
