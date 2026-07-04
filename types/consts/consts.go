@@ -443,9 +443,15 @@ const (
 )
 
 const (
+	// AUTHZ_USER_ROOT is the built-in root user's ID (subject), not a role name.
 	AUTHZ_USER_ROOT = "root"
 
-	AUTHZ_ROLE_ADMIN       = "admin"
+	// AUTHZ_ROLE_ADMIN is the tenant-scoped admin role, granted via g(subject, role, tenant).
+	// The Casbin matcher grants this role unconditional access to every object/action
+	// inside the tenant, bypassing explicit permission policies entirely.
+	AUTHZ_ROLE_ADMIN = "admin"
+	// AUTHZ_SYSTEM_ROLE_ROOT is the system-level super-admin role, granted via g2(subject, role)
+	// outside any tenant. AUTHZ_USER_ROOT is assigned this role by default during RBAC Init.
 	AUTHZ_SYSTEM_ROLE_ROOT = "system_root"
 )
 

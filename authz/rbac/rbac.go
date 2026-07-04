@@ -84,6 +84,10 @@ func (noop) UnassignRole(ctx context.Context, tenant string, subject string, rol
 	return nil
 }
 
+func (noop) HasRole(ctx context.Context, tenant string, subject string, role string) (bool, error) {
+	return false, nil
+}
+
 func (noop) SubjectInTenant(ctx context.Context, tenant string, subject string) (bool, error) {
 	return false, nil
 }
@@ -226,6 +230,16 @@ func (r *rbac) UnassignRole(ctx context.Context, tenant string, subject string, 
 		return err
 	}
 	return nil
+}
+
+// HasRole reports whether subject explicitly holds role inside tenant.
+func (r *rbac) HasRole(ctx context.Context, tenant string, subject string, role string) (bool, error) {
+	if subject == role {
+		return false, nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.enforcer.HasGroupingPolicy(subject, role, tenant)
 }
 
 // SubjectInTenant reports whether subject has any role assignment inside tenant.

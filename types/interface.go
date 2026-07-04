@@ -391,6 +391,11 @@ type RBAC interface {
 	// Other roles held by the same subject in the same tenant are left unchanged.
 	UnassignRole(ctx context.Context, tenant string, subject string, role string) error
 
+	// HasRole reports whether subject explicitly holds role inside tenant.
+	// Unlike SubjectInTenant, which checks membership in general, this checks one
+	// specific role assignment, such as the built-in admin role.
+	HasRole(ctx context.Context, tenant string, subject string, role string) (bool, error)
+
 	// SubjectInTenant reports whether subject has at least one role assignment in
 	// tenant. It checks membership, not whether any specific route is authorized.
 	SubjectInTenant(ctx context.Context, tenant string, subject string) (bool, error)

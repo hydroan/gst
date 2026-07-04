@@ -68,7 +68,11 @@ e = some(where (p.eft == allow))
 # Allow a request when either:
 # 1) the subject belongs to the system_root role through g2. This branch does
 #    not compare tenant, so system_root is intentionally cross-tenant.
-# 2) the subject belongs to the built-in admin role in the request tenant, or
+# 2) the subject belongs to the built-in admin role in the request tenant.
+#    This branch grants unconditional access to every object/action in the
+#    tenant — it does NOT check any p (permission policy) entry, unlike
+#    branch 3 below. Assigning the "admin" role is equivalent to granting
+#    full tenant-scoped superuser access.
 # 3) the subject belongs to the policy role in the same tenant, and the object
 #    and action match the stored permission.
 #
