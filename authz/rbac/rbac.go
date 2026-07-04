@@ -106,6 +106,10 @@ func (noop) HasSystemRole(ctx context.Context, subject string, role string) (boo
 	return isBuiltInSystemRole(subject, role), nil
 }
 
+func (noop) RemoveSubject(ctx context.Context, subject string) error {
+	return nil
+}
+
 func RBAC() types.RBAC {
 	// When RBAC is disabled or enforcer is not initialized,
 	// return a safe no-op implementation to prevent panics.
@@ -353,6 +357,23 @@ func (r *rbac) HasSystemRole(ctx context.Context, subject string, role string) (
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.enforcer.HasNamedGroupingPolicy(systemRoleGrouping, subject, role)
+}
+
+// RemoveSubject removes every tenant-scoped and system-level role assignment
+// held by subject, across all tenants.
+func (r *rbac) RemoveSubject(ctx context.Context, subject string) (err error) {
+	ctx, finishSpan := traceRBAC(ctx, "remove_subject", nil)
+	defer func() {
+		finishSpan(err)
+	}()
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	_, tenantErr := r.enforcer.RemoveFilteredGroupingPolicyCtx(ctx, 0, subject)
+	_, systemErr := r.enforcer.RemoveFilteredNamedGroupingPolicyCtx(ctx, systemRoleGrouping, 0, subject)
+	err = errors.Join(tenantErr, systemErr)
+	return err
 }
 
 func contextOrBackground(ctx context.Context) context.Context {

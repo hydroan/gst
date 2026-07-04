@@ -416,6 +416,11 @@ type RBAC interface {
 	// This check is separate from Authorize because system roles are not scoped to
 	// tenant route policies.
 	HasSystemRole(ctx context.Context, subject string, role string) (bool, error)
+
+	// RemoveSubject removes every role assignment held by subject, both
+	// tenant-scoped and system-level, across all tenants. Use this when a
+	// subject is deleted or deactivated so no orphaned role bindings remain.
+	RemoveSubject(ctx context.Context, subject string) error
 }
 
 // Module describes a registered API module: route metadata, auth exposure,
