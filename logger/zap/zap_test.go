@@ -2,6 +2,7 @@ package zap
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,6 +51,78 @@ func TestNewLogWriterLeavesStdStreamsUnbuffered(t *testing.T) {
 			withLogWriterConfig(t, t.TempDir(), tt.file)
 
 			writer := newLogWriter()
+			if buffered, ok := writer.(*zapcore.BufferedWriteSyncer); ok {
+				t.Cleanup(func() { _ = buffered.Stop() })
+				t.Fatalf("expected %q sink to stay unbuffered", tt.file)
+			}
+		})
+	}
+}
+
+func TestNewLogWriterConsoleOptionTeesFileSinkToStdout(t *testing.T) {
+	dir := t.TempDir()
+	withLogWriterConfig(t, dir, "console.log")
+
+	var writer zapcore.WriteSyncer
+	output := captureStdout(t, func() {
+		writer = newLogWriter(Option{Console: true})
+		_, err := writer.Write([]byte("teed to stdout"))
+		require.NoError(t, err)
+		// Syncing a pipe (stdout stand-in here) fails on some platforms since
+		// pipes don't support fsync; production code discards this error too
+		// (see Clean()), so the file-sink assertion below is what matters.
+		_ = writer.Sync()
+	})
+	t.Cleanup(func() {
+		if buffered, ok := writer.(*zapcore.BufferedWriteSyncer); ok {
+			_ = buffered.Stop()
+		}
+	})
+	require.Contains(t, output, "teed to stdout")
+
+	data, err := os.ReadFile(filepath.Join(dir, "console.log"))
+	require.NoError(t, err)
+	require.Contains(t, string(data), "teed to stdout")
+}
+
+func TestNewLogWriterWithoutConsoleOptionStaysFileOnly(t *testing.T) {
+	dir := t.TempDir()
+	withLogWriterConfig(t, dir, "file_only.log")
+
+	var writer zapcore.WriteSyncer
+	output := captureStdout(t, func() {
+		writer = newLogWriter()
+		_, err := writer.Write([]byte("file only"))
+		require.NoError(t, err)
+		require.NoError(t, writer.Sync())
+	})
+	t.Cleanup(func() {
+		if buffered, ok := writer.(*zapcore.BufferedWriteSyncer); ok {
+			_ = buffered.Stop()
+		}
+	})
+	require.Empty(t, output)
+
+	data, err := os.ReadFile(filepath.Join(dir, "file_only.log"))
+	require.NoError(t, err)
+	require.Contains(t, string(data), "file only")
+}
+
+func TestNewLogWriterConsoleOptionIgnoredForStdStreams(t *testing.T) {
+	tests := []struct {
+		name string
+		file string
+	}{
+		{name: "stdout", file: "/dev/stdout"},
+		{name: "stderr", file: "/dev/stderr"},
+		{name: "empty", file: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			withLogWriterConfig(t, t.TempDir(), tt.file)
+
+			writer := newLogWriter(Option{Console: true})
 			if buffered, ok := writer.(*zapcore.BufferedWriteSyncer); ok {
 				t.Cleanup(func() { _ = buffered.Stop() })
 				t.Fatalf("expected %q sink to stay unbuffered", tt.file)
@@ -137,6 +210,25 @@ func TestGormTraceUsesMetadata(t *testing.T) {
 	require.Equal(t, "trace-1", fields[consts.TRACE_ID])
 	require.Equal(t, "select 1", fields["sql"])
 	require.Equal(t, int64(1), fields["rows"])
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
+	oldStdout := os.Stdout
+	readPipe, writePipe, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = writePipe
+
+	fn()
+
+	require.NoError(t, writePipe.Close())
+	os.Stdout = oldStdout
+
+	output, err := io.ReadAll(readPipe)
+	require.NoError(t, err)
+	require.NoError(t, readPipe.Close())
+	return string(output)
 }
 
 func withLogWriterConfig(t *testing.T, dir, file string) {

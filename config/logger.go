@@ -4,6 +4,7 @@ const (
 	LOGGER_DIR                     = "LOGGER_DIR"                     //nolint:staticcheck
 	LOGGER_PREFIX                  = "LOGGER_PREFIX"                  //nolint:staticcheck
 	LOGGER_FILE                    = "LOGGER_FILE"                    //nolint:staticcheck
+	LOGGER_CONSOLE                 = "LOGGER_CONSOLE"                 //nolint:staticcheck
 	LOGGER_LEVEL                   = "LOGGER_LEVEL"                   //nolint:staticcheck
 	LOGGER_FORMAT                  = "LOGGER_FORMAT"                  //nolint:staticcheck
 	LOGGER_ENCODER                 = "LOGGER_ENCODER"                 //nolint:staticcheck
@@ -31,6 +32,15 @@ type Logger struct {
 	// If value is "/dev/stderr", log to os.Stderr.
 	// If value is empty(length is zero), log to os.Stdout.
 	File string `json:"file" ini:"file" yaml:"file" mapstructure:"file"`
+
+	// Console additionally mirrors the global logger's output to os.Stdout
+	// when File is set to a real file path. It has no effect when File is
+	// empty or one of "/dev/stdout"/"/dev/stderr", since those already log
+	// to console. Only the global logger built by Init() reads this field;
+	// subsystem loggers stay file-only unless the caller opts in explicitly
+	// via zap.Option.Console.
+	// Default: true
+	Console bool `json:"console" ini:"console" yaml:"console" mapstructure:"console"`
 
 	// Level specifies the log level,  supported values are: (error|warn|warning|info|debug).
 	// The value default to "info" and ignore case.
@@ -84,6 +94,7 @@ func (*Logger) setDefault() {
 	cv.SetDefault("logger.dir", "./logs")
 	cv.SetDefault("logger.prefix", "")
 	cv.SetDefault("logger.file", "")
+	cv.SetDefault("logger.console", true)
 	cv.SetDefault("logger.level", "info")
 	cv.SetDefault("logger.format", "json")
 	cv.SetDefault("logger.encoder", "json")

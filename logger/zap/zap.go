@@ -38,21 +38,24 @@ var (
 	bufferedLogWriters   []*zapcore.BufferedWriteSyncer
 )
 
-// Option configures encoder behavior for constructors.
+// Option configures encoder and writer behavior for constructors.
 // DisableMsg/DisableLevel hide "msg" and "level" fields; TSLayout sets time format.
+// Console additionally mirrors a file sink to os.Stdout; see newLogWriter.
 type Option struct {
 	DisableMsg    bool
 	DisableLevel  bool
 	DisableCaller bool
 	TSLayout      string
+	Console       bool
 }
 
 // Init initializes global loggers from config and wires subsystem loggers.
 // Returns error on configuration or initialization failure.
 func Init() error {
 	readConf()
+	opt := Option{Console: config.App.Logger.Console}
 	zap.ReplaceGlobals(zap.New(
-		zapcore.NewCore(newLogEncoder(), newLogWriter(), newLogLevel()),
+		zapcore.NewCore(newLogEncoder(opt), newLogWriter(opt), newLogLevel(opt)),
 		zap.AddCaller(),
 		zap.AddStacktrace(zapcore.FatalLevel),
 	))
@@ -261,8 +264,8 @@ func NewSugared(filename string, opts ...Option) *zap.SugaredLogger {
 }
 
 // newLogWriter selects log sink (stdout/stderr or rolling file).
-// opts: reserved for future expansion
-func newLogWriter(_ ...Option) zapcore.WriteSyncer {
+// opts: opts[0].Console additionally mirrors a file sink to os.Stdout.
+func newLogWriter(opts ...Option) zapcore.WriteSyncer {
 	switch strings.TrimSpace(logFile) {
 	case "/dev/stdout":
 		return zapcore.AddSync(os.Stdout)
@@ -284,6 +287,9 @@ func newLogWriter(_ ...Option) zapcore.WriteSyncer {
 			FlushInterval: defaultLogFlushInterval,
 		}
 		registerBufferedLogWriter(writer)
+		if len(opts) > 0 && opts[0].Console {
+			return zapcore.NewMultiWriteSyncer(zapcore.AddSync(os.Stdout), writer)
+		}
 		return writer
 	}
 }
