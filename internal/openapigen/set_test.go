@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/getkin/kin-openapi/openapi3gen"
 	"github.com/hydroan/gst/model"
 )
 
@@ -76,6 +77,36 @@ func TestSchemaFromTypeKeepsRegularStructsAsObjects(t *testing.T) {
 	}
 	if schemaRef.Value.Type == nil || !schemaRef.Value.Type.Is(openapi3.TypeObject) {
 		t.Fatalf("schema type = %v, want object", schemaRef.Value.Type)
+	}
+}
+
+type mapTitleModel struct {
+	// GroupRoles binds groups to their roles.
+	GroupRoles map[string][]string `json:"group_roles,omitempty"`
+}
+
+func TestAddSchemaTitleAppliesToMapAdditionalProperties(t *testing.T) {
+	schemaRef, err := openapi3gen.NewSchemaRefForValue(mapTitleModel{}, nil)
+	if err != nil {
+		t.Fatalf("NewSchemaRefForValue() error = %v", err)
+	}
+
+	addSchemaTitle[mapTitleModel](schemaRef)
+
+	groupRoles := schemaRef.Value.Properties["group_roles"]
+	if groupRoles == nil || groupRoles.Value == nil {
+		t.Fatal("group_roles property missing")
+	}
+	if groupRoles.Value.Title != "GroupRoles binds groups to their roles." {
+		t.Fatalf("group_roles title = %q, want field doc comment", groupRoles.Value.Title)
+	}
+
+	additionalProperties := groupRoles.Value.AdditionalProperties.Schema
+	if additionalProperties == nil || additionalProperties.Value == nil {
+		t.Fatal("group_roles additionalProperties schema missing")
+	}
+	if additionalProperties.Value.Title != groupRoles.Value.Title {
+		t.Fatalf("additionalProperties title = %q, want %q", additionalProperties.Value.Title, groupRoles.Value.Title)
 	}
 }
 

@@ -1853,7 +1853,9 @@ func addSchemaTitle[T any](schemaRef *openapi3.SchemaRef) {
 		if !exists || description == "" {
 			continue
 		}
-		if field, ok := fieldByJSON[propName]; ok {
+		var field reflect.StructField
+		var hasField bool
+		if field, hasField = fieldByJSON[propName]; hasField {
 			if updatedSchema := convertDatatypesJSONTypeSchema(propRef, field, description); updatedSchema != nil {
 				propRef = updatedSchema
 			}
@@ -1862,9 +1864,29 @@ func addSchemaTitle[T any](schemaRef *openapi3.SchemaRef) {
 		if propRef.Value != nil {
 			newSchema := *propRef.Value
 			newSchema.Title = description
+			if hasField {
+				addMapValueTitle(&newSchema, field, description)
+			}
 			schemaRef.Value.Properties[propName] = &openapi3.SchemaRef{Value: &newSchema}
 		}
 	}
+}
+
+// addMapValueTitle applies a map field's doc comment to its additionalProperties
+// schema. JSON Schema has no name for map values themselves, so without this the
+// value schema (eg. []string) renders in Swagger UI with no description at all.
+func addMapValueTitle(schema *openapi3.Schema, field reflect.StructField, description string) {
+	typ := field.Type
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	if typ.Kind() != reflect.Map {
+		return
+	}
+	if schema.AdditionalProperties.Schema == nil || schema.AdditionalProperties.Schema.Value == nil {
+		return
+	}
+	schema.AdditionalProperties.Schema.Value.Title = description
 }
 
 // convertDatatypesJSONTypeSchema unwraps gorm datatypes.JSONType[T] so the
