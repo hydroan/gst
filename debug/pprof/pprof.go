@@ -20,8 +20,15 @@ func Run() error {
 	if !config.App.PprofEnabled {
 		return nil
 	}
-	runtime.SetMutexProfileFraction(1)
-	runtime.SetBlockProfileRate(1)
+	// A fraction/rate of 1 records every single mutex contention and blocking
+	// event (with its stack trace), which keeps sampling continuously even
+	// when nobody is querying /debug/pprof/*. Under real production
+	// concurrency that adds a persistent CPU cost unrelated to actual pprof
+	// usage, so sample instead of recording exhaustively: report 1 in 100
+	// contended mutex events, and only stack-trace blocking events that last
+	// at least 100us.
+	runtime.SetMutexProfileFraction(100)
+	runtime.SetBlockProfileRate(100_000)
 
 	server = &http.Server{
 		Addr:              fmt.Sprintf("%s:%d", config.App.PprofListen, config.App.PprofPort),
