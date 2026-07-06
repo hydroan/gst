@@ -44,12 +44,14 @@ import (
 	"context"
 	"maps"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/google/uuid"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
 	"github.com/stoewer/go-strcase"
@@ -99,6 +101,13 @@ func Init() error {
 		return nil
 	}
 
+	// Route internal SDK errors (e.g. export failures) through the application
+	// logger instead of the default stderr handler so they surface in the same
+	// log pipeline as everything else.
+	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
+		logger.OTEL.Errorw("otel internal error", "err", err)
+	}))
+
 	// Create exporter
 	exporter, err := newExporter(cfg)
 	if err != nil {
@@ -108,10 +117,7 @@ func Init() error {
 	// Create resource
 	res, err := resource.New(
 		context.Background(),
-		resource.WithAttributes(
-			semconv.ServiceName(cfg.ServiceName),
-			semconv.ServiceVersion("1.0.0"),
-		),
+		resource.WithAttributes(resourceAttributes(cfg)...),
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed to create resource")
@@ -336,6 +342,49 @@ func normalizeConfig(cfg config.OTEL) (config.OTEL, error) {
 	}
 
 	return cfg, nil
+}
+
+// resourceAttributes builds the OpenTelemetry resource attributes describing
+// this process, so traces can be told apart by environment and by instance
+// when multiple replicas are running in production.
+func resourceAttributes(cfg config.OTEL) []attribute.KeyValue {
+	hostname, hostErr := os.Hostname()
+
+	attrs := []attribute.KeyValue{
+		semconv.ServiceName(cfg.ServiceName),
+		semconv.ServiceVersion(resolveServiceVersion()),
+		semconv.DeploymentEnvironment(string(config.App.Mode)),
+		semconv.ServiceInstanceID(resolveInstanceID(hostname, hostErr)),
+	}
+	if hostErr == nil && hostname != "" {
+		attrs = append(attrs, semconv.HostName(hostname))
+	}
+	return attrs
+}
+
+// resolveServiceVersion returns the service.version resource attribute value.
+// It prefers the resolved application version (populated from VCS build info,
+// see config.AppInfo.setBuildInfo), falling back to the git commit hash and
+// finally "unknown" when neither is available.
+func resolveServiceVersion() string {
+	if v := strings.TrimSpace(config.App.AppInfo.Version); v != "" {
+		return v
+	}
+	if commit := strings.TrimSpace(config.App.AppInfo.GitCommit); commit != "" {
+		return commit
+	}
+	return "unknown"
+}
+
+// resolveInstanceID returns the service.instance.id resource attribute value.
+// It prefers the process hostname, which already uniquely identifies a
+// container or pod in typical production deployments, falling back to a
+// generated UUID when the hostname is unavailable.
+func resolveInstanceID(hostname string, hostErr error) string {
+	if hostErr == nil && strings.TrimSpace(hostname) != "" {
+		return hostname
+	}
+	return uuid.NewString()
 }
 
 // newExporter creates an OTLP trace exporter based on startup configuration.

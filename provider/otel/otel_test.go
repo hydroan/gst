@@ -5,11 +5,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
@@ -67,6 +69,70 @@ func TestNormalizeConfigRejectsOversizedExportBatch(t *testing.T) {
 		BSPMaxExportBatchSize: 101,
 	})
 	require.Error(t, err)
+}
+
+func TestResolveServiceVersionPrefersAppVersion(t *testing.T) {
+	t.Cleanup(func() {
+		config.App.AppInfo.Version = ""
+		config.App.AppInfo.GitCommit = ""
+	})
+
+	config.App.AppInfo.Version = "v1.2.3"
+	config.App.AppInfo.GitCommit = "abc123"
+	require.Equal(t, "v1.2.3", resolveServiceVersion())
+}
+
+func TestResolveServiceVersionFallsBackToGitCommit(t *testing.T) {
+	t.Cleanup(func() {
+		config.App.AppInfo.Version = ""
+		config.App.AppInfo.GitCommit = ""
+	})
+
+	config.App.AppInfo.Version = ""
+	config.App.AppInfo.GitCommit = "abc123"
+	require.Equal(t, "abc123", resolveServiceVersion())
+}
+
+func TestResolveServiceVersionFallsBackToUnknown(t *testing.T) {
+	t.Cleanup(func() {
+		config.App.AppInfo.Version = ""
+		config.App.AppInfo.GitCommit = ""
+	})
+
+	config.App.AppInfo.Version = ""
+	config.App.AppInfo.GitCommit = ""
+	require.Equal(t, "unknown", resolveServiceVersion())
+}
+
+func TestResolveInstanceIDPrefersHostname(t *testing.T) {
+	require.Equal(t, "node-1", resolveInstanceID("node-1", nil))
+}
+
+func TestResolveInstanceIDFallsBackToGeneratedIDWhenHostnameUnavailable(t *testing.T) {
+	require.NotEmpty(t, resolveInstanceID("", errors.New("lookup failed")))
+	require.NotEmpty(t, resolveInstanceID("", nil))
+}
+
+func TestResourceAttributesIncludesServiceAndEnvironmentInfo(t *testing.T) {
+	t.Cleanup(func() {
+		config.App.AppInfo.Version = ""
+		config.App.Mode = ""
+	})
+
+	config.App.AppInfo.Version = "v1.2.3"
+	config.App.Mode = config.Prod
+
+	attrs := resourceAttributes(config.OTEL{ServiceName: "dice"})
+
+	values := make(map[attribute.Key]attribute.Value, len(attrs))
+	for _, kv := range attrs {
+		values[kv.Key] = kv.Value
+	}
+
+	require.Equal(t, "dice", values[semconv.ServiceNameKey].AsString())
+	require.Equal(t, "v1.2.3", values[semconv.ServiceVersionKey].AsString())
+	require.Equal(t, "prod", values[semconv.DeploymentEnvironmentKey].AsString())
+	require.NotEmpty(t, values[semconv.ServiceInstanceIDKey].AsString())
 }
 
 func TestIsSpanRecording(t *testing.T) {
