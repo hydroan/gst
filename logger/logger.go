@@ -9,6 +9,12 @@ import (
 )
 
 var (
+	// App is the general-purpose business logger for application code (model
+	// hooks, service methods, etc.) that wants WithContext-enriched logging
+	// without going through zap.S()/zap.L(). Unlike those globals, App never
+	// mirrors output to stdout.
+	App types.Logger
+
 	Runtime types.Logger
 	Cronjob types.Logger
 	Task    types.Logger

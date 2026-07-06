@@ -60,6 +60,8 @@ func Init() error {
 		zap.AddStacktrace(zapcore.FatalLevel),
 	))
 
+	logger.App = New("app.log")
+
 	logger.Runtime = New("runtime.log")
 	logger.Cronjob = New("cronjob.log")
 	logger.Task = New("task.log")
@@ -103,6 +105,8 @@ func Clean() {
 	// types.Logger
 	_ = zap.L().Sync()
 	logs := []types.Logger{
+		logger.App,
+
 		logger.Runtime,
 		logger.Cronjob,
 		logger.Task,
