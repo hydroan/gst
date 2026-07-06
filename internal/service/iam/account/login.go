@@ -97,7 +97,7 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	}
 
 	// Verify password
-	if err = VerifyPasswordCredential(credential, req.Password); err != nil {
+	if err = VerifyPasswordCredential(ctx, credential, req.Password); err != nil {
 		log.Warnz("invalid password", zap.String("username", req.Username))
 		return nil, errors.New("invalid username or password")
 	}

@@ -52,7 +52,7 @@ func authenticateIAMAccount(ctx *types.ServiceContext, user *modeliamuser.User, 
 	if err != nil {
 		return nil, servicemfa.ErrAccountAuthenticationFailed
 	}
-	if err := serviceiamaccount.VerifyPasswordCredential(credential, password); err != nil {
+	if err := serviceiamaccount.VerifyPasswordCredential(ctx, credential, password); err != nil {
 		return nil, servicemfa.ErrAccountAuthenticationFailed
 	}
 	return &servicemfa.AuthenticatedAccount{

@@ -45,7 +45,7 @@ func (c *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 	}
 
 	// Verify old password
-	if err = VerifyPasswordCredential(credential, req.OldPassword); err != nil {
+	if err = VerifyPasswordCredential(ctx, credential, req.OldPassword); err != nil {
 		log.Error("old password verification failed", "username", currentUser.Username)
 		return nil, errors.New("old password is incorrect")
 	}

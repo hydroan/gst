@@ -64,7 +64,7 @@ func (iamAccountGateway) VerifyPassword(ctx *types.ServiceContext, userID, passw
 	if err != nil {
 		return serviceemail.ErrAccountAuthenticationFailed
 	}
-	if err = serviceiamaccount.VerifyPasswordCredential(credential, password); err != nil {
+	if err = serviceiamaccount.VerifyPasswordCredential(ctx, credential, password); err != nil {
 		return serviceemail.ErrAccountAuthenticationFailed
 	}
 	return nil

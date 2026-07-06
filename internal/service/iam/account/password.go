@@ -7,6 +7,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
+	gstotel "github.com/hydroan/gst/provider/otel"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -75,11 +76,27 @@ func LoadPasswordCredential(ctx context.Context, userID string) (*modeliamaccoun
 }
 
 // VerifyPasswordCredential verifies a plaintext password against a credential hash.
-func VerifyPasswordCredential(credential *modeliamaccount.PasswordCredential, password string) error {
+// The bcrypt comparison is deliberately slow (tens of milliseconds) to resist
+// brute-force attacks, so it runs inside an iam.VerifyPassword span to keep that
+// cost visible in request traces. A password mismatch is an expected business
+// outcome and never marks the span as failed; only unexpected verification
+// errors are recorded as span errors.
+func VerifyPasswordCredential(ctx context.Context, credential *modeliamaccount.PasswordCredential, password string) error {
+	_, span := gstotel.StartSpan(ctx, gstotel.OperationSpanName("iam", "VerifyPassword"))
+	defer span.End()
+
 	if credential == nil {
-		return errors.New("password credential is required")
+		err := errors.New("password credential is required")
+		gstotel.RecordError(span, err)
+		return err
 	}
-	return bcrypt.CompareHashAndPassword([]byte(credential.PasswordHash), []byte(password))
+
+	err := bcrypt.CompareHashAndPassword([]byte(credential.PasswordHash), []byte(password))
+	gstotel.AddSpanTags(span, map[string]any{"iam.password.match": err == nil})
+	if err != nil && !errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+		gstotel.RecordError(span, err)
+	}
+	return err
 }
 
 // ApplyPasswordCredentialUpdate replaces the credential hash and password-change state.
