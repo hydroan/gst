@@ -18,7 +18,7 @@ func (User3) Design() {
 	// Default to true.
 	Enabled(true)
 
-	// Default Endpoint is the lower case of the model name.
+	// Default Endpoint is the pluralized snake_case form of the model name.
 	Endpoint("user")
 
 	// Custom create action request "Payload" and response "Result".
@@ -47,7 +47,7 @@ func (*User4) Design() {
 	// Default to true.
 	dsl.Enabled(true)
 
-	// Default Endpoint is the lower case of the model name.
+	// Default Endpoint is the pluralized snake_case form of the model name.
 	// dsl.Endpoint("user4")
 
 	// Custom create action request "Payload" and response "Result".

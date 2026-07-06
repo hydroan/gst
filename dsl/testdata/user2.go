@@ -17,7 +17,7 @@ func (User2) Design() {
 	dsl.Enabled(false)
 	dsl.Param("{user}")
 
-	// Default Endpoint is the lower case of the model name.
+	// Default Endpoint is the pluralized snake_case form of the model name.
 	// dsl.Endpoint("user")
 
 	// Custom create action request "Payload" and response "Result".

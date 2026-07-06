@@ -54,7 +54,7 @@ func TestIsModelBase(t *testing.T) {
 		{
 			name: "input7",
 			code: input7,
-			want: []bool{false, false},
+			want: []bool{false, false, false},
 		},
 	}
 	for _, tt := range tests {
@@ -142,7 +142,7 @@ func TestIsModelEmpty(t *testing.T) {
 		{
 			name: "input7",
 			code: input7,
-			want: []bool{true, false},
+			want: []bool{true, false, true},
 		},
 	}
 	for _, tt := range tests {
@@ -237,7 +237,7 @@ func Test_parse(t *testing.T) {
 			name:  "input7",
 			code:  input7,
 			want1: map[string]struct{}{},
-			want2: map[string]struct{}{"User8": {}},
+			want2: map[string]struct{}{"User8": {}, "ReceiveRobot": {}},
 		},
 	}
 	for _, tt := range tests {
@@ -366,7 +366,7 @@ func TestFindAllModelEmpty(t *testing.T) {
 		{
 			name: "input7",
 			code: input7,
-			want: []string{"User8"},
+			want: []string{"User8", "ReceiveRobot"},
 		},
 	}
 	for _, tt := range tests {
@@ -848,7 +848,7 @@ func TestParse(t *testing.T) {
 			want: map[string]*Design{
 				"User2": {
 					Enabled:    false,
-					Endpoint:   "user2",
+					Endpoint:   "user2s",
 					Param:      ":user",
 					Migrate:    false,
 					Create:     &Action{Enabled: true, Service: false, Public: false, Payload: "User2", Result: "*User3", Phase: consts.PHASE_CREATE},
@@ -890,7 +890,7 @@ func TestParse(t *testing.T) {
 				},
 				"User4": {
 					Enabled:    true,
-					Endpoint:   "user4",
+					Endpoint:   "user4s",
 					Migrate:    false,
 					Create:     &Action{Enabled: true, Service: false, Public: false, Payload: "User", Result: "*User", Phase: consts.PHASE_CREATE},
 					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User4", Result: "*User4"},
@@ -920,7 +920,7 @@ func TestParse(t *testing.T) {
 			want: map[string]*Design{
 				"User5": {
 					Enabled:    true,
-					Endpoint:   "user5",
+					Endpoint:   "user5s",
 					Migrate:    false,
 					Create:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
 					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User5", Result: "*User5"},
@@ -944,7 +944,7 @@ func TestParse(t *testing.T) {
 			want: map[string]*Design{
 				"User6": {
 					Enabled:    true,
-					Endpoint:   "user6",
+					Endpoint:   "user6s",
 					Migrate:    false,
 					IsEmpty:    true,
 					Create:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User6", Result: "*User6"},
@@ -969,7 +969,7 @@ func TestParse(t *testing.T) {
 			want: map[string]*Design{
 				"User8": {
 					Enabled:    true,
-					Endpoint:   "user8",
+					Endpoint:   "user8s",
 					Migrate:    false,
 					IsEmpty:    true,
 					Create:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
@@ -984,6 +984,24 @@ func TestParse(t *testing.T) {
 					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
 					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
 					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*User8", Result: "*User8"},
+				},
+				"ReceiveRobot": {
+					Enabled:    true,
+					Endpoint:   "receive_robots",
+					Migrate:    false,
+					IsEmpty:    true,
+					Create:     &Action{Enabled: false, Service: false, Public: false, Payload: "*ReceiveRobot", Result: "*ReceiveRobot"},
+					Delete:     &Action{Enabled: false, Service: false, Public: false, Payload: "*ReceiveRobot", Result: "*ReceiveRobot"},
+					Update:     &Action{Enabled: false, Service: false, Public: false, Payload: "*ReceiveRobot", Result: "*ReceiveRobot"},
+					Patch:      &Action{Enabled: false, Service: false, Public: false, Payload: "*ReceiveRobot", Result: "*ReceiveRobot"},
+					List:       &Action{Enabled: false, Service: false, Public: false, Payload: "*ReceiveRobot", Result: "*ReceiveRobot"},
+					Get:        &Action{Enabled: false, Service: false, Public: false, Payload: "*ReceiveRobot", Result: "*ReceiveRobot"},
+					CreateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*ReceiveRobot", Result: "*ReceiveRobot"},
+					DeleteMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*ReceiveRobot", Result: "*ReceiveRobot"},
+					UpdateMany: &Action{Enabled: false, Service: false, Public: false, Payload: "*ReceiveRobot", Result: "*ReceiveRobot"},
+					PatchMany:  &Action{Enabled: false, Service: false, Public: false, Payload: "*ReceiveRobot", Result: "*ReceiveRobot"},
+					Import:     &Action{Enabled: false, Service: false, Public: false, Payload: "*ReceiveRobot", Result: "*ReceiveRobot"},
+					Export:     &Action{Enabled: false, Service: false, Public: false, Payload: "*ReceiveRobot", Result: "*ReceiveRobot"},
 				},
 			},
 		},

@@ -89,7 +89,8 @@ import (
 func Enabled(bool) {}
 
 // Endpoint sets a custom endpoint path for the model's API routes.
-// If not specified, defaults to the lowercase version of the model name.
+// If not specified, defaults to the pluralized snake_case form of the model name,
+// e.g. "receive_robots" for a ReceiveRobot model.
 // Leading slashes are automatically removed and forward slashes are replaced with hyphens.
 // Example: Endpoint("users") for a User model, Endpoint("/iam/users") becomes "iam-users"
 func Endpoint(string) {}

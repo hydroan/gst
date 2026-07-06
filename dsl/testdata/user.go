@@ -16,7 +16,7 @@ func (User) Design() {
 	// Default to true.
 	// Enabled(true)
 
-	// Default Endpoint is the lower case of the model name.
+	// Default Endpoint is the pluralized snake_case form of the model name.
 	Endpoint("//iam/user2")
 
 	// Default to true,

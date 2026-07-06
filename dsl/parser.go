@@ -6,8 +6,12 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gertd/go-pluralize"
 	"github.com/hydroan/gst/types/consts"
+	"github.com/stoewer/go-strcase"
 )
+
+var pluralizeCli = pluralize.NewClient()
 
 // Parse analyzes a Go source file and extracts DSL design information from models.
 // It looks for structs that have a Design() method and parses the DSL calls within that method.
@@ -61,9 +65,11 @@ func Parse(file *ast.File, endpoint string) map[string]*Design {
 	// Missing actions are initialized here and remain disabled by default.
 	// Service defaults to false for both declared and missing actions.
 	for name, design := range m {
-		// Default endpoint is the lower case of the model name.
+		// Default endpoint is the pluralized snake_case form of the model name,
+		// matching the RESTful convention and the default table naming,
+		// e.g. "ReceiveRobot" becomes "receive_robots".
 		if len(design.Endpoint) == 0 {
-			design.Endpoint = strings.ToLower(name)
+			design.Endpoint = strcase.SnakeCase(pluralizeCli.Plural(name))
 		}
 
 		if design.Create == nil {
