@@ -1013,8 +1013,17 @@ func CheckModelPackageNaming() []string {
 
 		packageName := node.Name.Name
 
+		// Go convention discourages underscores in package names, so strip them
+		// from the directory name before comparing.
+		expectedName := strings.ReplaceAll(dirName, "_", "")
+
+		// Allow black-box test files to use the `<package>_test` external test package name.
+		if strings.HasSuffix(path, "_test.go") && packageName == expectedName+"_test" {
+			return nil
+		}
+
 		// Check if package name matches directory name
-		if packageName != dirName {
+		if packageName != expectedName {
 			relativePath, _ := filepath.Rel(modelDir, path)
 			violations = append(violations, fmt.Sprintf("%s: package name '%s' should match directory name '%s'", relativePath, packageName, dirName))
 		}
