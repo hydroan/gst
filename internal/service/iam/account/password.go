@@ -44,13 +44,13 @@ func validateNewAccountPassword(password string) error {
 }
 
 // NewPasswordCredential creates a password credential for the given IAM user.
-func NewPasswordCredential(userID, password string, mustChangePassword bool) (*modeliamaccount.PasswordCredential, error) {
+func NewPasswordCredential(ctx context.Context, userID, password string, mustChangePassword bool) (*modeliamaccount.PasswordCredential, error) {
 	if userID == "" {
 		return nil, errors.New("user_id is required")
 	}
 
 	credential := &modeliamaccount.PasswordCredential{UserID: userID}
-	if err := ApplyPasswordCredentialUpdate(credential, password, mustChangePassword); err != nil {
+	if err := ApplyPasswordCredentialUpdate(ctx, credential, password, mustChangePassword); err != nil {
 		return nil, err
 	}
 	return credential, nil
@@ -100,12 +100,12 @@ func VerifyPasswordCredential(ctx context.Context, credential *modeliamaccount.P
 }
 
 // ApplyPasswordCredentialUpdate replaces the credential hash and password-change state.
-func ApplyPasswordCredentialUpdate(credential *modeliamaccount.PasswordCredential, newPassword string, mustChangePassword bool) error {
+func ApplyPasswordCredentialUpdate(ctx context.Context, credential *modeliamaccount.PasswordCredential, newPassword string, mustChangePassword bool) error {
 	if credential == nil {
 		return errors.New("password credential is required")
 	}
 
-	passwordHash, err := hashAccountPassword(newPassword)
+	passwordHash, err := hashAccountPassword(ctx, newPassword)
 	if err != nil {
 		return err
 	}
@@ -116,13 +116,23 @@ func ApplyPasswordCredentialUpdate(credential *modeliamaccount.PasswordCredentia
 	return nil
 }
 
-func hashAccountPassword(password string) (string, error) {
+// hashAccountPassword hashes a plaintext password with bcrypt. Like the bcrypt
+// comparison in VerifyPasswordCredential, hashing is deliberately slow (tens of
+// milliseconds) to resist brute-force attacks, so it runs inside an
+// iam.HashPassword span to keep that cost visible in request traces.
+func hashAccountPassword(ctx context.Context, password string) (string, error) {
 	if err := validateNewAccountPassword(password); err != nil {
 		return "", err
 	}
+
+	_, span := gstotel.StartSpan(ctx, gstotel.OperationSpanName("iam", "HashPassword"))
+	defer span.End()
+
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return "", errors.Wrap(err, "hash password")
+		err = errors.Wrap(err, "hash password")
+		gstotel.RecordError(span, err)
+		return "", err
 	}
 	return string(hashedPassword), nil
 }

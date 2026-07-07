@@ -47,7 +47,7 @@ func TestIAMAccountSnapshotMarksInactiveAccountsInactive(t *testing.T) {
 func TestApplyIAMPasswordUpdateHashesPasswordAndClearsChangeFlag(t *testing.T) {
 	credential := &modeliamaccount.PasswordCredential{MustChangePassword: true}
 
-	err := applyIAMPasswordUpdate(credential, "new-password-123")
+	err := applyIAMPasswordUpdate(t.Context(), credential, "new-password-123")
 
 	require.NoError(t, err)
 	require.False(t, credential.MustChangePassword)

@@ -44,7 +44,7 @@ func (r *ResetPasswordService) Create(ctx *types.ServiceContext, req *modeliamac
 		}
 		credential = &modeliamaccount.PasswordCredential{UserID: target.ID}
 	}
-	if err = ApplyPasswordCredentialUpdate(credential, req.NewPassword, true); err != nil {
+	if err = ApplyPasswordCredentialUpdate(ctx, credential, req.NewPassword, true); err != nil {
 		log.Error("failed to hash new password", err)
 		return nil, errors.Wrap(err, "failed to process new password")
 	}

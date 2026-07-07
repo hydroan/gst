@@ -50,7 +50,7 @@ func (c *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 		return nil, errors.New("old password is incorrect")
 	}
 
-	if err = ApplyPasswordCredentialUpdate(credential, req.NewPassword, false); err != nil {
+	if err = ApplyPasswordCredentialUpdate(ctx, credential, req.NewPassword, false); err != nil {
 		log.Error("failed to hash new password", err)
 		return nil, errors.New("failed to process new password")
 	}

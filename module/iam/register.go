@@ -1,6 +1,7 @@
 package iam
 
 import (
+	"context"
 	"time"
 
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
@@ -149,7 +150,7 @@ func buildDefaultUserRecords(configs []*DefaultUser) ([]*modeliamuser.User, []*m
 			Status:   status,
 		}
 		user.ID = userID
-		credential, err := serviceiamaccount.NewPasswordCredential(userID, cfg.Password, cfg.MustChangePassword)
+		credential, err := serviceiamaccount.NewPasswordCredential(context.Background(), userID, cfg.Password, cfg.MustChangePassword)
 		if err != nil {
 			panic(err)
 		}

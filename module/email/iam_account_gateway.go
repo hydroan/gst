@@ -78,7 +78,7 @@ func (iamAccountGateway) UpdatePassword(ctx *types.ServiceContext, userID, newPa
 	if err != nil {
 		return err
 	}
-	if err := applyIAMPasswordUpdate(credential, newPassword); err != nil {
+	if err := applyIAMPasswordUpdate(ctx, credential, newPassword); err != nil {
 		return err
 	}
 	return database.Database[*modeliamaccount.PasswordCredential](ctx).
@@ -166,11 +166,11 @@ func iamUserActive(user *modeliamuser.User) bool {
 	return user != nil && (user.Status == "" || user.Status == modeliamuser.UserStatusActive)
 }
 
-func applyIAMPasswordUpdate(credential *modeliamaccount.PasswordCredential, newPassword string) error {
+func applyIAMPasswordUpdate(ctx context.Context, credential *modeliamaccount.PasswordCredential, newPassword string) error {
 	if credential == nil {
 		return errors.New("password update account is required")
 	}
-	return serviceiamaccount.ApplyPasswordCredentialUpdate(credential, newPassword, false)
+	return serviceiamaccount.ApplyPasswordCredentialUpdate(ctx, credential, newPassword, false)
 }
 
 func applyIAMEmailChange(identity *modeliamaccount.EmailIdentity, newEmail string, changedAt time.Time) error {

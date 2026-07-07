@@ -52,7 +52,7 @@ func (s *SignupService) Create(ctx *types.ServiceContext, req *modeliamaccount.S
 			return createErr
 		}
 
-		passwordCredential, createErr := NewPasswordCredential(newUser.ID, req.Password, false)
+		passwordCredential, createErr := NewPasswordCredential(ctx, newUser.ID, req.Password, false)
 		if createErr != nil {
 			return createErr
 		}
