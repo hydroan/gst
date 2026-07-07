@@ -35,7 +35,8 @@ var checkCmd = &cobra.Command{
 8. Explicit DSL Payload types should end with Req and Result types should end with Rsp
 9. Model files should contain at most one model struct
 10. Service files should contain at most one service struct
-11. Only allowed directories are enforced for gst framework projects`,
+11. Only allowed directories are enforced for gst framework projects
+12. Model Design() DSL must pass the same validation rules that gate gg gen`,
 	Run: func(cmd *cobra.Command, args []string) {
 		checkRun()
 	},
@@ -84,6 +85,7 @@ func collectProjectChecks() []projectCheckResult {
 		{Name: "Service file boundaries", Violations: CheckServiceFileBoundary()},
 		{Name: "Model package naming", Violations: CheckModelPackageNaming()},
 		{Name: "Directory restrictions", Violations: CheckAllowedDirectories()},
+		{Name: "DSL design rules", Violations: CheckDSLDesign()},
 	}
 	return results
 }
@@ -1166,4 +1168,51 @@ func usesGstFramework(projectDir string) bool {
 
 	// Check if github.com/hydroan/gst is in dependencies
 	return strings.Contains(string(content), "github.com/hydroan/gst")
+}
+
+// CheckDSLDesign runs DSL Design() validation on every model file, so keyword
+// placement and generation-semantic violations fail gg check with the same
+// rules that block gg gen.
+func CheckDSLDesign() []string {
+	var violations []string
+
+	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
+		return violations
+	}
+
+	err := filepath.Walk(modelDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		base := filepath.Base(path)
+		if info.IsDir() {
+			if path != modelDir && (base == "vendor" || base == "testdata") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(base, ".go") ||
+			strings.HasSuffix(base, "_test.go") ||
+			strings.HasPrefix(base, "_") ||
+			slices.Contains(excludes, base) {
+			return nil
+		}
+
+		fset := token.NewFileSet()
+		file, parseErr := parser.ParseFile(fset, path, nil, parser.ParseComments)
+		if parseErr != nil {
+			violations = append(violations, fmt.Sprintf("%s: %v", path, parseErr))
+			return nil
+		}
+		for _, validateErr := range dsl.Validate(file, modelDir, path) {
+			violations = append(violations, validateErr.Error())
+		}
+		return nil
+	})
+	if err != nil {
+		violations = append(violations, err.Error())
+	}
+
+	return violations
 }

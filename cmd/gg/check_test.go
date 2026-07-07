@@ -109,6 +109,70 @@ func TestCheckModelPackageNamingAllowsUnderscoreStrippedAndExternalTestPackages(
 	}
 }
 
+func TestCheckDSLDesignRejectsExactOnBuiltinIDActions(t *testing.T) {
+	oldModelDir := modelDir
+	t.Cleanup(func() {
+		modelDir = oldModelDir
+	})
+
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	modelDir = "model"
+
+	writeCheckFile(t, filepath.Join(projectDir, "model", "iam", "session.go"), `package iam
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Session struct {
+	model.Base
+}
+
+func (Session) Design() {
+	Delete(func() {
+		Service()
+		Exact()
+	})
+}
+`)
+	writeCheckFile(t, filepath.Join(projectDir, "model", "iam", "current.go"), `package iam
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Current struct {
+	model.Base
+}
+
+func (Current) Design() {
+	Route("iam/sessions/current", func() {
+		Get(func() {
+			Service()
+			Exact()
+			Payload[*CurrentGetReq]()
+			Result[*CurrentGetRsp]()
+		})
+	})
+}
+`)
+
+	violations := CheckDSLDesign()
+
+	if len(violations) != 1 {
+		t.Fatalf("expected exactly one violation, got %#v", violations)
+	}
+	if !strings.Contains(violations[0], "uses dsl.Exact() but relies on the built-in controller") {
+		t.Fatalf("unexpected violation message: %q", violations[0])
+	}
+	if !strings.Contains(violations[0], filepath.Join("model", "iam", "session.go")) {
+		t.Fatalf("violation should point to the offending file, got %q", violations[0])
+	}
+}
+
 func writeCheckFile(t *testing.T, path string, content string) {
 	t.Helper()
 
