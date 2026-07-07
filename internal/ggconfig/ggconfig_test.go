@@ -134,19 +134,25 @@ func TestLoad(t *testing.T) {
 gen:
   routes:
     ignore:
-      - POST /api/signup
-      - GET /api/iam/admin/users
-      - GET /api/iam/admin/users/:id
+      /api/signup: [POST]
+      /api/iam/admin/users: [GET]
+      /api/iam/admin/users/:id:
+        - GET
+        - DELETE
 `)
 		cfg, err := Load(dir)
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
-		if got := len(cfg.Gen.Routes.Ignore); got != 3 {
-			t.Fatalf("len(Ignore) = %d, want 3", got)
+		if got := len(cfg.Gen.Routes.Ignore); got != 4 {
+			t.Fatalf("len(Ignore) = %d, want 4", got)
 		}
 		if cfg.Gen.Routes.Ignore[0].Method != http.MethodPost {
 			t.Errorf("Ignore[0].Method = %q, want POST", cfg.Gen.Routes.Ignore[0].Method)
+		}
+		last := cfg.Gen.Routes.Ignore[3]
+		if last.Method != http.MethodDelete || last.Raw != "DELETE /api/iam/admin/users/:id" {
+			t.Errorf("Ignore[3] = %+v, want DELETE /api/iam/admin/users/:id", last)
 		}
 	})
 
@@ -155,7 +161,7 @@ gen:
 gen:
   routes:
     ignroe:
-      - POST /api/signup
+      /api/signup: [POST]
 `)
 		if _, err := Load(dir); err == nil {
 			t.Fatal("Load() expected error for unknown field, got nil")
@@ -170,31 +176,68 @@ gen:
 	})
 
 	t.Run("missing version is rejected", func(t *testing.T) {
-		dir := writeConfig(t, "gen:\n  routes:\n    ignore: []\n")
+		dir := writeConfig(t, "gen:\n  routes:\n    ignore: {}\n")
 		if _, err := Load(dir); err == nil {
 			t.Fatal("Load() expected error for missing version, got nil")
 		}
 	})
 
-	t.Run("invalid rule is rejected", func(t *testing.T) {
-		dir := writeConfig(t, `version: 1
-gen:
-  routes:
-    ignore:
-      - TRACE /api/signup
-`)
-		if _, err := Load(dir); err == nil {
-			t.Fatal("Load() expected error for invalid rule, got nil")
-		}
-	})
-
-	t.Run("duplicate rules are rejected", func(t *testing.T) {
+	t.Run("legacy string entries are rejected", func(t *testing.T) {
 		dir := writeConfig(t, `version: 1
 gen:
   routes:
     ignore:
       - POST /api/signup
-      - POST /signup/
+`)
+		if _, err := Load(dir); err == nil {
+			t.Fatal("Load() expected error for non-mapping ignore, got nil")
+		}
+	})
+
+	t.Run("invalid method is rejected", func(t *testing.T) {
+		dir := writeConfig(t, `version: 1
+gen:
+  routes:
+    ignore:
+      /api/signup: [TRACE]
+`)
+		if _, err := Load(dir); err == nil {
+			t.Fatal("Load() expected error for invalid method, got nil")
+		}
+	})
+
+	t.Run("route without methods is rejected", func(t *testing.T) {
+		dir := writeConfig(t, `version: 1
+gen:
+  routes:
+    ignore:
+      /api/signup: []
+`)
+		if _, err := Load(dir); err == nil {
+			t.Fatal("Load() expected error for empty method list, got nil")
+		}
+	})
+
+	t.Run("duplicate path keys are rejected", func(t *testing.T) {
+		dir := writeConfig(t, `version: 1
+gen:
+  routes:
+    ignore:
+      /api/signup: [POST]
+      /api/signup: [DELETE]
+`)
+		if _, err := Load(dir); err == nil {
+			t.Fatal("Load() expected error for duplicate path keys, got nil")
+		}
+	})
+
+	t.Run("duplicate rules under formatting variants are rejected", func(t *testing.T) {
+		dir := writeConfig(t, `version: 1
+gen:
+  routes:
+    ignore:
+      /api/signup: [POST]
+      /signup/: [POST]
 `)
 		if _, err := Load(dir); err == nil {
 			t.Fatal("Load() expected error for duplicate rules, got nil")
@@ -206,11 +249,23 @@ gen:
 gen:
   routes:
     ignore:
-      - GET /api/users/:id
-      - GET /api/users/:userId
+      /api/users/:id: [GET]
+      /api/users/:userId: [GET]
 `)
 		if _, err := Load(dir); err == nil {
 			t.Fatal("Load() expected error for param-name duplicate rules, got nil")
+		}
+	})
+
+	t.Run("duplicate methods on one path are rejected", func(t *testing.T) {
+		dir := writeConfig(t, `version: 1
+gen:
+  routes:
+    ignore:
+      /api/signup: [POST, post]
+`)
+		if _, err := Load(dir); err == nil {
+			t.Fatal("Load() expected error for duplicate methods, got nil")
 		}
 	})
 }

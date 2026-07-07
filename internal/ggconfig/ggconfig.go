@@ -39,14 +39,17 @@ type GenConfig struct {
 
 // GenRoutesConfig configures route generation behavior.
 type GenRoutesConfig struct {
-	// Ignore lists routes excluded from code generation, each entry in the
-	// form "METHOD /api/path". A matched action is treated as if it were
-	// not declared in the model Design: no router registration, no service
-	// registration, and no service file generation.
-	Ignore []RouteRule `yaml:"ignore"`
+	// Ignore maps route paths to the HTTP methods excluded from code
+	// generation. A matched action drops out of the generated registration
+	// files while its service file stays on disk.
+	Ignore RouteIgnoreRules `yaml:"ignore"`
 }
 
-// RouteRule is a single parsed "METHOD /api/path" ignore entry.
+// RouteIgnoreRules is the parsed gen.routes.ignore mapping, flattened into
+// one RouteRule per (method, path) pair.
+type RouteIgnoreRules []RouteRule
+
+// RouteRule is a single parsed (method, path) ignore entry.
 type RouteRule struct {
 	// Method is the upper-cased HTTP method.
 	Method string
@@ -68,17 +71,53 @@ var allowedRuleMethods = map[string]struct{}{
 	"DELETE": {},
 }
 
-// UnmarshalYAML parses a "METHOD /api/path" scalar entry into a RouteRule.
-func (r *RouteRule) UnmarshalYAML(value *yaml.Node) error {
-	var raw string
-	if err := value.Decode(&raw); err != nil {
-		return errors.Wrap(err, "route rule must be a string")
+// UnmarshalYAML parses the path-to-methods mapping form of gen.routes.ignore:
+//
+//	ignore:
+//	  /api/signup: [POST]
+//	  /api/iam/admin/users/:id: [GET, DELETE]
+//
+// The path is written once and every listed method becomes one RouteRule.
+// Path keys are deduplicated with parameter names collapsed, so the same
+// route split across several keys is rejected instead of silently merged.
+func (r *RouteIgnoreRules) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind != yaml.MappingNode {
+		return errors.New("gen.routes.ignore must be a mapping of route path to HTTP method list")
 	}
-	rule, err := ParseRouteRule(raw)
-	if err != nil {
-		return err
+
+	rules := make([]RouteRule, 0, len(value.Content)/2)
+	seenPaths := make(map[string]struct{}, len(value.Content)/2)
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		var path string
+		if err := value.Content[i].Decode(&path); err != nil {
+			return errors.Wrap(err, "route path must be a string")
+		}
+		var methods []string
+		if err := value.Content[i+1].Decode(&methods); err != nil {
+			return errors.Wrapf(err, "methods of route %q must be a list of strings", path)
+		}
+		if len(methods) == 0 {
+			return errors.Newf("route %q lists no methods", path)
+		}
+
+		pathRules := make([]RouteRule, 0, len(methods))
+		for _, method := range methods {
+			rule, err := ParseRouteRule(method + " " + path)
+			if err != nil {
+				return err
+			}
+			pathRules = append(pathRules, rule)
+		}
+
+		pathKey := collapsedPathKey(pathRules[0].Segments)
+		if _, ok := seenPaths[pathKey]; ok {
+			return errors.Newf("duplicate route path %q: merge its methods into one entry", path)
+		}
+		seenPaths[pathKey] = struct{}{}
+		rules = append(rules, pathRules...)
 	}
-	*r = rule
+
+	*r = rules
 	return nil
 }
 
@@ -206,19 +245,25 @@ func validateIgnoreRules(rules []RouteRule) error {
 	return nil
 }
 
-// dedupKey returns the rule identity used for duplicate detection. Parameter
-// segments are collapsed to ":" because Match treats parameter names as
-// interchangeable, so rules differing only in parameter names target the
-// same routes. Segments are always non-empty here: ParseRouteRule rejects
-// empty segments before a RouteRule is constructed.
+// dedupKey returns the rule identity used for duplicate detection: the HTTP
+// method plus the parameter-name-collapsed path.
 func (r RouteRule) dedupKey() string {
-	segments := make([]string, len(r.Segments))
-	for i, segment := range r.Segments {
+	return r.Method + " " + collapsedPathKey(r.Segments)
+}
+
+// collapsedPathKey returns the path identity with parameter segments
+// collapsed to ":", matching the parameter-name-insensitive Match semantics:
+// paths differing only in parameter names target the same routes. Segments
+// are always non-empty here: ParseRouteRule rejects empty segments before a
+// RouteRule is constructed.
+func collapsedPathKey(ruleSegments []string) string {
+	segments := make([]string, len(ruleSegments))
+	for i, segment := range ruleSegments {
 		if strings.HasPrefix(segment, ":") {
 			segments[i] = ":"
 		} else {
 			segments[i] = segment
 		}
 	}
-	return r.Method + " /" + strings.Join(segments, "/")
+	return "/" + strings.Join(segments, "/")
 }
