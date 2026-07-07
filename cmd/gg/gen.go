@@ -18,6 +18,7 @@ import (
 	"github.com/hydroan/gst/internal/codegen"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	pkgnew "github.com/hydroan/gst/internal/codegen/new"
+	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
@@ -107,6 +108,22 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 	buildHierarchicalEndpoints(allModels)
 	propagateParentParams(allModels)
+
+	// Apply project-level route ignores from gst.yaml before any
+	// registration statements are collected, so a matched action behaves
+	// exactly like an action that was never declared.
+	projectCfg, err := ggconfig.Load(".")
+	if err != nil {
+		return err
+	}
+	ignoreResult := applyRouteIgnores(allModels, projectCfg.Gen.Routes.Ignore)
+	if !opts.Quiet && len(ignoreResult.Matches) > 0 {
+		clioutput.Section("Ignore Routes")
+		for _, match := range ignoreResult.Matches {
+			clioutput.Item("IGNORE", "%s %s (%s)", match.Method, match.Path, match.Model)
+		}
+	}
+	reportUnmatchedRouteIgnores(ignoreResult)
 
 	// Record old service files list (if prune option is enabled)
 	var oldServiceFiles []string

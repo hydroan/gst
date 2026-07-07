@@ -347,6 +347,34 @@ func init() {
 REQ/RSP 命名和业务项目根目录结构；根目录结构检查会跳过 Git ignore 规则忽略的
 目录。`gg gen` 生成前也会执行这些检查；检查失败会停止生成。
 
+### 项目级配置 gst.yaml
+
+在业务项目根目录（与 `go.mod` 同级）可放置可选的 `gst.yaml`，这是 `gg` 工具的
+构建期工程配置，与运行时 `config.ini` 无关。
+
+当前支持在 `gg gen`（含 `gg module copy` 后的重新生成）与 `gg prune` 中忽略
+指定路由，被忽略的路由等价于对应 action 未在 `Design` 中声明——不注册路由、
+不注册 service、不生成 service 文件。适合屏蔽 `module copy` 带来的不需要的
+接口，或把被框架模块占用的路径让给业务自己的实现：
+
+```yaml
+version: 1
+
+gen:
+  routes:
+    ignore:
+      - POST /api/signup
+      - GET /api/iam/admin/users
+      - GET /api/iam/admin/users/:id
+```
+
+- 条目格式为 `METHOD /api/path`；`/api` 前缀可省略，因此可直接粘贴
+  `gg routes` 输出的方法和路径（其路径不带 `/api` 前缀）。参数段（`:id`）
+  按位置匹配，不比较参数名。
+- 未匹配到任何路由的条目会在生成时输出 warning，提示配置可能已过期。
+- 已生成的 service 文件可通过 `gg gen --prune` 或 `gg prune` 清理；
+  `gg module copy` 仍会拷贝模块的 service 文件，属预期行为，重新 prune 即可。
+
 ## 示例
 
 当前仓库的 `examples/demo` 是推荐阅读的完整业务项目示例：
