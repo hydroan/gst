@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/types/consts"
 )
 
 func TestApplyServiceMethod4PointerConversion(t *testing.T) {
@@ -33,6 +34,7 @@ func (u *Creator) Create(ctx *types.ServiceContext, req *model.User) (rsp *model
 				Enabled: true,
 				Payload: "UserReq",
 				Result:  "UserRsp",
+				Phase:   consts.PHASE_CREATE,
 			},
 			want: "req model.UserReq",
 		},
@@ -52,6 +54,7 @@ func (u *Creator) Create(ctx *types.ServiceContext, req model.User) (rsp model.U
 				Enabled: true,
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
+				Phase:   consts.PHASE_CREATE,
 			},
 			want: "req *model.UserReq",
 		},
@@ -71,6 +74,7 @@ func (u *Creator) Create(ctx *types.ServiceContext, req *model.User) (rsp *model
 				Enabled: true,
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
+				Phase:   consts.PHASE_CREATE,
 			},
 			want: "req *model.UserReq",
 		},
@@ -90,6 +94,7 @@ func (u *Creator) Create(ctx *types.ServiceContext, req model.User) (rsp model.U
 				Enabled: true,
 				Payload: "UserReq",
 				Result:  "UserRsp",
+				Phase:   consts.PHASE_CREATE,
 			},
 			want: "req model.UserReq",
 		},

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/types/consts"
 	"github.com/kr/pretty"
 )
 
@@ -24,6 +25,7 @@ func TestApplyServiceFile(t *testing.T) {
 				Enabled: true,
 				Payload: "UserReq",
 				Result:  "UserRsp",
+				Phase:   consts.PHASE_CREATE,
 			},
 			servicePkgName: "service",
 			want: `package service
@@ -65,6 +67,7 @@ func (u *user) CreateAfter(ctx *types.ServiceContext, user *model.User) error {
 				Enabled: true,
 				Payload: "User",
 				Result:  "User",
+				Phase:   consts.PHASE_CREATE,
 			},
 			servicePkgName: "service",
 			want: `package service
@@ -122,6 +125,7 @@ func (u *user) Create(ctx *types.ServiceContext, req *model.User) (rsp *model.Us
 				Enabled: true,
 				Payload: "*User",
 				Result:  "*User",
+				Phase:   consts.PHASE_CREATE,
 			},
 			servicePkgName: "callback",
 			want: `package callback
@@ -180,6 +184,7 @@ func (c *Creator) CreateAfter(ctx *types.ServiceContext, attachment *shared.Atta
 				Payload:  "*Attachment",
 				Result:   "*Attachment",
 				Filename: "upload",
+				Phase:    consts.PHASE_CREATE,
 			},
 			servicePkgName: "attachment",
 			want: `package attachment
@@ -240,6 +245,7 @@ func (c *Creator) Create(ctx *types.ServiceContext, req *shared.Attachment) (rsp
 				Payload:  "*AttachmentReq",
 				Result:   "*AttachmentRsp",
 				Filename: "upload",
+				Phase:    consts.PHASE_CREATE,
 			},
 			servicePkgName: "attachment",
 			want: `package attachment
@@ -287,6 +293,7 @@ func (c *Creator) Create(ctx *types.ServiceContext, req *shared.Attachment) (rsp
 				Enabled: true,
 				Payload: "*Attachment",
 				Result:  "*Attachment",
+				Phase:   consts.PHASE_CREATE,
 			},
 			servicePkgName: "attachment",
 			want: `package attachment
@@ -335,6 +342,7 @@ func (u *Upload) Create(ctx *types.ServiceContext, req *shared.Attachment) (rsp 
 				Payload:  "*Attachment",
 				Result:   "*Attachment",
 				Filename: "upload",
+				Phase:    consts.PHASE_CREATE,
 			},
 			servicePkgName: "attachment",
 			want: `package attachment
@@ -395,6 +403,7 @@ func (a *Upload) CreateAfter(ctx *types.ServiceContext, attachment *shared.Attac
 				Payload:  "*AttachmentReq",
 				Result:   "*AttachmentRsp",
 				Filename: "upload",
+				Phase:    consts.PHASE_CREATE,
 			},
 			servicePkgName: "attachment",
 			want: `package attachment
@@ -452,6 +461,7 @@ func (c *configSetting) Create(ctx *types.ServiceContext, req *model.ConfigSetti
 				Enabled: true,
 				Payload: "*ConfigSetting",
 				Result:  "*ConfigSetting",
+				Phase:   consts.PHASE_CREATE,
 			},
 			servicePkgName: "configsetting",
 			want: `package configsetting
@@ -469,6 +479,64 @@ type configSetting struct {
 
 func (c *configSetting) Create(ctx *types.ServiceContext, req *model.ConfigSetting) (rsp *model.ConfigSetting, err error) {
 	return rsp, nil
+}
+`,
+		},
+		{
+			// Regression test for an incident where isServiceMethod4 matched a hand-written
+			// helper by shape alone: Patcher.validate has the same
+			// (ctx *types.ServiceContext, req *pkg.Req) (*pkg.X, error) shape as the real
+			// Patch action method, so it was mistaken for the action method and rewritten
+			// in place, corrupting its return type and breaking the build. applyServiceMethod4
+			// must only rewrite the function whose name matches action.Phase.MethodName().
+			name: "does_not_rewrite_non_action_function_with_same_shape",
+			code: `package receiverobot
+
+import (
+	"helloworld/model/group"
+
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+)
+
+type Patcher struct {
+	service.Base[*group.ReceiveRobot, *group.ReceiveRobotPatchReq, *group.ReceiveRobotPatchRsp]
+}
+
+func (r *Patcher) Patch(ctx *types.ServiceContext, req *group.ReceiveRobotPatchReq) (rsp *group.ReceiveRobotPatchRsp, err error) {
+	return rsp, nil
+}
+
+func (r *Patcher) validate(ctx *types.ServiceContext, req *group.ReceiveRobotPatchReq) (*group.ReceiveRobot, error) {
+	return nil, nil
+}
+`,
+			action: &dsl.Action{
+				Enabled: true,
+				Payload: "*ReceiveRobotPatchReq",
+				Result:  "*ReceiveRobotPatchRsp",
+				Phase:   consts.PHASE_PATCH,
+			},
+			servicePkgName: "receiverobot",
+			want: `package receiverobot
+
+import (
+	"helloworld/model/group"
+
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+)
+
+type Patcher struct {
+	service.Base[*group.ReceiveRobot, *group.ReceiveRobotPatchReq, *group.ReceiveRobotPatchRsp]
+}
+
+func (r *Patcher) Patch(ctx *types.ServiceContext, req *group.ReceiveRobotPatchReq) (rsp *group.ReceiveRobotPatchRsp, err error) {
+	return rsp, nil
+}
+
+func (r *Patcher) validate(ctx *types.ServiceContext, req *group.ReceiveRobotPatchReq) (*group.ReceiveRobot, error) {
+	return nil, nil
 }
 `,
 		},
@@ -527,6 +595,7 @@ func (u *Creator) Create(ctx *types.ServiceContext, req *identity.UserReq) (rsp 
 				Enabled: true,
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
+				Phase:   consts.PHASE_CREATE,
 			},
 			servicePkgName: "user",
 			modelInfo: &ModelInfo{
@@ -577,6 +646,7 @@ func (u *Creator) Create(ctx *types.ServiceContext, req *auth.UserReq) (rsp *aut
 				Enabled: true,
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
+				Phase:   consts.PHASE_CREATE,
 			},
 			servicePkgName: "user",
 			modelInfo: &ModelInfo{
@@ -626,6 +696,7 @@ func (u *Creator) Create(ctx *types.ServiceContext, req *oldpkg.UserReq) (rsp *o
 				Enabled: true,
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
+				Phase:   consts.PHASE_CREATE,
 			},
 			servicePkgName: "user",
 			modelInfo: &ModelInfo{
@@ -677,6 +748,7 @@ func (d *Lister) List(ctx *types.ServiceContext, req *auth.Debug) (rsp *auth.Deb
 				Enabled: true,
 				Payload: "*Debug",
 				Result:  "*Debug",
+				Phase:   consts.PHASE_LIST,
 			},
 			servicePkgName: "debug",
 			modelInfo: &ModelInfo{
@@ -728,6 +800,7 @@ func (p *Ping) Get(ctx *types.ServiceContext, req *debug.Debug) (rsp *debug.Ping
 				Enabled: true,
 				Payload: "*Debug",
 				Result:  "*PingRsp",
+				Phase:   consts.PHASE_GET,
 			},
 			servicePkgName: "debug",
 			modelInfo: &ModelInfo{

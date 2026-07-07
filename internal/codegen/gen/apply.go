@@ -224,12 +224,26 @@ func applyServiceMethod3(fn *ast.FuncDecl, action *dsl.Action) bool { return fal
 // Shape: func (r *recv) Method(ctx *types.ServiceContext, req *<pkg>.<Req>) (*<pkg>.<Rsp>, error)
 //
 //	func (r *recv) Method(ctx *types.ServiceContext, req <pkg>.<Req>) (<pkg>.<Rsp>, error)
+//
+// isServiceMethod4 only recognizes the parameter/result shape, not the function name, so a
+// hand-written helper that happens to match the same shape as the real action method must not
+// be rewritten. Incident: a Patch action's Payload/Result were changed to
+// ReceiveRobotPatchReq/ReceiveRobotPatchRsp and gg gen was re-run; Patcher.validate, a plain
+// validation helper with the same (ctx *types.ServiceContext, req *pkg.Req) (*pkg.X, error)
+// shape as Patch, was mistaken for the action method and had its return type rewritten to
+// *group.ReceiveRobotPatchRsp, corrupting the function body and breaking the build. Requiring
+// fn.Name to equal action.Phase.MethodName() (e.g. "Patch") ensures only the actual action
+// method for the current DSL phase is ever rewritten.
 func applyServiceMethod4(fn *ast.FuncDecl, action *dsl.Action) bool {
-	if fn == nil || action == nil {
+	if fn == nil || action == nil || fn.Name == nil {
 		return false
 	}
 
 	if !isServiceMethod4(fn) {
+		return false
+	}
+
+	if fn.Name.Name != action.Phase.MethodName() {
 		return false
 	}
 
