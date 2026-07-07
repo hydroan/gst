@@ -60,6 +60,13 @@ type RouteRule struct {
 
 	// Raw preserves the original entry for error and log output.
 	Raw string
+
+	// From restricts the rule to actions declared by models whose file path
+	// lives under this directory prefix (e.g. "model/iam"). Empty means the
+	// rule applies to every model declaring a matching route. It lets a
+	// project ignore a framework module's route while re-declaring the same
+	// route in its own model directory.
+	From string
 }
 
 // allowedRuleMethods lists the HTTP methods the generated routes can use.
@@ -76,8 +83,13 @@ var allowedRuleMethods = map[string]struct{}{
 //	ignore:
 //	  /api/signup: [POST]
 //	  /api/iam/admin/users/:id: [GET, DELETE]
+//	  /api/iam/admin/users:
+//	    methods: [GET]
+//	    from: model/iam
 //
 // The path is written once and every listed method becomes one RouteRule.
+// The object form adds "from", restricting the rule to models declared under
+// that directory so a project can re-declare the same route elsewhere.
 // Path keys are deduplicated with parameter names collapsed, so the same
 // route split across several keys is rejected instead of silently merged.
 func (r *RouteIgnoreRules) UnmarshalYAML(value *yaml.Node) error {
@@ -92,12 +104,9 @@ func (r *RouteIgnoreRules) UnmarshalYAML(value *yaml.Node) error {
 		if err := value.Content[i].Decode(&path); err != nil {
 			return errors.Wrap(err, "route path must be a string")
 		}
-		var methods []string
-		if err := value.Content[i+1].Decode(&methods); err != nil {
-			return errors.Wrapf(err, "methods of route %q must be a list of strings", path)
-		}
-		if len(methods) == 0 {
-			return errors.Newf("route %q lists no methods", path)
+		methods, from, err := decodeIgnoreRuleValue(path, value.Content[i+1])
+		if err != nil {
+			return err
 		}
 
 		pathRules := make([]RouteRule, 0, len(methods))
@@ -106,6 +115,7 @@ func (r *RouteIgnoreRules) UnmarshalYAML(value *yaml.Node) error {
 			if err != nil {
 				return err
 			}
+			rule.From = from
 			pathRules = append(pathRules, rule)
 		}
 
@@ -119,6 +129,79 @@ func (r *RouteIgnoreRules) UnmarshalYAML(value *yaml.Node) error {
 
 	*r = rules
 	return nil
+}
+
+// decodeIgnoreRuleValue decodes one ignore entry value: either a plain
+// method list, or a mapping with "methods" and an optional "from" directory
+// prefix. Unknown mapping keys are rejected to keep gst.yaml parsing strict.
+func decodeIgnoreRuleValue(path string, value *yaml.Node) ([]string, string, error) {
+	var methods []string
+	var from string
+	switch value.Kind {
+	case yaml.SequenceNode:
+		if err := value.Decode(&methods); err != nil {
+			return nil, "", errors.Wrapf(err, "methods of route %q must be a list of strings", path)
+		}
+	case yaml.MappingNode:
+		fromSet := false
+		for i := 0; i+1 < len(value.Content); i += 2 {
+			var key string
+			if err := value.Content[i].Decode(&key); err != nil {
+				return nil, "", errors.Wrapf(err, "invalid key in route %q", path)
+			}
+			switch key {
+			case "methods":
+				if err := value.Content[i+1].Decode(&methods); err != nil {
+					return nil, "", errors.Wrapf(err, "methods of route %q must be a list of strings", path)
+				}
+			case "from":
+				if err := value.Content[i+1].Decode(&from); err != nil {
+					return nil, "", errors.Wrapf(err, "from of route %q must be a string", path)
+				}
+				fromSet = true
+			default:
+				return nil, "", errors.Newf("route %q has unknown field %q, want methods/from", path, key)
+			}
+		}
+		if fromSet {
+			normalized, err := normalizeRuleFrom(path, from)
+			if err != nil {
+				return nil, "", err
+			}
+			from = normalized
+		}
+	default:
+		return nil, "", errors.Newf("route %q must map to a method list or a {methods, from} object", path)
+	}
+
+	if len(methods) == 0 {
+		return nil, "", errors.Newf("route %q lists no methods", path)
+	}
+	return methods, from, nil
+}
+
+// normalizeRuleFrom cleans and validates the "from" directory prefix of an
+// ignore entry. It must be a relative directory such as "model/iam".
+func normalizeRuleFrom(path, from string) (string, error) {
+	from = strings.Trim(strings.TrimSpace(from), "/")
+	if from == "" {
+		return "", errors.Newf("route %q has an empty from; drop the field to match all models", path)
+	}
+	cleaned := filepath.ToSlash(filepath.Clean(from))
+	if cleaned != from || strings.HasPrefix(cleaned, "..") {
+		return "", errors.Newf("route %q has invalid from %q: want a relative directory like \"model/iam\"", path, from)
+	}
+	return cleaned, nil
+}
+
+// MatchesSource reports whether the rule applies to an action declared in
+// the given model file. Rules without a From prefix apply to every model.
+func (r RouteRule) MatchesSource(modelFilePath string) bool {
+	if r.From == "" {
+		return true
+	}
+	modelFilePath = filepath.ToSlash(modelFilePath)
+	return modelFilePath == r.From || strings.HasPrefix(modelFilePath, r.From+"/")
 }
 
 // ParseRouteRule parses a "METHOD /api/path" entry into a RouteRule.

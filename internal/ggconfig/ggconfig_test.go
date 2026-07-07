@@ -218,42 +218,24 @@ gen:
 		}
 	})
 
-	t.Run("duplicate path keys are rejected", func(t *testing.T) {
-		dir := writeConfig(t, `version: 1
-gen:
-  routes:
-    ignore:
-      /api/signup: [POST]
-      /api/signup: [DELETE]
-`)
-		if _, err := Load(dir); err == nil {
-			t.Fatal("Load() expected error for duplicate path keys, got nil")
+	t.Run("duplicate route paths are rejected", func(t *testing.T) {
+		// All variants collapse to the same normalized path key: exact
+		// repetition, /api prefix and slash formatting, and parameter names.
+		tests := []struct {
+			name    string
+			entries string
+		}{
+			{"exact repetition", "      /api/signup: [POST]\n      /api/signup: [DELETE]\n"},
+			{"formatting variant", "      /api/signup: [POST]\n      /signup/: [POST]\n"},
+			{"param name variant", "      /api/users/:id: [GET]\n      /api/users/:userId: [GET]\n"},
 		}
-	})
-
-	t.Run("duplicate rules under formatting variants are rejected", func(t *testing.T) {
-		dir := writeConfig(t, `version: 1
-gen:
-  routes:
-    ignore:
-      /api/signup: [POST]
-      /signup/: [POST]
-`)
-		if _, err := Load(dir); err == nil {
-			t.Fatal("Load() expected error for duplicate rules, got nil")
-		}
-	})
-
-	t.Run("duplicate rules differing only in param name are rejected", func(t *testing.T) {
-		dir := writeConfig(t, `version: 1
-gen:
-  routes:
-    ignore:
-      /api/users/:id: [GET]
-      /api/users/:userId: [GET]
-`)
-		if _, err := Load(dir); err == nil {
-			t.Fatal("Load() expected error for param-name duplicate rules, got nil")
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				dir := writeConfig(t, "version: 1\ngen:\n  routes:\n    ignore:\n"+tt.entries)
+				if _, err := Load(dir); err == nil {
+					t.Fatal("Load() expected error for duplicate route paths, got nil")
+				}
+			})
 		}
 	})
 
@@ -268,4 +250,94 @@ gen:
 			t.Fatal("Load() expected error for duplicate methods, got nil")
 		}
 	})
+
+	t.Run("object form with from scopes the rule", func(t *testing.T) {
+		dir := writeConfig(t, `version: 1
+gen:
+  routes:
+    ignore:
+      /api/iam/admin/users:
+        methods: [GET]
+        from: model/iam/
+`)
+		cfg, err := Load(dir)
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if got := len(cfg.Gen.Routes.Ignore); got != 1 {
+			t.Fatalf("len(Ignore) = %d, want 1", got)
+		}
+		if from := cfg.Gen.Routes.Ignore[0].From; from != "model/iam" {
+			t.Errorf("Ignore[0].From = %q, want model/iam (trailing slash trimmed)", from)
+		}
+	})
+
+	t.Run("object form without from matches all models", func(t *testing.T) {
+		dir := writeConfig(t, `version: 1
+gen:
+  routes:
+    ignore:
+      /api/signup:
+        methods: [POST]
+`)
+		cfg, err := Load(dir)
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if from := cfg.Gen.Routes.Ignore[0].From; from != "" {
+			t.Errorf("Ignore[0].From = %q, want empty", from)
+		}
+	})
+
+	t.Run("object form with unknown field is rejected", func(t *testing.T) {
+		dir := writeConfig(t, `version: 1
+gen:
+  routes:
+    ignore:
+      /api/signup:
+        methods: [POST]
+        form: model/iam
+`)
+		if _, err := Load(dir); err == nil {
+			t.Fatal("Load() expected error for unknown field in rule object, got nil")
+		}
+	})
+
+	t.Run("object form with invalid from is rejected", func(t *testing.T) {
+		for _, from := range []string{`""`, `../iam`, `model//iam`} {
+			dir := writeConfig(t, `version: 1
+gen:
+  routes:
+    ignore:
+      /api/signup:
+        methods: [POST]
+        from: `+from+`
+`)
+			if _, err := Load(dir); err == nil {
+				t.Errorf("Load() expected error for from %s, got nil", from)
+			}
+		}
+	})
+}
+
+func TestRouteRuleMatchesSource(t *testing.T) {
+	tests := []struct {
+		name          string
+		from          string
+		modelFilePath string
+		want          bool
+	}{
+		{"empty from matches everything", "", "model/admin/admin.go", true},
+		{"model under from dir", "model/iam", "model/iam/user/user.go", true},
+		{"model outside from dir", "model/iam", "model/admin/admin.go", false},
+		{"prefix must be a whole segment", "model/iam", "model/iamx/user.go", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule := RouteRule{From: tt.from}
+			if got := rule.MatchesSource(tt.modelFilePath); got != tt.want {
+				t.Errorf("MatchesSource(%q) with From=%q = %v, want %v", tt.modelFilePath, tt.from, got, tt.want)
+			}
+		})
+	}
 }
