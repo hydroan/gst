@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/hydroan/gst/dsl"
@@ -26,18 +27,31 @@ type routeIgnoreResult struct {
 	// Unmatched lists rules that matched no generated route, usually a sign
 	// the configuration is stale after a framework module update.
 	Unmatched []ggconfig.RouteRule
+
+	// KeptServiceFiles are the service files owned by ignored Service()
+	// actions. Ignoring a route only removes its registrations from the
+	// generated files; the service files stay on disk so the project remains
+	// file-identical with gg module copy output, and prune must not treat
+	// them as deletable.
+	KeptServiceFiles map[string]bool
+
+	// KeptServiceDirs are the cleaned service directories that contain the
+	// kept service files, protected from orphan-directory cleanup.
+	KeptServiceDirs map[string]bool
 }
 
 // applyRouteIgnores disables every action whose generated route matches an
-// ignore rule. A disabled action is equivalent to an action not declared in
-// the model Design: no router registration, no service registration, and no
-// service file generation. Models must have hierarchical endpoints built
-// before calling this.
+// ignore rule. A disabled action drops out of the generated registration
+// files (model/model.go, service/service.go, router/router.go) and no new
+// service file is generated for it, but existing service files are kept on
+// disk. Models must have hierarchical endpoints built before calling this.
 func applyRouteIgnores(allModels []*gen.ModelInfo, rules []ggconfig.RouteRule) routeIgnoreResult {
 	result := routeIgnoreResult{}
 	if len(rules) == 0 {
 		return result
 	}
+	result.KeptServiceFiles = make(map[string]bool)
+	result.KeptServiceDirs = make(map[string]bool)
 
 	matched := make([]bool, len(rules))
 	for _, m := range allModels {
@@ -47,6 +61,11 @@ func applyRouteIgnores(allModels []*gen.ModelInfo, rules []ggconfig.RouteRule) r
 			for i, rule := range rules {
 				if !rule.Match(method, finalRoute) {
 					continue
+				}
+				if act.Service {
+					target := gen.ServiceTarget(m, act, modelDir, serviceDir)
+					result.KeptServiceFiles[target.FilePath] = true
+					result.KeptServiceDirs[filepath.Clean(target.Dir)] = true
 				}
 				act.Enabled = false
 				matched[i] = true

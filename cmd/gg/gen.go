@@ -347,7 +347,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	// Prune disabled service files
 	// ============================================================
 	if prune {
-		pruneServiceFiles(oldServiceFiles, allModels)
+		pruneServiceFiles(oldServiceFiles, allModels, ignoreResult.KeptServiceFiles, ignoreResult.KeptServiceDirs)
 	}
 
 	// ============================================================

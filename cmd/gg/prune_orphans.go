@@ -211,8 +211,18 @@ func isManagedServiceFile(path string) bool {
 	return gen.IsActionServiceSource(path)
 }
 
-func handleOrphanServiceDirs(allModels []*gen.ModelInfo) {
-	orphans := scanOrphanServiceDirs(currentServiceDirs(allModels), getPruneOrphanIgnorePatterns())
+// handleOrphanServiceDirs reports or cleans service directories no model
+// owns. Directories in keptDirs hold service files of gst.yaml-ignored
+// actions and are treated as owned; keptDirs may be nil.
+func handleOrphanServiceDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool) {
+	currentDirs := currentServiceDirs(allModels)
+	for dir := range keptDirs {
+		currentDirs.ModelDirs = append(currentDirs.ModelDirs, dir)
+		addServiceDirAncestors(currentDirs.KnownDirs, dir)
+	}
+	sort.Strings(currentDirs.ModelDirs)
+
+	orphans := scanOrphanServiceDirs(currentDirs, getPruneOrphanIgnorePatterns())
 	if len(orphans) == 0 {
 		return
 	}

@@ -172,28 +172,64 @@ func (Signup) Design() {
 	}
 }
 
-// TestApplyRouteIgnoresRemovesServiceFileFromPruneExpectations verifies that
-// once an ignore rule disables a service-bearing action, currentServiceFiles
-// (the set pruneServiceFiles treats as "expected to exist") no longer
-// includes that action's service file. This is what makes standalone
-// gg prune recognize an ignored action's leftover service file as prunable.
-func TestApplyRouteIgnoresRemovesServiceFileFromPruneExpectations(t *testing.T) {
+// TestApplyRouteIgnoresKeepsServiceFilesForPrune verifies that ignoring a
+// service-bearing action records its service file and directory as kept, and
+// that pruneServiceFiles honors the kept set: the file stays on disk even
+// though the disabled action no longer contributes to currentServiceFiles.
+// This keeps an ignored module route file-identical with gg module copy
+// output instead of turning it into a deletion candidate.
+func TestApplyRouteIgnoresKeepsServiceFilesForPrune(t *testing.T) {
 	projectDir := t.TempDir()
 	writeSignupModelFixture(t, projectDir)
 
-	allModels, err := codegen.FindModels("tmpapp", filepath.Join(projectDir, "model"), filepath.Join(projectDir, "service"), nil)
+	relModelDir := filepath.Join(projectDir, "model")
+	relServiceDir := filepath.Join(projectDir, "service")
+	allModels, err := codegen.FindModels("tmpapp", relModelDir, relServiceDir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	buildHierarchicalEndpoints(allModels)
 	propagateParentParams(allModels)
-	applyRouteIgnores(allModels, parseRules(t, "POST /api/signup"))
 
-	// After ignoring, the Design yields no service-bearing actions, so the
-	// prune expectation set for this model is empty.
-	expected := currentServiceFiles(allModels)
-	if len(expected) != 0 {
+	// Resolve the service file the Signup action owns before ignoring it.
+	var signupServiceFile string
+	allModels[0].Design.Range(func(route string, act *dsl.Action) {
+		if act.Service {
+			signupServiceFile = gen.ServiceTarget(allModels[0], act, relModelDir, relServiceDir).FilePath
+		}
+	})
+	if signupServiceFile == "" {
+		t.Fatal("fixture should declare a service-bearing action")
+	}
+
+	oldModelDir, oldServiceDir := modelDir, serviceDir
+	t.Cleanup(func() { modelDir, serviceDir = oldModelDir, oldServiceDir })
+	modelDir, serviceDir = relModelDir, relServiceDir
+
+	result := applyRouteIgnores(allModels, parseRules(t, "POST /api/signup"))
+
+	if !result.KeptServiceFiles[signupServiceFile] {
+		t.Fatalf("KeptServiceFiles = %v, want %q kept", result.KeptServiceFiles, signupServiceFile)
+	}
+	if !result.KeptServiceDirs[filepath.Clean(filepath.Dir(signupServiceFile))] {
+		t.Fatalf("KeptServiceDirs = %v, want %q kept", result.KeptServiceDirs, filepath.Dir(signupServiceFile))
+	}
+
+	// The ignored action drops out of the expected registration set...
+	if expected := currentServiceFiles(allModels); len(expected) != 0 {
 		t.Fatalf("currentServiceFiles = %v, want empty after ignore", expected)
+	}
+
+	// ...but pruneServiceFiles must keep the file on disk.
+	if err := os.MkdirAll(filepath.Dir(signupServiceFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(signupServiceFile, []byte("package account\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pruneServiceFiles([]string{signupServiceFile}, allModels, result.KeptServiceFiles, result.KeptServiceDirs)
+	if _, err := os.Stat(signupServiceFile); err != nil {
+		t.Fatalf("ignored action's service file should survive prune: %v", err)
 	}
 }
 
@@ -319,7 +355,7 @@ func TestGenRunAppliesRouteIgnoresFromGstYAML(t *testing.T) {
 gen:
   routes:
     ignore:
-      - GET /api/tickets
+      /api/tickets: [GET]
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}

@@ -6,7 +6,6 @@ import (
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen"
 	"github.com/hydroan/gst/internal/codegen/gen"
-	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/spf13/cobra"
 )
 
@@ -41,21 +40,16 @@ func pruneRun() {
 		clioutput.Success("", "%d models found", len(allModels))
 	}
 
-	// Align the prune view with gg gen: build hierarchical endpoints, then
-	// apply project-level route ignores so ignored actions no longer count
-	// as expected service files.
-	buildHierarchicalEndpoints(allModels)
-	propagateParentParams(allModels)
-	projectCfg, err := ggconfig.Load(".")
-	checkErr(err)
-	reportUnmatchedRouteIgnores(applyRouteIgnores(allModels, projectCfg.Gen.Routes.Ignore))
+	// Route ignores from gst.yaml are intentionally not applied here: an
+	// ignored action keeps its service file on disk, so leaving the action
+	// enabled makes prune treat the file as expected without extra bookkeeping.
 
 	// Scan existing service files
 	oldServiceFiles := scanExistingServiceFiles(serviceDir)
 
 	// Prune disabled service files
 	clioutput.Section("Prune Disabled Service Files")
-	pruneServiceFiles(oldServiceFiles, allModels)
+	pruneServiceFiles(oldServiceFiles, allModels, nil, nil)
 
 	clioutput.Done("Code pruning completed successfully!")
 }

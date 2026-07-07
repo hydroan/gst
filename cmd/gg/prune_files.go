@@ -79,15 +79,18 @@ func filterIgnoredFiles(files []string, ignorePatterns []string) (filtered []str
 	return filtered, ignored
 }
 
-// pruneServiceFiles prunes disabled service files.
-func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo) {
+// pruneServiceFiles prunes disabled service files. Files in keptFiles belong
+// to gst.yaml-ignored actions: they no longer appear in the generated
+// registrations but must stay on disk, so they are never deletion candidates.
+// keptDirs protects their directories from orphan cleanup; both may be nil.
+func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo, keptFiles, keptDirs map[string]bool) {
 	// Get list of service files that should currently exist
 	currentFiles := currentServiceFiles(allModels)
 
 	// Find files to delete (exist in old list but not in current list)
 	filesToDelete := make([]string, 0)
 	for _, oldFile := range oldServiceFiles {
-		if !currentFiles[oldFile] {
+		if !currentFiles[oldFile] && !keptFiles[oldFile] {
 			filesToDelete = append(filesToDelete, oldFile)
 		}
 	}
@@ -115,7 +118,7 @@ func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo) {
 		}
 		// Still check for empty directories even if no files to delete
 		removeEmptyDirectories(serviceDir)
-		handleOrphanServiceDirs(allModels)
+		handleOrphanServiceDirs(allModels, keptDirs)
 		return
 	}
 
@@ -147,7 +150,7 @@ func pruneServiceFiles(oldServiceFiles []string, allModels []*gen.ModelInfo) {
 
 	// Remove empty directories after deleting files
 	removeEmptyDirectories(serviceDir)
-	handleOrphanServiceDirs(allModels)
+	handleOrphanServiceDirs(allModels, keptDirs)
 }
 
 func currentServiceFiles(allModels []*gen.ModelInfo) map[string]bool {
