@@ -369,13 +369,20 @@ gen:
   routes:
     ignore:
       /api/signup: [POST]
-      /api/iam/admin/users: [GET]
       /api/iam/admin/users/:id: [GET, DELETE]
+      # 对象形式：from 限定只忽略声明在该目录下的 model，
+      # 业务可在自己的 model 目录重新声明同一路由
+      /api/iam/admin/users:
+        methods: [GET]
+        from: model/iam
 ```
 
 - 每个 path 写一次，值是要忽略的 HTTP method 列表；`/api` 前缀可省略，
   因此路径可直接粘贴 `gg routes` 的输出（其路径不带 `/api` 前缀）。
   参数段（`:id`）按位置匹配，不比较参数名。
+- 需要用自己的实现替换框架路由时，用对象形式加 `from`（如 `model/iam`）
+  把规则限定到框架模块目录；否则规则会把业务自己声明的同路径 action 一并
+  忽略。无 `from` 的规则命中多个 model 目录时会输出 warning 提醒。
 - 未匹配到任何路由的条目会在生成时输出 warning，提示配置可能已过期。
 - 忽略不影响 model 的 `Migrate` 注册：表结构照常创建，模块内部逻辑
   （如登录查询用户表）不受影响。

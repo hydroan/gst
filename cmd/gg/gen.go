@@ -123,7 +123,7 @@ func genRunWithOptions(opts genRunOptions) error {
 			clioutput.Item("IGNORE", "%s %s (%s)", match.Method, match.Path, match.Model)
 		}
 	}
-	reportUnmatchedRouteIgnores(ignoreResult)
+	reportRouteIgnoreWarnings(ignoreResult)
 
 	// Record old service files list (if prune option is enabled)
 	var oldServiceFiles []string

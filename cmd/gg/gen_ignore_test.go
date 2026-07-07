@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -97,39 +98,9 @@ func (Group) Design() {
 	}
 }
 
-func TestApplyRouteIgnoresDisablesNestedRouteActions(t *testing.T) {
-	projectDir := t.TempDir()
-	writeSignupModelFixture(t, projectDir)
-
-	allModels, err := codegen.FindModels("tmpapp", filepath.Join(projectDir, "model"), filepath.Join(projectDir, "service"), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(allModels) != 1 {
-		t.Fatalf("len(allModels) = %d, want 1", len(allModels))
-	}
-	buildHierarchicalEndpoints(allModels)
-	propagateParentParams(allModels)
-
-	result := applyRouteIgnores(allModels, parseRules(t, "POST /api/signup"))
-
-	if len(result.Matches) != 1 {
-		t.Fatalf("len(Matches) = %d, want 1", len(result.Matches))
-	}
-	match := result.Matches[0]
-	if match.Method != http.MethodPost || match.Path != "/api/signup" || match.Model != "Signup" {
-		t.Fatalf("Matches[0] = %+v, want POST /api/signup (Signup)", match)
-	}
-	if remaining := collectActions(allModels[0].Design); len(remaining) != 0 {
-		t.Fatalf("remaining actions = %d, want 0", len(remaining))
-	}
-}
-
 // writeSignupModelFixture writes a Signup model under projectDir/model/account
 // whose Create action declares Service() with Filename("signup.go") on a
-// nested "/signup" route. Shared by the nested-route ignore test and the
-// prune-expectations test, both of which need the same service-bearing
-// action to verify it disappears after an ignore rule matches it.
+// nested "/signup" route, the shape of a module-copied framework action.
 func writeSignupModelFixture(t *testing.T, projectDir string) {
 	t.Helper()
 	modelSource := `package account
@@ -172,12 +143,12 @@ func (Signup) Design() {
 	}
 }
 
-// TestApplyRouteIgnoresKeepsServiceFilesForPrune verifies that ignoring a
-// service-bearing action records its service file and directory as kept, and
-// that pruneServiceFiles honors the kept set: the file stays on disk even
-// though the disabled action no longer contributes to currentServiceFiles.
-// This keeps an ignored module route file-identical with gg module copy
-// output instead of turning it into a deletion candidate.
+// TestApplyRouteIgnoresKeepsServiceFilesForPrune verifies the full ignore
+// contract on a nested-route service action: the action is disabled with its
+// match reported, its service file and directory are recorded as kept, and
+// pruneServiceFiles honors the kept set so the file stays on disk. This
+// keeps an ignored module route file-identical with gg module copy output
+// instead of turning it into a deletion candidate.
 func TestApplyRouteIgnoresKeepsServiceFilesForPrune(t *testing.T) {
 	projectDir := t.TempDir()
 	writeSignupModelFixture(t, projectDir)
@@ -187,6 +158,9 @@ func TestApplyRouteIgnoresKeepsServiceFilesForPrune(t *testing.T) {
 	allModels, err := codegen.FindModels("tmpapp", relModelDir, relServiceDir, nil)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(allModels) != 1 {
+		t.Fatalf("len(allModels) = %d, want 1", len(allModels))
 	}
 	buildHierarchicalEndpoints(allModels)
 	propagateParentParams(allModels)
@@ -207,6 +181,18 @@ func TestApplyRouteIgnoresKeepsServiceFilesForPrune(t *testing.T) {
 	modelDir, serviceDir = relModelDir, relServiceDir
 
 	result := applyRouteIgnores(allModels, parseRules(t, "POST /api/signup"))
+
+	// The nested-route action is disabled and reported.
+	if len(result.Matches) != 1 {
+		t.Fatalf("len(Matches) = %d, want 1", len(result.Matches))
+	}
+	match := result.Matches[0]
+	if match.Method != http.MethodPost || match.Path != "/api/signup" || match.Model != "Signup" {
+		t.Fatalf("Matches[0] = %+v, want POST /api/signup (Signup)", match)
+	}
+	if remaining := collectActions(allModels[0].Design); len(remaining) != 0 {
+		t.Fatalf("remaining actions = %d, want 0", len(remaining))
+	}
 
 	if !result.KeptServiceFiles[signupServiceFile] {
 		t.Fatalf("KeptServiceFiles = %v, want %q kept", result.KeptServiceFiles, signupServiceFile)
@@ -231,6 +217,133 @@ func TestApplyRouteIgnoresKeepsServiceFilesForPrune(t *testing.T) {
 	if _, err := os.Stat(signupServiceFile); err != nil {
 		t.Fatalf("ignored action's service file should survive prune: %v", err)
 	}
+}
+
+// TestApplyRouteIgnoresScopesRuleByFromDirectory verifies the from-scoping
+// contract: when a framework model and a project model declare the same
+// route, a rule with From only disables the model under that directory, and
+// a From-less rule disables both while reporting the multi-directory match
+// so the user is warned about a likely swallowed re-declaration.
+func TestApplyRouteIgnoresScopesRuleByFromDirectory(t *testing.T) {
+	frameworkModel := `package user
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type User struct {
+	model.Base
+}
+
+func (User) Design() {
+	dsl.Route("iam/admin/users", func() {
+		dsl.List(func() {})
+	})
+}
+`
+	projectModel := `package admin
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Admin struct {
+	model.Empty
+}
+
+type UserListReq struct {
+	Keyword string ` + "`json:\"keyword\"`" + `
+}
+
+type UserListRsp struct {
+	Total int64 ` + "`json:\"total\"`" + `
+}
+
+func (Admin) Design() {
+	dsl.Route("iam/admin/users", func() {
+		dsl.List(func() {
+			dsl.Service()
+			dsl.Flatten()
+			dsl.Filename("user_list.go")
+			dsl.Payload[*UserListReq]()
+			dsl.Result[*UserListRsp]()
+		})
+	})
+}
+`
+	newModels := func(t *testing.T) []*gen.ModelInfo {
+		t.Helper()
+		projectDir := t.TempDir()
+		for dir, fixture := range map[string]string{
+			filepath.Join("model", "iam", "user"): frameworkModel,
+			filepath.Join("model", "admin"):       projectModel,
+		} {
+			if err := os.MkdirAll(filepath.Join(projectDir, dir), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			name := "user.go"
+			if strings.Contains(fixture, "package admin") {
+				name = "admin.go"
+			}
+			if err := os.WriteFile(filepath.Join(projectDir, dir, name), []byte(fixture), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		t.Chdir(projectDir)
+		allModels, err := codegen.FindModels("tmpapp", "model", "service", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(allModels) != 2 {
+			t.Fatalf("len(allModels) = %d, want 2", len(allModels))
+		}
+		buildHierarchicalEndpoints(allModels)
+		propagateParentParams(allModels)
+		return allModels
+	}
+
+	t.Run("from-scoped rule only disables the framework model", func(t *testing.T) {
+		allModels := newModels(t)
+		rules := parseRules(t, "GET /api/iam/admin/users")
+		rules[0].From = "model/iam"
+
+		result := applyRouteIgnores(allModels, rules)
+
+		if len(result.Matches) != 1 || result.Matches[0].Model != "User" {
+			t.Fatalf("Matches = %+v, want exactly the framework User model", result.Matches)
+		}
+		if len(result.MultiSourceRules) != 0 {
+			t.Fatalf("MultiSourceRules = %+v, want empty for a from-scoped rule", result.MultiSourceRules)
+		}
+		remaining := make([]string, 0, 1)
+		for _, m := range allModels {
+			m.Design.Range(func(route string, act *dsl.Action) {
+				remaining = append(remaining, m.ModelName)
+			})
+		}
+		if len(remaining) != 1 || remaining[0] != "Admin" {
+			t.Fatalf("remaining models = %v, want only the project Admin model", remaining)
+		}
+	})
+
+	t.Run("from-less rule disables both and reports multi-directory match", func(t *testing.T) {
+		allModels := newModels(t)
+
+		result := applyRouteIgnores(allModels, parseRules(t, "GET /api/iam/admin/users"))
+
+		if len(result.Matches) != 2 {
+			t.Fatalf("len(Matches) = %d, want 2", len(result.Matches))
+		}
+		if len(result.MultiSourceRules) != 1 {
+			t.Fatalf("MultiSourceRules = %+v, want one entry", result.MultiSourceRules)
+		}
+		wantDirs := []string{"model/admin", "model/iam"}
+		if got := result.MultiSourceRules[0].Dirs; !slices.Equal(got, wantDirs) {
+			t.Fatalf("MultiSourceRules[0].Dirs = %v, want %v", got, wantDirs)
+		}
+	})
 }
 
 // parseRules builds RouteRules from raw entries, failing the test on parse errors.
