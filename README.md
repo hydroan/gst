@@ -9,6 +9,8 @@ model 注册和 service 注册，再在 `service` 中补充业务逻辑。
 > 当前仓库是 gst 框架源码仓库。业务项目应通过 `gg new` 创建；不要在 gst
 > 框架仓库根目录对业务项目运行 `gg gen`、`gg migrate` 等生成命令。
 
+前后端接口对接（请求位置、通用查询参数、响应结构）以 [API_CONTRACT.md](API_CONTRACT.md) 为准。
+
 ## 快速开始
 
 ### 安装 gg

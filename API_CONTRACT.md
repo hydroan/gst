@@ -1,7 +1,7 @@
-# 前端 API 对接规范
+# API 对接契约
 
-本文档面向前端开发者，说明项目默认资源接口的 REST 对接约定。下面以 `group`
-资源为例，对应资源路径为 `/api/groups`。
+本文档是前后端共同遵守的对接契约：后端按此实现默认资源接口，前端按此调用，
+出现分歧以本文为准。下面以 `group` 资源为例，对应资源路径为 `/api/groups`。
 
 本文只描述默认资源接口。自定义接口可能有自己的路径、请求结构和响应结构，应以
 对应接口文档或 Swagger 为准。请求体统一使用 JSON：
@@ -30,6 +30,23 @@ Content-Type: application/json
 | 删除多个 group | `DELETE /api/groups/batch` | body 必须使用 `{ "ids": [...] }` |
 | 全量更新多个 group | `PUT /api/groups/batch` | body 必须使用 `{ "items": [...] }`，每个 item 必须带 `id` |
 | 部分更新多个 group | `PATCH /api/groups/batch` | body 必须使用 `{ "items": [...] }`，每个 item 必须带 `id` 和要修改的字段 |
+
+## 列表通用查询参数
+
+除业务字段过滤外，列表接口的通用查询参数由后端按资源逐个启用：分页由 model 嵌入
+`model.Pagination` 启用，游标分页由 `model.Cursor` 启用，其余参数由 `model.Query`
+启用（`model.Query` 同时包含前两者）。资源未启用对应能力时，传这些参数会返回 400。
+某个资源支持哪些参数以 Swagger 为准。
+
+| 能力 | 参数 | 示例 |
+| --- | --- | --- |
+| 分页 | `page`（从 1 开始）、`size` | `?page=1&size=20` |
+| 排序 | `_sortby`，逗号分隔多字段，方向 `asc`/`desc`（默认 `asc`） | `?_sortby=created_at desc,name` |
+| 模糊匹配 | `_fuzzy` 为 `true` 时业务字段过滤使用模糊匹配 | `?name=g&_fuzzy=true` |
+| OR 过滤 | `_or` 为 `true` 时多个业务字段过滤条件之间用 OR 连接 | `?name=g1&status=enabled&_or=true` |
+| 展开关联 | `_expand`，逗号分隔，`all` 表示全部可展开字段 | `?_expand=all` |
+| 跳过总数 | `_nototal` 为 `true` 时响应不返回 `total` | `?_nototal=true` |
+| 游标分页 | `_cursor_value`、`_cursor_fields`、`_cursor_next`；使用游标时响应不返回 `total` | `?_cursor_value=xxx&_cursor_next=true` |
 
 ## 请求体格式
 
@@ -69,14 +86,41 @@ Content-Type: application/json
 }
 ```
 
-批量创建时，`items` 中通常不需要传 `id`；批量全量更新和批量部分更新时，每个 item
-必须能标识要更新的资源，通常需要传 `id`。
+批量创建时，`items` 中通常不需要传 `id`，`id` 由后端生成并在响应中返回；批量全量
+更新和批量部分更新时，每个 item 必须能标识要更新的资源，通常需要传 `id`。
 
 删除多个 group：
 
 ```json
 {
   "ids": ["group-id-1", "group-id-2"]
+}
+```
+
+## 响应结构
+
+所有接口统一返回如下 envelope：
+
+```json
+{
+  "code": 0,
+  "msg": "success",
+  "data": {},
+  "trace_id": "..."
+}
+```
+
+- 成功时 HTTP 状态码为 `200`，`code` 固定为 `0`，业务数据在 `data` 中。
+- 失败时 HTTP 状态码为 `4xx`/`5xx`，`code` 为非 0 错误码，`msg` 是可展示的错误信息。
+  前端以 HTTP 状态码或 `code != 0` 判定失败，具体错误码含义以 Swagger 为准。
+- `trace_id` 用于排障，反馈接口问题时请带上。
+
+列表接口的 `data` 固定为如下结构（`_nototal=true` 时没有 `total`）：
+
+```json
+{
+  "total": 2,
+  "items": [{ "id": "group-id-1" }, { "id": "group-id-2" }]
 }
 ```
 
@@ -90,4 +134,4 @@ Content-Type: application/json
 - 批量创建、批量全量更新、批量部分更新统一使用 `items`。
 - 批量删除统一使用 `ids`。
 - 不要把参数放到“看起来也能传”的其他位置；本文指定的位置就是前端对接时必须遵守的位置。
-
+- 前端解析响应只依赖统一 envelope 和 `data` 结构，不要依赖 `msg` 的具体文案做逻辑判断。
