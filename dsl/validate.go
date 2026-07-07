@@ -25,6 +25,18 @@ var actionMethodNames = map[string]bool{
 	consts.PHASE_EXPORT.MethodName():      true,
 }
 
+// routeIDActionMethodNames are actions whose built-in controllers read the
+// resource id from the route parameter only. Exact() removes the default
+// "/:id" suffix from the generated route, so these actions must delegate to a
+// custom service method via Payload/Result when Exact() is used; otherwise the
+// generated route can never resolve a resource id.
+var routeIDActionMethodNames = map[string]bool{
+	consts.PHASE_DELETE.MethodName(): true,
+	consts.PHASE_UPDATE.MethodName(): true,
+	consts.PHASE_PATCH.MethodName():  true,
+	consts.PHASE_GET.MethodName():    true,
+}
+
 var designOnlyMethodNames = map[string]bool{
 	"Endpoint": true,
 	"Param":    true,
@@ -142,6 +154,8 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile boo
 	service := false
 	filenameValue := ""
 	flatten := false
+	exact := false
+	payloadOrResult := false
 	errs := make([]error, 0)
 
 	for _, stmt := range flit.Body.List {
@@ -161,7 +175,11 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile boo
 			filenameValue = stringArgValue(child, filenameValue)
 		case name == "Flatten":
 			flatten = true
-		case name == "Enabled" || name == "Public" || name == "Exact" || name == "Payload" || name == "Result":
+		case name == "Exact":
+			exact = true
+		case name == "Payload" || name == "Result":
+			payloadOrResult = true
+		case name == "Enabled" || name == "Public":
 			continue
 		case actionMethodNames[name]:
 			errs = append(errs, fmt.Errorf("%s: %s action cannot contain nested %s action", filename, actionName, name))
@@ -182,6 +200,9 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile boo
 		if rootModelFile {
 			errs = append(errs, fmt.Errorf("%s: dsl.Flatten() cannot be used by root model file %s; move the model under model/<package>/<file>.go or remove Flatten()", filename, filename))
 		}
+	}
+	if exact && routeIDActionMethodNames[actionName] && !payloadOrResult {
+		errs = append(errs, fmt.Errorf("%s: %s action uses dsl.Exact() but relies on the built-in controller which reads the resource id from the route parameter only; declare Payload/Result with a custom service method or remove Exact()", filename, actionName))
 	}
 
 	return errs

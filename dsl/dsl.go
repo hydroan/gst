@@ -298,6 +298,11 @@ func Public() {}
 // Omit Exact() for normal CRUD-style route generation. Exact does not change
 // Param, Public, Service, Payload, Result, Filename, Flatten, or any other DSL
 // keyword; it only controls the current action's generated router path.
+//
+// Note that the built-in Delete, Update, and Patch controllers read the
+// resource id from the route parameter only. An Exact route without an id
+// segment must declare Payload/Result so the action is delegated to a custom
+// service method instead of the built-in controller.
 func Exact() {}
 
 // Payload specifies the request payload type for the current action.
