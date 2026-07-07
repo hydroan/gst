@@ -706,7 +706,7 @@ func routeParamName(expr ast.Expr) string {
 
 func routePhaseMethod(phase string) string {
 	switch phase {
-	case "Create", "CreateMany", "Import", "Export":
+	case "Create", "CreateMany", "Import":
 		return "POST"
 	case "Delete", "DeleteMany":
 		return "DELETE"
@@ -714,7 +714,7 @@ func routePhaseMethod(phase string) string {
 		return "PUT"
 	case "Patch", "PatchMany":
 		return "PATCH"
-	case "List", "Get":
+	case "List", "Get", "Export":
 		return "GET"
 	default:
 		return ""
