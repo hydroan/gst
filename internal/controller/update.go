@@ -25,11 +25,9 @@ import (
 // Update is a generic function to product gin handler to update one resource.
 // The resource type depends on the type of interface types.Model.
 //
-// Update will update one resource and resource "ID" must be specified,
-// which can be specify in "router parameter `id`" or "http body data".
-//
-// "router parameter `id`" has more priority than "http body data".
-// It will skip decode id from "http body data" if "router parameter `id`" not empty.
+// Update will update one resource. The resource id comes from the configured
+// route parameter only, eg: localhost:9000/api/myresource/myid. The id carried
+// by the http body is ignored.
 func Update[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
 	UpdateFactory[M, REQ, RSP]()(c)
 }
@@ -37,9 +35,9 @@ func Update[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 // UpdateFactory returns a Gin handler that replaces one resource.
 //
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into
-// M, uses the configured route id before the body id, verifies that exactly one
-// existing record matches, preserves the original creator fields, sets the
-// updater field, runs update hooks, writes the replacement through the
+// M, reads the resource id from the configured route parameter, verifies that
+// exactly one existing record matches, preserves the original creator fields,
+// sets the updater field, runs update hooks, writes the replacement through the
 // configured database handler, and records an operation log.
 //
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
@@ -107,31 +105,23 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			return
 		}
 
-		// param id has more priority than http body data id
-		var paramID string
-		if len(cfg) > 0 {
-			paramID = meta.Param(util.Deref(cfg[0]).ParamName)
-		}
-		bodyID := req.GetID()
+		// The resource id comes from the configured route parameter only.
 		var id string
-		log.Infoz(
-			"update from request",
-			zap.String("param_id", paramID),
-			zap.String("body_id", bodyID),
-			zap.Object(reflect.TypeOf(*new(M)).Elem().String(), req),
-		)
-		if paramID != "" {
-			req.SetID(paramID)
-			id = paramID
-		} else if bodyID != "" {
-			paramID = bodyID //nolint:ineffassign,wastedassign
-			id = bodyID
-		} else {
-			log.Error("id missing")
-			JSON(c, CodeFailure.WithErr(errors.New("id missing")))
-			gstotel.RecordError(span, err)
+		if len(cfg) > 0 {
+			id = meta.Param(util.Deref(cfg[0]).ParamName)
+		}
+		if len(id) == 0 {
+			log.Error(CodeNotFoundRouteParam)
+			JSON(c, CodeNotFoundRouteParam)
+			gstotel.RecordError(span, errors.New(CodeNotFoundRouteParam.Msg()))
 			return
 		}
+		req.SetID(id)
+		log.Infoz(
+			"update from request",
+			zap.String("id", id),
+			zap.Object(reflect.TypeOf(*new(M)).Elem().String(), req),
+		)
 
 		data := make([]M, 0)
 		// The underlying type of interface types.Model must be pointer to structure, such as *model.User.

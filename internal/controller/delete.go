@@ -22,27 +22,21 @@ import (
 	"github.com/hydroan/gst/util"
 )
 
-// Delete is a generic function to product gin handler to delete one or multiple resources.
+// Delete is a generic function to product gin handler to delete one resource.
 // The resource type depends on the type of interface types.Model.
 //
-// Resource id must be specify and all resources that id matched will be deleted in database.
-//
-// Delete one resource:
-// - specify resource `id` in "router parameter", eg: localhost:9000/api/myresource/myid
-// - specify resource `id` in "query parameter", eg: localhost:9000/api/myresource?id=myid
-//
-// Delete multiple resources:
-// - specify resource `id` slice in "http body data".
+// The resource id comes from the configured route parameter only,
+// eg: localhost:9000/api/myresource/myid.
+// Batch deletion should use the DeleteMany action instead.
 func Delete[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
 	DeleteFactory[M, REQ, RSP]()(c)
 }
 
-// DeleteFactory returns a Gin handler that deletes one or more resources.
+// DeleteFactory returns a Gin handler that deletes one resource.
 //
-// When M, REQ, and RSP are the same type, the handler collects ids from the
-// query string, the configured route parameter, and an optional JSON string
-// array body. It deduplicates ids, runs delete hooks for each model, deletes the
-// models through the configured database handler, records operation logs, and
+// When M, REQ, and RSP are the same type, the handler reads the resource id
+// from the configured route parameter, runs delete hooks, deletes the model
+// through the configured database handler, records an operation log, and
 // returns a no-content response status.
 //
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
@@ -99,44 +93,23 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// The underlying type of interface types.Model must be pointer to structure, such as *model.User.
 		// 'typ' is the structure type, such as: model.User.
 		typ := reflect.TypeOf(*new(M)).Elem()
-		ml := make([]M, 0)
-		idsSet := make(map[string]struct{})
 
-		addID := func(id string) {
-			if len(id) == 0 {
-				return
-			}
-			if _, exists := idsSet[id]; exists {
-				return
-			}
-			// 'm' is the structure value such as: &model.User{ID: myid, Name: myname}.
-			m := reflect.New(typ).Interface().(M) //nolint:errcheck
-			m.SetID(id)
-			ml = append(ml, m)
-			idsSet[id] = struct{}{}
-		}
-
-		// Delete one record accoding to "query parameter `id`".
-		if id, ok := c.GetQuery(consts.QUERY_ID); ok {
-			addID(id)
-		}
-		// Delete one record accoding to "route parameter `id`".
+		// The resource id comes from the configured route parameter only.
+		var id string
 		if len(cfg) > 0 {
-			addID(meta.Param(util.Deref(cfg[0]).ParamName))
+			id = meta.Param(util.Deref(cfg[0]).ParamName)
 		}
-		// Delete multiple records accoding to "http body data".
-		bodyIDs := make([]string, 0)
-		if err := c.ShouldBindJSON(&bodyIDs); err == nil && len(bodyIDs) > 0 {
-			for _, id := range bodyIDs {
-				addID(id)
-			}
+		if len(id) == 0 {
+			log.Error(CodeNotFoundRouteParam)
+			JSON(c, CodeNotFoundRouteParam)
+			gstotel.RecordError(span, errors.New(CodeNotFoundRouteParam.Msg()))
+			return
 		}
-
-		ids := make([]string, 0, len(idsSet))
-		for id := range idsSet {
-			ids = append(ids, id)
-		}
-		log.Info(fmt.Sprintf("%s delete %v", typ.Name(), ids))
+		// 'm' is the structure value such as: &model.User{ID: myid, Name: myname}.
+		m := reflect.New(typ).Interface().(M) //nolint:errcheck
+		m.SetID(id)
+		ml := []M{m}
+		log.Info(fmt.Sprintf("%s delete %s", typ.Name(), id))
 
 		// 1.Perform business logic processing before delete resources.
 		// TODO: Should there be one service hook(DeleteBefore), or multiple?

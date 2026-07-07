@@ -41,7 +41,8 @@
 
 ## Delete
 
-### Delete one resource (by route parameter)
+The resource id comes from the route parameter only. Batch deletion should use
+the `DeleteMany` action instead.
 
 > `Request`
 >
@@ -69,115 +70,15 @@
 > database.Database[*model.User]().Delete(user)
 > ```
 
-### Delete one resource (by http body)
-
-> `Rrequest`
->
-> ```bash
-> # Delete user whose id is 'user01'.
-> curl --silent --location --request DELETE 'http://localhost:8080/api/user' \
-> --header 'Content-Type: application/json' \
-> --header 'Authorization: Bearer -' \
-> --data '[
->    "user01"
-> ]'
-> ```
->
-> `Response`
->
-> ```json
-> {
->     "code": 0,
->     "data": "",
->     "msg": "success"
-> }
-> ```
->
-> `Database Equivalent`
->
-> ```go
-> user := new(model.User)
-> user.SetID("user01")
-> database.Database[*model.User]().Delete(user)
-> ```
-
-### Delete multiple resources (by http body)
-
-> `Request`
->
-> ```bash
-> # Delete user whose id are 'user01', 'user02'.
-> curl --silent --location --request DELETE 'http://localhost:8080/api/user' \
-> --header 'Content-Type: application/json' \
-> --header 'Authorization: Bearer -' \
-> --data '[
->    "user01", "user02"
-> ]'
-> ```
->
-> `Response`
->
-> ```json
-> {
->     "code": 0,
->     "data": "",
->     "msg": "success"
-> }
-> ```
->
-> `Database equivalent`
->
-> ```go
-> u1, u2 := new(model.User), new(model.User)
-> u1.SetID("user01")
-> u2.SetID("user02")
-> database.Database[*model.User]().Delete(u1, u2)
-> ```
-
-### Delete multiple resource (by route parameter and http body)
-
-> `Request`
->
-> ```bash
-> # Delete user whose id are 'user01', 'user02', "user03".
-> curl --silent --location --request DELETE 'http://localhost:8080/api/user/user01' \
-> --header 'Content-Type: application/json' \
-> --header 'Authorization: Bearer -' \
-> --data '[
-> "user02", "user03"
-> ]'
-> ```
->
-> `Response`
->
-> ```json
-> {
->     "code": 0,
->     "data": "",
->     "msg": "success"
-> }
-> ```
->
-> `Database equivalent`
->
-> ```go
-> u1, u2, u3 := new(model.User), new(model.User), new(model.User)
-> u1.SetID("user01")
-> u2.SetID("user02")
-> u3.SetID("user03")
-> database.Database[*model.User]().Delete(u1, u2, u3)
-> ```
-
 ## Update
 
 > `Request`
 >
 > ```bash
-> curl --silent --location --request PUT 'http://localhost:8080/api/user' \
+> curl --silent --location --request PUT 'http://localhost:8080/api/user/user01' \
 > --header 'Content-Type: application/json' \
 > --header 'Authorization: Bearer -' \
 > --data-raw '{
->    "id": "user01",
 >    "name": "user01_modifed",
 >    "email": "user01_modifed@gmail.com"
 > }'
@@ -211,7 +112,8 @@
 
 ## UpdatePartial
 
-### Update partial by router parameter
+The resource id comes from the route parameter only. The id carried by the
+http body is ignored.
 
 > `Request`
 >
@@ -236,47 +138,6 @@
 >        "updated_at": "2024-12-26T10:29:32.837+08:00",
 >        "name": "user01_modified",
 >        "email": "user01_modifed@gmail.com",
->        "avatar": "https://myavataor.com",
->        "sunname": "mysunname",
->        "nickname": "mynickname"
->     },
->     "msg": "success"
-> }
-> ```
->
-> `Database equivalent`
->
-> ```go
-> database.Database[*model.User]().UpdateById("user01", "name", "user01_modified")
-> database.Database[*model.User]().UpdateById("user01", "email", "user01_modified@gmail.com")
-> ```
-
-### Update partial by http body
-
-> `Request`
->
-> ```bash
-> curl --silent --location --request PATCH 'http://localhost:8080/api/user' \
-> --header 'Content-Type: application/json' \
-> --header 'Authorization: Bearer -' \
-> --data-raw '{
->     "id": "user01",
->     "name": "user01_modified2",
->     "email": "user01_modifed2@gmail.com"
-> }'
-> ```
->
-> `Response`
->
-> ```json
-> {
->     "code": 0,
->     "data": {
->        "id": "user01",
->        "created_at": "2024-12-25T17:22:28.558+08:00",
->        "updated_at": "2024-12-26T10:30:28.484+08:00",
->        "name": "user01_modified2",
->        "email": "user01_modifed2@gmail.com",
 >        "avatar": "https://myavataor.com",
 >        "sunname": "mysunname",
 >        "nickname": "mynickname"

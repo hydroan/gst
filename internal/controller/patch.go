@@ -25,24 +25,20 @@ import (
 // Patch is a generic function to product gin handler to partial update one resource.
 // The resource type depends on the type of interface types.Model.
 //
-// resource id must be specified.
-// - specified in "query parameter `id`".
-// - specified in "router parameter `id`".
-//
-// which one or multiple resources desired modify.
-// - specified in "query parameter".
-// - specified in "http body data".
+// The resource id comes from the configured route parameter only,
+// eg: localhost:9000/api/myresource/myid. The fields desired to modify are
+// carried by the http body, and the id carried by the http body is ignored.
 func Patch[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
 	PatchFactory[M, REQ, RSP]()(c)
 }
 
 // PatchFactory returns a Gin handler that partially updates one resource.
 //
-// When M, REQ, and RSP are the same type, the handler uses the configured route
-// id before the body id, loads the existing record, copies fields present in
-// the request model into that record, sets the updater field, runs patch hooks,
-// writes the patched model through the configured database handler, and records
-// an operation log.
+// When M, REQ, and RSP are the same type, the handler reads the resource id
+// from the configured route parameter, loads the existing record, copies fields
+// present in the request model into that record, sets the updater field, runs
+// patch hooks, writes the patched model through the configured database
+// handler, and records an operation log.
 //
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's Patch method.
@@ -117,6 +113,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			gstotel.RecordError(span, err)
 			return
 		}
+		// The resource id comes from the configured route parameter only.
 		if len(cfg) > 0 {
 			id = meta.Param(util.Deref(cfg[0]).ParamName)
 		}
@@ -125,9 +122,6 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			JSON(c, CodeFailure.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
-		}
-		if len(id) == 0 {
-			id = req.GetID()
 		}
 		if len(id) == 0 {
 			log.Error(CodeNotFoundRouteParam)
