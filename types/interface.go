@@ -118,7 +118,7 @@ type Database[M Model] interface {
 	// Health checks database connectivity and is not disabled by WithDryRun.
 	Health() error
 	// Transaction executes fn in a transaction for this model and passes a transaction-bound Database.
-	Transaction(fn func(txDB Database[M]) error) error
+	Transaction(fn func(tx Database[M]) error) error
 	// TransactionFunc executes fn in a transaction for multi-model work; each Database used inside fn must call WithTx(tx).
 	// WithTx also seeds the returned operation chain's context, so model hooks that receive that context and call
 	// database.Database[*OtherModel](ctx) keep using the same transaction.
