@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
-	"github.com/gorilla/schema"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/modelregistry"
 	. "github.com/hydroan/gst/internal/response"
@@ -56,16 +55,6 @@ var listCursorQueryKeys = map[string]struct{}{
 	consts.QUERY_CURSOR_FIELDS: {},
 	consts.QUERY_CURSOR_NEXT:   {},
 }
-
-// queryDecoder is shared so gorilla/schema can reuse its protected structure
-// metadata cache across requests. Keep it private and do not mutate decoder
-// options after initialization; the cache itself is concurrency-safe, but
-// option setters and converter registration are not.
-var queryDecoder = func() *schema.Decoder {
-	decoder := schema.NewDecoder()
-	decoder.SetAliasTag("query")
-	return decoder
-}()
 
 // List is a generic function to product gin handler to list resources in backend.
 // The resource type deponds on the type of interface types.Model.
@@ -116,7 +105,7 @@ func decodeListQuery[M types.Model](m M, query map[string][]string) error {
 			return err
 		}
 	}
-	return queryDecoder.Decode(m, query)
+	return serviceregistry.QueryDecoder().Decode(m, query)
 }
 
 func rejectListQueryKeys(query map[string][]string, keys map[string]struct{}) error {

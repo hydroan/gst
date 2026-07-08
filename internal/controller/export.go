@@ -61,7 +61,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		typ := reflect.TypeOf(*new(M)).Elem() // the real underlying structure type
 		m := reflect.New(typ).Interface().(M) //nolint:errcheck
 
-		if err := queryDecoder.Decode(m, c.Request.URL.Query()); err != nil {
+		if err := serviceregistry.QueryDecoder().Decode(m, c.Request.URL.Query()); err != nil {
 			log.Warn("failed to parse uri query parameter into model: ", err)
 		}
 		log.Info("query parameter: ", m)
