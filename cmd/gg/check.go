@@ -289,9 +289,11 @@ func CheckModelSingularNaming() []string {
 		"schemas":     true,
 		"entities":    true,
 		"records":     true,
+		"data":        true,
 	}
 	allowedPluralDirs := map[string]bool{
 		"types": true,
+		"data":  true,
 	}
 
 	client := pluralize.NewClient()
