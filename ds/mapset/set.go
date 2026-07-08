@@ -2,6 +2,8 @@ package mapset
 
 import (
 	"fmt"
+	"iter"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -169,23 +171,6 @@ func (s *Set[E]) Clone() *Set[E] {
 	return s.clone()
 }
 
-func (s *Set[E]) clone() *Set[E] {
-	var cloned *Set[E]
-	cloned, _ = NewFromMapKeys(s.set, s.options()...)
-	return cloned
-}
-
-func (s *Set[E]) options() []Option[E] {
-	ops := []Option[E]{}
-	if s.safe {
-		ops = append(ops, WithSafe[E]())
-	}
-	if s.sorted {
-		ops = append(ops, WithSorted(s.cmp))
-	}
-	return ops
-}
-
 // Contains reports whether the set contains all the given elements.
 // It always returns true if the provided slice is nil or empty.
 func (s *Set[E]) Contains(el ...E) bool {
@@ -243,14 +228,7 @@ func (s *Set[E]) ContainsAnyElement(other *Set[E]) bool {
 	if other == nil {
 		return false
 	}
-	if s.safe {
-		s.mu.RLock()
-		defer s.mu.RUnlock()
-	}
-	if other.safe {
-		other.mu.RLock()
-		defer other.mu.RUnlock()
-	}
+	defer s.lockBothRead(other)()
 	if len(other.set) == 0 {
 		return false
 	}
@@ -305,14 +283,7 @@ func (s *Set[E]) Equal(other *Set[E]) bool {
 	if other == nil {
 		return false
 	}
-	if s.safe {
-		s.mu.RLock()
-		defer s.mu.RUnlock()
-	}
-	if other.safe {
-		other.mu.RLock()
-		defer other.mu.RUnlock()
-	}
+	defer s.lockBothRead(other)()
 	if len(s.set) != len(other.set) {
 		return false
 	}
@@ -337,26 +308,51 @@ func (s *Set[E]) IsEmpty() bool {
 }
 
 // Iter returns a channel of elements that caller can range over.
+//
+// The set is snapshotted under the read lock before streaming, so the lock is
+// not held while sending on the channel. Prefer "Seq" or "Range" when the caller
+// may stop early: an "Iter" channel that is abandoned before being fully drained
+// leaks the sending goroutine.
 func (s *Set[E]) Iter() <-chan E {
+	if s.safe {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+	}
+
+	el := s.snapshot()
 	ch := make(chan E)
 	go func() {
+		for _, e := range el {
+			ch <- e
+		}
+		close(ch)
+	}()
+	return ch
+}
+
+// Seq returns an iterator over the set's elements for use with range-over-func.
+// Unlike "Iter", stopping the range early is safe and leaks no goroutine.
+// If the set is sorted, elements are yielded in sorted order.
+func (s *Set[E]) Seq() iter.Seq[E] {
+	return func(yield func(E) bool) {
 		if s.safe {
 			s.mu.RLock()
 			defer s.mu.RUnlock()
 		}
 		if s.sorted {
-			el := s.sortedSlice(s.cmp)
-			for _, e := range el {
-				ch <- e
+			for _, e := range s.sortedSlice(s.cmp) {
+				if !yield(e) {
+					return
+				}
 			}
-		} else {
-			for e := range s.set {
-				ch <- e
+			return
+		}
+		for e := range s.set {
+			if !yield(e) {
+				return
 			}
 		}
-		close(ch)
-	}()
-	return ch
+	}
 }
 
 // IsSubset checks if the current set is a subset of the given set.
@@ -366,29 +362,9 @@ func (s *Set[E]) IsSubset(other *Set[E]) bool {
 	if other == nil {
 		return false
 	}
-	if s.safe {
-		s.mu.RLock()
-		defer s.mu.RUnlock()
-	}
-	if other.safe {
-		other.mu.RLock()
-		defer other.mu.RUnlock()
-	}
+	defer s.lockBothRead(other)()
 
 	return s.isSubset(other)
-}
-
-func (s *Set[E]) isSubset(other *Set[E]) bool {
-	if len(s.set) > len(other.set) {
-		return false
-	}
-	var ok bool
-	for e := range s.set {
-		if _, ok = other.set[e]; !ok {
-			return false
-		}
-	}
-	return true
 }
 
 // IsProperSubset checks if the current set is a proper subset of the given set.
@@ -398,14 +374,7 @@ func (s *Set[E]) IsProperSubset(other *Set[E]) bool {
 	if other == nil {
 		return false
 	}
-	if s.safe {
-		s.mu.RLock()
-		defer s.mu.RUnlock()
-	}
-	if other.safe {
-		other.mu.RLock()
-		defer other.mu.RUnlock()
-	}
+	defer s.lockBothRead(other)()
 
 	return len(s.set) < len(other.set) && s.isSubset(other)
 }
@@ -417,46 +386,21 @@ func (s *Set[E]) IsSuperset(other *Set[E]) bool {
 	if other == nil {
 		return true
 	}
-	if s.safe {
-		s.mu.RLock()
-		defer s.mu.RUnlock()
-	}
-	if other.safe {
-		other.mu.RLock()
-		defer other.mu.RUnlock()
-	}
+	defer s.lockBothRead(other)()
 
 	return s.isSuperset(other)
-}
-
-func (s *Set[E]) isSuperset(other *Set[E]) bool {
-	if len(other.set) == 0 {
-		return true
-	}
-	var ok bool
-	for e := range other.set {
-		if _, ok = s.set[e]; !ok {
-			return false
-		}
-	}
-	return true
 }
 
 // IsProperSuperset checks if the current set is a proper superset of given set.
 // A proper superset means all elements of given set are present int the current set.
 // and the current set has additional element not present in the given set.
 func (s *Set[E]) IsProperSuperset(other *Set[E]) bool {
-	if s.safe {
-		s.mu.RLock()
-		defer s.mu.RUnlock()
+	if other == nil {
+		// Every non-empty set is a proper superset of the empty (nil) set; the
+		// empty set is not a proper superset of the empty set.
+		return !s.IsEmpty()
 	}
-	if other == nil && len(s.set) > 0 {
-		return true
-	}
-	if other.safe {
-		other.mu.RLock()
-		defer other.mu.RUnlock()
-	}
+	defer s.lockBothRead(other)()
 	return len(s.set) > len(other.set) && s.isSuperset(other)
 }
 
@@ -469,16 +413,9 @@ func (s *Set[E]) IsProperSuperset(other *Set[E]) bool {
 // be concurrent-safe.
 func (s *Set[E]) Difference(other *Set[E]) *Set[E] {
 	if other == nil {
-		return s.clone()
+		return s.Clone()
 	}
-	if s.safe {
-		s.mu.RLock()
-		defer s.mu.RUnlock()
-	}
-	if other.safe {
-		other.mu.RLock()
-		defer other.mu.RUnlock()
-	}
+	defer s.lockBothRead(other)()
 	if len(other.set) == 0 || len(s.set) == 0 {
 		return s.clone()
 	}
@@ -503,16 +440,9 @@ func (s *Set[E]) SymmetricDifference(other *Set[E]) *Set[E] {
 	if other == nil {
 		return s.Clone()
 	}
-	if s.safe {
-		s.mu.RLock()
-		defer s.mu.RUnlock()
-	}
-	if other.safe {
-		s.mu.RLock()
-		defer s.mu.RUnlock()
-	}
+	defer s.lockBothRead(other)()
 	if len(other.set) == 0 {
-		return s.Clone()
+		return s.clone()
 	}
 
 	diff, _ := New(s.options()...)
@@ -542,16 +472,9 @@ func (s *Set[E]) Union(other *Set[E]) *Set[E] {
 	if other == nil {
 		return s.Clone()
 	}
-	if s.safe {
-		s.mu.RLock()
-		defer s.mu.RUnlock()
-	}
-	if other.safe {
-		other.mu.RLock()
-		defer other.mu.RUnlock()
-	}
+	defer s.lockBothRead(other)()
 	if len(other.set) == 0 {
-		return s.Clone()
+		return s.clone()
 	}
 
 	union, _ := New(s.options()...)
@@ -571,18 +494,12 @@ func (s *Set[E]) Union(other *Set[E]) *Set[E] {
 // The returned set inherits the properties of the current set.
 // For example, if the current set is concurrent-safe, the returned set is also
 func (s *Set[E]) Intersect(other *Set[E]) *Set[E] {
-	if s.safe {
-		s.mu.RLock()
-		defer s.mu.RUnlock()
-	}
-	if other.safe {
-		other.mu.RLock()
-		defer other.mu.RUnlock()
-	}
-	inter, _ := New(s.options()...)
 	if other == nil {
+		inter, _ := New(s.options()...)
 		return inter
 	}
+	defer s.lockBothRead(other)()
+	inter, _ := New(s.options()...)
 	if len(other.set) == 0 || len(s.set) == 0 {
 		return inter
 	}
@@ -633,12 +550,39 @@ func (s *Set[E]) Slice() []E {
 		defer s.mu.RUnlock()
 	}
 
+	return s.snapshot()
+}
+
+// clone copies the set into a new one that inherits the same options. Callers
+// must hold the read lock.
+func (s *Set[E]) clone() *Set[E] {
+	var cloned *Set[E]
+	cloned, _ = NewFromMapKeys(s.set, s.options()...)
+	return cloned
+}
+
+// options rebuilds the option list that reproduces the set's current properties.
+func (s *Set[E]) options() []Option[E] {
+	ops := []Option[E]{}
+	if s.safe {
+		ops = append(ops, WithSafe[E]())
+	}
+	if s.sorted {
+		ops = append(ops, WithSorted(s.cmp))
+	}
+	return ops
+}
+
+// snapshot returns the set's elements as a slice, honoring the sorted option.
+// Callers must hold the read lock.
+func (s *Set[E]) snapshot() []E {
 	if s.sorted {
 		return s.sortedSlice(s.cmp)
 	}
 	return s.unsortedSlice()
 }
 
+// sortedSlice returns the set's elements sorted by cmp.
 func (s *Set[E]) sortedSlice(cmp func(E, E) int) []E {
 	el := make([]E, 0, len(s.set))
 	for e := range s.set {
@@ -648,10 +592,77 @@ func (s *Set[E]) sortedSlice(cmp func(E, E) int) []E {
 	return el
 }
 
+// unsortedSlice returns the set's elements in non-deterministic order.
 func (s *Set[E]) unsortedSlice() []E {
 	el := make([]E, 0, len(s.set))
 	for e := range s.set {
 		el = append(el, e)
 	}
 	return el
+}
+
+// isSubset reports whether s is a subset of other. Callers must hold the locks.
+func (s *Set[E]) isSubset(other *Set[E]) bool {
+	if len(s.set) > len(other.set) {
+		return false
+	}
+	var ok bool
+	for e := range s.set {
+		if _, ok = other.set[e]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// isSuperset reports whether s is a superset of other. Callers must hold the locks.
+func (s *Set[E]) isSuperset(other *Set[E]) bool {
+	if len(other.set) == 0 {
+		return true
+	}
+	var ok bool
+	for e := range other.set {
+		if _, ok = s.set[e]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// lockBothRead read-locks s and other in a stable, address-ordered sequence and
+// returns a function that releases the same locks. Ordering acquisition by mutex
+// address prevents AB-BA deadlocks between concurrent binary operations (for
+// example a.Union(b) racing b.Union(a)). Sets that are not concurrent-safe are
+// skipped, and a mutex shared by both sets (such as s == other) is locked once.
+func (s *Set[E]) lockBothRead(other *Set[E]) func() {
+	var first, second types.Locker
+	if s.safe {
+		first = s.mu
+	}
+	if other.safe && other.mu != first {
+		second = other.mu
+	}
+	if first != nil && second != nil && lockerAddr(second) < lockerAddr(first) {
+		first, second = second, first
+	}
+	if first != nil {
+		first.RLock()
+	}
+	if second != nil {
+		second.RLock()
+	}
+	return func() {
+		if second != nil {
+			second.RUnlock()
+		}
+		if first != nil {
+			first.RUnlock()
+		}
+	}
+}
+
+// lockerAddr returns the address of the underlying lock so that a pair of locks
+// can be acquired in a deterministic order.
+func lockerAddr(l types.Locker) uintptr {
+	return reflect.ValueOf(l).Pointer()
 }
