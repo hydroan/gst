@@ -1,7 +1,9 @@
 package mapset_test
 
 import (
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/hydroan/gst/ds/mapset"
 	"github.com/stretchr/testify/assert"
@@ -152,15 +154,56 @@ func TestIsEmpty(t *testing.T) {
 }
 
 func TestIter(t *testing.T) {
-	s, _ := mapset.NewFromSlice([]int{1, 2, 3}, mapset.WithSorted(intCmp))
-	elements := make([]int, 0, 3)
-	count := 0
-	for e := range s.Iter() {
-		elements = append(elements, e)
-		count++
-	}
-	assert.Equal(t, 3, count)
-	assert.Equal(t, []int{1, 2, 3}, elements)
+	t.Run("iterate all", func(t *testing.T) {
+		s, _ := mapset.NewFromSlice([]int{1, 2, 3}, mapset.WithSorted(intCmp))
+		elements := make([]int, 0, 3)
+		for e := range s.Iter() {
+			elements = append(elements, e)
+		}
+		assert.Equal(t, []int{1, 2, 3}, elements)
+	})
+
+	// An early break must not leave the read lock held and deadlock later writers
+	// on a concurrent-safe set.
+	t.Run("early break does not block writers", func(t *testing.T) {
+		s, _ := mapset.New(mapset.WithSafe[int]())
+		s.Add(1, 2, 3, 4, 5)
+		for range s.Iter() {
+			break
+		}
+
+		done := make(chan struct{})
+		go func() {
+			s.Add(6)
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Fatal("Add blocked: Iter still holds the read lock after an early break")
+		}
+	})
+}
+
+func TestSeq(t *testing.T) {
+	t.Run("iterate all", func(t *testing.T) {
+		s, _ := mapset.NewFromSlice([]int{1, 2, 3}, mapset.WithSorted(intCmp))
+		elements := make([]int, 0, 3)
+		for e := range s.Seq() {
+			elements = append(elements, e)
+		}
+		assert.Equal(t, []int{1, 2, 3}, elements)
+	})
+
+	t.Run("early break stops iteration", func(t *testing.T) {
+		s, _ := mapset.NewFromSlice([]int{1, 2, 3}, mapset.WithSorted(intCmp))
+		var first int
+		for e := range s.Seq() {
+			first = e
+			break
+		}
+		assert.Equal(t, 1, first)
+	})
 }
 
 func TestIsSubset(t *testing.T) {
@@ -191,12 +234,23 @@ func TestIsSuperset(t *testing.T) {
 }
 
 func TestIsProperSuperset(t *testing.T) {
-	s1, _ := mapset.NewFromSlice([]int{1, 2, 3})
-	s2, _ := mapset.NewFromSlice([]int{1, 2})
-	s3, _ := mapset.NewFromSlice([]int{1, 2})
-	assert.True(t, s1.IsProperSuperset(s2))
-	assert.False(t, s2.IsProperSuperset(s3))
-	assert.False(t, s2.IsProperSuperset(s1))
+	t.Run("proper superset", func(t *testing.T) {
+		s1, _ := mapset.NewFromSlice([]int{1, 2, 3})
+		s2, _ := mapset.NewFromSlice([]int{1, 2})
+		s3, _ := mapset.NewFromSlice([]int{1, 2})
+		assert.True(t, s1.IsProperSuperset(s2))
+		assert.False(t, s2.IsProperSuperset(s3))
+		assert.False(t, s2.IsProperSuperset(s1))
+	})
+
+	t.Run("nil", func(t *testing.T) {
+		empty, _ := mapset.New[int]()
+		nonEmpty, _ := mapset.NewFromSlice([]int{1})
+		require.NotPanics(t, func() {
+			assert.False(t, empty.IsProperSuperset(nil))
+			assert.True(t, nonEmpty.IsProperSuperset(nil))
+		})
+	})
 }
 
 func TestDifference(t *testing.T) {
@@ -209,29 +263,64 @@ func TestDifference(t *testing.T) {
 }
 
 func TestSymmetricDifference(t *testing.T) {
-	s1, _ := mapset.NewFromSlice([]int{1, 2, 3})
-	s2, _ := mapset.NewFromSlice([]int{2, 3, 4})
-	diff1 := s1.SymmetricDifference(s2)
-	diff2 := s2.SymmetricDifference(s1)
-	// fmt.Println(diff1.Slice(), diff2.Slice())
-	assert.True(t, diff1.Contains(1, 4))
-	assert.True(t, diff2.Contains(1, 4))
+	t.Run("unsafe", func(t *testing.T) {
+		s1, _ := mapset.NewFromSlice([]int{1, 2, 3})
+		s2, _ := mapset.NewFromSlice([]int{2, 3, 4})
+		diff1 := s1.SymmetricDifference(s2)
+		diff2 := s2.SymmetricDifference(s1)
+		assert.True(t, diff1.Contains(1, 4))
+		assert.True(t, diff2.Contains(1, 4))
+	})
+
+	t.Run("safe", func(t *testing.T) {
+		s1, _ := mapset.NewFromSlice([]int{1, 2, 3}, mapset.WithSafe[int]())
+		s2, _ := mapset.NewFromSlice([]int{2, 3, 4}, mapset.WithSafe[int]())
+		diff := s1.SymmetricDifference(s2)
+		assert.Equal(t, 2, diff.Len())
+		assert.True(t, diff.Contains(1, 4))
+	})
+
+	t.Run("concurrent", func(t *testing.T) {
+		runConcurrentBinaryOp(t, func(a, b *mapset.Set[int]) { _ = a.SymmetricDifference(b) })
+	})
 }
 
 func TestUnion(t *testing.T) {
-	s1, _ := mapset.NewFromSlice([]int{1, 2, 3})
-	s2, _ := mapset.NewFromSlice([]int{3, 4, 5})
-	union := s1.Union(s2)
-	assert.Equal(t, 5, union.Len())
-	assert.True(t, union.Contains(1, 2, 3, 4, 5))
+	t.Run("union", func(t *testing.T) {
+		s1, _ := mapset.NewFromSlice([]int{1, 2, 3})
+		s2, _ := mapset.NewFromSlice([]int{3, 4, 5})
+		union := s1.Union(s2)
+		assert.Equal(t, 5, union.Len())
+		assert.True(t, union.Contains(1, 2, 3, 4, 5))
+	})
+
+	t.Run("concurrent", func(t *testing.T) {
+		runConcurrentBinaryOp(t, func(a, b *mapset.Set[int]) { _ = a.Union(b) })
+	})
 }
 
 func TestIntersect(t *testing.T) {
-	s1, _ := mapset.NewFromSlice([]int{1, 2, 3})
-	s2, _ := mapset.NewFromSlice([]int{2, 3, 4})
-	intersect := s1.Intersect(s2)
-	assert.Equal(t, 2, intersect.Len())
-	assert.True(t, intersect.Contains(2, 3))
+	t.Run("intersect", func(t *testing.T) {
+		s1, _ := mapset.NewFromSlice([]int{1, 2, 3})
+		s2, _ := mapset.NewFromSlice([]int{2, 3, 4})
+		intersect := s1.Intersect(s2)
+		assert.Equal(t, 2, intersect.Len())
+		assert.True(t, intersect.Contains(2, 3))
+	})
+
+	t.Run("nil", func(t *testing.T) {
+		s, _ := mapset.NewFromSlice([]int{1, 2, 3}, mapset.WithSorted(intCmp))
+		var got *mapset.Set[int]
+		require.NotPanics(t, func() {
+			got = s.Intersect(nil)
+		})
+		assert.Equal(t, 0, got.Len())
+		assert.Equal(t, []int{}, got.Slice())
+	})
+
+	t.Run("concurrent", func(t *testing.T) {
+		runConcurrentBinaryOp(t, func(a, b *mapset.Set[int]) { _ = a.Intersect(b) })
+	})
 }
 
 func TestClone(t *testing.T) {
@@ -262,4 +351,24 @@ func TestUnmarshalJSON(t *testing.T) {
 	err := s.UnmarshalJSON(data)
 	require.NoError(t, err)
 	assert.True(t, s.Contains(1, 2, 3))
+}
+
+// runConcurrentBinaryOp runs op in both directions against two concurrent-safe
+// sets while other goroutines mutate them. Run with -race it flags any map read
+// that is not guarded by the other set's lock, and any lock-ordering deadlock
+// surfaces as a hang.
+func runConcurrentBinaryOp(t *testing.T, op func(a, b *mapset.Set[int])) {
+	t.Helper()
+	a, _ := mapset.NewFromSlice([]int{1, 2, 3}, mapset.WithSafe[int]())
+	b, _ := mapset.NewFromSlice([]int{3, 4, 5}, mapset.WithSafe[int]())
+
+	var wg sync.WaitGroup
+	for i := range 100 {
+		wg.Add(4)
+		go func() { defer wg.Done(); op(a, b) }()
+		go func() { defer wg.Done(); op(b, a) }()
+		go func() { defer wg.Done(); a.Add(i) }()
+		go func() { defer wg.Done(); b.Remove(i) }()
+	}
+	wg.Wait()
 }

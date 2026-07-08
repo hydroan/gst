@@ -27,6 +27,7 @@ func WithSafe[E comparable]() Option[E] {
 // - "MarshalJSON": sorts the elements before returning the JSON representation.
 // - "Range": sorts the elements before calling the provided function.
 // - "Iter": sorts the elements before returning a channel of elements.
+// - "Seq": sorts the elements before yielding them to the iterator.
 func WithSorted[E comparable](cmp func(E, E) int) Option[E] {
 	return func(s *Set[E]) error {
 		if cmp == nil {
