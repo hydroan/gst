@@ -135,7 +135,8 @@ type DatabaseOption[M Model] interface {
 	WithDB(any) Database[M]
 	// WithTx binds operations to a *gorm.DB transaction, primarily inside TransactionFunc.
 	// It also stores the transaction in the operation context so model hooks can pass ctx to Database[*OtherModel](ctx)
-	// without manually threading the raw transaction through hook signatures.
+	// without manually threading the raw transaction through hook signatures, and re-parents this
+	// chain's tracing spans under the transaction span carried by tx.
 	WithTx(tx any) Database[M]
 	// WithTable sets a custom table name; the table must already exist.
 	WithTable(name string) Database[M]

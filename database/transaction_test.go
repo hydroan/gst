@@ -15,6 +15,8 @@ import (
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
+	oteltrace "go.opentelemetry.io/otel/trace"
+	"gorm.io/gorm"
 )
 
 func TestDatabaseTransaction(t *testing.T) {
@@ -649,8 +651,9 @@ func TestDatabaseTransactionWithOTELEnabled(t *testing.T) {
 }
 
 // TestDatabaseTransactionFuncWithOTELEnabled is the TransactionFunc counterpart of
-// TestDatabaseTransactionWithOTELEnabled; see that test's comment for why span content
-// itself is not asserted here.
+// TestDatabaseTransactionWithOTELEnabled; span name/attributes are still unobservable (see
+// that test's comment), but the transaction span context handed to fn through the tx handle
+// IS observable and asserted here, since WithTx relies on it to nest inner operation spans.
 func TestDatabaseTransactionFuncWithOTELEnabled(t *testing.T) {
 	setupOTELTestForTransaction(t)
 	defer cleanupTestData()
@@ -658,6 +661,10 @@ func TestDatabaseTransactionFuncWithOTELEnabled(t *testing.T) {
 	t.Run("commit", func(t *testing.T) {
 		defer cleanupTestData()
 		err := database.Database[*TestUser](context.Background()).TransactionFunc(func(tx any) error {
+			gormTx, ok := tx.(*gorm.DB)
+			require.True(t, ok, "tx should be a *gorm.DB")
+			require.True(t, oteltrace.SpanContextFromContext(gormTx.Statement.Context).IsValid(),
+				"tx must carry the transaction span context so WithTx can nest inner spans under it")
 			return database.Database[*TestUser](context.Background()).WithTx(tx).Create(ul...)
 		})
 		require.NoError(t, err, "transaction should succeed")

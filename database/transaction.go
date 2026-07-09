@@ -84,18 +84,18 @@ func (db *database[M]) Transaction(fn func(tx types.Database[M]) error) error {
 	modelName := reflect.TypeOf(*new(M)).Elem().Name()
 	spanCtx, span := gstotel.StartSpan(db.ctx, transactionSpanName(modelName, "Transaction"))
 	defer span.End()
-	recording := gstotel.IsSpanRecording(span)
-	if recording {
-		gstotel.AddSpanTags(span, map[string]any{
-			"component":          "database",
-			"database.model":     modelName,
-			"database.operation": "Transaction",
-		})
-	}
+	gstotel.AddSpanTags(span, map[string]any{
+		"component":          "database",
+		"database.model":     modelName,
+		"database.operation": "Transaction",
+	})
 
 	begin := time.Now()
 
-	return db.ins.Transaction(func(gormTx *gorm.DB) error {
+	// Binding the transaction handle to spanCtx makes GORM's Begin copy the span context
+	// into gormTx's statement context, which WithTx lifts back out to nest inner operation
+	// spans under this transaction span.
+	txErr := db.ins.WithContext(spanCtx).Transaction(func(gormTx *gorm.DB) error {
 		// Create a new database instance with transaction context. Using spanCtx (rather
 		// than db.ctx) makes per-statement spans from GormTracingPlugin nest under this
 		// transaction span instead of appearing as flat siblings in the trace.
@@ -112,10 +112,6 @@ func (db *database[M]) Transaction(fn func(tx types.Database[M]) error) error {
 			if db.rollbackFunc != nil {
 				db.rollbackFunc()
 			}
-			if recording {
-				gstotel.AddSpanTags(span, map[string]any{"database.duration_ms": time.Since(begin).Milliseconds()})
-				gstotel.RecordError(span, err)
-			}
 			logger.Database.WithContext(db.ctx, consts.Phase("Transaction")).Errorz(
 				"transaction rolled back due to error",
 				zap.Error(err),
@@ -124,15 +120,18 @@ func (db *database[M]) Transaction(fn func(tx types.Database[M]) error) error {
 			return err
 		}
 
-		if recording {
-			gstotel.AddSpanTags(span, map[string]any{"database.duration_ms": time.Since(begin).Milliseconds()})
-		}
 		logger.Database.WithContext(db.ctx, consts.Phase("Transaction")).Infoz(
 			"transaction committed successfully",
 			zap.String("cost", util.FormatDurationSmart(time.Since(begin))),
 		)
 		return nil
 	})
+
+	// Recorded after db.ins.Transaction returns so failures during the commit phase itself
+	// are also captured on the span. The span's own native duration already covers the full
+	// transaction including commit/rollback, so no duration tag is added.
+	gstotel.RecordError(span, txErr)
+	return txErr
 }
 
 // TransactionFunc executes a function within a complete transaction with automatic management.
@@ -224,32 +223,25 @@ func (db *database[M]) TransactionFunc(fn func(tx any) error) error {
 	}
 
 	modelName := reflect.TypeOf(*new(M)).Elem().Name()
-	// TransactionFunc hands the caller a raw *gorm.DB (not a context), so unlike Transaction
-	// there is no way to thread the span context into nested Database[T](ctx) calls the
-	// caller makes inside fn; this span only bounds the transaction as a whole.
-	_, span := gstotel.StartSpan(db.ctx, transactionSpanName(modelName, "TransactionFunc"))
+	spanCtx, span := gstotel.StartSpan(db.ctx, transactionSpanName(modelName, "TransactionFunc"))
 	defer span.End()
-	recording := gstotel.IsSpanRecording(span)
-	if recording {
-		gstotel.AddSpanTags(span, map[string]any{
-			"component":          "database",
-			"database.model":     modelName,
-			"database.operation": "TransactionFunc",
-		})
-	}
+	gstotel.AddSpanTags(span, map[string]any{
+		"component":          "database",
+		"database.model":     modelName,
+		"database.operation": "TransactionFunc",
+	})
 
 	begin := time.Now()
 
-	return db.ins.Transaction(func(tx *gorm.DB) error {
+	// fn only receives the raw *gorm.DB, so the span context travels inside the transaction
+	// handle's statement context (GORM's Begin copies it from this handle): WithTx(tx) lifts
+	// it back out to nest the spans of every operation that joins this transaction.
+	txErr := db.ins.WithContext(spanCtx).Transaction(func(tx *gorm.DB) error {
 		// Execute the user function with the transaction gorm.DB instance
 		if err := fn(tx); err != nil {
 			// Execute custom rollback logic if provided
 			if db.rollbackFunc != nil {
 				db.rollbackFunc()
-			}
-			if recording {
-				gstotel.AddSpanTags(span, map[string]any{"database.duration_ms": time.Since(begin).Milliseconds()})
-				gstotel.RecordError(span, err)
 			}
 			logger.Database.WithContext(db.ctx, consts.Phase("TransactionFunc")).Errorz(
 				"transaction rolled back due to error",
@@ -259,13 +251,16 @@ func (db *database[M]) TransactionFunc(fn func(tx any) error) error {
 			return err
 		}
 
-		if recording {
-			gstotel.AddSpanTags(span, map[string]any{"database.duration_ms": time.Since(begin).Milliseconds()})
-		}
 		logger.Database.WithContext(db.ctx, consts.Phase("TransactionFunc")).Infoz(
 			"transaction committed successfully",
 			zap.String("cost", util.FormatDurationSmart(time.Since(begin))),
 		)
 		return nil
 	})
+
+	// Recorded after db.ins.Transaction returns so failures during the commit phase itself
+	// are also captured on the span. The span's own native duration already covers the full
+	// transaction including commit/rollback, so no duration tag is added.
+	gstotel.RecordError(span, txErr)
+	return txErr
 }

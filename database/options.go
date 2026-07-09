@@ -10,6 +10,7 @@ import (
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
+	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 )
 
@@ -172,6 +173,12 @@ func (db *database[M]) WithTable(name string) types.Database[M] {
 // and calls Database[*OtherModel](ctx), the new operation chain inherits the
 // same transaction instead of opening a separate write.
 //
+// WithTx additionally re-parents this operation chain's tracing spans under the
+// transaction span carried by tx (bound to the tx handle's statement context by
+// Transaction/TransactionFunc), so per-operation spans nest under the transaction
+// span in the trace. Only the span is grafted; all values of the caller's own
+// context are preserved.
+//
 // NOTE: Invalid tx parameter (nil or wrong type) will log a warning and skip transaction context.
 func (db *database[M]) WithTx(tx any) types.Database[M] {
 	var empty *gorm.DB
@@ -191,6 +198,11 @@ func (db *database[M]) WithTx(tx any) types.Database[M] {
 	// 	ctx:          db.ctx,
 	// 	rollbackFunc: db.rollbackFunc,
 	// }
+	if _tx.Statement != nil {
+		if txSpan := trace.SpanFromContext(_tx.Statement.Context); txSpan.SpanContext().IsValid() {
+			db.ctx = trace.ContextWithSpan(db.ctx, txSpan)
+		}
+	}
 	db.ctx = contextWithTx(db.ctx, _tx)
 	db.ins = _tx.Session(&gorm.Session{
 		SkipDefaultTransaction: false,
