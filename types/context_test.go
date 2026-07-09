@@ -38,7 +38,7 @@ func TestServiceContextContextMethods(t *testing.T) {
 	require.Equal(t, []string{"blue"}, meta.Query()["tag"])
 }
 
-func TestServiceContextMetadataAccessorsReturnCopies(t *testing.T) {
+func TestServiceContextQueryAccessorReturnsCopy(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
@@ -52,8 +52,6 @@ func TestServiceContextMetadataAccessorsReturnCopies(t *testing.T) {
 
 	serviceCtx := NewServiceContext(ctx, nil, "")
 
-	params := serviceCtx.Params()
-	params["id"] = "mutated"
 	query := serviceCtx.Query()
 	query["tag"][0] = "mutated"
 

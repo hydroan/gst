@@ -102,13 +102,12 @@ func (sc *ServiceContext) RequiresAuth() bool {
 	return sc.requiresAuth
 }
 
-func (sc *ServiceContext) Params() map[string]string { return requestctx.FromContext(sc).Params() }
-func (sc *ServiceContext) Query() url.Values         { return requestctx.FromContext(sc).Query() }
-func (sc *ServiceContext) Param(key string) string   { return requestctx.FromContext(sc).Param(key) }
-func (sc *ServiceContext) Route() string             { return requestctx.FromContext(sc).Route() }
-func (sc *ServiceContext) Username() string          { return requestctx.FromContext(sc).Username() }
-func (sc *ServiceContext) UserID() string            { return requestctx.FromContext(sc).UserID() }
-func (sc *ServiceContext) SessionID() string         { return requestctx.FromContext(sc).SessionID() }
+func (sc *ServiceContext) Query() url.Values       { return requestctx.FromContext(sc).Query() }
+func (sc *ServiceContext) Param(key string) string { return requestctx.FromContext(sc).Param(key) }
+func (sc *ServiceContext) Route() string           { return requestctx.FromContext(sc).Route() }
+func (sc *ServiceContext) Username() string        { return requestctx.FromContext(sc).Username() }
+func (sc *ServiceContext) UserID() string          { return requestctx.FromContext(sc).UserID() }
+func (sc *ServiceContext) SessionID() string       { return requestctx.FromContext(sc).SessionID() }
 
 func (sc *ServiceContext) TenantID() string { return requestctx.FromContext(sc).TenantID() }
 func (sc *ServiceContext) TraceID() string  { return requestctx.FromContext(sc).TraceID() }
