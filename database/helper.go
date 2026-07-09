@@ -466,6 +466,13 @@ func traceModelHook[M types.Model](ctx context.Context, phase consts.Phase, pare
 	return err
 }
 
+// transactionSpanName returns the canonical OTel span name for Transaction/TransactionFunc,
+// e.g. "database.User.Transaction". Uses the same "database" component as trace() so
+// transaction spans sit in the same namespace as ordinary Create/List/Update/Delete spans.
+func transactionSpanName(modelName, operation string) string {
+	return gstotel.FrameworkSpanName("database", modelName, operation)
+}
+
 // contains checks if a string item exists in a string slice.
 // Uses a map-based approach for O(n) time complexity with O(n) space complexity.
 // More efficient than linear search for larger slices.

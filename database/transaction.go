@@ -1,9 +1,11 @@
 package database
 
 import (
+	"reflect"
 	"time"
 
 	"github.com/hydroan/gst/logger"
+	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
@@ -79,11 +81,25 @@ func (db *database[M]) Transaction(fn func(tx types.Database[M]) error) error {
 		return ErrBuildSQLTransaction
 	}
 
+	modelName := reflect.TypeOf(*new(M)).Elem().Name()
+	spanCtx, span := gstotel.StartSpan(db.ctx, transactionSpanName(modelName, "Transaction"))
+	defer span.End()
+	recording := gstotel.IsSpanRecording(span)
+	if recording {
+		gstotel.AddSpanTags(span, map[string]any{
+			"component":          "database",
+			"database.model":     modelName,
+			"database.operation": "Transaction",
+		})
+	}
+
 	begin := time.Now()
 
 	return db.ins.Transaction(func(gormTx *gorm.DB) error {
-		// Create a new database instance with transaction context
-		tx := Database[M](db.ctx).WithTx(gormTx)
+		// Create a new database instance with transaction context. Using spanCtx (rather
+		// than db.ctx) makes per-statement spans from GormTracingPlugin nest under this
+		// transaction span instead of appearing as flat siblings in the trace.
+		tx := Database[M](spanCtx).WithTx(gormTx)
 
 		// Copy relevant options to the transaction database instance
 		if db.rollbackFunc != nil {
@@ -96,6 +112,10 @@ func (db *database[M]) Transaction(fn func(tx types.Database[M]) error) error {
 			if db.rollbackFunc != nil {
 				db.rollbackFunc()
 			}
+			if recording {
+				gstotel.AddSpanTags(span, map[string]any{"database.duration_ms": time.Since(begin).Milliseconds()})
+				gstotel.RecordError(span, err)
+			}
 			logger.Database.WithContext(db.ctx, consts.Phase("Transaction")).Errorz(
 				"transaction rolled back due to error",
 				zap.Error(err),
@@ -104,6 +124,9 @@ func (db *database[M]) Transaction(fn func(tx types.Database[M]) error) error {
 			return err
 		}
 
+		if recording {
+			gstotel.AddSpanTags(span, map[string]any{"database.duration_ms": time.Since(begin).Milliseconds()})
+		}
 		logger.Database.WithContext(db.ctx, consts.Phase("Transaction")).Infoz(
 			"transaction committed successfully",
 			zap.String("cost", util.FormatDurationSmart(time.Since(begin))),
@@ -200,6 +223,21 @@ func (db *database[M]) TransactionFunc(fn func(tx any) error) error {
 		return ErrBuildSQLTransaction
 	}
 
+	modelName := reflect.TypeOf(*new(M)).Elem().Name()
+	// TransactionFunc hands the caller a raw *gorm.DB (not a context), so unlike Transaction
+	// there is no way to thread the span context into nested Database[T](ctx) calls the
+	// caller makes inside fn; this span only bounds the transaction as a whole.
+	_, span := gstotel.StartSpan(db.ctx, transactionSpanName(modelName, "TransactionFunc"))
+	defer span.End()
+	recording := gstotel.IsSpanRecording(span)
+	if recording {
+		gstotel.AddSpanTags(span, map[string]any{
+			"component":          "database",
+			"database.model":     modelName,
+			"database.operation": "TransactionFunc",
+		})
+	}
+
 	begin := time.Now()
 
 	return db.ins.Transaction(func(tx *gorm.DB) error {
@@ -209,6 +247,10 @@ func (db *database[M]) TransactionFunc(fn func(tx any) error) error {
 			if db.rollbackFunc != nil {
 				db.rollbackFunc()
 			}
+			if recording {
+				gstotel.AddSpanTags(span, map[string]any{"database.duration_ms": time.Since(begin).Milliseconds()})
+				gstotel.RecordError(span, err)
+			}
 			logger.Database.WithContext(db.ctx, consts.Phase("TransactionFunc")).Errorz(
 				"transaction rolled back due to error",
 				zap.Error(err),
@@ -217,6 +259,9 @@ func (db *database[M]) TransactionFunc(fn func(tx any) error) error {
 			return err
 		}
 
+		if recording {
+			gstotel.AddSpanTags(span, map[string]any{"database.duration_ms": time.Since(begin).Milliseconds()})
+		}
 		logger.Database.WithContext(db.ctx, consts.Phase("TransactionFunc")).Infoz(
 			"transaction committed successfully",
 			zap.String("cost", util.FormatDurationSmart(time.Since(begin))),

@@ -4,9 +4,14 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/logger"
+	pkgzap "github.com/hydroan/gst/logger/zap"
 	"github.com/hydroan/gst/model"
+	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
@@ -606,5 +611,106 @@ func TestDatabaseWithLock(t *testing.T) {
 			})
 			require.NoError(t, err)
 		})
+	})
+}
+
+// TestDatabaseTransactionWithOTELEnabled verifies that enabling real OTel tracing does not
+// change Transaction's commit/rollback behavior. It cannot assert on the emitted span itself:
+// Transaction's fn receives types.Database[M], not a context.Context, so there is no public
+// hook for a black-box test to observe span name/attributes/status (the same constraint that
+// leaves GormTracingPlugin's per-statement spans in gorm_tracing.go untested today).
+func TestDatabaseTransactionWithOTELEnabled(t *testing.T) {
+	setupOTELTestForTransaction(t)
+	defer cleanupTestData()
+
+	t.Run("commit", func(t *testing.T) {
+		defer cleanupTestData()
+		err := database.Database[*TestUser](context.Background()).Transaction(func(tx types.Database[*TestUser]) error {
+			return tx.Create(ul...)
+		})
+		require.NoError(t, err, "transaction should succeed")
+		users := make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
+		require.Len(t, users, 3, "should have 3 records after successful transaction")
+	})
+
+	t.Run("rollback", func(t *testing.T) {
+		defer cleanupTestData()
+		errTest := errors.New("test error")
+		err := database.Database[*TestUser](context.Background()).Transaction(func(tx types.Database[*TestUser]) error {
+			require.NoError(t, tx.Create(ul...))
+			return errTest
+		})
+		require.ErrorIs(t, err, errTest)
+		users := make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
+		require.Empty(t, users, "should have 0 records after rollback")
+	})
+}
+
+// TestDatabaseTransactionFuncWithOTELEnabled is the TransactionFunc counterpart of
+// TestDatabaseTransactionWithOTELEnabled; see that test's comment for why span content
+// itself is not asserted here.
+func TestDatabaseTransactionFuncWithOTELEnabled(t *testing.T) {
+	setupOTELTestForTransaction(t)
+	defer cleanupTestData()
+
+	t.Run("commit", func(t *testing.T) {
+		defer cleanupTestData()
+		err := database.Database[*TestUser](context.Background()).TransactionFunc(func(tx any) error {
+			return database.Database[*TestUser](context.Background()).WithTx(tx).Create(ul...)
+		})
+		require.NoError(t, err, "transaction should succeed")
+		users := make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
+		require.Len(t, users, 3, "should have 3 records after successful transaction")
+	})
+
+	t.Run("rollback", func(t *testing.T) {
+		defer cleanupTestData()
+		errTest := errors.New("test error")
+		err := database.Database[*TestUser](context.Background()).TransactionFunc(func(tx any) error {
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithTx(tx).Create(ul...))
+			return errTest
+		})
+		require.ErrorIs(t, err, errTest)
+		users := make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
+		require.Empty(t, users, "should have 0 records after rollback")
+	})
+}
+
+// setupOTELTestForTransaction enables real OTel tracing for one test, mirroring
+// middleware/tracing_test.go's setupTracingTestWithEndpointAndSampler. Unlike that helper,
+// this only swaps config.App.OTEL rather than all of config.App, because config.App.Database
+// (set up once by this package's init()) must stay intact for the transaction itself to work.
+func setupOTELTestForTransaction(t *testing.T) {
+	t.Helper()
+
+	originalOTEL := config.App.OTEL
+	config.App.OTEL.Enabled = true
+	config.App.OTEL.ServiceName = "gst-test"
+	config.App.OTEL.ExporterOTLPProtocol = config.OTLPProtocolHTTPProtobuf
+	config.App.OTEL.ExporterOTLPTracesEndpoint = "http://127.0.0.1:1/v1/traces"
+	config.App.OTEL.ExporterOTLPCompression = config.OTLPCompressionNone
+	config.App.OTEL.TracesSampler = config.TracesSamplerParentBasedAlwaysOn
+	config.App.OTEL.BSPMaxQueueSize = 100
+	config.App.OTEL.BSPMaxExportBatchSize = 100
+	config.App.OTEL.BSPScheduleDelay = 10 * time.Millisecond
+	config.App.OTEL.BSPExportTimeout = time.Second
+	t.Cleanup(func() {
+		config.App.OTEL = originalOTEL
+	})
+
+	originalOTELLogger := logger.OTEL
+	logger.OTEL = pkgzap.New("/dev/null")
+	t.Cleanup(func() {
+		logger.OTEL = originalOTELLogger
+	})
+
+	gstotel.Close()
+	require.NoError(t, gstotel.Init())
+	t.Cleanup(func() {
+		gstotel.Close()
 	})
 }
