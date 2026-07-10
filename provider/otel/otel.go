@@ -76,8 +76,6 @@ var (
 	tracerProvider *sdktrace.TracerProvider
 	mu             sync.Mutex
 	initialized    bool
-
-	ErrOTELIsDisabled = errors.New("otel is disabled")
 )
 
 type requestRootSpanKey struct{}
@@ -219,11 +217,6 @@ func StartSpan(ctx context.Context, name string, opts ...trace.SpanStartOption) 
 		return ctx, trace.SpanFromContext(ctx)
 	}
 	return tracer.Start(ctx, name, opts...) //nolint:spancheck // Caller receives and ends the returned span.
-}
-
-// SpanFromContext returns the span from the context
-func SpanFromContext(ctx context.Context) trace.Span {
-	return trace.SpanFromContext(ctx)
 }
 
 // IsSpanRecording reports whether span is active and records telemetry data.
