@@ -139,7 +139,7 @@ func setDelete[M types.Model, REQ types.Request, RSP types.Response](path string
 		Description: description(consts.Delete, typ),
 		Tags:        tags(path, consts.Delete, typ),
 		Parameters:  parseParametersFromPath(path),
-		Responses:   newResponses[RSP](204, rspKey),
+		Responses:   newResponses[RSP](200, rspKey),
 		// Responses: func() *openapi3.Responses {
 		// 	var schemaRef204 *openapi3.SchemaRef
 		// 	var err error
@@ -768,7 +768,7 @@ func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		Tags:        tags(path, consts.DeleteMany, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
-		Responses:   newResponses[RSP](204, rspKey),
+		Responses:   newResponses[RSP](200, rspKey),
 		// RequestBody: &openapi3.RequestBodyRef{
 		// 	Value: &openapi3.RequestBody{
 		// 		Required:    true,

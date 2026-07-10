@@ -452,7 +452,7 @@ func (c *Client) request(action action, payload any) (*Resp, error) {
 		return res, nil
 	}
 
-	// Delete or BatchDelete response is empty with http status 204.
+	// Fallback for a successful response that carries an empty body.
 	return &Resp{Cookies: resp.Cookies()}, nil
 }
 

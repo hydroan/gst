@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"net/http"
 	"reflect"
 
 	"github.com/cockroachdb/errors"
@@ -30,7 +29,7 @@ func DeleteMany[M types.Model, REQ types.Request, RSP types.Response](c *gin.Con
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into
 // requestData[M], converts ids into model instances, runs batch delete hooks,
 // deletes the models through the configured database handler, records an
-// operation log, and returns a no-content response status.
+// operation log, and returns a success response.
 //
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's DeleteMany method.
@@ -172,17 +171,6 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 			log.Warn(err)
 		}
 
-		if !errors.Is(reqErr, io.EOF) {
-			req.Summary = &summary{
-				Total:     len(req.Items),
-				Succeeded: len(req.Items),
-				Failed:    0,
-			}
-		}
-		req.IDs = nil
-		req.Items = nil
-		req.Options = nil
-		// not response req.
-		JSON(c, CodeSuccess.WithStatus(http.StatusNoContent))
+		JSON(c, CodeSuccess)
 	}
 }

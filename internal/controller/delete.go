@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"reflect"
 
 	"github.com/cockroachdb/errors"
@@ -37,7 +36,7 @@ func Delete[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 // When M, REQ, and RSP are the same type, the handler reads the resource id
 // from the configured route parameter, runs delete hooks, deletes the model
 // through the configured database handler, records an operation log, and
-// returns a no-content response status.
+// returns a success response.
 //
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's Delete method.
@@ -193,6 +192,6 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			}
 		}
 
-		JSON(c, CodeSuccess.WithStatus(http.StatusNoContent))
+		JSON(c, CodeSuccess)
 	}
 }
