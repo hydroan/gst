@@ -67,13 +67,52 @@ func runProjectChecks() int {
 	return totalProjectCheckViolations(results)
 }
 
-func runProjectChecksQuiet() int {
-	results := collectProjectChecks()
+// runProjectChecksQuiet reports project check violations without printing
+// anything when the project is clean. Violations recorded in baseline are
+// treated as pre-existing and are neither counted nor printed, so callers such
+// as module copy fail only on violations introduced after the baseline
+// snapshot. A nil baseline keeps the full check behavior.
+func runProjectChecksQuiet(baseline map[string]struct{}) int {
+	results := filterProjectCheckResults(collectProjectChecks(), baseline)
 	total := totalProjectCheckViolations(results)
 	if total > 0 {
 		printProjectCheckResults(results)
 	}
 	return total
+}
+
+// collectProjectCheckBaseline snapshots the current project check violations.
+// Module copy records this baseline before writing any file, so its embedded
+// gg gen run fails only on violations introduced by the copied module instead
+// of pre-existing project issues.
+func collectProjectCheckBaseline() map[string]struct{} {
+	baseline := make(map[string]struct{})
+	for _, result := range collectProjectChecks() {
+		for _, violation := range result.Violations {
+			baseline[violation] = struct{}{}
+		}
+	}
+	return baseline
+}
+
+// filterProjectCheckResults drops violations recorded in baseline, keeping
+// only violations introduced after the baseline snapshot.
+func filterProjectCheckResults(results []projectCheckResult, baseline map[string]struct{}) []projectCheckResult {
+	if len(baseline) == 0 {
+		return results
+	}
+	filtered := make([]projectCheckResult, 0, len(results))
+	for _, result := range results {
+		violations := make([]string, 0, len(result.Violations))
+		for _, violation := range result.Violations {
+			if _, preexisting := baseline[violation]; preexisting {
+				continue
+			}
+			violations = append(violations, violation)
+		}
+		filtered = append(filtered, projectCheckResult{Name: result.Name, Violations: violations})
+	}
+	return filtered
 }
 
 func collectProjectChecks() []projectCheckResult {

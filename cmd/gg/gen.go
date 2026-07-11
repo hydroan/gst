@@ -46,6 +46,11 @@ func init() {
 
 type genRunOptions struct {
 	Quiet bool
+	// BaselineViolations lists project check violations that already existed
+	// before the caller started. The quiet pre-generation checks fail only on
+	// violations outside this baseline; module copy uses it so pre-existing
+	// project issues do not block copying an unrelated module.
+	BaselineViolations map[string]struct{}
 }
 
 func genRun() {
@@ -70,7 +75,7 @@ func genRunWithOptions(opts genRunOptions) error {
 
 	checks := runProjectChecks
 	if opts.Quiet {
-		checks = runProjectChecksQuiet
+		checks = func() int { return runProjectChecksQuiet(opts.BaselineViolations) }
 	}
 	if checks() > 0 {
 		return errors.New("project checks failed")

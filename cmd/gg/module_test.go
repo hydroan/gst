@@ -128,7 +128,60 @@ func TestPrintModuleCopyPlanReportsExtraTargetServiceFilesAsWarningSection(t *te
 	}
 }
 
-func TestRunModuleCopyGenKeepsQuietProjectChecks(t *testing.T) {
+func TestRunModuleCopyGenAllowsPreexistingProjectCheckViolations(t *testing.T) {
+	projectDir := newModuleCopyGenProject(t)
+	writePluralModelFile(t, projectDir, "session", "sessions.go", "Session2", "copytest/sessions")
+
+	baseline := collectProjectCheckBaseline()
+	if len(baseline) == 0 {
+		t.Fatal("test fixture should fail project checks before module-copy generation")
+	}
+	module = ""
+
+	var genErr error
+	output := captureStdout(t, func() {
+		genErr = runModuleCopyGen(baseline)
+	})
+	if genErr != nil {
+		t.Fatalf("runModuleCopyGen() error = %v, want nil for pre-existing violations", genErr)
+	}
+	if strings.Contains(output, "sessions.go") {
+		t.Fatalf("module-copy generation should not report pre-existing violations:\n%s", output)
+	}
+}
+
+func TestRunModuleCopyGenFailsOnNewProjectCheckViolations(t *testing.T) {
+	projectDir := newModuleCopyGenProject(t)
+	writePluralModelFile(t, projectDir, "session", "sessions.go", "Session2", "copytest/sessions")
+
+	baseline := collectProjectCheckBaseline()
+	if len(baseline) == 0 {
+		t.Fatal("test fixture should fail project checks before module-copy generation")
+	}
+	module = ""
+
+	writePluralModelFile(t, projectDir, "account", "accounts.go", "Account2", "copytest/accounts")
+
+	var genErr error
+	output := captureStdout(t, func() {
+		genErr = runModuleCopyGen(baseline)
+	})
+	if genErr == nil || !strings.Contains(genErr.Error(), "project checks failed") {
+		t.Fatalf("runModuleCopyGen() error = %v, want project checks failed", genErr)
+	}
+	if !strings.Contains(output, "accounts.go") {
+		t.Fatalf("module-copy generation should report the newly introduced violation:\n%s", output)
+	}
+	if strings.Contains(output, "sessions.go") {
+		t.Fatalf("module-copy generation should not report pre-existing violations:\n%s", output)
+	}
+}
+
+// newModuleCopyGenProject creates a temp gst project and points the gg command
+// globals at it, so module-copy generation tests run against an isolated tree.
+func newModuleCopyGenProject(t *testing.T) string {
+	t.Helper()
+
 	oldModelDir := modelDir
 	oldServiceDir := serviceDir
 	oldRouterDir := routerDir
@@ -159,25 +212,34 @@ func TestRunModuleCopyGenKeepsQuietProjectChecks(t *testing.T) {
 	prune = false
 	cleanOrphans = false
 
-	if err := os.MkdirAll(filepath.Join(projectDir, "model", "copytest", "session"), 0o755); err != nil {
-		t.Fatal(err)
-	}
 	if err := os.WriteFile(filepath.Join(projectDir, "go.mod"), []byte("module tmpapp\n\ngo 1.26\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(projectDir, "model", "copytest", "session", "sessions.go"), []byte(`package session
+	return projectDir
+}
+
+// writePluralModelFile writes a model file whose plural file name violates the
+// singular-naming project check, giving tests a deterministic violation.
+func writePluralModelFile(t *testing.T, projectDir, pkgName, fileName, modelName, route string) {
+	t.Helper()
+
+	dir := filepath.Join(projectDir, "model", "copytest", pkgName)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, fileName), []byte(`package `+pkgName+`
 
 import (
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 )
 
-type Session2 struct {
+type `+modelName+` struct {
 	model.Empty
 }
 
-func (Session2) Design() {
-	dsl.Route("copytest/sessions", func() {
+func (`+modelName+`) Design() {
+	dsl.Route("`+route+`", func() {
 		dsl.List(func() {
 			dsl.Service()
 		})
@@ -185,16 +247,6 @@ func (Session2) Design() {
 }
 `), 0o600); err != nil {
 		t.Fatal(err)
-	}
-
-	if checks := runProjectChecksQuiet(); checks == 0 {
-		t.Fatal("test fixture should fail project checks before module-copy generation")
-	}
-	module = ""
-
-	err := runModuleCopyGen()
-	if err == nil || !strings.Contains(err.Error(), "project checks failed") {
-		t.Fatalf("runModuleCopyGen() error = %v, want project checks failed", err)
 	}
 }
 

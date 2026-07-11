@@ -143,7 +143,12 @@ func runModuleCopy(name string, opts moduleCopyOptions) error {
 		return nil
 	}
 
-	exec := ggmodule.CopyExecution{Plan: plan, Options: copyOpts, RunGen: runModuleCopyGen}
+	// Snapshot current project check violations before any file is written, so
+	// the copy-time gen run fails only on violations introduced by this copy.
+	baseline := collectProjectCheckBaseline()
+	exec := ggmodule.CopyExecution{Plan: plan, Options: copyOpts, RunGen: func() error {
+		return runModuleCopyGen(baseline)
+	}}
 	if err := exec.Run(); err != nil {
 		if len(exec.WrittenFiles) > 0 {
 			printModuleCopyCleanup(name)
@@ -162,11 +167,13 @@ func runModuleCopy(name string, opts moduleCopyOptions) error {
 
 // runModuleCopyGen reuses gg gen's generator path but suppresses generated-file
 // logs so module copy output stays focused on local-source files.
-func runModuleCopyGen() error {
+func runModuleCopyGen(baseline map[string]struct{}) error {
 	// Module copy needs gg gen to create the target service shell, but it must not
 	// turn this copy operation into a prune/cleanup pass over user service files.
-	// Keep gg check enabled through genRunWithOptions(Quiet: true). If copied
-	// module sources fail project checks, fix the framework module or the check
+	// Project checks stay enabled through genRunWithOptions(Quiet: true), scoped
+	// by baseline to violations introduced by this copy: pre-existing project
+	// violations must not block copying an unrelated module. If copied module
+	// sources introduce new violations, fix the framework module or the check
 	// rule instead of bypassing validation here.
 	oldPrune := prune
 	oldCleanOrphans := cleanOrphans
@@ -177,7 +184,7 @@ func runModuleCopyGen() error {
 		cleanOrphans = oldCleanOrphans
 	}()
 
-	return genRunWithOptions(genRunOptions{Quiet: true})
+	return genRunWithOptions(genRunOptions{Quiet: true, BaselineViolations: baseline})
 }
 
 func confirmModuleCopy(name string) bool {
