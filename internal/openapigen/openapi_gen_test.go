@@ -63,3 +63,18 @@ func TestSetKeepsAuthRouteSecurityDefault(t *testing.T) {
 		t.Fatalf("auth op security = %+v, want nil so the document-level security applies", item.Get.Security)
 	}
 }
+
+func TestSetDocumentsEmbeddedFrameworkQueryParameters(t *testing.T) {
+	Set[*openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel]("/api/test-query-contract", true, consts.List)
+
+	item := doc.Paths.Value("/api/test-query-contract")
+	if item == nil || item.Get == nil {
+		t.Fatal("GET /api/test-query-contract missing from document")
+	}
+	parameters := queryParametersByName(t, item.Get)
+	for _, name := range []string{"page", "size", "_cursor_value", "_sortby", "_nototal"} {
+		if parameters[name] == nil {
+			t.Errorf("query parameter %q is missing from the generated List operation", name)
+		}
+	}
+}

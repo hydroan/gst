@@ -15,7 +15,6 @@ import (
 	"github.com/getkin/kin-openapi/openapi3gen"
 	"github.com/hydroan/gst/apidoc"
 	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
@@ -120,6 +119,10 @@ func setCreate[M types.Model, REQ types.Request, RSP types.Response](path string
 	reqSchemaRef := newSchemaRefWithDocs(*new(REQ))
 	rspSchemaRef := newSchemaRefWithDocs(*new(apiResponse[RSP]))
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
+	successStatus := 201
+	if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
+		successStatus = 200
+	}
 
 	// gen := openapi3gen.NewGenerator()
 	// var reqSchemaRef *openapi3.SchemaRef
@@ -138,7 +141,7 @@ func setCreate[M types.Model, REQ types.Request, RSP types.Response](path string
 		Tags:        tags(path, consts.Create, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
-		Responses:   newResponses[RSP](201, rspKey),
+		Responses:   newResponses[RSP](successStatus, rspKey),
 		// RequestBody: &openapi3.RequestBodyRef{Ref: "#/components/requestBodies/" + reqKey},
 		// Responses:   openapi3.NewResponses(openapi3.WithStatus(201, &openapi3.ResponseRef{Ref: "#/components/responses/" + rspKey})),
 
@@ -662,7 +665,7 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		// }
 	} else {
 		reqSchemaRef = newSchemaRefWithDocs(*new(REQ))
-		rspSchemaRef = newSchemaRefWithDocs(*new(RSP))
+		rspSchemaRef = newSchemaRefWithDocs(*new(apiResponse[RSP]))
 		// if rspSchemaRef.Value != nil && rspSchemaRef.Value.Properties != nil {
 		// 	if dataProperty, exists := rspSchemaRef.Value.Properties["data"]; exists {
 		// 		addSchemaTitle[RSP](dataProperty)
@@ -670,6 +673,10 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		// }
 	}
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
+	successStatus := 201
+	if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
+		successStatus = 200
+	}
 
 	// // // 定义 BatchCreateRequest schema
 	// // reqSchemaName := name + "BatchRequest"
@@ -708,7 +715,7 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		Tags:        tags(path, consts.CreateMany, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
-		Responses:   newResponses[RSP](201, rspKey),
+		Responses:   newResponses[RSP](successStatus, rspKey),
 		// RequestBody: &openapi3.RequestBodyRef{
 		// 	Value: &openapi3.RequestBody{
 		// 		Description: fmt.Sprintf("Request body for batch creating %s", name),
@@ -823,7 +830,7 @@ func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		// 	}
 		// }
 	} else {
-		rspSchemaRef = newSchemaRefWithDocs(*new(RSP))
+		rspSchemaRef = newSchemaRefWithDocs(*new(apiResponse[RSP]))
 		// if rspSchemaRef.Value != nil && rspSchemaRef.Value.Properties != nil {
 		// 	if dataProperty, exists := rspSchemaRef.Value.Properties["data"]; exists {
 		// 		addSchemaTitle[RSP](dataProperty)
@@ -1053,7 +1060,7 @@ func setPatchMany[M types.Model, REQ types.Request, RSP types.Response](path str
 		// }
 	} else {
 		reqSchemaRef = newSchemaRefWithDocs(*new(REQ))
-		rspSchemaRef = newSchemaRefWithDocs(*new(RSP))
+		rspSchemaRef = newSchemaRefWithDocs(*new(apiResponse[RSP]))
 		// if rspSchemaRef.Value != nil && rspSchemaRef.Value.Properties != nil {
 		// 	if dataProperty, exists := rspSchemaRef.Value.Properties["data"]; exists {
 		// 		addSchemaTitle[RSP](dataProperty)
@@ -1777,21 +1784,6 @@ func addHeaderParameters(op *openapi3.Operation) {
 	}
 }
 
-var (
-	// Cache field descriptions of model.Base to avoid frequent parsing
-	baseModelDocsCache map[string]string
-	baseModelDocsOnce  sync.Once
-)
-
-// getBaseModelDocs gets field descriptions of model.Base (with caching)
-func getBaseModelDocs() map[string]string {
-	baseModelDocsOnce.Do(func() {
-		baseModel := &model.Base{}
-		baseModelDocsCache = parseModelDocs(baseModel)
-	})
-	return baseModelDocsCache
-}
-
 // openAPIDocComment removes the Go doc subject from API-facing text while
 // preserving comments that do not begin with the exact declared symbol.
 func openAPIDocComment(symbol, comment string) string {
@@ -1997,6 +1989,58 @@ func collectSchemaDocFields(typ reflect.Type, fields map[string]schemaDocField, 
 	}
 }
 
+// collectQueryDocFields collects query-tagged fields from typ and anonymous
+// embedded structs in breadth-first order. Fields declared at a shallower
+// depth win over deeper promoted fields with the same query name, matching Go
+// field selection precedence.
+func collectQueryDocFields(typ reflect.Type) []schemaDocField {
+	if typ == nil {
+		return nil
+	}
+
+	fields := make([]schemaDocField, 0)
+	seen := make(map[string]bool)
+	visited := make(map[reflect.Type]bool)
+	queue := []reflect.Type{typ}
+	for len(queue) > 0 {
+		next := make([]reflect.Type, 0)
+		for _, currentType := range queue {
+			for currentType.Kind() == reflect.Pointer {
+				currentType = currentType.Elem()
+			}
+			if currentType.Kind() != reflect.Struct || visited[currentType] {
+				continue
+			}
+			visited[currentType] = true
+
+			docs := parseModelDocs(reflect.New(currentType).Interface())
+			for field := range currentType.Fields() {
+				queryTag := getFieldTag(field, consts.TAG_QUERY)
+				if queryTag != "" {
+					if !seen[queryTag] {
+						seen[queryTag] = true
+						fields = append(fields, schemaDocField{field: field, docs: docs})
+					}
+					continue
+				}
+				if !field.Anonymous {
+					continue
+				}
+
+				embeddedType := field.Type
+				for embeddedType.Kind() == reflect.Pointer {
+					embeddedType = embeddedType.Elem()
+				}
+				if embeddedType.Kind() == reflect.Struct {
+					next = append(next, embeddedType)
+				}
+			}
+		}
+		queue = next
+	}
+	return fields
+}
+
 // fieldEnumDoc resolves the registered enum doc of a field type, unwrapping
 // pointers, slices and arrays. The second result reports whether the enum
 // applies to the slice items schema instead of the field schema itself.
@@ -2147,31 +2191,21 @@ func schemaFromType(dataType reflect.Type) *openapi3.SchemaRef {
 
 // addQueryParameters adds query parameters for List operation.
 func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op *openapi3.Operation) {
-	// 只有使用默认的逻辑才支持通过结构体字段过滤
+	// Model-field query filters are available only to the default CRUD path.
 	if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
 		return
 	}
 
-	queries := make([]*openapi3.ParameterRef, 0)
+	fields := collectQueryDocFields(reflect.TypeFor[M]())
 
-	// Get model field descriptions
-	modelInstance := *new(M)
-	modelDocs := parseModelDocs(modelInstance)
-
-	typ := reflect.TypeOf(*new(M)).Elem()
-	for field := range typ.Fields() {
-		// Only fields with query tags are exposed as request query parameters.
+	queries := make([]*openapi3.ParameterRef, 0, len(fields))
+	for _, docField := range fields {
+		field := docField.field
 		queryTag := getFieldTag(field, consts.TAG_QUERY)
-		if len(queryTag) == 0 {
-			continue
-		}
-
-		// Get field descriptions from model documentation
-		description := openAPIDocComment(field.Name, modelDocs[field.Name])
-
-		schema := fieldToOpenAPISchema(field)
-		if enumDoc, onItems, ok := fieldEnumDoc(field.Type); ok && !onItems {
-			applyEnum(schema, false, enumDoc)
+		description := openAPIDocComment(field.Name, docField.docs[field.Name])
+		schemaRef := schemaFromType(field.Type)
+		if enumDoc, onItems, ok := fieldEnumDoc(field.Type); ok && schemaRef != nil && schemaRef.Value != nil {
+			applyEnum(schemaRef.Value, onItems, enumDoc)
 			description = enumDescription(description, enumDoc)
 		}
 
@@ -2180,31 +2214,7 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 				Name:        queryTag,
 				In:          "query",
 				Required:    false,
-				Schema:      &openapi3.SchemaRef{Value: schema},
-				Description: description,
-			},
-		})
-	}
-
-	// Get field descriptions of model.Base (using cache)
-	baseDocs := getBaseModelDocs()
-
-	baseType := reflect.TypeFor[model.Base]()
-	for field := range baseType.Fields() {
-		queryTag := getFieldTag(field, consts.TAG_QUERY)
-		if len(queryTag) == 0 {
-			continue
-		}
-
-		// Get field descriptions from Base model documentation
-		description := openAPIDocComment(field.Name, baseDocs[field.Name])
-
-		queries = append(queries, &openapi3.ParameterRef{
-			Value: &openapi3.Parameter{
-				Name:        queryTag,
-				In:          "query",
-				Required:    false,
-				Schema:      &openapi3.SchemaRef{Value: fieldToOpenAPISchema(field)},
+				Schema:      schemaRef,
 				Description: description,
 			},
 		})
@@ -2252,6 +2262,7 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 	for _, query := range queries {
 		if query.Value != nil && !existing[query.Value.Name] {
 			op.Parameters = append(op.Parameters, query)
+			existing[query.Value.Name] = true
 		}
 	}
 }

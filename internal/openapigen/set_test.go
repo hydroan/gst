@@ -21,6 +21,82 @@ type openapiTimeQueryModel struct {
 	model.Base
 }
 
+type openapiEmbeddedQueryModel struct {
+	// Page overrides the promoted pagination field.
+	Page string `json:"-" query:"page"`
+
+	model.Query
+	model.Base
+}
+
+type openapiPaginationQueryModel struct {
+	model.Pagination
+	model.Base
+}
+
+type openapiCursorQueryModel struct {
+	model.Cursor
+	model.Base
+}
+
+type openapiDeepQueryFields struct {
+	Shared int `json:"-" query:"shared"`
+}
+
+type openapiFirstQueryBranch struct {
+	openapiDeepQueryFields
+}
+
+type openapiSecondQueryBranch struct {
+	Shared string `json:"-" query:"shared"`
+}
+
+type openapiShallowQueryModel struct {
+	openapiFirstQueryBranch
+	openapiSecondQueryBranch
+	model.Base
+}
+
+type openapiSliceQueryModel struct {
+	Values []string `json:"-" query:"values"`
+
+	model.Base
+}
+
+type openapiDefaultCreateModel struct {
+	Name string `json:"name"`
+
+	model.Base
+}
+
+type openapiCustomCreateModel struct {
+	Name string `json:"name"`
+
+	model.Base
+}
+
+type openapiCustomCreateRequest struct {
+	Name string `json:"name"`
+}
+
+type openapiCustomCreateResponse struct {
+	Result string `json:"result"`
+}
+
+type openapiCustomBatchModel struct {
+	Name string `json:"name"`
+
+	model.Base
+}
+
+type openapiCustomBatchRequest struct {
+	Name string `json:"name"`
+}
+
+type openapiCustomBatchResponse struct {
+	Result string `json:"result"`
+}
+
 func TestSchemaFromTypeUsesDateTimeFormatForTime(t *testing.T) {
 	tests := []struct {
 		name string
@@ -72,6 +148,199 @@ func TestAddQueryParametersUsesDateTimeFormatForTimeFields(t *testing.T) {
 	}
 
 	t.Fatal("expires_at query parameter was not added")
+}
+
+func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
+	tests := []struct {
+		name       string
+		add        func(*openapi3.Operation)
+		parameters []string
+	}{
+		{
+			name: "query",
+			add: func(op *openapi3.Operation) {
+				addQueryParameters[*openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel](op)
+			},
+			parameters: []string{
+				"page", "size",
+				"_cursor_value", "_cursor_fields", "_cursor_next",
+				"_expand", "_depth", "_fuzzy", "_sortby", "_nocache",
+				"_column_name", "_start_time", "_end_time", "_or", "_index",
+				"_select", "_nototal",
+				"id", "created_by", "updated_by",
+			},
+		},
+		{
+			name: "pagination",
+			add: func(op *openapi3.Operation) {
+				addQueryParameters[*openapiPaginationQueryModel, *openapiPaginationQueryModel, *openapiPaginationQueryModel](op)
+			},
+			parameters: []string{"page", "size", "id", "created_by", "updated_by"},
+		},
+		{
+			name: "cursor",
+			add: func(op *openapi3.Operation) {
+				addQueryParameters[*openapiCursorQueryModel, *openapiCursorQueryModel, *openapiCursorQueryModel](op)
+			},
+			parameters: []string{"_cursor_value", "_cursor_fields", "_cursor_next", "id", "created_by", "updated_by"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			op := &openapi3.Operation{}
+			tt.add(op)
+
+			parameters := queryParametersByName(t, op)
+			for _, name := range tt.parameters {
+				if parameters[name] == nil {
+					t.Errorf("query parameter %q is missing", name)
+				}
+			}
+			if len(parameters) != len(tt.parameters) {
+				t.Fatalf("query parameters = %v, want exactly %v", parameterNames(parameters), tt.parameters)
+			}
+		})
+	}
+
+	op := &openapi3.Operation{}
+	addQueryParameters[*openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel](op)
+	page := queryParametersByName(t, op)["page"]
+	if page.Schema == nil || page.Schema.Value == nil || page.Schema.Value.Type == nil || !page.Schema.Value.Type.Is(openapi3.TypeString) {
+		t.Fatalf("page schema = %#v, want the outer string field to override the embedded pagination field", page.Schema)
+	}
+
+	op = &openapi3.Operation{}
+	addQueryParameters[*openapiShallowQueryModel, *openapiShallowQueryModel, *openapiShallowQueryModel](op)
+	shared := queryParametersByName(t, op)["shared"]
+	if shared.Schema == nil || shared.Schema.Value == nil || shared.Schema.Value.Type == nil || !shared.Schema.Value.Type.Is(openapi3.TypeString) {
+		t.Fatalf("shared schema = %#v, want the shallower embedded string field to override the earlier deeper field", shared.Schema)
+	}
+}
+
+func TestAddQueryParametersBuildsSliceItemSchema(t *testing.T) {
+	op := &openapi3.Operation{}
+	addQueryParameters[*openapiSliceQueryModel, *openapiSliceQueryModel, *openapiSliceQueryModel](op)
+
+	values := queryParametersByName(t, op)["values"]
+	if values == nil || values.Schema == nil || values.Schema.Value == nil {
+		t.Fatal("values query parameter schema is missing")
+	}
+	if values.Schema.Value.Type == nil || !values.Schema.Value.Type.Is(openapi3.TypeArray) {
+		t.Fatalf("values schema type = %v, want array", values.Schema.Value.Type)
+	}
+	if values.Schema.Value.Items == nil || values.Schema.Value.Items.Value == nil || values.Schema.Value.Items.Value.Type == nil || !values.Schema.Value.Items.Value.Type.Is(openapi3.TypeString) {
+		t.Fatalf("values item schema = %#v, want string", values.Schema.Value.Items)
+	}
+}
+
+func TestSetCreateDocumentsRuntimeSuccessStatus(t *testing.T) {
+	tests := []struct {
+		name       string
+		set        func(*openapi3.PathItem)
+		wantStatus string
+	}{
+		{
+			name: "default create",
+			set: func(pathItem *openapi3.PathItem) {
+				setCreate[*openapiDefaultCreateModel, *openapiDefaultCreateModel, *openapiDefaultCreateModel]("/api/default-create", pathItem)
+			},
+			wantStatus: "201",
+		},
+		{
+			name: "custom create",
+			set: func(pathItem *openapi3.PathItem) {
+				setCreate[*openapiCustomCreateModel, openapiCustomCreateRequest, openapiCustomCreateResponse]("/api/custom-create", pathItem)
+			},
+			wantStatus: "200",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pathItem := &openapi3.PathItem{}
+			tt.set(pathItem)
+
+			if pathItem.Post == nil || pathItem.Post.Responses == nil || pathItem.Post.Responses.Value(tt.wantStatus) == nil {
+				t.Fatalf("documented responses = %v, want status %s", pathItem.Post.Responses, tt.wantStatus)
+			}
+			wrongStatus := "201"
+			if tt.wantStatus == "201" {
+				wrongStatus = "200"
+			}
+			if pathItem.Post.Responses.Value(wrongStatus) != nil {
+				t.Fatalf("documented responses unexpectedly include status %s", wrongStatus)
+			}
+		})
+	}
+}
+
+func TestSetCustomBatchDocumentsResponseEnvelope(t *testing.T) {
+	tests := []struct {
+		name       string
+		set        func(*openapi3.PathItem)
+		operation  func(*openapi3.PathItem) *openapi3.Operation
+		wantStatus string
+	}{
+		{
+			name: "create many",
+			set: func(pathItem *openapi3.PathItem) {
+				setCreateMany[*openapiCustomBatchModel, openapiCustomBatchRequest, openapiCustomBatchResponse]("/api/custom-batch", pathItem)
+			},
+			operation:  func(pathItem *openapi3.PathItem) *openapi3.Operation { return pathItem.Post },
+			wantStatus: "200",
+		},
+		{
+			name: "delete many",
+			set: func(pathItem *openapi3.PathItem) {
+				setDeleteMany[*openapiCustomBatchModel, openapiCustomBatchRequest, openapiCustomBatchResponse]("/api/custom-batch", pathItem)
+			},
+			operation:  func(pathItem *openapi3.PathItem) *openapi3.Operation { return pathItem.Delete },
+			wantStatus: "200",
+		},
+		{
+			name: "update many",
+			set: func(pathItem *openapi3.PathItem) {
+				setUpdateMany[*openapiCustomBatchModel, openapiCustomBatchRequest, openapiCustomBatchResponse]("/api/custom-batch", pathItem)
+			},
+			operation:  func(pathItem *openapi3.PathItem) *openapi3.Operation { return pathItem.Put },
+			wantStatus: "200",
+		},
+		{
+			name: "patch many",
+			set: func(pathItem *openapi3.PathItem) {
+				setPatchMany[*openapiCustomBatchModel, openapiCustomBatchRequest, openapiCustomBatchResponse]("/api/custom-batch", pathItem)
+			},
+			operation:  func(pathItem *openapi3.PathItem) *openapi3.Operation { return pathItem.Patch },
+			wantStatus: "200",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pathItem := &openapi3.PathItem{}
+			tt.set(pathItem)
+
+			op := tt.operation(pathItem)
+			if op == nil || op.Responses == nil || op.Responses.Value(tt.wantStatus) == nil {
+				t.Fatalf("documented responses = %v, want status %s", op.Responses, tt.wantStatus)
+			}
+			if op.Responses.Value("201") != nil {
+				t.Fatal("custom batch response unexpectedly includes status 201")
+			}
+
+			schema := registeredResponseSchema(t, op.Responses.Value(tt.wantStatus))
+			for _, name := range []string{"code", "msg", "data", "trace_id"} {
+				if schema.Properties[name] == nil {
+					t.Errorf("response envelope property %q is missing", name)
+				}
+			}
+			data := schema.Properties["data"]
+			if data == nil || data.Value == nil || data.Value.Properties["result"] == nil {
+				t.Fatalf("response data schema = %#v, want the custom response shape", data)
+			}
+		})
+	}
 }
 
 func TestSchemaFromTypeKeepsRegularStructsAsObjects(t *testing.T) {
@@ -793,4 +1062,51 @@ func assertDateTimeSchema(t *testing.T, schemaRef *openapi3.SchemaRef) {
 	if schemaRef.Value.Format != "date-time" {
 		t.Fatalf("schema format = %q, want date-time", schemaRef.Value.Format)
 	}
+}
+
+func queryParametersByName(t *testing.T, op *openapi3.Operation) map[string]*openapi3.Parameter {
+	t.Helper()
+
+	parameters := make(map[string]*openapi3.Parameter, len(op.Parameters))
+	for _, parameterRef := range op.Parameters {
+		if parameterRef == nil || parameterRef.Value == nil || parameterRef.Value.In != "query" {
+			continue
+		}
+		name := parameterRef.Value.Name
+		if parameters[name] != nil {
+			t.Fatalf("query parameter %q was added more than once", name)
+		}
+		parameters[name] = parameterRef.Value
+	}
+	return parameters
+}
+
+func parameterNames(parameters map[string]*openapi3.Parameter) []string {
+	names := make([]string, 0, len(parameters))
+	for name := range parameters {
+		names = append(names, name)
+	}
+	return names
+}
+
+func registeredResponseSchema(t *testing.T, responseRef *openapi3.ResponseRef) *openapi3.Schema {
+	t.Helper()
+
+	if responseRef == nil {
+		t.Fatal("operation response is missing")
+	}
+	if responseRef.Ref != "" {
+		rspKey := strings.TrimPrefix(responseRef.Ref, "#/components/responses/")
+		docMutex.RLock()
+		responseRef = doc.Components.Responses[rspKey]
+		docMutex.RUnlock()
+	}
+	if responseRef == nil || responseRef.Value == nil {
+		t.Fatal("registered response component is missing")
+	}
+	mediaType := responseRef.Value.Content["application/json"]
+	if mediaType == nil || mediaType.Schema == nil || mediaType.Schema.Value == nil {
+		t.Fatal("registered response component JSON schema is missing")
+	}
+	return mediaType.Schema.Value
 }
