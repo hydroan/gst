@@ -57,7 +57,7 @@ jobs:
           }
 
           func (User) Design() {
-            Migrate(true)
+            Migrate()
 
             Create(func() {
               Enabled(true)
