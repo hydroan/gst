@@ -81,14 +81,22 @@ func listUsers(ctx *types.ServiceContext, actor *modeliamuser.User) ([]*modeliam
 		return nil, 0, err
 	}
 
+	// WithPagination(0, 0) falls back to page 1 with the default limit instead
+	// of disabling pagination, so an unpaginated request needs its own chain.
 	users := make([]*modeliamuser.User, 0)
-	query := database.Database[*modeliamuser.User](ctx).
-		WithQuery(userQuery, cfg).
-		WithOrder("created_at DESC")
 	if filters.Page > 0 || filters.Size > 0 {
-		query = query.WithPagination(filters.Page, filters.Size)
+		err = database.Database[*modeliamuser.User](ctx).
+			WithQuery(userQuery, cfg).
+			WithOrder("created_at DESC").
+			WithPagination(filters.Page, filters.Size).
+			List(&users)
+	} else {
+		err = database.Database[*modeliamuser.User](ctx).
+			WithQuery(userQuery, cfg).
+			WithOrder("created_at DESC").
+			List(&users)
 	}
-	if err = query.List(&users); err != nil {
+	if err != nil {
 		return nil, 0, err
 	}
 	return users, total, nil
