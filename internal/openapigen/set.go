@@ -11,6 +11,7 @@ import (
 	"github.com/gertd/go-pluralize"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3gen"
+	"github.com/hydroan/gst/apidoc"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
@@ -34,11 +35,86 @@ var removeFieldMap = map[string]bool{
 	"deleted_by": true,
 }
 
+// componentNameOwners tracks which package owns each component base name, so
+// same-named types from different packages never share one component entry.
+var (
+	componentNameMu     sync.Mutex
+	componentNameOwners = map[string]string{}
+)
+
+// schemaComponentName derives a readable, package-qualified component name
+// for a type: the package path segments after the last "/model/" (a type in
+// the model root keeps its bare name), otherwise the last two package path
+// segments. Examples:
+//
+//	dice/model/play.Customization                    -> play.Customization
+//	dice/model.User                                  -> User
+//	.../gst/internal/model/iam/user.User             -> iam.user.User
+//	.../gst/module/mfa.TOTPBind                      -> module.mfa.TOTPBind
+func schemaComponentName(typ reflect.Type) string {
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	return schemaComponentNameFromPath(typ.PkgPath(), typ.Name())
+}
+
+// schemaComponentNameFromPath implements the naming rule of
+// schemaComponentName on a plain package path and type name.
+func schemaComponentNameFromPath(pkgPath, name string) string {
+	if pkgPath == "" || name == "" {
+		return name
+	}
+
+	if index := strings.LastIndex(pkgPath, "/model/"); index >= 0 {
+		suffix := strings.ReplaceAll(pkgPath[index+len("/model/"):], "/", ".")
+		return suffix + "." + name
+	}
+	if pkgPath == "model" || strings.HasSuffix(pkgPath, "/model") {
+		return name
+	}
+
+	segments := strings.Split(pkgPath, "/")
+	if len(segments) >= 2 {
+		segments = segments[len(segments)-2:]
+	}
+	return strings.Join(segments, ".") + "." + name
+}
+
+// uniqueComponentName returns the component name for a type, guaranteeing
+// that two different packages never resolve to the same name: the second
+// package to claim a name falls back to its fully qualified package path.
+func uniqueComponentName(typ reflect.Type) string {
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	name := schemaComponentName(typ)
+	pkgPath := typ.PkgPath()
+	if pkgPath == "" || name == "" {
+		return name
+	}
+
+	componentNameMu.Lock()
+	defer componentNameMu.Unlock()
+	owner, taken := componentNameOwners[name]
+	if taken && owner != pkgPath {
+		qualified := strings.ReplaceAll(pkgPath, "/", ".") + "." + typ.Name()
+		zap.S().Warnf("openapi component name %q is owned by package %q, using %q for package %q", name, owner, qualified, pkgPath)
+		return qualified
+	}
+	componentNameOwners[name] = pkgPath
+	return name
+}
+
+// componentKey returns the requestBodies/responses component key for one
+// action of a model, eg. "play.customization_patch".
+func componentKey(typ reflect.Type, phase any) string {
+	return fmt.Sprintf("%s_%s", strings.ToLower(uniqueComponentName(typ)), phase)
+}
+
 func setCreate[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeOf(*new(M))
-	name := typ.Elem().Name()
-	reqKey := fmt.Sprintf("%s_%s", strings.ToLower(name), consts.PHASE_CREATE)
-	rspKey := fmt.Sprintf("%s_%s", strings.ToLower(name), consts.PHASE_CREATE)
+	reqKey := componentKey(typ, consts.PHASE_CREATE)
+	rspKey := reqKey
 	reqSchemaRef, _ := openapi3gen.NewSchemaRefForValue(*new(REQ), nil)
 	rspSchemaRef, _ := openapi3gen.NewSchemaRefForValue(*new(apiResponse[RSP]), nil)
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
@@ -54,7 +130,7 @@ func setCreate[M types.Model, REQ types.Request, RSP types.Response](path string
 	// }
 
 	pathItem.Post = &openapi3.Operation{
-		OperationID: operationID(consts.Create, typ),
+		OperationID: operationID(path, consts.Create),
 		Summary:     summary(path, consts.Create, typ),
 		Description: description(consts.Create, typ),
 		Tags:        tags(path, consts.Create, typ),
@@ -127,14 +203,13 @@ func setCreate[M types.Model, REQ types.Request, RSP types.Response](path string
 
 func setDelete[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeOf(*new(M))
-	name := typ.Elem().Name()
-	reqKey := fmt.Sprintf("%s_%s", strings.ToLower(name), consts.PHASE_DELETE)
-	rspKey := fmt.Sprintf("%s_%s", strings.ToLower(name), consts.PHASE_DELETE)
+	reqKey := componentKey(typ, consts.PHASE_DELETE)
+	rspKey := reqKey
 	rspSchemaRef, _ := openapi3gen.NewSchemaRefForValue(*new(apiResponse[RSP]), nil)
 	registerSchema[M, REQ, RSP](reqKey, rspKey, nil, rspSchemaRef)
 
 	pathItem.Delete = &openapi3.Operation{
-		OperationID: operationID(consts.Delete, typ),
+		OperationID: operationID(path, consts.Delete),
 		Summary:     summary(path, consts.Delete, typ),
 		Description: description(consts.Delete, typ),
 		Tags:        tags(path, consts.Delete, typ),
@@ -193,15 +268,14 @@ func setDelete[M types.Model, REQ types.Request, RSP types.Response](path string
 
 func setUpdate[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeOf(*new(M))
-	name := typ.Elem().Name()
-	reqKey := fmt.Sprintf("%s_%s", strings.ToLower(name), consts.PHASE_UPDATE)
-	rspKey := fmt.Sprintf("%s_%s", strings.ToLower(name), consts.PHASE_UPDATE)
+	reqKey := componentKey(typ, consts.PHASE_UPDATE)
+	rspKey := reqKey
 	reqSchemaRef, _ := openapi3gen.NewSchemaRefForValue(*new(REQ), nil)
 	rspSchemaRef, _ := openapi3gen.NewSchemaRefForValue(*new(apiResponse[RSP]), nil)
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
 
 	pathItem.Put = &openapi3.Operation{
-		OperationID: operationID(consts.Update, typ),
+		OperationID: operationID(path, consts.Update),
 		Summary:     summary(path, consts.Update, typ),
 		Description: description(consts.Update, typ),
 		Tags:        tags(path, consts.Update, typ),
@@ -275,15 +349,14 @@ func setUpdate[M types.Model, REQ types.Request, RSP types.Response](path string
 
 func setPatch[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeOf(*new(M))
-	name := typ.Elem().Name()
-	reqKey := fmt.Sprintf("%s_%s", strings.ToLower(name), consts.PHASE_PATCH)
-	rspKey := fmt.Sprintf("%s_%s", strings.ToLower(name), consts.PHASE_PATCH)
+	reqKey := componentKey(typ, consts.PHASE_PATCH)
+	rspKey := reqKey
 	reqSchemaRef, _ := openapi3gen.NewSchemaRefForValue(*new(REQ), nil)
 	rspSchemaRef, _ := openapi3gen.NewSchemaRefForValue(*new(apiResponse[RSP]), nil)
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
 
 	pathItem.Patch = &openapi3.Operation{
-		OperationID: operationID(consts.Patch, typ),
+		OperationID: operationID(path, consts.Patch),
 		Summary:     summary(path, consts.Patch, typ),
 		Description: description(consts.Patch, typ),
 		Tags:        tags(path, consts.Patch, typ),
@@ -353,9 +426,8 @@ func setPatch[M types.Model, REQ types.Request, RSP types.Response](path string,
 
 func setList[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeOf(*new(M))
-	name := typ.Elem().Name()
-	reqKey := fmt.Sprintf("%s_%s", strings.ToLower(name), consts.PHASE_LIST)
-	rspKey := fmt.Sprintf("%s_%s", strings.ToLower(name), consts.PHASE_LIST)
+	reqKey := componentKey(typ, consts.PHASE_LIST)
+	rspKey := reqKey
 
 	var rspSchemaRef *openapi3.SchemaRef
 	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
@@ -382,7 +454,7 @@ func setList[M types.Model, REQ types.Request, RSP types.Response](path string, 
 	registerSchema[M, REQ, RSP](reqKey, rspKey, nil, rspSchemaRef)
 
 	pathItem.Get = &openapi3.Operation{
-		OperationID: operationID(consts.List, typ),
+		OperationID: operationID(path, consts.List),
 		Summary:     summary(path, consts.List, typ),
 		Description: description(consts.List, typ),
 		Tags:        tags(path, consts.List, typ),
@@ -492,14 +564,13 @@ func setList[M types.Model, REQ types.Request, RSP types.Response](path string, 
 
 func setGet[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeOf(*new(M))
-	name := typ.Elem().Name()
-	reqKey := fmt.Sprintf("%s_%s", strings.ToLower(name), consts.PHASE_GET)
-	rspKey := fmt.Sprintf("%s_%s", strings.ToLower(name), consts.PHASE_GET)
+	reqKey := componentKey(typ, consts.PHASE_GET)
+	rspKey := reqKey
 	rspSchemaRef, _ := openapi3gen.NewSchemaRefForValue(*new(apiResponse[RSP]), nil)
 	registerSchema[M, REQ, RSP](reqKey, rspKey, nil, rspSchemaRef)
 
 	pathItem.Get = &openapi3.Operation{
-		OperationID: operationID(consts.Get, typ),
+		OperationID: operationID(path, consts.Get),
 		Summary:     summary(path, consts.Get, typ),
 		Description: description(consts.Get, typ),
 		Tags:        tags(path, consts.Get, typ),
@@ -563,9 +634,8 @@ func setGet[M types.Model, REQ types.Request, RSP types.Response](path string, p
 
 func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeOf(*new(M))
-	name := typ.Elem().Name()
-	reqKey := fmt.Sprintf("%s_%s", strings.ToLower(name), consts.PHASE_CREATE_MANY)
-	rspKey := fmt.Sprintf("%s_%s", strings.ToLower(name), consts.PHASE_CREATE_MANY)
+	reqKey := componentKey(typ, consts.PHASE_CREATE_MANY)
+	rspKey := reqKey
 
 	var reqSchemaRef *openapi3.SchemaRef
 	var rspSchemaRef *openapi3.SchemaRef
@@ -630,7 +700,7 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 	// }
 
 	pathItem.Post = &openapi3.Operation{
-		OperationID: operationID(consts.CreateMany, typ),
+		OperationID: operationID(path, consts.CreateMany),
 		Summary:     summary(path, consts.CreateMany, typ),
 		Description: description(consts.CreateMany, typ),
 		Tags:        tags(path, consts.CreateMany, typ),
@@ -719,9 +789,8 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 
 func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeOf(*new(M))
-	name := typ.Elem().Name()
-	reqKey := fmt.Sprintf("%s_%s", strings.ToLower(name), consts.DeleteMany)
-	rspKey := fmt.Sprintf("%s_%s", strings.ToLower(name), consts.DeleteMany)
+	reqKey := componentKey(typ, consts.DeleteMany)
+	rspKey := reqKey
 	reqSchemaRef := &openapi3.SchemaRef{
 		Value: &openapi3.Schema{
 			Type:     &openapi3.Types{openapi3.TypeObject},
@@ -762,7 +831,7 @@ func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path st
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
 
 	pathItem.Delete = &openapi3.Operation{
-		OperationID: operationID(consts.DeleteMany, typ),
+		OperationID: operationID(path, consts.DeleteMany),
 		Summary:     summary(path, consts.DeleteMany, typ),
 		Description: description(consts.DeleteMany, typ),
 		Tags:        tags(path, consts.DeleteMany, typ),
@@ -834,9 +903,8 @@ func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path st
 func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	gen := openapi3gen.NewGenerator()
 	typ := reflect.TypeOf(*new(M))
-	name := typ.Elem().Name()
-	reqKey := fmt.Sprintf("%s_%s", strings.ToLower(name), consts.PHASE_UPDATE_MANY)
-	rspKey := fmt.Sprintf("%s_%s", strings.ToLower(name), consts.PHASE_UPDATE_MANY)
+	reqKey := componentKey(typ, consts.PHASE_UPDATE_MANY)
+	rspKey := reqKey
 
 	var reqSchemaRef *openapi3.SchemaRef
 	var rspSchemaRef *openapi3.SchemaRef
@@ -871,7 +939,7 @@ func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
 
 	pathItem.Put = &openapi3.Operation{
-		OperationID: operationID(consts.UpdateMany, typ),
+		OperationID: operationID(path, consts.UpdateMany),
 		Summary:     summary(path, consts.UpdateMany, typ),
 		Description: description(consts.UpdateMany, typ),
 		Tags:        tags(path, consts.UpdateMany, typ),
@@ -959,9 +1027,8 @@ func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 func setPatchMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	gen := openapi3gen.NewGenerator()
 	typ := reflect.TypeOf(*new(M))
-	name := typ.Elem().Name()
-	reqKey := fmt.Sprintf("%s_%s", strings.ToLower(name), consts.PHASE_PATCH_MANY)
-	rspKey := fmt.Sprintf("%s_%s", strings.ToLower(name), consts.PHASE_PATCH_MANY)
+	reqKey := componentKey(typ, consts.PHASE_PATCH_MANY)
+	rspKey := reqKey
 
 	var reqSchemaRef *openapi3.SchemaRef
 	var rspSchemaRef *openapi3.SchemaRef
@@ -996,7 +1063,7 @@ func setPatchMany[M types.Model, REQ types.Request, RSP types.Response](path str
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
 
 	pathItem.Patch = &openapi3.Operation{
-		OperationID: operationID(consts.PatchMany, typ),
+		OperationID: operationID(path, consts.PatchMany),
 		Summary:     summary(path, consts.PatchMany, typ),
 		Description: description(consts.PatchMany, typ),
 		Tags:        tags(path, consts.PatchMany, typ),
@@ -1171,10 +1238,7 @@ func setExport[M types.Model, REQ types.Request, RSP types.Response](path string
 func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey, rspKey string, reqSchemaRef *openapi3.SchemaRef, rspSchemaRef *openapi3.SchemaRef) {
 	if !modelregistry.IsEmpty[M]() {
 		typ := reflect.TypeOf(*new(M))
-		for typ.Kind() == reflect.Pointer {
-			typ = typ.Elem()
-		}
-		name := typ.Name()
+		name := uniqueComponentName(typ)
 		docMutex.Lock()
 		if doc.Components.Schemas == nil {
 			doc.Components.Schemas = openapi3.Schemas{}
@@ -1844,30 +1908,109 @@ func addSchemaFieldDocs[T any](schemaRef *openapi3.SchemaRef) {
 		}
 	}
 
-	// Add descriptions to schema properties
+	// Add descriptions and enum values to schema properties
 	for propName, propRef := range schemaRef.Value.Properties {
 		if propRef.Value == nil {
 			continue
 		}
 
-		// Set description if available
-		description, exists := propertyDescriptions[propName]
-		if !exists || description == "" {
-			continue
-		}
-		if field, ok := fieldByJSON[propName]; ok {
+		description := propertyDescriptions[propName]
+		field, hasField := fieldByJSON[propName]
+
+		if hasField && description != "" {
 			if updatedSchema := convertDatatypesJSONTypeSchema(propRef, field, description); updatedSchema != nil {
 				propRef = updatedSchema
 			}
 		}
+
+		var enumDoc apidoc.EnumDoc
+		enumOnItems := false
+		hasEnum := false
+		if hasField {
+			enumDoc, enumOnItems, hasEnum = fieldEnumDoc(field.Type)
+		}
+		if (description == "" && !hasEnum) || propRef.Value == nil {
+			continue
+		}
+
 		// Create a copy of the schema to avoid shared reference issues
-		if propRef.Value != nil {
-			newSchema := *propRef.Value
-			newSchema.Title = description
-			newSchema.Description = description
-			schemaRef.Value.Properties[propName] = &openapi3.SchemaRef{Value: &newSchema}
+		newSchema := *propRef.Value
+		newSchema.Title = description
+		newSchema.Description = description
+		if hasEnum {
+			applyEnum(&newSchema, enumOnItems, enumDoc)
+			newSchema.Description = enumDescription(description, enumDoc)
+		}
+		schemaRef.Value.Properties[propName] = &openapi3.SchemaRef{Value: &newSchema}
+	}
+}
+
+// fieldEnumDoc resolves the registered enum doc of a field type, unwrapping
+// pointers, slices and arrays. The second result reports whether the enum
+// applies to the slice items schema instead of the field schema itself.
+func fieldEnumDoc(typ reflect.Type) (doc apidoc.EnumDoc, onItems bool, ok bool) {
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	if typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array {
+		typ = typ.Elem()
+		onItems = true
+		for typ.Kind() == reflect.Pointer {
+			typ = typ.Elem()
 		}
 	}
+	if typ.PkgPath() == "" || typ.Name() == "" {
+		return apidoc.EnumDoc{}, false, false
+	}
+	doc, ok = apidoc.LookupEnum(typ.PkgPath(), typ.Name())
+	if !ok || len(doc.Values) == 0 {
+		return apidoc.EnumDoc{}, false, false
+	}
+	return doc, onItems, true
+}
+
+// applyEnum sets the enum values on the property schema, or on a copy of its
+// items schema for slice fields to avoid mutating shared item schemas.
+func applyEnum(schema *openapi3.Schema, onItems bool, doc apidoc.EnumDoc) {
+	values := make([]any, 0, len(doc.Values))
+	for _, value := range doc.Values {
+		values = append(values, value.Value)
+	}
+
+	if !onItems {
+		schema.Enum = values
+		return
+	}
+	if schema.Items == nil || schema.Items.Value == nil {
+		return
+	}
+	items := *schema.Items.Value
+	items.Enum = values
+	schema.Items = &openapi3.SchemaRef{Value: &items}
+}
+
+// enumDescription appends the enum value list to the field description so
+// each value's comment stays visible next to the field. When the field has
+// no comment of its own, the enum type comment is used as the base text.
+func enumDescription(base string, doc apidoc.EnumDoc) string {
+	if base == "" {
+		base = doc.Comment
+	}
+
+	lines := make([]string, 0, len(doc.Values))
+	for _, value := range doc.Values {
+		line := fmt.Sprintf("- `%v`", value.Value)
+		if value.Comment != "" {
+			line += ": " + value.Comment
+		}
+		lines = append(lines, line)
+	}
+	list := strings.Join(lines, "\n")
+
+	if base == "" {
+		return list
+	}
+	return base + "\n\n" + list
 }
 
 // convertDatatypesJSONTypeSchema unwraps gorm datatypes.JSONType[T] so the
@@ -1975,12 +2118,18 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 		// Get field descriptions from model documentation
 		description := modelDocs[field.Name]
 
+		schema := fieldToOpenAPISchema(field)
+		if enumDoc, onItems, ok := fieldEnumDoc(field.Type); ok && !onItems {
+			applyEnum(schema, false, enumDoc)
+			description = enumDescription(description, enumDoc)
+		}
+
 		queries = append(queries, &openapi3.ParameterRef{
 			Value: &openapi3.Parameter{
 				Name:        queryTag,
 				In:          "query",
 				Required:    false,
-				Schema:      &openapi3.SchemaRef{Value: fieldToOpenAPISchema(field)},
+				Schema:      &openapi3.SchemaRef{Value: schema},
 				Description: description,
 			},
 		})
@@ -2056,23 +2205,26 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 	}
 }
 
-func operationID(op consts.HTTPVerb, typ reflect.Type) string {
-	return fmt.Sprintf("%s%s", op, typ.Elem().Name())
+// operationID derives a unique, stable operation id from the route path and
+// the action, eg. PATCH /api/play/customizations/{id} -> "play_customizations_patch".
+// Deriving from the path instead of the model name keeps ids unique when
+// same-named models exist in different packages or one model serves several
+// routes; duplicate operation ids break OpenAPI client generators.
+func operationID(path string, op consts.HTTPVerb) string {
+	token := strings.Join(resourceSegments(path), "_")
+	if token == "" {
+		return string(op)
+	}
+	return strings.ReplaceAll(token, "-", "_") + "_" + string(op)
 }
 
-func summary(path string, op consts.HTTPVerb, _ reflect.Type) string {
-	path = strings.TrimPrefix(path, `/api/`)
-	path = strings.TrimSuffix(path, `/{id}`)
-	items := strings.Split(path, `/`)
-
-	if len(items) > 1 { // trim the first segment
-		items = items[1:]
-	}
-
-	// remove the segment that starts with ":" or wrapped with {}
-	filtered := make([]string, 0, len(items))
-	for _, seg := range items {
-		if seg == "" || strings.HasPrefix(seg, ":") {
+// resourceSegments returns the resource segments of a route path: the /api
+// prefix, path parameters and empty segments are dropped.
+func resourceSegments(path string) []string {
+	segments := strings.Split(strings.Trim(path, "/"), "/")
+	filtered := make([]string, 0, len(segments))
+	for index, seg := range segments {
+		if seg == "" || (index == 0 && seg == "api") || strings.HasPrefix(seg, ":") {
 			continue
 		}
 		if strings.HasPrefix(seg, "{") && strings.HasSuffix(seg, "}") {
@@ -2080,9 +2232,23 @@ func summary(path string, op consts.HTTPVerb, _ reflect.Type) string {
 		}
 		filtered = append(filtered, seg)
 	}
+	return filtered
+}
 
-	path = strings.Join(filtered, `/`)
-	return strings.ReplaceAll(path, `/`, `_`) + "_" + string(op)
+func summary(path string, op consts.HTTPVerb, typ reflect.Type) string {
+	// Prefer the first line of the model doc comment: it reads much better
+	// in the operation list than a mechanical token.
+	if comment := parseStructComment(elemInstance(typ)); comment != "" {
+		return strings.TrimSpace(strings.SplitN(comment, "\n", 2)[0])
+	}
+
+	// Fallback: flatten the resource path, keeping the historical shape that
+	// drops the leading module segment.
+	items := resourceSegments(strings.TrimSuffix(path, `/batch`))
+	if len(items) > 1 {
+		items = items[1:]
+	}
+	return strings.Join(items, "_") + "_" + string(op)
 
 	// // Try to get struct comment first
 	// var modelInstance any
@@ -2117,17 +2283,7 @@ func summary(path string, op consts.HTTPVerb, _ reflect.Type) string {
 }
 
 func description(op consts.HTTPVerb, typ reflect.Type) string {
-	// Try to get struct comment first
-	var modelInstance any
-	if typ.Kind() == reflect.Slice {
-		// For slice types, create an instance of the element type
-		modelInstance = reflect.New(typ.Elem()).Interface()
-	} else {
-		// For other types, create an instance directly
-		modelInstance = reflect.New(typ).Interface()
-	}
-
-	structComment := parseStructComment(modelInstance)
+	structComment := parseStructComment(elemInstance(typ))
 	if structComment != "" {
 		return structComment
 	}
@@ -2140,17 +2296,24 @@ func description(op consts.HTTPVerb, typ reflect.Type) string {
 	return fmt.Sprintf("%s %s", op, typ.Elem().Name())
 }
 
-func tags(path string, _ consts.HTTPVerb, typ reflect.Type) []string {
-	// return []string{typ.Elem().Name()}
-	tag := strings.TrimPrefix(path, `/api/`)
-	tag = strings.TrimSuffix(tag, `/batch`)
-	items := strings.Split(tag, `/`)
-	if len(items) > 0 {
-		tag = items[0]
-	} else {
-		tag = typ.Elem().Name()
+// elemInstance creates a model instance for comment parsing, unwrapping
+// slice types to their element type.
+func elemInstance(typ reflect.Type) any {
+	if typ.Kind() == reflect.Slice {
+		return reflect.New(typ.Elem()).Interface()
 	}
-	return []string{tag}
+	return reflect.New(typ).Interface()
+}
+
+// tags groups an operation under the first resource segment of its path,
+// which matches the module structure of the backend (eg. play, groups,
+// players). Path parameters never become tags.
+func tags(path string, _ consts.HTTPVerb, typ reflect.Type) []string {
+	segments := resourceSegments(strings.TrimSuffix(path, `/batch`))
+	if len(segments) > 0 {
+		return []string{segments[0]}
+	}
+	return []string{typ.Elem().Name()}
 }
 
 // setupBatchExample will remove field "created_at", "created_by", "updated_at", "updated_by"

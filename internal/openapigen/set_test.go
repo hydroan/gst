@@ -2,12 +2,15 @@ package openapigen
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3gen"
+	"github.com/hydroan/gst/apidoc"
 	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/types/consts"
 )
 
 type openapiTimeQueryModel struct {
@@ -212,6 +215,191 @@ func TestSetupBatchExampleGeneratesRecursiveMapExample(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("group_roles example = %#v, want %#v", got, want)
+	}
+}
+
+// enumFieldStatus is a demo enum type for schema decoration tests.
+type enumFieldStatus string
+
+type enumFieldModel struct {
+	// Status is the record status.
+	Status enumFieldStatus `json:"status"`
+
+	Codes []enumFieldStatus `json:"codes"`
+}
+
+func registerEnumFieldStatus() {
+	apidoc.RegisterEnum(reflect.TypeFor[enumFieldStatus]().PkgPath(), "enumFieldStatus", apidoc.EnumDoc{
+		Comment: "enumFieldStatus is the demo status enum.",
+		Values: []apidoc.EnumValue{
+			{Value: "active", Comment: "the record is active"},
+			{Value: "disabled", Comment: "the record is disabled"},
+		},
+	})
+}
+
+func TestAddSchemaFieldDocsSetsEnumValues(t *testing.T) {
+	registerEnumFieldStatus()
+
+	schemaRef, err := openapi3gen.NewSchemaRefForValue(enumFieldModel{}, nil)
+	if err != nil {
+		t.Fatalf("NewSchemaRefForValue() error = %v", err)
+	}
+
+	addSchemaFieldDocs[enumFieldModel](schemaRef)
+
+	status := schemaRef.Value.Properties["status"]
+	if status == nil || status.Value == nil {
+		t.Fatal("status property missing")
+	}
+	if len(status.Value.Enum) != 2 || status.Value.Enum[0] != "active" || status.Value.Enum[1] != "disabled" {
+		t.Fatalf("status enum = %#v, want [active disabled]", status.Value.Enum)
+	}
+	if !strings.Contains(status.Value.Description, "Status is the record status.") {
+		t.Fatalf("status description = %q, want it to keep the field comment", status.Value.Description)
+	}
+	if !strings.Contains(status.Value.Description, "- `active`: the record is active") {
+		t.Fatalf("status description = %q, want it to list enum value comments", status.Value.Description)
+	}
+}
+
+func TestAddSchemaFieldDocsSetsEnumOnSliceItemsWithoutFieldComment(t *testing.T) {
+	registerEnumFieldStatus()
+
+	schemaRef, err := openapi3gen.NewSchemaRefForValue(enumFieldModel{}, nil)
+	if err != nil {
+		t.Fatalf("NewSchemaRefForValue() error = %v", err)
+	}
+
+	addSchemaFieldDocs[enumFieldModel](schemaRef)
+
+	codes := schemaRef.Value.Properties["codes"]
+	if codes == nil || codes.Value == nil {
+		t.Fatal("codes property missing")
+	}
+	if codes.Value.Items == nil || codes.Value.Items.Value == nil {
+		t.Fatal("codes items schema missing")
+	}
+	if len(codes.Value.Items.Value.Enum) != 2 {
+		t.Fatalf("codes items enum = %#v, want the two enum values", codes.Value.Items.Value.Enum)
+	}
+	// The field has no comment, so the enum type comment becomes the base text.
+	if !strings.Contains(codes.Value.Description, "enumFieldStatus is the demo status enum.") {
+		t.Fatalf("codes description = %q, want the enum type comment as base text", codes.Value.Description)
+	}
+}
+
+func TestAddQueryParametersSetsEnumValues(t *testing.T) {
+	registerEnumFieldStatus()
+
+	op := &openapi3.Operation{}
+	addQueryParameters[*enumQueryModel, *enumQueryModel, *enumQueryModel](op)
+
+	for _, parameter := range op.Parameters {
+		if parameter.Value == nil || parameter.Value.Name != "status" {
+			continue
+		}
+		if len(parameter.Value.Schema.Value.Enum) != 2 {
+			t.Fatalf("status parameter enum = %#v, want the two enum values", parameter.Value.Schema.Value.Enum)
+		}
+		if !strings.Contains(parameter.Value.Description, "- `active`: the record is active") {
+			t.Fatalf("status parameter description = %q, want enum value comments", parameter.Value.Description)
+		}
+		return
+	}
+	t.Fatal("status query parameter was not added")
+}
+
+type enumQueryModel struct {
+	Status enumFieldStatus `json:"status" query:"status"`
+
+	model.Base
+}
+
+func TestSchemaComponentName(t *testing.T) {
+	tests := []struct {
+		name    string
+		pkgPath string
+		typName string
+		want    string
+	}{
+		{"model subpackage", "dice/model/play", "Customization", "play.Customization"},
+		{"nested model subpackage", "github.com/hydroan/gst/internal/model/iam/user", "User", "iam.user.User"},
+		{"model root", "dice/model", "User", "User"},
+		{"non-model package", "github.com/hydroan/gst/module/mfa", "TOTPBind", "module.mfa.TOTPBind"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := schemaComponentNameFromPath(tt.pkgPath, tt.typName)
+			if got != tt.want {
+				t.Fatalf("schemaComponentName(%s.%s) = %q, want %q", tt.pkgPath, tt.typName, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestOperationIDDerivesFromPath(t *testing.T) {
+	tests := []struct {
+		path string
+		op   consts.HTTPVerb
+		want string
+	}{
+		{"/api/play/customizations/{id}", consts.Patch, "play_customizations_patch"},
+		{"/api/groups", consts.List, "groups_list"},
+		{"/api/hello-world", consts.Create, "hello_world_create"},
+		{"/api/groups/{group}/players", consts.List, "groups_players_list"},
+	}
+	for _, tt := range tests {
+		if got := operationID(tt.path, tt.op); got != tt.want {
+			t.Fatalf("operationID(%s, %s) = %q, want %q", tt.path, tt.op, got, tt.want)
+		}
+	}
+}
+
+// summaryFirstLineModel is the human readable summary line.
+// The second comment line must not leak into the summary.
+type summaryFirstLineModel struct {
+	Name string `json:"name"`
+}
+
+func TestSummaryPrefersStructCommentFirstLine(t *testing.T) {
+	typ := reflect.TypeFor[*summaryFirstLineModel]()
+	got := summary("/api/play/customizations", consts.Patch, typ)
+	if got != "summaryFirstLineModel is the human readable summary line." {
+		t.Fatalf("summary() = %q, want the first comment line", got)
+	}
+}
+
+func TestSummaryFallsBackToPathToken(t *testing.T) {
+	typ := reflect.TypeOf(&struct{ Name string }{})
+	got := summary("/api/play/customizations/{id}", consts.Patch, typ)
+	if got != "customizations_patch" {
+		t.Fatalf("summary() = %q, want the mechanical fallback", got)
+	}
+}
+
+func TestTagsSkipPathParameters(t *testing.T) {
+	got := tags("/api/{tenant}/groups", consts.List, reflect.TypeFor[*summaryFirstLineModel]())
+	if len(got) != 1 || got[0] != "groups" {
+		t.Fatalf("tags() = %v, want [groups]", got)
+	}
+}
+
+func TestUniqueComponentNameResolvesCrossPackageCollision(t *testing.T) {
+	first := uniqueComponentName(reflect.TypeFor[openapiTimeQueryModel]())
+	if first != "internal.openapigen.openapiTimeQueryModel" {
+		t.Fatalf("first = %q, want the last-two-segment qualified name", first)
+	}
+
+	// A different package claiming the same base name must get a fully
+	// qualified fallback instead of silently sharing the component.
+	componentNameMu.Lock()
+	componentNameOwners["internal.openapigen.openapiTimeQueryModel"] = "example.com/other/pkg"
+	componentNameMu.Unlock()
+
+	second := uniqueComponentName(reflect.TypeFor[openapiTimeQueryModel]())
+	if second != "github.com.hydroan.gst.internal.openapigen.openapiTimeQueryModel" {
+		t.Fatalf("second = %q, want the fully qualified fallback", second)
 	}
 }
 

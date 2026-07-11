@@ -10,6 +10,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/config"
+	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 )
@@ -38,7 +39,11 @@ func Write(filename string) error {
 	return os.WriteFile(filename, data, 0o600)
 }
 
-func Set[M types.Model, REQ types.Request, RSP types.Response](path string, verb ...consts.HTTPVerb) {
+// Set registers the OpenAPI document entries for the given path and verbs.
+// authRequired reports whether the route sits behind the authenticated route
+// group; public routes are documented with an empty security requirement so
+// they override the document-level security.
+func Set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, verb ...consts.HTTPVerb) {
 	getOrCreate := func(p string) *openapi3.PathItem {
 		if v := doc.Paths.Value(p); v != nil {
 			return v
@@ -64,31 +69,47 @@ func Set[M types.Model, REQ types.Request, RSP types.Response](path string, verb
 	docMutex.Unlock()
 
 	for _, verb := range buildVerbs(verb...) {
+		var op *openapi3.Operation
 		switch verb {
 		case consts.Create:
 			setCreate[M, REQ, RSP](path, pathItem)
+			op = pathItem.Post
 		case consts.Delete:
 			setDelete[M, REQ, RSP](pathid, pathidItem)
+			op = pathidItem.Delete
 		case consts.Update:
 			setUpdate[M, REQ, RSP](pathid, pathidItem)
+			op = pathidItem.Put
 		case consts.Patch:
 			setPatch[M, REQ, RSP](pathid, pathidItem)
+			op = pathidItem.Patch
 		case consts.List:
 			setList[M, REQ, RSP](path, pathItem)
+			op = pathItem.Get
 		case consts.Get:
 			setGet[M, REQ, RSP](pathid, pathidItem)
+			op = pathidItem.Get
 		case consts.Import:
 			setImport[M, REQ, RSP](pathipt, pathiptItem)
+			op = pathiptItem.Post
 		case consts.Export:
 			setExport[M, REQ, RSP](pathexpt, pathexptItem)
+			op = pathexptItem.Get
 		case consts.CreateMany:
 			setCreateMany[M, REQ, RSP](pathbatch, pathbatchItem)
+			op = pathbatchItem.Post
 		case consts.DeleteMany:
 			setDeleteMany[M, REQ, RSP](pathbatch, pathbatchItem)
+			op = pathbatchItem.Delete
 		case consts.UpdateMany:
 			setUpdateMany[M, REQ, RSP](pathbatch, pathbatchItem)
+			op = pathbatchItem.Put
 		case consts.PatchMany:
 			setPatchMany[M, REQ, RSP](pathbatch, pathbatchItem)
+			op = pathbatchItem.Patch
+		}
+		if !authRequired {
+			markPublic(op)
 		}
 	}
 
@@ -202,6 +223,53 @@ func setDocInfo(doc *openapi3.T) {
 		Description: config.App.AppInfo.Name + " Restful api docs",
 		Version:     config.App.AppInfo.Version,
 	}
+	setDocSecurity(doc)
+}
+
+// securitySchemeNames are the component names of the supported authentication
+// mechanisms: the IAM session cookie and the bearer token.
+const (
+	securitySchemeCookie = "cookieAuth"
+	securitySchemeBearer = "bearerAuth"
+)
+
+// setDocSecurity declares the authentication mechanisms and requires one of
+// them for every operation by default. Public operations override this with
+// an empty security requirement (see markPublic).
+func setDocSecurity(doc *openapi3.T) {
+	if doc.Components == nil {
+		doc.Components = &openapi3.Components{}
+	}
+	if doc.Components.SecuritySchemes == nil {
+		doc.Components.SecuritySchemes = openapi3.SecuritySchemes{}
+	}
+	doc.Components.SecuritySchemes[securitySchemeCookie] = &openapi3.SecuritySchemeRef{
+		Value: &openapi3.SecurityScheme{
+			Type:        "apiKey",
+			In:          "cookie",
+			Name:        serviceiamsession.SessionCookieName,
+			Description: "IAM session cookie issued by POST /api/login",
+		},
+	}
+	doc.Components.SecuritySchemes[securitySchemeBearer] = &openapi3.SecuritySchemeRef{
+		Value: &openapi3.SecurityScheme{
+			Type:   "http",
+			Scheme: "bearer",
+		},
+	}
+	doc.Security = openapi3.SecurityRequirements{
+		{securitySchemeCookie: []string{}},
+		{securitySchemeBearer: []string{}},
+	}
+}
+
+// markPublic documents an operation as accessible without authentication by
+// overriding the document-level security with an empty requirement list.
+func markPublic(op *openapi3.Operation) {
+	if op == nil {
+		return
+	}
+	op.Security = &openapi3.SecurityRequirements{}
 }
 
 func getFieldTag(field reflect.StructField, tagName string) string {

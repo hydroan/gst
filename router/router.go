@@ -241,40 +241,44 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router gin.I
 		panic("unknown router type")
 	}
 
+	// Everything except the public route group is documented as requiring
+	// authentication, which is the safe default for custom sub groups.
+	authRequired := router != gin.IRouter(pub)
+
 	if verbMap[consts.Create] {
 		endpoint := gopath.Join(base, path)
 		router.POST(path, controller.CreateFactory[M, REQ, RSP](cfg...))
 		registerRoute(endpoint, http.MethodPost)
 		middleware.RouteManager.Add(endpoint)
-		go openapigen.Set[M, REQ, RSP](endpoint, consts.Create)
+		go openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.Create)
 	}
 	if verbMap[consts.Delete] {
 		endpoint := gopath.Join(base, path)
 		router.DELETE(path, controller.DeleteFactory[M, REQ, RSP](cfg...))
 		registerRoute(endpoint, http.MethodDelete)
 		middleware.RouteManager.Add(endpoint)
-		go openapigen.Set[M, REQ, RSP](endpoint, consts.Delete)
+		go openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.Delete)
 	}
 	if verbMap[consts.Update] {
 		endpoint := gopath.Join(base, path)
 		router.PUT(path, controller.UpdateFactory[M, REQ, RSP](cfg...))
 		registerRoute(endpoint, http.MethodPut)
 		middleware.RouteManager.Add(endpoint)
-		go openapigen.Set[M, REQ, RSP](endpoint, consts.Update)
+		go openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.Update)
 	}
 	if verbMap[consts.Patch] {
 		endpoint := gopath.Join(base, path)
 		router.PATCH(path, controller.PatchFactory[M, REQ, RSP](cfg...))
 		registerRoute(endpoint, http.MethodPatch)
 		middleware.RouteManager.Add(endpoint)
-		go openapigen.Set[M, REQ, RSP](endpoint, consts.Patch)
+		go openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.Patch)
 	}
 	if verbMap[consts.List] {
 		endpoint := gopath.Join(base, path)
 		router.GET(path, controller.ListFactory[M, REQ, RSP](cfg...))
 		registerRoute(endpoint, http.MethodGet)
 		middleware.RouteManager.Add(endpoint)
-		go openapigen.Set[M, REQ, RSP](endpoint, consts.List)
+		go openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.List)
 	}
 
 	if verbMap[consts.Get] {
@@ -282,7 +286,7 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router gin.I
 		router.GET(path, controller.GetFactory[M, REQ, RSP](cfg...))
 		registerRoute(endpoint, http.MethodGet)
 		middleware.RouteManager.Add(endpoint)
-		go openapigen.Set[M, REQ, RSP](endpoint, consts.Get)
+		go openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.Get)
 	}
 
 	if verbMap[consts.CreateMany] {
@@ -290,28 +294,28 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router gin.I
 		router.POST(path, controller.CreateManyFactory[M, REQ, RSP](cfg...))
 		registerRoute(endpoint, http.MethodPost)
 		middleware.RouteManager.Add(endpoint)
-		go openapigen.Set[M, REQ, RSP](endpoint, consts.CreateMany)
+		go openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.CreateMany)
 	}
 	if verbMap[consts.DeleteMany] {
 		endpoint := gopath.Join(base, path)
 		router.DELETE(path, controller.DeleteManyFactory[M, REQ, RSP](cfg...))
 		registerRoute(endpoint, http.MethodDelete)
 		middleware.RouteManager.Add(endpoint)
-		go openapigen.Set[M, REQ, RSP](endpoint, consts.DeleteMany)
+		go openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.DeleteMany)
 	}
 	if verbMap[consts.UpdateMany] {
 		endpoint := gopath.Join(base, path)
 		router.PUT(path, controller.UpdateManyFactory[M, REQ, RSP](cfg...))
 		registerRoute(endpoint, http.MethodPut)
 		middleware.RouteManager.Add(endpoint)
-		go openapigen.Set[M, REQ, RSP](endpoint, consts.UpdateMany)
+		go openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.UpdateMany)
 	}
 	if verbMap[consts.PatchMany] {
 		endpoint := gopath.Join(base, path)
 		router.PATCH(path, controller.PatchManyFactory[M, REQ, RSP](cfg...))
 		registerRoute(endpoint, http.MethodPatch)
 		middleware.RouteManager.Add(endpoint)
-		go openapigen.Set[M, REQ, RSP](endpoint, consts.PatchMany)
+		go openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.PatchMany)
 	}
 
 	if verbMap[consts.Import] {
@@ -319,14 +323,14 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router gin.I
 		router.POST(path, controller.ImportFactory[M, REQ, RSP](cfg...))
 		registerRoute(endpoint, http.MethodPost)
 		middleware.RouteManager.Add(endpoint)
-		go openapigen.Set[M, REQ, RSP](endpoint, consts.Import)
+		go openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.Import)
 	}
 	if verbMap[consts.Export] {
 		endpoint := gopath.Join(base, path)
 		router.GET(path, controller.ExportFactory[M, REQ, RSP](cfg...))
 		registerRoute(endpoint, http.MethodGet)
 		middleware.RouteManager.Add(endpoint)
-		go openapigen.Set[M, REQ, RSP](endpoint, consts.Export)
+		go openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.Export)
 	}
 }
 
