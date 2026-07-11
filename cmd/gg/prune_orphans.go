@@ -2,10 +2,13 @@ package main
 
 import (
 	"bufio"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/hydroan/gst/dsl"
@@ -211,10 +214,11 @@ func isManagedServiceFile(path string) bool {
 	return gen.IsActionServiceSource(path)
 }
 
-// handleOrphanServiceDirs reports or cleans service directories no model
-// owns. Directories in keptDirs hold service files of gst.yaml-ignored
-// actions and are treated as owned; keptDirs may be nil.
-func handleOrphanServiceDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool) {
+// collectOrphanServiceDirs resolves service directory ownership and returns
+// the orphan directories plus the helper directories kept because live
+// service code still imports them. Directories in keptDirs hold service files
+// of gst.yaml-ignored actions and are treated as owned; keptDirs may be nil.
+func collectOrphanServiceDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool) (orphans, keptHelpers []orphanServiceDir) {
 	currentDirs := currentServiceDirs(allModels)
 	for dir := range keptDirs {
 		currentDirs.ModelDirs = append(currentDirs.ModelDirs, dir)
@@ -222,7 +226,128 @@ func handleOrphanServiceDirs(allModels []*gen.ModelInfo, keptDirs map[string]boo
 	}
 	sort.Strings(currentDirs.ModelDirs)
 
-	orphans := scanOrphanServiceDirs(currentDirs, getPruneOrphanIgnorePatterns())
+	helperDirs := importedServiceHelperDirs(currentDirs)
+	keptHelpers = make([]orphanServiceDir, 0, len(helperDirs))
+	for _, dir := range helperDirs {
+		keptHelpers = append(keptHelpers, orphanServiceDir{
+			Path:  dir,
+			Files: unmanagedFilesUnderDir(dir),
+		})
+		currentDirs.ModelDirs = append(currentDirs.ModelDirs, dir)
+		addServiceDirAncestors(currentDirs.KnownDirs, dir)
+	}
+	sort.Strings(currentDirs.ModelDirs)
+
+	orphans = scanOrphanServiceDirs(currentDirs, getPruneOrphanIgnorePatterns())
+	return orphans, keptHelpers
+}
+
+// importedServiceHelperDirs returns service directories that no model action
+// owns but live service code under the owned directories still imports,
+// directly or transitively. Module copy installs such shared helper packages
+// (for example iam/adminauth); deleting them would break the build, so orphan
+// cleanup must treat them as owned.
+func importedServiceHelperDirs(currentDirs serviceDirSet) []string {
+	modulePath := currentProjectModulePath()
+	if modulePath == "" {
+		return nil
+	}
+	importPrefix := modulePath + "/" + filepath.ToSlash(filepath.Clean(serviceDir))
+
+	helperDirs := make([]string, 0)
+	helperDirSet := make(map[string]bool)
+	scanned := make(map[string]bool)
+	scanQueue := make([]string, 0, len(currentDirs.ModelDirs))
+	for _, dir := range currentDirs.ModelDirs {
+		if !scanned[dir] {
+			scanned[dir] = true
+			scanQueue = append(scanQueue, dir)
+		}
+	}
+
+	ownedOrDiscovered := func(dir string) bool {
+		if currentDirs.KnownDirs[dir] || helperDirSet[dir] {
+			return true
+		}
+		if isUnderCurrentModelServiceDir(dir, currentDirs.ModelDirs) {
+			return true
+		}
+		return isUnderCurrentModelServiceDir(dir, helperDirs)
+	}
+
+	for len(scanQueue) > 0 {
+		current := scanQueue[0]
+		scanQueue = scanQueue[1:]
+		for _, dir := range importedServiceDirsUnderDir(current, importPrefix) {
+			if ownedOrDiscovered(dir) || scanned[dir] {
+				continue
+			}
+			helperDirSet[dir] = true
+			helperDirs = append(helperDirs, dir)
+			scanned[dir] = true
+			scanQueue = append(scanQueue, dir)
+		}
+	}
+
+	sort.Strings(helperDirs)
+	return helperDirs
+}
+
+// importedServiceDirsUnderDir parses the imports of every Go file under dir
+// and returns the service directories referenced through project-local
+// service imports. Files that fail to parse are skipped.
+func importedServiceDirsUnderDir(dir string, importPrefix string) []string {
+	dirs := make([]string, 0)
+	seen := make(map[string]bool)
+	fset := token.NewFileSet()
+
+	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			//nolint:nilerr
+			return nil
+		}
+		if info.IsDir() || !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		file, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
+		if err != nil {
+			//nolint:nilerr
+			return nil
+		}
+		for _, imp := range file.Imports {
+			importPath, err := strconv.Unquote(imp.Path.Value)
+			if err != nil {
+				continue
+			}
+			imported, ok := serviceDirForImport(importPath, importPrefix)
+			if !ok || seen[imported] {
+				continue
+			}
+			seen[imported] = true
+			dirs = append(dirs, imported)
+		}
+		return nil
+	})
+
+	sort.Strings(dirs)
+	return dirs
+}
+
+// serviceDirForImport maps a project-local service import path to the service
+// directory it points at.
+func serviceDirForImport(importPath string, importPrefix string) (string, bool) {
+	if !strings.HasPrefix(importPath, importPrefix+"/") {
+		return "", false
+	}
+	rel := strings.TrimPrefix(importPath, importPrefix+"/")
+	return filepath.Join(filepath.Clean(serviceDir), filepath.FromSlash(rel)), true
+}
+
+// handleOrphanServiceDirs reports or cleans service directories no model
+// owns; see collectOrphanServiceDirs for the ownership rules.
+func handleOrphanServiceDirs(allModels []*gen.ModelInfo, keptDirs map[string]bool) {
+	orphans, keptHelpers := collectOrphanServiceDirs(allModels, keptDirs)
+	reportKeptServiceHelperDirs(keptHelpers)
 	if len(orphans) == 0 {
 		return
 	}
@@ -243,12 +368,22 @@ func handleOrphanServiceDirs(allModels []*gen.ModelInfo, keptDirs map[string]boo
 func reportOrphanServiceDirs(section string, orphans []orphanServiceDir) {
 	clioutput.Section(section)
 	for _, orphan := range orphans {
-		clioutput.Item("", "%s", orphan.Path)
-		clioutput.Item("", "no current model maps to this service directory")
-		clioutput.Item("", "contains unmanaged files:")
+		clioutput.Item("", "%s (no current model maps to this directory)", orphan.Path)
 		for _, file := range orphan.Files {
-			clioutput.Item("", "%s", file)
+			clioutput.Line(clioutput.StyleMuted, "    - %s", file)
 		}
+	}
+}
+
+// reportKeptServiceHelperDirs explains why unmanaged helper directories
+// survived orphan cleanup: live service code still imports them.
+func reportKeptServiceHelperDirs(keptHelpers []orphanServiceDir) {
+	if len(keptHelpers) == 0 {
+		return
+	}
+	clioutput.Section("Service Helper Directories Kept")
+	for _, helper := range keptHelpers {
+		clioutput.Item("", "%s (imported by live service files)", helper.Path)
 	}
 }
 
