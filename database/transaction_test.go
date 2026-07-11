@@ -2,10 +2,10 @@ package database_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/logger"

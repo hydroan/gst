@@ -76,6 +76,8 @@ linters:
       rules:
         main:
           deny:
+            - pkg: "errors"
+              desc: "Use github.com/cockroachdb/errors instead"
             - pkg: "github.com/pkg/errors"
               desc: "Use github.com/cockroachdb/errors instead"
 

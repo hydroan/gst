@@ -1,12 +1,12 @@
 package ggmodule
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
 )
 

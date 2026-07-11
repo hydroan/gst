@@ -2,7 +2,6 @@ package ggmodule
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"go/ast"
 	goformat "go/format"
@@ -12,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	gofumpt "mvdan.cc/gofumpt/format"
 )
 

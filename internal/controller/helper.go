@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"reflect"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/requestctx"
@@ -488,7 +488,8 @@ func traceServiceImport[M types.Model](parentCtx context.Context, phase consts.P
 
 // handleServiceError handles service-layer errors.
 func handleServiceError(c *gin.Context, ctx *types.ServiceContext, err error) {
-	if serviceErr, ok := errors.AsType[*service.Error](err); ok {
+	var serviceErr *service.Error
+	if errors.As(err, &serviceErr) {
 		JSON(c, serviceErr)
 		return
 	}

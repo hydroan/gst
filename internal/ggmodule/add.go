@@ -1,11 +1,11 @@
 package ggmodule
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
+	"github.com/cockroachdb/errors"
 	"golang.org/x/tools/go/ast/astutil"
 )
 

@@ -1,11 +1,11 @@
 package filetype
 
 import (
-	"errors"
 	"io"
 	"os"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/h2non/filetype"
 	"go.uber.org/zap"

@@ -2,7 +2,6 @@ package gen
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -13,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/types/consts"

@@ -1,7 +1,6 @@
 package ggmodule
 
 import (
-	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -13,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
