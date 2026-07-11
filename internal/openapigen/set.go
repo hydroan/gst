@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/gertd/go-pluralize"
 	"github.com/getkin/kin-openapi/openapi3"
@@ -1790,6 +1792,75 @@ func getBaseModelDocs() map[string]string {
 	return baseModelDocsCache
 }
 
+// openAPIDocComment removes the Go doc subject from API-facing text while
+// preserving comments that do not begin with the exact declared symbol.
+func openAPIDocComment(symbol, comment string) string {
+	comment = strings.TrimSpace(comment)
+	if symbol == "" || comment == "" {
+		return comment
+	}
+
+	rest, ok := strings.CutPrefix(comment, symbol)
+	if !ok || rest == "" {
+		return comment
+	}
+
+	switch {
+	case strings.HasPrefix(rest, ":"):
+		rest = strings.TrimSpace(strings.TrimPrefix(rest, ":"))
+	case strings.HasPrefix(rest, "："):
+		rest = strings.TrimSpace(strings.TrimPrefix(rest, "："))
+	default:
+		boundary, _ := utf8.DecodeRuneInString(rest)
+		if !unicode.IsSpace(boundary) {
+			return comment
+		}
+		rest = strings.TrimLeftFunc(rest, unicode.IsSpace)
+		switch {
+		case strings.HasPrefix(rest, ":"):
+			rest = strings.TrimSpace(strings.TrimPrefix(rest, ":"))
+		case strings.HasPrefix(rest, "："):
+			rest = strings.TrimSpace(strings.TrimPrefix(rest, "："))
+		}
+	}
+
+	if rest == "" {
+		return comment
+	}
+	switch {
+	case strings.HasPrefix(rest, "是否"):
+	case strings.HasPrefix(rest, "是"):
+		rest = strings.TrimSpace(strings.TrimPrefix(rest, "是"))
+	default:
+		if trimmed, found := trimOpenAPIDocCopula(rest, "is"); found {
+			rest = trimmed
+		} else if trimmed, found := trimOpenAPIDocCopula(rest, "are"); found {
+			rest = trimmed
+		}
+	}
+
+	if rest == "" {
+		return comment
+	}
+	first, size := utf8.DecodeRuneInString(rest)
+	if upper := unicode.ToUpper(first); upper != first {
+		rest = string(upper) + rest[size:]
+	}
+	return rest
+}
+
+func trimOpenAPIDocCopula(comment, copula string) (string, bool) {
+	rest, ok := strings.CutPrefix(comment, copula)
+	if !ok || rest == "" {
+		return comment, false
+	}
+	boundary, _ := utf8.DecodeRuneInString(rest)
+	if !unicode.IsSpace(boundary) {
+		return comment, false
+	}
+	return strings.TrimLeftFunc(rest, unicode.IsSpace), true
+}
+
 // newSchemaRefWithDocs generates the OpenAPI schema for value and decorates it
 // and every nested schema with the doc comments and enum values registered for
 // the Go types reachable from value's type.
@@ -1803,12 +1874,12 @@ func newSchemaRefWithDocs(value any) *openapi3.SchemaRef {
 }
 
 // addSchemaDocsForType decorates schemaRef with the doc comments and enum
-// values registered for typ, adding them as both the title and the description
-// so Swagger UI renders the field meaning next to the field name. It walks the
-// generated schema tree and the Go type tree in parallel, so nested request and
-// response structs are decorated at every depth. visiting holds the struct
-// types on the current descent path so self-referential types terminate;
-// callers pass nil.
+// values registered for typ. Field comments become descriptions without being
+// copied into titles, so documentation renderers do not display the same text
+// twice and independent schema titles remain intact. It walks the generated
+// schema tree and the Go type tree in parallel, so nested request and response
+// structs are decorated at every depth. visiting holds the struct types on the
+// current descent path so self-referential types terminate; callers pass nil.
 func addSchemaDocsForType(typ reflect.Type, schemaRef *openapi3.SchemaRef, visiting map[reflect.Type]bool) {
 	if typ == nil || schemaRef == nil || schemaRef.Value == nil {
 		return
@@ -1849,13 +1920,13 @@ func addSchemaDocsForType(typ reflect.Type, schemaRef *openapi3.SchemaRef, visit
 			continue
 		}
 
-		description := docField.docs[docField.field.Name]
+		description := openAPIDocComment(docField.field.Name, docField.docs[docField.field.Name])
 
 		// Unwrap gorm datatypes.JSONType[T] so both the schema and the type
 		// walk below continue with the wrapped data type.
 		fieldType := docField.field.Type
 		if dataType, isJSONType := datatypesJSONDataType(fieldType); isJSONType {
-			if unwrapped := convertDatatypesJSONTypeSchema(propRef, docField.field, description); unwrapped != nil {
+			if unwrapped := convertDatatypesJSONTypeSchema(propRef, docField.field); unwrapped != nil {
 				propRef = unwrapped
 				schemaRef.Value.Properties[propName] = propRef
 			}
@@ -1866,7 +1937,6 @@ func addSchemaDocsForType(typ reflect.Type, schemaRef *openapi3.SchemaRef, visit
 		if (description != "" || hasEnum) && propRef.Value != nil {
 			// Copy the schema so shared schema instances keep their own docs.
 			newSchema := *propRef.Value
-			newSchema.Title = description
 			newSchema.Description = description
 			if hasEnum {
 				applyEnum(&newSchema, enumOnItems, enumDoc)
@@ -1948,6 +2018,7 @@ func fieldEnumDoc(typ reflect.Type) (doc apidoc.EnumDoc, onItems bool, ok bool) 
 	if !ok || len(doc.Values) == 0 {
 		return apidoc.EnumDoc{}, false, false
 	}
+	doc.Comment = openAPIDocComment(typ.Name(), doc.Comment)
 	return doc, onItems, true
 }
 
@@ -2014,7 +2085,7 @@ func datatypesJSONDataType(typ reflect.Type) (reflect.Type, bool) {
 
 // convertDatatypesJSONTypeSchema unwraps gorm datatypes.JSONType[T] so the
 // generated schema uses the underlying T definition instead of the wrapper.
-func convertDatatypesJSONTypeSchema(propRef *openapi3.SchemaRef, field reflect.StructField, description string) *openapi3.SchemaRef {
+func convertDatatypesJSONTypeSchema(propRef *openapi3.SchemaRef, field reflect.StructField) *openapi3.SchemaRef {
 	if propRef == nil {
 		return nil
 	}
@@ -2033,10 +2104,6 @@ func convertDatatypesJSONTypeSchema(propRef *openapi3.SchemaRef, field reflect.S
 			zap.S().Warnf("failed to build schema for datatypes.JSONType[%s]: %v", dataType.String(), err)
 			return propRef
 		}
-	}
-
-	if schemaRef.Value != nil && description != "" {
-		schemaRef.Value.Title = description
 	}
 
 	return schemaRef
@@ -2100,7 +2167,7 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 		}
 
 		// Get field descriptions from model documentation
-		description := modelDocs[field.Name]
+		description := openAPIDocComment(field.Name, modelDocs[field.Name])
 
 		schema := fieldToOpenAPISchema(field)
 		if enumDoc, onItems, ok := fieldEnumDoc(field.Type); ok && !onItems {
@@ -2130,7 +2197,7 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 		}
 
 		// Get field descriptions from Base model documentation
-		description := baseDocs[field.Name]
+		description := openAPIDocComment(field.Name, baseDocs[field.Name])
 
 		queries = append(queries, &openapi3.ParameterRef{
 			Value: &openapi3.Parameter{
@@ -2222,7 +2289,7 @@ func resourceSegments(path string) []string {
 func summary(path string, op consts.HTTPVerb, typ reflect.Type) string {
 	// Prefer the first line of the model doc comment: it reads much better
 	// in the operation list than a mechanical token.
-	if comment := parseStructComment(elemInstance(typ)); comment != "" {
+	if comment := openAPIStructComment(typ); comment != "" {
 		return strings.TrimSpace(strings.SplitN(comment, "\n", 2)[0])
 	}
 
@@ -2267,7 +2334,7 @@ func summary(path string, op consts.HTTPVerb, typ reflect.Type) string {
 }
 
 func description(op consts.HTTPVerb, typ reflect.Type) string {
-	structComment := parseStructComment(elemInstance(typ))
+	structComment := openAPIStructComment(typ)
 	if structComment != "" {
 		return structComment
 	}
@@ -2278,6 +2345,12 @@ func description(op consts.HTTPVerb, typ reflect.Type) string {
 		return fmt.Sprintf("%s %s", op, pluralizeCli.Plural(typ.Elem().Name()))
 	}
 	return fmt.Sprintf("%s %s", op, typ.Elem().Name())
+}
+
+func openAPIStructComment(typ reflect.Type) string {
+	instance := elemInstance(typ)
+	_, typeName := typeIdentity(instance)
+	return openAPIDocComment(typeName, parseStructComment(instance))
 }
 
 // elemInstance creates a model instance for comment parsing, unwrapping

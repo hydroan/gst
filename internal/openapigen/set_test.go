@@ -11,9 +11,11 @@ import (
 	"github.com/hydroan/gst/apidoc"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types/consts"
+	"gorm.io/datatypes"
 )
 
 type openapiTimeQueryModel struct {
+	// ExpiresAt is the expiration time.
 	ExpiresAt *time.Time `json:"expires_at,omitempty" query:"expires_at"`
 
 	model.Base
@@ -63,6 +65,9 @@ func TestAddQueryParametersUsesDateTimeFormatForTimeFields(t *testing.T) {
 		}
 
 		assertDateTimeSchema(t, parameter.Value.Schema)
+		if parameter.Value.Description != "The expiration time." {
+			t.Fatalf("expires_at description = %q, want API-facing field comment", parameter.Value.Description)
+		}
 		return
 	}
 
@@ -83,38 +88,196 @@ func TestSchemaFromTypeKeepsRegularStructsAsObjects(t *testing.T) {
 	}
 }
 
-type mapTitleModel struct {
+type mapDocModel struct {
 	// GroupRoles binds groups to their roles.
 	GroupRoles map[string][]string `json:"group_roles,omitempty"`
 }
 
-func TestAddSchemaDocsForTypeSetsTitleAndDescription(t *testing.T) {
-	schemaRef, err := openapi3gen.NewSchemaRefForValue(mapTitleModel{}, nil)
+func TestOpenAPIDocCommentRemovesExactGoDocSubject(t *testing.T) {
+	tests := []struct {
+		name    string
+		symbol  string
+		comment string
+		want    string
+	}{
+		{
+			name:    "Chinese copula",
+			symbol:  "Label",
+			comment: "Label 是字段标签。",
+			want:    "字段标签。",
+		},
+		{
+			name:    "Chinese question phrase",
+			symbol:  "Enabled",
+			comment: "Enabled 是否启用。",
+			want:    "是否启用。",
+		},
+		{
+			name:    "English copula",
+			symbol:  "Name",
+			comment: "Name is the option name.",
+			want:    "The option name.",
+		},
+		{
+			name:    "English plural copula",
+			symbol:  "Options",
+			comment: "Options are available choices.",
+			want:    "Available choices.",
+		},
+		{
+			name:    "tab symbol boundary",
+			symbol:  "Name",
+			comment: "Name\tis the display name.",
+			want:    "The display name.",
+		},
+		{
+			name:    "wrapped English copula",
+			symbol:  "Name",
+			comment: "Name is\nthe display name.",
+			want:    "The display name.",
+		},
+		{
+			name:    "English verb",
+			symbol:  "GroupRoles",
+			comment: "GroupRoles binds groups to their roles.",
+			want:    "Binds groups to their roles.",
+		},
+		{
+			name:    "ASCII colon",
+			symbol:  "Name",
+			comment: "Name: display name.",
+			want:    "Display name.",
+		},
+		{
+			name:    "full width colon",
+			symbol:  "Name",
+			comment: "Name：显示名称。",
+			want:    "显示名称。",
+		},
+		{
+			name:    "multiple lines",
+			symbol:  "Model",
+			comment: "Model is the model summary.\n\nMore details.",
+			want:    "The model summary.\n\nMore details.",
+		},
+		{
+			name:    "similar identifier",
+			symbol:  "ID",
+			comment: "IDCard is the identity card.",
+			want:    "IDCard is the identity card.",
+		},
+		{
+			name:    "comment without subject",
+			symbol:  "Name",
+			comment: "显示名称。",
+			want:    "显示名称。",
+		},
+		{
+			name:    "subject only",
+			symbol:  "Name",
+			comment: "Name",
+			want:    "Name",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := openAPIDocComment(tt.symbol, tt.comment); got != tt.want {
+				t.Fatalf("openAPIDocComment(%q, %q) = %q, want %q", tt.symbol, tt.comment, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAddSchemaDocsForTypeSetsDescriptionWithoutTitle(t *testing.T) {
+	schemaRef, err := openapi3gen.NewSchemaRefForValue(mapDocModel{}, nil)
 	if err != nil {
 		t.Fatalf("NewSchemaRefForValue() error = %v", err)
 	}
 
-	addSchemaDocsForType(reflect.TypeFor[mapTitleModel](), schemaRef, nil)
+	addSchemaDocsForType(reflect.TypeFor[mapDocModel](), schemaRef, nil)
 
 	groupRoles := schemaRef.Value.Properties["group_roles"]
 	if groupRoles == nil || groupRoles.Value == nil {
 		t.Fatal("group_roles property missing")
 	}
-	if groupRoles.Value.Title != "GroupRoles binds groups to their roles." {
-		t.Fatalf("group_roles title = %q, want field doc comment", groupRoles.Value.Title)
+	if groupRoles.Value.Title != "" {
+		t.Fatalf("group_roles title = %q, want empty", groupRoles.Value.Title)
 	}
-	if groupRoles.Value.Description != "GroupRoles binds groups to their roles." {
-		t.Fatalf("group_roles description = %q, want field doc comment", groupRoles.Value.Description)
+	if groupRoles.Value.Description != "Binds groups to their roles." {
+		t.Fatalf("group_roles description = %q, want API-facing field comment", groupRoles.Value.Description)
 	}
 }
 
-func TestAddSchemaDocsForTypeDoesNotDuplicateIntoMapAdditionalProperties(t *testing.T) {
-	schemaRef, err := openapi3gen.NewSchemaRefForValue(mapTitleModel{}, nil)
+func TestAddSchemaDocsForTypePreservesExistingTitle(t *testing.T) {
+	property := openapi3.NewStringSchema()
+	property.Title = "Explicit schema title"
+	object := openapi3.NewObjectSchema()
+	object.WithProperty("group_roles", property)
+	schemaRef := &openapi3.SchemaRef{Value: object}
+
+	addSchemaDocsForType(reflect.TypeFor[mapDocModel](), schemaRef, nil)
+
+	groupRoles := schemaRef.Value.Properties["group_roles"]
+	if groupRoles == nil || groupRoles.Value == nil {
+		t.Fatal("group_roles property missing")
+	}
+	if groupRoles.Value.Title != "Explicit schema title" {
+		t.Fatalf("group_roles title = %q, want explicit schema title", groupRoles.Value.Title)
+	}
+	if groupRoles.Value.Description != "Binds groups to their roles." {
+		t.Fatalf("group_roles description = %q, want API-facing field comment", groupRoles.Value.Description)
+	}
+}
+
+type jsonDocPayload struct {
+	// Code is the payload code.
+	Code string `json:"code"`
+}
+
+type jsonDocModel struct {
+	// Config is the configuration payload.
+	Config datatypes.JSONType[jsonDocPayload] `json:"config"`
+}
+
+func TestAddSchemaDocsForTypeDecoratesJSONTypeWithoutTitle(t *testing.T) {
+	schemaRef, err := openapi3gen.NewSchemaRefForValue(jsonDocModel{}, nil)
 	if err != nil {
 		t.Fatalf("NewSchemaRefForValue() error = %v", err)
 	}
 
-	addSchemaDocsForType(reflect.TypeFor[mapTitleModel](), schemaRef, nil)
+	addSchemaDocsForType(reflect.TypeFor[jsonDocModel](), schemaRef, nil)
+
+	config := schemaRef.Value.Properties["config"]
+	if config == nil || config.Value == nil {
+		t.Fatal("config property missing")
+	}
+	if config.Value.Title != "" {
+		t.Fatalf("config title = %q, want empty", config.Value.Title)
+	}
+	if config.Value.Description != "The configuration payload." {
+		t.Fatalf("config description = %q, want API-facing field comment", config.Value.Description)
+	}
+
+	code := config.Value.Properties["code"]
+	if code == nil || code.Value == nil {
+		t.Fatal("config code property missing")
+	}
+	if code.Value.Title != "" {
+		t.Fatalf("config code title = %q, want empty", code.Value.Title)
+	}
+	if code.Value.Description != "The payload code." {
+		t.Fatalf("config code description = %q, want API-facing nested field comment", code.Value.Description)
+	}
+}
+
+func TestAddSchemaDocsForTypeDoesNotDuplicateIntoMapAdditionalProperties(t *testing.T) {
+	schemaRef, err := openapi3gen.NewSchemaRefForValue(mapDocModel{}, nil)
+	if err != nil {
+		t.Fatalf("NewSchemaRefForValue() error = %v", err)
+	}
+
+	addSchemaDocsForType(reflect.TypeFor[mapDocModel](), schemaRef, nil)
 
 	groupRoles := schemaRef.Value.Properties["group_roles"]
 	if groupRoles == nil || groupRoles.Value == nil {
@@ -255,7 +418,7 @@ func TestAddSchemaDocsForTypeSetsEnumValues(t *testing.T) {
 	if len(status.Value.Enum) != 2 || status.Value.Enum[0] != "active" || status.Value.Enum[1] != "disabled" {
 		t.Fatalf("status enum = %#v, want [active disabled]", status.Value.Enum)
 	}
-	if !strings.Contains(status.Value.Description, "Status is the record status.") {
+	if !strings.Contains(status.Value.Description, "The record status.") {
 		t.Fatalf("status description = %q, want it to keep the field comment", status.Value.Description)
 	}
 	if !strings.Contains(status.Value.Description, "- `active`: the record is active") {
@@ -284,7 +447,7 @@ func TestAddSchemaDocsForTypeSetsEnumOnSliceItemsWithoutFieldComment(t *testing.
 		t.Fatalf("codes items enum = %#v, want the two enum values", codes.Value.Items.Value.Enum)
 	}
 	// The field has no comment, so the enum type comment becomes the base text.
-	if !strings.Contains(codes.Value.Description, "enumFieldStatus is the demo status enum.") {
+	if !strings.Contains(codes.Value.Description, "The demo status enum.") {
 		t.Fatalf("codes description = %q, want the enum type comment as base text", codes.Value.Description)
 	}
 }
@@ -317,8 +480,11 @@ func TestAddSchemaDocsForTypeDecoratesNestedStructFields(t *testing.T) {
 	if options == nil || options.Value == nil {
 		t.Fatal("options property missing")
 	}
-	if options.Value.Title != "Options is the full nested option collection." {
-		t.Fatalf("options title = %q, want field doc comment", options.Value.Title)
+	if options.Value.Title != "" {
+		t.Fatalf("options title = %q, want empty", options.Value.Title)
+	}
+	if options.Value.Description != "The full nested option collection." {
+		t.Fatalf("options description = %q, want API-facing field comment", options.Value.Description)
 	}
 	if options.Value.Items == nil || options.Value.Items.Value == nil {
 		t.Fatal("options items schema missing")
@@ -328,11 +494,11 @@ func TestAddSchemaDocsForTypeDecoratesNestedStructFields(t *testing.T) {
 	if code == nil || code.Value == nil {
 		t.Fatal("options items code property missing")
 	}
-	if code.Value.Title != "Code is the option code." {
-		t.Fatalf("nested code title = %q, want nested struct field doc comment", code.Value.Title)
+	if code.Value.Title != "" {
+		t.Fatalf("nested code title = %q, want empty", code.Value.Title)
 	}
-	if code.Value.Description != "Code is the option code." {
-		t.Fatalf("nested code description = %q, want nested struct field doc comment", code.Value.Description)
+	if code.Value.Description != "The option code." {
+		t.Fatalf("nested code description = %q, want API-facing nested struct field comment", code.Value.Description)
 	}
 }
 
@@ -365,8 +531,11 @@ func TestAddSchemaDocsForTypeDecoratesEmbeddedStructFields(t *testing.T) {
 	if label == nil || label.Value == nil {
 		t.Fatal("label property missing")
 	}
-	if label.Value.Title != "Label is the row label." {
-		t.Fatalf("promoted label title = %q, want embedded struct field doc comment", label.Value.Title)
+	if label.Value.Title != "" {
+		t.Fatalf("promoted label title = %q, want empty", label.Value.Title)
+	}
+	if label.Value.Description != "The row label." {
+		t.Fatalf("promoted label description = %q, want API-facing embedded struct field comment", label.Value.Description)
 	}
 
 	status := schemaRef.Value.Properties["status"]
@@ -376,7 +545,7 @@ func TestAddSchemaDocsForTypeDecoratesEmbeddedStructFields(t *testing.T) {
 	if len(status.Value.Enum) != 2 {
 		t.Fatalf("promoted status enum = %#v, want the two enum values", status.Value.Enum)
 	}
-	if !strings.Contains(status.Value.Description, "Status is the record status.") {
+	if !strings.Contains(status.Value.Description, "The record status.") {
 		t.Fatalf("promoted status description = %q, want embedded struct field doc comment", status.Value.Description)
 	}
 }
@@ -413,7 +582,7 @@ func TestNewSchemaRefWithDocsDecoratesCustomListResponseWrapper(t *testing.T) {
 	if len(status.Value.Enum) != 2 {
 		t.Fatalf("items element status enum = %#v, want the two enum values", status.Value.Enum)
 	}
-	if !strings.Contains(status.Value.Description, "Status is the record status.") {
+	if !strings.Contains(status.Value.Description, "The record status.") {
 		t.Fatalf("items element status description = %q, want embedded struct field doc comment", status.Value.Description)
 	}
 
@@ -422,8 +591,14 @@ func TestNewSchemaRefWithDocsDecoratesCustomListResponseWrapper(t *testing.T) {
 		t.Fatal("items element options schema missing")
 	}
 	name := options.Value.Items.Value.Properties["name"]
-	if name == nil || name.Value == nil || name.Value.Title != "Name is the option name." {
+	if name == nil || name.Value == nil {
 		t.Fatal("deeply nested option name property missing its doc comment")
+	}
+	if name.Value.Title != "" {
+		t.Fatalf("deeply nested option name title = %q, want empty", name.Value.Title)
+	}
+	if name.Value.Description != "The option name." {
+		t.Fatalf("deeply nested option name description = %q, want API-facing field comment", name.Value.Description)
 	}
 }
 
@@ -452,8 +627,11 @@ func TestAddSchemaDocsForTypeCutsCyclicStructTypes(t *testing.T) {
 	if title == nil || title.Value == nil {
 		t.Fatal("title property missing")
 	}
-	if title.Value.Title != "Title is the category title." {
-		t.Fatalf("title = %q, want field doc comment", title.Value.Title)
+	if title.Value.Title != "" {
+		t.Fatalf("title schema title = %q, want empty", title.Value.Title)
+	}
+	if title.Value.Description != "The category title." {
+		t.Fatalf("title description = %q, want API-facing field comment", title.Value.Description)
 	}
 }
 
@@ -469,6 +647,9 @@ func TestAddQueryParametersSetsEnumValues(t *testing.T) {
 		}
 		if len(parameter.Value.Schema.Value.Enum) != 2 {
 			t.Fatalf("status parameter enum = %#v, want the two enum values", parameter.Value.Schema.Value.Enum)
+		}
+		if !strings.Contains(parameter.Value.Description, "The demo status enum.") {
+			t.Fatalf("status parameter description = %q, want API-facing enum type comment", parameter.Value.Description)
 		}
 		if !strings.Contains(parameter.Value.Description, "- `active`: the record is active") {
 			t.Fatalf("status parameter description = %q, want enum value comments", parameter.Value.Description)
@@ -531,10 +712,39 @@ type summaryFirstLineModel struct {
 }
 
 func TestSummaryPrefersStructCommentFirstLine(t *testing.T) {
-	typ := reflect.TypeFor[*summaryFirstLineModel]()
-	got := summary("/api/play/customizations", consts.Patch, typ)
-	if got != "summaryFirstLineModel is the human readable summary line." {
-		t.Fatalf("summary() = %q, want the first comment line", got)
+	types := map[string]reflect.Type{
+		"value":             reflect.TypeFor[summaryFirstLineModel](),
+		"pointer":           reflect.TypeFor[*summaryFirstLineModel](),
+		"slice":             reflect.TypeFor[[]summaryFirstLineModel](),
+		"slice of pointers": reflect.TypeFor[[]*summaryFirstLineModel](),
+	}
+
+	for name, typ := range types {
+		t.Run(name, func(t *testing.T) {
+			got := summary("/api/play/customizations", consts.Patch, typ)
+			if got != "The human readable summary line." {
+				t.Fatalf("summary() = %q, want the first comment line", got)
+			}
+		})
+	}
+}
+
+func TestDescriptionRemovesStructNameAndKeepsRemainingLines(t *testing.T) {
+	want := "The human readable summary line.\nThe second comment line must not leak into the summary."
+	types := map[string]reflect.Type{
+		"value":             reflect.TypeFor[summaryFirstLineModel](),
+		"pointer":           reflect.TypeFor[*summaryFirstLineModel](),
+		"slice":             reflect.TypeFor[[]summaryFirstLineModel](),
+		"slice of pointers": reflect.TypeFor[[]*summaryFirstLineModel](),
+	}
+
+	for name, typ := range types {
+		t.Run(name, func(t *testing.T) {
+			got := description(consts.Patch, typ)
+			if got != want {
+				t.Fatalf("description() = %q, want API-facing full struct comment", got)
+			}
+		})
 	}
 }
 
