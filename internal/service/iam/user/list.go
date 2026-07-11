@@ -25,8 +25,8 @@ type AdminUserListService struct {
 
 type adminUserListFilters struct {
 	Username string
-	Page     uint
-	Size     uint
+	Page     int
+	Size     int
 }
 
 // List returns users visible to the current administrator.
@@ -86,7 +86,7 @@ func listUsers(ctx *types.ServiceContext, actor *modeliamuser.User) ([]*modeliam
 		WithQuery(userQuery, cfg).
 		WithOrder("created_at DESC")
 	if filters.Page > 0 || filters.Size > 0 {
-		query = query.WithPagination(int(filters.Page), int(filters.Size))
+		query = query.WithPagination(filters.Page, filters.Size)
 	}
 	if err = query.List(&users); err != nil {
 		return nil, 0, err
@@ -101,17 +101,17 @@ func readAdminUserListFilters(ctx *types.ServiceContext) adminUserListFilters {
 	query := ctx.Query()
 	return adminUserListFilters{
 		Username: query.Get("username"),
-		Page:     parseAdminUserListUint(query.Get(consts.QUERY_PAGE)),
-		Size:     parseAdminUserListUint(query.Get(consts.QUERY_SIZE)),
+		Page:     parseAdminUserListInt(query.Get(consts.QUERY_PAGE)),
+		Size:     parseAdminUserListInt(query.Get(consts.QUERY_SIZE)),
 	}
 }
 
-func parseAdminUserListUint(value string) uint {
-	parsed, err := strconv.ParseUint(value, 10, 0)
+func parseAdminUserListInt(value string) int {
+	parsed, err := strconv.Atoi(value)
 	if err != nil {
 		return 0
 	}
-	return uint(parsed)
+	return parsed
 }
 
 // adminUserListQuery converts URL filters into the model query consumed by

@@ -38,6 +38,12 @@ func Test_OptionQuery(t *testing.T) {
 		query, err := cli.QueryString()
 		require.NoError(t, err)
 		assert.Equal(t, "page=1&size=10", query)
+
+		cli, err = client.New(addr, client.WithQueryPagination(1, -1))
+		require.NoError(t, err)
+		query, err = cli.QueryString()
+		require.NoError(t, err)
+		assert.Equal(t, "page=1&size=-1", query)
 	})
 
 	t.Run("WithQueryExpand", func(t *testing.T) {

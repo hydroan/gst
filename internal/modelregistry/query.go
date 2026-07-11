@@ -44,8 +44,8 @@ type Queryable interface {
 // Embedding Pagination only enables page and size. It does not imply sorting,
 // fuzzy matching, cursor pagination, or any other List query controls.
 type Pagination struct {
-	Page uint `json:"-" gorm:"-" query:"page" url:"page,omitempty"` // Page is the one-based page number used by offset pagination.
-	Size uint `json:"-" gorm:"-" query:"size" url:"size,omitempty"` // Size is the page size used by offset pagination.
+	Page int `json:"-" gorm:"-" query:"page" url:"page,omitempty"` // Page is the one-based page number; non-positive values use the first page.
+	Size int `json:"-" gorm:"-" query:"size" url:"size,omitempty"` // Size is the page size; negative values disable the limit.
 }
 
 // PaginationEnabled marks models that opt in to page and size query parameters.

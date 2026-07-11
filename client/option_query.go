@@ -63,7 +63,7 @@ func WithQuery(_keyValues ...any) Option {
 	}
 }
 
-func WithQueryPagination(page, size uint) Option {
+func WithQueryPagination(page, size int) Option {
 	return func(c *Client) {
 		if c.query == nil {
 			c.query = new(model.Query)
