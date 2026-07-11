@@ -85,13 +85,13 @@ type mapTitleModel struct {
 	GroupRoles map[string][]string `json:"group_roles,omitempty"`
 }
 
-func TestAddSchemaTitleDoesNotDuplicateIntoMapAdditionalProperties(t *testing.T) {
+func TestAddSchemaFieldDocsSetsTitleAndDescription(t *testing.T) {
 	schemaRef, err := openapi3gen.NewSchemaRefForValue(mapTitleModel{}, nil)
 	if err != nil {
 		t.Fatalf("NewSchemaRefForValue() error = %v", err)
 	}
 
-	addSchemaTitle[mapTitleModel](schemaRef)
+	addSchemaFieldDocs[mapTitleModel](schemaRef)
 
 	groupRoles := schemaRef.Value.Properties["group_roles"]
 	if groupRoles == nil || groupRoles.Value == nil {
@@ -100,16 +100,36 @@ func TestAddSchemaTitleDoesNotDuplicateIntoMapAdditionalProperties(t *testing.T)
 	if groupRoles.Value.Title != "GroupRoles binds groups to their roles." {
 		t.Fatalf("group_roles title = %q, want field doc comment", groupRoles.Value.Title)
 	}
+	if groupRoles.Value.Description != "GroupRoles binds groups to their roles." {
+		t.Fatalf("group_roles description = %q, want field doc comment", groupRoles.Value.Description)
+	}
+}
+
+func TestAddSchemaFieldDocsDoesNotDuplicateIntoMapAdditionalProperties(t *testing.T) {
+	schemaRef, err := openapi3gen.NewSchemaRefForValue(mapTitleModel{}, nil)
+	if err != nil {
+		t.Fatalf("NewSchemaRefForValue() error = %v", err)
+	}
+
+	addSchemaFieldDocs[mapTitleModel](schemaRef)
+
+	groupRoles := schemaRef.Value.Properties["group_roles"]
+	if groupRoles == nil || groupRoles.Value == nil {
+		t.Fatal("group_roles property missing")
+	}
 
 	// The map's additionalProperties value schema should stay undecorated: the
-	// field-level title above already describes it, and every other type in this
-	// codebase (arrays, nested structs) only carries a title at the field level.
+	// field-level docs above already describe it, and every other type in this
+	// codebase (arrays, nested structs) only carries docs at the field level.
 	additionalProperties := groupRoles.Value.AdditionalProperties.Schema
 	if additionalProperties == nil || additionalProperties.Value == nil {
 		t.Fatal("group_roles additionalProperties schema missing")
 	}
 	if additionalProperties.Value.Title != "" {
 		t.Fatalf("additionalProperties title = %q, want empty", additionalProperties.Value.Title)
+	}
+	if additionalProperties.Value.Description != "" {
+		t.Fatalf("additionalProperties description = %q, want empty", additionalProperties.Value.Description)
 	}
 }
 

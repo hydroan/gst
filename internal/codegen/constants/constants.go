@@ -11,6 +11,7 @@ const (
 	ImportPathConsts    = "github.com/hydroan/gst/types/consts"
 	ImportPathBootstrap = "github.com/hydroan/gst/bootstrap"
 	ImportPathUtil      = "github.com/hydroan/gst/util"
+	ImportPathAPIDoc    = "github.com/hydroan/gst/apidoc"
 
 	// ModelPackagePath is the package path for comparison
 	ModelPackagePath = `"github.com/hydroan/gst/model"`

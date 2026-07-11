@@ -1,36 +1,48 @@
 package openapigen
 
 import (
-	"go/ast"
+	"reflect"
 	"testing"
+
+	"github.com/hydroan/gst/apidoc"
 )
 
-func TestExtractCommentTextPreservesMarkdownFormatting(t *testing.T) {
-	comment := &ast.CommentGroup{List: []*ast.Comment{
-		{Text: "// Group is the group record."},
-		{Text: "//"},
-		{Text: "// Business logic: stores the stable identity."},
-		{Text: "//"},
-		{Text: "// Field sources:"},
-		{Text: "//   - ExternalGroupNo: from group_config.group_id."},
-		{Text: "//   - GroupName: from func_config.group_name."},
-	}}
+// registryPriorityModel is the source comment, which must lose to the registry.
+type registryPriorityModel struct {
+	// Name source comment, which must lose to the registry.
+	Name string `json:"name"`
+}
 
-	got := extractCommentText(comment)
-	want := "Group is the group record.\n\nBusiness logic: stores the stable identity.\n\nField sources:\n  - ExternalGroupNo: from group_config.group_id.\n  - GroupName: from func_config.group_name."
-	if got != want {
-		t.Fatalf("extractCommentText() = %q, want %q", got, want)
+// fallbackOnlyModel is parsed from this source file when not registered.
+type fallbackOnlyModel struct {
+	// Name is parsed from this source file.
+	Name string `json:"name"`
+}
+
+func TestParseModelDocsPrefersRegistry(t *testing.T) {
+	pkgPath := reflect.TypeFor[registryPriorityModel]().PkgPath()
+	apidoc.Register(pkgPath, "registryPriorityModel", apidoc.StructDoc{
+		Comment: "registered struct comment",
+		Fields:  map[string]string{"Name": "registered field comment"},
+	})
+
+	docs := parseModelDocs(&registryPriorityModel{})
+	if docs["Name"] != "registered field comment" {
+		t.Fatalf(`docs[Name] = %q, want "registered field comment"`, docs["Name"])
+	}
+
+	if comment := parseStructComment(&registryPriorityModel{}); comment != "registered struct comment" {
+		t.Fatalf(`parseStructComment() = %q, want "registered struct comment"`, comment)
 	}
 }
 
-func TestExtractCommentTextKeepsFieldCommentText(t *testing.T) {
-	comment := &ast.CommentGroup{List: []*ast.Comment{
-		{Text: "// GroupName is the group display name."},
-	}}
+func TestParseModelDocsFallsBackToSourceFile(t *testing.T) {
+	docs := parseModelDocs(&fallbackOnlyModel{})
+	if want := "Name is parsed from this source file."; docs["Name"] != want {
+		t.Fatalf("docs[Name] = %q, want %q", docs["Name"], want)
+	}
 
-	got := extractCommentText(comment)
-	want := "GroupName is the group display name."
-	if got != want {
-		t.Fatalf("extractCommentText() = %q, want %q", got, want)
+	if want := "fallbackOnlyModel is parsed from this source file when not registered."; parseStructComment(&fallbackOnlyModel{}) != want {
+		t.Fatalf("parseStructComment() = %q, want %q", parseStructComment(&fallbackOnlyModel{}), want)
 	}
 }

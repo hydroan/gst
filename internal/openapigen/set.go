@@ -1181,7 +1181,7 @@ func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey
 		}
 		if _, ok := doc.Components.Schemas[name]; !ok {
 			if schemaRef, err := openapi3gen.NewSchemaRefForValue(*new(M), nil); err == nil {
-				addSchemaTitle[M](schemaRef)
+				addSchemaFieldDocs[M](schemaRef)
 				doc.Components.Schemas[name] = schemaRef
 			}
 		}
@@ -1256,7 +1256,7 @@ func processAllRequestTypes[REQ types.Request](reqSchemaRef *openapi3.SchemaRef)
 
 	// 如果是普通请求，直接处理
 	if len(reqSchemaRef.Value.Properties) == 0 {
-		addSchemaTitle[REQ](reqSchemaRef)
+		addSchemaFieldDocs[REQ](reqSchemaRef)
 		return
 	}
 
@@ -1264,11 +1264,11 @@ func processAllRequestTypes[REQ types.Request](reqSchemaRef *openapi3.SchemaRef)
 	if itemsProperty, hasItems := reqSchemaRef.Value.Properties["items"]; hasItems {
 		if itemsProperty.Value != nil && itemsProperty.Value.Items != nil {
 			// 为批量请求的 items 添加注释
-			addSchemaTitle[REQ](itemsProperty.Value.Items)
+			addSchemaFieldDocs[REQ](itemsProperty.Value.Items)
 		}
 	} else {
 		// 普通请求
-		addSchemaTitle[REQ](reqSchemaRef)
+		addSchemaFieldDocs[REQ](reqSchemaRef)
 	}
 }
 
@@ -1285,24 +1285,24 @@ func processAllResponseTypes[RSP types.Response](rspSchemaRef *openapi3.SchemaRe
 		// 1. 如果 data 直接是 RSP 类型（普通的 apiResponse[RSP]）
 		if len(dataProperty.Value.Properties) == 0 {
 			// data 是一个简单类型或者没有嵌套属性
-			addSchemaTitle[RSP](dataProperty)
+			addSchemaFieldDocs[RSP](dataProperty)
 		} else {
 			// 2. 检查是否是 apiListResponse（有 items 和 total）
 			if itemsProperty, hasItems := dataProperty.Value.Properties["items"]; hasItems {
 				if totalProperty, hasTotal := dataProperty.Value.Properties["total"]; hasTotal && totalProperty != nil {
 					// 这是 apiListResponse 类型
 					if itemsProperty.Value != nil && itemsProperty.Value.Items != nil {
-						addSchemaTitle[RSP](itemsProperty.Value.Items)
+						addSchemaFieldDocs[RSP](itemsProperty.Value.Items)
 					}
 				} else if summaryProperty, hasSummary := dataProperty.Value.Properties["summary"]; hasSummary && summaryProperty != nil {
 					// 3. 这是 apiBatchResponse 类型（有 items, options, summary）
 					if itemsProperty.Value != nil && itemsProperty.Value.Items != nil {
-						addSchemaTitle[RSP](itemsProperty.Value.Items)
+						addSchemaFieldDocs[RSP](itemsProperty.Value.Items)
 					}
 				}
 			} else {
 				// 4. 可能是直接的 RSP 类型，但有嵌套属性
-				addSchemaTitle[RSP](dataProperty)
+				addSchemaFieldDocs[RSP](dataProperty)
 			}
 		}
 	}
@@ -1791,8 +1791,10 @@ func getBaseModelDocs() map[string]string {
 	return baseModelDocsCache
 }
 
-// addSchemaTitle adds field titles to schema properties
-func addSchemaTitle[T any](schemaRef *openapi3.SchemaRef) {
+// addSchemaFieldDocs adds field doc comments to schema properties, as both
+// the title and the description so Swagger UI renders the field meaning next
+// to the field name.
+func addSchemaFieldDocs[T any](schemaRef *openapi3.SchemaRef) {
 	if schemaRef == nil || schemaRef.Value == nil || schemaRef.Value.Properties == nil {
 		return
 	}
@@ -1862,6 +1864,7 @@ func addSchemaTitle[T any](schemaRef *openapi3.SchemaRef) {
 		if propRef.Value != nil {
 			newSchema := *propRef.Value
 			newSchema.Title = description
+			newSchema.Description = description
 			schemaRef.Value.Properties[propName] = &openapi3.SchemaRef{Value: &newSchema}
 		}
 	}

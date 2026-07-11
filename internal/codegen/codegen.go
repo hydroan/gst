@@ -5,17 +5,19 @@ import (
 	"io/fs"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
+	"github.com/hydroan/gst/internal/structdoc"
 )
 
-// FindModels finds all model infos in a directory
-func FindModels(module, modelDir, serviceDir string, excludes []string) ([]*gen.ModelInfo, error) {
-	allModels := make([]*gen.ModelInfo, 0)
-
-	if err := filepath.Walk(modelDir, func(path string, info fs.FileInfo, err error) error {
+// walkModelFiles walks modelDir and invokes fn for every Go source file that
+// participates in code generation, skipping vendor/testdata directories,
+// test files, ignored files and excluded file names.
+func walkModelFiles(modelDir string, excludes []string, fn func(path string) error) error {
+	return filepath.Walk(modelDir, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -34,6 +36,15 @@ func FindModels(module, modelDir, serviceDir string, excludes []string) ([]*gen.
 			return nil
 		}
 
+		return fn(path)
+	})
+}
+
+// FindModels finds all model infos in a directory
+func FindModels(module, modelDir, serviceDir string, excludes []string) ([]*gen.ModelInfo, error) {
+	allModels := make([]*gen.ModelInfo, 0)
+
+	if err := walkModelFiles(modelDir, excludes, func(path string) error {
 		models, err := gen.FindModels(module, modelDir, path)
 		if err != nil {
 			return err
@@ -49,6 +60,43 @@ func FindModels(module, modelDir, serviceDir string, excludes []string) ([]*gen.
 	}
 
 	return allModels, nil
+}
+
+// ExtractStructDocs extracts the struct and field doc comments of every
+// struct declared under modelDir, including custom request and response
+// types. The returned entries are sorted by package path and type name so
+// generated output stays deterministic.
+func ExtractStructDocs(module, modelDir string, excludes []string) ([]gen.StructDocEntry, error) {
+	entries := make([]gen.StructDocEntry, 0)
+
+	if err := walkModelFiles(modelDir, excludes, func(path string) error {
+		docs, err := structdoc.ParseFile(path)
+		if err != nil {
+			return err
+		}
+
+		pkgPath := module + "/" + filepath.ToSlash(filepath.Dir(path))
+		for typeName, doc := range docs {
+			entries = append(entries, gen.StructDocEntry{
+				PkgPath:  pkgPath,
+				TypeName: typeName,
+				Doc:      doc,
+			})
+		}
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].PkgPath != entries[j].PkgPath {
+			return entries[i].PkgPath < entries[j].PkgPath
+		}
+		return entries[i].TypeName < entries[j].TypeName
+	})
+
+	return entries, nil
 }
 
 // HasMethod checks if a struct has a specific method

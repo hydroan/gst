@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -12,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/ds/tree/trie"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/clioutput"
@@ -218,9 +218,24 @@ func genRunWithOptions(opts genRunOptions) error {
 	sort.Strings(modelImports)
 	modelCode, err := gen.BuildModelFile("model", modelImports, modelStmts...)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "build model/model.go")
 	}
 	if writeErr := writeGenFile(filepath.Join(modelDir, "model.go"), modelCode); writeErr != nil {
+		return writeErr
+	}
+
+	// generate model/apidoc.go, which registers struct and field doc comments
+	// so the OpenAPI document keeps schema descriptions in binaries deployed
+	// without Go source files.
+	docEntries, err := codegen.ExtractStructDocs(module, modelDir, excludes)
+	if err != nil {
+		return errors.Wrap(err, "extract struct docs")
+	}
+	apidocCode, err := gen.BuildAPIDocFile("model", docEntries)
+	if err != nil {
+		return errors.Wrap(err, "build model/apidoc.go")
+	}
+	if writeErr := writeGenFile(filepath.Join(modelDir, "apidoc.go"), apidocCode); writeErr != nil {
 		return writeErr
 	}
 
@@ -229,7 +244,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	sort.Strings(serviceImports)
 	serviceCode, err := gen.BuildServiceFile("service", serviceImports, serviceStmts...)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "build service/service.go")
 	}
 	if writeErr := writeGenFile(filepath.Join(serviceDir, "service.go"), serviceCode); writeErr != nil {
 		return writeErr
@@ -237,12 +252,13 @@ func genRunWithOptions(opts genRunOptions) error {
 
 	// generate router/router.go
 	// router always imports "github.com/hydroan/gst/types"
+	// Load package preparation to avoid Golang analysis and speed up generation.
 	routerImportMap["github.com/hydroan/gst/types"] = struct{}{}
 	routerImports := lo.Keys(routerImportMap)
 	sort.Strings(routerImports)
 	routerCode, err := gen.BuildRouterFile("router", routerImports, routerStmts...)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "build router/router.go")
 	}
 	if writeErr := writeGenFile(filepath.Join(routerDir, "router.go"), routerCode); writeErr != nil {
 		return writeErr
@@ -251,7 +267,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	// generate main.go
 	mainCode, err := gen.BuildMainFile(module)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "build main.go")
 	}
 	if err := writeGenFile("main.go", mainCode); err != nil {
 		return err
