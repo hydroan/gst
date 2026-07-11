@@ -31,7 +31,7 @@ func TestProfileGet(t *testing.T) {
 	account := newProfileTestAccount(t)
 	cli := newProfileAuthenticatedClient(t, profileAPI, account.SessionID)
 
-	resp, err := cli.Request(http.MethodGet, &iam.ProfileGetReq{})
+	resp, err := cli.Request(http.MethodGet, new(struct{}))
 	require.NoError(t, err)
 
 	testutil.TestResp(t, resp, func(t *testing.T, rsp iam.ProfileGetRsp) {

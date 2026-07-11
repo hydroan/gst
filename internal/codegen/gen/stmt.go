@@ -116,10 +116,16 @@ func StmtServiceRegister(serviceImport string, phase consts.Phase) *ast.ExprStmt
 //	router.Register[*model.Group, *model.Group, *model.Group](router.Auth(), "group", &types.ControllerConfig[*model.Group]{}, consts.Create)
 //	router.Register[*model.Group, *model.Group, *model.Group](router.Pub(), "login", &types.ControllerConfig[*auth.LoginReq]{}, consts.Create)
 func StmtRouterRegister(modelPkgName, modelName, reqName, rspName string, router string, endpoint string, paramName string, verb string) *ast.ExprStmt {
-	// If reqName is equal to modelName or reqName starts with *, then the reqExpr use StarExpr,
-	// otherwise use SelectorExpr
+	// The dsl.PayloadEmpty sentinel resolves to *gstmodel.Empty. The router
+	// file aggregates imports from many model packages, so the gst model
+	// package is always referenced under the gstmodel alias to avoid clashing
+	// with a business root model package named "model". Otherwise, if reqName
+	// is equal to modelName or reqName starts with *, then the reqExpr use
+	// StarExpr, or use SelectorExpr.
 	var reqExpr ast.Expr
-	if strings.HasPrefix(reqName, "*") || modelName == reqName {
+	if isEmptyPayload(reqName) {
+		reqExpr = emptyReqExpr(gstModelPkgAlias)
+	} else if strings.HasPrefix(reqName, "*") || modelName == reqName {
 		reqExpr = &ast.StarExpr{
 			X: &ast.SelectorExpr{
 				X:   ast.NewIdent(modelPkgName),

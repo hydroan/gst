@@ -188,6 +188,9 @@ func (Search) Design() {
 - `Public()` 表示公开接口，不走认证中间件；默认不写则需要认证。
 - `Exact()` 表示当前 action 按声明路径原样注册，不追加默认的 `/:id`、`/batch` 等后缀。
 - `Payload[T]()` 定义请求体类型；`Result[T]()` 定义响应体类型。
+- `List`、`Get` 是 HTTP GET 接口，没有请求体，禁止声明 `Payload[T]()`；
+  只声明 `Result[T]()` 即成为自定义动作，生成的请求类型固定为 `*model.Empty`，
+  查询参数通过 `ctx.Query()`、路径参数通过 `ctx.Param()` 读取。
 - `Service()` 表示当前 action 需要生成并注册业务 service。
 - 只声明 `Create(func(){})`、`List(func(){})` 等 action 就会启用对应接口；
   `Enabled(false)` 主要用于显式关闭已声明 action。
@@ -422,6 +425,7 @@ action 是自定义动作时再开启 `Service()`。
 如果 `M`、`REQ`、`RSP` 是同一个类型，默认资源 CRUD 会执行框架内置流程，
 只调用 service hook 和过滤方法。要让 action 主方法被调用，需要用 `Payload[T]()` 或
 `Result[T]()` 绑定当前接口专用的 REQ/RSP，让它成为自定义动作。
+`List`、`Get` 只能通过 `Result[T]()` 触发自定义动作，请求类型固定为 `*model.Empty`。
 
 ### Route 和 Endpoint 有什么区别？
 

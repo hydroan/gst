@@ -8,6 +8,7 @@ import (
 	"github.com/hydroan/gst/database"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
@@ -15,7 +16,7 @@ import (
 
 // AdminSessionListService handles retrieval of all sessions grouped by user for privileged administrators.
 type AdminSessionListService struct {
-	service.Base[*modeliamsession.AdminSession, *modeliamsession.AdminSessionListReq, *modeliamsession.AdminSessionListRsp]
+	service.Base[*modeliamsession.AdminSession, *model.Empty, *modeliamsession.AdminSessionListRsp]
 }
 
 type adminSessionOwnerItem struct {
@@ -24,7 +25,7 @@ type adminSessionOwnerItem struct {
 }
 
 // List returns all indexed sessions grouped by user for a privileged administrator.
-func (a *AdminSessionListService) List(ctx *types.ServiceContext, req *modeliamsession.AdminSessionListReq) (rsp *modeliamsession.AdminSessionListRsp, err error) {
+func (a *AdminSessionListService) List(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamsession.AdminSessionListRsp, err error) {
 	log := a.WithContext(ctx, ctx.Phase())
 
 	if err = ensureAdminSessionActor(ctx); err != nil {

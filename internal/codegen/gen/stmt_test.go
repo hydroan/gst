@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"testing"
 
+	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/types/consts"
 )
 
@@ -203,6 +204,17 @@ func TestStmtRouterRegister(t *testing.T) {
 			endpoint:     "login",
 			verb:         "Update",
 			want:         `router.Register[*pkgmodel.Group, *pkgmodel.GroupRequest, *pkgmodel.GroupResponse](router.Pub(), "login", &types.ControllerConfig[*pkgmodel.Group]{}, consts.Update)`,
+		},
+		{
+			name:         "list with empty payload",
+			modelPkgName: "group",
+			modelName:    "Group",
+			reqName:      dsl.PayloadEmpty,
+			respName:     "*GroupListRsp",
+			router:       "Auth",
+			endpoint:     "groups",
+			verb:         "List",
+			want:         `router.Register[*group.Group, *gstmodel.Empty, *group.GroupListRsp](router.Auth(), "groups", &types.ControllerConfig[*group.Group]{}, consts.List)`,
 		},
 	}
 	for _, tt := range tests {

@@ -204,6 +204,17 @@ func applyServiceFile(file *ast.File, action *dsl.Action, servicePkgName, correc
 		}
 	}
 
+	// Keep the gst model import in sync with the request type: a rewritten
+	// *model.Empty request needs the import, while a business request type
+	// must not leave it behind unused.
+	if isEmptyPayload(action.Payload) {
+		if ensureEmptyReqImportSpec(file, serviceModelPackageName(file)) {
+			changed = true
+		}
+	} else if pruneGstModelImportSpec(file) {
+		changed = true
+	}
+
 	return changed
 }
 
@@ -249,129 +260,92 @@ func applyServiceMethod4(fn *ast.FuncDecl, action *dsl.Action) bool {
 
 	var changed bool
 
-	// Update the second parameter type based on action.Payload
-	if fn.Type != nil && fn.Type.Params != nil && len(fn.Type.Params.List) >= 2 {
-		param := fn.Type.Params.List[1]
-		if action.Payload != "" {
-			// Determine if action.Payload should be a pointer type
-			payloadIsPointer := len(action.Payload) > 0 && action.Payload[0] == '*'
-			payloadName := action.Payload
-			if payloadIsPointer {
-				payloadName = action.Payload[1:] // Remove the '*' prefix
-			}
+	// The business model package qualifier is derived from the first result
+	// type: Result never carries the dsl.PayloadEmpty sentinel, so it always
+	// references the business model package.
+	modelPkg := ""
+	if fn.Type != nil && fn.Type.Results != nil && len(fn.Type.Results.List) >= 1 {
+		modelPkg = selectorPackageName(fn.Type.Results.List[0].Type)
+	}
 
-			// Handle current *pkg.Type case
-			if star, ok := param.Type.(*ast.StarExpr); ok {
-				if sel, ok := star.X.(*ast.SelectorExpr); ok {
-					if pkgIdent, ok := sel.X.(*ast.Ident); ok {
-						if payloadIsPointer {
-							// Keep as pointer type, just update the name
-							if sel.Sel.Name != payloadName {
-								changed = true
-								newIdent := ast.NewIdent(payloadName)
-								newIdent.NamePos = sel.Sel.NamePos
-								sel.Sel = newIdent
-							}
-						} else {
-							// Convert from pointer to non-pointer type
-							changed = true
-							newSel := &ast.SelectorExpr{
-								X:   pkgIdent,
-								Sel: ast.NewIdent(payloadName),
-							}
-							param.Type = newSel
-						}
-					}
-				}
-				// Handle current pkg.Type case
-			} else if sel, ok := param.Type.(*ast.SelectorExpr); ok {
-				if pkgIdent, ok := sel.X.(*ast.Ident); ok {
-					if payloadIsPointer {
-						// Convert from non-pointer to pointer type
-						changed = true
-						newStar := &ast.StarExpr{
-							X: &ast.SelectorExpr{
-								X:   pkgIdent,
-								Sel: ast.NewIdent(payloadName),
-							},
-						}
-						param.Type = newStar
-					} else {
-						// Keep as non-pointer type, just update the name
-						if sel.Sel.Name != payloadName {
-							changed = true
-							newIdent := ast.NewIdent(payloadName)
-							newIdent.NamePos = sel.Sel.NamePos
-							sel.Sel = newIdent
-						}
-					}
-				}
-			}
+	// Update the second parameter type based on action.Payload. The
+	// dsl.PayloadEmpty sentinel switches the qualifier to the gst model
+	// package; a business payload switches it back.
+	if fn.Type != nil && fn.Type.Params != nil && len(fn.Type.Params.List) >= 2 && action.Payload != "" {
+		param := fn.Type.Params.List[1]
+		targetPkg, targetType := payloadTypeTarget(action.Payload, modelPkg)
+		if expr, c := applyTypeRef(param.Type, targetPkg, targetType); c {
+			param.Type = expr
+			changed = true
 		}
 	}
 
 	// Update the first result type based on action.Result
-	if fn.Type != nil && fn.Type.Results != nil && len(fn.Type.Results.List) >= 1 {
+	if fn.Type != nil && fn.Type.Results != nil && len(fn.Type.Results.List) >= 1 && action.Result != "" {
 		res := fn.Type.Results.List[0]
-		if action.Result != "" {
-			// Determine if action.Result should be a pointer type
-			resultIsPointer := len(action.Result) > 0 && action.Result[0] == '*'
-			resultName := action.Result
-			if resultIsPointer {
-				resultName = action.Result[1:] // Remove the '*' prefix
-			}
-
-			// Handle current *pkg.Type case
-			if star, ok := res.Type.(*ast.StarExpr); ok {
-				if sel, ok := star.X.(*ast.SelectorExpr); ok {
-					if pkgIdent, ok := sel.X.(*ast.Ident); ok {
-						if resultIsPointer {
-							// Keep as pointer type, just update the name
-							if sel.Sel.Name != resultName {
-								changed = true
-								newIdent := ast.NewIdent(resultName)
-								newIdent.NamePos = sel.Sel.NamePos
-								sel.Sel = newIdent
-							}
-						} else {
-							// Convert from pointer to non-pointer type
-							changed = true
-							newSel := &ast.SelectorExpr{
-								X:   pkgIdent,
-								Sel: ast.NewIdent(resultName),
-							}
-							res.Type = newSel
-						}
-					}
-				}
-				// Handle current pkg.Type case
-			} else if sel, ok := res.Type.(*ast.SelectorExpr); ok {
-				if pkgIdent, ok := sel.X.(*ast.Ident); ok {
-					if resultIsPointer {
-						// Convert from non-pointer to pointer type
-						changed = true
-						newStar := &ast.StarExpr{
-							X: &ast.SelectorExpr{
-								X:   pkgIdent,
-								Sel: ast.NewIdent(resultName),
-							},
-						}
-						res.Type = newStar
-					} else {
-						// Keep as non-pointer type, just update the name
-						if sel.Sel.Name != resultName {
-							changed = true
-							newIdent := ast.NewIdent(resultName)
-							newIdent.NamePos = sel.Sel.NamePos
-							sel.Sel = newIdent
-						}
-					}
-				}
-			}
+		if expr, c := applyTypeRef(res.Type, modelPkg, action.Result); c {
+			res.Type = expr
+			changed = true
 		}
 	}
 
 	return changed
+}
+
+// applyTypeRef rewrites a *pkg.Type or pkg.Type expression to reference
+// targetPkg and actionType. A leading '*' in actionType selects the pointer
+// form. When targetPkg is empty the current package qualifier is kept.
+// It returns the possibly replaced expression and whether anything changed.
+func applyTypeRef(expr ast.Expr, targetPkg, actionType string) (ast.Expr, bool) {
+	if actionType == "" {
+		return expr, false
+	}
+	pointer := strings.HasPrefix(actionType, "*")
+	typeName := strings.TrimPrefix(actionType, "*")
+
+	var sel *ast.SelectorExpr
+	switch t := expr.(type) {
+	case *ast.StarExpr:
+		s, ok := t.X.(*ast.SelectorExpr)
+		if !ok {
+			return expr, false
+		}
+		sel = s
+	case *ast.SelectorExpr:
+		sel = t
+	default:
+		return expr, false
+	}
+	pkgIdent, ok := sel.X.(*ast.Ident)
+	if !ok {
+		return expr, false
+	}
+
+	var changed bool
+	if targetPkg != "" && pkgIdent.Name != targetPkg {
+		newIdent := ast.NewIdent(targetPkg)
+		newIdent.NamePos = pkgIdent.NamePos
+		sel.X = newIdent
+		changed = true
+	}
+	if sel.Sel == nil || sel.Sel.Name != typeName {
+		newIdent := ast.NewIdent(typeName)
+		if sel.Sel != nil {
+			newIdent.NamePos = sel.Sel.NamePos
+		}
+		sel.Sel = newIdent
+		changed = true
+	}
+
+	_, isPointer := expr.(*ast.StarExpr)
+	if isPointer == pointer {
+		return expr, changed
+	}
+	if pointer {
+		// Position the * just before the selector
+		return &ast.StarExpr{Star: sel.Pos() - 1, X: sel}, true
+	}
+	return sel, true
 }
 
 // applyServiceType updates a service struct type to match the generated service generics.
@@ -402,19 +376,24 @@ func applyServiceType(spec *ast.TypeSpec, action *dsl.Action, correctModelName .
 				if pkgIdent, ok := sel.X.(*ast.Ident); ok && pkgIdent.Name == "service" && sel.Sel.Name == "Base" {
 					if len(indexListExpr.Indices) == 3 {
 						if len(correctModelName) > 0 && correctModelName[0] != "" {
-							if changed1 := applyServiceTypeParam(indexListExpr, 0, "*"+correctModelName[0]); changed1 {
+							if changed1 := applyServiceTypeParam(indexListExpr, 0, "", "*"+correctModelName[0]); changed1 {
 								changed = true
 							}
 						}
+						// The first generic parameter always references the
+						// business model package, so it provides the target
+						// qualifier for the payload and result parameters.
+						modelPkg := selectorPackageName(indexListExpr.Indices[0])
 						// Handle second parameter (Payload)
 						if action.Payload != "" {
-							if changed2 := applyServiceTypeParam(indexListExpr, 1, action.Payload); changed2 {
+							targetPkg, targetType := payloadTypeTarget(action.Payload, modelPkg)
+							if changed2 := applyServiceTypeParam(indexListExpr, 1, targetPkg, targetType); changed2 {
 								changed = true
 							}
 						}
 						// Handle third parameter (Result)
 						if action.Result != "" {
-							if changed3 := applyServiceTypeParam(indexListExpr, 2, action.Result); changed3 {
+							if changed3 := applyServiceTypeParam(indexListExpr, 2, modelPkg, action.Result); changed3 {
 								changed = true
 							}
 						}
@@ -428,73 +407,18 @@ func applyServiceType(spec *ast.TypeSpec, action *dsl.Action, correctModelName .
 }
 
 // applyServiceTypeParam updates a specific type parameter in service.Base[T1, T2, T3]
-// based on whether the actionType starts with '*' (pointer) or not (non-pointer)
-func applyServiceTypeParam(indexListExpr *ast.IndexListExpr, paramIndex int, actionType string) bool {
+// to reference targetPkg and actionType. A leading '*' in actionType selects
+// the pointer form; an empty targetPkg keeps the current package qualifier.
+func applyServiceTypeParam(indexListExpr *ast.IndexListExpr, paramIndex int, targetPkg, actionType string) bool {
 	if paramIndex >= len(indexListExpr.Indices) || actionType == "" {
 		return false
 	}
 
-	// Determine if actionType should be a pointer type
-	actionIsPointer := len(actionType) > 0 && actionType[0] == '*'
-	actionName := actionType
-	if actionIsPointer {
-		actionName = actionType[1:] // Remove the '*' prefix
+	expr, changed := applyTypeRef(indexListExpr.Indices[paramIndex], targetPkg, actionType)
+	if changed {
+		indexListExpr.Indices[paramIndex] = expr
 	}
-
-	currentParam := indexListExpr.Indices[paramIndex]
-
-	// Handle current *pkg.Type case
-	if star, ok := currentParam.(*ast.StarExpr); ok {
-		if sel, ok := star.X.(*ast.SelectorExpr); ok {
-			if actionIsPointer {
-				// Keep as pointer type, just update the name
-				if sel.Sel.Name != actionName {
-					newIdent := ast.NewIdent(actionName)
-					newIdent.NamePos = sel.Sel.NamePos
-					sel.Sel = newIdent
-					return true
-				}
-			} else {
-				// Convert from pointer to non-pointer type
-				newIdent := ast.NewIdent(actionName)
-				newIdent.NamePos = sel.Sel.NamePos
-				sel.Sel = newIdent
-				// Replace the StarExpr with SelectorExpr
-				indexListExpr.Indices[paramIndex] = sel
-				return true
-			}
-		}
-	}
-
-	// Handle current pkg.Type case (non-pointer)
-	if sel, ok := currentParam.(*ast.SelectorExpr); ok {
-		if actionIsPointer {
-			// Convert from non-pointer to pointer type
-			newIdent := ast.NewIdent(actionName)
-			newIdent.NamePos = sel.Sel.NamePos
-			// Create a new SelectorExpr with updated name
-			newSel := &ast.SelectorExpr{
-				X:   sel.X, // Keep the same package identifier
-				Sel: newIdent,
-			}
-			// Wrap new SelectorExpr with StarExpr
-			starExpr := &ast.StarExpr{
-				Star: sel.Pos() - 1, // Position the * just before the selector
-				X:    newSel,
-			}
-			indexListExpr.Indices[paramIndex] = starExpr
-			return true
-		}
-		// Keep as non-pointer type, just update the name
-		if sel.Sel.Name != actionName {
-			newIdent := ast.NewIdent(actionName)
-			newIdent.NamePos = sel.Sel.NamePos
-			sel.Sel = newIdent
-			return true
-		}
-	}
-
-	return false
+	return changed
 }
 
 // ApplyServiceFileWithModelSync extends ApplyServiceFile to handle import path and package name updates.

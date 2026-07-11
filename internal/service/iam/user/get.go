@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/hydroan/gst/internal/service/iam/adminauth"
+	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 
@@ -16,11 +17,11 @@ import (
 // authorization helper has validated both the actor's endpoint permission and
 // the target user's tenant visibility.
 type AdminUserGetService struct {
-	service.Base[*modeliamuser.User, *modeliamuser.AdminUserGetReq, *modeliamuser.AdminUserGetRsp]
+	service.Base[*modeliamuser.User, *model.Empty, *modeliamuser.AdminUserGetRsp]
 }
 
 // Get returns one user visible to the current administrator.
-func (a *AdminUserGetService) Get(ctx *types.ServiceContext, req *modeliamuser.AdminUserGetReq) (rsp *modeliamuser.AdminUserGetRsp, err error) {
+func (a *AdminUserGetService) Get(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamuser.AdminUserGetRsp, err error) {
 	log := a.WithContext(ctx, ctx.Phase())
 
 	targetUserID := ctx.Param("id")

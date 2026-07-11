@@ -796,6 +796,101 @@ func (DeclaredDefault) Design() {
 }
 `
 
+func TestParseListGetPayloadDefaults(t *testing.T) {
+	design := parseDesignFromSource(t, listGetPayloadDefaultsSource, "Session")
+
+	// List with Result declared delegates to a custom service method,
+	// so the request type defaults to *model.Empty.
+	if design.List.Payload != PayloadEmpty {
+		t.Fatalf("List.Payload = %q, want %q", design.List.Payload, PayloadEmpty)
+	}
+	if design.List.Result != "*SessionListRsp" {
+		t.Fatalf("List.Result = %q, want *SessionListRsp", design.List.Result)
+	}
+
+	// Get without Result keeps the built-in controller defaults.
+	if design.Get.Payload != "*Session" {
+		t.Fatalf("Get.Payload = %q, want *Session", design.Get.Payload)
+	}
+
+	// Create with Result only keeps the model type as the request default.
+	if design.Create.Payload != "*Session" {
+		t.Fatalf("Create.Payload = %q, want *Session", design.Create.Payload)
+	}
+
+	// Get with Result declared inside a Route block also defaults to *model.Empty.
+	actions := design.routes["iam/sessions/current"]
+	if len(actions) != 1 {
+		t.Fatalf("custom route actions = %d, want 1", len(actions))
+	}
+	if actions[0].Payload != PayloadEmpty {
+		t.Fatalf("route Get.Payload = %q, want %q", actions[0].Payload, PayloadEmpty)
+	}
+}
+
+func TestParseListPayloadDeclarationDiscarded(t *testing.T) {
+	design := parseDesignFromSource(t, listPayloadDeclaredSource, "Session")
+
+	// A Payload declaration on List is invalid (rejected by Validate); the
+	// parser discards it so downstream code never sees a body-bound request
+	// type on a GET action.
+	if design.List.Payload != PayloadEmpty {
+		t.Fatalf("List.Payload = %q, want %q", design.List.Payload, PayloadEmpty)
+	}
+}
+
+const listGetPayloadDefaultsSource = `
+package model
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Session struct {
+	model.Base
+}
+
+func (Session) Design() {
+	List(func() {
+		Service()
+		Result[*SessionListRsp]()
+	})
+	Get(func() {})
+	Create(func() {
+		Service()
+		Result[*SessionCreateRsp]()
+	})
+	Route("iam/sessions/current", func() {
+		Get(func() {
+			Service()
+			Result[*CurrentGetRsp]()
+		})
+	})
+}
+`
+
+const listPayloadDeclaredSource = `
+package model
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Session struct {
+	model.Base
+}
+
+func (Session) Design() {
+	List(func() {
+		Service()
+		Payload[*SessionListReq]()
+		Result[*SessionListRsp]()
+	})
+}
+`
+
 func TestParse(t *testing.T) {
 	tests := []struct {
 		name string // description of this test case
@@ -816,7 +911,10 @@ func TestParse(t *testing.T) {
 					Migrate:  true,
 					routes: map[string][]*Action{
 						"iam/users": {
-							{Enabled: true, Service: true, Payload: "*UserReq", Result: "*UserRsp", Phase: consts.PHASE_LIST},
+							// The Payload[*UserReq] declaration in testdata/user.go is
+							// discarded: List handles an HTTP GET request, so declaring
+							// Result fixes the request type to PayloadEmpty.
+							{Enabled: true, Service: true, Payload: PayloadEmpty, Result: "*UserRsp", Phase: consts.PHASE_LIST},
 							{Enabled: true, Service: true, Payload: "*User", Result: "*User", Phase: consts.PHASE_GET},
 						},
 						"tenant/users": {

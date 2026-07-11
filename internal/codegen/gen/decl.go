@@ -60,10 +60,16 @@ func imports(modulePath, modelFileDir, modelPkgName string, otherPkg ...string) 
 		if len(pkg) == 0 {
 			continue
 		}
+		// An entry in "alias path" form imports the package under the alias,
+		// e.g. `gstmodel "github.com/hydroan/gst/model"`.
+		value := fmt.Sprintf("%q", pkg)
+		if alias, path, ok := strings.Cut(pkg, " "); ok {
+			value = fmt.Sprintf("%s %q", alias, path)
+		}
 		genDecl.Specs = append(genDecl.Specs, &ast.ImportSpec{
 			Path: &ast.BasicLit{
 				Kind:  token.STRING,
-				Value: fmt.Sprintf("%q", pkg),
+				Value: value,
 			},
 		})
 	}
@@ -124,10 +130,13 @@ func types(modelPkgName, modelName, reqName, rspName string, phase consts.Phase,
 		})
 	}
 
-	// if reqName is equal to modelName or reqName starts with *, then the reqExpr use StarExpr,
-	// otherwise use SelectorExpr
+	// The dsl.PayloadEmpty sentinel resolves to *model.Empty from the gst
+	// model package; otherwise, if reqName is equal to modelName or reqName
+	// starts with *, then the reqExpr use StarExpr, or use SelectorExpr.
 	var reqExpr ast.Expr
-	if strings.HasPrefix(reqName, "*") || modelName == reqName {
+	if isEmptyPayload(reqName) {
+		reqExpr = emptyReqExpr(emptyReqPkgName(modelPkgName))
+	} else if strings.HasPrefix(reqName, "*") || modelName == reqName {
 		reqExpr = &ast.StarExpr{
 			X: &ast.SelectorExpr{
 				X:   ast.NewIdent(modelPkgName),
@@ -372,10 +381,13 @@ func serviceMethod3(recvName, modelName, modelPkgName string, phase consts.Phase
 //
 //	func (u *Creator) Create(ctx *types.ServiceContext, user *model.User) (rsp *model.User, err error) {\n}
 func serviceMethod4(recvName, modelName, modelPkgName, reqName, rspName string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
-	// if reqName is equal to modelName or reqName starts with *, then the reqExpr use StarExpr,
-	// otherwise use SelectorExpr
+	// The dsl.PayloadEmpty sentinel resolves to *model.Empty from the gst
+	// model package; otherwise, if reqName is equal to modelName or reqName
+	// starts with *, then the reqExpr use StarExpr, or use SelectorExpr.
 	var reqExpr ast.Expr
-	if strings.HasPrefix(reqName, "*") || modelName == reqName {
+	if isEmptyPayload(reqName) {
+		reqExpr = emptyReqExpr(emptyReqPkgName(modelPkgName))
+	} else if strings.HasPrefix(reqName, "*") || modelName == reqName {
 		reqExpr = &ast.StarExpr{
 			X: &ast.SelectorExpr{
 				X:   ast.NewIdent(modelPkgName),

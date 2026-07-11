@@ -305,9 +305,19 @@ func Public() {}
 // service method instead of the built-in controller.
 func Exact() {}
 
+// PayloadEmpty is the Action.Payload value assigned to List and Get actions
+// that declare Result. These actions handle HTTP GET requests without a
+// request body, so code generation uses the non-persistent *model.Empty as
+// the request type instead of the model type.
+const PayloadEmpty = "*model.Empty"
+
 // Payload specifies the request payload type for the current action.
 // The type parameter T defines the structure of incoming request data.
 // Example: Payload[CreateUserRequest]() or Payload[*User]()
+//
+// Payload must not be declared on List and Get actions: they handle HTTP GET
+// requests, which carry no request body. Custom List/Get services declare
+// Result only and read query parameters from ServiceContext.Query().
 func Payload[T any]() {}
 
 // Result specifies the response result type for the current action.
@@ -335,10 +345,19 @@ func Patch(func()) {}
 
 // List defines the configuration for the list operation.
 // Used for retrieving multiple records with optional filtering and pagination.
+//
+// List handles an HTTP GET request and must not declare Payload. Declaring
+// Result delegates the action to a custom service method whose request type
+// is generated as *model.Empty; filters are read from ServiceContext.Query().
 func List(func()) {}
 
 // Get defines the configuration for the get operation.
 // Used for retrieving a single record by identifier.
+//
+// Get handles an HTTP GET request and must not declare Payload. Declaring
+// Result delegates the action to a custom service method whose request type
+// is generated as *model.Empty; parameters are read from ServiceContext.Query()
+// and ServiceContext.Param().
 func Get(func()) {}
 
 // CreateMany defines the configuration for batch create operations.
@@ -503,6 +522,7 @@ type Action struct {
 	// Payload specifies the type name for the request payload.
 	// This determines the structure of incoming request data.
 	// Example: "CreateUserRequest", "*User", "User"
+	// List and Get actions that declare Result carry PayloadEmpty here.
 	Payload string
 
 	// Result specifies the type name for the response result.

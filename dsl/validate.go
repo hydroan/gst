@@ -28,13 +28,22 @@ var actionMethodNames = map[string]bool{
 // routeIDActionMethodNames are actions whose built-in controllers read the
 // resource id from the route parameter only. Exact() removes the default
 // "/:id" suffix from the generated route, so these actions must delegate to a
-// custom service method via Payload/Result when Exact() is used; otherwise the
-// generated route can never resolve a resource id.
+// custom service method when Exact() is used (via Payload/Result, or Result
+// alone for the GET-verb Get action); otherwise the generated route can never
+// resolve a resource id.
 var routeIDActionMethodNames = map[string]bool{
 	consts.PHASE_DELETE.MethodName(): true,
 	consts.PHASE_UPDATE.MethodName(): true,
 	consts.PHASE_PATCH.MethodName():  true,
 	consts.PHASE_GET.MethodName():    true,
+}
+
+// getVerbActionMethodNames are actions whose generated routes handle HTTP GET
+// requests. A GET request carries no request body, so these actions must not
+// declare Payload; custom services read filters from ServiceContext.Query().
+var getVerbActionMethodNames = map[string]bool{
+	consts.PHASE_LIST.MethodName(): true,
+	consts.PHASE_GET.MethodName():  true,
 }
 
 var designOnlyMethodNames = map[string]bool{
@@ -155,7 +164,8 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile boo
 	filenameValue := ""
 	flatten := false
 	exact := false
-	payloadOrResult := false
+	payload := false
+	result := false
 	errs := make([]error, 0)
 
 	for _, stmt := range flit.Body.List {
@@ -177,8 +187,10 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile boo
 			flatten = true
 		case name == "Exact":
 			exact = true
-		case name == "Payload" || name == "Result":
-			payloadOrResult = true
+		case name == "Payload":
+			payload = true
+		case name == "Result":
+			result = true
 		case name == "Enabled" || name == "Public":
 			continue
 		case actionMethodNames[name]:
@@ -201,8 +213,17 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile boo
 			errs = append(errs, fmt.Errorf("%s: dsl.Flatten() cannot be used by root model file %s; move the model under model/<package>/<file>.go or remove Flatten()", filename, filename))
 		}
 	}
-	if exact && routeIDActionMethodNames[actionName] && !payloadOrResult {
-		errs = append(errs, fmt.Errorf("%s: %s action uses dsl.Exact() but relies on the built-in controller which reads the resource id from the route parameter only; declare Payload/Result with a custom service method or remove Exact()", filename, actionName))
+	if payload && getVerbActionMethodNames[actionName] {
+		errs = append(errs, fmt.Errorf("%s: %s action handles an HTTP GET request and cannot declare Payload; declare Result for a custom service method and read query parameters from ServiceContext.Query()", filename, actionName))
+	}
+	if exact && routeIDActionMethodNames[actionName] {
+		if getVerbActionMethodNames[actionName] {
+			if !result {
+				errs = append(errs, fmt.Errorf("%s: %s action uses dsl.Exact() but relies on the built-in controller which reads the resource id from the route parameter only; declare Result with a custom service method or remove Exact()", filename, actionName))
+			}
+		} else if !payload && !result {
+			errs = append(errs, fmt.Errorf("%s: %s action uses dsl.Exact() but relies on the built-in controller which reads the resource id from the route parameter only; declare Payload/Result with a custom service method or remove Exact()", filename, actionName))
+		}
 	}
 
 	return errs

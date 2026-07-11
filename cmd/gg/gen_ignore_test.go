@@ -253,10 +253,6 @@ type Admin struct {
 	model.Empty
 }
 
-type UserListReq struct {
-	Keyword string ` + "`json:\"keyword\"`" + `
-}
-
 type UserListRsp struct {
 	Total int64 ` + "`json:\"total\"`" + `
 }
@@ -267,7 +263,6 @@ func (Admin) Design() {
 			dsl.Service()
 			dsl.Flatten()
 			dsl.Filename("user_list.go")
-			dsl.Payload[*UserListReq]()
 			dsl.Result[*UserListRsp]()
 		})
 	})

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -331,6 +332,27 @@ func TestSessionList(t *testing.T) {
 			require.True(t, sessionMap[currentSessionID].IsCurrent)
 			require.False(t, sessionMap[otherSessionID].IsCurrent)
 		})
+	})
+
+	t.Run("ignore_request_body_on_list", func(t *testing.T) {
+		// List handles an HTTP GET request whose body carries no semantics;
+		// the controller must not bind (or reject) whatever body a client
+		// happens to send.
+		account := newSessionTestAccount(t)
+		sessionID := loginSession(t, account.Username, account.Password)
+
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, sessionsAPI, strings.NewReader("{invalid json"))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		// Match the framework client's User-Agent: the session is bound to
+		// the browser fingerprint captured at login.
+		req.Header.Set("User-Agent", consts.FrameworkName)
+		req.AddCookie(&http.Cookie{Name: "session_id", Value: sessionID})
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode)
 	})
 
 	t.Run("reject_when_user_disabled_after_session_created", func(t *testing.T) {

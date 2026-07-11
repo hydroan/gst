@@ -203,6 +203,11 @@ func genRunWithOptions(opts genRunOptions) error {
 			if act.Public {
 				base = "Pub"
 			}
+			// A dsl.PayloadEmpty request type is emitted as *gstmodel.Empty,
+			// so the router file needs the aliased gst model import.
+			if act.Payload == dsl.PayloadEmpty {
+				routerImportMap[gen.GstModelRouterImport] = struct{}{}
+			}
 			route, paramName := routerTargetForAction(route, m.Design, act)
 			routerStmts = append(routerStmts, gen.StmtRouterRegister(m.ModelPkgName, m.ModelName, act.Payload, act.Result, base, route, paramName, act.Phase.MethodName()))
 		})

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"strings"
 
 	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/types/consts"
@@ -255,10 +256,16 @@ func BuildRouterFile(pkgName string, modelImports []string, stmts ...ast.Stmt) (
 		},
 	}
 	for _, imp := range modelImports {
+		// An entry in "alias path" form imports the package under the alias,
+		// e.g. `gstmodel "github.com/hydroan/gst/model"`.
+		value := fmt.Sprintf("%q", imp)
+		if alias, path, ok := strings.Cut(imp, " "); ok {
+			value = fmt.Sprintf("%s %q", alias, path)
+		}
 		importDecl.Specs = append(importDecl.Specs, &ast.ImportSpec{
 			Path: &ast.BasicLit{
 				Kind:  token.STRING,
-				Value: fmt.Sprintf("%q", imp),
+				Value: value,
 			},
 		})
 	}

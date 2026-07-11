@@ -5,6 +5,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
+	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
@@ -12,11 +13,11 @@ import (
 
 // SessionListService handles retrieval of all active sessions for the current authenticated user.
 type SessionListService struct {
-	service.Base[*modeliamsession.Session2, *modeliamsession.SessionListReq, *modeliamsession.SessionListRsp]
+	service.Base[*modeliamsession.Session2, *model.Empty, *modeliamsession.SessionListRsp]
 }
 
 // List returns all active sessions for the current authenticated user.
-func (s *SessionListService) List(ctx *types.ServiceContext, req *modeliamsession.SessionListReq) (rsp *modeliamsession.SessionListRsp, err error) {
+func (s *SessionListService) List(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamsession.SessionListRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	// SessionManager.Current already guarantees that the resolved session is bound to

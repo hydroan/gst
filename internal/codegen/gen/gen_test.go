@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/hydroan/gst/dsl"
@@ -747,6 +748,69 @@ func TestGenServiceMethod8(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("genServiceMethod8() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGenerateServiceListEmptyPayload(t *testing.T) {
+	tests := []struct {
+		name          string
+		info          *ModelInfo
+		wantImport    string
+		wantBase      string
+		wantSignature string
+	}{
+		{
+			name: "sub package model",
+			info: &ModelInfo{
+				ModulePath:   "helloworld",
+				ModelPkgName: "group",
+				ModelName:    "Group",
+				ModelVarName: "g",
+				ModelFileDir: "model/group",
+				Design:       &dsl.Design{},
+			},
+			wantImport:    "\"github.com/hydroan/gst/model\"",
+			wantBase:      "service.Base[*group.Group, *model.Empty, *group.GroupListRsp]",
+			wantSignature: "func (g *Lister) List(ctx *types.ServiceContext, req *model.Empty) (rsp *group.GroupListRsp, err error)",
+		},
+		{
+			name: "root model package",
+			info: &ModelInfo{
+				ModulePath:   "helloworld",
+				ModelPkgName: "model",
+				ModelName:    "Group",
+				ModelVarName: "g",
+				ModelFileDir: "model",
+				Design:       &dsl.Design{},
+			},
+			wantImport:    "gstmodel \"github.com/hydroan/gst/model\"",
+			wantBase:      "service.Base[*model.Group, *gstmodel.Empty, *model.GroupListRsp]",
+			wantSignature: "func (g *Lister) List(ctx *types.ServiceContext, req *gstmodel.Empty) (rsp *model.GroupListRsp, err error)",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			action := &dsl.Action{
+				Enabled: true,
+				Service: true,
+				Payload: dsl.PayloadEmpty,
+				Result:  "*" + tt.info.ModelName + "ListRsp",
+				Phase:   consts.PHASE_LIST,
+			}
+			file := GenerateServiceWithPackage(tt.info, action, consts.PHASE_LIST, "group")
+			if file == nil {
+				t.Fatal("GenerateServiceWithPackage returned nil")
+			}
+			got, err := FormatNodeExtra(file)
+			if err != nil {
+				t.Fatalf("format generated service failed: %v", err)
+			}
+			for _, want := range []string{tt.wantImport, tt.wantBase, tt.wantSignature} {
+				if !strings.Contains(got, want) {
+					t.Errorf("generated service missing %q, got:\n%s", want, got)
+				}
 			}
 		})
 	}

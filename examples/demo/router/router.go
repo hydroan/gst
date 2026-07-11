@@ -12,11 +12,12 @@ import (
 	"github.com/hydroan/gst/router"
 	"github.com/hydroan/gst/types/consts"
 
+	gstmodel "github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 )
 
 func Init() error {
-	router.Register[*auth.Login, *auth.Login, *auth.LoginRsp](router.Pub(), "auth/login", &types.ControllerConfig[*auth.Login]{}, consts.List)
+	router.Register[*auth.Login, *gstmodel.Empty, *auth.LoginRsp](router.Pub(), "auth/login", &types.ControllerConfig[*auth.Login]{}, consts.List)
 	router.Register[*common.Search, *common.SearchDedupReq, *common.SearchDedupRsp](router.Auth(), "search-sources/dedup", &types.ControllerConfig[*common.Search]{}, consts.Create)
 	router.Register[*file.Encrypt, *file.EncryptReq, *file.EncryptRsp](router.Auth(), "config/files/encrypt", &types.ControllerConfig[*file.Encrypt]{}, consts.Create)
 	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/files", &types.ControllerConfig[*config.File]{}, consts.Create)
@@ -35,7 +36,7 @@ func Init() error {
 	router.Register[*model.Conversation, *model.Conversation, *model.Conversation](router.Auth(), "conversations/:conv", &types.ControllerConfig[*model.Conversation]{ParamName: "conv"}, consts.Patch)
 	router.Register[*model.Conversation, *model.Conversation, *model.Conversation](router.Auth(), "conversations", &types.ControllerConfig[*model.Conversation]{}, consts.List)
 	router.Register[*model.Conversation, *model.Conversation, *model.Conversation](router.Auth(), "conversations/:conv", &types.ControllerConfig[*model.Conversation]{ParamName: "conv"}, consts.Get)
-	router.Register[*model.Ping, *model.Ping, *model.PingRsp](router.Pub(), "pings", &types.ControllerConfig[*model.Ping]{}, consts.List)
+	router.Register[*model.Ping, *gstmodel.Empty, *model.PingRsp](router.Pub(), "pings", &types.ControllerConfig[*model.Ping]{}, consts.List)
 	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes", &types.ControllerConfig[*model.TraceProbe]{}, consts.Create)
 	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes/:trace_probe", &types.ControllerConfig[*model.TraceProbe]{ParamName: "trace_probe"}, consts.Delete)
 	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes/:trace_probe", &types.ControllerConfig[*model.TraceProbe]{ParamName: "trace_probe"}, consts.Update)

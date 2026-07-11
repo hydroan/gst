@@ -5,6 +5,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
+	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
@@ -12,11 +13,11 @@ import (
 
 // AdminSessionGetService handles retrieval of a specified session for privileged administrators.
 type AdminSessionGetService struct {
-	service.Base[*modeliamsession.AdminSession, *modeliamsession.AdminSessionGetReq, *modeliamsession.AdminSessionGetRsp]
+	service.Base[*modeliamsession.AdminSession, *model.Empty, *modeliamsession.AdminSessionGetRsp]
 }
 
 // Get returns the detail of a specified session for a privileged administrator.
-func (a *AdminSessionGetService) Get(ctx *types.ServiceContext, req *modeliamsession.AdminSessionGetReq) (rsp *modeliamsession.AdminSessionGetRsp, err error) {
+func (a *AdminSessionGetService) Get(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamsession.AdminSessionGetRsp, err error) {
 	log := a.WithContext(ctx, ctx.Phase())
 
 	currentSessionID, _, err := SessionManager.Current(ctx)

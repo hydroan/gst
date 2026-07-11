@@ -153,7 +153,6 @@ func (Current) Design() {
 		Get(func() {
 			Service()
 			Exact()
-			Payload[*CurrentGetReq]()
 			Result[*CurrentGetRsp]()
 		})
 	})

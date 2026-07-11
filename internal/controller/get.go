@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"io"
 	"reflect"
 	"strconv"
 	"strings"
@@ -51,8 +50,11 @@ func Get[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
 // database index query options, runs get hooks, loads the model through the
 // configured database handler, records an operation log, and returns the model.
 //
-// When REQ or RSP differs from M, the handler binds the JSON body into REQ and
-// delegates the operation to the phase service's Get method.
+// When REQ or RSP differs from M, the handler delegates the operation to the
+// phase service's Get method with a zero-value REQ. Get handles an HTTP GET
+// request whose body carries no semantics, so nothing is bound into REQ;
+// custom services read parameters from ServiceContext.Query() and
+// ServiceContext.Param().
 func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	handler, _ := extractConfig(cfg...)
 	return func(c *gin.Context) {
@@ -79,12 +81,6 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 				req = reflect.New(reqTyp).Interface().(REQ) //nolint:errcheck
 			}
 
-			if err = c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
-				log.Error(err)
-				JSON(c, CodeInvalidParam.WithErr(err))
-				gstotel.RecordError(span, err)
-				return
-			}
 			var serviceCtx *types.ServiceContext
 			if rsp, err = traceServiceOperation[M, RSP](ctrlSpanCtx, consts.PHASE_GET, func(spanCtx context.Context) (RSP, error) {
 				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_GET)

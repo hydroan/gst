@@ -23,9 +23,6 @@ type User struct {
 	model.Base
 }
 
-// AdminUserGetReq is the request payload for loading a tenant-visible user.
-type AdminUserGetReq struct{}
-
 // AdminUserGetRsp returns a tenant-visible user for privileged administrators.
 type AdminUserGetRsp struct {
 	User AdminUserView `json:"user"`
@@ -72,7 +69,6 @@ func (User) Design() {
 			Service()
 			Flatten()
 			Filename("get.go")
-			Payload[*AdminUserGetReq]()
 			Result[*AdminUserGetRsp]()
 		})
 	})

@@ -9,9 +9,6 @@ type Current struct {
 	model.Empty
 }
 
-// CurrentGetReq is the request payload for getting the current session.
-type CurrentGetReq struct{}
-
 // CurrentGetRsp returns the current session together with the latest principal snapshot.
 type CurrentGetRsp = AuthenticatedSessionRsp
 
@@ -28,7 +25,6 @@ func (Current) Design() {
 			Flatten()
 			Exact()
 			Filename("current_get.go")
-			Payload[*CurrentGetReq]()
 			Result[*CurrentGetRsp]()
 		})
 		Delete(func() {

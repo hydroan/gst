@@ -141,6 +141,13 @@ func Parse(file *ast.File, endpoint string) map[string]*Design {
 // If the action is enabled but has empty Payload or Result fields, they are set to
 // the pointer type of the model name (e.g., "*User" for model "User").
 //
+// List and Get actions handle HTTP GET requests without a request body. When
+// such an action declares Result it is delegated to a custom service method,
+// so its Payload is fixed to PayloadEmpty (*model.Empty) instead of the model
+// type; custom services read query parameters from ServiceContext.Query().
+// Without Result the action keeps the model type as Payload, which keeps the
+// built-in controller path (query decoding, pagination) active.
+//
 // Parameters:
 //   - modelName: The name of the model (e.g., "User")
 //   - action: The action to initialize defaults for
@@ -148,14 +155,24 @@ func Parse(file *ast.File, endpoint string) map[string]*Design {
 // This function only modifies enabled actions. For disabled actions, the Payload
 // and Result fields remain unchanged.
 func initDefaultAction(modelName string, action *Action) {
-	if action.Enabled {
-		if len(action.Payload) == 0 {
-			action.Payload = starName(modelName)
-		}
-		if len(action.Result) == 0 {
-			action.Result = starName(modelName)
-		}
+	if !action.Enabled {
+		return
 	}
+	if isGetVerbPhase(action.Phase) && len(action.Result) > 0 {
+		action.Payload = PayloadEmpty
+	}
+	if len(action.Payload) == 0 {
+		action.Payload = starName(modelName)
+	}
+	if len(action.Result) == 0 {
+		action.Result = starName(modelName)
+	}
+}
+
+// isGetVerbPhase reports whether the phase's generated route handles an HTTP
+// GET request, which carries no request body.
+func isGetVerbPhase(phase consts.Phase) bool {
+	return phase == consts.PHASE_LIST || phase == consts.PHASE_GET
 }
 
 // parse analyzes an AST file to find all models and their Design method declarations.
@@ -635,7 +652,11 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 					case "Result":
 						isResult = true
 					}
-					if isPayload {
+					// List and Get handle HTTP GET requests without a request
+					// body; a Payload declaration on them is rejected by
+					// Validate and discarded here so downstream code never
+					// sees a body-bound request type on a GET action.
+					if isPayload && !isGetVerbPhase(phase) {
 						if ident, ok := indexExpr.Index.(*ast.Ident); ok && ident != nil { // Payload[User]
 							payload = ident.Name
 						} else if starExpr, ok := indexExpr.Index.(*ast.StarExpr); ok && starExpr != nil { // Payload[*User]

@@ -18,9 +18,6 @@ type Profile struct {
 	model.Base
 }
 
-// ProfileGetReq is the request payload for getting the current user's profile.
-type ProfileGetReq struct{}
-
 // ProfileGetRsp returns the current user's profile.
 type ProfileGetRsp = Profile
 
@@ -44,7 +41,6 @@ func (Profile) Design() {
 			Flatten()
 			Exact()
 			Filename("get.go")
-			Payload[*ProfileGetReq]()
 			Result[*ProfileGetRsp]()
 		})
 	})

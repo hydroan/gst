@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"io"
 	"reflect"
 	"strconv"
 	"strings"
@@ -129,8 +128,10 @@ func rejectListQueryKeys(query map[string][]string, keys map[string]struct{}) er
 // OR matching, ordering, selection, cache control, database index hints, and time
 // ranges.
 //
-// When REQ or RSP differs from M, the handler binds the JSON body into REQ and
-// delegates the operation to the phase service's List method.
+// When REQ or RSP differs from M, the handler delegates the operation to the
+// phase service's List method with a zero-value REQ. List handles an HTTP GET
+// request whose body carries no semantics, so nothing is bound into REQ;
+// custom services read query parameters from ServiceContext.Query().
 func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	handler, _ := extractConfig(cfg...)
 	return func(c *gin.Context) {
@@ -157,12 +158,6 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 				req = reflect.New(reqTyp).Interface().(REQ) //nolint:errcheck
 			}
 
-			if err = c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
-				log.Error(err)
-				JSON(c, CodeInvalidParam.WithErr(err))
-				gstotel.RecordError(span, err)
-				return
-			}
 			var serviceCtx *types.ServiceContext
 			if rsp, err = traceServiceOperation[M, RSP](ctrlSpanCtx, consts.PHASE_LIST, func(spanCtx context.Context) (RSP, error) {
 				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_LIST)

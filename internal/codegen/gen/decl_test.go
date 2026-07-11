@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/kr/pretty"
 )
@@ -19,6 +20,7 @@ func TestImports(t *testing.T) {
 		modulePath   string
 		modelFileDir string
 		modelPkgName string
+		otherPkgs    []string
 
 		want string
 	}{
@@ -32,10 +34,36 @@ func TestImports(t *testing.T) {
 	"github.com/hydroan/gst/types"
 )`,
 		},
+		{
+			name:         "other package",
+			modulePath:   "codegen",
+			modelFileDir: "model/group",
+			modelPkgName: "group",
+			otherPkgs:    []string{"github.com/hydroan/gst/model"},
+			want: `import (
+	"codegen/model/group"
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/model"
+)`,
+		},
+		{
+			name:         "aliased other package",
+			modulePath:   "codegen",
+			modelFileDir: "model",
+			modelPkgName: "model",
+			otherPkgs:    []string{"gstmodel github.com/hydroan/gst/model"},
+			want: `import (
+	"codegen/model"
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+	gstmodel "github.com/hydroan/gst/model"
+)`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := FormatNode(imports(tt.modulePath, tt.modelFileDir, tt.modelPkgName))
+			got, err := FormatNode(imports(tt.modulePath, tt.modelFileDir, tt.modelPkgName, tt.otherPkgs...))
 			if err != nil {
 				t.Error(err)
 				return
@@ -127,6 +155,28 @@ func TestTypes(t *testing.T) {
 			phase:        consts.PHASE_UPDATE,
 			want: `type Updater struct {
 	service.Base[*model.User, *model.UserReq, *model.UserRsp]
+}`,
+		},
+		{
+			name:         "list with empty payload",
+			modelPkgname: "group",
+			modelName:    "Group",
+			reqName:      dsl.PayloadEmpty,
+			rspName:      "*GroupListRsp",
+			phase:        consts.PHASE_LIST,
+			want: `type Lister struct {
+	service.Base[*group.Group, *model.Empty, *group.GroupListRsp]
+}`,
+		},
+		{
+			name:         "list with empty payload in root model package",
+			modelPkgname: "model",
+			modelName:    "User",
+			reqName:      dsl.PayloadEmpty,
+			rspName:      "*UserListRsp",
+			phase:        consts.PHASE_LIST,
+			want: `type Lister struct {
+	service.Base[*model.User, *gstmodel.Empty, *model.UserListRsp]
 }`,
 		},
 	}
@@ -313,6 +363,26 @@ func TestServiceMethod4(t *testing.T) {
 			rspName:      "*GroupResponse",
 			phase:        consts.PHASE_UPDATE,
 			want:         "func (g *Updater) Update(ctx *types.ServiceContext, req *model.GroupRequest) (rsp *model.GroupResponse, err error) {\n}",
+		},
+		{
+			name:         "ListEmptyPayload",
+			recvName:     "g",
+			modelPkgName: "group",
+			modelName:    "Group",
+			reqName:      dsl.PayloadEmpty,
+			rspName:      "*GroupListRsp",
+			phase:        consts.PHASE_LIST,
+			want:         "func (g *Lister) List(ctx *types.ServiceContext, req *model.Empty) (rsp *group.GroupListRsp, err error) {\n}",
+		},
+		{
+			name:         "GetEmptyPayloadRootModelPackage",
+			recvName:     "u",
+			modelPkgName: "model",
+			modelName:    "User",
+			reqName:      dsl.PayloadEmpty,
+			rspName:      "*UserGetRsp",
+			phase:        consts.PHASE_GET,
+			want:         "func (u *Getter) Get(ctx *types.ServiceContext, req *gstmodel.Empty) (rsp *model.UserGetRsp, err error) {\n}",
 		},
 	}
 	for _, tt := range tests {

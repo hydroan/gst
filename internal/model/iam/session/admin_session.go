@@ -10,18 +10,12 @@ type AdminSession struct {
 	model.Empty
 }
 
-// AdminSessionListReq is the request payload for listing all sessions grouped by user.
-type AdminSessionListReq struct{}
-
 // AdminSessionListRsp returns all active sessions grouped by user for privileged administrators.
 type AdminSessionListRsp struct {
 	Items        []AdminSessionOwnerView `json:"items"`
 	Total        int64                   `json:"total"`
 	SessionTotal int64                   `json:"session_total"`
 }
-
-// AdminSessionGetReq is the request payload for loading a specified session as a privileged administrator.
-type AdminSessionGetReq struct{}
 
 // AdminSessionGetRsp returns the detail of a specified session for a privileged administrator.
 type AdminSessionGetRsp struct {
@@ -40,14 +34,12 @@ func (AdminSession) Design() {
 			Service()
 			Flatten()
 			Filename("admin_session_list.go")
-			Payload[*AdminSessionListReq]()
 			Result[*AdminSessionListRsp]()
 		})
 		Get(func() {
 			Service()
 			Flatten()
 			Filename("admin_session_get.go")
-			Payload[*AdminSessionGetReq]()
 			Result[*AdminSessionGetRsp]()
 		})
 		Delete(func() {

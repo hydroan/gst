@@ -11,17 +11,11 @@ type Session2 struct {
 	model.Empty
 }
 
-// SessionListReq is the request payload for listing active sessions of the current user.
-type SessionListReq struct{}
-
 // SessionListRsp returns all active sessions of the current authenticated user.
 type SessionListRsp struct {
 	Items []SessionView `json:"items"`
 	Total int64         `json:"total"`
 }
-
-// SessionGetReq is the request payload for loading a specified session of the current user.
-type SessionGetReq struct{}
 
 // SessionGetRsp returns the detail of a specified session of the current authenticated user.
 type SessionGetRsp struct {
@@ -46,7 +40,6 @@ func (Session2) Design() {
 			Service()
 			Flatten()
 			Filename("session_list.go")
-			Payload[*SessionListReq]()
 			Result[*SessionListRsp]()
 		})
 
@@ -54,7 +47,6 @@ func (Session2) Design() {
 			Service()
 			Flatten()
 			Filename("session_get.go")
-			Payload[*SessionGetReq]()
 			Result[*SessionGetRsp]()
 		})
 

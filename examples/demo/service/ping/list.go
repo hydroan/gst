@@ -4,16 +4,17 @@ import (
 	"demo/model"
 
 	"github.com/hydroan/gst/database"
+	gstmodel "github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
 
 type Lister struct {
-	service.Base[*model.Ping, *model.Ping, *model.PingRsp]
+	service.Base[*model.Ping, *gstmodel.Empty, *model.PingRsp]
 }
 
-func (p *Lister) List(ctx *types.ServiceContext, req *model.Ping) (rsp *model.PingRsp, err error) {
+func (p *Lister) List(ctx *types.ServiceContext, req *gstmodel.Empty) (rsp *model.PingRsp, err error) {
 	users := make([]*iam.User, 0)
 	n := new(int64)
 	// _ = database.Database[*iam.User](ctx).WithDryRun().List(&users)
