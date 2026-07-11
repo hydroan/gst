@@ -6,14 +6,14 @@ import (
 	"github.com/hydroan/gst/internal/codegen/gen"
 )
 
-func TestExtractStructDocs(t *testing.T) {
-	entries, err := ExtractStructDocs("example.com/proj", "testdata/apidocmodel", nil)
+func TestExtractAPIDocs(t *testing.T) {
+	entries, err := ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", nil)
 	if err != nil {
-		t.Fatalf("ExtractStructDocs() error = %v", err)
+		t.Fatalf("ExtractAPIDocs() error = %v", err)
 	}
 
-	byKey := make(map[string]gen.StructDocEntry, len(entries))
-	for _, entry := range entries {
+	byKey := make(map[string]gen.StructDocEntry, len(entries.Structs))
+	for _, entry := range entries.Structs {
 		byKey[entry.PkgPath+"."+entry.TypeName] = entry
 	}
 
@@ -51,23 +51,57 @@ func TestExtractStructDocs(t *testing.T) {
 	}
 }
 
-func TestExtractStructDocsDeterministicOrder(t *testing.T) {
-	first, err := ExtractStructDocs("example.com/proj", "testdata/apidocmodel", nil)
+func TestExtractAPIDocsEnums(t *testing.T) {
+	entries, err := ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", nil)
 	if err != nil {
-		t.Fatalf("ExtractStructDocs() error = %v", err)
-	}
-	second, err := ExtractStructDocs("example.com/proj", "testdata/apidocmodel", nil)
-	if err != nil {
-		t.Fatalf("ExtractStructDocs() error = %v", err)
+		t.Fatalf("ExtractAPIDocs() error = %v", err)
 	}
 
-	if len(first) != len(second) {
-		t.Fatalf("entry count differs between runs: %d vs %d", len(first), len(second))
+	var status *gen.EnumDocEntry
+	for i := range entries.Enums {
+		if entries.Enums[i].TypeName == "UserStatus" {
+			status = &entries.Enums[i]
+		}
 	}
-	for i := range first {
-		if first[i].PkgPath != second[i].PkgPath || first[i].TypeName != second[i].TypeName {
-			t.Fatalf("entry order differs at index %d: %s.%s vs %s.%s",
-				i, first[i].PkgPath, first[i].TypeName, second[i].PkgPath, second[i].TypeName)
+	if status == nil {
+		t.Fatal("UserStatus enum entry missing")
+	}
+	if status.PkgPath != "example.com/proj/testdata/apidocmodel" {
+		t.Fatalf("status.PkgPath = %q, want the model package path", status.PkgPath)
+	}
+	if want := "UserStatus is the lifecycle status of a user."; status.Doc.Comment != want {
+		t.Fatalf("status.Doc.Comment = %q, want %q", status.Doc.Comment, want)
+	}
+	if len(status.Doc.Values) != 2 || status.Doc.Values[0].Value != "active" || status.Doc.Values[1].Value != "disabled" {
+		t.Fatalf("status.Doc.Values = %#v, want active and disabled in order", status.Doc.Values)
+	}
+	if status.Doc.Values[0].Comment != "the user can log in" {
+		t.Fatalf("status.Doc.Values[0].Comment = %q, want the constant comment", status.Doc.Values[0].Comment)
+	}
+}
+
+func TestExtractAPIDocsDeterministicOrder(t *testing.T) {
+	first, err := ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", nil)
+	if err != nil {
+		t.Fatalf("ExtractAPIDocs() error = %v", err)
+	}
+	second, err := ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", nil)
+	if err != nil {
+		t.Fatalf("ExtractAPIDocs() error = %v", err)
+	}
+
+	if len(first.Structs) != len(second.Structs) || len(first.Enums) != len(second.Enums) {
+		t.Fatalf("entry counts differ between runs: %d/%d vs %d/%d",
+			len(first.Structs), len(first.Enums), len(second.Structs), len(second.Enums))
+	}
+	for i := range first.Structs {
+		if first.Structs[i].PkgPath != second.Structs[i].PkgPath || first.Structs[i].TypeName != second.Structs[i].TypeName {
+			t.Fatalf("struct entry order differs at index %d", i)
+		}
+	}
+	for i := range first.Enums {
+		if first.Enums[i].PkgPath != second.Enums[i].PkgPath || first.Enums[i].TypeName != second.Enums[i].TypeName {
+			t.Fatalf("enum entry order differs at index %d", i)
 		}
 	}
 }

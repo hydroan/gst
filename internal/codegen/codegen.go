@@ -62,38 +62,63 @@ func FindModels(module, modelDir, serviceDir string, excludes []string) ([]*gen.
 	return allModels, nil
 }
 
-// ExtractStructDocs extracts the struct and field doc comments of every
-// struct declared under modelDir, including custom request and response
-// types. The returned entries are sorted by package path and type name so
-// generated output stays deterministic.
-func ExtractStructDocs(module, modelDir string, excludes []string) ([]gen.StructDocEntry, error) {
-	entries := make([]gen.StructDocEntry, 0)
+// ExtractAPIDocs extracts the struct doc comments and enum declarations of
+// every type declared under modelDir, including custom request and response
+// types. Enum constants may live in a different file than their type
+// declaration; entries of the same package are merged. The returned entries
+// are sorted by package path and type name so generated output stays
+// deterministic.
+func ExtractAPIDocs(module, modelDir string, excludes []string) (gen.APIDocEntries, error) {
+	var entries gen.APIDocEntries
+	enumByKey := make(map[string]*gen.EnumDocEntry)
+	enumKeys := make([]string, 0)
 
 	if err := walkModelFiles(modelDir, excludes, func(path string) error {
-		docs, err := structdoc.ParseFile(path)
+		docs, err := structdoc.ParseFileDocs(path)
 		if err != nil {
 			return err
 		}
 
 		pkgPath := module + "/" + filepath.ToSlash(filepath.Dir(path))
-		for typeName, doc := range docs {
-			entries = append(entries, gen.StructDocEntry{
+		for typeName, doc := range docs.Structs {
+			entries.Structs = append(entries.Structs, gen.StructDocEntry{
 				PkgPath:  pkgPath,
 				TypeName: typeName,
 				Doc:      doc,
 			})
 		}
+		for typeName, doc := range docs.Enums {
+			key := pkgPath + "." + typeName
+			entry, ok := enumByKey[key]
+			if !ok {
+				entry = &gen.EnumDocEntry{PkgPath: pkgPath, TypeName: typeName}
+				enumByKey[key] = entry
+				enumKeys = append(enumKeys, key)
+			}
+			if entry.Doc.Comment == "" {
+				entry.Doc.Comment = doc.Comment
+			}
+			entry.Doc.Values = append(entry.Doc.Values, doc.Values...)
+		}
 
 		return nil
 	}); err != nil {
-		return nil, err
+		return gen.APIDocEntries{}, err
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].PkgPath != entries[j].PkgPath {
-			return entries[i].PkgPath < entries[j].PkgPath
+	// Only named types with declared constant values are enums.
+	sort.Strings(enumKeys)
+	for _, key := range enumKeys {
+		if entry := enumByKey[key]; len(entry.Doc.Values) > 0 {
+			entries.Enums = append(entries.Enums, *entry)
 		}
-		return entries[i].TypeName < entries[j].TypeName
+	}
+
+	sort.Slice(entries.Structs, func(i, j int) bool {
+		if entries.Structs[i].PkgPath != entries.Structs[j].PkgPath {
+			return entries.Structs[i].PkgPath < entries.Structs[j].PkgPath
+		}
+		return entries.Structs[i].TypeName < entries.Structs[j].TypeName
 	})
 
 	return entries, nil

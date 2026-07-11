@@ -227,9 +227,9 @@ func genRunWithOptions(opts genRunOptions) error {
 	// generate model/apidoc.go, which registers struct and field doc comments
 	// so the OpenAPI document keeps schema descriptions in binaries deployed
 	// without Go source files.
-	docEntries, err := codegen.ExtractStructDocs(module, modelDir, excludes)
+	docEntries, err := codegen.ExtractAPIDocs(module, modelDir, excludes)
 	if err != nil {
-		return errors.Wrap(err, "extract struct docs")
+		return errors.Wrap(err, "extract api docs")
 	}
 	apidocCode, err := gen.BuildAPIDocFile("model", docEntries)
 	if err != nil {

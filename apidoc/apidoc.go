@@ -8,6 +8,7 @@ package apidoc
 
 import (
 	"maps"
+	"slices"
 	"sync"
 )
 
@@ -19,9 +20,27 @@ type StructDoc struct {
 	Fields map[string]string
 }
 
+// EnumValue describes one declared constant of an enum-like named type.
+type EnumValue struct {
+	// Value is the constant literal as it appears in JSON, eg. "fixed_odds" or 2.
+	Value any
+	// Comment is the doc comment of the constant.
+	Comment string
+}
+
+// EnumDoc holds the doc comment and declared values of an enum-like named
+// type, eg. `type PayoutRuleType string` with a const block of its values.
+type EnumDoc struct {
+	// Comment is the doc comment of the type itself.
+	Comment string
+	// Values lists the declared constants in source order.
+	Values []EnumValue
+}
+
 var (
-	mu       sync.RWMutex
-	registry = make(map[string]StructDoc)
+	mu           sync.RWMutex
+	registry     = make(map[string]StructDoc)
+	enumRegistry = make(map[string]EnumDoc)
 )
 
 func registryKey(pkgPath, typeName string) string {
@@ -51,5 +70,32 @@ func Lookup(pkgPath, typeName string) (StructDoc, bool) {
 		return StructDoc{}, false
 	}
 	doc.Fields = maps.Clone(doc.Fields)
+	return doc, true
+}
+
+// RegisterEnum records the doc comment and declared values of the enum-like
+// type identified by pkgPath and typeName. Registering the same type again
+// replaces the previous entry. The Values slice is copied, so callers may
+// reuse it after RegisterEnum returns.
+func RegisterEnum(pkgPath, typeName string, doc EnumDoc) {
+	doc.Values = slices.Clone(doc.Values)
+
+	mu.Lock()
+	defer mu.Unlock()
+	enumRegistry[registryKey(pkgPath, typeName)] = doc
+}
+
+// LookupEnum returns the enum doc registered for the type identified by
+// pkgPath and typeName. The returned EnumDoc owns its Values slice, so
+// callers may mutate it freely.
+func LookupEnum(pkgPath, typeName string) (EnumDoc, bool) {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	doc, ok := enumRegistry[registryKey(pkgPath, typeName)]
+	if !ok {
+		return EnumDoc{}, false
+	}
+	doc.Values = slices.Clone(doc.Values)
 	return doc, true
 }

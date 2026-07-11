@@ -61,7 +61,7 @@ git init
 | `middleware/` | 注册中间件 |
 | `router/router.go` | 由 `gg gen` 生成的路由注册文件 |
 | `model/model.go` | 由 `gg gen` 生成的模型注册文件 |
-| `model/apidoc.go` | 由 `gg gen` 生成的注释注册文件，让 Swagger 文档在无源码的部署环境仍带字段说明 |
+| `model/apidoc.go` | 由 `gg gen` 生成的注释与枚举注册文件，让 Swagger 文档在无源码的部署环境仍带字段说明和枚举值 |
 | `service/service.go` | 由 `gg gen` 生成的 service 注册文件 |
 | `main.go` | 由 `gg gen` 生成的应用入口 |
 

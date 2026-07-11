@@ -91,6 +91,113 @@ func TestParseSource(t *testing.T) {
 	}
 }
 
+const enumSource = `package demo
+
+// PayoutRuleType is the payout rule of the special settlement.
+type PayoutRuleType string
+
+const (
+	PayoutRuleTypeFixedOdds   PayoutRuleType = "fixed_odds"   // payout with fixed odds
+	PayoutRuleTypeReturnStake PayoutRuleType = "return_stake" // return the stake only
+)
+
+// Priority is an integer enum using iota.
+type Priority int
+
+const (
+	PriorityLow Priority = iota // lowest priority
+	PriorityMid
+	// PriorityHigh is the highest priority.
+	PriorityHigh
+)
+
+// NotEnum is a named type without constants.
+type NotEnum string
+
+// untypedGroup constants must not leak into the preceding enum.
+const (
+	UntypedA = "a"
+	UntypedB = "b"
+)
+
+// Alias types must be skipped.
+type StatusAlias = PayoutRuleType
+`
+
+func TestParseSourceDocsEnums(t *testing.T) {
+	docs, err := ParseSourceDocs("demo.go", []byte(enumSource))
+	if err != nil {
+		t.Fatalf("ParseSourceDocs() error = %v", err)
+	}
+
+	payout, ok := docs.Enums["PayoutRuleType"]
+	if !ok {
+		t.Fatal("Enums[PayoutRuleType] missing")
+	}
+	if want := "PayoutRuleType is the payout rule of the special settlement."; payout.Comment != want {
+		t.Fatalf("payout.Comment = %q, want %q", payout.Comment, want)
+	}
+	if len(payout.Values) != 2 {
+		t.Fatalf("payout.Values = %#v, want 2 values", payout.Values)
+	}
+	if payout.Values[0].Value != "fixed_odds" || payout.Values[0].Comment != "payout with fixed odds" {
+		t.Fatalf("payout.Values[0] = %#v, want fixed_odds with its comment", payout.Values[0])
+	}
+	if payout.Values[1].Value != "return_stake" {
+		t.Fatalf("payout.Values[1] = %#v, want return_stake", payout.Values[1])
+	}
+
+	priority, ok := docs.Enums["Priority"]
+	if !ok {
+		t.Fatal("Enums[Priority] missing")
+	}
+	if len(priority.Values) != 3 {
+		t.Fatalf("priority.Values = %#v, want 3 values", priority.Values)
+	}
+	for i, want := range []int{0, 1, 2} {
+		if priority.Values[i].Value != want {
+			t.Fatalf("priority.Values[%d].Value = %v, want %d", i, priority.Values[i].Value, want)
+		}
+	}
+	if priority.Values[2].Comment != "PriorityHigh is the highest priority." {
+		t.Fatalf("priority.Values[2].Comment = %q, want the doc comment", priority.Values[2].Comment)
+	}
+
+	notEnum, ok := docs.Enums["NotEnum"]
+	if !ok {
+		t.Fatal("Enums[NotEnum] missing, a commented named type without constants still carries its comment")
+	}
+	if len(notEnum.Values) != 0 {
+		t.Fatalf("notEnum.Values = %#v, want no values", notEnum.Values)
+	}
+
+	if _, ok := docs.Enums["StatusAlias"]; ok {
+		t.Fatal("Enums[StatusAlias] present, want alias types skipped")
+	}
+	for name, enum := range docs.Enums {
+		for _, v := range enum.Values {
+			if v.Value == "a" || v.Value == "b" {
+				t.Fatalf("untyped constant leaked into enum %s: %#v", name, v)
+			}
+		}
+	}
+}
+
+func TestParseSourceDocsEnumConstantsInSeparateFile(t *testing.T) {
+	docs, err := ParseSourceDocs("consts.go", []byte("package demo\n\nconst StatusOn Status = \"on\" // enabled\n"))
+	if err != nil {
+		t.Fatalf("ParseSourceDocs() error = %v", err)
+	}
+
+	status, ok := docs.Enums["Status"]
+	if !ok {
+		t.Fatal("Enums[Status] missing, constants of a type declared elsewhere must be collected")
+	}
+	if len(status.Values) != 1 || status.Values[0].Value != "on" {
+		t.Fatalf("status.Values = %#v, want the single on value", status.Values)
+	}
+}
+
 func TestExtractCommentTextPreservesMarkdownFormatting(t *testing.T) {
 	comment := &ast.CommentGroup{List: []*ast.Comment{
 		{Text: "// Group is the group record."},

@@ -8,23 +8,38 @@ import (
 )
 
 func TestBuildAPIDocFile(t *testing.T) {
-	entries := []StructDocEntry{
-		{
-			PkgPath:  "example.com/proj/model",
-			TypeName: "User",
-			Doc: apidoc.StructDoc{
-				Comment: "User is the user record.\nIt spans multiple lines.",
-				Fields: map[string]string{
-					"Name": "Name is the user name.",
-					"Age":  "Age is the user age.",
+	entries := APIDocEntries{
+		Structs: []StructDocEntry{
+			{
+				PkgPath:  "example.com/proj/model",
+				TypeName: "User",
+				Doc: apidoc.StructDoc{
+					Comment: "User is the user record.\nIt spans multiple lines.",
+					Fields: map[string]string{
+						"Name": "Name is the user name.",
+						"Age":  "Age is the user age.",
+					},
+				},
+			},
+			{
+				PkgPath:  "example.com/proj/model/sub",
+				TypeName: "EncryptReq",
+				Doc: apidoc.StructDoc{
+					Fields: map[string]string{"Path": "Path is the file path."},
 				},
 			},
 		},
-		{
-			PkgPath:  "example.com/proj/model/sub",
-			TypeName: "EncryptReq",
-			Doc: apidoc.StructDoc{
-				Fields: map[string]string{"Path": "Path is the file path."},
+		Enums: []EnumDocEntry{
+			{
+				PkgPath:  "example.com/proj/model",
+				TypeName: "UserStatus",
+				Doc: apidoc.EnumDoc{
+					Comment: "UserStatus is the lifecycle status.",
+					Values: []apidoc.EnumValue{
+						{Value: "active", Comment: "the user can log in"},
+						{Value: 2},
+					},
+				},
 			},
 		},
 	}
@@ -42,6 +57,10 @@ func TestBuildAPIDocFile(t *testing.T) {
 		`Comment: "User is the user record.\nIt spans multiple lines.",`,
 		`"Name": "Name is the user name.",`,
 		`apidoc.Register("example.com/proj/model/sub", "EncryptReq", apidoc.StructDoc{`,
+		`apidoc.RegisterEnum("example.com/proj/model", "UserStatus", apidoc.EnumDoc{`,
+		`Comment: "UserStatus is the lifecycle status.",`,
+		`{Value: "active", Comment: "the user can log in"},`,
+		`{Value: 2},`,
 	} {
 		if !strings.Contains(code, want) {
 			t.Fatalf("BuildAPIDocFile() output missing %q, got:\n%s", want, code)
@@ -50,7 +69,7 @@ func TestBuildAPIDocFile(t *testing.T) {
 }
 
 func TestBuildAPIDocFileWithoutEntries(t *testing.T) {
-	code, err := BuildAPIDocFile("model", nil)
+	code, err := BuildAPIDocFile("model", APIDocEntries{})
 	if err != nil {
 		t.Fatalf("BuildAPIDocFile() error = %v", err)
 	}

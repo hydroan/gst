@@ -42,6 +42,51 @@ func TestRegisterReplacesPreviousEntry(t *testing.T) {
 	}
 }
 
+func TestRegisterEnumAndLookupEnum(t *testing.T) {
+	RegisterEnum("example.com/demo/model", "Status", EnumDoc{
+		Comment: "Status is a demo enum.",
+		Values: []EnumValue{
+			{Value: "active", Comment: "the record is active"},
+			{Value: "disabled", Comment: "the record is disabled"},
+		},
+	})
+
+	doc, ok := LookupEnum("example.com/demo/model", "Status")
+	if !ok {
+		t.Fatal("LookupEnum() ok = false, want true")
+	}
+	if doc.Comment != "Status is a demo enum." {
+		t.Fatalf("doc.Comment = %q, want %q", doc.Comment, "Status is a demo enum.")
+	}
+	if len(doc.Values) != 2 || doc.Values[0].Value != "active" || doc.Values[1].Comment != "the record is disabled" {
+		t.Fatalf("doc.Values = %#v, want the two registered values in order", doc.Values)
+	}
+
+	if _, ok := LookupEnum("example.com/demo/model", "NotRegistered"); ok {
+		t.Fatal("LookupEnum() ok = true, want false for unregistered enum")
+	}
+}
+
+func TestRegisterEnumAndLookupEnumCopyValues(t *testing.T) {
+	values := []EnumValue{{Value: "a", Comment: "original"}}
+	RegisterEnum("example.com/demo/model", "Isolated", EnumDoc{Values: values})
+
+	// Mutating the caller's slice after RegisterEnum must not affect the registry.
+	values[0].Comment = "mutated by caller"
+
+	doc, _ := LookupEnum("example.com/demo/model", "Isolated")
+	if doc.Values[0].Comment != "original" {
+		t.Fatalf("doc.Values[0].Comment = %q, want %q", doc.Values[0].Comment, "original")
+	}
+
+	// Mutating the looked-up slice must not affect later lookups.
+	doc.Values[0].Comment = "mutated by reader"
+	again, _ := LookupEnum("example.com/demo/model", "Isolated")
+	if again.Values[0].Comment != "original" {
+		t.Fatalf("again.Values[0].Comment = %q, want %q", again.Values[0].Comment, "original")
+	}
+}
+
 func TestRegisterAndLookupCopyFields(t *testing.T) {
 	fields := map[string]string{"Name": "original"}
 	Register("example.com/demo/model", "Isolated", StructDoc{Fields: fields})

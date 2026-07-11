@@ -16,3 +16,11 @@ type UserCreateReq struct {
 type plain struct {
 	Value string
 }
+
+// UserStatus is the lifecycle status of a user.
+type UserStatus string
+
+const (
+	UserStatusActive   UserStatus = "active"   // the user can log in
+	UserStatusDisabled UserStatus = "disabled" // the user is blocked
+)

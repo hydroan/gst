@@ -50,4 +50,28 @@ func init() {
 	apidoc.Register("demo/model/conversation", "SearchSource", apidoc.StructDoc{
 		Comment: "SearchSource describes an external reference attached to a message.",
 	})
+	apidoc.RegisterEnum("demo/model", "ConversationType", apidoc.EnumDoc{
+		Comment: "ConversationType identifies the content type handled by a conversation.",
+		Values: []apidoc.EnumValue{
+			{Value: "chat"},
+			{Value: "image"},
+		},
+	})
+	apidoc.RegisterEnum("demo/model/config", "FileFormat", apidoc.EnumDoc{
+		Comment: "FileFormat identifies the expected syntax of a configuration file.",
+		Values: []apidoc.EnumValue{
+			{Value: "text"},
+			{Value: "json"},
+			{Value: "yaml"},
+			{Value: "env"},
+		},
+	})
+	apidoc.RegisterEnum("demo/model/conversation", "MessageRole", apidoc.EnumDoc{
+		Comment: "MessageRole identifies who produced a message.",
+		Values: []apidoc.EnumValue{
+			{Value: "user"},
+			{Value: "assistant"},
+			{Value: "system"},
+		},
+	})
 }
