@@ -789,6 +789,84 @@ func profilePatchResult() *modelcopytest.Profile {
 	}
 }
 
+func TestAddServiceFilesKeepsEmptyPayloadListRequest(t *testing.T) {
+	sourceServiceDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(sourceServiceDir, "list.go"), []byte(`package servicecopytest
+
+import (
+	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
+	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+)
+
+// ProfileListService lists profiles.
+type ProfileListService struct {
+	service.Base[*modelcopytest.Profile, *model.Empty, *modelcopytest.ProfileListRsp]
+}
+
+// List copies list logic.
+func (s *ProfileListService) List(ctx *types.ServiceContext, req *model.Empty) (rsp *modelcopytest.ProfileListRsp, err error) {
+	return &modelcopytest.ProfileListRsp{}, nil
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	modelInfo := &gen.ModelInfo{
+		ModulePath:    "tmpapp",
+		ModelFileDir:  filepath.Join("model", "copytest"),
+		ModelFilePath: filepath.Join("model", "copytest", "profile.go"),
+		ModelPkgName:  "copytest",
+		ModelName:     "Profile",
+		ModelVarName:  "p",
+		Design:        &dsl.Design{Enabled: true},
+	}
+	listAction := &dsl.Action{
+		Enabled: true,
+		Service: true,
+		Payload: dsl.PayloadEmpty,
+		Result:  "*ProfileListRsp",
+		Phase:   consts.PHASE_LIST,
+	}
+	plan := &CopyPlan{
+		Name:                  "copytest",
+		ProjectModulePath:     "tmpapp",
+		SourceServiceDir:      sourceServiceDir,
+		TargetServiceDir:      filepath.Join("service", "copytest"),
+		TargetModelImportPath: filepath.Join("tmpapp", "model", "copytest"),
+		Actions: []moduleCopyAction{
+			{
+				Action:     listAction,
+				SourcePath: filepath.Join(sourceServiceDir, "list.go"),
+				TargetPath: filepath.Join("service", "copytest", "list.go"),
+				ModelInfo:  modelInfo,
+			},
+		},
+	}
+
+	if err := plan.addServiceFiles(nil); err != nil {
+		t.Fatalf("addServiceFiles() error = %v", err)
+	}
+	code := string(plan.Files[0].Content)
+	// The copy pipeline rewrites the module model import to the target
+	// project, but the gst model import backing *model.Empty must survive
+	// untouched.
+	for _, want := range []string{
+		`"github.com/hydroan/gst/model"`,
+		"service.Base[*copytest.Profile, *model.Empty, *copytest.ProfileListRsp]",
+		"req *model.Empty",
+		"return &copytest.ProfileListRsp{}, nil",
+	} {
+		if !strings.Contains(code, want) {
+			t.Fatalf("copied empty-payload list service missing %q:\n%s", want, code)
+		}
+	}
+	if strings.Contains(code, "modelcopytest") {
+		t.Fatalf("copied service kept source module import artifacts:\n%s", code)
+	}
+}
+
 func TestAddServiceFilesUsesFlattenServicePackage(t *testing.T) {
 	sourceServiceDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(sourceServiceDir, "role.go"), []byte(`package servicecopytest
