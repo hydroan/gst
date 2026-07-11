@@ -37,7 +37,7 @@ var checkCmd = &cobra.Command{
 10. Service files should contain at most one service struct
 11. Only allowed directories are enforced for gst framework projects
 12. Model Design() DSL must pass the same validation rules that gate gg gen
-13. database.Database operation chains must end with a terminal operation inline`,
+13. database.Database operation chains must end with a terminal operation inline or be passed directly as a call argument`,
 	Run: func(cmd *cobra.Command, args []string) {
 		checkRun()
 	},

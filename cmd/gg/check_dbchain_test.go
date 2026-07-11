@@ -39,6 +39,16 @@ func transact(ctx context.Context, u *model.User) error {
 		return tx.Create(u)
 	})
 }
+
+func passInline(ctx context.Context) bool {
+	return exists(database.Database[*model.User](ctx), "id")
+}
+
+func passInlineWithOptions(ctx context.Context, tx any) bool {
+	return exists(database.Database[*model.User](ctx).WithTx(tx), "id")
+}
+
+func exists(db any, id string) bool { return db != nil }
 `)
 	// A same-named non-gst package must not be treated as the framework database package.
 	writeCheckFile(t, filepath.Join(projectDir, "service", "order", "order.go"), `package order
@@ -115,15 +125,15 @@ func storedAfterOption(ctx context.Context) error {
 	return db.List(&users)
 }
 
-func passed(ctx context.Context) {
-	consume(database.Database[*model.User](ctx))
-}
-
 func unterminated(ctx context.Context) {
 	database.Database[*model.User](ctx).WithLimit(10)
 }
 
-func consume(db any) {}
+func methodValue(ctx context.Context) {
+	consume(database.Database[*model.User](ctx).List)
+}
+
+func consume(fn any) {}
 `)
 	// Aliased imports of the framework database package are still resolved.
 	writeCheckFile(t, filepath.Join(projectDir, "cronjob", "cleanup.go"), `package cronjob

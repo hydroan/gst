@@ -66,10 +66,11 @@ var databaseChainMethods = map[string]bool{
 }
 
 // CheckDatabaseChainTermination checks that every database.Database operation
-// chain ends with a terminal operation inline. Database implementations share
-// an underlying GORM session, so storing the chain value in a variable or
-// passing it around and running operations later is incorrect usage; each
-// independent operation must start with its own database.Database call.
+// chain either ends with a terminal operation inline or is handed directly to
+// a helper as a call argument. Database implementations share an underlying
+// GORM session, so storing the chain value in a variable and running
+// operations later is incorrect usage; each independent operation must start
+// with its own database.Database call.
 func CheckDatabaseChainTermination() []string {
 	var violations []string
 
@@ -227,10 +228,18 @@ func databaseChainViolation(anchor *ast.CallExpr, parents map[ast.Node]ast.Node)
 		return "", false
 	}
 
-	if _, ok := parents[node].(*ast.ExprStmt); ok {
+	switch parent := parents[node].(type) {
+	case *ast.ExprStmt:
 		return "database.Database chain never calls a terminal operation such as List, Get, or Create", true
+	case *ast.CallExpr:
+		// Handing the chain directly to a helper as a call argument is
+		// allowed; the helper is responsible for running one terminal
+		// operation on it, e.g. dao.ModelExists(database.Database[M](ctx), id, dest).
+		if expr, ok := node.(ast.Expr); ok && slices.Contains(parent.Args, expr) {
+			return "", false
+		}
 	}
-	return "database.Database chain value must not be stored or passed around; end the chain with a terminal operation and call database.Database again for each independent operation", true
+	return "database.Database chain value must not be stored or returned; end the chain with a terminal operation inline or pass it directly as a call argument, and call database.Database again for each independent operation", true
 }
 
 // nodeParents maps every AST node in file to its parent node.
