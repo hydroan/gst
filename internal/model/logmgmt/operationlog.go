@@ -28,7 +28,7 @@ type OperationLog struct {
 }
 
 func (OperationLog) Design() {
-	Migrate(true)
+	Migrate()
 	List(func() {
 		Enabled(true)
 	})

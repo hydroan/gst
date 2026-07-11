@@ -20,5 +20,5 @@ type PasswordCredential struct {
 }
 
 func (PasswordCredential) Design() {
-	Migrate(true)
+	Migrate()
 }

@@ -30,7 +30,7 @@ type LoginLog struct {
 }
 
 func (LoginLog) Design() {
-	Migrate(true)
+	Migrate()
 	List(func() {
 		Enabled(true)
 	})

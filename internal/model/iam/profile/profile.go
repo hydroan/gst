@@ -34,7 +34,7 @@ type ProfilePatchReq struct {
 type ProfilePatchRsp = Profile
 
 func (Profile) Design() {
-	Migrate(true)
+	Migrate()
 	Route("/iam/profile", func() {
 		Get(func() {
 			Service()

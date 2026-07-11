@@ -42,7 +42,7 @@ type CasbinRule struct {
 }
 
 func (CasbinRule) Design() {
-	dsl.Migrate(true)
+	dsl.Migrate()
 }
 
 // SetID intentionally ignores custom IDs because the Casbin GORM adapter manages
