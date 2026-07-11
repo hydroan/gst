@@ -34,7 +34,7 @@ var pluralizeCli = pluralize.NewClient()
 //	}
 //
 // The parser supports various DSL patterns:
-//   - Global settings: Enabled(), Endpoint("path"), Migrate(true)
+//   - Global settings: Enabled(), Endpoint("path"), Migrate()
 //   - Action configuration: Create().Payload[Type].Result[Type]
 //   - Service and visibility: Service(), Public()
 func Parse(file *ast.File, endpoint string) map[string]*Design {
@@ -270,7 +270,7 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 			continue
 		}
 		call, ok := callExpr.X.(*ast.CallExpr)
-		if !ok || call == nil || call.Fun == nil || len(call.Args) == 0 {
+		if !ok || call == nil || call.Fun == nil {
 			continue
 		}
 		var funcName string
@@ -292,6 +292,16 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 			continue
 		}
 
+		// Parse "Migrate()". Declaring the marker enables database migration.
+		if funcName == "Migrate" && len(call.Args) == 0 {
+			defaults.Migrate = true
+		}
+
+		// The remaining DSL calls all carry at least one argument.
+		if len(call.Args) == 0 {
+			continue
+		}
+
 		// Parse "Enabled()".
 		if funcName == "Enabled" && len(call.Args) == 1 {
 			if arg, ok := call.Args[0].(*ast.Ident); ok && arg != nil {
@@ -305,13 +315,6 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 				defaults.Endpoint = trimQuote(arg.Value)
 				defaults.Endpoint = strings.TrimLeft(defaults.Endpoint, "/")
 				defaults.Endpoint = strings.ReplaceAll(defaults.Endpoint, "/", "-")
-			}
-		}
-
-		// Parse "Migrate()".
-		if funcName == "Migrate" && len(call.Args) == 1 {
-			if arg, ok := call.Args[0].(*ast.Ident); ok && arg != nil {
-				defaults.Migrate = arg.Name == "true"
 			}
 		}
 
