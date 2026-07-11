@@ -69,7 +69,7 @@ type Menu struct {
 }
 
 func (Menu) Design() {
-	dsl.Migrate(true)
+	dsl.Migrate()
 	dsl.Route("authz/menus", func() {
 		dsl.Create(func() {})
 		dsl.Delete(func() {})

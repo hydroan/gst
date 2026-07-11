@@ -27,7 +27,7 @@ func (TraceProbe) GetTableName() string { return "demo_trace_probes" }
 func (TraceProbe) Purge() bool          { return true }
 
 func (TraceProbe) Design() {
-	Migrate(true)
+	Migrate()
 	Endpoint("trace-probes")
 	Param("trace_probe")
 

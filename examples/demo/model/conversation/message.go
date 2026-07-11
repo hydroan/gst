@@ -32,7 +32,7 @@ type Message struct {
 }
 
 func (Message) Design() {
-	Migrate(true)
+	Migrate()
 	Endpoint("messages")
 
 	Create(func() {
