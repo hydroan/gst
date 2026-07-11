@@ -36,7 +36,8 @@ var checkCmd = &cobra.Command{
 9. Model files should contain at most one model struct
 10. Service files should contain at most one service struct
 11. Only allowed directories are enforced for gst framework projects
-12. Model Design() DSL must pass the same validation rules that gate gg gen`,
+12. Model Design() DSL must pass the same validation rules that gate gg gen
+13. database.Database operation chains must end with a terminal operation inline`,
 	Run: func(cmd *cobra.Command, args []string) {
 		checkRun()
 	},
@@ -86,6 +87,7 @@ func collectProjectChecks() []projectCheckResult {
 		{Name: "Model package naming", Violations: CheckModelPackageNaming()},
 		{Name: "Directory restrictions", Violations: CheckAllowedDirectories()},
 		{Name: "DSL design rules", Violations: CheckDSLDesign()},
+		{Name: "Database chain termination", Violations: CheckDatabaseChainTermination()},
 	}
 	return results
 }
