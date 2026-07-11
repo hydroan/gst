@@ -22,13 +22,17 @@ var _ types.Logger = (*Logger)(nil)
 func (l *Logger) Debug(args ...any) { l.zlog.Sugar().Debug(args...) }
 func (l *Logger) Info(args ...any)  { l.zlog.Sugar().Info(args...) }
 func (l *Logger) Warn(args ...any)  { l.zlog.Sugar().Warn(args...) }
-func (l *Logger) Error(args ...any) { l.zlog.Sugar().Error(args...) }
+func (l *Logger) Error(args ...any) {
+	l.withErrorStack(zapcore.ErrorLevel, args).Sugar().Error(args...)
+}
 func (l *Logger) Fatal(args ...any) { l.zlog.Sugar().Fatal(args...) }
 
 func (l *Logger) Debugf(format string, args ...any) { l.zlog.Sugar().Debugf(format, args...) }
 func (l *Logger) Infof(format string, args ...any)  { l.zlog.Sugar().Infof(format, args...) }
 func (l *Logger) Warnf(format string, args ...any)  { l.zlog.Sugar().Warnf(format, args...) }
-func (l *Logger) Errorf(format string, args ...any) { l.zlog.Sugar().Errorf(format, args...) }
+func (l *Logger) Errorf(format string, args ...any) {
+	l.withErrorStack(zapcore.ErrorLevel, args).Sugar().Errorf(format, args...)
+}
 func (l *Logger) Fatalf(format string, args ...any) { l.zlog.Sugar().Fatalf(format, args...) }
 
 func (l *Logger) Debugw(msg string, keysValues ...any) { l.zlog.Sugar().Debugw(msg, keysValues...) }
