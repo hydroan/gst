@@ -138,8 +138,12 @@ func GetModulePath() (string, error) {
 	}
 	defer file.Close()
 
-	// If go command exists, get module path directly through go list -m command
+	// If go command exists, get module path directly through go list -m command.
+	// Disable workspace mode explicitly: inside a go.work workspace "go list -m"
+	// prints every workspace module (one per line) instead of the current one,
+	// which would corrupt every generated import path.
 	cmd := exec.Command("go", "list", "-m")
+	cmd.Env = append(os.Environ(), "GOWORK=off")
 	output, err := cmd.Output()
 	if err == nil {
 		return strings.TrimSpace(string(output)), nil

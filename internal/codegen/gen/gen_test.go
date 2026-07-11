@@ -116,6 +116,35 @@ func TestGetModulePath(t *testing.T) {
 	}
 }
 
+func TestGetModulePathInWorkspaceReturnsCurrentModuleOnly(t *testing.T) {
+	dir := t.TempDir()
+	appDir := filepath.Join(dir, "app")
+	libDir := filepath.Join(dir, "lib")
+	for moduleDir, moduleName := range map[string]string{appDir: "example.com/app", libDir: "example.com/lib"} {
+		if err := os.MkdirAll(moduleDir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(moduleDir, "go.mod"), []byte("module "+moduleName+"\n\ngo 1.24\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	goWork := filepath.Join(dir, "go.work")
+	if err := os.WriteFile(goWork, []byte("go 1.24\n\nuse (\n\t./app\n\t./lib\n)\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Chdir(appDir)
+	t.Setenv("GOWORK", goWork)
+
+	got, err := GetModulePath()
+	if err != nil {
+		t.Fatalf("GetModulePath() error = %v", err)
+	}
+	if got != "example.com/app" {
+		t.Fatalf("GetModulePath() = %q, want %q (workspace mode must not leak other modules)", got, "example.com/app")
+	}
+}
+
 func TestFindModelPackageName(t *testing.T) {
 	fset := token.NewFileSet()
 	file1, err := parser.ParseFile(fset, "user.go", src1, parser.ParseComments)
