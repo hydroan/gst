@@ -19,8 +19,8 @@ func (User) Design() {
 	// Default Endpoint is the pluralized snake_case form of the model name.
 	Endpoint("//iam/user2")
 
-	// Default to true,
-	Migrate(true)
+	// Migration is disabled by default; declaring Migrate() enables it.
+	Migrate()
 	Param("user")
 
 	Route("/iam/users", func() {

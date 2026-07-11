@@ -12,7 +12,7 @@ type User6 struct {
 }
 
 func (User6) Design() {
-	dsl.Migrate(true)
+	dsl.Migrate()
 }
 
 type User7 struct {
