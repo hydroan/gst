@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
@@ -163,6 +164,41 @@ func TestAddSpanTagsSetsAttributesInOneBatch(t *testing.T) {
 	require.Contains(t, span.attributes, attribute.String("unknown", "unsupported_type"))
 }
 
+func TestRecordErrorRecordsErrorOriginStackTrace(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{
+			name: "error with stack trace",
+			err:  newStackTracedError(),
+		},
+		{
+			name: "wrapped error keeps origin stack trace",
+			err:  errors.Wrap(newStackTracedError(), "wrapped"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			span := recordErrorOnSpan(t, tt.err)
+			require.Equal(t, codes.Error, span.Status().Code)
+
+			stackTrace := exceptionStackTrace(t, span)
+			require.Contains(t, stackTrace, "newStackTracedError")
+			require.Contains(t, stackTrace, "otel_test.go")
+		})
+	}
+}
+
+func TestRecordErrorFallsBackToRecordSiteStackTrace(t *testing.T) {
+	span := recordErrorOnSpan(t, plainError{})
+	require.Equal(t, codes.Error, span.Status().Code)
+
+	stackTrace := exceptionStackTrace(t, span)
+	require.Contains(t, stackTrace, "TestRecordErrorFallsBackToRecordSiteStackTrace")
+}
+
 func TestFrameworkSpanNameUsesDottedGoNames(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -240,6 +276,51 @@ func TestOperationSpanNameUsesDottedGoNames(t *testing.T) {
 			require.Equal(t, tt.want, OperationSpanName(tt.component, tt.operation))
 		})
 	}
+}
+
+// plainError is an error without any embedded stack trace.
+type plainError struct{}
+
+func (plainError) Error() string { return "plain failure" }
+
+// newStackTracedError creates an error whose stack trace points at this
+// helper, so tests can assert the error origin is recorded.
+func newStackTracedError() error {
+	return errors.New("stack traced failure")
+}
+
+// recordErrorOnSpan runs RecordError against a real recording span and
+// returns the ended span for assertions.
+func recordErrorOnSpan(t *testing.T, err error) sdktrace.ReadOnlySpan {
+	t.Helper()
+
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+
+	_, span := provider.Tracer("test").Start(context.Background(), "operation")
+	RecordError(span, err)
+	span.End()
+
+	spans := recorder.Ended()
+	require.Len(t, spans, 1)
+	return spans[0]
+}
+
+func exceptionStackTrace(t *testing.T, span sdktrace.ReadOnlySpan) string {
+	t.Helper()
+
+	events := span.Events()
+	require.Len(t, events, 1)
+	require.Equal(t, semconv.ExceptionEventName, events[0].Name)
+
+	for _, attr := range events[0].Attributes {
+		if attr.Key == semconv.ExceptionStacktraceKey {
+			return attr.Value.AsString()
+		}
+	}
+	require.Failf(t, "missing attribute", "exception event has no %s attribute", semconv.ExceptionStacktraceKey)
+	return ""
 }
 
 type attributeCountingSpan struct {

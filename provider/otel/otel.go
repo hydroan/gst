@@ -42,9 +42,11 @@ package otel
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -519,11 +521,54 @@ func AddSpanEvent(span trace.Span, name string, attrs ...attribute.KeyValue) {
 	span.AddEvent(name, trace.WithAttributes(attrs...))
 }
 
-// RecordError records an error in the current span
+// RecordError records err on the span as an exception event and marks the
+// span status as Error.
+//
+// If any error in the unwrap chain carries a stack trace captured at its
+// creation point (e.g. errors from github.com/cockroachdb/errors), the
+// deepest such stack trace is recorded as the exception.stacktrace attribute
+// so the span points at where the error actually happened. Otherwise the
+// stack trace of this RecordError call site is recorded instead.
 func RecordError(span trace.Span, err error) {
 	if !IsSpanRecording(span) || err == nil {
 		return
 	}
-	span.RecordError(err)
+	if stackTrace := errorOriginStackTrace(err); stackTrace != "" {
+		span.RecordError(err, trace.WithAttributes(semconv.ExceptionStacktrace(stackTrace)))
+	} else {
+		span.RecordError(err, trace.WithStackTrace(true))
+	}
 	span.SetStatus(codes.Error, err.Error())
+}
+
+// errorOriginStackTrace extracts the deepest stack trace embedded in the
+// unwrap chain of err and formats it like a Go stack trace with the
+// innermost (error creation) frame first. It returns "" when no error in
+// the chain carries a stack trace.
+func errorOriginStackTrace(err error) string {
+	var deepest *errors.ReportableStackTrace
+	for cur := err; cur != nil; cur = errors.UnwrapOnce(cur) {
+		if st := errors.GetReportableStackTrace(cur); st != nil {
+			deepest = st
+		}
+	}
+	if deepest == nil || len(deepest.Frames) == 0 {
+		return ""
+	}
+
+	// Sentry orders frames oldest first; iterate in reverse so the error
+	// creation frame comes first, matching Go stack trace conventions.
+	var sb strings.Builder
+	for _, frame := range slices.Backward(deepest.Frames) {
+		function := frame.Function
+		if frame.Module != "" && frame.Module != "unknown" {
+			function = frame.Module + "." + frame.Function
+		}
+		file := frame.AbsPath
+		if file == "" {
+			file = frame.Filename
+		}
+		fmt.Fprintf(&sb, "%s\n\t%s:%d\n", function, file, frame.Lineno)
+	}
+	return sb.String()
 }
