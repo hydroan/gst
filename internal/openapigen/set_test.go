@@ -88,13 +88,13 @@ type mapTitleModel struct {
 	GroupRoles map[string][]string `json:"group_roles,omitempty"`
 }
 
-func TestAddSchemaFieldDocsSetsTitleAndDescription(t *testing.T) {
+func TestAddSchemaDocsForTypeSetsTitleAndDescription(t *testing.T) {
 	schemaRef, err := openapi3gen.NewSchemaRefForValue(mapTitleModel{}, nil)
 	if err != nil {
 		t.Fatalf("NewSchemaRefForValue() error = %v", err)
 	}
 
-	addSchemaFieldDocs[mapTitleModel](schemaRef)
+	addSchemaDocsForType(reflect.TypeFor[mapTitleModel](), schemaRef, nil)
 
 	groupRoles := schemaRef.Value.Properties["group_roles"]
 	if groupRoles == nil || groupRoles.Value == nil {
@@ -108,13 +108,13 @@ func TestAddSchemaFieldDocsSetsTitleAndDescription(t *testing.T) {
 	}
 }
 
-func TestAddSchemaFieldDocsDoesNotDuplicateIntoMapAdditionalProperties(t *testing.T) {
+func TestAddSchemaDocsForTypeDoesNotDuplicateIntoMapAdditionalProperties(t *testing.T) {
 	schemaRef, err := openapi3gen.NewSchemaRefForValue(mapTitleModel{}, nil)
 	if err != nil {
 		t.Fatalf("NewSchemaRefForValue() error = %v", err)
 	}
 
-	addSchemaFieldDocs[mapTitleModel](schemaRef)
+	addSchemaDocsForType(reflect.TypeFor[mapTitleModel](), schemaRef, nil)
 
 	groupRoles := schemaRef.Value.Properties["group_roles"]
 	if groupRoles == nil || groupRoles.Value == nil {
@@ -238,7 +238,7 @@ func registerEnumFieldStatus() {
 	})
 }
 
-func TestAddSchemaFieldDocsSetsEnumValues(t *testing.T) {
+func TestAddSchemaDocsForTypeSetsEnumValues(t *testing.T) {
 	registerEnumFieldStatus()
 
 	schemaRef, err := openapi3gen.NewSchemaRefForValue(enumFieldModel{}, nil)
@@ -246,7 +246,7 @@ func TestAddSchemaFieldDocsSetsEnumValues(t *testing.T) {
 		t.Fatalf("NewSchemaRefForValue() error = %v", err)
 	}
 
-	addSchemaFieldDocs[enumFieldModel](schemaRef)
+	addSchemaDocsForType(reflect.TypeFor[enumFieldModel](), schemaRef, nil)
 
 	status := schemaRef.Value.Properties["status"]
 	if status == nil || status.Value == nil {
@@ -263,7 +263,7 @@ func TestAddSchemaFieldDocsSetsEnumValues(t *testing.T) {
 	}
 }
 
-func TestAddSchemaFieldDocsSetsEnumOnSliceItemsWithoutFieldComment(t *testing.T) {
+func TestAddSchemaDocsForTypeSetsEnumOnSliceItemsWithoutFieldComment(t *testing.T) {
 	registerEnumFieldStatus()
 
 	schemaRef, err := openapi3gen.NewSchemaRefForValue(enumFieldModel{}, nil)
@@ -271,7 +271,7 @@ func TestAddSchemaFieldDocsSetsEnumOnSliceItemsWithoutFieldComment(t *testing.T)
 		t.Fatalf("NewSchemaRefForValue() error = %v", err)
 	}
 
-	addSchemaFieldDocs[enumFieldModel](schemaRef)
+	addSchemaDocsForType(reflect.TypeFor[enumFieldModel](), schemaRef, nil)
 
 	codes := schemaRef.Value.Properties["codes"]
 	if codes == nil || codes.Value == nil {
@@ -286,6 +286,174 @@ func TestAddSchemaFieldDocsSetsEnumOnSliceItemsWithoutFieldComment(t *testing.T)
 	// The field has no comment, so the enum type comment becomes the base text.
 	if !strings.Contains(codes.Value.Description, "enumFieldStatus is the demo status enum.") {
 		t.Fatalf("codes description = %q, want the enum type comment as base text", codes.Value.Description)
+	}
+}
+
+// nestedBetOption is one nested payload item for schema decoration tests.
+type nestedBetOption struct {
+	// Code is the option code.
+	Code string `json:"code"`
+	// Name is the option name.
+	Name string `json:"name"`
+}
+
+// nestedPayloadReq is a request body carrying a nested item collection.
+type nestedPayloadReq struct {
+	// MaxAmount is the request level limit.
+	MaxAmount int64 `json:"max_amount"`
+	// Options is the full nested option collection.
+	Options []*nestedBetOption `json:"options"`
+}
+
+func TestAddSchemaDocsForTypeDecoratesNestedStructFields(t *testing.T) {
+	schemaRef, err := openapi3gen.NewSchemaRefForValue(nestedPayloadReq{}, nil)
+	if err != nil {
+		t.Fatalf("NewSchemaRefForValue() error = %v", err)
+	}
+
+	addSchemaDocsForType(reflect.TypeFor[nestedPayloadReq](), schemaRef, nil)
+
+	options := schemaRef.Value.Properties["options"]
+	if options == nil || options.Value == nil {
+		t.Fatal("options property missing")
+	}
+	if options.Value.Title != "Options is the full nested option collection." {
+		t.Fatalf("options title = %q, want field doc comment", options.Value.Title)
+	}
+	if options.Value.Items == nil || options.Value.Items.Value == nil {
+		t.Fatal("options items schema missing")
+	}
+
+	code := options.Value.Items.Value.Properties["code"]
+	if code == nil || code.Value == nil {
+		t.Fatal("options items code property missing")
+	}
+	if code.Value.Title != "Code is the option code." {
+		t.Fatalf("nested code title = %q, want nested struct field doc comment", code.Value.Title)
+	}
+	if code.Value.Description != "Code is the option code." {
+		t.Fatalf("nested code description = %q, want nested struct field doc comment", code.Value.Description)
+	}
+}
+
+// embeddedSchemeRow is the persisted row promoted into view structs.
+type embeddedSchemeRow struct {
+	// Status is the record status.
+	Status enumFieldStatus `json:"status"`
+	// Label is the row label.
+	Label string `json:"label"`
+}
+
+// embeddedSchemeView is a response view embedding the persisted row.
+type embeddedSchemeView struct {
+	*embeddedSchemeRow
+	// Options is the nested option collection of the row.
+	Options []*nestedBetOption `json:"options"`
+}
+
+func TestAddSchemaDocsForTypeDecoratesEmbeddedStructFields(t *testing.T) {
+	registerEnumFieldStatus()
+
+	schemaRef, err := openapi3gen.NewSchemaRefForValue(embeddedSchemeView{}, nil)
+	if err != nil {
+		t.Fatalf("NewSchemaRefForValue() error = %v", err)
+	}
+
+	addSchemaDocsForType(reflect.TypeFor[embeddedSchemeView](), schemaRef, nil)
+
+	label := schemaRef.Value.Properties["label"]
+	if label == nil || label.Value == nil {
+		t.Fatal("label property missing")
+	}
+	if label.Value.Title != "Label is the row label." {
+		t.Fatalf("promoted label title = %q, want embedded struct field doc comment", label.Value.Title)
+	}
+
+	status := schemaRef.Value.Properties["status"]
+	if status == nil || status.Value == nil {
+		t.Fatal("status property missing")
+	}
+	if len(status.Value.Enum) != 2 {
+		t.Fatalf("promoted status enum = %#v, want the two enum values", status.Value.Enum)
+	}
+	if !strings.Contains(status.Value.Description, "Status is the record status.") {
+		t.Fatalf("promoted status description = %q, want embedded struct field doc comment", status.Value.Description)
+	}
+}
+
+// customListRsp is a custom list response whose shape mimics the framework
+// list wrapper (items plus total), so wrapper shape sniffing would misfire.
+type customListRsp struct {
+	Items []*embeddedSchemeView `json:"items"`
+	Total int64                 `json:"total"`
+}
+
+func TestNewSchemaRefWithDocsDecoratesCustomListResponseWrapper(t *testing.T) {
+	registerEnumFieldStatus()
+
+	schemaRef := newSchemaRefWithDocs(*new(apiResponse[*customListRsp]))
+	if schemaRef == nil || schemaRef.Value == nil {
+		t.Fatal("newSchemaRefWithDocs() returned nil schema")
+	}
+
+	data := schemaRef.Value.Properties["data"]
+	if data == nil || data.Value == nil {
+		t.Fatal("data property missing")
+	}
+	items := data.Value.Properties["items"]
+	if items == nil || items.Value == nil || items.Value.Items == nil || items.Value.Items.Value == nil {
+		t.Fatal("data items schema missing")
+	}
+
+	element := items.Value.Items.Value
+	status := element.Properties["status"]
+	if status == nil || status.Value == nil {
+		t.Fatal("items element status property missing")
+	}
+	if len(status.Value.Enum) != 2 {
+		t.Fatalf("items element status enum = %#v, want the two enum values", status.Value.Enum)
+	}
+	if !strings.Contains(status.Value.Description, "Status is the record status.") {
+		t.Fatalf("items element status description = %q, want embedded struct field doc comment", status.Value.Description)
+	}
+
+	options := element.Properties["options"]
+	if options == nil || options.Value == nil || options.Value.Items == nil || options.Value.Items.Value == nil {
+		t.Fatal("items element options schema missing")
+	}
+	name := options.Value.Items.Value.Properties["name"]
+	if name == nil || name.Value == nil || name.Value.Title != "Name is the option name." {
+		t.Fatal("deeply nested option name property missing its doc comment")
+	}
+}
+
+// cyclicCategory is a self referential type for the cycle guard test.
+type cyclicCategory struct {
+	// Title is the category title.
+	Title string `json:"title"`
+
+	Children []*cyclicCategory `json:"children"`
+}
+
+func TestAddSchemaDocsForTypeCutsCyclicStructTypes(t *testing.T) {
+	// Build a self referencing schema by hand: the children items schema points
+	// back at the root, mirroring the cyclic Go type. Without the cycle guard
+	// the walk would recurse forever.
+	object := openapi3.NewObjectSchema()
+	rootRef := &openapi3.SchemaRef{Value: object}
+	children := openapi3.NewArraySchema()
+	children.Items = rootRef
+	object.WithProperty("title", openapi3.NewStringSchema())
+	object.WithPropertyRef("children", &openapi3.SchemaRef{Value: children})
+
+	addSchemaDocsForType(reflect.TypeFor[cyclicCategory](), rootRef, nil)
+
+	title := rootRef.Value.Properties["title"]
+	if title == nil || title.Value == nil {
+		t.Fatal("title property missing")
+	}
+	if title.Value.Title != "Title is the category title." {
+		t.Fatalf("title = %q, want field doc comment", title.Value.Title)
 	}
 }
 

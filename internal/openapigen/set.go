@@ -115,8 +115,8 @@ func setCreate[M types.Model, REQ types.Request, RSP types.Response](path string
 	typ := reflect.TypeOf(*new(M))
 	reqKey := componentKey(typ, consts.PHASE_CREATE)
 	rspKey := reqKey
-	reqSchemaRef, _ := openapi3gen.NewSchemaRefForValue(*new(REQ), nil)
-	rspSchemaRef, _ := openapi3gen.NewSchemaRefForValue(*new(apiResponse[RSP]), nil)
+	reqSchemaRef := newSchemaRefWithDocs(*new(REQ))
+	rspSchemaRef := newSchemaRefWithDocs(*new(apiResponse[RSP]))
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
 
 	// gen := openapi3gen.NewGenerator()
@@ -205,7 +205,7 @@ func setDelete[M types.Model, REQ types.Request, RSP types.Response](path string
 	typ := reflect.TypeOf(*new(M))
 	reqKey := componentKey(typ, consts.PHASE_DELETE)
 	rspKey := reqKey
-	rspSchemaRef, _ := openapi3gen.NewSchemaRefForValue(*new(apiResponse[RSP]), nil)
+	rspSchemaRef := newSchemaRefWithDocs(*new(apiResponse[RSP]))
 	registerSchema[M, REQ, RSP](reqKey, rspKey, nil, rspSchemaRef)
 
 	pathItem.Delete = &openapi3.Operation{
@@ -270,8 +270,8 @@ func setUpdate[M types.Model, REQ types.Request, RSP types.Response](path string
 	typ := reflect.TypeOf(*new(M))
 	reqKey := componentKey(typ, consts.PHASE_UPDATE)
 	rspKey := reqKey
-	reqSchemaRef, _ := openapi3gen.NewSchemaRefForValue(*new(REQ), nil)
-	rspSchemaRef, _ := openapi3gen.NewSchemaRefForValue(*new(apiResponse[RSP]), nil)
+	reqSchemaRef := newSchemaRefWithDocs(*new(REQ))
+	rspSchemaRef := newSchemaRefWithDocs(*new(apiResponse[RSP]))
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
 
 	pathItem.Put = &openapi3.Operation{
@@ -351,8 +351,8 @@ func setPatch[M types.Model, REQ types.Request, RSP types.Response](path string,
 	typ := reflect.TypeOf(*new(M))
 	reqKey := componentKey(typ, consts.PHASE_PATCH)
 	rspKey := reqKey
-	reqSchemaRef, _ := openapi3gen.NewSchemaRefForValue(*new(REQ), nil)
-	rspSchemaRef, _ := openapi3gen.NewSchemaRefForValue(*new(apiResponse[RSP]), nil)
+	reqSchemaRef := newSchemaRefWithDocs(*new(REQ))
+	rspSchemaRef := newSchemaRefWithDocs(*new(apiResponse[RSP]))
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
 
 	pathItem.Patch = &openapi3.Operation{
@@ -431,7 +431,7 @@ func setList[M types.Model, REQ types.Request, RSP types.Response](path string, 
 
 	var rspSchemaRef *openapi3.SchemaRef
 	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
-		rspSchemaRef, _ = openapi3gen.NewSchemaRefForValue(*new(apiListResponse[M]), nil)
+		rspSchemaRef = newSchemaRefWithDocs(*new(apiListResponse[M]))
 		// if rspSchemaRef.Value != nil && rspSchemaRef.Value.Properties != nil {
 		// 	if dataProperty, exists := rspSchemaRef.Value.Properties["data"]; exists {
 		// 		if dataProperty.Value != nil && dataProperty.Value.Properties != nil {
@@ -444,7 +444,7 @@ func setList[M types.Model, REQ types.Request, RSP types.Response](path string, 
 		// 	}
 		// }
 	} else {
-		rspSchemaRef, _ = openapi3gen.NewSchemaRefForValue(*new(apiResponse[RSP]), nil)
+		rspSchemaRef = newSchemaRefWithDocs(*new(apiResponse[RSP]))
 		// if rspSchemaRef.Value != nil && rspSchemaRef.Value.Properties != nil {
 		// 	if dataProperty, exists := rspSchemaRef.Value.Properties["data"]; exists {
 		// 		addSchemaTitle[RSP](dataProperty)
@@ -566,7 +566,7 @@ func setGet[M types.Model, REQ types.Request, RSP types.Response](path string, p
 	typ := reflect.TypeOf(*new(M))
 	reqKey := componentKey(typ, consts.PHASE_GET)
 	rspKey := reqKey
-	rspSchemaRef, _ := openapi3gen.NewSchemaRefForValue(*new(apiResponse[RSP]), nil)
+	rspSchemaRef := newSchemaRefWithDocs(*new(apiResponse[RSP]))
 	registerSchema[M, REQ, RSP](reqKey, rspKey, nil, rspSchemaRef)
 
 	pathItem.Get = &openapi3.Operation{
@@ -640,13 +640,13 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 	var reqSchemaRef *openapi3.SchemaRef
 	var rspSchemaRef *openapi3.SchemaRef
 	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
-		reqSchemaRef, _ = openapi3gen.NewSchemaRefForValue(*new(apiBatchRequest[REQ]), nil)
+		reqSchemaRef = newSchemaRefWithDocs(*new(apiBatchRequest[REQ]))
 		// if reqSchemaRef.Value != nil && reqSchemaRef.Value.Properties != nil {
 		// 	if itemsProperty, exists := reqSchemaRef.Value.Properties["items"]; exists && itemsProperty.Value != nil && itemsProperty.Value.Items != nil {
 		// 		addSchemaTitle[M](itemsProperty.Value.Items)
 		// 	}
 		// }
-		rspSchemaRef, _ = openapi3gen.NewSchemaRefForValue(*new(apiBatchResponse[RSP]), nil)
+		rspSchemaRef = newSchemaRefWithDocs(*new(apiBatchResponse[RSP]))
 		// if rspSchemaRef.Value != nil && rspSchemaRef.Value.Properties != nil {
 		// 	if dataProperty, exists := rspSchemaRef.Value.Properties["data"]; exists {
 		// 		if dataProperty.Value != nil && dataProperty.Value.Properties != nil {
@@ -659,8 +659,8 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		// 	}
 		// }
 	} else {
-		reqSchemaRef, _ = openapi3gen.NewSchemaRefForValue(*new(REQ), nil)
-		rspSchemaRef, _ = openapi3gen.NewSchemaRefForValue(*new(RSP), nil)
+		reqSchemaRef = newSchemaRefWithDocs(*new(REQ))
+		rspSchemaRef = newSchemaRefWithDocs(*new(RSP))
 		// if rspSchemaRef.Value != nil && rspSchemaRef.Value.Properties != nil {
 		// 	if dataProperty, exists := rspSchemaRef.Value.Properties["data"]; exists {
 		// 		addSchemaTitle[RSP](dataProperty)
@@ -812,7 +812,7 @@ func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path st
 	}
 	var rspSchemaRef *openapi3.SchemaRef
 	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
-		rspSchemaRef, _ = openapi3gen.NewSchemaRefForValue(*new(apiBatchResponse[RSP]), nil)
+		rspSchemaRef = newSchemaRefWithDocs(*new(apiBatchResponse[RSP]))
 		// if rspSchemaRef.Value != nil && rspSchemaRef.Value.Properties != nil {
 		// 	if dataProperty, exists := rspSchemaRef.Value.Properties["data"]; exists && dataProperty.Value != nil && dataProperty.Value.Properties != nil {
 		// 		if itemsProperty, exists := dataProperty.Value.Properties["items"]; exists && itemsProperty.Value != nil && itemsProperty.Value.Items != nil {
@@ -821,7 +821,7 @@ func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		// 	}
 		// }
 	} else {
-		rspSchemaRef, _ = openapi3gen.NewSchemaRefForValue(*new(RSP), nil)
+		rspSchemaRef = newSchemaRefWithDocs(*new(RSP))
 		// if rspSchemaRef.Value != nil && rspSchemaRef.Value.Properties != nil {
 		// 	if dataProperty, exists := rspSchemaRef.Value.Properties["data"]; exists {
 		// 		addSchemaTitle[RSP](dataProperty)
@@ -901,7 +901,6 @@ func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path st
 }
 
 func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
-	gen := openapi3gen.NewGenerator()
 	typ := reflect.TypeOf(*new(M))
 	reqKey := componentKey(typ, consts.PHASE_UPDATE_MANY)
 	rspKey := reqKey
@@ -909,13 +908,13 @@ func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 	var reqSchemaRef *openapi3.SchemaRef
 	var rspSchemaRef *openapi3.SchemaRef
 	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
-		reqSchemaRef, _ = gen.NewSchemaRefForValue(*new(apiBatchRequest[REQ]), nil)
+		reqSchemaRef = newSchemaRefWithDocs(*new(apiBatchRequest[REQ]))
 		// if reqSchemaRef.Value != nil && reqSchemaRef.Value.Properties != nil {
 		// 	if itemsProperty, exists := reqSchemaRef.Value.Properties["items"]; exists && itemsProperty.Value != nil && itemsProperty.Value.Items != nil {
 		// 		addSchemaTitle[M](itemsProperty.Value.Items)
 		// 	}
 		// }
-		rspSchemaRef, _ = openapi3gen.NewSchemaRefForValue(*new(apiBatchResponse[REQ]), nil)
+		rspSchemaRef = newSchemaRefWithDocs(*new(apiBatchResponse[REQ]))
 		// if rspSchemaRef.Value != nil && rspSchemaRef.Value.Properties != nil {
 		// 	if dataProperty, exists := rspSchemaRef.Value.Properties["data"]; exists {
 		// 		if dataProperty.Value != nil && dataProperty.Value.Properties != nil {
@@ -928,8 +927,8 @@ func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		// 	}
 		// }
 	} else {
-		reqSchemaRef, _ = gen.NewSchemaRefForValue(*new(REQ), nil)
-		rspSchemaRef, _ = openapi3gen.NewSchemaRefForValue(*new(apiResponse[RSP]), nil)
+		reqSchemaRef = newSchemaRefWithDocs(*new(REQ))
+		rspSchemaRef = newSchemaRefWithDocs(*new(apiResponse[RSP]))
 		// if rspSchemaRef.Value != nil && rspSchemaRef.Value.Properties != nil {
 		// 	if dataProperty, exists := rspSchemaRef.Value.Properties["data"]; exists {
 		// 		addSchemaTitle[RSP](dataProperty)
@@ -1025,7 +1024,6 @@ func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 }
 
 func setPatchMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
-	gen := openapi3gen.NewGenerator()
 	typ := reflect.TypeOf(*new(M))
 	reqKey := componentKey(typ, consts.PHASE_PATCH_MANY)
 	rspKey := reqKey
@@ -1033,13 +1031,13 @@ func setPatchMany[M types.Model, REQ types.Request, RSP types.Response](path str
 	var reqSchemaRef *openapi3.SchemaRef
 	var rspSchemaRef *openapi3.SchemaRef
 	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
-		reqSchemaRef, _ = gen.NewSchemaRefForValue(*new(apiBatchRequest[REQ]), nil)
+		reqSchemaRef = newSchemaRefWithDocs(*new(apiBatchRequest[REQ]))
 		// if reqSchemaRef.Value != nil && reqSchemaRef.Value.Properties != nil {
 		// 	if itemsProperty, exists := reqSchemaRef.Value.Properties["items"]; exists && itemsProperty.Value != nil && itemsProperty.Value.Items != nil {
 		// 		addSchemaTitle[M](itemsProperty.Value.Items)
 		// 	}
 		// }
-		rspSchemaRef, _ = gen.NewSchemaRefForValue(*new(apiBatchResponse[RSP]), nil)
+		rspSchemaRef = newSchemaRefWithDocs(*new(apiBatchResponse[RSP]))
 		// if rspSchemaRef.Value != nil && rspSchemaRef.Value.Properties != nil {
 		// 	if dataProperty, exists := rspSchemaRef.Value.Properties["data"]; exists {
 		// 		if dataProperty.Value != nil && dataProperty.Value.Properties != nil {
@@ -1052,8 +1050,8 @@ func setPatchMany[M types.Model, REQ types.Request, RSP types.Response](path str
 		// 	}
 		// }
 	} else {
-		reqSchemaRef, _ = gen.NewSchemaRefForValue(*new(REQ), nil)
-		rspSchemaRef, _ = gen.NewSchemaRefForValue(*new(RSP), nil)
+		reqSchemaRef = newSchemaRefWithDocs(*new(REQ))
+		rspSchemaRef = newSchemaRefWithDocs(*new(RSP))
 		// if rspSchemaRef.Value != nil && rspSchemaRef.Value.Properties != nil {
 		// 	if dataProperty, exists := rspSchemaRef.Value.Properties["data"]; exists {
 		// 		addSchemaTitle[RSP](dataProperty)
@@ -1244,8 +1242,7 @@ func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey
 			doc.Components.Schemas = openapi3.Schemas{}
 		}
 		if _, ok := doc.Components.Schemas[name]; !ok {
-			if schemaRef, err := openapi3gen.NewSchemaRefForValue(*new(M), nil); err == nil {
-				addSchemaFieldDocs[M](schemaRef)
+			if schemaRef := newSchemaRefWithDocs(*new(M)); schemaRef != nil {
 				doc.Components.Schemas[name] = schemaRef
 			}
 		}
@@ -1264,7 +1261,6 @@ func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey
 			doc.Components.RequestBodies = openapi3.RequestBodies{}
 		}
 		if _, ok := doc.Components.RequestBodies[reqKey]; !ok && reqSchemaRef != nil {
-			processAllRequestTypes[REQ](reqSchemaRef)
 			setupExample(reqSchemaRef)
 			setupBatchExample(reqSchemaRef)
 			doc.Components.RequestBodies[reqKey] = &openapi3.RequestBodyRef{
@@ -1291,7 +1287,6 @@ func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey
 			doc.Components.Responses = openapi3.ResponseBodies{}
 		}
 		if _, ok := doc.Components.Responses[rspKey]; !ok && rspSchemaRef != nil {
-			processAllResponseTypes[RSP](rspSchemaRef)
 			doc.Components.Responses[rspKey] = &openapi3.ResponseRef{
 				Value: &openapi3.Response{
 					Description: new(name + " Response"),
@@ -1309,66 +1304,6 @@ func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey
 			// }
 		}
 		docMutex.Unlock()
-	}
-}
-
-// processAllRequestTypes 统一处理所有类型的 Request schema
-func processAllRequestTypes[REQ types.Request](reqSchemaRef *openapi3.SchemaRef) {
-	if reqSchemaRef == nil || reqSchemaRef.Value == nil {
-		return
-	}
-
-	// 如果是普通请求，直接处理
-	if len(reqSchemaRef.Value.Properties) == 0 {
-		addSchemaFieldDocs[REQ](reqSchemaRef)
-		return
-	}
-
-	// 检查是否是批量请求（有 items 字段）
-	if itemsProperty, hasItems := reqSchemaRef.Value.Properties["items"]; hasItems {
-		if itemsProperty.Value != nil && itemsProperty.Value.Items != nil {
-			// 为批量请求的 items 添加注释
-			addSchemaFieldDocs[REQ](itemsProperty.Value.Items)
-		}
-	} else {
-		// 普通请求
-		addSchemaFieldDocs[REQ](reqSchemaRef)
-	}
-}
-
-// processAllResponseTypes 统一处理所有类型的 Response schema
-func processAllResponseTypes[RSP types.Response](rspSchemaRef *openapi3.SchemaRef) {
-	if rspSchemaRef == nil || rspSchemaRef.Value == nil || rspSchemaRef.Value.Properties == nil {
-		return
-	}
-
-	// 处理 data 字段
-	if dataProperty, exists := rspSchemaRef.Value.Properties["data"]; exists && dataProperty.Value != nil {
-		// 检查 data 是什么类型的结构
-
-		// 1. 如果 data 直接是 RSP 类型（普通的 apiResponse[RSP]）
-		if len(dataProperty.Value.Properties) == 0 {
-			// data 是一个简单类型或者没有嵌套属性
-			addSchemaFieldDocs[RSP](dataProperty)
-		} else {
-			// 2. 检查是否是 apiListResponse（有 items 和 total）
-			if itemsProperty, hasItems := dataProperty.Value.Properties["items"]; hasItems {
-				if totalProperty, hasTotal := dataProperty.Value.Properties["total"]; hasTotal && totalProperty != nil {
-					// 这是 apiListResponse 类型
-					if itemsProperty.Value != nil && itemsProperty.Value.Items != nil {
-						addSchemaFieldDocs[RSP](itemsProperty.Value.Items)
-					}
-				} else if summaryProperty, hasSummary := dataProperty.Value.Properties["summary"]; hasSummary && summaryProperty != nil {
-					// 3. 这是 apiBatchResponse 类型（有 items, options, summary）
-					if itemsProperty.Value != nil && itemsProperty.Value.Items != nil {
-						addSchemaFieldDocs[RSP](itemsProperty.Value.Items)
-					}
-				}
-			} else {
-				// 4. 可能是直接的 RSP 类型，但有嵌套属性
-				addSchemaFieldDocs[RSP](dataProperty)
-			}
-		}
 	}
 }
 
@@ -1855,93 +1790,140 @@ func getBaseModelDocs() map[string]string {
 	return baseModelDocsCache
 }
 
-// addSchemaFieldDocs adds field doc comments to schema properties, as both
-// the title and the description so Swagger UI renders the field meaning next
-// to the field name.
-func addSchemaFieldDocs[T any](schemaRef *openapi3.SchemaRef) {
-	if schemaRef == nil || schemaRef.Value == nil || schemaRef.Value.Properties == nil {
+// newSchemaRefWithDocs generates the OpenAPI schema for value and decorates it
+// and every nested schema with the doc comments and enum values registered for
+// the Go types reachable from value's type.
+func newSchemaRefWithDocs(value any) *openapi3.SchemaRef {
+	schemaRef, err := openapi3gen.NewSchemaRefForValue(value, nil)
+	if err != nil {
+		return schemaRef
+	}
+	addSchemaDocsForType(reflect.TypeOf(value), schemaRef, nil)
+	return schemaRef
+}
+
+// addSchemaDocsForType decorates schemaRef with the doc comments and enum
+// values registered for typ, adding them as both the title and the description
+// so Swagger UI renders the field meaning next to the field name. It walks the
+// generated schema tree and the Go type tree in parallel, so nested request and
+// response structs are decorated at every depth. visiting holds the struct
+// types on the current descent path so self-referential types terminate;
+// callers pass nil.
+func addSchemaDocsForType(typ reflect.Type, schemaRef *openapi3.SchemaRef, visiting map[reflect.Type]bool) {
+	if typ == nil || schemaRef == nil || schemaRef.Value == nil {
 		return
 	}
-
-	// Get model field descriptions
-	modelInstance := *new(T)
-	modelDocs := parseModelDocs(modelInstance)
-
-	// Get field descriptions of model.Base (using cache)
-	baseDocs := getBaseModelDocs()
-
-	// Create a mapping from JSON property names to field descriptions
-	propertyDescriptions := make(map[string]string)
-	fieldByJSON := make(map[string]reflect.StructField)
-
-	// Process model fields
-	typ := reflect.TypeOf(*new(T))
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
+
+	switch typ.Kind() {
+	case reflect.Slice, reflect.Array:
+		addSchemaDocsForType(typ.Elem(), schemaRef.Value.Items, visiting)
+		return
+	case reflect.Struct:
+	default:
+		return
+	}
+	if typ == timeType || len(schemaRef.Value.Properties) == 0 {
+		return
+	}
+	if visiting[typ] {
+		return
+	}
+	if visiting == nil {
+		visiting = make(map[reflect.Type]bool)
+	}
+	visiting[typ] = true
+	defer delete(visiting, typ)
+
+	fields := make(map[string]schemaDocField)
+	collectSchemaDocFields(typ, fields, make(map[reflect.Type]bool))
+
+	for propName, propRef := range schemaRef.Value.Properties {
+		if propRef == nil || propRef.Value == nil {
+			continue
+		}
+		docField, hasField := fields[propName]
+		if !hasField {
+			continue
+		}
+
+		description := docField.docs[docField.field.Name]
+
+		// Unwrap gorm datatypes.JSONType[T] so both the schema and the type
+		// walk below continue with the wrapped data type.
+		fieldType := docField.field.Type
+		if dataType, isJSONType := datatypesJSONDataType(fieldType); isJSONType {
+			if unwrapped := convertDatatypesJSONTypeSchema(propRef, docField.field, description); unwrapped != nil {
+				propRef = unwrapped
+				schemaRef.Value.Properties[propName] = propRef
+			}
+			fieldType = dataType
+		}
+
+		enumDoc, enumOnItems, hasEnum := fieldEnumDoc(fieldType)
+		if (description != "" || hasEnum) && propRef.Value != nil {
+			// Copy the schema so shared schema instances keep their own docs.
+			newSchema := *propRef.Value
+			newSchema.Title = description
+			newSchema.Description = description
+			if hasEnum {
+				applyEnum(&newSchema, enumOnItems, enumDoc)
+				newSchema.Description = enumDescription(description, enumDoc)
+			}
+			propRef = &openapi3.SchemaRef{Value: &newSchema}
+			schemaRef.Value.Properties[propName] = propRef
+		}
+
+		addSchemaDocsForType(fieldType, propRef, visiting)
+	}
+}
+
+// schemaDocField pairs one JSON-visible struct field with the doc comments of
+// the struct that declares it.
+type schemaDocField struct {
+	field reflect.StructField
+	docs  map[string]string
+}
+
+// collectSchemaDocFields maps every JSON property name of typ to its declaring
+// struct field and that struct's doc comments, descending into anonymous
+// embedded structs the same way encoding/json promotes fields. Fields already
+// collected win over deeper promoted fields, matching encoding/json
+// shallow-first precedence. visited stops self-embedding chains.
+func collectSchemaDocFields(typ reflect.Type, fields map[string]schemaDocField, visited map[reflect.Type]bool) {
+	if visited[typ] {
+		return
+	}
+	visited[typ] = true
+
+	docs := parseModelDocs(reflect.New(typ).Interface())
+
+	var embedded []reflect.Type
 	for field := range typ.Fields() {
 		jsonTag := getFieldTag(field, consts.TAG_JSON)
-		if len(jsonTag) == 0 {
-			continue
-		}
-		fieldByJSON[jsonTag] = field
-
-		// Get field descriptions from model documentation
-		if description, exists := modelDocs[field.Name]; exists && description != "" {
-			propertyDescriptions[jsonTag] = description
-			// Debug: log the mapping
-			// fmt.Printf("DEBUG: Field %s -> JSON %s -> Description: %s\n", field.Name, jsonTag, description)
-		}
-	}
-
-	// Process Base model fields
-	baseType := reflect.TypeFor[model.Base]()
-	for field := range baseType.Fields() {
-		jsonTag := getFieldTag(field, consts.TAG_JSON)
-		if len(jsonTag) == 0 {
-			continue
-		}
-
-		// Get field descriptions from Base model documentation
-		if description, exists := baseDocs[field.Name]; exists && description != "" {
-			propertyDescriptions[jsonTag] = description
-		}
-	}
-
-	// Add descriptions and enum values to schema properties
-	for propName, propRef := range schemaRef.Value.Properties {
-		if propRef.Value == nil {
-			continue
-		}
-
-		description := propertyDescriptions[propName]
-		field, hasField := fieldByJSON[propName]
-
-		if hasField && description != "" {
-			if updatedSchema := convertDatatypesJSONTypeSchema(propRef, field, description); updatedSchema != nil {
-				propRef = updatedSchema
+		if field.Anonymous && jsonTag == "" {
+			embeddedType := field.Type
+			for embeddedType.Kind() == reflect.Pointer {
+				embeddedType = embeddedType.Elem()
 			}
-		}
-
-		var enumDoc apidoc.EnumDoc
-		enumOnItems := false
-		hasEnum := false
-		if hasField {
-			enumDoc, enumOnItems, hasEnum = fieldEnumDoc(field.Type)
-		}
-		if (description == "" && !hasEnum) || propRef.Value == nil {
+			if embeddedType.Kind() == reflect.Struct {
+				embedded = append(embedded, embeddedType)
+			}
 			continue
 		}
-
-		// Create a copy of the schema to avoid shared reference issues
-		newSchema := *propRef.Value
-		newSchema.Title = description
-		newSchema.Description = description
-		if hasEnum {
-			applyEnum(&newSchema, enumOnItems, enumDoc)
-			newSchema.Description = enumDescription(description, enumDoc)
+		if jsonTag == "" {
+			continue
 		}
-		schemaRef.Value.Properties[propName] = &openapi3.SchemaRef{Value: &newSchema}
+		if _, exists := fields[jsonTag]; exists {
+			continue
+		}
+		fields[jsonTag] = schemaDocField{field: field, docs: docs}
+	}
+
+	for _, embeddedType := range embedded {
+		collectSchemaDocFields(embeddedType, fields, visited)
 	}
 }
 
@@ -2013,29 +1995,31 @@ func enumDescription(base string, doc apidoc.EnumDoc) string {
 	return base + "\n\n" + list
 }
 
+// datatypesJSONDataType returns the wrapped data type of a gorm
+// datatypes.JSONType[T] field type, unwrapping pointers first.
+func datatypesJSONDataType(typ reflect.Type) (reflect.Type, bool) {
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	if typ.PkgPath() != "gorm.io/datatypes" || (typ.Name() != "JSONType" && !strings.HasPrefix(typ.Name(), "JSONType[")) {
+		return nil, false
+	}
+	for f := range typ.Fields() {
+		if f.Name == "Data" || f.Name == "data" || f.IsExported() {
+			return f.Type, true
+		}
+	}
+	return nil, false
+}
+
 // convertDatatypesJSONTypeSchema unwraps gorm datatypes.JSONType[T] so the
 // generated schema uses the underlying T definition instead of the wrapper.
 func convertDatatypesJSONTypeSchema(propRef *openapi3.SchemaRef, field reflect.StructField, description string) *openapi3.SchemaRef {
 	if propRef == nil {
 		return nil
 	}
-	typ := field.Type
-	for typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
-	}
-	if typ.PkgPath() != "gorm.io/datatypes" || (typ.Name() != "JSONType" && !strings.HasPrefix(typ.Name(), "JSONType[")) {
-		return propRef
-	}
-
-	var dataType reflect.Type
-	for f := range typ.Fields() {
-		if f.Name == "Data" || f.Name == "data" || f.IsExported() {
-			dataType = f.Type
-			break
-		}
-	}
-
-	if dataType == nil {
+	dataType, isJSONType := datatypesJSONDataType(field.Type)
+	if !isJSONType {
 		return propRef
 	}
 
