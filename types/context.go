@@ -39,6 +39,11 @@ type ServiceContext struct {
 // You can pass a custom context.Context to propagate span tracing.
 // If ctx is nil, the request context is used when available.
 //
+// NewServiceContext always returns a non-nil *ServiceContext, even when
+// both c and ctx are nil. ServiceContext methods are also nil-receiver
+// safe and return zero values on a nil receiver, so callers never need
+// defensive nil checks around the returned context.
+//
 //nolint:revive // ServiceContext is constructed from the Gin request first.
 func NewServiceContext(c *gin.Context, ctx context.Context, phase consts.Phase) *ServiceContext {
 	if c == nil {

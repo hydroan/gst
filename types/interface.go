@@ -238,6 +238,19 @@ type (
 //
 // Custom actions should use action-specific REQ/RSP types instead of reusing
 // types from other endpoints, even when the fields are identical.
+//
+// Nil-safety contract: when invoked by the generated controllers, ctx is
+// never nil and req is never a nil pointer — the controller constructs a
+// fresh *ServiceContext per call and instantiates REQ via reflection before
+// binding, so implementations do not need defensive nil checks on ctx or req.
+//
+// Non-nil does not mean populated: List/Get never bind a request body, and
+// Create/Update tolerate an empty body, so req may point to a zero-value
+// struct. Validate required business fields instead of checking for nil.
+//
+// The contract only covers framework-invoked calls. Code that calls a
+// service method directly (tests, jobs, or code bypassing the controller
+// layer) must supply non-nil arguments itself.
 type Service[M Model, REQ Request, RSP Response] interface {
 	Create(*ServiceContext, REQ) (RSP, error)
 	Delete(*ServiceContext, REQ) (RSP, error)
