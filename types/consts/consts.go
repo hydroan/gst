@@ -3,6 +3,7 @@ package consts
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/stoewer/go-strcase"
@@ -383,6 +384,25 @@ type HTTPVerb string
 
 func (v HTTPVerb) String() string {
 	return strings.ReplaceAll(string(v), "_", " ")
+}
+
+// HTTPMethod returns the HTTP request method of the route registered for the
+// verb, eg. Create, CreateMany and Import all map to "POST". Unknown verbs
+// return an empty string.
+func (v HTTPVerb) HTTPMethod() string {
+	switch v {
+	case Create, CreateMany, Import:
+		return http.MethodPost
+	case Delete, DeleteMany:
+		return http.MethodDelete
+	case Update, UpdateMany:
+		return http.MethodPut
+	case Patch, PatchMany:
+		return http.MethodPatch
+	case List, Get, Export:
+		return http.MethodGet
+	}
+	return ""
 }
 
 const (

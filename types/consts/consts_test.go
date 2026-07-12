@@ -1,6 +1,7 @@
 package consts_test
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/hydroan/gst/types/consts"
@@ -259,6 +260,41 @@ func TestPhase_Filename(t *testing.T) {
 			got := tt.phase.Filename()
 			if got != tt.want {
 				t.Errorf("Filename() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHTTPVerb_HTTPMethod(t *testing.T) {
+	tests := []struct {
+		name string
+		verb consts.HTTPVerb
+		want string
+	}{
+		{"create", consts.Create, http.MethodPost},
+		{"delete", consts.Delete, http.MethodDelete},
+		{"update", consts.Update, http.MethodPut},
+		{"patch", consts.Patch, http.MethodPatch},
+		{"list", consts.List, http.MethodGet},
+		{"get", consts.Get, http.MethodGet},
+
+		{"create_many", consts.CreateMany, http.MethodPost},
+		{"delete_many", consts.DeleteMany, http.MethodDelete},
+		{"update_many", consts.UpdateMany, http.MethodPut},
+		{"patch_many", consts.PatchMany, http.MethodPatch},
+
+		{"import", consts.Import, http.MethodPost},
+		{"export", consts.Export, http.MethodGet},
+
+		// Unknown verb → empty method
+		{"unknown", consts.HTTPVerb(""), ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.verb.HTTPMethod()
+			if got != tt.want {
+				t.Errorf("HTTPMethod() = %v, want %v", got, tt.want)
 			}
 		})
 	}
