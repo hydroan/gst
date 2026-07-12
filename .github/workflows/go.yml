@@ -92,6 +92,14 @@ jobs:
           }
           EOF
 
+      # Point the demo project at the current checkout so the generated code
+      # compiles against this branch's gst source instead of the released module
+      - name: Use local gst source in demo project
+        run: |
+          cd examples/demo-ci
+          go mod edit -replace github.com/hydroan/gst=../..
+          go mod tidy
+
       # Run gg gen inside demo project
       - name: Run gg gen
         run: |
