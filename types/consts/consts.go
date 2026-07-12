@@ -161,8 +161,10 @@ func (p Phase) Filename() string {
 }
 
 // RoleName returns the associated role name for the Phase in human-readable form.
-// It maps CRUD and ManyCRUD phases (including "_before" and "_after") to specific role names.
-// Non-CRUD phases return an empty string.
+// It maps CRUD and ManyCRUD phases (including "_before" and "_after") to specific
+// role names. Hook phases map to the role that hosts them: filter and filter_raw
+// hooks are generated as methods on the Lister, so both map to "Lister".
+// Unrecognized phases return an empty string.
 //
 // Examples:
 //
@@ -170,7 +172,7 @@ func (p Phase) Filename() string {
 //	PHASE_CREATE_BEFORE      -> "Creator"
 //	PHASE_UPDATE_MANY        -> "ManyUpdater"
 //	PHASE_UPDATE_MANY_AFTER  -> "ManyUpdater"
-//	PHASE_FILTER
+//	PHASE_FILTER             -> "Lister"
 func (p Phase) RoleName() string {
 	s := string(p)
 

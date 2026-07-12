@@ -83,8 +83,12 @@ func TestPhase_RoleName(t *testing.T) {
 		{"many_patch_before", consts.PHASE_PATCH_MANY_BEFORE, "ManyPatcher"},
 		{"many_patch_after", consts.PHASE_PATCH_MANY_AFTER, "ManyPatcher"},
 
+		// Filter hooks are hosted on the Lister service struct, so they map
+		// to the "Lister" role, mirroring list_before/list_after above.
+		{"filter", consts.PHASE_FILTER, "Lister"},
+		{"filter_raw", consts.PHASE_FILTER_RAW, "Lister"},
+
 		// 非 CRUD 操作
-		{"filter", consts.PHASE_FILTER, ""},
 		{"import", consts.PHASE_IMPORT, "Importer"},
 		{"export", consts.PHASE_EXPORT, "Exporter"},
 	}
