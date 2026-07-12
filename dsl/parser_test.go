@@ -643,7 +643,7 @@ type Attachment struct {
 }
 
 func (Attachment) Design() {
-	Migrate(true)
+	Migrate()
 	Route("/attachment/upload", func() {
 		Create(func() {
 			Enabled(true)

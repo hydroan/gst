@@ -12,7 +12,7 @@ type User8 struct {
 }
 
 func (*User8) Design() {
-	Migrate(true)
+	Migrate()
 }
 
 type User9 struct {
@@ -28,5 +28,5 @@ type ReceiveRobot struct {
 }
 
 func (*ReceiveRobot) Design() {
-	Migrate(true)
+	Migrate()
 }

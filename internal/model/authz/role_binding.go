@@ -30,7 +30,7 @@ func (r *RoleBinding) tenant() string {
 }
 
 func (RoleBinding) Design() {
-	dsl.Migrate(true)
+	dsl.Migrate()
 	dsl.Route("authz/role-bindings", func() {
 		dsl.Create(func() {})
 		dsl.Delete(func() {})

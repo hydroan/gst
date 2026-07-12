@@ -27,7 +27,7 @@ type Conversation struct {
 }
 
 func (Conversation) Design() {
-	Migrate(true)
+	Migrate()
 	Endpoint("conversations")
 	Param("conv")
 

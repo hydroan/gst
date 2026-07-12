@@ -43,7 +43,7 @@ func (File) Purge() bool          { return true }
 func (File) Design() {
 	Endpoint("files")
 	Param("file")
-	Migrate(true)
+	Migrate()
 
 	Route("/config/files", func() {
 		Create(func() {

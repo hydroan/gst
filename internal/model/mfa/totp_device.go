@@ -25,5 +25,5 @@ type TOTPDevice struct {
 }
 
 func (TOTPDevice) Design() {
-	Migrate(true)
+	Migrate()
 }

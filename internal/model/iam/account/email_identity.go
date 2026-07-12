@@ -19,7 +19,7 @@ type EmailIdentity struct {
 }
 
 func (EmailIdentity) Design() {
-	Migrate(true)
+	Migrate()
 }
 
 func (EmailIdentity) Purge() bool { return true }

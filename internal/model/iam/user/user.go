@@ -56,7 +56,7 @@ type UserStatusPatchRsp struct {
 }
 
 func (User) Design() {
-	Migrate(true)
+	Migrate()
 
 	Route("/iam/admin/users", func() {
 		List(func() {

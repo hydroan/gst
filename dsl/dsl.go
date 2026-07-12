@@ -23,8 +23,8 @@
 //		// Add path parameter for dynamic routing
 //		Param("user")  // Creates routes like /api/users/:user
 //
-//		// Enable database migration (default: false)
-//		Migrate(true)
+//		// Enable database migration (default: disabled)
+//		Migrate()
 //
 //		// Define alternative routes for different access patterns
 //		Route("public/users", func() {
@@ -194,10 +194,10 @@ func Param(string) {}
 //   - /api/config/apps and /api/config/apps/:app (additional config route)
 func Route(string, func()) {}
 
-// Migrate controls whether database migration should be performed for this model.
-// When true, the model's table structure will be created/updated in the database.
-// Default: false
-func Migrate(bool) {}
+// Migrate marks the model as a database model that requires schema migration.
+// When declared, the model's table structure will be created/updated in the database.
+// Migration is disabled by default; declaring Migrate() enables it.
+func Migrate() {}
 
 // Service marks the current action as requiring custom service code.
 //

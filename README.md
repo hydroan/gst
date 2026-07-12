@@ -85,7 +85,7 @@ git init
 
 ### 数据库资源
 
-普通资源使用 `model.Base`。如果这个资源需要建表或迁移，声明 `Migrate(true)`。
+普通资源使用 `model.Base`。如果这个资源需要建表或迁移，声明 `Migrate()`。
 
 ```go
 package model
@@ -104,7 +104,7 @@ type Conversation struct {
 }
 
 func (Conversation) Design() {
-	Migrate(true)
+	Migrate()
 	Endpoint("conversations")
 	Param("conv")
 
@@ -297,7 +297,7 @@ gg config defaults server --format yaml
 gg config convert config.ini config.yaml
 ```
 
-模型声明 `Migrate(true)` 后，字段变化先预览迁移计划：
+模型声明 `Migrate()` 后，字段变化先预览迁移计划：
 
 ```bash
 gg migrate --dry-run
