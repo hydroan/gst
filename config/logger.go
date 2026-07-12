@@ -8,6 +8,7 @@ const (
 	LOGGER_LEVEL                   = "LOGGER_LEVEL"                   //nolint:staticcheck
 	LOGGER_FORMAT                  = "LOGGER_FORMAT"                  //nolint:staticcheck
 	LOGGER_ENCODER                 = "LOGGER_ENCODER"                 //nolint:staticcheck
+	LOGGER_ERROR_STACK_DISABLED    = "LOGGER_ERROR_STACK_DISABLED"    //nolint:staticcheck
 	LOGGER_MAX_AGE                 = "LOGGER_MAX_AGE"                 //nolint:staticcheck
 	LOGGER_MAX_SIZE                = "LOGGER_MAX_SIZE"                //nolint:staticcheck
 	LOGGER_MAX_BACKUPS             = "LOGGER_MAX_BACKUPS"             //nolint:staticcheck
@@ -52,6 +53,14 @@ type Logger struct {
 
 	// Encoder is the same as LogFormat.
 	Encoder string `json:"encoder" ini:"encoder" yaml:"encoder" mapstructure:"encoder"`
+
+	// ErrorStackDisabled disables attaching the error_stack field to
+	// error-level logs when a logged error carries a stack trace embedded at
+	// its creation point. Stack traces are attached by default; set this to
+	// true in environments where the extra payload is unwanted, such as local
+	// development.
+	// Default: false
+	ErrorStackDisabled bool `json:"error_stack_disabled" ini:"error_stack_disabled" yaml:"error_stack_disabled" mapstructure:"error_stack_disabled"`
 
 	// MaxAge is the maximum number of days to retain old log files based on the
 	// timestamp encoded in their filename.
@@ -98,6 +107,7 @@ func (*Logger) setDefault() {
 	cv.SetDefault("logger.level", "info")
 	cv.SetDefault("logger.format", "json")
 	cv.SetDefault("logger.encoder", "json")
+	cv.SetDefault("logger.error_stack_disabled", false)
 	cv.SetDefault("logger.max_age", 30)
 	cv.SetDefault("logger.max_size", 100)
 	cv.SetDefault("logger.max_backups", 1)

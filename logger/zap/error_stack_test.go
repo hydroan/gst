@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/config"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -46,6 +47,24 @@ func TestErrorSkipsErrorStackFieldWhenErrorHasNoStackTrace(t *testing.T) {
 	entries := logs.All()
 	require.Len(t, entries, 1)
 	require.Contains(t, entries[0].Message, "plain failure")
+
+	for _, field := range entries[0].Context {
+		require.NotEqual(t, errorStackKey, field.Key)
+	}
+}
+
+func TestErrorSkipsErrorStackFieldWhenDisabledByConfig(t *testing.T) {
+	old := config.App.Logger.ErrorStackDisabled
+	config.App.Logger.ErrorStackDisabled = true
+	t.Cleanup(func() { config.App.Logger.ErrorStackDisabled = old })
+
+	logger, logs := newObservedLogger()
+
+	logger.Error(newStackTracedError())
+
+	entries := logs.All()
+	require.Len(t, entries, 1)
+	require.Contains(t, entries[0].Message, "stack traced failure")
 
 	for _, field := range entries[0].Context {
 		require.NotEqual(t, errorStackKey, field.Key)

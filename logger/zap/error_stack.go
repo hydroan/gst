@@ -1,6 +1,7 @@
 package zap
 
 import (
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/errorstack"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -13,10 +14,11 @@ const errorStackKey = "error_stack"
 // withErrorStack returns the underlying zap logger enriched with the
 // error_stack field when args contain an error carrying an embedded stack
 // trace. The first such error wins. It returns the logger unchanged when
-// the level is disabled or no error carries a stack trace, so non-error
-// paths pay nothing.
+// the level is disabled, the error_stack field is disabled via
+// logger.error_stack_disabled, or no error carries a stack trace, so
+// non-error paths pay nothing.
 func (l *Logger) withErrorStack(level zapcore.Level, args []any) *zap.Logger {
-	if !l.zlog.Core().Enabled(level) {
+	if !l.zlog.Core().Enabled(level) || config.App.Logger.ErrorStackDisabled {
 		return l.zlog
 	}
 	for _, arg := range args {
