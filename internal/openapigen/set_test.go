@@ -980,7 +980,7 @@ type summaryFirstLineModel struct {
 	Name string `json:"name"`
 }
 
-func TestSummaryPrefersStructCommentFirstLine(t *testing.T) {
+func TestSummaryCombinesVerbAndStructCommentFirstLine(t *testing.T) {
 	types := map[string]reflect.Type{
 		"value":             reflect.TypeFor[summaryFirstLineModel](),
 		"pointer":           reflect.TypeFor[*summaryFirstLineModel](),
@@ -990,11 +990,43 @@ func TestSummaryPrefersStructCommentFirstLine(t *testing.T) {
 
 	for name, typ := range types {
 		t.Run(name, func(t *testing.T) {
-			got := summary("/api/play/customizations", consts.Patch, typ)
-			if got != "The human readable summary line." {
-				t.Fatalf("summary() = %q, want the first comment line", got)
+			got := summary("/api/play/customizations", consts.Patch, typ, false)
+			if got != "Patch The human readable summary line" {
+				t.Fatalf("summary() = %q, want the verb plus the first comment line", got)
 			}
 		})
+	}
+}
+
+func TestSummaryUsesTrailingActionSegmentForCustomTypes(t *testing.T) {
+	typ := reflect.TypeFor[*summaryFirstLineModel]()
+	got := summary("/api/users/{id}/disable", consts.Create, typ, true)
+	if got != "Disable The human readable summary line" {
+		t.Fatalf("summary() = %q, want the action segment plus the first comment line", got)
+	}
+}
+
+func TestSummaryKeepsVerbForDefaultCRUDNestedCollection(t *testing.T) {
+	typ := reflect.TypeFor[*summaryFirstLineModel]()
+	got := summary("/api/tenants/{tenant}/users", consts.Create, typ, false)
+	if got != "Create The human readable summary line" {
+		t.Fatalf("summary() = %q, want the verb for a default CRUD nested collection", got)
+	}
+}
+
+func TestSummaryAndDescriptionPreferRegisteredOperationDoc(t *testing.T) {
+	apidoc.RegisterOperation("POST", "/api/override-users/:id/disable", apidoc.OperationDoc{
+		Summary:     "The registered summary",
+		Description: "The registered description.",
+	})
+
+	typ := reflect.TypeFor[*summaryFirstLineModel]()
+	path := "/api/override-users/{id}/disable"
+	if got := summary(path, consts.Create, typ, true); got != "The registered summary" {
+		t.Fatalf("summary() = %q, want the registered override", got)
+	}
+	if got := description(path, consts.Create, typ, true); got != "The registered description." {
+		t.Fatalf("description() = %q, want the registered override", got)
 	}
 }
 
@@ -1009,7 +1041,7 @@ func TestDescriptionRemovesStructNameAndKeepsRemainingLines(t *testing.T) {
 
 	for name, typ := range types {
 		t.Run(name, func(t *testing.T) {
-			got := description(consts.Patch, typ)
+			got := description("/api/play/customizations", consts.Patch, typ, false)
 			if got != want {
 				t.Fatalf("description() = %q, want API-facing full struct comment", got)
 			}
@@ -1017,11 +1049,11 @@ func TestDescriptionRemovesStructNameAndKeepsRemainingLines(t *testing.T) {
 	}
 }
 
-func TestSummaryFallsBackToPathToken(t *testing.T) {
+func TestSummaryFallsBackToPathSegments(t *testing.T) {
 	typ := reflect.TypeOf(&struct{ Name string }{})
-	got := summary("/api/play/customizations/{id}", consts.Patch, typ)
-	if got != "customizations_patch" {
-		t.Fatalf("summary() = %q, want the mechanical fallback", got)
+	got := summary("/api/play/customizations/{id}", consts.Patch, typ, false)
+	if got != "Patch play customizations" {
+		t.Fatalf("summary() = %q, want the path segment fallback", got)
 	}
 }
 

@@ -10,7 +10,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/gertd/go-pluralize"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3gen"
 	"github.com/hydroan/gst/apidoc"
@@ -19,8 +18,6 @@ import (
 	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
 )
-
-var pluralizeCli = pluralize.NewClient()
 
 var idFormat = "" // eg: "uuid"
 
@@ -136,8 +133,8 @@ func setCreate[M types.Model, REQ types.Request, RSP types.Response](path string
 
 	pathItem.Post = &openapi3.Operation{
 		OperationID: operationID(path, consts.Create),
-		Summary:     summary(path, consts.Create, typ),
-		Description: description(consts.Create, typ),
+		Summary:     summary(path, consts.Create, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
+		Description: description(path, consts.Create, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 		Tags:        tags(path, consts.Create, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
@@ -215,8 +212,8 @@ func setDelete[M types.Model, REQ types.Request, RSP types.Response](path string
 
 	pathItem.Delete = &openapi3.Operation{
 		OperationID: operationID(path, consts.Delete),
-		Summary:     summary(path, consts.Delete, typ),
-		Description: description(consts.Delete, typ),
+		Summary:     summary(path, consts.Delete, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
+		Description: description(path, consts.Delete, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 		Tags:        tags(path, consts.Delete, typ),
 		Parameters:  parseParametersFromPath(path),
 		Responses:   newResponses[RSP](200, rspKey),
@@ -281,8 +278,8 @@ func setUpdate[M types.Model, REQ types.Request, RSP types.Response](path string
 
 	pathItem.Put = &openapi3.Operation{
 		OperationID: operationID(path, consts.Update),
-		Summary:     summary(path, consts.Update, typ),
-		Description: description(consts.Update, typ),
+		Summary:     summary(path, consts.Update, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
+		Description: description(path, consts.Update, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 		Tags:        tags(path, consts.Update, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
@@ -362,8 +359,8 @@ func setPatch[M types.Model, REQ types.Request, RSP types.Response](path string,
 
 	pathItem.Patch = &openapi3.Operation{
 		OperationID: operationID(path, consts.Patch),
-		Summary:     summary(path, consts.Patch, typ),
-		Description: description(consts.Patch, typ),
+		Summary:     summary(path, consts.Patch, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
+		Description: description(path, consts.Patch, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 		Tags:        tags(path, consts.Patch, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
@@ -460,8 +457,8 @@ func setList[M types.Model, REQ types.Request, RSP types.Response](path string, 
 
 	pathItem.Get = &openapi3.Operation{
 		OperationID: operationID(path, consts.List),
-		Summary:     summary(path, consts.List, typ),
-		Description: description(consts.List, typ),
+		Summary:     summary(path, consts.List, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
+		Description: description(path, consts.List, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 		Tags:        tags(path, consts.List, typ),
 		Parameters:  parseParametersFromPath(path),
 		Responses:   newResponses[RSP](200, rspKey),
@@ -576,8 +573,8 @@ func setGet[M types.Model, REQ types.Request, RSP types.Response](path string, p
 
 	pathItem.Get = &openapi3.Operation{
 		OperationID: operationID(path, consts.Get),
-		Summary:     summary(path, consts.Get, typ),
-		Description: description(consts.Get, typ),
+		Summary:     summary(path, consts.Get, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
+		Description: description(path, consts.Get, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 		Tags:        tags(path, consts.Get, typ),
 		Parameters:  parseParametersFromPath(path),
 		Responses:   newResponses[RSP](200, rspKey),
@@ -710,8 +707,8 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 
 	pathItem.Post = &openapi3.Operation{
 		OperationID: operationID(path, consts.CreateMany),
-		Summary:     summary(path, consts.CreateMany, typ),
-		Description: description(consts.CreateMany, typ),
+		Summary:     summary(path, consts.CreateMany, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
+		Description: description(path, consts.CreateMany, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 		Tags:        tags(path, consts.CreateMany, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
@@ -841,8 +838,8 @@ func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path st
 
 	pathItem.Delete = &openapi3.Operation{
 		OperationID: operationID(path, consts.DeleteMany),
-		Summary:     summary(path, consts.DeleteMany, typ),
-		Description: description(consts.DeleteMany, typ),
+		Summary:     summary(path, consts.DeleteMany, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
+		Description: description(path, consts.DeleteMany, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 		Tags:        tags(path, consts.DeleteMany, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
@@ -948,8 +945,8 @@ func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 
 	pathItem.Put = &openapi3.Operation{
 		OperationID: operationID(path, consts.UpdateMany),
-		Summary:     summary(path, consts.UpdateMany, typ),
-		Description: description(consts.UpdateMany, typ),
+		Summary:     summary(path, consts.UpdateMany, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
+		Description: description(path, consts.UpdateMany, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 		Tags:        tags(path, consts.UpdateMany, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
@@ -1071,8 +1068,8 @@ func setPatchMany[M types.Model, REQ types.Request, RSP types.Response](path str
 
 	pathItem.Patch = &openapi3.Operation{
 		OperationID: operationID(path, consts.PatchMany),
-		Summary:     summary(path, consts.PatchMany, typ),
-		Description: description(consts.PatchMany, typ),
+		Summary:     summary(path, consts.PatchMany, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
+		Description: description(path, consts.PatchMany, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 		Tags:        tags(path, consts.PatchMany, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
@@ -2297,65 +2294,51 @@ func resourceSegments(path string) []string {
 	return filtered
 }
 
-func summary(path string, op consts.HTTPVerb, typ reflect.Type) string {
-	// Prefer the first line of the model doc comment: it reads much better
-	// in the operation list than a mechanical token.
-	if comment := openAPIStructComment(typ); comment != "" {
-		return strings.TrimSpace(strings.SplitN(comment, "\n", 2)[0])
+// operationDocInput assembles the apidoc.Operation describing one route
+// operation for the summary/description generators. customTypes reports
+// whether the operation declares its own request/response types instead of
+// reusing the model (see apidoc.Operation.CustomTypes).
+func operationDocInput(path string, verb consts.HTTPVerb, typ reflect.Type, customTypes bool) apidoc.Operation {
+	elem := typ
+	for elem.Kind() == reflect.Pointer || elem.Kind() == reflect.Slice {
+		elem = elem.Elem()
 	}
-
-	// Fallback: flatten the resource path, keeping the historical shape that
-	// drops the leading module segment.
-	items := resourceSegments(strings.TrimSuffix(path, `/batch`))
-	if len(items) > 1 {
-		items = items[1:]
+	return apidoc.Operation{
+		Method:       verb.HTTPMethod(),
+		Path:         path,
+		Verb:         verb,
+		CustomTypes:  customTypes,
+		ModelName:    elem.Name(),
+		ModelComment: openAPIStructComment(typ),
 	}
-	return strings.Join(items, "_") + "_" + string(op)
-
-	// // Try to get struct comment first
-	// var modelInstance any
-	// var elementType reflect.Type
-	// if typ.Kind() == reflect.Slice {
-	// 	// For slice types, create an instance of the element type
-	// 	elementType = typ.Elem()
-	// 	modelInstance = reflect.New(elementType).Interface()
-	// } else {
-	// 	// For other types, create an instance directly
-	// 	elementType = typ
-	// 	modelInstance = reflect.New(typ).Interface()
-	// }
-	//
-	// structComment := parseStructComment(modelInstance)
-	// if structComment != "" {
-	// 	return structComment
-	// }
-	//
-	// // Dereference pointer types to get the actual struct type name
-	// actualType := elementType
-	// for actualType.Kind() == reflect.Pointer {
-	// 	actualType = actualType.Elem()
-	// }
-	//
-	// // Fallback to original logic if no struct comment found
-	// switch op {
-	// case consts.List, consts.CreateMany, consts.DeleteMany, consts.UpdateMany, consts.PatchMany:
-	// 	return fmt.Sprintf("%s %s", op, pluralizeCli.Plural(actualType.Name()))
-	// }
-	// return fmt.Sprintf("%s %s", op, actualType.Name())
 }
 
-func description(op consts.HTTPVerb, typ reflect.Type) string {
-	structComment := openAPIStructComment(typ)
-	if structComment != "" {
-		return structComment
+// summary returns the operation summary: an explicitly registered
+// apidoc.OperationDoc wins, otherwise the (replaceable) apidoc.GenerateSummary
+// builds it from the verb, path and model doc comment.
+func summary(path string, verb consts.HTTPVerb, typ reflect.Type, customTypes bool) string {
+	op := operationDocInput(path, verb, typ, customTypes)
+	if doc, ok := apidoc.LookupOperation(op.Method, op.Path); ok && doc.Summary != "" {
+		return doc.Summary
 	}
+	if generate := apidoc.GenerateSummary; generate != nil {
+		return generate(op)
+	}
+	return apidoc.DefaultSummary(op)
+}
 
-	// Fallback to original logic if no struct comment found
-	switch op {
-	case consts.List, consts.CreateMany, consts.DeleteMany, consts.UpdateMany, consts.PatchMany:
-		return fmt.Sprintf("%s %s", op, pluralizeCli.Plural(typ.Elem().Name()))
+// description returns the operation description: an explicitly registered
+// apidoc.OperationDoc wins, otherwise the (replaceable)
+// apidoc.GenerateDescription builds it from the model doc comment.
+func description(path string, verb consts.HTTPVerb, typ reflect.Type, customTypes bool) string {
+	op := operationDocInput(path, verb, typ, customTypes)
+	if doc, ok := apidoc.LookupOperation(op.Method, op.Path); ok && doc.Description != "" {
+		return doc.Description
 	}
-	return fmt.Sprintf("%s %s", op, typ.Elem().Name())
+	if generate := apidoc.GenerateDescription; generate != nil {
+		return generate(op)
+	}
+	return apidoc.DefaultDescription(op)
 }
 
 func openAPIStructComment(typ reflect.Type) string {
