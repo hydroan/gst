@@ -131,6 +131,11 @@ func (Conversation) Design() {
 `Param("conv")` 控制单资源路由中的参数名。未声明 `Param(...)` 时，单资源路由默认
 使用框架默认参数。
 
+需要自增整数主键的资源改用 `model.AutoBase`，字段和默认 hook 与 `model.Base`
+一致，区别是 ID 由数据库在插入时分配（框架不会生成）。注意：这类模型通过
+`model.Register` 注入 seed 记录时必须显式指定 ID 或依赖唯一索引，否则重复启动会
+重复插入；`Base` 字符串 ID 的逗号分隔多 ID 查询写法对整数 ID 不适用。
+
 ### 自定义动作
 
 不直接表示数据库表的接口优先使用 `model.Empty`，并为当前接口单独定义自己的
@@ -414,6 +419,12 @@ gen:
 
 需要数据库表、默认 CRUD、迁移和模型生命周期 hook 时使用 `model.Base`。只表示一个
 动作、工具接口、登录跳转、批处理等非数据库接口时使用 `model.Empty`。
+
+### 什么时候用 model.AutoBase？
+
+数据库资源默认用 `model.Base`（UUIDv7 字符串主键）。写入量大、增长快、且不需要
+对外暴露不可猜测 ID 的表（例如流水、明细类），可以改用 `model.AutoBase` 获得更窄
+的自增整数主键和更小的二级索引。
 
 ### 什么时候需要 Service()？
 

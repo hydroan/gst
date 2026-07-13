@@ -711,19 +711,20 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 // 	public bool
 // }
 
-// FindAllModelBase finds all struct types that embed model.Base as an anonymous field.
-// It searches for structs containing anonymous fields of type "model.Base" or aliased versions
-// like "pkgmodel.Base" where pkgmodel is an import alias for the model package.
+// FindAllModelBase finds all struct types that embed a database base model
+// (model.Base or model.AutoBase) as an anonymous field. It searches for
+// structs containing anonymous fields of type "model.Base", "model.AutoBase",
+// or aliased versions like "pkgmodel.Base" where pkgmodel is an import alias
+// for the model package.
 //
 // Parameters:
 //   - file: The AST file to search in
 //
 // Returns:
-//   - []string: Names of all struct types that embed model.Base
+//   - []string: Names of all struct types that embed a database base model
 //
 // This function is used to identify models that should have full database functionality,
 // as opposed to lightweight models that embed model.Empty.
-// FindAllModelBase finds all struct types that embed model.Base as an anonymous field
 func FindAllModelBase(file *ast.File) []string {
 	names := make([]string, 0)
 	if file == nil {
@@ -799,16 +800,22 @@ func FindAllModelEmpty(file *ast.File) []string {
 	return names
 }
 
-// IsModelBase checks if a struct field is an anonymous embedding of model.Base.
-// It handles various import patterns including direct imports, aliased imports,
-// and dot imports of the model package.
+// modelBaseNames are the database base model type names recognized by
+// IsModelBase. Base uses a UUIDv7 string primary key and AutoBase uses an
+// auto-increment integer primary key; both mark a struct as a database model.
+var modelBaseNames = []string{"Base", "AutoBase"}
+
+// IsModelBase checks if a struct field is an anonymous embedding of a database
+// base model (model.Base or model.AutoBase). It handles various import
+// patterns including direct imports, aliased imports, and dot imports of the
+// model package.
 //
 // Parameters:
 //   - file: The AST file containing import information
 //   - field: The struct field to check
 //
 // Returns:
-//   - bool: true if the field is an anonymous model.Base embedding
+//   - bool: true if the field is an anonymous database base model embedding
 //
 // Supported import patterns:
 //   - import "github.com/hydroan/gst/model"
@@ -816,11 +823,9 @@ func FindAllModelEmpty(file *ast.File) []string {
 //   - import . "github.com/hydroan/gst/model"
 //
 // Example field patterns that return true:
-//   - model.Base (with standard import)
-//   - pkgmodel.Base (with aliased import)
-//   - Base (with dot import)
-//
-// IsModelBase checks if a struct field is an anonymous embedding of model.Base
+//   - model.Base, model.AutoBase (with standard import)
+//   - pkgmodel.Base, pkgmodel.AutoBase (with aliased import)
+//   - Base, AutoBase (with dot import)
 func IsModelBase(file *ast.File, field *ast.Field) bool {
 	// Not anonymouse field.
 	if file == nil || field == nil || len(field.Names) != 0 {
@@ -842,10 +847,10 @@ func IsModelBase(file *ast.File, field *ast.Field) bool {
 	switch t := field.Type.(type) {
 	case *ast.SelectorExpr:
 		if ident, ok := t.X.(*ast.Ident); ok {
-			return slices.Contains(aliasNames, ident.Name) && t.Sel.Name == "Base"
+			return slices.Contains(aliasNames, ident.Name) && slices.Contains(modelBaseNames, t.Sel.Name)
 		}
 	case *ast.Ident:
-		return t.Name == "Base"
+		return slices.Contains(modelBaseNames, t.Name)
 	}
 
 	return false

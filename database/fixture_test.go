@@ -98,6 +98,10 @@ func cleanupTestData() {
 	_ = database.Database[*TestUniqueItem](context.Background()).List(&uniqueItems)
 	_ = database.Database[*TestUniqueItem](context.Background()).Delete(uniqueItems...)
 
+	autoItems := make([]*TestAutoItem, 0)
+	_ = database.Database[*TestAutoItem](context.Background()).List(&autoItems)
+	_ = database.Database[*TestAutoItem](context.Background()).Delete(autoItems...)
+
 	hookGroups := make([]*TestHookGroup, 0)
 	_ = database.Database[*TestHookGroup](context.Background()).List(&hookGroups)
 	_ = database.Database[*TestHookGroup](context.Background()).Delete(hookGroups...)
@@ -213,6 +217,15 @@ func (i *TestUniqueItem) UpdateAfter(ctx context.Context) error {
 	return nil
 }
 
+type TestAutoItem struct {
+	Code string `json:"code" gorm:"size:191"`
+	Name string `json:"name" gorm:"size:191"`
+
+	model.AutoBase
+}
+
+func (*TestAutoItem) Purge() bool { return true }
+
 type TestHookConfig struct {
 	Value string `json:"value" gorm:"size:191"`
 
@@ -268,6 +281,7 @@ func init() {
 	model.Register[*TestProduct]()
 	model.Register[*TestPlainItem]()
 	model.Register[*TestUniqueItem]()
+	model.Register[*TestAutoItem]()
 	model.Register[*TestHookConfig]()
 	model.Register[*TestHookGroup]()
 	model.Register[*TestCategory]()

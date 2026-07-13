@@ -174,8 +174,10 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 		case reflect.Chan, reflect.Map, reflect.Func:
 			continue
 		case reflect.Struct:
-			// All `model.XXX` extends the basic model named `Base`,
-			if field.Name == "Base" {
+			// Base and AutoBase are the framework base models: lift only their
+			// query-relevant fields instead of recursing, so framework-managed
+			// fields such as DeletedAt never leak into query conditions.
+			if field.Name == "Base" || field.Name == "AutoBase" {
 				if !fieldVal.FieldByName("CreatedBy").IsZero() {
 					// Not overwrite the "CreatedBy" value set in types.Model.
 					// The "CreatedBy" value set in types.Model has higher priority than base model.
@@ -194,7 +196,12 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 					// Not overwrite the "ID" value set in types.Model.
 					// The "ID" value set in types.Model has higher priority than base model.
 					if _, loaded := q["id"]; !loaded {
-						q["id"] = fieldVal.FieldByName("ID").Interface().(string) //nolint:errcheck
+						switch idField := fieldVal.FieldByName("ID"); idField.Kind() {
+						case reflect.String: // Base: UUIDv7 string primary key.
+							q["id"] = idField.String()
+						case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64: // AutoBase: auto-increment integer primary key.
+							q["id"] = strconv.FormatUint(idField.Uint(), 10)
+						}
 					}
 				}
 				/*

@@ -56,6 +56,21 @@ func TestIsModelBase(t *testing.T) {
 			code: input7,
 			want: []bool{false, false, false},
 		},
+		{
+			name: "input8",
+			code: input8,
+			want: []bool{true, true},
+		},
+		{
+			name: "input9",
+			code: input9,
+			want: []bool{true},
+		},
+		{
+			name: "input10",
+			code: input10,
+			want: []bool{true},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -143,6 +158,21 @@ func TestIsModelEmpty(t *testing.T) {
 			name: "input7",
 			code: input7,
 			want: []bool{true, false, true},
+		},
+		{
+			name: "input8",
+			code: input8,
+			want: []bool{false, false},
+		},
+		{
+			name: "input9",
+			code: input9,
+			want: []bool{false},
+		},
+		{
+			name: "input10",
+			code: input10,
+			want: []bool{false},
 		},
 	}
 	for _, tt := range tests {
@@ -309,6 +339,21 @@ func TestFindAllModelBase(t *testing.T) {
 			code: input7,
 			want: []string{},
 		},
+		{
+			name: "input8",
+			code: input8,
+			want: []string{"User10", "User11"},
+		},
+		{
+			name: "input9",
+			code: input9,
+			want: []string{"User12"},
+		},
+		{
+			name: "input10",
+			code: input10,
+			want: []string{"User13"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -367,6 +412,21 @@ func TestFindAllModelEmpty(t *testing.T) {
 			name: "input7",
 			code: input7,
 			want: []string{"User8", "ReceiveRobot"},
+		},
+		{
+			name: "input8",
+			code: input8,
+			want: []string{},
+		},
+		{
+			name: "input9",
+			code: input9,
+			want: []string{},
+		},
+		{
+			name: "input10",
+			code: input10,
+			want: []string{},
 		},
 	}
 	for _, tt := range tests {

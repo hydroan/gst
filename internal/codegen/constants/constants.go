@@ -45,8 +45,9 @@ const (
 
 // Model field names
 const (
-	FieldBase  = "Base"
-	FieldEmpty = "Empty"
+	FieldBase     = "Base"
+	FieldAutoBase = "AutoBase"
+	FieldEmpty    = "Empty"
 )
 
 // Function names

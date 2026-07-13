@@ -185,8 +185,9 @@ type DatabaseOption[M Model] interface {
 }
 
 // Model defines the framework contract for database-backed and action models.
-// Typical database resources embed model.Base. Action-only models may use
-// model.Empty or model.Any when they do not represent persistent rows.
+// Typical database resources embed model.Base (UUIDv7 string primary key) or
+// model.AutoBase (auto-increment integer primary key). Action-only models may
+// use model.Empty or model.Any when they do not represent persistent rows.
 //
 // Type Requirements:
 //   - Must be a pointer to struct (e.g., *User)
@@ -194,9 +195,9 @@ type DatabaseOption[M Model] interface {
 //   - Hooks should be idempotent enough to run as part of framework CRUD phases
 type Model interface {
 	GetTableName() string // GetTableName returns the table name.
-	GetID() string
-	SetID(id ...string) // SetID method will automatically set the id if id is empty.
-	ClearID()           // ClearID always set the id to empty.
+	GetID() string        // GetID returns the string form of the id, or "" when the id is unset.
+	SetID(id ...string)   // SetID sets the id when unset; Base generates a UUID without an argument while AutoBase leaves generation to the database.
+	ClearID()             // ClearID always set the id to empty.
 	GetCreatedBy() string
 	GetUpdatedBy() string
 	GetCreatedAt() time.Time

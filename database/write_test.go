@@ -134,6 +134,22 @@ func TestDatabaseCreate(t *testing.T) {
 		require.Equal(t, "same-code", items[0].UniqueCode)
 		require.Equal(t, "second", items[0].Name)
 	})
+
+	t.Run("auto increment ids are assigned and backfilled", func(t *testing.T) {
+		items := []*TestAutoItem{
+			{Code: "create-a1", Name: "first"},
+			{Code: "create-a2", Name: "second"},
+		}
+		require.NoError(t, database.Database[*TestAutoItem](context.Background()).Create(items...))
+		require.NotZero(t, items[0].ID, "auto increment id should be backfilled after create")
+		require.NotZero(t, items[1].ID, "auto increment id should be backfilled after create")
+		require.NotEqual(t, items[0].ID, items[1].ID, "each row should get its own id")
+		require.NotEmpty(t, items[0].GetID(), "GetID should expose the assigned id")
+
+		single := &TestAutoItem{Code: "create-a3", Name: "third"}
+		require.NoError(t, database.Database[*TestAutoItem](context.Background()).Create(single))
+		require.Greater(t, single.ID, items[1].ID, "later insert should get a larger id")
+	})
 }
 
 func TestDatabaseDelete(t *testing.T) {
@@ -189,6 +205,20 @@ func TestDatabaseDelete(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(nil))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Delete([]*TestUser{nil, nil, nil}...))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Delete([]*TestUser{nil, u1, nil}...))
+
+	t.Run("auto increment model rows are deleted by id", func(t *testing.T) {
+		items := []*TestAutoItem{
+			{Code: "delete-a1"},
+			{Code: "delete-a2"},
+		}
+		require.NoError(t, database.Database[*TestAutoItem](context.Background()).Create(items...))
+		require.NoError(t, database.Database[*TestAutoItem](context.Background()).Delete(items[0]))
+
+		remained := make([]*TestAutoItem, 0)
+		require.NoError(t, database.Database[*TestAutoItem](context.Background()).List(&remained))
+		require.Len(t, remained, 1)
+		require.Equal(t, items[1].ID, remained[0].ID)
+	})
 }
 
 func TestDatabaseUpdate(t *testing.T) {
@@ -322,6 +352,22 @@ func TestDatabaseUpdate(t *testing.T) {
 		require.Len(t, items, 1)
 		require.Equal(t, first.ID, items[0].ID)
 		require.Equal(t, "second", items[0].Name)
+	})
+
+	t.Run("auto increment model keeps its id on update", func(t *testing.T) {
+		item := &TestAutoItem{Code: "update-a1", Name: "before"}
+		require.NoError(t, database.Database[*TestAutoItem](context.Background()).Create(item))
+		created := item.ID
+		require.NotZero(t, created)
+
+		item.Name = "after"
+		require.NoError(t, database.Database[*TestAutoItem](context.Background()).Update(item))
+		require.Equal(t, created, item.ID, "update should not change the id")
+
+		items := make([]*TestAutoItem, 0)
+		require.NoError(t, database.Database[*TestAutoItem](context.Background()).List(&items))
+		require.Len(t, items, 1, "update should not insert a new row")
+		require.Equal(t, "after", items[0].Name)
 	})
 }
 

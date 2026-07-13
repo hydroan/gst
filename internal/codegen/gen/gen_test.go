@@ -40,6 +40,12 @@ type GroupUser struct {
 	GroupId int
 	UserId  int
 }
+
+type Device struct {
+	Name string
+
+	model.AutoBase
+}
 	`
 
 var src2 = `
@@ -65,6 +71,12 @@ type Group struct {
 type GroupUser struct {
 	GroupId int
 	UserId  int
+}
+
+type Device struct {
+	Name string
+
+	model_auth.AutoBase
 }
 	`
 
@@ -275,6 +287,31 @@ func TestFindModels(t *testing.T) {
 						Export:     &dsl.Action{Payload: "*Group", Result: "*Group"},
 					},
 				},
+				{
+					ModulePath:    "github.com/hydroan/gst",
+					ModelFileDir:  tmpdir,
+					ModelFilePath: filename1,
+					ModelPkgName:  "model",
+					ModelName:     "Device",
+					ModelVarName:  "d",
+					Design: &dsl.Design{
+						Enabled:    true,
+						Endpoint:   "devices",
+						Migrate:    false,
+						Create:     &dsl.Action{Payload: "*Device", Result: "*Device"},
+						Delete:     &dsl.Action{Payload: "*Device", Result: "*Device"},
+						Update:     &dsl.Action{Payload: "*Device", Result: "*Device"},
+						Patch:      &dsl.Action{Payload: "*Device", Result: "*Device"},
+						List:       &dsl.Action{Payload: "*Device", Result: "*Device"},
+						Get:        &dsl.Action{Payload: "*Device", Result: "*Device"},
+						CreateMany: &dsl.Action{Payload: "*Device", Result: "*Device"},
+						DeleteMany: &dsl.Action{Payload: "*Device", Result: "*Device"},
+						UpdateMany: &dsl.Action{Payload: "*Device", Result: "*Device"},
+						PatchMany:  &dsl.Action{Payload: "*Device", Result: "*Device"},
+						Import:     &dsl.Action{Payload: "*Device", Result: "*Device"},
+						Export:     &dsl.Action{Payload: "*Device", Result: "*Device"},
+					},
+				},
 			},
 			wantErr: false,
 		},
@@ -332,6 +369,31 @@ func TestFindModels(t *testing.T) {
 						PatchMany:  &dsl.Action{Payload: "*Group", Result: "*Group"},
 						Import:     &dsl.Action{Payload: "*Group", Result: "*Group"},
 						Export:     &dsl.Action{Payload: "*Group", Result: "*Group"},
+					},
+				},
+				{
+					ModulePath:    "github.com/hydroan/gst",
+					ModelFileDir:  tmpdir,
+					ModelFilePath: filename2,
+					ModelPkgName:  "model",
+					ModelName:     "Device",
+					ModelVarName:  "d",
+					Design: &dsl.Design{
+						Enabled:    true,
+						Endpoint:   "devices",
+						Migrate:    false,
+						Create:     &dsl.Action{Payload: "*Device", Result: "*Device"},
+						Delete:     &dsl.Action{Payload: "*Device", Result: "*Device"},
+						Update:     &dsl.Action{Payload: "*Device", Result: "*Device"},
+						Patch:      &dsl.Action{Payload: "*Device", Result: "*Device"},
+						List:       &dsl.Action{Payload: "*Device", Result: "*Device"},
+						Get:        &dsl.Action{Payload: "*Device", Result: "*Device"},
+						CreateMany: &dsl.Action{Payload: "*Device", Result: "*Device"},
+						DeleteMany: &dsl.Action{Payload: "*Device", Result: "*Device"},
+						UpdateMany: &dsl.Action{Payload: "*Device", Result: "*Device"},
+						PatchMany:  &dsl.Action{Payload: "*Device", Result: "*Device"},
+						Import:     &dsl.Action{Payload: "*Device", Result: "*Device"},
+						Export:     &dsl.Action{Payload: "*Device", Result: "*Device"},
 					},
 				},
 			},

@@ -42,8 +42,8 @@ func patchValue(log types.Logger, typ reflect.Type, oldVal reflect.Value, newVal
 			switch field.Type.Name() {
 			case "GormTime": // The underlying type of model.GormTime(type of time.Time) is struct, we should continue handle.
 
-			case "Base":
-				// Base contains framework-managed fields and should not be patched directly.
+			case "Base", "AutoBase":
+				// Base and AutoBase contain framework-managed fields and should not be patched directly.
 				/*
 					Legacy Base field patching kept as reference after Remark and Order
 					were moved out of model.Base.

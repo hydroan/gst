@@ -4,10 +4,13 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestDatabaseWithQuery(t *testing.T) {
@@ -1439,5 +1442,37 @@ func TestDatabaseWithQuery(t *testing.T) {
 		require.True(t, foundU1_3, "should find u1")
 		require.True(t, foundU2_3, "should find u2")
 		require.True(t, foundU3_3, "should find u3")
+	})
+
+	t.Run("AutoBase", func(t *testing.T) {
+		defer cleanupTestData()
+		items := []*TestAutoItem{
+			{Code: "query-a1", Name: "first"},
+			{Code: "query-a2", Name: "second"},
+		}
+		require.NoError(t, database.Database[*TestAutoItem](context.Background()).Create(items...))
+
+		// Filter by the embedded auto increment id.
+		got := make([]*TestAutoItem, 0)
+		require.NoError(t, database.Database[*TestAutoItem](context.Background()).
+			WithQuery(&TestAutoItem{AutoBase: model.AutoBase{ID: items[0].ID}}).
+			List(&got))
+		require.Len(t, got, 1)
+		require.Equal(t, items[0].ID, got[0].ID)
+		require.Equal(t, items[0].Code, got[0].Code)
+
+		// Filter by a regular column on an AutoBase model.
+		got = make([]*TestAutoItem, 0)
+		require.NoError(t, database.Database[*TestAutoItem](context.Background()).
+			WithQuery(&TestAutoItem{Code: items[1].Code}).
+			List(&got))
+		require.Len(t, got, 1)
+		require.Equal(t, items[1].ID, got[0].ID)
+
+		// DeletedAt on the embedded base must not leak bogus conditions into the query.
+		got = make([]*TestAutoItem, 0)
+		require.NoError(t, database.Database[*TestAutoItem](context.Background()).
+			WithQuery(&TestAutoItem{AutoBase: model.AutoBase{DeletedAt: gorm.DeletedAt{Time: time.Now(), Valid: true}}}).
+			List(&got))
 	})
 }

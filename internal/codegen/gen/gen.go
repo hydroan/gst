@@ -171,39 +171,9 @@ func findModelPackageName(file *ast.File) string {
 	return file.Name.Name
 }
 
-// // isModelBase 检查字段是否是 model.Base
-//
-//	func isModelBase(file *ast.File, field *ast.Field, modelPkgName string) bool {
-//		if field.Names != nil { // 不是匿名字段
-//			return false
-//		}
-//
-//		getAliasName := func(file *ast.File) string {
-//			for _, imp := range file.Imports {
-//				path := strings.Trim(imp.Path.Value, `"`)
-//				if strings.HasSuffix(path, "github.com/hydroan/gst/model") {
-//					if imp.Name != nil {
-//						return imp.Name.Name // 使用重命名的包名
-//					}
-//					return "model" // 默认包名
-//				}
-//			}
-//			return ""
-//		}
-//		aliasName := getAliasName(file)
-//
-//		switch t := field.Type.(type) {
-//		case *ast.SelectorExpr:
-//			if ident, ok := t.X.(*ast.Ident); ok {
-//				return ident.Name == aliasName && t.Sel.Name == "Base"
-//			}
-//		case *ast.Ident:
-//			// 处理同包的情况
-//			return t.Name == "Base"
-//		}
-//
-//		return false
-//	}
+// isModelBase checks if a struct field is an anonymous embedding of a
+// database base model (model.Base or model.AutoBase), handling aliased
+// imports of the model package.
 func isModelBase(file *ast.File, field *ast.Field) bool {
 	// Not anonymouse field.
 	if len(field.Names) != 0 {
@@ -226,10 +196,10 @@ func isModelBase(file *ast.File, field *ast.Field) bool {
 	switch t := field.Type.(type) {
 	case *ast.SelectorExpr:
 		if ident, ok := t.X.(*ast.Ident); ok {
-			return ident.Name == aliasName && t.Sel.Name == constants.FieldBase
+			return ident.Name == aliasName && (t.Sel.Name == constants.FieldBase || t.Sel.Name == constants.FieldAutoBase)
 		}
 	case *ast.Ident:
-		return t.Name == constants.FieldBase
+		return t.Name == constants.FieldBase || t.Name == constants.FieldAutoBase
 	}
 
 	return false

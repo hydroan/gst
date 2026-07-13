@@ -260,6 +260,19 @@ func TestDatabaseGet(t *testing.T) {
 	err = database.Database[*TestUser](context.Background()).Get(uu, u1.ID)
 	require.Error(t, err, "should return error when dest is nil")
 	require.ErrorIs(t, err, database.ErrNilDest)
+
+	t.Run("auto increment model is fetched by decimal id string", func(t *testing.T) {
+		item := &TestAutoItem{Code: "get-a1", Name: "first"}
+		require.NoError(t, database.Database[*TestAutoItem](context.Background()).Create(item))
+
+		fetched := new(TestAutoItem)
+		require.NoError(t, database.Database[*TestAutoItem](context.Background()).Get(fetched, item.GetID()))
+		require.Equal(t, item.ID, fetched.ID)
+		require.Equal(t, item.Code, fetched.Code)
+
+		missing := new(TestAutoItem)
+		require.ErrorIs(t, database.Database[*TestAutoItem](context.Background()).Get(missing, "986000"), database.ErrRecordNotFound)
+	})
 }
 
 func TestDatabaseFirst(t *testing.T) {

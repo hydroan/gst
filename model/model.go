@@ -16,6 +16,7 @@ var (
 
 var (
 	_ types.Model = (*Base)(nil)
+	_ types.Model = (*AutoBase)(nil)
 	_ types.Model = (*Empty)(nil)
 	_ types.Model = (*Any)(nil)
 )
@@ -23,6 +24,10 @@ var (
 type (
 	// Base provides common fields and default hooks for database-backed resources.
 	Base = modelregistry.Base
+
+	// AutoBase provides the same common fields and default hooks as Base but
+	// uses an auto-increment integer primary key assigned by the database.
+	AutoBase = modelregistry.AutoBase
 
 	// Query enables framework-owned list query parameters when embedded by a model.
 	Query = modelregistry.Query
