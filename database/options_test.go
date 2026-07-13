@@ -730,9 +730,9 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 						Size: 10,
 					},
 					Cursor: model.Cursor{
-						CursorValue:  &cursorValue,
-						CursorFields: "id",
-						CursorNext:   true,
+						CursorValue: &cursorValue,
+						CursorField: "id",
+						CursorNext:  true,
 					},
 					Fuzzy:  &fuzzy,
 					SortBy: "created_at desc",
@@ -751,7 +751,7 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 			require.NotContains(t, stmts[0].Args, "10")
 			require.NotContains(t, stmts[0].Args, "1")
 			require.NotContains(t, stmts[0].Args, *query.CursorValue)
-			require.NotContains(t, stmts[0].Args, query.CursorFields)
+			require.NotContains(t, stmts[0].Args, query.CursorField)
 			require.NotContains(t, stmts[0].Args, query.SortBy)
 			require.Empty(t, users, "WithBuildSQL should not execute the query or fill the destination")
 		})
@@ -784,9 +784,9 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 			query := &cursorableTestUser{
 				Name: "cursorable-user",
 				Cursor: model.Cursor{
-					CursorValue:  &cursorValue,
-					CursorFields: "id",
-					CursorNext:   true,
+					CursorValue: &cursorValue,
+					CursorField: "id",
+					CursorNext:  true,
 				},
 			}
 
@@ -799,7 +799,7 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 			require.Len(t, stmts, 1)
 			require.Contains(t, stmts[0].Args, query.Name)
 			require.NotContains(t, stmts[0].Args, *query.CursorValue)
-			require.NotContains(t, stmts[0].Args, query.CursorFields)
+			require.NotContains(t, stmts[0].Args, query.CursorField)
 			require.NotContains(t, stmts[0].Args, "1")
 			require.Empty(t, users, "WithBuildSQL should not execute the query or fill the destination")
 		})

@@ -42,13 +42,18 @@ Content-Type: application/json
 | 能力 | 参数 | 启用方式 | 示例 |
 | --- | --- | --- | --- |
 | 分页 | `page`（从 1 开始）、`size` | `model.Pagination` | `?page=1&size=20` |
-| 排序 | `_sortby`，逗号分隔多字段，方向 `asc`/`desc`（默认 `asc`） | `model.Query` | `?_sortby=created_at desc,name` |
+| 排序 | `_sort_by`，逗号分隔多字段，方向 `asc`/`desc`（默认 `asc`） | `model.Query` | `?_sort_by=created_at desc,name` |
 | 模糊匹配 | `_fuzzy` 为 `true` 时业务字段过滤使用模糊匹配 | `model.Query` | `?name=g&_fuzzy=true` |
 | 展开关联 | `_expand`，逗号分隔，`all` 表示全部可展开字段 | `model.Query` | `?_expand=all` |
-| 时间范围 | `_column_name` 指定时间列，`_start_time`、`_end_time` 是范围边界 | `model.Query` | `?_column_name=created_at&_start_time=2025-01-01 00:00:00&_end_time=2025-01-02 00:00:00` |
-| 游标分页 | `_cursor_value`、`_cursor_fields`、`_cursor_next`；使用游标时响应不返回 `total` | `model.Cursor` | `?_cursor_value=xxx&_cursor_next=true` |
+| 时间范围 | `_time_column` 指定时间列，`_start_time`、`_end_time` 是范围边界 | `model.Query` | `?_time_column=created_at&_start_time=2025-01-01 00:00:00&_end_time=2025-01-02 00:00:00` |
+| 游标分页 | `_cursor_value`、`_cursor_field`、`_cursor_next`；使用游标时响应不返回 `total` | `model.Cursor` | `?_cursor_value=xxx&_cursor_next=true` |
 | OR 过滤 | `_or` 为 `true` 时多个业务字段过滤条件之间用 OR 连接 | `model.UnsafeQuery` | `?name=g1&status=enabled&_or=true` |
-| 跳过总数 | `_nototal` 为 `true` 时响应不返回 `total` | `model.UnsafeQuery` | `?_nototal=true` |
+| 跳过总数 | `_no_total` 为 `true` 时响应不返回 `total` | `model.UnsafeQuery` | `?_no_total=true` |
+
+命名约定：框架控制参数一律以 `_` 开头，与直接作为查询参数暴露的业务字段（如
+`?name=xxx`）区分，避免与业务列名冲突。`page`、`size` 是刻意的例外——它们是使用
+频率最高的参数，且裸名是 REST 惯例；代价是业务字段不能再以裸的 `page`/`size` 作为
+过滤参数，需要时通过 query tag 起别名。
 
 ## 请求体格式
 
@@ -117,7 +122,7 @@ Content-Type: application/json
   前端以 HTTP 状态码或 `code != 0` 判定失败，具体错误码含义以 Swagger 为准。
 - `trace_id` 用于排障，反馈接口问题时请带上。
 
-列表接口的 `data` 固定为如下结构（`_nototal=true` 时没有 `total`）：
+列表接口的 `data` 固定为如下结构（`_no_total=true` 时没有 `total`）：
 
 ```json
 {

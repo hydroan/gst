@@ -72,7 +72,7 @@ func TestSetDocumentsEmbeddedFrameworkQueryParameters(t *testing.T) {
 		t.Fatal("GET /api/test-query-contract missing from document")
 	}
 	parameters := queryParametersByName(t, item.Get)
-	for _, name := range []string{"page", "size", "_cursor_value", "_sortby", "_fuzzy"} {
+	for _, name := range []string{"page", "size", "_cursor_value", "_sort_by", "_fuzzy"} {
 		if parameters[name] == nil {
 			t.Errorf("query parameter %q is missing from the generated List operation", name)
 		}

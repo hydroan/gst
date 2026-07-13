@@ -109,33 +109,33 @@ func WithQueryFuzzy(fuzzy bool) Option {
 	}
 }
 
-func WithQuerySortby(sortby string) Option {
+func WithQuerySortBy(sortBy string) Option {
 	return func(c *Client) {
-		if sortby = strings.TrimSpace(sortby); len(sortby) == 0 {
+		if sortBy = strings.TrimSpace(sortBy); len(sortBy) == 0 {
 			return
 		}
 		if c.query == nil {
 			c.query = new(clientQuery)
 		}
-		c.query.SortBy = sortby
+		c.query.SortBy = sortBy
 	}
 }
 
-func WithQueryNocache(nocache bool) Option {
+func WithQueryNoCache(noCache bool) Option {
 	return func(c *Client) {
 		if c.query == nil {
 			c.query = new(clientQuery)
 		}
-		c.query.NoCache = nocache
+		c.query.NoCache = noCache
 	}
 }
 
-func WithQueryTimeRange(columeName string, start, end time.Time) Option {
+func WithQueryTimeRange(timeColumn string, start, end time.Time) Option {
 	return func(c *Client) {
 		if c.query == nil {
 			c.query = new(clientQuery)
 		}
-		if columeName = strings.TrimSpace(columeName); len(columeName) == 0 {
+		if timeColumn = strings.TrimSpace(timeColumn); len(timeColumn) == 0 {
 			return
 		}
 		if start.IsZero() || end.IsZero() {
@@ -144,7 +144,7 @@ func WithQueryTimeRange(columeName string, start, end time.Time) Option {
 		if start.After(end) {
 			start, end = end, start
 		}
-		c.query.ColumnName = columeName
+		c.query.TimeColumn = timeColumn
 		c.query.StartTime = start.Format(consts.DATE_TIME_LAYOUT)
 		c.query.EndTime = end.Format(consts.DATE_TIME_LAYOUT)
 	}

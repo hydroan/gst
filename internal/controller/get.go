@@ -120,12 +120,12 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 
 		var err error
 		var expands []string
-		nocache := true // default disable cache.
+		noCache := true // default disable cache.
 		depth := 1
-		if nocacheStr, ok := c.GetQuery(consts.QUERY_NOCACHE); ok {
-			var _nocache bool
-			if _nocache, err = strconv.ParseBool(nocacheStr); err == nil {
-				nocache = _nocache
+		if noCacheStr, ok := c.GetQuery(consts.QUERY_NO_CACHE); ok {
+			var parsed bool
+			if parsed, err = strconv.ParseBool(noCacheStr); err == nil {
+				noCache = parsed
 			}
 		}
 		if depthStr, ok := c.GetQuery(consts.QUERY_DEPTH); ok {
@@ -194,7 +194,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			WithIndex(index).
 			WithSelect(strings.Split(selects, ",")...).
 			WithExpand(expands).
-			WithCache(!nocache).
+			WithCache(!noCache).
 			Get(m, param); err != nil {
 			log.Error(err)
 			JSON(c, CodeFailure.WithErr(err))

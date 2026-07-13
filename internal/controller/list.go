@@ -27,8 +27,8 @@ var listQueryKeys = map[string]struct{}{
 	consts.QUERY_EXPAND:      {},
 	consts.QUERY_DEPTH:       {},
 	consts.QUERY_FUZZY:       {},
-	consts.QUERY_SORTBY:      {},
-	consts.QUERY_COLUMN_NAME: {},
+	consts.QUERY_SORT_BY:     {},
+	consts.QUERY_TIME_COLUMN: {},
 	consts.QUERY_START_TIME:  {},
 	consts.QUERY_END_TIME:    {},
 }
@@ -38,11 +38,11 @@ var listQueryKeys = map[string]struct{}{
 // execution; in particular _or can defeat mandatory service-level filters,
 // so a model must opt in to them separately from the regular List controls.
 var listUnsafeQueryKeys = map[string]struct{}{
-	consts.QUERY_OR:      {},
-	consts.QUERY_INDEX:   {},
-	consts.QUERY_SELECT:  {},
-	consts.QUERY_NOCACHE: {},
-	consts.QUERY_NOTOTAL: {},
+	consts.QUERY_OR:       {},
+	consts.QUERY_INDEX:    {},
+	consts.QUERY_SELECT:   {},
+	consts.QUERY_NO_CACHE: {},
+	consts.QUERY_NO_TOTAL: {},
 }
 
 // listPaginationQueryKeys are enabled by model.Pagination. They are split from
@@ -57,9 +57,9 @@ var listPaginationQueryKeys = map[string]struct{}{
 // intentionally independent from SortBy; the cursor field and direction define
 // the stable order used by the database layer.
 var listCursorQueryKeys = map[string]struct{}{
-	consts.QUERY_CURSOR_VALUE:  {},
-	consts.QUERY_CURSOR_FIELDS: {},
-	consts.QUERY_CURSOR_NEXT:   {},
+	consts.QUERY_CURSOR_VALUE: {},
+	consts.QUERY_CURSOR_FIELD: {},
+	consts.QUERY_CURSOR_NEXT:  {},
 }
 
 // List is a generic function to product gin handler to list resources in backend.
@@ -196,7 +196,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		if sizeStr, ok := c.GetQuery(consts.QUERY_SIZE); ok {
 			size, _ = strconv.Atoi(sizeStr)
 		}
-		columnName, _ := c.GetQuery(consts.QUERY_COLUMN_NAME)
+		timeColumn, _ := c.GetQuery(consts.QUERY_TIME_COLUMN)
 		index, _ := c.GetQuery(consts.QUERY_INDEX)
 		selects, _ := c.GetQuery(consts.QUERY_SELECT)
 		if startTimeStr, ok := c.GetQuery(consts.QUERY_START_TIME); ok {
@@ -225,16 +225,16 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		var fuzzy bool
 		var expands []string
 		var cursorNext bool
-		var nototal bool // default enable total.
+		var noTotal bool // default enable total.
 		cursorValue := c.Query(consts.QUERY_CURSOR_VALUE)
-		cursorFields := c.Query(consts.QUERY_CURSOR_FIELDS)
-		nocache := true // default disable cache.
+		cursorField := c.Query(consts.QUERY_CURSOR_FIELD)
+		noCache := true // default disable cache.
 		depth := 1
 		data := make([]M, 0)
-		if nocacheStr, ok := c.GetQuery(consts.QUERY_NOCACHE); ok {
-			var _nocache bool
-			if _nocache, err = strconv.ParseBool(nocacheStr); err == nil {
-				nocache = _nocache
+		if noCacheStr, ok := c.GetQuery(consts.QUERY_NO_CACHE); ok {
+			var parsed bool
+			if parsed, err = strconv.ParseBool(noCacheStr); err == nil {
+				noCache = parsed
 			}
 		}
 		if orStr, ok := c.GetQuery(consts.QUERY_OR); ok {
@@ -306,7 +306,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			gstotel.RecordError(span, err)
 			return
 		}
-		sortBy, _ := c.GetQuery(consts.QUERY_SORTBY)
+		sortBy, _ := c.GetQuery(consts.QUERY_SORT_BY)
 		// 2.List resources from database.
 		if size == 0 {
 			size = defaultLimit
@@ -321,12 +321,12 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 				UseOr:      or,
 				RawQuery:   svc.FilterRaw(ctx),
 			}).
-			WithCursor(cursorValue, cursorNext, cursorFields).
+			WithCursor(cursorValue, cursorNext, cursorField).
 			WithExclude(m.Excludes()).
 			WithExpand(expands, sortBy).
 			WithOrder(sortBy).
-			WithTimeRange(columnName, startTime, endTime).
-			WithCache(!nocache).
+			WithTimeRange(timeColumn, startTime, endTime).
+			WithCache(!noCache).
 			List(&data); err != nil {
 			log.Error(err)
 			JSON(c, CodeFailure.WithErr(err))
@@ -345,10 +345,10 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			return
 		}
 		total := new(int64)
-		nototalStr, _ := c.GetQuery(consts.QUERY_NOTOTAL)
-		nototal, _ = strconv.ParseBool(nototalStr)
+		noTotalStr, _ := c.GetQuery(consts.QUERY_NO_TOTAL)
+		noTotal, _ = strconv.ParseBool(noTotalStr)
 		// NOTE: Total count is not provided when using cursor-based pagination.
-		if !nototal && len(cursorValue) == 0 {
+		if !noTotal && len(cursorValue) == 0 {
 			if err = handler(requestContext(c)).
 				// WithPagination(page, size). // NOTE: WithPagination should not apply in Count method.
 				// WithSelect(strings.Split(selects, ",")...). // NOTE: WithSelect should not apply in Count method.
@@ -360,8 +360,8 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 					RawQuery:   svc.FilterRaw(ctx),
 				}).
 				WithExclude(m.Excludes()).
-				WithTimeRange(columnName, startTime, endTime).
-				WithCache(!nocache).
+				WithTimeRange(timeColumn, startTime, endTime).
+				WithCache(!noCache).
 				Count(total); err != nil {
 				log.Error(err)
 				JSON(c, CodeFailure.WithErr(err))
@@ -396,7 +396,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		}
 
 		log.Infoz(fmt.Sprintf("%s: length: %d, total: %d", typ.Name(), len(data), *total), zap.Object(typ.Name(), m))
-		if !nototal {
+		if !noTotal {
 			JSON(c, CodeSuccess, gin.H{
 				"items": data,
 				"total": *total,

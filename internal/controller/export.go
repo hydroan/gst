@@ -45,7 +45,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		if limitStr, ok := c.GetQuery(consts.QUERY_LIMIT); ok {
 			limit, _ = strconv.Atoi(limitStr)
 		}
-		columnName, _ := c.GetQuery(consts.QUERY_COLUMN_NAME)
+		timeColumn, _ := c.GetQuery(consts.QUERY_TIME_COLUMN)
 		index, _ := c.GetQuery(consts.QUERY_INDEX)
 		selects, _ := c.GetQuery(consts.QUERY_SELECT)
 		if startTimeStr, ok := c.GetQuery(consts.QUERY_START_TIME); ok {
@@ -138,7 +138,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			gstotel.RecordError(span, err)
 			return
 		}
-		sortBy, _ := c.GetQuery(consts.QUERY_SORTBY)
+		sortBy, _ := c.GetQuery(consts.QUERY_SORT_BY)
 		_, _ = page, size
 		// 2.List resources from database.
 		if err = handler(requestContext(c)).
@@ -155,7 +155,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			WithExclude(m.Excludes()).
 			WithExpand(expands, sortBy).
 			WithOrder(sortBy).
-			WithTimeRange(columnName, startTime, endTime).
+			WithTimeRange(timeColumn, startTime, endTime).
 			List(&data); err != nil {
 			log.Error(err)
 			JSON(c, CodeFailure.WithErr(err))

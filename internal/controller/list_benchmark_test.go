@@ -38,23 +38,23 @@ var (
 		"name": {"alice"},
 	}
 	listBenchmarkFullQuery = map[string][]string{
-		"name":           {"alice"},
-		"_fuzzy":         {"true"},
-		"_sortby":        {"created_at desc"},
-		"page":           {"2"},
-		"size":           {"10"},
-		"_cursor_value":  {"0196a0b3-c9d1-713c-870e-adc76af9f857"},
-		"_cursor_fields": {"id"},
-		"_cursor_next":   {"true"},
+		"name":          {"alice"},
+		"_fuzzy":        {"true"},
+		"_sort_by":      {"created_at desc"},
+		"page":          {"2"},
+		"size":          {"10"},
+		"_cursor_value": {"0196a0b3-c9d1-713c-870e-adc76af9f857"},
+		"_cursor_field": {"id"},
+		"_cursor_next":  {"true"},
 	}
 	listBenchmarkPaginationQuery = map[string][]string{
 		"page": {"2"},
 		"size": {"10"},
 	}
 	listBenchmarkCursorQuery = map[string][]string{
-		"_cursor_value":  {"0196a0b3-c9d1-713c-870e-adc76af9f857"},
-		"_cursor_fields": {"id"},
-		"_cursor_next":   {"true"},
+		"_cursor_value": {"0196a0b3-c9d1-713c-870e-adc76af9f857"},
+		"_cursor_field": {"id"},
+		"_cursor_next":  {"true"},
 	}
 	listBenchmarkRejectedQuery = map[string][]string{
 		"_fuzzy": {"true"},

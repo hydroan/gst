@@ -13,11 +13,11 @@ var addr = "http://localhost:8080"
 
 func Test_OptionQuery(t *testing.T) {
 	t.Run("WithQuery", func(t *testing.T) {
-		cli, err := client.New(addr, client.WithQuery("name", "tom", "age", 20, "_sortby", "created_at desc,name asc"))
+		cli, err := client.New(addr, client.WithQuery("name", "tom", "age", 20, "_sort_by", "created_at desc,name asc"))
 		require.NoError(t, err)
 		query, err := cli.QueryString()
 		require.NoError(t, err)
-		assert.Equal(t, "name=tom&age=20&_sortby=created_at+desc%2Cname+asc", query)
+		assert.Equal(t, "name=tom&age=20&_sort_by=created_at+desc%2Cname+asc", query)
 
 		cli, err = client.New(addr, client.WithQuery("name", "tom", "age", 20, "suname"))
 		require.NoError(t, err)
@@ -68,20 +68,20 @@ func Test_OptionQuery(t *testing.T) {
 		assert.Equal(t, "_fuzzy=true", query)
 	})
 
-	t.Run("WithQuerySortby", func(t *testing.T) {
-		cli, err := client.New(addr, client.WithQuerySortby("created_at desc,id asc"))
+	t.Run("WithQuerySortBy", func(t *testing.T) {
+		cli, err := client.New(addr, client.WithQuerySortBy("created_at desc,id asc"))
 		require.NoError(t, err)
 		query, err := cli.QueryString()
 		require.NoError(t, err)
-		assert.Equal(t, "_sortby=created_at+desc%2Cid+asc", query)
+		assert.Equal(t, "_sort_by=created_at+desc%2Cid+asc", query)
 	})
 
-	t.Run("WithQueryNocache", func(t *testing.T) {
-		cli, err := client.New(addr, client.WithQueryNocache(true))
+	t.Run("WithQueryNoCache", func(t *testing.T) {
+		cli, err := client.New(addr, client.WithQueryNoCache(true))
 		require.NoError(t, err)
 		query, err := cli.QueryString()
 		require.NoError(t, err)
-		assert.Equal(t, "_nocache=true", query)
+		assert.Equal(t, "_no_cache=true", query)
 	})
 
 	t.Run("WithQueryTimeRange", func(t *testing.T) {
@@ -91,7 +91,7 @@ func Test_OptionQuery(t *testing.T) {
 		require.NoError(t, err)
 		query, err := cli.QueryString()
 		require.NoError(t, err)
-		assert.Equal(t, "_column_name=created_at&_end_time=2022-01-02+00%3A00%3A00&_start_time=2022-01-01+00%3A00%3A00", query)
+		assert.Equal(t, "_end_time=2022-01-02+00%3A00%3A00&_start_time=2022-01-01+00%3A00%3A00&_time_column=created_at", query)
 	})
 
 	t.Run("WithQueryOr", func(t *testing.T) {

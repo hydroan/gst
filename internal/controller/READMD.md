@@ -512,25 +512,25 @@ type User struct {
 > database.Database[*model.User]().WithQuery(&model.User{Name: util.ValueOf("user01")}, true).List(&users)
 > ```
 
-#### `_sortby=xxx`
+#### `_sort_by=xxx`
 
 >   `Request`
 >
 >   ```bash
->   # _sortby=name
->   curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_fuzzy=true&_sortby=name' \
+>   # _sort_by=name
+>   curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_fuzzy=true&_sort_by=name' \
 >   --header 'Authorization: Bearer -'
 >   
->   # _sortby=name desc
->   curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_fuzzy=true&_sortby=name%20desc' \
+>   # _sort_by=name desc
+>   curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_fuzzy=true&_sort_by=name%20desc' \
 >   --header 'Authorization: Bearer -'
 >   
->   # _sortby=name desc, created_at
->   curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_fuzzy=true&_sortby=name%20desc%2C%20created_at' \
+>   # _sort_by=name desc, created_at
+>   curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_fuzzy=true&_sort_by=name%20desc%2C%20created_at' \
 >   --header 'Authorization: Bearer -'
 >   
->   # _sortby=name desc, created_at asc
->   curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_fuzzy=true&_sortby=name%20desc%2C%20created_at%20asc' \
+>   # _sort_by=name desc, created_at asc
+>   curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_fuzzy=true&_sort_by=name%20desc%2C%20created_at%20asc' \
 >   --header 'Authorization: Bearer -'
 >   ```
 >
@@ -545,12 +545,12 @@ type User struct {
 
 
 
-#### `_nocache=true`
+#### `_no_cache=true`
 
 >`Request`
 >
 >```bash
->curl --silent --location --request GET 'http://localhost:8080/api/user?_nocache=false' \
+>curl --silent --location --request GET 'http://localhost:8080/api/user?_no_cache=false' \
 >--header 'Authorization: Bearer -'
 >```
 >
@@ -564,12 +564,12 @@ type User struct {
 
 
 
-#### `_column_name=xxx`,`_start_time=xxx`, `_end_time=xxx`
+#### `_time_column=xxx`,`_start_time=xxx`, `_end_time=xxx`
 
 >`Request`
 >
 >```bash
->curl --silent --location --request GET 'http://localhost:8080/api/user?_column_name=created_at&_start_time=2024-01-01+23%3A59%3A59&_end_time=2030-01-01+23%3A59%3A59' \
+>curl --silent --location --request GET 'http://localhost:8080/api/user?_time_column=created_at&_start_time=2024-01-01+23%3A59%3A59&_end_time=2030-01-01+23%3A59%3A59' \
 >--header 'Authorization: Bearer -'
 >```
 >
@@ -826,4 +826,4 @@ type User struct {
 
 ### query parameters
 
-The useage of`_expand`, `_depth`, `_index`, `_select`, `_nocache` is the same as List query parameters.
+The useage of`_expand`, `_depth`, `_index`, `_select`, `_no_cache` is the same as List query parameters.

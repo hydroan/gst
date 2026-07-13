@@ -169,9 +169,9 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 			},
 			parameters: []string{
 				"page", "size",
-				"_cursor_value", "_cursor_fields", "_cursor_next",
-				"_expand", "_depth", "_fuzzy", "_sortby",
-				"_column_name", "_start_time", "_end_time",
+				"_cursor_value", "_cursor_field", "_cursor_next",
+				"_expand", "_depth", "_fuzzy", "_sort_by",
+				"_time_column", "_start_time", "_end_time",
 				"id", "created_by", "updated_by",
 			},
 		},
@@ -182,10 +182,10 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 			},
 			parameters: []string{
 				"page", "size",
-				"_cursor_value", "_cursor_fields", "_cursor_next",
-				"_expand", "_depth", "_fuzzy", "_sortby",
-				"_column_name", "_start_time", "_end_time",
-				"_or", "_index", "_select", "_nocache", "_nototal",
+				"_cursor_value", "_cursor_field", "_cursor_next",
+				"_expand", "_depth", "_fuzzy", "_sort_by",
+				"_time_column", "_start_time", "_end_time",
+				"_or", "_index", "_select", "_no_cache", "_no_total",
 				"id", "created_by", "updated_by",
 			},
 		},
@@ -201,7 +201,7 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 			add: func(op *openapi3.Operation) {
 				addQueryParameters[*openapiCursorQueryModel, *openapiCursorQueryModel, *openapiCursorQueryModel](op)
 			},
-			parameters: []string{"_cursor_value", "_cursor_fields", "_cursor_next", "id", "created_by", "updated_by"},
+			parameters: []string{"_cursor_value", "_cursor_field", "_cursor_next", "id", "created_by", "updated_by"},
 		},
 	}
 

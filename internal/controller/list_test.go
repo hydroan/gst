@@ -26,8 +26,8 @@ func TestDecodeListQueryGatesUnsafeQueryKeys(t *testing.T) {
 	queryKeys := map[string][]string{
 		"name":         {"alice"},
 		"_fuzzy":       {"true"},
-		"_sortby":      {"created_at desc"},
-		"_column_name": {"created_at"},
+		"_sort_by":     {"created_at desc"},
+		"_time_column": {"created_at"},
 		"_start_time":  {"2025-01-01 00:00:00"},
 		"_end_time":    {"2025-01-02 00:00:00"},
 	}
@@ -38,7 +38,7 @@ func TestDecodeListQueryGatesUnsafeQueryKeys(t *testing.T) {
 	})
 
 	t.Run("QueryRejectsUnsafeKeys", func(t *testing.T) {
-		for _, key := range []string{"_or", "_index", "_select", "_nocache", "_nototal"} {
+		for _, key := range []string{"_or", "_index", "_select", "_no_cache", "_no_total"} {
 			var m listQueryableTestModel
 			err := decodeListQuery(&m, map[string][]string{key: {"true"}})
 			require.Error(t, err, "unsafe query key %q must be rejected without model.UnsafeQuery", key)
@@ -48,11 +48,11 @@ func TestDecodeListQueryGatesUnsafeQueryKeys(t *testing.T) {
 	t.Run("UnsafeQueryAcceptsUnsafeKeys", func(t *testing.T) {
 		var m listUnsafeQueryableTestModel
 		require.NoError(t, decodeListQuery(&m, map[string][]string{
-			"_or":      {"true"},
-			"_index":   {"idx_test"},
-			"_select":  {"name"},
-			"_nocache": {"true"},
-			"_nototal": {"true"},
+			"_or":       {"true"},
+			"_index":    {"idx_test"},
+			"_select":   {"name"},
+			"_no_cache": {"true"},
+			"_no_total": {"true"},
 		}))
 	})
 
