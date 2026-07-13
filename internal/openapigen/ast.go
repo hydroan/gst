@@ -31,7 +31,12 @@ var (
 func parseModelDocs(t any) map[string]string {
 	pkgPath, typeName := typeIdentity(t)
 	if pkgPath == "" || typeName == "" {
-		// Silently handle invalid type cases
+		// An anonymous struct (a type alias to an unnamed struct) has neither a
+		// package path nor a type name, so recover its field docs by matching
+		// the struct's field signature against the registry.
+		if fields, ok := anonStructFieldDocs(t); ok {
+			return fields
+		}
 		return map[string]string{}
 	}
 
@@ -90,6 +95,38 @@ func typeIdentity(t any) (pkgPath, typeName string) {
 		typ = typ.Elem()
 	}
 	return typ.PkgPath(), typ.Name()
+}
+
+// anonStructFieldDocs recovers the field docs of an anonymous struct value by
+// matching its exported field names against the apidoc registry. It returns
+// false when t is not a struct or no unambiguous signature match exists.
+func anonStructFieldDocs(t any) (map[string]string, bool) {
+	typ := reflect.TypeOf(t)
+	for typ != nil && typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	if typ == nil || typ.Kind() != reflect.Struct {
+		return nil, false
+	}
+
+	names := exportedFieldNames(typ)
+	if len(names) == 0 {
+		return nil, false
+	}
+	return apidoc.LookupFieldsBySignature(names)
+}
+
+// exportedFieldNames returns the Go names of the exported, non-embedded fields
+// of typ, matching the field set that structdoc records for a struct.
+func exportedFieldNames(typ reflect.Type) []string {
+	var names []string
+	for field := range typ.Fields() {
+		if field.Anonymous || !field.IsExported() {
+			continue
+		}
+		names = append(names, field.Name)
+	}
+	return names
 }
 
 // parseStructDocFromSource locates the source file declaring the type and

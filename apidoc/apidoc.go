@@ -9,6 +9,7 @@ package apidoc
 import (
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 )
 
@@ -41,6 +42,15 @@ var (
 	mu           sync.RWMutex
 	registry     = make(map[string]StructDoc)
 	enumRegistry = make(map[string]EnumDoc)
+
+	// signatureRegistry maps a struct's field-name signature to its field
+	// docs, so an anonymous struct (a type alias to an unnamed struct, which
+	// reflection cannot resolve to a package path and type name) can recover
+	// its field docs by structural signature. signatureAmbiguous records
+	// signatures shared by structs with differing field docs; such signatures
+	// are dropped so a lookup never returns docs belonging to another struct.
+	signatureRegistry  = make(map[string]map[string]string)
+	signatureAmbiguous = make(map[string]bool)
 )
 
 func registryKey(pkgPath, typeName string) string {
@@ -56,6 +66,7 @@ func Register(pkgPath, typeName string, doc StructDoc) {
 	mu.Lock()
 	defer mu.Unlock()
 	registry[registryKey(pkgPath, typeName)] = doc
+	indexFieldsBySignature(doc.Fields)
 }
 
 // Lookup returns the doc comments registered for the struct identified by
@@ -71,6 +82,56 @@ func Lookup(pkgPath, typeName string) (StructDoc, bool) {
 	}
 	doc.Fields = maps.Clone(doc.Fields)
 	return doc, true
+}
+
+// fieldNameSignature builds a stable signature from a set of Go field names.
+func fieldNameSignature(names []string) string {
+	names = slices.Clone(names)
+	slices.Sort(names)
+	return strings.Join(names, "\n")
+}
+
+// indexFieldsBySignature records fields under their field-name signature.
+// Callers must hold mu. When two structs with differing field docs share a
+// signature it is marked ambiguous and removed, so a later signature lookup
+// returns nothing rather than the wrong struct's docs.
+func indexFieldsBySignature(fields map[string]string) {
+	if len(fields) == 0 {
+		return
+	}
+	sig := fieldNameSignature(slices.Collect(maps.Keys(fields)))
+	if signatureAmbiguous[sig] {
+		return
+	}
+	if existing, ok := signatureRegistry[sig]; ok {
+		if !maps.Equal(existing, fields) {
+			signatureAmbiguous[sig] = true
+			delete(signatureRegistry, sig)
+		}
+		return
+	}
+	signatureRegistry[sig] = fields
+}
+
+// LookupFieldsBySignature returns the field docs of a registered struct whose
+// documented field-name set equals names. It serves anonymous structs (type
+// aliases to unnamed structs) that cannot be identified by package path and
+// type name. It returns false when there is no match or the signature is
+// shared by structs with differing docs.
+func LookupFieldsBySignature(names []string) (map[string]string, bool) {
+	sig := fieldNameSignature(names)
+
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if signatureAmbiguous[sig] {
+		return nil, false
+	}
+	fields, ok := signatureRegistry[sig]
+	if !ok {
+		return nil, false
+	}
+	return maps.Clone(fields), true
 }
 
 // RegisterEnum records the doc comment and declared values of the enum-like
