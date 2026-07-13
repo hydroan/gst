@@ -1,12 +1,19 @@
 package modelregistry
 
+import (
+	"reflect"
+	"slices"
+)
+
 // Query declares framework-owned HTTP query parameters for list-style
 // controller actions.
 //
 // Embedding Query in a model is an explicit opt-in: the model can still expose
 // its own fields as query filters through query tags, while Query enables the
 // standard List controls, including offset pagination, cursor pagination,
-// fuzzy matching, sorting, expansion, and time-range filtering.
+// fuzzy matching, sorting, expansion, and time-range filtering. Query already
+// embeds Pagination and Cursor, so models that embed Query must not embed
+// those structs again.
 //
 // Query intentionally covers only controls that keep list semantics intact.
 // Controls that rewrite filter combination or tune query execution live in
@@ -29,12 +36,17 @@ type Query struct {
 	EndTime    string  `json:"-" gorm:"-" query:"_end_time" url:"_end_time,omitempty"`       // EndTime is the upper bound for the selected time-range column.
 }
 
-// QueryEnabled marks models that opt in to general framework query parameters.
-func (Query) QueryEnabled() {}
+// queryEnabled marks models that opt in to general framework query parameters.
+func (Query) queryEnabled() {}
 
 // Queryable is implemented by models that embed Query.
+//
+// The marker method is unexported, so embedding Query is the only way to
+// satisfy Queryable: models outside this package can neither declare the
+// method themselves nor accidentally opt in without the Query fields.
+// The other marker interfaces below are sealed the same way.
 type Queryable interface {
-	QueryEnabled()
+	queryEnabled()
 }
 
 // UnsafeQuery declares framework-owned HTTP query parameters that change how a
@@ -60,12 +72,12 @@ type UnsafeQuery struct {
 	Nototal bool   `json:"-" gorm:"-" query:"_nototal" url:"_nototal,omitempty"` // Nototal skips the total-count query when true.
 }
 
-// UnsafeQueryEnabled marks models that opt in to unsafe framework query parameters.
-func (UnsafeQuery) UnsafeQueryEnabled() {}
+// unsafeQueryEnabled marks models that opt in to unsafe framework query parameters.
+func (UnsafeQuery) unsafeQueryEnabled() {}
 
 // UnsafeQueryable is implemented by models that embed UnsafeQuery.
 type UnsafeQueryable interface {
-	UnsafeQueryEnabled()
+	unsafeQueryEnabled()
 }
 
 // Pagination declares offset-pagination query parameters for List actions.
@@ -77,12 +89,12 @@ type Pagination struct {
 	Size int `json:"-" gorm:"-" query:"size" url:"size,omitempty"` // Size is the page size; negative values disable the limit.
 }
 
-// PaginationEnabled marks models that opt in to page and size query parameters.
-func (Pagination) PaginationEnabled() {}
+// paginationEnabled marks models that opt in to page and size query parameters.
+func (Pagination) paginationEnabled() {}
 
 // Paginatable is implemented by models that embed Pagination.
 type Paginatable interface {
-	PaginationEnabled()
+	paginationEnabled()
 }
 
 // Cursor declares cursor-pagination query parameters for List actions.
@@ -96,10 +108,65 @@ type Cursor struct {
 	CursorNext   bool    `json:"-" gorm:"-" query:"_cursor_next" url:"_cursor_next,omitempty"`     // CursorNext chooses the cursor direction; false requests the previous page.
 }
 
-// CursorEnabled marks models that opt in to cursor query parameters.
-func (Cursor) CursorEnabled() {}
+// cursorEnabled marks models that opt in to cursor query parameters.
+func (Cursor) cursorEnabled() {}
 
 // Cursorable is implemented by models that embed Cursor.
 type Cursorable interface {
-	CursorEnabled()
+	cursorEnabled()
+}
+
+// IsQueryable reports whether m opted in to general framework query parameters
+// by embedding Query.
+func IsQueryable(m any) bool {
+	_, ok := m.(Queryable)
+	return ok
+}
+
+// IsUnsafeQueryable reports whether m opted in to unsafe framework query
+// parameters by embedding UnsafeQuery.
+func IsUnsafeQueryable(m any) bool {
+	_, ok := m.(UnsafeQueryable)
+	return ok
+}
+
+// IsPaginatable reports whether m opted in to page and size query parameters
+// by embedding Pagination directly or through Query.
+func IsPaginatable(m any) bool {
+	_, ok := m.(Paginatable)
+	return ok
+}
+
+// IsCursorable reports whether m opted in to cursor query parameters by
+// embedding Cursor directly or through Query.
+func IsCursorable(m any) bool {
+	_, ok := m.(Cursorable)
+	return ok
+}
+
+// queryMarkerTypes lists the sealed marker interfaces satisfied by the
+// framework query structs above. Matching by capability instead of by concrete
+// type keeps pointer embedding and nested marker structs working.
+var queryMarkerTypes = []reflect.Type{
+	reflect.TypeFor[Queryable](),
+	reflect.TypeFor[UnsafeQueryable](),
+	reflect.TypeFor[Paginatable](),
+	reflect.TypeFor[Cursorable](),
+}
+
+// IsQueryMarkerType reports whether t carries framework query parameters, that
+// is, whether it or its pointer type satisfies one of the marker interfaces.
+// Database query construction uses it to keep controller-only query fields out
+// of SQL WHERE conditions.
+func IsQueryMarkerType(t reflect.Type) bool {
+	if t == nil {
+		return false
+	}
+	if slices.ContainsFunc(queryMarkerTypes, t.Implements) {
+		return true
+	}
+	if t.Kind() == reflect.Pointer {
+		return false
+	}
+	return slices.ContainsFunc(queryMarkerTypes, reflect.PointerTo(t).Implements)
 }

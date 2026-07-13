@@ -96,22 +96,22 @@ func List[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) 
 }
 
 func decodeListQuery[M types.Model](m M, query map[string][]string) error {
-	if _, ok := any(m).(modelregistry.Queryable); !ok {
+	if !modelregistry.IsQueryable(m) {
 		if err := rejectListQueryKeys(query, listQueryKeys); err != nil {
 			return err
 		}
 	}
-	if _, ok := any(m).(modelregistry.UnsafeQueryable); !ok {
+	if !modelregistry.IsUnsafeQueryable(m) {
 		if err := rejectListQueryKeys(query, listUnsafeQueryKeys); err != nil {
 			return err
 		}
 	}
-	if _, ok := any(m).(modelregistry.Paginatable); !ok {
+	if !modelregistry.IsPaginatable(m) {
 		if err := rejectListQueryKeys(query, listPaginationQueryKeys); err != nil {
 			return err
 		}
 	}
-	if _, ok := any(m).(modelregistry.Cursorable); !ok {
+	if !modelregistry.IsCursorable(m) {
 		if err := rejectListQueryKeys(query, listCursorQueryKeys); err != nil {
 			return err
 		}

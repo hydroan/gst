@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/provider/otel"
@@ -166,7 +166,9 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 		if !ok {
 			continue
 		}
-		if isQueryMarkerType(fieldTyp) {
+		// The marker interfaces are sealed in modelregistry, so recognition of
+		// framework query fields lives there as the single source of truth.
+		if modelregistry.IsQueryMarkerType(fieldTyp) {
 			continue
 		}
 
@@ -322,31 +324,6 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 		// q[strcase.SnakeCase(jsonTag)] = fieldVal.Interface()
 		q[strcase.SnakeCase(jsonTag)] = _v
 	}
-}
-
-// queryMarkerTypes are intentionally structural instead of importing
-// modelregistry: database filtering only needs to know that a nested struct is a
-// controller query marker, not which concrete package defined it. This keeps
-// Query, UnsafeQuery, Pagination, and Cursor fields out of SQL WHERE conditions
-// while leaving normal schema-tagged model fields available for filtering.
-var queryMarkerTypes = []reflect.Type{
-	reflect.TypeFor[interface{ QueryEnabled() }](),
-	reflect.TypeFor[interface{ UnsafeQueryEnabled() }](),
-	reflect.TypeFor[interface{ PaginationEnabled() }](),
-	reflect.TypeFor[interface{ CursorEnabled() }](),
-}
-
-func isQueryMarkerType(t reflect.Type) bool {
-	if t == nil {
-		return false
-	}
-	if slices.ContainsFunc(queryMarkerTypes, t.Implements) {
-		return true
-	}
-	if t.Kind() == reflect.Pointer {
-		return false
-	}
-	return slices.ContainsFunc(queryMarkerTypes, reflect.PointerTo(t).Implements)
 }
 
 // buildCacheKey constructs Redis cache keys for database operations.

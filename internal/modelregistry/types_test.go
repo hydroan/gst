@@ -1,6 +1,7 @@
 package modelregistry_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/hydroan/gst/internal/modelregistry"
@@ -52,6 +53,16 @@ type CursorableUser struct {
 	model.Base
 }
 
+// markerMethodSpoofUser declares an exported method matching the historical
+// marker name. The sealed marker interfaces must not treat it as opting in.
+type markerMethodSpoofUser struct {
+	Name string `json:"name,omitempty"`
+
+	model.Base
+}
+
+func (markerMethodSpoofUser) QueryEnabled() {}
+
 func TestAreTypesEqual(t *testing.T) {
 	require.True(t, modelregistry.AreTypesEqual[*User, *User, *User]())
 	require.False(t, modelregistry.AreTypesEqual[*User, User, *User]())
@@ -99,25 +110,48 @@ func BenchmarkAreTypesEqual(b *testing.B) {
 }
 
 func TestQueryable(t *testing.T) {
-	require.NotImplements(t, (*model.Queryable)(nil), new(User))
-	require.Implements(t, (*model.Queryable)(nil), new(QueryableUser))
-	require.Implements(t, (*model.Queryable)(nil), QueryableUser{})
+	require.False(t, modelregistry.IsQueryable(new(User)))
+	require.True(t, modelregistry.IsQueryable(new(QueryableUser)))
+	require.True(t, modelregistry.IsQueryable(QueryableUser{}))
 
-	require.Implements(t, (*model.Paginatable)(nil), new(QueryableUser))
-	require.Implements(t, (*model.Cursorable)(nil), new(QueryableUser))
-	require.NotImplements(t, (*model.UnsafeQueryable)(nil), new(QueryableUser))
+	require.True(t, modelregistry.IsPaginatable(new(QueryableUser)))
+	require.True(t, modelregistry.IsCursorable(new(QueryableUser)))
+	require.False(t, modelregistry.IsUnsafeQueryable(new(QueryableUser)))
 
-	require.Implements(t, (*model.Queryable)(nil), new(UnsafeQueryableUser))
-	require.Implements(t, (*model.UnsafeQueryable)(nil), new(UnsafeQueryableUser))
-	require.Implements(t, (*model.UnsafeQueryable)(nil), UnsafeQueryableUser{})
+	require.True(t, modelregistry.IsQueryable(new(UnsafeQueryableUser)))
+	require.True(t, modelregistry.IsUnsafeQueryable(new(UnsafeQueryableUser)))
+	require.True(t, modelregistry.IsUnsafeQueryable(UnsafeQueryableUser{}))
 
-	require.NotImplements(t, (*model.Queryable)(nil), new(PaginatableUser))
-	require.Implements(t, (*model.Paginatable)(nil), new(PaginatableUser))
-	require.NotImplements(t, (*model.Cursorable)(nil), new(PaginatableUser))
+	require.False(t, modelregistry.IsQueryable(new(PaginatableUser)))
+	require.True(t, modelregistry.IsPaginatable(new(PaginatableUser)))
+	require.False(t, modelregistry.IsCursorable(new(PaginatableUser)))
 
-	require.NotImplements(t, (*model.Queryable)(nil), new(CursorableUser))
-	require.NotImplements(t, (*model.Paginatable)(nil), new(CursorableUser))
-	require.Implements(t, (*model.Cursorable)(nil), new(CursorableUser))
+	require.False(t, modelregistry.IsQueryable(new(CursorableUser)))
+	require.False(t, modelregistry.IsPaginatable(new(CursorableUser)))
+	require.True(t, modelregistry.IsCursorable(new(CursorableUser)))
+
+	// Embedding the framework query structs is the only opt-in path.
+	require.False(t, modelregistry.IsQueryable(new(markerMethodSpoofUser)))
+	require.False(t, modelregistry.IsUnsafeQueryable(new(markerMethodSpoofUser)))
+	require.False(t, modelregistry.IsPaginatable(new(markerMethodSpoofUser)))
+	require.False(t, modelregistry.IsCursorable(new(markerMethodSpoofUser)))
+}
+
+func TestIsQueryMarkerType(t *testing.T) {
+	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[model.Query]()))
+	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[*model.Query]()))
+	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[model.UnsafeQuery]()))
+	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[model.Pagination]()))
+	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[model.Cursor]()))
+
+	// Nested structs that embed a marker struct carry framework query
+	// parameters as well, so they are also excluded from SQL conditions.
+	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[QueryableUser]()))
+
+	require.False(t, modelregistry.IsQueryMarkerType(nil))
+	require.False(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[User]()))
+	require.False(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[markerMethodSpoofUser]()))
+	require.False(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[string]()))
 }
 
 func TestIsEmpty(t *testing.T) {
