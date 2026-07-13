@@ -634,6 +634,47 @@ func TestSetupExampleGeneratesRecursiveExamplesForArbitraryTypes(t *testing.T) {
 	}
 }
 
+func TestSetupExampleKeepsNestedIDFields(t *testing.T) {
+	type nestedItem struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	type parentRequest struct {
+		ID     string       `json:"id"`
+		Label  string       `json:"label"`
+		Single *nestedItem  `json:"single"`
+		Items  []nestedItem `json:"items"`
+	}
+
+	schemaRef, err := openapi3gen.NewSchemaRefForValue(parentRequest{}, nil)
+	if err != nil {
+		t.Fatalf("NewSchemaRefForValue() error = %v", err)
+	}
+
+	setupExample(schemaRef)
+
+	example, ok := schemaRef.Value.Example.(map[string]any)
+	if !ok {
+		t.Fatalf("example type = %T, want map[string]any", schemaRef.Value.Example)
+	}
+
+	// The top-level id is a Base auto field and stays removed from the example.
+	if _, exists := example["id"]; exists {
+		t.Fatalf("top-level id must be removed, got example = %#v", example)
+	}
+
+	// A nested struct's id is caller-supplied and must be kept.
+	wantSingle := map[string]any{"id": "string", "name": "string"}
+	if got := example["single"]; !reflect.DeepEqual(got, wantSingle) {
+		t.Fatalf("single example = %#v, want %#v", got, wantSingle)
+	}
+
+	wantItems := []any{map[string]any{"id": "string", "name": "string"}}
+	if got := example["items"]; !reflect.DeepEqual(got, wantItems) {
+		t.Fatalf("items example = %#v, want %#v", got, wantItems)
+	}
+}
+
 func TestSetupBatchExampleGeneratesRecursiveMapExample(t *testing.T) {
 	type batchItemModel struct {
 		GroupRoles map[string][]string `json:"group_roles"`
@@ -787,6 +828,43 @@ func TestAddSchemaDocsForTypeDecoratesNestedStructFields(t *testing.T) {
 	}
 	if code.Value.Description != "The option code." {
 		t.Fatalf("nested code description = %q, want API-facing nested struct field comment", code.Value.Description)
+	}
+}
+
+func TestAddSchemaDocsForTypeDecoratesAnonymousStructBySignature(t *testing.T) {
+	apidoc.Register("openapigen/anon", "anonSchemaPayloadDoc", apidoc.StructDoc{
+		Fields: map[string]string{
+			"Headline": "The headline.",
+			"Slug":     "The slug.",
+		},
+	})
+
+	type anonSchemaPayload = struct {
+		Headline string `json:"headline"`
+		Slug     string `json:"slug"`
+	}
+
+	schemaRef, err := openapi3gen.NewSchemaRefForValue(*new(anonSchemaPayload), nil)
+	if err != nil {
+		t.Fatalf("NewSchemaRefForValue() error = %v", err)
+	}
+
+	addSchemaDocsForType(reflect.TypeFor[anonSchemaPayload](), schemaRef, nil)
+
+	headline := schemaRef.Value.Properties["headline"]
+	if headline == nil || headline.Value == nil {
+		t.Fatal("headline property missing")
+	}
+	if headline.Value.Description != "The headline." {
+		t.Fatalf("headline description = %q, want anonymous struct field comment", headline.Value.Description)
+	}
+
+	slug := schemaRef.Value.Properties["slug"]
+	if slug == nil || slug.Value == nil {
+		t.Fatal("slug property missing")
+	}
+	if slug.Value.Description != "The slug." {
+		t.Fatalf("slug description = %q, want anonymous struct field comment", slug.Value.Description)
 	}
 }
 

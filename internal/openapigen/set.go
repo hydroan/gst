@@ -1346,7 +1346,10 @@ func parseParametersFromPath(path string) []*openapi3.ParameterRef {
 	return parameterRefList
 }
 
-// setupExample will remove field "created_at", "created_by", "updated_at", "updated_by", "id".
+// setupExample builds the request body example and removes the Base auto
+// fields ("created_at", "created_by", "updated_at", "updated_by", "id") from
+// the top level only. Nested structs keep those property names because there
+// they are caller-supplied fields rather than Base auto fields.
 //
 // Before:
 //
@@ -1421,9 +1424,12 @@ func buildExampleValue(schema *openapi3.Schema, depth int) any {
 		if len(schema.Properties) > 0 {
 			example := make(map[string]any, len(schema.Properties))
 			for propName, propRef := range schema.Properties {
-				if removeFieldMap[propName] || propRef.Value == nil {
+				if propRef.Value == nil {
 					continue
 				}
+				// Nested fields keep their id/audit-named properties: at this
+				// depth they are caller-supplied fields, not the Base auto
+				// fields that only appear at the request top level.
 				example[propName] = buildExampleValue(propRef.Value, depth+1)
 			}
 			return example
