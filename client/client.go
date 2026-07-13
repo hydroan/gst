@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/google/go-querystring/query"
 	"github.com/hydroan/gst/logger/zap"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"golang.org/x/time/rate"
@@ -52,7 +51,7 @@ type Client struct {
 	token      string
 
 	header      http.Header
-	query       *model.Query
+	query       *clientQuery
 	queryRaw    string
 	param       string
 	apiPath     string

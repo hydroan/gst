@@ -30,6 +30,14 @@ type QueryableUser struct {
 	model.Base
 }
 
+type UnsafeQueryableUser struct {
+	Name string `json:"name,omitempty"`
+
+	model.Query
+	model.UnsafeQuery
+	model.Base
+}
+
 type PaginatableUser struct {
 	Name string `json:"name,omitempty"`
 
@@ -97,6 +105,11 @@ func TestQueryable(t *testing.T) {
 
 	require.Implements(t, (*model.Paginatable)(nil), new(QueryableUser))
 	require.Implements(t, (*model.Cursorable)(nil), new(QueryableUser))
+	require.NotImplements(t, (*model.UnsafeQueryable)(nil), new(QueryableUser))
+
+	require.Implements(t, (*model.Queryable)(nil), new(UnsafeQueryableUser))
+	require.Implements(t, (*model.UnsafeQueryable)(nil), new(UnsafeQueryableUser))
+	require.Implements(t, (*model.UnsafeQueryable)(nil), UnsafeQueryableUser{})
 
 	require.NotImplements(t, (*model.Queryable)(nil), new(PaginatableUser))
 	require.Implements(t, (*model.Paginatable)(nil), new(PaginatableUser))

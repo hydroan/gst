@@ -29,6 +29,12 @@ type openapiEmbeddedQueryModel struct {
 	model.Base
 }
 
+type openapiUnsafeQueryModel struct {
+	model.Query
+	model.UnsafeQuery
+	model.Base
+}
+
 type openapiPaginationQueryModel struct {
 	model.Pagination
 	model.Base
@@ -164,9 +170,22 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 			parameters: []string{
 				"page", "size",
 				"_cursor_value", "_cursor_fields", "_cursor_next",
-				"_expand", "_depth", "_fuzzy", "_sortby", "_nocache",
-				"_column_name", "_start_time", "_end_time", "_or", "_index",
-				"_select", "_nototal",
+				"_expand", "_depth", "_fuzzy", "_sortby",
+				"_column_name", "_start_time", "_end_time",
+				"id", "created_by", "updated_by",
+			},
+		},
+		{
+			name: "unsafe query",
+			add: func(op *openapi3.Operation) {
+				addQueryParameters[*openapiUnsafeQueryModel, *openapiUnsafeQueryModel, *openapiUnsafeQueryModel](op)
+			},
+			parameters: []string{
+				"page", "size",
+				"_cursor_value", "_cursor_fields", "_cursor_next",
+				"_expand", "_depth", "_fuzzy", "_sortby",
+				"_column_name", "_start_time", "_end_time",
+				"_or", "_index", "_select", "_nocache", "_nototal",
 				"id", "created_by", "updated_by",
 			},
 		},

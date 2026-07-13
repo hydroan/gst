@@ -34,19 +34,21 @@ Content-Type: application/json
 ## 列表通用查询参数
 
 除业务字段过滤外，列表接口的通用查询参数由后端按资源逐个启用：分页由 model 嵌入
-`model.Pagination` 启用，游标分页由 `model.Cursor` 启用，其余参数由 `model.Query`
-启用（`model.Query` 同时包含前两者）。资源未启用对应能力时，传这些参数会返回 400。
-某个资源支持哪些参数以 Swagger 为准。
+`model.Pagination` 启用，游标分页由 `model.Cursor` 启用，排序、模糊匹配、展开关联、
+时间范围等常规参数由 `model.Query` 启用（`model.Query` 同时包含前两者），OR 过滤、
+跳过总数等改变查询语义或执行方式的参数由 `model.UnsafeQuery` 单独启用。资源未启用
+对应能力时，传这些参数会返回 400。某个资源支持哪些参数以 Swagger 为准。
 
-| 能力 | 参数 | 示例 |
-| --- | --- | --- |
-| 分页 | `page`（从 1 开始）、`size` | `?page=1&size=20` |
-| 排序 | `_sortby`，逗号分隔多字段，方向 `asc`/`desc`（默认 `asc`） | `?_sortby=created_at desc,name` |
-| 模糊匹配 | `_fuzzy` 为 `true` 时业务字段过滤使用模糊匹配 | `?name=g&_fuzzy=true` |
-| OR 过滤 | `_or` 为 `true` 时多个业务字段过滤条件之间用 OR 连接 | `?name=g1&status=enabled&_or=true` |
-| 展开关联 | `_expand`，逗号分隔，`all` 表示全部可展开字段 | `?_expand=all` |
-| 跳过总数 | `_nototal` 为 `true` 时响应不返回 `total` | `?_nototal=true` |
-| 游标分页 | `_cursor_value`、`_cursor_fields`、`_cursor_next`；使用游标时响应不返回 `total` | `?_cursor_value=xxx&_cursor_next=true` |
+| 能力 | 参数 | 启用方式 | 示例 |
+| --- | --- | --- | --- |
+| 分页 | `page`（从 1 开始）、`size` | `model.Pagination` | `?page=1&size=20` |
+| 排序 | `_sortby`，逗号分隔多字段，方向 `asc`/`desc`（默认 `asc`） | `model.Query` | `?_sortby=created_at desc,name` |
+| 模糊匹配 | `_fuzzy` 为 `true` 时业务字段过滤使用模糊匹配 | `model.Query` | `?name=g&_fuzzy=true` |
+| 展开关联 | `_expand`，逗号分隔，`all` 表示全部可展开字段 | `model.Query` | `?_expand=all` |
+| 时间范围 | `_column_name` 指定时间列，`_start_time`、`_end_time` 是范围边界 | `model.Query` | `?_column_name=created_at&_start_time=2025-01-01 00:00:00&_end_time=2025-01-02 00:00:00` |
+| 游标分页 | `_cursor_value`、`_cursor_fields`、`_cursor_next`；使用游标时响应不返回 `total` | `model.Cursor` | `?_cursor_value=xxx&_cursor_next=true` |
+| OR 过滤 | `_or` 为 `true` 时多个业务字段过滤条件之间用 OR 连接 | `model.UnsafeQuery` | `?name=g1&status=enabled&_or=true` |
+| 跳过总数 | `_nototal` 为 `true` 时响应不返回 `total` | `model.UnsafeQuery` | `?_nototal=true` |
 
 ## 请求体格式
 

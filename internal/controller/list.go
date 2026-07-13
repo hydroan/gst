@@ -26,16 +26,23 @@ import (
 var listQueryKeys = map[string]struct{}{
 	consts.QUERY_EXPAND:      {},
 	consts.QUERY_DEPTH:       {},
-	consts.QUERY_OR:          {},
 	consts.QUERY_FUZZY:       {},
 	consts.QUERY_SORTBY:      {},
 	consts.QUERY_COLUMN_NAME: {},
 	consts.QUERY_START_TIME:  {},
 	consts.QUERY_END_TIME:    {},
-	consts.QUERY_NOCACHE:     {},
-	consts.QUERY_NOTOTAL:     {},
-	consts.QUERY_INDEX:       {},
-	consts.QUERY_SELECT:      {},
+}
+
+// listUnsafeQueryKeys are enabled by model.UnsafeQuery. They are split from
+// listQueryKeys because they rewrite filter combination or tune query
+// execution; in particular _or can defeat mandatory service-level filters,
+// so a model must opt in to them separately from the regular List controls.
+var listUnsafeQueryKeys = map[string]struct{}{
+	consts.QUERY_OR:      {},
+	consts.QUERY_INDEX:   {},
+	consts.QUERY_SELECT:  {},
+	consts.QUERY_NOCACHE: {},
+	consts.QUERY_NOTOTAL: {},
 }
 
 // listPaginationQueryKeys are enabled by model.Pagination. They are split from
@@ -94,6 +101,11 @@ func decodeListQuery[M types.Model](m M, query map[string][]string) error {
 			return err
 		}
 	}
+	if _, ok := any(m).(modelregistry.UnsafeQueryable); !ok {
+		if err := rejectListQueryKeys(query, listUnsafeQueryKeys); err != nil {
+			return err
+		}
+	}
 	if _, ok := any(m).(modelregistry.Paginatable); !ok {
 		if err := rejectListQueryKeys(query, listPaginationQueryKeys); err != nil {
 			return err
@@ -125,8 +137,9 @@ func rejectListQueryKeys(query map[string][]string, keys map[string]struct{}) er
 //
 // The automatic listing branch supports model schema fields plus framework query
 // parameters for pagination, cursor pagination, expansion, depth, fuzzy matching,
-// OR matching, ordering, selection, cache control, database index hints, and time
-// ranges.
+// ordering, and time ranges; OR matching, selection, cache control, database index
+// hints, and total-count suppression additionally require the model to embed
+// model.UnsafeQuery.
 //
 // When REQ or RSP differs from M, the handler delegates the operation to the
 // phase service's List method with a zero-value REQ. List handles an HTTP GET

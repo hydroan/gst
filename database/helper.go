@@ -320,10 +320,11 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 // queryMarkerTypes are intentionally structural instead of importing
 // modelregistry: database filtering only needs to know that a nested struct is a
 // controller query marker, not which concrete package defined it. This keeps
-// Query, Pagination, and Cursor fields out of SQL WHERE conditions while leaving
-// normal schema-tagged model fields available for filtering.
+// Query, UnsafeQuery, Pagination, and Cursor fields out of SQL WHERE conditions
+// while leaving normal schema-tagged model fields available for filtering.
 var queryMarkerTypes = []reflect.Type{
 	reflect.TypeFor[interface{ QueryEnabled() }](),
+	reflect.TypeFor[interface{ UnsafeQueryEnabled() }](),
 	reflect.TypeFor[interface{ PaginationEnabled() }](),
 	reflect.TypeFor[interface{ CursorEnabled() }](),
 }

@@ -12,6 +12,14 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
+// clientQuery combines the regular and unsafe framework query parameters so
+// client query options can populate either group. The client always allows
+// setting them; the server decides per model which parameters are accepted.
+type clientQuery struct {
+	model.Query
+	model.UnsafeQuery
+}
+
 func WithQuery(_keyValues ...any) Option {
 	if len(_keyValues) == 0 || len(_keyValues) == 1 {
 		return func(_ *Client) {}
@@ -66,7 +74,7 @@ func WithQuery(_keyValues ...any) Option {
 func WithQueryPagination(page, size int) Option {
 	return func(c *Client) {
 		if c.query == nil {
-			c.query = new(model.Query)
+			c.query = new(clientQuery)
 		}
 		if page == 0 {
 			page = 1
@@ -82,7 +90,7 @@ func WithQueryPagination(page, size int) Option {
 func WithQueryExpand(expand string, depth uint) Option {
 	return func(c *Client) {
 		if c.query == nil {
-			c.query = new(model.Query)
+			c.query = new(clientQuery)
 		}
 		if expand = strings.TrimSpace(expand); len(expand) == 0 {
 			return
@@ -95,7 +103,7 @@ func WithQueryExpand(expand string, depth uint) Option {
 func WithQueryFuzzy(fuzzy bool) Option {
 	return func(c *Client) {
 		if c.query == nil {
-			c.query = new(model.Query)
+			c.query = new(clientQuery)
 		}
 		c.query.Fuzzy = &fuzzy
 	}
@@ -107,7 +115,7 @@ func WithQuerySortby(sortby string) Option {
 			return
 		}
 		if c.query == nil {
-			c.query = new(model.Query)
+			c.query = new(clientQuery)
 		}
 		c.query.SortBy = sortby
 	}
@@ -116,7 +124,7 @@ func WithQuerySortby(sortby string) Option {
 func WithQueryNocache(nocache bool) Option {
 	return func(c *Client) {
 		if c.query == nil {
-			c.query = new(model.Query)
+			c.query = new(clientQuery)
 		}
 		c.query.NoCache = nocache
 	}
@@ -125,7 +133,7 @@ func WithQueryNocache(nocache bool) Option {
 func WithQueryTimeRange(columeName string, start, end time.Time) Option {
 	return func(c *Client) {
 		if c.query == nil {
-			c.query = new(model.Query)
+			c.query = new(clientQuery)
 		}
 		if columeName = strings.TrimSpace(columeName); len(columeName) == 0 {
 			return
@@ -145,7 +153,7 @@ func WithQueryTimeRange(columeName string, start, end time.Time) Option {
 func WithQueryOr(or bool) Option {
 	return func(c *Client) {
 		if c.query == nil {
-			c.query = new(model.Query)
+			c.query = new(clientQuery)
 		}
 		c.query.Or = &or
 	}
@@ -157,7 +165,7 @@ func WithQueryIndex(index string) Option {
 			return
 		}
 		if c.query == nil {
-			c.query = new(model.Query)
+			c.query = new(clientQuery)
 		}
 		c.query.Index = index
 	}
@@ -175,7 +183,7 @@ func WithQuerySelect(selects ...string) Option {
 			return
 		}
 		if c.query == nil {
-			c.query = new(model.Query)
+			c.query = new(clientQuery)
 		}
 		c.query.Select = strings.Join(_selects, ",")
 	}

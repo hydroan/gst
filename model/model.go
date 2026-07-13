@@ -30,6 +30,12 @@ type (
 	// Queryable marks models that opt in to framework-owned query parameters.
 	Queryable = modelregistry.Queryable
 
+	// UnsafeQuery enables unsafe list query parameters when embedded by a model.
+	UnsafeQuery = modelregistry.UnsafeQuery
+
+	// UnsafeQueryable marks models that opt in to unsafe framework query parameters.
+	UnsafeQueryable = modelregistry.UnsafeQueryable
+
 	// Pagination enables page and size query parameters when embedded by a model.
 	Pagination = modelregistry.Pagination
 
