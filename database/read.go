@@ -26,8 +26,15 @@ func (db *database[M]) dryRunReadSession() *gorm.DB {
 //
 // Parameters:
 //   - dest: Pointer to the result slice. The pointer itself must not be nil.
-//     The slice value may be nil or initialized with make; List replaces its
-//     contents with the query result.
+//     The slice value may be nil or preallocated with make. List fully replaces
+//     the slice contents with the query result and never merges into or appends
+//     onto whatever dest already holds: the underlying GORM Find resets the slice
+//     length to 0 before scanning rows, so pre-existing elements are discarded.
+//     After a successful call len(*dest) equals the number of rows returned.
+//     A "dirty" or reused dest therefore cannot leak stale rows into the result,
+//     but callers should still pass an empty slice: the ListBefore model hook runs
+//     over the pre-existing elements before the query overwrites them, so leftover
+//     data would trigger useless hook invocations.
 //
 // Features:
 //   - Automatic result caching when enabled

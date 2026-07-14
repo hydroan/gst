@@ -99,6 +99,11 @@ type Database[M Model] interface {
 	// UpdateByID updates a single field of a record by its ID.
 	UpdateByID(id string, key string, value any) error
 	// List retrieves multiple records matching the query conditions.
+	// dest must be a non-nil pointer to a slice; the slice value itself may be
+	// nil or preallocated with make. List fully replaces the slice contents with
+	// the query result: any pre-existing elements are discarded, never merged or
+	// appended to. After a successful call len(*dest) equals the number of rows
+	// returned, so a "dirty" dest does not leak stale rows into the result.
 	List(dest *[]M) error
 	// Get retrieves a single record by its ID.
 	// The destination must be a non-nil pointer matching M. When M is *T,
