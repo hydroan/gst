@@ -1,12 +1,14 @@
 package gen
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
 	"path/filepath"
 	"strings"
 
 	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/codegen/constants"
 )
 
 // applyServiceRoleName renames the service struct type and all associated receiver
@@ -421,6 +423,176 @@ func applyServiceTypeParam(indexListExpr *ast.IndexListExpr, paramIndex int, tar
 	return changed
 }
 
+// forceCanonicalServiceStruct forces the action's service struct declaration
+// back to the generated canonical form: a struct whose body is exactly the
+// direct service.Base[...] embedding. The struct declaration is generated
+// code that registration and logger injection depend on, so hand edits to it
+// are corrected instead of preserved: extra fields are discarded together
+// with interior comments (embedding another service is forbidden, and the
+// framework injects the logger only through the direct service.Base
+// embedding), and a deleted struct is regenerated so gg gen always converges
+// on a registrable service struct. It reports whether the file was modified.
+func forceCanonicalServiceStruct(file *ast.File, action *dsl.Action, modelInfo *ModelInfo) bool {
+	if file == nil || action == nil || modelInfo == nil {
+		return false
+	}
+	roleName := action.RoleName()
+	if len(roleName) == 0 {
+		return false
+	}
+
+	spec := findStructTypeSpec(file, roleName)
+	if spec == nil {
+		// A well-formed service struct under another name is out of rewrite
+		// scope: with Filename set it belongs to the applyServiceRoleName
+		// rename path, and module-copied services legitimately use their own
+		// struct names (they register manually instead of through generated
+		// registration code).
+		if len(findServiceTypeName(file)) > 0 {
+			return false
+		}
+		file.Decls = append(file.Decls, types(modelInfo.ModelPkgName, modelInfo.ModelName, action.Payload, action.Result, action.Phase, roleName, false))
+		ensureServiceImportSpec(file)
+		ensureModelImportSpec(file, modelInfo)
+		return true
+	}
+
+	structType, ok := spec.Type.(*ast.StructType)
+	if !ok {
+		return false
+	}
+	if isCanonicalServiceStructBody(structType) {
+		return false
+	}
+
+	baseField := generatedServiceBaseField(modelInfo, action, roleName)
+	if baseField == nil {
+		return false
+	}
+	removeStructInteriorComments(file, structType)
+	if structType.Fields == nil {
+		structType.Fields = &ast.FieldList{}
+	}
+	structType.Fields.List = []*ast.Field{baseField}
+	ensureServiceImportSpec(file)
+	ensureModelImportSpec(file, modelInfo)
+	return true
+}
+
+// isCanonicalServiceStructBody reports whether the struct body is exactly the
+// generated form: a single embedded service.Base[T1, T2, T3] field. Stale
+// type parameters still count as canonical; applyServiceType syncs them
+// separately without rewriting the body.
+func isCanonicalServiceStructBody(structType *ast.StructType) bool {
+	if structType.Fields == nil || len(structType.Fields.List) != 1 {
+		return false
+	}
+	field := structType.Fields.List[0]
+	return len(field.Names) == 0 && is_service_base_with_three_type_params(field.Type)
+}
+
+// removeStructInteriorComments drops every comment group positioned inside
+// the struct braces: a force-rewritten body takes its comments with it, and a
+// stale comment would otherwise interleave with the position-less replacement
+// field when printing.
+func removeStructInteriorComments(file *ast.File, structType *ast.StructType) {
+	if structType.Fields == nil || !structType.Fields.Opening.IsValid() || !structType.Fields.Closing.IsValid() {
+		return
+	}
+	kept := file.Comments[:0]
+	for _, group := range file.Comments {
+		if group.Pos() > structType.Fields.Opening && group.End() < structType.Fields.Closing {
+			continue
+		}
+		kept = append(kept, group)
+	}
+	file.Comments = kept
+}
+
+// generatedServiceBaseField builds the service.Base[...] embedded field
+// exactly as generated service code declares it for the action.
+func generatedServiceBaseField(modelInfo *ModelInfo, action *dsl.Action, roleName string) *ast.Field {
+	decl := types(modelInfo.ModelPkgName, modelInfo.ModelName, action.Payload, action.Result, action.Phase, roleName, false)
+	typeSpec, ok := decl.Specs[0].(*ast.TypeSpec)
+	if !ok {
+		return nil
+	}
+	structType, ok := typeSpec.Type.(*ast.StructType)
+	if !ok {
+		return nil
+	}
+	return structType.Fields.List[0]
+}
+
+// findStructTypeSpec returns the struct type spec declared with the given
+// name, or nil when the file declares no such struct.
+func findStructTypeSpec(file *ast.File, name string) *ast.TypeSpec {
+	for _, decl := range file.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+		for _, spec := range genDecl.Specs {
+			typeSpec, ok := spec.(*ast.TypeSpec)
+			if !ok || typeSpec.Name == nil || typeSpec.Name.Name != name {
+				continue
+			}
+			if _, ok := typeSpec.Type.(*ast.StructType); ok {
+				return typeSpec
+			}
+		}
+	}
+	return nil
+}
+
+// ensureServiceImportSpec inserts the gst service import so a restored
+// service.Base embedding resolves. It reports whether the file was modified.
+func ensureServiceImportSpec(file *ast.File) bool {
+	if file == nil || findImportSpec(file, constants.ImportPathService) != nil {
+		return false
+	}
+	return insertImportSpec(file, &ast.ImportSpec{
+		Path: &ast.BasicLit{
+			Kind:  token.STRING,
+			Value: fmt.Sprintf("%q", constants.ImportPathService),
+		},
+	})
+}
+
+// ensureModelImportSpec inserts the business model import a restored
+// service.Base embedding references, aliased when the package name differs
+// from the last import path segment. It reports whether the file was modified.
+func ensureModelImportSpec(file *ast.File, modelInfo *ModelInfo) bool {
+	importPath := filepath.Join(modelInfo.ModulePath, modelInfo.ModelFileDir)
+	if file == nil || findImportSpec(file, importPath) != nil {
+		return false
+	}
+
+	spec := &ast.ImportSpec{
+		Path: &ast.BasicLit{
+			Kind:  token.STRING,
+			Value: fmt.Sprintf("%q", importPath),
+		},
+	}
+	if fields := strings.Split(importPath, "/"); len(fields) > 0 && fields[len(fields)-1] != modelInfo.ModelPkgName {
+		spec.Name = ast.NewIdent(modelInfo.ModelPkgName)
+	}
+	return insertImportSpec(file, spec)
+}
+
+// insertImportSpec appends the import spec to the first import declaration,
+// creating one at the top of the file when none exists.
+func insertImportSpec(file *ast.File, spec *ast.ImportSpec) bool {
+	for _, decl := range file.Decls {
+		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.IMPORT {
+			genDecl.Specs = append(genDecl.Specs, spec)
+			return true
+		}
+	}
+	file.Decls = append([]ast.Decl{&ast.GenDecl{Tok: token.IMPORT, Specs: []ast.Spec{spec}}}, file.Decls...)
+	return true
+}
+
 // ApplyServiceFileWithModelSync extends ApplyServiceFile to handle import path and package name updates.
 // It will update import statements and package references when model packages are renamed.
 //
@@ -446,12 +618,19 @@ func ApplyServiceFileWithModelSync(file *ast.File, action *dsl.Action, servicePk
 		return false
 	}
 
+	// Force the service struct body back to its canonical form before
+	// anything else: the remaining apply steps only recognize service structs
+	// through the direct service.Base embedding.
+	changed := forceCanonicalServiceStruct(file, action, modelInfo)
+
 	// First apply the original ApplyServiceFile logic
 	correctModelName := ""
 	if modelInfo != nil {
 		correctModelName = modelInfo.ModelName
 	}
-	changed := applyServiceFile(file, action, servicePkgName, correctModelName)
+	if applyServiceFile(file, action, servicePkgName, correctModelName) {
+		changed = true
+	}
 	if modelInfo == nil || modelInfo.ModulePath == "" || modelInfo.ModelFileDir == "" || modelInfo.ModelPkgName == "" {
 		return changed
 	}
