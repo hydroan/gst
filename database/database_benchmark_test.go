@@ -177,13 +177,13 @@ func BenchmarkDatabaseCount(b *testing.B) {
 	require.NoError(b, database.Database[*TestUser](context.Background()).Create(ul...))
 
 	b.Run("nocache", func(b *testing.B) {
-		count := new(int64)
+		count := new(int)
 		for b.Loop() {
 			_ = database.Database[*TestUser](context.Background()).Count(count)
 		}
 	})
 	b.Run("withcache", func(b *testing.B) {
-		count := new(int64)
+		count := new(int)
 		for b.Loop() {
 			_ = database.Database[*TestUser](context.Background()).WithCache().Count(count)
 		}

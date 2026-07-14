@@ -31,7 +31,7 @@ type AdminUserGetRsp struct {
 // AdminUserListRsp returns tenant-visible users for privileged administrators.
 type AdminUserListRsp struct {
 	Items []AdminUserView `json:"items"`
-	Total int64           `json:"total"`
+	Total int             `json:"total"`
 }
 
 // AdminUserView describes an IAM user for privileged administrator APIs.

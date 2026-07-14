@@ -25,7 +25,7 @@ func TestAdminUserList(t *testing.T) {
 		cli := accountNewAuthenticatedClient(t, adminUsersAPI(), rootSessionID)
 
 		items := make([]iam.AdminUserView, 0)
-		total := new(int64)
+		total := new(int)
 		_, err := cli.List(&items, total)
 		require.NoError(t, err)
 		require.Positive(t, *total)
@@ -42,10 +42,10 @@ func TestAdminUserList(t *testing.T) {
 		cli := accountNewAuthenticatedClient(t, adminUsersAPI()+"?username=fuzzy_match", rootSessionID)
 
 		items := make([]iam.AdminUserView, 0)
-		total := new(int64)
+		total := new(int)
 		_, err := cli.List(&items, total)
 		require.NoError(t, err)
-		require.EqualValues(t, 1, *total)
+		require.Equal(t, 1, *total)
 		require.Len(t, items, 1)
 		require.Equal(t, fuzzyUser.UserID, items[0].ID)
 		require.Equal(t, fuzzyUser.Username, items[0].Username)
@@ -55,7 +55,7 @@ func TestAdminUserList(t *testing.T) {
 		cli := accountNewAuthenticatedClient(t, adminUsersAPI(), actor.SessionID)
 
 		items := make([]iam.AdminUserView, 0)
-		total := new(int64)
+		total := new(int)
 		_, err := cli.List(&items, total)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")

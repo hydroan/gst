@@ -78,7 +78,7 @@ func TestProfilePatch(t *testing.T) {
 			require.Equal(t, avatar, rsp.Avatar)
 			require.Equal(t, metadata, rsp.Metadata)
 		})
-		require.Equal(t, int64(1), profileCountForUser(t, account.UserID))
+		require.Equal(t, 1, profileCountForUser(t, account.UserID))
 	})
 
 	t.Run("patch_only_requested_fields", func(t *testing.T) {
@@ -235,10 +235,10 @@ func profileCleanupAccount(t *testing.T, userID string) {
 	require.NoError(t, database.Database[*iam.User](context.Background()).Delete(user))
 }
 
-func profileCountForUser(t *testing.T, userID string) int64 {
+func profileCountForUser(t *testing.T, userID string) int {
 	t.Helper()
 
-	var total int64
+	var total int
 	require.NoError(t, database.Database[*modeliamprofile.Profile](context.Background()).
 		WithQuery(&modeliamprofile.Profile{UserID: userID}).
 		Count(&total))

@@ -344,7 +344,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			gstotel.RecordError(span, err)
 			return
 		}
-		total := new(int64)
+		total := new(int)
 		noTotalStr, _ := c.GetQuery(consts.QUERY_NO_TOTAL)
 		noTotal, _ = strconv.ParseBool(noTotalStr)
 		// NOTE: Total count is not provided when using cursor-based pagination.

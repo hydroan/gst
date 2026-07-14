@@ -14,7 +14,7 @@ type Session2 struct {
 // SessionListRsp returns all active sessions of the current authenticated user.
 type SessionListRsp struct {
 	Items []SessionView `json:"items"`
-	Total int64         `json:"total"`
+	Total int           `json:"total"`
 }
 
 // SessionGetRsp returns the detail of a specified session of the current authenticated user.

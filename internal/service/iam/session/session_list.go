@@ -70,6 +70,6 @@ func (s *SessionListService) List(ctx *types.ServiceContext, req *model.Empty) (
 
 	return &modeliamsession.SessionListRsp{
 		Items: items,
-		Total: int64(len(items)),
+		Total: len(items),
 	}, nil
 }

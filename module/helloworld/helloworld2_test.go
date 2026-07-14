@@ -111,7 +111,7 @@ func TestHelloworld2Module(t *testing.T) {
 			case "list":
 				createHelloworld2TestRecord(t, cli, res1)
 				items := make([]*helloworld.Helloworld2, 0)
-				total := new(int64)
+				total := new(int)
 
 				_, err = cli.List(&items, total)
 				require.NoError(t, err)

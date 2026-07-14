@@ -51,7 +51,7 @@ func (a *AdminSessionListService) List(ctx *types.ServiceContext, req *model.Emp
 
 	cache := redis.Cache[modeliamsession.Session]().WithContext(ctx)
 	owners := make(map[string]*adminSessionOwnerItem, len(sessionIDs))
-	var sessionTotal int64
+	var sessionTotal int
 	for i := range sessionIDs {
 		sessionID := sessionIDs[i]
 		if sessionID == "" {
@@ -126,7 +126,7 @@ func (a *AdminSessionListService) List(ctx *types.ServiceContext, req *model.Emp
 
 	return &modeliamsession.AdminSessionListRsp{
 		Items:        rspItems,
-		Total:        int64(len(rspItems)),
+		Total:        len(rspItems),
 		SessionTotal: sessionTotal,
 	}, nil
 }

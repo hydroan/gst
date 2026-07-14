@@ -68,7 +68,7 @@ func (a *AdminUserListService) List(ctx *types.ServiceContext, _ *model.Empty) (
 // listUsers applies the authorization-derived scope and request filters, counts
 // the full filtered result set, then applies request pagination only to the
 // returned page.
-func listUsers(ctx *types.ServiceContext, actor *modeliamuser.User) ([]*modeliamuser.User, int64, error) {
+func listUsers(ctx *types.ServiceContext, actor *modeliamuser.User) ([]*modeliamuser.User, int, error) {
 	cfg, err := userVisibilityQueryConfig(ctx, actor)
 	if err != nil {
 		return nil, 0, err
@@ -76,7 +76,7 @@ func listUsers(ctx *types.ServiceContext, actor *modeliamuser.User) ([]*modeliam
 	filters := readAdminUserListFilters(ctx)
 	userQuery, cfg := adminUserListQuery(filters, cfg)
 
-	var total int64
+	var total int
 	if err = database.Database[*modeliamuser.User](ctx).WithQuery(userQuery, cfg).Count(&total); err != nil {
 		return nil, 0, err
 	}

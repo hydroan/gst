@@ -45,8 +45,8 @@ const (
 )
 
 type ListResponse[T any] struct {
-	Items []T   `json:"items"`
-	Total int64 `json:"total"`
+	Items []T `json:"items"`
+	Total int `json:"total"`
 }
 
 func init() {
@@ -103,7 +103,7 @@ func TestLoginLogList(t *testing.T) {
 	t.Run("after_login", func(t *testing.T) {
 		cli := newLoginLogClient(t, sessionID)
 		items := make([]*logmgmt.LoginLog, 0)
-		total := new(int64)
+		total := new(int)
 		resp, err := cli.List(&items, total)
 		require.NoError(t, err)
 
@@ -136,7 +136,7 @@ func TestLoginLogList(t *testing.T) {
 
 		cli := newLoginLogClient(t, sessionID)
 		items := make([]*logmgmt.LoginLog, 0)
-		total := new(int64)
+		total := new(int)
 		resp, err = cli.List(&items, total)
 		require.NoError(t, err)
 
@@ -179,7 +179,7 @@ func TestOperationLogList(t *testing.T) {
 	t.Run("before_operation", func(t *testing.T) {
 		cli := newOperationLogClient(t, sessionID, client.WithQuery("record_id", roleID))
 		items := make([]*logmgmt.OperationLog, 0)
-		total := new(int64)
+		total := new(int)
 		resp, err := cli.List(&items, total)
 		require.NoError(t, err)
 
@@ -214,7 +214,7 @@ func TestOperationLogList(t *testing.T) {
 	t.Run("after_operation", func(t *testing.T) {
 		cli := newOperationLogClient(t, sessionID, client.WithQuery("record_id", roleID))
 		items := make([]*logmgmt.OperationLog, 0)
-		total := new(int64)
+		total := new(int)
 		resp, err := cli.List(&items, total)
 		require.NoError(t, err)
 

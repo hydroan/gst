@@ -131,7 +131,7 @@ func Test_Client(t *testing.T) {
 	require.NoError(t, err)
 
 	users := make([]User, 0)
-	total := new(int64)
+	total := new(int)
 	user := new(User)
 
 	// test List
@@ -141,7 +141,7 @@ func Test_Client(t *testing.T) {
 		require.NotNil(t, resp)
 		require.NotEmpty(t, resp.TraceID)
 		require.Len(t, users, 2)
-		require.Equal(t, int64(5), *total)
+		require.Equal(t, 5, *total)
 	})
 	// test Get
 	t.Run("get", func(t *testing.T) {
@@ -257,7 +257,7 @@ func Test_Client(t *testing.T) {
 		cli, err := client.New(addr2, client.WithToken(token))
 		require.NoError(t, err)
 		items := make([]User, 0)
-		total := *new(int64)
+		total := *new(int)
 
 		// 1. delete all resources.
 		_, err = cli.DeleteMany([]string{id1, id2, id3, id4, id5})
@@ -269,7 +269,7 @@ func Test_Client(t *testing.T) {
 		_, err = cli.List(&items, &total)
 		require.NoError(t, err)
 		require.Empty(t, items)
-		require.Equal(t, int64(0), total)
+		require.Equal(t, 0, total)
 
 		// 3.create resources.
 		resp, err := cli.CreateMany([]User{user1, user2, user3, user4, user5})
@@ -281,7 +281,7 @@ func Test_Client(t *testing.T) {
 		_, err = cli.List(&items, &total)
 		require.NoError(t, err)
 		require.Len(t, items, 5)
-		require.Equal(t, int64(5), total)
+		require.Equal(t, 5, total)
 	})
 
 	// Test DeleteMany
@@ -289,7 +289,7 @@ func Test_Client(t *testing.T) {
 		cli, err := client.New(addr2, client.WithToken(token))
 		require.NoError(t, err)
 		items := make([]User, 0)
-		total := *new(int64)
+		total := *new(int)
 
 		// 1.create resources.
 		_, err = cli.UpdateMany([]User{user1, user2, user3, user4, user5})
@@ -299,7 +299,7 @@ func Test_Client(t *testing.T) {
 		_, err = cli.List(&items, &total)
 		require.NoError(t, err)
 		require.Len(t, items, 5)
-		require.Equal(t, int64(5), total)
+		require.Equal(t, 5, total)
 
 		// 3.delete resources
 		resp, err := cli.DeleteMany([]string{id1, id2, id3, id4, id5})
@@ -314,7 +314,7 @@ func Test_Client(t *testing.T) {
 		_, err = cli.List(&items, &total)
 		require.NoError(t, err)
 		require.Empty(t, items)
-		require.Equal(t, int64(0), total)
+		require.Equal(t, 0, total)
 	})
 
 	// Test UpdateMany
@@ -438,12 +438,12 @@ func Test_Client_WithAPI(t *testing.T) {
 
 		// Test List using apiPath from WithAPI
 		users := make([]User, 0)
-		total := new(int64)
+		total := new(int)
 		resp, err := cli.List(&users, total)
 		require.NoError(t, err)
 		require.NotNil(t, resp)
 		require.NotEmpty(t, resp.TraceID)
-		require.GreaterOrEqual(t, *total, int64(0))
+		require.GreaterOrEqual(t, *total, 0)
 	})
 
 	// Test WithAPI option with Get method
@@ -604,11 +604,11 @@ func Test_Client_WithAPI(t *testing.T) {
 		require.NoError(t, err)
 
 		users := make([]User, 0)
-		total := new(int64)
+		total := new(int)
 		resp, err := cli.List(&users, total)
 		require.NoError(t, err)
 		require.NotNil(t, resp)
-		require.GreaterOrEqual(t, *total, int64(0))
+		require.GreaterOrEqual(t, *total, 0)
 	})
 }
 

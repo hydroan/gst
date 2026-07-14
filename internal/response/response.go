@@ -223,7 +223,7 @@ func Bytes(c *gin.Context, coder types.Coder, data ...[]byte) {
 	_, _ = c.Writer.Write(util.StringToBytes(dataStr))
 }
 
-func BytesList(c *gin.Context, coder types.Coder, total int64, data ...[]byte) {
+func BytesList(c *gin.Context, coder types.Coder, total int, data ...[]byte) {
 	c.Header("Content-Type", "application/json; charset=utf-8")
 	var dataStr string
 	if len(data) > 0 {

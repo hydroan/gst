@@ -48,8 +48,8 @@ var (
 )
 
 type ListResponse[T any] struct {
-	Items []T   `json:"items"`
-	Total int64 `json:"total"`
+	Items []T `json:"items"`
+	Total int `json:"total"`
 }
 
 func init() {
@@ -165,13 +165,13 @@ func TestAuthzMenu(t *testing.T) {
 
 		t.Run("list", func(t *testing.T) {
 			items := make([]*authz.Menu, 0)
-			total := new(int64)
+			total := new(int)
 			resp, err = cli.List(&items, total)
 			require.NoError(t, err)
 			testutil.TestResp[ListResponse[*authz.Menu]](t, resp, func(t *testing.T, rsp ListResponse[*authz.Menu]) {
 				t.Helper()
 				require.NotNil(t, rsp.Items)
-				require.GreaterOrEqual(t, rsp.Total, int64(0))
+				require.GreaterOrEqual(t, rsp.Total, 0)
 			})
 		})
 
@@ -250,13 +250,13 @@ func TestAuthzMenu(t *testing.T) {
 			}), client.WithQueryExpand("Children,Parent", 1))
 			require.NoError(t, err)
 			items := make([]*authz.Menu, 0)
-			total := new(int64)
+			total := new(int)
 			resp, err = cliExpand.List(&items, total)
 			require.NoError(t, err)
 			testutil.TestResp[ListResponse[*authz.Menu]](t, resp, func(t *testing.T, rsp ListResponse[*authz.Menu]) {
 				t.Helper()
 				require.NotNil(t, rsp.Items)
-				require.GreaterOrEqual(t, rsp.Total, int64(0))
+				require.GreaterOrEqual(t, rsp.Total, 0)
 			})
 		})
 
@@ -379,7 +379,7 @@ func TestAuthzMenu(t *testing.T) {
 			}))
 			require.NoError(t, err)
 			items := make([]*authz.Menu, 0)
-			total := new(int64)
+			total := new(int)
 			resp, err = userMenuCli.List(&items, total)
 			require.NoError(t, err)
 			testutil.TestResp[ListResponse[*authz.Menu]](t, resp, func(t *testing.T, rsp ListResponse[*authz.Menu]) {
@@ -438,7 +438,7 @@ func TestAuthzMenu(t *testing.T) {
 			userMenuCli, err := authzTenantClient(menuAPI, tenantUserSessionID, tenantA)
 			require.NoError(t, err)
 			items := make([]*authz.Menu, 0)
-			total := new(int64)
+			total := new(int)
 			resp, err = userMenuCli.List(&items, total)
 			require.NoError(t, err)
 			testutil.TestResp[ListResponse[*authz.Menu]](t, resp, func(t *testing.T, rsp ListResponse[*authz.Menu]) {
@@ -450,7 +450,7 @@ func TestAuthzMenu(t *testing.T) {
 			userMenuCli, err = authzTenantClient(menuAPI, tenantUserSessionID, tenantB)
 			require.NoError(t, err)
 			items = make([]*authz.Menu, 0)
-			total = new(int64)
+			total = new(int)
 			resp, err = userMenuCli.List(&items, total)
 			require.NoError(t, err)
 			testutil.TestResp[ListResponse[*authz.Menu]](t, resp, func(t *testing.T, rsp ListResponse[*authz.Menu]) {
@@ -498,13 +498,13 @@ func TestAuthzRole(t *testing.T) {
 
 		t.Run("list", func(t *testing.T) {
 			items := make([]*authz.Role, 0)
-			total := new(int64)
+			total := new(int)
 			resp, err = cli.List(&items, total)
 			require.NoError(t, err)
 			testutil.TestResp[ListResponse[*authz.Role]](t, resp, func(t *testing.T, rsp ListResponse[*authz.Role]) {
 				t.Helper()
 				require.NotNil(t, rsp.Items)
-				require.GreaterOrEqual(t, rsp.Total, int64(0))
+				require.GreaterOrEqual(t, rsp.Total, 0)
 			})
 		})
 
@@ -631,13 +631,13 @@ func TestAuthzRole(t *testing.T) {
 
 		t.Run("list_expand", func(t *testing.T) {
 			items := make([]*authz.Role, 0)
-			total := new(int64)
+			total := new(int)
 			resp, err = cli.List(&items, total)
 			require.NoError(t, err)
 			testutil.TestResp[ListResponse[*authz.Role]](t, resp, func(t *testing.T, rsp ListResponse[*authz.Role]) {
 				t.Helper()
 				require.NotNil(t, rsp.Items)
-				require.GreaterOrEqual(t, rsp.Total, int64(0))
+				require.GreaterOrEqual(t, rsp.Total, 0)
 			})
 		})
 
@@ -687,13 +687,13 @@ func TestAuthzRoleBinding(t *testing.T) {
 
 		t.Run("list", func(t *testing.T) {
 			items := make([]*authz.RoleBinding, 0)
-			total := new(int64)
+			total := new(int)
 			resp, err = cli.List(&items, total)
 			require.NoError(t, err)
 			testutil.TestResp[ListResponse[*authz.RoleBinding]](t, resp, func(t *testing.T, rsp ListResponse[*authz.RoleBinding]) {
 				t.Helper()
 				require.NotNil(t, rsp.Items)
-				require.GreaterOrEqual(t, rsp.Total, int64(0))
+				require.GreaterOrEqual(t, rsp.Total, 0)
 			})
 		})
 
@@ -730,13 +730,13 @@ func TestAuthzRoleBinding(t *testing.T) {
 
 		t.Run("list_expand", func(t *testing.T) {
 			items := make([]*authz.RoleBinding, 0)
-			total := new(int64)
+			total := new(int)
 			resp, err = cli.List(&items, total)
 			require.NoError(t, err)
 			testutil.TestResp[ListResponse[*authz.RoleBinding]](t, resp, func(t *testing.T, rsp ListResponse[*authz.RoleBinding]) {
 				t.Helper()
 				require.NotNil(t, rsp.Items)
-				require.GreaterOrEqual(t, rsp.Total, int64(0))
+				require.GreaterOrEqual(t, rsp.Total, 0)
 			})
 		})
 
@@ -850,7 +850,7 @@ func TestIAMAdminUserTenantListGet(t *testing.T) {
 
 	t.Run("list_tenant_users", func(t *testing.T) {
 		items := make([]iam.AdminUserView, 0)
-		total := new(int64)
+		total := new(int)
 		_, listErr := cli.List(&items, total)
 		require.NoError(t, listErr)
 		require.Positive(t, *total)

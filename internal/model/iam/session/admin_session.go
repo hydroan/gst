@@ -13,8 +13,8 @@ type AdminSession struct {
 // AdminSessionListRsp returns all active sessions grouped by user for privileged administrators.
 type AdminSessionListRsp struct {
 	Items        []AdminSessionOwnerView `json:"items"`
-	Total        int64                   `json:"total"`
-	SessionTotal int64                   `json:"session_total"`
+	Total        int                     `json:"total"`
+	SessionTotal int                     `json:"session_total"`
 }
 
 // AdminSessionGetRsp returns the detail of a specified session for a privileged administrator.

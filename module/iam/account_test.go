@@ -137,7 +137,7 @@ func TestAccountLogout(t *testing.T) {
 		cli := accountNewAuthenticatedClient(t, userAPI, user.SessionID)
 
 		items := make([]*iam.User, 0)
-		total := new(int64)
+		total := new(int)
 		_, err := cli.List(&items, total)
 		require.Error(t, err)
 	})

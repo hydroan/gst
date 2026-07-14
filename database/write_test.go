@@ -17,9 +17,9 @@ func TestDatabaseCreate(t *testing.T) {
 
 	// Test basic Create - single record
 	require.NoError(t, database.Database[*TestUser](context.Background()).Create(u1))
-	count := new(int64)
+	count := new(int)
 	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-	require.Equal(t, int64(1), *count, "should have 1 record after creating single record")
+	require.Equal(t, 1, *count, "should have 1 record after creating single record")
 
 	// Verify single record was created correctly
 	u := new(TestUser)
@@ -39,7 +39,7 @@ func TestDatabaseCreate(t *testing.T) {
 	u1.Remark, u2.Remark, u3.Remark = nil, nil, nil // clear remark to test hook
 	require.NoError(t, database.Database[*TestUser](context.Background()).Create(ul...))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-	require.Equal(t, int64(3), *count, "should have 3 records after batch create")
+	require.Equal(t, 3, *count, "should have 3 records after batch create")
 
 	// Check the create hook results for batch create
 	require.Equal(t, remarkUserCreateBefore, *u1.Remark, "u1 should have create hook result")
@@ -157,13 +157,13 @@ func TestDatabaseDelete(t *testing.T) {
 	setupTestData(t)
 
 	// Test basic Delete - single record (soft delete)
-	count := new(int64)
+	count := new(int)
 	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-	require.Equal(t, int64(3), *count, "should have 3 records initially")
+	require.Equal(t, 3, *count, "should have 3 records initially")
 
 	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(u1))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-	require.Equal(t, int64(2), *count, "should have 2 records after soft delete")
+	require.Equal(t, 2, *count, "should have 2 records after soft delete")
 
 	// Verify soft-deleted record is not visible in List
 	users := make([]*TestUser, 0)
@@ -184,7 +184,7 @@ func TestDatabaseDelete(t *testing.T) {
 	// Test Delete - batch delete multiple records
 	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(u2, u3))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-	require.Equal(t, int64(0), *count, "should have 0 records after batch soft delete")
+	require.Equal(t, 0, *count, "should have 0 records after batch soft delete")
 
 	// Verify all records are soft-deleted
 	users = make([]*TestUser, 0)
@@ -194,12 +194,12 @@ func TestDatabaseDelete(t *testing.T) {
 	// Recreate data for next test
 	setupTestData(t)
 	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-	require.Equal(t, int64(3), *count, "should have 3 records after recreate")
+	require.Equal(t, 3, *count, "should have 3 records after recreate")
 
 	// Test Delete - batch delete with slice
 	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(ul...))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-	require.Equal(t, int64(0), *count, "should have 0 records after batch delete with slice")
+	require.Equal(t, 0, *count, "should have 0 records after batch delete with slice")
 
 	// Test Delete with empty resources - should not return error
 	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(nil))
@@ -257,9 +257,9 @@ func TestDatabaseUpdate(t *testing.T) {
 	u3.Name = "user3_batch"
 	u1.Remark, u2.Remark, u3.Remark = nil, nil, nil // clear remark to test hook
 	require.NoError(t, database.Database[*TestUser](context.Background()).Update(ul...))
-	count := new(int64)
+	count := new(int)
 	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-	require.Equal(t, int64(3), *count, "should have 3 records after batch update")
+	require.Equal(t, 3, *count, "should have 3 records after batch update")
 
 	// Check the update hook result
 	require.Equal(t, remarkUserUpdateBefore, *u1.Remark, "u1 should have update hook result")

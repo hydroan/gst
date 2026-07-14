@@ -298,7 +298,7 @@ QUERY:
 // Applies all previously set query conditions (WHERE, JOIN, etc.) to the count operation.
 //
 // Parameters:
-//   - count: Pointer to int64 where the result count will be stored
+//   - count: Pointer to int where the result count will be stored
 //
 // Returns database errors if the query fails.
 //
@@ -310,12 +310,12 @@ QUERY:
 //
 // Example:
 //
-//	var total int64
+//	var total int
 //	WithQuery(&User{Status: "active"}).Count(&total)  // Count active records
 //	WithQuery(&User{Name: "john"}).Count(&total)      // Count records matching name
 //
-// Note: The count parameter must be a non-nil pointer to int64.
-func (db *database[M]) Count(count *int64) (err error) {
+// Note: The count parameter must be a non-nil pointer to int.
+func (db *database[M]) Count(count *int) (err error) {
 	defer db.reset()
 
 	if count == nil {
@@ -328,20 +328,22 @@ func (db *database[M]) Count(count *int64) (err error) {
 	defer done(err)
 
 	begin := time.Now()
+	// GORM's Count only accepts *int64, so bridge through a local variable.
+	var count64 int64
 	var key string
 	if db.dryRun {
 		tableName := db.m.GetTableName()
 		if len(db.tableName) > 0 {
 			tableName = db.tableName
 		}
-		tx := db.dryRunReadSession().Table(tableName).Model(*new(M)).Limit(-1).Count(count)
+		tx := db.dryRunReadSession().Table(tableName).Model(*new(M)).Limit(-1).Count(&count64)
 		return db.collectSQL(tx)
 	}
 	if !db.enableCache {
 		goto QUERY
 	}
-	_, _, key = buildCacheKey(db.ins.Session(&gorm.Session{DryRun: true, Logger: glogger.Default.LogMode(glogger.Silent)}).Model(*new(M)).Count(count).Statement, "count")
-	if _cache, e := cache.Cache[int64]().WithContext(ctx).Get(key); e != nil {
+	_, _, key = buildCacheKey(db.ins.Session(&gorm.Session{DryRun: true, Logger: glogger.Default.LogMode(glogger.Silent)}).Model(*new(M)).Count(&count64).Statement, "count")
+	if _cache, e := cache.Cache[int]().WithContext(ctx).Get(key); e != nil {
 		// metrics.CacheMiss.WithLabelValues("count", db.typ.Name()).Inc()
 		goto QUERY
 	} else {
@@ -352,15 +354,16 @@ func (db *database[M]) Count(count *int64) (err error) {
 	}
 
 QUERY:
-	// if err = db.db.Model(*new(M)).Count(count).Error; err != nil {
+	// if err = db.db.Model(*new(M)).Count(&count64).Error; err != nil {
 	tableName := db.m.GetTableName()
 	if len(db.tableName) > 0 {
 		tableName = db.tableName
 	}
-	if err = db.ins.Table(tableName).Model(*new(M)).Limit(-1).Count(count).Error; err != nil {
+	if err = db.ins.Table(tableName).Model(*new(M)).Limit(-1).Count(&count64).Error; err != nil {
 		logger.Cache.Error(err)
 		return err
 	}
+	*count = int(count64)
 	// if db.enableCache && config.App.Redis.Enabled {
 	// 	logger.Cache.Infow("count from database", "cost", time.Since(begin).String(), "key", key)
 	// 	go func() {
@@ -372,7 +375,7 @@ QUERY:
 	// }
 	if db.enableCache {
 		logger.Cache.Infow("count from database", "cost", util.FormatDurationSmart(time.Since(begin)), "key", key)
-		_ = cache.Cache[int64]().WithContext(ctx).Set(key, *count, config.App.Cache.Expiration)
+		_ = cache.Cache[int]().WithContext(ctx).Set(key, *count, config.App.Cache.Expiration)
 
 	}
 	return nil

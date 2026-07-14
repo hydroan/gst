@@ -18,7 +18,7 @@ type TraceProbe struct {
 	Note string `json:"note,omitempty" query:"note" gorm:"size:1024"`
 
 	Hook      string `json:"hook,omitempty" query:"hook" gorm:"size:64"`
-	HookCount int64  `json:"hook_count,omitempty" gorm:"-"`
+	HookCount int    `json:"hook_count,omitempty" gorm:"-"`
 
 	model.Base
 }
@@ -98,7 +98,7 @@ func (t *TraceProbe) GetAfter(ctx context.Context) error {
 }
 
 func (t *TraceProbe) traceModelHook(ctx context.Context, phase consts.Phase) error {
-	var total int64
+	var total int
 	err := database.Database[*TraceProbe](ctx).Count(&total)
 	if t != nil {
 		t.Hook = phase.MethodName()
@@ -117,11 +117,11 @@ func (t *TraceProbe) traceModelHook(ctx context.Context, phase consts.Phase) err
 	return err
 }
 
-func traceProbeLogFields(t *TraceProbe, phase consts.Phase, total int64) []zap.Field {
+func traceProbeLogFields(t *TraceProbe, phase consts.Phase, total int) []zap.Field {
 	fields := []zap.Field{
 		zap.String("component", "model_hook"),
 		zap.String("hook", phase.MethodName()),
-		zap.Int64("total", total),
+		zap.Int("total", total),
 	}
 	if t != nil {
 		fields = append(

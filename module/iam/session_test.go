@@ -313,14 +313,14 @@ func TestSessionList(t *testing.T) {
 		require.NoError(t, err)
 
 		items := make([]iam.SessionView, 0)
-		total := new(int64)
+		total := new(int)
 		resp, err := cli.List(&items, total)
 		require.NoError(t, err)
 
 		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 2)
-			require.EqualValues(t, 2, rsp.Total)
+			require.Equal(t, 2, rsp.Total)
 
 			sessionMap := make(map[string]iam.SessionView, len(rsp.Items))
 			for i := range rsp.Items {
@@ -367,7 +367,7 @@ func TestSessionList(t *testing.T) {
 		require.NoError(t, err)
 
 		items := make([]iam.SessionView, 0)
-		total := new(int64)
+		total := new(int)
 		_, err = cli.List(&items, total)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
@@ -386,7 +386,7 @@ func TestSessionList(t *testing.T) {
 		require.NoError(t, err)
 
 		items := make([]iam.SessionView, 0)
-		total := new(int64)
+		total := new(int)
 		_, err = cli.List(&items, total)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
@@ -413,14 +413,14 @@ func TestSessionList(t *testing.T) {
 		require.NoError(t, err)
 
 		items := make([]iam.SessionView, 0)
-		total := new(int64)
+		total := new(int)
 		resp, err := cli.List(&items, total)
 		require.NoError(t, err)
 
 		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 1)
-			require.EqualValues(t, 1, rsp.Total)
+			require.Equal(t, 1, rsp.Total)
 			require.Equal(t, currentSessionID, rsp.Items[0].ID)
 			require.True(t, rsp.Items[0].IsCurrent)
 		})
@@ -477,14 +477,14 @@ func TestAdminSessionList(t *testing.T) {
 		require.NoError(t, err)
 
 		items := make([]iam.AdminSessionOwnerView, 0)
-		total := new(int64)
+		total := new(int)
 		resp, err := cli.List(&items, total)
 		require.NoError(t, err)
 
 		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.AdminSessionListRsp) {
 			t.Helper()
-			require.GreaterOrEqual(t, rsp.Total, int64(3))
-			require.GreaterOrEqual(t, rsp.SessionTotal, int64(4))
+			require.GreaterOrEqual(t, rsp.Total, 3)
+			require.GreaterOrEqual(t, rsp.SessionTotal, 4)
 
 			userMap := make(map[string]iam.AdminSessionOwnerView, len(rsp.Items))
 			for i := range rsp.Items {
@@ -534,7 +534,7 @@ func TestAdminSessionList(t *testing.T) {
 		require.NoError(t, err)
 
 		items := make([]iam.AdminSessionOwnerView, 0)
-		total := new(int64)
+		total := new(int)
 		resp, err := cli.List(&items, total)
 		require.NoError(t, err)
 
@@ -560,7 +560,7 @@ func TestAdminSessionList(t *testing.T) {
 		}))
 		require.NoError(t, err)
 
-		_, err = cli.List(new([]iam.AdminSessionOwnerView), new(int64))
+		_, err = cli.List(new([]iam.AdminSessionOwnerView), new(int))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "400")
 	})
@@ -575,7 +575,7 @@ func TestAdminSessionList(t *testing.T) {
 		}))
 		require.NoError(t, err)
 
-		_, err = cli.List(new([]iam.AdminSessionOwnerView), new(int64))
+		_, err = cli.List(new([]iam.AdminSessionOwnerView), new(int))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
 	})
@@ -594,7 +594,7 @@ func TestAdminSessionList(t *testing.T) {
 		}))
 		require.NoError(t, err)
 
-		_, err = cli.List(new([]iam.AdminSessionOwnerView), new(int64))
+		_, err = cli.List(new([]iam.AdminSessionOwnerView), new(int))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
 		require.Contains(t, err.Error(), "account disabled")
@@ -614,7 +614,7 @@ func TestAdminSessionList(t *testing.T) {
 		}))
 		require.NoError(t, err)
 
-		_, err = cli.List(new([]iam.AdminSessionOwnerView), new(int64))
+		_, err = cli.List(new([]iam.AdminSessionOwnerView), new(int))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "403")
 		require.Contains(t, err.Error(), "account locked")
@@ -1078,13 +1078,13 @@ func TestSessionDelete(t *testing.T) {
 		})
 
 		items := make([]iam.SessionView, 0)
-		total := new(int64)
+		total := new(int)
 		resp, err = cli.List(&items, total)
 		require.NoError(t, err)
 		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 1)
-			require.EqualValues(t, 1, rsp.Total)
+			require.Equal(t, 1, rsp.Total)
 			require.Equal(t, currentSessionID, rsp.Items[0].ID)
 			require.True(t, rsp.Items[0].IsCurrent)
 		})
@@ -1116,13 +1116,13 @@ func TestSessionDelete(t *testing.T) {
 		})
 
 		items := make([]iam.SessionView, 0)
-		total := new(int64)
+		total := new(int)
 		resp, err = cli.List(&items, total)
 		require.NoError(t, err)
 		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 1)
-			require.EqualValues(t, 1, rsp.Total)
+			require.Equal(t, 1, rsp.Total)
 			require.Equal(t, currentSessionID, rsp.Items[0].ID)
 			require.True(t, rsp.Items[0].IsCurrent)
 		})
@@ -1209,13 +1209,13 @@ func TestSessionDeleteOthers(t *testing.T) {
 		})
 
 		items := make([]iam.SessionView, 0)
-		total := new(int64)
+		total := new(int)
 		resp, err = cli.List(&items, total)
 		require.NoError(t, err)
 		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 1)
-			require.EqualValues(t, 1, rsp.Total)
+			require.Equal(t, 1, rsp.Total)
 			require.Equal(t, currentSessionID, rsp.Items[0].ID)
 			require.True(t, rsp.Items[0].IsCurrent)
 		})
@@ -1245,13 +1245,13 @@ func TestSessionDeleteOthers(t *testing.T) {
 		})
 
 		items := make([]iam.SessionView, 0)
-		total := new(int64)
+		total := new(int)
 		resp, err = cli.List(&items, total)
 		require.NoError(t, err)
 		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 1)
-			require.EqualValues(t, 1, rsp.Total)
+			require.Equal(t, 1, rsp.Total)
 			require.Equal(t, currentSessionID, rsp.Items[0].ID)
 			require.True(t, rsp.Items[0].IsCurrent)
 		})

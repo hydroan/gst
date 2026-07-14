@@ -40,8 +40,8 @@ var (
 )
 
 type ListResponse[T any] struct {
-	Items []T   `json:"items"`
-	Total int64 `json:"total"`
+	Items []T `json:"items"`
+	Total int `json:"total"`
 }
 
 type totpTestAccount struct {

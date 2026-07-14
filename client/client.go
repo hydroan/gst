@@ -183,7 +183,7 @@ func (c *Client) Patch(id string, payload any) (*Resp, error) {
 // List send a GET request to retrieve a list of resources.
 // items must be a pointer to slice where items will be unmarshaled into.
 // total will be set to the total number of items available.
-func (c *Client) List(items any, total *int64) (*Resp, error) {
+func (c *Client) List(items any, total *int) (*Resp, error) {
 	if items == nil {
 		return nil, errors.New("items cannot be nil")
 	}
@@ -204,7 +204,7 @@ func (c *Client) List(items any, total *int64) (*Resp, error) {
 	}
 	responseList := new(struct {
 		Items json.RawMessage `json:"items"`
-		Total int64           `json:"total"`
+		Total int             `json:"total"`
 	})
 	if err := json.Unmarshal(resp.Data, responseList); err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal response")

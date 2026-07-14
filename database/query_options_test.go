@@ -144,9 +144,9 @@ func TestDatabaseWithIndex(t *testing.T) {
 	require.Equal(t, u1.Email, user.Email)
 
 	// Test WithIndex with Count method
-	count := new(int64)
+	count := new(int)
 	require.NoError(t, database.Database[*TestUser](context.Background()).WithIndex(existsIndex).Count(count))
-	require.Equal(t, int64(3), *count)
+	require.Equal(t, 3, *count)
 
 	// Test WithIndex with First method
 	firstUser := new(TestUser)
@@ -1358,9 +1358,9 @@ func TestDatabaseWithPurge(t *testing.T) {
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge().Delete(u1))
 
 		// Verify record is permanently deleted (not visible in normal queries)
-		count := new(int64)
+		count := new(int)
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-		require.Equal(t, int64(2), *count, "should have 2 records after hard delete")
+		require.Equal(t, 2, *count, "should have 2 records after hard delete")
 
 		// Verify record is not accessible via Get
 		u := new(TestUser)
@@ -1381,9 +1381,9 @@ func TestDatabaseWithPurge(t *testing.T) {
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge(true).Delete(u1, u2))
 
 		// Verify records are permanently deleted
-		count := new(int64)
+		count := new(int)
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-		require.Equal(t, int64(1), *count, "should have 1 record after hard delete")
+		require.Equal(t, 1, *count, "should have 1 record after hard delete")
 
 		// Verify records are not found even with Unscoped
 		var unscopedUser TestUser
@@ -1409,9 +1409,9 @@ func TestDatabaseWithPurge(t *testing.T) {
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge(false).Delete(u1))
 
 		// Verify record is soft-deleted (not visible in normal queries)
-		count := new(int64)
+		count := new(int)
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-		require.Equal(t, int64(2), *count, "should have 2 records after soft delete")
+		require.Equal(t, 2, *count, "should have 2 records after soft delete")
 
 		// Verify record is not accessible via Get
 		u := new(TestUser)
@@ -1432,9 +1432,9 @@ func TestDatabaseWithPurge(t *testing.T) {
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge(true).Delete(ul...))
 
 		// Verify all records are permanently deleted
-		count := new(int64)
+		count := new(int)
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-		require.Equal(t, int64(0), *count, "should have 0 records after batch hard delete")
+		require.Equal(t, 0, *count, "should have 0 records after batch hard delete")
 
 		// Verify all records are not found even with Unscoped
 		var countUnscoped int64
@@ -1450,9 +1450,9 @@ func TestDatabaseWithPurge(t *testing.T) {
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge(false).Delete(ul...))
 
 		// Verify all records are soft-deleted (not visible in normal queries)
-		count := new(int64)
+		count := new(int)
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-		require.Equal(t, int64(0), *count, "should have 0 records after batch soft delete")
+		require.Equal(t, 0, *count, "should have 0 records after batch soft delete")
 
 		// Verify all records still exist in database (found with Unscoped)
 		var countUnscoped int64
@@ -1474,19 +1474,19 @@ func TestDatabaseWithPurge(t *testing.T) {
 		// WithPurge should not affect Create operations
 		// Create with WithPurge() - should work normally
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge().Create(ul...))
-		count := new(int64)
+		count := new(int)
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-		require.Equal(t, int64(3), *count, "should have 3 records after Create with WithPurge()")
+		require.Equal(t, 3, *count, "should have 3 records after Create with WithPurge()")
 
 		// Create with WithPurge(true) - should work normally
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge(true).Create(ul...))
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-		require.Equal(t, int64(3), *count, "should have 3 records after Create with WithPurge(true)")
+		require.Equal(t, 3, *count, "should have 3 records after Create with WithPurge(true)")
 
 		// Create with WithPurge(false) - should work normally
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge(false).Create(ul...))
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-		require.Equal(t, int64(3), *count, "should have 3 records after Create with WithPurge(false)")
+		require.Equal(t, 3, *count, "should have 3 records after Create with WithPurge(false)")
 	})
 
 	t.Run("DoesNotAffectUpdate", func(t *testing.T) {
@@ -1551,21 +1551,21 @@ func TestDatabaseWithCache(t *testing.T) {
 
 		// WithCache should not affect Create operations
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache().Create(ul...))
-		count := new(int64)
+		count := new(int)
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-		require.Equal(t, int64(3), *count, "should have 3 records after Create with WithCache()")
+		require.Equal(t, 3, *count, "should have 3 records after Create with WithCache()")
 
 		// Create with WithCache(true) - should work normally
 		require.NoError(t, database.Database[*TestUser](context.Background()).Delete(ul...))
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache(true).Create(ul...))
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-		require.Equal(t, int64(3), *count, "should have 3 records after Create with WithCache(true)")
+		require.Equal(t, 3, *count, "should have 3 records after Create with WithCache(true)")
 
 		// Create with WithCache(false) - should work normally
 		require.NoError(t, database.Database[*TestUser](context.Background()).Delete(ul...))
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache(false).Create(ul...))
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-		require.Equal(t, int64(3), *count, "should have 3 records after Create with WithCache(false)")
+		require.Equal(t, 3, *count, "should have 3 records after Create with WithCache(false)")
 	})
 
 	t.Run("DoesNotAffectDelete", func(t *testing.T) {
@@ -1573,13 +1573,13 @@ func TestDatabaseWithCache(t *testing.T) {
 		setupTestData(t)
 
 		// WithCache should not affect Delete operations (but Delete clears cache)
-		count := new(int64)
+		count := new(int)
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-		require.Equal(t, int64(3), *count, "should have 3 records initially")
+		require.Equal(t, 3, *count, "should have 3 records initially")
 
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache().Delete(u1))
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-		require.Equal(t, int64(2), *count, "should have 2 records after Delete with WithCache()")
+		require.Equal(t, 2, *count, "should have 2 records after Delete with WithCache()")
 	})
 
 	t.Run("DoesNotAffectUpdate", func(t *testing.T) {
@@ -1648,19 +1648,19 @@ func TestDatabaseWithCache(t *testing.T) {
 		setupTestData(t)
 
 		// Test Count with cache enabled
-		count1 := new(int64)
+		count1 := new(int)
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count1))
-		require.Equal(t, int64(3), *count1, "should have 3 records without cache")
+		require.Equal(t, 3, *count1, "should have 3 records without cache")
 
-		count2 := new(int64)
+		count2 := new(int)
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache().Count(count2))
-		require.Equal(t, int64(3), *count2, "should have 3 records with cache enabled")
+		require.Equal(t, 3, *count2, "should have 3 records with cache enabled")
 		require.Equal(t, *count1, *count2, "counts should be identical")
 
 		// Test Count with cache disabled - should still work
-		count3 := new(int64)
+		count3 := new(int)
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithCache(false).Count(count3))
-		require.Equal(t, int64(3), *count3, "should have 3 records with cache disabled")
+		require.Equal(t, 3, *count3, "should have 3 records with cache disabled")
 		require.Equal(t, *count1, *count3, "counts should be identical")
 	})
 
@@ -1810,13 +1810,13 @@ func TestDatabaseWithOmit(t *testing.T) {
 			setupTestData(t)
 
 			// WithOmit should not affect Delete operation (soft delete)
-			count := new(int64)
+			count := new(int)
 			require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-			require.Equal(t, int64(3), *count, "should have 3 records initially")
+			require.Equal(t, 3, *count, "should have 3 records initially")
 
 			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("name", "age").Delete(u1))
 			require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-			require.Equal(t, int64(2), *count, "should have 2 records after soft delete")
+			require.Equal(t, 2, *count, "should have 2 records after soft delete")
 
 			// Verify record is soft-deleted (not accessible via Get)
 			uu := new(TestUser)
@@ -1828,13 +1828,13 @@ func TestDatabaseWithOmit(t *testing.T) {
 			setupTestData(t)
 
 			// WithOmit should not affect Delete operation (hard delete)
-			count := new(int64)
+			count := new(int)
 			require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-			require.Equal(t, int64(3), *count, "should have 3 records initially")
+			require.Equal(t, 3, *count, "should have 3 records initially")
 
 			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("name", "age").WithPurge().Delete(u1))
 			require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-			require.Equal(t, int64(2), *count, "should have 2 records after hard delete")
+			require.Equal(t, 2, *count, "should have 2 records after hard delete")
 
 			// Verify record is permanently deleted (not accessible via Get)
 			uu := new(TestUser)
@@ -1894,9 +1894,9 @@ func TestDatabaseWithOmit(t *testing.T) {
 		setupTestData(t)
 
 		// WithOmit should not affect Count operation
-		count := new(int64)
+		count := new(int)
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("name", "age").Count(count))
-		require.Equal(t, int64(3), *count, "count should not be affected by WithOmit")
+		require.Equal(t, 3, *count, "count should not be affected by WithOmit")
 	})
 
 	t.Run("First", func(t *testing.T) {

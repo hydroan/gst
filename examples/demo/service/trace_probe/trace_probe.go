@@ -80,7 +80,7 @@ func (t *TraceProbe) GetAfter(ctx *types.ServiceContext, probe *model.TraceProbe
 }
 
 func (t *TraceProbe) traceServiceHook(ctx *types.ServiceContext, phase consts.Phase, probe *model.TraceProbe, itemCount int) error {
-	var total int64
+	var total int
 	err := database.Database[*model.TraceProbe](ctx).Count(&total)
 
 	fields := traceProbeServiceFields(probe, phase, total, itemCount)
@@ -95,11 +95,11 @@ func (t *TraceProbe) traceServiceHook(ctx *types.ServiceContext, phase consts.Ph
 	return err
 }
 
-func traceProbeServiceFields(probe *model.TraceProbe, phase consts.Phase, total int64, itemCount int) []zap.Field {
+func traceProbeServiceFields(probe *model.TraceProbe, phase consts.Phase, total int, itemCount int) []zap.Field {
 	fields := []zap.Field{
 		zap.String("component", "service_hook"),
 		zap.String("hook", phase.MethodName()),
-		zap.Int64("total", total),
+		zap.Int("total", total),
 		zap.Int("item_count", itemCount),
 	}
 	if probe != nil {

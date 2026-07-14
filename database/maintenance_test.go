@@ -14,16 +14,16 @@ func TestDatabaseCleanup(t *testing.T) {
 	setupTestData(t)
 
 	// Verify initial count - should have 3 records
-	count := new(int64)
+	count := new(int)
 	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-	require.Equal(t, int64(3), *count)
+	require.Equal(t, 3, *count)
 
 	// Soft delete some records (u1 and u2)
 	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(u1, u2))
 
 	// Verify soft-deleted records are not visible in normal queries
 	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-	require.Equal(t, int64(1), *count, "only u3 should be visible after soft delete")
+	require.Equal(t, 1, *count, "only u3 should be visible after soft delete")
 
 	// Verify u3 is still accessible
 	u := new(TestUser)
@@ -39,7 +39,7 @@ func TestDatabaseCleanup(t *testing.T) {
 	// After Cleanup, u1 and u2 should be permanently deleted
 	// u3 should still exist
 	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-	require.Equal(t, int64(1), *count, "u3 should still exist after Cleanup")
+	require.Equal(t, 1, *count, "u3 should still exist after Cleanup")
 
 	// Verify u3 is still accessible
 	u = new(TestUser)
@@ -55,7 +55,7 @@ func TestDatabaseCleanup(t *testing.T) {
 
 	// Verify u3 still exists after second Cleanup
 	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-	require.Equal(t, int64(1), *count, "u3 should still exist after second Cleanup")
+	require.Equal(t, 1, *count, "u3 should still exist after second Cleanup")
 
 	// Test Cleanup with different model types
 	require.NoError(t, database.Database[*TestProduct](context.Background()).Cleanup())

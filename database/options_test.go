@@ -445,9 +445,9 @@ func TestDatabaseWithDebug(t *testing.T) {
 	t.Run("Count", func(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
-		count := new(int64)
+		count := new(int)
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithDebug().Count(count))
-		require.GreaterOrEqual(t, *count, int64(1), "count should be at least 1")
+		require.GreaterOrEqual(t, *count, 1, "count should be at least 1")
 	})
 
 	t.Run("First", func(t *testing.T) {
@@ -498,13 +498,13 @@ func TestDatabaseWithDryRun(t *testing.T) {
 		setupTestData(t)
 
 		// WithDryRun should not actually delete records
-		count := new(int64)
+		count := new(int)
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-		require.Equal(t, int64(3), *count, "should have 3 records initially")
+		require.Equal(t, 3, *count, "should have 3 records initially")
 
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithDryRun().Delete(u1))
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-		require.Equal(t, int64(3), *count, "records should not be deleted in dry-run mode")
+		require.Equal(t, 3, *count, "records should not be deleted in dry-run mode")
 
 		softDeleteUser := &dryRunSoftDeleteUser{Name: "dry-run-soft-delete", Base: model.Base{ID: "dry-run-soft-delete"}}
 		require.NoError(t, database.Database[*dryRunSoftDeleteUser](context.Background()).WithDryRun().Delete(softDeleteUser))
@@ -651,9 +651,9 @@ func TestDatabaseWithDryRun(t *testing.T) {
 		setupTestData(t)
 
 		// WithDryRun should only build the SELECT statement without executing it.
-		count := new(int64)
+		count := new(int)
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithDryRun().Count(count))
-		require.Equal(t, int64(0), *count, "Count should not execute in dry-run mode")
+		require.Equal(t, 0, *count, "Count should not execute in dry-run mode")
 	})
 
 	t.Run("First", func(t *testing.T) {

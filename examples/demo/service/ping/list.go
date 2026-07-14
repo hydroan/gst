@@ -16,7 +16,7 @@ type Lister struct {
 
 func (p *Lister) List(ctx *types.ServiceContext, req *gstmodel.Empty) (rsp *model.PingRsp, err error) {
 	users := make([]*iam.User, 0)
-	n := new(int64)
+	n := new(int)
 	// _ = database.Database[*iam.User](ctx).WithDryRun().List(&users)
 	// _ = database.Database[*iam.User](ctx).WithDryRun().Count(n)
 

@@ -112,7 +112,7 @@ type Database[M Model] interface {
 	// Take retrieves the first record in no specified order.
 	Take(dest M) error
 	// Count returns the total number of records matching the query conditions.
-	Count(*int64) error
+	Count(*int) error
 	// Cleanup permanently deletes all soft-deleted records; WithDryRun only builds the cleanup SQL.
 	Cleanup() error
 	// Health checks database connectivity and is not disabled by WithDryRun.
