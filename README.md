@@ -196,6 +196,8 @@ func (Search) Design() {
 - `List`、`Get` 是 HTTP GET 接口，没有请求体，禁止声明 `Payload[T]()`；
   只声明 `Result[T]()` 即成为自定义动作，生成的请求类型固定为 `*model.Empty`，
   查询参数通过 `ctx.Query()`、路径参数通过 `ctx.Param()` 读取。
+- `Import`、`Export` 的 service 方法签名固定（`Import(ctx, io.Reader)` 读上传文件、
+  `Export(ctx, ...M)` 返回附件字节），禁止声明 `Payload[T]()` 和 `Result[T]()`。
 - `Service()` 表示当前 action 需要生成并注册业务 service。
 - 只声明 `Create(func(){})`、`List(func(){})` 等 action 就会启用对应接口；
   `Enabled(false)` 主要用于显式关闭已声明 action。
