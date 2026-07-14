@@ -11,10 +11,52 @@ import (
 	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/pkg/filetype"
 	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 )
+
+// Export format identifiers accepted via the QUERY_FORMAT query parameter.
+const (
+	exportFormatXLSX = "xlsx"
+	exportFormatCSV  = "csv"
+)
+
+// Download file names and MIME types for each export format.
+const (
+	exportFileXLSX = "exported.xlsx"
+	exportFileCSV  = "exported.csv"
+
+	exportMIMEXLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	exportMIMECSV  = "text/csv; charset=utf-8"
+)
+
+// resolveExportFormat decides the export format from the query parameter,
+// honoring an explicit valid value and otherwise sniffing the produced bytes so
+// the response never relies solely on the client-supplied format. Bytes detected
+// as an xlsx workbook resolve to xlsx; anything else resolves to csv.
+func resolveExportFormat(queryFormat string, data []byte) string {
+	switch queryFormat {
+	case exportFormatXLSX, exportFormatCSV:
+		return queryFormat
+	}
+	if ft, _ := filetype.DetectBytes(data); ft == filetype.FiletypeXLSX {
+		return exportFormatXLSX
+	}
+	return exportFormatCSV
+}
+
+// exportAttachment returns the download file name and MIME type for the given
+// export format, defaulting to xlsx for empty or unknown formats.
+func exportAttachment(format string) (filename, contentType string) {
+	switch format {
+	case exportFormatCSV:
+		return exportFileCSV, exportMIMECSV
+	default:
+		return exportFileXLSX, exportMIMEXLSX
+	}
+}
 
 // Export handles an export request with the default factory settings.
 func Export[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
@@ -203,8 +245,8 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// }); err != nil {
 		// 	log.Error("failed to write operation log to database: ", err.Error())
 		// }
-		Data(c, exported, map[string]string{
-			"Content-Disposition": "attachment; filename=exported.xlsx",
-		})
+		format := resolveExportFormat(c.Query(consts.QUERY_FORMAT), exported)
+		filename, contentType := exportAttachment(format)
+		Attachment(c, exported, filename, contentType)
 	}
 }

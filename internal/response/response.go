@@ -243,17 +243,12 @@ func Text(c *gin.Context, coder types.Coder, data ...any) {
 	}
 }
 
-func Data(c *gin.Context, data []byte, headers ...map[string]string) {
-	header := make(map[string]string)
-	if len(headers) > 0 {
-		if headers[0] != nil {
-			header = headers[0]
-		}
-	}
-	for k, v := range header {
-		c.Header(k, v)
-	}
-	c.Data(http.StatusOK, "application/octet-stream", data)
+// Attachment writes data as a downloadable file, setting the download file name
+// and content type explicitly. It is used for exports where the format decides
+// the file extension and MIME type.
+func Attachment(c *gin.Context, data []byte, filename, contentType string) {
+	c.Header("Content-Disposition", "attachment; filename="+filename)
+	c.Data(http.StatusOK, contentType, data)
 }
 
 func File(c *gin.Context, filename string) {

@@ -55,6 +55,7 @@ const (
 	QUERY_NO_TOTAL     = "_no_total"
 	QUERY_INDEX        = "_index"
 	QUERY_SELECT       = "_select"
+	QUERY_FORMAT       = "_format"
 	QUERY_CURSOR_VALUE = "_cursor_value"
 	QUERY_CURSOR_FIELD = "_cursor_field"
 	QUERY_CURSOR_NEXT  = "_cursor_next"
