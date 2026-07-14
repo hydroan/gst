@@ -446,7 +446,7 @@ func TestFindAllModelEmpty(t *testing.T) {
 }
 
 func TestDesignRangeOrderDefaultRoute(t *testing.T) {
-	design := parseDesignFromSource(t, defaultRouteOrderSource, "OrderHost")
+	design := parseDesignFromSource(t, defaultRouteOrderSource, "OrderSample")
 
 	var got []consts.Phase
 	design.Range(func(route string, act *Action) {
@@ -465,11 +465,11 @@ func TestDesignRangeOrderDefaultRoute(t *testing.T) {
 }
 
 func TestDesignRangeOrderCustomRoute(t *testing.T) {
-	design := parseDesignFromSource(t, routeOrderSource, "RouteHost")
+	design := parseDesignFromSource(t, routeOrderSource, "RouteSample")
 
 	var got []consts.Phase
 	design.Range(func(route string, act *Action) {
-		if route == "cmdb/hosts" {
+		if route == "sample/records" {
 			got = append(got, act.Phase)
 		}
 	})
@@ -493,12 +493,12 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-type OrderHost struct {
+type OrderSample struct {
 	model.Base
 }
 
-func (OrderHost) Design() {
-	Endpoint("cmdb/hosts")
+func (OrderSample) Design() {
+	Endpoint("sample/records")
 	Get(func() {
 		Enabled(true)
 	})
@@ -522,12 +522,12 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-type RouteHost struct {
+type RouteSample struct {
 	model.Base
 }
 
-func (RouteHost) Design() {
-	Route("/cmdb/hosts", func() {
+func (RouteSample) Design() {
+	Route("/sample/records", func() {
 		Get(func() {
 			Enabled(true)
 		})
@@ -947,6 +947,52 @@ func (Session) Design() {
 		Service()
 		Payload[*SessionListReq]()
 		Result[*SessionListRsp]()
+	})
+}
+`
+
+func TestParseImportExportPayloadResultDeclarationsDiscarded(t *testing.T) {
+	design := parseDesignFromSource(t, importExportPayloadResultDeclaredSource, "Record")
+
+	// Payload and Result declarations on Import and Export are invalid
+	// (rejected by Validate); the parser discards them so the generated
+	// registration keeps the model type as the request and response types.
+	if design.Import.Payload != "*Record" {
+		t.Fatalf("Import.Payload = %q, want *Record", design.Import.Payload)
+	}
+	if design.Import.Result != "*Record" {
+		t.Fatalf("Import.Result = %q, want *Record", design.Import.Result)
+	}
+	if design.Export.Payload != "*Record" {
+		t.Fatalf("Export.Payload = %q, want *Record", design.Export.Payload)
+	}
+	if design.Export.Result != "*Record" {
+		t.Fatalf("Export.Result = %q, want *Record", design.Export.Result)
+	}
+}
+
+const importExportPayloadResultDeclaredSource = `
+package model
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Import(func() {
+		Service()
+		Payload[*RecordImportReq]()
+		Result[*RecordImportRsp]()
+	})
+	Export(func() {
+		Service()
+		Payload[*RecordExportReq]()
+		Result[*RecordExportRsp]()
 	})
 }
 `

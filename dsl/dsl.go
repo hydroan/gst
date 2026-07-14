@@ -318,11 +318,16 @@ const PayloadEmpty = "*model.Empty"
 // Payload must not be declared on List and Get actions: they handle HTTP GET
 // requests, which carry no request body. Custom List/Get services declare
 // Result only and read query parameters from ServiceContext.Query().
+// Payload must not be declared on Import and Export actions either: they
+// delegate to fixed service method signatures that never bind a request type.
 func Payload[T any]() {}
 
 // Result specifies the response result type for the current action.
 // The type parameter T defines the structure of outgoing response data.
 // Example: Result[*User]() or Result[UserResponse]()
+//
+// Result must not be declared on Import and Export actions: they delegate to
+// fixed service method signatures that never bind a response type.
 func Result[T any]() {}
 
 // Create defines the configuration for the create operation.
@@ -378,10 +383,19 @@ func PatchMany(func()) {}
 
 // Import defines the configuration for data import operations.
 // Used for bulk data ingestion from external sources.
+//
+// Import must not declare Payload or Result: the controller reads the
+// uploaded multipart form file, delegates to the fixed service method
+// Import(ctx, io.Reader) ([]M, error), and responds with a bare status code.
 func Import(func()) {}
 
 // Export defines the configuration for data export operations.
 // Used for bulk data extraction to external formats.
+//
+// Export must not declare Payload or Result: the route handles an HTTP GET
+// request whose filters come from query parameters, and the controller writes
+// the bytes returned by the fixed service method
+// Export(ctx, ...M) ([]byte, error) as a file attachment.
 func Export(func()) {}
 
 // Design represents the complete API design configuration for a model.

@@ -46,6 +46,17 @@ var getVerbActionMethodNames = map[string]bool{
 	consts.PHASE_GET.MethodName():  true,
 }
 
+// fixedContractActionSignatures are actions whose service methods have fixed
+// signatures that never bind Payload or Result types, mapped to those
+// signatures for error reporting. The Import controller reads the uploaded
+// multipart form file and responds with a bare status code; the Export
+// controller handles an HTTP GET request, reads filters from query
+// parameters, and writes the returned bytes as a file attachment.
+var fixedContractActionSignatures = map[string]string{
+	consts.PHASE_IMPORT.MethodName(): "Import(ctx, io.Reader) ([]M, error)",
+	consts.PHASE_EXPORT.MethodName(): "Export(ctx, ...M) ([]byte, error)",
+}
+
 var designOnlyMethodNames = map[string]bool{
 	"Endpoint": true,
 	"Param":    true,
@@ -215,6 +226,14 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile boo
 	}
 	if payload && getVerbActionMethodNames[actionName] {
 		errs = append(errs, fmt.Errorf("%s: %s action handles an HTTP GET request and cannot declare Payload; declare Result for a custom service method and read query parameters from ServiceContext.Query()", filename, actionName))
+	}
+	if sig, ok := fixedContractActionSignatures[actionName]; ok {
+		if payload {
+			errs = append(errs, fmt.Errorf("%s: %s action delegates to the fixed service method %s and cannot declare Payload", filename, actionName, sig))
+		}
+		if result {
+			errs = append(errs, fmt.Errorf("%s: %s action delegates to the fixed service method %s and cannot declare Result", filename, actionName, sig))
+		}
 	}
 	if exact && routeIDActionMethodNames[actionName] {
 		if getVerbActionMethodNames[actionName] {

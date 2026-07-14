@@ -566,3 +566,181 @@ func (Session) Design() {
 	})
 }
 `
+
+func TestValidateImportExportPayloadResultUsage(t *testing.T) {
+	tests := []struct {
+		name      string
+		source    string
+		modelDir  string
+		filename  string
+		wantError string
+	}{
+		{
+			name:      "payload on export action",
+			source:    validatePayloadOnExportSource,
+			modelDir:  "/repo/model",
+			filename:  "/repo/model/sample/record.go",
+			wantError: "Export action delegates to the fixed service method Export(ctx, ...M) ([]byte, error) and cannot declare Payload",
+		},
+		{
+			name:      "result on export action",
+			source:    validateResultOnExportSource,
+			modelDir:  "/repo/model",
+			filename:  "/repo/model/sample/record.go",
+			wantError: "Export action delegates to the fixed service method Export(ctx, ...M) ([]byte, error) and cannot declare Result",
+		},
+		{
+			name:      "payload on import action in route block",
+			source:    validatePayloadOnImportInRouteSource,
+			modelDir:  "/repo/model",
+			filename:  "/repo/model/sample/record.go",
+			wantError: "Import action delegates to the fixed service method Import(ctx, io.Reader) ([]M, error) and cannot declare Payload",
+		},
+		{
+			name:      "result on import action",
+			source:    validateResultOnImportSource,
+			modelDir:  "/repo/model",
+			filename:  "/repo/model/sample/record.go",
+			wantError: "Import action delegates to the fixed service method Import(ctx, io.Reader) ([]M, error) and cannot declare Result",
+		},
+		{
+			name:     "import and export with enabled only",
+			source:   validateEnabledOnlyImportExportSource,
+			modelDir: "/repo/model",
+			filename: "/repo/model/sample/record.go",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			file, err := parser.ParseFile(fset, tt.filename, tt.source, parser.ParseComments)
+			if err != nil {
+				t.Fatalf("parse source failed: %v", err)
+			}
+
+			errs := Validate(file, tt.modelDir, tt.filename)
+			if tt.wantError == "" {
+				if len(errs) != 0 {
+					t.Fatalf("Validate returned errors: %v", errs)
+				}
+				return
+			}
+			if len(errs) == 0 {
+				t.Fatalf("Validate returned no errors, want %q", tt.wantError)
+			}
+			var got strings.Builder
+			for _, err := range errs {
+				got.WriteString(err.Error())
+				got.WriteString("\n")
+			}
+			if !strings.Contains(got.String(), tt.wantError) {
+				t.Fatalf("Validate errors = %q, want substring %q", got.String(), tt.wantError)
+			}
+		})
+	}
+}
+
+const validatePayloadOnExportSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Export(func() {
+		Service()
+		Payload[*RecordExportReq]()
+	})
+}
+`
+
+const validateResultOnExportSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Export(func() {
+		Service()
+		Result[*RecordExportRsp]()
+	})
+}
+`
+
+const validatePayloadOnImportInRouteSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("sample/records", func() {
+		Import(func() {
+			Service()
+			Payload[*RecordImportReq]()
+		})
+	})
+}
+`
+
+const validateResultOnImportSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Import(func() {
+		Service()
+		Result[*RecordImportRsp]()
+	})
+}
+`
+
+const validateEnabledOnlyImportExportSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Import(func() {
+		Enabled(true)
+	})
+	Export(func() {
+		Enabled(true)
+	})
+}
+`

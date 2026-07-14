@@ -175,6 +175,15 @@ func isGetVerbPhase(phase consts.Phase) bool {
 	return phase == consts.PHASE_LIST || phase == consts.PHASE_GET
 }
 
+// isFixedContractPhase reports whether the phase delegates to a fixed service
+// method signature that never binds Payload or Result types: the Import
+// controller reads the uploaded multipart form file through
+// Import(ctx, io.Reader) and the Export controller writes the bytes returned
+// by Export(ctx, ...M) as a file attachment.
+func isFixedContractPhase(phase consts.Phase) bool {
+	return phase == consts.PHASE_IMPORT || phase == consts.PHASE_EXPORT
+}
+
 // parse analyzes an AST file to find all models and their Design method declarations.
 // It identifies models by looking for structs that embed model.Base or model.Empty,
 // then searches for their corresponding Design() method declarations.
@@ -656,10 +665,12 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 						isResult = true
 					}
 					// List and Get handle HTTP GET requests without a request
-					// body; a Payload declaration on them is rejected by
-					// Validate and discarded here so downstream code never
-					// sees a body-bound request type on a GET action.
-					if isPayload && !isGetVerbPhase(phase) {
+					// body, and Import and Export delegate to fixed service
+					// method signatures that never bind Payload or Result
+					// types. Declarations invalid for the phase are rejected
+					// by Validate and discarded here so downstream code never
+					// sees them.
+					if isPayload && !isGetVerbPhase(phase) && !isFixedContractPhase(phase) {
 						if ident, ok := indexExpr.Index.(*ast.Ident); ok && ident != nil { // Payload[User]
 							payload = ident.Name
 						} else if starExpr, ok := indexExpr.Index.(*ast.StarExpr); ok && starExpr != nil { // Payload[*User]
@@ -668,7 +679,7 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 							}
 						}
 					}
-					if isResult {
+					if isResult && !isFixedContractPhase(phase) {
 						if ident, ok := indexExpr.Index.(*ast.Ident); ok && ident != nil { // Result[User]
 							result = ident.Name
 						} else if starExpr, ok := indexExpr.Index.(*ast.StarExpr); ok && starExpr != nil { // Result[*User]
