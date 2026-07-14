@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
+	"github.com/hydroan/gst/router"
 	"github.com/spf13/cobra"
 )
 
@@ -301,6 +302,7 @@ func printModelRoutes(w io.Writer, routes []modelRoute, opts modelRoutesPrintOpt
 	opts.color = opts.color || routeColorEnabled(w)
 
 	fmt.Fprintf(w, "%s %s\n", routeText(opts.color, clioutput.StyleInfo, "%s", clioutput.SymbolSection), routeText(opts.color, clioutput.StyleBold, "Model Routes"))
+	fmt.Fprintf(w, "  %s base: %s\n", routeText(opts.color, clioutput.StyleMuted, "%s", clioutput.SymbolItem), router.APIPathPrefix)
 	fmt.Fprintf(w, "  %s models: %d, routes: %d, public: %d, auth: %d\n", routeText(opts.color, clioutput.StyleMuted, "%s", clioutput.SymbolItem), countRouteModels(routes), len(routes), countRouteScope(routes, "public"), countRouteScope(routes, "auth"))
 	if opts.Filter != "" {
 		fmt.Fprintf(w, "  %s filter: %s\n", routeText(opts.color, clioutput.StyleMuted, "%s", clioutput.SymbolItem), opts.Filter)
@@ -322,6 +324,7 @@ func printRouterRoutes(w io.Writer, routes []modelRoute, opts modelRoutesPrintOp
 	opts.color = opts.color || routeColorEnabled(w)
 
 	fmt.Fprintf(w, "%s %s\n", routeText(opts.color, clioutput.StyleInfo, "%s", clioutput.SymbolSection), routeText(opts.color, clioutput.StyleBold, "Router Routes"))
+	fmt.Fprintf(w, "  %s base: %s\n", routeText(opts.color, clioutput.StyleMuted, "%s", clioutput.SymbolItem), router.APIPathPrefix)
 	fmt.Fprintf(w, "  %s models: %d, routes: %d, public: %d, auth: %d\n", routeText(opts.color, clioutput.StyleMuted, "%s", clioutput.SymbolItem), countRouteModels(routes), len(routes), countRouteScope(routes, "public"), countRouteScope(routes, "auth"))
 	if opts.Filter != "" {
 		fmt.Fprintf(w, "  %s filter: %s\n", routeText(opts.color, clioutput.StyleMuted, "%s", clioutput.SymbolItem), opts.Filter)
