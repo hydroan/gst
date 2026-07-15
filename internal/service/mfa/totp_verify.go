@@ -62,7 +62,7 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 	}
 
 	if strings.TrimSpace(req.DeviceID) != "" {
-		query.Base.ID = strings.TrimSpace(req.DeviceID)
+		query.ID = strings.TrimSpace(req.DeviceID)
 	}
 
 	if err = database.Database[*modelmfa.TOTPDevice](ctx).WithQuery(query).List(&devices); err != nil {

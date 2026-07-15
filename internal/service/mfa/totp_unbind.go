@@ -250,7 +250,7 @@ func activeTOTPUnbindDeviceExists(ctx *types.ServiceContext, userID, deviceID st
 		UserID:   userID,
 		IsActive: true,
 	}
-	query.Base.ID = deviceID
+	query.ID = deviceID
 	return database.Database[*modelmfa.TOTPDevice](ctx).WithQuery(query).First(device) == nil
 }
 
