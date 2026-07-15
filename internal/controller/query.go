@@ -2,6 +2,7 @@ package controller
 
 import (
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -59,7 +60,10 @@ var listCursorQueryKeys = map[string]struct{}{
 // decodeListQuery decodes URL query parameters into the model's filter fields,
 // rejecting framework query keys the model has not opted in to via
 // model.Query, model.UnsafeQuery, model.Pagination, or model.Cursor.
+// Field-condition keys ("field[op]") are excluded before decoding: they are
+// parsed and validated separately by parseFieldConditionsQuery.
 func decodeListQuery[M types.Model](m M, query map[string][]string) error {
+	query = stripFieldConditionKeys(query)
 	if !modelregistry.IsQueryable(m) {
 		if err := rejectListQueryKeys(query, listQueryKeys); err != nil {
 			return err
@@ -104,12 +108,171 @@ func presentQueryFields(query map[string][]string) map[string]struct{} {
 		if strings.HasPrefix(key, "_") {
 			continue
 		}
+		if isFieldConditionKey(key) {
+			continue
+		}
 		if len(strings.Join(values, "")) == 0 {
 			continue
 		}
 		present[strcase.SnakeCase(key)] = struct{}{}
 	}
 	return present
+}
+
+// isFieldConditionKey reports whether a query key carries a field-level
+// operator filter ("field[op]"). Keys in the framework "_" namespace never
+// count: an underscore key with brackets stays a framework parameter and is
+// rejected by the regular query decoding path.
+func isFieldConditionKey(key string) bool {
+	return !strings.HasPrefix(key, "_") && strings.ContainsRune(key, '[')
+}
+
+// stripFieldConditionKeys returns a copy of the query without field-condition
+// keys, so gorilla/schema decoding of the model's own filter fields never
+// sees them; they are parsed and validated by parseFieldConditionsQuery.
+func stripFieldConditionKeys(query map[string][]string) map[string][]string {
+	filtered := make(map[string][]string, len(query))
+	for key, values := range query {
+		if isFieldConditionKey(key) {
+			continue
+		}
+		filtered[key] = values
+	}
+	return filtered
+}
+
+// parseFieldConditionsQuery extracts field-level operator filters from URL
+// query keys of the form "field[op]=value", e.g. "age[gt]=20" or
+// "remark[like]=hello". The field token must resolve (after snake case
+// normalization) to a queryable column of the model, and op must be a known
+// types.FilterOp; anything else is rejected so a mistyped filter can never
+// silently widen the result set. Empty values mean "not filtering" and are
+// skipped. Field conditions require the model to embed model.Query, and the
+// returned conditions are sorted by key for deterministic SQL.
+func parseFieldConditionsQuery(m types.Model, query map[string][]string) ([]types.FieldCondition, error) {
+	keys := make([]string, 0)
+	for key := range query {
+		if isFieldConditionKey(key) {
+			keys = append(keys, key)
+		}
+	}
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	if !modelregistry.IsQueryable(m) {
+		sort.Strings(keys)
+		return nil, errors.Newf("schema: invalid path %q", keys[0])
+	}
+	sort.Strings(keys)
+
+	columns := queryableColumns(reflect.TypeOf(m).Elem())
+	conds := make([]types.FieldCondition, 0, len(keys))
+	for _, key := range keys {
+		field, opToken, ok := splitFieldConditionKey(key)
+		if !ok {
+			return nil, errors.Newf("invalid field filter %q: expect \"field[op]=value\"", key)
+		}
+		op, ok := types.ParseFilterOp(opToken)
+		if !ok {
+			return nil, errors.Newf("invalid field filter %q: unknown operator %q", key, opToken)
+		}
+		column := strcase.SnakeCase(field)
+		if _, ok := columns[column]; !ok {
+			return nil, errors.Newf("invalid field filter %q: unknown field %q", key, field)
+		}
+		value := query[key][0]
+		if len(value) == 0 {
+			continue
+		}
+		conds = append(conds, types.FieldCondition{Column: column, Op: op, Value: value})
+	}
+	if len(conds) == 0 {
+		return nil, nil
+	}
+	// Field conditions are always AND-combined, but WithQuery builds the OR
+	// chain flat and cannot express (a OR b) AND cond; allowing the mix would
+	// let a condition escape the OR group and silently widen the result set,
+	// so the combination fails closed instead.
+	if values, ok := query[consts.QUERY_OR]; ok && len(values) > 0 {
+		if or, err := strconv.ParseBool(values[0]); err == nil && or {
+			return nil, errors.Newf("field filters cannot be combined with %s=true", consts.QUERY_OR)
+		}
+	}
+	return conds, nil
+}
+
+// splitFieldConditionKey splits "field[op]" into its field and operator
+// tokens, reporting whether the key has exactly that shape.
+func splitFieldConditionKey(key string) (field, op string, ok bool) {
+	open := strings.IndexByte(key, '[')
+	if open <= 0 || !strings.HasSuffix(key, "]") {
+		return "", "", false
+	}
+	field, op = key[:open], key[open+1:len(key)-1]
+	if len(op) == 0 || strings.ContainsAny(field, "[]") || strings.ContainsAny(op, "[]") {
+		return "", "", false
+	}
+	return field, op, true
+}
+
+// queryableColumns collects the snake case column names a client can filter
+// on, mirroring the surface the database layer builds conditions from
+// (database.structFieldToMap/queryColumnName): the model's own fields with
+// the query tag taking priority over the json tag and the field name, nested
+// non-framework structs recursively, and only the id/created_by/updated_by
+// columns lifted from Base/AutoBase.
+func queryableColumns(typ reflect.Type, cols ...map[string]struct{}) map[string]struct{} {
+	columns := make(map[string]struct{})
+	if len(cols) > 0 {
+		columns = cols[0]
+	}
+	for field := range typ.Fields() {
+		if field.PkgPath != "" && !field.Anonymous {
+			continue
+		}
+		fieldTyp := field.Type
+		for fieldTyp.Kind() == reflect.Pointer {
+			fieldTyp = fieldTyp.Elem()
+		}
+		if modelregistry.IsQueryMarkerType(fieldTyp) {
+			continue
+		}
+		switch fieldTyp.Kind() {
+		case reflect.Chan, reflect.Map, reflect.Func:
+			continue
+		case reflect.Struct:
+			if field.Name == "Base" || field.Name == "AutoBase" {
+				columns["id"] = struct{}{}
+				columns["created_by"] = struct{}{}
+				columns["updated_by"] = struct{}{}
+				continue
+			}
+			queryableColumns(fieldTyp, columns)
+			continue
+		}
+		columns[fieldQueryColumn(field)] = struct{}{}
+	}
+	return columns
+}
+
+// fieldQueryColumn resolves a struct field to its snake case query column,
+// with the query tag taking priority over the json tag and the field name;
+// it mirrors database.queryColumnName.
+func fieldQueryColumn(field reflect.StructField) string {
+	name := strings.TrimSpace(field.Tag.Get("query"))
+	if idx := strings.IndexByte(name, ','); idx >= 0 {
+		name = name[:idx]
+	}
+	if len(name) == 0 {
+		name = strings.TrimSpace(field.Tag.Get("json"))
+		if idx := strings.IndexByte(name, ','); idx >= 0 {
+			name = name[:idx]
+		}
+	}
+	if len(name) == 0 {
+		name = field.Name
+	}
+	return strcase.SnakeCase(name)
 }
 
 // timeQueryLayout describes one accepted layout of the _start_time and

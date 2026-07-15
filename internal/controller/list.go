@@ -142,6 +142,13 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			gstotel.RecordError(span, err)
 			return
 		}
+		var fieldConditions []types.FieldCondition
+		if fieldConditions, err = parseFieldConditionsQuery(m, c.Request.URL.Query()); err != nil {
+			log.Error(err)
+			JSON(c, CodeInvalidParam.WithErr(err))
+			gstotel.RecordError(span, err)
+			return
+		}
 		log.Infoz(typ.Name()+": list query parameter", zap.Object(typ.String(), m))
 		present := presentQueryFields(c.Request.URL.Query())
 
@@ -191,11 +198,12 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			WithIndex(index).
 			WithSelect(strings.Split(selects, ",")...).
 			WithQuery(svc.Filter(ctx, m), types.QueryConfig{
-				FuzzyMatch:    fuzzy,
-				AllowEmpty:    true,
-				UseOr:         or,
-				RawQuery:      svc.FilterRaw(ctx),
-				PresentFields: present,
+				FuzzyMatch:      fuzzy,
+				AllowEmpty:      true,
+				UseOr:           or,
+				RawQuery:        svc.FilterRaw(ctx),
+				PresentFields:   present,
+				FieldConditions: fieldConditions,
 			}).
 			WithCursor(cursorValue, cursorNext, cursorField).
 			WithExclude(m.Excludes()).
@@ -230,11 +238,12 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 				// WithSelect(strings.Split(selects, ",")...). // NOTE: WithSelect should not apply in Count method.
 				WithIndex(index).
 				WithQuery(svc.Filter(ctx, m), types.QueryConfig{
-					FuzzyMatch:    fuzzy,
-					AllowEmpty:    true,
-					UseOr:         or,
-					RawQuery:      svc.FilterRaw(ctx),
-					PresentFields: present,
+					FuzzyMatch:      fuzzy,
+					AllowEmpty:      true,
+					UseOr:           or,
+					RawQuery:        svc.FilterRaw(ctx),
+					PresentFields:   present,
+					FieldConditions: fieldConditions,
 				}).
 				WithExclude(m.Excludes()).
 				WithTimeRange(timeColumn, startTime, endTime).

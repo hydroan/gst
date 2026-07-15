@@ -257,6 +257,29 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 	}
 }
 
+func TestAddQueryParametersDocumentsFieldOperatorFilters(t *testing.T) {
+	op := &openapi3.Operation{}
+	addQueryParameters[*openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel](op)
+	parameters := queryParametersByName(t, op)
+
+	if !strings.Contains(parameters["page"].Description, "page[op]=value") {
+		t.Fatalf("page description = %q, want a field operator filter note on queryable models", parameters["page"].Description)
+	}
+	if !strings.Contains(parameters["page"].Description, "notlike") {
+		t.Fatalf("page description = %q, want the known operators listed", parameters["page"].Description)
+	}
+	if strings.Contains(parameters["_fuzzy"].Description, "[op]=value") {
+		t.Fatalf("_fuzzy description = %q, framework parameters must not advertise operator filters", parameters["_fuzzy"].Description)
+	}
+
+	op = &openapi3.Operation{}
+	addQueryParameters[*openapiPaginationQueryModel, *openapiPaginationQueryModel, *openapiPaginationQueryModel](op)
+	parameters = queryParametersByName(t, op)
+	if strings.Contains(parameters["id"].Description, "[op]=value") {
+		t.Fatalf("id description = %q, models without model.Query must not advertise operator filters", parameters["id"].Description)
+	}
+}
+
 func TestAddQueryParametersBuildsSliceItemSchema(t *testing.T) {
 	op := &openapi3.Operation{}
 	addQueryParameters[*openapiSliceQueryModel, *openapiSliceQueryModel, *openapiSliceQueryModel](op)

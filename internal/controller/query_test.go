@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -105,6 +106,13 @@ func TestPresentQueryFields(t *testing.T) {
 			"remark":    {"", ""},
 		})
 		require.Empty(t, present, "an empty value means the caller is not filtering by that key")
+	})
+
+	t.Run("ExcludesFieldConditionKeys", func(t *testing.T) {
+		present := presentQueryFields(map[string][]string{
+			"age[gt]": {"20"},
+		})
+		require.Empty(t, present, "field condition keys are not exact-filter columns")
 	})
 }
 
@@ -243,6 +251,142 @@ func TestParseExpandQuery(t *testing.T) {
 		c := newTestGetContext(t, "/items")
 		require.Empty(t, parseExpandQuery(c, &expandQueryTestModel{}))
 	})
+}
+
+type conditionQueryTestModel struct {
+	Name      string `query:"name"`
+	Age       int    `json:"age"`
+	Remark    string `json:"remark"`
+	ItemCount int    `json:"item_count"`
+
+	model.Query
+	model.Base
+}
+
+func TestParseFieldConditionsQuery(t *testing.T) {
+	t.Run("ExtractsOperatorConditionsAndIgnoresOtherKeys", func(t *testing.T) {
+		conds, err := parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"age[gt]":      {"20"},
+			"remark[like]": {"hello"},
+			"name":         {"alice"},
+			"_fuzzy":       {"true"},
+		})
+		require.NoError(t, err)
+		require.Equal(t, []types.FieldCondition{
+			{Column: "age", Op: types.FilterOpGt, Value: "20"},
+			{Column: "remark", Op: types.FilterOpLike, Value: "hello"},
+		}, conds)
+	})
+
+	t.Run("CoexistsWithExactFilterOnSameField", func(t *testing.T) {
+		query := map[string][]string{
+			"age":     {"10"},
+			"age[gt]": {"20"},
+		}
+		conds, err := parseFieldConditionsQuery(&conditionQueryTestModel{}, query)
+		require.NoError(t, err)
+		require.Equal(t, []types.FieldCondition{{Column: "age", Op: types.FilterOpGt, Value: "20"}}, conds)
+
+		var m conditionQueryTestModel
+		require.NoError(t, decodeListQuery(&m, query))
+		require.Equal(t, 10, m.Age, "bare key keeps feeding the exact business filter")
+	})
+
+	t.Run("MapsCamelFieldToSnakeColumn", func(t *testing.T) {
+		conds, err := parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"itemCount[notlike]": {"sample"},
+		})
+		require.NoError(t, err)
+		require.Equal(t, []types.FieldCondition{{Column: "item_count", Op: types.FilterOpNotLike, Value: "sample"}}, conds)
+	})
+
+	t.Run("AcceptsBaseLiftedColumns", func(t *testing.T) {
+		conds, err := parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"id[notin]": {"a,b"},
+		})
+		require.NoError(t, err)
+		require.Equal(t, []types.FieldCondition{{Column: "id", Op: types.FilterOpNotIn, Value: "a,b"}}, conds)
+	})
+
+	t.Run("SkipsEmptyValues", func(t *testing.T) {
+		conds, err := parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"age[gt]": {""},
+		})
+		require.NoError(t, err)
+		require.Empty(t, conds)
+	})
+
+	t.Run("RejectsUnknownField", func(t *testing.T) {
+		_, err := parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"bogus[gt]": {"1"},
+		})
+		require.Error(t, err)
+	})
+
+	t.Run("RejectsUnknownOperator", func(t *testing.T) {
+		_, err := parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"age[regex]": {"1"},
+		})
+		require.Error(t, err)
+	})
+
+	t.Run("RejectsMalformedKeys", func(t *testing.T) {
+		for _, key := range []string{"age[gt", "age[]", "age[gt]x", "age[gt][lt]", "[gt]"} {
+			_, err := parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{key: {"1"}})
+			require.Error(t, err, "key %q must be rejected", key)
+		}
+	})
+
+	t.Run("RequiresModelQuery", func(t *testing.T) {
+		type plainModel struct {
+			Age int `json:"age"`
+
+			model.Base
+		}
+		_, err := parseFieldConditionsQuery(&plainModel{}, map[string][]string{
+			"age[gt]": {"1"},
+		})
+		require.Error(t, err)
+	})
+
+	t.Run("RejectsCombinationWithOr", func(t *testing.T) {
+		type unsafeConditionModel struct {
+			Age int `json:"age"`
+
+			model.Query
+			model.UnsafeQuery
+			model.Base
+		}
+		_, err := parseFieldConditionsQuery(&unsafeConditionModel{}, map[string][]string{
+			"age[gt]": {"1"},
+			"_or":     {"true"},
+		})
+		require.Error(t, err, "flat OR building cannot express (a OR b) AND cond, so the combination must fail closed")
+
+		conds, err := parseFieldConditionsQuery(&unsafeConditionModel{}, map[string][]string{
+			"age[gt]": {"1"},
+			"_or":     {"false"},
+		})
+		require.NoError(t, err)
+		require.Len(t, conds, 1)
+	})
+
+	t.Run("LeavesFrameworkNamespaceAlone", func(t *testing.T) {
+		conds, err := parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"_page[gt]": {"1"},
+		})
+		require.NoError(t, err)
+		require.Empty(t, conds, "underscore keys stay in the framework namespace and are not field conditions")
+	})
+}
+
+func TestDecodeListQueryIgnoresFieldConditionKeys(t *testing.T) {
+	var m conditionQueryTestModel
+	require.NoError(t, decodeListQuery(&m, map[string][]string{
+		"name":    {"alice"},
+		"age[gt]": {"20"},
+	}))
+	require.Equal(t, "alice", m.Name)
 }
 
 // newTestGetContext builds a gin context carrying a GET request with the given

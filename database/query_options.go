@@ -245,14 +245,21 @@ func (db *database[M]) WithQuery(query M, config ...types.QueryConfig) types.Dat
 		}
 	}
 
+	// Field-level operator conditions are always AND-combined and, like
+	// RawQuery, count as real conditions for the empty-query safety checks.
+	hasFieldConditions := len(cfg.FieldConditions) > 0
+	if hasFieldConditions {
+		db.applyFieldConditions(cfg.FieldConditions)
+	}
+
 	// Check if query is nil or empty
 	var empty M
 	if queryVal.IsNil() || reflect.DeepEqual(query, empty) {
 		// Treat nil/empty as empty query
-		// If RawQuery is provided, it's already applied above, so we can return
-		// (RawQuery alone is sufficient, no need to check empty query safety)
-		if hasRawQuery {
-			// RawQuery is already applied, no need to check empty query
+		// If RawQuery or field conditions are provided, they are already
+		// applied above and alone are sufficient, so the empty query safety
+		// check is not needed.
+		if hasRawQuery || hasFieldConditions {
 			return db
 		}
 		// No RawQuery and empty query: apply safety check
@@ -290,10 +297,10 @@ func (db *database[M]) WithQuery(query M, config ...types.QueryConfig) types.Dat
 	// To allow empty queries, use: WithQuery(nil, QueryConfig{AllowEmpty: true}) or
 	//                              WithQuery(&User{}, QueryConfig{AllowEmpty: true})
 	if len(q) == 0 {
-		// If RawQuery is provided, it's already applied above, so we can return
-		// (RawQuery alone is sufficient, no need to check empty query safety)
-		if hasRawQuery {
-			// RawQuery is already applied, no need to check empty query
+		// If RawQuery or field conditions are provided, they are already
+		// applied above and alone are sufficient, so the empty query safety
+		// check is not needed.
+		if hasRawQuery || hasFieldConditions {
 			return db
 		}
 		// No RawQuery and empty query: apply safety check
@@ -366,7 +373,9 @@ func (db *database[M]) WithQuery(query M, config ...types.QueryConfig) types.Dat
 		// CRITICAL: Check if all query values are empty after filtering
 		// Even if query map is not empty, all values might be empty strings
 		// Example: &User{Name: "", Email: ""} has fields but all values are empty
-		if !hasValidCondition {
+		// Field conditions applied earlier are real conditions, so they
+		// disable this safety check the same way RawQuery would.
+		if !hasValidCondition && !hasFieldConditions {
 			if !cfg.AllowEmpty {
 				logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("all query values are empty, adding safety condition to prevent matching all records")
 				db.ins = db.ins.Where("1 = 0")
@@ -402,7 +411,9 @@ func (db *database[M]) WithQuery(query M, config ...types.QueryConfig) types.Dat
 		// CRITICAL: Check if all query values are empty after filtering
 		// Even if query map is not empty, all values might be empty strings
 		// Example: &User{Name: "", Email: ""} has fields but all values are empty
-		if !hasValidCondition {
+		// Field conditions applied earlier are real conditions, so they
+		// disable this safety check the same way RawQuery would.
+		if !hasValidCondition && !hasFieldConditions {
 			if !cfg.AllowEmpty {
 				logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("all query values are empty, adding safety condition to prevent matching all records")
 				db.ins = db.ins.Where("1 = 0")
@@ -412,6 +423,49 @@ func (db *database[M]) WithQuery(query M, config ...types.QueryConfig) types.Dat
 		}
 	}
 	return db
+}
+
+// applyFieldConditions appends field-level operator filters, each as an AND
+// condition with its value bound as a statement parameter. A condition with
+// an empty column or an operator the switch does not recognize fails closed
+// with "1 = 0": silently dropping it would widen the result set, which is
+// dangerous when the result feeds deletes or exports.
+//
+// The caller must hold db.mu.
+func (db *database[M]) applyFieldConditions(conds []types.FieldCondition) {
+	for _, cond := range conds {
+		if len(cond.Column) == 0 {
+			logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("field condition has empty column, adding safety condition")
+			db.ins = db.ins.Where("1 = 0")
+			continue
+		}
+		column := db.quoteIdent(cond.Column)
+		switch cond.Op {
+		case types.FilterOpEq:
+			db.ins = db.ins.Where(column+" = ?", cond.Value)
+		case types.FilterOpNe:
+			db.ins = db.ins.Where(column+" <> ?", cond.Value)
+		case types.FilterOpGt:
+			db.ins = db.ins.Where(column+" > ?", cond.Value)
+		case types.FilterOpGte:
+			db.ins = db.ins.Where(column+" >= ?", cond.Value)
+		case types.FilterOpLt:
+			db.ins = db.ins.Where(column+" < ?", cond.Value)
+		case types.FilterOpLte:
+			db.ins = db.ins.Where(column+" <= ?", cond.Value)
+		case types.FilterOpIn:
+			db.ins = db.ins.Where(column+" IN ?", strings.Split(cond.Value, ","))
+		case types.FilterOpNotIn:
+			db.ins = db.ins.Where(column+" NOT IN ?", strings.Split(cond.Value, ","))
+		case types.FilterOpLike:
+			db.ins = db.ins.Where(column+" LIKE ?", "%"+cond.Value+"%")
+		case types.FilterOpNotLike:
+			db.ins = db.ins.Where(column+" NOT LIKE ?", "%"+cond.Value+"%")
+		default:
+			logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("unknown field condition operator %q on column %q, adding safety condition", cond.Op, cond.Column)
+			db.ins = db.ins.Where("1 = 0")
+		}
+	}
 }
 
 // WithCursor enables cursor-based pagination for efficient large dataset traversal.

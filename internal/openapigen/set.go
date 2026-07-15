@@ -2339,6 +2339,7 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 	}
 
 	fields := collectQueryDocFields(reflect.TypeFor[M]())
+	queryable := modelregistry.IsQueryable(reflect.New(reflect.TypeFor[M]().Elem()).Interface())
 
 	queries := make([]*openapi3.ParameterRef, 0, len(fields))
 	for _, docField := range fields {
@@ -2349,6 +2350,12 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 		if enumDoc, onItems, ok := fieldEnumDoc(field.Type); ok && schemaRef != nil && schemaRef.Value != nil {
 			applyEnum(schemaRef.Value, onItems, enumDoc)
 			description = enumDescription(description, enumDoc)
+		}
+		// Business filter fields on queryable models additionally accept the
+		// "field[op]=value" operator filter syntax; framework parameters in
+		// the "_" namespace do not.
+		if queryable && !strings.HasPrefix(queryTag, "_") {
+			description = operatorFilterDescription(description, queryTag)
 		}
 
 		queries = append(queries, &openapi3.ParameterRef{
@@ -2407,6 +2414,22 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 			existing[query.Value.Name] = true
 		}
 	}
+}
+
+// operatorFilterDescription appends the field operator filter note to a query
+// parameter description, listing the operators accepted by the
+// "field[op]=value" syntax.
+func operatorFilterDescription(description, queryTag string) string {
+	ops := types.FilterOps()
+	tokens := make([]string, 0, len(ops))
+	for _, op := range ops {
+		tokens = append(tokens, string(op))
+	}
+	note := "Operator filter: " + queryTag + "[op]=value, op: " + strings.Join(tokens, "/") + "."
+	if len(description) == 0 {
+		return note
+	}
+	return description + "\n\n" + note
 }
 
 // operationID derives a unique, stable operation id from the route path and

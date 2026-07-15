@@ -584,6 +584,35 @@ interpreted in the server's local zone; unparseable values return 400.
 >database.Database[*model.User]().WithTimeRange("created_at", begin, now).List(&users)
 >```
 
+#### `field[op]=value` (field operator filters)
+
+Field-level operator filters (see `parseFieldConditionsQuery` in `query.go`) require
+`model.Query` and are always AND-combined with the other conditions. Supported
+operators: `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in`/`notin` (comma-separated
+values), `like`/`notlike` (substring match). The bare key stays the exact business
+filter, so `?age=10&age[gt]=20` applies both conditions. Unknown fields or
+operators, and combining with `_or=true`, return 400; empty values mean "not
+filtering".
+
+>`Request`
+>
+>```bash
+>curl --silent --location --request GET 'http://localhost:8080/api/user?age%5Bgte%5D=18&name%5Blike%5D=alice' \
+>--header 'Authorization: Bearer -'
+>```
+>
+>`Database equivalent`
+>
+>```go
+>database.Database[*model.User]().WithQuery(nil, types.QueryConfig{
+>	AllowEmpty: true,
+>	FieldConditions: []types.FieldCondition{
+>		{Column: "age", Op: types.FilterOpGte, Value: "18"},
+>		{Column: "name", Op: types.FilterOpLike, Value: "alice"},
+>	},
+>}).List(&users)
+>```
+
 #### `_or=true`
 
 > `Request`

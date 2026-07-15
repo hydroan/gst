@@ -11,9 +11,9 @@ import (
 // Embedding Query in a model is an explicit opt-in: the model can still expose
 // its own fields as query filters through query tags, while Query enables the
 // standard List controls, including offset pagination, cursor pagination,
-// fuzzy matching, sorting, expansion, and time-range filtering. Query already
-// embeds Pagination and Cursor, so models that embed Query must not embed
-// those structs again.
+// fuzzy matching, sorting, expansion, time-range filtering, and field-level
+// operator filters ("field[op]=value"). Query already embeds Pagination and
+// Cursor, so models that embed Query must not embed those structs again.
 //
 // Query intentionally covers only controls that keep list semantics intact.
 // Controls that rewrite filter combination or tune query execution live in

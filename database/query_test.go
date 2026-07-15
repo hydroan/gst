@@ -1476,6 +1476,207 @@ func TestDatabaseWithQuery(t *testing.T) {
 		require.True(t, foundU3_3, "should find u3")
 	})
 
+	t.Run("FieldConditions", func(t *testing.T) {
+		defer cleanupTestData()
+		setupTestData(t)
+		users := make([]*TestUser, 0)
+
+		// Test gt with nil query: age > 18 should return u2 (age=19) and u3 (age=20).
+		// Conditions alone count as real conditions, so the nil query is not
+		// blocked by the empty-query safety check.
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "age", Op: types.FilterOpGt, Value: "18"},
+				},
+			}).
+			List(&users))
+		require.Len(t, users, 2)
+		var foundU2, foundU3 bool
+		for _, u := range users {
+			switch u.ID {
+			case u2.ID:
+				foundU2 = true
+			case u3.ID:
+				foundU3 = true
+			}
+		}
+		require.True(t, foundU2, "should find u2")
+		require.True(t, foundU3, "should find u3")
+
+		// Test AND combination with an exact model filter:
+		// Name="user1" AND age >= 18 should return u1.
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(&TestUser{Name: u1.Name}, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "age", Op: types.FilterOpGte, Value: "18"},
+				},
+			}).
+			List(&users))
+		require.Len(t, users, 1)
+		require.Equal(t, u1.ID, users[0].ID)
+
+		// Name="user1" AND age > 18 should return 0 records (u1 has age=18).
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(&TestUser{Name: u1.Name}, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "age", Op: types.FilterOpGt, Value: "18"},
+				},
+			}).
+			List(&users))
+		require.Empty(t, users, "conditions combine with exact filters using AND logic")
+
+		// Test eq: age = 19 should return u2.
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "age", Op: types.FilterOpEq, Value: "19"},
+				},
+			}).
+			List(&users))
+		require.Len(t, users, 1)
+		require.Equal(t, u2.ID, users[0].ID)
+
+		// Test ne: age <> 19 should return u1 and u3.
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "age", Op: types.FilterOpNe, Value: "19"},
+				},
+			}).
+			List(&users))
+		require.Len(t, users, 2)
+		var foundU1 bool
+		foundU3 = false
+		for _, u := range users {
+			switch u.ID {
+			case u1.ID:
+				foundU1 = true
+			case u3.ID:
+				foundU3 = true
+			}
+		}
+		require.True(t, foundU1, "should find u1")
+		require.True(t, foundU3, "should find u3")
+
+		// Test lt and lte: age < 19 should return u1; age <= 19 should return u1 and u2.
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "age", Op: types.FilterOpLt, Value: "19"},
+				},
+			}).
+			List(&users))
+		require.Len(t, users, 1)
+		require.Equal(t, u1.ID, users[0].ID)
+
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "age", Op: types.FilterOpLte, Value: "19"},
+				},
+			}).
+			List(&users))
+		require.Len(t, users, 2)
+
+		// Test like: the value is wrapped with wildcards, so email like "@example"
+		// matches every user by substring.
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "email", Op: types.FilterOpLike, Value: "@example"},
+				},
+			}).
+			List(&users))
+		require.Len(t, users, 3, "like should match substrings")
+
+		// Test notlike: name not like "1" should return u2 and u3.
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "name", Op: types.FilterOpNotLike, Value: "1"},
+				},
+			}).
+			List(&users))
+		require.Len(t, users, 2, "notlike should exclude substring matches")
+
+		// Test in and notin: comma-separated values split into a set.
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "age", Op: types.FilterOpIn, Value: "18,20"},
+				},
+			}).
+			List(&users))
+		require.Len(t, users, 2)
+		foundU1, foundU3 = false, false
+		for _, u := range users {
+			switch u.ID {
+			case u1.ID:
+				foundU1 = true
+			case u3.ID:
+				foundU3 = true
+			}
+		}
+		require.True(t, foundU1, "should find u1")
+		require.True(t, foundU3, "should find u3")
+
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "name", Op: types.FilterOpNotIn, Value: "user1,user2"},
+				},
+			}).
+			List(&users))
+		require.Len(t, users, 1)
+		require.Equal(t, u3.ID, users[0].ID)
+
+		// Test UseOr does not affect conditions: Name="user1" with age > 18 must
+		// stay AND-combined and return 0 records, even though UseOr is set.
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(&TestUser{Name: u1.Name}, types.QueryConfig{
+				UseOr: true,
+				FieldConditions: []types.FieldCondition{
+					{Column: "age", Op: types.FilterOpGt, Value: "18"},
+				},
+			}).
+			List(&users))
+		require.Empty(t, users, "conditions must stay AND-combined under UseOr")
+
+		// Test fail-closed behavior: an unknown operator or an empty column adds
+		// "1 = 0" instead of being dropped, so the query returns no records.
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "age", Op: types.FilterOp("regex"), Value: "1"},
+				},
+			}).
+			List(&users))
+		require.Empty(t, users, "unknown operator must fail closed")
+
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "", Op: types.FilterOpEq, Value: "1"},
+				},
+			}).
+			List(&users))
+		require.Empty(t, users, "empty column must fail closed")
+	})
+
 	t.Run("AutoBase", func(t *testing.T) {
 		defer cleanupTestData()
 		items := []*TestAutoItem{
