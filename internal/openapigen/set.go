@@ -103,16 +103,47 @@ func uniqueComponentName(typ reflect.Type) string {
 	return name
 }
 
-// componentKey returns the requestBodies/responses component key for one
-// action of a model, eg. "play.customization_patch".
-func componentKey(typ reflect.Type, phase any) string {
-	return fmt.Sprintf("%s_%s", strings.ToLower(uniqueComponentName(typ)), phase)
+// actionComponentKey returns the requestBodies/responses component key for one
+// action, eg. "play.customization_patch". It keys on the payload or response
+// type rather than on the model: a model may expose several actions on the same
+// phase, eg. two custom POST routes, and keying on the model alone collapses
+// them onto one component where only the first one registered survives. The
+// phase stays in the key because one type renders differently per phase, eg. a
+// list envelope versus a single record. Anonymous types carry no name to key on
+// and fall back to the model plus the route path, which is unique per action.
+func actionComponentKey(typ, modelTyp reflect.Type, path string, phase any) string {
+	if name := uniqueComponentName(typ); name != "" {
+		return fmt.Sprintf("%s_%s", strings.ToLower(name), phase)
+	}
+	return fmt.Sprintf("%s_%s_%s", strings.ToLower(uniqueComponentName(modelTyp)), pathKeySegment(path), phase)
+}
+
+// pathKeySegment reduces a route path to a token usable inside a component key,
+// eg. "/api/records/{id}/archive" becomes "api_records_id_archive".
+func pathKeySegment(path string) string {
+	replacer := strings.NewReplacer("/", "_", "{", "", "}", "", ":", "", "-", "_", ".", "_")
+	return strings.Trim(strings.ToLower(replacer.Replace(path)), "_")
+}
+
+// componentDescriptionName returns the type name shown on a request or response
+// component, falling back to the model for anonymous types.
+func componentDescriptionName(typ, modelTyp reflect.Type) string {
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	if typ.Name() != "" {
+		return typ.Name()
+	}
+	for modelTyp.Kind() == reflect.Pointer {
+		modelTyp = modelTyp.Elem()
+	}
+	return modelTyp.Name()
 }
 
 func setCreate[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeOf(*new(M))
-	reqKey := componentKey(typ, consts.PHASE_CREATE)
-	rspKey := reqKey
+	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.PHASE_CREATE)
+	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_CREATE)
 	reqSchemaRef := newSchemaRefWithDocs(*new(REQ))
 	rspSchemaRef := newSchemaRefWithDocs(*new(apiResponse[RSP]))
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
@@ -205,8 +236,8 @@ func setCreate[M types.Model, REQ types.Request, RSP types.Response](path string
 
 func setDelete[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeOf(*new(M))
-	reqKey := componentKey(typ, consts.PHASE_DELETE)
-	rspKey := reqKey
+	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.PHASE_DELETE)
+	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_DELETE)
 	rspSchemaRef := newSchemaRefWithDocs(*new(apiResponse[RSP]))
 	registerSchema[M, REQ, RSP](reqKey, rspKey, nil, rspSchemaRef)
 
@@ -270,8 +301,8 @@ func setDelete[M types.Model, REQ types.Request, RSP types.Response](path string
 
 func setUpdate[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeOf(*new(M))
-	reqKey := componentKey(typ, consts.PHASE_UPDATE)
-	rspKey := reqKey
+	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.PHASE_UPDATE)
+	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_UPDATE)
 	reqSchemaRef := newSchemaRefWithDocs(*new(REQ))
 	rspSchemaRef := newSchemaRefWithDocs(*new(apiResponse[RSP]))
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
@@ -351,8 +382,8 @@ func setUpdate[M types.Model, REQ types.Request, RSP types.Response](path string
 
 func setPatch[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeOf(*new(M))
-	reqKey := componentKey(typ, consts.PHASE_PATCH)
-	rspKey := reqKey
+	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.PHASE_PATCH)
+	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_PATCH)
 	reqSchemaRef := newSchemaRefWithDocs(*new(REQ))
 	rspSchemaRef := newSchemaRefWithDocs(*new(apiResponse[RSP]))
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
@@ -428,8 +459,8 @@ func setPatch[M types.Model, REQ types.Request, RSP types.Response](path string,
 
 func setList[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeOf(*new(M))
-	reqKey := componentKey(typ, consts.PHASE_LIST)
-	rspKey := reqKey
+	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.PHASE_LIST)
+	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_LIST)
 
 	var rspSchemaRef *openapi3.SchemaRef
 	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
@@ -566,8 +597,8 @@ func setList[M types.Model, REQ types.Request, RSP types.Response](path string, 
 
 func setGet[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeOf(*new(M))
-	reqKey := componentKey(typ, consts.PHASE_GET)
-	rspKey := reqKey
+	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.PHASE_GET)
+	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_GET)
 	rspSchemaRef := newSchemaRefWithDocs(*new(apiResponse[RSP]))
 	registerSchema[M, REQ, RSP](reqKey, rspKey, nil, rspSchemaRef)
 
@@ -636,8 +667,8 @@ func setGet[M types.Model, REQ types.Request, RSP types.Response](path string, p
 
 func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeOf(*new(M))
-	reqKey := componentKey(typ, consts.PHASE_CREATE_MANY)
-	rspKey := reqKey
+	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.PHASE_CREATE_MANY)
+	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_CREATE_MANY)
 
 	var reqSchemaRef *openapi3.SchemaRef
 	var rspSchemaRef *openapi3.SchemaRef
@@ -795,8 +826,8 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 
 func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeOf(*new(M))
-	reqKey := componentKey(typ, consts.DeleteMany)
-	rspKey := reqKey
+	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.DeleteMany)
+	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.DeleteMany)
 	reqSchemaRef := &openapi3.SchemaRef{
 		Value: &openapi3.Schema{
 			Type:     &openapi3.Types{openapi3.TypeObject},
@@ -908,8 +939,8 @@ func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path st
 
 func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeOf(*new(M))
-	reqKey := componentKey(typ, consts.PHASE_UPDATE_MANY)
-	rspKey := reqKey
+	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.PHASE_UPDATE_MANY)
+	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_UPDATE_MANY)
 
 	var reqSchemaRef *openapi3.SchemaRef
 	var rspSchemaRef *openapi3.SchemaRef
@@ -1031,8 +1062,8 @@ func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 
 func setPatchMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeOf(*new(M))
-	reqKey := componentKey(typ, consts.PHASE_PATCH_MANY)
-	rspKey := reqKey
+	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.PHASE_PATCH_MANY)
+	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_PATCH_MANY)
 
 	var reqSchemaRef *openapi3.SchemaRef
 	var rspSchemaRef *openapi3.SchemaRef
@@ -1173,7 +1204,7 @@ const (
 // standard success envelope returned by the controller.
 func setImport[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeOf(*new(M))
-	rspKey := componentKey(typ, consts.PHASE_IMPORT)
+	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_IMPORT)
 	rspSchemaRef := newSchemaRefWithDocs(*new(apiResponse[RSP]))
 	registerSchema[M, REQ, RSP](rspKey, rspKey, nil, rspSchemaRef)
 
@@ -1292,11 +1323,7 @@ func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey
 	}
 
 	if !modelregistry.IsEmpty[REQ]() {
-		typ := reflect.TypeOf(*new(M))
-		for typ.Kind() == reflect.Pointer {
-			typ = typ.Elem()
-		}
-		name := typ.Name()
+		name := componentDescriptionName(reflect.TypeOf(*new(REQ)), reflect.TypeOf(*new(M)))
 
 		docMutex.Lock()
 		if doc.Components.RequestBodies == nil {
@@ -1318,11 +1345,7 @@ func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey
 	}
 
 	if !modelregistry.IsEmpty[RSP]() {
-		typ := reflect.TypeOf(*new(M))
-		for typ.Kind() == reflect.Pointer {
-			typ = typ.Elem()
-		}
-		name := typ.Name()
+		name := componentDescriptionName(reflect.TypeOf(*new(RSP)), reflect.TypeOf(*new(M)))
 
 		docMutex.Lock()
 		if doc.Components.Responses == nil {

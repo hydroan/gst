@@ -3,6 +3,7 @@ package openapigen
 import (
 	"reflect"
 	"slices"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -1289,6 +1290,194 @@ func assertDateTimeSchema(t *testing.T, schemaRef *openapi3.SchemaRef) {
 	if schemaRef.Value.Format != "date-time" {
 		t.Fatalf("schema format = %q, want date-time", schemaRef.Value.Format)
 	}
+}
+
+// openapiActionModel backs two custom Create routes that carry distinct
+// payloads, mirroring a resource that exposes several non-CRUD actions.
+type openapiActionModel struct {
+	// Name is the record name.
+	Name string `json:"name"`
+
+	model.Base
+}
+
+type openapiFirstActionReq struct {
+	// Reason is the field unique to the first action.
+	Reason string `json:"reason"`
+}
+
+type openapiFirstActionRsp struct {
+	ID string `json:"id"`
+}
+
+type openapiSecondActionReq struct {
+	// Token is the field unique to the second action.
+	Token string `json:"token"`
+}
+
+type openapiSecondActionRsp struct {
+	Name string `json:"name"`
+}
+
+// TestSetGivesEachCustomPayloadItsOwnRequestBody asserts that two actions
+// sharing a model and a phase each keep their own payload, instead of
+// collapsing onto one component keyed by the model.
+func TestSetGivesEachCustomPayloadItsOwnRequestBody(t *testing.T) {
+	Set[*openapiActionModel, *openapiFirstActionReq, *openapiFirstActionRsp]("/api/openapi-actions/first", true, consts.Create)
+	Set[*openapiActionModel, *openapiSecondActionReq, *openapiSecondActionRsp]("/api/openapi-actions/second", true, consts.Create)
+
+	first := registeredRequestBodySchema(t, operationForPath(t, "/api/openapi-actions/first").RequestBody)
+	if _, ok := first.Properties["reason"]; !ok {
+		t.Fatalf("first action payload properties = %v, want reason", propertyNames(first))
+	}
+
+	second := registeredRequestBodySchema(t, operationForPath(t, "/api/openapi-actions/second").RequestBody)
+	if _, ok := second.Properties["token"]; !ok {
+		t.Fatalf("second action payload properties = %v, want token", propertyNames(second))
+	}
+}
+
+// TestSetGivesEachCustomResponseItsOwnComponent asserts the same isolation for
+// responses, which share the request component key today.
+func TestSetGivesEachCustomResponseItsOwnComponent(t *testing.T) {
+	Set[*openapiActionModel, *openapiFirstActionReq, *openapiFirstActionRsp]("/api/openapi-responses/first", true, consts.Create)
+	Set[*openapiActionModel, *openapiSecondActionReq, *openapiSecondActionRsp]("/api/openapi-responses/second", true, consts.Create)
+
+	first := registeredResponseSchema(t, responseRefForPath(t, "/api/openapi-responses/first", 200))
+	if _, ok := dataSchema(t, first).Properties["id"]; !ok {
+		t.Fatalf("first action response data = %v, want id", propertyNames(dataSchema(t, first)))
+	}
+
+	second := registeredResponseSchema(t, responseRefForPath(t, "/api/openapi-responses/second", 200))
+	if _, ok := dataSchema(t, second).Properties["name"]; !ok {
+		t.Fatalf("second action response data = %v, want name", propertyNames(dataSchema(t, second)))
+	}
+}
+
+type openapiFirstTwinReq struct {
+	// Secret is shared with openapiSecondTwinReq, making the two structurally
+	// identical while remaining distinct types.
+	Secret string `json:"secret"`
+}
+
+type openapiSecondTwinReq struct {
+	Secret string `json:"secret"`
+}
+
+type openapiTwinRsp struct {
+	OK bool `json:"ok"`
+}
+
+// TestSetSeparatesStructurallyIdenticalPayloads asserts that two payload types
+// with identical fields still resolve to their own components, since the key is
+// derived from the type rather than from its shape.
+func TestSetSeparatesStructurallyIdenticalPayloads(t *testing.T) {
+	Set[*openapiActionModel, *openapiFirstTwinReq, *openapiTwinRsp]("/api/openapi-twins/first", true, consts.Create)
+	Set[*openapiActionModel, *openapiSecondTwinReq, *openapiTwinRsp]("/api/openapi-twins/second", true, consts.Create)
+
+	first := operationForPath(t, "/api/openapi-twins/first").RequestBody.Ref
+	second := operationForPath(t, "/api/openapi-twins/second").RequestBody.Ref
+	if first == second {
+		t.Fatalf("both twin payloads resolved to %q, want one component each", first)
+	}
+}
+
+// TestSetKeepsModelKeyForDefaultCRUD pins the component key of a default CRUD
+// action, where the model doubles as request and response.
+func TestSetKeepsModelKeyForDefaultCRUD(t *testing.T) {
+	Set[*openapiActionModel, *openapiActionModel, *openapiActionModel]("/api/openapi-crud", true, consts.Create)
+
+	op := operationForPath(t, "/api/openapi-crud")
+	wantRef := "#/components/requestBodies/internal.openapigen.openapiactionmodel_create"
+	if op.RequestBody.Ref != wantRef {
+		t.Fatalf("default CRUD requestBody ref = %q, want %q", op.RequestBody.Ref, wantRef)
+	}
+}
+
+// TestSetSeparatesListAndGetResponsesForSameType asserts that one response type
+// reused across two phases keeps the list envelope apart from the single-item
+// envelope.
+func TestSetSeparatesListAndGetResponsesForSameType(t *testing.T) {
+	Set[*openapiActionModel, *openapiActionModel, *openapiActionModel]("/api/openapi-envelope", true, consts.List)
+	Set[*openapiActionModel, *openapiActionModel, *openapiActionModel]("/api/openapi-envelope/:id", true, consts.Get)
+
+	list := dataSchema(t, registeredResponseSchema(t, responseRefForPath(t, "/api/openapi-envelope", 200)))
+	if _, ok := list.Properties["items"]; !ok {
+		t.Fatalf("list response data = %v, want items", propertyNames(list))
+	}
+
+	get := dataSchema(t, registeredResponseSchema(t, responseRefForPath(t, "/api/openapi-envelope/{id}", 200)))
+	if _, ok := get.Properties["items"]; ok {
+		t.Fatalf("get response data = %v, want a single record rather than items", propertyNames(get))
+	}
+}
+
+func operationForPath(t *testing.T, path string) *openapi3.Operation {
+	t.Helper()
+
+	item := doc.Paths.Value(path)
+	if item == nil || item.Post == nil {
+		t.Fatalf("POST %s is missing from the document", path)
+	}
+	return item.Post
+}
+
+func responseRefForPath(t *testing.T, path string, status int) *openapi3.ResponseRef {
+	t.Helper()
+
+	item := doc.Paths.Value(path)
+	if item == nil {
+		t.Fatalf("%s is missing from the document", path)
+	}
+	op := item.Post
+	if op == nil {
+		op = item.Get
+	}
+	if op == nil {
+		t.Fatalf("%s has no POST or GET operation", path)
+	}
+	return op.Responses.Status(status)
+}
+
+func registeredRequestBodySchema(t *testing.T, requestBodyRef *openapi3.RequestBodyRef) *openapi3.Schema {
+	t.Helper()
+
+	if requestBodyRef == nil {
+		t.Fatal("operation request body is missing")
+	}
+	if requestBodyRef.Ref != "" {
+		reqKey := strings.TrimPrefix(requestBodyRef.Ref, "#/components/requestBodies/")
+		docMutex.RLock()
+		requestBodyRef = doc.Components.RequestBodies[reqKey]
+		docMutex.RUnlock()
+	}
+	if requestBodyRef == nil || requestBodyRef.Value == nil {
+		t.Fatal("registered request body component is missing")
+	}
+	mediaType := requestBodyRef.Value.Content["application/json"]
+	if mediaType == nil || mediaType.Schema == nil || mediaType.Schema.Value == nil {
+		t.Fatal("registered request body component JSON schema is missing")
+	}
+	return mediaType.Schema.Value
+}
+
+func dataSchema(t *testing.T, envelope *openapi3.Schema) *openapi3.Schema {
+	t.Helper()
+
+	data := envelope.Properties["data"]
+	if data == nil || data.Value == nil {
+		t.Fatalf("response envelope = %v, want a data property", propertyNames(envelope))
+	}
+	return data.Value
+}
+
+func propertyNames(schema *openapi3.Schema) []string {
+	names := make([]string, 0, len(schema.Properties))
+	for name := range schema.Properties {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func queryParametersByName(t *testing.T, op *openapi3.Operation) map[string]*openapi3.Parameter {
