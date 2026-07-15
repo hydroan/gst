@@ -26,7 +26,8 @@ type openapiTimeQueryModel struct {
 }
 
 type openapiEmbeddedQueryModel struct {
-	// Page overrides the promoted pagination field.
+	// Page is a business filter field; the bare name no longer collides with
+	// the framework pagination parameter, which lives in the "_" namespace.
 	Page string `json:"-" query:"page"`
 
 	model.Query
@@ -186,7 +187,8 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 				addQueryParameters[*openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel](op)
 			},
 			parameters: []string{
-				"page", "size",
+				"page",
+				"_page", "_size",
 				"_cursor_value", "_cursor_field", "_cursor_next",
 				"_expand", "_depth", "_fuzzy", "_sort_by",
 				"_time_column", "_start_time", "_end_time",
@@ -199,7 +201,7 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 				addQueryParameters[*openapiUnsafeQueryModel, *openapiUnsafeQueryModel, *openapiUnsafeQueryModel](op)
 			},
 			parameters: []string{
-				"page", "size",
+				"_page", "_size",
 				"_cursor_value", "_cursor_field", "_cursor_next",
 				"_expand", "_depth", "_fuzzy", "_sort_by",
 				"_time_column", "_start_time", "_end_time",
@@ -212,7 +214,7 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 			add: func(op *openapi3.Operation) {
 				addQueryParameters[*openapiPaginationQueryModel, *openapiPaginationQueryModel, *openapiPaginationQueryModel](op)
 			},
-			parameters: []string{"page", "size", "id", "created_by", "updated_by"},
+			parameters: []string{"_page", "_size", "id", "created_by", "updated_by"},
 		},
 		{
 			name: "cursor",
@@ -244,7 +246,7 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 	addQueryParameters[*openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel](op)
 	page := queryParametersByName(t, op)["page"]
 	if page.Schema == nil || page.Schema.Value == nil || page.Schema.Value.Type == nil || !page.Schema.Value.Type.Is(openapi3.TypeString) {
-		t.Fatalf("page schema = %#v, want the outer string field to override the embedded pagination field", page.Schema)
+		t.Fatalf("page schema = %#v, want the bare business field to keep its own string schema alongside the framework _page parameter", page.Schema)
 	}
 
 	op = &openapi3.Operation{}

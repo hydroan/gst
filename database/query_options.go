@@ -723,8 +723,8 @@ func (db *database[M]) WithOrder(order string) types.Database[M] {
 //   - size: The number of records per page. If size <= 0, it defaults to defaultLimit.
 //
 // Examples:
-//   - pageStr, _ := c.GetQuery("page")
-//     sizeStr, _ := c.GetQuery("size")
+//   - pageStr, _ := c.GetQuery("_page")
+//     sizeStr, _ := c.GetQuery("_size")
 //     page, _ := strconv.Atoi(pageStr)
 //     size, _ := strconv.Atoi(sizeStr)
 //     WithPagination(page, size)

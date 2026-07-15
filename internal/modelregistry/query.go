@@ -82,17 +82,16 @@ type UnsafeQueryable interface {
 
 // Pagination declares offset-pagination query parameters for List actions.
 //
-// Embedding Pagination only enables page and size. It does not imply sorting,
-// fuzzy matching, cursor pagination, or any other List query controls.
+// Embedding Pagination only enables _page and _size. It does not imply
+// sorting, fuzzy matching, cursor pagination, or any other List query
+// controls.
 //
-// The page and size parameters deliberately skip the underscore prefix that
-// marks every other framework-owned query parameter: they are by far the most
-// used controls and bare names are the de facto REST convention. The cost is
-// that an embedding model cannot expose business fields as bare page or size
-// query filters; alias such fields through their query tags instead.
+// Like every framework-owned query parameter, _page and _size live in the
+// "_" prefix namespace, so bare names such as page and size stay available
+// as business filter fields on embedding models.
 type Pagination struct {
-	Page int `json:"-" gorm:"-" query:"page" url:"page,omitempty"` // Page is the one-based page number; non-positive values use the first page.
-	Size int `json:"-" gorm:"-" query:"size" url:"size,omitempty"` // Size is the page size; negative values disable the limit.
+	Page int `json:"-" gorm:"-" query:"_page" url:"_page,omitempty"` // Page is the one-based page number; non-positive values use the first page.
+	Size int `json:"-" gorm:"-" query:"_size" url:"_size,omitempty"` // Size is the page size; negative values disable the limit.
 }
 
 // paginationEnabled marks models that opt in to page and size query parameters.

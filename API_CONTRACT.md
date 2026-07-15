@@ -41,7 +41,7 @@ Content-Type: application/json
 
 | 能力 | 参数 | 启用方式 | 示例 |
 | --- | --- | --- | --- |
-| 分页 | `page`（从 1 开始）、`size` | `model.Pagination` | `?page=1&size=20` |
+| 分页 | `_page`（从 1 开始）、`_size` | `model.Pagination` | `?_page=1&_size=20` |
 | 排序 | `_sort_by`，逗号分隔多字段，方向 `asc`/`desc`（默认 `asc`） | `model.Query` | `?_sort_by=created_at desc,name` |
 | 模糊匹配 | `_fuzzy` 为 `true` 时业务字段过滤使用模糊匹配 | `model.Query` | `?name=g&_fuzzy=true` |
 | 展开关联 | `_expand`，逗号分隔，`all` 表示全部可展开字段 | `model.Query` | `?_expand=all` |
@@ -50,10 +50,9 @@ Content-Type: application/json
 | OR 过滤 | `_or` 为 `true` 时多个业务字段过滤条件之间用 OR 连接 | `model.UnsafeQuery` | `?name=g1&status=enabled&_or=true` |
 | 跳过总数 | `_no_total` 为 `true` 时响应不返回 `total` | `model.UnsafeQuery` | `?_no_total=true` |
 
-命名约定：框架控制参数一律以 `_` 开头，与直接作为查询参数暴露的业务字段（如
-`?name=xxx`）区分，避免与业务列名冲突。`page`、`size` 是刻意的例外——它们是使用
-频率最高的参数，且裸名是 REST 惯例；代价是业务字段不能再以裸的 `page`/`size` 作为
-过滤参数，需要时通过 query tag 起别名。
+命名约定：框架控制参数一律以 `_` 开头，`_` 前缀是框架保留命名空间，业务字段的
+query 名不要以 `_` 开头。反过来，所有裸名参数都属于业务字段过滤（如 `?name=xxx`），
+`page`、`size`、`limit` 这类裸名也可以放心用作业务过滤列，不会与框架参数冲突。
 
 ## 请求体格式
 

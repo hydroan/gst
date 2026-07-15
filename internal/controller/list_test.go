@@ -72,25 +72,27 @@ func TestPresentQueryFields(t *testing.T) {
 			"is_active": {"false"},
 			"age":       {"0"},
 			"isLocked":  {"true"},
+			"size":      {"3"},
 		})
 		require.Equal(t, map[string]struct{}{
 			"is_active": {},
 			"age":       {},
 			"is_locked": {},
-		}, present, "camel case keys should normalize to snake case column names")
+			"size":      {},
+		}, present, "camel case keys should normalize to snake case column names, and bare names like size are model filter columns")
 	})
 
 	t.Run("ExcludesFrameworkKeys", func(t *testing.T) {
 		present := presentQueryFields(map[string][]string{
-			"page":          {"1"},
-			"size":          {"10"},
-			"limit":         {"100"},
+			"_page":         {"1"},
+			"_size":         {"10"},
+			"_limit":        {"100"},
 			"_fuzzy":        {"true"},
 			"_sort_by":      {"created_at desc"},
 			"_no_total":     {"true"},
 			"_cursor_value": {"abc"},
 		})
-		require.Empty(t, present, "framework parameters are not model filter columns")
+		require.Empty(t, present, "framework parameters live in the underscore namespace and are not model filter columns")
 	})
 
 	t.Run("ExcludesKeysWithoutValues", func(t *testing.T) {

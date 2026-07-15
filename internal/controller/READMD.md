@@ -192,12 +192,12 @@ http body is ignored.
 
 ### Query Parameters
 
-#### `page=number`, `size=number` for paginatin.
+#### `_page=number`, `_size=number` for pagination.
 
 > `Request`
 >
 > ```bash
-> curl --silent --location --request GET 'http://localhost:8080/api/user?page=1&size=10' \
+> curl --silent --location --request GET 'http://localhost:8080/api/user?_page=1&_size=10' \
 > --header 'Authorization: Bearer -'
 > ```
 >

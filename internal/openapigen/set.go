@@ -496,7 +496,7 @@ func setList[M types.Model, REQ types.Request, RSP types.Response](path string, 
 		// // Parameters: []*openapi3.ParameterRef{
 		// // 	{
 		// // 		Value: &openapi3.Parameter{
-		// // 			Name:     "page",
+		// // 			Name:     "_page",
 		// // 			In:       "query",
 		// // 			Required: false,
 		// // 			Schema: &openapi3.SchemaRef{
@@ -2365,7 +2365,7 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 	// queries := []*openapi3.ParameterRef{
 	// 	{
 	// 		Value: &openapi3.Parameter{
-	// 			Name:     "page",
+	// 			Name:     "_page",
 	// 			In:       "query",
 	// 			Required: false,
 	// 			Schema: &openapi3.SchemaRef{
@@ -2379,7 +2379,7 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 	// 	},
 	// 	{
 	// 		Value: &openapi3.Parameter{
-	// 			Name:     "size",
+	// 			Name:     "_size",
 	// 			In:       "query",
 	// 			Required: false,
 	// 			Schema: &openapi3.SchemaRef{

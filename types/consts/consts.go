@@ -36,11 +36,13 @@ const (
 	JOB_SCHEDULE_TIME_LAYOUT = "2006-01-02 15:04:05"
 )
 
+// Framework-owned URL query parameters all live in the "_" prefix namespace,
+// so bare query keys always belong to model filter fields and never collide
+// with framework controls.
 const (
-	QUERY_ID           = "id"
-	QUERY_PAGE         = "page"
-	QUERY_SIZE         = "size"
-	QUERY_LIMIT        = "limit"
+	QUERY_PAGE         = "_page"
+	QUERY_SIZE         = "_size"
+	QUERY_LIMIT        = "_limit"
 	QUERY_EXPAND       = "_expand"
 	QUERY_DEPTH        = "_depth"
 	QUERY_OR           = "_or"
@@ -50,8 +52,6 @@ const (
 	QUERY_START_TIME   = "_start_time"
 	QUERY_END_TIME     = "_end_time"
 	QUERY_NO_CACHE     = "_no_cache"
-	QUERY_TYPE         = "type"
-	QUERY_FILENAME     = "filename"
 	QUERY_NO_TOTAL     = "_no_total"
 	QUERY_INDEX        = "_index"
 	QUERY_SELECT       = "_select"

@@ -123,17 +123,13 @@ func decodeListQuery[M types.Model](m M, query map[string][]string) error {
 // presentQueryFields collects the model filter keys explicitly provided in the
 // URL query string, keyed by snake case column name, so the database layer can
 // keep zero values (false, 0) of these columns as query conditions. Framework
-// parameters ("_"-prefixed keys plus page, size, and limit) and keys whose
-// values are all empty are excluded: they are not model filter columns, and an
-// empty value means the caller is not filtering by that key.
+// parameters (the "_" prefix namespace) and keys whose values are all empty
+// are excluded: they are not model filter columns, and an empty value means
+// the caller is not filtering by that key.
 func presentQueryFields(query map[string][]string) map[string]struct{} {
 	present := make(map[string]struct{}, len(query))
 	for key, values := range query {
 		if strings.HasPrefix(key, "_") {
-			continue
-		}
-		switch key {
-		case consts.QUERY_PAGE, consts.QUERY_SIZE, consts.QUERY_LIMIT:
 			continue
 		}
 		if len(strings.Join(values, "")) == 0 {
