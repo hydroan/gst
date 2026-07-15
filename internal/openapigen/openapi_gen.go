@@ -217,11 +217,20 @@ func DocumentHandler() http.Handler {
 	})
 }
 
+// unversionedDoc stands in for an application that never declares a version.
+// Leaving the app version unset is normal, while the spec requires
+// info.version to be a non-empty string.
+const unversionedDoc = "0.0.0"
+
 func setDocInfo(doc *openapi3.T) {
+	version := config.App.AppInfo.Version
+	if version == "" {
+		version = unversionedDoc
+	}
 	doc.Info = &openapi3.Info{
 		Title:       config.App.AppInfo.Name,
 		Description: config.App.AppInfo.Name + " Restful api docs",
-		Version:     config.App.AppInfo.Version,
+		Version:     version,
 	}
 	setDocSecurity(doc)
 }
