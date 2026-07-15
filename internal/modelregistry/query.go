@@ -32,8 +32,8 @@ type Query struct {
 	Fuzzy      *bool   `json:"-" gorm:"-" query:"_fuzzy" url:"_fuzzy,omitempty"`             // Fuzzy switches model-field filtering from exact matching to LIKE/REGEXP matching.
 	SortBy     string  `json:"-" gorm:"-" query:"_sort_by" url:"_sort_by,omitempty"`         // SortBy is the comma-separated order expression passed to WithOrder.
 	TimeColumn string  `json:"-" gorm:"-" query:"_time_column" url:"_time_column,omitempty"` // TimeColumn selects the column used by StartTime and EndTime range filters.
-	StartTime  string  `json:"-" gorm:"-" query:"_start_time" url:"_start_time,omitempty"`   // StartTime is the lower bound for the selected time-range column.
-	EndTime    string  `json:"-" gorm:"-" query:"_end_time" url:"_end_time,omitempty"`       // EndTime is the upper bound for the selected time-range column.
+	StartTime  string  `json:"-" gorm:"-" query:"_start_time" url:"_start_time,omitempty"`   // StartTime is the inclusive lower bound for the selected time-range column; see the controller's parseQueryTime for accepted formats.
+	EndTime    string  `json:"-" gorm:"-" query:"_end_time" url:"_end_time,omitempty"`       // EndTime is the inclusive upper bound for the selected time-range column; a date-only value covers the whole day.
 }
 
 // queryEnabled marks models that opt in to general framework query parameters.

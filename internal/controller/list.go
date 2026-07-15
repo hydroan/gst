@@ -6,9 +6,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/modelregistry"
@@ -18,50 +16,8 @@ import (
 	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
-	"github.com/stoewer/go-strcase"
 	"go.uber.org/zap"
 )
-
-// listQueryKeys are List controller parameters that belong to model.Query
-// rather than to the resource model's own filter fields.
-var listQueryKeys = map[string]struct{}{
-	consts.QUERY_EXPAND:      {},
-	consts.QUERY_DEPTH:       {},
-	consts.QUERY_FUZZY:       {},
-	consts.QUERY_SORT_BY:     {},
-	consts.QUERY_TIME_COLUMN: {},
-	consts.QUERY_START_TIME:  {},
-	consts.QUERY_END_TIME:    {},
-}
-
-// listUnsafeQueryKeys are enabled by model.UnsafeQuery. They are split from
-// listQueryKeys because they rewrite filter combination or tune query
-// execution; in particular _or can defeat mandatory service-level filters,
-// so a model must opt in to them separately from the regular List controls.
-var listUnsafeQueryKeys = map[string]struct{}{
-	consts.QUERY_OR:       {},
-	consts.QUERY_INDEX:    {},
-	consts.QUERY_SELECT:   {},
-	consts.QUERY_NO_CACHE: {},
-	consts.QUERY_NO_TOTAL: {},
-}
-
-// listPaginationQueryKeys are enabled by model.Pagination. They are split from
-// listQueryKeys so a model can allow page and size without enabling fuzzy,
-// sorting, expansion, or other framework-owned List controls.
-var listPaginationQueryKeys = map[string]struct{}{
-	consts.QUERY_PAGE: {},
-	consts.QUERY_SIZE: {},
-}
-
-// listCursorQueryKeys are enabled by model.Cursor. Cursor pagination is
-// intentionally independent from SortBy; the cursor field and direction define
-// the stable order used by the database layer.
-var listCursorQueryKeys = map[string]struct{}{
-	consts.QUERY_CURSOR_VALUE: {},
-	consts.QUERY_CURSOR_FIELD: {},
-	consts.QUERY_CURSOR_NEXT:  {},
-}
 
 // List is a generic function to product gin handler to list resources in backend.
 // The resource type deponds on the type of interface types.Model.
@@ -94,59 +50,6 @@ var listCursorQueryKeys = map[string]struct{}{
 //     /department/myid?_fuzzy=true
 func List[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
 	ListFactory[M, REQ, RSP]()(c)
-}
-
-func decodeListQuery[M types.Model](m M, query map[string][]string) error {
-	if !modelregistry.IsQueryable(m) {
-		if err := rejectListQueryKeys(query, listQueryKeys); err != nil {
-			return err
-		}
-	}
-	if !modelregistry.IsUnsafeQueryable(m) {
-		if err := rejectListQueryKeys(query, listUnsafeQueryKeys); err != nil {
-			return err
-		}
-	}
-	if !modelregistry.IsPaginatable(m) {
-		if err := rejectListQueryKeys(query, listPaginationQueryKeys); err != nil {
-			return err
-		}
-	}
-	if !modelregistry.IsCursorable(m) {
-		if err := rejectListQueryKeys(query, listCursorQueryKeys); err != nil {
-			return err
-		}
-	}
-	return serviceregistry.QueryDecoder().Decode(m, query)
-}
-
-// presentQueryFields collects the model filter keys explicitly provided in the
-// URL query string, keyed by snake case column name, so the database layer can
-// keep zero values (false, 0) of these columns as query conditions. Framework
-// parameters (the "_" prefix namespace) and keys whose values are all empty
-// are excluded: they are not model filter columns, and an empty value means
-// the caller is not filtering by that key.
-func presentQueryFields(query map[string][]string) map[string]struct{} {
-	present := make(map[string]struct{}, len(query))
-	for key, values := range query {
-		if strings.HasPrefix(key, "_") {
-			continue
-		}
-		if len(strings.Join(values, "")) == 0 {
-			continue
-		}
-		present[strcase.SnakeCase(key)] = struct{}{}
-	}
-	return present
-}
-
-func rejectListQueryKeys(query map[string][]string, keys map[string]struct{}) error {
-	for key := range query {
-		if _, found := keys[key]; found {
-			return errors.Newf("schema: invalid path %q", key)
-		}
-	}
-	return nil
 }
 
 // ListFactory returns a Gin handler that lists resources.
@@ -210,7 +113,6 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		}
 
 		var page, size int
-		var startTime, endTime time.Time
 		if pageStr, ok := c.GetQuery(consts.QUERY_PAGE); ok {
 			page, _ = strconv.Atoi(pageStr)
 		}
@@ -220,11 +122,12 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		timeColumn, _ := c.GetQuery(consts.QUERY_TIME_COLUMN)
 		index, _ := c.GetQuery(consts.QUERY_INDEX)
 		selects, _ := c.GetQuery(consts.QUERY_SELECT)
-		if startTimeStr, ok := c.GetQuery(consts.QUERY_START_TIME); ok {
-			startTime, _ = time.ParseInLocation(consts.DATE_TIME_LAYOUT, startTimeStr, time.Local)
-		}
-		if endTimeStr, ok := c.GetQuery(consts.QUERY_END_TIME); ok {
-			endTime, _ = time.ParseInLocation(consts.DATE_TIME_LAYOUT, endTimeStr, time.Local)
+		startTime, endTime, err := parseTimeRangeQuery(c)
+		if err != nil {
+			log.Error(err)
+			JSON(c, CodeInvalidParam.WithErr(err))
+			gstotel.RecordError(span, err)
+			return
 		}
 
 		// The underlying type of interface types.Model must be pointer to structure, such as *model.User.
@@ -233,7 +136,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		typ := reflect.TypeOf(*new(M)).Elem() // the real underlying structure type
 		m := reflect.New(typ).Interface().(M) //nolint:errcheck
 
-		if err := decodeListQuery(m, c.Request.URL.Query()); err != nil {
+		if err = decodeListQuery(m, c.Request.URL.Query()); err != nil {
 			log.Error(err)
 			JSON(c, CodeInvalidParam.WithErr(err))
 			gstotel.RecordError(span, err)
@@ -242,16 +145,13 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		log.Infoz(typ.Name()+": list query parameter", zap.Object(typ.String(), m))
 		present := presentQueryFields(c.Request.URL.Query())
 
-		var err error
 		var or bool
 		var fuzzy bool
-		var expands []string
 		var cursorNext bool
 		var noTotal bool // default enable total.
 		cursorValue := c.Query(consts.QUERY_CURSOR_VALUE)
 		cursorField := c.Query(consts.QUERY_CURSOR_FIELD)
 		noCache := true // default disable cache.
-		depth := 1
 		data := make([]M, 0)
 		if noCacheStr, ok := c.GetQuery(consts.QUERY_NO_CACHE); ok {
 			var parsed bool
@@ -268,54 +168,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		if cursorNextStr, ok := c.GetQuery(consts.QUERY_CURSOR_NEXT); ok {
 			cursorNext, _ = strconv.ParseBool(cursorNextStr)
 		}
-		if depthStr, ok := c.GetQuery(consts.QUERY_DEPTH); ok {
-			depth, _ = strconv.Atoi(depthStr)
-			if depth < 1 || depth > 99 {
-				depth = 1
-			}
-		}
-		if expandStr, ok := c.GetQuery(consts.QUERY_EXPAND); ok {
-			var _expands []string
-			items := strings.Split(expandStr, ",")
-			if len(items) > 0 {
-				if items[0] == consts.VALUE_ALL { // expand all feilds
-					items = m.Expands()
-				}
-			}
-			for _, e := range m.Expands() {
-				for _, item := range items {
-					if strings.EqualFold(item, e) {
-						_expands = append(_expands, e)
-					}
-				}
-			}
-			// fmt.Println("_expends: ", _expands)
-			fieldsMap := make(map[string]reflect.Kind)
-			for field := range typ.Fields() {
-				fieldsMap[field.Name] = field.Type.Kind()
-			}
-			for _, e := range _expands {
-				// If the expanding field not exists in the structure fiedls, skip depth expand.
-				kind, found := fieldsMap[e]
-				if !found {
-					expands = append(expands, e)
-					continue
-				}
-				// If the expanding field exists in the structure but the kind is not slice, skip depth expand.
-				if kind != reflect.Slice {
-					expands = append(expands, e)
-					continue
-				}
-				t := make([]string, depth)
-				for i := range depth {
-					t[i] = e
-				}
-				// fmt.Println("t: ", t)
-				// If expand="Children" and depth=3, the depth expanded is "Children.Children.Children"
-				expands = append(expands, strings.Join(t, "."))
-			}
-			// fmt.Println("expands: ", expands)
-		}
+		expands := parseExpandQuery(c, m)
 
 		// 1.Perform business logic processing before list resources.
 		var serviceCtxBefore *types.ServiceContext

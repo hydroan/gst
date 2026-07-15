@@ -566,6 +566,11 @@ type User struct {
 
 #### `_time_column=xxx`,`_start_time=xxx`, `_end_time=xxx`
 
+Accepted time formats (see `parseQueryTime` in `query.go`): `2006-01-02 15:04:05`,
+`2006-01-02T15:04[:05]`, `2006-01-02` (a date-only `_end_time` covers the whole day),
+RFC 3339 with explicit offset, and unix seconds/milliseconds. Zone-less layouts are
+interpreted in the server's local zone; unparseable values return 400.
+
 >`Request`
 >
 >```bash

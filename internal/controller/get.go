@@ -119,63 +119,14 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		m.SetID(param)                        // `GetBefore` hook need id.
 
 		var err error
-		var expands []string
 		noCache := true // default disable cache.
-		depth := 1
 		if noCacheStr, ok := c.GetQuery(consts.QUERY_NO_CACHE); ok {
 			var parsed bool
 			if parsed, err = strconv.ParseBool(noCacheStr); err == nil {
 				noCache = parsed
 			}
 		}
-		if depthStr, ok := c.GetQuery(consts.QUERY_DEPTH); ok {
-			depth, _ = strconv.Atoi(depthStr)
-			if depth < 1 || depth > 99 {
-				depth = 1
-			}
-		}
-		if expandStr, ok := c.GetQuery(consts.QUERY_EXPAND); ok {
-			var _expands []string
-			items := strings.Split(expandStr, ",")
-			if len(items) > 0 {
-				if items[0] == consts.VALUE_ALL { // expand all feilds
-					items = m.Expands()
-				}
-			}
-			for _, e := range m.Expands() {
-				for _, item := range items {
-					if strings.EqualFold(item, e) {
-						_expands = append(_expands, e)
-					}
-				}
-			}
-			// fmt.Println("_expends: ", _expands)
-			fieldsMap := make(map[string]reflect.Kind)
-			for field := range typ.Fields() {
-				fieldsMap[field.Name] = field.Type.Kind()
-			}
-			for _, e := range _expands {
-				// If the expanding field not exists in the structure fiedls, skip depth expand.
-				// TODO: if the field type is the structure name, make depth expand.
-				kind, found := fieldsMap[e]
-				if !found {
-					expands = append(expands, e)
-					continue
-				}
-				// If the expanding field exists in the structure but the kind is not slice, skip depth expand.
-				if kind != reflect.Slice {
-					expands = append(expands, e)
-					continue
-				}
-				t := make([]string, depth)
-				for i := range depth {
-					t[i] = e
-				}
-				// If expand="Children" and depth=3, the depth expanded is "Children.Children.Children"
-				expands = append(expands, strings.Join(t, "."))
-			}
-			// fmt.Println("expands: ", expands)
-		}
+		expands := parseExpandQuery(c, m)
 		log.Infoz("", zap.Object(typ.Name(), m))
 
 		// 1.Perform business logic processing before get resource.

@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	. "github.com/hydroan/gst/internal/response"
@@ -76,7 +75,6 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		defer span.End()
 
 		var page, size, limit int
-		var startTime, endTime time.Time
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_EXPORT)
 		if pageStr, ok := c.GetQuery(consts.QUERY_PAGE); ok {
 			page, _ = strconv.Atoi(pageStr)
@@ -90,11 +88,12 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		timeColumn, _ := c.GetQuery(consts.QUERY_TIME_COLUMN)
 		index, _ := c.GetQuery(consts.QUERY_INDEX)
 		selects, _ := c.GetQuery(consts.QUERY_SELECT)
-		if startTimeStr, ok := c.GetQuery(consts.QUERY_START_TIME); ok {
-			startTime, _ = time.ParseInLocation(consts.DATE_TIME_LAYOUT, startTimeStr, time.Local)
-		}
-		if endTimeStr, ok := c.GetQuery(consts.QUERY_END_TIME); ok {
-			endTime, _ = time.ParseInLocation(consts.DATE_TIME_LAYOUT, endTimeStr, time.Local)
+		startTime, endTime, err := parseTimeRangeQuery(c)
+		if err != nil {
+			log.Error(err)
+			JSON(c, CodeInvalidParam.WithErr(err))
+			gstotel.RecordError(span, err)
+			return
 		}
 
 		// The underlying type of interface types.Model must be pointer to structure, such as *model.User.
@@ -103,17 +102,14 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		typ := reflect.TypeOf(*new(M)).Elem() // the real underlying structure type
 		m := reflect.New(typ).Interface().(M) //nolint:errcheck
 
-		if err := serviceregistry.QueryDecoder().Decode(m, c.Request.URL.Query()); err != nil {
+		if err = serviceregistry.QueryDecoder().Decode(m, c.Request.URL.Query()); err != nil {
 			log.Warn("failed to parse uri query parameter into model: ", err)
 		}
 		log.Info("query parameter: ", m)
 		present := presentQueryFields(c.Request.URL.Query())
 
-		var err error
 		var or bool
 		var fuzzy bool
-		depth := 1
-		var expands []string
 		data := make([]M, 0)
 		if orStr, ok := c.GetQuery(consts.QUERY_OR); ok {
 			or, _ = strconv.ParseBool(orStr)
@@ -121,54 +117,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		if fuzzyStr, ok := c.GetQuery(consts.QUERY_FUZZY); ok {
 			fuzzy, _ = strconv.ParseBool(fuzzyStr)
 		}
-		if depthStr, ok := c.GetQuery(consts.QUERY_DEPTH); ok {
-			depth, _ = strconv.Atoi(depthStr)
-			if depth < 1 || depth > 99 {
-				depth = 1
-			}
-		}
-		if expandStr, ok := c.GetQuery(consts.QUERY_EXPAND); ok {
-			var _expands []string
-			items := strings.Split(expandStr, ",")
-			if len(items) > 0 {
-				if items[0] == consts.VALUE_ALL { // expand all feilds
-					items = m.Expands()
-				}
-			}
-			for _, e := range m.Expands() {
-				for _, item := range items {
-					if strings.EqualFold(item, e) {
-						_expands = append(_expands, e)
-					}
-				}
-			}
-			// fmt.Println("_expends: ", _expands)
-			fieldsMap := make(map[string]reflect.Kind)
-			for field := range typ.Fields() {
-				fieldsMap[field.Name] = field.Type.Kind()
-			}
-			for _, e := range _expands {
-				// If the expanding field not exists in the structure fiedls, skip depth expand.
-				kind, found := fieldsMap[e]
-				if !found {
-					expands = append(expands, e)
-					continue
-				}
-				// If the expanding field exists in the structure but the kind is not slice, skip depth expand.
-				if kind != reflect.Slice {
-					expands = append(expands, e)
-					continue
-				}
-				t := make([]string, depth)
-				for i := range depth {
-					t[i] = e
-				}
-				// fmt.Println("t: ", t)
-				// If expand="Children" and depth=3, the depth expanded is "Children.Children.Children"
-				expands = append(expands, strings.Join(t, "."))
-			}
-			// fmt.Println("expands: ", expands)
-		}
+		expands := parseExpandQuery(c, m)
 
 		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_EXPORT)
 		svcCtx := types.NewServiceContext(c, nil, consts.PHASE_EXPORT)
