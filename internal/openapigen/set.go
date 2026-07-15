@@ -826,8 +826,8 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 
 func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeOf(*new(M))
-	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.DeleteMany)
-	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.DeleteMany)
+	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.PHASE_DELETE_MANY)
+	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_DELETE_MANY)
 	reqSchemaRef := &openapi3.SchemaRef{
 		Value: &openapi3.Schema{
 			Type:     &openapi3.Types{openapi3.TypeObject},
@@ -1344,8 +1344,11 @@ func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey
 		docMutex.Unlock()
 	}
 
-	if !modelregistry.IsEmpty[RSP]() {
+	{
 		name := componentDescriptionName(reflect.TypeOf(*new(RSP)), reflect.TypeOf(*new(M)))
+		if modelregistry.IsEmpty[RSP]() {
+			markEmptyResponseData(rspSchemaRef)
+		}
 
 		docMutex.Lock()
 		if doc.Components.Responses == nil {
@@ -1457,16 +1460,65 @@ func setupExample(schemaRef *openapi3.SchemaRef) {
 // type (eg. a tree or linked-list struct) can't recurse indefinitely.
 const maxExampleDepth = 10
 
+// isRefOrMissing reports whether schemaRef carries no usable inline schema to
+// build an example from.
+//
+// A member rendered as a $ref keeps an inline Value in memory, but that Value
+// is dropped on serialization and, being reached through a cycle, never got
+// decorated with the enum values and formats its component carries. Building an
+// example from it invents values the referenced component rejects, so the
+// descent stops at the boundary and readers follow the $ref instead.
+func isRefOrMissing(schemaRef *openapi3.SchemaRef) bool {
+	return schemaRef == nil || schemaRef.Ref != "" || schemaRef.Value == nil
+}
+
+// exampleForStringFormat returns the example value of a formatted string. A
+// bare "string" placeholder is rejected by validators for these formats, since
+// the format carries its own pattern.
+func exampleForStringFormat(format string) (string, bool) {
+	switch format {
+	case "date-time":
+		return "2006-01-02T15:04:05Z", true
+	case "date":
+		return "2006-01-02", true
+	default:
+		return "", false
+	}
+}
+
 // buildExampleValue recursively builds an example value for schema so nested
 // arrays, structs, and maps (additionalProperties) show their full shape in
 // Swagger instead of an empty placeholder.
+//
+// A self-referential type recurses until maxExampleDepth stops it. The descent
+// stops with an empty array or object rather than with a null, because the
+// member being filled is typically not nullable and a null there makes the
+// example fail validation against the very schema it illustrates.
 func buildExampleValue(schema *openapi3.Schema, depth int) any {
-	if schema == nil || schema.Type == nil || depth > maxExampleDepth {
+	if schema == nil {
 		return nil
+	}
+
+	// An enum accepts nothing but its declared values, whatever its JSON type.
+	if len(schema.Enum) > 0 {
+		return schema.Enum[0]
+	}
+
+	// A schema without a type accepts any value, eg. the value side of a
+	// user-defined JSON map. Only an explicitly nullable member may stay null,
+	// so illustrate the rest with a string.
+	if schema.Type == nil {
+		if schema.Nullable {
+			return nil
+		}
+		return "string"
 	}
 
 	switch {
 	case schema.Type.Is(openapi3.TypeString):
+		if example, ok := exampleForStringFormat(schema.Format); ok {
+			return example
+		}
 		return "string"
 	case schema.Type.Is(openapi3.TypeInteger):
 		return 0
@@ -1475,15 +1527,18 @@ func buildExampleValue(schema *openapi3.Schema, depth int) any {
 	case schema.Type.Is(openapi3.TypeBoolean):
 		return false
 	case schema.Type.Is(openapi3.TypeArray):
-		if schema.Items == nil || schema.Items.Value == nil {
+		if isRefOrMissing(schema.Items) || depth >= maxExampleDepth {
 			return []any{}
 		}
 		return []any{buildExampleValue(schema.Items.Value, depth+1)}
 	case schema.Type.Is(openapi3.TypeObject):
+		if depth >= maxExampleDepth {
+			return map[string]any{}
+		}
 		if len(schema.Properties) > 0 {
 			example := make(map[string]any, len(schema.Properties))
 			for propName, propRef := range schema.Properties {
-				if propRef.Value == nil {
+				if isRefOrMissing(propRef) {
 					continue
 				}
 				// Nested fields keep their id/audit-named properties: at this
@@ -1493,7 +1548,7 @@ func buildExampleValue(schema *openapi3.Schema, depth int) any {
 			}
 			return example
 		}
-		if schema.AdditionalProperties.Schema != nil && schema.AdditionalProperties.Schema.Value != nil {
+		if !isRefOrMissing(schema.AdditionalProperties.Schema) {
 			return map[string]any{"string": buildExampleValue(schema.AdditionalProperties.Schema.Value, depth+1)}
 		}
 		return map[string]any{}
@@ -1918,8 +1973,14 @@ func trimOpenAPIDocCopula(comment, copula string) (string, bool) {
 // newSchemaRefWithDocs generates the OpenAPI schema for value and decorates it
 // and every nested schema with the doc comments and enum values registered for
 // the Go types reachable from value's type.
+//
+// A self-referential type, eg. a tree node holding its own children, cannot be
+// inlined forever, so the generator breaks the cycle by emitting a $ref into
+// components. Those $ref targets are named through uniqueComponentName, the
+// same rule registerSchema names components with, otherwise the $ref points at
+// a component that was never registered and the whole document fails to load.
 func newSchemaRefWithDocs(value any) *openapi3.SchemaRef {
-	schemaRef, err := openapi3gen.NewSchemaRefForValue(value, nil)
+	schemaRef, err := openapi3gen.NewSchemaRefForValue(value, nil, openapi3gen.CreateTypeNameGenerator(uniqueComponentName))
 	if err != nil {
 		return schemaRef
 	}
@@ -2216,6 +2277,14 @@ func convertDatatypesJSONTypeSchema(propRef *openapi3.SchemaRef, field reflect.S
 }
 
 func schemaFromType(dataType reflect.Type) *openapi3.SchemaRef {
+	return schemaFromTypeVisiting(dataType, nil)
+}
+
+// schemaFromTypeVisiting implements schemaFromType. visiting holds the struct
+// types on the current descent path so a self-referential type, eg. a tree node
+// holding its own children, terminates instead of recursing forever; callers
+// pass nil.
+func schemaFromTypeVisiting(dataType reflect.Type, visiting map[reflect.Type]bool) *openapi3.SchemaRef {
 	for dataType.Kind() == reflect.Pointer {
 		dataType = dataType.Elem()
 	}
@@ -2227,6 +2296,17 @@ func schemaFromType(dataType reflect.Type) *openapi3.SchemaRef {
 	switch dataType.Kind() {
 	case reflect.Struct:
 		schema := openapi3.NewObjectSchema()
+		if visiting[dataType] {
+			// Reaching the same struct again closes a cycle: describe it as a
+			// bare object rather than descend into it once more.
+			return &openapi3.SchemaRef{Value: schema}
+		}
+		if visiting == nil {
+			visiting = make(map[reflect.Type]bool)
+		}
+		visiting[dataType] = true
+		defer delete(visiting, dataType)
+
 		for f := range dataType.Fields() {
 			if !f.IsExported() {
 				continue
@@ -2235,11 +2315,11 @@ func schemaFromType(dataType reflect.Type) *openapi3.SchemaRef {
 			if jsonTag == "" {
 				continue
 			}
-			schema.WithPropertyRef(jsonTag, &openapi3.SchemaRef{Value: fieldToOpenAPISchema(f)})
+			schema.WithPropertyRef(jsonTag, schemaFromTypeVisiting(f.Type, visiting))
 		}
 		return &openapi3.SchemaRef{Value: schema}
 	case reflect.Slice, reflect.Array:
-		itemRef := schemaFromType(dataType.Elem())
+		itemRef := schemaFromTypeVisiting(dataType.Elem(), visiting)
 		if itemRef == nil {
 			return nil
 		}
@@ -2480,14 +2560,15 @@ func fieldType2openapiType(field reflect.StructField) *openapi3.Types {
 		return &openapi3.Types{openapi3.TypeNumber}
 	case reflect.Bool:
 		return &openapi3.Types{openapi3.TypeBoolean}
-	case reflect.Array:
+	case reflect.Array, reflect.Slice:
 		return &openapi3.Types{openapi3.TypeArray}
-	case reflect.Struct:
-		// fmt.Println("----- field name", field.Name, field.Type.Kind())
+	case reflect.Struct, reflect.Map:
 		return &openapi3.Types{openapi3.TypeObject}
 	default:
-		// fmt.Println("----- field name", field.Name, field.Type.Kind())
-		return &openapi3.Types{openapi3.TypeNull}
+		// An unmapped kind, eg. an interface, constrains nothing. Leaving the
+		// type out says exactly that, whereas "null" is not a type OpenAPI 3.0
+		// defines and makes the enclosing schema invalid.
+		return nil
 	}
 }
 
@@ -2520,11 +2601,28 @@ func newRequestBody[REQ types.Request](reqKey string) *openapi3.RequestBodyRef {
 	}
 }
 
+// newResponses references the response component for one action. Every
+// operation declares a response, including actions whose response type carries
+// no fields: those still answer with the envelope, and responses is a required
+// member of an OpenAPI operation.
 func newResponses[RSP types.Response](status int, rspKey string) *openapi3.Responses {
-	if modelregistry.IsEmpty[RSP]() {
-		return nil
-	}
 	return openapi3.NewResponses(openapi3.WithStatus(status, &openapi3.ResponseRef{Ref: "#/components/responses/" + rspKey}))
+}
+
+// markEmptyResponseData rewrites the data member of an envelope whose response
+// type carries no fields. Such an action answers with data set to null, so the
+// member records only its nullability rather than an empty object body.
+func markEmptyResponseData(schemaRef *openapi3.SchemaRef) {
+	if schemaRef == nil || schemaRef.Value == nil {
+		return
+	}
+	data := schemaRef.Value.Properties["data"]
+	if data == nil || data.Value == nil {
+		return
+	}
+	data.Value.Type = nil
+	data.Value.Properties = nil
+	data.Value.Nullable = true
 }
 
 // func NewResponses() *openapi3.Responses {
