@@ -18,6 +18,7 @@ import (
 	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
+	"github.com/stoewer/go-strcase"
 	"go.uber.org/zap"
 )
 
@@ -117,6 +118,30 @@ func decodeListQuery[M types.Model](m M, query map[string][]string) error {
 		}
 	}
 	return serviceregistry.QueryDecoder().Decode(m, query)
+}
+
+// presentQueryFields collects the model filter keys explicitly provided in the
+// URL query string, keyed by snake case column name, so the database layer can
+// keep zero values (false, 0) of these columns as query conditions. Framework
+// parameters ("_"-prefixed keys plus page, size, and limit) and keys whose
+// values are all empty are excluded: they are not model filter columns, and an
+// empty value means the caller is not filtering by that key.
+func presentQueryFields(query map[string][]string) map[string]struct{} {
+	present := make(map[string]struct{}, len(query))
+	for key, values := range query {
+		if strings.HasPrefix(key, "_") {
+			continue
+		}
+		switch key {
+		case consts.QUERY_PAGE, consts.QUERY_SIZE, consts.QUERY_LIMIT:
+			continue
+		}
+		if len(strings.Join(values, "")) == 0 {
+			continue
+		}
+		present[strcase.SnakeCase(key)] = struct{}{}
+	}
+	return present
 }
 
 func rejectListQueryKeys(query map[string][]string, keys map[string]struct{}) error {
@@ -219,6 +244,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			return
 		}
 		log.Infoz(typ.Name()+": list query parameter", zap.Object(typ.String(), m))
+		present := presentQueryFields(c.Request.URL.Query())
 
 		var err error
 		var or bool
@@ -316,10 +342,11 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			WithIndex(index).
 			WithSelect(strings.Split(selects, ",")...).
 			WithQuery(svc.Filter(ctx, m), types.QueryConfig{
-				FuzzyMatch: fuzzy,
-				AllowEmpty: true,
-				UseOr:      or,
-				RawQuery:   svc.FilterRaw(ctx),
+				FuzzyMatch:    fuzzy,
+				AllowEmpty:    true,
+				UseOr:         or,
+				RawQuery:      svc.FilterRaw(ctx),
+				PresentFields: present,
 			}).
 			WithCursor(cursorValue, cursorNext, cursorField).
 			WithExclude(m.Excludes()).
@@ -354,10 +381,11 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 				// WithSelect(strings.Split(selects, ",")...). // NOTE: WithSelect should not apply in Count method.
 				WithIndex(index).
 				WithQuery(svc.Filter(ctx, m), types.QueryConfig{
-					FuzzyMatch: fuzzy,
-					AllowEmpty: true,
-					UseOr:      or,
-					RawQuery:   svc.FilterRaw(ctx),
+					FuzzyMatch:    fuzzy,
+					AllowEmpty:    true,
+					UseOr:         or,
+					RawQuery:      svc.FilterRaw(ctx),
+					PresentFields: present,
 				}).
 				WithExclude(m.Excludes()).
 				WithTimeRange(timeColumn, startTime, endTime).

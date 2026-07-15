@@ -130,6 +130,13 @@ type QueryConfig struct {
 	UseOr        bool   // Use OR logic to combine query conditions. Default: false (uses AND)
 	RawQuery     string // Raw SQL query string for custom WHERE conditions
 	RawQueryArgs []any  // Arguments for the raw SQL query parameters
+
+	// PresentFields marks columns whose filter values were explicitly provided
+	// by the caller, keyed by snake case column name. Query construction treats
+	// zero values (false, 0) of these columns as real conditions instead of
+	// dropping them as unset, so a filter like "enabled=false" works. Columns
+	// not listed here keep the default zero-value skip.
+	PresentFields map[string]struct{}
 }
 
 // SQLStatement contains a generated SQL statement in executable and rendered forms.

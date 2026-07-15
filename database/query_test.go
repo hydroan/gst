@@ -991,6 +991,38 @@ func TestDatabaseWithQuery(t *testing.T) {
 		require.Empty(t, users, "AllowEmpty=false should block empty queries")
 	})
 
+	t.Run("PresentFields", func(t *testing.T) {
+		defer cleanupTestData()
+		setupTestData(t)
+		zeroAgeUser := &TestUser{Name: "user0", Email: "user0@example.com", Age: 0, Base: model.Base{ID: "u0"}}
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(zeroAgeUser))
+
+		// Without presence a zero-value field is treated as unset, so the query
+		// stays empty and falls back to the "1 = 0" safety condition.
+		users := make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(&TestUser{Age: 0}).
+			List(&users))
+		require.Empty(t, users, "zero values without presence should keep the empty-query safety behavior")
+
+		// With presence the zero value becomes a regular condition.
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(&TestUser{Age: 0}, types.QueryConfig{PresentFields: map[string]struct{}{"age": {}}}).
+			List(&users))
+		require.Len(t, users, 1, "an explicitly provided zero value should filter records")
+		require.Equal(t, zeroAgeUser.ID, users[0].ID)
+
+		// Presence only unlocks zero values; non-zero fields keep working and
+		// combine with AND logic as usual.
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(&TestUser{Name: zeroAgeUser.Name, Age: 0}, types.QueryConfig{PresentFields: map[string]struct{}{"age": {}}}).
+			List(&users))
+		require.Len(t, users, 1)
+		require.Equal(t, zeroAgeUser.ID, users[0].ID)
+	})
+
 	t.Run("UseOr", func(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)

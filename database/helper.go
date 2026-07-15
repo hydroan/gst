@@ -144,10 +144,43 @@ func (db *database[M]) trace(op string, batch ...int) (func(error), context.Cont
 	}, ctx, span
 }
 
+// queryColumnName resolves the condition column name for a struct field:
+// the "query" tag wins over the "json" tag, which wins over the field name,
+// and the result is converted to snake case to match gorm column naming.
+func queryColumnName(ctx context.Context, field reflect.StructField) string {
+	// "json" tag priority is higher than field.Name
+	jsonTag := strings.TrimSpace(field.Tag.Get("json"))
+	if idx := strings.Index(jsonTag, ","); idx >= 0 {
+		jsonTag = jsonTag[:idx]
+	}
+	if len(jsonTag) == 0 {
+		// the structure lowercase field name as the query condition.
+		jsonTag = field.Name
+	}
+	// "query" tag have higher priority than "json" tag
+	queryTag := strings.TrimSpace(field.Tag.Get("query"))
+	if idx := strings.Index(queryTag, ","); idx >= 0 {
+		queryTag = queryTag[:idx]
+	}
+	if len(queryTag) > 0 && queryTag != jsonTag {
+		logger.Database.WithContext(ctx, consts.Phase("StructFieldToMap")).Infoz("json tag replace by query tag", zap.String("old", jsonTag), zap.String("new", queryTag))
+		jsonTag = queryTag
+	}
+	// json tag name naming format must be same as gorm table columns,
+	// both should be "snake case" or "camel case".
+	// gorm table columns naming format default to 'snake case',
+	// so the json tag name is converted to "snake case" here.
+	return strcase.SnakeCase(jsonTag)
+}
+
 // structFieldToMap extracts the field tags from a struct and writes them into a map.
 // This map can then be used to build SQL query conditions.
+//
+// Zero-value fields are treated as unset and skipped, unless their column name
+// is listed in present: presence marks filter values explicitly provided by the
+// caller, so explicit zero values such as false and 0 still become conditions.
 // FIXME: if the field type is boolean or integer, disable the fuzzy matching.
-func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, q map[string]string) {
+func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, q map[string]string, present map[string]struct{}) {
 	if q == nil {
 		q = make(map[string]string)
 	}
@@ -157,7 +190,12 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 		fieldVal := val.Field(i)
 
 		if fieldVal.IsZero() {
-			continue
+			if len(present) == 0 {
+				continue
+			}
+			if _, ok := present[queryColumnName(ctx, field)]; !ok {
+				continue
+			}
 		}
 		if !fieldVal.CanInterface() {
 			continue
@@ -224,36 +262,11 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 					}
 				*/
 			} else {
-				structFieldToMap(ctx, fieldTyp, fieldVal, q)
+				structFieldToMap(ctx, fieldTyp, fieldVal, q, present)
 			}
 			continue
 		}
-		// "json" tag priority is higher than field.Name
-		jsonTagStr := strings.TrimSpace(field.Tag.Get("json"))
-		jsonTagItems := strings.Split(jsonTagStr, ",")
-		// NOTE: strings.Split always returns at least one element(empty string)
-		// We should not use len(jsonTagItems) to check the json tags exists.
-		var jsonTag string
-		if len(jsonTagItems) == 0 {
-			// the structure lowercase field name as the query condition.
-			jsonTagItems[0] = field.Name
-		}
-		jsonTag = jsonTagItems[0]
-		if len(jsonTag) == 0 {
-			// the structure lowercase field name as the query condition.
-			jsonTag = field.Name
-		}
-		// "query" tag have higher priority than "json" tag
-		queryTagStr := strings.TrimSpace(field.Tag.Get("query"))
-		queryTagItems := strings.Split(queryTagStr, ",")
-		queryTag := ""
-		if len(queryTagItems) > 0 {
-			queryTag = queryTagItems[0]
-		}
-		if len(queryTag) > 0 && queryTag != jsonTag {
-			logger.Database.WithContext(ctx, consts.Phase("StructFieldToMap")).Infoz("json tag replace by query tag", zap.String("old", jsonTag), zap.String("new", queryTag))
-			jsonTag = queryTag
-		}
+		columnName := queryColumnName(ctx, field)
 
 		if !fieldVal.CanInterface() {
 			continue
@@ -317,12 +330,7 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 			_v = fmt.Sprintf("%v", v)
 		}
 
-		// json tag name naming format must be same as gorm table columns,
-		// both should be "snake case" or "camel case".
-		// gorm table columns naming format default to 'snake case',
-		// so the json tag name is converted to "snake case here"
-		// q[strcase.SnakeCase(jsonTag)] = fieldVal.Interface()
-		q[strcase.SnakeCase(jsonTag)] = _v
+		q[columnName] = _v
 	}
 }
 

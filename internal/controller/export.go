@@ -107,6 +107,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			log.Warn("failed to parse uri query parameter into model: ", err)
 		}
 		log.Info("query parameter: ", m)
+		present := presentQueryFields(c.Request.URL.Query())
 
 		var err error
 		var or bool
@@ -189,10 +190,11 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			WithIndex(index).
 			WithSelect(strings.Split(selects, ",")...).
 			WithQuery(svc.Filter(svcCtx, m), types.QueryConfig{
-				FuzzyMatch: fuzzy,
-				AllowEmpty: true,
-				UseOr:      or,
-				RawQuery:   svc.FilterRaw(svcCtx),
+				FuzzyMatch:    fuzzy,
+				AllowEmpty:    true,
+				UseOr:         or,
+				RawQuery:      svc.FilterRaw(svcCtx),
+				PresentFields: present,
 			}).
 			WithExclude(m.Excludes()).
 			WithExpand(expands, sortBy).

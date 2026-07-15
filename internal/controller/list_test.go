@@ -65,3 +65,39 @@ func TestDecodeListQueryGatesUnsafeQueryKeys(t *testing.T) {
 		require.Error(t, decodeListQuery(&m, map[string][]string{"_fuzzy": {"true"}}))
 	})
 }
+
+func TestPresentQueryFields(t *testing.T) {
+	t.Run("CollectsExplicitModelKeys", func(t *testing.T) {
+		present := presentQueryFields(map[string][]string{
+			"is_active": {"false"},
+			"age":       {"0"},
+			"isLocked":  {"true"},
+		})
+		require.Equal(t, map[string]struct{}{
+			"is_active": {},
+			"age":       {},
+			"is_locked": {},
+		}, present, "camel case keys should normalize to snake case column names")
+	})
+
+	t.Run("ExcludesFrameworkKeys", func(t *testing.T) {
+		present := presentQueryFields(map[string][]string{
+			"page":          {"1"},
+			"size":          {"10"},
+			"limit":         {"100"},
+			"_fuzzy":        {"true"},
+			"_sort_by":      {"created_at desc"},
+			"_no_total":     {"true"},
+			"_cursor_value": {"abc"},
+		})
+		require.Empty(t, present, "framework parameters are not model filter columns")
+	})
+
+	t.Run("ExcludesKeysWithoutValues", func(t *testing.T) {
+		present := presentQueryFields(map[string][]string{
+			"is_active": {""},
+			"remark":    {"", ""},
+		})
+		require.Empty(t, present, "an empty value means the caller is not filtering by that key")
+	})
+}

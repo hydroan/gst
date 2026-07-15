@@ -271,7 +271,7 @@ func (db *database[M]) WithQuery(query M, config ...types.QueryConfig) types.Dat
 	val := reflect.ValueOf(query).Elem()
 	q := make(map[string]string)
 
-	structFieldToMap(db.ctx, typ, val, q)
+	structFieldToMap(db.ctx, typ, val, q, cfg.PresentFields)
 	// fmt.Println("------------- WithQuery", q)
 
 	// CRITICAL SAFETY CHECK: Empty query conditions
