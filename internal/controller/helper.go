@@ -21,6 +21,22 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// setRouteID copies the route id parameter into the model and reports whether
+// the model accepted it. UUID-keyed models (Base) accept any non-empty string,
+// so the check never changes their behavior. Integer-keyed models (AutoBase)
+// leave the id unset when the raw value does not parse into their key type;
+// handlers must answer such requests with "not found" before any database
+// access, because an unset id would silently drop the intended row filter and
+// passing the raw value to SQL would rely on the database's implicit
+// string-to-integer coercion (MySQL matches id=7 for '7abc').
+//
+// The caller must pass a non-empty id: UUID-keyed models generate a fresh id
+// when given an empty value.
+func setRouteID(m types.Model, id string) bool {
+	m.SetID(id)
+	return len(m.GetID()) > 0
+}
+
 type patchFieldSet map[string]struct{}
 
 func patchValue(log types.Logger, typ reflect.Type, oldVal reflect.Value, newVal reflect.Value, fieldSets ...patchFieldSet) {

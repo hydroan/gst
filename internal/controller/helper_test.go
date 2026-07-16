@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
@@ -96,6 +97,42 @@ func TestPatchValueSkipsMissingFields(t *testing.T) {
 	require.Equal(t, "enabled feature", oldRecord.Name)
 	require.Equal(t, 10, oldRecord.Count)
 	require.False(t, oldRecord.Enabled)
+}
+
+type routeIDUUIDRecord struct {
+	Name string `json:"name"`
+
+	model.Base
+}
+
+type routeIDIntegerRecord struct {
+	Name string `json:"name"`
+
+	model.AutoBase
+}
+
+func TestSetRouteIDAcceptsAnyValueForUUIDKeyedModel(t *testing.T) {
+	m := new(routeIDUUIDRecord)
+
+	require.True(t, setRouteID(m, "custom-id"))
+	require.Equal(t, "custom-id", m.GetID())
+}
+
+func TestSetRouteIDNormalizesIntegerKeyedModelID(t *testing.T) {
+	m := new(routeIDIntegerRecord)
+
+	require.True(t, setRouteID(m, "007"))
+	require.Equal(t, "7", m.GetID())
+	require.Equal(t, uint64(7), m.ID)
+}
+
+func TestSetRouteIDRejectsUnparsableIntegerKeyedModelID(t *testing.T) {
+	for _, id := range []string{"abc", "7abc", "0", "-1", "18446744073709551616"} {
+		m := new(routeIDIntegerRecord)
+
+		require.Falsef(t, setRouteID(m, id), "id %q should be rejected", id)
+		require.Zero(t, m.ID)
+	}
 }
 
 func TestPatchFieldSetFromJSONBodyUsesJSONTags(t *testing.T) {

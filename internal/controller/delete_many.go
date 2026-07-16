@@ -17,6 +17,7 @@ import (
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
+	"go.uber.org/zap"
 )
 
 // DeleteMany handles a batch delete request with the default factory settings.
@@ -102,7 +103,12 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		req.Items = make([]M, 0, len(req.IDs))
 		for _, id := range req.IDs {
 			m := reflect.New(typ).Interface().(M) //nolint:errcheck
-			m.SetID(id)
+			if !setRouteID(m, id) {
+				// An id the model rejects cannot match any row; skip it to keep
+				// batch delete idempotent instead of failing the whole batch.
+				log.Warnz("skip id rejected by model", zap.String("id", id))
+				continue
+			}
 			req.Items = append(req.Items, m)
 		}
 		var serviceCtxBefore *types.ServiceContext

@@ -100,7 +100,15 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		// 'm' is the structure value, such as: &model.User{ID: myid, Name: myname}.
 		typ := reflect.TypeOf(*new(M)).Elem()
 		m := reflect.New(typ).Interface().(M) //nolint:errcheck
-		m.SetID(param)                        // `GetBefore` hook need id.
+		// `GetBefore` hook need id.
+		if !setRouteID(m, param) {
+			// An id the model rejects cannot match any row; answer 404 before
+			// the raw value reaches SQL, where implicit string-to-integer
+			// coercion could match an unintended row.
+			log.Errorz("route id rejected by model", zap.String("id", param))
+			JSON(c, CodeNotFound)
+			return
+		}
 
 		var err error
 		noCache := true // default disable cache.
@@ -130,7 +138,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			WithSelect(strings.Split(selects, ",")...).
 			WithExpand(expands).
 			WithCache(!noCache).
-			Get(m, param); err != nil {
+			Get(m, m.GetID()); err != nil {
 			log.Error(err)
 			JSON(c, CodeFailure.WithErr(err))
 			gstotel.RecordError(span, err)

@@ -124,7 +124,13 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// 'typ' is the structure type, such as: model.User.
 		// 'm' is the structure value such as: &model.User{ID: myid, Name: myname}.
 		m := reflect.New(typ).Interface().(M) //nolint:errcheck
-		m.SetID(id)
+		if !setRouteID(m, id) {
+			// An id the model rejects cannot match any row; answer 404 without
+			// relying on the empty-query safety net below.
+			log.Errorz("route id rejected by model", zap.String("id", id))
+			JSON(c, CodeNotFound)
+			return
+		}
 		// Make sure the record must be already exists.
 		if err = handler(requestContext(c)).WithLimit(1).WithQuery(m).List(&data); err != nil {
 			log.Error(err)

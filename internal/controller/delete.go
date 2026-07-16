@@ -19,6 +19,7 @@ import (
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
+	"go.uber.org/zap"
 )
 
 // Delete handles a delete request with the default factory settings.
@@ -102,7 +103,13 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		// 'm' is the structure value such as: &model.User{ID: myid, Name: myname}.
 		m := reflect.New(typ).Interface().(M) //nolint:errcheck
-		m.SetID(id)
+		if !setRouteID(m, id) {
+			// An id the model rejects cannot match any row; answer 404 instead
+			// of passing an unset id to the database layer.
+			log.Errorz("route id rejected by model", zap.String("id", id))
+			JSON(c, CodeNotFound)
+			return
+		}
 		ml := []M{m}
 		log.Info(fmt.Sprintf("%s delete %s", typ.Name(), id))
 
