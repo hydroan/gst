@@ -31,9 +31,16 @@ func TestParseFilterOp(t *testing.T) {
 	})
 
 	t.Run("RejectsUnknownOperator", func(t *testing.T) {
-		for _, s := range []string{"", "eq ", "EQ", "regex", "between", "notnull"} {
+		for _, s := range []string{"", "eq ", "EQ", "between", "notnull"} {
 			_, ok := types.ParseFilterOp(s)
 			require.False(t, ok, "operator %q must be rejected", s)
+		}
+	})
+
+	t.Run("ServiceOnlyOperatorsAreNotParseable", func(t *testing.T) {
+		for _, op := range []types.FilterOp{types.FilterOpRegex, types.FilterOpNotRegex, types.FilterOpJSONContains} {
+			_, ok := types.ParseFilterOp(string(op))
+			require.False(t, ok, "service-only operator %q must not be reachable from URL parsing", op)
 		}
 	})
 }

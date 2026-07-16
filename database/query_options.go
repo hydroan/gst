@@ -10,6 +10,7 @@ import (
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"gorm.io/hints"
@@ -471,6 +472,15 @@ func (db *database[M]) applyFieldConditions(conds []types.FieldCondition) {
 			} else {
 				db.ins = db.ins.Where(column + " IS NOT NULL")
 			}
+		case types.FilterOpRegex:
+			db.ins = db.ins.Where(column+" "+db.regexpOperator()+" ?", cond.Value)
+		case types.FilterOpNotRegex:
+			db.ins = db.ins.Where("NOT ("+column+" "+db.regexpOperator()+" ?)", cond.Value)
+		case types.FilterOpJSONContains:
+			// datatypes handles the dialect split: JSON_CONTAINS on MySQL and
+			// a json_each EXISTS subquery on SQLite. The column is passed
+			// unquoted because the expression quotes it itself.
+			db.ins = db.ins.Where(datatypes.JSONArrayQuery(cond.Column).Contains(cond.Value))
 		default:
 			logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("unknown field condition operator %q on column %q, adding safety condition", cond.Op, cond.Column)
 			db.ins = db.ins.Where("1 = 0")

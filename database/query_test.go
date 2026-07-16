@@ -10,6 +10,7 @@ import (
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -1755,13 +1756,72 @@ func TestDatabaseWithQuery(t *testing.T) {
 		require.Len(t, users, 1, "startswith must escape LIKE metacharacters too")
 		require.Equal(t, underscoreUser.ID, users[0].ID)
 
+		// Test the service-only regex operators: they are not reachable from
+		// URL parsing but service code can pass them through FieldConditions.
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "name", Op: types.FilterOpRegex, Value: "^user[12]$"},
+				},
+			}).
+			List(&users))
+		require.Len(t, users, 2)
+		foundU1, foundU2 = false, false
+		for _, u := range users {
+			switch u.ID {
+			case u1.ID:
+				foundU1 = true
+			case u2.ID:
+				foundU2 = true
+			}
+		}
+		require.True(t, foundU1, "should find u1")
+		require.True(t, foundU2, "should find u2")
+
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "name", Op: types.FilterOpNotRegex, Value: "^user[0-9]$"},
+				},
+			}).
+			List(&users))
+		require.Len(t, users, 1, "only the underscored name escapes the pattern")
+		require.Equal(t, underscoreUser.ID, users[0].ID)
+
+		// Test the service-only jsoncontains operator on a JSON array column.
+		addrUser := &TestUser{Name: "user6", Email: "user6@example.com", Age: 23, Addr: datatypes.NewJSONSlice([]string{"alpha", "beta"}), Base: model.Base{ID: "u6"}}
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(addrUser))
+
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "addr", Op: types.FilterOpJSONContains, Value: "alpha"},
+				},
+			}).
+			List(&users))
+		require.Len(t, users, 1, "jsoncontains must match JSON array membership")
+		require.Equal(t, addrUser.ID, users[0].ID)
+
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "addr", Op: types.FilterOpJSONContains, Value: "gamma"},
+				},
+			}).
+			List(&users))
+		require.Empty(t, users, "jsoncontains must not match absent members")
+
 		// Test fail-closed behavior: an unknown operator or an empty column adds
 		// "1 = 0" instead of being dropped, so the query returns no records.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithQuery(nil, types.QueryConfig{
 				FieldConditions: []types.FieldCondition{
-					{Column: "age", Op: types.FilterOp("regex"), Value: "1"},
+					{Column: "age", Op: types.FilterOp("bogus"), Value: "1"},
 				},
 			}).
 			List(&users))
