@@ -270,8 +270,8 @@ func TestAddQueryParametersOrdersBusinessFieldsBeforeFrameworkParameters(t *test
 		"id", "created_by", "updated_by",
 		"created_at", "updated_at",
 		"_page", "_size", "_sort_by",
-		"_expand", "_depth",
 		"_cursor_value", "_cursor_field", "_cursor_next",
+		"_expand", "_depth",
 	}
 	if len(names) != len(want) {
 		t.Fatalf("query parameters = %v, want exactly %v", names, want)
