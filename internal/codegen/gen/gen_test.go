@@ -877,3 +877,75 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateServiceExport(t *testing.T) {
+	newInfo := func(isEmpty bool) *ModelInfo {
+		return &ModelInfo{
+			ModulePath:   "helloworld",
+			ModelPkgName: "model",
+			ModelName:    "User",
+			ModelVarName: "u",
+			ModelFileDir: "model",
+			Design:       &dsl.Design{IsEmpty: isEmpty},
+		}
+	}
+	// dsl.Parse defaults an action's Payload/Result to the starred model name.
+	action := &dsl.Action{
+		Enabled: true,
+		Service: true,
+		Payload: "*User",
+		Result:  "*User",
+		Phase:   consts.PHASE_EXPORT,
+	}
+
+	// The export controller invocation order: ListBefore, Filter and FilterRaw
+	// (both applied while building the query), ListAfter, Export.
+	hookSigsInOrder := []string{
+		"func (u *Exporter) ListBefore(ctx *types.ServiceContext, users *[]*model.User) error",
+		"func (u *Exporter) Filter(ctx *types.ServiceContext, user *model.User) *model.User",
+		"func (u *Exporter) FilterRaw(ctx *types.ServiceContext) string",
+		"func (u *Exporter) ListAfter(ctx *types.ServiceContext, users *[]*model.User) error",
+	}
+	exportSig := "func (u *Exporter) Export(ctx *types.ServiceContext, users ...*model.User) (data []byte, err error)"
+
+	t.Run("non-empty model generates list hooks in controller invocation order", func(t *testing.T) {
+		file := GenerateServiceWithPackage(newInfo(false), action, consts.PHASE_EXPORT, "user")
+		if file == nil {
+			t.Fatal("GenerateServiceWithPackage returned nil")
+		}
+		got, err := FormatNodeExtra(file)
+		if err != nil {
+			t.Fatalf("format generated service failed: %v", err)
+		}
+		lastIdx := -1
+		for _, sig := range append(append([]string{}, hookSigsInOrder...), exportSig) {
+			idx := strings.Index(got, sig)
+			if idx < 0 {
+				t.Fatalf("generated service missing %q, got:\n%s", sig, got)
+			}
+			if idx <= lastIdx {
+				t.Fatalf("generated method %q out of controller invocation order, got:\n%s", sig, got)
+			}
+			lastIdx = idx
+		}
+	})
+
+	t.Run("empty model generates Export only", func(t *testing.T) {
+		file := GenerateServiceWithPackage(newInfo(true), action, consts.PHASE_EXPORT, "user")
+		if file == nil {
+			t.Fatal("GenerateServiceWithPackage returned nil")
+		}
+		got, err := FormatNodeExtra(file)
+		if err != nil {
+			t.Fatalf("format generated service failed: %v", err)
+		}
+		if !strings.Contains(got, exportSig) {
+			t.Errorf("generated service missing %q, got:\n%s", exportSig, got)
+		}
+		for _, sig := range hookSigsInOrder {
+			if strings.Contains(got, sig) {
+				t.Errorf("generated service for empty model must not contain %q, got:\n%s", sig, got)
+			}
+		}
+	})
+}

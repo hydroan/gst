@@ -586,6 +586,17 @@ func GenerateServiceWithPackage(info *ModelInfo, action *dsl.Action, phase const
 	case consts.PHASE_IMPORT:
 		decls = append(decls, genServiceMethod5(info, action, phase, roleName))
 	case consts.PHASE_EXPORT:
+		// The export controller reuses the list pipeline before delegating to
+		// Export: it invokes ListBefore, applies Filter and FilterRaw when
+		// building the query, then invokes ListAfter, so the Exporter needs all
+		// four hooks; methods are emitted in controller invocation order.
+		// Skip generate hooks for empty models
+		if !info.Design.IsEmpty {
+			decls = append(decls, genServiceMethod2(info, action, consts.PHASE_LIST_BEFORE, roleName)) // generate list before hook
+			decls = append(decls, genServiceMethod7(info, consts.PHASE_FILTER, roleName))              // generate filter hook
+			decls = append(decls, genServiceMethod8(info, consts.PHASE_FILTER_RAW, roleName))          // generate filter raw hook
+			decls = append(decls, genServiceMethod2(info, action, consts.PHASE_LIST_AFTER, roleName))  // generate list after hook
+		}
 		decls = append(decls, genServiceMethod6(info, action, phase, roleName))
 	}
 
