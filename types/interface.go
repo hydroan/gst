@@ -96,8 +96,8 @@ type Database[M Model] interface {
 	Delete(objs ...M) error
 	// Update saves one or more full model values and updates timestamps unless WithDryRun is enabled.
 	Update(objs ...M) error
-	// UpdateByID updates a single field of a record by its ID.
-	UpdateByID(id string, key string, value any) error
+	// UpdateByID updates a single database column of a record by its ID.
+	UpdateByID(id string, column string, value any) error
 	// List retrieves multiple records matching the query conditions.
 	// dest must be a non-nil pointer to a slice; the slice value itself may be
 	// nil or preallocated with make. List fully replaces the slice contents with

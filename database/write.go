@@ -487,15 +487,15 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 //
 // Parameters:
 //   - id: The primary key of the record to update. Must not be empty.
-//   - name: The field name to update. Must not be empty.
-//   - value: The new value for the field. Must not be nil.
+//   - column: The database column to update. Must not be empty.
+//   - value: The new value for the column. Must not be nil.
 //
 // Behavior:
 //   - Automatically updates the updated_at timestamp
 //   - Does not invoke UpdateBefore/UpdateAfter hooks for performance reasons
 //   - Does not mutate cache when WithDryRun is enabled
 //   - Returns ErrIDRequired if id is empty
-//   - Returns ErrEmptyFieldName if name is empty
+//   - Returns ErrEmptyFieldName if column is empty
 //   - Returns ErrNilValue if value is nil
 //   - Returns nil (no error) if the record with the given ID does not exist
 //
@@ -503,13 +503,13 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 //
 //	UpdateByID("user123", "status", "active")  // Update user status
 //	UpdateByID("order456", "amount", 99.99)    // Update order amount
-func (db *database[M]) UpdateByID(id string, name string, value any) (err error) {
+func (db *database[M]) UpdateByID(id string, column string, value any) (err error) {
 	defer db.reset()
 
 	if len(id) == 0 {
 		return ErrIDRequired
 	}
-	if len(name) == 0 {
+	if len(column) == 0 {
 		return ErrEmptyFieldName
 	}
 	if value == nil {
@@ -519,17 +519,17 @@ func (db *database[M]) UpdateByID(id string, name string, value any) (err error)
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, ctx, _ := db.trace("UpdateById")
+	done, ctx, _ := db.trace("UpdateByID")
 	defer done(err)
 
-	// return db.db.Model(*new(M)).Where("id = ?", id).Update(name, value).Error
+	// return db.db.Model(*new(M)).Where("id = ?", id).Update(column, value).Error
 	tableName := db.m.GetTableName()
 	if len(db.tableName) > 0 {
 		tableName = db.tableName
 	}
 
 	if db.dryRun {
-		tx := db.ins.Session(&gorm.Session{DryRun: true}).Table(tableName).Model(*new(M)).Where("id = ?", id).Update(name, value)
+		tx := db.ins.Session(&gorm.Session{DryRun: true}).Table(tableName).Model(*new(M)).Where("id = ?", id).Update(column, value)
 		return db.collectSQL(tx)
 	}
 
@@ -537,7 +537,7 @@ func (db *database[M]) UpdateByID(id string, name string, value any) (err error)
 		defer cache.Cache[[]M]().WithContext(ctx).Clear()
 	}
 
-	if err = db.ins.Session(&gorm.Session{}).Table(tableName).Model(*new(M)).Where("id = ?", id).Update(name, value).Error; err != nil {
+	if err = db.ins.Session(&gorm.Session{}).Table(tableName).Model(*new(M)).Where("id = ?", id).Update(column, value).Error; err != nil {
 		return err
 	}
 	if db.enableCache {
