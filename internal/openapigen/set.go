@@ -2447,12 +2447,15 @@ func embedsBaseModel(typ reflect.Type) bool {
 }
 
 // frameworkQueryParameterOrder is the canonical trailing order of framework
-// query parameters in generated API documents.
+// query parameters in generated API documents, sorted by how commonly each
+// parameter is used: pagination on every list page, then table sorting, then
+// association expansion, then the niche cursor pagination, and finally the
+// unsafe advanced controls with the most obscure ones last.
 var frameworkQueryParameterOrder = []string{
-	consts.QUERY_PAGE, consts.QUERY_SIZE,
+	consts.QUERY_PAGE, consts.QUERY_SIZE, consts.QUERY_SORT_BY,
+	consts.QUERY_EXPAND, consts.QUERY_DEPTH,
 	consts.QUERY_CURSOR_VALUE, consts.QUERY_CURSOR_FIELD, consts.QUERY_CURSOR_NEXT,
-	consts.QUERY_EXPAND, consts.QUERY_DEPTH, consts.QUERY_SORT_BY,
-	consts.QUERY_OR, consts.QUERY_INDEX, consts.QUERY_SELECT, consts.QUERY_NO_CACHE, consts.QUERY_NO_TOTAL,
+	consts.QUERY_OR, consts.QUERY_SELECT, consts.QUERY_NO_TOTAL, consts.QUERY_NO_CACHE, consts.QUERY_INDEX,
 }
 
 // sortQueryParameters puts business filter parameters first, preserving their
