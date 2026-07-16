@@ -40,8 +40,6 @@ func patchValue(log types.Logger, typ reflect.Type, oldVal reflect.Value, newVal
 		switch field.Type.Kind() {
 		case reflect.Struct: // skip update base model.
 			switch field.Type.Name() {
-			case "GormTime": // The underlying type of model.GormTime(type of time.Time) is struct, we should continue handle.
-
 			case "Base", "AutoBase":
 				// Base and AutoBase contain framework-managed fields and should not be patched directly.
 				/*

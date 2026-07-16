@@ -311,10 +311,10 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 			// fmt.Println("--------------- slice element", slice.Index(0), slice.Index(0).Kind(), slice.Index(0).Type())
 			switch slice.Index(0).Kind() {
 			case reflect.String: // handle string slice.
-				// WARN: fieldVal.Type() is model.GormStrings not []string,
-				// execute statement `slice.Interface().([]string)` directly will case panic.
-				// _v = strings.Join(slice.Interface().([]string), ",") // the slice type is GormStrings not []string.
-				// We should make the slice of []string again.
+				// WARN: fieldVal.Type() may be a named slice type (e.g.
+				// datatypes.JSONSlice[string]) instead of []string, so asserting
+				// slice.Interface().([]string) directly would panic. Rebuild the
+				// value as a plain []string first.
 				slice = reflect.MakeSlice(reflect.TypeFor[[]string](), _len, _len)
 				reflect.Copy(slice, fieldVal)
 				_v = strings.Join(slice.Interface().([]string), ",") //nolint:errcheck
