@@ -19,31 +19,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// List is a generic function to product gin handler to list resources in backend.
-// The resource type deponds on the type of interface types.Model.
-//
-// If you want make a structure field as query parameter, you should add a "query"
-// tag for it. for example: query:"name"
-//
-// TODO:combine query parameter 'page' and 'size' into decoded types.Model
-// FIX: retrieve records recursive (current not support in gorm.)
-// https://stackoverflow.com/questions/69395891/get-recursive-field-values-in-gorm
-// DB.Preload("Category.Category.Category").Find(&Category)
-// its works for me.
-//
-// Query parameters:
-//   - All feilds of types.Model's underlying structure but excluding some special fields,
-//     such as "password", field value too large, json tag is "-", etc.
-//   - `_expand`: strings (multiple items separated by ",").
-//     The responsed data to frontend will expanded(retrieve data from external table accoding to foreign key)
-//     For examples:
-//     /department/myid?_expand=children
-//     /department/myid?_expand=children,parent
-//   - `_depth`: strings or interger.
-//     How depth to retrieve records from datab recursively, default to 1, value scope is [1,99].
-//     For examples:
-//     /department/myid?_expand=children&_depth=3
-//     /department/myid?_expand=children,parent&_depth=10
+// List handles a list request with the default factory settings.
 func List[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
 	ListFactory[M, REQ, RSP]()(c)
 }

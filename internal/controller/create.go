@@ -22,8 +22,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Create is a generic function to product gin handler to create one resource.
-// The resource type depends on the type of interface types.Model.
+// Create handles a create request with the default factory settings.
 func Create[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
 	CreateFactory[M, REQ, RSP]()(c)
 }

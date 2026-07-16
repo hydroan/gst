@@ -21,12 +21,7 @@ import (
 	"github.com/hydroan/gst/util"
 )
 
-// Delete is a generic function to product gin handler to delete one resource.
-// The resource type depends on the type of interface types.Model.
-//
-// The resource id comes from the configured route parameter only,
-// eg: localhost:9000/api/myresource/myid.
-// Batch deletion should use the DeleteMany action instead.
+// Delete handles a delete request with the default factory settings.
 func Delete[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
 	DeleteFactory[M, REQ, RSP]()(c)
 }
@@ -34,9 +29,10 @@ func Delete[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 // DeleteFactory returns a Gin handler that deletes one resource.
 //
 // When M, REQ, and RSP are the same type, the handler reads the resource id
-// from the configured route parameter, runs delete hooks, deletes the model
-// through the configured database handler, records an operation log, and
-// returns a success response.
+// from the configured route parameter (batch deletion uses the DeleteMany
+// action instead), runs delete hooks, deletes the model through the
+// configured database handler, records an operation log, and returns a
+// success response.
 //
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's Delete method.

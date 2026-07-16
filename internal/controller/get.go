@@ -22,23 +22,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Get is a generic function to product gin handler to list resource in backend.
-// The resource type deponds on the type of interface types.Model.
-//
-// Query parameters:
-//   - `_expand`: strings (multiple items separated by ",").
-//     The responsed data to frontend will expanded(retrieve data from external table accoding to foreign key)
-//     For examples:
-//     /department/myid?_expand=children
-//     /department/myid?_expand=children,parent
-//   - `_depth`: strings or interger.
-//     How depth to retrieve records from datab recursively, default to 1, value scope is [1,99].
-//     For examples:
-//     /department/myid?_expand=children&_depth=3
-//     /department/myid?_expand=children,parent&_depth=10
-//
-// Route parameters:
-// - id: string or integer.
+// Get handles a single-resource get request with the default factory settings.
 func Get[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
 	GetFactory[M, REQ, RSP]()(c)
 }

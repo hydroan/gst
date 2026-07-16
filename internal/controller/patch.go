@@ -22,12 +22,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Patch is a generic function to product gin handler to partial update one resource.
-// The resource type depends on the type of interface types.Model.
-//
-// The resource id comes from the configured route parameter only,
-// eg: localhost:9000/api/myresource/myid. The fields desired to modify are
-// carried by the http body, and the id carried by the http body is ignored.
+// Patch handles a partial update request with the default factory settings.
 func Patch[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
 	PatchFactory[M, REQ, RSP]()(c)
 }
@@ -35,10 +30,10 @@ func Patch[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context)
 // PatchFactory returns a Gin handler that partially updates one resource.
 //
 // When M, REQ, and RSP are the same type, the handler reads the resource id
-// from the configured route parameter, loads the existing record, copies fields
-// present in the request model into that record, sets the updater field, runs
-// patch hooks, writes the patched model through the configured database
-// handler, and records an operation log.
+// from the configured route parameter (the id carried by the body is ignored),
+// loads the existing record, copies fields present in the request body into
+// that record, sets the updater field, runs patch hooks, writes the patched
+// model through the configured database handler, and records an operation log.
 //
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's Patch method.

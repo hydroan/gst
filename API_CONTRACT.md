@@ -34,8 +34,8 @@ Content-Type: application/json
 ## 列表通用查询参数
 
 除业务字段过滤外，列表接口的通用查询参数由后端按资源逐个启用：分页由 model 嵌入
-`model.Pagination` 启用，游标分页由 `model.Cursor` 启用，排序、模糊匹配、展开关联、
-时间范围等常规参数由 `model.Query` 启用（`model.Query` 同时包含前两者），OR 过滤、
+`model.Pagination` 启用，游标分页由 `model.Cursor` 启用，排序、展开关联、时间范围、
+字段操作符过滤等常规参数由 `model.Query` 启用（`model.Query` 同时包含前两者），OR 过滤、
 跳过总数等改变查询语义或执行方式的参数由 `model.UnsafeQuery` 单独启用。资源未启用
 对应能力时，传这些参数会返回 400。某个资源支持哪些参数以 Swagger 为准。
 

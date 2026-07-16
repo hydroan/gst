@@ -22,12 +22,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Update is a generic function to product gin handler to update one resource.
-// The resource type depends on the type of interface types.Model.
-//
-// Update will update one resource. The resource id comes from the configured
-// route parameter only, eg: localhost:9000/api/myresource/myid. The id carried
-// by the http body is ignored.
+// Update handles a full update (replace) request with the default factory settings.
 func Update[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
 	UpdateFactory[M, REQ, RSP]()(c)
 }
@@ -35,10 +30,11 @@ func Update[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 // UpdateFactory returns a Gin handler that replaces one resource.
 //
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into
-// M, reads the resource id from the configured route parameter, verifies that
-// exactly one existing record matches, preserves the original creator fields,
-// sets the updater field, runs update hooks, writes the replacement through the
-// configured database handler, and records an operation log.
+// M, reads the resource id from the configured route parameter (the id carried
+// by the body is ignored), verifies that exactly one existing record matches,
+// preserves the original creator fields, sets the updater field, runs update
+// hooks, writes the replacement through the configured database handler, and
+// records an operation log.
 //
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's Update method.
