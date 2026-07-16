@@ -103,7 +103,10 @@ type Paginatable interface {
 //
 // Cursor owns cursor position and direction only. Ordering for cursor pagination
 // is derived from CursorField and CursorNext, so SortBy intentionally remains
-// outside this struct to avoid multiple competing order sources.
+// outside this struct to avoid multiple competing order sources. Embedding
+// Cursor also lets the client tune the batch size via _size (the field lives
+// in Pagination; the controller reads it from the URL directly), while _page
+// stays rejected: offset paging conflicts with cursor semantics.
 type Cursor struct {
 	CursorValue *string `json:"-" gorm:"-" query:"_cursor_value" url:"_cursor_value,omitempty"` // CursorValue is the current cursor token for cursor pagination.
 	CursorField string  `json:"-" gorm:"-" query:"_cursor_field" url:"_cursor_field,omitempty"` // CursorField names the single field the cursor orders by.

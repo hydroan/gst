@@ -364,10 +364,44 @@ func TestParseFieldConditionsQuery(t *testing.T) {
 	})
 
 	t.Run("TimeFieldRejectsSetAndSubstringOps", func(t *testing.T) {
-		for _, key := range []string{"expired_at[like]", "expired_at[notlike]", "expired_at[in]", "expired_at[notin]"} {
+		for _, key := range []string{"expired_at[like]", "expired_at[notlike]", "expired_at[in]", "expired_at[notin]", "expired_at[startswith]", "expired_at[endswith]"} {
 			_, err := parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{key: {"2026-07-01"}})
 			require.Error(t, err, "key %q must be rejected on a time field", key)
 		}
+	})
+
+	t.Run("PrefixAndSuffixOpsPassStringValues", func(t *testing.T) {
+		conds, err := parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"remark[endswith]":   {"suffix"},
+			"remark[startswith]": {"prefix"},
+		})
+		require.NoError(t, err)
+		require.Equal(t, []types.FieldCondition{
+			{Column: "remark", Op: types.FilterOpEndsWith, Value: "suffix"},
+			{Column: "remark", Op: types.FilterOpStartsWith, Value: "prefix"},
+		}, conds)
+
+		_, err = parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"enabled[startswith]": {"tr"},
+		})
+		require.Error(t, err, "prefix matching makes no sense on a bool field")
+	})
+
+	t.Run("IsNullWorksOnAnyColumnWithBoolValue", func(t *testing.T) {
+		conds, err := parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"expired_at[isnull]": {"false"},
+			"remark[isnull]":     {"true"},
+		})
+		require.NoError(t, err)
+		require.Equal(t, []types.FieldCondition{
+			{Column: "expired_at", Op: types.FilterOpIsNull, Value: "0"},
+			{Column: "remark", Op: types.FilterOpIsNull, Value: "1"},
+		}, conds)
+
+		_, err = parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"remark[isnull]": {"yes"},
+		})
+		require.Error(t, err, "isnull requires a boolean value")
 	})
 
 	t.Run("BaseTimeColumnsFilterable", func(t *testing.T) {
@@ -452,6 +486,69 @@ func TestParseFieldConditionsQuery(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Empty(t, conds, "underscore keys stay in the framework namespace and are not field conditions")
+	})
+}
+
+func TestDecodeListQueryPageSizeGating(t *testing.T) {
+	type cursorOnlyModel struct {
+		Name string `query:"name"`
+
+		model.Cursor
+		model.Base
+	}
+	type paginatableModel struct {
+		Name string `query:"name"`
+
+		model.Pagination
+		model.Base
+	}
+	type plainModel struct {
+		Name string `query:"name"`
+
+		model.Base
+	}
+
+	t.Run("CursorModelAcceptsSizeButRejectsPage", func(t *testing.T) {
+		var m cursorOnlyModel
+		require.NoError(t, decodeListQuery(&m, map[string][]string{"_size": {"50"}}),
+			"cursor pagination needs a client-adjustable batch size")
+		require.Error(t, decodeListQuery(&m, map[string][]string{"_page": {"2"}}),
+			"offset paging conflicts with cursor semantics")
+	})
+
+	t.Run("PaginatableModelAcceptsBoth", func(t *testing.T) {
+		var m paginatableModel
+		require.NoError(t, decodeListQuery(&m, map[string][]string{"_page": {"2"}, "_size": {"50"}}))
+	})
+
+	t.Run("PlainModelRejectsBoth", func(t *testing.T) {
+		var m plainModel
+		require.Error(t, decodeListQuery(&m, map[string][]string{"_size": {"50"}}))
+		require.Error(t, decodeListQuery(&m, map[string][]string{"_page": {"2"}}))
+	})
+}
+
+func TestResolveListPagination(t *testing.T) {
+	t.Run("AdjustableDefaultsAndClamp", func(t *testing.T) {
+		page, size := resolveListPagination(0, 0, true, false)
+		require.Equal(t, 0, page)
+		require.Equal(t, defaultPageSize, size, "adjustable models default to a small page")
+
+		_, size = resolveListPagination(0, 50, true, false)
+		require.Equal(t, 50, size)
+
+		_, size = resolveListPagination(0, maxPageSize+1, true, false)
+		require.Equal(t, maxPageSize, size, "oversized page size clamps to the cap")
+	})
+
+	t.Run("NonAdjustableKeepsBottomLine", func(t *testing.T) {
+		_, size := resolveListPagination(0, 0, false, false)
+		require.Equal(t, defaultLimit, size, "models without client size control keep the full-table safety limit")
+	})
+
+	t.Run("ActiveCursorIgnoresPage", func(t *testing.T) {
+		page, _ := resolveListPagination(3, 50, true, true)
+		require.Equal(t, 1, page, "offset paging must not stack on top of an active cursor")
 	})
 }
 

@@ -36,11 +36,15 @@ var listUnsafeQueryKeys = map[string]struct{}{
 	consts.QUERY_NO_TOTAL: {},
 }
 
-// listPaginationQueryKeys are enabled by model.Pagination. They are split from
-// listQueryKeys so a model can allow page and size without enabling fuzzy,
-// sorting, expansion, or other framework-owned List controls.
-var listPaginationQueryKeys = map[string]struct{}{
+// listPageQueryKey is enabled by model.Pagination only: offset paging
+// conflicts with cursor semantics, so cursor-only models reject it.
+var listPageQueryKey = map[string]struct{}{
 	consts.QUERY_PAGE: {},
+}
+
+// listSizeQueryKey is enabled by model.Pagination or model.Cursor: both
+// paging styles need a client-adjustable page/batch size.
+var listSizeQueryKey = map[string]struct{}{
 	consts.QUERY_SIZE: {},
 }
 
@@ -70,17 +74,60 @@ func decodeListQuery[M types.Model](m M, query map[string][]string) error {
 			return err
 		}
 	}
-	if !modelregistry.IsPaginatable(m) {
-		if err := rejectListQueryKeys(query, listPaginationQueryKeys); err != nil {
+	paginatable := modelregistry.IsPaginatable(m)
+	cursorable := modelregistry.IsCursorable(m)
+	if !paginatable {
+		if err := rejectListQueryKeys(query, listPageQueryKey); err != nil {
 			return err
 		}
 	}
-	if !modelregistry.IsCursorable(m) {
+	if !paginatable && !cursorable {
+		if err := rejectListQueryKeys(query, listSizeQueryKey); err != nil {
+			return err
+		}
+	}
+	if !cursorable {
 		if err := rejectListQueryKeys(query, listCursorQueryKeys); err != nil {
 			return err
 		}
 	}
+	// A cursor-only model has no struct field carrying the _size tag (it
+	// lives in Pagination), so drop the already-validated key before the
+	// schema decode; the controller reads _size from the URL directly.
+	if cursorable && !paginatable {
+		filtered := make(map[string][]string, len(query))
+		for key, values := range query {
+			if key == consts.QUERY_SIZE {
+				continue
+			}
+			filtered[key] = values
+		}
+		query = filtered
+	}
 	return serviceregistry.QueryDecoder().Decode(m, query)
+}
+
+// resolveListPagination normalizes the client page/size for a List request.
+// sizeAdjustable marks models embedding Pagination or Cursor: their unset
+// size defaults to defaultPageSize and oversized values clamp to maxPageSize.
+// Models without client size control keep defaultLimit as the full-table
+// safety bottom line. An active cursor resets page to 1 so offset paging
+// cannot stack on top of cursor filtering.
+func resolveListPagination(page, size int, sizeAdjustable, cursorActive bool) (int, int) {
+	if sizeAdjustable {
+		switch {
+		case size <= 0:
+			size = defaultPageSize
+		case size > maxPageSize:
+			size = maxPageSize
+		}
+	} else if size <= 0 {
+		size = defaultLimit
+	}
+	if cursorActive {
+		page = 1
+	}
+	return page, size
 }
 
 func rejectListQueryKeys(query map[string][]string, keys map[string]struct{}) error {
@@ -296,6 +343,8 @@ var timeType = reflect.TypeFor[time.Time]()
 // passed to the database where implicit conversion could silently match the
 // wrong rows.
 //
+//   - isnull applies to any column and requires a boolean value, normalized
+//     to 1/0; it is handled before the type dispatch below.
 //   - time columns accept the comparison operators only; the value is parsed
 //     by parseQueryTime and rendered in the server's local zone. A date-only
 //     value extends to the end of the day when it forms an upper inclusive
@@ -306,6 +355,19 @@ var timeType = reflect.TypeFor[time.Time]()
 //     comma-separated member.
 //   - string and other columns pass the value through unchanged.
 func normalizeFieldConditionValue(columnTyp reflect.Type, op types.FilterOp, value string) (string, error) {
+	// isnull is the only operator whose value type is independent of the
+	// column type: it always carries a boolean and applies to any nullable
+	// column, including time columns the comparison gating below would block.
+	if op == types.FilterOpIsNull {
+		b, err := strconv.ParseBool(value)
+		if err != nil {
+			return "", errors.Newf("isnull expects a boolean value, got %q", value)
+		}
+		if b {
+			return "1", nil
+		}
+		return "0", nil
+	}
 	switch {
 	case columnTyp == timeType:
 		switch op {
@@ -341,7 +403,7 @@ func normalizeFieldConditionValue(columnTyp reflect.Type, op types.FilterOp, val
 					return "", err
 				}
 			}
-		case types.FilterOpLike, types.FilterOpNotLike:
+		case types.FilterOpLike, types.FilterOpNotLike, types.FilterOpStartsWith, types.FilterOpEndsWith:
 			// Substring matching relies on the database's string rendering of
 			// the number; the pattern itself is not numeric.
 		default:

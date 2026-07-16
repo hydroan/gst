@@ -525,10 +525,13 @@ field, use the field operator filter syntax instead: `?name[like]=user01`
 Field-level operator filters (see `parseFieldConditionsQuery` in `query.go`) require
 `model.Query` and are always AND-combined with the other conditions. Supported
 operators: `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in`/`notin` (comma-separated
-values), `like`/`notlike` (substring match). The bare key stays the exact business
-filter, so `?age=10&age[gt]=20` applies both conditions. Unknown fields or
-operators, and combining with `_or=true`, return 400; empty values mean "not
-filtering".
+values), `like`/`notlike` (substring match), `startswith`/`endswith` (anchored
+match; a prefix can use an index), and `isnull` (boolean value; works on any
+nullable column). Values of the LIKE-based operators are literals, not pattern
+language: `%`, `_`, and the escape character are escaped. The bare key stays the
+exact business filter, so `?age=10&age[gt]=20` applies both conditions. Unknown
+fields or operators, and combining with `_or=true`, return 400; empty values
+mean "not filtering".
 
 Values are validated against the field's Go type and rejected with 400 when
 malformed. Numeric fields require numeric values. Time fields accept the

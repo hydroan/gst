@@ -221,7 +221,7 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 			add: func(op *openapi3.Operation) {
 				addQueryParameters[*openapiCursorQueryModel, *openapiCursorQueryModel, *openapiCursorQueryModel](op)
 			},
-			parameters: []string{"_cursor_value", "_cursor_field", "_cursor_next", "id", "created_by", "updated_by"},
+			parameters: []string{"_size", "_cursor_value", "_cursor_field", "_cursor_next", "id", "created_by", "updated_by"},
 		},
 	}
 

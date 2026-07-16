@@ -151,9 +151,8 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		}
 		sortBy, _ := c.GetQuery(consts.QUERY_SORT_BY)
 		// 2.List resources from database.
-		if size == 0 {
-			size = defaultLimit
-		}
+		sizeAdjustable := modelregistry.IsPaginatable(m) || modelregistry.IsCursorable(m)
+		page, size = resolveListPagination(page, size, sizeAdjustable, len(cursorValue) > 0)
 		if err = handler(requestContext(c)).
 			WithPagination(page, size).
 			WithIndex(index).

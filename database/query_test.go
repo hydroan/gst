@@ -1654,6 +1654,107 @@ func TestDatabaseWithQuery(t *testing.T) {
 			List(&users))
 		require.Empty(t, users, "conditions must stay AND-combined under UseOr")
 
+		// Test startswith is anchored at the beginning: "user" prefixes every
+		// name, while "ser" only appears inside and must not match.
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "name", Op: types.FilterOpStartsWith, Value: "user"},
+				},
+			}).
+			List(&users))
+		require.Len(t, users, 3)
+
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "name", Op: types.FilterOpStartsWith, Value: "ser"},
+				},
+			}).
+			List(&users))
+		require.Empty(t, users, "startswith must anchor at the beginning of the value")
+
+		// Test endswith is anchored at the end.
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "email", Op: types.FilterOpEndsWith, Value: "1@example.com"},
+				},
+			}).
+			List(&users))
+		require.Len(t, users, 1)
+		require.Equal(t, u1.ID, users[0].ID)
+
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "email", Op: types.FilterOpEndsWith, Value: "user"},
+				},
+			}).
+			List(&users))
+		require.Empty(t, users, "endswith must anchor at the end of the value")
+
+		// Test isnull: fixtures leave is_active NULL; one extra record sets it.
+		// (remark is unusable here: the TestUser CreateBefore hook fills it on
+		// every create, so it is never NULL.)
+		active := true
+		flaggedUser := &TestUser{Name: "user4", Email: "user4@example.com", Age: 21, IsActive: &active, Base: model.Base{ID: "u4"}}
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(flaggedUser))
+
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "is_active", Op: types.FilterOpIsNull, Value: "1"},
+				},
+			}).
+			List(&users))
+		require.Len(t, users, 3, "isnull=1 must select records whose column IS NULL")
+
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "is_active", Op: types.FilterOpIsNull, Value: "0"},
+				},
+			}).
+			List(&users))
+		require.Len(t, users, 1, "isnull=0 must select records whose column IS NOT NULL")
+		require.Equal(t, flaggedUser.ID, users[0].ID)
+
+		// Test LIKE metacharacter escaping: the value is a literal, not a
+		// pattern. An unescaped "user_" would match every "userX" via the
+		// "_" single-character wildcard; escaped it only matches the record
+		// whose name literally contains "user_".
+		underscoreUser := &TestUser{Name: "user_x", Email: "user.x@example.com", Age: 22, Base: model.Base{ID: "u5"}}
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(underscoreUser))
+
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "name", Op: types.FilterOpLike, Value: "user_"},
+				},
+			}).
+			List(&users))
+		require.Len(t, users, 1, "LIKE metacharacters in the value must be escaped")
+		require.Equal(t, underscoreUser.ID, users[0].ID)
+
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryConfig{
+				FieldConditions: []types.FieldCondition{
+					{Column: "name", Op: types.FilterOpStartsWith, Value: "user_"},
+				},
+			}).
+			List(&users))
+		require.Len(t, users, 1, "startswith must escape LIKE metacharacters too")
+		require.Equal(t, underscoreUser.ID, users[0].ID)
+
 		// Test fail-closed behavior: an unknown operator or an empty column adds
 		// "1 = 0" instead of being dropped, so the query returns no records.
 		users = make([]*TestUser, 0)

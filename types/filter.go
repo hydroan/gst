@@ -8,31 +8,37 @@ package types
 type FilterOp string
 
 const (
-	FilterOpEq      FilterOp = "eq"      // equal: column = value
-	FilterOpNe      FilterOp = "ne"      // not equal: column <> value
-	FilterOpGt      FilterOp = "gt"      // greater than: column > value
-	FilterOpGte     FilterOp = "gte"     // greater than or equal: column >= value
-	FilterOpLt      FilterOp = "lt"      // less than: column < value
-	FilterOpLte     FilterOp = "lte"     // less than or equal: column <= value
-	FilterOpIn      FilterOp = "in"      // set membership: column IN (comma-separated values)
-	FilterOpNotIn   FilterOp = "notin"   // set exclusion: column NOT IN (comma-separated values)
-	FilterOpLike    FilterOp = "like"    // substring match: column LIKE %value%
-	FilterOpNotLike FilterOp = "notlike" // substring exclusion: column NOT LIKE %value%
+	FilterOpEq         FilterOp = "eq"         // equal: column = value
+	FilterOpNe         FilterOp = "ne"         // not equal: column <> value
+	FilterOpGt         FilterOp = "gt"         // greater than: column > value
+	FilterOpGte        FilterOp = "gte"        // greater than or equal: column >= value
+	FilterOpLt         FilterOp = "lt"         // less than: column < value
+	FilterOpLte        FilterOp = "lte"        // less than or equal: column <= value
+	FilterOpIn         FilterOp = "in"         // set membership: column IN (comma-separated values)
+	FilterOpNotIn      FilterOp = "notin"      // set exclusion: column NOT IN (comma-separated values)
+	FilterOpLike       FilterOp = "like"       // substring match: column LIKE %value%
+	FilterOpNotLike    FilterOp = "notlike"    // substring exclusion: column NOT LIKE %value%
+	FilterOpStartsWith FilterOp = "startswith" // prefix match: column LIKE value% (can use an index)
+	FilterOpEndsWith   FilterOp = "endswith"   // suffix match: column LIKE %value
+	FilterOpIsNull     FilterOp = "isnull"     // null check: value true means IS NULL, false means IS NOT NULL
 )
 
 // filterOps indexes every known operator for parsing. Matching is exact and
 // case-sensitive: URL query keys are contract surface, not free-form input.
 var filterOps = map[string]FilterOp{
-	string(FilterOpEq):      FilterOpEq,
-	string(FilterOpNe):      FilterOpNe,
-	string(FilterOpGt):      FilterOpGt,
-	string(FilterOpGte):     FilterOpGte,
-	string(FilterOpLt):      FilterOpLt,
-	string(FilterOpLte):     FilterOpLte,
-	string(FilterOpIn):      FilterOpIn,
-	string(FilterOpNotIn):   FilterOpNotIn,
-	string(FilterOpLike):    FilterOpLike,
-	string(FilterOpNotLike): FilterOpNotLike,
+	string(FilterOpEq):         FilterOpEq,
+	string(FilterOpNe):         FilterOpNe,
+	string(FilterOpGt):         FilterOpGt,
+	string(FilterOpGte):        FilterOpGte,
+	string(FilterOpLt):         FilterOpLt,
+	string(FilterOpLte):        FilterOpLte,
+	string(FilterOpIn):         FilterOpIn,
+	string(FilterOpNotIn):      FilterOpNotIn,
+	string(FilterOpLike):       FilterOpLike,
+	string(FilterOpNotLike):    FilterOpNotLike,
+	string(FilterOpStartsWith): FilterOpStartsWith,
+	string(FilterOpEndsWith):   FilterOpEndsWith,
+	string(FilterOpIsNull):     FilterOpIsNull,
 }
 
 // ParseFilterOp converts an operator token from a "field[op]" query key into
@@ -49,7 +55,8 @@ func FilterOps() []FilterOp {
 		FilterOpEq, FilterOpNe,
 		FilterOpGt, FilterOpGte, FilterOpLt, FilterOpLte,
 		FilterOpIn, FilterOpNotIn,
-		FilterOpLike, FilterOpNotLike,
+		FilterOpLike, FilterOpNotLike, FilterOpStartsWith, FilterOpEndsWith,
+		FilterOpIsNull,
 	}
 }
 

@@ -458,14 +458,40 @@ func (db *database[M]) applyFieldConditions(conds []types.FieldCondition) {
 		case types.FilterOpNotIn:
 			db.ins = db.ins.Where(column+" NOT IN ?", strings.Split(cond.Value, ","))
 		case types.FilterOpLike:
-			db.ins = db.ins.Where(column+" LIKE ?", "%"+cond.Value+"%")
+			db.ins = db.ins.Where(column+" LIKE ?"+likeEscapeClause, "%"+escapeLikePattern(cond.Value)+"%")
 		case types.FilterOpNotLike:
-			db.ins = db.ins.Where(column+" NOT LIKE ?", "%"+cond.Value+"%")
+			db.ins = db.ins.Where(column+" NOT LIKE ?"+likeEscapeClause, "%"+escapeLikePattern(cond.Value)+"%")
+		case types.FilterOpStartsWith:
+			db.ins = db.ins.Where(column+" LIKE ?"+likeEscapeClause, escapeLikePattern(cond.Value)+"%")
+		case types.FilterOpEndsWith:
+			db.ins = db.ins.Where(column+" LIKE ?"+likeEscapeClause, "%"+escapeLikePattern(cond.Value))
+		case types.FilterOpIsNull:
+			if cond.Value == "1" {
+				db.ins = db.ins.Where(column + " IS NULL")
+			} else {
+				db.ins = db.ins.Where(column + " IS NOT NULL")
+			}
 		default:
 			logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("unknown field condition operator %q on column %q, adding safety condition", cond.Op, cond.Column)
 			db.ins = db.ins.Where("1 = 0")
 		}
 	}
+}
+
+// likeEscapeClause declares the LIKE escape character used by field
+// conditions. The pipe is chosen over the conventional backslash because
+// backslash inside a SQL string literal is itself an escape character in
+// MySQL but a plain character in SQLite/PostgreSQL, so no single spelling of
+// ESCAPE '\' parses the same way across the supported dialects.
+const likeEscapeClause = " ESCAPE '|'"
+
+// likePatternEscaper rewrites a field condition value into a literal LIKE
+// pattern fragment: client values are literals, not pattern language, so the
+// wildcards and the escape character itself are escaped.
+var likePatternEscaper = strings.NewReplacer("|", "||", "%", `|%`, "_", `|_`)
+
+func escapeLikePattern(value string) string {
+	return likePatternEscaper.Replace(value)
 }
 
 // WithCursor enables cursor-based pagination for efficient large dataset traversal.

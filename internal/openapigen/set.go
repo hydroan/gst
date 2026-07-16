@@ -2377,6 +2377,20 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 		})
 	}
 
+	// Cursor-only models accept _size as the batch size, but the field with
+	// its query tag lives in Pagination, so the parameter is synthesized.
+	if modelregistry.IsCursorable(m) && !modelregistry.IsPaginatable(m) {
+		queries = append(queries, &openapi3.ParameterRef{
+			Value: &openapi3.Parameter{
+				Name:        consts.QUERY_SIZE,
+				In:          "query",
+				Required:    false,
+				Schema:      &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeInteger}}},
+				Description: "Batch size for cursor pagination.",
+			},
+		})
+	}
+
 	// The framework-managed Base/AutoBase timestamps are reachable through
 	// operator filters only (bare equality on an exact timestamp is not a
 	// filter surface), so they are documented as literal "column[op]"
