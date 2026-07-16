@@ -175,13 +175,33 @@ func isFieldConditionKey(key string) bool {
 	return !strings.HasPrefix(key, "_") && strings.ContainsRune(key, '[')
 }
 
-// stripFieldConditionKeys returns a copy of the query without field-condition
-// keys, so gorilla/schema decoding of the model's own filter fields never
-// sees them; they are parsed and validated by parseFieldConditionsQuery.
+// bareTimeFilterColumns are the framework-managed Base/AutoBase timestamp
+// columns. They carry query:"-" on the model, so their bare keys are not
+// schema-decodable and are handled by parseFieldConditionsQuery instead: the
+// bare key is an exact-match (eq) filter, keeping the "bare name filters
+// exactly" contract uniform across every documented parameter.
+var bareTimeFilterColumns = map[string]struct{}{
+	"created_at": {},
+	"updated_at": {},
+}
+
+// isFieldConditionQueryKey reports whether parseFieldConditionsQuery owns the
+// key: either an operator filter key or a bare framework timestamp key.
+func isFieldConditionQueryKey(key string) bool {
+	if isFieldConditionKey(key) {
+		return true
+	}
+	_, ok := bareTimeFilterColumns[key]
+	return ok
+}
+
+// stripFieldConditionKeys returns a copy of the query without the keys owned
+// by parseFieldConditionsQuery, so gorilla/schema decoding of the model's own
+// filter fields never sees them.
 func stripFieldConditionKeys(query map[string][]string) map[string][]string {
 	filtered := make(map[string][]string, len(query))
 	for key, values := range query {
-		if isFieldConditionKey(key) {
+		if isFieldConditionQueryKey(key) {
 			continue
 		}
 		filtered[key] = values
@@ -191,7 +211,9 @@ func stripFieldConditionKeys(query map[string][]string) map[string][]string {
 
 // parseFieldConditionsQuery extracts field-level operator filters from URL
 // query keys of the form "field[op]=value", e.g. "age[gt]=20" or
-// "remark[like]=hello". The field token must resolve (after snake case
+// "remark[like]=hello", plus the bare framework timestamp keys
+// ("created_at", "updated_at"), which act as exact-match (eq) filters.
+// The field token must resolve (after snake case
 // normalization) to a queryable column of the model, and op must be a known
 // types.FilterOp; anything else is rejected so a mistyped filter can never
 // silently widen the result set. Empty values mean "not filtering" and are
@@ -200,7 +222,7 @@ func stripFieldConditionKeys(query map[string][]string) map[string][]string {
 func parseFieldConditionsQuery(m types.Model, query map[string][]string) ([]types.FieldCondition, error) {
 	keys := make([]string, 0)
 	for key := range query {
-		if isFieldConditionKey(key) {
+		if isFieldConditionQueryKey(key) {
 			keys = append(keys, key)
 		}
 	}
@@ -216,13 +238,21 @@ func parseFieldConditionsQuery(m types.Model, query map[string][]string) ([]type
 	columns := queryableColumns(reflect.TypeOf(m).Elem())
 	conds := make([]types.FieldCondition, 0, len(keys))
 	for _, key := range keys {
-		field, opToken, ok := splitFieldConditionKey(key)
-		if !ok {
-			return nil, errors.Newf("invalid field filter %q: expect \"field[op]=value\"", key)
-		}
-		op, ok := types.ParseFilterOp(opToken)
-		if !ok {
-			return nil, errors.Newf("invalid field filter %q: unknown operator %q", key, opToken)
+		var field string
+		var op types.FilterOp
+		if _, bare := bareTimeFilterColumns[key]; bare && !isFieldConditionKey(key) {
+			// The bare framework timestamp key is an exact-match filter.
+			field, op = key, types.FilterOpEq
+		} else {
+			var opToken string
+			var ok bool
+			field, opToken, ok = splitFieldConditionKey(key)
+			if !ok {
+				return nil, errors.Newf("invalid field filter %q: expect \"field[op]=value\"", key)
+			}
+			if op, ok = types.ParseFilterOp(opToken); !ok {
+				return nil, errors.Newf("invalid field filter %q: unknown operator %q", key, opToken)
+			}
 		}
 		column := strcase.SnakeCase(field)
 		columnTyp, ok := columns[column]

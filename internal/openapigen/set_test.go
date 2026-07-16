@@ -192,7 +192,7 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 				"_cursor_value", "_cursor_field", "_cursor_next",
 				"_expand", "_depth", "_sort_by",
 				"id", "created_by", "updated_by",
-				"created_at[op]", "updated_at[op]",
+				"created_at", "updated_at",
 			},
 		},
 		{
@@ -206,7 +206,7 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 				"_expand", "_depth", "_sort_by",
 				"_or", "_index", "_select", "_no_cache", "_no_total",
 				"id", "created_by", "updated_by",
-				"created_at[op]", "updated_at[op]",
+				"created_at", "updated_at",
 			},
 		},
 		{
@@ -268,7 +268,7 @@ func TestAddQueryParametersOrdersBusinessFieldsBeforeFrameworkParameters(t *test
 	want := []string{
 		"page",
 		"id", "created_by", "updated_by",
-		"created_at[op]", "updated_at[op]",
+		"created_at", "updated_at",
 		"_page", "_size", "_sort_by",
 		"_expand", "_depth",
 		"_cursor_value", "_cursor_field", "_cursor_next",

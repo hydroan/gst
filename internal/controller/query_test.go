@@ -404,6 +404,27 @@ func TestParseFieldConditionsQuery(t *testing.T) {
 		require.Error(t, err, "isnull requires a boolean value")
 	})
 
+	t.Run("BareBaseTimestampKeyBecomesEqCondition", func(t *testing.T) {
+		conds, err := parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"created_at": {"2026-07-01 08:00:00"},
+		})
+		require.NoError(t, err)
+		require.Equal(t, []types.FieldCondition{
+			{Column: "created_at", Op: types.FilterOpEq, Value: time.Date(2026, 7, 1, 8, 0, 0, 0, time.Local).Format(fieldConditionTimeLayout)},
+		}, conds, "the bare framework timestamp key is an exact-match filter, consistent with every other documented parameter")
+
+		conds, err = parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"updated_at": {""},
+		})
+		require.NoError(t, err)
+		require.Empty(t, conds, "an empty value means not filtering")
+
+		_, err = parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"created_at": {"not-a-time"},
+		})
+		require.Error(t, err, "the exact-match value still goes through time validation")
+	})
+
 	t.Run("BaseTimeColumnsFilterable", func(t *testing.T) {
 		conds, err := parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
 			"created_at[gte]": {"2026-07-01"},
@@ -555,8 +576,9 @@ func TestResolveListPagination(t *testing.T) {
 func TestDecodeListQueryIgnoresFieldConditionKeys(t *testing.T) {
 	var m conditionQueryTestModel
 	require.NoError(t, decodeListQuery(&m, map[string][]string{
-		"name":    {"alice"},
-		"age[gt]": {"20"},
+		"name":       {"alice"},
+		"age[gt]":    {"20"},
+		"created_at": {"2026-07-01"},
 	}))
 	require.Equal(t, "alice", m.Name)
 }

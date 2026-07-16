@@ -2391,10 +2391,10 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 		})
 	}
 
-	// The framework-managed Base/AutoBase timestamps are reachable through
-	// operator filters only (bare equality on an exact timestamp is not a
-	// filter surface), so they are documented as literal "column[op]"
-	// placeholder parameters on queryable models.
+	// The framework-managed Base/AutoBase timestamps carry query:"-" on the
+	// model, so their filter parameters are synthesized: the bare name is an
+	// exact-match filter like every other documented parameter, and the
+	// operator syntax covers ranges.
 	if queryable && embedsBaseModel(typ.Elem()) {
 		for column, doc := range map[string]string{
 			"created_at": "record creation time",
@@ -2402,11 +2402,11 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 		} {
 			queries = append(queries, &openapi3.ParameterRef{
 				Value: &openapi3.Parameter{
-					Name:        column + "[op]",
+					Name:        column,
 					In:          "query",
 					Required:    false,
 					Schema:      &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeString}}},
-					Description: "Operator filter for the " + doc + "; replace op with eq/ne/gt/gte/lt/lte, e.g. " + column + "[gte]=2026-07-01&" + column + "[lte]=2026-07-15. Bare equality (" + column + "=value) is not supported.",
+					Description: "Exact-match filter for the " + doc + ".\n\nOperator filter: " + column + "[op]=value, op: eq/ne/gt/gte/lt/lte/isnull; range example: " + column + "[gte]=2026-07-01&" + column + "[lte]=2026-07-15.",
 				},
 			})
 		}
