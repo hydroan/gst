@@ -2,7 +2,6 @@ package client_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/hydroan/gst/client"
 	"github.com/stretchr/testify/assert"
@@ -74,16 +73,6 @@ func Test_OptionQuery(t *testing.T) {
 		query, err := cli.QueryString()
 		require.NoError(t, err)
 		assert.Equal(t, "_no_cache=true", query)
-	})
-
-	t.Run("WithQueryTimeRange", func(t *testing.T) {
-		begin := time.Date(2022, 1, 1, 0, 0, 0, 0, time.Local)
-		end := time.Date(2022, 1, 2, 0, 0, 0, 0, time.Local)
-		cli, err := client.New(addr, client.WithQueryTimeRange("created_at", begin, end))
-		require.NoError(t, err)
-		query, err := cli.QueryString()
-		require.NoError(t, err)
-		assert.Equal(t, "_end_time=2022-01-02+00%3A00%3A00&_start_time=2022-01-01+00%3A00%3A00&_time_column=created_at", query)
 	})
 
 	t.Run("WithQueryOr", func(t *testing.T) {

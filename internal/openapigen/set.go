@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -2338,8 +2339,10 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 		return
 	}
 
-	fields := collectQueryDocFields(reflect.TypeFor[M]())
-	queryable := modelregistry.IsQueryable(reflect.New(reflect.TypeFor[M]().Elem()).Interface())
+	typ := reflect.TypeFor[M]()
+	fields := collectQueryDocFields(typ)
+	m := reflect.New(typ.Elem()).Interface().(types.Model) //nolint:errcheck
+	queryable := modelregistry.IsQueryable(m)
 
 	queries := make([]*openapi3.ParameterRef, 0, len(fields))
 	for _, docField := range fields {
@@ -2357,6 +2360,11 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 		if queryable && !strings.HasPrefix(queryTag, "_") {
 			description = operatorFilterDescription(description, queryTag)
 		}
+		// The _expand parameter only accepts the model's expandable
+		// association names, so list them where the frontend reads them.
+		if queryable && queryTag == consts.QUERY_EXPAND {
+			description = expandableFieldsDescription(description, m.Expands())
+		}
 
 		queries = append(queries, &openapi3.ParameterRef{
 			Value: &openapi3.Parameter{
@@ -2369,36 +2377,31 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 		})
 	}
 
-	// queries := []*openapi3.ParameterRef{
-	// 	{
-	// 		Value: &openapi3.Parameter{
-	// 			Name:     "_page",
-	// 			In:       "query",
-	// 			Required: false,
-	// 			Schema: &openapi3.SchemaRef{
-	// 				Value: &openapi3.Schema{
-	// 					Type:    &openapi3.Types{openapi3.TypeInteger},
-	// 					Default: 1,
-	// 				},
-	// 			},
-	// 			Description: "Page number",
-	// 		},
-	// 	},
-	// 	{
-	// 		Value: &openapi3.Parameter{
-	// 			Name:     "_size",
-	// 			In:       "query",
-	// 			Required: false,
-	// 			Schema: &openapi3.SchemaRef{
-	// 				Value: &openapi3.Schema{
-	// 					Type:    &openapi3.Types{openapi3.TypeInteger},
-	// 					Default: 10,
-	// 				},
-	// 			},
-	// 			Description: "Number of items per page",
-	// 		},
-	// 	},
-	// }
+	// The framework-managed Base/AutoBase timestamps are reachable through
+	// operator filters only (bare equality on an exact timestamp is not a
+	// filter surface), so they are documented as literal "column[op]"
+	// placeholder parameters on queryable models.
+	if queryable && embedsBaseModel(typ.Elem()) {
+		for column, doc := range map[string]string{
+			"created_at": "record creation time",
+			"updated_at": "record last update time",
+		} {
+			queries = append(queries, &openapi3.ParameterRef{
+				Value: &openapi3.Parameter{
+					Name:        column + "[op]",
+					In:          "query",
+					Required:    false,
+					Schema:      &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeString}}},
+					Description: "Operator filter for the " + doc + "; replace op with eq/ne/gt/gte/lt/lte, e.g. " + column + "[gte]=2026-07-01&" + column + "[lte]=2026-07-15. Bare equality (" + column + "=value) is not supported.",
+				},
+			})
+		}
+	}
+
+	// Business filter columns always come first; framework parameters keep a
+	// canonical trailing order regardless of where the framework structs are
+	// embedded in the model.
+	sortQueryParameters(queries)
 
 	// Avoid duplicate additions
 	existing := map[string]bool{}
@@ -2414,6 +2417,65 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 			existing[query.Value.Name] = true
 		}
 	}
+}
+
+// embedsBaseModel reports whether the model struct embeds Base or AutoBase.
+func embedsBaseModel(typ reflect.Type) bool {
+	if typ.Kind() != reflect.Struct {
+		return false
+	}
+	for _, name := range []string{"Base", "AutoBase"} {
+		if field, ok := typ.FieldByName(name); ok && field.Anonymous {
+			return true
+		}
+	}
+	return false
+}
+
+// frameworkQueryParameterOrder is the canonical trailing order of framework
+// query parameters in generated API documents.
+var frameworkQueryParameterOrder = []string{
+	consts.QUERY_PAGE, consts.QUERY_SIZE,
+	consts.QUERY_CURSOR_VALUE, consts.QUERY_CURSOR_FIELD, consts.QUERY_CURSOR_NEXT,
+	consts.QUERY_EXPAND, consts.QUERY_DEPTH, consts.QUERY_SORT_BY,
+	consts.QUERY_OR, consts.QUERY_INDEX, consts.QUERY_SELECT, consts.QUERY_NO_CACHE, consts.QUERY_NO_TOTAL,
+}
+
+// sortQueryParameters puts business filter parameters first, preserving their
+// collection order, and framework "_" parameters after them in the canonical
+// frameworkQueryParameterOrder; framework parameters missing from the
+// canonical list keep their relative order at the end.
+func sortQueryParameters(queries []*openapi3.ParameterRef) {
+	rank := func(name string) int {
+		if !strings.HasPrefix(name, "_") {
+			return 0
+		}
+		for i, known := range frameworkQueryParameterOrder {
+			if name == known {
+				return 1 + i
+			}
+		}
+		return 1 + len(frameworkQueryParameterOrder)
+	}
+	sort.SliceStable(queries, func(i, j int) bool {
+		return rank(queries[i].Value.Name) < rank(queries[j].Value.Name)
+	})
+}
+
+// expandableFieldsDescription appends the model's expandable association
+// names to the _expand parameter description so the frontend can see the
+// accepted values.
+func expandableFieldsDescription(description string, expands []string) string {
+	var note string
+	if len(expands) == 0 {
+		note = "This model has no expandable associations."
+	} else {
+		note = "Expandable: " + strings.Join(expands, ", ") + ", or all (snake case accepted, matched case-insensitively)."
+	}
+	if len(description) == 0 {
+		return note
+	}
+	return description + "\n\n" + note
 }
 
 // operatorFilterDescription appends the field operator filter note to a query

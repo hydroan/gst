@@ -32,10 +32,10 @@ func List[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) 
 // count unless total counting is disabled or cursor pagination is used.
 //
 // The automatic listing branch supports model schema fields plus framework query
-// parameters for pagination, cursor pagination, expansion, depth, ordering,
-// time ranges, and field operator filters; OR matching, selection, cache control,
-// database index hints, and total-count suppression additionally require the
-// model to embed model.UnsafeQuery.
+// parameters for pagination, cursor pagination, expansion, depth, ordering, and
+// field operator filters; OR matching, selection, cache control, database index
+// hints, and total-count suppression additionally require the model to embed
+// model.UnsafeQuery.
 //
 // When REQ or RSP differs from M, the handler delegates the operation to the
 // phase service's List method with a zero-value REQ. List handles an HTTP GET
@@ -91,16 +91,8 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		if sizeStr, ok := c.GetQuery(consts.QUERY_SIZE); ok {
 			size, _ = strconv.Atoi(sizeStr)
 		}
-		timeColumn, _ := c.GetQuery(consts.QUERY_TIME_COLUMN)
 		index, _ := c.GetQuery(consts.QUERY_INDEX)
 		selects, _ := c.GetQuery(consts.QUERY_SELECT)
-		startTime, endTime, err := parseTimeRangeQuery(c)
-		if err != nil {
-			log.Error(err)
-			JSON(c, CodeInvalidParam.WithErr(err))
-			gstotel.RecordError(span, err)
-			return
-		}
 
 		// The underlying type of interface types.Model must be pointer to structure, such as *model.User.
 		// 'typ' is the structure type, such as: model.User.
@@ -108,6 +100,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		typ := reflect.TypeOf(*new(M)).Elem() // the real underlying structure type
 		m := reflect.New(typ).Interface().(M) //nolint:errcheck
 
+		var err error
 		if err = decodeListQuery(m, c.Request.URL.Query()); err != nil {
 			log.Error(err)
 			JSON(c, CodeInvalidParam.WithErr(err))
@@ -176,7 +169,6 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			WithExclude(m.Excludes()).
 			WithExpand(expands, sortBy).
 			WithOrder(sortBy).
-			WithTimeRange(timeColumn, startTime, endTime).
 			WithCache(!noCache).
 			List(&data); err != nil {
 			log.Error(err)
@@ -212,7 +204,6 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 					FieldConditions: fieldConditions,
 				}).
 				WithExclude(m.Excludes()).
-				WithTimeRange(timeColumn, startTime, endTime).
 				WithCache(!noCache).
 				Count(total); err != nil {
 				log.Error(err)

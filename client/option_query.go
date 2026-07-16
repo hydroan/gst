@@ -6,10 +6,8 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // clientQuery combines the regular and unsafe framework query parameters so
@@ -118,26 +116,6 @@ func WithQueryNoCache(noCache bool) Option {
 			c.query = new(clientQuery)
 		}
 		c.query.NoCache = noCache
-	}
-}
-
-func WithQueryTimeRange(timeColumn string, start, end time.Time) Option {
-	return func(c *Client) {
-		if c.query == nil {
-			c.query = new(clientQuery)
-		}
-		if timeColumn = strings.TrimSpace(timeColumn); len(timeColumn) == 0 {
-			return
-		}
-		if start.IsZero() || end.IsZero() {
-			return
-		}
-		if start.After(end) {
-			start, end = end, start
-		}
-		c.query.TimeColumn = timeColumn
-		c.query.StartTime = start.Format(consts.DATE_TIME_LAYOUT)
-		c.query.EndTime = end.Format(consts.DATE_TIME_LAYOUT)
 	}
 }
 

@@ -520,26 +520,6 @@ field, use the field operator filter syntax instead: `?name[like]=user01`
 
 
 
-#### `_time_column=xxx`,`_start_time=xxx`, `_end_time=xxx`
-
-Accepted time formats (see `parseQueryTime` in `query.go`): `2006-01-02 15:04:05`,
-`2006-01-02T15:04[:05]`, `2006-01-02` (a date-only `_end_time` covers the whole day),
-RFC 3339 with explicit offset, and unix seconds/milliseconds. Zone-less layouts are
-interpreted in the server's local zone; unparseable values return 400.
-
->`Request`
->
->```bash
->curl --silent --location --request GET 'http://localhost:8080/api/user?_time_column=created_at&_start_time=2024-01-01+23%3A59%3A59&_end_time=2030-01-01+23%3A59%3A59' \
->--header 'Authorization: Bearer -'
->```
->
->`Database equivalent`
->
->```go
->database.Database[*model.User]().WithTimeRange("created_at", begin, now).List(&users)
->```
-
 #### `field[op]=value` (field operator filters)
 
 Field-level operator filters (see `parseFieldConditionsQuery` in `query.go`) require
@@ -550,10 +530,21 @@ filter, so `?age=10&age[gt]=20` applies both conditions. Unknown fields or
 operators, and combining with `_or=true`, return 400; empty values mean "not
 filtering".
 
+Values are validated against the field's Go type and rejected with 400 when
+malformed. Numeric fields require numeric values. Time fields accept the
+comparison operators only, with the formats parsed by `parseQueryTime`:
+`2006-01-02 15:04:05`, `2006-01-02T15:04[:05]`, `2006-01-02`, RFC 3339 with
+explicit offset, and unix seconds/milliseconds; zone-less layouts use the
+server's local zone, and a date-only value extends to the end of the day as an
+`lte` or `gt` bound. Time ranges combine `gte` and `lte` on the same field;
+the framework-managed `created_at`/`updated_at` columns are reachable through
+operator filters only.
+
 >`Request`
 >
 >```bash
->curl --silent --location --request GET 'http://localhost:8080/api/user?age%5Bgte%5D=18&name%5Blike%5D=alice' \
+># created_at range for July 2024 plus a numeric lower bound
+>curl --silent --location --request GET 'http://localhost:8080/api/user?age%5Bgte%5D=18&created_at%5Bgte%5D=2024-07-01&created_at%5Blte%5D=2024-07-31' \
 >--header 'Authorization: Bearer -'
 >```
 >
@@ -564,7 +555,8 @@ filtering".
 >	AllowEmpty: true,
 >	FieldConditions: []types.FieldCondition{
 >		{Column: "age", Op: types.FilterOpGte, Value: "18"},
->		{Column: "name", Op: types.FilterOpLike, Value: "alice"},
+>		{Column: "created_at", Op: types.FilterOpGte, Value: "2024-07-01 00:00:00"},
+>		{Column: "created_at", Op: types.FilterOpLte, Value: "2024-07-31 23:59:59.999999999"},
 >	},
 >}).List(&users)
 >```

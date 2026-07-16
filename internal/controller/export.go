@@ -85,16 +85,8 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		if limitStr, ok := c.GetQuery(consts.QUERY_LIMIT); ok {
 			limit, _ = strconv.Atoi(limitStr)
 		}
-		timeColumn, _ := c.GetQuery(consts.QUERY_TIME_COLUMN)
 		index, _ := c.GetQuery(consts.QUERY_INDEX)
 		selects, _ := c.GetQuery(consts.QUERY_SELECT)
-		startTime, endTime, err := parseTimeRangeQuery(c)
-		if err != nil {
-			log.Error(err)
-			JSON(c, CodeInvalidParam.WithErr(err))
-			gstotel.RecordError(span, err)
-			return
-		}
 
 		// The underlying type of interface types.Model must be pointer to structure, such as *model.User.
 		// 'typ' is the structure type, such as: model.User.
@@ -102,6 +94,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		typ := reflect.TypeOf(*new(M)).Elem() // the real underlying structure type
 		m := reflect.New(typ).Interface().(M) //nolint:errcheck
 
+		var err error
 		if err = serviceregistry.QueryDecoder().Decode(m, stripFieldConditionKeys(c.Request.URL.Query())); err != nil {
 			log.Warn("failed to parse uri query parameter into model: ", err)
 		}
@@ -151,7 +144,6 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			WithExclude(m.Excludes()).
 			WithExpand(expands, sortBy).
 			WithOrder(sortBy).
-			WithTimeRange(timeColumn, startTime, endTime).
 			List(&data); err != nil {
 			log.Error(err)
 			JSON(c, CodeFailure.WithErr(err))

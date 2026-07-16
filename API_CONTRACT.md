@@ -34,7 +34,7 @@ Content-Type: application/json
 ## 列表通用查询参数
 
 除业务字段过滤外，列表接口的通用查询参数由后端按资源逐个启用：分页由 model 嵌入
-`model.Pagination` 启用，游标分页由 `model.Cursor` 启用，排序、展开关联、时间范围、
+`model.Pagination` 启用，游标分页由 `model.Cursor` 启用，排序、展开关联、
 字段操作符过滤等常规参数由 `model.Query` 启用（`model.Query` 同时包含前两者），OR 过滤、
 跳过总数等改变查询语义或执行方式的参数由 `model.UnsafeQuery` 单独启用。资源未启用
 对应能力时，传这些参数会返回 400。某个资源支持哪些参数以 Swagger 为准。
@@ -43,9 +43,8 @@ Content-Type: application/json
 | --- | --- | --- | --- |
 | 分页 | `_page`（从 1 开始）、`_size` | `model.Pagination` | `?_page=1&_size=20` |
 | 排序 | `_sort_by`，逗号分隔多字段，方向 `asc`/`desc`（默认 `asc`） | `model.Query` | `?_sort_by=created_at desc,name` |
-| 展开关联 | `_expand`，逗号分隔，`all` 表示全部可展开字段 | `model.Query` | `?_expand=all` |
-| 时间范围 | `_time_column` 指定时间列，`_start_time`、`_end_time` 是范围边界（含边界）；格式支持 `2006-01-02 15:04:05`、`2006-01-02T15:04[:05]`、`2006-01-02`（纯日期作 `_end_time` 时覆盖到当天末尾）、带时区偏移的 RFC 3339、Unix 秒/毫秒时间戳，无时区格式按服务器本地时区解析，格式非法返回 400 | `model.Query` | `?_time_column=created_at&_start_time=2025-01-01 00:00:00&_end_time=2025-01-02 00:00:00` |
-| 字段操作符过滤 | `字段[op]=值`，与其他条件按 AND 组合；op 支持 `eq`、`ne`、`gt`、`gte`、`lt`、`lte`、`in`、`notin`（逗号分隔多值）、`like`、`notlike`（子串匹配）；字段名、操作符非法或与 `_or=true` 同用返回 400，空值视为不过滤 | `model.Query` | `?age[gte]=18&remark[like]=hello&name[notin]=a,b` |
+| 展开关联 | `_expand`，逗号分隔，`all` 表示全部可展开字段（可展开字段列表见 Swagger 中 `_expand` 参数说明，接受 snake_case 写法、大小写不敏感）；`_depth` 控制自引用字段的递归展开层数，范围 [1,10]，越界回退 1 | `model.Query` | `?_expand=all&_depth=5` |
+| 字段操作符过滤 | `字段[op]=值`，与其他条件按 AND 组合；op 支持 `eq`、`ne`、`gt`、`gte`、`lt`、`lte`、`in`、`notin`（逗号分隔多值）、`like`、`notlike`（子串匹配）；值按字段类型校验，非法返回 400：数字字段要求数字值；时间字段只支持比较类 op，格式支持 `2006-01-02 15:04:05`、`2006-01-02T15:04[:05]`、`2006-01-02`、带时区偏移的 RFC 3339、Unix 秒/毫秒时间戳，无时区格式按服务器本地时区解析，纯日期作 `lte` 上界覆盖到当天末尾、作 `gt` 表示整天之后；时间范围用同字段 `gte`+`lte` 组合表达，`created_at`/`updated_at` 只能通过操作符过滤；字段名、操作符非法或与 `_or=true` 同用返回 400，空值视为不过滤 | `model.Query` | `?age[gte]=18&remark[like]=hello&created_at[gte]=2025-01-01&created_at[lte]=2025-01-15` |
 | 游标分页 | `_cursor_value`、`_cursor_field`、`_cursor_next`；使用游标时响应不返回 `total` | `model.Cursor` | `?_cursor_value=xxx&_cursor_next=true` |
 | OR 过滤 | `_or` 为 `true` 时多个业务字段过滤条件之间用 OR 连接 | `model.UnsafeQuery` | `?name=g1&status=enabled&_or=true` |
 | 跳过总数 | `_no_total` 为 `true` 时响应不返回 `total` | `model.UnsafeQuery` | `?_no_total=true` |

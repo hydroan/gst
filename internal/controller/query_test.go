@@ -3,6 +3,7 @@ package controller
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,11 +30,8 @@ type listUnsafeQueryableTestModel struct {
 
 func TestDecodeListQueryGatesUnsafeQueryKeys(t *testing.T) {
 	queryKeys := map[string][]string{
-		"name":         {"alice"},
-		"_sort_by":     {"created_at desc"},
-		"_time_column": {"created_at"},
-		"_start_time":  {"2025-01-01 00:00:00"},
-		"_end_time":    {"2025-01-02 00:00:00"},
+		"name":     {"alice"},
+		"_sort_by": {"created_at desc"},
 	}
 
 	t.Run("QueryAcceptsRegularKeys", func(t *testing.T) {
@@ -175,44 +173,15 @@ func TestParseQueryTime(t *testing.T) {
 	})
 }
 
-func TestParseTimeRangeQuery(t *testing.T) {
-	t.Run("BothBounds", func(t *testing.T) {
-		c := newTestGetContext(t, "/items?_start_time=2026-07-01&_end_time=2026-07-02")
-		start, end, err := parseTimeRangeQuery(c)
-		require.NoError(t, err)
-		require.Equal(t, time.Date(2026, 7, 1, 0, 0, 0, 0, time.Local), start)
-		require.Equal(t, time.Date(2026, 7, 3, 0, 0, 0, 0, time.Local).Add(-time.Nanosecond), end)
-	})
-
-	t.Run("EmptyValuesMeanNoBound", func(t *testing.T) {
-		c := newTestGetContext(t, "/items?_start_time=&_end_time=")
-		start, end, err := parseTimeRangeQuery(c)
-		require.NoError(t, err)
-		require.True(t, start.IsZero())
-		require.True(t, end.IsZero())
-	})
-
-	t.Run("InvalidStartTimeFails", func(t *testing.T) {
-		c := newTestGetContext(t, "/items?_start_time=not-a-time")
-		_, _, err := parseTimeRangeQuery(c)
-		require.Error(t, err)
-	})
-
-	t.Run("InvalidEndTimeFails", func(t *testing.T) {
-		c := newTestGetContext(t, "/items?_end_time=not-a-time")
-		_, _, err := parseTimeRangeQuery(c)
-		require.Error(t, err)
-	})
-}
-
 type expandQueryTestModel struct {
-	Children []*expandQueryTestModel
-	Parent   *expandQueryTestModel
+	Children   []*expandQueryTestModel
+	Parent     *expandQueryTestModel
+	ChildItems []*expandQueryTestModel
 
 	model.Base
 }
 
-func (*expandQueryTestModel) Expands() []string { return []string{"Children", "Parent"} }
+func (*expandQueryTestModel) Expands() []string { return []string{"Children", "Parent", "ChildItems"} }
 
 func TestParseExpandQuery(t *testing.T) {
 	t.Run("DepthRepeatsSliceExpand", func(t *testing.T) {
@@ -227,12 +196,22 @@ func TestParseExpandQuery(t *testing.T) {
 
 	t.Run("AllSelectsEveryModelExpand", func(t *testing.T) {
 		c := newTestGetContext(t, "/items?_expand=all")
-		require.Equal(t, []string{"Children", "Parent"}, parseExpandQuery(c, &expandQueryTestModel{}))
+		require.Equal(t, []string{"Children", "Parent", "ChildItems"}, parseExpandQuery(c, &expandQueryTestModel{}))
 	})
 
 	t.Run("ExpandMatchesCaseInsensitively", func(t *testing.T) {
 		c := newTestGetContext(t, "/items?_expand=children")
 		require.Equal(t, []string{"Children"}, parseExpandQuery(c, &expandQueryTestModel{}))
+	})
+
+	t.Run("ExpandMatchesSnakeCaseName", func(t *testing.T) {
+		c := newTestGetContext(t, "/items?_expand=child_items")
+		require.Equal(t, []string{"ChildItems"}, parseExpandQuery(c, &expandQueryTestModel{}))
+	})
+
+	t.Run("DepthAcceptsUpperBoundTen", func(t *testing.T) {
+		c := newTestGetContext(t, "/items?_expand=Children&_depth=10")
+		require.Equal(t, []string{strings.Repeat("Children.", 9) + "Children"}, parseExpandQuery(c, &expandQueryTestModel{}))
 	})
 
 	t.Run("UnknownExpandDropped", func(t *testing.T) {
@@ -241,7 +220,7 @@ func TestParseExpandQuery(t *testing.T) {
 	})
 
 	t.Run("OutOfRangeDepthFallsBackToOne", func(t *testing.T) {
-		c := newTestGetContext(t, "/items?_expand=Children&_depth=100")
+		c := newTestGetContext(t, "/items?_expand=Children&_depth=11")
 		require.Equal(t, []string{"Children"}, parseExpandQuery(c, &expandQueryTestModel{}))
 	})
 
@@ -252,10 +231,12 @@ func TestParseExpandQuery(t *testing.T) {
 }
 
 type conditionQueryTestModel struct {
-	Name      string `query:"name"`
-	Age       int    `json:"age"`
-	Remark    string `json:"remark"`
-	ItemCount int    `json:"item_count"`
+	Name      string    `query:"name"`
+	Age       int       `json:"age"`
+	Remark    string    `json:"remark"`
+	ItemCount int       `json:"item_count"`
+	Enabled   bool      `json:"enabled"`
+	ExpiredAt time.Time `json:"expired_at"`
 
 	model.Query
 	model.Base
@@ -345,6 +326,102 @@ func TestParseFieldConditionsQuery(t *testing.T) {
 			"age[gt]": {"1"},
 		})
 		require.Error(t, err)
+	})
+
+	t.Run("TimeFieldNormalizesFlexibleFormats", func(t *testing.T) {
+		for key, want := range map[string]string{
+			// A date-only lower bound starts at the beginning of the day.
+			"expired_at[gte]": time.Date(2026, 7, 1, 0, 0, 0, 0, time.Local).Format(fieldConditionTimeLayout),
+			// A date-only inclusive upper bound covers the whole day.
+			"expired_at[lte]": time.Date(2026, 7, 2, 0, 0, 0, 0, time.Local).Add(-time.Nanosecond).Format(fieldConditionTimeLayout),
+			// A date-only exclusive lower bound means "after the whole day".
+			"expired_at[gt]": time.Date(2026, 7, 2, 0, 0, 0, 0, time.Local).Add(-time.Nanosecond).Format(fieldConditionTimeLayout),
+			// A date-only exclusive upper bound means "before the day starts".
+			"expired_at[lt]": time.Date(2026, 7, 1, 0, 0, 0, 0, time.Local).Format(fieldConditionTimeLayout),
+		} {
+			conds, err := parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{key: {"2026-07-01"}})
+			require.NoError(t, err, "key %q", key)
+			require.Len(t, conds, 1)
+			require.Equal(t, "expired_at", conds[0].Column)
+			require.Equal(t, want, conds[0].Value, "key %q", key)
+		}
+
+		conds, err := parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"expired_at[eq]": {"2026-07-01T08:30:15+08:00"},
+		})
+		require.NoError(t, err)
+		require.Len(t, conds, 1)
+		require.Equal(t,
+			time.Date(2026, 7, 1, 8, 30, 15, 0, time.FixedZone("", 8*3600)).In(time.Local).Format(fieldConditionTimeLayout),
+			conds[0].Value, "an explicit offset must be converted to the server's local zone")
+	})
+
+	t.Run("TimeFieldRejectsInvalidValue", func(t *testing.T) {
+		_, err := parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"expired_at[gte]": {"07/01/2026"},
+		})
+		require.Error(t, err)
+	})
+
+	t.Run("TimeFieldRejectsSetAndSubstringOps", func(t *testing.T) {
+		for _, key := range []string{"expired_at[like]", "expired_at[notlike]", "expired_at[in]", "expired_at[notin]"} {
+			_, err := parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{key: {"2026-07-01"}})
+			require.Error(t, err, "key %q must be rejected on a time field", key)
+		}
+	})
+
+	t.Run("BaseTimeColumnsFilterable", func(t *testing.T) {
+		conds, err := parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"created_at[gte]": {"2026-07-01"},
+			"updated_at[lt]":  {"2026-07-15"},
+		})
+		require.NoError(t, err)
+		require.Equal(t, []types.FieldCondition{
+			{Column: "created_at", Op: types.FilterOpGte, Value: time.Date(2026, 7, 1, 0, 0, 0, 0, time.Local).Format(fieldConditionTimeLayout)},
+			{Column: "updated_at", Op: types.FilterOpLt, Value: time.Date(2026, 7, 15, 0, 0, 0, 0, time.Local).Format(fieldConditionTimeLayout)},
+		}, conds)
+	})
+
+	t.Run("NumericFieldValidatesValues", func(t *testing.T) {
+		_, err := parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"age[gt]": {"abc"},
+		})
+		require.Error(t, err, "non-numeric comparison value must be rejected")
+
+		_, err = parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"age[in]": {"1,x"},
+		})
+		require.Error(t, err, "every set member must be numeric")
+
+		conds, err := parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"age[in]": {"1,2"},
+		})
+		require.NoError(t, err)
+		require.Equal(t, []types.FieldCondition{{Column: "age", Op: types.FilterOpIn, Value: "1,2"}}, conds)
+	})
+
+	t.Run("BoolFieldNormalizesAndGatesOps", func(t *testing.T) {
+		conds, err := parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"enabled[eq]": {"true"},
+		})
+		require.NoError(t, err)
+		require.Equal(t, []types.FieldCondition{{Column: "enabled", Op: types.FilterOpEq, Value: "1"}}, conds)
+
+		conds, err = parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"enabled[ne]": {"0"},
+		})
+		require.NoError(t, err)
+		require.Equal(t, []types.FieldCondition{{Column: "enabled", Op: types.FilterOpNe, Value: "0"}}, conds)
+
+		_, err = parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"enabled[gt]": {"true"},
+		})
+		require.Error(t, err, "ordering operators make no sense on a bool field")
+
+		_, err = parseFieldConditionsQuery(&conditionQueryTestModel{}, map[string][]string{
+			"enabled[eq]": {"yes"},
+		})
+		require.Error(t, err, "non-boolean value must be rejected")
 	})
 
 	t.Run("RejectsCombinationWithOr", func(t *testing.T) {

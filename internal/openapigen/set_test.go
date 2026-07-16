@@ -191,8 +191,8 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 				"_page", "_size",
 				"_cursor_value", "_cursor_field", "_cursor_next",
 				"_expand", "_depth", "_sort_by",
-				"_time_column", "_start_time", "_end_time",
 				"id", "created_by", "updated_by",
+				"created_at[op]", "updated_at[op]",
 			},
 		},
 		{
@@ -204,9 +204,9 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 				"_page", "_size",
 				"_cursor_value", "_cursor_field", "_cursor_next",
 				"_expand", "_depth", "_sort_by",
-				"_time_column", "_start_time", "_end_time",
 				"_or", "_index", "_select", "_no_cache", "_no_total",
 				"id", "created_by", "updated_by",
+				"created_at[op]", "updated_at[op]",
 			},
 		},
 		{
@@ -254,6 +254,58 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 	shared := queryParametersByName(t, op)["shared"]
 	if shared.Schema == nil || shared.Schema.Value == nil || shared.Schema.Value.Type == nil || !shared.Schema.Value.Type.Is(openapi3.TypeString) {
 		t.Fatalf("shared schema = %#v, want the shallower embedded string field to override the earlier deeper field", shared.Schema)
+	}
+}
+
+func TestAddQueryParametersOrdersBusinessFieldsBeforeFrameworkParameters(t *testing.T) {
+	op := &openapi3.Operation{}
+	addQueryParameters[*openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel](op)
+
+	names := make([]string, 0, len(op.Parameters))
+	for _, parameterRef := range op.Parameters {
+		names = append(names, parameterRef.Value.Name)
+	}
+	want := []string{
+		"page",
+		"id", "created_by", "updated_by",
+		"created_at[op]", "updated_at[op]",
+		"_page", "_size",
+		"_cursor_value", "_cursor_field", "_cursor_next",
+		"_expand", "_depth", "_sort_by",
+	}
+	if len(names) != len(want) {
+		t.Fatalf("query parameters = %v, want exactly %v", names, want)
+	}
+	for i := range want {
+		if names[i] != want[i] {
+			t.Fatalf("query parameter order = %v, want %v: business filter columns must come first regardless of where the framework structs are embedded", names, want)
+		}
+	}
+}
+
+type openapiExpandableQueryModel struct {
+	Children []*openapiExpandableQueryModel `json:"children,omitempty"`
+	Parent   *openapiExpandableQueryModel   `json:"parent,omitempty"`
+
+	model.Query
+	model.Base
+}
+
+func (*openapiExpandableQueryModel) Expands() []string { return []string{"Children", "Parent"} }
+
+func TestAddQueryParametersDocumentsExpandableFields(t *testing.T) {
+	op := &openapi3.Operation{}
+	addQueryParameters[*openapiExpandableQueryModel, *openapiExpandableQueryModel, *openapiExpandableQueryModel](op)
+	parameters := queryParametersByName(t, op)
+
+	expand := parameters["_expand"]
+	if expand == nil {
+		t.Fatal("_expand query parameter was not added")
+	}
+	for _, token := range []string{"Children", "Parent", "all"} {
+		if !strings.Contains(expand.Description, token) {
+			t.Fatalf("_expand description = %q, want expandable field %q listed", expand.Description, token)
+		}
 	}
 }
 

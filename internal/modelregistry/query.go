@@ -11,10 +11,10 @@ import (
 // Embedding Query in a model is an explicit opt-in: the model can still expose
 // its own fields as query filters through query tags, while Query enables the
 // standard List controls, including offset pagination, cursor pagination,
-// sorting, expansion, time-range filtering, and field-level operator filters
-// ("field[op]=value", substring matching via the like/notlike operators).
-// Query already embeds Pagination and Cursor, so models that embed Query must
-// not embed those structs again.
+// sorting, expansion, and field-level operator filters ("field[op]=value",
+// covering substring matching via like/notlike and time or numeric ranges via
+// the comparison operators). Query already embeds Pagination and Cursor, so
+// models that embed Query must not embed those structs again.
 //
 // Query intentionally covers only controls that keep list semantics intact.
 // Controls that rewrite filter combination or tune query execution live in
@@ -28,12 +28,9 @@ type Query struct {
 	Pagination
 	Cursor
 
-	Expand     *string `json:"-" gorm:"-" query:"_expand" url:"_expand,omitempty"`           // Expand lists model associations to preload, separated by commas.
-	Depth      *uint   `json:"-" gorm:"-" query:"_depth" url:"_depth,omitempty"`             // Depth controls recursive expansion depth for expandable slice fields.
-	SortBy     string  `json:"-" gorm:"-" query:"_sort_by" url:"_sort_by,omitempty"`         // SortBy is the comma-separated order expression passed to WithOrder.
-	TimeColumn string  `json:"-" gorm:"-" query:"_time_column" url:"_time_column,omitempty"` // TimeColumn selects the column used by StartTime and EndTime range filters.
-	StartTime  string  `json:"-" gorm:"-" query:"_start_time" url:"_start_time,omitempty"`   // StartTime is the inclusive lower bound for the selected time-range column; see the controller's parseQueryTime for accepted formats.
-	EndTime    string  `json:"-" gorm:"-" query:"_end_time" url:"_end_time,omitempty"`       // EndTime is the inclusive upper bound for the selected time-range column; a date-only value covers the whole day.
+	Expand *string `json:"-" gorm:"-" query:"_expand" url:"_expand,omitempty"`   // Expand lists model associations to preload, separated by commas.
+	Depth  *uint   `json:"-" gorm:"-" query:"_depth" url:"_depth,omitempty"`     // Depth controls recursive expansion depth for expandable slice fields.
+	SortBy string  `json:"-" gorm:"-" query:"_sort_by" url:"_sort_by,omitempty"` // SortBy is the comma-separated order expression passed to WithOrder.
 }
 
 // queryEnabled marks models that opt in to general framework query parameters.
