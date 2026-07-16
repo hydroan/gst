@@ -46,7 +46,6 @@ const (
 	QUERY_EXPAND       = "_expand"
 	QUERY_DEPTH        = "_depth"
 	QUERY_OR           = "_or"
-	QUERY_FUZZY        = "_fuzzy"
 	QUERY_SORT_BY      = "_sort_by"
 	QUERY_TIME_COLUMN  = "_time_column"
 	QUERY_START_TIME   = "_start_time"

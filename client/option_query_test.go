@@ -60,14 +60,6 @@ func Test_OptionQuery(t *testing.T) {
 		assert.Equal(t, "_depth=3&_expand=children%2Cparent", query)
 	})
 
-	t.Run("WithQueryFuzzy", func(t *testing.T) {
-		cli, err := client.New(addr, client.WithQueryFuzzy(true))
-		require.NoError(t, err)
-		query, err := cli.QueryString()
-		require.NoError(t, err)
-		assert.Equal(t, "_fuzzy=true", query)
-	})
-
 	t.Run("WithQuerySortBy", func(t *testing.T) {
 		cli, err := client.New(addr, client.WithQuerySortBy("created_at desc,id asc"))
 		require.NoError(t, err)

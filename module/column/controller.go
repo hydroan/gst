@@ -92,8 +92,8 @@ func queryColumns(table string, columns []string, db ...*gorm.DB) (map[string][]
 					zap.S().Error(err)
 					return
 				}
-				// 前端过滤出空值并且 _fuzzy=true 时,没有任何过滤作用
-				// 前端过滤出空值并且 _fuzzy=false 时,查询不到任何结果
+				// An empty value is useless as a frontend filter option: it either
+				// matches nothing or filters nothing, so skip it.
 				if len(name) == 0 {
 					zap.S().Warnf("empty name for column: %s", column)
 					continue
@@ -180,8 +180,8 @@ func queryColumnsWithQuery(table string, columns []string, query map[string][]st
 					zap.S().Error(err)
 					return
 				}
-				// 前端过滤出空值并且 _fuzzy=true 时,没有任何过滤作用
-				// 前端过滤出空值并且 _fuzzy=false 时,查询不到任何结果
+				// An empty value is useless as a frontend filter option: it either
+				// matches nothing or filters nothing, so skip it.
 				if len(name) == 0 {
 					zap.S().Debugf("empty name for column: %s", column)
 					continue
@@ -262,8 +262,8 @@ func queryColumnsAndCount(table string, columns []string, db ...*gorm.DB) (colum
 					zap.S().Error(err)
 					return
 				}
-				// 前端过滤出空值并且 _fuzzy=true 时,没有任何过滤作用
-				// 前端过滤出空值并且 _fuzzy=false 时,查询不到任何结果
+				// An empty value is useless as a frontend filter option: it either
+				// matches nothing or filters nothing, so skip it.
 				if len(name) == 0 {
 					zap.S().Warnf("empty name for column: %s", column)
 					continue

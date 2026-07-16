@@ -720,7 +720,6 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 		t.Run("Query", func(t *testing.T) {
 			var stmts []types.SQLStatement
 			users := make([]*queryableTestUser, 0)
-			fuzzy := true
 			cursorValue := "cursor-001"
 			query := &queryableTestUser{
 				Name: "queryable-user",
@@ -734,7 +733,6 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 						CursorField: "id",
 						CursorNext:  true,
 					},
-					Fuzzy:  &fuzzy,
 					SortBy: "created_at desc",
 				},
 			}

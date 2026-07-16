@@ -30,7 +30,6 @@ type listUnsafeQueryableTestModel struct {
 func TestDecodeListQueryGatesUnsafeQueryKeys(t *testing.T) {
 	queryKeys := map[string][]string{
 		"name":         {"alice"},
-		"_fuzzy":       {"true"},
 		"_sort_by":     {"created_at desc"},
 		"_time_column": {"created_at"},
 		"_start_time":  {"2025-01-01 00:00:00"},
@@ -67,7 +66,7 @@ func TestDecodeListQueryGatesUnsafeQueryKeys(t *testing.T) {
 			model.Base
 		}
 		var m unsafeOnlyModel
-		require.Error(t, decodeListQuery(&m, map[string][]string{"_fuzzy": {"true"}}))
+		require.Error(t, decodeListQuery(&m, map[string][]string{"_sort_by": {"created_at desc"}}))
 	})
 }
 
@@ -92,7 +91,6 @@ func TestPresentQueryFields(t *testing.T) {
 			"_page":         {"1"},
 			"_size":         {"10"},
 			"_limit":        {"100"},
-			"_fuzzy":        {"true"},
 			"_sort_by":      {"created_at desc"},
 			"_no_total":     {"true"},
 			"_cursor_value": {"abc"},
@@ -269,7 +267,7 @@ func TestParseFieldConditionsQuery(t *testing.T) {
 			"age[gt]":      {"20"},
 			"remark[like]": {"hello"},
 			"name":         {"alice"},
-			"_fuzzy":       {"true"},
+			"_sort_by":     {"created_at desc"},
 		})
 		require.NoError(t, err)
 		require.Equal(t, []types.FieldCondition{

@@ -43,7 +43,6 @@ Content-Type: application/json
 | --- | --- | --- | --- |
 | 分页 | `_page`（从 1 开始）、`_size` | `model.Pagination` | `?_page=1&_size=20` |
 | 排序 | `_sort_by`，逗号分隔多字段，方向 `asc`/`desc`（默认 `asc`） | `model.Query` | `?_sort_by=created_at desc,name` |
-| 模糊匹配 | `_fuzzy` 为 `true` 时业务字段过滤使用模糊匹配 | `model.Query` | `?name=g&_fuzzy=true` |
 | 展开关联 | `_expand`，逗号分隔，`all` 表示全部可展开字段 | `model.Query` | `?_expand=all` |
 | 时间范围 | `_time_column` 指定时间列，`_start_time`、`_end_time` 是范围边界（含边界）；格式支持 `2006-01-02 15:04:05`、`2006-01-02T15:04[:05]`、`2006-01-02`（纯日期作 `_end_time` 时覆盖到当天末尾）、带时区偏移的 RFC 3339、Unix 秒/毫秒时间戳，无时区格式按服务器本地时区解析，格式非法返回 400 | `model.Query` | `?_time_column=created_at&_start_time=2025-01-01 00:00:00&_end_time=2025-01-02 00:00:00` |
 | 字段操作符过滤 | `字段[op]=值`，与其他条件按 AND 组合；op 支持 `eq`、`ne`、`gt`、`gte`、`lt`、`lte`、`in`、`notin`（逗号分隔多值）、`like`、`notlike`（子串匹配）；字段名、操作符非法或与 `_or=true` 同用返回 400，空值视为不过滤 | `model.Query` | `?age[gte]=18&remark[like]=hello&name[notin]=a,b` |

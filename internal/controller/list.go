@@ -44,10 +44,6 @@ import (
 //     For examples:
 //     /department/myid?_expand=children&_depth=3
 //     /department/myid?_expand=children,parent&_depth=10
-//   - `_fuzzy`: bool
-//     fuzzy match records in database, default to fase.
-//     For examples:
-//     /department/myid?_fuzzy=true
 func List[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
 	ListFactory[M, REQ, RSP]()(c)
 }
@@ -60,10 +56,10 @@ func List[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) 
 // count unless total counting is disabled or cursor pagination is used.
 //
 // The automatic listing branch supports model schema fields plus framework query
-// parameters for pagination, cursor pagination, expansion, depth, fuzzy matching,
-// ordering, and time ranges; OR matching, selection, cache control, database index
-// hints, and total-count suppression additionally require the model to embed
-// model.UnsafeQuery.
+// parameters for pagination, cursor pagination, expansion, depth, ordering,
+// time ranges, and field operator filters; OR matching, selection, cache control,
+// database index hints, and total-count suppression additionally require the
+// model to embed model.UnsafeQuery.
 //
 // When REQ or RSP differs from M, the handler delegates the operation to the
 // phase service's List method with a zero-value REQ. List handles an HTTP GET
@@ -153,7 +149,6 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		present := presentQueryFields(c.Request.URL.Query())
 
 		var or bool
-		var fuzzy bool
 		var cursorNext bool
 		var noTotal bool // default enable total.
 		cursorValue := c.Query(consts.QUERY_CURSOR_VALUE)
@@ -168,9 +163,6 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		}
 		if orStr, ok := c.GetQuery(consts.QUERY_OR); ok {
 			or, _ = strconv.ParseBool(orStr)
-		}
-		if fuzzyStr, ok := c.GetQuery(consts.QUERY_FUZZY); ok {
-			fuzzy, _ = strconv.ParseBool(fuzzyStr)
 		}
 		if cursorNextStr, ok := c.GetQuery(consts.QUERY_CURSOR_NEXT); ok {
 			cursorNext, _ = strconv.ParseBool(cursorNextStr)
@@ -198,7 +190,6 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			WithIndex(index).
 			WithSelect(strings.Split(selects, ",")...).
 			WithQuery(svc.Filter(ctx, m), types.QueryConfig{
-				FuzzyMatch:      fuzzy,
 				AllowEmpty:      true,
 				UseOr:           or,
 				RawQuery:        svc.FilterRaw(ctx),
@@ -238,7 +229,6 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 				// WithSelect(strings.Split(selects, ",")...). // NOTE: WithSelect should not apply in Count method.
 				WithIndex(index).
 				WithQuery(svc.Filter(ctx, m), types.QueryConfig{
-					FuzzyMatch:      fuzzy,
 					AllowEmpty:      true,
 					UseOr:           or,
 					RawQuery:        svc.FilterRaw(ctx),

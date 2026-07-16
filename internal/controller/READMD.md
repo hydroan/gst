@@ -414,7 +414,7 @@ database.Database[*model.Category]().WithExpand(new(model.Category).Expands()).L
 > database.Database[*model.Category]().WithExpand([]string{"Children.Children.Children"}).List(&categories)
 > ```
 
-#### `field_name=value`, `_fuzzy_true`
+#### `field_name=value`
 
 NOTE: you should always make sure the model field has `schema` tag. for example:
 
@@ -464,53 +464,9 @@ type User struct {
 > database.Database[*model.User]().WithQuery(&model.User{Name: util.ValueOf("user01")}).List(&users)
 > ```
 
-> `request`
->
-> ```bash
-> curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_fuzzy=true' \
-> --header 'Authorization: Bearer -'
-> ```
->
-> `response`
->
-> ```json
-> {
-> "code": 0,
-> "data": {
->  "items": [
->    {
->      "id": "user01",
->      "created_at": "2024-12-25T17:22:28.558+08:00",
->      "updated_at": "2024-12-25T17:22:28.558+08:00",
->      "name": "user01",
->      "email": "user01@gmail.com"
->    },
->    {
->      "id": "user01_deferred_id",
->      "created_at": "2024-12-25T17:21:03.836+08:00",
->      "updated_at": "2024-12-25T17:21:03.836+08:00",
->      "name": "user01_deferred_id",
->      "email": "user01@example.com"
->    },
->    {
->      "id": "user01_with_id",
->      "created_at": "2024-12-25T17:21:03.834+08:00",
->      "updated_at": "2024-12-25T17:21:03.834+08:00",
->      "name": "user01_with_id",
->      "email": "user01@example.com"
->    }
->  ],
->  "total": 3
-> },
-> "msg": "success"
-> }
-> ```
->
-> `Database equivalent`
->
-> ```go
-> database.Database[*model.User]().WithQuery(&model.User{Name: util.ValueOf("user01")}, true).List(&users)
-> ```
+Bare keys are exact-match filters. For substring (fuzzy) matching on a single
+field, use the field operator filter syntax instead: `?name[like]=user01`
+(see the `field[op]=value` section below).
 
 #### `_sort_by=xxx`
 
@@ -518,19 +474,19 @@ type User struct {
 >
 >   ```bash
 >   # _sort_by=name
->   curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_fuzzy=true&_sort_by=name' \
+>   curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_sort_by=name' \
 >   --header 'Authorization: Bearer -'
 >   
 >   # _sort_by=name desc
->   curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_fuzzy=true&_sort_by=name%20desc' \
+>   curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_sort_by=name%20desc' \
 >   --header 'Authorization: Bearer -'
 >   
 >   # _sort_by=name desc, created_at
->   curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_fuzzy=true&_sort_by=name%20desc%2C%20created_at' \
+>   curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_sort_by=name%20desc%2C%20created_at' \
 >   --header 'Authorization: Bearer -'
 >   
 >   # _sort_by=name desc, created_at asc
->   curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_fuzzy=true&_sort_by=name%20desc%2C%20created_at%20asc' \
+>   curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_sort_by=name%20desc%2C%20created_at%20asc' \
 >   --header 'Authorization: Bearer -'
 >   ```
 >

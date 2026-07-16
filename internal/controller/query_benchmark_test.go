@@ -39,7 +39,6 @@ var (
 	}
 	listBenchmarkFullQuery = map[string][]string{
 		"name":          {"alice"},
-		"_fuzzy":        {"true"},
 		"_sort_by":      {"created_at desc"},
 		"_page":         {"2"},
 		"_size":         {"10"},
@@ -57,7 +56,7 @@ var (
 		"_cursor_next":  {"true"},
 	}
 	listBenchmarkRejectedQuery = map[string][]string{
-		"_fuzzy": {"true"},
+		"_sort_by": {"created_at desc"},
 	}
 )
 

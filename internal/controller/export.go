@@ -116,13 +116,9 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		present := presentQueryFields(c.Request.URL.Query())
 
 		var or bool
-		var fuzzy bool
 		data := make([]M, 0)
 		if orStr, ok := c.GetQuery(consts.QUERY_OR); ok {
 			or, _ = strconv.ParseBool(orStr)
-		}
-		if fuzzyStr, ok := c.GetQuery(consts.QUERY_FUZZY); ok {
-			fuzzy, _ = strconv.ParseBool(fuzzyStr)
 		}
 		expands := parseExpandQuery(c, m)
 
@@ -146,7 +142,6 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			WithIndex(index).
 			WithSelect(strings.Split(selects, ",")...).
 			WithQuery(svc.Filter(svcCtx, m), types.QueryConfig{
-				FuzzyMatch:      fuzzy,
 				AllowEmpty:      true,
 				UseOr:           or,
 				RawQuery:        svc.FilterRaw(svcCtx),

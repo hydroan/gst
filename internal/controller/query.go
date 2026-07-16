@@ -21,7 +21,6 @@ import (
 var listQueryKeys = map[string]struct{}{
 	consts.QUERY_EXPAND:      {},
 	consts.QUERY_DEPTH:       {},
-	consts.QUERY_FUZZY:       {},
 	consts.QUERY_SORT_BY:     {},
 	consts.QUERY_TIME_COLUMN: {},
 	consts.QUERY_START_TIME:  {},

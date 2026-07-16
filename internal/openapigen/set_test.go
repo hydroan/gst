@@ -190,7 +190,7 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 				"page",
 				"_page", "_size",
 				"_cursor_value", "_cursor_field", "_cursor_next",
-				"_expand", "_depth", "_fuzzy", "_sort_by",
+				"_expand", "_depth", "_sort_by",
 				"_time_column", "_start_time", "_end_time",
 				"id", "created_by", "updated_by",
 			},
@@ -203,7 +203,7 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 			parameters: []string{
 				"_page", "_size",
 				"_cursor_value", "_cursor_field", "_cursor_next",
-				"_expand", "_depth", "_fuzzy", "_sort_by",
+				"_expand", "_depth", "_sort_by",
 				"_time_column", "_start_time", "_end_time",
 				"_or", "_index", "_select", "_no_cache", "_no_total",
 				"id", "created_by", "updated_by",
@@ -268,8 +268,8 @@ func TestAddQueryParametersDocumentsFieldOperatorFilters(t *testing.T) {
 	if !strings.Contains(parameters["page"].Description, "notlike") {
 		t.Fatalf("page description = %q, want the known operators listed", parameters["page"].Description)
 	}
-	if strings.Contains(parameters["_fuzzy"].Description, "[op]=value") {
-		t.Fatalf("_fuzzy description = %q, framework parameters must not advertise operator filters", parameters["_fuzzy"].Description)
+	if strings.Contains(parameters["_sort_by"].Description, "[op]=value") {
+		t.Fatalf("_sort_by description = %q, framework parameters must not advertise operator filters", parameters["_sort_by"].Description)
 	}
 
 	op = &openapi3.Operation{}

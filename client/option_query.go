@@ -100,15 +100,6 @@ func WithQueryExpand(expand string, depth uint) Option {
 	}
 }
 
-func WithQueryFuzzy(fuzzy bool) Option {
-	return func(c *Client) {
-		if c.query == nil {
-			c.query = new(clientQuery)
-		}
-		c.query.Fuzzy = &fuzzy
-	}
-}
-
 func WithQuerySortBy(sortBy string) Option {
 	return func(c *Client) {
 		if sortBy = strings.TrimSpace(sortBy); len(sortBy) == 0 {
