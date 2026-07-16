@@ -110,89 +110,62 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			JSON(c, CodeNotFound)
 			return
 		}
-		ml := []M{m}
 		log.Info(fmt.Sprintf("%s delete %s", typ.Name(), id))
 
-		// 1.Perform business logic processing before delete resources.
-		// TODO: Should there be one service hook(DeleteBefore), or multiple?
-		for _, m := range ml {
-			var serviceCtxBefore *types.ServiceContext
-			if err := traceServiceHook[M](ctrlSpanCtx, consts.PHASE_DELETE_BEFORE, func(spanCtx context.Context) error {
-				serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE_BEFORE)
-				return svc.DeleteBefore(serviceCtxBefore, m)
-			}); err != nil {
-				log.Error(err)
-				handleServiceError(c, serviceCtxBefore, err)
-				gstotel.RecordError(span, err)
-				return
-			}
+		// 1.Perform business logic processing before delete resource.
+		var serviceCtxBefore *types.ServiceContext
+		if err := traceServiceHook[M](ctrlSpanCtx, consts.PHASE_DELETE_BEFORE, func(spanCtx context.Context) error {
+			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE_BEFORE)
+			return svc.DeleteBefore(serviceCtxBefore, m)
+		}); err != nil {
+			log.Error(err)
+			handleServiceError(c, serviceCtxBefore, err)
+			gstotel.RecordError(span, err)
+			return
 		}
 
-		// find out the records and record to operation log.
-		copied := make([]M, len(ml))
-		for i := range ml {
-			m := reflect.New(typ).Interface().(M) //nolint:errcheck
-			m.SetID(ml[i].GetID())
-			if err := handler(requestContext(c)).WithExpand(m.Expands()).Get(m, ml[i].GetID()); err != nil {
-				log.Error(err)
-				gstotel.RecordError(span, err)
-			}
-			copied[i] = m
+		// find out the record and keep a copy for the operation log.
+		copied := reflect.New(typ).Interface().(M) //nolint:errcheck
+		copied.SetID(m.GetID())
+		if err := handler(requestContext(c)).WithExpand(copied.Expands()).Get(copied, m.GetID()); err != nil {
+			log.Error(err)
+			gstotel.RecordError(span, err)
 		}
 
-		// 2.Delete resources in database.
-		if err := handler(requestContext(c)).Delete(ml...); err != nil {
+		// 2.Delete resource in database.
+		if err := handler(requestContext(c)).Delete(m); err != nil {
 			log.Error(err)
 			JSON(c, CodeFailure.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
 		}
-		// 3.Perform business logic processing after delete resources.
-		// TODO: Should there be one service hook(DeleteAfter), or multiple?
-		for _, m := range ml {
-			var serviceCtxAfter *types.ServiceContext
-			if err := traceServiceHook[M](ctrlSpanCtx, consts.PHASE_DELETE_AFTER, func(spanCtx context.Context) error {
-				serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE_AFTER)
-				return svc.DeleteAfter(serviceCtxAfter, m)
-			}); err != nil {
-				log.Error(err)
-				handleServiceError(c, serviceCtxAfter, err)
-				gstotel.RecordError(span, err)
-				return
-			}
+		// 3.Perform business logic processing after delete resource.
+		var serviceCtxAfter *types.ServiceContext
+		if err := traceServiceHook[M](ctrlSpanCtx, consts.PHASE_DELETE_AFTER, func(spanCtx context.Context) error {
+			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE_AFTER)
+			return svc.DeleteAfter(serviceCtxAfter, m)
+		}); err != nil {
+			log.Error(err)
+			handleServiceError(c, serviceCtxAfter, err)
+			gstotel.RecordError(span, err)
+			return
 		}
 
 		// 4.record operation log to database.
-		for i := range ml {
-			record, _ := json.Marshal(copied[i])
-			// cb.Enqueue(&modellogmgmt.OperationLog{
-			// 	OP:        consts.OP_DELETE,
-			// 	Model:     typ.Name(),
-			// 	Table:     tableName,
-			// 	RecordID:  ml[i].GetID(),
-			// 	Record:    util.BytesToString(record),
-			// 	IP:        c.ClientIP(),
-			// 	User:      c.GetString(consts.CTX_USERNAME),
-			// 	TraceID: c.GetString(consts.TRACE_ID),
-			// 	URI:       c.Request.RequestURI,
-			// 	Method:    c.Request.Method,
-			// 	UserAgent: c.Request.UserAgent(),
-			// })
-			m := reflect.New(typ).Interface().(M) //nolint:errcheck
-			if err := am.RecordOperation(requestContext(c), m, &modellogmgmt.OperationLog{
-				OP:        consts.OP_DELETE,
-				Model:     typ.Name(),
-				RecordID:  ml[i].GetID(),
-				Record:    util.BytesToString(record),
-				IP:        c.ClientIP(),
-				User:      c.GetString(consts.CTX_USERNAME),
-				TraceID:   c.GetString(consts.TRACE_ID),
-				URI:       c.Request.RequestURI,
-				Method:    c.Request.Method,
-				UserAgent: c.Request.UserAgent(),
-			}); err != nil {
-				log.Warn(err)
-			}
+		record, _ := json.Marshal(copied)
+		if err := am.RecordOperation(requestContext(c), reflect.New(typ).Interface().(M), &modellogmgmt.OperationLog{ //nolint:errcheck
+			OP:        consts.OP_DELETE,
+			Model:     typ.Name(),
+			RecordID:  m.GetID(),
+			Record:    util.BytesToString(record),
+			IP:        c.ClientIP(),
+			User:      c.GetString(consts.CTX_USERNAME),
+			TraceID:   c.GetString(consts.TRACE_ID),
+			URI:       c.Request.RequestURI,
+			Method:    c.Request.Method,
+			UserAgent: c.Request.UserAgent(),
+		}); err != nil {
+			log.Warn(err)
 		}
 
 		JSON(c, CodeSuccess)
