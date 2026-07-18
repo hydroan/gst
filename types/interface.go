@@ -111,10 +111,13 @@ type Database[M Model] interface {
 	// Get returns database.ErrRecordNotFound when no matching record exists.
 	Get(dest M, id string) error
 	// First retrieves the first record matching the current query conditions.
+	// First returns database.ErrRecordNotFound when no matching record exists.
 	First(dest M) error
 	// Last retrieves the last record matching the current query conditions.
+	// Last returns database.ErrRecordNotFound when no matching record exists.
 	Last(dest M) error
 	// Take retrieves the first record in no specified order.
+	// Take returns database.ErrRecordNotFound when no matching record exists.
 	Take(dest M) error
 	// Count returns the total number of records matching the query conditions.
 	Count(*int) error

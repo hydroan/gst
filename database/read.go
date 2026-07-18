@@ -395,7 +395,9 @@ QUERY:
 // Parameters:
 //   - dest: Pointer to model instance where the result will be stored
 //
-// Returns database errors if no record is found or query fails.
+// Returns ErrRecordNotFound when no matching record exists; the error is
+// raised by the underlying GORM First call. Returns other database errors
+// if the query fails.
 //
 // Features:
 //   - Automatic result caching when enabled
@@ -507,7 +509,9 @@ QUERY:
 // Parameters:
 //   - dest: Pointer to model instance where the result will be stored
 //
-// Returns database errors if no record is found or query fails.
+// Returns ErrRecordNotFound when no matching record exists; the error is
+// raised by the underlying GORM Last call. Returns other database errors
+// if the query fails.
 //
 // Features:
 //   - Automatic result caching when enabled
@@ -620,7 +624,9 @@ QUERY:
 // Parameters:
 //   - dest: Pointer to model instance where the result will be stored
 //
-// Returns database errors if no record is found or query fails.
+// Returns ErrRecordNotFound when no matching record exists; the error is
+// raised by the underlying GORM Take call. Returns other database errors
+// if the query fails.
 //
 // Features:
 //   - Automatic result caching when enabled
