@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/cache"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
@@ -133,6 +134,43 @@ func TestDatabaseWithDB(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).WithDB(db2).WithQuery(&TestUser{Name: u1.Name}).Create(u1))
 	require.NoError(t, database.Database[*TestUser](context.Background()).WithDB(db2).List(&users))
 	require.GreaterOrEqual(t, len(users), 1, "should find created user")
+}
+
+// TestDatabaseWithDBInsideTransaction verifies that a WithDB chain inside a
+// database.Transaction closure leaves the transaction: the custom-DB write
+// survives the rollback while the default-DB write rolls back. WithDB logs a
+// warning for this situation.
+func TestDatabaseWithDBInsideTransaction(t *testing.T) {
+	path := "/tmp/test_withdb_tx.db"
+	defer func() {
+		_ = os.Remove(path)
+		cleanupTestData()
+	}()
+
+	customDB, err := sqlite.New(config.Sqlite{
+		Enabled:  true,
+		Path:     path,
+		IsMemory: false,
+	})
+	require.NoError(t, err)
+	require.NoError(t, customDB.AutoMigrate(TestUser{}))
+
+	errTest := errors.New("test error")
+	err = database.Transaction(context.Background(), func(ctx context.Context) error {
+		// The default-DB write joins the transaction and must roll back.
+		require.NoError(t, database.Database[*TestUser](ctx).Create(u1))
+		// The WithDB chain replaces the underlying connection, so this write
+		// leaves the transaction and must survive the rollback.
+		require.NoError(t, database.Database[*TestUser](ctx).WithDB(customDB).Create(u2))
+		return errTest
+	})
+	require.ErrorIs(t, err, errTest)
+
+	users := make([]*TestUser, 0)
+	require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
+	require.Empty(t, users, "default-DB write must roll back")
+	require.NoError(t, database.Database[*TestUser](context.Background()).WithDB(customDB).List(&users))
+	require.Len(t, users, 1, "custom-DB write escapes the transaction and survives rollback")
 }
 
 func TestDatabaseWithTable(t *testing.T) {

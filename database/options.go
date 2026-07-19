@@ -42,6 +42,8 @@ import (
 //
 // NOTE: WithDB expects the required tables to already exist in the target database.
 // NOTE: Invalid database type (not *gorm.DB) will log a warning and return the original instance.
+// NOTE: Inside a database.Transaction closure, WithDB replaces the underlying
+// connection, so the chain leaves the transaction; this logs a warning.
 func (db *database[M]) WithDB(x any) types.Database[M] {
 	var empty *gorm.DB
 	if x == nil || x == new(gorm.DB) || x == empty {
@@ -59,6 +61,16 @@ func (db *database[M]) WithDB(x any) types.Database[M] {
 		logger.Database.WithContext(db.ctx, consts.Phase("WithDB")).Warn("invalid database type, expect *gorm.DB")
 		return db
 	}
+
+	// A context that carries a transaction means this chain was supposed to join
+	// it; replacing the underlying connection silently leaves the transaction.
+	// Warn so escaped writes inside database.Transaction closures are visible.
+	if _, ok := txFromContext(db.ctx); ok {
+		logger.Database.WithContext(db.ctx, consts.Phase("WithDB")).Warn(
+			"WithDB used inside a transaction context; this chain leaves the transaction",
+		)
+	}
+
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
