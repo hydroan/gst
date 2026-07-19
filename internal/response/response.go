@@ -295,11 +295,11 @@ func stringAny(v any) string {
 //
 // Example:
 //
-//	SSE(c, types.Event{
+//	SSE(c, sse.Event{
 //	    Event: "message",
 //	    Data:  "Hello, World!",
 //	})
-func SSE(c *gin.Context, event types.Event) error {
+func SSE(c *gin.Context, event sse.Event) error {
 	return sse.SendSSE(c.Writer, event)
 }
 
@@ -322,7 +322,7 @@ func SSE(c *gin.Context, event types.Event) error {
 // Example:
 //
 //	StreamSSE(c, func(w io.Writer) bool {
-//	    sse.Encode(w, types.Event{
+//	    sse.Encode(w, sse.Event{
 //	        Event: "message",
 //	        Data:  "Hello",
 //	    })

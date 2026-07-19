@@ -14,8 +14,8 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/requestctx"
 	. "github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/serviceregistry"
 	gstotel "github.com/hydroan/gst/provider/otel"
-	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"go.opentelemetry.io/otel/trace"
@@ -497,7 +497,7 @@ func traceServiceImport[M types.Model](parentCtx context.Context, phase consts.P
 
 // handleServiceError handles service-layer errors.
 func handleServiceError(c *gin.Context, err error) {
-	var serviceErr *service.Error
+	var serviceErr *serviceregistry.Error
 	if errors.As(err, &serviceErr) {
 		JSON(c, serviceErr)
 		return

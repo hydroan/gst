@@ -10,8 +10,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
@@ -32,7 +32,7 @@ func TestHandleServiceErrorDoesNotExposeCause(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(recorder)
 	cause := errors.New("database password leaked")
 
-	handleServiceError(ctx, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause))
+	handleServiceError(ctx, serviceregistry.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause))
 
 	require.Equal(t, http.StatusInternalServerError, recorder.Code)
 	require.JSONEq(t, `{"code":-1,"msg":"failed to load user","data":null,"trace_id":""}`, recorder.Body.String())
@@ -45,7 +45,7 @@ func TestHandleServiceErrorUsesServiceErrorResponse(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 
-	handleServiceError(ctx, service.NewError(http.StatusForbidden, "account disabled"))
+	handleServiceError(ctx, serviceregistry.NewError(http.StatusForbidden, "account disabled"))
 
 	require.Equal(t, http.StatusForbidden, recorder.Code)
 	var body struct {
@@ -102,13 +102,13 @@ func TestPatchValueSkipsMissingFields(t *testing.T) {
 type routeIDUUIDRecord struct {
 	Name string `json:"name"`
 
-	model.Base
+	modelregistry.Base
 }
 
 type routeIDIntegerRecord struct {
 	Name string `json:"name"`
 
-	model.AutoBase
+	modelregistry.AutoBase
 }
 
 func TestSetRouteIDAcceptsAnyValueForUUIDKeyedModel(t *testing.T) {

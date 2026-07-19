@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 )
@@ -16,16 +16,16 @@ import (
 type listQueryableTestModel struct {
 	Name string `query:"name"`
 
-	model.Query
-	model.Base
+	modelregistry.Query
+	modelregistry.Base
 }
 
 type listUnsafeQueryableTestModel struct {
 	Name string `query:"name"`
 
-	model.Query
-	model.UnsafeQuery
-	model.Base
+	modelregistry.Query
+	modelregistry.UnsafeQuery
+	modelregistry.Base
 }
 
 func TestDecodeListQueryGatesUnsafeQueryKeys(t *testing.T) {
@@ -43,7 +43,7 @@ func TestDecodeListQueryGatesUnsafeQueryKeys(t *testing.T) {
 		for _, key := range []string{"_or", "_index", "_select", "_no_cache", "_no_total"} {
 			var m listQueryableTestModel
 			err := decodeListQuery(&m, map[string][]string{key: {"true"}})
-			require.Error(t, err, "unsafe query key %q must be rejected without model.UnsafeQuery", key)
+			require.Error(t, err, "unsafe query key %q must be rejected without modelregistry.UnsafeQuery", key)
 		}
 	})
 
@@ -60,8 +60,8 @@ func TestDecodeListQueryGatesUnsafeQueryKeys(t *testing.T) {
 
 	t.Run("UnsafeQueryAloneRejectsRegularKeys", func(t *testing.T) {
 		type unsafeOnlyModel struct {
-			model.UnsafeQuery
-			model.Base
+			modelregistry.UnsafeQuery
+			modelregistry.Base
 		}
 		var m unsafeOnlyModel
 		require.Error(t, decodeListQuery(&m, map[string][]string{"_sort_by": {"created_at desc"}}))
@@ -178,7 +178,7 @@ type expandQueryTestModel struct {
 	Parent     *expandQueryTestModel
 	ChildItems []*expandQueryTestModel
 
-	model.Base
+	modelregistry.Base
 }
 
 func (*expandQueryTestModel) Expands() []string { return []string{"Children", "Parent", "ChildItems"} }
@@ -238,8 +238,8 @@ type conditionQueryTestModel struct {
 	Enabled   bool      `json:"enabled"`
 	ExpiredAt time.Time `json:"expired_at"`
 
-	model.Query
-	model.Base
+	modelregistry.Query
+	modelregistry.Base
 }
 
 func TestParseFieldConditionsQuery(t *testing.T) {
@@ -320,7 +320,7 @@ func TestParseFieldConditionsQuery(t *testing.T) {
 		type plainModel struct {
 			Age int `json:"age"`
 
-			model.Base
+			modelregistry.Base
 		}
 		_, err := parseFieldConditionsQuery(&plainModel{}, map[string][]string{
 			"age[gt]": {"1"},
@@ -483,9 +483,9 @@ func TestParseFieldConditionsQuery(t *testing.T) {
 		type unsafeConditionModel struct {
 			Age int `json:"age"`
 
-			model.Query
-			model.UnsafeQuery
-			model.Base
+			modelregistry.Query
+			modelregistry.UnsafeQuery
+			modelregistry.Base
 		}
 		_, err := parseFieldConditionsQuery(&unsafeConditionModel{}, map[string][]string{
 			"age[gt]": {"1"},
@@ -514,19 +514,19 @@ func TestDecodeListQueryPageSizeGating(t *testing.T) {
 	type cursorOnlyModel struct {
 		Name string `query:"name"`
 
-		model.Cursor
-		model.Base
+		modelregistry.Cursor
+		modelregistry.Base
 	}
 	type paginatableModel struct {
 		Name string `query:"name"`
 
-		model.Pagination
-		model.Base
+		modelregistry.Pagination
+		modelregistry.Base
 	}
 	type plainModel struct {
 		Name string `query:"name"`
 
-		model.Base
+		modelregistry.Base
 	}
 
 	t.Run("CursorModelAcceptsSizeButRejectsPage", func(t *testing.T) {

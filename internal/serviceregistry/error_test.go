@@ -1,4 +1,4 @@
-package service
+package serviceregistry
 
 import (
 	"net/http"

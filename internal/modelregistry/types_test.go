@@ -5,15 +5,14 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/model"
 	"github.com/stretchr/testify/require"
 )
 
 type (
-	t1 struct{ *model.Empty }
+	t1 struct{ *modelregistry.Empty }
 	t4 struct {
 		Name string
-		*model.Empty
+		*modelregistry.Empty
 	}
 )
 
@@ -21,36 +20,36 @@ type User struct {
 	Name   string `json:"name,omitempty"`
 	Email  string `json:"email,omitempty"`
 	Status uint   `json:"status,omitempty" gorm:"type:smallint;default:1;comment:status(0: disabled, 1: enabled)"`
-	model.Base
+	modelregistry.Base
 }
 
 type QueryableUser struct {
 	Name string `json:"name,omitempty"`
 
-	model.Query
-	model.Base
+	modelregistry.Query
+	modelregistry.Base
 }
 
 type UnsafeQueryableUser struct {
 	Name string `json:"name,omitempty"`
 
-	model.Query
-	model.UnsafeQuery
-	model.Base
+	modelregistry.Query
+	modelregistry.UnsafeQuery
+	modelregistry.Base
 }
 
 type PaginatableUser struct {
 	Name string `json:"name,omitempty"`
 
-	model.Pagination
-	model.Base
+	modelregistry.Pagination
+	modelregistry.Base
 }
 
 type CursorableUser struct {
 	Name string `json:"name,omitempty"`
 
-	model.Cursor
-	model.Base
+	modelregistry.Cursor
+	modelregistry.Base
 }
 
 // markerMethodSpoofUser declares an exported method matching the historical
@@ -58,7 +57,7 @@ type CursorableUser struct {
 type markerMethodSpoofUser struct {
 	Name string `json:"name,omitempty"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func (markerMethodSpoofUser) QueryEnabled() {}
@@ -138,11 +137,11 @@ func TestQueryable(t *testing.T) {
 }
 
 func TestIsQueryMarkerType(t *testing.T) {
-	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[model.Query]()))
-	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[*model.Query]()))
-	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[model.UnsafeQuery]()))
-	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[model.Pagination]()))
-	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[model.Cursor]()))
+	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[modelregistry.Query]()))
+	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[*modelregistry.Query]()))
+	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[modelregistry.UnsafeQuery]()))
+	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[modelregistry.Pagination]()))
+	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[modelregistry.Cursor]()))
 
 	// Nested structs that embed a marker struct carry framework query
 	// parameters as well, so they are also excluded from SQL conditions.
@@ -158,37 +157,37 @@ func TestIsEmpty(t *testing.T) {
 	type t1 string
 	type t2 int
 	type t3 struct{}
-	type t4 struct{ model.Empty }
-	type t5 struct{ *model.Empty }
-	type t6 struct{ model.Any }
-	type t7 struct{ *model.Any }
+	type t4 struct{ modelregistry.Empty }
+	type t5 struct{ *modelregistry.Empty }
+	type t6 struct{ modelregistry.Any }
+	type t7 struct{ *modelregistry.Any }
 	type t8 struct {
-		model.Empty
-		model.Any
+		modelregistry.Empty
+		modelregistry.Any
 	}
 	type t9 struct {
-		*model.Empty
-		model.Any
+		*modelregistry.Empty
+		modelregistry.Any
 	}
 	type t10 struct {
-		model.Empty
-		*model.Any
+		modelregistry.Empty
+		*modelregistry.Any
 	}
 	type t11 struct {
-		model.Empty
-		*model.Any
+		modelregistry.Empty
+		*modelregistry.Any
 	}
 	type t12 struct{ _ string }
 	type t13 struct {
 		_ string
-		model.Empty
+		modelregistry.Empty
 	}
 	type t14 struct {
 		_ string
-		model.Any
+		modelregistry.Any
 	}
-	type t15 = model.Empty
-	type t16 = model.Any
+	type t15 = modelregistry.Empty
+	type t16 = modelregistry.Any
 
 	require.True(t, modelregistry.IsEmpty[t1]())
 	require.True(t, modelregistry.IsEmpty[t2]())
@@ -214,9 +213,9 @@ func TestIsValid(t *testing.T) {
 	type t1 string
 	type t2 int
 	type t3 struct{}
-	type t4 struct{ model.Empty }
-	type t5 struct{ model.Any }
-	type t6 struct{ model.Base }
+	type t4 struct{ modelregistry.Empty }
+	type t5 struct{ modelregistry.Any }
+	type t6 struct{ modelregistry.Base }
 
 	require.False(t, modelregistry.IsValid[t1]())
 	require.False(t, modelregistry.IsValid[*t1]())

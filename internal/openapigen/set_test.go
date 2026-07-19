@@ -13,7 +13,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3gen"
 	"github.com/hydroan/gst/apidoc"
-	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/types/consts"
 	"gorm.io/datatypes"
 )
@@ -22,7 +22,7 @@ type openapiTimeQueryModel struct {
 	// ExpiresAt is the expiration time.
 	ExpiresAt *time.Time `json:"expires_at,omitempty" query:"expires_at"`
 
-	model.Base
+	modelregistry.Base
 }
 
 type openapiEmbeddedQueryModel struct {
@@ -30,24 +30,24 @@ type openapiEmbeddedQueryModel struct {
 	// the framework pagination parameter, which lives in the "_" namespace.
 	Page string `json:"-" query:"page"`
 
-	model.Query
-	model.Base
+	modelregistry.Query
+	modelregistry.Base
 }
 
 type openapiUnsafeQueryModel struct {
-	model.Query
-	model.UnsafeQuery
-	model.Base
+	modelregistry.Query
+	modelregistry.UnsafeQuery
+	modelregistry.Base
 }
 
 type openapiPaginationQueryModel struct {
-	model.Pagination
-	model.Base
+	modelregistry.Pagination
+	modelregistry.Base
 }
 
 type openapiCursorQueryModel struct {
-	model.Cursor
-	model.Base
+	modelregistry.Cursor
+	modelregistry.Base
 }
 
 type openapiDeepQueryFields struct {
@@ -65,25 +65,25 @@ type openapiSecondQueryBranch struct {
 type openapiShallowQueryModel struct {
 	openapiFirstQueryBranch
 	openapiSecondQueryBranch
-	model.Base
+	modelregistry.Base
 }
 
 type openapiSliceQueryModel struct {
 	Values []string `json:"-" query:"values"`
 
-	model.Base
+	modelregistry.Base
 }
 
 type openapiDefaultCreateModel struct {
 	Name string `json:"name"`
 
-	model.Base
+	modelregistry.Base
 }
 
 type openapiCustomCreateModel struct {
 	Name string `json:"name"`
 
-	model.Base
+	modelregistry.Base
 }
 
 type openapiCustomCreateRequest struct {
@@ -97,7 +97,7 @@ type openapiCustomCreateResponse struct {
 type openapiCustomBatchModel struct {
 	Name string `json:"name"`
 
-	model.Base
+	modelregistry.Base
 }
 
 type openapiCustomBatchRequest struct {
@@ -112,14 +112,14 @@ type openapiExportModel struct {
 	// Name is the sample name.
 	Name string `json:"name" query:"name"`
 
-	model.Base
+	modelregistry.Base
 }
 
 type openapiImportModel struct {
 	// Name is the sample name.
 	Name string `json:"name"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func TestSchemaFromTypeUsesDateTimeFormatForTime(t *testing.T) {
@@ -287,8 +287,8 @@ type openapiExpandableQueryModel struct {
 	Children []*openapiExpandableQueryModel `json:"children,omitempty"`
 	Parent   *openapiExpandableQueryModel   `json:"parent,omitempty"`
 
-	model.Query
-	model.Base
+	modelregistry.Query
+	modelregistry.Base
 }
 
 func (*openapiExpandableQueryModel) Expands() []string { return []string{"Children", "Parent"} }
@@ -328,7 +328,7 @@ func TestAddQueryParametersDocumentsFieldOperatorFilters(t *testing.T) {
 	addQueryParameters[*openapiPaginationQueryModel, *openapiPaginationQueryModel, *openapiPaginationQueryModel](op)
 	parameters = queryParametersByName(t, op)
 	if strings.Contains(parameters["id"].Description, "[op]=value") {
-		t.Fatalf("id description = %q, models without model.Query must not advertise operator filters", parameters["id"].Description)
+		t.Fatalf("id description = %q, models without modelregistry.Query must not advertise operator filters", parameters["id"].Description)
 	}
 }
 
@@ -1206,7 +1206,7 @@ func TestAddQueryParametersSetsEnumValues(t *testing.T) {
 type enumQueryModel struct {
 	Status enumFieldStatus `json:"status" query:"status"`
 
-	model.Base
+	modelregistry.Base
 }
 
 func TestSchemaComponentName(t *testing.T) {
@@ -1377,7 +1377,7 @@ type openapiActionModel struct {
 	// Name is the record name.
 	Name string `json:"name"`
 
-	model.Base
+	modelregistry.Base
 }
 
 type openapiFirstActionReq struct {
@@ -1471,7 +1471,7 @@ type openapiTreeNode struct {
 	Children []*openapiTreeNode `json:"children,omitempty"`
 	Parent   *openapiTreeNode   `json:"parent,omitempty"`
 
-	model.Base
+	modelregistry.Base
 }
 
 // TestSetResolvesSelfReferentialSchemaRefs asserts that the $ref emitted for a
@@ -1503,7 +1503,7 @@ type openapiTreeHolder struct {
 	Nodes []*openapiTreeNode `json:"nodes,omitempty"`
 	Extra []*openapiTreeNode `json:"extra,omitempty"`
 
-	model.Base
+	modelregistry.Base
 }
 
 // TestSetBuildsExampleWithoutNullPlaceholders asserts that the generated
@@ -1534,7 +1534,7 @@ type openapiExampleShapeModel struct {
 	// StartedAt is a date-time formatted string.
 	StartedAt time.Time `json:"started_at"`
 
-	model.Base
+	modelregistry.Base
 }
 
 // TestSetBuildsExampleHonouringFormatAndEnum asserts that an example value
@@ -1584,7 +1584,7 @@ type openapiNestedQueryModel struct {
 	// Items is a filterable collection of structs.
 	Items []openapiNestedQueryItem `json:"items" query:"items"`
 
-	model.Base
+	modelregistry.Base
 }
 
 // TestAddQueryParametersDescribesSliceMembersOfNestedStructs asserts that a
@@ -1651,7 +1651,7 @@ type openapiKeyModel struct {
 	// Name is the record name.
 	Name string `json:"name"`
 
-	model.Base
+	modelregistry.Base
 }
 
 // componentKeyCharset is the character set the OpenAPI spec allows in a
@@ -1692,7 +1692,7 @@ type openapiAnyMapModel struct {
 	// Attributes holds user-defined keys and values.
 	Attributes map[string]any `json:"attributes"`
 
-	model.Base
+	modelregistry.Base
 }
 
 // TestSetBuildsExampleForUntypedMapValues asserts that a schema declaring no

@@ -3,34 +3,34 @@ package controller
 import (
 	"testing"
 
-	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/internal/modelregistry"
 )
 
 type listBenchmarkModel struct {
 	Name string `query:"name"`
 
-	model.Base
+	modelregistry.Base
 }
 
 type listBenchmarkQueryableModel struct {
 	Name string `query:"name"`
 
-	model.Query
-	model.Base
+	modelregistry.Query
+	modelregistry.Base
 }
 
 type listBenchmarkPaginatableModel struct {
 	Name string `query:"name"`
 
-	model.Pagination
-	model.Base
+	modelregistry.Pagination
+	modelregistry.Base
 }
 
 type listBenchmarkCursorableModel struct {
 	Name string `query:"name"`
 
-	model.Cursor
-	model.Base
+	modelregistry.Cursor
+	modelregistry.Base
 }
 
 var (

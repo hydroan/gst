@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
@@ -13,17 +12,17 @@ import (
 type AutoUser struct {
 	Name string `json:"name,omitempty"`
 
-	model.AutoBase
+	modelregistry.AutoBase
 }
 
 func TestAutoBaseImplementsModel(t *testing.T) {
-	require.Implements(t, (*types.Model)(nil), &model.AutoBase{})
+	require.Implements(t, (*types.Model)(nil), &modelregistry.AutoBase{})
 	require.True(t, modelregistry.IsValid[*AutoUser]())
 	require.False(t, modelregistry.IsEmpty[AutoUser]())
 }
 
 func TestAutoBaseGetID(t *testing.T) {
-	b := new(model.AutoBase)
+	b := new(modelregistry.AutoBase)
 	// An unset ID reports empty so framework emptiness checks keep working.
 	require.Empty(t, b.GetID())
 
@@ -32,7 +31,7 @@ func TestAutoBaseGetID(t *testing.T) {
 }
 
 func TestAutoBaseSetID(t *testing.T) {
-	b := new(model.AutoBase)
+	b := new(modelregistry.AutoBase)
 
 	// Without arguments the ID stays unset; the database assigns it on insert.
 	b.SetID()
@@ -56,17 +55,17 @@ func TestAutoBaseSetID(t *testing.T) {
 }
 
 func TestAutoBaseClearID(t *testing.T) {
-	b := &model.AutoBase{ID: 7}
+	b := &modelregistry.AutoBase{ID: 7}
 	b.ClearID()
 	require.Zero(t, b.ID)
 	require.Empty(t, b.GetID())
 }
 
 func TestAutoBaseMarshalLogObject(t *testing.T) {
-	require.NoError(t, (*model.AutoBase)(nil).MarshalLogObject(zapcore.NewMapObjectEncoder()))
+	require.NoError(t, (*modelregistry.AutoBase)(nil).MarshalLogObject(zapcore.NewMapObjectEncoder()))
 
 	enc := zapcore.NewMapObjectEncoder()
-	b := &model.AutoBase{ID: 7}
+	b := &modelregistry.AutoBase{ID: 7}
 	b.CreatedBy = "creator"
 	b.UpdatedBy = "updater"
 	require.NoError(t, b.MarshalLogObject(enc))
