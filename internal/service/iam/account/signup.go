@@ -1,6 +1,8 @@
 package serviceiamaccount
 
 import (
+	"context"
+
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
@@ -47,8 +49,8 @@ func (s *SignupService) Create(ctx *types.ServiceContext, req *modeliamaccount.S
 	}
 
 	// Save the user and password credential atomically.
-	if err = database.Database[*modeliamuser.User](ctx).TransactionFunc(func(tx any) error {
-		if createErr := database.Database[*modeliamuser.User](ctx).WithTx(tx).Create(newUser); createErr != nil {
+	if err = database.Transaction(ctx, func(ctx context.Context) error {
+		if createErr := database.Database[*modeliamuser.User](ctx).Create(newUser); createErr != nil {
 			return createErr
 		}
 
@@ -56,7 +58,7 @@ func (s *SignupService) Create(ctx *types.ServiceContext, req *modeliamaccount.S
 		if createErr != nil {
 			return createErr
 		}
-		if createErr = database.Database[*modeliamaccount.PasswordCredential](ctx).WithTx(tx).Create(passwordCredential); createErr != nil {
+		if createErr = database.Database[*modeliamaccount.PasswordCredential](ctx).Create(passwordCredential); createErr != nil {
 			return createErr
 		}
 		if req.Email == "" {
@@ -67,7 +69,7 @@ func (s *SignupService) Create(ctx *types.ServiceContext, req *modeliamaccount.S
 		if createErr != nil {
 			return createErr
 		}
-		return database.Database[*modeliamaccount.EmailIdentity](ctx).WithTx(tx).Create(emailIdentity)
+		return database.Database[*modeliamaccount.EmailIdentity](ctx).Create(emailIdentity)
 	}); err != nil {
 		log.Error("failed to create user", zap.Error(err))
 		return nil, errors.New("failed to create user")

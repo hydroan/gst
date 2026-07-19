@@ -1,6 +1,8 @@
 package serviceiamprofile
 
 import (
+	"context"
+
 	"github.com/hydroan/gst/database"
 	modeliamprofile "github.com/hydroan/gst/internal/model/iam/profile"
 	"github.com/hydroan/gst/types"
@@ -24,10 +26,9 @@ func updateProfileColumns(ctx *types.ServiceContext, record *modeliamprofile.Pro
 	if record == nil {
 		return nil
 	}
-	return database.Database[*modeliamprofile.Profile](ctx).TransactionFunc(func(tx any) error {
+	return database.Transaction(ctx, func(ctx context.Context) error {
 		for _, column := range columns {
 			if err := database.Database[*modeliamprofile.Profile](ctx).
-				WithTx(tx).
 				UpdateByID(record.ID, column, profileColumnValue(record, column)); err != nil {
 				return err
 			}

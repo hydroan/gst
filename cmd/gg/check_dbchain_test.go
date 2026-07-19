@@ -21,7 +21,6 @@ import (
 	"context"
 
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/types"
 	"tmpapp/model"
 )
 
@@ -35,8 +34,8 @@ func create(ctx context.Context, u *model.User) error {
 }
 
 func transact(ctx context.Context, u *model.User) error {
-	return database.Database[*model.User](ctx).Transaction(func(tx types.Database[*model.User]) error {
-		return tx.Create(u)
+	return database.Transaction(ctx, func(ctx context.Context) error {
+		return database.Database[*model.User](ctx).Create(u)
 	})
 }
 
@@ -44,8 +43,8 @@ func passInline(ctx context.Context) bool {
 	return exists(database.Database[*model.User](ctx), "id")
 }
 
-func passInlineWithOptions(ctx context.Context, tx any) bool {
-	return exists(database.Database[*model.User](ctx).WithTx(tx), "id")
+func passInlineWithOptions(ctx context.Context) bool {
+	return exists(database.Database[*model.User](ctx).WithLimit(1), "id")
 }
 
 func exists(db any, id string) bool { return db != nil }

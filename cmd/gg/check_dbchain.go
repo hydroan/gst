@@ -19,20 +19,18 @@ const gstDatabaseImportPath = "github.com/hydroan/gst/database"
 // operation chain. TestDatabaseChainMethodSetsMatchTypesInterface guards this
 // set against drifting from the interface declaration.
 var databaseTerminalMethods = map[string]bool{
-	"Create":          true,
-	"Delete":          true,
-	"Update":          true,
-	"UpdateByID":      true,
-	"List":            true,
-	"Get":             true,
-	"First":           true,
-	"Last":            true,
-	"Take":            true,
-	"Count":           true,
-	"Cleanup":         true,
-	"Health":          true,
-	"Transaction":     true,
-	"TransactionFunc": true,
+	"Create":     true,
+	"Delete":     true,
+	"Update":     true,
+	"UpdateByID": true,
+	"List":       true,
+	"Get":        true,
+	"First":      true,
+	"Last":       true,
+	"Take":       true,
+	"Count":      true,
+	"Cleanup":    true,
+	"Health":     true,
 }
 
 // databaseChainMethods lists the types.DatabaseOption methods that keep the
@@ -40,7 +38,6 @@ var databaseTerminalMethods = map[string]bool{
 // against drifting from the interface declaration.
 var databaseChainMethods = map[string]bool{
 	"WithDB":         true,
-	"WithTx":         true,
 	"WithTable":      true,
 	"WithDebug":      true,
 	"WithQuery":      true,
@@ -48,7 +45,6 @@ var databaseChainMethods = map[string]bool{
 	"WithTimeRange":  true,
 	"WithSelect":     true,
 	"WithIndex":      true,
-	"WithRollback":   true,
 	"WithLock":       true,
 	"WithBatchSize":  true,
 	"WithPagination": true,

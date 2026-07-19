@@ -32,8 +32,7 @@ var (
 	ErrIDRequired          = errors.New("id is required")
 	ErrRecordNotFound      = gorm.ErrRecordNotFound
 	ErrNilSQLBuilder       = errors.New("sql statement collector cannot be nil")
-	ErrNilTransactionFunc  = errors.New("transaction function cannot be nil")
-	ErrBuildSQLTransaction = errors.New("build sql does not support transaction operations")
+	ErrNilTransaction      = errors.New("transaction function cannot be nil")
 )
 
 // migratedModelMap records model/database pairs seen by operation builders.
@@ -93,9 +92,6 @@ type database[M types.Model] struct {
 
 	// select
 	selectColumns []string
-
-	// rollback control
-	rollbackFunc func() // rollback function for manual transaction control
 
 	shouldAutoMigrate *bool
 }
@@ -181,9 +177,6 @@ func (db *database[M]) reset() {
 
 	// reset select
 	db.selectColumns = nil
-
-	// reset rollback function
-	db.rollbackFunc = nil
 }
 
 // prepare prepares the database instance for query execution by applying all configured
@@ -241,7 +234,7 @@ func (db *database[M]) prepare() error {
 //   - Context-aware operations for tracing
 //   - Default query limit protection
 //   - Panic protection for uninitialized database
-//   - Transaction inheritance when ctx was produced by a model-hook write or WithTx
+//   - Transaction inheritance when ctx was produced by database.Transaction or a model-hook write
 //
 // Transaction propagation:
 //

@@ -851,26 +851,6 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 		require.Contains(t, stmts[1].RenderedSQL, users[2].Name)
 	})
 
-	t.Run("TransactionUnsupported", func(t *testing.T) {
-		var stmts []types.SQLStatement
-		err := database.Database[*TestUser](context.Background()).WithBuildSQL(&stmts).Transaction(func(tx types.Database[*TestUser]) error {
-			return nil
-		})
-
-		require.ErrorIs(t, err, database.ErrBuildSQLTransaction)
-		require.Empty(t, stmts)
-	})
-
-	t.Run("TransactionFuncUnsupported", func(t *testing.T) {
-		var stmts []types.SQLStatement
-		err := database.Database[*TestUser](context.Background()).WithBuildSQL(&stmts).TransactionFunc(func(tx any) error {
-			return nil
-		})
-
-		require.ErrorIs(t, err, database.ErrBuildSQLTransaction)
-		require.Empty(t, stmts)
-	})
-
 	t.Run("GetIgnoresDestinationID", func(t *testing.T) {
 		existingID := u1.ID
 		requestedID := u2.ID

@@ -1,6 +1,7 @@
 package servicemfa
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"math/big"
@@ -65,33 +66,33 @@ func HashTOTPBackupCodes(codes []string) ([]string, error) {
 
 // ConsumeTOTPBackupCode verifies and removes one recovery code for the user.
 //
-// The exported path opens a TOTPDevice transaction, locks the user's active
-// devices, compares the normalized code against stored bcrypt hashes, removes
-// the matching hash, and updates LastUsedAt. Replays fail because the hash is
+// The exported path opens a transaction, locks the user's active devices,
+// compares the normalized code against stored bcrypt hashes, removes the
+// matching hash, and updates LastUsedAt. Replays fail because the hash is
 // removed in the same transaction that validates the code.
 func ConsumeTOTPBackupCode(ctx *types.ServiceContext, userID, code string) error {
 	if ctx == nil || strings.TrimSpace(userID) == "" {
 		return service.NewError(http.StatusUnauthorized, "authentication required")
 	}
 
-	return database.Database[*modelmfa.TOTPDevice](ctx).Transaction(func(tx types.Database[*modelmfa.TOTPDevice]) error {
-		return consumeTOTPBackupCodeInTx(tx, userID, code, time.Now())
+	return database.Transaction(ctx, func(ctx context.Context) error {
+		return consumeTOTPBackupCodeInTx(ctx, userID, code, time.Now())
 	})
 }
 
-// consumeTOTPBackupCodeInTx consumes a recovery code inside an existing device transaction.
-//
-// Unbind uses this path so backup-code consumption and device removal commit or
-// roll back together. The caller supplies the timestamp so all updates in the
-// higher-level transaction can share the same logical operation time.
-func consumeTOTPBackupCodeInTx(tx types.Database[*modelmfa.TOTPDevice], userID, code string, now time.Time) error {
+// consumeTOTPBackupCodeInTx consumes a recovery code inside an existing device
+// transaction. The caller passes a transaction-carrying context created by
+// database.Transaction so backup-code consumption and any surrounding writes
+// commit or roll back together; the timestamp is supplied by the caller so all
+// updates in the higher-level transaction share the same logical operation time.
+func consumeTOTPBackupCodeInTx(ctx context.Context, userID, code string, now time.Time) error {
 	normalizedCode, err := normalizeTOTPBackupCode(code)
 	if err != nil {
 		return errTOTPBackupCodeInvalid
 	}
 
 	devices := make([]*modelmfa.TOTPDevice, 0)
-	if err := tx.WithLock(consts.LockUpdate).WithQuery(&modelmfa.TOTPDevice{
+	if err := database.Database[*modelmfa.TOTPDevice](ctx).WithLock(consts.LockUpdate).WithQuery(&modelmfa.TOTPDevice{
 		UserID:   strings.TrimSpace(userID),
 		IsActive: true,
 	}).List(&devices); err != nil {
@@ -106,7 +107,7 @@ func consumeTOTPBackupCodeInTx(tx types.Database[*modelmfa.TOTPDevice], userID, 
 
 			device.BackupCodeHashes = append(device.BackupCodeHashes[:i], device.BackupCodeHashes[i+1:]...)
 			device.LastUsedAt = &now
-			if err := tx.Update(device); err != nil {
+			if err := database.Database[*modelmfa.TOTPDevice](ctx).Update(device); err != nil {
 				return errors.Wrap(err, "consume TOTP backup code")
 			}
 			return nil

@@ -127,6 +127,7 @@ func collectProjectChecks() []projectCheckResult {
 		{Name: "Directory restrictions", Violations: CheckAllowedDirectories()},
 		{Name: "DSL design rules", Violations: CheckDSLDesign()},
 		{Name: "Database chain termination", Violations: CheckDatabaseChainTermination()},
+		{Name: "Transaction closure context", Violations: CheckTransactionClosureContext()},
 	}
 	return results
 }

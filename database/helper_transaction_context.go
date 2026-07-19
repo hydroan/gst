@@ -52,13 +52,12 @@ func txFromContext(ctx context.Context) (*gorm.DB, bool) {
 //
 // If db.ctx already carries a transaction, this method deliberately does not
 // start a nested transaction. The caller is already inside an explicit
-// Transaction/TransactionFunc or an outer model hook write, so all Database[T](ctx)
+// database.Transaction or an outer model hook write, so all Database[T](ctx)
 // calls should continue sharing the first transaction boundary.
 //
-// This helper binds the transaction with contextWithTx directly instead of going
-// through WithTx, so the tracing span re-parenting done by WithTx never applies to
-// this hook boundary: spans of hooks and nested writes keep the operation span
-// created by db.trace as their parent instead of moving under a transaction span.
+// Unlike database.Transaction, this hook boundary does not create its own span:
+// spans of hooks and nested writes keep the operation span created by db.trace
+// as their parent instead of moving under a transaction span.
 func (db *database[M]) withModelHookTransaction(fn func() error) error {
 	if db.noHook || db.dryRun {
 		return fn()

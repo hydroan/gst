@@ -1,6 +1,7 @@
 package servicemfa
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -74,10 +75,11 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 		}
 	}
 
-	err = database.Database[*modelmfa.TOTPDevice](ctx).Transaction(func(tx types.Database[*modelmfa.TOTPDevice]) error {
+	userID := ctx.UserID()
+	err = database.Transaction(ctx, func(ctx context.Context) error {
 		devices := make([]*modelmfa.TOTPDevice, 0)
-		if listErr := tx.WithLock(consts.LockUpdate).WithQuery(&modelmfa.TOTPDevice{
-			UserID:   ctx.UserID(),
+		if listErr := database.Database[*modelmfa.TOTPDevice](ctx).WithLock(consts.LockUpdate).WithQuery(&modelmfa.TOTPDevice{
+			UserID:   userID,
 			IsActive: true,
 		}).List(&devices); listErr != nil {
 			return errors.Wrap(listErr, "list active TOTP devices")
@@ -86,7 +88,7 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 		device := findTOTPUnbindDevice(devices, req.DeviceID)
 		if device == nil {
 			log.Warnz("device not found or not active",
-				zap.String("user_id", ctx.UserID()),
+				zap.String("user_id", userID),
 				zap.String("device_id", req.DeviceID))
 			rsp = &modelmfa.TOTPUnbindRsp{
 				Success:     false,
@@ -97,12 +99,12 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 		}
 
 		now := time.Now()
-		if verifyErr := verifyTOTPUnbindFreshAuth(ctx, tx, req, devices, now); verifyErr != nil {
+		if verifyErr := verifyTOTPUnbindFreshAuth(ctx, userID, req, devices, now); verifyErr != nil {
 			if errors.Is(verifyErr, errTOTPUnbindVerificationInvalid) ||
 				errors.Is(verifyErr, errTOTPCodeInvalid) ||
 				errors.Is(verifyErr, errTOTPBackupCodeInvalid) {
 				log.Warnz("invalid fresh authentication for unbind",
-					zap.String("user_id", ctx.UserID()),
+					zap.String("user_id", userID),
 					zap.String("device_id", req.DeviceID),
 					zap.Error(verifyErr))
 				rsp = &modelmfa.TOTPUnbindRsp{
@@ -115,7 +117,7 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 			return verifyErr
 		}
 
-		if deleteErr := tx.WithPurge(true).Delete(device); deleteErr != nil {
+		if deleteErr := database.Database[*modelmfa.TOTPDevice](ctx).WithPurge(true).Delete(device); deleteErr != nil {
 			return fmt.Errorf("failed to unbind device: %w", deleteErr)
 		}
 
@@ -187,14 +189,16 @@ func countTOTPUnbindVerificationMethods(req *modelmfa.TOTPUnbindReq) int {
 	return count
 }
 
-// verifyTOTPUnbindFreshAuth validates the selected fresh-auth method in the device transaction.
+// verifyTOTPUnbindFreshAuth validates the selected fresh-auth method inside the
+// device transaction.
 //
 // Password has already been validated before the transaction. TOTP verification
-// accepts any active device owned by the current user. Recovery-code verification
-// consumes the matching hash through the transaction-bound backup-code helper.
+// accepts any active device owned by the current user. ctx carries the
+// transaction created by the caller, so recovery-code verification consumes the
+// matching hash in the same transaction as the device removal.
 func verifyTOTPUnbindFreshAuth(
-	ctx *types.ServiceContext,
-	tx types.Database[*modelmfa.TOTPDevice],
+	ctx context.Context,
+	userID string,
 	req *modelmfa.TOTPUnbindReq,
 	devices []*modelmfa.TOTPDevice,
 	now time.Time,
@@ -205,7 +209,7 @@ func verifyTOTPUnbindFreshAuth(
 	case strings.TrimSpace(req.TOTPCode) != "":
 		return validateTOTPCodeForDevices(req.TOTPCode, devices)
 	case strings.TrimSpace(req.BackupCode) != "":
-		return consumeTOTPBackupCodeInTx(tx, ctx.UserID(), req.BackupCode, now)
+		return consumeTOTPBackupCodeInTx(ctx, userID, req.BackupCode, now)
 	default:
 		return errTOTPUnbindVerificationInvalid
 	}

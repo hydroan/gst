@@ -83,12 +83,16 @@ type Logger interface {
 //
 // The interface embeds DatabaseOption[M] to provide chainable query building.
 // A chain is expected to end with one terminal operation, such as Create, List,
-// Get, Count, Cleanup, Health, Transaction, or TransactionFunc.
+// Get, Count, Cleanup, or Health.
 //
 // Implementations share an underlying GORM session. Call database.Database[M](ctx)
 // again for each independent operation chain. Keeping the returned value in a
 // variable and running another independent operation on it (for example, List
 // then Get or Update) is incorrect usage; see database.Database.
+//
+// Transactions are started with the package-level database.Transaction
+// function; the context it passes to fn makes every chain started from that
+// context join the transaction automatically.
 type Database[M Model] interface {
 	// Create inserts one or more records, setting framework IDs and timestamps unless WithDryRun is enabled.
 	Create(objs ...M) error
@@ -125,12 +129,6 @@ type Database[M Model] interface {
 	Cleanup() error
 	// Health checks database connectivity and is not disabled by WithDryRun.
 	Health() error
-	// Transaction executes fn in a transaction for this model and passes a transaction-bound Database.
-	Transaction(fn func(tx Database[M]) error) error
-	// TransactionFunc executes fn in a transaction for multi-model work; each Database used inside fn must call WithTx(tx).
-	// WithTx also seeds the returned operation chain's context, so model hooks that receive that context and call
-	// database.Database[*OtherModel](ctx) keep using the same transaction.
-	TransactionFunc(fn func(tx any) error) error
 
 	DatabaseOption[M]
 }
@@ -141,11 +139,6 @@ type Database[M Model] interface {
 type DatabaseOption[M Model] interface {
 	// WithDB uses a custom *gorm.DB; callers must migrate custom schemas explicitly.
 	WithDB(any) Database[M]
-	// WithTx binds operations to a *gorm.DB transaction, primarily inside TransactionFunc.
-	// It also stores the transaction in the operation context so model hooks can pass ctx to Database[*OtherModel](ctx)
-	// without manually threading the raw transaction through hook signatures, and re-parents this
-	// chain's tracing spans under the transaction span carried by tx.
-	WithTx(tx any) Database[M]
 	// WithTable sets a custom table name; the table must already exist.
 	WithTable(name string) Database[M]
 	// WithDebug enables debug mode to show detailed SQL queries.
@@ -160,8 +153,6 @@ type DatabaseOption[M Model] interface {
 	WithSelect(columns ...string) Database[M]
 	// WithIndex specifies database index hints for query optimization (MySQL only).
 	WithIndex(indexName string, hint ...consts.IndexHintMode) Database[M]
-	// WithRollback configures a callback that runs when Transaction or TransactionFunc rolls back.
-	WithRollback(rollbackFunc func()) Database[M]
 	// WithLock adds row-level locking to SELECT queries (must be used within a transaction).
 	WithLock(mode ...consts.LockMode) Database[M]
 	// WithBatchSize sets the batch size for Create, Update, and Delete.

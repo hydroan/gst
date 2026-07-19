@@ -10,7 +10,6 @@ import (
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
-	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 )
 
@@ -128,90 +127,6 @@ func (db *database[M]) WithTable(name string) types.Database[M] {
 	return db
 }
 
-// WithTx returns a new database manipulator with transaction context.
-// This method allows using an existing transaction to operate on multiple resource types.
-// The tx parameter should be a *gorm.DB transaction instance obtained from TransactionFunc.
-//
-// Parameters:
-//   - tx: The transaction instance (*gorm.DB) from TransactionFunc callback.
-//     If nil or invalid, logs a warning and returns the original database instance.
-//
-// Supports all CRUD operations and can be chained with other methods.
-//
-// Examples:
-//
-//	// Single resource type transaction
-//	database.Database[*User](context.Background()).TransactionFunc(func(tx any) error {
-//	    return database.Database[*User](context.Background()).WithTx(tx).Create(&user)
-//	})
-//
-//	// Multiple resource types in the same transaction
-//	database.Database[*User](context.Background()).TransactionFunc(func(tx any) error {
-//	    if err := database.Database[*User](context.Background()).WithTx(tx).Create(&user); err != nil {
-//	        return err
-//	    }
-//	    if err := database.Database[*Order](context.Background()).WithTx(tx).Create(&order); err != nil {
-//	        return err
-//	    }
-//	    return nil
-//	})
-//
-//	// Chainable with other methods
-//	database.Database[*User](context.Background()).TransactionFunc(func(tx any) error {
-//	    return database.Database[*User](context.Background()).
-//	        WithTx(tx).
-//	        WithQuery(&User{Name: "John"}).
-//	        Update(&user)
-//	})
-//
-// NOTE: WithTx must be used within a TransactionFunc callback. The transaction is automatically
-//
-//	committed when the callback returns nil, or rolled back when it returns an error.
-//
-// WithTx also stores the transaction in this operation chain's context. That
-// context propagation matters for model hooks: if a hook receives this context
-// and calls Database[*OtherModel](ctx), the new operation chain inherits the
-// same transaction instead of opening a separate write.
-//
-// WithTx additionally re-parents this operation chain's tracing spans under the
-// transaction span carried by tx (bound to the tx handle's statement context by
-// Transaction/TransactionFunc), so per-operation spans nest under the transaction
-// span in the trace. Only the span is grafted; all values of the caller's own
-// context are preserved.
-//
-// NOTE: Invalid tx parameter (nil or wrong type) will log a warning and skip transaction context.
-func (db *database[M]) WithTx(tx any) types.Database[M] {
-	var empty *gorm.DB
-	if tx == nil || tx == new(gorm.DB) || tx == empty {
-		logger.Database.WithContext(db.ctx, consts.Phase("WithTx")).Warn("invalid database type, expect *gorm.DB")
-		return db
-	}
-
-	_tx, ok := tx.(*gorm.DB)
-	if !ok || _tx == nil {
-		logger.Database.WithContext(db.ctx, consts.Phase("WithTx")).Warn("invalid database type, expect *gorm.DB")
-		return db
-	}
-
-	// return &database[M]{
-	// 	ins:          _tx.Model(*new(M)),
-	// 	ctx:          db.ctx,
-	// 	rollbackFunc: db.rollbackFunc,
-	// }
-	if _tx.Statement != nil {
-		if txSpan := trace.SpanFromContext(_tx.Statement.Context); txSpan.SpanContext().IsValid() {
-			db.ctx = trace.ContextWithSpan(db.ctx, txSpan)
-		}
-	}
-	db.ctx = contextWithTx(db.ctx, _tx)
-	db.ins = _tx.Session(&gorm.Session{
-		SkipDefaultTransaction: false,
-		NewDB:                  false,
-	}).WithContext(db.ctx)
-
-	return db
-}
-
 // WithBatchSize sets the batch size for batch operations such as batch insert, update, or delete.
 // Controls how many records are processed in a single database operation to optimize performance.
 //
@@ -267,42 +182,6 @@ func (db *database[M]) WithDebug() types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	db.ins = db.ins.Debug()
-	return db
-}
-
-// WithRollback sets a rollback callback function that will be executed when a transaction fails.
-// This method works with both Transaction and TransactionFunc to enable custom rollback logic
-// (e.g., cleaning up external resources, sending notifications).
-// The rollback function is only called when the transaction fails (returns an error).
-// The rollback function does not return an error - any errors should be handled internally (e.g., logged).
-//
-// Example with Transaction:
-//
-//	err := db.WithRollback(func() {
-//	    // Custom rollback logic (e.g., cleanup external resources, send notifications)
-//	    // This function is called automatically when transaction fails
-//	}).Transaction(func(tx types.Database[*model.User]) error {
-//	    if err := tx.Create(&user); err != nil {
-//	        return err // automatic rollback, rollback function will be called
-//	    }
-//	    return nil // automatic commit, rollback function will NOT be called
-//	})
-//
-// Example with TransactionFunc:
-//
-//	err := db.WithRollback(func() {
-//	    // Custom rollback logic
-//	}).TransactionFunc(func(tx any) error {
-//	    userDB := database.Database[*model.User](context.Background())
-//	    if err := userDB.WithTx(tx).Create(&user); err != nil {
-//	        return err // automatic rollback, rollback function will be called
-//	    }
-//	    return nil // automatic commit, rollback function will NOT be called
-//	})
-func (db *database[M]) WithRollback(rollbackFunc func()) types.Database[M] {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	db.rollbackFunc = rollbackFunc
 	return db
 }
 

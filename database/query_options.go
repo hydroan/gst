@@ -684,7 +684,9 @@ func (db *database[M]) WithSelect(columns ...string) types.Database[M] {
 
 // WithLock adds row-level locking to the query for concurrent access control.
 // Uses SELECT ... FOR UPDATE to prevent other transactions from modifying selected rows.
-// Must be used within a transaction (Transaction or TransactionFunc) to be effective.
+// Must be used within database.Transaction to be effective; outside a
+// transaction it logs a warning because row locks are released as soon as the
+// statement finishes.
 //
 // Important: WithLock only applies to SELECT queries (Get, First, List, etc.).
 // It does not work with Create, Update, or Delete operations.
@@ -697,37 +699,33 @@ func (db *database[M]) WithSelect(columns ...string) types.Database[M] {
 //   - consts.LockUpdateSkipLocked: SELECT ... FOR UPDATE SKIP LOCKED
 //   - consts.LockShareSkipLocked: SELECT ... FOR SHARE SKIP LOCKED
 //
-// Example with Transaction:
+// Example:
 //
-//	err := database.Database[*model.User](context.Background()).Transaction(func(tx types.Database[*model.User]) error {
-//	    // Get and lock user with FOR UPDATE
-//	    user := new(model.User)
-//	    if err := tx.WithLock(consts.LockUpdate).Get(user, userID); err != nil {
+//	err := database.Transaction(ctx, func(ctx context.Context) error {
+//	    // Get and lock the record with FOR UPDATE
+//	    record := new(model.Sample)
+//	    if err := database.Database[*model.Sample](ctx).
+//	        WithLock(consts.LockUpdate).
+//	        Get(record, recordID); err != nil {
 //	        return err
 //	    }
-//	    // Update the locked user
-//	    user.Name = "updated"
-//	    return tx.Update(user)
-//	})
-//
-// Example with TransactionFunc:
-//
-//	err := database.Database[*model.Order](context.Background()).TransactionFunc(func(tx any) error {
-//	    // Get and lock order with FOR UPDATE NOWAIT
-//	    order := new(model.Order)
-//	    if err := database.Database[*model.Order](context.Background()).
-//	        WithTx(tx).
-//	        WithLock(consts.LockUpdateNoWait).
-//	        Get(order, orderID); err != nil {
-//	        return err
-//	    }
-//	    // Update the locked order
-//	    order.Status = "processed"
-//	    return database.Database[*model.Order](context.Background()).WithTx(tx).Update(order)
+//	    // Update the locked record
+//	    record.Status = "processed"
+//	    return database.Database[*model.Sample](ctx).Update(record)
 //	})
 func (db *database[M]) WithLock(mode ...consts.LockMode) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
+
+	// Row locks outside a transaction are released as soon as the statement
+	// finishes, which silently defeats the purpose of WithLock. Warn instead of
+	// failing so read paths keep working, but the caller should wrap the
+	// operation in database.Transaction.
+	if _, ok := txFromContext(db.ctx); !ok {
+		logger.Database.WithContext(db.ctx, consts.Phase("WithLock")).Warn(
+			"WithLock used outside a transaction; locks are released immediately, wrap the operation in database.Transaction",
+		)
+	}
 
 	strength := "UPDATE"
 	options := ""
