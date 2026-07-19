@@ -44,6 +44,7 @@ linters:
     # Go modernization.
     - exptostd
     - intrange
+    - modernize
     - perfsprint
     - usestdlibvars
 
@@ -86,6 +87,13 @@ linters:
       exclude-functions:
         - io.Copy(*bytes.Buffer)
         - io.Copy(os.Stdout)
+
+    govet:
+      # shadow and nilness are not part of the default go vet analyzer set;
+      # they replace the standalone shadow/nilness binaries previously run by make.
+      enable:
+        - shadow
+        - nilness
 
     revive:
       rules:

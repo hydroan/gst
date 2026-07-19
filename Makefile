@@ -1,20 +1,16 @@
-.PHONY: check build format vet modernize lint shadow nilness test testv fix install uninstall help
+.PHONY: check build format vet lint test testv fix install uninstall help
 
 # Tool versions - must match go.mod exactly
 GOLANGCI_LINT_VERSION := $(shell go list -m -f '{{.Version}}' github.com/golangci/golangci-lint/v2)
 GOFUMPT_VERSION := $(shell go list -m -f '{{.Version}}' mvdan.cc/gofumpt)
-GOTOOLS_VERSION := $(shell go list -m -f '{{.Version}}' golang.org/x/tools)
 GOBIN := $(shell go env GOBIN)
 GOPATH := $(shell go env GOPATH)
 GO_BIN_DIR := $(if $(GOBIN),$(GOBIN),$(GOPATH)/bin)
 
 GOLANGCI_LINT_PKG := github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 GOFUMPT_PKG := mvdan.cc/gofumpt
-MODERNIZE_PKG := golang.org/x/tools/go/analysis/passes/modernize/cmd/modernize
-NILNESS_PKG := golang.org/x/tools/go/analysis/passes/nilness/cmd/nilness
-SHADOW_PKG := golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow
 
-INSTALL_BINS := golangci-lint gofumpt modernize nilness shadow gg
+INSTALL_BINS := golangci-lint gofumpt gg
 # install_tool_if_missing installs a Makefile-managed tool only when it is unavailable.
 define install_tool_if_missing
 	@if ! command -v $(1) >/dev/null 2>&1 && [ ! -x "$(GO_BIN_DIR)/$(1)" ]; then \
@@ -38,20 +34,17 @@ help:
 	@echo "  build          - Build the project"
 	@echo "  format         - Format code with gofumpt"
 	@echo "  vet            - Run go vet"
-	@echo "  lint           - Run golangci-lint"
-	@echo "  modernize      - Run modernize"
-	@echo "  nilness        - Run nilness analysis"
-	@echo "  shadow         - Run shadow analysis"
+	@echo "  lint           - Run golangci-lint (includes modernize, nilness and shadow)"
 	@echo "  test           - Run unit tests (simple output)"
 	@echo "  testv          - Run unit tests with verbose output"
-	@echo "  fix            - Auto-fix code issues (gofumpt, golangci-lint, shadow, modernize)"
+	@echo "  fix            - Auto-fix code issues (gofumpt, golangci-lint)"
 	@echo "  install        - Install gg command and development tools"
 	@echo "  uninstall      - Uninstall gg command and development tools"
 	@echo "  help           - Show this help message"
 
 # Run all code quality checks
 # Order matches make install tool installation order
-check: build lint format modernize nilness shadow vet
+check: build lint format vet
 	@echo "All checks passed successfully!"
 
 # Build the project
@@ -69,29 +62,11 @@ vet:
 	@echo "Running go vet..."
 	go vet ./...
 
-# Run modernize
-modernize:
-	$(call install_tool_if_missing,modernize,$(GOTOOLS_VERSION),$(MODERNIZE_PKG))
-	@echo "Running modernize..."
-	$(call run_tool,modernize,./...)
-
-# Run golangci-lint
+# Run golangci-lint (modernize, nilness and shadow run inside it, see .golangci.yml)
 lint:
 	$(call install_tool_if_missing,golangci-lint,$(GOLANGCI_LINT_VERSION),$(GOLANGCI_LINT_PKG))
 	@echo "Running golangci-lint..."
 	$(call run_tool,golangci-lint,run ./...)
-
-# Run nilness analysis
-nilness:
-	$(call install_tool_if_missing,nilness,$(GOTOOLS_VERSION),$(NILNESS_PKG))
-	@echo "Running nilness analysis..."
-	$(call run_tool,nilness,./...)
-
-# Run shadow analysis
-shadow:
-	$(call install_tool_if_missing,shadow,$(GOTOOLS_VERSION),$(SHADOW_PKG))
-	@echo "Running shadow analysis..."
-	$(call run_tool,shadow,./...)
 
 # Run unit tests
 test:
@@ -138,10 +113,6 @@ fix:
 	gofumpt -l -w .
 	@echo "Running golangci-lint --fix..."
 	golangci-lint run --fix ./...
-	@echo "Running shadow -fix..."
-	shadow -fix ./...
-	@echo "Running modernize -fix..."
-	modernize -fix ./...
 	@echo "All auto-fix operations completed!"
 
 # Install gg command and development tools
@@ -152,12 +123,6 @@ install:
 	@go install $(GOLANGCI_LINT_PKG)@$(GOLANGCI_LINT_VERSION)
 	@echo "Installing gofumpt@$(GOFUMPT_VERSION)..."
 	@go install $(GOFUMPT_PKG)@$(GOFUMPT_VERSION)
-	@echo "Installing modernize@$(GOTOOLS_VERSION)..."
-	@go install $(MODERNIZE_PKG)@$(GOTOOLS_VERSION)
-	@echo "Installing nilness@$(GOTOOLS_VERSION)..."
-	@go install $(NILNESS_PKG)@$(GOTOOLS_VERSION)
-	@echo "Installing shadow@$(GOTOOLS_VERSION)..."
-	@go install $(SHADOW_PKG)@$(GOTOOLS_VERSION)
 	@echo "Installing gg command..."
 	@go install ./cmd/gg
 	@echo "Installation completed!"
