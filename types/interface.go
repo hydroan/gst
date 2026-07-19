@@ -138,6 +138,8 @@ type Database[M Model] interface {
 // new chain with database.Database[M](ctx) for each independent operation.
 type DatabaseOption[M Model] interface {
 	// WithDB uses a custom *gorm.DB; callers must migrate custom schemas explicitly.
+	// Inside a database.Transaction closure it replaces the underlying connection,
+	// so the chain leaves the transaction and a warning is logged.
 	WithDB(any) Database[M]
 	// WithTable sets a custom table name; the table must already exist.
 	WithTable(name string) Database[M]
@@ -186,7 +188,7 @@ type DatabaseOption[M Model] interface {
 // Model defines the framework contract for database-backed and action models.
 // Typical database resources embed model.Base (UUIDv7 string primary key) or
 // model.AutoBase (auto-increment integer primary key). Action-only models may
-// use model.Empty or model.Any when they do not represent persistent rows.
+// use model.Empty when they do not represent persistent rows.
 //
 // Type Requirements:
 //   - Must be a pointer to struct (e.g., *User)

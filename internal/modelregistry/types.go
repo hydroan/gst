@@ -17,7 +17,7 @@ func GetTableName[M types.Model]() string {
 
 // AreTypesEqual reports whether M, REQ, and RSP are the same concrete type.
 //
-// Empty and Any models always return false so custom controller operations are used.
+// Empty models always return false so custom controller operations are used.
 func AreTypesEqual[M types.Model, REQ types.Request, RSP types.Response]() bool {
 	if IsEmpty[M]() {
 		return false
@@ -28,7 +28,7 @@ func AreTypesEqual[M types.Model, REQ types.Request, RSP types.Response]() bool 
 	return typ1 == typ2 && typ2 == typ3
 }
 
-// IsEmpty reports whether T has no fields beyond Empty or Any markers.
+// IsEmpty reports whether T has no fields beyond Empty markers.
 //
 // For example, these structs return true:
 //
@@ -37,13 +37,7 @@ func AreTypesEqual[M types.Model, REQ types.Request, RSP types.Response]() bool 
 //	}
 //
 //	type Login struct {
-//		model.Empty
-//		model.Any
-//	}
-//
-//	type Login struct {
 //		*model.Empty
-//		model.Any
 //	}
 //
 //	type Logout struct{
@@ -67,7 +61,7 @@ func IsEmpty[T any]() bool {
 		for ftyp.Kind() == reflect.Pointer {
 			ftyp = ftyp.Elem()
 		}
-		if ftyp == reflect.TypeFor[Empty]() || ftyp == reflect.TypeFor[Any]() {
+		if ftyp == reflect.TypeFor[Empty]() {
 			invalidFieldCount++
 		}
 	}
@@ -77,7 +71,7 @@ func IsEmpty[T any]() bool {
 
 // IsValid reports whether T is a database-backed model.
 //
-// T must be a pointer to a non-empty struct and must not embed Empty or Any.
+// T must be a pointer to a non-empty struct and must not embed Empty.
 func IsValid[T any]() bool {
 	typ := reflect.TypeFor[T]()
 
@@ -97,9 +91,9 @@ func IsValid[T any]() bool {
 		return false
 	}
 
-	// T fields contains `Empty` or `Any`, return false
+	// T fields contains `Empty`, return false
 	for field := range typ.Fields() {
-		if field.Type == reflect.TypeFor[Empty]() || field.Type == reflect.TypeFor[Any]() {
+		if field.Type == reflect.TypeFor[Empty]() {
 			return false
 		}
 	}

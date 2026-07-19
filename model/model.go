@@ -18,7 +18,6 @@ var (
 	_ types.Model = (*Base)(nil)
 	_ types.Model = (*AutoBase)(nil)
 	_ types.Model = (*Empty)(nil)
-	_ types.Model = (*Any)(nil)
 )
 
 type (
@@ -44,9 +43,6 @@ type (
 
 	// Empty marks a model as an action-only type that does not map to a database table.
 	Empty = modelregistry.Empty
-
-	// Any is a placeholder model for generic database operations that do not need a concrete model type.
-	Any = modelregistry.Any
 )
 
 // RegisteredModels returns independent model values registered through Register.
@@ -67,7 +63,7 @@ func RegisteredModels() []any {
 
 // Register registers a database-backed model for table setup and optional seed records.
 //
-// Models that embed Empty or Any are ignored because they do not represent
+// Models that embed Empty are ignored because they do not represent
 // database tables. Seed records without IDs receive generated IDs before they
 // are inserted during application startup.
 //
@@ -122,7 +118,7 @@ func Register[M types.Model](records ...M) {
 
 // RegisterTo registers a database-backed model on the specified database instance.
 //
-// Models that embed Empty or Any are ignored because they do not represent
+// Models that embed Empty are ignored because they do not represent
 // database tables. Unlike Register, RegisterTo preserves seed record IDs exactly
 // as provided by the caller.
 //

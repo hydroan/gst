@@ -15,7 +15,7 @@ var _ types.Model = (*Empty)(nil)
 // Key characteristics:
 //   - Structs with an anonymous model.Empty field are never migrated to the database
 //   - All interface methods return zero values or no-op implementations
-//   - IsEmpty reports true for structs containing only model.Empty or model.Any markers
+//   - IsEmpty reports true for structs containing only model.Empty markers
 //   - Service hooks are bypassed when AreTypesEqual returns false for Empty types
 //   - Commonly used for request/response DTOs that don't require persistence
 //

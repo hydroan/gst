@@ -159,54 +159,22 @@ func TestIsEmpty(t *testing.T) {
 	type t3 struct{}
 	type t4 struct{ modelregistry.Empty }
 	type t5 struct{ *modelregistry.Empty }
-	type t6 struct{ modelregistry.Any }
-	type t7 struct{ *modelregistry.Any }
-	type t8 struct {
-		modelregistry.Empty
-		modelregistry.Any
-	}
-	type t9 struct {
-		*modelregistry.Empty
-		modelregistry.Any
-	}
-	type t10 struct {
-		modelregistry.Empty
-		*modelregistry.Any
-	}
-	type t11 struct {
-		modelregistry.Empty
-		*modelregistry.Any
-	}
-	type t12 struct{ _ string }
-	type t13 struct {
+	type t6 struct{ _ string }
+	type t7 struct {
 		_ string
 		modelregistry.Empty
 	}
-	type t14 struct {
-		_ string
-		modelregistry.Any
-	}
-	type t15 = modelregistry.Empty
-	type t16 = modelregistry.Any
+	type t8 = modelregistry.Empty
 
 	require.True(t, modelregistry.IsEmpty[t1]())
 	require.True(t, modelregistry.IsEmpty[t2]())
 	require.True(t, modelregistry.IsEmpty[t3]())
 	require.True(t, modelregistry.IsEmpty[t4]())
 	require.True(t, modelregistry.IsEmpty[t5]())
-	require.True(t, modelregistry.IsEmpty[t6]())
-	require.True(t, modelregistry.IsEmpty[t7]())
+	require.False(t, modelregistry.IsEmpty[t6]())
+	require.False(t, modelregistry.IsEmpty[t7]())
 	require.True(t, modelregistry.IsEmpty[t8]())
-	require.True(t, modelregistry.IsEmpty[t9]())
-	require.True(t, modelregistry.IsEmpty[t10]())
-	require.True(t, modelregistry.IsEmpty[t11]())
-	require.False(t, modelregistry.IsEmpty[t12]())
-	require.False(t, modelregistry.IsEmpty[t13]())
-	require.False(t, modelregistry.IsEmpty[t14]())
-	require.True(t, modelregistry.IsEmpty[t15]())
-	require.True(t, modelregistry.IsEmpty[*t15]())
-	require.True(t, modelregistry.IsEmpty[t16]())
-	require.True(t, modelregistry.IsEmpty[*t16]())
+	require.True(t, modelregistry.IsEmpty[*t8]())
 }
 
 func TestIsValid(t *testing.T) {
@@ -214,8 +182,7 @@ func TestIsValid(t *testing.T) {
 	type t2 int
 	type t3 struct{}
 	type t4 struct{ modelregistry.Empty }
-	type t5 struct{ modelregistry.Any }
-	type t6 struct{ modelregistry.Base }
+	type t5 struct{ modelregistry.Base }
 
 	require.False(t, modelregistry.IsValid[t1]())
 	require.False(t, modelregistry.IsValid[*t1]())
@@ -226,9 +193,7 @@ func TestIsValid(t *testing.T) {
 	require.False(t, modelregistry.IsValid[t4]())
 	require.False(t, modelregistry.IsValid[*t4]())
 	require.False(t, modelregistry.IsValid[t5]())
-	require.False(t, modelregistry.IsValid[*t5]())
-	require.False(t, modelregistry.IsValid[t6]())
-	require.True(t, modelregistry.IsValid[*t6]())
+	require.True(t, modelregistry.IsValid[*t5]())
 }
 
 func BenchmarkIsModelEmpty(b *testing.B) {
