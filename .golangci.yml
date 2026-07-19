@@ -146,10 +146,13 @@ linters:
       locale: US
 
     recvcheck:
-      # Design is a pure DSL declaration and uses a value receiver by framework
-      # convention, while stateful hooks require pointer receivers.
+      # Design, GetTableName and Purge are stateless declaration methods that
+      # use value receivers by framework convention, while stateful hooks
+      # require pointer receivers.
       exclusions:
         - "*.Design"
+        - "*.GetTableName"
+        - "*.Purge"
 
     staticcheck:
       checks: ["all", "-QF1008", "-ST1001"]

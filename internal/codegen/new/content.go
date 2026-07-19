@@ -75,6 +75,7 @@ linters:
 
     # Go modernization.
     - copyloopvar
+    - exptostd
     - intrange
     - modernize
     - perfsprint
@@ -85,10 +86,20 @@ linters:
     - thelper
     - usetesting
 
-    # Module hygiene.
+    # Project constraints.
+    - depguard
     - gomoddirectives
 
   settings:
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: "errors"
+              desc: "Use github.com/cockroachdb/errors instead"
+            - pkg: "github.com/pkg/errors"
+              desc: "Use github.com/cockroachdb/errors instead"
+
     errcheck:
       check-type-assertions: true
       exclude-functions:
@@ -109,10 +120,13 @@ linters:
       locale: US
 
     recvcheck:
-      # Design is a pure DSL declaration and uses a value receiver by framework
-      # convention, while stateful hooks require pointer receivers.
+      # Design, GetTableName and Purge are stateless declaration methods that
+      # use value receivers by framework convention, while stateful hooks
+      # require pointer receivers.
       exclusions:
         - "*.Design"
+        - "*.GetTableName"
+        - "*.Purge"
 
     staticcheck:
       dot-import-whitelist:
@@ -150,6 +164,10 @@ linters:
       - path: _test\.go
         linters:
           - gosec
+      # Revive var-naming: ignore ALL_CAPS (redundant with staticcheck) and underscores in names.
+      - linters:
+          - revive
+        text: "don't use (ALL_CAPS|underscores) in Go names"
 
 issues:
   max-same-issues: 100
