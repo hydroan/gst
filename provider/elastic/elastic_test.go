@@ -400,7 +400,7 @@ func TestDocumentSearchAsc(t *testing.T) {
 	require.NoError(t, err)
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	_ = enc.Encode(res)
+	require.NoError(t, enc.Encode(res))
 }
 
 func TestDocumentSearchDesc(t *testing.T) {
@@ -420,7 +420,7 @@ func TestDocumentSearchDesc(t *testing.T) {
 	require.NoError(t, err)
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	_ = enc.Encode(res)
+	require.NoError(t, enc.Encode(res))
 }
 
 func TestDocumentSearchNext(t *testing.T) {
@@ -441,7 +441,7 @@ func TestDocumentSearchNext(t *testing.T) {
 	require.NoError(t, err)
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	_ = enc.Encode(res)
+	require.NoError(t, enc.Encode(res))
 }
 
 func TestDocumentSearchPrev(t *testing.T) {
@@ -462,7 +462,7 @@ func TestDocumentSearchPrev(t *testing.T) {
 	require.NoError(t, err)
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	_ = enc.Encode(res)
+	require.NoError(t, enc.Encode(res))
 }
 
 func TestDocumentQueryBuilderMatchPharseOptions(t *testing.T) {
@@ -528,5 +528,5 @@ func TestDocumentQueryBuilderAggs(t *testing.T) {
 	require.NoError(t, err)
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	_ = enc.Encode(res)
+	require.NoError(t, enc.Encode(res))
 }

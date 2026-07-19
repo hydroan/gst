@@ -3,6 +3,7 @@ package sse
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -132,7 +133,7 @@ func TestEncode_EmptyObject(t *testing.T) {
 
 	// Should include data: {} even for empty object
 	output := buf.String()
-	if !bytes.Contains([]byte(output), []byte("data: {}")) {
+	if !strings.Contains(output, "data: {}") {
 		t.Errorf("Expected output to contain 'data: {}', got %q", output)
 	}
 }
@@ -170,10 +171,10 @@ func TestEncode_FieldOrder(t *testing.T) {
 
 	output := buf.String()
 	// Check that fields are in recommended order: id, event, retry, data
-	idPos := bytes.Index([]byte(output), []byte("id: "))
-	eventPos := bytes.Index([]byte(output), []byte("event: "))
-	retryPos := bytes.Index([]byte(output), []byte("retry: "))
-	dataPos := bytes.Index([]byte(output), []byte("data: "))
+	idPos := strings.Index(output, "id: ")
+	eventPos := strings.Index(output, "event: ")
+	retryPos := strings.Index(output, "retry: ")
+	dataPos := strings.Index(output, "data: ")
 
 	if idPos == -1 || eventPos == -1 || retryPos == -1 || dataPos == -1 {
 		t.Fatalf("Missing required fields in output: %q", output)

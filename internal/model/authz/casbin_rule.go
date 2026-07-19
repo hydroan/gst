@@ -53,4 +53,4 @@ func (cr *CasbinRule) SetID(id ...string) {}
 //
 // gormadapter.NewAdapterByDBWithCustomTable uses casbin_rule, while GORM's
 // default pluralized table name would be casbin_rules.
-func (cr CasbinRule) GetTableName() string { return "casbin_rule" }
+func (cr *CasbinRule) GetTableName() string { return "casbin_rule" }

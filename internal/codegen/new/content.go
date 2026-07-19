@@ -49,6 +49,7 @@ linters:
     # Error handling.
     - errorlint
     - errname
+    - errchkjson
     - nilerr
     - nilnil
     - nilnesserr
@@ -58,18 +59,22 @@ linters:
     - rowserrcheck
     - sqlclosecheck
     - durationcheck
+    - fatcontext
     - gosec
 
     # Code hygiene.
     - asciicheck
+    - mirror
     - misspell
     - nolintlint
     - predeclared
+    - recvcheck
     - revive
     - unconvert
     - wastedassign
 
     # Go modernization.
+    - copyloopvar
     - intrange
     - modernize
     - perfsprint
@@ -102,6 +107,12 @@ linters:
 
     misspell:
       locale: US
+
+    recvcheck:
+      # Design is a pure DSL declaration and uses a value receiver by framework
+      # convention, while stateful hooks require pointer receivers.
+      exclusions:
+        - "*.Design"
 
     staticcheck:
       dot-import-whitelist:
