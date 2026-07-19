@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -235,7 +236,7 @@ func parseFieldConditionsQuery(m types.Model, query map[string][]string) ([]type
 	}
 	sort.Strings(keys)
 
-	columns := queryableColumns(reflect.TypeOf(m).Elem())
+	columns := cachedQueryableColumns(reflect.TypeOf(m).Elem())
 	conds := make([]types.FieldCondition, 0, len(keys))
 	for _, key := range keys {
 		var field string
@@ -313,6 +314,23 @@ var baseLiftedColumns = map[string]string{
 	"updated_by": "UpdatedBy",
 	"created_at": "CreatedAt",
 	"updated_at": "UpdatedAt",
+}
+
+// queryableColumnsCache caches the filterable column mapping per model type.
+// The mapping is derived from struct tags only, so it is computed once per
+// type instead of on every request carrying field filters; cached maps are
+// read-only.
+var queryableColumnsCache sync.Map // reflect.Type -> map[string]reflect.Type
+
+// cachedQueryableColumns returns the queryableColumns result of the type,
+// computing and caching it on first use.
+func cachedQueryableColumns(typ reflect.Type) map[string]reflect.Type {
+	if cached, ok := queryableColumnsCache.Load(typ); ok {
+		return cached.(map[string]reflect.Type) //nolint:errcheck
+	}
+	columns := queryableColumns(typ)
+	queryableColumnsCache.Store(typ, columns)
+	return columns
 }
 
 // queryableColumns collects the columns a client can filter on and their Go
@@ -559,6 +577,26 @@ func isDigitsOnly(value string) bool {
 	return true
 }
 
+// modelFieldKindsCache caches the field-name-to-kind mapping per model type.
+// The mapping is pure type information, so it is computed once per type
+// instead of on every expanding request; cached maps are read-only.
+var modelFieldKindsCache sync.Map // reflect.Type -> map[string]reflect.Kind
+
+// cachedModelFieldKinds returns the struct field kinds of the type keyed by
+// field name, computing and caching them on first use. parseExpandQuery uses
+// the kinds to repeat slice associations for recursive preloading.
+func cachedModelFieldKinds(typ reflect.Type) map[string]reflect.Kind {
+	if cached, ok := modelFieldKindsCache.Load(typ); ok {
+		return cached.(map[string]reflect.Kind) //nolint:errcheck
+	}
+	fieldKinds := make(map[string]reflect.Kind, typ.NumField())
+	for field := range typ.Fields() {
+		fieldKinds[field.Name] = field.Type.Kind()
+	}
+	modelFieldKindsCache.Store(typ, fieldKinds)
+	return fieldKinds
+}
+
 // parseExpandQuery resolves the _expand and _depth query parameters against
 // the model's expandable association paths. Expand names are matched against
 // m.Expands() ignoring case and snake case punctuation, so "childItems" and
@@ -592,11 +630,7 @@ func parseExpandQuery(c *gin.Context, m types.Model) []string {
 		}
 	}
 
-	typ := reflect.TypeOf(m).Elem()
-	fieldsMap := make(map[string]reflect.Kind)
-	for field := range typ.Fields() {
-		fieldsMap[field.Name] = field.Type.Kind()
-	}
+	fieldsMap := cachedModelFieldKinds(reflect.TypeOf(m).Elem())
 	var expands []string
 	for _, e := range matched {
 		// If the expanding field does not exist in the structure fields, skip depth expand.

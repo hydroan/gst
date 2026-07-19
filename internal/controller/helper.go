@@ -7,7 +7,7 @@ import (
 	"io"
 	"reflect"
 	"strings"
-	"time"
+	"sync"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
@@ -15,10 +15,7 @@ import (
 	"github.com/hydroan/gst/internal/requestctx"
 	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/serviceregistry"
-	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // setRouteID copies the route id parameter into the model and reports whether
@@ -195,7 +192,15 @@ func patchFieldSetFromJSONFields(typ reflect.Type, fields map[string]json.RawMes
 	return fieldSet
 }
 
+// patchJSONFieldNamesCache caches the JSON-name-to-field-name mapping per
+// model type. The mapping is derived from struct tags only, so it is computed
+// once per type instead of on every patch request; cached maps are read-only.
+var patchJSONFieldNamesCache sync.Map // reflect.Type -> map[string]string
+
 func patchJSONFieldNames(typ reflect.Type) map[string]string {
+	if cached, ok := patchJSONFieldNamesCache.Load(typ); ok {
+		return cached.(map[string]string) //nolint:errcheck
+	}
 	fields := make(map[string]string, typ.NumField())
 	for field := range typ.Fields() {
 		if field.PkgPath != "" && !field.Anonymous {
@@ -207,6 +212,7 @@ func patchJSONFieldNames(typ reflect.Type) map[string]string {
 		}
 		fields[name] = field.Name
 	}
+	patchJSONFieldNamesCache.Store(typ, fields)
 	return fields
 }
 
@@ -251,248 +257,6 @@ func requestContext(c *gin.Context) context.Context {
 		return context.Background()
 	}
 	return requestctx.WithMetadata(c.Request.Context(), requestctx.FromGin(c))
-}
-
-// startControllerSpan starts a span for controller operations
-func startControllerSpan[M types.Model](c *gin.Context, phase consts.Phase) (context.Context, trace.Span) {
-	// Get the model name(struct name).
-	modelName := reflect.TypeOf(*new(M)).Elem().Name()
-
-	// Use the canonical gst span name so Jaeger labels stay structured.
-	spanName := gstotel.FrameworkSpanName("controller", modelName, phase.MethodName())
-	parentCtx := gstotel.RequestRootContext(c.Request.Context())
-	spanCtx, span := gstotel.StartSpan(parentCtx, spanName)
-
-	// Update request context with new span context
-	c.Request = c.Request.WithContext(requestctx.WithMetadata(spanCtx, requestctx.FromGin(c)))
-
-	if gstotel.IsSpanRecording(span) {
-		// Add controller-specific attributes
-		gstotel.AddSpanTags(span, map[string]any{
-			"component":            "controller",
-			"controller.operation": phase.MethodName(),
-			"controller.model":     modelName,
-			"controller.method":    c.Request.Method,
-			"controller.path":      c.FullPath(),
-		})
-	}
-
-	return spanCtx, span
-}
-
-// traceServiceHook traces the service hook execution.
-func traceServiceHook[M types.Model](parentCtx context.Context, phase consts.Phase, fn func(context.Context) error) error {
-	// Get the model name(struct name).
-	modelName := reflect.TypeOf(*new(M)).Elem().Name()
-
-	// Use the canonical gst span name so service hooks group by model first.
-	spanName := gstotel.FrameworkSpanName("service", modelName, phase.MethodName())
-	spanCtx, span := gstotel.StartSpan(parentCtx, spanName)
-	defer span.End()
-
-	// // Update request context
-	// c.Request = c.Request.WithContext(spanCtx)
-
-	// // Get caller information
-	// file, line := getCallerInfo(2)
-
-	recording := gstotel.IsSpanRecording(span)
-	if recording {
-		// Add service-specific attributes
-		gstotel.AddSpanTags(span, map[string]any{
-			"component":         "service",
-			"service.operation": phase.MethodName(),
-			"service.model":     modelName,
-			// "code.file":         file,
-			// "code.line":         line,
-		})
-	}
-
-	// Declare error variable for use in defer
-	var err error
-
-	var startTime time.Time
-	if recording {
-		// Record start time and ensure duration + success recorded at the end
-		startTime = time.Now()
-	}
-	defer func() {
-		if recording {
-			duration := time.Since(startTime)
-			gstotel.AddSpanTags(span, map[string]any{
-				"hook.duration_ms": duration.Milliseconds(),
-				"hook.success":     err == nil,
-			})
-			if err != nil {
-				gstotel.RecordError(span, err)
-			}
-		}
-	}()
-
-	err = fn(spanCtx)
-	return err
-}
-
-// traceServiceOperation traces the service operation.
-func traceServiceOperation[M types.Model, RSP types.Response](parentCtx context.Context, phase consts.Phase, fn func(context.Context) (RSP, error)) (RSP, error) {
-	// Get the model name(struct name).
-	modelName := reflect.TypeOf(*new(M)).Elem().Name()
-
-	// Use the canonical gst span name so service operations group by model first.
-	spanName := gstotel.FrameworkSpanName("service", modelName, phase.MethodName())
-	spanCtx, span := gstotel.StartSpan(parentCtx, spanName)
-	defer span.End()
-
-	// // Update request context
-	// c.Request = c.Request.WithContext(spanCtx)
-
-	// // Get caller information
-	// file, line := getCallerInfo(2)
-
-	recording := gstotel.IsSpanRecording(span)
-	if recording {
-		// Add service-specific attributes
-		gstotel.AddSpanTags(span, map[string]any{
-			"component":         "service",
-			"service.operation": phase.MethodName(),
-			"service.model":     modelName,
-			// "code.file":         file,
-			// "code.line":         line,
-		})
-	}
-
-	// Declare error variable for use in defer
-	var err error
-	var rsp RSP
-
-	var startTime time.Time
-	if recording {
-		// Record start time and ensure duration + success recorded at the end
-		startTime = time.Now()
-	}
-	defer func() {
-		if recording {
-			duration := time.Since(startTime)
-			gstotel.AddSpanTags(span, map[string]any{
-				"hook.duration_ms": duration.Milliseconds(),
-				"hook.success":     err == nil,
-			})
-			if err != nil {
-				gstotel.RecordError(span, err)
-			}
-		}
-	}()
-
-	rsp, err = fn(spanCtx)
-	return rsp, err
-}
-
-// traceServiceExport traces the service export operation.
-func traceServiceExport[M types.Model, T []byte](parentCtx context.Context, phase consts.Phase, fn func(context.Context) (T, error)) (T, error) {
-	// Get the model name(struct name).
-	modelName := reflect.TypeOf(*new(M)).Elem().Name()
-
-	// Use the canonical gst span name so service export spans match CRUD spans.
-	spanName := gstotel.FrameworkSpanName("service", modelName, phase.MethodName())
-	spanCtx, span := gstotel.StartSpan(parentCtx, spanName)
-	defer span.End()
-
-	// // Update request context
-	// c.Request = c.Request.WithContext(spanCtx)
-
-	// // Get caller information
-	// file, line := getCallerInfo(2)
-
-	recording := gstotel.IsSpanRecording(span)
-	if recording {
-		// Add service-specific attributes
-		gstotel.AddSpanTags(span, map[string]any{
-			"component":         "service",
-			"service.operation": phase.MethodName(),
-			"service.model":     modelName,
-			// "code.file":         file,
-			// "code.line":         line,
-		})
-	}
-
-	// Declare error variable for use in defer
-	var err error
-	var data T
-
-	var startTime time.Time
-	if recording {
-		// Record start time and ensure duration + success recorded at the end
-		startTime = time.Now()
-	}
-	defer func() {
-		if recording {
-			duration := time.Since(startTime)
-			gstotel.AddSpanTags(span, map[string]any{
-				"hook.duration_ms": duration.Milliseconds(),
-				"hook.success":     err == nil,
-			})
-			if err != nil {
-				gstotel.RecordError(span, err)
-			}
-		}
-	}()
-
-	data, err = fn(spanCtx)
-	return data, err
-}
-
-// traceServiceImport traces the service import operation.
-func traceServiceImport[M types.Model](parentCtx context.Context, phase consts.Phase, fn func(context.Context) ([]M, error)) ([]M, error) {
-	// Get the model name(struct name).
-	modelName := reflect.TypeOf(*new(M)).Elem().Name()
-
-	// Use the canonical gst span name so service import spans match CRUD spans.
-	spanName := gstotel.FrameworkSpanName("service", modelName, phase.MethodName())
-	spanCtx, span := gstotel.StartSpan(parentCtx, spanName)
-	defer span.End()
-
-	// // Update request context
-	// c.Request = c.Request.WithContext(spanCtx)
-
-	// // Get caller information
-	// file, line := getCallerInfo(2)
-
-	recording := gstotel.IsSpanRecording(span)
-	if recording {
-		// Add service-specific attributes
-		gstotel.AddSpanTags(span, map[string]any{
-			"component":         "service",
-			"service.operation": phase.MethodName(),
-			"service.model":     modelName,
-			// "code.file":         file,
-			// "code.line":         line,
-		})
-	}
-
-	// Declare error variable for use in defer
-	var err error
-	var ml []M
-
-	var startTime time.Time
-	if recording {
-		// Record start time and ensure duration + success recorded at the end
-		startTime = time.Now()
-	}
-	defer func() {
-		if recording {
-			duration := time.Since(startTime)
-			gstotel.AddSpanTags(span, map[string]any{
-				"hook.duration_ms": duration.Milliseconds(),
-				"hook.success":     err == nil,
-			})
-			if err != nil {
-				gstotel.RecordError(span, err)
-			}
-		}
-	}()
-
-	ml, err = fn(spanCtx)
-	return ml, err
 }
 
 // handleServiceError handles service-layer errors.

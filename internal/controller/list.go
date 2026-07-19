@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"strconv"
 	"strings"
 
@@ -11,7 +10,6 @@ import (
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/modelregistry"
 	. "github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/types"
@@ -43,32 +41,22 @@ func List[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) 
 // custom services read query parameters from ServiceContext.Query().
 func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	handler, _ := extractConfig(cfg...)
+	meta := newFactoryMeta[M, REQ, RSP](consts.PHASE_LIST, consts.PHASE_LIST_BEFORE, consts.PHASE_LIST_AFTER)
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := startControllerSpan[M](c, consts.PHASE_LIST)
+		ctrlSpanCtx, span := meta.startControllerSpan(c)
 		defer span.End()
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_LIST)
-		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_LIST)
+		svc := meta.service()
 		ctx := types.NewServiceContext(c, nil, consts.PHASE_LIST)
 
-		if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
+		if !meta.typesEqual {
 			var err error
-			var req REQ
 			var rsp RSP
-
-			reqTyp := reflect.TypeFor[REQ]()
-			switch reqTyp.Kind() {
-			case reflect.Struct:
-				req = reflect.New(reqTyp).Elem().Interface().(REQ) //nolint:errcheck
-			case reflect.Pointer:
-				for reqTyp.Kind() == reflect.Pointer {
-					reqTyp = reqTyp.Elem()
-				}
-				req = reflect.New(reqTyp).Interface().(REQ) //nolint:errcheck
-			}
+			req := meta.newRequest()
 
 			var serviceCtx *types.ServiceContext
-			if rsp, err = traceServiceOperation[M, RSP](ctrlSpanCtx, consts.PHASE_LIST, func(spanCtx context.Context) (RSP, error) {
+			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_LIST, func(spanCtx context.Context) (RSP, error) {
 				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_LIST)
 				return svc.List(serviceCtx, req)
 			}); err != nil {
@@ -94,11 +82,8 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		index, _ := c.GetQuery(consts.QUERY_INDEX)
 		selects, _ := c.GetQuery(consts.QUERY_SELECT)
 
-		// The underlying type of interface types.Model must be pointer to structure, such as *model.User.
-		// 'typ' is the structure type, such as: model.User.
-		// 'm' is the structure value, such as: &model.User{ID: myid, Name: myname}.
-		typ := reflect.TypeOf(*new(M)).Elem() // the real underlying structure type
-		m := reflect.New(typ).Interface().(M) //nolint:errcheck
+		// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
+		m := meta.newModel()
 
 		var err error
 		if err = decodeListQuery(m, c.Request.URL.Query()); err != nil {
@@ -114,7 +99,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			gstotel.RecordError(span, err)
 			return
 		}
-		log.Infoz(typ.Name()+": list query parameter", zap.Object(typ.String(), m))
+		log.Infoz(meta.name+": list query parameter", zap.Object(meta.fullName, m))
 		present := presentQueryFields(c.Request.URL.Query())
 
 		var or bool
@@ -140,7 +125,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 
 		// 1.Perform business logic processing before list resources.
 		var serviceCtxBefore *types.ServiceContext
-		if err = traceServiceHook[M](ctrlSpanCtx, consts.PHASE_LIST_BEFORE, func(spanCtx context.Context) error {
+		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_LIST_BEFORE, func(spanCtx context.Context) error {
 			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_LIST_BEFORE)
 			return svc.ListBefore(serviceCtxBefore, &data)
 		}); err != nil {
@@ -177,7 +162,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		}
 		// 3.Perform business logic processing after list resources.
 		var serviceCtxAfter *types.ServiceContext
-		if err = traceServiceHook[M](ctrlSpanCtx, consts.PHASE_LIST_AFTER, func(spanCtx context.Context) error {
+		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_LIST_AFTER, func(spanCtx context.Context) error {
 			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_LIST_AFTER)
 			return svc.ListAfter(serviceCtxAfter, &data)
 		}); err != nil {
@@ -226,7 +211,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		// })
 		if err = am.RecordOperation(requestContext(c), m, &modellogmgmt.OperationLog{
 			OP:        consts.OP_LIST,
-			Model:     typ.Name(),
+			Model:     meta.name,
 			IP:        c.ClientIP(),
 			User:      c.GetString(consts.CTX_USERNAME),
 			TraceID:   c.GetString(consts.TRACE_ID),
@@ -237,7 +222,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			log.Warn(err)
 		}
 
-		log.Infoz(fmt.Sprintf("%s: length: %d, total: %d", typ.Name(), len(data), *total), zap.Object(typ.Name(), m))
+		log.Infoz(fmt.Sprintf("%s: length: %d, total: %d", meta.name, len(data), *total), zap.Object(meta.name, m))
 		if !noTotal {
 			JSON(c, CodeSuccess, gin.H{
 				"items": data,

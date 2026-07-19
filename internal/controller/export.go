@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"reflect"
 	"strconv"
 	"strings"
 
@@ -70,8 +69,9 @@ func Export[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 // method, and writes the result as an attachment
 func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	handler, _ := extractConfig(cfg...)
+	meta := newFactoryMeta[M, REQ, RSP](consts.PHASE_EXPORT)
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := startControllerSpan[M](c, consts.PHASE_EXPORT)
+		ctrlSpanCtx, span := meta.startControllerSpan(c)
 		defer span.End()
 
 		var page, size, limit int
@@ -88,11 +88,8 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		index, _ := c.GetQuery(consts.QUERY_INDEX)
 		selects, _ := c.GetQuery(consts.QUERY_SELECT)
 
-		// The underlying type of interface types.Model must be pointer to structure, such as *model.User.
-		// 'typ' is the structure type, such as: model.User.
-		// 'm' is the structure value, such as: &model.User{ID: myid, Name: myname}.
-		typ := reflect.TypeOf(*new(M)).Elem() // the real underlying structure type
-		m := reflect.New(typ).Interface().(M) //nolint:errcheck
+		// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
+		m := meta.newModel()
 
 		var err error
 		if err = serviceregistry.QueryDecoder().Decode(m, stripFieldConditionKeys(c.Request.URL.Query())); err != nil {
@@ -115,10 +112,10 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		expands := parseExpandQuery(c, m)
 
-		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_EXPORT)
+		svc := meta.service()
 		svcCtx := types.NewServiceContext(c, nil, consts.PHASE_EXPORT)
 		// 1.Perform business logic processing before list resources.
-		if err = traceServiceHook[M](ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) error {
+		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) error {
 			return svc.ListBefore(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), &data)
 		}); err != nil {
 			log.Error(err)
@@ -151,7 +148,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			return
 		}
 		// 3.Perform business logic processing after list resources.
-		if err = traceServiceHook[M](ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) error {
+		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) error {
 			return svc.ListAfter(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), &data)
 		}); err != nil {
 			log.Error(err)
@@ -161,7 +158,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		log.Info("export data length: ", len(data))
 		// 4.Export
-		exported, err := traceServiceExport[M](ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) ([]byte, error) {
+		exported, err := meta.traceServiceExport(ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) ([]byte, error) {
 			return svc.Export(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), data...)
 		})
 		if err != nil {

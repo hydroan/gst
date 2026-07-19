@@ -52,6 +52,16 @@ func register[M types.Model, REQ types.Request, RSP types.Response](phase consts
 	services[key] = svc
 }
 
+// KeyFor returns the registry key for the model/request/response/phase tuple.
+//
+// Building the key costs reflection and string formatting, so controller
+// factories compute it once at route-registration time and resolve the service
+// per request through Resolve instead of paying the key construction on every
+// request.
+func KeyFor[M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase) string {
+	return serviceKey[M, REQ, RSP](phase)
+}
+
 func serviceKey[M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase) string {
 	mTyp := reflect.TypeFor[M]()
 	reqTyp := reflect.TypeFor[REQ]()

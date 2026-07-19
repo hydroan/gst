@@ -8,7 +8,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	. "github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/pkg/filetype"
 	gstotel "github.com/hydroan/gst/provider/otel"
@@ -29,8 +28,9 @@ func Import[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 // models through the configured database handler, and returns a success
 func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	handler, _ := extractConfig(cfg...)
+	meta := newFactoryMeta[M, REQ, RSP](consts.PHASE_IMPORT)
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := startControllerSpan[M](c, consts.PHASE_IMPORT)
+		ctrlSpanCtx, span := meta.startControllerSpan(c)
 		defer span.End()
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_IMPORT)
@@ -71,8 +71,8 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 
 		// check filetype
 
-		ml, err := traceServiceImport(ctrlSpanCtx, consts.PHASE_IMPORT, func(spanCtx context.Context) ([]M, error) {
-			return serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_IMPORT).
+		ml, err := meta.traceServiceImport(ctrlSpanCtx, consts.PHASE_IMPORT, func(spanCtx context.Context) ([]M, error) {
+			return meta.service().
 				Import(types.NewServiceContext(c, spanCtx, consts.PHASE_IMPORT), buf)
 		})
 		if err != nil {

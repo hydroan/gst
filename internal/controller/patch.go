@@ -10,10 +10,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
-	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/requestctx"
 	. "github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/types"
@@ -39,32 +37,22 @@ func Patch[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context)
 // delegates the operation to the phase service's Patch method.
 func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	handler, _ := extractConfig(cfg...)
+	meta := newFactoryMeta[M, REQ, RSP](consts.PHASE_PATCH, consts.PHASE_PATCH_BEFORE, consts.PHASE_PATCH_AFTER)
 	return func(c *gin.Context) {
 		var id string
 
-		ctrlSpanCtx, span := startControllerSpan[M](c, consts.PHASE_PATCH)
+		ctrlSpanCtx, span := meta.startControllerSpan(c)
 		defer span.End()
 
-		meta := requestctx.FromGin(c)
+		reqMeta := requestctx.FromGin(c)
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_PATCH)
-		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_PATCH)
+		svc := meta.service()
 
-		if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
+		if !meta.typesEqual {
 			var err error
 			var reqErr error
-			var req REQ
 			var rsp RSP
-
-			reqTyp := reflect.TypeFor[REQ]()
-			switch reqTyp.Kind() {
-			case reflect.Struct:
-				req = reflect.New(reqTyp).Elem().Interface().(REQ) //nolint:errcheck
-			case reflect.Pointer:
-				for reqTyp.Kind() == reflect.Pointer {
-					reqTyp = reqTyp.Elem()
-				}
-				req = reflect.New(reqTyp).Interface().(REQ) //nolint:errcheck
-			}
+			req := meta.newRequest()
 
 			if reqErr = c.ShouldBindJSON(&req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 				log.Error(reqErr)
@@ -76,7 +64,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 				log.Warn(ErrRequestBodyEmpty)
 			}
 			var serviceCtx *types.ServiceContext
-			if rsp, err = traceServiceOperation[M, RSP](ctrlSpanCtx, consts.PHASE_PATCH, func(spanCtx context.Context) (RSP, error) {
+			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_PATCH, func(spanCtx context.Context) (RSP, error) {
 				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_PATCH)
 				return svc.Patch(serviceCtx, req)
 			}); err != nil {
@@ -92,8 +80,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			return
 		}
 
-		typ := reflect.TypeOf(*new(M)).Elem()
-		req := reflect.New(typ).Interface().(M) //nolint:errcheck
+		req := meta.newModel()
 		body, err := readJSONRequestBody(c)
 		if err != nil {
 			log.Error(err)
@@ -101,7 +88,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			gstotel.RecordError(span, err)
 			return
 		}
-		fields, err := patchFieldSetFromJSONBody(typ, body)
+		fields, err := patchFieldSetFromJSONBody(meta.typ, body)
 		if err != nil && !errors.Is(err, io.EOF) {
 			log.Error(err)
 			JSON(c, CodeFailure.WithErr(err))
@@ -110,7 +97,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		}
 		// The resource id comes from the configured route parameter only.
 		if len(cfg) > 0 {
-			id = meta.Param(util.Deref(cfg[0]).ParamName)
+			id = reqMeta.Param(util.Deref(cfg[0]).ParamName)
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			log.Error(err)
@@ -125,10 +112,8 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			return
 		}
 		data := make([]M, 0)
-		// The underlying type of interface types.Model must be pointer to structure, such as *model.User.
-		// 'typ' is the structure type, such as: model.User.
-		// 'm' is the structure value such as: &model.User{ID: myid, Name: myname}.
-		m := reflect.New(typ).Interface().(M) //nolint:errcheck
+		// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
+		m := meta.newModel()
 		if !setRouteID(m, id) {
 			// An id the model rejects cannot match any row; answer 404 without
 			// relying on the empty-query safety net below.
@@ -156,12 +141,12 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 
 		newVal := reflect.ValueOf(req).Elem()
 		oldVal := reflect.ValueOf(data[0]).Elem()
-		patchValue(log, typ, oldVal, newVal, fields)
+		patchValue(log, meta.typ, oldVal, newVal, fields)
 		cur := oldVal.Addr().Interface().(M) //nolint:errcheck
 
 		// 1.Perform business logic processing before partial update resource.
 		var serviceCtxBefore *types.ServiceContext
-		if err := traceServiceHook[M](ctrlSpanCtx, consts.PHASE_PATCH_BEFORE, func(spanCtx context.Context) error {
+		if err := meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_PATCH_BEFORE, func(spanCtx context.Context) error {
 			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_PATCH_BEFORE)
 			return svc.PatchBefore(serviceCtxBefore, cur)
 		}); err != nil {
@@ -179,7 +164,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		}
 		// 3.Perform business logic processing after partial update resource.
 		var serviceCtxAfter *types.ServiceContext
-		if err := traceServiceHook[M](ctrlSpanCtx, consts.PHASE_PATCH_AFTER, func(spanCtx context.Context) error {
+		if err := meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_PATCH_AFTER, func(spanCtx context.Context) error {
 			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_PATCH_AFTER)
 			return svc.PatchAfter(serviceCtxAfter, cur)
 		}); err != nil {
@@ -211,7 +196,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		// })
 		if err := am.RecordOperation(requestContext(c), req, &modellogmgmt.OperationLog{
 			OP:        consts.OP_PATCH,
-			Model:     typ.Name(),
+			Model:     meta.name,
 			RecordID:  req.GetID(),
 			Record:    util.BytesToString(record),
 			Request:   util.BytesToString(reqData),

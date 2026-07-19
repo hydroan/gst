@@ -5,15 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"reflect"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
-	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/requestctx"
 	. "github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/types"
@@ -39,29 +36,19 @@ func Delete[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 // delegates the operation to the phase service's Delete method.
 func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	handler, _ := extractConfig(cfg...)
+	meta := newFactoryMeta[M, REQ, RSP](consts.PHASE_DELETE, consts.PHASE_DELETE_BEFORE, consts.PHASE_DELETE_AFTER)
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := startControllerSpan[M](c, consts.PHASE_DELETE)
+		ctrlSpanCtx, span := meta.startControllerSpan(c)
 		defer span.End()
 
-		meta := requestctx.FromGin(c)
+		reqMeta := requestctx.FromGin(c)
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_DELETE)
-		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_DELETE)
+		svc := meta.service()
 
-		if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
+		if !meta.typesEqual {
 			var err error
-			var req REQ
 			var rsp RSP
-
-			reqTyp := reflect.TypeFor[REQ]()
-			switch reqTyp.Kind() {
-			case reflect.Struct:
-				req = reflect.New(reqTyp).Elem().Interface().(REQ) //nolint:errcheck
-			case reflect.Pointer:
-				for reqTyp.Kind() == reflect.Pointer {
-					reqTyp = reqTyp.Elem()
-				}
-				req = reflect.New(reqTyp).Interface().(REQ) //nolint:errcheck
-			}
+			req := meta.newRequest()
 
 			if reqErr := c.ShouldBindJSON(&req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 				log.Error(reqErr)
@@ -70,7 +57,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				return
 			}
 			var serviceCtx *types.ServiceContext
-			if rsp, err = traceServiceOperation[M, RSP](ctrlSpanCtx, consts.PHASE_DELETE, func(spanCtx context.Context) (RSP, error) {
+			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_DELETE, func(spanCtx context.Context) (RSP, error) {
 				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE)
 				return svc.Delete(serviceCtx, req)
 			}); err != nil {
@@ -86,14 +73,10 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			return
 		}
 
-		// The underlying type of interface types.Model must be pointer to structure, such as *model.User.
-		// 'typ' is the structure type, such as: model.User.
-		typ := reflect.TypeOf(*new(M)).Elem()
-
 		// The resource id comes from the configured route parameter only.
 		var id string
 		if len(cfg) > 0 {
-			id = meta.Param(util.Deref(cfg[0]).ParamName)
+			id = reqMeta.Param(util.Deref(cfg[0]).ParamName)
 		}
 		if len(id) == 0 {
 			log.Error(CodeNotFoundRouteParam)
@@ -101,8 +84,8 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			gstotel.RecordError(span, errors.New(CodeNotFoundRouteParam.Msg()))
 			return
 		}
-		// 'm' is the structure value such as: &model.User{ID: myid, Name: myname}.
-		m := reflect.New(typ).Interface().(M) //nolint:errcheck
+		// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
+		m := meta.newModel()
 		if !setRouteID(m, id) {
 			// An id the model rejects cannot match any row; answer 404 instead
 			// of passing an unset id to the database layer.
@@ -110,11 +93,11 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			JSON(c, CodeNotFound)
 			return
 		}
-		log.Info(fmt.Sprintf("%s delete %s", typ.Name(), id))
+		log.Info(fmt.Sprintf("%s delete %s", meta.name, id))
 
 		// 1.Perform business logic processing before delete resource.
 		var serviceCtxBefore *types.ServiceContext
-		if err := traceServiceHook[M](ctrlSpanCtx, consts.PHASE_DELETE_BEFORE, func(spanCtx context.Context) error {
+		if err := meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_DELETE_BEFORE, func(spanCtx context.Context) error {
 			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE_BEFORE)
 			return svc.DeleteBefore(serviceCtxBefore, m)
 		}); err != nil {
@@ -125,7 +108,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 
 		// find out the record and keep a copy for the operation log.
-		copied := reflect.New(typ).Interface().(M) //nolint:errcheck
+		copied := meta.newModel()
 		copied.SetID(m.GetID())
 		if err := handler(requestContext(c)).WithExpand(copied.Expands()).Get(copied, m.GetID()); err != nil {
 			log.Error(err)
@@ -141,7 +124,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		// 3.Perform business logic processing after delete resource.
 		var serviceCtxAfter *types.ServiceContext
-		if err := traceServiceHook[M](ctrlSpanCtx, consts.PHASE_DELETE_AFTER, func(spanCtx context.Context) error {
+		if err := meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_DELETE_AFTER, func(spanCtx context.Context) error {
 			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE_AFTER)
 			return svc.DeleteAfter(serviceCtxAfter, m)
 		}); err != nil {
@@ -153,9 +136,9 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 
 		// 4.record operation log to database.
 		record, _ := json.Marshal(copied)
-		if err := am.RecordOperation(requestContext(c), reflect.New(typ).Interface().(M), &modellogmgmt.OperationLog{ //nolint:errcheck
+		if err := am.RecordOperation(requestContext(c), meta.newModel(), &modellogmgmt.OperationLog{
 			OP:        consts.OP_DELETE,
-			Model:     typ.Name(),
+			Model:     meta.name,
 			RecordID:  m.GetID(),
 			Record:    util.BytesToString(record),
 			IP:        c.ClientIP(),

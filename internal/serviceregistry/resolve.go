@@ -3,17 +3,18 @@ package serviceregistry
 import (
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
 )
 
-// Resolve returns the registered service for the model/request/response/phase tuple.
+// Resolve returns the registered service for a key produced by KeyFor with
+// the same type parameters.
 //
-// When no service is registered, Resolve returns a no-op Base service so default
-// CRUD hooks can continue without forcing application code to register services.
-func Resolve[M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase) types.Service[M, REQ, RSP] {
-	key := serviceKey[M, REQ, RSP](phase)
-
+// The lookup deliberately stays per request: services registered after route
+// registration remain visible, only the key construction is hoisted to
+// route-registration time. When no service is registered under the key, a
+// no-op Base service is returned so default CRUD hooks can continue without
+// forcing application code to register services.
+func Resolve[M types.Model, REQ types.Request, RSP types.Response](key string) types.Service[M, REQ, RSP] {
 	mu.RLock()
 	svc, ok := services[key]
 	mu.RUnlock()

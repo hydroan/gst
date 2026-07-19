@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -10,10 +9,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
-	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/requestctx"
 	. "github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/types"
@@ -41,32 +38,22 @@ func Get[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
 // ServiceContext.Param().
 func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	handler, _ := extractConfig(cfg...)
+	meta := newFactoryMeta[M, REQ, RSP](consts.PHASE_GET, consts.PHASE_GET_BEFORE, consts.PHASE_GET_AFTER)
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := startControllerSpan[M](c, consts.PHASE_GET)
+		ctrlSpanCtx, span := meta.startControllerSpan(c)
 		defer span.End()
 
-		meta := requestctx.FromGin(c)
+		reqMeta := requestctx.FromGin(c)
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_GET)
-		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_GET)
+		svc := meta.service()
 
-		if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
+		if !meta.typesEqual {
 			var err error
-			var req REQ
 			var rsp RSP
-
-			reqTyp := reflect.TypeFor[REQ]()
-			switch reqTyp.Kind() {
-			case reflect.Struct:
-				req = reflect.New(reqTyp).Elem().Interface().(REQ) //nolint:errcheck
-			case reflect.Pointer:
-				for reqTyp.Kind() == reflect.Pointer {
-					reqTyp = reqTyp.Elem()
-				}
-				req = reflect.New(reqTyp).Interface().(REQ) //nolint:errcheck
-			}
+			req := meta.newRequest()
 
 			var serviceCtx *types.ServiceContext
-			if rsp, err = traceServiceOperation[M, RSP](ctrlSpanCtx, consts.PHASE_GET, func(spanCtx context.Context) (RSP, error) {
+			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_GET, func(spanCtx context.Context) (RSP, error) {
 				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_GET)
 				return svc.Get(serviceCtx, req)
 			}); err != nil {
@@ -84,7 +71,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 
 		var param string
 		if len(cfg) > 0 {
-			param = meta.Param(util.Deref(cfg[0]).ParamName)
+			param = reqMeta.Param(util.Deref(cfg[0]).ParamName)
 		}
 		if len(param) == 0 {
 			log.Error(CodeNotFoundRouteParam)
@@ -95,11 +82,8 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		index, _ := c.GetQuery(consts.QUERY_INDEX)
 		selects, _ := c.GetQuery(consts.QUERY_SELECT)
 
-		// The underlying type of interface types.Model must be pointer to structure, such as *model.User.
-		// 'typ' is the structure type, such as: model.User.
-		// 'm' is the structure value, such as: &model.User{ID: myid, Name: myname}.
-		typ := reflect.TypeOf(*new(M)).Elem()
-		m := reflect.New(typ).Interface().(M) //nolint:errcheck
+		// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
+		m := meta.newModel()
 		// `GetBefore` hook need id.
 		if !setRouteID(m, param) {
 			// An id the model rejects cannot match any row; answer 404 before
@@ -119,11 +103,11 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			}
 		}
 		expands := parseExpandQuery(c, m)
-		log.Infoz("", zap.Object(typ.Name(), m))
+		log.Infoz("", zap.Object(meta.name, m))
 
 		// 1.Perform business logic processing before get resource.
 		var serviceCtxBefore *types.ServiceContext
-		if err = traceServiceHook[M](ctrlSpanCtx, consts.PHASE_GET_BEFORE, func(spanCtx context.Context) error {
+		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_GET_BEFORE, func(spanCtx context.Context) error {
 			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_GET_BEFORE)
 			return svc.GetBefore(serviceCtxBefore, m)
 		}); err != nil {
@@ -146,7 +130,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		}
 		// 3.Perform business logic processing after get resource.
 		var serviceCtxAfter *types.ServiceContext
-		if err = traceServiceHook[M](ctrlSpanCtx, consts.PHASE_GET_AFTER, func(spanCtx context.Context) error {
+		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_GET_AFTER, func(spanCtx context.Context) error {
 			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_GET_AFTER)
 			return svc.GetAfter(serviceCtxAfter, m)
 		}); err != nil {
@@ -178,7 +162,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		// })
 		if err = am.RecordOperation(requestContext(c), m, &modellogmgmt.OperationLog{
 			OP:        consts.OP_GET,
-			Model:     typ.Name(),
+			Model:     meta.name,
 			IP:        c.ClientIP(),
 			User:      c.GetString(consts.CTX_USERNAME),
 			TraceID:   c.GetString(consts.TRACE_ID),

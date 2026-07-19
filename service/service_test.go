@@ -71,7 +71,8 @@ func TestService(t *testing.T) {
 
 	t.Run("logger", func(t *testing.T) {
 		for _, phase := range []consts.Phase{consts.PHASE_CREATE, consts.PHASE_DELETE} {
-			s, ok := serviceregistry.Resolve[*testUser, *testUser, *testUser](phase).(*svc)
+			key := serviceregistry.KeyFor[*testUser, *testUser, *testUser](phase)
+			s, ok := serviceregistry.Resolve[*testUser, *testUser, *testUser](key).(*svc)
 			require.True(t, ok)
 			require.NotNil(t, s)
 			require.NotNil(t, s.Logger) // service logger was set

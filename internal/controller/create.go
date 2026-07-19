@@ -5,15 +5,12 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"reflect"
 	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
-	"github.com/hydroan/gst/internal/modelregistry"
 	. "github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/types"
@@ -39,30 +36,20 @@ func Create[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 // requests are left unbound so the service can read the request directly.
 func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	handler, _ := extractConfig(cfg...)
+	meta := newFactoryMeta[M, REQ, RSP](consts.PHASE_CREATE, consts.PHASE_CREATE_BEFORE, consts.PHASE_CREATE_AFTER)
 	return func(c *gin.Context) {
 		var err error
 		var reqErr error
 
-		ctrlSpanCtx, span := startControllerSpan[M](c, consts.PHASE_CREATE)
+		ctrlSpanCtx, span := meta.startControllerSpan(c)
 		defer span.End()
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_CREATE)
-		svc := serviceregistry.Resolve[M, REQ, RSP](consts.PHASE_CREATE)
+		svc := meta.service()
 
-		if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
-			var req REQ
+		if !meta.typesEqual {
 			var rsp RSP
-
-			reqTyp := reflect.TypeFor[REQ]()
-			switch reqTyp.Kind() {
-			case reflect.Struct:
-				req = reflect.New(reqTyp).Elem().Interface().(REQ) //nolint:errcheck
-			case reflect.Pointer:
-				for reqTyp.Kind() == reflect.Pointer {
-					reqTyp = reqTyp.Elem()
-				}
-				req = reflect.New(reqTyp).Interface().(REQ) //nolint:errcheck
-			}
+			req := meta.newRequest()
 
 			// If the request content type if "multipart/form-data", then the request body is a file.
 			// We should not try to parse it as JSON.
@@ -78,7 +65,7 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				log.Warn(ErrRequestBodyEmpty)
 			}
 			var serviceCtx *types.ServiceContext
-			if rsp, err = traceServiceOperation[M, RSP](ctrlSpanCtx, consts.PHASE_CREATE, func(spanCtx context.Context) (RSP, error) {
+			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_CREATE, func(spanCtx context.Context) (RSP, error) {
 				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_CREATE)
 				return svc.Create(serviceCtx, req)
 			}); err != nil {
@@ -94,8 +81,7 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			return
 		}
 
-		typ := reflect.TypeOf(*new(M)).Elem()
-		req := reflect.New(typ).Interface().(M) //nolint:errcheck
+		req := meta.newModel()
 		if reqErr = c.ShouldBindJSON(&req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 			log.Error(reqErr)
 			JSON(c, CodeInvalidParam.WithErr(reqErr))
@@ -107,12 +93,12 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		} else {
 			req.SetCreatedBy(c.GetString(consts.CTX_USERNAME))
 			req.SetUpdatedBy(c.GetString(consts.CTX_USERNAME))
-			log.Infoz("create", zap.Object(reflect.TypeOf(*new(M)).Elem().String(), req))
+			log.Infoz("create", zap.Object(meta.fullName, req))
 		}
 
 		// 1.Perform business logic processing before create resource.
 		var serviceCtxBefore *types.ServiceContext
-		if err = traceServiceHook[M](ctrlSpanCtx, consts.PHASE_CREATE_BEFORE, func(spanCtx context.Context) error {
+		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_CREATE_BEFORE, func(spanCtx context.Context) error {
 			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_CREATE_BEFORE)
 			return svc.CreateBefore(serviceCtxBefore, req)
 		}); err != nil {
@@ -136,7 +122,7 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		// 3.Perform business logic processing after create resource
 		var serviceCtxAfter *types.ServiceContext
-		if err = traceServiceHook[M](ctrlSpanCtx, consts.PHASE_CREATE_AFTER, func(spanCtx context.Context) error {
+		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_CREATE_AFTER, func(spanCtx context.Context) error {
 			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_CREATE_AFTER)
 			return svc.CreateAfter(serviceCtxAfter, req)
 		}); err != nil {
@@ -167,7 +153,7 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// })
 		if err = am.RecordOperation(requestContext(c), req, &modellogmgmt.OperationLog{
 			OP:        consts.OP_CREATE,
-			Model:     typ.Name(),
+			Model:     meta.name,
 			RecordID:  req.GetID(),
 			Record:    util.BytesToString(record),
 			Request:   util.BytesToString(reqData),
