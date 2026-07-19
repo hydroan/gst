@@ -65,20 +65,20 @@ func (o op) String() string {
 }
 
 type event struct {
-	CacheID string
+	CacheID string `json:"cache_id"`
 
-	Key string // redis key
-	TS  int64  // timestamp
-	Op  op
-	Val json.RawMessage
-	Typ string
+	Key string          `json:"key"` // redis key
+	TS  int64           `json:"ts"`  // timestamp
+	Op  op              `json:"op"`
+	Val json.RawMessage `json:"val"`
+	Typ string          `json:"typ"`
 	raw any
-	TTL time.Duration
+	TTL time.Duration `json:"ttl"`
 
-	Hostname string // 哪台服务器产生的事件
+	Hostname string `json:"hostname"` // which server produced the event
 
-	SyncToRedis bool
-	RedisTTL    time.Duration
+	SyncToRedis bool          `json:"sync_to_redis"`
+	RedisTTL    time.Duration `json:"redis_ttl"`
 }
 
 func (e *event) MarshalLogObject(enc zapcore.ObjectEncoder) error {

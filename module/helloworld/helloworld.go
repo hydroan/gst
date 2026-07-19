@@ -15,14 +15,14 @@ type Helloworld struct {
 
 // Req is the custom request type.
 type Req struct {
-	Field1 string
-	Field2 int
+	Field1 string `json:"field1"`
+	Field2 int    `json:"field2"`
 }
 
 // Rsp is the custom response type.
 type Rsp struct {
-	Field3 string
-	Field4 int
+	Field3 string `json:"field3"`
+	Field4 int    `json:"field4"`
 }
 
 // Service implements the `types.Service` interface.

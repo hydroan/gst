@@ -39,8 +39,8 @@ func (n *Node[K, V]) clone() *Node[K, V] {
 }
 
 type KeysValue[K comparable, V any] struct {
-	Keys  []K
-	Value V
+	Keys  []K `json:"keys"`
+	Value V   `json:"value"`
 }
 
 type Trie[K comparable, V any] struct {

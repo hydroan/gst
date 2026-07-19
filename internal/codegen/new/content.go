@@ -55,6 +55,7 @@ linters:
     - nilnesserr
 
     # Backend resource safety.
+    - bidichk
     - bodyclose
     - rowserrcheck
     - sqlclosecheck
@@ -64,10 +65,16 @@ linters:
 
     # Code hygiene.
     - asciicheck
+    - dupword
+    - gocheckcompilerdirectives
+    - iface
+    - makezero
     - mirror
     - misspell
+    - musttag
     - nolintlint
     - predeclared
+    - reassign
     - recvcheck
     - revive
     - unconvert
@@ -88,6 +95,7 @@ linters:
     # Test quality.
     - testifylint
     - thelper
+    - tparallel
     - usetesting
 
     # Project constraints.
@@ -171,6 +179,11 @@ linters:
         linters:
           - gosec
           - unparam
+      # The gofix //go:fix directive is valid but not yet in
+      # gocheckcompilerdirectives' known directive list.
+      - linters:
+          - gocheckcompilerdirectives
+        text: "//go:fix"
       # Revive var-naming: ignore ALL_CAPS (redundant with staticcheck) and underscores in names.
       - linters:
           - revive
