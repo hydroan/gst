@@ -123,14 +123,14 @@ func TestResourceAttributesIncludesServiceAndEnvironmentInfo(t *testing.T) {
 	config.App.AppInfo.Version = "v1.2.3"
 	config.App.Mode = config.Prod
 
-	attrs := resourceAttributes(config.OTEL{ServiceName: "dice"})
+	attrs := resourceAttributes(config.OTEL{ServiceName: "sample-service"})
 
 	values := make(map[attribute.Key]attribute.Value, len(attrs))
 	for _, kv := range attrs {
 		values[kv.Key] = kv.Value
 	}
 
-	require.Equal(t, "dice", values[semconv.ServiceNameKey].AsString())
+	require.Equal(t, "sample-service", values[semconv.ServiceNameKey].AsString())
 	require.Equal(t, "v1.2.3", values[semconv.ServiceVersionKey].AsString())
 	require.Equal(t, "prod", values[semconv.DeploymentEnvironmentKey].AsString())
 	require.NotEmpty(t, values[semconv.ServiceInstanceIDKey].AsString())

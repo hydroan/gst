@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/config"
 	gstotel "github.com/hydroan/gst/provider/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -68,34 +67,35 @@ func middlewareWrapper(name string, middleware gin.HandlerFunc) gin.HandlerFunc 
 		middleware(c)
 
 		if recording {
-			// Record execution duration
+			// Performance: batch all completion attributes into one SetAttributes
+			// call; every extra call locks the span, grows the attribute slice,
+			// and re-runs deduplication. This runs once per middleware per traced
+			// request, so when adding attributes, extend this batch instead of
+			// adding SetAttributes calls.
 			duration := time.Since(start)
-			span.SetAttributes(
+			status := c.Writer.Status()
+			attrs := make([]attribute.KeyValue, 0, 6)
+			attrs = append(
+				attrs,
 				attribute.Int64("middleware.duration_ms", duration.Milliseconds()),
 				attribute.Int64("middleware.duration_ns", duration.Nanoseconds()),
+				attribute.Int("http.status_code", status),
 			)
 
 			// Check if middleware caused any errors (based on response status)
-			if c.Writer.Status() >= 400 {
-				span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", c.Writer.Status()))
-				span.SetAttributes(
-					attribute.Int("http.status_code", c.Writer.Status()),
-					attribute.Bool("middleware.error", true),
-				)
+			if status >= 400 {
+				span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", status))
+				attrs = append(attrs, attribute.Bool("middleware.error", true))
 			} else {
 				span.SetStatus(codes.Ok, "")
-				span.SetAttributes(
-					attribute.Int("http.status_code", c.Writer.Status()),
-					attribute.Bool("middleware.error", false),
-				)
+				attrs = append(attrs, attribute.Bool("middleware.error", false))
 			}
 
-			// Add service name as attribute
-			if config.App.OTEL.ServiceName != "" {
-				span.SetAttributes(
-					attribute.String("service.name", config.App.OTEL.ServiceName),
-				)
+			// Add the service name attribute cached at otel Init.
+			if serviceName := gstotel.ServiceNameAttr(); serviceName.Valid() {
+				attrs = append(attrs, serviceName)
 			}
+			span.SetAttributes(attrs...)
 		}
 	}
 }

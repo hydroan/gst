@@ -30,22 +30,25 @@ func Logger(filename ...string) gin.HandlerFunc {
 		// Add tracing information to logs.
 		span := GetSpanFromContext(c)
 		traceID := c.GetString(consts.TRACE_ID)
-		traceFields := []zapcore.Field{}
+		var spanID string
 		if span != nil && span.IsRecording() {
 			spanContext := span.SpanContext()
 			if spanContext.HasTraceID() {
 				if traceID == "" {
 					traceID = spanContext.TraceID().String()
 				}
-				traceFields = append(
-					traceFields,
-					zap.String("span_id", spanContext.SpanID().String()),
-				)
+				spanID = spanContext.SpanID().String()
 			}
 		}
 
-		//nolint:prealloc
-		fields := []zapcore.Field{
+		// accessLogFieldCap must stay >= the number of fields appended below so
+		// the slice is allocated exactly once per request; this logger runs on
+		// every request, and growing the slice costs an extra allocation and
+		// copy each time. Re-check the capacity when adding or removing fields.
+		const accessLogFieldCap = 16
+		fields := make([]zapcore.Field, 0, accessLogFieldCap)
+		fields = append(
+			fields,
 			zap.Int("status", c.Writer.Status()),
 			zap.String("method", c.Request.Method),
 			zap.String(consts.CTX_USERNAME, c.GetString(consts.CTX_USERNAME)),
@@ -56,10 +59,10 @@ func Logger(filename ...string) gin.HandlerFunc {
 			zap.String("ip", c.ClientIP()),
 			zap.String("user_agent", c.Request.UserAgent()),
 			zap.String("latency", util.FormatDurationSmart(time.Since(start))),
+		)
+		if spanID != "" {
+			fields = append(fields, zap.String("span_id", spanID))
 		}
-
-		// Append tracing fields to log fields
-		fields = append(fields, traceFields...)
 
 		if len(c.Errors) > 0 {
 			// Append error field if this is an erroneous request.

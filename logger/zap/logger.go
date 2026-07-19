@@ -99,16 +99,21 @@ func (l *Logger) With(fields ...string) types.Logger {
 	return &Logger{zlog: l.zlog.With(zapFields...)}
 }
 
+// withMetadata binds request metadata fields to a derived logger. This runs
+// for every request-scoped logger, so all fields go through one zap With call:
+// each With call clones the logger core, and chaining With/WithObject here
+// used to cost three clones per call. When adding metadata fields, extend this
+// single call instead of chaining further With/WithObject calls.
 func (l *Logger) withMetadata(meta requestctx.Metadata, phase consts.Phase, traceID string) types.Logger {
-	return l.With(
-		consts.PHASE, string(phase),
-		consts.CTX_ROUTE, meta.Route(),
-		consts.CTX_USERNAME, meta.Username(),
-		consts.CTX_USER_ID, meta.UserID(),
-		consts.TRACE_ID, traceID,
-	).
-		WithObject(consts.PARAMS, paramsObject(meta.Params())).
-		WithObject(consts.QUERY, queryObject(meta.Query()))
+	return &Logger{zlog: l.zlog.With(
+		zap.String(consts.PHASE, string(phase)),
+		zap.String(consts.CTX_ROUTE, meta.Route()),
+		zap.String(consts.CTX_USERNAME, meta.Username()),
+		zap.String(consts.CTX_USER_ID, meta.UserID()),
+		zap.String(consts.TRACE_ID, traceID),
+		zap.Object(consts.PARAMS, paramsObject(meta.Params())),
+		zap.Object(consts.QUERY, queryObject(meta.Query())),
+	)}
 }
 
 // WithContext creates a new logger with request metadata fields from ctx.
