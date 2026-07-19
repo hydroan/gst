@@ -24,6 +24,17 @@
 
 
 
+### internal 包引用方向
+
+公开包 `model`、`service`、`types` 是面向业务项目的 alias 转发层，分别转发 `internal/modelregistry`、`internal/serviceregistry`、`internal/sse`。internal 包（含测试）需要这些能力时必须直接引用对应的 internal 包，禁止反向 import 公开包，避免 internal → 公开 → internal 的依赖绕行和潜在 import 环。如果所需符号只存在于公开包（如曾经的 `service.Error`），应把实现下沉到 internal 包、公开包改为 alias 转发，而不是让 internal 反向引用。
+
+例外，以下内容必须保持公开包 import：
+
+- module 源码 `internal/model/<module>`、`internal/service/<module>`：会被 `gg copy` 复制进业务项目，copy 只改写 module 子树自身的 internal import 前缀，公开包 import 原样保留；若引用其他 internal 包，复制后无法编译。module 的 `_test.go` 不参与 copy，可以引用 internal 包。
+- `internal/codegen`、`internal/ggmodule` 中面向生成代码的 import 路径常量、模板和 testdata：属于生成到业务项目里的用户代码，必须写公开路径。
+
+
+
 ### 结束收尾
 
 1. 修改完 `dsl`、`cmd/gg`、`internal/codegen`、 `internal/ggmodule` 包的代码后，需要及时安装最新版本的 `gg` 工具
