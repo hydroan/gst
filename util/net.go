@@ -13,7 +13,7 @@ import (
 
 func GetConnection(conn net.Conn) Connection {
 	if conn == nil {
-		return *new(Connection)
+		return Connection{}
 	}
 	var (
 		rip, lip     string

@@ -134,16 +134,17 @@ func types(modelPkgName, modelName, reqName, rspName string, phase consts.Phase,
 	// model package; otherwise, if reqName is equal to modelName or reqName
 	// starts with *, then the reqExpr use StarExpr, or use SelectorExpr.
 	var reqExpr ast.Expr
-	if isEmptyPayload(reqName) {
+	switch {
+	case isEmptyPayload(reqName):
 		reqExpr = emptyReqExpr(emptyReqPkgName(modelPkgName))
-	} else if strings.HasPrefix(reqName, "*") || modelName == reqName {
+	case strings.HasPrefix(reqName, "*") || modelName == reqName:
 		reqExpr = &ast.StarExpr{
 			X: &ast.SelectorExpr{
 				X:   ast.NewIdent(modelPkgName),
 				Sel: ast.NewIdent(strings.TrimPrefix(reqName, "*")),
 			},
 		}
-	} else {
+	default:
 		reqExpr = &ast.SelectorExpr{
 			X:   ast.NewIdent(modelPkgName),
 			Sel: ast.NewIdent(reqName),
@@ -385,16 +386,17 @@ func serviceMethod4(recvName, modelName, modelPkgName, reqName, rspName string, 
 	// model package; otherwise, if reqName is equal to modelName or reqName
 	// starts with *, then the reqExpr use StarExpr, or use SelectorExpr.
 	var reqExpr ast.Expr
-	if isEmptyPayload(reqName) {
+	switch {
+	case isEmptyPayload(reqName):
 		reqExpr = emptyReqExpr(emptyReqPkgName(modelPkgName))
-	} else if strings.HasPrefix(reqName, "*") || modelName == reqName {
+	case strings.HasPrefix(reqName, "*") || modelName == reqName:
 		reqExpr = &ast.StarExpr{
 			X: &ast.SelectorExpr{
 				X:   ast.NewIdent(modelPkgName),
 				Sel: ast.NewIdent(strings.TrimPrefix(reqName, "*")),
 			},
 		}
-	} else {
+	default:
 		reqExpr = &ast.SelectorExpr{
 			X:   ast.NewIdent(modelPkgName),
 			Sel: ast.NewIdent(reqName),

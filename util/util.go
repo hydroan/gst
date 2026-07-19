@@ -417,7 +417,7 @@ func FormatDurationSmart(d time.Duration, precisions ...int) string {
 func SafeGo(fn func(), names ...any) {
 	go func() {
 		var name string
-		if len(names) <= 0 {
+		if len(names) == 0 {
 			name = "unnamed goroutine"
 		}
 		var nameBuilder strings.Builder

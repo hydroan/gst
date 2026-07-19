@@ -172,10 +172,10 @@ func initVar() {
 }
 
 func callerPrettyfier(frame *runtime.Frame) (function, file string) {
-	//return frame.Function, filepath.Join(
+	// return frame.Function, filepath.Join(
 	//    path.Base(filepath.Dir(frame.File)),
 	//    path.Base(frame.File),
-	//) + ":" + strconv.Itoa(frame.Line)
+	// ) + ":" + strconv.Itoa(frame.Line)
 	return "", filepath.Join(
 		path.Base(filepath.Dir(frame.File)),
 		path.Base(frame.File),

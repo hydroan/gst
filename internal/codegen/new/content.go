@@ -81,6 +81,9 @@ linters:
     - perfsprint
     - usestdlibvars
 
+    # Broad complementary suite (diagnostic, style, performance).
+    - gocritic
+
     # Test quality.
     - testifylint
     - thelper

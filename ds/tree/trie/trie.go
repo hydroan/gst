@@ -725,7 +725,7 @@ func (t *Trie[K, V]) String() string {
 	}
 	nodeFormatter := t.nodeFormatter
 	if nodeFormatter == nil {
-		nodeFormatter = func(v V, c int, hasValue bool) string { return nodeString(v, c, hasValue) }
+		nodeFormatter = nodeString[V]
 	}
 	keyFormatter := t.keyFormatter
 	if keyFormatter == nil {

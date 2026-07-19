@@ -163,7 +163,10 @@ func buildRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	defer config.Clean()
+	// Capture the package-level cleanup before the local config variable below
+	// shadows the package name; the error paths need it for explicit cleanup.
+	cleanup := config.Clean
+	defer cleanup()
 	os.Stdout = oldStdout
 
 	// Load configuration
@@ -180,7 +183,9 @@ func buildRun(cmd *cobra.Command, args []string) error {
 	if config.PackSrc != "" {
 		if packErr := packResources(config); packErr != nil {
 			if config.ExitWhenError {
-				os.Exit(1)
+				// os.Exit skips deferred calls, so run the cleanup explicitly.
+				cleanup()
+				os.Exit(1) //nolint:gocritic // cleanup already ran right above.
 			}
 			return fmt.Errorf("failed to pack resources: %w", packErr)
 		}

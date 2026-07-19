@@ -123,16 +123,17 @@ func StmtRouterRegister(modelPkgName, modelName, reqName, rspName string, router
 	// is equal to modelName or reqName starts with *, then the reqExpr use
 	// StarExpr, or use SelectorExpr.
 	var reqExpr ast.Expr
-	if isEmptyPayload(reqName) {
+	switch {
+	case isEmptyPayload(reqName):
 		reqExpr = emptyReqExpr(gstModelPkgAlias)
-	} else if strings.HasPrefix(reqName, "*") || modelName == reqName {
+	case strings.HasPrefix(reqName, "*") || modelName == reqName:
 		reqExpr = &ast.StarExpr{
 			X: &ast.SelectorExpr{
 				X:   ast.NewIdent(modelPkgName),
 				Sel: ast.NewIdent(strings.TrimPrefix(reqName, "*")),
 			},
 		}
-	} else {
+	default:
 		reqExpr = &ast.SelectorExpr{
 			X:   ast.NewIdent(modelPkgName),
 			Sel: ast.NewIdent(reqName),

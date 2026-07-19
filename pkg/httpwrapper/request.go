@@ -57,7 +57,7 @@ func (r *WrappedRequest) UnmarshalJSON(data []byte) error {
 }
 
 //// MarshalBinary
-//func (r *WrappedRequest) MarshalBinary() ([]byte, error) {
+// func (r *WrappedRequest) MarshalBinary() ([]byte, error) {
 //    if r.Request.Body == nil {
 //        return binary.Marshal(&wrappedRequest{
 //            Body:    nil,
@@ -74,10 +74,10 @@ func (r *WrappedRequest) UnmarshalJSON(data []byte) error {
 //        Body:    body,
 //        Request: r.Request,
 //    })
-//}
+// }
 //
 //// UnmarshalBinary
-//func (r *WrappedRequest) UnmarshalBinary(data []byte) error {
+// func (r *WrappedRequest) UnmarshalBinary(data []byte) error {
 //    wreq := new(wrappedRequest)
 //    if err := binary.Unmarshal(data, wreq); err != nil {
 //        return err
@@ -85,4 +85,4 @@ func (r *WrappedRequest) UnmarshalJSON(data []byte) error {
 //    r.Request = wreq.Request
 //    r.Request.Body = io.NopCloser(bytes.NewReader(wreq.Body))
 //    return nil
-//}
+// }

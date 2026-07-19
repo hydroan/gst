@@ -13,12 +13,12 @@ func intCmp(a, b int) int {
 }
 
 func stringCmp(a, b string) int {
-	//nolint:revive
-	if a < b {
+	switch {
+	case a < b:
 		return -1
-	} else if a > b {
+	case a > b:
 		return 1
-	} else {
+	default:
 		return 0
 	}
 }

@@ -304,7 +304,7 @@ func benchmarkDatabaseUpdateBatch(b *testing.B, size int) {
 		_ = database.Database[*TestUser](context.Background()).Create(users...)
 
 		for i := range users {
-			users[i].Name = users[i].Name + "_updated"
+			users[i].Name += "_updated"
 		}
 
 		_ = database.Database[*TestUser](context.Background()).Update(users...)

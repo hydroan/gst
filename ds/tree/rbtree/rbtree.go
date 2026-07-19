@@ -972,11 +972,12 @@ func (t *Tree[K, V]) lookup(key K) *Node[K, V] {
 }
 
 func (t *Tree[K, V]) replace(old *Node[K, V], new_ *Node[K, V]) {
-	if old.Parent == nil {
+	switch {
+	case old.Parent == nil:
 		t.root = new_
-	} else if old == old.Parent.Left {
+	case old == old.Parent.Left:
 		old.Parent.Left = new_
-	} else {
+	default:
 		old.Parent.Right = new_
 	}
 	if new_ != nil {

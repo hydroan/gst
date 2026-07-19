@@ -533,7 +533,7 @@ func checkFileJSONTagNaming(filePath string) []string {
 	// Find all model structs in this file
 	modelBaseNames := dsl.FindAllModelBase(node)
 	modelEmptyNames := dsl.FindAllModelEmpty(node)
-	allModelNames := append(modelBaseNames, modelEmptyNames...)
+	allModelNames := slices.Concat(modelBaseNames, modelEmptyNames)
 
 	// If no model structs found, skip this file
 	if len(allModelNames) == 0 {

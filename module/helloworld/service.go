@@ -84,7 +84,7 @@ func (s *Service) CreateMany(ctx *types.ServiceContext, req *Req) (*Rsp, error) 
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("helloworld module many creator")
-	counter = counter + req.Field2*req.Field2
+	counter += req.Field2 * req.Field2
 
 	return &Rsp{
 		Field3: "batch create hello world",
@@ -96,7 +96,7 @@ func (s *Service) DeleteMany(ctx *types.ServiceContext, req *Req) (*Rsp, error) 
 	log := s.WithContext(ctx, ctx.Phase())
 
 	log.Info("helloworld module many deleter")
-	counter = counter - req.Field2*req.Field2
+	counter -= req.Field2 * req.Field2
 
 	return &Rsp{
 		Field3: "batch delete hello world",

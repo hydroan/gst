@@ -173,17 +173,15 @@ func (t *Tree[K, V]) get(key K) (V, bool) {
 		res := t.cmp(key, n.Key)
 		if res == 0 {
 			break
-		} else if res < 0 {
-			if n.Children[0] == nil {
-				break
-			}
-			n = n.Children[0]
-		} else {
-			if n.Children[1] == nil {
-				break
-			}
-			n = n.Children[1]
 		}
+		child := 0
+		if res > 0 {
+			child = 1
+		}
+		if n.Children[child] == nil {
+			break
+		}
+		n = n.Children[child]
 	}
 
 	t.splay(n)
@@ -680,13 +678,14 @@ func (t *Tree[K, V]) splay(x *Node[K, V]) {
 			}
 		} else {
 			// check zig-zig
-			if g.Children[0] == p && p.Children[0] == x {
+			switch {
+			case g.Children[0] == p && p.Children[0] == x:
 				g = rotateZigZigRight(g)
-			} else if g.Children[1] == p && p.Children[1] == x {
+			case g.Children[1] == p && p.Children[1] == x:
 				g = rotateZigZigLeft(g)
-			} else if g.Children[0] == p && p.Children[1] == x {
+			case g.Children[0] == p && p.Children[1] == x:
 				g = rotateZigZagLeftRight(g)
-			} else {
+			default:
 				g = rotateZigZagRightLeft(g)
 			}
 

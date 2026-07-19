@@ -20,7 +20,7 @@ func TestServiceOutputRel(t *testing.T) {
 		{
 			name:      "duplicate_dir_and_stem",
 			modelFile: filepath.Join("repo", "model", "common", "common.go"),
-			want:      filepath.Join("common"),
+			want:      "common",
 		},
 		{
 			name:      "nested_duplicate_collapses_once",
@@ -30,7 +30,7 @@ func TestServiceOutputRel(t *testing.T) {
 		{
 			name:      "nested_duplicate_full_chain",
 			modelFile: filepath.Join("repo", "model", "x", "x", "x.go"),
-			want:      filepath.Join("x"),
+			want:      "x",
 		},
 		{
 			name:      "stem_differs_from_parent_dir",
@@ -40,7 +40,7 @@ func TestServiceOutputRel(t *testing.T) {
 		{
 			name:      "flat_model_file",
 			modelFile: filepath.Join("repo", "model", "user.go"),
-			want:      filepath.Join("user"),
+			want:      "user",
 		},
 	}
 

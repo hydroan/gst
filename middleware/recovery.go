@@ -65,12 +65,13 @@ func RecoveryWithTracing(logger *zap.Logger, stack bool) gin.HandlerFunc {
 			}
 			headersToStr := strings.Join(headers, "\r\n")
 
-			if brokenPipe {
+			switch {
+			case brokenPipe:
 				logger.Error(fmt.Sprintf("%s\n%s", recovered, headersToStr))
-			} else if stack {
+			case stack:
 				logger.Error(fmt.Sprintf("[Recovery] %s panic recovered:\n%s\n%s\n%s",
 					timeFormat(time.Now()), headersToStr, recovered, debug.Stack()))
-			} else {
+			default:
 				logger.Error(fmt.Sprintf("[Recovery] %s panic recovered:\n%s\n%s",
 					timeFormat(time.Now()), headersToStr, recovered))
 			}

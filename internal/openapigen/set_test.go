@@ -1022,7 +1022,7 @@ func TestAddSchemaDocsForTypeDecoratesAnonymousStructBySignature(t *testing.T) {
 		Slug     string `json:"slug"`
 	}
 
-	schemaRef, err := openapi3gen.NewSchemaRefForValue(*new(anonSchemaPayload), nil)
+	schemaRef, err := openapi3gen.NewSchemaRefForValue(anonSchemaPayload{}, nil)
 	if err != nil {
 		t.Fatalf("NewSchemaRefForValue() error = %v", err)
 	}
@@ -1104,7 +1104,7 @@ type customListRsp struct {
 func TestNewSchemaRefWithDocsDecoratesCustomListResponseWrapper(t *testing.T) {
 	registerEnumFieldStatus()
 
-	schemaRef := newSchemaRefWithDocs(*new(apiResponse[*customListRsp]))
+	schemaRef := newSchemaRefWithDocs(apiResponse[*customListRsp]{})
 	if schemaRef == nil || schemaRef.Value == nil {
 		t.Fatal("newSchemaRefWithDocs() returned nil schema")
 	}

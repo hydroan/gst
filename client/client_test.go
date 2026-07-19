@@ -257,7 +257,7 @@ func Test_Client(t *testing.T) {
 		cli, err := client.New(addr2, client.WithToken(token))
 		require.NoError(t, err)
 		items := make([]User, 0)
-		total := *new(int)
+		total := 0
 
 		// 1. delete all resources.
 		_, err = cli.DeleteMany([]string{id1, id2, id3, id4, id5})
@@ -289,7 +289,7 @@ func Test_Client(t *testing.T) {
 		cli, err := client.New(addr2, client.WithToken(token))
 		require.NoError(t, err)
 		items := make([]User, 0)
-		total := *new(int)
+		total := 0
 
 		// 1.create resources.
 		_, err = cli.UpdateMany([]User{user1, user2, user3, user4, user5})

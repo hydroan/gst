@@ -501,16 +501,17 @@ func (c *Client) parseSSEStream(body io.Reader, callback StreamCallback) error {
 		}
 
 		// Parse SSE field
-		if strings.HasPrefix(line, "id:") {
+		switch {
+		case strings.HasPrefix(line, "id:"):
 			event.ID = strings.TrimSpace(line[3:])
-		} else if strings.HasPrefix(line, "event:") {
+		case strings.HasPrefix(line, "event:"):
 			event.Event = strings.TrimSpace(line[6:])
-		} else if strings.HasPrefix(line, "retry:") {
+		case strings.HasPrefix(line, "retry:"):
 			retryStr := strings.TrimSpace(line[6:])
 			if retry, err := parseInt(retryStr); err == nil {
 				event.Retry = retry
 			}
-		} else if strings.HasPrefix(line, "data:") {
+		case strings.HasPrefix(line, "data:"):
 			data := strings.TrimSpace(line[5:])
 			// Check for [DONE] marker
 			if data == "[DONE]" {
@@ -579,11 +580,12 @@ func (c *Client) StreamURL(method, url string, payload any, callback StreamCallb
 
 	// Build full URL
 	var fullURL string
-	if url == "" {
+	switch {
+	case url == "":
 		fullURL = c.addr
-	} else if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
+	case strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://"):
 		fullURL = url
-	} else {
+	default:
 		fullURL = c.addr + "/" + strings.TrimLeft(url, "/")
 	}
 
