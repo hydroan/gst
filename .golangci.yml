@@ -94,6 +94,10 @@ linters:
       enable:
         - shadow
         - nilness
+        - unusedwrite
+        - reflectvaluecompare
+        - deepequalerrors
+        - sortslice
 
     revive:
       rules:

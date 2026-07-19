@@ -91,10 +91,14 @@ linters:
         - io.Copy(os.Stdout)
 
     govet:
-      # shadow and nilness are not part of the default go vet analyzer set.
+      # These analyzers are not part of the default go vet analyzer set.
       enable:
         - shadow
         - nilness
+        - unusedwrite
+        - reflectvaluecompare
+        - deepequalerrors
+        - sortslice
 
     misspell:
       locale: US

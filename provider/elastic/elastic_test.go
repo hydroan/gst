@@ -75,7 +75,9 @@ func TestDocumentGet(t *testing.T) {
 }
 
 func TestDocumentSearch(t *testing.T) {
-	//nolint:ineffassign,wastedassign
+	// The first two requests are kept as query DSL examples; they are
+	// intentionally overwritten below (govet covers unusedwrite).
+	//nolint:ineffassign,wastedassign,govet
 	req := &elastic.SearchRequest{
 		Query: map[string]any{
 			"bool": map[string]any{
@@ -97,7 +99,7 @@ func TestDocumentSearch(t *testing.T) {
 	}
 
 	// (type.keyword : "message_send" or type.keyword : "message_recv" or type.keyword : "message_ack" ) and message_user_id.keyword : "7143038995084115996" and message_text: hello
-	//nolint:ineffassign,wastedassign
+	//nolint:ineffassign,wastedassign,govet
 	req = &elastic.SearchRequest{
 		Query: map[string]any{
 			"bool": map[string]any{
