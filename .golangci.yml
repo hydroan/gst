@@ -42,6 +42,7 @@ linters:
     - recvcheck
     - revive
     - unconvert
+    - unparam
 
     # Go modernization.
     - copyloopvar
@@ -169,11 +170,13 @@ linters:
       - common-false-positives
       - legacy
     rules:
-      # Relax complexity in tests
+      # Relax complexity in tests. unparam is excluded because test helpers
+      # commonly keep parameters for signature symmetry across cases.
       - path: _test\.go
         linters:
           - gosec
           - godoclint
+          - unparam
       # Ignore nilerr in specific patterns (example)
       # - linters:
       #     - nilerr

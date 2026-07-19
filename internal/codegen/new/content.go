@@ -71,6 +71,7 @@ linters:
     - recvcheck
     - revive
     - unconvert
+    - unparam
     - wastedassign
 
     # Go modernization.
@@ -164,9 +165,12 @@ linters:
       - common-false-positives
       - legacy
     rules:
+      # unparam is excluded in tests because test helpers commonly keep
+      # parameters for signature symmetry across cases.
       - path: _test\.go
         linters:
           - gosec
+          - unparam
       # Revive var-naming: ignore ALL_CAPS (redundant with staticcheck) and underscores in names.
       - linters:
           - revive

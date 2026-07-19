@@ -115,7 +115,7 @@ func startEmailChangeFlow(ctx *types.ServiceContext, user *AccountSnapshot, newE
 		OldEmail: currentEmail,
 		NewEmail: newEmail,
 		Email:    newEmail,
-	}, 0)
+	})
 	if err != nil {
 		return errors.Wrap(err, "failed to issue email change confirmation flow")
 	}
@@ -132,7 +132,7 @@ func startEmailChangeFlow(ctx *types.ServiceContext, user *AccountSnapshot, newE
 		OldEmail: currentEmail,
 		NewEmail: newEmail,
 		Email:    currentEmail,
-	}, 0)
+	})
 	if err != nil {
 		return errors.Wrap(err, "failed to issue email change cancellation flow")
 	}

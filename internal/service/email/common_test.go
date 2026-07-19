@@ -184,7 +184,7 @@ func TestIssueLoadConsumeEmailFlow(t *testing.T) {
 	token, issued, err := issueEmailFlow(context.Background(), iamEmailFlowKindVerification, iamEmailFlowState{
 		Email:    " USER@Example.COM ",
 		Metadata: map[string]any{"source": "signup"},
-	}, 0)
+	})
 	require.NoError(t, err)
 	require.NotEmpty(t, token)
 	require.Equal(t, iamEmailFlowKindVerification, issued.Kind)
@@ -310,7 +310,7 @@ func TestInvalidKind(t *testing.T) {
 	restore := stubEmailGlobals(flowCache, throttleCache, now, bytes.NewReader(bytes.Repeat([]byte{5}, 64)))
 	t.Cleanup(restore)
 
-	_, _, err := issueEmailFlow(context.Background(), iamEmailFlowKind("unknown"), iamEmailFlowState{}, 0)
+	_, _, err := issueEmailFlow(context.Background(), iamEmailFlowKind("unknown"), iamEmailFlowState{})
 	require.ErrorIs(t, err, errEmailFlowKindInvalid)
 
 	_, err = reserveEmailThrottle(context.Background(), iamEmailFlowKind("unknown"), emailThrottleRequest, "user@example.com", time.Minute)

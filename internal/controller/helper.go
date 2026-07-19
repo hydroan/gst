@@ -496,7 +496,7 @@ func traceServiceImport[M types.Model](parentCtx context.Context, phase consts.P
 }
 
 // handleServiceError handles service-layer errors.
-func handleServiceError(c *gin.Context, ctx *types.ServiceContext, err error) {
+func handleServiceError(c *gin.Context, err error) {
 	var serviceErr *service.Error
 	if errors.As(err, &serviceErr) {
 		JSON(c, serviceErr)

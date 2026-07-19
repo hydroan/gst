@@ -56,7 +56,7 @@ func (s *ChangeResendService) Create(ctx *types.ServiceContext, req *modelemail.
 		OldEmail: normalizeAccountEmail(user.Email),
 		NewEmail: newEmail,
 		Email:    newEmail,
-	}, 0)
+	})
 	if err != nil {
 		log.Error("failed to issue email change resend flow", err)
 		return nil, errors.Wrap(err, "failed to issue email change resend flow")

@@ -76,7 +76,7 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 				return svc.DeleteMany(serviceCtx, req)
 			}); err != nil {
 				log.Error(err)
-				handleServiceError(c, serviceCtx, err)
+				handleServiceError(c, err)
 				gstotel.RecordError(span, err)
 				return
 			}
@@ -117,7 +117,7 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 			return svc.DeleteManyBefore(serviceCtxBefore, req.Items...)
 		}); err != nil {
 			log.Error(err)
-			handleServiceError(c, serviceCtxBefore, err)
+			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
 		}
@@ -143,7 +143,7 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 			return svc.DeleteManyAfter(serviceCtxAfter, req.Items...)
 		}); err != nil {
 			log.Error(err)
-			handleServiceError(c, serviceCtxAfter, err)
+			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
 		}

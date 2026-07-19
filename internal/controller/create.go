@@ -83,7 +83,7 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				return svc.Create(serviceCtx, req)
 			}); err != nil {
 				log.Error(err)
-				handleServiceError(c, serviceCtx, err)
+				handleServiceError(c, err)
 				gstotel.RecordError(span, err)
 				return
 			}
@@ -117,7 +117,7 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			return svc.CreateBefore(serviceCtxBefore, req)
 		}); err != nil {
 			log.Error(err)
-			handleServiceError(c, serviceCtxBefore, err)
+			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
 		}
@@ -141,7 +141,7 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			return svc.CreateAfter(serviceCtxAfter, req)
 		}); err != nil {
 			log.Error(err)
-			handleServiceError(c, serviceCtxAfter, err)
+			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
 		}

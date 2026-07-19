@@ -73,7 +73,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 				return svc.List(serviceCtx, req)
 			}); err != nil {
 				log.Error(err)
-				handleServiceError(c, serviceCtx, err)
+				handleServiceError(c, err)
 				gstotel.RecordError(span, err)
 				return
 			}
@@ -145,7 +145,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			return svc.ListBefore(serviceCtxBefore, &data)
 		}); err != nil {
 			log.Error(err)
-			handleServiceError(c, serviceCtxBefore, err)
+			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
 		}
@@ -182,7 +182,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			return svc.ListAfter(serviceCtxAfter, &data)
 		}); err != nil {
 			log.Error(err)
-			handleServiceError(c, serviceCtxAfter, err)
+			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
 		}

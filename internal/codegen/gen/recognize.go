@@ -30,7 +30,7 @@ func isServiceMethod1(fn *ast.FuncDecl) bool {
 	if len(fn.Type.Results.List) != 1 {
 		return false
 	}
-	if !is_ident_name(fn.Type.Results.List[0].Type, "error") {
+	if !isErrorIdent(fn.Type.Results.List[0].Type) {
 		return false
 	}
 	return true
@@ -61,7 +61,7 @@ func isServiceMethod2(fn *ast.FuncDecl) bool {
 	if len(fn.Type.Results.List) != 1 {
 		return false
 	}
-	if !is_ident_name(fn.Type.Results.List[0].Type, "error") {
+	if !isErrorIdent(fn.Type.Results.List[0].Type) {
 		return false
 	}
 	return true
@@ -92,7 +92,7 @@ func isServiceMethod3(fn *ast.FuncDecl) bool {
 	if len(fn.Type.Results.List) != 1 {
 		return false
 	}
-	if !is_ident_name(fn.Type.Results.List[0].Type, "error") {
+	if !isErrorIdent(fn.Type.Results.List[0].Type) {
 		return false
 	}
 	return true
@@ -127,7 +127,7 @@ func isServiceMethod4(fn *ast.FuncDecl) bool {
 	if !is_star_or_selector_type(fn.Type.Results.List[0].Type) {
 		return false
 	}
-	if !is_ident_name(fn.Type.Results.List[1].Type, "error") {
+	if !isErrorIdent(fn.Type.Results.List[1].Type) {
 		return false
 	}
 	return true
@@ -270,10 +270,10 @@ func is_variadic_star_selector(field *ast.Field) bool { //nolint:staticcheck
 	return sel.Sel != nil
 }
 
-// is_ident_name checks if expr is an identifier with specific name.
-func is_ident_name(expr ast.Expr, name string) bool { //nolint:staticcheck
+// isErrorIdent checks if expr is the builtin error identifier.
+func isErrorIdent(expr ast.Expr) bool {
 	id, ok := expr.(*ast.Ident)
-	return ok && id.Name == name
+	return ok && id.Name == "error"
 }
 
 // isServiceType checks if a type declaration is a service struct with embedded service.Base[*Model, *Model, *Model]

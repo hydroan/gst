@@ -53,7 +53,7 @@ func (s *PasswordResetRequestService) Create(ctx *types.ServiceContext, req *mod
 	token, flow, err := issueEmailFlow(ctx, iamEmailFlowKindPasswordReset, iamEmailFlowState{
 		UserID: user.ID,
 		Email:  email,
-	}, 0)
+	})
 	if err != nil {
 		log.Error("failed to issue password reset flow", err)
 		return nil, errors.Wrap(err, "failed to issue password reset flow")

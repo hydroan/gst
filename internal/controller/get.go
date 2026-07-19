@@ -71,7 +71,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 				return svc.Get(serviceCtx, req)
 			}); err != nil {
 				log.Error(err)
-				handleServiceError(c, serviceCtx, err)
+				handleServiceError(c, err)
 				gstotel.RecordError(span, err)
 				return
 			}
@@ -128,7 +128,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			return svc.GetBefore(serviceCtxBefore, m)
 		}); err != nil {
 			log.Error(err)
-			handleServiceError(c, serviceCtxBefore, err)
+			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
 		}
@@ -151,7 +151,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			return svc.GetAfter(serviceCtxAfter, m)
 		}); err != nil {
 			log.Error(err)
-			handleServiceError(c, serviceCtxAfter, err)
+			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
 		}

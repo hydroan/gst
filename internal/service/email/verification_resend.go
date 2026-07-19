@@ -52,7 +52,7 @@ func (s *VerificationResendService) Create(ctx *types.ServiceContext, req *model
 	token, flow, err := issueEmailFlow(ctx, iamEmailFlowKindVerification, iamEmailFlowState{
 		UserID: user.ID,
 		Email:  email,
-	}, 0)
+	})
 	if err != nil {
 		log.Error("failed to issue verification resend flow", err)
 		return nil, errors.Wrap(err, "failed to issue verification resend flow")

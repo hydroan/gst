@@ -102,13 +102,11 @@ func dispatchEmail(ctx context.Context, delivery emailDelivery) error {
 	return activeEmailSender.Send(normalizeContext(ctx), delivery)
 }
 
-func issueEmailFlow(ctx context.Context, kind iamEmailFlowKind, flow iamEmailFlowState, ttl time.Duration) (string, iamEmailFlowState, error) {
+func issueEmailFlow(ctx context.Context, kind iamEmailFlowKind, flow iamEmailFlowState) (string, iamEmailFlowState, error) {
 	if !validEmailFlowKind(kind) {
 		return "", iamEmailFlowState{}, errEmailFlowKindInvalid
 	}
-	if ttl <= 0 {
-		ttl = defaultEmailPolicy.tokenTTL(kind)
-	}
+	ttl := defaultEmailPolicy.tokenTTL(kind)
 
 	token, err := newEmailFlowToken()
 	if err != nil {

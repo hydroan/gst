@@ -546,12 +546,12 @@ func findStructTypeSpec(file *ast.File, name string) *ast.TypeSpec {
 }
 
 // ensureServiceImportSpec inserts the gst service import so a restored
-// service.Base embedding resolves. It reports whether the file was modified.
-func ensureServiceImportSpec(file *ast.File) bool {
+// service.Base embedding resolves.
+func ensureServiceImportSpec(file *ast.File) {
 	if file == nil || findImportSpec(file, constants.ImportPathService) != nil {
-		return false
+		return
 	}
-	return insertImportSpec(file, &ast.ImportSpec{
+	insertImportSpec(file, &ast.ImportSpec{
 		Path: &ast.BasicLit{
 			Kind:  token.STRING,
 			Value: fmt.Sprintf("%q", constants.ImportPathService),
@@ -561,11 +561,11 @@ func ensureServiceImportSpec(file *ast.File) bool {
 
 // ensureModelImportSpec inserts the business model import a restored
 // service.Base embedding references, aliased when the package name differs
-// from the last import path segment. It reports whether the file was modified.
-func ensureModelImportSpec(file *ast.File, modelInfo *ModelInfo) bool {
+// from the last import path segment.
+func ensureModelImportSpec(file *ast.File, modelInfo *ModelInfo) {
 	importPath := filepath.Join(modelInfo.ModulePath, modelInfo.ModelFileDir)
 	if file == nil || findImportSpec(file, importPath) != nil {
-		return false
+		return
 	}
 
 	spec := &ast.ImportSpec{
@@ -577,20 +577,19 @@ func ensureModelImportSpec(file *ast.File, modelInfo *ModelInfo) bool {
 	if fields := strings.Split(importPath, "/"); len(fields) > 0 && fields[len(fields)-1] != modelInfo.ModelPkgName {
 		spec.Name = ast.NewIdent(modelInfo.ModelPkgName)
 	}
-	return insertImportSpec(file, spec)
+	insertImportSpec(file, spec)
 }
 
 // insertImportSpec appends the import spec to the first import declaration,
 // creating one at the top of the file when none exists.
-func insertImportSpec(file *ast.File, spec *ast.ImportSpec) bool {
+func insertImportSpec(file *ast.File, spec *ast.ImportSpec) {
 	for _, decl := range file.Decls {
 		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.IMPORT {
 			genDecl.Specs = append(genDecl.Specs, spec)
-			return true
+			return
 		}
 	}
 	file.Decls = append([]ast.Decl{&ast.GenDecl{Tok: token.IMPORT, Specs: []ast.Spec{spec}}}, file.Decls...)
-	return true
 }
 
 // ApplyServiceFileWithModelSync extends ApplyServiceFile to handle import path and package name updates.
@@ -639,7 +638,7 @@ func ApplyServiceFileWithModelSync(file *ast.File, action *dsl.Action, servicePk
 	// by comparing current imports with the correct model import path
 	correctModelImportPath := filepath.Join(modelInfo.ModulePath, modelInfo.ModelFileDir)
 	correctModelPkgName := modelInfo.ModelPkgName
-	importMapping := buildModelImportMapping(file, correctModelImportPath, correctModelPkgName)
+	importMapping := buildModelImportMapping(file, correctModelPkgName)
 
 	if len(importMapping) == 0 {
 		// No import changes needed
@@ -662,7 +661,7 @@ func ApplyServiceFileWithModelSync(file *ast.File, action *dsl.Action, servicePk
 // buildModelImportMapping builds a mapping from the currently-used service model package name
 // to correctModelPkgName (only when they differ), so we only rewrite the main model import/reference
 // instead of accidentally rewriting other sibling model packages used in user code.
-func buildModelImportMapping(file *ast.File, correctModelImportPath, correctModelPkgName string) map[string]string {
+func buildModelImportMapping(file *ast.File, correctModelPkgName string) map[string]string {
 	currentModelPkgName := serviceModelPackageName(file)
 	if currentModelPkgName == "" || currentModelPkgName == correctModelPkgName {
 		return nil

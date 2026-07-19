@@ -120,7 +120,7 @@ type userCreator struct {
 	service.Base[*model.User, *model.User, *model.User]
 }
 */
-func types(modelPkgName, modelName, reqName, rspName string, phase consts.Phase, roleName string, withComment bool) *ast.GenDecl {
+func types(modelPkgName, modelName, reqName, rspName string, _ consts.Phase, roleName string, withComment bool) *ast.GenDecl {
 	comments := []*ast.Comment{}
 
 	if withComment {
@@ -473,7 +473,7 @@ func serviceMethod4(recvName, modelName, modelPkgName, reqName, rspName string, 
 // For example:
 //
 //	func (a *Importer) Import(ctx *types.ServiceContext, reader io.Reader) ([]*model.Asset, error) {\n}
-func serviceMethod5(recvName, modelName, modelPkgName string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
+func serviceMethod5(recvName, modelName, modelPkgName string, _ consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{
 			List: []*ast.Field{
@@ -537,7 +537,7 @@ func serviceMethod5(recvName, modelName, modelPkgName string, phase consts.Phase
 // For example:
 //
 //	func (a *Exporter) Export(ctx *types.ServiceContext, assets ...*model.Asset) ([]byte, error) {\n}
-func serviceMethod6(recvName, modelName, modelPkgName string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
+func serviceMethod6(recvName, modelName, modelPkgName string, _ consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	paramName := pluralizeCli.Plural(strings.ToLower(modelName))
 
 	return &ast.FuncDecl{
@@ -663,7 +663,7 @@ func serviceMethod7(recvName, modelName, modelPkgName string, phase consts.Phase
 //
 //	"func (u *Lister) FilterRaw(ctx *types.ServiceContext) string {\n}"
 //	"func (g *Lister) FilterRaw(ctx *types.ServiceContext) string {\n}"
-func serviceMethod8(recvName, modelName, modelPkgName string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
+func serviceMethod8(recvName, _, _ string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{
 			List: []*ast.Field{

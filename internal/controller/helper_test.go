@@ -32,7 +32,7 @@ func TestHandleServiceErrorDoesNotExposeCause(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(recorder)
 	cause := errors.New("database password leaked")
 
-	handleServiceError(ctx, nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause))
+	handleServiceError(ctx, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause))
 
 	require.Equal(t, http.StatusInternalServerError, recorder.Code)
 	require.JSONEq(t, `{"code":-1,"msg":"failed to load user","data":null,"trace_id":""}`, recorder.Body.String())
@@ -45,7 +45,7 @@ func TestHandleServiceErrorUsesServiceErrorResponse(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 
-	handleServiceError(ctx, nil, service.NewError(http.StatusForbidden, "account disabled"))
+	handleServiceError(ctx, service.NewError(http.StatusForbidden, "account disabled"))
 
 	require.Equal(t, http.StatusForbidden, recorder.Code)
 	var body struct {

@@ -146,17 +146,19 @@ func parseConsistency(consistency string) (gocql.Consistency, error) {
 	}
 }
 
-// Helper function to get the appropriate retry policy
+// Helper function to get the appropriate retry policy. An empty policy name
+// falls back to the simple policy; an unknown name is a configuration error,
+// mirroring how getConsistencyLevel rejects unknown consistency levels.
 func getRetryPolicy(policyName string, maxRetryCount int) (gocql.RetryPolicy, error) {
 	switch policyName {
-	case "default":
+	case "", "default":
 		return &gocql.SimpleRetryPolicy{NumRetries: maxRetryCount}, nil
 	case "exponential":
 		return &gocql.ExponentialBackoffRetryPolicy{NumRetries: maxRetryCount}, nil
 	case "fallthrough":
 		return &gocql.DowngradingConsistencyRetryPolicy{}, nil
 	default:
-		return &gocql.SimpleRetryPolicy{NumRetries: maxRetryCount}, nil
+		return nil, errors.New("unknown retry policy: " + policyName)
 	}
 }
 

@@ -58,7 +58,7 @@ func (cs *column) GetColumns(c *gin.Context, tableName string, columns []string,
 // | ZJ                 |
 // +--------------------+
 //
-//nolint:unused
+//nolint:unused,unparam
 func queryColumns(table string, columns []string, db ...*gorm.DB) (map[string][]string, error) {
 	_db := database.DB()
 	if len(db) > 0 {
@@ -228,7 +228,7 @@ func queryColumnsWithQuery(table string, columns []string, query map[string][]st
 // | od-7e8d4fb875bed78400bc5bbca88eed0c |                1 |
 // +-------------------------------------+------------------+
 //
-//nolint:unused
+//nolint:unused,unparam
 func queryColumnsAndCount(table string, columns []string, db ...*gorm.DB) (columnResult, error) {
 	_db := database.DB()
 	if len(db) > 0 {

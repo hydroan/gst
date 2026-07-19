@@ -192,10 +192,7 @@ func buildRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get build information
-	buildInfo, err := getBuildInfo(config)
-	if err != nil {
-		return fmt.Errorf("failed to get build info: %w", err)
-	}
+	buildInfo := getBuildInfo(config)
 
 	// Get build targets
 	targets, err := getBuildTargets(config)
@@ -339,7 +336,7 @@ func packResources(config *Build) error {
 }
 
 // getBuildInfo collects build information
-func getBuildInfo(config *Build) (*BuildInfo, error) {
+func getBuildInfo(config *Build) *BuildInfo {
 	info := &BuildInfo{
 		BuildTime:  time.Now().UTC().Format(time.RFC3339),
 		GoVersion:  runtime.Version(),
@@ -405,7 +402,7 @@ func getBuildInfo(config *Build) (*BuildInfo, error) {
 	// Add custom variables
 	maps.Copy(info.CustomVars, config.VarMap)
 
-	return info, nil
+	return info
 }
 
 // getBuildTargets determines build targets with platform support
