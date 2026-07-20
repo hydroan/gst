@@ -2,8 +2,10 @@ package serviceregistry
 
 import (
 	"net/http"
+	"runtime"
 	"strings"
 
+	"github.com/cockroachdb/errors/errbase"
 	"github.com/hydroan/gst/types"
 )
 
@@ -13,8 +15,9 @@ const (
 )
 
 var (
-	_ error       = (*Error)(nil)
-	_ types.Coder = (*Error)(nil)
+	_ error                      = (*Error)(nil)
+	_ types.Coder                = (*Error)(nil)
+	_ errbase.StackTraceProvider = (*Error)(nil)
 )
 
 // Error represents a service-layer error that can be converted to an API response.
@@ -24,6 +27,10 @@ type Error struct {
 	status int
 	msg    string
 	cause  error
+	// stack holds the program counters captured at the construction site,
+	// exposed through StackTrace so error-stack consumers such as
+	// errors.GetReportableStackTrace can locate where the error was created.
+	stack []uintptr
 }
 
 // NewError creates a service-layer error with a client-safe message.
@@ -56,7 +63,34 @@ func newError(status int, msg string, cause error) *Error {
 		status: normalizedStatus,
 		msg:    normalizeErrorMessage(normalizedStatus, msg),
 		cause:  cause,
+		stack:  callers(),
 	}
+}
+
+// callers captures the current call stack, skipping runtime.Callers, callers
+// itself, newError and its exported constructor wrapper, so the innermost
+// recorded frame is the construction site in application code.
+func callers() []uintptr {
+	const maxDepth = 32
+	var pcs [maxDepth]uintptr
+	n := runtime.Callers(4, pcs[:])
+	return pcs[:n]
+}
+
+// StackTrace implements errbase.StackTraceProvider, exposing the stack
+// captured at the construction site in the github.com/pkg/errors format that
+// errors.GetReportableStackTrace recognizes. When the error also wraps a
+// cause carrying its own stack trace, consumers that pick the deepest stack
+// in the unwrap chain keep preferring the cause's origin.
+func (e *Error) StackTrace() errbase.StackTrace {
+	if e == nil || len(e.stack) == 0 {
+		return nil
+	}
+	frames := make(errbase.StackTrace, len(e.stack))
+	for i, pc := range e.stack {
+		frames[i] = errbase.StackFrame(pc)
+	}
+	return frames
 }
 
 func (e *Error) Error() string {
