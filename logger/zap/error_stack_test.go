@@ -39,6 +39,45 @@ func TestErrorfAttachesErrorStackFieldFromErrorOrigin(t *testing.T) {
 	require.Contains(t, stackTrace, "newStackTracedError")
 }
 
+func TestErrorwAttachesErrorStackFieldFromErrorOrigin(t *testing.T) {
+	logger, logs := newObservedLogger()
+
+	logger.Errorw("operation failed", "error", newStackTracedError())
+
+	entries := logs.All()
+	require.Len(t, entries, 1)
+	require.Contains(t, entries[0].Message, "operation failed")
+
+	stackTrace := errorStackField(t, entries[0])
+	require.Contains(t, stackTrace, "newStackTracedError")
+}
+
+func TestErrorzAttachesErrorStackFieldFromErrorOrigin(t *testing.T) {
+	logger, logs := newObservedLogger()
+
+	logger.Errorz("operation failed", zap.Error(newStackTracedError()))
+
+	entries := logs.All()
+	require.Len(t, entries, 1)
+	require.Contains(t, entries[0].Message, "operation failed")
+
+	stackTrace := errorStackField(t, entries[0])
+	require.Contains(t, stackTrace, "newStackTracedError")
+}
+
+func TestErrorzSkipsErrorStackFieldWhenNoErrorField(t *testing.T) {
+	logger, logs := newObservedLogger()
+
+	logger.Errorz("operation failed", zap.String("key", "value"))
+
+	entries := logs.All()
+	require.Len(t, entries, 1)
+
+	for _, field := range entries[0].Context {
+		require.NotEqual(t, errorStackKey, field.Key)
+	}
+}
+
 func TestErrorSkipsErrorStackFieldWhenErrorHasNoStackTrace(t *testing.T) {
 	logger, logs := newObservedLogger()
 

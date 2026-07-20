@@ -38,13 +38,17 @@ func (l *Logger) Fatalf(format string, args ...any) { l.zlog.Sugar().Fatalf(form
 func (l *Logger) Debugw(msg string, keysValues ...any) { l.zlog.Sugar().Debugw(msg, keysValues...) }
 func (l *Logger) Infow(msg string, keysValues ...any)  { l.zlog.Sugar().Infow(msg, keysValues...) }
 func (l *Logger) Warnw(msg string, keysValues ...any)  { l.zlog.Sugar().Warnw(msg, keysValues...) }
-func (l *Logger) Errorw(msg string, keysValues ...any) { l.zlog.Sugar().Errorw(msg, keysValues...) }
+func (l *Logger) Errorw(msg string, keysValues ...any) {
+	l.withErrorStack(zapcore.ErrorLevel, keysValues).Sugar().Errorw(msg, keysValues...)
+}
 func (l *Logger) Fatalw(msg string, keysValues ...any) { l.zlog.Sugar().Fatalw(msg, keysValues...) }
 
 func (l *Logger) Debugz(msg string, fields ...zap.Field) { l.zlog.Debug(msg, fields...) }
 func (l *Logger) Infoz(msg string, fields ...zap.Field)  { l.zlog.Info(msg, fields...) }
 func (l *Logger) Warnz(msg string, fields ...zap.Field)  { l.zlog.Warn(msg, fields...) }
-func (l *Logger) Errorz(msg string, fields ...zap.Field) { l.zlog.Error(msg, fields...) }
+func (l *Logger) Errorz(msg string, fields ...zap.Field) {
+	l.withErrorStackFields(zapcore.ErrorLevel, fields).Error(msg, fields...)
+}
 func (l *Logger) Fatalz(msg string, fields ...zap.Field) { l.zlog.Fatal(msg, fields...) }
 
 func (l *Logger) ZapLogger() *zap.Logger { return l.zlog }
