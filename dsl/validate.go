@@ -4,25 +4,35 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/hydroan/gst/types/consts"
 )
 
-var actionMethodNames = map[string]bool{
-	consts.PHASE_CREATE.MethodName():      true,
-	consts.PHASE_DELETE.MethodName():      true,
-	consts.PHASE_UPDATE.MethodName():      true,
-	consts.PHASE_PATCH.MethodName():       true,
-	consts.PHASE_LIST.MethodName():        true,
-	consts.PHASE_GET.MethodName():         true,
-	consts.PHASE_CREATE_MANY.MethodName(): true,
-	consts.PHASE_DELETE_MANY.MethodName(): true,
-	consts.PHASE_UPDATE_MANY.MethodName(): true,
-	consts.PHASE_PATCH_MANY.MethodName():  true,
-	consts.PHASE_IMPORT.MethodName():      true,
-	consts.PHASE_EXPORT.MethodName():      true,
+// actionMethodPhases maps DSL action method names to their phases. It serves
+// both as the action keyword set and as the phase lookup for generation
+// facts derived from an action call, such as the service filename.
+var actionMethodPhases = map[string]consts.Phase{
+	consts.PHASE_CREATE.MethodName():      consts.PHASE_CREATE,
+	consts.PHASE_DELETE.MethodName():      consts.PHASE_DELETE,
+	consts.PHASE_UPDATE.MethodName():      consts.PHASE_UPDATE,
+	consts.PHASE_PATCH.MethodName():       consts.PHASE_PATCH,
+	consts.PHASE_LIST.MethodName():        consts.PHASE_LIST,
+	consts.PHASE_GET.MethodName():         consts.PHASE_GET,
+	consts.PHASE_CREATE_MANY.MethodName(): consts.PHASE_CREATE_MANY,
+	consts.PHASE_DELETE_MANY.MethodName(): consts.PHASE_DELETE_MANY,
+	consts.PHASE_UPDATE_MANY.MethodName(): consts.PHASE_UPDATE_MANY,
+	consts.PHASE_PATCH_MANY.MethodName():  consts.PHASE_PATCH_MANY,
+	consts.PHASE_IMPORT.MethodName():      consts.PHASE_IMPORT,
+	consts.PHASE_EXPORT.MethodName():      consts.PHASE_EXPORT,
+}
+
+func isActionMethod(name string) bool {
+	_, ok := actionMethodPhases[name]
+	return ok
 }
 
 // routeIDActionMethodNames are actions whose built-in controllers read the
@@ -86,21 +96,28 @@ func Validate(file *ast.File, modelDir string, filename string) []error {
 	}
 
 	errs := make([]error, 0)
+	records := make([]serviceActionRecord, 0)
 	rootModelFile := isRootModelFile(file, modelDir, filename)
-	for _, fn := range designBase {
-		errs = append(errs, validateDesignFunc(fn, rootModelFile, filename)...)
+	for _, name := range slices.Sorted(maps.Keys(designBase)) {
+		recs, designErrs := validateDesignFunc(designBase[name], name, rootModelFile, filename)
+		records = append(records, recs...)
+		errs = append(errs, designErrs...)
 	}
-	for _, fn := range designEmpty {
-		errs = append(errs, validateDesignFunc(fn, rootModelFile, filename)...)
+	for _, name := range slices.Sorted(maps.Keys(designEmpty)) {
+		recs, designErrs := validateDesignFunc(designEmpty[name], name, rootModelFile, filename)
+		records = append(records, recs...)
+		errs = append(errs, designErrs...)
 	}
+	errs = append(errs, validateServiceFilenameCollisions(records, filename)...)
 	return errs
 }
 
-func validateDesignFunc(fn *ast.FuncDecl, rootModelFile bool, filename string) []error {
+func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile bool, filename string) ([]serviceActionRecord, []error) {
 	if fn == nil || fn.Body == nil {
-		return nil
+		return nil, nil
 	}
 
+	records := make([]serviceActionRecord, 0)
 	errs := make([]error, 0)
 	for _, stmt := range fn.Body.List {
 		call := exprStmtCall(stmt)
@@ -113,28 +130,36 @@ func validateDesignFunc(fn *ast.FuncDecl, rootModelFile bool, filename string) [
 		}
 
 		switch {
-		case actionMethodNames[name]:
-			errs = append(errs, validateActionCall(call, name, rootModelFile, filename)...)
+		case isActionMethod(name):
+			info, actionErrs := validateActionCall(call, name, rootModelFile, filename)
+			if record, ok := newServiceActionRecord(info, name, modelName, ""); ok {
+				records = append(records, record)
+			}
+			errs = append(errs, actionErrs...)
 		case name == "Route":
-			errs = append(errs, validateRouteCall(call, rootModelFile, filename)...)
+			recs, routeErrs := validateRouteCall(call, modelName, rootModelFile, filename)
+			records = append(records, recs...)
+			errs = append(errs, routeErrs...)
 		case name == "Enabled" || designOnlyMethodNames[name]:
 			continue
 		case actionOnlyMethodNames[name]:
 			errs = append(errs, fmt.Errorf("%s: %s() can only be used inside an action block", filename, name))
 		}
 	}
-	return errs
+	return records, errs
 }
 
-func validateRouteCall(call *ast.CallExpr, rootModelFile bool, filename string) []error {
+func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile bool, filename string) ([]serviceActionRecord, []error) {
 	if len(call.Args) < 2 {
-		return nil
+		return nil, nil
 	}
 	flit, ok := call.Args[1].(*ast.FuncLit)
 	if !ok || flit == nil || flit.Body == nil {
-		return nil
+		return nil, nil
 	}
 
+	route := stringArgValue(call, "")
+	records := make([]serviceActionRecord, 0)
 	errs := make([]error, 0)
 	for _, stmt := range flit.Body.List {
 		child := exprStmtCall(stmt)
@@ -147,8 +172,12 @@ func validateRouteCall(call *ast.CallExpr, rootModelFile bool, filename string) 
 		}
 
 		switch {
-		case actionMethodNames[name]:
-			errs = append(errs, validateActionCall(child, name, rootModelFile, filename)...)
+		case isActionMethod(name):
+			info, actionErrs := validateActionCall(child, name, rootModelFile, filename)
+			if record, ok := newServiceActionRecord(info, name, modelName, route); ok {
+				records = append(records, record)
+			}
+			errs = append(errs, actionErrs...)
 		case name == "Route":
 			errs = append(errs, fmt.Errorf("%s: Route() can only be used at Design() top level", filename))
 		case actionOnlyMethodNames[name]:
@@ -159,26 +188,32 @@ func validateRouteCall(call *ast.CallExpr, rootModelFile bool, filename string) 
 			errs = append(errs, fmt.Errorf("%s: %s() can only be used at Design() top level", filename, name))
 		}
 	}
-	return errs
+	return records, errs
 }
 
-func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile bool, filename string) []error {
+// actionCallInfo carries the generation-relevant keywords collected from one
+// action block, so callers can derive facts such as the service filename
+// without re-walking the block.
+type actionCallInfo struct {
+	service  bool
+	filename string
+	flatten  bool
+	exact    bool
+	payload  bool
+	result   bool
+}
+
+func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile bool, filename string) (actionCallInfo, []error) {
+	info := actionCallInfo{}
 	if len(call.Args) == 0 {
-		return nil
+		return info, nil
 	}
 	flit, ok := call.Args[0].(*ast.FuncLit)
 	if !ok || flit == nil || flit.Body == nil {
-		return nil
+		return info, nil
 	}
 
-	service := false
-	filenameValue := ""
-	flatten := false
-	exact := false
-	payload := false
-	result := false
 	errs := make([]error, 0)
-
 	for _, stmt := range flit.Body.List {
 		child := exprStmtCall(stmt)
 		if child == nil {
@@ -191,20 +226,20 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile boo
 
 		switch {
 		case name == "Service":
-			service = true
+			info.service = true
 		case name == "Filename":
-			filenameValue = stringArgValue(child, filenameValue)
+			info.filename = stringArgValue(child, info.filename)
 		case name == "Flatten":
-			flatten = true
+			info.flatten = true
 		case name == "Exact":
-			exact = true
+			info.exact = true
 		case name == "Payload":
-			payload = true
+			info.payload = true
 		case name == "Result":
-			result = true
+			info.result = true
 		case name == "Enabled" || name == "Public":
 			continue
-		case actionMethodNames[name]:
+		case isActionMethod(name):
 			errs = append(errs, fmt.Errorf("%s: %s action cannot contain nested %s action", filename, actionName, name))
 		case name == "Route":
 			errs = append(errs, fmt.Errorf("%s: Route() can only be used at Design() top level", filename))
@@ -213,38 +248,107 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile boo
 		}
 	}
 
-	if flatten {
-		if !service {
+	if info.flatten {
+		if !info.service {
 			errs = append(errs, fmt.Errorf("%s: %s action uses dsl.Flatten() but does not enable Service()", filename, actionName))
 		}
-		if filenameValue == "" {
+		if info.filename == "" {
 			errs = append(errs, fmt.Errorf("%s: %s action uses dsl.Flatten() but is missing Filename(...)", filename, actionName))
 		}
 		if rootModelFile {
 			errs = append(errs, fmt.Errorf("%s: dsl.Flatten() cannot be used by root model file %s; move the model under model/<package>/<file>.go or remove Flatten()", filename, filename))
 		}
 	}
-	if payload && getVerbActionMethodNames[actionName] {
+	if info.payload && getVerbActionMethodNames[actionName] {
 		errs = append(errs, fmt.Errorf("%s: %s action handles an HTTP GET request and cannot declare Payload; declare Result for a custom service method and read query parameters from ServiceContext.Query()", filename, actionName))
 	}
 	if sig, ok := fixedContractActionSignatures[actionName]; ok {
-		if payload {
+		if info.payload {
 			errs = append(errs, fmt.Errorf("%s: %s action delegates to the fixed service method %s and cannot declare Payload", filename, actionName, sig))
 		}
-		if result {
+		if info.result {
 			errs = append(errs, fmt.Errorf("%s: %s action delegates to the fixed service method %s and cannot declare Result", filename, actionName, sig))
 		}
 	}
-	if exact && routeIDActionMethodNames[actionName] {
+	if info.exact && routeIDActionMethodNames[actionName] {
 		if getVerbActionMethodNames[actionName] {
-			if !result {
+			if !info.result {
 				errs = append(errs, fmt.Errorf("%s: %s action uses dsl.Exact() but relies on the built-in controller which reads the resource id from the route parameter only; declare Result with a custom service method or remove Exact()", filename, actionName))
 			}
-		} else if !payload && !result {
+		} else if !info.payload && !info.result {
 			errs = append(errs, fmt.Errorf("%s: %s action uses dsl.Exact() but relies on the built-in controller which reads the resource id from the route parameter only; declare Payload/Result with a custom service method or remove Exact()", filename, actionName))
 		}
 	}
 
+	return info, errs
+}
+
+// serviceActionRecord captures one Service-enabled action and the service
+// file it generates, for collision checks across the actions of a model file.
+type serviceActionRecord struct {
+	model    string // model struct name declaring the Design
+	route    string // Route path owning the action; empty for Design top-level actions
+	action   string // action method name, e.g. "Get"
+	flatten  bool   // Flatten writes into the package service dir instead of the model file dir
+	filename string // generated service filename, e.g. "list.go"
+}
+
+// newServiceActionRecord builds the generation record of one action call. It
+// reports false when the action does not generate a service file.
+func newServiceActionRecord(info actionCallInfo, actionName, modelName, route string) (serviceActionRecord, bool) {
+	if !info.service {
+		return serviceActionRecord{}, false
+	}
+	action := Action{Filename: info.filename, Phase: actionMethodPhases[actionName]}
+	return serviceActionRecord{
+		model:    modelName,
+		route:    route,
+		action:   actionName,
+		flatten:  info.flatten,
+		filename: action.ServiceFilename(),
+	}, true
+}
+
+// validateServiceFilenameCollisions rejects two Service actions generating
+// the same service file. gg gen derives both the target file and the service
+// struct name from Filename, so colliding actions fight over one struct: the
+// first action creates it and every later action force-syncs the
+// service.Base type parameters to its own Payload/Result, leaving a hybrid
+// declaration that satisfies neither service registration. All models in one
+// file share one service dir, so records are grouped per file; Flatten
+// actions write into the package service dir instead and therefore only
+// collide with other Flatten actions.
+func validateServiceFilenameCollisions(records []serviceActionRecord, filename string) []error {
+	type fileKey struct {
+		flatten bool
+		name    string
+	}
+	groups := make(map[fileKey][]serviceActionRecord)
+	keys := make([]fileKey, 0)
+	for _, record := range records {
+		key := fileKey{flatten: record.flatten, name: record.filename}
+		if _, ok := groups[key]; !ok {
+			keys = append(keys, key)
+		}
+		groups[key] = append(groups[key], record)
+	}
+
+	errs := make([]error, 0)
+	for _, key := range keys {
+		group := groups[key]
+		if len(group) < 2 {
+			continue
+		}
+		descs := make([]string, 0, len(group))
+		for _, record := range group {
+			desc := fmt.Sprintf("%s on %s", record.action, record.model)
+			if record.route != "" {
+				desc = fmt.Sprintf("%s (route %q)", desc, record.route)
+			}
+			descs = append(descs, desc)
+		}
+		errs = append(errs, fmt.Errorf("%s: service file %q is generated by multiple actions: %s; give each Service action a distinct Filename()", filename, key.name, strings.Join(descs, ", ")))
+	}
 	return errs
 }
 
