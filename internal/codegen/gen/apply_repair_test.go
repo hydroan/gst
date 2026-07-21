@@ -142,6 +142,41 @@ func (e *Exporter) Export(ctx *types.ServiceContext, users ...*model.User) (data
 			},
 		},
 		{
+			// A hand edit renamed the struct of a Filename-less action away
+			// from the phase role name. No rename path covers this case, yet
+			// the generated registration code still references the role name,
+			// so the struct and its method receivers are restored to the
+			// canonical name; receiver variable names and method bodies are
+			// user-visible code and stay untouched.
+			name: "restores_renamed_struct_without_filename",
+			code: `package user
+
+import (
+	"helloworld/model"
+
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+)
+
+type Mangled struct {
+	service.Base[*model.User, *model.User, *model.User]
+}
+
+func (x *Mangled) Export(ctx *types.ServiceContext, users ...*model.User) (data []byte, err error) {
+	data = append(data, 'a')
+	return data, err
+}
+`,
+			action:      exportAction,
+			wantChanged: true,
+			want: []string{
+				"type Exporter struct",
+				"func (x *Exporter) Export",
+				"data = append(data, 'a')",
+			},
+			wantAbsent: []string{"Mangled"},
+		},
+		{
 			// With Filename set, a canonical struct still carrying the old role
 			// name belongs to the rename path, not the force-rewrite path.
 			name: "skips_rewrite_when_filename_rename_applies",

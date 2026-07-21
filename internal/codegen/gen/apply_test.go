@@ -800,7 +800,11 @@ func (p *Ping) Get(ctx *types.ServiceContext, req *debug.Debug) (rsp *debug.Ping
 				Enabled: true,
 				Payload: "*Debug",
 				Result:  "*PingRsp",
-				Phase:   consts.PHASE_GET,
+				// Filename keeps the struct name "Ping" canonical for the
+				// action, so this case exercises only the stale model type
+				// sync and not the role name restoration.
+				Filename: "ping",
+				Phase:    consts.PHASE_GET,
 			},
 			servicePkgName: "debug",
 			modelInfo: &ModelInfo{

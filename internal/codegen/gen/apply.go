@@ -430,8 +430,11 @@ func applyServiceTypeParam(indexListExpr *ast.IndexListExpr, paramIndex int, tar
 // are corrected instead of preserved: extra fields are discarded together
 // with interior comments (embedding another service is forbidden, and the
 // framework injects the logger only through the direct service.Base
-// embedding), and a deleted struct is regenerated so gg gen always converges
-// on a registrable service struct. It reports whether the file was modified.
+// embedding), a struct renamed away from the role name is renamed back when
+// the action declares no Filename (with Filename set the
+// applyServiceRoleName rename path owns the name), and a deleted struct is
+// regenerated so gg gen always converges on a registrable service struct.
+// It reports whether the file was modified.
 func forceCanonicalServiceStruct(file *ast.File, action *dsl.Action, modelInfo *ModelInfo) bool {
 	if file == nil || action == nil || modelInfo == nil {
 		return false
@@ -441,28 +444,42 @@ func forceCanonicalServiceStruct(file *ast.File, action *dsl.Action, modelInfo *
 		return false
 	}
 
+	renamed := false
 	spec := findStructTypeSpec(file, roleName)
 	if spec == nil {
-		// A well-formed service struct under another name is out of rewrite
-		// scope: with Filename set it belongs to the applyServiceRoleName
+		existing := findServiceTypeName(file)
+		if len(existing) == 0 {
+			file.Decls = append(file.Decls, types(modelInfo.ModelPkgName, modelInfo.ModelName, action.Payload, action.Result, action.Phase, roleName, false))
+			ensureServiceImportSpec(file)
+			ensureModelImportSpec(file, modelInfo)
+			return true
+		}
+		// With Filename set, a well-formed service struct under another name
+		// is out of rewrite scope: it belongs to the applyServiceRoleName
 		// rename path, and module-copied services legitimately use their own
 		// struct names (they register manually instead of through generated
 		// registration code).
-		if len(findServiceTypeName(file)) > 0 {
+		if len(action.Filename) > 0 {
 			return false
 		}
-		file.Decls = append(file.Decls, types(modelInfo.ModelPkgName, modelInfo.ModelName, action.Payload, action.Result, action.Phase, roleName, false))
-		ensureServiceImportSpec(file)
-		ensureModelImportSpec(file, modelInfo)
-		return true
+		// Without Filename no rename path covers the struct, yet the
+		// generated registration code references the phase role name, so a
+		// renamed struct is restored to the canonical name. Receiver
+		// variable names are generation defaults, not framework assets, and
+		// stay untouched.
+		spec = renameServiceStruct(file, existing, roleName)
+		if spec == nil {
+			return false
+		}
+		renamed = true
 	}
 
 	structType, ok := spec.Type.(*ast.StructType)
 	if !ok {
-		return false
+		return renamed
 	}
 	if isCanonicalServiceStructBody(structType) {
-		return false
+		return renamed
 	}
 
 	baseField := generatedServiceBaseField(modelInfo, action, roleName)
@@ -477,6 +494,34 @@ func forceCanonicalServiceStruct(file *ast.File, action *dsl.Action, modelInfo *
 	ensureServiceImportSpec(file)
 	ensureModelImportSpec(file, modelInfo)
 	return true
+}
+
+// renameServiceStruct renames the service struct declaration from oldName to
+// newName and retargets the receiver type of every method bound to it, so
+// the struct matches the name referenced by generated registration code.
+// Receiver variable names and method bodies are user-visible code and are
+// left untouched. It returns the renamed type spec, or nil when no struct
+// named oldName exists.
+func renameServiceStruct(file *ast.File, oldName, newName string) *ast.TypeSpec {
+	spec := findStructTypeSpec(file, oldName)
+	if spec == nil {
+		return nil
+	}
+	spec.Name = ast.NewIdent(newName)
+	for _, decl := range file.Decls {
+		funcDecl, ok := decl.(*ast.FuncDecl)
+		if !ok || funcDecl.Recv == nil || len(funcDecl.Recv.List) == 0 {
+			continue
+		}
+		starExpr, ok := funcDecl.Recv.List[0].Type.(*ast.StarExpr)
+		if !ok {
+			continue
+		}
+		if ident, ok := starExpr.X.(*ast.Ident); ok && ident.Name == oldName {
+			ident.Name = newName
+		}
+	}
+	return spec
 }
 
 // isCanonicalServiceStructBody reports whether the struct body is exactly the
