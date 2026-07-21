@@ -95,8 +95,10 @@ func captureRequestBody(c *gin.Context, maxBodySize int64) *httpBodyCapture {
 		return &httpBodyCapture{size: -1, truncated: true}
 	}
 
-	body, err := io.ReadAll(c.Request.Body)
-	if err != nil {
+	// ContentLength is known and within the cap here, so allocate exactly once
+	// instead of paying io.ReadAll's grow-from-512-bytes buffering.
+	body := make([]byte, c.Request.ContentLength)
+	if _, err := io.ReadFull(c.Request.Body, body); err != nil {
 		return &httpBodyCapture{size: c.Request.ContentLength, err: "read request body: " + err.Error()}
 	}
 	c.Request.Body = io.NopCloser(bytes.NewReader(body))
@@ -321,6 +323,7 @@ func safeHTTPBodyLogSize(size uint64) int64 {
 }
 
 func isJSONContentType(contentType string) bool {
-	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+	mediaType, _, _ := strings.Cut(contentType, ";")
+	mediaType = strings.ToLower(strings.TrimSpace(mediaType))
 	return mediaType == "application/json" || strings.HasSuffix(mediaType, "+json")
 }
