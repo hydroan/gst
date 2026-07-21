@@ -22,6 +22,7 @@ var (
 	// 2xx/3xx success or redirect statuses such as http.StatusOK, are normalized to
 	// http.StatusInternalServerError and the provided message is discarded.
 	//
-	// The cause is available through Unwrap but is never exposed as the response message.
+	// The cause is reported by Error for logs and available through Unwrap, but
+	// is never exposed as the response message.
 	NewErrorWithCause = serviceregistry.NewErrorWithCause
 )

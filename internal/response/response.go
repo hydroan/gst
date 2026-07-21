@@ -9,7 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/sse"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
@@ -145,7 +147,7 @@ func (r Code) WithStatus(status int) CodeInstance {
 }
 
 func (r Code) WithErr(err error) CodeInstance {
-	msg := err.Error()
+	msg := clientSafeErrorMessage(err)
 	return CodeInstance{code: r, status: nil, msg: &msg}
 }
 
@@ -176,8 +178,20 @@ func (ci CodeInstance) WithStatus(status int) CodeInstance {
 }
 
 func (ci CodeInstance) WithErr(err error) CodeInstance {
-	msg := err.Error()
+	msg := clientSafeErrorMessage(err)
 	return CodeInstance{code: ci.code, status: ci.status, msg: &msg}
+}
+
+// clientSafeErrorMessage returns the message WithErr renders in the response
+// envelope. Service-layer errors anywhere in the wrap chain render their
+// client-safe Msg, keeping the internal cause (reported by Error for logs)
+// out of API responses; other errors keep rendering their full Error text.
+func clientSafeErrorMessage(err error) string {
+	var serviceErr *serviceregistry.Error
+	if errors.As(err, &serviceErr) {
+		return serviceErr.Msg()
+	}
+	return err.Error()
 }
 
 func (ci CodeInstance) WithMsg(msg string) CodeInstance {

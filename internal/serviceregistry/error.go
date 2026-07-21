@@ -48,7 +48,8 @@ func NewError(status int, msg string) *Error {
 // 2xx/3xx success or redirect statuses such as http.StatusOK, are normalized to
 // http.StatusInternalServerError and the provided message is discarded.
 //
-// The cause is available through Unwrap but is never exposed as the response message.
+// The cause is reported by Error for logs and available through Unwrap, but
+// is never exposed as the response message.
 func NewErrorWithCause(status int, msg string, cause error) *Error {
 	return newError(status, msg, cause)
 }
@@ -93,8 +94,15 @@ func (e *Error) StackTrace() errbase.StackTrace {
 	return frames
 }
 
+// Error reports the client-safe message followed by the cause chain, so log
+// consumers rendering err.Error() (zap's error field, sugared positional
+// logging) capture the internal cause. The response envelope renders Msg
+// instead, keeping the cause out of API responses.
 func (e *Error) Error() string {
-	return e.Msg()
+	if e == nil || e.cause == nil {
+		return e.Msg()
+	}
+	return e.msg + ": " + e.cause.Error()
 }
 
 func (e *Error) Unwrap() error {

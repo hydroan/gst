@@ -44,14 +44,16 @@ func TestNewErrorUsesHTTPStatusTextWhenMessageIsEmpty(t *testing.T) {
 	require.Equal(t, http.StatusText(http.StatusNotFound), err.Msg())
 }
 
-func TestNewErrorWithCauseKeepsCauseInternal(t *testing.T) {
+func TestNewErrorWithCauseIncludesCauseInErrorButNotMsg(t *testing.T) {
 	cause := errors.New("database password leaked")
 	err := NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause)
 
 	require.ErrorIs(t, err, cause)
+	// Msg stays client-safe: the response envelope renders Msg, never Error.
 	require.Equal(t, "failed to load user", err.Msg())
-	require.Equal(t, "failed to load user", err.Error())
-	require.NotContains(t, err.Error(), cause.Error())
+	require.NotContains(t, err.Msg(), cause.Error())
+	// Error reports the full chain so logs capture the internal cause.
+	require.Equal(t, "failed to load user: database password leaked", err.Error())
 }
 
 func TestNewErrorCapturesStackTraceAtConstructionSite(t *testing.T) {
