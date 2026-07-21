@@ -333,10 +333,10 @@ func setupHTTPBodyLoggerTest(t *testing.T, cfg config.HTTPBodyLogger) *observer.
 	})
 
 	core, logs := observer.New(zapcore.InfoLevel)
-	originalLogger := logger.Gin
-	logger.Gin = zap.New(core)
+	originalLogger := logger.HTTPBody
+	logger.HTTPBody = zap.New(core)
 	t.Cleanup(func() {
-		logger.Gin = originalLogger
+		logger.HTTPBody = originalLogger
 	})
 
 	return logs

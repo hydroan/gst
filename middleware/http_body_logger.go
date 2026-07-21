@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	// httpBodyLogMessage is the log message shared by every body log entry so
-	// entries can be filtered apart from access logs in the same log file.
+	// httpBodyLogMessage is the log message of every body log entry. Body logs
+	// go to their own log file (http_body.log) whose encoder drops the message
+	// field, so this only shows up when a custom logger keeps that field.
 	httpBodyLogMessage = "http_body"
 
 	defaultHTTPBodyLogMaxSize = "64KB"
@@ -25,12 +26,26 @@ const (
 // BodyLogger returns a middleware that logs JSON HTTP request and response
 // bodies as a single log entry per request, correlated by trace id.
 //
-// Bodies are logged verbatim as raw JSON text instead of being parsed, so
-// malformed payloads stay visible and the log storage does not grow field
-// mappings out of request content. Capturing happens up front, but whether
-// the captured bodies are written is decided after the handler chain
-// finished, so the all|error|none modes can use the final response status
-// and the envelope code recorded by the response helpers.
+// Bodies are deliberately logged verbatim as raw JSON text and must never be
+// unmarshaled into structured log fields:
+//
+//   - Structured bodies would grow the log storage's field mappings out of
+//     request content: every business field of every route becomes a mapped
+//     field, and the same field name carrying different types across routes
+//     (object vs array vs scalar) makes the storage reject whole entries,
+//     silently and data-dependently.
+//   - Malformed payloads stay visible verbatim; parsing would drop exactly
+//     the requests most worth inspecting.
+//   - Bodies over the size cap are truncated mid-JSON and cannot be parsed.
+//   - Raw text keeps the hot path free of per-request parsing costs.
+//
+// If structured querying over body fields is ever needed, parse in the log
+// pipeline (e.g. into a single flattened field), not here.
+//
+// Capturing happens up front, but whether the captured bodies are written is
+// decided after the handler chain finished, so the all|error|none modes can
+// use the final response status and the envelope code recorded by the
+// response helpers.
 func BodyLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cfg := config.App.Logger.HTTPBody
@@ -170,7 +185,7 @@ func (w *bodyLogWriter) capture(data []byte) {
 // carrying whichever captured bodies the configured modes admit. Requests
 // where neither side has content to log produce no entry at all.
 func writeHTTPBodyLog(c *gin.Context, reqMode, rspMode config.HTTPBodyLogMode, request, response *httpBodyCapture) {
-	if logger.Gin == nil {
+	if logger.HTTPBody == nil {
 		return
 	}
 
@@ -201,7 +216,7 @@ func writeHTTPBodyLog(c *gin.Context, reqMode, rspMode config.HTTPBodyLogMode, r
 	fields = appendHTTPBodyLogFields(fields, "request", request)
 	fields = appendHTTPBodyLogFields(fields, "response", response)
 
-	logger.Gin.Info(httpBodyLogMessage, fields...)
+	logger.HTTPBody.Info(httpBodyLogMessage, fields...)
 }
 
 // appendHTTPBodyLogFields appends the body fields of one side using the side

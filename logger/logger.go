@@ -47,7 +47,8 @@ var (
 	Protocol types.Logger
 	Binary   types.Logger
 
-	Gin    *zap.Logger
-	Gorm   gorml.Interface
-	Casbin log.Logger
+	Gin      *zap.Logger
+	HTTPBody *zap.Logger
+	Gorm     gorml.Interface
+	Casbin   log.Logger
 )

@@ -95,6 +95,7 @@ func Init() error {
 	logger.Binary = New("binary.log")
 
 	logger.Gin = NewGin("access.log")
+	logger.HTTPBody = NewGin("http_body.log")
 	logger.Gorm = NewGorm("gorm.log")
 	logger.Casbin = NewCasbin("casbin.log")
 
@@ -146,6 +147,11 @@ func Clean() {
 	// Gin logger
 	if logger.Gin != nil {
 		_ = logger.Gin.Sync()
+	}
+
+	// HTTP body logger
+	if logger.HTTPBody != nil {
+		_ = logger.HTTPBody.Sync()
 	}
 
 	// gorm logger
