@@ -16,6 +16,7 @@ const (
 	LOGGER_HTTP_BODY_LOG_REQUEST   = "LOGGER_HTTP_BODY_LOG_REQUEST"   //nolint:staticcheck
 	LOGGER_HTTP_BODY_LOG_RESPONSE  = "LOGGER_HTTP_BODY_LOG_RESPONSE"  //nolint:staticcheck
 	LOGGER_HTTP_BODY_MAX_BODY_SIZE = "LOGGER_HTTP_BODY_MAX_BODY_SIZE" //nolint:staticcheck
+	LOGGER_HTTP_BODY_SKIP_ROUTES   = "LOGGER_HTTP_BODY_SKIP_ROUTES"   //nolint:staticcheck
 )
 
 // Logger represents section "logger" for client-side or server-side configuration,
@@ -79,24 +80,46 @@ type Logger struct {
 	HTTPBody HTTPBodyLogger `json:"http_body" ini:"http_body" yaml:"http_body" mapstructure:"http_body"`
 }
 
+// HTTPBodyLogMode selects which finished requests get a captured HTTP body
+// written to the log.
+type HTTPBodyLogMode string
+
+const (
+	// HTTPBodyLogModeAll writes the captured body for every request.
+	HTTPBodyLogModeAll HTTPBodyLogMode = "all"
+	// HTTPBodyLogModeError writes the captured body only for failed requests:
+	// HTTP status >= 400, or a non-zero envelope code recorded by the
+	// response helpers.
+	HTTPBodyLogModeError HTTPBodyLogMode = "error"
+	// HTTPBodyLogModeNone disables body logging for that side entirely.
+	HTTPBodyLogModeNone HTTPBodyLogMode = "none"
+)
+
 // HTTPBodyLogger represents HTTP body logging configuration.
 type HTTPBodyLogger struct {
-	// Enabled enables HTTP request and response body logging middleware.
+	// Enabled enables the HTTP request and response body logging middleware.
 	// Default: false
 	Enabled bool `json:"enabled" ini:"enabled" yaml:"enabled" mapstructure:"enabled"`
 
-	// LogRequest enables logging of JSON HTTP request bodies.
-	// Default: false
-	LogRequest bool `json:"log_request" ini:"log_request" yaml:"log_request" mapstructure:"log_request"`
+	// LogRequest selects which requests get their JSON body logged (all|error|none).
+	// Empty or unknown values fall back to the default.
+	// Default: all
+	LogRequest HTTPBodyLogMode `json:"log_request" ini:"log_request" yaml:"log_request" mapstructure:"log_request"`
 
-	// LogResponse enables logging of JSON HTTP response bodies.
-	// Default: false
-	LogResponse bool `json:"log_response" ini:"log_response" yaml:"log_response" mapstructure:"log_response"`
+	// LogResponse selects which responses get their JSON body logged (all|error|none).
+	// Empty or unknown values fall back to the default.
+	// Default: error
+	LogResponse HTTPBodyLogMode `json:"log_response" ini:"log_response" yaml:"log_response" mapstructure:"log_response"`
 
 	// MaxBodySize limits how much request or response body data can be logged.
 	// Values are parsed with github.com/dustin/go-humanize, for example "64KB".
 	// Default: 64KB
 	MaxBodySize string `json:"max_body_size" ini:"max_body_size" yaml:"max_body_size" mapstructure:"max_body_size"`
+
+	// SkipRoutes lists routes whose bodies are never logged, for example login
+	// or other credential-carrying endpoints. A pattern ending in "*" matches
+	// the route by prefix; any other pattern must match the route exactly.
+	SkipRoutes []string `json:"skip_routes" ini:"skip_routes" yaml:"skip_routes" mapstructure:"skip_routes"`
 }
 
 func (*Logger) setDefault() {
@@ -112,7 +135,8 @@ func (*Logger) setDefault() {
 	cv.SetDefault("logger.max_size", 100)
 	cv.SetDefault("logger.max_backups", 1)
 	cv.SetDefault("logger.http_body.enabled", false)
-	cv.SetDefault("logger.http_body.log_request", false)
-	cv.SetDefault("logger.http_body.log_response", false)
+	cv.SetDefault("logger.http_body.log_request", HTTPBodyLogModeAll)
+	cv.SetDefault("logger.http_body.log_response", HTTPBodyLogModeError)
 	cv.SetDefault("logger.http_body.max_body_size", "64KB")
+	cv.SetDefault("logger.http_body.skip_routes", []string{})
 }

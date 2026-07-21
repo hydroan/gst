@@ -193,6 +193,9 @@ func NewCode(code Code, status int, msg string) Code {
 }
 
 func JSON(c *gin.Context, coder types.Coder, data ...any) {
+	// Record the envelope code so post-response middleware (e.g. the HTTP
+	// body logger) can classify the outcome even when the HTTP status is 2xx.
+	c.Set(consts.CTX_RESPONSE_CODE, coder.Code())
 	if len(data) > 0 {
 		c.JSON(coder.Status(), gin.H{
 			"code":          coder.Code(),
@@ -211,6 +214,7 @@ func JSON(c *gin.Context, coder types.Coder, data ...any) {
 }
 
 func Bytes(c *gin.Context, coder types.Coder, data ...[]byte) {
+	c.Set(consts.CTX_RESPONSE_CODE, coder.Code())
 	c.Header("Content-Type", "application/json; charset=utf-8")
 	c.Header("X-cached", "true")
 	var dataStr string
@@ -224,6 +228,7 @@ func Bytes(c *gin.Context, coder types.Coder, data ...[]byte) {
 }
 
 func BytesList(c *gin.Context, coder types.Coder, total int, data ...[]byte) {
+	c.Set(consts.CTX_RESPONSE_CODE, coder.Code())
 	c.Header("Content-Type", "application/json; charset=utf-8")
 	var dataStr string
 	if len(data) > 0 {
