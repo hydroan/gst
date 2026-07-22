@@ -193,15 +193,20 @@ func genRunWithOptions(opts genRunOptions) error {
 	serviceAliasMap := gen.ResolveImportConflicts(serviceImports)
 	for _, m := range allModels {
 		m.Design.Range(func(route string, act *dsl.Action) {
+			// Both registrations below must carry this exact route string:
+			// the service registry keys services by route and phase, so the
+			// service side and the router side share one route value.
+			route, paramName := routerTargetForAction(route, m.Design, act)
+
 			if act.Service {
 				target := gen.ServiceTarget(m, act, modelDir, serviceDir)
 				if alias := serviceAliasMap[target.ImportPath]; len(alias) > 0 {
 					// alias import package, eg:
 					// pkg1_user "service/pkg1/user"
 					// pkg2_user "service/pkg2/user"
-					serviceStmts = append(serviceStmts, gen.StmtServiceRegister(fmt.Sprintf("%s.%s", alias, act.RoleName()), act.Phase))
+					serviceStmts = append(serviceStmts, gen.StmtServiceRegister(fmt.Sprintf("%s.%s", alias, act.RoleName()), act.Phase, route))
 				} else {
-					serviceStmts = append(serviceStmts, gen.StmtServiceRegister(fmt.Sprintf("%s.%s", target.PackageName, act.RoleName()), act.Phase))
+					serviceStmts = append(serviceStmts, gen.StmtServiceRegister(fmt.Sprintf("%s.%s", target.PackageName, act.RoleName()), act.Phase, route))
 				}
 			}
 			base := "Auth"
@@ -213,7 +218,6 @@ func genRunWithOptions(opts genRunOptions) error {
 			if act.Payload == dsl.PayloadEmpty {
 				routerImportMap[gen.GstModelRouterImport] = struct{}{}
 			}
-			route, paramName := routerTargetForAction(route, m.Design, act)
 			routerStmts = append(routerStmts, gen.StmtRouterRegister(m.ModelPkgName, m.ModelName, act.Payload, act.Result, base, route, paramName, act.Phase.MethodName()))
 		})
 	}
@@ -397,9 +401,9 @@ func routerTargetForAction(route string, design *dsl.Design, action *dsl.Action)
 
 	paramName := ""
 
-	// If the phase is matched, the model endpoint will append the param, eg:
-	// Endpoint: tenant, param is ":tenant", new endpoint is "tenant/:tenant"
-	// Endpoint: tenant, param is ":id", new endpoint is "tenant/:id"
+	// If the phase is matched, the route appends the param, eg:
+	// route "tenant" with param ":tenant" becomes "tenant/:tenant"
+	// route "tenant" with param ":id" becomes "tenant/:id"
 	switch action.Phase {
 	case consts.PHASE_DELETE, consts.PHASE_UPDATE, consts.PHASE_PATCH, consts.PHASE_GET:
 		param := ":id"

@@ -36,7 +36,7 @@ func Create[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 // requests are left unbound so the service can read the request directly.
 func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	handler, _ := extractConfig(cfg...)
-	meta := newFactoryMeta[M, REQ, RSP](consts.PHASE_CREATE, consts.PHASE_CREATE_BEFORE, consts.PHASE_CREATE_AFTER)
+	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_CREATE, consts.PHASE_CREATE_BEFORE, consts.PHASE_CREATE_AFTER)
 	return func(c *gin.Context) {
 		var err error
 		var reqErr error

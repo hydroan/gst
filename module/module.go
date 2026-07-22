@@ -148,12 +148,15 @@ func Use[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[
 
 		for _, option := range options {
 			for _, p := range option.phases {
-				serviceregistry.Register[M, REQ, RSP](p, mod.Service())
-
+				// The service registers under the same raw route string the
+				// router handler uses, because the registry keys services by
+				// route and phase.
 				switch option.mode {
 				case useRouteModeCRUD:
+					serviceregistry.Register[M, REQ, RSP](p, crudRoute(route, param, p), mod.Service())
 					registerCRUDRouter(mod, route, param, p)
 				case useRouteModeExact:
+					serviceregistry.Register[M, REQ, RSP](p, route, mod.Service())
 					registerRouter(mod, route, nil, p.ToHTTPVerb())
 				}
 			}
@@ -191,28 +194,43 @@ func registersModel(options []UseOption) bool {
 	return false
 }
 
+// crudRoute returns the raw route string of the phase under the CRUD layout.
+// Service registration and router registration both derive the registry key
+// from this route, so they must share this single mapping.
+func crudRoute(route, param string, phase consts.Phase) string {
+	switch phase {
+	case consts.PHASE_DELETE, consts.PHASE_UPDATE, consts.PHASE_PATCH, consts.PHASE_GET:
+		return fmt.Sprintf("%s/:%s", route, param)
+	case consts.PHASE_CREATE_MANY, consts.PHASE_DELETE_MANY, consts.PHASE_UPDATE_MANY, consts.PHASE_PATCH_MANY:
+		return route + "/batch"
+	default:
+		return route
+	}
+}
+
 func registerCRUDRouter[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[M, REQ, RSP], route, param string, phase consts.Phase) {
+	target := crudRoute(route, param, phase)
 	switch phase {
 	case consts.PHASE_CREATE:
-		registerRouter(mod, route, nil, consts.Create)
+		registerRouter(mod, target, nil, consts.Create)
 	case consts.PHASE_DELETE:
-		registerRouter(mod, fmt.Sprintf("%s/:%s", route, param), &types.ControllerConfig[M]{ParamName: param}, consts.Delete)
+		registerRouter(mod, target, &types.ControllerConfig[M]{ParamName: param}, consts.Delete)
 	case consts.PHASE_UPDATE:
-		registerRouter(mod, fmt.Sprintf("%s/:%s", route, param), &types.ControllerConfig[M]{ParamName: param}, consts.Update)
+		registerRouter(mod, target, &types.ControllerConfig[M]{ParamName: param}, consts.Update)
 	case consts.PHASE_PATCH:
-		registerRouter(mod, fmt.Sprintf("%s/:%s", route, param), &types.ControllerConfig[M]{ParamName: param}, consts.Patch)
+		registerRouter(mod, target, &types.ControllerConfig[M]{ParamName: param}, consts.Patch)
 	case consts.PHASE_LIST:
-		registerRouter(mod, route, nil, consts.List)
+		registerRouter(mod, target, nil, consts.List)
 	case consts.PHASE_GET:
-		registerRouter(mod, fmt.Sprintf("%s/:%s", route, param), &types.ControllerConfig[M]{ParamName: param}, consts.Get)
+		registerRouter(mod, target, &types.ControllerConfig[M]{ParamName: param}, consts.Get)
 	case consts.PHASE_CREATE_MANY:
-		registerRouter(mod, route+"/batch", nil, consts.CreateMany)
+		registerRouter(mod, target, nil, consts.CreateMany)
 	case consts.PHASE_DELETE_MANY:
-		registerRouter(mod, route+"/batch", nil, consts.DeleteMany)
+		registerRouter(mod, target, nil, consts.DeleteMany)
 	case consts.PHASE_UPDATE_MANY:
-		registerRouter(mod, route+"/batch", nil, consts.UpdateMany)
+		registerRouter(mod, target, nil, consts.UpdateMany)
 	case consts.PHASE_PATCH_MANY:
-		registerRouter(mod, route+"/batch", nil, consts.PatchMany)
+		registerRouter(mod, target, nil, consts.PatchMany)
 	}
 }
 

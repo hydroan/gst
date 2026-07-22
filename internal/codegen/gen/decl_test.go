@@ -76,42 +76,6 @@ func TestImports(t *testing.T) {
 	}
 }
 
-func TestInits(t *testing.T) {
-	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
-		modelName string
-		want      string
-	}{
-		{
-			name:      "user",
-			modelName: "User",
-			want: `func init() {
-	service.Register[*user]()
-}`,
-		},
-		{
-			name:      "group",
-			modelName: "Group",
-			want: `func init() {
-	service.Register[*group]()
-}`,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := FormatNode(inits(tt.modelName))
-			if err != nil {
-				t.Error(err)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("inits() = \n%v\n, want \n%v\n", fmt.Sprintf("% #v", got), fmt.Sprintf("% #v", tt.want))
-			}
-		})
-	}
-}
-
 func TestTypes(t *testing.T) {
 	tests := []struct {
 		name string // description of this test case

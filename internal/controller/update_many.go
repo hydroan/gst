@@ -32,7 +32,7 @@ func UpdateMany[M types.Model, REQ types.Request, RSP types.Response](c *gin.Con
 // delegates the operation to the phase service's UpdateMany method.
 func UpdateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	handler, _ := extractConfig(cfg...)
-	meta := newFactoryMeta[M, REQ, RSP](consts.PHASE_UPDATE_MANY, consts.PHASE_UPDATE_MANY_BEFORE, consts.PHASE_UPDATE_MANY_AFTER)
+	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_UPDATE_MANY, consts.PHASE_UPDATE_MANY_BEFORE, consts.PHASE_UPDATE_MANY_AFTER)
 	return func(c *gin.Context) {
 		var err error
 		var reqErr error

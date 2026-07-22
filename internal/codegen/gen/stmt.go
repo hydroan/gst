@@ -88,8 +88,12 @@ func StmtModelRegister(modelName string) *ast.ExprStmt {
 
 // StmtServiceRegister creates a *ast.ExprStmt represents golang code like below:
 //
-//	service.Register[*user.Creator](consts.PHASE_CREATE)
-func StmtServiceRegister(serviceImport string, phase consts.Phase) *ast.ExprStmt {
+//	service.Register[*user.Creator](consts.PHASE_CREATE, "users")
+//
+// The route argument must be the same raw route string the matching
+// StmtRouterRegister statement carries, because the service registry keys
+// services by route and phase.
+func StmtServiceRegister(serviceImport string, phase consts.Phase, route string) *ast.ExprStmt {
 	return &ast.ExprStmt{
 		X: &ast.CallExpr{
 			Fun: &ast.IndexExpr{
@@ -106,6 +110,10 @@ func StmtServiceRegister(serviceImport string, phase consts.Phase) *ast.ExprStmt
 					X:   ast.NewIdent("consts"),
 					Sel: ast.NewIdent(phase.Name()),
 				},
+				&ast.BasicLit{
+					Kind:  token.STRING,
+					Value: fmt.Sprintf("%q", route),
+				},
 			},
 		},
 	}
@@ -115,7 +123,11 @@ func StmtServiceRegister(serviceImport string, phase consts.Phase) *ast.ExprStmt
 //
 //	router.Register[*model.Group, *model.Group, *model.Group](router.Auth(), "group", &types.ControllerConfig[*model.Group]{}, consts.Create)
 //	router.Register[*model.Group, *model.Group, *model.Group](router.Pub(), "login", &types.ControllerConfig[*auth.LoginReq]{}, consts.Create)
-func StmtRouterRegister(modelPkgName, modelName, reqName, rspName string, router string, endpoint string, paramName string, verb string) *ast.ExprStmt {
+//
+// routerGroup names the router group accessor ("Auth" or "Pub") and route is
+// the raw route string, shared verbatim with the matching StmtServiceRegister
+// statement.
+func StmtRouterRegister(modelPkgName, modelName, reqName, rspName string, routerGroup string, route string, paramName string, verb string) *ast.ExprStmt {
 	// The dsl.PayloadEmpty sentinel resolves to *gstmodel.Empty. The router
 	// file aggregates imports from many model packages, so the gst model
 	// package is always referenced under the gstmodel alias to avoid clashing
@@ -229,12 +241,12 @@ func StmtRouterRegister(modelPkgName, modelName, reqName, rspName string, router
 				&ast.CallExpr{
 					Fun: &ast.SelectorExpr{
 						X:   ast.NewIdent("router"),
-						Sel: ast.NewIdent(router),
+						Sel: ast.NewIdent(routerGroup),
 					},
 				},
 				&ast.BasicLit{
 					Kind:  token.STRING,
-					Value: fmt.Sprintf("%q", endpoint),
+					Value: fmt.Sprintf("%q", route),
 				},
 				paramExpr,
 				&ast.SelectorExpr{

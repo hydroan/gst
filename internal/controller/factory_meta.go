@@ -43,10 +43,13 @@ type phaseSpan struct {
 }
 
 // newFactoryMeta builds the shared metadata for a factory handling the primary
-// phase. hookPhases lists the additional service hook phases the handler
-// traces (for example the before/after phases of a CRUD operation), so their
-// span names are precomputed as well.
-func newFactoryMeta[M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase, hookPhases ...consts.Phase) *factoryMeta[M, REQ, RSP] {
+// phase. route is the raw route string the handler is registered under and
+// keys the service registry lookup together with the phase; an empty route
+// resolves no service, degrading to the no-op default service. hookPhases
+// lists the additional service hook phases the handler traces (for example
+// the before/after phases of a CRUD operation), so their span names are
+// precomputed as well.
+func newFactoryMeta[M types.Model, REQ types.Request, RSP types.Response](route string, phase consts.Phase, hookPhases ...consts.Phase) *factoryMeta[M, REQ, RSP] {
 	typ := reflect.TypeOf(*new(M)).Elem()
 	name := typ.Name()
 
@@ -67,7 +70,7 @@ func newFactoryMeta[M types.Model, REQ types.Request, RSP types.Response](phase 
 		name:           name,
 		fullName:       typ.String(),
 		typesEqual:     modelregistry.AreTypesEqual[M, REQ, RSP](),
-		svcKey:         serviceregistry.KeyFor[M, REQ, RSP](phase),
+		svcKey:         serviceregistry.Key(phase, route),
 		reqKind:        reqKind,
 		reqTyp:         reqTyp,
 		controllerSpan: newPhaseSpan("controller", name, phase),

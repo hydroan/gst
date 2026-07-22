@@ -35,7 +35,7 @@ func PatchMany[M types.Model, REQ types.Request, RSP types.Response](c *gin.Cont
 // delegates the operation to the phase service's PatchMany method.
 func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	handler, _ := extractConfig(cfg...)
-	meta := newFactoryMeta[M, REQ, RSP](consts.PHASE_PATCH_MANY, consts.PHASE_PATCH_MANY_BEFORE, consts.PHASE_PATCH_MANY_AFTER)
+	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_PATCH_MANY, consts.PHASE_PATCH_MANY_BEFORE, consts.PHASE_PATCH_MANY_AFTER)
 	return func(c *gin.Context) {
 		var err error
 		var reqErr error

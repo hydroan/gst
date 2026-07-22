@@ -225,10 +225,22 @@ func Stop() {
 //   - PATCH  /{path}/batch   -> PatchMany
 //
 // For custom controller configuration, pass a ControllerConfig object.
-func Register[M types.Model, REQ types.Request, RSP types.Response](router gin.IRouter, rawPath string, cfg *types.ControllerConfig[M], verbs ...consts.HTTPVerb) {
-	if validPath(rawPath) {
-		register[M, REQ, RSP](router, buildPath(rawPath), buildVerbMap(verbs...), cfg)
+//
+// The raw route string is stamped into the controller config so factories can
+// resolve the matching phase service through the route-derived registry key;
+// it must therefore equal the route passed to the corresponding
+// service.Register call. The config is shallow-copied first, keeping a
+// caller-shared config safe for reuse across routes.
+func Register[M types.Model, REQ types.Request, RSP types.Response](router gin.IRouter, route string, cfg *types.ControllerConfig[M], verbs ...consts.HTTPVerb) {
+	if !validPath(route) {
+		return
 	}
+	routed := types.ControllerConfig[M]{}
+	if cfg != nil {
+		routed = *cfg
+	}
+	routed.Route = route
+	register[M, REQ, RSP](router, buildPath(route), buildVerbMap(verbs...), &routed)
 }
 
 func register[M types.Model, REQ types.Request, RSP types.Response](router gin.IRouter, path string, verbMap map[consts.HTTPVerb]bool, cfg ...*types.ControllerConfig[M]) {
@@ -337,10 +349,10 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router gin.I
 	}
 }
 
-func validPath(rawPath string) bool {
-	rawPath = strings.TrimSpace(rawPath)
-	if len(rawPath) == 0 {
-		zap.S().Warn("empty path, skip register routes")
+func validPath(route string) bool {
+	route = strings.TrimSpace(route)
+	if len(route) == 0 {
+		zap.S().Warn("empty route, skip register routes")
 		return false
 	}
 	return true

@@ -57,7 +57,7 @@ func CreateMany[M types.Model, REQ types.Request, RSP types.Response](c *gin.Con
 // delegates the operation to the phase service's CreateMany method.
 func CreateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	handler, _ := extractConfig(cfg...)
-	meta := newFactoryMeta[M, REQ, RSP](consts.PHASE_CREATE_MANY, consts.PHASE_CREATE_MANY_BEFORE, consts.PHASE_CREATE_MANY_AFTER)
+	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_CREATE_MANY, consts.PHASE_CREATE_MANY_BEFORE, consts.PHASE_CREATE_MANY_AFTER)
 	return func(c *gin.Context) {
 		var err error
 		var reqErr error

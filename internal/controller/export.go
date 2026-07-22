@@ -69,7 +69,7 @@ func Export[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 // method, and writes the result as an attachment
 func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	handler, _ := extractConfig(cfg...)
-	meta := newFactoryMeta[M, REQ, RSP](consts.PHASE_EXPORT)
+	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_EXPORT)
 	return func(c *gin.Context) {
 		ctrlSpanCtx, span := meta.startControllerSpan(c)
 		defer span.End()

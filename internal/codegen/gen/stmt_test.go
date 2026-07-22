@@ -166,8 +166,8 @@ func TestStmtRouterRegister(t *testing.T) {
 		modelName    string
 		reqName      string
 		respName     string
-		router       string
-		endpoint     string
+		routerGroup  string
+		route        string
 		paramName    string
 		verb         string
 		want         string
@@ -177,9 +177,9 @@ func TestStmtRouterRegister(t *testing.T) {
 			modelPkgName: "model",
 			modelName:    "Group",
 			reqName:      "Group",
-			router:       "Auth",
+			routerGroup:  "Auth",
 			respName:     "Group",
-			endpoint:     "group",
+			route:        "group",
 			verb:         "Create",
 			want:         `router.Register[*model.Group, *model.Group, *model.Group](router.Auth(), "group", &types.ControllerConfig[*model.Group]{}, consts.Create)`,
 		},
@@ -189,8 +189,8 @@ func TestStmtRouterRegister(t *testing.T) {
 			modelName:    "Group",
 			reqName:      "GroupRequest",
 			respName:     "GroupResponse",
-			router:       "Auth",
-			endpoint:     "group2",
+			routerGroup:  "Auth",
+			route:        "group2",
 			verb:         "Update",
 			want:         `router.Register[*pkgmodel.Group, pkgmodel.GroupRequest, pkgmodel.GroupResponse](router.Auth(), "group2", &types.ControllerConfig[*pkgmodel.Group]{}, consts.Update)`,
 		},
@@ -200,8 +200,8 @@ func TestStmtRouterRegister(t *testing.T) {
 			modelName:    "Group",
 			reqName:      "*GroupRequest",
 			respName:     "*GroupResponse",
-			router:       "Pub",
-			endpoint:     "login",
+			routerGroup:  "Pub",
+			route:        "login",
 			verb:         "Update",
 			want:         `router.Register[*pkgmodel.Group, *pkgmodel.GroupRequest, *pkgmodel.GroupResponse](router.Pub(), "login", &types.ControllerConfig[*pkgmodel.Group]{}, consts.Update)`,
 		},
@@ -211,15 +211,15 @@ func TestStmtRouterRegister(t *testing.T) {
 			modelName:    "Group",
 			reqName:      dsl.PayloadEmpty,
 			respName:     "*GroupListRsp",
-			router:       "Auth",
-			endpoint:     "groups",
+			routerGroup:  "Auth",
+			route:        "groups",
 			verb:         "List",
 			want:         `router.Register[*group.Group, *gstmodel.Empty, *group.GroupListRsp](router.Auth(), "groups", &types.ControllerConfig[*group.Group]{}, consts.List)`,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := StmtRouterRegister(tt.modelPkgName, tt.modelName, tt.reqName, tt.respName, tt.router, tt.endpoint, tt.paramName, tt.verb)
+			res := StmtRouterRegister(tt.modelPkgName, tt.modelName, tt.reqName, tt.respName, tt.routerGroup, tt.route, tt.paramName, tt.verb)
 			got, err := FormatNode(res)
 			if err != nil {
 				t.Error(err)
@@ -237,25 +237,28 @@ func TestStmtServiceRegister(t *testing.T) {
 		name string // description of this test case
 		// Named input parameters for target function.
 		structName string
+		route      string
 		want       string
 		phase      consts.Phase
 	}{
 		{
 			name:       "test1",
 			structName: "user",
+			route:      "users",
 			phase:      consts.PHASE_CREATE,
-			want:       `service.Register[*user](consts.PHASE_CREATE)`,
+			want:       `service.Register[*user](consts.PHASE_CREATE, "users")`,
 		},
 		{
 			name:       "test2",
 			structName: "group",
+			route:      "groups/:id",
 			phase:      consts.PHASE_UPDATE,
-			want:       `service.Register[*group](consts.PHASE_UPDATE)`,
+			want:       `service.Register[*group](consts.PHASE_UPDATE, "groups/:id")`,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := StmtServiceRegister(tt.structName, tt.phase)
+			res := StmtServiceRegister(tt.structName, tt.phase, tt.route)
 			got, err := FormatNode(res)
 			if err != nil {
 				t.Error(err)

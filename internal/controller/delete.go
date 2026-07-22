@@ -36,7 +36,7 @@ func Delete[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 // delegates the operation to the phase service's Delete method.
 func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	handler, _ := extractConfig(cfg...)
-	meta := newFactoryMeta[M, REQ, RSP](consts.PHASE_DELETE, consts.PHASE_DELETE_BEFORE, consts.PHASE_DELETE_AFTER)
+	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_DELETE, consts.PHASE_DELETE_BEFORE, consts.PHASE_DELETE_AFTER)
 	return func(c *gin.Context) {
 		ctrlSpanCtx, span := meta.startControllerSpan(c)
 		defer span.End()

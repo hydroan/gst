@@ -9,9 +9,9 @@ import (
 
 func BenchmarkResolveRegisteredService(b *testing.B) {
 	type svc = Base[*testUser, *testUser, *testUser]
-	Register[*svc](consts.PHASE_CREATE)
+	Register[*svc](consts.PHASE_CREATE, "samples/bench")
 
-	key := serviceregistry.KeyFor[*testUser, *testUser, *testUser](consts.PHASE_CREATE)
+	key := serviceregistry.Key(consts.PHASE_CREATE, "samples/bench")
 	for b.Loop() {
 		_ = serviceregistry.Resolve[*testUser, *testUser, *testUser](key)
 	}

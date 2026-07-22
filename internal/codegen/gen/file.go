@@ -96,12 +96,14 @@ func BuildModelFile(pkgName string, modelImports []string, stmts ...ast.Stmt) (s
 /*
 package service
 
-import "github.com/hydroan/gst/service"
+import (
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types/consts"
+)
 
-func Init() error {
-	service.Register[*group]()
-	service.Register[*user]()
-	return nil
+func init() {
+	service.Register[*group](consts.PHASE_UPDATE, "groups/:id")
+	service.Register[*user](consts.PHASE_CREATE, "users")
 }
 */
 // FIXME: process imports automatically problem.

@@ -23,34 +23,31 @@ var once sync.Once
 // Base is the default no-op service implementation exposed to application services.
 type Base[M types.Model, REQ types.Request, RSP types.Response] = serviceregistry.Base[M, REQ, RSP]
 
-// Register registers a service type for the specified phase.
+// Register registers a service type for the phase of the route.
 //
 // Register is the public service registration entry point for application and
 // generated service code. Framework internals handle service lookup and concrete
 // instance registration through an internal registry.
 //
-// The service type parameter S can be either a pointer to a struct type (e.g., *MyService)
-// or a non-pointer struct type (e.g., MyService). The function will automatically handle
-// both cases and always store a pointer instance in the service map.
+// The route must be the same raw route string the matching router.Register
+// call uses, because the registry keys services by route and phase. Generated
+// code guarantees the match by deriving both registrations from one design;
+// keep hand-written registrations aligned the same way. Hook services (whose
+// model, request, and response types are identical) register with their route
+// all the same. Registering two services under one route and phase panics at
+// startup instead of silently overwriting the first one.
 //
-// Example usage with pointer type:
+// The service type parameter S is normally a pointer to a struct type
+// embedding Base; the registry always stores a pointer instance.
+//
+// Example usage:
 //
 //	type myService struct {
-//	    service.Base[*model.User, *model.UserCreateReq, *model.UserCreateRsp]
+//	    service.Base[*model.Sample, *model.SampleCreateReq, *model.SampleCreateRsp]
 //	}
 //
 //	func init() {
-//	    service.Register[*myService](consts.PHASE_CREATE)
-//	}
-//
-// Example usage with non-pointer type:
-//
-//	type myService struct {
-//	    service.Base[*model.User, *model.UserCreateReq, *model.UserCreateRsp]
-//	}
-//
-//	func init() {
-//	    service.Register[myService](consts.PHASE_CREATE)
+//	    service.Register[*myService](consts.PHASE_CREATE, "samples")
 //	}
 //
 // Logger initialization:
@@ -58,7 +55,7 @@ type Base[M types.Model, REQ types.Request, RSP types.Response] = serviceregistr
 //     and the service.Logger will be set later in service.Init().
 //   - If Register is called after initialization (e.g., in Init function),
 //     logger.Service is already available, and the service.Logger will be set directly.
-func Register[S types.Service[M, REQ, RSP], M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase) {
+func Register[S types.Service[M, REQ, RSP], M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase, route string) {
 	typ := reflect.TypeFor[S]()
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
@@ -68,7 +65,7 @@ func Register[S types.Service[M, REQ, RSP], M types.Model, REQ types.Request, RS
 	if !ok {
 		return
 	}
-	serviceregistry.Register[M, REQ, RSP](phase, svc)
+	serviceregistry.Register[M, REQ, RSP](phase, route, svc)
 }
 
 func Init() error {

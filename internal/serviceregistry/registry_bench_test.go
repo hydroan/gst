@@ -14,14 +14,14 @@ type testUser struct {
 
 func BenchmarkRegistryKey(b *testing.B) {
 	for b.Loop() {
-		_ = serviceKey[*testUser, *testUser, *testUser](consts.PHASE_CREATE)
+		_ = Key(consts.PHASE_CREATE, "samples")
 	}
 }
 
 // BenchmarkResolve measures the per-request cost when the key is built once
 // up front, which is how controller factories resolve services.
 func BenchmarkResolve(b *testing.B) {
-	key := KeyFor[*testUser, *testUser, *testUser](consts.PHASE_CREATE)
+	key := Key(consts.PHASE_CREATE, "samples")
 	for b.Loop() {
 		_ = Resolve[*testUser, *testUser, *testUser](key)
 	}

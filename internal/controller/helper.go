@@ -230,6 +230,15 @@ func patchJSONFieldName(field reflect.StructField) (string, bool) {
 	return field.Name, true
 }
 
+// routeFromConfig returns the route carried by the controller config, or an
+// empty string when no config declares one.
+func routeFromConfig[M types.Model](cfg ...*types.ControllerConfig[M]) string {
+	if len(cfg) > 0 && cfg[0] != nil {
+		return cfg[0].Route
+	}
+	return ""
+}
+
 func extractConfig[M types.Model](cfg ...*types.ControllerConfig[M]) (handler func(ctx context.Context) types.Database[M], db any) {
 	if len(cfg) > 0 {
 		if cfg[0] != nil {

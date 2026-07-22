@@ -77,43 +77,6 @@ func imports(modulePath, modelFileDir, modelPkgName string, otherPkg ...string) 
 	return genDecl
 }
 
-// inits returns an ast node that represents the declaration of below:
-/*
-func init() {
-	service.Register[*user]()
-}
-*/
-func inits(modelNames ...string) *ast.FuncDecl {
-	list := make([]ast.Stmt, 0, len(modelNames))
-
-	for _, name := range modelNames {
-		list = append(
-			list,
-			&ast.ExprStmt{
-				X: &ast.CallExpr{
-					Fun: &ast.IndexExpr{
-						X: &ast.SelectorExpr{
-							X:   ast.NewIdent("service"),
-							Sel: ast.NewIdent("Register"),
-						},
-						Index: &ast.StarExpr{
-							X: ast.NewIdent(strings.ToLower(name)),
-						},
-					},
-				},
-			},
-		)
-	}
-
-	return &ast.FuncDecl{
-		Name: ast.NewIdent("init"),
-		Type: &ast.FuncType{},
-		Body: &ast.BlockStmt{
-			List: list,
-		},
-	}
-}
-
 // types returns an ast node that represents the declaration of below:
 /*
 type userCreator struct {

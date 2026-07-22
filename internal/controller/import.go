@@ -28,7 +28,7 @@ func Import[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 // models through the configured database handler, and returns a success
 func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	handler, _ := extractConfig(cfg...)
-	meta := newFactoryMeta[M, REQ, RSP](consts.PHASE_IMPORT)
+	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_IMPORT)
 	return func(c *gin.Context) {
 		ctrlSpanCtx, span := meta.startControllerSpan(c)
 		defer span.End()

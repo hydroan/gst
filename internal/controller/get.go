@@ -38,7 +38,7 @@ func Get[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
 // ServiceContext.Param().
 func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	handler, _ := extractConfig(cfg...)
-	meta := newFactoryMeta[M, REQ, RSP](consts.PHASE_GET, consts.PHASE_GET_BEFORE, consts.PHASE_GET_AFTER)
+	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_GET, consts.PHASE_GET_BEFORE, consts.PHASE_GET_AFTER)
 	return func(c *gin.Context) {
 		ctrlSpanCtx, span := meta.startControllerSpan(c)
 		defer span.End()

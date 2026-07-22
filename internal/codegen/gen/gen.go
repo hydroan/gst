@@ -258,18 +258,9 @@ func FindModels(module string, modelDir string, filename string) ([]*ModelInfo, 
 	}
 
 	designs := dsl.Parse(f, "")
-	// Note: Endpoint assembly logic has been moved to concatEndpoints function in cmd/gg/gen.go
-	// to properly handle custom endpoints defined in DSL
-	//
-	// for _, design := range designs {
-	// 	// The new endpoint value is the model file dir + the endpoint value
-	// 	// For example: old endpoint is "order", the model dir is "model/user",
-	// 	// then the new endpoint is "user/order"
-	// 	newFilename := strings.TrimPrefix(filename, modelDir) // "/user/order.go"
-	// 	newFilename = strings.TrimPrefix(newFilename, "/")    // "user/order.go"
-	// 	dir := filepath.Dir(newFilename)                      // "user"
-	// 	design.Endpoint = filepath.Join(dir, design.Endpoint) // "user/order"
-	// }
+	// Note: route assembly (prefixing the model file dir onto Design.Endpoint)
+	// lives in cmd/gg/gen.go so custom routes declared in the DSL are handled
+	// in one place.
 
 	var models []*ModelInfo
 	for _, decl := range node.Decls {
