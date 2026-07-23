@@ -132,13 +132,14 @@ linters:
       locale: US
 
     recvcheck:
-      # Design, GetTableName and Purge are stateless declaration methods that
-      # use value receivers by framework convention, while stateful hooks
-      # require pointer receivers.
+      # Design, GetTableName, Purge and Indexes are stateless declaration
+      # methods that use value receivers by framework convention, while
+      # stateful hooks require pointer receivers.
       exclusions:
         - "*.Design"
         - "*.GetTableName"
         - "*.Purge"
+        - "*.Indexes"
 
     staticcheck:
       dot-import-whitelist:
