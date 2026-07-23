@@ -20,7 +20,7 @@ func TestMigrate(t *testing.T) {
 		schema, err := dumper.Dump(config.DBMySQL, User{}, Group{})
 		require.NoError(t, err)
 
-		migrated, err := dbmigrate.Migrate([]string{schema}, config.DBMySQL,
+		migrated, _, err := dbmigrate.Migrate([]string{schema}, config.DBMySQL,
 			&dbmigrate.DatabaseConfig{
 				Host:     "127.0.0.1",
 				Port:     3306,
@@ -49,7 +49,7 @@ func TestMigrate(t *testing.T) {
 		})
 		databaseConfig := postgresDatabaseConfig(database)
 
-		migrated, err := dbmigrate.Migrate(
+		migrated, _, err := dbmigrate.Migrate(
 			[]string{schema}, config.DBPostgres,
 			databaseConfig,
 			&dbmigrate.MigrateOption{
@@ -59,7 +59,7 @@ func TestMigrate(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, migrated)
 
-		migrated, err = dbmigrate.Migrate(
+		migrated, _, err = dbmigrate.Migrate(
 			[]string{schema}, config.DBPostgres,
 			databaseConfig,
 			&dbmigrate.MigrateOption{},
@@ -67,7 +67,7 @@ func TestMigrate(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, migrated)
 
-		migrated, err = dbmigrate.Migrate(
+		migrated, _, err = dbmigrate.Migrate(
 			[]string{schema}, config.DBPostgres,
 			databaseConfig,
 			&dbmigrate.MigrateOption{
@@ -85,7 +85,7 @@ func TestMigrate(t *testing.T) {
 		require.NoError(t, err)
 
 		database := filepath.Join(t.TempDir(), "test.db")
-		migrated, err := dbmigrate.Migrate([]string{schema}, config.DBSqlite,
+		migrated, _, err := dbmigrate.Migrate([]string{schema}, config.DBSqlite,
 			&dbmigrate.DatabaseConfig{
 				Database: database,
 			},
@@ -95,7 +95,7 @@ func TestMigrate(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, migrated)
 
-		migrated, err = dbmigrate.Migrate([]string{schema}, config.DBSqlite,
+		migrated, _, err = dbmigrate.Migrate([]string{schema}, config.DBSqlite,
 			&dbmigrate.DatabaseConfig{
 				Database: database,
 			},
@@ -103,7 +103,7 @@ func TestMigrate(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, migrated)
 
-		migrated, err = dbmigrate.Migrate([]string{schema}, config.DBSqlite,
+		migrated, _, err = dbmigrate.Migrate([]string{schema}, config.DBSqlite,
 			&dbmigrate.DatabaseConfig{
 				Database: database,
 			},

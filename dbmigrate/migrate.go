@@ -64,14 +64,15 @@ func newDryRunDatabase(db database.Database) (*database.DryRunDatabase, error) {
 // skips every review step.
 //
 // When a MySQL plan both drops and adds indexes on the same table, suspected
-// renames are reported with ready-to-run RENAME INDEX guidance before the
-// plan prints or runs; executing the rename stays a human decision.
-func Migrate(schemas []string, dbtyp config.DBType, cfg *DatabaseConfig, opt *MigrateOption) (migrated bool, err error) {
+// renames are returned as advisory text with ready-to-run RENAME INDEX
+// guidance. The caller owns when and how to present it; executing the
+// rename stays a human decision.
+func Migrate(schemas []string, dbtyp config.DBType, cfg *DatabaseConfig, opt *MigrateOption) (migrated bool, advisory string, err error) {
 	if len(schemas) == 0 {
-		return false, nil
+		return false, "", nil
 	}
 	if cfg == nil {
-		return false, nil
+		return false, "", nil
 	}
 	if opt == nil {
 		opt = &MigrateOption{}
@@ -112,7 +113,7 @@ func Migrate(schemas []string, dbtyp config.DBType, cfg *DatabaseConfig, opt *Mi
 		genMode = schema.GeneratorModeSQLite3
 	}
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	defer db.Close()
 
@@ -122,9 +123,10 @@ func Migrate(schemas []string, dbtyp config.DBType, cfg *DatabaseConfig, opt *Mi
 
 // run executes the database migration logic.
 // This function is derived from sqldef.Run (https://github.com/sqldef/sqldef),
-// but modified to return a boolean indicating whether any migration was performed,
-// and an error if any occurred, instead of exiting the program directly.
-func run(generatorMode schema.GeneratorMode, db database.Database, sqlParser database.Parser, options *sqldef.Options) (migrated bool, err error) {
+// but modified to return a boolean indicating whether any migration was
+// performed, the index-rename advisory text for the caller to present, and
+// an error if any occurred, instead of exiting the program directly.
+func run(generatorMode schema.GeneratorMode, db database.Database, sqlParser database.Parser, options *sqldef.Options) (migrated bool, advisory string, err error) {
 	// Set the generator config on the database for privilege filtering
 	// Note: MySQL will populate MysqlLowerCaseTableNames from the server
 	db.SetGeneratorConfig(options.Config)
@@ -132,7 +134,7 @@ func run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 
 	currentDDLs, exportErr := db.ExportDDLs()
 	if exportErr != nil {
-		return false, fmt.Errorf("Error on ExportDDLs: %w", exportErr)
+		return false, "", fmt.Errorf("Error on ExportDDLs: %w", exportErr)
 	}
 
 	defaultSchema := db.GetDefaultSchema()
@@ -150,7 +152,7 @@ func run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 		} else {
 			ddls, parseErr := schema.ParseDDLs(generatorMode, sqlParser, currentDDLs, defaultSchema)
 			if parseErr != nil {
-				return false, parseErr
+				return false, "", parseErr
 			}
 			ddls = schema.FilterTables(ddls, options.Config)
 			ddls = schema.FilterViews(ddls, options.Config)
@@ -163,31 +165,28 @@ func run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 				fmt.Print(ddlSuffix)
 			}
 		}
-		return false, nil
+		return false, "", nil
 	}
 
 	ddls, genErr := schema.GenerateIdempotentDDLs(generatorMode, sqlParser, options.DesiredDDLs, currentDDLs, options.Config, defaultSchema)
 	if genErr != nil {
-		return false, genErr
+		return false, "", genErr
 	}
 	if len(ddls) == 0 {
 		// fmt.Println("-- Nothing is modified --")
-		return false, nil
+		return false, "", nil
 	}
 
-	// Surface suspected index renames before the plan runs or prints, so a
-	// reviewer can replace a drop-and-rebuild pair with a metadata-only
-	// RENAME INDEX. Detection guides only; nothing is rewritten or executed.
+	// Detect suspected index renames for the caller to present alongside the
+	// plan. Detection guides only; nothing is rewritten or executed here.
 	if generatorMode == schema.GeneratorModeMysql {
-		if guidance := formatIndexRenameHints(detectIndexRenameHints(ddls)); len(guidance) != 0 {
-			fmt.Print(guidance)
-		}
+		advisory = formatIndexRenameHints(detectIndexRenameHints(ddls))
 	}
 
 	if options.DryRun || len(options.CurrentFile) > 0 {
 		dryRunDB, dryRunErr := newDryRunDatabase(db)
 		if dryRunErr != nil {
-			return false, dryRunErr
+			return false, "", dryRunErr
 		}
 		defer dryRunDB.Close()
 		db = dryRunDB
@@ -195,7 +194,7 @@ func run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 
 	err = database.RunDDLs(db, ddls, options.BeforeApply, ddlSuffix, database.StdoutLogger{})
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
-	return true, nil
+	return true, advisory, nil
 }

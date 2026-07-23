@@ -1,6 +1,7 @@
 package dbmigrate
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -93,13 +94,13 @@ func TestFormatIndexRenameHints(t *testing.T) {
 			Dropped: []string{"idx_groups_group_no"},
 			Added:   []addedIndex{{Name: "idx_groups_group_no2", Columns: "`group_no`", Unique: true}},
 		}})
-		require.Contains(t, guidance, "Possible index rename(s) detected")
-		require.Contains(t, guidance, "UNIQUE `idx_groups_group_no2`")
-		require.Contains(t, guidance, "ALTER TABLE `groups` RENAME INDEX `idx_groups_group_no` TO `idx_groups_group_no2`;")
+		require.Contains(t, guidance, "  -- Table `groups`: `idx_groups_group_no` -> UNIQUE `idx_groups_group_no2` (`group_no`)")
+		require.Contains(t, guidance, "\nALTER TABLE `groups` RENAME INDEX `idx_groups_group_no` TO `idx_groups_group_no2`;\n")
 		require.Contains(t, guidance, "only modifies metadata")
+		requireCopyPasteSafe(t, guidance)
 	})
 
-	t.Run("multiple candidates render both sides for review", func(t *testing.T) {
+	t.Run("multiple candidates render both sides as comments only", func(t *testing.T) {
 		guidance := formatIndexRenameHints([]indexRenameHint{{
 			Table:   "samples",
 			Dropped: []string{"idx_samples_kind", "uniq_samples_code"},
@@ -111,6 +112,46 @@ func TestFormatIndexRenameHints(t *testing.T) {
 		require.Contains(t, guidance, "`idx_samples_kind`, `uniq_samples_code`")
 		require.Contains(t, guidance, "`idx_samples_kind2` (`kind`)")
 		require.Contains(t, guidance, "UNIQUE `uniq_samples_code2` (`code`)")
-		require.Contains(t, guidance, "RENAME INDEX <old> TO <new>")
+		require.Contains(t, guidance, "  --   template: ALTER TABLE `samples` RENAME INDEX <old> TO <new>;")
+		// Ambiguous pairings must not expose an executable statement.
+		requireCopyPasteSafe(t, guidance)
+		for line := range strings.SplitSeq(guidance, "\n") {
+			require.False(t, strings.HasPrefix(line, "ALTER"), "unexpected executable line: %q", line)
+		}
 	})
+
+	t.Run("mixed hints group executable statements at the end", func(t *testing.T) {
+		guidance := formatIndexRenameHints([]indexRenameHint{
+			{
+				Table:   "groups",
+				Dropped: []string{"idx_groups_group_no"},
+				Added:   []addedIndex{{Name: "idx_groups_group_no2", Columns: "`group_no`", Unique: true}},
+			},
+			{
+				Table:   "records",
+				Dropped: []string{"idx_records_kind"},
+				Added:   []addedIndex{{Name: "idx_records_kind2", Columns: "`kind`"}},
+			},
+		})
+		statementBlock := guidance[strings.LastIndex(guidance, "\n\n"):]
+		require.Contains(t, statementBlock, "ALTER TABLE `groups` RENAME INDEX `idx_groups_group_no` TO `idx_groups_group_no2`;")
+		require.Contains(t, statementBlock, "ALTER TABLE `records` RENAME INDEX `idx_records_kind` TO `idx_records_kind2`;")
+	})
+}
+
+// requireCopyPasteSafe asserts that every advisory line is either a comment,
+// a blank line, or a directly executable statement, so pasting any part of
+// the block into MySQL cannot fail.
+func requireCopyPasteSafe(t *testing.T, guidance string) {
+	t.Helper()
+
+	for line := range strings.SplitSeq(guidance, "\n") {
+		switch {
+		case len(strings.TrimSpace(line)) == 0:
+		case strings.HasPrefix(strings.TrimSpace(line), "--"):
+		case strings.HasPrefix(line, "ALTER TABLE ") && strings.HasSuffix(line, ";"):
+		default:
+			t.Fatalf("line is neither comment, blank, nor executable: %q", line)
+		}
+	}
 }

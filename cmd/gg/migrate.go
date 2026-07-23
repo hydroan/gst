@@ -566,7 +566,7 @@ func performMigration(schema string, cfg *dbmigrate.DatabaseConfig) error {
 	fmt.Println("\n▶ Migration Plan")
 
 	// Dry Run: Check for changes without executing.
-	hasChange, err := dbmigrate.Migrate([]string{schema}, dbtyp, cfg, &dbmigrate.MigrateOption{
+	hasChange, advisory, err := dbmigrate.Migrate([]string{schema}, dbtyp, cfg, &dbmigrate.MigrateOption{
 		DryRun:     true,
 		EnableDrop: true,
 	})
@@ -577,6 +577,13 @@ func performMigration(schema string, cfg *dbmigrate.DatabaseConfig) error {
 	if !hasChange {
 		fmt.Println("  → No changes detected.")
 		return nil
+	}
+
+	// The advisory gets its own section after the plan, so suspected index
+	// renames stay visible right before the reviewer decides.
+	if len(advisory) != 0 {
+		fmt.Println("\n▶ Index Rename Advisory")
+		fmt.Print(advisory)
 	}
 
 	if migrateDryRun {
@@ -594,7 +601,7 @@ func performMigration(schema string, cfg *dbmigrate.DatabaseConfig) error {
 	fmt.Println("\n▶ Apply Migration")
 
 	// Execute Migration.
-	_, err = dbmigrate.Migrate([]string{schema}, dbtyp, cfg, &dbmigrate.MigrateOption{
+	_, _, err = dbmigrate.Migrate([]string{schema}, dbtyp, cfg, &dbmigrate.MigrateOption{
 		DryRun:     false,
 		EnableDrop: true,
 	})

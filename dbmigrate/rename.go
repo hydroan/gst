@@ -85,31 +85,45 @@ func detectIndexRenameHints(ddls []string) []indexRenameHint {
 	return hints
 }
 
-// formatIndexRenameHints renders the review guidance printed alongside a
-// migration plan that drops and re-creates indexes on the same table. It
-// only guides; executing RENAME INDEX stays a human decision.
+// formatIndexRenameHints renders the advisory body shown after a migration
+// plan that drops and re-creates indexes on the same table. The caller owns
+// the surrounding section title and placement; the advisory only guides,
+// and executing RENAME INDEX stays a human decision.
+//
+// Output rules keep copy-paste safe: every explanatory line carries a "--"
+// SQL comment prefix so pasting the whole block into MySQL stays harmless,
+// and only directly executable RENAME statements appear unprefixed, grouped
+// at the end after a blank line.
 func formatIndexRenameHints(hints []indexRenameHint) string {
 	if len(hints) == 0 {
 		return ""
 	}
 
 	var b strings.Builder
-	b.WriteString("-- Possible index rename(s) detected --\n")
+	b.WriteString("  -- The plan drops and re-creates indexes on the same table; some pairs may be renames.\n")
+	b.WriteString("  -- RENAME INDEX only modifies metadata; DROP + ADD rebuilds the index (full table scan on large tables).\n")
+	b.WriteString("  -- For each real rename, verify the columns match, run its statement below instead, then re-run gg migrate.\n")
+
+	statements := make([]string, 0, len(hints))
 	for _, hint := range hints {
 		if len(hint.Dropped) == 1 && len(hint.Added) == 1 {
 			added := hint.Added[0]
-			fmt.Fprintf(&b, "Table `%s`: DROP `%s` + ADD %s (%s) may be a rename.\n",
+			fmt.Fprintf(&b, "  -- Table `%s`: `%s` -> %s (%s)\n",
 				hint.Table, hint.Dropped[0], describeAddedIndex(added), added.Columns)
-			b.WriteString("If it is, verify the column definitions match, run the statement below manually, then re-run gg migrate:\n")
-			fmt.Fprintf(&b, "  ALTER TABLE `%s` RENAME INDEX `%s` TO `%s`;\n", hint.Table, hint.Dropped[0], added.Name)
+			statements = append(statements,
+				fmt.Sprintf("ALTER TABLE `%s` RENAME INDEX `%s` TO `%s`;", hint.Table, hint.Dropped[0], added.Name))
 		} else {
-			fmt.Fprintf(&b, "Table `%s`: dropped %s; added %s — some pairs may be renames.\n",
+			fmt.Fprintf(&b, "  -- Table `%s`: dropped %s; added %s\n",
 				hint.Table, describeDroppedIndexes(hint.Dropped), describeAddedIndexes(hint.Added))
-			fmt.Fprintf(&b, "For each real rename, run `ALTER TABLE `%s` RENAME INDEX <old> TO <new>;` manually, then re-run gg migrate.\n",
-				hint.Table)
+			fmt.Fprintf(&b, "  --   template: ALTER TABLE `%s` RENAME INDEX <old> TO <new>;\n", hint.Table)
 		}
 	}
-	b.WriteString("RENAME INDEX only modifies metadata; DROP + ADD rebuilds the index with a full table scan on large tables.\n")
+	if len(statements) != 0 {
+		b.WriteString("\n")
+		for _, statement := range statements {
+			b.WriteString(statement + "\n")
+		}
+	}
 	return b.String()
 }
 
