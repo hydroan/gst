@@ -2394,12 +2394,15 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 	// The framework-managed Base/AutoBase timestamps carry query:"-" on the
 	// model, so their filter parameters are synthesized: the bare name is an
 	// exact-match filter like every other documented parameter, and the
-	// operator syntax covers ranges.
+	// operator syntax covers ranges. The columns are declared as an ordered
+	// slice, not a map, because sortQueryParameters is stable and keeps their
+	// insertion order in the generated document.
 	if queryable && embedsBaseModel(typ.Elem()) {
-		for column, doc := range map[string]string{
-			"created_at": "record creation time",
-			"updated_at": "record last update time",
+		for _, timestamp := range []struct{ column, doc string }{
+			{"created_at", "record creation time"},
+			{"updated_at", "record last update time"},
 		} {
+			column, doc := timestamp.column, timestamp.doc
 			queries = append(queries, &openapi3.ParameterRef{
 				Value: &openapi3.Parameter{
 					Name:        column,
