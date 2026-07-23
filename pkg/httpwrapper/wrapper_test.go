@@ -5,73 +5,101 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
-	"github.com/hydroan/gst/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestWrappedRequest(t *testing.T) {
-	body := []byte("hello world")
-	req, err := http.NewRequest(http.MethodPost, "http://example.com", bytes.NewReader(body))
-	require.NoError(t, err)
-	testWrappedRequest(t, req, body)
+	t.Run("json body", func(t *testing.T) {
+		body := []byte(`{"name":"sample"}`)
+		req, err := http.NewRequest(http.MethodPost, "http://sample.local", bytes.NewReader(body))
+		require.NoError(t, err)
+		testWrappedRequest(t, req, body)
+	})
 
-	body = []byte{}
-	req, err = http.NewRequest(http.MethodPost, "http://example.com", bytes.NewReader(body))
-	require.NoError(t, err)
-	testWrappedRequest(t, req, body)
+	t.Run("empty body", func(t *testing.T) {
+		req, err := http.NewRequest(http.MethodPost, "http://sample.local", bytes.NewReader([]byte{}))
+		require.NoError(t, err)
+		testWrappedRequest(t, req, []byte{})
+	})
+
+	t.Run("nil body", func(t *testing.T) {
+		req, err := http.NewRequest(http.MethodGet, "http://sample.local", nil)
+		require.NoError(t, err)
+		testWrappedRequest(t, req, []byte{})
+	})
 }
 
+func TestWrappedResponse(t *testing.T) {
+	body := []byte(`{"name":"sample"}`)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(body)
+	})
+
+	t.Run("http", func(t *testing.T) {
+		srv := httptest.NewServer(handler)
+		defer srv.Close()
+
+		resp, err := srv.Client().Get(srv.URL)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		testWrappedResponse(t, resp, body)
+	})
+
+	t.Run("https", func(t *testing.T) {
+		srv := httptest.NewTLSServer(handler)
+		defer srv.Close()
+
+		resp, err := srv.Client().Get(srv.URL)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.NotNil(t, resp.TLS)
+		testWrappedResponse(t, resp, body)
+	})
+}
+
+// testWrappedRequest verifies that req survives a JSON marshal/unmarshal
+// round trip with its body restored to the expected bytes.
 func testWrappedRequest(t *testing.T, req *http.Request, body []byte) {
 	t.Helper()
+
 	reqWrapper := &WrappedRequest{Request: req}
 	data, err := json.Marshal(reqWrapper)
 	require.NoError(t, err)
 	assert.NotEmpty(t, data)
-	t.Log(util.StringAny(data))
 
 	reqWrapper = new(WrappedRequest)
-	err = json.Unmarshal(data, reqWrapper)
+	require.NoError(t, json.Unmarshal(data, reqWrapper))
+	got, err := io.ReadAll(reqWrapper.Body)
 	require.NoError(t, err)
-	data, err = io.ReadAll(reqWrapper.Body)
-	require.NoError(t, err)
-	assert.Equal(t, data, body)
+	assert.Equal(t, body, got)
 }
 
-func TestWrappedResponse(t *testing.T) {
-	domains := []string{
-		"http://example.com",
-		"https://example.com",
-	}
-
-	for _, domain := range domains {
-		req, err := http.NewRequest(http.MethodGet, domain, nil)
-		require.NoError(t, err)
-		resp, err := http.DefaultClient.Do(req)
-		require.NoError(t, err)
-		body, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		resp.Body = io.NopCloser(bytes.NewBuffer(body))
-		require.NoError(t, err)
-		testWrappedResponse(t, resp, body)
-		resp.Body.Close()
-	}
-}
-
+// testWrappedResponse verifies that resp survives a JSON marshal/unmarshal
+// round trip with its body and TLS state restored.
 func testWrappedResponse(t *testing.T, resp *http.Response, body []byte) {
 	t.Helper()
+
 	respWrapper := &WrappedResponse{Response: resp}
 	data, err := json.Marshal(respWrapper)
 	require.NoError(t, err)
 	assert.NotEmpty(t, data)
-	// t.Log(internal.String(data))
 
 	respWrapper = new(WrappedResponse)
-	err = json.Unmarshal(data, respWrapper)
+	require.NoError(t, json.Unmarshal(data, respWrapper))
+	got, err := io.ReadAll(respWrapper.Body)
 	require.NoError(t, err)
-	data, err = io.ReadAll(respWrapper.Body)
-	require.NoError(t, err)
-	assert.Equal(t, data, body)
+	assert.Equal(t, body, got)
+
+	if resp.TLS != nil {
+		require.NotNil(t, respWrapper.TLS)
+		require.Len(t, respWrapper.TLS.PeerCertificates, len(resp.TLS.PeerCertificates))
+		for i, cert := range resp.TLS.PeerCertificates {
+			assert.Equal(t, cert.Raw, respWrapper.TLS.PeerCertificates[i].Raw)
+		}
+	}
 }

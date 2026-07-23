@@ -11,37 +11,41 @@ import (
 
 // references: https://avi.im/blag/2021/golang-marshaling-special-fields/
 
+// WrappedResponse wraps *http.Response so that it survives a JSON
+// marshal/unmarshal round trip, including the response body and TLS state.
 type WrappedResponse struct {
 	*http.Response
 }
 
-// NOTE: json tag 不要加 "omitempty", 否则 jsoniter 包在序列化和反序列化的过程中会报错
-// 测试发现, snoic, encoding/json 这两个包可以 marshal/unmarshal WrappedRequest
-// go-json 会报错: "unsupported type: func() io.ReadCloser,"
+// NOTE: do not add "omitempty" to the json tags, otherwise the jsoniter
+// package fails to marshal/unmarshal this type. sonic and encoding/json
+// handle WrappedResponse fine, while go-json fails with
+// "unsupported type: func() io.ReadCloser".
 type wrappedResponse struct {
 	Request string          `json:"Request"`
 	Body    json.RawMessage `json:"Body"`
 	TLS     json.RawMessage `json:"TLS"`
 	*http.Response
 }
+
+// wrappedTLS mirrors tls.ConnectionState with the certificate chains
+// replaced by raw DER bytes, which encoding/json encodes as base64 strings.
 type wrappedTLS struct {
-	PeerCertificates []json.RawMessage   `json:"PeerCertificates"`
-	VerifiedChains   [][]json.RawMessage `json:"VerifiedChains"`
+	PeerCertificates [][]byte   `json:"PeerCertificates"`
+	VerifiedChains   [][][]byte `json:"VerifiedChains"`
 	*tls.ConnectionState
 }
 
-// MarshalJSON
-//
-// wrappedResponse.Body 如果是 []byte 类型, 默认值一定要是 []byte{}, 而不是 nil.
-// 当 Body 的类型为 string 时, 空字符串 json.Marshal 后的结果就是 "".
-// 所以这个 body 一定要用 []byte{}, 这样 json.Marshal 出来之后就是 "".
-// nil 在 json.Marshal 后的结果是 null, 这样就与 string 类型的 Body 不匹配.
+// MarshalJSON implements json.Marshaler. It drains Response.Body and
+// restores it afterwards so that the response stays usable. The body must
+// be valid JSON: it is embedded verbatim to keep the marshaled form
+// readable. An empty body and an absent TLS state are encoded as null
+// because an empty json.RawMessage cannot be marshaled.
 func (r *WrappedResponse) MarshalJSON() ([]byte, error) {
 	var err error
 	var body []byte
-	var tls []byte
+	var tlsState []byte
 
-	// 1.check Response.Body
 	if r.Response.Body != nil {
 		body, err = io.ReadAll(r.Response.Body)
 		if err != nil {
@@ -49,8 +53,10 @@ func (r *WrappedResponse) MarshalJSON() ([]byte, error) {
 		}
 		r.Response.Body = io.NopCloser(bytes.NewReader(body))
 	}
+	if len(body) == 0 {
+		body = nil
+	}
 
-	// 2.check Response.TLS
 	if r.Response.TLS != nil {
 		rtls := new(wrappedTLS)
 		rtls.ConnectionState = r.Response.TLS
@@ -58,34 +64,39 @@ func (r *WrappedResponse) MarshalJSON() ([]byte, error) {
 			rtls.PeerCertificates = append(rtls.PeerCertificates, cert.Raw)
 		}
 		for i := range r.Response.TLS.VerifiedChains {
-			var chain []json.RawMessage
+			var chain [][]byte
 			for _, cert := range r.Response.TLS.VerifiedChains[i] {
 				chain = append(chain, cert.Raw)
 			}
 			rtls.VerifiedChains = append(rtls.VerifiedChains, chain)
 		}
-		if tls, err = json.Marshal(rtls); err != nil {
+		if tlsState, err = json.Marshal(rtls); err != nil {
 			return nil, err
 		}
 	}
 
 	return json.Marshal(&wrappedResponse{
 		Body:     body,
-		TLS:      tls,
+		TLS:      tlsState,
 		Response: r.Response,
 	})
 }
 
-// UnmarshalJSON
+// UnmarshalJSON implements json.Unmarshaler. The restored Response.Body is
+// always a non-nil reader; a body marshaled as null yields an empty one.
 func (r *WrappedResponse) UnmarshalJSON(data []byte) error {
 	wresp := new(wrappedResponse)
 	if err := json.Unmarshal(data, wresp); err != nil {
 		return err
 	}
+	var body []byte
+	if !isJSONNull(wresp.Body) {
+		body = wresp.Body
+	}
 	r.Response = wresp.Response
-	r.Response.Body = io.NopCloser(bytes.NewReader(wresp.Body))
+	r.Response.Body = io.NopCloser(bytes.NewReader(body))
 
-	if len(wresp.TLS) != 0 {
+	if !isJSONNull(wresp.TLS) {
 		rtls := new(wrappedTLS)
 		if err := json.Unmarshal(wresp.TLS, rtls); err != nil {
 			return err
