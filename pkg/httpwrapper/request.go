@@ -9,16 +9,16 @@ import (
 
 // references: https://avi.im/blag/2021/golang-marshaling-special-fields/
 
-// Body 如果为nil, 可能会有 "invalid character '\\x00' looking for beginning of value" 错误
-// 还未完全验证.
-
+// WrappedRequest wraps *http.Request so that it survives a JSON
+// marshal/unmarshal round trip, including the request body.
 type WrappedRequest struct {
 	*http.Request
 }
 
-// NOTE: json tag 不要加 "omitempty", 否则 jsoniter 包在序列化和反序列化的过程中会报错
-// 测试发现, snoic, encoding/json 这两个包可以 marshal/unmarshal WrappedRequest
-// go-json 会报错: "unsupported type: func() io.ReadCloser,"
+// NOTE: do not add "omitempty" to the json tags, otherwise the jsoniter
+// package fails to marshal/unmarshal this type. sonic and encoding/json
+// handle WrappedRequest fine, while go-json fails with
+// "unsupported type: func() io.ReadCloser".
 type wrappedRequest struct {
 	Body    json.RawMessage `json:"Body"`
 	GetBody string          `json:"GetBody"`
@@ -26,7 +26,11 @@ type wrappedRequest struct {
 	*http.Request
 }
 
-// MarshalJSON
+// MarshalJSON implements json.Marshaler. It drains Request.Body and restores
+// it afterwards so that the request stays usable. The body must be valid
+// JSON: it is embedded verbatim to keep the marshaled form readable. An
+// empty body is encoded as null because an empty json.RawMessage cannot be
+// marshaled.
 func (r *WrappedRequest) MarshalJSON() ([]byte, error) {
 	var err error
 	var body []byte
@@ -37,6 +41,9 @@ func (r *WrappedRequest) MarshalJSON() ([]byte, error) {
 		}
 		r.Request.Body = io.NopCloser(bytes.NewReader(body))
 	}
+	if len(body) == 0 {
+		body = nil
+	}
 
 	//nolint:staticcheck
 	return json.Marshal(&wrappedRequest{
@@ -45,14 +52,19 @@ func (r *WrappedRequest) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// UnmarshalJSON
+// UnmarshalJSON implements json.Unmarshaler. The restored Request.Body is
+// always a non-nil reader; a body marshaled as null yields an empty one.
 func (r *WrappedRequest) UnmarshalJSON(data []byte) error {
 	wreq := new(wrappedRequest)
 	if err := json.Unmarshal(data, wreq); err != nil {
 		return err
 	}
+	var body []byte
+	if !isJSONNull(wreq.Body) {
+		body = wreq.Body
+	}
 	r.Request = wreq.Request
-	r.Request.Body = io.NopCloser(bytes.NewReader(wreq.Body))
+	r.Request.Body = io.NopCloser(bytes.NewReader(body))
 	return nil
 }
 
