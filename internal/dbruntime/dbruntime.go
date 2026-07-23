@@ -68,6 +68,10 @@ func InitDatabase(db *gorm.DB, dbmap map[string]*gorm.DB) (err error) {
 						err = errors.Wrap(err, fmt.Sprintf("failed to create table(%s)", typ.String()))
 						panic(err)
 					}
+					if err = ensureCustomIndexes(db, m); err != nil {
+						err = errors.Wrap(err, fmt.Sprintf("failed to ensure custom indexes(%s)", typ.String()))
+						panic(err)
+					}
 					zap.S().Infow("database create table", "model", typ.String(), "cost", util.FormatDurationSmart(time.Since(begin)))
 
 					initedTable.Set(typ.String(), "")
@@ -88,6 +92,10 @@ func InitDatabase(db *gorm.DB, dbmap map[string]*gorm.DB) (err error) {
 					typ := reflect.TypeOf(m).Elem()
 					if err = handler.Table(m.GetTableName()).AutoMigrate(m); err != nil {
 						err = errors.Wrap(err, fmt.Sprintf("failed to create table(%s)", typ.String()))
+						panic(err)
+					}
+					if err = ensureCustomIndexes(handler, m); err != nil {
+						err = errors.Wrap(err, fmt.Sprintf("failed to ensure custom indexes(%s)", typ.String()))
 						panic(err)
 					}
 					zap.S().Infow("database create table", "model", typ.String(), "cost", util.FormatDurationSmart(time.Since(begin)))
