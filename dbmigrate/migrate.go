@@ -177,10 +177,10 @@ func run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 		return false, "", nil
 	}
 
-	// Detect suspected index renames for the caller to present alongside the
+	// Detect verified index renames for the caller to present alongside the
 	// plan. Detection guides only; nothing is rewritten or executed here.
 	if generatorMode == schema.GeneratorModeMysql {
-		advisory = formatIndexRenameHints(detectIndexRenameHints(ddls))
+		advisory = formatIndexRenames(detectIndexRenames(ddls, currentDDLs))
 	}
 
 	if options.DryRun || len(options.CurrentFile) > 0 {

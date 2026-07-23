@@ -6,27 +6,35 @@ import (
 	"strings"
 )
 
-// indexRenameHint groups the dropped and added secondary indexes that one
-// migration plan touches on a single table. When both sides are non-empty,
-// some drop/add pairs may actually be renames that should run as RENAME
-// INDEX instead of a full drop-and-rebuild.
-type indexRenameHint struct {
+// renamePair is one confirmed index rename: the dropped and the added index
+// carry exactly the same column sequence and uniqueness, so a metadata-only
+// RENAME INDEX can replace the drop-and-rebuild pair.
+type renamePair struct {
 	Table   string
-	Dropped []string
-	Added   []addedIndex
+	From    string
+	To      string
+	Columns string // normalized column list for display, e.g. "group_id,created_at"
+	Unique  bool
 }
 
 // addedIndex is one secondary index the migration plan would create.
 type addedIndex struct {
 	Name    string
-	Columns string // raw column list as it appears in the plan, e.g. "`kind`, `created_at`"
+	Columns string // raw column list as it appears in the plan
+	Unique  bool
+}
+
+// currentIndex is one secondary index parsed from the exported current schema.
+type currentIndex struct {
+	Columns string // normalized column list
 	Unique  bool
 }
 
 // Statement shapes emitted by the sqldef MySQL generator for secondary
 // indexes. ADD statements keep the desired-side keyword (INDEX in the
 // gorm-generated schema; KEY tolerated for safety) and carry the column
-// list, DROP statements never carry column information. Covers plain,
+// list, DROP statements never carry column information — their definitions
+// are recovered from the exported current schema instead. Covers plain,
 // composite, and unique indexes in both the ALTER TABLE ADD form (struct
 // tag indexes embedded in CREATE TABLE) and the standalone CREATE INDEX
 // form (Indexer capability indexes).
@@ -34,13 +42,22 @@ var (
 	dropIndexPattern   = regexp.MustCompile("^ALTER TABLE ([^ ]+) DROP INDEX ([^ ]+)$")
 	alterAddPattern    = regexp.MustCompile(`^ALTER TABLE ([^ ]+) ADD (UNIQUE )?(?:FULLTEXT |SPATIAL )?(?:INDEX|KEY) ([^ ]+) \((.+)\)$`)
 	createIndexPattern = regexp.MustCompile(`^CREATE (UNIQUE )?INDEX ([^ ]+) ON ([^ ]+) \((.+)\)$`)
+
+	// currentTablePattern matches the CREATE TABLE header of one SHOW CREATE
+	// TABLE style statement in the exported current schema.
+	currentTablePattern = regexp.MustCompile("^\\s*CREATE TABLE `?([^` (]+)`? \\(")
+	// currentIndexPattern matches one secondary index line inside a CREATE
+	// TABLE body. The column list is captured up to the line's last closing
+	// parenthesis by the caller, so prefix lengths like col(10) survive.
+	currentIndexPattern = regexp.MustCompile("^\\s*(UNIQUE |FULLTEXT |SPATIAL )?KEY `([^`]+)` \\((.+)\\)")
 )
 
-// detectIndexRenameHints scans a migration plan for tables that both drop
-// and add secondary indexes. It only reads the plan text: DROP statements
-// carry no column information, so pairing drops with adds stays a human
-// decision and the hint reports both sides for review.
-func detectIndexRenameHints(ddls []string) []indexRenameHint {
+// detectIndexRenames pairs every added index in the migration plan with a
+// dropped index of the identical definition, recovering the dropped side's
+// columns from the exported current schema. Only exact matches (same table,
+// same column sequence, same uniqueness) with an unambiguous one-to-one
+// pairing are reported, so every reported pair is safe to rename.
+func detectIndexRenames(ddls []string, currentDDLs string) []renamePair {
 	type tableChanges struct {
 		dropped []string
 		added   []addedIndex
@@ -75,79 +92,121 @@ func detectIndexRenameHints(ddls []string) []indexRenameHint {
 		}
 	}
 
-	hints := make([]indexRenameHint, 0, len(tables))
+	current := parseCurrentIndexes(currentDDLs)
+	pairs := make([]renamePair, 0)
 	for _, table := range tables {
 		c := changes[table]
-		if len(c.dropped) != 0 && len(c.added) != 0 {
-			hints = append(hints, indexRenameHint{Table: table, Dropped: c.dropped, Added: c.added})
+		if len(c.dropped) == 0 || len(c.added) == 0 {
+			continue
+		}
+		for _, added := range c.added {
+			definition := currentIndex{Columns: normalizeColumns(added.Columns), Unique: added.Unique}
+			from, ok := matchDroppedIndex(current[table], c.dropped, definition)
+			if !ok {
+				continue
+			}
+			pairs = append(pairs, renamePair{
+				Table:   table,
+				From:    from,
+				To:      added.Name,
+				Columns: definition.Columns,
+				Unique:  added.Unique,
+			})
 		}
 	}
-	return hints
+	return pairs
 }
 
-// formatIndexRenameHints renders the advisory body shown after a migration
-// plan that drops and re-creates indexes on the same table. The caller owns
-// the surrounding section title and placement; the advisory only guides,
-// and executing RENAME INDEX stays a human decision.
+// matchDroppedIndex returns the single dropped index whose current
+// definition equals the added one. Zero matches means a genuine rebuild and
+// multiple matches are ambiguous; both report no pairing.
+func matchDroppedIndex(currentTable map[string]currentIndex, dropped []string, definition currentIndex) (string, bool) {
+	matched := ""
+	for _, name := range dropped {
+		def, ok := currentTable[name]
+		if !ok || def != definition {
+			continue
+		}
+		if matched != "" {
+			return "", false
+		}
+		matched = name
+	}
+	return matched, matched != ""
+}
+
+// parseCurrentIndexes extracts the secondary index definitions per table
+// from the SHOW CREATE TABLE style DDLs exported from the current database.
+func parseCurrentIndexes(currentDDLs string) map[string]map[string]currentIndex {
+	indexes := make(map[string]map[string]currentIndex)
+	table := ""
+	for line := range strings.SplitSeq(currentDDLs, "\n") {
+		if m := currentTablePattern.FindStringSubmatch(line); m != nil {
+			table = m[1]
+			indexes[table] = make(map[string]currentIndex)
+			continue
+		}
+		if table == "" {
+			continue
+		}
+		trimmed := strings.TrimRight(strings.TrimSpace(line), ",")
+		m := currentIndexPattern.FindStringSubmatch(trimmed)
+		if m == nil {
+			continue
+		}
+		// Recapture the column list up to the line's last closing parenthesis
+		// so column prefix lengths like col(10) stay intact.
+		start := strings.Index(trimmed, "(")
+		end := strings.LastIndex(trimmed, ")")
+		if start < 0 || end <= start {
+			continue
+		}
+		indexes[table][m[2]] = currentIndex{
+			Columns: normalizeColumns(trimmed[start+1 : end]),
+			Unique:  strings.TrimSpace(m[1]) == "UNIQUE",
+		}
+	}
+	return indexes
+}
+
+// normalizeColumns strips identifier quoting and spacing from a column list
+// so plan-side and current-side definitions compare by content.
+func normalizeColumns(columns string) string {
+	columns = strings.ReplaceAll(columns, "`", "")
+	columns = strings.ReplaceAll(columns, " ", "")
+	return columns
+}
+
+// formatIndexRenames renders the advisory body shown after a migration plan
+// whose drop/add pairs were verified as renames. The caller owns the
+// surrounding section title and placement; executing the statements stays a
+// human decision.
 //
 // Output rules keep copy-paste safe: every explanatory line carries a "--"
 // SQL comment prefix so pasting the whole block into MySQL stays harmless,
 // and only directly executable RENAME statements appear unprefixed, grouped
 // at the end after a blank line.
-func formatIndexRenameHints(hints []indexRenameHint) string {
-	if len(hints) == 0 {
+func formatIndexRenames(pairs []renamePair) string {
+	if len(pairs) == 0 {
 		return ""
 	}
 
 	var b strings.Builder
-	b.WriteString("  -- The plan drops and re-creates indexes on the same table; some pairs may be renames.\n")
+	b.WriteString("  -- The plan above drops and re-creates the indexes below with identical definitions; these are renames.\n")
 	b.WriteString("  -- RENAME INDEX only modifies metadata; DROP + ADD rebuilds the index (full table scan on large tables).\n")
-	b.WriteString("  -- For each real rename, verify the columns match, run its statement below instead, then re-run gg migrate.\n")
-
-	statements := make([]string, 0, len(hints))
-	for _, hint := range hints {
-		if len(hint.Dropped) == 1 && len(hint.Added) == 1 {
-			added := hint.Added[0]
-			fmt.Fprintf(&b, "  -- Table `%s`: `%s` -> %s (%s)\n",
-				hint.Table, hint.Dropped[0], describeAddedIndex(added), added.Columns)
-			statements = append(statements,
-				fmt.Sprintf("ALTER TABLE `%s` RENAME INDEX `%s` TO `%s`;", hint.Table, hint.Dropped[0], added.Name))
-		} else {
-			fmt.Fprintf(&b, "  -- Table `%s`: dropped %s; added %s\n",
-				hint.Table, describeDroppedIndexes(hint.Dropped), describeAddedIndexes(hint.Added))
-			fmt.Fprintf(&b, "  --   template: ALTER TABLE `%s` RENAME INDEX <old> TO <new>;\n", hint.Table)
+	b.WriteString("  -- Run the statement(s) below instead, then re-run gg migrate.\n")
+	for _, pair := range pairs {
+		unique := ""
+		if pair.Unique {
+			unique = ", UNIQUE"
 		}
+		fmt.Fprintf(&b, "  -- Table `%s`: `%s` -> `%s` (%s%s)\n", pair.Table, pair.From, pair.To, pair.Columns, unique)
 	}
-	if len(statements) != 0 {
-		b.WriteString("\n")
-		for _, statement := range statements {
-			b.WriteString(statement + "\n")
-		}
+	b.WriteString("\n")
+	for _, pair := range pairs {
+		fmt.Fprintf(&b, "ALTER TABLE `%s` RENAME INDEX `%s` TO `%s`;\n", pair.Table, pair.From, pair.To)
 	}
 	return b.String()
-}
-
-func describeAddedIndex(added addedIndex) string {
-	if added.Unique {
-		return "UNIQUE `" + added.Name + "`"
-	}
-	return "`" + added.Name + "`"
-}
-
-func describeAddedIndexes(added []addedIndex) string {
-	parts := make([]string, 0, len(added))
-	for _, a := range added {
-		parts = append(parts, fmt.Sprintf("%s (%s)", describeAddedIndex(a), a.Columns))
-	}
-	return strings.Join(parts, ", ")
-}
-
-func describeDroppedIndexes(dropped []string) string {
-	parts := make([]string, 0, len(dropped))
-	for _, name := range dropped {
-		parts = append(parts, "`"+name+"`")
-	}
-	return strings.Join(parts, ", ")
 }
 
 // unquoteIdent strips MySQL backtick quoting from an identifier.
