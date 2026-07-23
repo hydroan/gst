@@ -9,6 +9,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/maxrichie5/go-sqlfmt/sqlfmt"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
@@ -103,6 +104,21 @@ func (s *SchemaDumper) Dump(driver config.DBType, dst ...any) (string, error) {
 			statements = append(statements, schemaStatement{
 				ModelName: schemaModelName(v),
 				SQL:       sql,
+			})
+		}
+
+		// Append custom indexes declared through the Indexer capability.
+		// Plans and statement rendering are shared with the bootstrap
+		// executor, so the desired schema always matches the DDL that the
+		// runtime actually applies.
+		plans, planErr := modelregistry.ParseIndexPlans(db, v, tableName)
+		if planErr != nil {
+			return "", planErr
+		}
+		for _, plan := range plans {
+			statements = append(statements, schemaStatement{
+				ModelName: schemaModelName(v),
+				SQL:       plan.CreateSQL(db.Dialector),
 			})
 		}
 	}

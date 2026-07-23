@@ -55,6 +55,17 @@ func newDryRunDatabase(db database.Database) (*database.DryRunDatabase, error) {
 // Migrate applies the schema changes to the database.
 // It returns true if any changes were applied (or would be applied in dry-run mode),
 // and false if the database schema is already up-to-date.
+//
+// Index renames must run through this migration path BEFORE deploying code
+// that carries the new index name: once the rename is applied, bootstrap
+// AutoMigrate matches the new name and does nothing. Deploying first instead
+// makes gorm's MySQL driver silently DROP and re-CREATE single-column unique
+// indexes during startup, which rebuilds the index with a full table scan and
+// skips every review step.
+//
+// When a MySQL plan both drops and adds indexes on the same table, suspected
+// renames are reported with ready-to-run RENAME INDEX guidance before the
+// plan prints or runs; executing the rename stays a human decision.
 func Migrate(schemas []string, dbtyp config.DBType, cfg *DatabaseConfig, opt *MigrateOption) (migrated bool, err error) {
 	if len(schemas) == 0 {
 		return false, nil
@@ -162,6 +173,15 @@ func run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 	if len(ddls) == 0 {
 		// fmt.Println("-- Nothing is modified --")
 		return false, nil
+	}
+
+	// Surface suspected index renames before the plan runs or prints, so a
+	// reviewer can replace a drop-and-rebuild pair with a metadata-only
+	// RENAME INDEX. Detection guides only; nothing is rewritten or executed.
+	if generatorMode == schema.GeneratorModeMysql {
+		if guidance := formatIndexRenameHints(detectIndexRenameHints(ddls)); len(guidance) != 0 {
+			fmt.Print(guidance)
+		}
 	}
 
 	if options.DryRun || len(options.CurrentFile) > 0 {
