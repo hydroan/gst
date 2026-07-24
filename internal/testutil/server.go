@@ -37,6 +37,13 @@ func SetupRandomRedisNamespace() string {
 	return namespace
 }
 
+// EnableAutoMigrate turns on automatic table migration for test bootstraps.
+// database.auto_migrate defaults to false, while tests rely on it to create
+// sqlite tables on the fly.
+func EnableAutoMigrate() {
+	os.Setenv(config.DATABASE_AUTO_MIGRATE, "true")
+}
+
 // URL returns an absolute URL for the configured test server port.
 func URL(port int, path string) string {
 	return fmt.Sprintf("http://127.0.0.1:%d%s", port, path)

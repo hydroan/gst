@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/bootstrap"
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/pkg/tunnel"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/assert"
@@ -36,6 +37,7 @@ var (
 )
 
 func TestSession(t *testing.T) {
+	t.Setenv(config.DATABASE_AUTO_MIGRATE, "true")
 	require.NoError(t, bootstrap.Bootstrap())
 	readyCh := make(chan struct{}, 1)
 	doneCh := make(chan struct{}, 1)

@@ -79,6 +79,7 @@ func startServerOnce(t *testing.T) {
 	addr2 = testutil.URL(port, "/api/test-user/")
 
 	t.Setenv(config.DATABASE_TYPE, string(config.DBSqlite))
+	t.Setenv(config.DATABASE_AUTO_MIGRATE, "true")
 	t.Setenv(config.SQLITE_IS_MEMORY, "true")
 	t.Setenv(config.LOGGER_DIR, "/tmp/test_client")
 	t.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)

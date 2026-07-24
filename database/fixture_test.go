@@ -278,6 +278,7 @@ type TestCategory struct {
 func (*TestCategory) Purge() bool { return true }
 
 func init() {
+	os.Setenv(config.DATABASE_AUTO_MIGRATE, "true")
 	os.Setenv(config.LOGGER_DIR, "/tmp/test_database")
 	os.Setenv(config.DATABASE_TYPE, string(config.DBSqlite))
 	os.Setenv(config.SQLITE_IS_MEMORY, "false")

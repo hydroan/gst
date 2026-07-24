@@ -173,6 +173,7 @@ port = 8080
 
 [database]
 type = sqlite
+auto_migrate = true
 
 [sqlite]
 path = ./data.db

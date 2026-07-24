@@ -14,6 +14,7 @@ const (
 
 const (
 	DATABASE_TYPE                 = "DATABASE_TYPE"                 //nolint:staticcheck
+	DATABASE_AUTO_MIGRATE         = "DATABASE_AUTO_MIGRATE"         //nolint:staticcheck
 	DATABASE_SLOW_QUERY_THRESHOLD = "DATABASE_SLOW_QUERY_THRESHOLD" //nolint:staticcheck
 	DATABASE_MAX_IDLE_CONNS       = "DATABASE_MAX_IDLE_CONNS"       //nolint:staticcheck
 	DATABASE_MAX_OPEN_CONNS       = "DATABASE_MAX_OPEN_CONNS"       //nolint:staticcheck
@@ -23,6 +24,7 @@ const (
 
 type Database struct {
 	Type               DBType        `json:"type" mapstructure:"type" ini:"type" yaml:"type"`
+	AutoMigrate        bool          `json:"auto_migrate" mapstructure:"auto_migrate" ini:"auto_migrate" yaml:"auto_migrate"`
 	SlowQueryThreshold time.Duration `json:"slow_query_threshold" mapstructure:"slow_query_threshold" ini:"slow_query_threshold" yaml:"slow_query_threshold"`
 	MaxIdleConns       int           `json:"max_idle_conns" mapstructure:"max_idle_conns" ini:"max_idle_conns" yaml:"max_idle_conns"`
 	MaxOpenConns       int           `json:"max_open_conns" mapstructure:"max_open_conns" ini:"max_open_conns" yaml:"max_open_conns"`
@@ -32,6 +34,7 @@ type Database struct {
 
 func (*Database) setDefault() {
 	cv.SetDefault("database.type", DBSqlite)
+	cv.SetDefault("database.auto_migrate", false)
 	cv.SetDefault("database.slow_query_threshold", 500*time.Millisecond)
 	cv.SetDefault("database.max_idle_conns", 100)
 	cv.SetDefault("database.max_open_conns", 100)

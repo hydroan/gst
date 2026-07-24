@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/util"
 	cmap "github.com/orcaman/concurrent-map/v2"
 	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
@@ -29,6 +31,27 @@ var startedTable atomic.Int32
 // initedTable is a concurrent map that tracks initialized tables by their unique key (table_name:db_name)
 // It is used by the record processing goroutine to wait for table creation before inserting records
 var initedTable = cmap.New[string]()
+
+// ensureTable prepares the backing table for a registered model.
+//
+// With database.auto_migrate enabled it runs gorm AutoMigrate and creates
+// custom indexes, which suits local development and tests. With the option
+// disabled (the default) it only verifies that the table already exists via
+// the dialect-aware gorm Migrator, so schema changes in shared environments
+// stay an explicit "gg migrate" decision instead of a startup side effect.
+func ensureTable(handler *gorm.DB, m types.Model) error {
+	tableName := m.GetTableName()
+	if config.App.Database.AutoMigrate {
+		if err := handler.Table(tableName).AutoMigrate(m); err != nil {
+			return err
+		}
+		return ensureCustomIndexes(handler, m)
+	}
+	if !handler.Migrator().HasTable(tableName) {
+		return errors.Newf("table %q does not exist: run \"gg migrate\" to apply the schema, or enable database.auto_migrate for local development", tableName)
+	}
+	return nil
+}
 
 // InitDatabase initializes database tables and records with asynchronous processing support.
 // It creates tables and inserts records that are registered via Register() or RegisterTo() functions.
@@ -60,19 +83,15 @@ func InitDatabase(db *gorm.DB, dbmap map[string]*gorm.DB) (err error) {
 			for {
 				select {
 				case m := <-modelregistry.TableChan:
-					// create table automatically in default database.
+					// Prepare the table in the default database.
 					begin := time.Now()
 
 					typ := reflect.TypeOf(m).Elem()
-					if err = db.Table(m.GetTableName()).AutoMigrate(m); err != nil {
-						err = errors.Wrap(err, fmt.Sprintf("failed to create table(%s)", typ.String()))
+					if err = ensureTable(db, m); err != nil {
+						err = errors.Wrap(err, fmt.Sprintf("failed to prepare table(%s)", typ.String()))
 						panic(err)
 					}
-					if err = ensureCustomIndexes(db, m); err != nil {
-						err = errors.Wrap(err, fmt.Sprintf("failed to ensure custom indexes(%s)", typ.String()))
-						panic(err)
-					}
-					zap.S().Infow("database create table", "model", typ.String(), "cost", util.FormatDurationSmart(time.Since(begin)))
+					zap.S().Infow("database table ready", "model", typ.String(), "cost", util.FormatDurationSmart(time.Since(begin)))
 
 					initedTable.Set(typ.String(), "")
 
@@ -81,7 +100,7 @@ func InitDatabase(db *gorm.DB, dbmap map[string]*gorm.DB) (err error) {
 						continue
 					}
 
-					// create table automatically with custom database.
+					// Prepare the table in the custom database.
 					begin := time.Now()
 
 					handler := db
@@ -90,15 +109,11 @@ func InitDatabase(db *gorm.DB, dbmap map[string]*gorm.DB) (err error) {
 					}
 					m := v.Table
 					typ := reflect.TypeOf(m).Elem()
-					if err = handler.Table(m.GetTableName()).AutoMigrate(m); err != nil {
-						err = errors.Wrap(err, fmt.Sprintf("failed to create table(%s)", typ.String()))
+					if err = ensureTable(handler, m); err != nil {
+						err = errors.Wrap(err, fmt.Sprintf("failed to prepare table(%s)", typ.String()))
 						panic(err)
 					}
-					if err = ensureCustomIndexes(handler, m); err != nil {
-						err = errors.Wrap(err, fmt.Sprintf("failed to ensure custom indexes(%s)", typ.String()))
-						panic(err)
-					}
-					zap.S().Infow("database create table", "model", typ.String(), "cost", util.FormatDurationSmart(time.Since(begin)))
+					zap.S().Infow("database table ready", "model", typ.String(), "cost", util.FormatDurationSmart(time.Since(begin)))
 
 					initedTable.Set(typ.String(), v.DBName)
 

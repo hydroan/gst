@@ -52,6 +52,7 @@ type totpTestAccount struct {
 }
 
 func init() {
+	testutil.EnableAutoMigrate()
 	os.Setenv(config.DATABASE_TYPE, string(config.DBMySQL))
 	os.Setenv(config.MYSQL_USERNAME, "test_module")
 	os.Setenv(config.MYSQL_PASSWORD, "test_module")

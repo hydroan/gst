@@ -39,6 +39,7 @@ type ListResponse[T any] struct {
 func init() {
 	// NOTE: do not remove me
 	godump.Dump()
+	testutil.EnableAutoMigrate()
 	os.Setenv(config.DATABASE_TYPE, string(config.DBMySQL))
 	os.Setenv(config.MYSQL_USERNAME, "test_module")
 	os.Setenv(config.MYSQL_PASSWORD, "test_module")

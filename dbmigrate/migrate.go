@@ -57,11 +57,14 @@ func newDryRunDatabase(db database.Database) (*database.DryRunDatabase, error) {
 // and false if the database schema is already up-to-date.
 //
 // Index renames must run through this migration path BEFORE deploying code
-// that carries the new index name: once the rename is applied, bootstrap
-// AutoMigrate matches the new name and does nothing. Deploying first instead
-// makes gorm's MySQL driver silently DROP and re-CREATE single-column unique
-// indexes during startup, which rebuilds the index with a full table scan and
-// skips every review step.
+// that carries the new index name: once the rename is applied, startup table
+// preparation matches the new name and does nothing. With database.auto_migrate
+// enabled (local development, tests), deploying first instead makes gorm's
+// MySQL driver silently DROP and re-CREATE single-column unique indexes during
+// startup, which rebuilds the index with a full table scan and skips every
+// review step. With auto_migrate disabled (the production default) nothing is
+// rebuilt, but the model and the database keep drifting until the migration
+// runs.
 //
 // When a MySQL plan both drops and adds indexes on the same table, suspected
 // renames are returned as advisory text with ready-to-run RENAME INDEX

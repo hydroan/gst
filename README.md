@@ -295,6 +295,11 @@ database.Database[*appmodel.Conversation](ctx)
 `config.ini.example` 是新项目的默认配置模板。复制为 `config.ini` 后按环境修改。
 默认模板会开启 sqlite，适合本地快速启动。
 
+服务启动默认不自动建表、不自动迁移（`database.auto_migrate = false`）：启动期只校验注册模型
+的表是否存在，缺表直接报错退出并提示执行 `gg migrate`。`gg new` 生成的配置和 `examples/demo`
+显式开启 `auto_migrate = true`，本地开发、测试环境按需开启即可；生产环境保持默认关闭，
+schema 变更一律走 `gg migrate`。
+
 常用配置命令：
 
 ```bash
@@ -321,8 +326,10 @@ gg migrate
 
 ### 索引改名必须先迁移后发布
 
-改索引名必须先执行 `gg migrate` 再发布新代码：先迁移则服务启动时按名命中、无额外动作；
-先发布则 gorm 会在启动期对单列唯一索引做静默 DROP + CREATE 重建，大表代价极高且无确认环节。
+改索引名必须先执行 `gg migrate` 再发布新代码：先迁移则服务启动时按名命中、无额外动作。
+若环境开启了 `database.auto_migrate`（本地开发、测试），先发布会让 gorm 在启动期对单列唯一
+索引做静默 DROP + CREATE 重建，大表代价极高且无确认环节；生产环境默认关闭 auto_migrate，
+先发布虽不会触发重建，但模型与库会持续漂移，直到执行 `gg migrate` 为止。
 
 `gg migrate` 检测到疑似改名（同表索引有删有加）时会在迁移计划前给出 `RENAME INDEX` 指引：
 确认列定义一致后手工执行该语句（瞬时元数据操作），再重跑 `gg migrate`，对应删建项即消失。
