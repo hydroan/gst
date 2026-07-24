@@ -1851,6 +1851,17 @@ func TestDatabaseWithQuery(t *testing.T) {
 			List(&users))
 		require.Len(t, users, 2, "slice values must bind IN directly")
 
+		// A slice of a named string type binds the same way as []string, so
+		// enum-typed values need no per-member conversion.
+		type sampleStatus string
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{{Column: "name", Op: types.FilterOpIn, Value: []sampleStatus{sampleStatus(u1.Name), sampleStatus(u3.Name)}}},
+			}).
+			List(&users))
+		require.Len(t, users, 2, "named string type slices must bind like []string")
+
 		// An empty slice matches nothing instead of widening the result set.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
