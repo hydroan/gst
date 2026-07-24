@@ -138,11 +138,14 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 			gstotel.RecordError(span, err)
 			return
 		}
-		// 2.Batch partial update resource in database.
+		// 2.Batch partial update resource in database. The rows were loaded
+		// above, so ErrRecordNotFound only fires when one vanished in between;
+		// unique-key collisions from the patched values render 409. Either way
+		// the transaction rolls the whole batch back.
 		if !errors.Is(reqErr, io.EOF) {
 			if err = handler(requestContext(c)).Update(shouldUpdates...); err != nil {
 				log.Error(err)
-				JSON(c, CodeFailure.WithErr(err))
+				JSON(c, writeErrorCoder(err))
 				gstotel.RecordError(span, err)
 				return
 			}

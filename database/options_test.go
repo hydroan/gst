@@ -565,8 +565,10 @@ func TestDatabaseWithDryRun(t *testing.T) {
 		require.NoError(t, database.Database[*TestUser](context.Background()).Get(uu, u1.ID))
 		require.Equal(t, originalName, uu.Name, "name should not be updated in dry-run mode")
 
+		// Even in dry-run mode Update requires an ID: without a primary key
+		// there is no WHERE clause to build the UPDATE statement from.
 		dryRunUser := &TestUser{Name: "dry-run-update", Email: "dry-run-update@example.com"}
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithDryRun().Update(dryRunUser))
+		require.ErrorIs(t, database.Database[*TestUser](context.Background()).WithDryRun().Update(dryRunUser), database.ErrIDRequired)
 		require.Empty(t, dryRunUser.ID, "Update should not set ID in dry-run mode")
 		require.True(t, dryRunUser.CreatedAt.IsZero(), "Update should not set created_at in dry-run mode")
 		require.True(t, dryRunUser.UpdatedAt.IsZero(), "Update should not set updated_at in dry-run mode")

@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 
 	"github.com/cockroachdb/errors"
@@ -28,10 +27,15 @@ func Update[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 //
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into
 // M, reads the resource id from the configured route parameter (the id carried
-// by the body is ignored), verifies that exactly one existing record matches,
-// preserves the original creator fields, sets the updater field, runs update
-// hooks, writes the replacement through the configured database handler, and
-// records an operation log.
+// by the body is ignored), sets the updater field, runs update hooks, writes
+// the replacement through the configured database handler, and records an
+// operation log. Existence is enforced by the database layer instead of a
+// pre-read: a missing or soft-deleted record surfaces as
+// database.ErrRecordNotFound and renders 404, and a unique-key collision
+// renders 409. The UpdateBefore service hook therefore runs before existence
+// is known. After a successful write the handler backfills the creation audit
+// columns (created_at/created_by) from the persisted row, keeping the rest of
+// the response object intact so hook-populated fields survive.
 //
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's Update method.
@@ -98,39 +102,22 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			gstotel.RecordError(span, errors.New(CodeNotFoundRouteParam.Msg()))
 			return
 		}
+		// 'm' is a fresh model instance, such as: &model.User{ID: myid}.
+		m := meta.newModel()
+		if !setRouteID(m, id) {
+			// An id the model rejects cannot match any row; answer 404 without
+			// touching the database.
+			log.Errorz("route id rejected by model", zap.String("id", id))
+			JSON(c, CodeNotFound)
+			return
+		}
 		req.SetID(id)
+		req.SetUpdatedBy(c.GetString(consts.CTX_USERNAME)) // set updated_by to current user
 		log.Infoz(
 			"update from request",
 			zap.String("id", id),
 			zap.Object(meta.fullName, req),
 		)
-
-		data := make([]M, 0)
-		// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
-		m := meta.newModel()
-		if !setRouteID(m, id) {
-			// An id the model rejects cannot match any row; answer 404 without
-			// relying on the empty-query safety net below.
-			log.Errorz("route id rejected by model", zap.String("id", id))
-			JSON(c, CodeNotFound)
-			return
-		}
-		// Make sure the record must be already exists.
-		if err = handler(requestContext(c)).WithLimit(1).WithQuery(m).List(&data); err != nil {
-			log.Error(err)
-			JSON(c, CodeFailure.WithErr(err))
-			gstotel.RecordError(span, err)
-			return
-		}
-		if len(data) != 1 {
-			log.Errorz(fmt.Sprintf("the total number of records query from database not equal to 1(%d)", len(data)), zap.String("id", id))
-			JSON(c, CodeNotFound)
-			return
-		}
-
-		req.SetCreatedAt(data[0].GetCreatedAt())           // keep original "created_at"
-		req.SetCreatedBy(data[0].GetCreatedBy())           // keep original "created_by"
-		req.SetUpdatedBy(c.GetString(consts.CTX_USERNAME)) // set updated_by to current user”
 
 		// 1.Perform business logic processing before update resource.
 		var serviceCtxBefore *types.ServiceContext
@@ -143,11 +130,12 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			gstotel.RecordError(span, err)
 			return
 		}
-		// 2.Update resource in database.
+		// 2.Update resource in database. The database layer answers existence:
+		// ErrRecordNotFound renders 404, ErrDuplicatedKey renders 409.
 		log.Infoz("update in database", zap.Object(meta.name, req))
 		if err = handler(requestContext(c)).Update(req); err != nil {
 			log.Error(err)
-			JSON(c, CodeFailure.WithErr(err))
+			JSON(c, writeErrorCoder(err))
 			gstotel.RecordError(span, err)
 			return
 		}
@@ -161,6 +149,19 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
+		}
+		// Backfill the creation audit columns from the persisted row: Update
+		// never writes created_at/created_by, so the request object holds
+		// whatever the client sent. Only these two fields are copied — the
+		// response keeps req so values populated by service hooks (including
+		// non-persistent fields) survive. On a reload failure keep req as is:
+		// the update itself already committed.
+		reloaded := meta.newModel()
+		if reloadErr := handler(requestContext(c)).Get(reloaded, id); reloadErr != nil {
+			log.Warn(reloadErr)
+		} else {
+			req.SetCreatedAt(reloaded.GetCreatedAt())
+			req.SetCreatedBy(reloaded.GetCreatedBy())
 		}
 
 		// 4.record operation log to database.

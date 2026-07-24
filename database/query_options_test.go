@@ -1471,7 +1471,9 @@ func TestDatabaseWithPurge(t *testing.T) {
 	t.Run("DoesNotAffectCreate", func(t *testing.T) {
 		defer cleanupTestData()
 
-		// WithPurge should not affect Create operations
+		// WithPurge should not affect Create operations. Create is a pure
+		// INSERT, so the rows are dropped before each round instead of relying
+		// on repeated creates overwriting each other.
 		// Create with WithPurge() - should work normally
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge().Create(ul...))
 		count := new(int)
@@ -1479,11 +1481,13 @@ func TestDatabaseWithPurge(t *testing.T) {
 		require.Equal(t, 3, *count, "should have 3 records after Create with WithPurge()")
 
 		// Create with WithPurge(true) - should work normally
+		require.NoError(t, database.Database[*TestUser](context.Background()).Delete(ul...))
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge(true).Create(ul...))
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 		require.Equal(t, 3, *count, "should have 3 records after Create with WithPurge(true)")
 
 		// Create with WithPurge(false) - should work normally
+		require.NoError(t, database.Database[*TestUser](context.Background()).Delete(ul...))
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge(false).Create(ul...))
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 		require.Equal(t, 3, *count, "should have 3 records after Create with WithPurge(false)")

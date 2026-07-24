@@ -22,6 +22,7 @@ var databaseTerminalMethods = map[string]bool{
 	"Create":     true,
 	"Delete":     true,
 	"Update":     true,
+	"Upsert":     true,
 	"UpdateByID": true,
 	"List":       true,
 	"Get":        true,

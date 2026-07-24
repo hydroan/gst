@@ -279,3 +279,20 @@ func handleServiceError(c *gin.Context, err error) {
 	// Default error handling
 	JSON(c, CodeFailure.WithErr(err))
 }
+
+// writeErrorCoder maps database write errors to their canonical API codes:
+// database.ErrRecordNotFound renders 404 and database.ErrDuplicatedKey renders
+// 409 with their fixed client-safe messages; anything else falls back to
+// CodeFailure carrying the error text. Handlers log the full error themselves,
+// so the not-found/duplicate branches deliberately drop internal detail from
+// the response.
+func writeErrorCoder(err error) types.Coder {
+	switch {
+	case errors.Is(err, database.ErrRecordNotFound):
+		return CodeNotFound
+	case errors.Is(err, database.ErrDuplicatedKey):
+		return CodeAlreadyExist
+	default:
+		return CodeFailure.WithErr(err)
+	}
+}

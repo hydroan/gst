@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -35,7 +36,9 @@ func TestDatabaseCreate(t *testing.T) {
 	// Check the create hook result
 	require.Equal(t, remarkUserCreateBefore, *u1.Remark, "u1 should have create hook result")
 
-	// Test Create - batch create multiple records
+	// Test Create - batch create multiple records. u1 already exists and Create
+	// no longer overwrites, so drop it before recreating the whole batch.
+	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(u1))
 	u1.Remark, u2.Remark, u3.Remark = nil, nil, nil // clear remark to test hook
 	require.NoError(t, database.Database[*TestUser](context.Background()).Create(ul...))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
@@ -107,9 +110,10 @@ func TestDatabaseCreate(t *testing.T) {
 	// Test Create with empty resources - should not return error
 	require.NoError(t, database.Database[*TestUser](context.Background()).Create(nil))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Create([]*TestUser{nil, nil, nil}...))
-	require.NoError(t, database.Database[*TestUser](context.Background()).Create([]*TestUser{nil, u1, nil}...))
+	nilFilterUser := &TestUser{Name: "nil-filter", Base: model.Base{ID: "nil-filter-id"}}
+	require.NoError(t, database.Database[*TestUser](context.Background()).Create([]*TestUser{nil, nilFilterUser, nil}...))
 
-	t.Run("syncs upserted unique index record", func(t *testing.T) {
+	t.Run("duplicated unique key is rejected", func(t *testing.T) {
 		first := &TestUniqueItem{
 			UniqueCode: "same-code",
 			Name:       "first",
@@ -122,17 +126,49 @@ func TestDatabaseCreate(t *testing.T) {
 			UniqueCode: "same-code",
 			Name:       "second",
 		}
-		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Create(second))
-
-		require.Equal(t, first.ID, second.ID, "upserted create should expose the persisted row id")
-		require.Equal(t, first.ID, second.CreateAfterID, "CreateAfter should observe the persisted row id")
+		err := database.Database[*TestUniqueItem](context.Background()).Create(second)
+		require.ErrorIs(t, err, database.ErrDuplicatedKey, "create must reject a unique key collision instead of overwriting")
 
 		items := make([]*TestUniqueItem, 0)
 		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).List(&items))
 		require.Len(t, items, 1)
 		require.Equal(t, first.ID, items[0].ID)
-		require.Equal(t, "same-code", items[0].UniqueCode)
-		require.Equal(t, "second", items[0].Name)
+		require.Equal(t, "first", items[0].Name, "the existing row must stay untouched")
+	})
+
+	t.Run("duplicated key rolls back the whole batch", func(t *testing.T) {
+		seed := &TestUniqueItem{UniqueCode: "batch-code", Name: "existing"}
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Create(seed))
+
+		batch := []*TestUniqueItem{
+			{UniqueCode: "batch-new", Name: "new"},
+			{UniqueCode: "batch-code", Name: "dup"},
+		}
+		// Batch size 1 splits the two rows into separate INSERT statements, so
+		// the rollback must come from the write transaction, not from
+		// single-statement atomicity.
+		err := database.Database[*TestUniqueItem](context.Background()).WithBatchSize(1).Create(batch...)
+		require.ErrorIs(t, err, database.ErrDuplicatedKey)
+
+		rolledBack := make([]*TestUniqueItem, 0)
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).WithQuery(&TestUniqueItem{UniqueCode: "batch-new"}).List(&rolledBack))
+		require.Empty(t, rolledBack, "the row inserted before the collision must roll back")
+
+		seeded := make([]*TestUniqueItem, 0)
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).WithQuery(&TestUniqueItem{UniqueCode: "batch-code"}).List(&seeded))
+		require.Len(t, seeded, 1)
+		require.Equal(t, seed.ID, seeded[0].ID)
+		require.Equal(t, "existing", seeded[0].Name, "the existing row must stay untouched")
+	})
+
+	t.Run("caller supplied timestamps are overridden", func(t *testing.T) {
+		past := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+		item := &TestPlainItem{Code: "ts-code", Name: "ts"}
+		item.SetCreatedAt(past)
+		item.SetUpdatedAt(past)
+		require.NoError(t, database.Database[*TestPlainItem](context.Background()).Create(item))
+		require.True(t, item.CreatedAt.After(past), "created_at must be forced to now, not the caller value")
+		require.True(t, item.UpdatedAt.After(past), "updated_at must be forced to now, not the caller value")
 	})
 
 	t.Run("auto increment ids are assigned and backfilled", func(t *testing.T) {
@@ -306,52 +342,107 @@ func TestDatabaseUpdate(t *testing.T) {
 	require.Equal(t, u2.IsActive, u22.IsActive, "u2 is_active should match")
 	require.Equal(t, u3.IsActive, u33.IsActive, "u3 is_active should match")
 
-	// all created resources will generates ID automatically
+	// Update is a pure UPDATE: records without an ID are rejected before any
+	// database work instead of being inserted.
 	now := time.Now().Unix()
 	list := []*TestUser{
 		{
 			Name: strconv.Itoa(int(now)),
 		},
-		{
-			Name: strconv.Itoa(int(now + 1)),
-		},
-		{
-			Name: strconv.Itoa(int(now + 2)),
-		},
 	}
-	require.NoError(t, database.Database[*TestUser](context.Background()).Update(list...))
-	for _, u := range list {
-		require.NotEmpty(t, u.ID, "id should not be empty")
-	}
+	require.ErrorIs(t, database.Database[*TestUser](context.Background()).Update(list...), database.ErrIDRequired)
 
 	// Test Update with empty resources - should not return error
 	require.NoError(t, database.Database[*TestUser](context.Background()).Update(nil))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Update([]*TestUser{nil, nil, nil}...))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Update([]*TestUser{nil, u1, nil}...))
 
-	t.Run("syncs upserted unique index record", func(t *testing.T) {
-		first := &TestUniqueItem{
-			UniqueCode: "update-same-code",
-			Name:       "first",
-		}
-		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Create(first))
-		require.NotEmpty(t, first.ID)
+	t.Run("missing record fails with not found", func(t *testing.T) {
+		ghost := &TestUser{Name: "ghost", Base: model.Base{ID: "missing-id"}}
+		require.ErrorIs(t, database.Database[*TestUser](context.Background()).Update(ghost), database.ErrRecordNotFound)
+	})
 
-		second := &TestUniqueItem{
-			UniqueCode: "update-same-code",
-			Name:       "second",
-		}
-		second.ID = "update-stale-id"
-		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Update(second))
+	t.Run("batch update rolls back when one record is missing", func(t *testing.T) {
+		fresh := new(TestUser)
+		require.NoError(t, database.Database[*TestUser](context.Background()).Get(fresh, u1.ID))
+		fresh.Name = "batch-rollback"
+		ghost := &TestUser{Name: "ghost", Base: model.Base{ID: "missing-id"}}
 
-		require.Equal(t, first.ID, second.ID, "upserted update should expose the persisted row id")
-		require.Equal(t, first.ID, second.UpdateAfterID, "UpdateAfter should observe the persisted row id")
+		err := database.Database[*TestUser](context.Background()).Update(fresh, ghost)
+		require.ErrorIs(t, err, database.ErrRecordNotFound)
 
-		items := make([]*TestUniqueItem, 0)
-		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).List(&items))
-		require.Len(t, items, 1)
-		require.Equal(t, first.ID, items[0].ID)
-		require.Equal(t, "second", items[0].Name)
+		reloaded := new(TestUser)
+		require.NoError(t, database.Database[*TestUser](context.Background()).Get(reloaded, u1.ID))
+		require.NotEqual(t, "batch-rollback", reloaded.Name, "the row updated before the missing record must roll back")
+	})
+
+	t.Run("without hook batch update still rolls back", func(t *testing.T) {
+		fresh := new(TestUser)
+		require.NoError(t, database.Database[*TestUser](context.Background()).Get(fresh, u1.ID))
+		fresh.Name = "nohook-rollback"
+		ghost := &TestUser{Name: "ghost", Base: model.Base{ID: "missing-id"}}
+
+		err := database.Database[*TestUser](context.Background()).WithoutHook().Update(fresh, ghost)
+		require.ErrorIs(t, err, database.ErrRecordNotFound)
+
+		reloaded := new(TestUser)
+		require.NoError(t, database.Database[*TestUser](context.Background()).Get(reloaded, u1.ID))
+		require.NotEqual(t, "nohook-rollback", reloaded.Name, "WithoutHook writes must keep the transaction boundary")
+	})
+
+	t.Run("unchanged values still count as matched", func(t *testing.T) {
+		item := &TestPlainItem{Code: "unchanged-code", Name: "unchanged"}
+		require.NoError(t, database.Database[*TestPlainItem](context.Background()).Create(item))
+
+		// Saving without modifying anything must succeed: matched-rows
+		// semantics (clientFoundRows on MySQL) keep this from being misread
+		// as a missing record.
+		require.NoError(t, database.Database[*TestPlainItem](context.Background()).Update(item))
+	})
+
+	t.Run("unique key collision fails with duplicated key", func(t *testing.T) {
+		first := &TestUniqueItem{UniqueCode: "update-code-a", Name: "first"}
+		second := &TestUniqueItem{UniqueCode: "update-code-b", Name: "second"}
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Create(first, second))
+
+		second.UniqueCode = "update-code-a"
+		require.ErrorIs(t, database.Database[*TestUniqueItem](context.Background()).Update(second), database.ErrDuplicatedKey)
+	})
+
+	t.Run("creation audit columns cannot be forged", func(t *testing.T) {
+		item := &TestPlainItem{Code: "audit-code", Name: "before"}
+		require.NoError(t, database.Database[*TestPlainItem](context.Background()).Create(item))
+
+		persisted := new(TestPlainItem)
+		require.NoError(t, database.Database[*TestPlainItem](context.Background()).Get(persisted, item.ID))
+		originalCreatedAt := persisted.CreatedAt
+
+		persisted.Name = "after"
+		persisted.SetCreatedAt(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
+		persisted.SetCreatedBy("forged-user")
+		require.NoError(t, database.Database[*TestPlainItem](context.Background()).Update(persisted))
+
+		reloaded := new(TestPlainItem)
+		require.NoError(t, database.Database[*TestPlainItem](context.Background()).Get(reloaded, item.ID))
+		require.Equal(t, "after", reloaded.Name)
+		require.WithinDuration(t, originalCreatedAt, reloaded.CreatedAt, time.Second, "created_at must not be updatable")
+		require.Empty(t, reloaded.CreatedBy, "created_by must not be updatable")
+		require.True(t, reloaded.UpdatedAt.After(time.Date(2000, 1, 2, 0, 0, 0, 0, time.UTC)), "updated_at must be refreshed by the framework")
+	})
+
+	t.Run("soft deleted record cannot be updated or resurrected", func(t *testing.T) {
+		require.NoError(t, database.DB().AutoMigrate(&TestSoftDeleteItem{}))
+		defer func() {
+			_ = database.DB().Exec("DELETE FROM test_soft_delete_items").Error
+		}()
+
+		item := &TestSoftDeleteItem{Code: "soft-code", Name: "alive"}
+		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).Create(item))
+		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).Delete(item))
+
+		item.Name = "resurrected"
+		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](context.Background()).Update(item), database.ErrRecordNotFound,
+			"a soft-deleted row is not a live row for Update")
 	})
 
 	t.Run("auto increment model keeps its id on update", func(t *testing.T) {
@@ -368,6 +459,45 @@ func TestDatabaseUpdate(t *testing.T) {
 		require.NoError(t, database.Database[*TestAutoItem](context.Background()).List(&items))
 		require.Len(t, items, 1, "update should not insert a new row")
 		require.Equal(t, "after", items[0].Name)
+	})
+}
+
+func TestDatabaseUpsert(t *testing.T) {
+	defer cleanupTestData()
+
+	t.Run("inserts new records", func(t *testing.T) {
+		items := []*TestUniqueItem{
+			{UniqueCode: "upsert-a", Name: "a"},
+			{UniqueCode: "upsert-b", Name: "b"},
+		}
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Upsert(items...))
+		require.NotEmpty(t, items[0].ID)
+		require.NotEmpty(t, items[1].ID)
+
+		persisted := make([]*TestUniqueItem, 0)
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).List(&persisted))
+		require.Len(t, persisted, 2)
+	})
+
+	t.Run("overwrites on unique key collision and syncs ids", func(t *testing.T) {
+		first := &TestUniqueItem{UniqueCode: "upsert-same", Name: "first"}
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Upsert(first))
+		require.NotEmpty(t, first.ID)
+
+		firstPersisted := new(TestUniqueItem)
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Get(firstPersisted, first.ID))
+
+		second := &TestUniqueItem{UniqueCode: "upsert-same", Name: "second"}
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Upsert(second))
+		require.Equal(t, first.ID, second.ID, "the collided object must expose the persisted row id")
+		require.Empty(t, second.CreateAfterID, "Upsert must not run create hooks")
+		require.Empty(t, second.UpdateAfterID, "Upsert must not run update hooks")
+
+		items := make([]*TestUniqueItem, 0)
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).WithQuery(&TestUniqueItem{UniqueCode: "upsert-same"}).List(&items))
+		require.Len(t, items, 1)
+		require.Equal(t, "second", items[0].Name)
+		require.WithinDuration(t, firstPersisted.CreatedAt, items[0].CreatedAt, time.Second, "a conflict update keeps the original created_at")
 	})
 }
 

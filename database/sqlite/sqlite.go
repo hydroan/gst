@@ -53,7 +53,7 @@ func Init() (err error) {
 // New creates and returns a new SQLite database connection with the given configuration.
 // Returns (*gorm.DB, error) where error is non-nil if the connection fails.
 func New(cfg config.Sqlite) (*gorm.DB, error) {
-	return gorm.Open(sqlite.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm})
+	return gorm.Open(sqlite.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true})
 }
 
 // optimizeDatabase applies performance optimization settings to the SQLite database.

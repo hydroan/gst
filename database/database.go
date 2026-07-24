@@ -31,6 +31,7 @@ var (
 	ErrNotSetSlice         = errors.New("slice cannot set")
 	ErrIDRequired          = errors.New("id is required")
 	ErrRecordNotFound      = gorm.ErrRecordNotFound
+	ErrDuplicatedKey       = gorm.ErrDuplicatedKey
 	ErrNilSQLBuilder       = errors.New("sql statement collector cannot be nil")
 	ErrNilTransaction      = errors.New("transaction function cannot be nil")
 )
@@ -60,6 +61,30 @@ var (
 // The returned handle exposes the current runtime connection for advanced
 // integrations, but framework initialization owns the underlying pointer.
 // Callers should use Database[M](ctx) for normal CRUD operations.
+//
+// Running SQL directly on this raw handle bypasses everything Database[M](ctx)
+// wires up per request, so statements issued here are invisible to the tools
+// used for troubleshooting:
+//
+//   - Log correlation: the GORM SQL logger reads trace_id, user_id, and
+//     username from the statement context. The raw handle carries no request
+//     context, so its SQL log entries have empty trace/user fields and can
+//     never be joined with access/controller/service logs when tracing a
+//     request by trace_id.
+//   - Tracing: GormTracingPlugin parents each SQL span on the statement
+//     context. Statements on the raw handle produce orphan root spans outside
+//     the request trace, and with parent-based sampling they may not be
+//     recorded at all.
+//   - Transaction propagation: Database[M](ctx) joins the transaction carried
+//     by ctx (database.Transaction or a model-hook write). The raw handle
+//     always talks to the root connection, so its writes silently escape the
+//     surrounding transaction and break its all-or-nothing guarantee.
+//
+// When the raw handle is unavoidable (maintenance SQL, schema tweaks in
+// tests), pass the request context along: DB().WithContext(ctx) restores log
+// correlation and span parenting. Transaction propagation still requires
+// Database[M](ctx) — a context-carried transaction is never visible to the
+// raw handle.
 func DB() *gorm.DB {
 	return dbruntime.DB
 }

@@ -94,12 +94,24 @@ type Logger interface {
 // function; the context it passes to fn makes every chain started from that
 // context join the transaction automatically.
 type Database[M Model] interface {
-	// Create inserts one or more records, setting framework IDs and timestamps unless WithDryRun is enabled.
+	// Create inserts one or more records (pure INSERT), setting framework IDs
+	// and forcing created_at/updated_at to now. A primary or unique key
+	// collision fails with database.ErrDuplicatedKey instead of updating the
+	// existing row.
 	Create(objs ...M) error
 	// Delete removes one or more records using WithPurge, the model Purge setting, or soft delete by default.
 	Delete(objs ...M) error
-	// Update saves one or more full model values and updates timestamps unless WithDryRun is enabled.
+	// Update saves one or more full model values by primary key (pure UPDATE,
+	// zero values included). Objects without an ID fail with
+	// database.ErrIDRequired; records without a live row fail with
+	// database.ErrRecordNotFound. created_at/created_by/deleted_at are never
+	// written; updated_at is always refreshed by the framework.
 	Update(objs ...M) error
+	// Upsert inserts records or, on any unique-key collision, overwrites the
+	// conflicting row (INSERT ... ON DUPLICATE KEY UPDATE). It runs no model
+	// hooks and re-syncs caller objects with the persisted rows; reserve it
+	// for deliberate merge writes such as imports and sync jobs.
+	Upsert(objs ...M) error
 	// UpdateByID updates a single database column of a record by its ID.
 	UpdateByID(id string, column string, value any) error
 	// List retrieves multiple records matching the query conditions.

@@ -668,15 +668,19 @@ func TestAuthzRoleBinding(t *testing.T) {
 		var roleID string
 		var resp *client.Resp
 
-		// Create a role for assigning to user (role from previous test was deleted).
+		// Create a role for assigning to user. The id must be unique per run:
+		// the shared test database keeps rows across runs and Create rejects
+		// duplicates.
 		cliRole, err := client.New(roleAPI, client.WithCookie(&http.Cookie{
 			Name:  "session_id",
 			Value: adminSessionID,
 		}))
 		require.NoError(t, err)
+		// Keep the prefix short: the generated id must fit the char(36) id column.
+		bindingRoleID := authzTestUsername("rb_role")
 		resp, err = cliRole.Create(&authz.Role{
-			Base: model.Base{ID: "role_binding_test_role"},
-			Code: "role_binding_test_role",
+			Base: model.Base{ID: bindingRoleID},
+			Code: bindingRoleID,
 		})
 		require.NoError(t, err)
 		testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {

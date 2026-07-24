@@ -291,8 +291,11 @@ func Test_Client(t *testing.T) {
 		items := make([]User, 0)
 		total := 0
 
-		// 1.create resources.
-		_, err = cli.UpdateMany([]User{user1, user2, user3, user4, user5})
+		// 1.create resources from a clean slate: UpdateMany cannot create, so
+		// drop the fixed-id rows and recreate them explicitly.
+		_, err = cli.DeleteMany([]string{id1, id2, id3, id4, id5})
+		require.NoError(t, err)
+		_, err = cli.CreateMany([]User{user1, user2, user3, user4, user5})
 		require.NoError(t, err)
 
 		// 2.check the number of resources after create.
@@ -423,8 +426,11 @@ func Test_Client_WithAPI(t *testing.T) {
 
 	baseAddr := testutil.URL(port, "/api")
 
-	// Create test users first
+	// Create test users first, dropping fixed-id leftovers from earlier tests
+	// because Create rejects duplicates.
 	cliSetup, err := client.New(baseAddr+"/test-user", client.WithToken(token))
+	require.NoError(t, err)
+	_, err = cliSetup.DeleteMany([]string{id1, id2})
 	require.NoError(t, err)
 	_, err = cliSetup.Create(user1)
 	require.NoError(t, err)
@@ -624,6 +630,11 @@ type User struct {
 func (u *User) GetTableName() string {
 	return "test_users"
 }
+
+// Purge opts into hard delete so the fixed-id records can be recreated across
+// sub-tests: soft-deleted rows would keep occupying the primary key and make
+// later pure INSERTs fail with a duplicate error.
+func (u *User) Purge() bool { return true }
 
 func Test_Client_WithCookie(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

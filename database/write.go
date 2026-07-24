@@ -7,17 +7,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/cache"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
-	"go.uber.org/zap"
 	"gorm.io/gorm"
 	gormschema "gorm.io/gorm/schema"
 )
 
 // Create inserts one or multiple records into the database.
-// Automatically sets ID (if empty), created_at, and updated_at timestamps.
+// It is a pure INSERT: a record whose primary key or any unique key collides
+// with an existing row fails with ErrDuplicatedKey instead of silently
+// updating that row. Use Upsert for deliberate insert-or-update semantics.
 // Executes CreateBefore and CreateAfter model hooks unless disabled with WithoutHook or WithDryRun.
 // Supports batch processing for large datasets using configurable batch sizes.
 //
@@ -26,12 +28,18 @@ import (
 //
 // Behavior:
 //   - Automatically generates ID if empty using SetID()
-//   - Sets created_at and updated_at timestamps to current time
-//   - Supports batch processing for performance
+//   - Forces created_at and updated_at to the current time. Values carried by
+//     objs are deliberately ignored: HTTP controllers bind client JSON straight
+//     into models, so honoring caller-supplied timestamps would let clients
+//     forge audit fields.
+//   - Runs hooks and all batches in one transaction: a failure in any batch or
+//     hook rolls back the whole call (all-or-nothing), joining the transaction
+//     carried by ctx when present.
 //   - Clears related cache entries unless WithDryRun is enabled
 //   - Returns nil if no valid objects provided (empty slice or all objects are empty)
 //
-// Returns error if validation fails, database constraints are violated, or hooks return errors.
+// Returns ErrDuplicatedKey when a primary or unique key already exists, or an
+// error when hooks or other database constraints fail.
 // WithDryRun builds SQL only and does not execute hooks, database I/O, cache mutation, or object field filling.
 //
 // Example:
@@ -74,7 +82,7 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 		dryRunObjs := cloneDryRunModels(objs)
 		for i := 0; i < len(dryRunObjs); i += batchSize {
 			end := min(i+batchSize, len(dryRunObjs))
-			tx := db.ins.Session(&gorm.Session{DryRun: true}).Table(tableName).Save(dryRunObjs[i:end])
+			tx := db.ins.Session(&gorm.Session{DryRun: true}).Table(tableName).Create(dryRunObjs[i:end])
 			if err = db.collectSQL(tx); err != nil {
 				return err
 			}
@@ -86,7 +94,7 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 		defer cache.Cache[[]M]().WithContext(ctx).Clear()
 	}
 
-	return db.withModelHookTransaction(func() error {
+	return db.withWriteTransaction(func() error {
 		// Invoke model hook: CreateBefore for the entire batch.
 		if !db.noHook {
 			if err = traceModelHook[M](db.ctx, consts.PHASE_CREATE_BEFORE, span, func(spanCtx context.Context) error {
@@ -104,11 +112,6 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 			objs[i].SetID() // set id when id is empty.
 		}
 
-		// if err = db.db.Save(objs).Error; err != nil {
-		// if err = db.db.Table(db.tableName).Save(objs).Error; err != nil {
-		// 	return err
-		// }
-		//
 		tableName := db.m.GetTableName()
 		if len(db.tableName) > 0 {
 			tableName = db.tableName
@@ -117,7 +120,7 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 		if db.batchSize > 0 {
 			batchSize = db.batchSize
 		}
-		// update "created_at" and "updated_at"
+		// Force created_at/updated_at to now; see the timestamp note in the doc comment.
 		now := time.Now()
 		for i := range objs {
 			objs[i].SetCreatedAt(now)
@@ -125,10 +128,7 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 		}
 		for i := 0; i < len(objs); i += batchSize {
 			end := min(i+batchSize, len(objs))
-			if err = db.ins.Session(&gorm.Session{}).Table(tableName).Save(objs[i:end]).Error; err != nil {
-				return err
-			}
-			if err = db.syncSaveResultsByUniqueIndexes(tableName, objs[i:end]); err != nil {
+			if err = db.ins.Session(&gorm.Session{}).Table(tableName).Create(objs[i:end]).Error; err != nil {
 				return err
 			}
 		}
@@ -137,31 +137,6 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 				_ = cache.Cache[M]().WithContext(ctx).Delete(objs[i].GetID())
 			}
 		}
-
-		// // because db.db.Delete method just update field "delete_at" to current time,
-		// // not really delete it(soft delete).
-		// // If record already exists, Update method update all fields but exclude "created_at" by
-		// // mysql "ON DUPLICATE KEY UPDATE" mechanism. so we should update the "created_at" field manually.
-		// for i := range objs {
-		// 	// 有些 model 重写 SetID 为一个空函数, 则 GetID() 的值为空字符串. 更新 created_at 则会报错
-		// 	// 例如 casbin_rule 表/结构体: 这张表的 ID 总是 integer 类型, 并且有 autoincrement 属性, 所以必须重写 SetID.
-		// 	if len(objs[i].GetID()) == 0 {
-		// 		continue
-		// 	}
-		//
-		// 	// 这里要重新创建一个 gorm.DB 实例, 否则会出现这种语句, id 出现多次了.
-		// 	// UPDATE `assets` SET `created_at`='2023-11-12 14:35:42.604',`updated_at`='2023-11-12 14:35:42.604' WHERE id = '010103NU000020' AND `assets`.`deleted_at` IS NULL AND id = '010103NU000021' AND id = '010103NU000022' LIMIT 1000
-		// 	var _db *gorm.DB
-		// 	if strings.ToLower(config.App.Logger.Level) == "debug" {
-		// 		_db = DB.Debug()
-		// 	} else {
-		// 		_db = DB
-		// 	}
-		// 	createdAt := time.Now()
-		// 	if err = _db.Table(tableName).Model(*new(M)).Where("id = ?", objs[i].GetID()).Update("created_at", createdAt).Error; err != nil {
-		// 		return err
-		// 	}
-		// }
 
 		// Invoke model hook: CreateAfter for the entire batch.
 		if !db.noHook {
@@ -258,7 +233,7 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 		defer cache.Cache[[]M]().WithContext(ctx).Clear()
 	}
 
-	return db.withModelHookTransaction(func() error {
+	return db.withWriteTransaction(func() error {
 		// Invoke model hook: DeleteBefore.
 		if !db.noHook {
 			if err = traceModelHook[M](db.ctx, consts.PHASE_DELETE_BEFORE, span, func(spanCtx context.Context) error {
@@ -278,11 +253,6 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 		}
 		if util.Deref(db.enablePurge) {
 			// delete permanently.
-			// if err = db.db.Unscoped().Delete(objs).Error; err != nil {
-			// if err = db.db.Table(db.tableName).Unscoped().Delete(objs).Error; err != nil {
-			// 	return err
-			// }
-			//
 			batchSize := defaultDeleteBatchSize
 			if db.batchSize > 0 {
 				batchSize = db.batchSize
@@ -299,13 +269,9 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 				}
 			}
 		} else {
-			// Delete() method just update field "delete_at" to currrent time.
-			// DO NOT FORGET update the "created_at" field when create/update if record already exists.
-			// if err = db.db.Delete(objs).Error; err != nil {
-			// if err = db.db.Table(db.tableName).Delete(objs).Error; err != nil {
-			// 	return err
-			// }
-			//
+			// Soft delete: only set "deleted_at" to the current time. The row keeps
+			// occupying its unique keys, so a later Create with the same unique key
+			// fails with ErrDuplicatedKey; only Upsert can update such a row again.
 			batchSize := defaultDeleteBatchSize
 			if db.batchSize > 0 {
 				batchSize = db.batchSize
@@ -339,24 +305,39 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 	})
 }
 
-// Update modifies one or multiple records in the database.
-// Automatically updates the updated_at timestamp for each record.
+// Update saves the full state of one or multiple existing records.
+// It is a pure UPDATE by primary key: it never inserts, and every record must
+// already exist. Use Upsert for deliberate insert-or-update semantics.
 // Executes UpdateBefore and UpdateAfter model hooks unless disabled with WithoutHook or WithDryRun.
-// Uses GORM's Save method which performs INSERT or UPDATE based on primary key existence.
 //
 // Parameters:
 //   - objs: One or more model instances to update. Empty objects are automatically filtered out.
 //
 // Behavior:
-//   - If ID is empty: Generates a new ID and creates a new record (INSERT)
-//   - If ID is not empty: Updates the existing record (UPDATE)
-//   - Automatically updates the updated_at timestamp
-//   - Preserves created_at timestamp (not modified during update)
-//   - Updates all fields of the model
-//   - Supports batch processing for performance
+//   - Every object must carry a non-empty ID, otherwise ErrIDRequired is
+//     returned before any database work.
+//   - Writes the full row including zero values, or only the columns chosen
+//     with WithSelect.
+//   - Timestamp and audit columns are framework-managed and cannot be forged
+//     by callers: created_at/created_by are never written (creation facts),
+//     deleted_at is never written (rows cannot be soft-deleted or resurrected
+//     through Update), and updated_at is always refreshed to the current time
+//     by GORM regardless of the value carried by objs.
+//   - A record matching no live row (missing or soft deleted) fails with
+//     ErrRecordNotFound. Detection relies on matched-rows semantics: the
+//     framework MySQL DSN enables clientFoundRows=true so an update that
+//     changes nothing still counts as matched instead of being misread as
+//     missing. Custom connections passed via WithDB must keep that flag.
+//   - Runs hooks and all row updates in one transaction: any missing record or
+//     failed hook rolls back the whole call (all-or-nothing), joining the
+//     transaction carried by ctx when present.
 //   - Clears related cache entries unless WithDryRun is enabled
 //   - Returns nil if no valid objects provided (empty slice or all objects are empty)
-//   - WithDryRun builds SQL only and does not execute hooks, database I/O, cache mutation, or object field filling
+//
+// Returns ErrIDRequired when an object has no ID, ErrRecordNotFound when a
+// record does not exist (or is soft deleted), and ErrDuplicatedKey when the new
+// values collide with a unique key owned by another row.
+// WithDryRun builds SQL only and does not execute hooks, database I/O, cache mutation, or object field filling.
 //
 // Example:
 //
@@ -380,6 +361,13 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 	if len(objs) == 0 {
 		return nil
 	}
+	// A pure UPDATE needs a primary key on every record; fail fast before any
+	// database work so a partially valid batch never starts writing.
+	for i := range objs {
+		if len(objs[i].GetID()) == 0 {
+			return ErrIDRequired
+		}
+	}
 
 	if err = db.prepare(); err != nil {
 		return err
@@ -387,24 +375,16 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 	done, ctx, span := db.trace("Update", len(objs))
 	defer done(err)
 
+	tableName := db.m.GetTableName()
+	if len(db.tableName) > 0 {
+		tableName = db.tableName
+	}
+
 	if db.dryRun {
-		tableName := db.m.GetTableName()
-		if len(db.tableName) > 0 {
-			tableName = db.tableName
-		}
-		batchSize := defaultBatchSize
-		if db.batchSize > 0 {
-			batchSize = db.batchSize
-		}
-		if len(db.selectColumns) > 0 {
-			db.ins = db.ins.Select(db.selectColumns)
-		}
 		dryRunObjs := cloneDryRunModels(objs)
-		for i := 0; i < len(dryRunObjs); i += batchSize {
-			end := min(i+batchSize, len(dryRunObjs))
-			tx := db.ins.Session(&gorm.Session{DryRun: true}).Table(tableName).Save(dryRunObjs[i:end])
+		for i := range dryRunObjs {
+			tx := db.updateRowStatement(db.ins.Session(&gorm.Session{DryRun: true}), tableName, dryRunObjs[i]).Updates(dryRunObjs[i])
 			if err = db.collectSQL(tx); err != nil {
-				zap.S().Error(err)
 				return err
 			}
 		}
@@ -415,7 +395,7 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 		defer cache.Cache[[]M]().WithContext(ctx).Clear()
 	}
 
-	return db.withModelHookTransaction(func() error {
+	return db.withWriteTransaction(func() error {
 		// Invoke model hook: UpdateBefore.
 		if !db.noHook {
 			if err = traceModelHook[M](db.ctx, consts.PHASE_UPDATE_BEFORE, span, func(spanCtx context.Context) error {
@@ -430,38 +410,18 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 			}
 		}
 		for i := range objs {
-			objs[i].SetID() // set id when id is empty
-		}
-		// if err = db.db.Save(objs).Error; err != nil {
-		// if err = db.db.Table(db.tableName).Save(objs).Error; err != nil {
-		// 	return err
-		// }
-		//
-		tableName := db.m.GetTableName()
-		if len(db.tableName) > 0 {
-			tableName = db.tableName
-		}
-		batchSize := defaultBatchSize
-		if db.batchSize > 0 {
-			batchSize = db.batchSize
-		}
-		// set selected columns.
-		if len(db.selectColumns) > 0 {
-			db.ins = db.ins.Select(db.selectColumns)
-		}
-		for i := 0; i < len(objs); i += batchSize {
-			end := min(i+batchSize, len(objs))
-			if err = db.ins.Session(&gorm.Session{}).Table(tableName).Save(objs[i:end]).Error; err != nil {
-				zap.S().Error(err)
-				return err
+			res := db.updateRowStatement(db.ins.Session(&gorm.Session{}), tableName, objs[i]).Updates(objs[i])
+			if res.Error != nil {
+				return res.Error
 			}
-			if err = db.syncSaveResultsByUniqueIndexes(tableName, objs[i:end]); err != nil {
-				return err
+			// Zero matched rows means no live row has this id; matched-rows
+			// semantics make this reliable even when nothing changed (see the
+			// doc comment).
+			if res.RowsAffected == 0 {
+				return errors.Wrapf(ErrRecordNotFound, "update %s id=%s", tableName, objs[i].GetID())
 			}
 			if db.enableCache {
-				for j := i; j < end; j++ {
-					_ = cache.Cache[M]().WithContext(ctx).Delete(objs[j].GetID())
-				}
+				_ = cache.Cache[M]().WithContext(ctx).Delete(objs[i].GetID())
 			}
 		}
 		// Invoke model hook: UpdateAfter.
@@ -475,6 +435,141 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 				return nil
 			}); err != nil {
 				return err
+			}
+		}
+		return nil
+	})
+}
+
+// updateRowStatement builds the single-row UPDATE statement Update issues per
+// record: full-row semantics by default (Select("*") writes zero values too),
+// narrowed by WithSelect when provided, with framework-managed audit columns
+// excluded. created_at/created_by belong to creation and deleted_at belongs to
+// Delete; omitting them means callers cannot forge creation audit data,
+// soft-delete a row, or resurrect one through Update. updated_at stays
+// writable because GORM's auto-update-time handling always overwrites it with
+// the current time, even under a narrowed WithSelect.
+func (db *database[M]) updateRowStatement(session *gorm.DB, tableName string, obj M) *gorm.DB {
+	tx := session.Table(tableName).Model(obj)
+	if len(db.selectColumns) > 0 {
+		tx = tx.Select(db.selectColumns)
+	} else {
+		tx = tx.Select("*")
+	}
+	return tx.Omit("created_at", "created_by", "deleted_at")
+}
+
+// Upsert saves one or multiple records with insert-or-update semantics. It is
+// the only write that merges: Create rejects duplicates and Update rejects
+// missing rows, so reach for Upsert only when a flow deliberately wants
+// "insert the row, or overwrite whichever row owns the colliding unique key"
+// (imports, sync jobs, seed-style maintenance).
+//
+// It relies on the database's conflict resolution (MySQL
+// "INSERT ... ON DUPLICATE KEY UPDATE", SQLite/Postgres "ON CONFLICT DO
+// UPDATE"), which has sharp edges the caller owns:
+//   - The conflict target cannot be chosen: a collision on ANY unique key, not
+//     only the primary key, turns the insert into an update of the conflicting
+//     row. On tables with several unique keys, which row gets updated follows
+//     database index-selection rules.
+//   - A collision with a soft-deleted row updates that row and clears its
+//     deleted_at, resurrecting it.
+//   - created_at is preserved on conflict updates (auto-create-time columns
+//     are excluded from the conflict update set); on inserted rows
+//     created_at/updated_at are forced to the current time exactly like
+//     Create, so caller-supplied timestamps are never honored.
+//   - After each batch, caller-owned objects are re-synced from the database
+//     by complete unique-index values: an object that collided exposes the
+//     persisted row's ID instead of the one generated for the insert attempt.
+//
+// Upsert cannot know whether a row was inserted or updated, so it runs NO
+// model hooks — create/update hooks would lie for one of the two paths — and
+// must not be used to smuggle business writes past hook logic.
+//
+// All batches run in one transaction (all-or-nothing), joining the transaction
+// carried by ctx when present. WithSelect narrows the written columns. With
+// clientFoundRows enabled on MySQL, the reported affected count is 1 per row
+// whether it was inserted, updated, or left unchanged.
+// WithDryRun builds SQL only and does not execute database I/O, cache
+// mutation, or object field filling.
+func (db *database[M]) Upsert(_objs ...M) (err error) {
+	defer db.reset()
+
+	if len(_objs) == 0 {
+		return nil
+	}
+	var empty M
+	objs := make([]M, 0, len(_objs))
+	for _, obj := range _objs {
+		if reflect.DeepEqual(obj, empty) {
+			continue
+		}
+		objs = append(objs, obj)
+	}
+	if len(objs) == 0 {
+		return nil
+	}
+
+	if err = db.prepare(); err != nil {
+		return err
+	}
+	done, ctx, _ := db.trace("Upsert", len(objs))
+	defer done(err)
+
+	tableName := db.m.GetTableName()
+	if len(db.tableName) > 0 {
+		tableName = db.tableName
+	}
+	batchSize := defaultBatchSize
+	if db.batchSize > 0 {
+		batchSize = db.batchSize
+	}
+
+	if db.dryRun {
+		if len(db.selectColumns) > 0 {
+			db.ins = db.ins.Select(db.selectColumns)
+		}
+		dryRunObjs := cloneDryRunModels(objs)
+		for i := 0; i < len(dryRunObjs); i += batchSize {
+			end := min(i+batchSize, len(dryRunObjs))
+			tx := db.ins.Session(&gorm.Session{DryRun: true}).Table(tableName).Save(dryRunObjs[i:end])
+			if err = db.collectSQL(tx); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	if db.enableCache {
+		defer cache.Cache[[]M]().WithContext(ctx).Clear()
+	}
+
+	return db.withWriteTransaction(func() error {
+		for i := range objs {
+			objs[i].SetID() // set id when id is empty.
+		}
+		// Force created_at/updated_at like Create: the values only land on
+		// inserted rows, conflict updates keep the existing created_at.
+		now := time.Now()
+		for i := range objs {
+			objs[i].SetCreatedAt(now)
+			objs[i].SetUpdatedAt(now)
+		}
+		if len(db.selectColumns) > 0 {
+			db.ins = db.ins.Select(db.selectColumns)
+		}
+		for i := 0; i < len(objs); i += batchSize {
+			end := min(i+batchSize, len(objs))
+			if err = db.ins.Session(&gorm.Session{}).Table(tableName).Save(objs[i:end]).Error; err != nil {
+				return err
+			}
+			if err = db.syncSaveResultsByUniqueIndexes(tableName, objs[i:end]); err != nil {
+				return err
+			}
+			if db.enableCache {
+				for j := i; j < end; j++ {
+					_ = cache.Cache[M]().WithContext(ctx).Delete(objs[j].GetID())
+				}
 			}
 		}
 		return nil
@@ -549,16 +644,16 @@ func (db *database[M]) UpdateByID(id string, column string, value any) (err erro
 // syncSaveResultsByUniqueIndexes refreshes caller-owned objects after GORM
 // turns Save(slice) into an upsert.
 //
-// Context: database.Create and database.Update both persist batches through
-// GORM Save(slice). For slice values, GORM builds an INSERT ... ON DUPLICATE
-// KEY UPDATE / ON CONFLICT UPDATE statement. If the conflict is on a
-// non-primary unique index, the database updates the already-existing row, but
-// GORM leaves the Go object with the ID supplied by the caller. For Create that
-// ID is usually freshly generated; for Update it may be a stale or incorrect
-// ID. The controller and service layers later reuse that same object for
-// CreateAfter/UpdateAfter hooks, cache invalidation, operation logs, and HTTP
-// responses, so the object must be reconciled before any post-save behavior
-// observes it.
+// Context: database.Upsert persists batches through GORM Save(slice). For
+// slice values, GORM builds an INSERT ... ON DUPLICATE KEY UPDATE /
+// ON CONFLICT UPDATE statement. If the conflict is on a non-primary unique
+// index, the database updates the already-existing row, but GORM leaves the Go
+// object with the ID supplied by the caller — usually one freshly generated
+// for the insert attempt. Callers reuse that same object for cache
+// invalidation, operation logs, and HTTP responses, so the object must be
+// reconciled before any post-save behavior observes it. Create and Update do
+// not need this: a pure INSERT keeps the caller IDs and a pure UPDATE never
+// moves to another row.
 //
 // The reconciliation is intentionally narrow:
 //   - models without non-primary unique indexes pay no extra query cost;

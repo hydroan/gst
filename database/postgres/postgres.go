@@ -46,7 +46,7 @@ func Init() (err error) {
 // New creates and returns a new PostgreSQL database connection with the given configuration.
 // Returns (*gorm.DB, error) where error is non-nil if the connection fails.
 func New(cfg config.Postgres) (*gorm.DB, error) {
-	return gorm.Open(postgres.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm})
+	return gorm.Open(postgres.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true})
 }
 
 func buildDSN(cfg config.Postgres) string {

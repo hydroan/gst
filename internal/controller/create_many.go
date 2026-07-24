@@ -131,11 +131,13 @@ func CreateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 			return
 		}
 
-		// 2.Batch create resource in database.
+		// 2.Batch create resource in database. Pure INSERT with one transaction
+		// around the batch: any unique-key collision renders 409 and rolls the
+		// whole batch back.
 		if !errors.Is(reqErr, io.EOF) {
 			if err = handler(requestContext(c)).WithExpand(val.Expands()).Create(req.Items...); err != nil {
 				log.Error(err)
-				JSON(c, CodeFailure.WithErr(err))
+				JSON(c, writeErrorCoder(err))
 				gstotel.RecordError(span, err)
 				return
 			}
@@ -186,7 +188,6 @@ func CreateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 			log.Warn(err)
 		}
 
-		// FIXME: 如果某些字段增加了 gorm unique tag, 则更新成功后的资源 ID 时随机生成的，并不是数据库中的
 		if !errors.Is(reqErr, io.EOF) {
 			req.Summary = &summary{
 				Total:     len(req.Items),

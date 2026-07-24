@@ -46,12 +46,20 @@ func Init() (err error) {
 // New creates and returns a new MySQL database connection with the given configuration.
 // Returns (*gorm.DB, error) where error is non-nil if the connection fails.
 func New(cfg config.MySQL) (*gorm.DB, error) {
-	return gorm.Open(mysql.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm})
+	// TranslateError maps dialect-specific write failures to portable gorm
+	// sentinels (gorm.ErrDuplicatedKey, gorm.ErrForeignKeyViolated) that
+	// database.Create/Update surface to callers.
+	return gorm.Open(mysql.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true})
 }
 
+// buildDSN assembles the go-sql-driver DSN. clientFoundRows=true makes UPDATE
+// report matched rows instead of changed rows — the SQL-standard semantics
+// every other supported dialect already uses. database.Update depends on it:
+// with changed-rows semantics, saving a record without modifying anything
+// reports zero affected rows and would be misread as ErrRecordNotFound.
 func buildDSN(cfg config.MySQL) string {
 	return fmt.Sprintf(
-		"%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local",
+		"%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local&clientFoundRows=true",
 		cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database, cfg.Charset,
 	)
 }

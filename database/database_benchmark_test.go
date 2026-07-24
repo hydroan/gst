@@ -47,7 +47,7 @@ func BenchmarkDatabaseCreateSyncOverhead(b *testing.B) {
 			})
 		}
 	})
-	b.Run("unique_index_insert_with_sync", func(b *testing.B) {
+	b.Run("unique_index_insert", func(b *testing.B) {
 		cleanupTestData()
 
 		i := 0
@@ -60,7 +60,22 @@ func BenchmarkDatabaseCreateSyncOverhead(b *testing.B) {
 			})
 		}
 	})
-	b.Run("unique_index_conflict_with_sync", func(b *testing.B) {
+	// Upsert is the only write that pays the unique-index sync SELECT; these two
+	// sub-benchmarks measure it on the insert path and on the conflict path.
+	b.Run("unique_index_upsert_insert_with_sync", func(b *testing.B) {
+		cleanupTestData()
+
+		i := 0
+		for b.Loop() {
+			i++
+			code := strconv.Itoa(i)
+			_ = database.Database[*TestUniqueItem](context.Background()).Upsert(&TestUniqueItem{
+				UniqueCode: code,
+				Name:       code,
+			})
+		}
+	})
+	b.Run("unique_index_upsert_conflict_with_sync", func(b *testing.B) {
 		cleanupTestData()
 
 		const code = "same-code"
@@ -73,7 +88,7 @@ func BenchmarkDatabaseCreateSyncOverhead(b *testing.B) {
 		for b.Loop() {
 			i++
 			name := strconv.Itoa(i)
-			_ = database.Database[*TestUniqueItem](context.Background()).Create(&TestUniqueItem{
+			_ = database.Database[*TestUniqueItem](context.Background()).Upsert(&TestUniqueItem{
 				UniqueCode: code,
 				Name:       name,
 			})

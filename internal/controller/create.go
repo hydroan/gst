@@ -107,15 +107,13 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			gstotel.RecordError(span, err)
 			return
 		}
-		// 2.Create resource in database.
-		// database.Database().Delete just set "deleted_at" field to current time, not really delete.
-		// We should update it instead of creating it, and update the "created_at" and "updated_at" field.
-		// NOTE: WithExpand(req.Expands()...) is not a good choices.
-		// if err := database.Database[M]().WithExpand(req.Expands()...).Update(req); err != nil {
+		// 2.Create resource in database. Create is a pure INSERT: a primary or
+		// unique key collision (including one held by a soft-deleted row)
+		// surfaces as ErrDuplicatedKey and renders 409.
 		if !errors.Is(reqErr, io.EOF) {
 			if err = handler(requestContext(c)).WithExpand(req.Expands()).Create(req); err != nil {
 				log.Error(err)
-				JSON(c, CodeFailure.WithErr(err))
+				JSON(c, writeErrorCoder(err))
 				gstotel.RecordError(span, err)
 				return
 			}

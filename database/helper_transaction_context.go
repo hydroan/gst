@@ -41,25 +41,31 @@ func txFromContext(ctx context.Context) (*gorm.DB, bool) {
 	return tx, true
 }
 
-// withModelHookTransaction runs write hooks and the main write in one database
-// transaction when this operation is responsible for creating the boundary.
+// withWriteTransaction runs a write operation (hooks plus the main write) in
+// one database transaction when this operation is responsible for creating the
+// boundary.
 //
-// Create, Update, and Delete execute model hooks around the actual GORM write.
-// Without this wrapper, a hook can update a second model and then fail after the
-// primary model write has already committed. This helper makes the write phase
-// atomic by creating one transaction for the whole hook/write/hook sequence and
-// by storing that transaction in db.ctx before hooks are invoked.
+// Every write path (Create, Update, Upsert, Delete) needs this boundary, with
+// or without model hooks:
+//   - Model hooks can update a second model; without the boundary a hook could
+//     fail after the primary write already committed.
+//   - Multi-row and multi-batch writes must be all-or-nothing; without the
+//     boundary a mid-loop failure would leave earlier rows committed. This
+//     also holds for WithoutHook chains, which is why noHook does not skip
+//     the transaction: it only skips hook invocation inside fn.
+//
+// WithDryRun skips the boundary because it performs no database I/O.
 //
 // If db.ctx already carries a transaction, this method deliberately does not
 // start a nested transaction. The caller is already inside an explicit
 // database.Transaction or an outer model hook write, so all Database[T](ctx)
 // calls should continue sharing the first transaction boundary.
 //
-// Unlike database.Transaction, this hook boundary does not create its own span:
-// spans of hooks and nested writes keep the operation span created by db.trace
-// as their parent instead of moving under a transaction span.
-func (db *database[M]) withModelHookTransaction(fn func() error) error {
-	if db.noHook || db.dryRun {
+// Unlike database.Transaction, this write boundary does not create its own
+// span: spans of hooks and nested writes keep the operation span created by
+// db.trace as their parent instead of moving under a transaction span.
+func (db *database[M]) withWriteTransaction(fn func() error) error {
+	if db.dryRun {
 		return fn()
 	}
 	if _, ok := txFromContext(db.ctx); ok {

@@ -95,11 +95,14 @@ func UpdateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 			gstotel.RecordError(span, err)
 			return
 		}
-		// 2.Batch update resource in database.
+		// 2.Batch update resource in database. Pure UPDATE with one transaction
+		// around the batch: an item without an id fails the whole request, and
+		// an item without a live row renders 404 and rolls the batch back, so
+		// the batch endpoint can never insert rows.
 		if !errors.Is(reqErr, io.EOF) {
 			if err = handler(requestContext(c)).Update(req.Items...); err != nil {
 				log.Error(err)
-				JSON(c, CodeFailure.WithErr(err))
+				JSON(c, writeErrorCoder(err))
 				gstotel.RecordError(span, err)
 				return
 			}

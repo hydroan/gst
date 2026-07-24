@@ -51,6 +51,9 @@ func cleanupTestData() {
 	users := make([]*TestUser, 0)
 	_ = database.Database[*TestUser](context.Background()).List(&users)
 	_ = database.Database[*TestUser](context.Background()).Delete(users...)
+	// Purge soft-deleted leftovers: List cannot see them, but they keep
+	// occupying primary/unique keys and would break later pure INSERTs.
+	_ = database.DB().Exec("DELETE FROM test_users").Error
 	// Restore original values
 	u1 = &TestUser{Name: "user1", Email: "user1@example.com", Age: 18, Base: model.Base{ID: "u1"}}
 	u2 = &TestUser{Name: "user2", Email: "user2@example.com", Age: 19, Base: model.Base{ID: "u2"}}
@@ -225,6 +228,17 @@ type TestAutoItem struct {
 }
 
 func (*TestAutoItem) Purge() bool { return true }
+
+// TestSoftDeleteItem keeps the model.Base default Purge (soft delete) so write
+// tests can assert how writes treat soft-deleted rows. Its table is migrated
+// on demand inside the tests that need it and cleaned up with raw SQL because
+// soft-deleted rows are invisible to List.
+type TestSoftDeleteItem struct {
+	Code string `json:"code" gorm:"size:191;uniqueIndex"`
+	Name string `json:"name" gorm:"size:191"`
+
+	model.Base
+}
 
 type TestHookConfig struct {
 	Value string `json:"value" gorm:"size:191"`

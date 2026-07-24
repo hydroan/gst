@@ -155,10 +155,12 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			gstotel.RecordError(span, err)
 			return
 		}
-		// 2.Partial update resource in database.
+		// 2.Partial update resource in database. The record was loaded above, so
+		// ErrRecordNotFound only fires when it vanished in between; unique-key
+		// collisions from the patched values render 409.
 		if err := handler(requestContext(c)).Update(cur); err != nil {
 			log.Error(err)
-			JSON(c, CodeFailure.WithErr(err))
+			JSON(c, writeErrorCoder(err))
 			gstotel.RecordError(span, err)
 			return
 		}
