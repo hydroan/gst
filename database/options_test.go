@@ -5,10 +5,8 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/cache"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/database/sqlite"
@@ -575,61 +573,6 @@ func TestDatabaseWithDryRun(t *testing.T) {
 		require.Nil(t, dryRunUser.Remark, "Update should not run model hooks in dry-run mode")
 	})
 
-	t.Run("Cache", func(t *testing.T) {
-		defer cleanupTestData()
-		setupTestData(t)
-
-		assertDryRunKeepsCache := func(t *testing.T, fn func() error) {
-			t.Helper()
-
-			listCache := cache.Cache[[]*TestUser]()
-			modelCache := cache.Cache[*TestUser]()
-			listCache.Clear()
-			modelCache.Clear()
-			defer listCache.Clear()
-			defer modelCache.Clear()
-
-			cachedList := []*TestUser{{Name: "cached-list"}}
-			cachedUser := &TestUser{Name: "cached-user"}
-			require.NoError(t, listCache.Set("dry-run-list-cache", cachedList, time.Minute))
-			require.NoError(t, modelCache.Set(u1.ID, cachedUser, time.Minute))
-
-			require.NoError(t, fn())
-
-			gotList, err := listCache.Get("dry-run-list-cache")
-			require.NoError(t, err, "dry-run should not clear list cache")
-			require.Equal(t, cachedList, gotList, "dry-run should leave list cache unchanged")
-
-			gotUser, err := modelCache.Get(u1.ID)
-			require.NoError(t, err, "dry-run should not delete model cache")
-			require.Equal(t, cachedUser, gotUser, "dry-run should leave model cache unchanged")
-		}
-
-		t.Run("Create", func(t *testing.T) {
-			assertDryRunKeepsCache(t, func() error {
-				return database.Database[*TestUser](context.Background()).WithCache().WithDryRun().Create(ul...)
-			})
-		})
-
-		t.Run("Delete", func(t *testing.T) {
-			assertDryRunKeepsCache(t, func() error {
-				return database.Database[*TestUser](context.Background()).WithCache().WithDryRun().Delete(u1)
-			})
-		})
-
-		t.Run("Update", func(t *testing.T) {
-			assertDryRunKeepsCache(t, func() error {
-				return database.Database[*TestUser](context.Background()).WithCache().WithDryRun().Update(u1)
-			})
-		})
-
-		t.Run("UpdateByID", func(t *testing.T) {
-			assertDryRunKeepsCache(t, func() error {
-				return database.Database[*TestUser](context.Background()).WithCache().WithDryRun().UpdateByID(u1.ID, "name", "updated_name")
-			})
-		})
-	})
-
 	t.Run("UpdateByID", func(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
@@ -905,53 +848,6 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 		require.Equal(t, []any{requestedID}, stmts[0].Args, "Get SQL should only use the requested id")
 		require.Contains(t, stmts[0].RenderedSQL, requestedID)
 		require.Equal(t, existingID, dest.ID, "WithBuildSQL should leave destination values unchanged")
-	})
-
-	t.Run("WithCache", func(t *testing.T) {
-		defer cleanupTestData()
-
-		listCache := cache.Cache[[]*TestUser]()
-		modelCache := cache.Cache[*TestUser]()
-		listCache.Clear()
-		modelCache.Clear()
-		defer listCache.Clear()
-		defer modelCache.Clear()
-
-		cachedList := []*TestUser{{Name: "build-sql-cached-list"}}
-		cachedUser := &TestUser{Name: "build-sql-cached-user"}
-		require.NoError(t, listCache.Set("build-sql-list-cache", cachedList, time.Minute))
-		require.NoError(t, modelCache.Set(u1.ID, cachedUser, time.Minute))
-
-		var stmts []types.SQLStatement
-		user := &TestUser{Name: "build-sql-dry-run-cache", Email: "build-sql-dry-run-cache@example.com"}
-		err := database.Database[*TestUser](context.Background()).
-			WithCache().
-			WithBuildSQL(&stmts).
-			Create(user)
-
-		require.NoError(t, err)
-		require.Len(t, stmts, 1)
-		requireSQLContains(t, stmts[0], "INSERT", "INTO", "test_users")
-		require.Contains(t, stmts[0].Args, user.Name)
-		require.Contains(t, stmts[0].RenderedSQL, user.Name)
-		require.Empty(t, user.ID, "WithBuildSQL should not fill model IDs")
-		require.True(t, user.CreatedAt.IsZero(), "WithBuildSQL should not fill created_at")
-		require.True(t, user.UpdatedAt.IsZero(), "WithBuildSQL should not fill updated_at")
-		require.Nil(t, user.Remark, "WithBuildSQL should not run model hooks")
-
-		gotList, err := listCache.Get("build-sql-list-cache")
-		require.NoError(t, err, "WithBuildSQL should not clear list cache")
-		require.Equal(t, cachedList, gotList)
-
-		gotUser, err := modelCache.Get(u1.ID)
-		require.NoError(t, err, "WithBuildSQL should not delete model cache")
-		require.Equal(t, cachedUser, gotUser)
-
-		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: user.Name}).
-			List(&users))
-		require.Empty(t, users, "WithBuildSQL should not create database rows")
 	})
 
 	t.Run("ResetsAfterAction", func(t *testing.T) {

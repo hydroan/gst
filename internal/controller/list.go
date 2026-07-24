@@ -107,14 +107,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		var noTotal bool // default enable total.
 		cursorValue := c.Query(consts.QUERY_CURSOR_VALUE)
 		cursorField := c.Query(consts.QUERY_CURSOR_FIELD)
-		noCache := true // default disable cache.
 		data := make([]M, 0)
-		if noCacheStr, ok := c.GetQuery(consts.QUERY_NO_CACHE); ok {
-			var parsed bool
-			if parsed, err = strconv.ParseBool(noCacheStr); err == nil {
-				noCache = parsed
-			}
-		}
 		if orStr, ok := c.GetQuery(consts.QUERY_OR); ok {
 			or, _ = strconv.ParseBool(orStr)
 		}
@@ -153,7 +146,6 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			WithExclude(m.Excludes()).
 			WithExpand(expands, sortBy).
 			WithOrder(sortBy).
-			WithCache(!noCache).
 			List(&data); err != nil {
 			log.Error(err)
 			JSON(c, CodeFailure.WithErr(err))
@@ -188,7 +180,6 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 					FieldConditions: fieldConditions,
 				}).
 				WithExclude(m.Excludes()).
-				WithCache(!noCache).
 				Count(total); err != nil {
 				log.Error(err)
 				JSON(c, CodeFailure.WithErr(err))

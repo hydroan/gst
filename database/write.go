@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/cache"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
@@ -35,12 +34,11 @@ import (
 //   - Runs hooks and all batches in one transaction: a failure in any batch or
 //     hook rolls back the whole call (all-or-nothing), joining the transaction
 //     carried by ctx when present.
-//   - Clears related cache entries unless WithDryRun is enabled
 //   - Returns nil if no valid objects provided (empty slice or all objects are empty)
 //
 // Returns ErrDuplicatedKey when a primary or unique key already exists, or an
 // error when hooks or other database constraints fail.
-// WithDryRun builds SQL only and does not execute hooks, database I/O, cache mutation, or object field filling.
+// WithDryRun builds SQL only and does not execute hooks, database I/O, or object field filling.
 //
 // Example:
 //
@@ -67,7 +65,7 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, ctx, span := db.trace("Create", len(objs))
+	done, _, span := db.trace("Create", len(objs))
 	defer done(err)
 
 	if db.dryRun {
@@ -88,10 +86,6 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 			}
 		}
 		return nil
-	}
-
-	if db.enableCache {
-		defer cache.Cache[[]M]().WithContext(ctx).Clear()
 	}
 
 	return db.withWriteTransaction(func() error {
@@ -132,12 +126,6 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 				return err
 			}
 		}
-		if db.enableCache {
-			for i := range objs {
-				_ = cache.Cache[M]().WithContext(ctx).Delete(objs[i].GetID())
-			}
-		}
-
 		// Invoke model hook: CreateAfter for the entire batch.
 		if !db.noHook {
 			if err = traceModelHook[M](db.ctx, consts.PHASE_CREATE_AFTER, span, func(spanCtx context.Context) error {
@@ -168,9 +156,8 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 //   - Hard delete (with WithPurge): Permanently removes records from database
 //   - Soft-deleted records are automatically excluded from List, Get, First, Last, Count, and other query operations
 //   - Supports batch processing for performance
-//   - Clears related cache entries unless WithDryRun is enabled
 //   - Returns nil if no valid objects provided (empty slice or all objects are empty)
-//   - WithDryRun builds SQL only and does not execute hooks, database I/O, cache mutation, or object field filling
+//   - WithDryRun builds SQL only and does not execute hooks, database I/O, or object field filling
 //
 // Example:
 //
@@ -199,7 +186,7 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, ctx, span := db.trace("Delete", len(objs))
+	done, _, span := db.trace("Delete", len(objs))
 	defer done(err)
 
 	if db.dryRun {
@@ -227,10 +214,6 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 			}
 		}
 		return nil
-	}
-
-	if db.enableCache {
-		defer cache.Cache[[]M]().WithContext(ctx).Clear()
 	}
 
 	return db.withWriteTransaction(func() error {
@@ -262,11 +245,6 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 				if err = db.ins.Session(&gorm.Session{}).Table(tableName).Unscoped().Delete(objs[i:end]).Error; err != nil {
 					return err
 				}
-				if db.enableCache {
-					for j := i; j < end; j++ {
-						_ = cache.Cache[M]().WithContext(ctx).Delete(objs[j].GetID())
-					}
-				}
 			}
 		} else {
 			// Soft delete: only set "deleted_at" to the current time. The row keeps
@@ -280,11 +258,6 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 				end := min(i+batchSize, len(objs))
 				if err = db.ins.Session(&gorm.Session{}).Table(tableName).Delete(objs[i:end]).Error; err != nil {
 					return err
-				}
-				if db.enableCache {
-					for j := i; j < end; j++ {
-						_ = cache.Cache[M]().WithContext(ctx).Delete(objs[j].GetID())
-					}
 				}
 			}
 		}
@@ -331,13 +304,12 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 //   - Runs hooks and all row updates in one transaction: any missing record or
 //     failed hook rolls back the whole call (all-or-nothing), joining the
 //     transaction carried by ctx when present.
-//   - Clears related cache entries unless WithDryRun is enabled
 //   - Returns nil if no valid objects provided (empty slice or all objects are empty)
 //
 // Returns ErrIDRequired when an object has no ID, ErrRecordNotFound when a
 // record does not exist (or is soft deleted), and ErrDuplicatedKey when the new
 // values collide with a unique key owned by another row.
-// WithDryRun builds SQL only and does not execute hooks, database I/O, cache mutation, or object field filling.
+// WithDryRun builds SQL only and does not execute hooks, database I/O, or object field filling.
 //
 // Example:
 //
@@ -372,7 +344,7 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, ctx, span := db.trace("Update", len(objs))
+	done, _, span := db.trace("Update", len(objs))
 	defer done(err)
 
 	tableName := db.m.GetTableName()
@@ -389,10 +361,6 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 			}
 		}
 		return nil
-	}
-
-	if db.enableCache {
-		defer cache.Cache[[]M]().WithContext(ctx).Clear()
 	}
 
 	return db.withWriteTransaction(func() error {
@@ -419,9 +387,6 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 			// doc comment).
 			if res.RowsAffected == 0 {
 				return errors.Wrapf(ErrRecordNotFound, "update %s id=%s", tableName, objs[i].GetID())
-			}
-			if db.enableCache {
-				_ = cache.Cache[M]().WithContext(ctx).Delete(objs[i].GetID())
 			}
 		}
 		// Invoke model hook: UpdateAfter.
@@ -490,8 +455,8 @@ func (db *database[M]) updateRowStatement(session *gorm.DB, tableName string, ob
 // carried by ctx when present. WithSelect narrows the written columns. With
 // clientFoundRows enabled on MySQL, the reported affected count is 1 per row
 // whether it was inserted, updated, or left unchanged.
-// WithDryRun builds SQL only and does not execute database I/O, cache
-// mutation, or object field filling.
+// WithDryRun builds SQL only and does not execute database I/O or object
+// field filling.
 func (db *database[M]) Upsert(_objs ...M) (err error) {
 	defer db.reset()
 
@@ -513,7 +478,7 @@ func (db *database[M]) Upsert(_objs ...M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, ctx, _ := db.trace("Upsert", len(objs))
+	done, _, _ := db.trace("Upsert", len(objs))
 	defer done(err)
 
 	tableName := db.m.GetTableName()
@@ -540,10 +505,6 @@ func (db *database[M]) Upsert(_objs ...M) (err error) {
 		return nil
 	}
 
-	if db.enableCache {
-		defer cache.Cache[[]M]().WithContext(ctx).Clear()
-	}
-
 	return db.withWriteTransaction(func() error {
 		for i := range objs {
 			objs[i].SetID() // set id when id is empty.
@@ -566,11 +527,6 @@ func (db *database[M]) Upsert(_objs ...M) (err error) {
 			if err = db.syncSaveResultsByUniqueIndexes(tableName, objs[i:end]); err != nil {
 				return err
 			}
-			if db.enableCache {
-				for j := i; j < end; j++ {
-					_ = cache.Cache[M]().WithContext(ctx).Delete(objs[j].GetID())
-				}
-			}
 		}
 		return nil
 	})
@@ -588,7 +544,6 @@ func (db *database[M]) Upsert(_objs ...M) (err error) {
 // Behavior:
 //   - Automatically updates the updated_at timestamp
 //   - Does not invoke UpdateBefore/UpdateAfter hooks for performance reasons
-//   - Does not mutate cache when WithDryRun is enabled
 //   - Returns ErrIDRequired if id is empty
 //   - Returns ErrEmptyFieldName if column is empty
 //   - Returns ErrNilValue if value is nil
@@ -614,7 +569,7 @@ func (db *database[M]) UpdateByID(id string, column string, value any) (err erro
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, ctx, _ := db.trace("UpdateByID")
+	done, _, _ := db.trace("UpdateByID")
 	defer done(err)
 
 	// return db.db.Model(*new(M)).Where("id = ?", id).Update(column, value).Error
@@ -628,15 +583,8 @@ func (db *database[M]) UpdateByID(id string, column string, value any) (err erro
 		return db.collectSQL(tx)
 	}
 
-	if db.enableCache {
-		defer cache.Cache[[]M]().WithContext(ctx).Clear()
-	}
-
 	if err = db.ins.Session(&gorm.Session{}).Table(tableName).Model(*new(M)).Where("id = ?", id).Update(column, value).Error; err != nil {
 		return err
-	}
-	if db.enableCache {
-		_ = cache.Cache[M]().WithContext(ctx).Delete(id)
 	}
 	return nil
 }
@@ -649,8 +597,8 @@ func (db *database[M]) UpdateByID(id string, column string, value any) (err erro
 // ON CONFLICT UPDATE statement. If the conflict is on a non-primary unique
 // index, the database updates the already-existing row, but GORM leaves the Go
 // object with the ID supplied by the caller — usually one freshly generated
-// for the insert attempt. Callers reuse that same object for cache
-// invalidation, operation logs, and HTTP responses, so the object must be
+// for the insert attempt. Callers reuse that same object for operation
+// logs and HTTP responses, so the object must be
 // reconciled before any post-save behavior observes it. Create and Update do
 // not need this: a pure INSERT keeps the caller IDs and a pure UPDATE never
 // moves to another row.

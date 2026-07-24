@@ -52,8 +52,8 @@ type Queryable interface {
 // These controls are escape hatches rather than regular list features:
 //   - Or rewrites filter combination from AND to OR, which can defeat
 //     mandatory service-level filters such as tenant or permission scoping.
-//   - Index, Select, NoCache, and NoTotal expose execution-level knobs
-//     (index hints, column projection, cache bypass, count suppression).
+//   - Index, Select, and NoTotal expose execution-level knobs
+//     (index hints, column projection, count suppression).
 //
 // UnsafeQuery is therefore split from Query: embedding it is a separate,
 // deliberate opt-in that signals the model owner accepts these risks.
@@ -65,7 +65,6 @@ type UnsafeQuery struct {
 	Or      *bool  `json:"-" gorm:"-" query:"_or" url:"_or,omitempty"`             // Or combines model-field filters with OR instead of AND when enabled.
 	Index   string `json:"-" gorm:"-" query:"_index" url:"_index,omitempty"`       // Index requests a database index hint for the list query.
 	Select  string `json:"-" gorm:"-" query:"_select" url:"_select,omitempty"`     // Select limits returned columns, separated by commas.
-	NoCache bool   `json:"-" gorm:"-" query:"_no_cache" url:"_no_cache,omitempty"` // NoCache disables list cache reads and writes for this request.
 	NoTotal bool   `json:"-" gorm:"-" query:"_no_total" url:"_no_total,omitempty"` // NoTotal skips the total-count query when true.
 }
 

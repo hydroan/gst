@@ -40,7 +40,7 @@ func TestDecodeListQueryGatesUnsafeQueryKeys(t *testing.T) {
 	})
 
 	t.Run("QueryRejectsUnsafeKeys", func(t *testing.T) {
-		for _, key := range []string{"_or", "_index", "_select", "_no_cache", "_no_total"} {
+		for _, key := range []string{"_or", "_index", "_select", "_no_total"} {
 			var m listQueryableTestModel
 			err := decodeListQuery(&m, map[string][]string{key: {"true"}})
 			require.Error(t, err, "unsafe query key %q must be rejected without modelregistry.UnsafeQuery", key)
@@ -53,7 +53,6 @@ func TestDecodeListQueryGatesUnsafeQueryKeys(t *testing.T) {
 			"_or":       {"true"},
 			"_index":    {"idx_test"},
 			"_select":   {"name"},
-			"_no_cache": {"true"},
 			"_no_total": {"true"},
 		}))
 	})

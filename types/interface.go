@@ -185,8 +185,6 @@ type DatabaseOption[M Model] interface {
 	WithExpand(expand []string, order ...string) Database[M]
 	// WithPurge controls whether Delete permanently removes records instead of soft deleting them.
 	WithPurge(...bool) Database[M]
-	// WithCache enables cache reads/writes for supported read operations and cache invalidation for writes.
-	WithCache(...bool) Database[M]
 	// WithOmit excludes specified fields from INSERT, UPDATE, and SELECT operations.
 	WithOmit(...string) Database[M]
 	// WithBuildSQL builds SQL for the next terminal operation and appends Query, Args, and RenderedSQL to the collector.

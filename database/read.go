@@ -4,13 +4,8 @@ import (
 	"context"
 	"reflect"
 	"slices"
-	"time"
 
-	"github.com/hydroan/gst/cache"
-	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types/consts"
-	"github.com/hydroan/gst/util"
 	"gorm.io/gorm"
 	glogger "gorm.io/gorm/logger"
 )
@@ -22,7 +17,7 @@ func (db *database[M]) dryRunReadSession() *gorm.DB {
 
 // List retrieves multiple records from the database based on applied conditions.
 // Returns all records if no conditions are specified, or filtered records with WithQuery.
-// Supports caching, pagination, sorting, and eager loading of associations.
+// Supports pagination, sorting, and eager loading of associations.
 //
 // Parameters:
 //   - dest: Pointer to the result slice. The pointer itself must not be nil.
@@ -37,7 +32,6 @@ func (db *database[M]) dryRunReadSession() *gorm.DB {
 //     data would trigger useless hook invocations.
 //
 // Features:
-//   - Automatic result caching when enabled
 //   - Supports pagination with WithLimit/WithOffset
 //   - Supports sorting with WithOrder
 //   - Supports filtering with WithQuery
@@ -57,14 +51,12 @@ func (db *database[M]) List(dest *[]M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, ctx, span := db.trace("List")
+	done, _, span := db.trace("List")
 	defer done(err)
 	if dest == nil {
 		return ErrNilDest
 	}
 
-	begin := time.Now()
-	var key string
 	// set selected columns.
 	if len(db.selectColumns) > 0 {
 		db.ins = db.ins.Select(db.selectColumns)
@@ -78,21 +70,6 @@ func (db *database[M]) List(dest *[]M) (err error) {
 		tx := db.dryRunReadSession().Table(tableName).Find(dest)
 		return db.collectSQL(tx)
 	}
-	if !db.enableCache {
-		goto QUERY
-	}
-	_, _, key = buildCacheKey(db.ins.Session(&gorm.Session{DryRun: true, Logger: glogger.Default.LogMode(glogger.Silent)}).Find(dest).Statement, "list")
-	if _dest, e := cache.Cache[[]M]().WithContext(ctx).Get(key); e != nil {
-		// metrics.CacheMiss.WithLabelValues("list", db.typ.Name()).Inc()
-		goto QUERY
-	} else {
-		// metrics.CacheHit.WithLabelValues("list", db.typ.Name()).Inc()
-		*dest = _dest
-		logger.Cache.Infow("list from cache", "cost", util.FormatDurationSmart(time.Since(begin)), "key", key)
-		return nil
-	}
-
-QUERY:
 	var empty M // call nil value M will cause panic.
 	// Invoke model hook: ListBefore.
 	if !db.noHook {
@@ -140,31 +117,10 @@ QUERY:
 			return err
 		}
 	}
-	// Cache the result.
-	// if db.enableCache && config.App.Redis.Enabled {
-	// 	logger.Cache.Infow("list from database", "cost", time.Since(begin).String(), "key", key)
-	// 	go func() {
-	// 		if err = redis.SetML[M](key, *dest); err != nil {
-	// 			logger.Cache.Error(err)
-	// 		}
-	// 	}()
-	// }
-	if db.enableCache {
-		logger.Cache.Infow("list from database", "cost", util.FormatDurationSmart(time.Since(begin)), "key", key)
-		_ = cache.Cache[[]M]().WithContext(ctx).Set(key, *dest, config.App.Cache.Expiration)
-	}
-
 	return nil
 }
 
-// // Find equal to WithQuery(condition).List()
-// // More detail see `List` document.
-// func (db *database[T]) Find(dest *[]T, query T) error {
-// 	return db.db.Where(query).Find(dest).Error
-// }
-
 // Get retrieves a single record from the database by its primary key (ID).
-// Supports automatic caching to improve performance for frequently accessed records.
 // Executes GetBefore and GetAfter model hooks unless disabled with WithoutHook.
 //
 // Parameters:
@@ -176,8 +132,6 @@ QUERY:
 // matching record exists.
 //
 // Features:
-//   - Automatic result caching when enabled
-//   - Cache-first lookup for improved performance
 //   - Supports eager loading with WithExpand
 //   - Supports field selection with WithSelect
 //
@@ -199,11 +153,9 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, ctx, span := db.trace("Get")
+	done, _, span := db.trace("Get")
 	defer done(err)
 
-	begin := time.Now()
-	var key string
 	// set selected columns.
 	if len(db.selectColumns) > 0 {
 		db.ins = db.ins.Select(db.selectColumns)
@@ -222,28 +174,6 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 		tx := db.dryRunReadSession().Table(tableName).Where(db.quoteTableColumn(tableName, "id")+" = ?", id).Find(dryRunDest)
 		return db.collectSQL(tx)
 	}
-	if !db.enableCache {
-		goto QUERY
-	}
-	_, _, key = buildCacheKey(db.ins.Session(&gorm.Session{DryRun: true, Logger: glogger.Default.LogMode(glogger.Silent)}).Where("id = ?", id).Find(dest).Statement, "get", id)
-	if _dest, e := cache.Cache[M]().WithContext(ctx).Get(key); e != nil {
-		// metrics.CacheMiss.WithLabelValues("get", db.typ.Name()).Inc()
-		goto QUERY
-	} else {
-		// metrics.CacheHit.WithLabelValues("get", db.typ.Name()).Inc()
-		val := reflect.ValueOf(dest)
-		if val.Kind() != reflect.Pointer {
-			return ErrNotPtrStruct
-		}
-		if !val.Elem().CanAddr() {
-			return ErrNotAddressableModel
-		}
-		val.Elem().Set(reflect.ValueOf(_dest).Elem()) // the type of M is pointer to struct.
-		logger.Cache.Infow("get from cache", "cost", util.FormatDurationSmart(time.Since(begin)), "key", key)
-		return nil
-	}
-
-QUERY:
 	var empty M // call nil value M will cause panic.
 	// Invoke model hook: GetBefore.
 	if !db.noHook && !reflect.DeepEqual(empty, dest) {
@@ -260,14 +190,6 @@ QUERY:
 	}
 	// Use an explicit WHERE clause instead of relying on primary key fields
 	// already present on dest.
-	//
-	// dest.SetID(id)
-	// if err = db.db.Table(tableName).Find(dest).Error; err != nil {
-	// 	return err
-	// }
-	if len(tableName) == 0 {
-		_, tableName, _ = buildCacheKey(db.ins.Session(&gorm.Session{DryRun: true, Logger: glogger.Default.LogMode(glogger.Silent)}).Where("id = ?", id).Find(dest).Statement, "get", id)
-	}
 	dest.ClearID()
 	tx := db.ins.Table(tableName).Where(db.quoteTableColumn(tableName, "id")+" = ?", id).Find(dest)
 	if err = tx.Error; err != nil {
@@ -284,24 +206,10 @@ QUERY:
 			return err
 		}
 	}
-	// // Cache the result.
-	// if db.enableCache && config.App.Redis.Enabled {
-	// 	logger.Cache.Infow("get from database", "cost", time.Since(begin).String(), "key", key)
-	// 	go func() {
-	// 		if err = redis.SetM[M](key, dest); err != nil {
-	// 			logger.Cache.Error(err)
-	// 		}
-	// 	}()
-	// }
-	if db.enableCache {
-		logger.Cache.Infow("get from database", "cost", util.FormatDurationSmart(time.Since(begin)), "key", key)
-		_ = cache.Cache[M]().WithContext(ctx).Set(key, dest, config.App.Cache.Expiration)
-	}
 	return nil
 }
 
 // Count returns the total number of records matching the current query conditions.
-// Supports automatic caching to improve performance for frequently executed count queries.
 // Applies all previously set query conditions (WHERE, JOIN, etc.) to the count operation.
 //
 // Parameters:
@@ -310,8 +218,6 @@ QUERY:
 // Returns database errors if the query fails.
 //
 // Features:
-//   - Automatic result caching when enabled
-//   - Cache-first lookup for improved performance
 //   - Respects query modifiers such as WHERE and JOIN
 //   - Uses LIMIT(-1) to clear existing LIMIT clauses and count all matching rows
 //
@@ -331,13 +237,11 @@ func (db *database[M]) Count(count *int) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, ctx, _ := db.trace("Count")
+	done, _, _ := db.trace("Count")
 	defer done(err)
 
-	begin := time.Now()
 	// GORM's Count only accepts *int64, so bridge through a local variable.
 	var count64 int64
-	var key string
 	if db.dryRun {
 		tableName := db.m.GetTableName()
 		if len(db.tableName) > 0 {
@@ -346,50 +250,19 @@ func (db *database[M]) Count(count *int) (err error) {
 		tx := db.dryRunReadSession().Table(tableName).Model(*new(M)).Limit(-1).Count(&count64)
 		return db.collectSQL(tx)
 	}
-	if !db.enableCache {
-		goto QUERY
-	}
-	_, _, key = buildCacheKey(db.ins.Session(&gorm.Session{DryRun: true, Logger: glogger.Default.LogMode(glogger.Silent)}).Model(*new(M)).Count(&count64).Statement, "count")
-	if _cache, e := cache.Cache[int]().WithContext(ctx).Get(key); e != nil {
-		// metrics.CacheMiss.WithLabelValues("count", db.typ.Name()).Inc()
-		goto QUERY
-	} else {
-		// metrics.CacheHit.WithLabelValues("count", db.typ.Name()).Inc()
-		*count = _cache
-		logger.Cache.Infow("count from cache", "cost", util.FormatDurationSmart(time.Since(begin)), "key", key)
-		return err
-	}
-
-QUERY:
 	// if err = db.db.Model(*new(M)).Count(&count64).Error; err != nil {
 	tableName := db.m.GetTableName()
 	if len(db.tableName) > 0 {
 		tableName = db.tableName
 	}
 	if err = db.ins.Table(tableName).Model(*new(M)).Limit(-1).Count(&count64).Error; err != nil {
-		logger.Cache.Error(err)
 		return err
 	}
 	*count = int(count64)
-	// if db.enableCache && config.App.Redis.Enabled {
-	// 	logger.Cache.Infow("count from database", "cost", time.Since(begin).String(), "key", key)
-	// 	go func() {
-	// 		if err = redis.Set(db.ctx, key, *count); err != nil {
-	// 			logger.Cache.Error(err)
-	// 		}
-	// 	}()
-	//
-	// }
-	if db.enableCache {
-		logger.Cache.Infow("count from database", "cost", util.FormatDurationSmart(time.Since(begin)), "key", key)
-		_ = cache.Cache[int]().WithContext(ctx).Set(key, *count, config.App.Cache.Expiration)
-
-	}
 	return nil
 }
 
 // First retrieves the first record from the database ordered by primary key.
-// Supports automatic caching to improve performance for frequently accessed queries.
 // Applies all previously set query conditions and returns the first matching record.
 //
 // Parameters:
@@ -400,8 +273,6 @@ QUERY:
 // if the query fails.
 //
 // Features:
-//   - Automatic result caching when enabled
-//   - Cache-first lookup for improved performance
 //   - Supports all query modifiers (WHERE, ORDER BY, etc.)
 //   - Supports eager loading with WithExpand
 //   - Supports field selection with WithSelect
@@ -422,11 +293,9 @@ func (db *database[M]) First(dest M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, ctx, span := db.trace("First")
+	done, _, span := db.trace("First")
 	defer done(err)
 
-	begin := time.Now()
-	var key string
 	// set selected columns.
 	if len(db.selectColumns) > 0 {
 		db.ins = db.ins.Select(db.selectColumns)
@@ -439,28 +308,6 @@ func (db *database[M]) First(dest M) (err error) {
 		tx := db.dryRunReadSession().Table(tableName).First(dest)
 		return db.collectSQL(tx)
 	}
-	if !db.enableCache {
-		goto QUERY
-	}
-	_, _, key = buildCacheKey(db.ins.Session(&gorm.Session{DryRun: true, Logger: glogger.Default.LogMode(glogger.Silent)}).First(dest).Statement, "first")
-	if _dest, e := cache.Cache[M]().WithContext(ctx).Get(key); e != nil {
-		// metrics.CacheMiss.WithLabelValues("first", db.typ.Name()).Inc()
-		goto QUERY
-	} else {
-		// metrics.CacheHit.WithLabelValues("first", db.typ.Name()).Inc()
-		val := reflect.ValueOf(dest)
-		if val.Kind() != reflect.Pointer {
-			return ErrNotPtrStruct
-		}
-		if !val.Elem().CanAddr() {
-			return ErrNotAddressableModel
-		}
-		val.Elem().Set(reflect.ValueOf(_dest).Elem()) // the type of M is pointer to struct.
-		logger.Cache.Infow("first from cache", "cost", util.FormatDurationSmart(time.Since(begin)), "key", key)
-		return nil // Found cache and return.
-	}
-
-QUERY:
 	var empty M // call nil value M will cause panic.
 	// Invoke model hook: GetBefore
 	if !db.noHook && !reflect.DeepEqual(empty, dest) {
@@ -486,24 +333,10 @@ QUERY:
 			return err
 		}
 	}
-	// // Cache the result.
-	// if db.enableCache && config.App.Redis.Enabled {
-	// 	logger.Cache.Infow("first from database", "cost", time.Since(begin).String(), "key", key)
-	// 	go func() {
-	// 		if err = redis.SetM[M](key, dest); err != nil {
-	// 			logger.Cache.Error(err)
-	// 		}
-	// 	}()
-	// }
-	if db.enableCache {
-		logger.Cache.Infow("first from database", "cost", util.FormatDurationSmart(time.Since(begin)), "key", key)
-		_ = cache.Cache[M]().WithContext(ctx).Set(key, dest, config.App.Cache.Expiration)
-	}
 	return nil
 }
 
 // Last retrieves the last record from the database ordered by primary key.
-// Supports automatic caching to improve performance for frequently accessed queries.
 // Applies all previously set query conditions and returns the last matching record.
 //
 // Parameters:
@@ -514,8 +347,6 @@ QUERY:
 // if the query fails.
 //
 // Features:
-//   - Automatic result caching when enabled
-//   - Cache-first lookup for improved performance
 //   - Supports all query modifiers (WHERE, ORDER BY, etc.)
 //   - Supports eager loading with WithExpand
 //   - Supports field selection with WithSelect
@@ -537,11 +368,9 @@ func (db *database[M]) Last(dest M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, ctx, span := db.trace("Last")
+	done, _, span := db.trace("Last")
 	defer done(err)
 
-	begin := time.Now()
-	var key string
 	// set selected columns.
 	if len(db.selectColumns) > 0 {
 		db.ins = db.ins.Select(db.selectColumns)
@@ -554,28 +383,6 @@ func (db *database[M]) Last(dest M) (err error) {
 		tx := db.dryRunReadSession().Table(tableName).Last(dest)
 		return db.collectSQL(tx)
 	}
-	if !db.enableCache {
-		goto QUERY
-	}
-	_, _, key = buildCacheKey(db.ins.Session(&gorm.Session{DryRun: true, Logger: glogger.Default.LogMode(glogger.Silent)}).Last(dest).Statement, "last")
-	if _dest, e := cache.Cache[M]().WithContext(ctx).Get(key); e != nil {
-		// metrics.CacheMiss.WithLabelValues("last", db.typ.Name()).Inc()
-		goto QUERY
-	} else {
-		// metrics.CacheHit.WithLabelValues("last", db.typ.Name()).Inc()
-		val := reflect.ValueOf(dest)
-		if val.Kind() != reflect.Pointer {
-			return ErrNotPtrStruct
-		}
-		if !val.Elem().CanAddr() {
-			return ErrNotAddressableModel
-		}
-		val.Elem().Set(reflect.ValueOf(_dest).Elem()) // the type of M is pointer to struct.
-		logger.Cache.Infow("last from cache", "cost", util.FormatDurationSmart(time.Since(begin)), "key", key)
-		return nil // Found cache and return.
-	}
-
-QUERY:
 	var empty M // call nil value M will cause panic.
 	// Invoke model hook: GetBefore.
 	if !db.noHook && !reflect.DeepEqual(empty, dest) {
@@ -601,25 +408,11 @@ QUERY:
 			return err
 		}
 	}
-	// // Cache the result.
-	// if db.enableCache && config.App.Redis.Enabled {
-	// 	logger.Cache.Infow("last from database", "cost", time.Since(begin).String(), "key", key)
-	// 	go func() {
-	// 		if err = redis.SetM[M](key, dest); err != nil {
-	// 			logger.Cache.Error(err)
-	// 		}
-	// 	}()
-	// }
-	if db.enableCache {
-		logger.Cache.Infow("last from database", "cost", util.FormatDurationSmart(time.Since(begin)), "key", key)
-		_ = cache.Cache[M]().WithContext(ctx).Set(key, dest, config.App.Cache.Expiration)
-	}
 	return nil
 }
 
 // Take retrieves the first record from the database in no specified order.
 // Unlike First/Last which order by primary key, Take returns any matching record.
-// Supports automatic caching to improve performance for frequently accessed queries.
 //
 // Parameters:
 //   - dest: Pointer to model instance where the result will be stored
@@ -629,8 +422,6 @@ QUERY:
 // if the query fails.
 //
 // Features:
-//   - Automatic result caching when enabled
-//   - Cache-first lookup for improved performance
 //   - Supports all query modifiers (WHERE, JOIN, etc.)
 //   - Supports eager loading with WithExpand
 //   - Supports field selection with WithSelect
@@ -652,11 +443,9 @@ func (db *database[M]) Take(dest M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, ctx, span := db.trace("Take")
+	done, _, span := db.trace("Take")
 	defer done(err)
 
-	begin := time.Now()
-	var key string
 	// set selected columns.
 	if len(db.selectColumns) > 0 {
 		db.ins = db.ins.Select(db.selectColumns)
@@ -669,28 +458,6 @@ func (db *database[M]) Take(dest M) (err error) {
 		tx := db.dryRunReadSession().Table(tableName).Take(dest)
 		return db.collectSQL(tx)
 	}
-	if !db.enableCache {
-		goto QUERY
-	}
-	_, _, key = buildCacheKey(db.ins.Session(&gorm.Session{DryRun: true, Logger: glogger.Default.LogMode(glogger.Silent)}).First(dest).Statement, "take")
-	if _dest, e := cache.Cache[M]().WithContext(ctx).Get(key); e != nil {
-		// metrics.CacheMiss.WithLabelValues("take", db.typ.Name()).Inc()
-		goto QUERY
-	} else {
-		// metrics.CacheHit.WithLabelValues("take", db.typ.Name()).Inc()
-		val := reflect.ValueOf(dest)
-		if val.Kind() != reflect.Pointer {
-			return ErrNotPtrStruct
-		}
-		if !val.Elem().CanAddr() {
-			return ErrNotAddressableModel
-		}
-		val.Elem().Set(reflect.ValueOf(_dest).Elem()) // the type of M is pointer to struct.
-		logger.Cache.Infow("take from cache", "cost", util.FormatDurationSmart(time.Since(begin)), "key", key)
-		return nil // Found cache and return.
-	}
-
-QUERY:
 	var empty M // call nil value M will cause panic.
 	// Invoke model hook: GetBefore.
 	if !db.noHook && !reflect.DeepEqual(empty, dest) {
@@ -715,21 +482,6 @@ QUERY:
 		}); err != nil {
 			return err
 		}
-	}
-	// // Cache the result.
-	// if db.enableCache && config.App.Redis.Enabled {
-	// 	logger.Cache.Infow("take from database", "cost", time.Since(begin).String(), "key", key)
-	// 	go func() {
-	// 		if err = redis.SetM[M](key, dest); err != nil {
-	// 			logger.Cache.Error(err)
-	// 		}
-	// 	}()
-
-	//
-	// }
-	if db.enableCache {
-		logger.Cache.Infow("take from database", "cost", util.FormatDurationSmart(time.Since(begin)), "key", key)
-		_ = cache.Cache[M]().WithContext(ctx).Set(key, dest, config.App.Cache.Expiration)
 	}
 	return nil
 }

@@ -110,15 +110,6 @@ func WithQuerySortBy(sortBy string) Option {
 	}
 }
 
-func WithQueryNoCache(noCache bool) Option {
-	return func(c *Client) {
-		if c.query == nil {
-			c.query = new(clientQuery)
-		}
-		c.query.NoCache = noCache
-	}
-}
-
 func WithQueryOr(or bool) Option {
 	return func(c *Client) {
 		if c.query == nil {

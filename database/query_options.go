@@ -1050,39 +1050,6 @@ func (db *database[M]) WithPurge(enable ...bool) types.Database[M] {
 	return db
 }
 
-// WithCache enables query result caching to improve performance.
-// Improves performance by storing frequently accessed data in memory.
-//
-// Parameters:
-//   - enable: Optional boolean flag (default: true if omitted)
-//   - true: Enable caching for query operations (List, Get, Count, First, Last, Take)
-//   - false: Disable caching, always query from database
-//
-// Behavior:
-//   - When enabled, query results are cached and subsequent identical queries return cached data
-//   - Cache is automatically cleared on Create, Update, Delete operations
-//   - Only affects query operations (List, Get, Count, First, Last, Take)
-//   - Does not affect Create, Update, Delete operations (they clear cache instead)
-//
-// Example:
-//
-//	WithCache().List(&users)        // Enable cache (default)
-//	WithCache(true).Get(&user, id)  // Enable cache explicitly
-//	WithCache(false).List(&users)   // Disable cache, always query database
-//
-// WithCache will make query operations check cache first.
-// If cache not found or expired, query from database directly.
-func (db *database[M]) WithCache(enable ...bool) types.Database[M] {
-	_enable := true
-	if len(enable) > 0 {
-		_enable = enable[0]
-	}
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	db.enableCache = _enable
-	return db
-}
-
 // WithOmit excludes specified fields from INSERT, UPDATE, and SELECT operations.
 // Useful for skipping auto-generated fields or fields that shouldn't be modified.
 //

@@ -48,7 +48,6 @@ const (
 	QUERY_DEPTH        = "_depth"
 	QUERY_OR           = "_or"
 	QUERY_SORT_BY      = "_sort_by"
-	QUERY_NO_CACHE     = "_no_cache"
 	QUERY_NO_TOTAL     = "_no_total"
 	QUERY_INDEX        = "_index"
 	QUERY_SELECT       = "_select"

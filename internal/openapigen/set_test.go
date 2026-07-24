@@ -204,7 +204,7 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 				"_page", "_size",
 				"_cursor_value", "_cursor_field", "_cursor_next",
 				"_expand", "_depth", "_sort_by",
-				"_or", "_index", "_select", "_no_cache", "_no_total",
+				"_or", "_index", "_select", "_no_total",
 				"id", "created_by", "updated_by",
 				"created_at", "updated_at",
 			},

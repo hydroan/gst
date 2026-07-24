@@ -2460,7 +2460,7 @@ var frameworkQueryParameterOrder = []string{
 	consts.QUERY_PAGE, consts.QUERY_SIZE, consts.QUERY_SORT_BY,
 	consts.QUERY_CURSOR_VALUE, consts.QUERY_CURSOR_FIELD, consts.QUERY_CURSOR_NEXT,
 	consts.QUERY_EXPAND, consts.QUERY_DEPTH,
-	consts.QUERY_OR, consts.QUERY_SELECT, consts.QUERY_NO_TOTAL, consts.QUERY_NO_CACHE, consts.QUERY_INDEX,
+	consts.QUERY_OR, consts.QUERY_SELECT, consts.QUERY_NO_TOTAL, consts.QUERY_INDEX,
 }
 
 // sortQueryParameters puts business filter parameters first, preserving their

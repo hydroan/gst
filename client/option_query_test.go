@@ -67,14 +67,6 @@ func Test_OptionQuery(t *testing.T) {
 		assert.Equal(t, "_sort_by=created_at+desc%2Cid+asc", query)
 	})
 
-	t.Run("WithQueryNoCache", func(t *testing.T) {
-		cli, err := client.New(addr, client.WithQueryNoCache(true))
-		require.NoError(t, err)
-		query, err := cli.QueryString()
-		require.NoError(t, err)
-		assert.Equal(t, "_no_cache=true", query)
-	})
-
 	t.Run("WithQueryOr", func(t *testing.T) {
 		cli, err := client.New(addr, client.WithQueryOr(true))
 		require.NoError(t, err)

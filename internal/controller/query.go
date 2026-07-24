@@ -33,7 +33,6 @@ var listUnsafeQueryKeys = map[string]struct{}{
 	consts.QUERY_OR:       {},
 	consts.QUERY_INDEX:    {},
 	consts.QUERY_SELECT:   {},
-	consts.QUERY_NO_CACHE: {},
 	consts.QUERY_NO_TOTAL: {},
 }
 

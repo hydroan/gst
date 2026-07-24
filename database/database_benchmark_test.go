@@ -155,108 +155,60 @@ func BenchmarkDatabaseList(b *testing.B) {
 	defer cleanupTestData()
 	require.NoError(b, database.Database[*TestUser](context.Background()).Create(ul...))
 
-	b.Run("nocache", func(b *testing.B) {
-		users := make([]*TestUser, 0)
-		for b.Loop() {
-			_ = database.Database[*TestUser](context.Background()).List(&users)
-		}
-	})
-	b.Run("withcache", func(b *testing.B) {
-		users := make([]*TestUser, 0)
-		for b.Loop() {
-			_ = database.Database[*TestUser](context.Background()).WithCache().List(&users)
-		}
-	})
+	users := make([]*TestUser, 0)
+	for b.Loop() {
+		_ = database.Database[*TestUser](context.Background()).List(&users)
+	}
 }
 
 func BenchmarkDatabaseGet(b *testing.B) {
 	defer cleanupTestData()
 	require.NoError(b, database.Database[*TestUser](context.Background()).Create(ul...))
 
-	b.Run("nocache", func(b *testing.B) {
-		u := new(TestUser)
-		for b.Loop() {
-			_ = database.Database[*TestUser](context.Background()).Get(u, u1.ID)
-		}
-	})
-	b.Run("withcache", func(b *testing.B) {
-		u := new(TestUser)
-		for b.Loop() {
-			_ = database.Database[*TestUser](context.Background()).WithCache().Get(u, u1.ID)
-		}
-	})
+	u := new(TestUser)
+	for b.Loop() {
+		_ = database.Database[*TestUser](context.Background()).Get(u, u1.ID)
+	}
 }
 
 func BenchmarkDatabaseCount(b *testing.B) {
 	defer cleanupTestData()
 	require.NoError(b, database.Database[*TestUser](context.Background()).Create(ul...))
 
-	b.Run("nocache", func(b *testing.B) {
-		count := new(int)
-		for b.Loop() {
-			_ = database.Database[*TestUser](context.Background()).Count(count)
-		}
-	})
-	b.Run("withcache", func(b *testing.B) {
-		count := new(int)
-		for b.Loop() {
-			_ = database.Database[*TestUser](context.Background()).WithCache().Count(count)
-		}
-	})
+	count := new(int)
+	for b.Loop() {
+		_ = database.Database[*TestUser](context.Background()).Count(count)
+	}
 }
 
 func BenchmarkDatabaseFirst(b *testing.B) {
 	defer cleanupTestData()
 	require.NoError(b, database.Database[*TestUser](context.Background()).Create(ul...))
 
-	b.Run("nocache", func(b *testing.B) {
-		u := new(TestUser)
-		for b.Loop() {
-			_ = database.Database[*TestUser](context.Background()).First(u)
-		}
-	})
-	b.Run("withcache", func(b *testing.B) {
-		u := new(TestUser)
-		for b.Loop() {
-			_ = database.Database[*TestUser](context.Background()).WithCache().First(u)
-		}
-	})
+	u := new(TestUser)
+	for b.Loop() {
+		_ = database.Database[*TestUser](context.Background()).First(u)
+	}
 }
 
 func BenchmarkDatabaseLast(b *testing.B) {
 	defer cleanupTestData()
 	require.NoError(b, database.Database[*TestUser](context.Background()).Create(ul...))
 
-	b.Run("nocache", func(b *testing.B) {
-		u := new(TestUser)
-		for b.Loop() {
-			_ = database.Database[*TestUser](context.Background()).Last(u)
-		}
-	})
-	b.Run("withcache", func(b *testing.B) {
-		u := new(TestUser)
-		for b.Loop() {
-			_ = database.Database[*TestUser](context.Background()).WithCache().Last(u)
-		}
-	})
+	u := new(TestUser)
+	for b.Loop() {
+		_ = database.Database[*TestUser](context.Background()).Last(u)
+	}
 }
 
 func BenchmarkDatabaseTake(b *testing.B) {
 	defer cleanupTestData()
 	require.NoError(b, database.Database[*TestUser](context.Background()).Create(ul...))
 
-	b.Run("nocache", func(b *testing.B) {
-		u := new(TestUser)
-		for b.Loop() {
-			_ = database.Database[*TestUser](context.Background()).Take(u)
-		}
-	})
-	b.Run("withcache", func(b *testing.B) {
-		u := new(TestUser)
-		for b.Loop() {
-			_ = database.Database[*TestUser](context.Background()).WithCache().Take(u)
-		}
-	})
+	u := new(TestUser)
+	for b.Loop() {
+		_ = database.Database[*TestUser](context.Background()).Take(u)
+	}
 }
 
 func benchmarkDatabaseCreateBatch(b *testing.B, size int) {

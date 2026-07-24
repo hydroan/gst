@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"time"
 
@@ -95,13 +94,6 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		}
 
 		var err error
-		noCache := true // default disable cache.
-		if noCacheStr, ok := c.GetQuery(consts.QUERY_NO_CACHE); ok {
-			var parsed bool
-			if parsed, err = strconv.ParseBool(noCacheStr); err == nil {
-				noCache = parsed
-			}
-		}
 		expands := parseExpandQuery(c, m)
 		log.Infoz("", zap.Object(meta.name, m))
 
@@ -121,7 +113,6 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			WithIndex(index).
 			WithSelect(strings.Split(selects, ",")...).
 			WithExpand(expands).
-			WithCache(!noCache).
 			Get(m, m.GetID()); err != nil {
 			log.Error(err)
 			JSON(c, CodeFailure.WithErr(err))
