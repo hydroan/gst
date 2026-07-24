@@ -158,7 +158,7 @@ type DatabaseOption[M Model] interface {
 	// WithDebug enables debug mode to show detailed SQL queries.
 	WithDebug() Database[M]
 	// WithQuery adds query conditions from model fields or raw SQL configuration.
-	WithQuery(query M, config ...QueryConfig) Database[M]
+	WithQuery(query M, opts ...QueryOptions) Database[M]
 	// WithCursor enables cursor-based pagination for List operations.
 	WithCursor(string, bool, ...string) Database[M]
 	// WithTimeRange applies a time range filter to the query.

@@ -151,20 +151,20 @@ func TestDatabaseListWithJSONString(t *testing.T) {
 	res := make([]*TestUser, 0)
 	// Test query JSON field without fuzzy match.
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(&TestUser{Addr: []string{"shanghai"}}, types.QueryConfig{FuzzyMatch: false}).
+		WithQuery(&TestUser{Addr: []string{"shanghai"}}, types.QueryOptions{FuzzyMatch: false}).
 		List(&res))
 	require.Empty(t, res)
 
 	// Test query JSON field with fuzzy match
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(&TestUser{Addr: []string{"shanghai"}}, types.QueryConfig{FuzzyMatch: true}).
+		WithQuery(&TestUser{Addr: []string{"shanghai"}}, types.QueryOptions{FuzzyMatch: true}).
 		List(&res))
 	require.Len(t, res, 1)
 	require.Equal(t, "shanghai", res[0].Name)
 
 	// Test query JSON field with fuzzy match again
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(&TestUser{Addr: []string{"1"}}, types.QueryConfig{FuzzyMatch: true}).
+		WithQuery(&TestUser{Addr: []string{"1"}}, types.QueryOptions{FuzzyMatch: true}).
 		List(&res))
 	require.Len(t, res, 2)
 	var found1, found2 bool

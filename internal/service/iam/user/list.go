@@ -33,7 +33,7 @@ type adminUserListFilters struct {
 //
 // Passing nil as the target to EnsureTenantAdmin means this call only verifies
 // endpoint-level permission. The visible user set is applied later by
-// userVisibilityQueryConfig because list requests do not have one concrete target
+// userVisibilityQueryOptions because list requests do not have one concrete target
 // user to check.
 func (a *AdminUserListService) List(ctx *types.ServiceContext, _ *model.Empty) (rsp *modeliamuser.AdminUserListRsp, err error) {
 	log := a.WithContext(ctx, ctx.Phase())
@@ -69,15 +69,15 @@ func (a *AdminUserListService) List(ctx *types.ServiceContext, _ *model.Empty) (
 // the full filtered result set, then applies request pagination only to the
 // returned page.
 func listUsers(ctx *types.ServiceContext, actor *modeliamuser.User) ([]*modeliamuser.User, int, error) {
-	cfg, err := userVisibilityQueryConfig(ctx, actor)
+	opts, err := userVisibilityQueryOptions(ctx, actor)
 	if err != nil {
 		return nil, 0, err
 	}
 	filters := readAdminUserListFilters(ctx)
-	userQuery, cfg := adminUserListQuery(filters, cfg)
+	userQuery, opts := adminUserListQuery(filters, opts)
 
 	var total int
-	if err = database.Database[*modeliamuser.User](ctx).WithQuery(userQuery, cfg).Count(&total); err != nil {
+	if err = database.Database[*modeliamuser.User](ctx).WithQuery(userQuery, opts).Count(&total); err != nil {
 		return nil, 0, err
 	}
 
@@ -86,13 +86,13 @@ func listUsers(ctx *types.ServiceContext, actor *modeliamuser.User) ([]*modeliam
 	users := make([]*modeliamuser.User, 0)
 	if filters.Page > 0 || filters.Size > 0 {
 		err = database.Database[*modeliamuser.User](ctx).
-			WithQuery(userQuery, cfg).
+			WithQuery(userQuery, opts).
 			WithOrder("created_at DESC").
 			WithPagination(filters.Page, filters.Size).
 			List(&users)
 	} else {
 		err = database.Database[*modeliamuser.User](ctx).
-			WithQuery(userQuery, cfg).
+			WithQuery(userQuery, opts).
 			WithOrder("created_at DESC").
 			List(&users)
 	}
@@ -123,55 +123,56 @@ func parseAdminUserListInt(value string) int {
 }
 
 // adminUserListQuery converts URL filters into the model query consumed by
-// database.WithQuery. Tenant visibility remains in cfg.RawQuery and WithQuery
-// combines it with the username condition using AND semantics.
-func adminUserListQuery(filters adminUserListFilters, cfg types.QueryConfig) (*modeliamuser.User, types.QueryConfig) {
+// database.WithQuery. Tenant visibility remains in opts (a Filters IN condition, or the
+// fail-closed RawQuery for an empty visible set) and WithQuery combines it
+// with the username condition using AND semantics.
+func adminUserListQuery(filters adminUserListFilters, opts types.QueryOptions) (*modeliamuser.User, types.QueryOptions) {
 	query := new(modeliamuser.User)
 	if filters.Username == "" {
-		return query, cfg
+		return query, opts
 	}
 	query.Username = filters.Username
-	cfg.FuzzyMatch = true
-	return query, cfg
+	opts.FuzzyMatch = true
+	return query, opts
 }
 
-// userVisibilityQueryConfig converts IAM admin visibility rules into a database query.
+// userVisibilityQueryOptions converts IAM admin visibility rules into a database query.
 //
 // IAM users do not store tenant_id. Tenant membership comes from RBAC role
 // bindings, so tenant administrators are scoped by first reading all subjects
 // assigned to at least one role in the current tenant, then querying users by
 // those subject IDs. System root actors bypass this tenant scope and can list
 // every user.
-func userVisibilityQueryConfig(ctx *types.ServiceContext, actor *modeliamuser.User) (types.QueryConfig, error) {
+func userVisibilityQueryOptions(ctx *types.ServiceContext, actor *modeliamuser.User) (types.QueryOptions, error) {
 	systemRoot, err := isSystemRoot(ctx, actor)
 	if err != nil {
-		return types.QueryConfig{}, errors.Wrap(err, "failed to resolve actor system role")
+		return types.QueryOptions{}, errors.Wrap(err, "failed to resolve actor system role")
 	}
 	if systemRoot {
-		return types.QueryConfig{AllowEmpty: true}, nil
+		return types.QueryOptions{AllowEmpty: true}, nil
 	}
 
 	// The current tenant comes from the request context and falls back to the
 	// default authorization domain when the application has no tenant resolver.
 	subjectIDs, err := rbac.RBAC().SubjectsInTenant(ctx, currentTenant(ctx))
 	if err != nil {
-		return types.QueryConfig{}, errors.Wrap(err, "failed to list tenant subjects")
+		return types.QueryOptions{}, errors.Wrap(err, "failed to list tenant subjects")
 	}
 	if len(subjectIDs) == 0 {
-		return emptyUserVisibilityQueryConfig(), nil
+		return emptyUserVisibilityQueryOptions(), nil
 	}
 	subjectIDs, err = excludeSystemRootSubjects(ctx, subjectIDs)
 	if err != nil {
-		return types.QueryConfig{}, err
+		return types.QueryOptions{}, err
 	}
 	if len(subjectIDs) == 0 {
-		return emptyUserVisibilityQueryConfig(), nil
+		return emptyUserVisibilityQueryOptions(), nil
 	}
-	return types.QueryConfig{RawQuery: "id IN ?", RawQueryArgs: []any{subjectIDs}}, nil
+	return types.QueryOptions{Filters: []types.Filter{types.FilterIn("id", subjectIDs)}}, nil
 }
 
-func emptyUserVisibilityQueryConfig() types.QueryConfig {
-	return types.QueryConfig{RawQuery: "1 = 0", AllowEmpty: true}
+func emptyUserVisibilityQueryOptions() types.QueryOptions {
+	return types.QueryOptions{RawQuery: "1 = 0", AllowEmpty: true}
 }
 
 // excludeSystemRootSubjects removes subjects that tenant administrators must

@@ -1021,7 +1021,7 @@ func TestDatabaseWithExpand(t *testing.T) {
 		categories := make([]*TestCategory, 0)
 		// Expand parent with single depth
 		require.NoError(t, database.Database[*TestCategory](context.Background()).
-			WithQuery(&TestCategory{Name: "child"}, types.QueryConfig{FuzzyMatch: true}).
+			WithQuery(&TestCategory{Name: "child"}, types.QueryOptions{FuzzyMatch: true}).
 			WithExpand([]string{"Parent"}).
 			List(&categories))
 
@@ -1045,7 +1045,7 @@ func TestDatabaseWithExpand(t *testing.T) {
 		categories := make([]*TestCategory, 0)
 		// Expand parent with two depth (Parent.Parent)
 		require.NoError(t, database.Database[*TestCategory](context.Background()).
-			WithQuery(&TestCategory{Name: "child"}, types.QueryConfig{FuzzyMatch: true}).
+			WithQuery(&TestCategory{Name: "child"}, types.QueryOptions{FuzzyMatch: true}).
 			WithExpand([]string{"Parent.Parent"}).
 			List(&categories))
 
@@ -1071,7 +1071,7 @@ func TestDatabaseWithExpand(t *testing.T) {
 		categories := make([]*TestCategory, 0)
 		// Expand with more depth than available (should only expand available depth)
 		require.NoError(t, database.Database[*TestCategory](context.Background()).
-			WithQuery(&TestCategory{Name: "child"}, types.QueryConfig{FuzzyMatch: true}).
+			WithQuery(&TestCategory{Name: "child"}, types.QueryOptions{FuzzyMatch: true}).
 			WithExpand([]string{"Parent.Parent.Parent.Parent"}).
 			List(&categories))
 
@@ -1097,7 +1097,7 @@ func TestDatabaseWithExpand(t *testing.T) {
 		categories := make([]*TestCategory, 0)
 		// Association names are case sensitive
 		require.Error(t, database.Database[*TestCategory](context.Background()).
-			WithQuery(&TestCategory{Name: "child"}, types.QueryConfig{FuzzyMatch: true}).
+			WithQuery(&TestCategory{Name: "child"}, types.QueryOptions{FuzzyMatch: true}).
 			WithExpand([]string{"parent"}).
 			List(&categories))
 	})

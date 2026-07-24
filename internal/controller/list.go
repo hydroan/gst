@@ -92,8 +92,8 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			gstotel.RecordError(span, err)
 			return
 		}
-		var fieldConditions []types.FieldCondition
-		if fieldConditions, err = parseFieldConditionsQuery(m, c.Request.URL.Query()); err != nil {
+		var filters []types.Filter
+		if filters, err = parseFiltersQuery(m, c.Request.URL.Query()); err != nil {
 			log.Error(err)
 			JSON(c, CodeInvalidParam.WithErr(err))
 			gstotel.RecordError(span, err)
@@ -135,12 +135,12 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			WithPagination(page, size).
 			WithIndex(index).
 			WithSelect(strings.Split(selects, ",")...).
-			WithQuery(svc.Filter(ctx, m), types.QueryConfig{
-				AllowEmpty:      true,
-				UseOr:           or,
-				RawQuery:        svc.FilterRaw(ctx),
-				PresentFields:   present,
-				FieldConditions: fieldConditions,
+			WithQuery(svc.Filter(ctx, m), types.QueryOptions{
+				AllowEmpty:    true,
+				Or:            or,
+				RawQuery:      svc.FilterRaw(ctx),
+				PresentFields: present,
+				Filters:       filters,
 			}).
 			WithCursor(cursorValue, cursorNext, cursorField).
 			WithExclude(m.Excludes()).
@@ -172,12 +172,12 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 				// WithPagination(page, size). // NOTE: WithPagination should not apply in Count method.
 				// WithSelect(strings.Split(selects, ",")...). // NOTE: WithSelect should not apply in Count method.
 				WithIndex(index).
-				WithQuery(svc.Filter(ctx, m), types.QueryConfig{
-					AllowEmpty:      true,
-					UseOr:           or,
-					RawQuery:        svc.FilterRaw(ctx),
-					PresentFields:   present,
-					FieldConditions: fieldConditions,
+				WithQuery(svc.Filter(ctx, m), types.QueryOptions{
+					AllowEmpty:    true,
+					Or:            or,
+					RawQuery:      svc.FilterRaw(ctx),
+					PresentFields: present,
+					Filters:       filters,
 				}).
 				WithExclude(m.Excludes()).
 				Count(total); err != nil {

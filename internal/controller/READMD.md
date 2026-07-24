@@ -522,7 +522,7 @@ field, use the field operator filter syntax instead: `?name[like]=user01`
 
 #### `field[op]=value` (field operator filters)
 
-Field-level operator filters (see `parseFieldConditionsQuery` in `query.go`) require
+Field-level operator filters (see `parseFiltersQuery` in `query.go`) require
 `model.Query` and are always AND-combined with the other conditions. Supported
 operators: `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in`/`notin` (comma-separated
 values), `like`/`notlike` (substring match), `startswith`/`endswith` (anchored
@@ -532,6 +532,10 @@ language: `%`, `_`, and the escape character are escaped. The bare key stays the
 exact business filter, so `?age=10&age[gt]=20` applies both conditions. Unknown
 fields or operators, and combining with `_or=true`, return 400; empty values
 mean "not filtering".
+
+Service code builds the same filters with the `types.FilterXxx` constructors
+(e.g. `types.FilterIn("id", ids)` binds the slice as a whole), whose signatures
+lock the value shape each operator expects.
 
 Values are validated against the field's Go type and rejected with 400 when
 malformed. Numeric fields require numeric values. Time fields accept the
@@ -554,12 +558,12 @@ operator filters only.
 >`Database equivalent`
 >
 >```go
->database.Database[*model.User]().WithQuery(nil, types.QueryConfig{
+>database.Database[*model.User]().WithQuery(nil, types.QueryOptions{
 >	AllowEmpty: true,
->	FieldConditions: []types.FieldCondition{
->		{Column: "age", Op: types.FilterOpGte, Value: "18"},
->		{Column: "created_at", Op: types.FilterOpGte, Value: "2024-07-01 00:00:00"},
->		{Column: "created_at", Op: types.FilterOpLte, Value: "2024-07-31 23:59:59.999999999"},
+>	Filters: []types.Filter{
+>		types.FilterGte("age", "18"),
+>		types.FilterGte("created_at", "2024-07-01 00:00:00"),
+>		types.FilterLte("created_at", "2024-07-31 23:59:59.999999999"),
 >	},
 >}).List(&users)
 >```
@@ -642,8 +646,8 @@ operator filters only.
 > database.Database[*model.User]().WithQuery(&model.User{
 >   Name:  util.ValueOf("user01"),
 >   Email: util.ValueOf("user02@gmail.com"),
-> }, types.QueryConfig{
->   UseOr: true,
+> }, types.QueryOptions{
+>   Or: true,
 > })
 > ```
 

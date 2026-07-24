@@ -92,11 +92,11 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		m := meta.newModel()
 
 		var err error
-		if err = serviceregistry.QueryDecoder().Decode(m, stripFieldConditionKeys(c.Request.URL.Query())); err != nil {
+		if err = serviceregistry.QueryDecoder().Decode(m, stripFilterKeys(c.Request.URL.Query())); err != nil {
 			log.Warn("failed to parse uri query parameter into model: ", err)
 		}
-		var fieldConditions []types.FieldCondition
-		if fieldConditions, err = parseFieldConditionsQuery(m, c.Request.URL.Query()); err != nil {
+		var filters []types.Filter
+		if filters, err = parseFiltersQuery(m, c.Request.URL.Query()); err != nil {
 			log.Error(err)
 			JSON(c, CodeInvalidParam.WithErr(err))
 			gstotel.RecordError(span, err)
@@ -131,12 +131,12 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			WithLimit(limit).
 			WithIndex(index).
 			WithSelect(strings.Split(selects, ",")...).
-			WithQuery(svc.Filter(svcCtx, m), types.QueryConfig{
-				AllowEmpty:      true,
-				UseOr:           or,
-				RawQuery:        svc.FilterRaw(svcCtx),
-				PresentFields:   present,
-				FieldConditions: fieldConditions,
+			WithQuery(svc.Filter(svcCtx, m), types.QueryOptions{
+				AllowEmpty:    true,
+				Or:            or,
+				RawQuery:      svc.FilterRaw(svcCtx),
+				PresentFields: present,
+				Filters:       filters,
 			}).
 			WithExclude(m.Excludes()).
 			WithExpand(expands, sortBy).

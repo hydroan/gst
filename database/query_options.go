@@ -122,7 +122,7 @@ func (db *database[M]) WithIndex(indexName string, hint ...consts.IndexHintMode)
 //   - query: A model instance with fields set as query conditions. Can be nil to indicate empty query.
 //     When nil or all fields are zero values, it's treated as an empty query.
 //     Supported field types: string, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, bool, pointer types.
-//   - config: Optional QueryConfig to control query behavior (fuzzy matching, empty queries, OR logic, raw SQL)
+//   - opts: Optional QueryOptions to control query behavior (fuzzy matching, empty queries, OR logic, raw SQL)
 //
 // Query Behavior:
 //
@@ -139,8 +139,8 @@ func (db *database[M]) WithIndex(indexName string, hint ...consts.IndexHintMode)
 //	- Empty strings in comma-separated values are automatically skipped to prevent matching all records
 //	- Note: REGEXP may not be available in all databases (e.g., SQLite requires extension)
 //
-//	UseOr:
-//	- When true: Combines multiple field conditions with OR instead of AND
+//	Or:
+//	- When true: Combines multiple filters with OR instead of AND
 //	- First condition always uses WHERE, subsequent conditions use OR
 //	- Example: WHERE name IN ('John') OR email IN ('john@example.com')
 //	- Works with both exact match and fuzzy match
@@ -173,26 +173,26 @@ func (db *database[M]) WithIndex(indexName string, hint ...consts.IndexHintMode)
 //	WithQuery(&model.User{Name: "John", Age: 18, Email: "john@example.com"})  // WHERE name IN ('John') AND age IN (18) AND email IN ('john@example.com')
 //
 //	// Fuzzy match - single value (LIKE)
-//	WithQuery(&model.User{Name: "John"}, types.QueryConfig{FuzzyMatch: true})  // WHERE name LIKE '%John%'
+//	WithQuery(&model.User{Name: "John"}, types.QueryOptions{FuzzyMatch: true})  // WHERE name LIKE '%John%'
 //
 //	// Fuzzy match - multiple values (REGEXP)
-//	WithQuery(&model.User{Name: "John,Jack"}, types.QueryConfig{FuzzyMatch: true})  // WHERE name REGEXP '.*John.*|.*Jack.*'
+//	WithQuery(&model.User{Name: "John,Jack"}, types.QueryOptions{FuzzyMatch: true})  // WHERE name REGEXP '.*John.*|.*Jack.*'
 //
 //	// Fuzzy match - empty strings in comma-separated values are skipped
-//	WithQuery(&model.User{Name: "John,,Jack"}, types.QueryConfig{FuzzyMatch: true})  // WHERE name REGEXP '.*John.*|.*Jack.*'
+//	WithQuery(&model.User{Name: "John,,Jack"}, types.QueryOptions{FuzzyMatch: true})  // WHERE name REGEXP '.*John.*|.*Jack.*'
 //
 //	// OR logic to combine conditions
-//	WithQuery(&model.User{Name: "John", Email: "john@example.com"}, types.QueryConfig{UseOr: true})
+//	WithQuery(&model.User{Name: "John", Email: "john@example.com"}, types.QueryOptions{Or: true})
 //	// WHERE name IN ('John') OR email IN ('john@example.com')
 //
 //	// OR logic with fuzzy match
-//	WithQuery(&model.User{Name: "John", Email: "example"}, types.QueryConfig{UseOr: true, FuzzyMatch: true})
+//	WithQuery(&model.User{Name: "John", Email: "example"}, types.QueryOptions{Or: true, FuzzyMatch: true})
 //	// WHERE name LIKE '%John%' OR email LIKE '%example%'
 //
 //		// Raw SQL query (can be combined with model fields)
-//	WithQuery(&model.User{}, types.QueryConfig{RawQuery: "age > ? AND status = ?", RawQueryArgs: []any{18, "active"}})
-//	WithQuery(nil, types.QueryConfig{RawQuery: "created_at BETWEEN ? AND ?", RawQueryArgs: []any{startDate, endDate}})
-//	WithQuery(&model.User{Name: "John"}, types.QueryConfig{RawQuery: "age > ?", RawQueryArgs: []any{18}})  // WHERE age > ? AND name IN ('John')
+//	WithQuery(&model.User{}, types.QueryOptions{RawQuery: "age > ? AND status = ?", RawQueryArgs: []any{18, "active"}})
+//	WithQuery(nil, types.QueryOptions{RawQuery: "created_at BETWEEN ? AND ?", RawQueryArgs: []any{startDate, endDate}})
+//	WithQuery(&model.User{Name: "John"}, types.QueryOptions{RawQuery: "age > ?", RawQueryArgs: []any{18}})  // WHERE age > ? AND name IN ('John')
 //
 //	// Empty query (blocked by default for safety)
 //	WithQuery(nil)  // WHERE 1 = 0 (returns no records)
@@ -200,71 +200,71 @@ func (db *database[M]) WithIndex(indexName string, hint ...consts.IndexHintMode)
 //	WithQuery(&model.User{Name: "", Email: ""})  // WHERE 1 = 0 (all values are empty)
 //
 //	// Empty query with AllowEmpty=true (returns all records)
-//	WithQuery(nil, types.QueryConfig{AllowEmpty: true})  // Returns all records
-//	WithQuery(&model.User{}, types.QueryConfig{AllowEmpty: true})  // Returns all records
+//	WithQuery(nil, types.QueryOptions{AllowEmpty: true})  // Returns all records
+//	WithQuery(&model.User{}, types.QueryOptions{AllowEmpty: true})  // Returns all records
 //
 //	// Query with some empty and some non-empty fields (works normally)
 //	WithQuery(&model.User{Name: "John", Email: ""})  // WHERE name IN ('John') (Email is ignored)
 //
 //	// Combined options
-//	WithQuery(&model.User{Name: "John"}, types.QueryConfig{
+//	WithQuery(&model.User{Name: "John"}, types.QueryOptions{
 //	    FuzzyMatch: true,
-//	    UseOr:      true,
+//	    Or:      true,
 //	    AllowEmpty: false,
 //	})
 //
 // NOTE: The underlying type must be pointer to struct, otherwise panic will occur.
 // NOTE: Empty query conditions (nil or zero value) are blocked by default for safety to prevent
 //
-//	catastrophic data loss (e.g., deleting all records). Use QueryConfig{AllowEmpty: true} to override.
+//	catastrophic data loss (e.g., deleting all records). Use QueryOptions{AllowEmpty: true} to override.
 //
 // NOTE: When both RawQuery and model fields are provided, they are combined with AND logic.
 // NOTE: REGEXP function may not be available in all databases (e.g., SQLite requires extension).
 //
 //	For SQLite compatibility, consider using FuzzyMatch with single values (LIKE) or RawQuery.
-func (db *database[M]) WithQuery(query M, config ...types.QueryConfig) types.Database[M] {
+func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	// Parse query configuration
-	var cfg types.QueryConfig
-	if len(config) > 0 {
-		cfg = config[0]
+	// Parse query options
+	var opt types.QueryOptions
+	if len(opts) > 0 {
+		opt = opts[0]
 	}
-	// cfg.FuzzyMatch: default false (exact match)
-	// cfg.AllowEmpty: default false (block empty queries for safety)
+	// opt.FuzzyMatch: default false (exact match)
+	// opt.AllowEmpty: default false (block empty queries for safety)
 
 	queryVal := reflect.ValueOf(query)
 	// Handle RawQuery first (works even if query is nil)
 	// RawQuery will be combined with model fields using AND logic if both are provided
-	hasRawQuery := len(cfg.RawQuery) > 0
+	hasRawQuery := len(opt.RawQuery) > 0
 	if hasRawQuery {
-		if cfg.UseOr {
-			db.ins = db.ins.Or(cfg.RawQuery, cfg.RawQueryArgs...)
+		if opt.Or {
+			db.ins = db.ins.Or(opt.RawQuery, opt.RawQueryArgs...)
 		} else {
-			db.ins = db.ins.Where(cfg.RawQuery, cfg.RawQueryArgs...)
+			db.ins = db.ins.Where(opt.RawQuery, opt.RawQueryArgs...)
 		}
 	}
 
 	// Field-level operator conditions are always AND-combined and, like
 	// RawQuery, count as real conditions for the empty-query safety checks.
-	hasFieldConditions := len(cfg.FieldConditions) > 0
-	if hasFieldConditions {
-		db.applyFieldConditions(cfg.FieldConditions)
+	hasFilters := len(opt.Filters) > 0
+	if hasFilters {
+		db.applyFilters(opt.Filters)
 	}
 
 	// Check if query is nil or empty
 	var empty M
 	if queryVal.IsNil() || reflect.DeepEqual(query, empty) {
 		// Treat nil/empty as empty query
-		// If RawQuery or field conditions are provided, they are already
+		// If RawQuery or filters are provided, they are already
 		// applied above and alone are sufficient, so the empty query safety
 		// check is not needed.
-		if hasRawQuery || hasFieldConditions {
+		if hasRawQuery || hasFilters {
 			return db
 		}
 		// No RawQuery and empty query: apply safety check
-		if !cfg.AllowEmpty {
+		if !opt.AllowEmpty {
 			logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("query is nil or empty, adding safety condition to prevent matching all records")
 			db.ins = db.ins.Where("1 = 0")
 			return db
@@ -279,8 +279,7 @@ func (db *database[M]) WithQuery(query M, config ...types.QueryConfig) types.Dat
 	val := reflect.ValueOf(query).Elem()
 	q := make(map[string]string)
 
-	structFieldToMap(db.ctx, typ, val, q, cfg.PresentFields)
-	// fmt.Println("------------- WithQuery", q)
+	structFieldToMap(db.ctx, typ, val, q, opt.PresentFields)
 
 	// CRITICAL SAFETY CHECK: Empty query conditions
 	//
@@ -295,17 +294,17 @@ func (db *database[M]) WithQuery(query M, config ...types.QueryConfig) types.Dat
 	//   - WithQuery(&KV{Key: ""})               → happens when removed slice is empty
 	//
 	// By default, empty queries (nil or zero value) are blocked by adding "WHERE 1 = 0" condition.
-	// To allow empty queries, use: WithQuery(nil, QueryConfig{AllowEmpty: true}) or
-	//                              WithQuery(&User{}, QueryConfig{AllowEmpty: true})
+	// To allow empty queries, use: WithQuery(nil, QueryOptions{AllowEmpty: true}) or
+	//                              WithQuery(&User{}, QueryOptions{AllowEmpty: true})
 	if len(q) == 0 {
-		// If RawQuery or field conditions are provided, they are already
+		// If RawQuery or filters are provided, they are already
 		// applied above and alone are sufficient, so the empty query safety
 		// check is not needed.
-		if hasRawQuery || hasFieldConditions {
+		if hasRawQuery || hasFilters {
 			return db
 		}
 		// No RawQuery and empty query: apply safety check
-		if !cfg.AllowEmpty {
+		if !opt.AllowEmpty {
 			logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("all query fields are empty, adding safety condition to prevent matching all records")
 			db.ins = db.ins.Where("1 = 0")
 			return db
@@ -315,7 +314,7 @@ func (db *database[M]) WithQuery(query M, config ...types.QueryConfig) types.Dat
 		return db
 	}
 
-	if cfg.FuzzyMatch {
+	if opt.FuzzyMatch {
 		// // Deprecated!
 		// for k, v := range q {
 		// 	// WARN: THE SQL STATEMENT MUST CONTAINS backticks ``.
@@ -328,7 +327,7 @@ func (db *database[M]) WithQuery(query M, config ...types.QueryConfig) types.Dat
 		//     SELECT count(*) FROM `assets` WHERE `category_level2_id` REGEXP '.*XS.*|.*NU.*'
 		hasValidCondition := false
 		isFirstCondition := true
-		if len(cfg.RawQuery) > 0 {
+		if len(opt.RawQuery) > 0 {
 			// RawQuery is already applied, no need to check empty query
 			isFirstCondition = false
 		}
@@ -356,14 +355,14 @@ func (db *database[M]) WithQuery(query M, config ...types.QueryConfig) types.Dat
 				}
 				regexpVal = strings.TrimPrefix(regexpVal, "|")
 				// db.db = db.db.Where(fmt.Sprintf("`%s` REGEXP ?", k), regexpVal)
-				if cfg.UseOr && !isFirstCondition {
+				if opt.Or && !isFirstCondition {
 					db.ins = db.ins.Or(fmt.Sprintf("%s %s ?", db.quoteIdent(k), db.regexpOperator()), regexpVal)
 				} else {
 					db.ins = db.ins.Where(fmt.Sprintf("%s %s ?", db.quoteIdent(k), db.regexpOperator()), regexpVal)
 				}
 			} else { // If the query string has only one value, using LIKE
 				// db.db = db.db.Where(fmt.Sprintf("`%s` LIKE ?", k), fmt.Sprintf("%%%v%%", v))
-				if cfg.UseOr && !isFirstCondition {
+				if opt.Or && !isFirstCondition {
 					db.ins = db.ins.Or(db.quoteIdent(k)+" LIKE ?", fmt.Sprintf("%%%v%%", v))
 				} else {
 					db.ins = db.ins.Where(db.quoteIdent(k)+" LIKE ?", fmt.Sprintf("%%%v%%", v))
@@ -374,10 +373,10 @@ func (db *database[M]) WithQuery(query M, config ...types.QueryConfig) types.Dat
 		// CRITICAL: Check if all query values are empty after filtering
 		// Even if query map is not empty, all values might be empty strings
 		// Example: &User{Name: "", Email: ""} has fields but all values are empty
-		// Field conditions applied earlier are real conditions, so they
+		// Filters applied earlier are real conditions, so they
 		// disable this safety check the same way RawQuery would.
-		if !hasValidCondition && !hasFieldConditions {
-			if !cfg.AllowEmpty {
+		if !hasValidCondition && !hasFilters {
+			if !opt.AllowEmpty {
 				logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("all query values are empty, adding safety condition to prevent matching all records")
 				db.ins = db.ins.Where("1 = 0")
 			} else {
@@ -402,7 +401,7 @@ func (db *database[M]) WithQuery(query M, config ...types.QueryConfig) types.Dat
 			}
 			hasValidCondition = true
 			// db.db = db.db.Where(fmt.Sprintf("`%s` IN (?)", k), items)
-			if cfg.UseOr && !isFirstCondition {
+			if opt.Or && !isFirstCondition {
 				db.ins = db.ins.Or(db.quoteIdent(k)+" IN ?", items)
 			} else {
 				db.ins = db.ins.Where(db.quoteIdent(k)+" IN ?", items)
@@ -412,10 +411,10 @@ func (db *database[M]) WithQuery(query M, config ...types.QueryConfig) types.Dat
 		// CRITICAL: Check if all query values are empty after filtering
 		// Even if query map is not empty, all values might be empty strings
 		// Example: &User{Name: "", Email: ""} has fields but all values are empty
-		// Field conditions applied earlier are real conditions, so they
+		// Filters applied earlier are real conditions, so they
 		// disable this safety check the same way RawQuery would.
-		if !hasValidCondition && !hasFieldConditions {
-			if !cfg.AllowEmpty {
+		if !hasValidCondition && !hasFilters {
+			if !opt.AllowEmpty {
 				logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("all query values are empty, adding safety condition to prevent matching all records")
 				db.ins = db.ins.Where("1 = 0")
 			} else {
@@ -426,76 +425,146 @@ func (db *database[M]) WithQuery(query M, config ...types.QueryConfig) types.Dat
 	return db
 }
 
-// applyFieldConditions appends field-level operator filters, each as an AND
-// condition with its value bound as a statement parameter. A condition with
-// an empty column or an operator the switch does not recognize fails closed
-// with "1 = 0": silently dropping it would widen the result set, which is
-// dangerous when the result feeds deletes or exports.
+// applyFilters appends field-level operator filters, each as an AND
+// condition with its value bound as a statement parameter. Every mismatch
+// fails closed with "1 = 0" instead of being dropped: silently dropping a
+// filter would widen the result set, which is dangerous when the result
+// feeds deletes or exports. That covers an empty column, an operator the
+// switch does not recognize, and a value whose type does not match the
+// operator (see the Filter type for the per-operator value contract).
 //
 // The caller must hold db.mu.
-func (db *database[M]) applyFieldConditions(conds []types.FieldCondition) {
-	for _, cond := range conds {
-		if len(cond.Column) == 0 {
-			logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("field condition has empty column, adding safety condition")
+func (db *database[M]) applyFilters(filters []types.Filter) {
+	for _, f := range filters {
+		if len(f.Column) == 0 {
+			logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("filter has empty column, adding safety condition")
 			db.ins = db.ins.Where("1 = 0")
 			continue
 		}
-		column := db.quoteIdent(cond.Column)
-		switch cond.Op {
+		column := db.quoteIdent(f.Column)
+		switch f.Op {
 		case types.FilterOpEq:
-			db.ins = db.ins.Where(column+" = ?", cond.Value)
+			db.applyScalarFilter(f, column+" = ?")
 		case types.FilterOpNe:
-			db.ins = db.ins.Where(column+" <> ?", cond.Value)
+			db.applyScalarFilter(f, column+" <> ?")
 		case types.FilterOpGt:
-			db.ins = db.ins.Where(column+" > ?", cond.Value)
+			db.applyScalarFilter(f, column+" > ?")
 		case types.FilterOpGte:
-			db.ins = db.ins.Where(column+" >= ?", cond.Value)
+			db.applyScalarFilter(f, column+" >= ?")
 		case types.FilterOpLt:
-			db.ins = db.ins.Where(column+" < ?", cond.Value)
+			db.applyScalarFilter(f, column+" < ?")
 		case types.FilterOpLte:
-			db.ins = db.ins.Where(column+" <= ?", cond.Value)
+			db.applyScalarFilter(f, column+" <= ?")
 		case types.FilterOpIn:
-			db.ins = db.ins.Where(column+" IN ?", strings.Split(cond.Value, ","))
+			db.applyListFilter(f, column+" IN ?")
 		case types.FilterOpNotIn:
-			db.ins = db.ins.Where(column+" NOT IN ?", strings.Split(cond.Value, ","))
+			db.applyListFilter(f, column+" NOT IN ?")
 		case types.FilterOpLike:
-			db.ins = db.ins.Where(column+" LIKE ?"+likeEscapeClause, "%"+escapeLikePattern(cond.Value)+"%")
+			db.applyPatternFilter(f, column+" LIKE ?"+likeEscapeClause, "%", "%")
 		case types.FilterOpNotLike:
-			db.ins = db.ins.Where(column+" NOT LIKE ?"+likeEscapeClause, "%"+escapeLikePattern(cond.Value)+"%")
+			db.applyPatternFilter(f, column+" NOT LIKE ?"+likeEscapeClause, "%", "%")
 		case types.FilterOpStartsWith:
-			db.ins = db.ins.Where(column+" LIKE ?"+likeEscapeClause, escapeLikePattern(cond.Value)+"%")
+			db.applyPatternFilter(f, column+" LIKE ?"+likeEscapeClause, "", "%")
 		case types.FilterOpEndsWith:
-			db.ins = db.ins.Where(column+" LIKE ?"+likeEscapeClause, "%"+escapeLikePattern(cond.Value))
+			db.applyPatternFilter(f, column+" LIKE ?"+likeEscapeClause, "%", "")
 		case types.FilterOpIsNull:
-			if cond.Value == "1" {
+			b, ok := f.Value.(bool)
+			if !ok {
+				db.failClosedFilter(f, "expects a bool value")
+				continue
+			}
+			if b {
 				db.ins = db.ins.Where(column + " IS NULL")
 			} else {
 				db.ins = db.ins.Where(column + " IS NOT NULL")
 			}
 		case types.FilterOpRegex:
-			db.ins = db.ins.Where(column+" "+db.regexpOperator()+" ?", cond.Value)
+			db.applyStringFilter(f, column+" "+db.regexpOperator()+" ?")
 		case types.FilterOpNotRegex:
-			db.ins = db.ins.Where("NOT ("+column+" "+db.regexpOperator()+" ?)", cond.Value)
+			db.applyStringFilter(f, "NOT ("+column+" "+db.regexpOperator()+" ?)")
 		case types.FilterOpJSONContains:
 			// datatypes handles the dialect split: JSON_CONTAINS on MySQL and
 			// a json_each EXISTS subquery on SQLite. The column is passed
 			// unquoted because the expression quotes it itself.
-			db.ins = db.ins.Where(datatypes.JSONArrayQuery(cond.Column).Contains(cond.Value))
+			s, ok := f.Value.(string)
+			if !ok {
+				db.failClosedFilter(f, "expects a string value")
+				continue
+			}
+			db.ins = db.ins.Where(datatypes.JSONArrayQuery(f.Column).Contains(s))
 		default:
-			logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("unknown field condition operator %q on column %q, adding safety condition", cond.Op, cond.Column)
-			db.ins = db.ins.Where("1 = 0")
+			db.failClosedFilter(f, "is unknown")
 		}
 	}
 }
 
-// likeEscapeClause declares the LIKE escape character used by field
-// conditions. The pipe is chosen over the conventional backslash because
+// failClosedFilter records why a filter cannot be applied and narrows the
+// query to an empty result instead of widening it.
+func (db *database[M]) failClosedFilter(f types.Filter, msg string) {
+	logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("filter operator %q on column %q %s, adding safety condition", f.Op, f.Column, msg)
+	db.ins = db.ins.Where("1 = 0")
+}
+
+// applyScalarFilter binds a comparison filter whose value must be a scalar;
+// nil, slice, and array values fail closed.
+func (db *database[M]) applyScalarFilter(f types.Filter, clause string) {
+	if f.Value == nil {
+		db.failClosedFilter(f, "expects a scalar value")
+		return
+	}
+	if k := reflect.ValueOf(f.Value).Kind(); k == reflect.Slice || k == reflect.Array {
+		db.failClosedFilter(f, "expects a scalar value")
+		return
+	}
+	db.ins = db.ins.Where(clause, f.Value)
+}
+
+// applyListFilter binds a set-membership filter whose value must be a slice
+// or an array; anything else, including a comma-separated string, fails
+// closed. An empty slice keeps the SQL list semantics: IN matches nothing,
+// and the result never widens.
+func (db *database[M]) applyListFilter(f types.Filter, clause string) {
+	if f.Value == nil {
+		db.failClosedFilter(f, "expects a slice value")
+		return
+	}
+	if k := reflect.ValueOf(f.Value).Kind(); k != reflect.Slice && k != reflect.Array {
+		db.failClosedFilter(f, "expects a slice value")
+		return
+	}
+	db.ins = db.ins.Where(clause, f.Value)
+}
+
+// applyPatternFilter binds a LIKE-family filter; the value must be a string
+// and is escaped so the stored value matches literally.
+func (db *database[M]) applyPatternFilter(f types.Filter, clause, prefix, suffix string) {
+	s, ok := f.Value.(string)
+	if !ok {
+		db.failClosedFilter(f, "expects a string value")
+		return
+	}
+	db.ins = db.ins.Where(clause, prefix+escapeLikePattern(s)+suffix)
+}
+
+// applyStringFilter binds a filter whose value must be a plain string bound
+// as-is (the regex operators).
+func (db *database[M]) applyStringFilter(f types.Filter, clause string) {
+	s, ok := f.Value.(string)
+	if !ok {
+		db.failClosedFilter(f, "expects a string value")
+		return
+	}
+	db.ins = db.ins.Where(clause, s)
+}
+
+// likeEscapeClause declares the LIKE escape character used by filters.
+// The pipe is chosen over the conventional backslash because
 // backslash inside a SQL string literal is itself an escape character in
 // MySQL but a plain character in SQLite/PostgreSQL, so no single spelling of
 // ESCAPE '\' parses the same way across the supported dialects.
 const likeEscapeClause = " ESCAPE '|'"
 
-// likePatternEscaper rewrites a field condition value into a literal LIKE
+// likePatternEscaper rewrites a filter value into a literal LIKE
 // pattern fragment: client values are literals, not pattern language, so the
 // wildcards and the escape character itself are escaped.
 var likePatternEscaper = strings.NewReplacer("|", "||", "%", `|%`, "_", `|_`)
@@ -986,7 +1055,7 @@ func (db *database[M]) WithExpand(expand []string, order ...string) types.Databa
 //
 // Behavior:
 //   - Multiple values for the same field are combined with OR logic (exclude if matches any value)
-//   - Multiple fields add separate NOT conditions, so a record is excluded if it matches any excluded field condition
+//   - Multiple fields add separate NOT conditions, so a record is excluded if it matches any excluded filter
 //   - Empty exclude map has no effect
 //
 // Example:

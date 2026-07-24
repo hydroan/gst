@@ -61,9 +61,9 @@ var listCursorQueryKeys = map[string]struct{}{
 // rejecting framework query keys the model has not opted in to via
 // model.Query, model.UnsafeQuery, model.Pagination, or model.Cursor.
 // Field-condition keys ("field[op]") are excluded before decoding: they are
-// parsed and validated separately by parseFieldConditionsQuery.
+// parsed and validated separately by parseFiltersQuery.
 func decodeListQuery[M types.Model](m M, query map[string][]string) error {
-	query = stripFieldConditionKeys(query)
+	query = stripFilterKeys(query)
 	if !modelregistry.IsQueryable(m) {
 		if err := rejectListQueryKeys(query, listQueryKeys); err != nil {
 			return err
@@ -151,7 +151,7 @@ func presentQueryFields(query map[string][]string) map[string]struct{} {
 		if strings.HasPrefix(key, "_") {
 			continue
 		}
-		if isFieldConditionKey(key) {
+		if isFilterKey(key) {
 			continue
 		}
 		if len(strings.Join(values, "")) == 0 {
@@ -167,17 +167,17 @@ func presentQueryFields(query map[string][]string) map[string]struct{} {
 // fanning out unbounded database work.
 const maxExpandDepth = 10
 
-// isFieldConditionKey reports whether a query key carries a field-level
+// isFilterKey reports whether a query key carries a field-level
 // operator filter ("field[op]"). Keys in the framework "_" namespace never
 // count: an underscore key with brackets stays a framework parameter and is
 // rejected by the regular query decoding path.
-func isFieldConditionKey(key string) bool {
+func isFilterKey(key string) bool {
 	return !strings.HasPrefix(key, "_") && strings.ContainsRune(key, '[')
 }
 
 // bareTimeFilterColumns are the framework-managed Base/AutoBase timestamp
 // columns. They carry query:"-" on the model, so their bare keys are not
-// schema-decodable and are handled by parseFieldConditionsQuery instead: the
+// schema-decodable and are handled by parseFiltersQuery instead: the
 // bare key is an exact-match (eq) filter, keeping the "bare name filters
 // exactly" contract uniform across every documented parameter.
 var bareTimeFilterColumns = map[string]struct{}{
@@ -185,23 +185,23 @@ var bareTimeFilterColumns = map[string]struct{}{
 	"updated_at": {},
 }
 
-// isFieldConditionQueryKey reports whether parseFieldConditionsQuery owns the
+// isFilterQueryKey reports whether parseFiltersQuery owns the
 // key: either an operator filter key or a bare framework timestamp key.
-func isFieldConditionQueryKey(key string) bool {
-	if isFieldConditionKey(key) {
+func isFilterQueryKey(key string) bool {
+	if isFilterKey(key) {
 		return true
 	}
 	_, ok := bareTimeFilterColumns[key]
 	return ok
 }
 
-// stripFieldConditionKeys returns a copy of the query without the keys owned
-// by parseFieldConditionsQuery, so gorilla/schema decoding of the model's own
+// stripFilterKeys returns a copy of the query without the keys owned
+// by parseFiltersQuery, so gorilla/schema decoding of the model's own
 // filter fields never sees them.
-func stripFieldConditionKeys(query map[string][]string) map[string][]string {
+func stripFilterKeys(query map[string][]string) map[string][]string {
 	filtered := make(map[string][]string, len(query))
 	for key, values := range query {
-		if isFieldConditionQueryKey(key) {
+		if isFilterQueryKey(key) {
 			continue
 		}
 		filtered[key] = values
@@ -209,7 +209,7 @@ func stripFieldConditionKeys(query map[string][]string) map[string][]string {
 	return filtered
 }
 
-// parseFieldConditionsQuery extracts field-level operator filters from URL
+// parseFiltersQuery extracts field-level operator filters from URL
 // query keys of the form "field[op]=value", e.g. "age[gt]=20" or
 // "remark[like]=hello", plus the bare framework timestamp keys
 // ("created_at", "updated_at"), which act as exact-match (eq) filters.
@@ -217,12 +217,12 @@ func stripFieldConditionKeys(query map[string][]string) map[string][]string {
 // normalization) to a queryable column of the model, and op must be a known
 // types.FilterOp; anything else is rejected so a mistyped filter can never
 // silently widen the result set. Empty values mean "not filtering" and are
-// skipped. Field conditions require the model to embed model.Query, and the
+// skipped. Filters require the model to embed model.Query, and the
 // returned conditions are sorted by key for deterministic SQL.
-func parseFieldConditionsQuery(m types.Model, query map[string][]string) ([]types.FieldCondition, error) {
+func parseFiltersQuery(m types.Model, query map[string][]string) ([]types.Filter, error) {
 	keys := make([]string, 0)
 	for key := range query {
-		if isFieldConditionQueryKey(key) {
+		if isFilterQueryKey(key) {
 			keys = append(keys, key)
 		}
 	}
@@ -236,17 +236,17 @@ func parseFieldConditionsQuery(m types.Model, query map[string][]string) ([]type
 	sort.Strings(keys)
 
 	columns := cachedQueryableColumns(reflect.TypeOf(m).Elem())
-	conds := make([]types.FieldCondition, 0, len(keys))
+	conds := make([]types.Filter, 0, len(keys))
 	for _, key := range keys {
 		var field string
 		var op types.FilterOp
-		if _, bare := bareTimeFilterColumns[key]; bare && !isFieldConditionKey(key) {
+		if _, bare := bareTimeFilterColumns[key]; bare && !isFilterKey(key) {
 			// The bare framework timestamp key is an exact-match filter.
 			field, op = key, types.FilterOpEq
 		} else {
 			var opToken string
 			var ok bool
-			field, opToken, ok = splitFieldConditionKey(key)
+			field, opToken, ok = splitFilterKey(key)
 			if !ok {
 				return nil, errors.Newf("invalid field filter %q: expect \"field[op]=value\"", key)
 			}
@@ -259,20 +259,20 @@ func parseFieldConditionsQuery(m types.Model, query map[string][]string) ([]type
 		if !ok {
 			return nil, errors.Newf("invalid field filter %q: unknown field %q", key, field)
 		}
-		value := query[key][0]
-		if len(value) == 0 {
+		raw := query[key][0]
+		if len(raw) == 0 {
 			continue
 		}
-		value, err := normalizeFieldConditionValue(columnTyp, op, value)
+		value, err := normalizeFilterValue(columnTyp, op, raw)
 		if err != nil {
 			return nil, errors.Wrapf(err, "invalid field filter %q", key)
 		}
-		conds = append(conds, types.FieldCondition{Column: column, Op: op, Value: value})
+		conds = append(conds, types.Filter{Column: column, Op: op, Value: value})
 	}
 	if len(conds) == 0 {
 		return nil, nil
 	}
-	// Field conditions are always AND-combined, but WithQuery builds the OR
+	// Filters are always AND-combined, but WithQuery builds the OR
 	// chain flat and cannot express (a OR b) AND cond; allowing the mix would
 	// let a condition escape the OR group and silently widen the result set,
 	// so the combination fails closed instead.
@@ -284,9 +284,9 @@ func parseFieldConditionsQuery(m types.Model, query map[string][]string) ([]type
 	return conds, nil
 }
 
-// splitFieldConditionKey splits "field[op]" into its field and operator
+// splitFilterKey splits "field[op]" into its field and operator
 // tokens, reporting whether the key has exactly that shape.
-func splitFieldConditionKey(key string) (field, op string, ok bool) {
+func splitFilterKey(key string) (field, op string, ok bool) {
 	open := strings.IndexByte(key, '[')
 	if open <= 0 || !strings.HasSuffix(key, "]") {
 		return "", "", false
@@ -298,11 +298,11 @@ func splitFieldConditionKey(key string) (field, op string, ok bool) {
 	return field, op, true
 }
 
-// fieldConditionTimeLayout is the canonical layout a time-typed field
+// filterTimeLayout is the canonical layout a time-typed field
 // condition value is normalized to before it is bound as a statement
 // parameter. It preserves any sub-second precision produced by whole-day
 // upper-bound extension.
-const fieldConditionTimeLayout = "2006-01-02 15:04:05.999999999"
+const filterTimeLayout = "2006-01-02 15:04:05.999999999"
 
 // baseLiftedColumns are the Base/AutoBase struct fields exposed as filterable
 // columns, mirroring database.structFieldToMap plus the framework-managed
@@ -384,36 +384,37 @@ func queryableColumns(typ reflect.Type, cols ...map[string]reflect.Type) map[str
 // timeType is the reflect type time-typed columns are recognized by.
 var timeType = reflect.TypeFor[time.Time]()
 
-// normalizeFieldConditionValue validates a field condition value against the
-// column's Go type and rewrites it into the canonical form bound to the
-// statement, so a malformed value is rejected with an error instead of being
-// passed to the database where implicit conversion could silently match the
-// wrong rows.
+// normalizeFilterValue validates a filter value against the
+// column's Go type and rewrites it into the canonical typed value bound to
+// the statement, so a malformed value is rejected with an error instead of
+// being passed to the database where implicit conversion could silently
+// match the wrong rows.
 //
-//   - isnull applies to any column and requires a boolean value, normalized
-//     to 1/0; it is handled before the type dispatch below.
+//   - isnull applies to any column and requires a boolean value, carried as
+//     a bool; it is handled before the type dispatch below.
 //   - time columns accept the comparison operators only; the value is parsed
 //     by parseQueryTime and rendered in the server's local zone. A date-only
 //     value extends to the end of the day when it forms an upper inclusive
 //     (lte) or lower exclusive (gt) bound, so the bound covers the whole day.
-//   - bool columns accept eq/ne with a boolean value, normalized to 1/0 to
-//     match how exact model filters store bools.
+//     The canonical string form is kept on purpose: binding time.Time would
+//     let the driver re-render the value in its own location, while the
+//     string pins the wall-clock time the parser resolved.
+//   - bool columns accept eq/ne with a boolean value, carried as a bool.
 //   - numeric columns require numeric values; in/notin validate every
 //     comma-separated member.
-//   - string and other columns pass the value through unchanged.
-func normalizeFieldConditionValue(columnTyp reflect.Type, op types.FilterOp, value string) (string, error) {
+//   - in/notin values split on commas here, so the members travel as a real
+//     slice: the URL list encoding never reaches the database layer.
+//   - string and other scalar values pass through unchanged.
+func normalizeFilterValue(columnTyp reflect.Type, op types.FilterOp, value string) (any, error) {
 	// isnull is the only operator whose value type is independent of the
 	// column type: it always carries a boolean and applies to any nullable
 	// column, including time columns the comparison gating below would block.
 	if op == types.FilterOpIsNull {
 		b, err := strconv.ParseBool(value)
 		if err != nil {
-			return "", errors.Newf("isnull expects a boolean value, got %q", value)
+			return nil, errors.Newf("isnull expects a boolean value, got %q", value)
 		}
-		if b {
-			return "1", nil
-		}
-		return "0", nil
+		return b, nil
 	}
 	switch {
 	case columnTyp == timeType:
@@ -422,45 +423,52 @@ func normalizeFieldConditionValue(columnTyp reflect.Type, op types.FilterOp, val
 			end := op == types.FilterOpLte || op == types.FilterOpGt
 			t, err := parseQueryTime(value, end)
 			if err != nil {
-				return "", err
+				return nil, err
 			}
-			return t.In(time.Local).Format(fieldConditionTimeLayout), nil
+			return t.In(time.Local).Format(filterTimeLayout), nil
 		default:
-			return "", errors.Newf("operator %q is not supported on a time field", op)
+			return nil, errors.Newf("operator %q is not supported on a time field", op)
 		}
 	case columnTyp.Kind() == reflect.Bool:
 		switch op {
 		case types.FilterOpEq, types.FilterOpNe:
 			b, err := strconv.ParseBool(value)
 			if err != nil {
-				return "", errors.Newf("expect a boolean value, got %q", value)
+				return nil, errors.Newf("expect a boolean value, got %q", value)
 			}
-			if b {
-				return "1", nil
-			}
-			return "0", nil
+			return b, nil
 		default:
-			return "", errors.Newf("operator %q is not supported on a bool field", op)
+			return nil, errors.Newf("operator %q is not supported on a bool field", op)
 		}
 	case isNumericKind(columnTyp.Kind()):
 		switch op {
 		case types.FilterOpIn, types.FilterOpNotIn:
-			for item := range strings.SplitSeq(value, ",") {
+			items := strings.Split(value, ",")
+			for _, item := range items {
 				if err := validateNumericValue(columnTyp.Kind(), item); err != nil {
-					return "", err
+					return nil, err
 				}
 			}
+			return items, nil
 		case types.FilterOpLike, types.FilterOpNotLike, types.FilterOpStartsWith, types.FilterOpEndsWith:
 			// Substring matching relies on the database's string rendering of
 			// the number; the pattern itself is not numeric.
+			return value, nil
 		default:
 			if err := validateNumericValue(columnTyp.Kind(), value); err != nil {
-				return "", err
+				return nil, err
 			}
+			return value, nil
 		}
-		return value, nil
 	default:
-		return value, nil
+		switch op {
+		case types.FilterOpIn, types.FilterOpNotIn:
+			// The comma split moves the URL list encoding out of the database
+			// layer: from here on the members travel as a real slice.
+			return strings.Split(value, ","), nil
+		default:
+			return value, nil
+		}
 	}
 }
 
@@ -519,7 +527,7 @@ type timeQueryLayout struct {
 }
 
 // timeQueryLayouts are the zone-less layouts tried in order when parsing a
-// time-typed field condition value; they are interpreted in the server's
+// time-typed filter value; they are interpreted in the server's
 // local zone. RFC 3339 values with an explicit offset and all-digit unix
 // timestamps are handled separately in parseQueryTime.
 var timeQueryLayouts = []timeQueryLayout{

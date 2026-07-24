@@ -83,7 +83,7 @@ func loadAdminUserEmailMap(ctx context.Context, userIDs []string) (map[string]*m
 
 	identities := make([]*modeliamaccount.EmailIdentity, 0, len(userIDs))
 	if err := database.Database[*modeliamaccount.EmailIdentity](ctx).
-		WithQuery(nil, types.QueryConfig{RawQuery: "user_id IN ?", RawQueryArgs: []any{userIDs}}).
+		WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.FilterIn("user_id", userIDs)}}).
 		List(&identities); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
 			return items, nil
@@ -111,7 +111,7 @@ func loadAdminUserCredentialMap(ctx context.Context, userIDs []string) (map[stri
 
 	credentials := make([]*modeliamaccount.PasswordCredential, 0, len(userIDs))
 	if err := database.Database[*modeliamaccount.PasswordCredential](ctx).
-		WithQuery(nil, types.QueryConfig{RawQuery: "user_id IN ?", RawQueryArgs: []any{userIDs}}).
+		WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.FilterIn("user_id", userIDs)}}).
 		List(&credentials); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
 			return items, nil

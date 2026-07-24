@@ -8,10 +8,10 @@ import (
 )
 
 func QueryModelsMap[M types.Model](ctx context.Context, keyFunc func(M) string, queryFunc func() M) (map[string]M, error) {
-	return QueryModelsMapWithConfig[M](ctx, keyFunc, queryFunc, types.QueryConfig{AllowEmpty: true})
+	return QueryModelsMapWithOptions[M](ctx, keyFunc, queryFunc, types.QueryOptions{AllowEmpty: true})
 }
 
-func QueryModelsMapWithConfig[M types.Model](ctx context.Context, keyFunc func(M) string, queryFunc func() M, config types.QueryConfig) (map[string]M, error) {
+func QueryModelsMapWithOptions[M types.Model](ctx context.Context, keyFunc func(M) string, queryFunc func() M, opts types.QueryOptions) (map[string]M, error) {
 	if keyFunc == nil {
 		keyFunc = func(m M) string {
 			return m.GetID()
@@ -26,7 +26,7 @@ func QueryModelsMapWithConfig[M types.Model](ctx context.Context, keyFunc func(M
 
 	objs := make([]M, 0)
 	if err := database.Database[M](ctx).
-		WithQuery(queryFunc(), config).
+		WithQuery(queryFunc(), opts).
 		List(&objs); err != nil {
 		return nil, err
 	}

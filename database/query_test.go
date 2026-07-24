@@ -445,7 +445,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 
 		// Test FuzzyMatch=false (default, exact match): should return 0 records for partial match
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: "user"}, types.QueryConfig{
+			WithQuery(&TestUser{Name: "user"}, types.QueryOptions{
 				FuzzyMatch: false,
 			}).
 			List(&users))
@@ -455,7 +455,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Should return all 3 records (user1, user2, user3 all contain "user")
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: "user"}, types.QueryConfig{
+			WithQuery(&TestUser{Name: "user"}, types.QueryOptions{
 				FuzzyMatch: true,
 			}).
 			List(&users))
@@ -500,7 +500,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Should return all 3 records (all emails contain "example.com")
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Email: "example.com"}, types.QueryConfig{
+			WithQuery(&TestUser{Email: "example.com"}, types.QueryOptions{
 				FuzzyMatch: true,
 			}).
 			List(&users))
@@ -545,7 +545,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Query: Name="user1" should return 1 record (u1)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: "user1"}, types.QueryConfig{
+			WithQuery(&TestUser{Name: "user1"}, types.QueryOptions{
 				FuzzyMatch: true,
 			}).
 			List(&users))
@@ -564,7 +564,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Query: Name="user1,user2" should return 2 records (u1 and u2)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: strings.Join([]string{u1.Name, u2.Name}, ",")}, types.QueryConfig{
+			WithQuery(&TestUser{Name: strings.Join([]string{u1.Name, u2.Name}, ",")}, types.QueryOptions{
 				FuzzyMatch: true,
 			}).
 			List(&users))
@@ -591,7 +591,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Query: Name="user,ser" should return all 3 records (all contain "user")
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: "user,ser"}, types.QueryConfig{
+			WithQuery(&TestUser{Name: "user,ser"}, types.QueryOptions{
 				FuzzyMatch: true,
 			}).
 			List(&users))
@@ -614,7 +614,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test FuzzyMatch=true with no matching value: should return 0 records
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: "nonexistent"}, types.QueryConfig{
+			WithQuery(&TestUser{Name: "nonexistent"}, types.QueryOptions{
 				FuzzyMatch: true,
 			}).
 			List(&users))
@@ -623,7 +623,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test FuzzyMatch=true with empty string: should return 0 records (empty query blocked)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: ""}, types.QueryConfig{
+			WithQuery(&TestUser{Name: ""}, types.QueryOptions{
 				FuzzyMatch: true,
 			}).
 			List(&users))
@@ -633,7 +633,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Query: Name="user" AND Email="example" should return all 3 records
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: "user", Email: "example"}, types.QueryConfig{
+			WithQuery(&TestUser{Name: "user", Email: "example"}, types.QueryOptions{
 				FuzzyMatch: true,
 			}).
 			List(&users))
@@ -657,7 +657,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Query: Name="user1,,user2" should return 2 records (u1 and u2), empty strings should be ignored
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: "user1,,user2"}, types.QueryConfig{
+			WithQuery(&TestUser{Name: "user1,,user2"}, types.QueryOptions{
 				FuzzyMatch: true,
 			}).
 			List(&users))
@@ -683,7 +683,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test FuzzyMatch=true with partial match at start: Name="1" (matches "user1")
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: "1"}, types.QueryConfig{
+			WithQuery(&TestUser{Name: "1"}, types.QueryOptions{
 				FuzzyMatch: true,
 			}).
 			List(&users))
@@ -694,7 +694,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test FuzzyMatch=true with partial match in middle: Name="ser" (matches all users)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: "ser"}, types.QueryConfig{
+			WithQuery(&TestUser{Name: "ser"}, types.QueryOptions{
 				FuzzyMatch: true,
 			}).
 			List(&users))
@@ -717,7 +717,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test FuzzyMatch=true with partial match at end: Name="user" (matches all users)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: "user"}, types.QueryConfig{
+			WithQuery(&TestUser{Name: "user"}, types.QueryOptions{
 				FuzzyMatch: true,
 			}).
 			List(&users))
@@ -726,7 +726,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test FuzzyMatch=true with email partial match: Email="@example" (matches all emails)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Email: "@example"}, types.QueryConfig{
+			WithQuery(&TestUser{Email: "@example"}, types.QueryOptions{
 				FuzzyMatch: true,
 			}).
 			List(&users))
@@ -750,7 +750,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Query: Name="user1,user2" with special regex chars should work correctly
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: strings.Join([]string{u1.Name, u2.Name}, ",")}, types.QueryConfig{
+			WithQuery(&TestUser{Name: strings.Join([]string{u1.Name, u2.Name}, ",")}, types.QueryOptions{
 				FuzzyMatch: true,
 			}).
 			List(&users))
@@ -771,7 +771,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Should return 2 records (u1 and u3)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: strings.Join([]string{u1.Name, u3.Name}, ",")}, types.QueryConfig{
+			WithQuery(&TestUser{Name: strings.Join([]string{u1.Name, u3.Name}, ",")}, types.QueryOptions{
 				FuzzyMatch: true,
 			}).
 			List(&users))
@@ -795,23 +795,23 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test FuzzyMatch=true with AllowEmpty: empty query should return all records
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{}, types.QueryConfig{
+			WithQuery(&TestUser{}, types.QueryOptions{
 				FuzzyMatch: true,
 				AllowEmpty: true,
 			}).
 			List(&users))
 		require.Len(t, users, 3, "FuzzyMatch with AllowEmpty should return all records")
 
-		// Test FuzzyMatch=true with UseOr: Name="user1" OR Email="user2@example.com"
+		// Test FuzzyMatch=true with Or: Name="user1" OR Email="user2@example.com"
 		// Should return u1 (matches Name) and u2 (matches Email)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: u1.Name, Email: u2.Email}, types.QueryConfig{
+			WithQuery(&TestUser{Name: u1.Name, Email: u2.Email}, types.QueryOptions{
 				FuzzyMatch: true,
-				UseOr:      true,
+				Or:         true,
 			}).
 			List(&users))
-		require.Len(t, users, 2, "FuzzyMatch with UseOr should work correctly")
+		require.Len(t, users, 2, "FuzzyMatch with Or should work correctly")
 		foundU1, foundU2 = false, false
 		for _, u := range users {
 			if u.ID == u1.ID {
@@ -831,7 +831,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test FuzzyMatch=true with single field and empty string value (should be blocked)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: "", Email: "example"}, types.QueryConfig{
+			WithQuery(&TestUser{Name: "", Email: "example"}, types.QueryOptions{
 				FuzzyMatch: true,
 			}).
 			List(&users))
@@ -840,7 +840,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test FuzzyMatch=false explicitly (should be same as default)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: "user"}, types.QueryConfig{
+			WithQuery(&TestUser{Name: "user"}, types.QueryOptions{
 				FuzzyMatch: false,
 			}).
 			List(&users))
@@ -870,7 +870,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test nil query with AllowEmpty=true (should return all records)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{AllowEmpty: true}).
+			WithQuery(nil, types.QueryOptions{AllowEmpty: true}).
 			List(&users))
 		require.Len(t, users, 3)
 		var foundU1, foundU2, foundU3 bool
@@ -912,7 +912,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test empty struct with AllowEmpty=true (should return all records)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{}, types.QueryConfig{AllowEmpty: true}).
+			WithQuery(&TestUser{}, types.QueryOptions{AllowEmpty: true}).
 			List(&users))
 		require.Len(t, users, 3)
 		foundU1, foundU2, foundU3 = false, false, false
@@ -934,7 +934,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// This tests the second check point with AllowEmpty=true
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: "", Email: ""}, types.QueryConfig{AllowEmpty: true}).
+			WithQuery(&TestUser{Name: "", Email: ""}, types.QueryOptions{AllowEmpty: true}).
 			List(&users))
 		require.Len(t, users, 3, "query with all empty string fields should return all records when AllowEmpty=true")
 		foundU1, foundU2, foundU3 = false, false, false
@@ -967,27 +967,27 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test AllowEmpty with FuzzyMatch: should allow empty query when both are enabled
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{}, types.QueryConfig{
+			WithQuery(&TestUser{}, types.QueryOptions{
 				AllowEmpty: true,
 				FuzzyMatch: true,
 			}).
 			List(&users))
 		require.Len(t, users, 3, "AllowEmpty should work with FuzzyMatch")
 
-		// Test AllowEmpty with UseOr: should allow empty query when both are enabled
+		// Test AllowEmpty with Or: should allow empty query when both are enabled
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{}, types.QueryConfig{
+			WithQuery(&TestUser{}, types.QueryOptions{
 				AllowEmpty: true,
-				UseOr:      true,
+				Or:         true,
 			}).
 			List(&users))
-		require.Len(t, users, 3, "AllowEmpty should work with UseOr")
+		require.Len(t, users, 3, "AllowEmpty should work with Or")
 
 		// Test AllowEmpty=false explicitly (should be same as default)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{AllowEmpty: false}).
+			WithQuery(nil, types.QueryOptions{AllowEmpty: false}).
 			List(&users))
 		require.Empty(t, users, "AllowEmpty=false should block empty queries")
 	})
@@ -1009,7 +1009,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// With presence the zero value becomes a regular condition.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Age: 0}, types.QueryConfig{PresentFields: map[string]struct{}{"age": {}}}).
+			WithQuery(&TestUser{Age: 0}, types.QueryOptions{PresentFields: map[string]struct{}{"age": {}}}).
 			List(&users))
 		require.Len(t, users, 1, "an explicitly provided zero value should filter records")
 		require.Equal(t, zeroAgeUser.ID, users[0].ID)
@@ -1018,43 +1018,43 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// combine with AND logic as usual.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: zeroAgeUser.Name, Age: 0}, types.QueryConfig{PresentFields: map[string]struct{}{"age": {}}}).
+			WithQuery(&TestUser{Name: zeroAgeUser.Name, Age: 0}, types.QueryOptions{PresentFields: map[string]struct{}{"age": {}}}).
 			List(&users))
 		require.Len(t, users, 1)
 		require.Equal(t, zeroAgeUser.ID, users[0].ID)
 	})
 
-	t.Run("UseOr", func(t *testing.T) {
+	t.Run("Or", func(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
 		users := make([]*TestUser, 0)
 
-		// Test UseOr=false (default, AND logic): query with multiple fields should return records matching ALL conditions
+		// Test Or=false (default, AND logic): query with multiple fields should return records matching ALL conditions
 		// u1: Name="user1", Age=18
 		// u2: Name="user2", Age=19
 		// u3: Name="user3", Age=20
 		// Query: Name="user1" AND Age=19 should return 0 records (no user matches both)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: u1.Name, Age: u2.Age}, types.QueryConfig{UseOr: false}).
+			WithQuery(&TestUser{Name: u1.Name, Age: u2.Age}, types.QueryOptions{Or: false}).
 			List(&users))
 		require.Empty(t, users)
 
-		// Test UseOr=false (default, AND logic): query with multiple fields matching same record
+		// Test Or=false (default, AND logic): query with multiple fields matching same record
 		// Query: Name="user1" AND Age=18 should return 1 record (u1 matches both)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: u1.Name, Age: u1.Age}, types.QueryConfig{UseOr: false}).
+			WithQuery(&TestUser{Name: u1.Name, Age: u1.Age}, types.QueryOptions{Or: false}).
 			List(&users))
 		require.Len(t, users, 1)
 		require.Equal(t, u1.ID, users[0].ID)
 		require.Equal(t, u1.Name, users[0].Name)
 		require.Equal(t, u1.Age, users[0].Age)
 
-		// Test UseOr=true (OR logic): query with multiple fields should return records matching ANY condition
+		// Test Or=true (OR logic): query with multiple fields should return records matching ANY condition
 		// Query: Name="user1" OR Age=19 should return 2 records (u1 matches Name, u2 matches Age)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: u1.Name, Age: u2.Age}, types.QueryConfig{UseOr: true}).
+			WithQuery(&TestUser{Name: u1.Name, Age: u2.Age}, types.QueryOptions{Or: true}).
 			List(&users))
 		require.Len(t, users, 2)
 		var foundU1, foundU2 bool
@@ -1073,11 +1073,11 @@ func TestDatabaseWithQuery(t *testing.T) {
 		require.True(t, foundU1, "should find u1")
 		require.True(t, foundU2, "should find u2")
 
-		// Test UseOr=true with three fields: Name="user1" OR Email="user2@example.com" OR Age=20
+		// Test Or=true with three fields: Name="user1" OR Email="user2@example.com" OR Age=20
 		// Should return all 3 records (u1 matches Name, u2 matches Email, u3 matches Age)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: u1.Name, Email: u2.Email, Age: u3.Age}, types.QueryConfig{UseOr: true}).
+			WithQuery(&TestUser{Name: u1.Name, Email: u2.Email, Age: u3.Age}, types.QueryOptions{Or: true}).
 			List(&users))
 		require.Len(t, users, 3)
 		var foundU1_2, foundU2_2, foundU3 bool
@@ -1104,21 +1104,21 @@ func TestDatabaseWithQuery(t *testing.T) {
 		require.True(t, foundU2_2, "should find u2")
 		require.True(t, foundU3, "should find u3")
 
-		// Test UseOr=true with single field (should work same as UseOr=false for single field)
+		// Test Or=true with single field (should work same as Or=false for single field)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: u1.Name}, types.QueryConfig{UseOr: true}).
+			WithQuery(&TestUser{Name: u1.Name}, types.QueryOptions{Or: true}).
 			List(&users))
 		require.Len(t, users, 1)
 		require.Equal(t, u1.ID, users[0].ID)
 		require.Equal(t, u1.Name, users[0].Name)
 
-		// Test UseOr=true with FuzzyMatch: Name LIKE "%user%" OR Email LIKE "%example%"
+		// Test Or=true with FuzzyMatch: Name LIKE "%user%" OR Email LIKE "%example%"
 		// Should return all 3 records (all match both patterns)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: "user", Email: "example"}, types.QueryConfig{
-				UseOr:      true,
+			WithQuery(&TestUser{Name: "user", Email: "example"}, types.QueryOptions{
+				Or:         true,
 				FuzzyMatch: true,
 			}).
 			List(&users))
@@ -1156,7 +1156,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test RawQuery with nil query: age > 18
 		// Should return u2 (age=19) and u3 (age=20)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
+			WithQuery(nil, types.QueryOptions{
 				RawQuery:     "age > ?",
 				RawQueryArgs: []any{18},
 			}).
@@ -1192,7 +1192,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Should return u2 (age=19) and u3 (age=20)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{}, types.QueryConfig{
+			WithQuery(&TestUser{}, types.QueryOptions{
 				RawQuery:     "age >= ?",
 				RawQueryArgs: []any{19},
 			}).
@@ -1226,7 +1226,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Should return u2 (age=19)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
+			WithQuery(nil, types.QueryOptions{
 				RawQuery:     "age BETWEEN ? AND ?",
 				RawQueryArgs: []any{19, 19},
 			}).
@@ -1245,7 +1245,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Should return u1 (name="user1")
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
+			WithQuery(nil, types.QueryOptions{
 				RawQuery:     "name = ?",
 				RawQueryArgs: []any{u1.Name},
 			}).
@@ -1264,7 +1264,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Should return u1 (name="user1") and u2 (age=19)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
+			WithQuery(nil, types.QueryOptions{
 				RawQuery:     "name = ? OR age = ?",
 				RawQueryArgs: []any{u1.Name, u2.Age},
 			}).
@@ -1300,7 +1300,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Should return u1 (age=18) and u3 (age=20)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
+			WithQuery(nil, types.QueryOptions{
 				RawQuery:     "age IN (?)",
 				RawQueryArgs: []any{[]int{18, 20}},
 			}).
@@ -1336,7 +1336,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Should return u1 (name="user1" AND age=18)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
+			WithQuery(nil, types.QueryOptions{
 				RawQuery:     "name = ? AND age = ?",
 				RawQueryArgs: []any{u1.Name, u1.Age},
 			}).
@@ -1350,7 +1350,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Should return 0 records
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
+			WithQuery(nil, types.QueryOptions{
 				RawQuery:     "name = ? AND age = ?",
 				RawQueryArgs: []any{u1.Name, u2.Age},
 			}).
@@ -1361,7 +1361,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Should return 0 records
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
+			WithQuery(nil, types.QueryOptions{
 				RawQuery:     "age > ?",
 				RawQueryArgs: []any{100},
 			}).
@@ -1372,7 +1372,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Query: age = 18 (hardcoded value, no placeholders)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
+			WithQuery(nil, types.QueryOptions{
 				RawQuery:     "age = 18",
 				RawQueryArgs: nil,
 			}).
@@ -1384,7 +1384,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test RawQuery with empty RawQueryArgs slice (should work when query has no placeholders)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
+			WithQuery(nil, types.QueryOptions{
 				RawQuery:     "age = 18",
 				RawQueryArgs: []any{},
 			}).
@@ -1398,7 +1398,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Should return 0 records (no user with name="user1" AND age > 18, since u1 has age=18)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: u1.Name}, types.QueryConfig{
+			WithQuery(&TestUser{Name: u1.Name}, types.QueryOptions{
 				RawQuery:     "age > ?",
 				RawQueryArgs: []any{18},
 			}).
@@ -1410,7 +1410,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Should return u1 (name="user1" AND age >= 18)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: u1.Name}, types.QueryConfig{
+			WithQuery(&TestUser{Name: u1.Name}, types.QueryOptions{
 				RawQuery:     "age >= ?",
 				RawQueryArgs: []any{18},
 			}).
@@ -1425,7 +1425,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Should return u2 (name="user2" AND email="user2@example.com" AND age > 18)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: u2.Name, Email: u2.Email}, types.QueryConfig{
+			WithQuery(&TestUser{Name: u2.Name, Email: u2.Email}, types.QueryOptions{
 				RawQuery:     "age > ?",
 				RawQueryArgs: []any{18},
 			}).
@@ -1440,7 +1440,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Should return u2 (email="user2@example.com" AND age=19)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
+			WithQuery(nil, types.QueryOptions{
 				RawQuery:     "(name = ? OR email = ?) AND age >= ?",
 				RawQueryArgs: []any{u2.Name, u2.Email, 19},
 			}).
@@ -1455,7 +1455,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Should return all 3 records (all names contain "user")
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
+			WithQuery(nil, types.QueryOptions{
 				RawQuery:     "name LIKE ?",
 				RawQueryArgs: []any{"%user%"},
 			}).
@@ -1477,7 +1477,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		require.True(t, foundU3_3, "should find u3")
 	})
 
-	t.Run("FieldConditions", func(t *testing.T) {
+	t.Run("Filters", func(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
 		users := make([]*TestUser, 0)
@@ -1486,8 +1486,8 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Conditions alone count as real conditions, so the nil query is not
 		// blocked by the empty-query safety check.
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
 					{Column: "age", Op: types.FilterOpGt, Value: "18"},
 				},
 			}).
@@ -1509,8 +1509,8 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Name="user1" AND age >= 18 should return u1.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: u1.Name}, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
+			WithQuery(&TestUser{Name: u1.Name}, types.QueryOptions{
+				Filters: []types.Filter{
 					{Column: "age", Op: types.FilterOpGte, Value: "18"},
 				},
 			}).
@@ -1521,8 +1521,8 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Name="user1" AND age > 18 should return 0 records (u1 has age=18).
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: u1.Name}, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
+			WithQuery(&TestUser{Name: u1.Name}, types.QueryOptions{
+				Filters: []types.Filter{
 					{Column: "age", Op: types.FilterOpGt, Value: "18"},
 				},
 			}).
@@ -1532,8 +1532,8 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test eq: age = 19 should return u2.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
 					{Column: "age", Op: types.FilterOpEq, Value: "19"},
 				},
 			}).
@@ -1544,8 +1544,8 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test ne: age <> 19 should return u1 and u3.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
 					{Column: "age", Op: types.FilterOpNe, Value: "19"},
 				},
 			}).
@@ -1567,8 +1567,8 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test lt and lte: age < 19 should return u1; age <= 19 should return u1 and u2.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
 					{Column: "age", Op: types.FilterOpLt, Value: "19"},
 				},
 			}).
@@ -1578,8 +1578,8 @@ func TestDatabaseWithQuery(t *testing.T) {
 
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
 					{Column: "age", Op: types.FilterOpLte, Value: "19"},
 				},
 			}).
@@ -1590,8 +1590,8 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// matches every user by substring.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
 					{Column: "email", Op: types.FilterOpLike, Value: "@example"},
 				},
 			}).
@@ -1601,8 +1601,8 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test notlike: name not like "1" should return u2 and u3.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
 					{Column: "name", Op: types.FilterOpNotLike, Value: "1"},
 				},
 			}).
@@ -1612,9 +1612,9 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test in and notin: comma-separated values split into a set.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
-					{Column: "age", Op: types.FilterOpIn, Value: "18,20"},
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
+					{Column: "age", Op: types.FilterOpIn, Value: []string{"18", "20"}},
 				},
 			}).
 			List(&users))
@@ -1633,34 +1633,34 @@ func TestDatabaseWithQuery(t *testing.T) {
 
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
-					{Column: "name", Op: types.FilterOpNotIn, Value: "user1,user2"},
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
+					{Column: "name", Op: types.FilterOpNotIn, Value: []string{"user1", "user2"}},
 				},
 			}).
 			List(&users))
 		require.Len(t, users, 1)
 		require.Equal(t, u3.ID, users[0].ID)
 
-		// Test UseOr does not affect conditions: Name="user1" with age > 18 must
-		// stay AND-combined and return 0 records, even though UseOr is set.
+		// Test Or does not affect conditions: Name="user1" with age > 18 must
+		// stay AND-combined and return 0 records, even though Or is set.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: u1.Name}, types.QueryConfig{
-				UseOr: true,
-				FieldConditions: []types.FieldCondition{
+			WithQuery(&TestUser{Name: u1.Name}, types.QueryOptions{
+				Or: true,
+				Filters: []types.Filter{
 					{Column: "age", Op: types.FilterOpGt, Value: "18"},
 				},
 			}).
 			List(&users))
-		require.Empty(t, users, "conditions must stay AND-combined under UseOr")
+		require.Empty(t, users, "conditions must stay AND-combined under Or")
 
 		// Test startswith is anchored at the beginning: "user" prefixes every
 		// name, while "ser" only appears inside and must not match.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
 					{Column: "name", Op: types.FilterOpStartsWith, Value: "user"},
 				},
 			}).
@@ -1669,8 +1669,8 @@ func TestDatabaseWithQuery(t *testing.T) {
 
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
 					{Column: "name", Op: types.FilterOpStartsWith, Value: "ser"},
 				},
 			}).
@@ -1680,8 +1680,8 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test endswith is anchored at the end.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
 					{Column: "email", Op: types.FilterOpEndsWith, Value: "1@example.com"},
 				},
 			}).
@@ -1691,8 +1691,8 @@ func TestDatabaseWithQuery(t *testing.T) {
 
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
 					{Column: "email", Op: types.FilterOpEndsWith, Value: "user"},
 				},
 			}).
@@ -1708,9 +1708,9 @@ func TestDatabaseWithQuery(t *testing.T) {
 
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
-					{Column: "is_active", Op: types.FilterOpIsNull, Value: "1"},
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
+					{Column: "is_active", Op: types.FilterOpIsNull, Value: true},
 				},
 			}).
 			List(&users))
@@ -1718,9 +1718,9 @@ func TestDatabaseWithQuery(t *testing.T) {
 
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
-					{Column: "is_active", Op: types.FilterOpIsNull, Value: "0"},
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
+					{Column: "is_active", Op: types.FilterOpIsNull, Value: false},
 				},
 			}).
 			List(&users))
@@ -1736,8 +1736,8 @@ func TestDatabaseWithQuery(t *testing.T) {
 
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
 					{Column: "name", Op: types.FilterOpLike, Value: "user_"},
 				},
 			}).
@@ -1747,8 +1747,8 @@ func TestDatabaseWithQuery(t *testing.T) {
 
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
 					{Column: "name", Op: types.FilterOpStartsWith, Value: "user_"},
 				},
 			}).
@@ -1757,11 +1757,11 @@ func TestDatabaseWithQuery(t *testing.T) {
 		require.Equal(t, underscoreUser.ID, users[0].ID)
 
 		// Test the service-only regex operators: they are not reachable from
-		// URL parsing but service code can pass them through FieldConditions.
+		// URL parsing but service code can pass them through Filters.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
 					{Column: "name", Op: types.FilterOpRegex, Value: "^user[12]$"},
 				},
 			}).
@@ -1781,8 +1781,8 @@ func TestDatabaseWithQuery(t *testing.T) {
 
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
 					{Column: "name", Op: types.FilterOpNotRegex, Value: "^user[0-9]$"},
 				},
 			}).
@@ -1796,8 +1796,8 @@ func TestDatabaseWithQuery(t *testing.T) {
 
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
 					{Column: "addr", Op: types.FilterOpJSONContains, Value: "alpha"},
 				},
 			}).
@@ -1807,8 +1807,8 @@ func TestDatabaseWithQuery(t *testing.T) {
 
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
 					{Column: "addr", Op: types.FilterOpJSONContains, Value: "gamma"},
 				},
 			}).
@@ -1819,8 +1819,8 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// "1 = 0" instead of being dropped, so the query returns no records.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
 					{Column: "age", Op: types.FilterOp("bogus"), Value: "1"},
 				},
 			}).
@@ -1829,13 +1829,92 @@ func TestDatabaseWithQuery(t *testing.T) {
 
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryConfig{
-				FieldConditions: []types.FieldCondition{
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
 					{Column: "", Op: types.FilterOpEq, Value: "1"},
 				},
 			}).
 			List(&users))
 		require.Empty(t, users, "empty column must fail closed")
+	})
+
+	t.Run("TypedFilterValues", func(t *testing.T) {
+		defer cleanupTestData()
+		setupTestData(t)
+
+		// A slice value binds IN directly, so members keep commas literal.
+		users := make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{{Column: "name", Op: types.FilterOpIn, Value: []string{u1.Name, u3.Name}}},
+			}).
+			List(&users))
+		require.Len(t, users, 2, "slice values must bind IN directly")
+
+		// An empty slice matches nothing instead of widening the result set.
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{{Column: "name", Op: types.FilterOpIn, Value: []string{}}},
+			}).
+			List(&users))
+		require.Empty(t, users, "empty slice must match nothing")
+
+		// In no longer splits comma strings: a string value fails closed.
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{{Column: "name", Op: types.FilterOpIn, Value: u1.Name + "," + u2.Name}},
+			}).
+			List(&users))
+		require.Empty(t, users, "string value on In must fail closed")
+
+		// A scalar comparison rejects slice values and fails closed.
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{{Column: "age", Op: types.FilterOpGt, Value: []int{18}}},
+			}).
+			List(&users))
+		require.Empty(t, users, "slice value on a scalar operator must fail closed")
+
+		// A nil value fails closed on every operator family.
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{{Column: "age", Op: types.FilterOpEq, Value: nil}},
+			}).
+			List(&users))
+		require.Empty(t, users, "nil value must fail closed")
+
+		// IsNull carries a bool: false means IS NOT NULL and matches every row
+		// of a NOT NULL column, while the legacy "1" string now fails closed.
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{{Column: "name", Op: types.FilterOpIsNull, Value: false}},
+			}).
+			List(&users))
+		require.Len(t, users, 3, "IsNull false must mean IS NOT NULL")
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{{Column: "name", Op: types.FilterOpIsNull, Value: "1"}},
+			}).
+			List(&users))
+		require.Empty(t, users, "string value on IsNull must fail closed")
+
+		// Typed Go values bind directly on comparison operators.
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{
+					{Column: "age", Op: types.FilterOpGt, Value: 18},
+					{Column: "created_at", Op: types.FilterOpGte, Value: time.Now().Add(-time.Hour)},
+				},
+			}).
+			List(&users))
+		require.Len(t, users, 2, "typed scalar values must bind directly")
 	})
 
 	t.Run("AutoBase", func(t *testing.T) {
