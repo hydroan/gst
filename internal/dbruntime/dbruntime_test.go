@@ -44,6 +44,32 @@ func TestEnsureTablePassesWhenDisabledAndTableExists(t *testing.T) {
 	require.NoError(t, ensureTable(db, &plainRecord{}))
 }
 
+// derivedRecord omits an explicit table name and relies on gorm's naming strategy.
+type derivedRecord struct {
+	Name string
+
+	modelregistry.Base
+}
+
+func TestEnsureTableResolvesDerivedTableName(t *testing.T) {
+	db := newSQLiteDB(t)
+	withAutoMigrate(t, true)
+	require.NoError(t, ensureTable(db, &derivedRecord{}))
+	require.True(t, db.Migrator().HasTable("derived_records"))
+
+	withAutoMigrate(t, false)
+	require.NoError(t, ensureTable(db, &derivedRecord{}))
+}
+
+func TestEnsureTableReportsDerivedTableNameWhenMissing(t *testing.T) {
+	db := newSQLiteDB(t)
+	withAutoMigrate(t, false)
+
+	err := ensureTable(db, &derivedRecord{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `"derived_records"`)
+}
+
 // withAutoMigrate overrides the auto-migrate option and restores it on cleanup.
 func withAutoMigrate(t *testing.T, enabled bool) {
 	t.Helper()

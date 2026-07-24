@@ -32,6 +32,22 @@ var startedTable atomic.Int32
 // It is used by the record processing goroutine to wait for table creation before inserting records
 var initedTable = cmap.New[string]()
 
+// resolveTableName returns the table a model is backed by. Models may either
+// declare an explicit name through GetTableName or leave it empty and rely on
+// gorm's naming strategy; both forms are supported, so every consumer of a
+// model table name must resolve through this helper instead of trusting
+// GetTableName alone.
+func resolveTableName(handler *gorm.DB, m types.Model) (string, error) {
+	if tableName := m.GetTableName(); len(tableName) > 0 {
+		return tableName, nil
+	}
+	stmt := &gorm.Statement{DB: handler}
+	if err := stmt.Parse(m); err != nil {
+		return "", err
+	}
+	return stmt.Schema.Table, nil
+}
+
 // ensureTable prepares the backing table for a registered model.
 //
 // With database.auto_migrate enabled it runs gorm AutoMigrate and creates
@@ -40,12 +56,15 @@ var initedTable = cmap.New[string]()
 // the dialect-aware gorm Migrator, so schema changes in shared environments
 // stay an explicit "gg migrate" decision instead of a startup side effect.
 func ensureTable(handler *gorm.DB, m types.Model) error {
-	tableName := m.GetTableName()
 	if config.App.Database.AutoMigrate {
-		if err := handler.Table(tableName).AutoMigrate(m); err != nil {
+		if err := handler.Table(m.GetTableName()).AutoMigrate(m); err != nil {
 			return err
 		}
 		return ensureCustomIndexes(handler, m)
+	}
+	tableName, err := resolveTableName(handler, m)
+	if err != nil {
+		return err
 	}
 	if !handler.Migrator().HasTable(tableName) {
 		return errors.Newf("table %q does not exist: run \"gg migrate\" to apply the schema, or enable database.auto_migrate for local development", tableName)
