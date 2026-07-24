@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/logger"
@@ -21,7 +20,6 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // trace returns a timing function for database operations that provides comprehensive
@@ -40,7 +38,7 @@ import (
 //   - Comprehensive span attributes including operation metadata
 //   - Error-aware logging and span status management
 //   - Batch operation support with size tracking
-//   - Cache and dry-run mode status recording
+//   - Dry-run mode status recording
 //   - Smart duration formatting for readability
 //   - Context propagation to GORM operations
 //
@@ -95,7 +93,6 @@ func (db *database[M]) trace(op string, batch ...int) (func(error), context.Cont
 				attribute.String("database.operation", op),
 				attribute.String("database.model", modelName),
 				attribute.String("database.table", modelName),
-				attribute.Bool("database.cache_enabled", db.enableCache),
 				attribute.Bool("database.dry_run", db.dryRun),
 			)
 			if _batch > 0 {
@@ -137,7 +134,6 @@ func (db *database[M]) trace(op string, batch ...int) (func(error), context.Cont
 				zap.String("table", reflect.TypeOf(*new(M)).Elem().Name()),
 				zap.String("batch", strconv.Itoa(_batch)),
 				zap.String("cost", util.FormatDurationSmart(duration)),
-				zap.Bool("cache_enabled", db.enableCache),
 				zap.Bool("dry_run", db.dryRun),
 			)
 		} else {
@@ -146,7 +142,6 @@ func (db *database[M]) trace(op string, batch ...int) (func(error), context.Cont
 				zap.String("table", reflect.TypeOf(*new(M)).Elem().Name()),
 				zap.String("batch", strconv.Itoa(_batch)),
 				zap.String("cost", util.FormatDurationSmart(time.Since(begin))),
-				zap.Bool("cache_enabled", db.enableCache),
 				zap.Bool("dry_run", db.dryRun),
 			)
 		}
@@ -343,46 +338,6 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 	}
 }
 
-// buildCacheKey constructs Redis cache keys for database operations.
-// Generates both prefix and full key based on GORM statement and operation type.
-// Uses consistent naming convention for cache key organization and collision avoidance.
-//
-// Parameters:
-//   - stmt: GORM statement containing SQL and table information
-//   - action: Operation type ("get", "list", "count", etc.)
-//   - id: Optional ID for get operations to create simpler keys
-//
-// Returns prefix, table name and full cache key for Redis operations.
-//
-// Key Structure:
-//   - Prefix: namespace:table_name
-//   - Full Key: namespace:table_name:action:identifier
-//   - Get operations with ID: namespace:table_name:get:id_value
-//   - Other operations: namespace:table_name:action:sql_statement
-//
-// Features:
-//   - Namespace isolation for multi-tenant applications
-//   - Table-based key organization
-//   - Operation-specific key generation
-//   - SQL statement-based cache invalidation
-//
-// Reference: https://gorm.io/docs/sql_builder.html
-func buildCacheKey(stmt *gorm.Statement, action string, id ...string) (prefix, table, key string) {
-	prefix = strings.Join([]string{config.App.Redis.Namespace, stmt.Table}, ":")
-	table = stmt.Table
-	switch strings.ToLower(action) {
-	case "get":
-		if len(id) > 0 {
-			key = strings.Join([]string{config.App.Redis.Namespace, stmt.Table, action, id[0]}, ":")
-		} else {
-			key = strings.Join([]string{config.App.Redis.Namespace, stmt.Table, action, stmt.SQL.String()}, ":")
-		}
-	default:
-		key = strings.Join([]string{config.App.Redis.Namespace, stmt.Table, action, stmt.SQL.String()}, ":")
-	}
-	return prefix, table, key
-}
-
 // boolToInt converts a boolean value to an integer.
 // Returns 1 for true, 0 for false.
 // Useful for database operations that require integer representations of boolean values.
@@ -515,18 +470,4 @@ func indirectTypeAndValue(t reflect.Type, v reflect.Value) (reflect.Type, reflec
 		v = v.Elem()
 	}
 	return t, v, true
-}
-
-// getDBIdentifier returns a unique identifier for the database instance.
-// It uses the pointer address of the underlying database connection to distinguish different database instances.
-func getDBIdentifier(db *gorm.DB) string {
-	if db == nil {
-		return "nil"
-	}
-	sqlDB, err := db.DB()
-	if err != nil || sqlDB == nil {
-		// Fallback to gorm.DB pointer address if we can't get the underlying database connection
-		return fmt.Sprintf("%p", db)
-	}
-	return fmt.Sprintf("%p", sqlDB)
 }

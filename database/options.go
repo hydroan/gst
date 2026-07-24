@@ -2,8 +2,6 @@ package database
 
 import (
 	"context"
-	"fmt"
-	"reflect"
 	"strings"
 
 	"github.com/hydroan/gst/config"
@@ -81,18 +79,6 @@ func (db *database[M]) WithDB(x any) types.Database[M] {
 			ctx = db.ctx
 		}
 	}
-	// Keep existing setup bookkeeping for compatibility with prior operation-chain state.
-	if db.shouldAutoMigrate == nil {
-		// Use database identifier + model type as key to support multiple database instances
-		dbIdentifier := getDBIdentifier(_db)
-		modelType := reflect.TypeFor[M]().String()
-		migrationKey := fmt.Sprintf("%s:%s", dbIdentifier, modelType)
-		if _, loaded := migratedModelMap.LoadOrStore(migrationKey, struct{}{}); !loaded {
-			flag := new(bool)
-			*flag = true
-			db.shouldAutoMigrate = flag
-		}
-	}
 	if strings.ToLower(config.App.Logger.Level) == "debug" {
 		db.ins = _db.WithContext(ctx).Debug().Limit(defaultLimit)
 	} else {
@@ -134,7 +120,6 @@ func (db *database[M]) WithTable(name string) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	db.shouldAutoMigrate = new(bool)
 	db.tableName = name
 	return db
 }
@@ -209,7 +194,6 @@ func (db *database[M]) WithDebug() types.Database[M] {
 //   - Health: Not affected; it still executes connection checks
 //   - Read operations leave destination values unchanged because no rows are loaded
 //   - Model hooks are not executed because dry-run is limited to SQL construction
-//   - Cache entries are not read, cleared, deleted, or written
 //   - Input model objects are left unchanged; no ID, timestamp, or soft-delete fields are filled
 //
 // Example:
@@ -221,7 +205,7 @@ func (db *database[M]) WithDebug() types.Database[M] {
 //	WithDryRun().List(&users)               // Build SELECT SQL without loading records
 //	WithDryRun().Cleanup()                  // Build cleanup DELETE SQL without removing rows
 //
-// WithDryRun is build-only: it does not execute generated SQL, model hooks, cache mutation, or object field filling.
+// WithDryRun is build-only: it does not execute generated SQL, model hooks, or object field filling.
 func (db *database[M]) WithDryRun() types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -231,7 +215,7 @@ func (db *database[M]) WithDryRun() types.Database[M] {
 
 // WithBuildSQL enables SQL build mode for the next terminal operation.
 // It appends generated Query, Args, and RenderedSQL values to statements without
-// executing database I/O, model hooks, cache mutation, or object field filling.
+// executing database I/O, model hooks, or object field filling.
 //
 // WithBuildSQL is intended for CRUD, read, cleanup, and health-check SQL generation.
 // Transaction helpers are not supported because they manage real transaction control flow.

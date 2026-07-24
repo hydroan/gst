@@ -2,7 +2,6 @@ package database
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"strings"
 	"sync"
@@ -35,12 +34,6 @@ var (
 	ErrNilSQLBuilder       = errors.New("sql statement collector cannot be nil")
 	ErrNilTransaction      = errors.New("transaction function cannot be nil")
 )
-
-// migratedModelMap records model/database pairs seen by operation builders.
-// The key tracking is retained for compatibility with existing setup paths.
-// Key is "dbIdentifier:modelType", value is "struct{}{}".
-// dbIdentifier is the unique identifier of the database instance (e.g., pointer address of the underlying database connection).
-var migratedModelMap sync.Map
 
 var (
 	defaultLimit           = -1
@@ -99,11 +92,10 @@ type database[M types.Model] struct {
 
 	// options
 	enablePurge *bool  // delete resource permanently, not only update deleted_at field, only works on 'Delete' method.
-	enableCache bool   // using cache or not, only works 'List', 'Get', 'Count' method.
 	tableName   string // support multiple custom table name, always used with the `WithDB` method.
 	batchSize   int    // batch size for bulk operations. affects Create, Update, Delete.
 	noHook      bool   // disable model hook.
-	dryRun      bool   // build SQL without database I/O, hooks, cache mutation, or object field filling.
+	dryRun      bool   // build SQL without database I/O, hooks, or object field filling.
 
 	// sql
 	buildingSQL   bool // collect generated SQL statements for WithBuildSQL.
@@ -117,8 +109,6 @@ type database[M types.Model] struct {
 
 	// select
 	selectColumns []string
-
-	shouldAutoMigrate *bool
 }
 
 func (db *database[M]) quoteIdent(name string) string {
@@ -183,11 +173,9 @@ func (db *database[M]) reset() {
 	db.typ = nil
 
 	db.enablePurge = nil
-	db.enableCache = false
 	db.tableName = ""
 	db.batchSize = 0
 	db.noHook = false
-	db.shouldAutoMigrate = nil
 	db.dryRun = false
 
 	// reset sql build state
@@ -213,18 +201,6 @@ func (db *database[M]) prepare() error {
 	db.typ = reflect.TypeOf(*new(M)).Elem()
 	db.m = reflect.New(db.typ).Interface().(M) //nolint:errcheck
 
-	// AutoMigrate is intentionally disabled for operation chains. Framework
-	// initialization and custom callers are responsible for schema creation.
-	// if db.shouldAutoMigrate != nil && *db.shouldAutoMigrate {
-	// 	session := db.ins
-	// 	if tableName := db.m.GetTableName(); len(tableName) > 0 {
-	// 		session = session.Table(tableName)
-	// 	}
-	// 	if err := session.AutoMigrate(db.m); err != nil {
-	// 		return err
-	// 	}
-	// }
-
 	// Set enablePurge based on model's Purge() method if not explicitly set by WithPurge().
 	// Priority: WithPurge() > model.Purge() > default (soft delete)
 	// - If WithPurge() was called, use the explicitly set value (highest priority)
@@ -239,7 +215,7 @@ func (db *database[M]) prepare() error {
 }
 
 // Database creates and returns a generic database manipulator implementing types.Database interface.
-// Provides comprehensive CRUD capabilities with advanced features like caching, hooks, and query building.
+// Provides comprehensive CRUD capabilities with advanced features like hooks and query building.
 // Automatically enables debug mode when log level is set to debug.
 // Required tables must exist before executing operations with the returned manipulator.
 //
@@ -315,16 +291,6 @@ func Database[M types.Model](ctx context.Context) types.Database[M] {
 	db := &database[M]{
 		ins: ins,
 		ctx: gctx,
-	}
-
-	// Track database identifier + model type for compatibility with existing setup bookkeeping.
-	dbIdentifier := getDBIdentifier(DB())
-	modelType := reflect.TypeFor[M]().String()
-	migrationKey := fmt.Sprintf("%s:%s", dbIdentifier, modelType)
-	if _, loaded := migratedModelMap.LoadOrStore(migrationKey, struct{}{}); !loaded {
-		flag := new(bool)
-		*flag = true
-		db.shouldAutoMigrate = flag
 	}
 
 	return db
