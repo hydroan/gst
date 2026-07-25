@@ -98,7 +98,7 @@ const (
 // HTTPBodyLogger represents HTTP body logging configuration.
 type HTTPBodyLogger struct {
 	// Enabled enables the HTTP request and response body logging middleware.
-	// Default: false
+	// Default: true
 	Enabled bool `json:"enabled" ini:"enabled" yaml:"enabled" mapstructure:"enabled"`
 
 	// LogRequest selects which requests get their JSON body logged (all|error|none).
@@ -117,8 +117,11 @@ type HTTPBodyLogger struct {
 	MaxBodySize string `json:"max_body_size" ini:"max_body_size" yaml:"max_body_size" mapstructure:"max_body_size"`
 
 	// SkipRoutes lists routes whose bodies are never logged, for example login
-	// or other credential-carrying endpoints. A pattern ending in "*" matches
-	// the route by prefix; any other pattern must match the route exactly.
+	// or other credential-carrying endpoints. Bodies are logged verbatim and
+	// are never redacted, so every route accepting a password, token, or other
+	// secret belongs here. A pattern ending in "*" matches the route by prefix;
+	// any other pattern must match the registered route pattern exactly, so a
+	// route with path parameters is written with them ("/users/:id/password").
 	SkipRoutes []string `json:"skip_routes" ini:"skip_routes" yaml:"skip_routes" mapstructure:"skip_routes"`
 }
 
@@ -134,7 +137,7 @@ func (*Logger) setDefault() {
 	cv.SetDefault("logger.max_age", 30)
 	cv.SetDefault("logger.max_size", 100)
 	cv.SetDefault("logger.max_backups", 1)
-	cv.SetDefault("logger.http_body.enabled", false)
+	cv.SetDefault("logger.http_body.enabled", true)
 	cv.SetDefault("logger.http_body.log_request", HTTPBodyLogModeAll)
 	cv.SetDefault("logger.http_body.log_response", HTTPBodyLogModeError)
 	cv.SetDefault("logger.http_body.max_body_size", "64KB")
