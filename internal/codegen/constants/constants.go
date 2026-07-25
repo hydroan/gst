@@ -25,6 +25,15 @@ const (
 	PrefixIgnore    = "_"
 )
 
+// FileModeGenerated is the permission gg writes project files with.
+//
+// Generated sources are ordinary source files and must be as readable as the
+// hand-written ones next to them: a stricter mode leaves the package with
+// mixed permissions and breaks any reader that is not the generating user,
+// such as a CI job or a container build running as another account. The
+// process umask still tightens this as configured.
+const FileModeGenerated = 0o644
+
 // Generated file names.
 //
 // SuffixGenGo marks every file gg generates and fully owns. A file carrying

@@ -9,6 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
+	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/spf13/cobra"
 )
 
@@ -207,7 +208,7 @@ changelog:
 #       - "--label=org.opencontainers.image.version={{.Version}}"
 `, binaryName, binaryName, binaryName, binaryName)
 
-	if err := os.WriteFile(".goreleaser.yml", []byte(config), 0o600); err != nil {
+	if err := os.WriteFile(".goreleaser.yml", []byte(config), constants.FileModeGenerated); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 

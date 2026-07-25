@@ -163,7 +163,7 @@ func createFile(path string, content string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(content), 0o600)
+	return os.WriteFile(path, []byte(content), constants.FileModeGenerated)
 }
 
 func createTeplConfig(appName string) error {
@@ -212,5 +212,5 @@ db = 0
 password =
 namespace = %s
 `, appName, appName)
-	return os.WriteFile("config.ini.example", []byte(content), 0o600)
+	return os.WriteFile("config.ini.example", []byte(content), constants.FileModeGenerated)
 }

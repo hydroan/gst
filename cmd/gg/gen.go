@@ -335,7 +335,7 @@ func genRunWithOptions(opts genRunOptions) error {
 					return err
 				}
 				// #nosec G703 -- safePath validated under serviceDir by pathUnderRoot
-				if err := os.WriteFile(safePath, []byte(code), 0o600); err != nil {
+				if err := os.WriteFile(safePath, []byte(code), constants.FileModeGenerated); err != nil {
 					return err
 				}
 			} else if !opts.Quiet {
@@ -349,7 +349,7 @@ func genRunWithOptions(opts genRunOptions) error {
 				return err
 			}
 			// #nosec G703 -- safePath validated under serviceDir by pathUnderRoot
-			if err := os.WriteFile(safePath, []byte(code), 0o600); err != nil {
+			if err := os.WriteFile(safePath, []byte(code), constants.FileModeGenerated); err != nil {
 				return err
 			}
 		}

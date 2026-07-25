@@ -8,6 +8,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
+	"github.com/hydroan/gst/internal/codegen/constants"
 )
 
 func checkErr(err error) {
@@ -52,7 +53,7 @@ func writeGeneratedFile(filename string, content string, log bool) error {
 			if log {
 				clioutput.Status(clioutput.StyleWarn, clioutput.SymbolSuccess, "UPDATE", "%s", filename)
 			}
-			if err := os.WriteFile(filename, []byte(content), 0o600); err != nil {
+			if err := os.WriteFile(filename, []byte(content), constants.FileModeGenerated); err != nil {
 				return err
 			}
 		}
@@ -63,7 +64,7 @@ func writeGeneratedFile(filename string, content string, log bool) error {
 		if err := ensureParentDir(filename); err != nil {
 			return err
 		}
-		if err := os.WriteFile(filename, []byte(content), 0o600); err != nil {
+		if err := os.WriteFile(filename, []byte(content), constants.FileModeGenerated); err != nil {
 			return err
 		}
 	}

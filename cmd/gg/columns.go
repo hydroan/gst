@@ -358,7 +358,7 @@ func writeGeneratedFileIfChanged(path string, content string, quiet bool) error 
 	if err != nil && !os.IsNotExist(err) {
 		return errors.Wrapf(err, "read %s", path)
 	}
-	if err = os.WriteFile(path, []byte(content), 0o600); err != nil {
+	if err = os.WriteFile(path, []byte(content), constants.FileModeGenerated); err != nil {
 		return errors.Wrapf(err, "write %s", path)
 	}
 	if !quiet {
