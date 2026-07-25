@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/logger"
@@ -592,142 +591,63 @@ func escapeLikePattern(value string) string {
 	return likePatternEscaper.Replace(value)
 }
 
-// WithCursor enables cursor-based pagination for efficient large dataset traversal.
-// Cursor pagination is more efficient than offset-based pagination for large datasets
-// as it avoids performance degradation when skipping many records.
-//
-// Parameters:
-//   - cursorValue: The value of the cursor field from the last record in the previous page.
-//     For string fields (like ID), use the field value directly.
-//     For time fields, format as "YYYY-MM-DD HH:MM:SS.ffffff".
-//     Empty string will be ignored and cursor pagination will be disabled.
-//   - next: The direction of pagination.
-//   - true: Fetch records after the cursor (next page, ascending order)
-//   - false: Fetch records before the cursor (previous page, descending order)
-//   - fields: Optional field name(s) to use as cursor. Defaults to "id" if not specified.
-//     Currently only the first field is used (multiple fields support is TODO).
-//
-// Behavior:
-//   - When next=true: Returns records where cursorField > cursorValue, ordered by cursorField ASC
-//   - When next=false: Returns records where cursorField < cursorValue, ordered by cursorField DESC
-//     (results are reversed to maintain original sort order)
-//   - Empty cursorValue: Cursor pagination is disabled, returns all records
-//   - Default cursor field: "id" if not specified
-//
-// Example:
-//
-//	// First page (no cursor)
-//	db.Database[*model.User]().WithLimit(10).List(&users)
-//
-//	// Next page (using last user's ID as cursor)
-//	lastID := users[len(users)-1].ID
-//	db.Database[*model.User]().WithCursor(lastID, true).WithLimit(10).List(&nextUsers)
-//
-//	// Next page using custom field (created_at)
-//	lastCreatedAt := users[len(users)-1].CreatedAt.Format("2006-01-02 15:04:05.000000")
-//	db.Database[*model.User]().WithCursor(lastCreatedAt, true, "created_at").WithLimit(10).List(&nextUsers)
-//
-//	// Previous page
-//	firstID := users[0].ID
-//	db.Database[*model.User]().WithCursor(firstID, false).WithLimit(10).List(&prevUsers)
-func (db *database[M]) WithCursor(cursorValue string, next bool, fields ...string) types.Database[M] {
-	db.mu.Lock()
-	defer db.mu.Unlock()
+// defaultCursorColumn is the column cursor pagination falls back to when the
+// caller did not name one. It is the primary key of every framework base
+// model, which is the only column guaranteed to be unique and monotonic.
+const defaultCursorColumn = "id"
 
-	if len(cursorValue) == 0 {
-		return db
-	}
-
-	db.enableCursor = true
-	db.cursorValue = cursorValue
-	db.cursorNext = next
-
-	// TODO: support multiple cursor fields
-	if len(fields) > 0 {
-		db.cursorField = fields[0]
-	}
-	// Default cursor field is "id" if not specified
-	if db.cursorField == "" {
-		db.cursorField = "id"
-	}
-
-	return db
-}
-
-// applyCursorPagination applies cursor-based pagination to the query if cursor is set.
-func (db *database[M]) applyCursorPagination() {
-	if db.enableCursor {
-		// Apply cursor condition based on direction
-		if db.cursorNext {
-			// Next page: get records after the cursor
-			db.ins = db.ins.Where(db.quoteIdent(db.cursorField)+" > ?", db.cursorValue)
-			// Order by cursor field ascending for next page
-			db.ins = db.ins.Order(db.quoteIdent(db.cursorField) + " ASC")
-		} else {
-			// Previous page: get records before the cursor
-			db.ins = db.ins.Where(db.quoteIdent(db.cursorField)+" < ?", db.cursorValue)
-			// Order by cursor field descending for previous page
-			db.ins = db.ins.Order(db.quoteIdent(db.cursorField) + " DESC")
-		}
-	}
-}
-
-// WithTimeRange filters records within a specific time range.
-// Supports flexible time range queries:
-//   - Both times provided: uses BETWEEN clause
-//   - Only startTime provided (endTime is zero): uses >= clause
-//   - Only endTime provided (startTime is zero): uses <= clause
-//   - Both times are zero: returns without filtering
+// WithCursor enables cursor-based pagination for efficient large dataset
+// traversal. Unlike offset pagination, a cursor read stays at constant cost
+// however deep the client has paged, because the boundary is a WHERE
+// condition rather than a row count to skip.
 //
-// Parameters:
-//   - columnName: The name of the time column to filter on
-//   - startTime: The start time of the range (inclusive). Use zero value to ignore.
-//   - endTime: The end time of the range (inclusive). Use zero value to ignore.
+// The cursor carries the feed's ordering, so it also decides the ORDER BY of
+// the query: combining WithCursor with WithOrder produces two competing sort
+// sources and breaks the boundary condition, which the list controller
+// rejects as a client error.
+//
+// A cursor without a boundary value is a no-op, so an unpaginated first page
+// needs no special case at the call site. A time-typed cursor value is
+// formatted as "YYYY-MM-DD HH:MM:SS.ffffff".
 //
 // Examples:
 //
-//	// Range query: created_at BETWEEN start AND end
-//	WithTimeRange("created_at", time.Now().AddDate(0, -1, 0), time.Now())
-//
-//	// After query: created_at >= start
-//	WithTimeRange("created_at", time.Now().AddDate(0, -1, 0), time.Time{})
-//
-//	// Before query: created_at <= end
-//	WithTimeRange("created_at", time.Time{}, time.Now())
-func (db *database[M]) WithTimeRange(columnName string, startTime time.Time, endTime time.Time) types.Database[M] {
+//	WithCursor(types.CursorForward(SampleCols.ID.Asc(), lastID)).WithLimit(10).List(&next)
+//	WithCursor(types.CursorBackward(SampleCols.ID.Asc(), firstID)).WithLimit(10).List(&prev)
+//	WithCursor(types.CursorForward(SampleCols.CreatedAt.Desc(), lastCreatedAt)).WithLimit(10).List(&older)
+func (db *database[M]) WithCursor(cursor types.CursorPosition) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
-	if len(columnName) == 0 {
+
+	if !cursor.Enabled() {
 		return db
 	}
-
-	startIsZero := startTime.IsZero()
-	endIsZero := endTime.IsZero()
-
-	// Both times are zero, no filtering
-	if startIsZero && endIsZero {
-		return db
+	if len(cursor.Order.Column) == 0 {
+		cursor.Order.Column = defaultCursorColumn
 	}
-
-	// Both times provided, use BETWEEN
-	if !startIsZero && !endIsZero {
-		db.ins = db.ins.Where(db.quoteIdent(columnName)+" BETWEEN ? AND ?", startTime, endTime)
-		return db
-	}
-
-	// Only start time provided, use >=
-	if !startIsZero && endIsZero {
-		db.ins = db.ins.Where(db.quoteIdent(columnName)+" >= ?", startTime)
-		return db
-	}
-
-	// Only end time provided, use <=
-	if startIsZero && !endIsZero {
-		db.ins = db.ins.Where(db.quoteIdent(columnName)+" <= ?", endTime)
-		return db
-	}
+	db.cursor = cursor
 
 	return db
+}
+
+// applyCursorPagination applies cursor-based pagination to the query if a
+// cursor is set. Traveling backward reads the feed in reverse, so both the
+// boundary comparison and the ORDER BY flip; List reverses the rows afterwards
+// to hand them back in the feed's own order.
+func (db *database[M]) applyCursorPagination() {
+	if !db.cursor.Enabled() {
+		return
+	}
+	direction := db.cursor.Order.Direction
+	if db.cursor.Backward {
+		direction = direction.Flip()
+	}
+	comparison := " > ?"
+	if direction == types.OrderDesc {
+		comparison = " < ?"
+	}
+	db.ins = db.ins.Where(db.quoteOrderField(db.cursor.Order.Column)+comparison, db.cursor.Value)
+	db.ins = db.ins.Order(db.orderClause(types.Order{Column: db.cursor.Order.Column, Direction: direction}))
 }
 
 // WithSelect specifies fields to select when querying or updating records.
@@ -843,51 +763,45 @@ func (db *database[M]) WithLock(mode ...consts.LockMode) types.Database[M] {
 	return db
 }
 
-// WithOrder adds ORDER BY clause to sort query results (List, Get, First, Last, etc.).
-// Supports multiple sorting criteria and directions (ASC/DESC).
-// Column names are automatically quoted with dialect-appropriate identifiers to handle SQL keywords.
+// WithOrder adds ORDER BY terms to sort query results (List, Get, First,
+// Last, etc.). Terms apply in the order they are given, so the first one is
+// the primary sort key.
 //
-// Parameters:
-//   - order: Column name(s) with optional direction. Multiple columns separated by commas.
-//     Direction can be "ASC" (default) or "DESC" (case-insensitive).
+// Orders are built from the generated column references, which cannot name a
+// column the model does not have; the types.Asc and types.Desc constructors
+// take a plain column name for code that cannot reference a concrete model.
+// Column names are quoted with dialect-appropriate identifiers, and the
+// direction comes from a closed set, so neither part can carry SQL.
 //
 // Examples:
 //
-//	WithOrder("name")                        // Sort by name ascending (default)
-//	WithOrder("name ASC")                    // Sort by name ascending (explicit)
-//	WithOrder("name asc")                    // Sort by name ascending (case-insensitive)
-//	WithOrder("created_at DESC")             // Sort by creation date descending
-//	WithOrder("created_at desc")             // Sort by creation date descending (case-insensitive)
-//	WithOrder("priority DESC, name ASC")     // Multiple sort criteria
-//	WithOrder("priority desc, name asc")     // Multiple sort criteria (case-insensitive)
-//	WithOrder("order DESC, limit ASC")       // Handles SQL keywords safely
+//	WithOrder(SampleCols.Name.Asc())                          // ORDER BY `name` ASC
+//	WithOrder(SampleCols.CreatedAt.Desc())                    // ORDER BY `created_at` DESC
+//	WithOrder(SampleCols.Age.Desc(), SampleCols.Name.Asc())   // ORDER BY `age` DESC, `name` ASC
+//	WithOrder(types.Desc("created_at"))                       // same, by column name
 //
-// Note:
-//   - Column names are automatically escaped with dialect-specific quotes to prevent SQL injection
-//     and handle reserved keywords like "order", "limit", etc.
-//   - Direction keywords (ASC/DESC) are case-insensitive and will be converted to uppercase.
-func (db *database[M]) WithOrder(order string) types.Database[M] {
+// Calling WithOrder without any term, or with a term whose column is empty,
+// adds nothing.
+func (db *database[M]) WithOrder(orders ...types.Order) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
-	// 可以多多个字段进行排序, 每个字段之间通过逗号分隔.
-	// order 的值比如: "field1, field2 desc, field3 asc"
-	// 字段会根据不同数据库方言进行引用, 以避免关键字冲突.
-	items := strings.SplitSeq(order, ",")
-	for item := range items {
-		if len(item) > 0 {
-			items := strings.Fields(item)
-			for i := range items {
-				if strings.EqualFold(items[i], "asc") || strings.EqualFold(items[i], "desc") {
-					items[i] = strings.ToUpper(items[i])
-				} else {
-					items[i] = db.quoteOrderField(items[i])
-				}
-			}
-			db.ins = db.ins.Order(strings.Join(items, " "))
-			// fmt.Printf("====== %q\n", strings.Join(items, " "))
+	for _, order := range orders {
+		if len(order.Column) == 0 {
+			continue
 		}
+		db.ins = db.ins.Order(db.orderClause(order))
 	}
 	return db
+}
+
+// orderClause renders one ORDER BY term. A zero direction is read as
+// ascending, matching SQL's own default.
+func (db *database[M]) orderClause(order types.Order) string {
+	direction := types.OrderAsc
+	if order.Direction == types.OrderDesc {
+		direction = types.OrderDesc
+	}
+	return db.quoteOrderField(order.Column) + " " + string(direction)
 }
 
 // WithPagination applies pagination parameters to the query.
@@ -979,8 +893,8 @@ func (db *database[M]) WithOffset(offset int) types.Database[M] {
 // Parameters:
 //   - expand: Slice of relationship names to preload (e.g., ["Children", "Parent"])
 //     Nested relationships can be specified using dot notation (e.g., ["Parent.Parent", "Children.Children"])
-//   - order: Optional ordering for the preloaded relationships (e.g., "created_at desc")
-//     The first field in the order string will be wrapped with backticks to handle SQL keywords properly.
+//   - orders: Optional ordering for the preloaded relationships. The columns must
+//     exist on the associated table, which a self-referencing tree guarantees.
 //
 // Behavior:
 //   - Supports nested relationships using dot notation (e.g., "Parent.Parent")
@@ -995,7 +909,7 @@ func (db *database[M]) WithOffset(offset int) types.Database[M] {
 //	db.WithExpand([]string{"Posts"})
 //
 //	// Load user with posts ordered by creation date
-//	db.WithExpand([]string{"Posts"}, "created_at desc")
+//	db.WithExpand([]string{"Posts"}, types.Desc("created_at"))
 //
 //	// Load nested relationships
 //	db.WithExpand([]string{"Posts.Comments", "Profile"})
@@ -1006,25 +920,20 @@ func (db *database[M]) WithOffset(offset int) types.Database[M] {
 // Note: WithExpand only affects SELECT queries (List, Get, First, Last, etc.).
 // It does not work with Create, Update, or Delete operations.
 // Note: For custom fields without GORM foreign key definitions, use GetAfter/ListAfter hooks instead.
-func (db *database[M]) WithExpand(expand []string, order ...string) types.Database[M] {
+func (db *database[M]) WithExpand(expand []string, orders ...types.Order) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
-	var _orders string
-	if len(order) > 0 {
-		if len(order[0]) > 0 {
-			items := strings.Fields(order[0])
-			// The first item is the sort field, must be wrapped with backticks
-			// because the sort string might be a SQL keyword
-			// The second item might be "desc" etc., which doesn't need backticks
-			items[0] = "`" + items[0] + "`"
-			_orders = strings.Join(items, " ")
+	// The order terms sort the preloaded rows of each association, so their
+	// columns must exist on the associated table; a self-referencing tree,
+	// where parent and child share the schema, is the case this serves.
+	withOrder := func(preload *gorm.DB) *gorm.DB {
+		for _, order := range orders {
+			if len(order.Column) == 0 {
+				continue
+			}
+			preload = preload.Order(db.orderClause(order))
 		}
-	}
-	withOrder := func(db *gorm.DB) *gorm.DB {
-		if len(_orders) > 0 {
-			return db.Order(_orders)
-		}
-		return db
+		return preload
 	}
 	// FIXME: 前端加了 _depth 查询参数, 但是层数不匹配就无法递归排序,
 	// _depth 的作用:

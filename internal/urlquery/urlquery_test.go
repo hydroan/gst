@@ -403,6 +403,75 @@ func TestPresentFields(t *testing.T) {
 	})
 }
 
+func TestOrders(t *testing.T) {
+	t.Run("SingleColumnDefaultsToAscending", func(t *testing.T) {
+		orders, err := Orders(url.Values{"_sort_by": {"name"}}, &filterTestModel{})
+		require.NoError(t, err)
+		require.Equal(t, []types.Order{{Column: "name", Direction: types.OrderAsc}}, orders)
+	})
+
+	t.Run("DirectionIsCaseInsensitive", func(t *testing.T) {
+		orders, err := Orders(url.Values{"_sort_by": {"name DESC"}}, &filterTestModel{})
+		require.NoError(t, err)
+		require.Equal(t, []types.Order{{Column: "name", Direction: types.OrderDesc}}, orders)
+	})
+
+	t.Run("MultipleTermsKeepTheirOrder", func(t *testing.T) {
+		orders, err := Orders(url.Values{"_sort_by": {"age desc, name asc"}}, &filterTestModel{})
+		require.NoError(t, err)
+		require.Equal(t, []types.Order{
+			{Column: "age", Direction: types.OrderDesc},
+			{Column: "name", Direction: types.OrderAsc},
+		}, orders)
+	})
+
+	t.Run("ColumnCarriesTheDatabaseName", func(t *testing.T) {
+		orders, err := Orders(url.Values{"_sort_by": {"renamed desc"}}, &filterTestModel{})
+		require.NoError(t, err)
+		require.Equal(t, []types.Order{{Column: "custom_column", Direction: types.OrderDesc}}, orders,
+			"the URL names a column by its query name, but ORDER BY needs the database name")
+	})
+
+	t.Run("BaseTimestampIsSortable", func(t *testing.T) {
+		orders, err := Orders(url.Values{"_sort_by": {"created_at desc"}}, &filterTestModel{})
+		require.NoError(t, err)
+		require.Equal(t, []types.Order{{Column: "created_at", Direction: types.OrderDesc}}, orders,
+			`query:"-" only opts the timestamp out of exact filtering, the json name still resolves it`)
+	})
+
+	t.Run("NonFilterableColumnFails", func(t *testing.T) {
+		_, err := Orders(url.Values{"_sort_by": {"deleted_at"}}, &filterTestModel{})
+		require.Error(t, err, "a column hidden from JSON is framework bookkeeping and is not sortable either")
+	})
+
+	t.Run("UnknownColumnFails", func(t *testing.T) {
+		_, err := Orders(url.Values{"_sort_by": {"no_such_column"}}, &filterTestModel{})
+		require.Error(t, err, "an unknown sort column must fail instead of reaching the database")
+	})
+
+	t.Run("UnknownDirectionFails", func(t *testing.T) {
+		_, err := Orders(url.Values{"_sort_by": {"name sideways"}}, &filterTestModel{})
+		require.Error(t, err)
+	})
+
+	t.Run("MalformedTermFails", func(t *testing.T) {
+		_, err := Orders(url.Values{"_sort_by": {"name asc extra"}}, &filterTestModel{})
+		require.Error(t, err)
+	})
+
+	t.Run("MissingParameterYieldsNoOrder", func(t *testing.T) {
+		orders, err := Orders(url.Values{}, &filterTestModel{})
+		require.NoError(t, err)
+		require.Empty(t, orders)
+	})
+
+	t.Run("ModelWithoutQueryYieldsNoOrder", func(t *testing.T) {
+		orders, err := Orders(url.Values{"_sort_by": {"name"}}, &plainTestModel{})
+		require.NoError(t, err)
+		require.Empty(t, orders, "a model that did not opt in to model.Query is not sortable through the URL")
+	})
+}
+
 type paginatableTestModel struct {
 	modelregistry.Pagination
 	modelregistry.Base
@@ -465,30 +534,44 @@ func TestPagination(t *testing.T) {
 
 func TestCursor(t *testing.T) {
 	t.Run("CursorModelReadsAllThreeParameters", func(t *testing.T) {
-		value, next, field := Cursor(url.Values{
+		cursor, err := Cursor(url.Values{
 			"_cursor_value": {"abc"},
 			"_cursor_next":  {"true"},
 			"_cursor_field": {"created_at"},
 		}, &cursorTestModel{})
-		require.Equal(t, "abc", value)
-		require.True(t, next)
-		require.Equal(t, "created_at", field)
+		require.NoError(t, err)
+		require.Equal(t, types.CursorForward(types.Asc("created_at"), "abc"), cursor)
 	})
 
-	t.Run("MissingDirectionMeansPrevious", func(t *testing.T) {
-		_, next, _ := Cursor(url.Values{"_cursor_value": {"abc"}}, &cursorTestModel{})
-		require.False(t, next)
+	t.Run("MissingDirectionTravelsBackward", func(t *testing.T) {
+		cursor, err := Cursor(url.Values{"_cursor_value": {"abc"}}, &cursorTestModel{})
+		require.NoError(t, err)
+		require.True(t, cursor.Backward)
+		require.Empty(t, cursor.Order.Column, "an unnamed column leaves the primary key fallback to the database layer")
+	})
+
+	t.Run("UnknownColumnFails", func(t *testing.T) {
+		_, err := Cursor(url.Values{
+			"_cursor_value": {"abc"},
+			"_cursor_field": {"no_such_column"},
+		}, &cursorTestModel{})
+		require.Error(t, err, "an unknown cursor column must fail instead of reaching the database")
+	})
+
+	t.Run("MissingValueYieldsZeroCursor", func(t *testing.T) {
+		cursor, err := Cursor(url.Values{"_cursor_next": {"true"}}, &cursorTestModel{})
+		require.NoError(t, err)
+		require.False(t, cursor.Enabled())
 	})
 
 	t.Run("ModelWithoutCursorYieldsZeroCursor", func(t *testing.T) {
-		value, next, field := Cursor(url.Values{
+		cursor, err := Cursor(url.Values{
 			"_cursor_value": {"abc"},
 			"_cursor_next":  {"true"},
 			"_cursor_field": {"created_at"},
 		}, &plainTestModel{})
-		require.Empty(t, value, "a zero cursor makes WithCursor a no-op")
-		require.False(t, next)
-		require.Empty(t, field)
+		require.NoError(t, err)
+		require.False(t, cursor.Enabled(), "a zero cursor makes WithCursor a no-op")
 	})
 }
 

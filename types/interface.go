@@ -160,9 +160,7 @@ type DatabaseOption[M Model] interface {
 	// WithQuery adds query conditions from model fields or raw SQL configuration.
 	WithQuery(query M, opts ...QueryOptions) Database[M]
 	// WithCursor enables cursor-based pagination for List operations.
-	WithCursor(string, bool, ...string) Database[M]
-	// WithTimeRange applies a time range filter to the query.
-	WithTimeRange(columnName string, startTime time.Time, endTime time.Time) Database[M]
+	WithCursor(cursor CursorPosition) Database[M]
 	// WithSelect specifies fields for SELECT and Update column selection where supported.
 	WithSelect(columns ...string) Database[M]
 	// WithIndex specifies database index hints for query optimization (MySQL only).
@@ -179,10 +177,10 @@ type DatabaseOption[M Model] interface {
 	WithOffset(offset int) Database[M]
 	// WithExclude excludes records matching specified conditions.
 	WithExclude(map[string][]any) Database[M]
-	// WithOrder adds ORDER BY clause to sort query results.
-	WithOrder(order string) Database[M]
+	// WithOrder adds ORDER BY terms to sort query results.
+	WithOrder(orders ...Order) Database[M]
 	// WithExpand enables eager loading of specified associations.
-	WithExpand(expand []string, order ...string) Database[M]
+	WithExpand(expand []string, orders ...Order) Database[M]
 	// WithPurge controls whether Delete permanently removes records instead of soft deleting them.
 	WithPurge(...bool) Database[M]
 	// WithOmit excludes specified fields from INSERT, UPDATE, and SELECT operations.

@@ -688,7 +688,7 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 		err := database.Database[*TestUser](context.Background()).
 			WithBuildSQL(&stmts).
 			WithQuery(&TestUser{Name: u1.Name}).
-			WithOrder("created_at DESC").
+			WithOrder(types.Desc("created_at")).
 			List(&users)
 
 		require.NoError(t, err)

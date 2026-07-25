@@ -493,10 +493,9 @@ field, use the field operator filter syntax instead: `?name[like]=user01`
 >   `Database equivalent`
 >
 >   ```go
->   database.Database[*model.User]().WithOrder("name").List(&users)
->   database.Database[*model.User]().WithOrder("name desc").List(&users)
->   database.Database[*model.User]().WithOrder("name desc, created_at").List(&users)
->   database.Database[*model.User]().WithOrder("name desc, created_at asc").List(&users)
+>   database.Database[*model.User]().WithOrder(types.Asc("name")).List(&users)
+>   database.Database[*model.User]().WithOrder(types.Desc("name")).List(&users)
+>   database.Database[*model.User]().WithOrder(types.Desc("name"), types.Asc("created_at")).List(&users)
 >   ```
 
 

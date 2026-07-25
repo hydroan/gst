@@ -102,10 +102,7 @@ type database[M types.Model] struct {
 	sqlStatements *[]types.SQLStatement
 
 	// cursor pagination
-	cursorField  string // field used for cursor pagination, default is "id"
-	cursorValue  string // cursor value for pagination
-	cursorNext   bool   // direction of cursor pagination, true for next page, false for previous page
-	enableCursor bool   // enable cursor pagination
+	cursor types.CursorPosition // feed ordering, boundary value, and travel direction; a zero Value disables cursor pagination.
 
 	// select
 	selectColumns []string
@@ -125,15 +122,11 @@ func (db *database[M]) quoteTableColumn(table, column string) string {
 	return db.quoteIdent(table) + "." + db.quoteIdent(column)
 }
 
+// quoteOrderField quotes a column name for an ORDER BY term with the
+// dialect's identifier quotes, so reserved words such as "order" and "limit"
+// work. A qualified name keeps its table prefix, each part quoted on its own.
 func (db *database[M]) quoteOrderField(name string) string {
 	if len(name) == 0 {
-		return name
-	}
-	if strings.HasPrefix(name, "`") || strings.HasPrefix(name, "\"") || strings.HasPrefix(name, "[") {
-		return name
-	}
-	// Preserve raw expressions like functions or JSON operators.
-	if strings.ContainsAny(name, "()*+-/") {
 		return name
 	}
 	parts := strings.Split(name, ".")
@@ -182,11 +175,8 @@ func (db *database[M]) reset() {
 	db.buildingSQL = false
 	db.sqlStatements = nil
 
-	// reset cursor pagination fields
-	db.cursorField = ""
-	db.cursorValue = ""
-	db.cursorNext = true
-	db.enableCursor = false
+	// reset cursor pagination
+	db.cursor = types.CursorPosition{}
 
 	// reset select
 	db.selectColumns = nil

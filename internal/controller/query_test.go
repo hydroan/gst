@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -162,6 +163,28 @@ func TestDecodeListQueryIgnoresFilterKeys(t *testing.T) {
 	require.Equal(t, "alice", m.Name)
 	require.Equal(t, 10, m.Age,
 		"the bare key keeps feeding the exact business filter while its operator key is left to urlquery.Filters")
+}
+
+func TestCheckCursorOrderConflict(t *testing.T) {
+	cursor := types.CursorForward(types.Asc("id"), "abc")
+	orders := []types.Order{types.Desc("created_at")}
+
+	t.Run("CursorWithExplicitOrderIsRejected", func(t *testing.T) {
+		require.Error(t, checkCursorOrderConflict(cursor, orders),
+			"a second order source demotes the cursor column to a secondary sort key and breaks the boundary condition")
+	})
+
+	t.Run("CursorAloneIsAccepted", func(t *testing.T) {
+		require.NoError(t, checkCursorOrderConflict(cursor, nil))
+	})
+
+	t.Run("OrderAloneIsAccepted", func(t *testing.T) {
+		require.NoError(t, checkCursorOrderConflict(types.CursorPosition{}, orders))
+	})
+
+	t.Run("NeitherIsAccepted", func(t *testing.T) {
+		require.NoError(t, checkCursorOrderConflict(types.CursorPosition{}, nil))
+	})
 }
 
 // newTestGetContext builds a gin context carrying a GET request with the given

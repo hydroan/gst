@@ -129,22 +129,47 @@ func TestBaseQueryPagination(t *testing.T) {
 	})
 }
 
+func TestBaseQueryOrders(t *testing.T) {
+	var svc querySampleService
+
+	t.Run("ReadsRequestValues", func(t *testing.T) {
+		orders, err := svc.QueryOrders(newQueryContext(t, "/samples?_sort_by=created_at%20desc"))
+		require.NoError(t, err)
+		require.Equal(t, []types.Order{{Column: "created_at", Direction: types.OrderDesc}}, orders)
+	})
+
+	t.Run("UnknownColumnIsAClientError", func(t *testing.T) {
+		_, err := svc.QueryOrders(newQueryContext(t, "/samples?_sort_by=no_such_column"))
+		require.Error(t, err)
+	})
+
+	t.Run("ModelWithoutQueryYieldsNoOrder", func(t *testing.T) {
+		var plain queryPlainService
+		orders, err := plain.QueryOrders(newQueryContext(t, "/samples?_sort_by=created_at%20desc"))
+		require.NoError(t, err)
+		require.Empty(t, orders)
+	})
+}
+
 func TestBaseQueryCursor(t *testing.T) {
 	var svc querySampleService
 
 	t.Run("ReadsRequestValues", func(t *testing.T) {
-		value, next, field := svc.QueryCursor(newQueryContext(t, "/samples?_cursor_value=abc&_cursor_next=true&_cursor_field=created_at"))
-		require.Equal(t, "abc", value)
-		require.True(t, next)
-		require.Equal(t, "created_at", field)
+		cursor, err := svc.QueryCursor(newQueryContext(t, "/samples?_cursor_value=abc&_cursor_next=true&_cursor_field=created_at"))
+		require.NoError(t, err)
+		require.Equal(t, types.CursorForward(types.Asc("created_at"), "abc"), cursor)
+	})
+
+	t.Run("UnknownColumnIsAClientError", func(t *testing.T) {
+		_, err := svc.QueryCursor(newQueryContext(t, "/samples?_cursor_value=abc&_cursor_field=no_such_column"))
+		require.Error(t, err)
 	})
 
 	t.Run("ModelWithoutCursorYieldsZeroCursor", func(t *testing.T) {
 		var plain queryPlainService
-		value, next, field := plain.QueryCursor(newQueryContext(t, "/samples?_cursor_value=abc&_cursor_next=true"))
-		require.Empty(t, value)
-		require.False(t, next)
-		require.Empty(t, field)
+		cursor, err := plain.QueryCursor(newQueryContext(t, "/samples?_cursor_value=abc&_cursor_next=true"))
+		require.NoError(t, err)
+		require.False(t, cursor.Enabled())
 	})
 }
 

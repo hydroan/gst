@@ -55,16 +55,3 @@ func Pagination(q url.Values, m types.Model) (page, size int) {
 	}
 	return page, size
 }
-
-// Cursor returns the cursor value, direction and field of the request, ready
-// to be passed to Database.WithCursor.
-//
-// A model opts in to cursor pagination by embedding model.Cursor; any other
-// model yields a zero cursor, which WithCursor treats as a no-op.
-func Cursor(q url.Values, m types.Model) (value string, next bool, field string) {
-	if !modelregistry.IsCursorable(m) {
-		return "", false, ""
-	}
-	next, _ = strconv.ParseBool(q.Get(consts.QUERY_CURSOR_NEXT))
-	return q.Get(consts.QUERY_CURSOR_VALUE), next, q.Get(consts.QUERY_CURSOR_FIELD)
-}

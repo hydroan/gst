@@ -43,7 +43,6 @@ var databaseChainMethods = map[string]bool{
 	"WithDebug":      true,
 	"WithQuery":      true,
 	"WithCursor":     true,
-	"WithTimeRange":  true,
 	"WithSelect":     true,
 	"WithIndex":      true,
 	"WithLock":       true,

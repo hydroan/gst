@@ -23,6 +23,7 @@ import (
 //	QueryDecode        -> the query value Database.WithQuery takes
 //	QueryFilters       -> QueryOptions.Filters, from "field[op]=value" parameters
 //	QueryPresentFields -> QueryOptions.PresentFields, so "enabled=false" filters
+//	QueryOrders        -> Database.WithOrder
 //	QueryPagination    -> Database.WithPagination
 //	QueryCursor        -> Database.WithCursor
 //
@@ -49,9 +50,19 @@ import (
 //	    PresentFields: s.QueryPresentFields(ctx),
 //	    Filters:       filters,
 //	}
+//
+//	cursor, err := s.QueryCursor(ctx)
+//	if err != nil {
+//	    return nil, service.NewError(http.StatusBadRequest, err.Error())
+//	}
+//	orders, err := s.QueryOrders(ctx)
+//	if err != nil {
+//	    return nil, service.NewError(http.StatusBadRequest, err.Error())
+//	}
 //	err = database.Database[*Sample](ctx).
 //	    WithQuery(query, opts).
-//	    WithCursor(s.QueryCursor(ctx)).
+//	    WithCursor(cursor).
+//	    WithOrder(orders...).
 //	    WithPagination(s.QueryPagination(ctx)).
 //	    List(&items)
 //
@@ -88,6 +99,14 @@ func (Base[M, REQ, RSP]) QueryPresentFields(ctx *types.ServiceContext) map[strin
 	return urlquery.PresentFields(ctx.Query())
 }
 
+// QueryOrders returns the ORDER BY terms of the request, ready to be passed to
+// Database.WithOrder. Models embedding model.Query take them from _sort_by;
+// any other model yields no order. An unknown column or direction is a client
+// error and is reported as such.
+func (Base[M, REQ, RSP]) QueryOrders(ctx *types.ServiceContext) ([]types.Order, error) {
+	return urlquery.Orders(ctx.Query(), zeroModel[M]())
+}
+
 // QueryPagination returns the page and size arguments of the request, ready to
 // be passed to Database.WithPagination. Models embedding model.Pagination take
 // both from the request and models embedding model.Cursor take the size only;
@@ -96,10 +115,11 @@ func (Base[M, REQ, RSP]) QueryPagination(ctx *types.ServiceContext) (page, size 
 	return urlquery.Pagination(ctx.Query(), zeroModel[M]())
 }
 
-// QueryCursor returns the cursor value, direction and field of the request,
-// ready to be passed to Database.WithCursor. Models that did not embed
-// model.Cursor yield a zero cursor, which WithCursor treats as a no-op.
-func (Base[M, REQ, RSP]) QueryCursor(ctx *types.ServiceContext) (value string, next bool, field string) {
+// QueryCursor returns the cursor position of the request, ready to be passed
+// to Database.WithCursor. Models that did not embed model.Cursor yield a zero
+// cursor, which WithCursor treats as a no-op. An unknown cursor column is a
+// client error and is reported as such.
+func (Base[M, REQ, RSP]) QueryCursor(ctx *types.ServiceContext) (types.CursorPosition, error) {
 	return urlquery.Cursor(ctx.Query(), zeroModel[M]())
 }
 

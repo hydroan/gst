@@ -6,13 +6,13 @@ package types
 // type: both mistakes stop at compile time instead of surfacing as a SQL
 // error or a silently wrong result set.
 //
-// The methods are typed front ends for the FilterXxx constructors and produce
-// exactly the same Filter values. Code that cannot reference a concrete model
-// (generic helpers, framework internals, URL parsing) keeps using those
-// constructors with a string column name.
+// The methods are typed front ends for the FilterXxx, Asc and Desc
+// constructors and produce exactly the same Filter and Order values. Code that
+// cannot reference a concrete model (generic helpers, framework internals, URL
+// parsing) keeps using those constructors with a string column name.
 type Column[T any] struct {
 	// Name is the database column name resolved by gorm. It is also what the
-	// APIs taking a plain column name (WithOrder, WithTimeRange) expect.
+	// order and cursor constructors taking a plain column name expect.
 	Name string
 }
 
@@ -71,3 +71,9 @@ func (c Column[T]) NotRegex(expr string) Filter { return FilterNotRegex(c.Name, 
 
 // JSONContains matches rows whose JSON array column contains value.
 func (c Column[T]) JSONContains(value string) Filter { return FilterJSONContains(c.Name, value) }
+
+// Asc orders by the column ascending.
+func (c Column[T]) Asc() Order { return Asc(c.Name) }
+
+// Desc orders by the column descending.
+func (c Column[T]) Desc() Order { return Desc(c.Name) }

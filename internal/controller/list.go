@@ -89,7 +89,29 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		}
 		present := urlquery.PresentFields(query)
 
-		cursorValue, cursorNext, cursorField := urlquery.Cursor(query, m)
+		var orders []types.Order
+		if orders, err = urlquery.Orders(query, m); err != nil {
+			log.Error(err)
+			JSON(c, CodeInvalidParam.WithErr(err))
+			gstotel.RecordError(span, err)
+			return
+		}
+
+		var cursor types.CursorPosition
+		if cursor, err = urlquery.Cursor(query, m); err != nil {
+			log.Error(err)
+			JSON(c, CodeInvalidParam.WithErr(err))
+			gstotel.RecordError(span, err)
+			return
+		}
+
+		if err = checkCursorOrderConflict(cursor, orders); err != nil {
+			log.Error(err)
+			JSON(c, CodeInvalidParam.WithErr(err))
+			gstotel.RecordError(span, err)
+			return
+		}
+
 		data := make([]M, 0)
 		expands := parseExpandQuery(c, m)
 
@@ -104,7 +126,6 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			gstotel.RecordError(span, err)
 			return
 		}
-		sortBy, _ := c.GetQuery(consts.QUERY_SORT_BY)
 		// 2.List resources from database.
 		if err = handler(requestContext(c)).
 			WithPagination(urlquery.Pagination(query, m)).
@@ -114,10 +135,10 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 				PresentFields: present,
 				Filters:       filters,
 			}).
-			WithCursor(cursorValue, cursorNext, cursorField).
+			WithCursor(cursor).
 			WithExclude(m.Excludes()).
-			WithExpand(expands, sortBy).
-			WithOrder(sortBy).
+			WithExpand(expands, orders...).
+			WithOrder(orders...).
 			List(&data); err != nil {
 			log.Error(err)
 			JSON(c, CodeFailure.WithErr(err))
@@ -137,7 +158,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		}
 		total := new(int)
 		// NOTE: Total count is not provided when using cursor-based pagination.
-		if len(cursorValue) == 0 {
+		if !cursor.Enabled() {
 			if err = handler(requestContext(c)).
 				// NOTE: WithPagination should not apply in Count method.
 				WithQuery(svc.Filter(ctx, m), types.QueryOptions{

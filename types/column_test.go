@@ -67,3 +67,9 @@ func TestColumnInWithoutValues(t *testing.T) {
 		types.Filter{Column: "status", Op: types.FilterOpIn, Value: []sampleStatus(nil)},
 		status.In())
 }
+
+func TestColumnBuildsOrders(t *testing.T) {
+	created := types.Column[int]{Name: "created_at"}
+	require.Equal(t, types.Order{Column: "created_at", Direction: types.OrderAsc}, created.Asc())
+	require.Equal(t, types.Order{Column: "created_at", Direction: types.OrderDesc}, created.Desc())
+}

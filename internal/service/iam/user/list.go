@@ -87,13 +87,13 @@ func listUsers(ctx *types.ServiceContext, actor *modeliamuser.User) ([]*modeliam
 	if filters.Page > 0 || filters.Size > 0 {
 		err = database.Database[*modeliamuser.User](ctx).
 			WithQuery(userQuery, opts).
-			WithOrder("created_at DESC").
+			WithOrder(types.Desc("created_at")).
 			WithPagination(filters.Page, filters.Size).
 			List(&users)
 	} else {
 		err = database.Database[*modeliamuser.User](ctx).
 			WithQuery(userQuery, opts).
-			WithOrder("created_at DESC").
+			WithOrder(types.Desc("created_at")).
 			List(&users)
 	}
 	if err != nil {

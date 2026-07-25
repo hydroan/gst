@@ -245,21 +245,33 @@ opts := types.QueryOptions{
 	PresentFields: s.QueryPresentFields(ctx),
 	Filters:       filters,
 }
+cursor, err := s.QueryCursor(ctx)
+if err != nil {
+	return nil, service.NewError(http.StatusBadRequest, err.Error())
+}
+orders, err := s.QueryOrders(ctx)
+if err != nil {
+	return nil, service.NewError(http.StatusBadRequest, err.Error())
+}
 items := make([]*appmodel.Sample, 0)
 if err = database.Database[*appmodel.Sample](ctx).
 	WithQuery(query, opts).
-	WithCursor(s.QueryCursor(ctx)).
+	WithCursor(cursor).
+	WithOrder(orders...).
 	WithPagination(s.QueryPagination(ctx)).
 	List(&items); err != nil {
 	return nil, err
 }
 ```
 
-这五个方法覆盖 `field[op]` 过滤、零值过滤、分页和 cursor 分页，各项是否生效取决于
-model 声明的 `model.Query`、`model.Pagination`、`model.Cursor`。它们**不**校验
-`_sort_by` 的排序列，也不保证 `List` 与 `Count` 用同一份查询条件：统计总数时必须传入
-同样的查询值和 `types.QueryOptions`（把 `opts` 存成变量复用是最省事的写法），否则
-total 会和当页数据对不上。
+这六个方法覆盖 `field[op]` 过滤、零值过滤、排序、分页和 cursor 分页，各项是否生效取决于
+model 声明的 `model.Query`、`model.Pagination`、`model.Cursor`。`QueryOrders` 会校验
+`_sort_by` 的排序列，未知列名直接报错；但它们**不**保证 `List` 与 `Count` 用同一份查询
+条件：统计总数时必须传入同样的查询值和 `types.QueryOptions`（把 `opts` 存成变量复用是
+最省事的写法），否则 total 会和当页数据对不上。
+
+cursor 分页自带 ORDER BY，所以一次请求不能同时用 `_cursor_value` 和 `_sort_by`，
+框架列表接口会直接返回 400。
 
 #### OR 查询
 

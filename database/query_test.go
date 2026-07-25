@@ -1326,7 +1326,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).
 				WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: filters}).
-				WithOrder("id").
+				WithOrder(types.Asc("id")).
 				List(&users))
 			ids := make([]string, 0, len(users))
 			for _, u := range users {

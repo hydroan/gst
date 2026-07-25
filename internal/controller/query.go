@@ -35,9 +35,10 @@ var listSizeQueryKey = map[string]struct{}{
 	consts.QUERY_SIZE: {},
 }
 
-// listCursorQueryKeys are enabled by model.Cursor. Cursor pagination is
-// intentionally independent from SortBy; the cursor field and direction define
-// the stable order used by the database layer.
+// listCursorQueryKeys are enabled by model.Cursor. A model may opt in to both
+// cursor and sort parameters, but a single request may not use both at once:
+// the cursor column and travel direction define the stable order, which
+// checkCursorOrderConflict enforces.
 var listCursorQueryKeys = map[string]struct{}{
 	consts.QUERY_CURSOR_VALUE: {},
 	consts.QUERY_CURSOR_FIELD: {},
@@ -80,6 +81,18 @@ func rejectListQueryKeys(query map[string][]string, keys map[string]struct{}) er
 		if _, found := keys[key]; found {
 			return errors.Newf("schema: invalid path %q", key)
 		}
+	}
+	return nil
+}
+
+// checkCursorOrderConflict reports the client error for combining cursor
+// pagination with an explicit sort order. Cursor pagination derives its
+// ORDER BY from the cursor column, so a second order source would demote that
+// column to a secondary sort key and invalidate the boundary condition the
+// cursor relies on, which shows up as pages that skip or repeat rows.
+func checkCursorOrderConflict(cursor types.CursorPosition, orders []types.Order) error {
+	if cursor.Enabled() && len(orders) > 0 {
+		return errors.New("cursor pagination defines its own ordering: _sort_by cannot be combined with _cursor_value")
 	}
 	return nil
 }

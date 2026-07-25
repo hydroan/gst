@@ -104,6 +104,14 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		present := urlquery.PresentFields(query)
 
+		var orders []types.Order
+		if orders, err = urlquery.Orders(query, m); err != nil {
+			log.Error(err)
+			JSON(c, CodeInvalidParam.WithErr(err))
+			gstotel.RecordError(span, err)
+			return
+		}
+
 		data := make([]M, 0)
 		expands := parseExpandQuery(c, m)
 
@@ -118,7 +126,6 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			gstotel.RecordError(span, err)
 			return
 		}
-		sortBy, _ := c.GetQuery(consts.QUERY_SORT_BY)
 		_, _ = page, size
 		// 2.List resources from database.
 		if err = handler(requestContext(c)).
@@ -131,8 +138,8 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				Filters:       filters,
 			}).
 			WithExclude(m.Excludes()).
-			WithExpand(expands, sortBy).
-			WithOrder(sortBy).
+			WithExpand(expands, orders...).
+			WithOrder(orders...).
 			List(&data); err != nil {
 			log.Error(err)
 			JSON(c, CodeFailure.WithErr(err))
