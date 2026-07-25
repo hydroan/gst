@@ -108,6 +108,16 @@ func TestFilters(t *testing.T) {
 		require.Error(t, err)
 	})
 
+	// Filter groups are a service-side capability: letting a client build them
+	// would hand back the ability to combine conditions with OR, which is what
+	// the removed _or parameter got wrong.
+	t.Run("RejectsGroupOperators", func(t *testing.T) {
+		for _, key := range []string{"age[or]", "age[and]"} {
+			_, err := Filters(url.Values{key: {"1"}}, &filterTestModel{})
+			require.Error(t, err, "group operator %q must not be reachable from a URL", key)
+		}
+	})
+
 	t.Run("RejectsMalformedKeys", func(t *testing.T) {
 		for _, key := range []string{"age[gt", "age[]", "age[gt]x", "age[gt][lt]", "[gt]"} {
 			_, err := Filters(url.Values{key: {"1"}}, &filterTestModel{})

@@ -1317,6 +1317,125 @@ func TestDatabaseWithQuery(t *testing.T) {
 		require.True(t, foundU3_3, "should find u3")
 	})
 
+	t.Run("FilterGroups", func(t *testing.T) {
+		defer cleanupTestData()
+		setupTestData(t)
+
+		list := func(t *testing.T, filters ...types.Filter) []string {
+			t.Helper()
+			users := make([]*TestUser, 0)
+			require.NoError(t, database.Database[*TestUser](context.Background()).
+				WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: filters}).
+				WithOrder("id").
+				List(&users))
+			ids := make([]string, 0, len(users))
+			for _, u := range users {
+				ids = append(ids, u.ID)
+			}
+			return ids
+		}
+
+		t.Run("OrGroupMatchesAnyChild", func(t *testing.T) {
+			require.Equal(t, []string{u1.ID, u2.ID}, list(t, types.FilterOr(
+				types.FilterEq("name", u1.Name),
+				types.FilterEq("age", u2.Age),
+			)))
+		})
+
+		// The group is one element of an AND list, so a mandatory condition
+		// next to it can never be absorbed into the alternatives. This is the
+		// exact shape the removed QueryOptions.Or switch got wrong.
+		t.Run("GroupStaysAndCombinedWithOtherFilters", func(t *testing.T) {
+			require.Empty(t, list(
+				t,
+				types.FilterEq("name", u1.Name),
+				types.FilterOr(
+					types.FilterEq("age", u2.Age),
+					types.FilterEq("age", u3.Age),
+				),
+			), "the mandatory condition must not be OR-ed away")
+		})
+
+		t.Run("RawQueryStaysAndCombinedWithGroup", func(t *testing.T) {
+			users := make([]*TestUser, 0)
+			require.NoError(t, database.Database[*TestUser](context.Background()).
+				WithQuery(nil, types.QueryOptions{
+					AllowEmpty:   true,
+					RawQuery:     "name = ?",
+					RawQueryArgs: []any{u1.Name},
+					Filters: []types.Filter{types.FilterOr(
+						types.FilterEq("age", u2.Age),
+						types.FilterEq("age", u3.Age),
+					)},
+				}).
+				List(&users))
+			require.Empty(t, users, "RawQuery is a mandatory condition too")
+		})
+
+		t.Run("AndGroupsNestedInOrGroup", func(t *testing.T) {
+			require.Equal(t, []string{u1.ID, u3.ID}, list(t, types.FilterOr(
+				types.FilterAnd(
+					types.FilterEq("name", u1.Name),
+					types.FilterEq("age", u1.Age),
+				),
+				types.FilterAnd(
+					types.FilterEq("name", u3.Name),
+					types.FilterEq("age", u3.Age),
+				),
+			)), "(a AND b) OR (c AND d) must match only the fully matching rows")
+
+			require.Empty(t, list(t, types.FilterOr(
+				types.FilterAnd(
+					types.FilterEq("name", u1.Name),
+					types.FilterEq("age", u3.Age),
+				),
+				types.FilterAnd(
+					types.FilterEq("name", u3.Name),
+					types.FilterEq("age", u1.Age),
+				),
+			)), "a child group matches only when all of its own conditions hold")
+		})
+
+		t.Run("ThreeLevelNesting", func(t *testing.T) {
+			require.Equal(t, []string{u1.ID, u2.ID}, list(t, types.FilterOr(
+				types.FilterEq("name", u1.Name),
+				types.FilterAnd(
+					types.FilterEq("email", u2.Email),
+					types.FilterOr(
+						types.FilterEq("age", u2.Age),
+						types.FilterEq("age", u3.Age),
+					),
+				),
+			)))
+		})
+
+		t.Run("TopLevelAndGroupEqualsFlatFilters", func(t *testing.T) {
+			grouped := list(t, types.FilterAnd(
+				types.FilterEq("name", u1.Name),
+				types.FilterEq("age", u1.Age),
+			))
+			flat := list(
+				t,
+				types.FilterEq("name", u1.Name),
+				types.FilterEq("age", u1.Age),
+			)
+			require.Equal(t, flat, grouped)
+			require.Equal(t, []string{u1.ID}, grouped)
+		})
+
+		// An empty group is a caller bug. Answering it with the logical
+		// identity (TRUE for AND) would widen the result set, so both group
+		// operators fail closed instead.
+		t.Run("MalformedGroupsFailClosed", func(t *testing.T) {
+			require.Empty(t, list(t, types.FilterOr()), "empty OR group")
+			require.Empty(t, list(t, types.FilterAnd()), "empty AND group")
+			require.Empty(t, list(t, types.Filter{Op: types.FilterOpOr, Value: "oops"}),
+				"a group value that is not a filter list")
+			require.Empty(t, list(t, types.FilterOr(types.FilterEq("", "x"))),
+				"a child with an empty column")
+		})
+	})
+
 	t.Run("Filters", func(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)

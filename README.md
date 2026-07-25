@@ -256,6 +256,42 @@ if err = database.Database[*appmodel.Sample](ctx).
 `_sort_by` 的排序列，也不保证 `List` 与 `Count` 用同一份查询条件；统计总数时必须
 传入同样的查询值和 `types.QueryOptions`，否则 total 会和当页数据对不上。
 
+#### OR 查询
+
+`QueryOptions` 里的条件默认全部 AND 组合。需要 OR 时用 `types.FilterOr` 构造分组，
+组内条件之间 OR，分组整体仍与其他条件 AND——因此权限隔离这类强制条件不可能被
+OR 掉：
+
+```go
+Filters: []types.Filter{
+	types.FilterEq("tenant_id", tenant),          // 强制条件，始终 AND
+	types.FilterOr(                               // 一个搜索词横跨多列
+		types.FilterLike("name", keyword),
+		types.FilterLike("code", keyword),
+	),
+}
+// WHERE tenant_id = ? AND (name LIKE ? OR code LIKE ?)
+```
+
+`types.FilterAnd` 用于在 OR 组内嵌套 AND，配合出 `(a AND b) OR (c AND d)`：
+
+```go
+Filters: []types.Filter{
+	types.FilterEq("tenant_id", tenant),
+	types.FilterOr(
+		types.FilterAnd(types.FilterEq("kind", KindPrimary), types.FilterEq("status", StatusDone)),
+		types.FilterAnd(types.FilterEq("kind", KindSecondary), types.FilterEq("status", StatusPending)),
+	),
+}
+// WHERE tenant_id = ? AND ((kind = ? AND status = ?) OR (kind = ? AND status = ?))
+```
+
+分组可任意嵌套，深度不设限。`FilterAnd` 在顶层是合法但冗余的（等价于把子条件铺平
+写）。空分组会收敛成空结果集而不是匹配全部：分组没有子条件一定是调用方写错了。
+
+分组只能由服务端构造，**URL 不提供该能力**：`?field[or]=` 这类写法会返回 400，
+客户端无法自行改变条件的组合方式。
+
 默认资源的 hook 示例：
 
 ```go

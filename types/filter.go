@@ -39,6 +39,8 @@ const (
 	FilterOpRegex        FilterOp = "regex"        // regular expression match: column REGEXP value (dialect-aware)
 	FilterOpNotRegex     FilterOp = "notregex"     // regular expression exclusion: NOT (column REGEXP value)
 	FilterOpJSONContains FilterOp = "jsoncontains" // JSON array membership: value is a member of the JSON array column
+	FilterOpOr           FilterOp = "or"           // group: the []Filter value is OR-combined, the group itself AND-combined
+	FilterOpAnd          FilterOp = "and"          // group: the []Filter value is AND-combined, for nesting inside an OR group
 )
 
 // filterOps indexes the URL-exposed operators for parsing; service-only
@@ -93,6 +95,8 @@ func FilterOps() []FilterOp {
 //   - FilterOpLike, FilterOpNotLike, FilterOpStartsWith, FilterOpEndsWith,
 //     FilterOpRegex, FilterOpNotRegex, and FilterOpJSONContains require a
 //     string value.
+//   - FilterOpOr and FilterOpAnd require a non-empty []Filter value and carry
+//     no column: they group their children instead of naming one themselves.
 //   - The comparison operators take a scalar value (string, numeric,
 //     time.Time); slices, arrays, and nil are rejected.
 //
@@ -205,4 +209,50 @@ func FilterNotRegex(column, expr string) Filter {
 // a member.
 func FilterJSONContains(column, value string) Filter {
 	return Filter{Column: column, Op: FilterOpJSONContains, Value: value}
+}
+
+// FilterOr groups filters that are OR-combined with each other. The group as a
+// whole stays AND-combined with every other condition of the query, so a
+// mandatory condition such as tenant scoping can never be absorbed into the
+// alternatives:
+//
+//	Filters: []types.Filter{
+//	    types.FilterEq("tenant_id", tenant),
+//	    types.FilterOr(
+//	        types.FilterLike("name", keyword),
+//	        types.FilterLike("code", keyword),
+//	    ),
+//	}
+//	// WHERE tenant_id = ? AND (name LIKE ? OR code LIKE ?)
+//
+// Children may themselves be groups, which is how nesting is expressed; see
+// FilterAnd for the "(a AND b) OR (c AND d)" shape. A group with no children
+// fails closed.
+func FilterOr(filters ...Filter) Filter {
+	return Filter{Op: FilterOpOr, Value: filters}
+}
+
+// FilterAnd groups filters that are AND-combined with each other. Filters are
+// already AND-combined at the top level, so the group exists to nest an AND
+// inside an OR group:
+//
+//	Filters: []types.Filter{
+//	    types.FilterEq("tenant_id", tenant),
+//	    types.FilterOr(
+//	        types.FilterAnd(
+//	            types.FilterEq("kind", KindPrimary),
+//	            types.FilterEq("status", StatusDone),
+//	        ),
+//	        types.FilterAnd(
+//	            types.FilterEq("kind", KindSecondary),
+//	            types.FilterEq("status", StatusPending),
+//	        ),
+//	    ),
+//	}
+//	// WHERE tenant_id = ?
+//	//   AND ((kind = ? AND status = ?) OR (kind = ? AND status = ?))
+//
+// A group with no children fails closed.
+func FilterAnd(filters ...Filter) Filter {
+	return Filter{Op: FilterOpAnd, Value: filters}
 }

@@ -409,126 +409,171 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 //
 // The caller must hold db.mu.
 func (db *database[M]) applyFilters(filters []types.Filter) {
+	db.ins = db.filterConditions(db.ins, filters, false)
+}
+
+// filterConditions applies every filter onto tx and returns the result. The
+// filters are OR-combined with each other when or is set and AND-combined
+// otherwise; the top-level call always combines with AND.
+//
+// The caller must hold db.mu.
+func (db *database[M]) filterConditions(tx *gorm.DB, filters []types.Filter, or bool) *gorm.DB {
 	for _, f := range filters {
+		// Groups carry their children in Value and have no column of their
+		// own, so they are dispatched before the empty-column check below.
+		switch f.Op {
+		case types.FilterOpOr:
+			tx = db.combine(tx, or, db.groupCondition(f, true))
+			continue
+		case types.FilterOpAnd:
+			tx = db.combine(tx, or, db.groupCondition(f, false))
+			continue
+		}
 		if len(f.Column) == 0 {
 			logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("filter has empty column, adding safety condition")
-			db.ins = db.ins.Where("1 = 0")
+			tx = db.combine(tx, or, "1 = 0")
 			continue
 		}
 		column := db.quoteIdent(f.Column)
 		switch f.Op {
 		case types.FilterOpEq:
-			db.applyScalarFilter(f, column+" = ?")
+			tx = db.applyScalarFilter(tx, or, f, column+" = ?")
 		case types.FilterOpNe:
-			db.applyScalarFilter(f, column+" <> ?")
+			tx = db.applyScalarFilter(tx, or, f, column+" <> ?")
 		case types.FilterOpGt:
-			db.applyScalarFilter(f, column+" > ?")
+			tx = db.applyScalarFilter(tx, or, f, column+" > ?")
 		case types.FilterOpGte:
-			db.applyScalarFilter(f, column+" >= ?")
+			tx = db.applyScalarFilter(tx, or, f, column+" >= ?")
 		case types.FilterOpLt:
-			db.applyScalarFilter(f, column+" < ?")
+			tx = db.applyScalarFilter(tx, or, f, column+" < ?")
 		case types.FilterOpLte:
-			db.applyScalarFilter(f, column+" <= ?")
+			tx = db.applyScalarFilter(tx, or, f, column+" <= ?")
 		case types.FilterOpIn:
-			db.applyListFilter(f, column+" IN ?")
+			tx = db.applyListFilter(tx, or, f, column+" IN ?")
 		case types.FilterOpNotIn:
-			db.applyListFilter(f, column+" NOT IN ?")
+			tx = db.applyListFilter(tx, or, f, column+" NOT IN ?")
 		case types.FilterOpLike:
-			db.applyPatternFilter(f, column+" LIKE ?"+likeEscapeClause, "%", "%")
+			tx = db.applyPatternFilter(tx, or, f, column+" LIKE ?"+likeEscapeClause, "%", "%")
 		case types.FilterOpNotLike:
-			db.applyPatternFilter(f, column+" NOT LIKE ?"+likeEscapeClause, "%", "%")
+			tx = db.applyPatternFilter(tx, or, f, column+" NOT LIKE ?"+likeEscapeClause, "%", "%")
 		case types.FilterOpStartsWith:
-			db.applyPatternFilter(f, column+" LIKE ?"+likeEscapeClause, "", "%")
+			tx = db.applyPatternFilter(tx, or, f, column+" LIKE ?"+likeEscapeClause, "", "%")
 		case types.FilterOpEndsWith:
-			db.applyPatternFilter(f, column+" LIKE ?"+likeEscapeClause, "%", "")
+			tx = db.applyPatternFilter(tx, or, f, column+" LIKE ?"+likeEscapeClause, "%", "")
 		case types.FilterOpIsNull:
 			b, ok := f.Value.(bool)
 			if !ok {
-				db.failClosedFilter(f, "expects a bool value")
+				tx = db.failClosedFilter(tx, or, f, "expects a bool value")
 				continue
 			}
 			if b {
-				db.ins = db.ins.Where(column + " IS NULL")
+				tx = db.combine(tx, or, column+" IS NULL")
 			} else {
-				db.ins = db.ins.Where(column + " IS NOT NULL")
+				tx = db.combine(tx, or, column+" IS NOT NULL")
 			}
 		case types.FilterOpRegex:
-			db.applyStringFilter(f, column+" "+db.regexpOperator()+" ?")
+			tx = db.applyStringFilter(tx, or, f, column+" "+db.regexpOperator()+" ?")
 		case types.FilterOpNotRegex:
-			db.applyStringFilter(f, "NOT ("+column+" "+db.regexpOperator()+" ?)")
+			tx = db.applyStringFilter(tx, or, f, "NOT ("+column+" "+db.regexpOperator()+" ?)")
 		case types.FilterOpJSONContains:
 			// datatypes handles the dialect split: JSON_CONTAINS on MySQL and
 			// a json_each EXISTS subquery on SQLite. The column is passed
 			// unquoted because the expression quotes it itself.
 			s, ok := f.Value.(string)
 			if !ok {
-				db.failClosedFilter(f, "expects a string value")
+				tx = db.failClosedFilter(tx, or, f, "expects a string value")
 				continue
 			}
-			db.ins = db.ins.Where(datatypes.JSONArrayQuery(f.Column).Contains(s))
+			tx = db.combine(tx, or, datatypes.JSONArrayQuery(f.Column).Contains(s))
 		default:
-			db.failClosedFilter(f, "is unknown")
+			tx = db.failClosedFilter(tx, or, f, "is unknown")
 		}
 	}
+	return tx
+}
+
+// combine adds one condition to tx, joining it with OR when or is set and with
+// AND otherwise. gorm treats a leading Or the same as a Where, so a group's
+// first condition needs no special case.
+func (db *database[M]) combine(tx *gorm.DB, or bool, query any, args ...any) *gorm.DB {
+	if or {
+		return tx.Or(query, args...)
+	}
+	return tx.Where(query, args...)
+}
+
+// groupCondition builds one filter group as a single nested condition, so the
+// conditions outside the group can never be absorbed into it. Its children are
+// OR-combined when or is set and AND-combined otherwise; a child may itself be
+// a group, which is how arbitrary nesting works.
+//
+// A group whose value is not a filter list, or that carries no children at
+// all, fails closed: an empty group is a caller bug, and answering it with the
+// logical identity (TRUE for AND) would widen the result set.
+func (db *database[M]) groupCondition(f types.Filter, or bool) any {
+	children, ok := f.Value.([]types.Filter)
+	if !ok {
+		logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("filter group %q expects a filter list value, adding safety condition", f.Op)
+		return "1 = 0"
+	}
+	if len(children) == 0 {
+		logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("filter group %q has no children, adding safety condition", f.Op)
+		return "1 = 0"
+	}
+	return db.filterConditions(db.ins.Session(&gorm.Session{NewDB: true}), children, or)
 }
 
 // failClosedFilter records why a filter cannot be applied and narrows the
 // query to an empty result instead of widening it.
-func (db *database[M]) failClosedFilter(f types.Filter, msg string) {
+func (db *database[M]) failClosedFilter(tx *gorm.DB, or bool, f types.Filter, msg string) *gorm.DB {
 	logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("filter operator %q on column %q %s, adding safety condition", f.Op, f.Column, msg)
-	db.ins = db.ins.Where("1 = 0")
+	return db.combine(tx, or, "1 = 0")
 }
 
 // applyScalarFilter binds a comparison filter whose value must be a scalar;
 // nil, slice, and array values fail closed.
-func (db *database[M]) applyScalarFilter(f types.Filter, clause string) {
+func (db *database[M]) applyScalarFilter(tx *gorm.DB, or bool, f types.Filter, clause string) *gorm.DB {
 	if f.Value == nil {
-		db.failClosedFilter(f, "expects a scalar value")
-		return
+		return db.failClosedFilter(tx, or, f, "expects a scalar value")
 	}
 	if k := reflect.ValueOf(f.Value).Kind(); k == reflect.Slice || k == reflect.Array {
-		db.failClosedFilter(f, "expects a scalar value")
-		return
+		return db.failClosedFilter(tx, or, f, "expects a scalar value")
 	}
-	db.ins = db.ins.Where(clause, f.Value)
+	return db.combine(tx, or, clause, f.Value)
 }
 
 // applyListFilter binds a set-membership filter whose value must be a slice
 // or an array; anything else, including a comma-separated string, fails
 // closed. An empty slice keeps the SQL list semantics: IN matches nothing,
 // and the result never widens.
-func (db *database[M]) applyListFilter(f types.Filter, clause string) {
+func (db *database[M]) applyListFilter(tx *gorm.DB, or bool, f types.Filter, clause string) *gorm.DB {
 	if f.Value == nil {
-		db.failClosedFilter(f, "expects a slice value")
-		return
+		return db.failClosedFilter(tx, or, f, "expects a slice value")
 	}
 	if k := reflect.ValueOf(f.Value).Kind(); k != reflect.Slice && k != reflect.Array {
-		db.failClosedFilter(f, "expects a slice value")
-		return
+		return db.failClosedFilter(tx, or, f, "expects a slice value")
 	}
-	db.ins = db.ins.Where(clause, f.Value)
+	return db.combine(tx, or, clause, f.Value)
 }
 
 // applyPatternFilter binds a LIKE-family filter; the value must be a string
 // and is escaped so the stored value matches literally.
-func (db *database[M]) applyPatternFilter(f types.Filter, clause, prefix, suffix string) {
+func (db *database[M]) applyPatternFilter(tx *gorm.DB, or bool, f types.Filter, clause, prefix, suffix string) *gorm.DB {
 	s, ok := f.Value.(string)
 	if !ok {
-		db.failClosedFilter(f, "expects a string value")
-		return
+		return db.failClosedFilter(tx, or, f, "expects a string value")
 	}
-	db.ins = db.ins.Where(clause, prefix+escapeLikePattern(s)+suffix)
+	return db.combine(tx, or, clause, prefix+escapeLikePattern(s)+suffix)
 }
 
 // applyStringFilter binds a filter whose value must be a plain string bound
 // as-is (the regex operators).
-func (db *database[M]) applyStringFilter(f types.Filter, clause string) {
+func (db *database[M]) applyStringFilter(tx *gorm.DB, or bool, f types.Filter, clause string) *gorm.DB {
 	s, ok := f.Value.(string)
 	if !ok {
-		db.failClosedFilter(f, "expects a string value")
-		return
+		return db.failClosedFilter(tx, or, f, "expects a string value")
 	}
-	db.ins = db.ins.Where(clause, s)
+	return db.combine(tx, or, clause, s)
 }
 
 // likeEscapeClause declares the LIKE escape character used by filters.

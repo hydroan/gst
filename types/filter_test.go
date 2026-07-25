@@ -38,7 +38,10 @@ func TestParseFilterOp(t *testing.T) {
 	})
 
 	t.Run("ServiceOnlyOperatorsAreNotParseable", func(t *testing.T) {
-		for _, op := range []types.FilterOp{types.FilterOpRegex, types.FilterOpNotRegex, types.FilterOpJSONContains} {
+		for _, op := range []types.FilterOp{
+			types.FilterOpRegex, types.FilterOpNotRegex, types.FilterOpJSONContains,
+			types.FilterOpOr, types.FilterOpAnd,
+		} {
 			_, ok := types.ParseFilterOp(string(op))
 			require.False(t, ok, "service-only operator %q must not be reachable from URL parsing", op)
 		}
@@ -68,6 +71,31 @@ func TestFilterConstructors(t *testing.T) {
 		{"Regex", types.FilterRegex("name", "^sam"), types.Filter{Column: "name", Op: types.FilterOpRegex, Value: "^sam"}},
 		{"NotRegex", types.FilterNotRegex("name", "^sam"), types.Filter{Column: "name", Op: types.FilterOpNotRegex, Value: "^sam"}},
 		{"JSONContains", types.FilterJSONContains("tags", "sample"), types.Filter{Column: "tags", Op: types.FilterOpJSONContains, Value: "sample"}},
+		{
+			"Or",
+			types.FilterOr(types.FilterEq("age", 18), types.FilterEq("name", "sample")),
+			types.Filter{Op: types.FilterOpOr, Value: []types.Filter{
+				{Column: "age", Op: types.FilterOpEq, Value: 18},
+				{Column: "name", Op: types.FilterOpEq, Value: "sample"},
+			}},
+		},
+		{
+			"And",
+			types.FilterAnd(types.FilterEq("age", 18), types.FilterEq("name", "sample")),
+			types.Filter{Op: types.FilterOpAnd, Value: []types.Filter{
+				{Column: "age", Op: types.FilterOpEq, Value: 18},
+				{Column: "name", Op: types.FilterOpEq, Value: "sample"},
+			}},
+		},
+		{
+			"NestedGroups",
+			types.FilterOr(types.FilterAnd(types.FilterEq("age", 18))),
+			types.Filter{Op: types.FilterOpOr, Value: []types.Filter{
+				{Op: types.FilterOpAnd, Value: []types.Filter{
+					{Column: "age", Op: types.FilterOpEq, Value: 18},
+				}},
+			}},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

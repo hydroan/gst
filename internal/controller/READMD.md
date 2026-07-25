@@ -522,6 +522,11 @@ value type fails the build instead of the query. Code that cannot name a
 concrete model (generic helpers, framework internals) uses the
 `types.FilterXxx` constructors with a string column name instead.
 
+Service code additionally has `types.FilterOr` and `types.FilterAnd` to group
+filters, which is the only way a query expresses OR. Groups are deliberately
+not part of the URL contract: a client cannot change how conditions combine,
+so a mandatory service-side filter can never be OR-ed away.
+
 Values are validated against the field's Go type and rejected with 400 when
 malformed. Numeric fields require numeric values. Time fields accept the
 comparison operators only, with the formats parsed by `parseQueryTime`:
