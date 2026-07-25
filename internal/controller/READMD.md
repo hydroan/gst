@@ -503,7 +503,7 @@ field, use the field operator filter syntax instead: `?name[like]=user01`
 
 #### `field[op]=value` (field operator filters)
 
-Field-level operator filters (see `urlquery.Filters`) require
+Field-level operator filters (see `internal/urlquery.Filters`) require
 `model.Query` and are always AND-combined with the other conditions. Supported
 operators: `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in`/`notin` (comma-separated
 values), `like`/`notlike` (substring match), `startswith`/`endswith` (anchored
@@ -522,8 +522,10 @@ value type fails the build instead of the query. Code that cannot name a
 concrete model (generic helpers, framework internals) uses the
 `types.FilterXxx` constructors with a string column name instead.
 
-Service code additionally has `types.FilterOr` and `types.FilterAnd` to group
-filters, which is the only way a query expresses OR. Groups are deliberately
+A service that implements a list action itself reaches the same parsing
+through the `QueryXxx` methods on its `service.Base`. Service code also has
+`types.FilterOr` and `types.FilterAnd` to group filters, which is the only way
+a query expresses OR. Groups are deliberately
 not part of the URL contract: a client cannot change how conditions combine,
 so a mandatory service-side filter can never be OR-ed away.
 
