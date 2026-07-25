@@ -4,6 +4,7 @@ package constants
 const (
 	// Framework import paths
 	//nolint:godoclint
+	ImportPathGst       = "github.com/hydroan/gst"
 	ImportPathModel     = "github.com/hydroan/gst/model"
 	ImportPathService   = "github.com/hydroan/gst/service"
 	ImportPathRouter    = "github.com/hydroan/gst/router"
@@ -22,6 +23,24 @@ const (
 	ExtensionGo     = ".go"
 	PatternTestFile = "_test.go"
 	PrefixIgnore    = "_"
+)
+
+// Generated file names.
+//
+// SuffixGenGo marks every file gg generates and fully owns. A file carrying
+// this suffix is framework-managed: gg rewrites it, and deletes it once the
+// source it was generated from is gone. Project code never has to clean up
+// after the generator.
+const (
+	SuffixGenGo = ".gen.go"
+
+	FileModelGen   = "model" + SuffixGenGo
+	FileAPIDocGen  = "apidoc" + SuffixGenGo
+	FileServiceGen = "service" + SuffixGenGo
+	FileRouterGen  = "router" + SuffixGenGo
+	// FileMain keeps its conventional name: main.go is the entry point every
+	// Go toolchain and IDE expects.
+	FileMain = "main.go"
 )
 
 // Directory names

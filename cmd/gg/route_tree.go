@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/ds/tree/trie"
+	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/spf13/cobra"
 )
 
@@ -76,7 +77,7 @@ func filterRouteTree(routes map[string][]string, filter string) map[string][]str
 
 // parseRouteTreeFromFile parses generated router.go for URL route tree output.
 func parseRouteTreeFromFile() (map[string][]string, error) {
-	routerFile := filepath.Join(routerDir, "router.go")
+	routerFile := filepath.Join(routerDir, constants.FileRouterGen)
 	if !fileExists(routerFile) {
 		return nil, fmt.Errorf("router file not found: %s. Please run 'gg gen' first", routerFile)
 	}

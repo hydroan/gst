@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/hydroan/gst/internal/codegen/constants"
+
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
 )
@@ -18,12 +20,15 @@ var requiredFileContentMap = map[string]string{
 	"configx/configx.go":       configxContent,
 	"cronjob/cronjob.go":       cronjobContent,
 	"middleware/middleware.go": middlewareContent,
-	"model/model.go":           modelContent,
-	"service/service.go":       serviceContent,
-	"module/module.go":         moduleContent,
-	"router/router.go":         routerContent,
-	"dao/.gitkeep":             "",
-	"provider/.gitkeep":        "",
+	// These three are the empty first versions of files gg gen owns, so they
+	// carry the generated suffix: a project must compile before its first
+	// generation, and the generator then overwrites the same file.
+	"model/" + constants.FileModelGen:     modelContent,
+	"service/" + constants.FileServiceGen: serviceContent,
+	"module/module.go":                    moduleContent,
+	"router/" + constants.FileRouterGen:   routerContent,
+	"dao/.gitkeep":                        "",
+	"provider/.gitkeep":                   "",
 }
 
 var projectFileContentMap = newProjectFileContentMap()

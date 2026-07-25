@@ -236,6 +236,11 @@ type conditionQueryTestModel struct {
 	ItemCount int       `json:"item_count"`
 	Enabled   bool      `json:"enabled"`
 	ExpiredAt time.Time `json:"expired_at"`
+	// GroupIDs and Renamed anchor the column resolution: gorm renders the
+	// former as group_ids (a plain snake case conversion would not) and the
+	// latter through its column tag, while the URL keeps the json name.
+	GroupIDs string `json:"group_ids"`
+	Renamed  string `json:"renamed" gorm:"column:custom_column"`
 
 	modelregistry.Query
 	modelregistry.Base
@@ -284,6 +289,24 @@ func TestParseFiltersQuery(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Equal(t, []types.Filter{{Column: "id", Op: types.FilterOpNotIn, Value: []string{"a", "b"}}}, conds)
+	})
+
+	t.Run("UsesGormColumnNames", func(t *testing.T) {
+		conds, err := parseFiltersQuery(&conditionQueryTestModel{}, map[string][]string{
+			"group_ids[in]": {"a,b"},
+		})
+		require.NoError(t, err)
+		require.Equal(t, []types.Filter{
+			{Column: "group_ids", Op: types.FilterOpIn, Value: []string{"a", "b"}},
+		}, conds, "gorm renders GroupIDs as group_ids, not group_i_ds")
+
+		conds, err = parseFiltersQuery(&conditionQueryTestModel{}, map[string][]string{
+			"renamed[eq]": {"x"},
+		})
+		require.NoError(t, err)
+		require.Equal(t, []types.Filter{
+			{Column: "custom_column", Op: types.FilterOpEq, Value: "x"},
+		}, conds, "the URL keeps the json name while SQL uses the column tag")
 	})
 
 	t.Run("SkipsEmptyValues", func(t *testing.T) {

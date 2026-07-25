@@ -533,9 +533,13 @@ exact business filter, so `?age=10&age[gt]=20` applies both conditions. Unknown
 fields or operators, and combining with `_or=true`, return 400; empty values
 mean "not filtering".
 
-Service code builds the same filters with the `types.FilterXxx` constructors
-(e.g. `types.FilterIn("id", ids)` binds the slice as a whole), whose signatures
-lock the value shape each operator expects.
+Service code builds the same filters through the typed column references
+`gg gen` generates next to each model, for example
+`bet.BetOrderCols.Status.In(bet.OrderStatusPending)`: the column name and the
+value type are both checked by the compiler, so a renamed column or a wrong
+value type fails the build instead of the query. Code that cannot name a
+concrete model (generic helpers, framework internals) uses the
+`types.FilterXxx` constructors with a string column name instead.
 
 Values are validated against the field's Go type and rejected with 400 when
 malformed. Numeric fields require numeric values. Time fields accept the

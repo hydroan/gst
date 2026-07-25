@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/model"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -39,7 +40,9 @@ func TestStructFieldToMap(t *testing.T) {
 		}
 		typ := reflect.TypeOf(m).Elem()
 		val := reflect.ValueOf(m).Elem()
-		structFieldToMap(context.Background(), typ, val, q, present)
+		columns, err := modelschema.Columns(typ)
+		require.NoError(t, err)
+		structFieldToMap(context.Background(), typ, val, q, present, modelschema.ByGoName(columns))
 		return q
 	}
 
@@ -120,9 +123,13 @@ func TestStructFieldToMap(t *testing.T) {
 		require.NotContains(t, q, "enabled")
 	})
 
-	t.Run("presence matches the query tag over the json tag", func(t *testing.T) {
+	t.Run("presence matches the query tag while gorm names the column", func(t *testing.T) {
 		q := toMap(&presenceQueryItem{}, nil, map[string]struct{}{"flag": {}})
-		require.Equal(t, "0", q["flag"], "the query tag decides the condition column")
+		// The query tag names the URL parameter presence is keyed by, but the
+		// condition column is whatever gorm derives from the field name.
+		// Using the tag as a column name would emit a column no table has.
+		require.Equal(t, "0", q["legacy"])
+		require.NotContains(t, q, "flag")
 		require.NotContains(t, q, "legacy_json")
 	})
 

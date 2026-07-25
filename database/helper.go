@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
-	"github.com/stoewer/go-strcase"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -148,35 +148,6 @@ func (db *database[M]) trace(op string, batch ...int) (func(error), context.Cont
 	}, ctx, span
 }
 
-// queryColumnName resolves the condition column name for a struct field:
-// the "query" tag wins over the "json" tag, which wins over the field name,
-// and the result is converted to snake case to match gorm column naming.
-func queryColumnName(ctx context.Context, field reflect.StructField) string {
-	// "json" tag priority is higher than field.Name
-	jsonTag := strings.TrimSpace(field.Tag.Get("json"))
-	if idx := strings.Index(jsonTag, ","); idx >= 0 {
-		jsonTag = jsonTag[:idx]
-	}
-	if len(jsonTag) == 0 {
-		// the structure lowercase field name as the query condition.
-		jsonTag = field.Name
-	}
-	// "query" tag have higher priority than "json" tag
-	queryTag := strings.TrimSpace(field.Tag.Get("query"))
-	if idx := strings.Index(queryTag, ","); idx >= 0 {
-		queryTag = queryTag[:idx]
-	}
-	if len(queryTag) > 0 && queryTag != jsonTag {
-		logger.Database.WithContext(ctx, consts.Phase("StructFieldToMap")).Infoz("json tag replace by query tag", zap.String("old", jsonTag), zap.String("new", queryTag))
-		jsonTag = queryTag
-	}
-	// json tag name naming format must be same as gorm table columns,
-	// both should be "snake case" or "camel case".
-	// gorm table columns naming format default to 'snake case',
-	// so the json tag name is converted to "snake case" here.
-	return strcase.SnakeCase(jsonTag)
-}
-
 // structFieldToMap extracts the field tags from a struct and writes them into a map.
 // This map can then be used to build SQL query conditions.
 //
@@ -184,7 +155,7 @@ func queryColumnName(ctx context.Context, field reflect.StructField) string {
 // is listed in present: presence marks filter values explicitly provided by the
 // caller, so explicit zero values such as false and 0 still become conditions.
 // FIXME: if the field type is boolean or integer, disable the fuzzy matching.
-func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, q map[string]string, present map[string]struct{}) {
+func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, q map[string]string, present map[string]struct{}, columns map[string]modelschema.Column) {
 	if q == nil {
 		q = make(map[string]string)
 	}
@@ -193,11 +164,19 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 		fieldTyp := field.Type
 		fieldVal := val.Field(i)
 
+		// A field gorm does not map to a column is not a query condition.
+		// The embedded base structs are the exception: they are handled
+		// explicitly below, since gorm lifts their fields to the top level.
+		col, isColumn := columns[field.Name]
+
 		if fieldVal.IsZero() {
 			if len(present) == 0 {
 				continue
 			}
-			if _, ok := present[queryColumnName(ctx, field)]; !ok {
+			if !isColumn {
+				continue
+			}
+			if _, ok := present[col.QueryName]; !ok {
 				continue
 			}
 		}
@@ -266,11 +245,14 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 					}
 				*/
 			} else {
-				structFieldToMap(ctx, fieldTyp, fieldVal, q, present)
+				structFieldToMap(ctx, fieldTyp, fieldVal, q, present, columns)
 			}
 			continue
 		}
-		columnName := queryColumnName(ctx, field)
+		if !isColumn {
+			continue
+		}
+		columnName := col.DBName
 
 		if !fieldVal.CanInterface() {
 			continue

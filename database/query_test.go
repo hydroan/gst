@@ -1862,6 +1862,16 @@ func TestDatabaseWithQuery(t *testing.T) {
 			List(&users))
 		require.Len(t, users, 2, "named string type slices must bind like []string")
 
+		// A nil slice, which a variadic Column.In() call with no arguments
+		// produces, must behave like an empty one.
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryOptions{
+				Filters: []types.Filter{{Column: "name", Op: types.FilterOpIn, Value: []string(nil)}},
+			}).
+			List(&users))
+		require.Empty(t, users, "a nil slice must match nothing")
+
 		// An empty slice matches nothing instead of widening the result set.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).

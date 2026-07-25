@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -90,52 +88,12 @@ func runMigrateSchemaProgram(content string) error {
 }
 
 func runGeneratedMigrateProgram(content string, section string, message string) error {
-	tempDir, err := os.MkdirTemp("", "gg-migrate-*")
-	if err != nil {
-		return fmt.Errorf("failed to create temporary migration directory: %w", err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	runnerFile := filepath.Join(tempDir, "main.go")
-	if err = os.WriteFile(runnerFile, []byte(content), 0o600); err != nil {
-		return fmt.Errorf("failed to write temporary migration program: %w", err)
-	}
-
-	modFile := filepath.Join(tempDir, "migrate.mod")
-	goMod, err := os.ReadFile("go.mod")
-	if err != nil {
-		return fmt.Errorf("failed to read go.mod: %w", err)
-	}
-	// #nosec G703 -- modFile is created under an os.MkdirTemp-owned directory.
-	if err = os.WriteFile(modFile, goMod, 0o600); err != nil {
-		return fmt.Errorf("failed to write temporary migrate.mod: %w", err)
-	}
-
-	goSum, err := os.ReadFile("go.sum")
-	if os.IsNotExist(err) {
-		goSum = nil
-	} else if err != nil {
-		return fmt.Errorf("failed to read go.sum: %w", err)
-	}
-	if goSum != nil {
-		sumFile := filepath.Join(tempDir, "migrate.sum")
-		// #nosec G703 -- sumFile is created under an os.MkdirTemp-owned directory.
-		if err = os.WriteFile(sumFile, goSum, 0o600); err != nil {
-			return fmt.Errorf("failed to write temporary migrate.sum: %w", err)
-		}
-	}
-
 	clioutput.Section(section)
 	clioutput.Info("", "%s", message)
 
-	runCmd := exec.Command("go", "run", "-mod=mod", "-modfile", modFile, runnerFile)
-	runCmd.Stdout = os.Stdout
-	runCmd.Stderr = os.Stderr
-	runCmd.Stdin = os.Stdin
-	if err = runCmd.Run(); err != nil {
-		return fmt.Errorf("failed to run migration: %w", err)
-	}
-	return nil
+	// Migration prints its own progress and prompts for confirmation, so its
+	// output and input stay connected to the terminal.
+	return projectProgram{Content: content, Stdout: os.Stdout, Interactive: true}.Run()
 }
 
 const migrateTemplate = `package main
@@ -148,7 +106,6 @@ import (
 	"go/token"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"

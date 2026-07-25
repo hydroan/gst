@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
@@ -279,7 +280,16 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 	val := reflect.ValueOf(query).Elem()
 	q := make(map[string]string)
 
-	structFieldToMap(db.ctx, typ, val, q, opt.PresentFields)
+	// Column names come from gorm through modelschema. A model gorm cannot
+	// parse has no usable columns at all, so the query falls closed instead
+	// of matching on a guessed column name.
+	parsedColumns, parseErr := modelschema.Columns(typ)
+	if parseErr != nil {
+		logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("cannot resolve columns of %s: %v, adding safety condition", typ, parseErr)
+		db.ins = db.ins.Where("1 = 0")
+		return db
+	}
+	structFieldToMap(db.ctx, typ, val, q, opt.PresentFields, modelschema.ByGoName(parsedColumns))
 
 	// CRITICAL SAFETY CHECK: Empty query conditions
 	//

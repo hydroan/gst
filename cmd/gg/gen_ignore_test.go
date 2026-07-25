@@ -10,6 +10,7 @@ import (
 
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/codegen"
+	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/types/consts"
@@ -421,7 +422,7 @@ func findDesign(t *testing.T, models []*gen.ModelInfo, modelName string) *dsl.De
 // TestGenRunAppliesRouteIgnoresFromGstYAML is an end-to-end test for the
 // gst.yaml -> gg gen pipeline: it runs genRunWithOptions against a temporary
 // project whose gst.yaml ignores one route, then asserts the generated
-// router/router.go reflects that ignore (kept action registered, ignored
+// router/router.gen.go reflects that ignore (kept action registered, ignored
 // action absent).
 func TestGenRunAppliesRouteIgnoresFromGstYAML(t *testing.T) {
 	// Save and restore gg global flags, same pattern as
@@ -495,7 +496,7 @@ func (Ticket) Design() {
 		t.Fatalf("genRunWithOptions() error = %v", err)
 	}
 
-	routerCode, err := os.ReadFile(filepath.Join(projectDir, "router", "router.go"))
+	routerCode, err := os.ReadFile(filepath.Join(projectDir, "router", constants.FileRouterGen))
 	if err != nil {
 		t.Fatal(err)
 	}

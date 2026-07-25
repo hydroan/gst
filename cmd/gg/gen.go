@@ -16,6 +16,7 @@ import (
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/codegen"
+	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	pkgnew "github.com/hydroan/gst/internal/codegen/new"
 	"github.com/hydroan/gst/internal/ggconfig"
@@ -232,13 +233,13 @@ func genRunWithOptions(opts genRunOptions) error {
 	sort.Strings(modelImports)
 	modelCode, err := gen.BuildModelFile("model", modelImports, modelStmts...)
 	if err != nil {
-		return errors.Wrap(err, "build model/model.go")
+		return errors.Wrap(err, "build model/model.gen.go")
 	}
-	if writeErr := writeGenFile(filepath.Join(modelDir, "model.go"), modelCode); writeErr != nil {
+	if writeErr := writeGenFile(filepath.Join(modelDir, constants.FileModelGen), modelCode); writeErr != nil {
 		return writeErr
 	}
 
-	// generate model/apidoc.go, which registers struct and field doc comments
+	// generate model/apidoc.gen.go, which registers struct and field doc comments
 	// so the OpenAPI document keeps schema descriptions in binaries deployed
 	// without Go source files.
 	docEntries, err := codegen.ExtractAPIDocs(module, modelDir, excludes)
@@ -247,24 +248,24 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 	apidocCode, err := gen.BuildAPIDocFile("model", docEntries)
 	if err != nil {
-		return errors.Wrap(err, "build model/apidoc.go")
+		return errors.Wrap(err, "build model/apidoc.gen.go")
 	}
-	if writeErr := writeGenFile(filepath.Join(modelDir, "apidoc.go"), apidocCode); writeErr != nil {
+	if writeErr := writeGenFile(filepath.Join(modelDir, constants.FileAPIDocGen), apidocCode); writeErr != nil {
 		return writeErr
 	}
 
-	// generate service/service.go
+	// generate service/service.gen.go
 	serviceImports = lo.Keys(serviceImportMap)
 	sort.Strings(serviceImports)
 	serviceCode, err := gen.BuildServiceFile("service", serviceImports, serviceStmts...)
 	if err != nil {
-		return errors.Wrap(err, "build service/service.go")
+		return errors.Wrap(err, "build service/service.gen.go")
 	}
-	if writeErr := writeGenFile(filepath.Join(serviceDir, "service.go"), serviceCode); writeErr != nil {
+	if writeErr := writeGenFile(filepath.Join(serviceDir, constants.FileServiceGen), serviceCode); writeErr != nil {
 		return writeErr
 	}
 
-	// generate router/router.go
+	// generate router/router.gen.go
 	// router always imports "github.com/hydroan/gst/types"
 	// Load package preparation to avoid Golang analysis and speed up generation.
 	routerImportMap["github.com/hydroan/gst/types"] = struct{}{}
@@ -272,10 +273,16 @@ func genRunWithOptions(opts genRunOptions) error {
 	sort.Strings(routerImports)
 	routerCode, err := gen.BuildRouterFile("router", routerImports, routerStmts...)
 	if err != nil {
-		return errors.Wrap(err, "build router/router.go")
+		return errors.Wrap(err, "build router/router.gen.go")
 	}
-	if writeErr := writeGenFile(filepath.Join(routerDir, "router.go"), routerCode); writeErr != nil {
+	if writeErr := writeGenFile(filepath.Join(routerDir, constants.FileRouterGen), routerCode); writeErr != nil {
 		return writeErr
+	}
+
+	// Generate the typed column references of every model, so filters can
+	// name columns through the compiler instead of through string literals.
+	if genErr := generateColumnFiles(module, modelDir, allModels, opts.Quiet); genErr != nil {
+		return genErr
 	}
 
 	// generate main.go
@@ -283,7 +290,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	if err != nil {
 		return errors.Wrap(err, "build main.go")
 	}
-	if err := writeGenFile("main.go", mainCode); err != nil {
+	if err := writeGenFile(constants.FileMain, mainCode); err != nil {
 		return err
 	}
 

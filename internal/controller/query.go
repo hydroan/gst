@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
@@ -235,7 +236,10 @@ func parseFiltersQuery(m types.Model, query map[string][]string) ([]types.Filter
 	}
 	sort.Strings(keys)
 
-	columns := cachedQueryableColumns(reflect.TypeOf(m).Elem())
+	columns, err := filterableColumns(m)
+	if err != nil {
+		return nil, err
+	}
 	conds := make([]types.Filter, 0, len(keys))
 	for _, key := range keys {
 		var field string
@@ -254,8 +258,7 @@ func parseFiltersQuery(m types.Model, query map[string][]string) ([]types.Filter
 				return nil, errors.Newf("invalid field filter %q: unknown operator %q", key, opToken)
 			}
 		}
-		column := strcase.SnakeCase(field)
-		columnTyp, ok := columns[column]
+		col, ok := columns[strcase.SnakeCase(field)]
 		if !ok {
 			return nil, errors.Newf("invalid field filter %q: unknown field %q", key, field)
 		}
@@ -263,11 +266,11 @@ func parseFiltersQuery(m types.Model, query map[string][]string) ([]types.Filter
 		if len(raw) == 0 {
 			continue
 		}
-		value, err := normalizeFilterValue(columnTyp, op, raw)
+		value, err := normalizeFilterValue(col.Type, op, raw)
 		if err != nil {
 			return nil, errors.Wrapf(err, "invalid field filter %q", key)
 		}
-		conds = append(conds, types.Filter{Column: column, Op: op, Value: value})
+		conds = append(conds, types.Filter{Column: col.DBName, Op: op, Value: value})
 	}
 	if len(conds) == 0 {
 		return nil, nil
@@ -304,81 +307,23 @@ func splitFilterKey(key string) (field, op string, ok bool) {
 // upper-bound extension.
 const filterTimeLayout = "2006-01-02 15:04:05.999999999"
 
-// baseLiftedColumns are the Base/AutoBase struct fields exposed as filterable
-// columns, mirroring database.structFieldToMap plus the framework-managed
-// timestamps, which are only reachable through operator filters.
-var baseLiftedColumns = map[string]string{
-	"id":         "ID",
-	"created_by": "CreatedBy",
-	"updated_by": "UpdatedBy",
-	"created_at": "CreatedAt",
-	"updated_at": "UpdatedAt",
-}
-
-// queryableColumnsCache caches the filterable column mapping per model type.
-// The mapping is derived from struct tags only, so it is computed once per
-// type instead of on every request carrying field filters; cached maps are
-// read-only.
-var queryableColumnsCache sync.Map // reflect.Type -> map[string]reflect.Type
-
-// cachedQueryableColumns returns the queryableColumns result of the type,
-// computing and caching it on first use.
-func cachedQueryableColumns(typ reflect.Type) map[string]reflect.Type {
-	if cached, ok := queryableColumnsCache.Load(typ); ok {
-		return cached.(map[string]reflect.Type) //nolint:errcheck
+// filterableColumns returns the columns a client may filter on, keyed by the
+// URL parameter name. Both the parameter name and the database column name
+// come from modelschema, the single place that maps struct fields to columns,
+// so a filter can never name a column gorm does not emit.
+func filterableColumns(m types.Model) (map[string]modelschema.Column, error) {
+	parsed, err := modelschema.Columns(reflect.TypeOf(m))
+	if err != nil {
+		return nil, err
 	}
-	columns := queryableColumns(typ)
-	queryableColumnsCache.Store(typ, columns)
-	return columns
-}
-
-// queryableColumns collects the columns a client can filter on and their Go
-// field types, keyed by snake case column name. It mirrors the surface the
-// database layer builds conditions from (database.structFieldToMap and
-// queryColumnName): the model's own fields with the query tag taking priority
-// over the json tag and the field name (a "-" tag opts the field out), nested
-// non-framework structs recursively, and the baseLiftedColumns from
-// Base/AutoBase.
-func queryableColumns(typ reflect.Type, cols ...map[string]reflect.Type) map[string]reflect.Type {
-	columns := make(map[string]reflect.Type)
-	if len(cols) > 0 {
-		columns = cols[0]
+	columns := make(map[string]modelschema.Column, len(parsed))
+	for _, col := range parsed {
+		if !col.Filterable {
+			continue
+		}
+		columns[col.QueryName] = col
 	}
-	for field := range typ.Fields() {
-		if field.PkgPath != "" && !field.Anonymous {
-			continue
-		}
-		fieldTyp := field.Type
-		for fieldTyp.Kind() == reflect.Pointer {
-			fieldTyp = fieldTyp.Elem()
-		}
-		if modelregistry.IsQueryMarkerType(fieldTyp) {
-			continue
-		}
-		switch fieldTyp.Kind() {
-		case reflect.Chan, reflect.Map, reflect.Func:
-			continue
-		case reflect.Struct:
-			if field.Name == "Base" || field.Name == "AutoBase" {
-				for column, fieldName := range baseLiftedColumns {
-					if baseField, ok := fieldTyp.FieldByName(fieldName); ok {
-						columns[column] = baseField.Type
-					}
-				}
-				continue
-			}
-			if fieldTyp != timeType {
-				queryableColumns(fieldTyp, columns)
-				continue
-			}
-		}
-		column := fieldQueryColumn(field)
-		if column == "-" {
-			continue
-		}
-		columns[column] = fieldTyp
-	}
-	return columns
+	return columns, nil
 }
 
 // timeType is the reflect type time-typed columns are recognized by.
@@ -496,26 +441,6 @@ func validateNumericValue(kind reflect.Kind, value string) error {
 		return errors.Newf("expect a numeric value, got %q", value)
 	}
 	return nil
-}
-
-// fieldQueryColumn resolves a struct field to its snake case query column,
-// with the query tag taking priority over the json tag and the field name;
-// it mirrors database.queryColumnName.
-func fieldQueryColumn(field reflect.StructField) string {
-	name := strings.TrimSpace(field.Tag.Get("query"))
-	if idx := strings.IndexByte(name, ','); idx >= 0 {
-		name = name[:idx]
-	}
-	if len(name) == 0 {
-		name = strings.TrimSpace(field.Tag.Get("json"))
-		if idx := strings.IndexByte(name, ','); idx >= 0 {
-			name = name[:idx]
-		}
-	}
-	if len(name) == 0 {
-		name = field.Name
-	}
-	return strcase.SnakeCase(name)
 }
 
 // timeQueryLayout describes one accepted layout of a time-typed field

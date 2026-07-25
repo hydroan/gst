@@ -16,6 +16,7 @@ import (
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/clioutput"
+	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/spf13/cobra"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -193,8 +194,10 @@ func checkServiceDependencies(modulePath string) []string {
 			return nil
 		}
 
-		// Skip service.go registration file
-		if strings.HasSuffix(path, "service.go") {
+		// Skip framework-generated files. Matching the suffix gg owns is
+		// exact: matching a bare file name would also skip a project file
+		// such as user_service.go and silently drop it from the check.
+		if isGeneratedFileName(path) {
 			return nil
 		}
 
@@ -256,8 +259,8 @@ func checkModelDependencies(modulePath string) []string {
 			return nil
 		}
 
-		// Skip model.go registration file
-		if strings.HasSuffix(path, "model.go") {
+		// Skip framework-generated files, matching on the suffix gg owns.
+		if isGeneratedFileName(path) {
 			return nil
 		}
 
@@ -367,8 +370,8 @@ func CheckModelSingularNaming() []string {
 				violations = append(violations, violation)
 			}
 		} else if strings.HasSuffix(path, ".go") && !strings.Contains(path, "_test.go") {
-			// Skip model.go registration file
-			if strings.HasSuffix(path, "model.go") {
+			// Skip framework-generated files.
+			if isGeneratedFileName(path) {
 				return nil
 			}
 
@@ -504,8 +507,8 @@ func CheckModelJSONTagNaming() []string {
 			return nil
 		}
 
-		// Skip generated files
-		if strings.HasSuffix(path, "model.go") {
+		// Skip framework-generated files.
+		if isGeneratedFileName(path) {
 			return nil
 		}
 
@@ -671,7 +674,7 @@ func CheckModelActionTypeNaming() []string {
 			return nil
 		}
 
-		if strings.HasSuffix(path, "model.go") {
+		if isGeneratedFileName(path) {
 			return nil
 		}
 
@@ -819,7 +822,7 @@ func CheckModelFileBoundary() []string {
 			return nil
 		}
 
-		if strings.HasSuffix(path, "model.go") {
+		if isGeneratedFileName(path) {
 			return nil
 		}
 
@@ -891,7 +894,7 @@ func CheckServiceFileBoundary() []string {
 			return nil
 		}
 
-		if strings.HasSuffix(path, "service.go") {
+		if isGeneratedFileName(path) {
 			return nil
 		}
 
@@ -1259,4 +1262,9 @@ func CheckDSLDesign() []string {
 	}
 
 	return violations
+}
+
+// isGeneratedFileName reports whether a path is a file gg generates and owns.
+func isGeneratedFileName(path string) bool {
+	return strings.HasSuffix(path, constants.SuffixGenGo)
 }

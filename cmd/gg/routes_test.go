@@ -11,7 +11,7 @@ import (
 
 func TestRoutePhaseMethodMatchesRuntimeRegistration(t *testing.T) {
 	// Expected methods mirror the runtime registration table in
-	// router/router.go (Register): Export is served via GET, Import via POST.
+	// router/router.gen.go (Register): Export is served via GET, Import via POST.
 	tests := []struct {
 		phase string
 		want  string
