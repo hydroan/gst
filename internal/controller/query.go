@@ -2,17 +2,14 @@ package controller
 
 import (
 	"reflect"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stoewer/go-strcase"
@@ -58,13 +55,12 @@ var listCursorQueryKeys = map[string]struct{}{
 	consts.QUERY_CURSOR_NEXT:  {},
 }
 
-// decodeListQuery decodes URL query parameters into the model's filter fields,
-// rejecting framework query keys the model has not opted in to via
-// model.Query, model.UnsafeQuery, model.Pagination, or model.Cursor.
-// Field-condition keys ("field[op]") are excluded before decoding: they are
-// parsed and validated separately by parseFiltersQuery.
+// decodeListQuery rejects the framework query keys the model has not opted in
+// to via model.Query, model.UnsafeQuery, model.Pagination, or model.Cursor,
+// then decodes the remaining URL query parameters into the model's own query
+// fields. Rejecting unsupported keys is what separates the List controller
+// from urlquery.Decode, which ignores them instead.
 func decodeListQuery[M types.Model](m M, query map[string][]string) error {
-	query = stripFilterKeys(query)
 	if !modelregistry.IsQueryable(m) {
 		if err := rejectListQueryKeys(query, listQueryKeys); err != nil {
 			return err
@@ -92,43 +88,7 @@ func decodeListQuery[M types.Model](m M, query map[string][]string) error {
 			return err
 		}
 	}
-	// A cursor-only model has no struct field carrying the _size tag (it
-	// lives in Pagination), so drop the already-validated key before the
-	// schema decode; the controller reads _size from the URL directly.
-	if cursorable && !paginatable {
-		filtered := make(map[string][]string, len(query))
-		for key, values := range query {
-			if key == consts.QUERY_SIZE {
-				continue
-			}
-			filtered[key] = values
-		}
-		query = filtered
-	}
-	return serviceregistry.QueryDecoder().Decode(m, query)
-}
-
-// resolveListPagination normalizes the client page/size for a List request.
-// sizeAdjustable marks models embedding Pagination or Cursor: their unset
-// size defaults to defaultPageSize and oversized values clamp to maxPageSize.
-// Models without client size control keep defaultLimit as the full-table
-// safety bottom line. An active cursor resets page to 1 so offset paging
-// cannot stack on top of cursor filtering.
-func resolveListPagination(page, size int, sizeAdjustable, cursorActive bool) (int, int) {
-	if sizeAdjustable {
-		switch {
-		case size <= 0:
-			size = defaultPageSize
-		case size > maxPageSize:
-			size = maxPageSize
-		}
-	} else if size <= 0 {
-		size = defaultLimit
-	}
-	if cursorActive {
-		page = 1
-	}
-	return page, size
+	return urlquery.Decode(query, m)
 }
 
 func rejectListQueryKeys(query map[string][]string, keys map[string]struct{}) error {
@@ -140,374 +100,10 @@ func rejectListQueryKeys(query map[string][]string, keys map[string]struct{}) er
 	return nil
 }
 
-// presentQueryFields collects the model filter keys explicitly provided in the
-// URL query string, keyed by snake case column name, so the database layer can
-// keep zero values (false, 0) of these columns as query conditions. Framework
-// parameters (the "_" prefix namespace) and keys whose values are all empty
-// are excluded: they are not model filter columns, and an empty value means
-// the caller is not filtering by that key.
-func presentQueryFields(query map[string][]string) map[string]struct{} {
-	present := make(map[string]struct{}, len(query))
-	for key, values := range query {
-		if strings.HasPrefix(key, "_") {
-			continue
-		}
-		if isFilterKey(key) {
-			continue
-		}
-		if len(strings.Join(values, "")) == 0 {
-			continue
-		}
-		present[strcase.SnakeCase(key)] = struct{}{}
-	}
-	return present
-}
-
 // maxExpandDepth caps the _depth parameter. Every depth level becomes one
 // more recursive preload query, so the cap keeps a single request from
 // fanning out unbounded database work.
 const maxExpandDepth = 10
-
-// isFilterKey reports whether a query key carries a field-level
-// operator filter ("field[op]"). Keys in the framework "_" namespace never
-// count: an underscore key with brackets stays a framework parameter and is
-// rejected by the regular query decoding path.
-func isFilterKey(key string) bool {
-	return !strings.HasPrefix(key, "_") && strings.ContainsRune(key, '[')
-}
-
-// bareTimeFilterColumns are the framework-managed Base/AutoBase timestamp
-// columns. They carry query:"-" on the model, so their bare keys are not
-// schema-decodable and are handled by parseFiltersQuery instead: the
-// bare key is an exact-match (eq) filter, keeping the "bare name filters
-// exactly" contract uniform across every documented parameter.
-var bareTimeFilterColumns = map[string]struct{}{
-	"created_at": {},
-	"updated_at": {},
-}
-
-// isFilterQueryKey reports whether parseFiltersQuery owns the
-// key: either an operator filter key or a bare framework timestamp key.
-func isFilterQueryKey(key string) bool {
-	if isFilterKey(key) {
-		return true
-	}
-	_, ok := bareTimeFilterColumns[key]
-	return ok
-}
-
-// stripFilterKeys returns a copy of the query without the keys owned
-// by parseFiltersQuery, so gorilla/schema decoding of the model's own
-// filter fields never sees them.
-func stripFilterKeys(query map[string][]string) map[string][]string {
-	filtered := make(map[string][]string, len(query))
-	for key, values := range query {
-		if isFilterQueryKey(key) {
-			continue
-		}
-		filtered[key] = values
-	}
-	return filtered
-}
-
-// parseFiltersQuery extracts field-level operator filters from URL
-// query keys of the form "field[op]=value", e.g. "age[gt]=20" or
-// "remark[like]=hello", plus the bare framework timestamp keys
-// ("created_at", "updated_at"), which act as exact-match (eq) filters.
-// The field token must resolve (after snake case
-// normalization) to a queryable column of the model, and op must be a known
-// types.FilterOp; anything else is rejected so a mistyped filter can never
-// silently widen the result set. Empty values mean "not filtering" and are
-// skipped. Filters require the model to embed model.Query, and the
-// returned conditions are sorted by key for deterministic SQL.
-func parseFiltersQuery(m types.Model, query map[string][]string) ([]types.Filter, error) {
-	keys := make([]string, 0)
-	for key := range query {
-		if isFilterQueryKey(key) {
-			keys = append(keys, key)
-		}
-	}
-	if len(keys) == 0 {
-		return nil, nil
-	}
-	if !modelregistry.IsQueryable(m) {
-		sort.Strings(keys)
-		return nil, errors.Newf("schema: invalid path %q", keys[0])
-	}
-	sort.Strings(keys)
-
-	columns, err := filterableColumns(m)
-	if err != nil {
-		return nil, err
-	}
-	conds := make([]types.Filter, 0, len(keys))
-	for _, key := range keys {
-		var field string
-		var op types.FilterOp
-		if _, bare := bareTimeFilterColumns[key]; bare && !isFilterKey(key) {
-			// The bare framework timestamp key is an exact-match filter.
-			field, op = key, types.FilterOpEq
-		} else {
-			var opToken string
-			var ok bool
-			field, opToken, ok = splitFilterKey(key)
-			if !ok {
-				return nil, errors.Newf("invalid field filter %q: expect \"field[op]=value\"", key)
-			}
-			if op, ok = types.ParseFilterOp(opToken); !ok {
-				return nil, errors.Newf("invalid field filter %q: unknown operator %q", key, opToken)
-			}
-		}
-		col, ok := columns[strcase.SnakeCase(field)]
-		if !ok {
-			return nil, errors.Newf("invalid field filter %q: unknown field %q", key, field)
-		}
-		raw := query[key][0]
-		if len(raw) == 0 {
-			continue
-		}
-		value, err := normalizeFilterValue(col.Type, op, raw)
-		if err != nil {
-			return nil, errors.Wrapf(err, "invalid field filter %q", key)
-		}
-		conds = append(conds, types.Filter{Column: col.DBName, Op: op, Value: value})
-	}
-	if len(conds) == 0 {
-		return nil, nil
-	}
-	// Filters are always AND-combined, but WithQuery builds the OR
-	// chain flat and cannot express (a OR b) AND cond; allowing the mix would
-	// let a condition escape the OR group and silently widen the result set,
-	// so the combination fails closed instead.
-	if values, ok := query[consts.QUERY_OR]; ok && len(values) > 0 {
-		if or, err := strconv.ParseBool(values[0]); err == nil && or {
-			return nil, errors.Newf("field filters cannot be combined with %s=true", consts.QUERY_OR)
-		}
-	}
-	return conds, nil
-}
-
-// splitFilterKey splits "field[op]" into its field and operator
-// tokens, reporting whether the key has exactly that shape.
-func splitFilterKey(key string) (field, op string, ok bool) {
-	open := strings.IndexByte(key, '[')
-	if open <= 0 || !strings.HasSuffix(key, "]") {
-		return "", "", false
-	}
-	field, op = key[:open], key[open+1:len(key)-1]
-	if len(op) == 0 || strings.ContainsAny(field, "[]") || strings.ContainsAny(op, "[]") {
-		return "", "", false
-	}
-	return field, op, true
-}
-
-// filterTimeLayout is the canonical layout a time-typed field
-// condition value is normalized to before it is bound as a statement
-// parameter. It preserves any sub-second precision produced by whole-day
-// upper-bound extension.
-const filterTimeLayout = "2006-01-02 15:04:05.999999999"
-
-// filterableColumns returns the columns a client may filter on, keyed by the
-// URL parameter name. Both the parameter name and the database column name
-// come from modelschema, the single place that maps struct fields to columns,
-// so a filter can never name a column gorm does not emit.
-func filterableColumns(m types.Model) (map[string]modelschema.Column, error) {
-	parsed, err := modelschema.Columns(reflect.TypeOf(m))
-	if err != nil {
-		return nil, err
-	}
-	columns := make(map[string]modelschema.Column, len(parsed))
-	for _, col := range parsed {
-		if !col.Filterable {
-			continue
-		}
-		columns[col.QueryName] = col
-	}
-	return columns, nil
-}
-
-// timeType is the reflect type time-typed columns are recognized by.
-var timeType = reflect.TypeFor[time.Time]()
-
-// normalizeFilterValue validates a filter value against the
-// column's Go type and rewrites it into the canonical typed value bound to
-// the statement, so a malformed value is rejected with an error instead of
-// being passed to the database where implicit conversion could silently
-// match the wrong rows.
-//
-//   - isnull applies to any column and requires a boolean value, carried as
-//     a bool; it is handled before the type dispatch below.
-//   - time columns accept the comparison operators only; the value is parsed
-//     by parseQueryTime and rendered in the server's local zone. A date-only
-//     value extends to the end of the day when it forms an upper inclusive
-//     (lte) or lower exclusive (gt) bound, so the bound covers the whole day.
-//     The canonical string form is kept on purpose: binding time.Time would
-//     let the driver re-render the value in its own location, while the
-//     string pins the wall-clock time the parser resolved.
-//   - bool columns accept eq/ne with a boolean value, carried as a bool.
-//   - numeric columns require numeric values; in/notin validate every
-//     comma-separated member.
-//   - in/notin values split on commas here, so the members travel as a real
-//     slice: the URL list encoding never reaches the database layer.
-//   - string and other scalar values pass through unchanged.
-func normalizeFilterValue(columnTyp reflect.Type, op types.FilterOp, value string) (any, error) {
-	// isnull is the only operator whose value type is independent of the
-	// column type: it always carries a boolean and applies to any nullable
-	// column, including time columns the comparison gating below would block.
-	if op == types.FilterOpIsNull {
-		b, err := strconv.ParseBool(value)
-		if err != nil {
-			return nil, errors.Newf("isnull expects a boolean value, got %q", value)
-		}
-		return b, nil
-	}
-	switch {
-	case columnTyp == timeType:
-		switch op {
-		case types.FilterOpEq, types.FilterOpNe, types.FilterOpGt, types.FilterOpGte, types.FilterOpLt, types.FilterOpLte:
-			end := op == types.FilterOpLte || op == types.FilterOpGt
-			t, err := parseQueryTime(value, end)
-			if err != nil {
-				return nil, err
-			}
-			return t.In(time.Local).Format(filterTimeLayout), nil
-		default:
-			return nil, errors.Newf("operator %q is not supported on a time field", op)
-		}
-	case columnTyp.Kind() == reflect.Bool:
-		switch op {
-		case types.FilterOpEq, types.FilterOpNe:
-			b, err := strconv.ParseBool(value)
-			if err != nil {
-				return nil, errors.Newf("expect a boolean value, got %q", value)
-			}
-			return b, nil
-		default:
-			return nil, errors.Newf("operator %q is not supported on a bool field", op)
-		}
-	case isNumericKind(columnTyp.Kind()):
-		switch op {
-		case types.FilterOpIn, types.FilterOpNotIn:
-			items := strings.Split(value, ",")
-			for _, item := range items {
-				if err := validateNumericValue(columnTyp.Kind(), item); err != nil {
-					return nil, err
-				}
-			}
-			return items, nil
-		case types.FilterOpLike, types.FilterOpNotLike, types.FilterOpStartsWith, types.FilterOpEndsWith:
-			// Substring matching relies on the database's string rendering of
-			// the number; the pattern itself is not numeric.
-			return value, nil
-		default:
-			if err := validateNumericValue(columnTyp.Kind(), value); err != nil {
-				return nil, err
-			}
-			return value, nil
-		}
-	default:
-		switch op {
-		case types.FilterOpIn, types.FilterOpNotIn:
-			// The comma split moves the URL list encoding out of the database
-			// layer: from here on the members travel as a real slice.
-			return strings.Split(value, ","), nil
-		default:
-			return value, nil
-		}
-	}
-}
-
-func isNumericKind(kind reflect.Kind) bool {
-	switch kind {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-		reflect.Float32, reflect.Float64:
-		return true
-	}
-	return false
-}
-
-func validateNumericValue(kind reflect.Kind, value string) error {
-	var err error
-	switch kind {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		_, err = strconv.ParseInt(value, 10, 64)
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		_, err = strconv.ParseUint(value, 10, 64)
-	case reflect.Float32, reflect.Float64:
-		_, err = strconv.ParseFloat(value, 64)
-	}
-	if err != nil {
-		return errors.Newf("expect a numeric value, got %q", value)
-	}
-	return nil
-}
-
-// timeQueryLayout describes one accepted layout of a time-typed field
-// condition value. dateOnly marks layouts without a time-of-day component so
-// an upper bound can extend to the last instant of the day.
-type timeQueryLayout struct {
-	layout   string
-	dateOnly bool
-}
-
-// timeQueryLayouts are the zone-less layouts tried in order when parsing a
-// time-typed filter value; they are interpreted in the server's
-// local zone. RFC 3339 values with an explicit offset and all-digit unix
-// timestamps are handled separately in parseQueryTime.
-var timeQueryLayouts = []timeQueryLayout{
-	{layout: consts.DATE_TIME_LAYOUT}, // 2006-01-02 15:04:05
-	{layout: "2006-01-02T15:04:05"},   // HTML datetime-local with seconds
-	{layout: "2006-01-02 15:04"},
-	{layout: "2006-01-02T15:04"}, // HTML datetime-local
-	{layout: "2006-01-02", dateOnly: true},
-}
-
-// unixMilliThreshold separates unix-second from unix-millisecond values:
-// digit-only values at or above it (13+ digits) are treated as milliseconds.
-const unixMilliThreshold = 1e12
-
-// parseQueryTime parses a time-typed query value. Zone-less layouts are
-// interpreted in the server's local zone, RFC 3339 values keep their explicit
-// offset, and digit-only values are unix seconds or milliseconds. When end is
-// true and the value carries no time of day, the result extends to the last
-// instant of that day so an upper bound covers the whole day.
-func parseQueryTime(value string, end bool) (time.Time, error) {
-	for _, l := range timeQueryLayouts {
-		t, err := time.ParseInLocation(l.layout, value, time.Local)
-		if err != nil {
-			continue
-		}
-		if end && l.dateOnly {
-			t = t.AddDate(0, 0, 1).Add(-time.Nanosecond)
-		}
-		return t, nil
-	}
-	if t, err := time.Parse(time.RFC3339Nano, value); err == nil {
-		return t, nil
-	}
-	if isDigitsOnly(value) {
-		if n, err := strconv.ParseInt(value, 10, 64); err == nil {
-			if n >= unixMilliThreshold {
-				return time.UnixMilli(n), nil
-			}
-			return time.Unix(n, 0), nil
-		}
-	}
-	return time.Time{}, errors.Newf("unsupported time format %q", value)
-}
-
-func isDigitsOnly(value string) bool {
-	if len(value) == 0 {
-		return false
-	}
-	for _, r := range value {
-		if r < '0' || r > '9' {
-			return false
-		}
-	}
-	return true
-}
 
 // modelFieldKindsCache caches the field-name-to-kind mapping per model type.
 // The mapping is pure type information, so it is computed once per type

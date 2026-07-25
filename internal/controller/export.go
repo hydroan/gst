@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	. "github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/pkg/filetype"
 	gstotel "github.com/hydroan/gst/provider/otel"
@@ -88,22 +88,26 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		index, _ := c.GetQuery(consts.QUERY_INDEX)
 		selects, _ := c.GetQuery(consts.QUERY_SELECT)
 
+		// The URL query is parsed once and shared by every parser below;
+		// url.URL.Query re-parses the raw query string on each call.
+		query := c.Request.URL.Query()
+
 		// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
 		m := meta.newModel()
 
 		var err error
-		if err = serviceregistry.QueryDecoder().Decode(m, stripFilterKeys(c.Request.URL.Query())); err != nil {
+		if err = urlquery.Decode(query, m); err != nil {
 			log.Warn("failed to parse uri query parameter into model: ", err)
 		}
 		var filters []types.Filter
-		if filters, err = parseFiltersQuery(m, c.Request.URL.Query()); err != nil {
+		if filters, err = urlquery.Filters(query, m); err != nil {
 			log.Error(err)
 			JSON(c, CodeInvalidParam.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
 		}
 		log.Info("query parameter: ", m)
-		present := presentQueryFields(c.Request.URL.Query())
+		present := urlquery.PresentFields(query)
 
 		var or bool
 		data := make([]M, 0)

@@ -8,8 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
-	"github.com/hydroan/gst/internal/modelregistry"
 	. "github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/types"
@@ -72,47 +72,39 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			return
 		}
 
-		var page, size int
-		if pageStr, ok := c.GetQuery(consts.QUERY_PAGE); ok {
-			page, _ = strconv.Atoi(pageStr)
-		}
-		if sizeStr, ok := c.GetQuery(consts.QUERY_SIZE); ok {
-			size, _ = strconv.Atoi(sizeStr)
-		}
 		index, _ := c.GetQuery(consts.QUERY_INDEX)
 		selects, _ := c.GetQuery(consts.QUERY_SELECT)
+
+		// The URL query is parsed once and shared by every parser below;
+		// url.URL.Query re-parses the raw query string on each call.
+		query := c.Request.URL.Query()
 
 		// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
 		m := meta.newModel()
 
 		var err error
-		if err = decodeListQuery(m, c.Request.URL.Query()); err != nil {
+		if err = decodeListQuery(m, query); err != nil {
 			log.Error(err)
 			JSON(c, CodeInvalidParam.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
 		}
 		var filters []types.Filter
-		if filters, err = parseFiltersQuery(m, c.Request.URL.Query()); err != nil {
+		if filters, err = urlquery.Filters(query, m); err != nil {
 			log.Error(err)
 			JSON(c, CodeInvalidParam.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
 		}
 		log.Infoz(meta.name+": list query parameter", zap.Object(meta.fullName, m))
-		present := presentQueryFields(c.Request.URL.Query())
+		present := urlquery.PresentFields(query)
 
 		var or bool
-		var cursorNext bool
 		var noTotal bool // default enable total.
-		cursorValue := c.Query(consts.QUERY_CURSOR_VALUE)
-		cursorField := c.Query(consts.QUERY_CURSOR_FIELD)
+		cursorValue, cursorNext, cursorField := urlquery.Cursor(query, m)
 		data := make([]M, 0)
 		if orStr, ok := c.GetQuery(consts.QUERY_OR); ok {
 			or, _ = strconv.ParseBool(orStr)
-		}
-		if cursorNextStr, ok := c.GetQuery(consts.QUERY_CURSOR_NEXT); ok {
-			cursorNext, _ = strconv.ParseBool(cursorNextStr)
 		}
 		expands := parseExpandQuery(c, m)
 
@@ -129,10 +121,8 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		}
 		sortBy, _ := c.GetQuery(consts.QUERY_SORT_BY)
 		// 2.List resources from database.
-		sizeAdjustable := modelregistry.IsPaginatable(m) || modelregistry.IsCursorable(m)
-		page, size = resolveListPagination(page, size, sizeAdjustable, len(cursorValue) > 0)
 		if err = handler(requestContext(c)).
-			WithPagination(page, size).
+			WithPagination(urlquery.Pagination(query, m)).
 			WithIndex(index).
 			WithSelect(strings.Split(selects, ",")...).
 			WithQuery(svc.Filter(ctx, m), types.QueryOptions{

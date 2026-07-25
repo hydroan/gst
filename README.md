@@ -224,6 +224,38 @@ service.Base[M, REQ, RSP]
 - 自定义动作：当 `Payload` 或 `Result` 让 `REQ`、`RSP` 不同于 `M` 时，
   框架会调用 service 的 `Create`、`List`、`Delete` 等 action 方法。
 
+自定义 List 动作接管整个请求，框架不再替它解析查询参数。这类 service 应该用
+`urlquery` 包把参数还原成查询条件，而不是自己重写一遍解析，这样接口的筛选和
+分页行为与框架驱动的列表完全一致：
+
+```go
+query := new(appmodel.Sample)
+if err := urlquery.Decode(ctx.Query(), query); err != nil {
+	return nil, service.NewError(http.StatusBadRequest, err.Error())
+}
+filters, err := urlquery.Filters(ctx.Query(), query)
+if err != nil {
+	return nil, service.NewError(http.StatusBadRequest, err.Error())
+}
+items := make([]*appmodel.Sample, 0)
+if err = database.Database[*appmodel.Sample](ctx).
+	WithQuery(query, types.QueryOptions{
+		AllowEmpty:    true,
+		PresentFields: urlquery.PresentFields(ctx.Query()),
+		Filters:       filters,
+	}).
+	WithCursor(urlquery.Cursor(ctx.Query(), query)).
+	WithPagination(urlquery.Pagination(ctx.Query(), query)).
+	List(&items); err != nil {
+	return nil, err
+}
+```
+
+`urlquery` 覆盖 `field[op]` 过滤、零值过滤、分页和 cursor 分页四项，各项是否生效
+取决于 model 声明的 `model.Query`、`model.Pagination`、`model.Cursor`。它不校验
+`_sort_by` 的排序列，也不保证 `List` 与 `Count` 用同一份查询条件；统计总数时必须
+传入同样的查询值和 `types.QueryOptions`，否则 total 会和当页数据对不上。
+
 默认资源的 hook 示例：
 
 ```go

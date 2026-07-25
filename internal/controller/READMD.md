@@ -522,7 +522,7 @@ field, use the field operator filter syntax instead: `?name[like]=user01`
 
 #### `field[op]=value` (field operator filters)
 
-Field-level operator filters (see `parseFiltersQuery` in `query.go`) require
+Field-level operator filters (see `urlquery.Filters`) require
 `model.Query` and are always AND-combined with the other conditions. Supported
 operators: `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in`/`notin` (comma-separated
 values), `like`/`notlike` (substring match), `startswith`/`endswith` (anchored
