@@ -208,6 +208,25 @@ func TestHTTPBodyLoggerSkipsConfiguredRoutes(t *testing.T) {
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Len(t, logs.All(), 1)
 	})
+
+	// A route carrying path parameters has no fixed concrete path, so skipping
+	// exactly one such route is only possible when matching happens against the
+	// registered pattern; matching the resolved path would force a prefix
+	// wildcard that also skips its siblings.
+	t.Run("parameterized route matched by its pattern", func(t *testing.T) {
+		patternCfg := cfg
+		patternCfg.SkipRoutes = []string{"/api/records/:id/notes"}
+		logs := setupHTTPBodyLoggerTest(t, patternCfg)
+		router := newRouter()
+
+		w := performHTTPBodyLoggerRequest(router, "/api/records/1/notes", `{"a":1}`, "application/json")
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Empty(t, logs.All())
+
+		w = performHTTPBodyLoggerRequest(router, "/api/items", `{"a":1}`, "application/json")
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Len(t, logs.All(), 1, "sibling routes must stay logged")
+	})
 }
 
 func TestHTTPBodyLoggerSkipsLargeRequestBodyContent(t *testing.T) {

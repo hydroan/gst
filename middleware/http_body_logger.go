@@ -297,12 +297,19 @@ func matchHTTPBodyLogSkipRoute(patterns []string, route string) bool {
 }
 
 // httpBodyLogRoute resolves the route identity used for both skip matching
-// and the route log field, preferring the path recorded by the access logger.
+// and the route log field, preferring the registered route pattern.
+//
+// The pattern is what skip patterns are written against: a route carrying path
+// parameters ("/users/:id/password") has no fixed concrete path, so matching
+// the resolved path would force every such route to be skipped by a prefix
+// wildcard that also skips its siblings. Nothing is lost by preferring the
+// pattern, because the resolved values are logged separately as params and the
+// access log records the concrete path under the same trace id.
 func httpBodyLogRoute(c *gin.Context) string {
-	if route := c.GetString(consts.CTX_ROUTE); route != "" {
+	if route := c.FullPath(); route != "" {
 		return route
 	}
-	if route := c.FullPath(); route != "" {
+	if route := c.GetString(consts.CTX_ROUTE); route != "" {
 		return route
 	}
 	return c.Request.URL.Path
