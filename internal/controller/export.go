@@ -102,7 +102,6 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			gstotel.RecordError(span, err)
 			return
 		}
-		log.Info("query parameter: ", m)
 		present := urlquery.PresentFields(query)
 
 		data := make([]M, 0)
@@ -149,7 +148,6 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			gstotel.RecordError(span, err)
 			return
 		}
-		log.Info("export data length: ", len(data))
 		// 4.Export
 		exported, err := meta.traceServiceExport(ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) ([]byte, error) {
 			return svc.Export(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), data...)

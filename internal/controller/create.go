@@ -16,7 +16,6 @@ import (
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
-	"go.uber.org/zap"
 )
 
 // Create handles a create request with the default factory settings.
@@ -93,7 +92,6 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		} else {
 			req.SetCreatedBy(c.GetString(consts.CTX_USERNAME))
 			req.SetUpdatedBy(c.GetString(consts.CTX_USERNAME))
-			log.Infoz("create", zap.Object(meta.fullName, req))
 		}
 
 		// 1.Perform business logic processing before create resource.

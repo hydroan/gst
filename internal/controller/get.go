@@ -91,7 +91,6 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 
 		var err error
 		expands := parseExpandQuery(c, m)
-		log.Infoz("", zap.Object(meta.name, m))
 
 		// 1.Perform business logic processing before get resource.
 		var serviceCtxBefore *types.ServiceContext

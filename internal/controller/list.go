@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/gin-gonic/gin"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
@@ -12,7 +11,6 @@ import (
 	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
-	"go.uber.org/zap"
 )
 
 // List handles a list request with the default factory settings.
@@ -89,7 +87,6 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			gstotel.RecordError(span, err)
 			return
 		}
-		log.Infoz(meta.name+": list query parameter", zap.Object(meta.fullName, m))
 		present := urlquery.PresentFields(query)
 
 		cursorValue, cursorNext, cursorField := urlquery.Cursor(query, m)
@@ -183,7 +180,6 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			log.Warn(err)
 		}
 
-		log.Infoz(fmt.Sprintf("%s: length: %d, total: %d", meta.name, len(data), *total), zap.Object(meta.name, m))
 		JSON(c, CodeSuccess, gin.H{
 			"items": data,
 			"total": *total,

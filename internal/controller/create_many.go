@@ -15,7 +15,6 @@ import (
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
-	"go.uber.org/zap"
 )
 
 type requestData[M types.Model] struct {
@@ -116,7 +115,6 @@ func CreateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		for _, m := range req.Items {
 			m.SetCreatedBy(c.GetString(consts.CTX_USERNAME))
 			m.SetUpdatedBy(c.GetString(consts.CTX_USERNAME))
-			log.Infoz("create_many", zap.Bool("atomic", req.Options.Atomic), zap.Object(meta.name, m))
 		}
 
 		// 1.Perform business logic processing before batch create resource.

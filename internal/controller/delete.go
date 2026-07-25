@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 
 	"github.com/cockroachdb/errors"
@@ -93,7 +92,6 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			JSON(c, CodeNotFound)
 			return
 		}
-		log.Info(fmt.Sprintf("%s delete %s", meta.name, id))
 
 		// 1.Perform business logic processing before delete resource.
 		var serviceCtxBefore *types.ServiceContext

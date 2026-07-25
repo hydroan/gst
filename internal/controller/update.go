@@ -113,11 +113,6 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		req.SetID(id)
 		req.SetUpdatedBy(c.GetString(consts.CTX_USERNAME)) // set updated_by to current user
-		log.Infoz(
-			"update from request",
-			zap.String("id", id),
-			zap.Object(meta.fullName, req),
-		)
 
 		// 1.Perform business logic processing before update resource.
 		var serviceCtxBefore *types.ServiceContext
@@ -132,7 +127,6 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		// 2.Update resource in database. The database layer answers existence:
 		// ErrRecordNotFound renders 404, ErrDuplicatedKey renders 409.
-		log.Infoz("update in database", zap.Object(meta.name, req))
 		if err = handler(requestContext(c)).Update(req); err != nil {
 			log.Error(err)
 			JSON(c, writeErrorCoder(err))
