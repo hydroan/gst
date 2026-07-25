@@ -30,14 +30,6 @@ type QueryableUser struct {
 	modelregistry.Base
 }
 
-type UnsafeQueryableUser struct {
-	Name string `json:"name,omitempty"`
-
-	modelregistry.Query
-	modelregistry.UnsafeQuery
-	modelregistry.Base
-}
-
 type PaginatableUser struct {
 	Name string `json:"name,omitempty"`
 
@@ -115,11 +107,6 @@ func TestQueryable(t *testing.T) {
 
 	require.True(t, modelregistry.IsPaginatable(new(QueryableUser)))
 	require.True(t, modelregistry.IsCursorable(new(QueryableUser)))
-	require.False(t, modelregistry.IsUnsafeQueryable(new(QueryableUser)))
-
-	require.True(t, modelregistry.IsQueryable(new(UnsafeQueryableUser)))
-	require.True(t, modelregistry.IsUnsafeQueryable(new(UnsafeQueryableUser)))
-	require.True(t, modelregistry.IsUnsafeQueryable(UnsafeQueryableUser{}))
 
 	require.False(t, modelregistry.IsQueryable(new(PaginatableUser)))
 	require.True(t, modelregistry.IsPaginatable(new(PaginatableUser)))
@@ -131,7 +118,6 @@ func TestQueryable(t *testing.T) {
 
 	// Embedding the framework query structs is the only opt-in path.
 	require.False(t, modelregistry.IsQueryable(new(markerMethodSpoofUser)))
-	require.False(t, modelregistry.IsUnsafeQueryable(new(markerMethodSpoofUser)))
 	require.False(t, modelregistry.IsPaginatable(new(markerMethodSpoofUser)))
 	require.False(t, modelregistry.IsCursorable(new(markerMethodSpoofUser)))
 }
@@ -139,7 +125,6 @@ func TestQueryable(t *testing.T) {
 func TestIsQueryMarkerType(t *testing.T) {
 	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[modelregistry.Query]()))
 	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[*modelregistry.Query]()))
-	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[modelregistry.UnsafeQuery]()))
 	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[modelregistry.Pagination]()))
 	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[modelregistry.Cursor]()))
 

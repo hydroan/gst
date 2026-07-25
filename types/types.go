@@ -27,8 +27,9 @@ type ControllerConfig[M Model] struct {
 }
 
 // QueryOptions tunes how WithQuery turns a model value into WHERE conditions.
-// The zero value means exact matching, AND combination, and the empty-query
-// safety check enabled. See the WithQuery method for usage examples.
+// Every condition it produces is AND-combined; the zero value means exact
+// matching with the empty-query safety check enabled. See the WithQuery method
+// for usage examples.
 type QueryOptions struct {
 	// FuzzyMatch switches model-field filtering from exact matching (single
 	// value: IN, comma-separated values: IN list) to substring matching
@@ -43,13 +44,9 @@ type QueryOptions struct {
 	// real conditions and disable the safety check on their own.
 	AllowEmpty bool
 
-	// Or combines the model-field conditions and RawQuery with OR instead
-	// of AND. Filters are not affected: they always join with AND.
-	Or bool
-
 	// RawQuery is a raw parameterized SQL fragment added as an extra WHERE
-	// condition (OR-combined when Or is set). It works with a nil model
-	// and combines with model-field conditions otherwise.
+	// condition. It works with a nil model and combines with model-field
+	// conditions otherwise.
 	RawQuery string
 
 	// RawQueryArgs are the values bound to the RawQuery placeholders.
@@ -62,11 +59,11 @@ type QueryOptions struct {
 	// not listed here keep the default zero-value skip.
 	PresentFields map[string]struct{}
 
-	// Filters are field-level operator filters ("field[op]=value")
-	// combined with AND regardless of Or. They apply in every WithQuery
-	// path, including nil/empty model queries, so List and Count stay
-	// consistent. A condition with an unknown operator or empty column fails
-	// closed: query construction adds "1 = 0" instead of dropping it.
+	// Filters are field-level operator filters ("field[op]=value"). They
+	// apply in every WithQuery path, including nil/empty model queries, so
+	// List and Count stay consistent. A condition with an unknown operator
+	// or empty column fails closed: query construction adds "1 = 0" instead
+	// of dropping it.
 	Filters []Filter
 }
 

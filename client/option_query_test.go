@@ -24,11 +24,11 @@ func Test_OptionQuery(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "name=tom&age=20", query)
 
-		cli, err = client.New(addr, client.WithQuery("name", "tom", "age", 20, "suname"), client.WithQueryIndex("idx_composite_name_createdat"))
+		cli, err = client.New(addr, client.WithQuery("name", "tom", "age", 20, "suname"), client.WithQuerySortBy("created_at desc"))
 		require.NoError(t, err)
 		query, err = cli.QueryString()
 		require.NoError(t, err)
-		assert.Equal(t, "name=tom&age=20&_index=idx_composite_name_createdat", query)
+		assert.Equal(t, "name=tom&age=20&_sort_by=created_at+desc", query)
 	})
 
 	t.Run("WithQueryPagination", func(t *testing.T) {
@@ -65,29 +65,5 @@ func Test_OptionQuery(t *testing.T) {
 		query, err := cli.QueryString()
 		require.NoError(t, err)
 		assert.Equal(t, "_sort_by=created_at+desc%2Cid+asc", query)
-	})
-
-	t.Run("WithQueryOr", func(t *testing.T) {
-		cli, err := client.New(addr, client.WithQueryOr(true))
-		require.NoError(t, err)
-		query, err := cli.QueryString()
-		require.NoError(t, err)
-		assert.Equal(t, "_or=true", query)
-	})
-
-	t.Run("WithQueryIndex", func(t *testing.T) {
-		cli, err := client.New(addr, client.WithQueryIndex("idx_composite_name_createdat"))
-		require.NoError(t, err)
-		query, err := cli.QueryString()
-		require.NoError(t, err)
-		assert.Equal(t, "_index=idx_composite_name_createdat", query)
-	})
-
-	t.Run("WithQuerySelect", func(t *testing.T) {
-		cli, err := client.New(addr, client.WithQuerySelect("name", "age", ""))
-		require.NoError(t, err)
-		query, err := cli.QueryString()
-		require.NoError(t, err)
-		assert.Equal(t, "_select=name%2Cage", query)
 	})
 }

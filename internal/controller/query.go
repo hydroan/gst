@@ -23,17 +23,6 @@ var listQueryKeys = map[string]struct{}{
 	consts.QUERY_SORT_BY: {},
 }
 
-// listUnsafeQueryKeys are enabled by model.UnsafeQuery. They are split from
-// listQueryKeys because they rewrite filter combination or tune query
-// execution; in particular _or can defeat mandatory service-level filters,
-// so a model must opt in to them separately from the regular List controls.
-var listUnsafeQueryKeys = map[string]struct{}{
-	consts.QUERY_OR:       {},
-	consts.QUERY_INDEX:    {},
-	consts.QUERY_SELECT:   {},
-	consts.QUERY_NO_TOTAL: {},
-}
-
 // listPageQueryKey is enabled by model.Pagination only: offset paging
 // conflicts with cursor semantics, so cursor-only models reject it.
 var listPageQueryKey = map[string]struct{}{
@@ -56,18 +45,13 @@ var listCursorQueryKeys = map[string]struct{}{
 }
 
 // decodeListQuery rejects the framework query keys the model has not opted in
-// to via model.Query, model.UnsafeQuery, model.Pagination, or model.Cursor,
-// then decodes the remaining URL query parameters into the model's own query
-// fields. Rejecting unsupported keys is what separates the List controller
-// from urlquery.Decode, which ignores them instead.
+// to via model.Query, model.Pagination, or model.Cursor, then decodes the
+// remaining URL query parameters into the model's own query fields. Rejecting
+// unsupported keys is what separates the List controller from urlquery.Decode,
+// which ignores them instead.
 func decodeListQuery[M types.Model](m M, query map[string][]string) error {
 	if !modelregistry.IsQueryable(m) {
 		if err := rejectListQueryKeys(query, listQueryKeys); err != nil {
-			return err
-		}
-	}
-	if !modelregistry.IsUnsafeQueryable(m) {
-		if err := rejectListQueryKeys(query, listUnsafeQueryKeys); err != nil {
 			return err
 		}
 	}

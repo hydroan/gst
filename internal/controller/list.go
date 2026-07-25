@@ -3,8 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
@@ -27,13 +25,11 @@ func List[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) 
 // When M, REQ, and RSP are the same type, the handler decodes query parameters
 // into M, applies service filters, runs list hooks, queries the configured
 // database handler, records an operation log, and returns the items with a total
-// count unless total counting is disabled or cursor pagination is used.
+// count, which is omitted only when cursor pagination is used.
 //
 // The automatic listing branch supports model schema fields plus framework query
 // parameters for pagination, cursor pagination, expansion, depth, ordering, and
-// field operator filters; OR matching, selection, cache control, database index
-// hints, and total-count suppression additionally require the model to embed
-// model.UnsafeQuery.
+// field operator filters.
 //
 // When REQ or RSP differs from M, the handler delegates the operation to the
 // phase service's List method with a zero-value REQ. List handles an HTTP GET
@@ -72,9 +68,6 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			return
 		}
 
-		index, _ := c.GetQuery(consts.QUERY_INDEX)
-		selects, _ := c.GetQuery(consts.QUERY_SELECT)
-
 		// The URL query is parsed once and shared by every parser below;
 		// url.URL.Query re-parses the raw query string on each call.
 		query := c.Request.URL.Query()
@@ -99,13 +92,8 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		log.Infoz(meta.name+": list query parameter", zap.Object(meta.fullName, m))
 		present := urlquery.PresentFields(query)
 
-		var or bool
-		var noTotal bool // default enable total.
 		cursorValue, cursorNext, cursorField := urlquery.Cursor(query, m)
 		data := make([]M, 0)
-		if orStr, ok := c.GetQuery(consts.QUERY_OR); ok {
-			or, _ = strconv.ParseBool(orStr)
-		}
 		expands := parseExpandQuery(c, m)
 
 		// 1.Perform business logic processing before list resources.
@@ -123,11 +111,8 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		// 2.List resources from database.
 		if err = handler(requestContext(c)).
 			WithPagination(urlquery.Pagination(query, m)).
-			WithIndex(index).
-			WithSelect(strings.Split(selects, ",")...).
 			WithQuery(svc.Filter(ctx, m), types.QueryOptions{
 				AllowEmpty:    true,
-				Or:            or,
 				RawQuery:      svc.FilterRaw(ctx),
 				PresentFields: present,
 				Filters:       filters,
@@ -154,17 +139,12 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			return
 		}
 		total := new(int)
-		noTotalStr, _ := c.GetQuery(consts.QUERY_NO_TOTAL)
-		noTotal, _ = strconv.ParseBool(noTotalStr)
 		// NOTE: Total count is not provided when using cursor-based pagination.
-		if !noTotal && len(cursorValue) == 0 {
+		if len(cursorValue) == 0 {
 			if err = handler(requestContext(c)).
-				// WithPagination(page, size). // NOTE: WithPagination should not apply in Count method.
-				// WithSelect(strings.Split(selects, ",")...). // NOTE: WithSelect should not apply in Count method.
-				WithIndex(index).
+				// NOTE: WithPagination should not apply in Count method.
 				WithQuery(svc.Filter(ctx, m), types.QueryOptions{
 					AllowEmpty:    true,
-					Or:            or,
 					RawQuery:      svc.FilterRaw(ctx),
 					PresentFields: present,
 					Filters:       filters,
@@ -204,15 +184,9 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		}
 
 		log.Infoz(fmt.Sprintf("%s: length: %d, total: %d", meta.name, len(data), *total), zap.Object(meta.name, m))
-		if !noTotal {
-			JSON(c, CodeSuccess, gin.H{
-				"items": data,
-				"total": *total,
-			})
-		} else {
-			JSON(c, CodeSuccess, gin.H{
-				"items": data,
-			})
-		}
+		JSON(c, CodeSuccess, gin.H{
+			"items": data,
+			"total": *total,
+		})
 	}
 }

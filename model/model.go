@@ -32,9 +32,6 @@ type (
 	// model. It already includes Pagination and Cursor.
 	Query = modelregistry.Query
 
-	// UnsafeQuery enables unsafe list query parameters when embedded by a model.
-	UnsafeQuery = modelregistry.UnsafeQuery
-
 	// Pagination enables page and size query parameters when embedded by a model.
 	Pagination = modelregistry.Pagination
 

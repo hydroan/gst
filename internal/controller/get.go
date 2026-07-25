@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -26,9 +25,9 @@ func Get[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
 // GetFactory returns a Gin handler that retrieves one resource.
 //
 // When M, REQ, and RSP are the same type, the handler reads the configured route
-// parameter as the resource id, applies expansion, depth, selection, cache, and
-// database index query options, runs get hooks, loads the model through the
-// configured database handler, records an operation log, and returns the model.
+// parameter as the resource id, applies the expansion and depth query options,
+// runs get hooks, loads the model through the configured database handler,
+// records an operation log, and returns the model.
 //
 // When REQ or RSP differs from M, the handler delegates the operation to the
 // phase service's Get method with a zero-value REQ. Get handles an HTTP GET
@@ -78,9 +77,6 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			gstotel.RecordError(span, errors.New(CodeNotFoundRouteParam.Msg()))
 			return
 		}
-		index, _ := c.GetQuery(consts.QUERY_INDEX)
-		selects, _ := c.GetQuery(consts.QUERY_SELECT)
-
 		// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
 		m := meta.newModel()
 		// `GetBefore` hook need id.
@@ -110,8 +106,6 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		}
 		// 2.Get resource from database.
 		if err = handler(requestContext(c)).
-			WithIndex(index).
-			WithSelect(strings.Split(selects, ",")...).
 			WithExpand(expands).
 			Get(m, m.GetID()); err != nil {
 			log.Error(err)

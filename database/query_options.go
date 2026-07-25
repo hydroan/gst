@@ -182,14 +182,6 @@ func (db *database[M]) WithIndex(indexName string, hint ...consts.IndexHintMode)
 //	// Fuzzy match - empty strings in comma-separated values are skipped
 //	WithQuery(&model.User{Name: "John,,Jack"}, types.QueryOptions{FuzzyMatch: true})  // WHERE name REGEXP '.*John.*|.*Jack.*'
 //
-//	// OR logic to combine conditions
-//	WithQuery(&model.User{Name: "John", Email: "john@example.com"}, types.QueryOptions{Or: true})
-//	// WHERE name IN ('John') OR email IN ('john@example.com')
-//
-//	// OR logic with fuzzy match
-//	WithQuery(&model.User{Name: "John", Email: "example"}, types.QueryOptions{Or: true, FuzzyMatch: true})
-//	// WHERE name LIKE '%John%' OR email LIKE '%example%'
-//
 //		// Raw SQL query (can be combined with model fields)
 //	WithQuery(&model.User{}, types.QueryOptions{RawQuery: "age > ? AND status = ?", RawQueryArgs: []any{18, "active"}})
 //	WithQuery(nil, types.QueryOptions{RawQuery: "created_at BETWEEN ? AND ?", RawQueryArgs: []any{startDate, endDate}})
@@ -210,7 +202,6 @@ func (db *database[M]) WithIndex(indexName string, hint ...consts.IndexHintMode)
 //	// Combined options
 //	WithQuery(&model.User{Name: "John"}, types.QueryOptions{
 //	    FuzzyMatch: true,
-//	    Or:      true,
 //	    AllowEmpty: false,
 //	})
 //
@@ -240,11 +231,7 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 	// RawQuery will be combined with model fields using AND logic if both are provided
 	hasRawQuery := len(opt.RawQuery) > 0
 	if hasRawQuery {
-		if opt.Or {
-			db.ins = db.ins.Or(opt.RawQuery, opt.RawQueryArgs...)
-		} else {
-			db.ins = db.ins.Where(opt.RawQuery, opt.RawQueryArgs...)
-		}
+		db.ins = db.ins.Where(opt.RawQuery, opt.RawQueryArgs...)
 	}
 
 	// Field-level operator conditions are always AND-combined and, like
@@ -336,11 +323,6 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 		// eg: SELECT * FROM `assets` WHERE `category_level2_id` REGEXP '.*XS.*|.*NU.*'
 		//     SELECT count(*) FROM `assets` WHERE `category_level2_id` REGEXP '.*XS.*|.*NU.*'
 		hasValidCondition := false
-		isFirstCondition := true
-		if len(opt.RawQuery) > 0 {
-			// RawQuery is already applied, no need to check empty query
-			isFirstCondition = false
-		}
 		for k, v := range q {
 			items := strings.Split(v, ",")
 			// skip the string slice which all element is empty.
@@ -364,21 +346,10 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 					continue
 				}
 				regexpVal = strings.TrimPrefix(regexpVal, "|")
-				// db.db = db.db.Where(fmt.Sprintf("`%s` REGEXP ?", k), regexpVal)
-				if opt.Or && !isFirstCondition {
-					db.ins = db.ins.Or(fmt.Sprintf("%s %s ?", db.quoteIdent(k), db.regexpOperator()), regexpVal)
-				} else {
-					db.ins = db.ins.Where(fmt.Sprintf("%s %s ?", db.quoteIdent(k), db.regexpOperator()), regexpVal)
-				}
+				db.ins = db.ins.Where(fmt.Sprintf("%s %s ?", db.quoteIdent(k), db.regexpOperator()), regexpVal)
 			} else { // If the query string has only one value, using LIKE
-				// db.db = db.db.Where(fmt.Sprintf("`%s` LIKE ?", k), fmt.Sprintf("%%%v%%", v))
-				if opt.Or && !isFirstCondition {
-					db.ins = db.ins.Or(db.quoteIdent(k)+" LIKE ?", fmt.Sprintf("%%%v%%", v))
-				} else {
-					db.ins = db.ins.Where(db.quoteIdent(k)+" LIKE ?", fmt.Sprintf("%%%v%%", v))
-				}
+				db.ins = db.ins.Where(db.quoteIdent(k)+" LIKE ?", fmt.Sprintf("%%%v%%", v))
 			}
-			isFirstCondition = false
 		}
 		// CRITICAL: Check if all query values are empty after filtering
 		// Even if query map is not empty, all values might be empty strings
@@ -403,20 +374,13 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 		// construct the 'WHERE' 'IN' SQL statement.
 		// eg: SELECT id FROM users WHERE name IN ('user01', 'user02', 'user03', 'user04')
 		hasValidCondition := false
-		isFirstCondition := true
 		for k, v := range q {
 			items := strings.Split(v, ",")
 			if len(strings.Join(items, "")) == 0 {
 				continue
 			}
 			hasValidCondition = true
-			// db.db = db.db.Where(fmt.Sprintf("`%s` IN (?)", k), items)
-			if opt.Or && !isFirstCondition {
-				db.ins = db.ins.Or(db.quoteIdent(k)+" IN ?", items)
-			} else {
-				db.ins = db.ins.Where(db.quoteIdent(k)+" IN ?", items)
-			}
-			isFirstCondition = false
+			db.ins = db.ins.Where(db.quoteIdent(k)+" IN ?", items)
 		}
 		// CRITICAL: Check if all query values are empty after filtering
 		// Even if query map is not empty, all values might be empty strings

@@ -35,8 +35,7 @@ Content-Type: application/json
 
 除业务字段过滤外，列表接口的通用查询参数由后端按资源逐个启用：分页由 model 嵌入
 `model.Pagination` 启用，游标分页由 `model.Cursor` 启用，排序、展开关联、
-字段操作符过滤等常规参数由 `model.Query` 启用（`model.Query` 同时包含前两者），OR 过滤、
-跳过总数等改变查询语义或执行方式的参数由 `model.UnsafeQuery` 单独启用。资源未启用
+字段操作符过滤等参数由 `model.Query` 启用（`model.Query` 同时包含前两者）。资源未启用
 对应能力时，传这些参数会返回 400。某个资源支持哪些参数以 Swagger 为准。
 
 | 能力 | 参数 | 启用方式 | 示例 |
@@ -44,10 +43,8 @@ Content-Type: application/json
 | 分页 | `_page`（从 1 开始）、`_size`；`_size` 缺省 20，上限 100（超限收敛到 100，不报错） | `model.Pagination` | `?_page=1&_size=20` |
 | 排序 | `_sort_by`，逗号分隔多字段，方向 `asc`/`desc`（默认 `asc`） | `model.Query` | `?_sort_by=created_at desc,name` |
 | 展开关联 | `_expand`，逗号分隔，`all` 表示全部可展开字段（可展开字段列表见 Swagger 中 `_expand` 参数说明，接受 snake_case 写法、大小写不敏感）；`_depth` 控制自引用字段的递归展开层数，范围 [1,10]，越界回退 1 | `model.Query` | `?_expand=all&_depth=5` |
-| 字段操作符过滤 | `字段[op]=值`，与其他条件按 AND 组合；op 支持 `eq`、`ne`、`gt`、`gte`、`lt`、`lte`、`in`、`notin`（逗号分隔多值）、`like`、`notlike`（子串匹配）、`startswith`、`endswith`（前/后缀匹配，前缀可走索引）、`isnull`（值为 `true`/`false`，判断任意可空字段是否为 NULL）；`like` 类的值是字面量而非模式，`%`、`_` 会被转义；值按字段类型校验，非法返回 400：数字字段要求数字值；时间字段只支持比较类 op，格式支持 `2006-01-02 15:04:05`、`2006-01-02T15:04[:05]`、`2006-01-02`、带时区偏移的 RFC 3339、Unix 秒/毫秒时间戳，无时区格式按服务器本地时区解析，纯日期作 `lte` 上界覆盖到当天末尾、作 `gt` 表示整天之后；时间范围用同字段 `gte`+`lte` 组合表达，`created_at`/`updated_at` 同样支持裸名精确过滤（值为时间，同上校验）与操作符过滤；字段名、操作符非法或与 `_or=true` 同用返回 400，空值视为不过滤 | `model.Query` | `?age[gte]=18&remark[like]=hello&created_at[gte]=2025-01-01&created_at[lte]=2025-01-15` |
+| 字段操作符过滤 | `字段[op]=值`，与其他条件按 AND 组合；op 支持 `eq`、`ne`、`gt`、`gte`、`lt`、`lte`、`in`、`notin`（逗号分隔多值）、`like`、`notlike`（子串匹配）、`startswith`、`endswith`（前/后缀匹配，前缀可走索引）、`isnull`（值为 `true`/`false`，判断任意可空字段是否为 NULL）；`like` 类的值是字面量而非模式，`%`、`_` 会被转义；值按字段类型校验，非法返回 400：数字字段要求数字值；时间字段只支持比较类 op，格式支持 `2006-01-02 15:04:05`、`2006-01-02T15:04[:05]`、`2006-01-02`、带时区偏移的 RFC 3339、Unix 秒/毫秒时间戳，无时区格式按服务器本地时区解析，纯日期作 `lte` 上界覆盖到当天末尾、作 `gt` 表示整天之后；时间范围用同字段 `gte`+`lte` 组合表达，`created_at`/`updated_at` 同样支持裸名精确过滤（值为时间，同上校验）与操作符过滤；字段名、操作符非法返回 400，空值视为不过滤 | `model.Query` | `?age[gte]=18&remark[like]=hello&created_at[gte]=2025-01-01&created_at[lte]=2025-01-15` |
 | 游标分页 | `_cursor_value`、`_cursor_field`、`_cursor_next`；`_size` 控制批大小（缺省 20，上限 100）；游标与 offset 翻页互斥：仅嵌 `model.Cursor` 的资源传 `_page` 返回 400，游标生效时 `_page` 被忽略；使用游标时响应不返回 `total` | `model.Cursor` | `?_cursor_value=xxx&_cursor_next=true&_size=50` |
-| OR 过滤 | `_or` 为 `true` 时多个业务字段过滤条件之间用 OR 连接 | `model.UnsafeQuery` | `?name=g1&status=enabled&_or=true` |
-| 跳过总数 | `_no_total` 为 `true` 时响应不返回 `total` | `model.UnsafeQuery` | `?_no_total=true` |
 
 命名约定：框架控制参数一律以 `_` 开头，`_` 前缀是框架保留命名空间，业务字段的
 query 名不要以 `_` 开头。反过来，所有裸名参数都属于业务字段过滤（如 `?name=xxx`），
@@ -123,7 +120,7 @@ query 名不要以 `_` 开头。反过来，所有裸名参数都属于业务字
   前端以 HTTP 状态码或 `code != 0` 判定失败，具体错误码含义以 Swagger 为准。
 - `trace_id` 用于排障，反馈接口问题时请带上。
 
-列表接口的 `data` 固定为如下结构（`_no_total=true` 时没有 `total`）：
+列表接口的 `data` 固定为如下结构：
 
 ```json
 {

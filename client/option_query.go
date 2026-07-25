@@ -10,12 +10,11 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-// clientQuery combines the regular and unsafe framework query parameters so
-// client query options can populate either group. The client always allows
-// setting them; the server decides per model which parameters are accepted.
+// clientQuery carries the framework query parameters client query options can
+// populate. The client always allows setting them; the server decides per model
+// which parameters are accepted.
 type clientQuery struct {
 	model.Query
-	model.UnsafeQuery
 }
 
 func WithQuery(_keyValues ...any) Option {
@@ -107,44 +106,5 @@ func WithQuerySortBy(sortBy string) Option {
 			c.query = new(clientQuery)
 		}
 		c.query.SortBy = sortBy
-	}
-}
-
-func WithQueryOr(or bool) Option {
-	return func(c *Client) {
-		if c.query == nil {
-			c.query = new(clientQuery)
-		}
-		c.query.Or = &or
-	}
-}
-
-func WithQueryIndex(index string) Option {
-	return func(c *Client) {
-		if index = strings.TrimSpace(index); len(index) == 0 {
-			return
-		}
-		if c.query == nil {
-			c.query = new(clientQuery)
-		}
-		c.query.Index = index
-	}
-}
-
-func WithQuerySelect(selects ...string) Option {
-	return func(c *Client) {
-		_selects := make([]string, 0, len(selects))
-		for i := range selects {
-			if len(strings.TrimSpace(selects[i])) != 0 {
-				_selects = append(_selects, strings.TrimSpace(selects[i]))
-			}
-		}
-		if len(_selects) == 0 {
-			return
-		}
-		if c.query == nil {
-			c.query = new(clientQuery)
-		}
-		c.query.Select = strings.Join(_selects, ",")
 	}
 }

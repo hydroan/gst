@@ -80,15 +80,6 @@ func Filters(q url.Values, m types.Model) ([]types.Filter, error) {
 	if len(conds) == 0 {
 		return nil, nil
 	}
-	// Filters are always AND-combined, but WithQuery builds the OR
-	// chain flat and cannot express (a OR b) AND cond; allowing the mix would
-	// let a condition escape the OR group and silently widen the result set,
-	// so the combination fails closed instead.
-	if values, ok := q[consts.QUERY_OR]; ok && len(values) > 0 {
-		if or, err := strconv.ParseBool(values[0]); err == nil && or {
-			return nil, errors.Newf("field filters cannot be combined with %s=true", consts.QUERY_OR)
-		}
-	}
 	return conds, nil
 }
 

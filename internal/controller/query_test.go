@@ -18,50 +18,32 @@ type listQueryableTestModel struct {
 	modelregistry.Base
 }
 
-type listUnsafeQueryableTestModel struct {
-	Name string `query:"name"`
-
-	modelregistry.Query
-	modelregistry.UnsafeQuery
-	modelregistry.Base
-}
-
-func TestDecodeListQueryGatesUnsafeQueryKeys(t *testing.T) {
-	queryKeys := map[string][]string{
-		"name":     {"alice"},
-		"_sort_by": {"created_at desc"},
-	}
-
+func TestDecodeListQueryGatesQueryKeys(t *testing.T) {
 	t.Run("QueryAcceptsRegularKeys", func(t *testing.T) {
 		var m listQueryableTestModel
-		require.NoError(t, decodeListQuery(&m, queryKeys))
-	})
-
-	t.Run("QueryRejectsUnsafeKeys", func(t *testing.T) {
-		for _, key := range []string{"_or", "_index", "_select", "_no_total"} {
-			var m listQueryableTestModel
-			err := decodeListQuery(&m, map[string][]string{key: {"true"}})
-			require.Error(t, err, "unsafe query key %q must be rejected without modelregistry.UnsafeQuery", key)
-		}
-	})
-
-	t.Run("UnsafeQueryAcceptsUnsafeKeys", func(t *testing.T) {
-		var m listUnsafeQueryableTestModel
 		require.NoError(t, decodeListQuery(&m, map[string][]string{
-			"_or":       {"true"},
-			"_index":    {"idx_test"},
-			"_select":   {"name"},
-			"_no_total": {"true"},
+			"name":     {"alice"},
+			"_sort_by": {"created_at desc"},
 		}))
 	})
 
-	t.Run("UnsafeQueryAloneRejectsRegularKeys", func(t *testing.T) {
-		type unsafeOnlyModel struct {
-			modelregistry.UnsafeQuery
+	t.Run("ModelWithoutQueryRejectsRegularKeys", func(t *testing.T) {
+		type plainModel struct {
+			Name string `query:"name"`
+
 			modelregistry.Base
 		}
-		var m unsafeOnlyModel
-		require.Error(t, decodeListQuery(&m, map[string][]string{"_sort_by": {"created_at desc"}}))
+		var m plainModel
+		require.Error(t, decodeListQuery(&m, map[string][]string{"_sort_by": {"created_at desc"}}),
+			"a model that did not embed modelregistry.Query must not accept the List controls")
+	})
+
+	t.Run("RetiredKeysAreRejected", func(t *testing.T) {
+		for _, key := range []string{"_or", "_index", "_select", "_no_total"} {
+			var m listQueryableTestModel
+			require.Error(t, decodeListQuery(&m, map[string][]string{key: {"true"}}),
+				"retired framework key %q no longer maps to any model field and must be reported", key)
+		}
 	})
 }
 

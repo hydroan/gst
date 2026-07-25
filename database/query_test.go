@@ -802,32 +802,6 @@ func TestDatabaseWithQuery(t *testing.T) {
 			List(&users))
 		require.Len(t, users, 3, "FuzzyMatch with AllowEmpty should return all records")
 
-		// Test FuzzyMatch=true with Or: Name="user1" OR Email="user2@example.com"
-		// Should return u1 (matches Name) and u2 (matches Email)
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: u1.Name, Email: u2.Email}, types.QueryOptions{
-				FuzzyMatch: true,
-				Or:         true,
-			}).
-			List(&users))
-		require.Len(t, users, 2, "FuzzyMatch with Or should work correctly")
-		foundU1, foundU2 = false, false
-		for _, u := range users {
-			if u.ID == u1.ID {
-				foundU1 = true
-				require.Equal(t, u1.Name, u.Name)
-				require.Equal(t, u1.Email, u.Email)
-			}
-			if u.ID == u2.ID {
-				foundU2 = true
-				require.Equal(t, u2.Name, u.Name)
-				require.Equal(t, u2.Email, u.Email)
-			}
-		}
-		require.True(t, foundU1, "should find u1")
-		require.True(t, foundU2, "should find u2")
-
 		// Test FuzzyMatch=true with single field and empty string value (should be blocked)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
@@ -974,16 +948,6 @@ func TestDatabaseWithQuery(t *testing.T) {
 			List(&users))
 		require.Len(t, users, 3, "AllowEmpty should work with FuzzyMatch")
 
-		// Test AllowEmpty with Or: should allow empty query when both are enabled
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{}, types.QueryOptions{
-				AllowEmpty: true,
-				Or:         true,
-			}).
-			List(&users))
-		require.Len(t, users, 3, "AllowEmpty should work with Or")
-
 		// Test AllowEmpty=false explicitly (should be same as default)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
@@ -1022,130 +986,6 @@ func TestDatabaseWithQuery(t *testing.T) {
 			List(&users))
 		require.Len(t, users, 1)
 		require.Equal(t, zeroAgeUser.ID, users[0].ID)
-	})
-
-	t.Run("Or", func(t *testing.T) {
-		defer cleanupTestData()
-		setupTestData(t)
-		users := make([]*TestUser, 0)
-
-		// Test Or=false (default, AND logic): query with multiple fields should return records matching ALL conditions
-		// u1: Name="user1", Age=18
-		// u2: Name="user2", Age=19
-		// u3: Name="user3", Age=20
-		// Query: Name="user1" AND Age=19 should return 0 records (no user matches both)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: u1.Name, Age: u2.Age}, types.QueryOptions{Or: false}).
-			List(&users))
-		require.Empty(t, users)
-
-		// Test Or=false (default, AND logic): query with multiple fields matching same record
-		// Query: Name="user1" AND Age=18 should return 1 record (u1 matches both)
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: u1.Name, Age: u1.Age}, types.QueryOptions{Or: false}).
-			List(&users))
-		require.Len(t, users, 1)
-		require.Equal(t, u1.ID, users[0].ID)
-		require.Equal(t, u1.Name, users[0].Name)
-		require.Equal(t, u1.Age, users[0].Age)
-
-		// Test Or=true (OR logic): query with multiple fields should return records matching ANY condition
-		// Query: Name="user1" OR Age=19 should return 2 records (u1 matches Name, u2 matches Age)
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: u1.Name, Age: u2.Age}, types.QueryOptions{Or: true}).
-			List(&users))
-		require.Len(t, users, 2)
-		var foundU1, foundU2 bool
-		for _, u := range users {
-			if u.ID == u1.ID {
-				foundU1 = true
-				require.Equal(t, u1.Name, u.Name)
-				require.Equal(t, u1.Age, u.Age)
-			}
-			if u.ID == u2.ID {
-				foundU2 = true
-				require.Equal(t, u2.Name, u.Name)
-				require.Equal(t, u2.Age, u.Age)
-			}
-		}
-		require.True(t, foundU1, "should find u1")
-		require.True(t, foundU2, "should find u2")
-
-		// Test Or=true with three fields: Name="user1" OR Email="user2@example.com" OR Age=20
-		// Should return all 3 records (u1 matches Name, u2 matches Email, u3 matches Age)
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: u1.Name, Email: u2.Email, Age: u3.Age}, types.QueryOptions{Or: true}).
-			List(&users))
-		require.Len(t, users, 3)
-		var foundU1_2, foundU2_2, foundU3 bool
-		for _, u := range users {
-			switch u.ID {
-			case u1.ID:
-				foundU1_2 = true
-				require.Equal(t, u1.Name, u.Name)
-				require.Equal(t, u1.Email, u.Email)
-				require.Equal(t, u1.Age, u.Age)
-			case u2.ID:
-				foundU2_2 = true
-				require.Equal(t, u2.Name, u.Name)
-				require.Equal(t, u2.Email, u.Email)
-				require.Equal(t, u2.Age, u.Age)
-			case u3.ID:
-				foundU3 = true
-				require.Equal(t, u3.Name, u.Name)
-				require.Equal(t, u3.Email, u.Email)
-				require.Equal(t, u3.Age, u.Age)
-			}
-		}
-		require.True(t, foundU1_2, "should find u1")
-		require.True(t, foundU2_2, "should find u2")
-		require.True(t, foundU3, "should find u3")
-
-		// Test Or=true with single field (should work same as Or=false for single field)
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: u1.Name}, types.QueryOptions{Or: true}).
-			List(&users))
-		require.Len(t, users, 1)
-		require.Equal(t, u1.ID, users[0].ID)
-		require.Equal(t, u1.Name, users[0].Name)
-
-		// Test Or=true with FuzzyMatch: Name LIKE "%user%" OR Email LIKE "%example%"
-		// Should return all 3 records (all match both patterns)
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: "user", Email: "example"}, types.QueryOptions{
-				Or:         true,
-				FuzzyMatch: true,
-			}).
-			List(&users))
-		require.Len(t, users, 3)
-		foundU1_2, foundU2_2, foundU3 = false, false, false
-		for _, u := range users {
-			switch u.ID {
-			case u1.ID:
-				foundU1_2 = true
-				require.Equal(t, u1.Name, u.Name)
-				require.Equal(t, u1.Email, u.Email)
-				require.Equal(t, u1.Age, u.Age)
-			case u2.ID:
-				foundU2_2 = true
-				require.Equal(t, u2.Name, u.Name)
-				require.Equal(t, u2.Email, u.Email)
-				require.Equal(t, u2.Age, u.Age)
-			case u3.ID:
-				foundU3 = true
-				require.Equal(t, u3.Name, u.Name)
-				require.Equal(t, u3.Email, u.Email)
-				require.Equal(t, u3.Age, u.Age)
-			}
-		}
-		require.True(t, foundU1_2, "should find u1")
-		require.True(t, foundU2_2, "should find u2")
-		require.True(t, foundU3, "should find u3")
 	})
 
 	t.Run("RawQuery", func(t *testing.T) {
@@ -1641,19 +1481,6 @@ func TestDatabaseWithQuery(t *testing.T) {
 			List(&users))
 		require.Len(t, users, 1)
 		require.Equal(t, u3.ID, users[0].ID)
-
-		// Test Or does not affect conditions: Name="user1" with age > 18 must
-		// stay AND-combined and return 0 records, even though Or is set.
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: u1.Name}, types.QueryOptions{
-				Or: true,
-				Filters: []types.Filter{
-					{Column: "age", Op: types.FilterOpGt, Value: "18"},
-				},
-			}).
-			List(&users))
-		require.Empty(t, users, "conditions must stay AND-combined under Or")
 
 		// Test startswith is anchored at the beginning: "user" prefixes every
 		// name, while "ser" only appears inside and must not match.

@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	. "github.com/hydroan/gst/internal/response"
@@ -85,9 +84,6 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		if limitStr, ok := c.GetQuery(consts.QUERY_LIMIT); ok {
 			limit, _ = strconv.Atoi(limitStr)
 		}
-		index, _ := c.GetQuery(consts.QUERY_INDEX)
-		selects, _ := c.GetQuery(consts.QUERY_SELECT)
-
 		// The URL query is parsed once and shared by every parser below;
 		// url.URL.Query re-parses the raw query string on each call.
 		query := c.Request.URL.Query()
@@ -109,11 +105,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		log.Info("query parameter: ", m)
 		present := urlquery.PresentFields(query)
 
-		var or bool
 		data := make([]M, 0)
-		if orStr, ok := c.GetQuery(consts.QUERY_OR); ok {
-			or, _ = strconv.ParseBool(orStr)
-		}
 		expands := parseExpandQuery(c, m)
 
 		svc := meta.service()
@@ -133,11 +125,8 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		if err = handler(requestContext(c)).
 			// WithPagination(page, size). // 不要使用 WithPagination, 否则 WithLimit 不生效
 			WithLimit(limit).
-			WithIndex(index).
-			WithSelect(strings.Split(selects, ",")...).
 			WithQuery(svc.Filter(svcCtx, m), types.QueryOptions{
 				AllowEmpty:    true,
-				Or:            or,
 				RawQuery:      svc.FilterRaw(svcCtx),
 				PresentFields: present,
 				Filters:       filters,

@@ -278,28 +278,6 @@ func TestFilters(t *testing.T) {
 		require.Error(t, err, "non-boolean value must be rejected")
 	})
 
-	t.Run("RejectsCombinationWithOr", func(t *testing.T) {
-		type unsafeFilterModel struct {
-			Age int `json:"age"`
-
-			modelregistry.Query
-			modelregistry.UnsafeQuery
-			modelregistry.Base
-		}
-		_, err := Filters(url.Values{
-			"age[gt]": {"1"},
-			"_or":     {"true"},
-		}, &unsafeFilterModel{})
-		require.Error(t, err, "flat OR building cannot express (a OR b) AND cond, so the combination must fail closed")
-
-		conds, err := Filters(url.Values{
-			"age[gt]": {"1"},
-			"_or":     {"false"},
-		}, &unsafeFilterModel{})
-		require.NoError(t, err)
-		require.Len(t, conds, 1)
-	})
-
 	t.Run("LeavesFrameworkNamespaceAlone", func(t *testing.T) {
 		conds, err := Filters(url.Values{
 			"_page[gt]": {"1"},
@@ -393,7 +371,7 @@ func TestPresentFields(t *testing.T) {
 			"_size":         {"10"},
 			"_limit":        {"100"},
 			"_sort_by":      {"created_at desc"},
-			"_no_total":     {"true"},
+			"_expand":       {"all"},
 			"_cursor_value": {"abc"},
 		})
 		require.Empty(t, present, "framework parameters live in the underscore namespace and are not model filter columns")

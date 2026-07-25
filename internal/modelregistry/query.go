@@ -16,9 +16,7 @@ import (
 // the comparison operators). Query already embeds Pagination and Cursor, so
 // models that embed Query must not embed those structs again.
 //
-// Query intentionally covers only controls that keep list semantics intact.
-// Controls that rewrite filter combination or tune query execution live in
-// UnsafeQuery and require their own opt-in.
+// Query covers every framework List control; there is no second opt-in to add.
 //
 // Every field is ignored by JSON and GORM. The query tags are intentionally
 // kept here because the List controller decodes URL query parameters into the
@@ -44,36 +42,6 @@ func (Query) queryEnabled() {}
 // The other marker interfaces below are sealed the same way.
 type Queryable interface {
 	queryEnabled()
-}
-
-// UnsafeQuery declares framework-owned HTTP query parameters that change how a
-// list query is combined or executed, not just which rows it matches.
-//
-// These controls are escape hatches rather than regular list features:
-//   - Or rewrites filter combination from AND to OR, which can defeat
-//     mandatory service-level filters such as tenant or permission scoping.
-//   - Index, Select, and NoTotal expose execution-level knobs
-//     (index hints, column projection, count suppression).
-//
-// UnsafeQuery is therefore split from Query: embedding it is a separate,
-// deliberate opt-in that signals the model owner accepts these risks.
-// UnsafeQuery does not include Query; embed both when a model needs the
-// regular List controls as well.
-//
-// Every field is ignored by JSON and GORM for the same reason as Query.
-type UnsafeQuery struct {
-	Or      *bool  `json:"-" gorm:"-" query:"_or" url:"_or,omitempty"`             // Or combines model-field filters with OR instead of AND when enabled.
-	Index   string `json:"-" gorm:"-" query:"_index" url:"_index,omitempty"`       // Index requests a database index hint for the list query.
-	Select  string `json:"-" gorm:"-" query:"_select" url:"_select,omitempty"`     // Select limits returned columns, separated by commas.
-	NoTotal bool   `json:"-" gorm:"-" query:"_no_total" url:"_no_total,omitempty"` // NoTotal skips the total-count query when true.
-}
-
-// unsafeQueryEnabled marks models that opt in to unsafe framework query parameters.
-func (UnsafeQuery) unsafeQueryEnabled() {}
-
-// UnsafeQueryable is implemented by models that embed UnsafeQuery.
-type UnsafeQueryable interface {
-	unsafeQueryEnabled()
 }
 
 // Pagination declares offset-pagination query parameters for List actions.
@@ -127,13 +95,6 @@ func IsQueryable(m any) bool {
 	return ok
 }
 
-// IsUnsafeQueryable reports whether m opted in to unsafe framework query
-// parameters by embedding UnsafeQuery.
-func IsUnsafeQueryable(m any) bool {
-	_, ok := m.(UnsafeQueryable)
-	return ok
-}
-
 // IsPaginatable reports whether m opted in to page and size query parameters
 // by embedding Pagination directly or through Query.
 func IsPaginatable(m any) bool {
@@ -153,7 +114,6 @@ func IsCursorable(m any) bool {
 // type keeps pointer embedding and nested marker structs working.
 var queryMarkerTypes = []reflect.Type{
 	reflect.TypeFor[Queryable](),
-	reflect.TypeFor[UnsafeQueryable](),
 	reflect.TypeFor[Paginatable](),
 	reflect.TypeFor[Cursorable](),
 }
