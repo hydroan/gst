@@ -32,8 +32,16 @@ jobs:
       - name: Run CI checks
         run: make check
 
-      # Generate demo project
+      # Generate demo project.
+      # gg new runs "go mod tidy", which has to resolve
+      # github.com/hydroan/gst before the local replace directive is added
+      # below. GOPRIVATE sends that one lookup straight to the Git remote
+      # instead of proxy.golang.org and sum.golang.org, which would otherwise
+      # have to index the commit under test on demand -- a race this job can
+      # lose when it runs right after the push.
       - name: Generate demo project
+        env:
+          GOPRIVATE: github.com/hydroan/gst
         run: |
           cd examples
           gg new demo-ci
