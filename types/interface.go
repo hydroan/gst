@@ -160,6 +160,10 @@ type Database[M Model] interface {
 // The entry point is the package-level database.Aggregate[M, R] rather than a
 // method, because a Go method cannot introduce the result type parameter.
 //
+// One chain runs one query. The builder keeps the terms it was given, so
+// calling a terminal twice on the same value repeats the first query rather
+// than starting a fresh one; call database.Aggregate again for each read.
+//
 // Example:
 //
 //	type tenantTotal struct {

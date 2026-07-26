@@ -1,7 +1,5 @@
 package types
 
-import "reflect"
-
 // AggregateFn is the function applied to one projection term. The set is
 // closed, so a projection can never carry SQL the way a free-form select
 // string could: the renderer maps each constant to a fixed expression and
@@ -21,6 +19,19 @@ const (
 	AggregateMax           AggregateFn = "MAX"
 )
 
+// Valid reports whether the function is one this package defines. The renderer
+// composes SQL from the constant, so a value from outside the set would reach
+// the statement as text; the query builder rejects it instead.
+func (f AggregateFn) Valid() bool {
+	switch f {
+	case AggregateNone, AggregateCount, AggregateCountDistinct,
+		AggregateSum, AggregateAvg, AggregateMin, AggregateMax:
+		return true
+	default:
+		return false
+	}
+}
+
 // TimeBucket is the truncation granularity of a time group key. Bucketing is
 // the one place where the same intent needs a different expression per
 // dialect, so the constant travels through the builder and the database layer
@@ -35,15 +46,27 @@ const (
 	TimeBucketMonth TimeBucket = "month"
 )
 
+// Valid reports whether the bucket is one this package defines. An unknown
+// bucket would otherwise fall through to the day granularity and silently
+// report the wrong period.
+func (b TimeBucket) Valid() bool {
+	switch b {
+	case TimeBucketNone, TimeBucketHour, TimeBucketDay, TimeBucketMonth:
+		return true
+	default:
+		return false
+	}
+}
+
 // AggregateTerm is one term of an aggregate projection: a group key when Fn is
 // AggregateNone, a measure otherwise.
 //
 // Terms are built through the generated column references
 // (SampleCols.Amount.Sum()) or, for code that cannot name a concrete model,
 // through the package-level string variants (SumOf("amount")). The typed path
-// records the column's Go type in ValueType, which lets the builder reject a
-// SUM over a text column before the query runs; the string path carries no
-// type and is checked against the model schema instead.
+// cannot express a function the column type does not support, because the
+// generated reference does not carry the method; the string path names a
+// column that is checked against the model schema when the query is built.
 //
 // A term never holds SQL. Column names are quoted by the database layer,
 // values bind as statement parameters, and Fn and Bucket come from closed sets.
@@ -62,9 +85,6 @@ type AggregateTerm struct {
 	// Alias names the term in the SELECT list and binds it to a field of the
 	// result row. An empty alias defaults to the column name.
 	Alias string
-	// ValueType is the column's Go type when the term came from a generated
-	// column reference, and nil when it came from a string variant.
-	ValueType reflect.Type
 }
 
 // IsMeasure reports whether the term is an aggregate rather than a group key.
@@ -185,6 +205,18 @@ const (
 	HavingOpLt  HavingOp = "lt"
 	HavingOpLte HavingOp = "lte"
 )
+
+// Valid reports whether the comparison is one this package defines. An unknown
+// operator would otherwise fall through to equality and silently filter by the
+// wrong comparison.
+func (o HavingOp) Valid() bool {
+	switch o {
+	case HavingOpEq, HavingOpNe, HavingOpGt, HavingOpGte, HavingOpLt, HavingOpLte:
+		return true
+	default:
+		return false
+	}
+}
 
 // Having is one post-aggregation condition. It carries the term itself rather
 // than an alias string, which has two consequences: a condition can never name

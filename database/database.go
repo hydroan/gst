@@ -33,6 +33,7 @@ var (
 	ErrDuplicatedKey       = gorm.ErrDuplicatedKey
 	ErrNilSQLBuilder       = errors.New("sql statement collector cannot be nil")
 	ErrNilTransaction      = errors.New("transaction function cannot be nil")
+	ErrUnusableFilter      = errors.New("filter cannot be applied")
 )
 
 var (

@@ -1,9 +1,6 @@
 package types
 
-import (
-	"reflect"
-	"time"
-)
+import "time"
 
 // ColumnRef is the shared view of every generated column reference. Helpers
 // that accept a column take this interface rather than a concrete struct,
@@ -135,12 +132,7 @@ func (c Column[T]) Max() AggregateTerm { return c.term(AggregateMax) }
 func (c Column[T]) Group() AggregateTerm { return c.term(AggregateNone) }
 
 func (c Column[T]) term(fn AggregateFn) AggregateTerm {
-	return AggregateTerm{
-		Fn:        fn,
-		Column:    c.Name,
-		Alias:     c.Name,
-		ValueType: reflect.TypeFor[T](),
-	}
+	return AggregateTerm{Fn: fn, Column: c.Name, Alias: c.Name}
 }
 
 // NumericColumn is the reference generated for a column whose Go type is

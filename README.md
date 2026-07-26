@@ -375,6 +375,52 @@ database.Database[*appmodel.Conversation](ctx)
 `WithLimit` 等选项。一次查询或写入使用一个新的 `database.Database[T](...)`
 链式调用，不要在无关操作之间复用同一个 database 句柄。
 
+### 聚合查询
+
+看板和报表用 `database.Aggregate[M, R](ctx)`，不要把整表 `List` 进内存再用
+Go 循环累加。`M` 决定表、软删除范围和方言，`R` 是自己声明的结果行结构体：
+
+```go
+type categoryTotal struct {
+    Category string
+    Amount   int64
+    Records  int64
+}
+
+rows := make([]categoryTotal, 0)
+err := database.Aggregate[*appmodel.Record, categoryTotal](ctx).
+    Select(
+        appmodel.RecordCols.Category.Group(), // 不带聚合函数的项即分组键
+        appmodel.RecordCols.Amount.Sum(),     // 默认别名就是列名，多数情况不用写 As
+        types.Count().As("records"),
+    ).
+    Where(appmodel.RecordCols.TenantID.Eq(tenantID)).
+    Scan(&rows)
+```
+
+框架从分组键推导 `GROUP BY`，所以 SELECT 和 GROUP BY 不可能写不一致。
+
+几条会影响正确性的约定：
+
+- **`SUM` 空集恒为 0**（内部包了 `COALESCE`）；`AVG`/`MIN`/`MAX` 空集是 NULL，
+  结果字段**必须声明成指针**，否则构建期报错。这样「没有数据」和「结果恰好
+  是 0」在报表上才可区分。
+- **条件聚合**复用普通过滤器，一次扫描出多列指标：
+  `Cols.Amount.Sum().Where(Cols.Status.Eq("done")).As("done_amount")`。
+- **`As` 是可选的**。默认别名是列名，`COUNT(*)` 是 `count`。只有结果字段名和
+  列名不一致、或同一列上挂了两个度量时才需要写。
+- 别名和 `R` 的字段**双向校验**，任一侧对不上都是构建期错误，不会静默给出
+  一列 0。
+- 聚合规格写错一律**报错**，不像客户端过滤器那样退化成空结果。
+
+单行结果用 `ScanOne`，分页报表的总组数用 `CountGroups`。跨表条件用
+`types.FilterExists` / `FilterNotExists` 半连接，不要用 join —— join 到一对多
+子表会让 `SUM` 静默翻倍。它们是普通的 `Filter` 算子，`List`/`Count`/`Export`
+同样能用。
+
+框架**不做** join、窗口函数、UNION、递归 CTE，聚合能力也不向 URL 暴露：
+报表口径属于服务端契约，让客户端自选分组键等于开放一个无界扫描入口。
+
 ## 配置和迁移
 
 `config.ini.example` 是新项目的默认配置模板。复制为 `config.ini` 后按环境修改。

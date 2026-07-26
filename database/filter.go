@@ -3,6 +3,8 @@ package database
 import (
 	"reflect"
 
+	"github.com/cockroachdb/errors"
+
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types"
@@ -30,7 +32,10 @@ import (
 //
 // The caller must hold db.mu.
 func (db *database[M]) applyFilters(filters []types.Filter) {
-	if expr := db.renderFilters(filters, false, db.outerTableName()); expr != nil {
+	// The reason is discarded here on purpose: a client filter that cannot be
+	// applied narrows the query instead of failing the request. Server-built
+	// callers such as the aggregate builder read it and fail fast instead.
+	if expr, _ := db.renderFilters(filters, false, db.outerTableName()); expr != nil {
 		db.ins = db.ins.Where(expr)
 	}
 }
@@ -50,13 +55,21 @@ func (db *database[M]) applyFilters(filters []types.Filter) {
 // group fails closed instead; see groupCondition.
 //
 // The caller must hold db.mu.
-func (db *database[M]) renderFilters(filters []types.Filter, or bool, parentTable string) clause.Expression {
+func (db *database[M]) renderFilters(filters []types.Filter, or bool, parentTable string) (clause.Expression, error) {
 	if len(filters) == 0 {
-		return nil
+		// No filters is not a failure: callers read a nil expression as "add no
+		// condition". A sentinel here would make every call site branch on an
+		// error that never means anything went wrong.
+		return nil, nil //nolint:nilnil
 	}
+	var failure error
 	exprs := make([]clause.Expression, 0, len(filters))
 	for _, f := range filters {
-		exprs = append(exprs, db.renderFilter(f, parentTable))
+		expr, err := db.renderFilter(f, parentTable)
+		if err != nil && failure == nil {
+			failure = err
+		}
+		exprs = append(exprs, expr)
 	}
 	if or {
 		// A one-element OR group must never be handed to gorm as an
@@ -71,17 +84,17 @@ func (db *database[M]) renderFilters(filters []types.Filter, or bool, parentTabl
 		// by this rule or carries more than one child, which gorm renders
 		// parenthesized and correctly.
 		if len(exprs) == 1 {
-			return exprs[0]
+			return exprs[0], failure
 		}
-		return clause.Or(exprs...)
+		return clause.Or(exprs...), failure
 	}
-	return clause.And(exprs...)
+	return clause.And(exprs...), failure
 }
 
 // renderFilter turns one filter into a predicate.
 //
 // The caller must hold db.mu.
-func (db *database[M]) renderFilter(f types.Filter, parentTable string) clause.Expression {
+func (db *database[M]) renderFilter(f types.Filter, parentTable string) (clause.Expression, error) {
 	// Groups carry their children in Value and subqueries carry their columns
 	// inside it, so neither names a column of its own and both are dispatched
 	// before the empty-column check below.
@@ -98,8 +111,7 @@ func (db *database[M]) renderFilter(f types.Filter, parentTable string) clause.E
 		return db.existsCondition(f, sq, parentTable)
 	}
 	if len(f.Column) == 0 {
-		logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("filter has empty column, adding safety condition")
-		return failClosedExpr()
+		return db.failClosedFilter(f, "has an empty column")
 	}
 	column := db.quoteIdent(f.Column)
 	switch f.Op {
@@ -133,9 +145,9 @@ func (db *database[M]) renderFilter(f types.Filter, parentTable string) clause.E
 			return db.failClosedFilter(f, "expects a bool value")
 		}
 		if b {
-			return clause.Expr{SQL: column + " IS NULL"}
+			return clause.Expr{SQL: column + " IS NULL"}, nil
 		}
-		return clause.Expr{SQL: column + " IS NOT NULL"}
+		return clause.Expr{SQL: column + " IS NOT NULL"}, nil
 	case types.FilterOpRegex:
 		return db.stringFilter(f, column+" "+db.regexpOperator()+" ?")
 	case types.FilterOpNotRegex:
@@ -148,7 +160,7 @@ func (db *database[M]) renderFilter(f types.Filter, parentTable string) clause.E
 		if !ok {
 			return db.failClosedFilter(f, "expects a string value")
 		}
-		return datatypes.JSONArrayQuery(f.Column).Contains(s)
+		return datatypes.JSONArrayQuery(f.Column).Contains(s), nil
 	default:
 		return db.failClosedFilter(f, "is unknown")
 	}
@@ -162,15 +174,13 @@ func (db *database[M]) renderFilter(f types.Filter, parentTable string) clause.E
 // A group whose value is not a filter list, or that carries no children at
 // all, fails closed: an empty group is a caller bug, and answering it with the
 // logical identity (TRUE for AND) would widen the result set.
-func (db *database[M]) groupCondition(f types.Filter, or bool, parentTable string) clause.Expression {
+func (db *database[M]) groupCondition(f types.Filter, or bool, parentTable string) (clause.Expression, error) {
 	children, ok := f.Value.([]types.Filter)
 	if !ok {
-		logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("filter group %q expects a filter list value, adding safety condition", f.Op)
-		return failClosedExpr()
+		return db.failClosedFilter(f, "expects a filter list value")
 	}
 	if len(children) == 0 {
-		logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("filter group %q has no children, adding safety condition", f.Op)
-		return failClosedExpr()
+		return db.failClosedFilter(f, "has no children")
 	}
 	return db.renderFilters(children, or, parentTable)
 }
@@ -181,55 +191,55 @@ func failClosedExpr() clause.Expression { return clause.Expr{SQL: "1 = 0"} }
 
 // failClosedFilter records why a filter cannot be applied and narrows the
 // query to an empty result instead of widening it.
-func (db *database[M]) failClosedFilter(f types.Filter, msg string) clause.Expression {
+func (db *database[M]) failClosedFilter(f types.Filter, msg string) (clause.Expression, error) {
 	logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("filter operator %q on column %q %s, adding safety condition", f.Op, f.Column, msg)
-	return failClosedExpr()
+	return failClosedExpr(), errors.Wrapf(ErrUnusableFilter, "operator %q on column %q %s", f.Op, f.Column, msg)
 }
 
 // scalarFilter binds a comparison filter whose value must be a scalar; nil,
 // slice, and array values fail closed.
-func (db *database[M]) scalarFilter(f types.Filter, sql string) clause.Expression {
+func (db *database[M]) scalarFilter(f types.Filter, sql string) (clause.Expression, error) {
 	if f.Value == nil {
 		return db.failClosedFilter(f, "expects a scalar value")
 	}
 	if k := reflect.ValueOf(f.Value).Kind(); k == reflect.Slice || k == reflect.Array {
 		return db.failClosedFilter(f, "expects a scalar value")
 	}
-	return clause.Expr{SQL: sql, Vars: []any{f.Value}}
+	return clause.Expr{SQL: sql, Vars: []any{f.Value}}, nil
 }
 
 // listFilter binds a set-membership filter whose value must be a slice or an
 // array; anything else, including a comma-separated string, fails closed. An
 // empty slice keeps the SQL list semantics: IN matches nothing, and the result
 // never widens.
-func (db *database[M]) listFilter(f types.Filter, sql string) clause.Expression {
+func (db *database[M]) listFilter(f types.Filter, sql string) (clause.Expression, error) {
 	if f.Value == nil {
 		return db.failClosedFilter(f, "expects a slice value")
 	}
 	if k := reflect.ValueOf(f.Value).Kind(); k != reflect.Slice && k != reflect.Array {
 		return db.failClosedFilter(f, "expects a slice value")
 	}
-	return clause.Expr{SQL: sql, Vars: []any{f.Value}}
+	return clause.Expr{SQL: sql, Vars: []any{f.Value}}, nil
 }
 
 // patternFilter binds a LIKE-family filter; the value must be a string and is
 // escaped so the stored value matches literally.
-func (db *database[M]) patternFilter(f types.Filter, sql, prefix, suffix string) clause.Expression {
+func (db *database[M]) patternFilter(f types.Filter, sql, prefix, suffix string) (clause.Expression, error) {
 	s, ok := f.Value.(string)
 	if !ok {
 		return db.failClosedFilter(f, "expects a string value")
 	}
-	return clause.Expr{SQL: sql, Vars: []any{prefix + escapeLikePattern(s) + suffix}}
+	return clause.Expr{SQL: sql, Vars: []any{prefix + escapeLikePattern(s) + suffix}}, nil
 }
 
 // stringFilter binds a filter whose value must be a plain string bound as-is
 // (the regex operators).
-func (db *database[M]) stringFilter(f types.Filter, sql string) clause.Expression {
+func (db *database[M]) stringFilter(f types.Filter, sql string) (clause.Expression, error) {
 	s, ok := f.Value.(string)
 	if !ok {
 		return db.failClosedFilter(f, "expects a string value")
 	}
-	return clause.Expr{SQL: sql, Vars: []any{s}}
+	return clause.Expr{SQL: sql, Vars: []any{s}}, nil
 }
 
 // existsCondition renders a correlated subquery as a semi join. The related
@@ -249,7 +259,7 @@ func (db *database[M]) stringFilter(f types.Filter, sql string) clause.Expressio
 // wrong table, which returns a wrong row set rather than an error.
 //
 // The caller must hold db.mu.
-func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, parentTable string) clause.Expression {
+func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, parentTable string) (clause.Expression, error) {
 	if sq.Model == nil {
 		return db.failClosedFilter(f, "has no related model")
 	}
@@ -283,13 +293,14 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, parent
 		Select("1").
 		Where(correlation)
 	// The nested filters correlate against this subquery's own table.
-	if expr := db.renderFilters(sq.Filters, false, childTable); expr != nil {
+	expr, failure := db.renderFilters(sq.Filters, false, childTable)
+	if expr != nil {
 		sub = sub.Where(expr)
 	}
 	if sq.Negate {
-		return clause.Expr{SQL: "NOT EXISTS (?)", Vars: []any{sub}}
+		return clause.Expr{SQL: "NOT EXISTS (?)", Vars: []any{sub}}, failure
 	}
-	return clause.Expr{SQL: "EXISTS (?)", Vars: []any{sub}}
+	return clause.Expr{SQL: "EXISTS (?)", Vars: []any{sub}}, failure
 }
 
 // outerTableName resolves the table the current chain reads, for qualifying

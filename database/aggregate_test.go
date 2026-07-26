@@ -79,11 +79,13 @@ func TestAggregateScalar(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
 
+	// MIN, MAX and AVG are NULL for a group with no matching row, so their
+	// result fields are pointers; SUM is coalesced to zero and is not.
 	type row struct {
 		Total    int64
 		Records  int64
-		Smallest int64
-		Largest  int64
+		Smallest *int64
+		Largest  *int64
 		AvgScore *float64
 	}
 	got := row{}
@@ -99,8 +101,10 @@ func TestAggregateScalar(t *testing.T) {
 
 	require.EqualValues(t, 2100, got.Total)
 	require.EqualValues(t, 6, got.Records)
-	require.EqualValues(t, 100, got.Smallest)
-	require.EqualValues(t, 600, got.Largest)
+	require.NotNil(t, got.Smallest)
+	require.EqualValues(t, 100, *got.Smallest)
+	require.NotNil(t, got.Largest)
+	require.EqualValues(t, 600, *got.Largest)
 	require.NotNil(t, got.AvgScore)
 	require.InDelta(t, 4.0, *got.AvgScore, 0.0001)
 }
@@ -474,7 +478,97 @@ func TestAggregateBuildErrors(t *testing.T) {
 		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
 			Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
 			Having(aggCols.Score.Avg().As("avg_score").Gt(1)).
-			Scan(&rows), database.ErrAliasMissing)
+			Scan(&rows), database.ErrHavingTermNotSelected)
+	})
+
+	t.Run("UnknownAggregateFunction", func(t *testing.T) {
+		// The renderer composes SQL from the constant, so a value from outside
+		// the closed set would otherwise reach the statement as text.
+		rows := make([]row, 0)
+		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
+			Select(aggCols.Category.Group(), types.AggregateTerm{
+				Fn: "TOTALLY_NOT_SQL", Column: "amount", Alias: "total",
+			}).
+			Scan(&rows), database.ErrUnknownAggregateFn)
+	})
+
+	t.Run("UnknownTimeBucket", func(t *testing.T) {
+		rows := make([]row, 0)
+		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
+			Select(types.AggregateTerm{Column: "occurred_at", Bucket: "fortnight", Alias: "category"},
+				aggCols.Amount.Sum().As("total")).
+			Scan(&rows), database.ErrUnknownTimeBucket)
+	})
+
+	t.Run("ConditionOnGroupKey", func(t *testing.T) {
+		// Conditions only restrict a measure. They used to be dropped without a
+		// word, which reads as a report quietly counting the wrong rows.
+		rows := make([]row, 0)
+		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
+			Select(aggCols.Category.Group().Where(aggCols.Status.Eq("done")),
+				aggCols.Amount.Sum().As("total")).
+			Scan(&rows), database.ErrConditionOnGroupKey)
+	})
+
+	t.Run("BucketOnMeasure", func(t *testing.T) {
+		rows := make([]row, 0)
+		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
+			Select(aggCols.Category.Group(), types.AggregateTerm{
+				Fn: types.AggregateSum, Column: "amount", Bucket: types.TimeBucketDay, Alias: "total",
+			}).
+			Scan(&rows), database.ErrBucketOnMeasure)
+	})
+
+	t.Run("HavingTermDiffersFromProjectedTerm", func(t *testing.T) {
+		// Same alias, different expression: HAVING renders its own term, so
+		// matching the alias alone would filter by a measure the projection
+		// never declared.
+		type condRow struct {
+			Category string
+			Done     int64
+		}
+		rows := make([]condRow, 0)
+		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, condRow](ctx).
+			Select(aggCols.Category.Group(), types.Count().Where(aggCols.Status.Eq("done")).As("done")).
+			Having(types.Count().As("done").Gt(1)).
+			Scan(&rows), database.ErrHavingTermNotSelected)
+	})
+
+	t.Run("NullableMeasureNeedsPointerField", func(t *testing.T) {
+		type flat struct {
+			Category string
+			Peak     int64
+		}
+		rows := make([]flat, 0)
+		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, flat](ctx).
+			Select(aggCols.Category.Group(), aggCols.Amount.Max().As("peak")).
+			Scan(&rows), database.ErrNullableResultField)
+	})
+
+	t.Run("UnusableFilterFailsFastInsteadOfEmptyReport", func(t *testing.T) {
+		// A client filter that cannot be applied narrows the query. Here the
+		// same predicate would turn a report into a silent zero, so it errors.
+		got := struct{ Total int64 }{}
+		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, struct{ Total int64 }](ctx).
+			Select(aggCols.Amount.Sum().As("total")).
+			Where(types.FilterOr()).
+			ScanOne(&got), database.ErrUnusableFilter)
+	})
+
+	t.Run("OffsetWithoutLimit", func(t *testing.T) {
+		rows := make([]row, 0)
+		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
+			Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+			Offset(1).
+			Scan(&rows), database.ErrOffsetWithoutLimit)
+	})
+
+	t.Run("ScanOneRejectsPaging", func(t *testing.T) {
+		got := struct{ Total int64 }{}
+		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, struct{ Total int64 }](ctx).
+			Select(aggCols.Amount.Sum().As("total")).
+			Limit(1).
+			ScanOne(&got), database.ErrScanOnePaged)
 	})
 
 	t.Run("ScanOneRejectsGroupedQuery", func(t *testing.T) {
