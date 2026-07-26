@@ -27,6 +27,8 @@ type columnInfo struct {
 	TypeExpr string `json:"type_expr"` // Source-level type expression, empty when the type cannot be reproduced.
 	TypePkg  string `json:"type_pkg"`  // Import path required by TypeExpr, empty for builtin or same-package types.
 	TypeName string `json:"type_name"` // Original type, recorded in a comment when TypeExpr is empty.
+	Numeric  bool   `json:"numeric"`   // Column type is a numeric kind, so the reference gains SUM and AVG.
+	Time     bool   `json:"time"`      // Column type is time.Time, so the reference gains time bucketing.
 }
 
 // modelColumns groups the columns of one model.
@@ -63,6 +65,8 @@ type columnInfo struct {
 	TypeExpr string ` + "`json:\"type_expr\"`" + `
 	TypePkg  string ` + "`json:\"type_pkg\"`" + `
 	TypeName string ` + "`json:\"type_name\"`" + `
+	Numeric  bool   ` + "`json:\"numeric\"`" + `
+	Time     bool   ` + "`json:\"time\"`" + `
 }
 
 type modelColumns struct {
@@ -106,12 +110,15 @@ func main() {
 		entry := modelColumns{PkgPath: typ.PkgPath(), PkgName: packageName(typ), Name: typ.Name()}
 		for _, col := range cols {
 			expr, pkg := describeType(col.Type, typ.PkgPath())
+			class := modelschema.ClassifyColumn(col.Type)
 			entry.Columns = append(entry.Columns, columnInfo{
 				GoName:   col.GoName,
 				DBName:   col.DBName,
 				TypeExpr: expr,
 				TypePkg:  pkg,
 				TypeName: col.Type.String(),
+				Numeric:  class == modelschema.ColumnClassNumeric,
+				Time:     class == modelschema.ColumnClassTime,
 			})
 		}
 		out = append(out, entry)
@@ -319,7 +326,7 @@ func renderColumnsFile(module string, pkgName string, source string, models []mo
 		fmt.Fprintf(&buf, "\n// %sCols are the typed column references of %s.\n", m.Name, m.Name)
 		fmt.Fprintf(&buf, "var %sCols = struct {\n", m.Name)
 		for _, col := range m.Columns {
-			fmt.Fprintf(&buf, "\t%s types.Column[%s]", col.GoName, columnTypeParam(col))
+			fmt.Fprintf(&buf, "\t%s %s", col.GoName, columnRefType(col))
 			if col.TypeExpr == "" {
 				fmt.Fprintf(&buf, " // %s", col.TypeName)
 			}
@@ -327,7 +334,7 @@ func renderColumnsFile(module string, pkgName string, source string, models []mo
 		}
 		buf.WriteString("}{\n")
 		for _, col := range m.Columns {
-			fmt.Fprintf(&buf, "\t%s: types.Column[%s]{Name: %q},\n", col.GoName, columnTypeParam(col), col.DBName)
+			fmt.Fprintf(&buf, "\t%s: %s,\n", col.GoName, columnRefLiteral(col))
 		}
 		buf.WriteString("}\n")
 	}
@@ -346,6 +353,36 @@ func columnTypeParam(col columnInfo) string {
 		return "any"
 	}
 	return col.TypeExpr
+}
+
+// columnRefType returns the declared type of one generated column reference.
+// Numeric and time columns get the specialized references that carry the
+// aggregate functions only meaningful there; every other column, including one
+// whose type cannot be written as source, gets the plain reference.
+func columnRefType(col columnInfo) string {
+	switch {
+	case col.Time && col.TypeExpr != "":
+		return "types.TimeColumn"
+	case col.Numeric && col.TypeExpr != "":
+		return fmt.Sprintf("types.NumericColumn[%s]", col.TypeExpr)
+	default:
+		return fmt.Sprintf("types.Column[%s]", columnTypeParam(col))
+	}
+}
+
+// columnRefLiteral returns the composite literal initializing one generated
+// column reference. The specialized references embed the plain one, so their
+// literals name the embedded field.
+func columnRefLiteral(col columnInfo) string {
+	base := fmt.Sprintf("types.Column[%s]{Name: %q}", columnTypeParam(col), col.DBName)
+	switch {
+	case col.Time && col.TypeExpr != "":
+		return fmt.Sprintf("types.TimeColumn{Column: %s}", base)
+	case col.Numeric && col.TypeExpr != "":
+		return fmt.Sprintf("types.NumericColumn[%s]{Column: %s}", col.TypeExpr, base)
+	default:
+		return base
+	}
 }
 
 // writeGeneratedFileIfChanged writes content only when it differs from what is

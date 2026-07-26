@@ -32,10 +32,13 @@ func TestRenderColumnsFile(t *testing.T) {
 		PkgName: "sample",
 		Name:    "Record",
 		Columns: []columnInfo{
-			{GoName: "CreatedAt", DBName: "created_at", TypeExpr: "time.Time", TypePkg: "time", TypeName: "time.Time"},
+			{GoName: "Amount", DBName: "amount", TypeExpr: "int64", TypeName: "int64", Numeric: true},
+			{GoName: "CreatedAt", DBName: "created_at", TypeExpr: "time.Time", TypePkg: "time", TypeName: "time.Time", Time: true},
 			{GoName: "ID", DBName: "id", TypeExpr: "string", TypeName: "string"},
+			{GoName: "Score", DBName: "score", TypeExpr: "RecordScore", TypeName: "sample.RecordScore", Numeric: true},
 			{GoName: "Status", DBName: "status", TypeExpr: "RecordStatus", TypeName: "sample.RecordStatus"},
 			{GoName: "Tags", DBName: "tags", TypeName: "datatypes.JSONSlice[string]"},
+			{GoName: "Weight", DBName: "weight", TypeName: "weird.Numeric[int]", Numeric: true},
 		},
 	}}
 
@@ -51,7 +54,18 @@ func TestRenderColumnsFile(t *testing.T) {
 	t.Run("DeclaresTypedColumns", func(t *testing.T) {
 		require.Contains(t, rendered, `types.Column[string]{Name: "id"}`)
 		require.Contains(t, rendered, `types.Column[RecordStatus]{Name: "status"}`)
-		require.Contains(t, rendered, `types.Column[time.Time]{Name: "created_at"}`)
+	})
+
+	t.Run("SpecializesNumericColumns", func(t *testing.T) {
+		// SUM and AVG only belong on a numeric column, because a database
+		// answers SUM over text with 0 rather than an error. A named numeric
+		// type keeps its own name as the type argument.
+		require.Contains(t, rendered, `types.NumericColumn[int64]{Column: types.Column[int64]{Name: "amount"}}`)
+		require.Contains(t, rendered, `types.NumericColumn[RecordScore]{Column: types.Column[RecordScore]{Name: "score"}}`)
+	})
+
+	t.Run("SpecializesTimeColumns", func(t *testing.T) {
+		require.Contains(t, rendered, `types.TimeColumn{Column: types.Column[time.Time]{Name: "created_at"}}`)
 	})
 
 	t.Run("DegradesUnreproducibleTypesToAny", func(t *testing.T) {
@@ -60,6 +74,14 @@ func TestRenderColumnsFile(t *testing.T) {
 		// type is recorded in a comment.
 		require.Contains(t, rendered, `types.Column[any]{Name: "tags"}`)
 		require.Contains(t, rendered, "datatypes.JSONSlice[string]")
+	})
+
+	t.Run("DoesNotSpecializeWhenTypeIsUnreproducible", func(t *testing.T) {
+		// Specializing would need the type as a type argument, and any is not
+		// the column's type. The plain reference keeps the column usable and
+		// SumOf stays available for it.
+		require.Contains(t, rendered, `types.Column[any]{Name: "weight"}`)
+		require.NotContains(t, rendered, "types.NumericColumn[any]")
 	})
 
 	t.Run("ImportsOnlyWhatItUses", func(t *testing.T) {

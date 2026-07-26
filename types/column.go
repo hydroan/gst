@@ -1,5 +1,27 @@
 package types
 
+import (
+	"reflect"
+	"time"
+)
+
+// ColumnRef is the shared view of every generated column reference. Helpers
+// that accept a column take this interface rather than a concrete struct,
+// because embedding is not subtyping in Go: NumericColumn[T] cannot be passed
+// where Column[T] is expected, so a helper typed on the struct would reject
+// exactly the numeric and time columns it is most often used with.
+//
+// The type parameter is load-bearing. sealedColumn mentions T, so two column
+// references only satisfy the same ColumnRef[T] when their Go types match,
+// which is what makes correlating a string column with an integer column fail
+// to compile. The method is also unexported, so the set of implementations
+// stays closed to this package.
+type ColumnRef[T any] interface {
+	// ColumnName returns the database column name resolved by gorm.
+	ColumnName() string
+	sealedColumn(T)
+}
+
 // Column is a typed reference to a database column, generated per model by
 // gg gen. T is the Go type of the column, so a filter built through a Column
 // cannot name a column that does not exist nor bind a value of the wrong
@@ -10,11 +32,20 @@ package types
 // constructors and produce exactly the same Filter and Order values. Code that
 // cannot reference a concrete model (generic helpers, framework internals, URL
 // parsing) keeps using those constructors with a string column name.
+//
+// Columns whose Go type is numeric or time.Time are generated as NumericColumn
+// or TimeColumn instead, which embed this type and add the aggregate methods
+// that are only meaningful there.
 type Column[T any] struct {
 	// Name is the database column name resolved by gorm. It is also what the
 	// order and cursor constructors taking a plain column name expect.
 	Name string
 }
+
+// ColumnName returns the database column name.
+func (c Column[T]) ColumnName() string { return c.Name }
+
+func (c Column[T]) sealedColumn(T) {}
 
 // Eq matches rows where the column equals value.
 func (c Column[T]) Eq(value T) Filter { return FilterEq(c.Name, value) }
@@ -77,3 +108,82 @@ func (c Column[T]) Asc() Order { return Asc(c.Name) }
 
 // Desc orders by the column descending.
 func (c Column[T]) Desc() Order { return Desc(c.Name) }
+
+// The aggregate methods below are the ones that cannot be silently wrong on
+// any column type, so every column carries them. Functions that are silently
+// wrong on the wrong type live on the specialized references instead: a
+// database answers SUM over a text column with 0 rather than an error on both
+// MySQL and SQLite, which reaches a report as a wrong number.
+
+// Count counts the rows whose value of this column is not NULL. Use the
+// package-level Count for COUNT(*), which counts every row.
+func (c Column[T]) Count() AggregateTerm { return c.term(AggregateCount) }
+
+// CountDistinct counts the distinct non-NULL values of this column.
+func (c Column[T]) CountDistinct() AggregateTerm { return c.term(AggregateCountDistinct) }
+
+// Min returns the smallest value of this column. It yields NULL for a group
+// with no non-NULL value, so the result row field must be a pointer.
+func (c Column[T]) Min() AggregateTerm { return c.term(AggregateMin) }
+
+// Max returns the largest value of this column. The NULL rules match Min.
+func (c Column[T]) Max() AggregateTerm { return c.term(AggregateMax) }
+
+// Group makes this column a group key of the projection. The framework derives
+// GROUP BY from the group keys, so a projection cannot disagree with its own
+// GROUP BY list.
+func (c Column[T]) Group() AggregateTerm { return c.term(AggregateNone) }
+
+func (c Column[T]) term(fn AggregateFn) AggregateTerm {
+	return AggregateTerm{
+		Fn:        fn,
+		Column:    c.Name,
+		Alias:     c.Name,
+		ValueType: reflect.TypeFor[T](),
+	}
+}
+
+// NumericColumn is the reference generated for a column whose Go type is
+// numeric. It embeds Column, so every filter and order stays available, and
+// adds the aggregate functions that only make sense over a number.
+//
+// The specialization exists because of how the mistake fails, not because of
+// tidiness: SUM over a text column returns 0 with a warning on MySQL and
+// SQLite, so it surfaces as a plausible-looking wrong number on a dashboard
+// rather than as an error. Functions whose misuse is merely useless rather
+// than silently wrong stay on Column.
+type NumericColumn[T any] struct {
+	Column[T]
+}
+
+// Sum adds up this column. The renderer wraps it in COALESCE(..., 0) so an
+// empty group sums to zero rather than scanning NULL into the result row.
+func (c NumericColumn[T]) Sum() AggregateTerm { return c.term(AggregateSum) }
+
+// Avg averages this column. It yields NULL for a group with no non-NULL value
+// and is never coalesced, because a zero average and no data are different
+// answers; the result row field must be a pointer.
+func (c NumericColumn[T]) Avg() AggregateTerm { return c.term(AggregateAvg) }
+
+// TimeColumn is the reference generated for a time.Time column. It embeds
+// Column and adds time bucketing, which is only meaningful over a time value
+// and produces garbage rather than an error on some dialects when it is not.
+type TimeColumn struct {
+	Column[time.Time]
+}
+
+// ByHour, ByDay and ByMonth make this column a group key truncated to the
+// bucket, which is what a trend report groups by. The truncation expression
+// differs per dialect and is rendered by the database layer, so callers never
+// deal with a format string.
+func (c TimeColumn) ByHour() AggregateTerm { return c.bucket(TimeBucketHour) }
+
+func (c TimeColumn) ByDay() AggregateTerm { return c.bucket(TimeBucketDay) }
+
+func (c TimeColumn) ByMonth() AggregateTerm { return c.bucket(TimeBucketMonth) }
+
+func (c TimeColumn) bucket(bucket TimeBucket) AggregateTerm {
+	term := c.term(AggregateNone)
+	term.Bucket = bucket
+	return term
+}

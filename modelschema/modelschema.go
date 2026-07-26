@@ -22,10 +22,26 @@ import (
 // Column describes one database column of a model.
 type Column = modelschema.Column
 
+// ColumnClass describes the aggregate capability of a column type.
+type ColumnClass = modelschema.ColumnClass
+
+// The column classes gg gen maps to the generated column reference types.
+const (
+	ColumnClassOther   = modelschema.ColumnClassOther
+	ColumnClassNumeric = modelschema.ColumnClassNumeric
+	ColumnClassTime    = modelschema.ColumnClassTime
+)
+
 // Columns returns every database column of a model struct type, sorted by
 // database column name.
 func Columns(typ reflect.Type) ([]Column, error) {
 	return modelschema.Columns(typ)
+}
+
+// ClassifyColumn reports the aggregate capability of a column type, which
+// decides the column reference gg gen writes for it.
+func ClassifyColumn(typ reflect.Type) ColumnClass {
+	return modelschema.ClassifyColumn(typ)
 }
 
 // ByQueryName indexes columns by the URL parameter name clients filter with.
