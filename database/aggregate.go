@@ -225,7 +225,7 @@ func (a *aggregator[M, R]) build(paged bool) (*gorm.DB, error) {
 		Expression: clause.Expr{SQL: strings.Join(selects, ", "), Vars: vars},
 	})
 
-	if expr := a.db.renderFilters(a.filters, false); expr != nil {
+	if expr := a.db.renderFilters(a.filters, false, a.db.outerTableName()); expr != nil {
 		tx = tx.Where(expr)
 	}
 
@@ -321,7 +321,7 @@ func (a *aggregator[M, R]) termExpr(t types.AggregateTerm, columns map[string]mo
 		return a.db.timeBucketExpr(column, t.Bucket), nil
 	}
 
-	cond := a.db.renderFilters(t.Conditions, false)
+	cond := a.db.renderFilters(t.Conditions, false, a.db.outerTableName())
 	switch t.Fn {
 	case types.AggregateCount:
 		if cond != nil {

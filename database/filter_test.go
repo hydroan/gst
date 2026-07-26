@@ -582,3 +582,64 @@ func TestDatabaseTypedFilterValues(t *testing.T) {
 		List(&users))
 	require.Len(t, users, 2, "typed scalar values must bind directly")
 }
+
+// TestFilterOrSingleChild is the regression test for a group that collapses to
+// one alternative. gorm reads a one-element OrConditions as an OR *connector*,
+// so handing it that shape joins the group to the preceding condition with OR
+// and turns a mandatory sibling into an alternative -- a silent widening that
+// reads every row the mandatory condition was there to hide.
+func TestFilterOrSingleChild(t *testing.T) {
+	defer cleanupTestData()
+	setupTestData(t)
+
+	list := func(t *testing.T, filters ...types.Filter) []string {
+		t.Helper()
+		users := make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: filters}).
+			WithOrder(types.Asc("id")).
+			List(&users))
+		ids := make([]string, 0, len(users))
+		for _, u := range users {
+			ids = append(ids, u.ID)
+		}
+		return ids
+	}
+
+	// The two conditions must match different rows, otherwise AND and OR
+	// produce the same result and the assertion cannot tell them apart: the
+	// mandatory condition selects u1, the single alternative selects u2.
+	t.Run("MandatorySiblingSurvives", func(t *testing.T) {
+		require.Empty(t, list(
+			t,
+			types.FilterEq("age", u1.Age),
+			types.FilterOr(types.FilterEq("name", u2.Name)),
+		), "no row satisfies both, so a degraded group would show up as u1 and u2")
+	})
+
+	t.Run("EquivalentToTheBareCondition", func(t *testing.T) {
+		require.Equal(t,
+			list(t, types.FilterEq("name", u2.Name)),
+			list(t, types.FilterOr(types.FilterEq("name", u2.Name))),
+			"OR over one alternative is that alternative")
+	})
+
+	t.Run("NestedSingleChildGroups", func(t *testing.T) {
+		require.Empty(t, list(
+			t,
+			types.FilterEq("age", u1.Age),
+			types.FilterOr(types.FilterAnd(types.FilterOr(types.FilterEq("name", u2.Name)))),
+		), "collapsing through several levels must still leave an AND")
+	})
+
+	t.Run("MultipleAlternativesStillGrouped", func(t *testing.T) {
+		require.Equal(t, []string{u1.ID}, list(
+			t,
+			types.FilterEq("age", u1.Age),
+			types.FilterOr(
+				types.FilterEq("name", u1.Name),
+				types.FilterEq("name", u2.Name),
+			),
+		), "u2 matches an alternative but fails the mandatory condition")
+	})
+}

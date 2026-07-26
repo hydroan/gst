@@ -30,7 +30,7 @@ import (
 //
 // The caller must hold db.mu.
 func (db *database[M]) applyFilters(filters []types.Filter) {
-	if expr := db.renderFilters(filters, false); expr != nil {
+	if expr := db.renderFilters(filters, false, db.outerTableName()); expr != nil {
 		db.ins = db.ins.Where(expr)
 	}
 }
@@ -50,15 +50,29 @@ func (db *database[M]) applyFilters(filters []types.Filter) {
 // group fails closed instead; see groupCondition.
 //
 // The caller must hold db.mu.
-func (db *database[M]) renderFilters(filters []types.Filter, or bool) clause.Expression {
+func (db *database[M]) renderFilters(filters []types.Filter, or bool, parentTable string) clause.Expression {
 	if len(filters) == 0 {
 		return nil
 	}
 	exprs := make([]clause.Expression, 0, len(filters))
 	for _, f := range filters {
-		exprs = append(exprs, db.renderFilter(f))
+		exprs = append(exprs, db.renderFilter(f, parentTable))
 	}
 	if or {
+		// A one-element OR group must never be handed to gorm as an
+		// OrConditions: buildExprs reads that shape as an OR *connector* and
+		// joins it to the preceding condition with OR, which turns a mandatory
+		// sibling such as a tenant filter into an alternative and silently
+		// widens the query. One alternative is just that condition, so it is
+		// returned bare and the caller AND-combines it like any other.
+		//
+		// This cannot recurse into the same shape: renderFilters is the only
+		// producer of OR groups, so a nested group has already been collapsed
+		// by this rule or carries more than one child, which gorm renders
+		// parenthesized and correctly.
+		if len(exprs) == 1 {
+			return exprs[0]
+		}
 		return clause.Or(exprs...)
 	}
 	return clause.And(exprs...)
@@ -67,21 +81,21 @@ func (db *database[M]) renderFilters(filters []types.Filter, or bool) clause.Exp
 // renderFilter turns one filter into a predicate.
 //
 // The caller must hold db.mu.
-func (db *database[M]) renderFilter(f types.Filter) clause.Expression {
+func (db *database[M]) renderFilter(f types.Filter, parentTable string) clause.Expression {
 	// Groups carry their children in Value and subqueries carry their columns
 	// inside it, so neither names a column of its own and both are dispatched
 	// before the empty-column check below.
 	switch f.Op {
 	case types.FilterOpOr:
-		return db.groupCondition(f, true)
+		return db.groupCondition(f, true, parentTable)
 	case types.FilterOpAnd:
-		return db.groupCondition(f, false)
+		return db.groupCondition(f, false, parentTable)
 	case types.FilterOpExists:
 		sq, ok := f.Value.(types.Subquery)
 		if !ok {
 			return db.failClosedFilter(f, "expects a subquery value")
 		}
-		return db.existsCondition(f, sq)
+		return db.existsCondition(f, sq, parentTable)
 	}
 	if len(f.Column) == 0 {
 		logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("filter has empty column, adding safety condition")
@@ -148,7 +162,7 @@ func (db *database[M]) renderFilter(f types.Filter) clause.Expression {
 // A group whose value is not a filter list, or that carries no children at
 // all, fails closed: an empty group is a caller bug, and answering it with the
 // logical identity (TRUE for AND) would widen the result set.
-func (db *database[M]) groupCondition(f types.Filter, or bool) clause.Expression {
+func (db *database[M]) groupCondition(f types.Filter, or bool, parentTable string) clause.Expression {
 	children, ok := f.Value.([]types.Filter)
 	if !ok {
 		logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("filter group %q expects a filter list value, adding safety condition", f.Op)
@@ -158,7 +172,7 @@ func (db *database[M]) groupCondition(f types.Filter, or bool) clause.Expression
 		logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("filter group %q has no children, adding safety condition", f.Op)
 		return failClosedExpr()
 	}
-	return db.renderFilters(children, or)
+	return db.renderFilters(children, or, parentTable)
 }
 
 // failClosedExpr is the predicate that matches nothing. Narrowing to an empty
@@ -227,13 +241,23 @@ func (db *database[M]) stringFilter(f types.Filter, sql string) clause.Expressio
 // so it is written into the SQL; both sides are quoted identifiers taken from
 // column references, which cannot carry SQL.
 //
+// parentTable is the table the outer side of the correlation refers to. It is
+// threaded through the renderer rather than read from the chain, because a
+// subquery may itself contain one: the inner correlation must reach the table
+// directly enclosing it, and reading the chain would always yield the
+// outermost model instead. That mistake produces valid SQL joined against the
+// wrong table, which returns a wrong row set rather than an error.
+//
 // The caller must hold db.mu.
-func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery) clause.Expression {
+func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, parentTable string) clause.Expression {
 	if sq.Model == nil {
 		return db.failClosedFilter(f, "has no related model")
 	}
 	if len(sq.ChildColumn) == 0 || len(sq.ParentColumn) == 0 {
 		return db.failClosedFilter(f, "has an empty correlation column")
+	}
+	if len(parentTable) == 0 {
+		return db.failClosedFilter(f, "cannot resolve the table to correlate against")
 	}
 	childTable := sq.Model.GetTableName()
 	if len(childTable) == 0 {
@@ -246,13 +270,20 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery) clause
 		childTable = resolved
 	}
 	correlation := db.quoteTableColumn(childTable, sq.ChildColumn) +
-		" = " + db.quoteTableColumn(db.outerTableName(), sq.ParentColumn)
+		" = " + db.quoteTableColumn(parentTable, sq.ParentColumn)
 
+	// Table is set explicitly alongside Model. Model alone would let gorm name
+	// the FROM from the struct, and gorm reads its own TableName method rather
+	// than the framework's GetTableName, so a model that overrides only the
+	// latter would be selected FROM one table while the correlation qualifies
+	// another.
 	sub := db.ins.Session(&gorm.Session{NewDB: true}).
+		Table(childTable).
 		Model(sq.Model).
 		Select("1").
 		Where(correlation)
-	if expr := db.renderFilters(sq.Filters, false); expr != nil {
+	// The nested filters correlate against this subquery's own table.
+	if expr := db.renderFilters(sq.Filters, false, childTable); expr != nil {
 		sub = sub.Where(expr)
 	}
 	if sq.Negate {

@@ -270,6 +270,30 @@ type TestRecordTag struct {
 	model.Base
 }
 
+// TestTagAlias points at the same table as TestRecordTag but under a struct
+// name gorm would derive a different table from ("test_tag_aliases"). gorm
+// reads its own TableName method, not the framework's GetTableName, so a
+// subquery that takes its FROM from the struct and its correlation prefix from
+// GetTableName would name two different tables. It deliberately declares only
+// the framework method, which is what every model in a real project does.
+type TestTagAlias struct {
+	RecordID string `json:"record_id" gorm:"size:191"`
+	Label    string `json:"label" gorm:"size:191"`
+
+	model.Base
+}
+
+func (*TestTagAlias) GetTableName() string { return "test_record_tags" }
+
+// TestTagNote is the grandchild used by the nested-subquery test: a subquery
+// inside a subquery must correlate against the table directly enclosing it.
+type TestTagNote struct {
+	TagID string `json:"tag_id" gorm:"size:191"`
+	Body  string `json:"body" gorm:"size:191"`
+
+	model.Base
+}
+
 type TestHookConfig struct {
 	Value string `json:"value" gorm:"size:191"`
 
@@ -332,6 +356,7 @@ func init() {
 	model.Register[*TestCategory]()
 	model.Register[*TestAggregateRecord]()
 	model.Register[*TestRecordTag]()
+	model.Register[*TestTagNote]()
 
 	// block here until database migration is ready
 	dbruntime.Wait()

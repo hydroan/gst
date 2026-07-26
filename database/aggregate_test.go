@@ -704,3 +704,75 @@ func TestAggregateConditionalOnSubquery(t *testing.T) {
 		require.EqualValues(t, 2, again.TaggedRecords)
 	})
 }
+
+// TestFilterExistsTableResolution pins the subquery's FROM to the same table
+// its correlation qualifies. gorm names the FROM from the struct unless told
+// otherwise, and it reads its own TableName method rather than the framework's
+// GetTableName, so a model that overrides only the framework method would be
+// selected FROM one table while the correlation referenced another.
+func TestFilterExistsTableResolution(t *testing.T) {
+	defer cleanupAggregateData()
+	defer cleanupTagData()
+	setupAggregateData(t)
+	setupTagData(t)
+
+	ctx := context.Background()
+	// TestTagAlias resolves to test_record_tags through GetTableName, while its
+	// struct name would make gorm derive test_tag_aliases.
+	vip := types.FilterExists[*TestTagAlias](tagCols.RecordID, recordIDCol, tagCols.Label.Eq("vip"))
+
+	records := make([]*TestAggregateRecord, 0)
+	require.NoError(t, database.Database[*TestAggregateRecord](ctx).
+		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{vip}}).
+		WithOrder(types.Asc("id")).
+		List(&records))
+	require.Len(t, records, 2)
+	require.Equal(t, "a1", records[0].ID)
+	require.Equal(t, "a3", records[1].ID)
+}
+
+// TestFilterExistsNested pins the inner correlation to the table directly
+// enclosing it. Reading the outer chain instead would correlate the grandchild
+// against the outermost model, which is valid SQL joined on the wrong table:
+// it returns a wrong row set rather than an error.
+func TestFilterExistsNested(t *testing.T) {
+	defer cleanupAggregateData()
+	defer cleanupTagData()
+	defer func() { _ = database.DB().Exec("DELETE FROM test_tag_notes").Error }()
+	setupAggregateData(t)
+	setupTagData(t)
+
+	ctx := context.Background()
+	// A note on t1 only. t1 tags a1, so a1 is the single record reachable
+	// through tag -> note.
+	require.NoError(t, database.Database[*TestTagNote](ctx).Create(
+		&TestTagNote{Base: model.Base{ID: "n1"}, TagID: "t1", Body: "checked"},
+	))
+
+	noteCols := struct {
+		TagID types.Column[string]
+		Body  types.Column[string]
+	}{
+		TagID: types.Column[string]{Name: "tag_id"},
+		Body:  types.Column[string]{Name: "body"},
+	}
+	tagIDCol := types.Column[string]{Name: "id"}
+
+	// EXISTS(tag WHERE tag.record_id = record.id AND EXISTS(note WHERE
+	// note.tag_id = tag.id AND note.body = 'checked'))
+	//
+	// The inner correlation must name the tag table. Naming the record table
+	// would compare note.tag_id against record.id, which happens to be a legal
+	// comparison of two id columns and silently matches nothing here.
+	hasCheckedNote := types.FilterExists[*TestRecordTag](
+		tagCols.RecordID, recordIDCol,
+		types.FilterExists[*TestTagNote](noteCols.TagID, tagIDCol, noteCols.Body.Eq("checked")),
+	)
+
+	records := make([]*TestAggregateRecord, 0)
+	require.NoError(t, database.Database[*TestAggregateRecord](ctx).
+		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{hasCheckedNote}}).
+		List(&records))
+	require.Len(t, records, 1, "only a1 has a tag carrying a checked note")
+	require.Equal(t, "a1", records[0].ID)
+}
