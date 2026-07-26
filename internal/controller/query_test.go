@@ -179,11 +179,11 @@ func TestCheckCursorOrderConflict(t *testing.T) {
 	})
 
 	t.Run("OrderAloneIsAccepted", func(t *testing.T) {
-		require.NoError(t, checkCursorOrderConflict(types.CursorPosition{}, orders))
+		require.NoError(t, checkCursorOrderConflict(types.Cursor{}, orders))
 	})
 
 	t.Run("NeitherIsAccepted", func(t *testing.T) {
-		require.NoError(t, checkCursorOrderConflict(types.CursorPosition{}, nil))
+		require.NoError(t, checkCursorOrderConflict(types.Cursor{}, nil))
 	})
 }
 

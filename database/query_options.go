@@ -615,7 +615,7 @@ const defaultCursorColumn = "id"
 //	WithCursor(types.CursorForward(SampleCols.ID.Asc(), lastID)).WithLimit(10).List(&next)
 //	WithCursor(types.CursorBackward(SampleCols.ID.Asc(), firstID)).WithLimit(10).List(&prev)
 //	WithCursor(types.CursorForward(SampleCols.CreatedAt.Desc(), lastCreatedAt)).WithLimit(10).List(&older)
-func (db *database[M]) WithCursor(cursor types.CursorPosition) types.Database[M] {
+func (db *database[M]) WithCursor(cursor types.Cursor) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 

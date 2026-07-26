@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCursorPositionConstructors(t *testing.T) {
+func TestCursorConstructors(t *testing.T) {
 	forward := types.CursorForward(types.Asc("id"), "abc")
 	require.Equal(t, types.Order{Column: "id", Direction: types.OrderAsc}, forward.Order)
 	require.Equal(t, "abc", forward.Value)
@@ -18,8 +18,8 @@ func TestCursorPositionConstructors(t *testing.T) {
 	require.True(t, backward.Backward)
 }
 
-func TestCursorPositionEnabled(t *testing.T) {
-	require.False(t, types.CursorPosition{}.Enabled(), "a zero cursor makes WithCursor a no-op")
+func TestCursorEnabled(t *testing.T) {
+	require.False(t, types.Cursor{}.Enabled(), "a zero cursor makes WithCursor a no-op")
 	require.False(t, types.CursorForward(types.Asc("id"), "").Enabled(), "a cursor without a boundary value is not enabled")
 	require.True(t, types.CursorForward(types.Asc("id"), "abc").Enabled())
 }

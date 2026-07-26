@@ -90,7 +90,7 @@ func rejectListQueryKeys(query map[string][]string, keys map[string]struct{}) er
 // ORDER BY from the cursor column, so a second order source would demote that
 // column to a secondary sort key and invalidate the boundary condition the
 // cursor relies on, which shows up as pages that skip or repeat rows.
-func checkCursorOrderConflict(cursor types.CursorPosition, orders []types.Order) error {
+func checkCursorOrderConflict(cursor types.Cursor, orders []types.Order) error {
 	if cursor.Enabled() && len(orders) > 0 {
 		return errors.New("cursor pagination defines its own ordering: _sort_by cannot be combined with _cursor_value")
 	}

@@ -160,7 +160,7 @@ type DatabaseOption[M Model] interface {
 	// WithQuery adds query conditions from model fields or raw SQL configuration.
 	WithQuery(query M, opts ...QueryOptions) Database[M]
 	// WithCursor enables cursor-based pagination for List operations.
-	WithCursor(cursor CursorPosition) Database[M]
+	WithCursor(cursor Cursor) Database[M]
 	// WithSelect specifies fields for SELECT and Update column selection where supported.
 	WithSelect(columns ...string) Database[M]
 	// WithIndex specifies database index hints for query optimization (MySQL only).

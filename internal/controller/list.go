@@ -97,7 +97,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			return
 		}
 
-		var cursor types.CursorPosition
+		var cursor types.Cursor
 		if cursor, err = urlquery.Cursor(query, m); err != nil {
 			log.Error(err)
 			JSON(c, CodeInvalidParam.WithErr(err))

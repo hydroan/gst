@@ -23,13 +23,13 @@ import (
 // whether the request travels along the feed or back down it. A descending
 // feed is a service-side cursor, built with types.CursorForward on a Desc
 // order.
-func Cursor(q url.Values, m types.Model) (types.CursorPosition, error) {
+func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
 	if !modelregistry.IsCursorable(m) {
-		return types.CursorPosition{}, nil
+		return types.Cursor{}, nil
 	}
 	value := q.Get(consts.QUERY_CURSOR_VALUE)
 	if len(value) == 0 {
-		return types.CursorPosition{}, nil
+		return types.Cursor{}, nil
 	}
 
 	// An unnamed column leaves the order column empty on purpose: the database
@@ -39,11 +39,11 @@ func Cursor(q url.Values, m types.Model) (types.CursorPosition, error) {
 	if field := strings.TrimSpace(q.Get(consts.QUERY_CURSOR_FIELD)); len(field) > 0 {
 		columns, err := filterableColumns(m)
 		if err != nil {
-			return types.CursorPosition{}, err
+			return types.Cursor{}, err
 		}
 		resolved, ok := columns[field]
 		if !ok {
-			return types.CursorPosition{}, errors.Newf("unknown cursor column %q", field)
+			return types.Cursor{}, errors.Newf("unknown cursor column %q", field)
 		}
 		column = resolved.DBName
 	}

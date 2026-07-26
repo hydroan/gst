@@ -102,7 +102,7 @@ type database[M types.Model] struct {
 	sqlStatements *[]types.SQLStatement
 
 	// cursor pagination
-	cursor types.CursorPosition // feed ordering, boundary value, and travel direction; a zero Value disables cursor pagination.
+	cursor types.Cursor // feed ordering, boundary value, and travel direction; a zero Value disables cursor pagination.
 
 	// select
 	selectColumns []string
@@ -176,7 +176,7 @@ func (db *database[M]) reset() {
 	db.sqlStatements = nil
 
 	// reset cursor pagination
-	db.cursor = types.CursorPosition{}
+	db.cursor = types.Cursor{}
 
 	// reset select
 	db.selectColumns = nil
