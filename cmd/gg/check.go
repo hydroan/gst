@@ -1136,7 +1136,7 @@ func CheckAllowedDirectories() []string {
 		"dist":      true,
 		"generated": true,
 	}
-	ignoreMatcher := newProjectIgnoreMatcher(projectDir)
+	ignoreMatcher := newProjectIgnoreMatcher()
 
 	// Read directory contents
 	entries, err := os.ReadDir(projectDir)
@@ -1168,9 +1168,10 @@ func CheckAllowedDirectories() []string {
 	return violations
 }
 
-// newProjectIgnoreMatcher loads Git ignore rules for the project root.
-func newProjectIgnoreMatcher(projectDir string) gitignore.Matcher {
-	patterns, err := gitignore.ReadPatterns(osfs.New(projectDir), nil)
+// newProjectIgnoreMatcher loads Git ignore rules for the project root. Every
+// check walks the project from its root, so the root is not a parameter.
+func newProjectIgnoreMatcher() gitignore.Matcher {
+	patterns, err := gitignore.ReadPatterns(osfs.New("."), nil)
 	if err != nil || len(patterns) == 0 {
 		return nil
 	}

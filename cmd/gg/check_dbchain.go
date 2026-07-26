@@ -69,7 +69,7 @@ var databaseChainMethods = map[string]bool{
 func CheckDatabaseChainTermination() []string {
 	var violations []string
 
-	ignoreMatcher := newProjectIgnoreMatcher(".")
+	ignoreMatcher := newProjectIgnoreMatcher()
 
 	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
 		if err != nil {
