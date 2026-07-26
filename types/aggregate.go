@@ -180,11 +180,16 @@ type Having struct {
 // The value type is checked when the query is built, because an aggregate's
 // value type follows its function rather than its column: COUNT always yields
 // an integer, AVG a float, and SUM widens.
-func (t AggregateTerm) Eq(value any) Having  { return Having{Term: t, Op: HavingOpEq, Value: value} }
-func (t AggregateTerm) Ne(value any) Having  { return Having{Term: t, Op: HavingOpNe, Value: value} }
-func (t AggregateTerm) Gt(value any) Having  { return Having{Term: t, Op: HavingOpGt, Value: value} }
+func (t AggregateTerm) Eq(value any) Having { return Having{Term: t, Op: HavingOpEq, Value: value} }
+
+func (t AggregateTerm) Ne(value any) Having { return Having{Term: t, Op: HavingOpNe, Value: value} }
+
+func (t AggregateTerm) Gt(value any) Having { return Having{Term: t, Op: HavingOpGt, Value: value} }
+
 func (t AggregateTerm) Gte(value any) Having { return Having{Term: t, Op: HavingOpGte, Value: value} }
-func (t AggregateTerm) Lt(value any) Having  { return Having{Term: t, Op: HavingOpLt, Value: value} }
+
+func (t AggregateTerm) Lt(value any) Having { return Having{Term: t, Op: HavingOpLt, Value: value} }
+
 func (t AggregateTerm) Lte(value any) Having { return Having{Term: t, Op: HavingOpLte, Value: value} }
 
 // AggregateOrder is one ORDER BY term of an aggregate query. Unlike Order it

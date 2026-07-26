@@ -53,7 +53,7 @@ const (
 // timeType is the one type that gets time bucketing. A named type whose
 // underlying type is time.Time is deliberately excluded: it is not a
 // time.Time, so a reference typed on it would not compile.
-var timeType = reflect.TypeOf(time.Time{})
+var timeType = reflect.TypeFor[time.Time]()
 
 // ClassifyColumn reports the aggregate capability of a column type. Pointers
 // are dereferenced, since an aggregate reads the pointed-to value.
