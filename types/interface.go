@@ -145,6 +145,73 @@ type Database[M Model] interface {
 	DatabaseOption[M]
 }
 
+// Aggregator runs an analytical read over the table of M and scans the result
+// rows into R. It is deliberately separate from Database[M]: an aggregate
+// result is not a model row, so model hooks, association preloading and cursor
+// pagination have nothing to act on and are absent here rather than present
+// and inert.
+//
+// Scoping comes from M — the table name, the soft-delete condition and the
+// dialect — so an aggregate can never read rows a List on the same model
+// hides. R is an ordinary struct the caller declares; its fields bind to the
+// projection aliases, and a mismatch on either side is a build error rather
+// than a silently zero column.
+//
+// The entry point is the package-level database.Aggregate[M, R] rather than a
+// method, because a Go method cannot introduce the result type parameter.
+//
+// Example:
+//
+//	type tenantTotal struct {
+//	    TenantID string
+//	    Total    int64
+//	}
+//	total := SampleCols.Amount.Sum().As("total")
+//	rows := make([]tenantTotal, 0)
+//	err := database.Aggregate[*Sample, tenantTotal](ctx).
+//	    Select(SampleCols.TenantID.Group(), total).
+//	    Where(SampleCols.Status.Eq(StatusDone)).
+//	    Having(total.Gte(1000)).
+//	    OrderBy(total.Desc()).
+//	    Limit(10).
+//	    Scan(&rows)
+type Aggregator[M Model, R any] interface {
+	// Select declares the projection. A term without an aggregate function is
+	// a group key, and GROUP BY is derived from those keys, so the SELECT and
+	// GROUP BY lists cannot disagree. At least one aggregate term is required.
+	Select(terms ...AggregateTerm) Aggregator[M, R]
+	// Where restricts the rows entering the aggregation, using the same filter
+	// tree as WithQuery.
+	Where(filters ...Filter) Aggregator[M, R]
+	// Having restricts the produced groups by their measures.
+	Having(conditions ...Having) Aggregator[M, R]
+	// OrderBy sorts the result rows by a projection term.
+	OrderBy(orders ...AggregateOrder) Aggregator[M, R]
+	// Limit caps the number of result rows.
+	Limit(n int) Aggregator[M, R]
+	// Offset skips result rows, for paginating a grouped report.
+	Offset(n int) Aggregator[M, R]
+
+	// Scan runs the query and fills dest with one element per group.
+	Scan(dest *[]R) error
+	// ScanOne runs an ungrouped aggregation and fills dest with its single
+	// row. It fails when the projection declares group keys.
+	ScanOne(dest *R) error
+	// CountGroups reports how many groups the query produces, which is the
+	// total a paginated grouped report needs.
+	CountGroups(count *int) error
+
+	// WithTable overrides the table name; the table must already exist.
+	WithTable(name string) Aggregator[M, R]
+	// WithDebug enables debug mode to show the generated SQL.
+	WithDebug() Aggregator[M, R]
+	// WithBuildSQL builds the SQL for the next terminal operation and appends
+	// it to the collector instead of executing it.
+	WithBuildSQL(statements *[]SQLStatement) Aggregator[M, R]
+	// WithDryRun builds the SQL without database I/O.
+	WithDryRun() Aggregator[M, R]
+}
+
 // DatabaseOption provides chainable options for a single Database operation chain.
 // Options apply to the next terminal operation and are reset afterward. Start a
 // new chain with database.Database[M](ctx) for each independent operation.

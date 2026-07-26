@@ -205,3 +205,36 @@ func TestClassifyColumn(t *testing.T) {
 type textValuer struct{ raw string }
 
 func (v textValuer) Value() (driver.Value, error) { return v.raw, nil }
+
+func TestTableName(t *testing.T) {
+	// gorm's own TableName method decides the name when a model declares one.
+	name, err := TableName(reflect.TypeFor[sampleRecord]())
+	require.NoError(t, err)
+	require.Equal(t, "sample_records", name)
+
+	t.Run("DerivesFromNamingStrategy", func(t *testing.T) {
+		// sampleEntry declares no table name at all, which is the case the
+		// framework base models are in: their GetTableName returns "", so the
+		// name has to come from gorm's naming strategy rather than from the
+		// model.
+		name, err := TableName(reflect.TypeFor[sampleEntry]())
+		require.NoError(t, err)
+		require.Equal(t, "sample_entries", name)
+	})
+
+	t.Run("AcceptsPointer", func(t *testing.T) {
+		name, err := TableName(reflect.TypeFor[*sampleRecord]())
+		require.NoError(t, err)
+		require.Equal(t, "sample_records", name)
+	})
+
+	t.Run("RejectsNonStruct", func(t *testing.T) {
+		_, err := TableName(reflect.TypeFor[string]())
+		require.Error(t, err)
+	})
+}
+
+// sampleEntry declares no table name, so gorm's naming strategy names it.
+type sampleEntry struct {
+	ID string `gorm:"primaryKey"`
+}

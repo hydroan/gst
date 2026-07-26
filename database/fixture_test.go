@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/bootstrap"
@@ -240,6 +241,35 @@ type TestSoftDeleteItem struct {
 	model.Base
 }
 
+// TestAggregateRecord is the fixture for aggregate reads: a group key, a
+// second dimension for conditional aggregation, a numeric measure, a float
+// measure and a caller-controlled timestamp for bucketing.
+//
+// It deliberately keeps the model.Base default Purge, so its rows soft delete.
+// That is what lets the aggregate tests assert the rule an aggregate is most
+// likely to break: scanning into a plain result row parses no model, so
+// without the model the soft-delete condition disappears and an aggregate
+// counts rows a List on the same model hides.
+type TestAggregateRecord struct {
+	Category   string    `json:"category" gorm:"size:191"`
+	Status     string    `json:"status" gorm:"size:191"`
+	Amount     int64     `json:"amount"`
+	Score      float64   `json:"score"`
+	OccurredAt time.Time `json:"occurred_at"`
+
+	model.Base
+}
+
+// TestRecordTag is the related model of TestAggregateRecord, used by the
+// correlated-subquery filters. It soft deletes like its parent, so the tests
+// can assert that a subquery hides the same rows a List on it hides.
+type TestRecordTag struct {
+	RecordID string `json:"record_id" gorm:"size:191"`
+	Label    string `json:"label" gorm:"size:191"`
+
+	model.Base
+}
+
 type TestHookConfig struct {
 	Value string `json:"value" gorm:"size:191"`
 
@@ -300,6 +330,8 @@ func init() {
 	model.Register[*TestHookConfig]()
 	model.Register[*TestHookGroup]()
 	model.Register[*TestCategory]()
+	model.Register[*TestAggregateRecord]()
+	model.Register[*TestRecordTag]()
 
 	// block here until database migration is ready
 	dbruntime.Wait()

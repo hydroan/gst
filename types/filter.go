@@ -1,5 +1,7 @@
 package types
 
+import "reflect"
+
 // FilterOp is a field-level filter operator applied by WithQuery as an
 // additional AND condition. Operators never widen a query: unknown values
 // are rejected during parsing, and the database layer fails closed on
@@ -41,7 +43,31 @@ const (
 	FilterOpJSONContains FilterOp = "jsoncontains" // JSON array membership: value is a member of the JSON array column
 	FilterOpOr           FilterOp = "or"           // group: the []Filter value is OR-combined, the group itself AND-combined
 	FilterOpAnd          FilterOp = "and"          // group: the []Filter value is AND-combined, for nesting inside an OR group
+	FilterOpExists       FilterOp = "exists"       // correlated subquery: the Subquery value becomes EXISTS or NOT EXISTS
 )
+
+// Subquery is the correlated EXISTS subquery carried by FilterOpExists. It
+// names the related model, the column pair that correlates it with the outer
+// query, and the conditions narrowing it.
+//
+// A semi join is used rather than a real join on purpose: EXISTS matches a row
+// at most once, so an aggregate over the outer table keeps counting each row
+// once. A join to a one-to-many child multiplies the outer rows instead, and a
+// SUM over that silently doubles.
+type Subquery struct {
+	// Model is an allocated instance of the related model. It carries the
+	// child table name and its soft-delete scope, so a subquery hides the same
+	// rows a List on that model hides.
+	Model Model
+	// ChildColumn is the correlated column on the related model.
+	ChildColumn string
+	// ParentColumn is the correlated column on the model being queried.
+	ParentColumn string
+	// Filters narrow the related rows.
+	Filters []Filter
+	// Negate turns the condition into NOT EXISTS.
+	Negate bool
+}
 
 // filterOps indexes the URL-exposed operators for parsing; service-only
 // operators are deliberately absent (see the FilterOp tier note). Matching is
@@ -255,4 +281,55 @@ func FilterOr(filters ...Filter) Filter {
 // A group with no children fails closed.
 func FilterAnd(filters ...Filter) Filter {
 	return Filter{Op: FilterOpAnd, Value: filters}
+}
+
+// FilterExists matches rows of the queried model that have at least one
+// related row in C, correlated on the given column pair and narrowed by
+// filters:
+//
+//	types.FilterExists[*Item](ItemCols.SampleID, SampleCols.ID,
+//	    ItemCols.Status.Eq(StatusDone))
+//	// EXISTS (SELECT 1 FROM `items`
+//	//         WHERE `items`.`sample_id` = `samples`.`id`
+//	//           AND `items`.`status` = ? AND `items`.`deleted_at` IS NULL)
+//
+// The shared type parameter T is what makes the correlation safe: two column
+// references only satisfy the same ColumnRef[T] when their Go types match, so
+// correlating a string column with an integer one does not compile. The two
+// table names come from C and from the queried model, so a column reference
+// never has to carry a table name.
+//
+// It is an ordinary Filter, so List, Count, Export and Aggregate all accept
+// it; it is service-only and has no URL spelling, because a client-supplied
+// subquery is an unbounded read of a table the endpoint never named.
+func FilterExists[C Model, T any](child, parent ColumnRef[T], filters ...Filter) Filter {
+	return subqueryFilter[C](child, parent, filters, false)
+}
+
+// FilterNotExists matches rows that have no related row in C. Note that it is
+// not the negation of a filtered FilterExists over the same rows: a row whose
+// related rows all fail filters matches, and so does a row with no related
+// rows at all.
+func FilterNotExists[C Model, T any](child, parent ColumnRef[T], filters ...Filter) Filter {
+	return subqueryFilter[C](child, parent, filters, true)
+}
+
+// subqueryFilter builds the shared value of both subquery constructors. The
+// related model is allocated here rather than at render time so the database
+// layer needs no type parameter of its own to reach the child table.
+func subqueryFilter[C Model, T any](child, parent ColumnRef[T], filters []Filter, negate bool) Filter {
+	sub := Subquery{Filters: filters, Negate: negate}
+	if child != nil {
+		sub.ChildColumn = child.ColumnName()
+	}
+	if parent != nil {
+		sub.ParentColumn = parent.ColumnName()
+	}
+	typ := reflect.TypeFor[C]()
+	if typ.Kind() == reflect.Pointer {
+		if m, ok := reflect.New(typ.Elem()).Interface().(C); ok {
+			sub.Model = m
+		}
+	}
+	return Filter{Op: FilterOpExists, Value: sub}
 }

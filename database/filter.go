@@ -4,10 +4,12 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
@@ -67,13 +69,20 @@ func (db *database[M]) renderFilters(filters []types.Filter, or bool) clause.Exp
 //
 // The caller must hold db.mu.
 func (db *database[M]) renderFilter(f types.Filter) clause.Expression {
-	// Groups carry their children in Value and have no column of their own,
-	// so they are dispatched before the empty-column check below.
+	// Groups carry their children in Value and subqueries carry their columns
+	// inside it, so neither names a column of its own and both are dispatched
+	// before the empty-column check below.
 	switch f.Op {
 	case types.FilterOpOr:
 		return db.groupCondition(f, true)
 	case types.FilterOpAnd:
 		return db.groupCondition(f, false)
+	case types.FilterOpExists:
+		sq, ok := f.Value.(types.Subquery)
+		if !ok {
+			return db.failClosedFilter(f, "expects a subquery value")
+		}
+		return db.existsCondition(f, sq)
 	}
 	if len(f.Column) == 0 {
 		logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("filter has empty column, adding safety condition")
@@ -224,4 +233,73 @@ var likePatternEscaper = strings.NewReplacer("|", "||", "%", `|%`, "_", `|_`)
 
 func escapeLikePattern(value string) string {
 	return likePatternEscaper.Replace(value)
+}
+
+// existsCondition renders a correlated subquery as a semi join. The related
+// model is attached with Model, so the subquery inherits that model's
+// soft-delete scope: a subquery can never match a row a List on the related
+// model hides.
+//
+// The correlation compares two qualified columns rather than binding a value,
+// so it is written into the SQL; both sides are quoted identifiers taken from
+// column references, which cannot carry SQL.
+//
+// The caller must hold db.mu.
+func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery) clause.Expression {
+	if sq.Model == nil {
+		return db.failClosedFilter(f, "has no related model")
+	}
+	if len(sq.ChildColumn) == 0 || len(sq.ParentColumn) == 0 {
+		return db.failClosedFilter(f, "has an empty correlation column")
+	}
+	childTable := sq.Model.GetTableName()
+	if len(childTable) == 0 {
+		// A model only reports a table name when it overrides GetTableName;
+		// otherwise gorm derives it, so the same resolution is used here.
+		resolved, err := modelschema.TableName(reflect.TypeOf(sq.Model))
+		if err != nil {
+			return db.failClosedFilter(f, "related model has no resolvable table name")
+		}
+		childTable = resolved
+	}
+	correlation := db.quoteTableColumn(childTable, sq.ChildColumn) +
+		" = " + db.quoteTableColumn(db.outerTableName(), sq.ParentColumn)
+
+	sub := db.ins.Session(&gorm.Session{NewDB: true}).
+		Model(sq.Model).
+		Select("1").
+		Where(correlation)
+	if expr := db.renderFilters(sq.Filters, false); expr != nil {
+		sub = sub.Where(expr)
+	}
+	if sq.Negate {
+		return clause.Expr{SQL: "NOT EXISTS (?)", Vars: []any{sub}}
+	}
+	return clause.Expr{SQL: "EXISTS (?)", Vars: []any{sub}}
+}
+
+// outerTableName resolves the table the current chain reads, for qualifying
+// the outer side of a correlation. It derives the name from M directly instead
+// of from the prepared model, because filters are built while the chain is
+// still being assembled, before the terminal operation prepares it.
+func (db *database[M]) outerTableName() string {
+	if len(db.tableName) > 0 {
+		return db.tableName
+	}
+	typ := reflect.TypeOf(*new(M))
+	if typ == nil || typ.Kind() != reflect.Pointer {
+		return ""
+	}
+	m, ok := reflect.New(typ.Elem()).Interface().(M)
+	if !ok {
+		return ""
+	}
+	if name := m.GetTableName(); len(name) > 0 {
+		return name
+	}
+	name, err := modelschema.TableName(typ)
+	if err != nil {
+		return ""
+	}
+	return name
 }
