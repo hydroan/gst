@@ -66,7 +66,7 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 		return err
 	}
 	done, _, span := db.trace("Create", len(objs))
-	defer done(err)
+	defer func() { done(err) }()
 
 	if db.dryRun {
 		tableName := db.m.GetTableName()
@@ -187,7 +187,7 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 		return err
 	}
 	done, _, span := db.trace("Delete", len(objs))
-	defer done(err)
+	defer func() { done(err) }()
 
 	if db.dryRun {
 		tableName := db.m.GetTableName()
@@ -345,7 +345,7 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 		return err
 	}
 	done, _, span := db.trace("Update", len(objs))
-	defer done(err)
+	defer func() { done(err) }()
 
 	tableName := db.m.GetTableName()
 	if len(db.tableName) > 0 {
@@ -479,7 +479,7 @@ func (db *database[M]) Upsert(_objs ...M) (err error) {
 		return err
 	}
 	done, _, _ := db.trace("Upsert", len(objs))
-	defer done(err)
+	defer func() { done(err) }()
 
 	tableName := db.m.GetTableName()
 	if len(db.tableName) > 0 {
@@ -570,7 +570,7 @@ func (db *database[M]) UpdateByID(id string, column string, value any) (err erro
 		return err
 	}
 	done, _, _ := db.trace("UpdateByID")
-	defer done(err)
+	defer func() { done(err) }()
 
 	// return db.db.Model(*new(M)).Where("id = ?", id).Update(column, value).Error
 	tableName := db.m.GetTableName()

@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 	"time"
 
@@ -563,13 +564,44 @@ func TestAggregateBuildErrors(t *testing.T) {
 			Scan(&rows), database.ErrOffsetWithoutLimit)
 	})
 
-	t.Run("ScanOneRejectsPaging", func(t *testing.T) {
-		got := struct{ Total int64 }{}
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, struct{ Total int64 }](ctx).
-			Select(aggCols.Amount.Sum().As("total")).
-			Limit(1).
-			ScanOne(&got), database.ErrScanOnePaged)
+	t.Run("UnknownHavingOperator", func(t *testing.T) {
+		rows := make([]row, 0)
+		total := aggCols.Amount.Sum().As("total")
+		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
+			Select(aggCols.Category.Group(), total).
+			Having(types.Having{Term: total, Op: "approximately", Value: 1}).
+			Scan(&rows), database.ErrUnknownHavingOp)
 	})
+
+	t.Run("UnknownOrderDirection", func(t *testing.T) {
+		rows := make([]row, 0)
+		total := aggCols.Amount.Sum().As("total")
+		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
+			Select(aggCols.Category.Group(), total).
+			OrderBy(types.AggregateOrder{Term: total, Direction: "sideways"}).
+			Scan(&rows), database.ErrUnknownOrderDirection)
+	})
+
+	// ScanOne rejects all three pagination inputs, not just the one that
+	// happened to be covered.
+	for name, build := range map[string]func(types.Aggregator[*TestAggregateRecord, struct{ Total int64 }]) types.Aggregator[*TestAggregateRecord, struct{ Total int64 }]{
+		"Limit": func(a types.Aggregator[*TestAggregateRecord, struct{ Total int64 }]) types.Aggregator[*TestAggregateRecord, struct{ Total int64 }] {
+			return a.Limit(1)
+		},
+		"Offset": func(a types.Aggregator[*TestAggregateRecord, struct{ Total int64 }]) types.Aggregator[*TestAggregateRecord, struct{ Total int64 }] {
+			return a.Limit(1).Offset(1)
+		},
+		"Having": func(a types.Aggregator[*TestAggregateRecord, struct{ Total int64 }]) types.Aggregator[*TestAggregateRecord, struct{ Total int64 }] {
+			return a.Having(aggCols.Amount.Sum().As("total").Gt(1))
+		},
+	} {
+		t.Run("ScanOneRejects"+name, func(t *testing.T) {
+			got := struct{ Total int64 }{}
+			base := database.Aggregate[*TestAggregateRecord, struct{ Total int64 }](ctx).
+				Select(aggCols.Amount.Sum().As("total"))
+			require.ErrorIs(t, build(base).ScanOne(&got), database.ErrScanOnePaged)
+		})
+	}
 
 	t.Run("ScanOneRejectsGroupedQuery", func(t *testing.T) {
 		got := row{}
@@ -869,4 +901,297 @@ func TestFilterExistsNested(t *testing.T) {
 		List(&records))
 	require.Len(t, records, 1, "only a1 has a tag carrying a checked note")
 	require.Equal(t, "a1", records[0].ID)
+}
+
+// TestFilterExistsFailsClosedUnderNegation pins the one place in the renderer
+// where fail-closed could invert. A predicate that cannot be applied becomes
+// "match nothing"; placing that inside NOT EXISTS would turn it into "match
+// everything", which is the only way this package could widen a result set.
+// The whole condition has to collapse instead of the inner one.
+func TestFilterExistsFailsClosedUnderNegation(t *testing.T) {
+	defer cleanupAggregateData()
+	defer cleanupTagData()
+	setupAggregateData(t)
+	setupTagData(t)
+
+	ctx := context.Background()
+	list := func(t *testing.T, f types.Filter) int {
+		t.Helper()
+		records := make([]*TestAggregateRecord, 0)
+		require.NoError(t, database.Database[*TestAggregateRecord](ctx).
+			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{f}}).
+			List(&records))
+		return len(records)
+	}
+
+	// An empty group cannot be rendered, so the subquery's filter fails closed.
+	broken := types.FilterOr()
+
+	t.Run("ExistsMatchesNothing", func(t *testing.T) {
+		require.Equal(t, 0, list(t, types.FilterExists[*TestRecordTag](
+			tagCols.RecordID, recordIDCol, broken,
+		)))
+	})
+
+	t.Run("NotExistsAlsoMatchesNothing", func(t *testing.T) {
+		require.Equal(t, 0, list(t, types.FilterNotExists[*TestRecordTag](
+			tagCols.RecordID, recordIDCol, broken,
+		)),
+			"negating a fail-closed subquery must not return the whole table")
+	})
+}
+
+// TestFilterExistsValidatesInnerColumns pins the subquery's filters to the
+// related model's own columns. A name only the outer table has would otherwise
+// resolve against the enclosing query and silently turn the condition into a
+// correlated reference over different rows.
+func TestFilterExistsValidatesInnerColumns(t *testing.T) {
+	defer cleanupAggregateData()
+	defer cleanupTagData()
+	setupAggregateData(t)
+	setupTagData(t)
+
+	ctx := context.Background()
+	// "category" exists on the record table but not on the tag table.
+	outerOnly := types.FilterExists[*TestRecordTag](
+		tagCols.RecordID, recordIDCol, aggCols.Category.Eq("alpha"),
+	)
+
+	records := make([]*TestAggregateRecord, 0)
+	require.NoError(t, database.Database[*TestAggregateRecord](ctx).
+		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{outerOnly}}).
+		List(&records))
+	require.Empty(t, records, "an unknown inner column fails closed instead of correlating outward")
+
+	// The aggregate path reports the reason rather than answering with zero.
+	got := struct{ Total int64 }{}
+	require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, struct{ Total int64 }](ctx).
+		Select(aggCols.Amount.Sum().As("total")).
+		Where(outerOnly).
+		ScanOne(&got), database.ErrUnusableFilter)
+}
+
+// TestFilterExistsQualifiesInnerColumns pins the shape of the generated SQL
+// rather than its result. SQL resolves an unqualified name against the
+// innermost scope first, so a subquery filter reaches the right column either
+// way and no query result can tell the two spellings apart. The qualification
+// is still worth pinning: it is what keeps the emitted condition unambiguous
+// on its face, and what would keep it correct if a subquery ever gained a join.
+func TestFilterExistsQualifiesInnerColumns(t *testing.T) {
+	defer cleanupAggregateData()
+	defer cleanupTagData()
+	setupAggregateData(t)
+	setupTagData(t)
+
+	// Both tables carry an "id"; the filter names the tag's own.
+	byTagID := types.FilterExists[*TestRecordTag](
+		tagCols.RecordID, recordIDCol, tagCols.ID.Eq("t1"),
+	)
+
+	statements := make([]types.SQLStatement, 0)
+	records := make([]*TestAggregateRecord, 0)
+	require.NoError(t, database.Database[*TestAggregateRecord](context.Background()).
+		WithBuildSQL(&statements).
+		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{byTagID}}).
+		List(&records))
+
+	require.Len(t, statements, 1)
+	require.Contains(t, statements[0].Query, "`test_record_tags`.`id` = ?",
+		"the inner filter must name the subquery's own table")
+}
+
+// TestFilterExistsSelfJoin covers a related model that reads the same table as
+// the query around it. Without a distinct name for the subquery both sides of
+// the correlation resolve to the inner table and the condition degenerates
+// into comparing a row with itself.
+func TestFilterExistsSelfJoin(t *testing.T) {
+	defer cleanupTestData()
+	setupTestData(t)
+
+	ctx := context.Background()
+	catCols := struct {
+		ID       types.Column[string]
+		ParentID types.Column[string]
+	}{
+		ID:       types.Column[string]{Name: "id"},
+		ParentID: types.Column[string]{Name: "parent_id"},
+	}
+	require.NoError(t, database.Database[*TestCategory](ctx).Create(categoryRoot, categoryParent))
+
+	// Categories that are somebody's parent. root parents itself and parent,
+	// parent has no children, so only root matches.
+	hasChild := types.FilterExists[*TestCategory](catCols.ParentID, catCols.ID)
+	cats := make([]*TestCategory, 0)
+	require.NoError(t, database.Database[*TestCategory](ctx).
+		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{hasChild}}).
+		List(&cats))
+	require.Len(t, cats, 1)
+	require.Equal(t, categoryRootID, cats[0].ID)
+}
+
+// TestSumOfRejectsTextBackedValuer pins SUM to the single classification rule.
+// Admitting any struct that stores itself through driver.Valuer would take in
+// gorm.DeletedAt, which every model carries, and the null wrappers -- the exact
+// types ClassifyColumn exists to keep out.
+func TestSumOfRejectsTextBackedValuer(t *testing.T) {
+	defer cleanupAggregateData()
+	setupAggregateData(t)
+
+	rows := make([]struct{ Total int64 }, 0)
+	require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, struct{ Total int64 }](context.Background()).
+		Select(types.SumOf("deleted_at").As("total")).
+		Scan(&rows), database.ErrAggregateType)
+}
+
+// TestAggregateBuilderReuse pins the paginated-report idiom: read the page,
+// then count the groups off the same builder. The chain's gorm session keeps
+// the clauses of whatever ran on it before, so without a fresh statement per
+// build the count inherits the page's LIMIT and reports the page size as the
+// total -- silently, and only when tracing is off.
+func TestAggregateBuilderReuse(t *testing.T) {
+	defer cleanupAggregateData()
+	setupAggregateData(t)
+
+	type row struct {
+		Category string
+		Total    int64
+	}
+	ctx := context.Background()
+	builder := database.Aggregate[*TestAggregateRecord, row](ctx).
+		Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+		Where(aggCols.Status.Eq("done")).
+		OrderBy(aggCols.Category.Group().Asc()).
+		Limit(1)
+
+	rows := make([]row, 0)
+	require.NoError(t, builder.Scan(&rows))
+	require.Equal(t, []row{{Category: "alpha", Total: 300}}, rows)
+
+	var groups int
+	require.NoError(t, builder.CountGroups(&groups))
+	require.Equal(t, 3, groups, "the page limit must not leak into the total")
+
+	// A second identical read repeats the query rather than compounding it.
+	again := make([]row, 0)
+	require.NoError(t, builder.Scan(&again))
+	require.Equal(t, rows, again)
+}
+
+// TestAggregateNullableResultFields covers both ways a result field can tell
+// NULL apart from zero: a pointer, and a sql.Null wrapper.
+func TestAggregateNullableResultFields(t *testing.T) {
+	defer cleanupAggregateData()
+	setupAggregateData(t)
+
+	ctx := context.Background()
+
+	t.Run("AcceptsSQLNullWrappers", func(t *testing.T) {
+		type row struct {
+			Peak     sql.NullInt64
+			AvgScore sql.NullFloat64
+		}
+		got := row{}
+		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](ctx).
+			Select(aggCols.Amount.Max().As("peak"), aggCols.Score.Avg().As("avg_score")).
+			ScanOne(&got))
+		require.True(t, got.Peak.Valid)
+		require.EqualValues(t, 600, got.Peak.Int64)
+		require.True(t, got.AvgScore.Valid)
+	})
+
+	t.Run("StillRejectsPlainValue", func(t *testing.T) {
+		type row struct{ Peak int64 }
+		got := row{}
+		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
+			Select(aggCols.Amount.Max().As("peak")).
+			ScanOne(&got), database.ErrNullableResultField)
+	})
+}
+
+// TestAggregateHavingValue pins the values a post-aggregation comparison
+// accepts. nil renders as a comparison against NULL, which no group satisfies,
+// so a report would come back empty with no sign of the mistake.
+func TestAggregateHavingValue(t *testing.T) {
+	defer cleanupAggregateData()
+	setupAggregateData(t)
+
+	ctx := context.Background()
+	type row struct {
+		Category string
+		Total    int64
+	}
+	total := aggCols.Amount.Sum().As("total")
+
+	for name, value := range map[string]any{
+		"Nil":   nil,
+		"Slice": []int64{1, 2},
+	} {
+		t.Run(name, func(t *testing.T) {
+			rows := make([]row, 0)
+			require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
+				Select(aggCols.Category.Group(), total).
+				Having(total.Gt(value)).
+				Scan(&rows), database.ErrHavingValue)
+		})
+	}
+}
+
+// TestAggregateScanReplacesDest pins that a read replaces the destination
+// rather than appending to it. gorm keeps the existing elements when a scan
+// returns no rows, so a reused destination would still hold the previous
+// result and the caller would read a stale report as a fresh one.
+func TestAggregateScanReplacesDest(t *testing.T) {
+	defer cleanupAggregateData()
+	setupAggregateData(t)
+
+	ctx := context.Background()
+	type row struct {
+		Category string
+		Total    int64
+	}
+	rows := make([]row, 0)
+	require.NoError(t, database.Aggregate[*TestAggregateRecord, row](ctx).
+		Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+		Scan(&rows))
+	require.Len(t, rows, 3)
+
+	// A second read matching nothing must empty it, not leave the first result.
+	require.NoError(t, database.Aggregate[*TestAggregateRecord, row](ctx).
+		Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+		Where(aggCols.Category.Eq("nonexistent")).
+		Scan(&rows))
+	require.Empty(t, rows, "a read with no rows must clear the destination")
+
+	// ScanOne behaves the same for a single row.
+	type one struct{ Total int64 }
+	got := one{Total: 999}
+	require.NoError(t, database.Aggregate[*TestAggregateRecord, one](ctx).
+		Select(aggCols.Amount.Sum().As("total")).
+		Where(aggCols.Category.Eq("nonexistent")).
+		ScanOne(&got))
+	require.EqualValues(t, 0, got.Total, "the stale 999 must not survive")
+}
+
+// TestAggregateGroupByRendersRawExpression pins that the group key reaches gorm
+// as an already-quoted expression it must not quote again. The MySQL, SQLite
+// and PostgreSQL quoters are idempotent so a double quote is invisible there;
+// the SQL Server and ClickHouse ones are not, and would emit ""col"".
+func TestAggregateGroupByRendersRawExpression(t *testing.T) {
+	defer cleanupAggregateData()
+	setupAggregateData(t)
+
+	type row struct {
+		Category string
+		Total    int64
+	}
+	statements := make([]types.SQLStatement, 0)
+	rows := make([]row, 0)
+	require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
+		WithBuildSQL(&statements).
+		Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+		Scan(&rows))
+
+	require.Len(t, statements, 1)
+	require.Contains(t, statements[0].Query, "GROUP BY `category`")
+	require.NotContains(t, statements[0].Query, "``category``")
 }

@@ -39,7 +39,7 @@ func (db *database[M]) Cleanup() (err error) {
 		return err
 	}
 	done, _, _ := db.trace("Cleanup")
-	defer done(err)
+	defer func() { done(err) }()
 
 	// return db.db.Limit(-1).Where("deleted_at IS NOT NULL").Model(*new(M)).Unscoped().Delete(make([]M, 0)).Error
 	tableName := db.m.GetTableName()

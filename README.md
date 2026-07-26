@@ -411,7 +411,11 @@ err := database.Aggregate[*appmodel.Record, categoryTotal](ctx).
   列名不一致、或同一列上挂了两个度量时才需要写。
 - 别名和 `R` 的字段**双向校验**，任一侧对不上都是构建期错误，不会静默给出
   一列 0。
-- 聚合规格写错一律**报错**，不像客户端过滤器那样退化成空结果。
+- 聚合规格写错一律**报错**（未知列、未知函数、别名对不上、`Having` 比较 nil
+  或切片等），不像客户端过滤器那样退化成空结果。
+- **群/租户隔离不会自动套用**。`List` 的隔离来自 controller 跑的 service 钩子
+  （`Filter`/`FilterRaw`），而聚合是 service 直接调用的，那些钩子不会执行——
+  每个隔离条件都必须自己写进 `Where`。漏掉一个就会跨租户聚合，且没有任何迹象。
 
 单行结果用 `ScanOne`，分页报表的总组数用 `CountGroups`。跨表条件用
 `types.FilterExists` / `FilterNotExists` 半连接，不要用 join —— join 到一对多

@@ -53,8 +53,13 @@ import (
 //
 // Usage Pattern:
 //
-//	done := db.trace("Create", len(models))
-//	defer done(err)
+//	done, _, _ := db.trace("Create", len(models))
+//	defer func() { done(err) }()
+//
+// The closure is load-bearing: a plain `defer done(err)` evaluates err where
+// the defer is registered, which is before the operation has run, so every
+// span would be finished with a nil error and no failure would ever be
+// recorded on it.
 //
 // Tracing Hierarchy:
 //

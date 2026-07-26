@@ -160,9 +160,16 @@ type Database[M Model] interface {
 // The entry point is the package-level database.Aggregate[M, R] rather than a
 // method, because a Go method cannot introduce the result type parameter.
 //
-// One chain runs one query. The builder keeps the terms it was given, so
-// calling a terminal twice on the same value repeats the first query rather
-// than starting a fresh one; call database.Aggregate again for each read.
+// Row-level access rules are not inherited. A model's List gets its tenant or
+// group scoping from the service hooks the controller runs (Filter, FilterRaw);
+// an aggregate is called straight from service code, so those hooks never run
+// and every scoping condition has to be passed to Where explicitly. Forgetting
+// one aggregates across tenants without any sign that it did.
+//
+// A builder is a specification, not a live statement: it can be read more than
+// once, and each terminal renders the spec afresh. That is what makes the
+// paginated-report idiom safe -- Scan for the page, then CountGroups for the
+// total, off the same builder.
 //
 // Example:
 //

@@ -1,6 +1,7 @@
 package database
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/cockroachdb/errors"
@@ -22,6 +23,30 @@ import (
 // and keeping one implementation is what stops the fail-closed behavior from
 // drifting apart between them.
 
+// filterScope is what the surrounding query means for the filters being
+// rendered. It travels with the renderer because a filter list can appear at
+// three depths -- the top-level WHERE, a conditional aggregate's CASE guard,
+// and inside a correlated subquery -- and each answers "which table does this
+// column belong to" differently.
+type filterScope struct {
+	// qualify prefixes column names. It is empty at the top level, where an
+	// unqualified name is unambiguous, and set inside a subquery, where the
+	// same name usually exists on both tables and an unqualified one silently
+	// binds to the outer query instead.
+	qualify string
+	// parent is the table a correlated subquery joins back to.
+	parent string
+	// columns restricts which columns may be named, keyed by database name. It
+	// is nil at the top level, where the producer already owns validation, and
+	// set inside a subquery, where a name the related model does not have would
+	// otherwise resolve against the outer table and quietly change the meaning
+	// of the query.
+	columns map[string]struct{}
+	// depth numbers the nesting level so each subquery can take a distinct
+	// alias when it reads the same table as the query enclosing it.
+	depth int
+}
+
 // applyFilters appends field-level operator filters, each as an AND
 // condition with its value bound as a statement parameter. Every mismatch
 // fails closed with "1 = 0" instead of being dropped: silently dropping a
@@ -35,7 +60,7 @@ func (db *database[M]) applyFilters(filters []types.Filter) {
 	// The reason is discarded here on purpose: a client filter that cannot be
 	// applied narrows the query instead of failing the request. Server-built
 	// callers such as the aggregate builder read it and fail fast instead.
-	if expr, _ := db.renderFilters(filters, false, db.outerTableName()); expr != nil {
+	if expr, _ := db.renderFilters(filters, false, filterScope{parent: db.outerTableName()}); expr != nil {
 		db.ins = db.ins.Where(expr)
 	}
 }
@@ -55,7 +80,7 @@ func (db *database[M]) applyFilters(filters []types.Filter) {
 // group fails closed instead; see groupCondition.
 //
 // The caller must hold db.mu.
-func (db *database[M]) renderFilters(filters []types.Filter, or bool, parentTable string) (clause.Expression, error) {
+func (db *database[M]) renderFilters(filters []types.Filter, or bool, scope filterScope) (clause.Expression, error) {
 	if len(filters) == 0 {
 		// No filters is not a failure: callers read a nil expression as "add no
 		// condition". A sentinel here would make every call site branch on an
@@ -65,7 +90,7 @@ func (db *database[M]) renderFilters(filters []types.Filter, or bool, parentTabl
 	var failure error
 	exprs := make([]clause.Expression, 0, len(filters))
 	for _, f := range filters {
-		expr, err := db.renderFilter(f, parentTable)
+		expr, err := db.renderFilter(f, scope)
 		if err != nil && failure == nil {
 			failure = err
 		}
@@ -94,26 +119,35 @@ func (db *database[M]) renderFilters(filters []types.Filter, or bool, parentTabl
 // renderFilter turns one filter into a predicate.
 //
 // The caller must hold db.mu.
-func (db *database[M]) renderFilter(f types.Filter, parentTable string) (clause.Expression, error) {
+func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.Expression, error) {
 	// Groups carry their children in Value and subqueries carry their columns
 	// inside it, so neither names a column of its own and both are dispatched
 	// before the empty-column check below.
 	switch f.Op {
 	case types.FilterOpOr:
-		return db.groupCondition(f, true, parentTable)
+		return db.groupCondition(f, true, scope)
 	case types.FilterOpAnd:
-		return db.groupCondition(f, false, parentTable)
+		return db.groupCondition(f, false, scope)
 	case types.FilterOpExists:
 		sq, ok := f.Value.(types.Subquery)
 		if !ok {
 			return db.failClosedFilter(f, "expects a subquery value")
 		}
-		return db.existsCondition(f, sq, parentTable)
+		return db.existsCondition(f, sq, scope)
 	}
 	if len(f.Column) == 0 {
 		return db.failClosedFilter(f, "has an empty column")
 	}
-	column := db.quoteIdent(f.Column)
+	// Inside a subquery a name the related model does not have is not a typo
+	// the database rejects: it resolves against the enclosing query instead and
+	// turns the condition into a correlated reference, which is valid SQL over
+	// the wrong rows.
+	if scope.columns != nil {
+		if _, ok := scope.columns[f.Column]; !ok {
+			return db.failClosedFilter(f, "names a column the related model does not have")
+		}
+	}
+	column := db.scopedColumn(f.Column, scope)
 	switch f.Op {
 	case types.FilterOpEq:
 		return db.scalarFilter(f, column+" = ?")
@@ -174,7 +208,7 @@ func (db *database[M]) renderFilter(f types.Filter, parentTable string) (clause.
 // A group whose value is not a filter list, or that carries no children at
 // all, fails closed: an empty group is a caller bug, and answering it with the
 // logical identity (TRUE for AND) would widen the result set.
-func (db *database[M]) groupCondition(f types.Filter, or bool, parentTable string) (clause.Expression, error) {
+func (db *database[M]) groupCondition(f types.Filter, or bool, scope filterScope) (clause.Expression, error) {
 	children, ok := f.Value.([]types.Filter)
 	if !ok {
 		return db.failClosedFilter(f, "expects a filter list value")
@@ -182,7 +216,7 @@ func (db *database[M]) groupCondition(f types.Filter, or bool, parentTable strin
 	if len(children) == 0 {
 		return db.failClosedFilter(f, "has no children")
 	}
-	return db.renderFilters(children, or, parentTable)
+	return db.renderFilters(children, or, scope)
 }
 
 // failClosedExpr is the predicate that matches nothing. Narrowing to an empty
@@ -242,6 +276,16 @@ func (db *database[M]) stringFilter(f types.Filter, sql string) (clause.Expressi
 	return clause.Expr{SQL: sql, Vars: []any{s}}, nil
 }
 
+// scopedColumn renders a column name for the scope it is read in: qualified
+// inside a subquery, bare at the top level where qualification would add noise
+// without removing any ambiguity.
+func (db *database[M]) scopedColumn(column string, scope filterScope) string {
+	if len(scope.qualify) == 0 {
+		return db.quoteIdent(column)
+	}
+	return db.quoteTableColumn(scope.qualify, column)
+}
+
 // existsCondition renders a correlated subquery as a semi join. The related
 // model is attached with Model, so the subquery inherits that model's
 // soft-delete scope: a subquery can never match a row a List on the related
@@ -251,36 +295,64 @@ func (db *database[M]) stringFilter(f types.Filter, sql string) (clause.Expressi
 // so it is written into the SQL; both sides are quoted identifiers taken from
 // column references, which cannot carry SQL.
 //
-// parentTable is the table the outer side of the correlation refers to. It is
-// threaded through the renderer rather than read from the chain, because a
+// scope carries the table the outer side of the correlation refers to. It
+// travels with the renderer rather than being read from the chain, because a
 // subquery may itself contain one: the inner correlation must reach the table
-// directly enclosing it, and reading the chain would always yield the
-// outermost model instead. That mistake produces valid SQL joined against the
-// wrong table, which returns a wrong row set rather than an error.
+// directly enclosing it, and reading the chain would always yield the outermost
+// model instead. That mistake produces valid SQL joined against the wrong
+// table, which returns a wrong row set rather than an error.
 //
 // The caller must hold db.mu.
-func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, parentTable string) (clause.Expression, error) {
+func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope filterScope) (clause.Expression, error) {
 	if sq.Model == nil {
 		return db.failClosedFilter(f, "has no related model")
 	}
 	if len(sq.ChildColumn) == 0 || len(sq.ParentColumn) == 0 {
 		return db.failClosedFilter(f, "has an empty correlation column")
 	}
-	if len(parentTable) == 0 {
+	if len(scope.parent) == 0 {
 		return db.failClosedFilter(f, "cannot resolve the table to correlate against")
 	}
+	childType := reflect.TypeOf(sq.Model)
 	childTable := sq.Model.GetTableName()
 	if len(childTable) == 0 {
 		// A model only reports a table name when it overrides GetTableName;
 		// otherwise gorm derives it, so the same resolution is used here.
-		resolved, err := modelschema.TableName(reflect.TypeOf(sq.Model))
+		resolved, err := modelschema.TableName(childType)
 		if err != nil {
 			return db.failClosedFilter(f, "related model has no resolvable table name")
 		}
 		childTable = resolved
 	}
-	correlation := db.quoteTableColumn(childTable, sq.ChildColumn) +
-		" = " + db.quoteTableColumn(parentTable, sq.ParentColumn)
+	childColumns, err := modelschema.Columns(childType)
+	if err != nil {
+		return db.failClosedFilter(f, "related model has no resolvable columns")
+	}
+	allowed := make(map[string]struct{}, len(childColumns))
+	for _, c := range childColumns {
+		allowed[c.DBName] = struct{}{}
+	}
+	if _, ok := allowed[sq.ChildColumn]; !ok {
+		return db.failClosedFilter(f, "correlates on a column the related model does not have")
+	}
+
+	// A subquery reading the same table as the query around it needs its own
+	// name, or both sides of the correlation resolve to the inner table and the
+	// condition degenerates into a comparison of a row with itself. Aliasing
+	// only that case keeps every other subquery rendering exactly as before.
+	// Table takes a bare name: pre-quoting it makes gorm read the value as a
+	// raw table expression, and the soft-delete clause then qualifies itself
+	// with the struct-derived name instead of this one.
+	from := childTable
+	childRef := childTable
+	if childTable == scope.parent {
+		alias := fmt.Sprintf("%s_gst%d", childTable, scope.depth+1)
+		from = childTable + " AS " + alias
+		childRef = alias
+	}
+
+	correlation := db.quoteTableColumn(childRef, sq.ChildColumn) +
+		" = " + db.quoteTableColumn(scope.parent, sq.ParentColumn)
 
 	// Table is set explicitly alongside Model. Model alone would let gorm name
 	// the FROM from the struct, and gorm reads its own TableName method rather
@@ -288,19 +360,34 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, parent
 	// latter would be selected FROM one table while the correlation qualifies
 	// another.
 	sub := db.ins.Session(&gorm.Session{NewDB: true}).
-		Table(childTable).
+		Table(from).
 		Model(sq.Model).
 		Select("1").
 		Where(correlation)
-	// The nested filters correlate against this subquery's own table.
-	expr, failure := db.renderFilters(sq.Filters, false, childTable)
+	// Nested filters read the subquery's own table, correlate back to it, and
+	// may only name its columns.
+	inner := filterScope{
+		qualify: childRef,
+		parent:  childRef,
+		columns: allowed,
+		depth:   scope.depth + 1,
+	}
+	expr, failure := db.renderFilters(sq.Filters, false, inner)
 	if expr != nil {
 		sub = sub.Where(expr)
 	}
-	if sq.Negate {
-		return clause.Expr{SQL: "NOT EXISTS (?)", Vars: []any{sub}}, failure
+	// A predicate that could not be rendered fails closed to "match nothing".
+	// Negating the subquery would turn that into "match everything", so the
+	// whole condition collapses instead of the inner one: narrowing is always
+	// safe, widening never is, and this is the only place in the renderer where
+	// the difference is a negation away.
+	if failure != nil {
+		return failClosedExpr(), failure
 	}
-	return clause.Expr{SQL: "EXISTS (?)", Vars: []any{sub}}, failure
+	if sq.Negate {
+		return clause.Expr{SQL: "NOT EXISTS (?)", Vars: []any{sub}}, nil
+	}
+	return clause.Expr{SQL: "EXISTS (?)", Vars: []any{sub}}, nil
 }
 
 // outerTableName resolves the table the current chain reads, for qualifying

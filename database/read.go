@@ -52,7 +52,7 @@ func (db *database[M]) List(dest *[]M) (err error) {
 		return err
 	}
 	done, _, span := db.trace("List")
-	defer done(err)
+	defer func() { done(err) }()
 	if dest == nil {
 		return ErrNilDest
 	}
@@ -154,7 +154,7 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 		return err
 	}
 	done, _, span := db.trace("Get")
-	defer done(err)
+	defer func() { done(err) }()
 
 	// set selected columns.
 	if len(db.selectColumns) > 0 {
@@ -238,7 +238,7 @@ func (db *database[M]) Count(count *int) (err error) {
 		return err
 	}
 	done, _, _ := db.trace("Count")
-	defer done(err)
+	defer func() { done(err) }()
 
 	// GORM's Count only accepts *int64, so bridge through a local variable.
 	var count64 int64
@@ -294,7 +294,7 @@ func (db *database[M]) First(dest M) (err error) {
 		return err
 	}
 	done, _, span := db.trace("First")
-	defer done(err)
+	defer func() { done(err) }()
 
 	// set selected columns.
 	if len(db.selectColumns) > 0 {
@@ -369,7 +369,7 @@ func (db *database[M]) Last(dest M) (err error) {
 		return err
 	}
 	done, _, span := db.trace("Last")
-	defer done(err)
+	defer func() { done(err) }()
 
 	// set selected columns.
 	if len(db.selectColumns) > 0 {
@@ -444,7 +444,7 @@ func (db *database[M]) Take(dest M) (err error) {
 		return err
 	}
 	done, _, span := db.trace("Take")
-	defer done(err)
+	defer func() { done(err) }()
 
 	// set selected columns.
 	if len(db.selectColumns) > 0 {

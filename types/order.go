@@ -13,6 +13,18 @@ const (
 	OrderDesc OrderDirection = "DESC"
 )
 
+// Valid reports whether the direction is one this package defines. A value
+// from outside the set would otherwise fall through to ascending and sort a
+// report the opposite of what the caller asked for.
+func (d OrderDirection) Valid() bool {
+	switch d {
+	case "", OrderAsc, OrderDesc:
+		return true
+	default:
+		return false
+	}
+}
+
 // Flip returns the opposite direction. Cursor pagination uses it to read a
 // feed backwards: traveling against the feed reverses both the boundary
 // comparison and the ORDER BY.

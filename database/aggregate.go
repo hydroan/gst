@@ -2,11 +2,10 @@ package database
 
 import (
 	"context"
-	"database/sql/driver"
+	"database/sql"
 	"reflect"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/modelschema"
@@ -40,6 +39,8 @@ var (
 	ErrScanOnePaged          = errors.New("ScanOne cannot use Having, Limit or Offset, it always reads one row")
 	ErrOffsetWithoutLimit    = errors.New("Offset needs a Limit")
 	ErrAggregatorUnusable    = errors.New("aggregate could not attach to the database chain")
+	ErrHavingValue           = errors.New("having compares against a value SQL cannot order")
+	ErrUnknownOrderDirection = errors.New("order direction is not one the framework defines")
 )
 
 // aliasPattern is what an alias must look like. An alias reaches SQL as an
@@ -54,6 +55,14 @@ var aliasPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 type aggregator[M types.Model, R any] struct {
 	db  *database[M]
 	err error // set when the chain could not be attached; surfaced by the terminal
+
+	// The options live here rather than on the shared chain because reset()
+	// clears the chain's copies after every terminal, which would silently drop
+	// them from a second read off the same builder.
+	table      string
+	debug      bool
+	dryRun     bool
+	statements *[]types.SQLStatement
 
 	terms    []types.AggregateTerm
 	filters  []types.Filter
@@ -121,22 +130,27 @@ func (a *aggregator[M, R]) Offset(n int) types.Aggregator[M, R] {
 }
 
 func (a *aggregator[M, R]) WithTable(name string) types.Aggregator[M, R] {
-	a.db.WithTable(name)
+	a.table = name
 	return a
 }
 
+// The option methods never touch the chain, so they stay safe on an aggregator
+// that failed to attach: the error surfaces at the terminal instead of as a nil
+// dereference partway through building the query.
+
 func (a *aggregator[M, R]) WithDebug() types.Aggregator[M, R] {
-	a.db.WithDebug()
+	a.debug = true
 	return a
 }
 
 func (a *aggregator[M, R]) WithBuildSQL(statements *[]types.SQLStatement) types.Aggregator[M, R] {
-	a.db.WithBuildSQL(statements)
+	a.dryRun = true
+	a.statements = statements
 	return a
 }
 
 func (a *aggregator[M, R]) WithDryRun() types.Aggregator[M, R] {
-	a.db.WithDryRun()
+	a.dryRun = true
 	return a
 }
 
@@ -251,14 +265,26 @@ func (a *aggregator[M, R]) CountGroups(count *int) (err error) {
 // are applied only when paged is set, so CountGroups can reuse the same
 // assembly without them.
 func (a *aggregator[M, R]) build(paged bool) (*gorm.DB, error) {
-	columns, err := a.validate()
-	if err != nil {
+	if err := a.validate(); err != nil {
 		return nil, err
 	}
 
+	// Every build starts from a fresh statement. The chain's gorm session keeps
+	// the clauses of whatever ran on it before -- reset() clears the wrapper's
+	// options but says itself that it does not replace the session -- so a
+	// second read off the same builder would otherwise inherit the first
+	// query's WHERE, GROUP BY and LIMIT and quietly answer a different
+	// question. That shape is the one the paginated-report idiom produces:
+	// Scan for the page, then CountGroups for the total.
+	a.db.ins = a.session()
+	a.db.tableName = a.table
+	a.db.dryRun = a.dryRun
+	a.db.buildingSQL = a.statements != nil
+	a.db.sqlStatements = a.statements
+
 	table := a.db.m.GetTableName()
-	if len(a.db.tableName) > 0 {
-		table = a.db.tableName
+	if len(a.table) > 0 {
+		table = a.table
 	}
 	// Model is what carries the schema, and the schema is what adds the
 	// soft-delete condition. Table alone names the table but parses no model,
@@ -273,7 +299,7 @@ func (a *aggregator[M, R]) build(paged bool) (*gorm.DB, error) {
 	selects := make([]string, 0, len(a.terms))
 	vars := make([]any, 0)
 	for _, t := range a.terms {
-		sql, args, termErr := a.termExpr(t, columns)
+		sql, args, termErr := a.termExpr(t)
 		if termErr != nil {
 			return nil, termErr
 		}
@@ -287,7 +313,7 @@ func (a *aggregator[M, R]) build(paged bool) (*gorm.DB, error) {
 	// A predicate the renderer cannot apply narrows a client query to nothing,
 	// which is the right answer for request input. Here it would turn a report
 	// into a silent zero, so the reason is surfaced instead.
-	whereExpr, err := a.db.renderFilters(a.filters, false, a.db.outerTableName())
+	whereExpr, err := a.db.renderFilters(a.filters, false, filterScope{parent: a.db.outerTableName()})
 	if err != nil {
 		return nil, err
 	}
@@ -310,7 +336,7 @@ func (a *aggregator[M, R]) build(paged bool) (*gorm.DB, error) {
 		if t.IsMeasure() {
 			continue
 		}
-		sql, args, termErr := a.termExpr(t, columns)
+		sql, args, termErr := a.termExpr(t)
 		if termErr != nil {
 			return nil, termErr
 		}
@@ -329,7 +355,7 @@ func (a *aggregator[M, R]) build(paged bool) (*gorm.DB, error) {
 		})
 	}
 	for _, h := range a.havings {
-		sql, args, termErr := a.termExpr(h.Term, columns)
+		sql, args, termErr := a.termExpr(h.Term)
 		if termErr != nil {
 			return nil, termErr
 		}
@@ -376,6 +402,10 @@ func havingOperator(op types.HavingOp) string {
 	case types.HavingOpLte:
 		return "<="
 	default:
+		// validate rejects an operator outside the closed set before the
+		// renderer runs, so this arm means the two drifted apart. Equality is
+		// the least wrong spelling, and the guard above is what keeps it
+		// unreachable.
 		return "="
 	}
 }
@@ -392,7 +422,7 @@ func (a *aggregator[M, R]) alias(t types.AggregateTerm) string {
 // placeholders bind. A conditional measure carries its predicate as a nested
 // expression, so the filter renderer stays the only place predicates are
 // built.
-func (a *aggregator[M, R]) termExpr(t types.AggregateTerm, columns map[string]modelschema.Column) (string, []any, error) {
+func (a *aggregator[M, R]) termExpr(t types.AggregateTerm) (string, []any, error) {
 	column := a.db.quoteIdent(t.Column)
 	if !t.IsMeasure() {
 		if t.Bucket == types.TimeBucketNone {
@@ -401,7 +431,7 @@ func (a *aggregator[M, R]) termExpr(t types.AggregateTerm, columns map[string]mo
 		return a.db.timeBucketExpr(column, t.Bucket), nil, nil
 	}
 
-	cond, condErr := a.db.renderFilters(t.Conditions, false, a.db.outerTableName())
+	cond, condErr := a.db.renderFilters(t.Conditions, false, filterScope{parent: a.db.outerTableName()})
 	if condErr != nil {
 		return "", nil, condErr
 	}
@@ -451,13 +481,13 @@ func (a *aggregator[M, R]) termExpr(t types.AggregateTerm, columns map[string]mo
 
 // validate checks the projection against the model schema and the result row
 // before any SQL is built, and returns the model's columns for the renderer.
-func (a *aggregator[M, R]) validate() (map[string]modelschema.Column, error) {
+func (a *aggregator[M, R]) validate() error {
 	if len(a.terms) == 0 {
-		return nil, ErrEmptyProjection
+		return ErrEmptyProjection
 	}
 	columns, err := modelschema.Columns(a.db.typ)
 	if err != nil {
-		return nil, errors.Wrapf(err, "resolve columns of %s", a.db.typ)
+		return errors.Wrapf(err, "resolve columns of %s", a.db.typ)
 	}
 	byName := make(map[string]modelschema.Column, len(columns))
 	for _, c := range columns {
@@ -471,14 +501,14 @@ func (a *aggregator[M, R]) validate() (map[string]modelschema.Column, error) {
 			measures++
 		}
 		if err = a.validateTerm(t, byName); err != nil {
-			return nil, err
+			return err
 		}
 		alias := a.alias(t)
 		if !aliasPattern.MatchString(alias) {
-			return nil, errors.Wrapf(ErrInvalidAlias, "%q", alias)
+			return errors.Wrapf(ErrInvalidAlias, "%q", alias)
 		}
 		if _, dup := aliases[alias]; dup {
-			return nil, errors.Wrapf(ErrDuplicateAlias, "%q", alias)
+			return errors.Wrapf(ErrDuplicateAlias, "%q", alias)
 		}
 		aliases[alias] = struct{}{}
 	}
@@ -486,7 +516,7 @@ func (a *aggregator[M, R]) validate() (map[string]modelschema.Column, error) {
 	// clothes, and List already does that better. Rejecting it keeps one
 	// official path for reading rows.
 	if measures == 0 {
-		return nil, ErrNoAggregateFn
+		return ErrNoAggregateFn
 	}
 	// HAVING and ORDER BY are rendered from the term they carry, not from the
 	// alias, so matching the alias alone is not enough: a term with the same
@@ -495,21 +525,33 @@ func (a *aggregator[M, R]) validate() (map[string]modelschema.Column, error) {
 	// two agree by construction.
 	for _, h := range a.havings {
 		if !h.Op.Valid() {
-			return nil, errors.Wrapf(ErrUnknownHavingOp, "%q", h.Op)
+			return errors.Wrapf(ErrUnknownHavingOp, "%q", h.Op)
 		}
 		if !a.isSelected(h.Term) {
-			return nil, errors.Wrapf(ErrHavingTermNotSelected, "%q", a.alias(h.Term))
+			return errors.Wrapf(ErrHavingTermNotSelected, "%q", a.alias(h.Term))
+		}
+		// The comparison is rendered with the value bound, so anything SQL
+		// cannot order either fails at the database or, for nil, compares
+		// against NULL and quietly answers with no groups at all.
+		if h.Value == nil {
+			return errors.Wrapf(ErrHavingValue, "%q compares against nil", a.alias(h.Term))
+		}
+		if k := reflect.ValueOf(h.Value).Kind(); k == reflect.Slice || k == reflect.Array || k == reflect.Map {
+			return errors.Wrapf(ErrHavingValue, "%q compares against a %s", a.alias(h.Term), k)
 		}
 	}
 	for _, o := range a.orders {
+		if !o.Direction.Valid() {
+			return errors.Wrapf(ErrUnknownOrderDirection, "%q", o.Direction)
+		}
 		if !a.isSelected(o.Term) {
-			return nil, errors.Wrapf(ErrAliasMissing, "ORDER BY references %q", a.alias(o.Term))
+			return errors.Wrapf(ErrAliasMissing, "ORDER BY references %q", a.alias(o.Term))
 		}
 	}
 	if err = a.validateResultRow(aliases); err != nil {
-		return nil, err
+		return err
 	}
-	return byName, nil
+	return nil
 }
 
 // validateTerm checks that a term names a real column and that the column's
@@ -550,14 +592,12 @@ func (a *aggregator[M, R]) validateTerm(t types.AggregateTerm, byName map[string
 	case t.Fn == types.AggregateSum || t.Fn == types.AggregateAvg:
 		// The generated reference already blocks this at compile time for the
 		// types it can classify, so the check only bites on the string-name
-		// constructors. It accepts a struct that stores itself through
-		// driver.Valuer as well as a numeric kind: a decimal money type is a
-		// struct, and rejecting it would leave the framework unable to sum the
-		// most common money column there is. Such a type is not classified as
-		// numeric for code generation, because a Valuer may equally be a uuid
-		// or a JSON document stored as text -- naming one here is an explicit
-		// request to sum it, which is a different thing from guessing.
-		if class != modelschema.ColumnClassNumeric && !storesItself(column.Type) {
+		// constructors. It asks ClassifyColumn rather than keeping a rule of
+		// its own: a second rule admitted every struct storing itself through
+		// driver.Valuer, which is also how uuid, JSON and text-backed null
+		// wrappers travel, and gorm.DeletedAt is on every model. Two rules
+		// disagreeing about the same type is worse than one rule being strict.
+		if class != modelschema.ColumnClassNumeric {
 			return errors.Wrapf(ErrAggregateType, "%s over non-numeric column %q", t.Fn, t.Column)
 		}
 	case !t.IsMeasure() && t.Bucket != types.TimeBucketNone:
@@ -603,9 +643,9 @@ func (a *aggregator[M, R]) validateResultRow(aliases map[string]struct{}) error 
 		if _, ok := aliases[f.DBName]; !ok {
 			return errors.Wrapf(ErrAliasMissing, "%s.%s has no matching alias", typ, f.GoName)
 		}
-		if fn, isNullable := nullable[f.DBName]; isNullable && f.Type.Kind() != reflect.Pointer {
+		if fn, isNullable := nullable[f.DBName]; isNullable && !holdsNull(f.Type) {
 			return errors.Wrapf(ErrNullableResultField,
-				"%s.%s holds %s, which is NULL for an empty group; declare it as *%s",
+				"%s.%s holds %s, which is NULL for an empty group; declare it as *%s or a sql.Null type",
 				typ, f.GoName, fn, f.Type)
 		}
 	}
@@ -639,19 +679,28 @@ func (a *aggregator[M, R]) nullableAliases() map[string]types.AggregateFn {
 	return nullable
 }
 
-// valuerType is the interface a type implements to store itself as a database
-// value, which is how decimal and money types travel through gorm.
-var valuerType = reflect.TypeFor[driver.Valuer]()
+// session returns a statement-free handle onto the same connection. It keeps
+// the context and any transaction the chain joined, and drops only the clauses
+// a previous terminal left behind.
+func (a *aggregator[M, R]) session() *gorm.DB {
+	ins := a.db.ins.Session(&gorm.Session{NewDB: true})
+	if a.debug {
+		ins = ins.Debug()
+	}
+	return ins
+}
 
-// storesItself reports whether a struct column converts itself for the driver.
-// It is deliberately narrow: only a struct qualifies, so it cannot re-admit
-// the text-backed named types the numeric classification rules out.
-func storesItself(typ reflect.Type) bool {
-	for typ != nil && typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
+// scannerType is the interface a field implements to decode a raw database
+// value itself, which is how the sql.Null wrappers represent absence.
+var scannerType = reflect.TypeFor[sql.Scanner]()
+
+// holdsNull reports whether a result row field can tell NULL apart from the
+// zero value. A pointer does it by being nil; a sql.Null wrapper does it by
+// carrying a Valid flag. Anything else silently reads NULL as zero, which is
+// what makes "no rows" and "the answer is zero" the same number on a report.
+func holdsNull(typ reflect.Type) bool {
+	if typ.Kind() == reflect.Pointer {
+		return true
 	}
-	if typ == nil || typ.Kind() != reflect.Struct || typ == reflect.TypeFor[time.Time]() {
-		return false
-	}
-	return typ.Implements(valuerType) || reflect.PointerTo(typ).Implements(valuerType)
+	return typ.Implements(scannerType) || reflect.PointerTo(typ).Implements(scannerType)
 }
