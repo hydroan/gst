@@ -105,7 +105,7 @@ func Run(projectName string) error {
 	clioutput.Section("Run Go Mod Tidy")
 	cmd = exec.Command("go", "mod", "tidy")
 	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
+	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		clioutput.Error("", "go mod tidy failed")
 		return err
@@ -116,7 +116,7 @@ func Run(projectName string) error {
 	clioutput.Section("Initialize Git Repository")
 	cmd = exec.Command("git", "init")
 	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
+	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		clioutput.Error("", "git init failed")
 		return err
