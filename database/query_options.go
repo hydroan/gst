@@ -70,20 +70,16 @@ func (db *database[M]) WithIndex(indexName string, hint ...consts.IndexHintMode)
 		return db
 	}
 
-	// Check if database supports index hints (only MySQL supports them)
-	// SQLite, PostgreSQL, and other databases don't support index hints
 	if db.ins == nil {
 		return db
 	}
 
-	// Get database driver name to check if it's MySQL
-	driverName := db.ins.Name()
-	if driverName != "mysql" {
-		// Index hints are only supported by MySQL
-		// For other databases (SQLite, PostgreSQL, etc.), log a warning and skip
+	// Only MySQL understands index hints; elsewhere a hint is a syntax error
+	// rather than a no-op, so it is dropped with a warning. See dialect.go.
+	if !db.supportsIndexHint() {
 		logger.Database.WithContext(db.ctx, consts.Phase("WithIndex")).Warnf(
 			"index hints are not supported by %s database, skipping index hint for: %s",
-			driverName, indexName,
+			db.dialect(), indexName,
 		)
 		return db
 	}

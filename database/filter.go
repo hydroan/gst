@@ -2,7 +2,6 @@ package database
 
 import (
 	"reflect"
-	"strings"
 
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/logger"
@@ -217,22 +216,6 @@ func (db *database[M]) stringFilter(f types.Filter, sql string) clause.Expressio
 		return db.failClosedFilter(f, "expects a string value")
 	}
 	return clause.Expr{SQL: sql, Vars: []any{s}}
-}
-
-// likeEscapeClause declares the LIKE escape character used by filters.
-// The pipe is chosen over the conventional backslash because
-// backslash inside a SQL string literal is itself an escape character in
-// MySQL but a plain character in SQLite/PostgreSQL, so no single spelling of
-// ESCAPE '\' parses the same way across the supported dialects.
-const likeEscapeClause = " ESCAPE '|'"
-
-// likePatternEscaper rewrites a filter value into a literal LIKE
-// pattern fragment: client values are literals, not pattern language, so the
-// wildcards and the escape character itself are escaped.
-var likePatternEscaper = strings.NewReplacer("|", "||", "%", `|%`, "_", `|_`)
-
-func escapeLikePattern(value string) string {
-	return likePatternEscaper.Replace(value)
 }
 
 // existsCondition renders a correlated subquery as a semi join. The related

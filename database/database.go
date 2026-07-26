@@ -139,18 +139,6 @@ func (db *database[M]) quoteOrderField(name string) string {
 	return strings.Join(parts, ".")
 }
 
-func (db *database[M]) regexpOperator() string {
-	if db == nil || db.ins == nil || db.ins.Dialector == nil {
-		return "REGEXP"
-	}
-	switch strings.ToLower(db.ins.Dialector.Name()) {
-	case "postgres":
-		return "~"
-	default:
-		return "REGEXP"
-	}
-}
-
 // reset clears this wrapper's option fields (WithQuery, WithSelect, limits, etc.) after each
 // CRUD method returns. It does not replace the underlying *gorm.DB session: GORM may still
 // retain WHERE/ORDER clauses on that chain. Reusing the same Database handle for another

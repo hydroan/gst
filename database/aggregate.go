@@ -233,16 +233,33 @@ func (a *aggregator[M, R]) build(paged bool) (*gorm.DB, error) {
 	// alias. An alias is legal in GROUP BY and HAVING on MySQL, SQLite and
 	// ClickHouse but not on PostgreSQL or SQL Server, and re-rendering costs
 	// nothing, so one portable spelling replaces a per-dialect branch.
+	//
+	// Both go through gorm's own clause building so their values bind as
+	// statement parameters. Rendering them with Dialector.Explain would be
+	// wrong twice over: Explain exists to format SQL for the log, so it inlines
+	// values instead of binding them, and it has no case for a nested
+	// clause.Expression, so a conditional measure would reach the query as the
+	// Go formatting of a struct rather than as its predicate.
 	for _, t := range a.terms {
 		if t.IsMeasure() {
 			continue
 		}
 		sql, args := a.termExpr(t, columns)
-		tx = tx.Group(a.db.ins.Dialector.Explain(sql, args...))
+		if len(args) > 0 {
+			// Unreachable today: only measures carry conditions, and a group
+			// key renders to a column or a bucket expression, neither of which
+			// binds a value. Fail loudly rather than drop the values if a
+			// future group key gains any.
+			return nil, errors.Newf("group key %q renders bound values", a.alias(t))
+		}
+		tx = tx.Group(sql)
 	}
 	for _, h := range a.havings {
 		sql, args := a.termExpr(h.Term, columns)
-		tx = tx.Having(a.db.ins.Dialector.Explain(sql, args...)+" "+havingOperator(h.Op)+" ?", h.Value)
+		tx = tx.Having(clause.Expr{
+			SQL:  sql + " " + havingOperator(h.Op) + " ?",
+			Vars: append(append([]any(nil), args...), h.Value),
+		})
 	}
 
 	if paged {
@@ -301,7 +318,7 @@ func (a *aggregator[M, R]) termExpr(t types.AggregateTerm, columns map[string]mo
 		if t.Bucket == types.TimeBucketNone {
 			return column, nil
 		}
-		return a.bucketExpr(column, t.Bucket), nil
+		return a.db.timeBucketExpr(column, t.Bucket), nil
 	}
 
 	cond := a.db.renderFilters(t.Conditions, false)
@@ -340,81 +357,6 @@ func (a *aggregator[M, R]) termExpr(t types.AggregateTerm, columns map[string]mo
 			return fn + "(CASE WHEN ? THEN " + column + " END)", []any{cond}
 		}
 		return fn + "(" + column + ")", nil
-	}
-}
-
-// bucketExpr renders a time bucket as a sortable label. The label is a string
-// on every dialect, which keeps one Go type in the result row: returning each
-// driver's own date type instead would make R depend on the database behind
-// it. Lexical order matches chronological order, so ordering by the bucket
-// needs no extra expression.
-//
-// The truncation uses the value as the database stores it. Reporting in a
-// timezone other than the stored one is not expressed here; adding it later is
-// a new bucket constructor rather than a change to this one.
-func (a *aggregator[M, R]) bucketExpr(column string, bucket types.TimeBucket) string {
-	dialect := ""
-	if a.db.ins != nil && a.db.ins.Dialector != nil {
-		dialect = strings.ToLower(a.db.ins.Dialector.Name())
-	}
-	switch dialect {
-	case "sqlite":
-		return "strftime('" + sqliteBucketFormat(bucket) + "', " + column + ")"
-	case "postgres":
-		return "to_char(" + column + ", '" + postgresBucketFormat(bucket) + "')"
-	case "sqlserver":
-		return "FORMAT(" + column + ", '" + sqlserverBucketFormat(bucket) + "')"
-	case "clickhouse":
-		return "formatDateTime(" + column + ", '" + mysqlBucketFormat(bucket) + "')"
-	default:
-		return "DATE_FORMAT(" + column + ", '" + mysqlBucketFormat(bucket) + "')"
-	}
-}
-
-// The bucket format tables below all render the same labels: "2006-01-02
-// 15:00:00" for an hour, "2006-01-02" for a day and "2006-01" for a month.
-
-func mysqlBucketFormat(bucket types.TimeBucket) string {
-	switch bucket {
-	case types.TimeBucketHour:
-		return "%Y-%m-%d %H:00:00"
-	case types.TimeBucketMonth:
-		return "%Y-%m"
-	default:
-		return "%Y-%m-%d"
-	}
-}
-
-func sqliteBucketFormat(bucket types.TimeBucket) string {
-	switch bucket {
-	case types.TimeBucketHour:
-		return "%Y-%m-%d %H:00:00"
-	case types.TimeBucketMonth:
-		return "%Y-%m"
-	default:
-		return "%Y-%m-%d"
-	}
-}
-
-func postgresBucketFormat(bucket types.TimeBucket) string {
-	switch bucket {
-	case types.TimeBucketHour:
-		return "YYYY-MM-DD HH24:00:00"
-	case types.TimeBucketMonth:
-		return "YYYY-MM"
-	default:
-		return "YYYY-MM-DD"
-	}
-}
-
-func sqlserverBucketFormat(bucket types.TimeBucket) string {
-	switch bucket {
-	case types.TimeBucketHour:
-		return "yyyy-MM-dd HH:00:00"
-	case types.TimeBucketMonth:
-		return "yyyy-MM"
-	default:
-		return "yyyy-MM-dd"
 	}
 }
 

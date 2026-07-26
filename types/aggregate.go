@@ -70,10 +70,21 @@ type AggregateTerm struct {
 // IsMeasure reports whether the term is an aggregate rather than a group key.
 func (t AggregateTerm) IsMeasure() bool { return t.Fn != AggregateNone }
 
-// As names the term in the SELECT list. The alias binds the term to the result
-// row field of the same name, so it is part of the result contract rather than
-// a property of the column; that is why it is applied here instead of being a
-// parameter of the aggregate constructors.
+// As renames the term in the SELECT list.
+//
+// It is optional. Every term already carries a default alias — the column name
+// for a column term, "count" for COUNT(*) — so a projection whose result row
+// fields are named after the columns needs no As at all:
+//
+//	Select(SampleCols.TenantID.Group(), SampleCols.Amount.Sum())
+//	// scans into struct{ TenantID string; Amount int64 }
+//
+// Reach for As in the two cases the default cannot cover: when the result row
+// field is named differently from the column, and when one projection carries
+// two terms over the same column, whose default aliases would collide.
+//
+// The alias belongs to the result contract rather than to the column, which is
+// why it is applied here instead of being a parameter of the constructors.
 func (t AggregateTerm) As(alias string) AggregateTerm {
 	t.Alias = alias
 	return t
@@ -92,10 +103,20 @@ func (t AggregateTerm) Where(filters ...Filter) AggregateTerm {
 	return t
 }
 
+// DefaultCountAlias is the alias COUNT(*) projects under when the caller does
+// not rename it. A column term defaults to its column name, but COUNT(*) names
+// no column, so without a default of its own it would be the one term that
+// always had to be renamed.
+const DefaultCountAlias = "count"
+
 // Count counts rows: COUNT(*). It counts a row even when every column is NULL,
 // which is what a plain row count means; use a column reference's Count for
 // COUNT(column), which skips NULLs.
-func Count() AggregateTerm { return AggregateTerm{Fn: AggregateCount} }
+//
+// It projects as "count" unless renamed with As.
+func Count() AggregateTerm {
+	return AggregateTerm{Fn: AggregateCount, Alias: DefaultCountAlias}
+}
 
 // The string-name variants below build the same terms from a plain column
 // name, for code that cannot reference a concrete model: generic helpers and

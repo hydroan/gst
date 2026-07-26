@@ -181,6 +181,25 @@ func TestAggregateHavingAndTopN(t *testing.T) {
 		require.Equal(t, []row{{Category: "beta", Total: 900}}, rows)
 	})
 
+	t.Run("HavingOnConditionalMeasure", func(t *testing.T) {
+		// The measure carries a predicate, so HAVING has to re-render it with
+		// its value bound. Rendering it for the log instead would put the Go
+		// formatting of the predicate into the SQL, which the database accepts
+		// as a constant and answers with the wrong groups.
+		type condRow struct {
+			Category string
+			Done     int64
+		}
+		done := types.Count().Where(aggCols.Status.Eq("done")).As("done")
+		rows := make([]condRow, 0)
+		require.NoError(t, database.Aggregate[*TestAggregateRecord, condRow](context.Background()).
+			Select(aggCols.Category.Group(), done).
+			Having(done.Gt(1)).
+			Scan(&rows))
+		// done rows per category: alpha 2, beta 1, gamma 1.
+		require.Equal(t, []condRow{{Category: "alpha", Done: 2}}, rows)
+	})
+
 	t.Run("OrderByMeasureWithLimit", func(t *testing.T) {
 		rows := make([]row, 0)
 		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
@@ -628,4 +647,60 @@ func TestFilterExistsCombinesWithOtherFilters(t *testing.T) {
 		List(&records))
 	require.Len(t, records, 1, "a1 is done and a3 is failed")
 	require.Equal(t, "a3", records[0].ID)
+}
+
+// TestAggregateConditionalOnSubquery covers the combination a report reaches
+// for when the measure's own table carries no flag to split on: the split
+// lives in a related table, so the CASE predicate is a correlated subquery
+// rather than a column comparison.
+//
+// A join would be the obvious alternative and the wrong one: joining a
+// one-to-many child multiplies the outer rows, and the SUM then counts a row
+// once per related row instead of once.
+func TestAggregateConditionalOnSubquery(t *testing.T) {
+	defer cleanupAggregateData()
+	defer cleanupTagData()
+	setupAggregateData(t)
+	setupTagData(t)
+
+	ctx := context.Background()
+	tagged := types.FilterExists[*TestRecordTag](tagCols.RecordID, recordIDCol, tagCols.Label.Eq("vip"))
+	untagged := types.FilterNotExists[*TestRecordTag](tagCols.RecordID, recordIDCol, tagCols.Label.Eq("vip"))
+
+	type row struct {
+		TaggedAmount   int64
+		UntaggedAmount int64
+		TaggedRecords  int64
+	}
+	got := row{}
+	require.NoError(t, database.Aggregate[*TestAggregateRecord, row](ctx).
+		Select(
+			aggCols.Amount.Sum().Where(tagged).As("tagged_amount"),
+			aggCols.Amount.Sum().Where(untagged).As("untagged_amount"),
+			types.Count().Where(tagged).As("tagged_records"),
+		).
+		ScanOne(&got))
+
+	// vip tags sit on a1 (100) and a3 (300); the rest carry no vip tag.
+	require.EqualValues(t, 400, got.TaggedAmount)
+	require.EqualValues(t, 1700, got.UntaggedAmount)
+	require.EqualValues(t, 2, got.TaggedRecords)
+	require.EqualValues(t, 2100, got.TaggedAmount+got.UntaggedAmount,
+		"the two subsets must partition the table exactly once")
+
+	t.Run("SecondRelatedRowDoesNotDoubleCount", func(t *testing.T) {
+		require.NoError(t, database.Database[*TestRecordTag](ctx).Create(
+			&TestRecordTag{Base: model.Base{ID: "t9"}, RecordID: "a1", Label: "vip"},
+		))
+		again := row{}
+		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](ctx).
+			Select(
+				aggCols.Amount.Sum().Where(tagged).As("tagged_amount"),
+				aggCols.Amount.Sum().Where(untagged).As("untagged_amount"),
+				types.Count().Where(tagged).As("tagged_records"),
+			).
+			ScanOne(&again))
+		require.EqualValues(t, 400, again.TaggedAmount, "a semi join matches a row once")
+		require.EqualValues(t, 2, again.TaggedRecords)
+	})
 }
