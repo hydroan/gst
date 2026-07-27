@@ -144,12 +144,6 @@ func filterableColumns(m types.Model) (map[string]modelschema.Column, error) {
 	return columns, nil
 }
 
-// filterTimeLayout is the canonical layout a time-typed field
-// condition value is normalized to before it is bound as a statement
-// parameter. It preserves any sub-second precision produced by whole-day
-// upper-bound extension.
-const filterTimeLayout = "2006-01-02 15:04:05.999999999"
-
 // timeType is the reflect type time-typed columns are recognized by.
 var timeType = reflect.TypeFor[time.Time]()
 
@@ -194,7 +188,7 @@ func normalizeFilterValue(columnTyp reflect.Type, op types.FilterOp, value strin
 			if err != nil {
 				return nil, err
 			}
-			return t.In(time.Local).Format(filterTimeLayout), nil
+			return t.In(time.Local).Format(types.FilterTimeLayout), nil
 		default:
 			return nil, errors.Newf("operator %q is not supported on a time field", op)
 		}

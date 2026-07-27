@@ -1,6 +1,9 @@
 package types
 
-import "reflect"
+import (
+	"reflect"
+	"time"
+)
 
 // FilterOp is a field-level filter operator applied by WithQuery as an
 // additional AND condition. Operators never widen a query: unknown values
@@ -133,6 +136,41 @@ type Filter struct {
 	Column string
 	Op     FilterOp
 	Value  any
+}
+
+// FilterTimeLayout is the canonical layout a time-typed filter value parsed
+// from a URL is normalized to. The value travels as a string rather than a
+// time.Time on purpose: binding a time.Time would let the driver re-render it
+// in its own location, while the string pins the wall-clock time the parser
+// resolved.
+//
+// It is exported because the normalization is a contract of Filter, not a
+// detail of the parser: a service reading a bound back would otherwise have to
+// restate the layout, which no compiler could keep in sync with the parser.
+// Read a bound with TimeValue rather than parsing with this layout directly.
+const FilterTimeLayout = "2006-01-02 15:04:05.999999999"
+
+// TimeValue returns the filter's value as a time, which is how a service reads
+// back a range it did not build itself, such as one parsed from a request.
+//
+// Both value shapes a time bound can have are accepted: the canonical string a
+// URL-parsed filter carries, and the time.Time a caller passes to the
+// comparison constructors directly. It reports false for a value that is
+// neither, including a malformed string, so a caller that must distinguish
+// "no bound" from "some other value" can.
+func (f Filter) TimeValue() (time.Time, bool) {
+	switch value := f.Value.(type) {
+	case time.Time:
+		return value, true
+	case string:
+		parsed, err := time.ParseInLocation(FilterTimeLayout, value, time.Local)
+		if err != nil {
+			return time.Time{}, false
+		}
+		return parsed, true
+	default:
+		return time.Time{}, false
+	}
 }
 
 // The Filter constructors below build one Filter per operator and are the

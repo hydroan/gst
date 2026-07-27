@@ -2,6 +2,7 @@ package types_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
@@ -102,4 +103,47 @@ func TestFilterConstructors(t *testing.T) {
 			require.Equal(t, tt.want, tt.got)
 		})
 	}
+}
+
+func TestFilterTimeValue(t *testing.T) {
+	local := time.Date(2026, 7, 1, 8, 30, 15, 0, time.Local)
+
+	t.Run("ReadsCanonicalStringBackAsTime", func(t *testing.T) {
+		filter := types.FilterGte("expired_at", local.Format(types.FilterTimeLayout))
+		got, ok := filter.TimeValue()
+		require.True(t, ok)
+		require.True(t, got.Equal(local), "want %s, got %s", local, got)
+	})
+
+	t.Run("KeepsSubSecondPrecisionOfWholeDayUpperBound", func(t *testing.T) {
+		// A date-only upper bound is extended to the end of the day, so the
+		// value carries nanoseconds the layout must round-trip.
+		endOfDay := time.Date(2026, 7, 2, 0, 0, 0, 0, time.Local).Add(-time.Nanosecond)
+		filter := types.FilterLte("expired_at", endOfDay.Format(types.FilterTimeLayout))
+		got, ok := filter.TimeValue()
+		require.True(t, ok)
+		require.True(t, got.Equal(endOfDay), "want %s, got %s", endOfDay, got)
+	})
+
+	t.Run("AcceptsTimeBuiltByConstructorDirectly", func(t *testing.T) {
+		got, ok := types.FilterLt("expired_at", local).TimeValue()
+		require.True(t, ok)
+		require.True(t, got.Equal(local))
+	})
+
+	t.Run("ReportsFalseForNonTimeValue", func(t *testing.T) {
+		for name, filter := range map[string]types.Filter{
+			"MalformedString": types.FilterGte("expired_at", "2026-07-01"),
+			"Numeric":         types.FilterGte("age", 18),
+			"Bool":            types.FilterIsNull("expired_at"),
+			"Slice":           types.FilterIn("name", []string{"sample"}),
+			"Nil":             {Column: "expired_at", Op: types.FilterOpEq},
+		} {
+			t.Run(name, func(t *testing.T) {
+				got, ok := filter.TimeValue()
+				require.False(t, ok)
+				require.True(t, got.IsZero())
+			})
+		}
+	})
 }
