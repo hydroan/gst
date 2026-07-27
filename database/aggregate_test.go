@@ -69,11 +69,11 @@ var aggCols = struct {
 	Score      types.NumericColumn[float64]
 	OccurredAt types.TimeColumn
 }{
-	Category:   types.Column[string]{Name: "category"},
-	Status:     types.Column[string]{Name: "status"},
-	Amount:     types.NumericColumn[int64]{Column: types.Column[int64]{Name: "amount"}},
-	Score:      types.NumericColumn[float64]{Column: types.Column[float64]{Name: "score"}},
-	OccurredAt: types.TimeColumn{Column: types.Column[time.Time]{Name: "occurred_at"}},
+	Category:   types.NewColumn[string]("category"),
+	Status:     types.NewColumn[string]("status"),
+	Amount:     types.NewNumericColumn[int64]("amount"),
+	Score:      types.NewNumericColumn[float64]("score"),
+	OccurredAt: types.NewTimeColumn("occurred_at"),
 }
 
 func TestAggregateScalar(t *testing.T) {
@@ -640,12 +640,12 @@ var tagCols = struct {
 	RecordID types.Column[string]
 	Label    types.Column[string]
 }{
-	ID:       types.Column[string]{Name: "id"},
-	RecordID: types.Column[string]{Name: "record_id"},
-	Label:    types.Column[string]{Name: "label"},
+	ID:       types.NewColumn[string]("id"),
+	RecordID: types.NewColumn[string]("record_id"),
+	Label:    types.NewColumn[string]("label"),
 }
 
-var recordIDCol = types.Column[string]{Name: "id"}
+var recordIDCol = types.NewColumn[string]("id")
 
 // setupTagData seeds tags on a1, a3 and a4. a1 and a3 are alpha rows, a4 is a
 // beta row, so a subquery on the "vip" label selects across categories.
@@ -879,10 +879,10 @@ func TestFilterExistsNested(t *testing.T) {
 		TagID types.Column[string]
 		Body  types.Column[string]
 	}{
-		TagID: types.Column[string]{Name: "tag_id"},
-		Body:  types.Column[string]{Name: "body"},
+		TagID: types.NewColumn[string]("tag_id"),
+		Body:  types.NewColumn[string]("body"),
 	}
-	tagIDCol := types.Column[string]{Name: "id"}
+	tagIDCol := types.NewColumn[string]("id")
 
 	// EXISTS(tag WHERE tag.record_id = record.id AND EXISTS(note WHERE
 	// note.tag_id = tag.id AND note.body = 'checked'))
@@ -1013,8 +1013,8 @@ func TestFilterExistsSelfJoin(t *testing.T) {
 		ID       types.Column[string]
 		ParentID types.Column[string]
 	}{
-		ID:       types.Column[string]{Name: "id"},
-		ParentID: types.Column[string]{Name: "parent_id"},
+		ID:       types.NewColumn[string]("id"),
+		ParentID: types.NewColumn[string]("parent_id"),
 	}
 	require.NoError(t, database.Database[*TestCategory](ctx).Create(categoryRoot, categoryParent))
 

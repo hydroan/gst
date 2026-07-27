@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"go/format"
+	"go/parser"
+	"go/token"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -282,7 +284,14 @@ func generateColumnFiles(module string, modelDir string, models []*gen.ModelInfo
 	}
 	resolved, cached := readColumnsCache(cacheKey)
 	if !cached {
-		if resolved, err = inspectColumns(program); err != nil {
+		// The inspection build blanks out the previously generated column
+		// files: they may carry an API shape older than the running gg, and
+		// the build must not choke on the very files this run rewrites.
+		stubs, stubErr := generatedColumnFileStubs(modelDir)
+		if stubErr != nil {
+			return stubErr
+		}
+		if resolved, err = inspectColumns(program, stubs); err != nil {
 			return err
 		}
 		if err = writeColumnsCache(cacheKey, resolved); err != nil {
@@ -356,6 +365,11 @@ func renderColumnsFile(module string, pkgName string, source string, models []mo
 	imports := map[string]string{constants.ImportPathTypes: "types"}
 	for _, m := range models {
 		for _, col := range m.Columns {
+			// A TimeColumn reference carries no type argument, so the column
+			// type's import would be unused in the generated file.
+			if col.Time && col.TypeExpr != "" {
+				continue
+			}
 			if col.TypePkg == "" {
 				continue
 			}
@@ -457,18 +471,18 @@ func columnRefType(col columnInfo) string {
 	}
 }
 
-// columnRefLiteral returns the composite literal initializing one generated
-// column reference. The specialized references embed the plain one, so their
-// literals name the embedded field.
+// columnRefLiteral returns the constructor call initializing one generated
+// column reference. Construction goes through the NewXxx constructors rather
+// than composite literals because the column name field is unexported: a
+// generated reference cannot be repointed at another column at run time.
 func columnRefLiteral(col columnInfo) string {
-	base := fmt.Sprintf("types.Column[%s]{Name: %q}", columnTypeParam(col), col.DBName)
 	switch {
 	case col.Time && col.TypeExpr != "":
-		return fmt.Sprintf("types.TimeColumn{Column: %s}", base)
+		return fmt.Sprintf("types.NewTimeColumn(%q)", col.DBName)
 	case col.Numeric && col.TypeExpr != "":
-		return fmt.Sprintf("types.NumericColumn[%s]{Column: %s}", col.TypeExpr, base)
+		return fmt.Sprintf("types.NewNumericColumn[%s](%q)", col.TypeExpr, col.DBName)
 	default:
-		return base
+		return fmt.Sprintf("types.NewColumn[%s](%q)", columnTypeParam(col), col.DBName)
 	}
 }
 
@@ -491,6 +505,55 @@ func writeGeneratedFileIfChanged(path string, content string, quiet bool) error 
 	return nil
 }
 
+// isColumnFileCandidate reports whether path can be a generated column file
+// at all: it carries the generated suffix and is not one of the files another
+// generation step owns, such as the model registration and apidoc files.
+func isColumnFileCandidate(path string) bool {
+	if !strings.HasSuffix(path, constants.SuffixGenGo) {
+		return false
+	}
+	base := filepath.Base(path)
+	return base != constants.FileModelGen && base != constants.FileAPIDocGen
+}
+
+// generatedColumnFileStubs maps every framework-owned generated column file
+// under dir to a stub holding only its package clause. The inspection build
+// replaces the files with these stubs through a build overlay, so resolving
+// columns never depends on the previous generation's output: after a
+// framework upgrade that changes the generated API, the stale files would
+// otherwise fail to compile until the very run that is trying to rewrite
+// them.
+func generatedColumnFileStubs(dir string) (map[string]string, error) {
+	stubs := make(map[string]string)
+	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || !isColumnFileCandidate(path) {
+			return nil
+		}
+		content, readErr := os.ReadFile(path) //nolint:gosec // path comes from the model directory walk.
+		if readErr != nil {
+			return errors.Wrapf(readErr, "read %s", path)
+		}
+		// A file without the generated header is hand-written and keeps
+		// participating in the build as-is.
+		if !strings.HasPrefix(string(content), consts.CodeGeneratedComment()) {
+			return nil
+		}
+		clause, parseErr := parser.ParseFile(token.NewFileSet(), path, content, parser.PackageClauseOnly)
+		if parseErr != nil {
+			return errors.Wrapf(parseErr, "parse package clause of %s", path)
+		}
+		stubs[path] = "package " + clause.Name.Name + "\n"
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return stubs, nil
+}
+
 // removeOrphanColumnFiles deletes generated column files whose model source no
 // longer declares any model, which happens when a model is deleted, renamed,
 // or moved to another file. Only files carrying the generated header are
@@ -500,15 +563,10 @@ func removeOrphanColumnFiles(dir string, wanted map[string]struct{}, quiet bool)
 		if walkErr != nil {
 			return walkErr
 		}
-		if entry.IsDir() || !strings.HasSuffix(path, constants.SuffixGenGo) {
+		if entry.IsDir() || !isColumnFileCandidate(path) {
 			return nil
 		}
 		if _, keep := wanted[path]; keep {
-			return nil
-		}
-		// The model registration file lives in the same tree and is generated
-		// by a different step.
-		if filepath.Base(path) == constants.FileModelGen || filepath.Base(path) == constants.FileAPIDocGen {
 			return nil
 		}
 		content, err := os.ReadFile(path) //nolint:gosec // path comes from the model directory walk.
@@ -695,8 +753,10 @@ func isStdlibImport(path string, module string) bool {
 
 // inspectColumns compiles and runs the inspection program and decodes what it
 // reports. The result travels through a file rather than stdout, because
-// framework initialization writes progress lines to stdout.
-func inspectColumns(program string) ([]modelColumns, error) {
+// framework initialization writes progress lines to stdout. The build runs
+// with overlay replacing the previously generated column files, so a stale
+// generation never blocks the run that would refresh it.
+func inspectColumns(program string, overlay map[string]string) ([]modelColumns, error) {
 	resultFile, err := os.CreateTemp("", "gg-columns-*.json")
 	if err != nil {
 		return nil, errors.Wrap(err, "create column result file")
@@ -707,7 +767,7 @@ func inspectColumns(program string) ([]modelColumns, error) {
 	}
 	defer os.Remove(resultPath)
 
-	inspector := projectProgram{Content: strings.ReplaceAll(program, "{{OUTPUT}}", resultPath)}
+	inspector := projectProgram{Content: strings.ReplaceAll(program, "{{OUTPUT}}", resultPath), Overlay: overlay}
 	if err = inspector.Run(); err != nil {
 		return nil, errors.Wrap(err, "inspect model columns")
 	}

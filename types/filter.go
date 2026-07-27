@@ -358,10 +358,10 @@ func FilterNotExists[C Model, T any](child, parent ColumnRef[T], filters ...Filt
 func subqueryFilter[C Model, T any](child, parent ColumnRef[T], filters []Filter, negate bool) Filter {
 	sub := Subquery{Filters: filters, Negate: negate}
 	if child != nil {
-		sub.ChildColumn = child.ColumnName()
+		sub.ChildColumn = child.Name()
 	}
 	if parent != nil {
-		sub.ParentColumn = parent.ColumnName()
+		sub.ParentColumn = parent.Name()
 	}
 	typ := reflect.TypeFor[C]()
 	if typ.Kind() == reflect.Pointer {

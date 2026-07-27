@@ -159,27 +159,27 @@ func TestRenderColumnsFile(t *testing.T) {
 	})
 
 	t.Run("DeclaresTypedColumns", func(t *testing.T) {
-		require.Contains(t, rendered, `types.Column[string]{Name: "id"}`)
-		require.Contains(t, rendered, `types.Column[RecordStatus]{Name: "status"}`)
+		require.Contains(t, rendered, `types.NewColumn[string]("id")`)
+		require.Contains(t, rendered, `types.NewColumn[RecordStatus]("status")`)
 	})
 
 	t.Run("SpecializesNumericColumns", func(t *testing.T) {
 		// SUM and AVG only belong on a numeric column, because a database
 		// answers SUM over text with 0 rather than an error. A named numeric
 		// type keeps its own name as the type argument.
-		require.Contains(t, rendered, `types.NumericColumn[int64]{Column: types.Column[int64]{Name: "amount"}}`)
-		require.Contains(t, rendered, `types.NumericColumn[RecordScore]{Column: types.Column[RecordScore]{Name: "score"}}`)
+		require.Contains(t, rendered, `types.NewNumericColumn[int64]("amount")`)
+		require.Contains(t, rendered, `types.NewNumericColumn[RecordScore]("score")`)
 	})
 
 	t.Run("SpecializesTimeColumns", func(t *testing.T) {
-		require.Contains(t, rendered, `types.TimeColumn{Column: types.Column[time.Time]{Name: "created_at"}}`)
+		require.Contains(t, rendered, `types.NewTimeColumn("created_at")`)
 	})
 
 	t.Run("DegradesUnreproducibleTypesToAny", func(t *testing.T) {
 		// A generic instantiation cannot be written back as source, so the
 		// column keeps its exact name but loses the value type. The original
 		// type is recorded in a comment.
-		require.Contains(t, rendered, `types.Column[any]{Name: "tags"}`)
+		require.Contains(t, rendered, `types.NewColumn[any]("tags")`)
 		require.Contains(t, rendered, "datatypes.JSONSlice[string]")
 	})
 
@@ -187,13 +187,16 @@ func TestRenderColumnsFile(t *testing.T) {
 		// Specializing would need the type as a type argument, and any is not
 		// the column's type. The plain reference keeps the column usable and
 		// SumOf stays available for it.
-		require.Contains(t, rendered, `types.Column[any]{Name: "weight"}`)
-		require.NotContains(t, rendered, "types.NumericColumn[any]")
+		require.Contains(t, rendered, `types.NewColumn[any]("weight")`)
+		require.NotContains(t, rendered, "types.NewNumericColumn[any]")
 	})
 
 	t.Run("ImportsOnlyWhatItUses", func(t *testing.T) {
 		require.Contains(t, rendered, `types "github.com/hydroan/gst/types"`)
-		require.Contains(t, rendered, `time "time"`)
+		// The time column renders as NewTimeColumn without a type argument,
+		// so the file no longer references time.Time; emitting the import
+		// anyway would be an unused import that fails to compile.
+		require.NotContains(t, rendered, `time "time"`)
 		require.NotContains(t, rendered, "gorm.io/datatypes")
 	})
 
@@ -202,6 +205,25 @@ func TestRenderColumnsFile(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, rendered, again)
 	})
+}
+
+func TestRenderColumnsFileKeepsImportsUsedByTypeArguments(t *testing.T) {
+	// time.Duration is numeric, so its reference keeps the type argument and
+	// with it the import; only the TimeColumn specialization drops both.
+	models := []modelColumns{{
+		PkgPath: "tmpapp/model/sample",
+		PkgName: "sample",
+		Name:    "Record",
+		Columns: []columnInfo{
+			{GoName: "CreatedAt", DBName: "created_at", TypeExpr: "time.Time", TypePkg: "time", TypeName: "time.Time", Time: true},
+			{GoName: "Elapsed", DBName: "elapsed", TypeExpr: "time.Duration", TypePkg: "time", TypeName: "time.Duration", Numeric: true},
+		},
+	}}
+
+	rendered, err := renderColumnsFile("tmpapp", "sample", "model/sample/record.go", models)
+	require.NoError(t, err)
+	require.Contains(t, rendered, `types.NewNumericColumn[time.Duration]("elapsed")`)
+	require.Contains(t, rendered, `time "time"`)
 }
 
 func TestRenderColumnsFileRejectsImportAliasCollision(t *testing.T) {
@@ -216,6 +238,30 @@ func TestRenderColumnsFileRejectsImportAliasCollision(t *testing.T) {
 
 	_, err := renderColumnsFile("tmpapp", "sample", "model/sample/record.go", models)
 	require.Error(t, err, "two packages cannot share one import alias")
+}
+
+func TestGeneratedColumnFileStubs(t *testing.T) {
+	dir := t.TempDir()
+	sampleDir := filepath.Join(dir, "model", "sample")
+	require.NoError(t, os.MkdirAll(sampleDir, 0o750))
+
+	generated := consts.CodeGeneratedComment() + "\n// source: model/sample/record.go\n\npackage sample\n\nvar RecordCols = struct{}{}\n"
+	columns := filepath.Join(sampleDir, "record.gen.go")
+	handwritten := filepath.Join(sampleDir, "handwritten.gen.go")
+	registration := filepath.Join(dir, "model", constants.FileModelGen)
+	source := filepath.Join(sampleDir, "record.go")
+	require.NoError(t, os.WriteFile(columns, []byte(generated), 0o600))
+	require.NoError(t, os.WriteFile(handwritten, []byte("package sample\n"), 0o600))
+	require.NoError(t, os.WriteFile(registration, []byte(generated), 0o600))
+	require.NoError(t, os.WriteFile(source, []byte("package sample\n"), 0o600))
+
+	stubs, err := generatedColumnFileStubs(filepath.Join(dir, "model"))
+	require.NoError(t, err)
+
+	// Only the framework-owned column file collapses to its package clause:
+	// the inspection build must not depend on previously generated column
+	// references, while every other file keeps participating as-is.
+	require.Equal(t, map[string]string{columns: "package sample\n"}, stubs)
 }
 
 func TestRemoveOrphanColumnFiles(t *testing.T) {

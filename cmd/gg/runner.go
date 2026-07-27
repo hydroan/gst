@@ -1,11 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 )
 
 // projectProgram is a temporary Go program compiled against the project's own
@@ -25,6 +27,12 @@ type projectProgram struct {
 	// Interactive connects the program to the terminal's standard input, for a
 	// program that prompts the user for confirmation.
 	Interactive bool
+
+	// Overlay maps project file paths to replacement contents for this build
+	// only: the compiler sees the replacements while the files on disk stay
+	// untouched. Column inspection uses it to blank out previously generated
+	// files whose API may predate the running gg.
+	Overlay map[string]string
 }
 
 // Run compiles and runs the program. Stderr always goes to the terminal, so
@@ -68,7 +76,17 @@ func (p projectProgram) Run() error {
 	if stdout == nil {
 		stdout = io.Discard
 	}
-	runCmd := exec.Command("go", "run", "-mod=mod", "-modfile", modFile, runnerFile)
+	args := []string{"run", "-mod=mod", "-modfile", modFile}
+	if len(p.Overlay) > 0 {
+		overlayFile, overlayErr := writeOverlayFile(tempDir, p.Overlay)
+		if overlayErr != nil {
+			return overlayErr
+		}
+		args = append(args, "-overlay", overlayFile)
+	}
+	// #nosec G204 -- every argument is either a literal flag or a path gg
+	// itself created under the os.MkdirTemp-owned directory.
+	runCmd := exec.Command("go", append(args, runnerFile)...)
 	runCmd.Stdout = stdout
 	runCmd.Stderr = os.Stderr
 	if p.Interactive {
@@ -78,4 +96,41 @@ func (p projectProgram) Run() error {
 		return fmt.Errorf("failed to run generated program: %w", err)
 	}
 	return nil
+}
+
+// writeOverlayFile materializes the replacement contents under dir and
+// returns a go build overlay file mapping the original paths to them.
+func writeOverlayFile(dir string, overlay map[string]string) (string, error) {
+	paths := make([]string, 0, len(overlay))
+	for path := range overlay {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+
+	replace := make(map[string]string, len(overlay))
+	for i, path := range paths {
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve overlay path %s: %w", path, err)
+		}
+		replacement := filepath.Join(dir, fmt.Sprintf("overlay_%d.go", i))
+		// #nosec G703 -- the replacement is created under an os.MkdirTemp-owned directory.
+		if err = os.WriteFile(replacement, []byte(overlay[path]), 0o600); err != nil {
+			return "", fmt.Errorf("failed to write overlay replacement for %s: %w", path, err)
+		}
+		replace[abs] = replacement
+	}
+
+	encoded, err := json.Marshal(struct {
+		Replace map[string]string `json:"Replace"`
+	}{Replace: replace})
+	if err != nil {
+		return "", fmt.Errorf("failed to encode overlay file: %w", err)
+	}
+	overlayFile := filepath.Join(dir, "overlay.json")
+	// #nosec G703 -- the overlay file is created under the same temp directory.
+	if err = os.WriteFile(overlayFile, encoded, 0o600); err != nil {
+		return "", fmt.Errorf("failed to write overlay file: %w", err)
+	}
+	return overlayFile, nil
 }

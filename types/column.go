@@ -14,8 +14,8 @@ import "time"
 // to compile. The method is also unexported, so the set of implementations
 // stays closed to this package.
 type ColumnRef[T any] interface {
-	// ColumnName returns the database column name resolved by gorm.
-	ColumnName() string
+	// Name returns the database column name resolved by gorm.
+	Name() string
 	sealedColumn(T)
 }
 
@@ -34,77 +34,93 @@ type ColumnRef[T any] interface {
 // or TimeColumn instead, which embed this type and add the aggregate methods
 // that are only meaningful there.
 type Column[T any] struct {
-	// Name is the database column name resolved by gorm. It is also what the
-	// order and cursor constructors taking a plain column name expect.
-	Name string
+	name string
 }
 
-// ColumnName returns the database column name.
-func (c Column[T]) ColumnName() string { return c.Name }
+// NewColumn returns a typed reference to the named database column. gg gen
+// emits the calls in each model's generated file; handwritten code that
+// cannot reference a generated Cols var should keep using the FilterXxx, Asc
+// and Desc constructors with a plain column name instead of minting
+// references. The name is unexported so a shared reference cannot be
+// repointed at another column after construction.
+//
+// An empty name panics: references are constructed while generated code
+// initializes its package-level Cols vars, so a nameless one must not
+// survive process startup.
+func NewColumn[T any](name string) Column[T] {
+	if name == "" {
+		panic("types: a column reference requires a column name")
+	}
+	return Column[T]{name: name}
+}
+
+// Name returns the database column name resolved by gorm. It is also what the
+// order and cursor constructors taking a plain column name expect.
+func (c Column[T]) Name() string { return c.name }
 
 func (c Column[T]) sealedColumn(T) {}
 
 // Eq matches rows where the column equals value.
-func (c Column[T]) Eq(value T) Filter { return FilterEq(c.Name, value) }
+func (c Column[T]) Eq(value T) Filter { return FilterEq(c.name, value) }
 
 // Ne matches rows where the column does not equal value.
-func (c Column[T]) Ne(value T) Filter { return FilterNe(c.Name, value) }
+func (c Column[T]) Ne(value T) Filter { return FilterNe(c.name, value) }
 
 // Gt matches rows where the column is greater than value.
-func (c Column[T]) Gt(value T) Filter { return FilterGt(c.Name, value) }
+func (c Column[T]) Gt(value T) Filter { return FilterGt(c.name, value) }
 
 // Gte matches rows where the column is greater than or equal to value.
-func (c Column[T]) Gte(value T) Filter { return FilterGte(c.Name, value) }
+func (c Column[T]) Gte(value T) Filter { return FilterGte(c.name, value) }
 
 // Lt matches rows where the column is less than value.
-func (c Column[T]) Lt(value T) Filter { return FilterLt(c.Name, value) }
+func (c Column[T]) Lt(value T) Filter { return FilterLt(c.name, value) }
 
 // Lte matches rows where the column is less than or equal to value.
-func (c Column[T]) Lte(value T) Filter { return FilterLte(c.Name, value) }
+func (c Column[T]) Lte(value T) Filter { return FilterLte(c.name, value) }
 
 // In matches rows where the column is one of values. Calling it without any
 // value matches nothing, mirroring SQL list semantics.
-func (c Column[T]) In(values ...T) Filter { return FilterIn(c.Name, values) }
+func (c Column[T]) In(values ...T) Filter { return FilterIn(c.name, values) }
 
 // NotIn matches rows where the column is none of values. Calling it without
 // any value matches nothing; it does not mean "exclude nothing".
-func (c Column[T]) NotIn(values ...T) Filter { return FilterNotIn(c.Name, values) }
+func (c Column[T]) NotIn(values ...T) Filter { return FilterNotIn(c.name, values) }
 
 // Like matches rows where the column contains value as a substring. The
 // pattern is a string on every column type, because substring matching runs
 // against the database's string rendering of the value.
-func (c Column[T]) Like(value string) Filter { return FilterLike(c.Name, value) }
+func (c Column[T]) Like(value string) Filter { return FilterLike(c.name, value) }
 
 // NotLike matches rows where the column does not contain value as a substring.
-func (c Column[T]) NotLike(value string) Filter { return FilterNotLike(c.Name, value) }
+func (c Column[T]) NotLike(value string) Filter { return FilterNotLike(c.name, value) }
 
 // StartsWith matches rows where the column starts with value.
-func (c Column[T]) StartsWith(value string) Filter { return FilterStartsWith(c.Name, value) }
+func (c Column[T]) StartsWith(value string) Filter { return FilterStartsWith(c.name, value) }
 
 // EndsWith matches rows where the column ends with value.
-func (c Column[T]) EndsWith(value string) Filter { return FilterEndsWith(c.Name, value) }
+func (c Column[T]) EndsWith(value string) Filter { return FilterEndsWith(c.name, value) }
 
 // IsNull matches rows where the column is NULL.
-func (c Column[T]) IsNull() Filter { return FilterIsNull(c.Name) }
+func (c Column[T]) IsNull() Filter { return FilterIsNull(c.name) }
 
 // NotNull matches rows where the column is not NULL.
-func (c Column[T]) NotNull() Filter { return FilterNotNull(c.Name) }
+func (c Column[T]) NotNull() Filter { return FilterNotNull(c.name) }
 
 // Regex matches rows where the column matches the regular expression expr.
-func (c Column[T]) Regex(expr string) Filter { return FilterRegex(c.Name, expr) }
+func (c Column[T]) Regex(expr string) Filter { return FilterRegex(c.name, expr) }
 
 // NotRegex matches rows where the column does not match the regular
 // expression expr.
-func (c Column[T]) NotRegex(expr string) Filter { return FilterNotRegex(c.Name, expr) }
+func (c Column[T]) NotRegex(expr string) Filter { return FilterNotRegex(c.name, expr) }
 
 // JSONContains matches rows whose JSON array column contains value.
-func (c Column[T]) JSONContains(value string) Filter { return FilterJSONContains(c.Name, value) }
+func (c Column[T]) JSONContains(value string) Filter { return FilterJSONContains(c.name, value) }
 
 // Asc orders by the column ascending.
-func (c Column[T]) Asc() Order { return Asc(c.Name) }
+func (c Column[T]) Asc() Order { return Asc(c.name) }
 
 // Desc orders by the column descending.
-func (c Column[T]) Desc() Order { return Desc(c.Name) }
+func (c Column[T]) Desc() Order { return Desc(c.name) }
 
 // The aggregate methods below are the ones that cannot be silently wrong on
 // any column type, so every column carries them. Functions that are silently
@@ -132,7 +148,7 @@ func (c Column[T]) Max() AggregateTerm { return c.term(AggregateMax) }
 func (c Column[T]) Group() AggregateTerm { return c.term(AggregateNone) }
 
 func (c Column[T]) term(fn AggregateFn) AggregateTerm {
-	return AggregateTerm{Fn: fn, Column: c.Name, Alias: c.Name}
+	return AggregateTerm{Fn: fn, Column: c.name, Alias: c.name}
 }
 
 // NumericColumn is the reference generated for a column whose Go type is
@@ -146,6 +162,12 @@ func (c Column[T]) term(fn AggregateFn) AggregateTerm {
 // than silently wrong stay on Column.
 type NumericColumn[T any] struct {
 	Column[T]
+}
+
+// NewNumericColumn returns the numeric reference to the named database
+// column, carrying Sum and Avg on top of everything Column has.
+func NewNumericColumn[T any](name string) NumericColumn[T] {
+	return NumericColumn[T]{Column: NewColumn[T](name)}
 }
 
 // Sum adds up this column. The renderer wraps it in COALESCE(..., 0) so an
@@ -162,6 +184,12 @@ func (c NumericColumn[T]) Avg() AggregateTerm { return c.term(AggregateAvg) }
 // and produces garbage rather than an error on some dialects when it is not.
 type TimeColumn struct {
 	Column[time.Time]
+}
+
+// NewTimeColumn returns the time reference to the named database column,
+// carrying the bucketing group keys on top of everything Column has.
+func NewTimeColumn(name string) TimeColumn {
+	return TimeColumn{Column: NewColumn[time.Time](name)}
 }
 
 // ByHour, ByDay and ByMonth make this column a group key truncated to the

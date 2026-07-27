@@ -15,10 +15,29 @@ const (
 	sampleStatusRemoved sampleStatus = "removed"
 )
 
+func TestNewColumnReferences(t *testing.T) {
+	t.Run("CarriesTheColumnName", func(t *testing.T) {
+		require.Equal(t, "age", types.NewColumn[int]("age").Name())
+	})
+
+	t.Run("PromotesNameThroughSpecializedReferences", func(t *testing.T) {
+		// NumericColumn and TimeColumn embed Column, so the accessor stays
+		// available on them alongside the filter and order constructors.
+		require.Equal(t, "amount", types.NewNumericColumn[int64]("amount").Name())
+		require.Equal(t, "created_at", types.NewTimeColumn("created_at").Name())
+	})
+
+	t.Run("PanicsOnEmptyName", func(t *testing.T) {
+		// Column references are built by generated code during package
+		// initialization, so a nameless reference must not survive startup.
+		require.Panics(t, func() { types.NewColumn[string]("") })
+	})
+}
+
 func TestColumnBuildsFilters(t *testing.T) {
-	age := types.Column[int]{Name: "age"}
-	status := types.Column[sampleStatus]{Name: "status"}
-	name := types.Column[string]{Name: "name"}
+	age := types.NewColumn[int]("age")
+	status := types.NewColumn[sampleStatus]("status")
+	name := types.NewColumn[string]("name")
 
 	tests := []struct {
 		label string
@@ -59,7 +78,7 @@ func TestColumnBuildsFilters(t *testing.T) {
 }
 
 func TestColumnInWithoutValues(t *testing.T) {
-	status := types.Column[sampleStatus]{Name: "status"}
+	status := types.NewColumn[sampleStatus]("status")
 	// A variadic call with no arguments yields a nil slice. It still carries
 	// the slice type, so the database layer treats it as an empty set and
 	// matches nothing rather than widening the query.
@@ -69,7 +88,7 @@ func TestColumnInWithoutValues(t *testing.T) {
 }
 
 func TestColumnBuildsOrders(t *testing.T) {
-	created := types.Column[int]{Name: "created_at"}
+	created := types.NewColumn[int]("created_at")
 	require.Equal(t, types.Order{Column: "created_at", Direction: types.OrderAsc}, created.Asc())
 	require.Equal(t, types.Order{Column: "created_at", Direction: types.OrderDesc}, created.Desc())
 }
