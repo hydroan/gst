@@ -1,11 +1,14 @@
 package main
 
 import (
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
 	"github.com/hydroan/gst/types/consts"
@@ -24,6 +27,110 @@ func TestModelPkgPath(t *testing.T) {
 		modelPkgPath(&gen.ModelInfo{ModulePath: "tmpapp", ModelFileDir: "model/"}))
 	require.Equal(t, "tmpapp",
 		modelPkgPath(&gen.ModelInfo{ModulePath: "tmpapp", ModelFileDir: ""}))
+}
+
+func TestBuildColumnsProgram(t *testing.T) {
+	registered := &gen.ModelInfo{
+		ModulePath: "tmpapp", ModelPkgName: "sample", ModelName: "Record",
+		ModelFileDir: "model/sample", Design: &dsl.Design{Enabled: true, Migrate: true},
+	}
+	summary := &gen.ModelInfo{
+		ModulePath: "tmpapp", ModelPkgName: "report", ModelName: "Summary",
+		ModelFileDir: "model/report", Design: &dsl.Design{Enabled: true},
+	}
+	trend := &gen.ModelInfo{
+		ModulePath: "tmpapp", ModelPkgName: "report", ModelName: "Trend",
+		ModelFileDir: "model/report", Design: &dsl.Design{Enabled: true},
+	}
+	disabled := &gen.ModelInfo{
+		ModulePath: "tmpapp", ModelPkgName: "draft", ModelName: "Draft",
+		ModelFileDir: "model/draft", Design: &dsl.Design{Enabled: false},
+	}
+	note := &gen.ModelInfo{
+		ModulePath: "tmpapp", ModelPkgName: "model", ModelName: "Note",
+		ModelFileDir: "model", Design: &dsl.Design{Enabled: true},
+	}
+	all := []*gen.ModelInfo{registered, summary, trend, disabled, note}
+
+	program := buildColumnsProgram("tmpapp", all)
+
+	t.Run("EnumeratesUnregisteredModelsBehindCapabilityGuard", func(t *testing.T) {
+		// A model that declares a Design but no Migrate never reaches the
+		// runtime registry, so the program carries it as an explicit entry;
+		// the guard keeps only the models that opted in to framework query
+		// parameters, which is what gives them a filter and sort column
+		// namespace worth generating references for.
+		require.Contains(t, program, `vm1 "tmpapp/model/report"`)
+		require.Contains(t, program, "&vm1.Summary{},")
+		require.Contains(t, program, "&vm1.Trend{},")
+		require.Contains(t, program, "modelschema.IsQueryable")
+	})
+
+	t.Run("ImportsRootPackageModelsUnderTheirOwnAlias", func(t *testing.T) {
+		// The registration import must stay blank while the enumeration needs
+		// a named alias, so the root model package is imported twice.
+		require.Contains(t, program, `_ "tmpapp/model"`)
+		require.Contains(t, program, `vm0 "tmpapp/model"`)
+		require.Contains(t, program, "&vm0.Note{},")
+	})
+
+	t.Run("LeavesRegisteredAndDisabledModelsToTheRegistry", func(t *testing.T) {
+		// A migrated model arrives through model.RegisteredModels and a
+		// disabled Design is not part of the API; enumerating either would
+		// resurrect it behind the registry's back.
+		require.NotContains(t, program, "model/sample")
+		require.NotContains(t, program, "model/draft")
+	})
+
+	t.Run("ProducesParseableSource", func(t *testing.T) {
+		_, err := parser.ParseFile(token.NewFileSet(), "main.go", program, 0)
+		require.NoError(t, err)
+		// The builder owns three placeholders; {{OUTPUT}} stays for
+		// inspectColumns to fill on each run.
+		require.NotContains(t, program, "{{MODULE}}")
+		require.NotContains(t, program, "{{UNREGISTERED_IMPORTS}}")
+		require.NotContains(t, program, "{{UNREGISTERED_MODELS}}")
+		require.Contains(t, program, "{{OUTPUT}}")
+	})
+
+	t.Run("IsDeterministic", func(t *testing.T) {
+		require.Equal(t, program, buildColumnsProgram("tmpapp", all))
+	})
+
+	t.Run("OmitsEnumerationWhenEveryModelIsRegistered", func(t *testing.T) {
+		// Referencing modelschema.IsQueryable requires a framework version
+		// that exports it; a project without unregistered models keeps a
+		// program that never mentions it and so keeps building against older
+		// framework versions.
+		bare := buildColumnsProgram("tmpapp", []*gen.ModelInfo{registered})
+		require.NotContains(t, bare, "IsQueryable")
+		require.NotContains(t, bare, "[]any{")
+		_, err := parser.ParseFile(token.NewFileSet(), "main.go", bare, 0)
+		require.NoError(t, err)
+	})
+}
+
+func TestGroupColumnsByFile(t *testing.T) {
+	id := columnInfo{GoName: "ID", DBName: "id", TypeExpr: "string", TypeName: "string"}
+	sources := map[string]string{
+		"tmpapp/model/sample.Record":  "model/sample/record.go",
+		"tmpapp/model/report.Summary": "model/report/summary.go",
+	}
+	resolved := []modelColumns{
+		{PkgPath: "tmpapp/model/sample", PkgName: "sample", Name: "Record", Columns: []columnInfo{id}},
+		// Summary resolved no columns: an action-only model would render an
+		// empty Cols var that references nothing.
+		{PkgPath: "tmpapp/model/report", PkgName: "report", Name: "Summary"},
+		// External has no source file in the scan: it was registered from
+		// outside the project's model directory, such as a framework module.
+		{PkgPath: "github.com/elsewhere/mod", PkgName: "ext", Name: "External", Columns: []columnInfo{id}},
+	}
+
+	byFile := groupColumnsByFile(resolved, sources)
+
+	require.Len(t, byFile, 1)
+	require.Len(t, byFile["model/sample/record.go"], 1)
+	require.Equal(t, "Record", byFile["model/sample/record.go"][0].Name)
 }
 
 func TestRenderColumnsFile(t *testing.T) {

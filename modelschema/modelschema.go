@@ -2,8 +2,8 @@
 // framework.
 //
 // It exists for the toolchain, not for application code: gg gen compiles a
-// short program inside the project's own module to inspect the registered
-// models, and that program cannot reach internal/modelschema, where the
+// short program inside the project's own module to inspect the project's
+// models, and that program cannot reach the internal packages where the
 // resolution lives. Forwarding it here lets the generated program resolve
 // exactly the columns the framework resolves at runtime, instead of carrying
 // a second copy of the rules that would drift from it.
@@ -16,6 +16,7 @@ package modelschema
 import (
 	"reflect"
 
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 )
 
@@ -57,4 +58,13 @@ func ByGoName(columns []Column) map[string]Column {
 // QueryColumnName resolves the URL parameter name of a struct field.
 func QueryColumnName(field reflect.StructField) string {
 	return modelschema.QueryColumnName(field)
+}
+
+// IsQueryable reports whether m opted in to framework query parameters by
+// embedding model.Query. The inspection program uses it to keep only the
+// unregistered models that own a filter and sort column namespace; the
+// judgment stays sealed in internal/modelregistry, forwarded here for the
+// same reason column resolution is.
+func IsQueryable(m any) bool {
+	return modelregistry.IsQueryable(m)
 }

@@ -39,9 +39,11 @@ type modelColumns struct {
 	Columns []columnInfo `json:"columns"`
 }
 
-// columnsProgram inspects the models the project registers and reports their
-// columns as JSON. It runs inside the project module, so it resolves exactly
-// the columns the framework resolves at runtime.
+// columnsProgram is the template of the inspection program that reports the
+// project models' columns as JSON. It runs inside the project module, so it
+// resolves exactly the columns the framework resolves at runtime.
+// buildColumnsProgram fills {{MODULE}} and the unregistered-model
+// placeholders; {{OUTPUT}} is filled per run.
 const columnsProgram = `package main
 
 import (
@@ -57,7 +59,7 @@ import (
 	"github.com/hydroan/gst/module"
 
 	_ "{{MODULE}}/model"
-)
+{{UNREGISTERED_IMPORTS}})
 
 type columnInfo struct {
 	GoName   string ` + "`json:\"go_name\"`" + `
@@ -89,7 +91,8 @@ func main() {
 
 	seen := make(map[string]struct{})
 	out := make([]modelColumns, 0)
-	for _, m := range model.RegisteredModels() {
+	models := model.RegisteredModels()
+{{UNREGISTERED_MODELS}}	for _, m := range models {
 		typ := reflect.TypeOf(m)
 		for typ != nil && typ.Kind() == reflect.Pointer {
 			typ = typ.Elem()
@@ -176,6 +179,80 @@ func fail(err error) {
 }
 `
 
+// buildColumnsProgram renders the inspection program for the project.
+// Registered models are enumerated at run time through
+// model.RegisteredModels; a model that declares a Design but no Migrate never
+// reaches the registry, so it is compiled into the program as an explicit
+// entry instead and kept at run time only when it opted in to framework query
+// parameters — that opt-in is what gives it a filter and sort column
+// namespace worth generating references for.
+//
+// When every scanned model is registered, the placeholders collapse to
+// nothing and the program never references modelschema.IsQueryable, so such
+// projects keep building against framework versions that do not export it.
+func buildColumnsProgram(module string, models []*gen.ModelInfo) string {
+	program := strings.ReplaceAll(columnsProgram, "{{MODULE}}", module)
+
+	unregistered := make([]*gen.ModelInfo, 0, len(models))
+	for _, m := range models {
+		if m.Design.Enabled && !m.Design.Migrate {
+			unregistered = append(unregistered, m)
+		}
+	}
+	if len(unregistered) == 0 {
+		program = strings.ReplaceAll(program, "{{UNREGISTERED_IMPORTS}}", "")
+		return strings.ReplaceAll(program, "{{UNREGISTERED_MODELS}}", "")
+	}
+
+	// One deterministic alias per package: the fixed prefix cannot collide
+	// with the template's own imports, and sorting keeps the program text,
+	// and with it the inspection cache key, stable across runs.
+	aliases := make(map[string]string, len(unregistered))
+	paths := make([]string, 0, len(unregistered))
+	for _, m := range unregistered {
+		path := modelPkgPath(m)
+		if _, ok := aliases[path]; !ok {
+			aliases[path] = ""
+			paths = append(paths, path)
+		}
+	}
+	sort.Strings(paths)
+	for i, path := range paths {
+		aliases[path] = fmt.Sprintf("vm%d", i)
+	}
+	sort.Slice(unregistered, func(i, j int) bool {
+		if pi, pj := modelPkgPath(unregistered[i]), modelPkgPath(unregistered[j]); pi != pj {
+			return pi < pj
+		}
+		return unregistered[i].ModelName < unregistered[j].ModelName
+	})
+
+	var imports strings.Builder
+	for _, path := range paths {
+		fmt.Fprintf(&imports, "\t%s %q\n", aliases[path], path)
+	}
+
+	var entries strings.Builder
+	entries.WriteString(`	// Models that declare a Design but no Migrate never reach the registry.
+	// Their query columns resolve the same way, so those that opted in to
+	// framework query parameters are inspected alongside the registered ones.
+	for _, m := range []any{
+`)
+	for _, m := range unregistered {
+		fmt.Fprintf(&entries, "\t\t&%s.%s{},\n", aliases[modelPkgPath(m)], m.ModelName)
+	}
+	entries.WriteString(`	} {
+		if !modelschema.IsQueryable(m) {
+			continue
+		}
+		models = append(models, m)
+	}
+`)
+
+	program = strings.ReplaceAll(program, "{{UNREGISTERED_IMPORTS}}", imports.String())
+	return strings.ReplaceAll(program, "{{UNREGISTERED_MODELS}}", entries.String())
+}
+
 // generateColumnFiles writes one .gen.go file per model source file and
 // removes the generated files whose source is gone. Generated files are
 // framework-owned for their whole life cycle: projects never create, edit, or
@@ -193,7 +270,7 @@ func generateColumnFiles(module string, modelDir string, models []*gen.ModelInfo
 		return nil
 	}
 
-	program := strings.ReplaceAll(columnsProgram, "{{MODULE}}", module)
+	program := buildColumnsProgram(module, models)
 
 	// Compiling and running the inspection program costs seconds, which would
 	// otherwise be paid on every gg gen even when nothing that affects columns
@@ -220,17 +297,7 @@ func generateColumnFiles(module string, modelDir string, models []*gen.ModelInfo
 		sources[modelPkgPath(m)+"."+m.ModelName] = m.ModelFilePath
 	}
 
-	byFile := make(map[string][]modelColumns)
-	for _, m := range resolved {
-		file, ok := sources[m.PkgPath+"."+m.Name]
-		if !ok {
-			// A model registered from outside the project's model directory,
-			// such as a framework module: there is no source file here to
-			// generate alongside.
-			continue
-		}
-		byFile[file] = append(byFile[file], m)
-	}
+	byFile := groupColumnsByFile(resolved, sources)
 
 	wanted := make(map[string]struct{}, len(byFile))
 	for file, entries := range byFile {
@@ -247,6 +314,26 @@ func generateColumnFiles(module string, modelDir string, models []*gen.ModelInfo
 	}
 
 	return removeOrphanColumnFiles(modelDir, wanted, quiet)
+}
+
+// groupColumnsByFile matches resolved models to the source files that declare
+// them. A model that resolved no columns is dropped, because an empty Cols
+// var would reference nothing; a model without a source file here was
+// registered from outside the project's model directory, such as a framework
+// module, and has no file to generate alongside.
+func groupColumnsByFile(resolved []modelColumns, sources map[string]string) map[string][]modelColumns {
+	byFile := make(map[string][]modelColumns)
+	for _, m := range resolved {
+		if len(m.Columns) == 0 {
+			continue
+		}
+		file, ok := sources[m.PkgPath+"."+m.Name]
+		if !ok {
+			continue
+		}
+		byFile[file] = append(byFile[file], m)
+	}
+	return byFile
 }
 
 // modelPkgPath rebuilds the import path of the package declaring a model.
