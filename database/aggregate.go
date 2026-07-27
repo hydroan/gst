@@ -35,6 +35,7 @@ var (
 	ErrConditionOnGroupKey   = errors.New("a group key cannot carry conditions, they only restrict a measure")
 	ErrBucketOnMeasure       = errors.New("a measure cannot carry a time bucket, it only truncates a group key")
 	ErrHavingTermNotSelected = errors.New("having references a measure the projection does not declare")
+	ErrOrderTermNotSelected  = errors.New("order by references a term the projection does not declare")
 	ErrNullableResultField   = errors.New("result row field must be a pointer for an aggregate that yields NULL")
 	ErrScanOnePaged          = errors.New("ScanOne cannot use Having, Limit or Offset, it always reads one row")
 	ErrOffsetWithoutLimit    = errors.New("Offset needs a Limit")
@@ -539,13 +540,21 @@ func (a *aggregator[M, R]) validate() error {
 		if k := reflect.ValueOf(h.Value).Kind(); k == reflect.Slice || k == reflect.Array || k == reflect.Map {
 			return errors.Wrapf(ErrHavingValue, "%q compares against a %s", a.alias(h.Term), k)
 		}
+		// A typed nil pointer slips past the untyped nil check above but binds
+		// the same way: the driver dereferences non-nil pointers and turns a
+		// nil one at any depth into NULL, which quietly answers with no groups.
+		for v := reflect.ValueOf(h.Value); v.Kind() == reflect.Pointer; v = v.Elem() {
+			if v.IsNil() {
+				return errors.Wrapf(ErrHavingValue, "%q compares against a nil %s", a.alias(h.Term), v.Type())
+			}
+		}
 	}
 	for _, o := range a.orders {
 		if !o.Direction.Valid() {
 			return errors.Wrapf(ErrUnknownOrderDirection, "%q", o.Direction)
 		}
 		if !a.isSelected(o.Term) {
-			return errors.Wrapf(ErrAliasMissing, "ORDER BY references %q", a.alias(o.Term))
+			return errors.Wrapf(ErrOrderTermNotSelected, "%q", a.alias(o.Term))
 		}
 	}
 	if err = a.validateResultRow(aliases); err != nil {

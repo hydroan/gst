@@ -582,6 +582,21 @@ func TestAggregateBuildErrors(t *testing.T) {
 			Scan(&rows), database.ErrUnknownOrderDirection)
 	})
 
+	t.Run("OrderByTermDiffersFromProjectedTerm", func(t *testing.T) {
+		// Same alias, different expression: ORDER BY renders its own term, so
+		// matching the alias alone would sort by a measure the projection never
+		// declared.
+		type condRow struct {
+			Category string
+			Done     int64
+		}
+		rows := make([]condRow, 0)
+		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, condRow](ctx).
+			Select(aggCols.Category.Group(), types.Count().Where(aggCols.Status.Eq("done")).As("done")).
+			OrderBy(types.Count().As("done").Desc()).
+			Scan(&rows), database.ErrOrderTermNotSelected)
+	})
+
 	// ScanOne rejects all three pagination inputs, not just the one that
 	// happened to be covered.
 	for name, build := range map[string]func(types.Aggregator[*TestAggregateRecord, struct{ Total int64 }]) types.Aggregator[*TestAggregateRecord, struct{ Total int64 }]{
@@ -1123,8 +1138,10 @@ func TestAggregateHavingValue(t *testing.T) {
 	total := aggCols.Amount.Sum().As("total")
 
 	for name, value := range map[string]any{
-		"Nil":   nil,
-		"Slice": []int64{1, 2},
+		"Nil":              nil,
+		"Slice":            []int64{1, 2},
+		"TypedNilPointer":  (*int64)(nil),
+		"NestedNilPointer": new(*int64),
 	} {
 		t.Run(name, func(t *testing.T) {
 			rows := make([]row, 0)
