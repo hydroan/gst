@@ -3,8 +3,17 @@ package controller
 import (
 	"archive/zip"
 	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 )
 
@@ -83,4 +92,52 @@ func TestResolveExportFormat(t *testing.T) {
 			}
 		})
 	}
+}
+
+// exportVirtualSample mirrors a virtual resource: query fields and the Empty
+// marker, but no table behind it.
+type exportVirtualSample struct {
+	Name string `json:"name,omitempty" query:"name"`
+
+	modelregistry.Query
+	modelregistry.Empty
+}
+
+// exportVirtualSampleService is the exporter a virtual resource registers: it
+// builds the export bytes itself and never receives controller-listed rows.
+type exportVirtualSampleService struct {
+	serviceregistry.Base[*exportVirtualSample, *exportVirtualSample, *exportVirtualSample]
+
+	gotModels int
+}
+
+func (s *exportVirtualSampleService) Export(_ *types.ServiceContext, ms ...*exportVirtualSample) ([]byte, error) {
+	s.gotModels = len(ms)
+	return []byte("name\nsample\n"), nil
+}
+
+func TestExportFactoryVirtualModelSkipsListing(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logger.Controller = zap.New("")
+
+	// No database is configured in this test on purpose: a virtual model has
+	// no table, so the handler must never reach the controller-side listing.
+	const route = "test/export_virtual_samples/export"
+	svc := &exportVirtualSampleService{}
+	serviceregistry.Register[*exportVirtualSample, *exportVirtualSample, *exportVirtualSample](consts.PHASE_EXPORT, route, svc)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/"+route+"?name=sample", nil)
+
+	handler := ExportFactory[*exportVirtualSample, *exportVirtualSample, *exportVirtualSample](
+		&types.ControllerConfig[*exportVirtualSample]{Route: route},
+	)
+	handler(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "name\nsample\n", rec.Body.String())
+	require.Contains(t, rec.Header().Get("Content-Disposition"), csvTestName,
+		"non-xlsx bytes must resolve to the csv attachment")
+	require.Zero(t, svc.gotModels, "a virtual model export must not receive controller-listed rows")
 }

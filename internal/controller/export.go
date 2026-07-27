@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/internal/modelregistry"
 	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/hydroan/gst/logger"
@@ -73,87 +74,94 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		ctrlSpanCtx, span := meta.startControllerSpan(c)
 		defer span.End()
 
-		var page, size, limit int
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_EXPORT)
-		if pageStr, ok := c.GetQuery(consts.QUERY_PAGE); ok {
-			page, _ = strconv.Atoi(pageStr)
-		}
-		if sizeStr, ok := c.GetQuery(consts.QUERY_SIZE); ok {
-			size, _ = strconv.Atoi(sizeStr)
-		}
-		if limitStr, ok := c.GetQuery(consts.QUERY_LIMIT); ok {
-			limit, _ = strconv.Atoi(limitStr)
-		}
-		// The URL query is parsed once and shared by every parser below;
-		// url.URL.Query re-parses the raw query string on each call.
-		query := c.Request.URL.Query()
 
 		// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
 		m := meta.newModel()
-
-		var err error
-		if err = urlquery.Decode(query, m); err != nil {
-			log.Warn("failed to parse uri query parameter into model: ", err)
-		}
-		var filters []types.Filter
-		if filters, err = urlquery.Filters(query, m); err != nil {
-			log.Error(err)
-			JSON(c, CodeInvalidParam.WithErr(err))
-			gstotel.RecordError(span, err)
-			return
-		}
-		present := urlquery.PresentFields(query)
-
-		var orders []types.Order
-		if orders, err = urlquery.Orders(query, m); err != nil {
-			log.Error(err)
-			JSON(c, CodeInvalidParam.WithErr(err))
-			gstotel.RecordError(span, err)
-			return
-		}
-
-		data := make([]M, 0)
-		expands := parseExpandQuery(c, m)
-
 		svc := meta.service()
-		svcCtx := types.NewServiceContext(c, nil, consts.PHASE_EXPORT)
-		// 1.Perform business logic processing before list resources.
-		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) error {
-			return svc.ListBefore(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), &data)
-		}); err != nil {
-			log.Error(err)
-			JSON(c, CodeFailure.WithErr(err))
-			gstotel.RecordError(span, err)
-			return
-		}
-		_, _ = page, size
-		// 2.List resources from database.
-		if err = handler(requestContext(c)).
-			// WithPagination(page, size). // 不要使用 WithPagination, 否则 WithLimit 不生效
-			WithLimit(limit).
-			WithQuery(svc.Filter(svcCtx, m), types.QueryOptions{
-				AllowEmpty:    true,
-				RawQuery:      svc.FilterRaw(svcCtx),
-				PresentFields: present,
-				Filters:       filters,
-			}).
-			WithExclude(m.Excludes()).
-			WithExpand(expands, orders...).
-			WithOrder(orders...).
-			List(&data); err != nil {
-			log.Error(err)
-			JSON(c, CodeFailure.WithErr(err))
-			gstotel.RecordError(span, err)
-			return
-		}
-		// 3.Perform business logic processing after list resources.
-		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) error {
-			return svc.ListAfter(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), &data)
-		}); err != nil {
-			log.Error(err)
-			JSON(c, CodeFailure.WithErr(err))
-			gstotel.RecordError(span, err)
-			return
+
+		// A virtual resource has no table behind it, so the controller-side
+		// listing below would query a table that does not exist. Its service
+		// owns the whole request — mirroring how a List action with a custom
+		// result takes over — so the exporter receives no rows and parses the
+		// query parameters itself.
+		data := make([]M, 0)
+		if !modelregistry.IsVirtual(m) {
+			var page, size, limit int
+			if pageStr, ok := c.GetQuery(consts.QUERY_PAGE); ok {
+				page, _ = strconv.Atoi(pageStr)
+			}
+			if sizeStr, ok := c.GetQuery(consts.QUERY_SIZE); ok {
+				size, _ = strconv.Atoi(sizeStr)
+			}
+			if limitStr, ok := c.GetQuery(consts.QUERY_LIMIT); ok {
+				limit, _ = strconv.Atoi(limitStr)
+			}
+			// The URL query is parsed once and shared by every parser below;
+			// url.URL.Query re-parses the raw query string on each call.
+			query := c.Request.URL.Query()
+
+			var err error
+			if err = urlquery.Decode(query, m); err != nil {
+				log.Warn("failed to parse uri query parameter into model: ", err)
+			}
+			var filters []types.Filter
+			if filters, err = urlquery.Filters(query, m); err != nil {
+				log.Error(err)
+				JSON(c, CodeInvalidParam.WithErr(err))
+				gstotel.RecordError(span, err)
+				return
+			}
+			present := urlquery.PresentFields(query)
+
+			var orders []types.Order
+			if orders, err = urlquery.Orders(query, m); err != nil {
+				log.Error(err)
+				JSON(c, CodeInvalidParam.WithErr(err))
+				gstotel.RecordError(span, err)
+				return
+			}
+
+			expands := parseExpandQuery(c, m)
+			svcCtx := types.NewServiceContext(c, nil, consts.PHASE_EXPORT)
+			// 1.Perform business logic processing before list resources.
+			if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) error {
+				return svc.ListBefore(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), &data)
+			}); err != nil {
+				log.Error(err)
+				JSON(c, CodeFailure.WithErr(err))
+				gstotel.RecordError(span, err)
+				return
+			}
+			_, _ = page, size
+			// 2.List resources from database.
+			if err = handler(requestContext(c)).
+				// WithPagination(page, size). // 不要使用 WithPagination, 否则 WithLimit 不生效
+				WithLimit(limit).
+				WithQuery(svc.Filter(svcCtx, m), types.QueryOptions{
+					AllowEmpty:    true,
+					RawQuery:      svc.FilterRaw(svcCtx),
+					PresentFields: present,
+					Filters:       filters,
+				}).
+				WithExclude(m.Excludes()).
+				WithExpand(expands, orders...).
+				WithOrder(orders...).
+				List(&data); err != nil {
+				log.Error(err)
+				JSON(c, CodeFailure.WithErr(err))
+				gstotel.RecordError(span, err)
+				return
+			}
+			// 3.Perform business logic processing after list resources.
+			if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) error {
+				return svc.ListAfter(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), &data)
+			}); err != nil {
+				log.Error(err)
+				JSON(c, CodeFailure.WithErr(err))
+				gstotel.RecordError(span, err)
+				return
+			}
 		}
 		// 4.Export
 		exported, err := meta.traceServiceExport(ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) ([]byte, error) {

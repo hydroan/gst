@@ -1203,6 +1203,8 @@ type CopyTest struct {
 	model.Empty
 }
 
+type CopyTestListRsp struct{}
+
 func (CopyTest) Design() {
 	dsl.Route("copytest", func() {
 		dsl.Create(func() {
@@ -1212,6 +1214,7 @@ func (CopyTest) Design() {
 		dsl.List(func() {
 			dsl.Service()
 			dsl.Filename("check.go")
+			dsl.Result[*CopyTestListRsp]()
 		})
 		dsl.Get(func() {
 			dsl.Service()

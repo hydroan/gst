@@ -54,6 +54,15 @@ type markerMethodSpoofUser struct {
 
 func (markerMethodSpoofUser) QueryEnabled() {}
 
+// virtualSample mirrors a virtual resource: real query fields plus the Empty
+// marker, but no Base and no table.
+type virtualSample struct {
+	Name string `json:"name,omitempty"`
+
+	modelregistry.Query
+	modelregistry.Empty
+}
+
 func TestAreTypesEqual(t *testing.T) {
 	require.True(t, modelregistry.AreTypesEqual[*User, *User, *User]())
 	require.False(t, modelregistry.AreTypesEqual[*User, User, *User]())
@@ -120,6 +129,23 @@ func TestQueryable(t *testing.T) {
 	require.False(t, modelregistry.IsQueryable(new(markerMethodSpoofUser)))
 	require.False(t, modelregistry.IsPaginatable(new(markerMethodSpoofUser)))
 	require.False(t, modelregistry.IsCursorable(new(markerMethodSpoofUser)))
+}
+
+func TestIsVirtual(t *testing.T) {
+	// Embedding Empty is the opt-in, whether by value, by pointer, or beside
+	// other fields; IsEmpty stays a separate, narrower predicate.
+	require.True(t, modelregistry.IsVirtual(new(virtualSample)))
+	require.True(t, modelregistry.IsVirtual(new(t1)))
+	require.True(t, modelregistry.IsVirtual(new(t4)))
+	require.True(t, modelregistry.IsVirtual(new(modelregistry.Empty)))
+
+	// The marker follows Empty's pointer receivers, so only the pointer shape
+	// models actually flow through the framework in carries it.
+	require.False(t, modelregistry.IsVirtual(virtualSample{}))
+
+	// Table-backed models never opt in.
+	require.False(t, modelregistry.IsVirtual(new(User)))
+	require.False(t, modelregistry.IsVirtual(new(QueryableUser)))
 }
 
 func TestIsQueryMarkerType(t *testing.T) {

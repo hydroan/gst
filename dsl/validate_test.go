@@ -1036,3 +1036,145 @@ func (Record) Design() {
 	})
 }
 `
+
+func TestValidateVirtualModelListResult(t *testing.T) {
+	tests := []struct {
+		name      string
+		source    string
+		wantError string
+	}{
+		{
+			name:   "virtual model list with result passes",
+			source: validateVirtualListWithResultSource,
+		},
+		{
+			name:      "virtual model list without result is rejected",
+			source:    validateVirtualListWithoutResultSource,
+			wantError: "virtual model has no table to list from",
+		},
+		{
+			name:      "virtual model route list without result is rejected",
+			source:    validateVirtualRouteListWithoutResultSource,
+			wantError: "virtual model has no table to list from",
+		},
+		{
+			name:   "table-backed model list without result passes",
+			source: validateBaseListWithoutResultSource,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			filename := "/repo/model/stats/sample.go"
+			file, err := parser.ParseFile(fset, filename, tt.source, parser.ParseComments)
+			if err != nil {
+				t.Fatalf("parse source failed: %v", err)
+			}
+
+			errs := Validate(file, "/repo/model", filename)
+			if tt.wantError == "" {
+				if len(errs) != 0 {
+					t.Fatalf("Validate returned errors: %v", errs)
+				}
+				return
+			}
+			if len(errs) == 0 {
+				t.Fatalf("Validate returned no error, want %q", tt.wantError)
+			}
+			for _, err := range errs {
+				if strings.Contains(err.Error(), tt.wantError) {
+					return
+				}
+			}
+			t.Fatalf("Validate errors %v do not contain %q", errs, tt.wantError)
+		})
+	}
+}
+
+const validateVirtualListWithResultSource = `
+package stats
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Sample struct {
+	model.Query
+	model.Empty
+}
+
+type SampleListRsp struct{}
+
+func (Sample) Design() {
+	List(func() {
+		Service()
+		Result[*SampleListRsp]()
+	})
+	Export(func() {
+		Service()
+	})
+}
+`
+
+const validateVirtualListWithoutResultSource = `
+package stats
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Sample struct {
+	model.Query
+	model.Empty
+}
+
+func (Sample) Design() {
+	List(func() {
+		Service()
+	})
+}
+`
+
+const validateVirtualRouteListWithoutResultSource = `
+package stats
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Sample struct {
+	model.Query
+	model.Empty
+}
+
+func (Sample) Design() {
+	Route("stats/samples", func() {
+		List(func() {
+			Service()
+		})
+	})
+}
+`
+
+const validateBaseListWithoutResultSource = `
+package stats
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Sample struct {
+	model.Base
+}
+
+func (Sample) Design() {
+	List(func() {
+		Service()
+	})
+}
+`

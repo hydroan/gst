@@ -99,12 +99,14 @@ func Validate(file *ast.File, modelDir string, filename string) []error {
 	records := make([]serviceActionRecord, 0)
 	rootModelFile := isRootModelFile(file, modelDir, filename)
 	for _, name := range slices.Sorted(maps.Keys(designBase)) {
-		recs, designErrs := validateDesignFunc(designBase[name], name, rootModelFile, filename)
+		recs, designErrs := validateDesignFunc(designBase[name], name, rootModelFile, false, filename)
 		records = append(records, recs...)
 		errs = append(errs, designErrs...)
 	}
+	// Models embedding model.Empty are virtual: routes exist but no table
+	// backs them, so actions relying on built-in table access are rejected.
 	for _, name := range slices.Sorted(maps.Keys(designEmpty)) {
-		recs, designErrs := validateDesignFunc(designEmpty[name], name, rootModelFile, filename)
+		recs, designErrs := validateDesignFunc(designEmpty[name], name, rootModelFile, true, filename)
 		records = append(records, recs...)
 		errs = append(errs, designErrs...)
 	}
@@ -112,7 +114,7 @@ func Validate(file *ast.File, modelDir string, filename string) []error {
 	return errs
 }
 
-func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile bool, filename string) ([]serviceActionRecord, []error) {
+func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtual bool, filename string) ([]serviceActionRecord, []error) {
 	if fn == nil || fn.Body == nil {
 		return nil, nil
 	}
@@ -131,13 +133,13 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile bool, 
 
 		switch {
 		case isActionMethod(name):
-			info, actionErrs := validateActionCall(call, name, rootModelFile, filename)
+			info, actionErrs := validateActionCall(call, name, rootModelFile, virtual, filename)
 			if record, ok := newServiceActionRecord(info, name, modelName, ""); ok {
 				records = append(records, record)
 			}
 			errs = append(errs, actionErrs...)
 		case name == "Route":
-			recs, routeErrs := validateRouteCall(call, modelName, rootModelFile, filename)
+			recs, routeErrs := validateRouteCall(call, modelName, rootModelFile, virtual, filename)
 			records = append(records, recs...)
 			errs = append(errs, routeErrs...)
 		case name == "Enabled" || designOnlyMethodNames[name]:
@@ -149,7 +151,7 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile bool, 
 	return records, errs
 }
 
-func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile bool, filename string) ([]serviceActionRecord, []error) {
+func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virtual bool, filename string) ([]serviceActionRecord, []error) {
 	if len(call.Args) < 2 {
 		return nil, nil
 	}
@@ -173,7 +175,7 @@ func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile bool,
 
 		switch {
 		case isActionMethod(name):
-			info, actionErrs := validateActionCall(child, name, rootModelFile, filename)
+			info, actionErrs := validateActionCall(child, name, rootModelFile, virtual, filename)
 			if record, ok := newServiceActionRecord(info, name, modelName, route); ok {
 				records = append(records, record)
 			}
@@ -203,7 +205,7 @@ type actionCallInfo struct {
 	result   bool
 }
 
-func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile bool, filename string) (actionCallInfo, []error) {
+func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile, virtual bool, filename string) (actionCallInfo, []error) {
 	info := actionCallInfo{}
 	if len(call.Args) == 0 {
 		return info, nil
@@ -278,6 +280,13 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile boo
 		} else if !info.payload && !info.result {
 			errs = append(errs, fmt.Errorf("%s: %s action uses dsl.Exact() but relies on the built-in controller which reads the resource id from the route parameter only; declare Payload/Result with a custom service method or remove Exact()", filename, actionName))
 		}
+	}
+	// A List without a custom Result runs the built-in list controller, which
+	// selects from the model table; a virtual model has none, so the request
+	// could only fail at runtime. The Export action is exempt: its controller
+	// skips the table phases for virtual models and delegates to the service.
+	if virtual && actionName == consts.PHASE_LIST.MethodName() && !info.result {
+		errs = append(errs, fmt.Errorf("%s: %s action on a virtual model relies on the built-in list controller, but a virtual model has no table to list from; declare Result with a custom service method", filename, actionName))
 	}
 
 	return info, errs
