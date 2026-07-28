@@ -191,6 +191,28 @@ func (u *Updater) Patch(ctx *types.ServiceContext, req *model.RecordReq) (*model
 	}
 	return &model.RecordRsp{}, nil
 }
+
+// Delete reuses one err variable the idiomatic way. Every raw assignment is
+// checked and answered right away, which kills it for everything after the
+// check, so the later compliant flows through the same variable stay clean.
+func (u *Updater) Delete(ctx *types.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
+	record := new(model.Record)
+	err := database.Database[*model.Record](ctx).Get(record, req.ID)
+	if err != nil {
+		return nil, service.NewErrorWithCause(http.StatusNotFound, "record not found", err)
+	}
+	err = guard.RequireAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err = database.Database[*model.Record](ctx).Delete(record); err != nil {
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "record delete failed", err)
+	}
+	if err = guard.RequireAdmin(ctx); err != nil {
+		return nil, err
+	}
+	return &model.RecordRsp{}, nil
+}
 `)
 	writeCheckFile(t, filepath.Join(projectDir, "helper", "guard", "guard.go"), `package guard
 

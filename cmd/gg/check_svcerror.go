@@ -408,11 +408,15 @@ type svcErrFuncScope struct {
 	assigns map[svcErrVarObj][]svcErrAssign
 }
 
-// svcErrAssign is one recorded assignment: the assigned expression and where
-// the assignment happens.
+// svcErrAssign is one recorded assignment: the assigned expression, where
+// the assignment happens, and where its value stops being visible. killEnd
+// is set when the assignment is immediately answered by an
+// `if <var> != nil { return ... }` style check: past that check the variable
+// no longer holds this value, so later uses must not pool it.
 type svcErrAssign struct {
-	expr ast.Expr
-	pos  token.Pos
+	expr    ast.Expr
+	pos     token.Pos
+	killEnd token.Pos
 }
 
 // collectAssigns records every assignment in the function body, closures
@@ -444,6 +448,97 @@ func (s *svcErrFuncScope) collectAssigns(body *ast.BlockStmt) {
 		}
 		return true
 	})
+	s.markKilledAssigns(body)
+}
+
+// markKilledAssigns finds assignments consumed by their own error check —
+// `if v = f(); v != nil { return ... }` and the two-statement form
+// `v = f()` followed by `if v != nil { return ... }` — and records the end
+// of the check as the assignment's kill point. Past a check whose body
+// always leaves (return, branch, or panic), the variable no longer carries
+// that value, which is exactly how idiomatic Go reuses one err variable.
+func (s *svcErrFuncScope) markKilledAssigns(body *ast.BlockStmt) {
+	ast.Inspect(body, func(n ast.Node) bool {
+		var stmts []ast.Stmt
+		switch n := n.(type) {
+		case *ast.BlockStmt:
+			stmts = n.List
+		case *ast.CaseClause:
+			stmts = n.Body
+		case *ast.CommClause:
+			stmts = n.Body
+		default:
+			return true
+		}
+		for i, stmt := range stmts {
+			ifStmt, ok := stmt.(*ast.IfStmt)
+			if !ok {
+				continue
+			}
+			checkedObj := svcErrNilCheckedObj(ifStmt)
+			if checkedObj == nil || !svcErrStmtsAlwaysLeave(ifStmt.Body.List) {
+				continue
+			}
+			if assign, ok := ifStmt.Init.(*ast.AssignStmt); ok {
+				s.killAssign(checkedObj, assign, ifStmt.End())
+				continue
+			}
+			if i > 0 {
+				if assign, ok := stmts[i-1].(*ast.AssignStmt); ok {
+					s.killAssign(checkedObj, assign, ifStmt.End())
+				}
+			}
+		}
+		return true
+	})
+}
+
+// svcErrNilCheckedObj returns the declaration object of v when cond is a
+// plain `v != nil` comparison, nil otherwise.
+func svcErrNilCheckedObj(ifStmt *ast.IfStmt) svcErrVarObj {
+	cond, ok := ifStmt.Cond.(*ast.BinaryExpr)
+	if !ok || cond.Op != token.NEQ {
+		return nil
+	}
+	ident, ok := cond.X.(*ast.Ident)
+	if !ok {
+		return nil
+	}
+	if right, ok := cond.Y.(*ast.Ident); !ok || right.Name != "nil" {
+		return nil
+	}
+	return svcErrDeclObj(ident)
+}
+
+// svcErrStmtsAlwaysLeave reports whether a statement list ends by leaving
+// the surrounding flow: a return, a branch statement, or a panic call.
+func svcErrStmtsAlwaysLeave(stmts []ast.Stmt) bool {
+	if len(stmts) == 0 {
+		return false
+	}
+	switch last := stmts[len(stmts)-1].(type) {
+	case *ast.ReturnStmt, *ast.BranchStmt:
+		return true
+	case *ast.ExprStmt:
+		call, ok := last.X.(*ast.CallExpr)
+		if !ok {
+			return false
+		}
+		ident, ok := call.Fun.(*ast.Ident)
+		return ok && ident.Name == "panic"
+	}
+	return false
+}
+
+// killAssign records the kill point on the recorded entries of one
+// assignment statement for the checked variable.
+func (s *svcErrFuncScope) killAssign(obj svcErrVarObj, assign *ast.AssignStmt, killEnd token.Pos) {
+	entries := s.assigns[obj]
+	for i := range entries {
+		if entries[i].pos == assign.Pos() {
+			entries[i].killEnd = killEnd
+		}
+	}
 }
 
 // collectExits resolves the error expression of every return statement of
@@ -517,8 +612,12 @@ func (s *svcErrFuncScope) resolveObj(obj svcErrVarObj, at ast.Node, visiting map
 	found := false
 	for _, assign := range s.assigns[obj] {
 		// A use always happens after the assignment feeding it, so later
-		// assignments cannot be this use's origin.
+		// assignments cannot be this use's origin; an assignment whose value
+		// was consumed by its own error check is dead past that check.
 		if assign.pos >= at.Pos() {
+			continue
+		}
+		if assign.killEnd != token.NoPos && at.Pos() > assign.killEnd {
 			continue
 		}
 		found = true
