@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"reflect"
 	"regexp"
 	"strings"
@@ -551,7 +552,7 @@ func (a *aggregator[M, R]) validate() error {
 			return errors.Wrapf(ErrOrderTermNotSelected, "%q", a.alias(o.Term))
 		}
 	}
-	if err = a.validateResultRow(aliases); err != nil {
+	if err = a.validateResultRow(aliases, byName); err != nil {
 		return err
 	}
 	return nil
@@ -615,7 +616,7 @@ func (a *aggregator[M, R]) validateTerm(t types.AggregateTerm, byName map[string
 // both directions. gorm leaves an unmatched field at its zero value and drops
 // an unmatched column, so without this check a renamed alias shows up as a
 // column of zeros on a report rather than as an error.
-func (a *aggregator[M, R]) validateResultRow(aliases map[string]struct{}) error {
+func (a *aggregator[M, R]) validateResultRow(aliases map[string]struct{}, sources map[string]modelschema.Column) error {
 	typ := reflect.TypeFor[R]()
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
@@ -636,20 +637,21 @@ func (a *aggregator[M, R]) validateResultRow(aliases map[string]struct{}) error 
 			return errors.Wrapf(ErrResultFieldMissing, "%s has no field for %q", typ, alias)
 		}
 	}
-	// AVG, MIN and MAX yield NULL for a group with no matching row. gorm leaves
-	// a non-pointer field at its zero value when it scans NULL, which makes "no
-	// data" and "the answer is zero" the same number on a report. Requiring a
-	// pointer keeps them distinguishable, and the requirement is enforced here
-	// rather than left to a doc comment nobody reads at the call site.
-	nullable := a.nullableAliases()
+	// gorm leaves a non-pointer field at its zero value when it scans NULL,
+	// which makes "no data" and "the answer is zero" the same number on a
+	// report. Every field a NULL can actually reach must therefore be able to
+	// hold it, and the requirement is enforced here rather than left to a doc
+	// comment nobody reads at the call site. nullableAliases narrows the
+	// demand to the measures where a NULL is reachable.
+	nullable := a.nullableAliases(sources)
 	for _, f := range fields {
 		if _, ok := aliases[f.DBName]; !ok {
 			return errors.Wrapf(ErrAliasMissing, "%s.%s has no matching alias", typ, f.GoName)
 		}
-		if fn, isNullable := nullable[f.DBName]; isNullable && !holdsNull(f.Type) {
+		if why, isNullable := nullable[f.DBName]; isNullable && !holdsNull(f.Type) {
 			return errors.Wrapf(ErrNullableResultField,
-				"%s.%s holds %s, which is NULL for an empty group; declare it as *%s or a sql.Null type",
-				typ, f.GoName, fn, f.Type)
+				"%s.%s holds %s; declare it as *%s or a sql.Null type",
+				typ, f.GoName, why, f.Type)
 		}
 	}
 	return nil
@@ -668,15 +670,45 @@ func (a *aggregator[M, R]) isSelected(t types.AggregateTerm) bool {
 	return false
 }
 
-// nullableAliases returns the aliases whose aggregate yields NULL for a group
-// with no matching row. SUM is absent because the renderer coalesces it to
+// nullableAliases returns the aliases whose aggregate can come back NULL,
+// each keyed to a clause naming the way the NULL arrives, ready for the
+// validation message. SUM is absent because the renderer coalesces it to
 // zero, which is the identity of addition rather than a guess.
-func (a *aggregator[M, R]) nullableAliases() map[string]types.AggregateFn {
-	nullable := make(map[string]types.AggregateFn)
+//
+// AVG, MIN and MAX return NULL when they see no value at all. Under GROUP BY
+// every group holds at least one row, so a measure only meets that fate
+// through one of three doors: the projection has no group keys, and the whole
+// read is a single group that is empty when the filters match no rows; the
+// measure carries conditions, and no row of a group passes them; or the
+// source column is nullable, and a group holds only NULLs. A grouped,
+// unconditional measure over a non-nullable column can keep a plain result
+// field — the alternative would demand a pointer nothing ever sets to nil.
+func (a *aggregator[M, R]) nullableAliases(sources map[string]modelschema.Column) map[string]string {
+	grouped := false
+	for _, t := range a.terms {
+		if !t.IsMeasure() {
+			grouped = true
+			break
+		}
+	}
+	nullable := make(map[string]string)
 	for _, t := range a.terms {
 		switch t.Fn {
 		case types.AggregateAvg, types.AggregateMin, types.AggregateMax:
-			nullable[a.alias(t)] = t.Fn
+		default:
+			continue
+		}
+		// The unknown-column case cannot be reached — validateTerm has already
+		// rejected the term — but if it ever is, requiring the pointer is the
+		// safe side of the guess.
+		source, known := sources[t.Column]
+		switch {
+		case !grouped:
+			nullable[a.alias(t)] = fmt.Sprintf("%s, which is NULL when the filters match no rows", t.Fn)
+		case len(t.Conditions) > 0:
+			nullable[a.alias(t)] = fmt.Sprintf("a conditional %s, which is NULL for a group where no row passes its conditions", t.Fn)
+		case !known || holdsNull(source.Type):
+			nullable[a.alias(t)] = fmt.Sprintf("%s over nullable column %q, which is NULL for a group holding only NULLs", t.Fn, t.Column)
 		}
 	}
 	return nullable

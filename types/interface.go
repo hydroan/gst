@@ -155,7 +155,10 @@ type Database[M Model] interface {
 // dialect — so an aggregate can never read rows a List on the same model
 // hides. R is an ordinary struct the caller declares; its fields bind to the
 // projection aliases, and a mismatch on either side is a build error rather
-// than a silently zero column.
+// than a silently zero column. A measure that can come back NULL — AVG, MIN
+// or MAX without group keys, carrying conditions, or over a nullable column —
+// must bind to a pointer or sql.Null field, which is again a build error
+// rather than a zero on the report.
 //
 // The entry point is the package-level database.Aggregate[M, R] rather than a
 // method, because a Go method cannot introduce the result type parameter.
@@ -176,11 +179,15 @@ type Database[M Model] interface {
 //	type tenantTotal struct {
 //	    TenantID string
 //	    Total    int64
+//	    // ClosedAt is nullable on Sample, so MAX over it can be NULL and
+//	    // needs a field that can hold NULL.
+//	    LastClosed *time.Time
 //	}
 //	total := SampleCols.Amount.Sum().As("total")
 //	rows := make([]tenantTotal, 0)
 //	err := database.Aggregate[*Sample, tenantTotal](ctx).
-//	    Select(SampleCols.TenantID.Group(), total).
+//	    Select(SampleCols.TenantID.Group(), total,
+//	        SampleCols.ClosedAt.Max().As("last_closed")).
 //	    Where(SampleCols.Status.Eq(StatusDone)).
 //	    Having(total.Gte(1000)).
 //	    OrderBy(total.Desc()).

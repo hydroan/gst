@@ -68,12 +68,14 @@ var aggCols = struct {
 	Amount     types.NumericColumn[int64]
 	Score      types.NumericColumn[float64]
 	OccurredAt types.TimeColumn
+	ClosedAt   types.TimeColumn
 }{
 	Category:   types.NewColumn[string]("category"),
 	Status:     types.NewColumn[string]("status"),
 	Amount:     types.NewNumericColumn[int64]("amount"),
 	Score:      types.NewNumericColumn[float64]("score"),
 	OccurredAt: types.NewTimeColumn("occurred_at"),
+	ClosedAt:   types.NewTimeColumn("closed_at"),
 }
 
 func TestAggregateScalar(t *testing.T) {
@@ -535,14 +537,17 @@ func TestAggregateBuildErrors(t *testing.T) {
 			Scan(&rows), database.ErrHavingTermNotSelected)
 	})
 
-	t.Run("NullableMeasureNeedsPointerField", func(t *testing.T) {
+	t.Run("ConditionalMeasureNeedsPointerField", func(t *testing.T) {
+		// A condition can pass no row of a group, and MAX over nothing is
+		// NULL even though the group itself is not empty.
 		type flat struct {
 			Category string
 			Peak     int64
 		}
 		rows := make([]flat, 0)
 		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, flat](ctx).
-			Select(aggCols.Category.Group(), aggCols.Amount.Max().As("peak")).
+			Select(aggCols.Category.Group(),
+				aggCols.Amount.Max().Where(aggCols.Status.Eq("done")).As("peak")).
 			Scan(&rows), database.ErrNullableResultField)
 	})
 
@@ -1092,8 +1097,11 @@ func TestAggregateBuilderReuse(t *testing.T) {
 	require.Equal(t, rows, again)
 }
 
-// TestAggregateNullableResultFields covers both ways a result field can tell
-// NULL apart from zero: a pointer, and a sql.Null wrapper.
+// TestAggregateNullableResultFields pins where a result field must be able to
+// tell NULL apart from zero. AVG, MIN and MAX return NULL when they see no
+// value, so the field needs a pointer or a sql.Null wrapper — except for a
+// grouped, unconditional measure over a non-nullable column, where every group
+// holds at least one real value and a plain field cannot receive NULL.
 func TestAggregateNullableResultFields(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
@@ -1114,12 +1122,51 @@ func TestAggregateNullableResultFields(t *testing.T) {
 		require.True(t, got.AvgScore.Valid)
 	})
 
-	t.Run("StillRejectsPlainValue", func(t *testing.T) {
+	t.Run("UngroupedRejectsPlainField", func(t *testing.T) {
+		// Without group keys the whole read is one group, and it is empty when
+		// the filters match no rows.
 		type row struct{ Peak int64 }
 		got := row{}
 		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
 			Select(aggCols.Amount.Max().As("peak")).
 			ScanOne(&got), database.ErrNullableResultField)
+	})
+
+	t.Run("GroupedOverNonNullColumnAcceptsPlainField", func(t *testing.T) {
+		// GROUP BY emits no empty groups and the source columns cannot store
+		// NULL, so these measures always produce a value.
+		type row struct {
+			Category string
+			Peak     int64
+			Earliest int64
+			AvgScore float64
+		}
+		rows := make([]row, 0)
+		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](ctx).
+			Select(aggCols.Category.Group(),
+				aggCols.Amount.Max().As("peak"),
+				aggCols.Amount.Min().As("earliest"),
+				aggCols.Score.Avg().As("avg_score")).
+			OrderBy(aggCols.Category.Group().Asc()).
+			Scan(&rows))
+		require.Equal(t, []row{
+			{Category: "alpha", Peak: 300, Earliest: 100, AvgScore: 2.5},
+			{Category: "beta", Peak: 500, Earliest: 400, AvgScore: 5.0},
+			{Category: "gamma", Peak: 600, Earliest: 600, AvgScore: 6.5},
+		}, rows)
+	})
+
+	t.Run("GroupedOverNullableColumnRejectsPlainField", func(t *testing.T) {
+		// A group can hold rows whose closed_at is NULL throughout, and MAX
+		// over only NULLs is NULL.
+		type row struct {
+			Category string
+			LastSeen time.Time
+		}
+		rows := make([]row, 0)
+		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
+			Select(aggCols.Category.Group(), aggCols.ClosedAt.Max().As("last_seen")).
+			Scan(&rows), database.ErrNullableResultField)
 	})
 }
 

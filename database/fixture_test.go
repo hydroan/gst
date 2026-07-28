@@ -243,7 +243,10 @@ type TestSoftDeleteItem struct {
 
 // TestAggregateRecord is the fixture for aggregate reads: a group key, a
 // second dimension for conditional aggregation, a numeric measure, a float
-// measure and a caller-controlled timestamp for bucketing.
+// measure, a caller-controlled timestamp for bucketing and a nullable
+// timestamp for the NULL-safety rule on result rows. The seed never fills
+// ClosedAt; it exists so the tests can point a measure at a column that can
+// hold NULL.
 //
 // It deliberately keeps the model.Base default Purge, so its rows soft delete.
 // That is what lets the aggregate tests assert the rule an aggregate is most
@@ -251,11 +254,12 @@ type TestSoftDeleteItem struct {
 // without the model the soft-delete condition disappears and an aggregate
 // counts rows a List on the same model hides.
 type TestAggregateRecord struct {
-	Category   string    `json:"category" gorm:"size:191"`
-	Status     string    `json:"status" gorm:"size:191"`
-	Amount     int64     `json:"amount"`
-	Score      float64   `json:"score"`
-	OccurredAt time.Time `json:"occurred_at"`
+	Category   string     `json:"category" gorm:"size:191"`
+	Status     string     `json:"status" gorm:"size:191"`
+	Amount     int64      `json:"amount"`
+	Score      float64    `json:"score"`
+	OccurredAt time.Time  `json:"occurred_at"`
+	ClosedAt   *time.Time `json:"closed_at"`
 
 	model.Base
 }
