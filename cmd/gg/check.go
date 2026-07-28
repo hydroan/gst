@@ -129,6 +129,7 @@ func collectProjectChecks() []projectCheckResult {
 		{Name: "DSL design rules", Violations: CheckDSLDesign()},
 		{Name: "Database chain termination", Violations: CheckDatabaseChainTermination()},
 		{Name: "Transaction closure context", Violations: CheckTransactionClosureContext()},
+		{Name: "Service error discipline", Violations: CheckServiceErrorDiscipline()},
 	}
 	return results
 }

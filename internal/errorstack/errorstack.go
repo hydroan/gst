@@ -14,10 +14,16 @@ import (
 // err and formats it like a Go stack trace with the innermost (error
 // creation) frame first. It returns "" when no error in the chain carries a
 // stack trace.
+//
+// A stack captured during package initialization is treated as no stack at
+// all: it belongs to a package-level sentinel's construction and points at
+// runtime.doInit, never at the failure site. Skipping it lets the deepest
+// run-time stack in the chain win, typically the site that wrapped the
+// sentinel.
 func Origin(err error) string {
 	var deepest *errors.ReportableStackTrace
 	for cur := err; cur != nil; cur = errors.UnwrapOnce(cur) {
-		if st := errors.GetReportableStackTrace(cur); st != nil {
+		if st := errors.GetReportableStackTrace(cur); st != nil && !isInitTimeStack(st) {
 			deepest = st
 		}
 	}
@@ -40,4 +46,16 @@ func Origin(err error) string {
 		fmt.Fprintf(&sb, "%s\n\t%s:%d\n", function, file, frame.Lineno)
 	}
 	return sb.String()
+}
+
+// isInitTimeStack reports whether the stack trace was captured while the
+// program was initializing packages, recognized by a runtime.doInit frame.
+// Regular call stacks never contain that frame.
+func isInitTimeStack(st *errors.ReportableStackTrace) bool {
+	for i := range st.Frames {
+		if st.Frames[i].Module == "runtime" && strings.HasPrefix(st.Frames[i].Function, "doInit") {
+			return true
+		}
+	}
+	return false
 }
