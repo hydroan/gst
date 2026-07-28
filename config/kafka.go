@@ -1,11 +1,8 @@
 package config
 
-import "time"
-
 const (
 	KAFKA_BROKERS   = "KAFKA_BROKERS"   //nolint:staticcheck
 	KAFKA_CLIENT_ID = "KAFKA_CLIENT_ID" //nolint:staticcheck
-	KAFKA_VERSION   = "KAFKA_VERSION"   //nolint:staticcheck
 
 	KAFKA_SASL_ENABLED   = "KAFKA_SASL_ENABLED"   //nolint:staticcheck
 	KAFKA_SASL_MECHANISM = "KAFKA_SASL_MECHANISM" //nolint:staticcheck
@@ -18,58 +15,32 @@ const (
 	KAFKA_CA_FILE              = "KAFKA_CA_FILE"              //nolint:staticcheck
 	KAFKA_INSECURE_SKIP_VERIFY = "KAFKA_INSECURE_SKIP_VERIFY" //nolint:staticcheck
 
-	KAFKA_PRODUCER_REQUIRED_ACKS     = "KAFKA_PRODUCER_REQUIRED_ACKS"     //nolint:staticcheck
-	KAFKA_PRODUCER_RETRIES           = "KAFKA_PRODUCER_RETRIES"           //nolint:staticcheck
-	KAFKA_PRODUCER_COMPRESSION       = "KAFKA_PRODUCER_COMPRESSION"       //nolint:staticcheck
-	KAFKA_PRODUCER_MAX_MESSAGE_BYTES = "KAFKA_PRODUCER_MAX_MESSAGE_BYTES" //nolint:staticcheck
-
-	KAFKA_CONSUMER_GROUP              = "KAFKA_CONSUMER_GROUP"              //nolint:staticcheck
-	KAFKA_CONSUMER_REBALANCE_STRATEGY = "KAFKA_CONSUMER_REBALANCE_STRATEGY" //nolint:staticcheck
-	KAFKA_CONSUMER_OFFSET             = "KAFKA_CONSUMER_OFFSET"             //nolint:staticcheck
-
-	KAFKA_TIMEOUT_DIAL  = "KAFKA_TIMEOUT_DIAL"  //nolint:staticcheck
-	KAFKA_TIMEOUT_READ  = "KAFKA_TIMEOUT_READ"  //nolint:staticcheck
-	KAFKA_TIMEOUT_WRITE = "KAFKA_TIMEOUT_WRITE" //nolint:staticcheck
-
 	KAFKA_ENABLED = "KAFKA_ENABLED" //nolint:staticcheck
 )
 
-// SASL defines SASL authentication parameters
-type SASL struct {
-	Enabled   bool   `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
-	Mechanism string `json:"mechanism" mapstructure:"mechanism" ini:"mechanism" yaml:"mechanism"`
-	Username  string `json:"username" mapstructure:"username" ini:"username" yaml:"username"`
-	Password  string `json:"password" mapstructure:"password" ini:"password" yaml:"password"`
-}
+// Supported Kafka SASL mechanisms.
+const (
+	KafkaSASLMechanismPlain       = "plain"
+	KafkaSASLMechanismScramSHA256 = "scram-sha-256"
+	KafkaSASLMechanismScramSHA512 = "scram-sha-512"
+)
 
-// Producer defines Kafka producer specific configuration
-type Producer struct {
-	RequiredAcks    int    `json:"required_acks" mapstructure:"required_acks" ini:"required_acks" yaml:"required_acks"`
-	Retries         int    `json:"retries" mapstructure:"retries" ini:"retries" yaml:"retries"`
-	Compression     string `json:"compression" mapstructure:"compression" ini:"compression" yaml:"compression"`
-	MaxMessageBytes int    `json:"max_message_bytes" mapstructure:"max_message_bytes" ini:"max_message_bytes" yaml:"max_message_bytes"`
-}
-
-// Consumer defines Kafka consumer specific configuration
-type Consumer struct {
-	Group             string `json:"group" mapstructure:"group" ini:"group" yaml:"group"`
-	RebalanceStrategy string `json:"rebalance_strategy" mapstructure:"rebalance_strategy" ini:"rebalance_strategy" yaml:"rebalance_strategy"`
-	Offset            string `json:"offset" mapstructure:"offset" ini:"offset" yaml:"offset"`
-}
-
-// Timeout defines connection timeouts
-type Timeout struct {
-	Dial  time.Duration `json:"dial" mapstructure:"dial" ini:"dial" yaml:"dial"`
-	Read  time.Duration `json:"read" mapstructure:"read" ini:"read" yaml:"read"`
-	Write time.Duration `json:"write" mapstructure:"write" ini:"write" yaml:"write"`
-}
-
+// Kafka configures the framework-managed Kafka client backed by franz-go.
+//
+// Only environment-level settings are exposed: where to connect and how to
+// authenticate. Behavioral tuning (acks, compression, batching, balancing,
+// offsets, protocol version) deliberately stays with franz-go defaults, which
+// already implement current best practices (idempotent producer, all-ISR acks,
+// cooperative-sticky balancing, automatic version negotiation). Callers that
+// need specific behavior pass extra kgo.Opt values to provider/kafka.New.
 type Kafka struct {
 	Brokers  []string `json:"brokers" mapstructure:"brokers" ini:"brokers" yaml:"brokers"`
 	ClientID string   `json:"client_id" mapstructure:"client_id" ini:"client_id" yaml:"client_id"`
-	Version  string   `json:"version" mapstructure:"version" ini:"version" yaml:"version"`
 
-	SASL SASL `json:"sasl" mapstructure:"sasl" ini:"sasl" yaml:"sasl"`
+	SASLEnabled   bool   `json:"sasl_enabled" mapstructure:"sasl_enabled" ini:"sasl_enabled" yaml:"sasl_enabled"`
+	SASLMechanism string `json:"sasl_mechanism" mapstructure:"sasl_mechanism" ini:"sasl_mechanism" yaml:"sasl_mechanism"`
+	SASLUsername  string `json:"sasl_username" mapstructure:"sasl_username" ini:"sasl_username" yaml:"sasl_username"`
+	SASLPassword  string `json:"sasl_password" mapstructure:"sasl_password" ini:"sasl_password" yaml:"sasl_password"`
 
 	TLSEnabled         bool   `json:"tls_enabled" mapstructure:"tls_enabled" ini:"tls_enabled" yaml:"tls_enabled"`
 	CertFile           string `json:"cert_file" mapstructure:"cert_file" ini:"cert_file" yaml:"cert_file"`
@@ -77,41 +48,23 @@ type Kafka struct {
 	CAFile             string `json:"ca_file" mapstructure:"ca_file" ini:"ca_file" yaml:"ca_file"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify" mapstructure:"insecure_skip_verify" ini:"insecure_skip_verify" yaml:"insecure_skip_verify"`
 
-	Producer Producer `json:"producer" mapstructure:"producer" ini:"producer" yaml:"producer"`
-	Consumer Consumer `json:"consumer" mapstructure:"consumer" ini:"consumer" yaml:"consumer"`
-	Timeout  Timeout  `json:"timeout" mapstructure:"timeout" ini:"timeout" yaml:"timeout"`
-
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*Kafka) setDefault() {
-	cv.SetDefault("kafka.brokers", []string{"localhost:9092"})
-	cv.SetDefault("kafka.client_id", "sarama-client")
-	cv.SetDefault("kafka.version", "")
+	cv.SetDefault("kafka.brokers", []string{"127.0.0.1:9092"})
+	cv.SetDefault("kafka.client_id", "gst")
 
-	cv.SetDefault("kafka.sasl.enabled", false)
-	cv.SetDefault("kafka.sasl.mechanism", "PLAIN")
-	cv.SetDefault("kafka.sasl.username", "")
-	cv.SetDefault("kafka.sasl.password", "")
+	cv.SetDefault("kafka.sasl_enabled", false)
+	cv.SetDefault("kafka.sasl_mechanism", KafkaSASLMechanismPlain)
+	cv.SetDefault("kafka.sasl_username", "")
+	cv.SetDefault("kafka.sasl_password", "")
 
 	cv.SetDefault("kafka.tls_enabled", false)
 	cv.SetDefault("kafka.cert_file", "")
 	cv.SetDefault("kafka.key_file", "")
 	cv.SetDefault("kafka.ca_file", "")
 	cv.SetDefault("kafka.insecure_skip_verify", false)
-
-	cv.SetDefault("kafka.producer.required_acks", 1)
-	cv.SetDefault("kafka.producer.retries", 3)
-	cv.SetDefault("kafka.producer.compression", "none")
-	cv.SetDefault("kafka.producer.max_message_bytes", 1000000)
-
-	cv.SetDefault("kafka.consumer.group", "")
-	cv.SetDefault("kafka.consumer.rebalance_strategy", "range")
-	cv.SetDefault("kafka.consumer.offset", "newest")
-
-	cv.SetDefault("kafka.timeout.dial", 10*time.Second)
-	cv.SetDefault("kafka.timeout.read", 30*time.Second)
-	cv.SetDefault("kafka.timeout.write", 30*time.Second)
 
 	cv.SetDefault("kafka.enabled", false)
 }
