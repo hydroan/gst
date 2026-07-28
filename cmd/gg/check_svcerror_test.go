@@ -77,7 +77,7 @@ func loadRecords(ctx *types.ServiceContext) error {
 }
 `)
 
-	violations := CheckServiceErrorDiscipline()
+	violations := CheckServiceErrorDiscipline(newProjectIgnoreMatcher())
 
 	// Violations point at the raw error expressions themselves: the database
 	// calls on laundry.go:23 / sample.go:19 / sample.go:26 and the raw
@@ -265,7 +265,7 @@ func Sweep() error {
 }
 `)
 
-	violations := CheckServiceErrorDiscipline()
+	violations := CheckServiceErrorDiscipline(newProjectIgnoreMatcher())
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations, got %#v", violations)
 	}

@@ -49,7 +49,7 @@ func update(outerCtx context.Context, record *model.Record) error {
 }
 `)
 
-	violations := CheckTransactionClosureContext()
+	violations := CheckTransactionClosureContext(newProjectIgnoreMatcher())
 
 	wantSubstrings := []string{
 		filepath.Join("service", "nested", "nested.go") + ":12:",
@@ -116,7 +116,7 @@ func cleanup(ctx context.Context, record *model.Record) error {
 }
 `)
 
-	violations := CheckTransactionClosureContext()
+	violations := CheckTransactionClosureContext(newProjectIgnoreMatcher())
 
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations, got %#v", violations)

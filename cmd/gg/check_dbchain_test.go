@@ -91,7 +91,7 @@ func keep(ctx context.Context) any {
 }
 `)
 
-	violations := CheckDatabaseChainTermination()
+	violations := CheckDatabaseChainTermination(newProjectIgnoreMatcher())
 
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations, got %#v", violations)
@@ -149,7 +149,7 @@ func keep(ctx context.Context) any {
 }
 `)
 
-	violations := CheckDatabaseChainTermination()
+	violations := CheckDatabaseChainTermination(newProjectIgnoreMatcher())
 
 	wantSubstrings := []string{
 		filepath.Join("cronjob", "cleanup.go") + ":11:",

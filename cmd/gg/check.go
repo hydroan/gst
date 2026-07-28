@@ -38,7 +38,11 @@ var checkCmd = &cobra.Command{
 10. Service files should contain at most one service struct
 11. Only allowed directories are enforced for gst framework projects
 12. Model Design() DSL must pass the same validation rules that gate gg gen
-13. database.Database operation chains must end with a terminal operation inline or be passed directly as a call argument`,
+13. database.Database operation chains must end with a terminal operation inline or be passed directly as a call argument
+14. database.Database chains and nested database.Transaction calls inside a database.Transaction closure must use the closure's context parameter
+15. Errors leaving service methods must be built by service.NewError or service.NewErrorWithCause
+
+Paths ignored by the project's Git ignore rules are skipped by every check, so runtime artifacts such as log directories never fail checks.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		checkRun()
 	},
@@ -117,19 +121,22 @@ func filterProjectCheckResults(results []projectCheckResult, baseline map[string
 }
 
 func collectProjectChecks() []projectCheckResult {
+	// One matcher serves every check: building it scans the whole worktree
+	// for ignore files, which is too expensive to repeat per check.
+	ignore := newProjectIgnoreMatcher()
 	results := []projectCheckResult{
-		{Name: "Architecture dependencies", Violations: CheckArchitectureDependency()},
-		{Name: "Model singular naming", Violations: CheckModelSingularNaming()},
-		{Name: "Model JSON tag naming", Violations: CheckModelJSONTagNaming()},
-		{Name: "Model action type naming", Violations: CheckModelActionTypeNaming()},
-		{Name: "Model file boundaries", Violations: CheckModelFileBoundary()},
-		{Name: "Service file boundaries", Violations: CheckServiceFileBoundary()},
-		{Name: "Model package naming", Violations: CheckModelPackageNaming()},
-		{Name: "Directory restrictions", Violations: CheckAllowedDirectories()},
-		{Name: "DSL design rules", Violations: CheckDSLDesign()},
-		{Name: "Database chain termination", Violations: CheckDatabaseChainTermination()},
-		{Name: "Transaction closure context", Violations: CheckTransactionClosureContext()},
-		{Name: "Service error discipline", Violations: CheckServiceErrorDiscipline()},
+		{Name: "Architecture dependencies", Violations: CheckArchitectureDependency(ignore)},
+		{Name: "Model singular naming", Violations: CheckModelSingularNaming(ignore)},
+		{Name: "Model JSON tag naming", Violations: CheckModelJSONTagNaming(ignore)},
+		{Name: "Model action type naming", Violations: CheckModelActionTypeNaming(ignore)},
+		{Name: "Model file boundaries", Violations: CheckModelFileBoundary(ignore)},
+		{Name: "Service file boundaries", Violations: CheckServiceFileBoundary(ignore)},
+		{Name: "Model package naming", Violations: CheckModelPackageNaming(ignore)},
+		{Name: "Directory restrictions", Violations: CheckAllowedDirectories(ignore)},
+		{Name: "DSL design rules", Violations: CheckDSLDesign(ignore)},
+		{Name: "Database chain termination", Violations: CheckDatabaseChainTermination(ignore)},
+		{Name: "Transaction closure context", Violations: CheckTransactionClosureContext(ignore)},
+		{Name: "Service error discipline", Violations: CheckServiceErrorDiscipline(ignore)},
 	}
 	return results
 }
@@ -158,39 +165,35 @@ func totalProjectCheckViolations(results []projectCheckResult) int {
 }
 
 // CheckArchitectureDependency performs architecture dependency checks.
-func CheckArchitectureDependency() []string {
+func CheckArchitectureDependency(ignore gitignore.Matcher) []string {
 	//nolint:prealloc
 	var violations []string
 	modulePath := currentProjectModulePath()
 
 	// Check service files
-	serviceViolations := checkServiceDependencies(modulePath)
+	serviceViolations := checkServiceDependencies(modulePath, ignore)
 	violations = append(violations, serviceViolations...)
 
 	// Check dao files
-	daoViolations := checkDAODependencies(modulePath)
+	daoViolations := checkDAODependencies(modulePath, ignore)
 	violations = append(violations, daoViolations...)
 
 	// Check model files
-	modelViolations := checkModelDependencies(modulePath)
+	modelViolations := checkModelDependencies(modulePath, ignore)
 	violations = append(violations, modelViolations...)
 
 	return violations
 }
 
 // checkServiceDependencies checks if service code calls other service code
-func checkServiceDependencies(modulePath string) []string {
+func checkServiceDependencies(modulePath string, ignore gitignore.Matcher) []string {
 	var violations []string
 
 	if _, err := os.Stat(serviceDir); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := filepath.Walk(serviceDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
+	err := walkProjectDir(serviceDir, ignore, func(path string, _ os.FileInfo) error {
 		if !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") {
 			return nil
 		}
@@ -215,18 +218,14 @@ func checkServiceDependencies(modulePath string) []string {
 }
 
 // checkDAODependencies checks if DAO code calls upper-layer code.
-func checkDAODependencies(modulePath string) []string {
+func checkDAODependencies(modulePath string, ignore gitignore.Matcher) []string {
 	var violations []string
 
 	if _, err := os.Stat(daoDir); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := filepath.Walk(daoDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
+	err := walkProjectDir(daoDir, ignore, func(path string, _ os.FileInfo) error {
 		if !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") {
 			return nil
 		}
@@ -244,18 +243,14 @@ func checkDAODependencies(modulePath string) []string {
 }
 
 // checkModelDependencies checks if model code calls upper-layer or data-access code.
-func checkModelDependencies(modulePath string) []string {
+func checkModelDependencies(modulePath string, ignore gitignore.Matcher) []string {
 	var violations []string
 
 	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := filepath.Walk(modelDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
+	err := walkProjectDir(modelDir, ignore, func(path string, _ os.FileInfo) error {
 		if !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") {
 			return nil
 		}
@@ -306,7 +301,7 @@ func checkFileForArchitectureImports(filePath, layerType, modulePath string) []s
 }
 
 // CheckModelSingularNaming checks if model directories and files use singular names
-func CheckModelSingularNaming() []string {
+func CheckModelSingularNaming(ignore gitignore.Matcher) []string {
 	var violations []string
 
 	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
@@ -346,11 +341,7 @@ func CheckModelSingularNaming() []string {
 
 	client := pluralize.NewClient()
 
-	err := filepath.Walk(modelDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
+	err := walkProjectDir(modelDir, ignore, func(path string, info os.FileInfo) error {
 		// Get relative path from model directory
 		relPath, err := filepath.Rel(modelDir, path)
 		if err != nil {
@@ -493,18 +484,14 @@ func projectImportLayer(importPath, modulePath string) string {
 }
 
 // CheckModelJSONTagNaming checks if model struct json tags use camelCase naming
-func CheckModelJSONTagNaming() []string {
+func CheckModelJSONTagNaming(ignore gitignore.Matcher) []string {
 	var violations []string
 
 	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := filepath.Walk(modelDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
+	err := walkProjectDir(modelDir, ignore, func(path string, info os.FileInfo) error {
 		// Skip directories and non-Go files
 		if info.IsDir() || !strings.HasSuffix(path, ".go") {
 			return nil
@@ -661,18 +648,14 @@ func toSnakeCase(s string) string {
 }
 
 // CheckModelActionTypeNaming checks explicit DSL Payload and Result type names.
-func CheckModelActionTypeNaming() []string {
+func CheckModelActionTypeNaming(ignore gitignore.Matcher) []string {
 	var violations []string
 
 	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := filepath.Walk(modelDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
+	err := walkProjectDir(modelDir, ignore, func(path string, info os.FileInfo) error {
 		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") {
 			return nil
 		}
@@ -809,18 +792,14 @@ func actionTypeBaseName(expr ast.Expr) (string, bool) {
 }
 
 // CheckModelFileBoundary checks that each model file contains at most one model struct.
-func CheckModelFileBoundary() []string {
+func CheckModelFileBoundary(ignore gitignore.Matcher) []string {
 	var violations []string
 
 	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := filepath.Walk(modelDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
+	err := walkProjectDir(modelDir, ignore, func(path string, info os.FileInfo) error {
 		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") {
 			return nil
 		}
@@ -881,18 +860,14 @@ func modelStructNames(node *ast.File) []string {
 }
 
 // CheckServiceFileBoundary checks that each service file contains at most one service struct.
-func CheckServiceFileBoundary() []string {
+func CheckServiceFileBoundary(ignore gitignore.Matcher) []string {
 	var violations []string
 
 	if _, err := os.Stat(serviceDir); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := filepath.Walk(serviceDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
+	err := walkProjectDir(serviceDir, ignore, func(path string, info os.FileInfo) error {
 		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") {
 			return nil
 		}
@@ -1026,18 +1001,14 @@ func relativePath(filePath string) string {
 }
 
 // CheckModelPackageNaming checks if model package names match their directory names
-func CheckModelPackageNaming() []string {
+func CheckModelPackageNaming(ignore gitignore.Matcher) []string {
 	var violations []string
 
 	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := filepath.Walk(modelDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
+	err := walkProjectDir(modelDir, ignore, func(path string, info os.FileInfo) error {
 		// Skip directories and non-Go files
 		if info.IsDir() || !strings.HasSuffix(path, ".go") {
 			return nil
@@ -1090,7 +1061,7 @@ func CheckModelPackageNaming() []string {
 }
 
 // CheckAllowedDirectories checks if only allowed directories exist in the project
-func CheckAllowedDirectories() []string {
+func CheckAllowedDirectories(ignore gitignore.Matcher) []string {
 	projectDir := "."
 	var violations []string
 
@@ -1139,7 +1110,6 @@ func CheckAllowedDirectories() []string {
 		"dist":      true,
 		"generated": true,
 	}
-	ignoreMatcher := newProjectIgnoreMatcher()
 
 	// Read directory contents
 	entries, err := os.ReadDir(projectDir)
@@ -1158,7 +1128,7 @@ func CheckAllowedDirectories() []string {
 		if strings.HasPrefix(dirName, ".") {
 			continue
 		}
-		if isIgnoredProjectDirectory(ignoreMatcher, dirName) {
+		if isIgnoredProjectPath(ignore, dirName, true) {
 			continue
 		}
 
@@ -1173,6 +1143,8 @@ func CheckAllowedDirectories() []string {
 
 // newProjectIgnoreMatcher loads Git ignore rules for the project root. Every
 // check walks the project from its root, so the root is not a parameter.
+// Building a matcher scans the whole worktree for ignore files, so
+// collectProjectChecks builds one and shares it across every check.
 func newProjectIgnoreMatcher() gitignore.Matcher {
 	patterns, err := gitignore.ReadPatterns(osfs.New("."), nil)
 	if err != nil || len(patterns) == 0 {
@@ -1181,12 +1153,32 @@ func newProjectIgnoreMatcher() gitignore.Matcher {
 	return gitignore.NewMatcher(patterns)
 }
 
-// isIgnoredProjectDirectory reports whether a root-level project directory is ignored by Git rules.
-func isIgnoredProjectDirectory(matcher gitignore.Matcher, dirName string) bool {
+// isIgnoredProjectPath reports whether a project-relative path is ignored by
+// Git rules.
+func isIgnoredProjectPath(matcher gitignore.Matcher, path string, isDir bool) bool {
 	if matcher == nil {
 		return false
 	}
-	return matcher.Match([]string{dirName}, true)
+	return matcher.Match(strings.Split(path, string(filepath.Separator)), isDir)
+}
+
+// walkProjectDir walks root while pruning paths ignored by Git rules, so
+// runtime artifacts such as the log directories a test run leaves behind
+// never reach checkFn. Walk errors abort the walk instead of being delegated,
+// so checkFn only sees paths that exist.
+func walkProjectDir(root string, ignore gitignore.Matcher, checkFn func(path string, info os.FileInfo) error) error {
+	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if path != root && isIgnoredProjectPath(ignore, path, info.IsDir()) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		return checkFn(path, info)
+	})
 }
 
 // isGstFrameworkProject checks if this is the gst framework project itself
@@ -1224,18 +1216,14 @@ func usesGstFramework(projectDir string) bool {
 // CheckDSLDesign runs DSL Design() validation on every model file, so keyword
 // placement and generation-semantic violations fail gg check with the same
 // rules that block gg gen.
-func CheckDSLDesign() []string {
+func CheckDSLDesign(ignore gitignore.Matcher) []string {
 	var violations []string
 
 	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
 		return violations
 	}
 
-	err := filepath.Walk(modelDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
+	err := walkProjectDir(modelDir, ignore, func(path string, info os.FileInfo) error {
 		base := filepath.Base(path)
 		if info.IsDir() {
 			if path != modelDir && (base == "vendor" || base == "testdata") {

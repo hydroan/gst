@@ -10,6 +10,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 )
 
 // gstServiceImportPath is the framework package whose NewError and
@@ -34,7 +36,7 @@ const gstServiceImportPath = "github.com/hydroan/gst/service"
 // database.Transaction calls are transparent: their closure exits are
 // treated as exits of the enclosing flow. Unresolvable constructs fail
 // closed, so an exit the checker cannot prove compliant is a violation.
-func CheckServiceErrorDiscipline() []string {
+func CheckServiceErrorDiscipline(ignore gitignore.Matcher) []string {
 	analysis := &svcErrAnalysis{
 		modulePath:  currentProjectModulePath(),
 		fset:        token.NewFileSet(),
@@ -46,11 +48,7 @@ func CheckServiceErrorDiscipline() []string {
 		return nil
 	}
 
-	ignoreMatcher := newProjectIgnoreMatcher()
-	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
+	err := walkProjectDir(".", ignore, func(path string, info os.FileInfo) error {
 		if info.IsDir() {
 			if path == "." {
 				return nil
@@ -61,9 +59,6 @@ func CheckServiceErrorDiscipline() []string {
 			}
 			// Nested Go modules belong to other projects.
 			if _, statErr := os.Stat(filepath.Join(path, "go.mod")); statErr == nil {
-				return filepath.SkipDir
-			}
-			if ignoreMatcher != nil && ignoreMatcher.Match(strings.Split(path, string(filepath.Separator)), true) {
 				return filepath.SkipDir
 			}
 			return nil

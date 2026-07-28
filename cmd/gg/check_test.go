@@ -33,7 +33,7 @@ import _ "tmpapp/service/iam/session"
 import _ "tmpapp/service/iam/session"
 `)
 
-	violations := CheckArchitectureDependency()
+	violations := CheckArchitectureDependency(newProjectIgnoreMatcher())
 
 	for _, violation := range violations {
 		if strings.Contains(violation, filepath.Join("service", "iam", "account", "login.go")) {
@@ -62,7 +62,7 @@ func TestCheckModelSingularNamingAllowsSharedTypesDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	violations := CheckModelSingularNaming()
+	violations := CheckModelSingularNaming(newProjectIgnoreMatcher())
 
 	for _, violation := range violations {
 		if strings.Contains(violation, filepath.Join("model", "types")) {
@@ -71,6 +71,38 @@ func TestCheckModelSingularNamingAllowsSharedTypesDirectory(t *testing.T) {
 	}
 	if len(violations) != 1 || !strings.Contains(violations[0], filepath.Join("model", "records")) {
 		t.Fatalf("expected only ordinary plural model directory violation, got %#v", violations)
+	}
+}
+
+func TestCheckModelSingularNamingSkipsGitIgnoredPaths(t *testing.T) {
+	oldModelDir := modelDir
+	t.Cleanup(func() {
+		modelDir = oldModelDir
+	})
+
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	modelDir = "model"
+
+	// A runtime artifact directory ignored by Git rules, such as the log
+	// directory a test run leaves behind, must not fail naming checks.
+	writeCheckFile(t, filepath.Join(projectDir, ".gitignore"), "logs\n")
+	if err := os.MkdirAll(filepath.Join(projectDir, "model", "user", "logs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(projectDir, "model", "records"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	violations := CheckModelSingularNaming(newProjectIgnoreMatcher())
+
+	for _, violation := range violations {
+		if strings.Contains(violation, filepath.Join("model", "user", "logs")) {
+			t.Fatalf("git-ignored directory should be skipped, got violations: %#v", violations)
+		}
+	}
+	if len(violations) != 1 || !strings.Contains(violations[0], filepath.Join("model", "records")) {
+		t.Fatalf("expected only non-ignored plural directory violation, got %#v", violations)
 	}
 }
 
@@ -94,7 +126,7 @@ func TestCheckModelPackageNamingAllowsUnderscoreStrippedAndExternalTestPackages(
 	// A genuine mismatch between package name and directory name (after stripping underscores) should still be reported.
 	writeCheckFile(t, filepath.Join(projectDir, "model", "mismatch", "mismatch.go"), "package wrongname\n")
 
-	violations := CheckModelPackageNaming()
+	violations := CheckModelPackageNaming(newProjectIgnoreMatcher())
 
 	for _, violation := range violations {
 		if strings.Contains(violation, filepath.Join("receive_robot", "receive_robot.go")) {
@@ -102,6 +134,36 @@ func TestCheckModelPackageNamingAllowsUnderscoreStrippedAndExternalTestPackages(
 		}
 		if strings.Contains(violation, filepath.Join("group", "receive_robot_test.go")) {
 			t.Fatalf("external test package name should be allowed, got violations: %#v", violations)
+		}
+	}
+	if len(violations) != 1 || !strings.Contains(violations[0], filepath.Join("mismatch", "mismatch.go")) {
+		t.Fatalf("expected only genuine package name mismatch violation, got %#v", violations)
+	}
+}
+
+func TestCheckModelPackageNamingSkipsGitIgnoredPaths(t *testing.T) {
+	oldModelDir := modelDir
+	t.Cleanup(func() {
+		modelDir = oldModelDir
+	})
+
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	modelDir = "model"
+
+	writeCheckFile(t, filepath.Join(projectDir, ".gitignore"), "generated\n")
+
+	// A mismatched package inside a git-ignored directory must not be reported.
+	writeCheckFile(t, filepath.Join(projectDir, "model", "user", "generated", "helper.go"), "package mismatched\n")
+
+	// A genuine mismatch outside ignored paths should still be reported.
+	writeCheckFile(t, filepath.Join(projectDir, "model", "mismatch", "mismatch.go"), "package wrongname\n")
+
+	violations := CheckModelPackageNaming(newProjectIgnoreMatcher())
+
+	for _, violation := range violations {
+		if strings.Contains(violation, "helper.go") {
+			t.Fatalf("git-ignored path should be skipped, got violations: %#v", violations)
 		}
 	}
 	if len(violations) != 1 || !strings.Contains(violations[0], filepath.Join("mismatch", "mismatch.go")) {
@@ -159,7 +221,7 @@ func (Current) Design() {
 }
 `)
 
-	violations := CheckDSLDesign()
+	violations := CheckDSLDesign(newProjectIgnoreMatcher())
 
 	if len(violations) != 1 {
 		t.Fatalf("expected exactly one violation, got %#v", violations)

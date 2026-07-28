@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 )
 
 // CheckTransactionClosureContext checks that inside a database.Transaction
@@ -21,16 +23,10 @@ import (
 // flags context arguments that are plain identifiers different from the
 // enclosing closure's context parameter name. Non-identifier arguments (call
 // results, selector expressions) are left alone.
-func CheckTransactionClosureContext() []string {
+func CheckTransactionClosureContext(ignore gitignore.Matcher) []string {
 	var violations []string
 
-	ignoreMatcher := newProjectIgnoreMatcher()
-
-	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
+	err := walkProjectDir(".", ignore, func(path string, info os.FileInfo) error {
 		if info.IsDir() {
 			if path == "." {
 				return nil
@@ -41,9 +37,6 @@ func CheckTransactionClosureContext() []string {
 			}
 			// Nested Go modules belong to other projects.
 			if _, statErr := os.Stat(filepath.Join(path, "go.mod")); statErr == nil {
-				return filepath.SkipDir
-			}
-			if ignoreMatcher != nil && ignoreMatcher.Match(strings.Split(path, string(filepath.Separator)), true) {
 				return filepath.SkipDir
 			}
 			return nil
