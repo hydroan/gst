@@ -36,10 +36,11 @@ const gstServiceImportPath = "github.com/hydroan/gst/service"
 // closed, so an exit the checker cannot prove compliant is a violation.
 func CheckServiceErrorDiscipline() []string {
 	analysis := &svcErrAnalysis{
-		modulePath: currentProjectModulePath(),
-		fset:       token.NewFileSet(),
-		summaries:  map[svcErrFuncKey]*svcErrFuncSummary{},
-		entryTypes: map[string]map[string]bool{},
+		modulePath:  currentProjectModulePath(),
+		fset:        token.NewFileSet(),
+		summaries:   map[svcErrFuncKey]*svcErrFuncSummary{},
+		entryTypes:  map[string]map[string]bool{},
+		pkgVarTypes: map[string]map[string]string{},
 	}
 	if analysis.modulePath == "" {
 		return nil
@@ -75,6 +76,17 @@ func CheckServiceErrorDiscipline() []string {
 	})
 	if err != nil {
 		return []string{fmt.Sprintf("walking project directory: %v", err)}
+	}
+
+	// Function bodies are analyzed only after every file was collected, so
+	// cross-file knowledge - service struct types and package-level variable
+	// types - is complete regardless of walk order.
+	for _, collector := range analysis.files {
+		for _, decl := range collector.file.Decls {
+			if funcDecl, ok := decl.(*ast.FuncDecl); ok {
+				collector.collectFunc(funcDecl)
+			}
+		}
 	}
 
 	return analysis.report()
@@ -131,11 +143,13 @@ type svcErrFuncSummary struct {
 // svcErrAnalysis carries the whole-project state: per-function summaries and
 // the service struct types whose methods are the checked entry points.
 type svcErrAnalysis struct {
-	modulePath string
-	fset       *token.FileSet
-	summaries  map[svcErrFuncKey]*svcErrFuncSummary
-	entryTypes map[string]map[string]bool
-	entries    []svcErrFuncKey
+	modulePath  string
+	fset        *token.FileSet
+	summaries   map[svcErrFuncKey]*svcErrFuncSummary
+	entryTypes  map[string]map[string]bool
+	pkgVarTypes map[string]map[string]string
+	entries     []svcErrFuncKey
+	files       []*svcErrFileCollector
 }
 
 // collectFile parses one project file and records service struct types and
@@ -172,24 +186,75 @@ func (a *svcErrAnalysis) collectFile(path string) {
 		}
 	}
 
+	collector.file = file
 	for _, decl := range file.Decls {
-		switch decl := decl.(type) {
-		case *ast.GenDecl:
+		if decl, ok := decl.(*ast.GenDecl); ok {
 			collector.collectServiceTypes(decl)
-		case *ast.FuncDecl:
-			collector.collectFunc(decl)
+			collector.collectPackageVars(decl)
 		}
 	}
+	a.files = append(a.files, collector)
 }
 
-// svcErrFileCollector is the per-file context: import aliases of the
-// framework packages and of project-internal packages.
+// svcErrFileCollector is the per-file context: the parsed file plus import
+// aliases of the framework packages and of project-internal packages.
 type svcErrFileCollector struct {
 	analysis   *svcErrAnalysis
+	file       *ast.File
 	pkgDir     string
 	svcAliases []string
 	dbAliases  []string
 	projectPkg map[string]string
+}
+
+// collectPackageVars records the concrete type of package-level variables
+// declared as composite literals or with an explicit type, so method calls on
+// them (for example a package-level manager singleton) resolve to that type's
+// methods instead of failing closed.
+func (c *svcErrFileCollector) collectPackageVars(decl *ast.GenDecl) {
+	if decl.Tok != token.VAR {
+		return
+	}
+	for _, spec := range decl.Specs {
+		valueSpec, ok := spec.(*ast.ValueSpec)
+		if !ok {
+			continue
+		}
+		for i, name := range valueSpec.Names {
+			typeName := ""
+			switch {
+			case valueSpec.Type != nil:
+				typeName = svcErrReceiverTypeName(valueSpec.Type)
+			case i < len(valueSpec.Values):
+				typeName = svcErrCompositeTypeName(valueSpec.Values[i])
+			}
+			if typeName == "" {
+				continue
+			}
+			vars := c.analysis.pkgVarTypes[c.pkgDir]
+			if vars == nil {
+				vars = map[string]string{}
+				c.analysis.pkgVarTypes[c.pkgDir] = vars
+			}
+			vars[name.Name] = typeName
+		}
+	}
+}
+
+// svcErrCompositeTypeName extracts the local type name from a composite
+// literal value, with or without a leading address operator.
+func svcErrCompositeTypeName(expr ast.Expr) string {
+	switch expr := expr.(type) {
+	case *ast.UnaryExpr:
+		if expr.Op == token.AND {
+			return svcErrCompositeTypeName(expr.X)
+		}
+	case *ast.CompositeLit:
+		if ident, ok := expr.Type.(*ast.Ident); ok {
+			return ident.Name
+		}
+	}
+	return ""
 }
 
 // collectServiceTypes records struct types that embed service.Base; their
@@ -493,8 +558,28 @@ func (s *svcErrFuncScope) resolveCall(call *ast.CallExpr, visiting map[svcErrVar
 			pos:    s.file.analysis.fset.Position(call.Pos()),
 		}}
 	case *ast.SelectorExpr:
+		if fun.Sel == nil {
+			return []svcErrSource{s.raw(call)}
+		}
+		// A method call on another project package's package-level variable
+		// (pkg.Manager.Method) resolves through that package's recorded
+		// variable types.
+		if varSel, ok := fun.X.(*ast.SelectorExpr); ok {
+			if pkgIdent, ok := varSel.X.(*ast.Ident); ok && varSel.Sel != nil {
+				if pkgDir, ok := s.file.projectPkg[pkgIdent.Name]; ok {
+					if typeName, ok := s.file.analysis.pkgVarTypes[pkgDir][varSel.Sel.Name]; ok {
+						return []svcErrSource{{
+							kind:   svcErrSourceCall,
+							callee: svcErrFuncKey{pkgDir: pkgDir, recv: typeName, name: fun.Sel.Name},
+							pos:    s.file.analysis.fset.Position(call.Pos()),
+						}}
+					}
+				}
+			}
+			return []svcErrSource{s.raw(call)}
+		}
 		ident, ok := fun.X.(*ast.Ident)
-		if !ok || fun.Sel == nil {
+		if !ok {
 			return []svcErrSource{s.raw(call)}
 		}
 		if slices.Contains(s.file.svcAliases, ident.Name) && (fun.Sel.Name == "NewError" || fun.Sel.Name == "NewErrorWithCause") {
@@ -514,6 +599,18 @@ func (s *svcErrFuncScope) resolveCall(call *ast.CallExpr, visiting map[svcErrVar
 			return []svcErrSource{{
 				kind:   svcErrSourceCall,
 				callee: svcErrFuncKey{pkgDir: pkgDir, name: fun.Sel.Name},
+				pos:    s.file.analysis.fset.Position(call.Pos()),
+			}}
+		}
+		// A method call on a same-package package-level variable (a manager
+		// singleton) resolves through the variable's recorded concrete type.
+		// Local variables never register there, so the lookup alone decides;
+		// a same-named local shadowing the package variable is not a shape
+		// this project uses.
+		if typeName, ok := s.file.analysis.pkgVarTypes[s.file.pkgDir][ident.Name]; ok {
+			return []svcErrSource{{
+				kind:   svcErrSourceCall,
+				callee: svcErrFuncKey{pkgDir: s.file.pkgDir, recv: typeName, name: fun.Sel.Name},
 				pos:    s.file.analysis.fset.Position(call.Pos()),
 			}}
 		}
