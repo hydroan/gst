@@ -336,15 +336,24 @@ type svcErrFuncScope struct {
 	numResults int
 	// assigns maps a declared variable to every expression assigned to it,
 	// closures included. Keying by the parser-resolved declaration object
-	// keeps same-named variables from different scopes apart, so a compliant
-	// exit is not polluted by an unrelated err a few lines above.
-	assigns map[svcErrVarObj][]ast.Expr
+	// keeps same-named variables from different scopes apart, and each entry
+	// records its position so a return only pools assignments that happened
+	// before it: reusing one err variable for several sources must not let a
+	// later raw assignment pollute an earlier compliant exit.
+	assigns map[svcErrVarObj][]svcErrAssign
+}
+
+// svcErrAssign is one recorded assignment: the assigned expression and where
+// the assignment happens.
+type svcErrAssign struct {
+	expr ast.Expr
+	pos  token.Pos
 }
 
 // collectAssigns records every assignment in the function body, closures
 // included, keyed by the assigned variable's declaration object.
 func (s *svcErrFuncScope) collectAssigns(body *ast.BlockStmt) {
-	s.assigns = map[svcErrVarObj][]ast.Expr{}
+	s.assigns = map[svcErrVarObj][]svcErrAssign{}
 	ast.Inspect(body, func(n ast.Node) bool {
 		assign, ok := n.(*ast.AssignStmt)
 		if !ok {
@@ -355,7 +364,7 @@ func (s *svcErrFuncScope) collectAssigns(body *ast.BlockStmt) {
 			// call as origin; only the error-typed one ever reaches an exit.
 			for _, lhs := range assign.Lhs {
 				if ident, ok := lhs.(*ast.Ident); ok && svcErrDeclObj(ident) != nil {
-					s.assigns[svcErrDeclObj(ident)] = append(s.assigns[svcErrDeclObj(ident)], assign.Rhs[0])
+					s.assigns[svcErrDeclObj(ident)] = append(s.assigns[svcErrDeclObj(ident)], svcErrAssign{expr: assign.Rhs[0], pos: assign.Pos()})
 				}
 			}
 			return true
@@ -365,7 +374,7 @@ func (s *svcErrFuncScope) collectAssigns(body *ast.BlockStmt) {
 		}
 		for i, lhs := range assign.Lhs {
 			if ident, ok := lhs.(*ast.Ident); ok && svcErrDeclObj(ident) != nil {
-				s.assigns[svcErrDeclObj(ident)] = append(s.assigns[svcErrDeclObj(ident)], assign.Rhs[i])
+				s.assigns[svcErrDeclObj(ident)] = append(s.assigns[svcErrDeclObj(ident)], svcErrAssign{expr: assign.Rhs[i], pos: assign.Pos()})
 			}
 		}
 		return true
@@ -430,23 +439,30 @@ func (s *svcErrFuncScope) resolveExpr(expr ast.Expr, visiting map[svcErrVarObj]b
 }
 
 // resolveObj resolves the origins of the value held by one declared
-// variable, pooling every assignment recorded for its declaration object.
-// at names the expression or statement to blame when nothing was recorded.
+// variable, pooling the assignments recorded for its declaration object that
+// happen before the use site. at names the use — the expression or statement
+// to blame when nothing was recorded.
 func (s *svcErrFuncScope) resolveObj(obj svcErrVarObj, at ast.Node, visiting map[svcErrVarObj]bool) []svcErrSource {
 	if obj == nil || visiting[obj] {
 		return nil
 	}
-	assigned, ok := s.assigns[obj]
-	if !ok {
-		// No recorded assignment: a parameter or captured value the checker
-		// cannot see through; fail closed.
-		return []svcErrSource{{kind: svcErrSourceRaw, pos: s.file.analysis.fset.Position(at.Pos())}}
-	}
 	visiting[obj] = true
 	defer delete(visiting, obj)
 	var sources []svcErrSource
-	for _, source := range assigned {
-		sources = append(sources, s.resolveExpr(source, visiting)...)
+	found := false
+	for _, assign := range s.assigns[obj] {
+		// A use always happens after the assignment feeding it, so later
+		// assignments cannot be this use's origin.
+		if assign.pos >= at.Pos() {
+			continue
+		}
+		found = true
+		sources = append(sources, s.resolveExpr(assign.expr, visiting)...)
+	}
+	if !found {
+		// No assignment before the use: a parameter or captured value the
+		// checker cannot see through; fail closed.
+		return []svcErrSource{{kind: svcErrSourceRaw, pos: s.file.analysis.fset.Position(at.Pos())}}
 	}
 	return sources
 }

@@ -175,6 +175,22 @@ func loadChecked[T any](ctx *types.ServiceContext) error {
 func newRecordMissingError(err error) *service.Error {
 	return service.NewErrorWithCause(http.StatusNotFound, "record not found", err)
 }
+
+// Patch reuses one err variable for several sources. The early compliant
+// return must not be polluted by the raw assignment that happens later in
+// the body: only assignments before a return feed that return.
+func (u *Updater) Patch(ctx *types.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
+	err := guard.RequireAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	record := new(model.Record)
+	err = database.Database[*model.Record](ctx).Get(record, req.ID)
+	if err != nil {
+		return nil, service.NewErrorWithCause(http.StatusNotFound, "record not found", err)
+	}
+	return &model.RecordRsp{}, nil
+}
 `)
 	writeCheckFile(t, filepath.Join(projectDir, "helper", "guard", "guard.go"), `package guard
 
