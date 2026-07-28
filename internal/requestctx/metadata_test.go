@@ -14,21 +14,24 @@ import (
 func TestFromGinExtractsRequestFields(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/users/42?tag=blue&tag=green", nil)
-	ctx.Params = gin.Params{{Key: "id", Value: "42"}}
-	ctx.Set(consts.PARAMS, []string{"id"})
-	ctx.Set(consts.CTX_ROUTE, "/api/users/:id")
-	ctx.Set(consts.CTX_USERNAME, "admin")
-	ctx.Set(consts.CTX_USER_ID, "user-1")
-	ctx.Set(consts.CTX_SESSION_ID, "session-1")
-	ctx.Set(consts.CTX_TENANT_ID, "tenant-1")
-	ctx.Set(consts.TRACE_ID, "trace-1")
+	// The route comes from gin's own route matching, so the request has to go
+	// through a registered route rather than a bare test context.
+	var meta Metadata
+	router := gin.New()
+	router.GET("/api/users/:id", func(ctx *gin.Context) {
+		ctx.Set(consts.PARAMS, []string{"id"})
+		ctx.Set(consts.CTX_USERNAME, "admin")
+		ctx.Set(consts.CTX_USER_ID, "user-1")
+		ctx.Set(consts.CTX_SESSION_ID, "session-1")
+		ctx.Set(consts.CTX_TENANT_ID, "tenant-1")
+		ctx.Set(consts.TRACE_ID, "trace-1")
 
-	meta := FromGin(ctx)
+		meta = FromGin(ctx)
+	})
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/users/42?tag=blue&tag=green", nil))
 
 	require.Equal(t, "/api/users/:id", meta.Route())
+	require.Equal(t, "/api/users/42", meta.Path())
 	require.Equal(t, "admin", meta.Username())
 	require.Equal(t, "user-1", meta.UserID())
 	require.Equal(t, "session-1", meta.SessionID())
@@ -61,6 +64,7 @@ func TestMetadataProtectsParamsAndQuery(t *testing.T) {
 func TestMetadataContextRoundTrip(t *testing.T) {
 	meta := New(Fields{
 		Route:    "/api/users/:id",
+		Path:     "/api/users/42",
 		Username: "admin",
 		UserID:   "user-1",
 		TenantID: "tenant-1",
@@ -77,6 +81,7 @@ func TestMetadataContextRoundTrip(t *testing.T) {
 	got := FromContext(ctx)
 
 	require.Equal(t, "/api/users/:id", got.Route())
+	require.Equal(t, "/api/users/42", got.Path())
 	require.Equal(t, "admin", got.Username())
 	require.Equal(t, "user-1", got.UserID())
 	require.Equal(t, "tenant-1", got.TenantID())

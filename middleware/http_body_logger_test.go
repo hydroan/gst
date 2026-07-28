@@ -93,6 +93,7 @@ func TestHTTPBodyLoggerLogsRequestAndResponseAsOneEntry(t *testing.T) {
 
 	ctx := entries[0].ContextMap()
 	require.Equal(t, "/api/records", ctx["route"])
+	require.Equal(t, "/api/records", ctx["path"])
 	require.Equal(t, "POST", ctx["method"])
 	require.Equal(t, "alice", ctx["username"])
 	require.Equal(t, "u-1", ctx["user_id"])
@@ -105,6 +106,34 @@ func TestHTTPBodyLoggerLogsRequestAndResponseAsOneEntry(t *testing.T) {
 	require.Equal(t, int64(w.Body.Len()), ctx["response_size"])
 	require.NotContains(t, ctx, "request_truncated")
 	require.NotContains(t, ctx, "response_truncated")
+}
+
+func TestHTTPBodyLoggerRecordsRoutePatternAndConcretePath(t *testing.T) {
+	logs := setupHTTPBodyLoggerTest(t, config.HTTPBodyLogger{
+		Enabled:     true,
+		LogRequest:  config.HTTPBodyLogModeAll,
+		LogResponse: config.HTTPBodyLogModeNone,
+		MaxBodySize: "64KB",
+	})
+
+	router := gin.New()
+	router.Use(BodyLogger())
+	router.POST("/api/records/:id/notes", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	w := performHTTPBodyLoggerRequest(router, "/api/records/42/notes", `{"a":1}`, "application/json")
+
+	require.Equal(t, http.StatusOK, w.Code)
+	entries := logs.All()
+	require.Len(t, entries, 1)
+
+	// The route groups every request of the endpoint together, the path
+	// identifies this one request; both are logged so aggregation and lookup
+	// each have a field of the right cardinality.
+	ctx := entries[0].ContextMap()
+	require.Equal(t, "/api/records/:id/notes", ctx["route"])
+	require.Equal(t, "/api/records/42/notes", ctx["path"])
 }
 
 func TestHTTPBodyLoggerDefaultModesLogRequestAlwaysResponseOnError(t *testing.T) {

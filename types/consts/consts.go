@@ -23,7 +23,13 @@ const (
 )
 
 const (
+	// CTX_ROUTE names the matched route pattern ("/api/users/:id") and
+	// CTX_PATH the concrete request path ("/api/users/42"). Both identify the
+	// same request: the pattern has low cardinality and groups every request
+	// of one endpoint together, the path pins down a single request. Log
+	// aggregation and alerting must key on the route, never on the path.
 	CTX_ROUTE         = "route"
+	CTX_PATH          = "path"
 	CTX_USERNAME      = "username"
 	CTX_USER_ID       = "user_id"
 	CTX_SESSION_ID    = "session_id"

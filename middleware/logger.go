@@ -20,12 +20,12 @@ func Logger(filename ...string) gin.HandlerFunc {
 		start := time.Now()
 		path := c.Request.URL.Path
 		query := c.Request.URL.RawQuery
-		c.Set(consts.CTX_ROUTE, path)
 		c.Next()
 
-		labelPath := sanitizeLabelValue(c.FullPath())
-		prommetrics.HTTPRequestsTotal.WithLabelValues(c.Request.Method, labelPath, strconv.Itoa(c.Writer.Status())).Inc()
-		prommetrics.HTTPRequestDuration.WithLabelValues(c.Request.Method, labelPath, strconv.Itoa(c.Writer.Status())).Observe(time.Since(start).Seconds())
+		route := c.FullPath()
+		labelRoute := sanitizeLabelValue(route)
+		prommetrics.HTTPRequestsTotal.WithLabelValues(c.Request.Method, labelRoute, strconv.Itoa(c.Writer.Status())).Inc()
+		prommetrics.HTTPRequestDuration.WithLabelValues(c.Request.Method, labelRoute, strconv.Itoa(c.Writer.Status())).Observe(time.Since(start).Seconds())
 
 		// Add tracing information to logs.
 		span := GetSpanFromContext(c)
@@ -54,7 +54,8 @@ func Logger(filename ...string) gin.HandlerFunc {
 			zap.String(consts.CTX_USERNAME, c.GetString(consts.CTX_USERNAME)),
 			zap.String(consts.CTX_USER_ID, c.GetString(consts.CTX_USER_ID)),
 			zap.String(consts.TRACE_ID, traceID),
-			zap.String("path", path),
+			zap.String(consts.CTX_ROUTE, route),
+			zap.String(consts.CTX_PATH, path),
 			zap.String("query", query),
 			zap.String("ip", c.ClientIP()),
 			zap.String("user_agent", c.Request.UserAgent()),

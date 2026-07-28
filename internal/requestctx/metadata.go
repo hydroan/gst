@@ -10,8 +10,15 @@ import (
 )
 
 // Metadata contains immutable request-scoped fields shared by logging and lower-level infrastructure.
+//
+// Route and path are two identities of the same request and both are kept:
+// the route is the matched route pattern ("/api/users/:id") that groups every
+// request of one endpoint together, the path is the concrete request path
+// ("/api/users/42") that pins down a single request. Consumers aggregating
+// requests must use the route; the path only locates one of them.
 type Metadata struct {
 	route     string
+	path      string
 	username  string
 	userID    string
 	sessionID string
@@ -24,6 +31,7 @@ type Metadata struct {
 // Fields contains request metadata fields for non-gin callers and tests.
 type Fields struct {
 	Route     string
+	Path      string
 	Username  string
 	UserID    string
 	SessionID string
@@ -37,6 +45,7 @@ type Fields struct {
 func New(fields Fields) Metadata {
 	return Metadata{
 		route:     fields.Route,
+		path:      fields.Path,
 		username:  fields.Username,
 		userID:    fields.UserID,
 		sessionID: fields.SessionID,
@@ -48,6 +57,12 @@ func New(fields Fields) Metadata {
 }
 
 // FromGin extracts Metadata from gin.Context.
+//
+// Route and path are read straight off the gin context instead of through
+// context keys another middleware has to set first, so metadata is complete no
+// matter where in the handler chain it is taken. The route is empty for
+// requests gin did not match to a registered route (NoRoute, NoMethod); the
+// path stays populated in those cases and identifies the request on its own.
 func FromGin(c *gin.Context) Metadata {
 	if c == nil {
 		return Metadata{}
@@ -58,13 +73,16 @@ func FromGin(c *gin.Context) Metadata {
 		params[key] = c.Param(key)
 	}
 
+	var path string
 	var query url.Values
 	if c.Request != nil && c.Request.URL != nil {
+		path = c.Request.URL.Path
 		query = c.Request.URL.Query()
 	}
 
 	return New(Fields{
-		Route:     c.GetString(consts.CTX_ROUTE),
+		Route:     c.FullPath(),
+		Path:      path,
 		Username:  c.GetString(consts.CTX_USERNAME),
 		UserID:    c.GetString(consts.CTX_USER_ID),
 		SessionID: c.GetString(consts.CTX_SESSION_ID),
@@ -76,6 +94,7 @@ func FromGin(c *gin.Context) Metadata {
 }
 
 func (m Metadata) Route() string     { return m.route }
+func (m Metadata) Path() string      { return m.path }
 func (m Metadata) Username() string  { return m.username }
 func (m Metadata) UserID() string    { return m.userID }
 func (m Metadata) SessionID() string { return m.sessionID }
@@ -102,6 +121,7 @@ func WithMetadata(ctx context.Context, meta Metadata) context.Context {
 
 	return context.WithValue(ctx, metadataContextKey{}, New(Fields{
 		Route:     meta.Route(),
+		Path:      meta.Path(),
 		Username:  meta.Username(),
 		UserID:    meta.UserID(),
 		SessionID: meta.SessionID(),

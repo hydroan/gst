@@ -53,7 +53,7 @@ func BodyLogger() gin.HandlerFunc {
 		rspMode := normalizeHTTPBodyLogMode(cfg.LogResponse, config.HTTPBodyLogModeError)
 		if !cfg.Enabled ||
 			(reqMode == config.HTTPBodyLogModeNone && rspMode == config.HTTPBodyLogModeNone) ||
-			matchHTTPBodyLogSkipRoute(cfg.SkipRoutes, httpBodyLogRoute(c)) {
+			matchHTTPBodyLogSkipRoute(cfg.SkipRoutes, httpBodyLogSkipTarget(c)) {
 			c.Next()
 			return
 		}
@@ -200,10 +200,15 @@ func writeHTTPBodyLog(c *gin.Context, reqMode, rspMode config.HTTPBodyLogMode, r
 		return
 	}
 
-	fields := make([]zap.Field, 0, 16)
+	// httpBodyLogFieldCap must stay >= the fixed fields appended below plus the
+	// four fields each body side can contribute, so the slice is allocated
+	// exactly once. Re-check it when adding or removing fields.
+	const httpBodyLogFieldCap = 18
+	fields := make([]zap.Field, 0, httpBodyLogFieldCap)
 	fields = append(
 		fields,
-		zap.String(consts.CTX_ROUTE, httpBodyLogRoute(c)),
+		zap.String(consts.CTX_ROUTE, c.FullPath()),
+		zap.String(consts.CTX_PATH, c.Request.URL.Path),
 		zap.String("method", c.Request.Method),
 		zap.String(consts.CTX_USERNAME, c.GetString(consts.CTX_USERNAME)),
 		zap.String(consts.CTX_USER_ID, c.GetString(consts.CTX_USER_ID)),
@@ -296,20 +301,16 @@ func matchHTTPBodyLogSkipRoute(patterns []string, route string) bool {
 	return false
 }
 
-// httpBodyLogRoute resolves the route identity used for both skip matching
-// and the route log field, preferring the registered route pattern.
+// httpBodyLogSkipTarget resolves the route identity skip patterns are matched
+// against, preferring the registered route pattern.
 //
 // The pattern is what skip patterns are written against: a route carrying path
 // parameters ("/users/:id/password") has no fixed concrete path, so matching
 // the resolved path would force every such route to be skipped by a prefix
-// wildcard that also skips its siblings. Nothing is lost by preferring the
-// pattern, because the resolved values are logged separately as params and the
-// access log records the concrete path under the same trace id.
-func httpBodyLogRoute(c *gin.Context) string {
+// wildcard that also skips its siblings. Requests gin did not match to a route
+// have no pattern, so those fall back to the concrete path and stay skippable.
+func httpBodyLogSkipTarget(c *gin.Context) string {
 	if route := c.FullPath(); route != "" {
-		return route
-	}
-	if route := c.GetString(consts.CTX_ROUTE); route != "" {
 		return route
 	}
 	return c.Request.URL.Path

@@ -16,18 +16,20 @@ func TestServiceContextContextMethods(t *testing.T) {
 	var _ context.Context = (*ServiceContext)(nil)
 
 	gin.SetMode(gin.TestMode)
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/users/42?tag=blue", nil)
-	ctx.Params = gin.Params{{Key: "id", Value: "42"}}
-	ctx.Set(consts.PARAMS, []string{"id"})
-	ctx.Set(consts.CTX_ROUTE, "/api/users/:id")
-	ctx.Set(consts.CTX_USERNAME, "admin")
-	ctx.Set(consts.CTX_USER_ID, "user-1")
-	ctx.Set(consts.CTX_TENANT_ID, "tenant-1")
-	ctx.Set(consts.TRACE_ID, "trace-1")
 
-	serviceCtx := NewServiceContext(ctx, nil, "")
+	var serviceCtx *ServiceContext
+	router := gin.New()
+	router.GET("/api/users/:id", func(ctx *gin.Context) {
+		ctx.Set(consts.PARAMS, []string{"id"})
+		ctx.Set(consts.CTX_USERNAME, "admin")
+		ctx.Set(consts.CTX_USER_ID, "user-1")
+		ctx.Set(consts.CTX_TENANT_ID, "tenant-1")
+		ctx.Set(consts.TRACE_ID, "trace-1")
+
+		serviceCtx = NewServiceContext(ctx, nil, "")
+	})
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/users/42?tag=blue", nil))
+
 	meta := requestctx.FromContext(serviceCtx)
 
 	require.Equal(t, "admin", serviceCtx.Username())
@@ -40,17 +42,18 @@ func TestServiceContextContextMethods(t *testing.T) {
 
 func TestServiceContextQueryAccessorReturnsCopy(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/users/42?tag=blue", nil)
-	ctx.Params = gin.Params{{Key: "id", Value: "42"}}
-	ctx.Set(consts.PARAMS, []string{"id"})
-	ctx.Set(consts.CTX_ROUTE, "/api/users/:id")
-	ctx.Set(consts.CTX_USERNAME, "admin")
-	ctx.Set(consts.CTX_USER_ID, "user-1")
-	ctx.Set(consts.TRACE_ID, "trace-1")
 
-	serviceCtx := NewServiceContext(ctx, nil, "")
+	var serviceCtx *ServiceContext
+	router := gin.New()
+	router.GET("/api/users/:id", func(ctx *gin.Context) {
+		ctx.Set(consts.PARAMS, []string{"id"})
+		ctx.Set(consts.CTX_USERNAME, "admin")
+		ctx.Set(consts.CTX_USER_ID, "user-1")
+		ctx.Set(consts.TRACE_ID, "trace-1")
+
+		serviceCtx = NewServiceContext(ctx, nil, "")
+	})
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/users/42?tag=blue", nil))
 
 	query := serviceCtx.Query()
 	query["tag"][0] = "mutated"
@@ -58,6 +61,7 @@ func TestServiceContextQueryAccessorReturnsCopy(t *testing.T) {
 	require.Equal(t, "42", serviceCtx.Param("id"))
 	require.Equal(t, []string{"blue"}, serviceCtx.Query()["tag"])
 	require.Equal(t, "/api/users/:id", serviceCtx.Route())
+	require.Equal(t, "/api/users/42", serviceCtx.Path())
 	require.Equal(t, "trace-1", serviceCtx.TraceID())
 }
 

@@ -153,6 +153,7 @@ func TestWithContextAddsMetadataFields(t *testing.T) {
 	log := &Logger{zlog: zap.New(core)}
 	meta := requestctx.New(requestctx.Fields{
 		Route:    "/api/users/:id",
+		Path:     "/api/users/42",
 		Username: "admin",
 		UserID:   "user-1",
 		TraceID:  "trace-1",
@@ -173,6 +174,7 @@ func TestWithContextAddsMetadataFields(t *testing.T) {
 	fields := entries[0].ContextMap()
 	require.Equal(t, string(consts.PHASE_LIST), fields[consts.PHASE])
 	require.Equal(t, "/api/users/:id", fields[consts.CTX_ROUTE])
+	require.Equal(t, "/api/users/42", fields[consts.CTX_PATH])
 	require.Equal(t, "admin", fields[consts.CTX_USERNAME])
 	require.Equal(t, "user-1", fields[consts.CTX_USER_ID])
 	require.Equal(t, "trace-1", fields[consts.TRACE_ID])
