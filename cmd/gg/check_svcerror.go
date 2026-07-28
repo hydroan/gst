@@ -406,6 +406,9 @@ type svcErrFuncScope struct {
 	// before it: reusing one err variable for several sources must not let a
 	// later raw assignment pollute an earlier compliant exit.
 	assigns map[svcErrVarObj][]svcErrAssign
+	// windows lists the exclusive visibility windows per variable; a use
+	// inside a window sees only the window's own assignment.
+	windows map[svcErrVarObj][]svcErrWindow
 }
 
 // svcErrAssign is one recorded assignment: the assigned expression, where
@@ -417,6 +420,15 @@ type svcErrAssign struct {
 	expr    ast.Expr
 	pos     token.Pos
 	killEnd token.Pos
+}
+
+// svcErrWindow is an exclusive visibility window: inside the body of an
+// `if <var> != nil` check that the assignment at assignPos feeds, the
+// variable can hold only that value, regardless of what it held before.
+type svcErrWindow struct {
+	assignPos token.Pos
+	bodyStart token.Pos
+	bodyEnd   token.Pos
 }
 
 // collectAssigns records every assignment in the function body, closures
@@ -458,6 +470,7 @@ func (s *svcErrFuncScope) collectAssigns(body *ast.BlockStmt) {
 // always leaves (return, branch, or panic), the variable no longer carries
 // that value, which is exactly how idiomatic Go reuses one err variable.
 func (s *svcErrFuncScope) markKilledAssigns(body *ast.BlockStmt) {
+	s.windows = map[svcErrVarObj][]svcErrWindow{}
 	ast.Inspect(body, func(n ast.Node) bool {
 		var stmts []ast.Stmt
 		switch n := n.(type) {
@@ -476,17 +489,27 @@ func (s *svcErrFuncScope) markKilledAssigns(body *ast.BlockStmt) {
 				continue
 			}
 			checkedObj := svcErrNilCheckedObj(ifStmt)
-			if checkedObj == nil || !svcErrStmtsAlwaysLeave(ifStmt.Body.List) {
+			if checkedObj == nil {
 				continue
 			}
-			if assign, ok := ifStmt.Init.(*ast.AssignStmt); ok {
+			assign, ok := ifStmt.Init.(*ast.AssignStmt)
+			if !ok && i > 0 {
+				assign, ok = stmts[i-1].(*ast.AssignStmt)
+			}
+			if !ok || assign == nil {
+				continue
+			}
+			// Inside the check's body the variable holds only the value this
+			// assignment just gave it, no matter what it held before.
+			s.windows[checkedObj] = append(s.windows[checkedObj], svcErrWindow{
+				assignPos: assign.Pos(),
+				bodyStart: ifStmt.Body.Pos(),
+				bodyEnd:   ifStmt.Body.End(),
+			})
+			// A check whose body always leaves also consumes the value for
+			// everything after the check.
+			if svcErrStmtsAlwaysLeave(ifStmt.Body.List) {
 				s.killAssign(checkedObj, assign, ifStmt.End())
-				continue
-			}
-			if i > 0 {
-				if assign, ok := stmts[i-1].(*ast.AssignStmt); ok {
-					s.killAssign(checkedObj, assign, ifStmt.End())
-				}
 			}
 		}
 		return true
@@ -610,7 +633,22 @@ func (s *svcErrFuncScope) resolveObj(obj svcErrVarObj, at ast.Node, visiting map
 	defer delete(visiting, obj)
 	var sources []svcErrSource
 	found := false
+	// A use inside an exclusive window sees only the window's own
+	// assignment: the check's init just overwrote the variable. Nested
+	// windows pick the innermost one, the most recent overwrite.
+	var window *svcErrWindow
+	for i := range s.windows[obj] {
+		w := &s.windows[obj][i]
+		if at.Pos() > w.bodyStart && at.Pos() < w.bodyEnd {
+			if window == nil || w.bodyStart > window.bodyStart {
+				window = w
+			}
+		}
+	}
 	for _, assign := range s.assigns[obj] {
+		if window != nil && assign.pos != window.assignPos {
+			continue
+		}
 		// A use always happens after the assignment feeding it, so later
 		// assignments cannot be this use's origin; an assignment whose value
 		// was consumed by its own error check is dead past that check.

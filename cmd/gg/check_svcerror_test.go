@@ -117,6 +117,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
@@ -207,6 +208,25 @@ func (u *Updater) Delete(ctx *types.ServiceContext, req *model.RecordReq) (*mode
 	}
 	if err = database.Database[*model.Record](ctx).Delete(record); err != nil {
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "record delete failed", err)
+	}
+	if err = guard.RequireAdmin(ctx); err != nil {
+		return nil, err
+	}
+	return &model.RecordRsp{}, nil
+}
+
+// Import mirrors a load-or-default flow: the not-found branch of the first
+// check falls through instead of returning, so that raw assignment is never
+// killed; the next check still stays clean because inside a check's body the
+// variable holds only the value its own init just assigned.
+func (u *Updater) Import(ctx *types.ServiceContext, req *model.RecordReq) (*model.RecordRsp, error) {
+	record := new(model.Record)
+	err := database.Database[*model.Record](ctx).Get(record, req.ID)
+	if err != nil {
+		if !errors.Is(err, database.ErrRecordNotFound) {
+			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load record", err)
+		}
+		record = &model.Record{}
 	}
 	if err = guard.RequireAdmin(ctx); err != nil {
 		return nil, err
