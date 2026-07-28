@@ -194,21 +194,18 @@ issues:
   max-same-issues: 100
 `
 
-var moduleContent = `// Package module provides business logic modules for the application.
+var moduleContent = `// Package module assembles the application's business modules.
 //
-// Recommended pattern:
-//   - Organize each resource into its own subpackage under module/, e.g., module/user.
-//   - Inside each subpackage, expose a Register() function that calls module.Use.
-//   - Call these Register() functions from module.Init() to centralize startup.
+// Call each module's Register function in init below: built-in gst modules
+// such as github.com/hydroan/gst/module/iam, and your own. For your own
+// resources, create one subpackage per resource under module/ and expose a
+// Register function that wires model, service and routes via module.Use.
 //
-// See module/helloworld for a complete example.
+// See github.com/hydroan/gst/module/helloworld for a complete example.
 package module
 
 func init() {
-	// TODO: Call your module Register() functions here
-	// Example:
-	//   user.Register()
-	//   order.Register()
+	// TODO: call your module Register functions here.
 }
 `
 
@@ -235,68 +232,68 @@ func main() {
 }
 `
 
-const configxContent = `// Package configx provides custom configuration extensions for the application.
+const configxContent = `// Package configx registers the application's custom configuration sections.
 //
-// Define your custom configuration structs and register them using config.Register.
-// See config.Register documentation for details on configuration loading priority
-// and struct tag usage.
+// Declare a struct and call config.Register[T]() in init below. The section
+// name is the snake_case of the struct name (Sample -> [sample] in
+// config.ini). Fields resolve from environment variables (SAMPLE_ENDPOINT),
+// then the config file, then "default" struct tags; see config.Register for
+// details.
 //
 // Example:
 //
 //	import "github.com/hydroan/gst/config"
 //
-//	type Payment struct {
-//		Provider string ` + "`json:\"provider\" mapstructure:\"provider\" default:\"alipay\"`" + `
-//		Enabled bool   ` + "`json:\"enabled\" mapstructure:\"enabled\" default:\"false\"`" + `
+//	type Sample struct {
+//		Endpoint string ` + "`json:\"endpoint\" mapstructure:\"endpoint\" default:\"127.0.0.1:8080\"`" + `
+//		Enabled  bool   ` + "`json:\"enabled\" mapstructure:\"enabled\"`" + `
 //	}
 //
 //	func init() {
-//		config.Register[Payment]()
+//		config.Register[Sample]()
 //	}
+//
+//	// Anywhere after startup:
+//	cfg := config.Get[Sample]()
 package configx
 
 func init() {
-	// TODO: Register your custom configurations here
-	// Example:
-	//   config.Register[YourCustomConfig]()
+	// TODO: register your custom configurations here.
 }
 `
 
-const cronjobContent = `// Package cronjob provides scheduled task management for the application.
+const cronjobContent = `// Package cronjob registers the application's scheduled tasks.
 //
-// Cron spec format: "second minute hour day month weekday" (6 fields)
-// Examples: "0 0 2 * * *" (daily at 2:00 AM), "0 0 * * * *" (hourly)
+// Call cronjob.Register(fn, spec, name) in init below; the framework starts
+// all registered jobs on boot. fn is a func() error; every run is logged
+// under name, and panics are recovered.
+//
+// spec is a 6-field cron expression "second minute hour day month weekday",
+// e.g. "0 0 2 * * *" (daily at 02:00), or a descriptor such as "@hourly" or
+// "@every 5m". Pass cronjob.Config{RunImmediately: true} as the optional
+// fourth argument to also run the job once at startup.
 //
 // Example:
 //
 //	import "github.com/hydroan/gst/cronjob"
 //
-//	func cleanup() error {
-//		// Implementation here
-//		return nil
-//	}
+//	func cleanup() error { return nil }
 //
 //	func init() {
 //		cronjob.Register(cleanup, "0 0 2 * * *", "daily-cleanup")
-//		// Optional: run immediately after registration
-//		// cronjob.Register(cleanup, "0 0 2 * * *", "daily-cleanup", cronjob.Config{
-//		//     RunImmediately: true,
-//		// })
 //	}
 package cronjob
 
 func init() {
-	// TODO: Register your cron jobs here
-	// Example:
-	//   cronjob.Register(yourFunc, "0 0 * * * *", "hourly-task")
+	// TODO: register your cron jobs here.
 }
 `
 
-const middlewareContent = `// Package middleware provides custom HTTP middleware for the application.
+const middlewareContent = `// Package middleware registers the application's custom HTTP middleware.
 //
-// Register global middleware (applied to all routes) or authentication middleware
-// (applied to authenticated routes only). Middlewares are automatically wrapped
-// with tracing for performance monitoring.
+// middleware.Register applies to all routes; middleware.RegisterAuth applies
+// only to routes behind authentication. Both take one or more gin.HandlerFunc
+// and wrap each with tracing automatically.
 //
 // Example:
 //
@@ -305,27 +302,17 @@ const middlewareContent = `// Package middleware provides custom HTTP middleware
 //		"github.com/hydroan/gst/middleware"
 //	)
 //
-//	func customMiddleware() gin.HandlerFunc {
-//		return func(c *gin.Context) {
-//			// Your middleware logic here
-//			c.Next()
-//		}
+//	func sample(c *gin.Context) {
+//		// Runs before each handler; call c.Abort() to stop the request.
 //	}
 //
 //	func init() {
-//		// Register global middleware (applied to all routes)
-//		middleware.Register(customMiddleware())
-//
-//		// Register authentication middleware (applied to authenticated routes only)
-//		middleware.RegisterAuth(customMiddleware())
+//		middleware.Register(sample)
 //	}
 package middleware
 
 func init() {
-	// TODO: Register your custom middlewares here
-	// Example:
-	//   middleware.Register(yourMiddleware())
-	//   middleware.RegisterAuth(yourAuthMiddleware())
+	// TODO: register your custom middlewares here.
 }
 `
 
