@@ -15,7 +15,7 @@ import (
 )
 
 type GetRequest struct {
-	Source []string // 指定返回的字段
+	Source []string // fields to return
 }
 
 type GetResult struct {

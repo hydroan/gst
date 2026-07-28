@@ -300,7 +300,7 @@ func IPv6ToIPv4(ipStr string) string {
 	}
 
 	// handle IPv4-mapped IPv6 addresses
-	// eg ::ffff:192.0.2.128 或 ::ffff:c000:280
+	// eg ::ffff:192.0.2.128 or ::ffff:c000:280
 	if strings.Contains(ipStr, "::ffff:") {
 		split := strings.Split(ipStr, "::ffff:")
 		if len(split) == 2 {

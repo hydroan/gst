@@ -184,7 +184,7 @@ func Close() error {
 	defer mu.Unlock()
 
 	if client != nil {
-		client.Disconnect(250) // 等待 250ms 完成断开
+		client.Disconnect(250) // wait 250ms for the disconnect to complete
 		client = nil
 		initialized = false
 	}

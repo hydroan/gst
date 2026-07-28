@@ -46,7 +46,7 @@ func (cs *column) GetColumns(c *gin.Context, tableName string, columns []string,
 	JSON(c, CodeSuccess, columnRes)
 }
 
-// queryColumns 只查询字段有多少种
+// queryColumns only queries which distinct values each column has.
 //
 // select category_level2_id from assets group by category_level2_id;
 // +--------------------+
@@ -198,7 +198,8 @@ func queryColumnsWithQuery(table string, columns []string, query map[string][]st
 	return cr, nil
 }
 
-// queryColumns 只查询字段有多少种, 并且计算每种字段值的个数
+// queryColumnsAndCount queries which distinct values each column has, together
+// with the number of records holding each value.
 //
 // select category_level2_id, count(*) as category_count from assets group by category_level2_id;
 // +--------------------+----------------+

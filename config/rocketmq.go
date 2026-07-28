@@ -5,9 +5,9 @@ import "time"
 type ConsumeFromWhere string
 
 const (
-	ConsumeFromWhereLastOffset  ConsumeFromWhere = "last_offset"  // 从上次消费位点开始消费
-	ConsumeFromWhereFirstOffset ConsumeFromWhere = "first_offset" // 从队列最开始开始消费
-	ConsumeFromWhereTimestamp   ConsumeFromWhere = "timestamp"    // 从指定时间点开始消费
+	ConsumeFromWhereLastOffset  ConsumeFromWhere = "last_offset"  // consume from the last committed offset
+	ConsumeFromWhereFirstOffset ConsumeFromWhere = "first_offset" // consume from the beginning of the queue
+	ConsumeFromWhereTimestamp   ConsumeFromWhere = "timestamp"    // consume from the given timestamp
 )
 
 const (

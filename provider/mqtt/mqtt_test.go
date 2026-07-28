@@ -68,7 +68,7 @@ func TestMqtt(t *testing.T) {
 		topic := "test/qos1"
 		message := "test message with qos 1"
 
-		// 测试 QoS 1 发布
+		// publish with QoS 1
 		err := mqtt.Publish(topic, message, mqtt.PublishOption{
 			QoS:     1,
 			Retain:  true,
@@ -89,7 +89,7 @@ func TestMqtt(t *testing.T) {
 		receivedCount := 0
 		var mu sync.Mutex
 
-		// 订阅多个主题
+		// subscribe to multiple topics
 		for _, topic := range topics {
 			err := mqtt.Subscribe(topic, func(topic string, payload []byte) error {
 				mu.Lock()
@@ -101,13 +101,13 @@ func TestMqtt(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		// 发布消息到所有主题
+		// publish a message to every topic
 		for _, topic := range topics {
 			err := mqtt.Publish(topic, "test message")
 			require.NoError(t, err)
 		}
 
-		// 等待所有消息接收
+		// wait until every message has been received
 		done := make(chan struct{})
 		go func() {
 			wg.Wait()
@@ -127,37 +127,37 @@ func TestMqtt(t *testing.T) {
 	t.Run("UnsubscribeTest", func(t *testing.T) {
 		topic := "test/unsubscribe"
 
-		// 先订阅
+		// subscribe first
 		err := mqtt.Subscribe(topic, func(topic string, payload []byte) error {
 			t.Error("should not receive message after unsubscribe")
 			return nil
 		})
 		require.NoError(t, err)
 
-		// 取消订阅
+		// then unsubscribe
 		err = mqtt.Unsubscribe(topic)
 		require.NoError(t, err)
 
-		// 发布消息
+		// publish a message
 		err = mqtt.Publish(topic, "test message")
 		require.NoError(t, err)
 
-		// 等待一段时间，确保没有收到消息
+		// wait a while to make sure no message arrives
 		// time.Sleep(2 * time.Second)
 	})
 
 	// t.Run("ErrorCases", func(t *testing.T) {
-	// 	// 测试无效的 topic
+	// 	// an invalid topic
 	// 	err := mqtt.Publish("", "test message")
 	// 	assert.Error(t, err)
 	//
-	// 	// 测试无效的 QoS
+	// 	// an invalid QoS
 	// 	err = mqtt.Publish("test/topic", "test message", mqtt.PublishOption{
-	// 		QoS: 3, // 无效的 QoS 值
+	// 		QoS: 3, // invalid QoS value
 	// 	})
 	// 	assert.Error(t, err)
 	//
-	// 	// 测试超时情况
+	// 	// a timeout
 	// 	err = mqtt.Publish("test/topic", "test message", mqtt.PublishOption{
 	// 		Timeout: 1 * time.Nanosecond,
 	// 	})
@@ -197,7 +197,7 @@ func TestMqtt(t *testing.T) {
 		err = mqtt.Publish(topic, payload)
 		require.NoError(t, err)
 
-		// 等待消息接收
+		// wait for the message
 		done := make(chan struct{})
 		go func() {
 			wg.Wait()
@@ -206,7 +206,7 @@ func TestMqtt(t *testing.T) {
 
 		select {
 		case <-done:
-			// 成功
+			// success
 		case <-time.After(5 * time.Second):
 			t.Fatal("timeout waiting for json message")
 		}

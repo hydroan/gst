@@ -68,7 +68,7 @@ func (qb *QueryBuilder) Bool(fn func(qb *QueryBuilder)) *QueryBuilder {
 	nestedBuilder := NewQueryBuilder()
 	fn(nestedBuilder)
 	query := nestedBuilder.BuildQuery()
-	if query != nil { // 只有在query不为nil时才添加
+	if query != nil { // only add the nested query when it is not nil
 		qb.Must(query)
 	}
 	return qb
@@ -403,7 +403,7 @@ func (qb *QueryBuilder) Validate() error {
 		return errors.New("from cannot be negative")
 	}
 
-	// 如果使用了 search_after，from 必须为 0
+	// from must be 0 when search_after is used
 	if len(qb.searchAfter) > 0 && qb.from != 0 {
 		return errors.New("from must be 0 when using search_after")
 	}

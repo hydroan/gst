@@ -1,9 +1,9 @@
 package trie
 
 /*
-使用
+Usage
 
-1. 存储字符串
+1. Storing strings
 trie := New[rune, int]()
 trie.Put([]rune("cat"), 1)
 trie.Put([]rune("car"), 2)
@@ -16,13 +16,13 @@ trie.Put([]rune("car"), 2)
 	 / \
 	t   r
 
-2. 存储字节序列：
+2. Storing byte sequences:
 trie := New[byte, string]()
 trie.Put([]byte{192, 168, 1, 0}, "network1")
 trie.Put([]byte{192, 168, 1, 1}, "network2")
 
 
-3. 存储任意序列：
+3. Storing arbitrary sequences:
 type PathNode struct {
     ID int
     Name string
@@ -39,26 +39,26 @@ trie.Put(path, "document location")
 
 /*
 
-应用
+Applications
 
-1.前缀搜索
-// 查找所有以 "ca" 开头的单词
+1. Prefix search
+// find every word starting with "ca"
 prefix := []rune("ca")
-matches := trie.PrefixSearch(prefix) // 找到 "cat", "car"
+matches := trie.PrefixSearch(prefix) // finds "cat", "car"
 
 
-2.自动补全
-// 根据输入前缀提供补全建议
-suggestions := trie.AutoComplete([]rune("c")) // 返回 "cat", "car"
+2. Auto completion
+// suggest completions for the entered prefix
+suggestions := trie.AutoComplete([]rune("c")) // returns "cat", "car"
 
 
-3.IP路由查找
-// IP地址路由表查找
+3. IP routing lookup
+// look up an IP address in a routing table
 routingTrie := New[byte, string]()
 routingTrie.Put([]byte{192, 168, 0, 0}, "network1")
 
 
-4.字典树
+4. Dictionary
 dictTrie := New[rune, string]()
 dictTrie.Put([]rune("hello"), "greeting")
 dictTrie.Put([]rune("help"), "assistance")

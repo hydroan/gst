@@ -707,7 +707,7 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		successStatus = 200
 	}
 
-	// // // 定义 BatchCreateRequest schema
+	// // // define the BatchCreateRequest schema
 	// // reqSchemaName := name + "BatchRequest"
 	// // reqSchemaRef := &openapi3.SchemaRef{
 	// // 	Value: &openapi3.Schema{
@@ -1435,7 +1435,7 @@ func parseParametersFromPath(path string) []*openapi3.ParameterRef {
 //	  "name": "string",
 //	}
 //
-// NOTE: 结构体字段必须有 json tag, 否则 schemaRef.Value.Properties 中不会带有这些字段
+// NOTE: struct fields must carry a json tag, otherwise they are missing from schemaRef.Value.Properties.
 func setupExample(schemaRef *openapi3.SchemaRef) {
 	if schemaRef == nil {
 		return
@@ -1567,7 +1567,7 @@ func setupBatchExample(schemaRef *openapi3.SchemaRef) {
 	for k, v := range props {
 		if k == "items" && v.Value != nil && v.Value.Type.Is(openapi3.TypeArray) {
 			if v.Value.Items != nil && v.Value.Items.Value != nil {
-				// 为数组中的单个元素创建 example
+				// build the example for a single element of the array
 				example := make(map[string]any)
 				for propName, propRef := range v.Value.Items.Value.Properties {
 					if removeFieldMap[propName] || propRef.Value == nil {
@@ -1576,10 +1576,10 @@ func setupBatchExample(schemaRef *openapi3.SchemaRef) {
 					example[propName] = buildExampleValue(propRef.Value, 0)
 				}
 
-				// 设置单个 item 的 example
+				// set the example of a single item
 				v.Value.Items.Value.Example = example
 
-				// 设置整个 batch request 的 example
+				// set the example of the whole batch request
 				schemaRef.Value.Example = map[string]any{
 					"items": []map[string]any{example},
 				}
@@ -1588,28 +1588,28 @@ func setupBatchExample(schemaRef *openapi3.SchemaRef) {
 	}
 }
 
-// removeFieldsFromRequestBody 从单个 CRUD 操作的 RequestBody 中移除指定字段
+// removeFieldsFromRequestBody removes the given fields from the RequestBody of a single CRUD operation.
 func removeFieldsFromRequestBody(op *openapi3.Operation, fieldsToRemove ...string) {
 	if op == nil || op.RequestBody == nil {
 		return
 	}
 
-	// 创建一个 map 方便查找
+	// build a map for easy lookup
 	removeMap := make(map[string]bool)
 	for _, field := range fieldsToRemove {
 		removeMap[field] = true
 	}
 
-	// 如果默认没有传入要移除的字段，使用默认值
+	// fall back to the default fields when the caller passes none
 	if len(fieldsToRemove) == 0 {
 		removeMap = removeFieldMap
 	}
 
-	// 处理 RequestBodyRef
+	// resolve the RequestBodyRef
 	var requestBody *openapi3.RequestBody
 
 	if op.RequestBody.Ref != "" {
-		// 如果是引用，需要从 components 中获取实际的 RequestBody
+		// a reference: look the actual RequestBody up in components
 		docMutex.RLock()
 		if doc.Components.RequestBodies != nil {
 			refKey := strings.TrimPrefix(op.RequestBody.Ref, "#/components/requestBodies/")
@@ -1626,11 +1626,11 @@ func removeFieldsFromRequestBody(op *openapi3.Operation, fieldsToRemove ...strin
 		return
 	}
 
-	// 使用写锁保护对 schema 的修改操作
+	// hold the write lock while the schema is modified
 	docMutex.Lock()
 	defer docMutex.Unlock()
 
-	// 处理每个 content type
+	// handle each content type
 	for contentType, mediaType := range requestBody.Content {
 		if mediaType.Schema == nil || mediaType.Schema.Value == nil {
 			continue
@@ -1638,14 +1638,14 @@ func removeFieldsFromRequestBody(op *openapi3.Operation, fieldsToRemove ...strin
 
 		schema := mediaType.Schema.Value
 
-		// 移除 properties 中的字段
+		// remove the fields from properties
 		if schema.Properties != nil {
 			for field := range removeMap {
 				delete(schema.Properties, field)
 			}
 		}
 
-		// 移除 required 中的字段
+		// remove the fields from required
 		if len(schema.Required) > 0 {
 			newRequired := []string{}
 			for _, req := range schema.Required {
@@ -1656,7 +1656,7 @@ func removeFieldsFromRequestBody(op *openapi3.Operation, fieldsToRemove ...strin
 			schema.Required = newRequired
 		}
 
-		// 处理 example
+		// handle the example
 		if schema.Example != nil {
 			if exampleMap, ok := schema.Example.(map[string]any); ok {
 				for field := range removeMap {
@@ -1665,33 +1665,33 @@ func removeFieldsFromRequestBody(op *openapi3.Operation, fieldsToRemove ...strin
 			}
 		}
 
-		// 更新 content
+		// write the content back
 		requestBody.Content[contentType] = mediaType
 	}
 }
 
-// removeFieldsFromBatchRequestBody 从批量 CRUD 操作的 RequestBody 中移除指定字段
+// removeFieldsFromBatchRequestBody removes the given fields from the RequestBody of a batch CRUD operation.
 func removeFieldsFromBatchRequestBody(op *openapi3.Operation, fieldsToRemove ...string) {
 	if op == nil || op.RequestBody == nil {
 		return
 	}
 
-	// 创建一个 map 方便查找
+	// build a map for easy lookup
 	removeMap := make(map[string]bool)
 	for _, field := range fieldsToRemove {
 		removeMap[field] = true
 	}
 
-	// 如果默认没有传入要移除的字段，使用默认值
+	// fall back to the default fields when the caller passes none
 	if len(fieldsToRemove) == 0 {
 		removeMap = removeFieldMap
 	}
 
-	// 处理 RequestBodyRef
+	// resolve the RequestBodyRef
 	var requestBody *openapi3.RequestBody
 
 	if op.RequestBody.Ref != "" {
-		// 如果是引用，需要从 components 中获取实际的 RequestBody
+		// a reference: look the actual RequestBody up in components
 		docMutex.RLock()
 		if doc.Components.RequestBodies != nil {
 			refKey := strings.TrimPrefix(op.RequestBody.Ref, "#/components/requestBodies/")
@@ -1708,11 +1708,11 @@ func removeFieldsFromBatchRequestBody(op *openapi3.Operation, fieldsToRemove ...
 		return
 	}
 
-	// 使用写锁保护对 schema 的修改操作
+	// hold the write lock while the schema is modified
 	docMutex.Lock()
 	defer docMutex.Unlock()
 
-	// 处理每个 content type
+	// handle each content type
 	for contentType, mediaType := range requestBody.Content {
 		if mediaType.Schema == nil || mediaType.Schema.Value == nil {
 			continue
@@ -1720,20 +1720,20 @@ func removeFieldsFromBatchRequestBody(op *openapi3.Operation, fieldsToRemove ...
 
 		schema := mediaType.Schema.Value
 
-		// 对于批量操作，需要处理 items 数组
+		// a batch operation carries the payload in an items array
 		if schema.Properties != nil {
 			if itemsProp, exists := schema.Properties["items"]; exists {
 				if itemsProp.Value != nil && itemsProp.Value.Items != nil && itemsProp.Value.Items.Value != nil {
 					itemSchema := itemsProp.Value.Items.Value
 
-					// 移除 items 中每个元素的字段
+					// remove the fields from every element of items
 					if itemSchema.Properties != nil {
 						for field := range removeMap {
 							delete(itemSchema.Properties, field)
 						}
 					}
 
-					// 移除 required 中的字段
+					// remove the fields from required
 					if len(itemSchema.Required) > 0 {
 						newRequired := []string{}
 						for _, req := range itemSchema.Required {
@@ -1744,7 +1744,7 @@ func removeFieldsFromBatchRequestBody(op *openapi3.Operation, fieldsToRemove ...
 						itemSchema.Required = newRequired
 					}
 
-					// 处理 items 的 example
+					// handle the example of items
 					if itemSchema.Example != nil {
 						if exampleMap, ok := itemSchema.Example.(map[string]any); ok {
 							for field := range removeMap {
@@ -1756,7 +1756,7 @@ func removeFieldsFromBatchRequestBody(op *openapi3.Operation, fieldsToRemove ...
 			}
 		}
 
-		// 处理整个 batch request 的 example
+		// handle the example of the whole batch request
 		if schema.Example != nil {
 			if exampleMap, ok := schema.Example.(map[string]any); ok {
 				if items, exists := exampleMap["items"]; exists {
@@ -1780,7 +1780,7 @@ func removeFieldsFromBatchRequestBody(op *openapi3.Operation, fieldsToRemove ...
 			}
 		}
 
-		// 更新 content
+		// write the content back
 		requestBody.Content[contentType] = mediaType
 	}
 }

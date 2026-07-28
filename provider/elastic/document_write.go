@@ -23,7 +23,7 @@ func (*document) BulkIndex(_ context.Context, indexName string, docs ...types.ES
 	)
 	start := time.Now()
 
-	// 遍历消息数组
+	// iterate over the documents
 	for i := range docs {
 		meta := fmt.Appendf(nil, `{ "index" : { "_id" : "%s" } }%s`, docs[i].GetID(), "\n")
 		if data, err = json.Marshal(docs[i].Document()); err != nil {
@@ -37,7 +37,7 @@ func (*document) BulkIndex(_ context.Context, indexName string, docs ...types.ES
 		buf.Write(data)
 	}
 
-	// 执行批量请求
+	// execute the bulk request
 	res, err = client.Bulk(bytes.NewReader(buf.Bytes()), client.Bulk.WithIndex(indexName))
 	if err != nil {
 		err = fmt.Errorf("failed to execute bulk request: %w", err)

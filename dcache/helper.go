@@ -18,25 +18,26 @@ func newProducer(brokers []string, topic string) (*kgo.Client, error) {
 		kgo.AllowAutoTopicCreation(),
 		kgo.ClientID(fmt.Sprintf("producer-%s-%s", topic, hostname)),
 
-		// 低延迟优化
-		kgo.ProducerLinger(1*time.Millisecond), // 极短的批处理等待时间
-		// kgo.ProducerBatchMaxBytes(n),           // 较小的批处理大小
-		// kgo.MaxBufferedRecords(n),              // 大缓冲区以处理突发流量
+		// low latency tuning
+		kgo.ProducerLinger(1*time.Millisecond), // extremely short batching delay
+		// kgo.ProducerBatchMaxBytes(n),           // smaller batches
+		// kgo.MaxBufferedRecords(n),              // large buffer to absorb traffic bursts
 
-		// 可靠性降级以换取更低延迟
-		// 不需要消息幂等性, 状态节点会自动去重复和记录最大时间戳来保证 最终状态一致性
-		// 本地环境下发现如下配置可以在每批次 operator 中减少100-200ms的延迟
+		// trade reliability for lower latency
+		// message idempotency is not needed: the state node deduplicates and tracks the highest
+		// timestamp, which is what guarantees eventual state consistency
+		// locally the settings below were found to cut 100-200ms per operator batch
 		// kgo.RequiredAcks(kgo.NoAck()),
-		// kgo.DisableIdempotentWrite(),           // 禁用幂等性以减少开销
-		kgo.RetryTimeout(300*time.Millisecond), // 快速失败而不是长时间重试
+		// kgo.DisableIdempotentWrite(),           // disable idempotency to reduce the overhead
+		kgo.RetryTimeout(300*time.Millisecond), // fail fast instead of retrying for a long time
 
-		// TCP连接优化
-		kgo.DialTimeout(300*time.Millisecond),     // 快速连接超时
-		kgo.RequestTimeoutOverhead(1*time.Second), // 最小1s,否则kgo.NewClient 会报错
+		// TCP connection tuning
+		kgo.DialTimeout(300*time.Millisecond),     // short connect timeout
+		kgo.RequestTimeoutOverhead(1*time.Second), // at least 1s, otherwise kgo.NewClient errors out
 	)
 }
 
-// newConsumer 创建 kafka 消费者, 会有多个消费者
+// newConsumer creates a kafka consumer; there are several of them.
 func newConsumer(brokers []string, topic string, group string) (*kgo.Client, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -48,19 +49,19 @@ func newConsumer(brokers []string, topic string, group string) (*kgo.Client, err
 		kgo.ConsumeTopics(topic),
 		kgo.ClientID(fmt.Sprintf("consumer-%s-%s", topic, hostname)),
 
-		// 不需要自动提交, 也不需要手动提交, 系统每次重启之后使用最新的 offset
+		// neither automatic nor manual commits are needed, every restart starts from the latest offset
 		kgo.DisableAutoCommit(),
-		// 每次启动时,都是新的 group id
+		// a fresh group id on every start
 		kgo.ConsumerGroup(fmt.Sprintf("%s-%d", group, time.Now().UnixNano())),
-		// 系统启动时,总是消费最新的消息
+		// always consume the newest messages after a start
 		kgo.ConsumeResetOffset(kgo.NewOffset().AtEnd()),
 
-		// 低延迟消费优化
-		kgo.FetchMaxWait(10*time.Millisecond), // 非常短的拉取等待时间
-		kgo.FetchMinBytes(1),                  // 任何数据都立即返回
-		// kgo.FetchMaxBytes(n),           // 较大的最大获取大小 (10MB)
+		// low latency consumption tuning
+		kgo.FetchMaxWait(10*time.Millisecond), // very short fetch wait
+		kgo.FetchMinBytes(1),                  // return as soon as any data is available
+		// kgo.FetchMaxBytes(n),           // larger maximum fetch size (10MB)
 
-		// TCP连接优化
+		// TCP connection tuning
 		kgo.DialTimeout(300*time.Millisecond),
 	)
 }

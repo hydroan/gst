@@ -15,7 +15,7 @@ type Session struct {
 	Username     string `json:"username"`
 	SessionID    string `json:"session_id"`
 
-	// TODO: 统一起来，使用 model.UserAgent
+	// TODO: unify these fields into model.UserAgent
 	Platform       string `json:"platform"`
 	OS             string `json:"os"`
 	EngineName     string `json:"engine_name"`

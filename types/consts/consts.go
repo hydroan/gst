@@ -145,11 +145,11 @@ func (p Phase) MethodName() string {
 func (p Phase) Filename() string {
 	s := string(p)
 
-	// 去掉 _before / _after
+	// strip the _before / _after suffix
 	s = strings.TrimSuffix(s, "_before")
 	s = strings.TrimSuffix(s, "_after")
 
-	// 转小写并拼接 .go
+	// lower case it and append the .go extension
 	return strings.ToLower(s) + ".go"
 }
 
@@ -312,7 +312,7 @@ func (p Phase) ToHTTPVerb() HTTPVerb {
 	}
 }
 
-// Name 返回 Phase 常量定义时的名字，比如 PHASE_CREATE_MANY
+// Name returns the identifier the Phase constant is declared with, for example PHASE_CREATE_MANY.
 func (p Phase) Name() string {
 	phaseNames := map[Phase]string{
 		PHASE_CREATE:             "PHASE_CREATE",

@@ -48,10 +48,10 @@ func FormatNodeExtra(node ast.Node, processImport ...bool) (string, error) {
 	return FormatNodeExtraWithFileSet(node, nil, processImport...)
 }
 
-// FormatNodeExtraWithFileSet 使用指定的 FileSet 格式化节点，保持注释位置
+// FormatNodeExtraWithFileSet formats the node with the given FileSet, which keeps comments in place.
 func FormatNodeExtraWithFileSet(node ast.Node, fset *token.FileSet, processImport ...bool) (string, error) {
 	var buf bytes.Buffer
-	// 如果没有提供 FileSet，创建新的
+	// create a new FileSet if none was provided
 	if fset == nil {
 		fset = token.NewFileSet()
 	}

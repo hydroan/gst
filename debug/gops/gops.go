@@ -32,7 +32,7 @@ func Run() error {
 
 	if err := agent.Listen(agent.Options{
 		Addr: fmt.Sprintf("%s:%d", config.App.GopsListen, config.App.GopsPort),
-		// 千万千万别将 ShutdownCleanup 设置为 true, 如果设置为 true, gops 捕捉信号并 os.Exit(1) 调试了我一下午.
+		// Never set ShutdownCleanup to true: gops then traps termination signals and calls os.Exit(1) itself.
 		ShutdownCleanup: false,
 		ConfigDir:       tempDir,
 	}); err != nil {

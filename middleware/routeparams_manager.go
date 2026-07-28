@@ -62,7 +62,7 @@ func (rpm *RouteParamsManager) parsePath(path string) []string {
 				params = append(params, param)
 			}
 		} else if strings.Contains(part, "{") && strings.Contains(part, "}") {
-			// 处理 {id} 风格的参数 (如果需要)
+			// handle {id} style parameters
 			param := strings.TrimSuffix(strings.TrimPrefix(part, "{"), "}")
 			if len(param) > 0 {
 				params = append(params, param)

@@ -37,21 +37,21 @@ import (
 // }
 //
 // func TestRedBlackTree_New(t *testing.T) {
-// 	// 测试 New
+// 	// test New
 // 	tree, err := rbtree.New[int, string](intComparator)
 // 	assert.NoError(t, err)
 // 	assert.NotNil(t, tree)
 // 	assert.True(t, tree.IsEmpty())
 // 	assert.Equal(t, 0, tree.Size())
 //
-// 	// 测试 NewWithOrderedKeys
+// 	// test NewWithOrderedKeys
 // 	orderedTree, err := rbtree.NewWithOrderedKeys[int, string]()
 // 	assert.NoError(t, err)
 // 	assert.NotNil(t, orderedTree)
 // 	assert.True(t, orderedTree.IsEmpty())
 // 	assert.Equal(t, 0, orderedTree.Size())
 //
-// 	// 测试 NewFromMap
+// 	// test NewFromMap
 // 	m := map[int]string{1: "one", 2: "two", 3: "three"}
 // 	treeFromMap, err := rbtree.NewFromMap(m, intComparator)
 // 	assert.NoError(t, err)
@@ -59,7 +59,7 @@ import (
 // 	assert.False(t, treeFromMap.IsEmpty())
 // 	assert.Equal(t, len(m), treeFromMap.Size())
 //
-// 	// 测试 NewFromSlice
+// 	// test NewFromSlice
 // 	slice := []string{"zero", "one", "two", "three"}
 // 	sliceTree, err := rbtree.NewFromSlice(slice)
 // 	assert.NoError(t, err)
@@ -69,21 +69,21 @@ import (
 //
 // 	fmt.Println(sliceTree)
 //
-// 	// 验证 map 中的 key 都存在于树中
+// 	// verify every key of the map exists in the tree
 // 	for k, v := range m {
 // 		val, found := treeFromMap.Get(k)
 // 		assert.True(t, found)
 // 		assert.Equal(t, v, val)
 // 	}
 //
-// 	// 测试 NewFromMapWithOrderedKeys
+// 	// test NewFromMapWithOrderedKeys
 // 	orderedTreeFromMap, err := rbtree.NewFromMapWithOrderedKeys(m)
 // 	assert.NoError(t, err)
 // 	assert.NotNil(t, orderedTreeFromMap)
 // 	assert.False(t, orderedTreeFromMap.IsEmpty())
 // 	assert.Equal(t, len(m), orderedTreeFromMap.Size())
 //
-// 	// 验证 map 中的 key 都存在于树中
+// 	// verify every key of the map exists in the tree
 // 	for k, v := range m {
 // 		val, found := orderedTreeFromMap.Get(k)
 // 		assert.True(t, found)
@@ -95,11 +95,11 @@ import (
 // 	tree, err := rbtree.New[int, string](intComparator)
 // 	assert.NoError(t, err)
 //
-// 	// 测试空树
+// 	// test an empty tree
 // 	assert.True(t, tree.IsEmpty())
 // 	assert.Equal(t, 0, tree.Size())
 //
-// 	// 插入元素
+// 	// insert elements
 // 	tree.Put(10, "ten")
 // 	tree.Put(20, "twenty")
 // 	tree.Put(5, "five")
@@ -107,24 +107,24 @@ import (
 // 	assert.False(t, tree.IsEmpty())
 // 	assert.Equal(t, 3, tree.Size())
 //
-// 	// 获取元素
+// 	// get an element
 // 	val, found := tree.Get(10)
 // 	assert.True(t, found)
 // 	assert.Equal(t, "ten", val)
 //
-// 	// 获取不存在的元素
+// 	// get a missing element
 // 	val, found = tree.Get(100)
 // 	assert.False(t, found)
 // 	assert.Equal(t, "", val)
 //
-// 	// 删除元素
+// 	// delete an element
 // 	tree.Delete(10)
 // 	_, found = tree.Get(10)
 // 	assert.False(t, found)
 // 	assert.Equal(t, 2, tree.Size())
 //
-// 	// 删除不存在的元素
-// 	tree.Delete(100) // 不应引发错误
+// 	// delete a missing element
+// 	tree.Delete(100) // must not raise an error
 // 	assert.Equal(t, 2, tree.Size())
 // }
 //
@@ -132,21 +132,21 @@ import (
 // 	tree, err := rbtree.New[int, string](intComparator)
 // 	assert.NoError(t, err)
 //
-// 	// 测试空树
+// 	// test an empty tree
 // 	assert.Nil(t, tree.Min())
 // 	assert.Nil(t, tree.Max())
 //
-// 	// 插入元素
+// 	// insert elements
 // 	tree.Put(15, "fifteen")
 // 	tree.Put(10, "ten")
 // 	tree.Put(20, "twenty")
 // 	tree.Put(5, "five")
 //
-// 	// 最小值
+// 	// minimum
 // 	assert.Equal(t, 5, tree.Min().Key)
 // 	assert.Equal(t, "five", tree.Min().Value)
 //
-// 	// 最大值
+// 	// maximum
 // 	assert.Equal(t, 20, tree.Max().Key)
 // 	assert.Equal(t, "twenty", tree.Max().Value)
 // }
@@ -158,29 +158,29 @@ import (
 // 	tree.Put(20, "twenty")
 // 	tree.Put(30, "thirty")
 //
-// 	// Floor 测试
-// 	node, found := tree.Floor(25) // 应返回 20
+// 	// Floor tests
+// 	node, found := tree.Floor(25) // must return 20
 // 	assert.True(t, found)
 // 	assert.Equal(t, 20, node.Key)
 //
-// 	node, found = tree.Floor(10) // 应返回 10
+// 	node, found = tree.Floor(10) // must return 10
 // 	assert.True(t, found)
 // 	assert.Equal(t, 10, node.Key)
 //
-// 	node, found = tree.Floor(5) // 不存在
+// 	node, found = tree.Floor(5) // not present
 // 	assert.False(t, found)
 // 	assert.Nil(t, node)
 //
-// 	// Ceiling 测试
-// 	node, found = tree.Ceiling(25) // 应返回 30
+// 	// Ceiling tests
+// 	node, found = tree.Ceiling(25) // must return 30
 // 	assert.True(t, found)
 // 	assert.Equal(t, 30, node.Key)
 //
-// 	node, found = tree.Ceiling(20) // 应返回 20
+// 	node, found = tree.Ceiling(20) // must return 20
 // 	assert.True(t, found)
 // 	assert.Equal(t, 20, node.Key)
 //
-// 	node, found = tree.Ceiling(35) // 不存在
+// 	node, found = tree.Ceiling(35) // not present
 // 	assert.False(t, found)
 // 	assert.Nil(t, node)
 // }
@@ -207,11 +207,11 @@ import (
 // 	tree.Put(1, "one")
 // 	tree.Put(2, "two")
 //
-// 	// Keys 应按排序顺序返回
+// 	// Keys must be returned in sorted order
 // 	expectedKeys := []int{1, 2, 3}
 // 	assert.Equal(t, expectedKeys, tree.Keys())
 //
-// 	// Values 应按 in-order 顺序返回
+// 	// Values must be returned in in-order
 // 	expectedValues := []string{"one", "two", "three"}
 // 	assert.Equal(t, expectedValues, tree.Values())
 // }
@@ -225,7 +225,7 @@ import (
 // 	tree.Put(3, "three")
 // 	tree.Put(7, "seven")
 //
-// 	// Preorder: 根 → 左 → 右
+// 	// Preorder: root -> left -> right
 // 	expectedPreorder := []int{10, 5, 3, 7, 15}
 // 	var preorder []int
 // 	for n := range tree.PreorderChan() {
@@ -238,7 +238,7 @@ import (
 // 	})
 // 	assert.Equal(t, expectedPreorder, preorder)
 //
-// 	// Inorder: 左 → 根 → 右 (排序)
+// 	// Inorder: left -> root -> right (sorted)
 // 	expectedInorder := []int{3, 5, 7, 10, 15}
 // 	var inorder []int
 // 	for n := range tree.InorderChan() {
@@ -251,7 +251,7 @@ import (
 // 	})
 // 	assert.Equal(t, expectedInorder, inorder)
 //
-// 	// Postorder: 左 → 右 → 根
+// 	// Postorder: left -> right -> root
 // 	expectedPostorder := []int{3, 7, 5, 15, 10}
 // 	var postorder []int
 // 	for n := range tree.PostorderChan() {
@@ -264,7 +264,7 @@ import (
 // 	})
 // 	assert.Equal(t, expectedPostorder, postorder)
 //
-// 	// LevelOrder: 层级遍历
+// 	// LevelOrder: level order traversal
 // 	expectedLevelOrder := []int{10, 5, 15, 3, 7}
 // 	var levelOrder []int
 // 	for n := range tree.LevelOrderChan() {
@@ -281,7 +281,7 @@ import (
 // func TestRedBlackTree_String(t *testing.T) {
 // 	fmt.Println("=== Test Red-Black Tree Visualization ===")
 //
-// 	// 1️⃣ 创建一个 int -> string 的红黑树
+// 	// 1️⃣ create an int -> string red-black tree
 // 	tree, err := rbtree.NewWithOrderedKeys(rbtree.WithColorfulString[int, string]())
 // 	assert.NoError(t, err)
 // 	tree.Put(10, "ten")
@@ -298,7 +298,7 @@ import (
 // 	fmt.Println("\n🔹 Red-Black Tree (int -> string):")
 // 	fmt.Println(tree.String())
 //
-// 	// 2️⃣ 创建一个 string -> int 的红黑树
+// 	// 2️⃣ create a string -> int red-black tree
 // 	treeStr, err := rbtree.NewWithOrderedKeys(rbtree.WithColorfulString[string, int](), rbtree.WithNodeFormat[string, int]("%s:%d "))
 // 	assert.NoError(t, err)
 // 	treeStr.Put("banana", 10)
@@ -312,7 +312,7 @@ import (
 // 	fmt.Println("\n🔹 Red-Black Tree (string -> int):")
 // 	fmt.Println(treeStr.String())
 //
-// 	// 3️⃣ 创建一个 float64 -> string 的红黑树
+// 	// 3️⃣ create a float64 -> string red-black tree
 // 	treeFloat, err := rbtree.NewWithOrderedKeys(rbtree.WithColorfulString[float64, string](), rbtree.WithNodeFormat[float64, string]("%.2f:%s "))
 // 	assert.NoError(t, err)
 //
@@ -501,11 +501,11 @@ func TestRedBlackTree_KeysValues(t *testing.T) {
 	tree.Put(1, "one")
 	tree.Put(2, "two")
 
-	// Keys 应按排序顺序返回
+	// Keys must be returned in sorted order
 	expectedKeys := []int{1, 2, 3}
 	assert.Equal(t, expectedKeys, tree.Keys())
 
-	// Values 应按 in-order 顺序返回
+	// Values must be returned in in-order
 	expectedValues := []string{"one", "two", "three"}
 	assert.Equal(t, expectedValues, tree.Values())
 }
@@ -671,7 +671,7 @@ func TestRedBlackTree_Traversals(t *testing.T) {
 	tree.Put(3, "three")
 	tree.Put(7, "seven")
 
-	// Preorder: 根 → 左 → 右
+	// Preorder: root -> left -> right
 	expectedPreorder := []int{10, 5, 3, 7, 15}
 	preorder := make([]int, 0)
 	tree.PreOrder(func(i int, s string) bool {
@@ -680,7 +680,7 @@ func TestRedBlackTree_Traversals(t *testing.T) {
 	})
 	assert.Equal(t, expectedPreorder, preorder)
 
-	// Inorder: 左 → 根 → 右 (排序)
+	// Inorder: left -> root -> right (sorted)
 	expectedInorder := []int{3, 5, 7, 10, 15}
 	inorder := make([]int, 0)
 	tree.InOrder(func(i int, s string) bool {
@@ -689,7 +689,7 @@ func TestRedBlackTree_Traversals(t *testing.T) {
 	})
 	assert.Equal(t, expectedInorder, inorder)
 
-	// Postorder: 左 → 右 → 根
+	// Postorder: left -> right -> root
 	expectedPostorder := []int{3, 7, 5, 15, 10}
 	postorder := make([]int, 0)
 	tree.PostOrder(func(i int, s string) bool {
@@ -698,7 +698,7 @@ func TestRedBlackTree_Traversals(t *testing.T) {
 	})
 	assert.Equal(t, expectedPostorder, postorder)
 
-	// LevelOrder: 层级遍历
+	// LevelOrder: level order traversal
 	expectedLevelOrder := []int{10, 5, 15, 3, 7}
 	levelOrder := make([]int, 0)
 	tree.LevelOrder(func(i int, s string) bool {
@@ -735,7 +735,7 @@ func TestRedBlackTree_Traversals(t *testing.T) {
 func TestRedBlackTree_String(t *testing.T) {
 	fmt.Println("=== Test Red-Black Tree Visualization ===")
 
-	// 1️⃣ 创建一个 int -> string 的红黑树
+	// 1️⃣ create an int -> string red-black tree
 	tree, err := rbtree.NewOrderedKeys(rbtree.WithColorfulString[int, string]())
 	require.NoError(t, err)
 	tree.Put(10, "ten")
@@ -752,7 +752,7 @@ func TestRedBlackTree_String(t *testing.T) {
 	fmt.Println("\n🔹 Red-Black Tree (int -> string):")
 	fmt.Println(tree.String())
 
-	// 2️⃣ 创建一个 string -> int 的红黑树
+	// 2️⃣ create a string -> int red-black tree
 	treeStr, err := rbtree.NewOrderedKeys(rbtree.WithColorfulString[string, int](), rbtree.WithNodeFormatter(func(k string, v int) string {
 		return fmt.Sprintf("%s:%d ", k, v)
 	}))
@@ -768,7 +768,7 @@ func TestRedBlackTree_String(t *testing.T) {
 	fmt.Println("\n🔹 Red-Black Tree (string -> int):")
 	fmt.Println(treeStr.String())
 
-	// 3️⃣ 创建一个 float64 -> string 的红黑树
+	// 3️⃣ create a float64 -> string red-black tree
 	treeFloat, err := rbtree.NewOrderedKeys(rbtree.WithColorfulString[float64, string](), rbtree.WithNodeFormatter(func(k float64, v string) string {
 		return fmt.Sprintf("%.2f:%s ", k, v)
 	}))

@@ -1,7 +1,7 @@
 package redis
 
-// 如果使用 Redis 版本小于等于 6，安装 v8 版本
-// 如果使用 Redis 版本大于等于 7，安装 v9 版本
+// Use the go-redis v8 client with Redis 6 and older,
+// and the v9 client with Redis 7 and newer.
 
 import (
 	"context"
@@ -524,10 +524,10 @@ func RemovePrefix(ctx context.Context, prefix string) (err error) {
 }
 
 // modelMarshaler
-// MarshalBinary, UnmarshalBinary 的 receiver 不能是指针, 否则 redis 会报错:
-// redis: can't marshal redis.modelMarshaler[*myproject/model.FeishuUser] (implement encoding.BinaryMarshaler)
+// The receiver of MarshalBinary and UnmarshalBinary must not be a pointer, otherwise redis reports:
+// redis: can't marshal redis.modelMarshaler[*myproject/model.Sample] (implement encoding.BinaryMarshaler)
 //
-// MarshalJSON, UnmarshalJSON 的 receiver 必须是指针, 否则 panic
+// The receiver of MarshalJSON and UnmarshalJSON must be a pointer, otherwise it panics.
 type modelMarshaler[M types.Model] struct {
 	Model M
 }
@@ -567,7 +567,7 @@ func (b *modelMarshaler[M]) UnmarshalJSON(data []byte) error {
 }
 
 // modelMarshalerList
-// MarshalBinary 的 receiver一定不能是指针
+// The receiver of MarshalBinary must never be a pointer.
 type modelMarshalerList[M types.Model] []modelMarshaler[M]
 
 func (bl modelMarshalerList[M]) MarshalBinary() ([]byte, error) {

@@ -11,13 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestLocalCacheBasicOperations 测试基本的缓存操作
+// TestLocalCacheBasicOperations tests the basic cache operations.
 func TestLocalCacheBasicOperations(t *testing.T) {
 	cache, err := dcache.NewLocalCache[string]()
 	require.NoError(t, err)
 	assert.NotNil(t, cache)
 
-	// 测试Set和Get
+	// Set and Get
 	err = cache.Set("key1", "value1", 1*time.Hour)
 	require.NoError(t, err)
 
@@ -25,55 +25,55 @@ func TestLocalCacheBasicOperations(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "value1", val)
 
-	// 测试Exists
+	// Exists
 	assert.True(t, cache.Exists("key1"))
 	assert.False(t, cache.Exists("nonexistent"))
 
-	// 测试Delete
+	// Delete
 	err = cache.Delete("key1")
 	require.NoError(t, err)
 	assert.False(t, cache.Exists("key1"))
 
-	// 测试获取已删除的键
+	// get a key that was deleted
 	_, err = cache.Get("key1")
 	require.Error(t, err)
 	assert.Equal(t, types.ErrEntryNotFound, err)
 }
 
-// TestLocalCacheTTL 测试TTL功能
+// TestLocalCacheTTL tests the TTL handling.
 func TestLocalCacheTTL(t *testing.T) {
 	cache, err := dcache.NewLocalCache[string]()
 	require.NoError(t, err)
 
-	// 设置短TTL
+	// set a short TTL
 	err = cache.Set("ttl-key", "ttl-value", 100*time.Millisecond)
 	require.NoError(t, err)
 
-	// 立即检查应该存在
+	// it must exist right away
 	assert.True(t, cache.Exists("ttl-key"))
 	val, err := cache.Get("ttl-key")
 	require.NoError(t, err)
 	assert.Equal(t, "ttl-value", val)
 
-	// 等待TTL过期
+	// wait for the TTL to expire
 	time.Sleep(200 * time.Millisecond)
 
-	// TTL过期后检查应该不存在
+	// once the TTL expired it must be gone
 	assert.False(t, cache.Exists("ttl-key"))
 	_, err = cache.Get("ttl-key")
 	assert.Equal(t, types.ErrEntryNotFound, err)
 }
 
-// TestLocalCacheZeroTTL 测试零TTL（永不过期）
+// TestLocalCacheZeroTTL tests a zero TTL, which never expires.
 func TestLocalCacheZeroTTL(t *testing.T) {
 	cache, err := dcache.NewLocalCache[string]()
 	require.NoError(t, err)
 
-	// 设置零TTL
+	// set a zero TTL
 	err = cache.Set("zero-ttl", "永不过期", 0)
 	require.NoError(t, err)
 
-	// 短暂等待后仍应存在
+	// it must still exist after a short wait
 	time.Sleep(100 * time.Millisecond)
 	assert.True(t, cache.Exists("zero-ttl"))
 	val, err := cache.Get("zero-ttl")
@@ -81,44 +81,44 @@ func TestLocalCacheZeroTTL(t *testing.T) {
 	assert.Equal(t, "永不过期", val)
 }
 
-// TestLocalCacheNegativeTTL 测试负TTL（应该被拒绝）
+// TestLocalCacheNegativeTTL tests a negative TTL, which must be rejected.
 func TestLocalCacheNegativeTTL(t *testing.T) {
 	cache, err := dcache.NewLocalCache[string]()
 	require.NoError(t, err)
 
-	// 设置负TTL
+	// set a negative TTL
 	err = cache.Set("negative-ttl", "invalid", -1*time.Second)
-	// 不确定ristretto如何处理负TTL，需要根据实际行为调整断言
+	// how ristretto handles a negative TTL is unclear, so the assertion follows the real behavior
 	if err != nil {
 		assert.Contains(t, err.Error(), "rejected")
 	} else {
-		// 如果没有错误，检查值是否被设置
+		// without an error, check whether the value was stored anyway
 		exists := cache.Exists("negative-ttl")
 		assert.False(t, exists, "负TTL的键不应该被设置")
 	}
 }
 
-// TestLocalCacheDifferentTypes 测试不同类型
+// TestLocalCacheDifferentTypes tests caches of different types.
 func TestLocalCacheDifferentTypes(t *testing.T) {
-	// 字符串缓存
+	// string cache
 	strCache, err := dcache.NewLocalCache[string]()
 	require.NoError(t, err)
 	err = strCache.Set("str", "string-value", 1*time.Hour)
 	require.NoError(t, err)
 
-	// 整数缓存
+	// int cache
 	intCache, err := dcache.NewLocalCache[int]()
 	require.NoError(t, err)
 	err = intCache.Set("int", 42, 1*time.Hour)
 	require.NoError(t, err)
 
-	// 结构体缓存 - 使用包级别的 Person 类型
+	// struct cache, using the package level Person type
 	personCache, err := dcache.NewLocalCache[Person]()
 	require.NoError(t, err)
 	err = personCache.Set("person", Person{Name: "Alice", Age: 30}, 1*time.Hour)
 	require.NoError(t, err)
 
-	// 检查各自类型的值
+	// check the value of each type
 	strVal, err := strCache.Get("str")
 	require.NoError(t, err)
 	assert.Equal(t, "string-value", strVal)
@@ -132,16 +132,16 @@ func TestLocalCacheDifferentTypes(t *testing.T) {
 	assert.Equal(t, Person{Name: "Alice", Age: 30}, personVal)
 }
 
-// TestLocalCacheOverwrite 测试覆盖已有键
+// TestLocalCacheOverwrite tests overwriting an existing key.
 func TestLocalCacheOverwrite(t *testing.T) {
 	cache, err := dcache.NewLocalCache[string]()
 	require.NoError(t, err)
 
-	// 首次设置
+	// first set
 	err = cache.Set("overwrite", "original", 1*time.Hour)
 	require.NoError(t, err)
 
-	// 覆盖
+	// overwrite
 	err = cache.Set("overwrite", "updated", 2*time.Hour)
 	require.NoError(t, err)
 
@@ -150,12 +150,12 @@ func TestLocalCacheOverwrite(t *testing.T) {
 	assert.Equal(t, "updated", val)
 }
 
-// TestLocalCacheConcurrency 测试并发操作
+// TestLocalCacheConcurrency tests concurrent operations.
 func TestLocalCacheConcurrency(t *testing.T) {
 	cache, err := dcache.NewLocalCache[string]()
 	require.NoError(t, err)
 
-	// 同时进行多个Set和Get操作
+	// run many Set and Get operations at once
 	const goroutines = 100
 	errCh := make(chan error, goroutines)
 
@@ -184,41 +184,41 @@ func TestLocalCacheConcurrency(t *testing.T) {
 		}(i)
 	}
 
-	// 等待所有goroutine完成
+	// wait for every goroutine to finish
 	for range goroutines {
 		require.NoError(t, <-errCh)
 	}
 }
 
-// TestLocalCacheLargeValues 测试大型值
+// TestLocalCacheLargeValues tests large values.
 func TestLocalCacheLargeValues(t *testing.T) {
 	cache, err := dcache.NewLocalCache[string]()
 	require.NoError(t, err)
 
-	// 创建一个大字符串
+	// build a large string
 	largeValue := make([]byte, 1<<20) // 1MB
 	for i := range largeValue {
 		largeValue[i] = byte(i % 256)
 	}
 	largeString := string(largeValue)
 
-	// 设置大值
+	// store the large value
 	err = cache.Set("large", largeString, 1*time.Hour)
 	require.NoError(t, err)
 
-	// 获取并验证
+	// read it back and verify
 	val, err := cache.Get("large")
 	require.NoError(t, err)
 	assert.Equal(t, largeString, val)
 }
 
-// TestLocalCacheKeyCollision 测试哈希冲突处理
+// TestLocalCacheKeyCollision tests how hash collisions are handled.
 func TestLocalCacheKeyCollision(t *testing.T) {
-	// 注意：这个测试主要是概念性的，因为很难在实际中制造哈希冲突
+	// NOTE: this test is mostly conceptual, because forcing a real hash collision is hard.
 	cache, err := dcache.NewLocalCache[string]()
 	require.NoError(t, err)
 
-	// 设置大量随机键以增加冲突可能性
+	// store many keys to raise the chance of a collision
 	const keyCount = 10000
 	for i := range keyCount {
 		key := fmt.Sprintf("collision-test-key-%d", i)
@@ -227,7 +227,7 @@ func TestLocalCacheKeyCollision(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// 随机检查一些键值对
+	// spot check some of the key value pairs
 	for i := range 100 {
 		idx := i * 100
 		key := fmt.Sprintf("collision-test-key-%d", idx)
@@ -239,80 +239,80 @@ func TestLocalCacheKeyCollision(t *testing.T) {
 	}
 }
 
-// TestLocalCacheMetrics 测试指标收集
+// TestLocalCacheMetrics tests the metrics collection.
 func TestLocalCacheMetrics(t *testing.T) {
 	cache, err := dcache.NewLocalCache[string]()
 	require.NoError(t, err)
 
-	// 类型断言为指标提供者
+	// assert the cache is a metrics provider
 	metricsProvider, ok := cache.(dcache.CacheMetricsProvider)
 	assert.True(t, ok, "缓存应该实现cacheMetricsProvider接口")
 
-	// 执行一些操作以生成指标
+	// run some operations so that metrics are produced
 	for i := range 100 {
 		key := fmt.Sprintf("metrics-key-%d", i)
 		err := cache.Set(key, fmt.Sprintf("val-%d", i), 1*time.Hour)
 		require.NoError(t, err)
 	}
 
-	// 一些读取操作
+	// some reads
 	for i := range 50 {
 		key := fmt.Sprintf("metrics-key-%d", i)
 		_, err := cache.Get(key)
 		require.NoError(t, err)
 	}
 
-	// 一些缓存未命中
+	// some cache misses
 	for i := 100; i < 150; i++ {
 		key := fmt.Sprintf("nonexistent-key-%d", i)
 		_, err := cache.Get(key)
 		require.Error(t, err)
 	}
 
-	// 检查指标
+	// check the metrics
 	metrics := metricsProvider.Metrics()
 	assert.NotNil(t, metrics)
 	assert.Positive(t, metrics.KeysAdded, "应该有键被添加")
 	assert.Positive(t, metrics.Misses, "应该有缓存未命中")
 }
 
-// TestLocalCacheSingletonBehavior 测试缓存单例行为
+// TestLocalCacheSingletonBehavior tests that one cache per type is shared.
 func TestLocalCacheSingletonBehavior(t *testing.T) {
-	// 创建两个相同类型的缓存
+	// create two caches of the same type
 	cache1, err := dcache.NewLocalCache[string]()
 	require.NoError(t, err)
 	cache2, err := dcache.NewLocalCache[string]()
 	require.NoError(t, err)
 
-	// 它们应该是同一个实例
+	// they must be the same instance
 	assert.Equal(t, fmt.Sprintf("%p", cache1), fmt.Sprintf("%p", cache2))
 
-	// 在cache1中设置一个值
+	// set a value through cache1
 	err = cache1.Set("singleton-test", "value", 1*time.Hour)
 	require.NoError(t, err)
 
-	// 应该能从cache2中获取
+	// it must be readable through cache2
 	val, err := cache2.Get("singleton-test")
 	require.NoError(t, err)
 	assert.Equal(t, "value", val)
 
-	// 创建不同类型的缓存
+	// create a cache of another type
 	intCache, err := dcache.NewLocalCache[int]()
 	require.NoError(t, err)
 
-	// 应该是不同的实例
+	// it must be a different instance
 	assert.NotEqual(t, fmt.Sprintf("%p", cache1), fmt.Sprintf("%p", intCache))
 }
 
-// // TestLocalCacheRejectedSet 测试缓存拒绝设置操作
+// // TestLocalCacheRejectedSet tests a set operation the cache rejects.
 // func TestLocalCacheRejectedSet(t *testing.T) {
-// 	// 这个测试很难直接实现，因为我们很难强制ristretto拒绝设置操作
-// 	// 但我们可以尝试设置大量数据来增加被拒绝的可能性
+// 	// this test is hard to write directly, because forcing ristretto to reject a set is hard,
+// 	// but storing a lot of data raises the chance of a rejection
 //
 // 	cache, err := NewLocalCache[string]()
 // 	assert.NoError(t, err)
 //
-// 	// 设置大量数据
+// 	// store a lot of data
 // 	rejected := false
 // 	for i := 0; i < 10000000 && !rejected; i++ {
 // 		key := fmt.Sprintf("stress-test-key-%d", i)
@@ -323,35 +323,35 @@ func TestLocalCacheSingletonBehavior(t *testing.T) {
 // 		}
 // 	}
 //
-// 	// 注意：不强制断言rejected为true，因为这取决于系统资源和ristretto的内部实现
-// 	t.Logf("Set操作被拒绝: %v", rejected)
+// 	// NOTE: rejected is not asserted to be true, it depends on the system resources and on ristretto internals
+// 	t.Logf("set operation rejected: %v", rejected)
 // }
 
-// TestLocalCacheNilValue 测试nil值处理
+// TestLocalCacheNilValue tests how a nil value is handled.
 func TestLocalCacheNilValue(t *testing.T) {
 	cache, err := dcache.NewLocalCache[*string]()
 	require.NoError(t, err)
 
-	// 设置nil值
+	// store a nil value
 	err = cache.Set("nil-key", nil, 1*time.Hour)
 	require.NoError(t, err)
 
-	// 获取nil值
+	// read the nil value back
 	val, err := cache.Get("nil-key")
 	require.NoError(t, err)
 	assert.Nil(t, val)
 }
 
-// TestLocalCacheEmptyKey 测试空键
+// TestLocalCacheEmptyKey tests an empty key.
 func TestLocalCacheEmptyKey(t *testing.T) {
 	cache, err := dcache.NewLocalCache[string]()
 	require.NoError(t, err)
 
-	// 设置空键
+	// store an entry under the empty key
 	err = cache.Set("", "empty-key-value", 1*time.Hour)
 	require.NoError(t, err)
 
-	// 获取空键
+	// read the empty key back
 	val, err := cache.Get("")
 	require.NoError(t, err)
 	assert.Equal(t, "empty-key-value", val)

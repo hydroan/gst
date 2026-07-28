@@ -368,7 +368,7 @@ func BenchmarkMultiMap_Values(b *testing.B) {
 	b.Run("unsafe_small", func(b *testing.B) {
 		mm, _ := multimap.New[string, int](intCmp)
 		for i := range 100 {
-			for j := range 5 { // 每个key存5个值
+			for j := range 5 { // store 5 values per key
 				mm.Set(fmt.Sprintf("key%d", i), i*10+j)
 			}
 		}
@@ -382,7 +382,7 @@ func BenchmarkMultiMap_Values(b *testing.B) {
 	b.Run("unsafe_large", func(b *testing.B) {
 		mm, _ := multimap.New[string, int](intCmp)
 		for i := range 1000 {
-			for j := range 10 { // 每个key存10个值
+			for j := range 10 { // store 10 values per key
 				mm.Set(fmt.Sprintf("key%d", i), i*10+j)
 			}
 		}
@@ -425,7 +425,7 @@ func BenchmarkMultiMap_Values(b *testing.B) {
 func BenchmarkMultiMap_Clear(b *testing.B) {
 	b.Run("unsafe_small", func(b *testing.B) {
 		mm, _ := multimap.New[string, int](intCmp)
-		// 预填充一次，避免在循环中重复填充
+		// prefill once so the loop doesn't refill on every iteration
 		for j := range 100 {
 			for k := range 5 {
 				mm.Set(fmt.Sprintf("key%d", j), k)
@@ -434,7 +434,7 @@ func BenchmarkMultiMap_Clear(b *testing.B) {
 
 		b.ResetTimer()
 		for range b.N {
-			// 使用 Clone 来获取新的副本进行清理
+			// use Clone to get a fresh copy to clear
 			clone := mm.Clone()
 			clone.Clear()
 		}
@@ -442,7 +442,7 @@ func BenchmarkMultiMap_Clear(b *testing.B) {
 
 	b.Run("unsafe_medium", func(b *testing.B) {
 		mm, _ := multimap.New[string, int](intCmp)
-		// 使用中等规模的数据：500个键，每个键5个值
+		// use a medium sized data set: 500 keys, 5 values per key
 		for j := range 500 {
 			for k := range 5 {
 				mm.Set(fmt.Sprintf("key%d", j), k)

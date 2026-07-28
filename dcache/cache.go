@@ -79,14 +79,14 @@ func Init() error {
 			return
 		}
 
-		// 手动通过线程池控制 kafka 并发量
+		// bound the kafka concurrency manually with a goroutine pool
 		gopool, err := ants.NewPool(runtime.NumCPU()*2000, ants.WithPreAlloc(false))
 		if err != nil {
 			gerr = err
 			return
 		}
 
-		// 初始化 Kafka 消费者和生产者
+		// initialize the Kafka consumer and producer
 		consumer, err := newConsumer(config.App.Kafka.Brokers, TOPIC_REDIS_SET_DEL, GROUP_REDIS_SET_DEL)
 		if err != nil {
 			gerr = err
@@ -99,12 +99,12 @@ func Init() error {
 		}
 
 		var wg sync.WaitGroup
-		// 为每个 key 维护独立的最大时间戳
+		// keep a separate maximum timestamp per key
 		keyMaxTimestamps := cmap.New[int64]()
 
 		util.SafeGo(func() {
 			for {
-				// 基础上下文，用于操作超时控制
+				// base context, used for operation timeouts
 				baseCtx := context.Background()
 				fetches := consumer.PollFetches(context.Background())
 				if fetches.IsClientClosed() {
@@ -121,41 +121,41 @@ func Init() error {
 					)
 				})
 
-				// 重置批次计数器
-				totalRecords := 0        // 总消息数
-				var successRecords int64 // 成功处理的消息数
-				var failedRecords int64  // 处理失败的消息数
-				skippedRecords := 0      // 跳过的无效的消息数
+				// reset the batch counters
+				totalRecords := 0        // total number of messages
+				var successRecords int64 // number of messages processed successfully
+				var failedRecords int64  // number of messages that failed to process
+				skippedRecords := 0      // number of invalid messages that were skipped
 
-				// 用于跟踪本批次处理的消息的偏移量
+				// tracks the offsets of the messages processed in this batch
 				offsets := make(map[string]map[int32]kgo.EpochOffset)
 
 				// ---------------------------------------------------------------------
-				// 第一阶段：收集所有事件并按时间戳去重，保留每个键的最新操作
+				// Phase one: collect every event and deduplicate by timestamp, keeping the latest operation per key
 				// ---------------------------------------------------------------------
 
-				// 存储每个键的最新操作，实现规则1和规则3
+				// holds the latest operation per key, which implements rule one and rule three
 				keyEvents := make(map[string]*event)
 
 				begin := time.Now()
-				// 遍历所有分区的消息
+				// walk the messages of every partition
 				fetches.EachPartition(func(p kgo.FetchTopicPartition) {
 					if len(p.Records) == 0 {
-						return // 静默跳过空分区
+						return // silently skip empty partitions
 					}
 
 					totalRecords += len(p.Records)
 
-					// 确保为每个主题初始化偏移量映射
+					// make sure the offset map of the topic is initialized
 					if _, exists := offsets[p.Topic]; !exists {
 						offsets[p.Topic] = make(map[int32]kgo.EpochOffset)
 					}
 
 					var lastOffset int64 = -1
 					for _, record := range p.Records {
-						lastOffset = record.Offset // 记录最后一条消息的偏移量
+						lastOffset = record.Offset // remember the offset of the last message
 
-						// 解析事件
+						// parse the event
 						event := new(event)
 						if err = json.Unmarshal(record.Value, event); err != nil {
 							log.Error(
@@ -167,10 +167,10 @@ func Init() error {
 							continue
 						}
 
-						// 获取该 key 的历史最大时间戳
+						// the highest timestamp seen so far for this key
 						keyMaxTS, _ := keyMaxTimestamps.Get(event.Key)
 
-						// 规则一：过滤掉时间戳小于该 key 历史最大时间戳的事件
+						// Rule one: drop events whose timestamp is not newer than the highest one seen for this key
 						if event.TS <= keyMaxTS {
 							log.Warn(
 								"skipping outdated event for key",
@@ -183,7 +183,7 @@ func Init() error {
 							continue
 						}
 
-						// 规则二: 按时间戳去重：只保留每个键的最新操作
+						// Rule two: deduplicate by timestamp, keeping only the latest operation per key
 						existingEvent, exists := keyEvents[event.Key]
 						if !exists || event.TS > existingEvent.TS {
 							keyEvents[event.Key] = event
@@ -191,7 +191,7 @@ func Init() error {
 
 					}
 
-					// 更新分区偏移量，用于后续可能的手动提交偏移量(可能用不到了)
+					// update the partition offset, in case offsets are committed manually later (probably no longer needed)
 					if lastOffset >= 0 {
 						offsets[p.Topic][p.Partition] = kgo.EpochOffset{
 							Offset: lastOffset + 1,
@@ -200,7 +200,7 @@ func Init() error {
 					}
 				})
 
-				// 如果没有消息需要处理，则继续等待下一批
+				// nothing to process, wait for the next batch
 				if len(keyEvents) == 0 {
 					log.Debug(
 						"no events to process in this batch",
@@ -211,34 +211,34 @@ func Init() error {
 					continue
 				}
 
-				// 将map转换为切片，按照时间戳排序
+				// turn the map into a slice so it can be sorted by timestamp
 				eventSlice := make([]*event, 0, len(keyEvents))
 				for _, event := range keyEvents {
 					eventSlice = append(eventSlice, event)
 				}
 
-				// 规则三: 严格按照时间戳排序 (从早到晚)
+				// Rule three: sort strictly by timestamp (oldest first)
 				sort.Slice(eventSlice, func(i, j int) bool {
 					return eventSlice[i].TS < eventSlice[j].TS
 				})
 
 				// ---------------------------------------------------------------------
-				// 第二阶段：按照时间戳顺序执行Redis操作, 操作完后推送 kafka 消息
+				// Phase two: run the Redis operations in timestamp order, then publish a kafka message for each
 				// ---------------------------------------------------------------------
 
-				// 记录本批次处理的每个 key 的最大时间戳，用于批处理结束后更新
+				// highest timestamp per key within this batch, applied once the batch is done
 				batchKeyMaxTS := make(map[string]int64)
 
-				// 批次操作 redis 和 kafka 超时控制
+				// run the redis and kafka operations of this batch
 				wg.Add(len(eventSlice))
 				for i := range eventSlice {
 					evt := eventSlice[i]
-					// 更新该 key 在本批次中的最大时间戳
+					// update the highest timestamp of this key within the batch
 					if ts, exists := batchKeyMaxTS[evt.Key]; !exists || evt.TS > ts {
 						batchKeyMaxTS[evt.Key] = evt.TS
 					}
 
-					// TODO: 生产环境设置成 Debug 级别
+					// TODO: lower this to the Debug level in production
 					log.Info("process event", zap.Object("event", evt))
 
 					err = gopool.Submit(func() {
@@ -258,7 +258,7 @@ func Init() error {
 									return
 								}
 							}
-							// 无论是否同步到Redis，都发送完成事件到Kafka
+							// send the done event to Kafka whether or not it was synced to Redis
 							evtDone := &event{
 								CacheID:     evt.CacheID,
 								Typ:         evt.Typ,
@@ -281,7 +281,7 @@ func Init() error {
 								atomic.AddInt64(&failedRecords, 1)
 							} else {
 								atomic.AddInt64(&successRecords, 1)
-								// 同步推送 kafka 消息
+								// publish the kafka message synchronously
 								produceRecord := &kgo.Record{Topic: TOPIC_REDIS_DONE, Value: data}
 								if err = producer.ProduceSync(baseCtx, produceRecord).FirstErr(); err != nil {
 									log.Error(
@@ -304,7 +304,7 @@ func Init() error {
 									return
 								}
 							}
-							// 无论是否同步到Redis，都发送完成事件到Kafka
+							// send the done event to Kafka whether or not it was synced to Redis
 							evtDone := &event{
 								CacheID:     evt.CacheID,
 								Typ:         evt.Typ,
@@ -325,7 +325,7 @@ func Init() error {
 								atomic.AddInt64(&failedRecords, 1)
 							} else {
 								atomic.AddInt64(&successRecords, 1)
-								// 同步推送 kafka 消息
+								// publish the kafka message synchronously
 								produceRecord := &kgo.Record{Topic: TOPIC_REDIS_DONE, Value: data}
 								if err = producer.ProduceSync(baseCtx, produceRecord).FirstErr(); err != nil {
 									log.Error(
@@ -345,12 +345,12 @@ func Init() error {
 				}
 				wg.Wait()
 
-				// 批处理完成后，更新每个 key 的最大时间戳
+				// the batch is done, update the highest timestamp of every key
 				for key, ts := range batchKeyMaxTS {
 					keyMaxTimestamps.Set(key, ts)
 				}
 
-				// 记录处理统计信息
+				// log the processing statistics
 				if totalRecords > 0 {
 					log.Info(
 						"successfully consumed events",
@@ -363,12 +363,12 @@ func Init() error {
 					)
 				}
 
-				// 清空 map 和 slice，帮助 GC 自动回收内存
+				// drop the map and the slice to help the GC reclaim the memory
 				keyEvents = nil
 				eventSlice = nil
 				batchKeyMaxTS = nil //nolint:ineffassign,wastedassign
 
-				// // 系统每次重启时，都会从最新的偏移量开始消费, 所以不需要保存偏移量
+				// // every restart consumes from the latest offset, so there is no need to persist offsets
 				// if len(offsets) > 0 {
 				// 	consumer.CommitOffsets(ctx, offsets, func(c *kgo.Client, ocr1 *kmsg.OffsetCommitRequest, ocr2 *kmsg.OffsetCommitResponse, err error) {
 				// 		if err != nil {

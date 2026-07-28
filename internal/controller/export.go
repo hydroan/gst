@@ -136,7 +136,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			_, _ = page, size
 			// 2.List resources from database.
 			if err = handler(requestContext(c)).
-				// WithPagination(page, size). // 不要使用 WithPagination, 否则 WithLimit 不生效
+				// WithPagination(page, size). // don't use WithPagination, it makes WithLimit ineffective
 				WithLimit(limit).
 				WithQuery(svc.Filter(svcCtx, m), types.QueryOptions{
 					AllowEmpty:    true,

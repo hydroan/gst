@@ -14,9 +14,9 @@ import (
 )
 
 var (
-	// 为什么选择 cmap v2
-	//  1. sync.Map 不支持泛型, 在大量使用泛型的缓存库里面不使用泛型很突兀/麻烦
-	//  2. cmap v2 比 sync.Map 性能要高很多
+	// Why cmap v2:
+	//  1. sync.Map has no generics, which is awkward in a cache library built around them.
+	//  2. cmap v2 performs much better than sync.Map.
 	localCacheMap = cmap.New[any]()
 	localCacheMu  sync.Mutex
 	localMaxItems = 1 << 24
@@ -32,7 +32,7 @@ type localCache[T any] struct {
 	c *ristretto.Cache[string, T]
 }
 
-// NewLocalCache 创建的缓存不具备分布式的能力, 需要分布式缓存请使用 NewDistributedCache
+// NewLocalCache returns a cache without any distributed capability, use NewDistributedCache when that is needed.
 func NewLocalCache[T any]() (types.Cache[T], error) {
 	typ := reflect.TypeFor[T]()
 	key := typ.PkgPath() + "|" + typ.String()
@@ -143,19 +143,19 @@ func (m *localMetrics) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 
 func buildConf[T any]() *ristretto.Config[string, T] {
 	return &ristretto.Config[string, T]{
-		// NumCounters 应该是你预期缓存项最大数量的大约 10 倍
-		// 这个值影响内部布隆过滤器的准确性
+		// NumCounters should be roughly 10 times the maximum number of entries you expect,
+		// the value drives the accuracy of the internal bloom filter.
 		NumCounters: int64(localMaxItems) * 10,
 
-		// MaxCost 就是你想要缓存的最大项数
-		// 因为每个项的 cost 都是 1
+		// MaxCost is the maximum number of entries to cache,
+		// because the cost of every entry is 1.
 		MaxCost: int64(localMaxItems),
 
-		// BufferItems 控制写缓冲区大小
-		// 我把缓存的个数设置为 1千多万, 所以这里设置的大一些
+		// BufferItems controls the size of the write buffer,
+		// it is set high here because the entry count is above ten million.
 		BufferItems: 256,
 
-		// 开启指标收集
+		// collect metrics
 		Metrics: true,
 	}
 }

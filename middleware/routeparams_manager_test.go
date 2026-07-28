@@ -89,8 +89,8 @@ func TestRouterParamsManager(t *testing.T) {
 		routeManager.Add("/api/resources/:/items/{}")
 
 		params := routeManager.Get("/api/resources/:/items/{}")
-		// 空名称参数可能会被跳过或以空字符串处理，取决于实现
-		// 这里假设它们被跳过
+		// Depending on the implementation, unnamed params are either skipped or kept as
+		// empty strings. Here we assume they are skipped.
 		if len(params) != 0 {
 			t.Logf("Note: Empty param names were handled as: %v", params)
 		}
@@ -101,7 +101,7 @@ func TestRouterParamsManager(t *testing.T) {
 		routeManager.Add("/api/:id/sub/:id")
 
 		params := routeManager.Get("/api/:id/sub/:id")
-		// 注意：取决于实现，可能返回两个"id"或去重后只有一个
+		// NOTE: depending on the implementation this returns two "id" entries or a single deduplicated one.
 		t.Logf("Duplicate param handling: %v", params)
 		if len(params) == 0 {
 			t.Errorf("Expected at least one parameter")
@@ -111,11 +111,11 @@ func TestRouterParamsManager(t *testing.T) {
 	t.Run("MultipleRoutes", func(t *testing.T) {
 		routeManager := NewRouteParamsManager()
 
-		// 注册多个路由
+		// register multiple routes
 		routeManager.Add("/api/users/:userId")
 		routeManager.Add("/api/posts/:postId")
 
-		// 验证每个路由的参数
+		// verify the params of each route
 		params1 := routeManager.Get("/api/users/:userId")
 		expected1 := []string{"userId"}
 		if !reflect.DeepEqual(params1, expected1) {
@@ -133,10 +133,10 @@ func TestRouterParamsManager(t *testing.T) {
 		routeManager := NewRouteParamsManager()
 		routeManager.Add("/api/users/:userId")
 
-		// 尝试获取未注册路由的参数
+		// try to get the params of a route that was never registered
 		params := routeManager.Get("/api/products/:productId")
 
-		// 期望为nil或空切片
+		// expect nil or an empty slice
 		if len(params) != 0 {
 			t.Errorf("Expected nil or empty slice for unregistered route, got %v", params)
 		}
@@ -145,7 +145,7 @@ func TestRouterParamsManager(t *testing.T) {
 	t.Run("TrailingSlash", func(t *testing.T) {
 		routeManager := NewRouteParamsManager()
 
-		// 注册带斜杠的路由
+		// register a route with a trailing slash
 		routeManager.Add("/api/users/:userId/")
 
 		params := routeManager.Get("/api/users/:userId/")
@@ -154,8 +154,8 @@ func TestRouterParamsManager(t *testing.T) {
 			t.Errorf("Expected params %v, got %v", expected, params)
 		}
 
-		// 测试没有斜杠时是否能获取到相同的参数
-		// 注意：这取决于实现是否视为不同的路由
+		// check whether the same params are returned without the trailing slash
+		// NOTE: this depends on whether the implementation treats it as a different route.
 		paramsNoSlash := routeManager.Get("/api/users/:userId")
 		if len(paramsNoSlash) > 0 {
 			t.Logf("Note: Trailing slash handling - with slash: %v, without slash: %v",
@@ -164,7 +164,7 @@ func TestRouterParamsManager(t *testing.T) {
 	})
 }
 
-// 表格驱动测试示例
+// table-driven test
 func TestRouteParamsManagerTableDriven(t *testing.T) {
 	tests := []struct {
 		name     string

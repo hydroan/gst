@@ -55,139 +55,139 @@ func setupTestDistributedCache[T any](t *testing.T) types.DistributedCache[T] {
 	return distributed
 }
 
-// TestDistributedCacheBasicOperations 测试基本操作
+// TestDistributedCacheBasicOperations tests the basic operations.
 func TestDistributedCacheBasicOperations(t *testing.T) {
-	// 为了测试，我们需要替换一些依赖组件
-	// 这里我们创建一个方法来获取测试用的distributedCache
+	// the test replaces a few dependencies, so the distributedCache under test
+	// is built through a dedicated helper
 	dc := setupTestDistributedCache[string](t)
 
-	// 测试Set操作
+	// Set
 	err := dc.Set("test-key", "test-value", 1*time.Minute)
 	require.NoError(t, err)
 
-	// 本地缓存应该被设置
+	// the local cache must hold the entry now
 	val, err := dc.Get("test-key")
 	require.NoError(t, err)
 	require.Equal(t, "test-value", val)
 
-	// 测试Delete操作
+	// Delete
 	err = dc.Delete("test-key")
 	require.NoError(t, err)
 
-	// 应该不存在了
+	// it must be gone
 	require.False(t, dc.Exists("test-key"))
 
-	// 测试不存在的键
+	// a key that does not exist
 	_, err = dc.Get("non-existent")
 	require.Error(t, err)
 	require.True(t, errors.Is(err, types.ErrEntryNotFound))
 }
 
-// TestDistributedCacheWithSync 测试带同步的操作
+// TestDistributedCacheWithSync tests the operations that synchronize.
 func TestDistributedCacheWithSync(t *testing.T) {
 	dc := setupTestDistributedCache[string](t)
 	key, value := "test-key", "test-value"
 	localTTL, remoteTTL := 500*time.Millisecond, 1*time.Minute
 
-	// 测试SetWithSync
+	// SetWithSync
 	err := dc.SetWithSync(key, value, localTTL, remoteTTL)
 	require.NoError(t, err)
 
-	// 测试GetWithSync (从本地缓存获取)
+	// GetWithSync (served from the local cache)
 	val, err := dc.Get("test-key")
 	require.NoError(t, err)
 	require.Equal(t, value, val)
 
-	// 自动过期拿不到
-	time.Sleep(localTTL + 50*time.Millisecond) // 增加一些缓冲时间确保过期
+	// after the automatic expiration it is no longer readable
+	time.Sleep(localTTL + 50*time.Millisecond) // add some slack so it has surely expired
 	val, err = dc.Get("test-key")
 	require.ErrorIs(t, err, types.ErrEntryNotFound)
 	require.Empty(t, val)
 
-	// 由于测试环境没有真实的 Redis，GetWithSync 会失败
-	// 这里我们先设置一个值到 Redis 模拟的场景
+	// GetWithSync fails without a real Redis in the test environment,
+	// so a value is written first to emulate an entry living in Redis
 	err = dc.SetWithSync(key, value, localTTL, remoteTTL)
 	require.NoError(t, err)
 
-	// 等待一小段时间让设置操作完成
+	// give the set operation a moment to complete
 	time.Sleep(100 * time.Millisecond)
 
 	val, err = dc.GetWithSync(key, localTTL)
 	require.NoError(t, err)
 	require.Equal(t, value, val)
 
-	// 主动删除 Delete
+	// explicit Delete
 	err = dc.Delete(key)
 	require.NoError(t, err)
 	val, err = dc.Get(key)
 	require.ErrorIs(t, err, types.ErrEntryNotFound)
 	require.Empty(t, val)
 
-	// 重新设置值用于后续测试
+	// set the value again for the rest of the test
 	err = dc.SetWithSync(key, value, localTTL, remoteTTL)
 	require.NoError(t, err)
 
-	// 等待设置完成
+	// wait for the set to complete
 	time.Sleep(100 * time.Millisecond)
 
 	val, err = dc.GetWithSync(key, localTTL)
 	require.NoError(t, err)
 	require.Equal(t, value, val)
 
-	// 主动删除 DeleteWithSync
+	// explicit DeleteWithSync
 	err = dc.DeleteWithSync(key)
 	require.NoError(t, err)
 	val, err = dc.Get(key)
 	require.ErrorIs(t, err, types.ErrEntryNotFound)
 	require.Empty(t, val)
 
-	// 等状态节点删除 redis 中的 key
+	// wait for the state node to delete the key from redis
 	time.Sleep(500 * time.Millisecond)
 	val, err = dc.GetWithSync(key, localTTL)
 	require.ErrorIs(t, err, types.ErrEntryNotFound)
 	require.Empty(t, val)
 }
 
-// TestDistributedCacheTTL 测试TTL功能
+// TestDistributedCacheTTL tests the TTL handling.
 func TestDistributedCacheTTL(t *testing.T) {
 	dc := setupTestDistributedCache[string](t)
 
-	// 设置非常短的TTL
+	// set a very short TTL
 	err := dc.Set("ttl-key", "ttl-value", 100*time.Millisecond)
 	require.NoError(t, err)
 
-	// 立即应该能获取
+	// it must be readable right away
 	val, err := dc.Get("ttl-key")
 	require.NoError(t, err)
 	require.Equal(t, "ttl-value", val)
 
-	// 等待TTL过期
+	// wait for the TTL to expire
 	time.Sleep(200 * time.Millisecond)
 
-	// 现在应该获取不到了
+	// now it must be gone
 	_, err = dc.Get("ttl-key")
 	require.Error(t, err)
 }
 
-// TestDistributedCacheRemoteTTLValidation 测试RemoteTTL验证
+// TestDistributedCacheRemoteTTLValidation tests the validation of remoteTTL.
 func TestDistributedCacheRemoteTTLValidation(t *testing.T) {
 	dc := setupTestDistributedCache[string](t)
 
-	// 设置错误的TTL (remoteTTL < localTTL)
+	// an invalid TTL pair (remoteTTL < localTTL)
 	err := dc.SetWithSync("invalid-ttl", "value", 2*time.Hour, 1*time.Hour)
 	require.Error(t, err)
 }
 
-// TestDistributedCacheConcurrency 测试并发操作
+// TestDistributedCacheConcurrency tests concurrent operations.
 func TestDistributedCacheConcurrency(t *testing.T) {
 	dc := setupTestDistributedCache[string](t)
 
-	// 创建等待组来同步goroutines
+	// a wait group to synchronize the goroutines
 	var wg sync.WaitGroup
 	const numGoroutines = 100
 	errCh := make(chan error, numGoroutines)
 
-	// 启动多个goroutines同时进行读写操作
+	// run reads and writes from many goroutines at once
 	for i := range numGoroutines {
 		wg.Add(1)
 		go func(idx int) {
@@ -196,14 +196,14 @@ func TestDistributedCacheConcurrency(t *testing.T) {
 			key := fmt.Sprintf("concurrent-key-%d", idx)
 			value := fmt.Sprintf("value-%d", idx)
 
-			// 设置值
+			// set the value
 			err := dc.Set(key, value, 1*time.Minute)
 			if err != nil {
 				errCh <- err
 				return
 			}
 
-			// 读取值
+			// read the value
 			val, err := dc.Get(key)
 			if err != nil {
 				errCh <- err
@@ -214,7 +214,7 @@ func TestDistributedCacheConcurrency(t *testing.T) {
 				return
 			}
 
-			// 删除值
+			// delete the value
 			err = dc.Delete(key)
 			if err != nil {
 				errCh <- err
@@ -224,7 +224,7 @@ func TestDistributedCacheConcurrency(t *testing.T) {
 		}(i)
 	}
 
-	// 等待所有goroutines完成
+	// wait for every goroutine to finish
 	wg.Wait()
 	close(errCh)
 	for err := range errCh {
@@ -232,17 +232,17 @@ func TestDistributedCacheConcurrency(t *testing.T) {
 	}
 }
 
-// TestDistributedCacheDifferentTypes 测试不同类型的缓存
+// TestDistributedCacheDifferentTypes tests caches of different types.
 func TestDistributedCacheDifferentTypes(t *testing.T) {
-	// 字符串缓存
+	// string cache
 	strCache := setupTestDistributedCache[string](t)
 
-	// 整数缓存
+	// int cache
 	intCache := setupTestDistributedCache[int](t)
 
 	personCache := setupTestDistributedCache[Person](t)
 
-	// 测试各种类型操作
+	// operate on each type
 	err := strCache.Set("str", "string-value", 1*time.Minute)
 	require.NoError(t, err)
 
@@ -252,7 +252,7 @@ func TestDistributedCacheDifferentTypes(t *testing.T) {
 	err = personCache.Set("person", Person{Name: "Alice", Age: 30}, 1*time.Minute)
 	require.NoError(t, err)
 
-	// 检查值
+	// check the values
 	strVal, err := strCache.Get("str")
 	require.NoError(t, err)
 	require.Equal(t, "string-value", strVal)
@@ -266,51 +266,51 @@ func TestDistributedCacheDifferentTypes(t *testing.T) {
 	require.Equal(t, Person{Name: "Alice", Age: 30}, personVal)
 }
 
-// TestDistributedCacheLargeValues 测试大型值
+// TestDistributedCacheLargeValues tests large values.
 func TestDistributedCacheLargeValues(t *testing.T) {
 	dc := setupTestDistributedCache[string](t)
 
-	// 创建一个大字符串
+	// build a large string
 	largeValue := make([]byte, 1<<20) // 1MB
 	for i := range largeValue {
 		largeValue[i] = byte(i % 256)
 	}
 	largeString := string(largeValue)
 
-	// 设置大值
+	// store the large value
 	err := dc.Set("large", largeString, 1*time.Hour)
 	require.NoError(t, err)
 
-	// 获取并验证
+	// read it back and verify
 	val, err := dc.Get("large")
 	require.NoError(t, err)
 	require.Equal(t, largeString, val)
 }
 
-// TestDistributedCacheEdgeCases 测试边缘情况
+// TestDistributedCacheEdgeCases tests the edge cases.
 func TestDistributedCacheEdgeCases(t *testing.T) {
 	dc := setupTestDistributedCache[string](t)
 
-	// 测试空键
+	// an empty key
 	err := dc.Set("", "empty-key", 1*time.Hour)
 	require.NoError(t, err)
 	val, err := dc.Get("")
 	require.NoError(t, err)
 	require.Equal(t, "empty-key", val)
 
-	// 测试零TTL
+	// a zero TTL
 	err = dc.Set("zero-ttl", "forever", 0)
 	require.NoError(t, err)
 
-	// 测试极小TTL
+	// a tiny TTL
 	err = dc.Set("tiny-ttl", "quick", 1*time.Nanosecond)
 	require.NoError(t, err)
 	time.Sleep(10 * time.Millisecond)
 	_, err = dc.Get("tiny-ttl")
-	require.Error(t, err) // 应该已经过期
+	require.Error(t, err) // it must have expired
 
-	// 测试极大TTL
-	err = dc.Set("huge-ttl", "longterm", 100*365*24*time.Hour) // ~100年
+	// a huge TTL
+	err = dc.Set("huge-ttl", "longterm", 100*365*24*time.Hour) // ~100 years
 	require.NoError(t, err)
 	val, err = dc.Get("huge-ttl")
 	require.NoError(t, err)

@@ -122,9 +122,9 @@ func (s *Session) Write(event *Event) error {
 	s.locker.wmu.Lock()
 	logger.Protocol.Infow("Session.Write() L", "key", s.locker.key, "event", event.Cmd) // L: lock
 	defer s.locker.wmu.Unlock()
-	// 这个 ID 极其重要, 如果人家设置了 ID, 你千万别动人家的
-	// 因为 Event 的 ID 相同就表明这是正在进行的同一个通信.
-	// 如果 Event 的 ID 就表明这不是同一个通信.
+	// This ID is critical: never overwrite an ID the caller already set,
+	// because events sharing the same ID belong to the same ongoing exchange,
+	// while a different ID marks a different one.
 	if event.ID == "" {
 		event.ID = util.UUID()
 	}

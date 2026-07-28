@@ -278,20 +278,20 @@ func benchmarkParallel(b *testing.B, cm types.Cache[string]) {
 			for pb.Next() {
 				idx := counter % count
 
-				// 使用质数哈希来分散操作类型，避免规律性
-				opType := (counter * 7) % 10 // 将操作分为10类
+				// hash with a prime to spread the operation types and avoid a regular pattern
+				opType := (counter * 7) % 10 // split the operations into 10 classes
 
 				switch {
-				case opType < 3: // 30% 写操作
+				case opType < 3: // 30% writes
 					err := cm.Set(keys[idx], values[idx], ttl)
 					if err != nil {
 						b.Fatal(err)
 					}
-				case opType < 9: // 60% 读操作
+				case opType < 9: // 60% reads
 					if _, err := cm.Get(keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 						b.Fatal(err)
 					}
-				default: // 10% 删除操作
+				default: // 10% deletes
 					if err := cm.Delete(keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 						b.Fatal(err)
 					}

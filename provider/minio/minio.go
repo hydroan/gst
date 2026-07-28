@@ -329,7 +329,7 @@ func Get(ctx context.Context, objectKey string, opts ...*GetOptions) (io.ReadClo
 		return nil, nil, errors.Wrapf(getErr, "failed to get object %s", objectKey)
 	}
 
-	// 获取对象信息
+	// fetch the object metadata
 	stat, err := obj.Stat()
 	if err != nil {
 		obj.Close()

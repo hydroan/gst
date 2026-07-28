@@ -27,7 +27,7 @@ const (
 	ETCD_ENABLED = "ETCD_ENABLED" //nolint:staticcheck
 )
 
-// Etcd 配置结构
+// Etcd is the etcd client configuration.
 type Etcd struct {
 	Endpoints           []string      `json:"endpoints" mapstructure:"endpoints" ini:"endpoints" yaml:"endpoints"`
 	DialTimeout         time.Duration `json:"dial_timeout" mapstructure:"dial_timeout" ini:"dial_timeout" yaml:"dial_timeout"`

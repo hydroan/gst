@@ -38,7 +38,7 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		defer span.End()
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_IMPORT)
-		// NOTE:字段为 file 必须和前端协商好.
+		// NOTE: the form field name is "file", it must be agreed on with the frontend.
 		file, err := c.FormFile("file")
 		if err != nil {
 			log.Error(err)

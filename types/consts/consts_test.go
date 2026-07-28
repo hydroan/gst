@@ -45,7 +45,7 @@ func TestPhase_RoleName(t *testing.T) {
 		phase consts.Phase
 		want  string
 	}{
-		// 单个 CRUD
+		// single CRUD
 		{"creator", consts.PHASE_CREATE, "Creator"},
 		{"updater", consts.PHASE_UPDATE, "Updater"},
 		{"deleter", consts.PHASE_DELETE, "Deleter"},
@@ -59,7 +59,7 @@ func TestPhase_RoleName(t *testing.T) {
 		{"many_deleter", consts.PHASE_DELETE_MANY, "ManyDeleter"},
 		{"many_patcher", consts.PHASE_PATCH_MANY, "ManyPatcher"},
 
-		// before/after - 单个
+		// before/after - single
 		{"create_before", consts.PHASE_CREATE_BEFORE, "Creator"},
 		{"create_after", consts.PHASE_CREATE_AFTER, "Creator"},
 		{"update_before", consts.PHASE_UPDATE_BEFORE, "Updater"},
@@ -88,7 +88,7 @@ func TestPhase_RoleName(t *testing.T) {
 		{"filter", consts.PHASE_FILTER, "Lister"},
 		{"filter_raw", consts.PHASE_FILTER_RAW, "Lister"},
 
-		// 非 CRUD 操作
+		// non-CRUD operations
 		{"import", consts.PHASE_IMPORT, "Importer"},
 		{"export", consts.PHASE_EXPORT, "Exporter"},
 	}
@@ -215,7 +215,7 @@ func TestPhase_Filename(t *testing.T) {
 		phase consts.Phase
 		want  string
 	}{
-		// 单个 CRUD
+		// single CRUD
 		{"create", consts.PHASE_CREATE, "create.go"},
 		{"update", consts.PHASE_UPDATE, "update.go"},
 		{"delete", consts.PHASE_DELETE, "delete.go"},
@@ -229,7 +229,7 @@ func TestPhase_Filename(t *testing.T) {
 		{"delete_many", consts.PHASE_DELETE_MANY, "delete_many.go"},
 		{"patch_many", consts.PHASE_PATCH_MANY, "patch_many.go"},
 
-		// before/after 单个
+		// before/after single
 		{"create_before", consts.PHASE_CREATE_BEFORE, "create.go"},
 		{"create_after", consts.PHASE_CREATE_AFTER, "create.go"},
 		{"update_before", consts.PHASE_UPDATE_BEFORE, "update.go"},
@@ -253,7 +253,7 @@ func TestPhase_Filename(t *testing.T) {
 		{"patch_many_before", consts.PHASE_PATCH_MANY_BEFORE, "patch_many.go"},
 		{"patch_many_after", consts.PHASE_PATCH_MANY_AFTER, "patch_many.go"},
 
-		// 其他 phase
+		// other phases
 		{"filter", consts.PHASE_FILTER, "filter.go"},
 		{"import", consts.PHASE_IMPORT, "import.go"},
 		{"export", consts.PHASE_EXPORT, "export.go"},

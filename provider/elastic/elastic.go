@@ -176,8 +176,9 @@ func _check() error {
 
 func Client() *elasticsearch.Client { return client }
 
-// SearchTimestamp
-// WithIndex("winlog*"), // 使用通配符查询多个索引
+// SearchTimestamp searches index for documents newer than the timestamp persisted in
+// TIMESTAMP_FILE and returns the raw response body.
+// index accepts a wildcard, eg "sample-*", to query multiple indices at once.
 func SearchTimestamp(index string, size ...int) ([]byte, error) {
 	_size := defaultSearchSize
 	if len(size) > 0 {
@@ -211,7 +212,7 @@ func SearchTimestamp(index string, size ...int) ([]byte, error) {
 	timestampEnd = time.Date(2099, now.Month(), now.Day(), 23, 59, 59, 0, time.UTC)
 	if timestampStartData, err = os.ReadFile(TIMESTAMP_FILE); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			timestampStart = time.Date(now.Year(), now.Month(), now.Day()-1, now.Hour(), now.Minute(), now.Second(), 0, time.UTC) // 提前一天
+			timestampStart = time.Date(now.Year(), now.Month(), now.Day()-1, now.Hour(), now.Minute(), now.Second(), 0, time.UTC) // one day earlier
 			fmt.Println("------------------- touch file and write time: ", timestampStart.Format(time.RFC3339))
 			if err = os.WriteFile(TIMESTAMP_FILE, []byte(timestampStart.Format(time.RFC3339)), 0o600); err != nil {
 				return nil, err
@@ -243,8 +244,8 @@ func SearchTimestamp(index string, size ...int) ([]byte, error) {
 
 	res, err := client.Search(
 		client.Search.WithContext(context.Background()),
-		// client.Search.WithIndex("winlog*"), // 使用通配符查询多个索引
-		client.Search.WithIndex(index), // 使用通配符查询多个索引
+		// client.Search.WithIndex("sample-*"), // use a wildcard to query multiple indices
+		client.Search.WithIndex(index), // index may be a wildcard covering multiple indices
 		client.Search.WithBody(strings.NewReader(query)),
 		client.Search.WithTrackTotalHits(true),
 		client.Search.WithPretty(),

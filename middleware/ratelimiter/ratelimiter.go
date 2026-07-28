@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	defaultRate  = rate.Limit(10) // 默认每秒允许 10 个请求
-	defaultBurst = 50             // 默认令牌桶容量
-	defaultTTL   = 24 * time.Hour // 默认限流器过期时间
+	defaultRate  = rate.Limit(10) // default: allow 10 requests per second
+	defaultBurst = 50             // default token bucket capacity
+	defaultTTL   = 24 * time.Hour // default expiration of an idle limiter
 )
 
 func init() {

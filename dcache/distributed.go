@@ -38,9 +38,9 @@ const (
 )
 
 var (
-	// 为什么选择 cmap v2
-	//  1. sync.Map 不支持泛型, 在大量使用泛型的缓存库里面不使用泛型很突兀/麻烦
-	//  2. cmap v2 比 sync.Map 性能要高很多
+	// Why cmap v2:
+	//  1. sync.Map has no generics, which is awkward in a cache library built around them.
+	//  2. cmap v2 performs much better than sync.Map.
 	distributedCacheMap = cmap.New[any]()
 	distributedCacheMu  sync.Mutex
 
@@ -106,18 +106,23 @@ func (e *event) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	return nil
 }
 
-// NewDistributedCache 为什么要为每种类型创建一个单独的缓存, 并放在一个并发 map 中?
-// 每个类型的缓存都有自己的 goroutine 来监控 opSetDone, opDelDone 事件, 互不干涉
-// 因为数据类型有限, 所以不会有太多的 goroutine 监听 kafka 事件, 监听者不多, 则效率会更高.
+// NewDistributedCache returns the distributed cache of type T, creating it on first use.
 //
-// 如果不这么做, 每调用一次 NewDistributedCache 就会创建一个 goroutine 监听 kafka 事件.
-// 会导致创建过多的 kafka 消费者, 这完全不是我们想要的.
-// 既然提供了这个函数, 我们没办法完全保证其他开发者不会频繁调用这个函数, 控制权还需要交给自己.
+// Why keep one cache per type in a concurrent map?
+// Each type's cache owns the goroutine that watches the opSetDone and opDelDone events, and they
+// never interfere with each other. The number of types is bounded, so only a few goroutines ever
+// listen for kafka events, and fewer listeners means better throughput.
 //
-// 计算:
+// Without the map, every NewDistributedCache call would spawn another goroutine listening for
+// kafka events and therefore far too many kafka consumers, which is not what we want. Since this
+// function is exported we cannot stop other developers from calling it repeatedly, so the control
+// has to stay here.
 //
-//	kafka 在单节点上的消费者数量: 服务进程个数 * DistributedCache个数, 一般都是跑一个服务进程的.
-//	kafka 监听者总数量: 但节点上消费者个数 * 节点个数
+// The arithmetic:
+//
+//	kafka consumers on one node: number of service processes * number of DistributedCache instances,
+//	and normally only one service process runs.
+//	total kafka listeners: consumers per node * number of nodes
 func NewDistributedCache[T any](opts ...DistributedCacheOption[T]) (types.DistributedCache[T], error) {
 	typ := reflect.TypeFor[T]()
 	key := typ.PkgPath() + "|" + typ.String()
@@ -155,20 +160,19 @@ type distributedCache[T any] struct {
 	localCache types.Cache[T]
 	redisCache types.Cache[any]
 
-	// 用来在 redis 缓存中区分不同的类型
+	// prefix keeps the types apart inside the redis cache.
 	prefix string
 
-	// typ 分布式缓存类型
-	// 当某一个实例收到 opSetDone, opDelDone 事件时, 会检查 event.Typ 是否于等于自己的分布式缓存类型
-	// 如果相同, 则不处理.
-	// NOTE: 多个分布式缓存实例的 typ 总是相同
+	// typ is the type of the distributed cache.
+	// When an instance receives an opSetDone or opDelDone event it compares event.Typ with its own
+	// type and ignores the event when they differ.
+	// NOTE: the typ of the distributed cache instances of one type is always the same.
 	typ string
 
-	// 分布式缓存ID, 用来标识不同的分布式缓存实例
-	// 每一个实例都有自己唯一的分布式缓存ID
-	// 当某一个实例收到 opSetDone, opDelDone 事件时, 会检查 event.CacheId 是否于等于自己的分布式缓存ID
-	// 如果相同, 则不处理.
-	// NOTE: 多个分布式缓存实例的 cacheID 总是不同
+	// cacheID identifies one distributed cache instance, and every instance has its own.
+	// When an instance receives an opSetDone or opDelDone event it compares event.CacheID with its
+	// own ID and ignores the event when they are equal, because it published that event itself.
+	// NOTE: the cacheID of two distributed cache instances is never the same.
 	cacheID  string
 	hostname string
 
@@ -216,17 +220,17 @@ func newDistributedCache[T any](opts ...DistributedCacheOption[T]) (types.Cache[
 		return nil, err
 	}
 
-	// 为什么这里要加上 prefix?
-	// localCache 是支持泛型的, 每一种类型都有单独的 localCache,
-	// NewLocalCache 只是从包含多个 local cache 的 map 中返回当前类型的 lcoal cache
-	// 由于 redis 是不支持泛型的, 所以这里加上一个 prefix 来作为新的命名空间
+	// Why add a prefix here?
+	// localCache is generic and every type has its own localCache: NewLocalCache just returns the
+	// local cache of the current type out of a map holding many of them.
+	// redis has no generics, so the prefix acts as the namespace of the type.
 	typ := reflect.TypeFor[T]()
 	var prefix string
 	var typStr string
-	if len(typ.PkgPath()) > 0 { // 不是 golang 基本类型, 一般是结构体类型
+	if len(typ.PkgPath()) > 0 { // not a builtin go type, usually a struct type
 		prefix = fmt.Sprintf("%s:%s:", typ.PkgPath(), typ.Name())
 		typStr = fmt.Sprintf("%s:%s", typ.PkgPath(), typ.Name())
-	} else { // golang 基本类型
+	} else { // builtin go type
 		prefix = typ.Name() + ":"
 		typStr = typ.Name()
 	}
@@ -523,48 +527,50 @@ func (dc *distributedCache[T]) listenEvents() {
 				}
 				switch evt.Op {
 				case opSetDone:
-					// 如果是自己发出的事件，跳过处理
-					// 先检查缓存ID, 检查完后其实不用再检查缓存类型
+					// skip the events this instance published itself,
+					// check the cache ID first, after which the cache type barely needs checking
 					if evt.CacheID == dc.cacheID {
-						// fmt.Println("----- set 缓存ID不匹配", dc.mark, dc.cacheId, evt.CacheId)
+						// fmt.Println("----- set cache ID matched", dc.mark, dc.cacheId, evt.CacheId)
 						continue
 					}
-					// 这里会接收到任意类型的数据, 基本类型,自定义类型等, 需要判断是否是自己的类型
-					// 不用担心不同类型会有相同的key而导致错误的设置,不同类型的key总是会不同的, 例如:
-					// key1 在 string 类型的 localCache, redisCache 是这样的: string:key1
-					// key1 在 int 类型的 localCache, redisCache 是这样的: int:key1
+					// events of any type arrive here, builtin as well as custom ones, so the type has to be checked.
+					// Two types sharing a key can never set the wrong entry, because the keys always differ, eg:
+					// key1 of the string localCache is string:key1 in redisCache
+					// key1 of the int localCache is int:key1 in redisCache
 					if evt.Typ != dc.typ {
-						// fmt.Println("----- set 缓存类型不匹配", dc.mark, dc.typ, evt.Typ)
+						// fmt.Println("----- set cache type mismatch", dc.mark, dc.typ, evt.Typ)
 						continue
 					}
 
-					// TODO: 生产环境需要设置成 debug
+					// TODO: lower this to debug in production
 					dc.logger.Info("consume event", zap.Object("event", evt))
 					var val T
 					// fmt.Printf("----- %s OpSet %v %v %v\n", dc.mark, event.Typ, event.Key, string(event.Val))
 					if err := json.Unmarshal(evt.Val, &val); err == nil {
-						// TODO: 如何解决这个问题
-						// 本地缓存已经删除了, 收到 opSetDone 事件后,又要再删除一次, 我觉得没必要重复删除
+						// TODO: how should this be solved?
+						// The local entry is already gone, and handling opSetDone removes it a second
+						// time, which looks like an unnecessary repeat.
 
 						dc.distributedSet.Add(1)
-						// 这里不需要使用 prefix + key, 状态节点传过来的 key, 已经是 prefix+key 了.
+						// no prefix + key here, the key sent by the state node already is prefix+key.
 						if err := dc.localCache.Set(evt.Key, val, evt.TTL); err != nil {
 							dc.logger.Warn("failed to set to local cache", zap.Error(err))
 						}
 					}
 				case opDelDone:
-					// 先检查缓存ID, 其实不用再检查缓存类型
+					// check the cache ID first, the cache type barely needs checking afterwards
 					if evt.CacheID == dc.cacheID {
-						// fmt.Println("------ delete 缓存ID不匹配", dc.mark, dc.cacheId, evt.CacheId)
+						// fmt.Println("------ delete cache ID matched", dc.mark, dc.cacheId, evt.CacheId)
 						continue
 					}
 					if evt.Typ != dc.typ {
-						// fmt.Println("------ delete 缓存类型不匹配:", dc.mark, dc.typ, evt.Typ)
+						// fmt.Println("------ delete cache type mismatch:", dc.mark, dc.typ, evt.Typ)
 						continue
 					}
 					dc.distributedDelete.Add(1)
-					// 这里不需要使用 prefix + key, 状态节点传过来的 key, 已经是 prefix+key 了.
-					// 但凡收到 opDelDone 事件, 都需要从本地缓存中删除, 我们无法得知这个 key 是不是属于我们当前缓存的
+					// no prefix + key here, the key sent by the state node already is prefix+key.
+					// Every opDelDone event has to delete from the local cache, because there is no way
+					// to tell whether the key belongs to this cache.
 					if err := dc.localCache.Delete(evt.Key); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 						dc.logger.Warn("failed to delete from local cache", zap.Error(err))
 					}
@@ -600,7 +606,7 @@ func (dc *distributedCache[T]) sendEvent(evt *event) {
 		evt.Typ = dc.typ
 		evt.Val = val
 		evt.Hostname = dc.hostname
-		evt.raw = nil // 设置为nil,减少event体积
+		evt.raw = nil // clear it to keep the event small
 		data, err := json.Marshal(evt)
 		if err != nil {
 			dc.logger.Error("failed to marshal event", zap.Error(err), zap.Object("event", evt))
@@ -610,7 +616,7 @@ func (dc *distributedCache[T]) sendEvent(evt *event) {
 			Topic: TOPIC_REDIS_SET_DEL,
 			Value: data,
 		}
-		// TODO: 日志设置成 debug
+		// TODO: lower this log to debug
 		dc.logger.Info("publish event", zap.Object("event", evt))
 		if err := dc.pubSetDel.ProduceSync(context.Background(), record).FirstErr(); err != nil {
 			dc.logger.Error("failed to publish event", zap.Error(err), zap.Object("event", evt))

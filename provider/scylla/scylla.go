@@ -156,7 +156,7 @@ func New(cfg config.Scylla) (gocqlx.Session, error) {
 	return gocqlx.WrapSession(gocql.NewSession(*cluster))
 }
 
-// 自定义实现QueryObserver接口，用于跟踪查询
+// queryObserver implements gocql.QueryObserver to trace queries.
 type queryObserver struct{}
 
 func (o *queryObserver) ObserveQuery(ctx context.Context, query gocql.ObservedQuery) {
@@ -170,7 +170,7 @@ func (o *queryObserver) ObserveQuery(ctx context.Context, query gocql.ObservedQu
 	)
 }
 
-// 自定义实现BatchObserver接口，用于跟踪批处理
+// batchObserver implements gocql.BatchObserver to trace batches.
 type batchObserver struct{}
 
 func (o *batchObserver) ObserveBatch(ctx context.Context, batch gocql.ObservedBatch) {

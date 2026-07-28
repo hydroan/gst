@@ -28,20 +28,20 @@ var (
 	listener    net.Listener
 )
 
-// RegisterServiceFunc 是服务注册函数的类型定义
+// RegisterServiceFunc is the type of a service registration function.
 type RegisterServiceFunc func(*grpc.Server)
 
-// 存储所有等待注册的服务
+// serviceRegistrars holds every service that is waiting to be registered.
 var serviceRegistrars []RegisterServiceFunc
 
-// RegisterService 添加一个服务注册函数，用于在服务器启动时注册服务
+// RegisterService adds a service registration function, which registers the service when the server starts.
 func RegisterService(registrar RegisterServiceFunc) {
 	mu.Lock()
 	defer mu.Unlock()
 
 	serviceRegistrars = append(serviceRegistrars, registrar)
 
-	// 如果服务器已经初始化，直接注册服务
+	// register right away if the server is already initialized
 	if initialized && server != nil {
 		registrar(server)
 	}
@@ -60,7 +60,7 @@ func Init() error {
 
 	var opts []grpc.ServerOption
 
-	// 配置消息大小限制
+	// message size limits
 	if cfg.MaxRecvMsgSize > 0 {
 		opts = append(opts, grpc.MaxRecvMsgSize(cfg.MaxRecvMsgSize))
 	}
@@ -68,27 +68,27 @@ func Init() error {
 		opts = append(opts, grpc.MaxSendMsgSize(cfg.MaxSendMsgSize))
 	}
 
-	// 配置窗口大小
+	// window sizes
 	if cfg.InitialConnWindowSize > 0 {
 		opts = append(opts, grpc.InitialConnWindowSize(cfg.InitialConnWindowSize))
 	}
 	if cfg.InitialWindowSize > 0 {
 		opts = append(opts, grpc.InitialWindowSize(cfg.InitialWindowSize))
 	}
-	// 配置保活参数
+	// keepalive parameters
 	if cfg.KeepaliveTime > 0 || cfg.KeepaliveTimeout > 0 {
 		serverParams := keepalive.ServerParameters{
-			Time:                  cfg.KeepaliveTime,         // 如果空闲超过此时间，则发送ping
-			Timeout:               cfg.KeepaliveTimeout,      // 如果ping在此时间内没有响应，则关闭连接
-			MaxConnectionIdle:     cfg.MaxConnectionIdle,     // 如果连接空闲超过此时间，则关闭
-			MaxConnectionAge:      cfg.MaxConnectionAge,      // 连接最大年龄
-			MaxConnectionAgeGrace: cfg.MaxConnectionAgeGrace, // 强制关闭连接前的宽限期
+			Time:                  cfg.KeepaliveTime,         // send a ping once the connection has been idle this long
+			Timeout:               cfg.KeepaliveTimeout,      // close the connection if a ping is not answered within this time
+			MaxConnectionIdle:     cfg.MaxConnectionIdle,     // close the connection once it has been idle this long
+			MaxConnectionAge:      cfg.MaxConnectionAge,      // maximum age of a connection
+			MaxConnectionAgeGrace: cfg.MaxConnectionAgeGrace, // grace period before a connection is closed forcibly
 		}
 
-		// 配置如何处理客户端的保活ping
+		// how client keepalive pings are handled
 		enforcementPolicy := keepalive.EnforcementPolicy{
-			MinTime:             5 * time.Second, // 如果客户端在此时间内ping超过一次，则断开连接
-			PermitWithoutStream: true,            // 允许客户端在没有活跃RPC时发送ping
+			MinTime:             5 * time.Second, // disconnect a client that pings more than once within this time
+			PermitWithoutStream: true,            // let clients ping while no RPC is active
 		}
 
 		opts = append(
@@ -98,22 +98,22 @@ func Init() error {
 		)
 	}
 
-	// 限制每个连接的最大并发流数
+	// limit the number of concurrent streams per connection
 	opts = append(opts, grpc.MaxConcurrentStreams(100))
 
-	// 添加一元拦截器用于日志记录、恢复、认证等
+	// unary interceptors for logging, panic recovery, authentication and so on
 	opts = append(opts, grpc.ChainUnaryInterceptor(
 		LoggingUnaryInterceptor,
 		RecoveryUnaryInterceptor,
 	))
 
-	// 添加流拦截器
+	// stream interceptors
 	opts = append(opts, grpc.ChainStreamInterceptor(
 		LoggingStreamInterceptor,
 		RecoveryStreamInterceptor,
 	))
 
-	// TLS 配置
+	// TLS configuration
 	if cfg.TLSEnabled {
 		tlsConfig, err := util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, false)
 		if err != nil {
@@ -122,31 +122,31 @@ func Init() error {
 		creds := credentials.NewTLS(tlsConfig)
 		opts = append(opts, grpc.Creds(creds))
 	} else {
-		// 如果不使用TLS，仍然提供一个insecure凭证避免某些客户端问题
+		// without TLS still provide insecure credentials, some clients misbehave otherwise
 		opts = append(opts, grpc.Creds(insecure.NewCredentials()))
 	}
 
-	// 创建服务器
+	// create the server
 	server = grpc.NewServer(opts...)
 
-	// 注册健康检查服务
+	// register the health check service
 	if cfg.HealthCheckEnabled {
 		healthServer := health.NewServer()
 		healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
 		healthpb.RegisterHealthServer(server, healthServer)
 	}
 
-	// 注册反射服务（用于 grpcurl 等工具）
+	// register the reflection service (used by tools such as grpcurl)
 	if cfg.ReflectionEnabled {
 		reflection.Register(server)
 	}
 
-	// 注册之前等待的所有服务
+	// register every service that has been waiting
 	for _, registrar := range serviceRegistrars {
 		registrar(server)
 	}
 
-	// 创建监听器但不启动服务
+	// create the listener without serving on it yet
 	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", cfg.Listen, cfg.Port))
 	if err != nil {
 		return errors.Wrap(err, "failed to create listener")
@@ -159,7 +159,7 @@ func Init() error {
 	return nil
 }
 
-// Run 启动 gRPC 服务器并阻塞直到收到终止信号
+// Run serves the gRPC server in a background goroutine and returns any error reported at startup.
 func Run() error {
 	mu.Lock()
 	defer mu.Unlock()
@@ -177,7 +177,7 @@ func Run() error {
 
 	errCh := make(chan error, 1)
 
-	// 启动 gRPC 服务器
+	// start the gRPC server
 	go func() {
 		zap.S().Infow("gRPC server started", "addr", listener.Addr().String())
 		if err := server.Serve(listener); err != nil {
@@ -185,7 +185,7 @@ func Run() error {
 		}
 	}()
 
-	// 监听启动错误
+	// check for a startup error
 	select {
 	case err := <-errCh:
 		return err
@@ -203,7 +203,7 @@ func Stop() {
 
 	zap.S().Infow("gRPC server shutdown initiated")
 
-	// 优雅停机
+	// graceful shutdown
 	gracefulStopCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -221,20 +221,20 @@ func Stop() {
 		server.Stop()
 	}
 
-	// 重置状态
+	// reset the state
 	server = nil
 	listener = nil
 	initialized = false
 }
 
-// LoggingUnaryInterceptor 用于记录一元RPC调用的日志
+// LoggingUnaryInterceptor logs unary RPC calls.
 func LoggingUnaryInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 	start := time.Now()
 
-	// 调用真正的处理程序
+	// call the real handler
 	resp, err := handler(ctx, req)
 
-	// 记录请求信息
+	// log the request
 	logger := zap.S().With(
 		"method", info.FullMethod,
 		"duration", time.Since(start),
@@ -249,17 +249,17 @@ func LoggingUnaryInterceptor(ctx context.Context, req any, info *grpc.UnaryServe
 	return resp, err
 }
 
-// LoggingStreamInterceptor 用于记录流式RPC调用的日志
+// LoggingStreamInterceptor logs streaming RPC calls.
 func LoggingStreamInterceptor(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 	start := time.Now()
 
-	// 包装流，以便可以获取更多信息
+	// wrap the stream so that more information is available
 	wrappedStream := &wrappedServerStream{ServerStream: ss}
 
-	// 调用真正的处理程序
+	// call the real handler
 	err := handler(srv, wrappedStream)
 
-	// 记录请求信息
+	// log the request
 	logger := zap.S().With(
 		"method", info.FullMethod,
 		"duration", time.Since(start),
@@ -276,7 +276,7 @@ func LoggingStreamInterceptor(srv any, ss grpc.ServerStream, info *grpc.StreamSe
 	return err
 }
 
-// RecoveryUnaryInterceptor 处理一元RPC调用中的panic
+// RecoveryUnaryInterceptor recovers from panics raised during unary RPC calls.
 func RecoveryUnaryInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -292,7 +292,7 @@ func RecoveryUnaryInterceptor(ctx context.Context, req any, info *grpc.UnaryServ
 	return handler(ctx, req)
 }
 
-// RecoveryStreamInterceptor 处理流式RPC调用中的panic
+// RecoveryStreamInterceptor recovers from panics raised during streaming RPC calls.
 func RecoveryStreamInterceptor(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -308,21 +308,21 @@ func RecoveryStreamInterceptor(srv any, ss grpc.ServerStream, info *grpc.StreamS
 	return handler(srv, ss)
 }
 
-// wrappedServerStream 包装了 grpc.ServerStream 以便添加更多功能
+// wrappedServerStream wraps grpc.ServerStream so that more behavior can be added to it.
 type wrappedServerStream struct {
 	grpc.ServerStream
 }
 
-// RegisterStatsHandler 注册统计处理器
+// RegisterStatsHandler registers a stats handler.
 func RegisterStatsHandler(handler stats.Handler) {
 	mu.Lock()
 	defer mu.Unlock()
 
 	if !initialized || server == nil {
-		// 服务器尚未初始化，将在Init中添加
+		// the server is not initialized yet, there is nothing to register the handler on
 		return
 	}
 
-	// 这个功能无法在服务器初始化后添加
+	// a stats handler cannot be added once the server has been initialized
 	zap.S().Warnw("cannot register stats handler after server initialization")
 }

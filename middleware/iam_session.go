@@ -62,7 +62,7 @@ func IAMSession() gin.HandlerFunc {
 			return
 		}
 
-		// 校验浏览器/OS
+		// verify the browser and OS
 		ua := useragent.New(c.Request.UserAgent())
 		engineName, _ := ua.Engine()
 		browserName, _ := ua.Browser()

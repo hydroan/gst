@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 )
 
-// detectContentType 根据文件扩展名检测 Content-Type
+// detectContentType detects the Content-Type from the file extension.
 func detectContentType(filename string) string {
 	ext := filepath.Ext(filename)
 	contentTypes := map[string]string{

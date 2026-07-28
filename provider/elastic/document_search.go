@@ -128,7 +128,7 @@ func (*document) Search(ctx context.Context, indexName string, req *SearchReques
 	if len(req.Sort) == 0 {
 		req.Sort = []map[string]any{
 			{
-				"_doc": map[string]any{ // 使用 _doc 作为第二排序字段
+				"_doc": map[string]any{ // fall back to _doc as the sort field
 					"order": "asc",
 				},
 			},

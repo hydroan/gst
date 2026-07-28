@@ -11,9 +11,9 @@ const (
 )
 
 type Cache struct {
-	Shards      int           `json:"shards" mapstructure:"shards" ini:"shards" yaml:"shards"`                         // 分片数量（仅部分缓存类型支持）
-	LifeWindow  time.Duration `json:"life_window" mapstructure:"life_window" ini:"life_window" yaml:"life_window"`     // 单条数据存活时间
-	CleanWindow time.Duration `json:"clean_window" mapstructure:"clean_window" ini:"clean_window" yaml:"clean_window"` // 清理过期数据的周期
+	Shards      int           `json:"shards" mapstructure:"shards" ini:"shards" yaml:"shards"`                         // number of shards (supported by some cache types only)
+	LifeWindow  time.Duration `json:"life_window" mapstructure:"life_window" ini:"life_window" yaml:"life_window"`     // lifetime of a single entry
+	CleanWindow time.Duration `json:"clean_window" mapstructure:"clean_window" ini:"clean_window" yaml:"clean_window"` // interval between expired entry cleanups
 	Expiration  time.Duration `json:"expiration" mapstructure:"expiration" ini:"expiration" yaml:"expiration"`
 	Capacity    int           `json:"capacity" mapstructure:"capacity" ini:"capacity" yaml:"capacity"`
 }

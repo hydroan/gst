@@ -41,13 +41,13 @@ func newProjectFileContentMap() map[string]string {
 }
 
 // ============================================================
-// Run: 初始化新项目
+// Run: initialize a new project
 // ============================================================
 
 func Run(projectName string) error {
 	projectDir := filepath.Base(projectName)
 
-	// 项目目录
+	// project directory
 	clioutput.Section("Create Project Directory")
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		clioutput.Error("", "failed to create project directory")
@@ -55,12 +55,12 @@ func Run(projectName string) error {
 	}
 	clioutput.Success("", "%s", projectDir)
 
-	// 切换目录
+	// switch into it
 	if err := os.Chdir(projectDir); err != nil {
 		return err
 	}
 
-	// 初始化 Go module
+	// initialize the Go module
 	clioutput.Section("Initialize Go Module")
 	clioutput.Info("", "go mod init %s", projectName)
 	cmd := exec.Command("go", "mod", "init", projectName)
@@ -72,7 +72,7 @@ func Run(projectName string) error {
 	}
 	clioutput.Success("", "Go module initialized")
 
-	// 生成项目文件
+	// generate the project files
 	clioutput.Section("Generate Project Files")
 	for file, content := range projectFileContentMap {
 		if err := createFile(file, content); err != nil {
@@ -101,7 +101,7 @@ func Run(projectName string) error {
 	}
 	clioutput.Success("CREATE", "%s", "config.ini.example")
 
-	// 运行 go mod tidy
+	// run go mod tidy
 	clioutput.Section("Run Go Mod Tidy")
 	cmd = exec.Command("go", "mod", "tidy")
 	cmd.Stdout = io.Discard
@@ -112,7 +112,7 @@ func Run(projectName string) error {
 	}
 	clioutput.Success("", "Dependencies tidied")
 
-	// 初始化 git 仓库
+	// initialize the git repository
 	clioutput.Section("Initialize Git Repository")
 	cmd = exec.Command("git", "init")
 	cmd.Stdout = io.Discard
@@ -123,7 +123,7 @@ func Run(projectName string) error {
 	}
 	clioutput.Success("", "Git repository initialized")
 
-	// 最终提示
+	// closing hints
 	clioutput.Section("Project Initialization Completed")
 	clioutput.Done("Project %s created successfully!", clioutput.Text(clioutput.StyleBold, "%s", projectDir))
 	clioutput.Section("Next Steps")
@@ -135,7 +135,7 @@ func Run(projectName string) error {
 }
 
 // ============================================================
-// 辅助函数
+// helpers
 // ============================================================
 
 func EnsureFileExists() ([]string, error) {

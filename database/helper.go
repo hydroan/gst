@@ -266,9 +266,9 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 		var _v string
 		switch fieldVal.Kind() {
 		case reflect.Bool:
-			// 由于 WHERE IN 语句会自动加上单引号,比如 WHERE `default` IN ('true')
-			// 但是我们想要的是 WHERE `default` IN (true),
-			// 所以没办法就只能直接转成 int 了.
+			// A WHERE IN clause quotes its values automatically, eg WHERE `default` IN ('true'),
+			// but what we want is WHERE `default` IN (true),
+			// so the only way out is to convert the bool into an int here.
 			_v = strconv.Itoa(boolToInt(v.(bool))) //nolint:errcheck
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 			_v = fmt.Sprintf("%d", v)

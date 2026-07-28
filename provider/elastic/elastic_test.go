@@ -190,8 +190,8 @@ func TestDocumentSearch(t *testing.T) {
 		{
 			lastHit := resp.Hits[len(resp.Hits)-1]
 			req.SearchAfter = []any{lastHit.Source["created_at"]}
-			// 如果是按照ID进行排序，则传入ID值
-			// 如果是安装 created_at 进行排序，则传入 created_at 值
+			// when sorting by ID, pass the ID value
+			// when sorting by created_at, pass the created_at value
 
 			resp, err = elastic.Document.Search(context.Background(), Index, req)
 			require.NoError(t, err)
@@ -208,7 +208,7 @@ func TestDocumentSearchNormal(t *testing.T) {
 
 	keyword := "hello"
 	size := 2
-	// 普通搜索
+	// plain search
 	req := &elastic.SearchRequest{
 		Query: map[string]any{
 			"bool": map[string]any{
@@ -224,11 +224,11 @@ func TestDocumentSearchNormal(t *testing.T) {
 		Size: size,
 	}
 
-	// 执行搜索
+	// run the search
 
 	result, err := elastic.Document.Search(context.TODO(), Index, req)
 	require.NoError(t, err)
-	// 打印搜索结果
+	// print the search results
 	for _, hit := range result.Hits {
 		fmt.Println(hit.ID)
 	}
@@ -294,7 +294,7 @@ func TestDocumentSearchAfter(t *testing.T) {
 	size := 2
 	dateStr := "2024-10-29T10:38:06.085+08:00"
 	date, _ := dateparse.ParseLocal(dateStr)
-	// search after 分页
+	// search_after pagination
 	req := &elastic.SearchRequest{
 		Query: map[string]any{
 			"bool": map[string]any{
@@ -318,7 +318,7 @@ func TestDocumentSearchAfter(t *testing.T) {
 		SearchAfter: []any{date},
 	}
 
-	// 执行搜索
+	// run the search
 
 	result, err := elastic.Document.Search(context.TODO(), Index, req)
 	require.NoError(t, err)
@@ -348,16 +348,16 @@ func TestDocumentBoolQueryBuilder(t *testing.T) {
 	{
 
 		query := elastic.NewQueryBuilder().
-			// 基础条件（and 部分）
+			// base conditions (the and part)
 			Term("chat_type.keyword", "direct").
 			Term("type.keyword", "message_send").
-			// 嵌套的 or 条件
+			// nested or conditions
 			Bool(func(bq *elastic.QueryBuilder) {
-				// 第一组条件 (message_user_id: A and message_peer_user_id: B)
+				// first group (message_user_id: A and message_peer_user_id: B)
 				bq.Should(elastic.NewQueryBuilder().Term("message_user_id.keyword", userID).Term("message_peer_user_id.keyword", peerUserID).BuildQuery())
-				// 第二组条件 (message_user_id: B and message_peer_user_id: A)
+				// second group (message_user_id: B and message_peer_user_id: A)
 				bq.Should(elastic.NewQueryBuilder().Term("message_user_id.keyword", peerUserID).Term("message_peer_user_id.keyword", userID).BuildQuery())
-				// 设置 should 至少匹配一个条件
+				// require at least one of the should conditions to match
 				bq.MinimumShouldMatch(1)
 			}).Size(1000)
 

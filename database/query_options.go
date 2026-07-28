@@ -737,25 +737,26 @@ func (db *database[M]) WithExpand(expand []string, orders ...types.Order) types.
 		}
 		return preload
 	}
-	// FIXME: 前端加了 _depth 查询参数, 但是层数不匹配就无法递归排序,
-	// _depth 的作用:
+	// FIXME: the frontend passes a _depth query parameter, but recursive ordering breaks
+	// when the depth does not match the real number of levels.
+	// What _depth does:
 	// _depth = 2: Children -> Children.Children
 	// _depth = 3: Children -> Children.Children.Children
-	// 假设一共有3层, 但是 _depth=5, 则无法递归排序
+	// With only 3 levels but _depth=5, recursive ordering no longer works.
 	//
-	// 解决办法:
-	// 假设: [Children.Children.Children, Parent]
-	// 以前:
+	// The fix:
+	// given: [Children.Children.Children, Parent]
+	// before:
 	//      db.db = db.db.Preload("Children.Children.Children", withOrder)
 	//      db.db = db.db.Preload("Parent", withOrder)
-	// 现在: (递归 Children)
+	// now: (Children preloaded level by level)
 	//      db.db = db.db.Preload("Children", withOrder)
 	//      db.db = db.db.Preload("Children.Children", withOrder)
 	//      db.db = db.db.Preload("Children.Children.Children", withOrder)
 	//      db.db = db.db.Preload("Parent", withOrder)
 
 	for i := range expand {
-		// preload 排序问题
+		// ordering preloaded associations
 		// https://www.jianshu.com/p/a88fb2d4b2ef
 		// https://gorm.io/docs/preload.html#Custom-Preloading-SQL
 
