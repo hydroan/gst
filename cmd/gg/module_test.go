@@ -238,10 +238,13 @@ type `+modelName+` struct {
 	model.Empty
 }
 
+type `+modelName+`ListRsp struct{}
+
 func (`+modelName+`) Design() {
 	dsl.Route("`+route+`", func() {
 		dsl.List(func() {
 			dsl.Service()
+			dsl.Result[*`+modelName+`ListRsp]()
 		})
 	})
 }

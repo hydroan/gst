@@ -482,10 +482,14 @@ type Ticket struct {
 	model.Empty
 }
 
+type TicketListRsp struct{}
+
 func (Ticket) Design() {
 	dsl.Route("tickets", func() {
 		dsl.Create(func() {})
-		dsl.List(func() {})
+		dsl.List(func() {
+			dsl.Result[*TicketListRsp]()
+		})
 	})
 }
 `), 0o600); err != nil {
