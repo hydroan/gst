@@ -19,19 +19,15 @@ type SessionListService struct {
 
 // List returns all active sessions for the current authenticated user.
 func (s *SessionListService) List(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamsession.SessionListRsp, err error) {
-	log := s.WithContext(ctx, ctx.Phase())
-
 	// SessionManager.Current already guarantees that the resolved session is bound to
 	// an authenticated user, so the service can directly use currentSession.UserID.
 	currentSessionID, currentSession, err := SessionManager.Current(ctx)
 	if err != nil {
-		log.Error("failed to get current session", err)
 		return nil, err
 	}
 
 	sessionIDs, err := listUserSessionIDs(ctx, currentSession.UserID)
 	if err != nil {
-		log.Error("failed to list user sessions", err)
 		return nil, err
 	}
 
@@ -50,7 +46,6 @@ func (s *SessionListService) List(ctx *types.ServiceContext, req *model.Empty) (
 				removeStaleSessionIndexes(ctx, currentSession.UserID, sessionID)
 				continue
 			}
-			log.Error("failed to load session from redis", getErr)
 			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", getErr)
 		}
 		if validateErr := SessionManager.Validate(sessionID, session); validateErr != nil {

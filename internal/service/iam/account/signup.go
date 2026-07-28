@@ -37,7 +37,6 @@ func (s *SignupService) Create(ctx *types.ServiceContext, req *modeliamaccount.S
 	// Check if username already exists
 	existingUsers := make([]*modeliamuser.User, 0)
 	if err = database.Database[*modeliamuser.User](ctx).WithLimit(1).WithQuery(&modeliamuser.User{Username: req.Username}).List(&existingUsers); err != nil {
-		log.Error("failed to check existing user", zap.Error(err))
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to check existing user", err)
 	}
 	if len(existingUsers) > 0 {
@@ -72,7 +71,6 @@ func (s *SignupService) Create(ctx *types.ServiceContext, req *modeliamaccount.S
 		}
 		return database.Database[*modeliamaccount.EmailIdentity](ctx).Create(emailIdentity)
 	}); err != nil {
-		log.Error("failed to create user", zap.Error(err))
 		if errors.Is(err, database.ErrDuplicatedKey) {
 			return nil, service.NewErrorWithCause(http.StatusConflict, "username already exists", err)
 		}

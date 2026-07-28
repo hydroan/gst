@@ -31,12 +31,10 @@ func (u *UserStatusPatchService) Patch(ctx *types.ServiceContext, req *modeliamu
 
 	actor, target, err := LoadActorAndTarget(ctx, targetUserID)
 	if err != nil {
-		log.Error("failed to resolve actor or target user", err)
 		return nil, err
 	}
 
 	if err = adminauth.EnsureTenantAdmin(ctx, actor, target); err != nil {
-		log.Error("user status change denied", err)
 		return nil, err
 	}
 
@@ -55,7 +53,6 @@ func (u *UserStatusPatchService) Patch(ctx *types.ServiceContext, req *modeliamu
 		WithoutHook().
 		WithSelect("username", "status").
 		Update(target); err != nil {
-		log.Error("failed to update user status", err)
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update user status", err)
 	}
 

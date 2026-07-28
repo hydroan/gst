@@ -17,24 +17,19 @@ type ProfilePatchService struct {
 
 // Patch creates or updates the current user's profile with only the requested fields.
 func (p *ProfilePatchService) Patch(ctx *types.ServiceContext, req *modeliamprofile.ProfilePatchReq) (rsp *modeliamprofile.ProfilePatchRsp, err error) {
-	log := p.WithContext(ctx, ctx.Phase())
-
 	_, session, err := serviceiamsession.SessionManager.Current(ctx)
 	if err != nil {
-		log.Error("failed to get current session", err)
 		return nil, err
 	}
 
 	record, found, err := loadProfileByUserID(ctx, session.UserID)
 	if err != nil {
-		log.Error("failed to load profile", err)
 		return nil, err
 	}
 	if !found {
 		record = &modeliamprofile.Profile{UserID: session.UserID}
 		applyProfilePatch(record, req)
 		if err = database.Database[*modeliamprofile.Profile](ctx).Create(record); err != nil {
-			log.Error("failed to create profile", err)
 			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to create profile", err)
 		}
 		return record, nil
@@ -44,9 +39,8 @@ func (p *ProfilePatchService) Patch(ctx *types.ServiceContext, req *modeliamprof
 	if len(columns) == 0 {
 		return record, nil
 	}
-	if updateErr := updateProfileColumns(ctx, record, columns); updateErr != nil {
-		log.Error("failed to update profile", updateErr)
-		return nil, updateErr
+	if err = updateProfileColumns(ctx, record, columns); err != nil {
+		return nil, err
 	}
 
 	return record, nil

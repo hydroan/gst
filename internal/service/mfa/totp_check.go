@@ -28,11 +28,9 @@ func (c *TOTPCheckService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPC
 
 	// Validate input.
 	if req.Username == "" {
-		log.Warnw("empty username provided", "client_ip", ctx.ClientIP())
 		return nil, service.NewError(http.StatusBadRequest, "username is required")
 	}
 	if req.Password == "" {
-		log.Warnw("empty password provided", "username", req.Username, "client_ip", ctx.ClientIP())
 		return nil, service.NewError(http.StatusBadRequest, "password is required")
 	}
 
@@ -43,10 +41,8 @@ func (c *TOTPCheckService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPC
 			return nil, newAccountAuthenticatorNotConfiguredServiceError(err)
 		}
 		if errors.Is(err, ErrAccountAuthenticationFailed) {
-			log.Warnw("authentication failed", "username", req.Username, "client_ip", ctx.ClientIP(), "error", err)
 			return nil, service.NewErrorWithCause(http.StatusUnauthorized, "authentication failed", err)
 		}
-		log.Errorw("failed to authenticate account", "username", req.Username, "error", err)
 		return nil, service.NewErrorWithCause(http.StatusUnauthorized, "authentication failed", err)
 	}
 	if err = validateAuthenticatedAccount(account, ""); err != nil {
@@ -58,7 +54,6 @@ func (c *TOTPCheckService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPC
 	if err = database.Database[*modelmfa.TOTPDevice](ctx).
 		WithQuery(&modelmfa.TOTPDevice{UserID: account.ID, IsActive: true}).
 		List(&devices); err != nil {
-		log.Errorw("failed to query TOTP devices", "user_id", account.ID, "error", err)
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to check MFA status", err)
 	}
 

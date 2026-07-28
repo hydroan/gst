@@ -36,26 +36,20 @@ type adminUserListFilters struct {
 // userVisibilityQueryOptions because list requests do not have one concrete target
 // user to check.
 func (a *AdminUserListService) List(ctx *types.ServiceContext, _ *model.Empty) (rsp *modeliamuser.AdminUserListRsp, err error) {
-	log := a.WithContext(ctx, ctx.Phase())
-
 	actor, err := LoadActor(ctx)
 	if err != nil {
-		log.Error("failed to resolve actor user", err)
 		return nil, err
 	}
 	if err = adminauth.EnsureTenantAdmin(ctx, actor, nil); err != nil {
-		log.Error("admin user list denied", err)
 		return nil, err
 	}
 
 	users, total, err := listUsers(ctx, actor)
 	if err != nil {
-		log.Error("failed to list admin users", err)
 		return nil, err
 	}
 	views, err := buildAdminUserViews(ctx, users)
 	if err != nil {
-		log.Error("failed to build admin user views", err)
 		return nil, err
 	}
 

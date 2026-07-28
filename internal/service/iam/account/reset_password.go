@@ -27,30 +27,25 @@ func (r *ResetPasswordService) Create(ctx *types.ServiceContext, req *modeliamac
 
 	actor, target, err := serviceiamuser.LoadActorAndTarget(ctx, req.UserID)
 	if err != nil {
-		log.Error("failed to resolve actor or target user", err)
 		return nil, err
 	}
 
 	if err = adminauth.EnsureTenantAdmin(ctx, actor, target); err != nil {
-		log.Error("reset password denied", err)
 		return nil, err
 	}
 
 	credential, err := LoadPasswordCredential(ctx, target.ID)
 	if err != nil {
 		if !errors.Is(err, database.ErrRecordNotFound) {
-			log.Error("failed to query password credential", err)
 			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load password credential", err)
 		}
 		credential = &modeliamaccount.PasswordCredential{UserID: target.ID}
 	}
-	if applyErr := ApplyPasswordCredentialUpdate(ctx, credential, req.NewPassword, true); applyErr != nil {
-		log.Error("failed to hash new password", applyErr)
-		return nil, applyErr
+	if err = ApplyPasswordCredentialUpdate(ctx, credential, req.NewPassword, true); err != nil {
+		return nil, err
 	}
 	if credential.ID == "" {
 		if err = database.Database[*modeliamaccount.PasswordCredential](ctx).Create(credential); err != nil {
-			log.Error("failed to create password credential", err)
 			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update password", err)
 		}
 	} else {
@@ -58,13 +53,11 @@ func (r *ResetPasswordService) Create(ctx *types.ServiceContext, req *modeliamac
 			WithoutHook().
 			WithSelect("user_id", "password_hash", "must_change_password", "password_changed_at").
 			Update(credential); err != nil {
-			log.Error("failed to update password credential", err)
 			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update password", err)
 		}
 	}
 
 	if err = serviceiamsession.DeleteUserSessions(ctx, req.UserID); err != nil {
-		log.Error("failed to revoke user sessions after password reset", err)
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to revoke user sessions", err)
 	}
 

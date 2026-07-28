@@ -26,7 +26,6 @@ func (t *TOTPStatusService) List(ctx *types.ServiceContext, req *modelmfa.TOTPSt
 
 	// 1. Verify the authenticated account.
 	if len(ctx.UserID()) == 0 {
-		log.Errorz("user_id not found in context")
 		return nil, service.NewError(http.StatusUnauthorized, "authentication required")
 	}
 
@@ -38,7 +37,6 @@ func (t *TOTPStatusService) List(ctx *types.ServiceContext, req *modelmfa.TOTPSt
 	}
 
 	if err = database.Database[*modelmfa.TOTPDevice](ctx).WithQuery(query).List(&devices); err != nil {
-		log.Errorz("failed to list totp devices", zap.Error(err))
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to retrieve device information", err)
 	}
 

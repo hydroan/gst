@@ -70,11 +70,9 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	// Find user by username
 	users := make([]*modeliamuser.User, 0)
 	if err = database.Database[*modeliamuser.User](ctx).WithLimit(1).WithQuery(&modeliamuser.User{Username: req.Username}).List(&users); err != nil {
-		log.Errorz("failed to query user", zap.Error(err))
 		return nil, service.NewErrorWithCause(http.StatusUnauthorized, "invalid username or password", err)
 	}
 	if len(users) == 0 {
-		log.Warnz("user not found", zap.String("username", req.Username))
 		return nil, service.NewError(http.StatusUnauthorized, "invalid username or password")
 	}
 	targetUser := users[0]
@@ -89,7 +87,6 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 
 	credential, err := LoadPasswordCredential(ctx, targetUser.ID)
 	if err != nil {
-		log.Warnz("password credential not found", zap.String("username", req.Username), zap.Error(err))
 		return nil, service.NewErrorWithCause(http.StatusUnauthorized, "invalid username or password", err)
 	}
 	if credential.LockedUntil != nil && credential.LockedUntil.After(time.Now()) {
@@ -98,13 +95,12 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 
 	// Verify password
 	if err = VerifyPasswordCredential(ctx, credential, req.Password); err != nil {
-		log.Warnz("invalid password", zap.String("username", req.Username))
 		return nil, service.NewErrorWithCause(http.StatusUnauthorized, "invalid username or password", err)
 	}
 	tenantID := strings.TrimSpace(req.TenantID)
 	if tenantID != "" {
-		if tenantErr := ensureLoginTenant(ctx, targetUser.ID, tenantID); tenantErr != nil {
-			return nil, tenantErr
+		if err = ensureLoginTenant(ctx, targetUser.ID, tenantID); err != nil {
+			return nil, err
 		}
 	}
 
@@ -135,7 +131,6 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	// Create session
 	sessionID, err := serviceiamsession.NewSessionID()
 	if err != nil {
-		log.Errorz("failed to create session id", zap.Error(err))
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to create session id", err)
 	}
 	prefixedSessionID := modeliamsession.SessionIDKey(sessionID)
@@ -163,12 +158,10 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	// Store session in Redis
 	redisCache := redis.Cache[modeliamsession.Session]().WithContext(ctx)
 	if err = redisCache.Set(prefixedSessionID, sessionData, expire); err != nil {
-		log.Errorz("failed to set session in redis", zap.Error(err))
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to store session", err)
 	}
 	if err = serviceiamsession.IndexSession(ctx, sessionData); err != nil {
 		_ = redisCache.Delete(prefixedSessionID)
-		log.Errorz("failed to track user session in redis", zap.Error(err))
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to track user session", err)
 	}
 

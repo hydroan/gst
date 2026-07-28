@@ -17,15 +17,11 @@ type AdminSessionDeleteService struct {
 
 // Delete invalidates a specified session for a privileged administrator.
 func (a *AdminSessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.AdminSessionDeleteReq) (rsp *modeliamsession.AdminSessionDeleteRsp, err error) {
-	log := a.WithContext(ctx, ctx.Phase())
-
 	currentSessionID, _, err := SessionManager.Current(ctx)
 	if err != nil {
-		log.Error("failed to get current session", err)
 		return nil, err
 	}
 	if err = ensureAdminSessionActor(ctx); err != nil {
-		log.Error("failed to verify admin session actor", err)
 		return nil, err
 	}
 
@@ -39,7 +35,6 @@ func (a *AdminSessionDeleteService) Delete(ctx *types.ServiceContext, req *model
 		if errors.Is(err, types.ErrEntryNotFound) {
 			return nil, service.NewError(http.StatusNotFound, "session not found")
 		}
-		log.Error("failed to load target session", err)
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load target session", err)
 	}
 	if err = SessionManager.Validate(targetSessionID, targetSession); err != nil {
@@ -51,7 +46,6 @@ func (a *AdminSessionDeleteService) Delete(ctx *types.ServiceContext, req *model
 		if errors.Is(err, types.ErrEntryNotFound) {
 			return nil, service.NewError(http.StatusNotFound, "session not found")
 		}
-		log.Error("failed to delete target session", err)
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to delete session", err)
 	}
 	if targetSessionID == currentSessionID {

@@ -38,7 +38,6 @@ func (l *LogoutService) Create(ctx *types.ServiceContext, req *modeliamaccount.L
 			return &modeliamaccount.LogoutRsp{Msg: "logout successful"}, nil
 		}
 
-		log.Error("failed to delete session from redis", err)
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to logout", err)
 	}
 

@@ -21,11 +21,8 @@ type SessionDeleteService struct {
 // same user and keeps the current cookie-backed session active. The endpoint
 // remains idempotent: deleting a missing session still returns success.
 func (s *SessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.SessionDeleteReq) (rsp *modeliamsession.SessionDeleteRsp, err error) {
-	log := s.WithContext(ctx, ctx.Phase())
-
 	currentSessionID, currentSession, err := SessionManager.Current(ctx)
 	if err != nil {
-		log.Error("failed to get current session", err)
 		return nil, err
 	}
 
@@ -38,7 +35,6 @@ func (s *SessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamse
 		// secondary sessions. The current cookie-backed session must survive so
 		// the caller can continue using the API after the request completes.
 		if err = DeleteUserSessionsExceptCurrent(ctx, currentSession.UserID, currentSessionID); err != nil {
-			log.Error("failed to delete other sessions", err)
 			return nil, err
 		}
 		return &modeliamsession.SessionDeleteRsp{}, nil
@@ -52,7 +48,6 @@ func (s *SessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamse
 			}
 			return &modeliamsession.SessionDeleteRsp{}, nil
 		}
-		log.Error("failed to load target session", err)
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load target session", err)
 	}
 	if err = SessionManager.Validate(targetSessionID, targetSession); err != nil {
@@ -73,7 +68,6 @@ func (s *SessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamse
 			}
 			return &modeliamsession.SessionDeleteRsp{}, nil
 		}
-		log.Error("failed to delete target session", err)
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to delete session", err)
 	}
 	if targetSessionID == currentSessionID {

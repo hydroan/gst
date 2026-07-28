@@ -36,16 +36,13 @@ func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPBi
 	log := t.WithContext(ctx, ctx.Phase())
 
 	if len(ctx.UserID()) == 0 {
-		log.Errorz("user_id not found in context")
 		return nil, service.NewError(http.StatusUnauthorized, "authentication required")
 	}
 	if len(ctx.Username()) == 0 {
-		log.Errorz("username not found in context")
 		return nil, service.NewError(http.StatusUnauthorized, "authentication required")
 	}
 	sessionID, err := currentTOTPBindSessionID(ctx)
 	if err != nil {
-		log.Errorz("session_id not found in context")
 		return nil, err
 	}
 
@@ -57,7 +54,6 @@ func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPBi
 		SecretSize:  32, // 32 bytes = 256 bits
 	})
 	if err != nil {
-		log.Errorz("failed to generate TOTP key", zap.Error(err))
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to generate TOTP key", err)
 	}
 
@@ -65,7 +61,6 @@ func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPBi
 
 	qrCodeImage, err := generateQRCode(qrCodeURL)
 	if err != nil {
-		log.Errorz("failed to generate QR code image", zap.Error(err))
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to generate QR code image", err)
 	}
 
@@ -76,7 +71,6 @@ func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPBi
 		Secret:    key.Secret(),
 	})
 	if err != nil {
-		log.Errorz("failed to issue TOTP bind challenge", zap.Error(err))
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to issue TOTP binding challenge", err)
 	}
 

@@ -26,36 +26,30 @@ func (c *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 	// Get current session
 	sessionID, currentSession, err := serviceiamsession.SessionManager.Current(ctx)
 	if err != nil {
-		log.Error("failed to get current session", err)
 		return nil, err
 	}
 
 	// Get user from database
 	currentUser := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx).Get(currentUser, currentSession.UserID); err != nil {
-		log.Error("failed to query user", err)
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to query user", err)
 	}
 
 	credential, err := LoadPasswordCredential(ctx, currentUser.ID)
 	if err != nil {
-		log.Error("failed to query password credential", err)
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load password credential", err)
 	}
 
 	// Verify old password
 	if err = VerifyPasswordCredential(ctx, credential, req.OldPassword); err != nil {
-		log.Error("old password verification failed", "username", currentUser.Username)
 		return nil, service.NewError(http.StatusBadRequest, "old password is incorrect")
 	}
 
-	if applyErr := ApplyPasswordCredentialUpdate(ctx, credential, req.NewPassword, false); applyErr != nil {
-		log.Error("failed to hash new password", applyErr)
-		return nil, applyErr
+	if err = ApplyPasswordCredentialUpdate(ctx, credential, req.NewPassword, false); err != nil {
+		return nil, err
 	}
 
 	if err = serviceiamsession.DeleteUserSessionsExceptCurrent(ctx, currentUser.GetID(), sessionID); err != nil {
-		log.Error("failed to revoke other sessions after password change", err)
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to revoke other sessions", err)
 	}
 
@@ -64,7 +58,6 @@ func (c *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 		WithoutHook().
 		WithSelect("user_id", "password_hash", "must_change_password", "password_changed_at").
 		Update(credential); err != nil {
-		log.Error("failed to update password", err)
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update password", err)
 	}
 

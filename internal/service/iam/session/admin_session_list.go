@@ -27,10 +27,7 @@ type adminSessionOwnerItem struct {
 
 // List returns all indexed sessions grouped by user for a privileged administrator.
 func (a *AdminSessionListService) List(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamsession.AdminSessionListRsp, err error) {
-	log := a.WithContext(ctx, ctx.Phase())
-
 	if err = ensureAdminSessionActor(ctx); err != nil {
-		log.Error("failed to verify admin session actor", err)
 		return nil, err
 	}
 
@@ -46,7 +43,6 @@ func (a *AdminSessionListService) List(ctx *types.ServiceContext, req *model.Emp
 		sessionIDs, err = listAllSessionIDs(ctx)
 	}
 	if err != nil {
-		log.Error("failed to list all sessions", err)
 		return nil, err
 	}
 
@@ -65,7 +61,6 @@ func (a *AdminSessionListService) List(ctx *types.ServiceContext, req *model.Emp
 				removeStaleSessionIndexes(ctx, "", sessionID)
 				continue
 			}
-			log.Error("failed to load session from redis", getErr)
 			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", getErr)
 		}
 		if validateErr := SessionManager.Validate(sessionID, session); validateErr != nil {
@@ -81,7 +76,6 @@ func (a *AdminSessionListService) List(ctx *types.ServiceContext, req *model.Emp
 			var ok bool
 			item, ok, err = a.buildItem(ctx, session)
 			if err != nil {
-				log.Error("failed to build admin session owner view", err)
 				return nil, err
 			}
 			if !ok {

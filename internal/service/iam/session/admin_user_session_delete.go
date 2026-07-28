@@ -18,11 +18,8 @@ type AdminUserSessionDeleteService struct {
 
 // Delete invalidates all indexed sessions of a specified user for a privileged administrator.
 func (a *AdminUserSessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.AdminUserSessionDeleteReq) (rsp *modeliamsession.AdminUserSessionDeleteRsp, err error) {
-	log := a.WithContext(ctx, ctx.Phase())
-
 	_, currentSession, err := SessionManager.Current(ctx)
 	if err != nil {
-		log.Error("failed to get current session", err)
 		return nil, err
 	}
 
@@ -36,17 +33,14 @@ func (a *AdminUserSessionDeleteService) Delete(ctx *types.ServiceContext, req *m
 		if errors.Is(err, database.ErrRecordNotFound) {
 			return nil, service.NewError(http.StatusNotFound, "user not found")
 		}
-		log.Error("failed to load target user", err)
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", err)
 	}
-	if targetErr := ensureAdminSessionTarget(ctx, targetUser); targetErr != nil {
-		log.Error("failed to verify admin session target", targetErr)
-		return nil, targetErr
+	if err = ensureAdminSessionTarget(ctx, targetUser); err != nil {
+		return nil, err
 	}
 
-	if deleteErr := DeleteUserSessions(ctx, targetUserID); deleteErr != nil {
-		log.Error("failed to delete target user sessions", deleteErr)
-		return nil, deleteErr
+	if err = DeleteUserSessions(ctx, targetUserID); err != nil {
+		return nil, err
 	}
 	if currentSession.UserID == targetUserID {
 		SessionManager.ClearCookie(ctx)

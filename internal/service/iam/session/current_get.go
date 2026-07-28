@@ -19,25 +19,20 @@ type CurrentGetService struct {
 
 // Get returns the current authenticated session together with the latest user snapshot.
 func (c *CurrentGetService) Get(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamsession.CurrentGetRsp, err error) {
-	log := c.WithContext(ctx, ctx.Phase())
-
 	_, currentSession, err := SessionManager.Current(ctx)
 	if err != nil {
-		log.Error("failed to get current session", err)
 		return nil, err
 	}
 
 	currentUser := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx).Get(currentUser, currentSession.UserID); err != nil {
-		log.Error("failed to load user for current session")
 		return nil, service.NewError(http.StatusUnauthorized, "session invalid")
 	}
-	if activeErr := ensureSessionUserActive(currentUser); activeErr != nil {
-		return nil, activeErr
+	if err = ensureSessionUserActive(currentUser); err != nil {
+		return nil, err
 	}
 	email, err := loadSessionEmail(ctx, currentUser.ID)
 	if err != nil {
-		log.Error("failed to load email identity for current session")
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load email identity", err)
 	}
 

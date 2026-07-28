@@ -18,11 +18,8 @@ type SessionGetService struct {
 
 // Get returns the detail of a specified session for the current authenticated user.
 func (s *SessionGetService) Get(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamsession.SessionGetRsp, err error) {
-	log := s.WithContext(ctx, ctx.Phase())
-
 	currentSessionID, currentSession, err := SessionManager.Current(ctx)
 	if err != nil {
-		log.Error("failed to get current session", err)
 		return nil, err
 	}
 
@@ -36,7 +33,6 @@ func (s *SessionGetService) Get(ctx *types.ServiceContext, req *model.Empty) (rs
 		if errors.Is(err, types.ErrEntryNotFound) {
 			return nil, service.NewError(http.StatusNotFound, "session not found")
 		}
-		log.Error("failed to load target session", err)
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load target session", err)
 	}
 	if err = SessionManager.Validate(targetSessionID, targetSession); err != nil {
