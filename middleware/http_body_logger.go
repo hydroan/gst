@@ -39,6 +39,10 @@ const (
 //   - Bodies over the size cap are truncated mid-JSON and cannot be parsed.
 //   - Raw text keeps the hot path free of per-request parsing costs.
 //
+// The URL query is logged as one raw string for the same reason: its keys are
+// caller-controlled and unbounded. Route params stay structured because their
+// keys come from the registered routes.
+//
 // If structured querying over body fields is ever needed, parse in the log
 // pipeline (e.g. into a single flattened field), not here.
 //
@@ -214,7 +218,7 @@ func writeHTTPBodyLog(c *gin.Context, reqMode, rspMode config.HTTPBodyLogMode, r
 		zap.String(consts.CTX_USER_ID, c.GetString(consts.CTX_USER_ID)),
 		zap.String(consts.TRACE_ID, c.GetString(consts.TRACE_ID)),
 		zap.Any(consts.PARAMS, httpBodyLogParams(c.Params)),
-		zap.Any(consts.QUERY, c.Request.URL.Query()),
+		zap.String(consts.QUERY, c.Request.URL.RawQuery),
 		zap.Int("status", c.Writer.Status()),
 		zap.Int("code", c.GetInt(consts.CTX_RESPONSE_CODE)),
 	)

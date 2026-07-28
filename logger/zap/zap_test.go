@@ -179,7 +179,8 @@ func TestWithContextAddsMetadataFields(t *testing.T) {
 	require.Equal(t, "user-1", fields[consts.CTX_USER_ID])
 	require.Equal(t, "trace-1", fields[consts.TRACE_ID])
 	require.Equal(t, map[string]any{"id": "42"}, fields[consts.PARAMS])
-	require.Equal(t, map[string]any{"tag": "blue,green"}, fields[consts.QUERY])
+	// Fields carries no RawQuery, so the logged query is re-encoded from Query.
+	require.Equal(t, "tag=blue&tag=green", fields[consts.QUERY])
 }
 
 func TestGormTraceUsesMetadata(t *testing.T) {

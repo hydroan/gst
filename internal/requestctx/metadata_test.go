@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -28,7 +29,7 @@ func TestFromGinExtractsRequestFields(t *testing.T) {
 
 		meta = FromGin(ctx)
 	})
-	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/users/42?tag=blue&tag=green", nil))
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/users/42?tag=blue&tag=green&range=a[gte]", nil))
 
 	require.Equal(t, "/api/users/:id", meta.Route())
 	require.Equal(t, "/api/users/42", meta.Path())
@@ -39,6 +40,21 @@ func TestFromGinExtractsRequestFields(t *testing.T) {
 	require.Equal(t, "trace-1", meta.TraceID())
 	require.Equal(t, "42", meta.Param("id"))
 	require.Equal(t, []string{"blue", "green"}, meta.Query()["tag"])
+	// The raw query keeps key order and escaping exactly as sent, which
+	// re-encoding the parsed values would not.
+	require.Equal(t, "tag=blue&tag=green&range=a[gte]", meta.RawQuery())
+}
+
+func TestMetadataRawQueryFallsBackToEncodedQuery(t *testing.T) {
+	meta := New(Fields{
+		Query: url.Values{
+			"tag":  {"blue", "green"},
+			"name": {"sample"},
+		},
+	})
+
+	require.Equal(t, "name=sample&tag=blue&tag=green", meta.RawQuery())
+	require.Empty(t, New(Fields{}).RawQuery())
 }
 
 func TestMetadataProtectsParamsAndQuery(t *testing.T) {
@@ -75,6 +91,7 @@ func TestMetadataContextRoundTrip(t *testing.T) {
 		Query: map[string][]string{
 			"tag": {"blue", "green"},
 		},
+		RawQuery: "tag=blue&tag=green",
 	})
 
 	ctx := WithMetadata(context.Background(), meta)
@@ -88,4 +105,5 @@ func TestMetadataContextRoundTrip(t *testing.T) {
 	require.Equal(t, "trace-1", got.TraceID())
 	require.Equal(t, "42", got.Param("id"))
 	require.Equal(t, []string{"blue", "green"}, got.Query()["tag"])
+	require.Equal(t, "tag=blue&tag=green", got.RawQuery())
 }

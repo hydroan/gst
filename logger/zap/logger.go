@@ -2,7 +2,6 @@ package zap
 
 import (
 	"context"
-	"strings"
 
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/types"
@@ -108,6 +107,10 @@ func (l *Logger) With(fields ...string) types.Logger {
 // each With call clones the logger core, and chaining With/WithObject here
 // used to cost three clones per call. When adding metadata fields, extend this
 // single call instead of chaining further With/WithObject calls.
+//
+// Route params stay structured because their keys come from the registered
+// routes and are therefore bounded; the query is logged as one raw string
+// because its keys are not. See requestctx.Metadata.RawQuery.
 func (l *Logger) withMetadata(meta requestctx.Metadata, phase consts.Phase, traceID string) types.Logger {
 	return &Logger{zlog: l.zlog.With(
 		zap.String(consts.PHASE, string(phase)),
@@ -117,7 +120,7 @@ func (l *Logger) withMetadata(meta requestctx.Metadata, phase consts.Phase, trac
 		zap.String(consts.CTX_USER_ID, meta.UserID()),
 		zap.String(consts.TRACE_ID, traceID),
 		zap.Object(consts.PARAMS, paramsObject(meta.Params())),
-		zap.Object(consts.QUERY, queryObject(meta.Query())),
+		zap.String(consts.QUERY, meta.RawQuery()),
 	)}
 }
 
@@ -147,18 +150,6 @@ func (o paramsObject) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	}
 	for k, v := range o {
 		enc.AddString(k, v)
-	}
-	return nil
-}
-
-type queryObject map[string][]string
-
-func (o queryObject) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	if o == nil {
-		return nil
-	}
-	for k, v := range o {
-		enc.AddString(k, strings.Join(v, ","))
 	}
 	return nil
 }

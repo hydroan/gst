@@ -56,7 +56,7 @@ func Logger(filename ...string) gin.HandlerFunc {
 			zap.String(consts.TRACE_ID, traceID),
 			zap.String(consts.CTX_ROUTE, route),
 			zap.String(consts.CTX_PATH, path),
-			zap.String("query", query),
+			zap.String(consts.QUERY, query),
 			zap.String("ip", c.ClientIP()),
 			zap.String("user_agent", c.Request.UserAgent()),
 			zap.String("latency", util.FormatDurationSmart(time.Since(start))),

@@ -26,9 +26,13 @@ type Metadata struct {
 	traceID   string
 	params    map[string]string
 	query     url.Values
+	rawQuery  string
 }
 
 // Fields contains request metadata fields for non-gin callers and tests.
+//
+// RawQuery is optional: when it is empty and Query is not, New re-encodes
+// Query to fill it.
 type Fields struct {
 	Route     string
 	Path      string
@@ -39,6 +43,7 @@ type Fields struct {
 	TraceID   string
 	Params    map[string]string
 	Query     url.Values
+	RawQuery  string
 }
 
 // New creates Metadata from explicit fields.
@@ -53,6 +58,7 @@ func New(fields Fields) Metadata {
 		traceID:   fields.TraceID,
 		params:    cloneStringMap(fields.Params),
 		query:     cloneURLValues(fields.Query),
+		rawQuery:  rawQueryOf(fields.RawQuery, fields.Query),
 	}
 }
 
@@ -75,9 +81,11 @@ func FromGin(c *gin.Context) Metadata {
 
 	var path string
 	var query url.Values
+	var rawQuery string
 	if c.Request != nil && c.Request.URL != nil {
 		path = c.Request.URL.Path
 		query = c.Request.URL.Query()
+		rawQuery = c.Request.URL.RawQuery
 	}
 
 	return New(Fields{
@@ -90,6 +98,7 @@ func FromGin(c *gin.Context) Metadata {
 		TraceID:   c.GetString(consts.TRACE_ID),
 		Params:    params,
 		Query:     query,
+		RawQuery:  rawQuery,
 	})
 }
 
@@ -111,6 +120,18 @@ func (m Metadata) Param(key string) string {
 func (m Metadata) Params() map[string]string { return cloneStringMap(m.params) }
 func (m Metadata) Query() url.Values         { return cloneURLValues(m.query) }
 
+// RawQuery returns the query string as the client sent it ("a=1&b=2").
+//
+// Request handling wants the query parsed into url.Values; logging wants the
+// opposite. Logged as structured key-value pairs, every query key any client
+// ever sends becomes a field in the log storage's mapping, and query keys are
+// caller-controlled and unbounded: a misspelled parameter, a bracketed filter
+// syntax and a scanner sending random parameters each add a permanent field,
+// until the index reaches its field limit and silently rejects further
+// entries. One raw string keeps the mapping at exactly one field, and keeps
+// what was actually sent visible instead of a normalized reconstruction.
+func (m Metadata) RawQuery() string { return m.rawQuery }
+
 type metadataContextKey struct{}
 
 // WithMetadata returns a context carrying immutable request metadata.
@@ -129,6 +150,7 @@ func WithMetadata(ctx context.Context, meta Metadata) context.Context {
 		TraceID:   meta.TraceID(),
 		Params:    meta.Params(),
 		Query:     meta.Query(),
+		RawQuery:  meta.RawQuery(),
 	}))
 }
 
@@ -143,6 +165,16 @@ func FromContext(ctx context.Context) Metadata {
 		return Metadata{}
 	}
 	return meta
+}
+
+// rawQueryOf resolves the raw query string, re-encoding the parsed values for
+// callers that only carry url.Values. Encoding normalizes key order and
+// escaping, so gin-built metadata passes the original string instead.
+func rawQueryOf(rawQuery string, query url.Values) string {
+	if len(rawQuery) > 0 || len(query) == 0 {
+		return rawQuery
+	}
+	return query.Encode()
 }
 
 func cloneStringMap(src map[string]string) map[string]string {

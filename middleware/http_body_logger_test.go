@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -98,7 +97,7 @@ func TestHTTPBodyLoggerLogsRequestAndResponseAsOneEntry(t *testing.T) {
 	require.Equal(t, "alice", ctx["username"])
 	require.Equal(t, "u-1", ctx["user_id"])
 	require.Equal(t, "trace-1", ctx["trace_id"])
-	require.Equal(t, url.Values{"verbose": {"true"}}, ctx["query"])
+	require.Equal(t, "verbose=true", ctx["query"])
 	require.Equal(t, int64(http.StatusOK), ctx["status"])
 	require.Equal(t, `{"a":1,"b":2}`, ctx["request"])
 	require.Equal(t, int64(len(`{"a":1,"b":2}`)), ctx["request_size"])
