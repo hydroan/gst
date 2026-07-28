@@ -1,7 +1,10 @@
 package serviceemail
 
 import (
+	"net/http"
 	"strings"
+
+	"github.com/hydroan/gst/service"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/types"
@@ -11,20 +14,20 @@ import (
 // change flow to the requested target address.
 func validateEmailChangeTarget(ctx *types.ServiceContext, user *AccountSnapshot, newEmail string) error {
 	if user == nil || strings.TrimSpace(user.ID) == "" {
-		return errors.New("current account is required")
+		return service.NewError(http.StatusBadRequest, "current account is required")
 	}
 	if !user.Active {
-		return errors.New("current account is not active")
+		return service.NewError(http.StatusBadRequest, "current account is not active")
 	}
 	currentEmail := normalizeAccountEmail(user.Email)
 	if currentEmail == "" {
-		return errors.New("current email is required")
+		return service.NewError(http.StatusBadRequest, "current email is required")
 	}
 	if newEmail == "" {
-		return errors.New("new email is required")
+		return service.NewError(http.StatusBadRequest, "new email is required")
 	}
 	if newEmail == currentEmail {
-		return errors.New("new email must be different from current email")
+		return service.NewError(http.StatusBadRequest, "new email must be different from current email")
 	}
 
 	existingUser, err := currentAccountGateway().FindByEmail(ctx, newEmail)
@@ -35,10 +38,10 @@ func validateEmailChangeTarget(ctx *types.ServiceContext, user *AccountSnapshot,
 		if errors.Is(err, ErrAccountGatewayNotConfigured) {
 			return newAccountGatewayNotConfiguredServiceError(err)
 		}
-		return errors.Wrap(err, "failed to lookup target email")
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to lookup target email", err)
 	}
 	if existingUser != nil && existingUser.ID != user.ID {
-		return errors.New("new email is already in use")
+		return service.NewError(http.StatusConflict, "new email is already in use")
 	}
 
 	return nil
@@ -48,16 +51,16 @@ func validateEmailChangeTarget(ctx *types.ServiceContext, user *AccountSnapshot,
 // the minimum state required to safely process the request.
 func validateEmailChangeFlow(flow iamEmailFlowState) error {
 	if strings.TrimSpace(flow.UserID) == "" {
-		return errors.New("email change account id is required")
+		return service.NewError(http.StatusBadRequest, "email change account id is required")
 	}
 	if normalizeEmailScope(flow.OldEmail) == "" {
-		return errors.New("email change old email is required")
+		return service.NewError(http.StatusBadRequest, "email change old email is required")
 	}
 	if normalizeEmailScope(flow.NewEmail) == "" {
-		return errors.New("email change new email is required")
+		return service.NewError(http.StatusBadRequest, "email change new email is required")
 	}
 	if normalizeEmailScope(flow.OldEmail) == normalizeEmailScope(flow.NewEmail) {
-		return errors.New("email change old and new email must be different")
+		return service.NewError(http.StatusBadRequest, "email change old and new email must be different")
 	}
 	return nil
 }

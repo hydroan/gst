@@ -1,6 +1,7 @@
 package serviceemail
 
 import (
+	"net/http"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -29,11 +30,10 @@ func (s *PasswordResetConfirmService) Create(ctx *types.ServiceContext, req *mod
 				Msg:   "invalid or expired password reset token",
 			}, nil
 		}
-		log.Error("failed to consume password reset flow", err)
-		return nil, errors.Wrap(err, "failed to consume password reset flow")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to consume password reset flow", err)
 	}
 	if strings.TrimSpace(flow.UserID) == "" {
-		return nil, errors.New("password reset account id is required")
+		return nil, service.NewError(http.StatusBadRequest, "password reset account id is required")
 	}
 
 	gateway := currentAccountGateway()
@@ -43,8 +43,7 @@ func (s *PasswordResetConfirmService) Create(ctx *types.ServiceContext, req *mod
 			log.Error("email account gateway is not configured", err)
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		log.Error("failed to load password reset account", err)
-		return nil, errors.Wrap(err, "failed to load password reset account")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load password reset account", err)
 	}
 	if err = validAccountSnapshot(user, flow.UserID); err != nil {
 		log.Error("email account gateway returned invalid password reset account", err)
@@ -62,8 +61,7 @@ func (s *PasswordResetConfirmService) Create(ctx *types.ServiceContext, req *mod
 			log.Error("email account gateway is not configured", err)
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		log.Error("failed to update password reset account", err)
-		return nil, errors.Wrap(err, "failed to update password")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update password", err)
 	}
 
 	gateway.InvalidateSessions(user.ID)

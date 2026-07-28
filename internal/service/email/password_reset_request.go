@@ -1,6 +1,8 @@
 package serviceemail
 
 import (
+	"net/http"
+
 	"github.com/cockroachdb/errors"
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/service"
@@ -30,8 +32,7 @@ func (s *PasswordResetRequestService) Create(ctx *types.ServiceContext, req *mod
 		if errors.Is(err, errEmailFlowThrottled) {
 			return rsp, nil
 		}
-		log.Error("failed to reserve password reset throttle", err)
-		return nil, errors.Wrap(err, "failed to reserve password reset throttle")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to reserve password reset throttle", err)
 	}
 
 	user, err := currentAccountGateway().FindByEmail(ctx, email)
@@ -43,8 +44,7 @@ func (s *PasswordResetRequestService) Create(ctx *types.ServiceContext, req *mod
 			log.Error("email account gateway is not configured", err)
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		log.Error("failed to load password reset account", err)
-		return nil, errors.Wrap(err, "failed to load password reset account")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load password reset account", err)
 	}
 	if !eligiblePasswordResetAccount(user, email) {
 		return rsp, nil
@@ -55,13 +55,11 @@ func (s *PasswordResetRequestService) Create(ctx *types.ServiceContext, req *mod
 		Email:  email,
 	})
 	if err != nil {
-		log.Error("failed to issue password reset flow", err)
-		return nil, errors.Wrap(err, "failed to issue password reset flow")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to issue password reset flow", err)
 	}
 
 	if err = dispatchEmail(ctx, passwordResetDelivery(token, flow)); err != nil {
-		log.Error("failed to dispatch password reset email", err)
-		return nil, errors.Wrap(err, "failed to dispatch password reset email")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to dispatch password reset email", err)
 	}
 
 	return rsp, nil

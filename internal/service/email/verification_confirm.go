@@ -1,6 +1,7 @@
 package serviceemail
 
 import (
+	"net/http"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -29,11 +30,10 @@ func (s *VerificationConfirmService) Create(ctx *types.ServiceContext, req *mode
 				Msg:      "invalid or expired verification token",
 			}, nil
 		}
-		log.Error("failed to consume verification flow", err)
-		return nil, errors.Wrap(err, "failed to consume verification flow")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to consume verification flow", err)
 	}
 	if strings.TrimSpace(flow.UserID) == "" {
-		return nil, errors.New("verification account id is required")
+		return nil, service.NewError(http.StatusBadRequest, "verification account id is required")
 	}
 
 	gateway := currentAccountGateway()
@@ -43,8 +43,7 @@ func (s *VerificationConfirmService) Create(ctx *types.ServiceContext, req *mode
 			log.Error("email account gateway is not configured", err)
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		log.Error("failed to load verification account", err)
-		return nil, errors.Wrap(err, "failed to load verification account")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load verification account", err)
 	}
 	if err = validAccountSnapshot(user, flow.UserID); err != nil {
 		log.Error("email account gateway returned invalid verification account", err)
@@ -68,8 +67,7 @@ func (s *VerificationConfirmService) Create(ctx *types.ServiceContext, req *mode
 			log.Error("email account gateway is not configured", err)
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		log.Error("failed to update verification account", err)
-		return nil, errors.Wrap(err, "failed to update email verification state")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update email verification state", err)
 	}
 
 	return &modelemail.VerificationConfirmRsp{

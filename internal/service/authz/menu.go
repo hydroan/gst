@@ -1,6 +1,7 @@
 package serviceauthz
 
 import (
+	"net/http"
 	"regexp"
 	"strings"
 
@@ -35,8 +36,7 @@ func (m *MenuService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.M
 func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauthz.Menu, log types.Logger) error {
 	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, ctx.UserID(), consts.AUTHZ_SYSTEM_ROLE_ROOT)
 	if err != nil {
-		log.Error(err)
-		return err
+		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}
 	if systemRoot {
 		return nil
@@ -51,8 +51,7 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 	if err := database.Database[*modelauthz.RoleBinding](ctx).
 		WithQuery(&modelauthz.RoleBinding{TenantID: tenant, SubjectID: ctx.UserID()}).
 		List(&roleBindings); err != nil {
-		log.Error(err)
-		return err
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to load role bindings", err)
 	}
 
 	if len(roleBindings) > 0 {
@@ -69,8 +68,7 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 		}
 		if err := database.Database[*modelauthz.Role](ctx).
 			WithQuery(&modelauthz.Role{TenantID: tenant, Base: model.Base{ID: strings.Join(roleIDs, ",")}}).List(&roles); err != nil {
-			log.Error(err)
-			return err
+			return service.NewErrorWithCause(http.StatusInternalServerError, "failed to load roles", err)
 		}
 		if len(roles) == 0 {
 			log.Warn("subject has role-binding records but no matching roles")
@@ -82,8 +80,7 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 		if err := database.Database[*modelauthz.Role](ctx).
 			WithQuery(&modelauthz.Role{TenantID: tenant, Default: new(true)}).
 			List(&roles); err != nil {
-			log.Error(err)
-			return err
+			return service.NewErrorWithCause(http.StatusInternalServerError, "failed to load roles", err)
 		}
 	}
 	if len(roles) == 0 {

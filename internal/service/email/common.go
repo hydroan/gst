@@ -5,8 +5,11 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"io"
+	"net/http"
 	"strings"
 	"time"
+
+	"github.com/hydroan/gst/service"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/provider/redis"
@@ -97,7 +100,7 @@ var (
 func dispatchEmail(ctx context.Context, delivery emailDelivery) error {
 	delivery.To = normalizeEmailScope(delivery.To)
 	if delivery.To == "" {
-		return errors.New("email recipient is required")
+		return service.NewError(http.StatusBadRequest, "email recipient is required")
 	}
 	return activeEmailSender.Send(normalizeContext(ctx), delivery)
 }

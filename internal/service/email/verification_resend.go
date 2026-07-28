@@ -1,6 +1,8 @@
 package serviceemail
 
 import (
+	"net/http"
+
 	"github.com/cockroachdb/errors"
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/model"
@@ -29,8 +31,7 @@ func (s *VerificationResendService) Create(ctx *types.ServiceContext, req *model
 		if errors.Is(err, errEmailFlowThrottled) {
 			return rsp, nil
 		}
-		log.Error("failed to reserve verification resend throttle", err)
-		return nil, errors.Wrap(err, "failed to reserve verification resend throttle")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to reserve verification resend throttle", err)
 	}
 
 	user, err := currentAccountGateway().FindByEmail(ctx, email)
@@ -42,8 +43,7 @@ func (s *VerificationResendService) Create(ctx *types.ServiceContext, req *model
 			log.Error("email account gateway is not configured", err)
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		log.Error("failed to load verification resend account", err)
-		return nil, errors.Wrap(err, "failed to load verification resend account")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load verification resend account", err)
 	}
 	if !eligibleVerificationAccount(user, email) {
 		return rsp, nil
@@ -54,13 +54,11 @@ func (s *VerificationResendService) Create(ctx *types.ServiceContext, req *model
 		Email:  email,
 	})
 	if err != nil {
-		log.Error("failed to issue verification resend flow", err)
-		return nil, errors.Wrap(err, "failed to issue verification resend flow")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to issue verification resend flow", err)
 	}
 
 	if err = dispatchEmail(ctx, verificationDelivery(token, flow)); err != nil {
-		log.Error("failed to dispatch verification resend email", err)
-		return nil, errors.Wrap(err, "failed to dispatch verification resend email")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to dispatch verification resend email", err)
 	}
 
 	return rsp, nil

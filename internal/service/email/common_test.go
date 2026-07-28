@@ -3,6 +3,7 @@ package serviceemail
 import (
 	"bytes"
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
@@ -864,11 +865,11 @@ func TestChangeConfirmCreateCanceled(t *testing.T) {
 	SetAccountGateway(testAccountGateway{
 		getByID: func(*types.ServiceContext, string) (*AccountSnapshot, error) {
 			t.Fatalf("GetByID should not be called for canceled flow")
-			return nil, errors.New("unexpected GetByID call")
+			return nil, service.NewError(http.StatusBadRequest, "unexpected GetByID call")
 		},
 		findByEmail: func(*types.ServiceContext, string) (*AccountSnapshot, error) {
 			t.Fatalf("FindByEmail should not be called for canceled flow")
-			return nil, errors.New("unexpected FindByEmail call")
+			return nil, service.NewError(http.StatusBadRequest, "unexpected FindByEmail call")
 		},
 		applyEmailChange: func(*types.ServiceContext, string, string, time.Time) error {
 			t.Fatalf("ApplyEmailChange should not be called for canceled flow")

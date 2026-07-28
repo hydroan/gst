@@ -1,6 +1,8 @@
 package serviceemail
 
 import (
+	"net/http"
+
 	"github.com/cockroachdb/errors"
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/model"
@@ -29,8 +31,7 @@ func (s *VerificationRequestService) Create(ctx *types.ServiceContext, req *mode
 		if errors.Is(err, errEmailFlowThrottled) {
 			return rsp, nil
 		}
-		log.Error("failed to reserve verification request throttle", err)
-		return nil, errors.Wrap(err, "failed to reserve verification request throttle")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to reserve verification request throttle", err)
 	}
 
 	user, err := currentAccountGateway().FindByEmail(ctx, email)
@@ -42,8 +43,7 @@ func (s *VerificationRequestService) Create(ctx *types.ServiceContext, req *mode
 			log.Error("email account gateway is not configured", err)
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		log.Error("failed to load verification account", err)
-		return nil, errors.Wrap(err, "failed to load verification account")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load verification account", err)
 	}
 	if !eligibleVerificationAccount(user, email) {
 		return rsp, nil
@@ -54,13 +54,11 @@ func (s *VerificationRequestService) Create(ctx *types.ServiceContext, req *mode
 		Email:  email,
 	})
 	if err != nil {
-		log.Error("failed to issue verification flow", err)
-		return nil, errors.Wrap(err, "failed to issue verification flow")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to issue verification flow", err)
 	}
 
 	if err = dispatchEmail(ctx, verificationDelivery(token, flow)); err != nil {
-		log.Error("failed to dispatch verification email", err)
-		return nil, errors.Wrap(err, "failed to dispatch verification email")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to dispatch verification email", err)
 	}
 
 	return rsp, nil

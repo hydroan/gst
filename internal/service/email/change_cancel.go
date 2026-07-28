@@ -1,6 +1,8 @@
 package serviceemail
 
 import (
+	"net/http"
+
 	"github.com/cockroachdb/errors"
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/service"
@@ -26,8 +28,7 @@ func (s *ChangeCancelService) Create(ctx *types.ServiceContext, req *modelemail.
 				Msg:      "invalid or expired email change cancellation token",
 			}, nil
 		}
-		log.Error("failed to consume email change cancellation flow", err)
-		return nil, errors.Wrap(err, "failed to consume email change cancellation flow")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to consume email change cancellation flow", err)
 	}
 	if err = validateEmailChangeFlow(flow); err != nil {
 		return nil, err
@@ -39,8 +40,7 @@ func (s *ChangeCancelService) Create(ctx *types.ServiceContext, req *modelemail.
 			log.Error("email account gateway is not configured", err)
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		log.Error("failed to load email change cancellation account", err)
-		return nil, errors.Wrap(err, "failed to load email change cancellation account")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load email change cancellation account", err)
 	}
 	if err = validAccountSnapshot(user, flow.UserID); err != nil {
 		log.Error("email account gateway returned invalid email change cancellation account", err)
@@ -63,8 +63,7 @@ func (s *ChangeCancelService) Create(ctx *types.ServiceContext, req *modelemail.
 	}
 
 	if err = markEmailChangeCanceled(ctx, flow); err != nil {
-		log.Error("failed to mark email change as canceled", err)
-		return nil, errors.Wrap(err, "failed to mark email change as canceled")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to mark email change as canceled", err)
 	}
 
 	return &modelemail.ChangeCancelRsp{

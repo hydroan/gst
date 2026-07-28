@@ -1,6 +1,7 @@
 package serviceemail
 
 import (
+	"net/http"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -20,7 +21,7 @@ type ChangeResendService struct {
 func (s *ChangeResendService) Create(ctx *types.ServiceContext, req *modelemail.ChangeResendReq) (rsp *modelemail.ChangeResendRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 	if ctx == nil || strings.TrimSpace(ctx.UserID()) == "" {
-		return nil, errors.New("authentication required")
+		return nil, service.NewError(http.StatusBadRequest, "authentication required")
 	}
 
 	user, err := currentAccountGateway().GetByID(ctx, ctx.UserID())
@@ -29,8 +30,7 @@ func (s *ChangeResendService) Create(ctx *types.ServiceContext, req *modelemail.
 			log.Error("email account gateway is not configured", err)
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		log.Error("failed to load email change resend account", err)
-		return nil, errors.Wrap(err, "failed to load current account")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load current account", err)
 	}
 	if err = validAccountSnapshot(user, ctx.UserID()); err != nil {
 		log.Error("email account gateway returned invalid email change resend account", err)
@@ -47,8 +47,7 @@ func (s *ChangeResendService) Create(ctx *types.ServiceContext, req *modelemail.
 		if errors.Is(err, errEmailFlowThrottled) {
 			return &modelemail.ChangeResendRsp{Msg: "email change confirmation resent successfully"}, nil
 		}
-		log.Error("failed to reserve email change resend throttle", err)
-		return nil, errors.Wrap(err, "failed to reserve email change resend throttle")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to reserve email change resend throttle", err)
 	}
 
 	confirmToken, confirmFlow, err := issueEmailFlow(ctx, iamEmailFlowKindChangeConfirm, iamEmailFlowState{
@@ -58,12 +57,10 @@ func (s *ChangeResendService) Create(ctx *types.ServiceContext, req *modelemail.
 		Email:    newEmail,
 	})
 	if err != nil {
-		log.Error("failed to issue email change resend flow", err)
-		return nil, errors.Wrap(err, "failed to issue email change resend flow")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to issue email change resend flow", err)
 	}
 	if err = dispatchEmail(ctx, changeConfirmDelivery(confirmToken, confirmFlow)); err != nil {
-		log.Error("failed to dispatch email change resend confirmation", err)
-		return nil, errors.Wrap(err, "failed to dispatch email change resend confirmation")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to dispatch email change resend confirmation", err)
 	}
 
 	return &modelemail.ChangeResendRsp{Msg: "email change confirmation resent successfully"}, nil
