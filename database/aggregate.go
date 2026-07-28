@@ -61,7 +61,6 @@ type aggregator[M types.Model, R any] struct {
 	// clears the chain's copies after every terminal, which would silently drop
 	// them from a second read off the same builder.
 	table      string
-	debug      bool
 	dryRun     bool
 	statements *[]types.SQLStatement
 
@@ -138,11 +137,6 @@ func (a *aggregator[M, R]) WithTable(name string) types.Aggregator[M, R] {
 // The option methods never touch the chain, so they stay safe on an aggregator
 // that failed to attach: the error surfaces at the terminal instead of as a nil
 // dereference partway through building the query.
-
-func (a *aggregator[M, R]) WithDebug() types.Aggregator[M, R] {
-	a.debug = true
-	return a
-}
 
 func (a *aggregator[M, R]) WithBuildSQL(statements *[]types.SQLStatement) types.Aggregator[M, R] {
 	a.dryRun = true
@@ -692,11 +686,7 @@ func (a *aggregator[M, R]) nullableAliases() map[string]types.AggregateFn {
 // the context and any transaction the chain joined, and drops only the clauses
 // a previous terminal left behind.
 func (a *aggregator[M, R]) session() *gorm.DB {
-	ins := a.db.ins.Session(&gorm.Session{NewDB: true})
-	if a.debug {
-		ins = ins.Debug()
-	}
-	return ins
+	return a.db.ins.Session(&gorm.Session{NewDB: true})
 }
 
 // scannerType is the interface a field implements to decode a raw database

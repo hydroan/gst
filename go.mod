@@ -127,7 +127,6 @@ require (
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/driver/sqlserver v1.6.3
 	gorm.io/gorm v1.31.2
-	gorm.io/hints v1.1.2
 	mvdan.cc/gofumpt v0.10.0
 )
 

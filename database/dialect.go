@@ -51,13 +51,6 @@ func (db *database[M]) regexpOperator() string {
 	return "REGEXP"
 }
 
-// supportsIndexHint reports whether the dialect understands index hints. Only
-// MySQL does; on the others a hint is a syntax error rather than a no-op, so
-// WithIndex has to drop it instead of passing it through.
-func (db *database[M]) supportsIndexHint() bool {
-	return db.dialect() == dialectMySQL
-}
-
 // likeEscapeClause declares the LIKE escape character used by filters.
 // The pipe is chosen over the conventional backslash because backslash inside
 // a SQL string literal is itself an escape character in MySQL but a plain

@@ -160,7 +160,7 @@ func (db *database[M]) WithTable(name string) types.Database[M] {
 //	// Combined with other methods
 //	database.Database[*model.User](context.Background()).
 //	    WithBatchSize(1000).
-//	    WithDebug().
+//	    WithOmit("created_at").
 //	    Create(users...)
 //
 // NOTE: If size is 0 or not set, default batch sizes are used (1000 for Create/Update, 10000 for Delete).
@@ -170,15 +170,6 @@ func (db *database[M]) WithBatchSize(size int) types.Database[M] {
 	defer db.mu.Unlock()
 	// db.db = db.db.Session(&gorm.Session{CreateBatchSize: db.batchSize})
 	db.batchSize = size
-	return db
-}
-
-// WithDebug enables debug mode for database operations, showing detailed SQL queries and execution info.
-// This setting has higher priority than config.App.Logger.Level and overrides the default value (false).
-func (db *database[M]) WithDebug() types.Database[M] {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	db.ins = db.ins.Debug()
 	return db
 }
 

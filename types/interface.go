@@ -214,8 +214,6 @@ type Aggregator[M Model, R any] interface {
 
 	// WithTable overrides the table name; the table must already exist.
 	WithTable(name string) Aggregator[M, R]
-	// WithDebug enables debug mode to show the generated SQL.
-	WithDebug() Aggregator[M, R]
 	// WithBuildSQL builds the SQL for the next terminal operation and appends
 	// it to the collector instead of executing it.
 	WithBuildSQL(statements *[]SQLStatement) Aggregator[M, R]
@@ -233,16 +231,12 @@ type DatabaseOption[M Model] interface {
 	WithDB(any) Database[M]
 	// WithTable sets a custom table name; the table must already exist.
 	WithTable(name string) Database[M]
-	// WithDebug enables debug mode to show detailed SQL queries.
-	WithDebug() Database[M]
 	// WithQuery adds query conditions from model fields or raw SQL configuration.
 	WithQuery(query M, opts ...QueryOptions) Database[M]
 	// WithCursor enables cursor-based pagination for List operations.
 	WithCursor(cursor Cursor) Database[M]
 	// WithSelect specifies fields for SELECT and Update column selection where supported.
 	WithSelect(columns ...string) Database[M]
-	// WithIndex specifies database index hints for query optimization (MySQL only).
-	WithIndex(indexName string, hint ...consts.IndexHintMode) Database[M]
 	// WithLock adds row-level locking to SELECT queries (must be used within a transaction).
 	WithLock(mode ...consts.LockMode) Database[M]
 	// WithBatchSize sets the batch size for Create, Update, and Delete.

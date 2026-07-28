@@ -42,11 +42,9 @@ var databaseTerminalMethods = map[string]bool{
 var databaseChainMethods = map[string]bool{
 	"WithDB":         true,
 	"WithTable":      true,
-	"WithDebug":      true,
 	"WithQuery":      true,
 	"WithCursor":     true,
 	"WithSelect":     true,
-	"WithIndex":      true,
 	"WithLock":       true,
 	"WithBatchSize":  true,
 	"WithPagination": true,
