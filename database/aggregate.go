@@ -166,7 +166,7 @@ func (a *aggregator[M, R]) Scan(dest *[]R) (err error) {
 	// done must read the named return, not the nil err captured at defer time.
 	defer func() { done(err) }()
 
-	tx, err := a.build(true)
+	tx, err := a.build(buildRead)
 	if err != nil {
 		return err
 	}
@@ -209,7 +209,7 @@ func (a *aggregator[M, R]) ScanOne(dest *R) (err error) {
 	if len(a.havings) > 0 || a.hasLimit || a.offset > 0 {
 		return ErrScanOnePaged
 	}
-	tx, err := a.build(true)
+	tx, err := a.build(buildRead)
 	if err != nil {
 		return err
 	}
@@ -238,10 +238,13 @@ func (a *aggregator[M, R]) CountGroups(count *int) (err error) {
 	done, _, _ := a.db.trace("AggregateCountGroups")
 	defer func() { done(err) }()
 
-	// The inner query keeps its projection: the group keys decide the group
-	// count, and a measure may still be referenced by HAVING. Ordering and
-	// paging are dropped because neither changes how many groups exist.
-	inner, err := a.build(false)
+	// The inner query projects only the group keys: the outer count reads
+	// nothing but how many rows the derived table answers, so a measure would
+	// be computed for every group and then thrown away. HAVING still filters
+	// the groups because it renders its own expression rather than a select
+	// alias. Ordering and paging are dropped because neither changes how many
+	// groups exist.
+	inner, err := a.build(buildCountInner)
 	if err != nil {
 		return err
 	}
@@ -257,10 +260,22 @@ func (a *aggregator[M, R]) CountGroups(count *int) (err error) {
 	return nil
 }
 
-// build validates the projection and assembles the query. Ordering and paging
-// are applied only when paged is set, so CountGroups can reuse the same
-// assembly without them.
-func (a *aggregator[M, R]) build(paged bool) (*gorm.DB, error) {
+// buildMode selects the shape build assembles. Validation always covers the
+// full specification, so a mistake surfaces on whichever terminal runs first.
+type buildMode int
+
+const (
+	// buildRead renders the full projection with ordering and paging; Scan
+	// and ScanOne read it.
+	buildRead buildMode = iota
+	// buildCountInner renders only the group keys, without ordering or
+	// paging; CountGroups wraps it in a derived table and counts its rows.
+	buildCountInner
+)
+
+// build validates the projection and assembles the query in the shape the
+// mode asks for.
+func (a *aggregator[M, R]) build(mode buildMode) (*gorm.DB, error) {
 	if err := a.validate(); err != nil {
 		return nil, err
 	}
@@ -292,15 +307,32 @@ func (a *aggregator[M, R]) build(paged bool) (*gorm.DB, error) {
 	// from Model, and dereferencing a nil Model there yields an invalid value.
 	tx := a.db.ins.Table(table).Model(a.db.m)
 
-	selects := make([]string, 0, len(a.terms))
+	terms := a.terms
+	if mode == buildCountInner {
+		keys := make([]types.AggregateTerm, 0, len(a.terms))
+		for _, t := range a.terms {
+			if !t.IsMeasure() {
+				keys = append(keys, t)
+			}
+		}
+		terms = keys
+	}
+	selects := make([]string, 0, len(terms))
 	vars := make([]any, 0)
-	for _, t := range a.terms {
+	for _, t := range terms {
 		sql, args, termErr := a.termExpr(t)
 		if termErr != nil {
 			return nil, termErr
 		}
 		selects = append(selects, sql+" AS "+a.db.quoteIdent(a.alias(t)))
 		vars = append(vars, args...)
+	}
+	if len(selects) == 0 {
+		// Reachable only in count mode with no group keys. COUNT(*) keeps the
+		// derived table an aggregate query answering exactly one row -- the
+		// single group the read is -- where a plain constant would answer one
+		// row per matching row.
+		selects = append(selects, "COUNT(*) AS "+a.db.quoteIdent("groups"))
 	}
 	tx.Statement.AddClause(clause.Select{
 		Expression: clause.Expr{SQL: strings.Join(selects, ", "), Vars: vars},
@@ -361,7 +393,7 @@ func (a *aggregator[M, R]) build(paged bool) (*gorm.DB, error) {
 		})
 	}
 
-	if paged {
+	if mode == buildRead {
 		// ORDER BY may use the output alias: every supported dialect accepts
 		// one there.
 		for _, o := range a.orders {

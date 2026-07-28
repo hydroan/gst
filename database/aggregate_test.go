@@ -3,6 +3,7 @@ package database_test
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"testing"
 	"time"
 
@@ -354,6 +355,37 @@ func TestAggregateCountGroups(t *testing.T) {
 		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
 			Select(aggCols.Category.Group(), total).
 			Having(total.Gt(600)).
+			CountGroups(&groups))
+		require.Equal(t, 1, groups)
+	})
+
+	t.Run("InnerProjectsOnlyGroupKeys", func(t *testing.T) {
+		// The outer count reads nothing but how many rows the derived table
+		// answers, so a measure inside it would be computed for every group
+		// and then thrown away. HAVING keeps working without the measure in
+		// the select list because it renders its own expression.
+		var groups int
+		statements := make([]types.SQLStatement, 0)
+		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
+			WithBuildSQL(&statements).
+			Select(aggCols.Category.Group(), total).
+			Having(total.Gt(600)).
+			CountGroups(&groups))
+		require.Len(t, statements, 1)
+		sql := statements[0].RenderedSQL
+		require.Contains(t, sql, "GROUP BY")
+		projection, having, hasHaving := strings.Cut(sql, "HAVING")
+		require.True(t, hasHaving, "the count must keep filtering groups")
+		require.Contains(t, having, "SUM(", "HAVING renders the full measure expression")
+		require.NotContains(t, projection, "SUM(", "the count projection must not compute measures")
+	})
+
+	t.Run("CountsOneGroupWithoutKeys", func(t *testing.T) {
+		// Without group keys the whole read is a single group, and the count
+		// answers one even though nothing scans the measure values.
+		var groups int
+		require.NoError(t, database.Aggregate[*TestAggregateRecord, struct{ Total int64 }](context.Background()).
+			Select(total).
 			CountGroups(&groups))
 		require.Equal(t, 1, groups)
 	})
