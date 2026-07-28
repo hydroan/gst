@@ -41,7 +41,7 @@ func (a *AdminSessionGetService) Get(ctx *types.ServiceContext, req *model.Empty
 			return nil, service.NewError(http.StatusNotFound, "session not found")
 		}
 		log.Error("failed to load target session", err)
-		return nil, err
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load target session", err)
 	}
 	if err = SessionManager.Validate(targetSessionID, targetSession); err != nil {
 		_, _ = SessionManager.Delete(ctx, targetSessionID)

@@ -53,7 +53,7 @@ func (s *SessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamse
 			return &modeliamsession.SessionDeleteRsp{}, nil
 		}
 		log.Error("failed to load target session", err)
-		return nil, err
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load target session", err)
 	}
 	if err = SessionManager.Validate(targetSessionID, targetSession); err != nil {
 		_, _ = SessionManager.Delete(ctx, targetSessionID)
@@ -74,7 +74,7 @@ func (s *SessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamse
 			return &modeliamsession.SessionDeleteRsp{}, nil
 		}
 		log.Error("failed to delete target session", err)
-		return nil, err
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to delete session", err)
 	}
 	if targetSessionID == currentSessionID {
 		SessionManager.ClearCookie(ctx)

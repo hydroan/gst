@@ -2,6 +2,7 @@ package serviceiamsession
 
 import (
 	"context"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/cockroachdb/errors"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	"github.com/hydroan/gst/provider/redis"
+	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
 
@@ -35,7 +37,11 @@ func listUserSessionIDs(ctx context.Context, userID string) ([]string, error) {
 	if err := pruneExpiredSessionIDs(ctx, userKey); err != nil {
 		return nil, err
 	}
-	return redis.ZRange(ctx, userKey, 0, -1)
+	sessionIDs, err := redis.ZRange(ctx, userKey, 0, -1)
+	if err != nil {
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to list user sessions", err)
+	}
+	return sessionIDs, nil
 }
 
 // listAllSessionIDs loads all indexed session ids across users.
@@ -49,7 +55,11 @@ func listAllSessionIDs(ctx context.Context) ([]string, error) {
 	if err := pruneExpiredSessionIDs(ctx, modeliamsession.SessionAllKey()); err != nil {
 		return nil, err
 	}
-	return redis.ZRange(ctx, modeliamsession.SessionAllKey(), 0, -1)
+	sessionIDs, err := redis.ZRange(ctx, modeliamsession.SessionAllKey(), 0, -1)
+	if err != nil {
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to list sessions", err)
+	}
+	return sessionIDs, nil
 }
 
 // listOnlineSessionIDs loads session ids whose last-seen score falls inside the requested window.
@@ -65,12 +75,16 @@ func listOnlineSessionIDs(ctx context.Context, since time.Time) ([]string, error
 	}
 	ctx = redisContext(ctx)
 	pruneStaleLastSeenSessionIDs(ctx, time.Now())
-	return redis.ZRangeByScore(
+	sessionIDs, err := redis.ZRangeByScore(
 		ctx,
 		modeliamsession.SessionLastSeenKey(),
 		strconv.FormatInt(since.UnixMilli(), 10),
 		"+inf",
 	)
+	if err != nil {
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to list online sessions", err)
+	}
+	return sessionIDs, nil
 }
 
 // pruneExpiredSessionIDs removes expired session ids from a session index ZSET.
@@ -81,7 +95,10 @@ func listOnlineSessionIDs(ctx context.Context, since time.Time) ([]string, error
 // payload itself; callers still load and validate each remaining payload because
 // Redis state can drift after partial writes, manual cache edits, or old data.
 func pruneExpiredSessionIDs(ctx context.Context, key string) error {
-	return redis.ZRemRangeByScore(redisContext(ctx), key, "-inf", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	if err := redis.ZRemRangeByScore(redisContext(ctx), key, "-inf", strconv.FormatInt(time.Now().UnixMilli(), 10)); err != nil {
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to prune expired sessions", err)
+	}
+	return nil
 }
 
 // pruneStaleLastSeenSessionIDs bounds the global last-seen index by the maximum session lifetime.
@@ -118,13 +135,16 @@ func removeSessionIndexes(ctx context.Context, userID, sessionID string) error {
 	}
 	if userID != "" {
 		if err := redis.ZRem(ctx, modeliamsession.SessionUserKey(userID), sessionID); err != nil {
-			return err
+			return service.NewErrorWithCause(http.StatusInternalServerError, "failed to remove session index", err)
 		}
 	}
 	if err := redis.ZRem(ctx, modeliamsession.SessionAllKey(), sessionID); err != nil {
-		return err
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to remove session index", err)
 	}
-	return redis.ZRem(ctx, modeliamsession.SessionLastSeenKey(), sessionID)
+	if err := redis.ZRem(ctx, modeliamsession.SessionLastSeenKey(), sessionID); err != nil {
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to remove session index", err)
+	}
+	return nil
 }
 
 // removeStaleSessionIndexes best-effort removes a stale session id from known Redis indexes.
@@ -158,31 +178,31 @@ func IndexSession(ctx context.Context, sessionData modeliamsession.Session) erro
 	pruneStaleLastSeenSessionIDs(ctx, time.Now())
 	ttl := time.Until(sessionData.ExpiresAt)
 	if ttl <= 0 {
-		return errors.New("session expired")
+		return service.NewError(http.StatusInternalServerError, "session expired")
 	}
 	// Store the expiration timestamp as the index score. The list paths use this
 	// contract to prune expired ZSET members before loading session payloads.
 	score := float64(sessionData.ExpiresAt.UnixMilli())
 	userKey := modeliamsession.SessionUserKey(sessionData.UserID)
 	if err := redis.ZAdd(ctx, userKey, score, sessionData.ID); err != nil {
-		return err
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to index session", err)
 	}
 	if err := redis.ZAdd(ctx, modeliamsession.SessionAllKey(), score, sessionData.ID); err != nil {
 		_ = redis.ZRem(ctx, userKey, sessionData.ID)
-		return err
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to index session", err)
 	}
 	lastSeenScore := float64(sessionData.LastSeenAt.UnixMilli())
 	if err := redis.ZAdd(ctx, modeliamsession.SessionLastSeenKey(), lastSeenScore, sessionData.ID); err != nil {
 		removeStaleSessionIndexes(ctx, sessionData.UserID, sessionData.ID)
-		return err
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to index session", err)
 	}
 	if err := redis.Expire(ctx, userKey, ttl); err != nil {
 		removeStaleSessionIndexes(ctx, sessionData.UserID, sessionData.ID)
-		return err
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to index session", err)
 	}
 	if err := redis.Expire(ctx, modeliamsession.SessionAllKey(), ttl); err != nil {
 		removeStaleSessionIndexes(ctx, sessionData.UserID, sessionData.ID)
-		return err
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to index session", err)
 	}
 	return nil
 }
@@ -200,7 +220,7 @@ func UpdateSessionMustChangePassword(ctx context.Context, sessionID string, must
 		if errors.Is(err, types.ErrEntryNotFound) {
 			return nil
 		}
-		return err
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", err)
 	}
 	session.MustChangePassword = mustChange
 	ttl := time.Until(session.ExpiresAt)
@@ -208,7 +228,10 @@ func UpdateSessionMustChangePassword(ctx context.Context, sessionID string, must
 		_, _ = SessionManager.Delete(ctx, sessionID)
 		return types.ErrEntryNotFound
 	}
-	return cache.Set(sessionKey, session, ttl)
+	if err := cache.Set(sessionKey, session, ttl); err != nil {
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to store session", err)
+	}
+	return nil
 }
 
 // TouchSession refreshes LastSeenAt for an active session at most once per touch interval.
@@ -239,7 +262,7 @@ func TouchSession(ctx context.Context, sessionID string, sessionData modeliamses
 	touchKey := modeliamsession.SessionTouchKey(sessionID)
 	acquired, err := redis.SetNX(ctx, touchKey, "1", sessionTouchInterval)
 	if err != nil {
-		return err
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to touch session", err)
 	}
 	if !acquired {
 		return nil
@@ -250,11 +273,11 @@ func TouchSession(ctx context.Context, sessionID string, sessionData modeliamses
 		WithContext(ctx).
 		Set(modeliamsession.SessionIDKey(sessionID), sessionData, ttl); err != nil {
 		_ = redis.Del(ctx, touchKey)
-		return err
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to touch session", err)
 	}
 	if err = redis.ZAdd(ctx, modeliamsession.SessionLastSeenKey(), float64(now.UnixMilli()), sessionID); err != nil {
 		_ = redis.Del(ctx, touchKey)
-		return err
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to touch session", err)
 	}
 	pruneStaleLastSeenSessionIDs(ctx, now)
 	return nil
@@ -288,7 +311,7 @@ func DeleteUserSessionsExceptCurrent(ctx context.Context, userID, currentSession
 				removeStaleSessionIndexes(ctx, userID, sessionID)
 				continue
 			}
-			return err
+			return service.NewErrorWithCause(http.StatusInternalServerError, "failed to delete session", err)
 		}
 	}
 
@@ -321,11 +344,14 @@ func DeleteUserSessions(ctx context.Context, userID string) error {
 				removeStaleSessionIndexes(ctx, userID, sessionID)
 				continue
 			}
-			return err
+			return service.NewErrorWithCause(http.StatusInternalServerError, "failed to delete session", err)
 		}
 	}
 
-	return redis.Del(ctx, modeliamsession.SessionUserKey(userID))
+	if err = redis.Del(ctx, modeliamsession.SessionUserKey(userID)); err != nil {
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to delete user session index", err)
+	}
+	return nil
 }
 
 // InvalidateUserSessions removes all indexed sessions for a user.

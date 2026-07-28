@@ -22,7 +22,7 @@ import (
 func LoadActor(ctx *types.ServiceContext) (*modeliamuser.User, error) {
 	_, session, err := serviceiamsession.SessionManager.Current(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "invalid session")
+		return nil, service.NewErrorWithCause(http.StatusUnauthorized, "invalid session", err)
 	}
 	if session.UserID == "" {
 		return nil, service.NewError(http.StatusUnauthorized, "current user not found")
@@ -86,5 +86,9 @@ func isSystemRoot(ctx *types.ServiceContext, actor *modeliamuser.User) (bool, er
 	if actor == nil || strings.TrimSpace(actor.GetID()) == "" {
 		return false, nil
 	}
-	return rbac.RBAC().HasSystemRole(ctx, actor.GetID(), consts.AUTHZ_SYSTEM_ROLE_ROOT)
+	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, actor.GetID(), consts.AUTHZ_SYSTEM_ROLE_ROOT)
+	if err != nil {
+		return false, service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+	}
+	return systemRoot, nil
 }

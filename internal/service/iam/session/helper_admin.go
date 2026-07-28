@@ -51,8 +51,8 @@ func loadAdminSessionActor(ctx *types.ServiceContext) (*modeliamuser.User, error
 	if err = database.Database[*modeliamuser.User](ctx).Get(actor, session.UserID); err != nil {
 		return nil, service.NewError(http.StatusUnauthorized, "session invalid")
 	}
-	if err = ensureSessionUserActive(actor); err != nil {
-		return nil, err
+	if activeErr := ensureSessionUserActive(actor); activeErr != nil {
+		return nil, activeErr
 	}
 
 	return actor, nil

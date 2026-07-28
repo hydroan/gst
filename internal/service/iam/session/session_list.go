@@ -1,6 +1,7 @@
 package serviceiamsession
 
 import (
+	"net/http"
 	"sort"
 
 	"github.com/cockroachdb/errors"
@@ -50,7 +51,7 @@ func (s *SessionListService) List(ctx *types.ServiceContext, req *model.Empty) (
 				continue
 			}
 			log.Error("failed to load session from redis", getErr)
-			return nil, getErr
+			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", getErr)
 		}
 		if validateErr := SessionManager.Validate(sessionID, session); validateErr != nil {
 			_, _ = SessionManager.Delete(ctx, sessionID)

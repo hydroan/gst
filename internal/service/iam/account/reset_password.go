@@ -40,18 +40,18 @@ func (r *ResetPasswordService) Create(ctx *types.ServiceContext, req *modeliamac
 	if err != nil {
 		if !errors.Is(err, database.ErrRecordNotFound) {
 			log.Error("failed to query password credential", err)
-			return nil, errors.Wrap(err, "failed to update password")
+			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load password credential", err)
 		}
 		credential = &modeliamaccount.PasswordCredential{UserID: target.ID}
 	}
-	if err = ApplyPasswordCredentialUpdate(ctx, credential, req.NewPassword, true); err != nil {
-		log.Error("failed to hash new password", err)
-		return nil, errors.Wrap(err, "failed to process new password")
+	if applyErr := ApplyPasswordCredentialUpdate(ctx, credential, req.NewPassword, true); applyErr != nil {
+		log.Error("failed to hash new password", applyErr)
+		return nil, applyErr
 	}
 	if credential.ID == "" {
 		if err = database.Database[*modeliamaccount.PasswordCredential](ctx).Create(credential); err != nil {
 			log.Error("failed to create password credential", err)
-			return nil, errors.Wrap(err, "failed to update password")
+			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update password", err)
 		}
 	} else {
 		if err = database.Database[*modeliamaccount.PasswordCredential](ctx).
@@ -59,7 +59,7 @@ func (r *ResetPasswordService) Create(ctx *types.ServiceContext, req *modeliamac
 			WithSelect("user_id", "password_hash", "must_change_password", "password_changed_at").
 			Update(credential); err != nil {
 			log.Error("failed to update password credential", err)
-			return nil, errors.Wrap(err, "failed to update password")
+			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update password", err)
 		}
 	}
 

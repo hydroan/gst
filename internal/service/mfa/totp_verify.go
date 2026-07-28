@@ -1,12 +1,10 @@
 package servicemfa
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/service"
@@ -45,14 +43,14 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 		return &modelmfa.TOTPVerifyRsp{
 			Valid:   false,
 			Message: "TOTP code is required",
-		}, errors.New("TOTP code is required")
+		}, service.NewError(http.StatusBadRequest, "TOTP code is required")
 	}
 	if !isSixDigitTOTPCode(code) {
 		log.Warnz("invalid totp code format", zap.String("user_id", ctx.UserID()))
 		return &modelmfa.TOTPVerifyRsp{
 			Valid:   false,
 			Message: "TOTP code must be 6 digits",
-		}, errors.New("TOTP code must be 6 digits")
+		}, service.NewError(http.StatusBadRequest, "TOTP code must be 6 digits")
 	}
 
 	devices := make([]*modelmfa.TOTPDevice, 0)
@@ -70,7 +68,7 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 		return &modelmfa.TOTPVerifyRsp{
 			Valid:   false,
 			Message: "failed to retrieve device information",
-		}, fmt.Errorf("failed to list devices: %w", err)
+		}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to retrieve device information", err)
 	}
 
 	if len(devices) == 0 {
@@ -78,7 +76,7 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 		return &modelmfa.TOTPVerifyRsp{
 			Valid:   false,
 			Message: "no active TOTP devices found",
-		}, errors.New("no active TOTP devices found")
+		}, service.NewError(http.StatusBadRequest, "no active TOTP devices found")
 	}
 
 	var validDevice *modelmfa.TOTPDevice

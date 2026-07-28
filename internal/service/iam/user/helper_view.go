@@ -2,11 +2,13 @@ package serviceiamuser
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
 
@@ -88,7 +90,7 @@ func loadAdminUserEmailMap(ctx context.Context, userIDs []string) (map[string]*m
 		if errors.Is(err, database.ErrRecordNotFound) {
 			return items, nil
 		}
-		return nil, err
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load email identities", err)
 	}
 	for _, identity := range identities {
 		if identity != nil && identity.UserID != "" {
@@ -116,7 +118,7 @@ func loadAdminUserCredentialMap(ctx context.Context, userIDs []string) (map[stri
 		if errors.Is(err, database.ErrRecordNotFound) {
 			return items, nil
 		}
-		return nil, err
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load password credentials", err)
 	}
 	for _, credential := range credentials {
 		if credential != nil && credential.UserID != "" {

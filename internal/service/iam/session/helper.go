@@ -67,7 +67,7 @@ func sessionViewActiveAt(view modeliamsession.SessionView) time.Time {
 func NewSessionID() (string, error) {
 	buf := make([]byte, sessionIDBytes)
 	if _, err := rand.Read(buf); err != nil {
-		return "", err
+		return "", service.NewErrorWithCause(http.StatusInternalServerError, "failed to generate session id", err)
 	}
 	return hex.EncodeToString(buf), nil
 }

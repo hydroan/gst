@@ -45,17 +45,17 @@ func (a *AdminUserSessionListService) List(ctx *types.ServiceContext, req *model
 			return nil, service.NewError(http.StatusNotFound, "user not found")
 		}
 		log.Error("failed to load target user", err)
-		return nil, err
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", err)
 	}
-	if err = ensureAdminSessionTarget(ctx, targetUser); err != nil {
-		log.Error("failed to verify admin session target", err)
-		return nil, err
+	if targetErr := ensureAdminSessionTarget(ctx, targetUser); targetErr != nil {
+		log.Error("failed to verify admin session target", targetErr)
+		return nil, targetErr
 	}
 
-	view, err := a.buildView(ctx, targetUser, currentSessionID, onlineSince, onlineOnly)
-	if err != nil {
-		log.Error("failed to build target user sessions view", err)
-		return nil, err
+	view, viewErr := a.buildView(ctx, targetUser, currentSessionID, onlineSince, onlineOnly)
+	if viewErr != nil {
+		log.Error("failed to build target user sessions view", viewErr)
+		return nil, viewErr
 	}
 
 	return &modeliamsession.AdminUserSessionListRsp{
@@ -71,13 +71,13 @@ func (a *AdminUserSessionListService) List(ctx *types.ServiceContext, req *model
 // path bounded by recently active sessions instead of scanning every session
 // owned by the target user.
 func (a *AdminUserSessionListService) buildView(ctx *types.ServiceContext, user *modeliamuser.User, currentSessionID string, onlineSince time.Time, onlineOnly bool) (modeliamsession.AdminSessionOwnerView, error) {
-	credential, err := loadSessionPasswordCredential(ctx, user.ID)
-	if err != nil {
-		return modeliamsession.AdminSessionOwnerView{}, err
+	credential, credentialErr := loadSessionPasswordCredential(ctx, user.ID)
+	if credentialErr != nil {
+		return modeliamsession.AdminSessionOwnerView{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load password credential", credentialErr)
 	}
-	email, err := loadSessionEmail(ctx, user.ID)
-	if err != nil {
-		return modeliamsession.AdminSessionOwnerView{}, err
+	email, emailErr := loadSessionEmail(ctx, user.ID)
+	if emailErr != nil {
+		return modeliamsession.AdminSessionOwnerView{}, emailErr
 	}
 
 	view := modeliamsession.AdminSessionOwnerView{
@@ -91,14 +91,15 @@ func (a *AdminUserSessionListService) buildView(ctx *types.ServiceContext, user 
 
 	var indexUserID string
 	var sessionIDs []string
+	var listErr error
 	if onlineOnly {
-		sessionIDs, err = listOnlineSessionIDs(ctx, onlineSince)
+		sessionIDs, listErr = listOnlineSessionIDs(ctx, onlineSince)
 	} else {
 		indexUserID = user.ID
-		sessionIDs, err = listUserSessionIDs(ctx, user.ID)
+		sessionIDs, listErr = listUserSessionIDs(ctx, user.ID)
 	}
-	if err != nil {
-		return modeliamsession.AdminSessionOwnerView{}, err
+	if listErr != nil {
+		return modeliamsession.AdminSessionOwnerView{}, listErr
 	}
 
 	cache := redis.Cache[modeliamsession.Session]().WithContext(ctx)
@@ -114,7 +115,7 @@ func (a *AdminUserSessionListService) buildView(ctx *types.ServiceContext, user 
 				removeStaleSessionIndexes(ctx, indexUserID, sessionID)
 				continue
 			}
-			return modeliamsession.AdminSessionOwnerView{}, getErr
+			return modeliamsession.AdminSessionOwnerView{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", getErr)
 		}
 		if validateErr := SessionManager.Validate(sessionID, sessionData); validateErr != nil {
 			_, _ = SessionManager.Delete(ctx, sessionID)

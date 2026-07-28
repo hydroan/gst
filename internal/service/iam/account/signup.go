@@ -2,6 +2,7 @@ package serviceiamaccount
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
@@ -21,26 +22,26 @@ func (s *SignupService) Create(ctx *types.ServiceContext, req *modeliamaccount.S
 
 	// Validate input
 	if req.Username == "" {
-		return nil, errors.New("username is required")
+		return nil, service.NewError(http.StatusBadRequest, "username is required")
 	}
 	if req.Password == "" {
-		return nil, errors.New("password is required")
+		return nil, service.NewError(http.StatusBadRequest, "password is required")
 	}
 	if req.Password != req.RePassword {
-		return nil, errors.New("passwords do not match")
+		return nil, service.NewError(http.StatusBadRequest, "passwords do not match")
 	}
 	if len(req.Password) < 6 {
-		return nil, errors.New("password must be at least 6 characters long")
+		return nil, service.NewError(http.StatusBadRequest, "password must be at least 6 characters long")
 	}
 
 	// Check if username already exists
 	existingUsers := make([]*modeliamuser.User, 0)
 	if err = database.Database[*modeliamuser.User](ctx).WithLimit(1).WithQuery(&modeliamuser.User{Username: req.Username}).List(&existingUsers); err != nil {
 		log.Error("failed to check existing user", zap.Error(err))
-		return nil, errors.New("failed to create user")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to check existing user", err)
 	}
 	if len(existingUsers) > 0 {
-		return nil, errors.New("username already exists")
+		return nil, service.NewError(http.StatusConflict, "username already exists")
 	}
 
 	// Create new user
@@ -72,7 +73,10 @@ func (s *SignupService) Create(ctx *types.ServiceContext, req *modeliamaccount.S
 		return database.Database[*modeliamaccount.EmailIdentity](ctx).Create(emailIdentity)
 	}); err != nil {
 		log.Error("failed to create user", zap.Error(err))
-		return nil, errors.New("failed to create user")
+		if errors.Is(err, database.ErrDuplicatedKey) {
+			return nil, service.NewErrorWithCause(http.StatusConflict, "username already exists", err)
+		}
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to create user", err)
 	}
 
 	log.Info("user created successfully", zap.String("username", req.Username), zap.String("user_id", newUser.ID))

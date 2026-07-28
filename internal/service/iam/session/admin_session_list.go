@@ -1,6 +1,7 @@
 package serviceiamsession
 
 import (
+	"net/http"
 	"sort"
 	"time"
 
@@ -65,7 +66,7 @@ func (a *AdminSessionListService) List(ctx *types.ServiceContext, req *model.Emp
 				continue
 			}
 			log.Error("failed to load session from redis", getErr)
-			return nil, getErr
+			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", getErr)
 		}
 		if validateErr := SessionManager.Validate(sessionID, session); validateErr != nil {
 			_, _ = SessionManager.Delete(ctx, sessionID)
@@ -138,7 +139,7 @@ func (a *AdminSessionListService) buildItem(ctx *types.ServiceContext, sourceSes
 			_, _ = SessionManager.Delete(ctx, sourceSession.ID)
 			return nil, false, nil
 		}
-		return nil, false, err
+		return nil, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session owner", err)
 	}
 	credential, err := loadSessionPasswordCredential(ctx, targetUser.ID)
 	if err != nil {
@@ -146,11 +147,11 @@ func (a *AdminSessionListService) buildItem(ctx *types.ServiceContext, sourceSes
 			_, _ = SessionManager.Delete(ctx, sourceSession.ID)
 			return nil, false, nil
 		}
-		return nil, false, err
+		return nil, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session owner", err)
 	}
 	email, err := loadSessionEmail(ctx, targetUser.ID)
 	if err != nil {
-		return nil, false, err
+		return nil, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session owner", err)
 	}
 
 	return &adminSessionOwnerItem{

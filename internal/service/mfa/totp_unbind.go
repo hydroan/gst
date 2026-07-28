@@ -59,18 +59,18 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 				zap.String("device_id", req.DeviceID))
 			return newTOTPUnbindFailureRsp(ctx, "Device not found or already unbound")
 		}
-		if verifyErr := verifyTOTPUnbindPassword(ctx, ctx.UserID(), req.Password); verifyErr != nil {
-			if isTOTPUnbindPasswordSystemError(verifyErr) {
-				log.Errorz("failed to verify password for unbind",
-					zap.String("user_id", ctx.UserID()),
-					zap.String("device_id", req.DeviceID),
-					zap.Error(verifyErr))
-				return nil, verifyErr
-			}
-			log.Warnz("invalid password for unbind",
+		invalid, verifyErr := verifyTOTPUnbindPassword(ctx, ctx.UserID(), req.Password)
+		if verifyErr != nil {
+			log.Errorz("failed to verify password for unbind",
 				zap.String("user_id", ctx.UserID()),
 				zap.String("device_id", req.DeviceID),
 				zap.Error(verifyErr))
+			return nil, verifyErr
+		}
+		if invalid {
+			log.Warnz("invalid password for unbind",
+				zap.String("user_id", ctx.UserID()),
+				zap.String("device_id", req.DeviceID))
 			return newTOTPUnbindFailureRsp(ctx, "invalid verification")
 		}
 	}
@@ -82,7 +82,7 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 			UserID:   userID,
 			IsActive: true,
 		}).List(&devices); listErr != nil {
-			return errors.Wrap(listErr, "list active TOTP devices")
+			return service.NewErrorWithCause(http.StatusInternalServerError, "failed to list active TOTP devices", listErr)
 		}
 
 		device := findTOTPUnbindDevice(devices, req.DeviceID)
@@ -114,11 +114,11 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 				}
 				return nil
 			}
-			return verifyErr
+			return service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify fresh authentication", verifyErr)
 		}
 
 		if deleteErr := database.Database[*modelmfa.TOTPDevice](ctx).WithPurge(true).Delete(device); deleteErr != nil {
-			return fmt.Errorf("failed to unbind device: %w", deleteErr)
+			return service.NewErrorWithCause(http.StatusInternalServerError, "failed to unbind device", deleteErr)
 		}
 
 		rsp = &modelmfa.TOTPUnbindRsp{
@@ -137,7 +137,7 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 	}
 
 	if rsp == nil {
-		return nil, errors.New("failed to build TOTP unbind response")
+		return nil, service.NewError(http.StatusInternalServerError, "failed to build TOTP unbind response")
 	}
 	if rsp.Success {
 		log.Infoz("totp device unbound successfully",
@@ -169,7 +169,7 @@ func countActiveTOTPUnbindDevices(ctx *types.ServiceContext, userID string) (int
 		UserID:   userID,
 		IsActive: true,
 	}).List(&devices); err != nil {
-		return 0, errors.Wrap(err, "count active TOTP devices")
+		return 0, service.NewErrorWithCause(http.StatusInternalServerError, "failed to count active TOTP devices", err)
 	}
 	return len(devices), nil
 }
@@ -215,27 +215,25 @@ func verifyTOTPUnbindFreshAuth(
 	}
 }
 
-// verifyTOTPUnbindPassword validates the current account's password for fresh auth.
-func verifyTOTPUnbindPassword(ctx *types.ServiceContext, userID, password string) error {
+// verifyTOTPUnbindPassword validates the current account's password for fresh
+// auth. invalid reports a wrong or rejected credential, answered with the
+// generic failure response; svcErr carries system failures that must abort the
+// request.
+func verifyTOTPUnbindPassword(ctx *types.ServiceContext, userID, password string) (invalid bool, svcErr *service.Error) {
 	account, err := currentAccountAuthenticator().AuthenticateByAccountID(ctx, userID, password)
 	if err != nil {
 		if errors.Is(err, ErrAccountAuthenticatorNotConfigured) {
-			return newAccountAuthenticatorNotConfiguredServiceError(err)
+			return false, newAccountAuthenticatorNotConfiguredServiceError(err)
 		}
 		if errors.Is(err, ErrAccountAuthenticationFailed) {
-			return errTOTPUnbindVerificationInvalid
+			return true, nil
 		}
-		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify password", err)
+		return false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify password", err)
 	}
 	if err := validateAuthenticatedAccount(account, userID); err != nil {
-		return newAccountAuthenticatorInvalidAccountServiceError(err)
+		return false, newAccountAuthenticatorInvalidAccountServiceError(err)
 	}
-	return nil
-}
-
-func isTOTPUnbindPasswordSystemError(err error) bool {
-	var serviceErr *service.Error
-	return errors.As(err, &serviceErr)
+	return false, nil
 }
 
 // activeTOTPUnbindDeviceExists checks target ownership before password validation.

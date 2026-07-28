@@ -2,9 +2,11 @@ package serviceiamprofile
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/hydroan/gst/database"
 	modeliamprofile "github.com/hydroan/gst/internal/model/iam/profile"
+	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
 
@@ -14,7 +16,7 @@ func loadProfileByUserID(ctx *types.ServiceContext, userID string) (*modeliampro
 		WithLimit(1).
 		WithQuery(&modeliamprofile.Profile{UserID: userID}).
 		List(&profiles); err != nil {
-		return nil, false, err
+		return nil, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load profile", err)
 	}
 	if len(profiles) == 0 {
 		return nil, false, nil
@@ -30,7 +32,7 @@ func updateProfileColumns(ctx *types.ServiceContext, record *modeliamprofile.Pro
 		for _, column := range columns {
 			if err := database.Database[*modeliamprofile.Profile](ctx).
 				UpdateByID(record.ID, column, profileColumnValue(record, column)); err != nil {
-				return err
+				return service.NewErrorWithCause(http.StatusInternalServerError, "failed to update profile", err)
 			}
 		}
 		return nil

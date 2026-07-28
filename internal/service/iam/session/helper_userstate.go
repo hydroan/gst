@@ -130,7 +130,7 @@ func loadSessionEmail(ctx context.Context, userID string) (string, error) {
 		if errors.Is(err, database.ErrRecordNotFound) {
 			return "", nil
 		}
-		return "", err
+		return "", service.NewErrorWithCause(http.StatusInternalServerError, "failed to load email identity", err)
 	}
 	return identity.Email, nil
 }

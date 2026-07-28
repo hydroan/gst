@@ -1,7 +1,6 @@
 package servicemfa
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/hydroan/gst/database"
@@ -40,7 +39,7 @@ func (t *TOTPStatusService) List(ctx *types.ServiceContext, req *modelmfa.TOTPSt
 
 	if err = database.Database[*modelmfa.TOTPDevice](ctx).WithQuery(query).List(&devices); err != nil {
 		log.Errorz("failed to list totp devices", zap.Error(err))
-		return nil, fmt.Errorf("failed to retrieve device information: %w", err)
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to retrieve device information", err)
 	}
 
 	// 3. Count device states and build the public device view.

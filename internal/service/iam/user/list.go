@@ -1,9 +1,9 @@
 package serviceiamuser
 
 import (
+	"net/http"
 	"strconv"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
@@ -71,14 +71,14 @@ func (a *AdminUserListService) List(ctx *types.ServiceContext, _ *model.Empty) (
 func listUsers(ctx *types.ServiceContext, actor *modeliamuser.User) ([]*modeliamuser.User, int, error) {
 	opts, err := userVisibilityQueryOptions(ctx, actor)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, service.NewErrorWithCause(http.StatusInternalServerError, "failed to list users", err)
 	}
 	filters := readAdminUserListFilters(ctx)
 	userQuery, opts := adminUserListQuery(filters, opts)
 
 	var total int
 	if err = database.Database[*modeliamuser.User](ctx).WithQuery(userQuery, opts).Count(&total); err != nil {
-		return nil, 0, err
+		return nil, 0, service.NewErrorWithCause(http.StatusInternalServerError, "failed to count users", err)
 	}
 
 	// WithPagination(0, 0) falls back to page 1 with the default limit instead
@@ -97,7 +97,7 @@ func listUsers(ctx *types.ServiceContext, actor *modeliamuser.User) ([]*modeliam
 			List(&users)
 	}
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, service.NewErrorWithCause(http.StatusInternalServerError, "failed to list users", err)
 	}
 	return users, total, nil
 }
@@ -146,7 +146,7 @@ func adminUserListQuery(filters adminUserListFilters, opts types.QueryOptions) (
 func userVisibilityQueryOptions(ctx *types.ServiceContext, actor *modeliamuser.User) (types.QueryOptions, error) {
 	systemRoot, err := isSystemRoot(ctx, actor)
 	if err != nil {
-		return types.QueryOptions{}, errors.Wrap(err, "failed to resolve actor system role")
+		return types.QueryOptions{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to resolve actor system role", err)
 	}
 	if systemRoot {
 		return types.QueryOptions{AllowEmpty: true}, nil
@@ -156,7 +156,7 @@ func userVisibilityQueryOptions(ctx *types.ServiceContext, actor *modeliamuser.U
 	// default authorization domain when the application has no tenant resolver.
 	subjectIDs, err := rbac.RBAC().SubjectsInTenant(ctx, currentTenant(ctx))
 	if err != nil {
-		return types.QueryOptions{}, errors.Wrap(err, "failed to list tenant subjects")
+		return types.QueryOptions{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to list tenant subjects", err)
 	}
 	if len(subjectIDs) == 0 {
 		return emptyUserVisibilityQueryOptions(), nil
@@ -184,7 +184,7 @@ func excludeSystemRootSubjects(ctx *types.ServiceContext, subjectIDs []string) (
 	for _, subjectID := range subjectIDs {
 		systemRoot, err := rbac.RBAC().HasSystemRole(ctx, subjectID, consts.AUTHZ_SYSTEM_ROLE_ROOT)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to resolve subject system role")
+			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to resolve subject system role", err)
 		}
 		if systemRoot {
 			continue

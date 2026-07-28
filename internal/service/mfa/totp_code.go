@@ -29,7 +29,7 @@ func ValidateUserTOTPCode(ctx *types.ServiceContext, userID, code string) error 
 		UserID:   strings.TrimSpace(userID),
 		IsActive: true,
 	}).List(&devices); err != nil {
-		return errors.Wrap(err, "list TOTP devices")
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to list TOTP devices", err)
 	}
 
 	return validateTOTPCodeForDevices(code, devices)

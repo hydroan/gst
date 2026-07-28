@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"net/http"
 
-	"github.com/cockroachdb/errors"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
@@ -59,7 +58,7 @@ func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPBi
 	})
 	if err != nil {
 		log.Errorz("failed to generate TOTP key", zap.Error(err))
-		return nil, errors.New("failed to generate TOTP key")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to generate TOTP key", err)
 	}
 
 	qrCodeURL := key.URL()
@@ -67,7 +66,7 @@ func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPBi
 	qrCodeImage, err := generateQRCode(qrCodeURL)
 	if err != nil {
 		log.Errorz("failed to generate QR code image", zap.Error(err))
-		return nil, errors.New("failed to generate QR code image")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to generate QR code image", err)
 	}
 
 	challengeID, _, err := issueTOTPBindChallenge(ctx, totpBindChallenge{
@@ -78,7 +77,7 @@ func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPBi
 	})
 	if err != nil {
 		log.Errorz("failed to issue TOTP bind challenge", zap.Error(err))
-		return nil, err
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to issue TOTP binding challenge", err)
 	}
 
 	rsp = &modelmfa.TOTPBindRsp{

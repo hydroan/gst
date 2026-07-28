@@ -3,7 +3,6 @@ package serviceiamaccount
 import (
 	"net/http"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
@@ -28,31 +27,31 @@ func (c *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 	sessionID, currentSession, err := serviceiamsession.SessionManager.Current(ctx)
 	if err != nil {
 		log.Error("failed to get current session", err)
-		return nil, errors.New("invalid session")
+		return nil, err
 	}
 
 	// Get user from database
 	currentUser := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx).Get(currentUser, currentSession.UserID); err != nil {
 		log.Error("failed to query user", err)
-		return nil, errors.New("database error")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to query user", err)
 	}
 
 	credential, err := LoadPasswordCredential(ctx, currentUser.ID)
 	if err != nil {
 		log.Error("failed to query password credential", err)
-		return nil, errors.New("database error")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load password credential", err)
 	}
 
 	// Verify old password
 	if err = VerifyPasswordCredential(ctx, credential, req.OldPassword); err != nil {
 		log.Error("old password verification failed", "username", currentUser.Username)
-		return nil, errors.New("old password is incorrect")
+		return nil, service.NewError(http.StatusBadRequest, "old password is incorrect")
 	}
 
-	if err = ApplyPasswordCredentialUpdate(ctx, credential, req.NewPassword, false); err != nil {
-		log.Error("failed to hash new password", err)
-		return nil, errors.New("failed to process new password")
+	if applyErr := ApplyPasswordCredentialUpdate(ctx, credential, req.NewPassword, false); applyErr != nil {
+		log.Error("failed to hash new password", applyErr)
+		return nil, applyErr
 	}
 
 	if err = serviceiamsession.DeleteUserSessionsExceptCurrent(ctx, currentUser.GetID(), sessionID); err != nil {
@@ -66,7 +65,7 @@ func (c *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 		WithSelect("user_id", "password_hash", "must_change_password", "password_changed_at").
 		Update(credential); err != nil {
 		log.Error("failed to update password", err)
-		return nil, errors.New("failed to update password")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update password", err)
 	}
 
 	serviceiamsession.InvalidateUserStateCache(ctx, currentUser.GetID())

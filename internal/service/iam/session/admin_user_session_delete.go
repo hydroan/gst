@@ -37,16 +37,16 @@ func (a *AdminUserSessionDeleteService) Delete(ctx *types.ServiceContext, req *m
 			return nil, service.NewError(http.StatusNotFound, "user not found")
 		}
 		log.Error("failed to load target user", err)
-		return nil, err
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", err)
 	}
-	if err = ensureAdminSessionTarget(ctx, targetUser); err != nil {
-		log.Error("failed to verify admin session target", err)
-		return nil, err
+	if targetErr := ensureAdminSessionTarget(ctx, targetUser); targetErr != nil {
+		log.Error("failed to verify admin session target", targetErr)
+		return nil, targetErr
 	}
 
-	if err = DeleteUserSessions(ctx, targetUserID); err != nil {
-		log.Error("failed to delete target user sessions", err)
-		return nil, err
+	if deleteErr := DeleteUserSessions(ctx, targetUserID); deleteErr != nil {
+		log.Error("failed to delete target user sessions", deleteErr)
+		return nil, deleteErr
 	}
 	if currentSession.UserID == targetUserID {
 		SessionManager.ClearCookie(ctx)

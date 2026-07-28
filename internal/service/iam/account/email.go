@@ -2,12 +2,14 @@ package serviceiamaccount
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
+	"github.com/hydroan/gst/service"
 )
 
 // NewEmailIdentity creates the primary email identity for the given IAM user.
@@ -28,7 +30,7 @@ func NewEmailIdentity(userID, email string) (*modeliamaccount.EmailIdentity, err
 // LoadEmailIdentity loads the primary email identity owned by the given IAM user.
 func LoadEmailIdentity(ctx context.Context, userID string) (*modeliamaccount.EmailIdentity, error) {
 	if userID == "" {
-		return nil, errors.New("user_id is required")
+		return nil, service.NewError(http.StatusBadRequest, "user_id is required")
 	}
 
 	identities := make([]*modeliamaccount.EmailIdentity, 0, 1)
@@ -36,7 +38,7 @@ func LoadEmailIdentity(ctx context.Context, userID string) (*modeliamaccount.Ema
 		WithLimit(1).
 		WithQuery(&modeliamaccount.EmailIdentity{UserID: userID}).
 		List(&identities); err != nil {
-		return nil, err
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load email identity", err)
 	}
 	if len(identities) == 0 {
 		return nil, database.ErrRecordNotFound

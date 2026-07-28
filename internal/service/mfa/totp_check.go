@@ -1,6 +1,8 @@
 package servicemfa
 
 import (
+	"net/http"
+
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
@@ -27,11 +29,11 @@ func (c *TOTPCheckService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPC
 	// Validate input.
 	if req.Username == "" {
 		log.Warnw("empty username provided", "client_ip", ctx.ClientIP())
-		return nil, errors.New("username is required")
+		return nil, service.NewError(http.StatusBadRequest, "username is required")
 	}
 	if req.Password == "" {
 		log.Warnw("empty password provided", "username", req.Username, "client_ip", ctx.ClientIP())
-		return nil, errors.New("password is required")
+		return nil, service.NewError(http.StatusBadRequest, "password is required")
 	}
 
 	account, err := currentAccountAuthenticator().AuthenticateByUsername(ctx, req.Username, req.Password)
@@ -42,10 +44,10 @@ func (c *TOTPCheckService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPC
 		}
 		if errors.Is(err, ErrAccountAuthenticationFailed) {
 			log.Warnw("authentication failed", "username", req.Username, "client_ip", ctx.ClientIP(), "error", err)
-			return nil, errors.New("authentication failed")
+			return nil, service.NewErrorWithCause(http.StatusUnauthorized, "authentication failed", err)
 		}
 		log.Errorw("failed to authenticate account", "username", req.Username, "error", err)
-		return nil, errors.New("authentication failed")
+		return nil, service.NewErrorWithCause(http.StatusUnauthorized, "authentication failed", err)
 	}
 	if err = validateAuthenticatedAccount(account, ""); err != nil {
 		log.Errorw("mfa account authenticator returned invalid account", "username", req.Username, "error", err)
@@ -57,7 +59,7 @@ func (c *TOTPCheckService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPC
 		WithQuery(&modelmfa.TOTPDevice{UserID: account.ID, IsActive: true}).
 		List(&devices); err != nil {
 		log.Errorw("failed to query TOTP devices", "user_id", account.ID, "error", err)
-		return nil, errors.New("failed to check MFA status")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to check MFA status", err)
 	}
 
 	requiresMFA := len(devices) > 0

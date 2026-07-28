@@ -79,7 +79,10 @@ func TestTOTPCheckCreateHidesAccountAuthenticationFailure(t *testing.T) {
 		Password: "wrong-password",
 	})
 
-	require.EqualError(t, err, "authentication failed")
+	// The client-facing message stays generic while the cause remains on the
+	// chain for logging.
+	requireServiceError(t, err, http.StatusUnauthorized, "authentication failed")
+	require.ErrorIs(t, err, ErrAccountAuthenticationFailed)
 }
 
 func TestTOTPCheckCreateReturnsConfigurationErrorForInvalidAuthenticatedAccount(t *testing.T) {
@@ -104,11 +107,12 @@ func TestTOTPCheckCreateReturnsConfigurationErrorForInvalidAuthenticatedAccount(
 
 func TestVerifyTOTPUnbindPasswordMapsAccountAuthenticatorErrors(t *testing.T) {
 	tests := []struct {
-		name       string
-		auth       AccountAuthenticator
-		wantErr    error
-		wantStatus int
-		wantMsg    string
+		name        string
+		auth        AccountAuthenticator
+		wantInvalid bool
+		wantErr     error
+		wantStatus  int
+		wantMsg     string
 	}{
 		{
 			name:       "missing authenticator",
@@ -124,7 +128,7 @@ func TestVerifyTOTPUnbindPasswordMapsAccountAuthenticatorErrors(t *testing.T) {
 					return nil, ErrAccountAuthenticationFailed
 				},
 			},
-			wantErr: errTOTPUnbindVerificationInvalid,
+			wantInvalid: true,
 		},
 		{
 			name: "nil authenticated account",
@@ -184,13 +188,14 @@ func TestVerifyTOTPUnbindPasswordMapsAccountAuthenticatorErrors(t *testing.T) {
 			resetAccountAuthenticatorAfterTest(t)
 			SetAccountAuthenticator(tt.auth)
 
-			err := verifyTOTPUnbindPassword(&types.ServiceContext{}, "user-1", "password")
+			invalid, err := verifyTOTPUnbindPassword(&types.ServiceContext{}, "user-1", "password")
 
+			require.Equal(t, tt.wantInvalid, invalid)
 			if tt.wantErr == nil && tt.wantStatus == 0 {
-				require.NoError(t, err)
+				require.Nil(t, err)
 				return
 			}
-			require.Error(t, err)
+			require.NotNil(t, err)
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
 			}

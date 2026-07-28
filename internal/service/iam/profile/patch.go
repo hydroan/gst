@@ -1,6 +1,8 @@
 package serviceiamprofile
 
 import (
+	"net/http"
+
 	"github.com/hydroan/gst/database"
 	modeliamprofile "github.com/hydroan/gst/internal/model/iam/profile"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
@@ -33,7 +35,7 @@ func (p *ProfilePatchService) Patch(ctx *types.ServiceContext, req *modeliamprof
 		applyProfilePatch(record, req)
 		if err = database.Database[*modeliamprofile.Profile](ctx).Create(record); err != nil {
 			log.Error("failed to create profile", err)
-			return nil, err
+			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to create profile", err)
 		}
 		return record, nil
 	}
@@ -42,9 +44,9 @@ func (p *ProfilePatchService) Patch(ctx *types.ServiceContext, req *modeliamprof
 	if len(columns) == 0 {
 		return record, nil
 	}
-	if err = updateProfileColumns(ctx, record, columns); err != nil {
-		log.Error("failed to update profile", err)
-		return nil, err
+	if updateErr := updateProfileColumns(ctx, record, columns); updateErr != nil {
+		log.Error("failed to update profile", updateErr)
+		return nil, updateErr
 	}
 
 	return record, nil

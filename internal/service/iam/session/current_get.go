@@ -32,8 +32,8 @@ func (c *CurrentGetService) Get(ctx *types.ServiceContext, req *model.Empty) (rs
 		log.Error("failed to load user for current session")
 		return nil, service.NewError(http.StatusUnauthorized, "session invalid")
 	}
-	if err = ensureSessionUserActive(currentUser); err != nil {
-		return nil, err
+	if activeErr := ensureSessionUserActive(currentUser); activeErr != nil {
+		return nil, activeErr
 	}
 	email, err := loadSessionEmail(ctx, currentUser.ID)
 	if err != nil {

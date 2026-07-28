@@ -3,7 +3,6 @@ package serviceiamuser
 import (
 	"net/http"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/internal/service/iam/adminauth"
@@ -27,7 +26,7 @@ func (u *UserStatusPatchService) Patch(ctx *types.ServiceContext, req *modeliamu
 	switch req.Status {
 	case modeliamuser.UserStatusActive, modeliamuser.UserStatusInactive, modeliamuser.UserStatusLocked:
 	default:
-		return nil, errors.New("invalid status: must be active, inactive, or locked")
+		return nil, service.NewError(http.StatusBadRequest, "invalid status: must be active, inactive, or locked")
 	}
 
 	actor, target, err := LoadActorAndTarget(ctx, targetUserID)
@@ -57,7 +56,7 @@ func (u *UserStatusPatchService) Patch(ctx *types.ServiceContext, req *modeliamu
 		WithSelect("username", "status").
 		Update(target); err != nil {
 		log.Error("failed to update user status", err)
-		return nil, errors.Wrap(err, "failed to update user status")
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update user status", err)
 	}
 
 	if shouldInvalidateUserSessions(req.Status) {
