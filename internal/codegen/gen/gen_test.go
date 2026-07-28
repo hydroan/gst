@@ -682,7 +682,7 @@ func TestGenServiceMethod5(t *testing.T) {
 			want: `func (u *Importer) Import(ctx *types.ServiceContext, reader io.Reader) (users []*model.User, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user import")
-	return users, err
+	return users, nil
 }`,
 		},
 	}
@@ -721,7 +721,7 @@ func TestGenServiceMethod6(t *testing.T) {
 			want: `func (u *Exporter) Export(ctx *types.ServiceContext, users ...*model.User) (data []byte, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user export")
-	return data, err
+	return data, nil
 }`,
 		},
 	}

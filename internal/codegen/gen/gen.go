@@ -408,25 +408,29 @@ func genServiceMethod4(info *ModelInfo, action *dsl.Action, reqName, rspName str
 	)
 }
 
-// genServiceMethod5 uses AST to generate Import method.
+// genServiceMethod5 uses AST to generate Import method. The scaffold returns
+// a literal nil error: returning the never-assigned named err would fail the
+// service error discipline check on the very next gg run.
 func genServiceMethod5(info *ModelInfo, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod5(
 		info.ModelVarName, info.ModelName, info.ModelPkgName, phase, roleName,
 		StmtLogWithContext(info.ModelVarName),
 		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
 		EmptyLine(),
-		Returns(ast.NewIdent(pluralizeCli.Plural(strings.ToLower(info.ModelName))), ast.NewIdent("err")),
+		Returns(ast.NewIdent(pluralizeCli.Plural(strings.ToLower(info.ModelName))), ast.NewIdent("nil")),
 	)
 }
 
-// genServiceMethod6 uses AST to generate Export method.
+// genServiceMethod6 uses AST to generate Export method. Like the Import
+// scaffold, it returns a literal nil error to keep generated code compliant
+// with the service error discipline check.
 func genServiceMethod6(info *ModelInfo, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod6(
 		info.ModelVarName, info.ModelName, info.ModelPkgName, phase, roleName,
 		StmtLogWithContext(info.ModelVarName),
 		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
 		EmptyLine(),
-		Returns(ast.NewIdent("data"), ast.NewIdent("err")),
+		Returns(ast.NewIdent("data"), ast.NewIdent("nil")),
 	)
 }
 
