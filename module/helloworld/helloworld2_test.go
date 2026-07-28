@@ -113,7 +113,16 @@ func TestHelloworld2Module(t *testing.T) {
 				items := make([]*helloworld.Helloworld2, 0)
 				total := new(int)
 
-				_, err = cli.List(&items, total)
+				// The test database keeps the records of earlier runs and an
+				// unfiltered list is capped by the framework page limit, which
+				// eventually leaves the record just created outside the
+				// response. Listing by id keeps the assertion about the list
+				// hooks independent of how many records the table holds.
+				var listCli *client.Client
+				listCli, err = client.New(addr2, client.WithToken(token), client.WithQuery("id", id))
+				require.NoError(t, err)
+
+				_, err = listCli.List(&items, total)
 				require.NoError(t, err)
 
 				item := findHelloworld2TestRecord(items, id)
