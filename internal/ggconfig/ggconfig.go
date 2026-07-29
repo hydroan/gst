@@ -5,6 +5,7 @@ package ggconfig
 
 import (
 	"bytes"
+	"go/token"
 	"io"
 	"os"
 	"path/filepath"
@@ -35,6 +36,9 @@ type Config struct {
 type GenConfig struct {
 	// Routes configures route generation behavior.
 	Routes GenRoutesConfig `yaml:"routes"`
+
+	// Models configures model registration generation behavior.
+	Models GenModelsConfig `yaml:"models"`
 }
 
 // GenRoutesConfig configures route generation behavior.
@@ -43,6 +47,14 @@ type GenRoutesConfig struct {
 	// generation. A matched action drops out of the generated registration
 	// files while its service file stays on disk.
 	Ignore RouteIgnoreRules `yaml:"ignore"`
+}
+
+// GenModelsConfig configures model registration generation behavior.
+type GenModelsConfig struct {
+	// Ignore lists models excluded from the generated model.Register calls.
+	// A matched model keeps its routes, services, and generated files; only
+	// its registration (and with it table creation) disappears.
+	Ignore ModelIgnoreRules `yaml:"ignore"`
 }
 
 // RouteIgnoreRules is the parsed gen.routes.ignore mapping, flattened into
@@ -164,9 +176,9 @@ func decodeIgnoreRuleValue(path string, value *yaml.Node) ([]string, string, err
 			}
 		}
 		if fromSet {
-			normalized, err := normalizeRuleFrom(path, from)
+			normalized, err := normalizeFromDir(from)
 			if err != nil {
-				return nil, "", err
+				return nil, "", errors.Wrapf(err, "route %q", path)
 			}
 			from = normalized
 		}
@@ -180,16 +192,16 @@ func decodeIgnoreRuleValue(path string, value *yaml.Node) ([]string, string, err
 	return methods, from, nil
 }
 
-// normalizeRuleFrom cleans and validates the "from" directory prefix of an
+// normalizeFromDir cleans and validates a "from" directory prefix of an
 // ignore entry. It must be a relative directory such as "model/iam".
-func normalizeRuleFrom(path, from string) (string, error) {
+func normalizeFromDir(from string) (string, error) {
 	from = strings.Trim(strings.TrimSpace(from), "/")
 	if from == "" {
-		return "", errors.Newf("route %q has an empty from; drop the field to match all models", path)
+		return "", errors.New("empty from; drop the field to match all models")
 	}
 	cleaned := filepath.ToSlash(filepath.Clean(from))
 	if cleaned != from || strings.HasPrefix(cleaned, "..") {
-		return "", errors.Newf("route %q has invalid from %q: want a relative directory like \"model/iam\"", path, from)
+		return "", errors.Newf("invalid from %q: want a relative directory like \"model/iam\"", from)
 	}
 	return cleaned, nil
 }
@@ -197,11 +209,17 @@ func normalizeRuleFrom(path, from string) (string, error) {
 // MatchesSource reports whether the rule applies to an action declared in
 // the given model file. Rules without a From prefix apply to every model.
 func (r RouteRule) MatchesSource(modelFilePath string) bool {
-	if r.From == "" {
+	return matchesSourceDir(r.From, modelFilePath)
+}
+
+// matchesSourceDir reports whether modelFilePath lives under the from
+// directory prefix. An empty from matches every path.
+func matchesSourceDir(from, modelFilePath string) bool {
+	if from == "" {
 		return true
 	}
 	modelFilePath = filepath.ToSlash(modelFilePath)
-	return modelFilePath == r.From || strings.HasPrefix(modelFilePath, r.From+"/")
+	return modelFilePath == from || strings.HasPrefix(modelFilePath, from+"/")
 }
 
 // ParseRouteRule parses a "METHOD /api/path" entry into a RouteRule.
@@ -283,6 +301,107 @@ func NormalizeRoutePath(path string) []string {
 		}
 	}
 	return segments
+}
+
+// ModelIgnoreRules is the parsed gen.models.ignore mapping, one ModelRule
+// per model name entry.
+type ModelIgnoreRules []ModelRule
+
+// ModelRule is a single parsed model registration ignore entry.
+type ModelRule struct {
+	// Name is the Go struct name of the model, e.g. "Profile".
+	Name string
+
+	// From restricts the rule to models whose file path lives under this
+	// directory prefix (e.g. "model/iam"). Empty means the rule applies to
+	// every model with a matching name. It protects a project's own model
+	// of the same name declared elsewhere.
+	From string
+
+	// Raw preserves the original entry for error and log output.
+	Raw string
+}
+
+// MatchesSource reports whether the rule applies to a model declared in
+// the given model file. Rules without a From prefix apply to every model.
+func (r ModelRule) MatchesSource(modelFilePath string) bool {
+	return matchesSourceDir(r.From, modelFilePath)
+}
+
+// UnmarshalYAML parses the model-name mapping form of gen.models.ignore:
+//
+//	ignore:
+//	  Profile:
+//	    from: model/iam
+//	  Widget:
+//
+// Each key is the Go struct name of a model whose generated model.Register
+// call gg gen must skip. The optional object value adds "from", restricting
+// the rule to models declared under that directory so a project's own model
+// of the same name elsewhere keeps registering.
+func (r *ModelIgnoreRules) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind != yaml.MappingNode {
+		return errors.New("gen.models.ignore must be a mapping of model name to an optional {from} object")
+	}
+
+	rules := make([]ModelRule, 0, len(value.Content)/2)
+	seenNames := make(map[string]struct{}, len(value.Content)/2)
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		var name string
+		if err := value.Content[i].Decode(&name); err != nil {
+			return errors.Wrap(err, "model name must be a string")
+		}
+		if !token.IsIdentifier(name) || !token.IsExported(name) {
+			return errors.Newf("model %q is not an exported Go identifier", name)
+		}
+		if _, ok := seenNames[name]; ok {
+			return errors.Newf("duplicate model %q", name)
+		}
+		seenNames[name] = struct{}{}
+
+		from, err := decodeModelIgnoreRuleValue(name, value.Content[i+1])
+		if err != nil {
+			return err
+		}
+		rules = append(rules, ModelRule{Name: name, From: from, Raw: name})
+	}
+
+	*r = rules
+	return nil
+}
+
+// decodeModelIgnoreRuleValue decodes one ignore entry value: either empty
+// (no restriction) or a mapping with an optional "from" directory prefix.
+// Unknown mapping keys are rejected to keep gst.yaml parsing strict.
+func decodeModelIgnoreRuleValue(name string, value *yaml.Node) (string, error) {
+	if value.Kind == yaml.ScalarNode && value.Tag == "!!null" {
+		return "", nil
+	}
+	if value.Kind != yaml.MappingNode {
+		return "", errors.Newf("model %q must map to an optional {from} object", name)
+	}
+
+	var from string
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		var key string
+		if err := value.Content[i].Decode(&key); err != nil {
+			return "", errors.Wrapf(err, "invalid key in model %q", name)
+		}
+		switch key {
+		case "from":
+			if err := value.Content[i+1].Decode(&from); err != nil {
+				return "", errors.Wrapf(err, "from of model %q must be a string", name)
+			}
+			normalized, err := normalizeFromDir(from)
+			if err != nil {
+				return "", errors.Wrapf(err, "model %q", name)
+			}
+			from = normalized
+		default:
+			return "", errors.Newf("model %q has unknown field %q, want from", name, key)
+		}
+	}
+	return from, nil
 }
 
 // Load reads the gst.yaml file from dir. A missing file is not an error

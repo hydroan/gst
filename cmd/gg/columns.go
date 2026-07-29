@@ -189,6 +189,10 @@ func fail(err error) {
 // parameters — that opt-in is what gives it a filter and sort column
 // namespace worth generating references for.
 //
+// Models ignored by gst.yaml gen.models.ignore are also compiled in as
+// explicit entries but skip the query-parameter gate: they remain
+// table-backed and their column files must not drift from the sources.
+//
 // When every scanned model is registered, the placeholders collapse to
 // nothing and the program never references modelschema.IsQueryable, so such
 // projects keep building against framework versions that do not export it.
@@ -196,12 +200,16 @@ func buildColumnsProgram(module string, models []*gen.ModelInfo) string {
 	program := strings.ReplaceAll(columnsProgram, "{{MODULE}}", module)
 
 	unregistered := make([]*gen.ModelInfo, 0, len(models))
+	ignored := make([]*gen.ModelInfo, 0, len(models))
 	for _, m := range models {
-		if m.Design.Enabled && !m.Design.Migrate {
+		switch {
+		case m.RegisterIgnored:
+			ignored = append(ignored, m)
+		case m.Design.Enabled && !m.Design.Migrate:
 			unregistered = append(unregistered, m)
 		}
 	}
-	if len(unregistered) == 0 {
+	if len(unregistered) == 0 && len(ignored) == 0 {
 		program = strings.ReplaceAll(program, "{{UNREGISTERED_IMPORTS}}", "")
 		return strings.ReplaceAll(program, "{{UNREGISTERED_MODELS}}", "")
 	}
@@ -209,9 +217,12 @@ func buildColumnsProgram(module string, models []*gen.ModelInfo) string {
 	// One deterministic alias per package: the fixed prefix cannot collide
 	// with the template's own imports, and sorting keeps the program text,
 	// and with it the inspection cache key, stable across runs.
-	aliases := make(map[string]string, len(unregistered))
-	paths := make([]string, 0, len(unregistered))
-	for _, m := range unregistered {
+	extra := make([]*gen.ModelInfo, 0, len(unregistered)+len(ignored))
+	extra = append(extra, unregistered...)
+	extra = append(extra, ignored...)
+	aliases := make(map[string]string, len(extra))
+	paths := make([]string, 0, len(extra))
+	for _, m := range extra {
 		path := modelPkgPath(m)
 		if _, ok := aliases[path]; !ok {
 			aliases[path] = ""
@@ -222,12 +233,16 @@ func buildColumnsProgram(module string, models []*gen.ModelInfo) string {
 	for i, path := range paths {
 		aliases[path] = fmt.Sprintf("vm%d", i)
 	}
-	sort.Slice(unregistered, func(i, j int) bool {
-		if pi, pj := modelPkgPath(unregistered[i]), modelPkgPath(unregistered[j]); pi != pj {
-			return pi < pj
-		}
-		return unregistered[i].ModelName < unregistered[j].ModelName
-	})
+	sortByPackageAndName := func(entries []*gen.ModelInfo) {
+		sort.Slice(entries, func(i, j int) bool {
+			if pi, pj := modelPkgPath(entries[i]), modelPkgPath(entries[j]); pi != pj {
+				return pi < pj
+			}
+			return entries[i].ModelName < entries[j].ModelName
+		})
+	}
+	sortByPackageAndName(unregistered)
+	sortByPackageAndName(ignored)
 
 	var imports strings.Builder
 	for _, path := range paths {
@@ -235,21 +250,34 @@ func buildColumnsProgram(module string, models []*gen.ModelInfo) string {
 	}
 
 	var entries strings.Builder
-	entries.WriteString(`	// Models that declare a Design but no Migrate never reach the registry.
+	if len(unregistered) > 0 {
+		entries.WriteString(`	// Models that declare a Design but no Migrate never reach the registry.
 	// Their query columns resolve the same way, so those that opted in to
 	// framework query parameters are inspected alongside the registered ones.
 	for _, m := range []any{
 `)
-	for _, m := range unregistered {
-		fmt.Fprintf(&entries, "\t\t&%s.%s{},\n", aliases[modelPkgPath(m)], m.ModelName)
-	}
-	entries.WriteString(`	} {
+		for _, m := range unregistered {
+			fmt.Fprintf(&entries, "\t\t&%s.%s{},\n", aliases[modelPkgPath(m)], m.ModelName)
+		}
+		entries.WriteString(`	} {
 		if !modelschema.IsQueryable(m) {
 			continue
 		}
 		models = append(models, m)
 	}
 `)
+	}
+	if len(ignored) > 0 {
+		entries.WriteString(`	// Models whose registration is ignored by gst.yaml gen.models.ignore
+	// stay table-backed: their column files must keep matching the
+	// module-copied model sources, so they are inspected unconditionally.
+	models = append(models,
+`)
+		for _, m := range ignored {
+			fmt.Fprintf(&entries, "\t\t&%s.%s{},\n", aliases[modelPkgPath(m)], m.ModelName)
+		}
+		entries.WriteString("\t)\n")
+	}
 
 	program = strings.ReplaceAll(program, "{{UNREGISTERED_IMPORTS}}", imports.String())
 	return strings.ReplaceAll(program, "{{UNREGISTERED_MODELS}}", entries.String())

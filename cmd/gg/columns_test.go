@@ -110,6 +110,50 @@ func TestBuildColumnsProgram(t *testing.T) {
 	})
 }
 
+func TestBuildColumnsProgramInspectsIgnoredModelsUnconditionally(t *testing.T) {
+	ignored := &gen.ModelInfo{
+		ModulePath: "tmpapp", ModelPkgName: "user", ModelName: "User",
+		ModelFileDir: "model/iam/user", ModelFilePath: "model/iam/user/user.go",
+		Design:          &dsl.Design{Enabled: true, Migrate: false},
+		RegisterIgnored: true,
+	}
+	virtual := &gen.ModelInfo{
+		ModulePath: "tmpapp", ModelPkgName: "stats", ModelName: "Summary",
+		ModelFileDir: "model/stats", ModelFilePath: "model/stats/summary.go",
+		Design: &dsl.Design{Enabled: true, Migrate: false},
+	}
+
+	program := buildColumnsProgram("tmpapp", []*gen.ModelInfo{ignored, virtual})
+
+	t.Run("AppendsIgnoredModelsWithoutTheCapabilityGuard", func(t *testing.T) {
+		// A model ignored by gst.yaml gen.models.ignore stays table-backed:
+		// its column file must keep matching the module-copied source, so it
+		// is inspected unconditionally instead of behind IsQueryable.
+		require.Contains(t, program, "models = append(models,\n\t\t&vm0.User{},\n\t)")
+	})
+
+	t.Run("KeepsTheCapabilityGuardForVirtualModels", func(t *testing.T) {
+		require.Contains(t, program, "&vm1.Summary{},")
+		require.Contains(t, program, "modelschema.IsQueryable")
+	})
+
+	t.Run("ProducesParseableSource", func(t *testing.T) {
+		_, err := parser.ParseFile(token.NewFileSet(), "main.go", program, 0)
+		require.NoError(t, err)
+	})
+
+	t.Run("OmitsTheGuardWhenOnlyIgnoredModelsNeedInspection", func(t *testing.T) {
+		// Same compatibility rule as the virtual-model enumeration: a project
+		// whose only extra entries are ignored models must not reference
+		// modelschema.IsQueryable at all.
+		bare := buildColumnsProgram("tmpapp", []*gen.ModelInfo{ignored})
+		require.NotContains(t, bare, "IsQueryable")
+		require.Contains(t, bare, "&vm0.User{},")
+		_, err := parser.ParseFile(token.NewFileSet(), "main.go", bare, 0)
+		require.NoError(t, err)
+	})
+}
+
 func TestGroupColumnsByFile(t *testing.T) {
 	id := columnInfo{GoName: "ID", DBName: "id", TypeExpr: "string", TypeName: "string"}
 	sources := map[string]string{

@@ -131,6 +131,17 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 	reportRouteIgnoreWarnings(ignoreResult)
 
+	// Model ignores run after route ignores so the live-action warning sees
+	// the final enabled-action set.
+	modelIgnores := applyModelIgnores(allModels, projectCfg.Gen.Models.Ignore)
+	if !opts.Quiet && len(modelIgnores.Matches) > 0 {
+		clioutput.Section("Ignore Models")
+		for _, match := range modelIgnores.Matches {
+			clioutput.Item("IGNORE", "model %s (%s)", match.Model, match.File)
+		}
+	}
+	reportModelIgnoreWarnings(modelIgnores)
+
 	// Record old service files list (if prune option is enabled)
 	var oldServiceFiles []string
 	if prune {

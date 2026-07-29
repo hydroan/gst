@@ -39,6 +39,11 @@ type ModelInfo struct {
 
 	// custom request and response related fields
 	Design *dsl.Design
+
+	// RegisterIgnored marks a model matched by a gst.yaml gen.models.ignore
+	// rule: its generated model.Register call is skipped while column
+	// generation still treats it as a table-backed model.
+	RegisterIgnored bool
 }
 
 type ServiceTargetInfo struct {
