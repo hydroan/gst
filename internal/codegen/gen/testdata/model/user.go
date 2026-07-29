@@ -23,23 +23,23 @@ type UserUpdateResponse struct {
 
 func (*User) Design() {
 	Create(func() {
-		Payload[UserCreateRequest]()
+		Payload[*UserCreateRequest]()
 		Result[*User]()
 	})
 
 	Update(func() {
-		Payload[User]()
+		Payload[*User]()
 		Result[*UserUpdateResponse]()
 	})
 
 	Patch(func() {
-		Payload[User]()
+		Payload[*User]()
 		Result[*User]()
 	})
 
 	UpdateMany(func() {
-		Payload[User]()
-		Result[User]()
+		Payload[*User]()
+		Result[*User]()
 	})
 
 	DeleteMany(func() {

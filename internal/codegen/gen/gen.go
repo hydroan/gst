@@ -402,7 +402,7 @@ func genServiceMethod3(info *ModelInfo, action *dsl.Action, phase consts.Phase, 
 // genServiceMethod4 uses AST to generate Create,Delete,Update,Patch,List,Get,CreateMany,DeleteMany,UpdateMany,PatchMany methods.
 func genServiceMethod4(info *ModelInfo, action *dsl.Action, reqName, rspName string, phase consts.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod4(
-		info.ModelVarName, info.ModelName, info.ModelPkgName, reqName, rspName, phase, roleName,
+		info.ModelVarName, info.ModelPkgName, reqName, rspName, phase, roleName,
 		StmtLogWithContext(info.ModelVarName),
 		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
 		EmptyLine(),

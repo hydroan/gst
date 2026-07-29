@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
-	"strings"
 
 	"github.com/hydroan/gst/types/consts"
 )
@@ -131,43 +130,15 @@ func StmtRouterRegister(modelPkgName, modelName, reqName, rspName string, router
 	// The dsl.PayloadEmpty sentinel resolves to *gstmodel.Empty. The router
 	// file aggregates imports from many model packages, so the gst model
 	// package is always referenced under the gstmodel alias to avoid clashing
-	// with a business root model package named "model". Otherwise, if reqName
-	// is equal to modelName or reqName starts with *, then the reqExpr use
-	// StarExpr, or use SelectorExpr.
+	// with a business root model package named "model". Any other action type
+	// is emitted in the canonical pointer form.
 	var reqExpr ast.Expr
-	switch {
-	case isEmptyPayload(reqName):
+	if isEmptyPayload(reqName) {
 		reqExpr = emptyReqExpr(gstModelPkgAlias)
-	case strings.HasPrefix(reqName, "*") || modelName == reqName:
-		reqExpr = &ast.StarExpr{
-			X: &ast.SelectorExpr{
-				X:   ast.NewIdent(modelPkgName),
-				Sel: ast.NewIdent(strings.TrimPrefix(reqName, "*")),
-			},
-		}
-	default:
-		reqExpr = &ast.SelectorExpr{
-			X:   ast.NewIdent(modelPkgName),
-			Sel: ast.NewIdent(reqName),
-		}
-	}
-
-	// If rspName is equal to modelName or rspName starts with *, then the rspExpr use StarExpr,
-	// otherwise use SelectorExpr
-	var rspExpr ast.Expr
-	if strings.HasPrefix(rspName, "*") || modelName == rspName {
-		rspExpr = &ast.StarExpr{
-			X: &ast.SelectorExpr{
-				X:   ast.NewIdent(modelPkgName),
-				Sel: ast.NewIdent(strings.TrimPrefix(rspName, "*")),
-			},
-		}
 	} else {
-		rspExpr = &ast.SelectorExpr{
-			X:   ast.NewIdent(modelPkgName),
-			Sel: ast.NewIdent(rspName),
-		}
+		reqExpr = actionTypeExpr(modelPkgName, reqName)
 	}
+	rspExpr := actionTypeExpr(modelPkgName, rspName)
 
 	var paramExpr ast.Expr
 	// expr like: &types.ControllerConfig[*config.Namespace]{}

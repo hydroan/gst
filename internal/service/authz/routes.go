@@ -10,10 +10,10 @@ import (
 )
 
 type RoutesService struct {
-	service.Base[*modelauthz.Routes, *modelauthz.Routes, modelauthz.RoutesRsp]
+	service.Base[*modelauthz.Routes, *modelauthz.Routes, *modelauthz.RoutesRsp]
 }
 
-func (RoutesService) List(ctx *types.ServiceContext, req *modelauthz.Routes) (modelauthz.RoutesRsp, error) {
+func (RoutesService) List(ctx *types.ServiceContext, req *modelauthz.Routes) (*modelauthz.RoutesRsp, error) {
 	routes := router.Routes()
 	items := make([]modelauthz.Route, 0, len(routes))
 	for path, methods := range routes {
@@ -25,5 +25,5 @@ func (RoutesService) List(ctx *types.ServiceContext, req *modelauthz.Routes) (mo
 	sort.Slice(items, func(i int, j int) bool {
 		return items[i].Path < items[j].Path
 	})
-	return modelauthz.RoutesRsp{Items: items}, nil
+	return &modelauthz.RoutesRsp{Items: items}, nil
 }

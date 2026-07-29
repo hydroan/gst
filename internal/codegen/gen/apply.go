@@ -295,14 +295,15 @@ func applyServiceMethod4(fn *ast.FuncDecl, action *dsl.Action) bool {
 }
 
 // applyTypeRef rewrites a *pkg.Type or pkg.Type expression to reference
-// targetPkg and actionType. A leading '*' in actionType selects the pointer
-// form. When targetPkg is empty the current package qualifier is kept.
-// It returns the possibly replaced expression and whether anything changed.
+// targetPkg and actionType in the canonical pointer form. dsl.Validate rejects
+// value type declarations, so an actionType arriving without the leading '*'
+// still yields the pointer form. When targetPkg is empty the current package
+// qualifier is kept. It returns the possibly replaced expression and whether
+// anything changed.
 func applyTypeRef(expr ast.Expr, targetPkg, actionType string) (ast.Expr, bool) {
 	if actionType == "" {
 		return expr, false
 	}
-	pointer := strings.HasPrefix(actionType, "*")
 	typeName := strings.TrimPrefix(actionType, "*")
 
 	var sel *ast.SelectorExpr
@@ -339,23 +340,19 @@ func applyTypeRef(expr ast.Expr, targetPkg, actionType string) (ast.Expr, bool) 
 		changed = true
 	}
 
-	_, isPointer := expr.(*ast.StarExpr)
-	if isPointer == pointer {
+	if _, isPointer := expr.(*ast.StarExpr); isPointer {
 		return expr, changed
 	}
-	if pointer {
-		// Position the * just before the selector
-		return &ast.StarExpr{Star: sel.Pos() - 1, X: sel}, true
-	}
-	return sel, true
+	// Position the * just before the selector
+	return &ast.StarExpr{Star: sel.Pos() - 1, X: sel}, true
 }
 
 // applyServiceType updates a service struct type to match the generated service generics.
 // It transforms: type user struct { service.Base[*model.User, *model.User, *model.User] }
 // into:         type user struct { service.Base[*model.User, *model.UserReq, *model.UserRsp] }
-// or:           type user struct { service.Base[*model.User, model.UserReq, model.UserRsp] }
-// depending on whether action.Payload/Result starts with '*'. When correctModelName
-// is provided, it also corrects the first generic parameter to the current model.
+// following the action's Payload/Result in the canonical pointer form. When
+// correctModelName is provided, it also corrects the first generic parameter
+// to the current model.
 func applyServiceType(spec *ast.TypeSpec, action *dsl.Action, correctModelName ...string) bool {
 	if spec == nil || action == nil {
 		return false
@@ -409,8 +406,8 @@ func applyServiceType(spec *ast.TypeSpec, action *dsl.Action, correctModelName .
 }
 
 // applyServiceTypeParam updates a specific type parameter in service.Base[T1, T2, T3]
-// to reference targetPkg and actionType. A leading '*' in actionType selects
-// the pointer form; an empty targetPkg keeps the current package qualifier.
+// to reference targetPkg and actionType in the canonical pointer form; an
+// empty targetPkg keeps the current package qualifier.
 func applyServiceTypeParam(indexListExpr *ast.IndexListExpr, paramIndex int, targetPkg, actionType string) bool {
 	if paramIndex >= len(indexListExpr.Indices) || actionType == "" {
 		return false

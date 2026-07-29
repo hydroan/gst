@@ -6,7 +6,7 @@ import (
 	"github.com/hydroan/gst/types"
 )
 
-var _ types.Module[*Routes, *Routes, RoutesRsp] = (*RoutesModule)(nil)
+var _ types.Module[*Routes, *Routes, *RoutesRsp] = (*RoutesModule)(nil)
 
 type (
 	Route        = modelauthz.Route
@@ -15,7 +15,7 @@ type (
 	RoutesModule struct{}
 )
 
-func (*RoutesModule) Service() types.Service[*Routes, *Routes, RoutesRsp] {
+func (*RoutesModule) Service() types.Service[*Routes, *Routes, *RoutesRsp] {
 	return &serviceauthz.RoutesService{}
 }
 func (*RoutesModule) Route() string { return "authz/routes" }

@@ -18,7 +18,9 @@ func TestApplyServiceTypePointerConversion(t *testing.T) {
 		want   string
 	}{
 		{
-			name: "convert_pointer_to_non_pointer",
+			// Bare action type names coming from a non-validated source keep
+			// the canonical pointer type parameters.
+			name: "bare_action_keeps_pointer_params",
 			code: `package service
 
 import (
@@ -34,7 +36,7 @@ type user struct {
 				Payload: "UserReq",
 				Result:  "UserRsp",
 			},
-			want: "service.Base[*model.User, model.UserReq, model.UserRsp]",
+			want: "service.Base[*model.User, *model.UserReq, *model.UserRsp]",
 		},
 		{
 			name: "convert_non_pointer_to_pointer",
@@ -75,7 +77,9 @@ type user struct {
 			want: "service.Base[*model.User, *model.UserReq, *model.UserRsp]",
 		},
 		{
-			name: "keep_non_pointer_type",
+			// Hand-written value type parameters are corrected to the
+			// canonical pointer form even when the action carries bare names.
+			name: "bare_action_converts_value_params",
 			code: `package service
 
 import (
@@ -91,10 +95,10 @@ type user struct {
 				Payload: "UserReq",
 				Result:  "UserRsp",
 			},
-			want: "service.Base[*model.User, model.UserReq, model.UserRsp]",
+			want: "service.Base[*model.User, *model.UserReq, *model.UserRsp]",
 		},
 		{
-			name: "mixed_conversion",
+			name: "mixed_params_canonicalized",
 			code: `package service
 
 import (
@@ -110,7 +114,7 @@ type user struct {
 				Payload: "UserReq",
 				Result:  "*UserRsp",
 			},
-			want: "service.Base[*model.User, model.UserReq, *model.UserRsp]",
+			want: "service.Base[*model.User, *model.UserReq, *model.UserRsp]",
 		},
 	}
 

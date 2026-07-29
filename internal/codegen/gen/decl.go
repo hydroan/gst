@@ -83,6 +83,18 @@ type userCreator struct {
 	service.Base[*model.User, *model.User, *model.User]
 }
 */
+// actionTypeExpr builds the type expression of one explicit action type in the
+// canonical pointer form. dsl.Validate rejects value type declarations, so a
+// name arriving without the leading '*' still yields the pointer form.
+func actionTypeExpr(pkgName, typeName string) ast.Expr {
+	return &ast.StarExpr{
+		X: &ast.SelectorExpr{
+			X:   ast.NewIdent(pkgName),
+			Sel: ast.NewIdent(strings.TrimPrefix(typeName, "*")),
+		},
+	}
+}
+
 func types(modelPkgName, modelName, reqName, rspName string, _ consts.Phase, roleName string, withComment bool) *ast.GenDecl {
 	comments := []*ast.Comment{}
 
@@ -94,42 +106,15 @@ func types(modelPkgName, modelName, reqName, rspName string, _ consts.Phase, rol
 	}
 
 	// The dsl.PayloadEmpty sentinel resolves to *model.Empty from the gst
-	// model package; otherwise, if reqName is equal to modelName or reqName
-	// starts with *, then the reqExpr use StarExpr, or use SelectorExpr.
+	// model package; any other action type is emitted in the canonical
+	// pointer form.
 	var reqExpr ast.Expr
-	switch {
-	case isEmptyPayload(reqName):
+	if isEmptyPayload(reqName) {
 		reqExpr = emptyReqExpr(emptyReqPkgName(modelPkgName))
-	case strings.HasPrefix(reqName, "*") || modelName == reqName:
-		reqExpr = &ast.StarExpr{
-			X: &ast.SelectorExpr{
-				X:   ast.NewIdent(modelPkgName),
-				Sel: ast.NewIdent(strings.TrimPrefix(reqName, "*")),
-			},
-		}
-	default:
-		reqExpr = &ast.SelectorExpr{
-			X:   ast.NewIdent(modelPkgName),
-			Sel: ast.NewIdent(reqName),
-		}
-	}
-
-	// if rspName is equal to modelName or rspName starts with *, then the rspExpr use StarExpr,
-	// otherwise use SelectorExpr
-	var rspExpr ast.Expr
-	if strings.HasPrefix(rspName, "*") || modelName == rspName {
-		rspExpr = &ast.StarExpr{
-			X: &ast.SelectorExpr{
-				X:   ast.NewIdent(modelPkgName),
-				Sel: ast.NewIdent(strings.TrimPrefix(rspName, "*")),
-			},
-		}
 	} else {
-		rspExpr = &ast.SelectorExpr{
-			X:   ast.NewIdent(modelPkgName),
-			Sel: ast.NewIdent(rspName),
-		}
+		reqExpr = actionTypeExpr(modelPkgName, reqName)
 	}
+	rspExpr := actionTypeExpr(modelPkgName, rspName)
 
 	return &ast.GenDecl{
 		Doc: &ast.CommentGroup{
@@ -344,44 +329,17 @@ func serviceMethod3(recvName, modelName, modelPkgName string, phase consts.Phase
 // For example:
 //
 //	func (u *Creator) Create(ctx *types.ServiceContext, user *model.User) (rsp *model.User, err error) {\n}
-func serviceMethod4(recvName, modelName, modelPkgName, reqName, rspName string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
+func serviceMethod4(recvName, modelPkgName, reqName, rspName string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	// The dsl.PayloadEmpty sentinel resolves to *model.Empty from the gst
-	// model package; otherwise, if reqName is equal to modelName or reqName
-	// starts with *, then the reqExpr use StarExpr, or use SelectorExpr.
+	// model package; any other action type is emitted in the canonical
+	// pointer form.
 	var reqExpr ast.Expr
-	switch {
-	case isEmptyPayload(reqName):
+	if isEmptyPayload(reqName) {
 		reqExpr = emptyReqExpr(emptyReqPkgName(modelPkgName))
-	case strings.HasPrefix(reqName, "*") || modelName == reqName:
-		reqExpr = &ast.StarExpr{
-			X: &ast.SelectorExpr{
-				X:   ast.NewIdent(modelPkgName),
-				Sel: ast.NewIdent(strings.TrimPrefix(reqName, "*")),
-			},
-		}
-	default:
-		reqExpr = &ast.SelectorExpr{
-			X:   ast.NewIdent(modelPkgName),
-			Sel: ast.NewIdent(reqName),
-		}
-	}
-
-	// if rspName is equal to modelName or rspName starts with *, then the rspExpr use StarExpr,
-	// otherwise use SelectorExpr
-	var rspExpr ast.Expr
-	if strings.HasPrefix(rspName, "*") || modelName == rspName {
-		rspExpr = &ast.StarExpr{
-			X: &ast.SelectorExpr{
-				X:   ast.NewIdent(modelPkgName),
-				Sel: ast.NewIdent(strings.TrimPrefix(rspName, "*")),
-			},
-		}
 	} else {
-		rspExpr = &ast.SelectorExpr{
-			X:   ast.NewIdent(modelPkgName),
-			Sel: ast.NewIdent(rspName),
-		}
+		reqExpr = actionTypeExpr(modelPkgName, reqName)
 	}
+	rspExpr := actionTypeExpr(modelPkgName, rspName)
 
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{

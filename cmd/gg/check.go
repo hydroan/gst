@@ -31,7 +31,7 @@ var checkCmd = &cobra.Command{
 3. Model code should not call service or dao code
 4. Model directories and files must be singular
 5. Model file names should not contain hyphens (use underscores instead)
-6. Model struct json tags should use snake_case naming
+6. Model struct and explicit DSL Payload/Result type json tags should use snake_case naming
 7. Model package names must match their directory names
 8. Explicit DSL Payload types should end with Req and Result types should end with Rsp
 9. Model files should contain at most one model struct
@@ -127,7 +127,7 @@ func collectProjectChecks() []projectCheckResult {
 	results := []projectCheckResult{
 		{Name: "Architecture dependencies", Violations: CheckArchitectureDependency(ignore)},
 		{Name: "Model singular naming", Violations: CheckModelSingularNaming(ignore)},
-		{Name: "Model JSON tag naming", Violations: CheckModelJSONTagNaming(ignore)},
+		{Name: "JSON tag naming", Violations: CheckJSONTagNaming(ignore)},
 		{Name: "Model action type naming", Violations: CheckModelActionTypeNaming(ignore)},
 		{Name: "Model file boundaries", Violations: CheckModelFileBoundary(ignore)},
 		{Name: "Service file boundaries", Violations: CheckServiceFileBoundary(ignore)},
@@ -483,14 +483,20 @@ func projectImportLayer(importPath, modulePath string) string {
 	return layer
 }
 
-// CheckModelJSONTagNaming checks if model struct json tags use camelCase naming
-func CheckModelJSONTagNaming(ignore gitignore.Matcher) []string {
+// CheckJSONTagNaming checks that json tags declared under the model directory
+// use snake_case naming. It covers model structs and the explicit DSL Payload
+// and Result types referenced by Design methods.
+func CheckJSONTagNaming(ignore gitignore.Matcher) []string {
 	var violations []string
 
 	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
 		return violations
 	}
 
+	// Files are grouped per directory because an explicit DSL action type may
+	// be declared in a different file of the package that references it.
+	var packageDirs []string
+	packageFiles := make(map[string][]string)
 	err := walkProjectDir(modelDir, ignore, func(path string, info os.FileInfo) error {
 		// Skip directories and non-Go files
 		if info.IsDir() || !strings.HasSuffix(path, ".go") {
@@ -502,20 +508,31 @@ func CheckModelJSONTagNaming(ignore gitignore.Matcher) []string {
 			return nil
 		}
 
-		fileViolations := checkFileJSONTagNaming(path)
-		violations = append(violations, fileViolations...)
+		violations = append(violations, checkFileModelJSONTagNaming(path)...)
 
+		if strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		dir := filepath.Dir(path)
+		if _, seen := packageFiles[dir]; !seen {
+			packageDirs = append(packageDirs, dir)
+		}
+		packageFiles[dir] = append(packageFiles[dir], path)
 		return nil
 	})
 	if err != nil {
 		violations = append(violations, fmt.Sprintf("walking model directory: %v", err))
 	}
 
+	for _, dir := range packageDirs {
+		violations = append(violations, checkPackageActionTypeJSONTagNaming(packageFiles[dir])...)
+	}
+
 	return violations
 }
 
-// checkFileJSONTagNaming checks json tag naming in a single file
-func checkFileJSONTagNaming(filePath string) []string {
+// checkFileModelJSONTagNaming checks json tags of the model structs in one file.
+func checkFileModelJSONTagNaming(filePath string) []string {
 	var violations []string
 
 	fset := token.NewFileSet()
@@ -534,9 +551,7 @@ func checkFileJSONTagNaming(filePath string) []string {
 		return violations
 	}
 
-	// Get relative path for cleaner output
-	cwd, _ := os.Getwd()
-	relPath, _ := filepath.Rel(cwd, filePath)
+	relPath := relativePath(filePath)
 
 	// Check only model structs
 	for _, decl := range node.Decls {
@@ -550,8 +565,7 @@ func checkFileJSONTagNaming(filePath string) []string {
 				continue
 			}
 			// Check if this struct is a model
-			isModel := slices.Contains(allModelNames, typeSpec.Name.Name)
-			if !isModel {
+			if !slices.Contains(allModelNames, typeSpec.Name.Name) {
 				continue
 			}
 
@@ -560,25 +574,135 @@ func checkFileJSONTagNaming(filePath string) []string {
 				continue
 			}
 
-			// Check JSON tags in this model struct
-			for _, field := range structType.Fields.List {
-				if field.Tag != nil {
-					tagValue := strings.Trim(field.Tag.Value, "`")
-					if jsonTag := extractJSONTag(tagValue); jsonTag != "" {
-						if !isSnakeCase(jsonTag) {
-							fieldName := ""
-							if len(field.Names) > 0 {
-								fieldName = field.Names[0].Name
-							}
-							violations = append(violations, fmt.Sprintf(
-								"%s: field '%s' json tag '%s' should be '%s'",
-								relPath, fieldName, jsonTag, toSnakeCase(jsonTag),
-							))
-						}
-					}
+			violations = append(violations, structJSONTagViolations(relPath, structType)...)
+		}
+	}
+
+	return violations
+}
+
+// checkPackageActionTypeJSONTagNaming checks json tags of the explicit DSL
+// Payload and Result types declared in one model package. Only types
+// referenced by a Design method and declared in the same package are checked:
+// model structs are already covered by checkFileModelJSONTagNaming, and
+// unreferenced structs, such as DTOs mirroring an external wire contract, must
+// keep their own naming.
+func checkPackageActionTypeJSONTagNaming(paths []string) []string {
+	var violations []string
+
+	fset := token.NewFileSet()
+	files := make(map[string]*ast.File, len(paths))
+	for _, path := range paths {
+		node, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+		if err != nil {
+			continue
+		}
+		files[path] = node
+	}
+
+	// Model structs are covered by the per-file model check already.
+	covered := make(map[string]bool)
+	for _, node := range files {
+		for _, name := range slices.Concat(dsl.FindAllModelBase(node), dsl.FindAllModelEmpty(node)) {
+			covered[name] = true
+		}
+	}
+
+	// Collect the same-package type names referenced as Payload[T] or Result[T].
+	referenced := make(map[string]bool)
+	for _, node := range files {
+		for _, decl := range node.Decls {
+			funcDecl, ok := decl.(*ast.FuncDecl)
+			if !ok || funcDecl.Name == nil || funcDecl.Name.Name != "Design" || funcDecl.Recv == nil || funcDecl.Body == nil {
+				continue
+			}
+			ast.Inspect(funcDecl.Body, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
 				}
+				_, typeExpr, ok := dslActionTypeCall(call.Fun)
+				if !ok {
+					return true
+				}
+				if name, ok := localActionTypeName(typeExpr); ok && !covered[name] {
+					referenced[name] = true
+				}
+				return true
+			})
+		}
+	}
+	if len(referenced) == 0 {
+		return violations
+	}
+
+	// Check declarations of the referenced types in file walk order.
+	for _, path := range paths {
+		node, ok := files[path]
+		if !ok {
+			continue
+		}
+		relPath := relativePath(path)
+		for _, decl := range node.Decls {
+			genDecl, ok := decl.(*ast.GenDecl)
+			if !ok || genDecl.Tok != token.TYPE {
+				continue
+			}
+			for _, spec := range genDecl.Specs {
+				typeSpec, ok := spec.(*ast.TypeSpec)
+				if !ok || !referenced[typeSpec.Name.Name] {
+					continue
+				}
+
+				structType, ok := typeSpec.Type.(*ast.StructType)
+				if !ok || structType.Fields == nil {
+					continue
+				}
+
+				violations = append(violations, structJSONTagViolations(relPath, structType)...)
 			}
 		}
+	}
+
+	return violations
+}
+
+// localActionTypeName resolves a DSL type argument to a type name declared in
+// the same package. Pointer forms are unwrapped; qualified names from other
+// packages are not resolved.
+func localActionTypeName(expr ast.Expr) (string, bool) {
+	switch x := expr.(type) {
+	case *ast.Ident:
+		return x.Name, true
+	case *ast.StarExpr:
+		return localActionTypeName(x.X)
+	}
+	return "", false
+}
+
+// structJSONTagViolations reports the fields of one struct whose json tags are
+// not snake_case.
+func structJSONTagViolations(relPath string, structType *ast.StructType) []string {
+	var violations []string
+
+	for _, field := range structType.Fields.List {
+		if field.Tag == nil {
+			continue
+		}
+		tagValue := strings.Trim(field.Tag.Value, "`")
+		jsonTag := extractJSONTag(tagValue)
+		if jsonTag == "" || isSnakeCase(jsonTag) {
+			continue
+		}
+
+		fieldName := ""
+		if len(field.Names) > 0 {
+			fieldName = field.Names[0].Name
+		}
+		violations = append(violations, fmt.Sprintf(
+			"%s: field '%s' json tag '%s' should be '%s'",
+			relPath, fieldName, jsonTag, toSnakeCase(jsonTag),
+		))
 	}
 
 	return violations
@@ -686,8 +810,7 @@ func checkFileActionTypeNaming(filePath string) []string {
 		return violations
 	}
 
-	cwd, _ := os.Getwd()
-	relPath, _ := filepath.Rel(cwd, filePath)
+	relPath := relativePath(filePath)
 
 	for _, decl := range node.Decls {
 		funcDecl, ok := decl.(*ast.FuncDecl)

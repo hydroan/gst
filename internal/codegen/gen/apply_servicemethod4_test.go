@@ -19,7 +19,9 @@ func TestApplyServiceMethod4PointerConversion(t *testing.T) {
 		want   string
 	}{
 		{
-			name: "convert_pointer_to_non_pointer",
+			// Bare action type names coming from a non-validated source keep
+			// the canonical pointer signature.
+			name: "bare_action_keeps_pointer_code",
 			code: `package service
 
 import (
@@ -36,7 +38,7 @@ func (u *Creator) Create(ctx *types.ServiceContext, req *model.User) (rsp *model
 				Result:  "UserRsp",
 				Phase:   consts.PHASE_CREATE,
 			},
-			want: "req model.UserReq",
+			want: "req *model.UserReq",
 		},
 		{
 			name: "convert_non_pointer_to_pointer",
@@ -79,7 +81,9 @@ func (u *Creator) Create(ctx *types.ServiceContext, req *model.User) (rsp *model
 			want: "req *model.UserReq",
 		},
 		{
-			name: "keep_non_pointer_type",
+			// A hand-written value signature is corrected to the canonical
+			// pointer form even when the action carries bare type names.
+			name: "bare_action_converts_value_code",
 			code: `package service
 
 import (
@@ -96,7 +100,7 @@ func (u *Creator) Create(ctx *types.ServiceContext, req model.User) (rsp model.U
 				Result:  "UserRsp",
 				Phase:   consts.PHASE_CREATE,
 			},
-			want: "req model.UserReq",
+			want: "req *model.UserReq",
 		},
 	}
 

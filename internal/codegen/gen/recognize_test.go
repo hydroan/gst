@@ -41,7 +41,7 @@ func TestIsServiceMethod3(t *testing.T) {
 }
 
 func TestIsServiceMethod4(t *testing.T) {
-	fn := serviceMethod4("u", "User", "Create", "model", "UserReq", "UserRsp", "Creator")
+	fn := serviceMethod4("u", "model", "*UserReq", "*UserRsp", consts.PHASE_CREATE, "Creator")
 	fnNeg := serviceMethod3("u", "User", "CreateManyBefore", "model", "ManyCreator")
 	if !isServiceMethod4(fn) {
 		t.Fatalf("expected isServiceMethod4 to return true for ServiceMethod4-generated func")

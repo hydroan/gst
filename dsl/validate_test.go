@@ -567,6 +567,138 @@ func (Session) Design() {
 }
 `
 
+func TestValidateActionTypePointerForm(t *testing.T) {
+	tests := []struct {
+		name      string
+		source    string
+		modelDir  string
+		filename  string
+		wantError string
+	}{
+		{
+			name:      "value payload type",
+			source:    validateValuePayloadSource,
+			modelDir:  "/repo/model",
+			filename:  "/repo/model/iam/session.go",
+			wantError: "Create action declares Payload[SessionCreateReq] with a value type; declare the pointer form Payload[*SessionCreateReq]",
+		},
+		{
+			name:      "value result type in route block",
+			source:    validateValueResultInRouteSource,
+			modelDir:  "/repo/model",
+			filename:  "/repo/model/iam/session.go",
+			wantError: "Update action declares Result[SessionUpdateRsp] with a value type; declare the pointer form Result[*SessionUpdateRsp]",
+		},
+		{
+			name:      "value model type as payload",
+			source:    validateValueModelPayloadSource,
+			modelDir:  "/repo/model",
+			filename:  "/repo/model/iam/session.go",
+			wantError: "Create action declares Payload[Session] with a value type; declare the pointer form Payload[*Session]",
+		},
+		{
+			name:     "pointer payload and result types",
+			source:   validatePayloadOnCreateSource,
+			modelDir: "/repo/model",
+			filename: "/repo/model/iam/session.go",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			file, err := parser.ParseFile(fset, tt.filename, tt.source, parser.ParseComments)
+			if err != nil {
+				t.Fatalf("parse source failed: %v", err)
+			}
+
+			errs := Validate(file, tt.modelDir, tt.filename)
+			if tt.wantError == "" {
+				if len(errs) != 0 {
+					t.Fatalf("Validate returned errors: %v", errs)
+				}
+				return
+			}
+			if len(errs) == 0 {
+				t.Fatalf("Validate returned no errors, want %q", tt.wantError)
+			}
+			var got strings.Builder
+			for _, err := range errs {
+				got.WriteString(err.Error())
+				got.WriteString("\n")
+			}
+			if !strings.Contains(got.String(), tt.wantError) {
+				t.Fatalf("Validate errors = %q, want substring %q", got.String(), tt.wantError)
+			}
+		})
+	}
+}
+
+const validateValuePayloadSource = `
+package iam
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Session struct {
+	model.Base
+}
+
+func (Session) Design() {
+	Create(func() {
+		Service()
+		Payload[SessionCreateReq]()
+		Result[*SessionCreateRsp]()
+	})
+}
+`
+
+const validateValueResultInRouteSource = `
+package iam
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Session struct {
+	model.Base
+}
+
+func (Session) Design() {
+	Route("iam/sessions/current", func() {
+		Update(func() {
+			Service()
+			Payload[*SessionUpdateReq]()
+			Result[SessionUpdateRsp]()
+		})
+	})
+}
+`
+
+const validateValueModelPayloadSource = `
+package iam
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Session struct {
+	model.Base
+}
+
+func (Session) Design() {
+	Create(func() {
+		Service()
+		Payload[Session]()
+		Result[*Session]()
+	})
+}
+`
+
 func TestValidateImportExportPayloadResultUsage(t *testing.T) {
 	tests := []struct {
 		name      string

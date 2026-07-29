@@ -16,7 +16,7 @@ func (Routes) Design() {
 			dsl.Service()
 			dsl.Flatten()
 			dsl.Filename("routes.go")
-			dsl.Result[RoutesRsp]()
+			dsl.Result[*RoutesRsp]()
 		})
 	})
 }

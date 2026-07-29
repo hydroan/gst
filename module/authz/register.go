@@ -107,7 +107,7 @@ func Register(config ...Config) {
 	module.Use[
 		*Routes,
 		*Routes,
-		RoutesRsp](
+		*RoutesRsp](
 		&RoutesModule{},
 		module.CRUD(consts.PHASE_LIST),
 	)

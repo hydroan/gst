@@ -23,8 +23,8 @@ func TestApplyServiceFile(t *testing.T) {
 			code: dataServiceUserCreate,
 			action: &dsl.Action{
 				Enabled: true,
-				Payload: "UserReq",
-				Result:  "UserRsp",
+				Payload: "*UserReq",
+				Result:  "*UserRsp",
 				Phase:   consts.PHASE_CREATE,
 			},
 			servicePkgName: "service",
@@ -38,10 +38,10 @@ import (
 )
 
 type user struct {
-	service.Base[*model.User, model.UserReq, model.UserRsp]
+	service.Base[*model.User, *model.UserReq, *model.UserRsp]
 }
 
-func (u *user) Create(ctx *types.ServiceContext, req model.UserReq) (rsp model.UserRsp, err error) {
+func (u *user) Create(ctx *types.ServiceContext, req *model.UserReq) (rsp *model.UserRsp, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create")
 	return rsp, nil
@@ -65,8 +65,8 @@ func (u *user) CreateAfter(ctx *types.ServiceContext, user *model.User) error {
 			code: dataServiceUserCreate,
 			action: &dsl.Action{
 				Enabled: true,
-				Payload: "User",
-				Result:  "User",
+				Payload: "*User",
+				Result:  "*User",
 				Phase:   consts.PHASE_CREATE,
 			},
 			servicePkgName: "service",
@@ -80,10 +80,54 @@ import (
 )
 
 type user struct {
-	service.Base[*model.User, model.User, model.User]
+	service.Base[*model.User, *model.User, *model.User]
 }
 
-func (u *user) Create(ctx *types.ServiceContext, req model.User) (rsp model.User, err error) {
+func (u *user) Create(ctx *types.ServiceContext, req *model.User) (rsp *model.User, err error) {
+	log := u.WithContext(ctx, ctx.Phase())
+	log.Info("user create")
+	return rsp, nil
+}
+
+func (u *user) CreateBefore(ctx *types.ServiceContext, user *model.User) error {
+	log := u.WithContext(ctx, ctx.Phase())
+	log.Info("user create before")
+	return nil
+}
+
+func (u *user) CreateAfter(ctx *types.ServiceContext, user *model.User) error {
+	log := u.WithContext(ctx, ctx.Phase())
+	log.Info("user create after")
+	return nil
+}
+`,
+		},
+		{
+			// Bare action type names coming from a non-validated source are
+			// still rewritten into the canonical pointer form.
+			name: "bare_action_names_canonicalized",
+			code: dataServiceUserCreate,
+			action: &dsl.Action{
+				Enabled: true,
+				Payload: "UserReq",
+				Result:  "UserRsp",
+				Phase:   consts.PHASE_CREATE,
+			},
+			servicePkgName: "service",
+			want: `package service
+
+import (
+	"helloworld/model"
+
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+)
+
+type user struct {
+	service.Base[*model.User, *model.UserReq, *model.UserRsp]
+}
+
+func (u *user) Create(ctx *types.ServiceContext, req *model.UserReq) (rsp *model.UserRsp, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create")
 	return rsp, nil

@@ -610,7 +610,9 @@ func TestGenServiceMethod4(t *testing.T) {
 }`,
 		},
 		{
-			name: "group",
+			// A bare action type name coming from a non-validated source is
+			// still emitted in the canonical pointer form.
+			name: "group_bare_names_canonicalized",
 			info: &ModelInfo{
 				ModelPkgName: "model",
 				ModelName:    "Group",
@@ -621,7 +623,7 @@ func TestGenServiceMethod4(t *testing.T) {
 			reqName: "GroupRequest",
 			rspName: "GroupResponse",
 			phase:   consts.PHASE_UPDATE,
-			want: `func (g *Updater) Update(ctx *types.ServiceContext, req model.GroupRequest) (rsp model.GroupResponse, err error) {
+			want: `func (g *Updater) Update(ctx *types.ServiceContext, req *model.GroupRequest) (rsp *model.GroupResponse, err error) {
 	log := g.WithContext(ctx, ctx.Phase())
 	log.Info("group update")
 	return rsp, nil

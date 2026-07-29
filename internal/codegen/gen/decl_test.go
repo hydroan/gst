@@ -100,14 +100,16 @@ func TestTypes(t *testing.T) {
 }`,
 		},
 		{
-			name:         "user",
+			// Bare action type names coming from a non-validated source are
+			// still emitted in the canonical pointer form.
+			name:         "user_bare_names_canonicalized",
 			modelPkgname: "model",
 			modelName:    "User",
 			reqName:      "UserReq",
 			rspName:      "UserRsp",
 			phase:        consts.PHASE_UPDATE,
 			want: `type Updater struct {
-	service.Base[*model.User, model.UserReq, model.UserRsp]
+	service.Base[*model.User, *model.UserReq, *model.UserRsp]
 }`,
 		},
 		{
@@ -291,7 +293,6 @@ func TestServiceMethod4(t *testing.T) {
 		name string // description of this test case
 		// Named input parameters for target function.
 		recvName     string
-		modelName    string
 		modelPkgName string
 		reqName      string
 		rspName      string
@@ -302,27 +303,26 @@ func TestServiceMethod4(t *testing.T) {
 			name:         "Create",
 			recvName:     "u",
 			modelPkgName: "model",
-			modelName:    "User",
 			reqName:      "User",
 			rspName:      "User",
 			phase:        consts.PHASE_CREATE,
 			want:         "func (u *Creator) Create(ctx *types.ServiceContext, req *model.User) (rsp *model.User, err error) {\n}",
 		},
 		{
-			name:         "Update",
+			// Bare action type names coming from a non-validated source are
+			// still emitted in the canonical pointer form.
+			name:         "UpdateBareNamesCanonicalized",
 			recvName:     "g",
-			modelName:    "Group",
 			modelPkgName: "model",
 			reqName:      "GroupRequest",
 			rspName:      "GroupResponse",
 			phase:        consts.PHASE_UPDATE,
-			want:         "func (g *Updater) Update(ctx *types.ServiceContext, req model.GroupRequest) (rsp model.GroupResponse, err error) {\n}",
+			want:         "func (g *Updater) Update(ctx *types.ServiceContext, req *model.GroupRequest) (rsp *model.GroupResponse, err error) {\n}",
 		},
 		{
 			name:         "Update2",
 			recvName:     "g",
 			modelPkgName: "model",
-			modelName:    "Group",
 			reqName:      "*GroupRequest",
 			rspName:      "*GroupResponse",
 			phase:        consts.PHASE_UPDATE,
@@ -332,7 +332,6 @@ func TestServiceMethod4(t *testing.T) {
 			name:         "ListEmptyPayload",
 			recvName:     "g",
 			modelPkgName: "group",
-			modelName:    "Group",
 			reqName:      dsl.PayloadEmpty,
 			rspName:      "*GroupListRsp",
 			phase:        consts.PHASE_LIST,
@@ -342,7 +341,6 @@ func TestServiceMethod4(t *testing.T) {
 			name:         "GetEmptyPayloadRootModelPackage",
 			recvName:     "u",
 			modelPkgName: "model",
-			modelName:    "User",
 			reqName:      dsl.PayloadEmpty,
 			rspName:      "*UserGetRsp",
 			phase:        consts.PHASE_GET,
@@ -351,7 +349,7 @@ func TestServiceMethod4(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := serviceMethod4(tt.recvName, tt.modelName, tt.modelPkgName, tt.reqName, tt.rspName, tt.phase, tt.phase.RoleName())
+			res := serviceMethod4(tt.recvName, tt.modelPkgName, tt.reqName, tt.rspName, tt.phase, tt.phase.RoleName())
 			got, err := FormatNode(res)
 			if err != nil {
 				t.Error(err)

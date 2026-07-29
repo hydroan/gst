@@ -184,7 +184,9 @@ func TestStmtRouterRegister(t *testing.T) {
 			want:         `router.Register[*model.Group, *model.Group, *model.Group](router.Auth(), "group", &types.ControllerConfig[*model.Group]{}, consts.Create)`,
 		},
 		{
-			name:         "test2",
+			// Bare action type names coming from a non-validated source are
+			// still emitted in the canonical pointer form.
+			name:         "test2_bare_names_canonicalized",
 			modelPkgName: "pkgmodel",
 			modelName:    "Group",
 			reqName:      "GroupRequest",
@@ -192,7 +194,7 @@ func TestStmtRouterRegister(t *testing.T) {
 			routerGroup:  "Auth",
 			route:        "group2",
 			verb:         "Update",
-			want:         `router.Register[*pkgmodel.Group, pkgmodel.GroupRequest, pkgmodel.GroupResponse](router.Auth(), "group2", &types.ControllerConfig[*pkgmodel.Group]{}, consts.Update)`,
+			want:         `router.Register[*pkgmodel.Group, *pkgmodel.GroupRequest, *pkgmodel.GroupResponse](router.Auth(), "group2", &types.ControllerConfig[*pkgmodel.Group]{}, consts.Update)`,
 		},
 		{
 			name:         "test3",
