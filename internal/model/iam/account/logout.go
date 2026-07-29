@@ -9,8 +9,6 @@ type Logout struct {
 	model.Empty
 }
 
-type LogoutReq struct{}
-
 type LogoutRsp struct {
 	Msg string `json:"msg,omitempty"`
 }
@@ -21,7 +19,6 @@ func (Logout) Design() {
 			Service()
 			Flatten()
 			Filename("logout.go")
-			Payload[*LogoutReq]()
 			Result[*LogoutRsp]()
 		})
 	})

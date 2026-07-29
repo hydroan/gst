@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
+	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
@@ -24,7 +25,7 @@ var Enabled bool
 // response returns only the challenge ID and authenticator setup data, never the
 // raw secret as a standalone field.
 type TOTPBindService struct {
-	service.Base[*modelmfa.TOTPBind, *modelmfa.TOTPBind, *modelmfa.TOTPBindRsp]
+	service.Base[*modelmfa.TOTPBind, *model.Empty, *modelmfa.TOTPBindRsp]
 }
 
 // Create creates a pending TOTP binding challenge and returns setup metadata.
@@ -32,7 +33,7 @@ type TOTPBindService struct {
 // The method requires an authenticated account and session, generates a new
 // server-held secret, stores it in the binding challenge, and returns the
 // challenge ID with the provisioning URL and QR image for authenticator setup.
-func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPBind) (rsp *modelmfa.TOTPBindRsp, err error) {
+func (t *TOTPBindService) Create(ctx *types.ServiceContext, req *model.Empty) (rsp *modelmfa.TOTPBindRsp, err error) {
 	log := t.WithContext(ctx, ctx.Phase())
 
 	if len(ctx.UserID()) == 0 {

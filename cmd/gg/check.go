@@ -41,6 +41,7 @@ var checkCmd = &cobra.Command{
 13. database.Database operation chains must end with a terminal operation inline or be passed directly as a call argument
 14. database.Database chains and nested database.Transaction calls inside a database.Transaction closure must use the closure's context parameter
 15. Errors leaving service methods must be built by service.NewError or service.NewErrorWithCause
+16. Explicit DSL Payload/Result types must be named types declared in the same model package: struct types use the pointer form, slice and map types use the value form, and an empty struct type may only pair with an empty peer side
 
 Paths ignored by the project's Git ignore rules are skipped by every check, so runtime artifacts such as log directories never fail checks.`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -129,6 +130,7 @@ func collectProjectChecks() []projectCheckResult {
 		{Name: "Model singular naming", Violations: CheckModelSingularNaming(ignore)},
 		{Name: "JSON tag naming", Violations: CheckJSONTagNaming(ignore)},
 		{Name: "Model action type naming", Violations: CheckModelActionTypeNaming(ignore)},
+		{Name: "Action type form", Violations: CheckActionTypeForm(ignore)},
 		{Name: "Model file boundaries", Violations: CheckModelFileBoundary(ignore)},
 		{Name: "Service file boundaries", Violations: CheckServiceFileBoundary(ignore)},
 		{Name: "Model package naming", Violations: CheckModelPackageNaming(ignore)},

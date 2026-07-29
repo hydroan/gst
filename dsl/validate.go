@@ -237,10 +237,8 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile, vi
 			info.exact = true
 		case name == "Payload":
 			info.payload = true
-			errs = append(errs, validateActionTypePointerForm(child, filename, actionName, name)...)
 		case name == "Result":
 			info.result = true
-			errs = append(errs, validateActionTypePointerForm(child, filename, actionName, name)...)
 		case name == "Enabled" || name == "Public":
 			continue
 		case isActionMethod(name):
@@ -292,33 +290,6 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile, vi
 	}
 
 	return info, errs
-}
-
-// validateActionTypePointerForm rejects a bare value type argument declared on
-// Payload or Result. The explicit action type must use the pointer form so
-// every generated service signature follows the single canonical shape; other
-// argument shapes are outside this rule and left untouched.
-func validateActionTypePointerForm(call *ast.CallExpr, filename, actionName, kind string) []error {
-	ident, ok := actionTypeArg(call.Fun).(*ast.Ident)
-	if !ok || ident == nil {
-		return nil
-	}
-	return []error{fmt.Errorf("%s: %s action declares %s[%s] with a value type; declare the pointer form %s[*%s]",
-		filename, actionName, kind, ident.Name, kind, ident.Name)}
-}
-
-// actionTypeArg returns the single type argument of a Payload/Result call
-// expression, or nil when the call carries no single type argument.
-func actionTypeArg(expr ast.Expr) ast.Expr {
-	switch x := expr.(type) {
-	case *ast.IndexExpr:
-		return x.Index
-	case *ast.IndexListExpr:
-		if len(x.Indices) == 1 {
-			return x.Indices[0]
-		}
-	}
-	return nil
 }
 
 // serviceActionRecord captures one Service-enabled action and the service

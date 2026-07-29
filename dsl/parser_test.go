@@ -856,8 +856,8 @@ func (DeclaredDefault) Design() {
 }
 `
 
-func TestParseListGetPayloadDefaults(t *testing.T) {
-	design := parseDesignFromSource(t, listGetPayloadDefaultsSource, "Session")
+func TestParseActionTypeDefaults(t *testing.T) {
+	design := parseDesignFromSource(t, actionTypeDefaultsSource, "Session")
 
 	// List with Result declared delegates to a custom service method,
 	// so the request type defaults to *model.Empty.
@@ -868,14 +868,25 @@ func TestParseListGetPayloadDefaults(t *testing.T) {
 		t.Fatalf("List.Result = %q, want *SessionListRsp", design.List.Result)
 	}
 
-	// Get without Result keeps the built-in controller defaults.
+	// Get with neither side declared keeps the built-in controller defaults:
+	// both sides stay on the model type.
 	if design.Get.Payload != "*Session" {
 		t.Fatalf("Get.Payload = %q, want *Session", design.Get.Payload)
 	}
+	if design.Get.Result != "*Session" {
+		t.Fatalf("Get.Result = %q, want *Session", design.Get.Result)
+	}
 
-	// Create with Result only keeps the model type as the request default.
-	if design.Create.Payload != "*Session" {
-		t.Fatalf("Create.Payload = %q, want *Session", design.Create.Payload)
+	// Create with Result only must not guess the model as the request type:
+	// the missing side defaults to *model.Empty.
+	if design.Create.Payload != PayloadEmpty {
+		t.Fatalf("Create.Payload = %q, want %q", design.Create.Payload, PayloadEmpty)
+	}
+
+	// Update with Payload only defaults the missing response side to
+	// *model.Empty as well.
+	if design.Update.Result != PayloadEmpty {
+		t.Fatalf("Update.Result = %q, want %q", design.Update.Result, PayloadEmpty)
 	}
 
 	// Get with Result declared inside a Route block also defaults to *model.Empty.
@@ -899,7 +910,7 @@ func TestParseListPayloadDeclarationDiscarded(t *testing.T) {
 	}
 }
 
-const listGetPayloadDefaultsSource = `
+const actionTypeDefaultsSource = `
 package model
 
 import (
@@ -920,6 +931,10 @@ func (Session) Design() {
 	Create(func() {
 		Service()
 		Result[*SessionCreateRsp]()
+	})
+	Update(func() {
+		Service()
+		Payload[*SessionUpdateReq]()
 	})
 	Route("iam/sessions/current", func() {
 		Get(func() {

@@ -600,8 +600,8 @@ func TestGenServiceMethod4(t *testing.T) {
 				ModulePath:   "codegen",
 				ModelFileDir: "/tmp/model",
 			},
-			reqName: "User",
-			rspName: "User",
+			reqName: "*User",
+			rspName: "*User",
 			phase:   consts.PHASE_CREATE,
 			want: `func (u *Creator) Create(ctx *types.ServiceContext, req *model.User) (rsp *model.User, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
@@ -610,9 +610,9 @@ func TestGenServiceMethod4(t *testing.T) {
 }`,
 		},
 		{
-			// A bare action type name coming from a non-validated source is
-			// still emitted in the canonical pointer form.
-			name: "group_bare_names_canonicalized",
+			// A bare action type name (the declared form of slice and map
+			// action types) is transcribed as a value type.
+			name: "group_bare_names_transcribed",
 			info: &ModelInfo{
 				ModelPkgName: "model",
 				ModelName:    "Group",
@@ -623,7 +623,7 @@ func TestGenServiceMethod4(t *testing.T) {
 			reqName: "GroupRequest",
 			rspName: "GroupResponse",
 			phase:   consts.PHASE_UPDATE,
-			want: `func (g *Updater) Update(ctx *types.ServiceContext, req *model.GroupRequest) (rsp *model.GroupResponse, err error) {
+			want: `func (g *Updater) Update(ctx *types.ServiceContext, req model.GroupRequest) (rsp model.GroupResponse, err error) {
 	log := g.WithContext(ctx, ctx.Phase())
 	log.Info("group update")
 	return rsp, nil

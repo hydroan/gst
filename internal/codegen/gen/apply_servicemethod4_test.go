@@ -12,6 +12,7 @@ import (
 )
 
 func TestApplyServiceMethod4PointerConversion(t *testing.T) {
+	// Every case uses the helloworld/model business package.
 	tests := []struct {
 		name   string
 		code   string
@@ -19,9 +20,7 @@ func TestApplyServiceMethod4PointerConversion(t *testing.T) {
 		want   string
 	}{
 		{
-			// Bare action type names coming from a non-validated source keep
-			// the canonical pointer signature.
-			name: "bare_action_keeps_pointer_code",
+			name: "convert_pointer_to_non_pointer",
 			code: `package service
 
 import (
@@ -38,7 +37,7 @@ func (u *Creator) Create(ctx *types.ServiceContext, req *model.User) (rsp *model
 				Result:  "UserRsp",
 				Phase:   consts.PHASE_CREATE,
 			},
-			want: "req *model.UserReq",
+			want: "req model.UserReq",
 		},
 		{
 			name: "convert_non_pointer_to_pointer",
@@ -81,9 +80,7 @@ func (u *Creator) Create(ctx *types.ServiceContext, req *model.User) (rsp *model
 			want: "req *model.UserReq",
 		},
 		{
-			// A hand-written value signature is corrected to the canonical
-			// pointer form even when the action carries bare type names.
-			name: "bare_action_converts_value_code",
+			name: "keep_non_pointer_type",
 			code: `package service
 
 import (
@@ -100,7 +97,7 @@ func (u *Creator) Create(ctx *types.ServiceContext, req model.User) (rsp model.U
 				Result:  "UserRsp",
 				Phase:   consts.PHASE_CREATE,
 			},
-			want: "req *model.UserReq",
+			want: "req model.UserReq",
 		},
 	}
 
@@ -116,7 +113,7 @@ func (u *Creator) Create(ctx *types.ServiceContext, req model.User) (rsp model.U
 			for _, decl := range file.Decls {
 				if funcDecl, ok := decl.(*ast.FuncDecl); ok && funcDecl != nil {
 					if isServiceMethod4(funcDecl) {
-						applyServiceMethod4(funcDecl, tt.action)
+						applyServiceMethod4(funcDecl, tt.action, "model")
 					}
 				}
 			}
@@ -135,13 +132,15 @@ func (u *Creator) Create(ctx *types.ServiceContext, req model.User) (rsp model.U
 
 func TestApplyServiceMethod4EmptyPayload(t *testing.T) {
 	tests := []struct {
-		name   string
-		code   string
-		action *dsl.Action
-		want   string
+		name     string
+		code     string
+		action   *dsl.Action
+		modelPkg string
+		want     string
 	}{
 		{
-			name: "switch_business_req_to_empty_payload",
+			name:     "switch_business_req_to_empty_payload",
+			modelPkg: "group",
 			code: `package group
 
 import (
@@ -161,7 +160,8 @@ func (g *Lister) List(ctx *types.ServiceContext, req *group.GroupListReq) (rsp *
 			want: "req *model.Empty",
 		},
 		{
-			name: "switch_empty_payload_back_to_model",
+			name:     "switch_empty_payload_back_to_model",
+			modelPkg: "group",
 			code: `package group
 
 import (
@@ -183,7 +183,8 @@ func (g *Lister) List(ctx *types.ServiceContext, req *model.Empty) (rsp *group.G
 			want: "req *group.Group",
 		},
 		{
-			name: "switch_to_empty_payload_in_root_model_package",
+			name:     "switch_to_empty_payload_in_root_model_package",
+			modelPkg: "model",
 			code: `package user
 
 import (
@@ -202,6 +203,27 @@ func (u *Getter) Get(ctx *types.ServiceContext, req *model.UserGetReq) (rsp *mod
 			},
 			want: "req *gstmodel.Empty",
 		},
+		{
+			name:     "switch_business_rsp_to_empty_result",
+			modelPkg: "group",
+			code: `package group
+
+import (
+	"helloworld/model/group"
+	"github.com/hydroan/gst/types"
+)
+
+func (g *Creator) Create(ctx *types.ServiceContext, req *group.GroupCreateReq) (rsp *group.GroupCreateRsp, err error) {
+	return rsp, nil
+}`,
+			action: &dsl.Action{
+				Enabled: true,
+				Payload: "*GroupCreateReq",
+				Result:  dsl.PayloadEmpty,
+				Phase:   consts.PHASE_CREATE,
+			},
+			want: "(rsp *model.Empty, err error)",
+		},
 	}
 
 	for _, tt := range tests {
@@ -215,7 +237,7 @@ func (u *Getter) Get(ctx *types.ServiceContext, req *model.UserGetReq) (rsp *mod
 			for _, decl := range file.Decls {
 				if funcDecl, ok := decl.(*ast.FuncDecl); ok && funcDecl != nil {
 					if isServiceMethod4(funcDecl) {
-						applyServiceMethod4(funcDecl, tt.action)
+						applyServiceMethod4(funcDecl, tt.action, tt.modelPkg)
 					}
 				}
 			}

@@ -138,15 +138,17 @@ func Parse(file *ast.File, endpoint string) map[string]*Design {
 }
 
 // initDefaultAction initializes default payload and result values for an enabled action.
-// If the action is enabled but has empty Payload or Result fields, they are set to
-// the pointer type of the model name (e.g., "*User" for model "User").
+//
+// With neither side declared both default to the pointer type of the model
+// name (e.g., "*User" for model "User"), which keeps the built-in CRUD
+// controller path active. Once the developer declares one side explicitly the
+// action is a custom contract, and the framework never guesses the model as
+// the other half: the missing side defaults to PayloadEmpty (*model.Empty).
 //
 // List and Get actions handle HTTP GET requests without a request body. When
 // such an action declares Result it is delegated to a custom service method,
-// so its Payload is fixed to PayloadEmpty (*model.Empty) instead of the model
-// type; custom services read query parameters from ServiceContext.Query().
-// Without Result the action keeps the model type as Payload, which keeps the
-// built-in controller path (query decoding, pagination) active.
+// so its Payload is fixed to PayloadEmpty (*model.Empty); custom services
+// read query parameters from ServiceContext.Query().
 //
 // Parameters:
 //   - modelName: The name of the model (e.g., "User")
@@ -161,11 +163,14 @@ func initDefaultAction(modelName string, action *Action) {
 	if isGetVerbPhase(action.Phase) && len(action.Result) > 0 {
 		action.Payload = PayloadEmpty
 	}
-	if len(action.Payload) == 0 {
+	switch {
+	case len(action.Payload) == 0 && len(action.Result) == 0:
 		action.Payload = starName(modelName)
-	}
-	if len(action.Result) == 0 {
 		action.Result = starName(modelName)
+	case len(action.Payload) == 0:
+		action.Payload = PayloadEmpty
+	case len(action.Result) == 0:
+		action.Result = PayloadEmpty
 	}
 }
 

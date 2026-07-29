@@ -103,7 +103,7 @@ func Register() {
 
 	module.Use[
 		*TOTPBind,
-		*TOTPBind,
+		*model.Empty,
 		*TOTPBindRsp](
 		&TOTPBindModule{},
 		module.CRUD(consts.PHASE_CREATE),

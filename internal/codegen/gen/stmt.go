@@ -127,18 +127,24 @@ func StmtServiceRegister(serviceImport string, phase consts.Phase, route string)
 // the raw route string, shared verbatim with the matching StmtServiceRegister
 // statement.
 func StmtRouterRegister(modelPkgName, modelName, reqName, rspName string, routerGroup string, route string, paramName string, verb string) *ast.ExprStmt {
-	// The dsl.PayloadEmpty sentinel resolves to *gstmodel.Empty. The router
-	// file aggregates imports from many model packages, so the gst model
-	// package is always referenced under the gstmodel alias to avoid clashing
-	// with a business root model package named "model". Any other action type
-	// is emitted in the canonical pointer form.
+	// The dsl.PayloadEmpty sentinel on either side resolves to
+	// *gstmodel.Empty. The router file aggregates imports from many model
+	// packages, so the gst model package is always referenced under the
+	// gstmodel alias to avoid clashing with a business root model package
+	// named "model". Any other action type is emitted in the canonical
+	// pointer form.
 	var reqExpr ast.Expr
 	if isEmptyPayload(reqName) {
 		reqExpr = emptyReqExpr(gstModelPkgAlias)
 	} else {
 		reqExpr = actionTypeExpr(modelPkgName, reqName)
 	}
-	rspExpr := actionTypeExpr(modelPkgName, rspName)
+	var rspExpr ast.Expr
+	if isEmptyPayload(rspName) {
+		rspExpr = emptyReqExpr(gstModelPkgAlias)
+	} else {
+		rspExpr = actionTypeExpr(modelPkgName, rspName)
+	}
 
 	var paramExpr ast.Expr
 	// expr like: &types.ControllerConfig[*config.Namespace]{}

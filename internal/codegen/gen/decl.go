@@ -83,16 +83,30 @@ type userCreator struct {
 	service.Base[*model.User, *model.User, *model.User]
 }
 */
-// actionTypeExpr builds the type expression of one explicit action type in the
-// canonical pointer form. dsl.Validate rejects value type declarations, so a
-// name arriving without the leading '*' still yields the pointer form.
+// actionTypeExpr builds the type expression of one explicit action type,
+// transcribing the declared form: a leading '*' yields the pointer form and a
+// bare name stays a value type. The form itself is enforced by gg checks
+// (struct types are pointers, slice and map types are values), so the
+// generator emits exactly what the DSL declares.
 func actionTypeExpr(pkgName, typeName string) ast.Expr {
-	return &ast.StarExpr{
-		X: &ast.SelectorExpr{
-			X:   ast.NewIdent(pkgName),
-			Sel: ast.NewIdent(strings.TrimPrefix(typeName, "*")),
-		},
+	sel := &ast.SelectorExpr{
+		X:   ast.NewIdent(pkgName),
+		Sel: ast.NewIdent(strings.TrimPrefix(typeName, "*")),
 	}
+	if !strings.HasPrefix(typeName, "*") {
+		return sel
+	}
+	return &ast.StarExpr{X: sel}
+}
+
+// actionTypeOrEmptyExpr builds the type expression of one action type,
+// resolving the dsl.PayloadEmpty sentinel to *model.Empty from the gst model
+// package (aliased when the business model package is itself named "model").
+func actionTypeOrEmptyExpr(modelPkgName, typeName string) ast.Expr {
+	if isEmptyPayload(typeName) {
+		return emptyReqExpr(emptyReqPkgName(modelPkgName))
+	}
+	return actionTypeExpr(modelPkgName, typeName)
 }
 
 func types(modelPkgName, modelName, reqName, rspName string, _ consts.Phase, roleName string, withComment bool) *ast.GenDecl {
@@ -106,15 +120,10 @@ func types(modelPkgName, modelName, reqName, rspName string, _ consts.Phase, rol
 	}
 
 	// The dsl.PayloadEmpty sentinel resolves to *model.Empty from the gst
-	// model package; any other action type is emitted in the canonical
-	// pointer form.
-	var reqExpr ast.Expr
-	if isEmptyPayload(reqName) {
-		reqExpr = emptyReqExpr(emptyReqPkgName(modelPkgName))
-	} else {
-		reqExpr = actionTypeExpr(modelPkgName, reqName)
-	}
-	rspExpr := actionTypeExpr(modelPkgName, rspName)
+	// model package on either side; any other action type is emitted in the
+	// canonical pointer form.
+	reqExpr := actionTypeOrEmptyExpr(modelPkgName, reqName)
+	rspExpr := actionTypeOrEmptyExpr(modelPkgName, rspName)
 
 	return &ast.GenDecl{
 		Doc: &ast.CommentGroup{
@@ -331,15 +340,10 @@ func serviceMethod3(recvName, modelName, modelPkgName string, phase consts.Phase
 //	func (u *Creator) Create(ctx *types.ServiceContext, user *model.User) (rsp *model.User, err error) {\n}
 func serviceMethod4(recvName, modelPkgName, reqName, rspName string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	// The dsl.PayloadEmpty sentinel resolves to *model.Empty from the gst
-	// model package; any other action type is emitted in the canonical
-	// pointer form.
-	var reqExpr ast.Expr
-	if isEmptyPayload(reqName) {
-		reqExpr = emptyReqExpr(emptyReqPkgName(modelPkgName))
-	} else {
-		reqExpr = actionTypeExpr(modelPkgName, reqName)
-	}
-	rspExpr := actionTypeExpr(modelPkgName, rspName)
+	// model package on either side; any other action type is emitted in the
+	// canonical pointer form.
+	reqExpr := actionTypeOrEmptyExpr(modelPkgName, reqName)
+	rspExpr := actionTypeOrEmptyExpr(modelPkgName, rspName)
 
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{

@@ -176,17 +176,17 @@ func TestStmtRouterRegister(t *testing.T) {
 			name:         "test1",
 			modelPkgName: "model",
 			modelName:    "Group",
-			reqName:      "Group",
+			reqName:      "*Group",
 			routerGroup:  "Auth",
-			respName:     "Group",
+			respName:     "*Group",
 			route:        "group",
 			verb:         "Create",
 			want:         `router.Register[*model.Group, *model.Group, *model.Group](router.Auth(), "group", &types.ControllerConfig[*model.Group]{}, consts.Create)`,
 		},
 		{
-			// Bare action type names coming from a non-validated source are
-			// still emitted in the canonical pointer form.
-			name:         "test2_bare_names_canonicalized",
+			// Bare action type names (the declared form of slice and map
+			// action types) are transcribed as value types.
+			name:         "test2_bare_names_transcribed",
 			modelPkgName: "pkgmodel",
 			modelName:    "Group",
 			reqName:      "GroupRequest",
@@ -194,7 +194,7 @@ func TestStmtRouterRegister(t *testing.T) {
 			routerGroup:  "Auth",
 			route:        "group2",
 			verb:         "Update",
-			want:         `router.Register[*pkgmodel.Group, *pkgmodel.GroupRequest, *pkgmodel.GroupResponse](router.Auth(), "group2", &types.ControllerConfig[*pkgmodel.Group]{}, consts.Update)`,
+			want:         `router.Register[*pkgmodel.Group, pkgmodel.GroupRequest, pkgmodel.GroupResponse](router.Auth(), "group2", &types.ControllerConfig[*pkgmodel.Group]{}, consts.Update)`,
 		},
 		{
 			name:         "test3",
@@ -217,6 +217,17 @@ func TestStmtRouterRegister(t *testing.T) {
 			route:        "groups",
 			verb:         "List",
 			want:         `router.Register[*group.Group, *gstmodel.Empty, *group.GroupListRsp](router.Auth(), "groups", &types.ControllerConfig[*group.Group]{}, consts.List)`,
+		},
+		{
+			name:         "create with empty result",
+			modelPkgName: "group",
+			modelName:    "Group",
+			reqName:      "*GroupCreateReq",
+			respName:     dsl.PayloadEmpty,
+			routerGroup:  "Auth",
+			route:        "groups",
+			verb:         "Create",
+			want:         `router.Register[*group.Group, *group.GroupCreateReq, *gstmodel.Empty](router.Auth(), "groups", &types.ControllerConfig[*group.Group]{}, consts.Create)`,
 		},
 	}
 	for _, tt := range tests {

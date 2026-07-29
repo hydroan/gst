@@ -103,9 +103,9 @@ func (u *user) CreateAfter(ctx *types.ServiceContext, user *model.User) error {
 `,
 		},
 		{
-			// Bare action type names coming from a non-validated source are
-			// still rewritten into the canonical pointer form.
-			name: "bare_action_names_canonicalized",
+			// Bare action type names (the declared form of slice and map
+			// action types) are transcribed as value types.
+			name: "bare_action_names_transcribed",
 			code: dataServiceUserCreate,
 			action: &dsl.Action{
 				Enabled: true,
@@ -124,10 +124,10 @@ import (
 )
 
 type user struct {
-	service.Base[*model.User, *model.UserReq, *model.UserRsp]
+	service.Base[*model.User, model.UserReq, model.UserRsp]
 }
 
-func (u *user) Create(ctx *types.ServiceContext, req *model.UserReq) (rsp *model.UserRsp, err error) {
+func (u *user) Create(ctx *types.ServiceContext, req model.UserReq) (rsp model.UserRsp, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create")
 	return rsp, nil

@@ -9,6 +9,7 @@ import (
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	// modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
+	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	// "github.com/mssola/useragent"
@@ -17,11 +18,11 @@ import (
 
 // LogoutService handles logout requests for the current authenticated session.
 type LogoutService struct {
-	service.Base[*modeliamaccount.Logout, *modeliamaccount.LogoutReq, *modeliamaccount.LogoutRsp]
+	service.Base[*modeliamaccount.Logout, *model.Empty, *modeliamaccount.LogoutRsp]
 }
 
 // Create logs out the current session and always clears the session cookie on success.
-func (l *LogoutService) Create(ctx *types.ServiceContext, req *modeliamaccount.LogoutReq) (rsp *modeliamaccount.LogoutRsp, err error) {
+func (l *LogoutService) Create(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamaccount.LogoutRsp, err error) {
 	log := l.WithContext(ctx, ctx.Phase())
 
 	sessionID, err := serviceiamsession.SessionManager.SessionID(ctx)

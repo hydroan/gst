@@ -199,17 +199,17 @@ func applyServiceFile(file *ast.File, action *dsl.Action, servicePkgName, correc
 				}
 			}
 			if isServiceMethod4(funcDecl) {
-				if applyServiceMethod4(funcDecl, action) {
+				if applyServiceMethod4(funcDecl, action, serviceModelPackageName(file)) {
 					changed = true
 				}
 			}
 		}
 	}
 
-	// Keep the gst model import in sync with the request type: a rewritten
-	// *model.Empty request needs the import, while a business request type
-	// must not leave it behind unused.
-	if isEmptyPayload(action.Payload) {
+	// Keep the gst model import in sync with the action types: a rewritten
+	// *model.Empty request or result needs the import, while pure business
+	// action types must not leave it behind unused.
+	if isEmptyPayload(action.Payload) || isEmptyPayload(action.Result) {
 		if ensureEmptyReqImportSpec(file, serviceModelPackageName(file)) {
 			changed = true
 		}
@@ -247,7 +247,7 @@ func applyServiceMethod3(fn *ast.FuncDecl, action *dsl.Action) bool { return fal
 // *sample.RecordPatchRsp, corrupting the function body and breaking the build. Requiring
 // fn.Name to equal action.Phase.MethodName() (e.g. "Patch") ensures only the actual action
 // method for the current DSL phase is ever rewritten.
-func applyServiceMethod4(fn *ast.FuncDecl, action *dsl.Action) bool {
+func applyServiceMethod4(fn *ast.FuncDecl, action *dsl.Action, modelPkg string) bool {
 	if fn == nil || action == nil || fn.Name == nil {
 		return false
 	}
@@ -262,14 +262,6 @@ func applyServiceMethod4(fn *ast.FuncDecl, action *dsl.Action) bool {
 
 	var changed bool
 
-	// The business model package qualifier is derived from the first result
-	// type: Result never carries the dsl.PayloadEmpty sentinel, so it always
-	// references the business model package.
-	modelPkg := ""
-	if fn.Type != nil && fn.Type.Results != nil && len(fn.Type.Results.List) >= 1 {
-		modelPkg = selectorPackageName(fn.Type.Results.List[0].Type)
-	}
-
 	// Update the second parameter type based on action.Payload. The
 	// dsl.PayloadEmpty sentinel switches the qualifier to the gst model
 	// package; a business payload switches it back.
@@ -282,10 +274,12 @@ func applyServiceMethod4(fn *ast.FuncDecl, action *dsl.Action) bool {
 		}
 	}
 
-	// Update the first result type based on action.Result
+	// Update the first result type based on action.Result, resolving the
+	// dsl.PayloadEmpty sentinel the same way as the request side.
 	if fn.Type != nil && fn.Type.Results != nil && len(fn.Type.Results.List) >= 1 && action.Result != "" {
 		res := fn.Type.Results.List[0]
-		if expr, c := applyTypeRef(res.Type, modelPkg, action.Result); c {
+		targetPkg, targetType := payloadTypeTarget(action.Result, modelPkg)
+		if expr, c := applyTypeRef(res.Type, targetPkg, targetType); c {
 			res.Type = expr
 			changed = true
 		}
@@ -295,15 +289,16 @@ func applyServiceMethod4(fn *ast.FuncDecl, action *dsl.Action) bool {
 }
 
 // applyTypeRef rewrites a *pkg.Type or pkg.Type expression to reference
-// targetPkg and actionType in the canonical pointer form. dsl.Validate rejects
-// value type declarations, so an actionType arriving without the leading '*'
-// still yields the pointer form. When targetPkg is empty the current package
-// qualifier is kept. It returns the possibly replaced expression and whether
-// anything changed.
+// targetPkg and actionType, transcribing the declared form: a leading '*' in
+// actionType selects the pointer form and a bare name selects the value form
+// (the form itself is enforced by gg checks). When targetPkg is empty the
+// current package qualifier is kept. It returns the possibly replaced
+// expression and whether anything changed.
 func applyTypeRef(expr ast.Expr, targetPkg, actionType string) (ast.Expr, bool) {
 	if actionType == "" {
 		return expr, false
 	}
+	pointer := strings.HasPrefix(actionType, "*")
 	typeName := strings.TrimPrefix(actionType, "*")
 
 	var sel *ast.SelectorExpr
@@ -340,17 +335,21 @@ func applyTypeRef(expr ast.Expr, targetPkg, actionType string) (ast.Expr, bool) 
 		changed = true
 	}
 
-	if _, isPointer := expr.(*ast.StarExpr); isPointer {
+	_, isPointer := expr.(*ast.StarExpr)
+	if isPointer == pointer {
 		return expr, changed
 	}
-	// Position the * just before the selector
-	return &ast.StarExpr{Star: sel.Pos() - 1, X: sel}, true
+	if pointer {
+		// Position the * just before the selector
+		return &ast.StarExpr{Star: sel.Pos() - 1, X: sel}, true
+	}
+	return sel, true
 }
 
 // applyServiceType updates a service struct type to match the generated service generics.
 // It transforms: type user struct { service.Base[*model.User, *model.User, *model.User] }
 // into:         type user struct { service.Base[*model.User, *model.UserReq, *model.UserRsp] }
-// following the action's Payload/Result in the canonical pointer form. When
+// transcribing the declared form of the action's Payload/Result. When
 // correctModelName is provided, it also corrects the first generic parameter
 // to the current model.
 func applyServiceType(spec *ast.TypeSpec, action *dsl.Action, correctModelName ...string) bool {
@@ -390,9 +389,11 @@ func applyServiceType(spec *ast.TypeSpec, action *dsl.Action, correctModelName .
 								changed = true
 							}
 						}
-						// Handle third parameter (Result)
+						// Handle third parameter (Result), resolving the
+						// dsl.PayloadEmpty sentinel the same way as Payload.
 						if action.Result != "" {
-							if changed3 := applyServiceTypeParam(indexListExpr, 2, modelPkg, action.Result); changed3 {
+							targetPkg, targetType := payloadTypeTarget(action.Result, modelPkg)
+							if changed3 := applyServiceTypeParam(indexListExpr, 2, targetPkg, targetType); changed3 {
 								changed = true
 							}
 						}
@@ -406,7 +407,7 @@ func applyServiceType(spec *ast.TypeSpec, action *dsl.Action, correctModelName .
 }
 
 // applyServiceTypeParam updates a specific type parameter in service.Base[T1, T2, T3]
-// to reference targetPkg and actionType in the canonical pointer form; an
+// to reference targetPkg and actionType, transcribing the declared form; an
 // empty targetPkg keeps the current package qualifier.
 func applyServiceTypeParam(indexListExpr *ast.IndexListExpr, paramIndex int, targetPkg, actionType string) bool {
 	if paramIndex >= len(indexListExpr.Indices) || actionType == "" {

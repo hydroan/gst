@@ -92,24 +92,24 @@ func TestTypes(t *testing.T) {
 			name:         "user",
 			modelPkgname: "model",
 			modelName:    "User",
-			reqName:      "User",
-			rspName:      "User",
+			reqName:      "*User",
+			rspName:      "*User",
 			phase:        consts.PHASE_CREATE,
 			want: `type Creator struct {
 	service.Base[*model.User, *model.User, *model.User]
 }`,
 		},
 		{
-			// Bare action type names coming from a non-validated source are
-			// still emitted in the canonical pointer form.
-			name:         "user_bare_names_canonicalized",
+			// Bare action type names (the declared form of slice and map
+			// action types) are transcribed as value types.
+			name:         "user_bare_names_transcribed",
 			modelPkgname: "model",
 			modelName:    "User",
 			reqName:      "UserReq",
 			rspName:      "UserRsp",
 			phase:        consts.PHASE_UPDATE,
 			want: `type Updater struct {
-	service.Base[*model.User, *model.UserReq, *model.UserRsp]
+	service.Base[*model.User, model.UserReq, model.UserRsp]
 }`,
 		},
 		{
@@ -143,6 +143,28 @@ func TestTypes(t *testing.T) {
 			phase:        consts.PHASE_LIST,
 			want: `type Lister struct {
 	service.Base[*model.User, *gstmodel.Empty, *model.UserListRsp]
+}`,
+		},
+		{
+			name:         "create with empty result",
+			modelPkgname: "group",
+			modelName:    "Group",
+			reqName:      "*GroupCreateReq",
+			rspName:      dsl.PayloadEmpty,
+			phase:        consts.PHASE_CREATE,
+			want: `type Creator struct {
+	service.Base[*group.Group, *group.GroupCreateReq, *model.Empty]
+}`,
+		},
+		{
+			name:         "create with empty result in root model package",
+			modelPkgname: "model",
+			modelName:    "User",
+			reqName:      "*UserCreateReq",
+			rspName:      dsl.PayloadEmpty,
+			phase:        consts.PHASE_CREATE,
+			want: `type Creator struct {
+	service.Base[*model.User, *model.UserCreateReq, *gstmodel.Empty]
 }`,
 		},
 	}
@@ -303,21 +325,21 @@ func TestServiceMethod4(t *testing.T) {
 			name:         "Create",
 			recvName:     "u",
 			modelPkgName: "model",
-			reqName:      "User",
-			rspName:      "User",
+			reqName:      "*User",
+			rspName:      "*User",
 			phase:        consts.PHASE_CREATE,
 			want:         "func (u *Creator) Create(ctx *types.ServiceContext, req *model.User) (rsp *model.User, err error) {\n}",
 		},
 		{
-			// Bare action type names coming from a non-validated source are
-			// still emitted in the canonical pointer form.
-			name:         "UpdateBareNamesCanonicalized",
+			// Bare action type names (the declared form of slice and map
+			// action types) are transcribed as value types.
+			name:         "UpdateBareNamesTranscribed",
 			recvName:     "g",
 			modelPkgName: "model",
 			reqName:      "GroupRequest",
 			rspName:      "GroupResponse",
 			phase:        consts.PHASE_UPDATE,
-			want:         "func (g *Updater) Update(ctx *types.ServiceContext, req *model.GroupRequest) (rsp *model.GroupResponse, err error) {\n}",
+			want:         "func (g *Updater) Update(ctx *types.ServiceContext, req model.GroupRequest) (rsp model.GroupResponse, err error) {\n}",
 		},
 		{
 			name:         "Update2",
@@ -345,6 +367,15 @@ func TestServiceMethod4(t *testing.T) {
 			rspName:      "*UserGetRsp",
 			phase:        consts.PHASE_GET,
 			want:         "func (u *Getter) Get(ctx *types.ServiceContext, req *gstmodel.Empty) (rsp *model.UserGetRsp, err error) {\n}",
+		},
+		{
+			name:         "CreateEmptyResult",
+			recvName:     "g",
+			modelPkgName: "group",
+			reqName:      "*GroupCreateReq",
+			rspName:      dsl.PayloadEmpty,
+			phase:        consts.PHASE_CREATE,
+			want:         "func (g *Creator) Create(ctx *types.ServiceContext, req *group.GroupCreateReq) (rsp *model.Empty, err error) {\n}",
 		},
 	}
 	for _, tt := range tests {

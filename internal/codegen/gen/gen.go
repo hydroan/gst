@@ -478,10 +478,10 @@ func GenerateServiceWithPackage(info *ModelInfo, action *dsl.Action, phase const
 	if phase == consts.PHASE_IMPORT {
 		otherPkgs = append(otherPkgs, "io")
 	}
-	// A dsl.PayloadEmpty request type references model.Empty from the gst
-	// model package, so the generated file needs its import (aliased when the
-	// business model package is itself named "model").
-	if isEmptyPayload(action.Payload) {
+	// A dsl.PayloadEmpty request or result type references model.Empty from
+	// the gst model package, so the generated file needs its import (aliased
+	// when the business model package is itself named "model").
+	if isEmptyPayload(action.Payload) || isEmptyPayload(action.Result) {
 		otherPkgs = append(otherPkgs, emptyReqImport(info.ModelPkgName))
 	}
 
