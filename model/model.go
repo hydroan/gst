@@ -2,7 +2,6 @@ package model
 
 import (
 	"reflect"
-	"strings"
 	"sync"
 
 	"github.com/hydroan/gst/internal/modelregistry"
@@ -116,39 +115,6 @@ func Register[M types.Model](records ...M) {
 
 	if len(records) != 0 {
 		modelregistry.RecordChan <- &modelregistry.Record{Table: table, Rows: records, Expands: table.Expands()}
-	}
-}
-
-// RegisterTo registers a database-backed model on the specified database instance.
-//
-// Models that embed Empty are ignored because they do not represent
-// database tables. Unlike Register, RegisterTo preserves seed record IDs exactly
-// as provided by the caller.
-//
-// Key features:
-//   - Thread-safe concurrent registration using mutex protection
-//   - Custom database instance targeting
-//
-// Parameters:
-//   - dbname: The name of the target database instance (case-insensitive)
-//   - records: Optional initial records to be seeded into the table
-//
-// For more details and examples, see: Register().
-func RegisterTo[M types.Model](dbname string, records ...M) {
-	if !modelregistry.IsValid[M]() {
-		return
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-
-	dbname = strings.ToLower(dbname)
-	table := reflect.New(reflect.TypeOf(*new(M)).Elem()).Interface().(M) //nolint:errcheck
-
-	modelregistry.TableDBChan <- &modelregistry.TableDB{Table: table, DBName: dbname}
-
-	if len(records) != 0 {
-		modelregistry.RecordChan <- &modelregistry.Record{Table: table, Rows: records, Expands: table.Expands(), DBName: dbname}
 	}
 }
 

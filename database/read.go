@@ -63,9 +63,6 @@ func (db *database[M]) List(dest *[]M) (err error) {
 	}
 	if db.dryRun {
 		tableName := db.m.GetTableName()
-		if len(db.tableName) > 0 {
-			tableName = db.tableName
-		}
 		db.applyCursorPagination()
 		tx := db.dryRunReadSession().Table(tableName).Find(dest)
 		return db.collectSQL(tx)
@@ -88,9 +85,6 @@ func (db *database[M]) List(dest *[]M) (err error) {
 	}
 	// if err = db.db.Find(dest).Error; err != nil {
 	tableName := db.m.GetTableName()
-	if len(db.tableName) > 0 {
-		tableName = db.tableName
-	}
 	// apply cursor-based pagination.
 	db.applyCursorPagination()
 	if err = db.ins.Table(tableName).Find(dest).Error; err != nil {
@@ -162,9 +156,6 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 	}
 	if db.dryRun {
 		tableName := db.m.GetTableName()
-		if len(db.tableName) > 0 {
-			tableName = db.tableName
-		}
 		dryRunDest := cloneDryRunModel(dest)
 		dryRunDest.ClearID()
 		if len(tableName) == 0 {
@@ -185,9 +176,6 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 	}
 	// if err = db.db.Where("id = ?", id).Find(dest).Error; err != nil {
 	tableName := db.m.GetTableName()
-	if len(db.tableName) > 0 {
-		tableName = db.tableName
-	}
 	// Use an explicit WHERE clause instead of relying on primary key fields
 	// already present on dest.
 	dest.ClearID()
@@ -244,17 +232,11 @@ func (db *database[M]) Count(count *int) (err error) {
 	var count64 int64
 	if db.dryRun {
 		tableName := db.m.GetTableName()
-		if len(db.tableName) > 0 {
-			tableName = db.tableName
-		}
 		tx := db.dryRunReadSession().Table(tableName).Model(*new(M)).Limit(-1).Count(&count64)
 		return db.collectSQL(tx)
 	}
 	// if err = db.db.Model(*new(M)).Count(&count64).Error; err != nil {
 	tableName := db.m.GetTableName()
-	if len(db.tableName) > 0 {
-		tableName = db.tableName
-	}
 	if err = db.ins.Table(tableName).Model(*new(M)).Limit(-1).Count(&count64).Error; err != nil {
 		return err
 	}
@@ -302,9 +284,6 @@ func (db *database[M]) First(dest M) (err error) {
 	}
 	if db.dryRun {
 		tableName := db.m.GetTableName()
-		if len(db.tableName) > 0 {
-			tableName = db.tableName
-		}
 		tx := db.dryRunReadSession().Table(tableName).First(dest)
 		return db.collectSQL(tx)
 	}
@@ -319,9 +298,6 @@ func (db *database[M]) First(dest M) (err error) {
 	}
 	// if err = db.db.First(dest).Error; err != nil {
 	tableName := db.m.GetTableName()
-	if len(db.tableName) > 0 {
-		tableName = db.tableName
-	}
 	if err = db.ins.Table(tableName).First(dest).Error; err != nil {
 		return err
 	}
@@ -377,9 +353,6 @@ func (db *database[M]) Last(dest M) (err error) {
 	}
 	if db.dryRun {
 		tableName := db.m.GetTableName()
-		if len(db.tableName) > 0 {
-			tableName = db.tableName
-		}
 		tx := db.dryRunReadSession().Table(tableName).Last(dest)
 		return db.collectSQL(tx)
 	}
@@ -394,9 +367,6 @@ func (db *database[M]) Last(dest M) (err error) {
 	}
 	// if err = db.db.Last(dest).Error; err != nil {
 	tableName := db.m.GetTableName()
-	if len(db.tableName) > 0 {
-		tableName = db.tableName
-	}
 	if err = db.ins.Table(tableName).Last(dest).Error; err != nil {
 		return err
 	}
@@ -452,9 +422,6 @@ func (db *database[M]) Take(dest M) (err error) {
 	}
 	if db.dryRun {
 		tableName := db.m.GetTableName()
-		if len(db.tableName) > 0 {
-			tableName = db.tableName
-		}
 		tx := db.dryRunReadSession().Table(tableName).Take(dest)
 		return db.collectSQL(tx)
 	}
@@ -469,9 +436,6 @@ func (db *database[M]) Take(dest M) (err error) {
 	}
 	// if err = db.db.Take(dest).Error; err != nil {
 	tableName := db.m.GetTableName()
-	if len(db.tableName) > 0 {
-		tableName = db.tableName
-	}
 	if err = db.ins.Table(tableName).Take(dest).Error; err != nil {
 		return err
 	}

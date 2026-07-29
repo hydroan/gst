@@ -7,6 +7,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/database"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/requestctx"
 	. "github.com/hydroan/gst/internal/response"
@@ -34,7 +35,6 @@ func Delete[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's Delete method.
 func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	handler, _ := extractConfig(cfg...)
 	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_DELETE, consts.PHASE_DELETE_BEFORE, consts.PHASE_DELETE_AFTER)
 	return func(c *gin.Context) {
 		ctrlSpanCtx, span := meta.startControllerSpan(c)
@@ -108,13 +108,13 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// find out the record and keep a copy for the operation log.
 		copied := meta.newModel()
 		copied.SetID(m.GetID())
-		if err := handler(requestContext(c)).WithExpand(copied.Expands()).Get(copied, m.GetID()); err != nil {
+		if err := database.Database[M](requestContext(c)).WithExpand(copied.Expands()).Get(copied, m.GetID()); err != nil {
 			log.Error(err)
 			gstotel.RecordError(span, err)
 		}
 
 		// 2.Delete resource in database.
-		if err := handler(requestContext(c)).Delete(m); err != nil {
+		if err := database.Database[M](requestContext(c)).Delete(m); err != nil {
 			log.Error(err)
 			JSON(c, CodeFailure.WithErr(err))
 			gstotel.RecordError(span, err)

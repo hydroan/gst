@@ -31,7 +31,6 @@ func Import[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 // an ID is created (unique-key collisions fail with 409). Both writes share
 // one transaction, so an import is all-or-nothing.
 func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	handler, _ := extractConfig(cfg...)
 	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_IMPORT)
 	return func(c *gin.Context) {
 		ctrlSpanCtx, span := meta.startControllerSpan(c)
@@ -103,10 +102,10 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// One transaction for the whole import: a duplicate on the create side
 		// or a missing ID on the update side rolls everything back.
 		if err := database.Transaction(requestContext(c), func(txCtx context.Context) error {
-			if err := handler(txCtx).Create(toCreate...); err != nil {
+			if err := database.Database[M](txCtx).Create(toCreate...); err != nil {
 				return err
 			}
-			return handler(txCtx).Update(toUpdate...)
+			return database.Database[M](txCtx).Update(toUpdate...)
 		}); err != nil {
 			log.Error(err)
 			JSON(c, writeErrorCoder(err))
@@ -121,7 +120,7 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// 	tableName = pluralizeCli.Plural(strings.ToLower(items[len(items)-1]))
 		// }
 		// record, _ := json.Marshal(ml)
-		// if err := database.Database[*model.OperationLog]().WithDB(db).Create(&model.OperationLog{
+		// if err := database.Database[*model.OperationLog]().Create(&model.OperationLog{
 		// 	Op:        model.OperationTypeImport,
 		// 	Model:     typ.Name(),
 		// 	Table:     tableName,

@@ -91,12 +91,14 @@ type database[M types.Model] struct {
 	ctx context.Context
 	mu  sync.Mutex
 
+	// identity
+	base *gorm.DB // connection handle this chain was opened on; it keys context transactions and stays the original handle even after the chain joins one. Set at entry, never reset.
+
 	// options
-	enablePurge *bool  // delete resource permanently, not only update deleted_at field, only works on 'Delete' method.
-	tableName   string // support multiple custom table name, always used with the `WithDB` method.
-	batchSize   int    // batch size for bulk operations. affects Create, Update, Delete.
-	noHook      bool   // disable model hook.
-	dryRun      bool   // build SQL without database I/O, hooks, or object field filling.
+	enablePurge *bool // delete resource permanently, not only update deleted_at field, only works on 'Delete' method.
+	batchSize   int   // batch size for bulk operations. affects Create, Update, Delete.
+	noHook      bool  // disable model hook.
+	dryRun      bool  // build SQL without database I/O, hooks, or object field filling.
 
 	// sql
 	buildingSQL   bool // collect generated SQL statements for WithBuildSQL.
@@ -155,7 +157,6 @@ func (db *database[M]) reset() {
 	db.typ = nil
 
 	db.enablePurge = nil
-	db.tableName = ""
 	db.batchSize = 0
 	db.noHook = false
 	db.dryRun = false
@@ -250,27 +251,47 @@ func Database[M types.Model](ctx context.Context) types.Database[M] {
 	if DB() == nil || DB() == new(gorm.DB) {
 		panic("database is not initialized")
 	}
+	return databaseFor[M](ctx, DB())
+}
+
+// DatabaseOn is Database on an application-held database instance, typically
+// built once with a dialect New function such as clickhouse.New and kept by
+// the application. The chain only joins transactions opened on the same
+// instance by TransactionOn. Panics on a nil instance, consistent with
+// Database on an uninitialized default database.
+func DatabaseOn[M types.Model](ctx context.Context, instance *gorm.DB) types.Database[M] {
+	if instance == nil {
+		panic("database instance cannot be nil")
+	}
+	return databaseFor[M](ctx, instance)
+}
+
+// databaseFor builds the operation chain for one entry-point call: it joins
+// the context-carried transaction keyed by the given connection handle when
+// present, and stamps the chain with that handle as its identity.
+func databaseFor[M types.Model](ctx context.Context, base *gorm.DB) types.Database[M] {
 	gctx := context.Background()
 	if ctx != nil {
 		gctx = ctx
 	}
 
-	baseDB := DB()
-	if tx, ok := txFromContext(gctx); ok {
-		baseDB = tx
+	// The handle is the chain's identity and transaction key; the running
+	// connection switches to the context transaction when one exists.
+	running := base
+	if tx, ok := txFromContext(gctx, base); ok {
+		running = tx
 	}
 
 	var ins *gorm.DB
 	if strings.ToLower(config.App.Logger.Level) == "debug" {
-		ins = baseDB.Debug().WithContext(gctx).Limit(defaultLimit)
+		ins = running.Debug().WithContext(gctx).Limit(defaultLimit)
 	} else {
-		ins = baseDB.WithContext(gctx).Limit(defaultLimit)
+		ins = running.WithContext(gctx).Limit(defaultLimit)
 	}
 
-	db := &database[M]{
-		ins: ins,
-		ctx: gctx,
+	return &database[M]{
+		ins:  ins,
+		ctx:  gctx,
+		base: base,
 	}
-
-	return db
 }

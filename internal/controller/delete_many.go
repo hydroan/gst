@@ -7,6 +7,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/database"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/logger"
@@ -32,7 +33,6 @@ func DeleteMany[M types.Model, REQ types.Request, RSP types.Response](c *gin.Con
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's DeleteMany method.
 func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	handler, _ := extractConfig(cfg...)
 	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_DELETE_MANY, consts.PHASE_DELETE_MANY_BEFORE, consts.PHASE_DELETE_MANY_AFTER)
 	return func(c *gin.Context) {
 		var err error
@@ -114,8 +114,8 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		if !errors.Is(reqErr, io.EOF) {
 			// purge mode is current not allowed in request.
 			//
-			// if err = handler(requestContext(c)).WithPurge(req.Options.Purge).Delete(req.Items...); err != nil {
-			if err = handler(requestContext(c)).Delete(req.Items...); err != nil {
+			// if err = database.Database[M](requestContext(c)).WithPurge(req.Options.Purge).Delete(req.Items...); err != nil {
+			if err = database.Database[M](requestContext(c)).Delete(req.Items...); err != nil {
 				log.Error(err)
 				JSON(c, CodeFailure.WithErr(err))
 				gstotel.RecordError(span, err)

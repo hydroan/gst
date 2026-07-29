@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/modelregistry"
 	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/urlquery"
@@ -68,7 +69,6 @@ func Export[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 // and query options, delegates byte generation to the phase service's Export
 // method, and writes the result as an attachment
 func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	handler, _ := extractConfig(cfg...)
 	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_EXPORT)
 	return func(c *gin.Context) {
 		ctrlSpanCtx, span := meta.startControllerSpan(c)
@@ -135,7 +135,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			}
 			_, _ = page, size
 			// 2.List resources from database.
-			if err = handler(requestContext(c)).
+			if err = database.Database[M](requestContext(c)).
 				// WithPagination(page, size). // don't use WithPagination, it makes WithLimit ineffective
 				WithLimit(limit).
 				WithQuery(svc.Filter(svcCtx, m), types.QueryOptions{
@@ -180,7 +180,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// 	tableName = pluralizeCli.Plural(strings.ToLower(items[len(items)-1]))
 		// }
 		// record, _ := json.Marshal(data)
-		// if err := database.Database[*model.OperationLog]().WithDB(db).Create(&model.OperationLog{
+		// if err := database.Database[*model.OperationLog]().Create(&model.OperationLog{
 		// 	Op:        model.OperationTypeExport,
 		// 	Model:     typ.Name(),
 		// 	Table:     tableName,

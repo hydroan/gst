@@ -32,14 +32,36 @@ func Transaction(ctx context.Context, fn func(ctx context.Context) error) error 
 	if fn == nil {
 		return ErrNilTransaction
 	}
+	if DB() == nil || DB() == new(gorm.DB) {
+		panic("database is not initialized")
+	}
+	return transactionOn(ctx, DB(), fn)
+}
+
+// TransactionOn is Transaction on an application-held database instance: fn
+// runs inside a transaction opened on that instance, and only DatabaseOn
+// chains for the same instance join it — a default-database chain inside fn
+// keeps its own connection. Cross-instance atomicity is not provided. Panics
+// on a nil instance, consistent with DatabaseOn.
+func TransactionOn(ctx context.Context, instance *gorm.DB, fn func(ctx context.Context) error) error {
+	if fn == nil {
+		return ErrNilTransaction
+	}
+	if instance == nil {
+		panic("database instance cannot be nil")
+	}
+	return transactionOn(ctx, instance, fn)
+}
+
+// transactionOn is the shared body of Transaction and TransactionOn. The
+// connection handle keys the context transaction, so per-instance
+// transactions coexist and joining is always same-instance only.
+func transactionOn(ctx context.Context, base *gorm.DB, fn func(ctx context.Context) error) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if _, ok := txFromContext(ctx); ok {
+	if _, ok := txFromContext(ctx, base); ok {
 		return fn(ctx)
-	}
-	if DB() == nil || DB() == new(gorm.DB) {
-		panic("database is not initialized")
 	}
 
 	spanCtx, span := gstotel.StartSpan(ctx, gstotel.OperationSpanName("database", "Transaction"))
@@ -52,9 +74,9 @@ func Transaction(ctx context.Context, fn func(ctx context.Context) error) error 
 	begin := time.Now()
 	// Deriving the closure context from spanCtx makes per-statement spans from
 	// GormTracingPlugin nest under this transaction span, and contextWithTx
-	// makes every Database[M](ctx) chain inside fn join gormTx.
-	txErr := DB().WithContext(spanCtx).Transaction(func(gormTx *gorm.DB) error {
-		if err := fn(contextWithTx(spanCtx, gormTx)); err != nil {
+	// makes every chain opened on the same handle inside fn join gormTx.
+	txErr := base.WithContext(spanCtx).Transaction(func(gormTx *gorm.DB) error {
+		if err := fn(contextWithTx(spanCtx, gormTx, base)); err != nil {
 			logger.Database.WithContext(ctx, consts.Phase("Transaction")).Errorz(
 				"transaction rolled back due to error",
 				zap.Error(err),

@@ -43,9 +43,6 @@ func (db *database[M]) Cleanup() (err error) {
 
 	// return db.db.Limit(-1).Where("deleted_at IS NOT NULL").Model(*new(M)).Unscoped().Delete(make([]M, 0)).Error
 	tableName := db.m.GetTableName()
-	if len(db.tableName) > 0 {
-		tableName = db.tableName
-	}
 	tx := db.ins.Session(&gorm.Session{DryRun: db.dryRun}).Table(tableName).Limit(-1).Where("deleted_at IS NOT NULL").Model(*new(M)).Unscoped().Delete(make([]M, 0))
 	if db.dryRun {
 		return db.collectSQL(tx)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/database"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/logger"
@@ -34,7 +35,6 @@ func PatchMany[M types.Model, REQ types.Request, RSP types.Response](c *gin.Cont
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's PatchMany method.
 func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	handler, _ := extractConfig(cfg...)
 	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_PATCH_MANY, consts.PHASE_PATCH_MANY_BEFORE, consts.PHASE_PATCH_MANY_AFTER)
 	return func(c *gin.Context) {
 		var err error
@@ -105,7 +105,7 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 			var results []M
 			v := meta.newModel()
 			v.SetID(m.GetID())
-			if err = handler(requestContext(c)).WithLimit(1).WithQuery(v).List(&results); err != nil {
+			if err = database.Database[M](requestContext(c)).WithLimit(1).WithQuery(v).List(&results); err != nil {
 				log.Error(err)
 				gstotel.RecordError(span, err)
 				continue
@@ -143,7 +143,7 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 		// unique-key collisions from the patched values render 409. Either way
 		// the transaction rolls the whole batch back.
 		if !errors.Is(reqErr, io.EOF) {
-			if err = handler(requestContext(c)).Update(shouldUpdates...); err != nil {
+			if err = database.Database[M](requestContext(c)).Update(shouldUpdates...); err != nil {
 				log.Error(err)
 				JSON(c, writeErrorCoder(err))
 				gstotel.RecordError(span, err)

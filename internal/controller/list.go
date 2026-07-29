@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/database"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/urlquery"
@@ -34,7 +35,6 @@ func List[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) 
 // request whose body carries no semantics, so nothing is bound into REQ;
 // custom services read query parameters from ServiceContext.Query().
 func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	handler, _ := extractConfig(cfg...)
 	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_LIST, consts.PHASE_LIST_BEFORE, consts.PHASE_LIST_AFTER)
 	return func(c *gin.Context) {
 		ctrlSpanCtx, span := meta.startControllerSpan(c)
@@ -127,7 +127,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			return
 		}
 		// 2.List resources from database.
-		if err = handler(requestContext(c)).
+		if err = database.Database[M](requestContext(c)).
 			WithPagination(urlquery.Pagination(query, m)).
 			WithQuery(svc.Filter(ctx, m), types.QueryOptions{
 				AllowEmpty:    true,
@@ -159,7 +159,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		total := new(int)
 		// NOTE: Total count is not provided when using cursor-based pagination.
 		if !cursor.Enabled() {
-			if err = handler(requestContext(c)).
+			if err = database.Database[M](requestContext(c)).
 				// NOTE: WithPagination should not apply in Count method.
 				WithQuery(svc.Filter(ctx, m), types.QueryOptions{
 					AllowEmpty:    true,

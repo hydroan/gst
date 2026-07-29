@@ -6,6 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/database"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/requestctx"
 	. "github.com/hydroan/gst/internal/response"
@@ -35,7 +36,6 @@ func Get[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context) {
 // custom services read parameters from ServiceContext.Query() and
 // ServiceContext.Param().
 func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	handler, _ := extractConfig(cfg...)
 	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_GET, consts.PHASE_GET_BEFORE, consts.PHASE_GET_AFTER)
 	return func(c *gin.Context) {
 		ctrlSpanCtx, span := meta.startControllerSpan(c)
@@ -104,7 +104,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			return
 		}
 		// 2.Get resource from database.
-		if err = handler(requestContext(c)).
+		if err = database.Database[M](requestContext(c)).
 			WithExpand(expands).
 			Get(m, m.GetID()); err != nil {
 			log.Error(err)

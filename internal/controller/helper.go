@@ -239,28 +239,6 @@ func routeFromConfig[M types.Model](cfg ...*types.ControllerConfig[M]) string {
 	return ""
 }
 
-func extractConfig[M types.Model](cfg ...*types.ControllerConfig[M]) (handler func(ctx context.Context) types.Database[M], db any) {
-	if len(cfg) > 0 {
-		if cfg[0] != nil {
-			db = cfg[0].DB
-		}
-	}
-	handler = func(ctx context.Context) types.Database[M] {
-		fn := database.Database[M](ctx)
-		if len(cfg) > 0 {
-			if cfg[0] != nil {
-				if len(cfg[0].TableName) > 0 {
-					fn = database.Database[M](ctx).WithDB(cfg[0].DB).WithTable(cfg[0].TableName)
-				} else {
-					fn = database.Database[M](ctx).WithDB(cfg[0].DB)
-				}
-			}
-		}
-		return fn
-	}
-	return handler, db
-}
-
 func requestContext(c *gin.Context) context.Context {
 	if c == nil || c.Request == nil {
 		return context.Background()

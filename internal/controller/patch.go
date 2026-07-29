@@ -9,6 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/database"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/requestctx"
 	. "github.com/hydroan/gst/internal/response"
@@ -36,7 +37,6 @@ func Patch[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context)
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's Patch method.
 func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	handler, _ := extractConfig(cfg...)
 	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_PATCH, consts.PHASE_PATCH_BEFORE, consts.PHASE_PATCH_AFTER)
 	return func(c *gin.Context) {
 		var id string
@@ -123,7 +123,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		}
 
 		// Make sure the record must be already exists.
-		if err := handler(requestContext(c)).WithLimit(1).WithQuery(m).List(&data); err != nil {
+		if err := database.Database[M](requestContext(c)).WithLimit(1).WithQuery(m).List(&data); err != nil {
 			log.Error(err)
 			JSON(c, CodeFailure.WithErr(err))
 			gstotel.RecordError(span, err)
@@ -158,7 +158,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		// 2.Partial update resource in database. The record was loaded above, so
 		// ErrRecordNotFound only fires when it vanished in between; unique-key
 		// collisions from the patched values render 409.
-		if err := handler(requestContext(c)).Update(cur); err != nil {
+		if err := database.Database[M](requestContext(c)).Update(cur); err != nil {
 			log.Error(err)
 			JSON(c, writeErrorCoder(err))
 			gstotel.RecordError(span, err)

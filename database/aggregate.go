@@ -61,7 +61,6 @@ type aggregator[M types.Model, R any] struct {
 	// The options live here rather than on the shared chain because reset()
 	// clears the chain's copies after every terminal, which would silently drop
 	// them from a second read off the same builder.
-	table      string
 	dryRun     bool
 	statements *[]types.SQLStatement
 
@@ -81,6 +80,19 @@ func Aggregate[M types.Model, R any](ctx context.Context) types.Aggregator[M, R]
 	if !ok {
 		// Unreachable while Database returns the concrete chain, but swallowing
 		// it would surface later as a nil dereference far from the cause.
+		return &aggregator[M, R]{err: ErrAggregatorUnusable}
+	}
+	return &aggregator[M, R]{db: inner}
+}
+
+// AggregateOn is Aggregate on an application-held database instance. See
+// DatabaseOn for the instance semantics, including the panic on nil.
+func AggregateOn[M types.Model, R any](ctx context.Context, instance *gorm.DB) types.Aggregator[M, R] {
+	inner, ok := DatabaseOn[M](ctx, instance).(*database[M])
+	if !ok {
+		// Unreachable while DatabaseOn returns the concrete chain, but
+		// swallowing it would surface later as a nil dereference far from
+		// the cause.
 		return &aggregator[M, R]{err: ErrAggregatorUnusable}
 	}
 	return &aggregator[M, R]{db: inner}
@@ -127,11 +139,6 @@ func (a *aggregator[M, R]) Offset(n int) types.Aggregator[M, R] {
 		return a
 	}
 	a.offset = n
-	return a
-}
-
-func (a *aggregator[M, R]) WithTable(name string) types.Aggregator[M, R] {
-	a.table = name
 	return a
 }
 
@@ -288,15 +295,11 @@ func (a *aggregator[M, R]) build(mode buildMode) (*gorm.DB, error) {
 	// question. That shape is the one the paginated-report idiom produces:
 	// Scan for the page, then CountGroups for the total.
 	a.db.ins = a.session()
-	a.db.tableName = a.table
 	a.db.dryRun = a.dryRun
 	a.db.buildingSQL = a.statements != nil
 	a.db.sqlStatements = a.statements
 
 	table := a.db.m.GetTableName()
-	if len(a.table) > 0 {
-		table = a.table
-	}
 	// Model is what carries the schema, and the schema is what adds the
 	// soft-delete condition. Table alone names the table but parses no model,
 	// so an aggregate scanning into R would silently read deleted rows while a

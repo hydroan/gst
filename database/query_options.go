@@ -436,7 +436,7 @@ func (db *database[M]) WithLock(mode ...consts.LockMode) types.Database[M] {
 	// finishes, which silently defeats the purpose of WithLock. Warn instead of
 	// failing so read paths keep working, but the caller should wrap the
 	// operation in database.Transaction.
-	if _, ok := txFromContext(db.ctx); !ok {
+	if _, ok := txFromContext(db.ctx, db.base); !ok {
 		logger.Database.WithContext(db.ctx, consts.Phase("WithLock")).Warn(
 			"WithLock used outside a transaction; locks are released immediately, wrap the operation in database.Transaction",
 		)

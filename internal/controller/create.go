@@ -9,6 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/database"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/logger"
@@ -34,7 +35,6 @@ func Create[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 // delegates the operation to the phase service's Create method. Multipart form
 // requests are left unbound so the service can read the request directly.
 func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	handler, _ := extractConfig(cfg...)
 	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_CREATE, consts.PHASE_CREATE_BEFORE, consts.PHASE_CREATE_AFTER)
 	return func(c *gin.Context) {
 		var err error
@@ -109,7 +109,7 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// unique key collision (including one held by a soft-deleted row)
 		// surfaces as ErrDuplicatedKey and renders 409.
 		if !errors.Is(reqErr, io.EOF) {
-			if err = handler(requestContext(c)).WithExpand(req.Expands()).Create(req); err != nil {
+			if err = database.Database[M](requestContext(c)).WithExpand(req.Expands()).Create(req); err != nil {
 				log.Error(err)
 				JSON(c, writeErrorCoder(err))
 				gstotel.RecordError(span, err)

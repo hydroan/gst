@@ -70,9 +70,6 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 
 	if db.dryRun {
 		tableName := db.m.GetTableName()
-		if len(db.tableName) > 0 {
-			tableName = db.tableName
-		}
 		batchSize := defaultBatchSize
 		if db.batchSize > 0 {
 			batchSize = db.batchSize
@@ -107,9 +104,6 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 		}
 
 		tableName := db.m.GetTableName()
-		if len(db.tableName) > 0 {
-			tableName = db.tableName
-		}
 		batchSize := defaultBatchSize
 		if db.batchSize > 0 {
 			batchSize = db.batchSize
@@ -191,9 +185,6 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 
 	if db.dryRun {
 		tableName := db.m.GetTableName()
-		if len(db.tableName) > 0 {
-			tableName = db.tableName
-		}
 		batchSize := defaultDeleteBatchSize
 		if db.batchSize > 0 {
 			batchSize = db.batchSize
@@ -231,9 +222,6 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 			}
 		}
 		tableName := db.m.GetTableName()
-		if len(db.tableName) > 0 {
-			tableName = db.tableName
-		}
 		if util.Deref(db.enablePurge) {
 			// delete permanently.
 			batchSize := defaultDeleteBatchSize
@@ -300,7 +288,7 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 //     ErrRecordNotFound. Detection relies on matched-rows semantics: the
 //     framework MySQL DSN enables clientFoundRows=true so an update that
 //     changes nothing still counts as matched instead of being misread as
-//     missing. Custom connections passed via WithDB must keep that flag.
+//     missing. Custom database connections must keep that flag.
 //   - Runs hooks and all row updates in one transaction: any missing record or
 //     failed hook rolls back the whole call (all-or-nothing), joining the
 //     transaction carried by ctx when present.
@@ -348,9 +336,6 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 	defer func() { done(err) }()
 
 	tableName := db.m.GetTableName()
-	if len(db.tableName) > 0 {
-		tableName = db.tableName
-	}
 
 	if db.dryRun {
 		dryRunObjs := cloneDryRunModels(objs)
@@ -482,9 +467,6 @@ func (db *database[M]) Upsert(_objs ...M) (err error) {
 	defer func() { done(err) }()
 
 	tableName := db.m.GetTableName()
-	if len(db.tableName) > 0 {
-		tableName = db.tableName
-	}
 	batchSize := defaultBatchSize
 	if db.batchSize > 0 {
 		batchSize = db.batchSize
@@ -574,9 +556,6 @@ func (db *database[M]) UpdateByID(id string, column string, value any) (err erro
 
 	// return db.db.Model(*new(M)).Where("id = ?", id).Update(column, value).Error
 	tableName := db.m.GetTableName()
-	if len(db.tableName) > 0 {
-		tableName = db.tableName
-	}
 
 	if db.dryRun {
 		tx := db.ins.Session(&gorm.Session{DryRun: true}).Table(tableName).Model(*new(M)).Where("id = ?", id).Update(column, value)

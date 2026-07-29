@@ -3,7 +3,6 @@ package dbruntime
 import (
 	"fmt"
 	"reflect"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/util"
 	cmap "github.com/orcaman/concurrent-map/v2"
-	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -73,30 +71,17 @@ func ensureTable(handler *gorm.DB, m types.Model) error {
 }
 
 // InitDatabase initializes database tables and records with asynchronous processing support.
-// It creates tables and inserts records that are registered via Register() or RegisterTo() functions.
+// It creates tables and inserts records that are registered via the model.Register function.
 // The function supports concurrent model registration at any stage - before, during, or after InitDatabase execution.
 //
 // Key features:
 //   - Asynchronous table creation and record insertion using goroutines and channels
 //   - Thread-safe concurrent model registration support
-//   - Automatic handling of both default database and custom database instances
 //   - Real-time processing of models registered during initialization
 //
 // NOTE: The version of gorm.io/driver/postgres lower than v1.5.4 have some issues.
 // More details see: https://github.com/go-gorm/gorm/issues/6886
-func InitDatabase(db *gorm.DB, dbmap map[string]*gorm.DB) (err error) {
-	// Install GORM OpenTelemetry tracing plugin
-	if err = db.Use(otelgorm.NewPlugin()); err != nil {
-		zap.S().Warnw("failed to install GORM OpenTelemetry tracing plugin", "error", err)
-	}
-
-	// Install tracing plugin for custom databases
-	for _, customDB := range dbmap {
-		if err = customDB.Use(otelgorm.NewPlugin()); err != nil {
-			zap.S().Warnw("failed to install GORM OpenTelemetry tracing plugin for custom DB", "error", err)
-		}
-	}
-
+func InitDatabase(db *gorm.DB) (err error) {
 	if startedTable.CompareAndSwap(0, 1) {
 		go func() {
 			for {
@@ -114,28 +99,6 @@ func InitDatabase(db *gorm.DB, dbmap map[string]*gorm.DB) (err error) {
 
 					initedTable.Set(typ.String(), "")
 
-				case v := <-modelregistry.TableDBChan:
-					if v == nil {
-						continue
-					}
-
-					// Prepare the table in the custom database.
-					begin := time.Now()
-
-					handler := db
-					if val, exists := dbmap[strings.ToLower(v.DBName)]; exists {
-						handler = val
-					}
-					m := v.Table
-					typ := reflect.TypeOf(m).Elem()
-					if err = ensureTable(handler, m); err != nil {
-						err = errors.Wrap(err, fmt.Sprintf("failed to prepare table(%s)", typ.String()))
-						panic(err)
-					}
-					zap.S().Infow("database table ready", "model", typ.String(), util.LogDuration(time.Since(begin)))
-
-					initedTable.Set(typ.String(), v.DBName)
-
 				case r := <-modelregistry.RecordChan:
 					if r == nil {
 						continue
@@ -148,20 +111,15 @@ func InitDatabase(db *gorm.DB, dbmap map[string]*gorm.DB) (err error) {
 					go func(r *modelregistry.Record) {
 						typ := reflect.TypeOf(r.Table).Elem()
 						for {
-							dbname, e := initedTable.Get(typ.String())
-							if e && dbname == r.DBName {
+							if _, e := initedTable.Get(typ.String()); e {
 								break
 							}
 							time.Sleep(100 * time.Millisecond)
 						}
 
 						begin := time.Now()
-						handler := db
-						if val, exists := dbmap[strings.ToLower(r.DBName)]; exists {
-							handler = val
-						}
 						// Use upsert-avoidance to keep seeding idempotent across DBs.
-						if err = handler.Table(r.Table.GetTableName()).
+						if err = db.Table(r.Table.GetTableName()).
 							Clauses(clause.OnConflict{DoNothing: true}).
 							Create(r.Rows).Error; err != nil {
 							err = errors.Wrap(err, "failed to create table records")
@@ -182,10 +140,9 @@ func InitDatabase(db *gorm.DB, dbmap map[string]*gorm.DB) (err error) {
 }
 
 // Wait blocks until all pending database initialization operations are completed.
-// It monitors three channels used by the InitDatabase function's background goroutine:
+// It monitors the two channels used by the InitDatabase function's background goroutine:
 //
 //   - modelregistry.TableChan: Contains models waiting for table creation in the default database
-//   - modelregistry.TableDBChan: Contains models waiting for table creation in custom databases
 //   - modelregistry.RecordChan: Contains records waiting for insertion after table creation
 //
 // This function is useful in scenarios where you need to ensure that all database
@@ -218,22 +175,20 @@ func Wait() {
 	startTime := time.Now()
 	var lastLogTime time.Time
 
-	for len(modelregistry.TableChan) != 0 || len(modelregistry.TableDBChan) != 0 || len(modelregistry.RecordChan) != 0 {
+	for len(modelregistry.TableChan) != 0 || len(modelregistry.RecordChan) != 0 {
 		tablePending := len(modelregistry.TableChan)
-		tableDBPending := len(modelregistry.TableDBChan)
 		recordPending := len(modelregistry.RecordChan)
 
 		// Log progress every 500ms to avoid spam
 		if time.Since(lastLogTime) >= 500*time.Millisecond {
 			elapsed := time.Since(startTime)
-			totalPending := tablePending + tableDBPending + recordPending
+			totalPending := tablePending + recordPending
 
 			zap.S().Infow(
 				"waiting for database initialization",
 				util.LogDuration(elapsed),
 				"total_pending", totalPending,
 				"default_tables", tablePending,
-				"custom_tables", tableDBPending,
 				"records", recordPending,
 			)
 			lastLogTime = time.Now()

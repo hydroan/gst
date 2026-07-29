@@ -219,8 +219,6 @@ type Aggregator[M Model, R any] interface {
 	// total a paginated grouped report needs.
 	CountGroups(count *int) error
 
-	// WithTable overrides the table name; the table must already exist.
-	WithTable(name string) Aggregator[M, R]
 	// WithBuildSQL builds the SQL for the next terminal operation and appends
 	// it to the collector instead of executing it.
 	WithBuildSQL(statements *[]SQLStatement) Aggregator[M, R]
@@ -232,12 +230,6 @@ type Aggregator[M Model, R any] interface {
 // Options apply to the next terminal operation and are reset afterward. Start a
 // new chain with database.Database[M](ctx) for each independent operation.
 type DatabaseOption[M Model] interface {
-	// WithDB uses a custom *gorm.DB; callers must migrate custom schemas explicitly.
-	// Inside a database.Transaction closure it replaces the underlying connection,
-	// so the chain leaves the transaction and a warning is logged.
-	WithDB(any) Database[M]
-	// WithTable sets a custom table name; the table must already exist.
-	WithTable(name string) Database[M]
 	// WithQuery adds query conditions from model fields or raw SQL configuration.
 	WithQuery(query M, opts ...QueryOptions) Database[M]
 	// WithCursor enables cursor-based pagination for List operations.

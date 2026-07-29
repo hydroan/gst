@@ -8,6 +8,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/logger"
+	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -16,7 +17,6 @@ import (
 var (
 	Default *gorm.DB
 	db      *sql.DB
-	dbmap   = make(map[string]*gorm.DB)
 )
 
 // Init initializes the default SQLite connection.
@@ -25,7 +25,7 @@ var (
 func Init() (err error) {
 	cfg := config.App.Sqlite
 	if !cfg.Enabled || config.App.Database.Type != config.DBSqlite {
-		return err
+		return nil
 	}
 
 	if Default, err = New(cfg); err != nil {
@@ -47,13 +47,22 @@ func Init() (err error) {
 	}
 
 	zap.S().Infow("successfully connect to sqlite", "path", cfg.Path, "database", cfg.Database, "is_memory", cfg.IsMemory)
-	return dbruntime.InitDatabase(Default, dbmap)
+	return dbruntime.InitDatabase(Default)
 }
 
 // New creates and returns a new SQLite database connection with the given configuration.
-// Returns (*gorm.DB, error) where error is non-nil if the connection fails.
+// The returned handle already carries the GORM OpenTelemetry tracing plugin,
+// so application-held instances passed to DatabaseOn, AggregateOn, and
+// TransactionOn are traced like the default database.
 func New(cfg config.Sqlite) (*gorm.DB, error) {
-	return gorm.Open(sqlite.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true})
+	db, err := gorm.Open(sqlite.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true})
+	if err != nil {
+		return nil, err
+	}
+	if err := db.Use(otelgorm.NewPlugin()); err != nil {
+		zap.S().Warnw("failed to install GORM OpenTelemetry tracing plugin", "dialect", "sqlite", "error", err)
+	}
+	return db, nil
 }
 
 // optimizeDatabase applies performance optimization settings to the SQLite database.

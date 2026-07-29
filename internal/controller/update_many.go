@@ -7,6 +7,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/database"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/logger"
@@ -31,7 +32,6 @@ func UpdateMany[M types.Model, REQ types.Request, RSP types.Response](c *gin.Con
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's UpdateMany method.
 func UpdateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	handler, _ := extractConfig(cfg...)
 	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_UPDATE_MANY, consts.PHASE_UPDATE_MANY_BEFORE, consts.PHASE_UPDATE_MANY_AFTER)
 	return func(c *gin.Context) {
 		var err error
@@ -100,7 +100,7 @@ func UpdateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		// an item without a live row renders 404 and rolls the batch back, so
 		// the batch endpoint can never insert rows.
 		if !errors.Is(reqErr, io.EOF) {
-			if err = handler(requestContext(c)).Update(req.Items...); err != nil {
+			if err = database.Database[M](requestContext(c)).Update(req.Items...); err != nil {
 				log.Error(err)
 				JSON(c, writeErrorCoder(err))
 				gstotel.RecordError(span, err)

@@ -12,10 +12,6 @@ type Event = sse.Event
 // a route. It is the public configuration surface for controller behavior; the
 // concrete controller handlers and their runtime state remain framework-owned.
 type ControllerConfig[M Model] struct {
-	// DB overrides the database handle used by the route. Only *gorm.DB is supported.
-	DB any
-	// TableName overrides the model table name used by the route.
-	TableName string
 	// ParamName names the route parameter that carries the resource ID.
 	ParamName string
 	// Route is the raw route string the handler is registered under. Controller

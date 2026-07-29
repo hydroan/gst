@@ -7,6 +7,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/database"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/requestctx"
 	. "github.com/hydroan/gst/internal/response"
@@ -40,7 +41,6 @@ func Update[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's Update method.
 func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	handler, _ := extractConfig(cfg...)
 	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_UPDATE, consts.PHASE_UPDATE_BEFORE, consts.PHASE_UPDATE_AFTER)
 	return func(c *gin.Context) {
 		var err error
@@ -127,7 +127,7 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		// 2.Update resource in database. The database layer answers existence:
 		// ErrRecordNotFound renders 404, ErrDuplicatedKey renders 409.
-		if err = handler(requestContext(c)).Update(req); err != nil {
+		if err = database.Database[M](requestContext(c)).Update(req); err != nil {
 			log.Error(err)
 			JSON(c, writeErrorCoder(err))
 			gstotel.RecordError(span, err)
@@ -151,7 +151,7 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// non-persistent fields) survive. On a reload failure keep req as is:
 		// the update itself already committed.
 		reloaded := meta.newModel()
-		if reloadErr := handler(requestContext(c)).Get(reloaded, id); reloadErr != nil {
+		if reloadErr := database.Database[M](requestContext(c)).Get(reloaded, id); reloadErr != nil {
 			log.Warn(reloadErr)
 		} else {
 			req.SetCreatedAt(reloaded.GetCreatedAt())

@@ -8,6 +8,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/logger"
+	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"go.uber.org/zap"
 	"gorm.io/driver/clickhouse"
 	"gorm.io/gorm"
@@ -16,7 +17,6 @@ import (
 var (
 	Default *gorm.DB
 	db      *sql.DB
-	dbmap   = make(map[string]*gorm.DB)
 )
 
 // Init initializes the default Clickhouse connection.
@@ -25,7 +25,7 @@ var (
 func Init() (err error) {
 	cfg := config.App.Clickhouse
 	if !cfg.Enabled || config.App.Database.Type != config.DBClickHouse {
-		return err
+		return nil
 	}
 
 	if Default, err = New(cfg); err != nil {
@@ -34,23 +34,36 @@ func Init() (err error) {
 	if db, err = Default.DB(); err != nil {
 		return errors.Wrap(err, "failed to get clickhouse db")
 	}
-	// It will fix error: "Cannot create column with type 'FixedString(10240)' because fixed string with size > 256 is suspicious. Set setting allow_suspicious_fixed_string_types = 1 in order to allow it"
-	if _, err = db.Exec("SET allow_suspicious_fixed_string_types = 1"); err != nil {
-		return err
-	}
 	db.SetMaxIdleConns(config.App.Database.MaxIdleConns)
 	db.SetMaxOpenConns(config.App.Database.MaxOpenConns)
 	db.SetConnMaxLifetime(config.App.Database.ConnMaxLifetime)
 	db.SetConnMaxIdleTime(config.App.Database.ConnMaxIdleTime)
 
 	zap.S().Infow("successfully connect to clickhouse", "host", cfg.Host, "port", cfg.Port, "database", cfg.Database)
-	return dbruntime.InitDatabase(Default, dbmap)
+	return dbruntime.InitDatabase(Default)
 }
 
 // New creates and returns a new Clickhouse database connection with the given configuration.
-// Returns (*gorm.DB, error) where error is non-nil if the connection fails.
+// The returned handle already carries the GORM OpenTelemetry tracing plugin,
+// so application-held instances passed to DatabaseOn, AggregateOn, and
+// TransactionOn are traced like the default database.
 func New(cfg config.Clickhouse) (*gorm.DB, error) {
-	return gorm.Open(clickhouse.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true})
+	db, err := gorm.Open(clickhouse.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true})
+	if err != nil {
+		return nil, err
+	}
+	// It will fix error: "Cannot create column with type 'FixedString(10240)' because fixed string with size > 256 is suspicious. Set setting allow_suspicious_fixed_string_types = 1 in order to allow it"
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get clickhouse db")
+	}
+	if _, err = sqlDB.Exec("SET allow_suspicious_fixed_string_types = 1"); err != nil {
+		return nil, err
+	}
+	if err := db.Use(otelgorm.NewPlugin()); err != nil {
+		zap.S().Warnw("failed to install GORM OpenTelemetry tracing plugin", "dialect", "clickhouse", "error", err)
+	}
+	return db, nil
 }
 
 func buildDSN(cfg config.Clickhouse) string {

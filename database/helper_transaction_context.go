@@ -6,7 +6,7 @@ import (
 	"gorm.io/gorm"
 )
 
-type transactionContextKey struct{}
+type transactionContextKey struct{ base *gorm.DB }
 
 // contextWithTx returns a child context carrying the current GORM transaction.
 //
@@ -17,24 +17,29 @@ type transactionContextKey struct{}
 // to travel through the hook context. Database[M](ctx) reads this value back and
 // binds the returned operation chain to the same transaction.
 //
+// The key carries the connection handle the transaction was opened on, so
+// transactions on different database instances coexist in one context tree
+// and a chain only ever joins the transaction of its own instance: same
+// handle, same transaction view.
+//
 // The transaction value is scoped to this context tree only. It is not global,
 // does not cross requests, and is lost if hook code replaces the context with
 // context.Background().
-func contextWithTx(ctx context.Context, tx *gorm.DB) context.Context {
+func contextWithTx(ctx context.Context, tx *gorm.DB, base *gorm.DB) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if tx == nil {
 		return ctx
 	}
-	return context.WithValue(ctx, transactionContextKey{}, tx)
+	return context.WithValue(ctx, transactionContextKey{base: base}, tx)
 }
 
-func txFromContext(ctx context.Context) (*gorm.DB, bool) {
+func txFromContext(ctx context.Context, base *gorm.DB) (*gorm.DB, bool) {
 	if ctx == nil {
 		return nil, false
 	}
-	tx, ok := ctx.Value(transactionContextKey{}).(*gorm.DB)
+	tx, ok := ctx.Value(transactionContextKey{base: base}).(*gorm.DB)
 	if !ok || tx == nil {
 		return nil, false
 	}
@@ -68,14 +73,14 @@ func (db *database[M]) withWriteTransaction(fn func() error) error {
 	if db.dryRun {
 		return fn()
 	}
-	if _, ok := txFromContext(db.ctx); ok {
+	if _, ok := txFromContext(db.ctx, db.base); ok {
 		return fn()
 	}
 
 	parentCtx := db.ctx
 	parentIns := db.ins
 	return db.ins.Transaction(func(tx *gorm.DB) error {
-		txCtx := contextWithTx(parentCtx, tx)
+		txCtx := contextWithTx(parentCtx, tx, db.base)
 		db.ctx = txCtx
 		db.ins = tx.Session(&gorm.Session{
 			SkipDefaultTransaction: false,

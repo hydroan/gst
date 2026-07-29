@@ -40,8 +40,6 @@ var databaseTerminalMethods = map[string]bool{
 // chain open. TestDatabaseChainMethodSetsMatchTypesInterface guards this set
 // against drifting from the interface declaration.
 var databaseChainMethods = map[string]bool{
-	"WithDB":         true,
-	"WithTable":      true,
 	"WithQuery":      true,
 	"WithCursor":     true,
 	"WithSelect":     true,

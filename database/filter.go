@@ -395,9 +395,6 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 // of from the prepared model, because filters are built while the chain is
 // still being assembled, before the terminal operation prepares it.
 func (db *database[M]) outerTableName() string {
-	if len(db.tableName) > 0 {
-		return db.tableName
-	}
 	typ := reflect.TypeOf(*new(M))
 	if typ == nil || typ.Kind() != reflect.Pointer {
 		return ""
