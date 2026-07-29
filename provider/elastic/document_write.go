@@ -11,6 +11,7 @@ import (
 	"github.com/elastic/go-elasticsearch/v8/esapi"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/util"
 )
 
 func (*document) BulkIndex(_ context.Context, indexName string, docs ...types.ESDocumenter) error {
@@ -74,6 +75,6 @@ func (*document) BulkIndex(_ context.Context, indexName string, docs ...types.ES
 			}
 		}
 	}
-	logger.Elastic.Infow("successfully indexed documents", "length", len(docs), "cost", time.Since(start).String())
+	logger.Elastic.Infow("successfully indexed documents", "length", len(docs), util.LogDuration(time.Since(start)))
 	return nil
 }

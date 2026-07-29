@@ -39,7 +39,7 @@ func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 	sql, rows := fc()
 
 	if err != nil {
-		g.l.Errorz("", zap.String("sql", sql), zap.Int64("rows", rows), zap.String("elapsed", util.FormatDurationSmart(elapsed)), zap.Error(err))
+		g.l.Errorz("", zap.String("sql", sql), zap.Int64("rows", rows), util.LogDuration(elapsed), zap.Error(err))
 	} else {
 		if elapsed > config.App.Database.SlowQueryThreshold {
 			g.l.Warnz("slow SQL detected",
@@ -47,7 +47,7 @@ func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 				zap.String(consts.CTX_USER_ID, userID),
 				zap.String(consts.TRACE_ID, traceID),
 				zap.String("sql", sql),
-				zap.String("elapsed", util.FormatDurationSmart(elapsed)),
+				util.LogDuration(elapsed),
 				zap.String("threshold", config.App.Database.SlowQueryThreshold.String()),
 				zap.Int64("rows", rows))
 		} else {
@@ -56,7 +56,7 @@ func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 				zap.String(consts.CTX_USER_ID, userID),
 				zap.String(consts.TRACE_ID, traceID),
 				zap.String("sql", sql),
-				zap.String("elapsed", util.FormatDurationSmart(elapsed)),
+				util.LogDuration(elapsed),
 				zap.Int64("rows", rows))
 		}
 	}

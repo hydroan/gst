@@ -138,7 +138,7 @@ func (db *database[M]) trace(op string, batch ...int) (func(error), context.Cont
 				zap.Error(err),
 				zap.String("table", reflect.TypeOf(*new(M)).Elem().Name()),
 				zap.String("batch", strconv.Itoa(_batch)),
-				zap.String("cost", util.FormatDurationSmart(duration)),
+				util.LogDuration(duration),
 				zap.Bool("dry_run", db.dryRun),
 			)
 		} else {
@@ -146,7 +146,7 @@ func (db *database[M]) trace(op string, batch ...int) (func(error), context.Cont
 				"",
 				zap.String("table", reflect.TypeOf(*new(M)).Elem().Name()),
 				zap.String("batch", strconv.Itoa(_batch)),
-				zap.String("cost", util.FormatDurationSmart(time.Since(begin))),
+				util.LogDuration(time.Since(begin)),
 				zap.Bool("dry_run", db.dryRun),
 			)
 		}

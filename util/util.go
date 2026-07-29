@@ -23,12 +23,14 @@ import (
 	tcping "github.com/cloverstd/tcping/ping"
 	"github.com/cockroachdb/errors"
 	"github.com/google/uuid"
+	"github.com/hydroan/gst/types/consts"
 	probing "github.com/prometheus-community/pro-bing"
 	"github.com/rs/xid"
 	"github.com/segmentio/ksuid"
 	"github.com/spf13/cast"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 func UUID(prefix ...string) string {
@@ -361,23 +363,17 @@ func HashID(fields ...string) string {
 	return hex.EncodeToString(hash[:16])
 }
 
-// // FormatDurationMilliseconds formats a time.Duration as a string representing milliseconds.
-// // The result keeps 'precision' decimal places, e.g., "1.23" for precision=2.
-// // If precision is negative, it defaults to 2 decimal places.
-// func FormatDurationMilliseconds(d time.Duration, precision int) string {
-// 	if precision < 0 {
-// 		precision = 2
-// 	}
-// 	ms := float64(d) / float64(time.Millisecond)
-// 	format := fmt.Sprintf("%%.%dfms", precision)
-// 	return fmt.Sprintf(format, ms)
-// }
-
-// FormatDurationSmart formats a time.Duration into a string with the following rules:
-//   - If duration is less than 1ms, display as milliseconds with the specified precision (e.g., "0.018ms").
-//   - If duration is less than 1s, display as milliseconds with the specified precision (e.g., "123.451ms").
-//   - If duration is less than 1min, display as seconds with the specified precision (e.g., "2.013s").
-//   - If duration is 1min or more, display as minutes with the specified precision (e.g., "1.502min").
+// FormatDurationSmart formats a time.Duration into a string, picking the unit
+// that keeps the value readable:
+//   - Less than 1µs: nanoseconds (e.g., "900ns").
+//   - Less than 1ms: microseconds with the specified precision (e.g., "18.40µs").
+//   - Less than 1s: milliseconds with the specified precision (e.g., "123.451ms").
+//   - Less than 1min: seconds with the specified precision (e.g., "2.013s").
+//   - 1min or more: minutes with the specified precision (e.g., "1.502min").
+//
+// Nanoseconds are the resolution of time.Duration itself, so that tier prints an
+// integer and ignores precision; decimals there would only claim a resolution
+// that does not exist.
 //
 // Negative durations are supported and formatted with a '-' sign.
 // The precision parameter controls the number of digits after the decimal point (minimum 0, maximum 9).
@@ -403,8 +399,10 @@ func FormatDurationSmart(d time.Duration, precisions ...int) string {
 	}
 
 	switch {
+	case absNs < 1e3: // <1µs
+		return strconv.FormatInt(ns, 10) + "ns"
 	case absNs < 1e6: // <1ms
-		return fmt.Sprintf(format, float64(ns)/1e6, "ms")
+		return fmt.Sprintf(format, float64(ns)/1e3, "µs")
 	case absNs < 1e9: // <1s
 		return fmt.Sprintf(format, float64(ns)/1e6, "ms")
 	case absNs < 60*1e9: // <1min
@@ -412,6 +410,38 @@ func FormatDurationSmart(d time.Duration, precisions ...int) string {
 	default:
 		return fmt.Sprintf(format, float64(ns)/(60*1e9), "min")
 	}
+}
+
+// LogDuration is the only supported way to log how long an operation took. It
+// emits one field pair, integer nanoseconds plus the same value rendered for
+// reading:
+//
+//	{"msg": "executed query", "duration": 2120000, "duration_human": "2.12ms"}
+//
+// Both halves are needed and neither pays for the other. Log stores index the
+// nanosecond field as an integer, so "slower than 500ms" is a range filter and
+// averages and percentiles are aggregations; because time.Duration is integral
+// there is never a mix of integer and floating point values for the store to
+// reconcile, and no unit is left implicit in the field name. The rendered
+// string is what a person reads while tailing a log, where raw nanoseconds are
+// unreadable.
+//
+// Field names come from consts and are written here alone, so no call site can
+// spell them differently and no query has to know which component produced the
+// entry.
+func LogDuration(d time.Duration) zap.Field {
+	return zap.Inline(logDuration(d))
+}
+
+// logDuration renders an elapsed time as the field pair documented on
+// LogDuration. It is inlined rather than nested so both fields sit at the top
+// level of the entry, where the field name alone locates them.
+type logDuration time.Duration
+
+func (d logDuration) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	enc.AddInt64(consts.LOG_DURATION, int64(d))
+	enc.AddString(consts.LOG_DURATION_HUMAN, FormatDurationSmart(time.Duration(d)))
+	return nil
 }
 
 func SafeGo(fn func(), names ...any) {

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/util"
 )
 
 // A simple logger adapter that uses zap logger
@@ -40,7 +41,7 @@ func (l *elasticLogger) LogRoundTrip(
 		"method", req.Method,
 		"url", req.URL.String(),
 		"status", status,
-		"duration", dur,
+		util.LogDuration(dur),
 		"error", err,
 		"response", body,
 	)

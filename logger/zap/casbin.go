@@ -4,6 +4,7 @@ import (
 	casbinl "github.com/casbin/casbin/v3/log"
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 )
 
@@ -38,7 +39,7 @@ func (c *CasbinLogger) OnAfterEvent(entry *casbinl.LogEntry) error {
 	if entry.IsActive {
 		fields := []any{
 			zap.String("event", string(entry.EventType)),
-			zap.Duration("duration", entry.Duration),
+			util.LogDuration(entry.Duration),
 		}
 		if entry.Subject != "" {
 			fields = append(fields, zap.String("subject", entry.Subject))

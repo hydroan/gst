@@ -352,14 +352,14 @@ func Init() error {
 
 				// log the processing statistics
 				if totalRecords > 0 {
-					log.Info(
+					log.Infoz(
 						"successfully consumed events",
 						zap.Int("total", totalRecords),
 						zap.Int("deduplicated", len(eventSlice)),
 						zap.Int64("success", successRecords),
 						zap.Int64("failed", failedRecords),
 						zap.Int("skipped", skippedRecords),
-						zap.String("costed", util.FormatDurationSmart(time.Since(begin), 2)),
+						util.LogDuration(time.Since(begin)),
 					)
 				}
 

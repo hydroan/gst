@@ -59,7 +59,7 @@ func Logger(filename ...string) gin.HandlerFunc {
 			zap.String(consts.QUERY, query),
 			zap.String("ip", c.ClientIP()),
 			zap.String("user_agent", c.Request.UserAgent()),
-			zap.String("latency", util.FormatDurationSmart(time.Since(start))),
+			util.LogDuration(time.Since(start)),
 		)
 		if spanID != "" {
 			fields = append(fields, zap.String("span_id", spanID))

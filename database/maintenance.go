@@ -93,7 +93,7 @@ func (db *database[M]) Health() error {
 		logger.Database.WithContext(db.ctx, consts.Phase("Health")).Errorz(
 			"database connection check failed",
 			zap.Error(err),
-			zap.String("cost", util.FormatDurationSmart(time.Since(begin))),
+			util.LogDuration(time.Since(begin)),
 		)
 		return fmt.Errorf("database connection check failed: %w", err)
 	}
@@ -104,7 +104,7 @@ func (db *database[M]) Health() error {
 		logger.Database.WithContext(db.ctx, consts.Phase("Health")).Errorz(
 			"get sql.DB instance failed",
 			zap.Error(err),
-			zap.String("cost", util.FormatDurationSmart(time.Since(begin))),
+			util.LogDuration(time.Since(begin)),
 		)
 		return fmt.Errorf("get sql.DB instance failed: %w", err)
 	}
@@ -118,7 +118,7 @@ func (db *database[M]) Health() error {
 			zap.Int("max", stats.MaxOpenConnections),
 			zap.Int("in_use", stats.InUse),
 			zap.Int("idle", stats.Idle),
-			zap.String("cost", util.FormatDurationSmart(time.Since(begin))),
+			util.LogDuration(time.Since(begin)),
 		)
 	}
 
@@ -131,7 +131,7 @@ func (db *database[M]) Health() error {
 		logger.Database.WithContext(db.ctx, consts.Phase("Health")).Errorz(
 			"database ping failed",
 			zap.Error(err),
-			zap.String("cost", util.FormatDurationSmart(time.Since(begin))),
+			util.LogDuration(time.Since(begin)),
 		)
 		return fmt.Errorf("database ping failed: %w", err)
 	}
@@ -142,7 +142,7 @@ func (db *database[M]) Health() error {
 		zap.Int("in_use_connections", stats.InUse),
 		zap.Int("idle_connections", stats.Idle),
 		zap.Int("max_open_connections", stats.MaxOpenConnections),
-		zap.String("cost", util.FormatDurationSmart(time.Since(begin))),
+		util.LogDuration(time.Since(begin)),
 	)
 
 	return nil

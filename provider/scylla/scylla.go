@@ -165,7 +165,7 @@ func (o *queryObserver) ObserveQuery(ctx context.Context, query gocql.ObservedQu
 		"statement", query.Statement,
 		"values", query.Values,
 		"keyspace", query.Keyspace,
-		"duration", query.End.Sub(query.Start),
+		util.LogDuration(query.End.Sub(query.Start)),
 		"error", query.Err,
 	)
 }
@@ -182,7 +182,7 @@ func (o *batchObserver) ObserveBatch(ctx context.Context, batch gocql.ObservedBa
 		"statements", statements,
 		"values", batch.Values,
 		"keyspace", batch.Keyspace,
-		"duration", batch.End.Sub(batch.Start),
+		util.LogDuration(batch.End.Sub(batch.Start)),
 		"error", batch.Err,
 	)
 }

@@ -73,7 +73,7 @@ func (i *initializer) executeWithTiming(fn func() error) error {
 	defer func() {
 		duration := time.Since(start)
 		// Log with structured fields for better observability
-		zap.S().Debugw("Init function executed", "function", funcName, "cost", util.FormatDurationSmart(duration))
+		zap.S().Debugw("Init function executed", "function", funcName, util.LogDuration(duration))
 	}()
 
 	return fn()

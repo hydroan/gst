@@ -706,9 +706,9 @@ func (dc *distributedCache[T]) trace(op string) func(error) {
 	begin := time.Now()
 	return func(err error) {
 		if err != nil {
-			dc.logger.Error("trace", zap.Error(err), zap.String("op", op), zap.String("cost", util.FormatDurationSmart(time.Since(begin), 2)))
+			dc.logger.Errorz("trace", zap.Error(err), zap.String("op", op), util.LogDuration(time.Since(begin)))
 		} else {
-			dc.logger.Info("trace", zap.String("op", op), zap.String("cost", util.FormatDurationSmart(time.Since(begin), 2)))
+			dc.logger.Infoz("trace", zap.String("op", op), util.LogDuration(time.Since(begin)))
 		}
 	}
 }

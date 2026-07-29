@@ -237,7 +237,7 @@ func LoggingUnaryInterceptor(ctx context.Context, req any, info *grpc.UnaryServe
 	// log the request
 	logger := zap.S().With(
 		"method", info.FullMethod,
-		"duration", time.Since(start),
+		util.LogDuration(time.Since(start)),
 	)
 
 	if err != nil {
@@ -262,7 +262,7 @@ func LoggingStreamInterceptor(srv any, ss grpc.ServerStream, info *grpc.StreamSe
 	// log the request
 	logger := zap.S().With(
 		"method", info.FullMethod,
-		"duration", time.Since(start),
+		util.LogDuration(time.Since(start)),
 		"isClientStream", info.IsClientStream,
 		"isServerStream", info.IsServerStream,
 	)

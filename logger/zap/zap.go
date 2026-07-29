@@ -344,12 +344,17 @@ func newLogEncoder(opt ...Option) zapcore.Encoder {
 	encConfig := zap.NewProductionEncoderConfig()
 	// encConfig.EncodeTime = zapcore.RFC3339TimeEncoder
 	// encConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	// encConfig.EncodeDuration = zapcore.MillisDurationEncoder
 	// encConfig.EncodeCaller = zapcore.ShortCallerEncoder
 	// encConfig.EncodeLevel = zapcore.LowercaseLevelEncoder
 	// encConfig.EncodeTime = zapcore.TimeEncoderOfLayout("2006-01-02 15:04:05")
 	encConfig.EncodeTime = zapcore.TimeEncoderOfLayout(consts.LayoutTimeEncoder)
 	encConfig.EncodeLevel = zapcore.CapitalLevelEncoder
+	// Nanoseconds, matching util.LogDuration. The zap production default encodes
+	// durations as floating point seconds, which rounds sub-millisecond work to
+	// zero and leaves a log store guessing between integer and float. This
+	// backstops any time.Duration that reaches a logger without going through
+	// util.LogDuration, so no entry can carry a differently scaled duration.
+	encConfig.EncodeDuration = zapcore.NanosDurationEncoder
 	// encConfig.EncodeCaller = zapcore.ShortCallerEncoder
 	// encConfig.EncodeLevel = zapcore.LowercaseColorLevelEncoder
 	// encConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder

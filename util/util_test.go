@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zapcore"
 )
 
 func TestUtil(t *testing.T) {
@@ -213,17 +215,30 @@ func TestFormatDurationSmart(t *testing.T) {
 		precision int
 		expected  string
 	}{
-		{900 * time.Nanosecond, 3, "0.001ms"},
-		{500 * time.Microsecond, 2, "0.50ms"},
-		{2 * time.Millisecond, 0, "2ms"},
+		// nanosecond tier: prints an integer, precision does not apply
+		{0, 2, "0ns"},
+		{1 * time.Nanosecond, 2, "1ns"},
+		{900 * time.Nanosecond, 3, "900ns"},
+		{-900 * time.Nanosecond, 3, "-900ns"},
+		// tier boundaries: each unit starts exactly at 1 of that unit
+		{999 * time.Nanosecond, 2, "999ns"},
+		{1 * time.Microsecond, 2, "1.00µs"},
+		{999500 * time.Nanosecond, 1, "999.5µs"},
+		{1 * time.Millisecond, 2, "1.00ms"},
 		{999 * time.Millisecond, 1, "999.0ms"},
-		{1500 * time.Millisecond, 2, "1.50s"},
-		{2 * time.Second, 2, "2.00s"},
+		{1 * time.Second, 2, "1.00s"},
 		{59 * time.Second, 0, "59s"},
 		{60 * time.Second, 1, "1.0min"},
+		// microsecond tier
+		{18400 * time.Nanosecond, 2, "18.40µs"},
+		{500 * time.Microsecond, 2, "500.00µs"},
+		{-500 * time.Microsecond, 2, "-500.00µs"},
+		// remaining tiers
+		{2 * time.Millisecond, 0, "2ms"},
+		{1500 * time.Millisecond, 2, "1.50s"},
+		{2 * time.Second, 2, "2.00s"},
 		{90 * time.Second, 3, "1.500min"},
 		{2*time.Minute + 3*time.Second, 2, "2.05min"},
-		{-500 * time.Microsecond, 2, "-0.50ms"},
 		{-2 * time.Second, 2, "-2.00s"},
 		{-90 * time.Second, 1, "-1.5min"},
 		// test precision bounds
@@ -235,6 +250,39 @@ func TestFormatDurationSmart(t *testing.T) {
 		got := FormatDurationSmart(tc.input, tc.precision)
 		if got != tc.expected {
 			t.Errorf("FormatDurationSmart(%v, %d) = %v; want %v", tc.input, tc.precision, got, tc.expected)
+		}
+	}
+
+	// precision defaults to 2 when omitted
+	if got := FormatDurationSmart(2120 * time.Microsecond); got != "2.12ms" {
+		t.Errorf("FormatDurationSmart(2120µs) = %v; want 2.12ms", got)
+	}
+}
+
+func TestLogDuration(t *testing.T) {
+	tests := []struct {
+		input    time.Duration
+		expected string
+	}{
+		{2120 * time.Microsecond, `{"duration":2120000,"duration_human":"2.12ms"}`},
+		// sub-microsecond work stays visible instead of rounding away
+		{900 * time.Nanosecond, `{"duration":900,"duration_human":"900ns"}`},
+		{0, `{"duration":0,"duration_human":"0ns"}`},
+		{-1500 * time.Millisecond, `{"duration":-1500000000,"duration_human":"-1.50s"}`},
+		{90 * time.Second, `{"duration":90000000000,"duration_human":"1.50min"}`},
+	}
+
+	// An empty config drops the entry keys, leaving only the fields under test.
+	encoder := zapcore.NewJSONEncoder(zapcore.EncoderConfig{})
+	for _, tc := range tests {
+		buf, err := encoder.EncodeEntry(zapcore.Entry{}, []zapcore.Field{LogDuration(tc.input)})
+		if err != nil {
+			t.Fatalf("EncodeEntry(%v) error: %v", tc.input, err)
+		}
+		// Both halves must sit at the top level of the entry, and the machine
+		// half must be an integer so a log store never has to reconcile types.
+		if got := strings.TrimSpace(buf.String()); got != tc.expected {
+			t.Errorf("LogDuration(%v) = %v; want %v", tc.input, got, tc.expected)
 		}
 	}
 }

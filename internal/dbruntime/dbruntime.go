@@ -110,7 +110,7 @@ func InitDatabase(db *gorm.DB, dbmap map[string]*gorm.DB) (err error) {
 						err = errors.Wrap(err, fmt.Sprintf("failed to prepare table(%s)", typ.String()))
 						panic(err)
 					}
-					zap.S().Infow("database table ready", "model", typ.String(), "cost", util.FormatDurationSmart(time.Since(begin)))
+					zap.S().Infow("database table ready", "model", typ.String(), util.LogDuration(time.Since(begin)))
 
 					initedTable.Set(typ.String(), "")
 
@@ -132,7 +132,7 @@ func InitDatabase(db *gorm.DB, dbmap map[string]*gorm.DB) (err error) {
 						err = errors.Wrap(err, fmt.Sprintf("failed to prepare table(%s)", typ.String()))
 						panic(err)
 					}
-					zap.S().Infow("database table ready", "model", typ.String(), "cost", util.FormatDurationSmart(time.Since(begin)))
+					zap.S().Infow("database table ready", "model", typ.String(), util.LogDuration(time.Since(begin)))
 
 					initedTable.Set(typ.String(), v.DBName)
 
@@ -167,7 +167,7 @@ func InitDatabase(db *gorm.DB, dbmap map[string]*gorm.DB) (err error) {
 							err = errors.Wrap(err, "failed to create table records")
 							panic(err)
 						}
-						zap.S().Infow("database create table records", "model", typ.String(), "cost", util.FormatDurationSmart(time.Since(begin)))
+						zap.S().Infow("database create table records", "model", typ.String(), util.LogDuration(time.Since(begin)))
 					}(r)
 
 				}
@@ -230,7 +230,7 @@ func Wait() {
 
 			zap.S().Infow(
 				"waiting for database initialization",
-				"elapsed", util.FormatDurationSmart(elapsed),
+				util.LogDuration(elapsed),
 				"total_pending", totalPending,
 				"default_tables", tablePending,
 				"custom_tables", tableDBPending,
@@ -246,6 +246,6 @@ func Wait() {
 	elapsed := time.Since(startTime)
 	zap.S().Infow(
 		"database initialization completed",
-		"total_time", util.FormatDurationSmart(elapsed),
+		util.LogDuration(elapsed),
 	)
 }

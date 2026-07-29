@@ -142,7 +142,7 @@ func (*document) Search(ctx context.Context, indexName string, req *SearchReques
 		"size", strconv.Itoa(req.Size),
 	)
 	defer func() {
-		logger.Infow("search completed", "cost", util.FormatDurationSmart(time.Since(begin)))
+		logger.Infow("search completed", util.LogDuration(time.Since(begin)))
 	}()
 
 	// Convert request to JSON

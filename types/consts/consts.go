@@ -82,6 +82,14 @@ const (
 	PARAMS = "params"
 	QUERY  = "query"
 
+	// LOG_DURATION reports how long an operation took as integer nanoseconds,
+	// LOG_DURATION_HUMAN the same value rendered for reading ("2.12ms"). Every
+	// elapsed time the framework logs goes through util.LogDuration, which is
+	// the only writer of this pair, so one query reaches the timing of any
+	// operation regardless of which component produced it.
+	LOG_DURATION       = "duration"
+	LOG_DURATION_HUMAN = "duration_human"
+
 	USER_SYSTEM = "system"
 	USER_ROOT   = "root"
 

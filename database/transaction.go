@@ -58,13 +58,13 @@ func Transaction(ctx context.Context, fn func(ctx context.Context) error) error 
 			logger.Database.WithContext(ctx, consts.Phase("Transaction")).Errorz(
 				"transaction rolled back due to error",
 				zap.Error(err),
-				zap.String("cost", util.FormatDurationSmart(time.Since(begin))),
+				util.LogDuration(time.Since(begin)),
 			)
 			return err
 		}
 		logger.Database.WithContext(ctx, consts.Phase("Transaction")).Infoz(
 			"transaction committed successfully",
-			zap.String("cost", util.FormatDurationSmart(time.Since(begin))),
+			util.LogDuration(time.Since(begin)),
 		)
 		return nil
 	})
