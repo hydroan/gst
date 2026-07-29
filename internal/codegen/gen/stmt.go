@@ -125,23 +125,24 @@ func StmtServiceRegister(serviceImport string, phase consts.Phase, route string)
 //
 // routerGroup names the router group accessor ("Auth" or "Pub") and route is
 // the raw route string, shared verbatim with the matching StmtServiceRegister
-// statement.
-func StmtRouterRegister(modelPkgName, modelName, reqName, rspName string, routerGroup string, route string, paramName string, verb string) *ast.ExprStmt {
+// statement. gstModelPkg is the qualifier the router file uses for
+// model.Empty, resolved once per file by RouterGstModelUse.
+func StmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg string, routerGroup string, route string, paramName string, verb string) *ast.ExprStmt {
 	// The dsl.PayloadEmpty sentinel on either side resolves to
-	// *gstmodel.Empty. The router file aggregates imports from many model
-	// packages, so the gst model package is always referenced under the
-	// gstmodel alias to avoid clashing with a business root model package
+	// *<gstModelPkg>.Empty. gstModelPkg is the file-level qualifier decided
+	// once per router file by RouterGstModelUse: plain "model" by default,
+	// the gstmodel alias when a routed business model package is itself
 	// named "model". Any other action type is emitted in the canonical
 	// pointer form.
 	var reqExpr ast.Expr
 	if isEmptyPayload(reqName) {
-		reqExpr = emptyReqExpr(gstModelPkgAlias)
+		reqExpr = emptyReqExpr(gstModelPkg)
 	} else {
 		reqExpr = actionTypeExpr(modelPkgName, reqName)
 	}
 	var rspExpr ast.Expr
 	if isEmptyPayload(rspName) {
-		rspExpr = emptyReqExpr(gstModelPkgAlias)
+		rspExpr = emptyReqExpr(gstModelPkg)
 	} else {
 		rspExpr = actionTypeExpr(modelPkgName, rspName)
 	}

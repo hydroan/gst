@@ -203,6 +203,13 @@ func genRunWithOptions(opts genRunOptions) error {
 	serviceImports := lo.Keys(serviceImportMap)
 	sort.Strings(serviceImports)
 	serviceAliasMap := gen.ResolveImportConflicts(serviceImports)
+	// A dsl.PayloadEmpty side is emitted as *model.Empty (or *gstmodel.Empty
+	// when a routed business model package is itself named "model"), so the
+	// qualifier and the import entry are decided once per router file.
+	gstModelPkg, gstModelNeeded := gen.RouterGstModelUse(allModels)
+	if gstModelNeeded {
+		routerImportMap[gen.GstModelImportEntry(gstModelPkg)] = struct{}{}
+	}
 	for _, m := range allModels {
 		m.Design.Range(func(route string, act *dsl.Action) {
 			// Both registrations below must carry this exact route string:
@@ -225,12 +232,7 @@ func genRunWithOptions(opts genRunOptions) error {
 			if act.Public {
 				base = "Pub"
 			}
-			// A dsl.PayloadEmpty request type is emitted as *gstmodel.Empty,
-			// so the router file needs the aliased gst model import.
-			if act.Payload == dsl.PayloadEmpty {
-				routerImportMap[gen.GstModelRouterImport] = struct{}{}
-			}
-			routerStmts = append(routerStmts, gen.StmtRouterRegister(m.ModelPkgName, m.ModelName, act.Payload, act.Result, base, route, paramName, act.Phase.MethodName()))
+			routerStmts = append(routerStmts, gen.StmtRouterRegister(m.ModelPkgName, m.ModelName, act.Payload, act.Result, gstModelPkg, base, route, paramName, act.Phase.MethodName()))
 		})
 	}
 

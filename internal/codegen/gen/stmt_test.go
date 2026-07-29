@@ -166,6 +166,7 @@ func TestStmtRouterRegister(t *testing.T) {
 		modelName    string
 		reqName      string
 		respName     string
+		gstModelPkg  string
 		routerGroup  string
 		route        string
 		paramName    string
@@ -179,6 +180,7 @@ func TestStmtRouterRegister(t *testing.T) {
 			reqName:      "*Group",
 			routerGroup:  "Auth",
 			respName:     "*Group",
+			gstModelPkg:  "model",
 			route:        "group",
 			verb:         "Create",
 			want:         `router.Register[*model.Group, *model.Group, *model.Group](router.Auth(), "group", &types.ControllerConfig[*model.Group]{}, consts.Create)`,
@@ -191,6 +193,7 @@ func TestStmtRouterRegister(t *testing.T) {
 			modelName:    "Group",
 			reqName:      "GroupRequest",
 			respName:     "GroupResponse",
+			gstModelPkg:  "model",
 			routerGroup:  "Auth",
 			route:        "group2",
 			verb:         "Update",
@@ -202,6 +205,7 @@ func TestStmtRouterRegister(t *testing.T) {
 			modelName:    "Group",
 			reqName:      "*GroupRequest",
 			respName:     "*GroupResponse",
+			gstModelPkg:  "model",
 			routerGroup:  "Pub",
 			route:        "login",
 			verb:         "Update",
@@ -213,10 +217,11 @@ func TestStmtRouterRegister(t *testing.T) {
 			modelName:    "Group",
 			reqName:      dsl.PayloadEmpty,
 			respName:     "*GroupListRsp",
+			gstModelPkg:  "model",
 			routerGroup:  "Auth",
 			route:        "groups",
 			verb:         "List",
-			want:         `router.Register[*group.Group, *gstmodel.Empty, *group.GroupListRsp](router.Auth(), "groups", &types.ControllerConfig[*group.Group]{}, consts.List)`,
+			want:         `router.Register[*group.Group, *model.Empty, *group.GroupListRsp](router.Auth(), "groups", &types.ControllerConfig[*group.Group]{}, consts.List)`,
 		},
 		{
 			name:         "create with empty result",
@@ -224,15 +229,31 @@ func TestStmtRouterRegister(t *testing.T) {
 			modelName:    "Group",
 			reqName:      "*GroupCreateReq",
 			respName:     dsl.PayloadEmpty,
+			gstModelPkg:  "model",
 			routerGroup:  "Auth",
 			route:        "groups",
 			verb:         "Create",
-			want:         `router.Register[*group.Group, *group.GroupCreateReq, *gstmodel.Empty](router.Auth(), "groups", &types.ControllerConfig[*group.Group]{}, consts.Create)`,
+			want:         `router.Register[*group.Group, *group.GroupCreateReq, *model.Empty](router.Auth(), "groups", &types.ControllerConfig[*group.Group]{}, consts.Create)`,
+		},
+		{
+			// A project routing a root model package keeps the gstmodel
+			// alias so the Empty qualifier cannot clash with the business
+			// "model" import.
+			name:         "empty payload in root model package keeps gstmodel alias",
+			modelPkgName: "model",
+			modelName:    "Group",
+			reqName:      dsl.PayloadEmpty,
+			respName:     "*GroupListRsp",
+			gstModelPkg:  "gstmodel",
+			routerGroup:  "Auth",
+			route:        "groups",
+			verb:         "List",
+			want:         `router.Register[*model.Group, *gstmodel.Empty, *model.GroupListRsp](router.Auth(), "groups", &types.ControllerConfig[*model.Group]{}, consts.List)`,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := StmtRouterRegister(tt.modelPkgName, tt.modelName, tt.reqName, tt.respName, tt.routerGroup, tt.route, tt.paramName, tt.verb)
+			res := StmtRouterRegister(tt.modelPkgName, tt.modelName, tt.reqName, tt.respName, tt.gstModelPkg, tt.routerGroup, tt.route, tt.paramName, tt.verb)
 			got, err := FormatNode(res)
 			if err != nil {
 				t.Error(err)

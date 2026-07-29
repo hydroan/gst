@@ -22,11 +22,44 @@ const (
 	gstModelPkgAlias = "gstmodel"
 )
 
-// GstModelRouterImport is the BuildRouterFile modelImports entry that makes
-// the gstmodel qualifier emitted by StmtRouterRegister resolvable. The router
-// file aggregates imports from many model packages, so the gst model package
-// is always imported under the gstmodel alias there.
-const GstModelRouterImport = gstModelPkgAlias + " " + GstModelImportPath
+// RouterGstModelUse resolves how the generated router file references the
+// gst model package. pkgName is the qualifier emitted for model.Empty: the
+// plain package name by default, falling back to the gstmodel alias when a
+// routed business model package is itself named "model" (Go forbids an
+// identifier in both the file and package block, so the plain qualifier
+// would clash with that import). needed reports whether any routed action
+// resolves either side to dsl.PayloadEmpty, i.e. whether the qualifier
+// appears in the file at all. Call it after the route/model ignore passes so
+// disabled actions no longer count as routed.
+func RouterGstModelUse(models []*ModelInfo) (pkgName string, needed bool) {
+	pkgName = gstModelPkgName
+	for _, m := range models {
+		if m.Design == nil {
+			continue
+		}
+		routed := false
+		m.Design.Range(func(_ string, act *dsl.Action) {
+			routed = true
+			if isEmptyPayload(act.Payload) || isEmptyPayload(act.Result) {
+				needed = true
+			}
+		})
+		if routed && m.ModelPkgName == gstModelPkgName {
+			pkgName = gstModelPkgAlias
+		}
+	}
+	return pkgName, needed
+}
+
+// GstModelImportEntry returns the imports() entry ("path" or "alias path")
+// that makes the given gst model package qualifier resolvable in a
+// generated file.
+func GstModelImportEntry(pkgName string) string {
+	if pkgName == gstModelPkgAlias {
+		return gstModelPkgAlias + " " + GstModelImportPath
+	}
+	return GstModelImportPath
+}
 
 // emptyReqPkgName returns the package qualifier a generated service file uses
 // to reference model.Empty. When the business model package itself is named
@@ -42,10 +75,7 @@ func emptyReqPkgName(modelPkgName string) string {
 // emptyReqImport returns the imports() entry ("path" or "alias path") that
 // makes the emptyReqPkgName qualifier resolvable in a generated service file.
 func emptyReqImport(modelPkgName string) string {
-	if emptyReqPkgName(modelPkgName) == gstModelPkgAlias {
-		return gstModelPkgAlias + " " + GstModelImportPath
-	}
-	return GstModelImportPath
+	return GstModelImportEntry(emptyReqPkgName(modelPkgName))
 }
 
 // emptyReqExpr builds the *<pkgName>.Empty type expression that generated
