@@ -77,7 +77,7 @@ func (s *SignupService) Create(ctx *types.ServiceContext, req *modeliamaccount.S
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to create user", err)
 	}
 
-	log.Info("user created successfully", zap.String("username", req.Username), zap.String("user_id", newUser.ID))
+	log.Infoz("user created successfully", zap.String("username", req.Username), zap.String("user_id", newUser.ID))
 
 	return &modeliamaccount.SignupRsp{
 		UserID:   newUser.ID,

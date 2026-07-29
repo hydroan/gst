@@ -108,11 +108,11 @@ func Init() error {
 				baseCtx := context.Background()
 				fetches := consumer.PollFetches(context.Background())
 				if fetches.IsClientClosed() {
-					log.Error("fetches.IsClientClosed", zap.Error(err))
+					log.Errorz("fetches.IsClientClosed", zap.Error(err))
 					continue
 				}
 				fetches.EachError(func(s string, i int32, err error) {
-					log.Error(
+					log.Errorz(
 						"failed to fetch from kafka",
 						zap.Error(err),
 						zap.String("topic", TOPIC_REDIS_SET_DEL),
@@ -158,7 +158,7 @@ func Init() error {
 						// parse the event
 						event := new(event)
 						if err = json.Unmarshal(record.Value, event); err != nil {
-							log.Error(
+							log.Errorz(
 								"failed to unmarshal event from kafka record",
 								zap.Error(err),
 								zap.Int64("offset", record.Offset),
@@ -172,7 +172,7 @@ func Init() error {
 
 						// Rule one: drop events whose timestamp is not newer than the highest one seen for this key
 						if event.TS <= keyMaxTS {
-							log.Warn(
+							log.Warnz(
 								"skipping outdated event for key",
 								zap.String("key", event.Key),
 								zap.Int64("event_ts", event.TS),
@@ -202,7 +202,7 @@ func Init() error {
 
 				// nothing to process, wait for the next batch
 				if len(keyEvents) == 0 {
-					log.Debug(
+					log.Debugz(
 						"no events to process in this batch",
 						zap.Int("total_records", totalRecords),
 						zap.Int("skipped_records", skippedRecords),
@@ -239,17 +239,16 @@ func Init() error {
 					}
 
 					// TODO: lower this to the Debug level in production
-					log.Info("process event", zap.Object("event", evt))
+					log.Infoz("process event", zap.Object("event", evt))
 
 					err = gopool.Submit(func() {
 						defer wg.Done()
 						switch evt.Op {
 						case opSet:
 							if evt.SyncToRedis {
-								// logger.Info("redis set", zap.Int64("event_ts", evt.TS), zap.String("key", evt.Key), zap.Any("value", evt.Val), zap.Duration("redis_ttl", evt.RedisTTL))
 								if err = redisCli.Set(baseCtx, evt.Key, []byte(evt.Val), evt.RedisTTL).Err(); err != nil {
 									atomic.AddInt64(&failedRecords, 1)
-									log.Error(
+									log.Errorz(
 										"failed to set redis key",
 										zap.Error(err),
 										zap.String("key", evt.Key),
@@ -273,7 +272,7 @@ func Init() error {
 							}
 							var data []byte
 							if data, err = json.Marshal(evtDone); err != nil {
-								log.Error(
+								log.Errorz(
 									"failed to marshal event in redis set",
 									zap.Error(err),
 									zap.Object("event", evtDone),
@@ -284,7 +283,7 @@ func Init() error {
 								// publish the kafka message synchronously
 								produceRecord := &kgo.Record{Topic: TOPIC_REDIS_DONE, Value: data}
 								if err = producer.ProduceSync(baseCtx, produceRecord).FirstErr(); err != nil {
-									log.Error(
+									log.Errorz(
 										"failed to produce redis set done event",
 										zap.Error(err),
 										zap.Object("event", evtDone),
@@ -294,7 +293,7 @@ func Init() error {
 						case opDel:
 							if evt.SyncToRedis {
 								if err = redisCli.Del(baseCtx, evt.Key).Err(); err != nil {
-									log.Error(
+									log.Errorz(
 										"failed to del redis key",
 										zap.Error(err),
 										zap.String("key", evt.Key),
@@ -317,7 +316,7 @@ func Init() error {
 							}
 							var data []byte
 							if data, err = json.Marshal(evtDone); err != nil {
-								log.Error(
+								log.Errorz(
 									"failed to marshal event in redis del",
 									zap.Error(err),
 									zap.Object("event", evtDone),
@@ -328,7 +327,7 @@ func Init() error {
 								// publish the kafka message synchronously
 								produceRecord := &kgo.Record{Topic: TOPIC_REDIS_DONE, Value: data}
 								if err = producer.ProduceSync(baseCtx, produceRecord).FirstErr(); err != nil {
-									log.Error(
+									log.Errorz(
 										"failed to produce redis del done event",
 										zap.Error(err),
 										zap.Object("event", evtDone),
@@ -336,11 +335,11 @@ func Init() error {
 								}
 							}
 						default:
-							log.Warn("unknown operation type", zap.String("op", evt.Op.String()))
+							log.Warnz("unknown operation type", zap.String("op", evt.Op.String()))
 						}
 					})
 					if err != nil {
-						log.Error("failed to submit event to gopool", zap.Error(err), zap.Object("event", evt))
+						log.Errorz("failed to submit event to gopool", zap.Error(err), zap.Object("event", evt))
 					}
 				}
 				wg.Wait()

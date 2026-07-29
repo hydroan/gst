@@ -318,7 +318,7 @@ func (dc *distributedCache[T]) Set(key string, value T, ttl time.Duration) (err 
 
 	// set local cache.
 	if err = dc.localCache.Set(prefixedKey, value, ttl); err != nil {
-		dc.logger.Warn("failed to set local cache", zap.Error(err))
+		dc.logger.Warnz("failed to set local cache", zap.Error(err))
 	}
 
 	dc.sendEvent(&event{
@@ -343,7 +343,7 @@ func (dc *distributedCache[T]) SetWithSync(key string, value T, localTTL time.Du
 
 	// set local cache.
 	if err = dc.localCache.Set(prefixedKey, value, localTTL); err != nil {
-		dc.logger.Warn("failed to set local cache", zap.Error(err))
+		dc.logger.Warnz("failed to set local cache", zap.Error(err))
 	}
 
 	dc.sendEvent(&event{
@@ -379,7 +379,7 @@ func (dc *distributedCache[T]) Get(key string) (value T, err error) {
 		return zero, types.ErrEntryNotFound
 	}
 
-	dc.logger.Warn("failed to get from local cache", zap.Error(err))
+	dc.logger.Warnz("failed to get from local cache", zap.Error(err))
 	return zero, err
 }
 
@@ -400,7 +400,7 @@ func (dc *distributedCache[T]) GetWithSync(key string, localTTL time.Duration) (
 		// local cache miss.
 		dc.localMisses.Add(1)
 	} else {
-		dc.logger.Warn("failed to get from local cache", zap.Error(err))
+		dc.logger.Warnz("failed to get from local cache", zap.Error(err))
 		return zero, err
 	}
 
@@ -418,7 +418,7 @@ func (dc *distributedCache[T]) GetWithSync(key string, localTTL time.Duration) (
 		// redis cache hit.
 		dc.redisHits.Add(1)
 		if err = dc.localCache.Set(prefixedKey, redisVal, localTTL); err != nil {
-			dc.logger.Warn("failed to set local cache", zap.Error(err))
+			dc.logger.Warnz("failed to set local cache", zap.Error(err))
 			return redisVal, err
 		}
 		return redisVal, nil
@@ -428,7 +428,7 @@ func (dc *distributedCache[T]) GetWithSync(key string, localTTL time.Duration) (
 		dc.redisMisses.Add(1)
 		return zero, types.ErrEntryNotFound
 	}
-	dc.logger.Warn("failed to get from redis cache", zap.Error(err))
+	dc.logger.Warnz("failed to get from redis cache", zap.Error(err))
 	return zero, err
 }
 
@@ -441,7 +441,7 @@ func (dc *distributedCache[T]) Delete(key string) (err error) {
 
 	// NOTE: After recive kafka "delete" event, we will delete the entry from local cache again, it is a no-op.
 	if err = dc.localCache.Delete(prefixedKey); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
-		dc.logger.Warn("failed to delete from local cache", zap.Error(err))
+		dc.logger.Warnz("failed to delete from local cache", zap.Error(err))
 	}
 
 	dc.sendEvent(&event{
@@ -462,7 +462,7 @@ func (dc *distributedCache[T]) DeleteWithSync(key string) (err error) {
 
 	// NOTE: After recive kafka "delete" event, we will delete the entry from local cache again, it is a no-op.
 	if err = dc.localCache.Delete(prefixedKey); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
-		dc.logger.Warn("failed to delete from local cache", zap.Error(err))
+		dc.logger.Warnz("failed to delete from local cache", zap.Error(err))
 	}
 
 	dc.sendEvent(&event{
@@ -502,7 +502,7 @@ func (dc *distributedCache[T]) listenEvents() {
 				continue
 			}
 			fetches.EachError(func(s string, i int32, err error) {
-				dc.logger.Error(
+				dc.logger.Errorz(
 					"failed to fetch from kafka",
 					zap.Error(err),
 					zap.String("topic", TOPIC_REDIS_DONE),
@@ -517,7 +517,7 @@ func (dc *distributedCache[T]) listenEvents() {
 			for _, record := range records {
 				evt := new(event)
 				if err := json.Unmarshal(record.Value, evt); err != nil {
-					dc.logger.Error(
+					dc.logger.Errorz(
 						"failed to unmarshal event",
 						zap.Error(err),
 						zap.String("topic", TOPIC_REDIS_DONE),
@@ -543,7 +543,7 @@ func (dc *distributedCache[T]) listenEvents() {
 					}
 
 					// TODO: lower this to debug in production
-					dc.logger.Info("consume event", zap.Object("event", evt))
+					dc.logger.Infoz("consume event", zap.Object("event", evt))
 					var val T
 					// fmt.Printf("----- %s OpSet %v %v %v\n", dc.mark, event.Typ, event.Key, string(event.Val))
 					if err := json.Unmarshal(evt.Val, &val); err == nil {
@@ -554,7 +554,7 @@ func (dc *distributedCache[T]) listenEvents() {
 						dc.distributedSet.Add(1)
 						// no prefix + key here, the key sent by the state node already is prefix+key.
 						if err := dc.localCache.Set(evt.Key, val, evt.TTL); err != nil {
-							dc.logger.Warn("failed to set to local cache", zap.Error(err))
+							dc.logger.Warnz("failed to set to local cache", zap.Error(err))
 						}
 					}
 				case opDelDone:
@@ -572,10 +572,10 @@ func (dc *distributedCache[T]) listenEvents() {
 					// Every opDelDone event has to delete from the local cache, because there is no way
 					// to tell whether the key belongs to this cache.
 					if err := dc.localCache.Delete(evt.Key); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
-						dc.logger.Warn("failed to delete from local cache", zap.Error(err))
+						dc.logger.Warnz("failed to delete from local cache", zap.Error(err))
 					}
 				default:
-					dc.logger.Warn("unknown event op", zap.String("op", evt.Op.String()), zap.String("key", evt.Key), zap.Object("event", evt))
+					dc.logger.Warnz("unknown event op", zap.String("op", evt.Op.String()), zap.String("key", evt.Key), zap.Object("event", evt))
 				}
 			}
 
@@ -595,11 +595,11 @@ func (dc *distributedCache[T]) sendEvent(evt *event) {
 	err := dc.gopool.Submit(func() {
 		val, err := json.Marshal(evt.raw)
 		if err != nil {
-			dc.logger.Error("failed to marshal event raw data", zap.Error(err), zap.Object("event", evt))
+			dc.logger.Errorz("failed to marshal event raw data", zap.Error(err), zap.Object("event", evt))
 			return
 		}
 		if len(val) == 0 {
-			dc.logger.Warn("the marshaled value is empty", zap.Object("event", evt))
+			dc.logger.Warnz("the marshaled value is empty", zap.Object("event", evt))
 			return
 		}
 		evt.CacheID = dc.cacheID
@@ -609,7 +609,7 @@ func (dc *distributedCache[T]) sendEvent(evt *event) {
 		evt.raw = nil // clear it to keep the event small
 		data, err := json.Marshal(evt)
 		if err != nil {
-			dc.logger.Error("failed to marshal event", zap.Error(err), zap.Object("event", evt))
+			dc.logger.Errorz("failed to marshal event", zap.Error(err), zap.Object("event", evt))
 			return
 		}
 		record := &kgo.Record{
@@ -617,13 +617,13 @@ func (dc *distributedCache[T]) sendEvent(evt *event) {
 			Value: data,
 		}
 		// TODO: lower this log to debug
-		dc.logger.Info("publish event", zap.Object("event", evt))
+		dc.logger.Infoz("publish event", zap.Object("event", evt))
 		if err := dc.pubSetDel.ProduceSync(context.Background(), record).FirstErr(); err != nil {
-			dc.logger.Error("failed to publish event", zap.Error(err), zap.Object("event", evt))
+			dc.logger.Errorz("failed to publish event", zap.Error(err), zap.Object("event", evt))
 		}
 	})
 	if err != nil {
-		dc.logger.Error("failed to submit event to gopool", zap.Error(err))
+		dc.logger.Errorz("failed to submit event to gopool", zap.Error(err))
 	}
 }
 
@@ -633,9 +633,9 @@ func (dc *distributedCache[T]) startMonitor() {
 		for range ticker.C {
 			if flag.Lookup("test.v") == nil {
 				if local, ok := dc.localCache.(CacheMetricsProvider); ok {
-					dc.logger.Info("cache metrics", zap.Object("distributed", dc.Metrics()), zap.Object("local", local.Metrics()))
+					dc.logger.Infoz("cache metrics", zap.Object("distributed", dc.Metrics()), zap.Object("local", local.Metrics()))
 				} else {
-					dc.logger.Info("cache metrics", zap.Object("distributed", dc.Metrics()))
+					dc.logger.Infoz("cache metrics", zap.Object("distributed", dc.Metrics()))
 				}
 			}
 		}

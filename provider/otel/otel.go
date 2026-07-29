@@ -156,7 +156,7 @@ func Init() error {
 	initHotPathAttrs(cfg.ServiceName)
 
 	initialized = true
-	logger.OTEL.Info(
+	logger.OTEL.Infoz(
 		"otel tracing initialized",
 		zap.String("service_name", cfg.ServiceName),
 		zap.String("exporter_otlp_protocol", string(cfg.ExporterOTLPProtocol)),
