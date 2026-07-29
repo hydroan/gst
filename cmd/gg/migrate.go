@@ -106,6 +106,7 @@ import (
 	"go/token"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -115,10 +116,10 @@ import (
 	_ "{{MODULE}}/module"
 
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/dbmigrate"
 	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module"
-	"github.com/hydroan/gst/dbmigrate"
 	"github.com/hydroan/gst/router"
 )
 
