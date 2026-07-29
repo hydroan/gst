@@ -295,6 +295,8 @@ func TestAuthzMenu(t *testing.T) {
 		})
 
 		t.Run("delete_removes_partial_menu_references", func(t *testing.T) {
+			authzPurgeLeftoverRole(t, "partial_menu_role")
+
 			resp, err = cli.Create(&authz.Menu{
 				ParentID: "root",
 				Label:    "Partial Menu",
@@ -345,6 +347,8 @@ func TestAuthzMenu(t *testing.T) {
 		})
 
 		t.Run("invalid_role_binding_does_not_fallback_to_default_role", func(t *testing.T) {
+			authzPurgeLeftoverRole(t, "default_fallback_role")
+
 			resp, err = cli.Create(&authz.Menu{
 				ParentID: "root",
 				Label:    "Default Fallback Menu",
@@ -772,6 +776,8 @@ func TestAuthzRoleBinding(t *testing.T) {
 		})
 
 		t.Run("delete_role_cleans_role_bindings", func(t *testing.T) {
+			authzPurgeLeftoverRole(t, "deleted_role")
+
 			resp, err = cliRole.Create(&authz.Role{
 				Base: model.Base{ID: "deleted_role"},
 				Code: "deleted_role",
@@ -1080,6 +1086,21 @@ func authzTenantClient(api, sessionID, tenantID string) (*client.Client, error) 
 			Value: sessionID,
 		}),
 	)
+}
+
+// authzPurgeLeftoverRole removes the fixed-id role that a previously failed
+// run may have left in the shared test database, so the caller can recreate
+// the role without hitting a duplicated-key conflict. Deleting through the
+// standard chain runs the role delete hooks, which also remove the role's
+// bindings and RBAC policies.
+func authzPurgeLeftoverRole(t *testing.T, roleID string) {
+	t.Helper()
+
+	err := database.Database[*authz.Role](context.Background()).WithPurge().Delete(&authz.Role{Base: model.Base{ID: roleID}})
+	if errors.Is(err, database.ErrRecordNotFound) {
+		return
+	}
+	require.NoError(t, err)
 }
 
 func authzCreateTenantRole(t *testing.T, tenantID, code string, menuIDs ...string) string {
