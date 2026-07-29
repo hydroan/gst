@@ -5,12 +5,10 @@ import (
 )
 
 func init() {
-	iam.Register(iam.Config{
-		DefaultUsers: []*iam.DefaultUser{
-			{
-				Username: "root",
-				Password: "abc123.com", // gitguardian:ignore
-			},
-		},
-	})
+	iam.Register()
+
+	// Baseline accounts are application data: create them explicitly through
+	// the standard database chain in a startup hook such as
+	// router.OnRoutesReady, using serviceiamaccount.NewPasswordCredential for
+	// password hashing.
 }

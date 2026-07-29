@@ -63,38 +63,26 @@ func RegisteredModels() []any {
 	return models
 }
 
-// Register registers a database-backed model for table setup and optional seed records.
+// Register registers a database-backed model for table setup.
 //
 // Models that embed Empty are ignored because they do not represent
-// database tables. Seed records without IDs receive generated IDs before they
-// are inserted during application startup.
+// database tables.
 //
-// Key features:
-//   - Thread-safe concurrent registration using mutex protection
-//   - Automatic ID generation for records without IDs
+// Register only manages the schema. Baseline data (seed rows) belongs to the
+// application: create it explicitly through the standard database chain in a
+// startup hook such as router.OnRoutesReady, where model hooks, auditing,
+// and transactions all apply.
 //
-// Parameters:
-//   - records: Optional initial records to be seeded into the table. Can be single or multiple records.
+// Example:
 //
-// Examples:
-//
-//	// Create table 'users' only
+//	// Create table 'users'
 //	Register[*model.User]()
-//
-//	// Create table 'users' and insert one user record
-//	Register[*model.User](&model.User{Name: "admin"})
-//
-//	// Create table 'users' and insert a single user record
-//	Register[*model.User](user)
-//
-//	// Create table 'users' and insert multiple records
-//	Register[*model.User](users...)  // where users is []*model.User
 //
 // NOTE:
 //  1. Register is usually called from the generated model/model.go file.
 //  2. Ensure the model package is imported by the application entrypoint.
 //  3. The function is safe for concurrent use.
-func Register[M types.Model](records ...M) {
+func Register[M types.Model]() {
 	if !modelregistry.IsValid[M]() {
 		return
 	}
@@ -105,17 +93,6 @@ func Register[M types.Model](records ...M) {
 	table := reflect.New(reflect.TypeOf(*new(M)).Elem()).Interface().(M) //nolint:errcheck
 	registeredModels = append(registeredModels, newModelSnapshot(table))
 	modelregistry.TableChan <- table
-
-	// NOTE: it's necessary to set id before insert.
-	for i := range records {
-		if len(records[i].GetID()) == 0 {
-			records[i].SetID()
-		}
-	}
-
-	if len(records) != 0 {
-		modelregistry.RecordChan <- &modelregistry.Record{Table: table, Rows: records, Expands: table.Expands()}
-	}
 }
 
 func newModelSnapshot(m types.Model) types.Model {

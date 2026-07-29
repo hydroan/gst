@@ -10,6 +10,10 @@ import (
 
 var pluralizeCli = pluralize.NewClient()
 
+// TableChan is the internal queue for default-database table registration.
+// It receives model values from model.Register for processing by dbruntime.InitDatabase.
+var TableChan = make(chan types.Model, 10240)
+
 // GetTableName returns the default table name for a model type.
 func GetTableName[M types.Model]() string {
 	return strcase.SnakeCase(pluralizeCli.Plural(reflect.TypeOf(*new(M)).Elem().Name()))

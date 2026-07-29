@@ -1,7 +1,6 @@
 package iam
 
 import (
-	"context"
 	"time"
 
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
@@ -19,18 +18,7 @@ import (
 
 // Config is the configuration for iam module.
 type Config struct {
-	DefaultUsers      []*DefaultUser // DefaultUsers are default users to create on registration.
-	SessionExpiration time.Duration  // SessionExpiration is the session expiration time. It defaults to 8 hours and can be configured by IAM_SESSION_EXPIRATION.
-}
-
-// DefaultUser describes a user and password credential created during module registration.
-type DefaultUser struct {
-	ID                 string
-	Username           string
-	Password           string
-	Email              string
-	Status             modeliamuser.UserStatus
-	MustChangePassword bool
+	SessionExpiration time.Duration // SessionExpiration is the session expiration time. It defaults to 8 hours and can be configured by IAM_SESSION_EXPIRATION.
 }
 
 // Register registers IAM models, API routes, middleware, and scheduled jobs.
@@ -110,11 +98,13 @@ func Register(config ...Config) {
 	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionDeleteAllService{}), module.Exact(consts.PHASE_DELETE))
 	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionDeleteService{}), module.CRUD(consts.PHASE_DELETE))
 
-	// Register the backing IAM tables and optional default users.
-	defaultUsers, defaultCredentials, defaultEmailIdentities := buildDefaultUserRecords(cfg.DefaultUsers)
-	model.Register[*modeliamuser.User](defaultUsers...)
-	model.Register[*modeliamaccount.PasswordCredential](defaultCredentials...)
-	model.Register[*modeliamaccount.EmailIdentity](defaultEmailIdentities...)
+	// Register the backing IAM tables. Baseline accounts are application
+	// data: create them explicitly through the standard database chain in a
+	// startup hook such as router.OnRoutesReady, using
+	// serviceiamaccount.NewPasswordCredential for password hashing.
+	model.Register[*modeliamuser.User]()
+	model.Register[*modeliamaccount.PasswordCredential]()
+	model.Register[*modeliamaccount.EmailIdentity]()
 	model.Register[*modeliamprofile.Profile]()
 }
 
@@ -122,48 +112,4 @@ func Register(config ...Config) {
 // If not configured, it returns the default value of 8 hours.
 func GetSessionExpiration() time.Duration {
 	return serviceiamsession.GetSessionExpiration()
-}
-
-func buildDefaultUserRecords(configs []*DefaultUser) ([]*modeliamuser.User, []*modeliamaccount.PasswordCredential, []*modeliamaccount.EmailIdentity) {
-	users := make([]*modeliamuser.User, 0, len(configs))
-	credentials := make([]*modeliamaccount.PasswordCredential, 0, len(configs))
-	emailIdentities := make([]*modeliamaccount.EmailIdentity, 0, len(configs))
-	for _, cfg := range configs {
-		if cfg == nil {
-			continue
-		}
-		if cfg.Username == "" {
-			panic("default user username is required")
-		}
-
-		userID := cfg.ID
-		if userID == "" {
-			userID = cfg.Username
-		}
-		status := cfg.Status
-		if status == "" {
-			status = modeliamuser.UserStatusActive
-		}
-
-		user := &modeliamuser.User{
-			Username: cfg.Username,
-			Status:   status,
-		}
-		user.ID = userID
-		credential, err := serviceiamaccount.NewPasswordCredential(context.Background(), userID, cfg.Password, cfg.MustChangePassword)
-		if err != nil {
-			panic(err)
-		}
-		if cfg.Email != "" {
-			emailIdentity, err := serviceiamaccount.NewEmailIdentity(userID, cfg.Email)
-			if err != nil {
-				panic(err)
-			}
-			emailIdentities = append(emailIdentities, emailIdentity)
-		}
-
-		users = append(users, user)
-		credentials = append(credentials, credential)
-	}
-	return users, credentials, emailIdentities
 }

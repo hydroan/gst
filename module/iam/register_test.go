@@ -1,12 +1,18 @@
 package iam_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 
+	"github.com/cockroachdb/errors"
 	"github.com/goforj/godump"
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/database"
+	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
+	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/types/consts"
@@ -49,18 +55,11 @@ func init() {
 	os.Setenv(config.LOGGER_DIR, "./logs")
 	os.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)
 
-	iam.Register(iam.Config{
-		DefaultUsers: []*iam.DefaultUser{
-			{
-				ID:       consts.AUTHZ_USER_ROOT,
-				Username: consts.AUTHZ_USER_ROOT,
-				Password: rootPassword,
-			},
-		},
-	})
+	iam.Register()
 	if err := bootstrap.Bootstrap(); err != nil {
 		panic(err)
 	}
+	seedRootAccount()
 
 	go func() {
 		if err := bootstrap.Run(); err != nil {
@@ -69,4 +68,26 @@ func init() {
 	}()
 
 	testutil.MustWaitForServer(port)
+}
+
+// seedRootAccount creates the root user and password credential the tests
+// authenticate with. Baseline accounts are application data, so the test
+// creates them explicitly through the standard database chain and tolerates
+// leftovers from previous runs against the shared test database.
+func seedRootAccount() {
+	ctx := context.Background()
+
+	user := &modeliamuser.User{Username: consts.AUTHZ_USER_ROOT, Status: modeliamuser.UserStatusActive}
+	user.ID = consts.AUTHZ_USER_ROOT
+	if err := database.Database[*modeliamuser.User](ctx).Create(user); err != nil && !errors.Is(err, database.ErrDuplicatedKey) {
+		panic(err)
+	}
+
+	credential, err := serviceiamaccount.NewPasswordCredential(ctx, user.ID, rootPassword, false)
+	if err != nil {
+		panic(err)
+	}
+	if err := database.Database[*modeliamaccount.PasswordCredential](ctx).Create(credential); err != nil && !errors.Is(err, database.ErrDuplicatedKey) {
+		panic(err)
+	}
 }

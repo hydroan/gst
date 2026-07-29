@@ -14,10 +14,7 @@ import (
 )
 
 func init() {
-	// Register the root menu seed row.
-	model.Register[*Menu](
-		&Menu{Base: model.Base{ID: model.RootID}, ParentID: model.RootID},
-	)
+	model.Register[*Menu]()
 }
 
 var (

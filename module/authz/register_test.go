@@ -9,12 +9,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
+	modelauthz "github.com/hydroan/gst/internal/model/authz"
+	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
+	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module/authz"
@@ -66,21 +71,14 @@ func init() {
 	os.Setenv(config.AUDIT_ENABLED, "true")
 	os.Setenv(config.AUDIT_ASYNC_WRITE, "false")
 
-	iam.Register(iam.Config{
-		DefaultUsers: []*iam.DefaultUser{
-			{
-				Username: rootUsername,
-				Password: rootPassword,
-				ID:       "root",
-			},
-		},
-	})
+	iam.Register()
 	authz.Register(authz.Config{
 		TenantResolver: authz.HeaderTenantResolver(tenantHeader),
 	})
 	if err := bootstrap.Bootstrap(); err != nil {
 		panic(err)
 	}
+	seedBaseline()
 
 	go func() {
 		if err := bootstrap.Run(); err != nil {
@@ -89,6 +87,34 @@ func init() {
 	}()
 
 	testutil.MustWaitForServer(port)
+}
+
+// seedBaseline creates the baseline rows the tests depend on: the root user
+// with its password credential, and the root menu row anchoring the menu
+// tree. Baseline data is application data, so the test creates it explicitly
+// through the standard database chain and tolerates leftovers from previous
+// runs against the shared test database.
+func seedBaseline() {
+	ctx := context.Background()
+
+	user := &modeliamuser.User{Username: rootUsername, Status: modeliamuser.UserStatusActive}
+	user.ID = "root"
+	if err := database.Database[*modeliamuser.User](ctx).Create(user); err != nil && !errors.Is(err, database.ErrDuplicatedKey) {
+		panic(err)
+	}
+
+	credential, err := serviceiamaccount.NewPasswordCredential(ctx, user.ID, rootPassword, false)
+	if err != nil {
+		panic(err)
+	}
+	if err := database.Database[*modeliamaccount.PasswordCredential](ctx).Create(credential); err != nil && !errors.Is(err, database.ErrDuplicatedKey) {
+		panic(err)
+	}
+
+	rootMenu := &modelauthz.Menu{Base: model.Base{ID: model.RootID}, ParentID: model.RootID}
+	if err := database.Database[*modelauthz.Menu](ctx).Create(rootMenu); err != nil && !errors.Is(err, database.ErrDuplicatedKey) {
+		panic(err)
+	}
 }
 
 func TestAuthzRoutes(t *testing.T) {
