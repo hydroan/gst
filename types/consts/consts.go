@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/stoewer/go-strcase"
 )
@@ -419,7 +420,19 @@ const (
 	ADMIN = "admin"
 )
 
-const LayoutTimeEncoder = "2006-01-02|15:04:05"
+// LayoutTimeEncoder is the timestamp layout of every log entry, and the only
+// one: no logger may override it, or its file alone would become unorderable
+// against the rest.
+//
+// RFC3339 with nanoseconds is what makes an entry's own timestamp usable. Whole
+// seconds cannot order the entries of a single request, which pushes readers
+// onto whatever ingest time their log pipeline stamps on, and that measures the
+// pipeline rather than the work. The offset is written out and kept local, so
+// an entry reads as the wall clock of the host that produced it while still
+// merging correctly with entries from any other zone. Log stores recognize this
+// layout as a date without being told, so the field is sortable and
+// range-filterable on arrival.
+const LayoutTimeEncoder = time.RFC3339Nano
 
 const IMPORT_PATH_MODEL = `"github.com/hydroan/gst/model"`
 

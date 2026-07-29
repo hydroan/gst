@@ -2,6 +2,7 @@ package zap
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -146,6 +147,37 @@ func TestCleanFlushesBufferedFileSink(t *testing.T) {
 	if !strings.Contains(string(data), "flush through clean") {
 		t.Fatalf("expected flushed log file to contain message, got %q", string(data))
 	}
+}
+
+func TestNewLogEncoderTimestampOrdersWithinASecond(t *testing.T) {
+	encoder := newLogEncoder()
+	at := time.Date(2026, 7, 29, 14, 3, 8, 243834831, time.FixedZone("", 8*60*60))
+
+	encode := func(at time.Time) string {
+		buf, err := encoder.EncodeEntry(zapcore.Entry{Time: at}, nil)
+		require.NoError(t, err)
+		var entry struct {
+			TS string `json:"ts"`
+		}
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &entry))
+		return entry.TS
+	}
+
+	first := encode(at)
+	require.Equal(t, "2026-07-29T14:03:08.243834831+08:00", first)
+
+	// The entries of one request land in the same second, so a whole-second
+	// timestamp would collapse them into a single value and lose their order.
+	next := encode(at.Add(time.Microsecond))
+	require.Less(t, first, next)
+
+	// The zone offset travels with the entry, so hosts in different zones stay
+	// comparable, and the layout is one a log store reads as a date unassisted.
+	parsed, err := time.Parse(time.RFC3339Nano, first)
+	require.NoError(t, err)
+	require.True(t, parsed.Equal(at))
+	_, offset := parsed.Zone()
+	require.Equal(t, 8*60*60, offset)
 }
 
 func TestWithContextAddsMetadataFields(t *testing.T) {

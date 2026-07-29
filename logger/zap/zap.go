@@ -39,13 +39,16 @@ var (
 )
 
 // Option configures encoder and writer behavior for constructors.
-// DisableMsg/DisableLevel hide "msg" and "level" fields; TSLayout sets time format.
+// DisableMsg/DisableLevel hide "msg" and "level" fields.
 // Console additionally mirrors a file sink to os.Stdout; see newLogWriter.
+//
+// Timestamp layout is deliberately not an option: consts.LayoutTimeEncoder
+// applies to every entry, so entries from different files stay orderable
+// against one another and a log store types the field the same way everywhere.
 type Option struct {
 	DisableMsg    bool
 	DisableLevel  bool
 	DisableCaller bool
-	TSLayout      string
 	Console       bool
 }
 
@@ -338,15 +341,12 @@ func newLogLevel(_ ...Option) zapcore.Level {
 	return *level
 }
 
-// newLogEncoder builds JSON/console encoder with optional field suppression and time layout.
+// newLogEncoder builds JSON/console encoder with optional field suppression.
 // opt: encoder options
 func newLogEncoder(opt ...Option) zapcore.Encoder {
 	encConfig := zap.NewProductionEncoderConfig()
-	// encConfig.EncodeTime = zapcore.RFC3339TimeEncoder
-	// encConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 	// encConfig.EncodeCaller = zapcore.ShortCallerEncoder
 	// encConfig.EncodeLevel = zapcore.LowercaseLevelEncoder
-	// encConfig.EncodeTime = zapcore.TimeEncoderOfLayout("2006-01-02 15:04:05")
 	encConfig.EncodeTime = zapcore.TimeEncoderOfLayout(consts.LayoutTimeEncoder)
 	encConfig.EncodeLevel = zapcore.CapitalLevelEncoder
 	// Nanoseconds, matching util.LogDuration. The zap production default encodes
@@ -369,9 +369,6 @@ func newLogEncoder(opt ...Option) zapcore.Encoder {
 		}
 		if o.DisableCaller {
 			encConfig.CallerKey = ""
-		}
-		if len(o.TSLayout) > 0 {
-			encConfig.EncodeTime = zapcore.TimeEncoderOfLayout(o.TSLayout)
 		}
 	}
 	switch strings.ToLower(logFormat) {
