@@ -13,10 +13,6 @@ import (
 	"gorm.io/datatypes"
 )
 
-func init() {
-	model.Register[*Menu]()
-}
-
 var (
 	RootID      = model.RootID
 	RootName    = model.RootName
@@ -28,8 +24,6 @@ var (
 	KeyName = model.KeyName
 	KeyID   = model.KeyID
 )
-
-var MenuRoot = &Menu{ParentID: model.RootID, Base: model.Base{ID: RootID}}
 
 type MenuPlatform string
 
