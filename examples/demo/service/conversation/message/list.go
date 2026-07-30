@@ -28,11 +28,3 @@ func (m *Lister) ListAfter(ctx *types.ServiceContext, messages *[]*conversation.
 	log.Info("message list after")
 	return nil
 }
-
-func (m *Lister) Filter(ctx *types.ServiceContext, message *conversation.Message) *conversation.Message {
-	return message
-}
-
-func (m *Lister) FilterRaw(ctx *types.ServiceContext) string {
-	return ""
-}

@@ -28,11 +28,3 @@ func (f *Lister) ListAfter(ctx *types.ServiceContext, files *[]*config.File) err
 	log.Info("file list after")
 	return nil
 }
-
-func (f *Lister) Filter(ctx *types.ServiceContext, file *config.File) *config.File {
-	return file
-}
-
-func (f *Lister) FilterRaw(ctx *types.ServiceContext) string {
-	return ""
-}
