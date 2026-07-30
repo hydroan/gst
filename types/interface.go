@@ -164,7 +164,7 @@ type Database[M Model] interface {
 // method, because a Go method cannot introduce the result type parameter.
 //
 // Row-level access rules are not inherited. A model's List gets its tenant or
-// group scoping from the service hooks the controller runs (Filter, FilterRaw);
+// group scoping from the Filter service hook the controller runs;
 // an aggregate is called straight from service code, so those hooks never run
 // and every scoping condition has to be passed to Where explicitly. Forgetting
 // one aggregates across tenants without any sign that it did.
@@ -370,8 +370,16 @@ type Service[M Model, REQ Request, RSP Response] interface {
 	Import(*ServiceContext, io.Reader) ([]M, error)
 	Export(*ServiceContext, ...M) ([]byte, error)
 
-	Filter(*ServiceContext, M) M
-	FilterRaw(*ServiceContext) string
+	// Filter lets a service rewrite the query condition before the
+	// controller-side listing runs (List and Export). The model carries the
+	// URL-decoded equality condition and the options carry the parsed operator
+	// filters; the typical use is row-level data scoping: append typed filters
+	// (e.g. Cols.GroupID.In(...)) to options.Filters or narrow the model
+	// condition, then return both. Returning an error aborts the request — the
+	// correct behavior when loading the caller's data scope fails. The
+	// controller calls Filter once and shares the result between List and
+	// Count, so both always see the same condition set.
+	Filter(*ServiceContext, M, QueryOptions) (M, QueryOptions, error)
 
 	Logger
 }

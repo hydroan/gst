@@ -134,16 +134,25 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				return
 			}
 			_, _ = page, size
-			// 2.List resources from database.
+			// 2.Let the service rewrite the query condition and options; the
+			// typical use is row-level data scoping, sharing the exact List
+			// semantics so an export can never see rows the list hides.
+			queryOpts := types.QueryOptions{
+				AllowEmpty:    true,
+				PresentFields: present,
+				Filters:       filters,
+			}
+			if m, queryOpts, err = svc.Filter(svcCtx, m, queryOpts); err != nil {
+				log.Error(err)
+				handleServiceError(c, err)
+				gstotel.RecordError(span, err)
+				return
+			}
+			// 3.List resources from database.
 			if err = database.Database[M](requestContext(c)).
 				// WithPagination(page, size). // don't use WithPagination, it makes WithLimit ineffective
 				WithLimit(limit).
-				WithQuery(svc.Filter(svcCtx, m), types.QueryOptions{
-					AllowEmpty:    true,
-					RawQuery:      svc.FilterRaw(svcCtx),
-					PresentFields: present,
-					Filters:       filters,
-				}).
+				WithQuery(m, queryOpts).
 				WithExclude(m.Excludes()).
 				WithExpand(expands, orders...).
 				WithOrder(orders...).
@@ -153,7 +162,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				gstotel.RecordError(span, err)
 				return
 			}
-			// 3.Perform business logic processing after list resources.
+			// 4.Perform business logic processing after list resources.
 			if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) error {
 				return svc.ListAfter(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), &data)
 			}); err != nil {
@@ -163,7 +172,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				return
 			}
 		}
-		// 4.Export
+		// 5.Export
 		exported, err := meta.traceServiceExport(ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) ([]byte, error) {
 			return svc.Export(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), data...)
 		})

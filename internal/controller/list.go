@@ -126,15 +126,24 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			gstotel.RecordError(span, err)
 			return
 		}
-		// 2.List resources from database.
+		// 2.Let the service rewrite the query condition and options; the typical
+		// use is row-level data scoping. Filter runs once and the result is
+		// shared by List and Count below, so both see the same condition set.
+		queryOpts := types.QueryOptions{
+			AllowEmpty:    true,
+			PresentFields: present,
+			Filters:       filters,
+		}
+		if m, queryOpts, err = svc.Filter(ctx, m, queryOpts); err != nil {
+			log.Error(err)
+			handleServiceError(c, err)
+			gstotel.RecordError(span, err)
+			return
+		}
+		// 3.List resources from database.
 		if err = database.Database[M](requestContext(c)).
 			WithPagination(urlquery.Pagination(query, m)).
-			WithQuery(svc.Filter(ctx, m), types.QueryOptions{
-				AllowEmpty:    true,
-				RawQuery:      svc.FilterRaw(ctx),
-				PresentFields: present,
-				Filters:       filters,
-			}).
+			WithQuery(m, queryOpts).
 			WithCursor(cursor).
 			WithExclude(m.Excludes()).
 			WithExpand(expands, orders...).
@@ -145,7 +154,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			gstotel.RecordError(span, err)
 			return
 		}
-		// 3.Perform business logic processing after list resources.
+		// 4.Perform business logic processing after list resources.
 		var serviceCtxAfter *types.ServiceContext
 		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_LIST_AFTER, func(spanCtx context.Context) error {
 			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_LIST_AFTER)
@@ -160,12 +169,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		// NOTE: Total count is not provided when using cursor-based pagination.
 		if !cursor.Enabled() {
 			if err = database.Database[M](requestContext(c)).
-				WithQuery(svc.Filter(ctx, m), types.QueryOptions{
-					AllowEmpty:    true,
-					RawQuery:      svc.FilterRaw(ctx),
-					PresentFields: present,
-					Filters:       filters,
-				}).
+				WithQuery(m, queryOpts).
 				WithExclude(m.Excludes()).
 				Count(total); err != nil {
 				log.Error(err)
@@ -175,7 +179,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			}
 		}
 
-		// 4.record operation log to database.
+		// 5.record operation log to database.
 		// cb.Enqueue(&modellogmgmt.OperationLog{
 		// 	OP:        consts.OP_LIST,
 		// 	Model:     typ.Name(),

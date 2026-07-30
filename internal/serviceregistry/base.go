@@ -56,5 +56,6 @@ func (Base[M, REQ, RSP]) Export(*types.ServiceContext, ...M) ([]byte, error) {
 	return make([]byte, 0), nil
 }
 
-func (Base[M, REQ, RSP]) Filter(_ *types.ServiceContext, m M) M    { return m }
-func (Base[M, REQ, RSP]) FilterRaw(_ *types.ServiceContext) string { return "" }
+func (Base[M, REQ, RSP]) Filter(_ *types.ServiceContext, m M, opts types.QueryOptions) (M, types.QueryOptions, error) {
+	return m, opts, nil
+}
