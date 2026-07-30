@@ -242,6 +242,23 @@ mode = "prod"
 	assert.Equal(t, config.Mode("prod"), config.App.Server.Mode)
 }
 
+// TestInitDefaultsToInMemorySqliteWithoutConfigFile pins the defaults a missing
+// config file falls back to. Table preparation exempts this combination from
+// the "gg migrate" requirement, so the two packages must agree on it.
+func TestInitDefaultsToInMemorySqliteWithoutConfigFile(t *testing.T) {
+	clearConfigEnvForTest(t)
+	t.Chdir(t.TempDir())
+
+	config.SetConfigFile("")
+	if err := config.Init(); err != nil {
+		t.Fatal(err)
+	}
+
+	assert.Equal(t, config.DBSqlite, config.App.Database.Type)
+	assert.True(t, config.App.Sqlite.IsMemory)
+	assert.False(t, config.App.Database.AutoMigrate)
+}
+
 type Wechat struct {
 	AppID     string `json:"app_id" mapstructure:"app_id" default:"myappid"`
 	AppSecret string `json:"app_secret" mapstructure:"app_secret" default:"myappsecret"`
@@ -281,6 +298,9 @@ func clearConfigEnvForTest(t *testing.T) {
 		"SERVER_PORT",
 		"REDIS_ENABLED",
 		"REDIS_NAMESPACE",
+		config.DATABASE_TYPE,
+		config.DATABASE_AUTO_MIGRATE,
+		config.SQLITE_IS_MEMORY,
 	}
 	for _, key := range keys {
 		t.Setenv(key, "")
