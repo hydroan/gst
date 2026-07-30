@@ -83,7 +83,6 @@ func (db *database[M]) List(dest *[]M) (err error) {
 			return err
 		}
 	}
-	// if err = db.db.Find(dest).Error; err != nil {
 	tableName := db.m.GetTableName()
 	// apply cursor-based pagination.
 	db.applyCursorPagination()
@@ -174,7 +173,6 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 			return err
 		}
 	}
-	// if err = db.db.Where("id = ?", id).Find(dest).Error; err != nil {
 	tableName := db.m.GetTableName()
 	// Use an explicit WHERE clause instead of relying on primary key fields
 	// already present on dest.
@@ -297,7 +295,6 @@ func (db *database[M]) First(dest M) (err error) {
 			return err
 		}
 	}
-	// if err = db.db.First(dest).Error; err != nil {
 	tableName := db.m.GetTableName()
 	if err = db.ins.Table(tableName).First(dest).Error; err != nil {
 		return err
@@ -366,7 +363,6 @@ func (db *database[M]) Last(dest M) (err error) {
 			return err
 		}
 	}
-	// if err = db.db.Last(dest).Error; err != nil {
 	tableName := db.m.GetTableName()
 	if err = db.ins.Table(tableName).Last(dest).Error; err != nil {
 		return err
@@ -435,7 +431,6 @@ func (db *database[M]) Take(dest M) (err error) {
 			return err
 		}
 	}
-	// if err = db.db.Take(dest).Error; err != nil {
 	tableName := db.m.GetTableName()
 	if err = db.ins.Table(tableName).Take(dest).Error; err != nil {
 		return err

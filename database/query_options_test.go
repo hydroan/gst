@@ -705,6 +705,40 @@ func TestDatabaseWithPagination(t *testing.T) {
 		assertIDs(t, pageUsers, ids[4:6])
 		assertIDs(t, offsetUsers, ids[4:6])
 	})
+
+	// Paging clauses land on the chain in call order, so when a chain mixes
+	// WithPagination with WithLimit or WithOffset the last call decides the
+	// clause it sets. Mixing them on one chain is not a supported pattern; the
+	// assertions only pin the resulting order down so the behavior cannot
+	// drift back to a deferred scope that always wins.
+	t.Run("LastPagingCallWins", func(t *testing.T) {
+		defer cleanupTestData()
+		records, ids := newSeqUsers("pg_mixed", 10)
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(records...))
+
+		listMixed := func(apply func(types.Database[*TestUser]) types.Database[*TestUser]) []*TestUser {
+			users := make([]*TestUser, 0)
+			require.NoError(t, apply(database.Database[*TestUser](context.Background()).
+				WithOrder(types.Asc("id"))).
+				List(&users))
+			return users
+		}
+
+		// WithPagination last: it sets both LIMIT and OFFSET.
+		assertIDs(t, listMixed(func(db types.Database[*TestUser]) types.Database[*TestUser] {
+			return db.WithLimit(5).WithPagination(2, 3)
+		}), ids[3:6])
+
+		// WithLimit last: it replaces the LIMIT and leaves the page OFFSET.
+		assertIDs(t, listMixed(func(db types.Database[*TestUser]) types.Database[*TestUser] {
+			return db.WithPagination(2, 3).WithLimit(5)
+		}), ids[3:8])
+
+		// WithOffset last: it replaces the OFFSET and leaves the page LIMIT.
+		assertIDs(t, listMixed(func(db types.Database[*TestUser]) types.Database[*TestUser] {
+			return db.WithPagination(2, 3).WithOffset(6)
+		}), ids[6:9])
+	})
 }
 
 func TestDatabaseWithOffset(t *testing.T) {

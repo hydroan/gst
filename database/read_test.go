@@ -411,6 +411,12 @@ func TestDatabaseCount(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).WithLimit(1).Count(count))
 	require.Equal(t, 3, *count, "limit should not affect count")
 
+	// Test count with a cursor left on the chain - a cursor narrows List only,
+	// so the count still covers every matching record
+	require.NoError(t, database.Database[*TestUser](context.Background()).
+		WithCursor(types.CursorForward(types.Asc("id"), u1.ID)).Count(count))
+	require.Equal(t, 3, *count, "cursor should not affect count")
+
 	// Test count with query conditions
 	require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(&TestUser{Name: u1.Name}).Count(count))
 	require.Equal(t, 1, *count, "should have 1 record matching name")
