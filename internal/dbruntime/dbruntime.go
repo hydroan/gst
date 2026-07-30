@@ -47,8 +47,15 @@ func resolveTableName(handler *gorm.DB, m types.Model) (string, error) {
 // disabled (the default) it only verifies that the table already exists via
 // the dialect-aware gorm Migrator, so schema changes in shared environments
 // stay an explicit "gg migrate" decision instead of a startup side effect.
+//
+// An in-memory sqlite database is exempt from that check: it is created empty
+// in every process and dies with it, so no earlier "gg migrate" run can have
+// populated it and there is no shared schema to protect. Migrating it anyway
+// keeps the zero-config defaults (sqlite, in-memory, auto_migrate off) bootable
+// instead of panicking on the first registered model.
 func ensureTable(handler *gorm.DB, m types.Model) error {
-	if config.App.Database.AutoMigrate {
+	inMemory := config.App.Database.Type == config.DBSqlite && config.App.Sqlite.IsMemory
+	if config.App.Database.AutoMigrate || inMemory {
 		if err := handler.Table(m.GetTableName()).AutoMigrate(m); err != nil {
 			return err
 		}

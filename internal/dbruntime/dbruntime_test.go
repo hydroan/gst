@@ -28,11 +28,21 @@ func TestEnsureTableCreatesTableWhenAutoMigrateEnabled(t *testing.T) {
 func TestEnsureTableFailsFastWhenDisabledAndTableMissing(t *testing.T) {
 	db := newSQLiteDB(t)
 	withAutoMigrate(t, false)
+	withSqlite(t, false)
 
 	err := ensureTable(db, &plainRecord{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "gg migrate")
 	require.False(t, db.Migrator().HasTable("plain_records"))
+}
+
+func TestEnsureTableMigratesInMemorySqliteWhenDisabled(t *testing.T) {
+	db := newSQLiteDB(t)
+	withAutoMigrate(t, false)
+	withSqlite(t, true)
+
+	require.NoError(t, ensureTable(db, &plainRecord{}))
+	require.True(t, db.Migrator().HasTable("plain_records"))
 }
 
 func TestEnsureTablePassesWhenDisabledAndTableExists(t *testing.T) {
@@ -76,4 +86,15 @@ func withAutoMigrate(t *testing.T, enabled bool) {
 	old := config.App.Database.AutoMigrate
 	config.App.Database.AutoMigrate = enabled
 	t.Cleanup(func() { config.App.Database.AutoMigrate = old })
+}
+
+// withSqlite selects sqlite as the database type and marks whether it is the
+// in-memory variant, restoring both options on cleanup.
+func withSqlite(t *testing.T, inMemory bool) {
+	t.Helper()
+	oldType, oldIsMemory := config.App.Database.Type, config.App.Sqlite.IsMemory
+	config.App.Database.Type, config.App.Sqlite.IsMemory = config.DBSqlite, inMemory
+	t.Cleanup(func() {
+		config.App.Database.Type, config.App.Sqlite.IsMemory = oldType, oldIsMemory
+	})
 }
