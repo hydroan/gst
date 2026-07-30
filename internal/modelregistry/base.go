@@ -19,8 +19,12 @@ var _ types.Model = (*Base)(nil)
 //
 // Usually, there are some gorm tags that may be of interest to you.
 // gorm:"unique"
-// gorm:"foreignKey:ParentID"
-// gorm:"foreignKey:ParentID,references:ID"
+// gorm:"foreignKey:ParentID;constraint:-"
+// gorm:"foreignKey:ParentID;references:ID;constraint:-"
+//
+// Associations are declared so queries can preload them, not to create physical
+// foreign keys, so they carry constraint:- and leave referential integrity to
+// the model hooks.
 type Base struct {
 	ID string `json:"id" gorm:"primaryKey;type:char(36)" query:"id" url:"-"` // UUIDv7 identifier for the record
 

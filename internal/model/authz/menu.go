@@ -51,9 +51,14 @@ type Menu struct {
 	Platforms     datatypes.JSONSlice[MenuPlatform] `json:"platforms,omitempty" query:"platforms"` // Empty means all platforms.
 	DomainPattern string                            `json:"domain_pattern,omitempty" query:"domain_pattern" gorm:"default:.*"`
 
+	// Self-referencing tree. The associations exist so Expands can preload Parent
+	// and Children; constraint:- keeps AutoMigrate from emitting a physical foreign
+	// key, because preloading resolves the relation in Go and never relies on one.
+	// Without that constraint the database no longer rejects deleting a menu that
+	// still has children, so callers own the referential integrity of the tree.
 	ParentID string  `json:"parent_id,omitempty" gorm:"size:191" query:"parent_id"`
-	Children []*Menu `json:"children,omitempty" gorm:"foreignKey:ParentID"`             // Child menus.
-	Parent   *Menu   `json:"parent,omitempty" gorm:"foreignKey:ParentID;references:ID"` // Parent menu.
+	Children []*Menu `json:"children,omitempty" gorm:"foreignKey:ParentID;constraint:-"`             // Child menus.
+	Parent   *Menu   `json:"parent,omitempty" gorm:"foreignKey:ParentID;references:ID;constraint:-"` // Parent menu.
 
 	model.Query
 	model.Base
