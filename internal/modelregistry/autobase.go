@@ -27,8 +27,8 @@ var _ types.Model = (*AutoBase)(nil)
 //     on a unique index; idempotent seeding depends on conflicting keys.
 //   - The comma-separated multi-ID query trick supported by Base's string ID
 //     does not apply to the integer ID.
-//   - Updating a record whose ID is unset inserts a new row, mirroring how
-//     Base generates a fresh UUID for records without an ID.
+//   - Updating a record whose ID is unset fails with database.ErrIDRequired;
+//     use database.Upsert for insert-or-update semantics.
 type AutoBase struct {
 	ID uint64 `json:"id" gorm:"primaryKey;autoIncrement" query:"id" url:"-"` // Auto-increment identifier assigned by the database
 
