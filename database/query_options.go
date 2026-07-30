@@ -525,6 +525,11 @@ func (db *database[M]) orderClause(order types.Order) string {
 //     page, _ := strconv.Atoi(pageStr)
 //     size, _ := strconv.Atoi(sizeStr)
 //     WithPagination(page, size)
+//
+// The clauses land on the chain right away instead of through a GORM scope.
+// Scopes run when the statement executes, which is after a terminal operation
+// has built its own statement, so a scope would override the LIMIT and OFFSET
+// reset that Count applies to keep paging out of a count query.
 func (db *database[M]) WithPagination(page, size int) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -535,9 +540,12 @@ func (db *database[M]) WithPagination(page, size int) types.Database[M] {
 		size = defaultLimit
 	}
 	offset := (page - 1) * size
-	db.ins = db.ins.Scopes(func(d *gorm.DB) *gorm.DB {
-		return d.Offset(offset).Limit(size)
-	})
+	if offset <= 0 {
+		// GORM keeps a previously set offset when merging a zero one, so clear
+		// it the same way WithOffset does.
+		offset = -1
+	}
+	db.ins = db.ins.Offset(offset).Limit(size)
 	return db
 }
 

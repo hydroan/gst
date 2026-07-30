@@ -160,7 +160,6 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		// NOTE: Total count is not provided when using cursor-based pagination.
 		if !cursor.Enabled() {
 			if err = database.Database[M](requestContext(c)).
-				// NOTE: WithPagination should not apply in Count method.
 				WithQuery(svc.Filter(ctx, m), types.QueryOptions{
 					AllowEmpty:    true,
 					RawQuery:      svc.FilterRaw(ctx),

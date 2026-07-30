@@ -207,7 +207,9 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 //
 // Features:
 //   - Respects query modifiers such as WHERE and JOIN
-//   - Uses LIMIT(-1) to clear existing LIMIT clauses and count all matching rows
+//   - Clears LIMIT and OFFSET so that paging left on the chain cannot reach the
+//     count query. A count query answers a single row, which an OFFSET would
+//     skip and turn into a silent zero.
 //
 // Example:
 //
@@ -232,12 +234,11 @@ func (db *database[M]) Count(count *int) (err error) {
 	var count64 int64
 	if db.dryRun {
 		tableName := db.m.GetTableName()
-		tx := db.dryRunReadSession().Table(tableName).Model(*new(M)).Limit(-1).Count(&count64)
+		tx := db.dryRunReadSession().Table(tableName).Model(*new(M)).Limit(-1).Offset(-1).Count(&count64)
 		return db.collectSQL(tx)
 	}
-	// if err = db.db.Model(*new(M)).Count(&count64).Error; err != nil {
 	tableName := db.m.GetTableName()
-	if err = db.ins.Table(tableName).Model(*new(M)).Limit(-1).Count(&count64).Error; err != nil {
+	if err = db.ins.Table(tableName).Model(*new(M)).Limit(-1).Offset(-1).Count(&count64).Error; err != nil {
 		return err
 	}
 	*count = int(count64)

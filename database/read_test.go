@@ -402,9 +402,23 @@ func TestDatabaseCount(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 	require.Equal(t, 3, *count, "should have 3 records")
 
+	// Test count with paging left on the chain - paging must not reach the
+	// count query, whose single row an OFFSET would skip into a silent zero
+	require.NoError(t, database.Database[*TestUser](context.Background()).WithPagination(2, 2).Count(count))
+	require.Equal(t, 3, *count, "pagination should not affect count")
+	require.NoError(t, database.Database[*TestUser](context.Background()).WithOffset(2).Count(count))
+	require.Equal(t, 3, *count, "offset should not affect count")
+	require.NoError(t, database.Database[*TestUser](context.Background()).WithLimit(1).Count(count))
+	require.Equal(t, 3, *count, "limit should not affect count")
+
 	// Test count with query conditions
 	require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(&TestUser{Name: u1.Name}).Count(count))
 	require.Equal(t, 1, *count, "should have 1 record matching name")
+
+	// Test count with query conditions and paging on the same chain
+	require.NoError(t, database.Database[*TestUser](context.Background()).
+		WithQuery(&TestUser{Name: u1.Name}).WithPagination(3, 1).Count(count))
+	require.Equal(t, 1, *count, "pagination should not affect filtered count")
 
 	require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(&TestUser{Age: u2.Age}).Count(count))
 	require.Equal(t, 1, *count, "should have 1 record matching age")
