@@ -89,7 +89,7 @@ func (m *MenuService) filterByRole(ctx *types.ServiceContext, data *[]*modelauth
 		return nil
 	}
 	for _, r := range roles {
-		log.Infow("role", "username", ctx.Username(), "role_code", r.Code)
+		log.Infow("role", "username", ctx.Username(), "role_name", r.Name)
 	}
 
 	// MenuIDs and MenuPartialIDs both affect menu visibility. Only MenuIDs grants

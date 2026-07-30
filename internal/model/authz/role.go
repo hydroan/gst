@@ -17,9 +17,14 @@ import (
 )
 
 type Role struct {
-	TenantID string `json:"tenant_id,omitempty" query:"tenant_id" gorm:"size:191;default:default;uniqueIndex:idx_authz_roles_tenant_code"`
-	Code     string `json:"code,omitempty" query:"code" gorm:"size:191;uniqueIndex:idx_authz_roles_tenant_code"`
-	Default  *bool  `json:"default,omitempty" query:"default"`
+	TenantID string `json:"tenant_id,omitempty" query:"tenant_id" gorm:"size:191;default:default;uniqueIndex:idx_authz_roles_tenant_name"`
+
+	// Name is the human-readable role name, unique within a tenant. Renaming
+	// is free: casbin policies and role bindings reference the immutable ID,
+	// never the name.
+	Name string `json:"name,omitempty" query:"name" gorm:"size:191;uniqueIndex:idx_authz_roles_tenant_name"`
+
+	Default *bool `json:"default,omitempty" query:"default"`
 
 	// Scope holds generic constraints for regional roles.
 	// Keys and values are user-defined and framework-agnostic.
@@ -63,30 +68,26 @@ func (r *Role) tenant() string {
 
 func (r *Role) validate() error {
 	r.ID = strings.TrimSpace(r.ID)
-	r.Code = strings.TrimSpace(r.Code)
-	if len(r.Code) == 0 {
-		r.Code = r.ID
+	r.Name = strings.TrimSpace(r.Name)
+	if len(r.Name) == 0 {
+		return errors.New("role name is required")
 	}
 
-	if len(r.Code) == 0 {
-		return errors.New("role code is required")
-	}
-	if r.ID == consts.AUTHZ_SYSTEM_ROLE_ROOT {
-		return errors.New("system_root is reserved for system role")
+	// The system role is addressed by its constant ID and never lives in the
+	// roles table; reject both the ID and the name to avoid a user-created
+	// role masquerading as it.
+	if r.ID == consts.AUTHZ_SYSTEM_ROLE_ROOT || r.Name == consts.AUTHZ_SYSTEM_ROLE_ROOT {
+		return errors.New("system_root is reserved for the system role")
 	}
 
 	return nil
 }
 
+// CreateBefore validates the new role. The ID is left to the framework,
+// which assigns a UUIDv7 like every other model; clients no longer need to
+// invent role identifiers.
 func (r *Role) CreateBefore(ctx context.Context) error {
-	if strings.TrimSpace(r.ID) == "" {
-		return errors.New("role id is required")
-	}
-	if err := r.validate(); err != nil {
-		return err
-	}
-
-	return nil
+	return r.validate()
 }
 
 // CreateAfter syncs the role's permissions after the role row has been persisted.
@@ -233,7 +234,7 @@ func (r *Role) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 		return nil
 	}
 	enc.AddString("tenant_id", r.TenantID)
-	enc.AddString("code", r.Code)
+	enc.AddString("name", r.Name)
 	enc.AddString("id", r.ID)
 	return nil
 }

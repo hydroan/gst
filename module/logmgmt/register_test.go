@@ -189,8 +189,8 @@ func TestOperationLogList(t *testing.T) {
 		Username: username,
 		Password: password,
 	})
-	roleCode := logmgmtTestUsername("logmgmt_test_role")
-	roleID := util.HashID(roleCode)
+	roleName := logmgmtTestUsername("logmgmt_test_role")
+	roleID := util.HashID(roleName)
 	clearOperationLogs(t)
 	t.Cleanup(func() {
 		clearOperationLogs(t)
@@ -220,14 +220,14 @@ func TestOperationLogList(t *testing.T) {
 	require.NoError(t, err)
 	createReq := &authz.Role{
 		Base: model.Base{ID: roleID},
-		Code: roleCode,
+		Name: roleName,
 	}
 	resp, err := cli.Create(createReq)
 	require.NoError(t, err)
 	testutil.TestResp(t, resp, func(t *testing.T, rsp *authz.Role) {
 		t.Helper()
 		require.NotNil(t, rsp)
-		require.Equal(t, createReq.Code, rsp.Code)
+		require.Equal(t, createReq.Name, rsp.Name)
 	})
 
 	time.Sleep(1 * time.Second)

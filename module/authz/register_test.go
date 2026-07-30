@@ -317,8 +317,7 @@ func TestAuthzMenu(t *testing.T) {
 			}))
 			require.NoError(t, err)
 			resp, err = cliRole.Create(&authz.Role{
-				Base:           model.Base{ID: "partial_menu_role"},
-				Code:           "partial_menu_role",
+				Name:           "partial_menu_role",
 				MenuPartialIDs: []string{partialMenuID},
 			})
 			require.NoError(t, err)
@@ -370,8 +369,7 @@ func TestAuthzMenu(t *testing.T) {
 			require.NoError(t, err)
 			defaultRole := true
 			resp, err = cliRole.Create(&authz.Role{
-				Base:    model.Base{ID: "default_fallback_role"},
-				Code:    "default_fallback_role",
+				Name:    "default_fallback_role",
 				Default: &defaultRole,
 				MenuIDs: []string{defaultMenuID},
 			})
@@ -503,7 +501,7 @@ func TestAuthzRole(t *testing.T) {
 		}))
 		require.NoError(t, err)
 		var roleID string
-		var roleCode string
+		var roleName string
 		var resp *client.Resp
 		var roleMenuID string
 
@@ -539,25 +537,30 @@ func TestAuthzRole(t *testing.T) {
 			})
 		})
 
-		t.Run("create_requires_id", func(t *testing.T) {
-			_, err = cli.Create(&authz.Role{
-				Code: "missing_id_role",
-			})
+		t.Run("create_requires_name", func(t *testing.T) {
+			_, err = cli.Create(&authz.Role{})
 			require.Error(t, err)
 		})
 
-		t.Run("create_rejects_system_root_id", func(t *testing.T) {
+		t.Run("create_rejects_system_root", func(t *testing.T) {
+			// Both the reserved ID and the reserved name are rejected, so a
+			// user-created role can never masquerade as the system role.
 			_, err = cli.Create(&authz.Role{
 				Base: model.Base{ID: consts.AUTHZ_SYSTEM_ROLE_ROOT},
-				Code: consts.AUTHZ_SYSTEM_ROLE_ROOT,
+				Name: "some_role_name",
+			})
+			require.Error(t, err)
+			_, err = cli.Create(&authz.Role{
+				Name: consts.AUTHZ_SYSTEM_ROLE_ROOT,
 			})
 			require.Error(t, err)
 		})
 
 		t.Run("create", func(t *testing.T) {
-			roleID = authzTestUsername("test_role")
+			// The ID is framework-assigned; clients only provide the name.
+			roleName = authzTestUsername("test_role")
 			createReq := &authz.Role{
-				Base:    model.Base{ID: roleID},
+				Name:    roleName,
 				MenuIDs: []string{roleMenuID},
 			}
 			resp, err = cli.Create(createReq)
@@ -565,11 +568,9 @@ func TestAuthzRole(t *testing.T) {
 			testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper()
 				require.NotEmpty(t, rsp.ID)
-				require.Equal(t, roleID, rsp.ID)
 				require.Equal(t, rbac.DefaultTenant, rsp.TenantID)
-				require.Equal(t, roleID, rsp.Code)
+				require.Equal(t, roleName, rsp.Name)
 				roleID = rsp.ID
-				roleCode = rsp.Code
 			})
 			requireCasbinPolicy(t, rbac.DefaultTenant, roleID, "/api/authz/roles", http.MethodGet, "allow")
 			requireNoCasbinPolicy(t, rbac.DefaultTenant, roleID, "/api/authz/roles", http.MethodPost, "allow")
@@ -582,13 +583,13 @@ func TestAuthzRole(t *testing.T) {
 			testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper()
 				require.Equal(t, roleID, rsp.ID)
-				require.Equal(t, roleCode, rsp.Code)
+				require.Equal(t, roleName, rsp.Name)
 			})
 		})
 
 		t.Run("update", func(t *testing.T) {
 			updateReq := &authz.Role{
-				Code:    authzTestUsername("test_role_updated"),
+				Name:    authzTestUsername("test_role_updated"),
 				MenuIDs: []string{roleMenuID},
 			}
 			resp, err = cli.Update(roleID, updateReq)
@@ -596,15 +597,15 @@ func TestAuthzRole(t *testing.T) {
 			testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper()
 				require.Equal(t, roleID, rsp.ID)
-				require.Equal(t, updateReq.Code, rsp.Code)
-				roleCode = rsp.Code
+				require.Equal(t, updateReq.Name, rsp.Name)
+				roleName = rsp.Name
 			})
 		})
 
-		t.Run("update_code_preserves_role_id_policies", func(t *testing.T) {
-			nextCode := authzTestUsername("test_role_updated_again")
+		t.Run("update_name_preserves_role_id_policies", func(t *testing.T) {
+			nextName := authzTestUsername("test_role_updated_again")
 			resp, err = cli.Update(roleID, &authz.Role{
-				Code:    nextCode,
+				Name:    nextName,
 				MenuIDs: []string{roleMenuID},
 			})
 			require.NoError(t, err)
@@ -614,19 +615,19 @@ func TestAuthzRole(t *testing.T) {
 			require.NoError(t, err)
 			testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper()
-				require.Equal(t, nextCode, rsp.Code)
-				roleCode = rsp.Code
+				require.Equal(t, nextName, rsp.Name)
+				roleName = rsp.Name
 			})
 
 			requireCasbinPolicy(t, rbac.DefaultTenant, roleID, "/api/authz/roles", http.MethodGet, "allow")
 
-			requireNoCasbinPolicy(t, rbac.DefaultTenant, nextCode, "/api/authz/roles", http.MethodGet, "allow")
+			requireNoCasbinPolicy(t, rbac.DefaultTenant, nextName, "/api/authz/roles", http.MethodGet, "allow")
 		})
 
 		t.Run("failed_tenant_update_keeps_existing_policy", func(t *testing.T) {
 			_, err = cli.Update(roleID, &authz.Role{
 				TenantID: "other",
-				Code:     roleCode,
+				Name:     roleName,
 				MenuIDs:  nil,
 			})
 			require.Error(t, err)
@@ -635,19 +636,19 @@ func TestAuthzRole(t *testing.T) {
 		})
 
 		t.Run("patch", func(t *testing.T) {
-			patchReq := &authz.Role{Code: roleCode}
+			patchReq := &authz.Role{Name: roleName}
 			resp, err = cli.Patch(roleID, patchReq)
 			require.NoError(t, err)
 			testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper()
 				require.Equal(t, roleID, rsp.ID)
-				require.Equal(t, roleCode, rsp.Code)
+				require.Equal(t, roleName, rsp.Name)
 			})
 		})
 
-		t.Run("patch_code", func(t *testing.T) {
-			nextCode := authzTestUsername("test_role_patched")
-			resp, err = cli.Patch(roleID, &authz.Role{Code: nextCode})
+		t.Run("patch_name", func(t *testing.T) {
+			nextName := authzTestUsername("test_role_patched")
+			resp, err = cli.Patch(roleID, &authz.Role{Name: nextName})
 			require.NoError(t, err)
 
 			got := new(authz.Role)
@@ -655,8 +656,8 @@ func TestAuthzRole(t *testing.T) {
 			require.NoError(t, err)
 			testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper()
-				require.Equal(t, nextCode, rsp.Code)
-				roleCode = rsp.Code
+				require.Equal(t, nextName, rsp.Name)
+				roleName = rsp.Name
 			})
 		})
 
@@ -710,8 +711,7 @@ func TestAuthzRoleBinding(t *testing.T) {
 		// Keep the prefix short: the generated id must fit the char(36) id column.
 		bindingRoleID := authzTestUsername("rb_role")
 		resp, err = cliRole.Create(&authz.Role{
-			Base: model.Base{ID: bindingRoleID},
-			Code: bindingRoleID,
+			Name: bindingRoleID,
 		})
 		require.NoError(t, err)
 		testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
@@ -779,8 +779,7 @@ func TestAuthzRoleBinding(t *testing.T) {
 			authzPurgeLeftoverRole(t, "deleted_role")
 
 			resp, err = cliRole.Create(&authz.Role{
-				Base: model.Base{ID: "deleted_role"},
-				Code: "deleted_role",
+				Name: "deleted_role",
 			})
 			require.NoError(t, err)
 			var deletedRoleID string
@@ -1093,23 +1092,32 @@ func authzTenantClient(api, sessionID, tenantID string) (*client.Client, error) 
 // the role without hitting a duplicated-key conflict. Deleting through the
 // standard chain runs the role delete hooks, which also remove the role's
 // bindings and RBAC policies.
-func authzPurgeLeftoverRole(t *testing.T, roleID string) {
+func authzPurgeLeftoverRole(t *testing.T, roleName string) {
 	t.Helper()
 
-	err := database.Database[*authz.Role](context.Background()).WithPurge().Delete(&authz.Role{Base: model.Base{ID: roleID}})
-	if errors.Is(err, database.ErrRecordNotFound) {
-		return
-	}
+	// Roles are looked up by name: IDs are framework-generated now, so a
+	// leftover from a previous run can only be identified by its unique name.
+	leftovers := make([]*authz.Role, 0)
+	err := database.Database[*authz.Role](context.Background()).
+		WithQuery(&authz.Role{Name: roleName}).
+		List(&leftovers)
 	require.NoError(t, err)
+	for _, leftover := range leftovers {
+		err = database.Database[*authz.Role](context.Background()).WithPurge().Delete(leftover)
+		if errors.Is(err, database.ErrRecordNotFound) {
+			continue
+		}
+		require.NoError(t, err)
+	}
 }
 
-func authzCreateTenantRole(t *testing.T, tenantID, code string, menuIDs ...string) string {
+func authzCreateTenantRole(t *testing.T, tenantID, name string, menuIDs ...string) string {
 	t.Helper()
 
 	role := &authz.Role{
-		Base:     model.Base{ID: util.HashID(tenantID, code)},
+		Base:     model.Base{ID: util.HashID(tenantID, name)},
 		TenantID: tenantID,
-		Code:     code,
+		Name:     name,
 		MenuIDs:  menuIDs,
 	}
 	require.NoError(t, database.Database[*authz.Role](context.Background()).Create(role))
