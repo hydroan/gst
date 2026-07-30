@@ -130,14 +130,14 @@ README.md 面向使用 gst 框架的后端开发者，应保持简洁并聚焦�
 1. 在 gst 仓库执行 `make install` 安装 `gg` 命令。
 2. 使用 `gg new myproject` 创建后端项目。
 3. 在业务项目中修改或新增 `model` 文件，例如 `model/user.go`、`model/config/file.go`。
-4. 修改 model 的 DSL 后执行 `gg gen` 生成 `main.go`、`model/model.go`、`model/apidoc.go`、`service/service.go`、`router/router.go` 等注册代码。
+4. 修改 model 的 DSL 后执行 `gg gen` 生成 `main.go`、`model/model.gen.go`、`model/apidoc.gen.go`、`service/service.gen.go`、`router/router.gen.go` 等注册代码。
 5. 在对应的 `service` 文件中实现业务逻辑和复杂 hook。
 6. 如果 model 的 `Design()` 中声明了 `Migrate()`，该 model 也是数据库模型；数据库字段变化后使用 `gg migrate --dry-run` 预览迁移，再用 `gg migrate` 按确认执行 schema 迁移。
 7. 服务启动后会自动生成 Swagger 文档，访问路径是 `/docs/index.html`。
 
 #### 生成文件和手写文件的边界
 
-- `main.go`、`model/model.go`、`model/apidoc.go`、`service/service.go`、`router/router.go` 通常由 `gg gen` 生成，主要负责导入包和注册 model、service、router 以及 Swagger 文档使用的注释。除非明确要修改生成器，否则不要手写这些文件。
+- `main.go` 和所有 `.gen.go` 文件（`model/model.gen.go`、`model/apidoc.gen.go`、`service/service.gen.go`、`router/router.gen.go` 等）由 `gg gen` 生成，主要负责导入包和注册 model、service、router 以及 Swagger 文档使用的注释。除非明确要修改生成器，否则不要手写这些文件。
 - `model/**/*.go` 是接口和数据模型声明层。这里定义结构体字段、轻量级 model hook、`Design()` DSL、`Migrate()`、`Endpoint()`、`Param()`、`Route()`、`Payload()`、`Result()`、`Public()` 等接口行为。
 - `service/**/*.go` 是业务实现层。这里实现 `Create`、`Delete`、`Update`、`Patch`、`List`、`Get`、`DeleteMany` 等方法，以及 `CreateBefore`、`ListAfter`、`Filter`、`FilterRaw` 等复杂 hook。
 - `module/` 用来注册内置或自定义模块，例如 `iam.Register(...)`。
@@ -155,7 +155,7 @@ README.md 面向使用 gst 框架的后端开发者，应保持简洁并聚焦�
 #### service 实现规则
 
 - service 结构体通常嵌入 `service.Base[M, REQ, RSP]`，其中 `M` 是 model，`REQ` 是请求类型，`RSP` 是响应类型。
-- service 类型按 phase 命名，例如 `Creator`、`Lister`、`Getter`、`Updater`、`Patcher`、`Deleter`、`ManyDeleter`。注册时在生成的 `service/service.go` 中映射到 `consts.PHASE_CREATE`、`consts.PHASE_LIST` 等 phase。
+- service 类型按 phase 命名，例如 `Creator`、`Lister`、`Getter`、`Updater`、`Patcher`、`Deleter`、`ManyDeleter`。注册时在生成的 `service/service.gen.go` 中映射到 `consts.PHASE_CREATE`、`consts.PHASE_LIST` 等 phase。
 - 业务代码只使用 `service.Base` 和生成代码里的 `service.Register`；service 查找、registry map、实例注入和 logger 注入等状态由框架内部维护，不作为业务项目 API 使用。
 - 查询和写库优先使用 `database.Database[T](ctx)`，并按需要组合 `WithQuery`、`WithSelect`、`WithPagination`、`WithOrder`、`WithLimit` 等框架能力。
 - 列表过滤优先实现 `Filter(ctx, model)` 或 `FilterRaw(ctx)`；返回数据补充、关联查询、字段填充等逻辑优先放在 `ListAfter`。

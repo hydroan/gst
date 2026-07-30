@@ -59,10 +59,10 @@ git init
 | `configx/` | 扩展配置 |
 | `cronjob/` | 注册定时任务 |
 | `middleware/` | 注册中间件 |
-| `router/router.go` | 由 `gg gen` 生成的路由注册文件 |
-| `model/model.go` | 由 `gg gen` 生成的模型注册文件 |
-| `model/apidoc.go` | 由 `gg gen` 生成的注释与枚举注册文件，让 Swagger 文档在无源码的部署环境仍带字段说明和枚举值 |
-| `service/service.go` | 由 `gg gen` 生成的 service 注册文件 |
+| `router/router.gen.go` | 由 `gg gen` 生成的路由注册文件 |
+| `model/model.gen.go` | 由 `gg gen` 生成的模型注册文件 |
+| `model/apidoc.gen.go` | 由 `gg gen` 生成的注释与枚举注册文件，让 Swagger 文档在无源码的部署环境仍带字段说明和枚举值 |
+| `service/service.gen.go` | 由 `gg gen` 生成的 service 注册文件 |
 | `main.go` | 由 `gg gen` 生成的应用入口 |
 
 通常只手写 `model/**/*.go`、`service/**/*.go` 和扩展目录中的业务代码。生成文件
@@ -516,8 +516,8 @@ REQ/RSP 命名和业务项目根目录结构；根目录结构检查会跳过 Gi
 构建期工程配置，与运行时 `config.ini` 无关。
 
 当前支持在 `gg gen`（含 `gg module copy` 后的重新生成）中忽略指定路由。
-忽略只作用于生成的注册文件：`router/router.go` 不注册路由、
-`service/service.go` 不注册 service，也不会为其生成新的 service 文件；
+忽略只作用于生成的注册文件：`router/router.gen.go` 不注册路由、
+`service/service.gen.go` 不注册 service，也不会为其生成新的 service 文件；
 磁盘上已有的 service 文件（例如 `module copy` 拷贝来的）原样保留，
 `gg gen --prune` 和 `gg prune` 都不会把它们当作待删除文件，项目文件与
 `module copy` 输出保持一致。适合屏蔽 `module copy` 带来的不需要的接口，
@@ -562,8 +562,8 @@ gen:
 - [自定义动作模型：文件加密](./examples/demo/model/config/file/encrypt.go)
 - [资源 service hook](./examples/demo/service/conversation/create.go)
 - [自定义动作 service](./examples/demo/service/common/search/dedup.go)
-- [生成的路由注册](./examples/demo/router/router.go)
-- [生成的 service 注册](./examples/demo/service/service.go)
+- [生成的路由注册](./examples/demo/router/router.gen.go)
+- [生成的 service 注册](./examples/demo/service/service.gen.go)
 
 ## 常见问题
 
@@ -598,9 +598,10 @@ service，比如多个 `Create`，应使用 `Filename(...)` 避免生成文件�
 
 ### 生成文件可以手改吗？
 
-通常不要。`main.go`、`model/model.go`、`model/apidoc.go`、`service/service.go`、
-`router/router.go` 由 `gg gen` 维护。手写业务逻辑放在 `model/**/*.go`、
-`service/**/*.go` 和扩展目录。
+通常不要。`main.go` 和所有 `.gen.go` 文件（`model/model.gen.go`、
+`model/apidoc.gen.go`、`service/service.gen.go`、`router/router.gen.go` 等）
+由 `gg gen` 维护。手写业务逻辑放在 `model/**/*.go`、`service/**/*.go`
+和扩展目录。
 
 ### 如何确认接口路径？
 

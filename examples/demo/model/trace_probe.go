@@ -32,27 +32,21 @@ func (TraceProbe) Design() {
 	Param("trace_probe")
 
 	Create(func() {
-		Filename("trace_probe")
 		Service()
 	})
 	Delete(func() {
-		Filename("trace_probe")
 		Service()
 	})
 	Update(func() {
-		Filename("trace_probe")
 		Service()
 	})
 	Patch(func() {
-		Filename("trace_probe")
 		Service()
 	})
 	List(func() {
-		Filename("trace_probe")
 		Service()
 	})
 	Get(func() {
-		Filename("trace_probe")
 		Service()
 	})
 }

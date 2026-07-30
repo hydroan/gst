@@ -1,16 +1,7 @@
-package traceprobe
-
-import (
-	"demo/model"
-
-	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
-	"go.uber.org/zap"
-)
-
-// TraceProbe service
+// Package traceprobe traces context propagation through the service, database,
+// GORM, and model hooks of every standard CRUD phase. Each phase has its own
+// service struct in its own file; this file holds the tracing helpers they
+// share.
 //
 //	curl -s -i -c ./cookies.txt \
 //	  -X POST http://localhost:8090/api/login \
@@ -27,72 +18,40 @@ import (
 //
 //	curl -s -i -b ./cookies.txt \
 //	  http://localhost:8090/api/trace-probes/019efee7-76e5-7520-a405-9d4c7bead437
-type TraceProbe struct {
-	service.Base[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe]
-}
+package traceprobe
 
-func (t *TraceProbe) CreateBefore(ctx *types.ServiceContext, probe *model.TraceProbe) error {
-	return t.traceServiceHook(ctx, consts.PHASE_CREATE_BEFORE, probe, 0)
-}
+import (
+	"net/http"
 
-func (t *TraceProbe) CreateAfter(ctx *types.ServiceContext, probe *model.TraceProbe) error {
-	return t.traceServiceHook(ctx, consts.PHASE_CREATE_AFTER, probe, 0)
-}
+	"demo/model"
 
-func (t *TraceProbe) DeleteBefore(ctx *types.ServiceContext, probe *model.TraceProbe) error {
-	return t.traceServiceHook(ctx, consts.PHASE_DELETE_BEFORE, probe, 0)
-}
+	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/types/consts"
+	"go.uber.org/zap"
+)
 
-func (t *TraceProbe) DeleteAfter(ctx *types.ServiceContext, probe *model.TraceProbe) error {
-	return t.traceServiceHook(ctx, consts.PHASE_DELETE_AFTER, probe, 0)
-}
-
-func (t *TraceProbe) UpdateBefore(ctx *types.ServiceContext, probe *model.TraceProbe) error {
-	return t.traceServiceHook(ctx, consts.PHASE_UPDATE_BEFORE, probe, 0)
-}
-
-func (t *TraceProbe) UpdateAfter(ctx *types.ServiceContext, probe *model.TraceProbe) error {
-	return t.traceServiceHook(ctx, consts.PHASE_UPDATE_AFTER, probe, 0)
-}
-
-func (t *TraceProbe) PatchBefore(ctx *types.ServiceContext, probe *model.TraceProbe) error {
-	return t.traceServiceHook(ctx, consts.PHASE_PATCH_BEFORE, probe, 0)
-}
-
-func (t *TraceProbe) PatchAfter(ctx *types.ServiceContext, probe *model.TraceProbe) error {
-	return t.traceServiceHook(ctx, consts.PHASE_PATCH_AFTER, probe, 0)
-}
-
-func (t *TraceProbe) ListBefore(ctx *types.ServiceContext, probes *[]*model.TraceProbe) error {
-	return t.traceServiceHook(ctx, consts.PHASE_LIST_BEFORE, nil, traceProbeListLen(probes))
-}
-
-func (t *TraceProbe) ListAfter(ctx *types.ServiceContext, probes *[]*model.TraceProbe) error {
-	return t.traceServiceHook(ctx, consts.PHASE_LIST_AFTER, nil, traceProbeListLen(probes))
-}
-
-func (t *TraceProbe) GetBefore(ctx *types.ServiceContext, probe *model.TraceProbe) error {
-	return t.traceServiceHook(ctx, consts.PHASE_GET_BEFORE, probe, 0)
-}
-
-func (t *TraceProbe) GetAfter(ctx *types.ServiceContext, probe *model.TraceProbe) error {
-	return t.traceServiceHook(ctx, consts.PHASE_GET_AFTER, probe, 0)
-}
-
-func (t *TraceProbe) traceServiceHook(ctx *types.ServiceContext, phase consts.Phase, probe *model.TraceProbe, itemCount int) error {
+// traceServiceHook logs one service hook of the current phase together with the
+// live row count, so a request can be followed across the service, database and
+// model layers. log is the service logger, nil before logger injection runs.
+func traceServiceHook(log types.Logger, ctx *types.ServiceContext, phase consts.Phase, probe *model.TraceProbe, itemCount int) error {
 	var total int
 	err := database.Database[*model.TraceProbe](ctx).Count(&total)
 
 	fields := traceProbeServiceFields(probe, phase, total, itemCount)
-	if t.Logger != nil {
-		log := t.WithContext(ctx, phase)
+	if log != nil {
+		entry := log.WithContext(ctx, phase)
 		if err != nil {
-			log.Errorz("trace probe service hook", append(fields, zap.Error(err))...)
+			entry.Errorz("trace probe service hook", append(fields, zap.Error(err))...)
 		} else {
-			log.Infoz("trace probe service hook", fields...)
+			entry.Infoz("trace probe service hook", fields...)
 		}
 	}
-	return err
+	if err != nil {
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to count trace probes", err)
+	}
+	return nil
 }
 
 func traceProbeServiceFields(probe *model.TraceProbe, phase consts.Phase, total int, itemCount int) []zap.Field {
