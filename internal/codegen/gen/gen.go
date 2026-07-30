@@ -351,10 +351,6 @@ func serviceActionLogQuoted(modelName string, phase consts.Phase, action *dsl.Ac
 			msg = fmt.Sprintf("%s: %s before", modelLower, label)
 		case strings.HasSuffix(ps, "_after"):
 			msg = fmt.Sprintf("%s: %s after", modelLower, label)
-		case phase == consts.PHASE_FILTER:
-			msg = fmt.Sprintf("%s: %s filter", modelLower, label)
-		case phase == consts.PHASE_FILTER_RAW:
-			msg = fmt.Sprintf("%s: %s filter raw", modelLower, label)
 		default:
 			msg = fmt.Sprintf("%s: %s", modelLower, label)
 		}
@@ -436,22 +432,6 @@ func genServiceMethod6(info *ModelInfo, action *dsl.Action, phase consts.Phase, 
 		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
 		EmptyLine(),
 		Returns(ast.NewIdent("data"), ast.NewIdent("nil")),
-	)
-}
-
-// genServiceMethod7 uses AST to generate Filter method.
-func genServiceMethod7(info *ModelInfo, phase consts.Phase, roleName string) *ast.FuncDecl {
-	return serviceMethod7(
-		info.ModelVarName, info.ModelName, info.ModelPkgName, phase, roleName,
-		Returns(ast.NewIdent(strings.ToLower(info.ModelName))),
-	)
-}
-
-// genServiceMethod8 uses AST to generate FilterRaw method.
-func genServiceMethod8(info *ModelInfo, phase consts.Phase, roleName string) *ast.FuncDecl {
-	return serviceMethod8(
-		info.ModelVarName, info.ModelName, info.ModelPkgName, phase, roleName,
-		Returns(ast.NewIdent(`""`)),
 	)
 }
 
@@ -543,10 +523,8 @@ func GenerateServiceWithPackage(info *ModelInfo, action *dsl.Action, phase const
 		decls = append(decls, genServiceMethod4(info, action, action.Payload, action.Result, phase, roleName))
 		// Skip generate hooks for empty models
 		if !info.Design.IsEmpty {
-			decls = append(decls, genServiceMethod2(info, action, phase.Before(), roleName))  // generate list before hook
-			decls = append(decls, genServiceMethod2(info, action, phase.After(), roleName))   // generate list after hook
-			decls = append(decls, genServiceMethod7(info, consts.PHASE_FILTER, roleName))     // generate filter hook
-			decls = append(decls, genServiceMethod8(info, consts.PHASE_FILTER_RAW, roleName)) // generate filter raw hook
+			decls = append(decls, genServiceMethod2(info, action, phase.Before(), roleName)) // generate list before hook
+			decls = append(decls, genServiceMethod2(info, action, phase.After(), roleName))  // generate list after hook
 		}
 	case consts.PHASE_GET:
 		decls = append(decls, genServiceMethod4(info, action, action.Payload, action.Result, phase, roleName))
@@ -587,14 +565,12 @@ func GenerateServiceWithPackage(info *ModelInfo, action *dsl.Action, phase const
 		decls = append(decls, genServiceMethod5(info, action, phase, roleName))
 	case consts.PHASE_EXPORT:
 		// The export controller reuses the list pipeline before delegating to
-		// Export: it invokes ListBefore, applies Filter and FilterRaw when
-		// building the query, then invokes ListAfter, so the Exporter needs all
-		// four hooks; methods are emitted in controller invocation order.
+		// Export: it invokes ListBefore, applies the service Filter hook when
+		// building the query, then invokes ListAfter. Filter has a pass-through
+		// default, so only the Before/After hooks are scaffolded here.
 		// Skip generate hooks for empty models
 		if !info.Design.IsEmpty {
 			decls = append(decls, genServiceMethod2(info, action, consts.PHASE_LIST_BEFORE, roleName)) // generate list before hook
-			decls = append(decls, genServiceMethod7(info, consts.PHASE_FILTER, roleName))              // generate filter hook
-			decls = append(decls, genServiceMethod8(info, consts.PHASE_FILTER_RAW, roleName))          // generate filter raw hook
 			decls = append(decls, genServiceMethod2(info, action, consts.PHASE_LIST_AFTER, roleName))  // generate list after hook
 		}
 		decls = append(decls, genServiceMethod6(info, action, phase, roleName))

@@ -36,8 +36,6 @@ const (
 	patch_many_before  = "patch_many_before"
 	patch_many_after   = "patch_many_after"
 
-	import_    = "import"
-	export     = "export"
-	filter     = "filter"
-	filter_raw = "filter_raw"
+	import_ = "import"
+	export  = "export"
 )

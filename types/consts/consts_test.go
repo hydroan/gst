@@ -85,8 +85,6 @@ func TestPhase_RoleName(t *testing.T) {
 
 		// Filter hooks are hosted on the Lister service struct, so they map
 		// to the "Lister" role, mirroring list_before/list_after above.
-		{"filter", consts.PHASE_FILTER, "Lister"},
-		{"filter_raw", consts.PHASE_FILTER_RAW, "Lister"},
 
 		// non-CRUD operations
 		{"import", consts.PHASE_IMPORT, "Importer"},
@@ -130,7 +128,6 @@ func TestPhase_BeforeAfter(t *testing.T) {
 		{"many_patch_after", consts.PHASE_PATCH_MANY_AFTER, consts.PHASE_PATCH_MANY_AFTER, consts.PHASE_PATCH_MANY_AFTER},
 
 		// Non CRUD → no change
-		{"filter", consts.PHASE_FILTER, consts.PHASE_FILTER, consts.PHASE_FILTER},
 		{"import", consts.PHASE_IMPORT, consts.PHASE_IMPORT, consts.PHASE_IMPORT},
 		{"export", consts.PHASE_EXPORT, consts.PHASE_EXPORT, consts.PHASE_EXPORT},
 	}
@@ -196,7 +193,6 @@ func TestPhase_ToHTTPVerb(t *testing.T) {
 		{"import", consts.PHASE_IMPORT, consts.Import},
 
 		// Non CRUD → empty HTTPVerb
-		{"filter", consts.PHASE_FILTER, consts.HTTPVerb("")},
 	}
 
 	for _, tt := range tests {
@@ -254,7 +250,6 @@ func TestPhase_Filename(t *testing.T) {
 		{"patch_many_after", consts.PHASE_PATCH_MANY_AFTER, "patch_many.go"},
 
 		// other phases
-		{"filter", consts.PHASE_FILTER, "filter.go"},
 		{"import", consts.PHASE_IMPORT, "import.go"},
 		{"export", consts.PHASE_EXPORT, "export.go"},
 	}

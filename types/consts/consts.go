@@ -133,10 +133,8 @@ const (
 	PHASE_PATCH_MANY_BEFORE  Phase = patch_many_before
 	PHASE_PATCH_MANY_AFTER   Phase = patch_many_after
 
-	PHASE_IMPORT     Phase = import_
-	PHASE_EXPORT     Phase = export
-	PHASE_FILTER     Phase = filter
-	PHASE_FILTER_RAW Phase = filter_raw
+	PHASE_IMPORT Phase = import_
+	PHASE_EXPORT Phase = export
 )
 
 type Phase string
@@ -170,8 +168,9 @@ func (p Phase) Filename() string {
 
 // RoleName returns the associated role name for the Phase in human-readable form.
 // It maps CRUD and ManyCRUD phases (including "_before" and "_after") to specific
-// role names. Hook phases map to the role that hosts them: filter and filter_raw
-// hooks are generated as methods on the Lister, so both map to "Lister".
+// role names. Hook phases map to the role that hosts them: the list_before
+// and list_after hooks are generated as methods on the Lister, so both map
+// to "Lister".
 // Unrecognized phases return an empty string.
 //
 // Examples:
@@ -180,7 +179,6 @@ func (p Phase) Filename() string {
 //	PHASE_CREATE_BEFORE      -> "Creator"
 //	PHASE_UPDATE_MANY        -> "ManyUpdater"
 //	PHASE_UPDATE_MANY_AFTER  -> "ManyUpdater"
-//	PHASE_FILTER             -> "Lister"
 func (p Phase) RoleName() string {
 	s := string(p)
 
@@ -205,7 +203,7 @@ func (p Phase) RoleName() string {
 		role = "Deleter"
 	case patch:
 		role = "Patcher"
-	case list, filter, filter_raw:
+	case list:
 		role = "Lister"
 	case get:
 		role = "Getter"
@@ -287,7 +285,6 @@ func (p Phase) After() Phase {
 //	PHASE_CREATE             -> Create
 //	PHASE_CREATE_BEFORE      -> Create
 //	PHASE_CREATE_MANY_AFTER  -> CreateMany
-//	PHASE_FILTER             -> ""
 func (p Phase) ToHTTPVerb() HTTPVerb {
 	s := string(p)
 
@@ -360,7 +357,6 @@ func (p Phase) Name() string {
 		PHASE_UPDATE_MANY_AFTER:  "PHASE_UPDATE_MANY_AFTER",
 		PHASE_PATCH_MANY_BEFORE:  "PHASE_PATCH_MANY_BEFORE",
 		PHASE_PATCH_MANY_AFTER:   "PHASE_PATCH_MANY_AFTER",
-		PHASE_FILTER:             "PHASE_FILTER",
 		PHASE_IMPORT:             "PHASE_IMPORT",
 		PHASE_EXPORT:             "PHASE_EXPORT",
 	}
