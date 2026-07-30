@@ -9,6 +9,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -172,8 +173,14 @@ type routePolicy struct {
 // rows behind. Rebuilding the role's policy set keeps casbin_rule consistent with
 // the current menu bindings.
 func (r *Role) syncPermissions(ctx context.Context) error {
+	// Batch-load bound menus with a typed IN filter. The comma-joined ID
+	// shortcut is avoided on purpose: it breaks on integer AutoBase keys and
+	// relies on values never containing commas.
 	newMenus := make([]*Menu, 0)
-	if err := database.Database[*Menu](ctx).WithQuery(&Menu{Base: model.Base{ID: strings.Join(r.MenuIDs, ",")}}).List(&newMenus); err != nil {
+	if err := database.Database[*Menu](ctx).WithQuery(&Menu{}, types.QueryOptions{
+		AllowEmpty: true,
+		Filters:    []types.Filter{types.FilterIn("id", r.MenuIDs)},
+	}).List(&newMenus); err != nil {
 		zap.S().Error(err)
 		return err
 	}
