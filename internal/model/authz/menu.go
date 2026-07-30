@@ -8,6 +8,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gorm.io/datatypes"
@@ -34,6 +35,21 @@ const (
 )
 
 type Menu struct {
+	// ID widens the primary key inherited from model.Base.
+	//
+	// Menu identifiers are stable keys chosen by the application, not generated
+	// UUIDs: Role.MenuIDs and every Casbin policy derived from a menu reference
+	// them, so they have to survive re-seeding and are therefore written by hand,
+	// typically as a hierarchical page key. The inherited column is sized for
+	// UUIDv7 and silently truncates anything longer, and ParentID already stores
+	// these very same values at size 191 — a primary key narrower than the column
+	// pointing at it is a contradiction within one table.
+	//
+	// Shadowing model.Base.ID makes the ID accessors below mandatory: they are
+	// declared on Base and would otherwise read and write the hidden field while
+	// GORM maps this one.
+	ID string `json:"id" gorm:"primaryKey;size:191" query:"id" url:"-"`
+
 	// Frontend route path. The empty value means default route in React Router 6.x.
 	Path    string `json:"path" query:"path"`
 	Default string `json:"default,omitempty" query:"default"` // Default child route when the menu has children.
@@ -79,6 +95,27 @@ func (Menu) Design() {
 		dsl.Get(func() {})
 	})
 }
+
+// GetID reads the shadowing ID field. It replaces model.Base.GetID, which reads
+// the shadowed Base field that GORM never maps for this model.
+func (m *Menu) GetID() string { return m.ID }
+
+// SetID keeps an identifier the caller already assigned and generates one
+// otherwise, matching model.Base.SetID semantics against the shadowing field.
+func (m *Menu) SetID(id ...string) {
+	if len(m.ID) != 0 {
+		return
+	}
+	if len(id) == 0 || len(id[0]) == 0 {
+		m.ID = util.UUID()
+		return
+	}
+	m.ID = id[0]
+}
+
+// ClearID resets the shadowing ID field. It replaces model.Base.ClearID, which
+// clears the shadowed Base field.
+func (m *Menu) ClearID() { m.ID = "" }
 
 func (m *Menu) Purge() bool                                  { return true }
 func (m *Menu) CreateBefore(ctx context.Context) (err error) { return m.validate() }
