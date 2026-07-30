@@ -272,6 +272,18 @@ func TestDatabaseGet(t *testing.T) {
 
 		missing := new(TestAutoItem)
 		require.ErrorIs(t, database.Database[*TestAutoItem](context.Background()).Get(missing, "986000"), database.ErrRecordNotFound)
+
+		// Ids the model rejects fail closed before reaching SQL, where implicit
+		// string-to-integer coercion would otherwise match the row whose id is
+		// the numeric prefix ('7abc' would match id=7).
+		hijack := new(TestAutoItem)
+		require.ErrorIs(t, database.Database[*TestAutoItem](context.Background()).Get(hijack, item.GetID()+"abc"), database.ErrRecordNotFound)
+		require.ErrorIs(t, database.Database[*TestAutoItem](context.Background()).Get(hijack, "0198adf1-4e14-7d2c-b2f7-0123456789ab"), database.ErrRecordNotFound)
+
+		// Leading zeros normalize to the same decimal id and still match.
+		padded := new(TestAutoItem)
+		require.NoError(t, database.Database[*TestAutoItem](context.Background()).Get(padded, "0"+item.GetID()))
+		require.Equal(t, item.ID, padded.ID)
 	})
 }
 

@@ -143,6 +143,19 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 	if len(id) == 0 {
 		return ErrIDRequired
 	}
+	// Normalize the id through the model's own ID semantics before it can
+	// reach SQL. An id the model rejects cannot match any row, and answering
+	// "record not found" here keeps the database from applying implicit
+	// string-to-integer coercion on integer primary keys (MySQL matches id=7
+	// for '7abc'). Base accepts any non-empty string and passes through
+	// unchanged; AutoBase only accepts decimal digits. The probe is a clone
+	// because dest must stay untouched until the query fills it.
+	probe := cloneDryRunModel(dest)
+	probe.ClearID()
+	probe.SetID(id)
+	if id = probe.GetID(); len(id) == 0 {
+		return ErrRecordNotFound
+	}
 	if err = db.prepare(); err != nil {
 		return err
 	}

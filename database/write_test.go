@@ -568,3 +568,25 @@ func TestDatabaseUpdateByID(t *testing.T) {
 	require.Error(t, err, "should return error when value is nil")
 	require.ErrorIs(t, err, database.ErrNilValue, "error should be ErrNilValue")
 }
+
+// TestDatabaseUpdateByIDNormalizesID mirrors Get's id normalization: an id the
+// model rejects fails closed instead of letting implicit string-to-integer
+// coercion update the row whose id is the numeric prefix.
+func TestDatabaseUpdateByIDNormalizesID(t *testing.T) {
+	defer cleanupTestData()
+
+	item := &TestAutoItem{Code: "update-by-id-a1", Name: "first"}
+	require.NoError(t, database.Database[*TestAutoItem](context.Background()).Create(item))
+
+	err := database.Database[*TestAutoItem](context.Background()).UpdateByID(item.GetID()+"abc", "name", "hijacked")
+	require.ErrorIs(t, err, database.ErrRecordNotFound)
+
+	kept := new(TestAutoItem)
+	require.NoError(t, database.Database[*TestAutoItem](context.Background()).Get(kept, item.GetID()))
+	require.Equal(t, "first", kept.Name, "a rejected id must not update the row with its numeric prefix")
+
+	require.NoError(t, database.Database[*TestAutoItem](context.Background()).UpdateByID(item.GetID(), "name", "renamed"))
+	renamed := new(TestAutoItem)
+	require.NoError(t, database.Database[*TestAutoItem](context.Background()).Get(renamed, item.GetID()))
+	require.Equal(t, "renamed", renamed.Name)
+}

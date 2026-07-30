@@ -551,6 +551,15 @@ func (db *database[M]) UpdateByID(id string, column string, value any) (err erro
 	if err = db.prepare(); err != nil {
 		return err
 	}
+	// Normalize the id through the model's own ID semantics before it can
+	// reach SQL; see Get for the coercion hazard on integer primary keys.
+	// The probe is a clone so the shared model metadata keeps a zero ID.
+	probe := cloneDryRunModel(db.m)
+	probe.ClearID()
+	probe.SetID(id)
+	if id = probe.GetID(); len(id) == 0 {
+		return ErrRecordNotFound
+	}
 	done, _, _ := db.trace("UpdateByID")
 	defer func() { done(err) }()
 
