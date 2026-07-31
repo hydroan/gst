@@ -482,6 +482,11 @@ type cursorTestModel struct {
 	modelregistry.Base
 }
 
+type cursorAutoTestModel struct {
+	modelregistry.Cursor
+	modelregistry.AutoBase
+}
+
 type plainTestModel struct {
 	modelregistry.Base
 }
@@ -535,12 +540,12 @@ func TestPagination(t *testing.T) {
 func TestCursor(t *testing.T) {
 	t.Run("CursorModelReadsAllThreeParameters", func(t *testing.T) {
 		cursor, err := Cursor(url.Values{
-			"_cursor_value": {"abc"},
+			"_cursor_value": {"2026-07-01 08:30:15"},
 			"_cursor_next":  {"true"},
 			"_cursor_field": {"created_at"},
 		}, &cursorTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, types.CursorForward(types.Asc("created_at"), "abc"), cursor)
+		require.Equal(t, types.CursorForward(types.Asc("created_at"), "2026-07-01 08:30:15"), cursor)
 	})
 
 	t.Run("MissingDirectionTravelsBackward", func(t *testing.T) {
@@ -556,6 +561,42 @@ func TestCursor(t *testing.T) {
 			"_cursor_field": {"no_such_column"},
 		}, &cursorTestModel{})
 		require.Error(t, err, "an unknown cursor column must fail instead of reaching the database")
+	})
+
+	t.Run("MistypedValueOnNumericDefaultColumnFails", func(t *testing.T) {
+		_, err := Cursor(url.Values{"_cursor_value": {"abc"}}, &cursorAutoTestModel{})
+		require.Error(t, err, "MySQL coerces a non-numeric boundary on the integer primary key to 0, silently restarting the feed")
+	})
+
+	t.Run("NumericValueOnNumericDefaultColumnPasses", func(t *testing.T) {
+		cursor, err := Cursor(url.Values{"_cursor_value": {"42"}, "_cursor_next": {"true"}}, &cursorAutoTestModel{})
+		require.NoError(t, err)
+		require.True(t, cursor.Enabled())
+		require.Equal(t, "42", cursor.Value)
+	})
+
+	t.Run("MistypedValueOnNumericColumnFails", func(t *testing.T) {
+		_, err := Cursor(url.Values{
+			"_cursor_value": {"abc"},
+			"_cursor_field": {"age"},
+		}, &filterTestModel{})
+		require.Error(t, err, "a value the numeric cursor column cannot represent is a client error, matching filter semantics")
+	})
+
+	t.Run("MistypedValueOnTimeColumnFails", func(t *testing.T) {
+		_, err := Cursor(url.Values{
+			"_cursor_value": {"abc"},
+			"_cursor_field": {"created_at"},
+		}, &cursorTestModel{})
+		require.Error(t, err, "a value the time cursor column cannot represent is a client error, matching filter semantics")
+	})
+
+	t.Run("MistypedValueOnBoolColumnFails", func(t *testing.T) {
+		_, err := Cursor(url.Values{
+			"_cursor_value": {"abc"},
+			"_cursor_field": {"enabled"},
+		}, &filterTestModel{})
+		require.Error(t, err, "a value the bool cursor column cannot represent is a client error, matching filter semantics")
 	})
 
 	t.Run("MissingValueYieldsZeroCursor", func(t *testing.T) {

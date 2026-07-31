@@ -155,13 +155,18 @@ func TestBaseQueryCursor(t *testing.T) {
 	var svc querySampleService
 
 	t.Run("ReadsRequestValues", func(t *testing.T) {
-		cursor, err := svc.QueryCursor(newQueryContext(t, "/samples?_cursor_value=abc&_cursor_next=true&_cursor_field=created_at"))
+		cursor, err := svc.QueryCursor(newQueryContext(t, "/samples?_cursor_value=2026-07-01T08:30:15&_cursor_next=true&_cursor_field=created_at"))
 		require.NoError(t, err)
-		require.Equal(t, types.CursorForward(types.Asc("created_at"), "abc"), cursor)
+		require.Equal(t, types.CursorForward(types.Asc("created_at"), "2026-07-01T08:30:15"), cursor)
 	})
 
 	t.Run("UnknownColumnIsAClientError", func(t *testing.T) {
 		_, err := svc.QueryCursor(newQueryContext(t, "/samples?_cursor_value=abc&_cursor_field=no_such_column"))
+		require.Error(t, err)
+	})
+
+	t.Run("MistypedValueIsAClientError", func(t *testing.T) {
+		_, err := svc.QueryCursor(newQueryContext(t, "/samples?_cursor_value=abc&_cursor_field=age"))
 		require.Error(t, err)
 	})
 

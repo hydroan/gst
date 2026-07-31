@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types"
@@ -298,11 +299,6 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 	return db
 }
 
-// defaultCursorColumn is the column cursor pagination falls back to when the
-// caller did not name one. It is the primary key of every framework base
-// model, which is the only column guaranteed to be unique and monotonic.
-const defaultCursorColumn = "id"
-
 // WithCursor enables cursor-based pagination for efficient large dataset
 // traversal. Unlike offset pagination, a cursor read stays at constant cost
 // however deep the client has paged, because the boundary is a WHERE
@@ -330,7 +326,7 @@ func (db *database[M]) WithCursor(cursor types.Cursor) types.Database[M] {
 		return db
 	}
 	if len(cursor.Order.Column) == 0 {
-		cursor.Order.Column = defaultCursorColumn
+		cursor.Order.Column = modelregistry.DefaultCursorColumn
 	}
 	db.cursor = cursor
 

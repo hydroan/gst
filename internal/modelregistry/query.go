@@ -75,7 +75,7 @@ type Paginatable interface {
 // in Pagination; the controller reads it from the URL directly), while _page
 // stays rejected: offset paging conflicts with cursor semantics.
 type Cursor struct {
-	CursorValue *string `json:"-" gorm:"-" query:"_cursor_value" url:"_cursor_value,omitempty"` // CursorValue is the current cursor token for cursor pagination.
+	CursorValue *string `json:"-" gorm:"-" query:"_cursor_value" url:"_cursor_value,omitempty"` // CursorValue is the current cursor token; it must parse as the cursor column's Go type.
 	CursorField string  `json:"-" gorm:"-" query:"_cursor_field" url:"_cursor_field,omitempty"` // CursorField names the single field the cursor orders by.
 	CursorNext  bool    `json:"-" gorm:"-" query:"_cursor_next" url:"_cursor_next,omitempty"`   // CursorNext chooses the cursor direction; false requests the previous page.
 }
@@ -87,6 +87,14 @@ func (Cursor) cursorEnabled() {}
 type Cursorable interface {
 	cursorEnabled()
 }
+
+// DefaultCursorColumn is the database column cursor pagination falls back to
+// when the caller did not name one. It is the primary key of every framework
+// base model, which is the only column guaranteed to be unique and monotonic.
+// The database layer applies the fallback when building the boundary
+// comparison, and URL parsing resolves the same column to type-check the
+// cursor value, so both consumers read this single definition.
+const DefaultCursorColumn = "id"
 
 // IsQueryable reports whether m opted in to general framework query parameters
 // by embedding Query.
