@@ -74,6 +74,10 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var allow bool
 		var err error
+
+		obj := c.Request.URL.Path
+		act := c.Request.Method
+
 		sub := strings.TrimSpace(c.GetString(consts.CTX_USER_ID))
 		if sub == "" {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
@@ -82,6 +86,9 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 				"data":          nil,
 				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 			})
+			// Anonymous requests are rejected before the tenant is resolved,
+			// so the decision is recorded without one.
+			logAuthzDecision(c, "", sub, obj, act, consts.EffectDeny)
 			return
 		}
 		tenant, err := resolveAuthzTenant(c, cfg.TenantResolver)
@@ -101,9 +108,6 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 		}
 		c.Set(consts.CTX_TENANT_ID, tenant)
 
-		obj := c.Request.URL.Path
-		act := c.Request.Method
-
 		if allow, err = rbac.RBAC().Authorize(c.Request.Context(), tenant, sub, obj, act); err != nil {
 			zap.S().Error(err)
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
@@ -116,18 +120,7 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 		}
 		if allow {
 			c.Next()
-			if logger.Authz != nil {
-				logger.Authz.Infoz(
-					"",
-					zap.String("tenant", tenant),
-					zap.String("sub", sub),
-					zap.String("obj", obj),
-					zap.String("act", act),
-					zap.String("eft", string(consts.EffectAllow)),
-					zap.String("username", c.GetString(consts.CTX_USERNAME)),
-					zap.String("trace_id", c.GetString(consts.TRACE_ID)),
-				)
-			}
+			logAuthzDecision(c, tenant, sub, obj, act, consts.EffectAllow)
 			return
 		}
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
@@ -136,17 +129,28 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 			"data":          nil,
 			consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 		})
-		if logger.Authz != nil {
-			logger.Authz.Infoz(
-				"",
-				zap.String("tenant", tenant),
-				zap.String("sub", sub),
-				zap.String("obj", obj),
-				zap.String("act", act),
-				zap.String("eft", string(consts.EffectDeny)),
-			)
-		}
+		logAuthzDecision(c, tenant, sub, obj, act, consts.EffectDeny)
 	}
+}
+
+// logAuthzDecision writes one authorization decision to the authz log.
+// Every decision shares this single field set, so entries stay correlatable
+// by trace_id no matter which branch rejected or admitted the request.
+func logAuthzDecision(c *gin.Context, tenant, sub, obj, act string, effect consts.Effect) {
+	if logger.Authz == nil {
+		return
+	}
+
+	logger.Authz.Infoz(
+		"",
+		zap.String("tenant", tenant),
+		zap.String("sub", sub),
+		zap.String("obj", obj),
+		zap.String("act", act),
+		zap.String("eft", string(effect)),
+		zap.String("username", c.GetString(consts.CTX_USERNAME)),
+		zap.String("trace_id", c.GetString(consts.TRACE_ID)),
+	)
 }
 
 func resolveAuthzTenant(c *gin.Context, resolver TenantResolver) (string, error) {
