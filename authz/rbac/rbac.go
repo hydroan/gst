@@ -72,6 +72,10 @@ func (noop) RevokePermission(ctx context.Context, tenant string, role string, ob
 	return nil
 }
 
+func (noop) SetPermissionsForAuthenticated(ctx context.Context, permissions map[string][]string) error {
+	return nil
+}
+
 func (noop) RevokeRolePermissions(ctx context.Context, tenant string, role string) error {
 	return nil
 }
@@ -179,6 +183,46 @@ func (r *rbac) RevokePermission(ctx context.Context, tenant string, role string,
 
 	if _, err = r.enforcer.RemovePolicyCtx(ctx, tenant, role, object, action, string(consts.EffectAllow)); err != nil {
 		return err
+	}
+	return nil
+}
+
+// authenticatedPolicyTenant is the tenant column stored for policies written
+// against consts.AUTHZ_ROLE_AUTHENTICATED. The matcher branch for that role
+// compares no tenant, so the value never takes part in a decision; it marks the
+// row as tenant-independent for anyone reading casbin_rule.
+const authenticatedPolicyTenant = "*"
+
+// SetPermissionsForAuthenticated replaces every permission held by all
+// authenticated subjects with permissions. The policies are stored against the
+// implicit authenticated role, which no grouping rule ever assigns, so they
+// reach subjects holding no role at all.
+//
+// Like Role permission sync, it revokes the whole set and grants it again
+// rather than diffing: an entry dropped from the caller's list has to stop
+// allowing requests, and a diff that misses one leaves every subject holding a
+// permission no source declares.
+func (r *rbac) SetPermissionsForAuthenticated(ctx context.Context, permissions map[string][]string) (err error) {
+	ctx, finishSpan := traceRBAC(ctx, "set_permissions_for_authenticated",
+		rbacTraceFields(authenticatedPolicyTenant, consts.AUTHZ_ROLE_AUTHENTICATED))
+	defer func() {
+		finishSpan(err)
+	}()
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, err = r.enforcer.RemoveFilteredPolicyCtx(ctx, 0,
+		authenticatedPolicyTenant, consts.AUTHZ_ROLE_AUTHENTICATED); err != nil {
+		return err
+	}
+	for object, actions := range permissions {
+		for _, action := range actions {
+			if _, err = r.enforcer.AddPolicyCtx(ctx, authenticatedPolicyTenant, consts.AUTHZ_ROLE_AUTHENTICATED,
+				object, action, string(consts.EffectAllow)); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

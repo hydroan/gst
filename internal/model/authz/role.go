@@ -80,6 +80,29 @@ func (r *Role) validate() error {
 		return errors.New("system_root is reserved for the system role")
 	}
 
+	// Both checks below are on the ID alone, because the ID is what authorization
+	// reads: a role binding stores Role.ID as the Casbin role, and syncPermissions
+	// writes it into the role column of every policy it generates. The name is
+	// display text no matcher ever compares, so reserving it would forbid an
+	// ordinary label without closing anything.
+	//
+	// The matcher grants the built-in admin role unconditional access to every
+	// object and action in its tenant without consulting a single policy. A role
+	// created under this ID hands tenant-wide superuser access to everyone bound
+	// to it, whatever permissions it appears to select.
+	if r.ID == consts.AUTHZ_ROLE_ADMIN {
+		return errors.New("admin is reserved for the built-in tenant administrator role")
+	}
+
+	// Policies written for the authenticated role are matched without a role
+	// membership or tenant check, so they apply to every authenticated subject. A
+	// role created under this ID turns its own permissions into global ones: every
+	// policy syncPermissions generates for it would allow every subject that can
+	// log in, including subjects that were never bound to the role.
+	if r.ID == consts.AUTHZ_ROLE_AUTHENTICATED {
+		return errors.New("authenticated is reserved for the implicit role of every authenticated subject")
+	}
+
 	return nil
 }
 

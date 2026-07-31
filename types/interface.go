@@ -485,6 +485,23 @@ type RBAC interface {
 	// tenant without removing the role's subject assignments.
 	RevokeRolePermissions(ctx context.Context, tenant string, role string) error
 
+	// SetPermissionsForAuthenticated replaces the entire set of permissions every
+	// authenticated subject holds. permissions maps each object to the actions
+	// allowed on it, the same shape a router reports its registered routes in.
+	// The grant is bound to neither a tenant nor a role, so it reaches subjects
+	// that hold no role at all, in every tenant.
+	//
+	// It replaces rather than adds on purpose: the argument is the whole truth,
+	// so dropping an entry revokes it. A grant-only API would leave a removed
+	// entry allowing every subject forever, with nothing left in the source to
+	// show it. Passing an empty map revokes everything.
+	//
+	// Reserve it for objects that answer only about the caller and already narrow
+	// their result to what the caller may see; anything else granted this way
+	// becomes reachable by every subject that can log in. Unauthenticated requests
+	// are unaffected, because authorization runs only after authentication.
+	SetPermissionsForAuthenticated(ctx context.Context, permissions map[string][]string) error
+
 	// AssignRole assigns subject to role inside tenant.
 	// This creates tenant membership for subject and makes the role's
 	// tenant-scoped permissions available to that subject.

@@ -73,12 +73,26 @@ e = some(where (p.eft == allow))
 #    tenant — it does NOT check any p (permission policy) entry, unlike
 #    branch 3 below. Assigning the "admin" role is equivalent to granting
 #    full tenant-scoped superuser access.
-# 3) the subject belongs to the policy role in the same tenant, and the object
+# 3) the policy is written for the implicit "authenticated" role. This branch
+#    checks no role membership and no tenant, so it reaches every authenticated
+#    subject in every tenant — including subjects that hold no role at all. It
+#    still requires a subject: authorization runs after authentication, and the
+#    emptiness check keeps that a property of the matcher rather than a promise
+#    the caller has to keep. Reserve it for objects whose result is already
+#    scoped to the caller.
+# 4) the subject belongs to the policy role in the same tenant, and the object
 #    and action match the stored permission.
 #
 # The subject/role inequality checks keep a subject named like a role from
 # receiving that role through Casbin's self-match behavior.
-m = (r.sub != "system_root" && g2(r.sub, "system_root")) || (r.sub != "admin" && g(r.sub, "admin", r.tenant)) || (r.sub != p.role && r.tenant == p.tenant && g(r.sub, p.role, r.tenant) && keyMatch3(r.obj, p.obj) && r.act == p.act)
+#
+# A trailing backslash continues the line, so each branch above maps to the line
+# below it and the whole matcher stays readable as it grows. A comment between
+# two continued lines would end the value early, so keep the four lines adjacent.
+m = (r.sub != "system_root" && g2(r.sub, "system_root")) \
+ || (r.sub != "admin" && g(r.sub, "admin", r.tenant)) \
+ || (r.sub != "" && p.role == "authenticated" && keyMatch3(r.obj, p.obj) && r.act == p.act) \
+ || (r.sub != p.role && r.tenant == p.tenant && g(r.sub, p.role, r.tenant) && keyMatch3(r.obj, p.obj) && r.act == p.act)
 `)
 
 // Init initializes the tenant-aware Casbin enforcer when RBAC is enabled.
