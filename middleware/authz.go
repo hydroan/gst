@@ -93,13 +93,15 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 		}
 		tenant, err := resolveAuthzTenant(c, cfg.TenantResolver)
 		if err != nil {
-			zap.S().Error(err)
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 				"code":          -1,
 				"msg":           "authorization failed",
 				"data":          nil,
 				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 			})
+			// The tenant is unknown at this point, so the attempt is recorded
+			// without one.
+			logAuthzFailure(c, "", sub, obj, act, err)
 			return
 		}
 		tenant = strings.TrimSpace(tenant)
@@ -109,18 +111,18 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 		c.Set(consts.CTX_TENANT_ID, tenant)
 
 		if allow, err = rbac.RBAC().Authorize(c.Request.Context(), tenant, sub, obj, act); err != nil {
-			zap.S().Error(err)
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 				"code":          -1,
 				"msg":           "authorization failed",
 				"data":          nil,
 				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 			})
+			logAuthzFailure(c, tenant, sub, obj, act, err)
 			return
 		}
 		if allow {
-			c.Next()
 			logAuthzDecision(c, tenant, sub, obj, act, consts.EffectAllow)
+			c.Next()
 			return
 		}
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
@@ -133,21 +135,50 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 	}
 }
 
-// logAuthzDecision writes one authorization decision to the authz log.
-// Every decision shares this single field set, so entries stay correlatable
-// by trace_id no matter which branch rejected or admitted the request.
+// logAuthzDecision writes one completed authorization decision to the authz log.
+// It is called at decision time, before the handler chain runs, so timestamps
+// mean the same thing for every effect and a panicking handler cannot drop
+// an allowed decision.
 func logAuthzDecision(c *gin.Context, tenant, sub, obj, act string, effect consts.Effect) {
 	if logger.Authz == nil {
 		return
 	}
 
-	logger.Authz.Infoz(
-		"",
+	logger.Authz.Infoz("", append(
+		authzLogFields(c, tenant, sub, obj, act),
+		zap.String("eft", string(effect)),
+	)...)
+}
+
+// logAuthzFailure writes an authorization attempt that could not be decided.
+// Such an attempt carries no eft because policy never allowed or denied it:
+// reporting one would hide the failure and inflate the counts the other effect
+// is used to measure. The error level tells the two apart instead.
+func logAuthzFailure(c *gin.Context, tenant, sub, obj, act string, err error) {
+	if logger.Authz == nil {
+		return
+	}
+
+	logger.Authz.Errorz("", append(
+		authzLogFields(c, tenant, sub, obj, act),
+		zap.Error(err),
+	)...)
+}
+
+// authzLogFieldCount is the shared field count plus the single field every
+// caller appends. Reserving it keeps the append from growing the slice, which
+// would cost a second allocation and a copy on every authorized request.
+const authzLogFieldCount = 7
+
+// authzLogFields builds the field set shared by every authz log entry, so
+// entries stay correlatable by trace_id no matter which branch produced them.
+func authzLogFields(c *gin.Context, tenant, sub, obj, act string) []zap.Field {
+	return append(
+		make([]zap.Field, 0, authzLogFieldCount),
 		zap.String("tenant", tenant),
 		zap.String("sub", sub),
 		zap.String("obj", obj),
 		zap.String("act", act),
-		zap.String("eft", string(effect)),
 		zap.String("username", c.GetString(consts.CTX_USERNAME)),
 		zap.String("trace_id", c.GetString(consts.TRACE_ID)),
 	)
