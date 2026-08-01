@@ -3,6 +3,7 @@ package rbac
 import (
 	"context"
 	"maps"
+	"slices"
 	"strings"
 	"sync"
 
@@ -75,6 +76,12 @@ func (noop) GrantPermission(ctx context.Context, tenant string, role string, obj
 }
 
 func (noop) RevokePermission(ctx context.Context, tenant string, role string, object string, action string) error {
+	return nil
+}
+
+func (noop) SetRolePermissions(
+	ctx context.Context, tenant string, role string, permissions []types.Permission,
+) error {
 	return nil
 }
 
@@ -258,15 +265,27 @@ func (r *rbac) RevokePermission(ctx context.Context, tenant string, role string,
 // row as tenant-independent for anyone reading casbin_rule.
 const authenticatedPolicyTenant = "*"
 
+// SetRolePermissions replaces the entire permission set held by role in tenant.
+func (r *rbac) SetRolePermissions(
+	ctx context.Context, tenant string, role string, permissions []types.Permission,
+) (err error) {
+	ctx, finishSpan := traceRBAC(ctx, "set_role_permissions", rbacTraceFields(tenant, role))
+	defer func() {
+		finishSpan(err)
+	}()
+
+	return r.replacePermissions(ctx, tenant, role, permissions)
+}
+
 // SetPermissionsForAuthenticated replaces every permission held by all
 // authenticated subjects with permissions. The policies are stored against the
 // implicit authenticated role, which no grouping rule ever assigns, so they
 // reach subjects holding no role at all.
 //
-// Like Role permission sync, it revokes the whole set and grants it again
-// rather than diffing: an entry dropped from the caller's list has to stop
-// allowing requests, and a diff that misses one leaves every subject holding a
-// permission no source declares.
+// It shares its replacement with SetRolePermissions: the implicit role differs
+// from a real one only in the tenant and role the policies are stored under, and
+// keeping one implementation means the atomicity both depend on cannot hold for
+// one of them and not the other.
 func (r *rbac) SetPermissionsForAuthenticated(ctx context.Context, permissions map[string][]string) (err error) {
 	ctx, finishSpan := traceRBAC(ctx, "set_permissions_for_authenticated",
 		rbacTraceFields(authenticatedPolicyTenant, consts.AUTHZ_ROLE_AUTHENTICATED))
@@ -274,22 +293,79 @@ func (r *rbac) SetPermissionsForAuthenticated(ctx context.Context, permissions m
 		finishSpan(err)
 	}()
 
+	return r.replacePermissions(ctx, authenticatedPolicyTenant, consts.AUTHZ_ROLE_AUTHENTICATED,
+		permissionsFromObjectActions(permissions))
+}
+
+// replacePermissions swaps the whole permission set stored for role in tenant
+// under a single write lock, so a concurrent Authorize sees either the old set
+// or the new one and never the gap between them.
+//
+// The two engine calls form an ordering the correctness of the batch depends on:
+// Casbin skips a batch insert entirely, and reports no error, when any rule in
+// it already exists. Clearing the set first is what keeps that from silently
+// dropping the whole replacement, so the delete must stay ahead of the insert.
+func (r *rbac) replacePermissions(
+	ctx context.Context, tenant string, role string, permissions []types.Permission,
+) error {
+	rules := permissionPolicies(tenant, role, permissions)
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, err = r.enforcer.RemoveFilteredPolicyCtx(ctx, 0,
-		authenticatedPolicyTenant, consts.AUTHZ_ROLE_AUTHENTICATED); err != nil {
+	if _, err := r.enforcer.RemoveFilteredPolicyCtx(ctx, 0, tenant, role); err != nil {
 		return err
 	}
-	for object, actions := range permissions {
-		for _, action := range actions {
-			if _, err = r.enforcer.AddPolicyCtx(ctx, authenticatedPolicyTenant, consts.AUTHZ_ROLE_AUTHENTICATED,
-				object, action, string(consts.EffectAllow)); err != nil {
-				return err
-			}
-		}
+	if len(rules) == 0 {
+		return nil
+	}
+	if _, err := r.enforcer.AddPoliciesCtx(ctx, rules); err != nil {
+		return err
 	}
 	return nil
+}
+
+// permissionPolicies renders permissions as p policy rows for role in tenant,
+// dropping repeats. Casbin's batch insert does not deduplicate within a batch,
+// so a caller listing the same permission twice would otherwise store it twice.
+func permissionPolicies(tenant string, role string, permissions []types.Permission) [][]string {
+	rules := make([][]string, 0, len(permissions))
+	seen := make(map[types.Permission]struct{}, len(permissions))
+	for _, permission := range permissions {
+		if permission.Object == "" || permission.Action == "" {
+			continue
+		}
+		if _, ok := seen[permission]; ok {
+			continue
+		}
+		seen[permission] = struct{}{}
+		rules = append(rules, []string{
+			tenant, role, permission.Object, permission.Action, string(consts.EffectAllow),
+		})
+	}
+	return rules
+}
+
+// permissionsFromObjectActions flattens the object-to-actions shape a router
+// reports its routes in. The result is sorted so that replacing a set with an
+// equal one stores the rows in the same order every time: the order decides
+// which rule Casbin reports as the matched one, and an order that changed on
+// every restart would make AuthorizeExplained name a different rule for the
+// same request.
+func permissionsFromObjectActions(permissions map[string][]string) []types.Permission {
+	flattened := make([]types.Permission, 0, len(permissions))
+	for object, actions := range permissions {
+		for _, action := range actions {
+			flattened = append(flattened, types.Permission{Object: object, Action: action})
+		}
+	}
+	slices.SortFunc(flattened, func(a, b types.Permission) int {
+		if c := strings.Compare(a.Object, b.Object); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Action, b.Action)
+	})
+	return flattened
 }
 
 // RevokeRolePermissions removes every permission policy granted to role in tenant.

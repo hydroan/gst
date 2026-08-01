@@ -444,6 +444,18 @@ type DistributedCache[T any] interface {
 	DeleteWithSync(key string) error
 }
 
+// Permission is one operation a role is allowed to perform on one object. It is
+// the unit the whole-set replacement methods on RBAC take, so a caller states a
+// role's permissions as a set rather than as a sequence of grants.
+type Permission struct {
+	// Object is the protected resource, usually a route path template such as
+	// /api/things/{id}.
+	Object string
+
+	// Action is the operation on that object, usually an HTTP method.
+	Action string
+}
+
 // RBAC provides tenant-scoped role, permission, and subject assignment operations.
 // When RBAC is disabled or not initialized, the framework may provide a safe
 // no-op implementation whose methods succeed without side effects.
@@ -496,6 +508,24 @@ type RBAC interface {
 	// RevokeRolePermissions removes every permission policy granted to role inside
 	// tenant without removing the role's subject assignments.
 	RevokeRolePermissions(ctx context.Context, tenant string, role string) error
+
+	// SetRolePermissions replaces the entire permission set held by role inside
+	// tenant with permissions, leaving the role's subject assignments untouched.
+	//
+	// It replaces rather than adds on purpose: the argument is the whole truth,
+	// so an entry the caller drops stops allowing requests, and passing an empty
+	// set revokes everything. A grant-only API would leave a removed entry
+	// allowing requests forever, with nothing left in the source to show it.
+	//
+	// Implementations must apply the whole set as one step. Revoking and then
+	// granting back one permission at a time exposes the role's members to an
+	// empty or partial set while the replacement is in flight, which denies
+	// requests the role is entitled to.
+	//
+	// Prefer this over repeated GrantPermission calls whenever the caller knows
+	// the complete set, which is the usual case when permissions are derived from
+	// a stored source.
+	SetRolePermissions(ctx context.Context, tenant string, role string, permissions []Permission) error
 
 	// SetPermissionsForAuthenticated replaces the entire set of permissions every
 	// authenticated subject holds. permissions maps each object to the actions

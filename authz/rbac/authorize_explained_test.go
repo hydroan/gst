@@ -122,7 +122,7 @@ func TestAuthorizeExplainedOmitsRuleForPolicylessBranches(t *testing.T) {
 func newExplainedFixture(t *testing.T) *rbac {
 	t.Helper()
 
-	r := benchRBAC(t, 0)
+	r := newTestRBAC(t, 0)
 	for _, policy := range [][]string{
 		{"default", "role_a", "/api/things", "GET", "allow"},
 		{"*", consts.AUTHZ_ROLE_AUTHENTICATED, "/api/open", "GET", "allow"},

@@ -11,7 +11,6 @@ import (
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
-	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gorm.io/datatypes"
 )
@@ -119,9 +118,7 @@ func (r *Role) CreateAfter(ctx context.Context) error {
 	if err := database.Database[*Role](ctx).WithoutHook().Get(r, r.ID); err != nil {
 		return err
 	}
-	e1 := r.syncPermissions(ctx)
-	e2 := rbac.RBAC().AddRole(ctx, r.tenant(), r.ID)
-	return errors.Join(e1, e2)
+	return r.syncPermissions(ctx)
 }
 
 // UpdateBefore validates role updates before database writes. Role ID is immutable.
@@ -150,9 +147,7 @@ func (r *Role) UpdateAfter(ctx context.Context) error {
 	if err := database.Database[*Role](ctx).WithoutHook().Get(r, r.ID); err != nil {
 		return err
 	}
-	e1 := r.syncPermissions(ctx)
-	e2 := rbac.RBAC().AddRole(ctx, r.tenant(), r.ID)
-	return errors.Join(e1, e2)
+	return r.syncPermissions(ctx)
 }
 
 // DeleteBefore deletes the role's RBAC policies before the role row is removed.
@@ -182,20 +177,16 @@ func (r *Role) DeleteBefore(ctx context.Context) error {
 	return rbac.RBAC().RemoveRole(ctx, r.tenant(), r.ID)
 }
 
-type routePolicy struct {
-	object string
-	action string
-}
-
 // syncPermissions rebuilds Casbin policy rows for this role from Menu.Routes.
 // Role.MenuIDs is the authoritative source for backend route grants. MenuPartialIDs
 // only keeps partially selected parent menus visible in the frontend tree and must
 // not grant backend API access by itself.
 //
-// The method intentionally uses revoke-all-then-grant. Menu routes can be removed,
+// The whole set is replaced rather than diffed. Menu routes can be removed,
 // renamed, or have methods changed, and a diff-based update can leave stale Casbin
 // rows behind. Rebuilding the role's policy set keeps casbin_rule consistent with
-// the current menu bindings.
+// the current menu bindings, and SetRolePermissions applies it as one step so the
+// role's members are never authorized against a partially rebuilt set.
 func (r *Role) syncPermissions(ctx context.Context) error {
 	// Batch-load bound menus with a typed IN filter. The comma-joined ID
 	// shortcut is avoided on purpose: it breaks on integer AutoBase keys and
@@ -205,37 +196,25 @@ func (r *Role) syncPermissions(ctx context.Context) error {
 		AllowEmpty: true,
 		Filters:    []types.Filter{types.FilterIn("id", r.MenuIDs)},
 	}).List(&newMenus); err != nil {
-		zap.S().Error(err)
 		return err
 	}
 
-	newPolicies := make([]routePolicy, 0)
+	permissions := make([]types.Permission, 0)
 	for _, m := range newMenus {
-		newPolicies = append(newPolicies, routePoliciesForMenu(m)...)
+		permissions = append(permissions, routePermissionsForMenu(m)...)
 	}
 
-	if err := rbac.RBAC().RevokeRolePermissions(ctx, r.tenant(), r.ID); err != nil {
-		zap.S().Error(err)
-		return err
-	}
-	for _, p := range newPolicies {
-		if err := rbac.RBAC().GrantPermission(ctx, r.tenant(), r.ID, p.object, p.action); err != nil {
-			zap.S().Error(err)
-			return err
-		}
-	}
-
-	return nil
+	return rbac.RBAC().SetRolePermissions(ctx, r.tenant(), r.ID, permissions)
 }
 
-func routePoliciesForMenu(m *Menu) []routePolicy {
+func routePermissionsForMenu(m *Menu) []types.Permission {
 	if m == nil {
-		return make([]routePolicy, 0)
+		return make([]types.Permission, 0)
 	}
 
 	// A menu can bind multiple backend routes, and each route can bind multiple
 	// HTTP methods. Casbin stores those as individual path + method policies.
-	policies := make([]routePolicy, 0)
+	permissions := make([]types.Permission, 0)
 	for _, route := range m.Routes {
 		object := strings.TrimSpace(route.Path)
 		if len(object) == 0 {
@@ -246,10 +225,10 @@ func routePoliciesForMenu(m *Menu) []routePolicy {
 			if len(method) == 0 {
 				continue
 			}
-			policies = append(policies, routePolicy{object: object, action: method})
+			permissions = append(permissions, types.Permission{Object: object, Action: method})
 		}
 	}
-	return policies
+	return permissions
 }
 
 func (r *Role) MarshalLogObject(enc zapcore.ObjectEncoder) error {
