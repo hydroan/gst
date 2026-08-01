@@ -396,9 +396,9 @@ func (db *database[M]) WithSelect(columns ...string) types.Database[M] {
 
 // WithLock adds row-level locking to the query for concurrent access control.
 // Uses SELECT ... FOR UPDATE to prevent other transactions from modifying selected rows.
-// Must be used within database.Transaction to be effective; outside a
-// transaction it logs a warning because row locks are released as soon as the
-// statement finishes.
+// It requires a transaction. Outside one the lock would be released as soon as
+// the statement finished, so the chain fails with ErrLockOutsideTransaction
+// rather than returning rows the caller would wrongly believe it holds.
 //
 // Important: WithLock only applies to SELECT queries (Get, First, List, etc.).
 // It does not work with Create, Update, or Delete operations.
@@ -429,14 +429,14 @@ func (db *database[M]) WithLock(mode ...consts.LockMode) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	// Row locks outside a transaction are released as soon as the statement
-	// finishes, which silently defeats the purpose of WithLock. Warn instead of
-	// failing so read paths keep working, but the caller should wrap the
-	// operation in database.Transaction.
+	// A row lock outside a transaction is released the moment the statement
+	// finishes, so the query returns rows that nothing is holding: the caller
+	// believes it has exclusive access and does not. Whether that is the case is
+	// decidable right here, so it is refused rather than warned about — a
+	// warning leaves the wrong behavior running and the guarantee to the
+	// caller's memory.
 	if _, ok := dbruntime.TxFromContext(db.ctx, db.base); !ok {
-		logger.Database.WithContext(db.ctx, consts.Phase("WithLock")).Warn(
-			"WithLock used outside a transaction; locks are released immediately, wrap the operation in database.Transaction",
-		)
+		db.err = ErrLockOutsideTransaction
 	}
 
 	strength := "UPDATE"

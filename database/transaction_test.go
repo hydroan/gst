@@ -161,14 +161,18 @@ func TestDatabaseWithLock(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("outside transaction still queries and only warns", func(t *testing.T) {
+	t.Run("outside transaction is refused", func(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
 
+		// The lock would be released as the statement finished, handing back
+		// rows nothing holds. That is decidable before running the query, so it
+		// is refused instead of served with a warning.
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithLock(consts.LockUpdate).List(&users))
-		require.Len(t, users, 3, "lock outside a transaction must not change query results")
+		err := database.Database[*TestUser](context.Background()).
+			WithLock(consts.LockUpdate).List(&users)
+		require.ErrorIs(t, err, database.ErrLockOutsideTransaction)
+		require.Empty(t, users, "a refused lock must not return rows")
 	})
 }
 

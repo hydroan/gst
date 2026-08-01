@@ -40,6 +40,11 @@ var (
 	// it was opened on.
 	ErrTransactionInstance = errors.New("database instance is an open transaction: pass the instance it was opened on")
 
+	// ErrLockOutsideTransaction is returned when WithLock is used on a chain
+	// that is not inside a transaction, where the lock it asks for would be
+	// released as soon as the statement finished.
+	ErrLockOutsideTransaction = errors.New("WithLock requires a transaction: wrap the operation in database.Transaction")
+
 	// ErrAfterCommit marks a failure that happened after the transaction
 	// committed. Callers distinguish it with errors.Is because the two outcomes
 	// call for opposite handling: an ordinary error means the write was rolled
