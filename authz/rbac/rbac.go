@@ -14,35 +14,44 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
-// | Operation                    | Casbin function                                           |
-// | ---------------------------- | --------------------------------------------------------- |
-// | Grant role permission        | `AddPolicy(tenant, role, obj, act, eft)`                  |
-// | Revoke role permission       | `RemovePolicy(tenant, role, obj, act, eft)`               |
-// | Revoke all role permissions  | `RemoveFilteredPolicy(0, tenant, role)`                   |
-// | Assign role to subject       | `AddGroupingPolicy(subject, role, tenant)`                |
-// | Unassign role from subject   | `RemoveGroupingPolicy(subject, role, tenant)`             |
-// | Check subject tenant member  | `GetFilteredGroupingPolicy(0, subject)`                   |
-// | Assign system role           | `AddNamedGroupingPolicy("g2", subject, role)`             |
-// | Unassign system role         | `RemoveNamedGroupingPolicy("g2", subject, role)`          |
-// | Query subject role in tenant | `GetFilteredGroupingPolicy(0, subject, role, tenant)`     |
-// | Query role permissions       | `GetFilteredPolicy(0, tenant, role)`                      |
-// | Query system role assignment | `HasNamedGroupingPolicy("g2", subject, role)`             |
-// | Authorize request            | `Enforce(tenant, subject, obj, act)`                      |
+// Package rbac decides authorization from Casbin policies and keeps those
+// policies in step with the records they are derived from.
 //
-// // Query subject role bindings in a tenant.
-// RBAC.enforcer.GetFilteredGroupingPolicy(0, "user1", consts.AUTHZ_ROLE_ADMIN, DefaultTenant)
-// // Query a subject's system-level role binding.
-// RBAC.enforcer.HasNamedGroupingPolicy(systemRoleGrouping, consts.AUTHZ_USER_ROOT, consts.AUTHZ_SYSTEM_ROLE_ROOT)
-// // Query permissions granted to a role in a tenant.
-// RBAC.enforcer.GetFilteredPolicy(0, DefaultTenant, "admin")
-// // Authorize a subject against a tenant-scoped permission.
-// RBAC.enforcer.Enforce(DefaultTenant, "user1", "/api/authz/routes", "GET")
+// Three rule kinds carry everything the package stores. A permission,
+// (tenant, role, object, action, effect), is what a role may reach. An
+// assignment, (subject, role, tenant), is who holds a role in one tenant. A
+// system assignment, (subject, role), is who holds a role above every tenant,
+// which is how the built-in root subject stays reachable in a deployment with no
+// tenants configured at all.
+//
+// Reads go straight to the enforcer, which answers from memory. Writes do not:
+// they go through mutate, which drives storage and memory as two halves so that
+// a policy change rolls back with the transaction that caused it. Nothing in the
+// package writes through the enforcer's own AddPolicy family, and autosave stays
+// off so Casbin cannot write behind mutate's back.
 
 // DefaultTenant is the built-in authorization domain used when no tenant
 // resolver is configured by the application.
 const DefaultTenant = "default"
 
 const systemRoleGrouping = "g2"
+
+// normalizeTenant resolves the authorization domain an operation acts in.
+//
+// An unset tenant means the default domain. That is the whole arrangement in a
+// single-tenant deployment, where no resolver is configured and every rule is
+// stored against DefaultTenant, so an empty argument is an ordinary way of
+// saying "here" rather than a mistake to refuse.
+//
+// Every entry point taking a tenant applies it, reads and writes alike. Reading
+// and writing under different names for one domain is how a rule ends up written
+// where nothing will look for it.
+func normalizeTenant(tenant string) string {
+	if tenant = strings.TrimSpace(tenant); tenant != "" {
+		return tenant
+	}
+	return DefaultTenant
+}
 
 var (
 	enforcer    *casbin.ContextEnforcer
@@ -150,6 +159,7 @@ func RBAC() types.RBAC {
 
 // Authorize evaluates whether subject may perform action on object in tenant.
 func (r *rbac) Authorize(ctx context.Context, tenant string, subject string, object string, action string) (bool, error) {
+	tenant = normalizeTenant(tenant)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.enforcer.Enforce(tenant, subject, object, action)
@@ -181,6 +191,8 @@ const policyRoleColumn = 1
 func (r *rbac) AuthorizeExplained(
 	ctx context.Context, tenant string, subject string, object string, action string,
 ) (bool, consts.GrantSource, []string, error) {
+	tenant = normalizeTenant(tenant)
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -216,6 +228,7 @@ func (r *rbac) AuthorizeExplained(
 
 // RemoveRole removes all policies and subject assignments for role in tenant.
 func (r *rbac) RemoveRole(ctx context.Context, tenant string, role string) (err error) {
+	tenant = normalizeTenant(tenant)
 	ctx, finishSpan := traceRBAC(ctx, "remove_role", rbacTraceFields(tenant, role))
 	defer func() {
 		finishSpan(err)
@@ -230,6 +243,7 @@ func (r *rbac) RemoveRole(ctx context.Context, tenant string, role string) (err 
 
 // GrantPermission grants role access to object/action inside tenant.
 func (r *rbac) GrantPermission(ctx context.Context, tenant string, role string, object string, action string) (err error) {
+	tenant = normalizeTenant(tenant)
 	ctx, finishSpan := traceRBAC(ctx, "grant_permission", rbacTraceFields(tenant, role))
 	defer func() {
 		finishSpan(err)
@@ -241,6 +255,7 @@ func (r *rbac) GrantPermission(ctx context.Context, tenant string, role string, 
 
 // RevokePermission removes the exact tenant, role, object, action permission.
 func (r *rbac) RevokePermission(ctx context.Context, tenant string, role string, object string, action string) (err error) {
+	tenant = normalizeTenant(tenant)
 	ctx, finishSpan := traceRBAC(ctx, "revoke_permission", rbacTraceFields(tenant, role))
 	defer func() {
 		finishSpan(err)
@@ -260,6 +275,7 @@ const authenticatedPolicyTenant = "*"
 func (r *rbac) SetRolePermissions(
 	ctx context.Context, tenant string, role string, permissions []types.Permission,
 ) (err error) {
+	tenant = normalizeTenant(tenant)
 	ctx, finishSpan := traceRBAC(ctx, "set_role_permissions", rbacTraceFields(tenant, role))
 	defer func() {
 		finishSpan(err)
@@ -346,6 +362,7 @@ func permissionPolicies(tenant string, role string, permissions []types.Permissi
 // It is the explicit form of revoking a role's full permission set. Use
 // RevokePermission when removing one concrete object/action grant.
 func (r *rbac) RevokeRolePermissions(ctx context.Context, tenant string, role string) (err error) {
+	tenant = normalizeTenant(tenant)
 	ctx, finishSpan := traceRBAC(ctx, "revoke_role_permissions", rbacTraceFields(tenant, role))
 	defer func() {
 		finishSpan(err)
@@ -356,6 +373,7 @@ func (r *rbac) RevokeRolePermissions(ctx context.Context, tenant string, role st
 
 // AssignRole assigns subject to role inside tenant.
 func (r *rbac) AssignRole(ctx context.Context, tenant string, subject string, role string) (err error) {
+	tenant = normalizeTenant(tenant)
 	if subject == role {
 		return nil
 	}
@@ -369,6 +387,7 @@ func (r *rbac) AssignRole(ctx context.Context, tenant string, subject string, ro
 
 // UnassignRole removes a subject-role assignment from tenant.
 func (r *rbac) UnassignRole(ctx context.Context, tenant string, subject string, role string) (err error) {
+	tenant = normalizeTenant(tenant)
 	ctx, finishSpan := traceRBAC(ctx, "unassign_role", rbacTraceFields(tenant, role))
 	defer func() {
 		finishSpan(err)
@@ -379,6 +398,7 @@ func (r *rbac) UnassignRole(ctx context.Context, tenant string, subject string, 
 
 // HasRole reports whether subject explicitly holds role inside tenant.
 func (r *rbac) HasRole(ctx context.Context, tenant string, subject string, role string) (bool, error) {
+	tenant = normalizeTenant(tenant)
 	if subject == role {
 		return false, nil
 	}
@@ -397,10 +417,7 @@ func (r *rbac) SubjectInTenant(ctx context.Context, tenant string, subject strin
 	if subject == "" {
 		return false, nil
 	}
-	tenant = strings.TrimSpace(tenant)
-	if tenant == "" {
-		tenant = DefaultTenant
-	}
+	tenant = normalizeTenant(tenant)
 
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -423,10 +440,7 @@ func (r *rbac) SubjectInTenant(ctx context.Context, tenant string, subject strin
 // The tenant-visible user set is therefore derived from role bindings first and
 // then joined back to user rows by subject ID.
 func (r *rbac) SubjectsInTenant(ctx context.Context, tenant string) ([]string, error) {
-	tenant = strings.TrimSpace(tenant)
-	if tenant == "" {
-		tenant = DefaultTenant
-	}
+	tenant = normalizeTenant(tenant)
 
 	r.mu.RLock()
 	defer r.mu.RUnlock()

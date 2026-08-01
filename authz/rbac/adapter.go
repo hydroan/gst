@@ -23,6 +23,10 @@ const ruleColumnCount = 6
 // the schema belongs to the registered CasbinRule model, which is what creates
 // the table and its unique index. Keep the column names in step with that model.
 type policyRow struct {
+	// ID is read-only so that it can name a row in an error without ever being
+	// written: rules are inserted without one and the table assigns it.
+	ID uint64 `gorm:"column:id;->"`
+
 	Ptype string `gorm:"column:ptype"`
 	V0    string `gorm:"column:v0"`
 	V1    string `gorm:"column:v1"`
@@ -77,10 +81,15 @@ func (a *adapter) LoadPolicyCtx(ctx context.Context, m model.Model) error {
 		return errors.Wrap(err, "failed to load casbin policies")
 	}
 	for _, row := range rows {
-		if err := persist.LoadPolicyArray(row.rule(), m); err != nil {
-			// A malformed row is not skipped: dropping it would silently
-			// change who is authorized, which is worse than refusing to start.
-			return errors.Wrapf(err, "invalid casbin policy row %v", row.rule())
+		// A malformed row is not skipped: dropping it would silently change who
+		// is authorized, which is worse than refusing to start. The row is named
+		// by id so that whoever has to repair it can find it.
+		ast, err := row.assertion(m)
+		if err != nil {
+			return err
+		}
+		if err := persist.LoadPolicyArray(row.rule(ast), m); err != nil {
+			return errors.Wrapf(err, "invalid casbin policy row %d", row.ID)
 		}
 	}
 	return nil
@@ -219,17 +228,41 @@ func (r policyRow) values() [ruleColumnCount]string {
 	return [ruleColumnCount]string{r.V0, r.V1, r.V2, r.V3, r.V4, r.V5}
 }
 
-// rule renders the row as the token slice Casbin loads, dropping the trailing
-// empty columns the rule does not use. The ptype always survives, so a row with
-// no values at all still reports which assertion it claimed to belong to rather
-// than reading as an empty rule.
-func (r policyRow) rule() []string {
+// rule renders the row as the token slice Casbin loads, taking exactly as many
+// columns as the assertion it belongs to declares.
+//
+// The count comes from the assertion and not from which columns happen to be
+// non-empty. A rule is free to carry an empty token — an assignment in the
+// default tenant reads naturally as one — and sizing the slice by the last
+// non-empty column would hand Casbin a rule one token short of what its
+// assertion requires, which fails the load of the entire policy set. What the
+// row means has to be decided by what kind of row it is, never by its contents.
+func (r policyRow) rule(ast *model.Assertion) []string {
 	values := r.values()
-	last := -1
-	for i, value := range values {
-		if value != "" {
-			last = i
-		}
+	return append([]string{r.Ptype}, values[:len(ast.Tokens)]...)
+}
+
+// assertion resolves the assertion a stored row belongs to.
+//
+// Casbin's loader derives the section from the first byte of the ptype and
+// indexes the model with it, so it panics outright on an empty ptype and builds
+// a rule nothing will ever match on an unknown one. Both are reachable from the
+// table alone — the column is NOT NULL with an empty default, and nothing
+// constrains it to the ptypes the model declares — so the row is resolved here
+// first and reported as the load error the caller can act on.
+func (r policyRow) assertion(m model.Model) (*model.Assertion, error) {
+	if r.Ptype == "" {
+		return nil, errors.Newf("casbin policy row %d has no ptype", r.ID)
 	}
-	return append([]string{r.Ptype}, values[:last+1]...)
+	ast, ok := m[r.Ptype[:1]][r.Ptype]
+	if !ok {
+		return nil, errors.Newf("casbin policy row %d has unknown ptype %q", r.ID, r.Ptype)
+	}
+	if len(ast.Tokens) > ruleColumnCount {
+		return nil, errors.Newf(
+			"casbin assertion %q declares %d tokens, more than the %d columns a rule is stored in",
+			r.Ptype, len(ast.Tokens), ruleColumnCount,
+		)
+	}
+	return ast, nil
 }

@@ -6,6 +6,8 @@ import (
 	casbinmodel "github.com/casbin/casbin/v3/model"
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/logger"
+	"go.uber.org/zap"
 )
 
 // policyOp is what a mutation does to the stored policies.
@@ -50,6 +52,53 @@ func removeFiltered(sec string, ptype string, fieldIndex int, fieldValues ...str
 	}
 }
 
+// ErrEmptyPolicyValue reports a mutation carrying an empty value where an
+// identifier belongs.
+//
+// An empty value does not narrow a request, it widens it. Storage and Casbin
+// agree that an empty filter field matches anything, so a filtered delete built
+// from an empty argument removes every rule of its kind in the deployment
+// instead of none — revoking a role for one subject would revoke it for all of
+// them. An empty value inside a rule is the mirror image: the row stores fewer
+// meaningful columns than its kind declares, and the next load of the policy set
+// rejects it and takes the whole set down with it.
+//
+// Neither outcome can be recovered by guessing what was meant, and both are
+// silent at the call site, so a mutation carrying an empty value is refused
+// before anything is written.
+var ErrEmptyPolicyValue = errors.New("rbac: policy mutation carries an empty value")
+
+// validate reports whether the mutation can be applied without widening or
+// corrupting the policy set. See ErrEmptyPolicyValue.
+//
+// Every rule kind the framework writes is fully populated: a permission is
+// (tenant, role, object, action, effect), an assignment is (subject, role,
+// tenant), and a system assignment is (subject, role). None of them has a column
+// that is meaningfully empty, so an empty value always means the caller passed
+// one in.
+func (m policyMutation) validate() error {
+	switch m.op {
+	case policyAdd, policyRemove:
+		for _, rule := range m.rules {
+			for i, value := range rule {
+				if value == "" {
+					return errors.Wrapf(ErrEmptyPolicyValue, "%s rule field %d", m.ptype, i)
+				}
+			}
+		}
+	case policyRemoveFiltered:
+		if len(m.fieldValues) == 0 {
+			return errors.Wrapf(ErrEmptyPolicyValue, "%s filter has no values", m.ptype)
+		}
+		for i, value := range m.fieldValues {
+			if value == "" {
+				return errors.Wrapf(ErrEmptyPolicyValue, "%s filter field %d", m.ptype, m.fieldIndex+i)
+			}
+		}
+	}
+	return nil
+}
+
 // mutate applies mutations to the database now and to the in-memory policy
 // model once the surrounding transaction commits.
 //
@@ -65,15 +114,32 @@ func removeFiltered(sec string, ptype string, fieldIndex int, fieldValues ...str
 // InnoDB's deadlock detector cannot see and would surface only as a lock wait
 // timeout. The memory half takes the lock once for the whole batch, so readers
 // observe all of the mutations or none.
+//
+// It opens a transaction of its own when the caller has none, rather than
+// leaving the caller to remember one. A mutation set is one logical change —
+// replacing a role's permissions is a delete and an insert — and separately
+// autocommitting its parts lets a failed insert leave the role stripped of every
+// permission while the memory half, which never ran, keeps serving the old set.
+// That divergence outlives the process that caused it and is invisible to a
+// comparison of stored state, so the correct call has to be the only call.
+// Joining an existing transaction costs nothing, which is what makes requiring
+// one here affordable.
 func (r *rbac) mutate(ctx context.Context, mutations ...policyMutation) error {
 	if len(mutations) == 0 {
 		return nil
 	}
-	if err := r.applyToStore(ctx, mutations); err != nil {
-		return err
+	for _, mutation := range mutations {
+		if err := mutation.validate(); err != nil {
+			return err
+		}
 	}
-	return database.AfterCommit(ctx, func(ctx context.Context) error {
-		return r.applyToModel(ctx, mutations)
+	return database.Transaction(ctx, func(ctx context.Context) error {
+		if err := r.applyToStore(ctx, mutations); err != nil {
+			return err
+		}
+		return database.AfterCommit(ctx, func(ctx context.Context) error {
+			return r.applyToModel(ctx, mutations)
+		})
 	})
 }
 
@@ -129,14 +195,41 @@ func (r *rbac) applyToModel(ctx context.Context, mutations []policyMutation) err
 			)
 		}
 		if err != nil {
-			return errors.Join(err, r.reloadLocked(ctx))
+			return r.recoverLocked(ctx, err)
 		}
 
 		if err = r.rebuildRoleLinks(mutation, affected); err != nil {
-			return errors.Join(err, r.reloadLocked(ctx))
+			return r.recoverLocked(ctx, err)
 		}
 	}
 	return nil
+}
+
+// recoverLocked rebuilds the model from storage after an in-memory update
+// failed, and records both what failed and whether the rebuild rescued it.
+//
+// This is the one place where the decisions a process serves can disagree with
+// what is stored: the transaction is already durable, so the write cannot be
+// undone, and only memory is behind. Nothing downstream notices — the request
+// that caused it has usually returned, and comparing stored rules against the
+// records they come from cannot see a divergence that exists only in memory. It
+// is logged here because here is the only place that knows.
+func (r *rbac) recoverLocked(ctx context.Context, cause error) error {
+	reloaded := r.reloadLocked(ctx)
+	if reloaded == nil {
+		logger.Authz.Warnz(
+			"rbac in-memory policy update failed, reloaded from storage",
+			zap.Error(cause),
+		)
+		return cause
+	}
+	logger.Authz.Errorz(
+		"rbac in-memory policy update failed and could not be reloaded, "+
+			"authorization decisions now disagree with stored policies until this process reloads them",
+		zap.Error(cause),
+		zap.NamedError("reload_error", reloaded),
+	)
+	return errors.Join(cause, reloaded)
 }
 
 // rebuildRoleLinks updates the role inheritance graph after a grouping change.
