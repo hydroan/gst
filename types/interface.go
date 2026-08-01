@@ -562,6 +562,21 @@ type RBAC interface {
 	// tenant-scoped and system-level, across all tenants. Use this when a
 	// subject is deleted or deactivated so no orphaned role bindings remain.
 	RemoveSubject(ctx context.Context, subject string) error
+
+	// ReloadPolicies discards the authorization state the process holds in
+	// memory and rebuilds it from storage.
+	//
+	// Implementations answer from memory and keep it in step as they write, so
+	// the two agree as long as this process is the only writer. They stop
+	// agreeing when the stored rules change behind its back: another replica
+	// writing them, an operator repairing them by hand, a restore. Nothing
+	// detects that on its own, so this is the lever that puts a process back
+	// onto the stored state without restarting it.
+	//
+	// It reads every rule and is not part of the write path, which maintains
+	// memory itself. Reserve it for recovery and for the moment a change is
+	// known to have happened elsewhere.
+	ReloadPolicies(ctx context.Context) error
 }
 
 // Module describes a registered API module: route metadata, auth exposure,

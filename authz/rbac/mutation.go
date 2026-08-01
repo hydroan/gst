@@ -72,8 +72,8 @@ func (r *rbac) mutate(ctx context.Context, mutations ...policyMutation) error {
 	if err := r.applyToStore(ctx, mutations); err != nil {
 		return err
 	}
-	return database.AfterCommit(ctx, func(context.Context) error {
-		return r.applyToModel(mutations)
+	return database.AfterCommit(ctx, func(ctx context.Context) error {
+		return r.applyToModel(ctx, mutations)
 	})
 }
 
@@ -109,7 +109,7 @@ func (r *rbac) applyToStore(ctx context.Context, mutations []policyMutation) err
 //
 // A failure here leaves memory behind the database, which the enforcer cannot
 // repair on its own, so the model is reloaded from storage as a last resort.
-func (r *rbac) applyToModel(mutations []policyMutation) error {
+func (r *rbac) applyToModel(ctx context.Context, mutations []policyMutation) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -129,11 +129,11 @@ func (r *rbac) applyToModel(mutations []policyMutation) error {
 			)
 		}
 		if err != nil {
-			return errors.Join(err, r.reloadLocked())
+			return errors.Join(err, r.reloadLocked(ctx))
 		}
 
 		if err = r.rebuildRoleLinks(mutation, affected); err != nil {
-			return errors.Join(err, r.reloadLocked())
+			return errors.Join(err, r.reloadLocked(ctx))
 		}
 	}
 	return nil
@@ -153,9 +153,21 @@ func (r *rbac) rebuildRoleLinks(mutation policyMutation, affected [][]string) er
 	return r.enforcer.BuildIncrementalRoleLinks(op, mutation.ptype, affected)
 }
 
+// ReloadPolicies rebuilds the whole in-memory model from storage.
+func (r *rbac) ReloadPolicies(ctx context.Context) (err error) {
+	ctx, finishSpan := traceRBAC(ctx, "reload_policies", nil)
+	defer func() {
+		finishSpan(err)
+	}()
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.reloadLocked(ctx)
+}
+
 // reloadLocked rebuilds the whole in-memory model from storage. It is the
 // recovery path for a failed in-memory update, whose caller already holds the
 // write lock.
-func (r *rbac) reloadLocked() error {
-	return errors.Wrap(r.enforcer.LoadPolicy(), "failed to reload casbin policies")
+func (r *rbac) reloadLocked(ctx context.Context) error {
+	return errors.Wrap(r.enforcer.LoadPolicyCtx(ctx), "failed to reload casbin policies")
 }

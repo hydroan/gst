@@ -201,13 +201,16 @@ func (r *Role) syncPermissions(ctx context.Context) error {
 
 	permissions := make([]types.Permission, 0)
 	for _, m := range newMenus {
-		permissions = append(permissions, routePermissionsForMenu(m)...)
+		permissions = append(permissions, RoutePermissionsForMenu(m)...)
 	}
 
 	return rbac.RBAC().SetRolePermissions(ctx, r.tenant(), r.ID, permissions)
 }
 
-func routePermissionsForMenu(m *Menu) []types.Permission {
+// RoutePermissionsForMenu renders the backend route grants a menu carries. It
+// is exported so the reconciliation can derive the same expectation the sync
+// writes, from one implementation rather than two that could disagree.
+func RoutePermissionsForMenu(m *Menu) []types.Permission {
 	if m == nil {
 		return make([]types.Permission, 0)
 	}

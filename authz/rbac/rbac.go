@@ -133,6 +133,8 @@ func (noop) RemoveSubject(ctx context.Context, subject string) error {
 	return nil
 }
 
+func (noop) ReloadPolicies(ctx context.Context) error { return nil }
+
 func RBAC() types.RBAC {
 	// When RBAC is disabled or enforcer is not initialized,
 	// return a safe no-op implementation to prevent panics.
