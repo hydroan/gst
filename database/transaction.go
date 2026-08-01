@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/types/consts"
@@ -19,15 +20,19 @@ import (
 //
 // If the provided ctx already carries a transaction, fn joins the outer
 // transaction directly: no new transaction, span, or savepoint is created.
-// This matches withModelHookTransaction's boundary rule: the first explicit
+// This matches the boundary rule the write methods follow: the first explicit
 // transaction owns the boundary, and everything inside shares it.
 //
 // Operations that must NOT join the transaction belong outside the closure:
 // the closure body is the begin/commit block, so run them before calling
 // Transaction or after it returns (for example, compensation writes on error).
+// Work that must happen only once the transaction is durable belongs in
+// AfterCommit instead, which runs it after the commit and skips it on rollback.
 //
-// Returns ErrNilTransaction if fn is nil. Panics if the database is not
-// initialized, consistent with Database[M].
+// Returns ErrNilTransaction if fn is nil, and an error marked with
+// ErrAfterCommit when the transaction committed but a registered after-commit
+// action failed. Panics if the database is not initialized, consistent with
+// Database[M].
 func Transaction(ctx context.Context, fn func(ctx context.Context) error) error {
 	if fn == nil {
 		return ErrNilTransaction
@@ -50,6 +55,9 @@ func TransactionOn(ctx context.Context, instance *gorm.DB, fn func(ctx context.C
 	if instance == nil {
 		panic("database instance cannot be nil")
 	}
+	if isOpenTransaction(instance) {
+		return ErrTransactionInstance
+	}
 	return transactionOn(ctx, instance, fn)
 }
 
@@ -60,7 +68,7 @@ func transactionOn(ctx context.Context, base *gorm.DB, fn func(ctx context.Conte
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if _, ok := txFromContext(ctx, base); ok {
+	if _, ok := dbruntime.TxFromContext(ctx, base); ok {
 		return fn(ctx)
 	}
 
@@ -73,23 +81,25 @@ func transactionOn(ctx context.Context, base *gorm.DB, fn func(ctx context.Conte
 
 	begin := time.Now()
 	// Deriving the closure context from spanCtx makes per-statement spans from
-	// GormTracingPlugin nest under this transaction span, and contextWithTx
-	// makes every chain opened on the same handle inside fn join gormTx.
-	txErr := base.WithContext(spanCtx).Transaction(func(gormTx *gorm.DB) error {
-		if err := fn(contextWithTx(spanCtx, gormTx, base)); err != nil {
-			logger.Database.WithContext(ctx, consts.Phase("Transaction")).Errorz(
-				"transaction rolled back due to error",
-				zap.Error(err),
+	// GormTracingPlugin nest under this transaction span, and the boundary makes
+	// every chain opened on the same handle inside fn join gormTx while
+	// collecting the actions to run once it commits.
+	txErr := withTransactionBoundary(spanCtx, base, base.WithContext(spanCtx),
+		func(txCtx context.Context, _ *gorm.DB) error {
+			if err := fn(txCtx); err != nil {
+				logger.Database.WithContext(ctx, consts.Phase("Transaction")).Errorz(
+					"transaction rolled back due to error",
+					zap.Error(err),
+					util.LogDuration(time.Since(begin)),
+				)
+				return err
+			}
+			logger.Database.WithContext(ctx, consts.Phase("Transaction")).Infoz(
+				"transaction committed successfully",
 				util.LogDuration(time.Since(begin)),
 			)
-			return err
-		}
-		logger.Database.WithContext(ctx, consts.Phase("Transaction")).Infoz(
-			"transaction committed successfully",
-			util.LogDuration(time.Since(begin)),
-		)
-		return nil
-	})
+			return nil
+		})
 
 	// Recorded after the transaction returns so commit-phase failures are also
 	// captured on the span.

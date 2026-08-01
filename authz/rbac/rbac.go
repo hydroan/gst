@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/casbin/casbin/v3"
-	"github.com/cockroachdb/errors"
+	"github.com/casbin/casbin/v3/persist"
 	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
@@ -45,13 +45,20 @@ const DefaultTenant = "default"
 const systemRoleGrouping = "g2"
 
 var (
-	enforcer   *casbin.ContextEnforcer
-	enforcerMu sync.RWMutex
+	enforcer    *casbin.ContextEnforcer
+	policyStore *adapter
+	enforcerMu  sync.RWMutex
 )
 
 type rbac struct {
 	enforcer *casbin.ContextEnforcer
-	mu       *sync.RWMutex
+
+	// adapter is held directly rather than reached through the enforcer:
+	// mutate drives the database half of a write on its own so it can defer the
+	// in-memory half until the transaction commits.
+	adapter persist.ContextBatchAdapter
+
+	mu *sync.RWMutex
 }
 
 // noop implements RBAC behavior before Casbin is initialized.
@@ -134,6 +141,7 @@ func RBAC() types.RBAC {
 	}
 	return &rbac{
 		enforcer: enforcer,
+		adapter:  policyStore,
 		mu:       &enforcerMu,
 	}
 }
@@ -211,13 +219,11 @@ func (r *rbac) RemoveRole(ctx context.Context, tenant string, role string) (err 
 		finishSpan(err)
 	}()
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	_, policyErr := r.enforcer.RemoveFilteredPolicyCtx(ctx, 0, tenant, role)
-	_, groupingErr := r.enforcer.RemoveFilteredGroupingPolicyCtx(ctx, 1, role, tenant)
-	err = errors.Join(policyErr, groupingErr)
-	return err
+	return r.mutate(
+		ctx,
+		removeFiltered("p", "p", 0, tenant, role),
+		removeFiltered("g", "g", 1, role, tenant),
+	)
 }
 
 // GrantPermission grants role access to object/action inside tenant.
@@ -227,13 +233,8 @@ func (r *rbac) GrantPermission(ctx context.Context, tenant string, role string, 
 		finishSpan(err)
 	}()
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if _, err = r.enforcer.AddPolicyCtx(ctx, tenant, role, object, action, string(consts.EffectAllow)); err != nil {
-		return err
-	}
-	return nil
+	return r.mutate(ctx, addRules("p", "p",
+		[]string{tenant, role, object, action, string(consts.EffectAllow)}))
 }
 
 // RevokePermission removes the exact tenant, role, object, action permission.
@@ -243,13 +244,8 @@ func (r *rbac) RevokePermission(ctx context.Context, tenant string, role string,
 		finishSpan(err)
 	}()
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if _, err = r.enforcer.RemovePolicyCtx(ctx, tenant, role, object, action, string(consts.EffectAllow)); err != nil {
-		return err
-	}
-	return nil
+	return r.mutate(ctx, removeRules("p", "p",
+		[]string{tenant, role, object, action, string(consts.EffectAllow)}))
 }
 
 // authenticatedPolicyTenant is the tenant column stored for policies written
@@ -300,21 +296,11 @@ func (r *rbac) SetPermissionsForAuthenticated(ctx context.Context, permissions [
 func (r *rbac) replacePermissions(
 	ctx context.Context, tenant string, role string, permissions []types.Permission,
 ) error {
-	rules := permissionPolicies(tenant, role, permissions)
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if _, err := r.enforcer.RemoveFilteredPolicyCtx(ctx, 0, tenant, role); err != nil {
-		return err
+	mutations := []policyMutation{removeFiltered("p", "p", 0, tenant, role)}
+	if rules := permissionPolicies(tenant, role, permissions); len(rules) > 0 {
+		mutations = append(mutations, addRules("p", "p", rules...))
 	}
-	if len(rules) == 0 {
-		return nil
-	}
-	if _, err := r.enforcer.AddPoliciesCtx(ctx, rules); err != nil {
-		return err
-	}
-	return nil
+	return r.mutate(ctx, mutations...)
 }
 
 // permissionPolicies renders permissions as p policy rows for role in tenant.
@@ -363,13 +349,7 @@ func (r *rbac) RevokeRolePermissions(ctx context.Context, tenant string, role st
 		finishSpan(err)
 	}()
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if _, err = r.enforcer.RemoveFilteredPolicyCtx(ctx, 0, tenant, role); err != nil {
-		return err
-	}
-	return nil
+	return r.mutate(ctx, removeFiltered("p", "p", 0, tenant, role))
 }
 
 // AssignRole assigns subject to role inside tenant.
@@ -382,13 +362,7 @@ func (r *rbac) AssignRole(ctx context.Context, tenant string, subject string, ro
 		finishSpan(err)
 	}()
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if _, err = r.enforcer.AddGroupingPolicyCtx(ctx, subject, role, tenant); err != nil {
-		return err
-	}
-	return nil
+	return r.mutate(ctx, addRules("g", "g", []string{subject, role, tenant}))
 }
 
 // UnassignRole removes a subject-role assignment from tenant.
@@ -398,13 +372,7 @@ func (r *rbac) UnassignRole(ctx context.Context, tenant string, subject string, 
 		finishSpan(err)
 	}()
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if _, err = r.enforcer.RemoveGroupingPolicyCtx(ctx, subject, role, tenant); err != nil {
-		return err
-	}
-	return nil
+	return r.mutate(ctx, removeRules("g", "g", []string{subject, role, tenant}))
 }
 
 // HasRole reports whether subject explicitly holds role inside tenant.
@@ -495,13 +463,7 @@ func (r *rbac) AssignSystemRole(ctx context.Context, subject string, role string
 		finishSpan(err)
 	}()
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if _, err = r.enforcer.AddNamedGroupingPolicyCtx(ctx, systemRoleGrouping, subject, role); err != nil {
-		return err
-	}
-	return nil
+	return r.mutate(ctx, addRules("g", systemRoleGrouping, []string{subject, role}))
 }
 
 // UnassignSystemRole removes a subject's system-level role assignment.
@@ -511,13 +473,7 @@ func (r *rbac) UnassignSystemRole(ctx context.Context, subject string, role stri
 		finishSpan(err)
 	}()
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if _, err = r.enforcer.RemoveNamedGroupingPolicyCtx(ctx, systemRoleGrouping, subject, role); err != nil {
-		return err
-	}
-	return nil
+	return r.mutate(ctx, removeRules("g", systemRoleGrouping, []string{subject, role}))
 }
 
 // HasSystemRole reports whether subject explicitly holds a system-level role.
@@ -538,13 +494,11 @@ func (r *rbac) RemoveSubject(ctx context.Context, subject string) (err error) {
 		finishSpan(err)
 	}()
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	_, tenantErr := r.enforcer.RemoveFilteredGroupingPolicyCtx(ctx, 0, subject)
-	_, systemErr := r.enforcer.RemoveFilteredNamedGroupingPolicyCtx(ctx, systemRoleGrouping, 0, subject)
-	err = errors.Join(tenantErr, systemErr)
-	return err
+	return r.mutate(
+		ctx,
+		removeFiltered("g", "g", 0, subject),
+		removeFiltered("g", systemRoleGrouping, 0, subject),
+	)
 }
 
 func contextOrBackground(ctx context.Context) context.Context {

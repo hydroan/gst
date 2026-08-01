@@ -84,5 +84,9 @@ func newTestEnforcer(tb testing.TB, policyCount int) *casbin.ContextEnforcer {
 
 func newTestRBAC(tb testing.TB, policyCount int) *rbac {
 	tb.Helper()
-	return &rbac{enforcer: newTestEnforcer(tb, policyCount), mu: &enforcerMu}
+	return &rbac{
+		enforcer: newTestEnforcer(tb, policyCount),
+		adapter:  new(nullContextAdapter),
+		mu:       &enforcerMu,
+	}
 }

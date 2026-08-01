@@ -5,16 +5,12 @@ import (
 
 	"github.com/casbin/casbin/v3"
 	casbinmodel "github.com/casbin/casbin/v3/model"
-	gormadapter "github.com/casbin/gorm-adapter/v3"
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types/consts"
-	"gorm.io/gorm"
 )
-
-var adapter *gormadapter.Adapter
 
 // policyTable is the table the Casbin adapter reads and writes. Its schema is
 // owned by the CasbinRule model, so the name has to agree with that model's
@@ -100,18 +96,12 @@ func Init() (err error) {
 	// mean two definitions of one table, and would issue DDL at startup even
 	// where the framework deliberately leaves schema changes to gg migrate.
 	//
-	// TurnOffAutoMigrate overwrites the handle it is given in place, so it gets a
-	// session copy rather than the shared root handle.
-	handle := database.DB().Session(new(gorm.Session))
-	gormadapter.TurnOffAutoMigrate(handle)
-	if adapter, err = gormadapter.NewAdapterByDBUseTableName(handle, "", policyTable); err != nil {
-		return errors.Wrap(err, "failed to create casbin adapter")
-	}
+	policyAdapter := newAdapter(database.DB(), policyTable)
 	model, err := casbinmodel.NewModelFromString(string(modelData))
 	if err != nil {
 		return errors.Wrap(err, "failed to create casbin model")
 	}
-	contextEnforcer, err := casbin.NewContextEnforcer(model, adapter)
+	contextEnforcer, err := casbin.NewContextEnforcer(model, policyAdapter)
 	if err != nil {
 		return errors.Wrap(err, "failed to create casbin enforcer")
 	}
@@ -122,8 +112,13 @@ func Init() (err error) {
 	}
 
 	enforcer.SetLogger(logger.Casbin)
-	enforcer.EnableAutoSave(true)
 	enforcer.EnableEnforce(true)
+	// Writes go through mutate, which drives the adapter itself so it can split
+	// the database half from the in-memory half. Casbin's own persistence would
+	// do both at once, which is what leaves memory ahead of a rolled back
+	// transaction.
+	enforcer.EnableAutoSave(false)
+	policyStore = policyAdapter
 
 	for _, subject := range defaultSystemRootSubjects {
 		if err := RBAC().AssignSystemRole(context.Background(), subject, defaultSystemRole); err != nil {

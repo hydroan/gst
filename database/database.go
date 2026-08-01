@@ -34,6 +34,18 @@ var (
 	ErrNilSQLBuilder       = errors.New("sql statement collector cannot be nil")
 	ErrNilTransaction      = errors.New("transaction function cannot be nil")
 	ErrUnusableFilter      = errors.New("filter cannot be applied")
+
+	// ErrTransactionInstance is returned when the instance handed to DatabaseOn
+	// or TransactionOn is itself an open transaction rather than the connection
+	// it was opened on.
+	ErrTransactionInstance = errors.New("database instance is an open transaction: pass the instance it was opened on")
+
+	// ErrAfterCommit marks a failure that happened after the transaction
+	// committed. Callers distinguish it with errors.Is because the two outcomes
+	// call for opposite handling: an ordinary error means the write was rolled
+	// back and nothing happened, while this one means the write is durable and
+	// only a follow-up effect failed.
+	ErrAfterCommit = errors.New("after-commit action failed")
 )
 
 var (
@@ -93,6 +105,11 @@ type database[M types.Model] struct {
 
 	// identity
 	base *gorm.DB // connection handle this chain was opened on; it keys context transactions and stays the original handle even after the chain joins one. Set at entry, never reset.
+
+	// err is a defect in how this chain was built, reported by whichever
+	// terminal operation runs first. It is deliberately not cleared by reset:
+	// the chain is invalid for its whole life, not just for one operation.
+	err error
 
 	// options
 	enablePurge *bool // delete resource permanently, not only update deleted_at field, only works on 'Delete' method.
@@ -175,6 +192,9 @@ func (db *database[M]) reset() {
 // prepare prepares the database instance for query execution by applying all configured
 // query conditions, joins, and other settings to the underlying GORM database instance.
 func (db *database[M]) prepare() error {
+	if db.err != nil {
+		return db.err
+	}
 	if db.ins == nil || db.ins == new(gorm.DB) {
 		return ErrInvalidDB
 	}
@@ -277,10 +297,7 @@ func databaseFor[M types.Model](ctx context.Context, base *gorm.DB) types.Databa
 
 	// The handle is the chain's identity and transaction key; the running
 	// connection switches to the context transaction when one exists.
-	running := base
-	if tx, ok := txFromContext(gctx, base); ok {
-		running = tx
-	}
+	running := dbruntime.Handle(gctx, base)
 
 	var ins *gorm.DB
 	if strings.ToLower(config.App.Logger.Level) == "debug" {
@@ -289,9 +306,13 @@ func databaseFor[M types.Model](ctx context.Context, base *gorm.DB) types.Databa
 		ins = running.WithContext(gctx).Limit(defaultLimit)
 	}
 
-	return &database[M]{
+	chain := &database[M]{
 		ins:  ins,
 		ctx:  gctx,
 		base: base,
 	}
+	if isOpenTransaction(base) {
+		chain.err = ErrTransactionInstance
+	}
+	return chain
 }
