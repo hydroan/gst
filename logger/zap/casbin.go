@@ -41,18 +41,7 @@ func (c *CasbinLogger) OnAfterEvent(entry *casbinl.LogEntry) error {
 			zap.String("event", string(entry.EventType)),
 			util.LogDuration(entry.Duration),
 		}
-		if entry.Subject != "" {
-			fields = append(fields, zap.String("subject", entry.Subject))
-		}
-		if entry.Object != "" {
-			fields = append(fields, zap.String("object", entry.Object))
-		}
-		if entry.Action != "" {
-			fields = append(fields, zap.String("action", entry.Action))
-		}
-		if entry.Domain != "" {
-			fields = append(fields, zap.String("domain", entry.Domain))
-		}
+		fields = append(fields, enforceRequestFields(entry)...)
 		if entry.EventType == casbinl.EventEnforce {
 			fields = append(fields, zap.Bool("allowed", entry.Allowed))
 		}
@@ -71,6 +60,45 @@ func (c *CasbinLogger) OnAfterEvent(entry *casbinl.LogEntry) error {
 		return c.callback(entry)
 	}
 	return nil
+}
+
+// enforceRequestFields relabels the request tuple Casbin reports on an enforce
+// event.
+//
+// Casbin fills LogEntry by position, assuming the request is (sub, obj, act,
+// dom), and never consults the model's request definition. This framework
+// defines it as (tenant, sub, obj, act), so every value Casbin hands over sits
+// under the name of the field before it: Subject holds the tenant, Object the
+// subject, Action the object, Domain the action. Emitting those names verbatim
+// produces a log whose every label is wrong, which is worse than no log at all
+// when tracing why a request was allowed.
+//
+// The shift is a fixed consequence of the two definitions, so undoing it is a
+// fixed mapping too. Change it if either side moves: the request definition
+// lives with the enforcer setup, Casbin's side in its createEnforceLogEntry.
+//
+// Only enforce events carry a request; the other event types leave these fields
+// empty, and an empty value is dropped rather than logged under a wrong name.
+func enforceRequestFields(entry *casbinl.LogEntry) []any {
+	if entry.EventType != casbinl.EventEnforce {
+		return nil
+	}
+
+	fields := make([]any, 0, 4)
+	for _, f := range []struct {
+		name  string
+		value string
+	}{
+		{"tenant", entry.Subject},
+		{"sub", entry.Object},
+		{"obj", entry.Action},
+		{"act", entry.Domain},
+	} {
+		if f.value != "" {
+			fields = append(fields, zap.String(f.name, f.value))
+		}
+	}
+	return fields
 }
 
 func (c *CasbinLogger) SetLogCallback(callback func(entry *casbinl.LogEntry) error) error {
