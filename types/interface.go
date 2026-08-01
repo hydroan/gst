@@ -461,6 +461,18 @@ type RBAC interface {
 	// action as the operation being checked, such as an HTTP method.
 	Authorize(ctx context.Context, tenant string, subject string, object string, action string) (bool, error)
 
+	// AuthorizeExplained answers Authorize and additionally reports why.
+	//
+	// source names the strongest rule that allowed the request; it is empty when
+	// the request is denied, because a denial has no granting rule. matchedRule
+	// is the policy row that allowed it, and is nil unless the source is a
+	// policy: rules that allow without consulting policy leave the underlying
+	// engine free to report an unrelated row, which would be worse than none.
+	//
+	// Callers that only need the decision should use Authorize; this one does
+	// the extra work of explaining it.
+	AuthorizeExplained(ctx context.Context, tenant string, subject string, object string, action string) (allowed bool, source consts.GrantSource, matchedRule []string, err error)
+
 	// AddRole ensures role is available inside tenant.
 	// Casbin-backed implementations may create roles implicitly when policies or
 	// grouping rules are added, so this method can be a lifecycle hook with no

@@ -110,7 +110,10 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 		}
 		c.Set(consts.CTX_TENANT_ID, tenant)
 
-		if allow, err = rbac.RBAC().Authorize(c.Request.Context(), tenant, sub, obj, act); err != nil {
+		var source consts.GrantSource
+		var matchedRule []string
+		if allow, source, matchedRule, err = rbac.RBAC().
+			AuthorizeExplained(c.Request.Context(), tenant, sub, obj, act); err != nil {
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 				"code":          -1,
 				"msg":           "authorization failed",
@@ -121,7 +124,7 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 			return
 		}
 		if allow {
-			logAuthzDecision(c, tenant, sub, obj, act, consts.EffectAllow)
+			logAuthzGrant(c, tenant, sub, obj, act, source, matchedRule)
 			c.Next()
 			return
 		}
@@ -133,6 +136,36 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 		})
 		logAuthzDecision(c, tenant, sub, obj, act, consts.EffectDeny)
 	}
+}
+
+// logAuthzGrant writes one allowed authorization decision, together with what
+// allowed it.
+//
+// The two extra fields answer a question the request tuple alone cannot: several
+// rules may permit the same request, so "allowed" on its own does not say which
+// grant to revoke to take the access away. allowed_by names the rule kind and is
+// low-cardinality enough to aggregate over; matched_rule carries the policy row
+// and is present only when a policy is what allowed the request.
+//
+// matched_rule is worth recording next to obj because the two differ: obj is the
+// concrete path of this request, while the rule holds the pattern that matched
+// it, such as /api/things/{id}.
+func logAuthzGrant(
+	c *gin.Context, tenant, sub, obj, act string, source consts.GrantSource, matchedRule []string,
+) {
+	if logger.Authz == nil {
+		return
+	}
+
+	fields := append(
+		authzLogFields(c, tenant, sub, obj, act),
+		zap.String("eft", string(consts.EffectAllow)),
+		zap.String("allowed_by", string(source)),
+	)
+	if len(matchedRule) > 0 {
+		fields = append(fields, zap.Strings("matched_rule", matchedRule))
+	}
+	logger.Authz.Infoz("", fields...)
 }
 
 // logAuthzDecision writes one completed authorization decision to the authz log.
@@ -165,10 +198,11 @@ func logAuthzFailure(c *gin.Context, tenant, sub, obj, act string, err error) {
 	)...)
 }
 
-// authzLogFieldCount is the shared field count plus the single field every
-// caller appends. Reserving it keeps the append from growing the slice, which
-// would cost a second allocation and a copy on every authorized request.
-const authzLogFieldCount = 7
+// authzLogFieldCount is the shared field count plus the most any caller appends
+// to it: an effect, a grant source, and a matched rule. Reserving it keeps the
+// append from growing the slice, which would cost a second allocation and a copy
+// on every authorized request.
+const authzLogFieldCount = 9
 
 // authzLogFields builds the field set shared by every authz log entry, so
 // entries stay correlatable by trace_id no matter which branch produced them.

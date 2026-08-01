@@ -62,6 +62,12 @@ func (noop) Authorize(ctx context.Context, tenant string, subject string, object
 	return false, nil
 }
 
+func (noop) AuthorizeExplained(
+	ctx context.Context, tenant string, subject string, object string, action string,
+) (bool, consts.GrantSource, []string, error) {
+	return false, "", nil, nil
+}
+
 func (noop) AddRole(ctx context.Context, tenant string, role string) error    { return nil }
 func (noop) RemoveRole(ctx context.Context, tenant string, role string) error { return nil }
 func (noop) GrantPermission(ctx context.Context, tenant string, role string, object string, action string) error {
@@ -131,6 +137,65 @@ func (r *rbac) Authorize(ctx context.Context, tenant string, subject string, obj
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.enforcer.Enforce(tenant, subject, object, action)
+}
+
+// policyRoleColumn is the position of the role token in a p policy row. The
+// policy definition is (tenant, role, obj, act, eft), so a row Casbin reports as
+// the matched one carries its role here.
+const policyRoleColumn = 1
+
+// AuthorizeExplained evaluates the request and re-derives which matcher branch
+// allowed it.
+//
+// The branches are checked in the order the matcher lists them, strongest
+// first, and this order is load-bearing: a subject can satisfy several at once,
+// and naming a weaker one would suggest that revoking it takes the access away.
+// A system_root subject that also holds a role granting the same route must be
+// reported as system_root, or an operator who then strips the role will find the
+// route still reachable and no explanation for it.
+//
+// Keep this sequence aligned with the matcher in modelData. Nothing enforces the
+// agreement: drift leaves the decisions correct and only the explanations wrong,
+// which is the kind of fault that survives review.
+//
+// Only the two policy-driven branches yield a matched rule. The branches above
+// them never consult a policy, so every stored row satisfies the matcher and
+// Casbin reports whichever came first — an arbitrary row that would read as the
+// reason for access.
+func (r *rbac) AuthorizeExplained(
+	ctx context.Context, tenant string, subject string, object string, action string,
+) (bool, consts.GrantSource, []string, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// The engine is called directly rather than through the exported helpers
+	// below: those take the same read lock, and re-entering it deadlocks once a
+	// writer is queued.
+	allowed, matchedRule, err := r.enforcer.EnforceEx(tenant, subject, object, action)
+	if err != nil || !allowed {
+		return allowed, "", nil, err
+	}
+
+	systemRoot, err := r.enforcer.HasNamedGroupingPolicy(systemRoleGrouping, subject, consts.AUTHZ_SYSTEM_ROLE_ROOT)
+	if err != nil {
+		return allowed, "", nil, err
+	}
+	if systemRoot {
+		return allowed, consts.GrantSourceSystemRoot, nil, nil
+	}
+
+	tenantAdmin, err := r.enforcer.HasGroupingPolicy(subject, consts.AUTHZ_ROLE_ADMIN, tenant)
+	if err != nil {
+		return allowed, "", nil, err
+	}
+	if tenantAdmin {
+		return allowed, consts.GrantSourceTenantAdmin, nil, nil
+	}
+
+	if len(matchedRule) > policyRoleColumn && matchedRule[policyRoleColumn] == consts.AUTHZ_ROLE_AUTHENTICATED {
+		return allowed, consts.GrantSourceAuthenticated, matchedRule, nil
+	}
+	return allowed, consts.GrantSourceRole, matchedRule, nil
 }
 
 // AddRole is a no-op because Casbin creates roles implicitly when a tenant

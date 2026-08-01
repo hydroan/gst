@@ -490,6 +490,28 @@ const (
 	AUTHZ_ROLE_AUTHENTICATED = "authenticated"
 )
 
+// GrantSource names the kind of rule that allowed a request. An allowed request
+// has exactly one source: a subject may satisfy several authorization rules at
+// once, and the source reports the strongest of them, because removing a weaker
+// grant would leave the request allowed anyway.
+type GrantSource string
+
+const (
+	// GrantSourceSystemRoot is the system-level super-admin role, which allows
+	// every request in every tenant without consulting a policy.
+	GrantSourceSystemRoot GrantSource = "system_root"
+	// GrantSourceTenantAdmin is the built-in admin role, which allows every
+	// request inside its own tenant without consulting a policy.
+	GrantSourceTenantAdmin GrantSource = "tenant_admin"
+	// GrantSourceAuthenticated is a policy written for the implicit
+	// authenticated role, which allows the request for every authenticated
+	// subject regardless of the roles it holds.
+	GrantSourceAuthenticated GrantSource = "authenticated"
+	// GrantSourceRole is a policy granted to a role the subject holds in the
+	// request tenant.
+	GrantSourceRole GrantSource = "role"
+)
+
 type Effect string
 
 const (
