@@ -11,22 +11,15 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types/consts"
+	"gorm.io/gorm"
 )
 
 var adapter *gormadapter.Adapter
 
-type casbinRule struct {
-	ID    uint64 `gorm:"primaryKey;autoIncrement:true"`
-	Ptype string `gorm:"size:100"`
-	V0    string `gorm:"size:100"`
-	V1    string `gorm:"size:100"`
-	V2    string `gorm:"size:100"`
-	V3    string `gorm:"size:100"`
-	V4    string `gorm:"size:100"`
-	V5    string `gorm:"size:100"`
-}
-
-func (casbinRule) TableName() string { return "casbin_rule" }
+// policyTable is the table the Casbin adapter reads and writes. Its schema is
+// owned by the CasbinRule model, so the name has to agree with that model's
+// GetTableName.
+const policyTable = "casbin_rule"
 
 var defaultSystemRootSubjects = []string{
 	consts.AUTHZ_USER_ROOT,
@@ -101,9 +94,17 @@ func Init() (err error) {
 		return nil
 	}
 
-	// gormadapter.NewAdapterByDBWithCustomTable creates the Casbin policy table
-	// with an auto-incrementing primary key managed by the adapter.
-	if adapter, err = gormadapter.NewAdapterByDBWithCustomTable(database.DB(), new(casbinRule), "casbin_rule"); err != nil {
+	// The adapter is told not to migrate: the policy table belongs to the
+	// registered CasbinRule model, so it is created and indexed by the same
+	// migration path as every other table. Letting the adapter migrate too would
+	// mean two definitions of one table, and would issue DDL at startup even
+	// where the framework deliberately leaves schema changes to gg migrate.
+	//
+	// TurnOffAutoMigrate overwrites the handle it is given in place, so it gets a
+	// session copy rather than the shared root handle.
+	handle := database.DB().Session(new(gorm.Session))
+	gormadapter.TurnOffAutoMigrate(handle)
+	if adapter, err = gormadapter.NewAdapterByDBUseTableName(handle, "", policyTable); err != nil {
 		return errors.Wrap(err, "failed to create casbin adapter")
 	}
 	model, err := casbinmodel.NewModelFromString(string(modelData))
