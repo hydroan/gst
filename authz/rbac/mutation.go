@@ -2,6 +2,7 @@ package rbac
 
 import (
 	"context"
+	"sync/atomic"
 
 	casbinmodel "github.com/casbin/casbin/v3/model"
 	"github.com/cockroachdb/errors"
@@ -137,11 +138,34 @@ func (r *rbac) mutate(ctx context.Context, mutations ...policyMutation) error {
 		if err := r.applyToStore(ctx, mutations); err != nil {
 			return err
 		}
+		// Numbered here, after the rows are written and before the commit, so
+		// that the memory half can tell whether it is still the newest word on
+		// what it changed. See policySequence.
+		sequence := policySequence.Add(1)
 		return database.AfterCommit(ctx, func(ctx context.Context) error {
-			return r.applyToModel(ctx, mutations)
+			return r.applyToModel(ctx, sequence, mutations)
 		})
 	})
 }
+
+// policySequence orders policy writes by the order storage accepted them.
+//
+// A batch takes its number after its rows are written and before its
+// transaction commits. Row locks make that placement meaningful: a batch
+// overwriting rules another batch is holding cannot reach its own numbering
+// until that other batch commits and releases them. So for any two batches
+// whose rules overlap — the only pairs whose order can matter — the numbers run
+// the same way storage settled it.
+//
+// The counter is per process, which is the same reach the in-memory model has.
+// Nothing here claims to order writes against another replica's memory; a
+// replica learns of writes it did not make only by reloading.
+var policySequence atomic.Uint64
+
+// appliedSequence is the number of the newest batch the in-memory model has
+// taken. It is read and written only under the enforcer write lock, which every
+// applier holds for the whole of its update.
+var appliedSequence uint64
 
 // applyToStore writes the mutations through the adapter, which resolves the
 // context transaction per call.
@@ -175,9 +199,30 @@ func (r *rbac) applyToStore(ctx context.Context, mutations []policyMutation) err
 //
 // A failure here leaves memory behind the database, which the enforcer cannot
 // repair on its own, so the model is reloaded from storage as a last resort.
-func (r *rbac) applyToModel(ctx context.Context, mutations []policyMutation) error {
+//
+// A batch overtaken between its commit and this point does not replay at all.
+// Nothing orders the memory halves of two transactions against each other: the
+// commit settles their order in storage, and which goroutine then reaches the
+// lock first is the scheduler's business. Replaying an overtaken batch would
+// undo the newer one in memory only, leaving decisions that disagree with
+// storage for as long as the process runs. Its rules cannot simply be dropped
+// either — the newer batch may have changed different rules entirely — so the
+// model is rebuilt from storage, which is the one answer that is right whatever
+// the two batches touched.
+func (r *rbac) applyToModel(ctx context.Context, sequence uint64, mutations []policyMutation) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	overtaken := sequence < appliedSequence
+	appliedSequence = max(appliedSequence, sequence)
+	if overtaken {
+		logger.Authz.Warnz(
+			"rbac policy write was overtaken before reaching memory, reloading from storage",
+			zap.Uint64("sequence", sequence),
+			zap.Uint64("applied_sequence", appliedSequence),
+		)
+		return r.reloadLocked(ctx)
+	}
 
 	model := r.enforcer.GetModel()
 	for _, mutation := range mutations {

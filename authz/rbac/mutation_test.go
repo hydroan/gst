@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/casbin/casbin/v3"
 	casbinmodel "github.com/casbin/casbin/v3/model"
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dbruntime"
@@ -17,16 +18,39 @@ import (
 // dbruntimeDB is the package's test database handle.
 func dbruntimeDB() *gorm.DB { return dbruntime.DB }
 
-// storedRBAC pairs the in-memory enforcer with a real adapter over a real
-// table, so a test can assert what a write left in storage as well as in memory.
+// storedRBAC pairs an enforcer with a real adapter over a real table, so a test
+// can assert what a write left in storage as well as in memory.
+//
+// The enforcer is given the same adapter rather than a null one, so that
+// reloading the model actually reads the table back.
 func storedRBAC(tb testing.TB, table string) (*rbac, *adapter) {
 	tb.Helper()
 	store := newPolicyTable(tb, table)
-	return &rbac{
-		enforcer: newTestEnforcer(tb, 0),
-		adapter:  store,
-		mu:       &enforcerMu,
-	}, store
+
+	m, err := casbinmodel.NewModelFromString(string(modelData))
+	require.NoError(tb, err)
+	ctxEnforcer, err := casbin.NewContextEnforcer(m, store)
+	require.NoError(tb, err)
+	enforcer, ok := ctxEnforcer.(*casbin.ContextEnforcer)
+	require.True(tb, ok, "expected a context enforcer")
+	enforcer.EnableAutoSave(false)
+
+	return &rbac{enforcer: enforcer, adapter: store, mu: &enforcerMu}, store
+}
+
+// memoryRules returns every rule the in-memory model holds, in the same shape
+// storedRules reports, so the two can be compared directly.
+func memoryRules(tb testing.TB, r *rbac) []string {
+	tb.Helper()
+	rules := make([]string, 0)
+	for _, sec := range []string{"p", "g"} {
+		for ptype, ast := range r.enforcer.GetModel()[sec] {
+			for _, rule := range ast.Policy {
+				rules = append(rules, ptype+":"+strings.Join(rule, ","))
+			}
+		}
+	}
+	return rules
 }
 
 // storedRules returns every rule the table holds, as the loader sees it.
@@ -209,4 +233,39 @@ func TestMutateIsAtomicWithoutACallerTransaction(t *testing.T) {
 	allowed, err := r.Authorize(ctx, "tenant_a", "u1", "/api/things", "GET")
 	require.NoError(t, err)
 	assert.False(t, allowed, "no subject holds the role, so nothing changed in memory either")
+}
+
+// TestApplyToModelRebuildsWhenOvertaken covers two writes to the same role
+// whose memory halves run in the opposite order from their commits.
+//
+// The commit settles which write storage kept; which goroutine then reaches the
+// enforcer lock first does not, and nothing orders the two. Replaying the
+// older batch at that point would leave the process deciding from a permission
+// set storage has already replaced, for as long as it runs — and comparing
+// stored rules against the records they come from cannot see it, because
+// storage is not the half that is wrong.
+func TestApplyToModelRebuildsWhenOvertaken(t *testing.T) {
+	r, store := storedRBAC(t, "policy_overtaken")
+	ctx := context.Background()
+
+	// The older write, held back before its memory half runs.
+	older := []policyMutation{
+		removeFiltered("p", "p", 0, "tenant_a", "role_a"),
+		addRules("p", "p", []string{"tenant_a", "role_a", "/api/old", "GET", "allow"}),
+	}
+	require.NoError(t, r.applyToStore(ctx, older))
+	olderSequence := policySequence.Add(1)
+
+	// The newer write lands in storage and in memory while the older one waits.
+	require.NoError(t, r.SetRolePermissions(ctx, "tenant_a", "role_a", []types.Permission{
+		{Object: "/api/new", Action: "GET"},
+	}))
+	require.Equal(t, []string{"p:tenant_a,role_a,/api/new,GET,allow"}, storedRules(t, store))
+	require.Equal(t, []string{"p:tenant_a,role_a,/api/new,GET,allow"}, memoryRules(t, r))
+
+	// The older memory half finally runs, out of order.
+	require.NoError(t, r.applyToModel(ctx, olderSequence, older))
+
+	assert.Equal(t, storedRules(t, store), memoryRules(t, r),
+		"an overtaken write must not put memory back to a permission set storage has replaced")
 }
