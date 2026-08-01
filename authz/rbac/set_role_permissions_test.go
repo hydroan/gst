@@ -168,8 +168,9 @@ func TestSetPermissionsForAuthenticatedReplacesTheWholeSet(t *testing.T) {
 	r := newRolePermissionsFixture(t)
 	ctx := context.Background()
 
-	if err := r.SetPermissionsForAuthenticated(ctx, map[string][]string{
-		"/api/open": {"GET", "POST"},
+	if err := r.SetPermissionsForAuthenticated(ctx, []types.Permission{
+		{Object: "/api/open", Action: "GET"},
+		{Object: "/api/open", Action: "POST"},
 	}); err != nil {
 		t.Fatal(err)
 	}

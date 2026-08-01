@@ -444,18 +444,6 @@ type DistributedCache[T any] interface {
 	DeleteWithSync(key string) error
 }
 
-// Permission is one operation a role is allowed to perform on one object. It is
-// the unit the whole-set replacement methods on RBAC take, so a caller states a
-// role's permissions as a set rather than as a sequence of grants.
-type Permission struct {
-	// Object is the protected resource, usually a route path template such as
-	// /api/things/{id}.
-	Object string
-
-	// Action is the operation on that object, usually an HTTP method.
-	Action string
-}
-
 // RBAC provides tenant-scoped role, permission, and subject assignment operations.
 // When RBAC is disabled or not initialized, the framework may provide a safe
 // no-op implementation whose methods succeed without side effects.
@@ -484,12 +472,6 @@ type RBAC interface {
 	// Callers that only need the decision should use Authorize; this one does
 	// the extra work of explaining it.
 	AuthorizeExplained(ctx context.Context, tenant string, subject string, object string, action string) (allowed bool, source consts.GrantSource, matchedRule []string, err error)
-
-	// AddRole ensures role is available inside tenant.
-	// Casbin-backed implementations may create roles implicitly when policies or
-	// grouping rules are added, so this method can be a lifecycle hook with no
-	// persistent side effect.
-	AddRole(ctx context.Context, tenant string, role string) error
 
 	// RemoveRole removes role from tenant, including its permission policies and
 	// subject assignments. Callers should use this when deleting a role record so
@@ -528,21 +510,18 @@ type RBAC interface {
 	SetRolePermissions(ctx context.Context, tenant string, role string, permissions []Permission) error
 
 	// SetPermissionsForAuthenticated replaces the entire set of permissions every
-	// authenticated subject holds. permissions maps each object to the actions
-	// allowed on it, the same shape a router reports its registered routes in.
-	// The grant is bound to neither a tenant nor a role, so it reaches subjects
-	// that hold no role at all, in every tenant.
+	// authenticated subject holds. The grant is bound to neither a tenant nor a
+	// role, so it reaches subjects that hold no role at all, in every tenant.
 	//
-	// It replaces rather than adds on purpose: the argument is the whole truth,
-	// so dropping an entry revokes it. A grant-only API would leave a removed
-	// entry allowing every subject forever, with nothing left in the source to
-	// show it. Passing an empty map revokes everything.
+	// It is SetRolePermissions for the implicit role every authenticated subject
+	// carries, and shares its contract: the argument is the whole truth, an empty
+	// set revokes everything, and the whole set is applied as one step.
 	//
 	// Reserve it for objects that answer only about the caller and already narrow
 	// their result to what the caller may see; anything else granted this way
 	// becomes reachable by every subject that can log in. Unauthenticated requests
 	// are unaffected, because authorization runs only after authentication.
-	SetPermissionsForAuthenticated(ctx context.Context, permissions map[string][]string) error
+	SetPermissionsForAuthenticated(ctx context.Context, permissions []Permission) error
 
 	// AssignRole assigns subject to role inside tenant.
 	// This creates tenant membership for subject and makes the role's

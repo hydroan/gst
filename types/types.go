@@ -22,6 +22,18 @@ type ControllerConfig[M Model] struct {
 	Route string
 }
 
+// Permission is one operation a role is allowed to perform on one object. It is
+// the unit the whole-set replacement methods on RBAC take, so a caller states a
+// role's permissions as a set rather than as a sequence of grants.
+type Permission struct {
+	// Object is the protected resource, usually a route path template such as
+	// /api/things/{id}.
+	Object string
+
+	// Action is the operation on that object, usually an HTTP method.
+	Action string
+}
+
 // QueryOptions tunes how WithQuery turns a model value into WHERE conditions.
 // Every condition it produces is AND-combined; the zero value means exact
 // matching with the empty-query safety check enabled. See the WithQuery method

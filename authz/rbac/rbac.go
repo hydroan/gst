@@ -69,7 +69,6 @@ func (noop) AuthorizeExplained(
 	return false, "", nil, nil
 }
 
-func (noop) AddRole(ctx context.Context, tenant string, role string) error    { return nil }
 func (noop) RemoveRole(ctx context.Context, tenant string, role string) error { return nil }
 func (noop) GrantPermission(ctx context.Context, tenant string, role string, object string, action string) error {
 	return nil
@@ -85,7 +84,7 @@ func (noop) SetRolePermissions(
 	return nil
 }
 
-func (noop) SetPermissionsForAuthenticated(ctx context.Context, permissions map[string][]string) error {
+func (noop) SetPermissionsForAuthenticated(ctx context.Context, permissions []types.Permission) error {
 	return nil
 }
 
@@ -205,12 +204,6 @@ func (r *rbac) AuthorizeExplained(
 	return allowed, consts.GrantSourceRole, matchedRule, nil
 }
 
-// AddRole is a no-op because Casbin creates roles implicitly when a tenant
-// receives permissions or grouping policies for that role.
-func (r *rbac) AddRole(ctx context.Context, tenant string, role string) error {
-	return nil
-}
-
 // RemoveRole removes all policies and subject assignments for role in tenant.
 func (r *rbac) RemoveRole(ctx context.Context, tenant string, role string) (err error) {
 	ctx, finishSpan := traceRBAC(ctx, "remove_role", rbacTraceFields(tenant, role))
@@ -286,15 +279,14 @@ func (r *rbac) SetRolePermissions(
 // from a real one only in the tenant and role the policies are stored under, and
 // keeping one implementation means the atomicity both depend on cannot hold for
 // one of them and not the other.
-func (r *rbac) SetPermissionsForAuthenticated(ctx context.Context, permissions map[string][]string) (err error) {
+func (r *rbac) SetPermissionsForAuthenticated(ctx context.Context, permissions []types.Permission) (err error) {
 	ctx, finishSpan := traceRBAC(ctx, "set_permissions_for_authenticated",
 		rbacTraceFields(authenticatedPolicyTenant, consts.AUTHZ_ROLE_AUTHENTICATED))
 	defer func() {
 		finishSpan(err)
 	}()
 
-	return r.replacePermissions(ctx, authenticatedPolicyTenant, consts.AUTHZ_ROLE_AUTHENTICATED,
-		permissionsFromObjectActions(permissions))
+	return r.replacePermissions(ctx, authenticatedPolicyTenant, consts.AUTHZ_ROLE_AUTHENTICATED, permissions)
 }
 
 // replacePermissions swaps the whole permission set stored for role in tenant
@@ -325,11 +317,16 @@ func (r *rbac) replacePermissions(
 	return nil
 }
 
-// permissionPolicies renders permissions as p policy rows for role in tenant,
-// dropping repeats. Casbin's batch insert does not deduplicate within a batch,
-// so a caller listing the same permission twice would otherwise store it twice.
+// permissionPolicies renders permissions as p policy rows for role in tenant.
+//
+// It drops repeats because Casbin's batch insert does not deduplicate within a
+// batch, so a caller listing the same permission twice would otherwise store it
+// twice. It sorts because the stored order decides which rule Casbin reports as
+// the matched one: an order that followed the caller's would make
+// AuthorizeExplained name a different rule for the same request whenever the
+// caller derived its set from an unordered source.
 func permissionPolicies(tenant string, role string, permissions []types.Permission) [][]string {
-	rules := make([][]string, 0, len(permissions))
+	unique := make([]types.Permission, 0, len(permissions))
 	seen := make(map[types.Permission]struct{}, len(permissions))
 	for _, permission := range permissions {
 		if permission.Object == "" || permission.Action == "" {
@@ -339,33 +336,22 @@ func permissionPolicies(tenant string, role string, permissions []types.Permissi
 			continue
 		}
 		seen[permission] = struct{}{}
-		rules = append(rules, []string{
-			tenant, role, permission.Object, permission.Action, string(consts.EffectAllow),
-		})
+		unique = append(unique, permission)
 	}
-	return rules
-}
-
-// permissionsFromObjectActions flattens the object-to-actions shape a router
-// reports its routes in. The result is sorted so that replacing a set with an
-// equal one stores the rows in the same order every time: the order decides
-// which rule Casbin reports as the matched one, and an order that changed on
-// every restart would make AuthorizeExplained name a different rule for the
-// same request.
-func permissionsFromObjectActions(permissions map[string][]string) []types.Permission {
-	flattened := make([]types.Permission, 0, len(permissions))
-	for object, actions := range permissions {
-		for _, action := range actions {
-			flattened = append(flattened, types.Permission{Object: object, Action: action})
-		}
-	}
-	slices.SortFunc(flattened, func(a, b types.Permission) int {
+	slices.SortFunc(unique, func(a, b types.Permission) int {
 		if c := strings.Compare(a.Object, b.Object); c != 0 {
 			return c
 		}
 		return strings.Compare(a.Action, b.Action)
 	})
-	return flattened
+
+	rules := make([][]string, 0, len(unique))
+	for _, permission := range unique {
+		rules = append(rules, []string{
+			tenant, role, permission.Object, permission.Action, string(consts.EffectAllow),
+		})
+	}
+	return rules
 }
 
 // RevokeRolePermissions removes every permission policy granted to role in tenant.
