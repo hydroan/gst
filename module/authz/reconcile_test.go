@@ -8,6 +8,7 @@ import (
 	"github.com/hydroan/gst/database"
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
 	"github.com/hydroan/gst/module/authz"
+	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
@@ -28,16 +29,16 @@ func TestReconcilePoliciesDetectsDrift(t *testing.T) {
 	t.Run("reports a permission no record derives", func(t *testing.T) {
 		role := util.UUID()
 		object := "/api/reconcile/" + role
-		require.NoError(t, rbac.RBAC().SetRolePermissions(ctx, rbac.DefaultTenant, role, []types.Permission{
+		require.NoError(t, rbac.RBAC().SetRolePermissions(ctx, tenant.Default, role, []types.Permission{
 			{Object: object, Action: "GET"},
 		}))
-		t.Cleanup(func() { _ = rbac.RBAC().RevokeRolePermissions(ctx, rbac.DefaultTenant, role) })
+		t.Cleanup(func() { _ = rbac.RBAC().RevokeRolePermissions(ctx, tenant.Default, role) })
 
 		report, err := authz.ReconcilePolicies(ctx)
 		require.NoError(t, err)
 		require.Contains(t, report.Drifts, authz.PolicyDrift{
 			Kind: "permission", Direction: "orphaned",
-			Tenant: rbac.DefaultTenant, Role: role, Object: object, Action: "GET",
+			Tenant: tenant.Default, Role: role, Object: object, Action: "GET",
 		}, "a permission granted to a role that does not exist should be reported")
 	})
 
@@ -49,7 +50,7 @@ func TestReconcilePoliciesDetectsDrift(t *testing.T) {
 		rules := make([]*modelauthz.CasbinRule, 0)
 		require.NoError(t, database.Database[*modelauthz.CasbinRule](ctx).
 			WithQuery(&modelauthz.CasbinRule{
-				Ptype: "g", V0: binding.SubjectID, V1: binding.RoleID, V2: rbac.DefaultTenant,
+				Ptype: "g", V0: binding.SubjectID, V1: binding.RoleID, V2: tenant.Default,
 			}).List(&rules))
 		require.Len(t, rules, 1, "the binding should have stored exactly one grouping rule")
 		require.NoError(t, database.Database[*modelauthz.CasbinRule](ctx).Delete(rules...))
@@ -58,7 +59,7 @@ func TestReconcilePoliciesDetectsDrift(t *testing.T) {
 		require.NoError(t, err)
 		require.Contains(t, report.Drifts, authz.PolicyDrift{
 			Kind: "binding", Direction: "missing",
-			Tenant: rbac.DefaultTenant, Role: binding.RoleID, Subject: binding.SubjectID,
+			Tenant: tenant.Default, Role: binding.RoleID, Subject: binding.SubjectID,
 		}, "a binding record with no stored rule should be reported")
 	})
 }

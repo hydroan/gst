@@ -8,6 +8,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -123,6 +124,11 @@ func (m *Menu) UpdateBefore(ctx context.Context) error       { return m.validate
 
 // UpdateAfter refreshes permissions for roles that contain the current menu.
 func (m *Menu) UpdateAfter(ctx context.Context) error {
+	// A menu belongs to no tenant, so what it implies has to be recomputed for
+	// the roles of every tenant. Left scoped, this would refresh one tenant's
+	// roles and leave the rest holding permissions the menu no longer grants.
+	ctx = tenant.Across(ctx)
+
 	roles := make([]*Role, 0)
 	if err := database.Database[*Role](ctx).List(&roles); err != nil {
 		return err
@@ -141,6 +147,10 @@ func (m *Menu) UpdateAfter(ctx context.Context) error {
 
 // DeleteBefore removes the menu from roles before the menu row is deleted.
 func (m *Menu) DeleteBefore(ctx context.Context) error {
+	// Same reach as UpdateAfter: the menu is global, so removing it has to be
+	// removed from every tenant's roles.
+	ctx = tenant.Across(ctx)
+
 	roles := make([]*Role, 0)
 	if err := database.Database[*Role](ctx).List(&roles); err != nil {
 		return err

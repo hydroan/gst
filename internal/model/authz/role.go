@@ -9,6 +9,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap/zapcore"
@@ -16,18 +17,14 @@ import (
 )
 
 type Role struct {
-	TenantID string `json:"tenant_id,omitempty" query:"tenant_id" gorm:"size:191;default:default;uniqueIndex:idx_authz_roles_tenant_name"`
+	tenant.Scope
 
 	// Name is the human-readable role name, unique within a tenant. Renaming
 	// is free: casbin policies and role bindings reference the immutable ID,
 	// never the name.
-	Name string `json:"name,omitempty" query:"name" gorm:"size:191;uniqueIndex:idx_authz_roles_tenant_name"`
+	Name string `json:"name,omitempty" query:"name" gorm:"size:191"`
 
 	Default *bool `json:"default,omitempty" query:"default"`
-
-	// Scope holds generic constraints for regional roles.
-	// Keys and values are user-defined and framework-agnostic.
-	Scope datatypes.JSONMap `json:"scope,omitempty"`
 
 	// MenuIDs grants backend route permissions through each selected menu's
 	// Routes, and marks those menus as fully selected in the frontend menu tree.
@@ -58,11 +55,21 @@ func (Role) Design() {
 
 func (r *Role) Purge() bool { return true }
 
+// Indexes declares the uniqueness of a role name inside its tenant.
+//
+// It moved off the struct tags because the tenant column now arrives through an
+// embedded struct, and a tag on an embedded field cannot name a field beside it.
+// The columns and the uniqueness are what they were; only the generated name
+// differs, which is the framework's to choose.
+func (Role) Indexes() []model.Index {
+	return []model.Index{{Fields: []string{"TenantID", "Name"}, Unique: true}}
+}
+
 func (r *Role) tenant() string {
 	if r != nil && len(r.TenantID) > 0 {
-		return r.TenantID
+		return string(r.TenantID)
 	}
-	return rbac.DefaultTenant
+	return tenant.Default
 }
 
 func (r *Role) validate() error {
@@ -127,18 +134,13 @@ func (r *Role) UpdateBefore(ctx context.Context) error {
 		return err
 	}
 
+	// The tenant is neither read back nor compared. Two things already settle
+	// it: the row this update can reach is scoped to the caller's tenant, so
+	// another tenant's role is not found at all, and the tenant column is
+	// written on insert and never again, so no update can move a role between
+	// tenants whatever it sends.
 	current := new(Role)
-	if err := database.Database[*Role](ctx).Get(current, r.ID); err != nil {
-		return err
-	}
-
-	if len(r.TenantID) == 0 {
-		r.TenantID = current.TenantID
-	}
-	if current.tenant() != r.tenant() {
-		return errors.New("role tenant is immutable")
-	}
-	return nil
+	return database.Database[*Role](ctx).Get(current, r.ID)
 }
 
 // UpdateAfter syncs the role's permissions after the role row has been persisted.
@@ -164,8 +166,10 @@ func (r *Role) DeleteBefore(ctx context.Context) error {
 		r.TenantID = current.TenantID
 	}
 
+	// The role ID alone identifies the bindings: it is unique across tenants,
+	// and the listing is scoped to the caller's tenant anyway.
 	roleBindings := make([]*RoleBinding, 0)
-	if err := database.Database[*RoleBinding](ctx).WithQuery(&RoleBinding{TenantID: r.tenant(), RoleID: r.ID}).List(&roleBindings); err != nil {
+	if err := database.Database[*RoleBinding](ctx).WithQuery(&RoleBinding{RoleID: r.ID}).List(&roleBindings); err != nil {
 		return err
 	}
 	if len(roleBindings) > 0 {
@@ -238,7 +242,7 @@ func (r *Role) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	if r == nil {
 		return nil
 	}
-	enc.AddString("tenant_id", r.TenantID)
+	enc.AddString("tenant_id", string(r.TenantID))
 	enc.AddString("name", r.Name)
 	enc.AddString("id", r.ID)
 	return nil

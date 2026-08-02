@@ -10,6 +10,7 @@ import (
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
 )
@@ -91,7 +92,7 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 			logAuthzDecision(c, "", sub, obj, act, consts.EffectDeny)
 			return
 		}
-		tenant, err := resolveAuthzTenant(c, cfg.TenantResolver)
+		tenantID, err := resolveAuthzTenant(c, cfg.TenantResolver)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 				"code":          -1,
@@ -104,27 +105,37 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 			logAuthzFailure(c, "", sub, obj, act, err)
 			return
 		}
-		tenant = strings.TrimSpace(tenant)
-		if tenant == "" {
-			tenant = rbac.DefaultTenant
+		tenantID = strings.TrimSpace(tenantID)
+		if tenantID == "" {
+			tenantID = tenant.Default
 		}
-		c.Set(consts.CTX_TENANT_ID, tenant)
+		c.Set(consts.CTX_TENANT_ID, tenantID)
 
 		var source consts.GrantSource
 		var matchedRule []string
 		if allow, source, matchedRule, err = rbac.RBAC().
-			AuthorizeExplained(c.Request.Context(), tenant, sub, obj, act); err != nil {
+			AuthorizeExplained(c.Request.Context(), tenantID, sub, obj, act); err != nil {
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 				"code":          -1,
 				"msg":           "authorization failed",
 				"data":          nil,
 				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 			})
-			logAuthzFailure(c, tenant, sub, obj, act, err)
+			logAuthzFailure(c, tenantID, sub, obj, act, err)
 			return
 		}
 		if allow {
-			logAuthzGrant(c, tenant, sub, obj, act, source, matchedRule)
+			// A subject allowed as system_root was not authorized in any one
+			// tenant — the matcher grants it every object in every tenant — so
+			// binding its rows to one would leave the two halves disagreeing:
+			// allowed to see everything, shown a slice. The scope is taken from
+			// the authorization decision itself rather than looked up again,
+			// which is what keeps the reach of the data equal to the reach of
+			// the grant.
+			if source == consts.GrantSourceSystemRoot {
+				c.Request = c.Request.WithContext(tenant.Across(c.Request.Context()))
+			}
+			logAuthzGrant(c, tenantID, sub, obj, act, source, matchedRule)
 			c.Next()
 			return
 		}
@@ -134,7 +145,7 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 			"data":          nil,
 			consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 		})
-		logAuthzDecision(c, tenant, sub, obj, act, consts.EffectDeny)
+		logAuthzDecision(c, tenantID, sub, obj, act, consts.EffectDeny)
 	}
 }
 
@@ -236,7 +247,7 @@ func currentAuthzTenantResolver() TenantResolver {
 
 func defaultTenantResolver(c *gin.Context) (string, error) {
 	if c == nil {
-		return rbac.DefaultTenant, nil
+		return tenant.Default, nil
 	}
 	return strings.TrimSpace(c.GetString(consts.CTX_TENANT_ID)), nil
 }

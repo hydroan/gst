@@ -10,6 +10,7 @@ import (
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 )
@@ -74,7 +75,7 @@ func currentTenant(ctx *types.ServiceContext) string {
 	if ctx != nil && strings.TrimSpace(ctx.TenantID()) != "" {
 		return strings.TrimSpace(ctx.TenantID())
 	}
-	return rbac.DefaultTenant
+	return tenant.Default
 }
 
 // isSystemRoot reports whether actor has the framework-level root role.

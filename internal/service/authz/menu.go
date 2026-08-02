@@ -94,11 +94,11 @@ func visibleMenuIDs(ctx *types.ServiceContext, log types.Logger) ([]string, bool
 	if systemRoot {
 		return nil, false, nil
 	}
-	tenant := currentTenant(ctx)
-
+	// No tenant is named in the queries below: the rows they reach are already
+	// scoped to the tenant this request acts in.
 	roleBindings := make([]*modelauthz.RoleBinding, 0)
 	if err := database.Database[*modelauthz.RoleBinding](ctx).
-		WithQuery(&modelauthz.RoleBinding{TenantID: tenant, SubjectID: ctx.UserID()}).
+		WithQuery(&modelauthz.RoleBinding{SubjectID: ctx.UserID()}).
 		List(&roleBindings); err != nil {
 		return nil, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load role bindings", err)
 	}
@@ -116,7 +116,7 @@ func visibleMenuIDs(ctx *types.ServiceContext, log types.Logger) ([]string, bool
 			return nil, true, nil
 		}
 		if err := database.Database[*modelauthz.Role](ctx).
-			WithQuery(&modelauthz.Role{TenantID: tenant, Base: model.Base{ID: strings.Join(roleIDs, ",")}}).
+			WithQuery(&modelauthz.Role{Base: model.Base{ID: strings.Join(roleIDs, ",")}}).
 			List(&roles); err != nil {
 			return nil, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load roles", err)
 		}
@@ -126,7 +126,7 @@ func visibleMenuIDs(ctx *types.ServiceContext, log types.Logger) ([]string, bool
 		}
 	} else {
 		if err := database.Database[*modelauthz.Role](ctx).
-			WithQuery(&modelauthz.Role{TenantID: tenant, Default: new(true)}).
+			WithQuery(&modelauthz.Role{Default: new(true)}).
 			List(&roles); err != nil {
 			return nil, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load roles", err)
 		}
@@ -153,13 +153,6 @@ func visibleMenuIDs(ctx *types.ServiceContext, log types.Logger) ([]string, bool
 	}
 
 	return menuIDs, true, nil
-}
-
-func currentTenant(ctx *types.ServiceContext) string {
-	if ctx != nil && strings.TrimSpace(ctx.TenantID()) != "" {
-		return strings.TrimSpace(ctx.TenantID())
-	}
-	return rbac.DefaultTenant
 }
 
 // filterChildren narrows preloaded children by the same rules as the top level.

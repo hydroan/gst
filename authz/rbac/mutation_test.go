@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dbruntime"
 	prommetrics "github.com/hydroan/gst/metrics"
+	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
@@ -116,8 +117,8 @@ func TestMutateNormalizesEmptyTenant(t *testing.T) {
 	}))
 
 	assert.ElementsMatch(t, []string{
-		"g:u1,role_a," + DefaultTenant,
-		"p:" + DefaultTenant + ",role_a,/api/things,GET,allow",
+		"g:u1,role_a," + tenant.Default,
+		"p:" + tenant.Default + ",role_a,/api/things,GET,allow",
 	}, storedRules(t, store), "an omitted tenant must be stored as the default one")
 
 	// The rules load back into a fresh model, which is what a restart does.

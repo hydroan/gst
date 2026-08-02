@@ -7,6 +7,7 @@ import (
 	"github.com/hydroan/gst/authz/rbac"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 )
@@ -73,7 +74,7 @@ func currentTenant(ctx *types.ServiceContext) string {
 	if ctx != nil && strings.TrimSpace(ctx.TenantID()) != "" {
 		return strings.TrimSpace(ctx.TenantID())
 	}
-	return rbac.DefaultTenant
+	return tenant.Default
 }
 
 // operationObject returns the object string used for RBAC route authorization.

@@ -25,6 +25,7 @@ import (
 	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/provider/redis"
+	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
 	"github.com/stretchr/testify/require"
@@ -383,7 +384,7 @@ func TestAuthzMenu(t *testing.T) {
 
 			missingRoleID := "missing_default_fallback_role"
 			invalidRoleBinding := &authz.RoleBinding{
-				TenantID:  rbac.DefaultTenant,
+				Scope:     tenant.Scope{TenantID: tenant.Default},
 				SubjectID: userID,
 				RoleID:    missingRoleID,
 				Base:      model.Base{ID: util.HashID(userID, missingRoleID)},
@@ -391,12 +392,12 @@ func TestAuthzMenu(t *testing.T) {
 			require.NoError(t, database.Database[*authz.RoleBinding](context.Background()).WithoutHook().Create(invalidRoleBinding))
 			rbacPolicy := rbac.RBAC()
 			rbacCtx := context.Background()
-			require.NoError(t, rbacPolicy.AssignRole(rbacCtx, rbac.DefaultTenant, userID, missingRoleID))
-			require.NoError(t, rbacPolicy.GrantPermission(rbacCtx, rbac.DefaultTenant, missingRoleID, "/api/authz/menus", http.MethodGet))
+			require.NoError(t, rbacPolicy.AssignRole(rbacCtx, tenant.Default, userID, missingRoleID))
+			require.NoError(t, rbacPolicy.GrantPermission(rbacCtx, tenant.Default, missingRoleID, "/api/authz/menus", http.MethodGet))
 			t.Cleanup(func() {
 				_ = database.Database[*authz.RoleBinding](context.Background()).WithoutHook().WithPurge().Delete(invalidRoleBinding)
-				_ = rbacPolicy.UnassignRole(context.Background(), rbac.DefaultTenant, userID, missingRoleID)
-				_ = rbacPolicy.RevokePermission(context.Background(), rbac.DefaultTenant, missingRoleID, "/api/authz/menus", http.MethodGet)
+				_ = rbacPolicy.UnassignRole(context.Background(), tenant.Default, userID, missingRoleID)
+				_ = rbacPolicy.RevokePermission(context.Background(), tenant.Default, missingRoleID, "/api/authz/menus", http.MethodGet)
 				_, _ = cliRole.Delete(defaultRoleID)
 				_, _ = cli.Delete(defaultMenuID)
 			})
@@ -568,12 +569,12 @@ func TestAuthzRole(t *testing.T) {
 			testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper()
 				require.NotEmpty(t, rsp.ID)
-				require.Equal(t, rbac.DefaultTenant, rsp.TenantID)
+				require.EqualValues(t, tenant.Default, rsp.TenantID)
 				require.Equal(t, roleName, rsp.Name)
 				roleID = rsp.ID
 			})
-			requireCasbinPolicy(t, rbac.DefaultTenant, roleID, "/api/authz/roles", http.MethodGet, "allow")
-			requireNoCasbinPolicy(t, rbac.DefaultTenant, roleID, "/api/authz/roles", http.MethodPost, "allow")
+			requireCasbinPolicy(t, tenant.Default, roleID, "/api/authz/roles", http.MethodGet, "allow")
+			requireNoCasbinPolicy(t, tenant.Default, roleID, "/api/authz/roles", http.MethodPost, "allow")
 		})
 
 		t.Run("get", func(t *testing.T) {
@@ -619,20 +620,20 @@ func TestAuthzRole(t *testing.T) {
 				roleName = rsp.Name
 			})
 
-			requireCasbinPolicy(t, rbac.DefaultTenant, roleID, "/api/authz/roles", http.MethodGet, "allow")
+			requireCasbinPolicy(t, tenant.Default, roleID, "/api/authz/roles", http.MethodGet, "allow")
 
-			requireNoCasbinPolicy(t, rbac.DefaultTenant, nextName, "/api/authz/roles", http.MethodGet, "allow")
+			requireNoCasbinPolicy(t, tenant.Default, nextName, "/api/authz/roles", http.MethodGet, "allow")
 		})
 
 		t.Run("failed_tenant_update_keeps_existing_policy", func(t *testing.T) {
 			_, err = cli.Update(roleID, &authz.Role{
-				TenantID: "other",
-				Name:     roleName,
-				MenuIDs:  nil,
+				Scope:   tenant.Scope{TenantID: "other"},
+				Name:    roleName,
+				MenuIDs: nil,
 			})
 			require.Error(t, err)
 
-			requireCasbinPolicy(t, rbac.DefaultTenant, roleID, "/api/authz/roles", http.MethodGet, "allow")
+			requireCasbinPolicy(t, tenant.Default, roleID, "/api/authz/roles", http.MethodGet, "allow")
 		})
 
 		t.Run("patch", func(t *testing.T) {
@@ -742,12 +743,12 @@ func TestAuthzRoleBinding(t *testing.T) {
 			testutil.TestResp[*authz.RoleBinding](t, resp, func(t *testing.T, rsp *authz.RoleBinding) {
 				t.Helper()
 				require.NotEmpty(t, rsp.ID)
-				require.Equal(t, rbac.DefaultTenant, rsp.TenantID)
+				require.EqualValues(t, tenant.Default, rsp.TenantID)
 				require.Equal(t, userID, rsp.SubjectID)
 				require.Equal(t, roleID, rsp.RoleID)
 				roleBindingID = rsp.ID
 			})
-			requireCasbinGroupingPolicy(t, userID, roleID, rbac.DefaultTenant)
+			requireCasbinGroupingPolicy(t, userID, roleID, tenant.Default)
 		})
 
 		t.Run("get", func(t *testing.T) {
@@ -757,7 +758,7 @@ func TestAuthzRoleBinding(t *testing.T) {
 			testutil.TestResp[*authz.RoleBinding](t, resp, func(t *testing.T, rsp *authz.RoleBinding) {
 				t.Helper()
 				require.Equal(t, roleBindingID, rsp.ID)
-				require.Equal(t, rbac.DefaultTenant, rsp.TenantID)
+				require.EqualValues(t, tenant.Default, rsp.TenantID)
 				require.Equal(t, userID, rsp.SubjectID)
 				require.Equal(t, roleID, rsp.RoleID)
 			})
@@ -805,7 +806,7 @@ func TestAuthzRoleBinding(t *testing.T) {
 
 			remaining := make([]*authz.RoleBinding, 0)
 			err = database.Database[*authz.RoleBinding](context.Background()).
-				WithQuery(&authz.RoleBinding{TenantID: rbac.DefaultTenant, RoleID: deletedRoleID}).
+				WithQuery(&authz.RoleBinding{Scope: tenant.Scope{TenantID: tenant.Default}, RoleID: deletedRoleID}).
 				List(&remaining)
 			require.NoError(t, err)
 			require.Empty(t, remaining)
@@ -1114,15 +1115,17 @@ func authzPurgeLeftoverRole(t *testing.T, roleName string) {
 func authzCreateTenantRole(t *testing.T, tenantID, name string, menuIDs ...string) string {
 	t.Helper()
 
+	// The tenant comes from the context, which is what a request would supply;
+	// setting the column here would be overwritten by the stamp anyway.
+	ctx := tenant.In(context.Background(), tenantID)
 	role := &authz.Role{
-		Base:     model.Base{ID: util.HashID(tenantID, name)},
-		TenantID: tenantID,
-		Name:     name,
-		MenuIDs:  menuIDs,
+		Base:    model.Base{ID: util.HashID(tenantID, name)},
+		Name:    name,
+		MenuIDs: menuIDs,
 	}
-	require.NoError(t, database.Database[*authz.Role](context.Background()).Create(role))
+	require.NoError(t, database.Database[*authz.Role](ctx).Create(role))
 	t.Cleanup(func() {
-		_ = database.Database[*authz.Role](context.Background()).WithPurge().Delete(role)
+		_ = database.Database[*authz.Role](ctx).WithPurge().Delete(role)
 	})
 	return role.ID
 }
@@ -1130,14 +1133,14 @@ func authzCreateTenantRole(t *testing.T, tenantID, name string, menuIDs ...strin
 func authzBindTenantRole(t *testing.T, tenantID, subjectID, roleID string) {
 	t.Helper()
 
+	ctx := tenant.In(context.Background(), tenantID)
 	roleBinding := &authz.RoleBinding{
-		TenantID:  tenantID,
 		SubjectID: subjectID,
 		RoleID:    roleID,
 	}
-	require.NoError(t, database.Database[*authz.RoleBinding](context.Background()).Create(roleBinding))
+	require.NoError(t, database.Database[*authz.RoleBinding](ctx).Create(roleBinding))
 	t.Cleanup(func() {
-		_ = database.Database[*authz.RoleBinding](context.Background()).WithPurge().Delete(roleBinding)
+		_ = database.Database[*authz.RoleBinding](ctx).WithPurge().Delete(roleBinding)
 	})
 }
 

@@ -8,6 +8,7 @@ import (
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
+	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/util"
 	"github.com/stretchr/testify/require"
@@ -25,7 +26,7 @@ func TestPolicyWritesRollBackWithTheTransaction(t *testing.T) {
 	errRollback := errors.New("rollback the transaction")
 
 	t.Run("granting a permission", func(t *testing.T) {
-		tenant, role := rbac.DefaultTenant, util.UUID()
+		tenant, role := tenant.Default, util.UUID()
 		object := "/api/rollback/" + role
 
 		err := database.Transaction(ctx, func(ctx context.Context) error {
@@ -43,7 +44,7 @@ func TestPolicyWritesRollBackWithTheTransaction(t *testing.T) {
 	})
 
 	t.Run("assigning a role", func(t *testing.T) {
-		tenant, role := rbac.DefaultTenant, util.UUID()
+		tenant, role := tenant.Default, util.UUID()
 		subject := util.UUID()
 
 		err := database.Transaction(ctx, func(ctx context.Context) error {
@@ -61,7 +62,7 @@ func TestPolicyWritesRollBackWithTheTransaction(t *testing.T) {
 	})
 
 	t.Run("replacing a role's permissions", func(t *testing.T) {
-		tenant, role := rbac.DefaultTenant, util.UUID()
+		tenant, role := tenant.Default, util.UUID()
 		object := "/api/rollback/" + role
 
 		// A committed set to roll back onto, so the test also shows the
@@ -91,7 +92,7 @@ func TestPolicyWritesRollBackWithTheTransaction(t *testing.T) {
 // deferring the in-memory half until after the commit must not lose it.
 func TestPolicyWritesCommitWithTheTransaction(t *testing.T) {
 	ctx := context.Background()
-	tenant, role := rbac.DefaultTenant, util.UUID()
+	tenant, role := tenant.Default, util.UUID()
 	subject := util.UUID()
 	object := "/api/commit/" + role
 

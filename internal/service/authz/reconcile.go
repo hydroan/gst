@@ -6,9 +6,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
+	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types/consts"
 )
 
@@ -75,6 +75,12 @@ func (r PolicyReport) InSync() bool { return len(r.Drifts) == 0 }
 // any process holds, so its answer is the same from every replica and stays
 // meaningful on one whose memory has drifted.
 func ReconcilePolicies(ctx context.Context) (PolicyReport, error) {
+	// The stored rules cover every tenant, so the records they are compared
+	// against have to as well. Left scoped, the comparison would read one
+	// tenant's records against every tenant's rules and report the rest as
+	// orphaned — a report that is wrong in the direction of deleting access.
+	ctx = tenant.Across(ctx)
+
 	report := PolicyReport{Drifts: make([]PolicyDrift, 0)}
 
 	expected, err := expectedPolicies(ctx)
@@ -135,7 +141,7 @@ func expectedPolicies(ctx context.Context) (map[string]PolicyDrift, error) {
 
 	expected := make(map[string]PolicyDrift)
 	for _, role := range roles {
-		tenant := reconcileTenant(role.TenantID)
+		tenant := reconcileTenant(string(role.TenantID))
 		for _, menuID := range role.MenuIDs {
 			menu, ok := byMenuID[menuID]
 			if !ok {
@@ -152,7 +158,7 @@ func expectedPolicies(ctx context.Context) (map[string]PolicyDrift, error) {
 		}
 	}
 	for _, binding := range bindings {
-		tenant := reconcileTenant(binding.TenantID)
+		tenant := reconcileTenant(string(binding.TenantID))
 		key := policyKey("g", binding.SubjectID, binding.RoleID, tenant, "")
 		expected[key] = PolicyDrift{
 			Kind: "binding", Direction: "missing",
@@ -192,11 +198,11 @@ func driftFromRule(rule *modelauthz.CasbinRule, direction string) PolicyDrift {
 	}
 }
 
-func reconcileTenant(tenant string) string {
-	if strings.TrimSpace(tenant) == "" {
-		return rbac.DefaultTenant
+func reconcileTenant(id string) string {
+	if strings.TrimSpace(id) == "" {
+		return tenant.Default
 	}
-	return tenant
+	return id
 }
 
 // policyKey identifies a rule by the columns that decide it, so a stored row
