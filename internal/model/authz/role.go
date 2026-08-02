@@ -27,16 +27,10 @@ type Role struct {
 	Default *bool `json:"default,omitempty" query:"default"`
 
 	// MenuIDs grants backend route permissions through each selected menu's
-	// Routes, and marks those menus as fully selected in the frontend menu tree.
+	// Routes, and is the only source of frontend menu visibility.
 	MenuIDs datatypes.JSONSlice[string] `json:"menu_ids,omitempty"`
 
-	// MenuPartialIDs keeps partially selected parent menus visible in the
-	// frontend tree. It does not grant backend API permissions.
-	MenuPartialIDs datatypes.JSONSlice[string] `json:"menu_partial_ids,omitempty"`
-	ButtonIDs      datatypes.JSONSlice[string] `json:"button_ids,omitempty"`
-
-	Menus        []*Menu `json:"menus,omitempty" gorm:"-"`
-	MenuPartials []*Menu `json:"menu_partials,omitempty" gorm:"-"`
+	Menus []*Menu `json:"menus,omitempty" gorm:"-"`
 
 	model.Base
 }
@@ -182,9 +176,7 @@ func (r *Role) DeleteBefore(ctx context.Context) error {
 }
 
 // syncPermissions rebuilds Casbin policy rows for this role from Menu.Routes.
-// Role.MenuIDs is the authoritative source for backend route grants. MenuPartialIDs
-// only keeps partially selected parent menus visible in the frontend tree and must
-// not grant backend API access by itself.
+// Role.MenuIDs is the authoritative source for backend route grants.
 //
 // The whole set is replaced rather than diffed. Menu routes can be removed,
 // renamed, or have methods changed, and a diff-based update can leave stale Casbin

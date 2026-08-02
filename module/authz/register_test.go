@@ -295,20 +295,20 @@ func TestAuthzMenu(t *testing.T) {
 			require.Equal(t, testSuccessCode, resp.Code, "delete should return success")
 		})
 
-		t.Run("delete_removes_partial_menu_references", func(t *testing.T) {
-			authzPurgeLeftoverRole(t, "partial_menu_role")
+		t.Run("delete_removes_menu_references", func(t *testing.T) {
+			authzPurgeLeftoverRole(t, "menu_reference_role")
 
 			resp, err = cli.Create(&authz.Menu{
 				ParentID: "root",
-				Label:    "Partial Menu",
-				Path:     "/partial-menu",
+				Label:    "Referenced Menu",
+				Path:     "/referenced-menu",
 			})
 			require.NoError(t, err)
-			var partialMenuID string
+			var referencedMenuID string
 			testutil.TestResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
 				t.Helper()
 				require.NotEmpty(t, rsp.ID)
-				partialMenuID = rsp.ID
+				referencedMenuID = rsp.ID
 			})
 
 			var cliRole *client.Client
@@ -318,30 +318,30 @@ func TestAuthzMenu(t *testing.T) {
 			}))
 			require.NoError(t, err)
 			resp, err = cliRole.Create(&authz.Role{
-				Name:           "partial_menu_role",
-				MenuPartialIDs: []string{partialMenuID},
+				Name:    "menu_reference_role",
+				MenuIDs: []string{referencedMenuID},
 			})
 			require.NoError(t, err)
-			var partialRoleID string
+			var referencedRoleID string
 			testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper()
 				require.NotEmpty(t, rsp.ID)
-				partialRoleID = rsp.ID
+				referencedRoleID = rsp.ID
 			})
 
-			resp, err = cli.Delete(partialMenuID)
+			resp, err = cli.Delete(referencedMenuID)
 			require.NoError(t, err)
 			require.NotNil(t, resp)
 
 			got := new(authz.Role)
-			resp, err = cliRole.Get(partialRoleID, got)
+			resp, err = cliRole.Get(referencedRoleID, got)
 			require.NoError(t, err)
 			testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper()
-				require.NotContains(t, []string(rsp.MenuPartialIDs), partialMenuID)
+				require.NotContains(t, []string(rsp.MenuIDs), referencedMenuID)
 			})
 
-			resp, err = cliRole.Delete(partialRoleID)
+			resp, err = cliRole.Delete(referencedRoleID)
 			require.NoError(t, err)
 			require.NotNil(t, resp)
 		})

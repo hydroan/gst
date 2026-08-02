@@ -32,7 +32,7 @@
 - `GET /api/authz/role-bindings/:id`
 - `DELETE /api/authz/role-bindings/:id`
 
-`Role` 定义当前 tenant 下的一组权限。`Role.MenuIDs` 是后端路由权限生成的来源，`Role.MenuPartialIDs` 只用于前端菜单树中保留部分选中的父级节点，不直接授予后端 API 权限。
+`Role` 定义当前 tenant 下的一组权限。`Role.MenuIDs` 是后端路由权限生成的来源，同时也是前端菜单树可见范围的唯一来源。
 
 `RoleBinding` 表达某个 subject 在某个 tenant 内拥有某个 role。创建 binding 时，binding 的 `TenantID` 必须和目标 role 的 `TenantID` 一致。
 
@@ -40,7 +40,7 @@
 
 - `GET /api/authz/menus`
 
-该接口的资源来源是全局 `Menu` 目录，但响应会根据当前 request tenant 下的 `RoleBinding`、默认 role、`Role.MenuIDs`、`Role.MenuPartialIDs` 和 `Menu.DomainPattern` 过滤。因此它不是 tenant 拥有菜单资源，而是全局菜单目录在当前 tenant 下的可见投影。
+该接口的资源来源是全局 `Menu` 目录，但响应会根据当前 request tenant 下的 `RoleBinding`、默认 role、`Role.MenuIDs` 和 `Menu.DomainPattern` 过滤。因此它不是 tenant 拥有菜单资源，而是全局菜单目录在当前 tenant 下的可见投影。
 
 `system_root` 用户绕过菜单过滤，可看到完整菜单目录。
 
@@ -54,7 +54,7 @@
 - `PATCH /api/authz/menus/:id`
 - `DELETE /api/authz/menus/:id`
 
-`Menu` 不带 `TenantID`。修改菜单的 backend `Routes` 会触发相关 role 的权限同步；删除菜单会从所有引用它的 role 中移除 `MenuIDs` 和 `MenuPartialIDs`。因此普通 tenant admin 不应该直接管理这些接口。
+`Menu` 不带 `TenantID`。修改菜单的 backend `Routes` 会触发相关 role 的权限同步；删除菜单会从所有引用它的 role 的 `MenuIDs` 中移除。因此普通 tenant admin 不应该直接管理这些接口。
 
 ## 内部跨 tenant 能力
 

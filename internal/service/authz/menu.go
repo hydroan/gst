@@ -78,10 +78,9 @@ func (m *MenuService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.M
 //   - RoleBinding maps the current subject ID to role IDs inside the request tenant.
 //   - when the subject has no RoleBinding records, default roles in the request
 //     tenant provide the fallback menu set.
-//   - Role.MenuIDs grants fully selected menus; Role.MenuPartialIDs keeps parent
-//     menu nodes visible when only part of their children are selected. Both
-//     affect menu visibility, but only MenuIDs grants backend route permissions;
-//     this service is only shaping the frontend menu tree.
+//   - Role.MenuIDs is the only source of visible menus. The same set grants the
+//     backend route permissions; this service is only shaping the frontend menu
+//     tree.
 //
 // restricted reports whether the caller has to narrow by the returned set. It is
 // false only for system_root. A subject whose roles select no menu at all yields
@@ -142,8 +141,7 @@ func visibleMenuIDs(ctx *types.ServiceContext, log types.Logger) ([]string, bool
 	seen := make(map[string]struct{})
 	menuIDs := make([]string, 0)
 	for _, role := range roles {
-		for _, id := range append(append(make([]string, 0, len(role.MenuIDs)+len(role.MenuPartialIDs)),
-			role.MenuIDs...), role.MenuPartialIDs...) {
+		for _, id := range role.MenuIDs {
 			if _, ok := seen[id]; ok {
 				continue
 			}

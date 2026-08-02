@@ -1,8 +1,6 @@
 {
   "copy": {
-    "excludeSourceFiles": [
-      "internal/model/authz/button.go"
-    ],
+    "excludeSourceFiles": [],
     "middleware": [
       {
         "sourceFile": "middleware/authz.go",

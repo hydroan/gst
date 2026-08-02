@@ -156,12 +156,11 @@ func (m *Menu) DeleteBefore(ctx context.Context) error {
 		return err
 	}
 	for _, r := range roles {
-		if !slices.Contains(r.MenuIDs, m.ID) && !slices.Contains(r.MenuPartialIDs, m.ID) {
+		if !slices.Contains(r.MenuIDs, m.ID) {
 			continue
 		}
 
 		r.MenuIDs = removeMenuID(r.MenuIDs, m.ID)
-		r.MenuPartialIDs = removeMenuID(r.MenuPartialIDs, m.ID)
 
 		if err := database.Database[*Role](ctx).Update(r); err != nil {
 			return err
