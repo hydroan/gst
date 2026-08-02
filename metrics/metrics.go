@@ -31,6 +31,7 @@ var (
 	CacheHit              *prometheus.CounterVec
 	CacheMiss             *prometheus.CounterVec
 	QueueSize             prometheus.Gauge
+	AuthzPolicyDiverged   prometheus.Gauge
 )
 
 func Init() error {
@@ -142,7 +143,19 @@ func Init() error {
 		Help:      "Current size of the task queue",
 	})
 
-	errs := make([]error, 0, 17)
+	// A process in this state serves authorization decisions that disagree with
+	// what is stored, and looks healthy from everywhere else: the write it lost
+	// is already durable, the request that made it has returned, and comparing
+	// stored rules against the records they come from cannot see a
+	// disagreement that exists only in one process's memory.
+	AuthzPolicyDiverged = prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: NAMESPACE,
+		Subsystem: SUBSYSTEM,
+		Name:      "authz_policy_diverged",
+		Help:      "Whether the in-memory authorization policy set no longer agrees with storage",
+	})
+
+	errs := make([]error, 0, 18)
 	errs = append(errs, prometheus.Register(State))
 	errs = append(errs, prometheus.Register(Uptime))
 	errs = append(errs, prometheus.Register(HTTPRequestsTotal))
@@ -158,6 +171,7 @@ func Init() error {
 	errs = append(errs, prometheus.Register(CacheHit))
 	errs = append(errs, prometheus.Register(CacheMiss))
 	errs = append(errs, prometheus.Register(QueueSize))
+	errs = append(errs, prometheus.Register(AuthzPolicyDiverged))
 
 	errs = append(errs, prometheus.Register(collectors.NewBuildInfoCollector()))
 	errs = append(errs, prometheus.Register(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{Namespace: NAMESPACE})))

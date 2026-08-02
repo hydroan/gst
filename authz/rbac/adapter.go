@@ -15,6 +15,11 @@ import (
 // rule fills them. ruleColumnCount is how many a rule can occupy.
 var policyColumns = []string{"v0", "v1", "v2", "v3", "v4", "v5"}
 
+// policySections are the model sections holding rules: permissions under p,
+// assignments under g. They are the sections Casbin's own ClearPolicy resets,
+// so they are also the whole of what a stored policy set covers.
+var policySections = []string{"p", "g"}
+
 const ruleColumnCount = 6
 
 // policyRow is the row shape the adapter reads and writes.
@@ -98,7 +103,7 @@ func (a *adapter) LoadPolicyCtx(ctx context.Context, m model.Model) error {
 // SavePolicyCtx replaces every stored rule with the contents of m.
 func (a *adapter) SavePolicyCtx(ctx context.Context, m model.Model) error {
 	rows := make([]policyRow, 0)
-	for _, sec := range []string{"p", "g"} {
+	for _, sec := range policySections {
 		for ptype, ast := range m[sec] {
 			for _, rule := range ast.Policy {
 				rows = append(rows, newPolicyRow(ptype, rule))
