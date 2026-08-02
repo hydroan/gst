@@ -9,6 +9,7 @@ import (
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/tenant"
+	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -119,8 +120,8 @@ func (m *Menu) UpdateAfter(ctx context.Context) error {
 	// roles and leave the rest holding permissions the menu no longer grants.
 	ctx = tenant.Across(ctx)
 
-	roles := make([]*Role, 0)
-	if err := database.Database[*Role](ctx).List(&roles); err != nil {
+	roles, err := rolesToRefresh(ctx)
+	if err != nil {
 		return err
 	}
 	for _, r := range roles {
@@ -135,14 +136,43 @@ func (m *Menu) UpdateAfter(ctx context.Context) error {
 	return nil
 }
 
+// rolesToRefresh reads the roles a menu write has to act on, holding each under
+// an exclusive row lock for the rest of the menu's transaction.
+//
+// The lock is what makes rewriting a role's permissions from here safe. A
+// permission set is replaced by deleting the role's policy rows and inserting
+// the new ones, and two transactions doing that to one role at the same time
+// leave the union of both sets rather than the later one: on PostgreSQL neither
+// statement sees rows the other has not committed yet, so neither delete
+// removes the other's insert. Storage then holds permissions the deciding
+// process does not, and keeps them until something reloads it.
+//
+// A role's own write path never needed this. It has already written the role
+// row by the time it refreshes permissions, so it holds that row for the rest
+// of its transaction and a second writer waits. A menu write reaches the same
+// roles without touching their rows, which is what leaves it the one path that
+// can interleave — and taking the lock here is what puts it on the same footing
+// rather than on PostgreSQL's statement visibility.
+//
+// It has to be a lock rather than a re-read: the roles being replaced may hold
+// no policy rows at all, and there is nothing to serialize on in a range that
+// is empty.
+func rolesToRefresh(ctx context.Context) ([]*Role, error) {
+	roles := make([]*Role, 0)
+	if err := database.Database[*Role](ctx).WithLock(consts.LockUpdate).List(&roles); err != nil {
+		return nil, err
+	}
+	return roles, nil
+}
+
 // DeleteBefore removes the menu from roles before the menu row is deleted.
 func (m *Menu) DeleteBefore(ctx context.Context) error {
 	// Same reach as UpdateAfter: the menu is global, so removing it has to be
 	// removed from every tenant's roles.
 	ctx = tenant.Across(ctx)
 
-	roles := make([]*Role, 0)
-	if err := database.Database[*Role](ctx).List(&roles); err != nil {
+	roles, err := rolesToRefresh(ctx)
+	if err != nil {
 		return err
 	}
 	for _, r := range roles {
