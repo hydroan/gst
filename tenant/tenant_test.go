@@ -123,22 +123,34 @@ func TestScopeNarrowsUpdatesWithoutReadingFirst(t *testing.T) {
 	assert.Equal(t, "b1", stored.Name)
 }
 
-// TestScopeKeepsTheTenantOffEveryLaterWrite covers the column's create-only
-// permission: a row cannot change hands, and a client cannot move one by
-// sending a different value to an update.
-func TestScopeKeepsTheTenantOffEveryLaterWrite(t *testing.T) {
+// TestScopeRefusesAnUpdateThatNamesAnotherTenant covers the column's write-once
+// permission and the refusal that makes it honest.
+//
+// Gorm keeps the column out of every update statement, so the row was never in
+// danger. What was in danger is the caller's belief about it: an update that
+// named another tenant and returned success would leave a client wrong about
+// where its data is, with nothing in the response to say so.
+func TestScopeRefusesAnUpdateThatNamesAnotherTenant(t *testing.T) {
 	db := newDB(t)
 	seed(t, db, map[string]string{"a1": "alpha"})
-
 	ctx := tenant.In(context.Background(), "alpha")
+
+	err := db.WithContext(ctx).Save(&Record{ID: "a1", Name: "moved", Scope: tenant.Scope{TenantID: "beta"}}).Error
+	require.ErrorIs(t, err, tenant.ErrTenantImmutable)
+
+	// Naming the tenant the row already belongs to is what every read-modify-write
+	// round trip does, so it has to go through.
+	require.NoError(t, db.WithContext(ctx).
+		Save(&Record{ID: "a1", Name: "renamed", Scope: tenant.Scope{TenantID: "alpha"}}).Error)
+	// Naming none is the other ordinary shape.
 	require.NoError(t, db.WithContext(ctx).Model(&Record{}).Where("id = ?", "a1").
-		Updates(map[string]any{"name": "renamed"}).Error)
-	require.NoError(t, db.WithContext(ctx).Save(&Record{ID: "a1", Name: "saved", Scope: tenant.Scope{TenantID: "beta"}}).Error)
+		Update("name", "renamed twice").Error)
 
 	var stored Record
 	require.NoError(t, db.WithContext(tenant.Across(context.Background())).
 		First(&stored, "id = ?", "a1").Error)
 	assert.EqualValues(t, "alpha", stored.TenantID, "the tenant column has to be unreachable after the insert")
+	assert.Equal(t, "renamed twice", stored.Name, "the writes that were allowed have to have landed")
 }
 
 // TestScopeNarrowsDeletes covers the delete path, including the hard delete the

@@ -48,6 +48,15 @@ import (
 // reach to mean any of them.
 var ErrTenantRequired = errors.New("tenant: a cross-tenant insert must name the tenant the row belongs to")
 
+// ErrTenantImmutable reports an update carrying a tenant other than the one the
+// caller is acting in.
+//
+// The column is write-once, so the update could not have moved the row whatever
+// it said. Refusing is what keeps that from being a silent no-op: a client that
+// believed it moved a row and received a success would be wrong about where its
+// data is, and nothing in the response would say so.
+var ErrTenantImmutable = errors.New("tenant: a row cannot be moved to another tenant")
+
 // Column is the database column a tenant-scoped model carries.
 //
 // It is fixed rather than configurable. A name the model chose would have to be
@@ -73,7 +82,7 @@ func (ID) QueryClauses(f *schema.Field) []clause.Interface {
 }
 
 func (ID) UpdateClauses(f *schema.Field) []clause.Interface {
-	return []clause.Interface{predicateClause{field: f}}
+	return []clause.Interface{predicateClause{field: f}, immutableClause{field: f}}
 }
 
 func (ID) DeleteClauses(f *schema.Field) []clause.Interface {
@@ -168,6 +177,41 @@ func (c stampClause) ModifyStatement(stmt *gorm.Statement) {
 		}
 		if err := c.field.Set(stmt.Context, row, scope.id); err != nil {
 			_ = stmt.AddError(err)
+		}
+	})
+}
+
+// immutableClause refuses an update that names a tenant other than the one the
+// caller acts in.
+//
+// The refusal is about honesty rather than safety: Gorm's create-only
+// permission already keeps the column out of every update statement, so the row
+// was never in danger. What was in danger is the caller's belief about it.
+//
+// A cross-tenant caller is exempt because it acts in no single tenant, so there
+// is nothing to compare the value against.
+type immutableClause struct{ field *schema.Field }
+
+func (immutableClause) Name() string               { return "" }
+func (immutableClause) Build(clause.Builder)       {}
+func (immutableClause) MergeClause(*clause.Clause) {}
+
+func (c immutableClause) ModifyStatement(stmt *gorm.Statement) {
+	scope := resolve(stmt.Context)
+	if scope.across {
+		return
+	}
+
+	forEachRow(stmt.ReflectValue, func(row reflect.Value) {
+		if stmt.Error != nil {
+			return
+		}
+		value, zero := c.field.ValueOf(stmt.Context, row)
+		if zero {
+			return
+		}
+		if named, ok := value.(ID); ok && string(named) != scope.id {
+			_ = stmt.AddError(errors.Wrapf(ErrTenantImmutable, "named %q while acting in %q", named, scope.id))
 		}
 	})
 }

@@ -625,15 +625,36 @@ func TestAuthzRole(t *testing.T) {
 			requireNoCasbinPolicy(t, tenant.Default, nextName, "/api/authz/roles", http.MethodGet, "allow")
 		})
 
-		t.Run("failed_tenant_update_keeps_existing_policy", func(t *testing.T) {
+		// An update naming another tenant cannot move the role: the tenant
+		// column is written on insert and never again. This client is
+		// system_root, which acts in no single tenant, so there is no scope to
+		// compare the named value against and the update is answered rather
+		// than refused — a tenant-scoped caller gets tenant.ErrTenantImmutable
+		// instead. Either way the role stays where it is, which is what the
+		// policies below prove.
+		t.Run("tenant_update_cannot_move_the_role", func(t *testing.T) {
+			// The menus are carried over so this covers the tenant alone: an
+			// update dropping them would revoke the role's permissions on its
+			// own, which is the documented replace semantics and not what is
+			// under test here.
+			current := new(authz.Role)
+			_, err = cli.Get(roleID, current)
+			require.NoError(t, err)
+
 			_, err = cli.Update(roleID, &authz.Role{
 				Scope:   tenant.Scope{TenantID: "other"},
-				Name:    roleName,
-				MenuIDs: nil,
+				Name:    current.Name,
+				MenuIDs: current.MenuIDs,
 			})
-			require.Error(t, err)
+			require.NoError(t, err)
+
+			moved := new(authz.Role)
+			_, err = cli.Get(roleID, moved)
+			require.NoError(t, err)
+			require.EqualValues(t, tenant.Default, moved.TenantID)
 
 			requireCasbinPolicy(t, tenant.Default, roleID, "/api/authz/roles", http.MethodGet, "allow")
+			requireNoCasbinPolicy(t, "other", roleID, "/api/authz/roles", http.MethodGet, "allow")
 		})
 
 		t.Run("patch", func(t *testing.T) {
