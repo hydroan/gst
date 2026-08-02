@@ -65,8 +65,9 @@ func routesSnapshot() map[string][]string {
 // Routes returns a read-only snapshot of registered business API routes.
 //
 // Route parameters are converted from Gin's ":id" format to "{id}" so the
-// returned paths can be reused by Casbin keyMatch3 policies and menu route
-// bindings. Mutating the returned map or method slices does not affect router
+// returned paths can be reused as authorization policy objects and menu route
+// bindings; "{id}" is the placeholder the RBAC matcher reads as one path
+// segment. Mutating the returned map or method slices does not affect router
 // state.
 func Routes() map[string][]string {
 	snapshot := routesSnapshot()

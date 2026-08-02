@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/casbin/casbin/v3"
 	casbinmodel "github.com/casbin/casbin/v3/model"
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dbruntime"
@@ -27,13 +26,8 @@ func storedRBAC(tb testing.TB, table string) (*rbac, *adapter) {
 	tb.Helper()
 	store := newPolicyTable(tb, table)
 
-	m, err := casbinmodel.NewModelFromString(string(modelData))
+	enforcer, err := newEnforcer(store)
 	require.NoError(tb, err)
-	ctxEnforcer, err := casbin.NewContextEnforcer(m, store)
-	require.NoError(tb, err)
-	enforcer, ok := ctxEnforcer.(*casbin.ContextEnforcer)
-	require.True(tb, ok, "expected a context enforcer")
-	enforcer.EnableAutoSave(false)
 
 	return &rbac{enforcer: enforcer, adapter: store, mu: &enforcerMu}, store
 }

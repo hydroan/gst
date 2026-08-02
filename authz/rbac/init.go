@@ -5,6 +5,7 @@ import (
 
 	"github.com/casbin/casbin/v3"
 	casbinmodel "github.com/casbin/casbin/v3/model"
+	"github.com/casbin/casbin/v3/persist"
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
@@ -80,9 +81,43 @@ e = some(where (p.eft == allow))
 # two continued lines would end the value early, so keep the four lines adjacent.
 m = (r.sub != "system_root" && g2(r.sub, "system_root")) \
  || (r.sub != "admin" && g(r.sub, "admin", r.tenant)) \
- || (r.sub != "" && p.role == "authenticated" && keyMatch3(r.obj, p.obj) && r.act == p.act) \
- || (r.sub != p.role && r.tenant == p.tenant && g(r.sub, p.role, r.tenant) && keyMatch3(r.obj, p.obj) && r.act == p.act)
+ || (r.sub != "" && p.role == "authenticated" && pathMatch(r.obj, p.obj) && r.act == p.act) \
+ || (r.sub != p.role && r.tenant == p.tenant && g(r.sub, p.role, r.tenant) && pathMatch(r.obj, p.obj) && r.act == p.act)
 `)
+
+// newEnforcer builds the enforcer modelData describes, with the invariants the
+// package depends on already in place.
+//
+// Construction, autosave and the matcher functions are one step on purpose. The
+// enforcer compiles its matcher once and caches it together with the function
+// map it was built from, so a function registered after the first Enforce is
+// never seen by the cached expression, and the symptom is a matcher that cannot
+// resolve pathMatch at all rather than a slow one. Leaving that ordering to
+// each construction site to remember is the kind of convention the second site
+// gets wrong.
+func newEnforcer(store persist.ContextAdapter) (*casbin.ContextEnforcer, error) {
+	model, err := casbinmodel.NewModelFromString(string(modelData))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create casbin model")
+	}
+	contextEnforcer, err := casbin.NewContextEnforcer(model, store)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create casbin enforcer")
+	}
+	enforcer, ok := contextEnforcer.(*casbin.ContextEnforcer)
+	if !ok {
+		return nil, errors.New("failed to create context casbin enforcer")
+	}
+
+	enforcer.AddFunction(matcherFuncPathMatch, pathMatchFunc)
+	// Writes go through mutate, which drives the adapter itself so it can split
+	// the database half from the in-memory half. Casbin's own persistence would
+	// do both at once, which is what leaves memory ahead of a rolled back
+	// transaction.
+	enforcer.EnableAutoSave(false)
+
+	return enforcer, nil
+}
 
 // Init initializes the tenant-aware Casbin enforcer when RBAC is enabled.
 func Init() (err error) {
@@ -95,29 +130,13 @@ func Init() (err error) {
 	// migration path as every other table. Letting the adapter migrate too would
 	// mean two definitions of one table, and would issue DDL at startup even
 	// where the framework deliberately leaves schema changes to gg migrate.
-	//
 	policyAdapter := newAdapter(database.DB(), policyTable)
-	model, err := casbinmodel.NewModelFromString(string(modelData))
-	if err != nil {
-		return errors.Wrap(err, "failed to create casbin model")
-	}
-	contextEnforcer, err := casbin.NewContextEnforcer(model, policyAdapter)
-	if err != nil {
-		return errors.Wrap(err, "failed to create casbin enforcer")
-	}
-	var ok bool
-	enforcer, ok = contextEnforcer.(*casbin.ContextEnforcer)
-	if !ok {
-		return errors.New("failed to create context casbin enforcer")
+	if enforcer, err = newEnforcer(policyAdapter); err != nil {
+		return err
 	}
 
 	enforcer.SetLogger(logger.Casbin)
 	enforcer.EnableEnforce(true)
-	// Writes go through mutate, which drives the adapter itself so it can split
-	// the database half from the in-memory half. Casbin's own persistence would
-	// do both at once, which is what leaves memory ahead of a rolled back
-	// transaction.
-	enforcer.EnableAutoSave(false)
 	policyStore = policyAdapter
 
 	for _, subject := range defaultSystemRootSubjects {

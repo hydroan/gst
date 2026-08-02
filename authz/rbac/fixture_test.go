@@ -64,17 +64,9 @@ func (*nullContextAdapter) RemovePolicies(string, string, [][]string) error { re
 func newTestEnforcer(tb testing.TB, policyCount int) *casbin.ContextEnforcer {
 	tb.Helper()
 
-	m, err := casbinmodel.NewModelFromString(string(modelData))
+	e, err := newEnforcer(new(nullContextAdapter))
 	if err != nil {
 		tb.Fatal(err)
-	}
-	ctxEnforcer, err := casbin.NewContextEnforcer(m, new(nullContextAdapter))
-	if err != nil {
-		tb.Fatal(err)
-	}
-	e, ok := ctxEnforcer.(*casbin.ContextEnforcer)
-	if !ok {
-		tb.Fatal("expected a context enforcer")
 	}
 	for i := range policyCount {
 		if _, err = e.AddPolicy("default", "role_a", fmt.Sprintf("/api/things/%d", i), "GET", "allow"); err != nil {
