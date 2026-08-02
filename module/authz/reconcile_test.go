@@ -88,6 +88,25 @@ func TestReconcilePoliciesSkipsRulesNoRecordDerives(t *testing.T) {
 	}
 }
 
+// TestReconcilePoliciesSkipsTheBuiltInAdminAssignment covers the assignment that
+// grants the built-in tenant administrator role.
+//
+// That role has no row in the roles table, so no role binding can name it and
+// nothing among the records derives its assignment. Judged against them it is
+// reported as an orphaned binding every single run, which is how a drift report
+// becomes something nobody reads.
+func TestReconcilePoliciesSkipsTheBuiltInAdminAssignment(t *testing.T) {
+	ctx := context.Background()
+	subject := util.UUID()
+
+	require.NoError(t, rbac.RBAC().AssignRole(ctx, tenant.Default, subject, consts.AUTHZ_ROLE_ADMIN))
+	t.Cleanup(func() { _ = rbac.RBAC().UnassignRole(ctx, tenant.Default, subject, consts.AUTHZ_ROLE_ADMIN) })
+
+	report, err := authz.ReconcilePolicies(ctx)
+	require.NoError(t, err)
+	require.True(t, report.InSync(), "unexpected drift: %+v", report.Drifts)
+}
+
 // seedReconcilableBinding creates a role and a binding to it through the normal
 // path, so both the records and their stored rules exist before a test perturbs
 // one of them.

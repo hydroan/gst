@@ -32,6 +32,7 @@ var (
 	CacheMiss             *prometheus.CounterVec
 	QueueSize             prometheus.Gauge
 	AuthzPolicyDiverged   prometheus.Gauge
+	AuthzDecisionsTotal   *prometheus.CounterVec
 )
 
 func Init() error {
@@ -155,7 +156,19 @@ func Init() error {
 		Help:      "Whether the in-memory authorization policy set no longer agrees with storage",
 	})
 
-	errs := make([]error, 0, 18)
+	// Labeled by outcome and by what allowed it, both of which are bounded by
+	// the model rather than by traffic: a decision is allowed, denied or
+	// undecidable, and an allowed one names one of a handful of rule kinds.
+	// Neither the tenant nor the subject is a label — those grow with the
+	// deployment and belong in the authz log, which carries them already.
+	AuthzDecisionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: NAMESPACE,
+		Subsystem: SUBSYSTEM,
+		Name:      "authz_decisions_total",
+		Help:      "Total authorization decisions by outcome and granting rule kind",
+	}, []string{"effect", "allowed_by"})
+
+	errs := make([]error, 0, 19)
 	errs = append(errs, prometheus.Register(State))
 	errs = append(errs, prometheus.Register(Uptime))
 	errs = append(errs, prometheus.Register(HTTPRequestsTotal))
@@ -172,6 +185,7 @@ func Init() error {
 	errs = append(errs, prometheus.Register(CacheMiss))
 	errs = append(errs, prometheus.Register(QueueSize))
 	errs = append(errs, prometheus.Register(AuthzPolicyDiverged))
+	errs = append(errs, prometheus.Register(AuthzDecisionsTotal))
 
 	errs = append(errs, prometheus.Register(collectors.NewBuildInfoCollector()))
 	errs = append(errs, prometheus.Register(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{Namespace: NAMESPACE})))

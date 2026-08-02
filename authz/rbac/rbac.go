@@ -10,6 +10,7 @@ import (
 	"github.com/casbin/casbin/v3"
 	"github.com/casbin/casbin/v3/persist"
 	"github.com/cockroachdb/errors"
+	prommetrics "github.com/hydroan/gst/metrics"
 	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types"
@@ -130,15 +131,27 @@ func RBAC() types.RBAC {
 const policyRoleColumn = 1
 
 // Authorize evaluates the request and reports which rule allowed it.
+//
+// It is the one method on the hot path, so it is also the one worth watching:
+// every request makes exactly one call, and without a span of its own the time
+// it takes is spread invisibly across whatever encloses it. The span and the
+// counter both cost nothing when tracing is off and metrics were never
+// initialized, which is what a decision path can afford.
 func (r *rbac) Authorize(
 	ctx context.Context, tenant string, subject string, object string, action string,
 ) (types.Decision, error) {
 	tenant = normalizeTenant(tenant)
 
+	// The span context goes nowhere on purpose: nothing below this opens a span
+	// of its own, so this is a leaf and there is no child to parent.
+	_, finishSpan := traceRBAC(ctx, "authorize", rbacTraceFields(tenant, ""))
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	allowed, source, matchedRule, err := r.authorize(tenant, subject, object, action)
+	finishSpan(err)
+	countDecision(allowed, source, err)
 	// The rule is copied out. What the engine reports is its own storage, and
 	// handing that to a caller makes every consumer of a decision one edit away
 	// from rewriting the policy set it was decided from.
@@ -546,6 +559,29 @@ func rbacTraceFields(tenant string, role string) map[string]any {
 		fields["rbac.role"] = role
 	}
 	return fields
+}
+
+// countDecision publishes one decision to whoever is watching.
+//
+// An error is neither an allow nor a deny: policy never decided it, and folding
+// it into either effect would move the counts the other one is read for. The
+// rule kind is recorded only for an allow, because that is the only outcome one
+// exists for.
+func countDecision(allowed bool, source consts.GrantSource, err error) {
+	// The counter is created by prommetrics.Init, which bootstrap runs long
+	// before the first request. A process that never ran bootstrap, which is
+	// what a test is, still has to be able to decide.
+	if prommetrics.AuthzDecisionsTotal == nil {
+		return
+	}
+	switch {
+	case err != nil:
+		prommetrics.AuthzDecisionsTotal.WithLabelValues("error", "").Inc()
+	case allowed:
+		prommetrics.AuthzDecisionsTotal.WithLabelValues(string(consts.EffectAllow), string(source)).Inc()
+	default:
+		prommetrics.AuthzDecisionsTotal.WithLabelValues(string(consts.EffectDeny), "").Inc()
+	}
 }
 
 func isBuiltInSystemRole(subject string, role string) bool {

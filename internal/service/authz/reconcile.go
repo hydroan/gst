@@ -177,10 +177,16 @@ func skipReconcile(rule *modelauthz.CasbinRule) bool {
 		// not derived from any role.
 		return rule.V1 == consts.AUTHZ_ROLE_AUTHENTICATED
 	case "g":
-		return false
+		// The built-in tenant administrator role is granted by assignment
+		// alone: it has no row in the roles table, so no role binding can name
+		// it and nothing among the records derives it. Judging it against them
+		// reports the framework's own baseline as drift on every run.
+		return rule.V1 == consts.AUTHZ_ROLE_ADMIN
 	default:
-		// g2 and anything else: system-level assignments and rule kinds this
-		// comparison does not model.
+		// g2 and anything else. A system-level assignment is written straight
+		// through AssignSystemRole by whatever bootstraps the deployment, so
+		// there is no record to derive it from — which also means this
+		// comparison cannot see a system role somebody granted themselves.
 		return true
 	}
 }
@@ -198,11 +204,21 @@ func driftFromRule(rule *modelauthz.CasbinRule, direction string) PolicyDrift {
 	}
 }
 
+// reconcileTenant names the domain a record's rules were written under.
+//
+// It has to normalize exactly the way the write did, or the comparison keys
+// disagree with the rules they are meant to match: a record whose tenant
+// carries surrounding space has its rules stored trimmed, and looking for them
+// untrimmed reports every one of them as orphaned and missing at once.
+//
+// Nothing reachable writes such a record any more — the tenant package trims at
+// every entry — so this stands for rows that predate it or were written around
+// the framework, which are exactly the rows a drift report exists to find.
 func reconcileTenant(id string) string {
-	if strings.TrimSpace(id) == "" {
-		return tenant.Default
+	if id = strings.TrimSpace(id); id != "" {
+		return id
 	}
-	return id
+	return tenant.Default
 }
 
 // policyKey identifies a rule by the columns that decide it, so a stored row

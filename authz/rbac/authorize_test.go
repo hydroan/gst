@@ -5,7 +5,10 @@ import (
 	"slices"
 	"testing"
 
+	prommetrics "github.com/hydroan/gst/metrics"
 	"github.com/hydroan/gst/types/consts"
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 )
 
 // TestAuthorizeNamesTheGrantingRule covers one case per branch a decision can
@@ -321,4 +324,48 @@ func newAuthorizeFixture(t *testing.T) *rbac {
 		t.Fatal(err)
 	}
 	return r
+}
+
+// TestAuthorizeCountsEveryDecision covers the counter an operator reads to tell
+// a deployment denying nothing from one denying everything.
+//
+// The three outcomes are kept apart because they answer different questions: an
+// error is not a denial, and folding it into one would move the count the other
+// is read for.
+func TestAuthorizeCountsEveryDecision(t *testing.T) {
+	prommetrics.AuthzDecisionsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{Name: "authz_decisions_probe"}, []string{"effect", "allowed_by"},
+	)
+	t.Cleanup(func() { prommetrics.AuthzDecisionsTotal = nil })
+
+	r := newAuthorizeFixture(t)
+	ctx := context.Background()
+
+	if _, err := r.Authorize(ctx, "default", "u_member", "/api/things", "GET"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Authorize(ctx, "default", "u_plain", "/api/things", "GET"); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, c := range []struct {
+		effect    string
+		allowedBy string
+		want      float64
+	}{
+		{string(consts.EffectAllow), string(consts.GrantSourceRole), 1},
+		{string(consts.EffectDeny), "", 1},
+	} {
+		var metric dto.Metric
+		counter, err := prommetrics.AuthzDecisionsTotal.GetMetricWithLabelValues(c.effect, c.allowedBy)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := counter.Write(&metric); err != nil {
+			t.Fatal(err)
+		}
+		if got := metric.GetCounter().GetValue(); got != c.want {
+			t.Errorf("%s/%s: expected %v, got %v", c.effect, c.allowedBy, c.want, got)
+		}
+	}
 }
