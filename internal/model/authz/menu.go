@@ -27,14 +27,6 @@ var (
 	KeyID   = model.KeyID
 )
 
-type MenuPlatform string
-
-const (
-	MenuPlatformWeb     MenuPlatform = "web"
-	MenuPlatformMobile  MenuPlatform = "mobile"
-	MenuPlatformDesktop MenuPlatform = "desktop"
-)
-
 type Menu struct {
 	// ID widens the primary key inherited from model.Base.
 	//
@@ -60,13 +52,11 @@ type Menu struct {
 
 	// Display metadata.
 	Label string `json:"label,omitempty" query:"label"`
-	Icon  string `json:"icon,omitempty" query:"icon"`
 
-	// Visibility metadata. Runtime filtering behavior is handled by service logic.
-	Visible       *bool                             `json:"visible,omitempty" query:"visible" gorm:"default:1"`
-	Enabled       *bool                             `json:"enabled,omitempty" query:"enabled" gorm:"default:1"`
-	Platforms     datatypes.JSONSlice[MenuPlatform] `json:"platforms,omitempty" query:"platforms"` // Empty means all platforms.
-	DomainPattern string                            `json:"domain_pattern,omitempty" query:"domain_pattern" gorm:"default:.*"`
+	// Rendering hints for the client. The backend never filters on them: which
+	// menus a subject may see is decided solely by Role.MenuIDs.
+	Visible *bool `json:"visible,omitempty" query:"visible" gorm:"default:1"`
+	Enabled *bool `json:"enabled,omitempty" query:"enabled" gorm:"default:1"`
 
 	// Self-referencing tree. The associations exist so Expands can preload Parent
 	// and Children; constraint:- keeps AutoMigrate from emitting a physical foreign
@@ -184,9 +174,6 @@ func (m *Menu) validate() error {
 	}
 	if m.Enabled == nil {
 		m.Enabled = new(true)
-	}
-	if len(m.DomainPattern) == 0 {
-		m.DomainPattern = ".*"
 	}
 	if len(m.Path) > 0 {
 		m.Path = strings.TrimSuffix(strings.TrimSpace(m.Path), "/")

@@ -2,7 +2,6 @@ package serviceauthz
 
 import (
 	"net/http"
-	"regexp"
 	"strings"
 
 	"github.com/hydroan/gst/authz/rbac"
@@ -38,20 +37,12 @@ func (m *MenuService) Filter(ctx *types.ServiceContext, menu *modelauthz.Menu, o
 	return menu, opts, nil
 }
 
-// ListAfter applies the two visibility rules that cannot become query
-// conditions: DomainPattern is a per-row regular expression matched against the
-// request host, and expanded children are preloaded separately, so the
-// top-level condition never reaches them. Role visibility of the top level is
-// already handled by Filter and is not repeated here.
-//
-// Rows dropped by the host match are still counted in the total. That gap
-// cannot be closed here; the default DomainPattern matches every host, so the
-// total only drifts once menus are actually split across domains.
+// ListAfter narrows expanded children, the one place role visibility cannot
+// become a query condition: children are preloaded separately, so the condition
+// Filter pushed down never reaches them. The top level is already handled by
+// Filter and is not revisited here, which keeps the rows returned and the total
+// in agreement.
 func (m *MenuService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.Menu) error {
-	*data = lo.Filter(*data, func(item *modelauthz.Menu, _ int) bool {
-		return domainAllowed(ctx, item)
-	})
-
 	// Without expanded children there is nothing left to narrow, so the common
 	// case resolves roles once, in Filter.
 	if !lo.SomeBy(*data, func(item *modelauthz.Menu) bool { return len(item.Children) > 0 }) {
@@ -61,12 +52,15 @@ func (m *MenuService) ListAfter(ctx *types.ServiceContext, data *[]*modelauthz.M
 	if err != nil {
 		return err
 	}
+	if !restricted {
+		return nil
+	}
 	visible := make(map[string]struct{}, len(menuIDs))
 	for _, id := range menuIDs {
 		visible[id] = struct{}{}
 	}
 	for i := range *data {
-		filterChildren(ctx, (*data)[i], visible, restricted)
+		filterChildren((*data)[i], visible)
 	}
 
 	return nil
@@ -153,32 +147,19 @@ func visibleMenuIDs(ctx *types.ServiceContext, log types.Logger) ([]string, bool
 	return menuIDs, true, nil
 }
 
-// filterChildren narrows preloaded children by the same rules as the top level.
-// Children are loaded by a separate preload, so the condition Filter pushed down
-// never applies to them; restricted is false for system_root, which leaves only
-// the host match.
-func filterChildren(ctx *types.ServiceContext, menu *modelauthz.Menu, visible map[string]struct{}, restricted bool) {
+// filterChildren narrows preloaded children by the same rule as the top level,
+// dropping every subtree the visible set does not name. Children are loaded by a
+// separate preload, so the condition Filter pushed down never applies to them.
+// Callers that are not narrowing at all skip this entirely.
+func filterChildren(menu *modelauthz.Menu, visible map[string]struct{}) {
 	if len(menu.Children) == 0 {
 		return
 	}
 	menu.Children = lo.Filter(menu.Children, func(item *modelauthz.Menu, _ int) bool {
-		if restricted {
-			if _, ok := visible[item.ID]; !ok {
-				return false
-			}
-		}
-		return domainAllowed(ctx, item)
+		_, ok := visible[item.ID]
+		return ok
 	})
 	for i := range menu.Children {
-		filterChildren(ctx, menu.Children[i], visible, restricted)
+		filterChildren(menu.Children[i], visible)
 	}
-}
-
-// domainAllowed reports whether the menu belongs to the current request host,
-// which lets one menu table serve several domains. The pattern lives in the row
-// and is matched against the host, so it cannot become a query condition. An
-// invalid pattern matches nothing, hiding the menu rather than exposing it.
-func domainAllowed(ctx *types.ServiceContext, menu *modelauthz.Menu) bool {
-	matched, _ := regexp.MatchString(menu.DomainPattern, ctx.Host())
-	return matched
 }

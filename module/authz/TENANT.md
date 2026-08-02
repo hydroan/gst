@@ -40,7 +40,7 @@
 
 - `GET /api/authz/menus`
 
-该接口的资源来源是全局 `Menu` 目录，但响应会根据当前 request tenant 下的 `RoleBinding`、默认 role、`Role.MenuIDs` 和 `Menu.DomainPattern` 过滤。因此它不是 tenant 拥有菜单资源，而是全局菜单目录在当前 tenant 下的可见投影。
+该接口的资源来源是全局 `Menu` 目录，但响应会根据当前 request tenant 下的 `RoleBinding`、默认 role 和 `Role.MenuIDs` 过滤。因此它不是 tenant 拥有菜单资源，而是全局菜单目录在当前 tenant 下的可见投影。
 
 `system_root` 用户绕过菜单过滤，可看到完整菜单目录。
 
