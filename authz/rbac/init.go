@@ -120,7 +120,13 @@ func newEnforcer(store persist.ContextAdapter) (*casbin.ContextEnforcer, error) 
 }
 
 // Init initializes the tenant-aware Casbin enforcer when RBAC is enabled.
-func Init() (err error) {
+//
+// The enforcer is built and made ready before it is published, and published
+// together with its adapter. A reader reaches RBAC as soon as either package
+// variable is assigned, so assigning them as they are produced would hand out an
+// enforcer that still has enforcement off, or one whose writes have no adapter
+// to go through.
+func Init() error {
 	if !config.App.Auth.RBACEnabled {
 		return nil
 	}
@@ -131,7 +137,8 @@ func Init() (err error) {
 	// mean two definitions of one table, and would issue DDL at startup even
 	// where the framework deliberately leaves schema changes to gg migrate.
 	policyAdapter := newAdapter(database.DB(), policyTable)
-	if enforcer, err = newEnforcer(policyAdapter); err != nil {
+	policyEnforcer, err := newEnforcer(policyAdapter)
+	if err != nil {
 		return err
 	}
 
@@ -143,8 +150,8 @@ func Init() (err error) {
 	// same decision. The rest are raised from entry points this package never
 	// calls: policy writes go through mutate rather than the enforcer, and the
 	// reload goes through LoadPolicyCtx, which reports nothing at all.
-	enforcer.EnableEnforce(true)
-	policyStore = policyAdapter
+	policyEnforcer.EnableEnforce(true)
+	installEnforcer(policyEnforcer, policyAdapter)
 
 	for _, subject := range defaultSystemRootSubjects {
 		if err := RBAC().AssignSystemRole(context.Background(), subject, defaultSystemRole); err != nil {

@@ -445,8 +445,9 @@ type DistributedCache[T any] interface {
 }
 
 // RBAC provides tenant-scoped role, permission, and subject assignment operations.
-// When RBAC is disabled or not initialized, the framework may provide a safe
-// no-op implementation whose methods succeed without side effects.
+// A process holding no policy set — RBAC disabled, or not initialized — answers
+// reads as the deployment they describe, denying every request and reporting no
+// roles, and refuses every write rather than reporting a change it did not make.
 //
 // RBAC Model:
 //   - Tenant: Authorization domain for roles, permissions, and assignments

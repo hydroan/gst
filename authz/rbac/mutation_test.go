@@ -73,14 +73,23 @@ func storedRules(tb testing.TB, store *adapter) []string {
 // identifier. Storage and Casbin both read an empty filter field as "match
 // anything", so the mutation would delete every rule of its kind rather than
 // one, and it has to be refused before it reaches either.
+//
+// A permission missing its object or its action is the same fault reached
+// through a whole-set replacement, and refusing it there matters twice over: the
+// replacement deletes the role's current permissions before writing the new
+// ones, so an entry passed over instead of refused would leave a caller whose
+// entries are all empty having revoked everything and been told it succeeded.
 func TestMutateRejectsEmptyValues(t *testing.T) {
 	r, store := storedRBAC(t, "policy_reject_empty")
 	ctx := context.Background()
 
 	require.NoError(t, r.AssignRole(ctx, "tenant_a", "u1", "role_a"))
 	require.NoError(t, r.AssignSystemRole(ctx, "u2", "system_root"))
+	require.NoError(t, r.SetRolePermissions(ctx, "tenant_a", "role_a", []types.Permission{
+		{Object: "/api/things", Action: "GET"},
+	}))
 	before := storedRules(t, store)
-	require.Len(t, before, 2)
+	require.Len(t, before, 3)
 
 	t.Run("remove subject with no subject", func(t *testing.T) {
 		err := r.RemoveSubject(ctx, "")
@@ -99,6 +108,28 @@ func TestMutateRejectsEmptyValues(t *testing.T) {
 		err := r.AssignRole(ctx, "tenant_a", "u3", "")
 		require.ErrorIs(t, err, ErrEmptyPolicyValue)
 		assert.ElementsMatch(t, before, storedRules(t, store))
+	})
+
+	t.Run("set role permissions with an empty entry", func(t *testing.T) {
+		for name, permissions := range map[string][]types.Permission{
+			"no object":                {{Action: "GET"}},
+			"no action":                {{Object: "/api/other"}},
+			"beside a populated entry": {{Object: "/api/other", Action: "POST"}, {Action: "GET"}},
+		} {
+			t.Run(name, func(t *testing.T) {
+				err := r.SetRolePermissions(ctx, "tenant_a", "role_a", permissions)
+				require.ErrorIs(t, err, ErrEmptyPolicyValue)
+				assert.ElementsMatch(t, before, storedRules(t, store),
+					"a refused replacement must not have revoked what the role already holds")
+			})
+		}
+	})
+
+	// Having no entry at all is not an empty value but the caller stating an
+	// empty permission set, which the replacement has to keep honoring.
+	t.Run("set role permissions with no entries", func(t *testing.T) {
+		require.NoError(t, r.SetRolePermissions(ctx, "tenant_a", "role_a", nil))
+		assert.NotContains(t, storedRules(t, store), "p:tenant_a,role_a,/api/things,GET,allow")
 	})
 }
 

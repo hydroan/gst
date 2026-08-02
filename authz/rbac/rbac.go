@@ -58,9 +58,25 @@ type rbac struct {
 	mu *sync.RWMutex
 }
 
+// ErrRBACDisabled reports a policy write made in a process that holds no policy
+// set to write it to.
+//
+// A write has nowhere to go before Init has built the enforcer: there is no
+// in-memory set to change and no adapter to store the change through. Reporting
+// success would tell the caller its change is in force — a role created through
+// the API answering 201 with not one policy row behind it — and nothing
+// downstream can tell that apart from a change that landed, because the records
+// the rules are derived from were written either way.
+//
+// Reads are answered instead of refused. A denial and an empty role set are both
+// true of a process deciding from no policies, so answering them states the
+// situation rather than hiding it.
+var ErrRBACDisabled = errors.New("rbac: authorization is not initialized")
+
 // noop implements RBAC behavior before Casbin is initialized.
-// It keeps the built-in root subject as system_root so modules that do not
-// register authz can still use root-only administrative flows.
+// It answers reads and refuses writes with ErrRBACDisabled, and keeps the
+// built-in root subject as system_root so modules that do not register authz can
+// still use root-only administrative flows.
 type noop struct{}
 
 func (noop) Authorize(
@@ -69,23 +85,26 @@ func (noop) Authorize(
 	return types.Decision{}, nil
 }
 
-func (noop) RemoveRole(ctx context.Context, tenant string, role string) error { return nil }
+func (noop) RemoveRole(ctx context.Context, tenant string, role string) error {
+	return ErrRBACDisabled
+}
+
 func (noop) SetRolePermissions(
 	ctx context.Context, tenant string, role string, permissions []types.Permission,
 ) error {
-	return nil
+	return ErrRBACDisabled
 }
 
 func (noop) SetPermissionsForAuthenticated(ctx context.Context, permissions []types.Permission) error {
-	return nil
+	return ErrRBACDisabled
 }
 
 func (noop) AssignRole(ctx context.Context, tenant string, subject string, role string) error {
-	return nil
+	return ErrRBACDisabled
 }
 
 func (noop) UnassignRole(ctx context.Context, tenant string, subject string, role string) error {
-	return nil
+	return ErrRBACDisabled
 }
 
 func (noop) RolesForSubject(ctx context.Context, tenant string, subject string) ([]string, error) {
@@ -95,11 +114,11 @@ func (noop) RolesForSubject(ctx context.Context, tenant string, subject string) 
 func (noop) SubjectsInTenant(ctx context.Context, tenant string) ([]string, error) { return nil, nil }
 
 func (noop) AssignSystemRole(ctx context.Context, subject string, role string) error {
-	return nil
+	return ErrRBACDisabled
 }
 
 func (noop) UnassignSystemRole(ctx context.Context, subject string, role string) error {
-	return nil
+	return ErrRBACDisabled
 }
 
 func (noop) HasSystemRole(ctx context.Context, subject string, role string) (bool, error) {
@@ -107,22 +126,47 @@ func (noop) HasSystemRole(ctx context.Context, subject string, role string) (boo
 }
 
 func (noop) RemoveSubject(ctx context.Context, subject string) error {
-	return nil
+	return ErrRBACDisabled
 }
 
+// ReloadPolicies succeeds because there is no in-memory policy set to rebuild.
+// Nothing is claimed by saying so: the caller asked this process to catch up
+// with storage, and a process deciding from no policies already has.
 func (noop) ReloadPolicies(ctx context.Context) error { return nil }
 
+// RBAC returns the authorization entry point this process decides from.
+//
+// Before Init has installed an enforcer — RBAC disabled, or a process that never
+// bootstrapped — it answers with noop, which denies every request and refuses
+// every write.
+//
+// The two package variables are read together under the lock they are installed
+// under. Read outside it, a caller could be handed an enforcer whose adapter has
+// not been assigned yet, and the first write through it would dereference a nil
+// adapter.
 func RBAC() types.RBAC {
-	// When RBAC is disabled or enforcer is not initialized,
-	// return a safe no-op implementation to prevent panics.
-	if enforcer == nil {
+	enforcerMu.RLock()
+	policyEnforcer, store := enforcer, policyStore
+	enforcerMu.RUnlock()
+
+	if policyEnforcer == nil {
 		return noop{}
 	}
 	return &rbac{
-		enforcer: enforcer,
-		adapter:  policyStore,
+		enforcer: policyEnforcer,
+		adapter:  store,
 		mu:       &enforcerMu,
 	}
+}
+
+// installEnforcer publishes the enforcer and the adapter its writes go through
+// as one step, so that no reader observes one without the other. See RBAC.
+func installEnforcer(policyEnforcer *casbin.ContextEnforcer, store *adapter) {
+	enforcerMu.Lock()
+	defer enforcerMu.Unlock()
+
+	enforcer = policyEnforcer
+	policyStore = store
 }
 
 // policyRoleColumn is the position of the role token in a p policy row. The
@@ -336,13 +380,18 @@ func (r *rbac) replacePermissions(
 // the matched one: an order that followed the caller's would make
 // a decision name a different rule for the same request whenever the
 // caller derived its set from an unordered source.
+//
+// An entry missing an object or an action is rendered as it stands rather than
+// dropped, and mutate refuses the rule before anything is written. Dropping it
+// would leave a caller whose entries are all empty having asked to revoke
+// everything, silently: the replacement deletes the role's current set whether
+// or not a new one follows. Leaving the refusal to mutate is also what keeps
+// one implementation of it — the same ErrEmptyPolicyValue every other rule kind
+// is checked against.
 func permissionPolicies(tenant string, role string, permissions []types.Permission) [][]string {
 	unique := make([]types.Permission, 0, len(permissions))
 	seen := make(map[types.Permission]struct{}, len(permissions))
 	for _, permission := range permissions {
-		if permission.Object == "" || permission.Action == "" {
-			continue
-		}
 		if _, ok := seen[permission]; ok {
 			continue
 		}
