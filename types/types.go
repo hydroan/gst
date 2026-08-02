@@ -43,9 +43,15 @@ type Permission struct {
 // allow without consulting one leave the engine free to report an unrelated
 // row, which would read as the reason for access while being nothing of the
 // kind.
+//
+// Reason is the mirror of Source and is set only on a denial, where naming a
+// rule is not possible and what an operator needs instead is which step is
+// missing. It is empty when the implementation could not tell, so an empty
+// reason on a denial means unknown rather than none.
 type Decision struct {
 	Allowed     bool
 	Source      consts.GrantSource
+	Reason      consts.DenyReason
 	MatchedRule []string
 }
 

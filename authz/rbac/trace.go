@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	gstotel "github.com/hydroan/gst/provider/otel"
+	"github.com/hydroan/gst/types"
 )
 
 func contextOrBackground(ctx context.Context) context.Context {
@@ -43,6 +44,68 @@ func traceRBAC(ctx context.Context, operation string, fields map[string]any) (co
 		gstotel.AddSpanTags(span, map[string]any{
 			"rbac.success": err == nil,
 		})
+		if err != nil {
+			gstotel.RecordError(span, err)
+		}
+	}
+}
+
+// traceAuthorize starts the span one decision is made under, and returns a
+// callback that records what was decided rather than only whether deciding
+// worked.
+//
+// It is separate from traceRBAC because a decision is the one operation whose
+// result is worth recording: the writes around it either happen or report why
+// they did not, while an authorization that answers perfectly well can still be
+// the answer somebody is trying to explain. A trace that says only "succeeded"
+// cannot tell an allow from a denial, so it cannot answer the question the span
+// exists for.
+//
+// Nothing is built before the sampler has been consulted. This runs once per
+// request, and a span that will not be recorded must cost no allocation at all;
+// assembling the attributes first and discarding them would put that cost on
+// every request in a deployment that samples, or traces not at all.
+func traceAuthorize(ctx context.Context, tenant string) func(types.Decision, error) {
+	if !gstotel.IsEnabled() {
+		return func(types.Decision, error) {}
+	}
+
+	_, span := gstotel.StartSpan(contextOrBackground(ctx), gstotel.OperationSpanName("rbac", "authorize"))
+	if !gstotel.IsSpanRecording(span) {
+		return func(types.Decision, error) { span.End() }
+	}
+	gstotel.AddSpanTags(span, map[string]any{
+		"component":      "rbac",
+		"rbac.operation": "authorize",
+		"rbac.tenant":    tenant,
+	})
+
+	return func(decision types.Decision, err error) {
+		defer span.End()
+
+		tags := map[string]any{
+			"rbac.success": err == nil,
+			"rbac.allowed": decision.Allowed,
+		}
+		// Exactly one of the two is set, and which one is the outcome: a grant
+		// names the rule kind that allowed it, a denial names the step it was
+		// missing. Recording both keys would leave a reader guessing which
+		// applied.
+		if decision.Source != "" {
+			tags["rbac.allowed_by"] = string(decision.Source)
+		}
+		if decision.Reason != "" {
+			tags["rbac.denied_by"] = string(decision.Reason)
+		}
+		// The matched rule is the policy row, not the request path: it carries
+		// the template that matched, which is what an operator revokes. A span
+		// attribute is not an index key, so its cardinality costs nothing here
+		// the way it would on a metric label.
+		if len(decision.MatchedRule) > 0 {
+			tags["rbac.matched_rule"] = strings.Join(decision.MatchedRule, ",")
+		}
+		gstotel.AddSpanTags(span, tags)
+
 		if err != nil {
 			gstotel.RecordError(span, err)
 		}

@@ -89,14 +89,14 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 			})
 			// Anonymous requests are rejected before the tenant is resolved,
 			// so the decision is recorded without one.
-			logAuthzDecision(c, "", sub, obj, act, consts.EffectDeny)
+			logAuthzDeny(c, "", sub, obj, act, consts.DenyReasonUnauthenticated)
 			return
 		}
 		tenantID, err := resolveAuthzTenant(c, cfg.TenantResolver)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 				"code":          -1,
-				"msg":           "authorization failed",
+				"msg":           "authorization unavailable",
 				"data":          nil,
 				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 			})
@@ -111,12 +111,17 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 		}
 		c.Set(consts.CTX_TENANT_ID, tenantID)
 
+		// An attempt that could not be decided is reported as this server's
+		// failure, which is what it is: nothing about the request is wrong, and
+		// the client cannot change anything to make the decision reachable.
+		// Answering 400 filed authorization outages under client error, where
+		// nothing watching for server faults would ever see them.
 		var decision types.Decision
 		if decision, err = rbac.RBAC().
 			Authorize(c.Request.Context(), tenantID, sub, obj, act); err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 				"code":          -1,
-				"msg":           "authorization failed",
+				"msg":           "authorization unavailable",
 				"data":          nil,
 				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 			})
@@ -144,7 +149,7 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 			"data":          nil,
 			consts.TRACE_ID: c.GetString(consts.TRACE_ID),
 		})
-		logAuthzDecision(c, tenantID, sub, obj, act, consts.EffectDeny)
+		logAuthzDeny(c, tenantID, sub, obj, act, decision.Reason)
 	}
 }
 
@@ -178,19 +183,31 @@ func logAuthzGrant(
 	logger.Authz.Infoz("", fields...)
 }
 
-// logAuthzDecision writes one completed authorization decision to the authz log.
+// logAuthzDeny writes one refused request, together with what it was missing.
+//
+// denied_by is the mirror of allowed_by: a denial names no rule, so the only
+// thing it can report is which of the two steps behind a grant did not happen —
+// the subject holding a role here, or a permission covering the request. The
+// two lead to opposite repairs, and the request tuple beside it says neither.
+// It is omitted when nothing could be determined, so an absent field reads as
+// unknown rather than as a reason of its own.
+//
 // It is called at decision time, before the handler chain runs, so timestamps
-// mean the same thing for every effect and a panicking handler cannot drop
-// an allowed decision.
-func logAuthzDecision(c *gin.Context, tenant, sub, obj, act string, effect consts.Effect) {
+// mean the same thing for every effect and a panicking handler cannot drop a
+// decision.
+func logAuthzDeny(c *gin.Context, tenant, sub, obj, act string, reason consts.DenyReason) {
 	if logger.Authz == nil {
 		return
 	}
 
-	logger.Authz.Infoz("", append(
+	fields := append(
 		authzLogFields(c, tenant, sub, obj, act),
-		zap.String("eft", string(effect)),
-	)...)
+		zap.String("eft", string(consts.EffectDeny)),
+	)
+	if reason != "" {
+		fields = append(fields, zap.String("denied_by", string(reason)))
+	}
+	logger.Authz.Infoz("", fields...)
 }
 
 // logAuthzFailure writes an authorization attempt that could not be decided.
@@ -208,10 +225,15 @@ func logAuthzFailure(c *gin.Context, tenant, sub, obj, act string, err error) {
 	)...)
 }
 
-// authzLogFieldCount is the shared field count plus the most any caller appends
-// to it: an effect, a grant source, and a matched rule. Reserving it keeps the
-// append from growing the slice, which would cost a second allocation and a copy
-// on every authorized request.
+// authzLogFieldCount is the six shared fields plus the most any one caller
+// appends: a grant adds an effect, a source and a matched rule, which is three
+// and more than either other caller. Reserving it keeps the append from growing
+// the slice, which would cost a second allocation and a copy on every
+// authorized request.
+//
+// A caller adding a field has to check its own total against this, not raise it
+// on sight: a denial appends two and a failure one, so both stay inside a
+// reservation sized for the grant.
 const authzLogFieldCount = 9
 
 // authzLogFields builds the field set shared by every authz log entry, so

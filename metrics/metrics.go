@@ -156,17 +156,20 @@ func Init() error {
 		Help:      "Whether the in-memory authorization policy set no longer agrees with storage",
 	})
 
-	// Labeled by outcome and by what allowed it, both of which are bounded by
-	// the model rather than by traffic: a decision is allowed, denied or
-	// undecidable, and an allowed one names one of a handful of rule kinds.
-	// Neither the tenant nor the subject is a label — those grow with the
-	// deployment and belong in the authz log, which carries them already.
+	// Labeled by outcome and by the explanation that outcome can carry, all of
+	// which are bounded by the model rather than by traffic: a decision is
+	// allowed, denied or undecidable; an allowed one names one of a handful of
+	// rule kinds; a denied one names which of the two steps behind a grant is
+	// missing. Only the label belonging to the effect is filled, so the two
+	// never multiply into series that cannot occur. Neither the tenant nor the
+	// subject is a label — those grow with the deployment and belong in the
+	// authz log, which carries them already.
 	AuthzDecisionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: NAMESPACE,
 		Subsystem: SUBSYSTEM,
 		Name:      "authz_decisions_total",
-		Help:      "Total authorization decisions by outcome and granting rule kind",
-	}, []string{"effect", "allowed_by"})
+		Help:      "Total authorization decisions by outcome, granting rule kind and denial reason",
+	}, []string{"effect", "allowed_by", "denied_by"})
 
 	errs := make([]error, 0, 19)
 	errs = append(errs, prometheus.Register(State))

@@ -512,6 +512,38 @@ const (
 	GrantSourceRole GrantSource = "role"
 )
 
+// DenyReason names why a request was not allowed.
+//
+// A denial has no granting rule, so it cannot be explained the way an allow is,
+// by naming one. What is left to say is which of the two steps behind every
+// grant did not happen: the subject was never given a role here, or it holds
+// roles and none of their permissions covers the request. Those lead to
+// opposite repairs — a role binding, or a permission — and the request tuple
+// alone does not say which.
+//
+// The values are few and fixed, so denials can be counted by reason without the
+// label set growing with the deployment.
+type DenyReason string
+
+const (
+	// DenyReasonUnauthenticated is a request carrying no authenticated subject.
+	// Authorization runs after authentication, so such a request is refused
+	// before any policy is consulted.
+	DenyReasonUnauthenticated DenyReason = "unauthenticated"
+	// DenyReasonNoRole is a subject holding no role in the request tenant.
+	// Nothing tenant-scoped can grant it, whatever permissions exist, so the
+	// missing step is a role binding.
+	DenyReasonNoRole DenyReason = "no_role"
+	// DenyReasonNoPolicy is a subject holding roles whose permissions do not
+	// cover this object and action. The binding is in place, so the missing
+	// step is a permission.
+	DenyReasonNoPolicy DenyReason = "no_policy"
+	// DenyReasonNotInitialized is a process holding no policy set at all, which
+	// denies every request it decides. It reports a deployment that never
+	// initialized authorization rather than a rule somebody forgot to write.
+	DenyReasonNotInitialized DenyReason = "not_initialized"
+)
+
 type Effect string
 
 const (

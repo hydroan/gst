@@ -55,6 +55,8 @@ func TestRBACWithoutAnEnforcerAnswersReads(t *testing.T) {
 	decision, err := r.Authorize(ctx, "tenant_a", consts.AUTHZ_USER_ROOT, "/api/things", "GET")
 	require.NoError(t, err)
 	assert.False(t, decision.Allowed, "a process deciding from no policies has to deny")
+	assert.Equal(t, consts.DenyReasonNotInitialized, decision.Reason,
+		"every request is refused the same way, which is a deployment answer rather than a missing rule")
 
 	// The built-in root subject keeps system_root so that modules registering no
 	// authz can still use root-only administrative flows.

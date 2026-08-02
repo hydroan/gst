@@ -12,7 +12,8 @@ import (
 )
 
 // TestAuthorizeNamesTheGrantingRule covers one case per branch a decision can
-// take, plus the denial that has no granting rule at all.
+// take, plus the denials that have no granting rule to name and report what
+// they were missing instead.
 func TestAuthorizeNamesTheGrantingRule(t *testing.T) {
 	r := newAuthorizeFixture(t)
 	ctx := context.Background()
@@ -23,6 +24,7 @@ func TestAuthorizeNamesTheGrantingRule(t *testing.T) {
 		object      string
 		wantAllowed bool
 		wantSource  consts.GrantSource
+		wantReason  consts.DenyReason
 		wantRule    []string
 	}{
 		{
@@ -56,10 +58,18 @@ func TestAuthorizeNamesTheGrantingRule(t *testing.T) {
 			wantRule:    []string{"default", "role_a", "/api/things", "GET", "allow"},
 		},
 		{
-			name:        "denied",
+			name:        "denied for holding no role",
 			subject:     "u_plain",
 			object:      "/api/things",
 			wantAllowed: false,
+			wantReason:  consts.DenyReasonNoRole,
+		},
+		{
+			name:        "denied for holding no permission",
+			subject:     "u_member",
+			object:      "/api/unreachable",
+			wantAllowed: false,
+			wantReason:  consts.DenyReasonNoPolicy,
 		},
 	}
 	for _, c := range cases {
@@ -76,6 +86,9 @@ func TestAuthorizeNamesTheGrantingRule(t *testing.T) {
 			}
 			if source != c.wantSource {
 				t.Errorf("source: expected %q, got %q", c.wantSource, source)
+			}
+			if decision.Reason != c.wantReason {
+				t.Errorf("reason: expected %q, got %q", c.wantReason, decision.Reason)
 			}
 			if !slices.Equal(rule, c.wantRule) {
 				t.Errorf("rule: expected %v, got %v", c.wantRule, rule)
@@ -386,33 +399,45 @@ func newAuthorizeFixture(t *testing.T) *rbac {
 //
 // The three outcomes are kept apart because they answer different questions: an
 // error is not a denial, and folding it into one would move the count the other
-// is read for.
+// is read for. Each carries only the label its effect can fill, so a denial
+// counted by reason cannot be mistaken for one allowed by a rule kind.
 func TestAuthorizeCountsEveryDecision(t *testing.T) {
 	prommetrics.AuthzDecisionsTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{Name: "authz_decisions_probe"}, []string{"effect", "allowed_by"},
+		prometheus.CounterOpts{Name: "authz_decisions_probe"},
+		[]string{"effect", "allowed_by", "denied_by"},
 	)
 	t.Cleanup(func() { prommetrics.AuthzDecisionsTotal = nil })
 
 	r := newAuthorizeFixture(t)
 	ctx := context.Background()
 
-	if _, err := r.Authorize(ctx, "default", "u_member", "/api/things", "GET"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := r.Authorize(ctx, "default", "u_plain", "/api/things", "GET"); err != nil {
-		t.Fatal(err)
+	// One of each outcome: a member reaching its role's object, a subject
+	// holding no role at all, and that same member reaching an object no
+	// policy covers. The last two are both denials and are counted apart,
+	// because a missing binding and a missing permission are repaired
+	// differently.
+	for _, c := range []struct{ subject, object string }{
+		{"u_member", "/api/things"},
+		{"u_plain", "/api/things"},
+		{"u_member", "/api/unreachable"},
+	} {
+		if _, err := r.Authorize(ctx, "default", c.subject, c.object, "GET"); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	for _, c := range []struct {
 		effect    string
 		allowedBy string
+		deniedBy  string
 		want      float64
 	}{
-		{string(consts.EffectAllow), string(consts.GrantSourceRole), 1},
-		{string(consts.EffectDeny), "", 1},
+		{string(consts.EffectAllow), string(consts.GrantSourceRole), "", 1},
+		{string(consts.EffectDeny), "", string(consts.DenyReasonNoRole), 1},
+		{string(consts.EffectDeny), "", string(consts.DenyReasonNoPolicy), 1},
 	} {
 		var metric dto.Metric
-		counter, err := prommetrics.AuthzDecisionsTotal.GetMetricWithLabelValues(c.effect, c.allowedBy)
+		counter, err := prommetrics.AuthzDecisionsTotal.GetMetricWithLabelValues(c.effect, c.allowedBy, c.deniedBy)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -420,7 +445,7 @@ func TestAuthorizeCountsEveryDecision(t *testing.T) {
 			t.Fatal(err)
 		}
 		if got := metric.GetCounter().GetValue(); got != c.want {
-			t.Errorf("%s/%s: expected %v, got %v", c.effect, c.allowedBy, c.want, got)
+			t.Errorf("%s/%s/%s: expected %v, got %v", c.effect, c.allowedBy, c.deniedBy, c.want, got)
 		}
 	}
 }

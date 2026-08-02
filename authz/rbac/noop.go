@@ -5,6 +5,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/types/consts"
 )
 
 // ErrRBACDisabled reports a policy write made in a process that holds no policy
@@ -28,10 +29,14 @@ var ErrRBACDisabled = errors.New("rbac: authorization is not initialized")
 // still use root-only administrative flows.
 type noop struct{}
 
+// Authorize denies, and says that it is the absence of a policy set doing it
+// rather than the absence of a rule. Every request in the process is refused
+// the same way, which reads in the log as a deployment-wide misconfiguration
+// instead of a permission somebody forgot to grant.
 func (noop) Authorize(
 	ctx context.Context, tenant string, subject string, object string, action string,
 ) (types.Decision, error) {
-	return types.Decision{}, nil
+	return types.Decision{Reason: consts.DenyReasonNotInitialized}, nil
 }
 
 func (noop) RemoveRole(ctx context.Context, tenant string, role string) error {
