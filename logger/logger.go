@@ -2,7 +2,6 @@
 package logger
 
 import (
-	"github.com/casbin/casbin/v3/log"
 	"github.com/hydroan/gst/types"
 	"go.uber.org/zap"
 	gorml "gorm.io/gorm/logger"
@@ -50,5 +49,4 @@ var (
 	Gin      *zap.Logger
 	HTTPBody *zap.Logger
 	Gorm     gorml.Interface
-	Casbin   log.Logger
 )

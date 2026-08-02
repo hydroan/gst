@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	casbinl "github.com/casbin/casbin/v3/log"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types"
@@ -100,7 +99,6 @@ func Init() error {
 	logger.Gin = NewGin("access.log")
 	logger.HTTPBody = NewGin("http_body.log")
 	logger.Gorm = NewGorm("gorm.log")
-	logger.Casbin = NewCasbin("casbin.log")
 
 	return nil
 }
@@ -169,18 +167,6 @@ func Clean() {
 		}
 	}
 
-	// casbin logger
-	casbinLogs := []casbinl.Logger{
-		logger.Casbin,
-	}
-	for _, clog := range casbinLogs {
-		if log, ok := clog.(*CasbinLogger); ok {
-			if l, ok := log.l.(*Logger); ok {
-				_ = l.zlog.Sync()
-			}
-		}
-	}
-
 	stopBufferedLogWriters()
 }
 
@@ -215,20 +201,6 @@ func NewGorm(filename string) gorml.Interface {
 		zap.AddStacktrace(zapcore.FatalLevel),
 	)
 	return &GormLogger{l: &Logger{zlog: logger}}
-}
-
-// NewCasbin builds a casbin Logger (no caller field).
-// filename: target log file name ("/dev/stdout" for console)
-func NewCasbin(filename string) casbinl.Logger {
-	readConf()
-	if len(filename) > 0 {
-		logFile = filename
-	}
-	logger := zap.New(
-		zapcore.NewCore(newLogEncoder(Option{DisableMsg: true}), newLogWriter(), newLogLevel()),
-		zap.AddStacktrace(zapcore.FatalLevel),
-	)
-	return &CasbinLogger{l: &Logger{zlog: logger}}
 }
 
 // NewGin builds a *zap.Logger for Gin access logs.

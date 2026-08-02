@@ -9,7 +9,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types/consts"
 )
 
@@ -136,7 +135,14 @@ func Init() (err error) {
 		return err
 	}
 
-	enforcer.SetLogger(logger.Casbin)
+	// No logger is given to the enforcer, and none should be. Of the events
+	// Casbin reports, the only one it raises along any path this package takes
+	// is the enforcement event, once per decision and so once per request —
+	// carrying neither the tenant, nor what allowed the request, nor the trace
+	// it belongs to, all of which the authz middleware already writes for the
+	// same decision. The rest are raised from entry points this package never
+	// calls: policy writes go through mutate rather than the enforcer, and the
+	// reload goes through LoadPolicyCtx, which reports nothing at all.
 	enforcer.EnableEnforce(true)
 	policyStore = policyAdapter
 
