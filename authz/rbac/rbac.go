@@ -1,19 +1,3 @@
-// Package rbac decides authorization from Casbin policies and keeps those
-// policies in step with the records they are derived from.
-//
-// Three rule kinds carry everything the package stores. A permission,
-// (tenant, role, object, action, effect), is what a role may reach. An
-// assignment, (subject, role, tenant), is who holds a role in one tenant. A
-// system assignment, (subject, role), is who holds a role above every tenant,
-// which is how the built-in root subject stays reachable in a deployment with no
-// tenants configured at all.
-//
-// Reads answer from memory: the two role branches from the role graph, and
-// everything a policy decides from the enforcer. Writes do not: they go through
-// mutate, which drives storage and memory as two halves so that a policy change
-// rolls back with the transaction that caused it. Nothing in the package writes
-// through the enforcer's own AddPolicy family, and autosave stays off so Casbin
-// cannot write behind mutate's back.
 package rbac
 
 import (
@@ -275,8 +259,35 @@ func (r *rbac) RemoveRole(ctx context.Context, tenant string, role string) (err 
 	)
 }
 
+// ErrReservedRole reports a permission written against a role the matcher reads
+// as something other than an ordinary role.
+//
+// A policy stored for the implicit authenticated role is matched without a role
+// membership check and without a tenant check, so it allows every subject that
+// can log in, in every tenant. Written through an ordinary role call it would
+// turn one tenant's permission set into a grant across the whole deployment,
+// while reading in the records it came from as a role like any other.
+//
+// SetPermissionsForAuthenticated writes that rule deliberately, and refusing it
+// here is what leaves that method as the only way to write it. Removals are not
+// refused: whatever is already stored has to be removable.
+var ErrReservedRole = errors.New("rbac: role is reserved by the authorization matcher")
+
+// errIfReservedRole refuses a permission written against a reserved role. The
+// comparison is exact, because the matcher's is: a role differing by so much as
+// a space is an ordinary role that reaches nothing on its own.
+func errIfReservedRole(role string) error {
+	if role == consts.AUTHZ_ROLE_AUTHENTICATED {
+		return errors.Wrapf(ErrReservedRole, "role %q", role)
+	}
+	return nil
+}
+
 // GrantPermission grants role access to object/action inside tenant.
 func (r *rbac) GrantPermission(ctx context.Context, tenant string, role string, object string, action string) (err error) {
+	if err := errIfReservedRole(role); err != nil {
+		return err
+	}
 	tenant = normalizeTenant(tenant)
 	ctx, finishSpan := traceRBAC(ctx, "grant_permission", rbacTraceFields(tenant, role))
 	defer func() {
