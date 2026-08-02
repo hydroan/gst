@@ -19,15 +19,25 @@ import (
 // Index renames therefore follow the migrate-then-deploy workflow: apply the
 // rename through gg migrate first, so this bootstrap path finds the new name
 // already in place and does nothing.
+//
+// The table name is resolved through resolveTableName rather than taken from
+// GetTableName, because models may leave the name to gorm's naming strategy.
+// Planning and inspection must agree on it: an unresolved name makes the
+// migrator inspect nothing, so every plan looks missing and gets recreated.
 func ensureCustomIndexes(handler *gorm.DB, m types.Model) error {
-	plans, err := modelregistry.ParseIndexPlans(handler, m, m.GetTableName())
+	tableName, err := resolveTableName(handler, m)
+	if err != nil {
+		return err
+	}
+
+	plans, err := modelregistry.ParseIndexPlans(handler, m, tableName)
 	if err != nil || len(plans) == 0 {
 		return err
 	}
 
-	existing, err := handler.Migrator().GetIndexes(m.GetTableName())
+	existing, err := handler.Migrator().GetIndexes(tableName)
 	if err != nil {
-		return errors.Wrapf(err, "failed to inspect indexes of table %q", m.GetTableName())
+		return errors.Wrapf(err, "failed to inspect indexes of table %q", tableName)
 	}
 	byName := make(map[string]gorm.Index, len(existing))
 	for _, idx := range existing {

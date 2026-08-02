@@ -54,16 +54,16 @@ func resolveTableName(handler *gorm.DB, m types.Model) (string, error) {
 // keeps the zero-config defaults (sqlite, in-memory, auto_migrate off) bootable
 // instead of panicking on the first registered model.
 func ensureTable(handler *gorm.DB, m types.Model) error {
-	inMemory := config.App.Database.Type == config.DBSqlite && config.App.Sqlite.IsMemory
-	if config.App.Database.AutoMigrate || inMemory {
-		if err := handler.Table(m.GetTableName()).AutoMigrate(m); err != nil {
-			return err
-		}
-		return ensureCustomIndexes(handler, m)
-	}
 	tableName, err := resolveTableName(handler, m)
 	if err != nil {
 		return err
+	}
+	inMemory := config.App.Database.Type == config.DBSqlite && config.App.Sqlite.IsMemory
+	if config.App.Database.AutoMigrate || inMemory {
+		if err := handler.Table(tableName).AutoMigrate(m); err != nil {
+			return err
+		}
+		return ensureCustomIndexes(handler, m)
 	}
 	if !handler.Migrator().HasTable(tableName) {
 		return errors.Newf("table %q does not exist: run \"gg migrate\" to apply the schema, or enable database.auto_migrate for local development", tableName)
