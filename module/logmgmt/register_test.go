@@ -25,6 +25,7 @@ import (
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/module/logmgmt"
 	"github.com/hydroan/gst/tenant"
+	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
 	"github.com/stretchr/testify/require"
@@ -353,30 +354,38 @@ func grantLogmgmtTestPermissions(t *testing.T, userID string) {
 	perm := rbac.RBAC()
 	ctx := context.Background()
 	require.NoError(t, perm.AssignRole(ctx, tenant.Default, userID, logmgmtTestReaderRole))
-	require.NoError(t, perm.GrantPermission(ctx, tenant.Default, logmgmtTestReaderRole, "/api/log/loginlog", http.MethodGet))
-	require.NoError(t, perm.GrantPermission(ctx, tenant.Default, logmgmtTestReaderRole, "/api/log/operationlog", http.MethodGet))
-	require.NoError(t, perm.GrantPermission(ctx, tenant.Default, logmgmtTestReaderRole, "/api/logout", http.MethodPost))
+	require.NoError(t, perm.SetRolePermissions(ctx, tenant.Default, logmgmtTestReaderRole, []types.Permission{
+		{Object: "/api/log/loginlog", Action: http.MethodGet},
+		{Object: "/api/log/operationlog", Action: http.MethodGet},
+		{Object: "/api/logout", Action: http.MethodPost},
+	}))
 
 	require.NoError(t, perm.AssignRole(ctx, tenant.Default, "root", logmgmtTestAdminRole))
-	require.NoError(t, perm.GrantPermission(ctx, tenant.Default, logmgmtTestAdminRole, "/api/authz/roles", http.MethodPost))
+	require.NoError(t, perm.SetRolePermissions(ctx, tenant.Default, logmgmtTestAdminRole, []types.Permission{
+		{Object: "/api/authz/roles", Action: http.MethodPost},
+	}))
 
-	allowed, err := perm.Authorize(ctx, tenant.Default, userID, "/api/log/loginlog", http.MethodGet)
+	decision, err := perm.Authorize(ctx, tenant.Default, userID, "/api/log/loginlog", http.MethodGet)
+	allowed := decision.Allowed
 	require.NoError(t, err)
 	require.True(t, allowed)
-	allowed, err = perm.Authorize(ctx, tenant.Default, userID, "/api/log/operationlog", http.MethodGet)
+	decision, err = perm.Authorize(ctx, tenant.Default, userID, "/api/log/operationlog", http.MethodGet)
+	allowed = decision.Allowed
 	require.NoError(t, err)
 	require.True(t, allowed)
-	allowed, err = perm.Authorize(ctx, tenant.Default, userID, "/api/logout", http.MethodPost)
+	decision, err = perm.Authorize(ctx, tenant.Default, userID, "/api/logout", http.MethodPost)
+	allowed = decision.Allowed
 	require.NoError(t, err)
 	require.True(t, allowed)
-	allowed, err = perm.Authorize(ctx, tenant.Default, "root", "/api/authz/roles", http.MethodPost)
+	decision, err = perm.Authorize(ctx, tenant.Default, "root", "/api/authz/roles", http.MethodPost)
+	allowed = decision.Allowed
 	require.NoError(t, err)
 	require.True(t, allowed)
 
 	t.Cleanup(func() {
 		require.NoError(t, perm.UnassignRole(context.Background(), tenant.Default, userID, logmgmtTestReaderRole))
 		require.NoError(t, perm.UnassignRole(context.Background(), tenant.Default, "root", logmgmtTestAdminRole))
-		require.NoError(t, perm.RevokeRolePermissions(context.Background(), tenant.Default, logmgmtTestReaderRole))
-		require.NoError(t, perm.RevokeRolePermissions(context.Background(), tenant.Default, logmgmtTestAdminRole))
+		require.NoError(t, perm.SetRolePermissions(context.Background(), tenant.Default, logmgmtTestReaderRole, nil))
+		require.NoError(t, perm.SetRolePermissions(context.Background(), tenant.Default, logmgmtTestAdminRole, nil))
 	})
 }

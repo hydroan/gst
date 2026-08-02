@@ -7,29 +7,17 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
-// BenchmarkAuthorize measures the existing decision-only path.
+// BenchmarkAuthorize measures a decision on the branch that costs the most: a
+// role grant, which reaches the source derivation only after both membership
+// lookups miss.
 func BenchmarkAuthorize(b *testing.B) {
 	r := newTestRBAC(b, 363)
 	ctx := context.Background()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
-		if _, err := r.Authorize(ctx, "default", "u1", "/api/things/300", "GET"); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-// BenchmarkAuthorizeExplained measures the same decision plus the explanation,
-// on the branch that costs the most: a role grant, which reaches the source
-// derivation only after both membership lookups miss.
-func BenchmarkAuthorizeExplained(b *testing.B) {
-	r := newTestRBAC(b, 363)
-	ctx := context.Background()
-	b.ReportAllocs()
-	b.ResetTimer()
-	for range b.N {
-		_, source, _, err := r.AuthorizeExplained(ctx, "default", "u1", "/api/things/300", "GET")
+		decision, err := r.Authorize(ctx, "default", "u1", "/api/things/300", "GET")
+		source := decision.Source
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -54,22 +42,24 @@ func BenchmarkAuthorizeSystemRoot(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
-		allowed, err := r.Authorize(ctx, "default", "u_root", "/api/things/300", "GET")
+		decision, err := r.Authorize(ctx, "default", "u_root", "/api/things/300", "GET")
+		allowed := decision.Allowed
 		if err != nil || !allowed {
 			b.Fatalf("allowed=%v err=%v", allowed, err)
 		}
 	}
 }
 
-// BenchmarkAuthorizeExplainedDenied covers the denial path, which skips the
+// BenchmarkAuthorizeDenied covers the denial path, which skips the
 // derivation entirely.
-func BenchmarkAuthorizeExplainedDenied(b *testing.B) {
+func BenchmarkAuthorizeDenied(b *testing.B) {
 	r := newTestRBAC(b, 363)
 	ctx := context.Background()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
-		allowed, _, _, err := r.AuthorizeExplained(ctx, "default", "u1", "/api/nope", "GET")
+		decision, err := r.Authorize(ctx, "default", "u1", "/api/nope", "GET")
+		allowed := decision.Allowed
 		if err != nil {
 			b.Fatal(err)
 		}

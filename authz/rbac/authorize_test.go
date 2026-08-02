@@ -8,10 +8,10 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
-// TestAuthorizeExplainedNamesTheGrantingRule covers one case per matcher branch,
-// plus the denial that has no granting rule at all.
-func TestAuthorizeExplainedNamesTheGrantingRule(t *testing.T) {
-	r := newExplainedFixture(t)
+// TestAuthorizeNamesTheGrantingRule covers one case per branch a decision can
+// take, plus the denial that has no granting rule at all.
+func TestAuthorizeNamesTheGrantingRule(t *testing.T) {
+	r := newAuthorizeFixture(t)
 	ctx := context.Background()
 
 	cases := []struct {
@@ -61,7 +61,10 @@ func TestAuthorizeExplainedNamesTheGrantingRule(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			allowed, source, rule, err := r.AuthorizeExplained(ctx, "default", c.subject, c.object, "GET")
+			decision, err := r.Authorize(ctx, "default", c.subject, c.object, "GET")
+			allowed := decision.Allowed
+			source := decision.Source
+			rule := decision.MatchedRule
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -74,31 +77,23 @@ func TestAuthorizeExplainedNamesTheGrantingRule(t *testing.T) {
 			if !slices.Equal(rule, c.wantRule) {
 				t.Errorf("rule: expected %v, got %v", c.wantRule, rule)
 			}
-
-			// Both entry points share one decision, so the cheaper one has
-			// nothing of its own to drift from.
-			decided, err := r.Authorize(ctx, "default", c.subject, c.object, "GET")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if decided != allowed {
-				t.Errorf("Authorize: expected %v, got %v", allowed, decided)
-			}
 		})
 	}
 }
 
-// TestAuthorizeExplainedReportsStrongestSource pins the branch order. A subject
+// TestAuthorizeReportsStrongestSource pins the branch order. A subject
 // holding both a system role and a role policy for the same object is allowed by
 // either one, and only the stronger answers the question the field exists for:
 // revoking the role policy would not take the access away.
-func TestAuthorizeExplainedReportsStrongestSource(t *testing.T) {
-	r := newExplainedFixture(t)
+func TestAuthorizeReportsStrongestSource(t *testing.T) {
+	r := newAuthorizeFixture(t)
 	if _, err := r.enforcer.AddGroupingPolicy("u_system", "role_a", "default"); err != nil {
 		t.Fatal(err)
 	}
 
-	_, source, rule, err := r.AuthorizeExplained(context.Background(), "default", "u_system", "/api/things", "GET")
+	decision, err := r.Authorize(context.Background(), "default", "u_system", "/api/things", "GET")
+	source := decision.Source
+	rule := decision.MatchedRule
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,17 +105,18 @@ func TestAuthorizeExplainedReportsStrongestSource(t *testing.T) {
 	}
 }
 
-// TestAuthorizeExplainedOmitsRuleForPolicylessBranches guards the reason the
+// TestAuthorizeOmitsRuleForPolicylessBranches guards the reason the
 // rule is withheld above: those two branches are answered before the engine is
 // entered, so no stored row took part in the decision and naming one would
 // point at a grant that is not the reason for the access — here, for an
 // entirely different object.
-func TestAuthorizeExplainedOmitsRuleForPolicylessBranches(t *testing.T) {
-	r := newExplainedFixture(t)
+func TestAuthorizeOmitsRuleForPolicylessBranches(t *testing.T) {
+	r := newAuthorizeFixture(t)
 	ctx := context.Background()
 
 	for _, subject := range []string{"u_system", "u_admin"} {
-		_, _, rule, err := r.AuthorizeExplained(ctx, "default", subject, "/api/unrelated", "DELETE")
+		decision, err := r.Authorize(ctx, "default", subject, "/api/unrelated", "DELETE")
+		rule := decision.MatchedRule
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -138,7 +134,7 @@ func TestAuthorizeExplainedOmitsRuleForPolicylessBranches(t *testing.T) {
 // no to both cases below, so a branch rebuilt that way would take away access
 // that used to be granted, and would do it silently.
 func TestAuthorizeResolvesInheritedRoleLinks(t *testing.T) {
-	r := newExplainedFixture(t)
+	r := newAuthorizeFixture(t)
 	ctx := context.Background()
 
 	for _, grouping := range [][]string{
@@ -168,7 +164,9 @@ func TestAuthorizeResolvesInheritedRoleLinks(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			allowed, source, _, err := r.AuthorizeExplained(ctx, "default", c.subject, "/api/unrelated", "DELETE")
+			decision, err := r.Authorize(ctx, "default", c.subject, "/api/unrelated", "DELETE")
+			allowed := decision.Allowed
+			source := decision.Source
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -188,12 +186,14 @@ func TestAuthorizeResolvesInheritedRoleLinks(t *testing.T) {
 // under that name. The matcher guarded against it with an inequality, and the
 // branches still have to.
 func TestAuthorizeRejectsSubjectsNamedAfterARole(t *testing.T) {
-	r := newExplainedFixture(t)
+	r := newAuthorizeFixture(t)
 	ctx := context.Background()
 
 	for _, subject := range []string{consts.AUTHZ_SYSTEM_ROLE_ROOT, consts.AUTHZ_ROLE_ADMIN} {
 		t.Run(subject, func(t *testing.T) {
-			allowed, source, _, err := r.AuthorizeExplained(ctx, "default", subject, "/api/unrelated", "DELETE")
+			decision, err := r.Authorize(ctx, "default", subject, "/api/unrelated", "DELETE")
+			allowed := decision.Allowed
+			source := decision.Source
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -234,7 +234,9 @@ func TestAuthorizeWithoutPoliciesAnswersTheRoleBranches(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			allowed, source, _, err := r.AuthorizeExplained(ctx, "default", c.subject, "/api/things", "GET")
+			decision, err := r.Authorize(ctx, "default", c.subject, "/api/things", "GET")
+			allowed := decision.Allowed
+			source := decision.Source
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -257,7 +259,7 @@ func TestAuthorizeWithoutPoliciesAnswersTheRoleBranches(t *testing.T) {
 // every request that reaches it. Both are exercised by a single denial, which
 // evaluates the whole policy set on its way to answering no.
 func TestAuthorizeReadsStoredObjectsAsTemplates(t *testing.T) {
-	r := newExplainedFixture(t)
+	r := newAuthorizeFixture(t)
 	ctx := context.Background()
 
 	// Both rows are grants held by u_member, who holds role_a.
@@ -270,7 +272,8 @@ func TestAuthorizeReadsStoredObjectsAsTemplates(t *testing.T) {
 		}
 	}
 
-	allowed, _, _, err := r.AuthorizeExplained(ctx, "default", "u_member", "/api/authz/roles", "GET")
+	decision, err := r.Authorize(ctx, "default", "u_member", "/api/authz/roles", "GET")
+	allowed := decision.Allowed
 	if err != nil {
 		t.Fatalf("a stored template that cannot compile must not fail unrelated decisions: %v", err)
 	}
@@ -281,7 +284,8 @@ func TestAuthorizeReadsStoredObjectsAsTemplates(t *testing.T) {
 	// The grants the two rows do carry are the paths they spell, and the
 	// ordinary ones around them are untouched.
 	for _, object := range []string{"/api/.*", "/api/items/[", "/api/things"} {
-		allowed, _, _, err := r.AuthorizeExplained(ctx, "default", "u_member", object, "GET")
+		decision, err = r.Authorize(ctx, "default", "u_member", object, "GET")
+		allowed := decision.Allowed
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -291,7 +295,7 @@ func TestAuthorizeReadsStoredObjectsAsTemplates(t *testing.T) {
 	}
 }
 
-func newExplainedFixture(t *testing.T) *rbac {
+func newAuthorizeFixture(t *testing.T) *rbac {
 	t.Helper()
 
 	r := newTestRBAC(t, 0)

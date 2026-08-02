@@ -218,7 +218,8 @@ func ensureLoginTenant(ctx *types.ServiceContext, userID string, tenantID string
 		return nil
 	}
 
-	member, err := rbac.RBAC().SubjectInTenant(ctx, tenantID, userID)
+	roles, err := rbac.RBAC().RolesForSubject(ctx, tenantID, userID)
+	member := len(roles) > 0
 	if err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}

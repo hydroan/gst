@@ -135,7 +135,8 @@ func TestSetRolePermissionsReplacesAtomically(t *testing.T) {
 				return
 			default:
 			}
-			allowed, err := r.Authorize(ctx, "default", "u_member", "/api/things/0", "GET")
+			decision, err := r.Authorize(ctx, "default", "u_member", "/api/things/0", "GET")
+			allowed := decision.Allowed
 			if err != nil {
 				failed.Add(1)
 				return
@@ -181,13 +182,8 @@ func TestPermissionWritesRefuseTheReservedRole(t *testing.T) {
 	}); !errors.Is(err, ErrReservedRole) {
 		t.Errorf("SetRolePermissions: expected ErrReservedRole, got %v", err)
 	}
-	if err := r.GrantPermission(
-		ctx, "tenant_a", consts.AUTHZ_ROLE_AUTHENTICATED, "/api/things", "GET",
-	); !errors.Is(err, ErrReservedRole) {
-		t.Errorf("GrantPermission: expected ErrReservedRole, got %v", err)
-	}
-
-	allowed, err := r.Authorize(ctx, "tenant_b", "u_plain", "/api/things", "GET")
+	decision, err := r.Authorize(ctx, "tenant_b", "u_plain", "/api/things", "GET")
+	allowed := decision.Allowed
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +199,8 @@ func TestPermissionWritesRefuseTheReservedRole(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	allowed, err = r.Authorize(ctx, "tenant_b", "u_plain", "/api/things", "GET")
+	decision, err = r.Authorize(ctx, "tenant_b", "u_plain", "/api/things", "GET")
+	allowed = decision.Allowed
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +212,8 @@ func TestPermissionWritesRefuseTheReservedRole(t *testing.T) {
 	if err = r.RemoveRole(ctx, authenticatedPolicyTenant, consts.AUTHZ_ROLE_AUTHENTICATED); err != nil {
 		t.Fatal(err)
 	}
-	allowed, err = r.Authorize(ctx, "tenant_b", "u_plain", "/api/things", "GET")
+	decision, err = r.Authorize(ctx, "tenant_b", "u_plain", "/api/things", "GET")
+	allowed = decision.Allowed
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +236,8 @@ func TestSetPermissionsForAuthenticatedReplacesTheWholeSet(t *testing.T) {
 	}
 	// The authenticated role reaches subjects holding no role at all.
 	for _, action := range []string{"GET", "POST"} {
-		allowed, err := r.Authorize(ctx, "default", "u_plain", "/api/open", action)
+		decision, err := r.Authorize(ctx, "default", "u_plain", "/api/open", action)
+		allowed := decision.Allowed
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -250,7 +249,8 @@ func TestSetPermissionsForAuthenticatedReplacesTheWholeSet(t *testing.T) {
 	if err := r.SetPermissionsForAuthenticated(ctx, nil); err != nil {
 		t.Fatal(err)
 	}
-	allowed, err := r.Authorize(ctx, "default", "u_plain", "/api/open", "GET")
+	decision, err := r.Authorize(ctx, "default", "u_plain", "/api/open", "GET")
+	allowed := decision.Allowed
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,8 @@ func newRolePermissionsFixture(t *testing.T) *rbac {
 func assertAuthorized(t *testing.T, r *rbac, object string, action string, want bool) {
 	t.Helper()
 
-	allowed, err := r.Authorize(context.Background(), "default", "u_member", object, action)
+	decision, err := r.Authorize(context.Background(), "default", "u_member", object, action)
+	allowed := decision.Allowed
 	if err != nil {
 		t.Fatal(err)
 	}

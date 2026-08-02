@@ -228,7 +228,8 @@ func TestMutateIsAtomicWithoutACallerTransaction(t *testing.T) {
 	assert.ElementsMatch(t, before, storedRules(t, store),
 		"a failed replacement must not leave the role stripped of its permissions")
 
-	allowed, err := r.Authorize(ctx, "tenant_a", "u1", "/api/things", "GET")
+	decision, err := r.Authorize(ctx, "tenant_a", "u1", "/api/things", "GET")
+	allowed := decision.Allowed
 	require.NoError(t, err)
 	assert.False(t, allowed, "no subject holds the role, so nothing changed in memory either")
 }
@@ -294,7 +295,8 @@ func TestReloadKeepsTheEnforcerInvariants(t *testing.T) {
 	require.NoError(t, r.AssignRole(ctx, "tenant_a", "u1", "role_a"))
 	require.NoError(t, r.ReloadPolicies(ctx))
 
-	allowed, err := r.Authorize(ctx, "tenant_a", "u1", "/api/things/1", "GET")
+	decision, err := r.Authorize(ctx, "tenant_a", "u1", "/api/things/1", "GET")
+	allowed := decision.Allowed
 	require.NoError(t, err)
 	assert.True(t, allowed, "the matcher function has to survive a reload")
 

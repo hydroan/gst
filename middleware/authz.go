@@ -11,6 +11,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/tenant"
+	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
 )
@@ -73,7 +74,6 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
-		var allow bool
 		var err error
 
 		obj := c.Request.URL.Path
@@ -111,10 +111,9 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 		}
 		c.Set(consts.CTX_TENANT_ID, tenantID)
 
-		var source consts.GrantSource
-		var matchedRule []string
-		if allow, source, matchedRule, err = rbac.RBAC().
-			AuthorizeExplained(c.Request.Context(), tenantID, sub, obj, act); err != nil {
+		var decision types.Decision
+		if decision, err = rbac.RBAC().
+			Authorize(c.Request.Context(), tenantID, sub, obj, act); err != nil {
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 				"code":          -1,
 				"msg":           "authorization failed",
@@ -124,7 +123,7 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 			logAuthzFailure(c, tenantID, sub, obj, act, err)
 			return
 		}
-		if allow {
+		if decision.Allowed {
 			// A subject allowed as system_root was not authorized in any one
 			// tenant — the matcher grants it every object in every tenant — so
 			// binding its rows to one would leave the two halves disagreeing:
@@ -132,10 +131,10 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 			// the authorization decision itself rather than looked up again,
 			// which is what keeps the reach of the data equal to the reach of
 			// the grant.
-			if source == consts.GrantSourceSystemRoot {
+			if decision.Source == consts.GrantSourceSystemRoot {
 				c.Request = c.Request.WithContext(tenant.Across(c.Request.Context()))
 			}
-			logAuthzGrant(c, tenantID, sub, obj, act, source, matchedRule)
+			logAuthzGrant(c, tenantID, sub, obj, act, decision.Source, decision.MatchedRule)
 			c.Next()
 			return
 		}

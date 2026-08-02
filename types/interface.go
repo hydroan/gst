@@ -444,6 +444,20 @@ type DistributedCache[T any] interface {
 	DeleteWithSync(key string) error
 }
 
+// Decision is the outcome of one authorization check.
+//
+// Source names the strongest rule that allowed the request and is empty on a
+// denial, because a denial has no granting rule. MatchedRule is the policy row
+// that allowed it, and is nil unless Source names a policy: the rules that
+// allow without consulting one leave the engine free to report an unrelated
+// row, which would read as the reason for access while being nothing of the
+// kind.
+type Decision struct {
+	Allowed     bool
+	Source      consts.GrantSource
+	MatchedRule []string
+}
+
 // RBAC provides tenant-scoped role, permission, and subject assignment operations.
 // When RBAC is disabled or not initialized, the framework may provide a safe
 // no-op implementation whose methods succeed without side effects.
@@ -455,41 +469,24 @@ type DistributedCache[T any] interface {
 //   - Object: Protected resources or endpoints
 //   - Action: Operations on resources
 type RBAC interface {
-	// Authorize reports whether subject may perform action on object inside tenant.
+	// Authorize reports whether subject may perform action on object inside
+	// tenant, and what allowed it.
+	//
 	// Implementations should treat tenant as the authorization domain, subject as
 	// the authenticated identity, object as the protected route or resource, and
 	// action as the operation being checked, such as an HTTP method.
-	Authorize(ctx context.Context, tenant string, subject string, object string, action string) (bool, error)
-
-	// AuthorizeExplained answers Authorize and additionally reports why.
 	//
-	// source names the strongest rule that allowed the request; it is empty when
-	// the request is denied, because a denial has no granting rule. matchedRule
-	// is the policy row that allowed it, and is nil unless the source is a
-	// policy: rules that allow without consulting policy leave the underlying
-	// engine free to report an unrelated row, which would be worse than none.
-	//
-	// Callers that only need the decision should use Authorize; this one does
-	// the extra work of explaining it.
-	AuthorizeExplained(ctx context.Context, tenant string, subject string, object string, action string) (allowed bool, source consts.GrantSource, matchedRule []string, err error)
+	// The reason is answered alongside the decision rather than by a second
+	// method. Deriving it costs a handful of allocations against the thousands
+	// the decision itself takes, so a decision-only entry point would be a
+	// second way to ask one question, distinguished by a saving too small to
+	// measure.
+	Authorize(ctx context.Context, tenant string, subject string, object string, action string) (Decision, error)
 
 	// RemoveRole removes role from tenant, including its permission policies and
 	// subject assignments. Callers should use this when deleting a role record so
 	// authorization state does not retain stale grants.
 	RemoveRole(ctx context.Context, tenant string, role string) error
-
-	// GrantPermission grants role access to action on object inside tenant.
-	// This represents one exact allow policy for a tenant-scoped role.
-	GrantPermission(ctx context.Context, tenant string, role string, object string, action string) error
-
-	// RevokePermission removes one exact role permission inside tenant.
-	// Use RevokeRolePermissions when replacing or deleting the full permission set
-	// for a role.
-	RevokePermission(ctx context.Context, tenant string, role string, object string, action string) error
-
-	// RevokeRolePermissions removes every permission policy granted to role inside
-	// tenant without removing the role's subject assignments.
-	RevokeRolePermissions(ctx context.Context, tenant string, role string) error
 
 	// SetRolePermissions replaces the entire permission set held by role inside
 	// tenant with permissions, leaving the role's subject assignments untouched.
@@ -504,9 +501,10 @@ type RBAC interface {
 	// empty or partial set while the replacement is in flight, which denies
 	// requests the role is entitled to.
 	//
-	// Prefer this over repeated GrantPermission calls whenever the caller knows
-	// the complete set, which is the usual case when permissions are derived from
-	// a stored source.
+	// It is the only way to write a role's permissions, which is why it takes
+	// the whole set: an interface offering a single grant beside it would let a
+	// caller build one up a row at a time and never learn that the entry it
+	// dropped is still allowing requests.
 	SetRolePermissions(ctx context.Context, tenant string, role string, permissions []Permission) error
 
 	// SetPermissionsForAuthenticated replaces the entire set of permissions every
@@ -532,14 +530,14 @@ type RBAC interface {
 	// Other roles held by the same subject in the same tenant are left unchanged.
 	UnassignRole(ctx context.Context, tenant string, subject string, role string) error
 
-	// HasRole reports whether subject explicitly holds role inside tenant.
-	// Unlike SubjectInTenant, which checks membership in general, this checks one
-	// specific role assignment, such as the built-in admin role.
-	HasRole(ctx context.Context, tenant string, subject string, role string) (bool, error)
-
-	// SubjectInTenant reports whether subject has at least one role assignment in
-	// tenant. It checks membership, not whether any specific route is authorized.
-	SubjectInTenant(ctx context.Context, tenant string, subject string) (bool, error)
+	// RolesForSubject returns the roles subject holds inside tenant.
+	//
+	// It answers both questions the pair it replaced answered separately:
+	// membership is a non-empty result, and holding one particular role is that
+	// role being among them. Neither deserved an entry point of its own, and
+	// keeping the general one leaves this and SubjectsInTenant as the two
+	// directions of a single relation.
+	RolesForSubject(ctx context.Context, tenant string, subject string) ([]string, error)
 
 	// SubjectsInTenant returns subjects with at least one role assignment in
 	// tenant. It checks membership, not whether any specific route is authorized.

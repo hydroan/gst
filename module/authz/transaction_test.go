@@ -30,7 +30,7 @@ func TestPolicyWritesRollBackWithTheTransaction(t *testing.T) {
 		object := "/api/rollback/" + role
 
 		err := database.Transaction(ctx, func(ctx context.Context) error {
-			if err := rbac.RBAC().GrantPermission(ctx, tenant, role, object, "GET"); err != nil {
+			if err := rbac.RBAC().SetRolePermissions(ctx, tenant, role, []types.Permission{{Object: object, Action: "GET"}}); err != nil {
 				return err
 			}
 			return errRollback
@@ -38,7 +38,8 @@ func TestPolicyWritesRollBackWithTheTransaction(t *testing.T) {
 		require.ErrorIs(t, err, errRollback)
 
 		requireNoStoredPolicy(t, "p", tenant, role)
-		allowed, err := rbac.RBAC().Authorize(ctx, tenant, "subject-"+role, object, "GET")
+		decision, err := rbac.RBAC().Authorize(ctx, tenant, "subject-"+role, object, "GET")
+		allowed := decision.Allowed
 		require.NoError(t, err)
 		require.False(t, allowed, "a rolled back grant must not stay in force in memory")
 	})
@@ -56,9 +57,9 @@ func TestPolicyWritesRollBackWithTheTransaction(t *testing.T) {
 		require.ErrorIs(t, err, errRollback)
 
 		requireNoStoredPolicy(t, "g", subject, role)
-		held, err := rbac.RBAC().HasRole(ctx, tenant, subject, role)
+		roles, err := rbac.RBAC().RolesForSubject(ctx, tenant, subject)
 		require.NoError(t, err)
-		require.False(t, held, "a rolled back assignment must not stay in force in memory")
+		require.NotContains(t, roles, role, "a rolled back assignment must not stay in force in memory")
 	})
 
 	t.Run("replacing a role's permissions", func(t *testing.T) {
@@ -70,7 +71,7 @@ func TestPolicyWritesRollBackWithTheTransaction(t *testing.T) {
 		require.NoError(t, rbac.RBAC().SetRolePermissions(ctx, tenant, role, []types.Permission{
 			{Object: object, Action: "GET"},
 		}))
-		t.Cleanup(func() { _ = rbac.RBAC().RevokeRolePermissions(ctx, tenant, role) })
+		t.Cleanup(func() { _ = rbac.RBAC().SetRolePermissions(ctx, tenant, role, nil) })
 
 		err := database.Transaction(ctx, func(ctx context.Context) error {
 			if err := rbac.RBAC().SetRolePermissions(ctx, tenant, role, []types.Permission{
@@ -97,7 +98,7 @@ func TestPolicyWritesCommitWithTheTransaction(t *testing.T) {
 	object := "/api/commit/" + role
 
 	require.NoError(t, database.Transaction(ctx, func(ctx context.Context) error {
-		if err := rbac.RBAC().GrantPermission(ctx, tenant, role, object, "GET"); err != nil {
+		if err := rbac.RBAC().SetRolePermissions(ctx, tenant, role, []types.Permission{{Object: object, Action: "GET"}}); err != nil {
 			return err
 		}
 		return rbac.RBAC().AssignRole(ctx, tenant, subject, role)
@@ -108,7 +109,8 @@ func TestPolicyWritesCommitWithTheTransaction(t *testing.T) {
 
 	// The grouping rule has to reach the role manager too, not just the policy
 	// list, or the subject would hold the role without inheriting its rules.
-	allowed, err := rbac.RBAC().Authorize(ctx, tenant, subject, object, "GET")
+	decision, err := rbac.RBAC().Authorize(ctx, tenant, subject, object, "GET")
+	allowed := decision.Allowed
 	require.NoError(t, err)
 	require.True(t, allowed, "a committed grant and assignment should authorize the subject")
 }

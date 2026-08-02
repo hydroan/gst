@@ -45,11 +45,11 @@ func EnsureTenantAdmin(ctx *types.ServiceContext, actor *modeliamuser.User, targ
 	// Route permission and target membership are checked separately. A user can
 	// have permission to call the endpoint without being allowed to manage a
 	// particular target outside the current tenant.
-	allowed, err := rbac.RBAC().Authorize(ctx, tenant, actor.GetID(), operationObject(ctx), operationAction(ctx))
+	decision, err := rbac.RBAC().Authorize(ctx, tenant, actor.GetID(), operationObject(ctx), operationAction(ctx))
 	if err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}
-	if !allowed {
+	if !decision.Allowed {
 		return service.NewError(http.StatusForbidden, "permission denied")
 	}
 
@@ -108,7 +108,11 @@ func targetBelongsToTenant(ctx *types.ServiceContext, tenant string, userID stri
 	if strings.TrimSpace(userID) == "" {
 		return false, nil
 	}
-	return rbac.RBAC().SubjectInTenant(ctx, tenant, userID)
+	roles, err := rbac.RBAC().RolesForSubject(ctx, tenant, userID)
+	if err != nil {
+		return false, err
+	}
+	return len(roles) > 0, nil
 }
 
 // isSystemRoot reports whether user holds the framework-level root role.

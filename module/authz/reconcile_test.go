@@ -32,7 +32,7 @@ func TestReconcilePoliciesDetectsDrift(t *testing.T) {
 		require.NoError(t, rbac.RBAC().SetRolePermissions(ctx, tenant.Default, role, []types.Permission{
 			{Object: object, Action: "GET"},
 		}))
-		t.Cleanup(func() { _ = rbac.RBAC().RevokeRolePermissions(ctx, tenant.Default, role) })
+		t.Cleanup(func() { _ = rbac.RBAC().SetRolePermissions(ctx, tenant.Default, role, nil) })
 
 		report, err := authz.ReconcilePolicies(ctx)
 		require.NoError(t, err)

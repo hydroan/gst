@@ -62,25 +62,13 @@ type rbac struct {
 // register authz can still use root-only administrative flows.
 type noop struct{}
 
-func (noop) Authorize(ctx context.Context, tenant string, subject string, object string, action string) (bool, error) {
-	return false, nil
-}
-
-func (noop) AuthorizeExplained(
+func (noop) Authorize(
 	ctx context.Context, tenant string, subject string, object string, action string,
-) (bool, consts.GrantSource, []string, error) {
-	return false, "", nil, nil
+) (types.Decision, error) {
+	return types.Decision{}, nil
 }
 
 func (noop) RemoveRole(ctx context.Context, tenant string, role string) error { return nil }
-func (noop) GrantPermission(ctx context.Context, tenant string, role string, object string, action string) error {
-	return nil
-}
-
-func (noop) RevokePermission(ctx context.Context, tenant string, role string, object string, action string) error {
-	return nil
-}
-
 func (noop) SetRolePermissions(
 	ctx context.Context, tenant string, role string, permissions []types.Permission,
 ) error {
@@ -88,10 +76,6 @@ func (noop) SetRolePermissions(
 }
 
 func (noop) SetPermissionsForAuthenticated(ctx context.Context, permissions []types.Permission) error {
-	return nil
-}
-
-func (noop) RevokeRolePermissions(ctx context.Context, tenant string, role string) error {
 	return nil
 }
 
@@ -103,12 +87,8 @@ func (noop) UnassignRole(ctx context.Context, tenant string, subject string, rol
 	return nil
 }
 
-func (noop) HasRole(ctx context.Context, tenant string, subject string, role string) (bool, error) {
-	return false, nil
-}
-
-func (noop) SubjectInTenant(ctx context.Context, tenant string, subject string) (bool, error) {
-	return false, nil
+func (noop) RolesForSubject(ctx context.Context, tenant string, subject string) ([]string, error) {
+	return nil, nil
 }
 
 func (noop) SubjectsInTenant(ctx context.Context, tenant string) ([]string, error) { return nil, nil }
@@ -144,30 +124,25 @@ func RBAC() types.RBAC {
 	}
 }
 
-// Authorize evaluates whether subject may perform action on object in tenant.
-func (r *rbac) Authorize(ctx context.Context, tenant string, subject string, object string, action string) (bool, error) {
-	tenant = normalizeTenant(tenant)
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	allowed, _, _, err := r.authorize(tenant, subject, object, action)
-	return allowed, err
-}
-
 // policyRoleColumn is the position of the role token in a p policy row. The
 // policy definition is (tenant, role, obj, act, eft), so a row Casbin reports as
 // the matched one carries its role here.
 const policyRoleColumn = 1
 
-// AuthorizeExplained evaluates the request and reports which rule allowed it.
-func (r *rbac) AuthorizeExplained(
+// Authorize evaluates the request and reports which rule allowed it.
+func (r *rbac) Authorize(
 	ctx context.Context, tenant string, subject string, object string, action string,
-) (bool, consts.GrantSource, []string, error) {
+) (types.Decision, error) {
 	tenant = normalizeTenant(tenant)
 
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return r.authorize(tenant, subject, object, action)
+	allowed, source, matchedRule, err := r.authorize(tenant, subject, object, action)
+	// The rule is copied out. What the engine reports is its own storage, and
+	// handing that to a caller makes every consumer of a decision one edit away
+	// from rewriting the policy set it was decided from.
+	return types.Decision{Allowed: allowed, Source: source, MatchedRule: slices.Clone(matchedRule)}, err
 }
 
 // authorize decides the request and names the rule that allowed it.
@@ -281,33 +256,6 @@ func errIfReservedRole(role string) error {
 	return nil
 }
 
-// GrantPermission grants role access to object/action inside tenant.
-func (r *rbac) GrantPermission(ctx context.Context, tenant string, role string, object string, action string) (err error) {
-	if err = errIfReservedRole(role); err != nil {
-		return err
-	}
-	tenant = normalizeTenant(tenant)
-	ctx, finishSpan := traceRBAC(ctx, "grant_permission", rbacTraceFields(tenant, role))
-	defer func() {
-		finishSpan(err)
-	}()
-
-	return r.mutate(ctx, addRules("p", "p",
-		[]string{tenant, role, object, action, string(consts.EffectAllow)}))
-}
-
-// RevokePermission removes the exact tenant, role, object, action permission.
-func (r *rbac) RevokePermission(ctx context.Context, tenant string, role string, object string, action string) (err error) {
-	tenant = normalizeTenant(tenant)
-	ctx, finishSpan := traceRBAC(ctx, "revoke_permission", rbacTraceFields(tenant, role))
-	defer func() {
-		finishSpan(err)
-	}()
-
-	return r.mutate(ctx, removeRules("p", "p",
-		[]string{tenant, role, object, action, string(consts.EffectAllow)}))
-}
-
 // authenticatedPolicyTenant is the tenant column stored for policies written
 // against consts.AUTHZ_ROLE_AUTHENTICATED. The matcher branch for that role
 // compares no tenant, so the value never takes part in a decision; it marks the
@@ -373,7 +321,7 @@ func (r *rbac) replacePermissions(
 // batch, so a caller listing the same permission twice would otherwise store it
 // twice. It sorts because the stored order decides which rule Casbin reports as
 // the matched one: an order that followed the caller's would make
-// AuthorizeExplained name a different rule for the same request whenever the
+// a decision name a different rule for the same request whenever the
 // caller derived its set from an unordered source.
 func permissionPolicies(tenant string, role string, permissions []types.Permission) [][]string {
 	unique := make([]types.Permission, 0, len(permissions))
@@ -404,19 +352,6 @@ func permissionPolicies(tenant string, role string, permissions []types.Permissi
 	return rules
 }
 
-// RevokeRolePermissions removes every permission policy granted to role in tenant.
-// It is the explicit form of revoking a role's full permission set. Use
-// RevokePermission when removing one concrete object/action grant.
-func (r *rbac) RevokeRolePermissions(ctx context.Context, tenant string, role string) (err error) {
-	tenant = normalizeTenant(tenant)
-	ctx, finishSpan := traceRBAC(ctx, "revoke_role_permissions", rbacTraceFields(tenant, role))
-	defer func() {
-		finishSpan(err)
-	}()
-
-	return r.mutate(ctx, removeFiltered("p", "p", 0, tenant, role))
-}
-
 // AssignRole assigns subject to role inside tenant.
 func (r *rbac) AssignRole(ctx context.Context, tenant string, subject string, role string) (err error) {
 	tenant = normalizeTenant(tenant)
@@ -442,26 +377,16 @@ func (r *rbac) UnassignRole(ctx context.Context, tenant string, subject string, 
 	return r.mutate(ctx, removeRules("g", "g", []string{subject, role, tenant}))
 }
 
-// HasRole reports whether subject explicitly holds role inside tenant.
-func (r *rbac) HasRole(ctx context.Context, tenant string, subject string, role string) (bool, error) {
-	tenant = normalizeTenant(tenant)
-	if subject == role {
-		return false, nil
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.enforcer.HasGroupingPolicy(subject, role, tenant)
-}
-
-// SubjectInTenant reports whether subject has any role assignment inside tenant.
+// RolesForSubject returns the roles subject holds inside tenant.
 //
-// Tenant membership is represented by Casbin grouping policies in the form
-// subject, role, tenant. This check does not evaluate route permission; it only
-// answers whether the subject belongs to the tenant authorization domain.
-func (r *rbac) SubjectInTenant(ctx context.Context, tenant string, subject string) (bool, error) {
+// The grouping rules are (subject, role, tenant), so the subject's own rules
+// are read and narrowed to the tenant asked about. A rule with an empty role is
+// skipped: it names no role to return and the loader would have rejected it,
+// so its presence means the table was written around the framework.
+func (r *rbac) RolesForSubject(ctx context.Context, tenant string, subject string) ([]string, error) {
 	subject = strings.TrimSpace(subject)
 	if subject == "" {
-		return false, nil
+		return nil, nil
 	}
 	tenant = normalizeTenant(tenant)
 
@@ -470,14 +395,19 @@ func (r *rbac) SubjectInTenant(ctx context.Context, tenant string, subject strin
 
 	groupingPolicies, err := r.enforcer.GetFilteredGroupingPolicy(0, subject)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
+
+	roles := make([]string, 0, len(groupingPolicies))
 	for _, policy := range groupingPolicies {
-		if len(policy) >= 3 && strings.TrimSpace(policy[1]) != "" && policy[2] == tenant {
-			return true, nil
+		if len(policy) < 3 || policy[2] != tenant {
+			continue
+		}
+		if role := strings.TrimSpace(policy[1]); role != "" {
+			roles = append(roles, role)
 		}
 	}
-	return false, nil
+	return roles, nil
 }
 
 // SubjectsInTenant returns subjects with at least one role assignment inside tenant.
