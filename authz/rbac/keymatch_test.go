@@ -3,6 +3,7 @@ package rbac
 import (
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -27,29 +28,28 @@ func keyMatch3(path string, template string) (matched bool, panicked bool) {
 	return util.KeyMatch3(path, template), false
 }
 
-// requirePathMatchAgreesWithKeyMatch3 asserts the two answer alike: the same
-// verdict where Casbin answers, and an error exactly where Casbin panics.
-func requirePathMatchAgreesWithKeyMatch3(tb testing.TB, path string, template string) bool {
-	tb.Helper()
-
-	expected, panicked := keyMatch3(path, template)
-	matched, err := pathMatch(path, template)
-	if panicked {
-		require.Error(tb, err,
-			"keyMatch3 panics on template %q, so pathMatch has to report it", template)
-		return false
-	}
-	require.NoError(tb, err, "keyMatch3 answers for template %q, so pathMatch must too", template)
-	require.Equal(tb, expected, matched, "path %q against template %q", path, template)
-	return matched
+// isPlainTemplate reports whether everything in template outside a placeholder
+// and a wildcard is text the regexp engine would have read the same way.
+//
+// Those are the templates the framework itself writes, from router.Routes and
+// from menu route bindings, and the two implementations have to agree on every
+// one of them: narrowing the reading of a metacharacter is the point, and
+// changing anything else would be a regression.
+// The two forms are removed in the order keyMatch3 substitutes them: the
+// wildcard is recognized in the template as written, before removing a
+// placeholder can leave behind a "/*" the template never contained. Reversing
+// the two calls reports "/{0}*" as plain, which it is not — keyMatch3 turns it
+// into the nested repetition "/[^/]+*" and cannot compile it at all.
+func isPlainTemplate(template string) bool {
+	stripped := strings.ReplaceAll(template, "/*", "/")
+	stripped = pathTemplatePlaceholder.ReplaceAllString(stripped, "")
+	return regexp.QuoteMeta(stripped) == stripped
 }
 
-// TestPathMatchAgreesWithKeyMatch3 pins the semantics pathMatch inherits.
-//
-// Every case asserts the expected verdict as well as agreement with Casbin, so
-// the table documents the matching rules rather than only asserting that two
-// implementations are equally wrong.
-func TestPathMatchAgreesWithKeyMatch3(t *testing.T) {
+// TestPathMatchMatchesTheTemplateLanguage pins the semantics of a template:
+// {name} stands for one segment, /* for the rest of the path, and everything
+// else for the text it spells.
+func TestPathMatchMatchesTheTemplateLanguage(t *testing.T) {
 	cases := []struct {
 		name     string
 		path     string
@@ -78,29 +78,104 @@ func TestPathMatchAgreesWithKeyMatch3(t *testing.T) {
 		{"empty template matches empty path", "", "", true},
 		{"empty template rejects a path", "/x", "", false},
 
-		// Not a quirk of this implementation: the template is a regular
-		// expression, so a metacharacter stored in a policy widens what that
-		// policy allows. Recorded here because it is inherited behavior, and
-		// changing it belongs to whatever validates templates on the way in.
-		{"metacharacters keep regexp meaning", "/api/xbc", "/api/.bc", true},
-		{"alternation keeps regexp meaning", "/api/b", "/api/(a|b)", true},
+		{"a dot is a dot", "/api/a.b", "/api/a.b", true},
+		{"a dot matches nothing else", "/api/axb", "/api/a.b", false},
+		{"a bracket is a bracket", "/api/[", "/api/[", true},
+		// keyMatch3 compiled this one to an escaped dollar and matched "$",
+		// a path the template does not spell. Found by the fuzzer.
+		{"a backslash is a backslash", "\\", "\\", true},
+		{"a backslash reaches nothing else", "$", "\\", false},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			assert.Equal(t, c.matched, requirePathMatchAgreesWithKeyMatch3(t, c.path, c.template))
+			matched, err := pathMatch(c.path, c.template)
+			require.NoError(t, err)
+			assert.Equal(t, c.matched, matched, "path %q against template %q", c.path, c.template)
+
+			// Every case here is a template the framework itself could write,
+			// so the reading must not have moved.
+			if isPlainTemplate(c.template) {
+				expected, panicked := keyMatch3(c.path, c.template)
+				require.False(t, panicked, "keyMatch3 must answer for a plain template")
+				assert.Equal(t, expected, matched, "a plain template must read as it always did")
+			}
 		})
 	}
 }
 
-// FuzzPathMatchAgreesWithKeyMatch3 searches for any input where the compiled
-// template answers differently from Casbin rebuilding it.
+// TestPathMatchTreatsMetacharactersAsText covers what the template language
+// stopped granting.
+//
+// keyMatch3 hands the whole template to the regexp engine, so a metacharacter
+// stored as a route's object reaches paths that route never named — and a
+// template that does not compile fails every request that reaches it, because
+// a denial evaluates the whole policy set. Neither is expressible any more.
+func TestPathMatchTreatsMetacharactersAsText(t *testing.T) {
+	cases := []struct {
+		name     string
+		path     string
+		template string
+	}{
+		{"wildcard regexp no longer reaches every route", "/api/authz/roles", "/api/.*"},
+		{"any-character no longer spans a segment", "/api/axb", "/api/a.b"},
+		{"alternation no longer offers a choice", "/api/b", "/api/(a|b)"},
+		{"repetition no longer applies", "/api/aaa", "/api/a+"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			allowed, panicked := keyMatch3(c.path, c.template)
+			require.False(t, panicked)
+			require.True(t, allowed, "this case is only interesting if keyMatch3 allowed it")
+
+			matched, err := pathMatch(c.path, c.template)
+			require.NoError(t, err)
+			assert.False(t, matched, "template %q must no longer reach %q", c.template, c.path)
+		})
+	}
+}
+
+// TestPathMatchSurvivesATemplateKeyMatch3CouldNotCompile covers the other half:
+// a template that made keyMatch3 panic is now ordinary text, so it answers for
+// itself and stops taking every other decision down with it.
+func TestPathMatchSurvivesATemplateKeyMatch3CouldNotCompile(t *testing.T) {
+	const template = "/api/items/["
+	t.Cleanup(func() { pathTemplateCache.Delete(template) })
+
+	_, panicked := keyMatch3("/api/items/1", template)
+	require.True(t, panicked, "this case is only interesting if keyMatch3 could not compile it")
+
+	matched, err := pathMatch("/api/items/1", template)
+	require.NoError(t, err)
+	assert.False(t, matched)
+
+	matched, err = pathMatch(template, template)
+	require.NoError(t, err)
+	assert.True(t, matched, "the template must still match the path it spells")
+}
+
+// FuzzPathMatchReachesOnlyWhatTheTemplateSpells pins the two properties the
+// change exists for.
+//
+// A template that uses neither of the two forms reaches exactly one path: the
+// one it spells. That is the whole of it — whatever characters it holds, a
+// stored object cannot reach past the route it names.
+//
+// And for a template the framework itself writes, the reading must not have
+// moved at all, so it still has to agree with keyMatch3 exactly.
+//
+// The comparison is deliberately not "never matches more than keyMatch3 did".
+// That is false, and the fuzzer says so: the template `\` used to compile to
+// `^\$`, an escaped dollar, and matched the path `$` — a path the template does
+// not spell and never named. Reading it as text matches `\` instead. The old
+// reading was not a smaller set, it was a different one.
 //
 // The cached template is dropped afterwards because the cache is keyed by
 // template and bounded, in production, by the stored policy set; a fuzz run
 // invents templates without that bound and would otherwise grow it without
 // limit.
-func FuzzPathMatchAgreesWithKeyMatch3(f *testing.F) {
+func FuzzPathMatchReachesOnlyWhatTheTemplateSpells(f *testing.F) {
 	for _, seed := range [][2]string{
 		{"/api/items", "/api/items"},
 		{"/api/items/1", "/api/items/{id}"},
@@ -110,27 +185,54 @@ func FuzzPathMatchAgreesWithKeyMatch3(f *testing.F) {
 		{"", ""},
 		{"/api/名前", "/api/{name}"},
 		{"/api/xbc", "/api/.bc"},
+		{"/api/authz/roles", "/api/.*"},
+		// Both found by the fuzzer, and both about the order the two forms are
+		// recognized in rather than about matching: see isPlainTemplate.
+		{"\\", "\\"},
+		{"/x*", "/{0}*"},
 	} {
 		f.Add(seed[0], seed[1])
 	}
 
 	f.Fuzz(func(t *testing.T, path string, template string) {
 		defer pathTemplateCache.Delete(template)
-		requirePathMatchAgreesWithKeyMatch3(t, path, template)
+
+		matched, err := pathMatch(path, template)
+		if err != nil {
+			// A template this rejects reaches nothing at all.
+			return
+		}
+
+		if !pathTemplatePlaceholder.MatchString(template) && !strings.Contains(template, "/*") {
+			require.Equal(t, path == template, matched,
+				"template %q must reach the path it spells and no other, but answered %v for %q",
+				template, matched, path)
+			return
+		}
+
+		if isPlainTemplate(template) {
+			allowed, panicked := keyMatch3(path, template)
+			require.False(t, panicked, "keyMatch3 must answer for the plain template %q", template)
+			require.Equal(t, allowed, matched,
+				"plain template %q must read as it always did against %q", template, path)
+		}
 	})
 }
 
-// TestPathMatchReportsUnusableTemplatesInsteadOfPanicking covers a policy
-// holding a template that cannot compile. Casbin panics and leaves the
-// enforcer to recover, which reports that something failed without saying
-// which template did.
-func TestPathMatchReportsUnusableTemplatesInsteadOfPanicking(t *testing.T) {
-	const template = "/api/unusable/["
+// TestPathMatchReportsTemplatesItCannotCompile covers the one input quoting
+// does not rescue: QuoteMeta passes bytes that are not valid UTF-8 through
+// unescaped, and the parser rejects them. A policy table can hold such a row,
+// so the failure is reported with the template named rather than panicked the
+// way Casbin does.
+func TestPathMatchReportsTemplatesItCannotCompile(t *testing.T) {
+	const template = "/api/unusable/\xff"
+	t.Cleanup(func() { pathTemplateCache.Delete(template) })
 
 	matched, err := pathMatch("/api/unusable/1", template)
 	require.Error(t, err)
 	assert.False(t, matched, "a template that cannot compile must not allow anything")
-	assert.Contains(t, err.Error(), template, "the error must name the template so it can be repaired")
+	assert.Contains(t, err.Error(), "unusable path template",
+		"the error must name the template so it can be repaired")
 }
 
 // TestPathMatchCompilesEachTemplateOnce covers the caching itself, for both
@@ -149,7 +251,7 @@ func TestPathMatchCompilesEachTemplateOnce(t *testing.T) {
 	})
 
 	t.Run("unusable template", func(t *testing.T) {
-		const template = "/api/compiled-once/["
+		const template = "/api/compiled-once/\xff"
 		t.Cleanup(func() { pathTemplateCache.Delete(template) })
 
 		first, second := compilePathTemplate(template), compilePathTemplate(template)

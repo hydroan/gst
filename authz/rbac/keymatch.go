@@ -41,16 +41,24 @@ var pathTemplateCache sync.Map
 
 // pathMatch reports whether path matches template.
 //
-// The semantics are Casbin's keyMatch3: {name} matches one segment, /* matches
-// any suffix, and what remains is a regular expression anchored at both ends.
-// What differs is that the expression is compiled once per template instead of
-// once per call.
+// A template spells a path, with two things standing for more than themselves:
+// {name} matches one segment, and /* matches the rest of the path, separators
+// included. Everything else is the text it looks like.
 //
-// Casbin rebuilds it every call, and only for this one matcher: keyMatch3
-// reaches the regexp through util.RegexMatch, which calls regexp.MatchString,
-// while keyMatch2, keyMatch4 and keyMatch5 all resolve their pattern through
-// the compiled-pattern cache that package keeps. The matcher evaluates this
-// function once per stored policy per request, so the rebuild dominates the
+// That last part is where the template language and Casbin's keyMatch3 part
+// company. keyMatch3 substitutes those two forms and hands the whole result to
+// the regexp engine, which leaves every other metacharacter live: "/api/.*"
+// stored as one route's object reaches every route in the tenant, and a
+// template that does not compile fails every request that reaches it, because a
+// denial evaluates the whole policy set. Neither is something a policy asked
+// for, and neither is visible in the policy that causes it.
+//
+// The template is compiled once and kept, rather than rebuilt per call.
+// keyMatch3 rebuilds it every time, and alone among its neighbours: it reaches
+// the regexp through util.RegexMatch, which calls regexp.MatchString, while
+// keyMatch2, keyMatch4 and keyMatch5 all resolve their pattern through the
+// compiled-pattern cache that package keeps. The matcher evaluates this
+// function once per stored policy per request, so the rebuild dominated the
 // cost of a decision rather than adding to it.
 func pathMatch(path string, template string) (bool, error) {
 	compiled := compilePathTemplate(template)
@@ -74,6 +82,14 @@ func pathTemplateOf(cached any) (compiledPathTemplate, bool) {
 
 // compilePathTemplate turns a path template into an anchored expression,
 // returning the cached one when the template has been seen before.
+//
+// The expression is assembled rather than parsed: the placeholders are located,
+// and everything between them is quoted. Only the two forms the template
+// language defines survive as anything wider than the text they spell, so no
+// stored object can widen the policy it belongs to.
+//
+// Quoting can only narrow what a template matches, so a policy written while
+// the whole template was a regular expression never allows more than it did.
 func compilePathTemplate(template string) compiledPathTemplate {
 	if cached, hit := pathTemplateCache.Load(template); hit {
 		if compiled, ok := pathTemplateOf(cached); ok {
@@ -81,19 +97,28 @@ func compilePathTemplate(template string) compiledPathTemplate {
 		}
 	}
 
-	// The two rewrites and the anchoring reproduce keyMatch3 exactly. Casbin
-	// writes the placeholder replacement as "$1[^/]+$2", but its expression
-	// declares no capture group, so both references expand to nothing and the
-	// literal below is what it substitutes.
-	pattern := strings.ReplaceAll(template, "/*", "/.*")
-	pattern = pathTemplatePlaceholder.ReplaceAllString(pattern, "[^/]+")
+	var pattern strings.Builder
+	pattern.WriteString("^")
+	quoted := 0
+	for _, placeholder := range pathTemplatePlaceholder.FindAllStringIndex(template, -1) {
+		pattern.WriteString(quotePathTemplate(template[quoted:placeholder[0]]))
+		// A placeholder stops at a separator, which is what distinguishes it
+		// from the wildcard.
+		pattern.WriteString("[^/]+")
+		quoted = placeholder[1]
+	}
+	pattern.WriteString(quotePathTemplate(template[quoted:]))
+	pattern.WriteString("$")
 
 	compiled := compiledPathTemplate{}
-	expression, err := regexp.Compile("^" + pattern + "$")
+	expression, err := regexp.Compile(pattern.String())
 	if err != nil {
-		// Reported rather than panicked. Casbin panics here and leaves the
-		// enforcer to recover, which costs a stack dump on every request and
-		// drops the one detail worth having: which template failed to compile.
+		// Quoting rules out a syntax error, so what reaches here is a template
+		// that is not valid UTF-8: QuoteMeta passes those bytes through
+		// unescaped and the parser rejects them. It is reported rather than
+		// panicked, which is what Casbin does with the far larger class of
+		// failures it lets through, at the price of a stack dump per request
+		// and no mention of the template that caused it.
 		compiled.err = errors.Wrapf(err, "rbac: policy holds an unusable path template %q", template)
 	} else {
 		compiled.expression = expression
@@ -107,6 +132,22 @@ func compilePathTemplate(template string) compiledPathTemplate {
 		return stored
 	}
 	return compiled
+}
+
+// quotePathTemplate quotes the part of a template that holds no placeholder,
+// leaving the wildcard as the one form that keeps a meaning of its own.
+//
+// The wildcard is recognized wherever it appears rather than only at the end,
+// because that is where keyMatch3 recognized it, and narrowing it to a suffix
+// would take away grants that are written and working.
+func quotePathTemplate(literal string) string {
+	spans := strings.Split(literal, "/*")
+	for i, span := range spans {
+		spans[i] = regexp.QuoteMeta(span)
+	}
+	// The wildcard spans separators, which is what distinguishes it from a
+	// placeholder.
+	return strings.Join(spans, "/.*")
 }
 
 // pathMatchFunc adapts pathMatch to the signature the matcher calls it with.

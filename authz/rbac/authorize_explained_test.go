@@ -248,6 +248,49 @@ func TestAuthorizeWithoutPoliciesAnswersTheRoleBranches(t *testing.T) {
 	}
 }
 
+// TestAuthorizeReadsStoredObjectsAsTemplates covers the two ways a stored
+// object used to reach past the route it names.
+//
+// An object is data: it comes from a menu route binding, or from a permission
+// an application writes. Read as a regular expression, a metacharacter in one
+// reaches routes the policy never named, and one that does not compile fails
+// every request that reaches it. Both are exercised by a single denial, which
+// evaluates the whole policy set on its way to answering no.
+func TestAuthorizeReadsStoredObjectsAsTemplates(t *testing.T) {
+	r := newExplainedFixture(t)
+	ctx := context.Background()
+
+	// Both rows are grants held by u_member, who holds role_a.
+	for _, policy := range [][]string{
+		{"default", "role_a", "/api/.*", "GET", "allow"},
+		{"default", "role_a", "/api/items/[", "GET", "allow"},
+	} {
+		if _, err := r.enforcer.AddPolicy(policy); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	allowed, _, _, err := r.AuthorizeExplained(ctx, "default", "u_member", "/api/authz/roles", "GET")
+	if err != nil {
+		t.Fatalf("a stored template that cannot compile must not fail unrelated decisions: %v", err)
+	}
+	if allowed {
+		t.Error(`a stored "/api/.*" must not reach a route it does not name`)
+	}
+
+	// The grants the two rows do carry are the paths they spell, and the
+	// ordinary ones around them are untouched.
+	for _, object := range []string{"/api/.*", "/api/items/[", "/api/things"} {
+		allowed, _, _, err := r.AuthorizeExplained(ctx, "default", "u_member", object, "GET")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !allowed {
+			t.Errorf("expected %q to stay granted", object)
+		}
+	}
+}
+
 func newExplainedFixture(t *testing.T) *rbac {
 	t.Helper()
 
