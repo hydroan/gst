@@ -1,3 +1,19 @@
+// Package rbac decides authorization from Casbin policies and keeps those
+// policies in step with the records they are derived from.
+//
+// Three rule kinds carry everything the package stores. A permission,
+// (tenant, role, object, action, effect), is what a role may reach. An
+// assignment, (subject, role, tenant), is who holds a role in one tenant. A
+// system assignment, (subject, role), is who holds a role above every tenant,
+// which is how the built-in root subject stays reachable in a deployment with no
+// tenants configured at all.
+//
+// Reads answer from memory: the two role branches from the role graph, and
+// everything a policy decides from the enforcer. Writes do not: they go through
+// mutate, which drives storage and memory as two halves so that a policy change
+// rolls back with the transaction that caused it. Nothing in the package writes
+// through the enforcer's own AddPolicy family, and autosave stays off so Casbin
+// cannot write behind mutate's back.
 package rbac
 
 import (
@@ -14,27 +30,16 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
-// Package rbac decides authorization from Casbin policies and keeps those
-// policies in step with the records they are derived from.
-//
-// Three rule kinds carry everything the package stores. A permission,
-// (tenant, role, object, action, effect), is what a role may reach. An
-// assignment, (subject, role, tenant), is who holds a role in one tenant. A
-// system assignment, (subject, role), is who holds a role above every tenant,
-// which is how the built-in root subject stays reachable in a deployment with no
-// tenants configured at all.
-//
-// Reads go straight to the enforcer, which answers from memory. Writes do not:
-// they go through mutate, which drives storage and memory as two halves so that
-// a policy change rolls back with the transaction that caused it. Nothing in the
-// package writes through the enforcer's own AddPolicy family, and autosave stays
-// off so Casbin cannot write behind mutate's back.
-
 // DefaultTenant is the built-in authorization domain used when no tenant
 // resolver is configured by the application.
 const DefaultTenant = "default"
 
-const systemRoleGrouping = "g2"
+// tenantRoleGrouping holds assignments inside one tenant, systemRoleGrouping
+// those that sit above every tenant. Both name a grouping the model declares.
+const (
+	tenantRoleGrouping = "g"
+	systemRoleGrouping = "g2"
+)
 
 // normalizeTenant resolves the authorization domain an operation acts in.
 //
@@ -162,7 +167,8 @@ func (r *rbac) Authorize(ctx context.Context, tenant string, subject string, obj
 	tenant = normalizeTenant(tenant)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.enforcer.Enforce(tenant, subject, object, action)
+	allowed, _, _, err := r.authorize(tenant, subject, object, action)
+	return allowed, err
 }
 
 // policyRoleColumn is the position of the role token in a p policy row. The
@@ -170,24 +176,7 @@ func (r *rbac) Authorize(ctx context.Context, tenant string, subject string, obj
 // the matched one carries its role here.
 const policyRoleColumn = 1
 
-// AuthorizeExplained evaluates the request and re-derives which matcher branch
-// allowed it.
-//
-// The branches are checked in the order the matcher lists them, strongest
-// first, and this order is load-bearing: a subject can satisfy several at once,
-// and naming a weaker one would suggest that revoking it takes the access away.
-// A system_root subject that also holds a role granting the same route must be
-// reported as system_root, or an operator who then strips the role will find the
-// route still reachable and no explanation for it.
-//
-// Keep this sequence aligned with the matcher in modelData. Nothing enforces the
-// agreement: drift leaves the decisions correct and only the explanations wrong,
-// which is the kind of fault that survives review.
-//
-// Only the two policy-driven branches yield a matched rule. The branches above
-// them never consult a policy, so every stored row satisfies the matcher and
-// Casbin reports whichever came first — an arbitrary row that would read as the
-// reason for access.
+// AuthorizeExplained evaluates the request and reports which rule allowed it.
 func (r *rbac) AuthorizeExplained(
 	ctx context.Context, tenant string, subject string, object string, action string,
 ) (bool, consts.GrantSource, []string, error) {
@@ -196,34 +185,79 @@ func (r *rbac) AuthorizeExplained(
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	// The engine is called directly rather than through the exported helpers
-	// below: those take the same read lock, and re-entering it deadlocks once a
-	// writer is queued.
+	return r.authorize(tenant, subject, object, action)
+}
+
+// authorize decides the request and names the rule that allowed it.
+//
+// The two role branches are answered here rather than in the matcher because
+// neither consults a policy. The matcher is evaluated once per stored policy
+// row, so a branch that ignores p is a constant the engine recomputes for every
+// row, and a deployment pays for it on every request. Answering them here also
+// leaves one copy of the precedence: it used to live in the matcher and again
+// in the derivation below it, with nothing keeping the two in step.
+//
+// The order is load-bearing. A subject can satisfy several branches at once,
+// and naming a weaker one would suggest that revoking it takes the access away:
+// a system_root subject that also holds a role granting the same route must be
+// reported as system_root, or an operator who then strips the role will find
+// the route still reachable and no explanation for it.
+//
+// Only the policy branches yield a matched rule. The two above them never
+// consult a policy, so there is no row that is the reason for access.
+//
+// The read lock belongs to the caller and has to cover the whole of this: the
+// branches and the enforcement have to see one policy set, and taking the lock
+// here would deadlock the exported methods that already hold it.
+func (r *rbac) authorize(
+	tenant string, subject string, object string, action string,
+) (bool, consts.GrantSource, []string, error) {
+	systemRoot, err := r.hasRoleLink(systemRoleGrouping, subject, consts.AUTHZ_SYSTEM_ROLE_ROOT)
+	if err != nil {
+		return false, "", nil, err
+	}
+	if systemRoot {
+		return true, consts.GrantSourceSystemRoot, nil, nil
+	}
+
+	tenantAdmin, err := r.hasRoleLink(tenantRoleGrouping, subject, consts.AUTHZ_ROLE_ADMIN, tenant)
+	if err != nil {
+		return false, "", nil, err
+	}
+	if tenantAdmin {
+		return true, consts.GrantSourceTenantAdmin, nil, nil
+	}
+
 	allowed, matchedRule, err := r.enforcer.EnforceEx(tenant, subject, object, action)
 	if err != nil || !allowed {
 		return allowed, "", nil, err
 	}
-
-	systemRoot, err := r.enforcer.HasNamedGroupingPolicy(systemRoleGrouping, subject, consts.AUTHZ_SYSTEM_ROLE_ROOT)
-	if err != nil {
-		return allowed, "", nil, err
-	}
-	if systemRoot {
-		return allowed, consts.GrantSourceSystemRoot, nil, nil
-	}
-
-	tenantAdmin, err := r.enforcer.HasGroupingPolicy(subject, consts.AUTHZ_ROLE_ADMIN, tenant)
-	if err != nil {
-		return allowed, "", nil, err
-	}
-	if tenantAdmin {
-		return allowed, consts.GrantSourceTenantAdmin, nil, nil
-	}
-
 	if len(matchedRule) > policyRoleColumn && matchedRule[policyRoleColumn] == consts.AUTHZ_ROLE_AUTHENTICATED {
 		return allowed, consts.GrantSourceAuthenticated, matchedRule, nil
 	}
 	return allowed, consts.GrantSourceRole, matchedRule, nil
+}
+
+// hasRoleLink reports whether subject reaches role through the grouping ptype,
+// answering exactly what the g function in the matcher would have answered.
+//
+// The role manager is asked rather than the stored rules. It resolves a subject
+// that reaches the role through another role, which a lookup of the rules as
+// written does not, and moving a branch out of the matcher must not change what
+// that branch decides.
+//
+// The inequality is part of that agreement: HasLink reports a self-match, so a
+// subject named after the role would otherwise be handed it. The matcher
+// guarded against that with the same test.
+func (r *rbac) hasRoleLink(ptype string, subject string, role string, domain ...string) (bool, error) {
+	if subject == role {
+		return false, nil
+	}
+	manager := r.enforcer.GetNamedRoleManager(ptype)
+	if manager == nil {
+		return false, nil
+	}
+	return manager.HasLink(subject, role, domain...)
 }
 
 // RemoveRole removes all policies and subject assignments for role in tenant.

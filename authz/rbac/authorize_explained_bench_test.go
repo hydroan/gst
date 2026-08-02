@@ -39,6 +39,28 @@ func BenchmarkAuthorizeExplained(b *testing.B) {
 	}
 }
 
+// BenchmarkAuthorizeSystemRoot covers the branch that no longer reaches the
+// engine at all. It is sized like the others so the comparison shows what
+// deciding a branch outside the matcher is worth: this one answers from the
+// role graph, so its cost should not follow the size of the policy set.
+func BenchmarkAuthorizeSystemRoot(b *testing.B) {
+	r := newTestRBAC(b, 363)
+	if _, err := r.enforcer.AddNamedGroupingPolicy(
+		systemRoleGrouping, "u_root", consts.AUTHZ_SYSTEM_ROLE_ROOT,
+	); err != nil {
+		b.Fatal(err)
+	}
+	ctx := context.Background()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		allowed, err := r.Authorize(ctx, "default", "u_root", "/api/things/300", "GET")
+		if err != nil || !allowed {
+			b.Fatalf("allowed=%v err=%v", allowed, err)
+		}
+	}
+}
+
 // BenchmarkAuthorizeExplainedDenied covers the denial path, which skips the
 // derivation entirely.
 func BenchmarkAuthorizeExplainedDenied(b *testing.B) {

@@ -48,6 +48,9 @@ p = tenant, role, obj, act, eft
 g = _, _, _
 # g2 defines system-level role membership:
 # g2(subject, role) means subject has role outside any tenant.
+# The matcher below never names g2. It is declared so Casbin builds a role
+# manager for it, which is what authorize asks about system-level membership;
+# removing it would leave that question with nothing to answer it.
 g2 = _, _
 
 [policy_effect]
@@ -55,33 +58,31 @@ g2 = _, _
 e = some(where (p.eft == allow))
 
 [matchers]
+# Every branch here consults a policy. The two that do not — system_root, and
+# the built-in admin role inside the request tenant — are decided by authorize
+# before the engine is entered, because Casbin evaluates this expression once
+# per stored policy row and a branch ignoring p would be recomputed for each of
+# them. Keep it that way: a branch added here that does not read p is paid for
+# by every policy in the deployment, on every request.
+#
 # Allow a request when either:
-# 1) the subject belongs to the system_root role through g2. This branch does
-#    not compare tenant, so system_root is intentionally cross-tenant.
-# 2) the subject belongs to the built-in admin role in the request tenant.
-#    This branch grants unconditional access to every object/action in the
-#    tenant — it does NOT check any p (permission policy) entry, unlike
-#    branch 3 below. Assigning the "admin" role is equivalent to granting
-#    full tenant-scoped superuser access.
-# 3) the policy is written for the implicit "authenticated" role. This branch
+# 1) the policy is written for the implicit "authenticated" role. This branch
 #    checks no role membership and no tenant, so it reaches every authenticated
 #    subject in every tenant — including subjects that hold no role at all. It
 #    still requires a subject: authorization runs after authentication, and the
 #    emptiness check keeps that a property of the matcher rather than a promise
 #    the caller has to keep. Reserve it for objects whose result is already
 #    scoped to the caller.
-# 4) the subject belongs to the policy role in the same tenant, and the object
+# 2) the subject belongs to the policy role in the same tenant, and the object
 #    and action match the stored permission.
 #
-# The subject/role inequality checks keep a subject named like a role from
+# The subject/role inequality check keeps a subject named like a role from
 # receiving that role through Casbin's self-match behavior.
 #
 # A trailing backslash continues the line, so each branch above maps to the line
 # below it and the whole matcher stays readable as it grows. A comment between
-# two continued lines would end the value early, so keep the four lines adjacent.
-m = (r.sub != "system_root" && g2(r.sub, "system_root")) \
- || (r.sub != "admin" && g(r.sub, "admin", r.tenant)) \
- || (r.sub != "" && p.role == "authenticated" && pathMatch(r.obj, p.obj) && r.act == p.act) \
+# two continued lines would end the value early, so keep the two lines adjacent.
+m = (r.sub != "" && p.role == "authenticated" && pathMatch(r.obj, p.obj) && r.act == p.act) \
  || (r.sub != p.role && r.tenant == p.tenant && g(r.sub, p.role, r.tenant) && pathMatch(r.obj, p.obj) && r.act == p.act)
 `)
 
