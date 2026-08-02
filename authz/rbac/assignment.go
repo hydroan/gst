@@ -123,14 +123,19 @@ func (r *rbac) UnassignSystemRole(ctx context.Context, subject string, role stri
 	return r.mutate(ctx, removeRules("g", systemRoleGrouping, []string{subject, role}))
 }
 
-// HasSystemRole reports whether subject explicitly holds a system-level role.
+// HasSystemRole reports whether subject holds a system-level role.
+//
+// It resolves through the role graph, which is what Authorize decides its
+// system role branch from. The two answer one question, and every caller of
+// this one is a guard over the access that branch grants: refusing a tenant
+// administrator a root target, exempting root from menu filtering, reporting
+// root at login. Reading the grouping rules as written answers no for a subject
+// that reaches the role through another role, so the guards would stand open
+// for the one subject Authorize is already letting through everything.
 func (r *rbac) HasSystemRole(ctx context.Context, subject string, role string) (bool, error) {
-	if subject == role {
-		return false, nil
-	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.enforcer.HasNamedGroupingPolicy(systemRoleGrouping, subject, role)
+	return r.hasRoleLink(systemRoleGrouping, subject, role)
 }
 
 func isBuiltInSystemRole(subject string, role string) bool {

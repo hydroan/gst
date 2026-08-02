@@ -183,6 +183,61 @@ func TestAuthorizeResolvesInheritedRoleLinks(t *testing.T) {
 	}
 }
 
+// TestHasSystemRoleAgreesWithAuthorize pins the two entry points that answer
+// whether a subject holds a system role to one resolution.
+//
+// Authorize grants a system_root subject every object in every tenant, and
+// every caller of HasSystemRole is a guard over that grant: refusing a tenant
+// administrator a root target, exempting root from menu filtering, reporting
+// root at login. An answer weaker than Authorize's does not merely disagree,
+// it leaves those guards open for the one subject the grant is widest for.
+func TestHasSystemRoleAgreesWithAuthorize(t *testing.T) {
+	r := newAuthorizeFixture(t)
+	ctx := context.Background()
+
+	for _, grouping := range [][]string{
+		{"u_relayed_system", "relay_role"},
+		{"relay_role", consts.AUTHZ_SYSTEM_ROLE_ROOT},
+	} {
+		if _, err := r.enforcer.AddNamedGroupingPolicy(systemRoleGrouping, grouping); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cases := []struct {
+		name    string
+		subject string
+		want    bool
+	}{
+		{"assigned directly", "u_system", true},
+		{"reached through another role", "u_relayed_system", true},
+		{"holds no system role", "u_member", false},
+		{"named after the role", consts.AUTHZ_SYSTEM_ROLE_ROOT, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			held, err := r.HasSystemRole(ctx, c.subject, consts.AUTHZ_SYSTEM_ROLE_ROOT)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if held != c.want {
+				t.Errorf("HasSystemRole: expected %v, got %v", c.want, held)
+			}
+
+			decision, err := r.Authorize(ctx, "default", c.subject, "/api/unrelated", "DELETE")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if grantedAsRoot := decision.Source == consts.GrantSourceSystemRoot; grantedAsRoot != held {
+				t.Errorf(
+					"Authorize reported source %q while HasSystemRole reported %v",
+					decision.Source, held,
+				)
+			}
+		})
+	}
+}
+
 // TestAuthorizeRejectsSubjectsNamedAfterARole covers Casbin's self-match: its
 // role manager answers yes whenever the subject and the role are the same name,
 // which would hand tenant-wide or cross-tenant access to whoever registers
