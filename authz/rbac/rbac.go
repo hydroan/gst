@@ -9,6 +9,7 @@ import (
 
 	"github.com/casbin/casbin/v3"
 	"github.com/casbin/casbin/v3/persist"
+	"github.com/cockroachdb/errors"
 	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
@@ -285,7 +286,7 @@ func errIfReservedRole(role string) error {
 
 // GrantPermission grants role access to object/action inside tenant.
 func (r *rbac) GrantPermission(ctx context.Context, tenant string, role string, object string, action string) (err error) {
-	if err := errIfReservedRole(role); err != nil {
+	if err = errIfReservedRole(role); err != nil {
 		return err
 	}
 	tenant = normalizeTenant(tenant)
@@ -320,6 +321,9 @@ const authenticatedPolicyTenant = "*"
 func (r *rbac) SetRolePermissions(
 	ctx context.Context, tenant string, role string, permissions []types.Permission,
 ) (err error) {
+	if err = errIfReservedRole(role); err != nil {
+		return err
+	}
 	tenant = normalizeTenant(tenant)
 	ctx, finishSpan := traceRBAC(ctx, "set_role_permissions", rbacTraceFields(tenant, role))
 	defer func() {

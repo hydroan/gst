@@ -7,7 +7,9 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/types/consts"
 )
 
 // TestSetRolePermissionsReplacesTheWholeSet covers the replace semantics: the
@@ -159,6 +161,66 @@ func TestSetRolePermissionsReplacesAtomically(t *testing.T) {
 	}
 	if n := denied.Load(); n != 0 {
 		t.Errorf("expected no denial while the permission set is replaced, got %d", n)
+	}
+}
+
+// TestPermissionWritesRefuseTheReservedRole covers a permission aimed at the
+// implicit authenticated role through an ordinary role call.
+//
+// The matcher reads that role without a membership check and without a tenant
+// check, so a permission stored against it allows every subject that can log
+// in, in every tenant. Reached through a tenant-scoped call it would turn one
+// tenant's permission set into a grant across the deployment, while reading in
+// whatever the caller derived it from as a role like any other.
+func TestPermissionWritesRefuseTheReservedRole(t *testing.T) {
+	r := newRolePermissionsFixture(t)
+	ctx := context.Background()
+
+	if err := r.SetRolePermissions(ctx, "tenant_a", consts.AUTHZ_ROLE_AUTHENTICATED, []types.Permission{
+		{Object: "/api/things", Action: "GET"},
+	}); !errors.Is(err, ErrReservedRole) {
+		t.Errorf("SetRolePermissions: expected ErrReservedRole, got %v", err)
+	}
+	if err := r.GrantPermission(
+		ctx, "tenant_a", consts.AUTHZ_ROLE_AUTHENTICATED, "/api/things", "GET",
+	); !errors.Is(err, ErrReservedRole) {
+		t.Errorf("GrantPermission: expected ErrReservedRole, got %v", err)
+	}
+
+	allowed, err := r.Authorize(ctx, "tenant_b", "u_plain", "/api/things", "GET")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if allowed {
+		t.Error("a refused write must not have reached the policy set")
+	}
+
+	// The method that writes that rule on purpose still can, and what it writes
+	// is exactly the reach the refusal protects: a subject holding no role, in a
+	// tenant the call never named.
+	if err = r.SetPermissionsForAuthenticated(ctx, []types.Permission{
+		{Object: "/api/things", Action: "GET"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	allowed, err = r.Authorize(ctx, "tenant_b", "u_plain", "/api/things", "GET")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !allowed {
+		t.Error("expected the deliberate write to reach every tenant")
+	}
+
+	// Whatever is already stored has to stay removable.
+	if err = r.RemoveRole(ctx, authenticatedPolicyTenant, consts.AUTHZ_ROLE_AUTHENTICATED); err != nil {
+		t.Fatal(err)
+	}
+	allowed, err = r.Authorize(ctx, "tenant_b", "u_plain", "/api/things", "GET")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if allowed {
+		t.Error("expected the removal to take the grant away")
 	}
 }
 
