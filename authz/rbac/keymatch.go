@@ -54,7 +54,7 @@ var pathTemplateCache sync.Map
 // for, and neither is visible in the policy that causes it.
 //
 // The template is compiled once and kept, rather than rebuilt per call.
-// keyMatch3 rebuilds it every time, and alone among its neighbours: it reaches
+// keyMatch3 rebuilds it every time, and alone among its neighbors: it reaches
 // the regexp through util.RegexMatch, which calls regexp.MatchString, while
 // keyMatch2, keyMatch4 and keyMatch5 all resolve their pattern through the
 // compiled-pattern cache that package keeps. The matcher evaluates this

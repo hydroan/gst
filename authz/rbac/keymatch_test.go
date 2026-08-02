@@ -35,6 +35,7 @@ func keyMatch3(path string, template string) (matched bool, panicked bool) {
 // from menu route bindings, and the two implementations have to agree on every
 // one of them: narrowing the reading of a metacharacter is the point, and
 // changing anything else would be a regression.
+//
 // The two forms are removed in the order keyMatch3 substitutes them: the
 // wildcard is recognized in the template as written, before removing a
 // placeholder can leave behind a "/*" the template never contained. Reversing
