@@ -444,20 +444,6 @@ type DistributedCache[T any] interface {
 	DeleteWithSync(key string) error
 }
 
-// Decision is the outcome of one authorization check.
-//
-// Source names the strongest rule that allowed the request and is empty on a
-// denial, because a denial has no granting rule. MatchedRule is the policy row
-// that allowed it, and is nil unless Source names a policy: the rules that
-// allow without consulting one leave the engine free to report an unrelated
-// row, which would read as the reason for access while being nothing of the
-// kind.
-type Decision struct {
-	Allowed     bool
-	Source      consts.GrantSource
-	MatchedRule []string
-}
-
 // RBAC provides tenant-scoped role, permission, and subject assignment operations.
 // When RBAC is disabled or not initialized, the framework may provide a safe
 // no-op implementation whose methods succeed without side effects.

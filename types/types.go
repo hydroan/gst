@@ -2,6 +2,7 @@ package types
 
 import (
 	"github.com/hydroan/gst/internal/sse"
+	"github.com/hydroan/gst/types/consts"
 )
 
 // Event is an alias for sse.Event.
@@ -32,6 +33,20 @@ type Permission struct {
 
 	// Action is the operation on that object, usually an HTTP method.
 	Action string
+}
+
+// Decision is the outcome of one authorization check.
+//
+// Source names the strongest rule that allowed the request and is empty on a
+// denial, because a denial has no granting rule. MatchedRule is the policy row
+// that allowed it, and is nil unless Source names a policy: the rules that
+// allow without consulting one leave the engine free to report an unrelated
+// row, which would read as the reason for access while being nothing of the
+// kind.
+type Decision struct {
+	Allowed     bool
+	Source      consts.GrantSource
+	MatchedRule []string
 }
 
 // QueryOptions tunes how WithQuery turns a model value into WHERE conditions.
