@@ -55,17 +55,38 @@ func (CasbinRule) Design() {
 	dsl.Migrate()
 }
 
-// Indexes declares the uniqueness Casbin's adapter assumes. Every policy insert
-// it issues carries an on-conflict-do-nothing clause, which needs a matching
-// unique constraint to have anything to conflict with; without one, concurrent
-// writers store the same rule twice and a single-rule revocation then removes
-// only one of the copies.
+// Indexes declares the uniqueness Casbin's adapter assumes, and the one access
+// path that uniqueness cannot serve.
+//
+// The unique index is what every policy insert conflicts against: the adapter
+// issues them with an on-conflict-do-nothing clause, which needs a matching
+// constraint to have anything to conflict with. Without one, concurrent writers
+// store the same rule twice and a single-rule revocation removes one copy.
 //
 // The seven columns total 2800 bytes under utf8mb4, within InnoDB's 3072-byte
 // index key limit. Widening any of them past size 109 would exceed it.
+//
+// The second index exists for removing a role's assignments, which matches on
+// ptype, role and tenant — columns v1 and v2 for a grouping rule. That skips v0
+// and so leaves the unique index with only its first column to narrow by: every
+// grouping rule in the deployment is then walked to delete one role's. Each
+// engine pays for it differently and both pay. MySQL examined 45,348 rows of a
+// 200,000-row table for a delete matching one, and under REPEATABLE READ takes
+// a next-key lock on every one of them for the rest of the transaction, which
+// is the whole grouping range held while a role is deleted. PostgreSQL keeps
+// the scan inside the index but walks the same span, at 142 times the cost of
+// the seek. With this index both engines reach the rows directly, and neither
+// of the other two removals changes plan: they lead with v0 and keep using the
+// unique index.
+//
+// The rule columns mean different things per ptype — v0 is a tenant in a
+// permission and a subject in an assignment — so no single column order serves
+// both, and reordering the unique index would only move the miss to another
+// removal.
 func (cr *CasbinRule) Indexes() []model.Index {
 	return []model.Index{
 		{Fields: []string{"Ptype", "V0", "V1", "V2", "V3", "V4", "V5"}, Unique: true},
+		{Fields: []string{"Ptype", "V1", "V2"}},
 	}
 }
 

@@ -800,7 +800,11 @@ func TestAuthzRoleBinding(t *testing.T) {
 			})
 		})
 
-		t.Run("delete_role_cleans_role_bindings", func(t *testing.T) {
+		// The binding rows and the rule that authorized them are cleared by two
+		// different steps of one delete, and the rows going away is no evidence
+		// that the authorization did: a rule left behind keeps allowing requests
+		// with no record left to revoke it.
+		t.Run("delete_role_cleans_bindings_and_their_rules", func(t *testing.T) {
 			authzPurgeLeftoverRole(t, "deleted_role")
 
 			resp, err = cliRole.Create(&authz.Role{
@@ -834,6 +838,9 @@ func TestAuthzRoleBinding(t *testing.T) {
 				List(&remaining)
 			require.NoError(t, err)
 			require.Empty(t, remaining)
+
+			require.Empty(t, storedPolicies(t, "g", userID, deletedRoleID),
+				"deleting a role must take the assignments that reached it with it")
 		})
 
 		t.Run("delete", func(t *testing.T) {

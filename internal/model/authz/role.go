@@ -167,7 +167,20 @@ func (r *Role) DeleteBefore(ctx context.Context) error {
 		return err
 	}
 	if len(roleBindings) > 0 {
-		if err := database.Database[*RoleBinding](ctx).Delete(roleBindings...); err != nil {
+		// The rows go without their hooks. Each binding's DeleteBefore reads
+		// the row back and unassigns the role one subject at a time, while
+		// RemoveRole below drops every assignment to this role in one filtered
+		// delete — so the hooks spend a read and a policy write per binding on
+		// rules the next statement removes anyway, each taking the enforcer
+		// write lock and leaving an after-commit action until the transaction
+		// ends.
+		//
+		// What that gives up is a binding stored under a tenant other than the
+		// role it names, which RemoveRole's filter does not reach. Nothing
+		// writes one: a binding's own CreateBefore refuses a role belonging to
+		// another tenant. Such a row is written around the framework, and the
+		// drift report is what surfaces it.
+		if err := database.Database[*RoleBinding](ctx).WithoutHook().Delete(roleBindings...); err != nil {
 			return err
 		}
 	}
