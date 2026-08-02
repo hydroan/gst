@@ -18,7 +18,15 @@ const matcherFuncPathMatch = "pathMatch"
 
 // pathTemplatePlaceholder matches the {name} placeholder that stands for one
 // path segment, which is the placeholder syntax Casbin's keyMatch3 defines.
-var pathTemplatePlaceholder = regexp.MustCompile(`\{[^/]+\}`)
+//
+// The body excludes braces, which keyMatch3's own pattern does not. Matching is
+// greedy, so a body admitting a brace reads "{a}-{b}" as one placeholder and
+// takes the "-" between them with it: the compiled expression then stands for
+// any one segment rather than for the two parts the template spells, and the
+// text that would have been quoted never reaches the quoting step. That is the
+// one direction compilation must not move in, and excluding the brace is what
+// keeps a placeholder from reaching past the one it belongs to.
+var pathTemplatePlaceholder = regexp.MustCompile(`\{[^/{}]+\}`)
 
 // compiledPathTemplate is what one path template compiles to.
 //

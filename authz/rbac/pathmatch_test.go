@@ -28,20 +28,33 @@ func keyMatch3(path string, template string) (matched bool, panicked bool) {
 	return util.KeyMatch3(path, template), false
 }
 
-// isPlainTemplate reports whether everything in template outside a placeholder
-// and a wildcard is text the regexp engine would have read the same way.
+// sharesKeyMatch3Reading reports whether keyMatch3 reads template the way this
+// package does, which is the condition for comparing the two at all.
 //
 // Those are the templates the framework itself writes, from router.Routes and
 // from menu route bindings, and the two implementations have to agree on every
-// one of them: narrowing the reading of a metacharacter is the point, and
-// changing anything else would be a regression.
+// one of them: narrowing what a metacharacter and a greedy placeholder grant is
+// the point, and changing anything else would be a regression.
+//
+// Two things take a template outside the comparison. Everything outside a
+// placeholder and a wildcard has to be text the regexp engine would have read
+// the same way, or keyMatch3 reaches paths the template does not spell. And a
+// segment has to hold at most one placeholder: keyMatch3's placeholder pattern
+// admits a brace and matches greedily, so it reads "{a}-{b}" as one placeholder
+// and loses the text between them, which this package no longer does.
 //
 // The two forms are removed in the order keyMatch3 substitutes them: the
 // wildcard is recognized in the template as written, before removing a
 // placeholder can leave behind a "/*" the template never contained. Reversing
 // the two calls reports "/{0}*" as plain, which it is not — keyMatch3 turns it
 // into the nested repetition "/[^/]+*" and cannot compile it at all.
-func isPlainTemplate(template string) bool {
+func sharesKeyMatch3Reading(template string) bool {
+	for segment := range strings.SplitSeq(template, "/") {
+		if len(pathTemplatePlaceholder.FindAllStringIndex(segment, -1)) > 1 {
+			return false
+		}
+	}
+
 	stripped := strings.ReplaceAll(template, "/*", "/")
 	stripped = pathTemplatePlaceholder.ReplaceAllString(stripped, "")
 	return regexp.QuoteMeta(stripped) == stripped
@@ -96,7 +109,7 @@ func TestPathMatchMatchesTheTemplateLanguage(t *testing.T) {
 
 			// Every case here is a template the framework itself could write,
 			// so the reading must not have moved.
-			if isPlainTemplate(c.template) {
+			if sharesKeyMatch3Reading(c.template) {
 				expected, panicked := keyMatch3(c.path, c.template)
 				require.False(t, panicked, "keyMatch3 must answer for a plain template")
 				assert.Equal(t, expected, matched, "a plain template must read as it always did")
@@ -135,6 +148,49 @@ func TestPathMatchTreatsMetacharactersAsText(t *testing.T) {
 			assert.False(t, matched, "template %q must no longer reach %q", c.template, c.path)
 		})
 	}
+}
+
+// TestPathMatchPlaceholderDoesNotSwallowTheTextAfterIt covers a template
+// carrying two placeholders inside one segment.
+//
+// The placeholder pattern is greedy and its body admits a brace, so it reads
+// "{a}-{b}" as a single placeholder and the "-" between them disappears from
+// the compiled expression. The template then matches any one segment rather
+// than the two parts it spells, which grants an object nobody wrote — the one
+// direction the compilation is not allowed to move in, and the one the package
+// claims it cannot: quoting can only narrow, but nothing was quoted here
+// because the text never reached the quoting step.
+//
+// keyMatch3 reads it the same way, from the same pattern. Agreeing with it is
+// not the goal where it grants more than the template spells, which is what
+// the metacharacter cases above already establish.
+func TestPathMatchPlaceholderDoesNotSwallowTheTextAfterIt(t *testing.T) {
+	cases := []struct {
+		name     string
+		path     string
+		template string
+		matched  bool
+	}{
+		{"the text between them is part of the template", "/api/a-b", "/api/{a}-{b}", true},
+		{"a path without that text does not match", "/api/ab", "/api/{a}-{b}", false},
+		{"each placeholder still takes at least one character", "/api/-b", "/api/{a}-{b}", false},
+		{"the separator can be any text", "/api/a:b", "/api/{a}:{b}", true},
+		{"a placeholder still stops at a segment", "/api/a-b/c", "/api/{a}-{b}", false},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			matched, err := pathMatch(c.path, c.template)
+			require.NoError(t, err)
+			assert.Equal(t, c.matched, matched, "path %q against template %q", c.path, c.template)
+		})
+	}
+
+	t.Run("keyMatch3 granted what the template does not spell", func(t *testing.T) {
+		allowed, panicked := keyMatch3("/api/ab", "/api/{a}-{b}")
+		require.False(t, panicked)
+		require.True(t, allowed, "this case is only interesting if keyMatch3 allowed it")
+	})
 }
 
 // TestPathMatchSurvivesATemplateKeyMatch3CouldNotCompile covers the other half:
@@ -188,9 +244,13 @@ func FuzzPathMatchReachesOnlyWhatTheTemplateSpells(f *testing.F) {
 		{"/api/xbc", "/api/.bc"},
 		{"/api/authz/roles", "/api/.*"},
 		// Both found by the fuzzer, and both about the order the two forms are
-		// recognized in rather than about matching: see isPlainTemplate.
+		// recognized in rather than about matching: see sharesKeyMatch3Reading.
 		{"\\", "\\"},
 		{"/x*", "/{0}*"},
+		// Found by the fuzzer: two placeholders in one segment stand for two
+		// parts, so the shortest path they reach is two characters long.
+		// keyMatch3 read them as one placeholder and reached this path.
+		{"0", "{0}{0}"},
 	} {
 		f.Add(seed[0], seed[1])
 	}
@@ -211,7 +271,7 @@ func FuzzPathMatchReachesOnlyWhatTheTemplateSpells(f *testing.F) {
 			return
 		}
 
-		if isPlainTemplate(template) {
+		if sharesKeyMatch3Reading(template) {
 			allowed, panicked := keyMatch3(path, template)
 			require.False(t, panicked, "keyMatch3 must answer for the plain template %q", template)
 			require.Equal(t, allowed, matched,
