@@ -98,6 +98,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.43.0
 	github.com/testcontainers/testcontainers-go/modules/mysql v0.43.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.43.0
+	github.com/testcontainers/testcontainers-go/modules/redis v0.43.0
 	github.com/twmb/franz-go v1.21.5
 	github.com/twmb/franz-go/pkg/kadm v1.18.0
 	github.com/twmb/franz-go/pkg/kfake v0.0.0-20260727183601-4176fc0fcaf7
@@ -424,7 +425,6 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/sunshineplan/pdf v1.0.8 // indirect
 	github.com/swaggo/swag v1.16.4 // indirect
-	github.com/testcontainers/testcontainers-go/modules/redis v0.43.0 // indirect
 	github.com/tetafro/godot v1.5.6 // indirect
 	github.com/tetratelabs/wazero v1.11.0 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
