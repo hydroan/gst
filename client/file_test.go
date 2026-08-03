@@ -26,12 +26,12 @@ func TestDownloadReadsAttachment(t *testing.T) {
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)
 
-	file, err := cli.Download("/api/records/export", client.WithQuery("_format", "csv"))
+	attachment, err := cli.Download("/api/records/export", client.WithQuery("_format", "csv"))
 	require.NoError(t, err)
 	require.Equal(t, "csv", gotFormat)
-	require.Equal(t, "records.csv", file.Name)
-	require.Equal(t, "text/csv", file.ContentType)
-	require.Equal(t, "name\nsample\n", string(file.Content))
+	require.Equal(t, "records.csv", attachment.Name)
+	require.Equal(t, "text/csv", attachment.ContentType)
+	require.Equal(t, "name\nsample\n", string(attachment.Content))
 }
 
 func TestDownloadReturnsStructuredErrorOnRejection(t *testing.T) {

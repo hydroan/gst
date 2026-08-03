@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
@@ -159,11 +158,8 @@ func TestUserStatusPatch(t *testing.T) {
 			Username: victim.Username,
 			Password: victim.Password,
 		})
-		var respErr *client.Error
-		require.True(t, errors.As(err, &respErr), "error: %v", err)
-		require.Equal(t, http.StatusForbidden, respErr.StatusCode)
+		respErr := testutil.RequireError(t, err, http.StatusForbidden, "disabled")
 		require.Equal(t, -1, respErr.Code)
-		require.Contains(t, respErr.Msg, "disabled")
 	})
 
 	t.Run("enable_user", func(t *testing.T) {
@@ -256,11 +252,8 @@ func TestUserStatusPatch(t *testing.T) {
 			Username: victim.Username,
 			Password: victim.Password,
 		})
-		var respErr *client.Error
-		require.True(t, errors.As(err, &respErr), "error: %v", err)
-		require.Equal(t, http.StatusForbidden, respErr.StatusCode)
+		respErr := testutil.RequireError(t, err, http.StatusForbidden, "locked")
 		require.Equal(t, -1, respErr.Code)
-		require.Contains(t, respErr.Msg, "locked")
 	})
 
 	t.Run("unlock_user", func(t *testing.T) {

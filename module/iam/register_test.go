@@ -21,7 +21,7 @@ import (
 
 const rootPassword = "12345678"
 
-var baseURL = testutil.URL("")
+var baseURL = testutil.BaseURL()
 
 const (
 	signupPath         = "/api/signup"

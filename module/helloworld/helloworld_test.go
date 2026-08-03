@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var baseURL = testutil.URL("")
+var baseURL = testutil.BaseURL()
 
 const (
 	helloworldPath  = "/api/hello-world"

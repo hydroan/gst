@@ -149,16 +149,10 @@ func profileLoginSession(t *testing.T, username, password string) string {
 	})
 	require.NoError(t, err)
 
-	for _, cookie := range resp.Cookies {
-		if cookie.Name != "session_id" {
-			continue
-		}
-		require.NotEmpty(t, cookie.Value)
-		return cookie.Value
-	}
-
-	require.FailNow(t, "session cookie not found")
-	return ""
+	cookie := resp.Cookie("session_id")
+	require.NotNil(t, cookie, "session cookie not found")
+	require.NotEmpty(t, cookie.Value)
+	return cookie.Value
 }
 
 func profileCountForUser(t *testing.T, userID string) int {

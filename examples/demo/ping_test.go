@@ -20,18 +20,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var baseURL = testutil.URL("")
+var baseURL = testutil.BaseURL()
 
 const pingPath = "/api/pings"
 
 // TestMain mirrors main.go: the framework bootstraps first, the routes are
-// registered second, and the server serves last. Seed is where router.Init
+// registered second, and the server serves last. Routes is where router.Init
 // belongs, because registering a route needs a bootstrapped framework.
 func TestMain(m *testing.M) {
 	testutil.Run(m, testutil.Server{
 		Database: config.DBMySQL,
 		Redis:    true,
-		Seed:     func() { util.RunOrDie(router.Init) },
+		Routes:   func() { util.RunOrDie(router.Init) },
 	})
 }
 

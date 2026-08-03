@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/cookiejar"
 	"strings"
@@ -28,18 +27,8 @@ type Client struct {
 	header http.Header
 	debug  bool
 
-	ctx context.Context
-
-	types.Logger
-}
-
-// Resp is the standard response envelope a gst backend answers with.
-type Resp struct {
-	Code    int             `json:"code,omitempty"`
-	Msg     string          `json:"msg,omitempty"`
-	Data    json.RawMessage `json:"data,omitempty"`
-	TraceID string          `json:"trace_id,omitempty"`
-	Cookies []*http.Cookie  `json:"-"`
+	ctx    context.Context
+	logger types.Logger
 }
 
 // New creates a new client instance with given service base address and options.
@@ -47,6 +36,10 @@ type Resp struct {
 // isolated http.Client with its own cookie jar, so a login response cookie is
 // carried on every later request automatically.
 func New(addr string, opts ...Option) (*Client, error) {
+	addr = strings.TrimRight(addr, "/")
+	if !strings.HasPrefix(addr, "http://") && !strings.HasPrefix(addr, "https://") {
+		return nil, errors.New("addr must start with http:// or https://")
+	}
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create the cookie jar")
@@ -54,9 +47,9 @@ func New(addr string, opts ...Option) (*Client, error) {
 	client := &Client{
 		httpClient: &http.Client{Jar: jar},
 		header:     http.Header{},
-		addr:       strings.TrimRight(addr, "/"),
+		addr:       addr,
 		ctx:        context.Background(),
-		Logger:     zap.New(""),
+		logger:     zap.New(""),
 	}
 	client.header.Set("User-Agent", consts.FrameworkName)
 	client.header.Set("Content-Type", "application/json")

@@ -6,13 +6,13 @@
 // once the tests are done. Nothing has to be installed on the machine running
 // the tests beyond a container runtime.
 //
-//	var baseURL = testutil.URL("")
+//	var baseURL = testutil.BaseURL()
 //
 //	func TestMain(m *testing.M) {
 //		testutil.Run(m, testutil.Server{
 //			Database: config.DBMySQL,
 //			Redis:    true,
-//			Seed:     func() { util.RunOrDie(router.Init) },
+//			Routes:   func() { util.RunOrDie(router.Init) },
 //		})
 //	}
 //
@@ -50,25 +50,40 @@ func Run(m *testing.M, s Server) {
 	testutil.Run(m, s)
 }
 
+// BaseURL returns the test server base address clients are constructed with.
+func BaseURL() string {
+	return testutil.BaseURL()
+}
+
 // URL returns an absolute URL of the test server for path. The port is picked
 // per test binary, so an endpoint can be declared as a package-level variable.
 func URL(path string) string {
 	return testutil.URL(path)
 }
 
-// RequireResp asserts that resp carries a successful envelope and hands the
-// decoded payload to checkFn.
-func RequireResp[RSP any](t *testing.T, resp *client.Resp, checkFn func(t *testing.T, rsp RSP)) {
+// DecodeResp asserts that resp carries a successful envelope and returns the
+// decoded payload.
+func DecodeResp[RSP any](t *testing.T, resp *client.Envelope) RSP {
 	t.Helper()
 
-	testutil.RequireResp(t, resp, checkFn)
+	return testutil.DecodeResp[RSP](t, resp)
 }
 
 // RequireError asserts that err is a server-side rejection with the given
 // HTTP status code and that the business message contains every msgContains
-// entry.
-func RequireError(t *testing.T, err error, statusCode int, msgContains ...string) {
+// entry. The rejection is returned by value for follow-up asserts, such as
+// the business code.
+func RequireError(t *testing.T, err error, statusCode int, msgContains ...string) client.Error {
 	t.Helper()
 
-	testutil.RequireError(t, err, statusCode, msgContains...)
+	return testutil.RequireError(t, err, statusCode, msgContains...)
+}
+
+// RequireDataFields asserts that the raw envelope data carries every named
+// top-level JSON field, guarding serialization contracts against fields
+// silently vanishing behind omitempty.
+func RequireDataFields(t *testing.T, resp *client.Envelope, fields ...string) {
+	t.Helper()
+
+	testutil.RequireDataFields(t, resp, fields...)
 }

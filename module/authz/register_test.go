@@ -34,7 +34,7 @@ var (
 	rootUsername = "root"
 	rootPassword = "12345678"
 
-	baseURL = testutil.URL("")
+	baseURL = testutil.BaseURL()
 
 	tenantHeader    = "X-Tenant-ID"
 	tenantUserAgent = "gst-authz-tenant-test"
@@ -819,30 +819,22 @@ func loginSessionIDFromCookieWithUserAgent(t *testing.T, reqPayload iam.LoginReq
 	apiResp, err := cli.Do(http.MethodPost, loginPath, reqPayload)
 	require.NoError(t, err)
 
-	testutil.RequireResp(t, apiResp, func(t *testing.T, rsp iam.LoginRsp) {
-		t.Helper()
-		require.False(t, rsp.ServerTime.IsZero())
-		require.False(t, rsp.Session.ExpiresAt.IsZero())
-		if reqPayload.TenantID != "" {
-			require.Equal(t, reqPayload.TenantID, rsp.Session.TenantID)
-		}
-	})
+	rsp := testutil.DecodeResp[iam.LoginRsp](t, apiResp)
+	require.False(t, rsp.ServerTime.IsZero())
+	require.False(t, rsp.Session.ExpiresAt.IsZero())
+	if reqPayload.TenantID != "" {
+		require.Equal(t, reqPayload.TenantID, rsp.Session.TenantID)
+	}
 
 	var data map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(apiResp.Data, &data), "response data: %s", string(apiResp.Data))
 	require.NotContains(t, data, "session_id")
 
-	for _, cookie := range apiResp.Cookies {
-		if cookie.Name != "session_id" {
-			continue
-		}
-		require.NotEmpty(t, cookie.Value)
-		require.Regexp(t, `^[0-9a-f]{64}$`, cookie.Value)
-		return cookie.Value
-	}
-
-	require.FailNow(t, "session cookie not found")
-	return ""
+	cookie := apiResp.Cookie("session_id")
+	require.NotNil(t, cookie, "session cookie not found")
+	require.NotEmpty(t, cookie.Value)
+	require.Regexp(t, `^[0-9a-f]{64}$`, cookie.Value)
+	return cookie.Value
 }
 
 // authzSessionClient returns a client that presents the given session id.

@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var baseURL = testutil.URL("")
+var baseURL = testutil.BaseURL()
 
 const recordPath = "/api/test-record"
 
@@ -39,7 +39,7 @@ func (r *TestRecord) Purge() bool { return true }
 func TestMain(m *testing.M) {
 	testutil.Run(m, testutil.Server{
 		Register: func() { model.Register[*TestRecord]() },
-		Seed: func() {
+		Routes: func() {
 			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record", nil, consts.Create)
 			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &types.ControllerConfig[*TestRecord]{ParamName: "id"}, consts.Delete)
 			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &types.ControllerConfig[*TestRecord]{ParamName: "id"}, consts.Update)

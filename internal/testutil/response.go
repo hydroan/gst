@@ -10,9 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// RequireResp asserts that resp carries a successful envelope and hands the
-// decoded payload to checkFn.
-func RequireResp[RSP any](t *testing.T, resp *client.Resp, checkFn func(t *testing.T, rsp RSP)) {
+// DecodeResp asserts that resp carries a successful envelope and returns the
+// decoded payload.
+func DecodeResp[RSP any](t *testing.T, resp *client.Envelope) RSP {
 	t.Helper()
 
 	require.NotNil(t, resp)
@@ -23,15 +23,14 @@ func RequireResp[RSP any](t *testing.T, resp *client.Resp, checkFn func(t *testi
 
 	var rsp RSP
 	require.NoError(t, json.Unmarshal(resp.Data, &rsp), "response data: %s", string(resp.Data))
-	if checkFn != nil {
-		checkFn(t, rsp)
-	}
+	return rsp
 }
 
 // RequireError asserts that err is a server-side rejection with the given
 // HTTP status code and that the business message contains every msgContains
-// entry.
-func RequireError(t *testing.T, err error, statusCode int, msgContains ...string) {
+// entry. The rejection is returned by value for follow-up asserts, such as
+// the business code; the value form keeps ignoring it errcheck-clean.
+func RequireError(t *testing.T, err error, statusCode int, msgContains ...string) client.Error {
 	t.Helper()
 
 	require.Error(t, err)
@@ -40,5 +39,20 @@ func RequireError(t *testing.T, err error, statusCode int, msgContains ...string
 	require.Equal(t, statusCode, respErr.StatusCode, "unexpected rejection: %v", respErr)
 	for _, want := range msgContains {
 		require.Contains(t, respErr.Msg, want, "unexpected rejection: %v", respErr)
+	}
+	return *respErr
+}
+
+// RequireDataFields asserts that the raw envelope data carries every named
+// top-level JSON field, guarding serialization contracts against fields
+// silently vanishing behind omitempty.
+func RequireDataFields(t *testing.T, resp *client.Envelope, fields ...string) {
+	t.Helper()
+
+	require.NotNil(t, resp)
+	var data map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(resp.Data, &data), "response data: %s", string(resp.Data))
+	for _, field := range fields {
+		require.Contains(t, data, field, "response data: %s", string(resp.Data))
 	}
 }

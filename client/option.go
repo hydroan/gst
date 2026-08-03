@@ -1,7 +1,6 @@
 package client
 
 import (
-	"context"
 	"net/http"
 	"strings"
 	"time"
@@ -10,14 +9,6 @@ import (
 )
 
 type Option func(*Client)
-
-func WithContext(ctx context.Context) Option {
-	return func(c *Client) {
-		if ctx != nil {
-			c.ctx = ctx
-		}
-	}
-}
 
 func WithHTTPClient(client *http.Client) Option {
 	return func(c *Client) {
@@ -49,7 +40,7 @@ func WithDebug() Option {
 func WithLogger(logger types.Logger) Option {
 	return func(c *Client) {
 		if logger != nil {
-			c.Logger = logger
+			c.logger = logger
 		}
 	}
 }
@@ -88,7 +79,7 @@ func WithCookie(cookie *http.Cookie) Option {
 	}
 }
 
-func WithBaseAuth(username, password string) Option {
+func WithBasicAuth(username, password string) Option {
 	return func(c *Client) {
 		if username = strings.TrimSpace(username); len(username) != 0 {
 			c.username = username

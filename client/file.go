@@ -10,8 +10,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// File is one downloaded attachment.
-type File struct {
+// Attachment is one downloaded file attachment.
+type Attachment struct {
 	Name        string // file name parsed from Content-Disposition
 	ContentType string
 	Content     []byte
@@ -20,7 +20,7 @@ type File struct {
 // Download sends a GET request and reads the response as a file attachment,
 // pairing the framework's Export action. A rejection answers with the regular
 // JSON envelope and surfaces as an *Error.
-func (c *Client) Download(path string, opts ...RequestOption) (*File, error) {
+func (c *Client) Download(path string, opts ...RequestOption) (*Attachment, error) {
 	req, err := c.newRequest(http.MethodGet, path, nil, opts)
 	if err != nil {
 		return nil, err
@@ -41,18 +41,18 @@ func (c *Client) Download(path string, opts ...RequestOption) (*File, error) {
 		return nil, envErr
 	}
 
-	file := &File{ContentType: httpRsp.Header.Get("Content-Type"), Content: body}
+	attachment := &Attachment{ContentType: httpRsp.Header.Get("Content-Type"), Content: body}
 	if disposition := httpRsp.Header.Get("Content-Disposition"); disposition != "" {
 		if _, params, err := mime.ParseMediaType(disposition); err == nil {
-			file.Name = params["filename"]
+			attachment.Name = params["filename"]
 		}
 	}
-	return file, nil
+	return attachment, nil
 }
 
 // Upload sends content as the multipart "file" field, pairing the framework's
 // Import action. fields are written as plain form fields next to the file.
-func (c *Client) Upload(path, filename string, content io.Reader, fields map[string]string) (*Resp, error) {
+func (c *Client) Upload(path, filename string, content io.Reader, fields map[string]string) (*Envelope, error) {
 	buf := new(bytes.Buffer)
 	writer := multipart.NewWriter(buf)
 	part, err := writer.CreateFormFile("file", filename)

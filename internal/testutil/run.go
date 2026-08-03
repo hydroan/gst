@@ -28,11 +28,14 @@ type Server struct {
 	// bootstraps, which is where module registration belongs.
 	Register func()
 
-	// Seed runs once the framework is up and the database is reachable, but
-	// before the server starts serving, so no request can observe a half
-	// prepared state. Baseline rows such as a root account belong here, as
-	// does anything else that needs a bootstrapped framework, route
-	// registration included.
+	// Routes registers routes that need a bootstrapped framework, such as the
+	// generated router.Init of a project. It runs after the bootstrap and
+	// before Seed.
+	Routes func()
+
+	// Seed plants baseline rows such as a root account. It runs after Routes,
+	// once the framework is up and the database is reachable, but before the
+	// server starts serving, so no request can observe a half prepared state.
 	Seed func()
 }
 
@@ -67,6 +70,9 @@ func run(m *testing.M, s Server) int {
 	}
 	if err := bootstrap.Bootstrap(); err != nil {
 		panic(err)
+	}
+	if s.Routes != nil {
+		s.Routes()
 	}
 	if s.Seed != nil {
 		s.Seed()

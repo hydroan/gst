@@ -15,7 +15,7 @@ import (
 // Do sends one request and parses the response envelope. It is the non-generic
 // floor under the verb functions: use it when the caller needs envelope
 // details such as TraceID or Cookies instead of a decoded payload.
-func (c *Client) Do(method, path string, payload any, opts ...RequestOption) (*Resp, error) {
+func (c *Client) Do(method, path string, payload any, opts ...RequestOption) (*Envelope, error) {
 	req, err := c.newRequest(method, path, payload, opts)
 	if err != nil {
 		return nil, err
@@ -27,10 +27,6 @@ func (c *Client) Do(method, path string, payload any, opts ...RequestOption) (*R
 // and encoded query parameters, body from payload, headers and credentials
 // from the client.
 func (c *Client) newRequest(method, path string, payload any, opts []RequestOption) (*http.Request, error) {
-	if !strings.HasPrefix(c.addr, "http://") && !strings.HasPrefix(c.addr, "https://") {
-		return nil, errors.New("addr must start with http:// or https://")
-	}
-
 	encoded, err := newRequestConfig(opts).encode()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to encode the query parameters")
@@ -72,10 +68,10 @@ func (c *Client) newRequest(method, path string, payload any, opts []RequestOpti
 }
 
 // roundTrip sends the request and parses the envelope.
-func (c *Client) roundTrip(req *http.Request) (*Resp, error) {
+func (c *Client) roundTrip(req *http.Request) (*Envelope, error) {
 	if c.debug {
 		if dump, err := httputil.DumpRequest(req, true); err == nil {
-			c.Infoz(string(dump))
+			c.logger.Debugz(string(dump))
 		}
 	}
 
@@ -91,18 +87,18 @@ func (c *Client) roundTrip(req *http.Request) (*Resp, error) {
 	}
 	if c.debug {
 		if dump, err := httputil.DumpResponse(httpRsp, false); err == nil {
-			c.Infoz(string(dump) + string(body))
+			c.logger.Debugz(string(dump) + string(body))
 		}
 	}
 	return parseEnvelope(httpRsp, body)
 }
 
-// parseEnvelope turns one HTTP response into a Resp, or an *Error when the
-// server rejected the request: a non-2xx status, or a non-zero envelope code.
-// The envelope decode is best-effort so a non-JSON error page still produces
-// an *Error carrying the raw body.
-func parseEnvelope(httpRsp *http.Response, body []byte) (*Resp, error) {
-	res := new(Resp)
+// parseEnvelope turns one HTTP response into an Envelope, or an *Error when
+// the server rejected the request: a non-2xx status, or a non-zero envelope
+// code. The envelope decode is best-effort so a non-JSON error page still
+// produces an *Error carrying the raw body.
+func parseEnvelope(httpRsp *http.Response, body []byte) (*Envelope, error) {
+	res := new(Envelope)
 	if len(body) > 0 {
 		_ = json.Unmarshal(body, res)
 	}

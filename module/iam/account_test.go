@@ -532,13 +532,9 @@ func accountLoginClient(t *testing.T, username, password string) (*client.Client
 		Password: password,
 	})
 	require.NoError(t, err)
-	for _, cookie := range resp.Cookies {
-		if cookie.Name == "session_id" {
-			return cli, cookie.Value
-		}
-	}
-	require.FailNow(t, "session cookie not found")
-	return nil, ""
+	cookie := resp.Cookie("session_id")
+	require.NotNil(t, cookie, "session cookie not found")
+	return cli, cookie.Value
 }
 
 // accountLoginSessionCookieOverHTTPS logs in behind a simulated HTTPS proxy
@@ -558,13 +554,9 @@ func accountLoginSessionCookieOverHTTPS(t *testing.T, username, password string)
 	})
 	require.NoError(t, err)
 
-	for _, cookie := range resp.Cookies {
-		if cookie.Name == "session_id" {
-			return cookie
-		}
-	}
-	require.FailNow(t, "session cookie not found")
-	return nil
+	cookie := resp.Cookie("session_id")
+	require.NotNil(t, cookie, "session cookie not found")
+	return cookie
 }
 
 // accountSessionClient returns a client presenting the given session id, for

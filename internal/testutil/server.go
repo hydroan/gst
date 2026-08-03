@@ -8,6 +8,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// BaseURL returns the test server base address clients are constructed with.
+func BaseURL() string {
+	return URL("")
+}
+
 // URL returns an absolute URL of the test server for path.
 func URL(path string) string {
 	return fmt.Sprintf("http://127.0.0.1:%d%s", serverPort, path)

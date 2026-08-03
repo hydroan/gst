@@ -1114,34 +1114,26 @@ func loginSessionIDFromCookie(t *testing.T, username, password string) string {
 	})
 	require.NoError(t, err)
 
-	testutil.RequireResp(t, apiResp, func(t *testing.T, rsp iam.LoginRsp) {
-		t.Helper()
-		require.False(t, rsp.ServerTime.IsZero())
-		require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
-		require.False(t, rsp.Session.IssuedAt.IsZero())
-		require.False(t, rsp.Session.LastSeenAt.IsZero())
-		require.False(t, rsp.Session.ExpiresAt.IsZero())
-		require.Positive(t, rsp.Session.ExpiresInSeconds)
-		require.True(t, rsp.Session.ExpiresAt.After(rsp.ServerTime))
-		require.NotEmpty(t, rsp.Principal.UserID)
-		require.Equal(t, username, rsp.Principal.Username)
-	})
+	rsp := testutil.DecodeResp[iam.LoginRsp](t, apiResp)
+	require.False(t, rsp.ServerTime.IsZero())
+	require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
+	require.False(t, rsp.Session.IssuedAt.IsZero())
+	require.False(t, rsp.Session.LastSeenAt.IsZero())
+	require.False(t, rsp.Session.ExpiresAt.IsZero())
+	require.Positive(t, rsp.Session.ExpiresInSeconds)
+	require.True(t, rsp.Session.ExpiresAt.After(rsp.ServerTime))
+	require.NotEmpty(t, rsp.Principal.UserID)
+	require.Equal(t, username, rsp.Principal.Username)
 
 	var data map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(apiResp.Data, &data), "response data: %s", string(apiResp.Data))
 	require.NotContains(t, data, "session_id")
 
-	for _, cookie := range apiResp.Cookies {
-		if cookie.Name != "session_id" {
-			continue
-		}
-		require.NotEmpty(t, cookie.Value)
-		require.Regexp(t, `^[0-9a-f]{64}$`, cookie.Value)
-		return cookie.Value
-	}
-
-	require.FailNow(t, "session cookie not found")
-	return ""
+	cookie := apiResp.Cookie("session_id")
+	require.NotNil(t, cookie, "session cookie not found")
+	require.NotEmpty(t, cookie.Value)
+	require.Regexp(t, `^[0-9a-f]{64}$`, cookie.Value)
+	return cookie.Value
 }
 
 // clearSessionsAfterTest drops every session key once the test is done. Session
