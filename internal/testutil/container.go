@@ -33,14 +33,11 @@ func reportServiceReady(name, target string) {
 	fmt.Fprintf(os.Stdout, "test %s ready: %s\n", name, target)
 }
 
-// ReleaseOrReport releases a service a Setup function prepared, reporting a
-// failure on stderr instead of failing the run. A release is deferred from
-// TestMain and only runs once the tests are over, so there is no test left to
-// fail; what a leaked container needs is to be visible.
-func ReleaseOrReport(name string, release func() error) {
-	if err := release(); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to release the test %s: %v\n", name, err)
-	}
+// reportReleaseFailure reports that a prepared service could not be released.
+// A release runs once the tests are over, so there is no test left to fail;
+// what a leaked container needs is to be visible.
+func reportReleaseFailure(name string, err error) {
+	fmt.Fprintf(os.Stderr, "failed to release the test %s: %v\n", name, err)
 }
 
 var muteContainerLogOnce sync.Once
@@ -48,7 +45,7 @@ var muteContainerLogOnce sync.Once
 // muteContainerLog silences the logging testcontainers does on its own. Its
 // default logger writes to stderr as soon as the test binary runs with -v,
 // which buries the output of the test itself under image pull, reaper and
-// container lifecycle noise. Each Setup function reports the one line that
+// container lifecycle noise. Each setup function reports the one line that
 // matters instead, see reportServiceReady.
 func muteContainerLog() {
 	muteContainerLogOnce.Do(func() {

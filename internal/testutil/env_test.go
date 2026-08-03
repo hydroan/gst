@@ -1,4 +1,4 @@
-package testutil_test
+package testutil
 
 import (
 	"os"
@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,7 +22,7 @@ func TestApplyConfigToEnv(t *testing.T) {
 		username := "test"
 		password := "test"
 
-		testutil.ApplyConfigToEnv(config.MySQL{
+		applyConfigToEnv(config.MySQL{
 			Host:     host,
 			Port:     uint(port),
 			Database: database,
@@ -47,7 +46,7 @@ func TestApplyConfigToEnv(t *testing.T) {
 			config.LOGGER_HTTP_BODY_LOG_REQUEST, config.LOGGER_HTTP_BODY_LOG_RESPONSE,
 			config.LOGGER_HTTP_BODY_MAX_BODY_SIZE, config.LOGGER_HTTP_BODY_SKIP_ROUTES)
 
-		testutil.ApplyConfigToEnv(config.Logger{
+		applyConfigToEnv(config.Logger{
 			Prefix:  "test",
 			Console: false,
 			MaxAge:  7,
@@ -79,7 +78,7 @@ func TestApplyConfigToEnv(t *testing.T) {
 	t.Run("duration_field", func(t *testing.T) {
 		isolateEnv(t, config.DATABASE_SLOW_QUERY_THRESHOLD)
 
-		testutil.ApplyConfigToEnv(config.Database{SlowQueryThreshold: 500 * time.Millisecond})
+		applyConfigToEnv(config.Database{SlowQueryThreshold: 500 * time.Millisecond})
 
 		require.Equal(t, "500ms", os.Getenv(config.DATABASE_SLOW_QUERY_THRESHOLD))
 	})
@@ -87,7 +86,7 @@ func TestApplyConfigToEnv(t *testing.T) {
 	t.Run("section_named_differently_from_its_type", func(t *testing.T) {
 		isolateEnv(t, config.APP_NAME)
 
-		testutil.ApplyConfigToEnv(config.AppInfo{Name: "sample"})
+		applyConfigToEnv(config.AppInfo{Name: "sample"})
 
 		require.Equal(t, "sample", os.Getenv(config.APP_NAME))
 	})
@@ -95,16 +94,16 @@ func TestApplyConfigToEnv(t *testing.T) {
 	t.Run("pointer_section", func(t *testing.T) {
 		isolateEnv(t, config.SQLITE_PATH)
 
-		testutil.ApplyConfigToEnv(&config.Sqlite{Path: "/tmp/sample.db"})
+		applyConfigToEnv(&config.Sqlite{Path: "/tmp/sample.db"})
 
 		require.Equal(t, "/tmp/sample.db", os.Getenv(config.SQLITE_PATH))
 	})
 
 	t.Run("value_without_fields", func(t *testing.T) {
 		require.NotPanics(t, func() {
-			testutil.ApplyConfigToEnv(nil)
-			testutil.ApplyConfigToEnv(42)
-			testutil.ApplyConfigToEnv((*config.Sqlite)(nil))
+			applyConfigToEnv(nil)
+			applyConfigToEnv(42)
+			applyConfigToEnv((*config.Sqlite)(nil))
 		})
 	})
 }

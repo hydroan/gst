@@ -1,4 +1,4 @@
-package testutil_test
+package testutil
 
 import (
 	"net"
@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,7 +16,7 @@ func TestSetupSqlite(t *testing.T) {
 		config.SQLITE_PATH, config.SQLITE_DATABASE, config.SQLITE_IS_MEMORY,
 		config.DATABASE_TYPE, config.DATABASE_AUTO_MIGRATE)
 
-	cleanup, err := testutil.SetupSqlite()
+	cleanup, err := setupSqlite()
 	require.NoError(t, err)
 
 	path := os.Getenv(config.SQLITE_PATH)
@@ -39,7 +38,7 @@ func TestSetupPostgres(t *testing.T) {
 		config.POSTGRES_USERNAME, config.POSTGRES_PASSWORD, config.POSTGRES_SSLMODE,
 		config.DATABASE_TYPE, config.DATABASE_AUTO_MIGRATE)
 
-	cleanup, err := testutil.SetupPostgres()
+	cleanup, err := setupPostgres()
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, cleanup()) })
 

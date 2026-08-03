@@ -14,13 +14,13 @@ const (
 	redisPort  = "6379/tcp"
 )
 
-// SetupRedis starts a redis container of its own and points the framework at
+// setupRedis starts a redis container of its own and points the framework at
 // it. The returned function terminates that container.
 //
 // A container of its own is what keeps one test package from seeing the keys of
 // another, so tests reach for this rather than sharing an instance under
 // separate namespaces.
-func SetupRedis() (func() error, error) {
+func setupRedis() (func() error, error) {
 	muteContainerLog()
 	ctx := context.Background()
 
@@ -38,7 +38,7 @@ func SetupRedis() (func() error, error) {
 	addr := fmt.Sprintf("%s:%d", host, port)
 	// Only Addr is set: the framework reads Addrs in cluster mode alone, which
 	// stays off by default.
-	ApplyConfigToEnv(config.Redis{
+	applyConfigToEnv(config.Redis{
 		Addr:    addr,
 		Enabled: true,
 	})

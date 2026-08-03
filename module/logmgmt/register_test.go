@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/authz/rbac"
-	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
@@ -31,17 +30,15 @@ import (
 )
 
 var (
-	token        = "-"
-	port         = testutil.SetupRandomServerPort()
 	rootUsername = "root"
 	rootPassword = "12345678"
 
-	signupAPI       = testutil.URL(port, "/api/signup")
-	loginAPI        = testutil.URL(port, "/api/login")
-	logoutAPI       = testutil.URL(port, "/api/logout")
-	loginlogAPI     = testutil.URL(port, "/api/log/loginlog")
-	operationlogAPI = testutil.URL(port, "/api/log/operationlog")
-	roleAPI         = testutil.URL(port, "/api/authz/roles")
+	signupAPI       = testutil.URL("/api/signup")
+	loginAPI        = testutil.URL("/api/login")
+	logoutAPI       = testutil.URL("/api/logout")
+	loginlogAPI     = testutil.URL("/api/log/loginlog")
+	operationlogAPI = testutil.URL("/api/log/operationlog")
+	roleAPI         = testutil.URL("/api/authz/roles")
 )
 
 const (
@@ -49,56 +46,21 @@ const (
 	logmgmtTestAdminRole  = "logmgmt_test_admin"
 )
 
-type ListResponse[T any] struct {
-	Items []T `json:"items"`
-	Total int `json:"total"`
-}
-
-// TestMain prepares the database, the cache and the server every test in this
-// package shares, and releases them once the tests are done.
 func TestMain(m *testing.M) {
-	os.Exit(runTests(m))
-}
-
-// runTests exists so that the deferred releases still run: os.Exit in TestMain
-// would skip them.
-func runTests(m *testing.M) int {
-	cleanDatabase, err := testutil.SetupMySQL()
-	if err != nil {
-		panic(err)
-	}
-	defer testutil.ReleaseOrReport("database", cleanDatabase)
-
-	cleanCache, err := testutil.SetupRedis()
-	if err != nil {
-		panic(err)
-	}
-	defer testutil.ReleaseOrReport("cache", cleanCache)
-
-	os.Setenv(config.LOGGER_DIR, "./logs")
-	os.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)
 	// Enable audit and sync write before Bootstrap so operationlog test can list logs immediately.
 	os.Setenv(config.AUDIT_ENABLED, "true")
 	os.Setenv(config.AUDIT_ASYNC_WRITE, "false")
 
-	iam.Register()
-	authz.Register()
-	logmgmt.Register()
-
-	if err := bootstrap.Bootstrap(); err != nil {
-		panic(err)
-	}
-	seedRootAccount()
-
-	go func() {
-		if err := bootstrap.Run(); err != nil {
-			panic(err)
-		}
-	}()
-
-	testutil.MustWaitForServer(port)
-
-	return m.Run()
+	testutil.Run(m, testutil.Server{
+		Database: config.DBMySQL,
+		Redis:    true,
+		Register: func() {
+			iam.Register()
+			authz.Register()
+			logmgmt.Register()
+		},
+		Seed: seedRootAccount,
+	})
 }
 
 // seedRootAccount creates the root user and password credential the tests
@@ -142,7 +104,7 @@ func TestLoginLogList(t *testing.T) {
 		resp, err := cli.List(&items, total)
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[*logmgmt.LoginLog]) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[*logmgmt.LoginLog]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 1)
 			l := rsp.Items[0]
@@ -175,7 +137,7 @@ func TestLoginLogList(t *testing.T) {
 		resp, err = cli.List(&items, total)
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[*logmgmt.LoginLog]) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[*logmgmt.LoginLog]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 3)
 			l1, l2, l3 := rsp.Items[0], rsp.Items[1], rsp.Items[2]
@@ -213,7 +175,7 @@ func TestOperationLogList(t *testing.T) {
 		resp, err := cli.List(&items, total)
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[*logmgmt.OperationLog]) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[*logmgmt.OperationLog]) {
 			t.Helper()
 			require.Empty(t, rsp.Items)
 		})
@@ -248,7 +210,7 @@ func TestOperationLogList(t *testing.T) {
 		resp, err := cli.List(&items, total)
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[*logmgmt.OperationLog]) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[*logmgmt.OperationLog]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 1)
 			l := rsp.Items[0]

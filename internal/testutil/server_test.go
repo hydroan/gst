@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"testing"
@@ -9,15 +10,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSetupRandomServerPortConfiguresLocalEphemeralPort(t *testing.T) {
+func TestListenOnFreePortConfiguresLocalEphemeralPort(t *testing.T) {
 	t.Setenv(config.SERVER_LISTEN, "")
-	t.Setenv(config.SERVER_PORT, "8000")
+	t.Setenv(config.SERVER_PORT, strconv.Itoa(fixedModuleTestPort))
 
-	port := SetupRandomServerPort()
+	listenOnFreePort()
 
-	require.NotEqual(t, 8000, port)
+	require.NotEqual(t, fixedModuleTestPort, serverPort)
 	require.Equal(t, "127.0.0.1", os.Getenv(config.SERVER_LISTEN))
-	require.Equal(t, strconv.Itoa(port), os.Getenv(config.SERVER_PORT))
+	require.Equal(t, strconv.Itoa(serverPort), os.Getenv(config.SERVER_PORT))
+}
+
+func TestURLTargetsTheTestServerPort(t *testing.T) {
+	require.Equal(t, fmt.Sprintf("http://127.0.0.1:%d/api/samples", serverPort), URL("/api/samples"))
 }
 
 func TestSetupRandomRedisNamespaceConfiguresUniqueNamespace(t *testing.T) {

@@ -5,13 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"sync"
 	"testing"
 
-	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/client"
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/router"
@@ -22,9 +18,7 @@ import (
 )
 
 var (
-	token = "-"
-	port  int
-	addr2 string
+	addr2 = testutil.URL("/api/test-user/")
 
 	id1     = "user1"
 	id2     = "user2"
@@ -58,64 +52,28 @@ var (
 	user3 = User{Name: name3, Email: email3, Avatar: avatar3, Base: model.Base{ID: id3}}
 	user4 = User{Name: name4, Email: email4, Avatar: avatar4, Base: model.Base{ID: id4}}
 	user5 = User{Name: name5, Email: email5, Avatar: avatar5, Base: model.Base{ID: id5}}
-
-	serverOnce sync.Once
 )
 
-func startServer(t *testing.T) {
-	t.Helper()
-
-	serverOnce.Do(func() {
-		startServerOnce(t)
+func TestMain(m *testing.M) {
+	testutil.Run(m, testutil.Server{
+		Register: func() { model.Register[*User]() },
+		Seed: func() {
+			router.Register[*User, *User, *User](router.Auth(), "test-user", nil, consts.Create)
+			router.Register[*User, *User, *User](router.Auth(), "test-user/:id", &types.ControllerConfig[*User]{ParamName: "id"}, consts.Delete)
+			router.Register[*User, *User, *User](router.Auth(), "test-user/:id", &types.ControllerConfig[*User]{ParamName: "id"}, consts.Update)
+			router.Register[*User, *User, *User](router.Auth(), "test-user/:id", &types.ControllerConfig[*User]{ParamName: "id"}, consts.Patch)
+			router.Register[*User, *User, *User](router.Auth(), "test-user", nil, consts.List)
+			router.Register[*User, *User, *User](router.Auth(), "test-user/:id", &types.ControllerConfig[*User]{ParamName: "id"}, consts.Get)
+			router.Register[*User, *User, *User](router.Auth(), "test-user/batch", nil, consts.CreateMany)
+			router.Register[*User, *User, *User](router.Auth(), "test-user/batch", nil, consts.DeleteMany)
+			router.Register[*User, *User, *User](router.Auth(), "test-user/batch", nil, consts.UpdateMany)
+			router.Register[*User, *User, *User](router.Auth(), "test-user/batch", nil, consts.PatchMany)
+		},
 	})
 }
 
-func startServerOnce(t *testing.T) {
-	t.Helper()
-
-	model.Register[*User]()
-
-	port = testutil.SetupRandomServerPort()
-	addr2 = testutil.URL(port, "/api/test-user/")
-
-	t.Setenv(config.DATABASE_TYPE, string(config.DBSqlite))
-	t.Setenv(config.DATABASE_AUTO_MIGRATE, "true")
-	t.Setenv(config.SQLITE_IS_MEMORY, "true")
-	t.Setenv(config.LOGGER_DIR, "/tmp/test_client")
-	t.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)
-
-	// os.Setenv(config.DATABASE_TYPE, string(config.DBMySQL))
-	// os.Setenv(config.MYSQL_DATABASE, "test")
-	// os.Setenv(config.MYSQL_USERNAME, "test")
-	// os.Setenv(config.MYSQL_PASSWORD, "test")
-
-	if err := bootstrap.Bootstrap(); err != nil {
-		require.NoError(t, err)
-	}
-
-	go func() {
-		router.Register[*User, *User, *User](router.Auth(), "test-user", nil, consts.Create)
-		router.Register[*User, *User, *User](router.Auth(), "test-user/:id", &types.ControllerConfig[*User]{ParamName: "id"}, consts.Delete)
-		router.Register[*User, *User, *User](router.Auth(), "test-user/:id", &types.ControllerConfig[*User]{ParamName: "id"}, consts.Update)
-		router.Register[*User, *User, *User](router.Auth(), "test-user/:id", &types.ControllerConfig[*User]{ParamName: "id"}, consts.Patch)
-		router.Register[*User, *User, *User](router.Auth(), "test-user", nil, consts.List)
-		router.Register[*User, *User, *User](router.Auth(), "test-user/:id", &types.ControllerConfig[*User]{ParamName: "id"}, consts.Get)
-		router.Register[*User, *User, *User](router.Auth(), "test-user/batch", nil, consts.CreateMany)
-		router.Register[*User, *User, *User](router.Auth(), "test-user/batch", nil, consts.DeleteMany)
-		router.Register[*User, *User, *User](router.Auth(), "test-user/batch", nil, consts.UpdateMany)
-		router.Register[*User, *User, *User](router.Auth(), "test-user/batch", nil, consts.PatchMany)
-		if err := bootstrap.Run(); err != nil {
-			panic(err)
-		}
-		os.Exit(0)
-	}()
-	testutil.MustWaitForServer(port)
-}
-
 func Test_Client(t *testing.T) {
-	startServer(t)
-
-	cli, err := client.New(addr2, client.WithToken(token), client.WithQueryPagination(1, 2))
+	cli, err := client.New(addr2, client.WithToken(testutil.Token), client.WithQueryPagination(1, 2))
 	require.NoError(t, err)
 	fmt.Println(cli.QueryString())
 	fmt.Println(cli.RequestURL())
@@ -255,7 +213,7 @@ func Test_Client(t *testing.T) {
 
 	// Test CreateMany
 	t.Run("create_many", func(t *testing.T) {
-		cli, err := client.New(addr2, client.WithToken(token))
+		cli, err := client.New(addr2, client.WithToken(testutil.Token))
 		require.NoError(t, err)
 		items := make([]User, 0)
 		total := 0
@@ -287,7 +245,7 @@ func Test_Client(t *testing.T) {
 
 	// Test DeleteMany
 	t.Run("delete_many", func(t *testing.T) {
-		cli, err := client.New(addr2, client.WithToken(token))
+		cli, err := client.New(addr2, client.WithToken(testutil.Token))
 		require.NoError(t, err)
 		items := make([]User, 0)
 		total := 0
@@ -323,7 +281,7 @@ func Test_Client(t *testing.T) {
 
 	// Test UpdateMany
 	t.Run("update_many", func(t *testing.T) {
-		cli, err := client.New(addr2, client.WithToken(token))
+		cli, err := client.New(addr2, client.WithToken(testutil.Token))
 		require.NoError(t, err)
 
 		// 1.delete all resources
@@ -373,7 +331,7 @@ func Test_Client(t *testing.T) {
 
 	// Test PatchMany
 	t.Run("patch_many", func(t *testing.T) {
-		cli, err := client.New(addr2, client.WithToken(token))
+		cli, err := client.New(addr2, client.WithToken(testutil.Token))
 		require.NoError(t, err)
 
 		// 1.delete all resources
@@ -423,13 +381,11 @@ func Test_Client(t *testing.T) {
 }
 
 func Test_Client_WithAPI(t *testing.T) {
-	startServer(t)
-
-	baseAddr := testutil.URL(port, "/api")
+	baseAddr := testutil.URL("/api")
 
 	// Create test users first, dropping fixed-id leftovers from earlier tests
 	// because Create rejects duplicates.
-	cliSetup, err := client.New(baseAddr+"/test-user", client.WithToken(token))
+	cliSetup, err := client.New(baseAddr+"/test-user", client.WithToken(testutil.Token))
 	require.NoError(t, err)
 	_, err = cliSetup.DeleteMany([]string{id1, id2})
 	require.NoError(t, err)
@@ -440,7 +396,7 @@ func Test_Client_WithAPI(t *testing.T) {
 
 	// Test WithAPI option with List method
 	t.Run("with_api_option_list", func(t *testing.T) {
-		cli, err := client.New(baseAddr, client.WithToken(token), client.WithAPI("test-user"))
+		cli, err := client.New(baseAddr, client.WithToken(testutil.Token), client.WithAPI("test-user"))
 		require.NoError(t, err)
 
 		// Test List using apiPath from WithAPI
@@ -455,7 +411,7 @@ func Test_Client_WithAPI(t *testing.T) {
 
 	// Test WithAPI option with Get method
 	t.Run("with_api_option_get", func(t *testing.T) {
-		cli, err := client.New(baseAddr, client.WithToken(token), client.WithAPI("test-user"))
+		cli, err := client.New(baseAddr, client.WithToken(testutil.Token), client.WithAPI("test-user"))
 		require.NoError(t, err)
 
 		// Test Get using apiPath from WithAPI
@@ -472,7 +428,7 @@ func Test_Client_WithAPI(t *testing.T) {
 
 	// Test WithAPI option with Create method
 	t.Run("with_api_option_create", func(t *testing.T) {
-		cli, err := client.New(baseAddr, client.WithToken(token), client.WithAPI("test-user"))
+		cli, err := client.New(baseAddr, client.WithToken(testutil.Token), client.WithAPI("test-user"))
 		require.NoError(t, err)
 
 		newUser := User{
@@ -501,7 +457,7 @@ func Test_Client_WithAPI(t *testing.T) {
 
 	// Test WithAPI option with Update method
 	t.Run("with_api_option_update", func(t *testing.T) {
-		cli, err := client.New(baseAddr, client.WithToken(token), client.WithAPI("test-user"))
+		cli, err := client.New(baseAddr, client.WithToken(testutil.Token), client.WithAPI("test-user"))
 		require.NoError(t, err)
 
 		// First create a user
@@ -541,7 +497,7 @@ func Test_Client_WithAPI(t *testing.T) {
 
 	// Test WithAPI option with Patch method
 	t.Run("with_api_option_patch", func(t *testing.T) {
-		cli, err := client.New(baseAddr, client.WithToken(token), client.WithAPI("test-user"))
+		cli, err := client.New(baseAddr, client.WithToken(testutil.Token), client.WithAPI("test-user"))
 		require.NoError(t, err)
 
 		// First create a user
@@ -579,7 +535,7 @@ func Test_Client_WithAPI(t *testing.T) {
 
 	// Test WithAPI option with Delete method
 	t.Run("with_api_option_delete", func(t *testing.T) {
-		cli, err := client.New(baseAddr, client.WithToken(token), client.WithAPI("test-user"))
+		cli, err := client.New(baseAddr, client.WithToken(testutil.Token), client.WithAPI("test-user"))
 		require.NoError(t, err)
 
 		// First create a user
@@ -607,7 +563,7 @@ func Test_Client_WithAPI(t *testing.T) {
 
 	// Test WithAPI option with query parameters
 	t.Run("with_api_option_query", func(t *testing.T) {
-		cli, err := client.New(baseAddr, client.WithToken(token), client.WithAPI("test-user"), client.WithQueryPagination(1, 2))
+		cli, err := client.New(baseAddr, client.WithToken(testutil.Token), client.WithAPI("test-user"), client.WithQueryPagination(1, 2))
 		require.NoError(t, err)
 
 		users := make([]User, 0)

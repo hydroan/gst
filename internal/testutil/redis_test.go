@@ -1,4 +1,4 @@
-package testutil_test
+package testutil
 
 import (
 	"net"
@@ -7,14 +7,13 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSetupRedis(t *testing.T) {
 	isolateEnv(t, config.REDIS_ADDR, config.REDIS_ENABLED)
 
-	cleanup, err := testutil.SetupRedis()
+	cleanup, err := setupRedis()
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, cleanup()) })
 

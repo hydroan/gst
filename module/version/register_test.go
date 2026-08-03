@@ -2,10 +2,8 @@ package versionmod_test
 
 import (
 	"net/http"
-	"os"
 	"testing"
 
-	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/testutil"
@@ -13,46 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	token = "-"
-	port  = testutil.SetupRandomServerPort()
+var versionAPI = testutil.URL("/api/version")
 
-	versionAPI = testutil.URL(port, "/api/version")
-)
-
-// TestMain prepares the database and the server every test in this package
-// shares, and releases the database once the tests are done.
 func TestMain(m *testing.M) {
-	os.Exit(runTests(m))
-}
-
-// runTests exists so that the deferred release still runs: os.Exit in TestMain
-// would skip it.
-func runTests(m *testing.M) int {
-	cleanDatabase, err := testutil.SetupMySQL()
-	if err != nil {
-		panic(err)
-	}
-	defer testutil.ReleaseOrReport("database", cleanDatabase)
-
-	os.Setenv(config.LOGGER_DIR, "./logs")
-	os.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)
-
-	if err := bootstrap.Bootstrap(); err != nil {
-		panic(err)
-	}
-
-	go func() {
-		versionmod.Register()
-
-		if err := bootstrap.Run(); err != nil {
-			panic(err)
-		}
-	}()
-
-	testutil.MustWaitForServer(port)
-
-	return m.Run()
+	testutil.Run(m, testutil.Server{
+		Database: config.DBMySQL,
+		Register: versionmod.Register,
+	})
 }
 
 func TestVersion(t *testing.T) {

@@ -9,6 +9,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// ListResponse is the envelope a list endpoint answers with, for tests that
+// assert on the items and the total.
+type ListResponse[T any] struct {
+	Items []T `json:"items"`
+	Total int `json:"total"`
+}
+
+// TestResp asserts that resp carries a successful envelope and hands the
+// decoded payload to checkFn.
 func TestResp[RSP any](t *testing.T, resp *client.Resp, checkFn func(t *testing.T, rsp RSP)) {
 	t.Helper()
 

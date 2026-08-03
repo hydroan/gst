@@ -338,7 +338,7 @@ func userLoadByUsername(t *testing.T, username string) *iam.User {
 }
 
 func adminUsersAPI() string {
-	return testutil.URL(port, "/api/iam/admin/users")
+	return testutil.URL("/api/iam/admin/users")
 }
 
 func requireAdminUserView(t *testing.T, items []iam.AdminUserView, userID string) iam.AdminUserView {

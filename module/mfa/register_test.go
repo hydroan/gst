@@ -5,12 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
@@ -26,23 +24,15 @@ import (
 )
 
 var (
-	token = "-"
-	port  = testutil.SetupRandomServerPort()
-
-	signupAPI  = testutil.URL(port, "/api/signup")
-	loginAPI   = testutil.URL(port, "/api/login")
-	verifyAPI  = testutil.URL(port, "/api/mfa/totp/verify")
-	checkAPI   = testutil.URL(port, "/api/mfa/totp/check")
-	bindAPI    = testutil.URL(port, "/api/mfa/totp/bind")
-	confirmAPI = testutil.URL(port, "/api/mfa/totp/confirm")
-	unbindAPI  = testutil.URL(port, "/api/mfa/totp/unbind")
-	statusAPI  = testutil.URL(port, "/api/mfa/totp/status")
+	signupAPI  = testutil.URL("/api/signup")
+	loginAPI   = testutil.URL("/api/login")
+	verifyAPI  = testutil.URL("/api/mfa/totp/verify")
+	checkAPI   = testutil.URL("/api/mfa/totp/check")
+	bindAPI    = testutil.URL("/api/mfa/totp/bind")
+	confirmAPI = testutil.URL("/api/mfa/totp/confirm")
+	unbindAPI  = testutil.URL("/api/mfa/totp/unbind")
+	statusAPI  = testutil.URL("/api/mfa/totp/status")
 )
-
-type ListResponse[T any] struct {
-	Items []T `json:"items"`
-	Total int `json:"total"`
-}
 
 type totpTestAccount struct {
 	Username  string
@@ -51,46 +41,15 @@ type totpTestAccount struct {
 	SessionID string
 }
 
-// TestMain prepares the database, the cache and the server every test in this
-// package shares, and releases them once the tests are done.
 func TestMain(m *testing.M) {
-	os.Exit(runTests(m))
-}
-
-// runTests exists so that the deferred releases still run: os.Exit in TestMain
-// would skip them.
-func runTests(m *testing.M) int {
-	cleanDatabase, err := testutil.SetupMySQL()
-	if err != nil {
-		panic(err)
-	}
-	defer testutil.ReleaseOrReport("database", cleanDatabase)
-
-	cleanCache, err := testutil.SetupRedis()
-	if err != nil {
-		panic(err)
-	}
-	defer testutil.ReleaseOrReport("cache", cleanCache)
-
-	os.Setenv(config.LOGGER_DIR, "./logs")
-	os.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)
-
-	if err := bootstrap.Bootstrap(); err != nil {
-		panic(err)
-	}
-
-	go func() {
-		iam.Register()
-		mfa.Register()
-
-		if err := bootstrap.Run(); err != nil {
-			panic(err)
-		}
-	}()
-
-	testutil.MustWaitForServer(port)
-
-	return m.Run()
+	testutil.Run(m, testutil.Server{
+		Database: config.DBMySQL,
+		Redis:    true,
+		Register: func() {
+			iam.Register()
+			mfa.Register()
+		},
+	})
 }
 
 func TestTOTPStatus(t *testing.T) {

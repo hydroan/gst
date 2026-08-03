@@ -28,9 +28,9 @@ const (
 	sqliteDatabase = "test"
 )
 
-// SetupMySQL starts a mysql container of its own and points the framework at
+// setupMySQL starts a mysql container of its own and points the framework at
 // it. The returned function terminates that container.
-func SetupMySQL() (func() error, error) {
+func setupMySQL() (func() error, error) {
 	muteContainerLog()
 	ctx := context.Background()
 
@@ -50,7 +50,7 @@ func SetupMySQL() (func() error, error) {
 		return nil, errors.CombineErrors(err, terminate())
 	}
 
-	ApplyConfigToEnv(config.MySQL{
+	applyConfigToEnv(config.MySQL{
 		Host:     host,
 		Port:     port,
 		Database: mysqlDatabase,
@@ -63,9 +63,9 @@ func SetupMySQL() (func() error, error) {
 	return terminate, nil
 }
 
-// SetupPostgres starts a postgres container of its own and points the
+// setupPostgres starts a postgres container of its own and points the
 // framework at it. The returned function terminates that container.
-func SetupPostgres() (func() error, error) {
+func setupPostgres() (func() error, error) {
 	muteContainerLog()
 	ctx := context.Background()
 
@@ -88,7 +88,7 @@ func SetupPostgres() (func() error, error) {
 		return nil, errors.CombineErrors(err, terminate())
 	}
 
-	ApplyConfigToEnv(config.Postgres{
+	applyConfigToEnv(config.Postgres{
 		Host:     host,
 		Port:     port,
 		Database: postgresDatabase,
@@ -102,24 +102,24 @@ func SetupPostgres() (func() error, error) {
 	return terminate, nil
 }
 
-// SetupSqlite prepares a file backed sqlite database in a directory of its own
+// setupSqlite prepares a file backed sqlite database in a directory of its own
 // and points the framework at it. The returned function removes that directory.
 //
 // Sqlite needs no container, but a file still gives each call the isolation a
 // container gives: the framework default is an in-memory database shared by
 // every connection in the process.
-func SetupSqlite() (func() error, error) {
+func setupSqlite() (func() error, error) {
 	dir, err := os.MkdirTemp("", "gst_sqlite_")
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create sqlite directory")
 	}
 	path := filepath.Join(dir, sqliteDatabase+".db")
 
-	ApplyConfigToEnv(config.Sqlite{
+	applyConfigToEnv(config.Sqlite{
 		Path:     path,
 		Database: sqliteDatabase,
 	})
-	// File mode is the zero value of IsMemory and ApplyConfigToEnv skips zero
+	// File mode is the zero value of IsMemory and applyConfigToEnv skips zero
 	// values, while the framework defaults the field to true.
 	os.Setenv(config.SQLITE_IS_MEMORY, "false")
 	useDatabase(config.DBSqlite)

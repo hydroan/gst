@@ -15,18 +15,16 @@ import (
 
 const fixedModuleTestPort = 8000
 
+// serverPort is the port the test server listens on. It is picked when the
+// package loads, before any package-level URL is built, so that a test can
+// declare its endpoints as package-level variables.
+var serverPort = mustFreeLocalPort()
+
 var redisNamespaceSeq atomic.Uint64
 
-// SetupRandomServerPort configures the HTTP server to listen on a local ephemeral port.
-func SetupRandomServerPort() int {
-	port, err := freeLocalPort()
-	if err != nil {
-		panic(err)
-	}
-
-	os.Setenv(config.SERVER_LISTEN, "127.0.0.1")
-	os.Setenv(config.SERVER_PORT, strconv.Itoa(port))
-	return port
+// URL returns an absolute URL of the test server for path.
+func URL(path string) string {
+	return fmt.Sprintf("http://127.0.0.1:%d%s", serverPort, path)
 }
 
 // SetupRandomRedisNamespace configures Redis to use a namespace unique to this test process.
@@ -37,23 +35,25 @@ func SetupRandomRedisNamespace() string {
 	return namespace
 }
 
-// URL returns an absolute URL for the configured test server port.
-func URL(port int, path string) string {
-	return fmt.Sprintf("http://127.0.0.1:%d%s", port, path)
+// listenOnFreePort configures the HTTP server to listen on the port URL
+// resolves to.
+func listenOnFreePort() {
+	os.Setenv(config.SERVER_LISTEN, "127.0.0.1")
+	os.Setenv(config.SERVER_PORT, strconv.Itoa(serverPort))
 }
 
-// MustWaitForServer waits until the test server responds to health checks.
-func MustWaitForServer(port int) {
-	if err := WaitForServer(port, 10*time.Second); err != nil {
+// mustWaitForServer waits until the test server responds to health checks.
+func mustWaitForServer() {
+	if err := waitForServer(10 * time.Second); err != nil {
 		panic(err)
 	}
 }
 
-// WaitForServer waits until the test server responds to health checks.
-func WaitForServer(port int, timeout time.Duration) error {
+// waitForServer waits until the test server responds to health checks.
+func waitForServer(timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	cli := &http.Client{Timeout: 200 * time.Millisecond}
-	url := URL(port, "/-/healthz")
+	url := URL("/-/healthz")
 	var lastErr error
 
 	for time.Now().Before(deadline) {
@@ -74,7 +74,15 @@ func WaitForServer(port int, timeout time.Duration) error {
 	if lastErr == nil {
 		lastErr = errors.New("server did not respond before timeout")
 	}
-	return errors.Wrapf(lastErr, "server on port %d did not become ready", port)
+	return errors.Wrapf(lastErr, "server on port %d did not become ready", serverPort)
+}
+
+func mustFreeLocalPort() int {
+	port, err := freeLocalPort()
+	if err != nil {
+		panic(err)
+	}
+	return port
 }
 
 func freeLocalPort() (int, error) {

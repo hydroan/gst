@@ -25,12 +25,12 @@ import (
 )
 
 var (
-	sessionsAPI      = testutil.URL(port, "/api/iam/sessions")
-	adminSessionsAPI = testutil.URL(port, "/api/iam/admin/sessions")
+	sessionsAPI      = testutil.URL("/api/iam/sessions")
+	adminSessionsAPI = testutil.URL("/api/iam/admin/sessions")
 )
 
 func adminUserSessionsAPI(userID string) string {
-	return testutil.URL(port, fmt.Sprintf("/api/iam/admin/users/%s/sessions", userID))
+	return testutil.URL(fmt.Sprintf("/api/iam/admin/users/%s/sessions", userID))
 }
 
 type sessionTestAccount struct {
@@ -317,7 +317,7 @@ func TestSessionList(t *testing.T) {
 		resp, err := cli.List(&items, total)
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[iam.SessionView]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 2)
 			require.Equal(t, 2, rsp.Total)
@@ -417,7 +417,7 @@ func TestSessionList(t *testing.T) {
 		resp, err := cli.List(&items, total)
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[iam.SessionView]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 1)
 			require.Equal(t, 1, rsp.Total)
@@ -1081,7 +1081,7 @@ func TestSessionDelete(t *testing.T) {
 		total := new(int)
 		resp, err = cli.List(&items, total)
 		require.NoError(t, err)
-		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[iam.SessionView]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 1)
 			require.Equal(t, 1, rsp.Total)
@@ -1119,7 +1119,7 @@ func TestSessionDelete(t *testing.T) {
 		total := new(int)
 		resp, err = cli.List(&items, total)
 		require.NoError(t, err)
-		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[iam.SessionView]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 1)
 			require.Equal(t, 1, rsp.Total)
@@ -1212,7 +1212,7 @@ func TestSessionDeleteOthers(t *testing.T) {
 		total := new(int)
 		resp, err = cli.List(&items, total)
 		require.NoError(t, err)
-		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[iam.SessionView]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 1)
 			require.Equal(t, 1, rsp.Total)
@@ -1248,7 +1248,7 @@ func TestSessionDeleteOthers(t *testing.T) {
 		total := new(int)
 		resp, err = cli.List(&items, total)
 		require.NoError(t, err)
-		testutil.TestResp(t, resp, func(t *testing.T, rsp ListResponse[iam.SessionView]) {
+		testutil.TestResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[iam.SessionView]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 1)
 			require.Equal(t, 1, rsp.Total)

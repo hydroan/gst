@@ -3,11 +3,9 @@ package iam_test
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/goforj/godump"
-	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
@@ -21,69 +19,29 @@ import (
 const rootPassword = "12345678"
 
 var (
-	token = "-"
-	port  = testutil.SetupRandomServerPort()
-
-	signupAPI         = testutil.URL(port, "/api/signup")
-	loginAPI          = testutil.URL(port, "/api/login")
-	logoutAPI         = testutil.URL(port, "/api/logout")
-	changepasswordAPI = testutil.URL(port, "/api/iam/change-password")
-	resetpasswordAPI  = testutil.URL(port, "/api/iam/reset-password")
-	userAPI           = testutil.URL(port, "/api/iam/users")
-	currentAPI        = testutil.URL(port, "/api/iam/session/current")
+	signupAPI         = testutil.URL("/api/signup")
+	loginAPI          = testutil.URL("/api/login")
+	logoutAPI         = testutil.URL("/api/logout")
+	changepasswordAPI = testutil.URL("/api/iam/change-password")
+	resetpasswordAPI  = testutil.URL("/api/iam/reset-password")
+	userAPI           = testutil.URL("/api/iam/users")
+	currentAPI        = testutil.URL("/api/iam/session/current")
 )
 
 func userStatusAPI(userID string) string {
-	return testutil.URL(port, fmt.Sprintf("/api/iam/admin/users/%s/status", userID))
+	return testutil.URL(fmt.Sprintf("/api/iam/admin/users/%s/status", userID))
 }
 
-type ListResponse[T any] struct {
-	Items []T `json:"items"`
-	Total int `json:"total"`
-}
-
-// TestMain prepares the database, the cache and the server every test in this
-// package shares, and releases them once the tests are done.
 func TestMain(m *testing.M) {
-	os.Exit(runTests(m))
-}
-
-// runTests exists so that the deferred releases still run: os.Exit in TestMain
-// would skip them.
-func runTests(m *testing.M) int {
 	// NOTE: do not remove me
 	godump.Dump()
 
-	cleanDatabase, err := testutil.SetupMySQL()
-	if err != nil {
-		panic(err)
-	}
-	defer testutil.ReleaseOrReport("database", cleanDatabase)
-
-	cleanCache, err := testutil.SetupRedis()
-	if err != nil {
-		panic(err)
-	}
-	defer testutil.ReleaseOrReport("cache", cleanCache)
-
-	os.Setenv(config.LOGGER_DIR, "./logs")
-	os.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)
-
-	iam.Register()
-	if err := bootstrap.Bootstrap(); err != nil {
-		panic(err)
-	}
-	seedRootAccount()
-
-	go func() {
-		if err := bootstrap.Run(); err != nil {
-			panic(err)
-		}
-	}()
-
-	testutil.MustWaitForServer(port)
-
-	return m.Run()
+	testutil.Run(m, testutil.Server{
+		Database: config.DBMySQL,
+		Redis:    true,
+		Register: func() { iam.Register() },
+		Seed:     seedRootAccount,
+	})
 }
 
 // seedRootAccount creates the root user and password credential the tests

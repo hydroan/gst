@@ -4,11 +4,10 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"os"
 	"testing"
 
-	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/client"
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/module/helloworld"
 	"github.com/stretchr/testify/assert"
@@ -16,43 +15,15 @@ import (
 )
 
 var (
-	token = "-"
-	port  = testutil.SetupRandomServerPort()
-	addr  = testutil.URL(port, "/api/hello-world")
-	addr2 = testutil.URL(port, "/api/hello-world2")
+	addr  = testutil.URL("/api/hello-world")
+	addr2 = testutil.URL("/api/hello-world2")
 )
 
-// TestMain prepares the database and the server every test in this package
-// shares, and releases the database once they are done. Setting them up per
-// test would mean a container per test, and releasing the database from one
-// test would leave the remaining ones without one.
 func TestMain(m *testing.M) {
-	os.Exit(runTests(m))
-}
-
-// runTests exists so that the deferred release still runs: os.Exit in TestMain
-// would skip it.
-func runTests(m *testing.M) int {
-	cleanDatabase, err := testutil.SetupMySQL()
-	if err != nil {
-		panic(err)
-	}
-	defer testutil.ReleaseOrReport("database", cleanDatabase)
-
-	helloworld.Register()
-	if err := bootstrap.Bootstrap(); err != nil {
-		panic(err)
-	}
-
-	go func() {
-		if err := bootstrap.Run(); err != nil {
-			panic(err)
-		}
-	}()
-
-	testutil.MustWaitForServer(port)
-
-	return m.Run()
+	testutil.Run(m, testutil.Server{
+		Database: config.DBMySQL,
+		Register: helloworld.Register,
+	})
 }
 
 func TestHelloworldModule(t *testing.T) {
@@ -103,7 +74,7 @@ func TestHelloworldModule(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cli, err := client.New(addr, client.WithToken(token))
+			cli, err := client.New(addr, client.WithToken(testutil.Token))
 			require.NoError(t, err)
 
 			var resp *client.Resp

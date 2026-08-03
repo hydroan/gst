@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/client"
+	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/module/helloworld"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
@@ -73,7 +74,7 @@ func TestHelloworld2Module(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cli, err := client.New(addr2, client.WithToken(token))
+			cli, err := client.New(addr2, client.WithToken(testutil.Token))
 			require.NoError(t, err)
 
 			var resp *client.Resp

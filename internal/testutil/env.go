@@ -29,7 +29,7 @@ func buildConfigSections() map[reflect.Type]string {
 	return sections
 }
 
-// ApplyConfigToEnv exports the non-zero fields of a config section as the
+// applyConfigToEnv exports the non-zero fields of a config section as the
 // environment variables config.Init reads them back from, so a test hands over
 // a config struct instead of spelling out every variable name.
 //
@@ -41,7 +41,7 @@ func buildConfigSections() map[reflect.Type]string {
 // remaining framework defaults alone, which also means a false bool cannot be
 // exported this way. Fields with no single environment representation, such as
 // slices and maps, are skipped as well.
-func ApplyConfigToEnv(cfg any) {
+func applyConfigToEnv(cfg any) {
 	val := reflect.ValueOf(cfg)
 	for val.Kind() == reflect.Pointer {
 		if val.IsNil() {

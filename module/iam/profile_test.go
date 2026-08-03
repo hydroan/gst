@@ -16,7 +16,7 @@ import (
 	"gorm.io/datatypes"
 )
 
-var profileAPI = testutil.URL(port, "/api/iam/profile")
+var profileAPI = testutil.URL("/api/iam/profile")
 
 type profileTestAccount struct {
 	UserID    string
