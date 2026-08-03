@@ -16,9 +16,9 @@ import (
 	"github.com/hydroan/gst/cache/ristretto"
 	"github.com/hydroan/gst/cache/smap"
 	"github.com/hydroan/gst/internal/testutil"
+	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/provider/memcached"
 	"github.com/hydroan/gst/provider/redis"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 )
 

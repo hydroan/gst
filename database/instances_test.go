@@ -2,7 +2,7 @@ package database_test
 
 import (
 	"context"
-	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/errors"
@@ -19,18 +19,19 @@ import (
 // would hold its own non-default instance, and prepares the TestUser table
 // on it. File-backed, because a second in-memory sqlite would vanish
 // between connections.
-func newInstance(t *testing.T, path string) *gorm.DB {
+func newInstance(t *testing.T, name string) *gorm.DB {
 	t.Helper()
-	_ = os.Remove(path)
+	// A directory of its own per test, so instances never collide and nothing
+	// is left behind on the machine running the tests.
+	path := filepath.Join(t.TempDir(), name)
 	ins, err := sqlite.New(config.Sqlite{Path: path, Enabled: true})
 	require.NoError(t, err)
 	require.NoError(t, ins.AutoMigrate(&TestUser{}))
-	t.Cleanup(func() { _ = os.Remove(path) })
 	return ins
 }
 
 func TestDatabaseOn(t *testing.T) {
-	ins := newInstance(t, "/tmp/gst_test_on_crud.db")
+	ins := newInstance(t, "on_crud.db")
 	defer cleanupTestData()
 
 	user := &TestUser{Name: "named", Email: "named@example.com", Age: 30, Base: model.Base{ID: "named-1"}}
@@ -54,7 +55,7 @@ func TestDatabaseOnNilInstancePanics(t *testing.T) {
 }
 
 func TestAggregateOn(t *testing.T) {
-	ins := newInstance(t, "/tmp/gst_test_on_aggregate.db")
+	ins := newInstance(t, "on_aggregate.db")
 
 	users := []*TestUser{
 		{Name: "agg1", Email: "agg1@example.com", Age: 10, Base: model.Base{ID: "agg-1"}},
@@ -74,7 +75,7 @@ func TestAggregateOn(t *testing.T) {
 }
 
 func TestTransactionOn(t *testing.T) {
-	ins := newInstance(t, "/tmp/gst_test_on_tx.db")
+	ins := newInstance(t, "on_tx.db")
 	defer cleanupTestData()
 
 	rollback := errors.New("force rollback")

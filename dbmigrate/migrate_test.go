@@ -4,14 +4,60 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/dbmigrate"
+	"github.com/hydroan/gst/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) {
+	os.Exit(runTests(m))
+}
+
+// runTests prepares both databases the migration tests target. They need two at
+// once and no server at all, which is what SetupDatabase is for; os.Exit in
+// TestMain would skip the deferred releases, hence the wrapper.
+func runTests(m *testing.M) int {
+	releaseMySQL, err := testutil.SetupDatabase(config.DBMySQL)
+	if err != nil {
+		panic(err)
+	}
+	defer func() { _ = releaseMySQL() }()
+
+	releasePostgres, err := testutil.SetupDatabase(config.DBPostgres)
+	if err != nil {
+		panic(err)
+	}
+	defer func() { _ = releasePostgres() }()
+
+	return m.Run()
+}
+
+// databaseConfig reads back the connection the test container was prepared on.
+func databaseConfig(hostKey, portKey, userKey, passwordKey, database string) *dbmigrate.DatabaseConfig {
+	port, err := strconv.Atoi(os.Getenv(portKey))
+	if err != nil {
+		panic(err)
+	}
+	return &dbmigrate.DatabaseConfig{
+		Host:     os.Getenv(hostKey),
+		Port:     port,
+		Username: os.Getenv(userKey),
+		Password: os.Getenv(passwordKey),
+		Database: database,
+	}
+}
+
+func mysqlDatabaseConfig() *dbmigrate.DatabaseConfig {
+	return databaseConfig(config.MYSQL_HOST, config.MYSQL_PORT, config.MYSQL_USERNAME, config.MYSQL_PASSWORD,
+		os.Getenv(config.MYSQL_DATABASE))
+}
 
 func TestMigrate(t *testing.T) {
 	t.Run("mysql", func(t *testing.T) {
@@ -21,13 +67,7 @@ func TestMigrate(t *testing.T) {
 		require.NoError(t, err)
 
 		migrated, _, err := dbmigrate.Migrate([]string{schema}, config.DBMySQL,
-			&dbmigrate.DatabaseConfig{
-				Host:     "127.0.0.1",
-				Port:     3306,
-				Username: "test",
-				Password: "test",
-				Database: "test",
-			},
+			mysqlDatabaseConfig(),
 			&dbmigrate.MigrateOption{
 				DryRun: true,
 			})
@@ -116,14 +156,9 @@ func TestMigrate(t *testing.T) {
 }
 
 func postgresDatabaseConfig(database string) *dbmigrate.DatabaseConfig {
-	return &dbmigrate.DatabaseConfig{
-		Host:     "127.0.0.1",
-		Port:     5432,
-		Username: "test",
-		Password: "test",
-		Database: database,
-		SSLMode:  "disable",
-	}
+	cfg := databaseConfig(config.POSTGRES_HOST, config.POSTGRES_PORT, config.POSTGRES_USERNAME, config.POSTGRES_PASSWORD, database)
+	cfg.SSLMode = "disable"
+	return cfg
 }
 
 func createPostgresDatabase(t *testing.T, cfg *dbmigrate.DatabaseConfig, database string) {

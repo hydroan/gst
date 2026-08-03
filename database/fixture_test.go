@@ -2,16 +2,14 @@ package database_test
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/model"
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
@@ -335,37 +333,22 @@ type TestCategory struct {
 
 func (*TestCategory) Purge() bool { return true }
 
-func init() {
-	os.Setenv(config.DATABASE_AUTO_MIGRATE, "true")
-	os.Setenv(config.LOGGER_DIR, "/tmp/test_database")
-	os.Setenv(config.DATABASE_TYPE, string(config.DBSqlite))
-	os.Setenv(config.SQLITE_IS_MEMORY, "false")
-	os.Setenv(config.SQLITE_PATH, "/tmp/test.db")
-	_ = os.Remove("/tmp/test.db")
-
-	os.Setenv(config.DATABASE_TYPE, string(config.DBMySQL))
-	os.Setenv(config.MYSQL_DATABASE, "test")
-	os.Setenv(config.MYSQL_USERNAME, "test")
-	os.Setenv(config.MYSQL_PASSWORD, "test")
-
-	// TODO: test for sqlite, mysql, postgresql
-
-	model.Register[*TestUser]()
-	model.Register[*TestProduct]()
-	model.Register[*TestPlainItem]()
-	model.Register[*TestUniqueItem]()
-	model.Register[*TestAutoItem]()
-	model.Register[*TestHookConfig]()
-	model.Register[*TestHookGroup]()
-	model.Register[*TestCategory]()
-	model.Register[*TestAggregateRecord]()
-	model.Register[*TestRecordTag]()
-	model.Register[*TestTagNote]()
-
-	// block here until database migration is ready
-	dbruntime.Wait()
-
-	if err := bootstrap.Bootstrap(); err != nil {
-		panic(err)
-	}
+// TODO: test for sqlite, mysql, postgresql
+func TestMain(m *testing.M) {
+	testutil.Run(m, testutil.Server{
+		Database: config.DBMySQL,
+		Register: func() {
+			model.Register[*TestUser]()
+			model.Register[*TestProduct]()
+			model.Register[*TestPlainItem]()
+			model.Register[*TestUniqueItem]()
+			model.Register[*TestAutoItem]()
+			model.Register[*TestHookConfig]()
+			model.Register[*TestHookGroup]()
+			model.Register[*TestCategory]()
+			model.Register[*TestAggregateRecord]()
+			model.Register[*TestRecordTag]()
+			model.Register[*TestTagNote]()
+		},
+	})
 }
