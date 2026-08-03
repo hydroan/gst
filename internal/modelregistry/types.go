@@ -2,6 +2,7 @@ package modelregistry
 
 import (
 	"reflect"
+	"sync/atomic"
 
 	"github.com/gertd/go-pluralize"
 	"github.com/hydroan/gst/types"
@@ -11,8 +12,34 @@ import (
 var pluralizeCli = pluralize.NewClient()
 
 // TableChan is the internal queue for default-database table registration.
-// It receives model values from model.Register for processing by dbruntime.InitDatabase.
+// It receives model values from EnqueueTable for processing by dbruntime.InitDatabase.
 var TableChan = make(chan types.Model, 10240)
+
+// tablesPending counts the models queued for table registration whose table is
+// not ready yet. The queue length alone cannot answer that: a receive takes a
+// model off the channel long before its table exists, so a caller waiting on
+// len(TableChan) is told the work is done while a CREATE TABLE is still
+// running. Counting from the moment a model is queued leaves no such window.
+var tablesPending atomic.Int32
+
+// EnqueueTable queues a model for table registration. It is the only way to
+// put a model on TableChan, so that the pending count can never miss one.
+func EnqueueTable(m types.Model) {
+	tablesPending.Add(1)
+	TableChan <- m
+}
+
+// TableDone reports that one queued model now has its table, and is called by
+// the database runtime once table preparation returns.
+func TableDone() {
+	tablesPending.Add(-1)
+}
+
+// TablesPending returns how many models are queued or still having their table
+// prepared.
+func TablesPending() int {
+	return int(tablesPending.Load())
+}
 
 // GetTableName returns the default table name for a model type.
 func GetTableName[M types.Model]() string {

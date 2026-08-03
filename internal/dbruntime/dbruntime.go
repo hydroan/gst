@@ -90,15 +90,7 @@ func InitDatabase(db *gorm.DB) (err error) {
 	if startedTable.CompareAndSwap(0, 1) {
 		go func() {
 			for m := range modelregistry.TableChan {
-				// Prepare the table in the default database.
-				begin := time.Now()
-
-				typ := reflect.TypeOf(m).Elem()
-				if err = ensureTable(db, m); err != nil {
-					err = errors.Wrap(err, fmt.Sprintf("failed to prepare table(%s)", typ.String()))
-					panic(err)
-				}
-				zap.S().Infow("database table ready", "model", typ.String(), util.LogDuration(time.Since(begin)))
+				prepareTable(db, m)
 			}
 		}()
 	}
@@ -107,6 +99,21 @@ func InitDatabase(db *gorm.DB) (err error) {
 	DB = db
 
 	return nil
+}
+
+// prepareTable creates the table backing one queued model in the default
+// database, and reports the model done only once the table is there. Wait
+// counts on that ordering: a model still counts as pending for the whole of
+// ensureTable, not just for the time it sits on the queue.
+func prepareTable(db *gorm.DB, m types.Model) {
+	defer modelregistry.TableDone()
+
+	begin := time.Now()
+	typ := reflect.TypeOf(m).Elem()
+	if err := ensureTable(db, m); err != nil {
+		panic(errors.Wrap(err, fmt.Sprintf("failed to prepare table(%s)", typ.String())))
+	}
+	zap.S().Infow("database table ready", "model", typ.String(), util.LogDuration(time.Since(begin)))
 }
 
 // Wait blocks until all pending database initialization operations are completed.
@@ -144,8 +151,8 @@ func Wait() {
 	startTime := time.Now()
 	var lastLogTime time.Time
 
-	for len(modelregistry.TableChan) != 0 {
-		tablePending := len(modelregistry.TableChan)
+	for modelregistry.TablesPending() != 0 {
+		tablePending := modelregistry.TablesPending()
 
 		// Log progress every 500ms to avoid spam
 		if time.Since(lastLogTime) >= 500*time.Millisecond {

@@ -92,7 +92,7 @@ func Register[M types.Model]() {
 
 	table := reflect.New(reflect.TypeOf(*new(M)).Elem()).Interface().(M) //nolint:errcheck
 	registeredModels = append(registeredModels, newModelSnapshot(table))
-	modelregistry.TableChan <- table
+	modelregistry.EnqueueTable(table)
 }
 
 func newModelSnapshot(m types.Model) types.Model {
