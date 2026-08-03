@@ -10,25 +10,6 @@ import (
 	"github.com/stoewer/go-strcase"
 )
 
-// configSections maps each section type of config.Config to the name the
-// section is stored under. Those mapstructure tags are the only authority for
-// the name: config.Init runs viper with AutomaticEnv and a "." to "_" key
-// replacer, so an environment lookup is the upper-cased config path and
-// nothing else. A type name cannot stand in for the tag, config.AppInfo lives
-// under section "app".
-var configSections = buildConfigSections()
-
-func buildConfigSections() map[reflect.Type]string {
-	typ := reflect.TypeFor[config.Config]()
-	sections := make(map[reflect.Type]string, typ.NumField())
-	for field := range typ.Fields() {
-		if tag := field.Tag.Get("mapstructure"); len(tag) > 0 {
-			sections[field.Type] = tag
-		}
-	}
-	return sections
-}
-
 // applyConfigToEnv exports the non-zero fields of a config section as the
 // environment variables config.Init reads them back from, so a test hands over
 // a config struct instead of spelling out every variable name.
@@ -54,15 +35,6 @@ func applyConfigToEnv(cfg any) {
 	}
 
 	applyStructToEnv(strings.ToUpper(sectionName(val.Type())), val)
-}
-
-// sectionName returns the config section a type is stored under.
-func sectionName(typ reflect.Type) string {
-	if name, ok := configSections[typ]; ok {
-		return name
-	}
-	// A section registered through config.Register is named after its type.
-	return strings.ToLower(strcase.SnakeCase(typ.Name()))
 }
 
 // applyStructToEnv exports every field of val, prefixing it with the
@@ -101,4 +73,32 @@ func applyStructToEnv(path string, val reflect.Value) {
 			os.Setenv(fieldPath, fmt.Sprintf("%v", fieldVal.Interface()))
 		}
 	}
+}
+
+// sectionName returns the config section a type is stored under.
+func sectionName(typ reflect.Type) string {
+	if name, ok := configSections[typ]; ok {
+		return name
+	}
+	// A section registered through config.Register is named after its type.
+	return strings.ToLower(strcase.SnakeCase(typ.Name()))
+}
+
+// configSections maps each section type of config.Config to the name the
+// section is stored under. Those mapstructure tags are the only authority for
+// the name: config.Init runs viper with AutomaticEnv and a "." to "_" key
+// replacer, so an environment lookup is the upper-cased config path and
+// nothing else. A type name cannot stand in for the tag, config.AppInfo lives
+// under section "app".
+var configSections = buildConfigSections()
+
+func buildConfigSections() map[reflect.Type]string {
+	typ := reflect.TypeFor[config.Config]()
+	sections := make(map[reflect.Type]string, typ.NumField())
+	for field := range typ.Fields() {
+		if tag := field.Tag.Get("mapstructure"); len(tag) > 0 {
+			sections[field.Type] = tag
+		}
+	}
+	return sections
 }

@@ -30,7 +30,7 @@ func SetupRedis() (func() error, error) {
 	}
 	terminate := func() error { return c.Terminate(ctx) }
 
-	host, port, err := containerEndpoint(ctx, c, redisPort)
+	host, port, err := endpoint(ctx, c, redisPort)
 	if err != nil {
 		return nil, errors.CombineErrors(err, terminate())
 	}

@@ -13,8 +13,8 @@ import (
 	tclog "github.com/testcontainers/testcontainers-go/log"
 )
 
-// containerEndpoint returns the host and the published port c maps port to.
-func containerEndpoint(ctx context.Context, c testcontainers.Container, port string) (string, uint, error) {
+// endpoint returns the host and the published port c maps port to.
+func endpoint(ctx context.Context, c testcontainers.Container, port string) (string, uint, error) {
 	host, err := c.Host(ctx)
 	if err != nil {
 		return "", 0, errors.Wrapf(err, "failed to resolve container host for port %s", port)
