@@ -53,9 +53,15 @@ type Queryable interface {
 // Like every framework-owned query parameter, _page and _size live in the
 // "_" prefix namespace, so bare names such as page and size stay available
 // as business filter fields on embedding models.
+//
+// Neither parameter can be used to retrieve a whole table. A size the client
+// does not set, or sets to zero or less, becomes the default page size; a size
+// above the cap is clamped to it rather than refused, which is what keeps a
+// client asking for everything from being served everything. Bulk retrieval is
+// the Export action's job, and it is the only one that answers unbounded.
 type Pagination struct {
 	Page int `json:"-" gorm:"-" query:"_page" url:"_page,omitempty"` // Page is the one-based page number; non-positive values use the first page.
-	Size int `json:"-" gorm:"-" query:"_size" url:"_size,omitempty"` // Size is the page size; negative values disable the limit.
+	Size int `json:"-" gorm:"-" query:"_size" url:"_size,omitempty"` // Size is the page size; non-positive values use the default page size and oversized ones clamp to the cap.
 }
 
 // paginationEnabled marks models that opt in to page and size query parameters.
