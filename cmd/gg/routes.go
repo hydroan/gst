@@ -56,7 +56,7 @@ This command analyzes generated router registrations and displays routes grouped
 by model source files so developers can understand model and route structure.
 
 Optional filter parameter can match model names, source files, route paths, or phases.
-For example: 'gg routes conversation' will show router routes related to conversation.
+For example: 'gg routes record' will show router routes related to record.
 Use --model to display routes grouped by model source files.
 Use --scope auth or --scope pub to display only authenticated or public routes.`,
 		Args: cobra.MaximumNArgs(1),
