@@ -10,10 +10,6 @@ import (
 	"github.com/hydroan/gst/config"
 )
 
-// Token authenticates every request a test makes. Run installs it as the
-// never-expiring token, so a test client only has to pass it along.
-const Token = "-"
-
 // Server declares what a test package needs before its tests can run. Every
 // field is optional: the zero value prepares the framework defaults, which is
 // an sqlite database and no cache, and registers nothing.
@@ -109,7 +105,6 @@ func (s Server) prepare() (release func(), err error) {
 	// A log directory of its own keeps the logs of a test run out of the
 	// package source tree, where they would otherwise pile up next to the code.
 	os.Setenv(config.LOGGER_DIR, logDir)
-	os.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, Token)
 	listenOnFreePort()
 
 	cleanDatabase, err := setupDatabase(s.Database)
@@ -135,6 +130,24 @@ func (s Server) prepare() (release func(), err error) {
 	}
 
 	return release, nil
+}
+
+// SetupDatabase prepares the database dbType names and points the framework at
+// it, returning the function that releases it. An empty dbType selects the
+// framework default.
+//
+// Run already does this for the database a Server declares, so reach for it
+// only where Run cannot: a test needing two databases at once, or one with no
+// use for a running server.
+func SetupDatabase(dbType config.DBType) (func() error, error) {
+	return setupDatabase(dbType)
+}
+
+// SetupRedis prepares a redis container and points the framework at it,
+// returning the function that terminates it. Prefer Server.Redis, see
+// SetupDatabase for when this lower-level entry is the right one.
+func SetupRedis() (func() error, error) {
+	return setupRedis()
 }
 
 // setupDatabase prepares the database dbType names. An empty dbType selects

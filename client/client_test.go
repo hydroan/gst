@@ -73,7 +73,7 @@ func TestMain(m *testing.M) {
 }
 
 func Test_Client(t *testing.T) {
-	cli, err := client.New(addr2, client.WithToken(testutil.Token), client.WithQueryPagination(1, 2))
+	cli, err := client.New(addr2, client.WithQueryPagination(1, 2))
 	require.NoError(t, err)
 	fmt.Println(cli.QueryString())
 	fmt.Println(cli.RequestURL())
@@ -213,7 +213,7 @@ func Test_Client(t *testing.T) {
 
 	// Test CreateMany
 	t.Run("create_many", func(t *testing.T) {
-		cli, err := client.New(addr2, client.WithToken(testutil.Token))
+		cli, err := client.New(addr2)
 		require.NoError(t, err)
 		items := make([]User, 0)
 		total := 0
@@ -245,7 +245,7 @@ func Test_Client(t *testing.T) {
 
 	// Test DeleteMany
 	t.Run("delete_many", func(t *testing.T) {
-		cli, err := client.New(addr2, client.WithToken(testutil.Token))
+		cli, err := client.New(addr2)
 		require.NoError(t, err)
 		items := make([]User, 0)
 		total := 0
@@ -281,7 +281,7 @@ func Test_Client(t *testing.T) {
 
 	// Test UpdateMany
 	t.Run("update_many", func(t *testing.T) {
-		cli, err := client.New(addr2, client.WithToken(testutil.Token))
+		cli, err := client.New(addr2)
 		require.NoError(t, err)
 
 		// 1.delete all resources
@@ -331,7 +331,7 @@ func Test_Client(t *testing.T) {
 
 	// Test PatchMany
 	t.Run("patch_many", func(t *testing.T) {
-		cli, err := client.New(addr2, client.WithToken(testutil.Token))
+		cli, err := client.New(addr2)
 		require.NoError(t, err)
 
 		// 1.delete all resources
@@ -385,7 +385,7 @@ func Test_Client_WithAPI(t *testing.T) {
 
 	// Create test users first, dropping fixed-id leftovers from earlier tests
 	// because Create rejects duplicates.
-	cliSetup, err := client.New(baseAddr+"/test-user", client.WithToken(testutil.Token))
+	cliSetup, err := client.New(baseAddr + "/test-user")
 	require.NoError(t, err)
 	_, err = cliSetup.DeleteMany([]string{id1, id2})
 	require.NoError(t, err)
@@ -396,7 +396,7 @@ func Test_Client_WithAPI(t *testing.T) {
 
 	// Test WithAPI option with List method
 	t.Run("with_api_option_list", func(t *testing.T) {
-		cli, err := client.New(baseAddr, client.WithToken(testutil.Token), client.WithAPI("test-user"))
+		cli, err := client.New(baseAddr, client.WithAPI("test-user"))
 		require.NoError(t, err)
 
 		// Test List using apiPath from WithAPI
@@ -411,7 +411,7 @@ func Test_Client_WithAPI(t *testing.T) {
 
 	// Test WithAPI option with Get method
 	t.Run("with_api_option_get", func(t *testing.T) {
-		cli, err := client.New(baseAddr, client.WithToken(testutil.Token), client.WithAPI("test-user"))
+		cli, err := client.New(baseAddr, client.WithAPI("test-user"))
 		require.NoError(t, err)
 
 		// Test Get using apiPath from WithAPI
@@ -428,7 +428,7 @@ func Test_Client_WithAPI(t *testing.T) {
 
 	// Test WithAPI option with Create method
 	t.Run("with_api_option_create", func(t *testing.T) {
-		cli, err := client.New(baseAddr, client.WithToken(testutil.Token), client.WithAPI("test-user"))
+		cli, err := client.New(baseAddr, client.WithAPI("test-user"))
 		require.NoError(t, err)
 
 		newUser := User{
@@ -457,7 +457,7 @@ func Test_Client_WithAPI(t *testing.T) {
 
 	// Test WithAPI option with Update method
 	t.Run("with_api_option_update", func(t *testing.T) {
-		cli, err := client.New(baseAddr, client.WithToken(testutil.Token), client.WithAPI("test-user"))
+		cli, err := client.New(baseAddr, client.WithAPI("test-user"))
 		require.NoError(t, err)
 
 		// First create a user
@@ -497,7 +497,7 @@ func Test_Client_WithAPI(t *testing.T) {
 
 	// Test WithAPI option with Patch method
 	t.Run("with_api_option_patch", func(t *testing.T) {
-		cli, err := client.New(baseAddr, client.WithToken(testutil.Token), client.WithAPI("test-user"))
+		cli, err := client.New(baseAddr, client.WithAPI("test-user"))
 		require.NoError(t, err)
 
 		// First create a user
@@ -535,7 +535,7 @@ func Test_Client_WithAPI(t *testing.T) {
 
 	// Test WithAPI option with Delete method
 	t.Run("with_api_option_delete", func(t *testing.T) {
-		cli, err := client.New(baseAddr, client.WithToken(testutil.Token), client.WithAPI("test-user"))
+		cli, err := client.New(baseAddr, client.WithAPI("test-user"))
 		require.NoError(t, err)
 
 		// First create a user
@@ -563,7 +563,7 @@ func Test_Client_WithAPI(t *testing.T) {
 
 	// Test WithAPI option with query parameters
 	t.Run("with_api_option_query", func(t *testing.T) {
-		cli, err := client.New(baseAddr, client.WithToken(testutil.Token), client.WithAPI("test-user"), client.WithQueryPagination(1, 2))
+		cli, err := client.New(baseAddr, client.WithAPI("test-user"), client.WithQueryPagination(1, 2))
 		require.NoError(t, err)
 
 		users := make([]User, 0)
