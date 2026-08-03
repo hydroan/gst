@@ -32,6 +32,16 @@ type Role struct {
 
 	Menus []*Menu `json:"menus,omitempty" gorm:"-"`
 
+	// Query opts the role list into paging and ordering, which an
+	// administration screen listing roles needs and which Menu beside it
+	// already has.
+	//
+	// The two arrive together on purpose. A page is only meaningful over an
+	// ordered set: without an order the database is free to return rows in any
+	// order it likes, and a second page drawn from a different one repeats rows
+	// it already showed and skips rows it never did. Paging alone would have
+	// made that failure reachable through the very parameter added to fix it.
+	model.Query
 	model.Base
 }
 
