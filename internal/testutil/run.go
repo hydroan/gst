@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"fmt"
 	"os"
 	"slices"
 	"testing"
@@ -8,6 +9,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/testcontainer"
 )
 
 // Server declares what a test package needs before its tests can run. Every
@@ -107,7 +109,7 @@ func (s Server) prepare() (release func(), err error) {
 	os.Setenv(config.LOGGER_DIR, logDir)
 	listenOnFreePort()
 
-	cleanDatabase, err := setupDatabase(s.Database)
+	cleanDatabase, err := testcontainer.SetupDatabase(s.Database)
 	if err != nil {
 		return release, err
 	}
@@ -118,7 +120,7 @@ func (s Server) prepare() (release func(), err error) {
 	})
 
 	if s.Redis {
-		cleanCache, err := setupRedis()
+		cleanCache, err := testcontainer.SetupRedis()
 		if err != nil {
 			return release, err
 		}
@@ -140,32 +142,19 @@ func (s Server) prepare() (release func(), err error) {
 // only where Run cannot: a test needing two databases at once, or one with no
 // use for a running server.
 func SetupDatabase(dbType config.DBType) (func() error, error) {
-	return setupDatabase(dbType)
+	return testcontainer.SetupDatabase(dbType)
 }
 
 // SetupRedis prepares a redis container and points the framework at it,
 // returning the function that terminates it. Prefer Server.Redis, see
 // SetupDatabase for when this lower-level entry is the right one.
 func SetupRedis() (func() error, error) {
-	return setupRedis()
+	return testcontainer.SetupRedis()
 }
 
-// setupDatabase prepares the database dbType names. An empty dbType selects
-// the framework default.
-func setupDatabase(dbType config.DBType) (func() error, error) {
-	if len(dbType) == 0 {
-		dbType = config.DBSqlite
-	}
-
-	switch dbType {
-	case config.DBSqlite:
-		return setupSqlite()
-	case config.DBMySQL:
-		return setupMySQL()
-	case config.DBPostgres:
-		return setupPostgres()
-	default:
-		return nil, errors.Newf("no test database available for %q, supported are %q, %q and %q",
-			dbType, config.DBSqlite, config.DBMySQL, config.DBPostgres)
-	}
+// reportReleaseFailure reports that a prepared service could not be released.
+// A release runs once the tests are over, so there is no test left to fail;
+// what a leaked container needs is to be visible.
+func reportReleaseFailure(name string, err error) {
+	fmt.Fprintf(os.Stderr, "failed to release the test %s: %v\n", name, err)
 }

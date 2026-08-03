@@ -1,4 +1,4 @@
-package testutil
+package testcontainer
 
 import (
 	"context"
@@ -31,13 +31,6 @@ func containerEndpoint(ctx context.Context, c testcontainers.Container, port str
 // leaves behind to reach the service by hand.
 func reportServiceReady(name, target string) {
 	fmt.Fprintf(os.Stdout, "test %s ready: %s\n", name, target)
-}
-
-// reportReleaseFailure reports that a prepared service could not be released.
-// A release runs once the tests are over, so there is no test left to fail;
-// what a leaked container needs is to be visible.
-func reportReleaseFailure(name string, err error) {
-	fmt.Fprintf(os.Stderr, "failed to release the test %s: %v\n", name, err)
 }
 
 var muteContainerLogOnce sync.Once

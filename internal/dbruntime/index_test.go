@@ -1,9 +1,15 @@
 package dbruntime
 
 import (
+	"fmt"
+	"os"
+	"strconv"
+	"sync"
 	"testing"
 
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/testcontainer"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/sqlite"
@@ -11,8 +17,24 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-// mysqlTestDSN points at the database the module test suites share.
-const mysqlTestDSN = "test_module:test_module@tcp(127.0.0.1:3306)/test_module?charset=utf8mb4&parseTime=True&loc=Local"
+var (
+	mysqlOnce    sync.Once
+	releaseMySQL func() error
+	errMySQL     error
+)
+
+// TestMain releases the mysql container newMySQLDB prepares. Only the tests
+// covering mysql index behavior ask for one, so it is started lazily and this
+// is the only place that knows whether there is anything to release.
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if releaseMySQL != nil {
+		if err := releaseMySQL(); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to release the test database: %v\n", err)
+		}
+	}
+	os.Exit(code)
+}
 
 // indexedRecord declares custom indexes covering embedded Base columns.
 type indexedRecord struct {
@@ -221,23 +243,28 @@ func newSQLiteDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// newMySQLDB opens the shared module test database. The package otherwise
-// runs on sqlite alone, so an unreachable server skips the test instead of
-// failing it.
+// newMySQLDB opens a mysql container of its own. The package otherwise runs on
+// sqlite, so the container is prepared once for the whole package rather than
+// per test.
 func newMySQLDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	db, err := gorm.Open(mysql.Open(mysqlTestDSN), &gorm.Config{Logger: logger.Discard, TranslateError: true})
-	if err != nil {
-		t.Skipf("mysql is unavailable: %v", err)
-	}
+	mysqlOnce.Do(func() {
+		releaseMySQL, errMySQL = testcontainer.SetupDatabase(config.DBMySQL)
+	})
+	require.NoError(t, errMySQL)
+
+	port, err := strconv.Atoi(os.Getenv(config.MYSQL_PORT))
+	require.NoError(t, err)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+		os.Getenv(config.MYSQL_USERNAME), os.Getenv(config.MYSQL_PASSWORD),
+		os.Getenv(config.MYSQL_HOST), port, os.Getenv(config.MYSQL_DATABASE))
+
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: logger.Discard, TranslateError: true})
+	require.NoError(t, err)
 	sqlDB, err := db.DB()
-	if err != nil {
-		t.Skipf("mysql is unavailable: %v", err)
-	}
-	if err = sqlDB.Ping(); err != nil {
-		t.Skipf("mysql is unavailable: %v", err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, sqlDB.Ping())
 	t.Cleanup(func() { _ = sqlDB.Close() })
 	return db
 }

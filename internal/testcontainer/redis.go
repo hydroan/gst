@@ -1,4 +1,4 @@
-package testutil
+package testcontainer
 
 import (
 	"context"
@@ -14,13 +14,13 @@ const (
 	redisPort  = "6379/tcp"
 )
 
-// setupRedis starts a redis container of its own and points the framework at
+// SetupRedis starts a redis container of its own and points the framework at
 // it. The returned function terminates that container.
 //
 // A container of its own is what keeps one test package from seeing the keys of
 // another, so tests reach for this rather than sharing an instance under
 // separate namespaces.
-func setupRedis() (func() error, error) {
+func SetupRedis() (func() error, error) {
 	muteContainerLog()
 	ctx := context.Background()
 

@@ -1,4 +1,4 @@
-package testutil
+package testcontainer
 
 import (
 	"context"
@@ -27,6 +27,27 @@ const (
 
 	sqliteDatabase = "test"
 )
+
+// SetupDatabase prepares the database dbType names and points the framework at
+// it, returning the function that releases it. An empty dbType selects the
+// framework default.
+func SetupDatabase(dbType config.DBType) (func() error, error) {
+	if len(dbType) == 0 {
+		dbType = config.DBSqlite
+	}
+
+	switch dbType {
+	case config.DBSqlite:
+		return setupSqlite()
+	case config.DBMySQL:
+		return setupMySQL()
+	case config.DBPostgres:
+		return setupPostgres()
+	default:
+		return nil, errors.Newf("no test database available for %q, supported are %q, %q and %q",
+			dbType, config.DBSqlite, config.DBMySQL, config.DBPostgres)
+	}
+}
 
 // setupMySQL starts a mysql container of its own and points the framework at
 // it. The returned function terminates that container.

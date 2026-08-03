@@ -1,4 +1,4 @@
-package testutil
+package testcontainer
 
 import (
 	"net"
@@ -13,7 +13,7 @@ import (
 func TestSetupRedis(t *testing.T) {
 	isolateEnv(t, config.REDIS_ADDR, config.REDIS_ENABLED)
 
-	cleanup, err := setupRedis()
+	cleanup, err := SetupRedis()
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, cleanup()) })
 
