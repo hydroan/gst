@@ -2,6 +2,7 @@ package dcache_test
 
 import (
 	"fmt"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/dcache"
+	"github.com/hydroan/gst/internal/testcontainer"
 	"github.com/hydroan/gst/logger/zap"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
@@ -19,7 +21,21 @@ type Person struct {
 	Age  int
 }
 
-func init() {
+func TestMain(m *testing.M) {
+	os.Exit(runTests(m))
+}
+
+// runTests prepares the redis the distributed cache is backed by. os.Exit in
+// TestMain would skip the deferred release, hence the wrapper.
+func runTests(m *testing.M) int {
+	// Before config.Init: the container publishes its address through the
+	// environment, which is what config reads.
+	release, err := testcontainer.SetupRedis()
+	if err != nil {
+		panic(err)
+	}
+	defer func() { _ = release() }()
+
 	if err := config.Init(); err != nil {
 		panic(err)
 	}
@@ -29,6 +45,8 @@ func init() {
 	if err := dcache.Init(); err != nil {
 		panic(err)
 	}
+
+	return m.Run()
 }
 
 func setupTestDistributedCache[T any](t *testing.T) types.DistributedCache[T] {

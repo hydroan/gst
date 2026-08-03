@@ -134,24 +134,6 @@ func (s Server) prepare() (release func(), err error) {
 	return release, nil
 }
 
-// SetupDatabase prepares the database dbType names and points the framework at
-// it, returning the function that releases it. An empty dbType selects the
-// framework default.
-//
-// Run already does this for the database a Server declares, so reach for it
-// only where Run cannot: a test needing two databases at once, or one with no
-// use for a running server.
-func SetupDatabase(dbType config.DBType) (func() error, error) {
-	return testcontainer.SetupDatabase(dbType)
-}
-
-// SetupRedis prepares a redis container and points the framework at it,
-// returning the function that terminates it. Prefer Server.Redis, see
-// SetupDatabase for when this lower-level entry is the right one.
-func SetupRedis() (func() error, error) {
-	return testcontainer.SetupRedis()
-}
-
 // reportReleaseFailure reports that a prepared service could not be released.
 // A release runs once the tests are over, so there is no test left to fail;
 // what a leaked container needs is to be visible.

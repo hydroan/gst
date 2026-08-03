@@ -12,7 +12,7 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/dbmigrate"
-	"github.com/hydroan/gst/internal/testutil"
+	"github.com/hydroan/gst/internal/testcontainer"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,13 +24,13 @@ func TestMain(m *testing.M) {
 // once and no server at all, which is what SetupDatabase is for; os.Exit in
 // TestMain would skip the deferred releases, hence the wrapper.
 func runTests(m *testing.M) int {
-	releaseMySQL, err := testutil.SetupDatabase(config.DBMySQL)
+	releaseMySQL, err := testcontainer.SetupDatabase(config.DBMySQL)
 	if err != nil {
 		panic(err)
 	}
 	defer func() { _ = releaseMySQL() }()
 
-	releasePostgres, err := testutil.SetupDatabase(config.DBPostgres)
+	releasePostgres, err := testcontainer.SetupDatabase(config.DBPostgres)
 	if err != nil {
 		panic(err)
 	}
