@@ -30,7 +30,6 @@ require (
 	github.com/bytedance/sonic v1.15.0 // indirect
 	github.com/bytedance/sonic/loader v0.5.0 // indirect
 	github.com/casbin/casbin/v3 v3.10.0 // indirect
-	github.com/casbin/gorm-adapter/v3 v3.41.0 // indirect
 	github.com/casbin/govaluate v1.10.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -57,8 +56,6 @@ require (
 	github.com/gin-contrib/gzip v1.2.6 // indirect
 	github.com/gin-contrib/sse v1.1.0 // indirect
 	github.com/gin-contrib/zap v1.1.7 // indirect
-	github.com/glebarez/go-sqlite v1.22.0 // indirect
-	github.com/glebarez/sqlite v1.11.0 // indirect
 	github.com/go-asn1-ber/asn1-ber v1.5.8-0.20250403174932-29230038a667 // indirect
 	github.com/go-faster/city v1.0.1 // indirect
 	github.com/go-faster/errors v0.7.1 // indirect
@@ -101,7 +98,7 @@ require (
 	github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.8.0 // indirect
+	github.com/jackc/pgx/v5 v5.9.2 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jinzhu/copier v0.4.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
@@ -131,7 +128,6 @@ require (
 	github.com/nats-io/nats.go v1.52.0 // indirect
 	github.com/nats-io/nkeys v0.4.15 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
-	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/oapi-codegen/runtime v1.0.0 // indirect
 	github.com/oasdiff/yaml v0.1.1 // indirect
 	github.com/oasdiff/yaml3 v0.0.14 // indirect
@@ -154,7 +150,6 @@ require (
 	github.com/redis/go-redis/extra/rediscmd/v9 v9.21.0 // indirect
 	github.com/redis/go-redis/extra/redisotel/v9 v9.21.0 // indirect
 	github.com/redis/go-redis/v9 v9.21.0 // indirect
-	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/rogpeppe/go-internal v1.15.0 // indirect
 	github.com/rs/xid v1.6.0 // indirect
@@ -237,11 +232,6 @@ require (
 	gorm.io/driver/postgres v1.6.0 // indirect
 	gorm.io/driver/sqlite v1.6.0 // indirect
 	gorm.io/driver/sqlserver v1.6.3 // indirect
-	gorm.io/plugin/dbresolver v1.6.2 // indirect
-	modernc.org/libc v1.72.3 // indirect
-	modernc.org/mathutil v1.7.1 // indirect
-	modernc.org/memory v1.11.0 // indirect
-	modernc.org/sqlite v1.50.1 // indirect
 	stathat.com/c/consistent v1.0.0 // indirect
 )
 
