@@ -41,8 +41,8 @@ func TestMenuIDAccessors(t *testing.T) {
 
 	t.Run("adopts requested id", func(t *testing.T) {
 		m := new(Menu)
-		m.SetID("query/at_recharge_withdraw_record")
-		require.Equal(t, "query/at_recharge_withdraw_record", m.GetID())
+		m.SetID("query/sample_archived_record_history")
+		require.Equal(t, "query/sample_archived_record_history", m.GetID())
 	})
 
 	t.Run("generates id when none is given", func(t *testing.T) {
@@ -57,7 +57,7 @@ func TestMenuIDAccessors(t *testing.T) {
 	})
 
 	t.Run("clears id", func(t *testing.T) {
-		m := &Menu{ID: "player/list"}
+		m := &Menu{ID: "sample/list"}
 		m.ClearID()
 		require.Empty(t, m.GetID())
 	})

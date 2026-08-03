@@ -534,7 +534,7 @@ func (db *database[M]) Upsert(_objs ...M) (err error) {
 // Example:
 //
 //	UpdateByID("user123", "status", "active")  // Update user status
-//	UpdateByID("order456", "amount", 99.99)    // Update order amount
+//	UpdateByID("record456", "score", 99.99)    // Update record score
 func (db *database[M]) UpdateByID(id string, column string, value any) (err error) {
 	defer db.reset()
 

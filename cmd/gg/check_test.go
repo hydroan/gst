@@ -28,7 +28,7 @@ func TestCheckArchitectureDependencyAllowsSameServiceModuleImports(t *testing.T)
 
 import _ "tmpapp/service/iam/session"
 `)
-	writeCheckFile(t, filepath.Join(projectDir, "service", "order", "order.go"), `package order
+	writeCheckFile(t, filepath.Join(projectDir, "service", "record", "record.go"), `package record
 
 import _ "tmpapp/service/iam/session"
 `)
@@ -40,7 +40,7 @@ import _ "tmpapp/service/iam/session"
 			t.Fatalf("same service module import should be allowed, got violations: %#v", violations)
 		}
 	}
-	if len(violations) != 1 || !strings.Contains(violations[0], filepath.Join("service", "order", "order.go")) {
+	if len(violations) != 1 || !strings.Contains(violations[0], filepath.Join("service", "record", "record.go")) {
 		t.Fatalf("expected only cross service module import violation, got %#v", violations)
 	}
 }
@@ -117,11 +117,11 @@ func TestCheckModelPackageNamingAllowsUnderscoreStrippedAndExternalTestPackages(
 	modelDir = "model"
 
 	// A package name with underscores stripped from the directory name is allowed.
-	writeCheckFile(t, filepath.Join(projectDir, "model", "receive_robot", "receive_robot.go"), "package receiverobot\n")
+	writeCheckFile(t, filepath.Join(projectDir, "model", "sample_record", "sample_record.go"), "package samplerecord\n")
 
 	// A black-box test file using the `<package>_test` package name is allowed.
 	writeCheckFile(t, filepath.Join(projectDir, "model", "group", "group.go"), "package group\n")
-	writeCheckFile(t, filepath.Join(projectDir, "model", "group", "receive_robot_test.go"), "package group_test\n")
+	writeCheckFile(t, filepath.Join(projectDir, "model", "group", "sample_record_test.go"), "package group_test\n")
 
 	// A genuine mismatch between package name and directory name (after stripping underscores) should still be reported.
 	writeCheckFile(t, filepath.Join(projectDir, "model", "mismatch", "mismatch.go"), "package wrongname\n")
@@ -129,10 +129,10 @@ func TestCheckModelPackageNamingAllowsUnderscoreStrippedAndExternalTestPackages(
 	violations := CheckModelPackageNaming(newProjectIgnoreMatcher())
 
 	for _, violation := range violations {
-		if strings.Contains(violation, filepath.Join("receive_robot", "receive_robot.go")) {
+		if strings.Contains(violation, filepath.Join("sample_record", "sample_record.go")) {
 			t.Fatalf("underscore-stripped package name should be allowed, got violations: %#v", violations)
 		}
-		if strings.Contains(violation, filepath.Join("group", "receive_robot_test.go")) {
+		if strings.Contains(violation, filepath.Join("group", "sample_record_test.go")) {
 			t.Fatalf("external test package name should be allowed, got violations: %#v", violations)
 		}
 	}

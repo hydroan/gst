@@ -58,7 +58,7 @@ func TestDatabaseCleanup(t *testing.T) {
 	require.Equal(t, 1, *count, "u3 should still exist after second Cleanup")
 
 	// Test Cleanup with different model types
-	require.NoError(t, database.Database[*TestProduct](context.Background()).Cleanup())
+	require.NoError(t, database.Database[*TestItem](context.Background()).Cleanup())
 	require.NoError(t, database.Database[*TestCategory](context.Background()).Cleanup())
 }
 
@@ -95,7 +95,7 @@ func TestDatabaseHealth(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).Health())
 
 	// Test health check with different model types - should work for all models
-	require.NoError(t, database.Database[*TestProduct](context.Background()).Health())
+	require.NoError(t, database.Database[*TestItem](context.Background()).Health())
 	require.NoError(t, database.Database[*TestCategory](context.Background()).Health())
 }
 

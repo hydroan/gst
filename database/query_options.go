@@ -221,8 +221,8 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 
 		// If the query strings has multiple value(separated by ',')
 		// construct the 'WHERE' 'REGEXP' SQL statement
-		// eg: SELECT * FROM `assets` WHERE `category_level2_id` REGEXP '.*XS.*|.*NU.*'
-		//     SELECT count(*) FROM `assets` WHERE `category_level2_id` REGEXP '.*XS.*|.*NU.*'
+		// eg: SELECT * FROM `samples` WHERE `group_id` REGEXP '.*XS.*|.*NU.*'
+		//     SELECT count(*) FROM `samples` WHERE `group_id` REGEXP '.*XS.*|.*NU.*'
 		hasValidCondition := false
 		for k, v := range q {
 			items := strings.Split(v, ",")
@@ -267,8 +267,8 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 		}
 	} else {
 		// // Deprecated!
-		// // SELECT * FROM `assets` WHERE `assets`.`category_level2_id` = 'NU
-		// // SELECT count(*) FROM `assets` WHERE `assets`.`category_level2_id` = 'NU'
+		// // SELECT * FROM `samples` WHERE `samples`.`group_id` = 'NU
+		// // SELECT count(*) FROM `samples` WHERE `samples`.`group_id` = 'NU'
 		// db.db = db.db.Where(query)
 
 		// If the query string has multiple value(separated by ','),

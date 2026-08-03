@@ -239,19 +239,19 @@ func TestTransaction(t *testing.T) {
 
 	// Rollback: writes to different models roll back together.
 	errTest := errors.New("test error")
-	product := &TestProduct{Name: "sample", Price: 1}
+	item := &TestItem{Name: "sample", Score: 1}
 	err = database.Transaction(context.Background(), func(ctx context.Context) error {
 		require.NoError(t, database.Database[*TestUser](ctx).Create(ul...))
-		require.NoError(t, database.Database[*TestProduct](ctx).Create(product))
+		require.NoError(t, database.Database[*TestItem](ctx).Create(item))
 		return errTest
 	})
 	require.ErrorIs(t, err, errTest)
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 	require.Empty(t, users, "user writes should roll back")
-	products := make([]*TestProduct, 0)
-	require.NoError(t, database.Database[*TestProduct](context.Background()).List(&products))
-	require.Empty(t, products, "product writes should roll back in the same transaction")
+	items := make([]*TestItem, 0)
+	require.NoError(t, database.Database[*TestItem](context.Background()).List(&items))
+	require.Empty(t, items, "item writes should roll back in the same transaction")
 
 	// Panic: the underlying GORM transaction rolls back before the panic propagates.
 	require.PanicsWithValue(t, "transaction panic", func() {

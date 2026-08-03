@@ -404,31 +404,31 @@ func TestGenRunAppliesRouteIgnoresFromGstYAML(t *testing.T) {
 gen:
   routes:
     ignore:
-      /api/tickets: [GET]
+      /api/samples: [GET]
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(filepath.Join(projectDir, "model"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(projectDir, "model", "ticket.go"), []byte(`package model
+	if err := os.WriteFile(filepath.Join(projectDir, "model", "sample.go"), []byte(`package model
 
 import (
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 )
 
-type Ticket struct {
+type Sample struct {
 	model.Empty
 }
 
-type TicketListRsp struct{}
+type SampleListRsp struct{}
 
-func (Ticket) Design() {
-	dsl.Route("tickets", func() {
+func (Sample) Design() {
+	dsl.Route("samples", func() {
 		dsl.Create(func() {})
 		dsl.List(func() {
-			dsl.Result[*TicketListRsp]()
+			dsl.Result[*SampleListRsp]()
 		})
 	})
 }
@@ -446,11 +446,11 @@ func (Ticket) Design() {
 	}
 	// The kept action is registered.
 	if !strings.Contains(string(routerCode), "consts.Create") {
-		t.Errorf("router.go should register the tickets Create action:\n%s", routerCode)
+		t.Errorf("router.go should register the samples Create action:\n%s", routerCode)
 	}
 	// Business contract of gen.routes.ignore: the ignored route must not be
 	// registered.
 	if strings.Contains(string(routerCode), "consts.List") {
-		t.Errorf("router.go must not register the ignored tickets List action:\n%s", routerCode)
+		t.Errorf("router.go must not register the ignored samples List action:\n%s", routerCode)
 	}
 }

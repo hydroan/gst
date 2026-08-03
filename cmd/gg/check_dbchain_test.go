@@ -50,7 +50,7 @@ func passInlineWithOptions(ctx context.Context) bool {
 func exists(db any, id string) bool { return db != nil }
 `)
 	// A same-named non-gst package must not be treated as the framework database package.
-	writeCheckFile(t, filepath.Join(projectDir, "service", "order", "order.go"), `package order
+	writeCheckFile(t, filepath.Join(projectDir, "service", "record", "record.go"), `package record
 
 import (
 	"context"

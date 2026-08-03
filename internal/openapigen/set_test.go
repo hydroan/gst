@@ -935,8 +935,8 @@ func TestAddSchemaDocsForTypeSetsEnumOnSliceItemsWithoutFieldComment(t *testing.
 	}
 }
 
-// nestedBetOption is one nested payload item for schema decoration tests.
-type nestedBetOption struct {
+// nestedPayloadOption is one nested payload item for schema decoration tests.
+type nestedPayloadOption struct {
 	// Code is the option code.
 	Code string `json:"code"`
 	// Name is the option name.
@@ -948,7 +948,7 @@ type nestedPayloadReq struct {
 	// MaxAmount is the request level limit.
 	MaxAmount int64 `json:"max_amount"`
 	// Options is the full nested option collection.
-	Options []*nestedBetOption `json:"options"`
+	Options []*nestedPayloadOption `json:"options"`
 }
 
 func TestAddSchemaDocsForTypeDecoratesNestedStructFields(t *testing.T) {
@@ -1034,7 +1034,7 @@ type embeddedSchemeRow struct {
 type embeddedSchemeView struct {
 	*embeddedSchemeRow
 	// Options is the nested option collection of the row.
-	Options []*nestedBetOption `json:"options"`
+	Options []*nestedPayloadOption `json:"options"`
 }
 
 func TestAddSchemaDocsForTypeDecoratesEmbeddedStructFields(t *testing.T) {
@@ -1192,9 +1192,9 @@ func TestSchemaComponentName(t *testing.T) {
 		typName string
 		want    string
 	}{
-		{"model subpackage", "dice/model/play", "Customization", "play.Customization"},
+		{"model subpackage", "myproject/model/sample", "Record", "sample.Record"},
 		{"nested model subpackage", "github.com/hydroan/gst/internal/model/iam/user", "User", "iam.user.User"},
-		{"model root", "dice/model", "User", "User"},
+		{"model root", "myproject/model", "Item", "Item"},
 		{"non-model package", "github.com/hydroan/gst/module/mfa", "TOTPBind", "module.mfa.TOTPBind"},
 	}
 	for _, tt := range tests {
@@ -1213,10 +1213,10 @@ func TestOperationIDDerivesFromPath(t *testing.T) {
 		op   consts.HTTPVerb
 		want string
 	}{
-		{"/api/play/customizations/{id}", consts.Patch, "play_customizations_patch"},
+		{"/api/sample/records/{id}", consts.Patch, "sample_records_patch"},
 		{"/api/groups", consts.List, "groups_list"},
 		{"/api/hello-world", consts.Create, "hello_world_create"},
-		{"/api/groups/{group}/players", consts.List, "groups_players_list"},
+		{"/api/groups/{group}/items", consts.List, "groups_items_list"},
 	}
 	for _, tt := range tests {
 		if got := operationID(tt.path, tt.op); got != tt.want {
@@ -1241,7 +1241,7 @@ func TestSummaryCombinesVerbAndStructCommentFirstLine(t *testing.T) {
 
 	for name, typ := range types {
 		t.Run(name, func(t *testing.T) {
-			got := summary("/api/play/customizations", consts.Patch, typ, false)
+			got := summary("/api/sample/records", consts.Patch, typ, false)
 			if got != "Patch The human readable summary line" {
 				t.Fatalf("summary() = %q, want the verb plus the first comment line", got)
 			}
@@ -1292,7 +1292,7 @@ func TestDescriptionRemovesStructNameAndKeepsRemainingLines(t *testing.T) {
 
 	for name, typ := range types {
 		t.Run(name, func(t *testing.T) {
-			got := description("/api/play/customizations", consts.Patch, typ, false)
+			got := description("/api/sample/records", consts.Patch, typ, false)
 			if got != want {
 				t.Fatalf("description() = %q, want API-facing full struct comment", got)
 			}
@@ -1302,8 +1302,8 @@ func TestDescriptionRemovesStructNameAndKeepsRemainingLines(t *testing.T) {
 
 func TestSummaryFallsBackToPathSegments(t *testing.T) {
 	typ := reflect.TypeOf(&struct{ Name string }{})
-	got := summary("/api/play/customizations/{id}", consts.Patch, typ, false)
-	if got != "Patch play customizations" {
+	got := summary("/api/sample/records/{id}", consts.Patch, typ, false)
+	if got != "Patch sample records" {
 		t.Fatalf("summary() = %q, want the path segment fallback", got)
 	}
 }

@@ -19,14 +19,14 @@ type User9 struct {
 	Name string
 }
 
-// ReceiveRobot verifies that the default endpoint of a multi-word model name
-// is the pluralized snake_case form, e.g. "receive_robots".
-type ReceiveRobot struct {
+// SampleRecord verifies that the default endpoint of a multi-word model name
+// is the pluralized snake_case form, e.g. "sample_records".
+type SampleRecord struct {
 	Name string
 
 	pkgmodel.Empty
 }
 
-func (*ReceiveRobot) Design() {
+func (*SampleRecord) Design() {
 	Migrate()
 }

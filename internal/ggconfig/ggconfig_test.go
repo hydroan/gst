@@ -19,7 +19,7 @@ func TestParseRouteRule(t *testing.T) {
 			{"get /api/iam/admin/users", "GET", []string{"iam", "admin", "users"}},
 			{"GET /api/iam/admin/users/:id", "GET", []string{"iam", "admin", "users", ":id"}},
 			{"GET /api/iam/admin/users/{id}", "GET", []string{"iam", "admin", "users", ":id"}},
-			{"DELETE /tickets/", "DELETE", []string{"tickets"}},
+			{"DELETE /samples/", "DELETE", []string{"samples"}},
 		}
 		for _, tt := range tests {
 			rule, err := ParseRouteRule(tt.raw)

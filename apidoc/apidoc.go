@@ -23,14 +23,14 @@ type StructDoc struct {
 
 // EnumValue describes one declared constant of an enum-like named type.
 type EnumValue struct {
-	// Value is the constant literal as it appears in JSON, eg. "fixed_odds" or 2.
+	// Value is the constant literal as it appears in JSON, eg. "active" or 2.
 	Value any
 	// Comment is the doc comment of the constant.
 	Comment string
 }
 
 // EnumDoc holds the doc comment and declared values of an enum-like named
-// type, eg. `type PayoutRuleType string` with a const block of its values.
+// type, eg. `type SampleStatus string` with a const block of its values.
 type EnumDoc struct {
 	// Comment is the doc comment of the type itself.
 	Comment string

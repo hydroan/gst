@@ -141,10 +141,10 @@ func TestDefaultSummary(t *testing.T) {
 		{
 			name: "no comment falls back to resource path segments",
 			op: Operation{
-				Path: "/api/play/customizations/{id}",
+				Path: "/api/sample/records/{id}",
 				Verb: consts.Patch,
 			},
-			want: "Patch play customizations",
+			want: "Patch sample records",
 		},
 		{
 			name: "no comment with a trailing action segment does not repeat the action",
@@ -190,7 +190,7 @@ func TestDefaultDescription(t *testing.T) {
 
 	t.Run("falls back to the default summary without a comment", func(t *testing.T) {
 		op := Operation{
-			Path: "/api/play/customizations/{id}",
+			Path: "/api/sample/records/{id}",
 			Verb: consts.Patch,
 		}
 		if got := DefaultDescription(op); got != DefaultSummary(op) {

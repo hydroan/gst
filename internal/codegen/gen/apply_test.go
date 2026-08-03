@@ -534,7 +534,7 @@ func (c *configSetting) Create(ctx *types.ServiceContext, req *model.ConfigSetti
 			// in place, corrupting its return type and breaking the build. applyServiceMethod4
 			// must only rewrite the function whose name matches action.Phase.MethodName().
 			name: "does_not_rewrite_non_action_function_with_same_shape",
-			code: `package receiverobot
+			code: `package samplerecord
 
 import (
 	"helloworld/model/group"
@@ -544,25 +544,25 @@ import (
 )
 
 type Patcher struct {
-	service.Base[*group.ReceiveRobot, *group.ReceiveRobotPatchReq, *group.ReceiveRobotPatchRsp]
+	service.Base[*group.SampleRecord, *group.SampleRecordPatchReq, *group.SampleRecordPatchRsp]
 }
 
-func (r *Patcher) Patch(ctx *types.ServiceContext, req *group.ReceiveRobotPatchReq) (rsp *group.ReceiveRobotPatchRsp, err error) {
+func (r *Patcher) Patch(ctx *types.ServiceContext, req *group.SampleRecordPatchReq) (rsp *group.SampleRecordPatchRsp, err error) {
 	return rsp, nil
 }
 
-func (r *Patcher) validate(ctx *types.ServiceContext, req *group.ReceiveRobotPatchReq) (*group.ReceiveRobot, error) {
+func (r *Patcher) validate(ctx *types.ServiceContext, req *group.SampleRecordPatchReq) (*group.SampleRecord, error) {
 	return nil, nil
 }
 `,
 			action: &dsl.Action{
 				Enabled: true,
-				Payload: "*ReceiveRobotPatchReq",
-				Result:  "*ReceiveRobotPatchRsp",
+				Payload: "*SampleRecordPatchReq",
+				Result:  "*SampleRecordPatchRsp",
 				Phase:   consts.PHASE_PATCH,
 			},
-			servicePkgName: "receiverobot",
-			want: `package receiverobot
+			servicePkgName: "samplerecord",
+			want: `package samplerecord
 
 import (
 	"helloworld/model/group"
@@ -572,14 +572,14 @@ import (
 )
 
 type Patcher struct {
-	service.Base[*group.ReceiveRobot, *group.ReceiveRobotPatchReq, *group.ReceiveRobotPatchRsp]
+	service.Base[*group.SampleRecord, *group.SampleRecordPatchReq, *group.SampleRecordPatchRsp]
 }
 
-func (r *Patcher) Patch(ctx *types.ServiceContext, req *group.ReceiveRobotPatchReq) (rsp *group.ReceiveRobotPatchRsp, err error) {
+func (r *Patcher) Patch(ctx *types.ServiceContext, req *group.SampleRecordPatchReq) (rsp *group.SampleRecordPatchRsp, err error) {
 	return rsp, nil
 }
 
-func (r *Patcher) validate(ctx *types.ServiceContext, req *group.ReceiveRobotPatchReq) (*group.ReceiveRobot, error) {
+func (r *Patcher) validate(ctx *types.ServiceContext, req *group.SampleRecordPatchReq) (*group.SampleRecord, error) {
 	return nil, nil
 }
 `,

@@ -88,9 +88,9 @@ func cleanupTestData() {
 		panic(err)
 	}
 
-	products := make([]*TestProduct, 0)
-	_ = database.Database[*TestProduct](context.Background()).List(&products)
-	_ = database.Database[*TestProduct](context.Background()).Delete(products...)
+	items := make([]*TestItem, 0)
+	_ = database.Database[*TestItem](context.Background()).List(&items)
+	_ = database.Database[*TestItem](context.Background()).Delete(items...)
 
 	plainItems := make([]*TestPlainItem, 0)
 	_ = database.Database[*TestPlainItem](context.Background()).List(&plainItems)
@@ -172,16 +172,16 @@ type TestUser2 struct {
 func (t *TestUser2) Purge() bool          { return true }
 func (t *TestUser2) GetTableName() string { return "test_users" }
 
-type TestProduct struct {
+type TestItem struct {
 	Name        string  `json:"name"`
 	Description string  `json:"description"`
-	Price       float64 `json:"price"`
-	CategoryID  string  `json:"category_id"`
+	Score       float64 `json:"score"`
+	GroupID     string  `json:"group_id"`
 
 	model.Base
 }
 
-func (*TestProduct) Purge() bool { return true }
+func (*TestItem) Purge() bool { return true }
 
 type TestPlainItem struct {
 	Code          string `json:"code" gorm:"size:191"`
@@ -339,7 +339,7 @@ func TestMain(m *testing.M) {
 		Database: config.DBMySQL,
 		Register: func() {
 			model.Register[*TestUser]()
-			model.Register[*TestProduct]()
+			model.Register[*TestItem]()
 			model.Register[*TestPlainItem]()
 			model.Register[*TestUniqueItem]()
 			model.Register[*TestAutoItem]()

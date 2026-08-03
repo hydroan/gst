@@ -193,7 +193,7 @@ func packageHelper() string {
 	target := []byte(`package copytest
 
 import (
-	"dice/model/copytest"
+	"tmpapp/model/copytest"
 
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
@@ -222,7 +222,7 @@ func (c *Creator) CreateAfter(ctx *types.ServiceContext, req *copytest.CopyTest)
 		TargetPath:            "service/copytest/action.go",
 		Target:                target,
 		ModuleName:            "copytest",
-		TargetModelImportPath: "dice/model/copytest",
+		TargetModelImportPath: "tmpapp/model/copytest",
 	})
 	if err != nil {
 		t.Fatalf("mergeModuleServiceSource() error = %v", err)
@@ -298,7 +298,7 @@ func (l *ListingService) filterByOwner(ctx *types.ServiceContext, data *[]*model
 	target := []byte(`package copytest
 
 import (
-	"dice/model/copytest"
+	"tmpapp/model/copytest"
 
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
@@ -321,7 +321,7 @@ func (l *Lister) List(ctx *types.ServiceContext, req *copytest.CopyTest) (rsp *c
 		TargetPath:            "service/copytest/list.go",
 		Target:                target,
 		ModuleName:            "copytest",
-		TargetModelImportPath: "dice/model/copytest",
+		TargetModelImportPath: "tmpapp/model/copytest",
 	})
 	if err != nil {
 		t.Fatalf("mergeModuleServiceSource() error = %v", err)
@@ -368,7 +368,7 @@ func (s *BindingService) ListAfter(ctx *types.ServiceContext, data *[]*modelcopy
 	target := []byte(`package copytest
 
 import (
-	"dice/model/copytest"
+	"tmpapp/model/copytest"
 
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
@@ -389,7 +389,7 @@ func (b *Binding) ListAfter(ctx *types.ServiceContext, bindings *[]*copytest.Bin
 		TargetPath:            "service/copytest/binding.go",
 		Target:                target,
 		ModuleName:            "copytest",
-		TargetModelImportPath: "dice/model/copytest",
+		TargetModelImportPath: "tmpapp/model/copytest",
 	})
 	if err != nil {
 		t.Fatalf("mergeModuleServiceSource() error = %v", err)

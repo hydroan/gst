@@ -100,18 +100,18 @@ func TestDumpOrder(t *testing.T) {
 	})
 }
 
-// Article declares custom indexes through the Indexer capability while also
+// Sample declares custom indexes through the Indexer capability while also
 // carrying a plain struct tag column.
-type Article struct {
+type Sample struct {
 	Title string `json:"title"`
 	Tag   string `json:"tag"`
 
 	model.Base
 }
 
-func (*Article) GetTableName() string { return "articles" }
+func (*Sample) GetTableName() string { return "samples" }
 
-func (*Article) Indexes() []model.Index {
+func (*Sample) Indexes() []model.Index {
 	return []model.Index{
 		{Fields: []string{"Tag", "CreatedAt"}},
 		{Fields: []string{"Title"}, Unique: true},
@@ -123,19 +123,19 @@ func TestDumperCustomIndexes(t *testing.T) {
 	require.NoError(t, err)
 	defer dumper.Close()
 
-	schema, err := dumper.Dump(config.DBMySQL, &Article{})
+	schema, err := dumper.Dump(config.DBMySQL, &Sample{})
 	require.NoError(t, err)
-	require.Contains(t, schema, "CREATE TABLE `articles`")
-	require.Contains(t, schema, "idx_articles_tag_created_at")
-	require.Contains(t, schema, "uniq_articles_title")
+	require.Contains(t, schema, "CREATE TABLE `samples`")
+	require.Contains(t, schema, "idx_samples_tag_created_at")
+	require.Contains(t, schema, "uniq_samples_title")
 	// Index statements must come after the CREATE TABLE they belong to.
 	require.Less(t,
-		strings.Index(schema, "CREATE TABLE `articles`"),
-		strings.Index(schema, "idx_articles_tag_created_at"))
+		strings.Index(schema, "CREATE TABLE `samples`"),
+		strings.Index(schema, "idx_samples_tag_created_at"))
 
 	// The same plans render with dialect-specific quoting on postgres.
-	schema, err = dumper.Dump(config.DBPostgres, &Article{})
+	schema, err = dumper.Dump(config.DBPostgres, &Sample{})
 	require.NoError(t, err)
-	require.Contains(t, schema, "idx_articles_tag_created_at")
-	require.Contains(t, schema, "uniq_articles_title")
+	require.Contains(t, schema, "idx_samples_tag_created_at")
+	require.Contains(t, schema, "uniq_samples_title")
 }

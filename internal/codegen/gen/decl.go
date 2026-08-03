@@ -397,7 +397,7 @@ func serviceMethod4(recvName, modelPkgName, reqName, rspName string, phase const
 // serviceMethod5 generates an ast node that represents the declaration of below:
 // For example:
 //
-//	func (a *Importer) Import(ctx *types.ServiceContext, reader io.Reader) ([]*model.Asset, error) {\n}
+//	func (a *Importer) Import(ctx *types.ServiceContext, reader io.Reader) ([]*model.Sample, error) {\n}
 func serviceMethod5(recvName, modelName, modelPkgName string, _ consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{
@@ -461,7 +461,7 @@ func serviceMethod5(recvName, modelName, modelPkgName string, _ consts.Phase, ro
 // serviceMethod6 generates an ast node that represents the declaration of below:
 // For example:
 //
-//	func (a *Exporter) Export(ctx *types.ServiceContext, assets ...*model.Asset) ([]byte, error) {\n}
+//	func (a *Exporter) Export(ctx *types.ServiceContext, samples ...*model.Sample) ([]byte, error) {\n}
 func serviceMethod6(recvName, modelName, modelPkgName string, _ consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	paramName := pluralizeCli.Plural(strings.ToLower(modelName))
 

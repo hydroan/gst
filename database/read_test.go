@@ -130,8 +130,8 @@ func TestDatabaseList(t *testing.T) {
 	require.Len(t, users3, 3)
 
 	// Test List with different model types
-	products := make([]*TestProduct, 0)
-	require.NoError(t, database.Database[*TestProduct](context.Background()).List(&products))
+	items := make([]*TestItem, 0)
+	require.NoError(t, database.Database[*TestItem](context.Background()).List(&items))
 
 	// Test List with nil dest - should return error
 	err := database.Database[*TestUser](context.Background()).List(nil)
@@ -250,8 +250,8 @@ func TestDatabaseGet(t *testing.T) {
 	require.Equal(t, u2.ID, u.ID)
 
 	// Test Get with different model types
-	p := new(TestProduct)
-	require.ErrorIs(t, database.Database[*TestProduct](context.Background()).Get(p, "non-existent-id"), database.ErrRecordNotFound)
+	p := new(TestItem)
+	require.ErrorIs(t, database.Database[*TestItem](context.Background()).Get(p, "non-existent-id"), database.ErrRecordNotFound)
 	require.Empty(t, p.CreatedAt)
 	require.Empty(t, p.UpdatedAt)
 
@@ -324,8 +324,8 @@ func TestDatabaseFirst(t *testing.T) {
 	require.Equal(t, u2.Name, u.Name)
 
 	// Test First with different model types
-	p := new(TestProduct)
-	err := database.Database[*TestProduct](context.Background()).First(p)
+	p := new(TestItem)
+	err := database.Database[*TestItem](context.Background()).First(p)
 	// First may return error if no records exist, which is acceptable
 	if err != nil {
 		require.Contains(t, err.Error(), "record not found", "should return 'record not found' error when no records exist")
@@ -375,8 +375,8 @@ func TestDatabaseLast(t *testing.T) {
 	require.Equal(t, u2.Name, u.Name)
 
 	// Test Last with different model types
-	p := new(TestProduct)
-	err := database.Database[*TestProduct](context.Background()).Last(p)
+	p := new(TestItem)
+	err := database.Database[*TestItem](context.Background()).Last(p)
 	// Last may return error if no records exist, which is acceptable
 	if err != nil {
 		require.Contains(t, err.Error(), "record not found", "should return 'record not found' error when no records exist")
@@ -457,8 +457,8 @@ func TestDatabaseCount(t *testing.T) {
 	require.Equal(t, 2, *count)
 
 	// Test count with different model types
-	require.NoError(t, database.Database[*TestProduct](context.Background()).Count(count))
-	require.GreaterOrEqual(t, *count, 0, "product count should be non-negative")
+	require.NoError(t, database.Database[*TestItem](context.Background()).Count(count))
+	require.GreaterOrEqual(t, *count, 0, "item count should be non-negative")
 	require.NoError(t, database.Database[*TestCategory](context.Background()).Count(count))
 	require.GreaterOrEqual(t, *count, 0, "category count should be non-negative")
 

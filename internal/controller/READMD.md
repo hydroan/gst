@@ -515,7 +515,7 @@ mean "not filtering".
 
 Service code builds the same filters through the typed column references
 `gg gen` generates next to each model, for example
-`bet.BetOrderCols.Status.In(bet.OrderStatusPending)`: the column name and the
+`sample.RecordCols.Status.In(sample.RecordStatusPending)`: the column name and the
 value type are both checked by the compiler, so a renamed column or a wrong
 value type fails the build instead of the query. Code that cannot name a
 concrete model (generic helpers, framework internals) uses the

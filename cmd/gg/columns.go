@@ -383,7 +383,7 @@ func modelPkgPath(m *gen.ModelInfo) string {
 }
 
 // columnsFileName returns the generated file that belongs to a model source
-// file: model/bet/order.go becomes model/bet/order.gen.go.
+// file: model/sample/record.go becomes model/sample/record.gen.go.
 func columnsFileName(source string) string {
 	return strings.TrimSuffix(source, constants.ExtensionGo) + constants.SuffixGenGo
 }

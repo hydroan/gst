@@ -24,8 +24,8 @@ type column struct{}
 //
 // 	switch c.Param(consts.PARAM_ID) {
 // 	case "user":
-// 		// cs.Asset(c)
-// 		cs.GetColumns(c, "assets", columnUser)
+// 		// cs.Sample(c)
+// 		cs.GetColumns(c, "samples", columnUser)
 // 	default:
 // 		zap.S().Warn("unknow id: ", c.Param(consts.PARAM_ID))
 // 		ResponseJSON(c, CodeSuccess)
@@ -48,15 +48,15 @@ func (cs *column) GetColumns(c *gin.Context, tableName string, columns []string,
 
 // queryColumns only queries which distinct values each column has.
 //
-// select category_level2_id from assets group by category_level2_id;
-// +--------------------+
-// | category_level2_id |
-// +--------------------+
-// | BJ                 |
-// | NU                 |
-// | XS                 |
-// | ZJ                 |
-// +--------------------+
+// select group_id from samples group by group_id;
+// +----------+
+// | group_id |
+// +----------+
+// | BJ       |
+// | NU       |
+// | XS       |
+// | ZJ       |
+// +----------+
 //
 //nolint:unused,unparam
 func queryColumns(table string, columns []string, db ...*gorm.DB) (map[string][]string, error) {
@@ -201,33 +201,33 @@ func queryColumnsWithQuery(table string, columns []string, query map[string][]st
 // queryColumnsAndCount queries which distinct values each column has, together
 // with the number of records holding each value.
 //
-// select category_level2_id, count(*) as category_count from assets group by category_level2_id;
-// +--------------------+----------------+
-// | category_level2_id | category_count |
-// +--------------------+----------------+
-// | BJ                 |            110 |
-// | NU                 |            800 |
-// | XS                 |            328 |
-// | ZJ                 |            215 |
-// +--------------------+----------------+
+// select group_id, count(*) as group_count from samples group by group_id;
+// +----------+-------------+
+// | group_id | group_count |
+// +----------+-------------+
+// | BJ       |         110 |
+// | NU       |         800 |
+// | XS       |         328 |
+// | ZJ       |         215 |
+// +----------+-------------+
 //
-// select department_level2_id, count(*) as department_count from assets group by department_level2_id;
-// +-------------------------------------+------------------+
-// | department_level2_id                | department_count |
-// +-------------------------------------+------------------+
-// |                                     |             1236 |
-// | od-ea0ed19af82622a997edf6c2aab262bc |               28 |
-// | od-9011520298e3aca4f245e075dd873d02 |               10 |
-// | od-3a87018f46f9d37fa811503745fc0b05 |                5 |
-// | od-60e10a8929373b1ac0aff828dd5cacf8 |               30 |
-// | od-198eb3d20e4783518acee52b1bc48356 |               20 |
-// | od-ed452e84ca58c26719ea0ca8b8acecdd |                4 |
-// | od-1d7f4ac953b109f2a7e2a2366f5f315e |               72 |
-// | od-c6bbbc7f089b356cd45396e3443d1558 |                2 |
-// | od-39c14e77f3504a8ca05f3681e9d0470b |                3 |
-// | od-095e7e716c0a8262b3dad7888eb4776b |               42 |
-// | od-7e8d4fb875bed78400bc5bbca88eed0c |                1 |
-// +-------------------------------------+------------------+
+// select owner_id, count(*) as owner_count from samples group by owner_id;
+// +-------------------------------------+-------------+
+// | owner_id                            | owner_count |
+// +-------------------------------------+-------------+
+// |                                     |        1236 |
+// | id-ea0ed19af82622a997edf6c2aab262bc |          28 |
+// | id-9011520298e3aca4f245e075dd873d02 |          10 |
+// | id-3a87018f46f9d37fa811503745fc0b05 |           5 |
+// | id-60e10a8929373b1ac0aff828dd5cacf8 |          30 |
+// | id-198eb3d20e4783518acee52b1bc48356 |          20 |
+// | id-ed452e84ca58c26719ea0ca8b8acecdd |           4 |
+// | id-1d7f4ac953b109f2a7e2a2366f5f315e |          72 |
+// | id-c6bbbc7f089b356cd45396e3443d1558 |           2 |
+// | id-39c14e77f3504a8ca05f3681e9d0470b |           3 |
+// | id-095e7e716c0a8262b3dad7888eb4776b |          42 |
+// | id-7e8d4fb875bed78400bc5bbca88eed0c |           1 |
+// +-------------------------------------+-------------+
 //
 //nolint:unused,unparam
 func queryColumnsAndCount(table string, columns []string, db ...*gorm.DB) (columnResult, error) {

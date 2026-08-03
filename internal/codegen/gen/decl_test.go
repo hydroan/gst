@@ -407,10 +407,10 @@ func TestServiceMethod5(t *testing.T) {
 		{
 			name:         "dns",
 			recvName:     "a",
-			modelName:    "Asset",
+			modelName:    "Sample",
 			modelPkgName: "model",
 			phase:        consts.PHASE_IMPORT,
-			want:         "func (a *Importer) Import(ctx *types.ServiceContext, reader io.Reader) (assets []*model.Asset, err error) {\n}",
+			want:         "func (a *Importer) Import(ctx *types.ServiceContext, reader io.Reader) (samples []*model.Sample, err error) {\n}",
 		},
 	}
 	for _, tt := range tests {
@@ -441,10 +441,10 @@ func TestServiceMethod6(t *testing.T) {
 	}{
 		{
 			recvName:     "a",
-			modelName:    "Asset",
+			modelName:    "Sample",
 			modelPkgName: "model",
 			phase:        consts.PHASE_EXPORT,
-			want:         "func (a *Exporter) Export(ctx *types.ServiceContext, assets ...*model.Asset) (data []byte, err error) {\n}",
+			want:         "func (a *Exporter) Export(ctx *types.ServiceContext, samples ...*model.Sample) (data []byte, err error) {\n}",
 		},
 	}
 	for _, tt := range tests {

@@ -67,7 +67,7 @@ func Parse(file *ast.File, endpoint string) map[string]*Design {
 	for name, design := range m {
 		// Default endpoint is the pluralized snake_case form of the model name,
 		// matching the RESTful convention and the default table naming,
-		// e.g. "ReceiveRobot" becomes "receive_robots".
+		// e.g. "SampleRecord" becomes "sample_records".
 		if len(design.Endpoint) == 0 {
 			design.Endpoint = strcase.SnakeCase(pluralizeCli.Plural(name))
 		}

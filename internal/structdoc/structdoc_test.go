@@ -93,12 +93,12 @@ func TestParseSource(t *testing.T) {
 
 const enumSource = `package demo
 
-// PayoutRuleType is the payout rule of the special settlement.
-type PayoutRuleType string
+// SampleStatus is the status of the sample record.
+type SampleStatus string
 
 const (
-	PayoutRuleTypeFixedOdds   PayoutRuleType = "fixed_odds"   // payout with fixed odds
-	PayoutRuleTypeReturnStake PayoutRuleType = "return_stake" // return the stake only
+	SampleStatusActive   SampleStatus = "active"   // the record is active
+	SampleStatusArchived SampleStatus = "archived" // the record is archived
 )
 
 // Priority is an integer enum using iota.
@@ -121,7 +121,7 @@ const (
 )
 
 // Alias types must be skipped.
-type StatusAlias = PayoutRuleType
+type StatusAlias = SampleStatus
 `
 
 func TestParseSourceDocsEnums(t *testing.T) {
@@ -130,21 +130,21 @@ func TestParseSourceDocsEnums(t *testing.T) {
 		t.Fatalf("ParseSourceDocs() error = %v", err)
 	}
 
-	payout, ok := docs.Enums["PayoutRuleType"]
+	status, ok := docs.Enums["SampleStatus"]
 	if !ok {
-		t.Fatal("Enums[PayoutRuleType] missing")
+		t.Fatal("Enums[SampleStatus] missing")
 	}
-	if want := "PayoutRuleType is the payout rule of the special settlement."; payout.Comment != want {
-		t.Fatalf("payout.Comment = %q, want %q", payout.Comment, want)
+	if want := "SampleStatus is the status of the sample record."; status.Comment != want {
+		t.Fatalf("status.Comment = %q, want %q", status.Comment, want)
 	}
-	if len(payout.Values) != 2 {
-		t.Fatalf("payout.Values = %#v, want 2 values", payout.Values)
+	if len(status.Values) != 2 {
+		t.Fatalf("status.Values = %#v, want 2 values", status.Values)
 	}
-	if payout.Values[0].Value != "fixed_odds" || payout.Values[0].Comment != "payout with fixed odds" {
-		t.Fatalf("payout.Values[0] = %#v, want fixed_odds with its comment", payout.Values[0])
+	if status.Values[0].Value != "active" || status.Values[0].Comment != "the record is active" {
+		t.Fatalf("status.Values[0] = %#v, want active with its comment", status.Values[0])
 	}
-	if payout.Values[1].Value != "return_stake" {
-		t.Fatalf("payout.Values[1] = %#v, want return_stake", payout.Values[1])
+	if status.Values[1].Value != "archived" {
+		t.Fatalf("status.Values[1] = %#v, want archived", status.Values[1])
 	}
 
 	priority, ok := docs.Enums["Priority"]
