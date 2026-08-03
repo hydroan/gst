@@ -3,14 +3,14 @@ package model
 
 import (
 	"demo/model/config"
-	"demo/model/conversation"
+	"demo/model/record"
 
 	"github.com/hydroan/gst/model"
 )
 
 func init() {
 	model.Register[*config.File]()
-	model.Register[*conversation.Message]()
-	model.Register[*Conversation]()
+	model.Register[*record.Item]()
+	model.Register[*Record]()
 	model.Register[*TraceProbe]()
 }

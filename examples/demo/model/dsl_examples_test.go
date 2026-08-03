@@ -8,7 +8,7 @@ import (
 	"demo/model/common"
 	"demo/model/config"
 	configfile "demo/model/config/file"
-	"demo/model/conversation"
+	"demo/model/record"
 )
 
 type designer interface {
@@ -20,8 +20,8 @@ func TestDemoDSLModelsAreAvailable(t *testing.T) {
 		name  string
 		model designer
 	}{
-		{name: "conversation resource", model: rootmodel.Conversation{}},
-		{name: "message resource", model: conversation.Message{}},
+		{name: "record resource", model: rootmodel.Record{}},
+		{name: "item resource", model: record.Item{}},
 		{name: "search utility action", model: common.Search{}},
 		{name: "login public action", model: auth.Login{}},
 		{name: "config file resource", model: config.File{}},

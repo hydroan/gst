@@ -5,17 +5,17 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-// ConversationType identifies the content type handled by a conversation.
-type ConversationType string
+// RecordType identifies the content type handled by a record.
+type RecordType string
 
 const (
-	ConversationTypeChat  ConversationType = "chat"
-	ConversationTypeImage ConversationType = "image"
+	RecordTypeText  RecordType = "text"
+	RecordTypeImage RecordType = "image"
 )
 
-// Conversation demonstrates a database-backed resource with custom service hooks.
-type Conversation struct {
-	Type ConversationType `json:"type" query:"type"`
+// Record demonstrates a database-backed resource with custom service hooks.
+type Record struct {
+	Type RecordType `json:"type" query:"type"`
 
 	UserID string `json:"user_id" query:"user_id"`
 	Title  string `json:"title" query:"title"`
@@ -26,10 +26,10 @@ type Conversation struct {
 	model.Base
 }
 
-func (Conversation) Design() {
+func (Record) Design() {
 	Migrate()
-	Endpoint("conversations")
-	Param("conv")
+	Endpoint("records")
+	Param("rec")
 
 	Create(func() {
 		Service()
@@ -46,4 +46,4 @@ func (Conversation) Design() {
 	Get(func() {})
 }
 
-func (Conversation) Purge() bool { return true }
+func (Record) Purge() bool { return true }

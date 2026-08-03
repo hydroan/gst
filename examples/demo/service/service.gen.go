@@ -6,9 +6,9 @@ import (
 	"demo/service/common/search"
 	"demo/service/config/file"
 	"demo/service/config/file/encrypt"
-	"demo/service/conversation"
-	"demo/service/conversation/message"
 	"demo/service/ping"
+	"demo/service/record"
+	"demo/service/record/item"
 	"demo/service/trace_probe"
 
 	"github.com/hydroan/gst/service"
@@ -22,14 +22,14 @@ func init() {
 	service.Register[*file.Creator](consts.PHASE_CREATE, "config/files")
 	service.Register[*file.Updater](consts.PHASE_UPDATE, "config/files/:file")
 	service.Register[*file.Lister](consts.PHASE_LIST, "config/files")
-	service.Register[*message.Creator](consts.PHASE_CREATE, "conversations/:conv/messages")
-	service.Register[*message.Lister](consts.PHASE_LIST, "conversations/:conv/messages")
-	service.Register[*message.ManyDeleter](consts.PHASE_DELETE_MANY, "messages/batch")
-	service.Register[*conversation.Creator](consts.PHASE_CREATE, "conversations")
-	service.Register[*conversation.Deleter](consts.PHASE_DELETE, "conversations/:conv")
-	service.Register[*conversation.Patcher](consts.PHASE_PATCH, "conversations/:conv")
-	service.Register[*conversation.Lister](consts.PHASE_LIST, "conversations")
 	service.Register[*ping.Lister](consts.PHASE_LIST, "pings")
+	service.Register[*item.Creator](consts.PHASE_CREATE, "records/:rec/items")
+	service.Register[*item.Lister](consts.PHASE_LIST, "records/:rec/items")
+	service.Register[*item.ManyDeleter](consts.PHASE_DELETE_MANY, "items/batch")
+	service.Register[*record.Creator](consts.PHASE_CREATE, "records")
+	service.Register[*record.Deleter](consts.PHASE_DELETE, "records/:rec")
+	service.Register[*record.Patcher](consts.PHASE_PATCH, "records/:rec")
+	service.Register[*record.Lister](consts.PHASE_LIST, "records")
 	service.Register[*traceprobe.Creator](consts.PHASE_CREATE, "trace-probes")
 	service.Register[*traceprobe.Deleter](consts.PHASE_DELETE, "trace-probes/:trace_probe")
 	service.Register[*traceprobe.Updater](consts.PHASE_UPDATE, "trace-probes/:trace_probe")

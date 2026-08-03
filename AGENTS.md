@@ -156,7 +156,7 @@ README.md 面向使用 gst 框架的后端开发者，应保持简洁并聚焦�
 - 默认 CRUD 资源优先交给框架处理：在 `Design()` 中启用对应动作即可。如果没有额外业务逻辑，不声明 `Service()`。
 - 需要自定义业务逻辑时，在对应动作中声明 `Service()`，然后在同名 service 子目录中实现对应 phase 的 service 结构体。
 - 自定义接口必须为当前接口单独定义 `XXXReq`、`XXXRsp`，即使字段和其他接口完全相同也不要复用。请求和响应类型通过 `Payload[*XXXReq]()`、`Result[*XXXRsp]()` 绑定到 DSL。例外：List、Get 是 HTTP GET 接口，禁止声明 `Payload`，只定义并声明 `Result[*XXXRsp]()`，请求类型固定生成为 `*model.Empty`。
-- 同一资源的嵌套路由或额外动作使用 `Route(...)` 包裹，例如 `/config/files/encrypt`、`/messages/batch` 这类非默认 CRUD 路由。
+- 同一资源的嵌套路由或额外动作使用 `Route(...)` 包裹，例如 `/config/files/encrypt`、`/items/batch` 这类非默认 CRUD 路由。
 
 #### service 实现规则
 
@@ -169,7 +169,7 @@ README.md 面向使用 gst 框架的后端开发者，应保持简洁并聚焦�
 
 #### 常见接口模式
 
-- `model/conversation.go`：会话/对话类数据库资源 model，启用 CRUD，并通过 service hook 做当前用户过滤、返回字段补充、关联对象填充等逻辑。
+- `model/record.go`：普通数据库资源 model，启用 CRUD，并通过 service hook 做当前用户过滤、返回字段补充、关联对象填充等逻辑。
 - `model/common/common.go`：通用工具类接口，使用 `model.Empty` 定义非数据库动作，并为当前接口单独定义请求和响应。适合搜索结果去重、文件解析、批量转换等没有独立数据表的动作。
 - `model/auth/login.go`：登录跳转类公开接口，使用 `model.Empty` 定义动作模型，在 DSL 中声明 `Public()`，service 返回登录地址、token、回调结果等响应。
 - `model/config/namespace/file.go`：配置文件类数据库资源，同一个 model 可以同时提供默认资源路由和自定义嵌套路由；文件名、必填字段、文件大小、校验和等轻量逻辑放在 model hook。

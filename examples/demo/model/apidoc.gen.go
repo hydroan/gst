@@ -5,8 +5,8 @@ package model
 import "github.com/hydroan/gst/apidoc"
 
 func init() {
-	apidoc.Register("demo/model", "Conversation", apidoc.StructDoc{
-		Comment: "Conversation demonstrates a database-backed resource with custom service hooks.",
+	apidoc.Register("demo/model", "Record", apidoc.StructDoc{
+		Comment: "Record demonstrates a database-backed resource with custom service hooks.",
 		Fields: map[string]string{
 			"Username": "Username is returned to clients and is not stored in the database.",
 		},
@@ -44,16 +44,16 @@ func init() {
 	apidoc.Register("demo/model/config/file", "EncryptRsp", apidoc.StructDoc{
 		Comment: "EncryptRsp is the response returned after encrypting a configuration file.",
 	})
-	apidoc.Register("demo/model/conversation", "Message", apidoc.StructDoc{
-		Comment: "Message demonstrates a child resource with nested routes and batch actions.",
+	apidoc.Register("demo/model/record", "Item", apidoc.StructDoc{
+		Comment: "Item demonstrates a child resource with nested routes and batch actions.",
 	})
-	apidoc.Register("demo/model/conversation", "SearchSource", apidoc.StructDoc{
-		Comment: "SearchSource describes an external reference attached to a message.",
+	apidoc.Register("demo/model/record", "SearchSource", apidoc.StructDoc{
+		Comment: "SearchSource describes an external reference attached to an item.",
 	})
-	apidoc.RegisterEnum("demo/model", "ConversationType", apidoc.EnumDoc{
-		Comment: "ConversationType identifies the content type handled by a conversation.",
+	apidoc.RegisterEnum("demo/model", "RecordType", apidoc.EnumDoc{
+		Comment: "RecordType identifies the content type handled by a record.",
 		Values: []apidoc.EnumValue{
-			{Value: "chat"},
+			{Value: "text"},
 			{Value: "image"},
 		},
 	})
@@ -66,11 +66,11 @@ func init() {
 			{Value: "env"},
 		},
 	})
-	apidoc.RegisterEnum("demo/model/conversation", "MessageRole", apidoc.EnumDoc{
-		Comment: "MessageRole identifies who produced a message.",
+	apidoc.RegisterEnum("demo/model/record", "ItemKind", apidoc.EnumDoc{
+		Comment: "ItemKind identifies the kind of an item.",
 		Values: []apidoc.EnumValue{
-			{Value: "user"},
-			{Value: "assistant"},
+			{Value: "input"},
+			{Value: "output"},
 			{Value: "system"},
 		},
 	})

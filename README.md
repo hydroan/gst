@@ -95,18 +95,18 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-// Conversation is a database-backed resource.
-type Conversation struct {
+// Record is a database-backed resource.
+type Record struct {
 	UserID string `json:"user_id" schema:"user_id"`
 	Title  string `json:"title" schema:"title"`
 
 	model.Base
 }
 
-func (Conversation) Design() {
+func (Record) Design() {
 	Migrate()
-	Endpoint("conversations")
-	Param("conv")
+	Endpoint("records")
+	Param("rec")
 
 	Create(func() {
 		Service()
@@ -123,12 +123,12 @@ func (Conversation) Design() {
 
 这个模型会生成类似下面的路由：
 
-- `POST /api/conversations`
-- `PATCH /api/conversations/:conv`
-- `GET /api/conversations`
-- `GET /api/conversations/:conv`
+- `POST /api/records`
+- `PATCH /api/records/:rec`
+- `GET /api/records`
+- `GET /api/records/:rec`
 
-`Param("conv")` 控制单资源路由中的参数名。未声明 `Param(...)` 时，单资源路由默认
+`Param("rec")` 控制单资源路由中的参数名。未声明 `Param(...)` 时，单资源路由默认
 使用框架默认参数。
 
 需要自增整数主键的资源改用 `model.AutoBase`，字段和默认 hook 与 `model.Base`
@@ -188,7 +188,7 @@ func (Search) Design() {
 
 ### 路由和可见性
 
-- `Endpoint("conversations")` 定义默认资源路径。
+- `Endpoint("records")` 定义默认资源路径。
 - `Route("/config/files", func() {...})` 定义额外路径或完全自定义路径。
 - `Public()` 表示公开接口，不走认证中间件；默认不写则需要认证。
 - `Exact()` 表示当前 action 按声明路径原样注册，不追加默认的 `/:id`、`/batch` 等后缀。
@@ -312,7 +312,7 @@ Filters: []types.Filter{
 默认资源的 hook 示例：
 
 ```go
-package conversation
+package record
 
 import (
 	appmodel "github.com/example/myapp/model"
@@ -323,11 +323,11 @@ import (
 )
 
 type Creator struct {
-	service.Base[*appmodel.Conversation, *appmodel.Conversation, *appmodel.Conversation]
+	service.Base[*appmodel.Record, *appmodel.Record, *appmodel.Record]
 }
 
-func (c *Creator) CreateBefore(ctx *types.ServiceContext, conversation *appmodel.Conversation) error {
-	if conversation.Title == "" {
+func (c *Creator) CreateBefore(ctx *types.ServiceContext, record *appmodel.Record) error {
+	if record.Title == "" {
 		return errors.New("title is required")
 	}
 	return nil
@@ -368,7 +368,7 @@ func (d *Dedup) Create(ctx *types.ServiceContext, req *common.SearchDedupReq) (*
 查询和写库优先使用：
 
 ```go
-database.Database[*appmodel.Conversation](ctx)
+database.Database[*appmodel.Record](ctx)
 ```
 
 并按需要组合 `WithQuery`、`WithSelect`、`WithPagination`、`WithOrder`、
@@ -554,13 +554,13 @@ gen:
 
 - [应用入口](./examples/demo/main.go)
 - [模块注册](./examples/demo/module/module.go)
-- [资源模型：Conversation](./examples/demo/model/conversation.go)
-- [嵌套资源模型：Message](./examples/demo/model/conversation/message.go)
+- [资源模型：Record](./examples/demo/model/record.go)
+- [嵌套资源模型：Item](./examples/demo/model/record/item.go)
 - [配置文件资源模型：File](./examples/demo/model/config/file.go)
 - [公开动作模型：Login](./examples/demo/model/auth/login.go)
 - [自定义动作模型：搜索去重](./examples/demo/model/common/search.go)
 - [自定义动作模型：文件加密](./examples/demo/model/config/file/encrypt.go)
-- [资源 service hook](./examples/demo/service/conversation/create.go)
+- [资源 service hook](./examples/demo/service/record/create.go)
 - [自定义动作 service](./examples/demo/service/common/search/dedup.go)
 - [生成的路由注册](./examples/demo/router/router.gen.go)
 - [生成的 service 注册](./examples/demo/service/service.gen.go)

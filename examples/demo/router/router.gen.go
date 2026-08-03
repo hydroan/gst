@@ -7,7 +7,7 @@ import (
 	"demo/model/common"
 	"demo/model/config"
 	"demo/model/config/file"
-	"demo/model/conversation"
+	"demo/model/record"
 
 	"github.com/hydroan/gst/router"
 	"github.com/hydroan/gst/types/consts"
@@ -26,17 +26,17 @@ func Init() error {
 	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/files", &types.ControllerConfig[*config.File]{}, consts.List)
 	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/files/:file", &types.ControllerConfig[*config.File]{ParamName: "file"}, consts.Get)
 	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/namespaces/:namespace/files", &types.ControllerConfig[*config.File]{}, consts.List)
-	router.Register[*conversation.Message, *conversation.Message, *conversation.Message](router.Auth(), "conversations/:conv/messages", &types.ControllerConfig[*conversation.Message]{}, consts.Create)
-	router.Register[*conversation.Message, *conversation.Message, *conversation.Message](router.Auth(), "conversations/:conv/messages/:id", &types.ControllerConfig[*conversation.Message]{ParamName: "id"}, consts.Patch)
-	router.Register[*conversation.Message, *conversation.Message, *conversation.Message](router.Auth(), "conversations/:conv/messages", &types.ControllerConfig[*conversation.Message]{}, consts.List)
-	router.Register[*conversation.Message, *conversation.Message, *conversation.Message](router.Auth(), "conversations/:conv/messages/:id", &types.ControllerConfig[*conversation.Message]{ParamName: "id"}, consts.Get)
-	router.Register[*conversation.Message, *conversation.Message, *conversation.Message](router.Auth(), "messages/batch", &types.ControllerConfig[*conversation.Message]{}, consts.DeleteMany)
-	router.Register[*model.Conversation, *model.Conversation, *model.Conversation](router.Auth(), "conversations", &types.ControllerConfig[*model.Conversation]{}, consts.Create)
-	router.Register[*model.Conversation, *model.Conversation, *model.Conversation](router.Auth(), "conversations/:conv", &types.ControllerConfig[*model.Conversation]{ParamName: "conv"}, consts.Delete)
-	router.Register[*model.Conversation, *model.Conversation, *model.Conversation](router.Auth(), "conversations/:conv", &types.ControllerConfig[*model.Conversation]{ParamName: "conv"}, consts.Patch)
-	router.Register[*model.Conversation, *model.Conversation, *model.Conversation](router.Auth(), "conversations", &types.ControllerConfig[*model.Conversation]{}, consts.List)
-	router.Register[*model.Conversation, *model.Conversation, *model.Conversation](router.Auth(), "conversations/:conv", &types.ControllerConfig[*model.Conversation]{ParamName: "conv"}, consts.Get)
 	router.Register[*model.Ping, *gstmodel.Empty, *model.PingRsp](router.Pub(), "pings", &types.ControllerConfig[*model.Ping]{}, consts.List)
+	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "records/:rec/items", &types.ControllerConfig[*record.Item]{}, consts.Create)
+	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "records/:rec/items/:id", &types.ControllerConfig[*record.Item]{ParamName: "id"}, consts.Patch)
+	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "records/:rec/items", &types.ControllerConfig[*record.Item]{}, consts.List)
+	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "records/:rec/items/:id", &types.ControllerConfig[*record.Item]{ParamName: "id"}, consts.Get)
+	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "items/batch", &types.ControllerConfig[*record.Item]{}, consts.DeleteMany)
+	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "records", &types.ControllerConfig[*model.Record]{}, consts.Create)
+	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "records/:rec", &types.ControllerConfig[*model.Record]{ParamName: "rec"}, consts.Delete)
+	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "records/:rec", &types.ControllerConfig[*model.Record]{ParamName: "rec"}, consts.Patch)
+	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "records", &types.ControllerConfig[*model.Record]{}, consts.List)
+	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "records/:rec", &types.ControllerConfig[*model.Record]{ParamName: "rec"}, consts.Get)
 	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes", &types.ControllerConfig[*model.TraceProbe]{}, consts.Create)
 	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes/:trace_probe", &types.ControllerConfig[*model.TraceProbe]{ParamName: "trace_probe"}, consts.Delete)
 	router.Register[*model.TraceProbe, *model.TraceProbe, *model.TraceProbe](router.Auth(), "trace-probes/:trace_probe", &types.ControllerConfig[*model.TraceProbe]{ParamName: "trace_probe"}, consts.Update)
