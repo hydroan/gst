@@ -40,7 +40,7 @@ type sessionTestAccount struct {
 }
 
 func TestCurrentSessionGet(t *testing.T) {
-	setupSessionRedisCleanup(t)
+	clearSessionsAfterTest(t)
 
 	t.Run("get_current_session", func(t *testing.T) {
 		account := newSessionTestAccount(t)
@@ -188,7 +188,7 @@ func TestCurrentSessionGet(t *testing.T) {
 }
 
 func TestCurrentSessionDelete(t *testing.T) {
-	setupSessionRedisCleanup(t)
+	clearSessionsAfterTest(t)
 
 	t.Run("delete_current_session", func(t *testing.T) {
 		account := newSessionTestAccount(t)
@@ -218,7 +218,7 @@ func TestCurrentSessionDelete(t *testing.T) {
 }
 
 func TestSessionGet(t *testing.T) {
-	setupSessionRedisCleanup(t)
+	clearSessionsAfterTest(t)
 
 	t.Run("get_current_user_session_detail", func(t *testing.T) {
 		account := newSessionTestAccount(t)
@@ -299,7 +299,7 @@ func TestSessionGet(t *testing.T) {
 }
 
 func TestSessionList(t *testing.T) {
-	setupSessionRedisCleanup(t)
+	clearSessionsAfterTest(t)
 
 	t.Run("list_current_user_sessions", func(t *testing.T) {
 		account := newSessionTestAccount(t)
@@ -430,7 +430,7 @@ func TestSessionList(t *testing.T) {
 }
 
 func TestSessionUserStateRefresh(t *testing.T) {
-	setupSessionRedisCleanup(t)
+	clearSessionsAfterTest(t)
 
 	t.Run("returns_error_when_db_refresh_fails", func(t *testing.T) {
 		account := newSessionTestAccount(t)
@@ -452,7 +452,7 @@ func TestSessionUserStateRefresh(t *testing.T) {
 }
 
 func TestAdminSessionList(t *testing.T) {
-	setupSessionRedisCleanup(t)
+	clearSessionsAfterTest(t)
 
 	t.Run("list_all_sessions_grouped_by_user", func(t *testing.T) {
 		adminAccount := rootSessionTestAccount()
@@ -622,7 +622,7 @@ func TestAdminSessionList(t *testing.T) {
 }
 
 func TestAdminSessionGet(t *testing.T) {
-	setupSessionRedisCleanup(t)
+	clearSessionsAfterTest(t)
 
 	t.Run("get_other_user_session_detail", func(t *testing.T) {
 		adminSessionID := sessionLoginRoot(t)
@@ -682,7 +682,7 @@ func TestAdminSessionGet(t *testing.T) {
 }
 
 func TestAdminSessionDelete(t *testing.T) {
-	setupSessionRedisCleanup(t)
+	clearSessionsAfterTest(t)
 
 	t.Run("delete_other_user_session", func(t *testing.T) {
 		adminSessionID := sessionLoginRoot(t)
@@ -747,7 +747,7 @@ func TestAdminSessionDelete(t *testing.T) {
 }
 
 func TestAdminUserSessionList(t *testing.T) {
-	setupSessionRedisCleanup(t)
+	clearSessionsAfterTest(t)
 
 	t.Run("list_all_sessions_of_target_user", func(t *testing.T) {
 		adminSessionID := sessionLoginRoot(t)
@@ -909,7 +909,7 @@ func TestAdminUserSessionList(t *testing.T) {
 }
 
 func TestAdminUserSessionDelete(t *testing.T) {
-	setupSessionRedisCleanup(t)
+	clearSessionsAfterTest(t)
 
 	t.Run("delete_all_sessions_of_target_user", func(t *testing.T) {
 		adminSessionID := sessionLoginRoot(t)
@@ -1054,7 +1054,7 @@ func TestAdminUserSessionDelete(t *testing.T) {
 }
 
 func TestSessionDelete(t *testing.T) {
-	setupSessionRedisCleanup(t)
+	clearSessionsAfterTest(t)
 
 	t.Run("delete_non_current_session", func(t *testing.T) {
 		account := newSessionTestAccount(t)
@@ -1183,7 +1183,7 @@ func TestSessionDelete(t *testing.T) {
 }
 
 func TestSessionDeleteOthers(t *testing.T) {
-	setupSessionRedisCleanup(t)
+	clearSessionsAfterTest(t)
 
 	t.Run("delete_all_other_sessions", func(t *testing.T) {
 		account := newSessionTestAccount(t)
@@ -1259,7 +1259,7 @@ func TestSessionDeleteOthers(t *testing.T) {
 }
 
 func TestSessionDeleteAll(t *testing.T) {
-	setupSessionRedisCleanup(t)
+	clearSessionsAfterTest(t)
 
 	t.Run("delete_all_sessions", func(t *testing.T) {
 		account := newSessionTestAccount(t)
@@ -1324,14 +1324,6 @@ func TestSessionDeleteAll(t *testing.T) {
 		_, err = cli.Request(http.MethodGet, new(struct{}))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "401")
-	})
-}
-
-func setupSessionRedisCleanup(t *testing.T) {
-	t.Helper()
-
-	t.Cleanup(func() {
-		require.NoError(t, redis.RemovePrefix(context.Background(), modeliamsession.SessionNamespacePrefix))
 	})
 }
 
@@ -1517,4 +1509,17 @@ func loginSessionIDFromCookie(t *testing.T, username, password string) string {
 
 	require.FailNow(t, "session cookie not found")
 	return ""
+}
+
+// clearSessionsAfterTest drops every session key once the test is done. Session
+// state is global to the package: the admin list endpoints read the process
+// wide session and last-seen indexes, so one test's leftovers are another
+// test's phantom rows. The redis container is fresh per run, so this is about
+// isolating the tests from each other, not about earlier runs.
+func clearSessionsAfterTest(t *testing.T) {
+	t.Helper()
+
+	t.Cleanup(func() {
+		require.NoError(t, redis.RemovePrefix(context.Background(), modeliamsession.SessionNamespacePrefix))
+	})
 }

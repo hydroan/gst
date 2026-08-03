@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -20,19 +19,9 @@ const fixedModuleTestPort = 8000
 // declare its endpoints as package-level variables.
 var serverPort = mustFreeLocalPort()
 
-var redisNamespaceSeq atomic.Uint64
-
 // URL returns an absolute URL of the test server for path.
 func URL(path string) string {
 	return fmt.Sprintf("http://127.0.0.1:%d%s", serverPort, path)
-}
-
-// SetupRandomRedisNamespace configures Redis to use a namespace unique to this test process.
-func SetupRandomRedisNamespace() string {
-	seq := redisNamespaceSeq.Add(1)
-	namespace := fmt.Sprintf("gst-test:%d:%d", os.Getpid(), seq)
-	os.Setenv(config.REDIS_NAMESPACE, namespace)
-	return namespace
 }
 
 // listenOnFreePort configures the HTTP server to listen on the port URL

@@ -348,11 +348,9 @@ func TestAuthzMenu(t *testing.T) {
 				MenuIDs: []string{defaultMenuID},
 			})
 			require.NoError(t, err)
-			var defaultRoleID string
 			testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper()
 				require.NotEmpty(t, rsp.ID)
-				defaultRoleID = rsp.ID
 			})
 
 			missingRoleID := "missing_default_fallback_role"
@@ -369,14 +367,6 @@ func TestAuthzMenu(t *testing.T) {
 			require.NoError(t, rbacPolicy.SetRolePermissions(rbacCtx, tenant.Default, missingRoleID, []types.Permission{
 				{Object: "/api/authz/menus", Action: http.MethodGet},
 			}))
-			t.Cleanup(func() {
-				_ = database.Database[*authz.RoleBinding](context.Background()).WithoutHook().WithPurge().Delete(invalidRoleBinding)
-				_ = rbacPolicy.UnassignRole(context.Background(), tenant.Default, userID, missingRoleID)
-				_ = rbacPolicy.SetRolePermissions(context.Background(), tenant.Default, missingRoleID, nil)
-				_, _ = cliRole.Delete(defaultRoleID)
-				_, _ = cli.Delete(defaultMenuID)
-			})
-
 			var userMenuCli *client.Client
 			userMenuCli, err = client.New(menuAPI, client.WithCookie(&http.Cookie{
 				Name:  "session_id",
@@ -412,10 +402,6 @@ func TestAuthzMenu(t *testing.T) {
 				require.NotEmpty(t, rsp.ID)
 				tenantAMenuID = rsp.ID
 			})
-			t.Cleanup(func() {
-				_, _ = cli.Delete(tenantAMenuID)
-			})
-
 			resp, err = cli.Create(&authz.Menu{
 				ParentID: "root",
 				Label:    "Tenant B Menu",
@@ -431,10 +417,6 @@ func TestAuthzMenu(t *testing.T) {
 				require.NotEmpty(t, rsp.ID)
 				tenantBMenuID = rsp.ID
 			})
-			t.Cleanup(func() {
-				_, _ = cli.Delete(tenantBMenuID)
-			})
-
 			tenantARoleID := authzCreateTenantRole(t, tenantA, authzTestUsername("tenant_menu_a_role"), tenantAMenuID)
 			authzBindTenantRole(t, tenantA, tenantUserID, tenantARoleID)
 			tenantBRoleID := authzCreateTenantRole(t, tenantB, authzTestUsername("tenant_menu_b_role"), tenantBMenuID)
@@ -1100,9 +1082,6 @@ func authzCreateTenantRole(t *testing.T, tenantID, name string, menuIDs ...strin
 		MenuIDs: menuIDs,
 	}
 	require.NoError(t, database.Database[*authz.Role](ctx).Create(role))
-	t.Cleanup(func() {
-		_ = database.Database[*authz.Role](ctx).WithPurge().Delete(role)
-	})
 	return role.ID
 }
 
@@ -1115,9 +1094,6 @@ func authzBindTenantRole(t *testing.T, tenantID, subjectID, roleID string) {
 		RoleID:    roleID,
 	}
 	require.NoError(t, database.Database[*authz.RoleBinding](ctx).Create(roleBinding))
-	t.Cleanup(func() {
-		_ = database.Database[*authz.RoleBinding](ctx).WithPurge().Delete(roleBinding)
-	})
 }
 
 // authzGrantTenantPolicy sets the whole permission set of a role, because that

@@ -73,7 +73,6 @@ func TestReconcilePoliciesSkipsRulesNoRecordDerives(t *testing.T) {
 	require.NoError(t, rbac.RBAC().SetPermissionsForAuthenticated(ctx, []types.Permission{
 		{Object: "/api/reconcile/open", Action: "GET"},
 	}))
-	t.Cleanup(func() { _ = rbac.RBAC().SetPermissionsForAuthenticated(ctx, nil) })
 
 	report, err := authz.ReconcilePolicies(ctx)
 	require.NoError(t, err)
@@ -100,7 +99,6 @@ func TestReconcilePoliciesSkipsTheBuiltInAdminAssignment(t *testing.T) {
 	subject := util.UUID()
 
 	require.NoError(t, rbac.RBAC().AssignRole(ctx, tenant.Default, subject, consts.AUTHZ_ROLE_ADMIN))
-	t.Cleanup(func() { _ = rbac.RBAC().UnassignRole(ctx, tenant.Default, subject, consts.AUTHZ_ROLE_ADMIN) })
 
 	report, err := authz.ReconcilePolicies(ctx)
 	require.NoError(t, err)
@@ -120,9 +118,11 @@ func seedReconcilableBinding(t *testing.T) *modelauthz.RoleBinding {
 	binding := &modelauthz.RoleBinding{SubjectID: util.UUID(), RoleID: role.ID}
 	require.NoError(t, database.Database[*modelauthz.RoleBinding](ctx).Create(binding))
 
+	// The binding must go: this fixture deliberately drops its casbin rule, so
+	// a surviving record shows up as drift in the InSync assertions that follow.
+	// The role itself derives no expected policy, so it can stay.
 	t.Cleanup(func() {
 		_ = database.Database[*modelauthz.RoleBinding](ctx).Delete(binding)
-		_ = database.Database[*modelauthz.Role](ctx).Delete(role)
 	})
 	return binding
 }

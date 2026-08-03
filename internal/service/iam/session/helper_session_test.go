@@ -4,12 +4,10 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/config"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/internal/testutil"
@@ -19,10 +17,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	setupRedisOnce sync.Once
-	errSetupRedis  error
-)
+func TestMain(m *testing.M) {
+	testutil.Run(m, testutil.Server{Redis: true})
+}
 
 func TestNewSessionIDGeneratesOpaqueRandomToken(t *testing.T) {
 	first, err := serviceiamsession.NewSessionID()
@@ -51,7 +48,7 @@ func TestGetSessionUserStateTTL(t *testing.T) {
 }
 
 func TestTouchSession(t *testing.T) {
-	setupRedis(t)
+	clearSessions(t)
 
 	t.Run("throttles_stale_concurrent_snapshot", func(t *testing.T) {
 		now := time.Now().UTC()
@@ -90,7 +87,7 @@ func TestTouchSession(t *testing.T) {
 }
 
 func TestIndexSessionPrunesStaleLastSeenIndex(t *testing.T) {
-	setupRedis(t)
+	clearSessions(t)
 
 	previousExpiration := serviceiamsession.GetSessionExpiration()
 	serviceiamsession.SetSessionExpiration(time.Hour)
@@ -142,7 +139,7 @@ func TestSessionManagerCurrentUsesRequestCache(t *testing.T) {
 }
 
 func TestSessionManagerCurrentIgnoresMismatchedRequestCache(t *testing.T) {
-	setupRedis(t)
+	clearSessions(t)
 
 	now := time.Now().UTC()
 	cookieSessionID := "redis-session"
@@ -174,22 +171,13 @@ func TestSessionManagerCurrentIgnoresMismatchedRequestCache(t *testing.T) {
 	require.Equal(t, cookieSession, gotSession)
 }
 
-func setupRedis(t *testing.T) {
+// clearSessions drops the session keys left by earlier tests in this run. The
+// redis container is fresh per run, so this is only about keeping the tests in
+// this package from seeing each other's sessions.
+func clearSessions(t *testing.T) {
 	t.Helper()
 
-	setupRedisOnce.Do(func() {
-		t.Setenv(config.REDIS_ENABLED, "true")
-		testutil.SetupRandomRedisNamespace()
-		if errSetupRedis = config.Init(); errSetupRedis != nil {
-			return
-		}
-		errSetupRedis = redis.Init()
-	})
-	require.NoError(t, errSetupRedis)
 	require.NoError(t, redis.RemovePrefix(context.Background(), modeliamsession.SessionNamespacePrefix))
-	t.Cleanup(func() {
-		require.NoError(t, redis.RemovePrefix(context.Background(), modeliamsession.SessionNamespacePrefix))
-	})
 }
 
 func newSessionServiceContext(baseCtx context.Context, t *testing.T, sessionID string) *types.ServiceContext {

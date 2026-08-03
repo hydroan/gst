@@ -340,11 +340,4 @@ func grantLogmgmtTestPermissions(t *testing.T, userID string) {
 	allowed = decision.Allowed
 	require.NoError(t, err)
 	require.True(t, allowed)
-
-	t.Cleanup(func() {
-		require.NoError(t, perm.UnassignRole(context.Background(), tenant.Default, userID, logmgmtTestReaderRole))
-		require.NoError(t, perm.UnassignRole(context.Background(), tenant.Default, "root", logmgmtTestAdminRole))
-		require.NoError(t, perm.SetRolePermissions(context.Background(), tenant.Default, logmgmtTestReaderRole, nil))
-		require.NoError(t, perm.SetRolePermissions(context.Background(), tenant.Default, logmgmtTestAdminRole, nil))
-	})
 }

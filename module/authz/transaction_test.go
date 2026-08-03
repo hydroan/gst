@@ -71,7 +71,6 @@ func TestPolicyWritesRollBackWithTheTransaction(t *testing.T) {
 		require.NoError(t, rbac.RBAC().SetRolePermissions(ctx, tenant, role, []types.Permission{
 			{Object: object, Action: "GET"},
 		}))
-		t.Cleanup(func() { _ = rbac.RBAC().SetRolePermissions(ctx, tenant, role, nil) })
 
 		err := database.Transaction(ctx, func(ctx context.Context) error {
 			if err := rbac.RBAC().SetRolePermissions(ctx, tenant, role, []types.Permission{
@@ -103,7 +102,6 @@ func TestPolicyWritesCommitWithTheTransaction(t *testing.T) {
 		}
 		return rbac.RBAC().AssignRole(ctx, tenant, subject, role)
 	}))
-	t.Cleanup(func() { _ = rbac.RBAC().RemoveRole(ctx, tenant, role) })
 
 	require.Len(t, storedPolicies(t, "p", tenant, role), 1, "the grant should be stored")
 

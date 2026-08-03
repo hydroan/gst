@@ -152,6 +152,9 @@ func TestAccountLogout(t *testing.T) {
 		brokenIndexUser.SessionID = accountLoginUser(t, &brokenIndexUser, brokenIndexUser.Password)
 
 		userSessionKey := modeliamsession.SessionUserKey(brokenIndexUser.UserID)
+		// This case deliberately corrupts the user session index below. Repair
+		// it afterwards: a string left where a zset belongs makes every later
+		// read of that key fail, and nothing else clears it.
 		t.Cleanup(func() {
 			require.NoError(t, redis.Del(context.Background(), userSessionKey, modeliamsession.SessionIDKey(brokenIndexUser.SessionID)))
 			require.NoError(t, redis.ZRem(context.Background(), modeliamsession.SessionAllKey(), brokenIndexUser.SessionID))
@@ -382,6 +385,8 @@ func TestAccountResetPassword(t *testing.T) {
 		brokenSessionID := accountLoginUser(t, &brokenIndexVictim, brokenIndexVictim.Password)
 
 		userSessionKey := modeliamsession.SessionUserKey(brokenIndexVictim.UserID)
+		// See the note in TestAccountLogout: the corrupted index has to be
+		// repaired here, nothing else clears it.
 		t.Cleanup(func() {
 			require.NoError(t, redis.Del(context.Background(), userSessionKey, modeliamsession.SessionIDKey(brokenSessionID)))
 			require.NoError(t, redis.ZRem(context.Background(), modeliamsession.SessionAllKey(), brokenSessionID))

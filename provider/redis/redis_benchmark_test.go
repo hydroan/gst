@@ -4,21 +4,16 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/hydroan/gst/bootstrap"
-	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/provider/redis"
-	"github.com/hydroan/gst/util"
 )
 
-func BenchmarkRedis(b *testing.B) {
-	b.Setenv(config.REDIS_ADDR, "127.0.0.1:6378")
-	b.Setenv(config.REDIS_PASSWORD, "password123")
-	b.Setenv(config.REDIS_ENABLED, "true")
-	b.Setenv(config.LOGGER_FILE, "/tmp/test.log")
-	b.Setenv(config.REDIS_EXPIRATION, "8h")
-	util.RunOrDie(bootstrap.Bootstrap)
+func TestMain(m *testing.M) {
+	testutil.Run(m, testutil.Server{Redis: true})
+}
 
+func BenchmarkRedis(b *testing.B) {
 	groups := make([]*Group, 0, 1000)
 	for i := range 1000 {
 		groups = append(groups, &Group{

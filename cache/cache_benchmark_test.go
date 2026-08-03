@@ -2,11 +2,9 @@ package cache_test
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"testing"
 
-	"github.com/hydroan/gst/cache"
 	"github.com/hydroan/gst/cache/bigcache"
 	"github.com/hydroan/gst/cache/ccache"
 	"github.com/hydroan/gst/cache/cmap"
@@ -17,11 +15,10 @@ import (
 	"github.com/hydroan/gst/cache/lrue"
 	"github.com/hydroan/gst/cache/ristretto"
 	"github.com/hydroan/gst/cache/smap"
-	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/logger/zap"
-	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/provider/memcached"
 	"github.com/hydroan/gst/provider/redis"
+	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 )
 
@@ -30,26 +27,8 @@ type User struct {
 	model.Base
 }
 
-func init() {
-	os.Setenv(config.REDIS_ENABLED, "true")
-	os.Setenv(config.MEMCACHED_ENABLED, "false")
-	os.Setenv(config.REDIS_ADDR, "127.0.0.1:6379")
-	os.Setenv(config.REDIS_PASSWORD, "password123")
-	if err := config.Init(); err != nil {
-		panic(err)
-	}
-	if err := zap.Init(); err != nil {
-		panic(err)
-	}
-	if err := redis.Init(); err != nil {
-		panic(err)
-	}
-	if err := memcached.Init(); err != nil {
-		panic(err)
-	}
-	if err := cache.Init(); err != nil {
-		panic(err)
-	}
+func TestMain(m *testing.M) {
+	testutil.Run(m, testutil.Server{Redis: true})
 }
 
 func BenchmarkInt(b *testing.B) {

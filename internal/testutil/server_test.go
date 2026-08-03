@@ -24,15 +24,3 @@ func TestListenOnFreePortConfiguresLocalEphemeralPort(t *testing.T) {
 func TestURLTargetsTheTestServerPort(t *testing.T) {
 	require.Equal(t, fmt.Sprintf("http://127.0.0.1:%d/api/samples", serverPort), URL("/api/samples"))
 }
-
-func TestSetupRandomRedisNamespaceConfiguresUniqueNamespace(t *testing.T) {
-	t.Setenv(config.REDIS_NAMESPACE, "gst")
-
-	namespace1 := SetupRandomRedisNamespace()
-	namespace2 := SetupRandomRedisNamespace()
-
-	require.NotEmpty(t, namespace1)
-	require.NotEmpty(t, namespace2)
-	require.NotEqual(t, namespace1, namespace2)
-	require.Equal(t, namespace2, os.Getenv(config.REDIS_NAMESPACE))
-}
