@@ -14,8 +14,6 @@ import (
 )
 
 var (
-	addr = "0.0.0.0:12345"
-
 	Bye   = tunnel.NewCmd("bye", 1000)
 	Hello = tunnel.NewCmd("hello", 1001)
 )
@@ -39,26 +37,29 @@ var (
 func TestSession(t *testing.T) {
 	t.Setenv(config.DATABASE_AUTO_MIGRATE, "true")
 	require.NoError(t, bootstrap.Bootstrap())
-	readyCh := make(chan struct{}, 1)
+	// The listener picks its own port and hands the address over, so parallel
+	// test binaries never contend for one, and the client cannot dial before
+	// the listener exists.
+	addrCh := make(chan string, 1)
 	doneCh := make(chan struct{}, 1)
 	errCh := make(chan error, 1)
 
-	go server(readyCh, errCh)
-	client(t, readyCh, doneCh)
+	go server(addrCh, errCh)
+	client(t, addrCh, doneCh)
 	<-doneCh
 	require.NoError(t, <-errCh)
 }
 
-func server(readyCh chan<- struct{}, errCh chan<- error) {
-	l, err := net.Listen("tcp", addr)
+func server(addrCh chan<- string, errCh chan<- error) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		readyCh <- struct{}{}
+		addrCh <- ""
 		errCh <- err
 		return
 	}
 	defer l.Close()
 
-	readyCh <- struct{}{}
+	addrCh <- l.Addr().String()
 
 	conn, err := l.Accept()
 	if err != nil {
@@ -114,9 +115,10 @@ func server(readyCh chan<- struct{}, errCh chan<- error) {
 	}
 }
 
-func client(t *testing.T, readyCh <-chan struct{}, doneCh chan<- struct{}) {
+func client(t *testing.T, addrCh <-chan string, doneCh chan<- struct{}) {
 	t.Helper()
-	<-readyCh
+	addr := <-addrCh
+	require.NotEmpty(t, addr, "listener failed to start")
 
 	conn, err := net.Dial("tcp", addr)
 	require.NoError(t, err)
