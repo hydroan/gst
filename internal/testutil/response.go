@@ -4,17 +4,11 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/stretchr/testify/require"
 )
-
-// ListResponse is the envelope a list endpoint answers with, for tests that
-// assert on the items and the total.
-type ListResponse[T any] struct {
-	Items []T `json:"items"`
-	Total int `json:"total"`
-}
 
 // RequireResp asserts that resp carries a successful envelope and hands the
 // decoded payload to checkFn.
@@ -31,5 +25,20 @@ func RequireResp[RSP any](t *testing.T, resp *client.Resp, checkFn func(t *testi
 	require.NoError(t, json.Unmarshal(resp.Data, &rsp), "response data: %s", string(resp.Data))
 	if checkFn != nil {
 		checkFn(t, rsp)
+	}
+}
+
+// RequireError asserts that err is a server-side rejection with the given
+// HTTP status code and that the business message contains every msgContains
+// entry.
+func RequireError(t *testing.T, err error, statusCode int, msgContains ...string) {
+	t.Helper()
+
+	require.Error(t, err)
+	var respErr *client.Error
+	require.True(t, errors.As(err, &respErr), "not a server rejection: %v", err)
+	require.Equal(t, statusCode, respErr.StatusCode, "unexpected rejection: %v", respErr)
+	for _, want := range msgContains {
+		require.Contains(t, respErr.Msg, want, "unexpected rejection: %v", respErr)
 	}
 }

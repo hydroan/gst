@@ -6,7 +6,7 @@
 // once the tests are done. Nothing has to be installed on the machine running
 // the tests beyond a container runtime.
 //
-//	var pingAPI = testutil.URL("/api/ping")
+//	var baseURL = testutil.URL("")
 //
 //	func TestMain(m *testing.M) {
 //		testutil.Run(m, testutil.Server{
@@ -15,6 +15,19 @@
 //			Seed:     func() { util.RunOrDie(router.Init) },
 //		})
 //	}
+//
+//	func TestPing(t *testing.T) {
+//		cli, err := client.New(baseURL)
+//		require.NoError(t, err)
+//
+//		rsp, err := client.Get[model.PingRsp](cli, "/api/pings")
+//		require.NoError(t, err)
+//		require.NotNil(t, rsp)
+//	}
+//
+// A login is a plain client.Post: the client's cookie jar holds the session
+// cookie, so every later request through the same client is authenticated.
+// Rejections are asserted with RequireError.
 //
 // This package forwards to the framework-internal implementation and adds no
 // behavior of its own.
@@ -27,13 +40,8 @@ import (
 	testutil "github.com/hydroan/gst/internal/testutil"
 )
 
-type (
-	// Server declares what a test package needs before its tests can run.
-	Server = testutil.Server
-
-	// ListResponse is the envelope a list endpoint answers with.
-	ListResponse[T any] = testutil.ListResponse[T]
-)
+// Server declares what a test package needs before its tests can run.
+type Server = testutil.Server
 
 // Run prepares what s declares, starts the test server, runs the tests and
 // releases everything afterwards. It is the whole body of a test package's
@@ -54,4 +62,13 @@ func RequireResp[RSP any](t *testing.T, resp *client.Resp, checkFn func(t *testi
 	t.Helper()
 
 	testutil.RequireResp(t, resp, checkFn)
+}
+
+// RequireError asserts that err is a server-side rejection with the given
+// HTTP status code and that the business message contains every msgContains
+// entry.
+func RequireError(t *testing.T, err error, statusCode int, msgContains ...string) {
+	t.Helper()
+
+	testutil.RequireError(t, err, statusCode, msgContains...)
 }

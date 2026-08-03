@@ -1,11 +1,10 @@
 package client_test
 
 import (
-	"encoding/json"
-	"fmt"
 	"net/http"
-	"net/http/httptest"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/internal/testutil"
@@ -13,600 +12,172 @@ import (
 	"github.com/hydroan/gst/router"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	addr2 = testutil.URL("/api/test-user/")
-
-	id1     = "user1"
-	id2     = "user2"
-	id3     = "user3"
-	id4     = "user4"
-	id5     = "user5"
-	name1   = id1
-	name2   = id2
-	name3   = id3
-	name4   = id4
-	name5   = id5
-	email1  = "user1@gmail.com"
-	email2  = "user2@gmail.com"
-	email3  = "user3@gmail.com"
-	email4  = "user4@gmail.com"
-	email5  = "user5@gmail.com"
-	avatar1 = "avatar1"
-	avatar2 = "avatar2"
-	avatar3 = "avatar3"
-	avatar4 = "avatar4"
-	avatar5 = "avatar5"
-
-	name1Modified   = id1 + "_modified"
-	email1Modified  = email1 + "_modified"
-	avatar1Modified = avatar1 + "_modified"
-
-	avatar2Modified = avatar2 + "_modified"
-
-	user1 = User{Name: name1, Email: email1, Avatar: avatar1, Base: model.Base{ID: id1}}
-	user2 = User{Name: name2, Email: email2, Avatar: avatar2, Base: model.Base{ID: id2}}
-	user3 = User{Name: name3, Email: email3, Avatar: avatar3, Base: model.Base{ID: id3}}
-	user4 = User{Name: name4, Email: email4, Avatar: avatar4, Base: model.Base{ID: id4}}
-	user5 = User{Name: name5, Email: email5, Avatar: avatar5, Base: model.Base{ID: id5}}
-)
-
-func TestMain(m *testing.M) {
-	testutil.Run(m, testutil.Server{
-		Register: func() { model.Register[*User]() },
-		Seed: func() {
-			router.Register[*User, *User, *User](router.Auth(), "test-user", nil, consts.Create)
-			router.Register[*User, *User, *User](router.Auth(), "test-user/:id", &types.ControllerConfig[*User]{ParamName: "id"}, consts.Delete)
-			router.Register[*User, *User, *User](router.Auth(), "test-user/:id", &types.ControllerConfig[*User]{ParamName: "id"}, consts.Update)
-			router.Register[*User, *User, *User](router.Auth(), "test-user/:id", &types.ControllerConfig[*User]{ParamName: "id"}, consts.Patch)
-			router.Register[*User, *User, *User](router.Auth(), "test-user", nil, consts.List)
-			router.Register[*User, *User, *User](router.Auth(), "test-user/:id", &types.ControllerConfig[*User]{ParamName: "id"}, consts.Get)
-			router.Register[*User, *User, *User](router.Auth(), "test-user/batch", nil, consts.CreateMany)
-			router.Register[*User, *User, *User](router.Auth(), "test-user/batch", nil, consts.DeleteMany)
-			router.Register[*User, *User, *User](router.Auth(), "test-user/batch", nil, consts.UpdateMany)
-			router.Register[*User, *User, *User](router.Auth(), "test-user/batch", nil, consts.PatchMany)
-		},
-	})
-}
-
-func Test_Client(t *testing.T) {
-	cli, err := client.New(addr2, client.WithQueryPagination(1, 2))
-	require.NoError(t, err)
-	fmt.Println(cli.QueryString())
-	fmt.Println(cli.RequestURL())
-
-	_, err = cli.Create(user1)
-	require.NoError(t, err)
-	_, err = cli.Create(user2)
-	require.NoError(t, err)
-	_, err = cli.Create(user3)
-	require.NoError(t, err)
-	_, err = cli.Create(user4)
-	require.NoError(t, err)
-	_, err = cli.Create(user5)
-	require.NoError(t, err)
-
-	users := make([]User, 0)
-	total := new(int)
-	user := new(User)
-
-	// test List
-	t.Run("list", func(t *testing.T) {
-		resp, err := cli.List(&users, total)
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.NotEmpty(t, resp.TraceID)
-		require.Len(t, users, 2)
-		require.Equal(t, 5, *total)
-	})
-	// test Get
-	t.Run("get", func(t *testing.T) {
-		resp, err := cli.Get(id1, user)
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.NotEmpty(t, resp.TraceID)
-		require.Equal(t, id1, user.ID)
-		require.Equal(t, name1, user.Name)
-		require.Equal(t, email1, user.Email)
-		require.Equal(t, avatar1, user.Avatar)
-
-		resp, err = cli.Get(id2, user)
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.NotEmpty(t, resp.TraceID)
-		require.Equal(t, id2, user.ID)
-		require.Equal(t, name2, user.Name)
-		require.Equal(t, email2, user.Email)
-		require.Equal(t, avatar2, user.Avatar)
-
-		resp, err = cli.Get(id3, user)
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.NotEmpty(t, resp.TraceID)
-		require.Equal(t, id3, user.ID)
-		require.Equal(t, name3, user.Name)
-		require.Equal(t, email3, user.Email)
-		require.Equal(t, avatar3, user.Avatar)
-
-		resp, err = cli.Get(id4, user)
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.NotEmpty(t, resp.TraceID)
-		require.Equal(t, id4, user.ID)
-		require.Equal(t, name4, user.Name)
-		require.Equal(t, email4, user.Email)
-		require.Equal(t, avatar4, user.Avatar)
-
-		resp, err = cli.Get(id5, user)
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.NotEmpty(t, resp.TraceID)
-		require.Equal(t, id5, user.ID)
-		require.Equal(t, name5, user.Name)
-		require.Equal(t, email5, user.Email)
-		require.Equal(t, avatar5, user.Avatar)
-	})
-
-	// Test Update
-	t.Run("update", func(t *testing.T) {
-		resp, err := cli.Update(id1, &User{Name: name1Modified, Email: email1Modified, Base: model.Base{ID: id1}})
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.NotEmpty(t, resp.TraceID)
-
-		resp, err = cli.Get(id1, user)
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.NotEmpty(t, resp.TraceID)
-		require.Equal(t, id1, user.ID)
-		require.Equal(t, name1Modified, user.Name)
-		require.Equal(t, email1Modified, user.Email)
-		require.Empty(t, user.Avatar)
-	})
-
-	// Test Patch
-	t.Run("patch", func(t *testing.T) {
-		resp, err := cli.Patch(id1, &User{Avatar: avatar1Modified, Base: model.Base{ID: id1}})
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.NotEmpty(t, resp.TraceID)
-
-		resp, err = cli.Get(id1, user)
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.NotEmpty(t, resp.TraceID)
-		require.Equal(t, id1, user.ID)
-		require.Equal(t, name1Modified, user.Name)
-		require.Equal(t, email1Modified, user.Email)
-		require.Equal(t, avatar1Modified, user.Avatar)
-
-		resp, err = cli.Patch(id1, &User{Name: name1, Base: model.Base{ID: id1}})
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.NotEmpty(t, resp.TraceID)
-
-		resp, err = cli.Get(id1, user)
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.NotEmpty(t, resp.TraceID)
-		require.Equal(t, id1, user.ID)
-		require.Equal(t, name1, user.Name)
-		require.Equal(t, email1Modified, user.Email)
-		require.Equal(t, avatar1Modified, user.Avatar)
-
-		resp, err = cli.Patch(id1, &User{Email: email1, Avatar: avatar1, Base: model.Base{ID: id1}})
-		require.NotNil(t, resp)
-		require.NotEmpty(t, resp.TraceID)
-		require.NoError(t, err)
-		resp, err = cli.Get(id1, user)
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.NotEmpty(t, resp.TraceID)
-		require.Equal(t, id1, user.ID)
-		require.Equal(t, name1, user.Name)
-		require.Equal(t, email1, user.Email)
-		require.Equal(t, avatar1, user.Avatar)
-	})
-
-	// Test CreateMany
-	t.Run("create_many", func(t *testing.T) {
-		cli, err := client.New(addr2)
-		require.NoError(t, err)
-		items := make([]User, 0)
-		total := 0
-
-		// 1. delete all resources.
-		_, err = cli.DeleteMany([]string{id1, id2, id3, id4, id5})
-		require.NoError(t, err)
-		_, err = cli.CreateMany(user1)
-		require.ErrorIs(t, err, client.ErrNotStructSlice)
-
-		// 2.check the number of resources after create.
-		_, err = cli.List(&items, &total)
-		require.NoError(t, err)
-		require.Empty(t, items)
-		require.Equal(t, 0, total)
-
-		// 3.create resources.
-		resp, err := cli.CreateMany([]User{user1, user2, user3, user4, user5})
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.NotEmpty(t, resp.TraceID)
-
-		// 4.check the number of resources after create.
-		_, err = cli.List(&items, &total)
-		require.NoError(t, err)
-		require.Len(t, items, 5)
-		require.Equal(t, 5, total)
-	})
-
-	// Test DeleteMany
-	t.Run("delete_many", func(t *testing.T) {
-		cli, err := client.New(addr2)
-		require.NoError(t, err)
-		items := make([]User, 0)
-		total := 0
-
-		// 1.create resources from a clean slate: UpdateMany cannot create, so
-		// drop the fixed-id rows and recreate them explicitly.
-		_, err = cli.DeleteMany([]string{id1, id2, id3, id4, id5})
-		require.NoError(t, err)
-		_, err = cli.CreateMany([]User{user1, user2, user3, user4, user5})
-		require.NoError(t, err)
-
-		// 2.check the number of resources after create.
-		_, err = cli.List(&items, &total)
-		require.NoError(t, err)
-		require.Len(t, items, 5)
-		require.Equal(t, 5, total)
-
-		// 3.delete resources
-		resp, err := cli.DeleteMany([]string{id1, id2, id3, id4, id5})
-		require.NoError(t, err)
-		_ = resp
-		// require.NotNil(t, resp)
-		// require.NotEmpty(t, resp.TraceID)
-		_, err = cli.DeleteMany([]int{1})
-		require.ErrorIs(t, err, client.ErrNotStringSlice)
-
-		// 4.check the number of resources after delete
-		_, err = cli.List(&items, &total)
-		require.NoError(t, err)
-		require.Empty(t, items)
-		require.Equal(t, 0, total)
-	})
-
-	// Test UpdateMany
-	t.Run("update_many", func(t *testing.T) {
-		cli, err := client.New(addr2)
-		require.NoError(t, err)
-
-		// 1.delete all resources
-		_, err = cli.DeleteMany([]string{id1, id2, id3, id4, id5})
-		require.NoError(t, err)
-
-		// 2.creat all resources
-		_, err = cli.CreateMany([]User{user1, user2, user3, user4, user5})
-		require.NoError(t, err)
-
-		// u1 only modified email
-		u1 := user1
-		u1.Email = email1Modified
-		// u2 only modified avator
-		u2 := user2
-		u2.Avatar = avatar2Modified
-		resp, err := cli.UpdateMany([]User{u1, u2})
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.NotEmpty(t, resp.TraceID)
-
-		u := new(User)
-		_, err = cli.Get(id1, u)
-		require.NoError(t, err)
-		require.Equal(t, u.Name, user1.Name)
-		require.Equal(t, u.Email, email1Modified)
-		require.Equal(t, u.Avatar, user1.Avatar)
-
-		_, err = cli.Get(id2, u)
-		require.NoError(t, err)
-		require.Equal(t, u.Name, user2.Name)
-		require.Equal(t, u.Email, user2.Email)
-		require.Equal(t, u.Avatar, avatar2Modified)
-
-		_, err = cli.Get(id3, u)
-		require.NoError(t, err)
-		require.Equal(t, u.Name, user3.Name)
-		require.Equal(t, u.Email, user3.Email)
-		require.Equal(t, u.Avatar, user3.Avatar)
-
-		_, err = cli.Get(id4, u)
-		require.NoError(t, err)
-		require.Equal(t, u.Name, user4.Name)
-		require.Equal(t, u.Email, user4.Email)
-		require.Equal(t, u.Avatar, user4.Avatar)
-	})
-
-	// Test PatchMany
-	t.Run("patch_many", func(t *testing.T) {
-		cli, err := client.New(addr2)
-		require.NoError(t, err)
-
-		// 1.delete all resources
-		_, err = cli.DeleteMany([]string{id1, id2, id3, id4, id5})
-		require.NoError(t, err)
-
-		// 2.creat all resources
-		_, err = cli.CreateMany([]User{user1, user2, user3, user4, user5})
-		require.NoError(t, err)
-
-		// u1 only modified email
-		u1 := &User{Email: email1Modified}
-		u1.ID = id1
-		// u2 only modified avator
-		u2 := &User{Avatar: avatar2Modified}
-		u2.ID = id2
-		resp, err := cli.PatchMany([]*User{u1, u2})
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.NotEmpty(t, resp.TraceID)
-
-		u := new(User)
-		_, err = cli.Get(id1, u)
-		require.NoError(t, err)
-		require.Equal(t, u.Name, user1.Name)
-		require.Equal(t, u.Email, email1Modified)
-		require.Equal(t, u.Avatar, user1.Avatar)
-
-		_, err = cli.Get(id2, u)
-		require.NoError(t, err)
-		require.Equal(t, u.Name, user2.Name)
-		require.Equal(t, u.Email, user2.Email)
-		require.Equal(t, u.Avatar, avatar2Modified)
-
-		_, err = cli.Get(id3, u)
-		require.NoError(t, err)
-		require.Equal(t, u.Name, user3.Name)
-		require.Equal(t, u.Email, user3.Email)
-		require.Equal(t, u.Avatar, user3.Avatar)
-
-		_, err = cli.Get(id4, u)
-		require.NoError(t, err)
-		require.Equal(t, u.Name, user4.Name)
-		require.Equal(t, u.Email, user4.Email)
-		require.Equal(t, u.Avatar, user4.Avatar)
-	})
-}
-
-func Test_Client_WithAPI(t *testing.T) {
-	baseAddr := testutil.URL("/api")
-
-	// Create test users first, dropping fixed-id leftovers from earlier tests
-	// because Create rejects duplicates.
-	cliSetup, err := client.New(baseAddr + "/test-user")
-	require.NoError(t, err)
-	_, err = cliSetup.DeleteMany([]string{id1, id2})
-	require.NoError(t, err)
-	_, err = cliSetup.Create(user1)
-	require.NoError(t, err)
-	_, err = cliSetup.Create(user2)
-	require.NoError(t, err)
-
-	// Test WithAPI option with List method
-	t.Run("with_api_option_list", func(t *testing.T) {
-		cli, err := client.New(baseAddr, client.WithAPI("test-user"))
-		require.NoError(t, err)
-
-		// Test List using apiPath from WithAPI
-		users := make([]User, 0)
-		total := new(int)
-		resp, err := cli.List(&users, total)
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.NotEmpty(t, resp.TraceID)
-		require.GreaterOrEqual(t, *total, 0)
-	})
-
-	// Test WithAPI option with Get method
-	t.Run("with_api_option_get", func(t *testing.T) {
-		cli, err := client.New(baseAddr, client.WithAPI("test-user"))
-		require.NoError(t, err)
-
-		// Test Get using apiPath from WithAPI
-		user := new(User)
-		resp, err := cli.Get(id1, user)
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.NotEmpty(t, resp.TraceID)
-		require.Equal(t, id1, user.ID)
-		require.Equal(t, name1, user.Name)
-		require.Equal(t, email1, user.Email)
-		require.Equal(t, avatar1, user.Avatar)
-	})
-
-	// Test WithAPI option with Create method
-	t.Run("with_api_option_create", func(t *testing.T) {
-		cli, err := client.New(baseAddr, client.WithAPI("test-user"))
-		require.NoError(t, err)
-
-		newUser := User{
-			Name:   "test_user",
-			Email:  "test@example.com",
-			Avatar: "test_avatar",
-		}
-
-		resp, err := cli.Create(newUser)
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.NotEmpty(t, resp.TraceID)
-
-		createdUser := new(User)
-		err = json.Unmarshal(resp.Data, createdUser)
-		require.NoError(t, err)
-		require.NotEmpty(t, createdUser.ID)
-		require.Equal(t, newUser.Name, createdUser.Name)
-		require.Equal(t, newUser.Email, createdUser.Email)
-		require.Equal(t, newUser.Avatar, createdUser.Avatar)
-
-		// Clean up: delete the created user
-		_, err = cli.Delete(createdUser.ID)
-		require.NoError(t, err)
-	})
-
-	// Test WithAPI option with Update method
-	t.Run("with_api_option_update", func(t *testing.T) {
-		cli, err := client.New(baseAddr, client.WithAPI("test-user"))
-		require.NoError(t, err)
-
-		// First create a user
-		newUser := User{
-			Name:   "update_test",
-			Email:  "update@example.com",
-			Avatar: "update_avatar",
-		}
-		resp, err := cli.Create(newUser)
-		require.NoError(t, err)
-		createdUser := new(User)
-		err = json.Unmarshal(resp.Data, createdUser)
-		require.NoError(t, err)
-
-		// Update the user
-		updatedUser := User{
-			Name:   "updated_name",
-			Email:  "updated@example.com",
-			Avatar: "updated_avatar",
-		}
-		resp, err = cli.Update(createdUser.ID, updatedUser)
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-
-		// Verify update
-		user := new(User)
-		_, err = cli.Get(createdUser.ID, user)
-		require.NoError(t, err)
-		require.Equal(t, updatedUser.Name, user.Name)
-		require.Equal(t, updatedUser.Email, user.Email)
-		require.Equal(t, updatedUser.Avatar, user.Avatar)
-
-		// Clean up
-		_, err = cli.Delete(createdUser.ID)
-		require.NoError(t, err)
-	})
-
-	// Test WithAPI option with Patch method
-	t.Run("with_api_option_patch", func(t *testing.T) {
-		cli, err := client.New(baseAddr, client.WithAPI("test-user"))
-		require.NoError(t, err)
-
-		// First create a user
-		newUser := User{
-			Name:   "patch_test",
-			Email:  "patch@example.com",
-			Avatar: "patch_avatar",
-		}
-		resp, err := cli.Create(newUser)
-		require.NoError(t, err)
-		createdUser := new(User)
-		err = json.Unmarshal(resp.Data, createdUser)
-		require.NoError(t, err)
-
-		// Partially update the user
-		patchedUser := User{
-			Avatar: "patched_avatar",
-		}
-		resp, err = cli.Patch(createdUser.ID, patchedUser)
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-
-		// Verify patch
-		user := new(User)
-		_, err = cli.Get(createdUser.ID, user)
-		require.NoError(t, err)
-		require.Equal(t, newUser.Name, user.Name)         // Name should remain unchanged
-		require.Equal(t, newUser.Email, user.Email)       // Email should remain unchanged
-		require.Equal(t, patchedUser.Avatar, user.Avatar) // Avatar should be updated
-
-		// Clean up
-		_, err = cli.Delete(createdUser.ID)
-		require.NoError(t, err)
-	})
-
-	// Test WithAPI option with Delete method
-	t.Run("with_api_option_delete", func(t *testing.T) {
-		cli, err := client.New(baseAddr, client.WithAPI("test-user"))
-		require.NoError(t, err)
-
-		// First create a user
-		newUser := User{
-			Name:   "delete_test",
-			Email:  "delete@example.com",
-			Avatar: "delete_avatar",
-		}
-		resp, err := cli.Create(newUser)
-		require.NoError(t, err)
-		createdUser := new(User)
-		err = json.Unmarshal(resp.Data, createdUser)
-		require.NoError(t, err)
-
-		// Delete the user
-		resp, err = cli.Delete(createdUser.ID)
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-
-		// Verify deletion
-		user := new(User)
-		_, err = cli.Get(createdUser.ID, user)
-		require.Error(t, err)
-	})
-
-	// Test WithAPI option with query parameters
-	t.Run("with_api_option_query", func(t *testing.T) {
-		cli, err := client.New(baseAddr, client.WithAPI("test-user"), client.WithQueryPagination(1, 2))
-		require.NoError(t, err)
-
-		users := make([]User, 0)
-		total := new(int)
-		resp, err := cli.List(&users, total)
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.GreaterOrEqual(t, *total, 0)
-	})
-}
-
-type User struct {
-	Name   string `json:"name,omitempty"`
-	Email  string `json:"email,omitempty"`
-	Avatar string `json:"avatar,omitempty"`
+var baseURL = testutil.URL("")
+
+const recordPath = "/api/test-record"
+
+// TestRecord is the neutral fixture model the client end-to-end tests run
+// against; the routes below expose the full standard CRUD matrix for it.
+type TestRecord struct {
+	Name string `json:"name,omitempty"`
+	Note string `json:"note,omitempty"`
+	Tag  string `json:"tag,omitempty"`
 
 	model.Query
 	model.Base
 }
 
-func (u *User) GetTableName() string {
-	return "test_users"
+func (r *TestRecord) GetTableName() string {
+	return "test_records"
 }
 
-// Purge opts into hard delete so the fixed-id records can be recreated across
-// sub-tests: soft-deleted rows would keep occupying the primary key and make
-// later pure INSERTs fail with a duplicate error.
-func (u *User) Purge() bool { return true }
+func (r *TestRecord) Purge() bool { return true }
 
-func Test_Client_WithCookie(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "session=abc123", r.Header.Get("Cookie"))
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"code":0,"msg":"","data":null,"trace_id":"test"}`))
-	}))
-	defer srv.Close()
+func TestMain(m *testing.M) {
+	testutil.Run(m, testutil.Server{
+		Register: func() { model.Register[*TestRecord]() },
+		Seed: func() {
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record", nil, consts.Create)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &types.ControllerConfig[*TestRecord]{ParamName: "id"}, consts.Delete)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &types.ControllerConfig[*TestRecord]{ParamName: "id"}, consts.Update)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &types.ControllerConfig[*TestRecord]{ParamName: "id"}, consts.Patch)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record", nil, consts.List)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &types.ControllerConfig[*TestRecord]{ParamName: "id"}, consts.Get)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/batch", nil, consts.CreateMany)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/batch", nil, consts.DeleteMany)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/batch", nil, consts.UpdateMany)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/batch", nil, consts.PatchMany)
+		},
+	})
+}
 
-	cli, err := client.New(srv.URL, client.WithCookie(&http.Cookie{
-		Name:  "session",
-		Value: "abc123",
-	}))
+// newRecordID returns an id unique to this test binary run.
+func newRecordID(prefix string) string {
+	return prefix + "_" + strconv.FormatInt(time.Now().UnixNano(), 36)
+}
+
+func TestClientCRUDRoundTrip(t *testing.T) {
+	cli, err := client.New(baseURL)
 	require.NoError(t, err)
 
-	_, err = cli.Create(nil)
+	id := newRecordID("crud")
+	record := &TestRecord{Name: "sample-a", Note: "note-1", Base: model.Base{ID: id}}
+
+	created, err := client.Post[TestRecord](cli, recordPath, record)
 	require.NoError(t, err)
+	require.Equal(t, id, created.ID)
+	require.Equal(t, "sample-a", created.Name)
+
+	got, err := client.Get[TestRecord](cli, recordPath+"/"+id)
+	require.NoError(t, err)
+	require.Equal(t, "sample-a", got.Name)
+	require.Equal(t, "note-1", got.Note)
+
+	_, err = client.Put[TestRecord](cli, recordPath+"/"+id, &TestRecord{Name: "sample-b", Base: model.Base{ID: id}})
+	require.NoError(t, err)
+
+	got, err = client.Get[TestRecord](cli, recordPath+"/"+id)
+	require.NoError(t, err)
+	require.Equal(t, "sample-b", got.Name)
+	// A full update replaces the row, so the note written at create is gone.
+	require.Empty(t, got.Note)
+
+	patched, err := client.Patch[TestRecord](cli, recordPath+"/"+id, &TestRecord{Tag: "tag-1", Base: model.Base{ID: id}})
+	require.NoError(t, err)
+	require.Equal(t, "tag-1", patched.Tag)
+	// A partial update keeps the fields it does not name.
+	require.Equal(t, "sample-b", patched.Name)
+
+	_, err = client.Delete[struct{}](cli, recordPath+"/"+id, nil)
+	require.NoError(t, err)
+
+	// The bare CRUD route has no service layer; a vanished record answers 400
+	// with the database message rather than a service-shaped 404.
+	_, err = client.Get[TestRecord](cli, recordPath+"/"+id)
+	testutil.RequireError(t, err, http.StatusBadRequest, "record not found")
+}
+
+func TestClientListQueryOptions(t *testing.T) {
+	cli, err := client.New(baseURL)
+	require.NoError(t, err)
+
+	ids := make([]string, 0, 3)
+	for i := range 3 {
+		id := newRecordID("list" + strconv.Itoa(i))
+		_, createErr := client.Post[TestRecord](cli, recordPath, &TestRecord{Name: "list-sample", Base: model.Base{ID: id}})
+		require.NoError(t, createErr)
+		ids = append(ids, id)
+	}
+	t.Cleanup(func() {
+		_, cleanupErr := client.Delete[struct{}](cli, recordPath+"/batch", client.BatchIDs(ids))
+		require.NoError(t, cleanupErr)
+	})
+
+	list, err := client.Get[client.ListResult[*TestRecord]](cli, recordPath,
+		client.WithPage(1, 2), client.WithSortBy("created_at desc"))
+	require.NoError(t, err)
+	require.Len(t, list.Items, 2)
+	require.GreaterOrEqual(t, list.Total, 3)
+}
+
+func TestClientBatchRoundTrip(t *testing.T) {
+	cli, err := client.New(baseURL)
+	require.NoError(t, err)
+
+	id1 := newRecordID("batch_a")
+	id2 := newRecordID("batch_b")
+	records := []*TestRecord{
+		{Name: "batch-sample", Base: model.Base{ID: id1}},
+		{Name: "batch-sample", Base: model.Base{ID: id2}},
+	}
+
+	_, err = client.Post[struct{}](cli, recordPath+"/batch", client.BatchItems(records))
+	require.NoError(t, err)
+
+	got, err := client.Get[TestRecord](cli, recordPath+"/"+id1)
+	require.NoError(t, err)
+	require.Equal(t, "batch-sample", got.Name)
+
+	records[0].Note = "batch-note"
+	records[1].Note = "batch-note"
+	_, err = client.Put[struct{}](cli, recordPath+"/batch", client.BatchItems(records))
+	require.NoError(t, err)
+
+	got, err = client.Get[TestRecord](cli, recordPath+"/"+id2)
+	require.NoError(t, err)
+	require.Equal(t, "batch-note", got.Note)
+
+	_, err = client.Delete[struct{}](cli, recordPath+"/batch", client.BatchIDs([]string{id1, id2}))
+	require.NoError(t, err)
+
+	_, err = client.Get[TestRecord](cli, recordPath+"/"+id1)
+	testutil.RequireError(t, err, http.StatusBadRequest, "record not found")
+}
+
+func TestClientRejectionCarriesEnvelope(t *testing.T) {
+	cli, err := client.New(baseURL)
+	require.NoError(t, err)
+
+	_, err = client.Get[TestRecord](cli, recordPath+"/absent-record-id")
+	var respErr *client.Error
+	require.ErrorAs(t, err, &respErr)
+	require.Equal(t, http.StatusBadRequest, respErr.StatusCode)
+	require.NotZero(t, respErr.Code)
+	require.NotEmpty(t, respErr.Msg)
+	require.NotEmpty(t, respErr.TraceID)
+}
+
+func TestClientEnvelopeCompleteness(t *testing.T) {
+	// The one place asserting envelope integrity (TraceID present on success)
+	// so the module tests do not have to repeat it per case.
+	cli, err := client.New(baseURL)
+	require.NoError(t, err)
+
+	resp, err := cli.Do(http.MethodGet, recordPath, nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, resp.TraceID)
+	require.Zero(t, resp.Code)
 }

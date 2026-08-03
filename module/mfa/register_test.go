@@ -23,15 +23,17 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var (
-	signupAPI  = testutil.URL("/api/signup")
-	loginAPI   = testutil.URL("/api/login")
-	verifyAPI  = testutil.URL("/api/mfa/totp/verify")
-	checkAPI   = testutil.URL("/api/mfa/totp/check")
-	bindAPI    = testutil.URL("/api/mfa/totp/bind")
-	confirmAPI = testutil.URL("/api/mfa/totp/confirm")
-	unbindAPI  = testutil.URL("/api/mfa/totp/unbind")
-	statusAPI  = testutil.URL("/api/mfa/totp/status")
+var baseURL = testutil.URL("")
+
+const (
+	signupPath  = "/api/signup"
+	loginPath   = "/api/login"
+	verifyPath  = "/api/mfa/totp/verify"
+	checkPath   = "/api/mfa/totp/check"
+	bindPath    = "/api/mfa/totp/bind"
+	confirmPath = "/api/mfa/totp/confirm"
+	unbindPath  = "/api/mfa/totp/unbind"
+	statusPath  = "/api/mfa/totp/status"
 )
 
 type totpTestAccount struct {
@@ -131,9 +133,9 @@ func TestTOTPCheck(t *testing.T) {
 
 func TestTOTPBind(t *testing.T) {
 	account := newTOTPTestAccount(t, "totp_bind_user")
-	cli := newTOTPClient(t, bindAPI, account.SessionID)
+	cli := mfaSessionClient(t, account.SessionID)
 
-	resp, err := cli.Create(nil)
+	resp, err := cli.Do(http.MethodPost, bindPath, nil)
 	require.NoError(t, err)
 	testutil.RequireResp(t, resp, func(t *testing.T, rsp *mfa.TOTPBindRsp) {
 		t.Helper()
@@ -151,12 +153,12 @@ func TestTOTPBind(t *testing.T) {
 func TestTOTPConfirm(t *testing.T) {
 	account := newTOTPTestAccount(t, "totp_confirm_user")
 	challengeID, secret := createTOTPBindingChallenge(t, account.SessionID)
-	cli := newTOTPClient(t, confirmAPI, account.SessionID)
+	cli := mfaSessionClient(t, account.SessionID)
 
 	t.Run("invalid_challenge", func(t *testing.T) {
 		code, err := totp.GenerateCode(secret, time.Now())
 		require.NoError(t, err)
-		resp, err := cli.Create(mfa.TOTPConfirmReq{
+		resp, err := cli.Do(http.MethodPost, confirmPath, mfa.TOTPConfirmReq{
 			ChallengeID: "missing-challenge",
 			Code:        code,
 			DeviceName:  "test-device-missing-challenge",
@@ -172,7 +174,7 @@ func TestTOTPConfirm(t *testing.T) {
 		if code == invalidCode {
 			invalidCode = "000001"
 		}
-		resp, err := cli.Create(mfa.TOTPConfirmReq{
+		resp, err := cli.Do(http.MethodPost, confirmPath, mfa.TOTPConfirmReq{
 			ChallengeID: challengeID,
 			Code:        invalidCode,
 			DeviceName:  "test-device-2",
@@ -180,7 +182,7 @@ func TestTOTPConfirm(t *testing.T) {
 		require.Error(t, err)
 		require.Nil(t, resp)
 
-		resp, err = cli.Create(mfa.TOTPConfirmReq{
+		resp, err = cli.Do(http.MethodPost, confirmPath, mfa.TOTPConfirmReq{
 			ChallengeID: challengeID,
 			Code:        code,
 			DeviceName:  "test-device",
@@ -202,7 +204,7 @@ func TestTOTPConfirm(t *testing.T) {
 	t.Run("duplicate_challenge", func(t *testing.T) {
 		code, err := totp.GenerateCode(secret, time.Now())
 		require.NoError(t, err)
-		resp, err := cli.Create(mfa.TOTPConfirmReq{
+		resp, err := cli.Do(http.MethodPost, confirmPath, mfa.TOTPConfirmReq{
 			ChallengeID: challengeID,
 			Code:        code,
 			DeviceName:  "test-device-dup",
@@ -215,12 +217,12 @@ func TestTOTPConfirm(t *testing.T) {
 func TestTOTPVerify(t *testing.T) {
 	account := newTOTPTestAccount(t, "totp_verify_user")
 	_, secret, _ := bindTOTPDeviceForTest(t, account.SessionID, "test-device-verify")
-	cli := newTOTPClient(t, verifyAPI, account.SessionID)
+	cli := mfaSessionClient(t, account.SessionID)
 
 	t.Run("valid_code", func(t *testing.T) {
 		code, err := totp.GenerateCode(secret, time.Now())
 		require.NoError(t, err)
-		resp, err := cli.Create(mfa.TOTPVerifyReq{TOTPCode: code})
+		resp, err := cli.Do(http.MethodPost, verifyPath, mfa.TOTPVerifyReq{TOTPCode: code})
 		require.NoError(t, err)
 		testutil.RequireResp(t, resp, func(t *testing.T, rsp *mfa.TOTPVerifyRsp) {
 			t.Helper()
@@ -231,7 +233,7 @@ func TestTOTPVerify(t *testing.T) {
 	})
 
 	t.Run("invalid_code", func(t *testing.T) {
-		resp, err := cli.Create(mfa.TOTPVerifyReq{TOTPCode: "000000"})
+		resp, err := cli.Do(http.MethodPost, verifyPath, mfa.TOTPVerifyReq{TOTPCode: "000000"})
 		require.NoError(t, err)
 		testutil.RequireResp(t, resp, func(t *testing.T, rsp *mfa.TOTPVerifyRsp) {
 			t.Helper()
@@ -242,7 +244,7 @@ func TestTOTPVerify(t *testing.T) {
 	})
 
 	t.Run("invalid_format", func(t *testing.T) {
-		resp, err := cli.Create(mfa.TOTPVerifyReq{TOTPCode: "abc123"})
+		resp, err := cli.Do(http.MethodPost, verifyPath, mfa.TOTPVerifyReq{TOTPCode: "abc123"})
 		require.Error(t, err)
 		require.Nil(t, resp)
 	})
@@ -255,9 +257,9 @@ func TestTOTPLogin(t *testing.T) {
 	deviceID, secret, backupCodes := bindTOTPDeviceForTest(t, account.SessionID, "test-device-login")
 
 	t.Run("requires_second_factor", func(t *testing.T) {
-		cli, err := client.New(loginAPI)
+		cli, err := client.New(baseURL)
 		require.NoError(t, err)
-		resp, err := cli.Create(iam.LoginReq{
+		resp, err := cli.Do(http.MethodPost, loginPath, iam.LoginReq{
 			Username: account.Username,
 			Password: account.Password,
 		})
@@ -277,11 +279,11 @@ func TestTOTPLogin(t *testing.T) {
 
 	t.Run("rejects_conflicting_second_factors", func(t *testing.T) {
 		require.NotEmpty(t, backupCodes)
-		cli, err := client.New(loginAPI)
+		cli, err := client.New(baseURL)
 		require.NoError(t, err)
 		code, err := totp.GenerateCode(secret, time.Now())
 		require.NoError(t, err)
-		resp, err := cli.Create(iam.LoginReq{
+		resp, err := cli.Do(http.MethodPost, loginPath, iam.LoginReq{
 			Username:   account.Username,
 			Password:   account.Password,
 			TOTPCode:   code,
@@ -299,9 +301,9 @@ func TestTOTPLogin(t *testing.T) {
 			Password:   account.Password,
 			BackupCode: backupCodes[1],
 		})
-		cli, err := client.New(loginAPI)
+		cli, err := client.New(baseURL)
 		require.NoError(t, err)
-		resp, err := cli.Create(iam.LoginReq{
+		resp, err := cli.Do(http.MethodPost, loginPath, iam.LoginReq{
 			Username:   account.Username,
 			Password:   account.Password,
 			BackupCode: backupCodes[1],
@@ -315,10 +317,10 @@ func TestTOTPLogin(t *testing.T) {
 func TestTOTPUnbind(t *testing.T) {
 	account := newTOTPTestAccount(t, "totp_unbind_user")
 	deviceID, secret, backupCodes := bindTOTPDeviceForTest(t, account.SessionID, "test-device")
-	cli := newTOTPClient(t, unbindAPI, account.SessionID)
+	cli := mfaSessionClient(t, account.SessionID)
 
 	t.Run("missing_fresh_auth", func(t *testing.T) {
-		resp, err := cli.Create(mfa.TOTPUnbindReq{DeviceID: deviceID})
+		resp, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{DeviceID: deviceID})
 		require.NoError(t, err)
 		testutil.RequireResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
 			t.Helper()
@@ -333,7 +335,7 @@ func TestTOTPUnbind(t *testing.T) {
 
 	t.Run("multiple_verification_methods", func(t *testing.T) {
 		require.NotEmpty(t, backupCodes)
-		resp, err := cli.Create(mfa.TOTPUnbindReq{
+		resp, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
 			DeviceID:   deviceID,
 			Password:   account.Password,
 			BackupCode: backupCodes[0],
@@ -352,7 +354,7 @@ func TestTOTPUnbind(t *testing.T) {
 	})
 
 	t.Run("invalid_totp", func(t *testing.T) {
-		resp, err := cli.Create(mfa.TOTPUnbindReq{
+		resp, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
 			DeviceID: deviceID,
 			TOTPCode: "000000",
 		})
@@ -370,7 +372,7 @@ func TestTOTPUnbind(t *testing.T) {
 
 	t.Run("valid_password", func(t *testing.T) {
 		secondDeviceID, _, _ := bindTOTPDeviceForTest(t, account.SessionID, "test-device-password")
-		resp, err := cli.Create(mfa.TOTPUnbindReq{
+		resp, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
 			DeviceID: secondDeviceID,
 			Password: account.Password,
 		})
@@ -388,7 +390,7 @@ func TestTOTPUnbind(t *testing.T) {
 	t.Run("valid_totp", func(t *testing.T) {
 		code, err := totp.GenerateCode(secret, time.Now())
 		require.NoError(t, err)
-		resp, err := cli.Create(mfa.TOTPUnbindReq{
+		resp, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
 			DeviceID: deviceID,
 			TOTPCode: code,
 		})
@@ -412,21 +414,18 @@ func newTOTPTestAccount(t *testing.T, prefix string) totpTestAccount {
 		Password: "12345678",
 	}
 
-	cli, err := client.New(signupAPI)
+	cli, err := client.New(baseURL)
 	require.NoError(t, err)
-	resp, err := cli.Create(iam.SignupReq{
+	rsp, err := client.Post[iam.SignupRsp](cli, signupPath, iam.SignupReq{
 		Username:   account.Username,
 		Password:   account.Password,
 		RePassword: account.Password,
 	})
 	require.NoError(t, err)
-	testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
-		t.Helper()
-		require.Equal(t, account.Username, rsp.Username)
-		require.NotEmpty(t, rsp.UserID)
-		require.NotEmpty(t, rsp.Message)
-		account.UserID = rsp.UserID
-	})
+	require.Equal(t, account.Username, rsp.Username)
+	require.NotEmpty(t, rsp.UserID)
+	require.NotEmpty(t, rsp.Message)
+	account.UserID = rsp.UserID
 
 	account.SessionID = loginSessionIDFromCookie(t, iam.LoginReq{
 		Username: account.Username,
@@ -435,10 +434,11 @@ func newTOTPTestAccount(t *testing.T, prefix string) totpTestAccount {
 	return account
 }
 
-func newTOTPClient(t *testing.T, api, sessionID string) *client.Client {
+// mfaSessionClient returns a client that presents the given session id.
+func mfaSessionClient(t *testing.T, sessionID string) *client.Client {
 	t.Helper()
 
-	cli, err := client.New(api, client.WithCookie(&http.Cookie{
+	cli, err := client.New(baseURL, client.WithCookie(&http.Cookie{
 		Name:  "session_id",
 		Value: sessionID,
 	}))
@@ -449,8 +449,8 @@ func newTOTPClient(t *testing.T, api, sessionID string) *client.Client {
 func requestTOTPStatus(t *testing.T, sessionID string) *client.Resp {
 	t.Helper()
 
-	cli := newTOTPClient(t, statusAPI, sessionID)
-	resp, err := cli.Request(http.MethodGet, nil)
+	cli := mfaSessionClient(t, sessionID)
+	resp, err := cli.Do(http.MethodGet, statusPath, nil)
 	require.NoError(t, err)
 	return resp
 }
@@ -458,8 +458,8 @@ func requestTOTPStatus(t *testing.T, sessionID string) *client.Resp {
 func requestTOTPCheck(t *testing.T, account totpTestAccount) *client.Resp {
 	t.Helper()
 
-	cli := newTOTPClient(t, checkAPI, account.SessionID)
-	resp, err := cli.Create(mfa.TOTPCheckReq{
+	cli := mfaSessionClient(t, account.SessionID)
+	resp, err := cli.Do(http.MethodPost, checkPath, mfa.TOTPCheckReq{
 		Username: account.Username,
 		Password: account.Password,
 	})
@@ -470,45 +470,34 @@ func requestTOTPCheck(t *testing.T, account totpTestAccount) *client.Resp {
 func createTOTPBindingChallenge(t *testing.T, sessionID string) (string, string) {
 	t.Helper()
 
-	cli := newTOTPClient(t, bindAPI, sessionID)
-	resp, err := cli.Create(mfa.TOTPBind{})
+	cli := mfaSessionClient(t, sessionID)
+	rsp, err := client.Post[mfa.TOTPBindRsp](cli, bindPath, nil)
 	require.NoError(t, err)
-
-	var challengeID string
-	var secret string
-	testutil.RequireResp(t, resp, func(t *testing.T, rsp *mfa.TOTPBindRsp) {
-		t.Helper()
-		require.NotEmpty(t, rsp.ChallengeID)
-		require.NotEmpty(t, rsp.OtpauthURL)
-		challengeID = rsp.ChallengeID
-		secret = extractSecretFromOtpauthURL(t, rsp.OtpauthURL)
-	})
-	return challengeID, secret
+	require.NotEmpty(t, rsp.ChallengeID)
+	require.NotEmpty(t, rsp.OtpauthURL)
+	return rsp.ChallengeID, extractSecretFromOtpauthURL(t, rsp.OtpauthURL)
 }
 
 func unbindTOTPDeviceWithPassword(t *testing.T, sessionID, deviceID, password string) {
 	t.Helper()
 
-	cli := newTOTPClient(t, unbindAPI, sessionID)
-	resp, err := cli.Create(mfa.TOTPUnbindReq{
+	cli := mfaSessionClient(t, sessionID)
+	rsp, err := client.Post[mfa.TOTPUnbindRsp](cli, unbindPath, mfa.TOTPUnbindReq{
 		DeviceID: deviceID,
 		Password: password,
 	})
 	require.NoError(t, err)
-	testutil.RequireResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
-		t.Helper()
-		require.True(t, rsp.Success)
-		require.NotEmpty(t, rsp.Message)
-	})
+	require.True(t, rsp.Success)
+	require.NotEmpty(t, rsp.Message)
 }
 
 func loginSessionIDFromCookie(t *testing.T, reqPayload iam.LoginReq) string {
 	t.Helper()
 
-	cli, err := client.New(loginAPI)
+	cli, err := client.New(baseURL)
 	require.NoError(t, err)
 
-	apiResp, err := cli.Create(reqPayload)
+	apiResp, err := cli.Do(http.MethodPost, loginPath, reqPayload)
 	require.NoError(t, err)
 
 	testutil.RequireResp(t, apiResp, func(t *testing.T, rsp iam.LoginRsp) {
@@ -574,54 +563,27 @@ func assertTOTPDeviceActive(t *testing.T, deviceID string) {
 func bindTOTPDeviceForTest(t *testing.T, sessionID, deviceName string) (string, string, []string) {
 	t.Helper()
 
-	bindCli, err := client.New(bindAPI, client.WithCookie(&http.Cookie{
-		Name:  "session_id",
-		Value: sessionID,
-	}))
+	cli := mfaSessionClient(t, sessionID)
+
+	bindRsp, err := client.Post[mfa.TOTPBindRsp](cli, bindPath, nil)
 	require.NoError(t, err)
-
-	bindResp, err := bindCli.Create(mfa.TOTPBind{})
-	require.NoError(t, err)
-
-	var challengeID string
-	var secret string
-	testutil.RequireResp(t, bindResp, func(t *testing.T, rsp *mfa.TOTPBindRsp) {
-		t.Helper()
-
-		require.NotEmpty(t, rsp.ChallengeID)
-		require.NotEmpty(t, rsp.OtpauthURL)
-		challengeID = rsp.ChallengeID
-		secret = extractSecretFromOtpauthURL(t, rsp.OtpauthURL)
-	})
+	require.NotEmpty(t, bindRsp.ChallengeID)
+	require.NotEmpty(t, bindRsp.OtpauthURL)
+	secret := extractSecretFromOtpauthURL(t, bindRsp.OtpauthURL)
 
 	code, err := totp.GenerateCode(secret, time.Now())
 	require.NoError(t, err)
 
-	confirmCli, err := client.New(confirmAPI, client.WithCookie(&http.Cookie{
-		Name:  "session_id",
-		Value: sessionID,
-	}))
-	require.NoError(t, err)
-
-	confirmResp, err := confirmCli.Create(mfa.TOTPConfirmReq{
-		ChallengeID: challengeID,
+	confirmRsp, err := client.Post[mfa.TOTPConfirmRsp](cli, confirmPath, mfa.TOTPConfirmReq{
+		ChallengeID: bindRsp.ChallengeID,
 		Code:        code,
 		DeviceName:  deviceName,
 	})
 	require.NoError(t, err)
+	require.NotEmpty(t, confirmRsp.DeviceID)
+	require.NotEmpty(t, confirmRsp.BackupCodes)
 
-	var deviceID string
-	var backupCodes []string
-	testutil.RequireResp(t, confirmResp, func(t *testing.T, rsp *mfa.TOTPConfirmRsp) {
-		t.Helper()
-
-		require.NotEmpty(t, rsp.DeviceID)
-		require.NotEmpty(t, rsp.BackupCodes)
-		deviceID = rsp.DeviceID
-		backupCodes = rsp.BackupCodes
-	})
-
-	return deviceID, secret, backupCodes
+	return confirmRsp.DeviceID, secret, confirmRsp.BackupCodes
 }
 
 func getTOTPDeviceForTest(t *testing.T, deviceID string) *modelmfa.TOTPDevice {

@@ -24,13 +24,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	sessionsAPI      = testutil.URL("/api/iam/sessions")
-	adminSessionsAPI = testutil.URL("/api/iam/admin/sessions")
+const (
+	sessionsPath      = "/api/iam/sessions"
+	adminSessionsPath = "/api/iam/admin/sessions"
 )
 
-func adminUserSessionsAPI(userID string) string {
-	return testutil.URL(fmt.Sprintf("/api/iam/admin/users/%s/sessions", userID))
+func adminUserSessionsPath(userID string) string {
+	return fmt.Sprintf("/api/iam/admin/users/%s/sessions", userID)
 }
 
 type sessionTestAccount struct {
@@ -46,28 +46,21 @@ func TestCurrentSessionGet(t *testing.T) {
 		account := newSessionTestAccount(t)
 		sessionID := loginSession(t, account.Username, account.Password)
 
-		cli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
+		cli := sessionClient(t, sessionID)
+
+		rsp, err := client.Get[iam.CurrentGetRsp](cli, currentPath)
 		require.NoError(t, err)
 
-		resp, err := cli.Request(http.MethodGet, new(struct{}))
-		require.NoError(t, err)
-
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.CurrentGetRsp) {
-			t.Helper()
-			require.False(t, rsp.ServerTime.IsZero())
-			require.NotEmpty(t, rsp.Principal.UserID)
-			require.Equal(t, account.Username, rsp.Principal.Username)
-			require.False(t, rsp.Principal.MustChangePassword)
-			require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
-			require.False(t, rsp.Session.IssuedAt.IsZero())
-			require.False(t, rsp.Session.LastSeenAt.IsZero())
-			require.False(t, rsp.Session.ExpiresAt.IsZero())
-			require.Positive(t, rsp.Session.ExpiresInSeconds)
-			require.True(t, rsp.Session.ExpiresAt.After(rsp.ServerTime))
-		})
+		require.False(t, rsp.ServerTime.IsZero())
+		require.NotEmpty(t, rsp.Principal.UserID)
+		require.Equal(t, account.Username, rsp.Principal.Username)
+		require.False(t, rsp.Principal.MustChangePassword)
+		require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
+		require.False(t, rsp.Session.IssuedAt.IsZero())
+		require.False(t, rsp.Session.LastSeenAt.IsZero())
+		require.False(t, rsp.Session.ExpiresAt.IsZero())
+		require.Positive(t, rsp.Session.ExpiresInSeconds)
+		require.True(t, rsp.Session.ExpiresAt.After(rsp.ServerTime))
 	})
 
 	t.Run("touches_stale_current_session", func(t *testing.T) {
@@ -77,20 +70,13 @@ func TestCurrentSessionGet(t *testing.T) {
 		staleLastSeenAt := time.Now().Add(-time.Minute).UTC()
 		session := setSessionLastSeenAt(t, sessionID, staleLastSeenAt)
 
-		cli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
+		cli := sessionClient(t, sessionID)
+
+		rsp, err := client.Get[iam.CurrentGetRsp](cli, currentPath)
 		require.NoError(t, err)
 
-		resp, err := cli.Request(http.MethodGet, new(struct{}))
-		require.NoError(t, err)
-
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.CurrentGetRsp) {
-			t.Helper()
-			require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
-			require.False(t, rsp.Session.LastSeenAt.IsZero())
-		})
+		require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
+		require.False(t, rsp.Session.LastSeenAt.IsZero())
 
 		after := loadStoredSession(t, sessionID)
 		require.Equal(t, session.ExpiresAt, after.ExpiresAt)
@@ -104,19 +90,12 @@ func TestCurrentSessionGet(t *testing.T) {
 		recentLastSeenAt := time.Now().Add(-time.Second).UTC()
 		session := setSessionLastSeenAt(t, sessionID, recentLastSeenAt)
 
-		cli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, sessionID)
 
-		resp, err := cli.Request(http.MethodGet, new(struct{}))
+		rsp, err := client.Get[iam.CurrentGetRsp](cli, currentPath)
 		require.NoError(t, err)
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.CurrentGetRsp) {
-			t.Helper()
-			require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
-			require.False(t, rsp.Session.LastSeenAt.IsZero())
-		})
+		require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
+		require.False(t, rsp.Session.LastSeenAt.IsZero())
 
 		after := loadStoredSession(t, sessionID)
 		require.Equal(t, session.ExpiresAt, after.ExpiresAt)
@@ -129,19 +108,12 @@ func TestCurrentSessionGet(t *testing.T) {
 		tenantID := "tenant_current_session"
 		setSessionTenantID(t, sessionID, tenantID)
 
-		cli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
+		cli := sessionClient(t, sessionID)
+
+		rsp, err := client.Get[iam.CurrentGetRsp](cli, currentPath)
 		require.NoError(t, err)
 
-		resp, err := cli.Request(http.MethodGet, new(struct{}))
-		require.NoError(t, err)
-
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.CurrentGetRsp) {
-			t.Helper()
-			require.Equal(t, tenantID, rsp.Session.TenantID)
-		})
+		require.Equal(t, tenantID, rsp.Session.TenantID)
 	})
 
 	t.Run("reject_session_when_stored_snapshot_is_not_active", func(t *testing.T) {
@@ -154,15 +126,10 @@ func TestCurrentSessionGet(t *testing.T) {
 		session.Status = modeliamsession.SessionStatusRevoked
 		require.NoError(t, redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Set(sessionKey, session, time.Hour))
 
-		cli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, sessionID)
 
-		_, err = cli.Request(http.MethodGet, new(struct{}))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "401")
+		_, err = client.Get[iam.CurrentGetRsp](cli, currentPath)
+		testutil.RequireError(t, err, http.StatusUnauthorized)
 	})
 
 	t.Run("reject_session_when_stored_snapshot_is_expired", func(t *testing.T) {
@@ -175,15 +142,10 @@ func TestCurrentSessionGet(t *testing.T) {
 		session.ExpiresAt = time.Now().Add(-time.Minute)
 		require.NoError(t, redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Set(sessionKey, session, time.Hour))
 
-		cli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, sessionID)
 
-		_, err = cli.Request(http.MethodGet, new(struct{}))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "401")
+		_, err = client.Get[iam.CurrentGetRsp](cli, currentPath)
+		testutil.RequireError(t, err, http.StatusUnauthorized)
 	})
 }
 
@@ -195,25 +157,17 @@ func TestCurrentSessionDelete(t *testing.T) {
 		sessionID := loginSession(t, account.Username, account.Password)
 		requireUserSessionContains(t, account.UserID, sessionID)
 
-		cli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, sessionID)
 
-		resp, err := cli.Request(http.MethodDelete, new(struct{}))
+		rsp, err := client.Delete[iam.CurrentDeleteRsp](cli, currentPath, nil)
 		require.NoError(t, err)
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.CurrentDeleteRsp) {
-			t.Helper()
-			require.Equal(t, iam.CurrentDeleteRsp{}, rsp)
-		})
+		require.Equal(t, iam.CurrentDeleteRsp{}, *rsp)
 
 		requireSessionNotFound(t, sessionID)
 		requireUserSessionNotContains(t, account.UserID, sessionID)
 
-		_, err = cli.Request(http.MethodGet, new(struct{}))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "401")
+		_, err = client.Get[iam.CurrentGetRsp](cli, currentPath)
+		testutil.RequireError(t, err, http.StatusUnauthorized)
 	})
 }
 
@@ -227,41 +181,25 @@ func TestSessionGet(t *testing.T) {
 		tenantID := "tenant_session_get"
 		setSessionTenantID(t, otherSessionID, tenantID)
 
-		cli, err := client.New(sessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: currentSessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, currentSessionID)
 
-		got := new(iam.SessionGetRsp)
-		resp, err := cli.Get(otherSessionID, got)
+		rsp, err := client.Get[iam.SessionGetRsp](cli, sessionsPath+"/"+otherSessionID)
 		require.NoError(t, err)
-		testutil.RequireResp[*iam.SessionGetRsp](t, resp, func(t *testing.T, rsp *iam.SessionGetRsp) {
-			t.Helper()
-			require.Equal(t, otherSessionID, rsp.Session.ID)
-			require.Equal(t, tenantID, rsp.Session.TenantID)
-			require.False(t, rsp.Session.IsCurrent)
-		})
+		require.Equal(t, otherSessionID, rsp.Session.ID)
+		require.Equal(t, tenantID, rsp.Session.TenantID)
+		require.False(t, rsp.Session.IsCurrent)
 	})
 
 	t.Run("get_current_session_detail", func(t *testing.T) {
 		account := newSessionTestAccount(t)
 		currentSessionID := loginSession(t, account.Username, account.Password)
 
-		cli, err := client.New(sessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: currentSessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, currentSessionID)
 
-		got := new(iam.SessionGetRsp)
-		resp, err := cli.Get(currentSessionID, got)
+		rsp, err := client.Get[iam.SessionGetRsp](cli, sessionsPath+"/"+currentSessionID)
 		require.NoError(t, err)
-		testutil.RequireResp[*iam.SessionGetRsp](t, resp, func(t *testing.T, rsp *iam.SessionGetRsp) {
-			t.Helper()
-			require.Equal(t, currentSessionID, rsp.Session.ID)
-			require.True(t, rsp.Session.IsCurrent)
-		})
+		require.Equal(t, currentSessionID, rsp.Session.ID)
+		require.True(t, rsp.Session.IsCurrent)
 	})
 
 	t.Run("forbidden_when_getting_other_user_session", func(t *testing.T) {
@@ -271,30 +209,20 @@ func TestSessionGet(t *testing.T) {
 		victim := newSessionTestAccount(t)
 		victimSessionID := loginSession(t, victim.Username, victim.Password)
 
-		cli, err := client.New(sessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: attackerSessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, attackerSessionID)
 
-		_, err = cli.Get(victimSessionID, new(iam.SessionGetRsp))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
+		_, err := client.Get[iam.SessionGetRsp](cli, sessionsPath+"/"+victimSessionID)
+		testutil.RequireError(t, err, http.StatusForbidden)
 	})
 
 	t.Run("not_found_when_session_missing", func(t *testing.T) {
 		account := newSessionTestAccount(t)
 		currentSessionID := loginSession(t, account.Username, account.Password)
 
-		cli, err := client.New(sessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: currentSessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, currentSessionID)
 
-		_, err = cli.Get("missing-session-id", new(iam.SessionGetRsp))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "404")
+		_, err := client.Get[iam.SessionGetRsp](cli, sessionsPath+"/missing-session-id")
+		testutil.RequireError(t, err, http.StatusNotFound)
 	})
 }
 
@@ -306,32 +234,23 @@ func TestSessionList(t *testing.T) {
 		otherSessionID := loginSession(t, account.Username, account.Password)
 		currentSessionID := loginSession(t, account.Username, account.Password)
 
-		cli, err := client.New(sessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: currentSessionID,
-		}))
+		cli := sessionClient(t, currentSessionID)
+
+		list, err := client.Get[client.ListResult[iam.SessionView]](cli, sessionsPath)
 		require.NoError(t, err)
 
-		items := make([]iam.SessionView, 0)
-		total := new(int)
-		resp, err := cli.List(&items, total)
-		require.NoError(t, err)
+		require.Len(t, list.Items, 2)
+		require.Equal(t, 2, list.Total)
 
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[iam.SessionView]) {
-			t.Helper()
-			require.Len(t, rsp.Items, 2)
-			require.Equal(t, 2, rsp.Total)
+		sessionMap := make(map[string]iam.SessionView, len(list.Items))
+		for i := range list.Items {
+			sessionMap[list.Items[i].ID] = list.Items[i]
+		}
 
-			sessionMap := make(map[string]iam.SessionView, len(rsp.Items))
-			for i := range rsp.Items {
-				sessionMap[rsp.Items[i].ID] = rsp.Items[i]
-			}
-
-			require.Contains(t, sessionMap, currentSessionID)
-			require.Contains(t, sessionMap, otherSessionID)
-			require.True(t, sessionMap[currentSessionID].IsCurrent)
-			require.False(t, sessionMap[otherSessionID].IsCurrent)
-		})
+		require.Contains(t, sessionMap, currentSessionID)
+		require.Contains(t, sessionMap, otherSessionID)
+		require.True(t, sessionMap[currentSessionID].IsCurrent)
+		require.False(t, sessionMap[otherSessionID].IsCurrent)
 	})
 
 	t.Run("ignore_request_body_on_list", func(t *testing.T) {
@@ -341,7 +260,7 @@ func TestSessionList(t *testing.T) {
 		account := newSessionTestAccount(t)
 		sessionID := loginSession(t, account.Username, account.Password)
 
-		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, sessionsAPI, strings.NewReader("{invalid json"))
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, baseURL+sessionsPath, strings.NewReader("{invalid json"))
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
 		// Match the framework client's User-Agent: the session is bound to
@@ -360,18 +279,10 @@ func TestSessionList(t *testing.T) {
 		sessionID := loginSession(t, account.Username, account.Password)
 		sessionSetUserStatus(t, account.Username, modeliamuser.UserStatusInactive)
 
-		cli, err := client.New(sessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, sessionID)
 
-		items := make([]iam.SessionView, 0)
-		total := new(int)
-		_, err = cli.List(&items, total)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "account disabled")
+		_, err := client.Get[client.ListResult[iam.SessionView]](cli, sessionsPath)
+		testutil.RequireError(t, err, http.StatusForbidden, "account disabled")
 	})
 
 	t.Run("reject_when_user_locked_after_session_created", func(t *testing.T) {
@@ -379,18 +290,10 @@ func TestSessionList(t *testing.T) {
 		sessionID := loginSession(t, account.Username, account.Password)
 		sessionSetUserStatus(t, account.Username, modeliamuser.UserStatusLocked)
 
-		cli, err := client.New(sessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, sessionID)
 
-		items := make([]iam.SessionView, 0)
-		total := new(int)
-		_, err = cli.List(&items, total)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "account locked")
+		_, err := client.Get[client.ListResult[iam.SessionView]](cli, sessionsPath)
+		testutil.RequireError(t, err, http.StatusForbidden, "account locked")
 	})
 
 	t.Run("prune_invalid_indexed_session", func(t *testing.T) {
@@ -406,24 +309,16 @@ func TestSessionList(t *testing.T) {
 		requireUserSessionContains(t, account.UserID, expiredSessionID)
 		requireAllSessionContains(t, expiredSessionID)
 
-		cli, err := client.New(sessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: currentSessionID,
-		}))
+		cli := sessionClient(t, currentSessionID)
+
+		list, err := client.Get[client.ListResult[iam.SessionView]](cli, sessionsPath)
 		require.NoError(t, err)
 
-		items := make([]iam.SessionView, 0)
-		total := new(int)
-		resp, err := cli.List(&items, total)
-		require.NoError(t, err)
+		require.Len(t, list.Items, 1)
+		require.Equal(t, 1, list.Total)
+		require.Equal(t, currentSessionID, list.Items[0].ID)
+		require.True(t, list.Items[0].IsCurrent)
 
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[iam.SessionView]) {
-			t.Helper()
-			require.Len(t, rsp.Items, 1)
-			require.Equal(t, 1, rsp.Total)
-			require.Equal(t, currentSessionID, rsp.Items[0].ID)
-			require.True(t, rsp.Items[0].IsCurrent)
-		})
 		requireUserSessionNotContains(t, account.UserID, expiredSessionID)
 		requireAllSessionNotContains(t, expiredSessionID)
 	})
@@ -470,50 +365,41 @@ func TestAdminSessionList(t *testing.T) {
 		requireAllSessionContains(t, firstUserSessionID2)
 		requireAllSessionContains(t, secondUserSessionID)
 
-		cli, err := client.New(adminSessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: adminSessionID,
-		}))
+		cli := sessionClient(t, adminSessionID)
+
+		rsp, err := client.Get[iam.AdminSessionListRsp](cli, adminSessionsPath)
 		require.NoError(t, err)
 
-		items := make([]iam.AdminSessionOwnerView, 0)
-		total := new(int)
-		resp, err := cli.List(&items, total)
-		require.NoError(t, err)
+		require.GreaterOrEqual(t, rsp.Total, 3)
+		require.GreaterOrEqual(t, rsp.SessionTotal, 4)
 
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.AdminSessionListRsp) {
-			t.Helper()
-			require.GreaterOrEqual(t, rsp.Total, 3)
-			require.GreaterOrEqual(t, rsp.SessionTotal, 4)
+		userMap := make(map[string]iam.AdminSessionOwnerView, len(rsp.Items))
+		for i := range rsp.Items {
+			userMap[rsp.Items[i].Username] = rsp.Items[i]
+		}
 
-			userMap := make(map[string]iam.AdminSessionOwnerView, len(rsp.Items))
-			for i := range rsp.Items {
-				userMap[rsp.Items[i].Username] = rsp.Items[i]
-			}
+		require.Contains(t, userMap, adminAccount.Username)
+		require.Contains(t, userMap, firstUser.Username)
+		require.Contains(t, userMap, secondUser.Username)
 
-			require.Contains(t, userMap, adminAccount.Username)
-			require.Contains(t, userMap, firstUser.Username)
-			require.Contains(t, userMap, secondUser.Username)
+		require.Len(t, userMap[adminAccount.Username].Sessions, 1)
+		require.Equal(t, adminSessionID, userMap[adminAccount.Username].Sessions[0].ID)
+		require.False(t, userMap[adminAccount.Username].Sessions[0].IsCurrent)
 
-			require.Len(t, userMap[adminAccount.Username].Sessions, 1)
-			require.Equal(t, adminSessionID, userMap[adminAccount.Username].Sessions[0].ID)
-			require.False(t, userMap[adminAccount.Username].Sessions[0].IsCurrent)
+		firstUserSessionIDs := make(map[string]struct{}, len(userMap[firstUser.Username].Sessions))
+		for i := range userMap[firstUser.Username].Sessions {
+			firstUserSessionIDs[userMap[firstUser.Username].Sessions[i].ID] = struct{}{}
+			require.False(t, userMap[firstUser.Username].Sessions[i].IsCurrent)
+		}
+		require.Len(t, userMap[firstUser.Username].Sessions, 2)
+		_, ok := firstUserSessionIDs[firstUserSessionID1]
+		require.True(t, ok)
+		_, ok = firstUserSessionIDs[firstUserSessionID2]
+		require.True(t, ok)
 
-			firstUserSessionIDs := make(map[string]struct{}, len(userMap[firstUser.Username].Sessions))
-			for i := range userMap[firstUser.Username].Sessions {
-				firstUserSessionIDs[userMap[firstUser.Username].Sessions[i].ID] = struct{}{}
-				require.False(t, userMap[firstUser.Username].Sessions[i].IsCurrent)
-			}
-			require.Len(t, userMap[firstUser.Username].Sessions, 2)
-			_, ok := firstUserSessionIDs[firstUserSessionID1]
-			require.True(t, ok)
-			_, ok = firstUserSessionIDs[firstUserSessionID2]
-			require.True(t, ok)
-
-			require.Len(t, userMap[secondUser.Username].Sessions, 1)
-			require.Equal(t, secondUserSessionID, userMap[secondUser.Username].Sessions[0].ID)
-			require.False(t, userMap[secondUser.Username].Sessions[0].IsCurrent)
-		})
+		require.Len(t, userMap[secondUser.Username].Sessions, 1)
+		require.Equal(t, secondUserSessionID, userMap[secondUser.Username].Sessions[0].ID)
+		require.False(t, userMap[secondUser.Username].Sessions[0].IsCurrent)
 	})
 
 	t.Run("list_online_sessions_within_window", func(t *testing.T) {
@@ -527,57 +413,40 @@ func TestAdminSessionList(t *testing.T) {
 		setSessionLastSeenAt(t, recentSessionID, now.Add(-time.Minute))
 		setSessionLastSeenAt(t, staleSessionID, now.Add(-10*time.Minute))
 
-		cli, err := client.New(adminSessionsAPI+"?online_within=5m", client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: adminSessionID,
-		}))
+		cli := sessionClient(t, adminSessionID)
+
+		rsp, err := client.Get[iam.AdminSessionListRsp](cli, adminSessionsPath,
+			client.WithQuery("online_within", "5m"))
 		require.NoError(t, err)
 
-		items := make([]iam.AdminSessionOwnerView, 0)
-		total := new(int)
-		resp, err := cli.List(&items, total)
-		require.NoError(t, err)
+		userMap := make(map[string]iam.AdminSessionOwnerView, len(rsp.Items))
+		for i := range rsp.Items {
+			userMap[rsp.Items[i].Username] = rsp.Items[i]
+		}
 
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.AdminSessionListRsp) {
-			t.Helper()
-			userMap := make(map[string]iam.AdminSessionOwnerView, len(rsp.Items))
-			for i := range rsp.Items {
-				userMap[rsp.Items[i].Username] = rsp.Items[i]
-			}
-
-			require.Contains(t, userMap, targetAccount.Username)
-			require.Len(t, userMap[targetAccount.Username].Sessions, 1)
-			require.Equal(t, recentSessionID, userMap[targetAccount.Username].Sessions[0].ID)
-		})
+		require.Contains(t, userMap, targetAccount.Username)
+		require.Len(t, userMap[targetAccount.Username].Sessions, 1)
+		require.Equal(t, recentSessionID, userMap[targetAccount.Username].Sessions[0].ID)
 	})
 
 	t.Run("reject_invalid_online_within", func(t *testing.T) {
 		adminSessionID := sessionLoginRoot(t)
 
-		cli, err := client.New(adminSessionsAPI+"?online_within=bad", client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: adminSessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, adminSessionID)
 
-		_, err = cli.List(new([]iam.AdminSessionOwnerView), new(int))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "400")
+		_, err := client.Get[iam.AdminSessionListRsp](cli, adminSessionsPath,
+			client.WithQuery("online_within", "bad"))
+		testutil.RequireError(t, err, http.StatusBadRequest)
 	})
 
 	t.Run("forbidden_for_regular_user", func(t *testing.T) {
 		account := newSessionTestAccount(t)
 		sessionID := loginSession(t, account.Username, account.Password)
 
-		cli, err := client.New(adminSessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, sessionID)
 
-		_, err = cli.List(new([]iam.AdminSessionOwnerView), new(int))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
+		_, err := client.Get[iam.AdminSessionListRsp](cli, adminSessionsPath)
+		testutil.RequireError(t, err, http.StatusForbidden)
 	})
 
 	t.Run("forbidden_for_inactive_root", func(t *testing.T) {
@@ -588,16 +457,10 @@ func TestAdminSessionList(t *testing.T) {
 			sessionSetUserStatus(t, adminAccount.Username, modeliamuser.UserStatusActive)
 		})
 
-		cli, err := client.New(adminSessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: adminSessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, adminSessionID)
 
-		_, err = cli.List(new([]iam.AdminSessionOwnerView), new(int))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "account disabled")
+		_, err := client.Get[iam.AdminSessionListRsp](cli, adminSessionsPath)
+		testutil.RequireError(t, err, http.StatusForbidden, "account disabled")
 	})
 
 	t.Run("forbidden_for_locked_root", func(t *testing.T) {
@@ -608,16 +471,10 @@ func TestAdminSessionList(t *testing.T) {
 			sessionSetUserStatus(t, adminAccount.Username, modeliamuser.UserStatusActive)
 		})
 
-		cli, err := client.New(adminSessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: adminSessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, adminSessionID)
 
-		_, err = cli.List(new([]iam.AdminSessionOwnerView), new(int))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "account locked")
+		_, err := client.Get[iam.AdminSessionListRsp](cli, adminSessionsPath)
+		testutil.RequireError(t, err, http.StatusForbidden, "account locked")
 	})
 }
 
@@ -630,22 +487,15 @@ func TestAdminSessionGet(t *testing.T) {
 		targetAccount := newSessionTestAccount(t)
 		targetSessionID := loginSession(t, targetAccount.Username, targetAccount.Password)
 
-		cli, err := client.New(adminSessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: adminSessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, adminSessionID)
 
-		resp, err := cli.Get(targetSessionID, new(modeliamsession.AdminSessionGetRsp))
+		rsp, err := client.Get[modeliamsession.AdminSessionGetRsp](cli, adminSessionsPath+"/"+targetSessionID)
 		require.NoError(t, err)
-		testutil.RequireResp[*modeliamsession.AdminSessionGetRsp](t, resp, func(t *testing.T, rsp *modeliamsession.AdminSessionGetRsp) {
-			t.Helper()
-			require.Equal(t, targetSessionID, rsp.Session.ID)
-			require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
-			require.False(t, rsp.Session.IsCurrent)
-			require.NotEmpty(t, rsp.Session.ClientIP)
-			require.NotEmpty(t, rsp.Session.BrowserName)
-		})
+		require.Equal(t, targetSessionID, rsp.Session.ID)
+		require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
+		require.False(t, rsp.Session.IsCurrent)
+		require.NotEmpty(t, rsp.Session.ClientIP)
+		require.NotEmpty(t, rsp.Session.BrowserName)
 	})
 
 	t.Run("forbidden_for_regular_user", func(t *testing.T) {
@@ -655,29 +505,19 @@ func TestAdminSessionGet(t *testing.T) {
 		victim := newSessionTestAccount(t)
 		victimSessionID := loginSession(t, victim.Username, victim.Password)
 
-		cli, err := client.New(adminSessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: attackerSessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, attackerSessionID)
 
-		_, err = cli.Get(victimSessionID, new(modeliamsession.AdminSessionGetRsp))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
+		_, err := client.Get[modeliamsession.AdminSessionGetRsp](cli, adminSessionsPath+"/"+victimSessionID)
+		testutil.RequireError(t, err, http.StatusForbidden)
 	})
 
 	t.Run("not_found_when_session_missing", func(t *testing.T) {
 		adminSessionID := sessionLoginRoot(t)
 
-		cli, err := client.New(adminSessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: adminSessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, adminSessionID)
 
-		_, err = cli.Get("missing-session-id", new(modeliamsession.AdminSessionGetRsp))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "404")
+		_, err := client.Get[modeliamsession.AdminSessionGetRsp](cli, adminSessionsPath+"/missing-session-id")
+		testutil.RequireError(t, err, http.StatusNotFound)
 	})
 }
 
@@ -693,18 +533,11 @@ func TestAdminSessionDelete(t *testing.T) {
 		requireUserSessionContains(t, targetAccount.UserID, targetSessionID)
 		requireAllSessionContains(t, targetSessionID)
 
-		cli, err := client.New(adminSessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: adminSessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, adminSessionID)
 
-		resp, err := cli.Delete(targetSessionID)
+		rsp, err := client.Delete[iam.AdminSessionDeleteRsp](cli, adminSessionsPath+"/"+targetSessionID, nil)
 		require.NoError(t, err)
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.AdminSessionDeleteRsp) {
-			t.Helper()
-			require.Equal(t, iam.AdminSessionDeleteRsp{}, rsp)
-		})
+		require.Equal(t, iam.AdminSessionDeleteRsp{}, *rsp)
 
 		requireSessionNotFound(t, targetSessionID)
 		requireUserSessionNotContains(t, targetAccount.UserID, targetSessionID)
@@ -718,15 +551,10 @@ func TestAdminSessionDelete(t *testing.T) {
 		victimSessionID := loginSession(t, victim.Username, victim.Password)
 		requireUserSessionContains(t, victim.UserID, victimSessionID)
 
-		cli, err := client.New(adminSessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: attackerSessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, attackerSessionID)
 
-		_, err = cli.Delete(victimSessionID)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
+		_, err := client.Delete[iam.AdminSessionDeleteRsp](cli, adminSessionsPath+"/"+victimSessionID, nil)
+		testutil.RequireError(t, err, http.StatusForbidden)
 
 		requireUserSessionContains(t, victim.UserID, victimSessionID)
 	})
@@ -734,15 +562,10 @@ func TestAdminSessionDelete(t *testing.T) {
 	t.Run("not_found_when_session_missing", func(t *testing.T) {
 		adminSessionID := sessionLoginRoot(t)
 
-		cli, err := client.New(adminSessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: adminSessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, adminSessionID)
 
-		_, err = cli.Delete("missing-session-id")
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "404")
+		_, err := client.Delete[iam.AdminSessionDeleteRsp](cli, adminSessionsPath+"/missing-session-id", nil)
+		testutil.RequireError(t, err, http.StatusNotFound)
 	})
 }
 
@@ -756,32 +579,22 @@ func TestAdminUserSessionList(t *testing.T) {
 		targetSessionID1 := loginSession(t, targetAccount.Username, targetAccount.Password)
 		targetSessionID2 := loginSession(t, targetAccount.Username, targetAccount.Password)
 
-		cli, err := client.New(
-			adminUserSessionsAPI(targetAccount.UserID),
-			client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: adminSessionID,
-			}),
-		)
+		cli := sessionClient(t, adminSessionID)
+
+		rsp, err := client.Get[iam.AdminUserSessionListRsp](cli, adminUserSessionsPath(targetAccount.UserID))
 		require.NoError(t, err)
+		require.Equal(t, targetAccount.UserID, rsp.User.UserID)
+		require.Equal(t, targetAccount.Username, rsp.User.Username)
+		require.Len(t, rsp.User.Sessions, 2)
 
-		resp, err := cli.Request(http.MethodGet, new(struct{}))
-		require.NoError(t, err)
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.AdminUserSessionListRsp) {
-			t.Helper()
-			require.Equal(t, targetAccount.UserID, rsp.User.UserID)
-			require.Equal(t, targetAccount.Username, rsp.User.Username)
-			require.Len(t, rsp.User.Sessions, 2)
+		sessionMap := make(map[string]iam.SessionView, len(rsp.User.Sessions))
+		for i := range rsp.User.Sessions {
+			sessionMap[rsp.User.Sessions[i].ID] = rsp.User.Sessions[i]
+			require.False(t, rsp.User.Sessions[i].IsCurrent)
+		}
 
-			sessionMap := make(map[string]iam.SessionView, len(rsp.User.Sessions))
-			for i := range rsp.User.Sessions {
-				sessionMap[rsp.User.Sessions[i].ID] = rsp.User.Sessions[i]
-				require.False(t, rsp.User.Sessions[i].IsCurrent)
-			}
-
-			require.Contains(t, sessionMap, targetSessionID1)
-			require.Contains(t, sessionMap, targetSessionID2)
-		})
+		require.Contains(t, sessionMap, targetSessionID1)
+		require.Contains(t, sessionMap, targetSessionID2)
 	})
 
 	t.Run("list_online_sessions_within_window", func(t *testing.T) {
@@ -795,24 +608,15 @@ func TestAdminUserSessionList(t *testing.T) {
 		setSessionLastSeenAt(t, recentSessionID, now.Add(-time.Minute))
 		setSessionLastSeenAt(t, staleSessionID, now.Add(-10*time.Minute))
 
-		cli, err := client.New(
-			adminUserSessionsAPI(targetAccount.UserID)+"?online_within=5m",
-			client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: adminSessionID,
-			}),
-		)
-		require.NoError(t, err)
+		cli := sessionClient(t, adminSessionID)
 
-		resp, err := cli.Request(http.MethodGet, new(struct{}))
+		rsp, err := client.Get[iam.AdminUserSessionListRsp](cli, adminUserSessionsPath(targetAccount.UserID),
+			client.WithQuery("online_within", "5m"))
 		require.NoError(t, err)
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.AdminUserSessionListRsp) {
-			t.Helper()
-			require.Equal(t, targetAccount.UserID, rsp.User.UserID)
-			require.Equal(t, targetAccount.Username, rsp.User.Username)
-			require.Len(t, rsp.User.Sessions, 1)
-			require.Equal(t, recentSessionID, rsp.User.Sessions[0].ID)
-		})
+		require.Equal(t, targetAccount.UserID, rsp.User.UserID)
+		require.Equal(t, targetAccount.Username, rsp.User.Username)
+		require.Len(t, rsp.User.Sessions, 1)
+		require.Equal(t, recentSessionID, rsp.User.Sessions[0].ID)
 	})
 
 	t.Run("forbidden_for_regular_user", func(t *testing.T) {
@@ -822,35 +626,19 @@ func TestAdminUserSessionList(t *testing.T) {
 		victim := newSessionTestAccount(t)
 		_ = loginSession(t, victim.Username, victim.Password)
 
-		cli, err := client.New(
-			adminUserSessionsAPI(victim.UserID),
-			client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: attackerSessionID,
-			}),
-		)
-		require.NoError(t, err)
+		cli := sessionClient(t, attackerSessionID)
 
-		_, err = cli.Request(http.MethodGet, new(struct{}))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
+		_, err := client.Get[iam.AdminUserSessionListRsp](cli, adminUserSessionsPath(victim.UserID))
+		testutil.RequireError(t, err, http.StatusForbidden)
 	})
 
 	t.Run("not_found_when_user_missing", func(t *testing.T) {
 		adminSessionID := sessionLoginRoot(t)
 
-		cli, err := client.New(
-			adminUserSessionsAPI("missing-user-id"),
-			client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: adminSessionID,
-			}),
-		)
-		require.NoError(t, err)
+		cli := sessionClient(t, adminSessionID)
 
-		_, err = cli.Request(http.MethodGet, new(struct{}))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "404")
+		_, err := client.Get[iam.AdminUserSessionListRsp](cli, adminUserSessionsPath("missing-user-id"))
+		testutil.RequireError(t, err, http.StatusNotFound)
 	})
 
 	t.Run("list_target_user_with_no_sessions", func(t *testing.T) {
@@ -858,23 +646,13 @@ func TestAdminUserSessionList(t *testing.T) {
 
 		targetAccount := newSessionTestAccount(t)
 
-		cli, err := client.New(
-			adminUserSessionsAPI(targetAccount.UserID),
-			client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: adminSessionID,
-			}),
-		)
-		require.NoError(t, err)
+		cli := sessionClient(t, adminSessionID)
 
-		resp, err := cli.Request(http.MethodGet, new(struct{}))
+		rsp, err := client.Get[iam.AdminUserSessionListRsp](cli, adminUserSessionsPath(targetAccount.UserID))
 		require.NoError(t, err)
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.AdminUserSessionListRsp) {
-			t.Helper()
-			require.Equal(t, targetAccount.UserID, rsp.User.UserID)
-			require.Equal(t, targetAccount.Username, rsp.User.Username)
-			require.Empty(t, rsp.User.Sessions)
-		})
+		require.Equal(t, targetAccount.UserID, rsp.User.UserID)
+		require.Equal(t, targetAccount.Username, rsp.User.Username)
+		require.Empty(t, rsp.User.Sessions)
 	})
 
 	t.Run("mark_current_session_when_admin_views_self", func(t *testing.T) {
@@ -882,29 +660,19 @@ func TestAdminUserSessionList(t *testing.T) {
 		currentAdminSessionID := sessionLoginRoot(t)
 		otherAdminSessionID := loginSession(t, adminAccount.Username, adminAccount.Password)
 
-		cli, err := client.New(
-			adminUserSessionsAPI(adminAccount.UserID),
-			client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: currentAdminSessionID,
-			}),
-		)
+		cli := sessionClient(t, currentAdminSessionID)
+
+		rsp, err := client.Get[iam.AdminUserSessionListRsp](cli, adminUserSessionsPath(adminAccount.UserID))
 		require.NoError(t, err)
+		require.Len(t, rsp.User.Sessions, 2)
 
-		resp, err := cli.Request(http.MethodGet, new(struct{}))
-		require.NoError(t, err)
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.AdminUserSessionListRsp) {
-			t.Helper()
-			require.Len(t, rsp.User.Sessions, 2)
+		sessionMap := make(map[string]iam.SessionView, len(rsp.User.Sessions))
+		for i := range rsp.User.Sessions {
+			sessionMap[rsp.User.Sessions[i].ID] = rsp.User.Sessions[i]
+		}
 
-			sessionMap := make(map[string]iam.SessionView, len(rsp.User.Sessions))
-			for i := range rsp.User.Sessions {
-				sessionMap[rsp.User.Sessions[i].ID] = rsp.User.Sessions[i]
-			}
-
-			require.True(t, sessionMap[currentAdminSessionID].IsCurrent)
-			require.False(t, sessionMap[otherAdminSessionID].IsCurrent)
-		})
+		require.True(t, sessionMap[currentAdminSessionID].IsCurrent)
+		require.False(t, sessionMap[otherAdminSessionID].IsCurrent)
 	})
 }
 
@@ -923,21 +691,11 @@ func TestAdminUserSessionDelete(t *testing.T) {
 		requireAllSessionContains(t, targetSessionID1)
 		requireAllSessionContains(t, targetSessionID2)
 
-		cli, err := client.New(
-			adminUserSessionsAPI(targetAccount.UserID),
-			client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: adminSessionID,
-			}),
-		)
-		require.NoError(t, err)
+		cli := sessionClient(t, adminSessionID)
 
-		resp, err := cli.Request(http.MethodDelete, new(struct{}))
+		rsp, err := client.Delete[iam.AdminUserSessionDeleteRsp](cli, adminUserSessionsPath(targetAccount.UserID), nil)
 		require.NoError(t, err)
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.AdminUserSessionDeleteRsp) {
-			t.Helper()
-			require.Equal(t, iam.AdminUserSessionDeleteRsp{}, rsp)
-		})
+		require.Equal(t, iam.AdminUserSessionDeleteRsp{}, *rsp)
 
 		requireSessionNotFound(t, targetSessionID1)
 		requireSessionNotFound(t, targetSessionID2)
@@ -955,18 +713,10 @@ func TestAdminUserSessionDelete(t *testing.T) {
 		victimSessionID := loginSession(t, victim.Username, victim.Password)
 		requireUserSessionContains(t, victim.UserID, victimSessionID)
 
-		cli, err := client.New(
-			adminUserSessionsAPI(victim.UserID),
-			client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: attackerSessionID,
-			}),
-		)
-		require.NoError(t, err)
+		cli := sessionClient(t, attackerSessionID)
 
-		_, err = cli.Request(http.MethodDelete, new(struct{}))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
+		_, err := client.Delete[iam.AdminUserSessionDeleteRsp](cli, adminUserSessionsPath(victim.UserID), nil)
+		testutil.RequireError(t, err, http.StatusForbidden)
 
 		requireUserSessionContains(t, victim.UserID, victimSessionID)
 	})
@@ -974,18 +724,10 @@ func TestAdminUserSessionDelete(t *testing.T) {
 	t.Run("not_found_when_user_missing", func(t *testing.T) {
 		adminSessionID := sessionLoginRoot(t)
 
-		cli, err := client.New(
-			adminUserSessionsAPI("missing-user-id"),
-			client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: adminSessionID,
-			}),
-		)
-		require.NoError(t, err)
+		cli := sessionClient(t, adminSessionID)
 
-		_, err = cli.Request(http.MethodDelete, new(struct{}))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "404")
+		_, err := client.Delete[iam.AdminUserSessionDeleteRsp](cli, adminUserSessionsPath("missing-user-id"), nil)
+		testutil.RequireError(t, err, http.StatusNotFound)
 	})
 
 	t.Run("idempotent_when_target_user_has_no_sessions", func(t *testing.T) {
@@ -993,21 +735,11 @@ func TestAdminUserSessionDelete(t *testing.T) {
 
 		targetAccount := newSessionTestAccount(t)
 
-		cli, err := client.New(
-			adminUserSessionsAPI(targetAccount.UserID),
-			client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: adminSessionID,
-			}),
-		)
-		require.NoError(t, err)
+		cli := sessionClient(t, adminSessionID)
 
-		resp, err := cli.Request(http.MethodDelete, new(struct{}))
+		rsp, err := client.Delete[iam.AdminUserSessionDeleteRsp](cli, adminUserSessionsPath(targetAccount.UserID), nil)
 		require.NoError(t, err)
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.AdminUserSessionDeleteRsp) {
-			t.Helper()
-			require.Equal(t, iam.AdminUserSessionDeleteRsp{}, rsp)
-		})
+		require.Equal(t, iam.AdminUserSessionDeleteRsp{}, *rsp)
 	})
 
 	t.Run("delete_all_sessions_of_current_admin", func(t *testing.T) {
@@ -1018,21 +750,11 @@ func TestAdminUserSessionDelete(t *testing.T) {
 		requireUserSessionContains(t, adminAccount.UserID, currentAdminSessionID)
 		requireUserSessionContains(t, adminAccount.UserID, otherAdminSessionID)
 
-		cli, err := client.New(
-			adminUserSessionsAPI(adminAccount.UserID),
-			client.WithCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: currentAdminSessionID,
-			}),
-		)
-		require.NoError(t, err)
+		cli := sessionClient(t, currentAdminSessionID)
 
-		resp, err := cli.Request(http.MethodDelete, new(struct{}))
+		rsp, err := client.Delete[iam.AdminUserSessionDeleteRsp](cli, adminUserSessionsPath(adminAccount.UserID), nil)
 		require.NoError(t, err)
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.AdminUserSessionDeleteRsp) {
-			t.Helper()
-			require.Equal(t, iam.AdminUserSessionDeleteRsp{}, rsp)
-		})
+		require.Equal(t, iam.AdminUserSessionDeleteRsp{}, *rsp)
 
 		requireSessionNotFound(t, currentAdminSessionID)
 		requireSessionNotFound(t, otherAdminSessionID)
@@ -1041,15 +763,10 @@ func TestAdminUserSessionDelete(t *testing.T) {
 		requireAllSessionNotContains(t, currentAdminSessionID)
 		requireAllSessionNotContains(t, otherAdminSessionID)
 
-		currentCli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: currentAdminSessionID,
-		}))
-		require.NoError(t, err)
+		currentCli := sessionClient(t, currentAdminSessionID)
 
-		_, err = currentCli.Request(http.MethodGet, new(struct{}))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "401")
+		_, err = client.Get[iam.CurrentGetRsp](currentCli, currentPath)
+		testutil.RequireError(t, err, http.StatusUnauthorized)
 	})
 }
 
@@ -1064,30 +781,18 @@ func TestSessionDelete(t *testing.T) {
 		requireUserSessionContains(t, account.UserID, currentSessionID)
 		requireUserSessionContains(t, account.UserID, otherSessionID)
 
-		cli, err := client.New(sessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: currentSessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, currentSessionID)
 
-		resp, err := cli.Delete(otherSessionID)
+		rsp, err := client.Delete[iam.SessionDeleteRsp](cli, sessionsPath+"/"+otherSessionID, nil)
 		require.NoError(t, err)
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.SessionDeleteRsp) {
-			t.Helper()
-			require.Equal(t, iam.SessionDeleteRsp{}, rsp)
-		})
+		require.Equal(t, iam.SessionDeleteRsp{}, *rsp)
 
-		items := make([]iam.SessionView, 0)
-		total := new(int)
-		resp, err = cli.List(&items, total)
+		list, err := client.Get[client.ListResult[iam.SessionView]](cli, sessionsPath)
 		require.NoError(t, err)
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[iam.SessionView]) {
-			t.Helper()
-			require.Len(t, rsp.Items, 1)
-			require.Equal(t, 1, rsp.Total)
-			require.Equal(t, currentSessionID, rsp.Items[0].ID)
-			require.True(t, rsp.Items[0].IsCurrent)
-		})
+		require.Len(t, list.Items, 1)
+		require.Equal(t, 1, list.Total)
+		require.Equal(t, currentSessionID, list.Items[0].ID)
+		require.True(t, list.Items[0].IsCurrent)
 
 		requireSessionNotFound(t, otherSessionID)
 		requireUserSessionNotContains(t, account.UserID, otherSessionID)
@@ -1099,33 +804,21 @@ func TestSessionDelete(t *testing.T) {
 		currentSessionID := loginSession(t, account.Username, account.Password)
 		missingSessionID := loginSession(t, account.Username, account.Password)
 
-		cli, err := client.New(sessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: currentSessionID,
-		}))
+		cli := sessionClient(t, currentSessionID)
+
+		_, err := client.Delete[iam.SessionDeleteRsp](cli, sessionsPath+"/"+missingSessionID, nil)
 		require.NoError(t, err)
 
-		_, err = cli.Delete(missingSessionID)
+		rsp, err := client.Delete[iam.SessionDeleteRsp](cli, sessionsPath+"/"+missingSessionID, nil)
 		require.NoError(t, err)
+		require.Equal(t, iam.SessionDeleteRsp{}, *rsp)
 
-		resp, err := cli.Delete(missingSessionID)
+		list, err := client.Get[client.ListResult[iam.SessionView]](cli, sessionsPath)
 		require.NoError(t, err)
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.SessionDeleteRsp) {
-			t.Helper()
-			require.Equal(t, iam.SessionDeleteRsp{}, rsp)
-		})
-
-		items := make([]iam.SessionView, 0)
-		total := new(int)
-		resp, err = cli.List(&items, total)
-		require.NoError(t, err)
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[iam.SessionView]) {
-			t.Helper()
-			require.Len(t, rsp.Items, 1)
-			require.Equal(t, 1, rsp.Total)
-			require.Equal(t, currentSessionID, rsp.Items[0].ID)
-			require.True(t, rsp.Items[0].IsCurrent)
-		})
+		require.Len(t, list.Items, 1)
+		require.Equal(t, 1, list.Total)
+		require.Equal(t, currentSessionID, list.Items[0].ID)
+		require.True(t, list.Items[0].IsCurrent)
 	})
 
 	t.Run("forbidden_when_deleting_other_user_session", func(t *testing.T) {
@@ -1136,15 +829,10 @@ func TestSessionDelete(t *testing.T) {
 		victimSessionID := loginSession(t, victim.Username, victim.Password)
 		requireUserSessionContains(t, victim.UserID, victimSessionID)
 
-		cli, err := client.New(sessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: attackerSessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, attackerSessionID)
 
-		_, err = cli.Delete(victimSessionID)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
+		_, err := client.Delete[iam.SessionDeleteRsp](cli, sessionsPath+"/"+victimSessionID, nil)
+		testutil.RequireError(t, err, http.StatusForbidden)
 
 		requireUserSessionContains(t, victim.UserID, victimSessionID)
 	})
@@ -1154,31 +842,19 @@ func TestSessionDelete(t *testing.T) {
 		sessionID := loginSession(t, account.Username, account.Password)
 		requireUserSessionContains(t, account.UserID, sessionID)
 
-		cli, err := client.New(sessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, sessionID)
 
-		resp, err := cli.Delete(sessionID)
+		rsp, err := client.Delete[iam.SessionDeleteRsp](cli, sessionsPath+"/"+sessionID, nil)
 		require.NoError(t, err)
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.SessionDeleteRsp) {
-			t.Helper()
-			require.Equal(t, iam.SessionDeleteRsp{}, rsp)
-		})
+		require.Equal(t, iam.SessionDeleteRsp{}, *rsp)
 
 		requireSessionNotFound(t, sessionID)
 		requireUserSessionNotContains(t, account.UserID, sessionID)
 
-		currentCli, err := client.New(currentAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
-		require.NoError(t, err)
+		currentCli := sessionClient(t, sessionID)
 
-		_, err = currentCli.Request(http.MethodGet, new(struct{}))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "401")
+		_, err = client.Get[iam.CurrentGetRsp](currentCli, currentPath)
+		testutil.RequireError(t, err, http.StatusUnauthorized)
 	})
 }
 
@@ -1195,30 +871,18 @@ func TestSessionDeleteOthers(t *testing.T) {
 		requireUserSessionContains(t, account.UserID, otherSessionID1)
 		requireUserSessionContains(t, account.UserID, otherSessionID2)
 
-		cli, err := client.New(sessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: currentSessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, currentSessionID)
 
-		resp, err := cli.Delete("others")
+		rsp, err := client.Delete[iam.SessionDeleteRsp](cli, sessionsPath+"/others", nil)
 		require.NoError(t, err)
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.SessionDeleteRsp) {
-			t.Helper()
-			require.Equal(t, iam.SessionDeleteRsp{}, rsp)
-		})
+		require.Equal(t, iam.SessionDeleteRsp{}, *rsp)
 
-		items := make([]iam.SessionView, 0)
-		total := new(int)
-		resp, err = cli.List(&items, total)
+		list, err := client.Get[client.ListResult[iam.SessionView]](cli, sessionsPath)
 		require.NoError(t, err)
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[iam.SessionView]) {
-			t.Helper()
-			require.Len(t, rsp.Items, 1)
-			require.Equal(t, 1, rsp.Total)
-			require.Equal(t, currentSessionID, rsp.Items[0].ID)
-			require.True(t, rsp.Items[0].IsCurrent)
-		})
+		require.Len(t, list.Items, 1)
+		require.Equal(t, 1, list.Total)
+		require.Equal(t, currentSessionID, list.Items[0].ID)
+		require.True(t, list.Items[0].IsCurrent)
 
 		requireUserSessionContains(t, account.UserID, currentSessionID)
 		requireUserSessionNotContains(t, account.UserID, otherSessionID1)
@@ -1231,30 +895,18 @@ func TestSessionDeleteOthers(t *testing.T) {
 		account := newSessionTestAccount(t)
 		currentSessionID := loginSession(t, account.Username, account.Password)
 
-		cli, err := client.New(sessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: currentSessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, currentSessionID)
 
-		resp, err := cli.Delete("others")
+		rsp, err := client.Delete[iam.SessionDeleteRsp](cli, sessionsPath+"/others", nil)
 		require.NoError(t, err)
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.SessionDeleteRsp) {
-			t.Helper()
-			require.Equal(t, iam.SessionDeleteRsp{}, rsp)
-		})
+		require.Equal(t, iam.SessionDeleteRsp{}, *rsp)
 
-		items := make([]iam.SessionView, 0)
-		total := new(int)
-		resp, err = cli.List(&items, total)
+		list, err := client.Get[client.ListResult[iam.SessionView]](cli, sessionsPath)
 		require.NoError(t, err)
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[iam.SessionView]) {
-			t.Helper()
-			require.Len(t, rsp.Items, 1)
-			require.Equal(t, 1, rsp.Total)
-			require.Equal(t, currentSessionID, rsp.Items[0].ID)
-			require.True(t, rsp.Items[0].IsCurrent)
-		})
+		require.Len(t, list.Items, 1)
+		require.Equal(t, 1, list.Total)
+		require.Equal(t, currentSessionID, list.Items[0].ID)
+		require.True(t, list.Items[0].IsCurrent)
 	})
 }
 
@@ -1269,27 +921,19 @@ func TestSessionDeleteAll(t *testing.T) {
 		requireUserSessionContains(t, account.UserID, currentSessionID)
 		requireUserSessionContains(t, account.UserID, otherSessionID)
 
-		cli, err := client.New(sessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: currentSessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, currentSessionID)
 
-		resp, err := cli.Request(http.MethodDelete, new(struct{}))
+		rsp, err := client.Delete[iam.SessionDeleteAllRsp](cli, sessionsPath, nil)
 		require.NoError(t, err)
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.SessionDeleteAllRsp) {
-			t.Helper()
-			require.Equal(t, iam.SessionDeleteAllRsp{}, rsp)
-		})
+		require.Equal(t, iam.SessionDeleteAllRsp{}, *rsp)
 
 		requireSessionNotFound(t, currentSessionID)
 		requireSessionNotFound(t, otherSessionID)
 		requireUserSessionNotContains(t, account.UserID, currentSessionID)
 		requireUserSessionNotContains(t, account.UserID, otherSessionID)
 
-		_, err = cli.Request(http.MethodGet, new(struct{}))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "401")
+		_, err = client.Get[client.ListResult[iam.SessionView]](cli, sessionsPath)
+		testutil.RequireError(t, err, http.StatusUnauthorized)
 	})
 
 	t.Run("idempotent_when_stale_session_index_exists", func(t *testing.T) {
@@ -1303,27 +947,19 @@ func TestSessionDeleteAll(t *testing.T) {
 		require.NoError(t, redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Delete(modeliamsession.SessionIDKey(staleSessionID)))
 		requireUserSessionContains(t, account.UserID, staleSessionID)
 
-		cli, err := client.New(sessionsAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: currentSessionID,
-		}))
-		require.NoError(t, err)
+		cli := sessionClient(t, currentSessionID)
 
-		resp, err := cli.Request(http.MethodDelete, new(struct{}))
+		rsp, err := client.Delete[iam.SessionDeleteAllRsp](cli, sessionsPath, nil)
 		require.NoError(t, err)
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.SessionDeleteAllRsp) {
-			t.Helper()
-			require.Equal(t, iam.SessionDeleteAllRsp{}, rsp)
-		})
+		require.Equal(t, iam.SessionDeleteAllRsp{}, *rsp)
 
 		requireSessionNotFound(t, currentSessionID)
 		requireSessionNotFound(t, staleSessionID)
 		requireUserSessionNotContains(t, account.UserID, currentSessionID)
 		requireUserSessionNotContains(t, account.UserID, staleSessionID)
 
-		_, err = cli.Request(http.MethodGet, new(struct{}))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "401")
+		_, err = client.Get[client.ListResult[iam.SessionView]](cli, sessionsPath)
+		testutil.RequireError(t, err, http.StatusUnauthorized)
 	})
 }
 
@@ -1428,10 +1064,10 @@ func newSessionTestAccount(t *testing.T) sessionTestAccount {
 	username := fmt.Sprintf("session_%d", time.Now().UnixNano())
 	password := "12345678"
 
-	cli, err := client.New(signupAPI)
+	cli, err := client.New(baseURL)
 	require.NoError(t, err)
 
-	resp, err := cli.Create(iam.SignupReq{
+	rsp, err := client.Post[iam.SignupRsp](cli, signupPath, iam.SignupReq{
 		Username:   username,
 		Password:   password,
 		RePassword: password,
@@ -1442,13 +1078,10 @@ func newSessionTestAccount(t *testing.T) sessionTestAccount {
 		Username: username,
 		Password: password,
 	}
-	testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
-		t.Helper()
-		require.Equal(t, username, rsp.Username)
-		require.NotEmpty(t, rsp.UserID)
-		require.NotEmpty(t, rsp.Message)
-		account.UserID = rsp.UserID
-	})
+	require.Equal(t, username, rsp.Username)
+	require.NotEmpty(t, rsp.UserID)
+	require.NotEmpty(t, rsp.Message)
+	account.UserID = rsp.UserID
 
 	return account
 }
@@ -1472,10 +1105,10 @@ func sessionLoginRoot(t *testing.T) string {
 func loginSessionIDFromCookie(t *testing.T, username, password string) string {
 	t.Helper()
 
-	cli, err := client.New(loginAPI)
+	cli, err := client.New(baseURL)
 	require.NoError(t, err)
 
-	apiResp, err := cli.Create(iam.LoginReq{
+	apiResp, err := cli.Do(http.MethodPost, loginPath, iam.LoginReq{
 		Username: username,
 		Password: password,
 	})

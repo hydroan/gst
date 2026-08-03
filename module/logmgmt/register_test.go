@@ -33,12 +33,16 @@ var (
 	rootUsername = "root"
 	rootPassword = "12345678"
 
-	signupAPI       = testutil.URL("/api/signup")
-	loginAPI        = testutil.URL("/api/login")
-	logoutAPI       = testutil.URL("/api/logout")
-	loginlogAPI     = testutil.URL("/api/log/loginlog")
-	operationlogAPI = testutil.URL("/api/log/operationlog")
-	roleAPI         = testutil.URL("/api/authz/roles")
+	baseURL = testutil.URL("")
+)
+
+const (
+	signupPath       = "/api/signup"
+	loginPath        = "/api/login"
+	logoutPath       = "/api/logout"
+	loginlogPath     = "/api/log/loginlog"
+	operationlogPath = "/api/log/operationlog"
+	rolePath         = "/api/authz/roles"
 )
 
 const (
@@ -98,62 +102,47 @@ func TestLoginLogList(t *testing.T) {
 	})
 
 	t.Run("after_login", func(t *testing.T) {
-		cli := newLoginLogClient(t, sessionID)
-		items := make([]*logmgmt.LoginLog, 0)
-		total := new(int)
-		resp, err := cli.List(&items, total)
+		cli := logmgmtSessionClient(t, sessionID)
+
+		list, err := client.Get[client.ListResult[*logmgmt.LoginLog]](cli, loginlogPath)
 		require.NoError(t, err)
 
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[*logmgmt.LoginLog]) {
-			t.Helper()
-			require.Len(t, rsp.Items, 1)
-			l := rsp.Items[0]
-			require.Equal(t, userID, l.UserID)
-			require.Equal(t, username, l.Username)
-			require.Equal(t, modellogmgmt.LoginStatusSuccess, string(l.Status))
-		})
+		require.Len(t, list.Items, 1)
+		l := list.Items[0]
+		require.Equal(t, userID, l.UserID)
+		require.Equal(t, username, l.Username)
+		require.Equal(t, modellogmgmt.LoginStatusSuccess, string(l.Status))
 	})
 
 	t.Run("after_logout_and_login_again", func(t *testing.T) {
-		logoutCli, err := client.New(logoutAPI, client.WithCookie(&http.Cookie{
-			Name:  "session_id",
-			Value: sessionID,
-		}))
+		logoutCli := logmgmtSessionClient(t, sessionID)
+		_, err := client.Post[iam.LogoutRsp](logoutCli, logoutPath, nil)
 		require.NoError(t, err)
-		resp, err := logoutCli.Create(nil)
-		require.NoError(t, err)
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp *iam.LogoutRsp) {
-			t.Helper()
-		})
 
 		sessionID = loginSessionIDFromCookie(t, iam.LoginReq{
 			Username: username,
 			Password: password,
 		})
 
-		cli := newLoginLogClient(t, sessionID)
-		items := make([]*logmgmt.LoginLog, 0)
-		total := new(int)
-		resp, err = cli.List(&items, total)
+		cli := logmgmtSessionClient(t, sessionID)
+
+		list, err := client.Get[client.ListResult[*logmgmt.LoginLog]](cli, loginlogPath)
 		require.NoError(t, err)
 
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[*logmgmt.LoginLog]) {
-			t.Helper()
-			require.Len(t, rsp.Items, 3)
-			l1, l2, l3 := rsp.Items[0], rsp.Items[1], rsp.Items[2]
+		require.Len(t, list.Items, 3)
+		l1, l2, l3 := list.Items[0], list.Items[1], list.Items[2]
 
-			require.Equal(t, userID, l1.UserID)
-			require.Equal(t, username, l1.Username)
-			require.Equal(t, modellogmgmt.LoginStatusSuccess, string(l1.Status))
+		require.Equal(t, userID, l1.UserID)
+		require.Equal(t, username, l1.Username)
+		require.Equal(t, modellogmgmt.LoginStatusSuccess, string(l1.Status))
 
-			require.Equal(t, userID, l2.UserID)
-			require.Equal(t, username, l2.Username)
-			require.Equal(t, modellogmgmt.LoginStatusLogout, string(l2.Status))
+		require.Equal(t, userID, l2.UserID)
+		require.Equal(t, username, l2.Username)
+		require.Equal(t, modellogmgmt.LoginStatusLogout, string(l2.Status))
 
-			require.Equal(t, userID, l3.UserID)
-			require.Equal(t, username, l3.Username)
-			require.Equal(t, modellogmgmt.LoginStatusSuccess, string(l3.Status))
-		})
+		require.Equal(t, userID, l3.UserID)
+		require.Equal(t, username, l3.Username)
+		require.Equal(t, modellogmgmt.LoginStatusSuccess, string(l3.Status))
 	})
 }
 
@@ -169,104 +158,72 @@ func TestOperationLogList(t *testing.T) {
 	roleName := logmgmtTestUsername("logmgmt_test_role")
 	roleID := util.HashID(roleName)
 	t.Run("before_operation", func(t *testing.T) {
-		cli := newOperationLogClient(t, sessionID, client.WithQuery("record_id", roleID))
-		items := make([]*logmgmt.OperationLog, 0)
-		total := new(int)
-		resp, err := cli.List(&items, total)
-		require.NoError(t, err)
+		cli := logmgmtSessionClient(t, sessionID)
 
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[*logmgmt.OperationLog]) {
-			t.Helper()
-			require.Empty(t, rsp.Items)
-		})
+		list, err := client.Get[client.ListResult[*logmgmt.OperationLog]](cli, operationlogPath,
+			client.WithQuery("record_id", roleID))
+		require.NoError(t, err)
+		require.Empty(t, list.Items)
 	})
 
 	adminSessionID := loginSessionIDFromCookie(t, iam.LoginReq{
 		Username: rootUsername,
 		Password: rootPassword,
 	})
-	cli, err := client.New(roleAPI, client.WithCookie(&http.Cookie{
-		Name:  "session_id",
-		Value: adminSessionID,
-	}))
-	require.NoError(t, err)
+	cli := logmgmtSessionClient(t, adminSessionID)
 	createReq := &authz.Role{
 		Base: model.Base{ID: roleID},
 		Name: roleName,
 	}
-	resp, err := cli.Create(createReq)
+	created, err := client.Post[authz.Role](cli, rolePath, createReq)
 	require.NoError(t, err)
-	testutil.RequireResp(t, resp, func(t *testing.T, rsp *authz.Role) {
-		t.Helper()
-		require.NotNil(t, rsp)
-		require.Equal(t, createReq.Name, rsp.Name)
-	})
+	require.NotNil(t, created)
+	require.Equal(t, createReq.Name, created.Name)
 
 	time.Sleep(1 * time.Second)
 	t.Run("after_operation", func(t *testing.T) {
-		cli := newOperationLogClient(t, sessionID, client.WithQuery("record_id", roleID))
-		items := make([]*logmgmt.OperationLog, 0)
-		total := new(int)
-		resp, err := cli.List(&items, total)
+		cli := logmgmtSessionClient(t, sessionID)
+
+		list, err := client.Get[client.ListResult[*logmgmt.OperationLog]](cli, operationlogPath,
+			client.WithQuery("record_id", roleID))
 		require.NoError(t, err)
 
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[*logmgmt.OperationLog]) {
-			t.Helper()
-			require.Len(t, rsp.Items, 1)
-			l := rsp.Items[0]
-			require.NotNil(t, l)
-			require.Equal(t, rootUsername, l.User)
-			require.Equal(t, consts.OP_CREATE, l.OP)
-			require.Equal(t, "roles", l.Table)
-			require.Equal(t, "Role", l.Model)
-			require.Equal(t, "/api/authz/roles", l.URI)
-		})
+		require.Len(t, list.Items, 1)
+		l := list.Items[0]
+		require.NotNil(t, l)
+		require.Equal(t, rootUsername, l.User)
+		require.Equal(t, consts.OP_CREATE, l.OP)
+		require.Equal(t, "roles", l.Table)
+		require.Equal(t, "Role", l.Model)
+		require.Equal(t, "/api/authz/roles", l.URI)
 	})
 }
 
 func signupLogmgmtTestUser(t *testing.T, username, password string) string {
 	t.Helper()
 
-	cli, err := client.New(signupAPI)
+	cli, err := client.New(baseURL)
 	require.NoError(t, err)
-	resp, err := cli.Create(iam.SignupReq{
+	rsp, err := client.Post[iam.SignupRsp](cli, signupPath, iam.SignupReq{
 		Username:   username,
 		Password:   password,
 		RePassword: password,
 	})
 	require.NoError(t, err)
-
-	var userID string
-	testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
-		t.Helper()
-		require.Equal(t, username, rsp.Username)
-		require.NotEmpty(t, rsp.UserID)
-		require.NotEmpty(t, rsp.Message)
-		userID = rsp.UserID
-	})
-	return userID
+	require.Equal(t, username, rsp.Username)
+	require.NotEmpty(t, rsp.UserID)
+	require.NotEmpty(t, rsp.Message)
+	return rsp.UserID
 }
 
-func newLoginLogClient(t *testing.T, sessionID string) *client.Client {
+// logmgmtSessionClient returns a client that presents the given session id.
+func logmgmtSessionClient(t *testing.T, sessionID string) *client.Client {
 	t.Helper()
 
-	cli, err := client.New(loginlogAPI, client.WithCookie(&http.Cookie{
+	cli, err := client.New(baseURL, client.WithCookie(&http.Cookie{
 		Name:  "session_id",
 		Value: sessionID,
 	}))
-	require.NoError(t, err)
-	return cli
-}
-
-func newOperationLogClient(t *testing.T, sessionID string, opts ...client.Option) *client.Client {
-	t.Helper()
-
-	options := []client.Option{client.WithCookie(&http.Cookie{
-		Name:  "session_id",
-		Value: sessionID,
-	})}
-	options = append(options, opts...)
-	cli, err := client.New(operationlogAPI, options...)
 	require.NoError(t, err)
 	return cli
 }
@@ -278,10 +235,10 @@ func logmgmtTestUsername(prefix string) string {
 func loginSessionIDFromCookie(t *testing.T, reqPayload iam.LoginReq) string {
 	t.Helper()
 
-	cli, err := client.New(loginAPI)
+	cli, err := client.New(baseURL)
 	require.NoError(t, err)
 
-	apiResp, err := cli.Create(reqPayload)
+	apiResp, err := cli.Do(http.MethodPost, loginPath, reqPayload)
 	require.NoError(t, err)
 
 	testutil.RequireResp(t, apiResp, func(t *testing.T, rsp iam.LoginRsp) {

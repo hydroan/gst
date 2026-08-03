@@ -1,9 +1,7 @@
 package iam_test
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -56,35 +54,30 @@ func TestAccountLogin(t *testing.T) {
 	t.Run("returns_authenticated_session", func(t *testing.T) {
 		user := accountSignupUserWithEmail(t, "acct_login_response", "12345678", "Acct.Login@Example.COM")
 
-		cli, err := client.New(loginAPI)
-		require.NoError(t, err)
+		cli := accountNewClient(t)
 
-		resp, err := cli.Create(iam.LoginReq{
+		rsp, err := client.Post[iam.LoginRsp](cli, loginPath, iam.LoginReq{
 			Username: user.Username,
 			Password: user.Password,
 		})
 		require.NoError(t, err)
 
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.LoginRsp) {
-			t.Helper()
-
-			require.False(t, rsp.ServerTime.IsZero())
-			require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
-			require.False(t, rsp.Session.IssuedAt.IsZero())
-			require.False(t, rsp.Session.LastSeenAt.IsZero())
-			require.False(t, rsp.Session.ExpiresAt.IsZero())
-			require.Positive(t, rsp.Session.ExpiresInSeconds)
-			require.True(t, rsp.Session.ExpiresAt.After(rsp.ServerTime))
-			require.Equal(t, user.UserID, rsp.Principal.UserID)
-			require.Equal(t, user.Username, rsp.Principal.Username)
-			require.Equal(t, "Acct.Login@Example.COM", rsp.Principal.Email)
-			require.False(t, rsp.Principal.MustChangePassword)
-		})
+		require.False(t, rsp.ServerTime.IsZero())
+		require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
+		require.False(t, rsp.Session.IssuedAt.IsZero())
+		require.False(t, rsp.Session.LastSeenAt.IsZero())
+		require.False(t, rsp.Session.ExpiresAt.IsZero())
+		require.Positive(t, rsp.Session.ExpiresInSeconds)
+		require.True(t, rsp.Session.ExpiresAt.After(rsp.ServerTime))
+		require.Equal(t, user.UserID, rsp.Principal.UserID)
+		require.Equal(t, user.Username, rsp.Principal.Username)
+		require.Equal(t, "Acct.Login@Example.COM", rsp.Principal.Email)
+		require.False(t, rsp.Principal.MustChangePassword)
 	})
 
 	t.Run("sets_session_cookie", func(t *testing.T) {
 		user := accountSignupUser(t, "acct_login_cookie", "12345678")
-		cookie := accountLoginSessionCookie(t, user.Username, user.Password)
+		cookie := accountLoginSessionCookieOverHTTPS(t, user.Username, user.Password)
 
 		require.Equal(t, "session_id", cookie.Name)
 		require.NotEmpty(t, cookie.Value)
@@ -119,27 +112,21 @@ func TestAccountLogout(t *testing.T) {
 	accountRequireUserSessionContains(t, user.UserID, user.SessionID)
 
 	t.Run("logout", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, logoutAPI, user.SessionID)
+		cli := accountSessionClient(t, user.SessionID)
 
-		resp, err := cli.Create(nil)
+		rsp, err := client.Post[iam.LogoutRsp](cli, logoutPath, nil)
 		require.NoError(t, err)
-
-		testutil.RequireResp[*iam.LogoutRsp](t, resp, func(t *testing.T, rsp *iam.LogoutRsp) {
-			t.Helper()
-			require.NotEmpty(t, rsp.Msg)
-		})
+		require.NotEmpty(t, rsp.Msg)
 
 		accountRequireSessionNotFound(t, user.SessionID)
 		accountRequireUserSessionNotContains(t, user.UserID, user.SessionID)
 	})
 
-	t.Run("users_unauthorized_after_logout", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, userAPI, user.SessionID)
+	t.Run("unauthorized_after_logout", func(t *testing.T) {
+		cli := accountSessionClient(t, user.SessionID)
 
-		items := make([]*iam.User, 0)
-		total := new(int)
-		_, err := cli.List(&items, total)
-		require.Error(t, err)
+		_, err := client.Get[iam.CurrentGetRsp](cli, currentPath)
+		testutil.RequireError(t, err, http.StatusUnauthorized)
 	})
 
 	t.Run("login_again", func(t *testing.T) {
@@ -165,12 +152,10 @@ func TestAccountLogout(t *testing.T) {
 		require.NoError(t, redis.Del(t.Context(), userSessionKey))
 		require.NoError(t, redis.Set(t.Context(), userSessionKey, "not-a-zset", time.Hour))
 
-		cli := accountNewAuthenticatedClient(t, logoutAPI, brokenIndexUser.SessionID)
+		cli := accountSessionClient(t, brokenIndexUser.SessionID)
 
-		_, err := cli.Create(nil)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "500")
-		require.Contains(t, err.Error(), "failed to logout")
+		_, err := client.Post[iam.LogoutRsp](cli, logoutPath, nil)
+		testutil.RequireError(t, err, http.StatusInternalServerError, "failed to logout")
 	})
 }
 
@@ -186,42 +171,39 @@ func TestAccountChangePassword(t *testing.T) {
 		invalidUser := accountSignupUser(t, "acct_changepwd_empty_old", "12345678")
 		invalidUser.SessionID = accountLoginUser(t, &invalidUser, invalidUser.Password)
 
-		cli := accountNewAuthenticatedClient(t, changepasswordAPI, invalidUser.SessionID)
+		cli := accountSessionClient(t, invalidUser.SessionID)
 
-		_, err := cli.Create(iam.ChangePasswordReq{
+		_, err := client.Post[iam.ChangePasswordRsp](cli, changepasswordPath, iam.ChangePasswordReq{
 			OldPassword: "",
 			NewPassword: newPassword,
 		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "old password is required")
+		testutil.RequireError(t, err, http.StatusBadRequest, "old password is required")
 	})
 
 	t.Run("rejects_empty_new_password", func(t *testing.T) {
 		invalidUser := accountSignupUser(t, "acct_changepwd_empty_new", "12345678")
 		invalidUser.SessionID = accountLoginUser(t, &invalidUser, invalidUser.Password)
 
-		cli := accountNewAuthenticatedClient(t, changepasswordAPI, invalidUser.SessionID)
+		cli := accountSessionClient(t, invalidUser.SessionID)
 
-		_, err := cli.Create(iam.ChangePasswordReq{
+		_, err := client.Post[iam.ChangePasswordRsp](cli, changepasswordPath, iam.ChangePasswordReq{
 			OldPassword: invalidUser.Password,
 			NewPassword: "",
 		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "new password is required")
+		testutil.RequireError(t, err, http.StatusBadRequest, "new password is required")
 	})
 
 	t.Run("rejects_short_new_password", func(t *testing.T) {
 		invalidUser := accountSignupUser(t, "acct_changepwd_short_new", "12345678")
 		invalidUser.SessionID = accountLoginUser(t, &invalidUser, invalidUser.Password)
 
-		cli := accountNewAuthenticatedClient(t, changepasswordAPI, invalidUser.SessionID)
+		cli := accountSessionClient(t, invalidUser.SessionID)
 
-		_, err := cli.Create(iam.ChangePasswordReq{
+		_, err := client.Post[iam.ChangePasswordRsp](cli, changepasswordPath, iam.ChangePasswordReq{
 			OldPassword: invalidUser.Password,
 			NewPassword: "12345",
 		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "password must be at least 6 characters long")
+		testutil.RequireError(t, err, http.StatusBadRequest, "password must be at least 6 characters long")
 	})
 
 	t.Run("succeeds_when_current_session_sync_fails_after_db_update", func(t *testing.T) {
@@ -265,18 +247,14 @@ func TestAccountChangePassword(t *testing.T) {
 	})
 
 	t.Run("change_password", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, changepasswordAPI, user.SessionID)
+		cli := accountSessionClient(t, user.SessionID)
 
-		resp, err := cli.Create(iam.ChangePasswordReq{
+		rsp, err := client.Post[iam.ChangePasswordRsp](cli, changepasswordPath, iam.ChangePasswordReq{
 			OldPassword: user.Password,
 			NewPassword: newPassword,
 		})
 		require.NoError(t, err)
-
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp *iam.ChangePasswordRsp) {
-			t.Helper()
-			require.NotEmpty(t, rsp.Msg)
-		})
+		require.NotEmpty(t, rsp.Msg)
 	})
 
 	t.Run("keeps_current_session_and_revokes_other_sessions", func(t *testing.T) {
@@ -291,14 +269,12 @@ func TestAccountChangePassword(t *testing.T) {
 	})
 
 	t.Run("user_status_forbidden_without_admin_permission", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, userStatusAPI(user.UserID), user.SessionID)
+		cli := accountSessionClient(t, user.SessionID)
 
-		_, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
+		_, err := client.Patch[iam.UserStatusPatchRsp](cli, userStatusPath(user.UserID), iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusActive,
 		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "permission denied")
+		testutil.RequireError(t, err, http.StatusForbidden, "permission denied")
 	})
 }
 
@@ -314,15 +290,13 @@ func TestAccountResetPassword(t *testing.T) {
 	victimSessionAfterReset := ""
 
 	t.Run("forbidden_without_admin_permission", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, actor.SessionID)
+		cli := accountSessionClient(t, actor.SessionID)
 
-		_, err := cli.Create(iam.ResetPasswordReq{
+		_, err := client.Post[iam.ResetPasswordRsp](cli, resetpasswordPath, iam.ResetPasswordReq{
 			UserID:      victim.UserID,
 			NewPassword: resetPass,
 		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "permission denied")
+		testutil.RequireError(t, err, http.StatusForbidden, "permission denied")
 	})
 
 	t.Run("victim_login_before_reset", func(t *testing.T) {
@@ -332,52 +306,47 @@ func TestAccountResetPassword(t *testing.T) {
 	})
 
 	t.Run("rejects_empty_target_user_id", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, rootSessionID)
+		cli := accountSessionClient(t, rootSessionID)
 
-		_, err := cli.Create(iam.ResetPasswordReq{
+		_, err := client.Post[iam.ResetPasswordRsp](cli, resetpasswordPath, iam.ResetPasswordReq{
 			UserID:      "",
 			NewPassword: resetPass,
 		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "user_id is required")
+		testutil.RequireError(t, err, http.StatusBadRequest, "user_id is required")
 	})
 
 	t.Run("rejects_empty_new_password", func(t *testing.T) {
 		invalidVictim := accountSignupUser(t, "acct_reset_empty_new", "87654321")
 
-		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, rootSessionID)
+		cli := accountSessionClient(t, rootSessionID)
 
-		_, err := cli.Create(iam.ResetPasswordReq{
+		_, err := client.Post[iam.ResetPasswordRsp](cli, resetpasswordPath, iam.ResetPasswordReq{
 			UserID:      invalidVictim.UserID,
 			NewPassword: "",
 		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "new password is required")
+		testutil.RequireError(t, err, http.StatusBadRequest, "new password is required")
 	})
 
 	t.Run("rejects_short_new_password", func(t *testing.T) {
 		invalidVictim := accountSignupUser(t, "acct_reset_short_new", "87654321")
 
-		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, rootSessionID)
+		cli := accountSessionClient(t, rootSessionID)
 
-		_, err := cli.Create(iam.ResetPasswordReq{
+		_, err := client.Post[iam.ResetPasswordRsp](cli, resetpasswordPath, iam.ResetPasswordReq{
 			UserID:      invalidVictim.UserID,
 			NewPassword: "12345",
 		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "password must be at least 6 characters long")
+		testutil.RequireError(t, err, http.StatusBadRequest, "password must be at least 6 characters long")
 	})
 
 	t.Run("missing_target_returns_not_found", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, rootSessionID)
+		cli := accountSessionClient(t, rootSessionID)
 
-		_, err := cli.Create(iam.ResetPasswordReq{
+		_, err := client.Post[iam.ResetPasswordRsp](cli, resetpasswordPath, iam.ResetPasswordReq{
 			UserID:      "missing-reset-password-target",
 			NewPassword: resetPass,
 		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "404")
-		require.Contains(t, err.Error(), "user not found")
+		testutil.RequireError(t, err, http.StatusNotFound, "user not found")
 	})
 
 	t.Run("returns_error_when_session_revoke_fails", func(t *testing.T) {
@@ -397,41 +366,34 @@ func TestAccountResetPassword(t *testing.T) {
 		require.NoError(t, redis.Del(t.Context(), userSessionKey))
 		require.NoError(t, redis.Set(t.Context(), userSessionKey, "not-a-zset", time.Hour))
 
-		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, rootSessionID)
+		cli := accountSessionClient(t, rootSessionID)
 
-		_, err := cli.Create(iam.ResetPasswordReq{
+		_, err := client.Post[iam.ResetPasswordRsp](cli, resetpasswordPath, iam.ResetPasswordReq{
 			UserID:      brokenIndexVictim.UserID,
 			NewPassword: resetPass,
 		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "500")
-		require.Contains(t, err.Error(), "failed to revoke user sessions")
+		testutil.RequireError(t, err, http.StatusInternalServerError, "failed to revoke user sessions")
 	})
 
 	t.Run("reset_success", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, resetpasswordAPI, rootSessionID)
+		cli := accountSessionClient(t, rootSessionID)
 
-		resp, err := cli.Create(iam.ResetPasswordReq{
+		rsp, err := client.Post[iam.ResetPasswordRsp](cli, resetpasswordPath, iam.ResetPasswordReq{
 			UserID:      victim.UserID,
 			NewPassword: resetPass,
 		})
 		require.NoError(t, err)
-
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp *iam.ResetPasswordRsp) {
-			t.Helper()
-			require.NotEmpty(t, rsp.Msg)
-		})
+		require.NotEmpty(t, rsp.Msg)
 	})
 
 	t.Run("victim_session_invalid_after_reset", func(t *testing.T) {
 		accountRequireSessionNotFound(t, victimSessionBeforeReset)
 		accountRequireUserSessionNotContains(t, victim.UserID, victimSessionBeforeReset)
 
-		cli := accountNewAuthenticatedClient(t, currentAPI, victimSessionBeforeReset)
+		cli := accountSessionClient(t, victimSessionBeforeReset)
 
-		_, err := cli.Request(http.MethodGet, new(struct{}))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "401")
+		_, err := client.Get[iam.CurrentGetRsp](cli, currentPath)
+		testutil.RequireError(t, err, http.StatusUnauthorized)
 	})
 
 	t.Run("victim_login_after_reset", func(t *testing.T) {
@@ -440,40 +402,32 @@ func TestAccountResetPassword(t *testing.T) {
 	})
 
 	t.Run("must_change_password_blocks_list", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), victimSessionAfterReset)
+		cli := accountSessionClient(t, victimSessionAfterReset)
 
-		_, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
+		_, err := client.Patch[iam.UserStatusPatchRsp](cli, userStatusPath(victim.UserID), iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusActive,
 		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "password change required")
+		testutil.RequireError(t, err, http.StatusForbidden, "password change required")
 	})
 
 	t.Run("victim_change_password", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, changepasswordAPI, victimSessionAfterReset)
+		cli := accountSessionClient(t, victimSessionAfterReset)
 
-		resp, err := cli.Create(iam.ChangePasswordReq{
+		rsp, err := client.Post[iam.ChangePasswordRsp](cli, changepasswordPath, iam.ChangePasswordReq{
 			OldPassword: resetPass,
 			NewPassword: finalPass,
 		})
 		require.NoError(t, err)
-
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp *iam.ChangePasswordRsp) {
-			t.Helper()
-			require.NotEmpty(t, rsp.Msg)
-		})
+		require.NotEmpty(t, rsp.Msg)
 	})
 
 	t.Run("victim_account_status_forbidden_without_admin_permission_after_change_password", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), victimSessionAfterReset)
+		cli := accountSessionClient(t, victimSessionAfterReset)
 
-		_, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
+		_, err := client.Patch[iam.UserStatusPatchRsp](cli, userStatusPath(victim.UserID), iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusActive,
 		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "permission denied")
+		testutil.RequireError(t, err, http.StatusForbidden, "permission denied")
 	})
 }
 
@@ -502,24 +456,19 @@ func accountSignupUserWithEmail(t *testing.T, prefix, password, email string) ac
 		Email:    email,
 	}
 
-	cli, err := client.New(signupAPI)
-	require.NoError(t, err)
+	cli := accountNewClient(t)
 
-	resp, err := cli.Create(iam.SignupReq{
+	rsp, err := client.Post[iam.SignupRsp](cli, signupPath, iam.SignupReq{
 		Username:   user.Username,
 		Password:   user.Password,
 		RePassword: user.Password,
 		Email:      user.Email,
 	})
 	require.NoError(t, err)
-
-	testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
-		t.Helper()
-		require.Equal(t, user.Username, rsp.Username)
-		require.NotEmpty(t, rsp.UserID)
-		require.NotEmpty(t, rsp.Message)
-		user.UserID = rsp.UserID
-	})
+	require.Equal(t, user.Username, rsp.Username)
+	require.NotEmpty(t, rsp.UserID)
+	require.NotEmpty(t, rsp.Message)
+	user.UserID = rsp.UserID
 
 	return user
 }
@@ -549,40 +498,67 @@ func accountRequireEmailIdentity(t *testing.T, userID string) *modeliamaccount.E
 func accountLoginUser(t *testing.T, user *accountTestUser, password string) string {
 	t.Helper()
 
-	return accountLoginSessionCookie(t, user.Username, password).Value
+	_, sessionID := accountLoginClient(t, user.Username, password)
+	return sessionID
 }
 
 func accountLoginRoot(t *testing.T) string {
 	t.Helper()
 
-	sessionID := accountLoginSessionCookie(t, consts.AUTHZ_USER_ROOT, rootPassword).Value
+	_, sessionID := accountLoginClient(t, consts.AUTHZ_USER_ROOT, rootPassword)
 	t.Cleanup(func() {
 		serviceiamsession.InvalidateUserSessions(context.Background(), consts.AUTHZ_USER_ROOT)
 	})
 	return sessionID
 }
 
-func accountLoginSessionCookie(t *testing.T, username, password string) *http.Cookie {
+// accountNewClient returns a service-level client with the test user agent.
+func accountNewClient(t *testing.T) *client.Client {
 	t.Helper()
 
-	payload, err := json.Marshal(iam.LoginReq{
+	cli, err := client.New(baseURL, client.WithUserAgent(accountTestUserAgent))
+	require.NoError(t, err)
+	return cli
+}
+
+// accountLoginClient logs in and returns the authenticated client (the session
+// cookie lives in its jar) together with the session id for storage asserts.
+func accountLoginClient(t *testing.T, username, password string) (*client.Client, string) {
+	t.Helper()
+
+	cli := accountNewClient(t)
+	resp, err := cli.Do(http.MethodPost, loginPath, iam.LoginReq{
+		Username: username,
+		Password: password,
+	})
+	require.NoError(t, err)
+	for _, cookie := range resp.Cookies {
+		if cookie.Name == "session_id" {
+			return cli, cookie.Value
+		}
+	}
+	require.FailNow(t, "session cookie not found")
+	return nil, ""
+}
+
+// accountLoginSessionCookieOverHTTPS logs in behind a simulated HTTPS proxy
+// and returns the raw session cookie for attribute asserts.
+func accountLoginSessionCookieOverHTTPS(t *testing.T, username, password string) *http.Cookie {
+	t.Helper()
+
+	header := http.Header{}
+	header.Set("X-Forwarded-Proto", "https")
+	cli, err := client.New(baseURL,
+		client.WithUserAgent(accountTestUserAgent), client.WithHeader(header))
+	require.NoError(t, err)
+
+	resp, err := cli.Do(http.MethodPost, loginPath, iam.LoginReq{
 		Username: username,
 		Password: password,
 	})
 	require.NoError(t, err)
 
-	req, err := http.NewRequest(http.MethodPost, loginAPI, bytes.NewReader(payload))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Forwarded-Proto", "https")
-	req.Header.Set("User-Agent", accountTestUserAgent)
-
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	require.Less(t, resp.StatusCode, http.StatusMultipleChoices)
-
-	for _, cookie := range resp.Cookies() {
+	for _, cookie := range resp.Cookies {
 		if cookie.Name == "session_id" {
 			return cookie
 		}
@@ -591,15 +567,14 @@ func accountLoginSessionCookie(t *testing.T, username, password string) *http.Co
 	return nil
 }
 
-func accountNewAuthenticatedClient(t *testing.T, api, sessionID string) *client.Client {
+// accountSessionClient returns a client presenting the given session id, for
+// cases that hold a raw session id (revoked sessions, cross-user checks).
+func accountSessionClient(t *testing.T, sessionID string) *client.Client {
 	t.Helper()
 
-	header := http.Header{}
-	header.Set("User-Agent", accountTestUserAgent)
-	cli, err := client.New(api, client.WithHeader(header), client.WithCookie(&http.Cookie{
-		Name:  "session_id",
-		Value: sessionID,
-	}))
+	cli, err := client.New(baseURL,
+		client.WithUserAgent(accountTestUserAgent),
+		client.WithCookie(&http.Cookie{Name: "session_id", Value: sessionID}))
 	require.NoError(t, err)
 	return cli
 }

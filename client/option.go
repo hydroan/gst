@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/types"
-	"golang.org/x/time/rate"
 )
 
 type Option func(*Client)
@@ -28,10 +27,15 @@ func WithHTTPClient(client *http.Client) Option {
 	}
 }
 
+// WithHeader merges the given headers into the client defaults. A key present
+// in header replaces the default value of that key; other defaults stay.
 func WithHeader(header http.Header) Option {
 	return func(c *Client) {
-		if header != nil {
-			c.header = header.Clone()
+		for key, values := range header {
+			c.header.Del(key)
+			for _, value := range values {
+				c.header.Add(key, value)
+			}
 		}
 	}
 }
@@ -39,28 +43,6 @@ func WithHeader(header http.Header) Option {
 func WithDebug() Option {
 	return func(c *Client) {
 		c.debug = true
-	}
-}
-
-func WithRetry(maxRetries int, wait time.Duration) Option {
-	return func(c *Client) {
-		if maxRetries < 0 {
-			maxRetries = 0
-		}
-		if wait < 0 {
-			wait = 0
-		}
-		c.maxRetries = maxRetries
-		c.retryWait = wait
-	}
-}
-
-func WithRateLimit(r rate.Limit, b int) Option {
-	return func(c *Client) {
-		if r <= 0 || b <= 0 {
-			return
-		}
-		c.rateLimiter = rate.NewLimiter(r, b)
 	}
 }
 
@@ -119,17 +101,6 @@ func WithToken(token string) Option {
 	return func(c *Client) {
 		if token = strings.TrimSpace(token); len(token) != 0 {
 			c.token = token
-		}
-	}
-}
-
-// WithAPI sets a custom API path for the client.
-// The path will be appended to the base address when making requests.
-// Leading and trailing slashes are automatically handled.
-func WithAPI(path string) Option {
-	return func(c *Client) {
-		if path = strings.TrimSpace(path); len(path) != 0 {
-			c.apiPath = strings.Trim(path, "/")
 		}
 	}
 }

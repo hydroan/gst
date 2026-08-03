@@ -3,9 +3,11 @@ package iam_test
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/goforj/godump"
+	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
@@ -14,22 +16,36 @@ import (
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/types/consts"
+	"github.com/stretchr/testify/require"
 )
 
 const rootPassword = "12345678"
 
-var (
-	signupAPI         = testutil.URL("/api/signup")
-	loginAPI          = testutil.URL("/api/login")
-	logoutAPI         = testutil.URL("/api/logout")
-	changepasswordAPI = testutil.URL("/api/iam/change-password")
-	resetpasswordAPI  = testutil.URL("/api/iam/reset-password")
-	userAPI           = testutil.URL("/api/iam/users")
-	currentAPI        = testutil.URL("/api/iam/session/current")
+var baseURL = testutil.URL("")
+
+const (
+	signupPath         = "/api/signup"
+	loginPath          = "/api/login"
+	logoutPath         = "/api/logout"
+	changepasswordPath = "/api/iam/change-password"
+	resetpasswordPath  = "/api/iam/reset-password"
+	currentPath        = "/api/iam/session/current"
 )
 
-func userStatusAPI(userID string) string {
-	return testutil.URL(fmt.Sprintf("/api/iam/admin/users/%s/status", userID))
+func userStatusPath(userID string) string {
+	return fmt.Sprintf("/api/iam/admin/users/%s/status", userID)
+}
+
+// sessionClient returns a client that presents the given session id.
+func sessionClient(t *testing.T, sessionID string) *client.Client {
+	t.Helper()
+
+	cli, err := client.New(baseURL, client.WithCookie(&http.Cookie{
+		Name:  "session_id",
+		Value: sessionID,
+	}))
+	require.NoError(t, err)
+	return cli
 }
 
 func TestMain(m *testing.M) {

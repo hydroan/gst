@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
@@ -14,6 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const adminUsersPath = "/api/iam/admin/users"
+
 func TestAdminUserList(t *testing.T) {
 	rootSessionID := accountLoginRoot(t)
 	user := accountSignupUserWithEmail(t, "admin_user_list", "12345678", "admin.user.list@example.com")
@@ -22,15 +25,13 @@ func TestAdminUserList(t *testing.T) {
 	actor.SessionID = accountLoginUser(t, &actor, actor.Password)
 
 	t.Run("list_users", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, adminUsersAPI(), rootSessionID)
+		cli := accountSessionClient(t, rootSessionID)
 
-		items := make([]iam.AdminUserView, 0)
-		total := new(int)
-		_, err := cli.List(&items, total)
+		list, err := client.Get[client.ListResult[iam.AdminUserView]](cli, adminUsersPath)
 		require.NoError(t, err)
-		require.Positive(t, *total)
+		require.Positive(t, list.Total)
 
-		view := requireAdminUserView(t, items, user.UserID)
+		view := requireAdminUserView(t, list.Items, user.UserID)
 		require.Equal(t, user.UserID, view.ID)
 		require.Equal(t, user.Username, view.Username)
 		require.Equal(t, "admin.user.list@example.com", view.Email)
@@ -39,27 +40,22 @@ func TestAdminUserList(t *testing.T) {
 	})
 
 	t.Run("filter_by_username", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, adminUsersAPI()+"?username=fuzzy_match", rootSessionID)
+		cli := accountSessionClient(t, rootSessionID)
 
-		items := make([]iam.AdminUserView, 0)
-		total := new(int)
-		_, err := cli.List(&items, total)
+		list, err := client.Get[client.ListResult[iam.AdminUserView]](cli, adminUsersPath,
+			client.WithQuery("username", "fuzzy_match"))
 		require.NoError(t, err)
-		require.Equal(t, 1, *total)
-		require.Len(t, items, 1)
-		require.Equal(t, fuzzyUser.UserID, items[0].ID)
-		require.Equal(t, fuzzyUser.Username, items[0].Username)
+		require.Equal(t, 1, list.Total)
+		require.Len(t, list.Items, 1)
+		require.Equal(t, fuzzyUser.UserID, list.Items[0].ID)
+		require.Equal(t, fuzzyUser.Username, list.Items[0].Username)
 	})
 
 	t.Run("forbidden_without_admin_permission", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, adminUsersAPI(), actor.SessionID)
+		cli := accountSessionClient(t, actor.SessionID)
 
-		items := make([]iam.AdminUserView, 0)
-		total := new(int)
-		_, err := cli.List(&items, total)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "permission denied")
+		_, err := client.Get[client.ListResult[iam.AdminUserView]](cli, adminUsersPath)
+		testutil.RequireError(t, err, http.StatusForbidden, "permission denied")
 	})
 }
 
@@ -70,10 +66,9 @@ func TestAdminUserGet(t *testing.T) {
 	actor.SessionID = accountLoginUser(t, &actor, actor.Password)
 
 	t.Run("get_user", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, adminUsersAPI(), rootSessionID)
+		cli := accountSessionClient(t, rootSessionID)
 
-		got := new(iam.AdminUserGetRsp)
-		_, err := cli.Get(user.UserID, got)
+		got, err := client.Get[iam.AdminUserGetRsp](cli, adminUsersPath+"/"+user.UserID)
 		require.NoError(t, err)
 		require.Equal(t, user.UserID, got.User.ID)
 		require.Equal(t, user.Username, got.User.Username)
@@ -83,23 +78,17 @@ func TestAdminUserGet(t *testing.T) {
 	})
 
 	t.Run("missing_target_returns_not_found", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, adminUsersAPI(), rootSessionID)
+		cli := accountSessionClient(t, rootSessionID)
 
-		got := new(iam.AdminUserGetRsp)
-		_, err := cli.Get("missing-admin-user-get-target", got)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "404")
-		require.Contains(t, err.Error(), "user not found")
+		_, err := client.Get[iam.AdminUserGetRsp](cli, adminUsersPath+"/missing-admin-user-get-target")
+		testutil.RequireError(t, err, http.StatusNotFound, "user not found")
 	})
 
 	t.Run("forbidden_without_admin_permission", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, adminUsersAPI(), actor.SessionID)
+		cli := accountSessionClient(t, actor.SessionID)
 
-		got := new(iam.AdminUserGetRsp)
-		_, err := cli.Get(user.UserID, got)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "permission denied")
+		_, err := client.Get[iam.AdminUserGetRsp](cli, adminUsersPath+"/"+user.UserID)
+		testutil.RequireError(t, err, http.StatusForbidden, "permission denied")
 	})
 }
 
@@ -115,92 +104,76 @@ func TestUserStatusPatch(t *testing.T) {
 	victimSessionAfterEnable := ""
 
 	t.Run("forbidden_without_admin_permission", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), actor.SessionID)
+		cli := accountSessionClient(t, actor.SessionID)
 
-		_, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
+		_, err := client.Patch[iam.UserStatusPatchRsp](cli, userStatusPath(victim.UserID), iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusInactive,
 		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "permission denied")
+		testutil.RequireError(t, err, http.StatusForbidden, "permission denied")
 	})
 
 	t.Run("missing_target_returns_not_found", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, userStatusAPI("missing-user-status-target"), rootSessionID)
+		cli := accountSessionClient(t, rootSessionID)
 
-		_, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
+		_, err := client.Patch[iam.UserStatusPatchRsp](cli, userStatusPath("missing-user-status-target"), iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusInactive,
 		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "404")
-		require.Contains(t, err.Error(), "user not found")
+		testutil.RequireError(t, err, http.StatusNotFound, "user not found")
 	})
 
 	t.Run("disable_user", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), rootSessionID)
+		cli := accountSessionClient(t, rootSessionID)
 
-		resp, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
+		rsp, err := client.Patch[iam.UserStatusPatchRsp](cli, userStatusPath(victim.UserID), iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusInactive,
 		})
 		require.NoError(t, err)
-
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.UserStatusPatchRsp) {
-			t.Helper()
-			require.Contains(t, rsp.Msg, "success")
-		})
+		require.Contains(t, rsp.Msg, "success")
 	})
 
 	t.Run("session_invalid_after_disable", func(t *testing.T) {
 		accountRequireSessionNotFound(t, victim.SessionID)
 		accountRequireUserSessionNotContains(t, victim.UserID, victim.SessionID)
 
-		cli := accountNewAuthenticatedClient(t, currentAPI, victim.SessionID)
+		cli := accountSessionClient(t, victim.SessionID)
 
-		_, err := cli.Request(http.MethodGet, new(struct{}))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "401")
+		_, err := client.Get[iam.CurrentGetRsp](cli, currentPath)
+		testutil.RequireError(t, err, http.StatusUnauthorized)
 	})
 
 	t.Run("inactive_already_inactive_unchanged_still_ok", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), rootSessionID)
+		cli := accountSessionClient(t, rootSessionID)
 
-		resp, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
+		rsp, err := client.Patch[iam.UserStatusPatchRsp](cli, userStatusPath(victim.UserID), iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusInactive,
 		})
 		require.NoError(t, err)
-
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.UserStatusPatchRsp) {
-			t.Helper()
-			require.Contains(t, rsp.Msg, "unchanged")
-		})
+		require.Contains(t, rsp.Msg, "unchanged")
 	})
 
 	t.Run("login_fails_when_inactive", func(t *testing.T) {
-		cli, err := client.New(loginAPI)
+		cli, err := client.New(baseURL)
 		require.NoError(t, err)
 
-		_, err = cli.Create(iam.LoginReq{
+		_, err = client.Post[iam.LoginRsp](cli, loginPath, iam.LoginReq{
 			Username: victim.Username,
 			Password: victim.Password,
 		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), `"code":-1`)
-		require.Contains(t, err.Error(), "disabled")
+		var respErr *client.Error
+		require.True(t, errors.As(err, &respErr), "error: %v", err)
+		require.Equal(t, http.StatusForbidden, respErr.StatusCode)
+		require.Equal(t, -1, respErr.Code)
+		require.Contains(t, respErr.Msg, "disabled")
 	})
 
 	t.Run("enable_user", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), rootSessionID)
+		cli := accountSessionClient(t, rootSessionID)
 
-		resp, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
+		rsp, err := client.Patch[iam.UserStatusPatchRsp](cli, userStatusPath(victim.UserID), iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusActive,
 		})
 		require.NoError(t, err)
-
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.UserStatusPatchRsp) {
-			t.Helper()
-			require.Contains(t, rsp.Msg, "success")
-		})
+		require.Contains(t, rsp.Msg, "success")
 	})
 
 	t.Run("login_after_enable", func(t *testing.T) {
@@ -220,12 +193,10 @@ func TestUserStatusPatch(t *testing.T) {
 			serviceiamsession.InvalidateUserStateCache(context.Background(), victim.UserID)
 		})
 
-		cli := accountNewAuthenticatedClient(t, currentAPI, victimSessionAfterEnable)
+		cli := accountSessionClient(t, victimSessionAfterEnable)
 
-		_, err := cli.Request(http.MethodGet, new(struct{}))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "account disabled")
+		_, err := client.Get[iam.CurrentGetRsp](cli, currentPath)
+		testutil.RequireError(t, err, http.StatusForbidden, "account disabled")
 		accountRequireSessionNotFound(t, victimSessionAfterEnable)
 	})
 
@@ -241,90 +212,75 @@ func TestUserStatusPatch(t *testing.T) {
 			serviceiamsession.InvalidateUserStateCache(context.Background(), victim.UserID)
 		})
 
-		cli := accountNewAuthenticatedClient(t, currentAPI, sessionID)
+		cli := accountSessionClient(t, sessionID)
 
-		_, err := cli.Request(http.MethodGet, new(struct{}))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), "account locked")
+		_, err := client.Get[iam.CurrentGetRsp](cli, currentPath)
+		testutil.RequireError(t, err, http.StatusForbidden, "account locked")
 		accountRequireSessionNotFound(t, sessionID)
 	})
 
 	t.Run("invalid_status_rejected", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), rootSessionID)
+		cli := accountSessionClient(t, rootSessionID)
 
-		_, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
+		_, err := client.Patch[iam.UserStatusPatchRsp](cli, userStatusPath(victim.UserID), iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatus("not-a-valid-status"),
 		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "invalid")
+		testutil.RequireError(t, err, http.StatusBadRequest, "invalid")
 	})
 
 	t.Run("lock_user", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), rootSessionID)
+		cli := accountSessionClient(t, rootSessionID)
 
-		resp, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
+		rsp, err := client.Patch[iam.UserStatusPatchRsp](cli, userStatusPath(victim.UserID), iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusLocked,
 		})
 		require.NoError(t, err)
-
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.UserStatusPatchRsp) {
-			t.Helper()
-			require.Contains(t, rsp.Msg, "success")
-		})
+		require.Contains(t, rsp.Msg, "success")
 	})
 
 	t.Run("session_invalid_after_lock", func(t *testing.T) {
 		accountRequireSessionNotFound(t, victimSessionAfterEnable)
 		accountRequireUserSessionNotContains(t, victim.UserID, victimSessionAfterEnable)
 
-		cli := accountNewAuthenticatedClient(t, currentAPI, victimSessionAfterEnable)
+		cli := accountSessionClient(t, victimSessionAfterEnable)
 
-		_, err := cli.Request(http.MethodGet, new(struct{}))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "401")
+		_, err := client.Get[iam.CurrentGetRsp](cli, currentPath)
+		testutil.RequireError(t, err, http.StatusUnauthorized)
 	})
 
 	t.Run("login_fails_when_locked", func(t *testing.T) {
-		cli, err := client.New(loginAPI)
+		cli, err := client.New(baseURL)
 		require.NoError(t, err)
 
-		_, err = cli.Create(iam.LoginReq{
+		_, err = client.Post[iam.LoginRsp](cli, loginPath, iam.LoginReq{
 			Username: victim.Username,
 			Password: victim.Password,
 		})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-		require.Contains(t, err.Error(), `"code":-1`)
-		require.Contains(t, err.Error(), "locked")
+		var respErr *client.Error
+		require.True(t, errors.As(err, &respErr), "error: %v", err)
+		require.Equal(t, http.StatusForbidden, respErr.StatusCode)
+		require.Equal(t, -1, respErr.Code)
+		require.Contains(t, respErr.Msg, "locked")
 	})
 
 	t.Run("unlock_user", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), rootSessionID)
+		cli := accountSessionClient(t, rootSessionID)
 
-		resp, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
+		rsp, err := client.Patch[iam.UserStatusPatchRsp](cli, userStatusPath(victim.UserID), iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusActive,
 		})
 		require.NoError(t, err)
-
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.UserStatusPatchRsp) {
-			t.Helper()
-			require.Contains(t, rsp.Msg, "success")
-		})
+		require.Contains(t, rsp.Msg, "success")
 	})
 
 	t.Run("status_unchanged_idempotent", func(t *testing.T) {
-		cli := accountNewAuthenticatedClient(t, userStatusAPI(victim.UserID), rootSessionID)
+		cli := accountSessionClient(t, rootSessionID)
 
-		resp, err := cli.Request(http.MethodPatch, iam.UserStatusPatchReq{
+		rsp, err := client.Patch[iam.UserStatusPatchRsp](cli, userStatusPath(victim.UserID), iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusActive,
 		})
 		require.NoError(t, err)
-
-		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.UserStatusPatchRsp) {
-			t.Helper()
-			require.Contains(t, rsp.Msg, "unchanged")
-		})
+		require.Contains(t, rsp.Msg, "unchanged")
 	})
 }
 
@@ -335,10 +291,6 @@ func userLoadByUsername(t *testing.T, username string) *iam.User {
 	require.NoError(t, database.Database[*iam.User](context.Background()).WithQuery(&iam.User{Username: username}).List(&users))
 	require.Len(t, users, 1)
 	return users[0]
-}
-
-func adminUsersAPI() string {
-	return testutil.URL("/api/iam/admin/users")
 }
 
 func requireAdminUserView(t *testing.T, items []iam.AdminUserView, userID string) iam.AdminUserView {

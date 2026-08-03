@@ -1,7 +1,6 @@
 package helloworld_test
 
 import (
-	"encoding/json"
 	"strconv"
 	"testing"
 	"time"
@@ -12,6 +11,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// helloworld2BatchRsp is the structured batch response with data, options and
+// summary fields.
+type helloworld2BatchRsp struct {
+	Data    []*helloworld.Helloworld2 `json:"data"`
+	Options map[string]any            `json:"options"`
+	Summary struct {
+		Total     int `json:"total"`
+		Succeeded int `json:"succeeded"`
+		Failed    int `json:"failed"`
+	} `json:"summary"`
+}
 
 func TestHelloworld2Module(t *testing.T) {
 	tests := []struct {
@@ -73,10 +84,8 @@ func TestHelloworld2Module(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cli, err := client.New(addr2)
+			cli, err := client.New(baseURL)
 			require.NoError(t, err)
-
-			var resp *client.Resp
 
 			suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
 			id := "hw2_" + suffix
@@ -84,85 +93,73 @@ func TestHelloworld2Module(t *testing.T) {
 			res1 := newHelloworld2TestRecord(id)
 			res2 := newHelloworld2TestRecord(id2)
 
+			var hw *helloworld.Helloworld2
+			var batch *helloworld2BatchRsp
+
 			switch tt.name {
 			case "create":
-				resp, err = cli.Create(res1)
+				hw, err = client.Post[helloworld.Helloworld2](cli, helloworld2Path, res1)
 				require.NoError(t, err)
-				check1(t, tt, resp)
+				check1(t, tt, hw)
 
 			case "delete":
 				createHelloworld2TestRecord(t, cli, res1)
-				resp, err = cli.Delete(id)
+				hw, err = client.Delete[helloworld.Helloworld2](cli, helloworld2Path+"/"+id, nil)
 				require.NoError(t, err)
-				check1(t, tt, resp)
+				check1(t, tt, hw)
 
 			case "update":
 				createHelloworld2TestRecord(t, cli, res1)
-				resp, err = cli.Update(id, res1)
+				hw, err = client.Put[helloworld.Helloworld2](cli, helloworld2Path+"/"+id, res1)
 				require.NoError(t, err)
-				check1(t, tt, resp)
+				check1(t, tt, hw)
 
 			case "patch":
 				createHelloworld2TestRecord(t, cli, res1)
-				resp, err = cli.Patch(id, res1)
+				hw, err = client.Patch[helloworld.Helloworld2](cli, helloworld2Path+"/"+id, res1)
 				require.NoError(t, err)
-				check1(t, tt, resp)
+				check1(t, tt, hw)
 
 			case "list":
 				createHelloworld2TestRecord(t, cli, res1)
-				items := make([]*helloworld.Helloworld2, 0)
-				total := new(int)
+				list, listErr := client.Get[client.ListResult[*helloworld.Helloworld2]](cli, helloworld2Path)
+				require.NoError(t, listErr)
 
-				_, err = cli.List(&items, total)
-				require.NoError(t, err)
-
-				item := findHelloworld2TestRecord(items, id)
+				item := findHelloworld2TestRecord(list.Items, id)
 				require.NotNil(t, item)
-				var data []byte
-				data, err = json.Marshal(item)
-				require.NoError(t, err)
-				resp = &client.Resp{Data: data}
-
-				check1(t, tt, resp)
+				check1(t, tt, item)
 
 			case "get":
 				createHelloworld2TestRecord(t, cli, res1)
-				hw := new(helloworld.Helloworld2)
-				_, err = cli.Get(id, hw)
+				hw, err = client.Get[helloworld.Helloworld2](cli, helloworld2Path+"/"+id)
 				require.NoError(t, err)
-
-				// Convert hw to resp format for check1
-				var data []byte
-				data, err = json.Marshal(hw)
-				require.NoError(t, err)
-				resp = &client.Resp{Data: data}
-				check1(t, tt, resp)
+				check1(t, tt, hw)
 
 			case "create_many":
-				resp, err = cli.CreateMany([]*helloworld.Helloworld2{res1, res2})
+				batch, err = client.Post[helloworld2BatchRsp](cli, helloworld2Path+"/batch", client.BatchItems([]*helloworld.Helloworld2{res1, res2}))
 				require.NoError(t, err)
-				check2(t, tt, resp)
+				check2(t, tt, batch)
 
 			case "delete_many":
 				createHelloworld2TestRecord(t, cli, res1)
 				createHelloworld2TestRecord(t, cli, res2)
-				resp, err = cli.DeleteMany([]string{id, id2})
+				batch, err = client.Delete[helloworld2BatchRsp](cli, helloworld2Path+"/batch", client.BatchIDs([]string{id, id2}))
 				require.NoError(t, err)
-				check2(t, tt, resp)
+				check2(t, tt, batch)
 
 			case "update_many":
 				createHelloworld2TestRecord(t, cli, res1)
 				createHelloworld2TestRecord(t, cli, res2)
-				resp, err = cli.UpdateMany([]*helloworld.Helloworld2{res1, res2})
+				batch, err = client.Put[helloworld2BatchRsp](cli, helloworld2Path+"/batch", client.BatchItems([]*helloworld.Helloworld2{res1, res2}))
 				require.NoError(t, err)
-				check2(t, tt, resp)
+				check2(t, tt, batch)
 
 			case "patch_many":
 				createHelloworld2TestRecord(t, cli, res1)
 				createHelloworld2TestRecord(t, cli, res2)
-				resp, err = cli.PatchMany([]*helloworld.Helloworld2{res1, res2})
+				batch, err = client.Patch[helloworld2BatchRsp](cli, helloworld2Path+"/batch", client.BatchItems([]*helloworld.Helloworld2{res1, res2}))
 				require.NoError(t, err)
-				check2(t, tt, resp)
+				check2(t, tt, batch)
 			}
 		})
 	}
@@ -176,7 +173,7 @@ func newHelloworld2TestRecord(id string) *helloworld.Helloworld2 {
 
 func createHelloworld2TestRecord(t *testing.T, cli *client.Client, record *helloworld.Helloworld2) {
 	t.Helper()
-	_, err := cli.Create(record)
+	_, err := client.Post[struct{}](cli, helloworld2Path, record)
 	require.NoError(t, err)
 }
 
@@ -195,14 +192,10 @@ func check1(t *testing.T, tt struct {
 
 	after string
 },
-	resp *client.Resp,
+	hw *helloworld.Helloworld2,
 ) {
 	t.Helper()
-	hw := new(helloworld.Helloworld2)
-	pretty.Println(string(resp.Data))
-	if len(resp.Data) > 0 {
-		require.NoError(t, json.Unmarshal(resp.Data, hw))
-	}
+	pretty.Println(hw)
 
 	assert.Equal(t, tt.before, hw.Before)
 	assert.Equal(t, tt.after, hw.After)
@@ -214,26 +207,11 @@ func check2(t *testing.T, tt struct {
 
 	after string
 },
-	resp *client.Resp,
+	batch *helloworld2BatchRsp,
 ) {
-	t.Helper(
-	// CreateMany returns a structured response with data, options, and summary fields
-	)
+	t.Helper()
 
-	var batchResp struct {
-		Data    []*helloworld.Helloworld2 `json:"data"`
-		Options map[string]any            `json:"options"`
-		Summary struct {
-			Total     int `json:"total"`
-			Succeeded int `json:"succeeded"`
-			Failed    int `json:"failed"`
-		} `json:"summary"`
-	}
-	if len(resp.Data) > 0 {
-		require.NoError(t, json.Unmarshal(resp.Data, &batchResp))
-	}
-
-	for _, hw := range batchResp.Data {
+	for _, hw := range batch.Data {
 		assert.Equal(t, tt.before, hw.Before)
 		assert.Equal(t, tt.after, hw.After)
 	}

@@ -20,7 +20,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var pingAPI = testutil.URL("/api/pings")
+var baseURL = testutil.URL("")
+
+const pingPath = "/api/pings"
 
 // TestMain mirrors main.go: the framework bootstraps first, the routes are
 // registered second, and the server serves last. Seed is where router.Init
@@ -37,14 +39,10 @@ func TestMain(m *testing.M) {
 // reaches a generated route, the route reaches the service, and the service
 // reads from the database the test suite prepared.
 func TestPing(t *testing.T) {
-	cli, err := client.New(pingAPI)
+	cli, err := client.New(baseURL)
 	require.NoError(t, err)
 
-	resp, err := cli.Request("GET", nil)
+	rsp, err := client.Get[model.PingRsp](cli, pingPath)
 	require.NoError(t, err)
-
-	testutil.RequireResp(t, resp, func(t *testing.T, rsp *model.PingRsp) {
-		t.Helper()
-		require.NotNil(t, rsp)
-	})
+	require.NotNil(t, rsp)
 }

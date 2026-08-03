@@ -1,9 +1,6 @@
 package helloworld_test
 
 import (
-	"encoding/json"
-	"io"
-	"net/http"
 	"testing"
 
 	"github.com/hydroan/gst/client"
@@ -14,9 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	addr  = testutil.URL("/api/hello-world")
-	addr2 = testutil.URL("/api/hello-world2")
+var baseURL = testutil.URL("")
+
+const (
+	helloworldPath  = "/api/hello-world"
+	helloworld2Path = "/api/hello-world2"
 )
 
 func TestMain(m *testing.M) {
@@ -74,76 +73,40 @@ func TestHelloworldModule(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cli, err := client.New(addr)
+			cli, err := client.New(baseURL)
 			require.NoError(t, err)
 
-			var resp *client.Resp
+			req := &helloworld.Req{
+				Field1: "hello world",
+				Field2: 0,
+			}
+
+			var rsp *helloworld.Rsp
 
 			switch tt.name {
 			case "create":
-				resp, err = cli.Create(&helloworld.Req{
-					Field1: "hello world",
-					Field2: 0,
-				})
+				rsp, err = client.Post[helloworld.Rsp](cli, helloworldPath, req)
 			case "delete":
-				resp, err = cli.Delete("123")
+				rsp, err = client.Delete[helloworld.Rsp](cli, helloworldPath+"/123", nil)
 			case "update":
-				resp, err = cli.Update("123", &helloworld.Req{
-					Field1: "hello world",
-					Field2: 0,
-				})
+				rsp, err = client.Put[helloworld.Rsp](cli, helloworldPath+"/123", req)
 			case "patch":
-				resp, err = cli.Patch("123", &helloworld.Req{
-					Field1: "hello world",
-					Field2: 0,
-				})
+				rsp, err = client.Patch[helloworld.Rsp](cli, helloworldPath+"/123", req)
 			case "list":
-				var req *http.Request
-				var data []byte
-				var httpResp *http.Response
-				req, err = http.NewRequest(http.MethodGet, addr, nil)
-				require.NoError(t, err)
-				httpResp, err = http.DefaultClient.Do(req)
-				require.NoError(t, err)
-				defer httpResp.Body.Close()
-				data, err = io.ReadAll(httpResp.Body)
-				require.NoError(t, err)
-
-				resp = &client.Resp{}
-				require.NoError(t, json.Unmarshal(data, resp))
-
+				rsp, err = client.Get[helloworld.Rsp](cli, helloworldPath)
 			case "get":
-				resp, err = cli.Get("123", new(helloworld.Helloworld))
+				rsp, err = client.Get[helloworld.Rsp](cli, helloworldPath+"/123")
 			case "create_many":
-				resp, err = cli.CreateMany([]helloworld.Req{
-					{
-						Field1: "hello world",
-						Field2: 0,
-					},
-				})
+				rsp, err = client.Post[helloworld.Rsp](cli, helloworldPath+"/batch", client.BatchItems([]helloworld.Req{*req}))
 			case "delete_many":
-				resp, err = cli.DeleteMany([]string{})
+				rsp, err = client.Delete[helloworld.Rsp](cli, helloworldPath+"/batch", client.BatchIDs([]string{}))
 			case "update_many":
-				resp, err = cli.UpdateMany([]helloworld.Req{
-					{
-						Field1: "hello world",
-						Field2: 0,
-					},
-				})
+				rsp, err = client.Put[helloworld.Rsp](cli, helloworldPath+"/batch", client.BatchItems([]helloworld.Req{*req}))
 			case "patch_many":
-				resp, err = cli.PatchMany([]helloworld.Req{
-					{
-						Field1: "hello world",
-						Field2: 0,
-					},
-				})
+				rsp, err = client.Patch[helloworld.Rsp](cli, helloworldPath+"/batch", client.BatchItems([]helloworld.Req{*req}))
 			}
 
 			require.NoError(t, err)
-
-			rsp := new(helloworld.Rsp)
-			require.NoError(t, json.Unmarshal(resp.Data, rsp))
-
 			assert.Equal(t, tt.want, rsp.Field3)
 		})
 	}
