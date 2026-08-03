@@ -20,17 +20,23 @@ var (
 	versionAPI = testutil.URL(port, "/api/version")
 )
 
-func init() {
-	testutil.EnableAutoMigrate()
-	os.Setenv(config.DATABASE_TYPE, string(config.DBMySQL))
-	os.Setenv(config.MYSQL_USERNAME, "test_module")
-	os.Setenv(config.MYSQL_PASSWORD, "test_module")
-	os.Setenv(config.MYSQL_DATABASE, "test_module")
+// TestMain prepares the database and the server every test in this package
+// shares, and releases the database once the tests are done.
+func TestMain(m *testing.M) {
+	os.Exit(runTests(m))
+}
+
+// runTests exists so that the deferred release still runs: os.Exit in TestMain
+// would skip it.
+func runTests(m *testing.M) int {
+	cleanDatabase, err := testutil.SetupMySQL()
+	if err != nil {
+		panic(err)
+	}
+	defer testutil.ReleaseOrReport("database", cleanDatabase)
+
 	os.Setenv(config.LOGGER_DIR, "./logs")
 	os.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)
-	// Enable audit and sync write before Bootstrap so operationlog test can list logs immediately.
-	os.Setenv(config.AUDIT_ENABLED, "true")
-	os.Setenv(config.AUDIT_ASYNC_WRITE, "false")
 
 	if err := bootstrap.Bootstrap(); err != nil {
 		panic(err)
@@ -45,6 +51,8 @@ func init() {
 	}()
 
 	testutil.MustWaitForServer(port)
+
+	return m.Run()
 }
 
 func TestVersion(t *testing.T) {

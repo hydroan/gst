@@ -516,40 +516,7 @@ func accountSignupUserWithEmail(t *testing.T, prefix, password, email string) ac
 		user.UserID = rsp.UserID
 	})
 
-	t.Cleanup(func() {
-		accountCleanupUser(t, user.Username)
-	})
-
 	return user
-}
-
-func accountCleanupUser(t *testing.T, username string) {
-	t.Helper()
-
-	users := make([]*iam.User, 0)
-	require.NoError(t, database.Database[*iam.User](context.Background()).WithQuery(&iam.User{Username: username}).List(&users))
-	if len(users) == 0 {
-		return
-	}
-
-	for _, user := range users {
-		serviceiamsession.InvalidateUserSessions(t.Context(), user.ID)
-		credentials := make([]*modeliamaccount.PasswordCredential, 0)
-		require.NoError(t, database.Database[*modeliamaccount.PasswordCredential](context.Background()).
-			WithQuery(&modeliamaccount.PasswordCredential{UserID: user.ID}).
-			List(&credentials))
-		if len(credentials) > 0 {
-			require.NoError(t, database.Database[*modeliamaccount.PasswordCredential](context.Background()).Delete(credentials...))
-		}
-		identities := make([]*modeliamaccount.EmailIdentity, 0)
-		require.NoError(t, database.Database[*modeliamaccount.EmailIdentity](context.Background()).
-			WithQuery(&modeliamaccount.EmailIdentity{UserID: user.ID}).
-			List(&identities))
-		if len(identities) > 0 {
-			require.NoError(t, database.Database[*modeliamaccount.EmailIdentity](context.Background()).Delete(identities...))
-		}
-	}
-	require.NoError(t, database.Database[*iam.User](context.Background()).Delete(users...))
 }
 
 func accountRequirePasswordCredential(t *testing.T, userID string) *modeliamaccount.PasswordCredential {
@@ -557,7 +524,6 @@ func accountRequirePasswordCredential(t *testing.T, userID string) *modeliamacco
 
 	credentials := make([]*modeliamaccount.PasswordCredential, 0, 1)
 	require.NoError(t, database.Database[*modeliamaccount.PasswordCredential](context.Background()).
-		WithLimit(1).
 		WithQuery(&modeliamaccount.PasswordCredential{UserID: userID}).
 		List(&credentials))
 	require.Len(t, credentials, 1)
@@ -569,7 +535,6 @@ func accountRequireEmailIdentity(t *testing.T, userID string) *modeliamaccount.E
 
 	identities := make([]*modeliamaccount.EmailIdentity, 0, 1)
 	require.NoError(t, database.Database[*modeliamaccount.EmailIdentity](context.Background()).
-		WithLimit(1).
 		WithQuery(&modeliamaccount.EmailIdentity{UserID: userID}).
 		List(&identities))
 	require.Len(t, identities, 1)

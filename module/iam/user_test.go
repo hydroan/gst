@@ -332,7 +332,7 @@ func userLoadByUsername(t *testing.T, username string) *iam.User {
 	t.Helper()
 
 	users := make([]*iam.User, 0)
-	require.NoError(t, database.Database[*iam.User](context.Background()).WithLimit(1).WithQuery(&iam.User{Username: username}).List(&users))
+	require.NoError(t, database.Database[*iam.User](context.Background()).WithQuery(&iam.User{Username: username}).List(&users))
 	require.Len(t, users, 1)
 	return users[0]
 }

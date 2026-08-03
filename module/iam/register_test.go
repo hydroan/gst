@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"testing"
 
-	"github.com/cockroachdb/errors"
 	"github.com/goforj/godump"
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/config"
@@ -42,16 +42,30 @@ type ListResponse[T any] struct {
 	Total int `json:"total"`
 }
 
-func init() {
+// TestMain prepares the database, the cache and the server every test in this
+// package shares, and releases them once the tests are done.
+func TestMain(m *testing.M) {
+	os.Exit(runTests(m))
+}
+
+// runTests exists so that the deferred releases still run: os.Exit in TestMain
+// would skip them.
+func runTests(m *testing.M) int {
 	// NOTE: do not remove me
 	godump.Dump()
-	testutil.EnableAutoMigrate()
-	os.Setenv(config.DATABASE_TYPE, string(config.DBMySQL))
-	os.Setenv(config.MYSQL_USERNAME, "test_module")
-	os.Setenv(config.MYSQL_PASSWORD, "test_module")
-	os.Setenv(config.MYSQL_DATABASE, "test_module")
-	os.Setenv(config.REDIS_ENABLED, "true")
-	testutil.SetupRandomRedisNamespace()
+
+	cleanDatabase, err := testutil.SetupMySQL()
+	if err != nil {
+		panic(err)
+	}
+	defer testutil.ReleaseOrReport("database", cleanDatabase)
+
+	cleanCache, err := testutil.SetupRedis()
+	if err != nil {
+		panic(err)
+	}
+	defer testutil.ReleaseOrReport("cache", cleanCache)
+
 	os.Setenv(config.LOGGER_DIR, "./logs")
 	os.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)
 
@@ -68,18 +82,19 @@ func init() {
 	}()
 
 	testutil.MustWaitForServer(port)
+
+	return m.Run()
 }
 
 // seedRootAccount creates the root user and password credential the tests
 // authenticate with. Baseline accounts are application data, so the test
-// creates them explicitly through the standard database chain and tolerates
-// leftovers from previous runs against the shared test database.
+// creates them explicitly through the standard database chain.
 func seedRootAccount() {
 	ctx := context.Background()
 
 	user := &modeliamuser.User{Username: consts.AUTHZ_USER_ROOT, Status: modeliamuser.UserStatusActive}
 	user.ID = consts.AUTHZ_USER_ROOT
-	if err := database.Database[*modeliamuser.User](ctx).Create(user); err != nil && !errors.Is(err, database.ErrDuplicatedKey) {
+	if err := database.Database[*modeliamuser.User](ctx).Create(user); err != nil {
 		panic(err)
 	}
 
@@ -87,7 +102,7 @@ func seedRootAccount() {
 	if err != nil {
 		panic(err)
 	}
-	if err := database.Database[*modeliamaccount.PasswordCredential](ctx).Create(credential); err != nil && !errors.Is(err, database.ErrDuplicatedKey) {
+	if err := database.Database[*modeliamaccount.PasswordCredential](ctx).Create(credential); err != nil {
 		panic(err)
 	}
 }

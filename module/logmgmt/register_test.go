@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/client"
@@ -55,14 +54,27 @@ type ListResponse[T any] struct {
 	Total int `json:"total"`
 }
 
-func init() {
-	testutil.EnableAutoMigrate()
-	os.Setenv(config.DATABASE_TYPE, string(config.DBMySQL))
-	os.Setenv(config.MYSQL_USERNAME, "test_module")
-	os.Setenv(config.MYSQL_PASSWORD, "test_module")
-	os.Setenv(config.MYSQL_DATABASE, "test_module")
-	os.Setenv(config.REDIS_ENABLED, "true")
-	testutil.SetupRandomRedisNamespace()
+// TestMain prepares the database, the cache and the server every test in this
+// package shares, and releases them once the tests are done.
+func TestMain(m *testing.M) {
+	os.Exit(runTests(m))
+}
+
+// runTests exists so that the deferred releases still run: os.Exit in TestMain
+// would skip them.
+func runTests(m *testing.M) int {
+	cleanDatabase, err := testutil.SetupMySQL()
+	if err != nil {
+		panic(err)
+	}
+	defer testutil.ReleaseOrReport("database", cleanDatabase)
+
+	cleanCache, err := testutil.SetupRedis()
+	if err != nil {
+		panic(err)
+	}
+	defer testutil.ReleaseOrReport("cache", cleanCache)
+
 	os.Setenv(config.LOGGER_DIR, "./logs")
 	os.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)
 	// Enable audit and sync write before Bootstrap so operationlog test can list logs immediately.
@@ -85,18 +97,19 @@ func init() {
 	}()
 
 	testutil.MustWaitForServer(port)
+
+	return m.Run()
 }
 
 // seedRootAccount creates the root user and password credential the tests
 // authenticate with. Baseline accounts are application data, so the test
-// creates them explicitly through the standard database chain and tolerates
-// leftovers from previous runs against the shared test database.
+// creates them explicitly through the standard database chain.
 func seedRootAccount() {
 	ctx := context.Background()
 
 	user := &modeliamuser.User{Username: rootUsername, Status: modeliamuser.UserStatusActive}
 	user.ID = "root"
-	if err := database.Database[*modeliamuser.User](ctx).Create(user); err != nil && !errors.Is(err, database.ErrDuplicatedKey) {
+	if err := database.Database[*modeliamuser.User](ctx).Create(user); err != nil {
 		panic(err)
 	}
 
@@ -104,7 +117,7 @@ func seedRootAccount() {
 	if err != nil {
 		panic(err)
 	}
-	if err := database.Database[*modeliamaccount.PasswordCredential](ctx).Create(credential); err != nil && !errors.Is(err, database.ErrDuplicatedKey) {
+	if err := database.Database[*modeliamaccount.PasswordCredential](ctx).Create(credential); err != nil {
 		panic(err)
 	}
 }
@@ -193,11 +206,6 @@ func TestOperationLogList(t *testing.T) {
 	})
 	roleName := logmgmtTestUsername("logmgmt_test_role")
 	roleID := util.HashID(roleName)
-	clearOperationLogs(t)
-	t.Cleanup(func() {
-		clearOperationLogs(t)
-	})
-
 	t.Run("before_operation", func(t *testing.T) {
 		cli := newOperationLogClient(t, sessionID, client.WithQuery("record_id", roleID))
 		items := make([]*logmgmt.OperationLog, 0)
@@ -299,17 +307,6 @@ func newOperationLogClient(t *testing.T, sessionID string, opts ...client.Option
 	cli, err := client.New(operationlogAPI, options...)
 	require.NoError(t, err)
 	return cli
-}
-
-func clearOperationLogs(t *testing.T) {
-	t.Helper()
-
-	logs := make([]*logmgmt.OperationLog, 0)
-	require.NoError(t, database.Database[*logmgmt.OperationLog](context.Background()).WithLimit(-1).List(&logs))
-	if len(logs) == 0 {
-		return
-	}
-	require.NoError(t, database.Database[*logmgmt.OperationLog](context.Background()).WithPurge().Delete(logs...))
 }
 
 func logmgmtTestUsername(prefix string) string {

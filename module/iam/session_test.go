@@ -1415,7 +1415,7 @@ func sessionSetUserStatus(t *testing.T, username string, status modeliamuser.Use
 	t.Helper()
 
 	users := make([]*iam.User, 0)
-	require.NoError(t, database.Database[*iam.User](context.Background()).WithLimit(1).WithQuery(&iam.User{Username: username}).List(&users))
+	require.NoError(t, database.Database[*iam.User](context.Background()).WithQuery(&iam.User{Username: username}).List(&users))
 	require.Len(t, users, 1)
 
 	users[0].Status = status

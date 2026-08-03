@@ -345,6 +345,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/mattn/go-sqlite3 v1.14.24 // indirect
+	github.com/mdelapenya/tlscert v0.2.0 // indirect
 	github.com/mgechev/revive v1.15.0 // indirect
 	github.com/microsoft/go-mssqldb v1.10.0 // indirect
 	github.com/minio/crc64nvme v1.1.1 // indirect
@@ -423,6 +424,7 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/sunshineplan/pdf v1.0.8 // indirect
 	github.com/swaggo/swag v1.16.4 // indirect
+	github.com/testcontainers/testcontainers-go/modules/redis v0.43.0 // indirect
 	github.com/tetafro/godot v1.5.6 // indirect
 	github.com/tetratelabs/wazero v1.11.0 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect

@@ -51,19 +51,29 @@ type totpTestAccount struct {
 	SessionID string
 }
 
-func init() {
-	testutil.EnableAutoMigrate()
-	os.Setenv(config.DATABASE_TYPE, string(config.DBMySQL))
-	os.Setenv(config.MYSQL_USERNAME, "test_module")
-	os.Setenv(config.MYSQL_PASSWORD, "test_module")
-	os.Setenv(config.MYSQL_DATABASE, "test_module")
-	os.Setenv(config.REDIS_ENABLED, "true")
-	testutil.SetupRandomRedisNamespace()
+// TestMain prepares the database, the cache and the server every test in this
+// package shares, and releases them once the tests are done.
+func TestMain(m *testing.M) {
+	os.Exit(runTests(m))
+}
+
+// runTests exists so that the deferred releases still run: os.Exit in TestMain
+// would skip them.
+func runTests(m *testing.M) int {
+	cleanDatabase, err := testutil.SetupMySQL()
+	if err != nil {
+		panic(err)
+	}
+	defer testutil.ReleaseOrReport("database", cleanDatabase)
+
+	cleanCache, err := testutil.SetupRedis()
+	if err != nil {
+		panic(err)
+	}
+	defer testutil.ReleaseOrReport("cache", cleanCache)
+
 	os.Setenv(config.LOGGER_DIR, "./logs")
 	os.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)
-	// Enable audit and sync write before Bootstrap so operationlog test can list logs immediately.
-	os.Setenv(config.AUDIT_ENABLED, "true")
-	os.Setenv(config.AUDIT_ASYNC_WRITE, "false")
 
 	if err := bootstrap.Bootstrap(); err != nil {
 		panic(err)
@@ -79,6 +89,8 @@ func init() {
 	}()
 
 	testutil.MustWaitForServer(port)
+
+	return m.Run()
 }
 
 func TestTOTPStatus(t *testing.T) {

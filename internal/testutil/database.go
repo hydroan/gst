@@ -3,16 +3,11 @@ package testutil
 import (
 	"context"
 	"fmt"
-	"io"
-	"log"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	"github.com/testcontainers/testcontainers-go"
-	tclog "github.com/testcontainers/testcontainers-go/log"
 	"github.com/testcontainers/testcontainers-go/modules/mysql"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 )
@@ -63,7 +58,7 @@ func SetupMySQL() (func() error, error) {
 		Password: mysqlPassword,
 	})
 	useDatabase(config.DBMySQL)
-	reportDatabaseReady(config.DBMySQL, fmt.Sprintf("%s:%d/%s", host, port, mysqlDatabase))
+	reportServiceReady(string(config.DBMySQL), fmt.Sprintf("%s:%d/%s", host, port, mysqlDatabase))
 
 	return terminate, nil
 }
@@ -102,7 +97,7 @@ func SetupPostgres() (func() error, error) {
 		SSLMode:  "disable",
 	})
 	useDatabase(config.DBPostgres)
-	reportDatabaseReady(config.DBPostgres, fmt.Sprintf("%s:%d/%s", host, port, postgresDatabase))
+	reportServiceReady(string(config.DBPostgres), fmt.Sprintf("%s:%d/%s", host, port, postgresDatabase))
 
 	return terminate, nil
 }
@@ -128,48 +123,16 @@ func SetupSqlite() (func() error, error) {
 	// values, while the framework defaults the field to true.
 	os.Setenv(config.SQLITE_IS_MEMORY, "false")
 	useDatabase(config.DBSqlite)
-	reportDatabaseReady(config.DBSqlite, path)
+	reportServiceReady(string(config.DBSqlite), path)
 
 	return func() error { return os.RemoveAll(dir) }, nil
 }
 
-// containerEndpoint returns the host and the published port c maps port to.
-func containerEndpoint(ctx context.Context, c testcontainers.Container, port string) (string, uint, error) {
-	host, err := c.Host(ctx)
-	if err != nil {
-		return "", 0, errors.Wrapf(err, "failed to resolve container host for port %s", port)
-	}
-	mapped, err := c.MappedPort(ctx, port)
-	if err != nil {
-		return "", 0, errors.Wrapf(err, "failed to resolve mapped port for port %s", port)
-	}
-	return host, uint(mapped.Num()), nil
-}
-
 // useDatabase points the framework at dbType and turns on automatic table
-// migration, so a bootstrap creates its tables in the freshly prepared
-// database.
+// migration. database.auto_migrate defaults to false, and a freshly prepared
+// database holds no tables at all, so a bootstrap needs it to create the ones
+// its models declare.
 func useDatabase(dbType config.DBType) {
 	os.Setenv(config.DATABASE_TYPE, string(dbType))
-	EnableAutoMigrate()
-}
-
-// reportDatabaseReady prints where the prepared database lives. Container
-// logging is muted, see muteContainerLog, so this is the only line a failing
-// test leaves behind to reconnect by hand.
-func reportDatabaseReady(dbType config.DBType, target string) {
-	fmt.Fprintf(os.Stdout, "test database ready: %s %s\n", dbType, target)
-}
-
-var muteContainerLogOnce sync.Once
-
-// muteContainerLog silences the logging testcontainers does on its own. Its
-// default logger writes to stderr as soon as the test binary runs with -v,
-// which buries the output of the test itself under image pull, reaper and
-// container lifecycle noise. Each Setup function reports the one line that
-// matters instead, see reportDatabaseReady.
-func muteContainerLog() {
-	muteContainerLogOnce.Do(func() {
-		tclog.SetDefault(log.New(io.Discard, "", 0))
-	})
+	os.Setenv(config.DATABASE_AUTO_MIGRATE, "true")
 }

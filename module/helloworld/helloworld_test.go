@@ -2,7 +2,6 @@ package helloworld_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -21,16 +20,24 @@ var (
 	port  = testutil.SetupRandomServerPort()
 	addr  = testutil.URL(port, "/api/hello-world")
 	addr2 = testutil.URL(port, "/api/hello-world2")
-
-	cleanDatabase func() error
 )
 
-func init() {
-	var err error
-	cleanDatabase, err = testutil.SetupMySQL()
+// TestMain prepares the database and the server every test in this package
+// shares, and releases the database once they are done. Setting them up per
+// test would mean a container per test, and releasing the database from one
+// test would leave the remaining ones without one.
+func TestMain(m *testing.M) {
+	os.Exit(runTests(m))
+}
+
+// runTests exists so that the deferred release still runs: os.Exit in TestMain
+// would skip it.
+func runTests(m *testing.M) int {
+	cleanDatabase, err := testutil.SetupMySQL()
 	if err != nil {
 		panic(err)
 	}
+	defer testutil.ReleaseOrReport("database", cleanDatabase)
 
 	helloworld.Register()
 	if err := bootstrap.Bootstrap(); err != nil {
@@ -44,18 +51,8 @@ func init() {
 	}()
 
 	testutil.MustWaitForServer(port)
-}
 
-// TestMain releases the database every test in this package shares. Tearing it
-// down from a single test would leave the remaining ones without a database.
-func TestMain(m *testing.M) {
-	code := m.Run()
-	if cleanDatabase != nil {
-		if err := cleanDatabase(); err != nil {
-			fmt.Fprintf(os.Stderr, "failed to release the test database: %v\n", err)
-		}
-	}
-	os.Exit(code)
+	return m.Run()
 }
 
 func TestHelloworldModule(t *testing.T) {

@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/client"
@@ -59,14 +58,27 @@ type ListResponse[T any] struct {
 	Total int `json:"total"`
 }
 
-func init() {
-	testutil.EnableAutoMigrate()
-	os.Setenv(config.DATABASE_TYPE, string(config.DBMySQL))
-	os.Setenv(config.MYSQL_USERNAME, "test_module")
-	os.Setenv(config.MYSQL_PASSWORD, "test_module")
-	os.Setenv(config.MYSQL_DATABASE, "test_module")
-	os.Setenv(config.REDIS_ENABLED, "true")
-	testutil.SetupRandomRedisNamespace()
+// TestMain prepares the database, the cache and the server every test in this
+// package shares, and releases them once the tests are done.
+func TestMain(m *testing.M) {
+	os.Exit(runTests(m))
+}
+
+// runTests exists so that the deferred releases still run: os.Exit in TestMain
+// would skip them.
+func runTests(m *testing.M) int {
+	cleanDatabase, err := testutil.SetupMySQL()
+	if err != nil {
+		panic(err)
+	}
+	defer testutil.ReleaseOrReport("database", cleanDatabase)
+
+	cleanCache, err := testutil.SetupRedis()
+	if err != nil {
+		panic(err)
+	}
+	defer testutil.ReleaseOrReport("cache", cleanCache)
+
 	os.Setenv(config.LOGGER_DIR, "./logs")
 	os.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)
 	// Enable audit and sync write before Bootstrap so operationlog test can list logs immediately.
@@ -89,19 +101,20 @@ func init() {
 	}()
 
 	testutil.MustWaitForServer(port)
+
+	return m.Run()
 }
 
 // seedBaseline creates the baseline rows the tests depend on: the root user
 // with its password credential, and the root menu row anchoring the menu
 // tree. Baseline data is application data, so the test creates it explicitly
-// through the standard database chain and tolerates leftovers from previous
-// runs against the shared test database.
+// through the standard database chain.
 func seedBaseline() {
 	ctx := context.Background()
 
 	user := &modeliamuser.User{Username: rootUsername, Status: modeliamuser.UserStatusActive}
 	user.ID = "root"
-	if err := database.Database[*modeliamuser.User](ctx).Create(user); err != nil && !errors.Is(err, database.ErrDuplicatedKey) {
+	if err := database.Database[*modeliamuser.User](ctx).Create(user); err != nil {
 		panic(err)
 	}
 
@@ -109,12 +122,12 @@ func seedBaseline() {
 	if err != nil {
 		panic(err)
 	}
-	if err := database.Database[*modeliamaccount.PasswordCredential](ctx).Create(credential); err != nil && !errors.Is(err, database.ErrDuplicatedKey) {
+	if err := database.Database[*modeliamaccount.PasswordCredential](ctx).Create(credential); err != nil {
 		panic(err)
 	}
 
 	rootMenu := &modelauthz.Menu{Base: model.Base{ID: model.RootID}, ParentID: model.RootID}
-	if err := database.Database[*modelauthz.Menu](ctx).Create(rootMenu); err != nil && !errors.Is(err, database.ErrDuplicatedKey) {
+	if err := database.Database[*modelauthz.Menu](ctx).Create(rootMenu); err != nil {
 		panic(err)
 	}
 }
@@ -297,8 +310,6 @@ func TestAuthzMenu(t *testing.T) {
 		})
 
 		t.Run("delete_removes_menu_references", func(t *testing.T) {
-			authzPurgeLeftoverRole(t, "menu_reference_role")
-
 			resp, err = cli.Create(&authz.Menu{
 				ParentID: "root",
 				Label:    "Referenced Menu",
@@ -348,8 +359,6 @@ func TestAuthzMenu(t *testing.T) {
 		})
 
 		t.Run("invalid_role_binding_does_not_fallback_to_default_role", func(t *testing.T) {
-			authzPurgeLeftoverRole(t, "default_fallback_role")
-
 			resp, err = cli.Create(&authz.Menu{
 				ParentID: "root",
 				Label:    "Default Fallback Menu",
@@ -725,18 +734,15 @@ func TestAuthzRoleBinding(t *testing.T) {
 		var roleID string
 		var resp *client.Resp
 
-		// Create a role for assigning to user. The id must be unique per run:
-		// the shared test database keeps rows across runs and Create rejects
-		// duplicates.
+		// Create a role for assigning to user.
 		cliRole, err := client.New(roleAPI, client.WithCookie(&http.Cookie{
 			Name:  "session_id",
 			Value: adminSessionID,
 		}))
 		require.NoError(t, err)
-		// Keep the prefix short: the generated id must fit the char(36) id column.
-		bindingRoleID := authzTestUsername("rb_role")
+		bindingRoleName := authzTestUsername("rb_role")
 		resp, err = cliRole.Create(&authz.Role{
-			Name: bindingRoleID,
+			Name: bindingRoleName,
 		})
 		require.NoError(t, err)
 		testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
@@ -805,8 +811,6 @@ func TestAuthzRoleBinding(t *testing.T) {
 		// that the authorization did: a rule left behind keeps allowing requests
 		// with no record left to revoke it.
 		t.Run("delete_role_cleans_bindings_and_their_rules", func(t *testing.T) {
-			authzPurgeLeftoverRole(t, "deleted_role")
-
 			resp, err = cliRole.Create(&authz.Role{
 				Name: "deleted_role",
 			})
@@ -1119,30 +1123,6 @@ func authzTenantClient(api, sessionID, tenantID string) (*client.Client, error) 
 			Value: sessionID,
 		}),
 	)
-}
-
-// authzPurgeLeftoverRole removes the fixed-id role that a previously failed
-// run may have left in the shared test database, so the caller can recreate
-// the role without hitting a duplicated-key conflict. Deleting through the
-// standard chain runs the role delete hooks, which also remove the role's
-// bindings and RBAC policies.
-func authzPurgeLeftoverRole(t *testing.T, roleName string) {
-	t.Helper()
-
-	// Roles are looked up by name: IDs are framework-generated now, so a
-	// leftover from a previous run can only be identified by its unique name.
-	leftovers := make([]*authz.Role, 0)
-	err := database.Database[*authz.Role](context.Background()).
-		WithQuery(&authz.Role{Name: roleName}).
-		List(&leftovers)
-	require.NoError(t, err)
-	for _, leftover := range leftovers {
-		err = database.Database[*authz.Role](context.Background()).WithPurge().Delete(leftover)
-		if errors.Is(err, database.ErrRecordNotFound) {
-			continue
-		}
-		require.NoError(t, err)
-	}
 }
 
 func authzCreateTenantRole(t *testing.T, tenantID, name string, menuIDs ...string) string {

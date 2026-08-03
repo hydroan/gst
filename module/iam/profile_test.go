@@ -9,9 +9,7 @@ import (
 
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
-	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamprofile "github.com/hydroan/gst/internal/model/iam/profile"
-	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/stretchr/testify/require"
@@ -152,9 +150,6 @@ func newProfileTestAccount(t *testing.T) profileTestAccount {
 	})
 
 	account.SessionID = profileLoginSession(t, account.Username, account.Password)
-	t.Cleanup(func() {
-		profileCleanupAccount(t, account.UserID)
-	})
 
 	return account
 }
@@ -199,40 +194,6 @@ func newProfileAuthenticatedClient(t *testing.T, api, sessionID string) *client.
 	}))
 	require.NoError(t, err)
 	return cli
-}
-
-func profileCleanupAccount(t *testing.T, userID string) {
-	t.Helper()
-
-	serviceiamsession.InvalidateUserSessions(t.Context(), userID)
-
-	profiles := make([]*modeliamprofile.Profile, 0)
-	require.NoError(t, database.Database[*modeliamprofile.Profile](context.Background()).
-		WithQuery(&modeliamprofile.Profile{UserID: userID}).
-		List(&profiles))
-	if len(profiles) > 0 {
-		require.NoError(t, database.Database[*modeliamprofile.Profile](context.Background()).Delete(profiles...))
-	}
-
-	credentials := make([]*modeliamaccount.PasswordCredential, 0)
-	require.NoError(t, database.Database[*modeliamaccount.PasswordCredential](context.Background()).
-		WithQuery(&modeliamaccount.PasswordCredential{UserID: userID}).
-		List(&credentials))
-	if len(credentials) > 0 {
-		require.NoError(t, database.Database[*modeliamaccount.PasswordCredential](context.Background()).Delete(credentials...))
-	}
-
-	identities := make([]*modeliamaccount.EmailIdentity, 0)
-	require.NoError(t, database.Database[*modeliamaccount.EmailIdentity](context.Background()).
-		WithQuery(&modeliamaccount.EmailIdentity{UserID: userID}).
-		List(&identities))
-	if len(identities) > 0 {
-		require.NoError(t, database.Database[*modeliamaccount.EmailIdentity](context.Background()).Delete(identities...))
-	}
-
-	user := new(iam.User)
-	require.NoError(t, database.Database[*iam.User](context.Background()).Get(user, userID))
-	require.NoError(t, database.Database[*iam.User](context.Background()).Delete(user))
 }
 
 func profileCountForUser(t *testing.T, userID string) int {
