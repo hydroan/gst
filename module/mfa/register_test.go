@@ -57,7 +57,7 @@ func TestTOTPStatus(t *testing.T) {
 
 	t.Run("not_enabled", func(t *testing.T) {
 		resp := requestTOTPStatus(t, account.SessionID)
-		testutil.TestResp[*mfa.TOTPStatusRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPStatusRsp) {
+		testutil.RequireResp[*mfa.TOTPStatusRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPStatusRsp) {
 			t.Helper()
 			require.Equal(t, 0, rsp.DeviceCount)
 			require.Empty(t, rsp.Devices)
@@ -72,7 +72,7 @@ func TestTOTPStatus(t *testing.T) {
 
 	t.Run("enabled", func(t *testing.T) {
 		resp := requestTOTPStatus(t, account.SessionID)
-		testutil.TestResp[*mfa.TOTPStatusRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPStatusRsp) {
+		testutil.RequireResp[*mfa.TOTPStatusRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPStatusRsp) {
 			t.Helper()
 			require.True(t, rsp.Enabled)
 			require.NotEmpty(t, rsp.DeviceCount)
@@ -91,7 +91,7 @@ func TestTOTPStatus(t *testing.T) {
 
 	t.Run("disabled_after_unbind", func(t *testing.T) {
 		resp := requestTOTPStatus(t, account.SessionID)
-		testutil.TestResp[*mfa.TOTPStatusRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPStatusRsp) {
+		testutil.RequireResp[*mfa.TOTPStatusRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPStatusRsp) {
 			t.Helper()
 			require.False(t, rsp.Enabled)
 			require.Equal(t, 0, rsp.DeviceCount)
@@ -108,7 +108,7 @@ func TestTOTPCheck(t *testing.T) {
 
 	t.Run("not_enabled", func(t *testing.T) {
 		resp := requestTOTPCheck(t, account)
-		testutil.TestResp[*mfa.TOTPCheckRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPCheckRsp) {
+		testutil.RequireResp[*mfa.TOTPCheckRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPCheckRsp) {
 			t.Helper()
 			require.False(t, rsp.RequiresMFA)
 			require.NotEmpty(t, rsp.Message)
@@ -120,7 +120,7 @@ func TestTOTPCheck(t *testing.T) {
 
 	t.Run("enabled", func(t *testing.T) {
 		resp := requestTOTPCheck(t, account)
-		testutil.TestResp[*mfa.TOTPCheckRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPCheckRsp) {
+		testutil.RequireResp[*mfa.TOTPCheckRsp](t, resp, func(t *testing.T, rsp *mfa.TOTPCheckRsp) {
 			t.Helper()
 			require.True(t, rsp.RequiresMFA)
 			require.NotEmpty(t, rsp.Message)
@@ -135,7 +135,7 @@ func TestTOTPBind(t *testing.T) {
 
 	resp, err := cli.Create(nil)
 	require.NoError(t, err)
-	testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPBindRsp) {
+	testutil.RequireResp(t, resp, func(t *testing.T, rsp *mfa.TOTPBindRsp) {
 		t.Helper()
 		require.NotNil(t, rsp)
 		require.NotEmpty(t, rsp.ChallengeID)
@@ -186,7 +186,7 @@ func TestTOTPConfirm(t *testing.T) {
 			DeviceName:  "test-device",
 		})
 		require.NoError(t, err)
-		testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPConfirmRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp *mfa.TOTPConfirmRsp) {
 			t.Helper()
 			require.NotEmpty(t, rsp.DeviceID)
 			require.NotEmpty(t, rsp.Message)
@@ -222,7 +222,7 @@ func TestTOTPVerify(t *testing.T) {
 		require.NoError(t, err)
 		resp, err := cli.Create(mfa.TOTPVerifyReq{TOTPCode: code})
 		require.NoError(t, err)
-		testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPVerifyRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp *mfa.TOTPVerifyRsp) {
 			t.Helper()
 			require.True(t, rsp.Valid)
 			require.NotEmpty(t, rsp.Message)
@@ -233,7 +233,7 @@ func TestTOTPVerify(t *testing.T) {
 	t.Run("invalid_code", func(t *testing.T) {
 		resp, err := cli.Create(mfa.TOTPVerifyReq{TOTPCode: "000000"})
 		require.NoError(t, err)
-		testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPVerifyRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp *mfa.TOTPVerifyRsp) {
 			t.Helper()
 			require.False(t, rsp.Valid)
 			require.NotEmpty(t, rsp.Message)
@@ -320,7 +320,7 @@ func TestTOTPUnbind(t *testing.T) {
 	t.Run("missing_fresh_auth", func(t *testing.T) {
 		resp, err := cli.Create(mfa.TOTPUnbindReq{DeviceID: deviceID})
 		require.NoError(t, err)
-		testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
 			t.Helper()
 			require.False(t, rsp.Success)
 			require.Equal(t, 1, rsp.DeviceCount)
@@ -339,7 +339,7 @@ func TestTOTPUnbind(t *testing.T) {
 			BackupCode: backupCodes[0],
 		})
 		require.NoError(t, err)
-		testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
 			t.Helper()
 			require.False(t, rsp.Success)
 			require.Equal(t, 1, rsp.DeviceCount)
@@ -357,7 +357,7 @@ func TestTOTPUnbind(t *testing.T) {
 			TOTPCode: "000000",
 		})
 		require.NoError(t, err)
-		testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
 			t.Helper()
 			require.False(t, rsp.Success)
 			require.Equal(t, 1, rsp.DeviceCount)
@@ -375,7 +375,7 @@ func TestTOTPUnbind(t *testing.T) {
 			Password: account.Password,
 		})
 		require.NoError(t, err)
-		testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
 			t.Helper()
 			require.True(t, rsp.Success)
 			require.Equal(t, 1, rsp.DeviceCount)
@@ -393,7 +393,7 @@ func TestTOTPUnbind(t *testing.T) {
 			TOTPCode: code,
 		})
 		require.NoError(t, err)
-		testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
 			t.Helper()
 			require.True(t, rsp.Success)
 			require.Equal(t, 0, rsp.DeviceCount)
@@ -420,7 +420,7 @@ func newTOTPTestAccount(t *testing.T, prefix string) totpTestAccount {
 		RePassword: account.Password,
 	})
 	require.NoError(t, err)
-	testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
+	testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
 		t.Helper()
 		require.Equal(t, account.Username, rsp.Username)
 		require.NotEmpty(t, rsp.UserID)
@@ -476,7 +476,7 @@ func createTOTPBindingChallenge(t *testing.T, sessionID string) (string, string)
 
 	var challengeID string
 	var secret string
-	testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPBindRsp) {
+	testutil.RequireResp(t, resp, func(t *testing.T, rsp *mfa.TOTPBindRsp) {
 		t.Helper()
 		require.NotEmpty(t, rsp.ChallengeID)
 		require.NotEmpty(t, rsp.OtpauthURL)
@@ -495,7 +495,7 @@ func unbindTOTPDeviceWithPassword(t *testing.T, sessionID, deviceID, password st
 		Password: password,
 	})
 	require.NoError(t, err)
-	testutil.TestResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
+	testutil.RequireResp(t, resp, func(t *testing.T, rsp *mfa.TOTPUnbindRsp) {
 		t.Helper()
 		require.True(t, rsp.Success)
 		require.NotEmpty(t, rsp.Message)
@@ -511,7 +511,7 @@ func loginSessionIDFromCookie(t *testing.T, reqPayload iam.LoginReq) string {
 	apiResp, err := cli.Create(reqPayload)
 	require.NoError(t, err)
 
-	testutil.TestResp(t, apiResp, func(t *testing.T, rsp iam.LoginRsp) {
+	testutil.RequireResp(t, apiResp, func(t *testing.T, rsp iam.LoginRsp) {
 		t.Helper()
 		require.False(t, rsp.ServerTime.IsZero())
 		require.False(t, rsp.Session.ExpiresAt.IsZero())
@@ -585,7 +585,7 @@ func bindTOTPDeviceForTest(t *testing.T, sessionID, deviceName string) (string, 
 
 	var challengeID string
 	var secret string
-	testutil.TestResp(t, bindResp, func(t *testing.T, rsp *mfa.TOTPBindRsp) {
+	testutil.RequireResp(t, bindResp, func(t *testing.T, rsp *mfa.TOTPBindRsp) {
 		t.Helper()
 
 		require.NotEmpty(t, rsp.ChallengeID)
@@ -612,7 +612,7 @@ func bindTOTPDeviceForTest(t *testing.T, sessionID, deviceName string) (string, 
 
 	var deviceID string
 	var backupCodes []string
-	testutil.TestResp(t, confirmResp, func(t *testing.T, rsp *mfa.TOTPConfirmRsp) {
+	testutil.RequireResp(t, confirmResp, func(t *testing.T, rsp *mfa.TOTPConfirmRsp) {
 		t.Helper()
 
 		require.NotEmpty(t, rsp.DeviceID)

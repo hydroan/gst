@@ -65,7 +65,7 @@ func TestAccountLogin(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.LoginRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.LoginRsp) {
 			t.Helper()
 
 			require.False(t, rsp.ServerTime.IsZero())
@@ -124,7 +124,7 @@ func TestAccountLogout(t *testing.T) {
 		resp, err := cli.Create(nil)
 		require.NoError(t, err)
 
-		testutil.TestResp[*iam.LogoutRsp](t, resp, func(t *testing.T, rsp *iam.LogoutRsp) {
+		testutil.RequireResp[*iam.LogoutRsp](t, resp, func(t *testing.T, rsp *iam.LogoutRsp) {
 			t.Helper()
 			require.NotEmpty(t, rsp.Msg)
 		})
@@ -273,7 +273,7 @@ func TestAccountChangePassword(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp *iam.ChangePasswordRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp *iam.ChangePasswordRsp) {
 			t.Helper()
 			require.NotEmpty(t, rsp.Msg)
 		})
@@ -417,7 +417,7 @@ func TestAccountResetPassword(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp *iam.ResetPasswordRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp *iam.ResetPasswordRsp) {
 			t.Helper()
 			require.NotEmpty(t, rsp.Msg)
 		})
@@ -459,7 +459,7 @@ func TestAccountResetPassword(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp *iam.ChangePasswordRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp *iam.ChangePasswordRsp) {
 			t.Helper()
 			require.NotEmpty(t, rsp.Msg)
 		})
@@ -513,7 +513,7 @@ func accountSignupUserWithEmail(t *testing.T, prefix, password, email string) ac
 	})
 	require.NoError(t, err)
 
-	testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
+	testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
 		t.Helper()
 		require.Equal(t, user.Username, rsp.Username)
 		require.NotEmpty(t, rsp.UserID)

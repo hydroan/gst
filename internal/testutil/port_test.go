@@ -11,11 +11,11 @@ import (
 
 func TestListenOnFreePortConfiguresLocalEphemeralPort(t *testing.T) {
 	t.Setenv(config.SERVER_LISTEN, "")
-	t.Setenv(config.SERVER_PORT, strconv.Itoa(avoidedPort))
+	t.Setenv(config.SERVER_PORT, "")
 
 	listenOnFreePort()
 
-	require.NotEqual(t, avoidedPort, serverPort)
+	require.Positive(t, serverPort)
 	require.Equal(t, "127.0.0.1", os.Getenv(config.SERVER_LISTEN))
 	require.Equal(t, strconv.Itoa(serverPort), os.Getenv(config.SERVER_PORT))
 }

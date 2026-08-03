@@ -43,7 +43,7 @@ func TestPing(t *testing.T) {
 	resp, err := cli.Request("GET", nil)
 	require.NoError(t, err)
 
-	testutil.TestResp(t, resp, func(t *testing.T, rsp *model.PingRsp) {
+	testutil.RequireResp(t, resp, func(t *testing.T, rsp *model.PingRsp) {
 		t.Helper()
 		require.NotNil(t, rsp)
 	})

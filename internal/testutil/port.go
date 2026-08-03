@@ -9,11 +9,6 @@ import (
 	"github.com/hydroan/gst/config"
 )
 
-// avoidedPort is never handed out to a test server. Module tests used to
-// listen on it before they moved to ephemeral ports, so a developer may still
-// have something of their own bound there.
-const avoidedPort = 8000
-
 // serverPort is the port the test server listens on. It is picked when the
 // package loads, before any package-level URL is built, so that a test can
 // declare its endpoints as package-level variables.
@@ -34,28 +29,24 @@ func mustFreeLocalPort() int {
 	return port
 }
 
+// freeLocalPort asks the kernel for an unused port by binding to port zero and
+// closing again. The port is then free for the test server to take.
 func freeLocalPort() (int, error) {
-	for range 10 {
-		l, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			return 0, err
-		}
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
+	}
 
-		addr, ok := l.Addr().(*net.TCPAddr)
-		if !ok {
-			if err := l.Close(); err != nil {
-				return 0, err
-			}
-			return 0, errors.Newf("unexpected listener address type %T", l.Addr())
-		}
-		port := addr.Port
+	addr, ok := l.Addr().(*net.TCPAddr)
+	if !ok {
 		if err := l.Close(); err != nil {
 			return 0, err
 		}
-		if port != avoidedPort {
-			return port, nil
-		}
+		return 0, errors.Newf("unexpected listener address type %T", l.Addr())
 	}
-
-	return 0, errors.Newf("failed to allocate a non-%d local port", avoidedPort)
+	port := addr.Port
+	if err := l.Close(); err != nil {
+		return 0, err
+	}
+	return port, nil
 }

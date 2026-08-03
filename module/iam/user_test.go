@@ -144,7 +144,7 @@ func TestUserStatusPatch(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.UserStatusPatchRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.UserStatusPatchRsp) {
 			t.Helper()
 			require.Contains(t, rsp.Msg, "success")
 		})
@@ -169,7 +169,7 @@ func TestUserStatusPatch(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.UserStatusPatchRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.UserStatusPatchRsp) {
 			t.Helper()
 			require.Contains(t, rsp.Msg, "unchanged")
 		})
@@ -197,7 +197,7 @@ func TestUserStatusPatch(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.UserStatusPatchRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.UserStatusPatchRsp) {
 			t.Helper()
 			require.Contains(t, rsp.Msg, "success")
 		})
@@ -268,7 +268,7 @@ func TestUserStatusPatch(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.UserStatusPatchRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.UserStatusPatchRsp) {
 			t.Helper()
 			require.Contains(t, rsp.Msg, "success")
 		})
@@ -307,7 +307,7 @@ func TestUserStatusPatch(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.UserStatusPatchRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.UserStatusPatchRsp) {
 			t.Helper()
 			require.Contains(t, rsp.Msg, "success")
 		})
@@ -321,7 +321,7 @@ func TestUserStatusPatch(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.UserStatusPatchRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.UserStatusPatchRsp) {
 			t.Helper()
 			require.Contains(t, rsp.Msg, "unchanged")
 		})

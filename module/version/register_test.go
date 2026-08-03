@@ -27,7 +27,7 @@ func TestVersion(t *testing.T) {
 	resp, err := cli.Request(http.MethodGet, nil)
 	require.NoError(t, err)
 
-	testutil.TestResp(t, resp, func(t *testing.T, rsp *versionmod.VersionRsp) {
+	testutil.RequireResp(t, resp, func(t *testing.T, rsp *versionmod.VersionRsp) {
 		t.Helper(
 		// #*version.VersionRsp {
 		//   +Version     => "" #string

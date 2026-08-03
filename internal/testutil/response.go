@@ -16,9 +16,9 @@ type ListResponse[T any] struct {
 	Total int `json:"total"`
 }
 
-// TestResp asserts that resp carries a successful envelope and hands the
+// RequireResp asserts that resp carries a successful envelope and hands the
 // decoded payload to checkFn.
-func TestResp[RSP any](t *testing.T, resp *client.Resp, checkFn func(t *testing.T, rsp RSP)) {
+func RequireResp[RSP any](t *testing.T, resp *client.Resp, checkFn func(t *testing.T, rsp RSP)) {
 	t.Helper()
 
 	require.NotNil(t, resp)

@@ -32,7 +32,7 @@ func TestProfileGet(t *testing.T) {
 	resp, err := cli.Request(http.MethodGet, new(struct{}))
 	require.NoError(t, err)
 
-	testutil.TestResp(t, resp, func(t *testing.T, rsp iam.ProfileGetRsp) {
+	testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.ProfileGetRsp) {
 		t.Helper()
 		require.Equal(t, account.UserID, rsp.UserID)
 		require.Empty(t, rsp.ID)
@@ -66,7 +66,7 @@ func TestProfilePatch(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.ProfilePatchRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.ProfilePatchRsp) {
 			t.Helper()
 			require.NotEmpty(t, rsp.ID)
 			require.Equal(t, account.UserID, rsp.UserID)
@@ -87,7 +87,7 @@ func TestProfilePatch(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.ProfilePatchRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.ProfilePatchRsp) {
 			t.Helper()
 			require.Equal(t, account.UserID, rsp.UserID)
 			require.Equal(t, "Profile Test", rsp.DisplayName)
@@ -111,7 +111,7 @@ func TestProfilePatch(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp iam.ProfilePatchRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.ProfilePatchRsp) {
 			t.Helper()
 			require.Equal(t, account.UserID, rsp.UserID)
 			require.Equal(t, "Profile Test", rsp.DisplayName)
@@ -141,7 +141,7 @@ func newProfileTestAccount(t *testing.T) profileTestAccount {
 	})
 	require.NoError(t, err)
 
-	testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
+	testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
 		t.Helper()
 		require.Equal(t, account.Username, rsp.Username)
 		require.NotEmpty(t, rsp.UserID)
@@ -166,7 +166,7 @@ func profileLoginSession(t *testing.T, username, password string) string {
 	})
 	require.NoError(t, err)
 
-	testutil.TestResp(t, resp, func(t *testing.T, rsp iam.LoginRsp) {
+	testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.LoginRsp) {
 		t.Helper()
 		require.NotEmpty(t, rsp.Principal.UserID)
 		require.Equal(t, username, rsp.Principal.Username)

@@ -107,7 +107,7 @@ func TestAuthzRoutes(t *testing.T) {
 
 		resp, err := cli.Request(http.MethodGet, nil)
 		require.NoError(t, err)
-		testutil.TestResp(t, resp, func(t *testing.T, rsp authz.RoutesRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp authz.RoutesRsp) {
 			t.Helper(
 			// #modelauthz.RoutesRsp {
 			//   +Items => []modelauthz.Route [
@@ -142,7 +142,7 @@ func TestAuthzRoutes(t *testing.T) {
 		require.NoError(t, err)
 		resp, err := cli.Request(http.MethodGet, nil)
 		require.NoError(t, err)
-		testutil.TestResp(t, resp, func(t *testing.T, rsp authz.RoutesRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp authz.RoutesRsp) {
 			t.Helper()
 			requireRoute(t, rsp.Items, "/api/authz/routes", []string{http.MethodGet})
 		})
@@ -173,7 +173,7 @@ func TestAuthzMenu(t *testing.T) {
 			total := new(int)
 			resp, err = cli.List(&items, total)
 			require.NoError(t, err)
-			testutil.TestResp[testutil.ListResponse[*authz.Menu]](t, resp, func(t *testing.T, rsp testutil.ListResponse[*authz.Menu]) {
+			testutil.RequireResp[testutil.ListResponse[*authz.Menu]](t, resp, func(t *testing.T, rsp testutil.ListResponse[*authz.Menu]) {
 				t.Helper()
 				require.NotNil(t, rsp.Items)
 				require.GreaterOrEqual(t, rsp.Total, 0)
@@ -191,7 +191,7 @@ func TestAuthzMenu(t *testing.T) {
 			}
 			resp, err = cli.Create(createReq)
 			require.NoError(t, err)
-			testutil.TestResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
+			testutil.RequireResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
 				t.Helper()
 				require.NotEmpty(t, rsp.ID)
 				require.Equal(t, createReq.Label, rsp.Label)
@@ -206,7 +206,7 @@ func TestAuthzMenu(t *testing.T) {
 			got := new(authz.Menu)
 			resp, err = cli.Get(menuID, got)
 			require.NoError(t, err)
-			testutil.TestResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
+			testutil.RequireResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
 				t.Helper()
 				require.Equal(t, menuID, rsp.ID)
 				require.Equal(t, "Test Menu", rsp.Label)
@@ -227,7 +227,7 @@ func TestAuthzMenu(t *testing.T) {
 			}
 			resp, err = cli.Update(menuID, updateReq)
 			require.NoError(t, err)
-			testutil.TestResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
+			testutil.RequireResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
 				t.Helper()
 				require.Equal(t, menuID, rsp.ID)
 				require.Equal(t, updateReq.Label, rsp.Label)
@@ -240,7 +240,7 @@ func TestAuthzMenu(t *testing.T) {
 			patchReq := map[string]string{"label": "Test Menu Patched"}
 			resp, err = cli.Patch(menuID, patchReq)
 			require.NoError(t, err)
-			testutil.TestResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
+			testutil.RequireResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
 				t.Helper()
 				require.Equal(t, menuID, rsp.ID)
 				require.Equal(t, patchReq["label"], rsp.Label)
@@ -258,7 +258,7 @@ func TestAuthzMenu(t *testing.T) {
 			total := new(int)
 			resp, err = cliExpand.List(&items, total)
 			require.NoError(t, err)
-			testutil.TestResp[testutil.ListResponse[*authz.Menu]](t, resp, func(t *testing.T, rsp testutil.ListResponse[*authz.Menu]) {
+			testutil.RequireResp[testutil.ListResponse[*authz.Menu]](t, resp, func(t *testing.T, rsp testutil.ListResponse[*authz.Menu]) {
 				t.Helper()
 				require.NotNil(t, rsp.Items)
 				require.GreaterOrEqual(t, rsp.Total, 0)
@@ -280,7 +280,7 @@ func TestAuthzMenu(t *testing.T) {
 			})
 			require.NoError(t, err)
 			var referencedMenuID string
-			testutil.TestResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
+			testutil.RequireResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
 				t.Helper()
 				require.NotEmpty(t, rsp.ID)
 				referencedMenuID = rsp.ID
@@ -298,7 +298,7 @@ func TestAuthzMenu(t *testing.T) {
 			})
 			require.NoError(t, err)
 			var referencedRoleID string
-			testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
+			testutil.RequireResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper()
 				require.NotEmpty(t, rsp.ID)
 				referencedRoleID = rsp.ID
@@ -311,7 +311,7 @@ func TestAuthzMenu(t *testing.T) {
 			got := new(authz.Role)
 			resp, err = cliRole.Get(referencedRoleID, got)
 			require.NoError(t, err)
-			testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
+			testutil.RequireResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper()
 				require.NotContains(t, []string(rsp.MenuIDs), referencedMenuID)
 			})
@@ -329,7 +329,7 @@ func TestAuthzMenu(t *testing.T) {
 			})
 			require.NoError(t, err)
 			var defaultMenuID string
-			testutil.TestResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
+			testutil.RequireResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
 				t.Helper()
 				require.NotEmpty(t, rsp.ID)
 				defaultMenuID = rsp.ID
@@ -348,7 +348,7 @@ func TestAuthzMenu(t *testing.T) {
 				MenuIDs: []string{defaultMenuID},
 			})
 			require.NoError(t, err)
-			testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
+			testutil.RequireResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper()
 				require.NotEmpty(t, rsp.ID)
 			})
@@ -377,7 +377,7 @@ func TestAuthzMenu(t *testing.T) {
 			total := new(int)
 			resp, err = userMenuCli.List(&items, total)
 			require.NoError(t, err)
-			testutil.TestResp[testutil.ListResponse[*authz.Menu]](t, resp, func(t *testing.T, rsp testutil.ListResponse[*authz.Menu]) {
+			testutil.RequireResp[testutil.ListResponse[*authz.Menu]](t, resp, func(t *testing.T, rsp testutil.ListResponse[*authz.Menu]) {
 				t.Helper()
 				requireNoMenu(t, rsp.Items, defaultMenuID)
 			})
@@ -397,7 +397,7 @@ func TestAuthzMenu(t *testing.T) {
 			})
 			require.NoError(t, err)
 			var tenantAMenuID string
-			testutil.TestResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
+			testutil.RequireResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
 				t.Helper()
 				require.NotEmpty(t, rsp.ID)
 				tenantAMenuID = rsp.ID
@@ -412,7 +412,7 @@ func TestAuthzMenu(t *testing.T) {
 			})
 			require.NoError(t, err)
 			var tenantBMenuID string
-			testutil.TestResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
+			testutil.RequireResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
 				t.Helper()
 				require.NotEmpty(t, rsp.ID)
 				tenantBMenuID = rsp.ID
@@ -428,7 +428,7 @@ func TestAuthzMenu(t *testing.T) {
 			total := new(int)
 			resp, err = userMenuCli.List(&items, total)
 			require.NoError(t, err)
-			testutil.TestResp[testutil.ListResponse[*authz.Menu]](t, resp, func(t *testing.T, rsp testutil.ListResponse[*authz.Menu]) {
+			testutil.RequireResp[testutil.ListResponse[*authz.Menu]](t, resp, func(t *testing.T, rsp testutil.ListResponse[*authz.Menu]) {
 				t.Helper()
 				requireMenu(t, rsp.Items, tenantAMenuID)
 				requireNoMenu(t, rsp.Items, tenantBMenuID)
@@ -440,7 +440,7 @@ func TestAuthzMenu(t *testing.T) {
 			total = new(int)
 			resp, err = userMenuCli.List(&items, total)
 			require.NoError(t, err)
-			testutil.TestResp[testutil.ListResponse[*authz.Menu]](t, resp, func(t *testing.T, rsp testutil.ListResponse[*authz.Menu]) {
+			testutil.RequireResp[testutil.ListResponse[*authz.Menu]](t, resp, func(t *testing.T, rsp testutil.ListResponse[*authz.Menu]) {
 				t.Helper()
 				requireMenu(t, rsp.Items, tenantBMenuID)
 				requireNoMenu(t, rsp.Items, tenantAMenuID)
@@ -477,7 +477,7 @@ func TestAuthzRole(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		testutil.TestResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
+		testutil.RequireResp[*authz.Menu](t, resp, func(t *testing.T, rsp *authz.Menu) {
 			t.Helper()
 			require.NotEmpty(t, rsp.ID)
 			roleMenuID = rsp.ID
@@ -488,7 +488,7 @@ func TestAuthzRole(t *testing.T) {
 			total := new(int)
 			resp, err = cli.List(&items, total)
 			require.NoError(t, err)
-			testutil.TestResp[testutil.ListResponse[*authz.Role]](t, resp, func(t *testing.T, rsp testutil.ListResponse[*authz.Role]) {
+			testutil.RequireResp[testutil.ListResponse[*authz.Role]](t, resp, func(t *testing.T, rsp testutil.ListResponse[*authz.Role]) {
 				t.Helper()
 				require.NotNil(t, rsp.Items)
 				require.GreaterOrEqual(t, rsp.Total, 0)
@@ -523,7 +523,7 @@ func TestAuthzRole(t *testing.T) {
 			}
 			resp, err = cli.Create(createReq)
 			require.NoError(t, err)
-			testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
+			testutil.RequireResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper()
 				require.NotEmpty(t, rsp.ID)
 				require.EqualValues(t, tenant.Default, rsp.TenantID)
@@ -538,7 +538,7 @@ func TestAuthzRole(t *testing.T) {
 			got := new(authz.Role)
 			resp, err = cli.Get(roleID, got)
 			require.NoError(t, err)
-			testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
+			testutil.RequireResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper()
 				require.Equal(t, roleID, rsp.ID)
 				require.Equal(t, roleName, rsp.Name)
@@ -552,7 +552,7 @@ func TestAuthzRole(t *testing.T) {
 			}
 			resp, err = cli.Update(roleID, updateReq)
 			require.NoError(t, err)
-			testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
+			testutil.RequireResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper()
 				require.Equal(t, roleID, rsp.ID)
 				require.Equal(t, updateReq.Name, rsp.Name)
@@ -571,7 +571,7 @@ func TestAuthzRole(t *testing.T) {
 			got := new(authz.Role)
 			resp, err = cli.Get(roleID, got)
 			require.NoError(t, err)
-			testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
+			testutil.RequireResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper()
 				require.Equal(t, nextName, rsp.Name)
 				roleName = rsp.Name
@@ -618,7 +618,7 @@ func TestAuthzRole(t *testing.T) {
 			patchReq := &authz.Role{Name: roleName}
 			resp, err = cli.Patch(roleID, patchReq)
 			require.NoError(t, err)
-			testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
+			testutil.RequireResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper()
 				require.Equal(t, roleID, rsp.ID)
 				require.Equal(t, roleName, rsp.Name)
@@ -633,7 +633,7 @@ func TestAuthzRole(t *testing.T) {
 			got := new(authz.Role)
 			resp, err = cli.Get(roleID, got)
 			require.NoError(t, err)
-			testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
+			testutil.RequireResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper()
 				require.Equal(t, nextName, rsp.Name)
 				roleName = rsp.Name
@@ -645,7 +645,7 @@ func TestAuthzRole(t *testing.T) {
 			total := new(int)
 			resp, err = cli.List(&items, total)
 			require.NoError(t, err)
-			testutil.TestResp[testutil.ListResponse[*authz.Role]](t, resp, func(t *testing.T, rsp testutil.ListResponse[*authz.Role]) {
+			testutil.RequireResp[testutil.ListResponse[*authz.Role]](t, resp, func(t *testing.T, rsp testutil.ListResponse[*authz.Role]) {
 				t.Helper()
 				require.NotNil(t, rsp.Items)
 				require.GreaterOrEqual(t, rsp.Total, 0)
@@ -690,7 +690,7 @@ func TestAuthzRoleBinding(t *testing.T) {
 			Name: bindingRoleName,
 		})
 		require.NoError(t, err)
-		testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
+		testutil.RequireResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 			t.Helper()
 			require.NotEmpty(t, rsp.ID)
 			roleID = rsp.ID
@@ -701,7 +701,7 @@ func TestAuthzRoleBinding(t *testing.T) {
 			total := new(int)
 			resp, err = cli.List(&items, total)
 			require.NoError(t, err)
-			testutil.TestResp[testutil.ListResponse[*authz.RoleBinding]](t, resp, func(t *testing.T, rsp testutil.ListResponse[*authz.RoleBinding]) {
+			testutil.RequireResp[testutil.ListResponse[*authz.RoleBinding]](t, resp, func(t *testing.T, rsp testutil.ListResponse[*authz.RoleBinding]) {
 				t.Helper()
 				require.NotNil(t, rsp.Items)
 				require.GreaterOrEqual(t, rsp.Total, 0)
@@ -715,7 +715,7 @@ func TestAuthzRoleBinding(t *testing.T) {
 			}
 			resp, err = cli.Create(createReq)
 			require.NoError(t, err)
-			testutil.TestResp[*authz.RoleBinding](t, resp, func(t *testing.T, rsp *authz.RoleBinding) {
+			testutil.RequireResp[*authz.RoleBinding](t, resp, func(t *testing.T, rsp *authz.RoleBinding) {
 				t.Helper()
 				require.NotEmpty(t, rsp.ID)
 				require.EqualValues(t, tenant.Default, rsp.TenantID)
@@ -730,7 +730,7 @@ func TestAuthzRoleBinding(t *testing.T) {
 			got := new(authz.RoleBinding)
 			resp, err = cli.Get(roleBindingID, got)
 			require.NoError(t, err)
-			testutil.TestResp[*authz.RoleBinding](t, resp, func(t *testing.T, rsp *authz.RoleBinding) {
+			testutil.RequireResp[*authz.RoleBinding](t, resp, func(t *testing.T, rsp *authz.RoleBinding) {
 				t.Helper()
 				require.Equal(t, roleBindingID, rsp.ID)
 				require.EqualValues(t, tenant.Default, rsp.TenantID)
@@ -744,7 +744,7 @@ func TestAuthzRoleBinding(t *testing.T) {
 			total := new(int)
 			resp, err = cli.List(&items, total)
 			require.NoError(t, err)
-			testutil.TestResp[testutil.ListResponse[*authz.RoleBinding]](t, resp, func(t *testing.T, rsp testutil.ListResponse[*authz.RoleBinding]) {
+			testutil.RequireResp[testutil.ListResponse[*authz.RoleBinding]](t, resp, func(t *testing.T, rsp testutil.ListResponse[*authz.RoleBinding]) {
 				t.Helper()
 				require.NotNil(t, rsp.Items)
 				require.GreaterOrEqual(t, rsp.Total, 0)
@@ -761,7 +761,7 @@ func TestAuthzRoleBinding(t *testing.T) {
 			})
 			require.NoError(t, err)
 			var deletedRoleID string
-			testutil.TestResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
+			testutil.RequireResp[*authz.Role](t, resp, func(t *testing.T, rsp *authz.Role) {
 				t.Helper()
 				require.NotEmpty(t, rsp.ID)
 				deletedRoleID = rsp.ID
@@ -772,7 +772,7 @@ func TestAuthzRoleBinding(t *testing.T) {
 				RoleID:    deletedRoleID,
 			})
 			require.NoError(t, err)
-			testutil.TestResp[*authz.RoleBinding](t, resp, func(t *testing.T, rsp *authz.RoleBinding) {
+			testutil.RequireResp[*authz.RoleBinding](t, resp, func(t *testing.T, rsp *authz.RoleBinding) {
 				t.Helper()
 				require.NotEmpty(t, rsp.ID)
 			})
@@ -827,7 +827,7 @@ func TestIAMUserStatusTenantAuthorization(t *testing.T) {
 	require.NoError(t, err)
 	resp, err := cli.Patch(targetTenantAUserID+"/status", iam.UserStatusPatchReq{Status: iam.UserStatusActive})
 	require.NoError(t, err)
-	testutil.TestResp[iam.UserStatusPatchRsp](t, resp, func(t *testing.T, rsp iam.UserStatusPatchRsp) {
+	testutil.RequireResp[iam.UserStatusPatchRsp](t, resp, func(t *testing.T, rsp iam.UserStatusPatchRsp) {
 		t.Helper()
 		require.NotEmpty(t, rsp.Msg)
 	})
@@ -997,7 +997,7 @@ func authzSignupUser(t *testing.T, username, password string) string {
 	require.NoError(t, err)
 
 	var userID string
-	testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
+	testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
 		t.Helper()
 		require.Equal(t, username, rsp.Username)
 		require.NotEmpty(t, rsp.UserID)
@@ -1030,7 +1030,7 @@ func loginSessionIDFromCookieWithUserAgent(t *testing.T, reqPayload iam.LoginReq
 	apiResp, err := cli.Create(reqPayload)
 	require.NoError(t, err)
 
-	testutil.TestResp(t, apiResp, func(t *testing.T, rsp iam.LoginRsp) {
+	testutil.RequireResp(t, apiResp, func(t *testing.T, rsp iam.LoginRsp) {
 		t.Helper()
 		require.False(t, rsp.ServerTime.IsZero())
 		require.False(t, rsp.Session.ExpiresAt.IsZero())

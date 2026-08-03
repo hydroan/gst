@@ -48,10 +48,10 @@ func URL(path string) string {
 	return testutil.URL(path)
 }
 
-// TestResp asserts that resp carries a successful envelope and hands the
+// RequireResp asserts that resp carries a successful envelope and hands the
 // decoded payload to checkFn.
-func TestResp[RSP any](t *testing.T, resp *client.Resp, checkFn func(t *testing.T, rsp RSP)) {
+func RequireResp[RSP any](t *testing.T, resp *client.Resp, checkFn func(t *testing.T, rsp RSP)) {
 	t.Helper()
 
-	testutil.TestResp(t, resp, checkFn)
+	testutil.RequireResp(t, resp, checkFn)
 }

@@ -104,7 +104,7 @@ func TestLoginLogList(t *testing.T) {
 		resp, err := cli.List(&items, total)
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[*logmgmt.LoginLog]) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[*logmgmt.LoginLog]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 1)
 			l := rsp.Items[0]
@@ -122,7 +122,7 @@ func TestLoginLogList(t *testing.T) {
 		require.NoError(t, err)
 		resp, err := logoutCli.Create(nil)
 		require.NoError(t, err)
-		testutil.TestResp(t, resp, func(t *testing.T, rsp *iam.LogoutRsp) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp *iam.LogoutRsp) {
 			t.Helper()
 		})
 
@@ -137,7 +137,7 @@ func TestLoginLogList(t *testing.T) {
 		resp, err = cli.List(&items, total)
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[*logmgmt.LoginLog]) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[*logmgmt.LoginLog]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 3)
 			l1, l2, l3 := rsp.Items[0], rsp.Items[1], rsp.Items[2]
@@ -175,7 +175,7 @@ func TestOperationLogList(t *testing.T) {
 		resp, err := cli.List(&items, total)
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[*logmgmt.OperationLog]) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[*logmgmt.OperationLog]) {
 			t.Helper()
 			require.Empty(t, rsp.Items)
 		})
@@ -196,7 +196,7 @@ func TestOperationLogList(t *testing.T) {
 	}
 	resp, err := cli.Create(createReq)
 	require.NoError(t, err)
-	testutil.TestResp(t, resp, func(t *testing.T, rsp *authz.Role) {
+	testutil.RequireResp(t, resp, func(t *testing.T, rsp *authz.Role) {
 		t.Helper()
 		require.NotNil(t, rsp)
 		require.Equal(t, createReq.Name, rsp.Name)
@@ -210,7 +210,7 @@ func TestOperationLogList(t *testing.T) {
 		resp, err := cli.List(&items, total)
 		require.NoError(t, err)
 
-		testutil.TestResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[*logmgmt.OperationLog]) {
+		testutil.RequireResp(t, resp, func(t *testing.T, rsp testutil.ListResponse[*logmgmt.OperationLog]) {
 			t.Helper()
 			require.Len(t, rsp.Items, 1)
 			l := rsp.Items[0]
@@ -237,7 +237,7 @@ func signupLogmgmtTestUser(t *testing.T, username, password string) string {
 	require.NoError(t, err)
 
 	var userID string
-	testutil.TestResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
+	testutil.RequireResp(t, resp, func(t *testing.T, rsp iam.SignupRsp) {
 		t.Helper()
 		require.Equal(t, username, rsp.Username)
 		require.NotEmpty(t, rsp.UserID)
@@ -284,7 +284,7 @@ func loginSessionIDFromCookie(t *testing.T, reqPayload iam.LoginReq) string {
 	apiResp, err := cli.Create(reqPayload)
 	require.NoError(t, err)
 
-	testutil.TestResp(t, apiResp, func(t *testing.T, rsp iam.LoginRsp) {
+	testutil.RequireResp(t, apiResp, func(t *testing.T, rsp iam.LoginRsp) {
 		t.Helper()
 		require.False(t, rsp.ServerTime.IsZero())
 		require.False(t, rsp.Session.ExpiresAt.IsZero())
