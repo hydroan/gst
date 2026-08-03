@@ -2,6 +2,7 @@ package helloworld_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/client"
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/module/helloworld"
 	"github.com/stretchr/testify/assert"
@@ -21,16 +21,16 @@ var (
 	port  = testutil.SetupRandomServerPort()
 	addr  = testutil.URL(port, "/api/hello-world")
 	addr2 = testutil.URL(port, "/api/hello-world2")
+
+	cleanDatabase func() error
 )
 
 func init() {
-	testutil.EnableAutoMigrate()
-	os.Setenv(config.DATABASE_TYPE, string(config.DBMySQL))
-	os.Setenv(config.MYSQL_USERNAME, "test_module")
-	os.Setenv(config.MYSQL_PASSWORD, "test_module")
-	os.Setenv(config.MYSQL_DATABASE, "test_module")
-	os.Setenv(config.LOGGER_DIR, "/tmp/test_module")
-	os.Setenv(config.AUTH_NONE_EXPIRE_TOKEN, token)
+	var err error
+	cleanDatabase, err = testutil.SetupMySQL()
+	if err != nil {
+		panic(err)
+	}
 
 	helloworld.Register()
 	if err := bootstrap.Bootstrap(); err != nil {
@@ -44,6 +44,18 @@ func init() {
 	}()
 
 	testutil.MustWaitForServer(port)
+}
+
+// TestMain releases the database every test in this package shares. Tearing it
+// down from a single test would leave the remaining ones without a database.
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if cleanDatabase != nil {
+		if err := cleanDatabase(); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to release the test database: %v\n", err)
+		}
+	}
+	os.Exit(code)
 }
 
 func TestHelloworldModule(t *testing.T) {
