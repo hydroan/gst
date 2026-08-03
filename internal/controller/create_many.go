@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"net/http"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
@@ -193,6 +192,6 @@ func CreateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 				Failed:    0,
 			}
 		}
-		JSON(c, CodeSuccess.WithStatus(http.StatusCreated), req)
+		JSON(c, CodeSuccess, req)
 	}
 }

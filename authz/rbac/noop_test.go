@@ -17,7 +17,7 @@ import (
 // store the change through — and reporting success would tell the caller its
 // change is in force. Nothing downstream can tell that apart from a change that
 // landed, because the records a rule is derived from are written either way: a
-// role created through the API answers 201 with not one policy row behind it.
+// role created through the API answers success with not one policy row behind it.
 func TestRBACWithoutAnEnforcerRefusesWrites(t *testing.T) {
 	r := rbacWithoutEnforcer(t)
 	ctx := context.Background()

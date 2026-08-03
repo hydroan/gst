@@ -148,10 +148,6 @@ func setCreate[M types.Model, REQ types.Request, RSP types.Response](path string
 	reqSchemaRef := newSchemaRefWithDocs(*new(REQ))
 	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
-	successStatus := 201
-	if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
-		successStatus = 200
-	}
 
 	// gen := openapi3gen.NewGenerator()
 	// var reqSchemaRef *openapi3.SchemaRef
@@ -170,7 +166,7 @@ func setCreate[M types.Model, REQ types.Request, RSP types.Response](path string
 		Tags:        tags(path, consts.Create, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
-		Responses:   newResponses[RSP](successStatus, rspKey),
+		Responses:   newResponses[RSP](rspKey),
 		// RequestBody: &openapi3.RequestBodyRef{Ref: "#/components/requestBodies/" + reqKey},
 		// Responses:   openapi3.NewResponses(openapi3.WithStatus(201, &openapi3.ResponseRef{Ref: "#/components/responses/" + rspKey})),
 
@@ -248,7 +244,7 @@ func setDelete[M types.Model, REQ types.Request, RSP types.Response](path string
 		Description: description(path, consts.Delete, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 		Tags:        tags(path, consts.Delete, typ),
 		Parameters:  parseParametersFromPath(path),
-		Responses:   newResponses[RSP](200, rspKey),
+		Responses:   newResponses[RSP](rspKey),
 		// Responses: func() *openapi3.Responses {
 		// 	var schemaRef204 *openapi3.SchemaRef
 		// 	var err error
@@ -315,7 +311,7 @@ func setUpdate[M types.Model, REQ types.Request, RSP types.Response](path string
 		Tags:        tags(path, consts.Update, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
-		Responses:   newResponses[RSP](200, rspKey),
+		Responses:   newResponses[RSP](rspKey),
 		// RequestBody: &openapi3.RequestBodyRef{
 		// 	Value: &openapi3.RequestBody{
 		// 		Description: fmt.Sprintf("The %s data to update", name),
@@ -396,7 +392,7 @@ func setPatch[M types.Model, REQ types.Request, RSP types.Response](path string,
 		Tags:        tags(path, consts.Patch, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
-		Responses:   newResponses[RSP](200, rspKey),
+		Responses:   newResponses[RSP](rspKey),
 		// RequestBody: &openapi3.RequestBodyRef{
 		// 	Value: &openapi3.RequestBody{
 		// 		Description: fmt.Sprintf("Partial fields of %s to update", name),
@@ -493,7 +489,7 @@ func setList[M types.Model, REQ types.Request, RSP types.Response](path string, 
 		Description: description(path, consts.List, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 		Tags:        tags(path, consts.List, typ),
 		Parameters:  parseParametersFromPath(path),
-		Responses:   newResponses[RSP](200, rspKey),
+		Responses:   newResponses[RSP](rspKey),
 		// // Parameters: []*openapi3.ParameterRef{
 		// // 	{
 		// // 		Value: &openapi3.Parameter{
@@ -609,7 +605,7 @@ func setGet[M types.Model, REQ types.Request, RSP types.Response](path string, p
 		Description: description(path, consts.Get, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 		Tags:        tags(path, consts.Get, typ),
 		Parameters:  parseParametersFromPath(path),
-		Responses:   newResponses[RSP](200, rspKey),
+		Responses:   newResponses[RSP](rspKey),
 		// Responses: func() *openapi3.Responses {
 		// 	var schemaRef200 *openapi3.SchemaRef
 		// 	var err error
@@ -702,10 +698,6 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		// }
 	}
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
-	successStatus := 201
-	if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
-		successStatus = 200
-	}
 
 	// // // define the BatchCreateRequest schema
 	// // reqSchemaName := name + "BatchRequest"
@@ -744,7 +736,7 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		Tags:        tags(path, consts.CreateMany, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
-		Responses:   newResponses[RSP](successStatus, rspKey),
+		Responses:   newResponses[RSP](rspKey),
 		// RequestBody: &openapi3.RequestBodyRef{
 		// 	Value: &openapi3.RequestBody{
 		// 		Description: fmt.Sprintf("Request body for batch creating %s", name),
@@ -875,7 +867,7 @@ func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		Tags:        tags(path, consts.DeleteMany, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
-		Responses:   newResponses[RSP](200, rspKey),
+		Responses:   newResponses[RSP](rspKey),
 		// RequestBody: &openapi3.RequestBodyRef{
 		// 	Value: &openapi3.RequestBody{
 		// 		Required:    true,
@@ -982,7 +974,7 @@ func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		Tags:        tags(path, consts.UpdateMany, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
-		Responses:   newResponses[RSP](200, rspKey),
+		Responses:   newResponses[RSP](rspKey),
 		// RequestBody: &openapi3.RequestBodyRef{
 		// 	Value: &openapi3.RequestBody{
 		// 		Description: fmt.Sprintf("Request body for batch updating %s", name),
@@ -1105,7 +1097,7 @@ func setPatchMany[M types.Model, REQ types.Request, RSP types.Response](path str
 		Tags:        tags(path, consts.PatchMany, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: newRequestBody[REQ](reqKey),
-		Responses:   newResponses[RSP](200, rspKey),
+		Responses:   newResponses[RSP](rspKey),
 		// RequestBody: &openapi3.RequestBodyRef{
 		// 	Value: &openapi3.RequestBody{
 		// 		Description: fmt.Sprintf("Request body for batch partial updating %s", name),
@@ -1216,7 +1208,7 @@ func setImport[M types.Model, REQ types.Request, RSP types.Response](path string
 		Tags:        tags(path, consts.Import, typ),
 		Parameters:  parseParametersFromPath(path),
 		RequestBody: importFileRequestBody(),
-		Responses:   newResponses[RSP](200, rspKey),
+		Responses:   newResponses[RSP](rspKey),
 	}
 	addHeaderParameters(pathItem.Post)
 }
@@ -2710,8 +2702,12 @@ func newRequestBody[REQ types.Request](reqKey string) *openapi3.RequestBodyRef {
 // operation declares a response, including actions whose response type carries
 // no fields: those still answer with the envelope, and responses is a required
 // member of an OpenAPI operation.
-func newResponses[RSP types.Response](status int, rspKey string) *openapi3.Responses {
-	return openapi3.NewResponses(openapi3.WithStatus(status, &openapi3.ResponseRef{Ref: "#/components/responses/" + rspKey}))
+//
+// The success status is fixed at 200 rather than taken from the caller: a
+// successful request answers 200 whichever action handled it, so a generated
+// document that says otherwise would describe a runtime that does not exist.
+func newResponses[RSP types.Response](rspKey string) *openapi3.Responses {
+	return openapi3.NewResponses(openapi3.WithStatus(200, &openapi3.ResponseRef{Ref: "#/components/responses/" + rspKey}))
 }
 
 // markEmptyResponseData rewrites the data member of an envelope whose response

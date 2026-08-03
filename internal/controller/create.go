@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"net/http"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -28,8 +27,8 @@ func Create[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 //
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into
 // M, fills the creator/updater fields, runs the create hooks, writes the model
-// through the configured database handler, records an operation log, and returns
-// the created model with a created response status.
+// through the configured database handler, records an operation log, and
+// returns the created model.
 //
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's Create method. Multipart form
@@ -164,6 +163,6 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			log.Warn(err)
 		}
 
-		JSON(c, CodeSuccess.WithStatus(http.StatusCreated), req)
+		JSON(c, CodeSuccess, req)
 	}
 }

@@ -328,25 +328,25 @@ func TestAddQueryParametersBuildsSliceItemSchema(t *testing.T) {
 	}
 }
 
-func TestSetCreateDocumentsRuntimeSuccessStatus(t *testing.T) {
+// TestSetCreateDocumentsSuccessStatus guards the documented success status of
+// create. The default and the custom form both answer 200 at runtime, so
+// neither may be documented as created.
+func TestSetCreateDocumentsSuccessStatus(t *testing.T) {
 	tests := []struct {
-		name       string
-		set        func(*openapi3.PathItem)
-		wantStatus string
+		name string
+		set  func(*openapi3.PathItem)
 	}{
 		{
 			name: "default create",
 			set: func(pathItem *openapi3.PathItem) {
 				setCreate[*openapiDefaultCreateModel, *openapiDefaultCreateModel, *openapiDefaultCreateModel]("/api/default-create", pathItem)
 			},
-			wantStatus: "201",
 		},
 		{
 			name: "custom create",
 			set: func(pathItem *openapi3.PathItem) {
 				setCreate[*openapiCustomCreateModel, openapiCustomCreateRequest, openapiCustomCreateResponse]("/api/custom-create", pathItem)
 			},
-			wantStatus: "200",
 		},
 	}
 
@@ -355,15 +355,11 @@ func TestSetCreateDocumentsRuntimeSuccessStatus(t *testing.T) {
 			pathItem := &openapi3.PathItem{}
 			tt.set(pathItem)
 
-			if pathItem.Post == nil || pathItem.Post.Responses == nil || pathItem.Post.Responses.Value(tt.wantStatus) == nil {
-				t.Fatalf("documented responses = %v, want status %s", pathItem.Post.Responses, tt.wantStatus)
+			if pathItem.Post == nil || pathItem.Post.Responses == nil || pathItem.Post.Responses.Value("200") == nil {
+				t.Fatalf("documented responses = %v, want status 200", pathItem.Post.Responses)
 			}
-			wrongStatus := "201"
-			if tt.wantStatus == "201" {
-				wrongStatus = "200"
-			}
-			if pathItem.Post.Responses.Value(wrongStatus) != nil {
-				t.Fatalf("documented responses unexpectedly include status %s", wrongStatus)
+			if pathItem.Post.Responses.Value("201") != nil {
+				t.Fatal("documented responses unexpectedly include status 201")
 			}
 		})
 	}
