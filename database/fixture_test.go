@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -119,6 +120,17 @@ func setupTestData(t *testing.T) {
 	t.Helper()
 	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(ul...))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Create(ul...))
+}
+
+// skipOnDialect skips the calling test when the suite runs against dbType.
+// The reason must name the bug that keeps the dialect broken (for example
+// "BUG-1: sqlite has no REGEXP function"), so every skip stays an open account
+// that a fix can be checked off against by grepping the bug number.
+func skipOnDialect(t *testing.T, dbType config.DBType, reason string) {
+	t.Helper()
+	if config.App.Database.Type == dbType {
+		t.Skipf("skips on %s: %s", dbType, reason)
+	}
 }
 
 // findUsersByID finds users from a slice by their IDs and returns them in order (u1, u2, u3).
@@ -333,10 +345,25 @@ type TestCategory struct {
 
 func (*TestCategory) Purge() bool { return true }
 
-// TODO: test for sqlite, mysql, postgresql
+// envTestDatabase overrides the dialect this suite runs against. It is a
+// contract between this TestMain and the Makefile test target, which repeats
+// the package once per dialect. testutil knows nothing about the variable, so
+// projects built on the public testutil keep full control of their own
+// Server.Database.
+const envTestDatabase = "GST_TEST_DATABASE"
+
+// TestMain runs the suite against MySQL, the framework's primary dialect, by
+// default, and against the dialect envTestDatabase names when it is set. An
+// unsupported value fails the run through the Server.Database validation.
+// Every test in this package must either behave identically across dialects
+// or branch on config.App.Database.Type / skip with skipOnDialect.
 func TestMain(m *testing.M) {
+	dbType := config.DBMySQL
+	if override := os.Getenv(envTestDatabase); len(override) > 0 {
+		dbType = config.DBType(override)
+	}
 	testutil.Run(m, testutil.Server{
-		Database: config.DBMySQL,
+		Database: dbType,
 		Register: func() {
 			model.Register[*TestUser]()
 			model.Register[*TestItem]()
