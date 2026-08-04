@@ -9,7 +9,7 @@ import (
 
 // EmailIdentity stores the primary email identity for an IAM user.
 type EmailIdentity struct {
-	UserID          string     `json:"user_id" query:"user_id" gorm:"type:char(36);uniqueIndex;not null"`
+	UserID          string     `json:"user_id" query:"user_id" gorm:"size:36;uniqueIndex;not null"`
 	Email           string     `json:"email" query:"email" gorm:"size:191;not null"`
 	NormalizedEmail string     `json:"normalized_email" query:"normalized_email" gorm:"size:191;uniqueIndex;not null"`
 	VerifiedAt      *time.Time `json:"verified_at,omitempty"`

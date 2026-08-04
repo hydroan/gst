@@ -32,11 +32,13 @@ var _ types.Model = (*AutoBase)(nil)
 type AutoBase struct {
 	ID uint64 `json:"id" gorm:"primaryKey;autoIncrement" query:"id" url:"-"` // Auto-increment identifier assigned by the database
 
-	CreatedBy string         `json:"created_by,omitempty" gorm:"type:char(36)" query:"created_by" url:"-"` // UUIDv7 user ID who created the record
-	UpdatedBy string         `json:"updated_by,omitempty" gorm:"type:char(36)" query:"updated_by" url:"-"` // UUIDv7 user ID who last updated the record
-	CreatedAt time.Time      `json:"created_at,omitzero" query:"-" url:"-"`                                // Timestamp when the record was created
-	UpdatedAt time.Time      `json:"updated_at,omitzero" query:"-" url:"-"`                                // Timestamp when the record was last updated
-	DeletedAt gorm.DeletedAt `json:"-" gorm:"index" query:"-" url:"-"`                                     // Timestamp when the record was deleted
+	// size instead of an explicit char type for the same reason as Base:
+	// postgres blank-pads char values on read.
+	CreatedBy string         `json:"created_by,omitempty" gorm:"size:36" query:"created_by" url:"-"` // UUIDv7 user ID who created the record
+	UpdatedBy string         `json:"updated_by,omitempty" gorm:"size:36" query:"updated_by" url:"-"` // UUIDv7 user ID who last updated the record
+	CreatedAt time.Time      `json:"created_at,omitzero" query:"-" url:"-"`                          // Timestamp when the record was created
+	UpdatedAt time.Time      `json:"updated_at,omitzero" query:"-" url:"-"`                          // Timestamp when the record was last updated
+	DeletedAt gorm.DeletedAt `json:"-" gorm:"index" query:"-" url:"-"`                               // Timestamp when the record was deleted
 }
 
 func (b *AutoBase) GetTableName() string       { return "" }

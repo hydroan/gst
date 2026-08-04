@@ -41,6 +41,13 @@ import (
 //	- Empty strings in comma-separated values are automatically skipped to prevent matching all records
 //	- Note: REGEXP may not be available in all databases (e.g., SQLite requires extension)
 //
+//	JSON columns (fields whose type declares a JSON gorm data type, such as
+//	the gorm.io/datatypes types):
+//	- Exact match: a JSON document is not a scalar, so the condition fails
+//	  closed to an empty result on every dialect instead of comparing.
+//	- FuzzyMatch: matches against the document's text form, with the column
+//	  cast to text on dialects whose JSON types carry no text operators.
+//
 //	Or:
 //	- When true: Combines multiple filters with OR instead of AND
 //	- First condition always uses WHERE, subsequent conditions use OR
@@ -179,6 +186,16 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 	}
 	structFieldToMap(db.ctx, typ, val, q, opt.PresentFields, modelschema.ByGoName(parsedColumns))
 
+	// A JSON document is not a scalar, so both matching modes below treat its
+	// columns specially: exact matching fails closed and fuzzy matching runs
+	// over the document's text form.
+	jsonColumns := make(map[string]struct{})
+	for _, col := range parsedColumns {
+		if modelschema.IsJSONType(col.Type) {
+			jsonColumns[col.DBName] = struct{}{}
+		}
+	}
+
 	// CRITICAL SAFETY CHECK: Empty query conditions
 	//
 	// Empty query will match ALL records, which is dangerous when:
@@ -231,6 +248,8 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 				continue
 			}
 			hasValidCondition = true
+			_, isJSON := jsonColumns[k]
+			column := db.textPatternColumn(db.quoteIdent(k), isJSON)
 			if len(items) > 1 { // If the query string has multiple value(separated by ','), using regexp
 				var regexpVal string
 				for _, item := range items {
@@ -247,9 +266,9 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 					continue
 				}
 				regexpVal = strings.TrimPrefix(regexpVal, "|")
-				db.ins = db.ins.Where(fmt.Sprintf("%s %s ?", db.quoteIdent(k), db.regexpOperator()), regexpVal)
+				db.ins = db.ins.Where(fmt.Sprintf("%s %s ?", column, db.regexpOperator()), regexpVal)
 			} else { // If the query string has only one value, using LIKE
-				db.ins = db.ins.Where(db.quoteIdent(k)+" LIKE ?", fmt.Sprintf("%%%v%%", v))
+				db.ins = db.ins.Where(column+" LIKE ?", fmt.Sprintf("%%%v%%", v))
 			}
 		}
 		// CRITICAL: Check if all query values are empty after filtering
@@ -281,6 +300,15 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 				continue
 			}
 			hasValidCondition = true
+			if _, isJSON := jsonColumns[k]; isJSON {
+				// An exact match against a JSON document is not a scalar
+				// comparison: MySQL and SQLite answer it with no rows and
+				// postgres rejects the SQL outright. Failing closed keeps one
+				// portable answer and never widens the result.
+				logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("exact match on JSON column %q cannot compare, adding safety condition", k)
+				db.ins = db.ins.Where("1 = 0")
+				continue
+			}
 			db.ins = db.ins.Where(db.quoteIdent(k)+" IN ?", items)
 		}
 		// CRITICAL: Check if all query values are empty after filtering

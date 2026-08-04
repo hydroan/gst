@@ -86,6 +86,36 @@ func ClassifyColumn(typ reflect.Type) ColumnClass {
 	}
 }
 
+// IsJSONType reports whether a column type stores as a JSON document. The
+// answer comes from the type itself through gorm's GormDataTypeInterface,
+// which is how the gorm.io/datatypes types (JSON, JSONType, JSONSlice,
+// JSONMap) and custom JSON wrappers declare their column type. Pointers are
+// dereferenced, and the method is looked up on both receivers.
+//
+// The declared name is matched by its "json" prefix rather than by equality:
+// the datatypes family does not spell one name (JSONMap declares "jsonmap",
+// the others "json"), and a dialect-flavored wrapper may declare "jsonb".
+//
+// Consumers use it to keep text operators away from JSON columns where a
+// dialect is strict about operand types; see the WithQuery JSON handling in
+// the database package.
+func IsJSONType(typ reflect.Type) bool {
+	if typ == nil {
+		return false
+	}
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	value := reflect.New(typ)
+	decl, ok := value.Elem().Interface().(schema.GormDataTypeInterface)
+	if !ok {
+		if decl, ok = value.Interface().(schema.GormDataTypeInterface); !ok {
+			return false
+		}
+	}
+	return strings.HasPrefix(strings.ToLower(decl.GormDataType()), "json")
+}
+
 // schemaCache is the parse cache gorm expects; parsing a model type is only
 // done once per process.
 var schemaCache = &sync.Map{}

@@ -51,6 +51,18 @@ func (db *database[M]) regexpOperator() string {
 	return "REGEXP"
 }
 
+// textPatternColumn renders a column so the text pattern operators (LIKE and
+// the regex operator) accept it. PostgreSQL is strict about operand types:
+// json and jsonb carry no text operators, so a JSON column is cast to text
+// there. MySQL and SQLite already read a JSON value in its text form in a
+// string context, and skipping the cast keeps their SQL unchanged.
+func (db *database[M]) textPatternColumn(quotedColumn string, isJSON bool) string {
+	if isJSON && db.dialect() == dialectPostgres {
+		return "CAST(" + quotedColumn + " AS TEXT)"
+	}
+	return quotedColumn
+}
+
 // likeEscapeClause declares the LIKE escape character used by filters.
 // The pipe is chosen over the conventional backslash because backslash inside
 // a SQL string literal is itself an escape character in MySQL but a plain

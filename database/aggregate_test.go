@@ -1053,7 +1053,7 @@ func TestFilterExistsQualifiesInnerColumns(t *testing.T) {
 		List(&records))
 
 	require.Len(t, statements, 1)
-	require.Contains(t, statements[0].Query, "`test_record_tags`.`id` = ?",
+	require.Contains(t, statements[0].Query, quoteIdent("test_record_tags")+"."+quoteIdent("id")+" =",
 		"the inner filter must name the subquery's own table")
 }
 
@@ -1293,6 +1293,6 @@ func TestAggregateGroupByRendersRawExpression(t *testing.T) {
 		Scan(&rows))
 
 	require.Len(t, statements, 1)
-	require.Contains(t, statements[0].Query, "GROUP BY `category`")
-	require.NotContains(t, statements[0].Query, "``category``")
+	require.Contains(t, statements[0].Query, "GROUP BY "+quoteIdent("category"))
+	require.NotContains(t, statements[0].Query, quoteIdent(quoteIdent("category")))
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
@@ -141,7 +140,6 @@ func TestDatabaseList(t *testing.T) {
 }
 
 func TestDatabaseListWithJSONString(t *testing.T) {
-	skipOnDialect(t, config.DBPostgres, "BUG-9: WithQuery renders an exact IN condition against the JSON column, and postgres rejects comparing json to a plain string with SQLSTATE 22P02")
 	defer cleanupTestData()
 
 	data := []*TestUser{

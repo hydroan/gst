@@ -26,13 +26,16 @@ var _ types.Model = (*Base)(nil)
 // foreign keys, so they carry constraint:- and leave referential integrity to
 // the model hooks.
 type Base struct {
-	ID string `json:"id" gorm:"primaryKey;type:char(36)" query:"id" url:"-"` // UUIDv7 identifier for the record
+	// The id columns take a size instead of an explicit char type: postgres
+	// blank-pads char values, so an id shorter than 36 would come back with
+	// trailing spaces there. varchar stores every id verbatim on all dialects.
+	ID string `json:"id" gorm:"primaryKey;size:36" query:"id" url:"-"` // UUIDv7 identifier for the record
 
-	CreatedBy string         `json:"created_by,omitempty" gorm:"type:char(36)" query:"created_by" url:"-"` // UUIDv7 user ID who created the record
-	UpdatedBy string         `json:"updated_by,omitempty" gorm:"type:char(36)" query:"updated_by" url:"-"` // UUIDv7 user ID who last updated the record
-	CreatedAt time.Time      `json:"created_at,omitzero" query:"-" url:"-"`                                // Timestamp when the record was created
-	UpdatedAt time.Time      `json:"updated_at,omitzero" query:"-" url:"-"`                                // Timestamp when the record was last updated
-	DeletedAt gorm.DeletedAt `json:"-" gorm:"index" query:"-" url:"-"`                                     // Timestamp when the record was deleted
+	CreatedBy string         `json:"created_by,omitempty" gorm:"size:36" query:"created_by" url:"-"` // UUIDv7 user ID who created the record
+	UpdatedBy string         `json:"updated_by,omitempty" gorm:"size:36" query:"updated_by" url:"-"` // UUIDv7 user ID who last updated the record
+	CreatedAt time.Time      `json:"created_at,omitzero" query:"-" url:"-"`                          // Timestamp when the record was created
+	UpdatedAt time.Time      `json:"updated_at,omitzero" query:"-" url:"-"`                          // Timestamp when the record was last updated
+	DeletedAt gorm.DeletedAt `json:"-" gorm:"index" query:"-" url:"-"`                               // Timestamp when the record was deleted
 }
 
 func (b *Base) GetTableName() string       { return "" }
