@@ -46,6 +46,11 @@ type filterScope struct {
 	// keyed by database name. Comparisons on them normalize both sides through
 	// timeComparableExpr; see comparisonSQL.
 	timeColumns map[string]struct{}
+	// jsonColumns names the columns of the scope's model that store a JSON
+	// document, keyed by database name. The like-family filters match against
+	// the document's text form and cast the column where the dialect requires
+	// it; see textPatternColumn.
+	jsonColumns map[string]struct{}
 	// depth numbers the nesting level so each subquery can take a distinct
 	// alias when it reads the same table as the query enclosing it.
 	depth int
@@ -53,9 +58,14 @@ type filterScope struct {
 
 // outerScope is the filterScope of a top-level predicate: it correlates
 // against the chain's own table and knows which of that model's columns store
-// time.
+// time and which store JSON.
 func (db *database[M]) outerScope() filterScope {
-	return filterScope{parent: db.outerTableName(), timeColumns: timeColumnSet(reflect.TypeOf(*new(M)))}
+	typ := reflect.TypeOf(*new(M))
+	return filterScope{
+		parent:      db.outerTableName(),
+		timeColumns: timeColumnSet(typ),
+		jsonColumns: jsonColumnSet(typ),
+	}
 }
 
 // timeColumnSet reports the time-typed columns of a model type by database
@@ -71,6 +81,24 @@ func timeColumnSet(typ reflect.Type) map[string]struct{} {
 	set := make(map[string]struct{})
 	for _, c := range columns {
 		if modelschema.ClassifyColumn(c.Type) == modelschema.ColumnClassTime {
+			set[c.DBName] = struct{}{}
+		}
+	}
+	return set
+}
+
+// jsonColumnSet reports the JSON-typed columns of a model type by database
+// name, for the like-family cast in the filter renderer and the exact-match
+// fail-closed rule in WithQuery. Resolution failures yield an empty set, and
+// the columns then render without the cast.
+func jsonColumnSet(typ reflect.Type) map[string]struct{} {
+	columns, err := modelschema.Columns(typ)
+	if err != nil {
+		return nil
+	}
+	set := make(map[string]struct{})
+	for _, c := range columns {
+		if modelschema.IsJSONType(c.Type) {
 			set[c.DBName] = struct{}{}
 		}
 	}
@@ -196,13 +224,13 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 	case types.FilterOpNotIn:
 		return db.listFilter(f, column+" NOT IN ?")
 	case types.FilterOpLike:
-		return db.patternFilter(f, column+" LIKE ?"+db.likeEscapeSuffix(), "%", "%")
+		return db.patternFilter(f, db.likeColumn(scope, f.Column, column)+" LIKE ?"+db.likeEscapeSuffix(), "%", "%")
 	case types.FilterOpNotLike:
-		return db.patternFilter(f, column+" NOT LIKE ?"+db.likeEscapeSuffix(), "%", "%")
+		return db.patternFilter(f, db.likeColumn(scope, f.Column, column)+" NOT LIKE ?"+db.likeEscapeSuffix(), "%", "%")
 	case types.FilterOpStartsWith:
-		return db.patternFilter(f, column+" LIKE ?"+db.likeEscapeSuffix(), "", "%")
+		return db.patternFilter(f, db.likeColumn(scope, f.Column, column)+" LIKE ?"+db.likeEscapeSuffix(), "", "%")
 	case types.FilterOpEndsWith:
-		return db.patternFilter(f, column+" LIKE ?"+db.likeEscapeSuffix(), "%", "")
+		return db.patternFilter(f, db.likeColumn(scope, f.Column, column)+" LIKE ?"+db.likeEscapeSuffix(), "%", "")
 	case types.FilterOpIsNull:
 		b, ok := f.Value.(bool)
 		if !ok {
@@ -277,6 +305,14 @@ func (db *database[M]) comparisonSQL(scope filterScope, dbName, quotedColumn, op
 		return db.timeComparableExpr(quotedColumn) + op + db.timeComparableExpr("?")
 	}
 	return quotedColumn + op + "?"
+}
+
+// likeColumn renders the column a like-family filter matches against: a JSON
+// document matches by its text form, so a JSON column goes through
+// textPatternColumn and is cast where the dialect requires it.
+func (db *database[M]) likeColumn(scope filterScope, dbName, quotedColumn string) string {
+	_, isJSON := scope.jsonColumns[dbName]
+	return db.textPatternColumn(quotedColumn, isJSON)
 }
 
 // scalarFilter binds a comparison filter whose value must be a scalar; nil,
@@ -385,10 +421,14 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 	}
 	allowed := make(map[string]struct{}, len(childColumns))
 	childTimeColumns := make(map[string]struct{})
+	childJSONColumns := make(map[string]struct{})
 	for _, c := range childColumns {
 		allowed[c.DBName] = struct{}{}
 		if modelschema.ClassifyColumn(c.Type) == modelschema.ColumnClassTime {
 			childTimeColumns[c.DBName] = struct{}{}
+		}
+		if modelschema.IsJSONType(c.Type) {
+			childJSONColumns[c.DBName] = struct{}{}
 		}
 	}
 	if _, ok := allowed[sq.ChildColumn]; !ok {
@@ -430,6 +470,7 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 		parent:      childRef,
 		columns:     allowed,
 		timeColumns: childTimeColumns,
+		jsonColumns: childJSONColumns,
 		depth:       scope.depth + 1,
 	}
 	expr, failure := db.renderFilters(sq.Filters, false, inner)

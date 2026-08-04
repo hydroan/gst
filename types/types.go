@@ -60,12 +60,6 @@ type Decision struct {
 // matching with the empty-query safety check enabled. See the WithQuery method
 // for usage examples.
 type QueryOptions struct {
-	// FuzzyMatch switches model-field filtering from exact matching (single
-	// value: IN, comma-separated values: IN list) to substring matching
-	// (single value: LIKE '%v%', comma-separated values: REGEXP alternation
-	// with special characters escaped).
-	FuzzyMatch bool
-
 	// AllowEmpty allows a query without any condition to match all records.
 	// By default a nil model, a zero-value model, or all-empty field values
 	// add the "1 = 0" safety condition instead, so a forgotten filter cannot

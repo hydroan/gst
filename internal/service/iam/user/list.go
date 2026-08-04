@@ -119,14 +119,14 @@ func parseAdminUserListInt(value string) int {
 // adminUserListQuery converts URL filters into the model query consumed by
 // database.WithQuery. Tenant visibility remains in opts (a Filters IN condition, or the
 // fail-closed RawQuery for an empty visible set) and WithQuery combines it
-// with the username condition using AND semantics.
+// with the username condition using AND semantics. The username searches as a
+// substring through the like operator filter, the framework's one fuzzy path.
 func adminUserListQuery(filters adminUserListFilters, opts types.QueryOptions) (*modeliamuser.User, types.QueryOptions) {
 	query := new(modeliamuser.User)
 	if filters.Username == "" {
 		return query, opts
 	}
-	query.Username = filters.Username
-	opts.FuzzyMatch = true
+	opts.Filters = append(opts.Filters, types.FilterLike("username", filters.Username))
 	return query, opts
 }
 

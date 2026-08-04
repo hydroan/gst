@@ -149,22 +149,24 @@ func TestDatabaseListWithJSONString(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).Create(data...))
 
 	res := make([]*TestUser, 0)
-	// Test query JSON field without fuzzy match.
+	// An exact match on a JSON column is not a scalar comparison, so it fails
+	// closed to an empty result on every dialect.
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(&TestUser{Addr: []string{"shanghai"}}, types.QueryOptions{FuzzyMatch: false}).
+		WithQuery(&TestUser{Addr: []string{"shanghai"}}).
 		List(&res))
 	require.Empty(t, res)
 
-	// Test query JSON field with fuzzy match
+	// Substring matching on a JSON document goes through the like operator
+	// filter, which matches the document's text form and casts the column
+	// where the dialect requires it.
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(&TestUser{Addr: []string{"shanghai"}}, types.QueryOptions{FuzzyMatch: true}).
+		WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.FilterLike("addr", "shanghai")}}).
 		List(&res))
 	require.Len(t, res, 1)
 	require.Equal(t, "shanghai", res[0].Name)
 
-	// Test query JSON field with fuzzy match again
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(&TestUser{Addr: []string{"1"}}, types.QueryOptions{FuzzyMatch: true}).
+		WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.FilterLike("addr", "1")}}).
 		List(&res))
 	require.Len(t, res, 2)
 	var found1, found2 bool
