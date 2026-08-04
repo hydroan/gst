@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"slices"
 
+	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"gorm.io/gorm"
 	glogger "gorm.io/gorm/logger"
@@ -13,6 +14,21 @@ import (
 // dryRunReadSession builds read SQL through GORM without executing database I/O.
 func (db *database[M]) dryRunReadSession() *gorm.DB {
 	return db.ins.Session(&gorm.Session{DryRun: true, Logger: glogger.Default.LogMode(glogger.Silent)})
+}
+
+// nilModel reports whether a read destination is unusable: a nil or invalid
+// model pointer cannot be filled by the query.
+func nilModel[M types.Model](dest M) bool {
+	val := reflect.ValueOf(dest)
+	return !val.IsValid() || val.IsNil()
+}
+
+// applySelect narrows the read to the selected columns when WithSelect chose
+// any; see WithSelect for the default columns that ride along.
+func (db *database[M]) applySelect() {
+	if len(db.selectColumns) > 0 {
+		db.ins = db.ins.Select(db.selectColumns)
+	}
 }
 
 // List retrieves multiple records from the database based on applied conditions.
@@ -57,10 +73,7 @@ func (db *database[M]) List(dest *[]M) (err error) {
 		return ErrNilDest
 	}
 
-	// set selected columns.
-	if len(db.selectColumns) > 0 {
-		db.ins = db.ins.Select(db.selectColumns)
-	}
+	db.applySelect()
 	if db.dryRun {
 		tableName := db.m.GetTableName()
 		db.applyCursorPagination()
@@ -136,8 +149,7 @@ func (db *database[M]) List(dest *[]M) (err error) {
 func (db *database[M]) Get(dest M, id string) (err error) {
 	defer db.reset()
 
-	val := reflect.ValueOf(dest)
-	if !val.IsValid() || val.IsNil() {
+	if nilModel(dest) {
 		return ErrNilDest
 	}
 	if len(id) == 0 {
@@ -148,12 +160,10 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 	// "record not found" here keeps the database from applying implicit
 	// string-to-integer coercion on integer primary keys (MySQL matches id=7
 	// for '7abc'). Base accepts any non-empty string and passes through
-	// unchanged; AutoBase only accepts decimal digits. The probe is a clone
-	// because dest must stay untouched until the query fills it.
-	probe := cloneDryRunModel(dest)
-	probe.ClearID()
-	probe.SetID(id)
-	if id = probe.GetID(); len(id) == 0 {
+	// unchanged; AutoBase only accepts decimal digits. The probe clones dest,
+	// which must stay untouched until the query fills it.
+	var ok bool
+	if id, ok = normalizeModelID(dest, id); !ok {
 		return ErrRecordNotFound
 	}
 	if err = db.prepare(); err != nil {
@@ -162,10 +172,7 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 	done, _, span := db.trace("Get")
 	defer func() { done(err) }()
 
-	// set selected columns.
-	if len(db.selectColumns) > 0 {
-		db.ins = db.ins.Select(db.selectColumns)
-	}
+	db.applySelect()
 	if db.dryRun {
 		tableName := db.m.GetTableName()
 		dryRunDest := cloneDryRunModel(dest)
@@ -280,8 +287,7 @@ func (db *database[M]) Count(count *int) (err error) {
 func (db *database[M]) First(dest M) (err error) {
 	defer db.reset()
 
-	val := reflect.ValueOf(dest)
-	if !val.IsValid() || val.IsNil() {
+	if nilModel(dest) {
 		return ErrNilDest
 	}
 	if err = db.prepare(); err != nil {
@@ -290,10 +296,7 @@ func (db *database[M]) First(dest M) (err error) {
 	done, _, span := db.trace("First")
 	defer func() { done(err) }()
 
-	// set selected columns.
-	if len(db.selectColumns) > 0 {
-		db.ins = db.ins.Select(db.selectColumns)
-	}
+	db.applySelect()
 	if db.dryRun {
 		tableName := db.m.GetTableName()
 		tx := db.dryRunReadSession().Table(tableName).First(dest)
@@ -348,8 +351,7 @@ func (db *database[M]) First(dest M) (err error) {
 func (db *database[M]) Last(dest M) (err error) {
 	defer db.reset()
 
-	val := reflect.ValueOf(dest)
-	if !val.IsValid() || val.IsNil() {
+	if nilModel(dest) {
 		return ErrNilDest
 	}
 	if err = db.prepare(); err != nil {
@@ -358,10 +360,7 @@ func (db *database[M]) Last(dest M) (err error) {
 	done, _, span := db.trace("Last")
 	defer func() { done(err) }()
 
-	// set selected columns.
-	if len(db.selectColumns) > 0 {
-		db.ins = db.ins.Select(db.selectColumns)
-	}
+	db.applySelect()
 	if db.dryRun {
 		tableName := db.m.GetTableName()
 		tx := db.dryRunReadSession().Table(tableName).Last(dest)
@@ -416,8 +415,7 @@ func (db *database[M]) Last(dest M) (err error) {
 func (db *database[M]) Take(dest M) (err error) {
 	defer db.reset()
 
-	val := reflect.ValueOf(dest)
-	if !val.IsValid() || val.IsNil() {
+	if nilModel(dest) {
 		return ErrNilDest
 	}
 	if err = db.prepare(); err != nil {
@@ -426,10 +424,7 @@ func (db *database[M]) Take(dest M) (err error) {
 	done, _, span := db.trace("Take")
 	defer func() { done(err) }()
 
-	// set selected columns.
-	if len(db.selectColumns) > 0 {
-		db.ins = db.ins.Select(db.selectColumns)
-	}
+	db.applySelect()
 	if db.dryRun {
 		tableName := db.m.GetTableName()
 		tx := db.dryRunReadSession().Table(tableName).Take(dest)

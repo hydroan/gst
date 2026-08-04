@@ -15,6 +15,25 @@ import (
 	gormschema "gorm.io/gorm/schema"
 )
 
+// compactModels drops the zero-value models from a write's input. Writes
+// accept variadic models, so an empty call and explicitly zero elements both
+// mean "nothing to write" rather than an error; every write entry point runs
+// its input through here before touching the database.
+func compactModels[M types.Model](objs []M) []M {
+	if len(objs) == 0 {
+		return nil
+	}
+	var empty M
+	compacted := make([]M, 0, len(objs))
+	for _, obj := range objs {
+		if reflect.DeepEqual(obj, empty) {
+			continue
+		}
+		compacted = append(compacted, obj)
+	}
+	return compacted
+}
+
 // Create inserts one or multiple records into the database.
 // It is a pure INSERT: a record whose primary key or any unique key collides
 // with an existing row fails with ErrDuplicatedKey instead of silently
@@ -52,17 +71,7 @@ import (
 func (db *database[M]) Create(_objs ...M) (err error) {
 	defer db.reset()
 
-	if len(_objs) == 0 {
-		return nil
-	}
-	var empty M
-	objs := make([]M, 0, len(_objs))
-	for _, obj := range _objs {
-		if reflect.DeepEqual(obj, empty) {
-			continue
-		}
-		objs = append(objs, obj)
-	}
+	objs := compactModels(_objs)
 	if len(objs) == 0 {
 		return nil
 	}
@@ -178,17 +187,7 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 func (db *database[M]) Delete(_objs ...M) (err error) {
 	defer db.reset()
 
-	if len(_objs) == 0 {
-		return nil
-	}
-	var empty M
-	objs := make([]M, 0, len(_objs))
-	for _, obj := range _objs {
-		if reflect.DeepEqual(obj, empty) {
-			continue
-		}
-		objs = append(objs, obj)
-	}
+	objs := compactModels(_objs)
 	if len(objs) == 0 {
 		return nil
 	}
@@ -334,17 +333,7 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 func (db *database[M]) Update(_objs ...M) (err error) {
 	defer db.reset()
 
-	if len(_objs) == 0 {
-		return nil
-	}
-	var empty M
-	objs := make([]M, 0, len(_objs))
-	for _, obj := range _objs {
-		if reflect.DeepEqual(obj, empty) {
-			continue
-		}
-		objs = append(objs, obj)
-	}
+	objs := compactModels(_objs)
 	if len(objs) == 0 {
 		return nil
 	}
@@ -489,17 +478,7 @@ func (db *database[M]) updateRowStatement(session *gorm.DB, tableName string, ob
 func (db *database[M]) Upsert(_objs ...M) (err error) {
 	defer db.reset()
 
-	if len(_objs) == 0 {
-		return nil
-	}
-	var empty M
-	objs := make([]M, 0, len(_objs))
-	for _, obj := range _objs {
-		if reflect.DeepEqual(obj, empty) {
-			continue
-		}
-		objs = append(objs, obj)
-	}
+	objs := compactModels(_objs)
 	if len(objs) == 0 {
 		return nil
 	}
@@ -604,13 +583,10 @@ func (db *database[M]) UpdateByID(id string, column string, value any) (err erro
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	// Normalize the id through the model's own ID semantics before it can
-	// reach SQL; see Get for the coercion hazard on integer primary keys.
-	// The probe is a clone so the shared model metadata keeps a zero ID.
-	probe := cloneDryRunModel(db.m)
-	probe.ClearID()
-	probe.SetID(id)
-	if id = probe.GetID(); len(id) == 0 {
+	// The probe clones the shared model metadata, which must keep a zero ID;
+	// see normalizeModelID for the coercion hazard it guards against.
+	var ok bool
+	if id, ok = normalizeModelID(db.m, id); !ok {
 		return ErrRecordNotFound
 	}
 	done, _, _ := db.trace("UpdateByID")

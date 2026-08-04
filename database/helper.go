@@ -335,6 +335,21 @@ func boolToInt(b bool) int {
 	return 0
 }
 
+// normalizeModelID runs an id through the model's own ID semantics before it
+// can reach SQL, reporting false for an id the model rejects. Such an id
+// cannot match any row, and answering "record not found" at the entry keeps
+// the database from applying implicit string-to-integer coercion on integer
+// primary keys (MySQL matches id=7 for '7abc'). Base accepts any non-empty
+// string and passes through unchanged; AutoBase only accepts decimal digits.
+// The probe is a clone so probeSource stays untouched.
+func normalizeModelID[M types.Model](probeSource M, id string) (string, bool) {
+	probe := cloneDryRunModel(probeSource)
+	probe.ClearID()
+	probe.SetID(id)
+	id = probe.GetID()
+	return id, len(id) != 0
+}
+
 // traceModelHook traces model hook execution with OpenTelemetry spans.
 // Creates a span for the hook execution and records timing and error information.
 //
