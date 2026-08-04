@@ -149,7 +149,7 @@ func TestCleanFlushesBufferedFileSink(t *testing.T) {
 	}
 }
 
-func TestNewLogEncoderTimestampOrdersWithinASecond(t *testing.T) {
+func TestNewLogEncoderTimestampIsUTCAndOrdersWithinASecond(t *testing.T) {
 	encoder := newLogEncoder()
 	at := time.Date(2026, 7, 29, 14, 3, 8, 243834831, time.FixedZone("", 8*60*60))
 
@@ -164,20 +164,23 @@ func TestNewLogEncoderTimestampOrdersWithinASecond(t *testing.T) {
 	}
 
 	first := encode(at)
-	require.Equal(t, "2026-07-29T14:03:08.243834831+08:00", first)
+	require.Equal(t, "2026-07-29T06:03:08.243834831Z", first,
+		"the host zone must not leak into the timestamp")
 
 	// The entries of one request land in the same second, so a whole-second
 	// timestamp would collapse them into a single value and lose their order.
 	next := encode(at.Add(time.Microsecond))
 	require.Less(t, first, next)
 
-	// The zone offset travels with the entry, so hosts in different zones stay
-	// comparable, and the layout is one a log store reads as a date unassisted.
+	// The timestamp is rendered in UTC no matter what zone the host runs in,
+	// so an entry reads on the same clock as the stored rows it describes, and
+	// entries from any two hosts order lexicographically. The layout is one a
+	// log store reads as a date unassisted.
 	parsed, err := time.Parse(time.RFC3339Nano, first)
 	require.NoError(t, err)
 	require.True(t, parsed.Equal(at))
 	_, offset := parsed.Zone()
-	require.Equal(t, 8*60*60, offset)
+	require.Equal(t, 0, offset)
 }
 
 func TestWithContextAddsMetadataFields(t *testing.T) {

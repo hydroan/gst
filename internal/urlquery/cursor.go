@@ -94,8 +94,8 @@ func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
 //
 // A time boundary is not only validated but normalized to the UTC wall clock
 // in FilterTimeLayout, exactly like a time filter bound: the client spells
-// the boundary in any accepted query layout, and the database compares the
-// one wall clock the framework stores on every dialect.
+// the boundary in RFC 3339, and the database compares the one wall clock the
+// framework stores on every dialect.
 //
 // Only types the database coerces lossily are gated: numeric, bool and time
 // columns. String and other column types accept any value, and a nil column
@@ -109,7 +109,7 @@ func normalizeCursorValue(columnTyp reflect.Type, value string) (string, error) 
 	switch {
 	case columnTyp == timeType:
 		var t time.Time
-		if t, err = parseQueryTime(value, false); err == nil {
+		if t, err = parseQueryTime(value); err == nil {
 			value = t.In(time.UTC).Format(types.FilterTimeLayout)
 		}
 	case columnTyp.Kind() == reflect.Bool:

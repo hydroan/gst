@@ -12,7 +12,6 @@ import (
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/stoewer/go-strcase"
 )
 
@@ -155,13 +154,11 @@ var timeType = reflect.TypeFor[time.Time]()
 //
 //   - isnull applies to any column and requires a boolean value, carried as
 //     a bool; it is handled before the type dispatch below.
-//   - time columns accept the comparison operators only; the value is parsed
-//     by parseQueryTime and rendered in the server's local zone. A date-only
-//     value extends to the end of the day when it forms an upper inclusive
-//     (lte) or lower exclusive (gt) bound, so the bound covers the whole day.
-//     The canonical string form is kept on purpose: binding time.Time would
-//     let the driver re-render the value in its own location, while the
-//     string pins the wall-clock time the parser resolved.
+//   - time columns accept the comparison operators only; the value must be
+//     RFC 3339 (see parseQueryTime) and travels as the UTC wall clock in
+//     FilterTimeLayout. The canonical string form is kept on purpose: binding
+//     time.Time would let the driver re-render the value in its own location,
+//     while the string pins the wall-clock time the parser resolved.
 //   - bool columns accept eq/ne with a boolean value, carried as a bool.
 //   - numeric columns require numeric values; in/notin validate every
 //     comma-separated member.
@@ -183,8 +180,7 @@ func normalizeFilterValue(columnTyp reflect.Type, op types.FilterOp, value strin
 	case columnTyp == timeType:
 		switch op {
 		case types.FilterOpEq, types.FilterOpNe, types.FilterOpGt, types.FilterOpGte, types.FilterOpLt, types.FilterOpLte:
-			end := op == types.FilterOpLte || op == types.FilterOpGt
-			t, err := parseQueryTime(value, end)
+			t, err := parseQueryTime(value)
 			if err != nil {
 				return nil, err
 			}
@@ -263,68 +259,17 @@ func validateNumericValue(kind reflect.Kind, value string) error {
 	return nil
 }
 
-// timeQueryLayout describes one accepted layout of a time-typed field
-// condition value. dateOnly marks layouts without a time-of-day component so
-// an upper bound can extend to the last instant of the day.
-type timeQueryLayout struct {
-	layout   string
-	dateOnly bool
-}
-
-// timeQueryLayouts are the zone-less layouts tried in order when parsing a
-// time-typed filter value; they are interpreted in the server's
-// local zone. RFC 3339 values with an explicit offset and all-digit unix
-// timestamps are handled separately in parseQueryTime.
-var timeQueryLayouts = []timeQueryLayout{
-	{layout: consts.DATE_TIME_LAYOUT}, // 2006-01-02 15:04:05
-	{layout: "2006-01-02T15:04:05"},   // HTML datetime-local with seconds
-	{layout: "2006-01-02 15:04"},
-	{layout: "2006-01-02T15:04"}, // HTML datetime-local
-	{layout: "2006-01-02", dateOnly: true},
-}
-
-// unixMilliThreshold separates unix-second from unix-millisecond values:
-// digit-only values at or above it (13+ digits) are treated as milliseconds.
-const unixMilliThreshold = 1e12
-
-// parseQueryTime parses a time-typed query value. Zone-less layouts are
-// interpreted in the server's local zone, RFC 3339 values keep their explicit
-// offset, and digit-only values are unix seconds or milliseconds. When end is
-// true and the value carries no time of day, the result extends to the last
-// instant of that day so an upper bound covers the whole day.
-func parseQueryTime(value string, end bool) (time.Time, error) {
-	for _, l := range timeQueryLayouts {
-		t, err := time.ParseInLocation(l.layout, value, time.Local)
-		if err != nil {
-			continue
-		}
-		if end && l.dateOnly {
-			t = t.AddDate(0, 0, 1).Add(-time.Nanosecond)
-		}
-		return t, nil
+// parseQueryTime parses a time-typed query value. RFC 3339 (fractional
+// seconds up to nanoseconds accepted) is the one accepted format: its
+// mandatory UTC offset makes the value the same instant no matter what zone
+// the server runs in, and it is the format time.Time speaks in JSON, so
+// query values and body values spell time identically. Zone-less spellings
+// and unix timestamps are rejected on purpose — a zone-less value names a
+// different instant per server zone, and guessing is worse than failing.
+func parseQueryTime(value string) (time.Time, error) {
+	t, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return time.Time{}, errors.Newf("unsupported time format %q, expect RFC 3339", value)
 	}
-	if t, err := time.Parse(time.RFC3339Nano, value); err == nil {
-		return t, nil
-	}
-	if isDigitsOnly(value) {
-		if n, err := strconv.ParseInt(value, 10, 64); err == nil {
-			if n >= unixMilliThreshold {
-				return time.UnixMilli(n), nil
-			}
-			return time.Unix(n, 0), nil
-		}
-	}
-	return time.Time{}, errors.Newf("unsupported time format %q", value)
-}
-
-func isDigitsOnly(value string) bool {
-	if len(value) == 0 {
-		return false
-	}
-	for _, r := range value {
-		if r < '0' || r > '9' {
-			return false
-		}
-	}
-	return true
+	return t, nil
 }

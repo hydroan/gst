@@ -8,7 +8,6 @@ import (
 	"os"
 	"runtime/debug"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/errors"
 	ginzap "github.com/gin-contrib/zap"
@@ -65,15 +64,17 @@ func RecoveryWithTracing(logger *zap.Logger, stack bool) gin.HandlerFunc {
 			}
 			headersToStr := strings.Join(headers, "\r\n")
 
+			// The entry timestamp is the encoder's job; a hand-rolled one in
+			// the message would be zone-less text on the host clock.
 			switch {
 			case brokenPipe:
 				logger.Error(fmt.Sprintf("%s\n%s", recovered, headersToStr))
 			case stack:
-				logger.Error(fmt.Sprintf("[Recovery] %s panic recovered:\n%s\n%s\n%s",
-					timeFormat(time.Now()), headersToStr, recovered, debug.Stack()))
+				logger.Error(fmt.Sprintf("[Recovery] panic recovered:\n%s\n%s\n%s",
+					headersToStr, recovered, debug.Stack()))
 			default:
-				logger.Error(fmt.Sprintf("[Recovery] %s panic recovered:\n%s\n%s",
-					timeFormat(time.Now()), headersToStr, recovered))
+				logger.Error(fmt.Sprintf("[Recovery] panic recovered:\n%s\n%s",
+					headersToStr, recovered))
 			}
 		}
 
@@ -85,8 +86,4 @@ func RecoveryWithTracing(logger *zap.Logger, stack bool) gin.HandlerFunc {
 			c.AbortWithStatus(http.StatusInternalServerError)
 		}
 	})
-}
-
-func timeFormat(t time.Time) string {
-	return t.Format("2006/01/02 - 15:04:05")
 }

@@ -38,8 +38,7 @@ const (
 	CTX_REQUIRES_AUTH = "requires_auth"
 	CTX_RESPONSE_CODE = "response_code"
 
-	DATE_TIME_LAYOUT = "2006-01-02 15:04:05"
-	DATE_ID_LAYOUT   = "20060102"
+	DATE_ID_LAYOUT = "20060102"
 
 	JOB_SCHEDULE_TIME_LAYOUT = "2006-01-02 15:04:05"
 )
@@ -423,11 +422,12 @@ const (
 // RFC3339 with nanoseconds is what makes an entry's own timestamp usable. Whole
 // seconds cannot order the entries of a single request, which pushes readers
 // onto whatever ingest time their log pipeline stamps on, and that measures the
-// pipeline rather than the work. The offset is written out and kept local, so
-// an entry reads as the wall clock of the host that produced it while still
-// merging correctly with entries from any other zone. Log stores recognize this
-// layout as a date without being told, so the field is sortable and
-// range-filterable on arrival.
+// pipeline rather than the work. Entries are rendered in UTC (see the zap
+// encoder): the framework stores the UTC wall clock on every dialect, so a log
+// line reads on the same clock as the rows it describes, entries from hosts in
+// different zones order lexicographically, and no host zone leaks into the
+// stream. Log stores recognize this layout as a date without being told, so the
+// field is sortable and range-filterable on arrival.
 const LayoutTimeEncoder = time.RFC3339Nano
 
 const IMPORT_PATH_MODEL = `"github.com/hydroan/gst/model"`

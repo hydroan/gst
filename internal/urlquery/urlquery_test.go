@@ -137,28 +137,18 @@ func TestFilters(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	t.Run("TimeFieldNormalizesFlexibleFormats", func(t *testing.T) {
-		// Zone-less inputs are read in the server's local zone and the bound
-		// travels as the UTC wall clock, so every expectation is the local
-		// instant converted to UTC.
-		for key, want := range map[string]string{
-			// A date-only lower bound starts at the beginning of the day.
-			"expired_at[gte]": time.Date(2026, 7, 1, 0, 0, 0, 0, time.Local).UTC().Format(types.FilterTimeLayout),
-			// A date-only inclusive upper bound covers the whole day.
-			"expired_at[lte]": time.Date(2026, 7, 2, 0, 0, 0, 0, time.Local).Add(-time.Nanosecond).UTC().Format(types.FilterTimeLayout),
-			// A date-only exclusive lower bound means "after the whole day".
-			"expired_at[gt]": time.Date(2026, 7, 2, 0, 0, 0, 0, time.Local).Add(-time.Nanosecond).UTC().Format(types.FilterTimeLayout),
-			// A date-only exclusive upper bound means "before the day starts".
-			"expired_at[lt]": time.Date(2026, 7, 1, 0, 0, 0, 0, time.Local).UTC().Format(types.FilterTimeLayout),
-		} {
-			conds, err := Filters(url.Values{key: {"2026-07-01"}}, &filterTestModel{})
-			require.NoError(t, err, "key %q", key)
-			require.Len(t, conds, 1)
-			require.Equal(t, "expired_at", conds[0].Column)
-			require.Equal(t, want, conds[0].Value, "key %q", key)
-		}
-
+	t.Run("TimeFieldAcceptsOnlyRFC3339", func(t *testing.T) {
 		conds, err := Filters(url.Values{
+			"expired_at[gte]": {"2026-07-01T00:00:00Z"},
+		}, &filterTestModel{})
+		require.NoError(t, err)
+		require.Len(t, conds, 1)
+		require.Equal(t, "expired_at", conds[0].Column)
+		require.Equal(t,
+			time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC).Format(types.FilterTimeLayout),
+			conds[0].Value, "the bound travels as the UTC wall clock")
+
+		conds, err = Filters(url.Values{
 			"expired_at[eq]": {"2026-07-01T08:30:15+08:00"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
@@ -166,6 +156,13 @@ func TestFilters(t *testing.T) {
 		require.Equal(t,
 			time.Date(2026, 7, 1, 8, 30, 15, 0, time.FixedZone("", 8*3600)).UTC().Format(types.FilterTimeLayout),
 			conds[0].Value, "an explicit offset must be converted to UTC")
+
+		// A value without an explicit offset names a different instant per
+		// server zone, so it is rejected instead of being guessed at.
+		for _, value := range []string{"2026-07-01", "2026-07-01 08:30:15", "2026-07-01T08:30:15"} {
+			_, err := Filters(url.Values{"expired_at[gte]": {value}}, &filterTestModel{})
+			require.Error(t, err, "zone-less value %q must be rejected", value)
+		}
 	})
 
 	t.Run("TimeFieldRejectsInvalidValue", func(t *testing.T) {
@@ -218,11 +215,11 @@ func TestFilters(t *testing.T) {
 
 	t.Run("BareBaseTimestampKeyBecomesEqCondition", func(t *testing.T) {
 		conds, err := Filters(url.Values{
-			"created_at": {"2026-07-01 08:00:00"},
+			"created_at": {"2026-07-01T08:00:00Z"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
 		require.Equal(t, []types.Filter{
-			{Column: "created_at", Op: types.FilterOpEq, Value: time.Date(2026, 7, 1, 8, 0, 0, 0, time.Local).UTC().Format(types.FilterTimeLayout)},
+			{Column: "created_at", Op: types.FilterOpEq, Value: time.Date(2026, 7, 1, 8, 0, 0, 0, time.UTC).Format(types.FilterTimeLayout)},
 		}, conds, "the bare framework timestamp key is an exact-match filter, consistent with every other documented parameter")
 
 		conds, err = Filters(url.Values{
@@ -239,13 +236,13 @@ func TestFilters(t *testing.T) {
 
 	t.Run("BaseTimeColumnsFilterable", func(t *testing.T) {
 		conds, err := Filters(url.Values{
-			"created_at[gte]": {"2026-07-01"},
-			"updated_at[lt]":  {"2026-07-15"},
+			"created_at[gte]": {"2026-07-01T00:00:00Z"},
+			"updated_at[lt]":  {"2026-07-15T00:00:00Z"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
 		require.Equal(t, []types.Filter{
-			{Column: "created_at", Op: types.FilterOpGte, Value: time.Date(2026, 7, 1, 0, 0, 0, 0, time.Local).UTC().Format(types.FilterTimeLayout)},
-			{Column: "updated_at", Op: types.FilterOpLt, Value: time.Date(2026, 7, 15, 0, 0, 0, 0, time.Local).UTC().Format(types.FilterTimeLayout)},
+			{Column: "created_at", Op: types.FilterOpGte, Value: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC).Format(types.FilterTimeLayout)},
+			{Column: "updated_at", Op: types.FilterOpLt, Value: time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC).Format(types.FilterTimeLayout)},
 		}, conds)
 	})
 
@@ -543,15 +540,14 @@ func TestPagination(t *testing.T) {
 func TestCursor(t *testing.T) {
 	t.Run("CursorModelReadsAllThreeParameters", func(t *testing.T) {
 		cursor, err := Cursor(url.Values{
-			"_cursor_value": {"2026-07-01 08:30:15"},
+			"_cursor_value": {"2026-07-01T08:30:15+08:00"},
 			"_cursor_next":  {"true"},
 			"_cursor_field": {"created_at"},
 		}, &cursorTestModel{})
 		require.NoError(t, err)
-		// A time boundary is normalized like a time filter bound: the zone-less
-		// input is read in the server's local zone and travels as the UTC wall
-		// clock.
-		boundary := time.Date(2026, 7, 1, 8, 30, 15, 0, time.Local).UTC().Format(types.FilterTimeLayout)
+		// A time boundary is normalized like a time filter bound: the RFC 3339
+		// input travels as the UTC wall clock.
+		boundary := time.Date(2026, 7, 1, 8, 30, 15, 0, time.FixedZone("", 8*3600)).UTC().Format(types.FilterTimeLayout)
 		require.Equal(t, types.CursorForward(types.Asc("created_at"), boundary), cursor)
 	})
 
@@ -624,62 +620,49 @@ func TestCursor(t *testing.T) {
 }
 
 func TestParseQueryTime(t *testing.T) {
-	t.Run("DateTimeLayout", func(t *testing.T) {
-		got, err := parseQueryTime("2026-07-01 08:30:15", false)
+	t.Run("RFC3339UTC", func(t *testing.T) {
+		got, err := parseQueryTime("2026-07-01T08:30:15Z")
 		require.NoError(t, err)
-		require.Equal(t, time.Date(2026, 7, 1, 8, 30, 15, 0, time.Local), got)
-	})
-
-	t.Run("DateTimeLocalLayoutWithSeconds", func(t *testing.T) {
-		got, err := parseQueryTime("2026-07-01T08:30:15", false)
-		require.NoError(t, err)
-		require.Equal(t, time.Date(2026, 7, 1, 8, 30, 15, 0, time.Local), got)
-	})
-
-	t.Run("DateTimeLocalLayoutWithoutSeconds", func(t *testing.T) {
-		got, err := parseQueryTime("2026-07-01T08:30", false)
-		require.NoError(t, err)
-		require.Equal(t, time.Date(2026, 7, 1, 8, 30, 0, 0, time.Local), got)
-	})
-
-	t.Run("DateOnlyStartIsBeginOfDay", func(t *testing.T) {
-		got, err := parseQueryTime("2026-07-01", false)
-		require.NoError(t, err)
-		require.Equal(t, time.Date(2026, 7, 1, 0, 0, 0, 0, time.Local), got)
-	})
-
-	t.Run("DateOnlyEndCoversWholeDay", func(t *testing.T) {
-		got, err := parseQueryTime("2026-07-01", true)
-		require.NoError(t, err)
-		require.Equal(t, time.Date(2026, 7, 2, 0, 0, 0, 0, time.Local).Add(-time.Nanosecond), got)
+		require.True(t, got.Equal(time.Date(2026, 7, 1, 8, 30, 15, 0, time.UTC)))
 	})
 
 	t.Run("RFC3339KeepsExplicitOffset", func(t *testing.T) {
-		got, err := parseQueryTime("2026-07-01T08:30:15+08:00", false)
+		got, err := parseQueryTime("2026-07-01T08:30:15+08:00")
 		require.NoError(t, err)
 		require.True(t, got.Equal(time.Date(2026, 7, 1, 8, 30, 15, 0, time.FixedZone("", 8*3600))))
 	})
 
-	t.Run("RFC3339EndWithTimeOfDayIsNotExtended", func(t *testing.T) {
-		got, err := parseQueryTime("2026-07-01T00:00:00Z", true)
+	t.Run("RFC3339FractionalSeconds", func(t *testing.T) {
+		got, err := parseQueryTime("2026-07-01T08:30:15.123456789Z")
 		require.NoError(t, err)
-		require.True(t, got.Equal(time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)))
+		require.True(t, got.Equal(time.Date(2026, 7, 1, 8, 30, 15, 123456789, time.UTC)))
 	})
 
-	t.Run("UnixSeconds", func(t *testing.T) {
-		got, err := parseQueryTime("1751328000", false)
-		require.NoError(t, err)
-		require.True(t, got.Equal(time.Unix(1751328000, 0)))
+	t.Run("ZoneLessValueFails", func(t *testing.T) {
+		// Every zone-less spelling names a different instant per server zone,
+		// so all of them are rejected: RFC 3339 with its mandatory offset is
+		// the one accepted format.
+		for _, value := range []string{
+			"2026-07-01 08:30:15",
+			"2026-07-01T08:30:15",
+			"2026-07-01 08:30",
+			"2026-07-01T08:30",
+			"2026-07-01",
+		} {
+			_, err := parseQueryTime(value)
+			require.Error(t, err, "zone-less value %q must be rejected", value)
+		}
 	})
 
-	t.Run("UnixMilliseconds", func(t *testing.T) {
-		got, err := parseQueryTime("1751328000123", false)
-		require.NoError(t, err)
-		require.True(t, got.Equal(time.UnixMilli(1751328000123)))
+	t.Run("UnixTimestampFails", func(t *testing.T) {
+		for _, value := range []string{"1751328000", "1751328000123"} {
+			_, err := parseQueryTime(value)
+			require.Error(t, err, "digit-only value %q must be rejected", value)
+		}
 	})
 
 	t.Run("UnsupportedFormatFails", func(t *testing.T) {
-		_, err := parseQueryTime("07/01/2026", false)
+		_, err := parseQueryTime("07/01/2026")
 		require.Error(t, err)
 	})
 }

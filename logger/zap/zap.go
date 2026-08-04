@@ -319,7 +319,7 @@ func newLogEncoder(opt ...Option) zapcore.Encoder {
 	encConfig := zap.NewProductionEncoderConfig()
 	// encConfig.EncodeCaller = zapcore.ShortCallerEncoder
 	// encConfig.EncodeLevel = zapcore.LowercaseLevelEncoder
-	encConfig.EncodeTime = zapcore.TimeEncoderOfLayout(consts.LayoutTimeEncoder)
+	encConfig.EncodeTime = utcTimeEncoder
 	encConfig.EncodeLevel = zapcore.CapitalLevelEncoder
 	// Nanoseconds, matching util.LogDuration. The zap production default encodes
 	// durations as floating point seconds, which rounds sub-millisecond work to
@@ -352,6 +352,14 @@ func newLogEncoder(opt ...Option) zapcore.Encoder {
 	default:
 		return zapcore.NewJSONEncoder(encConfig)
 	}
+}
+
+// utcTimeEncoder renders the entry timestamp in UTC using
+// consts.LayoutTimeEncoder. The conversion happens here, the single point
+// every logger's encoder is built at, so no host zone can leak into a log
+// entry; see the layout constant for why the stream is UTC.
+func utcTimeEncoder(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+	enc.AppendString(t.UTC().Format(consts.LayoutTimeEncoder))
 }
 
 func readConf() {

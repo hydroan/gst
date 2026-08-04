@@ -90,7 +90,9 @@ func Init() (err error) {
 	cli = client
 	zap.S().Infow("successfully connect to redis", "addr", cfg.Addr, "db", cfg.DB, "cluster_mode", cfg.ClusterMode)
 
-	if err = cli.Set(context.TODO(), cfg.Namespace+"_"+"now", time.Now().Format(consts.DATE_TIME_LAYOUT), cfg.Expiration).Err(); err != nil {
+	// The probe value is diagnostic text read next to log entries, so it is
+	// rendered like them: UTC in the one log timestamp layout.
+	if err = cli.Set(context.TODO(), cfg.Namespace+"_"+"now", time.Now().UTC().Format(consts.LayoutTimeEncoder), cfg.Expiration).Err(); err != nil {
 		zap.S().Error(err)
 		cli.Close()
 		client = nil
