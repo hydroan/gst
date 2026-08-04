@@ -37,10 +37,6 @@ const (
 	CTX_TENANT_ID     = "tenant_id"
 	CTX_REQUIRES_AUTH = "requires_auth"
 	CTX_RESPONSE_CODE = "response_code"
-
-	DATE_ID_LAYOUT = "20060102"
-
-	JOB_SCHEDULE_TIME_LAYOUT = "2006-01-02 15:04:05"
 )
 
 // Framework-owned URL query parameters all live in the "_" prefix namespace,
