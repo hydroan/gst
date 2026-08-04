@@ -67,7 +67,7 @@ func (db *database[M]) List(dest *[]M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, _, span := db.trace("List")
+	done, span := db.trace("List")
 	defer func() { done(err) }()
 	if dest == nil {
 		return ErrNilDest
@@ -80,12 +80,11 @@ func (db *database[M]) List(dest *[]M) (err error) {
 		tx := db.dryRunReadSession().Table(tableName).Find(dest)
 		return db.collectSQL(tx)
 	}
-	var empty M // call nil value M will cause panic.
 	// Invoke model hook: ListBefore.
 	if !db.noHook {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_LIST_BEFORE, span, func(spanCtx context.Context) error {
 			for i := range *dest {
-				if !reflect.DeepEqual(empty, (*dest)[i]) {
+				if !nilModel((*dest)[i]) {
 					if err = (*dest)[i].ListBefore(spanCtx); err != nil {
 						return err
 					}
@@ -112,7 +111,7 @@ func (db *database[M]) List(dest *[]M) (err error) {
 	if !db.noHook {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_LIST_AFTER, span, func(spanCtx context.Context) error {
 			for i := range *dest {
-				if !reflect.DeepEqual(empty, (*dest)[i]) {
+				if !nilModel((*dest)[i]) {
 					if err = (*dest)[i].ListAfter(spanCtx); err != nil {
 						return err
 					}
@@ -169,7 +168,7 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, _, span := db.trace("Get")
+	done, span := db.trace("Get")
 	defer func() { done(err) }()
 
 	db.applySelect()
@@ -184,9 +183,8 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 		tx := db.dryRunReadSession().Table(tableName).Where(db.quoteTableColumn(tableName, "id")+" = ?", id).Find(dryRunDest)
 		return db.collectSQL(tx)
 	}
-	var empty M // call nil value M will cause panic.
 	// Invoke model hook: GetBefore.
-	if !db.noHook && !reflect.DeepEqual(empty, dest) {
+	if !db.noHook {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_BEFORE, span, func(spanCtx context.Context) error {
 			return dest.GetBefore(spanCtx)
 		}); err != nil {
@@ -205,7 +203,7 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 		return ErrRecordNotFound
 	}
 	// Invoke model hook: GetAfter.
-	if !db.noHook && !reflect.DeepEqual(empty, dest) {
+	if !db.noHook {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_AFTER, span, func(spanCtx context.Context) error {
 			return dest.GetAfter(spanCtx)
 		}); err != nil {
@@ -245,7 +243,7 @@ func (db *database[M]) Count(count *int) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, _, _ := db.trace("Count")
+	done, _ := db.trace("Count")
 	defer func() { done(err) }()
 
 	// GORM's Count only accepts *int64, so bridge through a local variable.
@@ -293,7 +291,7 @@ func (db *database[M]) First(dest M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, _, span := db.trace("First")
+	done, span := db.trace("First")
 	defer func() { done(err) }()
 
 	db.applySelect()
@@ -302,9 +300,8 @@ func (db *database[M]) First(dest M) (err error) {
 		tx := db.dryRunReadSession().Table(tableName).First(dest)
 		return db.collectSQL(tx)
 	}
-	var empty M // call nil value M will cause panic.
 	// Invoke model hook: GetBefore
-	if !db.noHook && !reflect.DeepEqual(empty, dest) {
+	if !db.noHook {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_BEFORE, span, func(spanCtx context.Context) error {
 			return dest.GetBefore(spanCtx)
 		}); err != nil {
@@ -316,7 +313,7 @@ func (db *database[M]) First(dest M) (err error) {
 		return err
 	}
 	// Invoke model hook: GetAfter
-	if !db.noHook && !reflect.DeepEqual(empty, dest) {
+	if !db.noHook {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_AFTER, span, func(spanCtx context.Context) error {
 			return dest.GetAfter(spanCtx)
 		}); err != nil {
@@ -357,7 +354,7 @@ func (db *database[M]) Last(dest M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, _, span := db.trace("Last")
+	done, span := db.trace("Last")
 	defer func() { done(err) }()
 
 	db.applySelect()
@@ -366,9 +363,8 @@ func (db *database[M]) Last(dest M) (err error) {
 		tx := db.dryRunReadSession().Table(tableName).Last(dest)
 		return db.collectSQL(tx)
 	}
-	var empty M // call nil value M will cause panic.
 	// Invoke model hook: GetBefore.
-	if !db.noHook && !reflect.DeepEqual(empty, dest) {
+	if !db.noHook {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_BEFORE, span, func(spanCtx context.Context) error {
 			return dest.GetBefore(spanCtx)
 		}); err != nil {
@@ -380,7 +376,7 @@ func (db *database[M]) Last(dest M) (err error) {
 		return err
 	}
 	// Invoke model hook: GetAfter
-	if !db.noHook && !reflect.DeepEqual(empty, dest) {
+	if !db.noHook {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_AFTER, span, func(spanCtx context.Context) error {
 			return dest.GetAfter(spanCtx)
 		}); err != nil {
@@ -421,7 +417,7 @@ func (db *database[M]) Take(dest M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, _, span := db.trace("Take")
+	done, span := db.trace("Take")
 	defer func() { done(err) }()
 
 	db.applySelect()
@@ -430,9 +426,8 @@ func (db *database[M]) Take(dest M) (err error) {
 		tx := db.dryRunReadSession().Table(tableName).Take(dest)
 		return db.collectSQL(tx)
 	}
-	var empty M // call nil value M will cause panic.
 	// Invoke model hook: GetBefore.
-	if !db.noHook && !reflect.DeepEqual(empty, dest) {
+	if !db.noHook {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_BEFORE, span, func(spanCtx context.Context) error {
 			return dest.GetBefore(spanCtx)
 		}); err != nil {
@@ -444,7 +439,7 @@ func (db *database[M]) Take(dest M) (err error) {
 		return err
 	}
 	// Invoke model hook: GetAfter.
-	if !db.noHook && !reflect.DeepEqual(empty, dest) {
+	if !db.noHook {
 		if err = traceModelHook[M](db.ctx, consts.PHASE_GET_AFTER, span, func(spanCtx context.Context) error {
 			return dest.GetAfter(spanCtx)
 		}); err != nil {

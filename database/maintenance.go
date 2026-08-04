@@ -48,7 +48,7 @@ func (db *database[M]) Cleanup() (err error) {
 	if db.dialect() == dialectClickHouse {
 		return errors.Wrap(ErrUnsupportedOnDialect, "Cleanup on clickhouse")
 	}
-	done, _, _ := db.trace("Cleanup")
+	done, _ := db.trace("Cleanup")
 	defer func() { done(err) }()
 
 	tableName := db.m.GetTableName()

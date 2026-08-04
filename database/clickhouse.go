@@ -22,7 +22,7 @@ import (
 // batch fails. ClickHouse has no unique constraints, so a duplicate row is
 // stored, never answered with ErrDuplicatedKey.
 func (db *database[M]) clickhouseCreate(objs []M) (err error) {
-	done, _, _ := db.trace("Create", len(objs))
+	done, _ := db.trace("Create", len(objs))
 	defer func() { done(err) }()
 
 	tableName := db.m.GetTableName()
@@ -80,7 +80,7 @@ func (db *database[M]) clickhouseDelete(objs []M) (err error) {
 		ids = append(ids, id)
 	}
 
-	done, _, _ := db.trace("Delete", len(objs))
+	done, _ := db.trace("Delete", len(objs))
 	defer func() { done(err) }()
 
 	batchSize := defaultDeleteBatchSize
@@ -113,7 +113,7 @@ func (db *database[M]) clickhouseDelete(objs []M) (err error) {
 // any table whose key columns it would rewrite. Narrow the write to the
 // columns being corrected with WithSelect, or use UpdateByID for one column.
 func (db *database[M]) clickhouseUpdate(objs []M) (err error) {
-	done, _, _ := db.trace("Update", len(objs))
+	done, _ := db.trace("Update", len(objs))
 	defer func() { done(err) }()
 
 	tableName := db.m.GetTableName()

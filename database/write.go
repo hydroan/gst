@@ -79,7 +79,7 @@ func (db *database[M]) Create(objs ...M) (err error) {
 	if db.dialect() == dialectClickHouse {
 		return db.clickhouseCreate(objs)
 	}
-	done, _, span := db.trace("Create", len(objs))
+	done, span := db.trace("Create", len(objs))
 	defer func() { done(err) }()
 
 	if db.dryRun {
@@ -195,7 +195,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	if db.dialect() == dialectClickHouse {
 		return db.clickhouseDelete(objs)
 	}
-	done, _, span := db.trace("Delete", len(objs))
+	done, span := db.trace("Delete", len(objs))
 	defer func() { done(err) }()
 
 	if db.dryRun {
@@ -348,7 +348,7 @@ func (db *database[M]) Update(objs ...M) (err error) {
 	if db.dialect() == dialectClickHouse {
 		return db.clickhouseUpdate(objs)
 	}
-	done, _, span := db.trace("Update", len(objs))
+	done, span := db.trace("Update", len(objs))
 	defer func() { done(err) }()
 
 	tableName := db.m.GetTableName()
@@ -470,7 +470,7 @@ func (db *database[M]) UpdateByID(id string, column string, value any) (err erro
 	if id, ok = normalizeModelID(db.m, id); !ok {
 		return ErrRecordNotFound
 	}
-	done, _, _ := db.trace("UpdateByID")
+	done, _ := db.trace("UpdateByID")
 	defer func() { done(err) }()
 
 	tableName := db.m.GetTableName()

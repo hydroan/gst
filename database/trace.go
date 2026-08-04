@@ -49,7 +49,7 @@ import (
 //
 // Usage Pattern:
 //
-//	done, _, _ := db.trace("Create", len(models))
+//	done, _ := db.trace("Create", len(models))
 //	defer func() { done(err) }()
 //
 // The closure is load-bearing: a plain `defer done(err)` evaluates err where
@@ -63,7 +63,7 @@ import (
 //
 // Note: Must be called after `defer db.reset()` to ensure proper cleanup order.
 // Jaeger tracing is automatically enabled when gstotel.IsEnabled() returns true.
-func (db *database[M]) trace(op string, batch ...int) (func(error), context.Context, trace.Span) {
+func (db *database[M]) trace(op string, batch ...int) (func(error), trace.Span) {
 	begin := time.Now()
 	var _batch int
 	if len(batch) > 0 {
@@ -146,7 +146,7 @@ func (db *database[M]) trace(op string, batch ...int) (func(error), context.Cont
 				zap.Bool("dry_run", db.dryRun),
 			)
 		}
-	}, ctx, span
+	}, span
 }
 
 // traceModelHook traces model hook execution with OpenTelemetry spans.
