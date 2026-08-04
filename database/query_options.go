@@ -40,7 +40,9 @@ import (
 //	- Multiple values (comma-separated): Uses REGEXP pattern (WHERE name REGEXP '.*John.*|.*Jack.*')
 //	- REGEXP special characters are automatically escaped using regexp.QuoteMeta
 //	- Empty strings in comma-separated values are automatically skipped to prevent matching all records
-//	- Note: REGEXP may not be available in all databases (e.g., SQLite requires extension)
+//	- REGEXP works on every supported dialect (the framework's SQLite driver
+//	  registers a Go implementation); case sensitivity follows the dialect,
+//	  see the regexp note on the SQLite driver
 //
 //	JSON columns (fields whose type declares a JSON gorm data type, such as
 //	the gorm.io/datatypes types):
@@ -120,9 +122,6 @@ import (
 //	catastrophic data loss (e.g., deleting all records). Use QueryOptions{AllowEmpty: true} to override.
 //
 // NOTE: When both RawQuery and model fields are provided, they are combined with AND logic.
-// NOTE: REGEXP function may not be available in all databases (e.g., SQLite requires extension).
-//
-//	For SQLite compatibility, consider using FuzzyMatch with single values (LIKE) or RawQuery.
 func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()

@@ -20,7 +20,7 @@
 //
 // # Dialect support
 //
-// MySQL, SQLite, and PostgreSQL carry the full surface described above with
+// MySQL, PostgreSQL, and SQLite carry the full surface described above with
 // identical behavior; the test suite runs against all three. The one stored
 // time base is the UTC wall clock, and the two documented per-dialect splits
 // are Upsert's conflict target (see Upsert) and row locks on SQLite (see

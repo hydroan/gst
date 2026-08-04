@@ -123,8 +123,8 @@ func setupTestData(t *testing.T) {
 }
 
 // quoteIdent renders an identifier the way the dialect under test quotes it,
-// so SQL assertions stay dialect-neutral: double quotes on postgres,
-// backticks on mysql and sqlite, mirroring the gorm dialectors.
+// so SQL assertions stay dialect-neutral: backticks on mysql and sqlite,
+// double quotes on postgres, mirroring the gorm dialectors.
 func quoteIdent(name string) string {
 	if config.App.Database.Type == config.DBPostgres {
 		return `"` + name + `"`

@@ -379,7 +379,7 @@ func (a *aggregator[M, R]) build(mode buildMode) (*gorm.DB, error) {
 			return nil, errors.Newf("group key %q renders bound values", a.alias(t))
 		}
 		// Raw keeps gorm from quoting an already quoted expression: the
-		// MySQL, SQLite and PostgreSQL quoters are idempotent, but the SQL
+		// MySQL, PostgreSQL and SQLite quoters are idempotent, but the SQL
 		// Server and ClickHouse ones are not and would emit ""col"".
 		tx.Statement.AddClause(clause.GroupBy{
 			Columns: []clause.Column{{Name: sql, Raw: true}},

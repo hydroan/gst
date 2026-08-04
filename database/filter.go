@@ -218,13 +218,13 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 		return db.stringFilter(f, "NOT ("+column+" "+db.regexpOperator()+" ?)")
 	case types.FilterOpJSONContains:
 		// datatypes handles the dialect split: JSON_CONTAINS on MySQL, a
-		// json_each EXISTS subquery on SQLite, a jsonb operator on Postgres.
+		// jsonb operator on Postgres, a json_each EXISTS subquery on SQLite.
 		// It covers only those three — on any other dialect its expression
 		// renders empty, which would silently WIDEN the result, so the filter
 		// fails closed there instead. The column is passed unquoted because
 		// the expression quotes it itself.
 		switch db.dialect() {
-		case dialectMySQL, dialectSQLite, dialectPostgres:
+		case dialectMySQL, dialectPostgres, dialectSQLite:
 		default:
 			return db.failClosedFilter(f, "is not supported on this dialect")
 		}

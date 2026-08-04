@@ -526,8 +526,9 @@ func TestDatabaseUpsert(t *testing.T) {
 	})
 
 	// Which collisions merge is a per-dialect contract (see the Upsert doc):
-	// MySQL merges on any unique key, SQLite and Postgres only on the primary
-	// key and answer a non-primary unique collision with ErrDuplicatedKey.
+	// MySQL merges on any unique key, PostgreSQL and SQLite only on the
+	// primary key and answer a non-primary unique collision with
+	// ErrDuplicatedKey.
 	t.Run("collision on a non-primary unique key", func(t *testing.T) {
 		first := &TestUniqueItem{UniqueCode: "upsert-same", Name: "first"}
 		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Upsert(first))

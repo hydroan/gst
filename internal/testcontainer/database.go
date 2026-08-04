@@ -20,15 +20,15 @@ func SetupDatabase(dbType config.DBType) (func() error, error) {
 	}
 
 	switch dbType {
-	case config.DBSqlite:
-		return setupSqlite()
 	case config.DBMySQL:
 		return setupMySQL()
 	case config.DBPostgres:
 		return setupPostgres()
+	case config.DBSqlite:
+		return setupSqlite()
 	default:
 		return nil, errors.Newf("no test database available for %q, supported are %q, %q and %q",
-			dbType, config.DBSqlite, config.DBMySQL, config.DBPostgres)
+			dbType, config.DBMySQL, config.DBPostgres, config.DBSqlite)
 	}
 }
 

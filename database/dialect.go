@@ -27,8 +27,8 @@ type dialect string
 
 const (
 	dialectMySQL      dialect = "mysql"
-	dialectSQLite     dialect = "sqlite"
 	dialectPostgres   dialect = "postgres"
+	dialectSQLite     dialect = "sqlite"
 	dialectSQLServer  dialect = "sqlserver"
 	dialectClickHouse dialect = "clickhouse"
 )
@@ -110,7 +110,7 @@ func (db *database[M]) textPatternColumn(quotedColumn string, isJSON bool) strin
 // likeEscapeSuffix declares the LIKE escape character used by filters.
 // The pipe is chosen over the conventional backslash because backslash inside
 // a SQL string literal is itself an escape character in MySQL but a plain
-// character in SQLite/PostgreSQL, so no single spelling of ESCAPE '\' parses
+// character in PostgreSQL/SQLite, so no single spelling of ESCAPE '\' parses
 // the same way across those dialects. The pipe needs no such disambiguation.
 // ClickHouse parses no ESCAPE clause at all — its LIKE reads backslash as the
 // escape character natively — so the suffix is empty there and the pattern
@@ -153,10 +153,10 @@ func (db *database[M]) escapeLikePattern(value string) string {
 // timezone tables loaded.
 func (db *database[M]) timeBucketExpr(quotedColumn string, bucket types.TimeBucket) string {
 	switch db.dialect() {
-	case dialectSQLite:
-		return "strftime('" + strftimeBucketFormat(bucket) + "', " + quotedColumn + ")"
 	case dialectPostgres:
 		return "to_char(" + quotedColumn + ", '" + postgresBucketFormat(bucket) + "')"
+	case dialectSQLite:
+		return "strftime('" + strftimeBucketFormat(bucket) + "', " + quotedColumn + ")"
 	case dialectSQLServer:
 		return "FORMAT(" + quotedColumn + ", '" + sqlserverBucketFormat(bucket) + "')"
 	case dialectClickHouse:

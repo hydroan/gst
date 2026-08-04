@@ -435,7 +435,7 @@ func (db *database[M]) updateRowStatement(session *gorm.DB, tableName string, ob
 //     key, not only the primary key, turns the insert into an update of the
 //     conflicting row. The target cannot be narrowed; on tables with several
 //     unique keys, which row gets updated follows index-selection rules.
-//   - SQLite and Postgres ("ON CONFLICT (primary key) DO UPDATE"): only a
+//   - PostgreSQL and SQLite ("ON CONFLICT (primary key) DO UPDATE"): only a
 //     primary-key collision merges. A collision on any other unique key fails
 //     the call with ErrDuplicatedKey — simulating the MySQL behavior with a
 //     read-then-write would carry a race no transaction level closes, so the
