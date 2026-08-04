@@ -26,19 +26,27 @@
 // are Upsert's conflict target (see Upsert) and row locks on SQLite (see
 // WithLock).
 //
-// ClickHouse is a read-only analytical instance (see clickhouse.New), never
-// the default database. Supported on it:
+// ClickHouse is an analytical instance (see clickhouse.New), never the
+// default database. Supported on it:
 //
 //   - the read path: List, Get, Count, First, Last, Take, WithQuery, the
 //     filter operators, ordering, paging, and cursor pagination;
 //   - the whole aggregate path: grouping, measures, conditional measures,
-//     time buckets, HAVING, ordering, paging, and CountGroups.
+//     time buckets, HAVING, ordering, paging, and CountGroups;
+//   - a write path with a deliberately weaker contract — no model hooks, no
+//     transaction boundary: Create is plain batch INSERTs (no
+//     ErrDuplicatedKey; ClickHouse has no unique constraints), Delete is a
+//     lightweight DELETE by primary key and always physical (no soft
+//     delete), Update and UpdateByID are asynchronous ALTER TABLE ... UPDATE
+//     mutations for low-frequency data correction (accepted, not awaited; no
+//     ErrRecordNotFound). Each entry point's doc states the details.
 //
 // Not carried by ClickHouse, failing closed to an empty result: correlated
 // EXISTS subqueries (FilterExists) and JSON containment (jsoncontains).
-// Not carried, answering ErrUnsupportedOnDialect: the write path (Create,
-// Update, Delete, Upsert, UpdateByID, Cleanup), Transaction/TransactionOn,
-// and WithLock — ClickHouse has no transactions or unique constraints for
-// their contracts to build on. Feeding the instance is the application
-// ingestion side's job, through plain batch INSERTs outside this package.
+// Not carried, answering ErrUnsupportedOnDialect: Upsert (no conflict
+// semantics), Cleanup (no soft-delete regime), Transaction/TransactionOn,
+// and WithLock. The instance's schema — engine, ORDER BY, partitioning —
+// is hand-written DDL owned by the application: neither bootstrap nor
+// "gg migrate" creates or alters ClickHouse tables, bootstrap only verifies
+// that a registered model's table exists.
 package database

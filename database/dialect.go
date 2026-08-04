@@ -3,7 +3,6 @@ package database
 import (
 	"strings"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/types"
 	"gorm.io/gorm"
 )
@@ -49,22 +48,6 @@ func (db *database[M]) dialect() dialect {
 		return dialectMySQL
 	}
 	return dialectOf(db.ins)
-}
-
-// ensureWritableDialect answers whether the chain's dialect carries the
-// framework write path, failing per the capability-miss rule when it does
-// not. ClickHouse does not: it is an analytical store whose UPDATE and DELETE
-// are asynchronous mutations (RowsAffected means nothing, soft deletes become
-// background rewrites), whose tables carry no unique constraints for
-// ErrDuplicatedKey or Upsert semantics to build on, and which has no
-// transaction for the boundary every write here promises. Feeding an
-// analytical instance is the application ingestion side's job; the read and
-// aggregate paths are what this chain offers on it.
-func (db *database[M]) ensureWritableDialect(op string) error {
-	if db.dialect() == dialectClickHouse {
-		return errors.Wrapf(ErrUnsupportedOnDialect, "%s on clickhouse", op)
-	}
-	return nil
 }
 
 // regexpOperator returns the operator that matches a value against a regular

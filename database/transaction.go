@@ -32,8 +32,9 @@ import (
 //
 // Returns ErrNilTransaction if fn is nil, and an error marked with
 // ErrAfterCommit when the transaction committed but a registered after-commit
-// action failed. Panics if the database is not initialized, consistent with
-// Database[M].
+// action failed. Returns ErrUnsupportedOnDialect on a ClickHouse instance,
+// which has no transactions. Panics if the database is not initialized,
+// consistent with Database[M].
 func Transaction(ctx context.Context, fn func(ctx context.Context) error) error {
 	if fn == nil {
 		return ErrNilTransaction

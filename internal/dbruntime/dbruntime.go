@@ -3,6 +3,7 @@ package dbruntime
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -54,6 +55,21 @@ func resolveTableName(handler *gorm.DB, m types.Model) (string, error) {
 // keeps the zero-config defaults (sqlite, in-memory, auto_migrate off) bootable
 // instead of panicking on the first registered model.
 func ensureTable(handler *gorm.DB, m types.Model) error {
+	// ClickHouse schema — engine, ORDER BY, partitioning, TTL — is a
+	// query-model design the framework cannot derive from a Go struct, so it
+	// is never created or migrated here: the application owns it through
+	// hand-written DDL, and bootstrap only verifies the table exists.
+	if handler.Dialector != nil && strings.ToLower(handler.Dialector.Name()) == "clickhouse" {
+		tableName, err := resolveTableName(handler, m)
+		if err != nil {
+			return err
+		}
+		if !handler.Migrator().HasTable(tableName) {
+			return errors.Newf("table %q does not exist: clickhouse tables are managed by hand-written DDL on the application side, create it before starting", tableName)
+		}
+		return nil
+	}
+
 	inMemory := config.App.Database.Type == config.DBSqlite && config.App.Sqlite.IsMemory
 	if config.App.Database.AutoMigrate || inMemory {
 		// AutoMigrate takes the raw GetTableName, not a resolved name: gorm

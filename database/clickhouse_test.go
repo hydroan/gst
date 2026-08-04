@@ -164,20 +164,94 @@ func TestClickhouse(t *testing.T) {
 		require.Equal(t, 3, groups)
 	})
 
-	// The capability-miss rule: everything below is not carried by clickhouse
-	// and must answer ErrUnsupportedOnDialect instead of half-working.
-	t.Run("WriteTransactionAndLockFailFast", func(t *testing.T) {
+	// The clickhouse write path: the same entry points, a weaker contract —
+	// no hooks, no transaction. Every subtest cleans up its own rows so the
+	// seed-based assertions above and below stay untouched.
+	t.Run("CreateAndDeleteRoundTrip", func(t *testing.T) {
+		rows := []*TestAggregateRecord{
+			{Category: "write", Status: "done", Amount: 1, OccurredAt: time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC)},
+			{Category: "write", Status: "done", Amount: 2, OccurredAt: time.Date(2024, 3, 1, 1, 0, 0, 0, time.UTC)},
+		}
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Create(rows...))
+		require.NotEmpty(t, rows[0].ID, "Create must fill generated ids")
+		require.False(t, rows[0].CreatedAt.IsZero(), "Create must fill timestamps")
+
+		require.Len(t, listIDs(t, types.FilterEq("category", "write")), 2)
+
+		// Lightweight DELETE is synchronous by default: the rows are gone from
+		// SELECT right away, physically, with no soft-delete detour.
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Delete(rows...))
+		require.Empty(t, listIDs(t, types.FilterEq("category", "write")))
+
+		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Delete(&TestAggregateRecord{}), database.ErrIDRequired,
+			"a delete without a primary key must fail fast")
+	})
+
+	t.Run("UpdateMutatesAsynchronously", func(t *testing.T) {
+		row := &TestAggregateRecord{Category: "mutate", Status: "before", Amount: 1, OccurredAt: time.Date(2024, 3, 2, 0, 0, 0, 0, time.UTC)}
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Create(row))
+
+		// ClickHouse refuses to UPDATE an ORDER BY key column (category and
+		// occurred_at here), so a correction narrows the write to the columns
+		// it corrects — the shape every real mutation on this dialect takes.
+		row.Status = "after"
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithSelect("status").Update(row))
+		require.Eventually(t, func() bool {
+			got := new(TestAggregateRecord)
+			if err := database.DatabaseOn[*TestAggregateRecord](ctx, ins).Get(got, row.ID); err != nil {
+				return false
+			}
+			return got.Status == "after"
+		}, 5*time.Second, 50*time.Millisecond, "the accepted mutation must eventually rewrite the row")
+
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).UpdateByID(row.ID, "status", "byid"))
+		require.Eventually(t, func() bool {
+			got := new(TestAggregateRecord)
+			if err := database.DatabaseOn[*TestAggregateRecord](ctx, ins).Get(got, row.ID); err != nil {
+				return false
+			}
+			return got.Status == "byid"
+		}, 5*time.Second, 50*time.Millisecond)
+
+		// No matched count comes back from a mutation, so a missing record
+		// passes silently instead of answering ErrRecordNotFound.
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithSelect("status").
+			Update(&TestAggregateRecord{Category: "mutate", Base: model.Base{ID: "no-such-row"}}))
+
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Delete(row))
+	})
+
+	t.Run("WriteDryRunBuildsSQL", func(t *testing.T) {
+		// Create refuses dry-run on clickhouse: the dialect driver executes
+		// the INSERT it builds without consulting DryRun, so a "dry" run
+		// would write real rows.
+		stmts := make([]types.SQLStatement, 0)
+		row := &TestAggregateRecord{Category: "dry", Status: "x", OccurredAt: time.Date(2024, 3, 3, 0, 0, 0, 0, time.UTC)}
+		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithBuildSQL(&stmts).Create(row),
+			database.ErrUnsupportedOnDialect)
+		require.Empty(t, listIDs(t, types.FilterEq("category", "dry")), "the refused dry run must not persist rows")
+
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithBuildSQL(&stmts).
+			Delete(&TestAggregateRecord{Base: model.Base{ID: "dry-1"}}))
+		require.Len(t, stmts, 1)
+		require.Contains(t, stmts[0].RenderedSQL, "DELETE FROM",
+			"delete must render the lightweight DELETE, not an ALTER TABLE mutation")
+
+		stmts = stmts[:0]
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithBuildSQL(&stmts).WithSelect("status").
+			Update(&TestAggregateRecord{Status: "y", Base: model.Base{ID: "dry-1"}}))
+		require.Len(t, stmts, 1)
+		require.Contains(t, stmts[0].RenderedSQL, "ALTER TABLE",
+			"update must render the ALTER TABLE mutation")
+	})
+
+	// The capability-miss rule: nothing below is carried by clickhouse, and
+	// each entry answers ErrUnsupportedOnDialect instead of half-working.
+	t.Run("UnsupportedEntriesFailFast", func(t *testing.T) {
 		record := &TestAggregateRecord{Category: "x", Base: model.Base{ID: "w1"}}
 
-		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Create(record), database.ErrUnsupportedOnDialect)
-		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Update(record), database.ErrUnsupportedOnDialect)
-		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Delete(record), database.ErrUnsupportedOnDialect)
 		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Upsert(record), database.ErrUnsupportedOnDialect)
-		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).UpdateByID("a1", "status", "x"), database.ErrUnsupportedOnDialect)
 		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Cleanup(), database.ErrUnsupportedOnDialect)
-		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithBuildSQL(&[]types.SQLStatement{}).Create(record), database.ErrUnsupportedOnDialect,
-			"the dry-run path is rejected the same way")
-
 		require.ErrorIs(t, database.TransactionOn(ctx, ins, func(ctx context.Context) error { return nil }), database.ErrUnsupportedOnDialect)
 
 		got := new(TestAggregateRecord)
@@ -185,7 +259,7 @@ func TestClickhouse(t *testing.T) {
 
 		var count int
 		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Count(&count))
-		require.Equal(t, 6, count, "rejected writes must leave the table untouched")
+		require.Equal(t, 6, count, "rejected entries and cleaned-up write tests must leave the seed untouched")
 	})
 
 	t.Run("JSONContainsFailsClosed", func(t *testing.T) {

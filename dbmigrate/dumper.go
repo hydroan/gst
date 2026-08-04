@@ -2,6 +2,7 @@ package dbmigrate
 
 import (
 	"database/sql"
+	"fmt"
 	"reflect"
 	"sort"
 	"strings"
@@ -57,6 +58,10 @@ func (s *SchemaDumper) Dump(driver config.DBType, dst ...any) (string, error) {
 		dialector = sqlite.New(sqlite.Config{Conn: s.db})
 		// GORM sqlite driver might ping to check version
 		s.mock.ExpectQuery("select sqlite_version()").WillReturnRows(sqlmock.NewRows([]string{"version"}).AddRow("3.35.0"))
+	default:
+		// Mirrors the Migrate refusal: analytical schemas such as ClickHouse
+		// are hand-written DDL, never dumped from Go models.
+		return "", fmt.Errorf("schema dump does not support %q: its schema is managed by hand-written DDL on the application side", driver)
 	}
 
 	// Sort dst by type name to ensure deterministic output order

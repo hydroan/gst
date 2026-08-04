@@ -114,6 +114,12 @@ func Migrate(schemas []string, dbtyp config.DBType, cfg *DatabaseConfig, opt *Mi
 		db, err = newSQLiteDatabase(dbcfg)
 		parseMode = parser.ParserModeSQLite3
 		genMode = schema.GeneratorModeSQLite3
+	default:
+		// ClickHouse (and any other analytical store) is deliberately not
+		// migratable here: its schema is a query-model design — engine,
+		// ORDER BY, partitioning, TTL — that cannot be derived from Go models,
+		// so the application owns it through hand-written DDL.
+		return false, "", fmt.Errorf("schema migration does not support %q: its schema is managed by hand-written DDL on the application side", dbtyp)
 	}
 	if err != nil {
 		return false, "", err

@@ -40,6 +40,11 @@ import (
 // error when hooks or other database constraints fail.
 // WithDryRun builds SQL only and does not execute hooks, database I/O, or object field filling.
 //
+// On a ClickHouse instance the contract is weaker (see clickhouseCreate):
+// plain batch INSERTs with no hooks, no transaction across batches, and no
+// ErrDuplicatedKey — ClickHouse has no unique constraints, so duplicates are
+// stored.
+//
 // Example:
 //
 //	Create(&User{Name: "John", Email: "john@example.com"})  // Create single record
@@ -65,8 +70,8 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	if err = db.ensureWritableDialect("Create"); err != nil {
-		return err
+	if db.dialect() == dialectClickHouse {
+		return db.clickhouseCreate(objs)
 	}
 	done, _, span := db.trace("Create", len(objs))
 	defer func() { done(err) }()
@@ -159,6 +164,11 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 //   - Returns nil if no valid objects provided (empty slice or all objects are empty)
 //   - WithDryRun builds SQL only and does not execute hooks, database I/O, or object field filling
 //
+// On a ClickHouse instance the contract is weaker (see clickhouseDelete):
+// a lightweight DELETE by primary key with no hooks and no transaction, and
+// always physical — ClickHouse has no application-level soft delete, so the
+// model's Purge and WithPurge are ignored there.
+//
 // Example:
 //
 //	Delete(&user)  // Soft delete by primary key
@@ -186,8 +196,8 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	if err = db.ensureWritableDialect("Delete"); err != nil {
-		return err
+	if db.dialect() == dialectClickHouse {
+		return db.clickhouseDelete(objs)
 	}
 	done, _, span := db.trace("Delete", len(objs))
 	defer func() { done(err) }()
@@ -308,6 +318,14 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 // values collide with a unique key owned by another row.
 // WithDryRun builds SQL only and does not execute hooks, database I/O, or object field filling.
 //
+// On a ClickHouse instance the contract is weaker (see clickhouseUpdate):
+// each record becomes an asynchronous ALTER TABLE ... UPDATE mutation — heavy,
+// meant for low-frequency data correction — with no hooks, no transaction,
+// and no existence detection: a nil error means accepted, not rewritten, and
+// a missing record passes silently instead of ErrRecordNotFound. ClickHouse
+// refuses to UPDATE an ORDER BY key column, so narrow the write with
+// WithSelect to the columns being corrected.
+//
 // Example:
 //
 //	user.Name = "Updated Name"
@@ -341,8 +359,8 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	if err = db.ensureWritableDialect("Update"); err != nil {
-		return err
+	if db.dialect() == dialectClickHouse {
+		return db.clickhouseUpdate(objs)
 	}
 	done, _, span := db.trace("Update", len(objs))
 	defer func() { done(err) }()
@@ -459,6 +477,9 @@ func (db *database[M]) updateRowStatement(session *gorm.DB, tableName string, ob
 // model hooks — create/update hooks would lie for one of the two paths — and
 // must not be used to smuggle business writes past hook logic.
 //
+// On a ClickHouse instance Upsert answers ErrUnsupportedOnDialect: there are
+// no conflict semantics to build on.
+//
 // All batches run in one transaction (all-or-nothing), joining the transaction
 // carried by ctx when present. WithSelect narrows the written columns. With
 // clientFoundRows enabled on MySQL, the reported affected count is 1 per row
@@ -486,8 +507,11 @@ func (db *database[M]) Upsert(_objs ...M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	if err = db.ensureWritableDialect("Upsert"); err != nil {
-		return err
+	// ClickHouse carries no conflict semantics for Upsert to build on: it has
+	// no unique constraints, and ReplacingMergeTree deduplication is an engine
+	// property, not a statement contract. Fails per the capability-miss rule.
+	if db.dialect() == dialectClickHouse {
+		return errors.Wrap(ErrUnsupportedOnDialect, "Upsert on clickhouse")
 	}
 	done, _, _ := db.trace("Upsert", len(objs))
 	defer func() { done(err) }()
@@ -557,6 +581,8 @@ func (db *database[M]) Upsert(_objs ...M) (err error) {
 //   - Returns ErrEmptyFieldName if column is empty
 //   - Returns ErrNilValue if value is nil
 //   - Returns nil (no error) if the record with the given ID does not exist
+//   - On a ClickHouse instance the statement is an asynchronous ALTER TABLE
+//     ... UPDATE mutation: a nil error means accepted, not rewritten
 //
 // Example:
 //
@@ -576,9 +602,6 @@ func (db *database[M]) UpdateByID(id string, column string, value any) (err erro
 	}
 
 	if err = db.prepare(); err != nil {
-		return err
-	}
-	if err = db.ensureWritableDialect("UpdateByID"); err != nil {
 		return err
 	}
 	// Normalize the id through the model's own ID semantics before it can

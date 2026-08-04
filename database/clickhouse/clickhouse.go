@@ -48,15 +48,18 @@ func Init() (err error) {
 // so application-held instances passed to DatabaseOn and AggregateOn are
 // traced like the default database.
 //
-// ClickHouse is an analytical instance, and the handle carries the read side
-// of the framework: List/Get/Count/First/Last/Take, the filter operators
-// (correlated EXISTS subqueries and JSON containment excepted — those fail
+// ClickHouse is an analytical instance. The handle carries the read side of
+// the framework — List/Get/Count/First/Last/Take, the filter operators
+// (correlated EXISTS subqueries and JSON containment excepted, those fail
 // closed), cursor pagination, and the whole aggregate path including time
-// buckets. The write path (Create, Update, Delete, Upsert, UpdateByID,
-// Cleanup), the transaction boundary, and row locks are not carried: those
-// entries fail with database.ErrUnsupportedOnDialect, and feeding the
-// instance belongs to the application's ingestion side (batch INSERTs), as
-// does its schema (engine, ORDER BY), which AutoMigrate does not manage.
+// buckets — plus a write path with a deliberately weaker contract: no model
+// hooks and no transaction boundary; Create is plain batch INSERTs, Delete a
+// lightweight physical DELETE by primary key, Update an asynchronous ALTER
+// TABLE mutation for low-frequency data correction. Upsert, Cleanup, the
+// transaction boundary, and row locks are not carried and fail with
+// database.ErrUnsupportedOnDialect. The schema (engine, ORDER BY,
+// partitioning) is hand-written DDL owned by the application; the framework
+// never creates or migrates ClickHouse tables.
 func New(cfg config.Clickhouse) (*gorm.DB, error) {
 	db, err := gorm.Open(clickhouse.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true})
 	if err != nil {

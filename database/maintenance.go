@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
@@ -32,14 +33,20 @@ import (
 //
 // Note: This operation affects the entire table and ignores any previously
 // set query conditions. Use with caution in production environments.
+// On a ClickHouse instance it answers ErrUnsupportedOnDialect: the soft-delete
+// regime does not exist there.
 func (db *database[M]) Cleanup() (err error) {
 	defer db.reset()
 
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	if err = db.ensureWritableDialect("Cleanup"); err != nil {
-		return err
+	// The deleted_at soft-delete regime does not exist on ClickHouse — its own
+	// lightweight delete already is a mark-then-merge removal — so there are no
+	// framework-made soft-deleted rows to purge there; rows mirrored from an
+	// OLTP source are operations territory. Fails per the capability-miss rule.
+	if db.dialect() == dialectClickHouse {
+		return errors.Wrap(ErrUnsupportedOnDialect, "Cleanup on clickhouse")
 	}
 	done, _, _ := db.trace("Cleanup")
 	defer func() { done(err) }()

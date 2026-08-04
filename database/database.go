@@ -68,9 +68,9 @@ var (
 
 	// ErrUnsupportedOnDialect is returned when an operation is invoked on a
 	// dialect that does not carry it, per the capability-miss rule: the entry
-	// fails instead of silently degrading. Today that is the write path, the
-	// transaction boundary, and row locks on a ClickHouse instance; see
-	// ensureWritableDialect.
+	// fails instead of silently degrading. Today that is Upsert, Cleanup, the
+	// transaction boundary, and row locks on a ClickHouse instance; each entry
+	// point states its own reason.
 	ErrUnsupportedOnDialect = errors.New("operation is not supported on this dialect")
 
 	// ErrLockOutsideTransaction is returned when WithLock is used on a chain
