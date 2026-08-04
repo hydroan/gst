@@ -18,6 +18,7 @@ import (
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/provider/redis"
 	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
 	cmap "github.com/orcaman/concurrent-map/v2"
 	"github.com/panjf2000/ants/v2"
@@ -68,7 +69,7 @@ type event struct {
 	CacheID string `json:"cache_id"`
 
 	Key string          `json:"key"` // redis key
-	TS  int64           `json:"ts"`  // timestamp
+	TS  int64           `json:"ts"`  // unix nanoseconds
 	Op  op              `json:"op"`
 	Val json.RawMessage `json:"val"`
 	Typ string          `json:"typ"`
@@ -92,7 +93,7 @@ func (e *event) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	} else {
 		val = e.Val
 	}
-	enc.AddString("ts", time.Unix(0, e.TS).Format("2006-01-02 15:04:05"))
+	enc.AddString("ts", time.Unix(0, e.TS).UTC().Format(consts.LayoutTimeEncoder))
 	enc.AddString("cache_id", e.CacheID)
 	enc.AddString("hostname", e.Hostname)
 	enc.AddString("typ", e.Typ)
