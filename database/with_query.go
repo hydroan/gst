@@ -1,0 +1,507 @@
+package database
+
+import (
+	"context"
+	"fmt"
+	"reflect"
+	"regexp"
+	"strconv"
+	"strings"
+
+	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
+	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/types/consts"
+)
+
+// WithQuery sets query conditions based on the provided model struct fields.
+// It supports exact matching, fuzzy matching (LIKE/REGEXP), OR/AND logic, and raw SQL queries.
+// Non-zero fields in the model will be used as query conditions.
+//
+// Parameters:
+//   - query: A model instance with fields set as query conditions. Can be nil to indicate empty query.
+//     When nil or all fields are zero values, it's treated as an empty query.
+//     Supported field types: string, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, bool, pointer types.
+//   - opts: Optional QueryOptions to control query behavior (fuzzy matching, empty queries, OR logic, raw SQL)
+//
+// Query Behavior:
+//
+//	Exact Match (Default):
+//	- Single value: Uses IN clause with one value (WHERE name IN ('John'))
+//	- Multiple values (comma-separated): Uses IN clause with multiple values (WHERE name IN ('John', 'Jack'))
+//	- Multiple fields: Uses AND logic to combine conditions (WHERE name IN ('John') AND age IN (18))
+//	- Empty strings in comma-separated values are automatically skipped
+//
+//	FuzzyMatch:
+//	- Single value: Uses LIKE pattern (WHERE name LIKE '%John%')
+//	- Multiple values (comma-separated): Uses REGEXP pattern (WHERE name REGEXP '.*John.*|.*Jack.*')
+//	- REGEXP special characters are automatically escaped using regexp.QuoteMeta
+//	- Empty strings in comma-separated values are automatically skipped to prevent matching all records
+//	- REGEXP works on every supported dialect (the framework's SQLite driver
+//	  registers a Go implementation); case sensitivity follows the dialect,
+//	  see the regexp note on the SQLite driver
+//
+//	JSON columns (fields whose type declares a JSON gorm data type, such as
+//	the gorm.io/datatypes types):
+//	- Exact match: a JSON document is not a scalar, so the condition fails
+//	  closed to an empty result on every dialect instead of comparing.
+//	- FuzzyMatch: matches against the document's text form, with the column
+//	  cast to text on dialects whose JSON types carry no text operators.
+//
+//	Or:
+//	- When true: Combines multiple filters with OR instead of AND
+//	- First condition always uses WHERE, subsequent conditions use OR
+//	- Example: WHERE name IN ('John') OR email IN ('john@example.com')
+//	- Works with both exact match and fuzzy match
+//
+//	RawQuery:
+//	- When provided, it will be combined with model fields using AND logic
+//	- Works even when query is nil
+//	- Supports parameterized queries with RawQueryArgs
+//	- Example: WHERE age > ? AND status = ?
+//	- When both RawQuery and model fields are provided, they are combined with AND logic
+//	- Example: RawQuery "age > ?" + model field Name="John" → WHERE age > ? AND name IN ('John')
+//
+//	AllowEmpty:
+//	- By default (false): Empty queries are blocked for safety (adds WHERE 1 = 0)
+//	- When true: Allows empty queries to match all records (full table scan)
+//	- Empty query cases: nil, empty struct, all fields are zero values, all field values are empty strings
+//	- Critical: Use with caution, especially for Delete operations
+//
+// Examples:
+//
+//	// Exact match - single field, single value
+//	WithQuery(&model.User{Name: "John"})  // WHERE name IN ('John')
+//
+//	// Exact match - single field, multiple values (comma-separated)
+//	WithQuery(&model.User{Name: "John,Jack"})  // WHERE name IN ('John', 'Jack')
+//	WithQuery(&model.User{ID: "id1,id2,id3"})  // WHERE id IN ('id1', 'id2', 'id3')
+//
+//	// Exact match - multiple fields (AND logic)
+//	WithQuery(&model.User{Name: "John", Age: 18})  // WHERE name IN ('John') AND age IN (18)
+//	WithQuery(&model.User{Name: "John", Age: 18, Email: "john@example.com"})  // WHERE name IN ('John') AND age IN (18) AND email IN ('john@example.com')
+//
+//	// Fuzzy match - single value (LIKE)
+//	WithQuery(&model.User{Name: "John"}, types.QueryOptions{FuzzyMatch: true})  // WHERE name LIKE '%John%'
+//
+//	// Fuzzy match - multiple values (REGEXP)
+//	WithQuery(&model.User{Name: "John,Jack"}, types.QueryOptions{FuzzyMatch: true})  // WHERE name REGEXP '.*John.*|.*Jack.*'
+//
+//	// Fuzzy match - empty strings in comma-separated values are skipped
+//	WithQuery(&model.User{Name: "John,,Jack"}, types.QueryOptions{FuzzyMatch: true})  // WHERE name REGEXP '.*John.*|.*Jack.*'
+//
+//		// Raw SQL query (can be combined with model fields)
+//	WithQuery(&model.User{}, types.QueryOptions{RawQuery: "age > ? AND status = ?", RawQueryArgs: []any{18, "active"}})
+//	WithQuery(nil, types.QueryOptions{RawQuery: "created_at BETWEEN ? AND ?", RawQueryArgs: []any{startDate, endDate}})
+//	WithQuery(&model.User{Name: "John"}, types.QueryOptions{RawQuery: "age > ?", RawQueryArgs: []any{18}})  // WHERE age > ? AND name IN ('John')
+//
+//	// Empty query (blocked by default for safety)
+//	WithQuery(nil)  // WHERE 1 = 0 (returns no records)
+//	WithQuery(&model.User{})  // WHERE 1 = 0 (returns no records)
+//	WithQuery(&model.User{Name: "", Email: ""})  // WHERE 1 = 0 (all values are empty)
+//
+//	// Empty query with AllowEmpty=true (returns all records)
+//	WithQuery(nil, types.QueryOptions{AllowEmpty: true})  // Returns all records
+//	WithQuery(&model.User{}, types.QueryOptions{AllowEmpty: true})  // Returns all records
+//
+//	// Query with some empty and some non-empty fields (works normally)
+//	WithQuery(&model.User{Name: "John", Email: ""})  // WHERE name IN ('John') (Email is ignored)
+//
+//	// Combined options
+//	WithQuery(&model.User{Name: "John"}, types.QueryOptions{
+//	    FuzzyMatch: true,
+//	    AllowEmpty: false,
+//	})
+//
+// NOTE: The underlying type must be pointer to struct, otherwise panic will occur.
+// NOTE: Empty query conditions (nil or zero value) are blocked by default for safety to prevent
+//
+//	catastrophic data loss (e.g., deleting all records). Use QueryOptions{AllowEmpty: true} to override.
+//
+// NOTE: When both RawQuery and model fields are provided, they are combined with AND logic.
+func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Database[M] {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	// Parse query options
+	var opt types.QueryOptions
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+	// opt.FuzzyMatch: default false (exact match)
+	// opt.AllowEmpty: default false (block empty queries for safety)
+
+	queryVal := reflect.ValueOf(query)
+	// Handle RawQuery first (works even if query is nil)
+	// RawQuery will be combined with model fields using AND logic if both are provided
+	hasRawQuery := len(opt.RawQuery) > 0
+	if hasRawQuery {
+		db.ins = db.ins.Where(opt.RawQuery, opt.RawQueryArgs...)
+	}
+
+	// Field-level operator conditions are always AND-combined and, like
+	// RawQuery, count as real conditions for the empty-query safety checks.
+	hasFilters := len(opt.Filters) > 0
+	if hasFilters {
+		db.applyFilters(opt.Filters)
+	}
+
+	// Check if query is nil or empty
+	var empty M
+	if queryVal.IsNil() || reflect.DeepEqual(query, empty) {
+		// Treat nil/empty as empty query
+		// If RawQuery or filters are provided, they are already
+		// applied above and alone are sufficient, so the empty query safety
+		// check is not needed.
+		if hasRawQuery || hasFilters {
+			return db
+		}
+		// No RawQuery and empty query: apply safety check
+		if !opt.AllowEmpty {
+			logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("query is nil or empty, adding safety condition to prevent matching all records")
+			db.ins = db.ins.Where("1 = 0")
+			return db
+		}
+		// AllowEmpty=true: allow matching all records
+		logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Info("query is nil or empty but AllowEmpty=true, allowing full table scan")
+		return db
+	}
+
+	// Process non-nil, non-empty query
+	typ := reflect.TypeOf(query).Elem()
+	val := reflect.ValueOf(query).Elem()
+	q := make(map[string]string)
+
+	// Column names come from gorm through modelschema. A model gorm cannot
+	// parse has no usable columns at all, so the query falls closed instead
+	// of matching on a guessed column name.
+	parsedColumns, parseErr := modelschema.Columns(typ)
+	if parseErr != nil {
+		logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("cannot resolve columns of %s: %v, adding safety condition", typ, parseErr)
+		db.ins = db.ins.Where("1 = 0")
+		return db
+	}
+	structFieldToMap(db.ctx, typ, val, q, opt.PresentFields, modelschema.ByGoName(parsedColumns))
+
+	// A JSON document is not a scalar, so both matching modes below treat its
+	// columns specially: exact matching fails closed and fuzzy matching runs
+	// over the document's text form.
+	jsonColumns := make(map[string]struct{})
+	for _, col := range parsedColumns {
+		if modelschema.IsJSONType(col.Type) {
+			jsonColumns[col.DBName] = struct{}{}
+		}
+	}
+
+	// CRITICAL SAFETY CHECK: Empty query conditions
+	//
+	// Empty query will match ALL records, which is dangerous when:
+	// 1. The result is used for subsequent Delete operations → deletes all data (CATASTROPHIC!)
+	// 2. Large datasets returned without pagination → performance/memory issues
+	//
+	// Empty Query Examples:
+	//   - WithQuery(nil)                         → nil query
+	//   - WithQuery(&User{})                    → all fields are zero values
+	//   - WithQuery(&User{Name: "", Email: ""}) → all field values are empty strings
+	//   - WithQuery(&KV{Key: ""})               → happens when removed slice is empty
+	//
+	// By default, empty queries (nil or zero value) are blocked by adding "WHERE 1 = 0" condition.
+	// To allow empty queries, use: WithQuery(nil, QueryOptions{AllowEmpty: true}) or
+	//                              WithQuery(&User{}, QueryOptions{AllowEmpty: true})
+	if len(q) == 0 {
+		// If RawQuery or filters are provided, they are already
+		// applied above and alone are sufficient, so the empty query safety
+		// check is not needed.
+		if hasRawQuery || hasFilters {
+			return db
+		}
+		// No RawQuery and empty query: apply safety check
+		if !opt.AllowEmpty {
+			logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("all query fields are empty, adding safety condition to prevent matching all records")
+			db.ins = db.ins.Where("1 = 0")
+			return db
+		}
+		// AllowEmpty=true: allow matching all records
+		logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Info("all query fields are empty but AllowEmpty=true, allowing full table scan")
+		return db
+	}
+
+	if opt.FuzzyMatch {
+		// If the query strings has multiple value(separated by ',')
+		// construct the 'WHERE' 'REGEXP' SQL statement
+		// eg: SELECT * FROM `samples` WHERE `group_id` REGEXP '.*XS.*|.*NU.*'
+		//     SELECT count(*) FROM `samples` WHERE `group_id` REGEXP '.*XS.*|.*NU.*'
+		hasValidCondition := false
+		for k, v := range q {
+			items := strings.Split(v, ",")
+			// skip the string slice which all element is empty.
+			if len(strings.Join(items, "")) == 0 {
+				continue
+			}
+			hasValidCondition = true
+			_, isJSON := jsonColumns[k]
+			column := db.textPatternColumn(db.quoteIdent(k), isJSON)
+			if len(items) > 1 { // If the query string has multiple value(separated by ','), using regexp
+				var regexpVal string
+				for _, item := range items {
+					// Skip empty items to avoid matching all records (.*.* pattern)
+					if len(item) == 0 {
+						continue
+					}
+					// WARN: not forget to escape the regexp value using regexp.QuoteMeta.
+					// eg: localhost\hello.world -> localhost\\hello\.world
+					regexpVal = regexpVal + "|.*" + regexp.QuoteMeta(item) + ".*"
+				}
+				// If all items were empty after filtering, skip this condition
+				if len(regexpVal) == 0 {
+					continue
+				}
+				regexpVal = strings.TrimPrefix(regexpVal, "|")
+				db.ins = db.ins.Where(fmt.Sprintf("%s %s ?", column, db.regexpOperator()), regexpVal)
+			} else { // If the query string has only one value, using LIKE
+				db.ins = db.ins.Where(column+" LIKE ?", fmt.Sprintf("%%%v%%", v))
+			}
+		}
+		// CRITICAL: Check if all query values are empty after filtering
+		// Even if query map is not empty, all values might be empty strings
+		// Example: &User{Name: "", Email: ""} has fields but all values are empty
+		// Filters applied earlier are real conditions, so they
+		// disable this safety check the same way RawQuery would.
+		if !hasValidCondition && !hasFilters {
+			if !opt.AllowEmpty {
+				logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("all query values are empty, adding safety condition to prevent matching all records")
+				db.ins = db.ins.Where("1 = 0")
+			} else {
+				logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Info("all query values are empty but AllowEmpty=true, allowing full table scan")
+			}
+		}
+	} else {
+		// If the query string has multiple value(separated by ','),
+		// construct the 'WHERE' 'IN' SQL statement.
+		// eg: SELECT id FROM users WHERE name IN ('user01', 'user02', 'user03', 'user04')
+		hasValidCondition := false
+		for k, v := range q {
+			items := strings.Split(v, ",")
+			if len(strings.Join(items, "")) == 0 {
+				continue
+			}
+			hasValidCondition = true
+			if _, isJSON := jsonColumns[k]; isJSON {
+				// An exact match against a JSON document is not a scalar
+				// comparison: MySQL and SQLite answer it with no rows and
+				// postgres rejects the SQL outright. Failing closed keeps one
+				// portable answer and never widens the result.
+				logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("exact match on JSON column %q cannot compare, adding safety condition", k)
+				db.ins = db.ins.Where("1 = 0")
+				continue
+			}
+			db.ins = db.ins.Where(db.quoteIdent(k)+" IN ?", items)
+		}
+		// CRITICAL: Check if all query values are empty after filtering
+		// Even if query map is not empty, all values might be empty strings
+		// Example: &User{Name: "", Email: ""} has fields but all values are empty
+		// Filters applied earlier are real conditions, so they
+		// disable this safety check the same way RawQuery would.
+		if !hasValidCondition && !hasFilters {
+			if !opt.AllowEmpty {
+				logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("all query values are empty, adding safety condition to prevent matching all records")
+				db.ins = db.ins.Where("1 = 0")
+			} else {
+				logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Info("all query values are empty but AllowEmpty=true, allowing full table scan")
+			}
+		}
+	}
+	return db
+}
+
+// structFieldToMap extracts the field tags from a struct and writes them into a map.
+// This map can then be used to build SQL query conditions.
+//
+// Zero-value fields are treated as unset and skipped, unless their column name
+// is listed in present: presence marks filter values explicitly provided by the
+// caller, so explicit zero values such as false and 0 still become conditions.
+// FIXME: if the field type is boolean or integer, disable the fuzzy matching.
+func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, q map[string]string, present map[string]struct{}, columns map[string]modelschema.Column) {
+	if q == nil {
+		q = make(map[string]string)
+	}
+	for i := range typ.NumField() {
+		field := typ.Field(i)
+		fieldTyp := field.Type
+		fieldVal := val.Field(i)
+
+		// A field gorm does not map to a column is not a query condition.
+		// The embedded base structs are the exception: they are handled
+		// explicitly below, since gorm lifts their fields to the top level.
+		col, isColumn := columns[field.Name]
+
+		if fieldVal.IsZero() {
+			if len(present) == 0 {
+				continue
+			}
+			if !isColumn {
+				continue
+			}
+			if _, ok := present[col.QueryName]; !ok {
+				continue
+			}
+		}
+		if !fieldVal.CanInterface() {
+			continue
+		}
+		fieldTyp, fieldVal, ok := indirectTypeAndValue(fieldTyp, fieldVal)
+		if !ok {
+			continue
+		}
+		// The marker interfaces are sealed in modelregistry, so recognition of
+		// framework query fields lives there as the single source of truth.
+		if modelregistry.IsQueryMarkerType(fieldTyp) {
+			continue
+		}
+
+		switch fieldTyp.Kind() {
+		case reflect.Chan, reflect.Map, reflect.Func:
+			continue
+		case reflect.Struct:
+			// Base and AutoBase are the framework base models: lift only their
+			// query-relevant fields instead of recursing, so framework-managed
+			// fields such as DeletedAt never leak into query conditions.
+			if field.Name == "Base" || field.Name == "AutoBase" {
+				if !fieldVal.FieldByName("CreatedBy").IsZero() {
+					// Not overwrite the "CreatedBy" value set in types.Model.
+					// The "CreatedBy" value set in types.Model has higher priority than base model.
+					if _, loaded := q["created_by"]; !loaded {
+						q["created_by"] = fieldVal.FieldByName("CreatedBy").Interface().(string) //nolint:errcheck
+					}
+				}
+				if !fieldVal.FieldByName("UpdatedBy").IsZero() {
+					// Not overwrite the "UpdatedBy" value set in types.Model.
+					// The "UpdatedBy" value set in types.Model has higher priority than base model.
+					if _, loaded := q["updated_by"]; !loaded {
+						q["updated_by"] = fieldVal.FieldByName("UpdatedBy").Interface().(string) //nolint:errcheck
+					}
+				}
+				if !fieldVal.FieldByName("ID").IsZero() {
+					// Not overwrite the "ID" value set in types.Model.
+					// The "ID" value set in types.Model has higher priority than base model.
+					if _, loaded := q["id"]; !loaded {
+						switch idField := fieldVal.FieldByName("ID"); idField.Kind() {
+						case reflect.String: // Base: UUIDv7 string primary key.
+							q["id"] = idField.String()
+						case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64: // AutoBase: auto-increment integer primary key.
+							q["id"] = strconv.FormatUint(idField.Uint(), 10)
+						}
+					}
+				}
+			} else {
+				structFieldToMap(ctx, fieldTyp, fieldVal, q, present, columns)
+			}
+			continue
+		}
+		if !isColumn {
+			continue
+		}
+		columnName := col.DBName
+
+		if !fieldVal.CanInterface() {
+			continue
+		}
+		v := fieldVal.Interface()
+		var _v string
+		switch fieldVal.Kind() {
+		case reflect.Bool:
+			// A WHERE IN clause quotes its values automatically, eg WHERE `default` IN ('true'),
+			// but what we want is WHERE `default` IN (true),
+			// so the only way out is to convert the bool into an int here.
+			_v = strconv.Itoa(boolToInt(v.(bool))) //nolint:errcheck
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			_v = fmt.Sprintf("%d", v)
+		case reflect.Float32, reflect.Float64:
+			_v = fmt.Sprintf("%g", v)
+		case reflect.String:
+			_v = fmt.Sprintf("%s", v)
+		case reflect.Pointer:
+			v = fieldVal.Elem().Interface()
+			// switch typ.Elem().Kind() {
+			switch fieldVal.Elem().Kind() {
+			case reflect.Bool:
+				_v = strconv.Itoa(boolToInt(v.(bool))) //nolint:errcheck
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+				_v = fmt.Sprintf("%d", v)
+			case reflect.Float32, reflect.Float64:
+				_v = fmt.Sprintf("%g", v)
+			case reflect.String:
+				_v = fmt.Sprintf("%s", v)
+			case reflect.Struct, reflect.Map, reflect.Chan, reflect.Func: // ignore the struct, map, chan, func
+			default:
+				_v = fmt.Sprintf("%v", v)
+			}
+		case reflect.Slice:
+			_len := fieldVal.Len()
+			if _len == 0 {
+				logger.Database.WithContext(ctx, consts.Phase("WithQuery")).Warn("reflect.Slice length is 0")
+				_len = 1
+			}
+			slice := reflect.MakeSlice(fieldVal.Type(), _len, _len)
+			switch slice.Index(0).Kind() {
+			case reflect.String: // handle string slice.
+				// WARN: fieldVal.Type() may be a named slice type (e.g.
+				// datatypes.JSONSlice[string]) instead of []string, so asserting
+				// slice.Interface().([]string) directly would panic. Rebuild the
+				// value as a plain []string first.
+				slice = reflect.MakeSlice(reflect.TypeFor[[]string](), _len, _len)
+				reflect.Copy(slice, fieldVal)
+				_v = strings.Join(slice.Interface().([]string), ",") //nolint:errcheck
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			// TODO: handle integer slice.
+			case reflect.Float32, reflect.Float64:
+			// TODO: handle float slice.
+			default:
+				_v = fmt.Sprintf("%v", v)
+			}
+		case reflect.Struct, reflect.Map, reflect.Chan, reflect.Func: // ignore the struct, map, chan, func
+		default:
+			_v = fmt.Sprintf("%v", v)
+		}
+
+		q[columnName] = _v
+	}
+}
+
+// boolToInt converts a boolean value to an integer.
+// Returns 1 for true, 0 for false.
+// Useful for database operations that require integer representations of boolean values.
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// indirectTypeAndValue recursively dereferences pointer types and values.
+// Follows pointer chains until reaching a non-pointer type.
+// Used for reflection operations that need to work with the underlying concrete type.
+//
+// Parameters:
+//   - t: The reflect.Type to dereference
+//   - v: The reflect.Value to dereference
+//
+// Returns:
+//   - reflect.Type: The final non-pointer type
+//   - reflect.Value: The final non-pointer value
+//   - bool: true if successful, false if encountered nil pointer
+//
+// Example:
+//   - Input: **int (pointer to pointer to int)
+//   - Output: int (the underlying int type)
+func indirectTypeAndValue(t reflect.Type, v reflect.Value) (reflect.Type, reflect.Value, bool) {
+	for t.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return t, v, false
+		}
+		t = t.Elem()
+		v = v.Elem()
+	}
+	return t, v, true
+}

@@ -13,8 +13,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// references:
-
 var (
 	// ErrInvalidDB reports an operation chain running on a database handle
 	// that was never initialized.
@@ -353,4 +351,19 @@ func databaseFor[M types.Model](ctx context.Context, base *gorm.DB) types.Databa
 		chain.err = ErrTransactionInstance
 	}
 	return chain
+}
+
+// normalizeModelID runs an id through the model's own ID semantics before it
+// can reach SQL, reporting false for an id the model rejects. Such an id
+// cannot match any row, and answering "record not found" at the entry keeps
+// the database from applying implicit string-to-integer coercion on integer
+// primary keys (MySQL matches id=7 for '7abc'). Base accepts any non-empty
+// string and passes through unchanged; AutoBase only accepts decimal digits.
+// The probe is a clone so probeSource stays untouched.
+func normalizeModelID[M types.Model](probeSource M, id string) (string, bool) {
+	probe := cloneDryRunModel(probeSource)
+	probe.ClearID()
+	probe.SetID(id)
+	id = probe.GetID()
+	return id, len(id) != 0
 }

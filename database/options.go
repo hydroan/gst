@@ -5,6 +5,11 @@ import (
 	"gorm.io/gorm"
 )
 
+// This file holds the execution-mode options: how an operation runs (batch
+// size, dry run, SQL capture, hook suppression) rather than what it queries.
+// The query-shaping options — conditions, ordering, paging, locking and
+// friends — live in query_options.go and with_query.go.
+
 // WithBatchSize sets the batch size for batch operations such as batch insert, update, or delete.
 // Controls how many records are processed in a single database operation to optimize performance.
 //
@@ -49,7 +54,6 @@ import (
 func (db *database[M]) WithBatchSize(size int) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
-	// db.db = db.db.Session(&gorm.Session{CreateBatchSize: db.batchSize})
 	db.batchSize = size
 	return db
 }

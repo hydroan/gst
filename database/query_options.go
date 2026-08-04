@@ -1,332 +1,17 @@
 package database
 
 import (
-	"fmt"
 	"reflect"
-	"regexp"
 	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
-
-// WithQuery sets query conditions based on the provided model struct fields.
-// It supports exact matching, fuzzy matching (LIKE/REGEXP), OR/AND logic, and raw SQL queries.
-// Non-zero fields in the model will be used as query conditions.
-//
-// Parameters:
-//   - query: A model instance with fields set as query conditions. Can be nil to indicate empty query.
-//     When nil or all fields are zero values, it's treated as an empty query.
-//     Supported field types: string, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, bool, pointer types.
-//   - opts: Optional QueryOptions to control query behavior (fuzzy matching, empty queries, OR logic, raw SQL)
-//
-// Query Behavior:
-//
-//	Exact Match (Default):
-//	- Single value: Uses IN clause with one value (WHERE name IN ('John'))
-//	- Multiple values (comma-separated): Uses IN clause with multiple values (WHERE name IN ('John', 'Jack'))
-//	- Multiple fields: Uses AND logic to combine conditions (WHERE name IN ('John') AND age IN (18))
-//	- Empty strings in comma-separated values are automatically skipped
-//
-//	FuzzyMatch:
-//	- Single value: Uses LIKE pattern (WHERE name LIKE '%John%')
-//	- Multiple values (comma-separated): Uses REGEXP pattern (WHERE name REGEXP '.*John.*|.*Jack.*')
-//	- REGEXP special characters are automatically escaped using regexp.QuoteMeta
-//	- Empty strings in comma-separated values are automatically skipped to prevent matching all records
-//	- REGEXP works on every supported dialect (the framework's SQLite driver
-//	  registers a Go implementation); case sensitivity follows the dialect,
-//	  see the regexp note on the SQLite driver
-//
-//	JSON columns (fields whose type declares a JSON gorm data type, such as
-//	the gorm.io/datatypes types):
-//	- Exact match: a JSON document is not a scalar, so the condition fails
-//	  closed to an empty result on every dialect instead of comparing.
-//	- FuzzyMatch: matches against the document's text form, with the column
-//	  cast to text on dialects whose JSON types carry no text operators.
-//
-//	Or:
-//	- When true: Combines multiple filters with OR instead of AND
-//	- First condition always uses WHERE, subsequent conditions use OR
-//	- Example: WHERE name IN ('John') OR email IN ('john@example.com')
-//	- Works with both exact match and fuzzy match
-//
-//	RawQuery:
-//	- When provided, it will be combined with model fields using AND logic
-//	- Works even when query is nil
-//	- Supports parameterized queries with RawQueryArgs
-//	- Example: WHERE age > ? AND status = ?
-//	- When both RawQuery and model fields are provided, they are combined with AND logic
-//	- Example: RawQuery "age > ?" + model field Name="John" → WHERE age > ? AND name IN ('John')
-//
-//	AllowEmpty:
-//	- By default (false): Empty queries are blocked for safety (adds WHERE 1 = 0)
-//	- When true: Allows empty queries to match all records (full table scan)
-//	- Empty query cases: nil, empty struct, all fields are zero values, all field values are empty strings
-//	- Critical: Use with caution, especially for Delete operations
-//
-// Examples:
-//
-//	// Exact match - single field, single value
-//	WithQuery(&model.User{Name: "John"})  // WHERE name IN ('John')
-//
-//	// Exact match - single field, multiple values (comma-separated)
-//	WithQuery(&model.User{Name: "John,Jack"})  // WHERE name IN ('John', 'Jack')
-//	WithQuery(&model.User{ID: "id1,id2,id3"})  // WHERE id IN ('id1', 'id2', 'id3')
-//
-//	// Exact match - multiple fields (AND logic)
-//	WithQuery(&model.User{Name: "John", Age: 18})  // WHERE name IN ('John') AND age IN (18)
-//	WithQuery(&model.User{Name: "John", Age: 18, Email: "john@example.com"})  // WHERE name IN ('John') AND age IN (18) AND email IN ('john@example.com')
-//
-//	// Fuzzy match - single value (LIKE)
-//	WithQuery(&model.User{Name: "John"}, types.QueryOptions{FuzzyMatch: true})  // WHERE name LIKE '%John%'
-//
-//	// Fuzzy match - multiple values (REGEXP)
-//	WithQuery(&model.User{Name: "John,Jack"}, types.QueryOptions{FuzzyMatch: true})  // WHERE name REGEXP '.*John.*|.*Jack.*'
-//
-//	// Fuzzy match - empty strings in comma-separated values are skipped
-//	WithQuery(&model.User{Name: "John,,Jack"}, types.QueryOptions{FuzzyMatch: true})  // WHERE name REGEXP '.*John.*|.*Jack.*'
-//
-//		// Raw SQL query (can be combined with model fields)
-//	WithQuery(&model.User{}, types.QueryOptions{RawQuery: "age > ? AND status = ?", RawQueryArgs: []any{18, "active"}})
-//	WithQuery(nil, types.QueryOptions{RawQuery: "created_at BETWEEN ? AND ?", RawQueryArgs: []any{startDate, endDate}})
-//	WithQuery(&model.User{Name: "John"}, types.QueryOptions{RawQuery: "age > ?", RawQueryArgs: []any{18}})  // WHERE age > ? AND name IN ('John')
-//
-//	// Empty query (blocked by default for safety)
-//	WithQuery(nil)  // WHERE 1 = 0 (returns no records)
-//	WithQuery(&model.User{})  // WHERE 1 = 0 (returns no records)
-//	WithQuery(&model.User{Name: "", Email: ""})  // WHERE 1 = 0 (all values are empty)
-//
-//	// Empty query with AllowEmpty=true (returns all records)
-//	WithQuery(nil, types.QueryOptions{AllowEmpty: true})  // Returns all records
-//	WithQuery(&model.User{}, types.QueryOptions{AllowEmpty: true})  // Returns all records
-//
-//	// Query with some empty and some non-empty fields (works normally)
-//	WithQuery(&model.User{Name: "John", Email: ""})  // WHERE name IN ('John') (Email is ignored)
-//
-//	// Combined options
-//	WithQuery(&model.User{Name: "John"}, types.QueryOptions{
-//	    FuzzyMatch: true,
-//	    AllowEmpty: false,
-//	})
-//
-// NOTE: The underlying type must be pointer to struct, otherwise panic will occur.
-// NOTE: Empty query conditions (nil or zero value) are blocked by default for safety to prevent
-//
-//	catastrophic data loss (e.g., deleting all records). Use QueryOptions{AllowEmpty: true} to override.
-//
-// NOTE: When both RawQuery and model fields are provided, they are combined with AND logic.
-func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Database[M] {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-
-	// Parse query options
-	var opt types.QueryOptions
-	if len(opts) > 0 {
-		opt = opts[0]
-	}
-	// opt.FuzzyMatch: default false (exact match)
-	// opt.AllowEmpty: default false (block empty queries for safety)
-
-	queryVal := reflect.ValueOf(query)
-	// Handle RawQuery first (works even if query is nil)
-	// RawQuery will be combined with model fields using AND logic if both are provided
-	hasRawQuery := len(opt.RawQuery) > 0
-	if hasRawQuery {
-		db.ins = db.ins.Where(opt.RawQuery, opt.RawQueryArgs...)
-	}
-
-	// Field-level operator conditions are always AND-combined and, like
-	// RawQuery, count as real conditions for the empty-query safety checks.
-	hasFilters := len(opt.Filters) > 0
-	if hasFilters {
-		db.applyFilters(opt.Filters)
-	}
-
-	// Check if query is nil or empty
-	var empty M
-	if queryVal.IsNil() || reflect.DeepEqual(query, empty) {
-		// Treat nil/empty as empty query
-		// If RawQuery or filters are provided, they are already
-		// applied above and alone are sufficient, so the empty query safety
-		// check is not needed.
-		if hasRawQuery || hasFilters {
-			return db
-		}
-		// No RawQuery and empty query: apply safety check
-		if !opt.AllowEmpty {
-			logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("query is nil or empty, adding safety condition to prevent matching all records")
-			db.ins = db.ins.Where("1 = 0")
-			return db
-		}
-		// AllowEmpty=true: allow matching all records
-		logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Info("query is nil or empty but AllowEmpty=true, allowing full table scan")
-		return db
-	}
-
-	// Process non-nil, non-empty query
-	typ := reflect.TypeOf(query).Elem()
-	val := reflect.ValueOf(query).Elem()
-	q := make(map[string]string)
-
-	// Column names come from gorm through modelschema. A model gorm cannot
-	// parse has no usable columns at all, so the query falls closed instead
-	// of matching on a guessed column name.
-	parsedColumns, parseErr := modelschema.Columns(typ)
-	if parseErr != nil {
-		logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("cannot resolve columns of %s: %v, adding safety condition", typ, parseErr)
-		db.ins = db.ins.Where("1 = 0")
-		return db
-	}
-	structFieldToMap(db.ctx, typ, val, q, opt.PresentFields, modelschema.ByGoName(parsedColumns))
-
-	// A JSON document is not a scalar, so both matching modes below treat its
-	// columns specially: exact matching fails closed and fuzzy matching runs
-	// over the document's text form.
-	jsonColumns := make(map[string]struct{})
-	for _, col := range parsedColumns {
-		if modelschema.IsJSONType(col.Type) {
-			jsonColumns[col.DBName] = struct{}{}
-		}
-	}
-
-	// CRITICAL SAFETY CHECK: Empty query conditions
-	//
-	// Empty query will match ALL records, which is dangerous when:
-	// 1. The result is used for subsequent Delete operations → deletes all data (CATASTROPHIC!)
-	// 2. Large datasets returned without pagination → performance/memory issues
-	//
-	// Empty Query Examples:
-	//   - WithQuery(nil)                         → nil query
-	//   - WithQuery(&User{})                    → all fields are zero values
-	//   - WithQuery(&User{Name: "", Email: ""}) → all field values are empty strings
-	//   - WithQuery(&KV{Key: ""})               → happens when removed slice is empty
-	//
-	// By default, empty queries (nil or zero value) are blocked by adding "WHERE 1 = 0" condition.
-	// To allow empty queries, use: WithQuery(nil, QueryOptions{AllowEmpty: true}) or
-	//                              WithQuery(&User{}, QueryOptions{AllowEmpty: true})
-	if len(q) == 0 {
-		// If RawQuery or filters are provided, they are already
-		// applied above and alone are sufficient, so the empty query safety
-		// check is not needed.
-		if hasRawQuery || hasFilters {
-			return db
-		}
-		// No RawQuery and empty query: apply safety check
-		if !opt.AllowEmpty {
-			logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("all query fields are empty, adding safety condition to prevent matching all records")
-			db.ins = db.ins.Where("1 = 0")
-			return db
-		}
-		// AllowEmpty=true: allow matching all records
-		logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Info("all query fields are empty but AllowEmpty=true, allowing full table scan")
-		return db
-	}
-
-	if opt.FuzzyMatch {
-		// // Deprecated!
-		// for k, v := range q {
-		// 	// WARN: THE SQL STATEMENT MUST CONTAINS backticks ``.
-		// 	db.db = db.db.Where(fmt.Sprintf("`%s` LIKE ?", k), fmt.Sprintf("%%%v%%", v))
-		// }
-
-		// If the query strings has multiple value(separated by ',')
-		// construct the 'WHERE' 'REGEXP' SQL statement
-		// eg: SELECT * FROM `samples` WHERE `group_id` REGEXP '.*XS.*|.*NU.*'
-		//     SELECT count(*) FROM `samples` WHERE `group_id` REGEXP '.*XS.*|.*NU.*'
-		hasValidCondition := false
-		for k, v := range q {
-			items := strings.Split(v, ",")
-			// skip the string slice which all element is empty.
-			if len(strings.Join(items, "")) == 0 {
-				continue
-			}
-			hasValidCondition = true
-			_, isJSON := jsonColumns[k]
-			column := db.textPatternColumn(db.quoteIdent(k), isJSON)
-			if len(items) > 1 { // If the query string has multiple value(separated by ','), using regexp
-				var regexpVal string
-				for _, item := range items {
-					// Skip empty items to avoid matching all records (.*.* pattern)
-					if len(item) == 0 {
-						continue
-					}
-					// WARN: not forget to escape the regexp value using regexp.QuoteMeta.
-					// eg: localhost\hello.world -> localhost\\hello\.world
-					regexpVal = regexpVal + "|.*" + regexp.QuoteMeta(item) + ".*"
-				}
-				// If all items were empty after filtering, skip this condition
-				if len(regexpVal) == 0 {
-					continue
-				}
-				regexpVal = strings.TrimPrefix(regexpVal, "|")
-				db.ins = db.ins.Where(fmt.Sprintf("%s %s ?", column, db.regexpOperator()), regexpVal)
-			} else { // If the query string has only one value, using LIKE
-				db.ins = db.ins.Where(column+" LIKE ?", fmt.Sprintf("%%%v%%", v))
-			}
-		}
-		// CRITICAL: Check if all query values are empty after filtering
-		// Even if query map is not empty, all values might be empty strings
-		// Example: &User{Name: "", Email: ""} has fields but all values are empty
-		// Filters applied earlier are real conditions, so they
-		// disable this safety check the same way RawQuery would.
-		if !hasValidCondition && !hasFilters {
-			if !opt.AllowEmpty {
-				logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("all query values are empty, adding safety condition to prevent matching all records")
-				db.ins = db.ins.Where("1 = 0")
-			} else {
-				logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Info("all query values are empty but AllowEmpty=true, allowing full table scan")
-			}
-		}
-	} else {
-		// // Deprecated!
-		// // SELECT * FROM `samples` WHERE `samples`.`group_id` = 'NU
-		// // SELECT count(*) FROM `samples` WHERE `samples`.`group_id` = 'NU'
-		// db.db = db.db.Where(query)
-
-		// If the query string has multiple value(separated by ','),
-		// construct the 'WHERE' 'IN' SQL statement.
-		// eg: SELECT id FROM users WHERE name IN ('user01', 'user02', 'user03', 'user04')
-		hasValidCondition := false
-		for k, v := range q {
-			items := strings.Split(v, ",")
-			if len(strings.Join(items, "")) == 0 {
-				continue
-			}
-			hasValidCondition = true
-			if _, isJSON := jsonColumns[k]; isJSON {
-				// An exact match against a JSON document is not a scalar
-				// comparison: MySQL and SQLite answer it with no rows and
-				// postgres rejects the SQL outright. Failing closed keeps one
-				// portable answer and never widens the result.
-				logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("exact match on JSON column %q cannot compare, adding safety condition", k)
-				db.ins = db.ins.Where("1 = 0")
-				continue
-			}
-			db.ins = db.ins.Where(db.quoteIdent(k)+" IN ?", items)
-		}
-		// CRITICAL: Check if all query values are empty after filtering
-		// Even if query map is not empty, all values might be empty strings
-		// Example: &User{Name: "", Email: ""} has fields but all values are empty
-		// Filters applied earlier are real conditions, so they
-		// disable this safety check the same way RawQuery would.
-		if !hasValidCondition && !hasFilters {
-			if !opt.AllowEmpty {
-				logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("all query values are empty, adding safety condition to prevent matching all records")
-				db.ins = db.ins.Where("1 = 0")
-			} else {
-				logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Info("all query values are empty but AllowEmpty=true, allowing full table scan")
-			}
-		}
-	}
-	return db
-}
 
 // WithCursor enables cursor-based pagination for efficient large dataset
 // traversal. Unlike offset pagination, a cursor read stays at constant cost
@@ -421,7 +106,6 @@ func (db *database[M]) WithSelect(columns ...string) types.Database[M] {
 			_columns = append(_columns, col)
 		}
 	}
-	// db.ins = db.ins.Select(append(_columns, defaultsColumns...))
 	if len(_columns) == 0 {
 		return db
 	}
@@ -697,29 +381,10 @@ func (db *database[M]) WithExpand(expand []string, orders ...types.Order) types.
 		}
 		return preload
 	}
-	// FIXME: the frontend passes a _depth query parameter, but recursive ordering breaks
-	// when the depth does not match the real number of levels.
-	// What _depth does:
-	// _depth = 2: Children -> Children.Children
-	// _depth = 3: Children -> Children.Children.Children
-	// With only 3 levels but _depth=5, recursive ordering no longer works.
-	//
-	// The fix:
-	// given: [Children.Children.Children, Parent]
-	// before:
-	//      db.db = db.db.Preload("Children.Children.Children", withOrder)
-	//      db.db = db.db.Preload("Parent", withOrder)
-	// now: (Children preloaded level by level)
-	//      db.db = db.db.Preload("Children", withOrder)
-	//      db.db = db.db.Preload("Children.Children", withOrder)
-	//      db.db = db.db.Preload("Children.Children.Children", withOrder)
-	//      db.db = db.db.Preload("Parent", withOrder)
-
+	// A nested path preloads level by level rather than in one call: the
+	// requested depth may exceed the real number of levels, and per-level
+	// preloading keeps the ordering applied to every level that does exist.
 	for i := range expand {
-		// ordering preloaded associations
-		// https://www.jianshu.com/p/a88fb2d4b2ef
-		// https://gorm.io/docs/preload.html#Custom-Preloading-SQL
-
 		items := strings.Split(expand[i], ".")
 		switch len(items) {
 		case 0:
@@ -727,7 +392,6 @@ func (db *database[M]) WithExpand(expand []string, orders ...types.Order) types.
 			db.ins = db.ins.Preload(expand[i], withOrder)
 		default:
 			for j := range items {
-				// fmt.Println("================== ", strings.Join(items[0:j+1], "."))
 				db.ins = db.ins.Preload(strings.Join(items[0:j+1], "."), withOrder)
 			}
 		}
@@ -834,4 +498,22 @@ func (db *database[M]) WithOmit(columns ...string) types.Database[M] {
 	defer db.mu.Unlock()
 	db.ins = db.ins.Omit(columns...)
 	return db
+}
+
+// contains checks if a string item exists in a string slice.
+// Uses a map-based approach for O(n) time complexity with O(n) space complexity.
+// More efficient than linear search for larger slices.
+//
+// Parameters:
+//   - slice: The string slice to search in
+//   - item: The string item to search for
+//
+// Returns true if the item is found, false otherwise.
+func contains(slice []string, item string) bool {
+	set := make(map[string]struct{}, len(slice))
+	for _, s := range slice {
+		set[s] = struct{}{}
+	}
+	_, ok := set[item]
+	return ok
 }
