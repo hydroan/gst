@@ -655,3 +655,45 @@ func TestFilterOrSingleChild(t *testing.T) {
 		), "u2 matches an alternative but fails the mandatory condition")
 	})
 }
+
+// TestDatabaseFiltersOnTimeColumns pins the runtime behavior of time
+// comparisons across dialects: a bound travels either as the UTC wall clock
+// in types.FilterTimeLayout (the URL parser's canonical form) or as a
+// time.Time, and both must select the same rows however the dialect stores
+// time. This is the filter-side counterpart of the cursor paging test and
+// exercises the time normalization sqlite needs for its text storage.
+func TestDatabaseFiltersOnTimeColumns(t *testing.T) {
+	defer cleanupAggregateData()
+	setupAggregateData(t)
+
+	listIDs := func(t *testing.T, f types.Filter) []string {
+		t.Helper()
+		records := make([]*TestAggregateRecord, 0)
+		require.NoError(t, database.Database[*TestAggregateRecord](context.Background()).
+			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{f}}).
+			WithOrder(types.Asc("id")).
+			List(&records))
+		ids := make([]string, 0, len(records))
+		for _, r := range records {
+			ids = append(ids, r.ID)
+		}
+		return ids
+	}
+
+	boundary := time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC)
+
+	t.Run("CanonicalStringBound", func(t *testing.T) {
+		require.Equal(t, []string{"a4", "a5", "a6"},
+			listIDs(t, types.FilterGte("occurred_at", boundary.Format(types.FilterTimeLayout))))
+	})
+
+	t.Run("TimeValueBound", func(t *testing.T) {
+		require.Equal(t, []string{"a1", "a2", "a3"},
+			listIDs(t, types.FilterLt("occurred_at", boundary)))
+	})
+
+	t.Run("EqualityOnAnExactInstant", func(t *testing.T) {
+		instant := time.Date(2024, 1, 11, 8, 0, 0, 0, time.UTC)
+		require.Equal(t, []string{"a3"}, listIDs(t, types.FilterEq("occurred_at", instant)))
+	})
+}

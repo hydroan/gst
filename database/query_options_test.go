@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/model"
@@ -126,6 +127,35 @@ func TestDatabaseWithCursor(t *testing.T) {
 				nextUsers[0].CreatedAt.Equal(firstUser.CreatedAt),
 				"next record should have created_at >= cursor value")
 		}
+	})
+
+	t.Run("TimeFieldPagesAcrossDialects", func(t *testing.T) {
+		// Paging on a time column is where the storage spellings differ the
+		// most, so the walk is pinned on every dialect: each boundary is the
+		// UTC wall clock of the previous row per the WithCursor contract, and
+		// every page must return exactly the next distinct instant.
+		defer cleanupAggregateData()
+		setupAggregateData(t)
+
+		next := func(t *testing.T, boundary time.Time) []*TestAggregateRecord {
+			t.Helper()
+			page := make([]*TestAggregateRecord, 0)
+			require.NoError(t, database.Database[*TestAggregateRecord](context.Background()).
+				WithCursor(types.CursorForward(types.Asc("occurred_at"), boundary.UTC().Format(types.FilterTimeLayout))).
+				WithLimit(1).
+				List(&page))
+			return page
+		}
+
+		// The seed's first three instants are strictly increasing: a1 at
+		// 2024-01-10 08:00, a2 at 09:00, a3 at 2024-01-11 08:00.
+		page := next(t, time.Date(2024, 1, 10, 8, 0, 0, 0, time.UTC))
+		require.Len(t, page, 1)
+		require.Equal(t, "a2", page[0].ID, "the boundary row itself must not leak back into the page")
+
+		page = next(t, page[0].OccurredAt)
+		require.Len(t, page, 1)
+		require.Equal(t, "a3", page[0].ID)
 	})
 
 	t.Run("EmptyCursor", func(t *testing.T) {

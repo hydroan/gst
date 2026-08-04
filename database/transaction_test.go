@@ -147,6 +147,34 @@ func TestDatabaseWithLock(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("with LockUpdateSkipLocked", func(t *testing.T) {
+		defer cleanupTestData()
+		setupTestData(t)
+
+		err := database.Transaction(context.Background(), func(ctx context.Context) error {
+			// Get and lock user with FOR UPDATE SKIP LOCKED
+			user := new(TestUser)
+			require.NoError(t, database.Database[*TestUser](ctx).WithLock(consts.LockUpdateSkipLocked).Get(user, u1.ID))
+			require.Equal(t, u1.ID, user.ID)
+			return nil
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("with LockShareSkipLocked", func(t *testing.T) {
+		defer cleanupTestData()
+		setupTestData(t)
+
+		err := database.Transaction(context.Background(), func(ctx context.Context) error {
+			// Get user with FOR SHARE SKIP LOCKED
+			user := new(TestUser)
+			require.NoError(t, database.Database[*TestUser](ctx).WithLock(consts.LockShareSkipLocked).Get(user, u1.ID))
+			require.Equal(t, u1.ID, user.ID)
+			return nil
+		})
+		require.NoError(t, err)
+	})
+
 	t.Run("with List", func(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)

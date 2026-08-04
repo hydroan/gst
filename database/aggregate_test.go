@@ -233,6 +233,68 @@ func TestAggregateHavingAndTopN(t *testing.T) {
 			Scan(&rows))
 		require.Equal(t, []row{{Category: "alpha", Total: 600}}, rows)
 	})
+
+	// Every HAVING operator, over totals of alpha 600, beta 900, gamma 600.
+	// Eq matters doubly: the renderer spells it through its default arm, so
+	// only a live query proves the spelling.
+	t.Run("HavingOperators", func(t *testing.T) {
+		cases := []struct {
+			name   string
+			having types.Having
+			want   []row
+		}{
+			{"Eq", total.Eq(900), []row{{Category: "beta", Total: 900}}},
+			{"Ne", total.Ne(600), []row{{Category: "beta", Total: 900}}},
+			{"Gte", total.Gte(900), []row{{Category: "beta", Total: 900}}},
+			{"Lt", total.Lt(700), []row{{Category: "alpha", Total: 600}, {Category: "gamma", Total: 600}}},
+			{"Lte", total.Lte(600), []row{{Category: "alpha", Total: 600}, {Category: "gamma", Total: 600}}},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				rows := make([]row, 0)
+				require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
+					Select(aggCols.Category.Group(), total).
+					Having(tc.having).
+					OrderBy(aggCols.Category.Group().Asc()).
+					Scan(&rows))
+				require.Equal(t, tc.want, rows)
+			})
+		}
+	})
+
+	// A non-positive limit means no limit and a non-positive offset no skip,
+	// matching Database.WithLimit/WithOffset so the two APIs read the same.
+	t.Run("NonPositiveLimitAndOffsetReset", func(t *testing.T) {
+		rows := make([]row, 0)
+		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
+			Select(aggCols.Category.Group(), total).
+			OrderBy(aggCols.Category.Group().Asc()).
+			Limit(1).
+			Limit(0).
+			Offset(0).
+			Scan(&rows))
+		require.Len(t, rows, 3, "Limit(0) must clear the cap and Offset(0) must not skip")
+	})
+}
+
+// TestAggregateWithDryRun pins that WithDryRun builds the aggregate without
+// executing it: no error, no database read, and the destination is left
+// untouched, matching the WithDryRun contract of the Database chain.
+func TestAggregateWithDryRun(t *testing.T) {
+	defer cleanupAggregateData()
+	setupAggregateData(t)
+
+	type row struct {
+		Category string
+		Total    int64
+	}
+	rows := []row{{Category: "stale", Total: 1}}
+	require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
+		WithDryRun().
+		Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+		Scan(&rows))
+	require.Equal(t, []row{{Category: "stale", Total: 1}}, rows,
+		"dry run loads no rows and leaves the destination unchanged")
 }
 
 func TestAggregateCountDistinct(t *testing.T) {

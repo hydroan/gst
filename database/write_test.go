@@ -9,6 +9,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -478,6 +479,37 @@ func TestDatabaseUpsert(t *testing.T) {
 		persisted := make([]*TestUniqueItem, 0)
 		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).List(&persisted))
 		require.Len(t, persisted, 2)
+	})
+
+	t.Run("builds SQL without executing under WithBuildSQL", func(t *testing.T) {
+		stmts := make([]types.SQLStatement, 0)
+		item := &TestUniqueItem{UniqueCode: "upsert-dry", Name: "dry"}
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).WithBuildSQL(&stmts).Upsert(item))
+		require.Len(t, stmts, 1)
+		require.Contains(t, stmts[0].RenderedSQL, "upsert-dry")
+		require.Empty(t, item.ID, "dry run must not fill ids")
+		require.True(t, item.CreatedAt.IsZero(), "dry run must not fill created_at")
+
+		items := make([]*TestUniqueItem, 0)
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).WithQuery(&TestUniqueItem{UniqueCode: "upsert-dry"}).List(&items))
+		require.Empty(t, items, "dry run must not persist rows")
+	})
+
+	t.Run("WithSelect narrows the merged columns", func(t *testing.T) {
+		first := &TestUniqueItem{UniqueCode: "upsert-select", Name: "before"}
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Upsert(first))
+		require.NotEmpty(t, first.ID)
+
+		// A primary-key collision merges on every dialect; WithSelect must
+		// keep the update set to the named columns, so the unique code the
+		// caller left different survives untouched.
+		update := &TestUniqueItem{UniqueCode: "ignored-code", Name: "after", Base: model.Base{ID: first.ID}}
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).WithSelect("name").Upsert(update))
+
+		got := new(TestUniqueItem)
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Get(got, first.ID))
+		require.Equal(t, "after", got.Name)
+		require.Equal(t, "upsert-select", got.UniqueCode, "columns outside WithSelect must not be written")
 	})
 
 	t.Run("merges on a primary key collision on every dialect", func(t *testing.T) {
