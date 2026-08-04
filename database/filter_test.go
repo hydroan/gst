@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
@@ -404,41 +403,49 @@ func TestDatabaseFilters(t *testing.T) {
 
 	// Test the service-only regex operators: they are not reachable from
 	// URL parsing but service code can pass them through Filters.
-	// BUG-1: sqlite has no REGEXP function (neither built in nor registered by
-	// the driver), so the regex operators error at runtime there.
-	if config.App.Database.Type != config.DBSqlite {
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{
-				Filters: []types.Filter{
-					{Column: "name", Op: types.FilterOpRegex, Value: "^user[12]$"},
-				},
-			}).
-			List(&users))
-		require.Len(t, users, 2)
-		foundU1, foundU2 = false, false
-		for _, u := range users {
-			switch u.ID {
-			case u1.ID:
-				foundU1 = true
-			case u2.ID:
-				foundU2 = true
-			}
+	users = make([]*TestUser, 0)
+	require.NoError(t, database.Database[*TestUser](context.Background()).
+		WithQuery(nil, types.QueryOptions{
+			Filters: []types.Filter{
+				{Column: "name", Op: types.FilterOpRegex, Value: "^user[12]$"},
+			},
+		}).
+		List(&users))
+	require.Len(t, users, 2)
+	foundU1, foundU2 = false, false
+	for _, u := range users {
+		switch u.ID {
+		case u1.ID:
+			foundU1 = true
+		case u2.ID:
+			foundU2 = true
 		}
-		require.True(t, foundU1, "should find u1")
-		require.True(t, foundU2, "should find u2")
-
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{
-				Filters: []types.Filter{
-					{Column: "name", Op: types.FilterOpNotRegex, Value: "^user[0-9]$"},
-				},
-			}).
-			List(&users))
-		require.Len(t, users, 1, "only the underscored name escapes the pattern")
-		require.Equal(t, underscoreUser.ID, users[0].ID)
 	}
+	require.True(t, foundU1, "should find u1")
+	require.True(t, foundU2, "should find u2")
+
+	users = make([]*TestUser, 0)
+	require.NoError(t, database.Database[*TestUser](context.Background()).
+		WithQuery(nil, types.QueryOptions{
+			Filters: []types.Filter{
+				{Column: "name", Op: types.FilterOpNotRegex, Value: "^user[0-9]$"},
+			},
+		}).
+		List(&users))
+	require.Len(t, users, 1, "only the underscored name escapes the pattern")
+	require.Equal(t, underscoreUser.ID, users[0].ID)
+
+	// An invalid pattern fails the query on every dialect instead of being
+	// silently dropped: MySQL rejects it in its regex engine, sqlite in the
+	// Go implementation the framework registers, postgres in its own.
+	users = make([]*TestUser, 0)
+	require.Error(t, database.Database[*TestUser](context.Background()).
+		WithQuery(nil, types.QueryOptions{
+			Filters: []types.Filter{
+				{Column: "name", Op: types.FilterOpRegex, Value: "(unclosed"},
+			},
+		}).
+		List(&users))
 
 	// Test the service-only jsoncontains operator on a JSON array column.
 	addrUser := &TestUser{Name: "user6", Email: "user6@example.com", Age: 23, Addr: datatypes.NewJSONSlice([]string{"alpha", "beta"}), Base: model.Base{ID: "u6"}}

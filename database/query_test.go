@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
@@ -562,58 +561,54 @@ func TestDatabaseWithQuery(t *testing.T) {
 
 		// Test FuzzyMatch=true with multiple values (REGEXP): comma-separated values
 		// Query: Name="user1,user2" should return 2 records (u1 and u2)
-		// BUG-1: sqlite has no REGEXP function (neither built in nor registered
-		// by the driver), so multi-value fuzzy matching errors at runtime there.
-		if config.App.Database.Type != config.DBSqlite {
-			users = make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](context.Background()).
-				WithQuery(&TestUser{Name: strings.Join([]string{u1.Name, u2.Name}, ",")}, types.QueryOptions{
-					FuzzyMatch: true,
-				}).
-				List(&users))
-			require.Len(t, users, 2)
-			u11, u22 = nil, nil
-			for _, u := range users {
-				switch u.ID {
-				case u1.ID:
-					u11 = u
-				case u2.ID:
-					u22 = u
-				}
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(&TestUser{Name: strings.Join([]string{u1.Name, u2.Name}, ",")}, types.QueryOptions{
+				FuzzyMatch: true,
+			}).
+			List(&users))
+		require.Len(t, users, 2)
+		u11, u22 = nil, nil
+		for _, u := range users {
+			switch u.ID {
+			case u1.ID:
+				u11 = u
+			case u2.ID:
+				u22 = u
 			}
-			require.NotNil(t, u11, "should find u1")
-			require.NotNil(t, u22, "should find u2")
-			require.Equal(t, u1.Name, u11.Name)
-			require.Equal(t, u2.Name, u22.Name)
-			require.Equal(t, u1.Age, u11.Age)
-			require.Equal(t, u2.Age, u22.Age)
-			require.Equal(t, u1.Email, u11.Email)
-			require.Equal(t, u2.Email, u22.Email)
-
-			// Test FuzzyMatch=true with multiple values (REGEXP): partial matches in comma-separated values
-			// Query: Name="user,ser" should return all 3 records (all contain "user")
-			users = make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](context.Background()).
-				WithQuery(&TestUser{Name: "user,ser"}, types.QueryOptions{
-					FuzzyMatch: true,
-				}).
-				List(&users))
-			require.Len(t, users, 3)
-			u11, u22, u33 = nil, nil, nil
-			for _, u := range users {
-				switch u.ID {
-				case u1.ID:
-					u11 = u
-				case u2.ID:
-					u22 = u
-				case u3.ID:
-					u33 = u
-				}
-			}
-			require.NotNil(t, u11, "should find u1")
-			require.NotNil(t, u22, "should find u2")
-			require.NotNil(t, u33, "should find u3")
 		}
+		require.NotNil(t, u11, "should find u1")
+		require.NotNil(t, u22, "should find u2")
+		require.Equal(t, u1.Name, u11.Name)
+		require.Equal(t, u2.Name, u22.Name)
+		require.Equal(t, u1.Age, u11.Age)
+		require.Equal(t, u2.Age, u22.Age)
+		require.Equal(t, u1.Email, u11.Email)
+		require.Equal(t, u2.Email, u22.Email)
+
+		// Test FuzzyMatch=true with multiple values (REGEXP): partial matches in comma-separated values
+		// Query: Name="user,ser" should return all 3 records (all contain "user")
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(&TestUser{Name: "user,ser"}, types.QueryOptions{
+				FuzzyMatch: true,
+			}).
+			List(&users))
+		require.Len(t, users, 3)
+		u11, u22, u33 = nil, nil, nil
+		for _, u := range users {
+			switch u.ID {
+			case u1.ID:
+				u11 = u
+			case u2.ID:
+				u22 = u
+			case u3.ID:
+				u33 = u
+			}
+		}
+		require.NotNil(t, u11, "should find u1")
+		require.NotNil(t, u22, "should find u2")
+		require.NotNil(t, u33, "should find u3")
 
 		// Test FuzzyMatch=true with no matching value: should return 0 records
 		users = make([]*TestUser, 0)
@@ -659,33 +654,30 @@ func TestDatabaseWithQuery(t *testing.T) {
 
 		// Test FuzzyMatch=true with comma-separated values containing empty strings
 		// Query: Name="user1,,user2" should return 2 records (u1 and u2), empty strings should be ignored
-		// BUG-1: multi-value fuzzy matching renders REGEXP, which sqlite lacks.
-		if config.App.Database.Type != config.DBSqlite {
-			users = make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](context.Background()).
-				WithQuery(&TestUser{Name: "user1,,user2"}, types.QueryOptions{
-					FuzzyMatch: true,
-				}).
-				List(&users))
-			require.Len(t, users, 2, "empty strings in comma-separated values should be ignored")
-			u11, u22 = nil, nil
-			for _, u := range users {
-				switch u.ID {
-				case u1.ID:
-					u11 = u
-				case u2.ID:
-					u22 = u
-				}
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(&TestUser{Name: "user1,,user2"}, types.QueryOptions{
+				FuzzyMatch: true,
+			}).
+			List(&users))
+		require.Len(t, users, 2, "empty strings in comma-separated values should be ignored")
+		u11, u22 = nil, nil
+		for _, u := range users {
+			switch u.ID {
+			case u1.ID:
+				u11 = u
+			case u2.ID:
+				u22 = u
 			}
-			require.NotNil(t, u11, "should find u1")
-			require.NotNil(t, u22, "should find u2")
-			require.Equal(t, u1.Name, u11.Name)
-			require.Equal(t, u2.Name, u22.Name)
-			require.Equal(t, u1.Age, u11.Age)
-			require.Equal(t, u2.Age, u22.Age)
-			require.Equal(t, u1.Email, u11.Email)
-			require.Equal(t, u2.Email, u22.Email)
 		}
+		require.NotNil(t, u11, "should find u1")
+		require.NotNil(t, u22, "should find u2")
+		require.Equal(t, u1.Name, u11.Name)
+		require.Equal(t, u2.Name, u22.Name)
+		require.Equal(t, u1.Age, u11.Age)
+		require.Equal(t, u2.Age, u22.Age)
+		require.Equal(t, u1.Email, u11.Email)
+		require.Equal(t, u2.Email, u22.Email)
 
 		// Test FuzzyMatch=true with partial match at start: Name="1" (matches "user1")
 		users = make([]*TestUser, 0)
@@ -755,52 +747,49 @@ func TestDatabaseWithQuery(t *testing.T) {
 
 		// Test FuzzyMatch=true with REGEXP special characters (should be escaped)
 		// Query: Name="user1,user2" with special regex chars should work correctly
-		// BUG-1: multi-value fuzzy matching renders REGEXP, which sqlite lacks.
-		if config.App.Database.Type != config.DBSqlite {
-			users = make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](context.Background()).
-				WithQuery(&TestUser{Name: strings.Join([]string{u1.Name, u2.Name}, ",")}, types.QueryOptions{
-					FuzzyMatch: true,
-				}).
-				List(&users))
-			require.Len(t, users, 2, "REGEXP special characters should be escaped")
-			u11, u22 = nil, nil
-			for _, u := range users {
-				switch u.ID {
-				case u1.ID:
-					u11 = u
-				case u2.ID:
-					u22 = u
-				}
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(&TestUser{Name: strings.Join([]string{u1.Name, u2.Name}, ",")}, types.QueryOptions{
+				FuzzyMatch: true,
+			}).
+			List(&users))
+		require.Len(t, users, 2, "REGEXP special characters should be escaped")
+		u11, u22 = nil, nil
+		for _, u := range users {
+			switch u.ID {
+			case u1.ID:
+				u11 = u
+			case u2.ID:
+				u22 = u
 			}
-			require.NotNil(t, u11, "should find u1")
-			require.NotNil(t, u22, "should find u2")
-
-			// Test FuzzyMatch=true with multiple comma-separated values: Name="user1,user3"
-			// Should return 2 records (u1 and u3)
-			users = make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](context.Background()).
-				WithQuery(&TestUser{Name: strings.Join([]string{u1.Name, u3.Name}, ",")}, types.QueryOptions{
-					FuzzyMatch: true,
-				}).
-				List(&users))
-			require.Len(t, users, 2)
-			u11, u33 = nil, nil
-			for _, u := range users {
-				switch u.ID {
-				case u1.ID:
-					u11 = u
-				case u3.ID:
-					u33 = u
-				}
-			}
-			require.NotNil(t, u11, "should find u1")
-			require.NotNil(t, u33, "should find u3")
-			require.Equal(t, u1.Name, u11.Name)
-			require.Equal(t, u3.Name, u33.Name)
-			require.Equal(t, u1.Age, u11.Age)
-			require.Equal(t, u3.Age, u33.Age)
 		}
+		require.NotNil(t, u11, "should find u1")
+		require.NotNil(t, u22, "should find u2")
+
+		// Test FuzzyMatch=true with multiple comma-separated values: Name="user1,user3"
+		// Should return 2 records (u1 and u3)
+		users = make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(&TestUser{Name: strings.Join([]string{u1.Name, u3.Name}, ",")}, types.QueryOptions{
+				FuzzyMatch: true,
+			}).
+			List(&users))
+		require.Len(t, users, 2)
+		u11, u33 = nil, nil
+		for _, u := range users {
+			switch u.ID {
+			case u1.ID:
+				u11 = u
+			case u3.ID:
+				u33 = u
+			}
+		}
+		require.NotNil(t, u11, "should find u1")
+		require.NotNil(t, u33, "should find u3")
+		require.Equal(t, u1.Name, u11.Name)
+		require.Equal(t, u3.Name, u33.Name)
+		require.Equal(t, u1.Age, u11.Age)
+		require.Equal(t, u3.Age, u33.Age)
 
 		// Test FuzzyMatch=true with AllowEmpty: empty query should return all records
 		users = make([]*TestUser, 0)

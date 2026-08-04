@@ -2,12 +2,15 @@ package sqlite
 
 import (
 	"database/sql"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/logger"
+	sqlite3 "github.com/mattn/go-sqlite3"
 	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
@@ -18,6 +21,76 @@ var (
 	Default *gorm.DB
 	db      *sql.DB
 )
+
+// driverName is the database/sql driver this package opens connections with:
+// the stock sqlite3 driver extended with the SQL functions the framework's
+// query surface needs. Registered at package load, which is how database/sql
+// drivers are installed.
+const driverName = "gst_sqlite3"
+
+func init() {
+	sql.Register(driverName, &sqlite3.SQLiteDriver{
+		ConnectHook: registerRegexpFunc,
+	})
+}
+
+// registerRegexpFunc makes REGEXP work on conn. SQLite parses the operator
+// but ships no implementation: "value REGEXP pattern" invokes a user function
+// regexp(pattern, value), and without one every regex filter fails at runtime
+// with "no such function: REGEXP".
+//
+// The implementation is Go's regexp package, so patterns use RE2 syntax and
+// match case-sensitively like the PostgreSQL ~ operator; MySQL matches
+// case-insensitively only through its default collation, which is a collation
+// choice rather than framework behavior. (?i) opts into case-insensitivity
+// per pattern, and an invalid pattern fails the query the way every dialect
+// rejects one.
+//
+// A NULL value or pattern never matches, mirroring how MySQL answers NULL
+// with NULL and a WHERE treats that as false. Numeric values match against
+// their text form the way MySQL casts them.
+//
+// The compiled pattern is cached per connection: the rows of one statement
+// all carry the same pattern, and a connection runs statements one at a time,
+// so the single-entry cache needs no lock.
+func registerRegexpFunc(conn *sqlite3.SQLiteConn) error {
+	var lastPattern string
+	var lastRe *regexp.Regexp
+	return conn.RegisterFunc("regexp", func(patternArg, valueArg any) (bool, error) {
+		pattern, ok := textValue(patternArg)
+		if !ok {
+			return false, nil
+		}
+		value, ok := textValue(valueArg)
+		if !ok {
+			return false, nil
+		}
+		if lastRe == nil || pattern != lastPattern {
+			re, err := regexp.Compile(pattern)
+			if err != nil {
+				return false, err
+			}
+			lastPattern, lastRe = pattern, re
+		}
+		return lastRe.MatchString(value), nil
+	}, true)
+}
+
+// textValue renders a SQLite value as the text REGEXP matches against.
+// NULL and BLOB report false: neither has a text form a pattern should
+// silently match.
+func textValue(arg any) (string, bool) {
+	switch v := arg.(type) {
+	case string:
+		return v, true
+	case int64:
+		return strconv.FormatInt(v, 10), true
+	case float64:
+		return strconv.FormatFloat(v, 'g', -1, 64), true
+	default:
+		return "", false
+	}
+}
 
 // Init initializes the default SQLite connection.
 // It checks if SQLite is enabled and selected as the default database.
@@ -54,8 +127,10 @@ func Init() (err error) {
 // The returned handle already carries the GORM OpenTelemetry tracing plugin,
 // so application-held instances passed to DatabaseOn, AggregateOn, and
 // TransactionOn are traced like the default database.
+// Connections open through this package's own driver, which carries the
+// framework's REGEXP implementation; see registerRegexpFunc.
 func New(cfg config.Sqlite) (*gorm.DB, error) {
-	db, err := gorm.Open(sqlite.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true})
+	db, err := gorm.Open(sqlite.New(sqlite.Config{DriverName: driverName, DSN: buildDSN(cfg)}), &gorm.Config{Logger: logger.Gorm, TranslateError: true})
 	if err != nil {
 		return nil, err
 	}

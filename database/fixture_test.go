@@ -124,8 +124,9 @@ func setupTestData(t *testing.T) {
 
 // skipOnDialect skips the calling test when the suite runs against dbType.
 // The reason must name the bug that keeps the dialect broken (for example
-// "BUG-1: sqlite has no REGEXP function"), so every skip stays an open account
-// that a fix can be checked off against by grepping the bug number.
+// "BUG-2: Upsert renders ON CONFLICT (id) there"), so every skip stays an
+// open account that a fix can be checked off against by grepping the bug
+// number.
 func skipOnDialect(t *testing.T, dbType config.DBType, reason string) {
 	t.Helper()
 	if config.App.Database.Type == dbType {

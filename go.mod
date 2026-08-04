@@ -61,6 +61,7 @@ require (
 	github.com/karlseguin/ccache/v3 v3.0.8
 	github.com/kr/pretty v0.3.1
 	github.com/larksuite/oapi-sdk-go/v3 v3.9.9
+	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/maxrichie5/go-sqlfmt v0.0.0-20241025195225-e353be92414a
 	github.com/minio/minio-go/v7 v7.2.1
 	github.com/mssola/useragent v1.0.0
@@ -345,7 +346,6 @@ require (
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.23 // indirect
-	github.com/mattn/go-sqlite3 v1.14.24 // indirect
 	github.com/mdelapenya/tlscert v0.2.0 // indirect
 	github.com/mgechev/revive v1.15.0 // indirect
 	github.com/microsoft/go-mssqldb v1.10.0 // indirect

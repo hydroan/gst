@@ -411,6 +411,12 @@ func (db *database[M]) WithSelect(columns ...string) types.Database[M] {
 //   - consts.LockUpdateSkipLocked: SELECT ... FOR UPDATE SKIP LOCKED
 //   - consts.LockShareSkipLocked: SELECT ... FOR SHARE SKIP LOCKED
 //
+// SQLite has no row-level locks -- the whole database is a single writer --
+// and its GORM driver drops the locking clause, so every mode is a no-op
+// there. The transaction requirement still applies: the code stays portable,
+// and the database-level write lock the transaction takes is what serializes
+// SQLite writers.
+//
 // Example:
 //
 //	err := database.Transaction(ctx, func(ctx context.Context) error {
