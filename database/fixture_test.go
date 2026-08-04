@@ -122,18 +122,6 @@ func setupTestData(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).Create(ul...))
 }
 
-// skipOnDialect skips the calling test when the suite runs against dbType.
-// The reason must name the bug that keeps the dialect broken (for example
-// "BUG-2: Upsert renders ON CONFLICT (id) there"), so every skip stays an
-// open account that a fix can be checked off against by grepping the bug
-// number.
-func skipOnDialect(t *testing.T, dbType config.DBType, reason string) {
-	t.Helper()
-	if config.App.Database.Type == dbType {
-		t.Skipf("skips on %s: %s", dbType, reason)
-	}
-}
-
 // quoteIdent renders an identifier the way the dialect under test quotes it,
 // so SQL assertions stay dialect-neutral: double quotes on postgres,
 // backticks on mysql and sqlite, mirroring the gorm dialectors.
@@ -367,7 +355,10 @@ const envTestDatabase = "GST_TEST_DATABASE"
 // default, and against the dialect envTestDatabase names when it is set. An
 // unsupported value fails the run through the Server.Database validation.
 // Every test in this package must either behave identically across dialects
-// or branch on config.App.Database.Type / skip with skipOnDialect.
+// or branch on config.App.Database.Type where a per-dialect contract differs
+// (the Upsert collision test is the pattern). A dialect broken by an open bug
+// takes a t.Skip carrying the bug number, so the account stays greppable
+// until the fix lands.
 func TestMain(m *testing.M) {
 	dbType := config.DBMySQL
 	if override := os.Getenv(envTestDatabase); len(override) > 0 {

@@ -42,9 +42,39 @@ type filterScope struct {
 	// otherwise resolve against the outer table and quietly change the meaning
 	// of the query.
 	columns map[string]struct{}
+	// timeColumns names the columns of the scope's model that store time,
+	// keyed by database name. Comparisons on them normalize both sides through
+	// timeComparableExpr; see comparisonSQL.
+	timeColumns map[string]struct{}
 	// depth numbers the nesting level so each subquery can take a distinct
 	// alias when it reads the same table as the query enclosing it.
 	depth int
+}
+
+// outerScope is the filterScope of a top-level predicate: it correlates
+// against the chain's own table and knows which of that model's columns store
+// time.
+func (db *database[M]) outerScope() filterScope {
+	return filterScope{parent: db.outerTableName(), timeColumns: timeColumnSet(reflect.TypeOf(*new(M)))}
+}
+
+// timeColumnSet reports the time-typed columns of a model type by database
+// name, for the comparison normalization in comparisonSQL. A type whose
+// columns cannot be resolved yields an empty set: its comparisons then render
+// without normalization, which is the exact SQL every column renders on the
+// dialects that compare time natively.
+func timeColumnSet(typ reflect.Type) map[string]struct{} {
+	columns, err := modelschema.Columns(typ)
+	if err != nil {
+		return nil
+	}
+	set := make(map[string]struct{})
+	for _, c := range columns {
+		if modelschema.ClassifyColumn(c.Type) == modelschema.ColumnClassTime {
+			set[c.DBName] = struct{}{}
+		}
+	}
+	return set
 }
 
 // applyFilters appends field-level operator filters, each as an AND
@@ -60,7 +90,7 @@ func (db *database[M]) applyFilters(filters []types.Filter) {
 	// The reason is discarded here on purpose: a client filter that cannot be
 	// applied narrows the query instead of failing the request. Server-built
 	// callers such as the aggregate builder read it and fail fast instead.
-	if expr, _ := db.renderFilters(filters, false, filterScope{parent: db.outerTableName()}); expr != nil {
+	if expr, _ := db.renderFilters(filters, false, db.outerScope()); expr != nil {
 		db.ins = db.ins.Where(expr)
 	}
 }
@@ -150,17 +180,17 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 	column := db.scopedColumn(f.Column, scope)
 	switch f.Op {
 	case types.FilterOpEq:
-		return db.scalarFilter(f, column+" = ?")
+		return db.scalarFilter(f, db.comparisonSQL(scope, f.Column, column, " = "))
 	case types.FilterOpNe:
-		return db.scalarFilter(f, column+" <> ?")
+		return db.scalarFilter(f, db.comparisonSQL(scope, f.Column, column, " <> "))
 	case types.FilterOpGt:
-		return db.scalarFilter(f, column+" > ?")
+		return db.scalarFilter(f, db.comparisonSQL(scope, f.Column, column, " > "))
 	case types.FilterOpGte:
-		return db.scalarFilter(f, column+" >= ?")
+		return db.scalarFilter(f, db.comparisonSQL(scope, f.Column, column, " >= "))
 	case types.FilterOpLt:
-		return db.scalarFilter(f, column+" < ?")
+		return db.scalarFilter(f, db.comparisonSQL(scope, f.Column, column, " < "))
 	case types.FilterOpLte:
-		return db.scalarFilter(f, column+" <= ?")
+		return db.scalarFilter(f, db.comparisonSQL(scope, f.Column, column, " <= "))
 	case types.FilterOpIn:
 		return db.listFilter(f, column+" IN ?")
 	case types.FilterOpNotIn:
@@ -228,6 +258,17 @@ func failClosedExpr() clause.Expression { return clause.Expr{SQL: "1 = 0"} }
 func (db *database[M]) failClosedFilter(f types.Filter, msg string) (clause.Expression, error) {
 	logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("filter operator %q on column %q %s, adding safety condition", f.Op, f.Column, msg)
 	return failClosedExpr(), errors.Wrapf(ErrUnusableFilter, "operator %q on column %q %s", f.Op, f.Column, msg)
+}
+
+// comparisonSQL renders "column op ?" for one comparison filter. A column the
+// scope knows to store time takes both sides through timeComparableExpr, so
+// the comparison agrees across storage spellings; every other column renders
+// the plain comparison.
+func (db *database[M]) comparisonSQL(scope filterScope, dbName, quotedColumn, op string) string {
+	if _, isTime := scope.timeColumns[dbName]; isTime {
+		return db.timeComparableExpr(quotedColumn) + op + db.timeComparableExpr("?")
+	}
+	return quotedColumn + op + "?"
 }
 
 // scalarFilter binds a comparison filter whose value must be a scalar; nil,
@@ -329,8 +370,12 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 		return db.failClosedFilter(f, "related model has no resolvable columns")
 	}
 	allowed := make(map[string]struct{}, len(childColumns))
+	childTimeColumns := make(map[string]struct{})
 	for _, c := range childColumns {
 		allowed[c.DBName] = struct{}{}
+		if modelschema.ClassifyColumn(c.Type) == modelschema.ColumnClassTime {
+			childTimeColumns[c.DBName] = struct{}{}
+		}
 	}
 	if _, ok := allowed[sq.ChildColumn]; !ok {
 		return db.failClosedFilter(f, "correlates on a column the related model does not have")
@@ -367,10 +412,11 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 	// Nested filters read the subquery's own table, correlate back to it, and
 	// may only name its columns.
 	inner := filterScope{
-		qualify: childRef,
-		parent:  childRef,
-		columns: allowed,
-		depth:   scope.depth + 1,
+		qualify:     childRef,
+		parent:      childRef,
+		columns:     allowed,
+		timeColumns: childTimeColumns,
+		depth:       scope.depth + 1,
 	}
 	expr, failure := db.renderFilters(sq.Filters, false, inner)
 	if expr != nil {

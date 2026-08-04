@@ -344,7 +344,7 @@ func (a *aggregator[M, R]) build(mode buildMode) (*gorm.DB, error) {
 	// A predicate the renderer cannot apply narrows a client query to nothing,
 	// which is the right answer for request input. Here it would turn a report
 	// into a silent zero, so the reason is surfaced instead.
-	whereExpr, err := a.db.renderFilters(a.filters, false, filterScope{parent: a.db.outerTableName()})
+	whereExpr, err := a.db.renderFilters(a.filters, false, a.db.outerScope())
 	if err != nil {
 		return nil, err
 	}
@@ -462,7 +462,7 @@ func (a *aggregator[M, R]) termExpr(t types.AggregateTerm) (string, []any, error
 		return a.db.timeBucketExpr(column, t.Bucket), nil, nil
 	}
 
-	cond, condErr := a.db.renderFilters(t.Conditions, false, filterScope{parent: a.db.outerTableName()})
+	cond, condErr := a.db.renderFilters(t.Conditions, false, a.db.outerScope())
 	if condErr != nil {
 		return "", nil, condErr
 	}

@@ -66,9 +66,16 @@ func New(cfg config.MySQL) (*gorm.DB, error) {
 // every other supported dialect already uses. database.Update depends on it:
 // with changed-rows semantics, saving a record without modifying anything
 // reports zero affected rows and would be misread as ErrRecordNotFound.
+//
+// loc=UTC makes the driver store and read DATETIME values as UTC wall-clock
+// time, which is the framework's one time base across dialects: postgres
+// already normalizes timestamptz to UTC and sqlite time text is read in UTC
+// by its date functions. A local loc would make the same instant a different
+// stored wall clock per dialect (and per server timezone), which is what
+// breaks time bucket labels, boundary comparisons, and URL time filters.
 func buildDSN(cfg config.MySQL) string {
 	return fmt.Sprintf(
-		"%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local&clientFoundRows=true",
+		"%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=UTC&clientFoundRows=true",
 		cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database, cfg.Charset,
 	)
 }

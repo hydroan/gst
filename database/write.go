@@ -108,8 +108,11 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 		if db.batchSize > 0 {
 			batchSize = db.batchSize
 		}
-		// Force created_at/updated_at to now; see the timestamp note in the doc comment.
-		now := time.Now()
+		// Force created_at/updated_at to now; see the timestamp note in the doc
+		// comment. UTC, so the stored wall clock is the same on every dialect:
+		// sqlite stores the time.Time's own location as text, and a local value
+		// would embed the server timezone into the row.
+		now := time.Now().UTC()
 		for i := range objs {
 			objs[i].SetCreatedAt(now)
 			objs[i].SetUpdatedAt(now)
@@ -412,18 +415,27 @@ func (db *database[M]) updateRowStatement(session *gorm.DB, tableName string, ob
 // Upsert saves one or multiple records with insert-or-update semantics. It is
 // the only write that merges: Create rejects duplicates and Update rejects
 // missing rows, so reach for Upsert only when a flow deliberately wants
-// "insert the row, or overwrite whichever row owns the colliding unique key"
+// "insert the row, or overwrite whichever row owns the colliding key"
 // (imports, sync jobs, seed-style maintenance).
 //
-// It relies on the database's conflict resolution (MySQL
-// "INSERT ... ON DUPLICATE KEY UPDATE", SQLite/Postgres "ON CONFLICT DO
-// UPDATE"), which has sharp edges the caller owns:
-//   - The conflict target cannot be chosen: a collision on ANY unique key, not
-//     only the primary key, turns the insert into an update of the conflicting
-//     row. On tables with several unique keys, which row gets updated follows
-//     database index-selection rules.
-//   - A collision with a soft-deleted row updates that row and clears its
-//     deleted_at, resurrecting it.
+// It relies on the database's conflict resolution, and WHICH collisions merge
+// is a per-dialect contract, because the dialects disagree about the conflict
+// target and no portable spelling exists (the same split every major ORM
+// documents rather than papers over):
+//   - MySQL ("INSERT ... ON DUPLICATE KEY UPDATE"): a collision on ANY unique
+//     key, not only the primary key, turns the insert into an update of the
+//     conflicting row. The target cannot be narrowed; on tables with several
+//     unique keys, which row gets updated follows index-selection rules.
+//   - SQLite and Postgres ("ON CONFLICT (primary key) DO UPDATE"): only a
+//     primary-key collision merges. A collision on any other unique key fails
+//     the call with ErrDuplicatedKey — simulating the MySQL behavior with a
+//     read-then-write would carry a race no transaction level closes, so the
+//     error is surfaced instead. A flow that must merge on a non-primary key
+//     there reads the existing row first and writes through Update.
+//
+// The remaining sharp edges the caller owns on every dialect:
+//   - A merging collision with a soft-deleted row updates that row and clears
+//     its deleted_at, resurrecting it.
 //   - created_at is preserved on conflict updates (auto-create-time columns
 //     are excluded from the conflict update set); on inserted rows
 //     created_at/updated_at are forced to the current time exactly like
@@ -431,6 +443,8 @@ func (db *database[M]) updateRowStatement(session *gorm.DB, tableName string, ob
 //   - After each batch, caller-owned objects are re-synced from the database
 //     by complete unique-index values: an object that collided exposes the
 //     persisted row's ID instead of the one generated for the insert attempt.
+//     The sync exists for MySQL's any-unique-key merges; primary-key merges
+//     keep the caller's ID and leave it nothing to reconcile.
 //
 // Upsert cannot know whether a row was inserted or updated, so it runs NO
 // model hooks — create/update hooks would lie for one of the two paths — and
@@ -491,9 +505,10 @@ func (db *database[M]) Upsert(_objs ...M) (err error) {
 		for i := range objs {
 			objs[i].SetID() // set id when id is empty.
 		}
-		// Force created_at/updated_at like Create: the values only land on
-		// inserted rows, conflict updates keep the existing created_at.
-		now := time.Now()
+		// Force created_at/updated_at like Create (UTC for the same one-time-base
+		// reason): the values only land on inserted rows, conflict updates keep
+		// the existing created_at.
+		now := time.Now().UTC()
 		for i := range objs {
 			objs[i].SetCreatedAt(now)
 			objs[i].SetUpdatedAt(now)

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/modelregistry"
@@ -157,7 +158,10 @@ func TestBaseQueryCursor(t *testing.T) {
 	t.Run("ReadsRequestValues", func(t *testing.T) {
 		cursor, err := svc.QueryCursor(newQueryContext(t, "/samples?_cursor_value=2026-07-01T08:30:15&_cursor_next=true&_cursor_field=created_at"))
 		require.NoError(t, err)
-		require.Equal(t, types.CursorForward(types.Asc("created_at"), "2026-07-01T08:30:15"), cursor)
+		// A time boundary travels as the UTC wall clock, like a time filter
+		// bound; the zone-less input is read in the server's local zone.
+		boundary := time.Date(2026, 7, 1, 8, 30, 15, 0, time.Local).UTC().Format(types.FilterTimeLayout)
+		require.Equal(t, types.CursorForward(types.Asc("created_at"), boundary), cursor)
 	})
 
 	t.Run("UnknownColumnIsAClientError", func(t *testing.T) {

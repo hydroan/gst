@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
@@ -100,7 +99,6 @@ func TestDatabaseWithCursor(t *testing.T) {
 	})
 
 	t.Run("CustomField", func(t *testing.T) {
-		skipOnDialect(t, config.DBSqlite, "BUG-6: sqlite compares its offset-suffixed timestamp text against the plain cursor text, so rows equal to the boundary leak back into the page")
 		defer cleanupTestData()
 		setupTestData(t)
 
@@ -109,11 +107,11 @@ func TestDatabaseWithCursor(t *testing.T) {
 		require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 		require.Len(t, users, 3)
 
-		// Get first record's created_at as cursor
-		// Format time to match database format (YYYY-MM-DD HH:MM:SS.ffffff)
+		// Get first record's created_at as cursor: per the WithCursor contract
+		// a time boundary is the UTC wall clock (YYYY-MM-DD HH:MM:SS.ffffff).
 		firstUser := users[0]
 		require.False(t, firstUser.CreatedAt.IsZero(), "first user should have created_at")
-		cursorValue := firstUser.CreatedAt.Format("2006-01-02 15:04:05.000000")
+		cursorValue := firstUser.CreatedAt.UTC().Format("2006-01-02 15:04:05.000000")
 
 		// Fetch next page using created_at as cursor field
 		nextUsers := make([]*TestUser, 0)

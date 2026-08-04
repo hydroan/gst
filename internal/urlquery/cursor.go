@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/modelregistry"
@@ -72,7 +73,8 @@ func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
 			}
 		}
 	}
-	if err := validateCursorValue(columnType, value); err != nil {
+	value, err := normalizeCursorValue(columnType, value)
+	if err != nil {
 		return types.Cursor{}, err
 	}
 
@@ -82,26 +84,34 @@ func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
 	return types.CursorBackward(types.Asc(column), value), nil
 }
 
-// validateCursorValue checks the boundary value against the Go type of the
-// cursor column, mirroring the fail-closed filter semantics: a mistyped
-// "field[op]=value" filter is rejected, so a mistyped cursor value must not
-// fare better. Without the check the raw string reaches the SQL comparison,
-// where MySQL coerces it instead of failing — a non-numeric boundary on a
-// numeric column becomes 0 — and the feed silently restarts from the first
-// page.
+// normalizeCursorValue checks the boundary value against the Go type of the
+// cursor column and returns the value the SQL comparison binds, mirroring the
+// fail-closed filter semantics: a mistyped "field[op]=value" filter is
+// rejected, so a mistyped cursor value must not fare better. Without the
+// check the raw string reaches the SQL comparison, where MySQL coerces it
+// instead of failing — a non-numeric boundary on a numeric column becomes 0 —
+// and the feed silently restarts from the first page.
+//
+// A time boundary is not only validated but normalized to the UTC wall clock
+// in FilterTimeLayout, exactly like a time filter bound: the client spells
+// the boundary in any accepted query layout, and the database compares the
+// one wall clock the framework stores on every dialect.
 //
 // Only types the database coerces lossily are gated: numeric, bool and time
 // columns. String and other column types accept any value, and a nil column
 // type (the model cannot resolve the fallback column, see Cursor) keeps the
 // plain passthrough.
-func validateCursorValue(columnTyp reflect.Type, value string) error {
+func normalizeCursorValue(columnTyp reflect.Type, value string) (string, error) {
 	if columnTyp == nil {
-		return nil
+		return value, nil
 	}
 	var err error
 	switch {
 	case columnTyp == timeType:
-		_, err = parseQueryTime(value, false)
+		var t time.Time
+		if t, err = parseQueryTime(value, false); err == nil {
+			value = t.In(time.UTC).Format(types.FilterTimeLayout)
+		}
 	case columnTyp.Kind() == reflect.Bool:
 		if _, parseErr := strconv.ParseBool(value); parseErr != nil {
 			err = errors.Newf("expect a boolean value, got %q", value)
@@ -109,5 +119,8 @@ func validateCursorValue(columnTyp reflect.Type, value string) error {
 	case isNumericKind(columnTyp.Kind()):
 		err = validateNumericValue(columnTyp.Kind(), value)
 	}
-	return errors.Wrapf(err, "invalid cursor value")
+	if err != nil {
+		return "", errors.Wrapf(err, "invalid cursor value")
+	}
+	return value, nil
 }

@@ -339,8 +339,10 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 // rejects as a client error.
 //
 // A cursor without a boundary value is a no-op, so an unpaginated first page
-// needs no special case at the call site. A time-typed cursor value is
-// formatted as "YYYY-MM-DD HH:MM:SS.ffffff".
+// needs no special case at the call site. A time-typed cursor value is the
+// UTC wall clock formatted as "YYYY-MM-DD HH:MM:SS.ffffff" — UTC is the one
+// wall clock the framework stores on every dialect, so a boundary read back
+// from a row formats as row.CreatedAt.UTC().
 //
 // Examples:
 //
@@ -365,7 +367,9 @@ func (db *database[M]) WithCursor(cursor types.Cursor) types.Database[M] {
 // applyCursorPagination applies cursor-based pagination to the query if a
 // cursor is set. Traveling backward reads the feed in reverse, so both the
 // boundary comparison and the ORDER BY flip; List reverses the rows afterwards
-// to hand them back in the feed's own order.
+// to hand them back in the feed's own order. A boundary on a time column goes
+// through timeComparableExpr on both sides, so the comparison agrees across
+// storage spellings.
 func (db *database[M]) applyCursorPagination() {
 	if !db.cursor.Enabled() {
 		return
@@ -374,11 +378,15 @@ func (db *database[M]) applyCursorPagination() {
 	if db.cursor.Backward {
 		direction = direction.Flip()
 	}
-	comparison := " > ?"
+	operator := " > "
 	if direction == types.OrderDesc {
-		comparison = " < ?"
+		operator = " < "
 	}
-	db.ins = db.ins.Where(db.quoteOrderField(db.cursor.Order.Column)+comparison, db.cursor.Value)
+	lhs, rhs := db.quoteOrderField(db.cursor.Order.Column), "?"
+	if _, isTime := timeColumnSet(reflect.TypeOf(*new(M)))[db.cursor.Order.Column]; isTime {
+		lhs, rhs = db.timeComparableExpr(lhs), db.timeComparableExpr(rhs)
+	}
+	db.ins = db.ins.Where(lhs+operator+rhs, db.cursor.Value)
 	db.ins = db.ins.Order(db.orderClause(types.Order{Column: db.cursor.Order.Column, Direction: direction}))
 }
 

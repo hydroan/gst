@@ -138,15 +138,18 @@ func TestFilters(t *testing.T) {
 	})
 
 	t.Run("TimeFieldNormalizesFlexibleFormats", func(t *testing.T) {
+		// Zone-less inputs are read in the server's local zone and the bound
+		// travels as the UTC wall clock, so every expectation is the local
+		// instant converted to UTC.
 		for key, want := range map[string]string{
 			// A date-only lower bound starts at the beginning of the day.
-			"expired_at[gte]": time.Date(2026, 7, 1, 0, 0, 0, 0, time.Local).Format(types.FilterTimeLayout),
+			"expired_at[gte]": time.Date(2026, 7, 1, 0, 0, 0, 0, time.Local).UTC().Format(types.FilterTimeLayout),
 			// A date-only inclusive upper bound covers the whole day.
-			"expired_at[lte]": time.Date(2026, 7, 2, 0, 0, 0, 0, time.Local).Add(-time.Nanosecond).Format(types.FilterTimeLayout),
+			"expired_at[lte]": time.Date(2026, 7, 2, 0, 0, 0, 0, time.Local).Add(-time.Nanosecond).UTC().Format(types.FilterTimeLayout),
 			// A date-only exclusive lower bound means "after the whole day".
-			"expired_at[gt]": time.Date(2026, 7, 2, 0, 0, 0, 0, time.Local).Add(-time.Nanosecond).Format(types.FilterTimeLayout),
+			"expired_at[gt]": time.Date(2026, 7, 2, 0, 0, 0, 0, time.Local).Add(-time.Nanosecond).UTC().Format(types.FilterTimeLayout),
 			// A date-only exclusive upper bound means "before the day starts".
-			"expired_at[lt]": time.Date(2026, 7, 1, 0, 0, 0, 0, time.Local).Format(types.FilterTimeLayout),
+			"expired_at[lt]": time.Date(2026, 7, 1, 0, 0, 0, 0, time.Local).UTC().Format(types.FilterTimeLayout),
 		} {
 			conds, err := Filters(url.Values{key: {"2026-07-01"}}, &filterTestModel{})
 			require.NoError(t, err, "key %q", key)
@@ -161,8 +164,8 @@ func TestFilters(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, conds, 1)
 		require.Equal(t,
-			time.Date(2026, 7, 1, 8, 30, 15, 0, time.FixedZone("", 8*3600)).In(time.Local).Format(types.FilterTimeLayout),
-			conds[0].Value, "an explicit offset must be converted to the server's local zone")
+			time.Date(2026, 7, 1, 8, 30, 15, 0, time.FixedZone("", 8*3600)).UTC().Format(types.FilterTimeLayout),
+			conds[0].Value, "an explicit offset must be converted to UTC")
 	})
 
 	t.Run("TimeFieldRejectsInvalidValue", func(t *testing.T) {
@@ -219,7 +222,7 @@ func TestFilters(t *testing.T) {
 		}, &filterTestModel{})
 		require.NoError(t, err)
 		require.Equal(t, []types.Filter{
-			{Column: "created_at", Op: types.FilterOpEq, Value: time.Date(2026, 7, 1, 8, 0, 0, 0, time.Local).Format(types.FilterTimeLayout)},
+			{Column: "created_at", Op: types.FilterOpEq, Value: time.Date(2026, 7, 1, 8, 0, 0, 0, time.Local).UTC().Format(types.FilterTimeLayout)},
 		}, conds, "the bare framework timestamp key is an exact-match filter, consistent with every other documented parameter")
 
 		conds, err = Filters(url.Values{
@@ -241,8 +244,8 @@ func TestFilters(t *testing.T) {
 		}, &filterTestModel{})
 		require.NoError(t, err)
 		require.Equal(t, []types.Filter{
-			{Column: "created_at", Op: types.FilterOpGte, Value: time.Date(2026, 7, 1, 0, 0, 0, 0, time.Local).Format(types.FilterTimeLayout)},
-			{Column: "updated_at", Op: types.FilterOpLt, Value: time.Date(2026, 7, 15, 0, 0, 0, 0, time.Local).Format(types.FilterTimeLayout)},
+			{Column: "created_at", Op: types.FilterOpGte, Value: time.Date(2026, 7, 1, 0, 0, 0, 0, time.Local).UTC().Format(types.FilterTimeLayout)},
+			{Column: "updated_at", Op: types.FilterOpLt, Value: time.Date(2026, 7, 15, 0, 0, 0, 0, time.Local).UTC().Format(types.FilterTimeLayout)},
 		}, conds)
 	})
 
@@ -545,7 +548,11 @@ func TestCursor(t *testing.T) {
 			"_cursor_field": {"created_at"},
 		}, &cursorTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, types.CursorForward(types.Asc("created_at"), "2026-07-01 08:30:15"), cursor)
+		// A time boundary is normalized like a time filter bound: the zone-less
+		// input is read in the server's local zone and travels as the UTC wall
+		// clock.
+		boundary := time.Date(2026, 7, 1, 8, 30, 15, 0, time.Local).UTC().Format(types.FilterTimeLayout)
+		require.Equal(t, types.CursorForward(types.Asc("created_at"), boundary), cursor)
 	})
 
 	t.Run("MissingDirectionTravelsBackward", func(t *testing.T) {

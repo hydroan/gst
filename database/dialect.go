@@ -51,6 +51,24 @@ func (db *database[M]) regexpOperator() string {
 	return "REGEXP"
 }
 
+// timeComparableExpr renders one side of a time comparison so both sides
+// agree on a comparable form. SQLite is the dialect that needs it: it stores
+// time as text whose zone suffix and sub-second width vary with the value
+// that was written, and a lexical comparison across those spellings misorders
+// instants (an equal instant with a longer spelling reads as greater, which
+// leaks boundary rows back into a cursor page). strftime normalizes both
+// sides to UTC millisecond text. Every other dialect compares time natively,
+// so the operand passes through and their SQL is unchanged.
+//
+// The operand is an already-quoted column or a bind placeholder; millisecond
+// precision matches the DATETIME(3) resolution the framework uses elsewhere.
+func (db *database[M]) timeComparableExpr(operand string) string {
+	if db.dialect() == dialectSQLite {
+		return "strftime('%Y-%m-%d %H:%M:%f', " + operand + ")"
+	}
+	return operand
+}
+
 // textPatternColumn renders a column so the text pattern operators (LIKE and
 // the regex operator) accept it. PostgreSQL is strict about operand types:
 // json and jsonb carry no text operators, so a JSON column is cast to text

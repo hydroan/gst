@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
@@ -36,7 +35,10 @@ import (
 
 func aggregateSeed() []*TestAggregateRecord {
 	at := func(month, day, hour int) time.Time {
-		return time.Date(2024, time.Month(month), day, hour, 0, 0, 0, time.Local)
+		// UTC, matching the one wall clock the framework stores on every
+		// dialect: bucket labels below then read exactly like these literals,
+		// independent of the machine's timezone.
+		return time.Date(2024, time.Month(month), day, hour, 0, 0, 0, time.UTC)
 	}
 	return []*TestAggregateRecord{
 		{Base: model.Base{ID: "a1"}, Category: "alpha", Status: "done", Amount: 100, Score: 1.5, OccurredAt: at(1, 10, 8)},
@@ -294,8 +296,6 @@ func TestAggregateTimeBucket(t *testing.T) {
 	})
 
 	t.Run("ByHour", func(t *testing.T) {
-		skipOnDialect(t, config.DBSqlite, "BUG-6: sqlite stores timestamps with a zone offset and strftime converts them to UTC, so bucket labels disagree with the local-time labels MySQL renders")
-		skipOnDialect(t, config.DBPostgres, "BUG-6: postgres renders timestamptz in the session time zone (UTC by framework default), so bucket labels disagree with the local-time labels MySQL renders")
 		rows := make([]row, 0)
 		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
 			Select(

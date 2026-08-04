@@ -142,7 +142,8 @@ type Filter struct {
 // from a URL is normalized to. The value travels as a string rather than a
 // time.Time on purpose: binding a time.Time would let the driver re-render it
 // in its own location, while the string pins the wall-clock time the parser
-// resolved.
+// resolved. The pinned wall clock is UTC, the one wall clock the framework
+// stores on every dialect.
 //
 // It is exported because the normalization is a contract of Filter, not a
 // detail of the parser: a service reading a bound back would otherwise have to
@@ -163,7 +164,7 @@ func (f Filter) TimeValue() (time.Time, bool) {
 	case time.Time:
 		return value, true
 	case string:
-		parsed, err := time.ParseInLocation(FilterTimeLayout, value, time.Local)
+		parsed, err := time.ParseInLocation(FilterTimeLayout, value, time.UTC)
 		if err != nil {
 			return time.Time{}, false
 		}

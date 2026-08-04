@@ -480,9 +480,23 @@ func TestDatabaseUpsert(t *testing.T) {
 		require.Len(t, persisted, 2)
 	})
 
-	t.Run("overwrites on unique key collision and syncs ids", func(t *testing.T) {
-		skipOnDialect(t, config.DBSqlite, "BUG-2: Upsert renders ON CONFLICT (id) there, so a non-primary unique collision errors instead of updating")
-		skipOnDialect(t, config.DBPostgres, "BUG-2: Upsert renders ON CONFLICT (id) there, so a non-primary unique collision errors instead of updating")
+	t.Run("merges on a primary key collision on every dialect", func(t *testing.T) {
+		item := &TestUniqueItem{UniqueCode: "upsert-pk", Name: "before"}
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Upsert(item))
+		require.NotEmpty(t, item.ID)
+
+		again := &TestUniqueItem{UniqueCode: "upsert-pk", Name: "after", Base: model.Base{ID: item.ID}}
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Upsert(again))
+
+		got := new(TestUniqueItem)
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Get(got, item.ID))
+		require.Equal(t, "after", got.Name)
+	})
+
+	// Which collisions merge is a per-dialect contract (see the Upsert doc):
+	// MySQL merges on any unique key, SQLite and Postgres only on the primary
+	// key and answer a non-primary unique collision with ErrDuplicatedKey.
+	t.Run("collision on a non-primary unique key", func(t *testing.T) {
 		first := &TestUniqueItem{UniqueCode: "upsert-same", Name: "first"}
 		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Upsert(first))
 		require.NotEmpty(t, first.ID)
@@ -491,7 +505,18 @@ func TestDatabaseUpsert(t *testing.T) {
 		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Get(firstPersisted, first.ID))
 
 		second := &TestUniqueItem{UniqueCode: "upsert-same", Name: "second"}
-		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Upsert(second))
+		err := database.Database[*TestUniqueItem](context.Background()).Upsert(second)
+
+		if config.App.Database.Type != config.DBMySQL {
+			require.ErrorIs(t, err, database.ErrDuplicatedKey)
+			items := make([]*TestUniqueItem, 0)
+			require.NoError(t, database.Database[*TestUniqueItem](context.Background()).WithQuery(&TestUniqueItem{UniqueCode: "upsert-same"}).List(&items))
+			require.Len(t, items, 1)
+			require.Equal(t, "first", items[0].Name, "a failed upsert must leave the persisted row untouched")
+			return
+		}
+
+		require.NoError(t, err)
 		require.Equal(t, first.ID, second.ID, "the collided object must expose the persisted row id")
 		require.Empty(t, second.CreateAfterID, "Upsert must not run create hooks")
 		require.Empty(t, second.UpdateAfterID, "Upsert must not run update hooks")

@@ -109,7 +109,10 @@ func TestFilterTimeValue(t *testing.T) {
 	local := time.Date(2026, 7, 1, 8, 30, 15, 0, time.Local)
 
 	t.Run("ReadsCanonicalStringBackAsTime", func(t *testing.T) {
-		filter := types.FilterGte("expired_at", local.Format(types.FilterTimeLayout))
+		// The canonical string carries the UTC wall clock, so producing one
+		// from a local instant goes through UTC first; the round trip then
+		// lands on the same instant.
+		filter := types.FilterGte("expired_at", local.UTC().Format(types.FilterTimeLayout))
 		got, ok := filter.TimeValue()
 		require.True(t, ok)
 		require.True(t, got.Equal(local), "want %s, got %s", local, got)
@@ -119,7 +122,7 @@ func TestFilterTimeValue(t *testing.T) {
 		// A date-only upper bound is extended to the end of the day, so the
 		// value carries nanoseconds the layout must round-trip.
 		endOfDay := time.Date(2026, 7, 2, 0, 0, 0, 0, time.Local).Add(-time.Nanosecond)
-		filter := types.FilterLte("expired_at", endOfDay.Format(types.FilterTimeLayout))
+		filter := types.FilterLte("expired_at", endOfDay.UTC().Format(types.FilterTimeLayout))
 		got, ok := filter.TimeValue()
 		require.True(t, ok)
 		require.True(t, got.Equal(endOfDay), "want %s, got %s", endOfDay, got)

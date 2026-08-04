@@ -188,7 +188,9 @@ func normalizeFilterValue(columnTyp reflect.Type, op types.FilterOp, value strin
 			if err != nil {
 				return nil, err
 			}
-			return t.In(time.Local).Format(types.FilterTimeLayout), nil
+			// The bound travels as the UTC wall clock, which is the one wall
+			// clock the framework stores on every dialect; see FilterTimeLayout.
+			return t.In(time.UTC).Format(types.FilterTimeLayout), nil
 		default:
 			return nil, errors.Newf("operator %q is not supported on a time field", op)
 		}
