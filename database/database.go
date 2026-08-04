@@ -16,29 +16,62 @@ import (
 // references:
 
 var (
-	ErrInvalidDB           = errors.New("invalid database, maybe not initialized")
-	ErrUnknowDBType        = errors.New("unknow database type, only support mysql or sqlite")
-	ErrNotPtrStruct        = errors.New("model is not pointer to structure")
-	ErrNotPtrSlice         = errors.New("not pointer to slice")
-	ErrNotPtrInt64         = errors.New("not pointer to int64")
-	ErrNilCount            = errors.New("count parameter cannot be nil")
-	ErrNilDest             = errors.New("dest parameter cannot be nil")
-	ErrEmptyFieldName      = errors.New("field name cannot be empty")
-	ErrNilValue            = errors.New("value cannot be nil")
-	ErrNotAddressableModel = errors.New("model is not addressable")
-	ErrNotAddressableSlice = errors.New("slice is not addressable")
-	ErrNotSetSlice         = errors.New("slice cannot set")
-	ErrIDRequired          = errors.New("id is required")
-	ErrRecordNotFound      = gorm.ErrRecordNotFound
-	ErrDuplicatedKey       = gorm.ErrDuplicatedKey
-	ErrNilSQLBuilder       = errors.New("sql statement collector cannot be nil")
-	ErrNilTransaction      = errors.New("transaction function cannot be nil")
-	ErrUnusableFilter      = errors.New("filter cannot be applied")
+	// ErrInvalidDB reports an operation chain running on a database handle
+	// that was never initialized.
+	ErrInvalidDB = errors.New("invalid database, maybe not initialized")
+
+	// ErrNilCount is returned when Count or CountGroups is handed a nil
+	// destination.
+	ErrNilCount = errors.New("count parameter cannot be nil")
+
+	// ErrNilDest is returned when a read operation is handed a nil
+	// destination.
+	ErrNilDest = errors.New("dest parameter cannot be nil")
+
+	// ErrEmptyFieldName is returned when UpdateByID is handed an empty column
+	// name.
+	ErrEmptyFieldName = errors.New("field name cannot be empty")
+
+	// ErrNilValue is returned when UpdateByID is handed a nil value.
+	ErrNilValue = errors.New("value cannot be nil")
+
+	// ErrIDRequired is returned when an operation that addresses records by
+	// primary key is handed a record or an id argument without one.
+	ErrIDRequired = errors.New("id is required")
+
+	// ErrRecordNotFound is the gorm sentinel for a read that matches no live
+	// row; Get and Update also answer it for a missing or soft-deleted record.
+	ErrRecordNotFound = gorm.ErrRecordNotFound
+
+	// ErrDuplicatedKey is the gorm sentinel for a write colliding with a
+	// primary or unique key, translated from the dialect's own error.
+	ErrDuplicatedKey = gorm.ErrDuplicatedKey
+
+	// ErrNilSQLBuilder is returned when WithBuildSQL runs without a statement
+	// collector to append to.
+	ErrNilSQLBuilder = errors.New("sql statement collector cannot be nil")
+
+	// ErrNilTransaction is returned when Transaction or TransactionOn is
+	// handed a nil closure.
+	ErrNilTransaction = errors.New("transaction function cannot be nil")
+
+	// ErrUnusableFilter reports a filter the renderer cannot apply. Client
+	// query paths fail closed to an empty result and only log it; server-built
+	// readers such as the aggregate builder surface it instead, because there
+	// an unusable predicate would disguise a bug as "no data".
+	ErrUnusableFilter = errors.New("filter cannot be applied")
 
 	// ErrTransactionInstance is returned when the instance handed to DatabaseOn
 	// or TransactionOn is itself an open transaction rather than the connection
 	// it was opened on.
 	ErrTransactionInstance = errors.New("database instance is an open transaction: pass the instance it was opened on")
+
+	// ErrUnsupportedOnDialect is returned when an operation is invoked on a
+	// dialect that does not carry it, per the capability-miss rule: the entry
+	// fails instead of silently degrading. Today that is the write path, the
+	// transaction boundary, and row locks on a ClickHouse instance; see
+	// ensureWritableDialect.
+	ErrUnsupportedOnDialect = errors.New("operation is not supported on this dialect")
 
 	// ErrLockOutsideTransaction is returned when WithLock is used on a chain
 	// that is not inside a transaction, where the lock it asks for would be

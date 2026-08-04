@@ -45,8 +45,18 @@ func Init() (err error) {
 
 // New creates and returns a new Clickhouse database connection with the given configuration.
 // The returned handle already carries the GORM OpenTelemetry tracing plugin,
-// so application-held instances passed to DatabaseOn, AggregateOn, and
-// TransactionOn are traced like the default database.
+// so application-held instances passed to DatabaseOn and AggregateOn are
+// traced like the default database.
+//
+// ClickHouse is an analytical instance, and the handle carries the read side
+// of the framework: List/Get/Count/First/Last/Take, the filter operators
+// (correlated EXISTS subqueries and JSON containment excepted — those fail
+// closed), cursor pagination, and the whole aggregate path including time
+// buckets. The write path (Create, Update, Delete, Upsert, UpdateByID,
+// Cleanup), the transaction boundary, and row locks are not carried: those
+// entries fail with database.ErrUnsupportedOnDialect, and feeding the
+// instance belongs to the application's ingestion side (batch INSERTs), as
+// does its schema (engine, ORDER BY), which AutoMigrate does not manage.
 func New(cfg config.Clickhouse) (*gorm.DB, error) {
 	db, err := gorm.Open(clickhouse.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true})
 	if err != nil {
@@ -66,12 +76,18 @@ func New(cfg config.Clickhouse) (*gorm.DB, error) {
 	return db, nil
 }
 
+// buildDSN assembles the clickhouse-go DSN, e.g.
+// "clickhouse://default:secret@localhost:9000/default?debug=false&compress=false&read_timeout=30s&dial_timeout=5s".
+// The query parameters join with "&": an earlier spelling joined them with
+// "?", which URL parsing reads as one malformed first parameter and silently
+// drops every option after the first. Only options clickhouse-go v2 defines
+// may appear — it forwards unknown ones to the server as settings, and the
+// server rejects the connection over them.
 func buildDSN(cfg config.Clickhouse) string {
-	// return "clickhouse://default:clickhouse@localhost:9010/default?debug=true?compress=false?read_timeout=5s?write_timeout=5s?dial_timeout=5s"
 	return fmt.Sprintf(
-		"clickhouse://%s:%s@%s:%d/%s?debug=%t?compress=%t?read_timeout=%s?write_timeout=%s?dial_timeout=%s",
+		"clickhouse://%s:%s@%s:%d/%s?debug=%t&compress=%t&read_timeout=%s&dial_timeout=%s",
 		cfg.Username, cfg.Password,
 		cfg.Host, cfg.Port, cfg.Database,
-		cfg.Debug, cfg.Compress, cfg.ReadTimeout, cfg.WriteTimeout, cfg.DialTimeout,
+		cfg.Debug, cfg.Compress, cfg.ReadTimeout, cfg.DialTimeout,
 	)
 }

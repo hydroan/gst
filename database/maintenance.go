@@ -38,6 +38,9 @@ func (db *database[M]) Cleanup() (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
+	if err = db.ensureWritableDialect("Cleanup"); err != nil {
+		return err
+	}
 	done, _, _ := db.trace("Cleanup")
 	defer func() { done(err) }()
 

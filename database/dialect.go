@@ -3,7 +3,9 @@ package database
 import (
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/types"
+	"gorm.io/gorm"
 )
 
 // This file is the single place the framework behaves differently per database
@@ -31,14 +33,38 @@ const (
 	dialectClickHouse dialect = "clickhouse"
 )
 
-// dialect reports which database the chain talks to. An unknown or unset
+// dialectOf reports the dialect of a connection handle. An unknown or unset
 // driver reads as MySQL, which is the framework's primary dialect and the one
 // whose spelling the fallbacks below use.
-func (db *database[M]) dialect() dialect {
-	if db == nil || db.ins == nil || db.ins.Dialector == nil {
+func dialectOf(ins *gorm.DB) dialect {
+	if ins == nil || ins.Dialector == nil {
 		return dialectMySQL
 	}
-	return dialect(strings.ToLower(db.ins.Dialector.Name()))
+	return dialect(strings.ToLower(ins.Dialector.Name()))
+}
+
+// dialect reports which database the chain talks to.
+func (db *database[M]) dialect() dialect {
+	if db == nil {
+		return dialectMySQL
+	}
+	return dialectOf(db.ins)
+}
+
+// ensureWritableDialect answers whether the chain's dialect carries the
+// framework write path, failing per the capability-miss rule when it does
+// not. ClickHouse does not: it is an analytical store whose UPDATE and DELETE
+// are asynchronous mutations (RowsAffected means nothing, soft deletes become
+// background rewrites), whose tables carry no unique constraints for
+// ErrDuplicatedKey or Upsert semantics to build on, and which has no
+// transaction for the boundary every write here promises. Feeding an
+// analytical instance is the application ingestion side's job; the read and
+// aggregate paths are what this chain offers on it.
+func (db *database[M]) ensureWritableDialect(op string) error {
+	if db.dialect() == dialectClickHouse {
+		return errors.Wrapf(ErrUnsupportedOnDialect, "%s on clickhouse", op)
+	}
+	return nil
 }
 
 // regexpOperator returns the operator that matches a value against a regular
@@ -81,21 +107,35 @@ func (db *database[M]) textPatternColumn(quotedColumn string, isJSON bool) strin
 	return quotedColumn
 }
 
-// likeEscapeClause declares the LIKE escape character used by filters.
+// likeEscapeSuffix declares the LIKE escape character used by filters.
 // The pipe is chosen over the conventional backslash because backslash inside
 // a SQL string literal is itself an escape character in MySQL but a plain
 // character in SQLite/PostgreSQL, so no single spelling of ESCAPE '\' parses
-// the same way across the supported dialects. The pipe needs no such
-// disambiguation, which is what makes one spelling work everywhere.
-const likeEscapeClause = " ESCAPE '|'"
+// the same way across those dialects. The pipe needs no such disambiguation.
+// ClickHouse parses no ESCAPE clause at all — its LIKE reads backslash as the
+// escape character natively — so the suffix is empty there and the pattern
+// escaper below switches to backslash to match.
+func (db *database[M]) likeEscapeSuffix() string {
+	if db.dialect() == dialectClickHouse {
+		return ""
+	}
+	return " ESCAPE '|'"
+}
 
-// likePatternEscaper rewrites a filter value into a literal LIKE pattern
-// fragment: client values are literals, not pattern language, so the wildcards
-// and the escape character itself are escaped.
-var likePatternEscaper = strings.NewReplacer("|", "||", "%", `|%`, "_", `|_`)
+// The pattern escapers rewrite a filter value into a literal LIKE pattern
+// fragment: client values are literals, not pattern language, so the
+// wildcards and the escape character itself are escaped — with the pipe under
+// an ESCAPE '|' clause, with backslash where the dialect hardwires it.
+var (
+	pipeLikeEscaper      = strings.NewReplacer("|", "||", "%", `|%`, "_", `|_`)
+	backslashLikeEscaper = strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`)
+)
 
-func escapeLikePattern(value string) string {
-	return likePatternEscaper.Replace(value)
+func (db *database[M]) escapeLikePattern(value string) string {
+	if db.dialect() == dialectClickHouse {
+		return backslashLikeEscaper.Replace(value)
+	}
+	return pipeLikeEscaper.Replace(value)
 }
 
 // timeBucketExpr renders a truncated time group key over an already quoted

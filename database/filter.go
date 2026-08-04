@@ -196,13 +196,13 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 	case types.FilterOpNotIn:
 		return db.listFilter(f, column+" NOT IN ?")
 	case types.FilterOpLike:
-		return db.patternFilter(f, column+" LIKE ?"+likeEscapeClause, "%", "%")
+		return db.patternFilter(f, column+" LIKE ?"+db.likeEscapeSuffix(), "%", "%")
 	case types.FilterOpNotLike:
-		return db.patternFilter(f, column+" NOT LIKE ?"+likeEscapeClause, "%", "%")
+		return db.patternFilter(f, column+" NOT LIKE ?"+db.likeEscapeSuffix(), "%", "%")
 	case types.FilterOpStartsWith:
-		return db.patternFilter(f, column+" LIKE ?"+likeEscapeClause, "", "%")
+		return db.patternFilter(f, column+" LIKE ?"+db.likeEscapeSuffix(), "", "%")
 	case types.FilterOpEndsWith:
-		return db.patternFilter(f, column+" LIKE ?"+likeEscapeClause, "%", "")
+		return db.patternFilter(f, column+" LIKE ?"+db.likeEscapeSuffix(), "%", "")
 	case types.FilterOpIsNull:
 		b, ok := f.Value.(bool)
 		if !ok {
@@ -217,9 +217,17 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 	case types.FilterOpNotRegex:
 		return db.stringFilter(f, "NOT ("+column+" "+db.regexpOperator()+" ?)")
 	case types.FilterOpJSONContains:
-		// datatypes handles the dialect split: JSON_CONTAINS on MySQL and
-		// a json_each EXISTS subquery on SQLite. The column is passed
-		// unquoted because the expression quotes it itself.
+		// datatypes handles the dialect split: JSON_CONTAINS on MySQL, a
+		// json_each EXISTS subquery on SQLite, a jsonb operator on Postgres.
+		// It covers only those three — on any other dialect its expression
+		// renders empty, which would silently WIDEN the result, so the filter
+		// fails closed there instead. The column is passed unquoted because
+		// the expression quotes it itself.
+		switch db.dialect() {
+		case dialectMySQL, dialectSQLite, dialectPostgres:
+		default:
+			return db.failClosedFilter(f, "is not supported on this dialect")
+		}
 		s, ok := f.Value.(string)
 		if !ok {
 			return db.failClosedFilter(f, "expects a string value")
@@ -304,7 +312,7 @@ func (db *database[M]) patternFilter(f types.Filter, sql, prefix, suffix string)
 	if !ok {
 		return db.failClosedFilter(f, "expects a string value")
 	}
-	return clause.Expr{SQL: sql, Vars: []any{prefix + escapeLikePattern(s) + suffix}}, nil
+	return clause.Expr{SQL: sql, Vars: []any{prefix + db.escapeLikePattern(s) + suffix}}, nil
 }
 
 // stringFilter binds a filter whose value must be a plain string bound as-is
@@ -345,6 +353,12 @@ func (db *database[M]) scopedColumn(column string, scope filterScope) string {
 //
 // The caller must hold db.mu.
 func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope filterScope) (clause.Expression, error) {
+	// ClickHouse cannot resolve a correlated column from the enclosing query
+	// (only constants and CTEs cross that scope boundary), so the semi join
+	// fails closed there rather than failing the whole statement.
+	if db.dialect() == dialectClickHouse {
+		return db.failClosedFilter(f, "is not supported on this dialect")
+	}
 	if sq.Model == nil {
 		return db.failClosedFilter(f, "has no related model")
 	}

@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
@@ -470,6 +471,14 @@ func (db *database[M]) WithSelect(columns ...string) types.Database[M] {
 func (db *database[M]) WithLock(mode ...consts.LockMode) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
+
+	// ClickHouse has no row locks at all — unlike SQLite, where the single
+	// writer makes the lock's guarantee hold on its own, here nothing stands
+	// in for it — so the chain fails per the capability-miss rule.
+	if db.dialect() == dialectClickHouse {
+		db.err = errors.Wrap(ErrUnsupportedOnDialect, "WithLock on clickhouse")
+		return db
+	}
 
 	// A row lock outside a transaction is released the moment the statement
 	// finishes, so the query returns rows that nothing is holding: the caller

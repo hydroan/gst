@@ -65,6 +65,9 @@ func (db *database[M]) Create(_objs ...M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
+	if err = db.ensureWritableDialect("Create"); err != nil {
+		return err
+	}
 	done, _, span := db.trace("Create", len(objs))
 	defer func() { done(err) }()
 
@@ -181,6 +184,9 @@ func (db *database[M]) Delete(_objs ...M) (err error) {
 	}
 
 	if err = db.prepare(); err != nil {
+		return err
+	}
+	if err = db.ensureWritableDialect("Delete"); err != nil {
 		return err
 	}
 	done, _, span := db.trace("Delete", len(objs))
@@ -335,6 +341,9 @@ func (db *database[M]) Update(_objs ...M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
+	if err = db.ensureWritableDialect("Update"); err != nil {
+		return err
+	}
 	done, _, span := db.trace("Update", len(objs))
 	defer func() { done(err) }()
 
@@ -477,6 +486,9 @@ func (db *database[M]) Upsert(_objs ...M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
+	if err = db.ensureWritableDialect("Upsert"); err != nil {
+		return err
+	}
 	done, _, _ := db.trace("Upsert", len(objs))
 	defer func() { done(err) }()
 
@@ -564,6 +576,9 @@ func (db *database[M]) UpdateByID(id string, column string, value any) (err erro
 	}
 
 	if err = db.prepare(); err != nil {
+		return err
+	}
+	if err = db.ensureWritableDialect("UpdateByID"); err != nil {
 		return err
 	}
 	// Normalize the id through the model's own ID semantics before it can
