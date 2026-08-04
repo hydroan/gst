@@ -27,10 +27,11 @@ import (
 // Query Behavior:
 //
 //	Exact Match (Default):
-//	- Single value: Uses IN clause with one value (WHERE name IN ('John'))
-//	- Multiple values (comma-separated): Uses IN clause with multiple values (WHERE name IN ('John', 'Jack'))
-//	- Multiple fields: Uses AND logic to combine conditions (WHERE name IN ('John') AND age IN (18))
-//	- Empty strings in comma-separated values are automatically skipped
+//	- Every non-zero field is one equality condition (WHERE name = 'John')
+//	- Multiple fields combine with AND logic (WHERE name = 'John' AND age = 18)
+//	- The value is a literal: a comma is data, never a list separator. A
+//	  query for several values uses the in operator filter instead
+//	  (types.FilterIn, URL form "field[in]=a,b"), where the list is explicit.
 //
 //	JSON columns (fields whose type declares a JSON gorm data type, such as
 //	the gorm.io/datatypes types): a JSON document is not a scalar, so an
@@ -55,21 +56,19 @@ import (
 //
 // Examples:
 //
-//	// Exact match - single field, single value
-//	WithQuery(&model.User{Name: "John"})  // WHERE name IN ('John')
-//
-//	// Exact match - single field, multiple values (comma-separated)
-//	WithQuery(&model.User{Name: "John,Jack"})  // WHERE name IN ('John', 'Jack')
-//	WithQuery(&model.User{ID: "id1,id2,id3"})  // WHERE id IN ('id1', 'id2', 'id3')
+//	// Exact match - single field
+//	WithQuery(&model.User{Name: "John"})  // WHERE name = 'John'
 //
 //	// Exact match - multiple fields (AND logic)
-//	WithQuery(&model.User{Name: "John", Age: 18})  // WHERE name IN ('John') AND age IN (18)
-//	WithQuery(&model.User{Name: "John", Age: 18, Email: "john@example.com"})  // WHERE name IN ('John') AND age IN (18) AND email IN ('john@example.com')
+//	WithQuery(&model.User{Name: "John", Age: 18})  // WHERE name = 'John' AND age = 18
+//
+//	// Several values for one field - the list is explicit, never comma-parsed
+//	WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.FilterIn("id", ids)}})
 //
 //		// Raw SQL query (can be combined with model fields)
 //	WithQuery(&model.User{}, types.QueryOptions{RawQuery: "age > ? AND status = ?", RawQueryArgs: []any{18, "active"}})
 //	WithQuery(nil, types.QueryOptions{RawQuery: "created_at BETWEEN ? AND ?", RawQueryArgs: []any{startDate, endDate}})
-//	WithQuery(&model.User{Name: "John"}, types.QueryOptions{RawQuery: "age > ?", RawQueryArgs: []any{18}})  // WHERE age > ? AND name IN ('John')
+//	WithQuery(&model.User{Name: "John"}, types.QueryOptions{RawQuery: "age > ?", RawQueryArgs: []any{18}})  // WHERE age > ? AND name = 'John'
 //
 //	// Empty query (blocked by default for safety)
 //	WithQuery(nil)  // WHERE 1 = 0 (returns no records)
@@ -81,7 +80,7 @@ import (
 //	WithQuery(&model.User{}, types.QueryOptions{AllowEmpty: true})  // Returns all records
 //
 //	// Query with some empty and some non-empty fields (works normally)
-//	WithQuery(&model.User{Name: "John", Email: ""})  // WHERE name IN ('John') (Email is ignored)
+//	WithQuery(&model.User{Name: "John", Email: ""})  // WHERE name = 'John' (Email is ignored)
 //
 // NOTE: The underlying type must be pointer to struct, otherwise panic will occur.
 // NOTE: Empty query conditions (nil or zero value) are blocked by default for safety to prevent
@@ -190,13 +189,13 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 		return db
 	}
 
-	// If the query string has multiple value(separated by ','),
-	// construct the 'WHERE' 'IN' SQL statement.
-	// eg: SELECT id FROM users WHERE name IN ('user01', 'user02', 'user03', 'user04')
+	// Every non-zero field is one equality condition. The value binds as a
+	// literal: a comma is data, never a list separator, so a value that
+	// happens to contain one stays queryable. An explicit list of values is
+	// the in operator filter's job.
 	hasValidCondition := false
 	for k, v := range q {
-		items := strings.Split(v, ",")
-		if len(strings.Join(items, "")) == 0 {
+		if len(v) == 0 {
 			continue
 		}
 		hasValidCondition = true
@@ -209,7 +208,7 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 			db.ins = db.ins.Where("1 = 0")
 			continue
 		}
-		db.ins = db.ins.Where(db.quoteIdent(k)+" IN ?", items)
+		db.ins = db.ins.Where(db.quoteIdent(k)+" = ?", v)
 	}
 	// CRITICAL: Check if all query values are empty after filtering
 	// Even if query map is not empty, all values might be empty strings

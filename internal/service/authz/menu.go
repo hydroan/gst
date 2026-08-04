@@ -2,12 +2,10 @@ package serviceauthz
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
@@ -109,7 +107,7 @@ func visibleMenuIDs(ctx *types.ServiceContext, log types.Logger) ([]string, bool
 			return nil, true, nil
 		}
 		if err := database.Database[*modelauthz.Role](ctx).
-			WithQuery(&modelauthz.Role{Base: model.Base{ID: strings.Join(roleIDs, ",")}}).
+			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.FilterIn(modelauthz.KeyID, roleIDs)}}).
 			List(&roles); err != nil {
 			return nil, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load roles", err)
 		}

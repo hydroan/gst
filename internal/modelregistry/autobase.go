@@ -25,8 +25,6 @@ var _ types.Model = (*AutoBase)(nil)
 // Caveats:
 //   - Seed records passed to model.Register must set an explicit ID or rely
 //     on a unique index; idempotent seeding depends on conflicting keys.
-//   - The comma-separated multi-ID query trick supported by Base's string ID
-//     does not apply to the integer ID.
 //   - Updating a record whose ID is unset fails with database.ErrIDRequired;
 //     use database.Upsert for insert-or-update semantics.
 type AutoBase struct {

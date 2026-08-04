@@ -2,7 +2,6 @@ package database_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -159,282 +158,28 @@ func TestDatabaseWithQuery(t *testing.T) {
 		require.Empty(t, users, "non-existent age should return 0 records")
 	})
 
-	t.Run("MultipleValues", func(t *testing.T) {
-		t.Run("multiple_id", func(t *testing.T) {
-			defer cleanupTestData()
-			setupTestData(t)
-			users := make([]*TestUser, 0)
+	t.Run("CommaIsData", func(t *testing.T) {
+		defer cleanupTestData()
+		setupTestData(t)
 
-			// Test multiple IDs with comma-separated values: ID="u1,u2"
-			// Should return 2 records (u1 and u2) using IN clause
-			query := new(TestUser)
-			ids := []string{u1.ID, u2.ID}
-			query.ID = strings.Join(ids, ",")
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(query).List(&users))
-			require.Len(t, users, 2)
+		// A comma inside a field value is data, never a list separator: the
+		// value binds as one literal, so a record whose value contains a comma
+		// stays queryable and two names never ride in on one string. An
+		// explicit list of values goes through the in operator filter.
+		commaUser := &TestUser{Name: "user1,user2", Email: "comma@example.com", Age: 40, Base: model.Base{ID: "u-comma"}}
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(commaUser))
 
-			var u11, u22 *TestUser
-			for _, u := range users {
-				switch u.ID {
-				case u1.ID:
-					u11 = u
-				case u2.ID:
-					u22 = u
-				}
-			}
-			require.NotNil(t, u11, "should find u1")
-			require.NotNil(t, u22, "should find u2")
-			require.NotEmpty(t, u11.ID)
-			require.NotEmpty(t, u22.ID)
-			require.NotEmpty(t, u11.CreatedAt)
-			require.NotEmpty(t, u22.CreatedAt)
-			require.NotEmpty(t, u11.UpdatedAt)
-			require.NotEmpty(t, u22.UpdatedAt)
-			require.Equal(t, u1.Name, u11.Name)
-			require.Equal(t, u2.Name, u22.Name)
-			require.Equal(t, u1.Age, u11.Age)
-			require.Equal(t, u2.Age, u22.Age)
-			require.Equal(t, u1.Email, u11.Email)
-			require.Equal(t, u2.Email, u22.Email)
-			require.Equal(t, u1.IsActive, u11.IsActive)
-			require.Equal(t, u2.IsActive, u22.IsActive)
+		users := make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(&TestUser{Name: "user1,user2"}).
+			List(&users))
+		require.Len(t, users, 1, "the comma value must match literally, not expand into a list")
+		require.Equal(t, commaUser.ID, users[0].ID)
 
-			// Test multiple IDs with three values: ID="u1,u2,u3"
-			// Should return all 3 records
-			users = make([]*TestUser, 0)
-			query = new(TestUser)
-			ids = []string{u1.ID, u2.ID, u3.ID}
-			query.ID = strings.Join(ids, ",")
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(query).List(&users))
-			require.Len(t, users, 3)
-			var foundU1, foundU2, foundU3 bool
-			for _, u := range users {
-				switch u.ID {
-				case u1.ID:
-					foundU1 = true
-					require.Equal(t, u1.Name, u.Name)
-					require.Equal(t, u1.Age, u.Age)
-					require.Equal(t, u1.Email, u.Email)
-				case u2.ID:
-					foundU2 = true
-					require.Equal(t, u2.Name, u.Name)
-					require.Equal(t, u2.Age, u.Age)
-					require.Equal(t, u2.Email, u.Email)
-				case u3.ID:
-					foundU3 = true
-					require.Equal(t, u3.Name, u.Name)
-					require.Equal(t, u3.Age, u.Age)
-					require.Equal(t, u3.Email, u.Email)
-				}
-			}
-			require.True(t, foundU1, "should find u1")
-			require.True(t, foundU2, "should find u2")
-			require.True(t, foundU3, "should find u3")
-
-			// Test multiple IDs with non-existent ID: ID="u1,nonexistent"
-			// Should return only u1 (non-existent ID is ignored)
-			users = make([]*TestUser, 0)
-			query = new(TestUser)
-			ids = []string{u1.ID, "nonexistent-id"}
-			query.ID = strings.Join(ids, ",")
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(query).List(&users))
-			require.Len(t, users, 1)
-			require.Equal(t, u1.ID, users[0].ID)
-			require.Equal(t, u1.Name, users[0].Name)
-
-			// Test multiple IDs with single value: ID="u1"
-			// Should return 1 record (single value should work)
-			users = make([]*TestUser, 0)
-			query = new(TestUser)
-			query.ID = u1.ID
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(query).List(&users))
-			require.Len(t, users, 1)
-			require.Equal(t, u1.ID, users[0].ID)
-			require.Equal(t, u1.Name, users[0].Name)
-		})
-
-		t.Run("multiple_name", func(t *testing.T) {
-			defer cleanupTestData()
-			setupTestData(t)
-			users := make([]*TestUser, 0)
-
-			// Test multiple names with comma-separated values: Name="user2,user3"
-			// Should return 2 records (u2 and u3) using IN clause
-			query := new(TestUser)
-			names := []string{u2.Name, u3.Name}
-			query.Name = strings.Join(names, ",")
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(query).List(&users))
-			require.Len(t, users, 2)
-
-			var u22, u33 *TestUser
-			for _, u := range users {
-				switch u.ID {
-				case u2.ID:
-					u22 = u
-				case u3.ID:
-					u33 = u
-				}
-			}
-			require.NotNil(t, u22, "should find u2")
-			require.NotNil(t, u33, "should find u3")
-			require.NotEmpty(t, u22.ID)
-			require.NotEmpty(t, u33.ID)
-			require.NotEmpty(t, u22.CreatedAt)
-			require.NotEmpty(t, u33.CreatedAt)
-			require.NotEmpty(t, u22.UpdatedAt)
-			require.NotEmpty(t, u33.UpdatedAt)
-			require.Equal(t, u2.Name, u22.Name)
-			require.Equal(t, u3.Name, u33.Name)
-			require.Equal(t, u2.Age, u22.Age)
-			require.Equal(t, u3.Age, u33.Age)
-			require.Equal(t, u2.Email, u22.Email)
-			require.Equal(t, u3.Email, u33.Email)
-			require.Equal(t, u2.IsActive, u22.IsActive)
-			require.Equal(t, u3.IsActive, u33.IsActive)
-
-			// Test multiple names with three values: Name="user1,user2,user3"
-			// Should return all 3 records
-			users = make([]*TestUser, 0)
-			query = new(TestUser)
-			names = []string{u1.Name, u2.Name, u3.Name}
-			query.Name = strings.Join(names, ",")
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(query).List(&users))
-			require.Len(t, users, 3)
-			var foundU1, foundU2, foundU3 bool
-			for _, u := range users {
-				switch u.ID {
-				case u1.ID:
-					foundU1 = true
-					require.Equal(t, u1.Name, u.Name)
-					require.Equal(t, u1.Age, u.Age)
-				case u2.ID:
-					foundU2 = true
-					require.Equal(t, u2.Name, u.Name)
-					require.Equal(t, u2.Age, u.Age)
-				case u3.ID:
-					foundU3 = true
-					require.Equal(t, u3.Name, u.Name)
-					require.Equal(t, u3.Age, u.Age)
-				}
-			}
-			require.True(t, foundU1, "should find u1")
-			require.True(t, foundU2, "should find u2")
-			require.True(t, foundU3, "should find u3")
-
-			// Test multiple names with non-existent name: Name="user1,nonexistent"
-			// Should return only u1 (non-existent name is ignored)
-			users = make([]*TestUser, 0)
-			query = new(TestUser)
-			names = []string{u1.Name, "nonexistent"}
-			query.Name = strings.Join(names, ",")
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(query).List(&users))
-			require.Len(t, users, 1)
-			require.Equal(t, u1.ID, users[0].ID)
-			require.Equal(t, u1.Name, users[0].Name)
-
-			// Test multiple names with single value: Name="user1"
-			// Should return 1 record (single value should work)
-			users = make([]*TestUser, 0)
-			query = new(TestUser)
-			query.Name = u1.Name
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(query).List(&users))
-			require.Len(t, users, 1)
-			require.Equal(t, u1.ID, users[0].ID)
-			require.Equal(t, u1.Name, users[0].Name)
-		})
-
-		t.Run("multiple_email", func(t *testing.T) {
-			defer cleanupTestData()
-			setupTestData(t)
-			users := make([]*TestUser, 0)
-
-			// Test multiple emails with comma-separated values: Email="user1@example.com,user2@example.com"
-			// Should return 2 records (u1 and u2) using IN clause
-			query := new(TestUser)
-			emails := []string{u1.Email, u2.Email}
-			query.Email = strings.Join(emails, ",")
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(query).List(&users))
-			require.Len(t, users, 2)
-
-			var u11, u22 *TestUser
-			for _, u := range users {
-				switch u.ID {
-				case u1.ID:
-					u11 = u
-				case u2.ID:
-					u22 = u
-				}
-			}
-			require.NotNil(t, u11, "should find u1")
-			require.NotNil(t, u22, "should find u2")
-			require.NotEmpty(t, u11.ID)
-			require.NotEmpty(t, u22.ID)
-			require.NotEmpty(t, u11.CreatedAt)
-			require.NotEmpty(t, u22.CreatedAt)
-			require.NotEmpty(t, u11.UpdatedAt)
-			require.NotEmpty(t, u22.UpdatedAt)
-			require.Equal(t, u1.Name, u11.Name)
-			require.Equal(t, u2.Name, u22.Name)
-			require.Equal(t, u1.Age, u11.Age)
-			require.Equal(t, u2.Age, u22.Age)
-			require.Equal(t, u1.Email, u11.Email)
-			require.Equal(t, u2.Email, u22.Email)
-			require.Equal(t, u1.IsActive, u11.IsActive)
-			require.Equal(t, u2.IsActive, u22.IsActive)
-
-			// Test multiple emails with three values
-			users = make([]*TestUser, 0)
-			query = new(TestUser)
-			emails = []string{u1.Email, u2.Email, u3.Email}
-			query.Email = strings.Join(emails, ",")
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(query).List(&users))
-			require.Len(t, users, 3)
-			var foundU1, foundU2, foundU3 bool
-			for _, u := range users {
-				switch u.ID {
-				case u1.ID:
-					foundU1 = true
-				case u2.ID:
-					foundU2 = true
-				case u3.ID:
-					foundU3 = true
-				}
-			}
-			require.True(t, foundU1, "should find u1")
-			require.True(t, foundU2, "should find u2")
-			require.True(t, foundU3, "should find u3")
-		})
-
-		t.Run("multiple_fields", func(t *testing.T) {
-			defer cleanupTestData()
-			setupTestData(t)
-			users := make([]*TestUser, 0)
-
-			// Test multiple fields with comma-separated values: Name="user1,user2" AND Email="user1@example.com,user2@example.com"
-			// Should return 2 records (u1 and u2) - both fields use IN clause with AND logic
-			query := new(TestUser)
-			names := []string{u1.Name, u2.Name}
-			emails := []string{u1.Email, u2.Email}
-			query.Name = strings.Join(names, ",")
-			query.Email = strings.Join(emails, ",")
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(query).List(&users))
-			require.Len(t, users, 2)
-			var foundU1, foundU2 bool
-			for _, u := range users {
-				switch u.ID {
-				case u1.ID:
-					foundU1 = true
-					require.Equal(t, u1.Name, u.Name)
-					require.Equal(t, u1.Email, u.Email)
-				case u2.ID:
-					foundU2 = true
-					require.Equal(t, u2.Name, u.Name)
-					require.Equal(t, u2.Email, u.Email)
-				}
-			}
-			require.True(t, foundU1, "should find u1")
-			require.True(t, foundU2, "should find u2")
-		})
+		require.NoError(t, database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.FilterIn("id", []string{u1.ID, u2.ID})}}).
+			List(&users))
+		require.Len(t, users, 2, "an explicit list of values is the in filter's job")
 	})
 
 	t.Run("AllowEmpty", func(t *testing.T) {
