@@ -305,6 +305,7 @@ func (r *rbac) applyMutations(sequence uint64, mutations []policyMutation, store
 			return false, err
 		}
 	}
+	rebuildPolicyIndex(model)
 	return true, nil
 }
 

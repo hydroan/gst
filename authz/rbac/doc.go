@@ -9,11 +9,12 @@
 // tenants configured at all.
 //
 // Reads answer from memory: the two role branches from the role graph, and
-// everything a policy decides from the enforcer. Writes do not: they go through
-// mutate, which drives storage and memory as two halves so that a policy change
-// rolls back with the transaction that caused it. Nothing in the package writes
-// through the enforcer's own AddPolicy family, and autosave stays off so Casbin
-// cannot write behind mutate's back.
+// everything a policy decides from the decision index, which is rebuilt from
+// the in-memory policy set whenever that set changes. Writes do not: they go
+// through mutate, which drives storage and memory as two halves so that a
+// policy change rolls back with the transaction that caused it. Nothing in the
+// package writes through the enforcer's own AddPolicy family, and autosave
+// stays off so Casbin cannot write behind mutate's back.
 //
 // # One process decides from its own memory
 //

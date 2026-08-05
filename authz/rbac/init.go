@@ -99,12 +99,18 @@ func Init() error {
 	return nil
 }
 
-// installEnforcer publishes the enforcer and the adapter its writes go through
-// as one step, so that no reader observes one without the other. See RBAC.
+// installEnforcer publishes the enforcer, the adapter its writes go through
+// and the index its decisions answer from as one step, so that no reader
+// observes one without the others. See RBAC.
 func installEnforcer(policyEnforcer *casbin.ContextEnforcer, store *adapter) {
 	enforcerMu.Lock()
 	defer enforcerMu.Unlock()
 
 	enforcer = policyEnforcer
 	policyStore = store
+	if policyEnforcer == nil {
+		policyIndex = nil
+		return
+	}
+	rebuildPolicyIndex(policyEnforcer.GetModel())
 }

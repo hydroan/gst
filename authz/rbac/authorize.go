@@ -9,10 +9,12 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
-// policyRoleColumn is the position of the role token in a p policy row. The
-// policy definition is (tenant, role, obj, act, eft), so a row Casbin reports as
-// the matched one carries its role here.
-const policyRoleColumn = 1
+// maxRoleHierarchy is how many links a subject may reach a role through,
+// mirroring the ten-level cap Casbin builds its role managers with. The
+// closure has to stop where the matcher's g() would have stopped, or a chain
+// deeper than the engine resolved would grant through the index what it
+// refused.
+const maxRoleHierarchy = 10
 
 // Authorize evaluates the request and reports which rule allowed it.
 //
@@ -80,25 +82,29 @@ func (r *rbac) denyReason(tenant string, subject string) consts.DenyReason {
 
 // authorize decides the request and names the rule that allowed it.
 //
-// The two role branches are answered here rather than in the matcher because
-// neither consults a policy. The matcher is evaluated once per stored policy
-// row, so a branch that ignores p is a constant the engine recomputes for every
-// row, and a deployment pays for it on every request. Answering them here also
-// leaves one copy of the precedence: it used to live in the matcher and again
-// in the derivation below it, with nothing keeping the two in step.
-//
-// The order is load-bearing. A subject can satisfy several branches at once,
-// and naming a weaker one would suggest that revoking it takes the access away:
-// a system_root subject that also holds a role granting the same route must be
+// Every branch is answered here, in one place, from strongest grant to
+// narrowest: system root, the tenant's built-in administrator, the implicit
+// authenticated role, and finally the subject's own roles. The order is
+// load-bearing twice over. A subject can satisfy several branches at once, and
+// naming a weaker one would suggest that revoking it takes the access away: a
+// system_root subject that also holds a role granting the same route must be
 // reported as system_root, or an operator who then strips the role will find
-// the route still reachable and no explanation for it.
+// the route still reachable and no explanation for it. The same reasoning
+// places authenticated ahead of the roles — its grant reaches every subject
+// that can log in, so no role revocation can take away what it allows.
 //
 // Only the policy branches yield a matched rule. The two above them never
 // consult a policy, so there is no row that is the reason for access.
 //
+// The policy branches answer from the decision index rather than the engine.
+// The matcher in modelData remains their specification — the differential
+// tests hold the two together — but evaluating it cost every request a scan of
+// every rule in the deployment, while the index bounds a decision by the
+// subject's own grant surface.
+//
 // The read lock belongs to the caller and has to cover the whole of this: the
-// branches and the enforcement have to see one policy set, and taking the lock
-// here would deadlock the exported methods that already hold it.
+// branches and the index have to see one policy set, and taking the lock here
+// would deadlock the exported methods that already hold it.
 func (r *rbac) authorize(
 	tenant string, subject string, object string, action string,
 ) (bool, consts.GrantSource, []string, error) {
@@ -118,14 +124,87 @@ func (r *rbac) authorize(
 		return true, consts.GrantSourceTenantAdmin, nil, nil
 	}
 
-	allowed, matchedRule, err := r.enforcer.EnforceEx(tenant, subject, object, action)
-	if err != nil || !allowed {
-		return allowed, "", nil, err
+	index := policyIndex
+	if index == nil {
+		return false, "", nil, nil
 	}
-	if len(matchedRule) > policyRoleColumn && matchedRule[policyRoleColumn] == consts.AUTHZ_ROLE_AUTHENTICATED {
-		return allowed, consts.GrantSourceAuthenticated, matchedRule, nil
+
+	// The authenticated branch requires a subject: authorization runs after
+	// authentication, and this check keeps that a property of the decision
+	// rather than a promise the caller has to keep.
+	if subject != "" {
+		allowed, matchedRule, matchErr := matchRules(index.authenticated, object, action)
+		if matchErr != nil {
+			return false, "", nil, matchErr
+		}
+		if allowed {
+			return true, consts.GrantSourceAuthenticated, matchedRule, nil
+		}
 	}
-	return allowed, consts.GrantSourceRole, matchedRule, nil
+
+	roles, err := r.subjectRoleClosure(subject, tenant)
+	if err != nil {
+		return false, "", nil, err
+	}
+	tenantRules := index.byTenantRole[tenant]
+	for _, role := range roles {
+		// The matcher refused a rule whose role names the subject itself, so
+		// that a subject named like a role is not handed it; skipping the
+		// role's whole rule set is the same refusal.
+		if role == subject {
+			continue
+		}
+		allowed, matchedRule, matchErr := matchRules(tenantRules[role], object, action)
+		if matchErr != nil {
+			return false, "", nil, matchErr
+		}
+		if allowed {
+			return true, consts.GrantSourceRole, matchedRule, nil
+		}
+	}
+	return false, "", nil, nil
+}
+
+// subjectRoleClosure resolves every role subject reaches inside tenant,
+// directly or through another role — what the matcher's g() answered once per
+// stored rule, asked once per decision instead.
+//
+// Each level is sorted before it is walked. The role manager reports a name's
+// roles in no stable order, and the closure's order decides which rule a
+// decision names when several roles grant the same route; sorting makes that
+// attribution the same answer on every replay.
+func (r *rbac) subjectRoleClosure(subject string, tenant string) ([]string, error) {
+	if subject == "" {
+		return nil, nil
+	}
+	manager := r.enforcer.GetNamedRoleManager(tenantRoleGrouping)
+	if manager == nil {
+		return nil, nil
+	}
+
+	seen := map[string]struct{}{subject: {}}
+	closure := make([]string, 0, 4)
+	frontier := []string{subject}
+	for level := 0; level < maxRoleHierarchy && len(frontier) > 0; level++ {
+		next := make([]string, 0, len(frontier))
+		for _, name := range frontier {
+			roles, err := manager.GetRoles(name, tenant)
+			if err != nil {
+				return nil, err
+			}
+			for _, role := range roles {
+				if _, ok := seen[role]; ok {
+					continue
+				}
+				seen[role] = struct{}{}
+				next = append(next, role)
+			}
+		}
+		slices.Sort(next)
+		closure = append(closure, next...)
+		frontier = next
+	}
+	return closure, nil
 }
 
 // hasRoleLink reports whether subject reaches role through the grouping ptype,

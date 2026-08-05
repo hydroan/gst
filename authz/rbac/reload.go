@@ -60,6 +60,7 @@ func (r *rbac) reload(ctx context.Context) error {
 	if err := r.enforcer.LoadPolicyCtx(ctx); err != nil {
 		return errors.Wrap(err, "failed to reload casbin policies")
 	}
+	rebuildPolicyIndex(r.enforcer.GetModel())
 	publishPolicyDivergence(false)
 	return nil
 }

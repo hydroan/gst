@@ -120,11 +120,23 @@ func newTestEnforcer(tb testing.TB, policyCount int) *casbin.ContextEnforcer {
 
 func newTestRBAC(tb testing.TB, policyCount int) *rbac {
 	tb.Helper()
-	return &rbac{
+	r := &rbac{
 		enforcer: newTestEnforcer(tb, policyCount),
 		adapter:  new(nullContextAdapter),
 		mu:       &enforcerMu,
 	}
+	reindex(r)
+	return r
+}
+
+// reindex rebuilds the decision index from r's model, standing in for the
+// rebuild every real policy write performs. A fixture that seeds the model
+// through the enforcer directly bypasses mutate, and a decision would
+// otherwise answer from whatever index the previous test left installed.
+func reindex(r *rbac) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	rebuildPolicyIndex(r.enforcer.GetModel())
 }
 
 // dbruntimeDB is the package's test database handle.
@@ -168,7 +180,9 @@ func storedRBAC(tb testing.TB, table string) (*rbac, *adapter) {
 	enforcer, err := newEnforcer(store)
 	require.NoError(tb, err)
 
-	return &rbac{enforcer: enforcer, adapter: store, mu: &enforcerMu}, store
+	r := &rbac{enforcer: enforcer, adapter: store, mu: &enforcerMu}
+	reindex(r)
+	return r, store
 }
 
 // memoryRules returns every rule the in-memory model holds, in the same shape

@@ -342,6 +342,7 @@ func TestAuthorizeReadsStoredObjectsAsTemplates(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	reindex(r)
 
 	decision, err := r.Authorize(ctx, "default", "u_member", "/api/authz/roles", "GET")
 	allowed := decision.Allowed
@@ -391,6 +392,7 @@ func newAuthorizeFixture(t *testing.T) *rbac {
 	); err != nil {
 		t.Fatal(err)
 	}
+	reindex(r)
 	return r
 }
 
