@@ -142,6 +142,41 @@ func TestDivergedProcessRetriesUntilStorageAnswers(t *testing.T) {
 		"the converged process has to decide from what storage holds")
 }
 
+// TestPeriodicReloadReconcilesWithStorage covers the schedule that bounds
+// every staleness a process cannot see for itself: a write another replica
+// made, a manual repair, a restore. None of those raises an error, publishes
+// divergence, or touches a removal's row counts on this process, so nothing
+// event-driven ever fires — only the schedule brings the process back in step.
+func TestPeriodicReloadReconcilesWithStorage(t *testing.T) {
+	prev := reloadInterval
+	reloadInterval = time.Millisecond
+	t.Cleanup(func() { reloadInterval = prev })
+
+	r, store := storedRBAC(t, "policy_periodic_reload")
+	// The loop resolves the enforcer through RBAC on every tick, so the pair
+	// under test has to be the installed one.
+	installEnforcer(r.enforcer, store)
+	t.Cleanup(func() { installEnforcer(nil, nil) })
+
+	stop := startPeriodicReload()
+	t.Cleanup(stop)
+
+	// A write this process never saw: storage only, no memory half, no
+	// divergence published.
+	_, err := r.applyToStore(context.Background(), []policyMutation{
+		addRules("p", "p", []string{"tenant_a", "role_a", "/api/things", "GET", "allow"}),
+	})
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		return len(r.enforcer.GetModel()["p"]["p"].Policy) == 1
+	}, 5*time.Second, time.Millisecond,
+		"the schedule has to pick up a write this process never made")
+	assert.Equal(t, storedRules(t, store), memoryRules(t, r))
+}
+
 // TestPolicyDivergenceIsPublished covers the state a process enters when the
 // reload that had to succeed did not. Nothing else can see it: the write is
 // already durable, the request that made it has returned, and comparing stored

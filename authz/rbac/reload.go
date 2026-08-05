@@ -2,6 +2,7 @@ package rbac
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -134,6 +135,62 @@ func (r *rbac) recoverPolicies(ctx context.Context, cause error) error {
 // from an in-memory policy set that no longer agrees with storage.
 var policiesDiverged atomic.Bool
 
+// reloadInterval is how often a process reconciles its in-memory policy set
+// with storage whether or not anything is known to be wrong. It bounds every
+// staleness this process cannot see for itself: a write another replica made, a
+// manual repair, a restore. One reconciliation is one bounded read of the
+// policy table under the enforcer write lock — milliseconds against a database
+// that is answering — so the interval costs latency of convergence, not load
+// worth weighing. It is a variable only so tests do not wait it out.
+var reloadInterval = time.Minute
+
+// periodicReloadRunning keeps the reconciliation to one goroutine however many
+// times initialization is reached.
+var periodicReloadRunning atomic.Bool
+
+// startPeriodicReload reconciles the in-memory policy set with storage every
+// reloadInterval, for as long as the process runs. Init starts it and lets it
+// run for the process's life; the returned stop exists for tests.
+//
+// The enforcer is resolved anew on every tick rather than captured once, so
+// the loop reconciles whatever enforcer is currently installed and quietly
+// does nothing in a process that has none.
+//
+// A failed attempt is logged and left for the next tick. Nothing more is known
+// at that point — a failed read says nothing about whether memory agrees with
+// storage — so nothing more is claimed: the divergence state stays with the
+// paths that know, and the known-diverged process keeps its own faster retry.
+func startPeriodicReload() (stop func()) {
+	if !periodicReloadRunning.CompareAndSwap(false, true) {
+		return func() {}
+	}
+	done := make(chan struct{})
+	var stopOnce sync.Once
+	go func() {
+		defer periodicReloadRunning.Store(false)
+		ticker := time.NewTicker(reloadInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				r, ok := RBAC().(*rbac)
+				if !ok {
+					continue
+				}
+				if err := r.reload(context.Background()); err != nil {
+					logger.Authz.Warnz(
+						"rbac periodic policy reload failed, retrying on the next interval",
+						zap.Error(err),
+					)
+				}
+			}
+		}
+	}()
+	return func() { stopOnce.Do(func() { close(done) }) }
+}
+
 // reloadRetryInterval is how long a diverged process waits between its attempts
 // to put itself back in step with storage. Each attempt is one bounded read of
 // the policy table, so the interval trades nothing but how long known-wrong
@@ -148,15 +205,17 @@ var reloadRetryRunning atomic.Bool
 // scheduleReloadRetry keeps retrying the reload a failed recovery could not
 // perform, until the process agrees with storage again.
 //
-// It exists because a failed recovery otherwise ends the story: the divergence
-// is published and logged, and then nothing ever tries again — a process that
-// missed one revocation while the database blipped would keep allowing it for
-// the rest of its life. The retry is driven by the divergence state rather
-// than by a schedule of its own, so a process in step with storage runs no
-// goroutine and reads nothing.
+// The periodic reconciliation would put the process right on its own, an
+// interval later. This retry exists because here the staleness is not a
+// possibility but a fact: the process knows its decisions disagree with
+// storage, and every request until the repair is served from the set known to
+// be wrong. Known-wrong time is worth a tighter loop than might-be-stale time,
+// and being driven by the divergence state, the loop costs a process in step
+// with storage nothing at all.
 //
-// A reload that succeeds anywhere — here, or a recovery on another write —
-// clears the state this loop is watching, and the loop ends with it.
+// A reload that succeeds anywhere — here, the periodic reconciliation, or a
+// recovery on another write — clears the state this loop is watching, and the
+// loop ends with it.
 func (r *rbac) scheduleReloadRetry() {
 	if !reloadRetryRunning.CompareAndSwap(false, true) {
 		return

@@ -91,6 +91,11 @@ func Init() error {
 			return errors.Wrapf(err, "failed to add default system role for %s", subject)
 		}
 	}
+
+	// From here the process reconciles itself with storage on a schedule, which
+	// is what bounds every staleness it cannot see: another replica's writes, a
+	// manual repair, a restore. It runs for the rest of the process's life.
+	startPeriodicReload()
 	return nil
 }
 
