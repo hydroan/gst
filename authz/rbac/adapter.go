@@ -18,7 +18,7 @@ const ruleColumnCount = 6
 // policyRow is the row shape the adapter reads and writes.
 //
 // It describes how a rule maps onto columns, not what the table looks like:
-// the schema belongs to the registered CasbinRule model, which is what creates
+// the schema belongs to the registered AuthzRule model, which is what creates
 // the table and its unique index. Keep the column names in step with that model.
 type policyRow struct {
 	// ID is read-only so that it can name a row in an error without ever being
@@ -42,7 +42,7 @@ type policyRow struct {
 // even when the transaction around that hook rolls back, leaving an
 // authorization the record it came from no longer justifies.
 //
-// It never issues DDL. The table is created and migrated from the CasbinRule
+// It never issues DDL. The table is created and migrated from the AuthzRule
 // model like every other table.
 type adapter struct {
 	base  *gorm.DB
@@ -70,7 +70,7 @@ func (a *adapter) conn(ctx context.Context) *gorm.DB {
 func (a *adapter) loadPolicies(ctx context.Context) (*policySet, error) {
 	rows := make([]policyRow, 0)
 	if err := a.base.WithContext(ctx).Table(a.table).Order("id").Find(&rows).Error; err != nil {
-		return nil, errors.Wrap(err, "failed to load casbin policies")
+		return nil, errors.Wrap(err, "failed to load authz policies")
 	}
 
 	set := newPolicySet()
@@ -89,7 +89,7 @@ func (a *adapter) loadPolicies(ctx context.Context) (*policySet, error) {
 
 // addPolicies stores rules, ignoring those already present.
 //
-// The conflict clause needs the unique index the CasbinRule model declares; it
+// The conflict clause needs the unique index the AuthzRule model declares; it
 // is what makes a repeated write idempotent instead of storing the rule twice.
 func (a *adapter) addPolicies(ctx context.Context, ptype string, rules [][]string) error {
 	if len(rules) == 0 {
@@ -100,7 +100,7 @@ func (a *adapter) addPolicies(ctx context.Context, ptype string, rules [][]strin
 		rows = append(rows, newPolicyRow(ptype, rule))
 	}
 	err := a.conn(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&rows).Error
-	return errors.Wrap(err, "failed to add casbin policies")
+	return errors.Wrap(err, "failed to add authz policies")
 }
 
 // removePoliciesCount deletes each rule by its exact column values and reports
@@ -118,7 +118,7 @@ func (a *adapter) removePoliciesCount(ctx context.Context, ptype string, rules [
 			conn = conn.Where(column+" = ?", values[i])
 		}
 		if conn = conn.Delete(&policyRow{}); conn.Error != nil {
-			return removed, errors.Wrap(conn.Error, "failed to remove casbin policies")
+			return removed, errors.Wrap(conn.Error, "failed to remove authz policies")
 		}
 		removed += conn.RowsAffected
 	}
@@ -136,7 +136,7 @@ func (a *adapter) removeFilteredPolicyCount(
 	ctx context.Context, ptype string, fieldIndex int, fieldValues ...string,
 ) (int64, error) {
 	if fieldIndex < 0 || fieldIndex+len(fieldValues) > ruleColumnCount {
-		return 0, errors.Newf("casbin filter out of range: index %d, %d values", fieldIndex, len(fieldValues))
+		return 0, errors.Newf("authz policy filter out of range: index %d, %d values", fieldIndex, len(fieldValues))
 	}
 
 	conn := a.conn(ctx).Where("ptype = ?", ptype)
@@ -147,7 +147,7 @@ func (a *adapter) removeFilteredPolicyCount(
 		conn = conn.Where(policyColumns[fieldIndex+i]+" = ?", value)
 	}
 	if conn = conn.Delete(&policyRow{}); conn.Error != nil {
-		return 0, errors.Wrap(conn.Error, "failed to remove filtered casbin policies")
+		return 0, errors.Wrap(conn.Error, "failed to remove filtered authz policies")
 	}
 	return conn.RowsAffected, nil
 }
@@ -190,11 +190,11 @@ func (r policyRow) values() [ruleColumnCount]string {
 // while looking stored.
 func (r policyRow) rule() ([]string, error) {
 	if r.Ptype == "" {
-		return nil, errors.Newf("casbin policy row %d has no ptype", r.ID)
+		return nil, errors.Newf("authz policy row %d has no ptype", r.ID)
 	}
 	tokens, ok := ruleTokens[r.Ptype]
 	if !ok {
-		return nil, errors.Newf("casbin policy row %d has unknown ptype %q", r.ID, r.Ptype)
+		return nil, errors.Newf("authz policy row %d has unknown ptype %q", r.ID, r.Ptype)
 	}
 	values := r.values()
 	return values[:tokens], nil

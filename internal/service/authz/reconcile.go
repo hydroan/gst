@@ -88,8 +88,8 @@ func ReconcilePolicies(ctx context.Context) (PolicyReport, error) {
 		return report, err
 	}
 
-	stored := make([]*modelauthz.CasbinRule, 0)
-	if err := database.Database[*modelauthz.CasbinRule](ctx).List(&stored); err != nil {
+	stored := make([]*modelauthz.AuthzRule, 0)
+	if err := database.Database[*modelauthz.AuthzRule](ctx).List(&stored); err != nil {
 		return report, err
 	}
 
@@ -170,7 +170,7 @@ func expectedPolicies(ctx context.Context) (map[string]PolicyDrift, error) {
 
 // skipReconcile reports whether a stored rule has no counterpart among the
 // records and must therefore not be judged against them.
-func skipReconcile(rule *modelauthz.CasbinRule) bool {
+func skipReconcile(rule *modelauthz.AuthzRule) bool {
 	switch rule.Ptype {
 	case "p":
 		// Declared by the application through SetPermissionsForAuthenticated,
@@ -191,7 +191,7 @@ func skipReconcile(rule *modelauthz.CasbinRule) bool {
 	}
 }
 
-func driftFromRule(rule *modelauthz.CasbinRule, direction string) PolicyDrift {
+func driftFromRule(rule *modelauthz.AuthzRule, direction string) PolicyDrift {
 	if rule.Ptype == "g" {
 		return PolicyDrift{
 			Kind: "binding", Direction: direction,

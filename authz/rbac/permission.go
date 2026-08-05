@@ -52,7 +52,7 @@ func errIfReservedRole(role string) error {
 // authenticatedPolicyTenant is the tenant column stored for policies written
 // against consts.AUTHZ_ROLE_AUTHENTICATED. The matcher branch for that role
 // compares no tenant, so the value never takes part in a decision; it marks the
-// row as tenant-independent for anyone reading casbin_rule.
+// row as tenant-independent for anyone reading authz_rule.
 const authenticatedPolicyTenant = "*"
 
 // SetRolePermissions replaces the entire permission set held by role in tenant.
@@ -94,10 +94,10 @@ func (r *rbac) SetPermissionsForAuthenticated(ctx context.Context, permissions [
 // under a single write lock, so a concurrent Authorize sees either the old set
 // or the new one and never the gap between them.
 //
-// The two engine calls form an ordering the correctness of the batch depends on:
-// Casbin skips a batch insert entirely, and reports no error, when any rule in
-// it already exists. Clearing the set first is what keeps that from silently
-// dropping the whole replacement, so the delete must stay ahead of the insert.
+// The delete stays ahead of the insert because that is what a replacement is:
+// the new set is the whole truth, so whatever the role held has to go before
+// it is written. The order also keeps the storage insert clean — its conflict
+// clause makes re-adding a surviving rule a no-op rather than an error.
 func (r *rbac) replacePermissions(
 	ctx context.Context, tenant string, role string, permissions []types.Permission,
 ) error {
@@ -110,12 +110,13 @@ func (r *rbac) replacePermissions(
 
 // permissionPolicies renders permissions as p policy rows for role in tenant.
 //
-// It drops repeats because Casbin's batch insert does not deduplicate within a
-// batch, so a caller listing the same permission twice would otherwise store it
-// twice. It sorts because the stored order decides which rule Casbin reports as
-// the matched one: an order that followed the caller's would make
-// a decision name a different rule for the same request whenever the
-// caller derived its set from an unordered source.
+// It drops repeats because the storage insert writes the batch as one
+// statement, and PostgreSQL refuses a conflict clause that touches one row
+// twice in one statement — a caller listing the same permission twice would
+// fail the whole write. It sorts because the stored order decides which rule a
+// decision names: an order that followed the caller's would make a decision
+// name a different rule for the same request whenever the caller derived its
+// set from an unordered source.
 //
 // An entry missing an object or an action is rendered as it stands rather than
 // dropped, and mutate refuses the rule before anything is written. Dropping it

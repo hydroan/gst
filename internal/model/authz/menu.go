@@ -36,7 +36,7 @@ type Menu struct {
 	// ID widens the primary key inherited from model.Base.
 	//
 	// Menu identifiers are stable keys chosen by the application, not generated
-	// UUIDs: Role.MenuIDs and every Casbin policy derived from a menu reference
+	// UUIDs: Role.MenuIDs and every policy row derived from a menu reference
 	// them, so they have to survive re-seeding and are therefore written by hand,
 	// typically as a hierarchical page key. The inherited column is sized for
 	// UUIDv7 and silently truncates anything longer, and ParentID already stores

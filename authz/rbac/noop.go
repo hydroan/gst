@@ -23,7 +23,7 @@ import (
 // situation rather than hiding it.
 var ErrRBACDisabled = errors.New("rbac: authorization is not initialized")
 
-// noop implements RBAC behavior before Casbin is initialized.
+// noop implements RBAC behavior before a policy set is installed.
 // It answers reads and refuses writes with ErrRBACDisabled, and keeps the
 // built-in root subject as system_root so modules that do not register authz can
 // still use root-only administrative flows.

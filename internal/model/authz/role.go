@@ -20,7 +20,7 @@ type Role struct {
 	tenant.Scope
 
 	// Name is the human-readable role name, unique within a tenant. Renaming
-	// is free: casbin policies and role bindings reference the immutable ID,
+	// is free: policy rows and role bindings reference the immutable ID,
 	// never the name.
 	Name string `json:"name,omitempty" query:"name" gorm:"size:191"`
 
@@ -91,7 +91,7 @@ func (r *Role) validate() error {
 	}
 
 	// Both checks below are on the ID alone, because the ID is what authorization
-	// reads: a role binding stores Role.ID as the Casbin role, and syncPermissions
+	// reads: a role binding stores Role.ID as the policy role, and syncPermissions
 	// writes it into the role column of every policy it generates. The name is
 	// display text no matcher ever compares, so reserving it would forbid an
 	// ordinary label without closing anything.
@@ -215,12 +215,12 @@ func (r *Role) DeleteAfter(ctx context.Context) error {
 	return rbac.RBAC().RemoveRole(ctx, r.tenant(), r.ID)
 }
 
-// syncPermissions rebuilds Casbin policy rows for this role from Menu.Routes.
+// syncPermissions rebuilds the authz policy rows for this role from Menu.Routes.
 // Role.MenuIDs is the authoritative source for backend route grants.
 //
 // The whole set is replaced rather than diffed. Menu routes can be removed,
-// renamed, or have methods changed, and a diff-based update can leave stale Casbin
-// rows behind. Rebuilding the role's policy set keeps casbin_rule consistent with
+// renamed, or have methods changed, and a diff-based update can leave stale policy
+// rows behind. Rebuilding the role's policy set keeps authz_rule consistent with
 // the current menu bindings, and SetRolePermissions applies it as one step so the
 // role's members are never authorized against a partially rebuilt set.
 func (r *Role) syncPermissions(ctx context.Context) error {
@@ -252,7 +252,7 @@ func RoutePermissionsForMenu(m *Menu) []types.Permission {
 	}
 
 	// A menu can bind multiple backend routes, and each route can bind multiple
-	// HTTP methods. Casbin stores those as individual path + method policies.
+	// HTTP methods. The policy set stores those as individual path + method rows.
 	permissions := make([]types.Permission, 0)
 	for _, route := range m.Routes {
 		object := strings.TrimSpace(route.Path)

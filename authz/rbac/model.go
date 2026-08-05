@@ -78,7 +78,7 @@ const (
 	systemRoleGrouping = "g2"
 )
 
-// policyTable is the table the Casbin adapter reads and writes. Its schema is
-// owned by the CasbinRule model, so the name has to agree with that model's
+// policyTable is the table the policy adapter reads and writes. Its schema is
+// owned by the AuthzRule model, so the name has to agree with that model's
 // GetTableName.
-const policyTable = "casbin_rule"
+const policyTable = "authz_rule"

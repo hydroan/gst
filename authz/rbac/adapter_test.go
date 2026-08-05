@@ -28,7 +28,7 @@ func TestLoadPolicyReportsUnusableRowsInsteadOfPanicking(t *testing.T) {
 			insert(ptype)
 			_, err := store.loadPolicies(ctx)
 			require.Error(t, err, "an unusable row must fail the load rather than crash it")
-			assert.Contains(t, err.Error(), "casbin policy row",
+			assert.Contains(t, err.Error(), "authz policy row",
 				"the error must name the row so it can be repaired")
 
 			require.NoError(t, dbruntimeDB().Table(store.table).Where("ptype = ?", ptype).

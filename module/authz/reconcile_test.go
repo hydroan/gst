@@ -47,13 +47,13 @@ func TestReconcilePoliciesDetectsDrift(t *testing.T) {
 
 		// Delete the stored rule directly, the way a stale replica or a manual
 		// repair would, leaving the record behind.
-		rules := make([]*modelauthz.CasbinRule, 0)
-		require.NoError(t, database.Database[*modelauthz.CasbinRule](ctx).
-			WithQuery(&modelauthz.CasbinRule{
+		rules := make([]*modelauthz.AuthzRule, 0)
+		require.NoError(t, database.Database[*modelauthz.AuthzRule](ctx).
+			WithQuery(&modelauthz.AuthzRule{
 				Ptype: "g", V0: binding.SubjectID, V1: binding.RoleID, V2: tenant.Default,
 			}).List(&rules))
 		require.Len(t, rules, 1, "the binding should have stored exactly one grouping rule")
-		require.NoError(t, database.Database[*modelauthz.CasbinRule](ctx).Delete(rules...))
+		require.NoError(t, database.Database[*modelauthz.AuthzRule](ctx).Delete(rules...))
 
 		report, err := authz.ReconcilePolicies(ctx)
 		require.NoError(t, err)

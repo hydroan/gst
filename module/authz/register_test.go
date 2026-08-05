@@ -999,35 +999,35 @@ func requireNoMenu(t *testing.T, menus []*authz.Menu, menuID string) {
 
 func requireCasbinPolicy(t *testing.T, tenant, role, object, action, effect string) {
 	t.Helper()
-	requireCasbinRule(t, "p", tenant, role, object, action, effect)
+	requireAuthzRule(t, "p", tenant, role, object, action, effect)
 }
 
 func requireNoCasbinPolicy(t *testing.T, tenant, role, object, action, effect string) {
 	t.Helper()
-	requireNoCasbinRule(t, "p", tenant, role, object, action, effect)
+	requireNoAuthzRule(t, "p", tenant, role, object, action, effect)
 }
 
 func requireCasbinGroupingPolicy(t *testing.T, subject, role, tenant string) {
 	t.Helper()
-	requireCasbinRule(t, "g", subject, role, tenant, "", "")
+	requireAuthzRule(t, "g", subject, role, tenant, "", "")
 }
 
-func requireCasbinRule(t *testing.T, ptype, v0, v1, v2, v3, v4 string) {
+func requireAuthzRule(t *testing.T, ptype, v0, v1, v2, v3, v4 string) {
 	t.Helper()
-	rules := listCasbinRules(t, ptype, v0, v1, v2, v3, v4)
+	rules := listAuthzRules(t, ptype, v0, v1, v2, v3, v4)
 	require.NotEmpty(t, rules)
 }
 
-func requireNoCasbinRule(t *testing.T, ptype, v0, v1, v2, v3, v4 string) {
+func requireNoAuthzRule(t *testing.T, ptype, v0, v1, v2, v3, v4 string) {
 	t.Helper()
-	rules := listCasbinRules(t, ptype, v0, v1, v2, v3, v4)
+	rules := listAuthzRules(t, ptype, v0, v1, v2, v3, v4)
 	require.Empty(t, rules)
 }
 
-func listCasbinRules(t *testing.T, ptype, v0, v1, v2, v3, v4 string) []*authz.CasbinRule {
+func listAuthzRules(t *testing.T, ptype, v0, v1, v2, v3, v4 string) []*authz.AuthzRule {
 	t.Helper()
-	rules := make([]*authz.CasbinRule, 0)
-	require.NoError(t, database.Database[*authz.CasbinRule](context.Background()).WithQuery(&authz.CasbinRule{
+	rules := make([]*authz.AuthzRule, 0)
+	require.NoError(t, database.Database[*authz.AuthzRule](context.Background()).WithQuery(&authz.AuthzRule{
 		Ptype: ptype,
 		V0:    v0,
 		V1:    v1,

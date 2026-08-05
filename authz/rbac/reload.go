@@ -57,7 +57,7 @@ func (r *rbac) reload(ctx context.Context) error {
 
 	set, err := r.adapter.loadPolicies(ctx)
 	if err != nil {
-		return errors.Wrap(err, "failed to reload casbin policies")
+		return errors.Wrap(err, "failed to reload authz policies")
 	}
 	policyRules = set
 	rebuildDerived(set)

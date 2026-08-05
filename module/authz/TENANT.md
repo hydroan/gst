@@ -8,7 +8,7 @@
 - `Menu` 是全局权限目录，不属于某个 tenant。
 - `GET /api/authz/menus` 是特殊接口：底层读取全局 `Menu` 目录，但返回当前用户在当前 tenant 下可见的菜单树。
 - `Routes` 是全局后端路由快照，不属于某个 tenant。
-- `CasbinRule` 当前只注册内部存储表，不暴露公开 CRUD API。
+- `AuthzRule` 当前只注册内部存储表，不暴露公开 CRUD API。
 - `system_root` 是系统级角色，不通过 `RoleBinding` 管理。
 
 ## 不属于 tenant 的接口
@@ -58,7 +58,7 @@
 
 ## 内部跨 tenant 能力
 
-`CasbinRule` 表保存 Casbin 策略数据，包括 tenant 内 permission、tenant 内 role assignment，以及 `system_root` 这类系统级 assignment。当前模块只注册该表给 Casbin adapter 使用，不暴露公开 CRUD API。业务代码不应直接通过通用 CRUD 管理 `CasbinRule`。
+`AuthzRule` 表保存授权策略数据，包括 tenant 内 permission、tenant 内 role assignment，以及 `system_root` 这类系统级 assignment。当前模块只注册该表给 authz/rbac 的策略 adapter 使用，不暴露公开 CRUD API。业务代码不应直接通过通用 CRUD 管理 `AuthzRule`。
 
 `system_root` 通过 RBAC 的 system role 能力表达，不属于任何 tenant，也不通过 `RoleBinding` 表达。系统级角色应由 bootstrap 或受控内部流程设置，不应开放给普通 tenant 管理员。
 
@@ -68,7 +68,7 @@
 - `RoleBinding` 有 `TenantID`，表示某个 subject 在某个 tenant 内绑定某个 role。
 - `Menu` 不增加 `TenantID`，表示全局 capability、菜单和后端 route catalog。
 - `Routes` 不落库，表示框架运行时注册的全局路由快照。
-- `CasbinRule` 是 RBAC runtime 的内部存储，不作为业务模型暴露。
+- `AuthzRule` 是 RBAC runtime 的内部存储，不作为业务模型暴露。
 
 ## tenant 来源
 

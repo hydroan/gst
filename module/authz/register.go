@@ -12,7 +12,7 @@ import (
 // Modules:
 //   - Role
 //   - RoleBinding
-//   - CasbinRule
+//   - AuthzRule
 //   - Menu
 //   - Routes
 //
@@ -46,9 +46,9 @@ import (
 // the session; a deployment whose tenant arrives another way registers its own
 // middleware between the two and overwrites it. See middleware.Authz.
 func Register() {
-	// Register CasbinRule explicitly because Casbin manages this table through
-	// the GORM adapter instead of a public CRUD module.
-	model.Register[*CasbinRule]()
+	// Register AuthzRule explicitly because the policy adapter manages this
+	// table instead of a public CRUD module.
+	model.Register[*AuthzRule]()
 
 	// Register Authz after the authentication middleware that writes CTX_USER_ID.
 	// Registering Authz before IAMSession makes authenticated requests look

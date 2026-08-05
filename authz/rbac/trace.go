@@ -17,8 +17,8 @@ func contextOrBackground(ctx context.Context) context.Context {
 }
 
 // traceRBAC starts a gst-owned RBAC span and returns a finish callback.
-// The returned context must be passed to Casbin so adapter and database spans
-// appear under the RBAC operation in the request trace.
+// The returned context must be passed down the write path so adapter and
+// database spans appear under the RBAC operation in the request trace.
 func traceRBAC(ctx context.Context, operation string, fields map[string]any) (context.Context, func(error)) {
 	ctx = contextOrBackground(ctx)
 	if !gstotel.IsEnabled() {

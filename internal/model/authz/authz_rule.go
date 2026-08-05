@@ -5,12 +5,13 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-// CasbinRule stores Casbin policy and grouping rules.
+// AuthzRule stores authorization policy and grouping rules.
 //
-// The table is written and read exclusively by the Casbin adapter, never
+// The table is written and read exclusively by the policy adapter in
+// authz/rbac, never
 // through the framework's CRUD chain, so this model exists to own the schema:
-// it is what gg migrate builds the table and its unique index from. The adapter
-// is configured not to migrate, which keeps a single definition of the table.
+// it is what gg migrate builds the table and its unique index from. The
+// adapter never migrates, which keeps a single definition of the table.
 //
 // It embeds AutoBase because the adapter requires an auto-incrementing integer
 // primary key and loads policies in primary-key order. The audit and soft-delete
@@ -35,7 +36,7 @@ import (
 //   - p, default, admin, /api/authz/routes, GET, allow
 //   - p, default, admin, /api/authz/roles, POST, allow
 //   - g, root, admin, default
-type CasbinRule struct {
+type AuthzRule struct {
 	// The rule columns are NOT NULL so the unique index below can do its job:
 	// MySQL treats NULLs as distinct, so a single nullable column would let
 	// duplicate rules through. The adapter only ever writes strings, so the
@@ -51,11 +52,11 @@ type CasbinRule struct {
 	model.AutoBase
 }
 
-func (CasbinRule) Design() {
+func (AuthzRule) Design() {
 	dsl.Migrate()
 }
 
-// Indexes declares the uniqueness Casbin's adapter assumes, and the one access
+// Indexes declares the uniqueness the policy adapter assumes, and the one access
 // path that uniqueness cannot serve.
 //
 // The unique index is what every policy insert conflicts against: the adapter
@@ -83,7 +84,7 @@ func (CasbinRule) Design() {
 // permission and a subject in an assignment — so no single column order serves
 // both, and reordering the unique index would only move the miss to another
 // removal.
-func (cr *CasbinRule) Indexes() []model.Index {
+func (cr *AuthzRule) Indexes() []model.Index {
 	return []model.Index{
 		{Fields: []string{"Ptype", "V0", "V1", "V2", "V3", "V4", "V5"}, Unique: true},
 		{Fields: []string{"Ptype", "V1", "V2"}},
@@ -93,8 +94,8 @@ func (cr *CasbinRule) Indexes() []model.Index {
 // Purge hard-deletes. The adapter neither writes nor filters on the soft-delete
 // column, so a soft-deleted rule would stay in force while the framework
 // reported it gone.
-func (cr *CasbinRule) Purge() bool { return true }
+func (cr *AuthzRule) Purge() bool { return true }
 
-// GetTableName returns the Casbin adapter table name, which GORM's default
-// pluralization would otherwise turn into casbin_rules.
-func (cr *CasbinRule) GetTableName() string { return "casbin_rule" }
+// GetTableName returns the policy table name, which GORM's default
+// pluralization would otherwise turn into authz_rules.
+func (cr *AuthzRule) GetTableName() string { return "authz_rule" }

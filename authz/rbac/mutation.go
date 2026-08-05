@@ -75,8 +75,9 @@ func removeFiltered(ptype string, fieldIndex int, fieldValues ...string) policyM
 // ErrEmptyPolicyValue reports a mutation carrying an empty value where an
 // identifier belongs.
 //
-// An empty value does not narrow a request, it widens it. Storage and Casbin
-// agree that an empty filter field matches anything, so a filtered delete built
+// An empty value does not narrow a request, it widens it. Storage and the
+// in-memory set agree that an empty filter field matches anything, so a
+// filtered delete built
 // from an empty argument removes every rule of its kind in the deployment
 // instead of none — revoking a role for one subject would revoke it for all of
 // them. An empty value inside a rule is the mirror image: the row stores fewer

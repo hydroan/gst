@@ -113,12 +113,12 @@ func TestPolicyWritesCommitWithTheTransaction(t *testing.T) {
 	require.True(t, allowed, "a committed grant and assignment should authorize the subject")
 }
 
-func storedPolicies(t *testing.T, ptype string, v0 string, v1 string) []*modelauthz.CasbinRule {
+func storedPolicies(t *testing.T, ptype string, v0 string, v1 string) []*modelauthz.AuthzRule {
 	t.Helper()
 
-	rules := make([]*modelauthz.CasbinRule, 0)
-	require.NoError(t, database.Database[*modelauthz.CasbinRule](context.Background()).
-		WithQuery(&modelauthz.CasbinRule{Ptype: ptype, V0: v0, V1: v1}).List(&rules))
+	rules := make([]*modelauthz.AuthzRule, 0)
+	require.NoError(t, database.Database[*modelauthz.AuthzRule](context.Background()).
+		WithQuery(&modelauthz.AuthzRule{Ptype: ptype, V0: v0, V1: v1}).List(&rules))
 	return rules
 }
 

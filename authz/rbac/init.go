@@ -28,7 +28,7 @@ func Init() error {
 	}
 
 	// The adapter never migrates: the policy table belongs to the registered
-	// CasbinRule model, so it is created and indexed by the same migration
+	// AuthzRule model, so it is created and indexed by the same migration
 	// path as every other table, and schema changes stay an explicit
 	// "gg migrate" decision instead of a startup side effect.
 	policyAdapter := newAdapter(database.DB(), policyTable)
