@@ -52,7 +52,7 @@ func errIfReservedRole(role string) error {
 // authenticatedPolicyTenant is the tenant column stored for policies written
 // against consts.AUTHZ_ROLE_AUTHENTICATED. The matcher branch for that role
 // compares no tenant, so the value never takes part in a decision; it marks the
-// row as tenant-independent for anyone reading authz_rule.
+// row as tenant-independent for anyone reading authz_rules.
 const authenticatedPolicyTenant = "*"
 
 // SetRolePermissions replaces the entire permission set held by role in tenant.

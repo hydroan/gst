@@ -2,6 +2,19 @@ package rbac
 
 import "strings"
 
+// tenantRoleGrouping holds assignments inside one tenant, systemRoleGrouping
+// those that sit above every tenant. They are the ptype values assignment
+// rules are stored under, and two of the kinds ruleTokens declares.
+const (
+	tenantRoleGrouping = "g"
+	systemRoleGrouping = "g2"
+)
+
+// policyTable is the table the policy adapter reads and writes. Its schema is
+// owned by the AuthzRule model, so the name has to agree with that model's
+// GetTableName.
+const policyTable = "authz_rules"
+
 // ruleTokens fixes how many values each rule kind carries: a permission is
 // (tenant, role, obj, act, eft), a tenant assignment (subject, role, tenant),
 // a system assignment (subject, role). It is what the Casbin model's

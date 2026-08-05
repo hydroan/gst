@@ -220,7 +220,7 @@ func (r *Role) DeleteAfter(ctx context.Context) error {
 //
 // The whole set is replaced rather than diffed. Menu routes can be removed,
 // renamed, or have methods changed, and a diff-based update can leave stale policy
-// rows behind. Rebuilding the role's policy set keeps authz_rule consistent with
+// rows behind. Rebuilding the role's policy set keeps authz_rules consistent with
 // the current menu bindings, and SetRolePermissions applies it as one step so the
 // role's members are never authorized against a partially rebuilt set.
 func (r *Role) syncPermissions(ctx context.Context) error {
