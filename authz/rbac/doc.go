@@ -1,5 +1,5 @@
-// Package rbac decides authorization from Casbin policies and keeps those
-// policies in step with the records they are derived from.
+// Package rbac decides authorization from stored policy rules and keeps those
+// rules in step with the records they are derived from.
 //
 // Three rule kinds carry everything the package stores. A permission,
 // (tenant, role, object, action, effect), is what a role may reach. An
@@ -12,9 +12,9 @@
 // everything a policy decides from the decision index, which is rebuilt from
 // the in-memory policy set whenever that set changes. Writes do not: they go
 // through mutate, which drives storage and memory as two halves so that a
-// policy change rolls back with the transaction that caused it. Nothing in the
-// package writes through the enforcer's own AddPolicy family, and autosave
-// stays off so Casbin cannot write behind mutate's back.
+// policy change rolls back with the transaction that caused it. Every write is a mutation of
+// the one in-memory set, so nothing can change what is decided from behind
+// mutate's back.
 //
 // # One process decides from its own memory
 //
@@ -52,8 +52,8 @@
 //
 // # Storage decides what two rules are, and does not always agree
 //
-// A rule's identity in memory is its exact bytes, because Casbin keys the
-// in-memory set with a Go map. Its identity in storage is whatever the column's
+// A rule's identity in memory is its exact bytes, because the policy set is
+// keyed with a Go map. Its identity in storage is whatever the column's
 // collation says, and the framework supports backends that disagree: a
 // case-insensitive collation, which is the default in some MySQL installations,
 // treats two rules differing only in case as one, while memory treats them as

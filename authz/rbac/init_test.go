@@ -1,6 +1,7 @@
 package rbac
 
 import (
+	"context"
 	"sync"
 	"testing"
 
@@ -8,20 +9,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestEnforcerAndAdapterArePublishedTogether covers what a reader may observe
-// while Init installs the enforcer.
+// TestPolicyStateIsPublishedTogether covers what a reader may observe while
+// Init installs the policy set.
 //
-// A caller reaches both package variables through RBAC the moment either one is
-// assigned. Assigned one at a time, there is a window in which the enforcer is
-// published and the adapter its writes go through is still nil, and any write
-// taken from that window dereferences it. Read without the lock they are
-// assigned under, the two are a data race besides.
-func TestEnforcerAndAdapterArePublishedTogether(t *testing.T) {
-	store := newPolicyTable(t, "policy_install_enforcer")
-	t.Cleanup(func() { installEnforcer(nil, nil) })
-
-	policyEnforcer, err := newEnforcer(store)
+// A caller reaches the package state through RBAC the moment the set is
+// assigned. Assigned one variable at a time, there is a window in which the
+// set is published and the adapter its writes go through is still nil, and any
+// write taken from that window dereferences it. Read without the lock they are
+// assigned under, the pieces are a data race besides.
+func TestPolicyStateIsPublishedTogether(t *testing.T) {
+	store := newPolicyTable(t, "policy_install_set")
+	set, err := store.loadPolicies(context.Background())
 	require.NoError(t, err)
+	t.Cleanup(func() { installPolicySet(nil, nil) })
 
 	stop := make(chan struct{})
 	var readers sync.WaitGroup
@@ -35,14 +35,14 @@ func TestEnforcerAndAdapterArePublishedTogether(t *testing.T) {
 				}
 				if published, ok := RBAC().(*rbac); ok {
 					assert.NotNil(t, published.adapter,
-						"an enforcer must not be reachable before the adapter its writes go through")
+						"a policy set must not be reachable before the adapter its writes go through")
 				}
 			}
 		})
 	}
 	for range 100 {
-		installEnforcer(policyEnforcer, store)
-		installEnforcer(nil, nil)
+		installPolicySet(set, store)
+		installPolicySet(nil, nil)
 	}
 	close(stop)
 	readers.Wait()

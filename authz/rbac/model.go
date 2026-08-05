@@ -1,5 +1,10 @@
 package rbac
 
+// modelData is the Casbin model the package's semantics are specified in. It
+// is consumed only by the differential oracle in the tests, which evaluates it
+// with the engine over the same rules the runtime answers from its own index
+// and graph — so a semantic drift between this text and the implementation is
+// a test failure rather than a silent split.
 var modelData = []byte(`
 [request_definition]
 # r defines the incoming authorization request tuple.
@@ -66,7 +71,8 @@ m = (r.sub != "" && p.role == "authenticated" && pathMatch(r.obj, p.obj) && r.ac
 `)
 
 // tenantRoleGrouping holds assignments inside one tenant, systemRoleGrouping
-// those that sit above every tenant. Both name a grouping the model declares.
+// those that sit above every tenant. They are the ptype values assignment
+// rules are stored under, and two of the kinds ruleTokens declares.
 const (
 	tenantRoleGrouping = "g"
 	systemRoleGrouping = "g2"

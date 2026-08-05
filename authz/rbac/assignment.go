@@ -28,7 +28,7 @@ func (r *rbac) AssignRole(ctx context.Context, tenant string, subject string, ro
 		finishSpan(err)
 	}()
 
-	return r.mutate(ctx, addRules("g", "g", []string{subject, role, tenant}))
+	return r.mutate(ctx, addRules(tenantRoleGrouping, []string{subject, role, tenant}))
 }
 
 // UnassignRole removes a subject-role assignment from tenant.
@@ -39,7 +39,7 @@ func (r *rbac) UnassignRole(ctx context.Context, tenant string, subject string, 
 		finishSpan(err)
 	}()
 
-	return r.mutate(ctx, removeRules("g", "g", []string{subject, role, tenant}))
+	return r.mutate(ctx, removeRules(tenantRoleGrouping, []string{subject, role, tenant}))
 }
 
 // RolesForSubject returns the roles subject holds inside tenant.
@@ -58,10 +58,7 @@ func (r *rbac) RolesForSubject(ctx context.Context, tenant string, subject strin
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	groupingPolicies, err := r.enforcer.GetFilteredGroupingPolicy(0, subject)
-	if err != nil {
-		return nil, err
-	}
+	groupingPolicies := policyRules.filtered(tenantRoleGrouping, 0, subject)
 
 	roles := make([]string, 0, len(groupingPolicies))
 	for _, policy := range groupingPolicies {
@@ -86,10 +83,7 @@ func (r *rbac) SubjectsInTenant(ctx context.Context, tenant string) ([]string, e
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	groupingPolicies, err := r.enforcer.GetFilteredGroupingPolicy(2, tenant)
-	if err != nil {
-		return nil, err
-	}
+	groupingPolicies := policyRules.filtered(tenantRoleGrouping, 2, tenant)
 
 	seen := make(map[string]struct{}, len(groupingPolicies))
 	subjects := make([]string, 0, len(groupingPolicies))
@@ -120,7 +114,7 @@ func (r *rbac) AssignSystemRole(ctx context.Context, subject string, role string
 		finishSpan(err)
 	}()
 
-	return r.mutate(ctx, addRules("g", systemRoleGrouping, []string{subject, role}))
+	return r.mutate(ctx, addRules(systemRoleGrouping, []string{subject, role}))
 }
 
 // UnassignSystemRole removes a subject's system-level role assignment.
@@ -130,7 +124,7 @@ func (r *rbac) UnassignSystemRole(ctx context.Context, subject string, role stri
 		finishSpan(err)
 	}()
 
-	return r.mutate(ctx, removeRules("g", systemRoleGrouping, []string{subject, role}))
+	return r.mutate(ctx, removeRules(systemRoleGrouping, []string{subject, role}))
 }
 
 // HasSystemRole reports whether subject holds a system-level role.
@@ -145,7 +139,7 @@ func (r *rbac) UnassignSystemRole(ctx context.Context, subject string, role stri
 func (r *rbac) HasSystemRole(ctx context.Context, subject string, role string) (bool, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.hasRoleLink(systemRoleGrouping, subject, role)
+	return r.hasRoleLink(systemRoleGrouping, subject, role), nil
 }
 
 func isBuiltInSystemRole(subject string, role string) bool {
@@ -162,7 +156,7 @@ func (r *rbac) RemoveSubject(ctx context.Context, subject string) (err error) {
 
 	return r.mutate(
 		ctx,
-		removeFiltered("g", "g", 0, subject),
-		removeFiltered("g", systemRoleGrouping, 0, subject),
+		removeFiltered(tenantRoleGrouping, 0, subject),
+		removeFiltered(systemRoleGrouping, 0, subject),
 	)
 }

@@ -50,13 +50,11 @@ func TestSetRolePermissionsLeavesOtherRolesAlone(t *testing.T) {
 	r := newRolePermissionsFixture(t)
 	ctx := context.Background()
 
-	for _, seed := range [][]string{
+	for _, row := range [][]string{
 		{"default", "role_b", "/api/things", "GET", "allow"},
 		{"other", "role_a", "/api/things", "GET", "allow"},
 	} {
-		if _, err := r.enforcer.AddPolicy(seed); err != nil {
-			t.Fatal(err)
-		}
+		seed(t, "p", row)
 	}
 
 	if err := r.SetRolePermissions(ctx, "default", "role_a", nil); err != nil {
@@ -70,10 +68,14 @@ func TestSetRolePermissionsLeavesOtherRolesAlone(t *testing.T) {
 		{"default", "role_b"},
 		{"other", "role_a"},
 	} {
-		policies, err := r.enforcer.GetFilteredPolicy(0, kept.tenant, kept.role)
-		if err != nil {
-			t.Fatal(err)
+		policies := make([][]string, 0)
+		r.mu.RLock()
+		for _, rule := range policyRules.filtered("p", 0, kept.tenant) {
+			if rule[1] == kept.role {
+				policies = append(policies, rule)
+			}
 		}
+		r.mu.RUnlock()
 		if len(policies) != 1 {
 			t.Errorf("%s/%s: expected its permission to survive, got %v", kept.tenant, kept.role, policies)
 		}
@@ -93,10 +95,9 @@ func TestSetRolePermissionsDropsDuplicates(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	policies, err := r.enforcer.GetFilteredPolicy(0, "default", "role_a")
-	if err != nil {
-		t.Fatal(err)
-	}
+	r.mu.RLock()
+	policies := policyRules.filtered("p", 0, "default")
+	r.mu.RUnlock()
 	if len(policies) != 1 {
 		t.Errorf("expected one stored policy, got %v", policies)
 	}
@@ -266,9 +267,7 @@ func newRolePermissionsFixture(t *testing.T) *rbac {
 	t.Helper()
 
 	r := newTestRBAC(t, 0)
-	if _, err := r.enforcer.AddGroupingPolicy("u_member", "role_a", "default"); err != nil {
-		t.Fatal(err)
-	}
+	seed(t, tenantRoleGrouping, []string{"u_member", "role_a", "default"})
 	return r
 }
 

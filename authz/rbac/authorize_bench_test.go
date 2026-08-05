@@ -33,11 +33,7 @@ func BenchmarkAuthorize(b *testing.B) {
 // role graph, so its cost should not follow the size of the policy set.
 func BenchmarkAuthorizeSystemRoot(b *testing.B) {
 	r := newTestRBAC(b, 363)
-	if _, err := r.enforcer.AddNamedGroupingPolicy(
-		systemRoleGrouping, "u_root", consts.AUTHZ_SYSTEM_ROLE_ROOT,
-	); err != nil {
-		b.Fatal(err)
-	}
+	seed(b, systemRoleGrouping, []string{"u_root", consts.AUTHZ_SYSTEM_ROLE_ROOT})
 	ctx := context.Background()
 	b.ReportAllocs()
 	b.ResetTimer()

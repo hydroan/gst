@@ -11,7 +11,7 @@ import (
 // ErrRBACDisabled reports a policy write made in a process that holds no policy
 // set to write it to.
 //
-// A write has nowhere to go before Init has built the enforcer: there is no
+// A write has nowhere to go before Init has installed a policy set: there is no
 // in-memory set to change and no adapter to store the change through. Reporting
 // success would tell the caller its change is in force — a role created through
 // the API answering success with not one policy row behind it — and nothing

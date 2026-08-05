@@ -4,17 +4,14 @@ import (
 	"context"
 	"sync/atomic"
 
-	casbinmodel "github.com/casbin/casbin/v3/model"
-	"github.com/casbin/casbin/v3/persist"
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
 
-// policyStorage is the storage mutate drives: Casbin's batch adapter surface,
-// which the enforcer also loads through, plus removal entry points that report
-// how many stored rows went.
+// policyStorage is the storage mutate drives and reload reads back: batched
+// writes, and removal entry points that report how many stored rows went.
 //
 // The counts exist to be compared. A removal is the one operation whose effect
 // in storage and in memory can silently differ — a backend collation treating
@@ -24,8 +21,8 @@ import (
 // insert that hit the conflict clause as a found row, so an add has no count
 // that means the same thing on every backend.
 type policyStorage interface {
-	persist.ContextBatchAdapter
-
+	loadPolicies(ctx context.Context) (*policySet, error)
+	addPolicies(ctx context.Context, ptype string, rules [][]string) error
 	removePoliciesCount(ctx context.Context, ptype string, rules [][]string) (int64, error)
 	removeFilteredPolicyCount(ctx context.Context, ptype string, fieldIndex int, fieldValues ...string) (int64, error)
 }
@@ -45,10 +42,9 @@ const (
 )
 
 // policyMutation is one change to the policy store, expressed so that it can be
-// applied to the database and to the in-memory model as two separate steps.
+// applied to the database and to the in-memory set as two separate steps.
 type policyMutation struct {
 	op    policyOp
-	sec   string
 	ptype string
 
 	// rules carries the rules for policyAdd and policyRemove.
@@ -59,18 +55,17 @@ type policyMutation struct {
 	fieldValues []string
 }
 
-func addRules(sec string, ptype string, rules ...[]string) policyMutation {
-	return policyMutation{op: policyAdd, sec: sec, ptype: ptype, rules: rules}
+func addRules(ptype string, rules ...[]string) policyMutation {
+	return policyMutation{op: policyAdd, ptype: ptype, rules: rules}
 }
 
-func removeRules(sec string, ptype string, rules ...[]string) policyMutation {
-	return policyMutation{op: policyRemove, sec: sec, ptype: ptype, rules: rules}
+func removeRules(ptype string, rules ...[]string) policyMutation {
+	return policyMutation{op: policyRemove, ptype: ptype, rules: rules}
 }
 
-func removeFiltered(sec string, ptype string, fieldIndex int, fieldValues ...string) policyMutation {
+func removeFiltered(ptype string, fieldIndex int, fieldValues ...string) policyMutation {
 	return policyMutation{
 		op:          policyRemoveFiltered,
-		sec:         sec,
 		ptype:       ptype,
 		fieldIndex:  fieldIndex,
 		fieldValues: fieldValues,
@@ -134,7 +129,7 @@ func (m policyMutation) validate() error {
 // no compensating update to get wrong, and no window in which memory describes a
 // transaction that did not survive.
 //
-// The database half runs without the enforcer lock. Holding it across database
+// The database half runs without the policy lock. Holding it across database
 // I/O would put a Go mutex and InnoDB row locks in one wait cycle, which
 // InnoDB's deadlock detector cannot see and would surface only as a lock wait
 // timeout. The memory half takes the lock once for the whole batch, so readers
@@ -188,7 +183,7 @@ func (r *rbac) mutate(ctx context.Context, mutations ...policyMutation) error {
 var policySequence atomic.Uint64
 
 // appliedSequence is the number of the newest batch the in-memory model has
-// taken. It is read and written only under the enforcer write lock, which every
+// taken. It is read and written only under the policy write lock, which every
 // applier holds for the whole of its update.
 var appliedSequence uint64
 
@@ -202,7 +197,7 @@ func (r *rbac) applyToStore(ctx context.Context, mutations []policyMutation) ([]
 		storedCounts[i] = storedCountUnknown
 		switch mutation.op {
 		case policyAdd:
-			err = r.adapter.AddPoliciesCtx(ctx, mutation.sec, mutation.ptype, mutation.rules)
+			err = r.adapter.addPolicies(ctx, mutation.ptype, mutation.rules)
 		case policyRemove:
 			storedCounts[i], err = r.adapter.removePoliciesCount(ctx, mutation.ptype, mutation.rules)
 		case policyRemoveFiltered:
@@ -229,16 +224,12 @@ func (r *rbac) applyToModel(
 	return r.recoverPolicies(ctx, cause)
 }
 
-// applyMutations replays the mutations against the in-memory policy model under
-// a single write lock, and reports whether the model is still in step with
-// storage afterwards. A false report carries the failure that caused it, or nil
-// when the model has to be rebuilt from storage without anything having failed:
-// a batch that was overtaken, or a removal whose two halves disagreed.
-//
-// Role links are rebuilt from the rules the model reports as actually changed,
-// not from the rules that were asked for: adding a rule that is already present
-// changes nothing, and rebuilding links for it would be work the model does not
-// agree happened.
+// applyMutations replays the mutations against the in-memory policy set under
+// a single write lock, rebuilds what is derived from it, and reports whether
+// memory is still in step with storage afterwards. A false report carries the
+// failure that caused it, or nil when the set has to be rebuilt from storage
+// without anything having failed: a batch that was overtaken, or a removal
+// whose two halves disagreed.
 //
 // A batch overtaken between its commit and this point does not replay at all.
 // Nothing orders the memory halves of two transactions against each other: the
@@ -272,23 +263,16 @@ func (r *rbac) applyMutations(sequence uint64, mutations []policyMutation, store
 		return false, nil
 	}
 
-	model := r.enforcer.GetModel()
+	set := policyRules
 	for i, mutation := range mutations {
 		var affected [][]string
-		var err error
-
 		switch mutation.op {
 		case policyAdd:
-			affected, err = model.AddPoliciesWithAffected(mutation.sec, mutation.ptype, mutation.rules)
+			affected = set.add(mutation.ptype, mutation.rules)
 		case policyRemove:
-			affected, err = model.RemovePoliciesWithAffected(mutation.sec, mutation.ptype, mutation.rules)
+			affected = set.remove(mutation.ptype, mutation.rules)
 		case policyRemoveFiltered:
-			_, affected, err = model.RemoveFilteredPolicy(
-				mutation.sec, mutation.ptype, mutation.fieldIndex, mutation.fieldValues...,
-			)
-		}
-		if err != nil {
-			return false, err
+			affected = set.removeFiltered(mutation.ptype, mutation.fieldIndex, mutation.fieldValues...)
 		}
 
 		if storedCounts[i] != storedCountUnknown && storedCounts[i] != int64(len(affected)) {
@@ -300,25 +284,7 @@ func (r *rbac) applyMutations(sequence uint64, mutations []policyMutation, store
 			)
 			return false, nil
 		}
-
-		if err = r.rebuildRoleLinks(mutation, affected); err != nil {
-			return false, err
-		}
 	}
-	rebuildPolicyIndex(model)
+	rebuildDerived(set)
 	return true, nil
-}
-
-// rebuildRoleLinks updates the role inheritance graph after a grouping change.
-// Permission rules do not participate in it, and rebuilding for them would
-// invalidate the matcher cache on every permission write for nothing.
-func (r *rbac) rebuildRoleLinks(mutation policyMutation, affected [][]string) error {
-	if mutation.sec != "g" || len(affected) == 0 {
-		return nil
-	}
-	op := casbinmodel.PolicyAdd
-	if mutation.op != policyAdd {
-		op = casbinmodel.PolicyRemove
-	}
-	return r.enforcer.BuildIncrementalRoleLinks(op, mutation.ptype, affected)
 }

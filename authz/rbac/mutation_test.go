@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	casbinmodel "github.com/casbin/casbin/v3/model"
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types"
@@ -108,11 +107,9 @@ func TestMutateNormalizesEmptyTenant(t *testing.T) {
 		"p:" + tenant.Default + ",role_a,/api/things,GET,allow",
 	}, storedRules(t, store), "an omitted tenant must be stored as the default one")
 
-	// The rules load back into a fresh model, which is what a restart does.
-	m, err := casbinmodel.NewModelFromString(string(modelData))
-	require.NoError(t, err)
-	require.NoError(t, store.LoadPolicyCtx(ctx, m),
-		"rules written with an omitted tenant must survive a reload")
+	// The rules load back into a fresh set, which is what a restart does.
+	_, err := store.loadPolicies(ctx)
+	require.NoError(t, err, "rules written with an omitted tenant must survive a reload")
 }
 
 // failAfterAdapter delegates to a real adapter and fails a chosen write, so a
@@ -132,11 +129,11 @@ func (a *failAfterAdapter) fails() bool {
 	return a.calls == a.failOn
 }
 
-func (a *failAfterAdapter) AddPoliciesCtx(ctx context.Context, sec, ptype string, rules [][]string) error {
+func (a *failAfterAdapter) addPolicies(ctx context.Context, ptype string, rules [][]string) error {
 	if a.fails() {
 		return errAdapterWrite
 	}
-	return a.adapter.AddPoliciesCtx(ctx, sec, ptype, rules)
+	return a.adapter.addPolicies(ctx, ptype, rules)
 }
 
 // The removal overrides intercept the counted entry points, which are the ones
@@ -208,7 +205,7 @@ func TestMutateReloadsWhenARemovalDisagreesWithStorage(t *testing.T) {
 		// Two assignments memory does not know about, which is what an external
 		// write or a passed-by concurrent insert leaves behind.
 		_, err := r.applyToStore(ctx, []policyMutation{
-			addRules("g", "g", []string{"u1", "role_a", "tenant_a"}, []string{"u2", "role_a", "tenant_a"}),
+			addRules(tenantRoleGrouping, []string{"u1", "role_a", "tenant_a"}, []string{"u2", "role_a", "tenant_a"}),
 		})
 		require.NoError(t, err)
 		require.Empty(t, memoryRules(t, r))
@@ -226,8 +223,7 @@ func TestMutateReloadsWhenARemovalDisagreesWithStorage(t *testing.T) {
 		// Two assignments storage never kept: written through the enforcer,
 		// whose autosave is off.
 		for _, subject := range []string{"u3", "u4"} {
-			_, err := r.enforcer.AddGroupingPolicy(subject, "role_b", "tenant_a")
-			require.NoError(t, err)
+			seed(t, tenantRoleGrouping, []string{subject, "role_b", "tenant_a"})
 		}
 
 		// Removing one deletes an in-memory rule and no stored row.
@@ -253,8 +249,8 @@ func TestApplyToModelRebuildsWhenOvertaken(t *testing.T) {
 
 	// The older write, held back before its memory half runs.
 	older := []policyMutation{
-		removeFiltered("p", "p", 0, "tenant_a", "role_a"),
-		addRules("p", "p", []string{"tenant_a", "role_a", "/api/old", "GET", "allow"}),
+		removeFiltered("p", 0, "tenant_a", "role_a"),
+		addRules("p", []string{"tenant_a", "role_a", "/api/old", "GET", "allow"}),
 	}
 	olderCounts, err := r.applyToStore(ctx, older)
 	require.NoError(t, err)

@@ -45,11 +45,9 @@ func (r *rbac) ReloadPolicies(ctx context.Context) (err error) {
 // has stopped answering must cost them reloadTimeout at most, not forever. A
 // caller whose own deadline is sooner keeps it; WithTimeout only ever tightens.
 //
-// The enforcer's own load is what makes this usable at all: it swaps the model
-// through applyModifiedModel rather than SetModel. SetModel re-initializes the
-// enforcer, rebuilding the function map so that no decision can resolve the
-// matcher function this package registers, and turning autosave back on so that
-// Casbin writes policies behind mutate's back.
+// The whole set is read into a replacement and swapped, together with the
+// state derived from it, under the one lock — a reader sees the old policy
+// world or the new one, never a mixture.
 func (r *rbac) reload(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(contextOrBackground(ctx), reloadTimeout)
 	defer cancel()
@@ -57,21 +55,23 @@ func (r *rbac) reload(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if err := r.enforcer.LoadPolicyCtx(ctx); err != nil {
+	set, err := r.adapter.loadPolicies(ctx)
+	if err != nil {
 		return errors.Wrap(err, "failed to reload casbin policies")
 	}
-	rebuildPolicyIndex(r.enforcer.GetModel())
+	policyRules = set
+	rebuildDerived(set)
 	publishPolicyDivergence(false)
 	return nil
 }
 
-// reloadTimeout bounds the enforcer write lock against a database that has
+// reloadTimeout bounds the policy write lock against a database that has
 // stopped answering.
 //
 // It is pulled between two limits. It has to outlast the client whose request
 // triggered a recovery reload, which is the whole reason that context is
 // detached. It also has to stay well under what anything upstream will wait
-// for, because a reload holds the enforcer write lock while it reads: every
+// for, because a reload holds the policy write lock while it reads: every
 // authorization in the process waits behind it. A read of the policy table is
 // sub-second on a database that is answering, so this only ever bites on one
 // that is not, and holding a request and the whole authorization path hostage
@@ -140,7 +140,7 @@ var policiesDiverged atomic.Bool
 // with storage whether or not anything is known to be wrong. It bounds every
 // staleness this process cannot see for itself: a write another replica made, a
 // manual repair, a restore. One reconciliation is one bounded read of the
-// policy table under the enforcer write lock — milliseconds against a database
+// policy table under the policy write lock — milliseconds against a database
 // that is answering — so the interval costs latency of convergence, not load
 // worth weighing. It is a variable only so tests do not wait it out.
 var reloadInterval = time.Minute
@@ -153,9 +153,9 @@ var periodicReloadRunning atomic.Bool
 // reloadInterval, for as long as the process runs. Init starts it and lets it
 // run for the process's life; the returned stop exists for tests.
 //
-// The enforcer is resolved anew on every tick rather than captured once, so
-// the loop reconciles whatever enforcer is currently installed and quietly
-// does nothing in a process that has none.
+// The target is resolved anew through RBAC on every tick rather than captured
+// once, so the loop reconciles whatever policy state is currently installed
+// and quietly does nothing in a process that has none.
 //
 // A failed attempt is logged and left for the next tick. Nothing more is known
 // at that point — a failed read says nothing about whether memory agrees with

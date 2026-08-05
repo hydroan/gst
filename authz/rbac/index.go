@@ -1,7 +1,6 @@
 package rbac
 
 import (
-	casbinmodel "github.com/casbin/casbin/v3/model"
 	"github.com/hydroan/gst/types/consts"
 )
 
@@ -25,7 +24,7 @@ import (
 //
 // An index is immutable once built. Every change to the policy set — a
 // mutation batch, a reload, an install — builds a fresh one from the model
-// under the enforcer write lock, whole rather than incrementally: policy
+// under the policy write lock, whole rather than incrementally: policy
 // writes happen at administrative frequency, a rebuild is linear in the rule
 // count, and a derivation with no update paths has no update bugs.
 type decisionIndex struct {
@@ -52,32 +51,17 @@ type indexedRule struct {
 }
 
 // policyIndex is the index decisions currently answer from. It is written
-// under the enforcer write lock wherever the policy set changes, and read
+// under the policy write lock wherever the policy set changes, and read
 // under the read lock a decision already holds. Nil means no policy set is
 // installed, which decides nothing.
 var policyIndex *decisionIndex
 
-// rebuildPolicyIndex derives a fresh index from m and installs it. The caller
-// holds the enforcer write lock, which is what keeps the index and the policy
-// set it is derived from changing as one.
-func rebuildPolicyIndex(m casbinmodel.Model) {
-	policyIndex = buildDecisionIndex(m)
-}
-
-// buildDecisionIndex derives an index from the p rules m holds, in the order
-// the model holds them, which is the order the engine matched them in.
-func buildDecisionIndex(m casbinmodel.Model) *decisionIndex {
+// buildDecisionIndex derives an index from the p rules set holds, in the
+// order the set holds them, which is the order the engine matched them in.
+func buildDecisionIndex(set *policySet) *decisionIndex {
 	index := &decisionIndex{byTenantRole: make(map[string]map[string][]indexedRule)}
-	section, ok := m["p"]
-	if !ok {
-		return index
-	}
-	ast, ok := section["p"]
-	if !ok {
-		return index
-	}
 
-	for _, rule := range ast.Policy {
+	for _, rule := range set.all("p") {
 		// A rule is (tenant, role, obj, act, eft); the loader sizes every rule
 		// to its assertion, so a short one cannot come from storage. Skipping
 		// is still the right answer for one that arrives another way: a rule

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestRBACWithoutAnEnforcerRefusesWrites covers a process holding no policy set:
+// TestRBACWithoutAPolicySetRefusesWrites covers a process holding no policy set:
 // RBAC disabled, or one that never bootstrapped.
 //
 // A write has nowhere to go there — no in-memory set to change, no adapter to
@@ -18,7 +18,7 @@ import (
 // change is in force. Nothing downstream can tell that apart from a change that
 // landed, because the records a rule is derived from are written either way: a
 // role created through the API answers success with not one policy row behind it.
-func TestRBACWithoutAnEnforcerRefusesWrites(t *testing.T) {
+func TestRBACWithoutAPolicySetRefusesWrites(t *testing.T) {
 	r := rbacWithoutEnforcer(t)
 	ctx := context.Background()
 	permissions := []types.Permission{{Object: "/api/things", Action: "GET"}}
@@ -44,11 +44,11 @@ func TestRBACWithoutAnEnforcerRefusesWrites(t *testing.T) {
 	}
 }
 
-// TestRBACWithoutAnEnforcerAnswersReads covers the other half of the same
+// TestRBACWithoutAPolicySetAnswersReads covers the other half of the same
 // process. A denial and an empty role set are both true of a deployment that
 // stores no policies, so answering them states the situation rather than hiding
 // it, and only the built-in root subject is answered otherwise.
-func TestRBACWithoutAnEnforcerAnswersReads(t *testing.T) {
+func TestRBACWithoutAPolicySetAnswersReads(t *testing.T) {
 	r := rbacWithoutEnforcer(t)
 	ctx := context.Background()
 

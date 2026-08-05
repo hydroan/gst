@@ -103,9 +103,7 @@ func TestAuthorizeNamesTheGrantingRule(t *testing.T) {
 // revoking the role policy would not take the access away.
 func TestAuthorizeReportsStrongestSource(t *testing.T) {
 	r := newAuthorizeFixture(t)
-	if _, err := r.enforcer.AddGroupingPolicy("u_system", "role_a", "default"); err != nil {
-		t.Fatal(err)
-	}
+	seed(t, tenantRoleGrouping, []string{"u_system", "role_a", "default"})
 
 	decision, err := r.Authorize(context.Background(), "default", "u_system", "/api/things", "GET")
 	source := decision.Source
@@ -157,17 +155,13 @@ func TestAuthorizeResolvesInheritedRoleLinks(t *testing.T) {
 		{"u_relayed_system", "relay_role"},
 		{"relay_role", consts.AUTHZ_SYSTEM_ROLE_ROOT},
 	} {
-		if _, err := r.enforcer.AddNamedGroupingPolicy(systemRoleGrouping, grouping); err != nil {
-			t.Fatal(err)
-		}
+		seed(t, systemRoleGrouping, grouping)
 	}
 	for _, grouping := range [][]string{
 		{"u_relayed_admin", "relay_tenant_role", "default"},
 		{"relay_tenant_role", consts.AUTHZ_ROLE_ADMIN, "default"},
 	} {
-		if _, err := r.enforcer.AddGroupingPolicy(grouping); err != nil {
-			t.Fatal(err)
-		}
+		seed(t, tenantRoleGrouping, grouping)
 	}
 
 	cases := []struct {
@@ -212,9 +206,7 @@ func TestHasSystemRoleAgreesWithAuthorize(t *testing.T) {
 		{"u_relayed_system", "relay_role"},
 		{"relay_role", consts.AUTHZ_SYSTEM_ROLE_ROOT},
 	} {
-		if _, err := r.enforcer.AddNamedGroupingPolicy(systemRoleGrouping, grouping); err != nil {
-			t.Fatal(err)
-		}
+		seed(t, systemRoleGrouping, grouping)
 	}
 
 	cases := []struct {
@@ -284,14 +276,8 @@ func TestAuthorizeWithoutPoliciesAnswersTheRoleBranches(t *testing.T) {
 	r := newTestRBAC(t, 0)
 	ctx := context.Background()
 
-	if _, err := r.enforcer.AddNamedGroupingPolicy(
-		systemRoleGrouping, "u_system", consts.AUTHZ_SYSTEM_ROLE_ROOT,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := r.enforcer.AddGroupingPolicy("u_admin", consts.AUTHZ_ROLE_ADMIN, "default"); err != nil {
-		t.Fatal(err)
-	}
+	seed(t, systemRoleGrouping, []string{"u_system", consts.AUTHZ_SYSTEM_ROLE_ROOT})
+	seed(t, tenantRoleGrouping, []string{"u_admin", consts.AUTHZ_ROLE_ADMIN, "default"})
 
 	cases := []struct {
 		name        string
@@ -338,11 +324,8 @@ func TestAuthorizeReadsStoredObjectsAsTemplates(t *testing.T) {
 		{"default", "role_a", "/api/.*", "GET", "allow"},
 		{"default", "role_a", "/api/items/[", "GET", "allow"},
 	} {
-		if _, err := r.enforcer.AddPolicy(policy); err != nil {
-			t.Fatal(err)
-		}
+		seed(t, "p", policy)
 	}
-	reindex(r)
 
 	decision, err := r.Authorize(ctx, "default", "u_member", "/api/authz/roles", "GET")
 	allowed := decision.Allowed
@@ -375,24 +358,15 @@ func newAuthorizeFixture(t *testing.T) *rbac {
 		{"default", "role_a", "/api/things", "GET", "allow"},
 		{"*", consts.AUTHZ_ROLE_AUTHENTICATED, "/api/open", "GET", "allow"},
 	} {
-		if _, err := r.enforcer.AddPolicy(policy); err != nil {
-			t.Fatal(err)
-		}
+		seed(t, "p", policy)
 	}
 	for _, grouping := range [][]string{
 		{"u_member", "role_a", "default"},
 		{"u_admin", consts.AUTHZ_ROLE_ADMIN, "default"},
 	} {
-		if _, err := r.enforcer.AddGroupingPolicy(grouping); err != nil {
-			t.Fatal(err)
-		}
+		seed(t, tenantRoleGrouping, grouping)
 	}
-	if _, err := r.enforcer.AddNamedGroupingPolicy(
-		systemRoleGrouping, "u_system", consts.AUTHZ_SYSTEM_ROLE_ROOT,
-	); err != nil {
-		t.Fatal(err)
-	}
-	reindex(r)
+	seed(t, systemRoleGrouping, []string{"u_system", consts.AUTHZ_SYSTEM_ROLE_ROOT})
 	return r
 }
 

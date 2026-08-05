@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	casbinmodel "github.com/casbin/casbin/v3/model"
 	"github.com/cockroachdb/errors"
 	prommetrics "github.com/hydroan/gst/metrics"
 	"github.com/hydroan/gst/types"
@@ -21,8 +20,8 @@ type failLoadAdapter struct{ *adapter }
 
 var errAdapterLoad = errors.New("adapter load failed")
 
-func (a *failLoadAdapter) LoadPolicyCtx(context.Context, casbinmodel.Model) error {
-	return errAdapterLoad
+func (a *failLoadAdapter) loadPolicies(context.Context) (*policySet, error) {
+	return nil, errAdapterLoad
 }
 
 // recoveringLoadAdapter fails a fixed number of policy reads and then answers
@@ -33,11 +32,11 @@ type recoveringLoadAdapter struct {
 	remaining atomic.Int32
 }
 
-func (a *recoveringLoadAdapter) LoadPolicyCtx(ctx context.Context, m casbinmodel.Model) error {
+func (a *recoveringLoadAdapter) loadPolicies(ctx context.Context) (*policySet, error) {
 	if a.remaining.Add(-1) >= 0 {
-		return errAdapterLoad
+		return nil, errAdapterLoad
 	}
-	return a.adapter.LoadPolicyCtx(ctx, m)
+	return a.adapter.loadPolicies(ctx)
 }
 
 // TestRecoveryOutlivesTheRequestThatTriggeredIt covers the context an
@@ -52,7 +51,7 @@ func TestRecoveryOutlivesTheRequestThatTriggeredIt(t *testing.T) {
 
 	// Storage holds a rule memory does not, which is the state a reload repairs.
 	_, err := r.applyToStore(context.Background(), []policyMutation{
-		addRules("p", "p", []string{"tenant_a", "role_a", "/api/things", "GET", "allow"}),
+		addRules("p", []string{"tenant_a", "role_a", "/api/things", "GET", "allow"}),
 	})
 	require.NoError(t, err)
 	require.Len(t, storedRules(t, store), 1)
@@ -63,27 +62,20 @@ func TestRecoveryOutlivesTheRequestThatTriggeredIt(t *testing.T) {
 
 	// Without this the test would pass on a database that ignores the context,
 	// proving nothing about the reload.
-	probe, err := casbinmodel.NewModelFromString(string(modelData))
-	require.NoError(t, err)
-	require.Error(t, store.LoadPolicyCtx(canceled, probe),
-		"the trigger context has to be dead for this test to mean anything")
+	_, err = store.loadPolicies(canceled)
+	require.Error(t, err, "the trigger context has to be dead for this test to mean anything")
 
 	require.NoError(t, r.recoverPolicies(canceled, nil))
 	assert.Equal(t, storedRules(t, store), memoryRules(t, r),
 		"a canceled trigger must not cancel the reload it triggered")
 }
 
-// TestReloadKeepsTheEnforcerInvariants guards the enforcer state a reload has to
-// leave alone.
-//
-// The reload goes through the enforcer's own load, which swaps the model
-// through applyModifiedModel. Rebuilding it any way that reaches SetModel
-// re-initializes the enforcer instead: the function map is rebuilt, dropping
-// the matcher function this package registers so that no decision can resolve
-// it, and autosave comes back on, letting Casbin write policies behind
-// mutate's back. Both faults are silent where they are introduced.
-func TestReloadKeepsTheEnforcerInvariants(t *testing.T) {
-	r, store := storedRBAC(t, "policy_reload_invariants")
+// TestReloadKeepsDeciding covers what a reload has to leave working: the set,
+// the index and the role graph are swapped together, so a decision after a
+// reload answers exactly as before it — templates matched, inheritance
+// resolved — from the reloaded rules.
+func TestReloadKeepsDeciding(t *testing.T) {
+	r, _ := storedRBAC(t, "policy_reload_invariants")
 	ctx := context.Background()
 
 	require.NoError(t, r.SetRolePermissions(ctx, "tenant_a", "role_a", []types.Permission{
@@ -93,14 +85,8 @@ func TestReloadKeepsTheEnforcerInvariants(t *testing.T) {
 	require.NoError(t, r.ReloadPolicies(ctx))
 
 	decision, err := r.Authorize(ctx, "tenant_a", "u1", "/api/things/1", "GET")
-	allowed := decision.Allowed
 	require.NoError(t, err)
-	assert.True(t, allowed, "the matcher function has to survive a reload")
-
-	before := storedRules(t, store)
-	_, err = r.enforcer.AddPolicy("tenant_a", "role_b", "/api/other", "GET", "allow")
-	require.NoError(t, err)
-	assert.Equal(t, before, storedRules(t, store), "autosave has to stay off after a reload")
+	assert.True(t, decision.Allowed, "a reloaded process has to keep deciding as before")
 }
 
 // TestDivergedProcessRetriesUntilStorageAnswers covers what happens after the
@@ -120,14 +106,13 @@ func TestDivergedProcessRetriesUntilStorageAnswers(t *testing.T) {
 	store := newPolicyTable(t, "policy_divergence_retry")
 	flaky := &recoveringLoadAdapter{adapter: store}
 	flaky.remaining.Store(3)
-	enforcer, err := newEnforcer(flaky)
-	require.NoError(t, err)
-	r := &rbac{enforcer: enforcer, adapter: flaky, mu: &enforcerMu}
+	installTestSet(t)
+	r := &rbac{adapter: flaky, mu: &policyMu}
 
 	// Storage holds a rule memory does not, which is what the retry has to
 	// repair once the adapter answers again.
-	_, err = r.applyToStore(context.Background(), []policyMutation{
-		addRules("p", "p", []string{"tenant_a", "role_a", "/api/things", "GET", "allow"}),
+	_, err := r.applyToStore(context.Background(), []policyMutation{
+		addRules("p", []string{"tenant_a", "role_a", "/api/things", "GET", "allow"}),
 	})
 	require.NoError(t, err)
 
@@ -153,10 +138,11 @@ func TestPeriodicReloadReconcilesWithStorage(t *testing.T) {
 	t.Cleanup(func() { reloadInterval = prev })
 
 	r, store := storedRBAC(t, "policy_periodic_reload")
-	// The loop resolves the enforcer through RBAC on every tick, so the pair
+	// The loop resolves its target through RBAC on every tick, so the adapter
 	// under test has to be the installed one.
-	installEnforcer(r.enforcer, store)
-	t.Cleanup(func() { installEnforcer(nil, nil) })
+	policyMu.Lock()
+	policyStore = store
+	policyMu.Unlock()
 
 	stop := startPeriodicReload()
 	t.Cleanup(stop)
@@ -164,14 +150,14 @@ func TestPeriodicReloadReconcilesWithStorage(t *testing.T) {
 	// A write this process never saw: storage only, no memory half, no
 	// divergence published.
 	_, err := r.applyToStore(context.Background(), []policyMutation{
-		addRules("p", "p", []string{"tenant_a", "role_a", "/api/things", "GET", "allow"}),
+		addRules("p", []string{"tenant_a", "role_a", "/api/things", "GET", "allow"}),
 	})
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
 		r.mu.RLock()
 		defer r.mu.RUnlock()
-		return len(r.enforcer.GetModel()["p"]["p"].Policy) == 1
+		return len(policyRules.all("p")) == 1
 	}, 5*time.Second, time.Millisecond,
 		"the schedule has to pick up a write this process never made")
 	assert.Equal(t, storedRules(t, store), memoryRules(t, r))
@@ -191,9 +177,8 @@ func TestPolicyDivergenceIsPublished(t *testing.T) {
 
 		store := newPolicyTable(t, "policy_divergence_failing")
 		failing := &failLoadAdapter{adapter: store}
-		enforcer, err := newEnforcer(failing)
-		require.NoError(t, err)
-		r := &rbac{enforcer: enforcer, adapter: failing, mu: &enforcerMu}
+		installTestSet(t)
+		r := &rbac{adapter: failing, mu: &policyMu}
 
 		require.ErrorIs(t, r.recoverPolicies(context.Background(), nil), errAdapterLoad)
 		assert.True(t, policiesDiverged.Load(),

@@ -65,16 +65,12 @@ func (r *rbac) Authorize(
 // An unknown answer is reported as no reason at all. Guessing between the two
 // would send an operator to repair the step that was never broken.
 func (r *rbac) denyReason(tenant string, subject string) consts.DenyReason {
-	manager := r.enforcer.GetNamedRoleManager(tenantRoleGrouping)
-	if manager == nil {
-		// No grouping means no subject holds a role, whatever is stored.
+	graph := policyGraph
+	if graph == nil {
+		// No graph means no subject holds a role, whatever is stored.
 		return consts.DenyReasonNoRole
 	}
-	roles, err := manager.GetRoles(subject, tenant)
-	if err != nil {
-		return ""
-	}
-	if len(roles) == 0 {
+	if len(graph.directRoles(tenantRoleGrouping, subject, tenant)) == 0 {
 		return consts.DenyReasonNoRole
 	}
 	return consts.DenyReasonNoPolicy
@@ -108,19 +104,10 @@ func (r *rbac) denyReason(tenant string, subject string) consts.DenyReason {
 func (r *rbac) authorize(
 	tenant string, subject string, object string, action string,
 ) (bool, consts.GrantSource, []string, error) {
-	systemRoot, err := r.hasRoleLink(systemRoleGrouping, subject, consts.AUTHZ_SYSTEM_ROLE_ROOT)
-	if err != nil {
-		return false, "", nil, err
-	}
-	if systemRoot {
+	if r.hasRoleLink(systemRoleGrouping, subject, consts.AUTHZ_SYSTEM_ROLE_ROOT) {
 		return true, consts.GrantSourceSystemRoot, nil, nil
 	}
-
-	tenantAdmin, err := r.hasRoleLink(tenantRoleGrouping, subject, consts.AUTHZ_ROLE_ADMIN, tenant)
-	if err != nil {
-		return false, "", nil, err
-	}
-	if tenantAdmin {
+	if r.hasRoleLink(tenantRoleGrouping, subject, consts.AUTHZ_ROLE_ADMIN, tenant) {
 		return true, consts.GrantSourceTenantAdmin, nil, nil
 	}
 
@@ -142,10 +129,7 @@ func (r *rbac) authorize(
 		}
 	}
 
-	roles, err := r.subjectRoleClosure(subject, tenant)
-	if err != nil {
-		return false, "", nil, err
-	}
+	roles := subjectRoleClosure(subject, tenant)
 	tenantRules := index.byTenantRole[tenant]
 	for _, role := range roles {
 		// The matcher refused a rule whose role names the subject itself, so
@@ -169,17 +153,14 @@ func (r *rbac) authorize(
 // directly or through another role — what the matcher's g() answered once per
 // stored rule, asked once per decision instead.
 //
-// Each level is sorted before it is walked. The role manager reports a name's
-// roles in no stable order, and the closure's order decides which rule a
-// decision names when several roles grant the same route; sorting makes that
+// Each level is sorted before it is walked. Assignments arrive in no order
+// worth preserving, and the closure's order decides which rule a decision
+// names when several roles grant the same route; sorting makes that
 // attribution the same answer on every replay.
-func (r *rbac) subjectRoleClosure(subject string, tenant string) ([]string, error) {
-	if subject == "" {
-		return nil, nil
-	}
-	manager := r.enforcer.GetNamedRoleManager(tenantRoleGrouping)
-	if manager == nil {
-		return nil, nil
+func subjectRoleClosure(subject string, tenant string) []string {
+	graph := policyGraph
+	if subject == "" || graph == nil {
+		return nil
 	}
 
 	seen := map[string]struct{}{subject: {}}
@@ -188,11 +169,7 @@ func (r *rbac) subjectRoleClosure(subject string, tenant string) ([]string, erro
 	for level := 0; level < maxRoleHierarchy && len(frontier) > 0; level++ {
 		next := make([]string, 0, len(frontier))
 		for _, name := range frontier {
-			roles, err := manager.GetRoles(name, tenant)
-			if err != nil {
-				return nil, err
-			}
-			for _, role := range roles {
+			for _, role := range graph.directRoles(tenantRoleGrouping, name, tenant) {
 				if _, ok := seen[role]; ok {
 					continue
 				}
@@ -204,29 +181,33 @@ func (r *rbac) subjectRoleClosure(subject string, tenant string) ([]string, erro
 		closure = append(closure, next...)
 		frontier = next
 	}
-	return closure, nil
+	return closure
 }
 
 // hasRoleLink reports whether subject reaches role through the grouping ptype,
 // answering exactly what the g function in the matcher would have answered.
 //
-// The role manager is asked rather than the stored rules. It resolves a subject
+// The role graph is asked rather than the stored rules. It resolves a subject
 // that reaches the role through another role, which a lookup of the rules as
 // written does not, and moving a branch out of the matcher must not change what
 // that branch decides.
 //
-// The inequality is part of that agreement: HasLink reports a self-match, so a
-// subject named after the role would otherwise be handed it. The matcher
+// The inequality is part of that agreement: the graph reports a self-match, so
+// a subject named after the role would otherwise be handed it. The matcher
 // guarded against that with the same test.
-func (r *rbac) hasRoleLink(ptype string, subject string, role string, domain ...string) (bool, error) {
+func (r *rbac) hasRoleLink(ptype string, subject string, role string, domain ...string) bool {
 	if subject == role {
-		return false, nil
+		return false
 	}
-	manager := r.enforcer.GetNamedRoleManager(ptype)
-	if manager == nil {
-		return false, nil
+	graph := policyGraph
+	if graph == nil {
+		return false
 	}
-	return manager.HasLink(subject, role, domain...)
+	scope := ""
+	if len(domain) > 0 {
+		scope = domain[0]
+	}
+	return graph.hasLink(ptype, subject, role, scope)
 }
 
 // countDecision publishes one decision to whoever is watching.

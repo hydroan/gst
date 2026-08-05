@@ -20,8 +20,8 @@ func (r *rbac) RemoveRole(ctx context.Context, tenant string, role string) (err 
 
 	return r.mutate(
 		ctx,
-		removeFiltered("p", "p", 0, tenant, role),
-		removeFiltered("g", "g", 1, role, tenant),
+		removeFiltered("p", 0, tenant, role),
+		removeFiltered(tenantRoleGrouping, 1, role, tenant),
 	)
 }
 
@@ -101,9 +101,9 @@ func (r *rbac) SetPermissionsForAuthenticated(ctx context.Context, permissions [
 func (r *rbac) replacePermissions(
 	ctx context.Context, tenant string, role string, permissions []types.Permission,
 ) error {
-	mutations := []policyMutation{removeFiltered("p", "p", 0, tenant, role)}
+	mutations := []policyMutation{removeFiltered("p", 0, tenant, role)}
 	if rules := permissionPolicies(tenant, role, permissions); len(rules) > 0 {
-		mutations = append(mutations, addRules("p", "p", rules...))
+		mutations = append(mutations, addRules("p", rules...))
 	}
 	return r.mutate(ctx, mutations...)
 }

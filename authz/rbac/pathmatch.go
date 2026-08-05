@@ -8,14 +8,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// matcherFuncPathMatch is the name modelData's matcher calls pathMatch by.
-//
-// It is deliberately not Casbin's keyMatch3, and could not be: FunctionMap
-// stores through LoadOrStore, so a built-in name can never be replaced. The
-// matcher has to name this function for the compiled templates to be used at
-// all.
-const matcherFuncPathMatch = "pathMatch"
-
 // pathTemplatePlaceholder matches the {name} placeholder that stands for one
 // path segment, which is the placeholder syntax Casbin's keyMatch3 defines.
 //
@@ -156,25 +148,4 @@ func quotePathTemplate(literal string) string {
 	// The wildcard spans separators, which is what distinguishes it from a
 	// placeholder.
 	return strings.Join(spans, "/.*")
-}
-
-// pathMatchFunc adapts pathMatch to the signature the matcher calls it with.
-//
-// The argument checks mirror Casbin's own: the matcher passes tokens straight
-// through, so a model naming the wrong token reaches this function with a value
-// that is not a string, and reporting that is more use than a type assertion
-// panic recovered several frames away.
-func pathMatchFunc(args ...any) (any, error) {
-	if len(args) != 2 {
-		return false, errors.Newf("%s: expected 2 arguments, got %d", matcherFuncPathMatch, len(args))
-	}
-	path, ok := args[0].(string)
-	if !ok {
-		return false, errors.Newf("%s: argument 1 must be a string, got %T", matcherFuncPathMatch, args[0])
-	}
-	template, ok := args[1].(string)
-	if !ok {
-		return false, errors.Newf("%s: argument 2 must be a string, got %T", matcherFuncPathMatch, args[1])
-	}
-	return pathMatch(path, template)
 }
