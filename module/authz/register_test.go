@@ -60,9 +60,7 @@ func TestMain(m *testing.M) {
 		Redis:    true,
 		Register: func() {
 			iam.Register()
-			authz.Register(authz.Config{
-				TenantResolver: authz.HeaderTenantResolver(tenantHeader),
-			})
+			authz.Register(authz.HeaderTenantResolver(tenantHeader))
 		},
 		Seed: seedBaseline,
 	})

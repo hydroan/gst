@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/authz/rbac"
@@ -28,41 +27,6 @@ import (
 // tenant's rows.
 type TenantResolver func(*gin.Context) (string, error)
 
-// AuthzConfig configures RBAC authorization middleware.
-type AuthzConfig struct {
-	TenantResolver TenantResolver
-}
-
-// AuthzOption configures Authz middleware.
-type AuthzOption func(*AuthzConfig)
-
-var authzTenantResolver = struct {
-	sync.RWMutex
-	resolver TenantResolver
-}{
-	resolver: defaultTenantResolver,
-}
-
-// WithTenantResolver sets the request tenant resolver used by Authz.
-func WithTenantResolver(resolver TenantResolver) AuthzOption {
-	return func(cfg *AuthzConfig) {
-		if resolver != nil {
-			cfg.TenantResolver = resolver
-		}
-	}
-}
-
-// SetAuthzTenantResolver sets the tenant resolver used by zero-argument Authz.
-func SetAuthzTenantResolver(resolver TenantResolver) {
-	if resolver == nil {
-		resolver = defaultTenantResolver
-	}
-
-	authzTenantResolver.Lock()
-	defer authzTenantResolver.Unlock()
-	authzTenantResolver.resolver = resolver
-}
-
 // Authz authorizes requests using RBAC.
 // It derives subject from trusted request context and blocks anonymous requests.
 // Authz must be called before config.Init so config.Init can read
@@ -72,14 +36,18 @@ func SetAuthzTenantResolver(resolver TenantResolver) {
 // consts.CTX_USER_ID. When using built-in IAM sessions, register IAMSession
 // before Authz; otherwise a valid session cookie is rejected as "permission
 // denied" because Authz cannot find the authenticated subject yet.
-func Authz(options ...AuthzOption) gin.HandlerFunc {
+//
+// At most one resolver may be given, and none is the common case: the request
+// tenant then comes from consts.CTX_TENANT_ID, which the authentication
+// middleware fills from the session. A resolver exists for deployments where
+// the tenant arrives some other way — a header a trusted gateway injects, a
+// subdomain — and giving it here is the only way to install one.
+func Authz(resolver ...TenantResolver) gin.HandlerFunc {
 	os.Setenv(config.AUTH_RBAC_ENABLED, "true")
 
-	cfg := AuthzConfig{}
-	for _, option := range options {
-		if option != nil {
-			option(&cfg)
-		}
+	resolveTenant := defaultTenantResolver
+	if len(resolver) > 0 && resolver[0] != nil {
+		resolveTenant = resolver[0]
 	}
 
 	return func(c *gin.Context) {
@@ -101,7 +69,7 @@ func Authz(options ...AuthzOption) gin.HandlerFunc {
 			logAuthzDeny(c, "", sub, obj, act, consts.DenyReasonUnauthenticated)
 			return
 		}
-		tenantID, err := resolveAuthzTenant(c, cfg.TenantResolver)
+		tenantID, err := resolveTenant(c)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 				"code":          -1,
@@ -259,23 +227,11 @@ func authzLogFields(c *gin.Context, tenant, sub, obj, act string) []zap.Field {
 	)
 }
 
-func resolveAuthzTenant(c *gin.Context, resolver TenantResolver) (string, error) {
-	if resolver == nil {
-		resolver = currentAuthzTenantResolver()
-	}
-	return resolver(c)
-}
-
-func currentAuthzTenantResolver() TenantResolver {
-	authzTenantResolver.RLock()
-	defer authzTenantResolver.RUnlock()
-	if authzTenantResolver.resolver == nil {
-		return defaultTenantResolver
-	}
-	return authzTenantResolver.resolver
-}
-
-func defaultTenantResolver(c *gin.Context) (string, error) {
+// defaultTenantResolver reads the tenant the authentication middleware stored
+// on the request. It is declared as a TenantResolver because that is what it
+// is: the signature, error included, belongs to the type, not to this one
+// implementation that happens never to fail.
+var defaultTenantResolver TenantResolver = func(c *gin.Context) (string, error) {
 	if c == nil {
 		return tenant.Default, nil
 	}

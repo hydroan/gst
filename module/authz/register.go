@@ -7,11 +7,6 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
-// Config is the configuration for authz module.
-type Config struct {
-	TenantResolver middleware.TenantResolver
-}
-
 // Register registers RBAC authorization modules and middleware.
 //
 // Modules:
@@ -46,12 +41,11 @@ type Config struct {
 // Register this module after the middleware that establishes the authenticated
 // subject. With the built-in IAM module, call iam.Register before authz.Register
 // so IAMSession runs before Authz and writes CTX_USER_ID for RBAC.
-func Register(config ...Config) {
-	cfg := Config{}
-	if len(config) > 0 {
-		cfg = config[0]
-	}
-
+//
+// At most one resolver may be given, and none is the common case: the request
+// tenant then comes from the authenticated session. See middleware.Authz and
+// middleware.TenantResolver for what a resolver is and what it is trusted with.
+func Register(resolver ...middleware.TenantResolver) {
 	// Register CasbinRule explicitly because Casbin manages this table through
 	// the GORM adapter instead of a public CRUD module.
 	model.Register[*CasbinRule]()
@@ -59,7 +53,7 @@ func Register(config ...Config) {
 	// Register Authz after the authentication middleware that writes CTX_USER_ID.
 	// Registering Authz before IAMSession makes authenticated requests look
 	// anonymous and returns "permission denied" before session cookies are read.
-	middleware.RegisterAuth(middleware.Authz(middleware.WithTenantResolver(cfg.TenantResolver)))
+	middleware.RegisterAuth(middleware.Authz(resolver...))
 
 	module.Use[
 		*Role,
