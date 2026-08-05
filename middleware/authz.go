@@ -10,22 +10,9 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/tenant"
-	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
 )
-
-// TenantResolver resolves the authorization tenant for the current request.
-//
-// What it returns is trusted twice over: the authorization decision is made in
-// that tenant, and every tenant-scoped row the request then reads or writes is
-// scoped to it. A resolver must therefore answer from something the deployment
-// vouches for — the session, a membership it verified, a header a trusted
-// gateway injected — and never pass a client-controlled value through as it
-// stands: policies for the implicit authenticated role match in every tenant,
-// so a request naming a forged tenant would pass those and act on that
-// tenant's rows.
-type TenantResolver func(*gin.Context) (string, error)
 
 // Authz authorizes requests using RBAC.
 // It derives subject from trusted request context and blocks anonymous requests.
@@ -37,22 +24,22 @@ type TenantResolver func(*gin.Context) (string, error)
 // before Authz; otherwise a valid session cookie is rejected as "permission
 // denied" because Authz cannot find the authenticated subject yet.
 //
-// At most one resolver may be given, and none is the common case: the request
-// tenant then comes from consts.CTX_TENANT_ID, which the authentication
-// middleware fills from the session. A resolver exists for deployments where
-// the tenant arrives some other way — a header a trusted gateway injects, a
-// subdomain — and giving it here is the only way to install one.
-func Authz(resolver ...TenantResolver) gin.HandlerFunc {
+// The request tenant has exactly one source: consts.CTX_TENANT_ID, read as it
+// stands when this middleware runs, defaulted to tenant.Default when empty.
+// Whatever trusted middleware wrote it last decides. IAMSession writes the
+// session's tenant; a deployment whose tenant arrives another way — a header a
+// trusted gateway injects, a subdomain — installs its own middleware after
+// IAMSession and before Authz and overwrites it. The value is trusted twice
+// over — the authorization decision is made in that tenant, and every
+// tenant-scoped row the request then reads or writes is scoped to it — so it
+// must only ever be written from something the deployment vouches for, never
+// from client input passed through as it stands: policies for the implicit
+// authenticated role match in every tenant, so a request naming a forged
+// tenant would pass those and act on that tenant's rows.
+func Authz() gin.HandlerFunc {
 	os.Setenv(config.AUTH_RBAC_ENABLED, "true")
 
-	resolveTenant := defaultTenantResolver
-	if len(resolver) > 0 && resolver[0] != nil {
-		resolveTenant = resolver[0]
-	}
-
 	return func(c *gin.Context) {
-		var err error
-
 		obj := c.Request.URL.Path
 		act := c.Request.Method
 
@@ -69,20 +56,7 @@ func Authz(resolver ...TenantResolver) gin.HandlerFunc {
 			logAuthzDeny(c, "", sub, obj, act, consts.DenyReasonUnauthenticated)
 			return
 		}
-		tenantID, err := resolveTenant(c)
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-				"code":          -1,
-				"msg":           "authorization unavailable",
-				"data":          nil,
-				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
-			})
-			// The tenant is unknown at this point, so the attempt is recorded
-			// without one.
-			logAuthzFailure(c, "", sub, obj, act, err)
-			return
-		}
-		tenantID = strings.TrimSpace(tenantID)
+		tenantID := strings.TrimSpace(c.GetString(consts.CTX_TENANT_ID))
 		if tenantID == "" {
 			tenantID = tenant.Default
 		}
@@ -93,9 +67,9 @@ func Authz(resolver ...TenantResolver) gin.HandlerFunc {
 		// the client cannot change anything to make the decision reachable.
 		// Answering 400 filed authorization outages under client error, where
 		// nothing watching for server faults would ever see them.
-		var decision types.Decision
-		if decision, err = rbac.RBAC().
-			Authorize(c.Request.Context(), tenantID, sub, obj, act); err != nil {
+		decision, err := rbac.RBAC().
+			Authorize(c.Request.Context(), tenantID, sub, obj, act)
+		if err != nil {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 				"code":          -1,
 				"msg":           "authorization unavailable",
@@ -225,15 +199,4 @@ func authzLogFields(c *gin.Context, tenant, sub, obj, act string) []zap.Field {
 		zap.String("username", c.GetString(consts.CTX_USERNAME)),
 		zap.String("trace_id", c.GetString(consts.TRACE_ID)),
 	)
-}
-
-// defaultTenantResolver reads the tenant the authentication middleware stored
-// on the request. It is declared as a TenantResolver because that is what it
-// is: the signature, error included, belongs to the type, not to this one
-// implementation that happens never to fail.
-var defaultTenantResolver TenantResolver = func(c *gin.Context) (string, error) {
-	if c == nil {
-		return tenant.Default, nil
-	}
-	return strings.TrimSpace(c.GetString(consts.CTX_TENANT_ID)), nil
 }

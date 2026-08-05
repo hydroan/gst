@@ -42,10 +42,10 @@ import (
 // subject. With the built-in IAM module, call iam.Register before authz.Register
 // so IAMSession runs before Authz and writes CTX_USER_ID for RBAC.
 //
-// At most one resolver may be given, and none is the common case: the request
-// tenant then comes from the authenticated session. See middleware.Authz and
-// middleware.TenantResolver for what a resolver is and what it is trusted with.
-func Register(resolver ...middleware.TenantResolver) {
+// The request tenant is read from CTX_TENANT_ID, which IAMSession fills from
+// the session; a deployment whose tenant arrives another way registers its own
+// middleware between the two and overwrites it. See middleware.Authz.
+func Register() {
 	// Register CasbinRule explicitly because Casbin manages this table through
 	// the GORM adapter instead of a public CRUD module.
 	model.Register[*CasbinRule]()
@@ -53,7 +53,7 @@ func Register(resolver ...middleware.TenantResolver) {
 	// Register Authz after the authentication middleware that writes CTX_USER_ID.
 	// Registering Authz before IAMSession makes authenticated requests look
 	// anonymous and returns "permission denied" before session cookies are read.
-	middleware.RegisterAuth(middleware.Authz(resolver...))
+	middleware.RegisterAuth(middleware.Authz())
 
 	module.Use[
 		*Role,

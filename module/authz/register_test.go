@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
@@ -19,6 +21,7 @@ import (
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	"github.com/hydroan/gst/internal/testutil"
+	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/module/iam"
@@ -60,7 +63,17 @@ func TestMain(m *testing.M) {
 		Redis:    true,
 		Register: func() {
 			iam.Register()
-			authz.Register(authz.HeaderTenantResolver(tenantHeader))
+			// The request tenant's one source is CTX_TENANT_ID, written by
+			// trusted middleware ahead of Authz. The tests stand in for a
+			// trusted gateway: registered after IAMSession, this overwrites the
+			// session's tenant with the header's whenever one is sent.
+			middleware.RegisterAuth(func(c *gin.Context) {
+				if tenantID := strings.TrimSpace(c.GetHeader(tenantHeader)); tenantID != "" {
+					c.Set(consts.CTX_TENANT_ID, tenantID)
+				}
+				c.Next()
+			})
+			authz.Register()
 		},
 		Seed: seedBaseline,
 	})

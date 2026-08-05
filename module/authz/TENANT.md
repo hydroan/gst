@@ -72,14 +72,17 @@
 
 ## tenant 来源
 
-`module/authz` 的默认 resolver 会优先读取请求上下文中的 `CTX_TENANT_ID`；为空时回退到 `rbac.DefaultTenant`。当项目同时使用 `module/iam` 时，`IAMSession` 会把 `Session.TenantID` 写入该上下文，因此登录时选择的 tenant 可以直接成为 authz 的默认 tenant 来源。
+请求 tenant 只有一个来源：请求上下文中的 `CTX_TENANT_ID`。`Authz` 中间件按现值读取，为空时回退到默认 tenant（`tenant.Default`）。当项目同时使用 `module/iam` 时，`IAMSession` 会把 `Session.TenantID` 写入该上下文，因此登录时选择的 tenant 直接成为 authz 的 tenant 来源，多租户不需要任何额外配置。
 
-如果项目的 tenant 来源不是 IAM session，例如 JWT claims、子域名或可信网关注入 header，可以在注册时传入 `TenantResolver`：
+如果项目的 tenant 来源不是 IAM session，例如 JWT claims、子域名或可信网关注入的 header，在 `IAMSession` 之后、`Authz` 之前注册一个项目自己的中间件覆写 `CTX_TENANT_ID`：
 
 ```go
-authz.Register(authz.Config{
-    TenantResolver: authz.HeaderTenantResolver("X-Tenant-ID"),
+middleware.RegisterAuth(func(c *gin.Context) {
+    if tenantID := strings.TrimSpace(c.GetHeader("X-Tenant-ID")); tenantID != "" {
+        c.Set(consts.CTX_TENANT_ID, tenantID)
+    }
+    c.Next()
 })
 ```
 
-`HeaderTenantResolver` 只适合测试、demo 或可信网关注入 tenant 的场景。生产项目应优先从 session、JWT claims、子域名或项目自己的 tenant 上下文中解析 tenant，不要把任意客户端 header 当作可信身份来源。
+`CTX_TENANT_ID` 是被双重信任的值：授权在这个 tenant 内判定，请求随后读写的 tenant 作用域行也 scope 到它。它只允许由部署方担保的来源写入（session、经受信网关校验后注入的 header、子域名解析），不要把任意客户端输入原样透传。

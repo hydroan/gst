@@ -56,24 +56,19 @@
 
 ## tenant 来源
 
-`IAMSession` 会把 `Session.TenantID` 写入请求上下文的 `CTX_TENANT_ID`。`module/authz` 的默认 resolver 会优先读取该上下文 tenant；为空时回退到 `rbac.DefaultTenant`。
+请求 tenant 只有一个来源：请求上下文中的 `CTX_TENANT_ID`。`IAMSession` 会把 `Session.TenantID` 写入它，`Authz` 中间件按现值读取，为空时回退到默认 tenant（`tenant.Default`）。
 
-通过 `gg module add iam` 和 `gg module add authz` 使用内置模块时，如果项目使用 IAM session tenant，可以在登录时传入 `tenant_id`，不需要额外配置 resolver。
+无论通过 `gg module add` 使用内置模块，还是通过 `gg module copy` 复制到业务项目（此时注册的是项目自己的零参 `Authz()`），只要项目使用 IAM session tenant，在登录时传入 `tenant_id` 即可，不需要任何额外配置。
 
-如果项目的 tenant 来源不是 IAM session，例如 JWT claims、子域名或可信网关注入 header，则在项目的模块注册处传入 resolver：
+如果项目的 tenant 来源不是 IAM session，例如 JWT claims、子域名或可信网关注入的 header，在 `IAMSession` 之后、`Authz` 之前注册一个项目自己的中间件覆写 `CTX_TENANT_ID`：
 
 ```go
-authz.Register(authz.Config{
-    TenantResolver: authz.HeaderTenantResolver("X-Tenant-ID"),
+middleware.RegisterAuth(func(c *gin.Context) {
+    if tenantID := strings.TrimSpace(c.GetHeader("X-Tenant-ID")); tenantID != "" {
+        c.Set(consts.CTX_TENANT_ID, tenantID)
+    }
+    c.Next()
 })
 ```
 
-通过 `gg module copy authz` 复制到业务项目后，copy manifest 会注册零参 `middleware.Authz()`。零参 `Authz()` 默认读取 `CTX_TENANT_ID`。如果业务项目使用其他 tenant 来源，需要在自己的接入文件中设置 resolver：
-
-```go
-middleware.SetAuthzTenantResolver(func(c *gin.Context) (string, error) {
-    return c.GetHeader("X-Tenant-ID"), nil
-})
-```
-
-`HeaderTenantResolver` 和 header 示例只适合测试、demo 或可信网关注入 tenant 的场景。生产项目应优先从 session、JWT claims、子域名或项目自己的 tenant 上下文中解析 tenant，不要把任意客户端 header 当作可信身份来源。
+`CTX_TENANT_ID` 是被双重信任的值：授权在这个 tenant 内判定，请求随后读写的 tenant 作用域行也 scope 到它。它只允许由部署方担保的来源写入（session、经受信网关校验后注入的 header、子域名解析），不要把任意客户端输入原样透传。
