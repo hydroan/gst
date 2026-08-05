@@ -36,29 +36,45 @@ func mustChangePasswordExempt(method, path string) bool {
 	}
 }
 
+// abortSession refuses the request in the API envelope, so a session-layer
+// rejection reads like every other refusal. These used to answer with a bare
+// {"error": ...}: a client parsing the envelope got no code and no trace id,
+// and two of the sites echoed whatever error text the layer below returned —
+// the cache's "entry not found" included — to whoever held an invalid cookie.
+func abortSession(c *gin.Context, status int, msg string) {
+	c.AbortWithStatusJSON(status, gin.H{
+		"code":          -1,
+		"msg":           msg,
+		"data":          nil,
+		consts.TRACE_ID: c.GetString(consts.TRACE_ID),
+	})
+}
+
 func IAMSession() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// fmt.Println("----- identifySession middleware", c.Request.RequestURI)
 		sessionID, err := c.Cookie(serviceiamsession.SessionCookieName)
 		sessionID = strings.TrimSpace(sessionID)
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "no session"})
-			return
-		}
-		if sessionID == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "no session"})
+		if err != nil || sessionID == "" {
+			abortSession(c, http.StatusUnauthorized, "no session")
 			return
 		}
 
 		ctx := c.Request.Context()
+		// A load that fails is answered with one fixed message. The cause is a
+		// storage detail — a snapshot that expired, a cache that has no such
+		// entry, a backend that did not answer — and none of it is the
+		// caller's: what the caller can act on is that this cookie no longer
+		// names a live session.
 		session, e := serviceiamsession.SessionManager.Load(ctx, sessionID)
 		if e != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": e.Error()})
+			abortSession(c, http.StatusUnauthorized, "session invalid")
 			return
 		}
+		// Validate speaks in client-safe terms — expired, not active — so its
+		// message passes through as it stands.
 		if err = serviceiamsession.SessionManager.Validate(sessionID, session); err != nil {
 			_, _ = serviceiamsession.SessionManager.Delete(ctx, sessionID)
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			abortSession(c, http.StatusUnauthorized, err.Error())
 			return
 		}
 
@@ -67,37 +83,38 @@ func IAMSession() gin.HandlerFunc {
 		engineName, _ := ua.Engine()
 		browserName, _ := ua.Browser()
 		if session.OS != ua.OS() {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "os mismatch"})
+			abortSession(c, http.StatusUnauthorized, "os mismatch")
 			return
 		}
 		if session.Platform != ua.Platform() {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "platform mismatch"})
+			abortSession(c, http.StatusUnauthorized, "platform mismatch")
 			return
 		}
 		if engineName != session.EngineName {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "engine mismatch"})
+			abortSession(c, http.StatusUnauthorized, "engine mismatch")
 			return
 		}
 		if browserName != session.BrowserName {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "browser mismatch"})
+			abortSession(c, http.StatusUnauthorized, "browser mismatch")
 			return
 		}
 
 		if session, err = serviceiamsession.ValidateSessionUserState(ctx, session); err != nil {
 			_, _ = serviceiamsession.SessionManager.Delete(ctx, sessionID)
-			status := http.StatusForbidden
+			// A service error carries a status and a message written for the
+			// client. Anything else is an internal failure whose text belongs
+			// in logs, not in the response.
+			status, msg := http.StatusForbidden, "session invalid"
 			var serviceErr *service.Error
 			if errors.As(err, &serviceErr) {
-				status = serviceErr.Status()
+				status, msg = serviceErr.Status(), serviceErr.Msg()
 			}
-			c.AbortWithStatusJSON(status, gin.H{"error": err.Error()})
+			abortSession(c, status, msg)
 			return
 		}
 
 		if sessionRequiresPasswordChange(session) && !mustChangePasswordExempt(c.Request.Method, c.Request.URL.Path) {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-				"error": "password change required before using this resource",
-			})
+			abortSession(c, http.StatusForbidden, "password change required before using this resource")
 			return
 		}
 
