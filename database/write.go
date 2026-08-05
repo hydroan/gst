@@ -297,8 +297,8 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 //   - Timestamp and audit columns are framework-managed and cannot be forged
 //     by callers: created_at/created_by are never written (creation facts),
 //     deleted_at is never written (rows cannot be soft-deleted or resurrected
-//     through Update), and updated_at is always refreshed to the current time
-//     by GORM regardless of the value carried by objs.
+//     through Update), and updated_at is always refreshed to the current UTC
+//     time by GORM (dbruntime.NowUTC) regardless of the value carried by objs.
 //   - A record matching no live row (missing or soft deleted) fails with
 //     ErrRecordNotFound. Detection relies on matched-rows semantics: the
 //     framework MySQL DSN enables clientFoundRows=true so an update that

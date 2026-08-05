@@ -22,6 +22,16 @@ import (
 // expose read-only accessors for application code.
 var DB *gorm.DB
 
+// NowUTC is the gorm.Config NowFunc shared by every dialect package: all
+// timestamps GORM maintains on its own — the updated_at refresh on Update and
+// the deleted_at stamp on soft delete — must carry UTC, the framework's one
+// time base (database.Create/Upsert already force it explicitly). The gorm
+// default time.Now() carries the server's local zone: drivers with a UTC
+// wire location still store the right instant, but the in-memory model then
+// serializes with a local offset instead of the UTC form read rows carry,
+// and sqlite would even persist that local offset into the row text.
+func NowUTC() time.Time { return time.Now().UTC() }
+
 // startedTable is an atomic flag to ensure table processing goroutine starts only once
 var startedTable atomic.Int32
 

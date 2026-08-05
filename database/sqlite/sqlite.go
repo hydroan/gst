@@ -130,7 +130,7 @@ func Init() (err error) {
 // Connections open through this package's own driver, which carries the
 // framework's REGEXP implementation; see registerRegexpFunc.
 func New(cfg config.Sqlite) (*gorm.DB, error) {
-	db, err := gorm.Open(sqlite.New(sqlite.Config{DriverName: driverName, DSN: buildDSN(cfg)}), &gorm.Config{Logger: logger.Gorm, TranslateError: true})
+	db, err := gorm.Open(sqlite.New(sqlite.Config{DriverName: driverName, DSN: buildDSN(cfg)}), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
 	if err != nil {
 		return nil, err
 	}

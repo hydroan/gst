@@ -61,7 +61,7 @@ func Init() (err error) {
 // partitioning) is hand-written DDL owned by the application; the framework
 // never creates or migrates ClickHouse tables.
 func New(cfg config.Clickhouse) (*gorm.DB, error) {
-	db, err := gorm.Open(clickhouse.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true})
+	db, err := gorm.Open(clickhouse.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
 	if err != nil {
 		return nil, err
 	}

@@ -48,7 +48,7 @@ func Init() (err error) {
 // so application-held instances passed to DatabaseOn, AggregateOn, and
 // TransactionOn are traced like the default database.
 func New(cfg config.SQLServer) (*gorm.DB, error) {
-	db, err := gorm.Open(sqlserver.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true})
+	db, err := gorm.Open(sqlserver.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
 	if err != nil {
 		return nil, err
 	}

@@ -51,7 +51,7 @@ func New(cfg config.MySQL) (*gorm.DB, error) {
 	// TranslateError maps dialect-specific write failures to portable gorm
 	// sentinels (gorm.ErrDuplicatedKey, gorm.ErrForeignKeyViolated) that
 	// database.Create/Update surface to callers.
-	db, err := gorm.Open(mysql.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true})
+	db, err := gorm.Open(mysql.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
 	if err != nil {
 		return nil, err
 	}

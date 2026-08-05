@@ -194,40 +194,41 @@ func TestDatabaseDelete(t *testing.T) {
 	defer cleanupTestData()
 	setupTestData(t)
 
-	// Test basic Delete - single record (soft delete)
+	// Test basic Delete - single record (TestUser purges, so this is a hard
+	// delete)
 	count := new(int)
 	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 	require.Equal(t, 3, *count, "should have 3 records initially")
 
 	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(u1))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-	require.Equal(t, 2, *count, "should have 2 records after soft delete")
+	require.Equal(t, 2, *count, "should have 2 records after delete")
 
-	// Verify soft-deleted record is not visible in List
+	// Verify deleted record is not visible in List
 	users := make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
-	require.Len(t, users, 2, "should have 2 records in List after soft delete")
+	require.Len(t, users, 2, "should have 2 records in List after delete")
 	var foundU1 bool
 	for _, u := range users {
 		if u.ID == u1.ID {
 			foundU1 = true
 		}
 	}
-	require.False(t, foundU1, "u1 should not be found in List after soft delete")
+	require.False(t, foundU1, "u1 should not be found in List after delete")
 
-	// Verify soft-deleted record is not accessible via Get
+	// Verify deleted record is not accessible via Get
 	u := new(TestUser)
 	require.ErrorIs(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID), database.ErrRecordNotFound)
 
 	// Test Delete - batch delete multiple records
 	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(u2, u3))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
-	require.Equal(t, 0, *count, "should have 0 records after batch soft delete")
+	require.Equal(t, 0, *count, "should have 0 records after batch delete")
 
-	// Verify all records are soft-deleted
+	// Verify all records are deleted
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
-	require.Empty(t, users, "should have 0 records in List after all soft deleted")
+	require.Empty(t, users, "should have 0 records in List after all deleted")
 
 	// Recreate data for next test
 	setupTestData(t)
@@ -256,6 +257,26 @@ func TestDatabaseDelete(t *testing.T) {
 		require.NoError(t, database.Database[*TestAutoItem](context.Background()).List(&remained))
 		require.Len(t, remained, 1)
 		require.Equal(t, items[1].ID, remained[0].ID)
+	})
+
+	t.Run("soft delete stamps deleted_at in UTC", func(t *testing.T) {
+		require.NoError(t, database.DB().AutoMigrate(&TestSoftDeleteItem{}))
+		defer func() {
+			_ = database.DB().Exec("DELETE FROM test_soft_delete_items").Error
+		}()
+
+		item := &TestSoftDeleteItem{Code: "soft-utc-code", Name: "alive"}
+		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).Create(item))
+		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).Delete(item))
+
+		// The deleted_at stamp is generated through NowFunc (dbruntime.NowUTC):
+		// the persisted instant must sit near the current UTC time; a NowFunc
+		// regressed to a shifted time base would drift by the server timezone
+		// offset here.
+		buried := new(TestSoftDeleteItem)
+		require.NoError(t, database.DB().Unscoped().Where("id = ?", item.ID).First(buried).Error)
+		require.True(t, buried.DeletedAt.Valid, "soft delete should persist deleted_at")
+		require.WithinDuration(t, time.Now().UTC(), buried.DeletedAt.Time, time.Minute, "deleted_at stamped by soft delete should be the current instant")
 	})
 }
 
@@ -358,6 +379,18 @@ func TestDatabaseUpdate(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).Update(nil))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Update([]*TestUser{nil, nil, nil}...))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Update([]*TestUser{nil, u1, nil}...))
+
+	t.Run("updated_at is refreshed in UTC", func(t *testing.T) {
+		fresh := new(TestUser)
+		require.NoError(t, database.Database[*TestUser](context.Background()).Get(fresh, u1.ID))
+		before := fresh.UpdatedAt
+		fresh.Name = "utc-refresh"
+		require.NoError(t, database.Database[*TestUser](context.Background()).Update(fresh))
+		// GORM refreshes updated_at through NowFunc; it must carry UTC so the
+		// in-memory value serializes with the same timestamp base Create forces.
+		require.Equal(t, time.UTC, fresh.UpdatedAt.Location(), "updated_at refreshed by Update should be UTC")
+		require.True(t, fresh.UpdatedAt.After(before), "updated_at should move forward after Update")
+	})
 
 	t.Run("missing record fails with not found", func(t *testing.T) {
 		ghost := &TestUser{Name: "ghost", Base: model.Base{ID: "missing-id"}}
@@ -590,6 +623,10 @@ func TestDatabaseUpdateByID(t *testing.T) {
 	require.Equal(t, u1.Age, u.Age, "age should not be changed")
 	require.Equal(t, u1.Email, u.Email, "email should not be changed")
 	require.NotEqual(t, originalUpdatedAt, u.UpdatedAt, "updated_at should be updated")
+	// The refresh goes through NowFunc (dbruntime.NowUTC): the instant read
+	// back must sit near the current UTC time; a NowFunc regressed to a
+	// shifted time base would drift by the server timezone offset here.
+	require.WithinDuration(t, time.Now().UTC(), u.UpdatedAt, time.Minute, "updated_at refreshed by UpdateByID should be the current instant")
 
 	// Test UpdateByID - update age field
 	newAge := 25
