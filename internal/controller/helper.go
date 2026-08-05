@@ -258,14 +258,23 @@ func handleServiceError(c *gin.Context, err error) {
 	JSON(c, CodeFailure.WithErr(err))
 }
 
-// writeErrorCoder maps database write errors to their canonical API codes:
+// writeErrorCoder maps database write errors to their canonical API codes: a
+// service-layer error keeps the status and message it was constructed with,
 // database.ErrRecordNotFound renders 404 and database.ErrDuplicatedKey renders
 // 409 with their fixed client-safe messages; anything else falls back to
 // CodeFailure carrying the error text. Handlers log the full error themselves,
 // so the not-found/duplicate branches deliberately drop internal detail from
 // the response.
+//
+// The service error is honored first, and here as well as in the action path:
+// a model hook refusing an operation states its status deliberately — a guard
+// answering 403 — and flattening that to a generic failure would misreport a
+// permission boundary as a malformed request.
 func writeErrorCoder(err error) types.Coder {
+	var serviceErr *serviceregistry.Error
 	switch {
+	case errors.As(err, &serviceErr):
+		return serviceErr
 	case errors.Is(err, database.ErrRecordNotFound):
 		return CodeNotFound
 	case errors.Is(err, database.ErrDuplicatedKey):

@@ -156,7 +156,9 @@ func (r *Role) UpdateAfter(ctx context.Context) error {
 	return r.syncPermissions(ctx)
 }
 
-// DeleteBefore deletes the role's RBAC policies before the role row is removed.
+// DeleteBefore checks the role exists and captures the tenant its rules were
+// written under, while the row is still there to read. The cleanup itself waits
+// for DeleteAfter, which runs on the other side of the row lock.
 func (r *Role) DeleteBefore(ctx context.Context) error {
 	if r.ID == "" {
 		return errors.New("role id is required")
@@ -169,7 +171,22 @@ func (r *Role) DeleteBefore(ctx context.Context) error {
 	if len(r.TenantID) == 0 {
 		r.TenantID = current.TenantID
 	}
+	return nil
+}
 
+// DeleteAfter removes the role's bindings and RBAC policies, after the DELETE
+// statement and inside its transaction.
+//
+// After rather than before is what serializes this against a concurrent
+// permission rebuild. A rebuild replaces the role's policy rows only while it
+// holds the role's row — its own write path updated the row, the menu path
+// locks it — so a cleanup running after this transaction has deleted that row
+// cannot interleave with one: the rebuild either committed first and its rows
+// are here to be removed, or it is waiting on the row lock and will find the
+// role gone. Run before the DELETE, the cleanup raced those rebuilds on
+// backends whose statements see only committed rows, and lost by leaving the
+// rebuilt rules stored for a role that no longer exists.
+func (r *Role) DeleteAfter(ctx context.Context) error {
 	// The role ID alone identifies the bindings: it is unique across tenants,
 	// and the listing is scoped to the caller's tenant anyway.
 	roleBindings := make([]*RoleBinding, 0)

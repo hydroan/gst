@@ -117,7 +117,7 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 			// if err = database.Database[M](requestContext(c)).WithPurge(req.Options.Purge).Delete(req.Items...); err != nil {
 			if err = database.Database[M](requestContext(c)).Delete(req.Items...); err != nil {
 				log.Error(err)
-				JSON(c, CodeFailure.WithErr(err))
+				JSON(c, writeErrorCoder(err))
 				gstotel.RecordError(span, err)
 				return
 			}

@@ -27,10 +27,13 @@
 // ReloadPolicies puts either right, and restarting does too:
 //
 //   - Storage changed by something other than this process: a manual repair, a
-//     restore, another tool writing the policy table.
+//     restore, another tool writing the policy table. A removal that touches
+//     the affected rules surfaces it early — its stored and in-memory row
+//     counts disagree, and the disagreement is answered by reloading.
 //   - A recovery that could not read storage back. The process then serves
 //     decisions that disagree with what is stored, publishes that state through
-//     the authz policy divergence gauge, and logs it at error level.
+//     the authz policy divergence gauge, logs it at error level, and keeps
+//     retrying the reload until one succeeds.
 //
 // With more than one process sharing a policy table — replicas behind a load
 // balancer, a service scaled beyond one instance — it becomes the dominant
@@ -57,10 +60,13 @@
 // treats two rules differing only in case as one, while memory treats them as
 // two.
 //
-// Where they disagree, the two halves of a write part company. An insert whose
-// rule collides with a stored one under that collation is dropped by the
-// on-conflict clause and kept in memory; an exact delete removes a rule the
-// caller did not name and leaves the named one in memory. Neither is reported.
+// Where they disagree, the two halves of a write part company. An exact delete
+// removes a rule the caller did not name and leaves the named one in memory —
+// that half is caught, because the two sides then count different rules and
+// the disagreement is answered by reloading. An insert whose rule collides
+// with a stored one under that collation is dropped by the on-conflict clause
+// and kept in memory, and that half stays silent: an insert has no row count
+// that means the same thing on every backend, so there is nothing to compare.
 //
 // TODO: stop depending on storage to decide rule identity, in a way that holds
 // for every supported backend. Nothing here can require a collation, since the

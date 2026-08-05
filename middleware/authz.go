@@ -17,6 +17,15 @@ import (
 )
 
 // TenantResolver resolves the authorization tenant for the current request.
+//
+// What it returns is trusted twice over: the authorization decision is made in
+// that tenant, and every tenant-scoped row the request then reads or writes is
+// scoped to it. A resolver must therefore answer from something the deployment
+// vouches for — the session, a membership it verified, a header a trusted
+// gateway injected — and never pass a client-controlled value through as it
+// stands: policies for the implicit authenticated role match in every tenant,
+// so a request naming a forged tenant would pass those and act on that
+// tenant's rows.
 type TenantResolver func(*gin.Context) (string, error)
 
 // AuthzConfig configures RBAC authorization middleware.

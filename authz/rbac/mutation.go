@@ -5,11 +5,35 @@ import (
 	"sync/atomic"
 
 	casbinmodel "github.com/casbin/casbin/v3/model"
+	"github.com/casbin/casbin/v3/persist"
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
+
+// policyStorage is the storage mutate drives: Casbin's batch adapter surface,
+// which the enforcer also loads through, plus removal entry points that report
+// how many stored rows went.
+//
+// The counts exist to be compared. A removal is the one operation whose effect
+// in storage and in memory can silently differ — a backend collation treating
+// two rules as one, or another transaction's uncommitted insert a delete
+// passes by — and the row count is the one thing both halves can state about
+// what they did. Insertions cannot be compared this way: MySQL reports an
+// insert that hit the conflict clause as a found row, so an add has no count
+// that means the same thing on every backend.
+type policyStorage interface {
+	persist.ContextBatchAdapter
+
+	removePoliciesCount(ctx context.Context, ptype string, rules [][]string) (int64, error)
+	removeFilteredPolicyCount(ctx context.Context, ptype string, fieldIndex int, fieldValues ...string) (int64, error)
+}
+
+// storedCountUnknown is the count of a mutation whose stored effect cannot be
+// compared: an insertion, whose count means different things per backend. A
+// mutation carrying it is applied without the check.
+const storedCountUnknown int64 = -1
 
 // policyOp is what a mutation does to the stored policies.
 type policyOp int
@@ -135,7 +159,8 @@ func (r *rbac) mutate(ctx context.Context, mutations ...policyMutation) error {
 		}
 	}
 	return database.Transaction(ctx, func(ctx context.Context) error {
-		if err := r.applyToStore(ctx, mutations); err != nil {
+		storedCounts, err := r.applyToStore(ctx, mutations)
+		if err != nil {
 			return err
 		}
 		// Numbered here, after the rows are written and before the commit, so
@@ -143,7 +168,7 @@ func (r *rbac) mutate(ctx context.Context, mutations ...policyMutation) error {
 		// what it changed. See policySequence.
 		sequence := policySequence.Add(1)
 		return database.AfterCommit(ctx, func(ctx context.Context) error {
-			return r.applyToModel(ctx, sequence, mutations)
+			return r.applyToModel(ctx, sequence, mutations, storedCounts)
 		})
 	})
 }
@@ -168,31 +193,36 @@ var policySequence atomic.Uint64
 var appliedSequence uint64
 
 // applyToStore writes the mutations through the adapter, which resolves the
-// context transaction per call.
-func (r *rbac) applyToStore(ctx context.Context, mutations []policyMutation) error {
-	for _, mutation := range mutations {
+// context transaction per call. It reports how many stored rows each removal
+// affected, and storedCountUnknown for the mutations that cannot be compared.
+func (r *rbac) applyToStore(ctx context.Context, mutations []policyMutation) ([]int64, error) {
+	storedCounts := make([]int64, len(mutations))
+	for i, mutation := range mutations {
 		var err error
+		storedCounts[i] = storedCountUnknown
 		switch mutation.op {
 		case policyAdd:
 			err = r.adapter.AddPoliciesCtx(ctx, mutation.sec, mutation.ptype, mutation.rules)
 		case policyRemove:
-			err = r.adapter.RemovePoliciesCtx(ctx, mutation.sec, mutation.ptype, mutation.rules)
+			storedCounts[i], err = r.adapter.removePoliciesCount(ctx, mutation.ptype, mutation.rules)
 		case policyRemoveFiltered:
-			err = r.adapter.RemoveFilteredPolicyCtx(
-				ctx, mutation.sec, mutation.ptype, mutation.fieldIndex, mutation.fieldValues...,
+			storedCounts[i], err = r.adapter.removeFilteredPolicyCount(
+				ctx, mutation.ptype, mutation.fieldIndex, mutation.fieldValues...,
 			)
 		}
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return storedCounts, nil
 }
 
 // applyToModel brings the in-memory policy model up to date with a batch that
 // storage has already accepted, rebuilding it from storage when it cannot.
-func (r *rbac) applyToModel(ctx context.Context, sequence uint64, mutations []policyMutation) error {
-	applied, cause := r.applyMutations(sequence, mutations)
+func (r *rbac) applyToModel(
+	ctx context.Context, sequence uint64, mutations []policyMutation, storedCounts []int64,
+) error {
+	applied, cause := r.applyMutations(sequence, mutations, storedCounts)
 	if applied {
 		return nil
 	}
@@ -202,7 +232,8 @@ func (r *rbac) applyToModel(ctx context.Context, sequence uint64, mutations []po
 // applyMutations replays the mutations against the in-memory policy model under
 // a single write lock, and reports whether the model is still in step with
 // storage afterwards. A false report carries the failure that caused it, or nil
-// when the batch was overtaken, which is not a failure.
+// when the model has to be rebuilt from storage without anything having failed:
+// a batch that was overtaken, or a removal whose two halves disagreed.
 //
 // Role links are rebuilt from the rules the model reports as actually changed,
 // not from the rules that were asked for: adding a rule that is already present
@@ -218,7 +249,15 @@ func (r *rbac) applyToModel(ctx context.Context, sequence uint64, mutations []po
 // either — the newer batch may have changed different rules entirely — so the
 // model is rebuilt from storage, which is the one answer that is right whatever
 // the two batches touched.
-func (r *rbac) applyMutations(sequence uint64, mutations []policyMutation) (bool, error) {
+//
+// A removal that affected storage and memory differently stops the replay the
+// same way. The two halves can part company without either erring: a backend
+// collation reading two rules as one deletes a row the caller did not name, and
+// on a backend whose statements see only committed rows, a delete passes by the
+// rule an uncommitted insert is adding. Which rules storage actually holds
+// cannot be derived from the counts, so the model is rebuilt from storage —
+// which also puts right any older divergence the counts happened to surface.
+func (r *rbac) applyMutations(sequence uint64, mutations []policyMutation, storedCounts []int64) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -234,7 +273,7 @@ func (r *rbac) applyMutations(sequence uint64, mutations []policyMutation) (bool
 	}
 
 	model := r.enforcer.GetModel()
-	for _, mutation := range mutations {
+	for i, mutation := range mutations {
 		var affected [][]string
 		var err error
 
@@ -250,6 +289,16 @@ func (r *rbac) applyMutations(sequence uint64, mutations []policyMutation) (bool
 		}
 		if err != nil {
 			return false, err
+		}
+
+		if storedCounts[i] != storedCountUnknown && storedCounts[i] != int64(len(affected)) {
+			logger.Authz.Warnz(
+				"rbac policy removal affected storage and memory differently, reloading from storage",
+				zap.String("ptype", mutation.ptype),
+				zap.Int64("stored_rows", storedCounts[i]),
+				zap.Int("memory_rules", len(affected)),
+			)
+			return false, nil
 		}
 
 		if err = r.rebuildRoleLinks(mutation, affected); err != nil {

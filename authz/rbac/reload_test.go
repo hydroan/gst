@@ -2,7 +2,9 @@ package rbac
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	casbinmodel "github.com/casbin/casbin/v3/model"
 	"github.com/cockroachdb/errors"
@@ -23,6 +25,21 @@ func (a *failLoadAdapter) LoadPolicyCtx(context.Context, casbinmodel.Model) erro
 	return errAdapterLoad
 }
 
+// recoveringLoadAdapter fails a fixed number of policy reads and then answers
+// like the real adapter, which is what a database blip looks like to a reload.
+// The counter is atomic because the reads come from the retry goroutine.
+type recoveringLoadAdapter struct {
+	*adapter
+	remaining atomic.Int32
+}
+
+func (a *recoveringLoadAdapter) LoadPolicyCtx(ctx context.Context, m casbinmodel.Model) error {
+	if a.remaining.Add(-1) >= 0 {
+		return errAdapterLoad
+	}
+	return a.adapter.LoadPolicyCtx(ctx, m)
+}
+
 // TestRecoveryOutlivesTheRequestThatTriggeredIt covers the context an
 // after-commit action is handed: the one from before the transaction opened,
 // which in an HTTP handler is the request's.
@@ -34,9 +51,10 @@ func TestRecoveryOutlivesTheRequestThatTriggeredIt(t *testing.T) {
 	r, store := storedRBAC(t, "policy_canceled_trigger")
 
 	// Storage holds a rule memory does not, which is the state a reload repairs.
-	require.NoError(t, r.applyToStore(context.Background(), []policyMutation{
+	_, err := r.applyToStore(context.Background(), []policyMutation{
 		addRules("p", "p", []string{"tenant_a", "role_a", "/api/things", "GET", "allow"}),
-	}))
+	})
+	require.NoError(t, err)
 	require.Len(t, storedRules(t, store), 1)
 	require.Empty(t, memoryRules(t, r), "the memory half has not run")
 
@@ -83,6 +101,45 @@ func TestReloadKeepsTheEnforcerInvariants(t *testing.T) {
 	_, err = r.enforcer.AddPolicy("tenant_a", "role_b", "/api/other", "GET", "allow")
 	require.NoError(t, err)
 	assert.Equal(t, before, storedRules(t, store), "autosave has to stay off after a reload")
+}
+
+// TestDivergedProcessRetriesUntilStorageAnswers covers what happens after the
+// reload a recovery needed has failed: without a retry, the divergence that was
+// published and logged is also final — a process that missed one revocation
+// while the database blipped would keep allowing it for the rest of its life.
+// The retry has to be driven by the divergence state, so it ends the moment a
+// reload succeeds and never runs on a process that is in step.
+func TestDivergedProcessRetriesUntilStorageAnswers(t *testing.T) {
+	prev := reloadRetryInterval
+	reloadRetryInterval = time.Millisecond
+	t.Cleanup(func() {
+		reloadRetryInterval = prev
+		publishPolicyDivergence(false)
+	})
+
+	store := newPolicyTable(t, "policy_divergence_retry")
+	flaky := &recoveringLoadAdapter{adapter: store}
+	flaky.remaining.Store(3)
+	enforcer, err := newEnforcer(flaky)
+	require.NoError(t, err)
+	r := &rbac{enforcer: enforcer, adapter: flaky, mu: &enforcerMu}
+
+	// Storage holds a rule memory does not, which is what the retry has to
+	// repair once the adapter answers again.
+	_, err = r.applyToStore(context.Background(), []policyMutation{
+		addRules("p", "p", []string{"tenant_a", "role_a", "/api/things", "GET", "allow"}),
+	})
+	require.NoError(t, err)
+
+	require.ErrorIs(t, r.recoverPolicies(context.Background(), nil), errAdapterLoad)
+	require.True(t, policiesDiverged.Load(), "the failed recovery has to publish the divergence")
+
+	require.Eventually(t, func() bool {
+		return !policiesDiverged.Load() && !reloadRetryRunning.Load()
+	}, 5*time.Second, time.Millisecond,
+		"the retry has to converge once storage answers, and stop once it has")
+	assert.Equal(t, storedRules(t, store), memoryRules(t, r),
+		"the converged process has to decide from what storage holds")
 }
 
 // TestPolicyDivergenceIsPublished covers the state a process enters when the

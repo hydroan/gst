@@ -224,6 +224,30 @@ func TestAuthzMenu(t *testing.T) {
 			require.NoError(t, err, "delete should return success")
 		})
 
+		// Menus are global and their routes are what every tenant's roles
+		// derive permissions from, so writing one is reserved for system-level
+		// subjects. An ordinary subject is refused even when a policy grants
+		// it the route: the authorization middleware cannot draw this line,
+		// because inside its own tenant such a subject passes it.
+		t.Run("write_requires_system_subject", func(t *testing.T) {
+			guardTenant := authzTestUsername("menu_guard_tenant")
+			memberID, memberSessionID := authzSignupAndLoginUserWithUserAgent(
+				t, authzTestUsername("menu_guard_user"), "12345678", tenantUserAgent,
+			)
+			guardRoleID := authzCreateTenantRole(t, guardTenant, authzTestUsername("menu_guard_role"))
+			authzBindTenantRole(t, guardTenant, memberID, guardRoleID)
+			authzGrantTenantPolicy(t, guardTenant, guardRoleID,
+				types.Permission{Object: menuPath, Action: http.MethodPost})
+
+			memberCli := authzTenantClient(t, memberSessionID, guardTenant)
+			_, err := client.Post[authz.Menu](memberCli, menuPath, &authz.Menu{
+				ParentID: "root",
+				Label:    "Guarded Menu",
+				Path:     "/guarded-menu",
+			})
+			testutil.RequireError(t, err, http.StatusForbidden)
+		})
+
 		t.Run("delete_removes_menu_references", func(t *testing.T) {
 			created, err := client.Post[authz.Menu](cli, menuPath, &authz.Menu{
 				ParentID: "root",

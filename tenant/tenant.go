@@ -164,7 +164,7 @@ func (c stampClause) ModifyStatement(stmt *gorm.Statement) {
 			}
 			return
 		}
-		if value, zero := c.field.ValueOf(stmt.Context, row); !zero && value != nil && value != "" {
+		if _, zero := c.field.ValueOf(stmt.Context, row); !zero {
 			return
 		}
 		// The row named no tenant. A cross-tenant request falls back to the one

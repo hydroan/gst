@@ -4,14 +4,24 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/types/consts"
 )
+
+// ErrSubjectIsRole reports an assignment whose subject and role share one name.
+//
+// Such an assignment can never take effect: the matcher and the role-graph
+// branches both refuse a self-match, precisely so that a subject named like a
+// role is not handed that role. Storing the rule anyway would report success
+// for a grant that decides nothing, and nothing downstream could tell that
+// apart from a grant that works.
+var ErrSubjectIsRole = errors.New("rbac: subject and role share one name, the assignment would never take effect")
 
 // AssignRole assigns subject to role inside tenant.
 func (r *rbac) AssignRole(ctx context.Context, tenant string, subject string, role string) (err error) {
 	tenant = normalizeTenant(tenant)
 	if subject == role {
-		return nil
+		return errors.Wrapf(ErrSubjectIsRole, "subject %q", subject)
 	}
 	ctx, finishSpan := traceRBAC(ctx, "assign_role", rbacTraceFields(tenant, role))
 	defer func() {
@@ -103,7 +113,7 @@ func (r *rbac) SubjectsInTenant(ctx context.Context, tenant string) ([]string, e
 // AssignSystemRole assigns a subject to a system-level role outside any tenant.
 func (r *rbac) AssignSystemRole(ctx context.Context, subject string, role string) (err error) {
 	if subject == role {
-		return nil
+		return errors.Wrapf(ErrSubjectIsRole, "subject %q", subject)
 	}
 	ctx, finishSpan := traceRBAC(ctx, "assign_system_role", rbacTraceFields("", role))
 	defer func() {

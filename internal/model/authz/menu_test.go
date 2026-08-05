@@ -1,12 +1,42 @@
 package modelauthz
 
 import (
+	"context"
 	"sync"
 	"testing"
 
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm/schema"
 )
+
+// TestMenuWriteGuardRequiresASystemSubject covers the boundary on menu writes.
+// A menu is global and its routes are what every tenant's roles derive their
+// permissions from, so an ordinary subject — even one whose policies grant it
+// the route — must be refused, while the deployment's own writes, which carry
+// no subject, must not be. The package holds no enforcer, so the guard answers
+// from the noop implementation, which knows exactly the built-in root subject.
+func TestMenuWriteGuardRequiresASystemSubject(t *testing.T) {
+	withSubject := func(userID string) context.Context {
+		return requestctx.WithMetadata(context.Background(),
+			requestctx.New(requestctx.Fields{UserID: userID}))
+	}
+
+	t.Run("no request behind the write", func(t *testing.T) {
+		require.NoError(t, errIfMenuWriteForbidden(context.Background()),
+			"seeding and jobs carry no subject and are the deployment's own hand")
+	})
+
+	t.Run("system subject", func(t *testing.T) {
+		require.NoError(t, errIfMenuWriteForbidden(withSubject("root")))
+	})
+
+	t.Run("ordinary subject", func(t *testing.T) {
+		err := errIfMenuWriteForbidden(withSubject("member"))
+		require.Error(t, err)
+		require.ErrorContains(t, err, "system administrators")
+	})
+}
 
 // TestMenuShadowedIDColumn asserts that the ID field declared on Menu, and not
 // the shadowed model.Base field, is what GORM maps. Menu identifiers are stable

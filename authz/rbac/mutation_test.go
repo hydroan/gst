@@ -76,6 +76,19 @@ func TestMutateRejectsEmptyValues(t *testing.T) {
 	})
 }
 
+// TestAssignRefusesASubjectNamedLikeItsRole covers an assignment that could
+// never take effect: the matcher and the role-graph branches refuse a
+// self-match, so storing the rule would report success for a grant that
+// decides nothing.
+func TestAssignRefusesASubjectNamedLikeItsRole(t *testing.T) {
+	r, store := storedRBAC(t, "policy_subject_named_role")
+	ctx := context.Background()
+
+	require.ErrorIs(t, r.AssignRole(ctx, "tenant_a", "role_a", "role_a"), ErrSubjectIsRole)
+	require.ErrorIs(t, r.AssignSystemRole(ctx, "system_root", "system_root"), ErrSubjectIsRole)
+	assert.Empty(t, storedRules(t, store), "a refused assignment must not have stored a rule")
+}
+
 // TestMutateNormalizesEmptyTenant covers the case where a caller omits the
 // tenant. An omitted tenant means the default domain on every read, so a write
 // has to store it under that same name: storing the empty string would leave a
@@ -126,20 +139,25 @@ func (a *failAfterAdapter) AddPoliciesCtx(ctx context.Context, sec, ptype string
 	return a.adapter.AddPoliciesCtx(ctx, sec, ptype, rules)
 }
 
-func (a *failAfterAdapter) RemovePoliciesCtx(ctx context.Context, sec, ptype string, rules [][]string) error {
+// The removal overrides intercept the counted entry points, which are the ones
+// mutate drives; intercepting the Casbin-shaped methods would leave the writes
+// under test reaching storage through the embedded adapter.
+func (a *failAfterAdapter) removePoliciesCount(
+	ctx context.Context, ptype string, rules [][]string,
+) (int64, error) {
 	if a.fails() {
-		return errAdapterWrite
+		return 0, errAdapterWrite
 	}
-	return a.adapter.RemovePoliciesCtx(ctx, sec, ptype, rules)
+	return a.adapter.removePoliciesCount(ctx, ptype, rules)
 }
 
-func (a *failAfterAdapter) RemoveFilteredPolicyCtx(
-	ctx context.Context, sec, ptype string, fieldIndex int, fieldValues ...string,
-) error {
+func (a *failAfterAdapter) removeFilteredPolicyCount(
+	ctx context.Context, ptype string, fieldIndex int, fieldValues ...string,
+) (int64, error) {
 	if a.fails() {
-		return errAdapterWrite
+		return 0, errAdapterWrite
 	}
-	return a.adapter.RemoveFilteredPolicyCtx(ctx, sec, ptype, fieldIndex, fieldValues...)
+	return a.adapter.removeFilteredPolicyCount(ctx, ptype, fieldIndex, fieldValues...)
 }
 
 // TestMutateIsAtomicWithoutACallerTransaction covers a caller that writes
@@ -176,6 +194,50 @@ func TestMutateIsAtomicWithoutACallerTransaction(t *testing.T) {
 	assert.False(t, allowed, "no subject holds the role, so nothing changed in memory either")
 }
 
+// TestMutateReloadsWhenARemovalDisagreesWithStorage covers the one comparison
+// the two halves of a removal admit: how many rules went. The halves can part
+// company without either erring — storage holding rules memory never saw, or
+// memory holding rules storage never kept — and the caller's own write is the
+// moment the disagreement becomes visible. It must not fail that caller, whose
+// write landed; it must leave the process deciding from what storage holds.
+func TestMutateReloadsWhenARemovalDisagreesWithStorage(t *testing.T) {
+	r, store := storedRBAC(t, "policy_removal_disagreement")
+	ctx := context.Background()
+
+	t.Run("storage ahead of memory", func(t *testing.T) {
+		// Two assignments memory does not know about, which is what an external
+		// write or a passed-by concurrent insert leaves behind.
+		_, err := r.applyToStore(ctx, []policyMutation{
+			addRules("g", "g", []string{"u1", "role_a", "tenant_a"}, []string{"u2", "role_a", "tenant_a"}),
+		})
+		require.NoError(t, err)
+		require.Empty(t, memoryRules(t, r))
+
+		// Removing one deletes a stored row and no in-memory rule.
+		require.NoError(t, r.UnassignRole(ctx, "tenant_a", "u1", "role_a"))
+
+		assert.Equal(t, storedRules(t, store), memoryRules(t, r),
+			"the disagreement has to end in a reload that puts memory in step")
+		assert.Contains(t, memoryRules(t, r), "g:u2,role_a,tenant_a",
+			"the reload has to surface the rules memory was missing")
+	})
+
+	t.Run("memory ahead of storage", func(t *testing.T) {
+		// Two assignments storage never kept: written through the enforcer,
+		// whose autosave is off.
+		for _, subject := range []string{"u3", "u4"} {
+			_, err := r.enforcer.AddGroupingPolicy(subject, "role_b", "tenant_a")
+			require.NoError(t, err)
+		}
+
+		// Removing one deletes an in-memory rule and no stored row.
+		require.NoError(t, r.UnassignRole(ctx, "tenant_a", "u3", "role_b"))
+
+		assert.Equal(t, storedRules(t, store), memoryRules(t, r),
+			"the reload has to drop every rule storage does not hold")
+	})
+}
+
 // TestApplyToModelRebuildsWhenOvertaken covers two writes to the same role
 // whose memory halves run in the opposite order from their commits.
 //
@@ -194,7 +256,8 @@ func TestApplyToModelRebuildsWhenOvertaken(t *testing.T) {
 		removeFiltered("p", "p", 0, "tenant_a", "role_a"),
 		addRules("p", "p", []string{"tenant_a", "role_a", "/api/old", "GET", "allow"}),
 	}
-	require.NoError(t, r.applyToStore(ctx, older))
+	olderCounts, err := r.applyToStore(ctx, older)
+	require.NoError(t, err)
 	olderSequence := policySequence.Add(1)
 
 	// The newer write lands in storage and in memory while the older one waits.
@@ -205,7 +268,7 @@ func TestApplyToModelRebuildsWhenOvertaken(t *testing.T) {
 	require.Equal(t, []string{"p:tenant_a,role_a,/api/new,GET,allow"}, memoryRules(t, r))
 
 	// The older memory half finally runs, out of order.
-	require.NoError(t, r.applyToModel(ctx, olderSequence, older))
+	require.NoError(t, r.applyToModel(ctx, olderSequence, older, olderCounts))
 
 	assert.Equal(t, storedRules(t, store), memoryRules(t, r),
 		"an overtaken write must not put memory back to a permission set storage has replaced")

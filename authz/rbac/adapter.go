@@ -6,6 +6,7 @@ import (
 	"github.com/casbin/casbin/v3/model"
 	"github.com/casbin/casbin/v3/persist"
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -62,6 +63,7 @@ var (
 	_ persist.ContextAdapter      = (*adapter)(nil)
 	_ persist.BatchAdapter        = (*adapter)(nil)
 	_ persist.ContextBatchAdapter = (*adapter)(nil)
+	_ policyStorage               = (*adapter)(nil)
 )
 
 func newAdapter(base *gorm.DB, table string) *adapter {
@@ -101,6 +103,13 @@ func (a *adapter) LoadPolicyCtx(ctx context.Context, m model.Model) error {
 }
 
 // SavePolicyCtx replaces every stored rule with the contents of m.
+//
+// The clear and the rewrite share one transaction, opened here when the caller
+// brings none. Autocommitted separately, a rewrite that failed would leave the
+// table cleared and stay that way — every rule in the deployment gone for a
+// fault in writing them back. Nothing in the framework calls this — mutate is
+// the only write path — so the boundary is here for whatever outside it one
+// day does.
 func (a *adapter) SavePolicyCtx(ctx context.Context, m model.Model) error {
 	rows := make([]policyRow, 0)
 	for _, sec := range policySections {
@@ -111,14 +120,15 @@ func (a *adapter) SavePolicyCtx(ctx context.Context, m model.Model) error {
 		}
 	}
 
-	conn := a.conn(ctx)
-	if err := conn.Where("1 = 1").Delete(&policyRow{}).Error; err != nil {
-		return errors.Wrap(err, "failed to clear casbin policies")
-	}
-	if len(rows) == 0 {
-		return nil
-	}
-	return errors.Wrap(a.conn(ctx).Create(&rows).Error, "failed to save casbin policies")
+	return database.TransactionOn(ctx, a.base, func(ctx context.Context) error {
+		if err := a.conn(ctx).Where("1 = 1").Delete(&policyRow{}).Error; err != nil {
+			return errors.Wrap(err, "failed to clear casbin policies")
+		}
+		if len(rows) == 0 {
+			return nil
+		}
+		return errors.Wrap(a.conn(ctx).Create(&rows).Error, "failed to save casbin policies")
+	})
 }
 
 func (a *adapter) AddPolicyCtx(ctx context.Context, sec string, ptype string, rule []string) error {
@@ -146,36 +156,52 @@ func (a *adapter) RemovePolicyCtx(ctx context.Context, sec string, ptype string,
 }
 
 // RemovePoliciesCtx deletes each rule by its exact column values.
+func (a *adapter) RemovePoliciesCtx(ctx context.Context, sec string, ptype string, rules [][]string) error {
+	_, err := a.removePoliciesCount(ctx, ptype, rules)
+	return err
+}
+
+// removePoliciesCount deletes each rule by its exact column values and reports
+// how many stored rows went.
 //
 // Every column is constrained, including the ones the rule leaves unused: the
 // table stores those as empty strings, so an exact match is what distinguishes
 // one rule from a longer rule sharing its prefix.
-func (a *adapter) RemovePoliciesCtx(ctx context.Context, sec string, ptype string, rules [][]string) error {
+func (a *adapter) removePoliciesCount(ctx context.Context, ptype string, rules [][]string) (int64, error) {
+	var removed int64
 	for _, rule := range rules {
 		conn := a.conn(ctx).Where("ptype = ?", ptype)
 		values := newPolicyRow(ptype, rule).values()
 		for i, column := range policyColumns {
 			conn = conn.Where(column+" = ?", values[i])
 		}
-		if err := conn.Delete(&policyRow{}).Error; err != nil {
-			return errors.Wrap(err, "failed to remove casbin policies")
+		if conn = conn.Delete(&policyRow{}); conn.Error != nil {
+			return removed, errors.Wrap(conn.Error, "failed to remove casbin policies")
 		}
+		removed += conn.RowsAffected
 	}
-	return nil
+	return removed, nil
 }
 
-// RemoveFilteredPolicyCtx deletes the rules matching fieldValues starting at
-// fieldIndex.
+func (a *adapter) RemoveFilteredPolicyCtx(
+	ctx context.Context, sec string, ptype string, fieldIndex int, fieldValues ...string,
+) error {
+	_, err := a.removeFilteredPolicyCount(ctx, ptype, fieldIndex, fieldValues...)
+	return err
+}
+
+// removeFilteredPolicyCount deletes the rules matching fieldValues starting at
+// fieldIndex and reports how many stored rows went.
 //
 // An empty value matches any value in that column, which is the filter
 // semantics Casbin's in-memory removal uses. A filter that is empty throughout
 // therefore deletes every rule of this ptype, and the in-memory removal it is
 // paired with does the same.
-func (a *adapter) RemoveFilteredPolicyCtx(
-	ctx context.Context, sec string, ptype string, fieldIndex int, fieldValues ...string,
-) error {
+func (a *adapter) removeFilteredPolicyCount(
+	ctx context.Context, ptype string, fieldIndex int, fieldValues ...string,
+) (int64, error) {
 	if fieldIndex < 0 || fieldIndex+len(fieldValues) > ruleColumnCount {
-		return errors.Newf("casbin filter out of range: index %d, %d values", fieldIndex, len(fieldValues))
+		return 0, errors.Newf("casbin filter out of range: index %d, %d values", fieldIndex, len(fieldValues))
 	}
 
 	conn := a.conn(ctx).Where("ptype = ?", ptype)
@@ -185,7 +211,10 @@ func (a *adapter) RemoveFilteredPolicyCtx(
 		}
 		conn = conn.Where(policyColumns[fieldIndex+i]+" = ?", value)
 	}
-	return errors.Wrap(conn.Delete(&policyRow{}).Error, "failed to remove filtered casbin policies")
+	if conn = conn.Delete(&policyRow{}); conn.Error != nil {
+		return 0, errors.Wrap(conn.Error, "failed to remove filtered casbin policies")
+	}
+	return conn.RowsAffected, nil
 }
 
 func (a *adapter) LoadPolicy(m model.Model) error { return a.LoadPolicyCtx(context.Background(), m) }

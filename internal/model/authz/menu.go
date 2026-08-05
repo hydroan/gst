@@ -2,13 +2,17 @@ package modelauthz
 
 import (
 	"context"
+	"net/http"
 	"slices"
 	"strings"
 
+	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/tenant"
+	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
@@ -109,9 +113,51 @@ func (m *Menu) SetID(id ...string) {
 // clears the shadowed Base field.
 func (m *Menu) ClearID() { m.ID = "" }
 
-func (m *Menu) Purge() bool                                  { return true }
-func (m *Menu) CreateBefore(ctx context.Context) (err error) { return m.validate() }
-func (m *Menu) UpdateBefore(ctx context.Context) error       { return m.validate() }
+func (m *Menu) Purge() bool { return true }
+
+func (m *Menu) CreateBefore(ctx context.Context) (err error) {
+	if err := errIfMenuWriteForbidden(ctx); err != nil {
+		return err
+	}
+	return m.validate()
+}
+
+func (m *Menu) UpdateBefore(ctx context.Context) error {
+	if err := errIfMenuWriteForbidden(ctx); err != nil {
+		return err
+	}
+	return m.validate()
+}
+
+// errIfMenuWriteForbidden refuses a menu write from a subject that is not
+// system-level.
+//
+// A menu is global, and what it carries is authorization: its routes are what
+// every tenant's roles derive their backend permissions from, so writing one
+// reaches into every tenant. The authorization middleware cannot draw that
+// line — a tenant administrator passes it for any object inside their tenant,
+// and these are the objects through which one tenant's administrator would
+// reshape every other tenant's grants. The boundary therefore sits on the
+// write itself, where every path to it converges. Reads stay as they are:
+// which menus a subject sees is decided per tenant by role bindings.
+//
+// A write with no subject behind it is not refused. Authorization rejects
+// anonymous requests before any handler runs, so no subject means no request:
+// seeding, a job, framework code — the deployment's own hand.
+func errIfMenuWriteForbidden(ctx context.Context) error {
+	subject := strings.TrimSpace(types.RequestUserID(ctx))
+	if subject == "" {
+		return nil
+	}
+	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, subject, consts.AUTHZ_SYSTEM_ROLE_ROOT)
+	if err != nil {
+		return err
+	}
+	if !systemRoot {
+		return service.NewError(http.StatusForbidden, "only system administrators may modify menus")
+	}
+	return nil
+}
 
 // UpdateAfter refreshes permissions for roles that contain the current menu.
 func (m *Menu) UpdateAfter(ctx context.Context) error {
@@ -167,6 +213,10 @@ func rolesToRefresh(ctx context.Context) ([]*Role, error) {
 
 // DeleteBefore removes the menu from roles before the menu row is deleted.
 func (m *Menu) DeleteBefore(ctx context.Context) error {
+	if err := errIfMenuWriteForbidden(ctx); err != nil {
+		return err
+	}
+
 	// Same reach as UpdateAfter: the menu is global, so removing it has to be
 	// removed from every tenant's roles.
 	ctx = tenant.Across(ctx)

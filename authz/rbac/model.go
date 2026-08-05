@@ -55,6 +55,15 @@ e = some(where (p.eft == allow))
 # The subject/role inequality check keeps a subject named like a role from
 # receiving that role through Casbin's self-match behavior.
 #
+# The order of the conditions inside a branch is measured, not guessed at.
+# Reordering them buys nothing worth having: pathMatch resolves through a cache
+# of compiled expressions, which puts one evaluation in the same cost range as
+# the boxed string equality the engine performs for a condition like the action
+# check, so a "cheap check first" rewrite was benchmarked at 5-10% slower on a
+# uniform-method policy set and at best noise on a mixed one. What a decision
+# pays for is the engine walking every stored row, and that is not a property
+# any ordering here can change.
+#
 # A trailing backslash continues the line, so each branch above maps to the line
 # below it and the whole matcher stays readable as it grows. A comment between
 # two continued lines would end the value early, so keep the two lines adjacent.

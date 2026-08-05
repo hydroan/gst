@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"github.com/casbin/casbin/v3"
-	"github.com/casbin/casbin/v3/persist"
 	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types"
 )
@@ -22,7 +21,7 @@ type rbac struct {
 	// adapter is held directly rather than reached through the enforcer:
 	// mutate drives the database half of a write on its own so it can defer the
 	// in-memory half until the transaction commits.
-	adapter persist.ContextBatchAdapter
+	adapter policyStorage
 
 	mu *sync.RWMutex
 }

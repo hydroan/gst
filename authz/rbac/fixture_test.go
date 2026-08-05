@@ -45,7 +45,22 @@ func TestMain(m *testing.M) {
 // It mirrors the capability surface of the adapter used at runtime, batch
 // methods included. Casbin reaches the batch ones through a bare type
 // assertion, so an adapter missing them panics rather than falling back.
+//
+// Its removal counts are unknown, not zero: a storage that keeps nothing
+// cannot say how many rows a removal affected, and reporting zero would make
+// every in-memory removal read as a disagreement to repair by reloading —
+// through a loader that answers with an empty model.
 type nullContextAdapter struct{}
+
+func (*nullContextAdapter) removePoliciesCount(context.Context, string, [][]string) (int64, error) {
+	return storedCountUnknown, nil
+}
+
+func (*nullContextAdapter) removeFilteredPolicyCount(
+	context.Context, string, int, ...string,
+) (int64, error) {
+	return storedCountUnknown, nil
+}
 
 func (*nullContextAdapter) LoadPolicyCtx(context.Context, casbinmodel.Model) error { return nil }
 func (*nullContextAdapter) SavePolicyCtx(context.Context, casbinmodel.Model) error { return nil }
