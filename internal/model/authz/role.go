@@ -2,6 +2,7 @@ package modelauthz
 
 import (
 	"context"
+	"net/http"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -9,6 +10,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
@@ -120,7 +122,47 @@ func (r *Role) validate() error {
 // which assigns a UUIDv7 like every other model; clients no longer need to
 // invent role identifiers.
 func (r *Role) CreateBefore(ctx context.Context) error {
-	return r.validate()
+	if err := r.validate(); err != nil {
+		return err
+	}
+	return r.validateMenuIDs(ctx)
+}
+
+// validateMenuIDs refuses a menu selection naming menus that do not exist.
+//
+// A dangling ID used to be kept as it stood: the row stored it, the response
+// echoed it, and syncPermissions silently expanded only the menus it could
+// find — a role that looked configured while a slice of its permissions never
+// existed. Nothing downstream could see it either: the drift report derives
+// its expectations from the same join, so the gap never reads as drift.
+// Refusing the write is the one place the mistake is still the caller's.
+func (r *Role) validateMenuIDs(ctx context.Context) error {
+	if len(r.MenuIDs) == 0 {
+		return nil
+	}
+	menus := make([]*Menu, 0)
+	if err := database.Database[*Menu](ctx).WithQuery(&Menu{}, types.QueryOptions{
+		AllowEmpty: true,
+		Filters:    []types.Filter{types.FilterIn("id", r.MenuIDs)},
+	}).List(&menus); err != nil {
+		return err
+	}
+	found := make(map[string]struct{}, len(menus))
+	for _, menu := range menus {
+		found[menu.ID] = struct{}{}
+	}
+	missing := make([]string, 0)
+	for _, id := range r.MenuIDs {
+		if _, ok := found[id]; ok {
+			continue
+		}
+		found[id] = struct{}{}
+		missing = append(missing, id)
+	}
+	if len(missing) > 0 {
+		return service.NewError(http.StatusBadRequest, "menus do not exist: "+strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 // CreateAfter syncs the role's permissions after the role row has been persisted.
@@ -135,6 +177,9 @@ func (r *Role) CreateAfter(ctx context.Context) error {
 // UpdateBefore validates role updates before database writes. Role ID is immutable.
 func (r *Role) UpdateBefore(ctx context.Context) error {
 	if err := r.validate(); err != nil {
+		return err
+	}
+	if err := r.validateMenuIDs(ctx); err != nil {
 		return err
 	}
 
@@ -226,13 +271,17 @@ func (r *Role) DeleteAfter(ctx context.Context) error {
 func (r *Role) syncPermissions(ctx context.Context) error {
 	// Batch-load bound menus with a typed IN filter. The comma-joined ID
 	// shortcut is avoided on purpose: it breaks on integer AutoBase keys and
-	// relies on values never containing commas.
+	// relies on values never containing commas. An empty selection skips the
+	// query: it derives no permissions, and asking the database to confirm an
+	// empty set is a round trip for an answer already in hand.
 	newMenus := make([]*Menu, 0)
-	if err := database.Database[*Menu](ctx).WithQuery(&Menu{}, types.QueryOptions{
-		AllowEmpty: true,
-		Filters:    []types.Filter{types.FilterIn("id", r.MenuIDs)},
-	}).List(&newMenus); err != nil {
-		return err
+	if len(r.MenuIDs) > 0 {
+		if err := database.Database[*Menu](ctx).WithQuery(&Menu{}, types.QueryOptions{
+			AllowEmpty: true,
+			Filters:    []types.Filter{types.FilterIn("id", r.MenuIDs)},
+		}).List(&newMenus); err != nil {
+			return err
+		}
 	}
 
 	permissions := make([]types.Permission, 0)

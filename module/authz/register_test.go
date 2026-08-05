@@ -423,6 +423,33 @@ func TestAuthzRole(t *testing.T) {
 			require.Error(t, err)
 		})
 
+		t.Run("rejects_menus_that_do_not_exist", func(t *testing.T) {
+			// A dangling menu ID used to be stored as it stood while the
+			// permission sync silently expanded only the menus it could find —
+			// a role that looked configured with a slice of it missing, and
+			// nothing downstream able to see the gap.
+			_, err := client.Post[authz.Role](cli, rolePath, &authz.Role{
+				Name:    authzTestUsername("dangling_menu_role"),
+				MenuIDs: []string{roleMenuID, "no/such/menu"},
+			})
+			testutil.RequireError(t, err, http.StatusBadRequest)
+			require.ErrorContains(t, err, "menus do not exist: no/such/menu")
+
+			created, err := client.Post[authz.Role](cli, rolePath, &authz.Role{
+				Name:    authzTestUsername("dangling_menu_role"),
+				MenuIDs: []string{roleMenuID},
+			})
+			require.NoError(t, err)
+			_, err = client.Put[authz.Role](cli, rolePath+"/"+created.ID, &authz.Role{
+				Name:    created.Name,
+				MenuIDs: []string{"no/such/menu"},
+			})
+			testutil.RequireError(t, err, http.StatusBadRequest)
+
+			_, err = client.Delete[struct{}](cli, rolePath+"/"+created.ID, nil)
+			require.NoError(t, err)
+		})
+
 		t.Run("create", func(t *testing.T) {
 			// The ID is framework-assigned; clients only provide the name.
 			roleName = authzTestUsername("test_role")
