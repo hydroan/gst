@@ -34,6 +34,12 @@ func TestDatabaseCreate(t *testing.T) {
 	require.Equal(t, u1.Name, u.Name, "name should match")
 	require.Equal(t, u1.Age, u.Age, "age should match")
 	require.Equal(t, u1.Email, u.Email, "email should match")
+	// The timestamps Create forces onto the object must round-trip exactly:
+	// dbruntime.NowUTC truncates to milliseconds to match the millisecond
+	// storage precision, so the value handed back by Create equals the value
+	// a later read returns.
+	require.True(t, u1.CreatedAt.Equal(u.CreatedAt), "created_at on the created object must equal the persisted value")
+	require.True(t, u1.UpdatedAt.Equal(u.UpdatedAt), "updated_at on the created object must equal the persisted value")
 
 	// Check the create hook result
 	require.Equal(t, remarkUserCreateBefore, *u1.Remark, "u1 should have create hook result")
@@ -380,7 +386,7 @@ func TestDatabaseUpdate(t *testing.T) {
 	require.NoError(t, database.Database[*TestUser](context.Background()).Update([]*TestUser{nil, nil, nil}...))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Update([]*TestUser{nil, u1, nil}...))
 
-	t.Run("updated_at is refreshed in UTC", func(t *testing.T) {
+	t.Run("updated_at is refreshed in UTC and round-trips exactly", func(t *testing.T) {
 		fresh := new(TestUser)
 		require.NoError(t, database.Database[*TestUser](context.Background()).Get(fresh, u1.ID))
 		before := fresh.UpdatedAt
@@ -390,6 +396,11 @@ func TestDatabaseUpdate(t *testing.T) {
 		// in-memory value serializes with the same timestamp base Create forces.
 		require.Equal(t, time.UTC, fresh.UpdatedAt.Location(), "updated_at refreshed by Update should be UTC")
 		require.True(t, fresh.UpdatedAt.After(before), "updated_at should move forward after Update")
+		// NowFunc truncates to milliseconds to match the storage precision, so
+		// the refreshed in-memory value equals what a later read returns.
+		reloaded := new(TestUser)
+		require.NoError(t, database.Database[*TestUser](context.Background()).Get(reloaded, u1.ID))
+		require.True(t, fresh.UpdatedAt.Equal(reloaded.UpdatedAt), "updated_at on the updated object must equal the persisted value")
 	})
 
 	t.Run("missing record fails with not found", func(t *testing.T) {
@@ -512,6 +523,13 @@ func TestDatabaseUpsert(t *testing.T) {
 		persisted := make([]*TestUniqueItem, 0)
 		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).List(&persisted))
 		require.Len(t, persisted, 2)
+
+		// Upsert forces timestamps exactly like Create: the in-memory values
+		// must equal the persisted ones (dbruntime.NowUTC, millisecond base).
+		got := new(TestUniqueItem)
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Get(got, items[0].ID))
+		require.True(t, items[0].CreatedAt.Equal(got.CreatedAt), "created_at on the upserted object must equal the persisted value")
+		require.True(t, items[0].UpdatedAt.Equal(got.UpdatedAt), "updated_at on the upserted object must equal the persisted value")
 	})
 
 	t.Run("builds SQL without executing under WithBuildSQL", func(t *testing.T) {
@@ -612,6 +630,9 @@ func TestDatabaseUpdateByID(t *testing.T) {
 	originalUpdatedAt := u.UpdatedAt
 
 	newName := "user1_modified"
+	// updated_at carries millisecond precision (dbruntime.NowUTC); step past
+	// the current millisecond so consecutive writes observe distinct values.
+	time.Sleep(2 * time.Millisecond)
 	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID(u.ID, "name", newName))
 	u = new(TestUser)
 	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID))
@@ -631,6 +652,7 @@ func TestDatabaseUpdateByID(t *testing.T) {
 	// Test UpdateByID - update age field
 	newAge := 25
 	previousUpdatedAt := u.UpdatedAt
+	time.Sleep(2 * time.Millisecond)
 	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID(u.ID, "age", newAge))
 	u = new(TestUser)
 	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID))
@@ -642,6 +664,7 @@ func TestDatabaseUpdateByID(t *testing.T) {
 	// Test UpdateByID - update email field
 	newEmail := "user1_new@example.com"
 	previousUpdatedAt = u.UpdatedAt
+	time.Sleep(2 * time.Millisecond)
 	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID(u.ID, "email", newEmail))
 	u = new(TestUser)
 	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID))

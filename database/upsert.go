@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/dbruntime"
 	"gorm.io/gorm"
 	gormschema "gorm.io/gorm/schema"
 )
@@ -104,10 +104,10 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 		for i := range objs {
 			objs[i].SetID() // set id when id is empty.
 		}
-		// Force created_at/updated_at like Create (UTC for the same one-time-base
-		// reason): the values only land on inserted rows, conflict updates keep
-		// the existing created_at.
-		now := time.Now().UTC()
+		// Force created_at/updated_at like Create (dbruntime.NowUTC, the same
+		// one-time-base reason): the values only land on inserted rows,
+		// conflict updates keep the existing created_at.
+		now := dbruntime.NowUTC()
 		for i := range objs {
 			objs[i].SetCreatedAt(now)
 			objs[i].SetUpdatedAt(now)

@@ -22,15 +22,22 @@ import (
 // expose read-only accessors for application code.
 var DB *gorm.DB
 
-// NowUTC is the gorm.Config NowFunc shared by every dialect package: all
-// timestamps GORM maintains on its own — the updated_at refresh on Update and
-// the deleted_at stamp on soft delete — must carry UTC, the framework's one
-// time base (database.Create/Upsert already force it explicitly). The gorm
-// default time.Now() carries the server's local zone: drivers with a UTC
-// wire location still store the right instant, but the in-memory model then
-// serializes with a local offset instead of the UTC form read rows carry,
-// and sqlite would even persist that local offset into the row text.
-func NowUTC() time.Time { return time.Now().UTC() }
+// NowUTC produces every framework-managed timestamp: it is the gorm.Config
+// NowFunc shared by the dialect packages (the updated_at refresh on Update,
+// the deleted_at stamp on soft delete) and the explicit source
+// database.Create/Upsert stamp rows with. Two decisions live here:
+//
+//   - UTC, the framework's one time base. The gorm default time.Now() carries
+//     the server's local zone: drivers with a UTC wire location still store
+//     the right instant, but the in-memory model then serializes with a local
+//     offset instead of the UTC form read rows carry, and sqlite would even
+//     persist that local offset into the row text.
+//   - Millisecond truncation, matching the millisecond storage precision the
+//     dialects share (MySQL datetime(3), ClickHouse DateTime64(3)). Without
+//     it the in-memory value keeps nanoseconds the row cannot hold, so the
+//     timestamp a write hands back differs from what a later read returns —
+//     and MySQL rounds half up, which can even shift the stored millisecond.
+func NowUTC() time.Time { return time.Now().UTC().Truncate(time.Millisecond) }
 
 // startedTable is an atomic flag to ensure table processing goroutine starts only once
 var startedTable atomic.Int32

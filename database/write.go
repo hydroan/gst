@@ -3,9 +3,9 @@ package database
 import (
 	"context"
 	"reflect"
-	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
@@ -123,10 +123,9 @@ func (db *database[M]) Create(objs ...M) (err error) {
 			batchSize = db.batchSize
 		}
 		// Force created_at/updated_at to now; see the timestamp note in the doc
-		// comment. UTC, so the stored wall clock is the same on every dialect:
-		// sqlite stores the time.Time's own location as text, and a local value
-		// would embed the server timezone into the row.
-		now := time.Now().UTC()
+		// comment. dbruntime.NowUTC owns the time base (UTC, millisecond
+		// precision) so the values handed back equal what a later read returns.
+		now := dbruntime.NowUTC()
 		for i := range objs {
 			objs[i].SetCreatedAt(now)
 			objs[i].SetUpdatedAt(now)

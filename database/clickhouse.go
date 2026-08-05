@@ -1,9 +1,8 @@
 package database
 
 import (
-	"time"
-
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/dbruntime"
 	"gorm.io/gorm"
 )
 
@@ -42,9 +41,9 @@ func (db *database[M]) clickhouseCreate(objs []M) (err error) {
 	for i := range objs {
 		objs[i].SetID() // set id when id is empty.
 	}
-	// Force created_at/updated_at to now (UTC), exactly like the
+	// Force created_at/updated_at to now (dbruntime.NowUTC), exactly like the
 	// transactional Create; see the timestamp note there.
-	now := time.Now().UTC()
+	now := dbruntime.NowUTC()
 	for i := range objs {
 		objs[i].SetCreatedAt(now)
 		objs[i].SetUpdatedAt(now)
