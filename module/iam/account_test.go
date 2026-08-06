@@ -146,7 +146,7 @@ func TestAccountLogout(t *testing.T) {
 			require.NoError(t, redis.Del(context.Background(), userSessionKey, modeliamsession.SessionIDKey(brokenIndexUser.SessionID)))
 			require.NoError(t, redis.ZRem(context.Background(), modeliamsession.SessionAllKey(), brokenIndexUser.SessionID))
 			require.NoError(t, redis.ZRem(context.Background(), modeliamsession.SessionLastSeenKey(), brokenIndexUser.SessionID))
-			serviceiamsession.InvalidateUserSessions(context.Background(), brokenIndexUser.UserID)
+			modeliamsession.InvalidateUserSessions(context.Background(), brokenIndexUser.UserID)
 		})
 
 		require.NoError(t, redis.Del(t.Context(), userSessionKey))
@@ -360,7 +360,7 @@ func TestAccountResetPassword(t *testing.T) {
 			require.NoError(t, redis.Del(context.Background(), userSessionKey, modeliamsession.SessionIDKey(brokenSessionID)))
 			require.NoError(t, redis.ZRem(context.Background(), modeliamsession.SessionAllKey(), brokenSessionID))
 			require.NoError(t, redis.ZRem(context.Background(), modeliamsession.SessionLastSeenKey(), brokenSessionID))
-			serviceiamsession.InvalidateUserSessions(context.Background(), brokenIndexVictim.UserID)
+			modeliamsession.InvalidateUserSessions(context.Background(), brokenIndexVictim.UserID)
 		})
 
 		require.NoError(t, redis.Del(t.Context(), userSessionKey))
@@ -507,7 +507,7 @@ func accountLoginRoot(t *testing.T) string {
 
 	_, sessionID := accountLoginClient(t, consts.AUTHZ_USER_ROOT, rootPassword)
 	t.Cleanup(func() {
-		serviceiamsession.InvalidateUserSessions(context.Background(), consts.AUTHZ_USER_ROOT)
+		modeliamsession.InvalidateUserSessions(context.Background(), consts.AUTHZ_USER_ROOT)
 	})
 	return sessionID
 }

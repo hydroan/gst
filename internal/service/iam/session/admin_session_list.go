@@ -58,7 +58,7 @@ func (a *AdminSessionListService) List(ctx *types.ServiceContext, req *model.Emp
 		session, getErr := cache.Get(modeliamsession.SessionIDKey(sessionID))
 		if getErr != nil {
 			if errors.Is(getErr, types.ErrEntryNotFound) {
-				removeStaleSessionIndexes(ctx, "", sessionID)
+				_ = modeliamsession.RemoveSessionIndexes(ctx, "", sessionID)
 				continue
 			}
 			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", getErr)

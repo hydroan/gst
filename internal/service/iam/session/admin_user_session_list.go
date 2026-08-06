@@ -105,7 +105,7 @@ func (a *AdminUserSessionListService) buildView(ctx *types.ServiceContext, user 
 		sessionData, getErr := cache.Get(modeliamsession.SessionIDKey(sessionID))
 		if getErr != nil {
 			if errors.Is(getErr, types.ErrEntryNotFound) {
-				removeStaleSessionIndexes(ctx, indexUserID, sessionID)
+				_ = modeliamsession.RemoveSessionIndexes(ctx, indexUserID, sessionID)
 				continue
 			}
 			return modeliamsession.AdminSessionOwnerView{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", getErr)

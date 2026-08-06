@@ -42,16 +42,6 @@ func ValidateSessionUserState(ctx context.Context, session modeliamsession.Sessi
 	return session, ensureSessionUserActive(&modeliamuser.User{Status: state.Status})
 }
 
-// InvalidateUserStateCache removes the short-lived mutable user-state cache for a user.
-func InvalidateUserStateCache(ctx context.Context, userID string) {
-	if userID == "" {
-		return
-	}
-	_ = redis.Cache[sessionUserState]().
-		WithContext(redisContext(ctx)).
-		Delete(modeliamsession.SessionUserStateKey(userID))
-}
-
 func loadCachedSessionUserState(ctx context.Context, userID string) (sessionUserState, bool) {
 	state, err := redis.Cache[sessionUserState]().
 		WithContext(redisContext(ctx)).

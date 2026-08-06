@@ -331,7 +331,7 @@ func TestSessionUserStateRefresh(t *testing.T) {
 		account := newSessionTestAccount(t)
 		sessionID := loginSession(t, account.Username, account.Password)
 		session := loadStoredSession(t, sessionID)
-		serviceiamsession.InvalidateUserStateCache(context.Background(), account.UserID)
+		modeliamsession.InvalidateUserStateCache(context.Background(), account.UserID)
 
 		canceledCtx, cancel := context.WithCancel(context.Background())
 		cancel()
@@ -343,6 +343,59 @@ func TestSessionUserStateRefresh(t *testing.T) {
 		require.True(t, errors.As(err, &serviceErr))
 		require.Equal(t, http.StatusInternalServerError, serviceErr.Status())
 		require.Contains(t, err.Error(), "failed to refresh session user state")
+	})
+}
+
+// TestInvalidateUserSessions covers the revocation entry point user lifecycle
+// operations reach for. Those operations live wherever a project models its
+// users, which is regularly outside the IAM service package, so this asserts the
+// guarantee they depend on: once revocation returns, the cookie is dead, without
+// waiting for the user-state cache to expire.
+func TestInvalidateUserSessions(t *testing.T) {
+	clearSessionsAfterTest(t)
+
+	t.Run("revokes_every_session_and_rejects_the_stale_cookie", func(t *testing.T) {
+		account := newSessionTestAccount(t)
+		firstSessionID := loginSession(t, account.Username, account.Password)
+		secondSessionID := loginSession(t, account.Username, account.Password)
+
+		// Spend the session once so the user-state cache is warm. A warm cache is
+		// exactly what lets a revoked user keep authenticating when only the
+		// database row changed.
+		_, err := client.Get[iam.CurrentGetRsp](sessionClient(t, firstSessionID), currentPath)
+		require.NoError(t, err)
+
+		modeliamsession.InvalidateUserSessions(context.Background(), account.UserID)
+
+		requireSessionNotFound(t, firstSessionID)
+		requireSessionNotFound(t, secondSessionID)
+		requireUserSessionNotContains(t, account.UserID, firstSessionID)
+		requireUserSessionNotContains(t, account.UserID, secondSessionID)
+		requireAllSessionNotContains(t, firstSessionID)
+		requireAllSessionNotContains(t, secondSessionID)
+		requireLastSeenSessionNotContains(t, firstSessionID)
+		requireLastSeenSessionNotContains(t, secondSessionID)
+		requireUserStateCacheCleared(t, account.UserID)
+
+		_, err = client.Get[iam.CurrentGetRsp](sessionClient(t, firstSessionID), currentPath)
+		testutil.RequireError(t, err, http.StatusUnauthorized)
+	})
+
+	t.Run("leaves_other_users_signed_in", func(t *testing.T) {
+		target := newSessionTestAccount(t)
+		targetSessionID := loginSession(t, target.Username, target.Password)
+
+		bystander := newSessionTestAccount(t)
+		bystanderSessionID := loginSession(t, bystander.Username, bystander.Password)
+
+		modeliamsession.InvalidateUserSessions(context.Background(), target.UserID)
+
+		requireSessionNotFound(t, targetSessionID)
+		requireUserSessionContains(t, bystander.UserID, bystanderSessionID)
+		requireAllSessionContains(t, bystanderSessionID)
+
+		_, err := client.Get[iam.CurrentGetRsp](sessionClient(t, bystanderSessionID), currentPath)
+		require.NoError(t, err)
 	})
 }
 
@@ -1039,6 +1092,21 @@ func requireAllSessionNotContains(t *testing.T, sessionID string) {
 	require.NotContains(t, sessionIDs, sessionID)
 }
 
+func requireUserStateCacheCleared(t *testing.T, userID string) {
+	t.Helper()
+
+	_, err := redis.Get(t.Context(), modeliamsession.SessionUserStateKey(userID))
+	require.ErrorIs(t, err, redis.ErrKeyNotExists)
+}
+
+func requireLastSeenSessionNotContains(t *testing.T, sessionID string) {
+	t.Helper()
+
+	sessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionLastSeenKey(), 0, -1)
+	require.NoError(t, err)
+	require.NotContains(t, sessionIDs, sessionID)
+}
+
 func sessionSetUserStatus(t *testing.T, username string, status modeliamuser.UserStatus) {
 	t.Helper()
 
@@ -1097,7 +1165,7 @@ func sessionLoginRoot(t *testing.T) string {
 
 	sessionID := loginSession(t, consts.AUTHZ_USER_ROOT, rootPassword)
 	t.Cleanup(func() {
-		serviceiamsession.InvalidateUserSessions(context.Background(), consts.AUTHZ_USER_ROOT)
+		modeliamsession.InvalidateUserSessions(context.Background(), consts.AUTHZ_USER_ROOT)
 	})
 	return sessionID
 }

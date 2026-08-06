@@ -4,9 +4,9 @@ import (
 	"net/http"
 
 	"github.com/hydroan/gst/database"
+	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/internal/service/iam/adminauth"
-	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
@@ -41,9 +41,9 @@ func (u *UserStatusPatchService) Patch(ctx *types.ServiceContext, req *modeliamu
 	if target.Status == req.Status {
 		// Still revoke sessions when the target state is inactive or locked so Redis cannot drift.
 		if shouldInvalidateUserSessions(req.Status) {
-			serviceiamsession.InvalidateUserSessions(ctx, targetUserID)
+			modeliamsession.InvalidateUserSessions(ctx, targetUserID)
 		} else {
-			serviceiamsession.InvalidateUserStateCache(ctx, targetUserID)
+			modeliamsession.InvalidateUserStateCache(ctx, targetUserID)
 		}
 		return &modeliamuser.UserStatusPatchRsp{Msg: "user status unchanged"}, nil
 	}
@@ -57,9 +57,9 @@ func (u *UserStatusPatchService) Patch(ctx *types.ServiceContext, req *modeliamu
 	}
 
 	if shouldInvalidateUserSessions(req.Status) {
-		serviceiamsession.InvalidateUserSessions(ctx, targetUserID)
+		modeliamsession.InvalidateUserSessions(ctx, targetUserID)
 	} else {
-		serviceiamsession.InvalidateUserStateCache(ctx, targetUserID)
+		modeliamsession.InvalidateUserStateCache(ctx, targetUserID)
 	}
 
 	log.Info("user status updated", "target_user_id", targetUserID, "status", req.Status, "actor_user_id", actor.GetID(), "actor_username", actor.Username)

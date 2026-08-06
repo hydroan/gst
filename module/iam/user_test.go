@@ -7,8 +7,8 @@ import (
 
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
+	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
-	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/stretchr/testify/require"
@@ -186,7 +186,7 @@ func TestUserStatusPatch(t *testing.T) {
 		t.Cleanup(func() {
 			victimModel.Status = prevStatus
 			require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect("username", "status").Update(victimModel))
-			serviceiamsession.InvalidateUserStateCache(context.Background(), victim.UserID)
+			modeliamsession.InvalidateUserStateCache(context.Background(), victim.UserID)
 		})
 
 		cli := accountSessionClient(t, victimSessionAfterEnable)
@@ -205,7 +205,7 @@ func TestUserStatusPatch(t *testing.T) {
 		t.Cleanup(func() {
 			victimModel.Status = prevStatus
 			require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect("username", "status").Update(victimModel))
-			serviceiamsession.InvalidateUserStateCache(context.Background(), victim.UserID)
+			modeliamsession.InvalidateUserStateCache(context.Background(), victim.UserID)
 		})
 
 		cli := accountSessionClient(t, sessionID)

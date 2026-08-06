@@ -5,6 +5,7 @@ import (
 
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
+	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/service"
@@ -61,7 +62,7 @@ func (c *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update password", err)
 	}
 
-	serviceiamsession.InvalidateUserStateCache(ctx, currentUser.GetID())
+	modeliamsession.InvalidateUserStateCache(ctx, currentUser.GetID())
 	if syncErr := serviceiamsession.UpdateSessionMustChangePassword(ctx, sessionID, false); syncErr != nil {
 		log.Warn("failed to sync session after password change", syncErr)
 	}

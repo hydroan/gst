@@ -7,10 +7,10 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
+	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceemail "github.com/hydroan/gst/internal/service/email"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
-	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/types"
 )
 
@@ -122,7 +122,7 @@ func (iamAccountGateway) ApplyEmailChange(ctx *types.ServiceContext, userID, new
 }
 
 func (iamAccountGateway) InvalidateSessions(userID string) {
-	serviceiamsession.InvalidateUserSessions(context.Background(), userID)
+	modeliamsession.InvalidateUserSessions(context.Background(), userID)
 }
 
 func loadIAMUserByID(ctx *types.ServiceContext, userID string) (*modeliamuser.User, error) {
