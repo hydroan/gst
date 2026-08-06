@@ -7,7 +7,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -48,7 +47,7 @@ func (db *database[M]) Cleanup() (err error) {
 	if db.dialect() == dialectClickHouse {
 		return errors.Wrap(ErrUnsupportedOnDialect, "Cleanup on clickhouse")
 	}
-	done, _ := db.trace("Cleanup")
+	done, _ := db.trace(phaseCleanup)
 	defer func() { done(err) }()
 
 	tableName := db.m.GetTableName()
@@ -96,7 +95,7 @@ func (db *database[M]) Health() error {
 
 	// 1.check database connection
 	if err := db.ins.Exec("SELECT 1").Error; err != nil {
-		logger.Database.WithContext(db.ctx, consts.Phase("Health")).Errorz(
+		logger.Database.WithContext(db.ctx, phaseHealth).Errorz(
 			"database connection check failed",
 			zap.Error(err),
 			util.LogDuration(time.Since(begin)),
@@ -107,7 +106,7 @@ func (db *database[M]) Health() error {
 	// 2.check database connection pool
 	sqlDB, err := db.ins.DB()
 	if err != nil {
-		logger.Database.WithContext(db.ctx, consts.Phase("Health")).Errorz(
+		logger.Database.WithContext(db.ctx, phaseHealth).Errorz(
 			"get sql.DB instance failed",
 			zap.Error(err),
 			util.LogDuration(time.Since(begin)),
@@ -118,7 +117,7 @@ func (db *database[M]) Health() error {
 	// check database connection pool config
 	stats := sqlDB.Stats()
 	if stats.OpenConnections >= stats.MaxOpenConnections {
-		logger.Database.WithContext(db.ctx, consts.Phase("Health")).Warnz(
+		logger.Database.WithContext(db.ctx, phaseHealth).Warnz(
 			"database connection pool is full",
 			zap.Int("open", stats.OpenConnections),
 			zap.Int("max", stats.MaxOpenConnections),
@@ -134,7 +133,7 @@ func (db *database[M]) Health() error {
 		ctx = db.ctx
 	}
 	if err := sqlDB.PingContext(ctx); err != nil {
-		logger.Database.WithContext(db.ctx, consts.Phase("Health")).Errorz(
+		logger.Database.WithContext(db.ctx, phaseHealth).Errorz(
 			"database ping failed",
 			zap.Error(err),
 			util.LogDuration(time.Since(begin)),
@@ -142,12 +141,14 @@ func (db *database[M]) Health() error {
 		return fmt.Errorf("database ping failed: %w", err)
 	}
 
-	logger.Database.WithContext(db.ctx, consts.Phase("Health")).Infoz(
+	// A passing check is the expected outcome; probes may run it on a tight
+	// interval, so success stays at debug level while failures log above.
+	logger.Database.WithContext(db.ctx, phaseHealth).Debugz(
 		"database health check passed",
-		zap.Int("open_connections", stats.OpenConnections),
-		zap.Int("in_use_connections", stats.InUse),
-		zap.Int("idle_connections", stats.Idle),
-		zap.Int("max_open_connections", stats.MaxOpenConnections),
+		zap.Int("open", stats.OpenConnections),
+		zap.Int("max", stats.MaxOpenConnections),
+		zap.Int("in_use", stats.InUse),
+		zap.Int("idle", stats.Idle),
 		util.LogDuration(time.Since(begin)),
 	)
 

@@ -169,7 +169,7 @@ func (a *aggregator[M, R]) Scan(dest *[]R) (err error) {
 	if err = a.db.prepare(); err != nil {
 		return err
 	}
-	done, _ := a.db.trace("Aggregate")
+	done, _ := a.db.trace(phaseAggregate)
 	// done must read the named return, not the nil err captured at defer time.
 	defer func() { done(err) }()
 
@@ -202,7 +202,7 @@ func (a *aggregator[M, R]) ScanOne(dest *R) (err error) {
 	if err = a.db.prepare(); err != nil {
 		return err
 	}
-	done, _ := a.db.trace("AggregateOne")
+	done, _ := a.db.trace(phaseAggregateOne)
 	defer func() { done(err) }()
 
 	for _, t := range a.terms {
@@ -242,7 +242,7 @@ func (a *aggregator[M, R]) CountGroups(count *int) (err error) {
 	if err = a.db.prepare(); err != nil {
 		return err
 	}
-	done, _ := a.db.trace("AggregateCountGroups")
+	done, _ := a.db.trace(phaseAggregateCountGroups)
 	defer func() { done(err) }()
 
 	// The inner query projects only the group keys: the outer count reads

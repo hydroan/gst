@@ -8,7 +8,6 @@ import (
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/provider/otel"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -95,14 +94,16 @@ func transactionOn(ctx context.Context, base *gorm.DB, fn func(ctx context.Conte
 	txErr := withTransactionBoundary(spanCtx, base, base.WithContext(spanCtx),
 		func(txCtx context.Context, _ *gorm.DB) error {
 			if err := fn(txCtx); err != nil {
-				logger.Database.WithContext(ctx, consts.Phase("Transaction")).Errorz(
+				logger.Database.WithContext(ctx, phaseTransaction).Errorz(
 					"transaction rolled back due to error",
 					zap.Error(err),
 					util.LogDuration(time.Since(begin)),
 				)
 				return err
 			}
-			logger.Database.WithContext(ctx, consts.Phase("Transaction")).Infoz(
+			// Commit is the expected outcome and the transaction span already
+			// records its duration, so success stays at debug level.
+			logger.Database.WithContext(ctx, phaseTransaction).Debugz(
 				"transaction committed successfully",
 				util.LogDuration(time.Since(begin)),
 			)

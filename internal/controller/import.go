@@ -14,6 +14,7 @@ import (
 	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
+	"go.uber.org/zap"
 )
 
 // Import handles an import request with the default factory settings.
@@ -40,21 +41,21 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// NOTE: the form field name is "file", it must be agreed on with the frontend.
 		file, err := c.FormFile("file")
 		if err != nil {
-			log.Error(err)
+			log.Errorz("read upload file failed", zap.Error(err))
 			JSON(c, CodeFailure.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
 		}
 		// check file size.
 		if file.Size > int64(MAX_IMPORT_SIZE) {
-			log.Error(CodeTooLargeFile)
+			log.Errorz(CodeTooLargeFile.String())
 			JSON(c, CodeTooLargeFile)
 			gstotel.RecordError(span, errors.New(CodeTooLargeFile.Msg()))
 			return
 		}
 		fd, err := file.Open()
 		if err != nil {
-			log.Error(err)
+			log.Errorz("read upload file failed", zap.Error(err))
 			JSON(c, CodeFailure.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
@@ -63,7 +64,7 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 
 		buf := new(bytes.Buffer)
 		if _, err = io.Copy(buf, fd); err != nil {
-			log.Error(err)
+			log.Errorz("read upload file failed", zap.Error(err))
 			JSON(c, CodeFailure.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
@@ -79,7 +80,7 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				Import(types.NewServiceContext(c, spanCtx, consts.PHASE_IMPORT), buf)
 		})
 		if err != nil {
-			log.Error(err)
+			log.Errorz("service operation failed", zap.Error(err))
 			JSON(c, CodeFailure.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
@@ -107,7 +108,7 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			}
 			return database.Database[M](txCtx).Update(toUpdate...)
 		}); err != nil {
-			log.Error(err)
+			log.Errorz("database operation failed", zap.Error(err))
 			JSON(c, writeErrorCoder(err))
 			gstotel.RecordError(span, err)
 			return

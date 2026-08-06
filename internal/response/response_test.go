@@ -1,6 +1,7 @@
 package response
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -47,5 +48,13 @@ func TestWithErrKeepsServiceErrorCauseOutOfMessage(t *testing.T) {
 	// Plain errors keep rendering their full Error text.
 	if got := CodeFailure.WithErr(errors.New("plain failure")).Msg(); got != "plain failure" {
 		t.Errorf("plain: msg = %q, want %q", got, "plain failure")
+	}
+}
+
+func TestCodeStringRendersMessageNotBareInteger(t *testing.T) {
+	got := CodeNotFoundRouteParam.String()
+	want := fmt.Sprintf("not found router param (code=%d)", int32(CodeNotFoundRouteParam))
+	if got != want {
+		t.Errorf("String() = %q, want %q", got, want)
 	}
 }

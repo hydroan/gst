@@ -67,7 +67,7 @@ func (db *database[M]) List(dest *[]M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, span := db.trace("List")
+	done, span := db.trace(consts.PHASE_LIST)
 	defer func() { done(err) }()
 	if dest == nil {
 		return ErrNilDest
@@ -168,7 +168,7 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, span := db.trace("Get")
+	done, span := db.trace(consts.PHASE_GET)
 	defer func() { done(err) }()
 
 	db.applySelect()
@@ -243,7 +243,7 @@ func (db *database[M]) Count(count *int) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, _ := db.trace("Count")
+	done, _ := db.trace(phaseCount)
 	defer func() { done(err) }()
 
 	// GORM's Count only accepts *int64, so bridge through a local variable.
@@ -291,7 +291,7 @@ func (db *database[M]) First(dest M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, span := db.trace("First")
+	done, span := db.trace(phaseFirst)
 	defer func() { done(err) }()
 
 	db.applySelect()
@@ -354,7 +354,7 @@ func (db *database[M]) Last(dest M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, span := db.trace("Last")
+	done, span := db.trace(phaseLast)
 	defer func() { done(err) }()
 
 	db.applySelect()
@@ -417,7 +417,7 @@ func (db *database[M]) Take(dest M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	done, span := db.trace("Take")
+	done, span := db.trace(phaseTake)
 	defer func() { done(err) }()
 
 	db.applySelect()

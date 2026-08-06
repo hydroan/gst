@@ -11,7 +11,7 @@ import (
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
+	"go.uber.org/zap"
 )
 
 // WithQuery sets query conditions based on the provided model struct fields.
@@ -126,12 +126,14 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 		}
 		// No RawQuery and empty query: apply safety check
 		if !opt.AllowEmpty {
-			logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("query is nil or empty, adding safety condition to prevent matching all records")
+			logger.Database.WithContext(db.ctx, phaseWithQuery).Warnz(
+				"query is nil or empty, adding safety condition to prevent matching all records",
+				zap.String("model", reflect.TypeOf(*new(M)).Elem().Name()),
+			)
 			db.ins = db.ins.Where("1 = 0")
 			return db
 		}
 		// AllowEmpty=true: allow matching all records
-		logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Info("query is nil or empty but AllowEmpty=true, allowing full table scan")
 		return db
 	}
 
@@ -145,7 +147,11 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 	// of matching on a guessed column name.
 	parsedColumns, parseErr := modelschema.Columns(typ)
 	if parseErr != nil {
-		logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("cannot resolve columns of %s: %v, adding safety condition", typ, parseErr)
+		logger.Database.WithContext(db.ctx, phaseWithQuery).Warnz(
+			"cannot resolve model columns, adding safety condition",
+			zap.String("model", typ.Name()),
+			zap.Error(parseErr),
+		)
 		db.ins = db.ins.Where("1 = 0")
 		return db
 	}
@@ -180,12 +186,14 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 		}
 		// No RawQuery and empty query: apply safety check
 		if !opt.AllowEmpty {
-			logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("all query fields are empty, adding safety condition to prevent matching all records")
+			logger.Database.WithContext(db.ctx, phaseWithQuery).Warnz(
+				"all query fields are empty, adding safety condition to prevent matching all records",
+				zap.String("model", typ.Name()),
+			)
 			db.ins = db.ins.Where("1 = 0")
 			return db
 		}
 		// AllowEmpty=true: allow matching all records
-		logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Info("all query fields are empty but AllowEmpty=true, allowing full table scan")
 		return db
 	}
 
@@ -204,7 +212,7 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 			// comparison: MySQL and SQLite answer it with no rows and
 			// postgres rejects the SQL outright. Failing closed keeps one
 			// portable answer and never widens the result.
-			logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("exact match on JSON column %q cannot compare, adding safety condition", k)
+			logger.Database.WithContext(db.ctx, phaseWithQuery).Warnz("exact match on JSON column cannot compare, adding safety condition", zap.String("column", k))
 			db.ins = db.ins.Where("1 = 0")
 			continue
 		}
@@ -215,13 +223,12 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 	// Example: &User{Name: "", Email: ""} has fields but all values are empty
 	// Filters applied earlier are real conditions, so they
 	// disable this safety check the same way RawQuery would.
-	if !hasValidCondition && !hasFilters {
-		if !opt.AllowEmpty {
-			logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warn("all query values are empty, adding safety condition to prevent matching all records")
-			db.ins = db.ins.Where("1 = 0")
-		} else {
-			logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Info("all query values are empty but AllowEmpty=true, allowing full table scan")
-		}
+	if !hasValidCondition && !hasFilters && !opt.AllowEmpty {
+		logger.Database.WithContext(db.ctx, phaseWithQuery).Warnz(
+			"all query values are empty, adding safety condition to prevent matching all records",
+			zap.String("model", typ.Name()),
+		)
+		db.ins = db.ins.Where("1 = 0")
 	}
 	return db
 }
@@ -350,7 +357,7 @@ func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, 
 		case reflect.Slice:
 			_len := fieldVal.Len()
 			if _len == 0 {
-				logger.Database.WithContext(ctx, consts.Phase("WithQuery")).Warn("reflect.Slice length is 0")
+				logger.Database.WithContext(ctx, phaseWithQuery).Debugz("query model slice field is empty, treated as a single zero value")
 				_len = 1
 			}
 			slice := reflect.MakeSlice(fieldVal.Type(), _len, _len)

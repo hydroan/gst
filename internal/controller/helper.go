@@ -16,6 +16,7 @@ import (
 	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/types"
+	"go.uber.org/zap"
 )
 
 // setRouteID copies the route id parameter into the model and reports whether
@@ -113,7 +114,7 @@ func patchValue(log types.Logger, typ reflect.Type, oldVal reflect.Value, newVal
 			continue
 		}
 		if !oldVal.Field(i).CanSet() {
-			log.Warnf("field %q is cannot set, skip", field.Name)
+			log.Debugz("field cannot be set, skip", zap.String("field", field.Name))
 			continue
 		}
 		if !newVal.Field(i).IsValid() {

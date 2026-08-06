@@ -3,9 +3,9 @@ package database
 import (
 	"context"
 	"reflect"
-	"strconv"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/provider/otel"
@@ -18,12 +18,33 @@ import (
 	"go.uber.org/zap"
 )
 
+// Phases of database-layer operations that have no controller counterpart in
+// consts. Values follow the consts.Phase snake_case convention so the log
+// phase field stays uniform across every log source; span names derive their
+// UpperCamelCase form via Phase.MethodName.
+const (
+	phaseUpsert               consts.Phase = "upsert"
+	phaseCount                consts.Phase = "count"
+	phaseFirst                consts.Phase = "first"
+	phaseLast                 consts.Phase = "last"
+	phaseTake                 consts.Phase = "take"
+	phaseUpdateByID           consts.Phase = "update_by_id"
+	phaseAggregate            consts.Phase = "aggregate"
+	phaseAggregateOne         consts.Phase = "aggregate_one"
+	phaseAggregateCountGroups consts.Phase = "aggregate_count_groups"
+	phaseCleanup              consts.Phase = "cleanup"
+	phaseHealth               consts.Phase = "health"
+	phaseTransaction          consts.Phase = "transaction"
+	phaseWithQuery            consts.Phase = "with_query"
+)
+
 // trace returns a timing function for database operations that provides comprehensive
 // performance monitoring, logging, and distributed tracing capabilities.
 // The returned function should be called with the operation result to complete tracing and logging.
 //
 // Parameters:
-//   - op: Operation name for logging and tracing identification (Create, List, Update, Delete, etc.)
+//   - phase: Operation phase for logging and tracing identification
+//     (consts.PHASE_CREATE, consts.PHASE_LIST, phaseUpsert, etc.)
 //   - batch: Optional batch size for batch operations (used for span attributes and logging)
 //
 // Returns a function that accepts an error and completes the operation tracing and logging.
@@ -49,7 +70,7 @@ import (
 //
 // Usage Pattern:
 //
-//	done, _ := db.trace("Create", len(models))
+//	done, _ := db.trace(consts.PHASE_CREATE, len(models))
 //	defer func() { done(err) }()
 //
 // The closure is load-bearing: a plain `defer done(err)` evaluates err where
@@ -63,8 +84,9 @@ import (
 //
 // Note: Must be called after `defer db.reset()` to ensure proper cleanup order.
 // Jaeger tracing is automatically enabled when gstotel.IsEnabled() returns true.
-func (db *database[M]) trace(op string, batch ...int) (func(error), trace.Span) {
+func (db *database[M]) trace(phase consts.Phase, batch ...int) (func(error), trace.Span) {
 	begin := time.Now()
+	modelName := reflect.TypeOf(*new(M)).Elem().Name()
 	var _batch int
 	if len(batch) > 0 {
 		_batch = batch[0]
@@ -73,8 +95,7 @@ func (db *database[M]) trace(op string, batch ...int) (func(error), trace.Span) 
 	ctx := db.ctx
 	var span trace.Span
 	if gstotel.IsEnabled() && ctx != nil {
-		modelName := reflect.TypeOf(*new(M)).Elem().Name()
-		spanName := gstotel.FrameworkSpanName("database", modelName, op)
+		spanName := gstotel.FrameworkSpanName("database", modelName, phase.MethodName())
 		ctx, span = gstotel.StartSpan(ctx, spanName)
 		ctx = requestctx.WithMetadata(ctx, requestctx.FromContext(db.ctx))
 		db.ctx = ctx
@@ -87,13 +108,12 @@ func (db *database[M]) trace(op string, batch ...int) (func(error), trace.Span) 
 		// re-runs deduplication. When adding attributes, extend the batches in
 		// this function instead of adding SetAttributes calls.
 		if gstotel.IsSpanRecording(span) {
-			attrs := make([]attribute.KeyValue, 0, 7)
+			attrs := make([]attribute.KeyValue, 0, 6)
 			attrs = append(
 				attrs,
 				attribute.String("component", "database"),
-				attribute.String("database.operation", op),
+				attribute.String("database.operation", phase.MethodName()),
 				attribute.String("database.model", modelName),
-				attribute.String("database.table", modelName),
 				attribute.Bool("database.dry_run", db.dryRun),
 			)
 			if _batch > 0 {
@@ -127,24 +147,27 @@ func (db *database[M]) trace(op string, batch ...int) (func(error), trace.Span) 
 			span.SetAttributes(attrs...)
 		}
 
-		// Log operation results
-		if err != nil {
-			logger.Database.WithContext(db.ctx, consts.Phase(op)).Errorz(
-				"",
-				zap.Error(err),
-				zap.String("table", reflect.TypeOf(*new(M)).Elem().Name()),
-				zap.String("batch", strconv.Itoa(_batch)),
-				util.LogDuration(duration),
-				zap.Bool("dry_run", db.dryRun),
-			)
-		} else {
-			logger.Database.WithContext(db.ctx, consts.Phase(op)).Infoz(
-				"",
-				zap.String("table", reflect.TypeOf(*new(M)).Elem().Name()),
-				zap.String("batch", strconv.Itoa(_batch)),
-				util.LogDuration(time.Since(begin)),
-				zap.Bool("dry_run", db.dryRun),
-			)
+		// Log operation results. Success and record-not-found stay at debug
+		// level: both are normal outcomes whose timing the SQL log and the
+		// operation span already cover, so they only matter when tracing an
+		// operation end to end. Real failures log at error level. Constant
+		// markers (batch_size, dry_run) appear only when meaningful.
+		fields := make([]zap.Field, 0, 5)
+		fields = append(fields, zap.String("model", modelName))
+		if _batch > 0 {
+			fields = append(fields, zap.Int("batch_size", _batch))
+		}
+		fields = append(fields, util.LogDuration(duration))
+		if db.dryRun {
+			fields = append(fields, zap.Bool("dry_run", true))
+		}
+		switch {
+		case err == nil:
+			logger.Database.WithContext(db.ctx, phase).Debugz("database operation completed", fields...)
+		case errors.Is(err, ErrRecordNotFound):
+			logger.Database.WithContext(db.ctx, phase).Debugz("database operation completed", append(fields, zap.Bool("record_not_found", true))...)
+		default:
+			logger.Database.WithContext(db.ctx, phase).Errorz("database operation failed", append(fields, zap.Error(err))...)
 		}
 	}, span
 }

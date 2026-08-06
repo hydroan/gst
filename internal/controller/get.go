@@ -55,7 +55,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_GET)
 				return svc.Get(serviceCtx, req)
 			}); err != nil {
-				log.Error(err)
+				log.Errorz("service operation failed", zap.Error(err))
 				handleServiceError(c, err)
 				gstotel.RecordError(span, err)
 				return
@@ -72,7 +72,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			param = reqMeta.Param(util.Deref(cfg[0]).ParamName)
 		}
 		if len(param) == 0 {
-			log.Error(CodeNotFoundRouteParam)
+			log.Errorz(CodeNotFoundRouteParam.String())
 			JSON(c, CodeNotFoundRouteParam)
 			gstotel.RecordError(span, errors.New(CodeNotFoundRouteParam.Msg()))
 			return
@@ -98,7 +98,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_GET_BEFORE)
 			return svc.GetBefore(serviceCtxBefore, m)
 		}); err != nil {
-			log.Error(err)
+			log.Errorz("service operation failed", zap.Error(err))
 			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
@@ -107,7 +107,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		if err = database.Database[M](requestContext(c)).
 			WithExpand(expands).
 			Get(m, m.GetID()); err != nil {
-			log.Error(err)
+			log.Errorz("database operation failed", zap.Error(err))
 			JSON(c, CodeFailure.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
@@ -118,7 +118,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_GET_AFTER)
 			return svc.GetAfter(serviceCtxAfter, m)
 		}); err != nil {
-			log.Error(err)
+			log.Errorz("service operation failed", zap.Error(err))
 			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
@@ -126,7 +126,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		// It will returns a empty types.Model if found nothing from database,
 		// we should response status code "CodeNotFound".
 		if len(m.GetID()) == 0 || m.GetCreatedAt().Equal(time.Time{}) {
-			log.Error(CodeNotFound)
+			log.Errorz(CodeNotFound.String())
 			JSON(c, CodeNotFound)
 			gstotel.RecordError(span, errors.New(CodeNotFound.Msg()))
 			return
@@ -154,7 +154,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			Method:    c.Request.Method,
 			UserAgent: c.Request.UserAgent(),
 		}); err != nil {
-			log.Warn(err)
+			log.Warnz("record operation log failed", zap.Error(err))
 		}
 
 		JSON(c, CodeSuccess, m)

@@ -14,6 +14,7 @@ import (
 	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
+	"go.uber.org/zap"
 )
 
 // Export format identifiers accepted via the QUERY_FORMAT query parameter.
@@ -102,12 +103,18 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			query := c.Request.URL.Query()
 
 			var err error
+			// A query that cannot decode is a client error, same as on the List
+			// path: rejecting it keeps the export from running with a silently
+			// dropped condition set.
 			if err = urlquery.Decode(query, m); err != nil {
-				log.Warn("failed to parse uri query parameter into model: ", err)
+				log.Errorz("parse query parameter failed", zap.Error(err))
+				JSON(c, CodeInvalidParam.WithErr(err))
+				gstotel.RecordError(span, err)
+				return
 			}
 			var filters []types.Filter
 			if filters, err = urlquery.Filters(query, m); err != nil {
-				log.Error(err)
+				log.Errorz("parse query parameter failed", zap.Error(err))
 				JSON(c, CodeInvalidParam.WithErr(err))
 				gstotel.RecordError(span, err)
 				return
@@ -116,7 +123,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 
 			var orders []types.Order
 			if orders, err = urlquery.Orders(query, m); err != nil {
-				log.Error(err)
+				log.Errorz("parse query parameter failed", zap.Error(err))
 				JSON(c, CodeInvalidParam.WithErr(err))
 				gstotel.RecordError(span, err)
 				return
@@ -128,7 +135,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) error {
 				return svc.ListBefore(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), &data)
 			}); err != nil {
-				log.Error(err)
+				log.Errorz("service operation failed", zap.Error(err))
 				JSON(c, CodeFailure.WithErr(err))
 				gstotel.RecordError(span, err)
 				return
@@ -143,7 +150,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				Filters:       filters,
 			}
 			if m, queryOpts, err = svc.Filter(svcCtx, m, queryOpts); err != nil {
-				log.Error(err)
+				log.Errorz("service operation failed", zap.Error(err))
 				handleServiceError(c, err)
 				gstotel.RecordError(span, err)
 				return
@@ -157,7 +164,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				WithExpand(expands, orders...).
 				WithOrder(orders...).
 				List(&data); err != nil {
-				log.Error(err)
+				log.Errorz("database operation failed", zap.Error(err))
 				JSON(c, CodeFailure.WithErr(err))
 				gstotel.RecordError(span, err)
 				return
@@ -166,7 +173,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) error {
 				return svc.ListAfter(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), &data)
 			}); err != nil {
-				log.Error(err)
+				log.Errorz("service operation failed", zap.Error(err))
 				JSON(c, CodeFailure.WithErr(err))
 				gstotel.RecordError(span, err)
 				return
@@ -177,7 +184,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			return svc.Export(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), data...)
 		})
 		if err != nil {
-			log.Error(err)
+			log.Errorz("service operation failed", zap.Error(err))
 			JSON(c, CodeFailure.WithErr(err))
 			gstotel.RecordError(span, err)
 			return

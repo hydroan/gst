@@ -76,7 +76,7 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 	if db.dialect() == dialectClickHouse {
 		return errors.Wrap(ErrUnsupportedOnDialect, "Upsert on clickhouse")
 	}
-	done, _ := db.trace("Upsert", len(objs))
+	done, _ := db.trace(phaseUpsert, len(objs))
 	defer func() { done(err) }()
 
 	tableName := db.m.GetTableName()

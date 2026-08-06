@@ -49,20 +49,17 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 			req := meta.newRequest()
 
 			if reqErr = c.ShouldBindJSON(&req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
-				log.Error(reqErr)
+				log.Errorz("bind request body failed", zap.Error(reqErr))
 				JSON(c, CodeInvalidParam.WithErr(reqErr))
 				gstotel.RecordError(span, reqErr)
 				return
-			}
-			if errors.Is(reqErr, io.EOF) {
-				log.Warn(ErrRequestBodyEmpty)
 			}
 			var serviceCtx *types.ServiceContext
 			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_DELETE_MANY, func(spanCtx context.Context) (RSP, error) {
 				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE_MANY)
 				return svc.DeleteMany(serviceCtx, req)
 			}); err != nil {
-				log.Error(err)
+				log.Errorz("service operation failed", zap.Error(err))
 				handleServiceError(c, err)
 				gstotel.RecordError(span, err)
 				return
@@ -76,13 +73,10 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 
 		var req requestData[M]
 		if reqErr = c.ShouldBindJSON(&req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
-			log.Error(reqErr)
+			log.Errorz("bind request body failed", zap.Error(reqErr))
 			JSON(c, CodeFailure.WithErr(err))
 			gstotel.RecordError(span, reqErr)
 			return
-		}
-		if errors.Is(reqErr, io.EOF) {
-			log.Warn(ErrRequestBodyEmpty)
 		}
 
 		// 1.Perform business logic processing before batch delete resources.
@@ -102,7 +96,7 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE_MANY_BEFORE)
 			return svc.DeleteManyBefore(serviceCtxBefore, req.Items...)
 		}); err != nil {
-			log.Error(err)
+			log.Errorz("service operation failed", zap.Error(err))
 			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
@@ -116,7 +110,7 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 			//
 			// if err = database.Database[M](requestContext(c)).WithPurge(req.Options.Purge).Delete(req.Items...); err != nil {
 			if err = database.Database[M](requestContext(c)).Delete(req.Items...); err != nil {
-				log.Error(err)
+				log.Errorz("database operation failed", zap.Error(err))
 				JSON(c, writeErrorCoder(err))
 				gstotel.RecordError(span, err)
 				return
@@ -128,7 +122,7 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE_MANY_AFTER)
 			return svc.DeleteManyAfter(serviceCtxAfter, req.Items...)
 		}); err != nil {
-			log.Error(err)
+			log.Errorz("service operation failed", zap.Error(err))
 			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
@@ -160,7 +154,7 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 			Method:    c.Request.Method,
 			UserAgent: c.Request.UserAgent(),
 		}); err != nil {
-			log.Warn(err)
+			log.Warnz("record operation log failed", zap.Error(err))
 		}
 
 		JSON(c, CodeSuccess)

@@ -19,10 +19,6 @@ import (
 
 // TODO: Record failed operations.
 
-// ErrRequestBodyEmpty is returned when an action requires a request body but the
-// client sends an empty body.
-const ErrRequestBodyEmpty = "request body is empty"
-
 var (
 	// Global circular buffer for async operation logs.
 	cb *circularbuffer.CircularBuffer[*modellogmgmt.OperationLog]

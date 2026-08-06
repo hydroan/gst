@@ -58,20 +58,17 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			req := meta.newRequest()
 
 			if reqErr = c.ShouldBindJSON(&req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
-				log.Error(reqErr)
+				log.Errorz("bind request body failed", zap.Error(reqErr))
 				JSON(c, CodeInvalidParam.WithErr(reqErr))
 				gstotel.RecordError(span, reqErr)
 				return
-			}
-			if errors.Is(reqErr, io.EOF) {
-				log.Warn(ErrRequestBodyEmpty)
 			}
 			var serviceCtx *types.ServiceContext
 			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_UPDATE, func(spanCtx context.Context) (RSP, error) {
 				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_UPDATE)
 				return svc.Update(serviceCtx, req)
 			}); err != nil {
-				log.Error(err)
+				log.Errorz("service operation failed", zap.Error(err))
 				handleServiceError(c, err)
 				gstotel.RecordError(span, err)
 				return
@@ -85,7 +82,7 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 
 		req := meta.newModel()
 		if reqErr := c.ShouldBindJSON(&req); reqErr != nil {
-			log.Error(reqErr)
+			log.Errorz("bind request body failed", zap.Error(reqErr))
 			JSON(c, CodeInvalidParam.WithErr(reqErr))
 			gstotel.RecordError(span, reqErr)
 			return
@@ -97,7 +94,7 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			id = reqMeta.Param(util.Deref(cfg[0]).ParamName)
 		}
 		if len(id) == 0 {
-			log.Error(CodeNotFoundRouteParam)
+			log.Errorz(CodeNotFoundRouteParam.String())
 			JSON(c, CodeNotFoundRouteParam)
 			gstotel.RecordError(span, errors.New(CodeNotFoundRouteParam.Msg()))
 			return
@@ -120,7 +117,7 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_UPDATE_BEFORE)
 			return svc.UpdateBefore(serviceCtxBefore, req)
 		}); err != nil {
-			log.Error(err)
+			log.Errorz("service operation failed", zap.Error(err))
 			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
@@ -128,7 +125,7 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// 2.Update resource in database. The database layer answers existence:
 		// ErrRecordNotFound renders 404, ErrDuplicatedKey renders 409.
 		if err = database.Database[M](requestContext(c)).Update(req); err != nil {
-			log.Error(err)
+			log.Errorz("database operation failed", zap.Error(err))
 			JSON(c, writeErrorCoder(err))
 			gstotel.RecordError(span, err)
 			return
@@ -139,7 +136,7 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_UPDATE_AFTER)
 			return svc.UpdateAfter(serviceCtxAfter, req)
 		}); err != nil {
-			log.Error(err)
+			log.Errorz("service operation failed", zap.Error(err))
 			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
@@ -152,7 +149,7 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// the update itself already committed.
 		reloaded := meta.newModel()
 		if reloadErr := database.Database[M](requestContext(c)).Get(reloaded, id); reloadErr != nil {
-			log.Warn(reloadErr)
+			log.Warnz("reload audit columns failed", zap.Error(reloadErr))
 		} else {
 			req.SetCreatedAt(reloaded.GetCreatedAt())
 			req.SetCreatedBy(reloaded.GetCreatedBy())
@@ -191,7 +188,7 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			Method:    c.Request.Method,
 			UserAgent: c.Request.UserAgent(),
 		}); err != nil {
-			log.Warn(err)
+			log.Warnz("record operation log failed", zap.Error(err))
 		}
 
 		JSON(c, CodeSuccess, req)

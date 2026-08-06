@@ -142,6 +142,12 @@ func (r Code) Msg() string {
 	return defaultCodeValueMap[CodeFailure].Msg
 }
 
+// String renders the code with its message so a Code value logged or
+// formatted directly stays readable instead of printing as a bare integer.
+func (r Code) String() string {
+	return fmt.Sprintf("%s (code=%d)", r.Msg(), int32(r))
+}
+
 func (r Code) WithStatus(status int) CodeInstance {
 	return CodeInstance{code: r, status: &status, msg: nil}
 }

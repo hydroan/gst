@@ -50,7 +50,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			req := meta.newRequest()
 
 			if reqErr := c.ShouldBindJSON(&req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
-				log.Error(reqErr)
+				log.Errorz("bind request body failed", zap.Error(reqErr))
 				JSON(c, CodeInvalidParam.WithErr(reqErr))
 				gstotel.RecordError(span, reqErr)
 				return
@@ -60,7 +60,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE)
 				return svc.Delete(serviceCtx, req)
 			}); err != nil {
-				log.Error(err)
+				log.Errorz("service operation failed", zap.Error(err))
 				handleServiceError(c, err)
 				gstotel.RecordError(span, err)
 				return
@@ -78,7 +78,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			id = reqMeta.Param(util.Deref(cfg[0]).ParamName)
 		}
 		if len(id) == 0 {
-			log.Error(CodeNotFoundRouteParam)
+			log.Errorz(CodeNotFoundRouteParam.String())
 			JSON(c, CodeNotFoundRouteParam)
 			gstotel.RecordError(span, errors.New(CodeNotFoundRouteParam.Msg()))
 			return
@@ -99,7 +99,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE_BEFORE)
 			return svc.DeleteBefore(serviceCtxBefore, m)
 		}); err != nil {
-			log.Error(err)
+			log.Errorz("service operation failed", zap.Error(err))
 			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
@@ -109,13 +109,13 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		copied := meta.newModel()
 		copied.SetID(m.GetID())
 		if err := database.Database[M](requestContext(c)).WithExpand(copied.Expands()).Get(copied, m.GetID()); err != nil {
-			log.Error(err)
+			log.Errorz("database operation failed", zap.Error(err))
 			gstotel.RecordError(span, err)
 		}
 
 		// 2.Delete resource in database.
 		if err := database.Database[M](requestContext(c)).Delete(m); err != nil {
-			log.Error(err)
+			log.Errorz("database operation failed", zap.Error(err))
 			JSON(c, writeErrorCoder(err))
 			gstotel.RecordError(span, err)
 			return
@@ -126,7 +126,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE_AFTER)
 			return svc.DeleteAfter(serviceCtxAfter, m)
 		}); err != nil {
-			log.Error(err)
+			log.Errorz("service operation failed", zap.Error(err))
 			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
@@ -146,7 +146,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			Method:    c.Request.Method,
 			UserAgent: c.Request.UserAgent(),
 		}); err != nil {
-			log.Warn(err)
+			log.Warnz("record operation log failed", zap.Error(err))
 		}
 
 		JSON(c, CodeSuccess)

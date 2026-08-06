@@ -9,7 +9,7 @@ import (
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
+	"go.uber.org/zap"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -292,7 +292,12 @@ func failClosedExpr() clause.Expression { return clause.Expr{SQL: "1 = 0"} }
 // failClosedFilter records why a filter cannot be applied and narrows the
 // query to an empty result instead of widening it.
 func (db *database[M]) failClosedFilter(f types.Filter, msg string) (clause.Expression, error) {
-	logger.Database.WithContext(db.ctx, consts.Phase("WithQuery")).Warnf("filter operator %q on column %q %s, adding safety condition", f.Op, f.Column, msg)
+	logger.Database.WithContext(db.ctx, phaseWithQuery).Warnz(
+		"filter cannot be applied, adding safety condition",
+		zap.String("op", string(f.Op)),
+		zap.String("column", f.Column),
+		zap.String("reason", msg),
+	)
 	return failClosedExpr(), errors.Wrapf(ErrUnusableFilter, "operator %q on column %q %s", f.Op, f.Column, msg)
 }
 

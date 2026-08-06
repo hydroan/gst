@@ -16,6 +16,7 @@ import (
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
+	"go.uber.org/zap"
 )
 
 // Create handles a create request with the default factory settings.
@@ -53,21 +54,18 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			// We should not try to parse it as JSON.
 			if !strings.EqualFold(c.ContentType(), "multipart/form-data") {
 				if reqErr = c.ShouldBindJSON(&req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
-					log.Error(reqErr)
+					log.Errorz("bind request body failed", zap.Error(reqErr))
 					JSON(c, CodeInvalidParam.WithErr(reqErr))
 					gstotel.RecordError(span, reqErr)
 					return
 				}
-			}
-			if errors.Is(reqErr, io.EOF) {
-				log.Warn(ErrRequestBodyEmpty)
 			}
 			var serviceCtx *types.ServiceContext
 			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_CREATE, func(spanCtx context.Context) (RSP, error) {
 				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_CREATE)
 				return svc.Create(serviceCtx, req)
 			}); err != nil {
-				log.Error(err)
+				log.Errorz("service operation failed", zap.Error(err))
 				handleServiceError(c, err)
 				gstotel.RecordError(span, err)
 				return
@@ -81,14 +79,12 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 
 		req := meta.newModel()
 		if reqErr = c.ShouldBindJSON(&req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
-			log.Error(reqErr)
+			log.Errorz("bind request body failed", zap.Error(reqErr))
 			JSON(c, CodeInvalidParam.WithErr(reqErr))
 			gstotel.RecordError(span, reqErr)
 			return
 		}
-		if errors.Is(reqErr, io.EOF) {
-			log.Warn(ErrRequestBodyEmpty)
-		} else {
+		if !errors.Is(reqErr, io.EOF) {
 			req.SetCreatedBy(c.GetString(consts.CTX_USERNAME))
 			req.SetUpdatedBy(c.GetString(consts.CTX_USERNAME))
 		}
@@ -99,7 +95,7 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_CREATE_BEFORE)
 			return svc.CreateBefore(serviceCtxBefore, req)
 		}); err != nil {
-			log.Error(err)
+			log.Errorz("service operation failed", zap.Error(err))
 			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
@@ -109,7 +105,7 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// surfaces as ErrDuplicatedKey and renders 409.
 		if !errors.Is(reqErr, io.EOF) {
 			if err = database.Database[M](requestContext(c)).WithExpand(req.Expands()).Create(req); err != nil {
-				log.Error(err)
+				log.Errorz("database operation failed", zap.Error(err))
 				JSON(c, writeErrorCoder(err))
 				gstotel.RecordError(span, err)
 				return
@@ -121,7 +117,7 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_CREATE_AFTER)
 			return svc.CreateAfter(serviceCtxAfter, req)
 		}); err != nil {
-			log.Error(err)
+			log.Errorz("service operation failed", zap.Error(err))
 			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
@@ -160,7 +156,7 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			Method:    c.Request.Method,
 			UserAgent: c.Request.UserAgent(),
 		}); err != nil {
-			log.Warn(err)
+			log.Warnz("record operation log failed", zap.Error(err))
 		}
 
 		JSON(c, CodeSuccess, req)

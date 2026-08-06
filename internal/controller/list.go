@@ -12,6 +12,7 @@ import (
 	gstotel "github.com/hydroan/gst/provider/otel"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
+	"go.uber.org/zap"
 )
 
 // List handles a list request with the default factory settings.
@@ -54,7 +55,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_LIST)
 				return svc.List(serviceCtx, req)
 			}); err != nil {
-				log.Error(err)
+				log.Errorz("service operation failed", zap.Error(err))
 				handleServiceError(c, err)
 				gstotel.RecordError(span, err)
 				return
@@ -75,14 +76,14 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 
 		var err error
 		if err = decodeListQuery(m, query); err != nil {
-			log.Error(err)
+			log.Errorz("parse query parameter failed", zap.Error(err))
 			JSON(c, CodeInvalidParam.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
 		}
 		var filters []types.Filter
 		if filters, err = urlquery.Filters(query, m); err != nil {
-			log.Error(err)
+			log.Errorz("parse query parameter failed", zap.Error(err))
 			JSON(c, CodeInvalidParam.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
@@ -91,7 +92,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 
 		var orders []types.Order
 		if orders, err = urlquery.Orders(query, m); err != nil {
-			log.Error(err)
+			log.Errorz("parse query parameter failed", zap.Error(err))
 			JSON(c, CodeInvalidParam.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
@@ -99,14 +100,14 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 
 		var cursor types.Cursor
 		if cursor, err = urlquery.Cursor(query, m); err != nil {
-			log.Error(err)
+			log.Errorz("parse query parameter failed", zap.Error(err))
 			JSON(c, CodeInvalidParam.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
 		}
 
 		if err = checkCursorOrderConflict(cursor, orders); err != nil {
-			log.Error(err)
+			log.Errorz("parse query parameter failed", zap.Error(err))
 			JSON(c, CodeInvalidParam.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
@@ -121,7 +122,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_LIST_BEFORE)
 			return svc.ListBefore(serviceCtxBefore, &data)
 		}); err != nil {
-			log.Error(err)
+			log.Errorz("service operation failed", zap.Error(err))
 			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
@@ -135,7 +136,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			Filters:       filters,
 		}
 		if m, queryOpts, err = svc.Filter(ctx, m, queryOpts); err != nil {
-			log.Error(err)
+			log.Errorz("service operation failed", zap.Error(err))
 			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
@@ -149,7 +150,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			WithExpand(expands, orders...).
 			WithOrder(orders...).
 			List(&data); err != nil {
-			log.Error(err)
+			log.Errorz("parse query parameter failed", zap.Error(err))
 			JSON(c, CodeFailure.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
@@ -160,7 +161,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_LIST_AFTER)
 			return svc.ListAfter(serviceCtxAfter, &data)
 		}); err != nil {
-			log.Error(err)
+			log.Errorz("service operation failed", zap.Error(err))
 			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
@@ -172,7 +173,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 				WithQuery(m, queryOpts).
 				WithExclude(m.Excludes()).
 				Count(total); err != nil {
-				log.Error(err)
+				log.Errorz("database operation failed", zap.Error(err))
 				JSON(c, CodeFailure.WithErr(err))
 				gstotel.RecordError(span, err)
 				return
@@ -201,7 +202,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			Method:    c.Request.Method,
 			UserAgent: c.Request.UserAgent(),
 		}); err != nil {
-			log.Warn(err)
+			log.Warnz("record operation log failed", zap.Error(err))
 		}
 
 		JSON(c, CodeSuccess, gin.H{

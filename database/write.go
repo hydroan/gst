@@ -79,7 +79,7 @@ func (db *database[M]) Create(objs ...M) (err error) {
 	if db.dialect() == dialectClickHouse {
 		return db.clickhouseCreate(objs)
 	}
-	done, span := db.trace("Create", len(objs))
+	done, span := db.trace(consts.PHASE_CREATE, len(objs))
 	defer func() { done(err) }()
 
 	if db.dryRun {
@@ -194,7 +194,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	if db.dialect() == dialectClickHouse {
 		return db.clickhouseDelete(objs)
 	}
-	done, span := db.trace("Delete", len(objs))
+	done, span := db.trace(consts.PHASE_DELETE, len(objs))
 	defer func() { done(err) }()
 
 	if db.dryRun {
@@ -347,7 +347,7 @@ func (db *database[M]) Update(objs ...M) (err error) {
 	if db.dialect() == dialectClickHouse {
 		return db.clickhouseUpdate(objs)
 	}
-	done, span := db.trace("Update", len(objs))
+	done, span := db.trace(consts.PHASE_UPDATE, len(objs))
 	defer func() { done(err) }()
 
 	tableName := db.m.GetTableName()
@@ -469,7 +469,7 @@ func (db *database[M]) UpdateByID(id string, column string, value any) (err erro
 	if id, ok = normalizeModelID(db.m, id); !ok {
 		return ErrRecordNotFound
 	}
-	done, _ := db.trace("UpdateByID")
+	done, _ := db.trace(phaseUpdateByID)
 	defer func() { done(err) }()
 
 	tableName := db.m.GetTableName()

@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"reflect"
 
@@ -55,20 +54,17 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			req := meta.newRequest()
 
 			if reqErr = c.ShouldBindJSON(&req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
-				log.Error(reqErr)
+				log.Errorz("bind request body failed", zap.Error(reqErr))
 				JSON(c, CodeInvalidParam.WithErr(reqErr))
 				gstotel.RecordError(span, reqErr)
 				return
-			}
-			if errors.Is(reqErr, io.EOF) {
-				log.Warn(ErrRequestBodyEmpty)
 			}
 			var serviceCtx *types.ServiceContext
 			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_PATCH, func(spanCtx context.Context) (RSP, error) {
 				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_PATCH)
 				return svc.Patch(serviceCtx, req)
 			}); err != nil {
-				log.Error(err)
+				log.Errorz("service operation failed", zap.Error(err))
 				handleServiceError(c, err)
 				gstotel.RecordError(span, err)
 				return
@@ -83,14 +79,14 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		req := meta.newModel()
 		body, err := readJSONRequestBody(c)
 		if err != nil {
-			log.Error(err)
+			log.Errorz("bind request body failed", zap.Error(err))
 			JSON(c, CodeFailure.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
 		}
 		fields, err := patchFieldSetFromJSONBody(meta.typ, body)
 		if err != nil && !errors.Is(err, io.EOF) {
-			log.Error(err)
+			log.Errorz("bind request body failed", zap.Error(err))
 			JSON(c, CodeFailure.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
@@ -100,13 +96,13 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			id = reqMeta.Param(util.Deref(cfg[0]).ParamName)
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
-			log.Error(err)
+			log.Errorz("bind request body failed", zap.Error(err))
 			JSON(c, CodeFailure.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
 		}
 		if len(id) == 0 {
-			log.Error(CodeNotFoundRouteParam)
+			log.Errorz(CodeNotFoundRouteParam.String())
 			JSON(c, CodeNotFoundRouteParam)
 			gstotel.RecordError(span, errors.New(CodeNotFoundRouteParam.Msg()))
 			return
@@ -124,13 +120,13 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 
 		// Make sure the record must be already exists.
 		if err := database.Database[M](requestContext(c)).WithLimit(1).WithQuery(m).List(&data); err != nil {
-			log.Error(err)
+			log.Errorz("database operation failed", zap.Error(err))
 			JSON(c, CodeFailure.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
 		}
 		if len(data) != 1 {
-			log.Errorz(fmt.Sprintf("the total number of records query from database not equal to 1(%d)", len(data)), zap.String("id", id))
+			log.Errorz("records matched by id is not exactly one", zap.Int("count", len(data)), zap.String("id", id))
 			JSON(c, CodeNotFound)
 			return
 		}
@@ -150,7 +146,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_PATCH_BEFORE)
 			return svc.PatchBefore(serviceCtxBefore, cur)
 		}); err != nil {
-			log.Error(err)
+			log.Errorz("service operation failed", zap.Error(err))
 			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
@@ -159,7 +155,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		// ErrRecordNotFound only fires when it vanished in between; unique-key
 		// collisions from the patched values render 409.
 		if err := database.Database[M](requestContext(c)).Update(cur); err != nil {
-			log.Error(err)
+			log.Errorz("database operation failed", zap.Error(err))
 			JSON(c, writeErrorCoder(err))
 			gstotel.RecordError(span, err)
 			return
@@ -170,7 +166,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_PATCH_AFTER)
 			return svc.PatchAfter(serviceCtxAfter, cur)
 		}); err != nil {
-			log.Error(err)
+			log.Errorz("service operation failed", zap.Error(err))
 			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
@@ -210,7 +206,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			Method:    c.Request.Method,
 			UserAgent: c.Request.UserAgent(),
 		}); err != nil {
-			log.Warn(err)
+			log.Warnz("record operation log failed", zap.Error(err))
 		}
 
 		JSON(c, CodeSuccess, cur)
