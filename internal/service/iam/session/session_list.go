@@ -40,7 +40,7 @@ func (s *SessionListService) List(ctx *types.ServiceContext, req *model.Empty) (
 			continue
 		}
 		sessionKey := modeliamsession.SessionIDKey(sessionID)
-		session, getErr := cache.Get(sessionKey)
+		sessionData, getErr := cache.Get(sessionKey)
 		if getErr != nil {
 			if errors.Is(getErr, types.ErrEntryNotFound) {
 				_ = modeliamsession.RemoveSessionIndexes(ctx, currentSession.UserID, sessionID)
@@ -48,11 +48,11 @@ func (s *SessionListService) List(ctx *types.ServiceContext, req *model.Empty) (
 			}
 			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", getErr)
 		}
-		if validateErr := SessionManager.Validate(sessionID, session); validateErr != nil {
+		if validateErr := SessionManager.Validate(sessionID, sessionData); validateErr != nil {
 			_, _ = SessionManager.Delete(ctx, sessionID)
 			continue
 		}
-		items = append(items, buildSessionView(session, currentSessionID))
+		items = append(items, buildSessionView(sessionData, currentSessionID))
 	}
 
 	sort.Slice(items, func(i, j int) bool {

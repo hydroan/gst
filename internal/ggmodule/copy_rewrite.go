@@ -1,7 +1,9 @@
 package ggmodule
 
 import (
+	"bytes"
 	"go/ast"
+	"go/format"
 	"go/parser"
 	"go/token"
 	pathpkg "path"
@@ -10,6 +12,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/codegen/gen"
 )
 
@@ -57,8 +60,10 @@ func normalizeModuleCopySource(filename string, src []byte, config moduleCopyRew
 		return nil, err
 	}
 
-	selectorNames := rewriteModuleCopyFile(file, config, includeServiceImports)
-	rewriteSelectorPackages(file, selectorNames)
+	selectors := rewriteSelectorPackages(file, rewriteModuleCopyFile(file, config, includeServiceImports))
+	if err = selectors.requireUnshadowed(filename, fset, file); err != nil {
+		return nil, err
+	}
 
 	code, err := gen.FormatNodeExtraWithFileSet(file, fset, true)
 	if err != nil {
@@ -122,7 +127,9 @@ func rewriteModuleCopyFile(file *ast.File, config moduleCopyRewriteConfig, inclu
 		} else {
 			rewrite.spec.Name = nil
 		}
-		if !rewrite.keepSpecialName && rewrite.oldName != "" {
+		// A name the copy leaves alone needs no selector work, and skipping it keeps
+		// requireUnshadowed from blaming copy for shadowing the module source already had.
+		if !rewrite.keepSpecialName && rewrite.oldName != "" && newName != rewrite.oldName {
 			selectorNames[rewrite.oldName] = newName
 		}
 	}
@@ -241,10 +248,27 @@ func moduleCopyPackageName(dir string) string {
 	return sanitizeModuleCopyIdentifier(filepath.Base(dir))
 }
 
-func rewriteSelectorPackages(node ast.Node, names map[string]string) {
+// moduleCopySelectors records every selector whose package qualifier carries a
+// copied import's new local name, in source order, flagging the ones the rewrite
+// produced. Copy renames a module's own imports (modeliamsession becomes
+// session), so a qualifier that was unmistakable in the module source can land
+// on a name the file already binds. requireUnshadowed needs both halves to tell
+// those apart: a flagged selector must reach the package, while an unflagged one
+// was already written against a declaration and is none of copy's business.
+type moduleCopySelectors struct {
+	copiedNames map[string]bool
+	fromRewrite []bool
+}
+
+func rewriteSelectorPackages(node ast.Node, names map[string]string) moduleCopySelectors {
+	selectors := moduleCopySelectors{copiedNames: make(map[string]bool, len(names))}
 	if len(names) == 0 {
-		return
+		return selectors
 	}
+	for _, newName := range names {
+		selectors.copiedNames[newName] = true
+	}
+
 	ast.Inspect(node, func(n ast.Node) bool {
 		sel, ok := n.(*ast.SelectorExpr)
 		if !ok {
@@ -254,11 +278,60 @@ func rewriteSelectorPackages(node ast.Node, names map[string]string) {
 		if !ok {
 			return true
 		}
-		newName, ok := names[ident.Name]
+		if newName, rewritten := names[ident.Name]; rewritten {
+			ident.Name = newName
+			selectors.fromRewrite = append(selectors.fromRewrite, true)
+		} else if selectors.copiedNames[ident.Name] {
+			selectors.fromRewrite = append(selectors.fromRewrite, false)
+		}
+		return true
+	})
+	return selectors
+}
+
+// requireUnshadowed reports a rewritten package qualifier that a declaration in
+// the same file swallows. go/parser applies the real Go scope rules while it
+// parses, so rendering the rewritten file and reading it back says exactly which
+// qualifiers still reach the package: an identifier resolved to a declaration
+// carries an ast.Object, one left for the linker to bind does not. Rendering the
+// file also keeps the walks in lockstep — the round trip preserves the tree, so
+// the n-th matching selector here is the n-th one rewriteSelectorPackages saw.
+func (s moduleCopySelectors) requireUnshadowed(filename string, fset *token.FileSet, file *ast.File) error {
+	if len(s.fromRewrite) == 0 {
+		return nil
+	}
+
+	var rendered bytes.Buffer
+	if err := format.Node(&rendered, fset, file); err != nil {
+		return err
+	}
+	resolvedFset := token.NewFileSet()
+	resolved, err := parser.ParseFile(resolvedFset, filename, rendered.Bytes(), 0)
+	if err != nil {
+		return err
+	}
+
+	var shadowed error
+	index := 0
+	ast.Inspect(resolved, func(n ast.Node) bool {
+		sel, ok := n.(*ast.SelectorExpr)
 		if !ok {
 			return true
 		}
-		ident.Name = newName
+		ident, ok := sel.X.(*ast.Ident)
+		if !ok || !s.copiedNames[ident.Name] {
+			return true
+		}
+		matched := index
+		index++
+		if shadowed != nil || matched >= len(s.fromRewrite) || !s.fromRewrite[matched] || ident.Obj == nil {
+			return true
+		}
+		shadowed = errors.Newf(
+			"%s: copied package reference %s.%s resolves to a declaration named %q in the same file; rename that declaration in the module source",
+			filename, ident.Name, sel.Sel.Name, ident.Name,
+		)
 		return true
 	})
+	return shadowed
 }

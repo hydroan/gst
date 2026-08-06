@@ -34,8 +34,10 @@ func mergeModuleServiceSource(input moduleServiceMergeInput) ([]byte, error) {
 		return nil, err
 	}
 
-	selectorNames := rewriteModuleCopyFile(sourceFile, input.Rewrite, true)
-	rewriteSelectorPackages(sourceFile, selectorNames)
+	selectors := rewriteSelectorPackages(sourceFile, rewriteModuleCopyFile(sourceFile, input.Rewrite, true))
+	if err = selectors.requireUnshadowed(input.SourcePath, fset, sourceFile); err != nil {
+		return nil, err
+	}
 
 	sourceStructs := serviceStructNames(sourceFile)
 	if len(sourceStructs) == 0 {

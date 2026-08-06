@@ -55,7 +55,7 @@ func (a *AdminSessionListService) List(ctx *types.ServiceContext, req *model.Emp
 			continue
 		}
 
-		session, getErr := cache.Get(modeliamsession.SessionIDKey(sessionID))
+		sessionData, getErr := cache.Get(modeliamsession.SessionIDKey(sessionID))
 		if getErr != nil {
 			if errors.Is(getErr, types.ErrEntryNotFound) {
 				_ = modeliamsession.RemoveSessionIndexes(ctx, "", sessionID)
@@ -63,28 +63,28 @@ func (a *AdminSessionListService) List(ctx *types.ServiceContext, req *model.Emp
 			}
 			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", getErr)
 		}
-		if validateErr := SessionManager.Validate(sessionID, session); validateErr != nil {
+		if validateErr := SessionManager.Validate(sessionID, sessionData); validateErr != nil {
 			_, _ = SessionManager.Delete(ctx, sessionID)
 			continue
 		}
-		if onlineOnly && !sessionSeenSince(session, onlineSince) {
+		if onlineOnly && !sessionSeenSince(sessionData, onlineSince) {
 			continue
 		}
 
-		item, exists := owners[session.UserID]
+		item, exists := owners[sessionData.UserID]
 		if !exists {
 			var ok bool
-			item, ok, err = a.buildItem(ctx, session)
+			item, ok, err = a.buildItem(ctx, sessionData)
 			if err != nil {
 				return nil, err
 			}
 			if !ok {
 				continue
 			}
-			owners[session.UserID] = item
+			owners[sessionData.UserID] = item
 		}
 
-		view := buildSessionView(session, "")
+		view := buildSessionView(sessionData, "")
 		item.view.Sessions = append(item.view.Sessions, view)
 		sessionTotal++
 
