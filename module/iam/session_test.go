@@ -399,6 +399,67 @@ func TestInvalidateUserSessions(t *testing.T) {
 	})
 }
 
+// TestSessionRejectionsAnswerInTheEnvelope covers the shape of a refusal from
+// the session middleware, which every request in a deployment can receive.
+//
+// Two properties are asserted, and each was broken once. These refusals used to
+// answer with a bare {"error": ...}: a client reading the documented envelope
+// found no code and no trace id, so a rejection could not be told apart from a
+// malformed response, and the one identifier tying it to the server's logs was
+// absent. And the message came from whatever layer failed — a cookie naming a
+// session the cache no longer holds was answered "cache entry not found",
+// handing the storage's internal vocabulary to whoever presented an invalid
+// cookie. What a caller can act on is that the cookie is not usable; which
+// layer noticed is the deployment's business.
+func TestSessionRejectionsAnswerInTheEnvelope(t *testing.T) {
+	clearSessionsAfterTest(t)
+
+	requireEnvelopeRejection := func(t *testing.T, err error, wantMsg string) {
+		t.Helper()
+
+		respErr := testutil.RequireError(t, err, http.StatusUnauthorized, wantMsg)
+		var envelope struct {
+			Code    *int             `json:"code"`
+			Msg     string           `json:"msg"`
+			Data    *json.RawMessage `json:"data"`
+			TraceID *string          `json:"trace_id"`
+		}
+		require.NoError(t, json.Unmarshal(respErr.Body, &envelope), "response body: %s", respErr.Body)
+		require.NotNil(t, envelope.Code, "a rejection has to carry a code, like every other response")
+		require.NotNil(t, envelope.TraceID, "a rejection has to carry the trace that explains it")
+		require.Equal(t, wantMsg, envelope.Msg)
+	}
+
+	t.Run("no cookie", func(t *testing.T) {
+		cli, err := client.New(baseURL)
+		require.NoError(t, err)
+
+		_, err = client.Get[iam.CurrentGetRsp](cli, currentPath)
+		requireEnvelopeRejection(t, err, "no session")
+	})
+
+	t.Run("a cookie naming no session", func(t *testing.T) {
+		// The storage answers "entry not found"; the client is told the one
+		// thing it can act on.
+		_, err := client.Get[iam.CurrentGetRsp](
+			sessionClient(t, "0000000000000000000000000000000000000000000000000000000000000000"), currentPath,
+		)
+		requireEnvelopeRejection(t, err, "session invalid")
+	})
+
+	t.Run("a revoked session", func(t *testing.T) {
+		account := newSessionTestAccount(t)
+		sessionID := loginSession(t, account.Username, account.Password)
+		_, err := client.Get[iam.CurrentGetRsp](sessionClient(t, sessionID), currentPath)
+		require.NoError(t, err)
+
+		modeliamsession.InvalidateUserSessions(context.Background(), account.UserID)
+
+		_, err = client.Get[iam.CurrentGetRsp](sessionClient(t, sessionID), currentPath)
+		requireEnvelopeRejection(t, err, "session invalid")
+	})
+}
+
 func TestAdminSessionList(t *testing.T) {
 	clearSessionsAfterTest(t)
 
