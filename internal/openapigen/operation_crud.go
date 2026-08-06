@@ -26,7 +26,7 @@ func setCreate[M types.Model, REQ types.Request, RSP types.Response](path string
 		RequestBody: newRequestBody[REQ](reqKey),
 		Responses:   newResponses[RSP](rspKey),
 	}
-	removeFieldsFromRequestBody(pathItem.Post)
+	removeBaseAutoFieldsFromRequestBody(pathItem.Post)
 }
 
 func setDelete[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
@@ -63,7 +63,7 @@ func setUpdate[M types.Model, REQ types.Request, RSP types.Response](path string
 		RequestBody: newRequestBody[REQ](reqKey),
 		Responses:   newResponses[RSP](rspKey),
 	}
-	removeFieldsFromRequestBody(pathItem.Put)
+	removeBaseAutoFieldsFromRequestBody(pathItem.Put)
 }
 
 func setPatch[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
@@ -83,7 +83,7 @@ func setPatch[M types.Model, REQ types.Request, RSP types.Response](path string,
 		RequestBody: newRequestBody[REQ](reqKey),
 		Responses:   newResponses[RSP](rspKey),
 	}
-	removeFieldsFromRequestBody(pathItem.Patch)
+	removeBaseAutoFieldsFromRequestBody(pathItem.Patch)
 }
 
 func setList[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
@@ -152,7 +152,7 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		RequestBody: newRequestBody[REQ](reqKey),
 		Responses:   newResponses[RSP](rspKey),
 	}
-	removeFieldsFromBatchRequestBody(pathItem.Post)
+	removeBaseAutoFieldsFromBatchRequestBody(pathItem.Post)
 }
 
 func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
@@ -228,7 +228,7 @@ func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		RequestBody: newRequestBody[REQ](reqKey),
 		Responses:   newResponses[RSP](rspKey),
 	}
-	removeFieldsFromBatchRequestBody(pathItem.Put)
+	removeBaseAutoFieldsFromBatchRequestBody(pathItem.Put)
 }
 
 func setPatchMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
@@ -256,5 +256,5 @@ func setPatchMany[M types.Model, REQ types.Request, RSP types.Response](path str
 		RequestBody: newRequestBody[REQ](reqKey),
 		Responses:   newResponses[RSP](rspKey),
 	}
-	removeFieldsFromBatchRequestBody(pathItem.Patch)
+	removeBaseAutoFieldsFromBatchRequestBody(pathItem.Patch)
 }

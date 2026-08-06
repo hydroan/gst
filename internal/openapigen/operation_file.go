@@ -33,9 +33,12 @@ const (
 // standard success envelope returned by the controller.
 func setImport[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeOf(*new(M))
+	reqKey := actionComponentKey(reflect.TypeOf(*new(REQ)), typ, path, consts.PHASE_IMPORT)
 	rspKey := actionComponentKey(reflect.TypeOf(*new(RSP)), typ, path, consts.PHASE_IMPORT)
 	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
-	registerSchema[M, REQ, RSP](rspKey, rspKey, nil, rspSchemaRef)
+	// The upload is documented inline as multipart/form-data rather than as a
+	// JSON request component, so no request schema is registered under reqKey.
+	registerSchema[M, REQ, RSP](reqKey, rspKey, nil, rspSchemaRef)
 
 	pathItem.Post = &openapi3.Operation{
 		OperationID: operationID(path, consts.Import),
