@@ -189,6 +189,11 @@ func New(filename string, opts ...Option) *Logger {
 
 // NewGorm builds a gorm logger.Interface.
 // filename: target log file name ("/dev/stdout" for console)
+//
+// The logger deliberately has no zap caller annotation: the wrapper depth
+// between business code and the log call varies per operation, so a fixed
+// AddCallerSkip would misattribute most statements. GormLogger.Trace walks
+// the stack itself and attaches the business caller as a plain field.
 func NewGorm(filename string) gorml.Interface {
 	readConf()
 	if len(filename) > 0 {
@@ -196,8 +201,6 @@ func NewGorm(filename string) gorml.Interface {
 	}
 	logger := zap.New(
 		zapcore.NewCore(newLogEncoder(), newLogWriter(), newLogLevel()),
-		zap.AddCaller(),
-		zap.AddCallerSkip(5),
 		zap.AddStacktrace(zapcore.FatalLevel),
 	)
 	return &GormLogger{l: &Logger{zlog: logger}}
