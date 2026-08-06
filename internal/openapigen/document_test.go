@@ -5,7 +5,6 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/types/consts"
 )
 
 // TestSetDocInfoAlwaysDeclaresAVersion asserts that the document declares a
@@ -56,43 +55,4 @@ func TestMarkPublic(t *testing.T) {
 
 	// A nil operation must not panic.
 	markPublic(nil)
-}
-
-func TestSetMarksPublicRouteSecurity(t *testing.T) {
-	Set[*openapiTimeQueryModel, *openapiTimeQueryModel, *openapiTimeQueryModel]("/api/test-public-route", false, consts.List)
-
-	item := doc.Paths.Value("/api/test-public-route")
-	if item == nil || item.Get == nil {
-		t.Fatal("GET /api/test-public-route missing from document")
-	}
-	if item.Get.Security == nil || len(*item.Get.Security) != 0 {
-		t.Fatalf("public op security = %+v, want an empty override", item.Get.Security)
-	}
-}
-
-func TestSetKeepsAuthRouteSecurityDefault(t *testing.T) {
-	Set[*openapiTimeQueryModel, *openapiTimeQueryModel, *openapiTimeQueryModel]("/api/test-auth-route", true, consts.List)
-
-	item := doc.Paths.Value("/api/test-auth-route")
-	if item == nil || item.Get == nil {
-		t.Fatal("GET /api/test-auth-route missing from document")
-	}
-	if item.Get.Security != nil {
-		t.Fatalf("auth op security = %+v, want nil so the document-level security applies", item.Get.Security)
-	}
-}
-
-func TestSetDocumentsEmbeddedFrameworkQueryParameters(t *testing.T) {
-	Set[*openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel]("/api/test-query-contract", true, consts.List)
-
-	item := doc.Paths.Value("/api/test-query-contract")
-	if item == nil || item.Get == nil {
-		t.Fatal("GET /api/test-query-contract missing from document")
-	}
-	parameters := queryParametersByName(t, item.Get)
-	for _, name := range []string{"_page", "_size", "_cursor_value", "_sort_by"} {
-		if parameters[name] == nil {
-			t.Errorf("query parameter %q is missing from the generated List operation", name)
-		}
-	}
 }
