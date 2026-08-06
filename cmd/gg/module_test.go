@@ -82,7 +82,7 @@ func TestRunModuleListDoesNotDependOnGoPretty(t *testing.T) {
 
 func TestPrintModuleCopyPlanReportsExtraTargetModelFilesAsWarningSection(t *testing.T) {
 	plan := &ggmodule.CopyPlan{
-		ExtraModelFiles: []string{filepath.Join("model", "authz", "design.go")},
+		ExtraModelFiles: []string{filepath.Join("model", "copytest", "design.go")},
 	}
 
 	output := captureStdout(t, func() {
@@ -91,7 +91,7 @@ func TestPrintModuleCopyPlanReportsExtraTargetModelFilesAsWarningSection(t *test
 
 	for _, want := range []string{
 		"Extra Target Model Files",
-		filepath.Join("model", "authz", "design.go"),
+		filepath.Join("model", "copytest", "design.go"),
 		"not present in the framework source",
 		"not deleted automatically",
 	} {
@@ -106,7 +106,7 @@ func TestPrintModuleCopyPlanReportsExtraTargetModelFilesAsWarningSection(t *test
 
 func TestPrintModuleCopyPlanReportsExtraTargetServiceFilesAsWarningSection(t *testing.T) {
 	plan := &ggmodule.CopyPlan{
-		ExtraServiceFiles: []string{filepath.Join("service", "mfa", "user_authenticator.go")},
+		ExtraServiceFiles: []string{filepath.Join("service", "copytest", "adapter.go")},
 	}
 
 	output := captureStdout(t, func() {
@@ -115,7 +115,7 @@ func TestPrintModuleCopyPlanReportsExtraTargetServiceFilesAsWarningSection(t *te
 
 	for _, want := range []string{
 		"Extra Target Service Files",
-		filepath.Join("service", "mfa", "user_authenticator.go"),
+		filepath.Join("service", "copytest", "adapter.go"),
 		"not produced by this module copy plan",
 		"not deleted automatically",
 	} {
@@ -126,6 +126,71 @@ func TestPrintModuleCopyPlanReportsExtraTargetServiceFilesAsWarningSection(t *te
 	if strings.Contains(output, "Extra target service files:") {
 		t.Fatalf("output should not show extra service files as a normal plan group:\n%s", output)
 	}
+}
+
+func TestPrintModuleCopyPlanListsMiddlewareTargets(t *testing.T) {
+	projectDir := newModuleCopyMiddlewarePlanProject(t)
+	t.Chdir(projectDir)
+
+	plan, err := ggmodule.BuildCopyPlan("copytest", ggmodule.CopyOptions{})
+	if err != nil {
+		t.Fatalf("BuildCopyPlan() error = %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		printModuleCopyPlan(plan)
+	})
+
+	for _, want := range []string{
+		"Middleware files",
+		filepath.Join("middleware", "copy_auth.go"),
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("copy plan output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+// newModuleCopyMiddlewarePlanProject builds the smallest framework tree whose
+// copy plan contains a middleware file: the module manifest declares one
+// middleware handler while the model and service source directories stay empty.
+func newModuleCopyMiddlewarePlanProject(t *testing.T) string {
+	t.Helper()
+
+	projectDir := t.TempDir()
+	frameworkRoot := filepath.Join(projectDir, "internal", "gst")
+	for _, dir := range []string{
+		filepath.Join(frameworkRoot, "module", "copytest"),
+		filepath.Join(frameworkRoot, "internal", "model", "copytest"),
+		filepath.Join(frameworkRoot, "internal", "service", "copytest"),
+		filepath.Join(frameworkRoot, "middleware"),
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write := func(path string, content string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(projectDir, "go.mod"), "module tmpapp\n\ngo 1.26\n")
+	write(filepath.Join(frameworkRoot, "go.mod"), "module github.com/hydroan/gst\n\ngo 1.26\n")
+	write(filepath.Join(frameworkRoot, "module", "copytest", "module.json"), `{
+	"copy": {
+		"middleware": [
+			{"sourceFile": "middleware/copy_auth.go", "scope": "auth", "handler": "CopyAuth"}
+		]
+	}
+}`)
+	write(filepath.Join(frameworkRoot, "middleware", "copy_auth.go"), `package middleware
+
+func CopyAuth() any {
+	return nil
+}
+`)
+	return projectDir
 }
 
 func TestRunModuleCopyGenAllowsPreexistingProjectCheckViolations(t *testing.T) {

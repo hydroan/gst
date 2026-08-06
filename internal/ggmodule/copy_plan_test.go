@@ -12,7 +12,7 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
-func TestValidateModuleCopyNameRejectsPaths(t *testing.T) {
+func TestValidateModuleCommandNameRejectsPaths(t *testing.T) {
 	tests := []string{
 		"module/copytest",
 		"./copytest",
@@ -24,14 +24,14 @@ func TestValidateModuleCopyNameRejectsPaths(t *testing.T) {
 
 	for _, name := range tests {
 		t.Run(name, func(t *testing.T) {
-			if err := validateModuleCopyName(name); err == nil {
-				t.Fatalf("validateModuleCopyName(%q) succeeded, want error", name)
+			if err := validateModuleCommandName(name, "module copy"); err == nil {
+				t.Fatalf("validateModuleCommandName(%q) succeeded, want error", name)
 			}
 		})
 	}
 
-	if err := validateModuleCopyName("copytest"); err != nil {
-		t.Fatalf("validateModuleCopyName(%q) = %v, want nil", "copytest", err)
+	if err := validateModuleCommandName("copytest", "module copy"); err != nil {
+		t.Fatalf("validateModuleCommandName(%q) = %v, want nil", "copytest", err)
 	}
 }
 
@@ -258,6 +258,8 @@ func (s *SampleService) DeleteAfter(ctx *types.ServiceContext, req *modelcopytes
 	plan := &CopyPlan{
 		Name:                  "copytest",
 		ProjectModulePath:     "tmpapp",
+		ModelDir:              "model",
+		ServiceDir:            "service",
 		SourceServiceDir:      sourceServiceDir,
 		TargetServiceDir:      filepath.Join("service", "copytest"),
 		TargetModelImportPath: filepath.Join("tmpapp", "model", "copytest"),
@@ -368,6 +370,8 @@ func itemPatchResult() *modelcopytest.Item {
 	plan := &CopyPlan{
 		Name:                  "copytest",
 		ProjectModulePath:     "tmpapp",
+		ModelDir:              "model",
+		ServiceDir:            "service",
 		SourceServiceDir:      sourceServiceDir,
 		TargetServiceDir:      filepath.Join("service", "copytest"),
 		TargetModelImportPath: filepath.Join("tmpapp", "model", "copytest"),
@@ -461,6 +465,8 @@ func (s *ItemListService) List(ctx *types.ServiceContext, req *model.Empty) (rsp
 	plan := &CopyPlan{
 		Name:                  "copytest",
 		ProjectModulePath:     "tmpapp",
+		ModelDir:              "model",
+		ServiceDir:            "service",
 		SourceServiceDir:      sourceServiceDir,
 		TargetServiceDir:      filepath.Join("service", "copytest"),
 		TargetModelImportPath: filepath.Join("tmpapp", "model", "copytest"),
@@ -538,6 +544,8 @@ func (s *SampleService) CreateAfter(ctx *types.ServiceContext, req *modelcopytes
 	plan := &CopyPlan{
 		Name:                  "copytest",
 		ProjectModulePath:     "tmpapp",
+		ModelDir:              "model",
+		ServiceDir:            "service",
 		SourceServiceDir:      sourceServiceDir,
 		TargetServiceDir:      filepath.Join("service", "copytest"),
 		TargetModelImportPath: filepath.Join("tmpapp", "model", "copytest"),
@@ -901,5 +909,35 @@ func Unrelated() string {
 func Ensure(any) {}
 `), 0o600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestBuildCopyPlanSkipsTestdataAndVendorModelSources(t *testing.T) {
+	projectDir := newModuleCopyPlanProject(t)
+	writeCopyTestModuleSource(t, projectDir, nil)
+	sourceModelDir := filepath.Join(projectDir, "internal", "gst", "internal", "model", "copytest")
+	for _, dir := range []string{"testdata", "vendor"} {
+		if err := os.MkdirAll(filepath.Join(sourceModelDir, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(sourceModelDir, dir, "ignored.go"), []byte("package ignored\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Chdir(projectDir)
+
+	plan, err := BuildCopyPlan("copytest", CopyOptions{})
+	if err != nil {
+		t.Fatalf("BuildCopyPlan() error = %v", err)
+	}
+
+	targets := plan.ModelTargets()
+	for _, unwanted := range []string{
+		filepath.Join("model", "copytest", "testdata", "ignored.go"),
+		filepath.Join("model", "copytest", "vendor", "ignored.go"),
+	} {
+		if slices.Contains(targets, unwanted) {
+			t.Fatalf("ModelTargets() = %v, should not copy %s", targets, unwanted)
+		}
 	}
 }

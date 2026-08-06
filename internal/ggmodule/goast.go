@@ -26,11 +26,7 @@ func formatGoFile(fset *token.FileSet, file *ast.File) ([]byte, error) {
 }
 
 func writeGoFile(path string, fset *token.FileSet, file *ast.File) error {
-	var buf bytes.Buffer
-	if err := goformat.Node(&buf, fset, file); err != nil {
-		return err
-	}
-	formatted, err := gofumpt.Source(buf.Bytes(), gofumpt.Options{})
+	formatted, err := formatGoFile(fset, file)
 	if err != nil {
 		return err
 	}

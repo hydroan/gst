@@ -28,6 +28,10 @@ func existingModuleAlias(file *ast.File, module Module) (string, bool) {
 // function. This makes add idempotent and lets remove fail loudly when a project
 // is only partially edited instead of guessing which stray import or call the
 // user intended to manage.
+//
+// It looks only inside init functions, because that is the only place gg module
+// add writes to. checkModuleNotRegistered answers a similar question with a
+// deliberately wider scan; see the note there.
 func registeredModuleAlias(file *ast.File, module Module) (string, bool) {
 	aliases := make(map[string]bool)
 	for _, spec := range file.Imports {
@@ -63,9 +67,16 @@ func registeredModuleAlias(file *ast.File, module Module) (string, bool) {
 	return "", false
 }
 
+// checkModuleNotRegistered blocks a copy when the project already registers the
+// framework module. The two ownership models are mutually exclusive: running
+// both would register the same module's model/service/router paths twice.
+//
+// The scan is wider than registeredModuleAlias on purpose. It walks the whole
+// file instead of just init functions and accepts a Register call with any
+// arguments, because this is a safety gate: anything that looks like a
+// registration has to stop the copy. add and remove stay narrow because they
+// only ever manage the zero-argument init call gg itself wrote.
 func checkModuleNotRegistered(name string) error {
-	// Framework-module registration and local-source copy are mutually exclusive:
-	// running both would register the same module's model/service/router paths twice.
 	moduleFile := filepath.Join("module", "module.go")
 	src, err := os.ReadFile(moduleFile)
 	if os.IsNotExist(err) {
@@ -132,16 +143,23 @@ func importPathBase(path string) string {
 	return filepath.Base(filepath.ToSlash(path))
 }
 
-// ensureRegisterCall appends the framework registration to an existing init
-// function or creates one when module/module.go does not have an init yet.
-// Register calls are intentionally appended so existing framework/project setup
-// keeps its order.
+// ensureRegisterCall appends the framework registration to module/module.go.
 func ensureRegisterCall(file *ast.File, alias string) bool {
+	return ensureInitCall(file,
+		func(initFn *ast.FuncDecl) bool { return registerCallExists(initFn, alias) },
+		func(pos token.Pos) ast.Stmt { return registerCallStmt(alias, pos) })
+}
+
+// ensureInitCall appends the statement stmt builds to an existing init function,
+// creating one when the file has no init yet. Calls are appended rather than
+// inserted so existing framework/project setup keeps its order, and stmt is
+// anchored at the init block's closing brace.
+func ensureInitCall(file *ast.File, exists func(*ast.FuncDecl) bool, stmt func(pos token.Pos) ast.Stmt) bool {
 	initFn := ensureInitFunc(file)
-	if registerCallExists(initFn, alias) {
+	if exists(initFn) {
 		return false
 	}
-	initFn.Body.List = append(initFn.Body.List, registerCallStmt(alias, initFn.Body.Rbrace))
+	initFn.Body.List = append(initFn.Body.List, stmt(initFn.Body.Rbrace))
 	return true
 }
 

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/hydroan/gst/internal/codegen/constants"
 )
 
 func requireDir(path string) error {
@@ -31,6 +33,9 @@ func goFilesInDir(root string) ([]string, error) {
 			return err
 		}
 		if info.IsDir() {
+			if skipModuleSourceDir(root, path, info.Name()) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if !isGoSourceFile(info.Name()) {
@@ -41,6 +46,15 @@ func goFilesInDir(root string) ([]string, error) {
 	})
 	sort.Strings(files)
 	return files, err
+}
+
+// skipModuleSourceDir reports whether a directory reached while walking a module
+// source tree must not be descended into. vendor and testdata hold files that
+// are not part of the module's own source, so model discovery and file copy must
+// agree on skipping them; consuming this single decision keeps the two walks
+// from disagreeing about what counts as module code.
+func skipModuleSourceDir(root string, path string, name string) bool {
+	return path != root && (name == constants.DirVendor || name == constants.DirTestData)
 }
 
 func goFilesInPackageDir(root string) ([]string, error) {

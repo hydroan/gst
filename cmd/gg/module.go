@@ -208,6 +208,7 @@ func printModuleCopyPlan(plan *ggmodule.CopyPlan) {
 	printModuleCopyPlanGroup("Model files", plan.ModelTargets())
 	printModuleCopyPlanGroup("Service files", plan.ServiceTargets())
 	printModuleCopyPlanGroup("Helper files", plan.HelperTargets())
+	printModuleCopyPlanGroup("Middleware files", plan.MiddlewareTargets())
 	printModuleCopyExtraModelReminder(plan)
 	printModuleCopyExtraServiceReminder(plan)
 }

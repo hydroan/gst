@@ -28,13 +28,6 @@ type moduleCopyMiddleware struct {
 	Handler    string
 }
 
-func (p *CopyPlan) targetMiddlewareDir() string {
-	if p.TargetMiddlewareDir == "" {
-		return defaultMiddlewareDir
-	}
-	return p.TargetMiddlewareDir
-}
-
 func (p *CopyPlan) resolveMiddleware(manifest []moduleCopyMiddlewareManifest) ([]moduleCopyMiddleware, error) {
 	middleware := make([]moduleCopyMiddleware, 0, len(manifest))
 	for _, item := range manifest {
@@ -84,7 +77,7 @@ func (p *CopyPlan) addMiddlewareFiles() error {
 		if err != nil {
 			return err
 		}
-		content, err := normalizeModuleMiddlewareSource(middleware.SourcePath, src, p.middlewareRewriteConfig(middleware.TargetPath))
+		content, err := normalizeModuleMiddlewareSource(middleware.SourcePath, src, p.rewriteConfig(middleware.TargetPath))
 		if err != nil {
 			return err
 		}
@@ -98,18 +91,8 @@ func (p *CopyPlan) addMiddlewareFiles() error {
 	return nil
 }
 
-func (p *CopyPlan) middlewareRewriteConfig(targetPath string) moduleCopyRewriteConfig {
-	return moduleCopyRewriteConfig{
-		ModuleName:        p.Name,
-		ProjectModulePath: p.ProjectModulePath,
-		ModelDir:          copyPlanDirOrDefault(p.ModelDir, defaultModelDir),
-		ServiceDir:        copyPlanDirOrDefault(p.ServiceDir, defaultServiceDir),
-		TargetPackage:     moduleCopyPackageName(filepath.Dir(targetPath)),
-	}
-}
-
-func (e *CopyExecution) registerMiddleware() (status string, path string, err error) {
-	targetDir := e.Plan.targetMiddlewareDir()
+func (e *CopyExecution) registerMiddleware() (status moduleCopyWriteStatus, path string, err error) {
+	targetDir := e.Plan.TargetMiddlewareDir
 	targetPath := filepath.Join(targetDir, middlewareRegistrationFilename)
 	fset, file, preexisting, err := parseOrCreateMiddlewareRegistrationFile(targetPath)
 	if err != nil {
@@ -132,24 +115,17 @@ func (e *CopyExecution) registerMiddleware() (status string, path string, err er
 		}
 	}
 	if !changed {
-		return "SKIP", targetPath, nil
+		return moduleCopyWriteSkip, targetPath, nil
 	}
 
-	formatted, err := formatGoFile(fset, file)
-	if err != nil {
-		return "", "", err
-	}
-	if err := ensureParentDir(targetPath); err != nil {
-		return "", "", err
-	}
-	if err := os.WriteFile(targetPath, formatted, 0o600); err != nil {
+	if err := writeGoFile(targetPath, fset, file); err != nil {
 		return "", "", err
 	}
 	e.WrittenFiles = append(e.WrittenFiles, targetPath)
 	if preexisting {
-		return "UPDATE", targetPath, nil
+		return moduleCopyWriteUpdate, targetPath, nil
 	}
-	return "CREATE", targetPath, nil
+	return moduleCopyWriteCreate, targetPath, nil
 }
 
 func parseOrCreateMiddlewareRegistrationFile(path string) (*token.FileSet, *ast.File, bool, error) {
@@ -187,12 +163,9 @@ func frameworkMiddlewareImportAlias(file *ast.File) string {
 }
 
 func ensureMiddlewareRegisterCall(file *ast.File, importAlias string, middleware moduleCopyMiddleware) bool {
-	initFn := ensureInitFunc(file)
-	if middlewareRegisterCallExists(initFn, importAlias, middleware) {
-		return false
-	}
-	initFn.Body.List = append(initFn.Body.List, middlewareRegisterCallStmt(importAlias, middleware, initFn.Body.Rbrace))
-	return true
+	return ensureInitCall(file,
+		func(initFn *ast.FuncDecl) bool { return middlewareRegisterCallExists(initFn, importAlias, middleware) },
+		func(pos token.Pos) ast.Stmt { return middlewareRegisterCallStmt(importAlias, middleware, pos) })
 }
 
 func middlewareRegisterCallExists(fn *ast.FuncDecl, importAlias string, middleware moduleCopyMiddleware) bool {
@@ -231,6 +204,10 @@ func isMiddlewareRegisterCall(call *ast.CallExpr, importAlias string, method str
 	return ok && handlerIdent.Name == handlerName
 }
 
+// middlewareRegisterCallStmt anchors every generated node at pos for the reason
+// spelled out on registerCallStmt: go/printer merges comments by token
+// position, so a node at token.NoPos can be printed around existing init
+// comments.
 func middlewareRegisterCallStmt(importAlias string, middleware moduleCopyMiddleware, pos token.Pos) ast.Stmt {
 	return &ast.ExprStmt{X: &ast.CallExpr{
 		Fun: &ast.SelectorExpr{

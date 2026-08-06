@@ -12,13 +12,11 @@ import (
 )
 
 type moduleServiceMergeInput struct {
-	SourcePath            string
-	Source                []byte
-	TargetPath            string
-	Target                []byte
-	ModuleName            string
-	TargetModelImportPath string
-	Rewrite               moduleCopyRewriteConfig
+	SourcePath string
+	Source     []byte
+	TargetPath string
+	Target     []byte
+	Rewrite    moduleCopyRewriteConfig
 }
 
 // mergeModuleServiceSource overlays the framework service source onto a generated
@@ -36,17 +34,7 @@ func mergeModuleServiceSource(input moduleServiceMergeInput) ([]byte, error) {
 		return nil, err
 	}
 
-	rewriteConfig := input.Rewrite
-	if rewriteConfig.ModuleName == "" {
-		rewriteConfig = moduleCopyRewriteConfig{
-			ModuleName:        input.ModuleName,
-			ProjectModulePath: strings.TrimSuffix(input.TargetModelImportPath, "/"+defaultModelDir+"/"+input.ModuleName),
-			ModelDir:          defaultModelDir,
-			ServiceDir:        defaultServiceDir,
-			TargetPackage:     input.ModuleName,
-		}
-	}
-	selectorNames := rewriteModuleServiceFile(sourceFile, rewriteConfig)
+	selectorNames := rewriteModuleCopyFile(sourceFile, input.Rewrite, true)
 	rewriteSelectorPackages(sourceFile, selectorNames)
 
 	sourceStructs := serviceStructNames(sourceFile)
@@ -56,6 +44,9 @@ func mergeModuleServiceSource(input moduleServiceMergeInput) ([]byte, error) {
 	targetStruct := findServiceStructName(targetFile)
 	if targetStruct == "" {
 		return nil, fmt.Errorf("target action service file %s has no service struct", input.TargetPath)
+	}
+	if uniqueErr := requireUniqueSourceMethods(sourceFile, sourceStructs, input.SourcePath); uniqueErr != nil {
+		return nil, uniqueErr
 	}
 
 	sourceStruct := sourceStructs[0]
@@ -76,10 +67,39 @@ func mergeModuleServiceSource(input moduleServiceMergeInput) ([]byte, error) {
 	for _, functionName := range sortedDocNames(docInserts.functions) {
 		code = insertFunctionDoc(code, functionName, docInserts.functions[functionName])
 	}
-	for _, methodName := range sortedDocNames(docInserts.methods) {
-		code = insertMethodDoc(code, targetStruct, methodName, docInserts.methods[methodName])
+	for _, key := range sortedMethodDocKeys(docInserts.methods) {
+		code = insertMethodDoc(code, key.receiver, key.name, docInserts.methods[key])
 	}
 	return []byte(code), nil
+}
+
+// requireUniqueSourceMethods rejects a source file that declares the same method
+// name on more than one service struct. Every source service struct is merged
+// onto the single generated target struct, so two same-named methods would
+// either overwrite each other or emit a duplicate declaration that stops the
+// copied project from compiling. Failing here keeps the copy a preflight error
+// instead of a broken project.
+func requireUniqueSourceMethods(file *ast.File, sourceStructs []string, sourcePath string) error {
+	sourceStructSet := make(map[string]bool, len(sourceStructs))
+	for _, sourceStruct := range sourceStructs {
+		sourceStructSet[sourceStruct] = true
+	}
+	owners := make(map[string]string)
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Recv == nil || fn.Name == nil {
+			continue
+		}
+		receiver := receiverTypeName(fn)
+		if !sourceStructSet[receiver] {
+			continue
+		}
+		if owner, seen := owners[fn.Name.Name]; seen {
+			return fmt.Errorf("source action service file %s declares method %s on both %s and %s; module copy merges every service struct onto one target struct", sourcePath, fn.Name.Name, owner, receiver)
+		}
+		owners[fn.Name.Name] = receiver
+	}
+	return nil
 }
 
 func mergeSourceServiceDecls(
@@ -100,7 +120,7 @@ func mergeSourceServiceDecls(
 			if d.Tok == token.IMPORT {
 				continue
 			}
-			filtered := filterSourceSpecs(d, sourceStructs...)
+			filtered := filterSourceSpecs(d, sourceStructSet)
 			if filtered != nil {
 				docInserts.decls = append(docInserts.decls, declDocInsert{
 					kind: d.Tok,
@@ -110,7 +130,8 @@ func mergeSourceServiceDecls(
 				targetFile.Decls = append(targetFile.Decls, filtered)
 			}
 		case *ast.FuncDecl:
-			if d.Recv != nil && sourceStructSet[receiverTypeName(d)] {
+			switch {
+			case d.Recv != nil && sourceStructSet[receiverTypeName(d)]:
 				if targetMethod := findMethod(targetFile, targetStruct, d.Name.Name); targetMethod != nil {
 					sourceRecv := methodReceiverName(d)
 					targetRecv := methodReceiverName(targetMethod)
@@ -122,16 +143,22 @@ func mergeSourceServiceDecls(
 					// parameter and result names must be retargeted to the
 					// generated ones so the copied body still compiles.
 					retargetMethodBodySignatureNames(d, targetMethod)
-					docInserts.methods[d.Name.Name] = commentGroupLines(d.Doc)
+					docInserts.methods[methodDocKey{receiver: targetStruct, name: d.Name.Name}] = commentGroupLines(d.Doc)
 					targetMethod.Doc = nil
 					targetMethod.Body = d.Body
 					appendSourceComments(targetFile, sourceComments, d.Body)
 					continue
 				}
 				retargetReceiver(d, targetStruct)
-				docInserts.methods[d.Name.Name] = commentGroupLines(d.Doc)
+				docInserts.methods[methodDocKey{receiver: targetStruct, name: d.Name.Name}] = commentGroupLines(d.Doc)
 				d.Doc = nil
-			} else {
+			case d.Recv != nil:
+				// A method on an ordinary source type keeps its own receiver, so
+				// its doc must be re-inserted before that receiver's method
+				// rather than looked up as a plain function.
+				docInserts.methods[methodDocKey{receiver: receiverTypeName(d), name: d.Name.Name}] = commentGroupLines(d.Doc)
+				d.Doc = nil
+			default:
 				docInserts.functions[d.Name.Name] = commentGroupLines(d.Doc)
 				d.Doc = nil
 			}
@@ -144,13 +171,9 @@ func mergeSourceServiceDecls(
 	return docInserts
 }
 
-func filterSourceSpecs(decl *ast.GenDecl, sourceStructs ...string) *ast.GenDecl {
+func filterSourceSpecs(decl *ast.GenDecl, sourceStructSet map[string]bool) *ast.GenDecl {
 	if decl.Tok != token.TYPE {
 		return decl
-	}
-	sourceStructSet := make(map[string]bool, len(sourceStructs))
-	for _, sourceStruct := range sourceStructs {
-		sourceStructSet[sourceStruct] = true
 	}
 	specs := make([]ast.Spec, 0, len(decl.Specs))
 	for _, spec := range decl.Specs {
@@ -363,13 +386,14 @@ func moduleCopyServicePackageName(action moduleCopyAction) string {
 
 func appendGeneratedServiceDecls(targetFile *ast.File, generatedFile *ast.File) {
 	targetStruct := findServiceStructName(targetFile)
+	targetStructSet := map[string]bool{targetStruct: true}
 	for _, decl := range generatedFile.Decls {
 		switch d := decl.(type) {
 		case *ast.GenDecl:
 			if d.Tok == token.IMPORT {
 				continue
 			}
-			filtered := filterSourceSpecs(d, targetStruct)
+			filtered := filterSourceSpecs(d, targetStructSet)
 			if filtered != nil {
 				targetFile.Decls = append(targetFile.Decls, filtered)
 			}
@@ -436,20 +460,7 @@ func countServiceStructsInFile(path string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	var count int
-	for _, decl := range file.Decls {
-		genDecl, ok := decl.(*ast.GenDecl)
-		if !ok || genDecl.Tok != token.TYPE {
-			continue
-		}
-		for _, spec := range genDecl.Specs {
-			typeSpec, ok := spec.(*ast.TypeSpec)
-			if ok && isServiceTypeSpec(typeSpec) {
-				count++
-			}
-		}
-	}
-	return count, nil
+	return len(serviceStructNames(file)), nil
 }
 
 func isServiceTypeSpec(typeSpec *ast.TypeSpec) bool {

@@ -28,11 +28,16 @@ func RemoveModule(projectDir string, name string) (ChangeResult, error) {
 	if !registered {
 		return ChangeResult{}, fmt.Errorf("module %q is not registered as a framework module", name)
 	}
-	if removeRegisterCall(file, alias) {
-		astutil.DeleteImport(fset, file, module.ImportPath)
-		if err := writeGoFile(path, fset, file); err != nil {
-			return ChangeResult{}, err
-		}
+	// registeredModuleAlias accepts any alias.Register(...) call, while removal
+	// only touches the zero-argument call gg add emits. Reporting ChangeRemoved
+	// without writing the file would claim a change that never happened, so a
+	// registration gg cannot manage is an error the user has to resolve.
+	if !removeRegisterCall(file, alias) {
+		return ChangeResult{}, fmt.Errorf("module %q is registered with a Register call that takes arguments; remove the call and its import from %s manually", name, path)
+	}
+	astutil.DeleteImport(fset, file, module.ImportPath)
+	if err := writeGoFile(path, fset, file); err != nil {
+		return ChangeResult{}, err
 	}
 	return ChangeResult{Module: module, Status: ChangeRemoved, Path: path}, nil
 }

@@ -77,12 +77,17 @@ func (c *Creator) CreateAfter(ctx *types.ServiceContext, req *copytest.CopyTest)
 `)
 
 	got, err := mergeModuleServiceSource(moduleServiceMergeInput{
-		SourcePath:            "action.go",
-		Source:                source,
-		TargetPath:            "service/copytest/action.go",
-		Target:                target,
-		ModuleName:            "copytest",
-		TargetModelImportPath: "tmpapp/model/copytest",
+		SourcePath: "action.go",
+		Source:     source,
+		TargetPath: "service/copytest/action.go",
+		Target:     target,
+		Rewrite: moduleCopyRewriteConfig{
+			ModuleName:        "copytest",
+			ProjectModulePath: "tmpapp",
+			ModelDir:          "model",
+			ServiceDir:        "service",
+			TargetPackage:     "copytest",
+		},
 	})
 	if err != nil {
 		t.Fatalf("mergeModuleServiceSource() error = %v", err)
@@ -176,12 +181,17 @@ func (l *Lister) List(ctx *types.ServiceContext, req *copytest.CopyTest) (rsp *c
 `)
 
 	got, err := mergeModuleServiceSource(moduleServiceMergeInput{
-		SourcePath:            "list.go",
-		Source:                source,
-		TargetPath:            "service/copytest/list.go",
-		Target:                target,
-		ModuleName:            "copytest",
-		TargetModelImportPath: "tmpapp/model/copytest",
+		SourcePath: "list.go",
+		Source:     source,
+		TargetPath: "service/copytest/list.go",
+		Target:     target,
+		Rewrite: moduleCopyRewriteConfig{
+			ModuleName:        "copytest",
+			ProjectModulePath: "tmpapp",
+			ModelDir:          "model",
+			ServiceDir:        "service",
+			TargetPackage:     "copytest",
+		},
 	})
 	if err != nil {
 		t.Fatalf("mergeModuleServiceSource() error = %v", err)
@@ -244,12 +254,17 @@ func (b *Binding) ListAfter(ctx *types.ServiceContext, bindings *[]*copytest.Bin
 `)
 
 	got, err := mergeModuleServiceSource(moduleServiceMergeInput{
-		SourcePath:            "binding.go",
-		Source:                source,
-		TargetPath:            "service/copytest/binding.go",
-		Target:                target,
-		ModuleName:            "copytest",
-		TargetModelImportPath: "tmpapp/model/copytest",
+		SourcePath: "binding.go",
+		Source:     source,
+		TargetPath: "service/copytest/binding.go",
+		Target:     target,
+		Rewrite: moduleCopyRewriteConfig{
+			ModuleName:        "copytest",
+			ProjectModulePath: "tmpapp",
+			ModelDir:          "model",
+			ServiceDir:        "service",
+			TargetPackage:     "copytest",
+		},
 	})
 	if err != nil {
 		t.Fatalf("mergeModuleServiceSource() error = %v", err)
@@ -263,5 +278,137 @@ func (b *Binding) ListAfter(ctx *types.ServiceContext, bindings *[]*copytest.Bin
 	}
 	if strings.Contains(code, "*data") {
 		t.Fatalf("source parameter name leaked into target body:\n%s", code)
+	}
+}
+
+func TestMergeModuleServiceSourceRejectsDuplicateMethodNames(t *testing.T) {
+	source := []byte(`package servicecopytest
+
+import (
+	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+)
+
+type FirstService struct {
+	service.Base[*modelcopytest.CopyTest, *modelcopytest.CopyTest, *modelcopytest.CopyTest]
+}
+
+type SecondService struct {
+	service.Base[*modelcopytest.CopyTest, *modelcopytest.CopyTest, *modelcopytest.CopyTest]
+}
+
+func (f *FirstService) CreateBefore(ctx *types.ServiceContext, req *modelcopytest.CopyTest) error {
+	return nil
+}
+
+func (s *SecondService) CreateBefore(ctx *types.ServiceContext, req *modelcopytest.CopyTest) error {
+	return nil
+}
+`)
+	target := []byte(`package copytest
+
+import (
+	"tmpapp/model/copytest"
+
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+)
+
+type Creator struct {
+	service.Base[*copytest.CopyTest, *copytest.CopyTest, *copytest.CopyTest]
+}
+
+func (c *Creator) Create(ctx *types.ServiceContext, req *copytest.CopyTest) (rsp *copytest.CopyTest, err error) {
+	return rsp, nil
+}
+`)
+
+	_, err := mergeModuleServiceSource(moduleServiceMergeInput{
+		SourcePath: "create.go",
+		Source:     source,
+		TargetPath: "service/copytest/create.go",
+		Target:     target,
+		Rewrite: moduleCopyRewriteConfig{
+			ModuleName:        "copytest",
+			ProjectModulePath: "tmpapp",
+			ModelDir:          "model",
+			ServiceDir:        "service",
+			TargetPackage:     "copytest",
+		},
+	})
+	if err == nil {
+		t.Fatal("mergeModuleServiceSource() succeeded, want an error for a method declared on two source service structs")
+	}
+	if !strings.Contains(err.Error(), "CreateBefore") {
+		t.Fatalf("mergeModuleServiceSource() error = %v, want the conflicting method name", err)
+	}
+}
+
+func TestMergeModuleServiceSourceKeepsNonServiceReceiverDoc(t *testing.T) {
+	source := []byte(`package servicecopytest
+
+import (
+	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+)
+
+type ActionService struct {
+	service.Base[*modelcopytest.CopyTest, *modelcopytest.CopyTest, *modelcopytest.CopyTest]
+}
+
+func (s *ActionService) CreateAfter(ctx *types.ServiceContext, req *modelcopytest.CopyTest) error {
+	return nil
+}
+
+type recordState struct{}
+
+// describe copies the doc of a method on a non-service receiver.
+func (r *recordState) describe() string {
+	return "described"
+}
+`)
+	target := []byte(`package copytest
+
+import (
+	"tmpapp/model/copytest"
+
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+)
+
+type Creator struct {
+	service.Base[*copytest.CopyTest, *copytest.CopyTest, *copytest.CopyTest]
+}
+
+func (c *Creator) Create(ctx *types.ServiceContext, req *copytest.CopyTest) (rsp *copytest.CopyTest, err error) {
+	return rsp, nil
+}
+`)
+
+	got, err := mergeModuleServiceSource(moduleServiceMergeInput{
+		SourcePath: "create.go",
+		Source:     source,
+		TargetPath: "service/copytest/create.go",
+		Target:     target,
+		Rewrite: moduleCopyRewriteConfig{
+			ModuleName:        "copytest",
+			ProjectModulePath: "tmpapp",
+			ModelDir:          "model",
+			ServiceDir:        "service",
+			TargetPackage:     "copytest",
+		},
+	})
+	if err != nil {
+		t.Fatalf("mergeModuleServiceSource() error = %v", err)
+	}
+	code := string(got)
+
+	if !strings.Contains(code, "func (r *recordState) describe() string") {
+		t.Fatalf("non-service receiver method was not copied:\n%s", code)
+	}
+	if !strings.Contains(code, "// describe copies the doc of a method on a non-service receiver.\nfunc (r *recordState) describe() string") {
+		t.Fatalf("non-service receiver method doc was dropped:\n%s", code)
 	}
 }

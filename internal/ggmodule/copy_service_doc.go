@@ -13,7 +13,7 @@ import (
 type sourceDocInserts struct {
 	decls     []declDocInsert
 	functions map[string][]string
-	methods   map[string][]string
+	methods   map[methodDocKey][]string
 }
 
 type declDocInsert struct {
@@ -22,10 +22,19 @@ type declDocInsert struct {
 	doc  []string
 }
 
+// methodDocKey identifies a method doc by the receiver type the method ends up
+// on. Methods merged onto the target service struct and methods that keep their
+// own source receiver can share a name, so the receiver has to be part of the
+// key for both docs to survive.
+type methodDocKey struct {
+	receiver string
+	name     string
+}
+
 func newSourceDocInserts() sourceDocInserts {
 	return sourceDocInserts{
 		functions: make(map[string][]string),
-		methods:   make(map[string][]string),
+		methods:   make(map[methodDocKey][]string),
 	}
 }
 
@@ -81,6 +90,23 @@ func sortedDocNames(docs map[string][]string) []string {
 	return names
 }
 
+func sortedMethodDocKeys(docs map[methodDocKey][]string) []methodDocKey {
+	keys := make([]methodDocKey, 0, len(docs))
+	for key := range docs {
+		if len(docs[key]) == 0 {
+			continue
+		}
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].receiver == keys[j].receiver {
+			return keys[i].name < keys[j].name
+		}
+		return keys[i].receiver < keys[j].receiver
+	})
+	return keys
+}
+
 func appendSourceComments(targetFile *ast.File, sourceComments ast.CommentMap, node ast.Node) {
 	if targetFile == nil || sourceComments == nil || node == nil {
 		return
@@ -88,14 +114,16 @@ func appendSourceComments(targetFile *ast.File, sourceComments ast.CommentMap, n
 	targetFile.Comments = append(targetFile.Comments, sourceComments.Filter(node).Comments()...)
 }
 
-func insertStructDoc(code string, typeName string, docLines []string) string {
+// insertDocBefore puts docLines directly above the first printed line that
+// match accepts. Doc comments are re-attached as text after the merged file has
+// been printed, so the anchor is a line of output rather than an AST node.
+func insertDocBefore(code string, docLines []string, match func(trimmed string) bool) string {
 	if len(docLines) == 0 {
 		return code
 	}
 	lines := strings.Split(code, "\n")
-	typePrefix := "type " + typeName + " struct"
 	for i, line := range lines {
-		if !strings.HasPrefix(strings.TrimSpace(line), typePrefix) {
+		if !match(strings.TrimSpace(line)) {
 			continue
 		}
 		if i > 0 && strings.TrimSpace(lines[i-1]) == docLines[len(docLines)-1] {
@@ -106,67 +134,37 @@ func insertStructDoc(code string, typeName string, docLines []string) string {
 		return strings.Join(lines, "\n")
 	}
 	return code
+}
+
+func insertStructDoc(code string, typeName string, docLines []string) string {
+	typePrefix := "type " + typeName + " struct"
+	return insertDocBefore(code, docLines, func(trimmed string) bool {
+		return strings.HasPrefix(trimmed, typePrefix)
+	})
 }
 
 func insertMethodDoc(code string, receiverType string, methodName string, docLines []string) string {
-	if len(docLines) == 0 {
-		return code
-	}
-	lines := strings.Split(code, "\n")
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
+	return insertDocBefore(code, docLines, func(trimmed string) bool {
 		if !strings.HasPrefix(trimmed, "func (") || !strings.Contains(trimmed, " "+methodName+"(") {
-			continue
+			return false
 		}
-		if !strings.Contains(trimmed, "*"+receiverType+")") && !strings.Contains(trimmed, " "+receiverType+")") {
-			continue
-		}
-		if i > 0 && strings.TrimSpace(lines[i-1]) == docLines[len(docLines)-1] {
-			return code
-		}
-		insert := append([]string{}, docLines...)
-		lines = append(lines[:i], append(insert, lines[i:]...)...)
-		return strings.Join(lines, "\n")
-	}
-	return code
+		return strings.Contains(trimmed, "*"+receiverType+")") || strings.Contains(trimmed, " "+receiverType+")")
+	})
 }
 
 func insertFunctionDoc(code string, functionName string, docLines []string) string {
-	if len(docLines) == 0 {
-		return code
-	}
-	lines := strings.Split(code, "\n")
 	funcPrefix := "func " + functionName + "("
-	for i, line := range lines {
-		if !strings.HasPrefix(strings.TrimSpace(line), funcPrefix) {
-			continue
-		}
-		if i > 0 && strings.TrimSpace(lines[i-1]) == docLines[len(docLines)-1] {
-			return code
-		}
-		insert := append([]string{}, docLines...)
-		lines = append(lines[:i], append(insert, lines[i:]...)...)
-		return strings.Join(lines, "\n")
-	}
-	return code
+	return insertDocBefore(code, docLines, func(trimmed string) bool {
+		return strings.HasPrefix(trimmed, funcPrefix)
+	})
 }
 
 func insertDeclDoc(code string, insertDoc declDocInsert, serviceStruct string) string {
-	if len(insertDoc.doc) == 0 || len(insertDoc.name) == 0 || insertDoc.name == serviceStruct {
+	if len(insertDoc.name) == 0 || insertDoc.name == serviceStruct {
 		return code
 	}
-	lines := strings.Split(code, "\n")
 	prefix := strings.ToLower(insertDoc.kind.String()) + " " + insertDoc.name
-	for i, line := range lines {
-		if !strings.HasPrefix(strings.TrimSpace(line), prefix) {
-			continue
-		}
-		if i > 0 && strings.TrimSpace(lines[i-1]) == insertDoc.doc[len(insertDoc.doc)-1] {
-			return code
-		}
-		doc := append([]string{}, insertDoc.doc...)
-		lines = append(lines[:i], append(doc, lines[i:]...)...)
-		return strings.Join(lines, "\n")
-	}
-	return code
+	return insertDocBefore(code, insertDoc.doc, func(trimmed string) bool {
+		return strings.HasPrefix(trimmed, prefix)
+	})
 }

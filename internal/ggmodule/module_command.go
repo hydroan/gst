@@ -35,7 +35,7 @@ type ChangeResult struct {
 // registration only works when the module's Register function can be called as
 // pkg.Register() with no arguments.
 func moduleForRegistration(name string) (Module, error) {
-	if err := validateModuleName(name); err != nil {
+	if err := validateModuleCommandName(name, "module command"); err != nil {
 		return Module{}, err
 	}
 	module, err := moduleByName(name)
@@ -51,11 +51,12 @@ func moduleForRegistration(name string) (Module, error) {
 	return module, nil
 }
 
-// validateModuleName keeps add/remove on catalog entries instead of arbitrary
-// filesystem paths. This avoids ambiguous commands such as `gg module add
-// module/copytest` and prevents path traversal from reaching outside the module
-// catalog.
-func validateModuleName(name string) error {
+// validateModuleCommandName keeps module commands on catalog entries instead of
+// arbitrary filesystem paths. This avoids ambiguous commands such as `gg module
+// add module/copytest` and prevents path traversal from reaching outside the
+// module catalog. subject names the command in the path errors, so add/remove
+// and copy each report the contract the user actually invoked.
+func validateModuleCommandName(name string, subject string) error {
 	if strings.TrimSpace(name) == "" {
 		return errors.New("module name is required")
 	}
@@ -63,10 +64,10 @@ func validateModuleName(name string) error {
 		return fmt.Errorf("module name %q must not contain surrounding whitespace", name)
 	}
 	if strings.HasPrefix(name, ".") || strings.ContainsAny(name, `/\`) {
-		return fmt.Errorf("module command accepts a module name, not a path: %s", name)
+		return fmt.Errorf("%s accepts a module name, not a path: %s", subject, name)
 	}
 	if filepath.Clean(name) != name || filepath.Base(name) != name {
-		return fmt.Errorf("module command accepts a module name, not a path: %s", name)
+		return fmt.Errorf("%s accepts a module name, not a path: %s", subject, name)
 	}
 	return nil
 }

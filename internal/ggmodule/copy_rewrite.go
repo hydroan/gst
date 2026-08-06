@@ -28,51 +28,17 @@ type moduleCopyRewriteConfig struct {
 // module, so those internal model imports must also be rewritten to the target
 // project's model/<module> tree.
 func normalizeModuleModelSource(filename string, src []byte, config moduleCopyRewriteConfig) ([]byte, error) {
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, filename, src, parser.ParseComments)
-	if err != nil {
-		return nil, err
-	}
-
-	selectorNames := rewriteModuleModelFile(file, config)
-	rewriteSelectorPackages(file, selectorNames)
-
-	code, err := gen.FormatNodeExtraWithFileSet(file, fset, true)
-	if err != nil {
-		return nil, err
-	}
-	return []byte(code), nil
-}
-
-func rewriteModuleModelFile(file *ast.File, config moduleCopyRewriteConfig) map[string]string {
 	// Model files intentionally only rewrite copied model imports. If a model file
 	// imports a copied service package, keeping that import untouched preserves the
 	// architecture violation instead of hiding it in generated project code.
-	return rewriteModuleCopyFile(file, config, false)
+	return normalizeModuleCopySource(filename, src, config, false)
 }
 
 // normalizeModuleServiceSource rewrites helper files into the current service
 // package and maps framework internal model/service imports to the current
 // project's copied module package tree.
 func normalizeModuleServiceSource(filename string, src []byte, config moduleCopyRewriteConfig) ([]byte, error) {
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, filename, src, parser.ParseComments)
-	if err != nil {
-		return nil, err
-	}
-
-	selectorNames := rewriteModuleServiceFile(file, config)
-	rewriteSelectorPackages(file, selectorNames)
-
-	code, err := gen.FormatNodeExtraWithFileSet(file, fset, true)
-	if err != nil {
-		return nil, err
-	}
-	return []byte(code), nil
-}
-
-func rewriteModuleServiceFile(file *ast.File, config moduleCopyRewriteConfig) map[string]string {
-	return rewriteModuleCopyFile(file, config, true)
+	return normalizeModuleCopySource(filename, src, config, true)
 }
 
 // normalizeModuleMiddlewareSource rewrites manifest-declared middleware files
@@ -81,13 +47,17 @@ func rewriteModuleServiceFile(file *ast.File, config moduleCopyRewriteConfig) ma
 // rules as service helpers while keeping the target package owned by the
 // middleware destination directory.
 func normalizeModuleMiddlewareSource(filename string, src []byte, config moduleCopyRewriteConfig) ([]byte, error) {
+	return normalizeModuleCopySource(filename, src, config, true)
+}
+
+func normalizeModuleCopySource(filename string, src []byte, config moduleCopyRewriteConfig, includeServiceImports bool) ([]byte, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, filename, src, parser.ParseComments)
 	if err != nil {
 		return nil, err
 	}
 
-	selectorNames := rewriteModuleMiddlewareFile(file, config)
+	selectorNames := rewriteModuleCopyFile(file, config, includeServiceImports)
 	rewriteSelectorPackages(file, selectorNames)
 
 	code, err := gen.FormatNodeExtraWithFileSet(file, fset, true)
@@ -97,15 +67,19 @@ func normalizeModuleMiddlewareSource(filename string, src []byte, config moduleC
 	return []byte(code), nil
 }
 
-func rewriteModuleMiddlewareFile(file *ast.File, config moduleCopyRewriteConfig) map[string]string {
-	return rewriteModuleCopyFile(file, config, true)
-}
-
 func rewriteModuleCopyFile(file *ast.File, config moduleCopyRewriteConfig, includeServiceImports bool) map[string]string {
 	file.Name.Name = config.TargetPackage
 
 	rewrites := make([]moduleCopyImportRewrite, 0)
 	usedNames := make(map[string]bool)
+	// An import left as-is still occupies its local name, so the alias search for
+	// rewritten imports must not hand that name out again.
+	markUsedName := func(imp *ast.ImportSpec, path string) {
+		name := importLocalName(imp, path)
+		if name != "" && name != "." && name != "_" {
+			usedNames[name] = true
+		}
+	}
 	for _, imp := range file.Imports {
 		path, err := strconv.Unquote(imp.Path.Value)
 		if err != nil {
@@ -113,17 +87,11 @@ func rewriteModuleCopyFile(file *ast.File, config moduleCopyRewriteConfig, inclu
 		}
 		rewrite, ok := buildModuleCopyImportRewrite(imp, path, config)
 		if !ok {
-			name := importLocalName(imp, path)
-			if name != "" && name != "." && name != "_" {
-				usedNames[name] = true
-			}
+			markUsedName(imp, path)
 			continue
 		}
-		if rewrite.kind == "service" && !includeServiceImports {
-			name := importLocalName(imp, path)
-			if name != "" && name != "." && name != "_" {
-				usedNames[name] = true
-			}
+		if rewrite.kind == moduleCopyImportService && !includeServiceImports {
+			markUsedName(imp, path)
 			continue
 		}
 		rewrites = append(rewrites, rewrite)
@@ -171,12 +139,9 @@ func preferredUnaliasedModuleCopyImports(rewrites []moduleCopyImportRewrite, use
 		byName[rewrite.desiredName] = append(byName[rewrite.desiredName], i)
 	}
 	for _, indexes := range byName {
-		if len(indexes) == 0 {
-			continue
-		}
 		selected := indexes[0]
 		for _, index := range indexes {
-			if rewrites[index].kind == "model" {
+			if rewrites[index].kind == moduleCopyImportModel {
 				selected = index
 				break
 			}
@@ -186,12 +151,22 @@ func preferredUnaliasedModuleCopyImports(rewrites []moduleCopyImportRewrite, use
 	return preferred
 }
 
+// moduleCopyImportKind is which copied package tree an import points at. The
+// string values are not cosmetic: moduleCopyImportAlias prefixes generated
+// aliases with them, so changing a value changes the copied source.
+type moduleCopyImportKind string
+
+const (
+	moduleCopyImportModel   moduleCopyImportKind = "model"
+	moduleCopyImportService moduleCopyImportKind = "service"
+)
+
 type moduleCopyImportRewrite struct {
 	spec            *ast.ImportSpec
 	oldName         string
 	newPath         string
 	desiredName     string
-	kind            string
+	kind            moduleCopyImportKind
 	keepSpecialName bool
 }
 
@@ -200,15 +175,15 @@ func buildModuleCopyImportRewrite(imp *ast.ImportSpec, sourcePath string, config
 	servicePrefix := frameworkModulePath + "/internal/service/" + config.ModuleName
 	switch {
 	case sourcePath == modelPrefix || strings.HasPrefix(sourcePath, modelPrefix+"/"):
-		return newModuleCopyImportRewrite(imp, sourcePath, modelPrefix, projectModuleCopyImportRoot(config.ProjectModulePath, config.ModelDir, config.ModuleName), "model"), true
+		return newModuleCopyImportRewrite(imp, sourcePath, modelPrefix, projectModuleCopyImportRoot(config.ProjectModulePath, config.ModelDir, config.ModuleName), moduleCopyImportModel), true
 	case sourcePath == servicePrefix || strings.HasPrefix(sourcePath, servicePrefix+"/"):
-		return newModuleCopyImportRewrite(imp, sourcePath, servicePrefix, projectModuleCopyImportRoot(config.ProjectModulePath, config.ServiceDir, config.ModuleName), "service"), true
+		return newModuleCopyImportRewrite(imp, sourcePath, servicePrefix, projectModuleCopyImportRoot(config.ProjectModulePath, config.ServiceDir, config.ModuleName), moduleCopyImportService), true
 	default:
 		return moduleCopyImportRewrite{}, false
 	}
 }
 
-func newModuleCopyImportRewrite(imp *ast.ImportSpec, sourcePath string, sourcePrefix string, targetPrefix string, kind string) moduleCopyImportRewrite {
+func newModuleCopyImportRewrite(imp *ast.ImportSpec, sourcePath string, sourcePrefix string, targetPrefix string, kind moduleCopyImportKind) moduleCopyImportRewrite {
 	suffix := strings.TrimPrefix(sourcePath, sourcePrefix)
 	newPath := targetPrefix + suffix
 	name := importLocalName(imp, sourcePath)
@@ -233,8 +208,8 @@ func importLocalName(imp *ast.ImportSpec, importPath string) string {
 	return pathpkg.Base(importPath)
 }
 
-func moduleCopyImportAlias(kind string, packageName string) string {
-	return sanitizeModuleCopyIdentifier(kind + packageName)
+func moduleCopyImportAlias(kind moduleCopyImportKind, packageName string) string {
+	return sanitizeModuleCopyIdentifier(string(kind) + packageName)
 }
 
 func sanitizeModuleCopyIdentifier(value string) string {

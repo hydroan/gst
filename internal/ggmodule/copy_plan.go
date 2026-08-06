@@ -5,9 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
+	"sort"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/codegen/gen"
 )
@@ -20,30 +19,7 @@ const (
 
 // CopyOptions configures the local-source copy workflow.
 type CopyOptions struct {
-	Force      bool
-	ModelDir   string
-	ServiceDir string
-}
-
-func (o CopyOptions) modelDir() string {
-	if o.ModelDir == "" {
-		return defaultModelDir
-	}
-	return o.ModelDir
-}
-
-func (o CopyOptions) serviceDir() string {
-	if o.ServiceDir == "" {
-		return defaultServiceDir
-	}
-	return o.ServiceDir
-}
-
-func copyPlanDirOrDefault(value string, fallback string) string {
-	if value == "" {
-		return fallback
-	}
-	return value
+	Force bool
 }
 
 // CopyPlan describes the final files and source mappings for one module copy.
@@ -118,7 +94,10 @@ const (
 // paths, parses source DSL through the same codegen model parser used by gg gen,
 // computes final rewritten file contents, and checks target conflicts.
 func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
-	if err := validateModuleCopyName(name); err != nil {
+	// Module copy addresses a top-level framework module by name, such as
+	// "copytest"; nested paths such as "<module>/<subpackage>" are outside the
+	// command contract.
+	if err := validateModuleCommandName(name, "module copy"); err != nil {
 		return nil, err
 	}
 	if _, err := os.Stat("go.mod"); err != nil {
@@ -139,14 +118,14 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 		Name:                  name,
 		ProjectModulePath:     projectModule,
 		FrameworkRoot:         frameworkRoot,
-		ModelDir:              opts.modelDir(),
-		ServiceDir:            opts.serviceDir(),
+		ModelDir:              defaultModelDir,
+		ServiceDir:            defaultServiceDir,
 		SourceModelDir:        filepath.Join(frameworkRoot, "internal", "model", name),
 		SourceServiceDir:      filepath.Join(frameworkRoot, "internal", "service", name),
-		TargetModelDir:        filepath.Join(opts.modelDir(), name),
-		TargetServiceDir:      filepath.Join(opts.serviceDir(), name),
+		TargetModelDir:        filepath.Join(defaultModelDir, name),
+		TargetServiceDir:      filepath.Join(defaultServiceDir, name),
 		TargetMiddlewareDir:   defaultMiddlewareDir,
-		TargetModelImportPath: filepath.Join(projectModule, opts.modelDir(), name),
+		TargetModelImportPath: filepath.Join(projectModule, defaultModelDir, name),
 	}
 
 	if sourceDirErr := plan.checkSourceDirs(); sourceDirErr != nil {
@@ -209,25 +188,6 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 	return plan, nil
 }
 
-// validateModuleCopyName intentionally rejects anything path-like. Module copy
-// copies a top-level framework module addressed by name, such as "copytest";
-// nested paths such as "<module>/<subpackage>" are outside the command contract.
-func validateModuleCopyName(name string) error {
-	if strings.TrimSpace(name) == "" {
-		return errors.New("module name is required")
-	}
-	if name != strings.TrimSpace(name) {
-		return fmt.Errorf("module name %q must not contain surrounding whitespace", name)
-	}
-	if strings.HasPrefix(name, ".") || strings.ContainsAny(name, `/\`) {
-		return fmt.Errorf("module copy accepts a module name, not a path: %s", name)
-	}
-	if filepath.Clean(name) != name || filepath.Base(name) != name {
-		return fmt.Errorf("module copy accepts a module name, not a path: %s", name)
-	}
-	return nil
-}
-
 func (p *CopyPlan) checkSourceDirs() error {
 	if err := requireDir(filepath.Join(p.FrameworkRoot, "module", p.Name)); err != nil {
 		return fmt.Errorf("module %q not found: %w", p.Name, err)
@@ -239,6 +199,53 @@ func (p *CopyPlan) checkSourceDirs() error {
 		return fmt.Errorf("module %q service source not found: %w", p.Name, err)
 	}
 	return nil
+}
+
+// extraTargetFiles lists Go files already present in dir that this copy plan
+// does not produce. The caller passes the plan file kinds that land in dir,
+// because copy output is not a mirror of the framework source tree: action
+// service files come from DSL ServiceFilename(), helper files from dependency
+// discovery, and excluded sources produce no target at all.
+func (p *CopyPlan) extraTargetFiles(dir string, kinds ...moduleCopyFileKind) ([]string, error) {
+	info, err := os.Stat(dir)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("%s is not a directory", dir)
+	}
+
+	expectedTargets := make(map[string]bool)
+	for _, file := range p.Files {
+		if !slices.Contains(kinds, file.Kind) {
+			continue
+		}
+		rel, relErr := filepath.Rel(dir, file.TargetPath)
+		if relErr != nil {
+			return nil, relErr
+		}
+		expectedTargets[rel] = true
+	}
+
+	targetFiles, err := goFilesInDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	extra := make([]string, 0)
+	for _, targetPath := range targetFiles {
+		rel, err := filepath.Rel(dir, targetPath)
+		if err != nil {
+			return nil, err
+		}
+		if !expectedTargets[rel] {
+			extra = append(extra, targetPath)
+		}
+	}
+	sort.Strings(extra)
+	return extra, nil
 }
 
 func (p *CopyPlan) checkConflicts(force bool) error {

@@ -1,12 +1,9 @@
 package ggmodule
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 
-	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
 )
 
@@ -17,11 +14,13 @@ func (p *CopyPlan) findModels() ([]*gen.ModelInfo, error) {
 			return err
 		}
 
-		base := filepath.Base(path)
-		if path != p.SourceModelDir && (base == constants.DirVendor || base == constants.DirTestData) {
-			return filepath.SkipDir
+		if info.IsDir() {
+			if skipModuleSourceDir(p.SourceModelDir, path, info.Name()) {
+				return filepath.SkipDir
+			}
+			return nil
 		}
-		if info.IsDir() || !isGoSourceFile(info.Name()) || p.ignoredSourcePath(path) {
+		if !isGoSourceFile(info.Name()) || p.ignoredSourcePath(path) {
 			return nil
 		}
 
@@ -78,50 +77,16 @@ func (p *CopyPlan) addModelFiles() error {
 	return nil
 }
 
+// collectExtraModelFiles records target model files this copy plan will not
+// write. Model copy is a SourceModelDir -> TargetModelDir mirror, so anything
+// left over is either project-owned or a stale copy from an older framework
+// version; module copy reports it and never deletes it.
 func (p *CopyPlan) collectExtraModelFiles() error {
-	info, err := os.Stat(p.TargetModelDir)
-	if os.IsNotExist(err) {
-		return nil
-	}
+	extra, err := p.extraTargetFiles(p.TargetModelDir, moduleCopyFileModel)
 	if err != nil {
 		return err
 	}
-	if !info.IsDir() {
-		return fmt.Errorf("%s is not a directory", p.TargetModelDir)
-	}
-
-	// Model copy is a SourceModelDir -> TargetModelDir mirror after applying
-	// module.json copy.excludeSourceFiles rules and source normalization. At this
-	// point p.Files already contains every model file that this copy plan will
-	// write, so comparing TargetModelDir against those planned model targets gives
-	// a precise stale-file warning without treating excluded or project-owned
-	// files as something module copy can delete automatically.
-	expectedTargets := make(map[string]bool)
-	for _, file := range p.Files {
-		if file.Kind != moduleCopyFileModel {
-			continue
-		}
-		rel, relErr := filepath.Rel(p.TargetModelDir, file.TargetPath)
-		if relErr != nil {
-			return relErr
-		}
-		expectedTargets[rel] = true
-	}
-
-	targetFiles, err := goFilesInDir(p.TargetModelDir)
-	if err != nil {
-		return err
-	}
-	for _, targetPath := range targetFiles {
-		rel, err := filepath.Rel(p.TargetModelDir, targetPath)
-		if err != nil {
-			return err
-		}
-		if !expectedTargets[rel] {
-			p.ExtraModelFiles = append(p.ExtraModelFiles, targetPath)
-		}
-	}
-	sort.Strings(p.ExtraModelFiles)
+	p.ExtraModelFiles = extra
 	return nil
 }
 
@@ -129,6 +94,11 @@ func (p *CopyPlan) targetModelInfo(source *gen.ModelInfo) (*gen.ModelInfo, error
 	// Reuse gg gen's service generator by projecting the framework model into
 	// the current project's model layout. The source model still drives action
 	// DSL; only module/package/path metadata changes.
+	//
+	// BuildCopyPlan always fills SourceModelDir. The empty case is the plan a
+	// test builds by hand to exercise action collection without a framework tree
+	// on disk: it drops the model straight into TargetModelDir instead of
+	// relocating it relative to the framework source root.
 	if p.SourceModelDir == "" {
 		target := *source
 		target.ModulePath = p.ProjectModulePath

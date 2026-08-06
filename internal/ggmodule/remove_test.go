@@ -1,6 +1,8 @@
 package ggmodule
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -27,5 +29,32 @@ func TestRemoveModuleUnregistersFrameworkModule(t *testing.T) {
 	_, err = RemoveModule(projectDir, "copytest")
 	if err == nil || !strings.Contains(err.Error(), "is not registered as a framework module") {
 		t.Fatalf("second RemoveModule() error = %v, want not registered", err)
+	}
+}
+
+func TestRemoveModuleRejectsRegisterCallWithArguments(t *testing.T) {
+	projectDir := newModuleCommandProjectWithFramework(t)
+	if err := os.WriteFile(filepath.Join(projectDir, "module", "module.go"), []byte(`package module
+
+import "github.com/hydroan/gst/module/copytest"
+
+func init() {
+	copytest.Register(nil)
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := RemoveModule(projectDir, "copytest")
+	if err == nil {
+		t.Fatal("RemoveModule() succeeded, want an error for a Register call gg does not manage")
+	}
+
+	content := readProjectModuleFile(t, projectDir)
+	if !strings.Contains(content, "copytest.Register(nil)") {
+		t.Fatalf("module.go should keep the unmanaged Register call:\n%s", content)
+	}
+	if !strings.Contains(content, `"github.com/hydroan/gst/module/copytest"`) {
+		t.Fatalf("module.go should keep the import of an unmanaged registration:\n%s", content)
 	}
 }

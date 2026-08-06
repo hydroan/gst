@@ -8,6 +8,27 @@ import (
 	"github.com/hydroan/gst/internal/clioutput"
 )
 
+// moduleCopyWriteStatus is what one write did to a target file. It is a named
+// type so a misspelled status cannot silently fall through the print switch.
+type moduleCopyWriteStatus string
+
+const (
+	moduleCopyWriteSkip   moduleCopyWriteStatus = "SKIP"
+	moduleCopyWriteUpdate moduleCopyWriteStatus = "UPDATE"
+	moduleCopyWriteCreate moduleCopyWriteStatus = "CREATE"
+)
+
+func printModuleCopyStatus(status moduleCopyWriteStatus, path string) {
+	switch status {
+	case moduleCopyWriteSkip:
+		clioutput.Item(string(status), "%s", path)
+	case moduleCopyWriteUpdate:
+		clioutput.Status(clioutput.StyleWarn, clioutput.SymbolSuccess, string(status), "%s", path)
+	case moduleCopyWriteCreate:
+		clioutput.Success(string(status), "%s", path)
+	}
+}
+
 // CopyExecution applies a previously checked CopyPlan.
 type CopyExecution struct {
 	Plan         *CopyPlan
@@ -22,6 +43,13 @@ type CopyExecution struct {
 // It does not roll back partial writes; the command prints the prune cleanup
 // path when a failure happens after files were written.
 func (e *CopyExecution) Run() error {
+	// Checked before the first write: the run needs gg gen between the model and
+	// service phases, so a missing runner must fail while the project is still
+	// untouched rather than after model files have landed.
+	if e.RunGen == nil {
+		return errors.New("module copy requires a gg gen runner")
+	}
+
 	clioutput.Section("Copy Model Files")
 	for _, file := range e.Plan.Files {
 		if file.Kind != moduleCopyFileModel {
@@ -32,9 +60,6 @@ func (e *CopyExecution) Run() error {
 		}
 	}
 
-	if e.RunGen == nil {
-		return errors.New("module copy requires a gg gen runner")
-	}
 	if err := e.RunGen(); err != nil {
 		return err
 	}
@@ -78,14 +103,7 @@ func (e *CopyExecution) Run() error {
 		if err != nil {
 			return err
 		}
-		switch status {
-		case "SKIP":
-			clioutput.Item("SKIP", "%s", path)
-		case "UPDATE":
-			clioutput.Status(clioutput.StyleWarn, clioutput.SymbolSuccess, "UPDATE", "%s", path)
-		case "CREATE":
-			clioutput.Success("CREATE", "%s", path)
-		}
+		printModuleCopyStatus(status, path)
 	}
 
 	return nil
@@ -107,7 +125,7 @@ func (e *CopyExecution) write(file moduleCopyFile) error {
 		file.TargetPath = safePath
 	}
 	if file.Kind == moduleCopyFileMiddleware {
-		safePath, err := requirePathUnderRoot(file.TargetPath, e.Plan.targetMiddlewareDir())
+		safePath, err := requirePathUnderRoot(file.TargetPath, e.Plan.TargetMiddlewareDir)
 		if err != nil {
 			return err
 		}
@@ -118,28 +136,21 @@ func (e *CopyExecution) write(file moduleCopyFile) error {
 	if err != nil {
 		return err
 	}
-	switch status {
-	case "SKIP":
-		clioutput.Item("SKIP", "%s", file.TargetPath)
-	case "UPDATE":
-		clioutput.Status(clioutput.StyleWarn, clioutput.SymbolSuccess, "UPDATE", "%s", file.TargetPath)
-	case "CREATE":
-		clioutput.Success("CREATE", "%s", file.TargetPath)
-	}
+	printModuleCopyStatus(status, file.TargetPath)
 	if wrote {
 		e.WrittenFiles = append(e.WrittenFiles, file.TargetPath)
 	}
 	return nil
 }
 
-func writeModuleCopyFile(path string, content []byte, preexisting bool, force bool) (status string, wrote bool, err error) {
+func writeModuleCopyFile(path string, content []byte, preexisting bool, force bool) (status moduleCopyWriteStatus, wrote bool, err error) {
 	if fileExists(path) {
 		oldData, err := os.ReadFile(path)
 		if err != nil {
 			return "", false, err
 		}
 		if string(oldData) == string(content) {
-			return "SKIP", false, nil
+			return moduleCopyWriteSkip, false, nil
 		}
 		if preexisting && !force {
 			return "", false, fmt.Errorf("%s already exists; use --force to overwrite", path)
@@ -147,7 +158,7 @@ func writeModuleCopyFile(path string, content []byte, preexisting bool, force bo
 		if err := os.WriteFile(path, content, 0o600); err != nil {
 			return "", false, err
 		}
-		return "UPDATE", true, nil
+		return moduleCopyWriteUpdate, true, nil
 	}
 
 	if err := ensureParentDir(path); err != nil {
@@ -156,5 +167,5 @@ func writeModuleCopyFile(path string, content []byte, preexisting bool, force bo
 	if err := os.WriteFile(path, content, 0o600); err != nil {
 		return "", false, err
 	}
-	return "CREATE", true, nil
+	return moduleCopyWriteCreate, true, nil
 }

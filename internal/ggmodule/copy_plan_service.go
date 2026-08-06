@@ -56,6 +56,14 @@ func (p *CopyPlan) collectActions(models []*gen.ModelInfo) ([]moduleCopyAction, 
 	return actions, nil
 }
 
+// actionServicePaths maps one action to the framework service file that holds
+// its logic and the project service file gg gen will create for it.
+//
+// BuildCopyPlan always fills FrameworkRoot, and both paths then come from gg
+// gen's own ServiceTarget so a copied file lands exactly where a later gg gen
+// would regenerate it. The empty case is the plan a test builds by hand: it maps
+// an action straight onto <service dir>/<ServiceFilename()>, without the
+// per-model subdirectory ServiceTarget adds for non-flattened actions.
 func (p *CopyPlan) actionServicePaths(sourceModel *gen.ModelInfo, targetModel *gen.ModelInfo, action *dsl.Action) (sourcePath string, targetPath string) {
 	if p.FrameworkRoot == "" {
 		return filepath.Join(p.SourceServiceDir, action.ServiceFilename()), filepath.Join(p.TargetServiceDir, action.ServiceFilename())
@@ -218,13 +226,11 @@ func (p *CopyPlan) addServiceFiles(helperFiles []string) error {
 			return err
 		}
 		content, err := mergeModuleServiceSource(moduleServiceMergeInput{
-			SourcePath:            first.SourcePath,
-			Source:                source,
-			TargetPath:            first.TargetPath,
-			Target:                target,
-			ModuleName:            p.Name,
-			TargetModelImportPath: p.TargetModelImportPath,
-			Rewrite:               p.serviceRewriteConfig(first.TargetPath),
+			SourcePath: first.SourcePath,
+			Source:     source,
+			TargetPath: first.TargetPath,
+			Target:     target,
+			Rewrite:    p.rewriteConfig(first.TargetPath),
 		})
 		if err != nil {
 			return err
@@ -249,7 +255,7 @@ func (p *CopyPlan) addServiceFiles(helperFiles []string) error {
 		if err != nil {
 			return err
 		}
-		content, err := normalizeModuleServiceSource(sourcePath, src, p.serviceRewriteConfig(targetPath))
+		content, err := normalizeModuleServiceSource(sourcePath, src, p.rewriteConfig(targetPath))
 		if err != nil {
 			return err
 		}
@@ -263,50 +269,15 @@ func (p *CopyPlan) addServiceFiles(helperFiles []string) error {
 	return nil
 }
 
+// collectExtraServiceFiles records target service files this copy plan will not
+// write. Service packages can legitimately hold project-owned adapters next to
+// copied module code, so the leftovers are reported rather than deleted.
 func (p *CopyPlan) collectExtraServiceFiles() error {
-	info, err := os.Stat(p.TargetServiceDir)
-	if os.IsNotExist(err) {
-		return nil
-	}
+	extra, err := p.extraTargetFiles(p.TargetServiceDir, moduleCopyFileService, moduleCopyFileHelper)
 	if err != nil {
 		return err
 	}
-	if !info.IsDir() {
-		return fmt.Errorf("%s is not a directory", p.TargetServiceDir)
-	}
-
-	// Service copy is intentionally not a raw SourceServiceDir -> TargetServiceDir
-	// directory mirror. Action service files come from DSL ServiceFilename(),
-	// helper files come from same-package dependency discovery, and ignored
-	// source files should not become expected targets. Therefore the
-	// authoritative "current module copy output" set is the final plan.Files
-	// service/helper targets computed above.
-	expectedTargets := make(map[string]bool)
-	for _, file := range p.Files {
-		if file.Kind != moduleCopyFileService && file.Kind != moduleCopyFileHelper {
-			continue
-		}
-		rel, relErr := filepath.Rel(p.TargetServiceDir, file.TargetPath)
-		if relErr != nil {
-			return relErr
-		}
-		expectedTargets[rel] = true
-	}
-
-	targetFiles, err := goFilesInDir(p.TargetServiceDir)
-	if err != nil {
-		return err
-	}
-	for _, targetPath := range targetFiles {
-		rel, err := filepath.Rel(p.TargetServiceDir, targetPath)
-		if err != nil {
-			return err
-		}
-		if !expectedTargets[rel] {
-			p.ExtraServiceFiles = append(p.ExtraServiceFiles, targetPath)
-		}
-	}
-	sort.Strings(p.ExtraServiceFiles)
+	p.ExtraServiceFiles = extra
 	return nil
 }
 
@@ -376,12 +347,16 @@ func (p *CopyPlan) targetServicePath(sourcePath string) (string, error) {
 	return filepath.Join(p.TargetServiceDir, rel), nil
 }
 
-func (p *CopyPlan) serviceRewriteConfig(targetPath string) moduleCopyRewriteConfig {
+// rewriteConfig describes how a framework source file is retargeted at
+// targetPath. Model, service helper and middleware copies share it: they differ
+// only in whether service imports are rewritten, which is the normalize entry
+// point's decision, not the config's.
+func (p *CopyPlan) rewriteConfig(targetPath string) moduleCopyRewriteConfig {
 	return moduleCopyRewriteConfig{
 		ModuleName:        p.Name,
 		ProjectModulePath: p.ProjectModulePath,
-		ModelDir:          copyPlanDirOrDefault(p.ModelDir, defaultModelDir),
-		ServiceDir:        copyPlanDirOrDefault(p.ServiceDir, defaultServiceDir),
+		ModelDir:          p.ModelDir,
+		ServiceDir:        p.ServiceDir,
 		TargetPackage:     moduleCopyPackageName(filepath.Dir(targetPath)),
 	}
 }
