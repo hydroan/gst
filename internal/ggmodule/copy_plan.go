@@ -2,23 +2,15 @@ package ggmodule
 
 import (
 	"fmt"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/internal/codegen/constants"
 	"github.com/hydroan/gst/internal/codegen/gen"
 )
-
-const frameworkModulePath = "github.com/hydroan/gst"
 
 const (
 	defaultModelDir      = "model"
@@ -47,22 +39,37 @@ func (o CopyOptions) serviceDir() string {
 	return o.ServiceDir
 }
 
+func copyPlanDirOrDefault(value string, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
 // CopyPlan describes the final files and source mappings for one module copy.
 type CopyPlan struct {
-	Name                  string
-	ProjectModulePath     string
-	FrameworkRoot         string
-	ModelDir              string
-	ServiceDir            string
-	SourceModelDir        string
-	SourceServiceDir      string
+	Name              string
+	ProjectModulePath string
+	FrameworkRoot     string
+
+	ModelDir   string
+	ServiceDir string
+
+	SourceModelDir   string
+	SourceServiceDir string
+
 	TargetModelDir        string
 	TargetServiceDir      string
 	TargetMiddlewareDir   string
 	TargetModelImportPath string
-	Actions               []moduleCopyAction
-	Middleware            []moduleCopyMiddleware
-	Files                 []moduleCopyFile
+
+	ExcludeSourceFiles []string
+	PostNotes          []string
+
+	Actions    []moduleCopyAction
+	Middleware []moduleCopyMiddleware
+	Files      []moduleCopyFile
+
 	// ExtraModelFiles is warning-only upgrade guidance for files already
 	// present in TargetModelDir that do not have a matching source file under
 	// SourceModelDir in this copy plan. Module copy reports these files so
@@ -74,9 +81,7 @@ type CopyPlan struct {
 	// files that are already present but are not produced by this copy plan.
 	// Module copy must not delete them automatically because service packages can
 	// intentionally contain project-owned adapters next to copied module code.
-	ExtraServiceFiles  []string
-	ExcludeSourceFiles []string
-	PostNotes          []string
+	ExtraServiceFiles []string
 }
 
 // moduleCopyAction connects one DSL action to the framework service file that
@@ -88,17 +93,6 @@ type moduleCopyAction struct {
 	SourcePath string
 	TargetPath string
 	ModelInfo  *gen.ModelInfo
-}
-
-// moduleCopyMiddleware connects one manifest-declared framework middleware file
-// to the project-owned file and registration call that module copy will create.
-// Unlike action service files, middleware files are copied byte-for-byte because
-// the project middleware package is the same package shape as the framework one.
-type moduleCopyMiddleware struct {
-	SourcePath string
-	TargetPath string
-	Scope      moduleCopyMiddlewareScope
-	Handler    string
 }
 
 // moduleCopyFile stores final target content. Conflict checks run against this
@@ -131,7 +125,7 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 		return nil, fmt.Errorf("gg module copy must run from the project root: %w", err)
 	}
 
-	projectModule, err := getModuleName()
+	projectModule, err := readProjectModulePath()
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +176,7 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 	if addModelErr := plan.addModelFiles(); addModelErr != nil {
 		return nil, addModelErr
 	}
-	if extraModelErr := plan.addExtraModelFiles(); extraModelErr != nil {
+	if extraModelErr := plan.collectExtraModelFiles(); extraModelErr != nil {
 		return nil, extraModelErr
 	}
 
@@ -195,7 +189,7 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 	// Precompute final service/helper contents during preflight so conflict checks
 	// compare against what will actually be written. The execution phase still
 	// runs gg gen for real before writing these merged files.
-	helperFiles, err := plan.helperDependencyFiles(actions)
+	helperFiles, err := plan.collectHelperDependencyFiles(actions)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +197,7 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 	if addServiceErr := plan.addServiceFiles(helperFiles); addServiceErr != nil {
 		return nil, addServiceErr
 	}
-	if extraServiceErr := plan.addExtraServiceFiles(); extraServiceErr != nil {
+	if extraServiceErr := plan.collectExtraServiceFiles(); extraServiceErr != nil {
 		return nil, extraServiceErr
 	}
 	if addMiddlewareErr := plan.addMiddlewareFiles(); addMiddlewareErr != nil {
@@ -217,7 +211,7 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 
 // validateModuleCopyName intentionally rejects anything path-like. Module copy
 // copies a top-level framework module addressed by name, such as "copytest";
-// submodule paths like "iam/user" are outside the command contract.
+// nested paths such as "<module>/<subpackage>" are outside the command contract.
 func validateModuleCopyName(name string) error {
 	if strings.TrimSpace(name) == "" {
 		return errors.New("module name is required")
@@ -234,43 +228,6 @@ func validateModuleCopyName(name string) error {
 	return nil
 }
 
-func findFrameworkRoot() (string, error) {
-	candidates := []string{
-		filepath.Join(".", "internal", "gst"),
-		".",
-	}
-	for _, candidate := range candidates {
-		if isFrameworkRoot(candidate) {
-			return filepath.Clean(candidate), nil
-		}
-	}
-
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	for {
-		if isFrameworkRoot(wd) {
-			return filepath.Clean(wd), nil
-		}
-		parent := filepath.Dir(wd)
-		if parent == wd {
-			break
-		}
-		wd = parent
-	}
-	return "", errors.New("framework source not found; expected internal/gst/go.mod")
-}
-
-func isFrameworkRoot(candidate string) bool {
-	modFile := filepath.Join(candidate, "go.mod")
-	data, err := os.ReadFile(modFile)
-	if err != nil {
-		return false
-	}
-	return strings.Contains(string(data), "module "+frameworkModulePath)
-}
-
 func (p *CopyPlan) checkSourceDirs() error {
 	if err := requireDir(filepath.Join(p.FrameworkRoot, "module", p.Name)); err != nil {
 		return fmt.Errorf("module %q not found: %w", p.Name, err)
@@ -282,603 +239,6 @@ func (p *CopyPlan) checkSourceDirs() error {
 		return fmt.Errorf("module %q service source not found: %w", p.Name, err)
 	}
 	return nil
-}
-
-func requireDir(path string) error {
-	info, err := os.Stat(path)
-	if err != nil {
-		return err
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("%s is not a directory", path)
-	}
-	return nil
-}
-
-func (p *CopyPlan) addModelFiles() error {
-	files, err := goFilesInDir(p.SourceModelDir)
-	if err != nil {
-		return err
-	}
-	for _, sourcePath := range files {
-		if p.ignoredSourcePath(sourcePath) {
-			continue
-		}
-		rel, err := filepath.Rel(p.SourceModelDir, sourcePath)
-		if err != nil {
-			return err
-		}
-		targetPath := filepath.Join(p.TargetModelDir, rel)
-		src, err := os.ReadFile(sourcePath)
-		if err != nil {
-			return err
-		}
-		content, err := normalizeModuleModelSource(sourcePath, src, moduleCopyRewriteConfig{
-			ModuleName:        p.Name,
-			ProjectModulePath: p.ProjectModulePath,
-			ModelDir:          p.ModelDir,
-			ServiceDir:        p.ServiceDir,
-			TargetPackage:     moduleCopyPackageName(filepath.Dir(targetPath)),
-		})
-		if err != nil {
-			return err
-		}
-		p.Files = append(p.Files, moduleCopyFile{
-			Kind:        moduleCopyFileModel,
-			TargetPath:  targetPath,
-			Content:     content,
-			Preexisting: fileExists(targetPath),
-		})
-	}
-	return nil
-}
-
-func (p *CopyPlan) findModels() ([]*gen.ModelInfo, error) {
-	allModels := make([]*gen.ModelInfo, 0)
-	if err := filepath.Walk(p.SourceModelDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		base := filepath.Base(path)
-		if path != p.SourceModelDir && (base == constants.DirVendor || base == constants.DirTestData) {
-			return filepath.SkipDir
-		}
-		if info.IsDir() || !isModuleCopyGoSource(info.Name()) || p.ignoredSourcePath(path) {
-			return nil
-		}
-
-		models, err := gen.FindModels(frameworkModulePath, p.SourceModelDir, path)
-		if err != nil {
-			return err
-		}
-		for _, m := range models {
-			m.ModelFilePath = path
-			allModels = append(allModels, m)
-		}
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	return allModels, nil
-}
-
-func (p *CopyPlan) addExtraModelFiles() error {
-	info, err := os.Stat(p.TargetModelDir)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("%s is not a directory", p.TargetModelDir)
-	}
-
-	// Model copy is a SourceModelDir -> TargetModelDir mirror after applying
-	// module.json copy.excludeSourceFiles rules and source normalization. At this
-	// point p.Files already contains every model file that this copy plan will
-	// write, so comparing TargetModelDir against those planned model targets gives
-	// a precise stale-file warning without treating excluded or project-owned
-	// files as something module copy can delete automatically.
-	expectedTargets := make(map[string]bool)
-	for _, file := range p.Files {
-		if file.Kind != moduleCopyFileModel {
-			continue
-		}
-		rel, relErr := filepath.Rel(p.TargetModelDir, file.TargetPath)
-		if relErr != nil {
-			return relErr
-		}
-		expectedTargets[rel] = true
-	}
-
-	targetFiles, err := goFilesInDir(p.TargetModelDir)
-	if err != nil {
-		return err
-	}
-	for _, targetPath := range targetFiles {
-		rel, err := filepath.Rel(p.TargetModelDir, targetPath)
-		if err != nil {
-			return err
-		}
-		if !expectedTargets[rel] {
-			p.ExtraModelFiles = append(p.ExtraModelFiles, targetPath)
-		}
-	}
-	sort.Strings(p.ExtraModelFiles)
-	return nil
-}
-
-func (p *CopyPlan) addExtraServiceFiles() error {
-	info, err := os.Stat(p.TargetServiceDir)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("%s is not a directory", p.TargetServiceDir)
-	}
-
-	// Service copy is intentionally not a raw SourceServiceDir -> TargetServiceDir
-	// directory mirror. Action service files come from DSL ServiceFilename(),
-	// helper files come from same-package dependency discovery, and ignored
-	// source files should not become expected targets. Therefore the
-	// authoritative "current module copy output" set is the final plan.Files
-	// service/helper targets computed above.
-	expectedTargets := make(map[string]bool)
-	for _, file := range p.Files {
-		if file.Kind != moduleCopyFileService && file.Kind != moduleCopyFileHelper {
-			continue
-		}
-		rel, relErr := filepath.Rel(p.TargetServiceDir, file.TargetPath)
-		if relErr != nil {
-			return relErr
-		}
-		expectedTargets[rel] = true
-	}
-
-	targetFiles, err := goFilesInDir(p.TargetServiceDir)
-	if err != nil {
-		return err
-	}
-	for _, targetPath := range targetFiles {
-		rel, err := filepath.Rel(p.TargetServiceDir, targetPath)
-		if err != nil {
-			return err
-		}
-		if !expectedTargets[rel] {
-			p.ExtraServiceFiles = append(p.ExtraServiceFiles, targetPath)
-		}
-	}
-	sort.Strings(p.ExtraServiceFiles)
-	return nil
-}
-
-func (p *CopyPlan) collectActions(models []*gen.ModelInfo) ([]moduleCopyAction, error) {
-	actions := make([]moduleCopyAction, 0)
-	for _, modelInfo := range models {
-		if modelInfo.Design == nil {
-			continue
-		}
-		targetModel, err := p.targetModelInfo(modelInfo)
-		if err != nil {
-			return nil, err
-		}
-		modelInfo.Design.Range(func(route string, action *dsl.Action) {
-			if !action.Service {
-				return
-			}
-			sourcePath, targetPath := p.actionServicePaths(modelInfo, targetModel, action)
-			if p.ignoredSourcePath(sourcePath) {
-				return
-			}
-			actions = append(actions, moduleCopyAction{
-				Route:      route,
-				Action:     action,
-				SourcePath: sourcePath,
-				TargetPath: targetPath,
-				ModelInfo:  targetModel,
-			})
-		})
-	}
-	sort.Slice(actions, func(i, j int) bool {
-		if actions[i].TargetPath == actions[j].TargetPath {
-			return actions[i].Route < actions[j].Route
-		}
-		return actions[i].TargetPath < actions[j].TargetPath
-	})
-
-	for _, action := range actions {
-		if err := requireServiceSourceFile(action); err != nil {
-			return nil, err
-		}
-	}
-	return actions, nil
-}
-
-func (p *CopyPlan) targetModelInfo(source *gen.ModelInfo) (*gen.ModelInfo, error) {
-	// Reuse gg gen's service generator by projecting the framework model into
-	// the current project's model layout. The source model still drives action
-	// DSL; only module/package/path metadata changes.
-	if p.SourceModelDir == "" {
-		target := *source
-		target.ModulePath = p.ProjectModulePath
-		if p.TargetModelDir != "" {
-			target.ModelPkgName = moduleCopyPackageName(p.TargetModelDir)
-			target.ModelFileDir = p.TargetModelDir
-			target.ModelFilePath = filepath.Join(p.TargetModelDir, filepath.Base(source.ModelFilePath))
-		}
-		return &target, nil
-	}
-	targetPath, err := p.targetModelPath(source.ModelFilePath)
-	if err != nil {
-		return nil, err
-	}
-	target := *source
-	target.ModulePath = p.ProjectModulePath
-	target.ModelPkgName = moduleCopyPackageName(filepath.Dir(targetPath))
-	target.ModelFileDir = filepath.Dir(targetPath)
-	target.ModelFilePath = targetPath
-	return &target, nil
-}
-
-func (p *CopyPlan) actionServicePaths(sourceModel *gen.ModelInfo, targetModel *gen.ModelInfo, action *dsl.Action) (sourcePath string, targetPath string) {
-	if p.FrameworkRoot == "" {
-		return filepath.Join(p.SourceServiceDir, action.ServiceFilename()), filepath.Join(p.TargetServiceDir, action.ServiceFilename())
-	}
-	sourceTarget := gen.ServiceTarget(sourceModel, action, p.frameworkModelDir(), p.frameworkServiceDir())
-	targetTarget := gen.ServiceTarget(targetModel, action, p.ModelDir, p.ServiceDir)
-	return sourceTarget.FilePath, targetTarget.FilePath
-}
-
-// requireServiceSourceFile enforces the module-copy convention that each action
-// service source file declares at least one service struct. The whole service
-// file is merged later, so hook-only files do not need to declare the action's
-// main method, and one file may host multiple action service structs.
-func requireServiceSourceFile(action moduleCopyAction) error {
-	if _, err := os.Stat(action.SourcePath); err != nil {
-		return fmt.Errorf("source action service file not found for %s: %w", action.Action.ServiceFilename(), err)
-	}
-	count, err := countServiceStructsInFile(action.SourcePath)
-	if err != nil {
-		return err
-	}
-	if count == 0 {
-		return fmt.Errorf("source action service file %s must contain at least one service struct", action.SourcePath)
-	}
-	return nil
-}
-
-func (p *CopyPlan) helperDependencyFiles(actions []moduleCopyAction) ([]string, error) {
-	actionFiles := make(map[string]bool)
-	scanQueue := make([]string, 0)
-	scanned := make(map[string]bool)
-	enqueueScan := func(sourcePath string) error {
-		clean, err := canonicalModuleCopyPath("", sourcePath)
-		if err != nil {
-			return err
-		}
-		if scanned[clean] {
-			return nil
-		}
-		scanned[clean] = true
-		scanQueue = append(scanQueue, clean)
-		return nil
-	}
-
-	packageActions := make(map[string][]string)
-	for _, sourcePath := range actionSourcePaths(actions) {
-		clean, err := canonicalModuleCopyPath("", sourcePath)
-		if err != nil {
-			return nil, err
-		}
-		actionFiles[clean] = true
-		if err = enqueueScan(clean); err != nil {
-			return nil, err
-		}
-		packageDir := filepath.Dir(sourcePath)
-		packageActions[packageDir] = append(packageActions[packageDir], sourcePath)
-	}
-
-	helperFiles := make([]string, 0)
-	seen := make(map[string]bool)
-	addHelperFile := func(sourcePath string) error {
-		clean, err := canonicalModuleCopyPath("", sourcePath)
-		if err != nil {
-			return err
-		}
-		if seen[clean] || actionFiles[clean] {
-			return nil
-		}
-		// Imported service packages can contain action service files too. Those
-		// files must stay owned by explicit module actions; only helper-only files
-		// are safe to copy as imported helper dependencies.
-		if serviceStructs, countErr := countServiceStructsInFile(clean); countErr != nil {
-			return countErr
-		} else if serviceStructs > 0 {
-			return nil
-		}
-		seen[clean] = true
-		helperFiles = append(helperFiles, clean)
-		return enqueueScan(clean)
-	}
-	for packageDir, selectedFiles := range packageActions {
-		files, err := moduleCopyHelperDependencyFiles(packageDir, selectedFiles)
-		if err != nil {
-			return nil, err
-		}
-		for _, file := range files {
-			if err = addHelperFile(file); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	for len(scanQueue) > 0 {
-		current := scanQueue[0]
-		scanQueue = scanQueue[1:]
-		files, err := p.importedServiceHelperFiles(current)
-		if err != nil {
-			return nil, err
-		}
-		for _, file := range files {
-			if err = addHelperFile(file); err != nil {
-				return nil, err
-			}
-		}
-	}
-	sort.Strings(helperFiles)
-	return helperFiles, nil
-}
-
-// importedServiceHelperFiles returns helper candidates from service packages
-// imported through github.com/hydroan/gst/internal/service/<module>/... imports.
-// This lets module copy include shared service helpers such as iam/adminauth
-// without treating every service subtree as part of the copied module action set.
-func (p *CopyPlan) importedServiceHelperFiles(sourcePath string) ([]string, error) {
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, sourcePath, nil, parser.ImportsOnly)
-	if err != nil {
-		return nil, err
-	}
-
-	helpers := make([]string, 0)
-	for _, imp := range file.Imports {
-		importPath, err := strconv.Unquote(imp.Path.Value)
-		if err != nil {
-			continue
-		}
-		serviceDir, ok := p.moduleServiceImportDir(importPath)
-		if !ok {
-			continue
-		}
-		files, err := goFilesInPackageDir(serviceDir)
-		if err != nil {
-			return nil, err
-		}
-		helpers = append(helpers, files...)
-	}
-	sort.Strings(helpers)
-	return helpers, nil
-}
-
-func (p *CopyPlan) moduleServiceImportDir(importPath string) (string, bool) {
-	prefix := frameworkModulePath + "/internal/service/" + p.Name
-	if importPath != prefix && !strings.HasPrefix(importPath, prefix+"/") {
-		return "", false
-	}
-	suffix := strings.TrimPrefix(importPath, prefix)
-	return filepath.Join(p.SourceServiceDir, filepath.FromSlash(strings.TrimPrefix(suffix, "/"))), true
-}
-
-func (p *CopyPlan) addServiceFiles(helperFiles []string) error {
-	for _, actions := range groupActionsByTargetPath(p.Actions) {
-		first := actions[0]
-		source, err := os.ReadFile(first.SourcePath)
-		if err != nil {
-			return err
-		}
-		target, err := generateTargetServiceShell(actions)
-		if err != nil {
-			return err
-		}
-		content, err := mergeModuleServiceSource(moduleServiceMergeInput{
-			SourcePath:            first.SourcePath,
-			Source:                source,
-			TargetPath:            first.TargetPath,
-			Target:                target,
-			ModuleName:            p.Name,
-			TargetModelImportPath: p.TargetModelImportPath,
-			Rewrite:               p.serviceRewriteConfig(first.TargetPath),
-		})
-		if err != nil {
-			return err
-		}
-		p.Files = append(p.Files, moduleCopyFile{
-			Kind:        moduleCopyFileService,
-			TargetPath:  first.TargetPath,
-			Content:     content,
-			Preexisting: fileExists(first.TargetPath),
-		})
-	}
-
-	for _, sourcePath := range helperFiles {
-		if p.ignoredSourcePath(sourcePath) {
-			continue
-		}
-		targetPath, err := p.targetServicePath(sourcePath)
-		if err != nil {
-			return err
-		}
-		src, err := os.ReadFile(sourcePath)
-		if err != nil {
-			return err
-		}
-		content, err := normalizeModuleServiceSource(sourcePath, src, p.serviceRewriteConfig(targetPath))
-		if err != nil {
-			return err
-		}
-		p.Files = append(p.Files, moduleCopyFile{
-			Kind:        moduleCopyFileHelper,
-			TargetPath:  targetPath,
-			Content:     content,
-			Preexisting: fileExists(targetPath),
-		})
-	}
-	return nil
-}
-
-func (p *CopyPlan) frameworkModelDir() string {
-	return filepath.Join(p.FrameworkRoot, "internal", "model")
-}
-
-func (p *CopyPlan) frameworkServiceDir() string {
-	return filepath.Join(p.FrameworkRoot, "internal", "service")
-}
-
-func (p *CopyPlan) targetModelPath(sourcePath string) (string, error) {
-	rel, err := filepath.Rel(p.SourceModelDir, sourcePath)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(p.TargetModelDir, rel), nil
-}
-
-func (p *CopyPlan) targetServicePath(sourcePath string) (string, error) {
-	rel, err := filepath.Rel(p.SourceServiceDir, sourcePath)
-	if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return filepath.Join(p.TargetServiceDir, rel), nil
-	}
-
-	sourceRoot, rootErr := canonicalModuleCopyPath("", p.SourceServiceDir)
-	cleanSource, sourceErr := canonicalModuleCopyPath("", sourcePath)
-	if rootErr != nil {
-		return "", rootErr
-	}
-	if sourceErr != nil {
-		return "", sourceErr
-	}
-	rel, err = filepath.Rel(sourceRoot, cleanSource)
-	if err != nil {
-		return "", err
-	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("source service file %s is outside %s", sourcePath, p.SourceServiceDir)
-	}
-	return filepath.Join(p.TargetServiceDir, rel), nil
-}
-
-func (p *CopyPlan) serviceRewriteConfig(targetPath string) moduleCopyRewriteConfig {
-	return moduleCopyRewriteConfig{
-		ModuleName:        p.Name,
-		ProjectModulePath: p.ProjectModulePath,
-		ModelDir:          copyPlanDirOrDefault(p.ModelDir, defaultModelDir),
-		ServiceDir:        copyPlanDirOrDefault(p.ServiceDir, defaultServiceDir),
-		TargetPackage:     moduleCopyPackageName(filepath.Dir(targetPath)),
-	}
-}
-
-func copyPlanDirOrDefault(value string, fallback string) string {
-	if value == "" {
-		return fallback
-	}
-	return value
-}
-
-func (p *CopyPlan) resolveMiddleware(manifest []moduleCopyMiddlewareManifest) ([]moduleCopyMiddleware, error) {
-	middleware := make([]moduleCopyMiddleware, 0, len(manifest))
-	for _, item := range manifest {
-		// The manifest stores framework-root relative paths so module.json
-		// remains stable no matter whether copy runs from gst itself or from a
-		// consumer project with internal/gst symlinked in.
-		sourcePath := filepath.Join(p.FrameworkRoot, filepath.FromSlash(item.SourceFile))
-		targetPath := filepath.Join(p.TargetMiddlewareDir, filepath.Base(item.SourceFile))
-		if err := requireMiddlewareSourceFile(sourcePath, item.Handler); err != nil {
-			return nil, err
-		}
-		middleware = append(middleware, moduleCopyMiddleware{
-			SourcePath: sourcePath,
-			TargetPath: targetPath,
-			Scope:      item.Scope,
-			Handler:    item.Handler,
-		})
-	}
-	sort.Slice(middleware, func(i, j int) bool {
-		return middleware[i].TargetPath < middleware[j].TargetPath
-	})
-	return middleware, nil
-}
-
-func requireMiddlewareSourceFile(sourcePath string, handler string) error {
-	if _, err := os.Stat(sourcePath); err != nil {
-		return fmt.Errorf("source middleware file not found for %s: %w", filepath.Base(sourcePath), err)
-	}
-
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, sourcePath, nil, parser.ParseComments)
-	if err != nil {
-		return err
-	}
-	for _, decl := range file.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if ok && fn.Recv == nil && fn.Name != nil && fn.Name.Name == handler {
-			return nil
-		}
-	}
-	return fmt.Errorf("source middleware file %s does not declare handler %s", sourcePath, handler)
-}
-
-func (p *CopyPlan) addMiddlewareFiles() error {
-	for _, middleware := range p.Middleware {
-		src, err := os.ReadFile(middleware.SourcePath)
-		if err != nil {
-			return err
-		}
-		content, err := normalizeModuleMiddlewareSource(middleware.SourcePath, src, p.middlewareRewriteConfig(middleware.TargetPath))
-		if err != nil {
-			return err
-		}
-		p.Files = append(p.Files, moduleCopyFile{
-			Kind:        moduleCopyFileMiddleware,
-			TargetPath:  middleware.TargetPath,
-			Content:     content,
-			Preexisting: fileExists(middleware.TargetPath),
-		})
-	}
-	return nil
-}
-
-func (p *CopyPlan) middlewareRewriteConfig(targetPath string) moduleCopyRewriteConfig {
-	return moduleCopyRewriteConfig{
-		ModuleName:        p.Name,
-		ProjectModulePath: p.ProjectModulePath,
-		ModelDir:          copyPlanDirOrDefault(p.ModelDir, defaultModelDir),
-		ServiceDir:        copyPlanDirOrDefault(p.ServiceDir, defaultServiceDir),
-		TargetPackage:     moduleCopyPackageName(filepath.Dir(targetPath)),
-	}
-}
-
-func groupActionsByTargetPath(actions []moduleCopyAction) [][]moduleCopyAction {
-	if len(actions) == 0 {
-		return nil
-	}
-	groups := make([][]moduleCopyAction, 0)
-	for _, action := range actions {
-		if len(groups) == 0 {
-			groups = append(groups, []moduleCopyAction{action})
-			continue
-		}
-		last := groups[len(groups)-1]
-		if last[0].TargetPath == action.TargetPath {
-			groups[len(groups)-1] = append(last, action)
-			continue
-		}
-		groups = append(groups, []moduleCopyAction{action})
-	}
-	return groups
 }
 
 func (p *CopyPlan) checkConflicts(force bool) error {
@@ -900,25 +260,25 @@ func (p *CopyPlan) checkConflicts(force bool) error {
 	return nil
 }
 
+// ignoredSourcePath matches module.json copy.excludeSourceFiles against source files
+// relative to the framework root. This keeps the manifest stable across projects:
+// "internal/model/copytest/ignored.go" means the same source file no matter where
+// the current app's model/service directories are configured.
+func (p *CopyPlan) ignoredSourcePath(sourcePath string) bool {
+	if len(p.ExcludeSourceFiles) == 0 {
+		return false
+	}
+	rel, err := filepath.Rel(p.FrameworkRoot, sourcePath)
+	if err != nil {
+		return false
+	}
+	rel = filepath.ToSlash(filepath.Clean(rel))
+	return slices.Contains(p.ExcludeSourceFiles, rel)
+}
+
 // ModelTargets returns current-project model files that copy will write.
 func (p *CopyPlan) ModelTargets() []string {
 	return p.targetsByKind(moduleCopyFileModel)
-}
-
-// ExtraModelTargets returns current-project model files that are not part of
-// the current copy plan. These are warnings only: copied model packages can
-// contain project-owned files, and module copy cannot prove an extra file is
-// obsolete just because the framework source no longer produces it.
-func (p *CopyPlan) ExtraModelTargets() []string {
-	return append([]string(nil), p.ExtraModelFiles...)
-}
-
-// ExtraServiceTargets returns current-project service files that are not part
-// of the current copy plan. These are warnings only: copied service packages can
-// contain project-owned adapters, and module copy cannot prove an extra file is
-// obsolete just because the framework source no longer produces it.
-func (p *CopyPlan) ExtraServiceTargets() []string {
-	return append([]string(nil), p.ExtraServiceFiles...)
 }
 
 // ServiceTargets returns current-project action service files that copy will merge.
@@ -937,6 +297,22 @@ func (p *CopyPlan) MiddlewareTargets() []string {
 	return p.targetsByKind(moduleCopyFileMiddleware)
 }
 
+// ExtraModelTargets returns current-project model files that are not part of
+// the current copy plan. These are warnings only: copied model packages can
+// contain project-owned files, and module copy cannot prove an extra file is
+// obsolete just because the framework source no longer produces it.
+func (p *CopyPlan) ExtraModelTargets() []string {
+	return append([]string(nil), p.ExtraModelFiles...)
+}
+
+// ExtraServiceTargets returns current-project service files that are not part
+// of the current copy plan. These are warnings only: copied service packages can
+// contain project-owned adapters, and module copy cannot prove an extra file is
+// obsolete just because the framework source no longer produces it.
+func (p *CopyPlan) ExtraServiceTargets() []string {
+	return append([]string(nil), p.ExtraServiceFiles...)
+}
+
 func (p *CopyPlan) targetsByKind(kind moduleCopyFileKind) []string {
 	targets := make([]string, 0)
 	for _, file := range p.Files {
@@ -945,179 +321,4 @@ func (p *CopyPlan) targetsByKind(kind moduleCopyFileKind) []string {
 		}
 	}
 	return targets
-}
-
-// ignoredSourcePath matches module.json copy.excludeSourceFiles against source files
-// relative to the framework root. This keeps the manifest stable across projects:
-// "internal/model/copytest/ignored.go" means the same source file no matter where
-// the current app's model/service directories are configured.
-func (p *CopyPlan) ignoredSourcePath(sourcePath string) bool {
-	if len(p.ExcludeSourceFiles) == 0 {
-		return false
-	}
-	rel, err := filepath.Rel(p.FrameworkRoot, sourcePath)
-	if err != nil {
-		return false
-	}
-	rel = filepath.ToSlash(filepath.Clean(rel))
-	return slices.Contains(p.ExcludeSourceFiles, rel)
-}
-
-func goFilesInDir(root string) ([]string, error) {
-	files := make([]string, 0)
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return nil
-		}
-		if !isModuleCopyGoSource(info.Name()) {
-			return nil
-		}
-		files = append(files, path)
-		return nil
-	})
-	sort.Strings(files)
-	return files, err
-}
-
-func goFilesInPackageDir(root string) ([]string, error) {
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		return nil, err
-	}
-	files := make([]string, 0)
-	for _, entry := range entries {
-		if entry.IsDir() || !isModuleCopyGoSource(entry.Name()) {
-			continue
-		}
-		files = append(files, filepath.Join(root, entry.Name()))
-	}
-	sort.Strings(files)
-	return files, nil
-}
-
-func isModuleCopyGoSource(name string) bool {
-	return strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") && !strings.HasPrefix(name, ".")
-}
-
-func actionSourcePaths(actions []moduleCopyAction) []string {
-	paths := make([]string, 0, len(actions))
-	seen := make(map[string]bool, len(actions))
-	for _, action := range actions {
-		if seen[action.SourcePath] {
-			continue
-		}
-		seen[action.SourcePath] = true
-		paths = append(paths, action.SourcePath)
-	}
-	sort.Strings(paths)
-	return paths
-}
-
-func receiverTypeName(fn *ast.FuncDecl) string {
-	if fn == nil || fn.Recv == nil || len(fn.Recv.List) == 0 {
-		return ""
-	}
-	switch typ := fn.Recv.List[0].Type.(type) {
-	case *ast.Ident:
-		return typ.Name
-	case *ast.StarExpr:
-		if ident, ok := typ.X.(*ast.Ident); ok {
-			return ident.Name
-		}
-	}
-	return ""
-}
-
-func checkModuleNotRegistered(name string) error {
-	// Framework-module registration and local-source copy are mutually exclusive:
-	// running both would register the same module's model/service/router paths twice.
-	moduleFile := filepath.Join("module", "module.go")
-	src, err := os.ReadFile(moduleFile)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, moduleFile, src, parser.ParseComments)
-	if err != nil {
-		return err
-	}
-
-	aliases := make(map[string]bool)
-	importPath := filepath.Join(frameworkModulePath, "module", name)
-	for _, spec := range file.Imports {
-		path, err := strconv.Unquote(spec.Path.Value)
-		if err != nil || path != importPath {
-			continue
-		}
-		if spec.Name != nil {
-			if spec.Name.Name == "." {
-				return fmt.Errorf("framework module %s is already imported in %s", name, moduleFile)
-			}
-			if spec.Name.Name != "_" {
-				aliases[spec.Name.Name] = true
-			}
-			continue
-		}
-		aliases[pathBase(path)] = true
-	}
-	if len(aliases) == 0 {
-		return nil
-	}
-
-	registered := false
-	ast.Inspect(file, func(node ast.Node) bool {
-		if registered {
-			return false
-		}
-		call, ok := node.(*ast.CallExpr)
-		if !ok {
-			return true
-		}
-		sel, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok || sel.Sel.Name != "Register" {
-			return true
-		}
-		if ident, ok := sel.X.(*ast.Ident); ok && aliases[ident.Name] {
-			registered = true
-			return false
-		}
-		return true
-	})
-	if registered {
-		return fmt.Errorf("framework module %s is already registered; remove it before copying local source", name)
-	}
-	return nil
-}
-
-func pathBase(path string) string {
-	return filepath.Base(filepath.ToSlash(path))
-}
-
-func getModuleName() (string, error) {
-	content, err := os.ReadFile("go.mod")
-	if err != nil {
-		return "", fmt.Errorf("failed to read go.mod: %w", err)
-	}
-
-	lines := strings.SplitSeq(string(content), "\n")
-	for line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "module ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "module")), nil
-		}
-	}
-
-	return "", errors.New("module name not found in go.mod")
-}
-
-func fileExists(filename string) bool {
-	_, err := os.Stat(filename)
-	return !os.IsNotExist(err)
 }

@@ -147,10 +147,10 @@ func importAliasForModule(module Module) *ast.Ident {
 	return ast.NewIdent(module.PackageName)
 }
 
-// moduleImportAlias maps a project's import spec back to the identifier used in
+// moduleAliasFromImportSpec maps a project's import spec back to the identifier used in
 // code. RemoveModule needs this because users may have kept the default package
 // name or an explicit alias that came from an earlier add.
-func moduleImportAlias(spec *ast.ImportSpec, module Module) (string, bool) {
+func moduleAliasFromImportSpec(spec *ast.ImportSpec, module Module) (string, bool) {
 	path, err := strconv.Unquote(spec.Path.Value)
 	if err != nil || path != module.ImportPath {
 		return "", false

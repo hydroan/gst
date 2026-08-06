@@ -1,26 +1,111 @@
 package ggmodule
 
 import (
-	"bytes"
+	"fmt"
 	"go/ast"
-	goformat "go/format"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 
 	"golang.org/x/tools/go/ast/astutil"
-	gofumpt "mvdan.cc/gofumpt/format"
 )
 
 const middlewareRegistrationFilename = "middleware.go"
+
+// moduleCopyMiddleware connects one manifest-declared framework middleware file
+// to the project-owned file and registration call that module copy will create.
+// Unlike action service files, a middleware file is not merged onto a generated
+// shell. The whole source file is normalized into the project middleware
+// package, which rewrites only the package clause and the copied model/service
+// imports.
+type moduleCopyMiddleware struct {
+	SourcePath string
+	TargetPath string
+	Scope      moduleCopyMiddlewareScope
+	Handler    string
+}
 
 func (p *CopyPlan) targetMiddlewareDir() string {
 	if p.TargetMiddlewareDir == "" {
 		return defaultMiddlewareDir
 	}
 	return p.TargetMiddlewareDir
+}
+
+func (p *CopyPlan) resolveMiddleware(manifest []moduleCopyMiddlewareManifest) ([]moduleCopyMiddleware, error) {
+	middleware := make([]moduleCopyMiddleware, 0, len(manifest))
+	for _, item := range manifest {
+		// The manifest stores framework-root relative paths so module.json
+		// remains stable no matter whether copy runs from gst itself or from a
+		// consumer project with internal/gst symlinked in.
+		sourcePath := filepath.Join(p.FrameworkRoot, filepath.FromSlash(item.SourceFile))
+		targetPath := filepath.Join(p.TargetMiddlewareDir, filepath.Base(item.SourceFile))
+		if err := requireMiddlewareSourceFile(sourcePath, item.Handler); err != nil {
+			return nil, err
+		}
+		middleware = append(middleware, moduleCopyMiddleware{
+			SourcePath: sourcePath,
+			TargetPath: targetPath,
+			Scope:      item.Scope,
+			Handler:    item.Handler,
+		})
+	}
+	sort.Slice(middleware, func(i, j int) bool {
+		return middleware[i].TargetPath < middleware[j].TargetPath
+	})
+	return middleware, nil
+}
+
+func requireMiddlewareSourceFile(sourcePath string, handler string) error {
+	if _, err := os.Stat(sourcePath); err != nil {
+		return fmt.Errorf("source middleware file not found for %s: %w", filepath.Base(sourcePath), err)
+	}
+
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, sourcePath, nil, parser.ParseComments)
+	if err != nil {
+		return err
+	}
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if ok && fn.Recv == nil && fn.Name != nil && fn.Name.Name == handler {
+			return nil
+		}
+	}
+	return fmt.Errorf("source middleware file %s does not declare handler %s", sourcePath, handler)
+}
+
+func (p *CopyPlan) addMiddlewareFiles() error {
+	for _, middleware := range p.Middleware {
+		src, err := os.ReadFile(middleware.SourcePath)
+		if err != nil {
+			return err
+		}
+		content, err := normalizeModuleMiddlewareSource(middleware.SourcePath, src, p.middlewareRewriteConfig(middleware.TargetPath))
+		if err != nil {
+			return err
+		}
+		p.Files = append(p.Files, moduleCopyFile{
+			Kind:        moduleCopyFileMiddleware,
+			TargetPath:  middleware.TargetPath,
+			Content:     content,
+			Preexisting: fileExists(middleware.TargetPath),
+		})
+	}
+	return nil
+}
+
+func (p *CopyPlan) middlewareRewriteConfig(targetPath string) moduleCopyRewriteConfig {
+	return moduleCopyRewriteConfig{
+		ModuleName:        p.Name,
+		ProjectModulePath: p.ProjectModulePath,
+		ModelDir:          copyPlanDirOrDefault(p.ModelDir, defaultModelDir),
+		ServiceDir:        copyPlanDirOrDefault(p.ServiceDir, defaultServiceDir),
+		TargetPackage:     moduleCopyPackageName(filepath.Dir(targetPath)),
+	}
 }
 
 func (e *CopyExecution) registerMiddleware() (status string, path string, err error) {
@@ -169,12 +254,4 @@ func middlewareRegisterMethod(middleware moduleCopyMiddleware) string {
 		return "RegisterAuth"
 	}
 	return "Register"
-}
-
-func formatGoFile(fset *token.FileSet, file *ast.File) ([]byte, error) {
-	var buf bytes.Buffer
-	if err := goformat.Node(&buf, fset, file); err != nil {
-		return nil, err
-	}
-	return gofumpt.Source(buf.Bytes(), gofumpt.Options{})
 }

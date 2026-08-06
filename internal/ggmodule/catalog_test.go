@@ -2,7 +2,7 @@ package ggmodule
 
 import "testing"
 
-func TestListModulesFindsAddableModulesAndPackageNames(t *testing.T) {
+func TestListModulesReportsAddableCopyableAndPackageNames(t *testing.T) {
 	projectDir := newModuleCommandProjectWithFramework(t)
 	writeModuleManifestForTest(t, frameworkModuleDir(t, projectDir, "copytest"), `{}`)
 

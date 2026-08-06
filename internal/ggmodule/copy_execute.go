@@ -3,8 +3,6 @@ package ggmodule
 import (
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
@@ -18,8 +16,9 @@ type CopyExecution struct {
 	WrittenFiles []string
 }
 
-// Run applies the copy in the required order:
-// model source first, gg gen second, service/helper business logic last.
+// Run applies the copy in the required order: model source first, gg gen
+// second, service/helper business logic third, and manifest-declared middleware
+// files plus their registration in middleware/middleware.go last.
 // It does not roll back partial writes; the command prints the prune cleanup
 // path when a failure happens after files were written.
 func (e *CopyExecution) Run() error {
@@ -94,21 +93,21 @@ func (e *CopyExecution) Run() error {
 
 func (e *CopyExecution) write(file moduleCopyFile) error {
 	if file.Kind == moduleCopyFileService || file.Kind == moduleCopyFileHelper {
-		safePath, err := pathUnderRoot(file.TargetPath, e.Plan.ServiceDir)
+		safePath, err := requirePathUnderRoot(file.TargetPath, e.Plan.ServiceDir)
 		if err != nil {
 			return err
 		}
 		file.TargetPath = safePath
 	}
 	if file.Kind == moduleCopyFileModel {
-		safePath, err := pathUnderRoot(file.TargetPath, e.Plan.ModelDir)
+		safePath, err := requirePathUnderRoot(file.TargetPath, e.Plan.ModelDir)
 		if err != nil {
 			return err
 		}
 		file.TargetPath = safePath
 	}
 	if file.Kind == moduleCopyFileMiddleware {
-		safePath, err := pathUnderRoot(file.TargetPath, e.Plan.targetMiddlewareDir())
+		safePath, err := requirePathUnderRoot(file.TargetPath, e.Plan.targetMiddlewareDir())
 		if err != nil {
 			return err
 		}
@@ -158,37 +157,4 @@ func writeModuleCopyFile(path string, content []byte, preexisting bool, force bo
 		return "", false, err
 	}
 	return "CREATE", true, nil
-}
-
-func ensureParentDir(filename string) error {
-	dir := filepath.Dir(filename)
-
-	var err error
-	if _, err = os.Stat(dir); err == nil {
-		return nil
-	} else if os.IsNotExist(err) {
-		return os.MkdirAll(dir, 0o755)
-	}
-	return err
-}
-
-// pathUnderRoot returns path cleaned and verified to be under root (no path traversal).
-func pathUnderRoot(path, root string) (string, error) {
-	path = filepath.Clean(path)
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return "", err
-	}
-	absRoot, err := filepath.Abs(root)
-	if err != nil {
-		return "", err
-	}
-	rel, err := filepath.Rel(absRoot, absPath)
-	if err != nil {
-		return "", err
-	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("path %s is not under root %s", path, root)
-	}
-	return path, nil
 }

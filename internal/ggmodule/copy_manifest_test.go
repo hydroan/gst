@@ -1,8 +1,6 @@
 package ggmodule
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -186,11 +184,4 @@ func TestLoadModuleManifestRejectsInvalidMiddlewareScope(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), moduleManifestFilename)
 	require.Contains(t, err.Error(), "scope")
-}
-
-func writeModuleManifestForTest(t *testing.T, moduleDir, content string) {
-	t.Helper()
-
-	err := os.WriteFile(filepath.Join(moduleDir, moduleManifestFilename), []byte(content), 0o600)
-	require.NoError(t, err)
 }

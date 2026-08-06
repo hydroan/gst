@@ -1,0 +1,112 @@
+package ggmodule
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+)
+
+func requireDir(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s is not a directory", path)
+	}
+	return nil
+}
+
+func fileExists(filename string) bool {
+	_, err := os.Stat(filename)
+	return !os.IsNotExist(err)
+}
+
+func goFilesInDir(root string) ([]string, error) {
+	files := make([]string, 0)
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if !isGoSourceFile(info.Name()) {
+			return nil
+		}
+		files = append(files, path)
+		return nil
+	})
+	sort.Strings(files)
+	return files, err
+}
+
+func goFilesInPackageDir(root string) ([]string, error) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil, err
+	}
+	files := make([]string, 0)
+	for _, entry := range entries {
+		if entry.IsDir() || !isGoSourceFile(entry.Name()) {
+			continue
+		}
+		files = append(files, filepath.Join(root, entry.Name()))
+	}
+	sort.Strings(files)
+	return files, nil
+}
+
+func isGoSourceFile(name string) bool {
+	return strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") && !strings.HasPrefix(name, ".")
+}
+
+func ensureParentDir(filename string) error {
+	dir := filepath.Dir(filename)
+
+	var err error
+	if _, err = os.Stat(dir); err == nil {
+		return nil
+	} else if os.IsNotExist(err) {
+		return os.MkdirAll(dir, 0o755)
+	}
+	return err
+}
+
+// requirePathUnderRoot returns path cleaned and verified to be under root (no path traversal).
+func requirePathUnderRoot(path, root string) (string, error) {
+	path = filepath.Clean(path)
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(absRoot, absPath)
+	if err != nil {
+		return "", err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("path %s is not under root %s", path, root)
+	}
+	return path, nil
+}
+
+func canonicalModuleCopyPath(baseDir string, path string) (string, error) {
+	if !filepath.IsAbs(path) && baseDir != "" {
+		path = filepath.Join(baseDir, path)
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	realPath, err := filepath.EvalSymlinks(abs)
+	if err == nil {
+		return realPath, nil
+	}
+	return abs, nil
+}

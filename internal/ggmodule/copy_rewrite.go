@@ -13,6 +13,14 @@ import (
 	"github.com/hydroan/gst/internal/codegen/gen"
 )
 
+type moduleCopyRewriteConfig struct {
+	ModuleName        string
+	ProjectModulePath string
+	ModelDir          string
+	ServiceDir        string
+	TargetPackage     string
+}
+
 // normalizeModuleModelSource converts framework model files into the current
 // project package layout. The model directory name is the package name, so
 // internal/model/copytest package modelcopytest becomes model/copytest package copytest.
@@ -41,14 +49,6 @@ func rewriteModuleModelFile(file *ast.File, config moduleCopyRewriteConfig) map[
 	// imports a copied service package, keeping that import untouched preserves the
 	// architecture violation instead of hiding it in generated project code.
 	return rewriteModuleCopyFile(file, config, false)
-}
-
-type moduleCopyRewriteConfig struct {
-	ModuleName        string
-	ProjectModulePath string
-	ModelDir          string
-	ServiceDir        string
-	TargetPackage     string
 }
 
 // normalizeModuleServiceSource rewrites helper files into the current service
@@ -248,14 +248,14 @@ func sanitizeModuleCopyIdentifier(value string) string {
 		return "copied"
 	}
 	result := builder.String()
-	first, _ := utf8FirstRune(result)
+	first, _ := firstRune(result)
 	if first == '_' || unicode.IsLetter(first) {
 		return result
 	}
 	return "copied" + result
 }
 
-func utf8FirstRune(value string) (rune, int) {
+func firstRune(value string) (rune, int) {
 	for i, r := range value {
 		return r, i
 	}

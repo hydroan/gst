@@ -61,7 +61,7 @@ func TestAddModuleKeepsExistingInitCommentsIntact(t *testing.T) {
 	if err := os.WriteFile(moduleFile, []byte(`// Package module provides business logic modules for the application.
 //
 // Recommended pattern:
-//   - Organize each resource into its own subpackage under module/, e.g., module/user.
+//   - Organize each resource into its own subpackage under module/, e.g., module/sample.
 //   - Inside each subpackage, expose a Register() function that calls module.Use.
 //   - Call these Register() functions from module.Init() to centralize startup.
 //
@@ -71,8 +71,8 @@ package module
 func init() {
 	// TODO: Call your module Register() functions here
 	// Example:
-	//   user.Register()
-	//   order.Register()
+	//   sample.Register()
+	//   record.Register()
 }
 `), 0o600); err != nil {
 		t.Fatal(err)

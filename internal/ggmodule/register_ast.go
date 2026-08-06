@@ -1,93 +1,21 @@
 package ggmodule
 
 import (
-	"bytes"
 	"fmt"
 	"go/ast"
-	goformat "go/format"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
-	"strings"
-
-	"github.com/cockroachdb/errors"
-	gofumpt "mvdan.cc/gofumpt/format"
+	"strconv"
 )
-
-// ChangeStatus describes whether a module command changed module/module.go.
-type ChangeStatus string
-
-const (
-	ChangeCreated ChangeStatus = "created"
-	ChangeRemoved ChangeStatus = "removed"
-	ChangeSkipped ChangeStatus = "skipped"
-)
-
-// ChangeResult is returned by add/remove commands so the Cobra layer can decide
-// how to present the operation without knowing AST details.
-type ChangeResult struct {
-	Module Module
-	Status ChangeStatus
-	Path   string
-}
-
-// moduleForRegistration applies the command-level constraints shared by add and
-// remove. A module can be listed even when it is not addable, but automatic
-// registration only works when the framework can be called as pkg.Register().
-func moduleForRegistration(name string) (Module, error) {
-	if err := validateModuleName(name); err != nil {
-		return Module{}, err
-	}
-	module, err := moduleByName(name)
-	if os.IsNotExist(err) {
-		return Module{}, fmt.Errorf("module %q not found", name)
-	}
-	if err != nil {
-		return Module{}, err
-	}
-	if !module.Addable {
-		return Module{}, fmt.Errorf("module %q cannot be added automatically because Register requires arguments", name)
-	}
-	return module, nil
-}
-
-// validateModuleName keeps add/remove on catalog entries instead of arbitrary
-// filesystem paths. This avoids ambiguous commands such as `gg module add
-// module/copytest` and prevents path traversal from reaching outside the module
-// catalog.
-func validateModuleName(name string) error {
-	if strings.TrimSpace(name) == "" {
-		return errors.New("module name is required")
-	}
-	if name != strings.TrimSpace(name) {
-		return fmt.Errorf("module name %q must not contain surrounding whitespace", name)
-	}
-	if strings.HasPrefix(name, ".") || strings.ContainsAny(name, `/\`) {
-		return fmt.Errorf("module command accepts a module name, not a path: %s", name)
-	}
-	if filepath.Clean(name) != name || filepath.Base(name) != name {
-		return fmt.Errorf("module command accepts a module name, not a path: %s", name)
-	}
-	return nil
-}
-
-func projectModuleFile(projectDir string) string {
-	return filepath.Join(projectDir, "module", "module.go")
-}
-
-func parseGoFile(path string) (*token.FileSet, *ast.File, error) {
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
-	return fset, file, err
-}
 
 // existingModuleAlias returns the qualifier already used for this framework
 // import, if the project has one. AddModule uses it for half-manual edits such
 // as an import without a Register call, so the generated call still compiles.
 func existingModuleAlias(file *ast.File, module Module) (string, bool) {
 	for _, spec := range file.Imports {
-		alias, ok := moduleImportAlias(spec, module)
+		alias, ok := moduleAliasFromImportSpec(spec, module)
 		if ok {
 			return alias, true
 		}
@@ -103,7 +31,7 @@ func existingModuleAlias(file *ast.File, module Module) (string, bool) {
 func registeredModuleAlias(file *ast.File, module Module) (string, bool) {
 	aliases := make(map[string]bool)
 	for _, spec := range file.Imports {
-		alias, ok := moduleImportAlias(spec, module)
+		alias, ok := moduleAliasFromImportSpec(spec, module)
 		if ok {
 			aliases[alias] = true
 		}
@@ -133,6 +61,75 @@ func registeredModuleAlias(file *ast.File, module Module) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func checkModuleNotRegistered(name string) error {
+	// Framework-module registration and local-source copy are mutually exclusive:
+	// running both would register the same module's model/service/router paths twice.
+	moduleFile := filepath.Join("module", "module.go")
+	src, err := os.ReadFile(moduleFile)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, moduleFile, src, parser.ParseComments)
+	if err != nil {
+		return err
+	}
+
+	aliases := make(map[string]bool)
+	importPath := filepath.Join(frameworkModulePath, "module", name)
+	for _, spec := range file.Imports {
+		path, err := strconv.Unquote(spec.Path.Value)
+		if err != nil || path != importPath {
+			continue
+		}
+		if spec.Name != nil {
+			if spec.Name.Name == "." {
+				return fmt.Errorf("framework module %s is already imported in %s", name, moduleFile)
+			}
+			if spec.Name.Name != "_" {
+				aliases[spec.Name.Name] = true
+			}
+			continue
+		}
+		aliases[importPathBase(path)] = true
+	}
+	if len(aliases) == 0 {
+		return nil
+	}
+
+	registered := false
+	ast.Inspect(file, func(node ast.Node) bool {
+		if registered {
+			return false
+		}
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || sel.Sel.Name != "Register" {
+			return true
+		}
+		if ident, ok := sel.X.(*ast.Ident); ok && aliases[ident.Name] {
+			registered = true
+			return false
+		}
+		return true
+	})
+	if registered {
+		return fmt.Errorf("framework module %s is already registered; remove it before copying local source", name)
+	}
+	return nil
+}
+
+func importPathBase(path string) string {
+	return filepath.Base(filepath.ToSlash(path))
 }
 
 // ensureRegisterCall appends the framework registration to an existing init
@@ -181,6 +178,23 @@ func registerCallExists(fn *ast.FuncDecl, alias string) bool {
 		}
 	}
 	return false
+}
+
+func registerCallStmt(alias string, pos token.Pos) ast.Stmt {
+	// The position is not cosmetic. go/printer merges comments into the output by
+	// token position; a newly-created AST node with token.NoPos can be printed
+	// around existing init comments in surprising ways, including splitting
+	// `copytest.Register()` into `copytest.` + comment + `Register()`. Anchoring the
+	// generated call at the init block's closing brace makes the call a normal
+	// statement after any placeholder comments while preserving those comments.
+	return &ast.ExprStmt{X: &ast.CallExpr{
+		Fun: &ast.SelectorExpr{
+			X:   &ast.Ident{NamePos: pos, Name: alias},
+			Sel: &ast.Ident{NamePos: pos, Name: "Register"},
+		},
+		Lparen: pos,
+		Rparen: pos,
+	}}
 }
 
 // removeRegisterCall filters only the exact alias.Register() statement that gg
@@ -250,43 +264,4 @@ func isRegisterCall(call *ast.CallExpr, alias string) bool {
 	}
 	ident, ok := sel.X.(*ast.Ident)
 	return ok && ident.Name == alias
-}
-
-func registerCallStmt(alias string, pos token.Pos) ast.Stmt {
-	// The position is not cosmetic. go/printer merges comments into the output by
-	// token position; a newly-created AST node with token.NoPos can be printed
-	// around existing init comments in surprising ways, including splitting
-	// `copytest.Register()` into `copytest.` + comment + `Register()`. Anchoring the
-	// generated call at the init block's closing brace makes the call a normal
-	// statement after any placeholder comments while preserving those comments.
-	return &ast.ExprStmt{X: &ast.CallExpr{
-		Fun: &ast.SelectorExpr{
-			X:   &ast.Ident{NamePos: pos, Name: alias},
-			Sel: &ast.Ident{NamePos: pos, Name: "Register"},
-		},
-		Lparen: pos,
-		Rparen: pos,
-	}}
-}
-
-func writeGoFile(path string, fset *token.FileSet, file *ast.File) error {
-	var buf bytes.Buffer
-	if err := goformat.Node(&buf, fset, file); err != nil {
-		return err
-	}
-	formatted, err := gofumpt.Source(buf.Bytes(), gofumpt.Options{})
-	if err != nil {
-		return err
-	}
-	if err := ensureParentDir(path); err != nil {
-		return err
-	}
-	return os.WriteFile(path, formatted, 0o600)
-}
-
-func identName(ident *ast.Ident) string {
-	if ident == nil {
-		return ""
-	}
-	return ident.Name
 }

@@ -83,6 +83,8 @@ func checkNoLocalSource(projectDir string, name string) error {
 	return nil
 }
 
+var errStopWalk = errors.New("stop walking")
+
 func hasModuleGoFiles(root string) (bool, error) {
 	if _, err := os.Stat(root); os.IsNotExist(err) {
 		return false, nil
@@ -97,7 +99,7 @@ func hasModuleGoFiles(root string) (bool, error) {
 		if info.IsDir() {
 			return nil
 		}
-		if isModuleCopyGoSource(info.Name()) {
+		if isGoSourceFile(info.Name()) {
 			return errStopWalk
 		}
 		return nil
@@ -110,5 +112,3 @@ func hasModuleGoFiles(root string) (bool, error) {
 	}
 	return false, err
 }
-
-var errStopWalk = errors.New("stop walking")
