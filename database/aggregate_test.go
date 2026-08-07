@@ -1267,6 +1267,34 @@ func TestAggregateNullableResultFields(t *testing.T) {
 			Select(aggCols.Category.Group(), aggCols.ClosedAt.Max().As("last_seen")).
 			Scan(&rows), database.ErrNullableResultField)
 	})
+
+	t.Run("AcceptsPointerFields", func(t *testing.T) {
+		// A pointer field is the other accepted shape besides the sql.Null
+		// wrappers: it carries the value for a group that has one and stays
+		// nil for a group holding only NULLs, so the two outcomes remain
+		// distinguishable. Give one alpha row a closed_at so both shapes
+		// appear in a single read.
+		require.NoError(t, database.DB().Exec(
+			"UPDATE test_aggregate_records SET closed_at = occurred_at WHERE id = 'a1'",
+		).Error)
+
+		type row struct {
+			Category string
+			LastSeen *time.Time
+		}
+		rows := make([]row, 0)
+		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](ctx).
+			Select(aggCols.Category.Group(), aggCols.ClosedAt.Max().As("last_seen")).
+			OrderBy(aggCols.Category.Group().Asc()).
+			Scan(&rows))
+		require.Len(t, rows, 3)
+		require.Equal(t, "alpha", rows[0].Category)
+		require.NotNil(t, rows[0].LastSeen)
+		require.Equal(t, "beta", rows[1].Category)
+		require.Nil(t, rows[1].LastSeen)
+		require.Equal(t, "gamma", rows[2].Category)
+		require.Nil(t, rows[2].LastSeen)
+	})
 }
 
 // TestAggregateHavingValue pins the values a post-aggregation comparison
