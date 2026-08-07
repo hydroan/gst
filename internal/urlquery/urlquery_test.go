@@ -500,8 +500,11 @@ func TestPagination(t *testing.T) {
 
 	t.Run("PaginatableModelDefaultsAndClamps", func(t *testing.T) {
 		page, size := Pagination(url.Values{}, &paginatableTestModel{})
-		require.Equal(t, 0, page)
+		require.Equal(t, 1, page, "an unset page normalizes to the first page")
 		require.Equal(t, defaultPageSize, size, "adjustable models default to a small page")
+
+		page, _ = Pagination(url.Values{"_page": {"-5"}}, &paginatableTestModel{})
+		require.Equal(t, 1, page, "a non-positive page normalizes to the first page")
 
 		_, size = Pagination(url.Values{"_size": {"0"}}, &paginatableTestModel{})
 		require.Equal(t, defaultPageSize, size)
@@ -512,19 +515,19 @@ func TestPagination(t *testing.T) {
 
 	t.Run("UnparsableValuesFallBackToDefaults", func(t *testing.T) {
 		page, size := Pagination(url.Values{"_page": {""}, "_size": {"abc"}}, &paginatableTestModel{})
-		require.Equal(t, 0, page)
+		require.Equal(t, 1, page, "an unparsable page normalizes to the first page")
 		require.Equal(t, defaultPageSize, size)
 	})
 
 	t.Run("CursorModelIgnoresPageButKeepsSize", func(t *testing.T) {
 		page, size := Pagination(url.Values{"_page": {"2"}, "_size": {"50"}}, &cursorTestModel{})
-		require.Equal(t, 0, page, "offset paging conflicts with cursor semantics and is not offered to cursor models")
+		require.Equal(t, 1, page, "offset paging conflicts with cursor semantics and is not offered to cursor models; the page still normalizes to 1")
 		require.Equal(t, 50, size, "cursor pagination needs a client-adjustable batch size")
 	})
 
 	t.Run("PlainModelKeepsBottomLine", func(t *testing.T) {
 		page, size := Pagination(url.Values{"_page": {"2"}, "_size": {"50"}}, &plainTestModel{})
-		require.Equal(t, 0, page)
+		require.Equal(t, 1, page, "a model without offset paging still yields a usable first page")
 		require.Equal(t, defaultLimit, size, "models without client size control keep the full-table safety limit")
 	})
 
@@ -533,7 +536,7 @@ func TestPagination(t *testing.T) {
 		require.Equal(t, 1, page, "offset paging must not stack on top of an active cursor")
 
 		page, _ = Pagination(url.Values{"_page": {"3"}, "_cursor_value": {"abc"}}, &plainTestModel{})
-		require.Equal(t, 0, page, "a model without cursor support never sees a cursor")
+		require.Equal(t, 1, page, "a model without cursor support never sees a cursor; the page still normalizes to 1")
 	})
 }
 

@@ -20,7 +20,7 @@ import (
 //
 // Each method maps to one database query argument:
 //
-//	QueryDecode        -> the query value Database.WithQuery takes
+//	QueryModel         -> the query value Database.WithQuery takes
 //	QueryFilters       -> QueryOptions.Filters, from "field[op]=value" parameters
 //	QueryPresentFields -> QueryOptions.PresentFields, so "enabled=false" filters
 //	QueryOrders        -> Database.WithOrder
@@ -35,7 +35,7 @@ import (
 //
 // A typical list service builds its query like this:
 //
-//	query, err := s.QueryDecode(ctx)
+//	query, err := s.QueryModel(ctx)
 //	if err != nil {
 //	    return nil, service.NewError(http.StatusBadRequest, err.Error())
 //	}
@@ -69,7 +69,7 @@ import (
 // A service that also reports a total must count with the very same query
 // value and options, otherwise the total and the page disagree.
 
-// QueryDecode returns a new model with its own query fields filled from the
+// QueryModel returns a new model with its own query fields filled from the
 // request, ready to be passed to Database.WithQuery.
 //
 // The keys QueryFilters owns never reach the decoder, and neither do framework
@@ -77,7 +77,7 @@ import (
 // the model, so a mistyped filter name is reported instead of silently
 // widening the result set. The model is returned even when decoding fails, so
 // a caller that tolerates partial input can still use it.
-func (Base[M, REQ, RSP]) QueryDecode(ctx *types.ServiceContext) (M, error) {
+func (Base[M, REQ, RSP]) QueryModel(ctx *types.ServiceContext) (M, error) {
 	m := reflect.New(reflect.TypeFor[M]().Elem()).Interface().(M) //nolint:errcheck
 	return m, urlquery.Decode(ctx.Query(), m)
 }
@@ -110,7 +110,9 @@ func (Base[M, REQ, RSP]) QueryOrders(ctx *types.ServiceContext) ([]types.Order, 
 // QueryPagination returns the page and size arguments of the request, ready to
 // be passed to Database.WithPagination. Models embedding model.Pagination take
 // both from the request and models embedding model.Cursor take the size only;
-// any other model keeps the framework's full-table safety limit.
+// any other model keeps the framework's full-table safety limit. The returned
+// page is always at least 1, so a service slicing in-memory pages or computing
+// offsets itself can use it without normalizing again.
 func (Base[M, REQ, RSP]) QueryPagination(ctx *types.ServiceContext) (page, size int) {
 	return urlquery.Pagination(ctx.Query(), zeroModel[M]())
 }

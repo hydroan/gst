@@ -45,11 +45,11 @@ type queryPlainService struct {
 	serviceregistry.Base[*queryPlainSample, *queryPlainSample, *queryPlainSample]
 }
 
-func TestBaseQueryDecode(t *testing.T) {
+func TestBaseQueryModel(t *testing.T) {
 	var svc querySampleService
 
 	t.Run("FillsModelFieldsAndFrameworkFields", func(t *testing.T) {
-		m, err := svc.QueryDecode(newQueryContext(t, "/samples?name=alice&age=10&_page=2&_size=50"))
+		m, err := svc.QueryModel(newQueryContext(t, "/samples?name=alice&age=10&_page=2&_size=50"))
 		require.NoError(t, err)
 		require.Equal(t, "alice", m.Name)
 		require.Equal(t, 10, m.Age)
@@ -58,20 +58,20 @@ func TestBaseQueryDecode(t *testing.T) {
 	})
 
 	t.Run("KeepsFilterKeysAwayFromTheDecoder", func(t *testing.T) {
-		m, err := svc.QueryDecode(newQueryContext(t, "/samples?name=alice&age[gt]=20&created_at=2026-07-01"))
+		m, err := svc.QueryModel(newQueryContext(t, "/samples?name=alice&age[gt]=20&created_at=2026-07-01"))
 		require.NoError(t, err)
 		require.Equal(t, "alice", m.Name)
 	})
 
 	t.Run("RejectsUnknownKeys", func(t *testing.T) {
-		_, err := svc.QueryDecode(newQueryContext(t, "/samples?bogus=1"))
+		_, err := svc.QueryModel(newQueryContext(t, "/samples?bogus=1"))
 		require.Error(t, err, "an unknown key is a typo and must not be ignored")
 	})
 
 	t.Run("ReturnsAFreshModelEachCall", func(t *testing.T) {
-		first, err := svc.QueryDecode(newQueryContext(t, "/samples?name=alice"))
+		first, err := svc.QueryModel(newQueryContext(t, "/samples?name=alice"))
 		require.NoError(t, err)
-		second, err := svc.QueryDecode(newQueryContext(t, "/samples?name=bob"))
+		second, err := svc.QueryModel(newQueryContext(t, "/samples?name=bob"))
 		require.NoError(t, err)
 		require.NotSame(t, first, second)
 		require.Equal(t, "alice", first.Name, "a later call must not overwrite an earlier model")
@@ -125,7 +125,7 @@ func TestBaseQueryPagination(t *testing.T) {
 	t.Run("ModelWithoutPaginationKeepsTheSafetyLimit", func(t *testing.T) {
 		var plain queryPlainService
 		page, size := plain.QueryPagination(newQueryContext(t, "/samples?_page=2&_size=50"))
-		require.Equal(t, 0, page)
+		require.Equal(t, 1, page, "the page always normalizes to at least 1")
 		require.Equal(t, 1000, size)
 	})
 }
@@ -156,11 +156,11 @@ func TestBaseQueryCursor(t *testing.T) {
 	var svc querySampleService
 
 	t.Run("ReadsRequestValues", func(t *testing.T) {
-		cursor, err := svc.QueryCursor(newQueryContext(t, "/samples?_cursor_value=2026-07-01T08:30:15&_cursor_next=true&_cursor_field=created_at"))
+		cursor, err := svc.QueryCursor(newQueryContext(t, "/samples?_cursor_value=2026-07-01T08:30:15%2B08:00&_cursor_next=true&_cursor_field=created_at"))
 		require.NoError(t, err)
-		// A time boundary travels as the UTC wall clock, like a time filter
-		// bound; the zone-less input is read in the server's local zone.
-		boundary := time.Date(2026, 7, 1, 8, 30, 15, 0, time.Local).UTC().Format(types.FilterTimeLayout)
+		// A time boundary is accepted in RFC 3339 only, like a time filter
+		// bound, and travels as the UTC wall clock.
+		boundary := time.Date(2026, 7, 1, 8, 30, 15, 0, time.FixedZone("UTC+8", 8*3600)).UTC().Format(types.FilterTimeLayout)
 		require.Equal(t, types.CursorForward(types.Asc("created_at"), boundary), cursor)
 	})
 

@@ -230,7 +230,7 @@ service.Base[M, REQ, RSP]
 类型参数 `M`，不用也不能由调用方另外指定：
 
 ```go
-query, err := s.QueryDecode(ctx)
+query, err := s.QueryModel(ctx)
 if err != nil {
 	return nil, service.NewError(http.StatusBadRequest, err.Error())
 }
