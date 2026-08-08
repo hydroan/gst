@@ -1,4 +1,4 @@
-package freecache
+package fastcache
 
 import (
 	"context"
@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/coocood/freecache"
-	"github.com/hydroan/gst/cache/tracing"
+	"github.com/VictoriaMetrics/fastcache"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/cache/tracing"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/util"
 	cmap "github.com/orcaman/concurrent-map/v2"
@@ -19,12 +19,12 @@ var (
 	mu       sync.Mutex
 )
 
-func Init() error {
+func Init() (err error) {
 	return nil
 }
 
 type cache[T any] struct {
-	c   *freecache.Cache
+	c   *fastcache.Cache
 	ctx context.Context
 }
 
@@ -42,7 +42,7 @@ func Cache[T any]() types.Cache[T] {
 
 	val, exists = cacheMap.Get(key)
 	if !exists {
-		val = tracing.NewWrapper(&cache[T]{c: freecache.NewCache(config.App.Cache.Capacity), ctx: context.Background()}, "freecache")
+		val = tracing.NewWrapper(&cache[T]{c: fastcache.New(config.App.Cache.Capacity), ctx: context.Background()}, "fastcache")
 		cacheMap.Set(key, val)
 	}
 	//nolint:errcheck
@@ -54,18 +54,18 @@ func (c *cache[T]) Set(key string, value T, ttl time.Duration) error {
 	if err != nil {
 		return err
 	}
-	return c.c.Set([]byte(key), val, int(ttl.Seconds()))
+	c.c.Set([]byte(key), val)
+	return nil
 }
 
 func (c *cache[T]) Get(key string) (T, error) {
 	var zero T
-	val, err := c.c.Get([]byte(key))
-	if err != nil {
+	value, ok := c.c.HasGet(nil, []byte(key))
+	if !ok {
 		return zero, types.ErrEntryNotFound
 	}
 	var result T
-	err = util.Unmarshal(val, &result)
-	if err != nil {
+	if err := util.Unmarshal(value, &result); err != nil {
 		return zero, err
 	}
 	return result, nil
@@ -81,16 +81,15 @@ func (c *cache[T]) Delete(key string) error {
 }
 
 func (c *cache[T]) Exists(key string) bool {
-	_, err := c.c.Get([]byte(key))
-	return err == nil
+	return c.c.Has([]byte(key))
 }
 
 func (c *cache[T]) Len() int {
-	return int(c.c.EntryCount())
+	return 0
 }
 
 func (c *cache[T]) Clear() {
-	c.c.Clear()
+	c.c.Reset()
 }
 
 func (c *cache[T]) WithContext(ctx context.Context) types.Cache[T] {

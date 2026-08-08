@@ -1,4 +1,4 @@
-package fastcache
+package gocache
 
 import (
 	"context"
@@ -6,12 +6,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/VictoriaMetrics/fastcache"
-	"github.com/hydroan/gst/cache/tracing"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/cache/tracing"
 	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/util"
 	cmap "github.com/orcaman/concurrent-map/v2"
+	pkgcache "github.com/patrickmn/go-cache"
 )
 
 var (
@@ -19,12 +18,12 @@ var (
 	mu       sync.Mutex
 )
 
-func Init() (err error) {
+func Init() error {
 	return nil
 }
 
 type cache[T any] struct {
-	c   *fastcache.Cache
+	c   *pkgcache.Cache
 	ctx context.Context
 }
 
@@ -42,7 +41,10 @@ func Cache[T any]() types.Cache[T] {
 
 	val, exists = cacheMap.Get(key)
 	if !exists {
-		val = tracing.NewWrapper(&cache[T]{c: fastcache.New(config.App.Cache.Capacity), ctx: context.Background()}, "fastcache")
+		val = tracing.NewWrapper(&cache[T]{
+			c:   pkgcache.New(config.App.Cache.Expiration, config.App.Cache.CleanWindow),
+			ctx: context.Background(),
+		}, "gocache")
 		cacheMap.Set(key, val)
 	}
 	//nolint:errcheck
@@ -50,46 +52,43 @@ func Cache[T any]() types.Cache[T] {
 }
 
 func (c *cache[T]) Set(key string, value T, ttl time.Duration) error {
-	val, err := util.Marshal(value)
-	if err != nil {
-		return err
-	}
-	c.c.Set([]byte(key), val)
+	c.c.Set(key, value, ttl)
 	return nil
 }
 
 func (c *cache[T]) Get(key string) (T, error) {
 	var zero T
-	value, ok := c.c.HasGet(nil, []byte(key))
+	val, ok := c.c.Get(key)
 	if !ok {
 		return zero, types.ErrEntryNotFound
 	}
-	var result T
-	if err := util.Unmarshal(value, &result); err != nil {
-		return zero, err
+	if val == nil {
+		return zero, types.ErrEntryNotFound
 	}
-	return result, nil
+	//nolint:errcheck
+	return val.(T), nil
 }
 
 func (c *cache[T]) Peek(key string) (T, error) {
 	return c.Get(key)
 }
 
+func (c *cache[T]) Exists(key string) bool {
+	_, exists := c.c.Get(key)
+	return exists
+}
+
 func (c *cache[T]) Delete(key string) error {
-	c.c.Del([]byte(key))
+	c.c.Delete(key)
 	return nil
 }
 
-func (c *cache[T]) Exists(key string) bool {
-	return c.c.Has([]byte(key))
-}
-
 func (c *cache[T]) Len() int {
-	return 0
+	return c.c.ItemCount()
 }
 
 func (c *cache[T]) Clear() {
-	c.c.Reset()
+	c.c.Flush()
 }
 
 func (c *cache[T]) WithContext(ctx context.Context) types.Cache[T] {

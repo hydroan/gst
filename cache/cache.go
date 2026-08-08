@@ -1,23 +1,11 @@
-package cache
-
-import (
-	"github.com/hydroan/gst/cache/bigcache"
-	"github.com/hydroan/gst/cache/ccache"
-	"github.com/hydroan/gst/cache/cmap"
-	"github.com/hydroan/gst/cache/fastcache"
-	"github.com/hydroan/gst/cache/freecache"
-	"github.com/hydroan/gst/cache/gocache"
-	"github.com/hydroan/gst/cache/lru"
-	"github.com/hydroan/gst/cache/lrue"
-	"github.com/hydroan/gst/cache/ristretto"
-	"github.com/hydroan/gst/cache/smap"
-	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/util"
-)
-
-// Init initialize all cache implementations.
+// Package cache is the public facade of the framework's in-memory cache.
 //
-// # Cache Implementations Overview
+// The concrete implementations live under internal/cache and are not part of
+// the public API: business projects import this package only, so their builds
+// link just the forwarded backend below instead of every cache library the
+// framework ships.
+//
+// # Available Backends (internal/cache)
 //
 // | Package     | Expiration Strategy       |
 // |-------------|---------------------------|
@@ -31,25 +19,24 @@ import (
 // | freecache   | Per-entry expiration      |
 // | ccache      | Per-entry expiration      |
 // | gocache     | Per-entry expiration      |
+//
+// The forwarded backend is ristretto: it is the only in-memory backend with
+// per-entry TTL, bounded capacity and scan-resistant admission at the same
+// time. Switching the recommendation is a framework decision made here, not a
+// knob exposed to business projects.
+package cache
+
+import (
+	"github.com/hydroan/gst/internal/cache/ristretto"
+	"github.com/hydroan/gst/types"
+)
+
+// Init validates the configuration of the forwarded cache backend.
 func Init() error {
-	return util.CombineError(
-		// ---- No expiration (eviction only by capacity or usage) ----
-		lru.Init,
-		cmap.Init,
-		smap.Init,
-		fastcache.Init,
-
-		// ---- Global expiration (single TTL for all entries) ----
-		lrue.Init,
-		bigcache.Init,
-
-		// ---- Per-entry expiration (each entry can have its own TTL) ----
-		ristretto.Init,
-		ccache.Init,
-		gocache.Init,
-		freecache.Init,
-	)
+	return ristretto.Init()
 }
 
-func Cache[T any]() types.Cache[T]          { return lrue.Cache[T]() }
-func ExpirableCache[T any]() types.Cache[T] { return ristretto.Cache[T]() }
+// Cache returns the process-wide typed cache backed by the forwarded backend.
+func Cache[T any]() types.Cache[T] {
+	return ristretto.Cache[T]()
+}

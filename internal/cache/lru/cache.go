@@ -1,5 +1,4 @@
-// Package lrue is a expirable lru cache.
-package lrue
+package lru
 
 import (
 	"context"
@@ -7,22 +6,29 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hashicorp/golang-lru/v2/expirable"
-	"github.com/hydroan/gst/cache/tracing"
+	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/cache/tracing"
 	"github.com/hydroan/gst/types"
 	cmap "github.com/orcaman/concurrent-map/v2"
 )
 
 var (
 	cacheMap = cmap.New[any]()
+	tmp      *lru.Cache[string, any] // tmp is a temporary cache used to check the config is correct.
 	mu       sync.Mutex
 )
 
-func Init() error { return nil }
+func Init() (err error) {
+	if tmp, err = lru.New[string, any](config.App.Cache.Capacity); err != nil {
+		return err
+	}
+	tmp.Purge()
+	return nil
+}
 
 type cache[T any] struct {
-	c   *expirable.LRU[string, T]
+	c   *lru.Cache[string, T]
 	ctx context.Context
 }
 
@@ -40,10 +46,9 @@ func Cache[T any]() types.Cache[T] {
 
 	val, exists = cacheMap.Get(key)
 	if !exists {
-		val = tracing.NewWrapper(&cache[T]{
-			c:   expirable.NewLRU[string, T](config.App.Cache.Capacity, nil, config.App.Cache.Expiration),
-			ctx: context.Background(),
-		}, "lrue")
+		// lru.New() only error on negative size.
+		_lru, _ := lru.New[string, T](config.App.Cache.Capacity)
+		val = tracing.NewWrapper(&cache[T]{c: _lru, ctx: context.Background()}, "lru")
 		cacheMap.Set(key, val)
 	}
 	//nolint:errcheck

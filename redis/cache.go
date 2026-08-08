@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/cache/tracing"
+	"github.com/hydroan/gst/internal/cache/tracing"
 	"github.com/hydroan/gst/types"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"

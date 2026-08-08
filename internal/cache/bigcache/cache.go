@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/allegro/bigcache"
-	"github.com/hydroan/gst/cache/tracing"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/cache/tracing"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/util"
 	cmap "github.com/orcaman/concurrent-map/v2"

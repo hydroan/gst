@@ -1,4 +1,4 @@
-package gocache
+package ccache
 
 import (
 	"context"
@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hydroan/gst/cache/tracing"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/cache/tracing"
 	"github.com/hydroan/gst/types"
+	"github.com/karlseguin/ccache/v3"
 	cmap "github.com/orcaman/concurrent-map/v2"
-	pkgcache "github.com/patrickmn/go-cache"
 )
 
 var (
@@ -18,12 +18,12 @@ var (
 	mu       sync.Mutex
 )
 
-func Init() error {
+func Init() (err error) {
 	return nil
 }
 
 type cache[T any] struct {
-	c   *pkgcache.Cache
+	c   *ccache.Cache[T]
 	ctx context.Context
 }
 
@@ -42,9 +42,9 @@ func Cache[T any]() types.Cache[T] {
 	val, exists = cacheMap.Get(key)
 	if !exists {
 		val = tracing.NewWrapper(&cache[T]{
-			c:   pkgcache.New(config.App.Cache.Expiration, config.App.Cache.CleanWindow),
+			c:   ccache.New(ccache.Configure[T]().MaxSize(int64(config.App.Cache.Capacity))),
 			ctx: context.Background(),
-		}, "gocache")
+		}, "ccache")
 		cacheMap.Set(key, val)
 	}
 	//nolint:errcheck
@@ -58,15 +58,14 @@ func (c *cache[T]) Set(key string, value T, ttl time.Duration) error {
 
 func (c *cache[T]) Get(key string) (T, error) {
 	var zero T
-	val, ok := c.c.Get(key)
-	if !ok {
-		return zero, types.ErrEntryNotFound
-	}
+	val := c.c.Get(key)
 	if val == nil {
 		return zero, types.ErrEntryNotFound
 	}
-	//nolint:errcheck
-	return val.(T), nil
+	if val.Expired() {
+		return zero, types.ErrEntryNotFound
+	}
+	return val.Value(), nil
 }
 
 func (c *cache[T]) Peek(key string) (T, error) {
@@ -74,8 +73,14 @@ func (c *cache[T]) Peek(key string) (T, error) {
 }
 
 func (c *cache[T]) Exists(key string) bool {
-	_, exists := c.c.Get(key)
-	return exists
+	val := c.c.Get(key)
+	if val == nil {
+		return false
+	}
+	if val.Expired() {
+		return false
+	}
+	return true
 }
 
 func (c *cache[T]) Delete(key string) error {
@@ -88,7 +93,7 @@ func (c *cache[T]) Len() int {
 }
 
 func (c *cache[T]) Clear() {
-	c.c.Flush()
+	c.c.Clear()
 }
 
 func (c *cache[T]) WithContext(ctx context.Context) types.Cache[T] {

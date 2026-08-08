@@ -6,7 +6,7 @@ import (
 
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/cache/tracing"
+	"github.com/hydroan/gst/internal/cache/tracing"
 	"github.com/hydroan/gst/types"
 	jsoniter "github.com/json-iterator/go"
 	"go.uber.org/zap"

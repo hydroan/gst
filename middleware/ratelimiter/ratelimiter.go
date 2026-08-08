@@ -6,7 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/cache/ristretto"
+	"github.com/hydroan/gst/cache"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"golang.org/x/time/rate"
@@ -19,12 +19,12 @@ const (
 )
 
 func init() {
-	if err := ristretto.Init(); err != nil {
+	if err := cache.Init(); err != nil {
 		panic(err)
 	}
 }
 
-var ratelimiterMap = ristretto.Cache[*rate.Limiter]()
+var ratelimiterMap = cache.Cache[*rate.Limiter]()
 
 // Config holds the configuration for the RateLimiter middleware.
 type Config struct {

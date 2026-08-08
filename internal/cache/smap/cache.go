@@ -1,15 +1,14 @@
-package ccache
+package smap
 
 import (
 	"context"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/hydroan/gst/cache/tracing"
-	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/cache/tracing"
 	"github.com/hydroan/gst/types"
-	"github.com/karlseguin/ccache/v3"
 	cmap "github.com/orcaman/concurrent-map/v2"
 )
 
@@ -18,12 +17,13 @@ var (
 	mu       sync.Mutex
 )
 
-func Init() (err error) {
+func Init() error {
 	return nil
 }
 
 type cache[T any] struct {
-	c   *ccache.Cache[T]
+	m   sync.Map
+	n   int64
 	ctx context.Context
 }
 
@@ -41,10 +41,7 @@ func Cache[T any]() types.Cache[T] {
 
 	val, exists = cacheMap.Get(key)
 	if !exists {
-		val = tracing.NewWrapper(&cache[T]{
-			c:   ccache.New(ccache.Configure[T]().MaxSize(int64(config.App.Cache.Capacity))),
-			ctx: context.Background(),
-		}, "ccache")
+		val = tracing.NewWrapper(&cache[T]{ctx: context.Background()}, "smap")
 		cacheMap.Set(key, val)
 	}
 	//nolint:errcheck
@@ -52,48 +49,56 @@ func Cache[T any]() types.Cache[T] {
 }
 
 func (c *cache[T]) Set(key string, value T, ttl time.Duration) error {
-	c.c.Set(key, value, ttl)
+	_, loaded := c.m.LoadOrStore(key, value)
+	if loaded {
+		c.m.Store(key, value)
+	} else {
+		atomic.AddInt64(&c.n, 1)
+	}
 	return nil
 }
 
 func (c *cache[T]) Get(key string) (T, error) {
-	var zero T
-	val := c.c.Get(key)
-	if val == nil {
+	v, ok1 := c.m.Load(key)
+	if !ok1 {
+		var zero T
 		return zero, types.ErrEntryNotFound
 	}
-	if val.Expired() {
+	_v, ok2 := v.(T)
+	if !ok2 {
+		var zero T
 		return zero, types.ErrEntryNotFound
 	}
-	return val.Value(), nil
+	return _v, nil
 }
 
 func (c *cache[T]) Peek(key string) (T, error) {
 	return c.Get(key)
 }
 
-func (c *cache[T]) Exists(key string) bool {
-	val := c.c.Get(key)
-	if val == nil {
-		return false
-	}
-	if val.Expired() {
-		return false
-	}
-	return true
-}
-
 func (c *cache[T]) Delete(key string) error {
-	c.c.Delete(key)
+	_, exists := c.m.LoadAndDelete(key)
+	if exists {
+		atomic.AddInt64(&c.n, -1)
+	}
 	return nil
 }
 
+func (c *cache[T]) Exists(key string) bool {
+	_, exists := c.m.Load(key)
+	return exists
+}
+
 func (c *cache[T]) Len() int {
-	return c.c.ItemCount()
+	return int(c.n)
 }
 
 func (c *cache[T]) Clear() {
-	c.c.Clear()
+	c.m.Range(func(key, _ any) bool {
+		c.m.Delete(key)
+		return true
+	})
+	atomic.StoreInt64(&c.n, 0)
 }
 
 func (c *cache[T]) WithContext(ctx context.Context) types.Cache[T] {
