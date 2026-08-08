@@ -330,7 +330,6 @@ func main() {
 			if tt.wantErr {
 				t.Fatal("BuildMainFile() succeeded unexpectedly")
 			}
-			// TODO: update the condition below to compare got with tt.want.
 			if got != tt.want {
 				t.Errorf("BuildMainFile() = \n%v,\n want \n%v\n", pretty.Sprintf("% #v", got), pretty.Sprintf("% #v", tt.want))
 			}

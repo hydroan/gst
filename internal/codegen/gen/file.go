@@ -309,7 +309,7 @@ func BuildRouterFile(pkgName string, modelImports []string, stmts ...ast.Stmt) (
 package main
 
 import (
-	- "helloworld/configx"
+	_ "helloworld/configx"
 	_ "helloworld/cronjob"
 	_ "helloworld/middleware"
 	_ "helloworld/model"
@@ -323,9 +323,6 @@ import (
 
 func main() {
 	RunOrDie(bootstrap.Bootstrap)
-	RunOrDie(configx.Init)
-	RunOrDie(cronjob.Init)
-	RunOrDie(service.Init)
 	RunOrDie(router.Init)
 	RunOrDie(bootstrap.Run)
 }
