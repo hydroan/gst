@@ -34,7 +34,6 @@ func Cache[T any]() types.Cache[T] {
 
 func (c *cache[T]) Set(key string, data T, ttl time.Duration) error {
 	if cli == nil {
-		zap.S().Warn("redis not initialized")
 		return errors.New("redis not initialized")
 	}
 	val, err := json.Marshal(data)
@@ -55,7 +54,6 @@ func (c *cache[T]) Set(key string, data T, ttl time.Duration) error {
 func (c *cache[T]) Get(key string) (T, error) {
 	var zero T
 	if cli == nil {
-		zap.S().Warn("redis not initialized")
 		return zero, errors.New("redis not initialized")
 	}
 	data, err := cli.Get(c.ctx, redisKey(key)).Bytes()
@@ -79,7 +77,6 @@ func (c *cache[T]) Get(key string) (T, error) {
 
 func (c *cache[T]) Peek(key string) (T, error) {
 	if cli == nil {
-		zap.S().Warn("redis not initialized")
 		return *new(T), errors.New("redis not initialized")
 	}
 	return c.Get(key)
@@ -87,7 +84,6 @@ func (c *cache[T]) Peek(key string) (T, error) {
 
 func (c *cache[T]) Delete(key string) error {
 	if cli == nil {
-		zap.S().Warn("redis not initialized")
 		return errors.New("redis not initialized")
 	}
 	if err := cli.Del(c.ctx, redisKey(key)).Err(); err != nil {
