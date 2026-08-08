@@ -159,7 +159,7 @@ func NewDistributedCache[T any](opts ...DistributedCacheOption[T]) (types.Distri
 // Performance metrics are tracked (hits/misses) and a controlled goroutine pool handles
 type distributedCache[T any] struct {
 	localCache types.Cache[T]
-	redisCache types.Cache[any]
+	redisCache types.Cache[T]
 
 	// prefix keeps the types apart inside the redis cache.
 	prefix string
@@ -271,10 +271,10 @@ func newDistributedCache[T any](opts ...DistributedCacheOption[T]) (types.Cache[
 	// setup redis cache
 	if dc.redisCache == nil {
 		redisCli, e := redis.New(config.App.Redis)
-		if err != nil {
+		if e != nil {
 			return nil, e
 		}
-		if dc.redisCache, e = NewRedisCache[any](redisCli); e != nil {
+		if dc.redisCache, e = NewRedisCache[T](redisCli); e != nil {
 			return nil, e
 		}
 		if dc.redisCache == nil {
@@ -337,8 +337,10 @@ func (dc *distributedCache[T]) SetWithSync(ctx context.Context, key string, valu
 	// done := dc.trace("Set")
 	// defer done(err)
 
-	if remoteTTL < localTTL {
-		return errors.New("remoteTTL must be greater than localTTL")
+	// A zero ttl means "never expires", which counts as the longest possible
+	// lifetime in this comparison.
+	if remoteTTL != 0 && (localTTL == 0 || remoteTTL < localTTL) {
+		return errors.New("remoteTTL must not be shorter than localTTL")
 	}
 	prefixedKey := dc.prefix + key
 
@@ -405,17 +407,9 @@ func (dc *distributedCache[T]) GetWithSync(ctx context.Context, key string, loca
 		return zero, err
 	}
 
-	var (
-		redisVal T
-		result   any
-		ok       bool
-	)
 	// get from redis cache
-	if result, err = dc.redisCache.Get(ctx, prefixedKey); err == nil {
-		if redisVal, ok = result.(T); !ok {
-			dc.logger.Warn(fmt.Sprintf("type assertion failed for key %s: expected %T, got %T", prefixedKey, *new(T), result))
-			return zero, types.ErrEntryNotFound
-		}
+	redisVal, err := dc.redisCache.Get(ctx, prefixedKey)
+	if err == nil {
 		// redis cache hit.
 		dc.redisHits.Add(1)
 		if err = dc.localCache.Set(ctx, prefixedKey, redisVal, localTTL); err != nil {
@@ -495,8 +489,10 @@ func (dc *distributedCache[T]) listenEvents() {
 		for {
 			fetches := dc.subDone.PollFetches(context.Background())
 			if fetches.IsClientClosed() {
-				// TODO: reconnect
-				continue
+				// A closed client cannot recover here; stop the listener
+				// instead of spinning on an immediately returning poll.
+				dc.logger.Error("kafka consumer client closed, stopping the done-event listener")
+				return
 			}
 			fetches.EachError(func(s string, i int32, err error) {
 				dc.logger.Errorz(
@@ -589,34 +585,36 @@ func (dc *distributedCache[T]) sendEvent(evt *event) {
 	if evt == nil {
 		return
 	}
-	err := dc.gopool.Submit(func() {
-		val, err := json.Marshal(evt.raw)
-		if err != nil {
-			dc.logger.Errorz("failed to marshal event raw data", zap.Error(err), zap.Object("event", evt))
-			return
-		}
-		if len(val) == 0 {
-			dc.logger.Warnz("the marshaled value is empty", zap.Object("event", evt))
-			return
-		}
-		evt.CacheID = dc.cacheID
-		evt.Typ = dc.typ
-		evt.Val = val
-		evt.Hostname = dc.hostname
-		evt.raw = nil // clear it to keep the event small
-		data, err := json.Marshal(evt)
-		if err != nil {
-			dc.logger.Errorz("failed to marshal event", zap.Error(err), zap.Object("event", evt))
-			return
-		}
+	// Marshal the caller's value synchronously: doing it in the pool goroutine
+	// would keep reading the value concurrently after Set has returned.
+	val, err := json.Marshal(evt.raw)
+	if err != nil {
+		dc.logger.Errorz("failed to marshal event raw data", zap.Error(err), zap.Object("event", evt))
+		return
+	}
+	if len(val) == 0 {
+		dc.logger.Warnz("the marshaled value is empty", zap.Object("event", evt))
+		return
+	}
+	evt.CacheID = dc.cacheID
+	evt.Typ = dc.typ
+	evt.Val = val
+	evt.Hostname = dc.hostname
+	evt.raw = nil // clear it to keep the event small
+	data, err := json.Marshal(evt)
+	if err != nil {
+		dc.logger.Errorz("failed to marshal event", zap.Error(err), zap.Object("event", evt))
+		return
+	}
+	err = dc.gopool.Submit(func() {
 		record := &kgo.Record{
 			Topic: TOPIC_REDIS_SET_DEL,
 			Value: data,
 		}
 		// TODO: lower this log to debug
 		dc.logger.Infoz("publish event", zap.Object("event", evt))
-		if err := dc.pubSetDel.ProduceSync(context.Background(), record).FirstErr(); err != nil {
-			dc.logger.Errorz("failed to publish event", zap.Error(err), zap.Object("event", evt))
+		if pubErr := dc.pubSetDel.ProduceSync(context.Background(), record).FirstErr(); pubErr != nil {
+			dc.logger.Errorz("failed to publish event", zap.Error(pubErr), zap.Object("event", evt))
 		}
 	})
 	if err != nil {
@@ -712,7 +710,7 @@ func (dc *distributedCache[T]) trace(op string) func(error) {
 
 type DistributedCacheOption[T any] func(*distributedCache[T]) error
 
-func WithRedisCache[T any](redisCache types.Cache[any]) DistributedCacheOption[T] {
+func WithRedisCache[T any](redisCache types.Cache[T]) DistributedCacheOption[T] {
 	return func(dc *distributedCache[T]) error {
 		dc.redisCache = redisCache
 		return nil

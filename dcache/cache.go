@@ -69,6 +69,7 @@ func Init() error {
 		hostname, err := os.Hostname()
 		if err != nil {
 			gerr = err
+			return
 		}
 		log := logger.Dcache.With("hostname", hostname, compKey, compVal)
 		log.Info("distributed cache setup")
@@ -108,8 +109,10 @@ func Init() error {
 				baseCtx := context.Background()
 				fetches := consumer.PollFetches(context.Background())
 				if fetches.IsClientClosed() {
-					log.Errorz("fetches.IsClientClosed", zap.Error(err))
-					continue
+					// A closed client cannot recover here; stop the consumer
+					// instead of spinning on an immediately returning poll.
+					log.Error("kafka consumer client closed, stopping the state node consumer")
+					return
 				}
 				fetches.EachError(func(s string, i int32, err error) {
 					log.Errorz(
@@ -157,7 +160,7 @@ func Init() error {
 
 						// parse the event
 						event := new(event)
-						if err = json.Unmarshal(record.Value, event); err != nil {
+						if err := json.Unmarshal(record.Value, event); err != nil {
 							log.Errorz(
 								"failed to unmarshal event from kafka record",
 								zap.Error(err),
@@ -241,12 +244,12 @@ func Init() error {
 					// TODO: lower this to the Debug level in production
 					log.Infoz("process event", zap.Object("event", evt))
 
-					err = gopool.Submit(func() {
+					submitErr := gopool.Submit(func() {
 						defer wg.Done()
 						switch evt.Op {
 						case opSet:
 							if evt.SyncToRedis {
-								if err = redisCli.Set(baseCtx, evt.Key, []byte(evt.Val), evt.RedisTTL).Err(); err != nil {
+								if err := redisCli.Set(baseCtx, evt.Key, []byte(evt.Val), evt.RedisTTL).Err(); err != nil {
 									atomic.AddInt64(&failedRecords, 1)
 									log.Errorz(
 										"failed to set redis key",
@@ -270,8 +273,8 @@ func Init() error {
 								SyncToRedis: evt.SyncToRedis,
 								RedisTTL:    evt.RedisTTL,
 							}
-							var data []byte
-							if data, err = json.Marshal(evtDone); err != nil {
+							data, err := json.Marshal(evtDone)
+							if err != nil {
 								log.Errorz(
 									"failed to marshal event in redis set",
 									zap.Error(err),
@@ -282,7 +285,7 @@ func Init() error {
 								atomic.AddInt64(&successRecords, 1)
 								// publish the kafka message synchronously
 								produceRecord := &kgo.Record{Topic: TOPIC_REDIS_DONE, Value: data}
-								if err = producer.ProduceSync(baseCtx, produceRecord).FirstErr(); err != nil {
+								if err := producer.ProduceSync(baseCtx, produceRecord).FirstErr(); err != nil {
 									log.Errorz(
 										"failed to produce redis set done event",
 										zap.Error(err),
@@ -292,7 +295,7 @@ func Init() error {
 							}
 						case opDel:
 							if evt.SyncToRedis {
-								if err = redisCli.Del(baseCtx, evt.Key).Err(); err != nil {
+								if err := redisCli.Del(baseCtx, evt.Key).Err(); err != nil {
 									log.Errorz(
 										"failed to del redis key",
 										zap.Error(err),
@@ -314,8 +317,8 @@ func Init() error {
 								SyncToRedis: evt.SyncToRedis,
 								RedisTTL:    evt.RedisTTL,
 							}
-							var data []byte
-							if data, err = json.Marshal(evtDone); err != nil {
+							data, err := json.Marshal(evtDone)
+							if err != nil {
 								log.Errorz(
 									"failed to marshal event in redis del",
 									zap.Error(err),
@@ -326,7 +329,7 @@ func Init() error {
 								atomic.AddInt64(&successRecords, 1)
 								// publish the kafka message synchronously
 								produceRecord := &kgo.Record{Topic: TOPIC_REDIS_DONE, Value: data}
-								if err = producer.ProduceSync(baseCtx, produceRecord).FirstErr(); err != nil {
+								if err := producer.ProduceSync(baseCtx, produceRecord).FirstErr(); err != nil {
 									log.Errorz(
 										"failed to produce redis del done event",
 										zap.Error(err),
@@ -338,8 +341,11 @@ func Init() error {
 							log.Warnz("unknown operation type", zap.String("op", evt.Op.String()))
 						}
 					})
-					if err != nil {
-						log.Errorz("failed to submit event to gopool", zap.Error(err), zap.Object("event", evt))
+					if submitErr != nil {
+						// The task never ran, so its wait-group slot must be
+						// released here or wg.Wait would hang forever.
+						wg.Done()
+						log.Errorz("failed to submit event to gopool", zap.Error(submitErr), zap.Object("event", evt))
 					}
 				}
 				wg.Wait()

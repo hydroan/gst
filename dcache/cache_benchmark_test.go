@@ -28,7 +28,7 @@ func Benchmark(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	redisCache2, err := dcache.NewRedisCache(redisCli, dcache.WithRedisKeyPrefix[any]("any-bench-"))
+	redisCache2, err := dcache.NewRedisCache(redisCli, dcache.WithRedisKeyPrefix[string]("distributed-bench-"))
 	if err != nil {
 		b.Fatal(err)
 	}
