@@ -4,15 +4,11 @@ go 1.26
 
 tool (
 	github.com/golangci/golangci-lint/v2/cmd/golangci-lint
-	github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway
-	github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2
 	golang.org/x/tools/go/analysis/passes/lostcancel/cmd/lostcancel
 	golang.org/x/tools/go/analysis/passes/modernize/cmd/modernize
 	golang.org/x/tools/go/analysis/passes/nilness/cmd/nilness
 	golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow
 	golang.org/x/tools/go/analysis/passes/stringintconv/cmd/stringintconv
-	google.golang.org/grpc/cmd/protoc-gen-go-grpc
-	google.golang.org/protobuf/cmd/protoc-gen-go
 	mvdan.cc/gofumpt
 )
 
@@ -83,7 +79,6 @@ require (
 	github.com/segmentio/fasthash v1.0.3
 	github.com/segmentio/ksuid v1.0.4
 	github.com/sergi/go-diff v1.4.0
-	github.com/sirupsen/logrus v1.9.4
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/sony/gobreaker v1.0.0
 	github.com/spf13/cast v1.10.0
@@ -120,7 +115,6 @@ require (
 	golang.org/x/text v0.40.0
 	golang.org/x/time v0.15.0
 	golang.org/x/tools v0.48.0
-	google.golang.org/grpc v1.82.0
 	gopkg.in/ini.v1 v1.67.3
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/rethinkdb/rethinkdb-go.v6 v6.2.2
@@ -412,6 +406,7 @@ require (
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/shirou/gopsutil/v4 v4.26.5 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
+	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/sivchari/containedctx v1.0.3 // indirect
 	github.com/smartystreets/goconvey v1.8.1 // indirect
 	github.com/sonatard/noctx v0.5.1 // indirect
@@ -483,7 +478,7 @@ require (
 	golang.org/x/sys v0.47.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
-	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.6.2 // indirect
+	google.golang.org/grpc v1.82.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/cenkalti/backoff.v2 v2.2.1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect

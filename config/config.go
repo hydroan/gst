@@ -46,7 +46,6 @@ type Config struct {
 	AppInfo       `json:"app" mapstructure:"app" ini:"app" yaml:"app"`
 	Server        `json:"server" mapstructure:"server" ini:"server" yaml:"server"`
 	Middleware    `json:"middleware" mapstructure:"middleware" ini:"middleware" yaml:"middleware"`
-	Grpc          `json:"grpc" mapstructure:"grpc" ini:"grpc" yaml:"grpc"`
 	Auth          `json:"auth" mapstructure:"auth" ini:"auth" yaml:"auth"`
 	Database      `json:"database" mapstructure:"database" ini:"database" yaml:"database"`
 	Cache         `json:"cache" mapstructure:"cache" ini:"cache" yaml:"cache"`
@@ -82,7 +81,6 @@ func (c *Config) setDefault(v *viper.Viper) {
 	c.AppInfo.setDefault(v)
 	c.Server.setDefault(v)
 	c.Middleware.setDefault(v)
-	c.Grpc.setDefault(v)
 	c.Auth.setDefault(v)
 	c.Logger.setDefault(v)
 	c.Database.setDefault(v)

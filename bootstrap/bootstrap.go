@@ -19,10 +19,8 @@ import (
 	"github.com/hydroan/gst/debug/gops"
 	debugpprof "github.com/hydroan/gst/debug/pprof"
 	"github.com/hydroan/gst/debug/statsviz"
-	"github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/dbruntime"
-	"github.com/hydroan/gst/logger/logrus"
 	pkgzap "github.com/hydroan/gst/logger/zap"
 	prommetrics "github.com/hydroan/gst/metrics"
 	"github.com/hydroan/gst/middleware"
@@ -52,7 +50,6 @@ func Bootstrap() error {
 	ins.Register(
 		config.Init,
 		pkgzap.Init,
-		logrus.Init,
 		prommetrics.Init,
 
 		// cache
@@ -94,7 +91,6 @@ func Bootstrap() error {
 		controller.Init,
 		middleware.Init,
 		router.Init,
-		grpc.Init,
 
 		// task
 		cronjob.Init,
@@ -140,14 +136,12 @@ func Run() error {
 
 	ins.RegisterGo(
 		router.Run,
-		grpc.Run,
 		statsviz.Run,
 		debugpprof.Run,
 		gops.Run,
 	)
 
 	registerCleanup(router.Stop)
-	registerCleanup(grpc.Stop)
 	registerCleanup(statsviz.Stop)
 	registerCleanup(debugpprof.Stop)
 	registerCleanup(gops.Stop)
