@@ -15,7 +15,14 @@ import (
 // register under.
 var optionalProviders = map[string]func() bool{
 	"cassandra": func() bool { return config.App.Cassandra.Enabled },
-	"elastic":   func() bool { return config.App.Elasticsearch.Enabled },
+	// The clickhouse section also feeds the gorm dialect. The provider is
+	// only expected when ClickHouse serves as a secondary analytical store;
+	// when database.type selects it as the primary database, the dialect
+	// alone is a complete setup and deserves no warning.
+	"clickhouse": func() bool {
+		return config.App.Clickhouse.Enabled && config.App.Database.Type != config.DBClickHouse
+	},
+	"elastic": func() bool { return config.App.Elasticsearch.Enabled },
 	"etcd":      func() bool { return config.App.Etcd.Enabled },
 	"influxdb":  func() bool { return config.App.Influxdb.Enabled },
 	"kafka":     func() bool { return config.App.Kafka.Enabled },

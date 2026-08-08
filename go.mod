@@ -14,6 +14,7 @@ tool (
 
 require (
 	charm.land/lipgloss/v2 v2.0.5
+	github.com/ClickHouse/clickhouse-go/v2 v2.34.0
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/VictoriaMetrics/fastcache v1.13.3
 	github.com/allegro/bigcache v1.2.1
@@ -150,7 +151,6 @@ require (
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/ClickHouse/ch-go v0.65.1 // indirect
 	github.com/ClickHouse/clickhouse-go-linter v1.2.0 // indirect
-	github.com/ClickHouse/clickhouse-go/v2 v2.34.0 // indirect
 	github.com/Djarvur/go-err113 v0.1.1 // indirect
 	github.com/HugoSmits86/nativewebp v1.3.0 // indirect
 	github.com/KyleBanks/depth v1.2.1 // indirect

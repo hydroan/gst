@@ -14,6 +14,7 @@ import (
 	// self-registers under its package name; a new provider package fails
 	// the test until it both self-registers and joins this import list.
 	_ "github.com/hydroan/gst/provider/cassandra"
+	_ "github.com/hydroan/gst/provider/clickhouse"
 	_ "github.com/hydroan/gst/provider/elastic"
 	_ "github.com/hydroan/gst/provider/etcd"
 	_ "github.com/hydroan/gst/provider/influxdb"
