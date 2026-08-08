@@ -176,12 +176,18 @@ func New(cfg config.Elasticsearch) (*elasticsearch.Client, error) {
 // _check will check the client and return an error if it's nil or invalid.
 func _check() error {
 	if client == nil || client == new(elasticsearch.Client) {
-		return errors.New("elasticsearch client is nil")
+		return errors.New("elasticsearch client not initialized")
 	}
 	return nil
 }
 
-func Client() *elasticsearch.Client { return client }
+// Client returns the initialized Elasticsearch client.
+func Client() (*elasticsearch.Client, error) {
+	if err := _check(); err != nil {
+		return nil, err
+	}
+	return client, nil
+}
 
 // SearchTimestamp searches index for documents newer than the timestamp persisted in
 // TIMESTAMP_FILE and returns the raw response body.

@@ -16,9 +16,8 @@ import (
 )
 
 var (
-	initialized bool
-	client      *clientv3.Client
-	mu          sync.RWMutex
+	client *clientv3.Client
+	mu     sync.RWMutex
 )
 
 // init registers this provider so importing the package compiles the
@@ -38,7 +37,7 @@ func Init() (err error) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if initialized {
+	if client != nil {
 		return nil
 	}
 
@@ -60,7 +59,6 @@ func Init() (err error) {
 
 	zap.S().Infow("successfully connected to etcd", "endpoints", cfg.Endpoints)
 
-	initialized = true
 	return nil
 }
 
@@ -126,12 +124,14 @@ func New(cfg config.Etcd) (*clientv3.Client, error) {
 	return cli, nil
 }
 
-// Client returns the global etcd client.
-// It returns nil if the client is not initialized.
-func Client() *clientv3.Client {
+// Client returns the initialized etcd client.
+func Client() (*clientv3.Client, error) {
 	mu.RLock()
 	defer mu.RUnlock()
-	return client
+	if client == nil {
+		return nil, errors.New("etcd client not initialized")
+	}
+	return client, nil
 }
 
 // Close closes the global etcd client.
@@ -139,12 +139,10 @@ func Close() error {
 	mu.Lock()
 	defer mu.Unlock()
 	if client == nil {
-		initialized = false
 		return nil
 	}
 	err := client.Close()
 	client = nil
-	initialized = false
 	if err != nil {
 		return errors.Wrap(err, "failed to close etcd client")
 	}

@@ -18,11 +18,10 @@ import (
 )
 
 var (
-	initialized bool
-	client      influxdb2.Client
-	writeAPI    api.WriteAPIBlocking
-	queryAPI    api.QueryAPI
-	mu          sync.RWMutex
+	client   influxdb2.Client
+	writeAPI api.WriteAPIBlocking
+	queryAPI api.QueryAPI
+	mu       sync.RWMutex
 )
 
 // init registers this provider so importing the package compiles the
@@ -43,7 +42,7 @@ func Init() (err error) {
 
 	mu.Lock()
 	defer mu.Unlock()
-	if initialized {
+	if client != nil {
 		return nil
 	}
 
@@ -78,7 +77,6 @@ func Init() (err error) {
 		"org", cfg.Org,
 		"bucket", cfg.Bucket)
 
-	initialized = true
 	return nil
 }
 
@@ -144,7 +142,7 @@ func WritePoint(measurement string, tags map[string]string, fields map[string]an
 	mu.RLock()
 	defer mu.RUnlock()
 
-	if !initialized {
+	if client == nil {
 		return errors.New("influxdb client not initialized")
 	}
 
@@ -168,7 +166,7 @@ func Query(query string) (*api.QueryTableResult, error) {
 	mu.RLock()
 	defer mu.RUnlock()
 
-	if !initialized {
+	if client == nil {
 		return nil, errors.New("influxdb client not initialized")
 	}
 
@@ -176,25 +174,34 @@ func Query(query string) (*api.QueryTableResult, error) {
 	return queryAPI.Query(context.Background(), query)
 }
 
-// Client returns the global InfluxDB client
-func Client() influxdb2.Client {
+// Client returns the initialized InfluxDB client.
+func Client() (influxdb2.Client, error) {
 	mu.RLock()
 	defer mu.RUnlock()
-	return client
+	if client == nil {
+		return nil, errors.New("influxdb client not initialized")
+	}
+	return client, nil
 }
 
-// WriteAPI returns the global InfluxDB write API
-func WriteAPI() api.WriteAPIBlocking {
+// WriteAPI returns the write API of the initialized InfluxDB client.
+func WriteAPI() (api.WriteAPIBlocking, error) {
 	mu.RLock()
 	defer mu.RUnlock()
-	return writeAPI
+	if writeAPI == nil {
+		return nil, errors.New("influxdb client not initialized")
+	}
+	return writeAPI, nil
 }
 
-// QueryAPI returns the global InfluxDB query API
-func QueryAPI() api.QueryAPI {
+// QueryAPI returns the query API of the initialized InfluxDB client.
+func QueryAPI() (api.QueryAPI, error) {
 	mu.RLock()
 	defer mu.RUnlock()
-	return queryAPI
+	if queryAPI == nil {
+		return nil, errors.New("influxdb client not initialized")
+	}
+	return queryAPI, nil
 }
 
 // Close gracefully shuts down the InfluxDB client
@@ -205,10 +212,11 @@ func Close() error {
 	if client != nil {
 		client.Close()
 		client = nil
+		writeAPI = nil
+		queryAPI = nil
 		zap.S().Infow("successfully closed influxdb client")
 	}
 
-	initialized = false
 	return nil
 }
 
@@ -217,7 +225,7 @@ func Health() (*domain.HealthCheck, error) {
 	mu.RLock()
 	defer mu.RUnlock()
 
-	if !initialized {
+	if client == nil {
 		return nil, errors.New("influxdb client not initialized")
 	}
 

@@ -11,9 +11,8 @@ import (
 )
 
 var (
-	initialized bool
-	client      *memcache.Client
-	mu          sync.RWMutex
+	client *memcache.Client
+	mu     sync.RWMutex
 )
 
 // init registers this provider so importing the package compiles the
@@ -33,7 +32,7 @@ func Init() (err error) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if initialized {
+	if client != nil {
 		return nil
 	}
 
@@ -48,7 +47,6 @@ func Init() (err error) {
 	}
 	zap.S().Infow("successfully connect to memcached", "servers", cfg.Servers)
 
-	initialized = true
 	return nil
 }
 
@@ -77,8 +75,8 @@ func New(cfg config.Memcached) (*memcache.Client, error) {
 func Client() (*memcache.Client, error) {
 	mu.RLock()
 	defer mu.RUnlock()
-	if !initialized {
-		return nil, errors.New("memcached client not initialized, call Init() first")
+	if client == nil {
+		return nil, errors.New("memcached client not initialized")
 	}
 	if client == nil {
 		return nil, errors.New("memcached client is nil")
@@ -159,7 +157,6 @@ func Close() error {
 	}
 	err := client.Close()
 	client = nil
-	initialized = false
 	if err != nil {
 		return errors.Wrap(err, "failed to close memcached client")
 	}

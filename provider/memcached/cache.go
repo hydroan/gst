@@ -25,7 +25,7 @@ func Cache[T any]() types.Cache[T] {
 }
 
 func (c *cache[T]) Set(key string, value T, ttl time.Duration) error {
-	if !initialized {
+	if client == nil {
 		zap.S().Warn("memcached not initialized")
 		return errors.New("memcached not initialized")
 	}
@@ -51,7 +51,7 @@ func (c *cache[T]) Set(key string, value T, ttl time.Duration) error {
 
 func (c *cache[T]) Get(key string) (T, error) {
 	var zero T
-	if !initialized {
+	if client == nil {
 		zap.S().Warn("memcached not initialized")
 		return zero, errors.New("memcached not initialized")
 	}
@@ -72,7 +72,7 @@ func (c *cache[T]) Get(key string) (T, error) {
 }
 func (c *cache[T]) Peek(key string) (T, error) { return c.Get(key) }
 func (c *cache[T]) Delete(key string) error {
-	if !initialized {
+	if client == nil {
 		zap.S().Warn("memcached not initialized")
 		return errors.New("memcached not initialized")
 	}
@@ -84,7 +84,7 @@ func (c *cache[T]) Delete(key string) error {
 }
 
 func (c *cache[T]) Exists(key string) bool {
-	if !initialized {
+	if client == nil {
 		zap.S().Warn("memcached not initialized")
 		return false
 	}
@@ -96,7 +96,7 @@ func (c *cache[T]) Exists(key string) bool {
 }
 
 func (c *cache[T]) Len() int {
-	if !initialized {
+	if client == nil {
 		zap.S().Warn("memcached not initialized")
 		return 0
 	}
@@ -105,7 +105,7 @@ func (c *cache[T]) Len() int {
 }
 
 func (c *cache[T]) Clear() {
-	if !initialized {
+	if client == nil {
 		zap.S().Warn("memcached not initialized")
 		return
 	}

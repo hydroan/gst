@@ -26,11 +26,10 @@ import (
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 var (
-	client      *goredis.Client
-	cluster     *goredis.ClusterClient
-	cli         goredis.UniversalClient
-	mu          sync.Mutex
-	initialized bool
+	client  *goredis.Client
+	cluster *goredis.ClusterClient
+	cli     goredis.UniversalClient
+	mu      sync.Mutex
 
 	ErrKeyNotExists    = errors.New("key no loger exists, may be expired")
 	ErrRedisIsDisabled = errors.New("redis is disabled")
@@ -72,7 +71,7 @@ func Init() (err error) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if initialized {
+	if cli != nil {
 		return nil
 	}
 
@@ -107,7 +106,6 @@ func Init() (err error) {
 		return err
 	}
 
-	initialized = true
 	return nil
 }
 
@@ -194,10 +192,20 @@ func NewCluster(cfg config.Redis) (*goredis.ClusterClient, error) {
 	return goredis.NewClusterClient(opts), nil
 }
 
-func Close() {
+// Client returns the initialized Redis client handle, standalone or
+// cluster depending on configuration.
+func Client() (goredis.UniversalClient, error) {
+	if cli == nil {
+		return nil, ErrRedisIsDisabled
+	}
+	return cli, nil
+}
+
+func Close() error {
+	var errs []error
 	if client != nil {
 		if err := client.Close(); err != nil {
-			zap.S().Errorw("failed to close redis client", "error", err)
+			errs = append(errs, errors.Wrap(err, "failed to close redis client"))
 		} else {
 			zap.S().Infow("successfully close redis client")
 		}
@@ -207,13 +215,14 @@ func Close() {
 
 	if cluster != nil {
 		if err := cluster.Close(); err != nil {
-			zap.S().Errorw("failed to close redis cluster client", "error", err)
+			errs = append(errs, errors.Wrap(err, "failed to close redis cluster client"))
 		} else {
 			zap.S().Infow("successfully close redis cluster client")
 		}
 		cli = nil
 		cluster = nil
 	}
+	return errors.Join(errs...)
 }
 
 // Set set any data into redis with specific key.

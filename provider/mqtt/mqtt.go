@@ -17,10 +17,9 @@ import (
 )
 
 var (
-	client      mqtt.Client
-	mu          sync.RWMutex
-	initialized bool
-	clientID    string
+	client   mqtt.Client
+	mu       sync.RWMutex
+	clientID string
 )
 
 // init registers this provider so importing the package compiles the
@@ -37,7 +36,7 @@ func Init() (err error) {
 
 	mu.Lock()
 	defer mu.Unlock()
-	if initialized {
+	if client != nil {
 		return nil
 	}
 
@@ -58,7 +57,6 @@ func Init() (err error) {
 		"auto_reconnect", cfg.AutoReconnect,
 	)
 	go monitorConnection()
-	initialized = true
 	return nil
 }
 
@@ -161,7 +159,7 @@ func Client() (mqtt.Client, error) {
 	mu.RLock()
 	defer mu.RUnlock()
 
-	if !initialized {
+	if client == nil {
 		return nil, errors.New("mqtt client not initialized")
 	}
 	if client == nil {
@@ -193,7 +191,6 @@ func Close() error {
 	if client != nil {
 		client.Disconnect(250) // wait 250ms for the disconnect to complete
 		client = nil
-		initialized = false
 	}
 	return nil
 }

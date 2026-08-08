@@ -76,7 +76,6 @@ var (
 	tracer         trace.Tracer
 	tracerProvider *sdktrace.TracerProvider
 	mu             sync.Mutex
-	initialized    bool
 )
 
 type requestRootSpanKey struct{}
@@ -96,7 +95,7 @@ func Init() error {
 
 	mu.Lock()
 	defer mu.Unlock()
-	if initialized {
+	if tracerProvider != nil {
 		return nil
 	}
 
@@ -155,7 +154,6 @@ func Init() error {
 
 	initHotPathAttrs(cfg.ServiceName)
 
-	initialized = true
 	logger.OTEL.Infoz(
 		"otel tracing initialized",
 		zap.String("service_name", cfg.ServiceName),
@@ -167,29 +165,29 @@ func Init() error {
 }
 
 // Close closes the OpenTelemetry tracer provider.
-func Close() {
+func Close() error {
 	mu.Lock()
 	defer mu.Unlock()
 
-	if !initialized || tracerProvider == nil {
-		return
+	if tracerProvider == nil {
+		return nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := tracerProvider.Shutdown(ctx); err != nil {
-		logger.OTEL.Errorw("failed to shutdown tracer provider", "err", err)
-	}
-
-	initialized = false
+	err := tracerProvider.Shutdown(ctx)
 	tracerProvider = nil
+	if err != nil {
+		return errors.Wrap(err, "failed to shutdown tracer provider")
+	}
 	logger.OTEL.Info("otel tracer closed")
+	return nil
 }
 
 // GetTracer returns the global tracer
 func GetTracer() trace.Tracer {
-	if !initialized {
+	if tracerProvider == nil {
 		return noop.NewTracerProvider().Tracer("noop")
 	}
 	return tracer
@@ -197,7 +195,7 @@ func GetTracer() trace.Tracer {
 
 // IsEnabled returns whether OpenTelemetry tracing is enabled.
 func IsEnabled() bool {
-	return config.App.OTEL.Enabled && initialized
+	return config.App.OTEL.Enabled && tracerProvider != nil
 }
 
 // FrameworkSpanName returns the canonical name for gst-owned resource spans.

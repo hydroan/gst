@@ -23,9 +23,8 @@ import (
 )
 
 var (
-	initialized bool
-	client      *minio.Client
-	mu          sync.RWMutex
+	client *minio.Client
+	mu     sync.RWMutex
 )
 
 // PutOptions represents upload options.
@@ -103,7 +102,7 @@ func Init() (err error) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if initialized {
+	if client != nil {
 		return nil
 	}
 
@@ -130,7 +129,6 @@ func Init() (err error) {
 	zap.S().Infow("successfully connected to minio", "endpoint", cfg.Endpoint, "bucket", cfg.Bucket, "region", cfg.Region)
 
 	client = newClient
-	initialized = true
 	return nil
 }
 

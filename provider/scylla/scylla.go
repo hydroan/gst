@@ -18,9 +18,8 @@ import (
 )
 
 var (
-	initialized bool
-	session     gocqlx.Session
-	mu          sync.RWMutex
+	session gocqlx.Session
+	mu      sync.RWMutex
 )
 
 // init registers this provider so importing the package compiles the
@@ -40,7 +39,7 @@ func Init() (err error) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if initialized {
+	if session.Session != nil {
 		return nil
 	}
 
@@ -56,7 +55,6 @@ func Init() (err error) {
 
 	zap.S().Infow("successfully connected to ScyllaDB", "hosts", cfg.Hosts, "keyspace", cfg.Keyspace)
 
-	initialized = true
 	return nil
 }
 
@@ -220,12 +218,13 @@ func parseConsistencyLevel(level config.Consistency) gocql.Consistency {
 	}
 }
 
-// Session returns the ScyllaDB session instance
-func Session() (gocqlx.Session, error) {
+// Client returns the initialized ScyllaDB session, the client handle of
+// this provider.
+func Client() (gocqlx.Session, error) {
 	mu.RLock()
 	defer mu.RUnlock()
-	if !initialized {
-		return gocqlx.Session{}, errors.New("ScyllaDB session not initialized, call Init() first")
+	if session.Session == nil {
+		return gocqlx.Session{}, errors.New("scylla session not initialized")
 	}
 	return session, nil
 }
@@ -235,17 +234,17 @@ func Close() error {
 	mu.Lock()
 	defer mu.Unlock()
 
-	if initialized {
+	if session.Session != nil {
 		session.Close()
 		zap.S().Infow("successfully closed ScyllaDB session")
-		initialized = false
+		session = gocqlx.Session{}
 	}
 	return nil
 }
 
 // Health checks if the ScyllaDB connection is healthy
 func Health() error {
-	sess, err := Session()
+	sess, err := Client()
 	if err != nil {
 		return err
 	}

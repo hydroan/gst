@@ -21,9 +21,8 @@ import (
 )
 
 var (
-	initialized bool
-	client      *mongo.Client
-	mu          sync.RWMutex
+	client *mongo.Client
+	mu     sync.RWMutex
 )
 
 // init registers this provider so importing the package compiles the
@@ -43,7 +42,7 @@ func Init() (err error) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if initialized {
+	if client != nil {
 		return nil
 	}
 
@@ -58,7 +57,6 @@ func Init() (err error) {
 	}
 	zap.S().Infow("successfully connect to mongodb", "host", cfg.Host, "port", cfg.Port, "database", cfg.Database)
 
-	initialized = true
 	return nil
 }
 
@@ -172,8 +170,8 @@ func buildURI(cfg config.Mongo) string {
 func Client() (*mongo.Client, error) {
 	mu.RLock()
 	defer mu.RUnlock()
-	if !initialized {
-		return nil, errors.New("mongo client not initialized, call Init() first")
+	if client == nil {
+		return nil, errors.New("mongo client not initialized")
 	}
 	if client == nil {
 		return nil, errors.New("mongo client is nil")
@@ -212,7 +210,6 @@ func Close() error {
 			return fmt.Errorf("failed to disconnect MongoDB client: %w", err)
 		}
 		client = nil
-		initialized = false
 	}
 	return nil
 }

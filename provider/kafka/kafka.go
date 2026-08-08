@@ -20,9 +20,8 @@ import (
 const pingTimeout = 10 * time.Second
 
 var (
-	mu          sync.RWMutex
-	initialized bool
-	client      *kgo.Client
+	mu     sync.RWMutex
+	client *kgo.Client
 )
 
 // init registers this provider so importing the package compiles the
@@ -42,7 +41,7 @@ func Init() (err error) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if initialized {
+	if client != nil {
 		return nil
 	}
 
@@ -62,7 +61,6 @@ func Init() (err error) {
 	zap.S().Infow("successfully connected to kafka", "brokers", cfg.Brokers, "client_id", cfg.ClientID)
 
 	client = c
-	initialized = true
 	return nil
 }
 
@@ -122,8 +120,8 @@ func buildOpts(cfg config.Kafka) ([]kgo.Opt, error) {
 func Client() (*kgo.Client, error) {
 	mu.RLock()
 	defer mu.RUnlock()
-	if !initialized || client == nil {
-		return nil, errors.New("kafka client not initialized, call Init() first")
+	if client == nil {
+		return nil, errors.New("kafka client not initialized")
 	}
 	return client, nil
 }
@@ -138,7 +136,7 @@ func Admin() (*kadm.Client, error) {
 	return kadm.NewClient(c), nil
 }
 
-// Close closes the default Kafka client and resets the initialized state,
+// Close closes the default Kafka client,
 // allowing a subsequent Init to establish a fresh client.
 func Close() error {
 	mu.Lock()
@@ -148,6 +146,5 @@ func Close() error {
 		zap.S().Infow("successfully closed kafka client")
 		client = nil
 	}
-	initialized = false
 	return nil
 }

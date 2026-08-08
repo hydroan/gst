@@ -13,9 +13,8 @@ import (
 )
 
 var (
-	initialized bool
-	session     *r.Session
-	mu          sync.RWMutex
+	session *r.Session
+	mu      sync.RWMutex
 )
 
 // init registers this provider so importing the package compiles the
@@ -35,7 +34,7 @@ func Init() (err error) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if initialized {
+	if session != nil {
 		return nil
 	}
 
@@ -50,7 +49,6 @@ func Init() (err error) {
 	}
 	zap.S().Infow("successfully connect to rethinkdb", "hosts", cfg.Hosts, "database", cfg.Database)
 
-	initialized = true
 	return nil
 }
 
@@ -105,12 +103,13 @@ func New(cfg config.RethinkDB) (*r.Session, error) {
 	return _session, nil
 }
 
-// Session returns the RethinkDB session instance
-func Session() (*r.Session, error) {
+// Client returns the initialized RethinkDB session, the client handle of
+// this provider.
+func Client() (*r.Session, error) {
 	mu.RLock()
 	defer mu.RUnlock()
-	if !initialized {
-		return nil, errors.New("rethinkdb session not initialized, call Init() first")
+	if session == nil {
+		return nil, errors.New("rethinkdb session not initialized")
 	}
 	if session == nil {
 		return nil, errors.New("rethinkdb session is nil")
@@ -128,7 +127,6 @@ func Close() error {
 	}
 	err := session.Close()
 	session = nil
-	initialized = false
 	if err != nil {
 		return errors.Wrap(err, "failed to close rethinkdb session")
 	}
@@ -138,7 +136,7 @@ func Close() error {
 
 // Health checks if the RethinkDB connection is healthy
 func Health() error {
-	s, err := Session()
+	s, err := Client()
 	if err != nil {
 		return err
 	}

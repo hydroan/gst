@@ -13,9 +13,8 @@ import (
 )
 
 var (
-	initialized bool
-	session     *gocql.Session
-	mu          sync.RWMutex
+	session *gocql.Session
+	mu      sync.RWMutex
 )
 
 // init registers this provider so importing the package compiles the
@@ -35,7 +34,7 @@ func Init() (err error) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if initialized {
+	if session != nil {
 		return nil
 	}
 
@@ -45,7 +44,6 @@ func Init() (err error) {
 
 	zap.S().Infow("successfully connected to cassandra", "hosts", cfg.Hosts, "port", cfg.Port, "keyspace", cfg.Keyspace)
 
-	initialized = true
 	return nil
 }
 
@@ -169,12 +167,15 @@ func getRetryPolicy(policyName string, maxRetryCount int) (gocql.RetryPolicy, er
 	}
 }
 
-// Session returns the global Cassandra session.
-// It returns nil if the session is not initialized.
-func Session() *gocql.Session {
+// Client returns the initialized Cassandra session, the client handle of
+// this provider.
+func Client() (*gocql.Session, error) {
 	mu.RLock()
 	defer mu.RUnlock()
-	return session
+	if session == nil {
+		return nil, errors.New("cassandra session not initialized")
+	}
+	return session, nil
 }
 
 // Close closes the global Cassandra session.
@@ -186,6 +187,5 @@ func Close() error {
 		zap.S().Infow("successfully close cassandra session")
 		session = nil
 	}
-	initialized = false
 	return nil
 }

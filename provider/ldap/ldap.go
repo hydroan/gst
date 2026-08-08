@@ -16,10 +16,9 @@ import (
 )
 
 var (
-	initialized bool
-	gconn       *ldap.Conn
-	mu          sync.RWMutex
-	heartbeat   *time.Ticker
+	gconn     *ldap.Conn
+	mu        sync.RWMutex
+	heartbeat *time.Ticker
 )
 
 // init registers this provider so importing the package compiles the
@@ -39,7 +38,7 @@ func Init() (err error) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if initialized {
+	if gconn != nil {
 		return nil
 	}
 
@@ -78,7 +77,6 @@ func Init() (err error) {
 
 	zap.S().Infow("successfully connected to LDAP server", "host", cfg.Host, "port", cfg.Port)
 
-	initialized = true
 	return nil
 }
 
@@ -120,12 +118,15 @@ func New(cfg config.Ldap) (*ldap.Conn, error) {
 	return conn, nil
 }
 
-// Conn returns the global LDAP connection.
-// It returns nil if the connection is not initialized.
-func Conn() *ldap.Conn {
+// Client returns the initialized LDAP connection, the client handle of
+// this provider.
+func Client() (*ldap.Conn, error) {
 	mu.RLock()
 	defer mu.RUnlock()
-	return gconn
+	if gconn == nil {
+		return nil, errors.New("ldap connection not initialized")
+	}
+	return gconn, nil
 }
 
 // Close closes the global LDAP connection.
@@ -140,12 +141,10 @@ func Close() error {
 	}
 
 	if gconn == nil {
-		initialized = false
 		return nil
 	}
 	err := gconn.Close()
 	gconn = nil
-	initialized = false
 	if err != nil {
 		return errors.Wrap(err, "failed to close LDAP connection")
 	}
@@ -156,7 +155,7 @@ func Close() error {
 // checkConnection verifies the LDAP connection is still valid
 // and reconnects if necessary.
 func checkConnection() {
-	if gconn == nil || !initialized {
+	if gconn == nil {
 		return
 	}
 
@@ -197,9 +196,9 @@ func checkConnection() {
 
 // Search performs an LDAP search with the given parameters
 func Search(baseDN, filter string, attributes []string, scope int) ([]*ldap.Entry, error) {
-	conn := Conn()
-	if conn == nil {
-		return nil, errors.New("LDAP connection not initialized")
+	conn, err := Client()
+	if err != nil {
+		return nil, err
 	}
 
 	cfg := config.App.Ldap
@@ -287,9 +286,9 @@ func SearchWithContext(ctx context.Context, baseDN, filter string, attributes []
 
 // Authenticate authenticates a user with the given username and password
 func Authenticate(username, password string) (bool, error) {
-	conn := Conn()
-	if conn == nil {
-		return false, errors.New("LDAP connection not initialized")
+	_, err := Client()
+	if err != nil {
+		return false, err
 	}
 
 	cfg := config.App.Ldap
@@ -333,9 +332,9 @@ func Authenticate(username, password string) (bool, error) {
 
 // GetUser returns a user entry for a given username
 func GetUser(username string, attributes []string) (*ldap.Entry, error) {
-	conn := Conn()
-	if conn == nil {
-		return nil, errors.New("LDAP connection not initialized")
+	_, err := Client()
+	if err != nil {
+		return nil, err
 	}
 
 	cfg := config.App.Ldap
@@ -365,9 +364,9 @@ func GetUser(username string, attributes []string) (*ldap.Entry, error) {
 
 // GetGroup returns a group entry for a given group name
 func GetGroup(groupName string, attributes []string) (*ldap.Entry, error) {
-	conn := Conn()
-	if conn == nil {
-		return nil, errors.New("LDAP connection not initialized")
+	_, err := Client()
+	if err != nil {
+		return nil, err
 	}
 
 	cfg := config.App.Ldap
@@ -397,9 +396,9 @@ func GetGroup(groupName string, attributes []string) (*ldap.Entry, error) {
 
 // GetUserGroups returns all groups for a given username
 func GetUserGroups(username string) ([]string, error) {
-	conn := Conn()
-	if conn == nil {
-		return nil, errors.New("LDAP connection not initialized")
+	_, err := Client()
+	if err != nil {
+		return nil, err
 	}
 
 	cfg := config.App.Ldap
@@ -452,9 +451,9 @@ func GetUserGroups(username string) ([]string, error) {
 
 // GetGroupMembers returns all members of a given group
 func GetGroupMembers(groupName string) ([]string, error) {
-	conn := Conn()
-	if conn == nil {
-		return nil, errors.New("LDAP connection not initialized")
+	_, err := Client()
+	if err != nil {
+		return nil, err
 	}
 
 	cfg := config.App.Ldap
@@ -494,9 +493,9 @@ func GetGroupMembers(groupName string) ([]string, error) {
 
 // AddUser adds a new user to the LDAP directory
 func AddUser(username, firstName, lastName, email, password string, attributes map[string][]string) error {
-	conn := Conn()
-	if conn == nil {
-		return errors.New("LDAP connection not initialized")
+	conn, err := Client()
+	if err != nil {
+		return err
 	}
 
 	cfg := config.App.Ldap
@@ -556,7 +555,7 @@ func AddUser(username, firstName, lastName, email, password string, attributes m
 	}
 
 	// Execute the add operation
-	err := conn.Add(addReq)
+	err = conn.Add(addReq)
 	if err != nil {
 		return errors.Wrap(err, "failed to add user")
 	}
@@ -566,9 +565,9 @@ func AddUser(username, firstName, lastName, email, password string, attributes m
 
 // ModifyUser modifies an existing user in the LDAP directory
 func ModifyUser(username string, changes map[string][]string) error {
-	conn := Conn()
-	if conn == nil {
-		return errors.New("LDAP connection not initialized")
+	conn, err := Client()
+	if err != nil {
+		return err
 	}
 
 	// First, find the user's DN
@@ -596,9 +595,9 @@ func ModifyUser(username string, changes map[string][]string) error {
 
 // DeleteUser deletes a user from the LDAP directory
 func DeleteUser(username string) error {
-	conn := Conn()
-	if conn == nil {
-		return errors.New("LDAP connection not initialized")
+	conn, err := Client()
+	if err != nil {
+		return err
 	}
 
 	// First, find the user's DN
@@ -621,9 +620,9 @@ func DeleteUser(username string) error {
 
 // AddUserToGroup adds a user to a group
 func AddUserToGroup(username, groupName string) error {
-	conn := Conn()
-	if conn == nil {
-		return errors.New("LDAP connection not initialized")
+	conn, err := Client()
+	if err != nil {
+		return err
 	}
 
 	// Find the user's DN
@@ -655,9 +654,9 @@ func AddUserToGroup(username, groupName string) error {
 
 // RemoveUserFromGroup removes a user from a group
 func RemoveUserFromGroup(username, groupName string) error {
-	conn := Conn()
-	if conn == nil {
-		return errors.New("LDAP connection not initialized")
+	conn, err := Client()
+	if err != nil {
+		return err
 	}
 
 	// Find the user's DN

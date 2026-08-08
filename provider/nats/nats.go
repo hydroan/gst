@@ -15,9 +15,8 @@ import (
 )
 
 var (
-	mu          sync.RWMutex
-	initialized bool
-	conn        *nats.Conn
+	mu   sync.RWMutex
+	conn *nats.Conn
 )
 
 // init registers this provider so importing the package compiles the
@@ -37,7 +36,7 @@ func Init() (err error) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if initialized {
+	if conn != nil {
 		return nil
 	}
 
@@ -53,7 +52,6 @@ func Init() (err error) {
 	}
 	zap.S().Infow("successfully connect to nats", "url", cfg.Addrs, "client_name", cfg.ClientName)
 
-	initialized = true
 	return nil
 }
 
@@ -131,7 +129,20 @@ func New(cfg config.Nats) (*nats.Conn, error) {
 	return nats.Connect(strings.Join(cfg.Addrs, ","), opts...)
 }
 
+// Client returns the initialized NATS connection, the client handle of
+// this provider.
+func Client() (*nats.Conn, error) {
+	mu.RLock()
+	defer mu.RUnlock()
+	if conn == nil {
+		return nil, errors.New("nats connection not initialized")
+	}
+	return conn, nil
+}
+
 func Close() error {
+	mu.Lock()
+	defer mu.Unlock()
 	if conn != nil {
 		conn.Close()
 		zap.S().Infow("successfully close nats client", "url", conn.ConnectedUrl(), "cluster_name", config.App.Nats.ClientName)
@@ -139,5 +150,3 @@ func Close() error {
 	}
 	return nil
 }
-
-func Conn() *nats.Conn { return conn }

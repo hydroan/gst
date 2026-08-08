@@ -45,7 +45,7 @@ func drainProviders() {
 		registered[p.Name] = true
 		ins.Register(p.Init)
 		if p.Close != nil {
-			registerCleanup(closeProvider(p))
+			registerCleanup(closeComponent(p.Name, p.Close))
 		}
 	}
 
@@ -68,13 +68,13 @@ func missingProviders(registered map[string]bool) []string {
 	return missing
 }
 
-// closeProvider adapts a provider Close to a cleanup handler, logging the
+// closeComponent adapts a component Close to a cleanup handler, logging the
 // returned error centrally so shutdown always continues and individual
-// providers do not implement their own logging.
-func closeProvider(p provider.Provider) func() {
+// components do not implement their own logging.
+func closeComponent(name string, closeFn func() error) func() {
 	return func() {
-		if err := p.Close(); err != nil {
-			zap.S().Errorw("failed to close provider", "provider", p.Name, "err", err)
+		if err := closeFn(); err != nil {
+			zap.S().Errorw("failed to close component", "component", name, "err", err)
 		}
 	}
 }

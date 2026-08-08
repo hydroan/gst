@@ -18,7 +18,6 @@ import (
 )
 
 var (
-	initialized     bool
 	defaultProducer rocketmq.Producer
 	defaultConsumer rocketmq.PushConsumer
 	defaultAdmin    admin.Admin
@@ -42,7 +41,7 @@ func Init() (err error) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if initialized {
+	if defaultProducer != nil {
 		return nil
 	}
 
@@ -65,7 +64,6 @@ func Init() (err error) {
 
 	zap.S().Infow("successfully connect to rocketmq", "nameserver", cfg.NameServerAddrs, "group", cfg.GroupName)
 
-	initialized = true
 	return nil
 }
 
@@ -229,8 +227,8 @@ func NewAdmin(cfg config.RocketMQ) (admin.Admin, error) {
 func Producer() (rocketmq.Producer, error) {
 	mu.RLock()
 	defer mu.RUnlock()
-	if !initialized {
-		return nil, errors.New("rocketmq producer not initialized, call Init() first")
+	if defaultProducer == nil {
+		return nil, errors.New("rocketmq producer not initialized")
 	}
 	if defaultProducer == nil {
 		return nil, errors.New("rocketmq producer is nil")
@@ -242,8 +240,8 @@ func Producer() (rocketmq.Producer, error) {
 func Consumer() (rocketmq.PushConsumer, error) {
 	mu.RLock()
 	defer mu.RUnlock()
-	if !initialized {
-		return nil, errors.New("rocketmq consumer not initialized, call Init() first")
+	if defaultConsumer == nil {
+		return nil, errors.New("rocketmq consumer not initialized")
 	}
 	if defaultConsumer == nil {
 		return nil, errors.New("rocketmq consumer is nil")
@@ -255,8 +253,8 @@ func Consumer() (rocketmq.PushConsumer, error) {
 func Admin() (admin.Admin, error) {
 	mu.RLock()
 	defer mu.RUnlock()
-	if !initialized {
-		return nil, errors.New("rocketmq admin not initialized, call Init() first")
+	if defaultAdmin == nil {
+		return nil, errors.New("rocketmq admin not initialized")
 	}
 	if defaultAdmin == nil {
 		return nil, errors.New("rocketmq admin is nil")
@@ -294,7 +292,6 @@ func Close() error {
 		}
 		defaultAdmin = nil
 	}
-	initialized = false
 	return errors.Join(errs...)
 }
 

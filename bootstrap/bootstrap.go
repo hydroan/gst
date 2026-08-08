@@ -99,13 +99,11 @@ func Bootstrap() error {
 		module.Init,
 	)
 
-	registerCleanup(redis.Close)
-	registerCleanup(gstotel.Close)
+	registerCleanup(closeComponent("redis", redis.Close))
+	registerCleanup(closeComponent("otel", gstotel.Close))
 	registerCleanup(controller.Clean)
 	registerCleanup(pkgzap.Clean)
 	registerCleanup(config.Clean)
-
-	initialized = true
 
 	if err := ins.Init(); err != nil {
 		return err
@@ -120,6 +118,11 @@ func Bootstrap() error {
 	// Second database drain: create tables and seed records added by modules
 	// during Bootstrap after module.Wait has made those registrations visible.
 	dbruntime.Wait()
+
+	// Mark success only after every phase finished: a failed Bootstrap must
+	// keep returning its error instead of turning into a silent nil on a
+	// retry. Bootstrap is single-shot; callers exit on failure (RunOrDie).
+	initialized = true
 
 	return nil
 }
