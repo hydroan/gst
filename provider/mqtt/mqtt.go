@@ -17,9 +17,10 @@ import (
 )
 
 var (
-	client   mqtt.Client
-	mu       sync.RWMutex
-	clientID string
+	client      mqtt.Client
+	mu          sync.RWMutex
+	clientID    string
+	stopMonitor chan struct{}
 )
 
 // init registers this provider so importing the package compiles the
@@ -56,7 +57,8 @@ func Init() (err error) {
 		"clean_session", cfg.CleanSession,
 		"auto_reconnect", cfg.AutoReconnect,
 	)
-	go monitorConnection()
+	stopMonitor = make(chan struct{})
+	go monitorConnection(client, stopMonitor)
 	return nil
 }
 
@@ -138,14 +140,23 @@ func defaultIfEmpty(str, defaultStr string) string {
 	return str
 }
 
-func monitorConnection() {
+// monitorConnection reconnects the client when the connection drops. The
+// client handle and stop channel arrive as arguments so Close can end the
+// loop without racing the monitor over package state.
+func monitorConnection(c mqtt.Client, stop <-chan struct{}) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		if !client.IsConnected() {
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+			if c.IsConnected() {
+				continue
+			}
 			logger.Mqtt.Warn("mqtt client disconnected, attempting to reconnect...")
-			if err := connect(client); err != nil {
+			if err := connect(c); err != nil {
 				logger.Mqtt.Errorw("reconnect failed", "error", err)
 				continue
 			}
@@ -189,6 +200,8 @@ func Close() error {
 	defer mu.Unlock()
 
 	if client != nil {
+		close(stopMonitor)
+		stopMonitor = nil
 		client.Disconnect(250) // wait 250ms for the disconnect to complete
 		client = nil
 	}
