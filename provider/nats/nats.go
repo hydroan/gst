@@ -144,8 +144,9 @@ func Close() error {
 	mu.Lock()
 	defer mu.Unlock()
 	if conn != nil {
+		url := conn.ConnectedUrl()
 		conn.Close()
-		zap.S().Infow("successfully close nats client", "url", conn.ConnectedUrl(), "cluster_name", config.App.Nats.ClientName)
+		zap.S().Infow("successfully close nats client", "url", url, "client_name", config.App.Nats.ClientName)
 		conn = nil
 	}
 	return nil
