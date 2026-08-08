@@ -2,19 +2,12 @@ package ccache_test
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/cache/cachetest"
 	"github.com/hydroan/gst/internal/cache/ccache"
 	"github.com/hydroan/gst/types"
 )
-
-func TestMain(m *testing.M) {
-	cachetest.FillTestConfig()
-	os.Exit(m.Run())
-}
 
 func TestCacheReturnsSameInstancePerType(t *testing.T) {
 	if ccache.Cache[int]() != ccache.Cache[int]() {

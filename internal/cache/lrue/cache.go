@@ -7,14 +7,18 @@ import (
 	"time"
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/types"
 )
 
-var store = registry.New()
+const (
+	// defaultMaxEntries bounds every per-type cache.
+	defaultMaxEntries = 10_000
+	// defaultExpiration is the single global window every entry shares.
+	defaultExpiration = 10 * time.Minute
+)
 
-func Init() error { return nil }
+var store = registry.New()
 
 type cache[T any] struct {
 	c *expirable.LRU[string, T]
@@ -25,7 +29,7 @@ type cache[T any] struct {
 func Cache[T any]() types.Cache[T] {
 	return registry.Load(store, func() types.Cache[T] {
 		return &cache[T]{
-			c: expirable.NewLRU[string, T](config.App.Cache.Capacity, nil, config.App.Cache.Expiration),
+			c: expirable.NewLRU[string, T](defaultMaxEntries, nil, defaultExpiration),
 		}
 	})
 }

@@ -6,40 +6,35 @@ import (
 
 	"github.com/allegro/bigcache/v3"
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/util"
 )
 
-var (
-	store = registry.New()
-
-	maxEntrySize     = 1024 * 64 // 64KB
-	hardMaxCacheSize = 0
-	verbose          = false
+const (
+	// shards must be a power of two, per the backend's requirement.
+	shards = 16
+	// lifeWindow is the single global lifetime every entry shares.
+	lifeWindow = 10 * time.Minute
+	// cleanWindow is how often the backend sweeps expired entries.
+	cleanWindow = 5 * time.Minute
+	// maxEntrySize is the backend's per-entry allocation hint in bytes.
+	maxEntrySize = 64 * 1024
 )
 
-func Init() error {
-	tmp, err := bigcache.New(context.Background(), buildConfig())
-	if err != nil {
-		return err
-	}
-	return tmp.Close()
-}
+var store = registry.New()
 
 type cache[T any] struct {
 	c *bigcache.BigCache
 }
 
 // Cache returns the process-wide bigcache cache of type T, creating it on
-// first use. Creation failures panic: they mean the cache configuration was
-// never loaded or is invalid, which Init reports as an error during bootstrap.
+// first use.
 func Cache[T any]() types.Cache[T] {
 	return registry.Load(store, func() types.Cache[T] {
 		c, err := bigcache.New(context.Background(), buildConfig())
 		if err != nil {
-			panic(errors.Wrap(err, "bigcache: create cache (run config.Init and cache.Init before requesting caches)"))
+			panic(err) // unreachable: the configuration is built from valid constants
 		}
 		return &cache[T]{c: c}
 	})
@@ -81,11 +76,9 @@ func (c *cache[T]) Exists(_ context.Context, key string) bool {
 
 func buildConfig() bigcache.Config {
 	return bigcache.Config{
-		Shards:           config.App.Shards,
-		LifeWindow:       config.App.Cache.LifeWindow,
-		CleanWindow:      config.App.Cache.CleanWindow,
-		MaxEntrySize:     maxEntrySize,
-		HardMaxCacheSize: hardMaxCacheSize,
-		Verbose:          verbose,
+		Shards:       shards,
+		LifeWindow:   lifeWindow,
+		CleanWindow:  cleanWindow,
+		MaxEntrySize: maxEntrySize,
 	}
 }

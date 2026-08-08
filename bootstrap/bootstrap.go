@@ -8,7 +8,6 @@ import (
 
 	"github.com/hydroan/gst/authn/jwt"
 	"github.com/hydroan/gst/authz/rbac"
-	"github.com/hydroan/gst/cache"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/cronjob"
 	"github.com/hydroan/gst/database/clickhouse"
@@ -51,9 +50,6 @@ func Bootstrap() error {
 		config.Init,
 		pkgzap.Init,
 		prommetrics.Init,
-
-		// cache
-		cache.Init,
 
 		// database
 		sqlite.Init,

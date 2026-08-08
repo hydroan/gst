@@ -2,20 +2,13 @@ package fastcache_test
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/cache/cachetest"
 	"github.com/hydroan/gst/internal/cache/fastcache"
 	"github.com/hydroan/gst/types"
 )
-
-func TestMain(m *testing.M) {
-	cachetest.FillTestConfig()
-	os.Exit(m.Run())
-}
 
 type sample struct {
 	Name string `json:"name"`

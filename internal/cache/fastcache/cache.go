@@ -6,15 +6,24 @@ import (
 
 	"github.com/VictoriaMetrics/fastcache"
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/util"
 )
 
-var store = registry.New()
+const (
+	// defaultCapacityBytes sizes this byte-addressed backend; the backend
+	// itself never goes below its 32MB floor.
+	defaultCapacityBytes = 64 << 20
 
-func Init() error { return nil }
+	// maxEntrySize is the backend's per-entry ceiling: fastcache silently
+	// drops entries whose key plus value exceed its 64KB chunk (minus the
+	// length header), so Set enforces the limit with an explicit error
+	// instead.
+	maxEntrySize = 64*1024 - 4
+)
+
+var store = registry.New()
 
 type cache[T any] struct {
 	c *fastcache.Cache
@@ -24,14 +33,9 @@ type cache[T any] struct {
 // first use.
 func Cache[T any]() types.Cache[T] {
 	return registry.Load(store, func() types.Cache[T] {
-		return &cache[T]{c: fastcache.New(config.App.Cache.Capacity)}
+		return &cache[T]{c: fastcache.New(defaultCapacityBytes)}
 	})
 }
-
-// maxEntrySize is the backend's per-entry ceiling: fastcache silently drops
-// entries whose key plus value exceed its 64KB chunk (minus the length
-// header), so Set enforces the limit with an explicit error instead.
-const maxEntrySize = 64*1024 - 4
 
 // Set stores the value under key. The backend has no expiration support, so
 // only ttl == 0 is accepted.

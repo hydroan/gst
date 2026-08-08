@@ -48,7 +48,6 @@ type Config struct {
 	Middleware    `json:"middleware" mapstructure:"middleware" ini:"middleware" yaml:"middleware"`
 	Auth          `json:"auth" mapstructure:"auth" ini:"auth" yaml:"auth"`
 	Database      `json:"database" mapstructure:"database" ini:"database" yaml:"database"`
-	Cache         `json:"cache" mapstructure:"cache" ini:"cache" yaml:"cache"`
 	Sqlite        `json:"sqlite" mapstructure:"sqlite" ini:"sqlite" yaml:"sqlite"`
 	Postgres      `json:"postgres" mapstructure:"postgres" ini:"postgres" yaml:"postgres"`
 	MySQL         `json:"mysql" mapstructure:"mysql" ini:"mysql" yaml:"mysql"`
@@ -83,7 +82,6 @@ func (c *Config) setDefault(v *viper.Viper) {
 	c.Auth.setDefault(v)
 	c.Logger.setDefault(v)
 	c.Database.setDefault(v)
-	c.Cache.setDefault(v)
 	c.Sqlite.setDefault(v)
 	c.Postgres.setDefault(v)
 	c.MySQL.setDefault(v)

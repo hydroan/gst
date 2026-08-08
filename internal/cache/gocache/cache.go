@@ -5,25 +5,26 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/types"
 	pkgcache "github.com/patrickmn/go-cache"
 )
 
-var store = registry.New()
+// cleanupInterval is how often the backend sweeps expired entries.
+const cleanupInterval = 5 * time.Minute
 
-func Init() error { return nil }
+var store = registry.New()
 
 type cache[T any] struct {
 	c *pkgcache.Cache
 }
 
 // Cache returns the process-wide go-cache cache of type T, creating it on
-// first use.
+// first use. The backend's default expiration is set to its no-expiration
+// marker: Set never relies on it because ttl == 0 is mapped explicitly.
 func Cache[T any]() types.Cache[T] {
 	return registry.Load(store, func() types.Cache[T] {
-		return &cache[T]{c: pkgcache.New(config.App.Cache.Expiration, config.App.Cache.CleanWindow)}
+		return &cache[T]{c: pkgcache.New(pkgcache.NoExpiration, cleanupInterval)}
 	})
 }
 

@@ -6,15 +6,17 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/coocood/freecache"
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/util"
 )
 
-var store = registry.New()
+// defaultCapacityBytes sizes this byte-addressed backend. The backend caps a
+// single entry at 1/1024 of the cache size, so 64MB also fixes the per-entry
+// ceiling at 64KB.
+const defaultCapacityBytes = 64 << 20
 
-func Init() error { return nil }
+var store = registry.New()
 
 type cache[T any] struct {
 	c *freecache.Cache
@@ -24,7 +26,7 @@ type cache[T any] struct {
 // first use.
 func Cache[T any]() types.Cache[T] {
 	return registry.Load(store, func() types.Cache[T] {
-		return &cache[T]{c: freecache.NewCache(config.App.Cache.Capacity)}
+		return &cache[T]{c: freecache.NewCache(defaultCapacityBytes)}
 	})
 }
 

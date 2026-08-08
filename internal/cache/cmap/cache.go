@@ -12,8 +12,6 @@ import (
 
 var store = registry.New()
 
-func Init() error { return nil }
-
 type cache[T any] struct {
 	c cmap.ConcurrentMap[string, T]
 }

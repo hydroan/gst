@@ -3,7 +3,8 @@
 // The concrete implementations live under internal/cache and are not part of
 // the public API: business projects import this package only, so their builds
 // link just the forwarded backend below instead of every cache library the
-// framework ships.
+// framework ships. Every backend carries built-in defaults; there is nothing
+// to configure or initialize.
 //
 // # Available Backends (internal/cache)
 //
@@ -30,11 +31,6 @@ import (
 	"github.com/hydroan/gst/internal/cache/ristretto"
 	"github.com/hydroan/gst/types"
 )
-
-// Init validates the configuration of the forwarded cache backend.
-func Init() error {
-	return ristretto.Init()
-}
 
 // Cache returns the process-wide typed cache backed by the forwarded backend.
 func Cache[T any]() types.Cache[T] {

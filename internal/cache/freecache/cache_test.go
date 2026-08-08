@@ -2,20 +2,13 @@ package freecache_test
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/cache/cachetest"
 	"github.com/hydroan/gst/internal/cache/freecache"
 	"github.com/hydroan/gst/types"
 )
-
-func TestMain(m *testing.M) {
-	cachetest.FillTestConfig()
-	os.Exit(m.Run())
-}
 
 type sample struct {
 	Name string `json:"name"`
@@ -55,13 +48,13 @@ func TestStructRoundtrip(t *testing.T) {
 }
 
 // TestSetRejectsEntryAboveBackendLimit records the backend's per-entry
-// ceiling: freecache caps one entry at 1/1024 of the cache size, and the
-// cache size bottoms out at 512KB, so with the test capacity a 1KB value is
-// rejected with an explicit error rather than stored partially.
+// ceiling: freecache caps one entry at 1/1024 of the cache size, which the
+// built-in 64MB capacity fixes at 64KB, so a 70KB value is rejected with an
+// explicit error rather than stored partially.
 func TestSetRejectsEntryAboveBackendLimit(t *testing.T) {
 	ctx := context.Background()
 	c := freecache.Cache[string]()
-	oversized := strings.Repeat("x", 1024)
+	oversized := strings.Repeat("x", 70*1024)
 	if err := c.Set(ctx, "oversized-entry", oversized, 0); err == nil {
 		t.Fatal("want error for entry above the backend per-entry limit")
 	}

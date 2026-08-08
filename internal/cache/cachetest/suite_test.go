@@ -1,7 +1,6 @@
 package cachetest_test
 
 import (
-	"os"
 	"testing"
 	"time"
 
@@ -17,11 +16,6 @@ import (
 	"github.com/hydroan/gst/internal/cache/ristretto"
 	"github.com/hydroan/gst/internal/cache/smap"
 )
-
-func TestMain(m *testing.M) {
-	cachetest.FillTestConfig()
-	os.Exit(m.Run())
-}
 
 func TestConformance(t *testing.T) {
 	t.Run("ristretto", func(t *testing.T) {

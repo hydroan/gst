@@ -6,34 +6,29 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/dgraph-io/ristretto/v2"
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/types"
 )
 
-var store = registry.New()
+// defaultMaxEntries bounds every per-type cache. The framework ships a fixed
+// default instead of a configuration knob: per-type instances are created
+// lazily and the admission counters cost memory per instance, so the default
+// stays small; raise it here when a real workload needs more.
+const defaultMaxEntries = 10_000
 
-func Init() error {
-	tmp, err := ristretto.NewCache(buildConf[any]())
-	if err != nil {
-		return err
-	}
-	tmp.Close()
-	return nil
-}
+var store = registry.New()
 
 type cache[T any] struct {
 	c *ristretto.Cache[string, T]
 }
 
 // Cache returns the process-wide ristretto cache of type T, creating it on
-// first use. Creation failures panic: they mean the cache configuration was
-// never loaded or is invalid, which Init reports as an error during bootstrap.
+// first use.
 func Cache[T any]() types.Cache[T] {
 	return registry.Load(store, func() types.Cache[T] {
 		c, err := ristretto.NewCache(buildConf[T]())
 		if err != nil {
-			panic(errors.Wrap(err, "ristretto: create cache (run config.Init and cache.Init before requesting caches)"))
+			panic(err) // unreachable: the configuration is built from positive constants
 		}
 		return &cache[T]{c: c}
 	})
@@ -71,14 +66,14 @@ func (c *cache[T]) Exists(_ context.Context, key string) bool {
 	return exists
 }
 
-// buildConf sizes the cache from the configured capacity: MaxCost bounds the
-// entry count because every entry costs 1, and NumCounters is ten times the
-// expected entry count as the admission policy requires.
+// buildConf sizes the cache following the backend's own guidance: MaxCost
+// bounds the entry count because every entry costs 1, NumCounters is ten
+// times the expected entries to keep the admission sketch accurate, and
+// BufferItems is the recommended write-buffer size.
 func buildConf[T any]() *ristretto.Config[string, T] {
-	capacity := int64(config.App.Cache.Capacity)
 	return &ristretto.Config[string, T]{
-		NumCounters: capacity * 10,
-		MaxCost:     capacity,
+		NumCounters: defaultMaxEntries * 10,
+		MaxCost:     defaultMaxEntries,
 		BufferItems: 64,
 	}
 }

@@ -5,19 +5,21 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/types"
 	"github.com/karlseguin/ccache/v3"
 )
 
-// foreverTTL stands in for "never expires": the backend has no such notion
-// and larger values would overflow its deadline arithmetic.
-const foreverTTL = 100 * 365 * 24 * time.Hour
+const (
+	// defaultMaxEntries bounds every per-type cache.
+	defaultMaxEntries = 10_000
+
+	// foreverTTL stands in for "never expires": the backend has no such
+	// notion and larger values would overflow its deadline arithmetic.
+	foreverTTL = 100 * 365 * 24 * time.Hour
+)
 
 var store = registry.New()
-
-func Init() error { return nil }
 
 type cache[T any] struct {
 	c *ccache.Cache[T]
@@ -27,7 +29,7 @@ type cache[T any] struct {
 // use.
 func Cache[T any]() types.Cache[T] {
 	return registry.Load(store, func() types.Cache[T] {
-		return &cache[T]{c: ccache.New(ccache.Configure[T]().MaxSize(int64(config.App.Cache.Capacity)))}
+		return &cache[T]{c: ccache.New(ccache.Configure[T]().MaxSize(defaultMaxEntries))}
 	})
 }
 
