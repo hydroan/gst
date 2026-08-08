@@ -45,6 +45,7 @@ var (
 type Config struct {
 	AppInfo       `json:"app" mapstructure:"app" ini:"app" yaml:"app"`
 	Server        `json:"server" mapstructure:"server" ini:"server" yaml:"server"`
+	Cache         `json:"cache" mapstructure:"cache" ini:"cache" yaml:"cache"`
 	Middleware    `json:"middleware" mapstructure:"middleware" ini:"middleware" yaml:"middleware"`
 	Auth          `json:"auth" mapstructure:"auth" ini:"auth" yaml:"auth"`
 	Database      `json:"database" mapstructure:"database" ini:"database" yaml:"database"`
@@ -78,6 +79,7 @@ type Config struct {
 func (c *Config) setDefault(v *viper.Viper) {
 	c.AppInfo.setDefault(v)
 	c.Server.setDefault(v)
+	c.Cache.setDefault(v)
 	c.Middleware.setDefault(v)
 	c.Auth.setDefault(v)
 	c.Logger.setDefault(v)

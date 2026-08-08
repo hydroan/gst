@@ -6,15 +6,16 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/dgraph-io/ristretto/v2"
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/types"
 )
 
-// defaultMaxEntries bounds every per-type cache. The framework ships a fixed
-// default instead of a configuration knob: per-type instances are created
-// lazily and the admission counters cost memory per instance, so the default
-// stays small; raise it here when a real workload needs more.
-const defaultMaxEntries = 10_000
+// defaultMaxEntries bounds every per-type cache when the cache configuration
+// does not override it. Instances are created lazily per type, so only used
+// types pay the admission-counter cost of roughly 4MB per instance at this
+// capacity.
+const defaultMaxEntries = 100_000
 
 var store = registry.New()
 
@@ -71,9 +72,10 @@ func (c *cache[T]) Exists(_ context.Context, key string) bool {
 // times the expected entries to keep the admission sketch accurate, and
 // BufferItems is the recommended write-buffer size.
 func buildConf[T any]() *ristretto.Config[string, T] {
+	maxEntries := int64(config.App.Cache.MaxEntriesOr(defaultMaxEntries))
 	return &ristretto.Config[string, T]{
-		NumCounters: defaultMaxEntries * 10,
-		MaxCost:     defaultMaxEntries,
+		NumCounters: maxEntries * 10,
+		MaxCost:     maxEntries,
 		BufferItems: 64,
 	}
 }

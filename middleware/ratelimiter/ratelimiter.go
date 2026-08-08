@@ -2,6 +2,7 @@ package ratelimiter
 
 import (
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -18,9 +19,12 @@ const (
 	defaultTTL   = 24 * time.Hour // default expiration of an idle limiter
 )
 
-// limiterCache is the process-wide limiter store. The cache backends carry
-// built-in defaults, so construction is pure and safe at package init.
-var limiterCache = cache.Cache[*rate.Limiter]()
+// limiterCache lazily fetches the limiter store on first request: the cache
+// backends read the optional cache configuration when an instance is first
+// created, and at package init that configuration is not loaded yet.
+var limiterCache = sync.OnceValue(func() types.Cache[*rate.Limiter] {
+	return cache.Cache[*rate.Limiter]()
+})
 
 // Config holds the configuration for the RateLimiter middleware.
 type Config struct {
@@ -98,10 +102,10 @@ func RateLimiter(opts ...Option) gin.HandlerFunc {
 		}
 
 		key := conf.KeyFunc(c)
-		limiter, err := limiterCache.Get(c.Request.Context(), key)
+		limiter, err := limiterCache().Get(c.Request.Context(), key)
 		if errors.Is(err, types.ErrEntryNotFound) {
 			limiter = rate.NewLimiter(conf.Rate, conf.Burst)
-			_ = limiterCache.Set(c.Request.Context(), key, limiter, conf.TTL)
+			_ = limiterCache().Set(c.Request.Context(), key, limiter, conf.TTL)
 		} else if err != nil {
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 				"code":          -1,

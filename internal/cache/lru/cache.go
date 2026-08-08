@@ -6,6 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	lru "github.com/hashicorp/golang-lru/v2"
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/types"
 )
@@ -13,7 +14,7 @@ import (
 // defaultMaxEntries bounds every per-type cache. The framework ships a fixed
 // default instead of a configuration knob; raise it here when a real workload
 // needs more.
-const defaultMaxEntries = 10_000
+const defaultMaxEntries = 100_000
 
 var store = registry.New()
 
@@ -25,7 +26,7 @@ type cache[T any] struct {
 // use.
 func Cache[T any]() types.Cache[T] {
 	return registry.Load(store, func() types.Cache[T] {
-		c, err := lru.New[string, T](defaultMaxEntries)
+		c, err := lru.New[string, T](config.App.Cache.MaxEntriesOr(defaultMaxEntries))
 		if err != nil {
 			panic(err) // unreachable: the default capacity is a positive constant
 		}
