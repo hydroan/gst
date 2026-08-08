@@ -38,7 +38,7 @@ func TestClickhouse(t *testing.T) {
 			config.App.Clickhouse = old
 		})
 
-		if err := Init(); err != nil {
+		if err = Init(); err != nil {
 			t.Fatalf("Init: %v", err)
 		}
 

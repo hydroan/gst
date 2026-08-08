@@ -22,7 +22,7 @@ var optionalProviders = map[string]func() bool{
 	"clickhouse": func() bool {
 		return config.App.Clickhouse.Enabled && config.App.Database.Type != config.DBClickHouse
 	},
-	"elastic": func() bool { return config.App.Elasticsearch.Enabled },
+	"elastic":   func() bool { return config.App.Elasticsearch.Enabled },
 	"etcd":      func() bool { return config.App.Etcd.Enabled },
 	"influxdb":  func() bool { return config.App.Influxdb.Enabled },
 	"kafka":     func() bool { return config.App.Kafka.Enabled },
