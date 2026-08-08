@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/allegro/bigcache"
+	"github.com/allegro/bigcache/v3"
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/cache/registry"
@@ -21,7 +21,7 @@ var (
 )
 
 func Init() error {
-	tmp, err := bigcache.NewBigCache(buildConfig())
+	tmp, err := bigcache.New(context.Background(), buildConfig())
 	if err != nil {
 		return err
 	}
@@ -37,7 +37,7 @@ type cache[T any] struct {
 // never loaded or is invalid, which Init reports as an error during bootstrap.
 func Cache[T any]() types.Cache[T] {
 	return registry.Load(store, func() types.Cache[T] {
-		c, err := bigcache.NewBigCache(buildConfig())
+		c, err := bigcache.New(context.Background(), buildConfig())
 		if err != nil {
 			panic(errors.Wrap(err, "bigcache: create cache (run config.Init and cache.Init before requesting caches)"))
 		}

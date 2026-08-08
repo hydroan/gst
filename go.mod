@@ -17,7 +17,7 @@ require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.34.0
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/VictoriaMetrics/fastcache v1.13.3
-	github.com/allegro/bigcache v1.2.1
+	github.com/allegro/bigcache/v3 v3.1.0
 	github.com/apache/rocketmq-client-go/v2 v2.1.2
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de
 	github.com/arl/statsviz v0.8.1
@@ -164,6 +164,7 @@ require (
 	github.com/alfatraining/structtag v1.0.0 // indirect
 	github.com/alingse/asasalint v0.0.11 // indirect
 	github.com/alingse/nilnesserr v0.2.0 // indirect
+	github.com/allegro/bigcache v1.2.1 // indirect
 	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/ashanbrown/forbidigo/v2 v2.3.1 // indirect

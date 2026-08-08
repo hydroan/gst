@@ -28,6 +28,11 @@ func Cache[T any]() types.Cache[T] {
 	})
 }
 
+// maxEntrySize is the backend's per-entry ceiling: fastcache silently drops
+// entries whose key plus value exceed its 64KB chunk (minus the length
+// header), so Set enforces the limit with an explicit error instead.
+const maxEntrySize = 64*1024 - 4
+
 // Set stores the value under key. The backend has no expiration support, so
 // only ttl == 0 is accepted.
 func (c *cache[T]) Set(_ context.Context, key string, value T, ttl time.Duration) error {
@@ -40,6 +45,9 @@ func (c *cache[T]) Set(_ context.Context, key string, value T, ttl time.Duration
 	val, err := util.Marshal(value)
 	if err != nil {
 		return err
+	}
+	if len(key)+len(val) >= maxEntrySize {
+		return errors.Newf("entry exceeds the %d byte fastcache limit", maxEntrySize)
 	}
 	c.c.Set([]byte(key), val)
 	return nil

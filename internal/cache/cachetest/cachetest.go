@@ -12,8 +12,20 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/types"
 )
+
+// FillTestConfig fills the cache configuration the backends read at
+// construction, so backend test binaries can run without the full config
+// bootstrap. Call it from TestMain before any backend constructor runs.
+func FillTestConfig() {
+	config.App.Cache.Capacity = 100000
+	config.App.Cache.Expiration = 10 * time.Minute
+	config.App.Cache.CleanWindow = 5 * time.Minute
+	config.App.Cache.LifeWindow = 10 * time.Minute
+	config.App.Cache.Shards = 16
+}
 
 // Capabilities declares which parts of the ttl contract a backend honors.
 type Capabilities struct {

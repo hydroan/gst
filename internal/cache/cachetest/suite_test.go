@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/cache/bigcache"
 	"github.com/hydroan/gst/internal/cache/cachetest"
 	"github.com/hydroan/gst/internal/cache/ccache"
@@ -20,13 +19,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	// The backends read the cache configuration at construction; fill it
-	// directly instead of running the full config bootstrap.
-	config.App.Cache.Capacity = 100000
-	config.App.Cache.Expiration = 10 * time.Minute
-	config.App.Cache.CleanWindow = 5 * time.Minute
-	config.App.Cache.LifeWindow = 10 * time.Minute
-	config.App.Cache.Shards = 16
+	cachetest.FillTestConfig()
 	os.Exit(m.Run())
 }
 
