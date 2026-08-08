@@ -138,7 +138,7 @@ func New(cfg config.Influxdb) (influxdb2.Client, error) {
 }
 
 // WritePoint writes a single point to InfluxDB
-func WritePoint(measurement string, tags map[string]string, fields map[string]any, ts ...time.Time) error {
+func WritePoint(ctx context.Context, measurement string, tags map[string]string, fields map[string]any, ts ...time.Time) error {
 	mu.RLock()
 	defer mu.RUnlock()
 
@@ -157,12 +157,11 @@ func WritePoint(measurement string, tags map[string]string, fields map[string]an
 	p := influxdb2.NewPoint(measurement, tags, fields, t)
 
 	// Write the point
-	ctx := context.Background()
 	return writeAPI.WritePoint(ctx, p)
 }
 
 // Query executes a Flux query against InfluxDB
-func Query(query string) (*api.QueryTableResult, error) {
+func Query(ctx context.Context, query string) (*api.QueryTableResult, error) {
 	mu.RLock()
 	defer mu.RUnlock()
 
@@ -171,7 +170,7 @@ func Query(query string) (*api.QueryTableResult, error) {
 	}
 
 	// Execute query
-	return queryAPI.Query(context.Background(), query)
+	return queryAPI.Query(ctx, query)
 }
 
 // Client returns the initialized InfluxDB client.
