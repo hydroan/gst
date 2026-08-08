@@ -17,7 +17,7 @@ func newTOTPBindChallengeTestCache() *totpBindChallengeTestCache {
 	return &totpBindChallengeTestCache{items: make(map[string]totpBindChallenge)}
 }
 
-func (c *totpBindChallengeTestCache) Get(key string) (totpBindChallenge, error) {
+func (c *totpBindChallengeTestCache) Get(_ context.Context, key string) (totpBindChallenge, error) {
 	value, ok := c.items[key]
 	if !ok {
 		return totpBindChallenge{}, types.ErrEntryNotFound
@@ -25,35 +25,19 @@ func (c *totpBindChallengeTestCache) Get(key string) (totpBindChallenge, error) 
 	return value, nil
 }
 
-func (c *totpBindChallengeTestCache) Peek(key string) (totpBindChallenge, error) {
-	return c.Get(key)
-}
-
-func (c *totpBindChallengeTestCache) Set(key string, value totpBindChallenge, _ time.Duration) error {
+func (c *totpBindChallengeTestCache) Set(_ context.Context, key string, value totpBindChallenge, _ time.Duration) error {
 	c.items[key] = value
 	return nil
 }
 
-func (c *totpBindChallengeTestCache) Delete(key string) error {
+func (c *totpBindChallengeTestCache) Delete(_ context.Context, key string) error {
 	delete(c.items, key)
 	return nil
 }
 
-func (c *totpBindChallengeTestCache) Exists(key string) bool {
+func (c *totpBindChallengeTestCache) Exists(_ context.Context, key string) bool {
 	_, ok := c.items[key]
 	return ok
-}
-
-func (c *totpBindChallengeTestCache) Len() int {
-	return len(c.items)
-}
-
-func (c *totpBindChallengeTestCache) Clear() {
-	clear(c.items)
-}
-
-func (c *totpBindChallengeTestCache) WithContext(context.Context) types.Cache[totpBindChallenge] {
-	return c
 }
 
 func TestIssueTOTPBindChallengeUsesOpaqueRandomToken(t *testing.T) {

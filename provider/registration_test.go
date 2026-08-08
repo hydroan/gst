@@ -20,7 +20,6 @@ import (
 	_ "github.com/hydroan/gst/provider/influxdb"
 	_ "github.com/hydroan/gst/provider/kafka"
 	_ "github.com/hydroan/gst/provider/ldap"
-	_ "github.com/hydroan/gst/provider/memcached"
 	_ "github.com/hydroan/gst/provider/minio"
 	_ "github.com/hydroan/gst/provider/mongo"
 	_ "github.com/hydroan/gst/provider/mqtt"

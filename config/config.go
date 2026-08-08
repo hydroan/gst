@@ -69,7 +69,6 @@ type Config struct {
 	Etcd          `json:"etcd" mapstructure:"etcd" ini:"etcd" yaml:"etcd"`
 	Cassandra     `json:"cassandra" mapstructure:"cassandra" ini:"cassandra" yaml:"cassandra"`
 	Scylla        `json:"scylla" mapstructure:"scylla" ini:"scylla" yaml:"scylla"`
-	Memcached     `json:"memcached" mapstructure:"memcached" ini:"memcached" yaml:"memcached"`
 	RethinkDB     `json:"rethinkdb" mapstructure:"rethinkdb" ini:"rethinkdb" yaml:"rethinkdb"`
 	RocketMQ      `json:"rocketmq" mapstructure:"rocketmq" ini:"rocketmq" yaml:"rocketmq"`
 	Debug         `json:"debug" mapstructure:"debug" ini:"debug" yaml:"debug"`
@@ -104,7 +103,6 @@ func (c *Config) setDefault(v *viper.Viper) {
 	c.Etcd.setDefault(v)
 	c.Cassandra.setDefault(v)
 	c.Scylla.setDefault(v)
-	c.Memcached.setDefault(v)
 	c.RethinkDB.setDefault(v)
 	c.RocketMQ.setDefault(v)
 	c.Debug.setDefault(v)

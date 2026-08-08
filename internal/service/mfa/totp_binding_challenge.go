@@ -82,8 +82,7 @@ func issueTOTPBindChallenge(ctx context.Context, challenge totpBindChallenge) (s
 	challenge.IssuedAt = now
 	challenge.ExpiresAt = now.Add(totpBindChallengeTTL)
 
-	if err := totpBindChallengeCache().WithContext(normalizeTOTPBindContext(ctx)).
-		Set(totpBindChallengeKey(challengeID), challenge, totpBindChallengeTTL); err != nil {
+	if err := totpBindChallengeCache().Set(ctx, totpBindChallengeKey(challengeID), challenge, totpBindChallengeTTL); err != nil {
 		return "", totpBindChallenge{}, errors.Wrap(err, "store TOTP binding challenge")
 	}
 
@@ -110,8 +109,7 @@ func loadTOTPBindChallenge(ctx context.Context, challengeID string) (totpBindCha
 		return totpBindChallenge{}, errTOTPBindChallengeNotFound
 	}
 
-	challenge, err := totpBindChallengeCache().WithContext(normalizeTOTPBindContext(ctx)).
-		Get(totpBindChallengeKey(challengeID))
+	challenge, err := totpBindChallengeCache().Get(ctx, totpBindChallengeKey(challengeID))
 	if err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
 			return totpBindChallenge{}, errTOTPBindChallengeNotFound
@@ -124,8 +122,7 @@ func loadTOTPBindChallenge(ctx context.Context, challengeID string) (totpBindCha
 		return totpBindChallenge{}, errTOTPBindChallengeInvalid
 	}
 	if !challenge.ExpiresAt.IsZero() && !challenge.ExpiresAt.After(totpBindChallengeNow()) {
-		_ = totpBindChallengeCache().WithContext(normalizeTOTPBindContext(ctx)).
-			Delete(totpBindChallengeKey(challengeID))
+		_ = totpBindChallengeCache().Delete(ctx, totpBindChallengeKey(challengeID))
 		return totpBindChallenge{}, errTOTPBindChallengeExpired
 	}
 
@@ -141,8 +138,7 @@ func consumeTOTPBindChallenge(ctx context.Context, challengeID string) error {
 	if challengeID == "" {
 		return errTOTPBindChallengeNotFound
 	}
-	if err := totpBindChallengeCache().WithContext(normalizeTOTPBindContext(ctx)).
-		Delete(totpBindChallengeKey(challengeID)); err != nil {
+	if err := totpBindChallengeCache().Delete(ctx, totpBindChallengeKey(challengeID)); err != nil {
 		return errors.Wrap(err, "consume TOTP binding challenge")
 	}
 	return nil
@@ -151,12 +147,4 @@ func consumeTOTPBindChallenge(ctx context.Context, challengeID string) error {
 // totpBindChallengeKey builds the cache key for a pending TOTP binding challenge.
 func totpBindChallengeKey(challengeID string) string {
 	return strings.Join([]string{totpBindChallengeKeyBase, strings.TrimSpace(challengeID)}, ":")
-}
-
-// normalizeTOTPBindContext provides a non-nil context for cache operations.
-func normalizeTOTPBindContext(ctx context.Context) context.Context {
-	if ctx == nil {
-		return context.Background()
-	}
-	return ctx
 }

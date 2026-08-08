@@ -589,7 +589,7 @@ func accountRequireSessionNotFound(t *testing.T, sessionID string) {
 	t.Helper()
 
 	sessionKey := modeliamsession.SessionIDKey(sessionID)
-	_, err := redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Get(sessionKey)
+	_, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), sessionKey)
 	require.ErrorIs(t, err, types.ErrEntryNotFound)
 }
 

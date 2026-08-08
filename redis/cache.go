@@ -11,30 +11,22 @@ import (
 	"go.uber.org/zap"
 )
 
-var _ types.Cache[any] = (*cache[any])(nil)
+var _ types.Cache[any] = cache[any]{}
 
-type cache[T any] struct {
-	ctx context.Context
-}
+type cache[T any] struct{}
 
-// Cache returns a new Redis-backed typed cache handle.
-//
-// Each call creates a fresh handle, so callers may bind a context once and
-// reuse the returned value for multiple related Redis cache operations in the
-// same flow:
-//
-//	cache := redis.Cache[T]().WithContext(ctx)
-//
-// This guarantee is specific to this Redis-backed implementation and should
-// not be assumed for other cache implementations. The generic types.Cache
-// contract does not require WithContext to return an independent handle.
+// Cache returns a Redis-backed typed cache handle wrapped with tracing. The
+// handle is stateless: the context of each call flows to the Redis client.
 func Cache[T any]() types.Cache[T] {
-	return tracing.NewWrapper(&cache[T]{ctx: context.Background()}, "redis")
+	return tracing.NewWrapper[T](cache[T]{}, "redis")
 }
 
-func (c *cache[T]) Set(key string, data T, ttl time.Duration) error {
+func (cache[T]) Set(ctx context.Context, key string, data T, ttl time.Duration) error {
 	if cli == nil {
 		return errors.New("redis not initialized")
+	}
+	if ttl < 0 {
+		return errors.New("negative ttl")
 	}
 	val, err := json.Marshal(data)
 	if err != nil {
@@ -44,19 +36,19 @@ func (c *cache[T]) Set(key string, data T, ttl time.Duration) error {
 	if len(val) == 0 {
 		return errors.New("cannot store empty value in redis")
 	}
-	if err = cli.Set(c.ctx, redisKey(key), val, ttl).Err(); err != nil {
+	if err = cli.Set(ctx, redisKey(key), val, ttl).Err(); err != nil {
 		zap.S().Error(err)
 		return err
 	}
 	return nil
 }
 
-func (c *cache[T]) Get(key string) (T, error) {
+func (cache[T]) Get(ctx context.Context, key string) (T, error) {
 	var zero T
 	if cli == nil {
 		return zero, errors.New("redis not initialized")
 	}
-	data, err := cli.Get(c.ctx, redisKey(key)).Bytes()
+	data, err := cli.Get(ctx, redisKey(key)).Bytes()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return zero, types.ErrEntryNotFound
@@ -75,60 +67,25 @@ func (c *cache[T]) Get(key string) (T, error) {
 	return result, nil
 }
 
-func (c *cache[T]) Peek(key string) (T, error) {
-	if cli == nil {
-		return *new(T), errors.New("redis not initialized")
-	}
-	return c.Get(key)
-}
-
-func (c *cache[T]) Delete(key string) error {
+func (cache[T]) Delete(ctx context.Context, key string) error {
 	if cli == nil {
 		return errors.New("redis not initialized")
 	}
-	if err := cli.Del(c.ctx, redisKey(key)).Err(); err != nil {
+	if err := cli.Del(ctx, redisKey(key)).Err(); err != nil {
 		zap.S().Error(err)
 		return err
 	}
 	return nil
 }
 
-func (c *cache[T]) Exists(key string) bool {
+func (cache[T]) Exists(ctx context.Context, key string) bool {
 	if cli == nil {
 		zap.S().Warn("redis not initialized")
 		return false
 	}
-	res, err := cli.Exists(c.ctx, redisKey(key)).Result()
+	res, err := cli.Exists(ctx, redisKey(key)).Result()
 	if err != nil {
 		return false
 	}
 	return res > 0
 }
-
-func (c *cache[T]) Len() int {
-	if cli == nil {
-		zap.S().Warn("redis not initialized")
-		return 0
-	}
-	// In Redis Cluster, this only counts the selected node.
-	count, err := cli.DBSize(c.ctx).Result()
-	if err != nil {
-		zap.S().Error(err)
-		return 0
-	}
-	return int(count)
-}
-
-func (c *cache[T]) Clear() {
-	if cli == nil {
-		zap.S().Warn("redis not initialized")
-		return
-	}
-	if err := RemovePrefix(c.ctx, ""); err != nil {
-		zap.S().Error(err)
-	}
-}
-
-// WithContext returns a new handle bound to ctx without mutating the receiver.
-// This is a stronger guarantee than the generic types.Cache interface requires.
-func (c *cache[T]) WithContext(ctx context.Context) types.Cache[T] { return &cache[T]{ctx: ctx} }

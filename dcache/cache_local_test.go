@@ -18,24 +18,24 @@ func TestLocalCacheBasicOperations(t *testing.T) {
 	assert.NotNil(t, cache)
 
 	// Set and Get
-	err = cache.Set("key1", "value1", 1*time.Hour)
+	err = cache.Set(t.Context(), "key1", "value1", 1*time.Hour)
 	require.NoError(t, err)
 
-	val, err := cache.Get("key1")
+	val, err := cache.Get(t.Context(), "key1")
 	require.NoError(t, err)
 	assert.Equal(t, "value1", val)
 
 	// Exists
-	assert.True(t, cache.Exists("key1"))
-	assert.False(t, cache.Exists("nonexistent"))
+	assert.True(t, cache.Exists(t.Context(), "key1"))
+	assert.False(t, cache.Exists(t.Context(), "nonexistent"))
 
 	// Delete
-	err = cache.Delete("key1")
+	err = cache.Delete(t.Context(), "key1")
 	require.NoError(t, err)
-	assert.False(t, cache.Exists("key1"))
+	assert.False(t, cache.Exists(t.Context(), "key1"))
 
 	// get a key that was deleted
-	_, err = cache.Get("key1")
+	_, err = cache.Get(t.Context(), "key1")
 	require.Error(t, err)
 	assert.Equal(t, types.ErrEntryNotFound, err)
 }
@@ -46,12 +46,12 @@ func TestLocalCacheTTL(t *testing.T) {
 	require.NoError(t, err)
 
 	// set a short TTL
-	err = cache.Set("ttl-key", "ttl-value", 100*time.Millisecond)
+	err = cache.Set(t.Context(), "ttl-key", "ttl-value", 100*time.Millisecond)
 	require.NoError(t, err)
 
 	// it must exist right away
-	assert.True(t, cache.Exists("ttl-key"))
-	val, err := cache.Get("ttl-key")
+	assert.True(t, cache.Exists(t.Context(), "ttl-key"))
+	val, err := cache.Get(t.Context(), "ttl-key")
 	require.NoError(t, err)
 	assert.Equal(t, "ttl-value", val)
 
@@ -59,8 +59,8 @@ func TestLocalCacheTTL(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// once the TTL expired it must be gone
-	assert.False(t, cache.Exists("ttl-key"))
-	_, err = cache.Get("ttl-key")
+	assert.False(t, cache.Exists(t.Context(), "ttl-key"))
+	_, err = cache.Get(t.Context(), "ttl-key")
 	assert.Equal(t, types.ErrEntryNotFound, err)
 }
 
@@ -70,13 +70,13 @@ func TestLocalCacheZeroTTL(t *testing.T) {
 	require.NoError(t, err)
 
 	// set a zero TTL
-	err = cache.Set("zero-ttl", "永不过期", 0)
+	err = cache.Set(t.Context(), "zero-ttl", "永不过期", 0)
 	require.NoError(t, err)
 
 	// it must still exist after a short wait
 	time.Sleep(100 * time.Millisecond)
-	assert.True(t, cache.Exists("zero-ttl"))
-	val, err := cache.Get("zero-ttl")
+	assert.True(t, cache.Exists(t.Context(), "zero-ttl"))
+	val, err := cache.Get(t.Context(), "zero-ttl")
 	require.NoError(t, err)
 	assert.Equal(t, "永不过期", val)
 }
@@ -87,13 +87,13 @@ func TestLocalCacheNegativeTTL(t *testing.T) {
 	require.NoError(t, err)
 
 	// set a negative TTL
-	err = cache.Set("negative-ttl", "invalid", -1*time.Second)
+	err = cache.Set(t.Context(), "negative-ttl", "invalid", -1*time.Second)
 	// how ristretto handles a negative TTL is unclear, so the assertion follows the real behavior
 	if err != nil {
 		assert.Contains(t, err.Error(), "rejected")
 	} else {
 		// without an error, check whether the value was stored anyway
-		exists := cache.Exists("negative-ttl")
+		exists := cache.Exists(t.Context(), "negative-ttl")
 		assert.False(t, exists, "负TTL的键不应该被设置")
 	}
 }
@@ -103,31 +103,31 @@ func TestLocalCacheDifferentTypes(t *testing.T) {
 	// string cache
 	strCache, err := dcache.NewLocalCache[string]()
 	require.NoError(t, err)
-	err = strCache.Set("str", "string-value", 1*time.Hour)
+	err = strCache.Set(t.Context(), "str", "string-value", 1*time.Hour)
 	require.NoError(t, err)
 
 	// int cache
 	intCache, err := dcache.NewLocalCache[int]()
 	require.NoError(t, err)
-	err = intCache.Set("int", 42, 1*time.Hour)
+	err = intCache.Set(t.Context(), "int", 42, 1*time.Hour)
 	require.NoError(t, err)
 
 	// struct cache, using the package level Person type
 	personCache, err := dcache.NewLocalCache[Person]()
 	require.NoError(t, err)
-	err = personCache.Set("person", Person{Name: "Alice", Age: 30}, 1*time.Hour)
+	err = personCache.Set(t.Context(), "person", Person{Name: "Alice", Age: 30}, 1*time.Hour)
 	require.NoError(t, err)
 
 	// check the value of each type
-	strVal, err := strCache.Get("str")
+	strVal, err := strCache.Get(t.Context(), "str")
 	require.NoError(t, err)
 	assert.Equal(t, "string-value", strVal)
 
-	intVal, err := intCache.Get("int")
+	intVal, err := intCache.Get(t.Context(), "int")
 	require.NoError(t, err)
 	assert.Equal(t, 42, intVal)
 
-	personVal, err := personCache.Get("person")
+	personVal, err := personCache.Get(t.Context(), "person")
 	require.NoError(t, err)
 	assert.Equal(t, Person{Name: "Alice", Age: 30}, personVal)
 }
@@ -138,14 +138,14 @@ func TestLocalCacheOverwrite(t *testing.T) {
 	require.NoError(t, err)
 
 	// first set
-	err = cache.Set("overwrite", "original", 1*time.Hour)
+	err = cache.Set(t.Context(), "overwrite", "original", 1*time.Hour)
 	require.NoError(t, err)
 
 	// overwrite
-	err = cache.Set("overwrite", "updated", 2*time.Hour)
+	err = cache.Set(t.Context(), "overwrite", "updated", 2*time.Hour)
 	require.NoError(t, err)
 
-	val, err := cache.Get("overwrite")
+	val, err := cache.Get(t.Context(), "overwrite")
 	require.NoError(t, err)
 	assert.Equal(t, "updated", val)
 }
@@ -164,13 +164,13 @@ func TestLocalCacheConcurrency(t *testing.T) {
 			key := fmt.Sprintf("key-%d", idx)
 			value := fmt.Sprintf("value-%d", idx)
 
-			err := cache.Set(key, value, 1*time.Hour)
+			err := cache.Set(t.Context(), key, value, 1*time.Hour)
 			if err != nil {
 				errCh <- err
 				return
 			}
 
-			val, err := cache.Get(key)
+			val, err := cache.Get(t.Context(), key)
 			if err != nil {
 				errCh <- err
 				return
@@ -203,11 +203,11 @@ func TestLocalCacheLargeValues(t *testing.T) {
 	largeString := string(largeValue)
 
 	// store the large value
-	err = cache.Set("large", largeString, 1*time.Hour)
+	err = cache.Set(t.Context(), "large", largeString, 1*time.Hour)
 	require.NoError(t, err)
 
 	// read it back and verify
-	val, err := cache.Get("large")
+	val, err := cache.Get(t.Context(), "large")
 	require.NoError(t, err)
 	assert.Equal(t, largeString, val)
 }
@@ -223,7 +223,7 @@ func TestLocalCacheKeyCollision(t *testing.T) {
 	for i := range keyCount {
 		key := fmt.Sprintf("collision-test-key-%d", i)
 		value := fmt.Sprintf("value-%d", i)
-		err := cache.Set(key, value, 1*time.Hour)
+		err := cache.Set(t.Context(), key, value, 1*time.Hour)
 		require.NoError(t, err)
 	}
 
@@ -233,7 +233,7 @@ func TestLocalCacheKeyCollision(t *testing.T) {
 		key := fmt.Sprintf("collision-test-key-%d", idx)
 		expectedValue := fmt.Sprintf("value-%d", idx)
 
-		val, err := cache.Get(key)
+		val, err := cache.Get(t.Context(), key)
 		require.NoError(t, err)
 		assert.Equal(t, expectedValue, val)
 	}
@@ -251,21 +251,21 @@ func TestLocalCacheMetrics(t *testing.T) {
 	// run some operations so that metrics are produced
 	for i := range 100 {
 		key := fmt.Sprintf("metrics-key-%d", i)
-		err := cache.Set(key, fmt.Sprintf("val-%d", i), 1*time.Hour)
+		err := cache.Set(t.Context(), key, fmt.Sprintf("val-%d", i), 1*time.Hour)
 		require.NoError(t, err)
 	}
 
 	// some reads
 	for i := range 50 {
 		key := fmt.Sprintf("metrics-key-%d", i)
-		_, err := cache.Get(key)
+		_, err := cache.Get(t.Context(), key)
 		require.NoError(t, err)
 	}
 
 	// some cache misses
 	for i := 100; i < 150; i++ {
 		key := fmt.Sprintf("nonexistent-key-%d", i)
-		_, err := cache.Get(key)
+		_, err := cache.Get(t.Context(), key)
 		require.Error(t, err)
 	}
 
@@ -288,11 +288,11 @@ func TestLocalCacheSingletonBehavior(t *testing.T) {
 	assert.Equal(t, fmt.Sprintf("%p", cache1), fmt.Sprintf("%p", cache2))
 
 	// set a value through cache1
-	err = cache1.Set("singleton-test", "value", 1*time.Hour)
+	err = cache1.Set(t.Context(), "singleton-test", "value", 1*time.Hour)
 	require.NoError(t, err)
 
 	// it must be readable through cache2
-	val, err := cache2.Get("singleton-test")
+	val, err := cache2.Get(t.Context(), "singleton-test")
 	require.NoError(t, err)
 	assert.Equal(t, "value", val)
 
@@ -317,7 +317,7 @@ func TestLocalCacheSingletonBehavior(t *testing.T) {
 // 	for i := 0; i < 10000000 && !rejected; i++ {
 // 		key := fmt.Sprintf("stress-test-key-%d", i)
 // 		value := fmt.Sprintf("value-%d", i)
-// 		err := cache.Set(key, value, 1*time.Hour)
+// 		err := cache.Set(t.Context(), key, value, 1*time.Hour)
 // 		if err != nil && err.Error() == "cache rejected the set operation" {
 // 			rejected = true
 // 		}
@@ -333,11 +333,11 @@ func TestLocalCacheNilValue(t *testing.T) {
 	require.NoError(t, err)
 
 	// store a nil value
-	err = cache.Set("nil-key", nil, 1*time.Hour)
+	err = cache.Set(t.Context(), "nil-key", nil, 1*time.Hour)
 	require.NoError(t, err)
 
 	// read the nil value back
-	val, err := cache.Get("nil-key")
+	val, err := cache.Get(t.Context(), "nil-key")
 	require.NoError(t, err)
 	assert.Nil(t, val)
 }
@@ -348,11 +348,11 @@ func TestLocalCacheEmptyKey(t *testing.T) {
 	require.NoError(t, err)
 
 	// store an entry under the empty key
-	err = cache.Set("", "empty-key-value", 1*time.Hour)
+	err = cache.Set(t.Context(), "", "empty-key-value", 1*time.Hour)
 	require.NoError(t, err)
 
 	// read the empty key back
-	val, err := cache.Get("")
+	val, err := cache.Get(t.Context(), "")
 	require.NoError(t, err)
 	assert.Equal(t, "empty-key-value", val)
 }

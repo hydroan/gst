@@ -40,7 +40,7 @@ func (s *SessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamse
 		return &modeliamsession.SessionDeleteRsp{}, nil
 	}
 
-	targetSession, err := redis.Cache[modeliamsession.Session]().WithContext(ctx).Get(modeliamsession.SessionIDKey(targetSessionID))
+	targetSession, err := redis.Cache[modeliamsession.Session]().Get(ctx, modeliamsession.SessionIDKey(targetSessionID))
 	if err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
 			if targetSessionID == currentSessionID {

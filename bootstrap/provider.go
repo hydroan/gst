@@ -27,7 +27,6 @@ var optionalProviders = map[string]func() bool{
 	"influxdb":  func() bool { return config.App.Influxdb.Enabled },
 	"kafka":     func() bool { return config.App.Kafka.Enabled },
 	"ldap":      func() bool { return config.App.Ldap.Enabled },
-	"memcached": func() bool { return config.App.Memcached.Enabled },
 	"minio":     func() bool { return config.App.Minio.Enabled },
 	"mongo":     func() bool { return config.App.Mongo.Enabled },
 	"mqtt":      func() bool { return config.App.Mqtt.Enabled },

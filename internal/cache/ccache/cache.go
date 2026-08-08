@@ -2,61 +2,49 @@ package ccache
 
 import (
 	"context"
-	"reflect"
-	"sync"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/cache/tracing"
+	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/types"
 	"github.com/karlseguin/ccache/v3"
-	cmap "github.com/orcaman/concurrent-map/v2"
 )
 
-var (
-	cacheMap = cmap.New[any]()
-	mu       sync.Mutex
-)
+// foreverTTL stands in for "never expires": the backend has no such notion
+// and larger values would overflow its deadline arithmetic.
+const foreverTTL = 100 * 365 * 24 * time.Hour
 
-func Init() (err error) {
-	return nil
-}
+var store = registry.New()
+
+func Init() error { return nil }
 
 type cache[T any] struct {
-	c   *ccache.Cache[T]
-	ctx context.Context
+	c *ccache.Cache[T]
 }
 
+// Cache returns the process-wide ccache cache of type T, creating it on first
+// use.
 func Cache[T any]() types.Cache[T] {
-	typ := reflect.TypeFor[T]()
-	key := typ.PkgPath() + "|" + typ.String()
-	val, exists := cacheMap.Get(key)
-	if exists {
-		//nolint:errcheck
-		return val.(types.Cache[T])
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-
-	val, exists = cacheMap.Get(key)
-	if !exists {
-		val = tracing.NewWrapper(&cache[T]{
-			c:   ccache.New(ccache.Configure[T]().MaxSize(int64(config.App.Cache.Capacity))),
-			ctx: context.Background(),
-		}, "ccache")
-		cacheMap.Set(key, val)
-	}
-	//nolint:errcheck
-	return val.(types.Cache[T])
+	return registry.Load(store, func() types.Cache[T] {
+		return &cache[T]{c: ccache.New(ccache.Configure[T]().MaxSize(int64(config.App.Cache.Capacity)))}
+	})
 }
 
-func (c *cache[T]) Set(key string, value T, ttl time.Duration) error {
+func (c *cache[T]) Set(_ context.Context, key string, value T, ttl time.Duration) error {
+	if ttl < 0 {
+		return errors.New("negative ttl")
+	}
+	// The backend expires an entry ttl after Set, so the contract's "never
+	// expires" must be mapped to a practically infinite lifetime.
+	if ttl == 0 {
+		ttl = foreverTTL
+	}
 	c.c.Set(key, value, ttl)
 	return nil
 }
 
-func (c *cache[T]) Get(key string) (T, error) {
+func (c *cache[T]) Get(_ context.Context, key string) (T, error) {
 	var zero T
 	val := c.c.Get(key)
 	if val == nil {
@@ -68,35 +56,15 @@ func (c *cache[T]) Get(key string) (T, error) {
 	return val.Value(), nil
 }
 
-func (c *cache[T]) Peek(key string) (T, error) {
-	return c.Get(key)
-}
-
-func (c *cache[T]) Exists(key string) bool {
-	val := c.c.Get(key)
-	if val == nil {
-		return false
-	}
-	if val.Expired() {
-		return false
-	}
-	return true
-}
-
-func (c *cache[T]) Delete(key string) error {
+func (c *cache[T]) Delete(_ context.Context, key string) error {
 	c.c.Delete(key)
 	return nil
 }
 
-func (c *cache[T]) Len() int {
-	return c.c.ItemCount()
-}
-
-func (c *cache[T]) Clear() {
-	c.c.Clear()
-}
-
-func (c *cache[T]) WithContext(ctx context.Context) types.Cache[T] {
-	c.ctx = ctx
-	return c
+func (c *cache[T]) Exists(_ context.Context, key string) bool {
+	val := c.c.Get(key)
+	if val == nil {
+		return false
+	}
+	return !val.Expired()
 }

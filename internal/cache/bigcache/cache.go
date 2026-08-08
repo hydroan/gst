@@ -2,116 +2,81 @@ package bigcache
 
 import (
 	"context"
-	"reflect"
-	"sync"
 	"time"
 
 	"github.com/allegro/bigcache"
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/cache/tracing"
+	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/util"
-	cmap "github.com/orcaman/concurrent-map/v2"
 )
 
 var (
-	cacheMap = cmap.New[any]()
-
-	tmp *bigcache.BigCache // tmp is a temporary cache used to check the config is correct.
-	mu  sync.Mutex
+	store = registry.New()
 
 	maxEntrySize     = 1024 * 64 // 64KB
 	hardMaxCacheSize = 0
 	verbose          = false
 )
 
-func Init() (err error) {
-	if tmp, err = bigcache.NewBigCache(buildConfig()); err != nil {
+func Init() error {
+	tmp, err := bigcache.NewBigCache(buildConfig())
+	if err != nil {
 		return err
 	}
-	tmp.Close()
-
-	return nil
+	return tmp.Close()
 }
 
 type cache[T any] struct {
-	c   *bigcache.BigCache
-	ctx context.Context
+	c *bigcache.BigCache
 }
 
+// Cache returns the process-wide bigcache cache of type T, creating it on
+// first use. Creation failures panic: they mean the cache configuration was
+// never loaded or is invalid, which Init reports as an error during bootstrap.
 func Cache[T any]() types.Cache[T] {
-	typ := reflect.TypeFor[T]()
-	key := typ.PkgPath() + "|" + typ.String()
-	val, exists := cacheMap.Get(key)
-	if exists {
-		//nolint:errcheck
-		return val.(types.Cache[T])
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-
-	val, exists = cacheMap.Get(key)
-	if !exists {
-		val = tracing.NewWrapper(&cache[T]{c: newBigCache(), ctx: context.Background()}, "bigcache")
-		cacheMap.Set(key, val)
-	}
-	//nolint:errcheck
-	return val.(types.Cache[T])
+	return registry.Load(store, func() types.Cache[T] {
+		c, err := bigcache.NewBigCache(buildConfig())
+		if err != nil {
+			panic(errors.Wrap(err, "bigcache: create cache (run config.Init and cache.Init before requesting caches)"))
+		}
+		return &cache[T]{c: c}
+	})
 }
 
-func (c *cache[T]) Set(key string, value T, _ time.Duration) error {
-	val, err := util.Marshal(value)
-	if err != nil {
-		return err
-	}
-	return c.c.Set(key, val)
+// Set always returns ErrTTLNotSupported: entries in this backend expire on
+// the global life window fixed at construction, so neither ttl == 0 (never
+// expire) nor a per-entry ttl can be honored. The backend stays wired for the
+// day the contract grows an opt-in for global expiration.
+func (c *cache[T]) Set(context.Context, string, T, time.Duration) error {
+	return types.ErrTTLNotSupported
 }
 
-func (c *cache[T]) Get(key string) (T, error) {
+func (c *cache[T]) Get(_ context.Context, key string) (T, error) {
 	var zero T
 	val, err := c.c.Get(key)
 	if err != nil {
-		// Return ErrEntryNotFound for not found cases
+		// The backend only fails a Get for a missing entry.
 		return zero, types.ErrEntryNotFound
 	}
 	var result T
-	err = util.Unmarshal(val, &result)
-	if err != nil {
+	if err := util.Unmarshal(val, &result); err != nil {
 		return zero, err
 	}
 	return result, nil
 }
 
-func (c *cache[T]) Peek(key string) (T, error) {
-	return c.Get(key)
+func (c *cache[T]) Delete(_ context.Context, key string) error {
+	if err := c.c.Delete(key); err != nil && !errors.Is(err, bigcache.ErrEntryNotFound) {
+		return err
+	}
+	return nil
 }
 
-func (c *cache[T]) Delete(key string) error {
-	return c.c.Delete(key)
-}
-
-func (c *cache[T]) Exists(key string) bool {
+func (c *cache[T]) Exists(_ context.Context, key string) bool {
 	_, err := c.c.Get(key)
 	return err == nil
-}
-
-func (c *cache[T]) Len() int {
-	return c.c.Len()
-}
-
-func (c *cache[T]) Clear() {
-	_ = c.c.Reset()
-}
-
-func (c *cache[T]) WithContext(ctx context.Context) types.Cache[T] {
-	c.ctx = ctx
-	return c
-}
-
-func newBigCache() *bigcache.BigCache {
-	cache, _ := bigcache.NewBigCache(buildConfig())
-	return cache
 }
 
 func buildConfig() bigcache.Config {

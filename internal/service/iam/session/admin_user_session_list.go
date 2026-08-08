@@ -95,14 +95,14 @@ func (a *AdminUserSessionListService) buildView(ctx *types.ServiceContext, user 
 		return modeliamsession.AdminSessionOwnerView{}, err
 	}
 
-	cache := redis.Cache[modeliamsession.Session]().WithContext(ctx)
+	cache := redis.Cache[modeliamsession.Session]()
 	for i := range sessionIDs {
 		sessionID := sessionIDs[i]
 		if sessionID == "" {
 			continue
 		}
 
-		sessionData, getErr := cache.Get(modeliamsession.SessionIDKey(sessionID))
+		sessionData, getErr := cache.Get(ctx, modeliamsession.SessionIDKey(sessionID))
 		if getErr != nil {
 			if errors.Is(getErr, types.ErrEntryNotFound) {
 				_ = modeliamsession.RemoveSessionIndexes(ctx, indexUserID, sessionID)

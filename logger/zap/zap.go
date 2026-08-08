@@ -83,7 +83,6 @@ func Init() error {
 	logger.Influxdb = New("influxdb.log")
 	logger.Kafka = New("kafka.log")
 	logger.Ldap = New("ldap.log")
-	logger.Memcached = New("memcached.log")
 	logger.Minio = New("minio.log")
 	logger.Mongo = New("mongo.log")
 	logger.Mqtt = New("mqtt.log")
@@ -125,7 +124,6 @@ func Clean() {
 		logger.Influxdb,
 		logger.Kafka,
 		logger.Ldap,
-		logger.Memcached,
 		logger.Minio,
 		logger.Mongo,
 		logger.Mqtt,

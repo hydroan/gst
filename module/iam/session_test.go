@@ -121,10 +121,10 @@ func TestCurrentSessionGet(t *testing.T) {
 		sessionID := loginSession(t, account.Username, account.Password)
 		sessionKey := modeliamsession.SessionIDKey(sessionID)
 
-		session, err := redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Get(sessionKey)
+		session, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), sessionKey)
 		require.NoError(t, err)
 		session.Status = modeliamsession.SessionStatusRevoked
-		require.NoError(t, redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Set(sessionKey, session, time.Hour))
+		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), sessionKey, session, time.Hour))
 
 		cli := sessionClient(t, sessionID)
 
@@ -137,10 +137,10 @@ func TestCurrentSessionGet(t *testing.T) {
 		sessionID := loginSession(t, account.Username, account.Password)
 		sessionKey := modeliamsession.SessionIDKey(sessionID)
 
-		session, err := redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Get(sessionKey)
+		session, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), sessionKey)
 		require.NoError(t, err)
 		session.ExpiresAt = time.Now().Add(-time.Minute)
-		require.NoError(t, redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Set(sessionKey, session, time.Hour))
+		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), sessionKey, session, time.Hour))
 
 		cli := sessionClient(t, sessionID)
 
@@ -302,10 +302,10 @@ func TestSessionList(t *testing.T) {
 		currentSessionID := loginSession(t, account.Username, account.Password)
 
 		sessionKey := modeliamsession.SessionIDKey(expiredSessionID)
-		session, err := redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Get(sessionKey)
+		session, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), sessionKey)
 		require.NoError(t, err)
 		session.ExpiresAt = time.Now().Add(-time.Minute)
-		require.NoError(t, redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Set(sessionKey, session, time.Hour))
+		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), sessionKey, session, time.Hour))
 		requireUserSessionContains(t, account.UserID, expiredSessionID)
 		requireAllSessionContains(t, expiredSessionID)
 
@@ -1058,7 +1058,7 @@ func TestSessionDeleteAll(t *testing.T) {
 		requireUserSessionContains(t, account.UserID, currentSessionID)
 		requireUserSessionContains(t, account.UserID, staleSessionID)
 
-		require.NoError(t, redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Delete(modeliamsession.SessionIDKey(staleSessionID)))
+		require.NoError(t, redis.Cache[modeliamsession.Session]().Delete(t.Context(), modeliamsession.SessionIDKey(staleSessionID)))
 		requireUserSessionContains(t, account.UserID, staleSessionID)
 
 		cli := sessionClient(t, currentSessionID)
@@ -1080,9 +1080,7 @@ func TestSessionDeleteAll(t *testing.T) {
 func loadStoredSession(t *testing.T, sessionID string) modeliamsession.Session {
 	t.Helper()
 
-	session, err := redis.Cache[modeliamsession.Session]().
-		WithContext(t.Context()).
-		Get(modeliamsession.SessionIDKey(sessionID))
+	session, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), modeliamsession.SessionIDKey(sessionID))
 	require.NoError(t, err)
 	return session
 }
@@ -1094,9 +1092,7 @@ func setSessionLastSeenAt(t *testing.T, sessionID string, lastSeenAt time.Time) 
 	session.LastSeenAt = lastSeenAt.UTC()
 	ttl := time.Until(session.ExpiresAt)
 	require.Greater(t, ttl, time.Duration(0))
-	require.NoError(t, redis.Cache[modeliamsession.Session]().
-		WithContext(t.Context()).
-		Set(modeliamsession.SessionIDKey(sessionID), session, ttl))
+	require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), modeliamsession.SessionIDKey(sessionID), session, ttl))
 	return session
 }
 
@@ -1107,9 +1103,7 @@ func setSessionTenantID(t *testing.T, sessionID string, tenantID string) modelia
 	session.TenantID = tenantID
 	ttl := time.Until(session.ExpiresAt)
 	require.Greater(t, ttl, time.Duration(0))
-	require.NoError(t, redis.Cache[modeliamsession.Session]().
-		WithContext(t.Context()).
-		Set(modeliamsession.SessionIDKey(sessionID), session, ttl))
+	require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), modeliamsession.SessionIDKey(sessionID), session, ttl))
 	return session
 }
 
@@ -1117,7 +1111,7 @@ func requireSessionNotFound(t *testing.T, sessionID string) {
 	t.Helper()
 
 	sessionKey := modeliamsession.SessionIDKey(sessionID)
-	_, err := redis.Cache[modeliamsession.Session]().WithContext(t.Context()).Get(sessionKey)
+	_, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), sessionKey)
 	require.ErrorIs(t, err, types.ErrEntryNotFound)
 }
 

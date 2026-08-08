@@ -14,17 +14,13 @@ import (
 // redisCache implements CacheManager interface use Redis as the backend storage.
 type redisCache[T any] struct {
 	cli redis.UniversalClient // cli is Redis client.
-	ctx context.Context       // ctx is global context used by the client.
 
 	prefix string
 }
 
 // NewRedisCache creates CacheManager implementation that uses Redis as backend.
 // It is your responsibility to ensure the redis client is valid.
-func NewRedisCache[T any](ctx context.Context, cli redis.UniversalClient, opts ...RedisCacheOption[T]) (types.Cache[T], error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+func NewRedisCache[T any](cli redis.UniversalClient, opts ...RedisCacheOption[T]) (types.Cache[T], error) {
 	if cli == nil {
 		return nil, errors.New("redis client is nil")
 	}
@@ -35,10 +31,7 @@ func NewRedisCache[T any](ctx context.Context, cli redis.UniversalClient, opts .
 		return nil, err
 	}
 
-	rc := &redisCache[T]{
-		cli: cli,
-		ctx: ctx,
-	}
+	rc := &redisCache[T]{cli: cli}
 	for _, opt := range opts {
 		if opt == nil {
 			continue
@@ -50,7 +43,8 @@ func NewRedisCache[T any](ctx context.Context, cli redis.UniversalClient, opts .
 	return rc, nil
 }
 
-func (rc *redisCache[T]) Set(key string, value T, ttl time.Duration) error {
+func (rc *redisCache[T]) Set(ctx context.Context, key string, value T, ttl time.Duration) error {
+	ctx = orBackground(ctx)
 	val, err := json.Marshal(value)
 	if err != nil {
 		return err
@@ -58,12 +52,13 @@ func (rc *redisCache[T]) Set(key string, value T, ttl time.Duration) error {
 	if len(val) == 0 {
 		return errors.New("cannot store empty value in redis")
 	}
-	return rc.cli.Set(rc.ctx, rc.prefix+key, val, ttl).Err()
+	return rc.cli.Set(ctx, rc.prefix+key, val, ttl).Err()
 }
 
-func (rc *redisCache[T]) Get(key string) (T, error) {
+func (rc *redisCache[T]) Get(ctx context.Context, key string) (T, error) {
+	ctx = orBackground(ctx)
 	var zero T
-	data, err := rc.cli.Get(rc.ctx, rc.prefix+key).Bytes()
+	data, err := rc.cli.Get(ctx, rc.prefix+key).Bytes()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return zero, types.ErrEntryNotFound
@@ -80,25 +75,26 @@ func (rc *redisCache[T]) Get(key string) (T, error) {
 	return result, nil
 }
 
-func (rc *redisCache[T]) Delete(key string) error {
-	err := rc.cli.Del(rc.ctx, rc.prefix+key).Err()
-	if errors.Is(err, redis.Nil) {
-		return types.ErrEntryNotFound
-	}
-	return err
+func (rc *redisCache[T]) Delete(ctx context.Context, key string) error {
+	return rc.cli.Del(orBackground(ctx), rc.prefix+key).Err()
 }
 
-func (rc *redisCache[T]) Exists(key string) bool {
-	res, err := rc.cli.Exists(rc.ctx, rc.prefix+key).Result()
+func (rc *redisCache[T]) Exists(ctx context.Context, key string) bool {
+	res, err := rc.cli.Exists(orBackground(ctx), rc.prefix+key).Result()
 	if err != nil {
 		return false
 	}
 	return res > 0
 }
-func (rc *redisCache[T]) Len() int                                   { return -1 }
-func (rc *redisCache[T]) Peek(string) (T, error)                     { var t T; return t, nil }
-func (rc *redisCache[T]) Clear()                                     {}
-func (rc *redisCache[T]) WithContext(context.Context) types.Cache[T] { return rc }
+
+// orBackground implements the contract promise that a nil ctx is treated as
+// context.Background() before it reaches the Redis client.
+func orBackground(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
 
 // RedisCacheOption is used to configure RedisCache.
 type RedisCacheOption[T any] func(*redisCache[T]) error

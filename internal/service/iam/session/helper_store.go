@@ -32,7 +32,6 @@ func listUserSessionIDs(ctx context.Context, userID string) ([]string, error) {
 	if userID == "" {
 		return make([]string, 0), nil
 	}
-	ctx = redisContext(ctx)
 	userKey := modeliamsession.SessionUserKey(userID)
 	if err := pruneExpiredSessionIDs(ctx, userKey); err != nil {
 		return nil, err
@@ -51,7 +50,6 @@ func listUserSessionIDs(ctx context.Context, userID string) ([]string, error) {
 // remove them. Pruning here makes admin session views count only sessions whose
 // index score says they are still within their configured lifetime.
 func listAllSessionIDs(ctx context.Context) ([]string, error) {
-	ctx = redisContext(ctx)
 	if err := pruneExpiredSessionIDs(ctx, modeliamsession.SessionAllKey()); err != nil {
 		return nil, err
 	}
@@ -73,7 +71,6 @@ func listOnlineSessionIDs(ctx context.Context, since time.Time) ([]string, error
 	if since.IsZero() {
 		return make([]string, 0), nil
 	}
-	ctx = redisContext(ctx)
 	pruneStaleLastSeenSessionIDs(ctx, time.Now())
 	sessionIDs, err := redis.ZRangeByScore(
 		ctx,
@@ -95,7 +92,7 @@ func listOnlineSessionIDs(ctx context.Context, since time.Time) ([]string, error
 // payload itself; callers still load and validate each remaining payload because
 // Redis state can drift after partial writes, manual cache edits, or old data.
 func pruneExpiredSessionIDs(ctx context.Context, key string) error {
-	if err := redis.ZRemRangeByScore(redisContext(ctx), key, "-inf", strconv.FormatInt(time.Now().UnixMilli(), 10)); err != nil {
+	if err := redis.ZRemRangeByScore(ctx, key, "-inf", strconv.FormatInt(time.Now().UnixMilli(), 10)); err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to prune expired sessions", err)
 	}
 	return nil
@@ -110,7 +107,6 @@ func pruneExpiredSessionIDs(ctx context.Context, key string) error {
 // still be. A short Redis lock keeps high-frequency request paths from pruning
 // the same global index on every request.
 func pruneStaleLastSeenSessionIDs(ctx context.Context, now time.Time) {
-	ctx = redisContext(ctx)
 	acquired, err := redis.SetNX(ctx, modeliamsession.SessionLastSeenPruneKey(), "1", sessionLastSeenPruneLockTTL)
 	if err != nil || !acquired {
 		return
@@ -147,7 +143,6 @@ func IndexSession(ctx context.Context, sessionData modeliamsession.Session) erro
 	if sessionData.UserID == "" || sessionData.ID == "" {
 		return nil
 	}
-	ctx = redisContext(ctx)
 	pruneStaleLastSeenSessionIDs(ctx, time.Now())
 	ttl := time.Until(sessionData.ExpiresAt)
 	if ttl <= 0 {
@@ -185,10 +180,9 @@ func UpdateSessionMustChangePassword(ctx context.Context, sessionID string, must
 	if sessionID == "" {
 		return nil
 	}
-	ctx = redisContext(ctx)
-	cache := redis.Cache[modeliamsession.Session]().WithContext(ctx)
+	cache := redis.Cache[modeliamsession.Session]()
 	sessionKey := modeliamsession.SessionIDKey(sessionID)
-	session, err := cache.Get(sessionKey)
+	session, err := cache.Get(ctx, sessionKey)
 	if err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
 			return nil
@@ -201,7 +195,7 @@ func UpdateSessionMustChangePassword(ctx context.Context, sessionID string, must
 		_, _ = SessionManager.Delete(ctx, sessionID)
 		return types.ErrEntryNotFound
 	}
-	if err := cache.Set(sessionKey, session, ttl); err != nil {
+	if err := cache.Set(ctx, sessionKey, session, ttl); err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to store session", err)
 	}
 	return nil
@@ -218,7 +212,6 @@ func TouchSession(ctx context.Context, sessionID string, sessionData modeliamses
 	if sessionID == "" {
 		return nil
 	}
-	ctx = redisContext(ctx)
 	if now.IsZero() {
 		now = time.Now()
 	}
@@ -242,9 +235,7 @@ func TouchSession(ctx context.Context, sessionID string, sessionData modeliamses
 	}
 
 	sessionData.LastSeenAt = now
-	if err = redis.Cache[modeliamsession.Session]().
-		WithContext(ctx).
-		Set(modeliamsession.SessionIDKey(sessionID), sessionData, ttl); err != nil {
+	if err = redis.Cache[modeliamsession.Session]().Set(ctx, modeliamsession.SessionIDKey(sessionID), sessionData, ttl); err != nil {
 		_ = redis.Del(ctx, touchKey)
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to touch session", err)
 	}
@@ -263,7 +254,6 @@ func DeleteUserSessionsExceptCurrent(ctx context.Context, userID, currentSession
 	if userID == "" {
 		return nil
 	}
-	ctx = redisContext(ctx)
 
 	sessionIDs, err := listUserSessionIDs(ctx, userID)
 	if err != nil {
@@ -298,7 +288,6 @@ func DeleteUserSessions(ctx context.Context, userID string) error {
 	if userID == "" {
 		return nil
 	}
-	ctx = redisContext(ctx)
 	modeliamsession.InvalidateUserStateCache(ctx, userID)
 
 	sessionIDs, err := listUserSessionIDs(ctx, userID)

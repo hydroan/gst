@@ -2,61 +2,45 @@ package gocache
 
 import (
 	"context"
-	"reflect"
-	"sync"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/cache/tracing"
+	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/types"
-	cmap "github.com/orcaman/concurrent-map/v2"
 	pkgcache "github.com/patrickmn/go-cache"
 )
 
-var (
-	cacheMap = cmap.New[any]()
-	mu       sync.Mutex
-)
+var store = registry.New()
 
-func Init() error {
-	return nil
-}
+func Init() error { return nil }
 
 type cache[T any] struct {
-	c   *pkgcache.Cache
-	ctx context.Context
+	c *pkgcache.Cache
 }
 
+// Cache returns the process-wide go-cache cache of type T, creating it on
+// first use.
 func Cache[T any]() types.Cache[T] {
-	typ := reflect.TypeFor[T]()
-	key := typ.PkgPath() + "|" + typ.String()
-	val, exists := cacheMap.Get(key)
-	if exists {
-		//nolint:errcheck
-		return val.(types.Cache[T])
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-
-	val, exists = cacheMap.Get(key)
-	if !exists {
-		val = tracing.NewWrapper(&cache[T]{
-			c:   pkgcache.New(config.App.Cache.Expiration, config.App.Cache.CleanWindow),
-			ctx: context.Background(),
-		}, "gocache")
-		cacheMap.Set(key, val)
-	}
-	//nolint:errcheck
-	return val.(types.Cache[T])
+	return registry.Load(store, func() types.Cache[T] {
+		return &cache[T]{c: pkgcache.New(config.App.Cache.Expiration, config.App.Cache.CleanWindow)}
+	})
 }
 
-func (c *cache[T]) Set(key string, value T, ttl time.Duration) error {
+func (c *cache[T]) Set(_ context.Context, key string, value T, ttl time.Duration) error {
+	if ttl < 0 {
+		return errors.New("negative ttl")
+	}
+	// The backend treats 0 as "use the default expiration", so the contract's
+	// "never expires" must be mapped to its explicit no-expiration marker.
+	if ttl == 0 {
+		ttl = pkgcache.NoExpiration
+	}
 	c.c.Set(key, value, ttl)
 	return nil
 }
 
-func (c *cache[T]) Get(key string) (T, error) {
+func (c *cache[T]) Get(_ context.Context, key string) (T, error) {
 	var zero T
 	val, ok := c.c.Get(key)
 	if !ok {
@@ -69,29 +53,12 @@ func (c *cache[T]) Get(key string) (T, error) {
 	return val.(T), nil
 }
 
-func (c *cache[T]) Peek(key string) (T, error) {
-	return c.Get(key)
-}
-
-func (c *cache[T]) Exists(key string) bool {
-	_, exists := c.c.Get(key)
-	return exists
-}
-
-func (c *cache[T]) Delete(key string) error {
+func (c *cache[T]) Delete(_ context.Context, key string) error {
 	c.c.Delete(key)
 	return nil
 }
 
-func (c *cache[T]) Len() int {
-	return c.c.ItemCount()
-}
-
-func (c *cache[T]) Clear() {
-	c.c.Flush()
-}
-
-func (c *cache[T]) WithContext(ctx context.Context) types.Cache[T] {
-	c.ctx = ctx
-	return c
+func (c *cache[T]) Exists(_ context.Context, key string) bool {
+	_, exists := c.c.Get(key)
+	return exists
 }

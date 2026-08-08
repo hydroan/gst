@@ -55,7 +55,7 @@ func NewLocalCache[T any]() (types.Cache[T], error) {
 	return val.(types.Cache[T]), nil
 }
 
-func (c *localCache[T]) Set(key string, value T, ttl time.Duration) error {
+func (c *localCache[T]) Set(_ context.Context, key string, value T, ttl time.Duration) error {
 	if success := c.c.SetWithTTL(key, value, 1, ttl); !success {
 		return errors.New("cache rejected the set operation")
 	}
@@ -64,7 +64,7 @@ func (c *localCache[T]) Set(key string, value T, ttl time.Duration) error {
 	return nil
 }
 
-func (c *localCache[T]) Get(key string) (T, error) {
+func (c *localCache[T]) Get(_ context.Context, key string) (T, error) {
 	val, ok := c.c.Get(key)
 	if !ok {
 		var zero T
@@ -73,22 +73,17 @@ func (c *localCache[T]) Get(key string) (T, error) {
 	return val, nil
 }
 
-// Delete removes the item with the provided key from the cache.
-// It always returns nil as the underlying cache implementation doesn't
-// provide information about whether the key existed or the deletion succeeded.
-func (c *localCache[T]) Delete(key string) error {
+// Delete removes the item with the provided key from the cache. Deleting a
+// missing key is not an error.
+func (c *localCache[T]) Delete(_ context.Context, key string) error {
 	c.c.Del(key)
 	return nil
 }
 
-func (c *localCache[T]) Exists(key string) bool {
+func (c *localCache[T]) Exists(_ context.Context, key string) bool {
 	_, exists := c.c.Get(key)
 	return exists
 }
-func (c *localCache[T]) Len() int                                   { return -1 }
-func (c *localCache[T]) Peek(string) (T, error)                     { var t T; return t, nil }
-func (c *localCache[T]) Clear()                                     {}
-func (c *localCache[T]) WithContext(context.Context) types.Cache[T] { return c }
 
 func (c *localCache[T]) Metrics() *localMetrics {
 	m := c.c.Metrics

@@ -42,7 +42,7 @@ func markEmailChangeCanceled(ctx context.Context, flow iamEmailFlowState) error 
 		CreatedAt:   now,
 		AvailableAt: now.Add(ttl),
 	}
-	if err := emailThrottleCache().WithContext(normalizeContext(ctx)).Set(key, record, ttl); err != nil {
+	if err := emailThrottleCache().Set(ctx, key, record, ttl); err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "store email change cancellation marker", err)
 	}
 
@@ -53,7 +53,7 @@ func markEmailChangeCanceled(ctx context.Context, flow iamEmailFlowState) error 
 // canceled and is still within the cancellation validity window.
 func emailChangeCanceled(ctx context.Context, userID, oldEmail, newEmail string) (bool, error) {
 	key := emailChangeCancellationKey(userID, oldEmail, newEmail)
-	record, err := emailThrottleCache().WithContext(normalizeContext(ctx)).Get(key)
+	record, err := emailThrottleCache().Get(ctx, key)
 	if err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
 			return false, nil
@@ -64,7 +64,7 @@ func emailChangeCanceled(ctx context.Context, userID, oldEmail, newEmail string)
 	if record.AvailableAt.After(emailNow()) {
 		return true, nil
 	}
-	if err = emailThrottleCache().WithContext(normalizeContext(ctx)).Delete(key); err != nil {
+	if err = emailThrottleCache().Delete(ctx, key); err != nil {
 		return false, errors.Wrap(err, "delete expired email change cancellation marker")
 	}
 	return false, nil
@@ -74,7 +74,7 @@ func emailChangeCanceled(ctx context.Context, userID, oldEmail, newEmail string)
 // email change request for the same address pair can proceed normally.
 func clearEmailChangeCancellation(ctx context.Context, userID, oldEmail, newEmail string) error {
 	key := emailChangeCancellationKey(userID, oldEmail, newEmail)
-	if err := emailThrottleCache().WithContext(normalizeContext(ctx)).Delete(key); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+	if err := emailThrottleCache().Delete(ctx, key); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "delete email change cancellation marker", err)
 	}
 	return nil

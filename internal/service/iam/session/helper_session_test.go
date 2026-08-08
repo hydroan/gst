@@ -61,16 +61,12 @@ func TestTouchSession(t *testing.T) {
 			LastSeenAt: now.Add(-time.Minute),
 			ExpiresAt:  now.Add(time.Hour),
 		}
-		require.NoError(t, redis.Cache[modeliamsession.Session]().
-			WithContext(t.Context()).
-			Set(modeliamsession.SessionIDKey(sessionID), session, time.Until(session.ExpiresAt)))
+		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), modeliamsession.SessionIDKey(sessionID), session, time.Until(session.ExpiresAt)))
 
 		firstTouchAt := now
 		require.NoError(t, serviceiamsession.TouchSession(t.Context(), sessionID, session, firstTouchAt))
 
-		afterFirstTouch, err := redis.Cache[modeliamsession.Session]().
-			WithContext(t.Context()).
-			Get(modeliamsession.SessionIDKey(sessionID))
+		afterFirstTouch, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), modeliamsession.SessionIDKey(sessionID))
 		require.NoError(t, err)
 		require.True(t, afterFirstTouch.LastSeenAt.Equal(firstTouchAt))
 
@@ -78,9 +74,7 @@ func TestTouchSession(t *testing.T) {
 		staleSnapshot.LastSeenAt = session.LastSeenAt
 		require.NoError(t, serviceiamsession.TouchSession(t.Context(), sessionID, staleSnapshot, firstTouchAt.Add(time.Second)))
 
-		afterSecondTouch, err := redis.Cache[modeliamsession.Session]().
-			WithContext(t.Context()).
-			Get(modeliamsession.SessionIDKey(sessionID))
+		afterSecondTouch, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), modeliamsession.SessionIDKey(sessionID))
 		require.NoError(t, err)
 		require.True(t, afterSecondTouch.LastSeenAt.Equal(afterFirstTouch.LastSeenAt))
 	})
@@ -150,9 +144,7 @@ func TestSessionManagerCurrentIgnoresMismatchedRequestCache(t *testing.T) {
 		IssuedAt:  now.Add(-time.Minute),
 		ExpiresAt: now.Add(time.Hour),
 	}
-	require.NoError(t, redis.Cache[modeliamsession.Session]().
-		WithContext(t.Context()).
-		Set(modeliamsession.SessionIDKey(cookieSessionID), cookieSession, time.Until(cookieSession.ExpiresAt)))
+	require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), modeliamsession.SessionIDKey(cookieSessionID), cookieSession, time.Until(cookieSession.ExpiresAt)))
 
 	cachedSessionID := "cached-session"
 	cachedSession := modeliamsession.Session{

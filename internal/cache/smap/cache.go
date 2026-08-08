@@ -2,106 +2,62 @@ package smap
 
 import (
 	"context"
-	"reflect"
 	"sync"
-	"sync/atomic"
 	"time"
 
-	"github.com/hydroan/gst/internal/cache/tracing"
+	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/types"
-	cmap "github.com/orcaman/concurrent-map/v2"
 )
 
-var (
-	cacheMap = cmap.New[any]()
-	mu       sync.Mutex
-)
+var store = registry.New()
 
-func Init() error {
-	return nil
-}
+func Init() error { return nil }
 
 type cache[T any] struct {
-	m   sync.Map
-	n   int64
-	ctx context.Context
+	m sync.Map
 }
 
+// Cache returns the process-wide sync.Map cache of type T, creating it on
+// first use.
 func Cache[T any]() types.Cache[T] {
-	typ := reflect.TypeFor[T]()
-	key := typ.PkgPath() + "|" + typ.String()
-	val, exists := cacheMap.Get(key)
-	if exists {
-		//nolint:errcheck
-		return val.(types.Cache[T])
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-
-	val, exists = cacheMap.Get(key)
-	if !exists {
-		val = tracing.NewWrapper(&cache[T]{ctx: context.Background()}, "smap")
-		cacheMap.Set(key, val)
-	}
-	//nolint:errcheck
-	return val.(types.Cache[T])
+	return registry.Load(store, func() types.Cache[T] {
+		return new(cache[T])
+	})
 }
 
-func (c *cache[T]) Set(key string, value T, ttl time.Duration) error {
-	_, loaded := c.m.LoadOrStore(key, value)
-	if loaded {
-		c.m.Store(key, value)
-	} else {
-		atomic.AddInt64(&c.n, 1)
+// Set stores the value under key. The backend has no expiration support, so
+// only ttl == 0 is accepted.
+func (c *cache[T]) Set(_ context.Context, key string, value T, ttl time.Duration) error {
+	if ttl < 0 {
+		return errors.New("negative ttl")
 	}
+	if ttl > 0 {
+		return types.ErrTTLNotSupported
+	}
+	c.m.Store(key, value)
 	return nil
 }
 
-func (c *cache[T]) Get(key string) (T, error) {
-	v, ok1 := c.m.Load(key)
-	if !ok1 {
-		var zero T
+func (c *cache[T]) Get(_ context.Context, key string) (T, error) {
+	var zero T
+	v, ok := c.m.Load(key)
+	if !ok {
 		return zero, types.ErrEntryNotFound
 	}
-	_v, ok2 := v.(T)
-	if !ok2 {
-		var zero T
+	value, ok := v.(T)
+	if !ok {
 		return zero, types.ErrEntryNotFound
 	}
-	return _v, nil
+	return value, nil
 }
 
-func (c *cache[T]) Peek(key string) (T, error) {
-	return c.Get(key)
-}
-
-func (c *cache[T]) Delete(key string) error {
-	_, exists := c.m.LoadAndDelete(key)
-	if exists {
-		atomic.AddInt64(&c.n, -1)
-	}
+func (c *cache[T]) Delete(_ context.Context, key string) error {
+	c.m.Delete(key)
 	return nil
 }
 
-func (c *cache[T]) Exists(key string) bool {
+func (c *cache[T]) Exists(_ context.Context, key string) bool {
 	_, exists := c.m.Load(key)
 	return exists
-}
-
-func (c *cache[T]) Len() int {
-	return int(c.n)
-}
-
-func (c *cache[T]) Clear() {
-	c.m.Range(func(key, _ any) bool {
-		c.m.Delete(key)
-		return true
-	})
-	atomic.StoreInt64(&c.n, 0)
-}
-
-func (c *cache[T]) WithContext(ctx context.Context) types.Cache[T] {
-	c.ctx = ctx
-	return c
 }

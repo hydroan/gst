@@ -1,10 +1,11 @@
 package cache_test
 
 import (
-	"fmt"
+	"context"
 	"strconv"
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/cache/bigcache"
 	"github.com/hydroan/gst/internal/cache/ccache"
 	"github.com/hydroan/gst/internal/cache/cmap"
@@ -17,7 +18,6 @@ import (
 	"github.com/hydroan/gst/internal/cache/smap"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/provider/memcached"
 	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/types"
 )
@@ -65,9 +65,6 @@ func BenchmarkInt(b *testing.B) {
 	b.Run("redis", func(b *testing.B) {
 		benchInt(b, redis.Cache[int]())
 	})
-	b.Run("memcached", func(b *testing.B) {
-		benchInt(b, memcached.Cache[int]())
-	})
 }
 
 func BenchmarkIntParallel(b *testing.B) {
@@ -103,9 +100,6 @@ func BenchmarkIntParallel(b *testing.B) {
 	})
 	b.Run("redis", func(b *testing.B) {
 		benchIntParallel(b, redis.Cache[int]())
-	})
-	b.Run("memcached", func(b *testing.B) {
-		benchIntParallel(b, memcached.Cache[int]())
 	})
 }
 
@@ -143,9 +137,6 @@ func BenchmarkString(b *testing.B) {
 	b.Run("redis", func(b *testing.B) {
 		benchString(b, redis.Cache[string]())
 	})
-	b.Run("memcached", func(b *testing.B) {
-		benchString(b, memcached.Cache[string]())
-	})
 }
 
 func BenchmarkStringParallel(b *testing.B) {
@@ -181,9 +172,6 @@ func BenchmarkStringParallel(b *testing.B) {
 	})
 	b.Run("redis", func(b *testing.B) {
 		benchStringParallel(b, redis.Cache[string]())
-	})
-	b.Run("memcached", func(b *testing.B) {
-		benchStringParallel(b, memcached.Cache[string]())
 	})
 }
 
@@ -221,9 +209,6 @@ func BenchmarkUser(b *testing.B) {
 	b.Run("redis", func(b *testing.B) {
 		benchUser(b, redis.Cache[User]())
 	})
-	b.Run("memcached", func(b *testing.B) {
-		benchUser(b, memcached.Cache[User]())
-	})
 }
 
 func BenchmarkUserParallel(b *testing.B) {
@@ -260,115 +245,135 @@ func BenchmarkUserParallel(b *testing.B) {
 	b.Run("redis", func(b *testing.B) {
 		benchUserParallel(b, redis.Cache[User]())
 	})
-	b.Run("memcached", func(b *testing.B) {
-		benchUserParallel(b, memcached.Cache[User]())
+}
+
+// benchKeyCount bounds the working set well below the configured capacity so
+// the Get benchmarks measure the hit path.
+const benchKeyCount = 1000
+
+// benchKeys precomputes the key working set so key construction stays out of
+// the measured loops.
+func benchKeys() []string {
+	keys := make([]string, benchKeyCount)
+	for i := range benchKeyCount {
+		keys[i] = "key" + strconv.Itoa(i)
+	}
+	return keys
+}
+
+func benchIntValues() []int {
+	values := make([]int, benchKeyCount)
+	for i := range benchKeyCount {
+		values[i] = i
+	}
+	return values
+}
+
+func benchStringValues() []string {
+	values := make([]string, benchKeyCount)
+	for i := range benchKeyCount {
+		values[i] = strconv.Itoa(i)
+	}
+	return values
+}
+
+func benchUserValues() []User {
+	values := make([]User, benchKeyCount)
+	for i := range benchKeyCount {
+		values[i] = User{Name: "user" + strconv.Itoa(i)}
+	}
+	return values
+}
+
+// skipWhenSetUnsupported skips backends whose Set cannot store entries under
+// the ttl contract, such as global-expiration backends.
+func skipWhenSetUnsupported[T any](b *testing.B, cache types.Cache[T], probe T) {
+	b.Helper()
+	if err := cache.Set(context.Background(), "bench-probe", probe, 0); errors.Is(err, types.ErrTTLNotSupported) {
+		b.Skip("backend cannot store entries under the ttl contract")
+	}
+}
+
+func benchCache[T any](b *testing.B, cache types.Cache[T], values []T) {
+	b.Helper()
+	ctx := context.Background()
+	keys := benchKeys()
+	skipWhenSetUnsupported(b, cache, values[0])
+
+	b.Run("Set", func(b *testing.B) {
+		for i := 0; b.Loop(); i++ {
+			idx := i % benchKeyCount
+			_ = cache.Set(ctx, keys[idx], values[idx], 0)
+		}
+	})
+	b.Run("Get", func(b *testing.B) {
+		for i := range benchKeyCount {
+			_ = cache.Set(ctx, keys[i], values[i], 0)
+		}
+		b.ResetTimer()
+		for i := 0; b.Loop(); i++ {
+			_, _ = cache.Get(ctx, keys[i%benchKeyCount])
+		}
+	})
+}
+
+func benchCacheParallel[T any](b *testing.B, cache types.Cache[T], values []T) {
+	b.Helper()
+	ctx := context.Background()
+	keys := benchKeys()
+	skipWhenSetUnsupported(b, cache, values[0])
+
+	b.Run("Set Parallel", func(b *testing.B) {
+		b.RunParallel(func(p *testing.PB) {
+			i := 0
+			for p.Next() {
+				idx := i % benchKeyCount
+				_ = cache.Set(ctx, keys[idx], values[idx], 0)
+				i++
+			}
+		})
+	})
+	b.Run("Get Parallel", func(b *testing.B) {
+		for i := range benchKeyCount {
+			_ = cache.Set(ctx, keys[i], values[i], 0)
+		}
+		b.ResetTimer()
+		b.RunParallel(func(p *testing.PB) {
+			i := 0
+			for p.Next() {
+				_, _ = cache.Get(ctx, keys[i%benchKeyCount])
+				i++
+			}
+		})
 	})
 }
 
 func benchInt(b *testing.B, cache types.Cache[int]) {
 	b.Helper()
-	b.Run("Set", func(b *testing.B) {
-		for i := range b.N {
-			_ = cache.Set(fmt.Sprintf("key%d", i), i, 0)
-		}
-	})
-	b.Run("Get", func(b *testing.B) {
-		for i := range b.N {
-			_, _ = cache.Get(fmt.Sprintf("key%d", i))
-		}
-	})
+	benchCache(b, cache, benchIntValues())
 }
 
 func benchIntParallel(b *testing.B, cache types.Cache[int]) {
 	b.Helper()
-	b.Run("Set Parallel", func(b *testing.B) {
-		b.RunParallel(func(p *testing.PB) {
-			i := 0
-			for p.Next() {
-				_ = cache.Set(fmt.Sprintf("key%d", i), i, 0)
-				i++
-			}
-		})
-	})
-	b.Run("Get Parallel", func(b *testing.B) {
-		b.RunParallel(func(p *testing.PB) {
-			i := 0
-			for p.Next() {
-				_, _ = cache.Get(fmt.Sprintf("key%d", i))
-				i++
-			}
-		})
-	})
+	benchCacheParallel(b, cache, benchIntValues())
 }
 
 func benchString(b *testing.B, cache types.Cache[string]) {
 	b.Helper()
-	b.Run("Set", func(b *testing.B) {
-		for i := range b.N {
-			_ = cache.Set(fmt.Sprintf("key%d", i), strconv.Itoa(i), 0)
-		}
-	})
-	b.Run("Get", func(b *testing.B) {
-		for i := range b.N {
-			_, _ = cache.Get(fmt.Sprintf("key%d", i))
-		}
-	})
+	benchCache(b, cache, benchStringValues())
 }
 
 func benchStringParallel(b *testing.B, cache types.Cache[string]) {
 	b.Helper()
-	b.Run("Set Parallel", func(b *testing.B) {
-		b.RunParallel(func(p *testing.PB) {
-			i := 0
-			for p.Next() {
-				_ = cache.Set(fmt.Sprintf("key%d", i), strconv.Itoa(i), 0)
-				i++
-			}
-		})
-	})
-	b.Run("Get Parallel", func(b *testing.B) {
-		b.RunParallel(func(p *testing.PB) {
-			i := 0
-			for p.Next() {
-				_, _ = cache.Get(fmt.Sprintf("key%d", i))
-				i++
-			}
-		})
-	})
+	benchCacheParallel(b, cache, benchStringValues())
 }
 
 func benchUser(b *testing.B, cache types.Cache[User]) {
 	b.Helper()
-	b.Run("Set", func(b *testing.B) {
-		for i := range b.N {
-			_ = cache.Set(fmt.Sprintf("key%d", i), User{Name: fmt.Sprintf("user%d", i)}, 0)
-		}
-	})
-	b.Run("Get", func(b *testing.B) {
-		for i := range b.N {
-			_, _ = cache.Get(fmt.Sprintf("key%d", i))
-		}
-	})
+	benchCache(b, cache, benchUserValues())
 }
 
 func benchUserParallel(b *testing.B, cache types.Cache[User]) {
 	b.Helper()
-	b.Run("Set Parallel", func(b *testing.B) {
-		b.RunParallel(func(p *testing.PB) {
-			i := 0
-			for p.Next() {
-				_ = cache.Set(fmt.Sprintf("key%d", i), User{Name: fmt.Sprintf("user%d", i)}, 0)
-				i++
-			}
-		})
-	})
-	b.Run("Get Parallel", func(b *testing.B) {
-		b.RunParallel(func(p *testing.PB) {
-			i := 0
-			for p.Next() {
-				_, _ = cache.Get(fmt.Sprintf("key%d", i))
-				i++
-			}
-		})
-	})
+	benchCacheParallel(b, cache, benchUserValues())
 }

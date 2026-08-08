@@ -1,3 +1,7 @@
+// Package tracing wraps cache backends that talk to remote systems with
+// OpenTelemetry spans. In-memory backends are not wrapped: a span per
+// nanosecond-scale operation costs orders of magnitude more than the
+// operation itself.
 package tracing
 
 import (
@@ -13,96 +17,38 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// Wrapper wraps a Cache implementation with distributed tracing capabilities
+// Wrapper decorates a Cache implementation with distributed tracing. It is
+// stateless: the caller context of each operation parents its span, and when
+// tracing is disabled every operation forwards to the wrapped cache directly.
 type Wrapper[T any] struct {
 	cache     types.Cache[T]
-	ctx       context.Context
 	cacheType string
 }
 
-// NewWrapper creates a new tracing wrapper for the given cache
+var _ types.Cache[any] = (*Wrapper[any])(nil)
+
+// NewWrapper creates a new tracing wrapper for the given cache.
 func NewWrapper[T any](cache types.Cache[T], cacheType string) *Wrapper[T] {
-	return &Wrapper[T]{
-		cache:     cache,
-		ctx:       context.Background(),
-		cacheType: cacheType,
-	}
+	return &Wrapper[T]{cache: cache, cacheType: cacheType}
 }
 
-func (tw *Wrapper[T]) WithContext(ctx context.Context) types.Cache[T] {
-	if ctx != nil {
-		tw.ctx = ctx
+// Get retrieves a value by key with tracing.
+func (tw *Wrapper[T]) Get(ctx context.Context, key string) (T, error) {
+	ctx = orBackground(ctx)
+	if !gstotel.IsEnabled() {
+		return tw.cache.Get(ctx, key)
 	}
-	return tw
-}
-
-// Set stores a key-value pair with tracing
-func (tw *Wrapper[T]) Set(key string, value T, ttl time.Duration) error {
-	spanCtx, span := tw.startSpan("set")
+	spanCtx, span := tw.startSpan(ctx, "get")
 	defer span.End()
-
-	// Add span attributes
-	span.SetAttributes(
-		attribute.String("cache.operation", "set"),
-		attribute.String("cache.key", key),
-		attribute.String("cache.ttl", ttl.String()),
-		attribute.String("cache.type", tw.cacheType),
-	)
-
-	// Record start time for duration measurement
-	start := time.Now()
-
-	// Call the underlying cache implementation with span context
-	err := tw.cache.WithContext(spanCtx).Set(key, value, ttl)
-
-	// Record operation duration
-	duration := time.Since(start)
-	span.SetAttributes(
-		attribute.String("cache.duration", duration.String()),
-	)
-
-	if err != nil {
-		if !errors.Is(err, types.ErrEntryNotFound) {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, fmt.Sprintf("Failed to set cache key: %v", err))
-		} else {
-			span.SetStatus(codes.Ok, err.Error())
-		}
-		return err
-	}
-
-	span.SetStatus(codes.Ok, "Cache key set successfully")
-	return nil
-}
-
-// Get retrieves a value by key with tracing
-func (tw *Wrapper[T]) Get(key string) (T, error) {
-	spanCtx, span := tw.startSpan("get")
-	defer span.End()
-
-	// Add span attributes
 	span.SetAttributes(
 		attribute.String("cache.operation", "get"),
 		attribute.String("cache.key", key),
 		attribute.String("cache.type", tw.cacheType),
 	)
 
-	// Record start time for duration measurement
-	start := time.Now()
-
-	// Call the underlying cache implementation with span context
-	value, err := tw.cache.WithContext(spanCtx).Get(key)
-
-	// Record operation duration
-	duration := time.Since(start)
-	span.SetAttributes(
-		attribute.String("cache.duration", duration.String()),
-	)
-
+	value, err := tw.cache.Get(spanCtx, key)
 	if err != nil {
-		span.SetAttributes(
-			attribute.Bool("cache.hit", false),
-		)
+		span.SetAttributes(attribute.Bool("cache.hit", false))
 		if !errors.Is(err, types.ErrEntryNotFound) {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, fmt.Sprintf("Failed to get cache key: %v", err))
@@ -112,88 +58,53 @@ func (tw *Wrapper[T]) Get(key string) (T, error) {
 		return value, err
 	}
 
-	span.SetAttributes(
-		attribute.Bool("cache.hit", true),
-	)
+	span.SetAttributes(attribute.Bool("cache.hit", true))
 	span.SetStatus(codes.Ok, "Cache key retrieved successfully")
 	return value, nil
 }
 
-// Peek retrieves a value by key without affecting its position with tracing
-func (tw *Wrapper[T]) Peek(key string) (T, error) {
-	spanCtx, span := tw.startSpan("peek")
+// Set stores a key-value pair with tracing.
+func (tw *Wrapper[T]) Set(ctx context.Context, key string, value T, ttl time.Duration) error {
+	ctx = orBackground(ctx)
+	if !gstotel.IsEnabled() {
+		return tw.cache.Set(ctx, key, value, ttl)
+	}
+	spanCtx, span := tw.startSpan(ctx, "set")
 	defer span.End()
-
-	// Add span attributes
 	span.SetAttributes(
-		attribute.String("cache.operation", "peek"),
+		attribute.String("cache.operation", "set"),
 		attribute.String("cache.key", key),
+		attribute.String("cache.ttl", ttl.String()),
 		attribute.String("cache.type", tw.cacheType),
 	)
 
-	// Record start time for duration measurement
-	start := time.Now()
-
-	// Call the underlying cache implementation with span context
-	value, err := tw.cache.WithContext(spanCtx).Peek(key)
-
-	// Record operation duration
-	duration := time.Since(start)
-	span.SetAttributes(
-		attribute.String("cache.duration", duration.String()),
-	)
-
-	if err != nil {
-		span.SetAttributes(
-			attribute.Bool("cache.hit", false),
-		)
-		if !errors.Is(err, types.ErrEntryNotFound) {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, fmt.Sprintf("Failed to peek cache key: %v", err))
-		} else {
-			span.SetStatus(codes.Ok, err.Error())
-		}
-		return value, err
+	if err := tw.cache.Set(spanCtx, key, value, ttl); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, fmt.Sprintf("Failed to set cache key: %v", err))
+		return err
 	}
 
-	span.SetAttributes(
-		attribute.Bool("cache.hit", true),
-	)
-	span.SetStatus(codes.Ok, "Cache key peeked successfully")
-	return value, nil
+	span.SetStatus(codes.Ok, "Cache key set successfully")
+	return nil
 }
 
-// Delete removes a key from the cache with tracing
-func (tw *Wrapper[T]) Delete(key string) error {
-	spanCtx, span := tw.startSpan("delete")
+// Delete removes a key from the cache with tracing.
+func (tw *Wrapper[T]) Delete(ctx context.Context, key string) error {
+	ctx = orBackground(ctx)
+	if !gstotel.IsEnabled() {
+		return tw.cache.Delete(ctx, key)
+	}
+	spanCtx, span := tw.startSpan(ctx, "delete")
 	defer span.End()
-
-	// Add span attributes
 	span.SetAttributes(
 		attribute.String("cache.operation", "delete"),
 		attribute.String("cache.key", key),
 		attribute.String("cache.type", tw.cacheType),
 	)
 
-	// Record start time for duration measurement
-	start := time.Now()
-
-	// Call the underlying cache implementation with span context
-	err := tw.cache.WithContext(spanCtx).Delete(key)
-
-	// Record operation duration
-	duration := time.Since(start)
-	span.SetAttributes(
-		attribute.String("cache.duration", duration.String()),
-	)
-
-	if err != nil {
-		if !errors.Is(err, types.ErrEntryNotFound) {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, fmt.Sprintf("Failed to delete cache key: %v", err))
-		} else {
-			span.SetStatus(codes.Ok, err.Error())
-		}
+	if err := tw.cache.Delete(spanCtx, key); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, fmt.Sprintf("Failed to delete cache key: %v", err))
 		return err
 	}
 
@@ -201,94 +112,41 @@ func (tw *Wrapper[T]) Delete(key string) error {
 	return nil
 }
 
-// Exists checks if a key exists in the cache with tracing
-func (tw *Wrapper[T]) Exists(key string) bool {
-	spanCtx, span := tw.startSpan("exists")
+// Exists checks if a key exists in the cache with tracing.
+func (tw *Wrapper[T]) Exists(ctx context.Context, key string) bool {
+	ctx = orBackground(ctx)
+	if !gstotel.IsEnabled() {
+		return tw.cache.Exists(ctx, key)
+	}
+	spanCtx, span := tw.startSpan(ctx, "exists")
 	defer span.End()
-
-	// Add span attributes
 	span.SetAttributes(
 		attribute.String("cache.operation", "exists"),
 		attribute.String("cache.key", key),
 		attribute.String("cache.type", tw.cacheType),
 	)
 
-	// Record start time for duration measurement
-	start := time.Now()
-
-	// Call the underlying cache implementation with span context
-	exists := tw.cache.WithContext(spanCtx).Exists(key)
-
-	// Record operation duration
-	duration := time.Since(start)
-	span.SetAttributes(
-		attribute.String("cache.duration", duration.String()),
-		attribute.Bool("cache.exists", exists),
-	)
-
+	exists := tw.cache.Exists(spanCtx, key)
+	span.SetAttributes(attribute.Bool("cache.exists", exists))
 	span.SetStatus(codes.Ok, "Cache key existence checked successfully")
 	return exists
 }
 
-// Len returns the number of items in the cache with tracing
-func (tw *Wrapper[T]) Len() int {
-	spanCtx, span := tw.startSpan("len")
-	defer span.End()
-
-	// Add span attributes
-	span.SetAttributes(
-		attribute.String("cache.operation", "len"),
-		attribute.String("cache.type", tw.cacheType),
-	)
-
-	// Record start time for duration measurement
-	start := time.Now()
-
-	// Call the underlying cache implementation with span context
-	length := tw.cache.WithContext(spanCtx).Len()
-
-	// Record operation duration
-	duration := time.Since(start)
-	span.SetAttributes(
-		attribute.String("cache.duration", duration.String()),
-		attribute.Int("cache.length", length),
-	)
-
-	span.SetStatus(codes.Ok, "Cache length retrieved successfully")
-	return length
+// orBackground implements the contract promise that a nil ctx is treated as
+// context.Background(); normalizing here keeps every wrapped backend safe.
+func orBackground(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
 }
 
-// Clear removes all items from the cache with tracing
-func (tw *Wrapper[T]) Clear() {
-	spanCtx, span := tw.startSpan("clear")
-	defer span.End()
-
-	// Add span attributes
-	span.SetAttributes(
-		attribute.String("cache.operation", "clear"),
-		attribute.String("cache.type", tw.cacheType),
-	)
-
-	// Record start time for duration measurement
-	start := time.Now()
-
-	// Call the underlying cache implementation with span context
-	tw.cache.WithContext(spanCtx).Clear()
-
-	// Record operation duration
-	duration := time.Since(start)
-	span.SetAttributes(
-		attribute.String("cache.duration", duration.String()),
-	)
-
-	span.SetStatus(codes.Ok, "Cache cleared successfully")
-}
-
-// startSpan creates a new span for the given cache operation. The caller owns the
-// returned span and must end it after the cache operation finishes.
-func (tw *Wrapper[T]) startSpan(operation string) (context.Context, trace.Span) {
+// startSpan creates a new span for the given cache operation as a child of
+// ctx. The caller owns the returned span and must end it after the cache
+// operation finishes.
+func (tw *Wrapper[T]) startSpan(ctx context.Context, operation string) (context.Context, trace.Span) {
 	tracer := gstotel.GetTracer()
 	operationName := gstotel.OperationSpanName("cache", operation)
-	ctx, span := tracer.Start(tw.ctx, operationName) //nolint:spancheck // Caller receives and ends the returned span.
-	return ctx, span                                 //nolint:spancheck // Caller receives and ends the returned span.
+	spanCtx, span := tracer.Start(ctx, operationName) //nolint:spancheck // Caller receives and ends the returned span.
+	return spanCtx, span                              //nolint:spancheck // Caller receives and ends the returned span.
 }

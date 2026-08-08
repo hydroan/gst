@@ -156,12 +156,12 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		ExpiresAt:          expiresAt,
 	}
 	// Store session in Redis
-	redisCache := redis.Cache[modeliamsession.Session]().WithContext(ctx)
-	if err = redisCache.Set(prefixedSessionID, sessionData, expire); err != nil {
+	redisCache := redis.Cache[modeliamsession.Session]()
+	if err = redisCache.Set(ctx, prefixedSessionID, sessionData, expire); err != nil {
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to store session", err)
 	}
 	if err = serviceiamsession.IndexSession(ctx, sessionData); err != nil {
-		_ = redisCache.Delete(prefixedSessionID)
+		_ = redisCache.Delete(ctx, prefixedSessionID)
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to track user session", err)
 	}
 

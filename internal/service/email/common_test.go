@@ -37,7 +37,7 @@ func newEmailServiceContext(userID string) *types.ServiceContext {
 	return types.NewServiceContext(nil, baseCtx, consts.PHASE_CREATE)
 }
 
-func (c *testCache[T]) Get(key string) (T, error) {
+func (c *testCache[T]) Get(_ context.Context, key string) (T, error) {
 	var zero T
 	entry, ok := c.items[key]
 	if !ok {
@@ -50,11 +50,7 @@ func (c *testCache[T]) Get(key string) (T, error) {
 	return entry.value, nil
 }
 
-func (c *testCache[T]) Peek(key string) (T, error) {
-	return c.Get(key)
-}
-
-func (c *testCache[T]) Set(key string, value T, ttl time.Duration) error {
+func (c *testCache[T]) Set(_ context.Context, key string, value T, ttl time.Duration) error {
 	entry := testCacheEntry[T]{value: value}
 	if ttl > 0 {
 		entry.expiresAt = emailNow().Add(ttl)
@@ -63,29 +59,20 @@ func (c *testCache[T]) Set(key string, value T, ttl time.Duration) error {
 	return nil
 }
 
-func (c *testCache[T]) Delete(key string) error {
-	if _, ok := c.items[key]; !ok {
-		return types.ErrEntryNotFound
-	}
+func (c *testCache[T]) Delete(_ context.Context, key string) error {
 	delete(c.items, key)
 	return nil
 }
 
-func (c *testCache[T]) Exists(key string) bool {
-	_, err := c.Get(key)
+func (c *testCache[T]) Exists(ctx context.Context, key string) bool {
+	_, err := c.Get(ctx, key)
 	return err == nil
 }
 
+// Len reports the number of stored entries. It is a test-only helper on the
+// concrete fake, not part of the types.Cache contract.
 func (c *testCache[T]) Len() int {
 	return len(c.items)
-}
-
-func (c *testCache[T]) Clear() {
-	clear(c.items)
-}
-
-func (c *testCache[T]) WithContext(context.Context) types.Cache[T] {
-	return c
 }
 
 type testEmailSender struct {
@@ -214,7 +201,7 @@ func TestLoadEmailFlowExpired(t *testing.T) {
 
 	token, err := newEmailFlowToken()
 	require.NoError(t, err)
-	err = flowCache.Set(emailFlowKey(iamEmailFlowKindPasswordReset, token), iamEmailFlowState{
+	err = flowCache.Set(t.Context(), emailFlowKey(iamEmailFlowKindPasswordReset, token), iamEmailFlowState{
 		Kind:      iamEmailFlowKindPasswordReset,
 		Email:     "user@example.com",
 		IssuedAt:  now.Add(-2 * time.Minute),
@@ -509,7 +496,7 @@ func TestVerificationResendCreateThrottled(t *testing.T) {
 		},
 	})
 
-	err := throttleCache.Set(emailThrottleKey(iamEmailFlowKindVerification, emailThrottleResend, "user@example.com"), emailThrottleRecord{
+	err := throttleCache.Set(t.Context(), emailThrottleKey(iamEmailFlowKindVerification, emailThrottleResend, "user@example.com"), emailThrottleRecord{
 		Kind:        iamEmailFlowKindVerification,
 		Action:      emailThrottleResend,
 		Scope:       "user@example.com",
@@ -538,7 +525,7 @@ func TestVerificationConfirmCreate(t *testing.T) {
 
 	token, err := newEmailFlowToken()
 	require.NoError(t, err)
-	err = flowCache.Set(emailFlowKey(iamEmailFlowKindVerification, token), iamEmailFlowState{
+	err = flowCache.Set(t.Context(), emailFlowKey(iamEmailFlowKindVerification, token), iamEmailFlowState{
 		Kind:      iamEmailFlowKindVerification,
 		UserID:    "user-verify-5",
 		Email:     "user@example.com",
@@ -601,7 +588,7 @@ func TestVerificationConfirmCreateAlreadyVerified(t *testing.T) {
 
 	token, err := newEmailFlowToken()
 	require.NoError(t, err)
-	err = flowCache.Set(emailFlowKey(iamEmailFlowKindVerification, token), iamEmailFlowState{
+	err = flowCache.Set(t.Context(), emailFlowKey(iamEmailFlowKindVerification, token), iamEmailFlowState{
 		Kind:      iamEmailFlowKindVerification,
 		UserID:    "user-verify-6",
 		Email:     "user@example.com",
@@ -765,7 +752,7 @@ func TestChangeResendCreateThrottled(t *testing.T) {
 		},
 	})
 
-	err := throttleCache.Set(emailThrottleKey(iamEmailFlowKindChangeConfirm, emailThrottleResend, "new@example.com"), emailThrottleRecord{
+	err := throttleCache.Set(t.Context(), emailThrottleKey(iamEmailFlowKindChangeConfirm, emailThrottleResend, "new@example.com"), emailThrottleRecord{
 		Kind:        iamEmailFlowKindChangeConfirm,
 		Action:      emailThrottleResend,
 		Scope:       "new@example.com",
@@ -794,7 +781,7 @@ func TestChangeConfirmCreate(t *testing.T) {
 
 	token, err := newEmailFlowToken()
 	require.NoError(t, err)
-	err = flowCache.Set(emailFlowKey(iamEmailFlowKindChangeConfirm, token), iamEmailFlowState{
+	err = flowCache.Set(t.Context(), emailFlowKey(iamEmailFlowKindChangeConfirm, token), iamEmailFlowState{
 		Kind:      iamEmailFlowKindChangeConfirm,
 		UserID:    "user-change-5",
 		OldEmail:  "old@example.com",
@@ -858,7 +845,7 @@ func TestChangeConfirmCreateCanceled(t *testing.T) {
 		IssuedAt:  now,
 		ExpiresAt: now.Add(30 * time.Minute),
 	}
-	err = flowCache.Set(emailFlowKey(iamEmailFlowKindChangeConfirm, token), flow, 30*time.Minute)
+	err = flowCache.Set(t.Context(), emailFlowKey(iamEmailFlowKindChangeConfirm, token), flow, 30*time.Minute)
 	require.NoError(t, err)
 	require.NoError(t, markEmailChangeCanceled(context.Background(), flow))
 
@@ -905,7 +892,7 @@ func TestChangeCancelCreate(t *testing.T) {
 		IssuedAt:  now,
 		ExpiresAt: now.Add(30 * time.Minute),
 	}
-	err = flowCache.Set(emailFlowKey(iamEmailFlowKindChangeCancel, token), flow, 30*time.Minute)
+	err = flowCache.Set(t.Context(), emailFlowKey(iamEmailFlowKindChangeCancel, token), flow, 30*time.Minute)
 	require.NoError(t, err)
 
 	SetAccountGateway(testAccountGateway{
@@ -1043,7 +1030,7 @@ func TestPasswordResetConfirmCreate(t *testing.T) {
 
 	token, err := newEmailFlowToken()
 	require.NoError(t, err)
-	err = flowCache.Set(emailFlowKey(iamEmailFlowKindPasswordReset, token), iamEmailFlowState{
+	err = flowCache.Set(t.Context(), emailFlowKey(iamEmailFlowKindPasswordReset, token), iamEmailFlowState{
 		Kind:      iamEmailFlowKindPasswordReset,
 		UserID:    "user-2",
 		Email:     "user@example.com",

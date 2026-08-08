@@ -787,9 +787,7 @@ func TestIAMLoginStoresSessionTenant(t *testing.T) {
 		TenantID: tenantID,
 	}, tenantUserAgent)
 
-	session, err := redis.Cache[modeliamsession.Session]().
-		WithContext(t.Context()).
-		Get(modeliamsession.SessionIDKey(sessionID))
+	session, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), modeliamsession.SessionIDKey(sessionID))
 	require.NoError(t, err)
 	require.Equal(t, tenantID, session.TenantID)
 }

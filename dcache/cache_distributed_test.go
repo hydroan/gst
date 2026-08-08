@@ -80,23 +80,23 @@ func TestDistributedCacheBasicOperations(t *testing.T) {
 	dc := setupTestDistributedCache[string](t)
 
 	// Set
-	err := dc.Set("test-key", "test-value", 1*time.Minute)
+	err := dc.Set(t.Context(), "test-key", "test-value", 1*time.Minute)
 	require.NoError(t, err)
 
 	// the local cache must hold the entry now
-	val, err := dc.Get("test-key")
+	val, err := dc.Get(t.Context(), "test-key")
 	require.NoError(t, err)
 	require.Equal(t, "test-value", val)
 
 	// Delete
-	err = dc.Delete("test-key")
+	err = dc.Delete(t.Context(), "test-key")
 	require.NoError(t, err)
 
 	// it must be gone
-	require.False(t, dc.Exists("test-key"))
+	require.False(t, dc.Exists(t.Context(), "test-key"))
 
 	// a key that does not exist
-	_, err = dc.Get("non-existent")
+	_, err = dc.Get(t.Context(), "non-existent")
 	require.Error(t, err)
 	require.True(t, errors.Is(err, types.ErrEntryNotFound))
 }
@@ -108,60 +108,60 @@ func TestDistributedCacheWithSync(t *testing.T) {
 	localTTL, remoteTTL := 500*time.Millisecond, 1*time.Minute
 
 	// SetWithSync
-	err := dc.SetWithSync(key, value, localTTL, remoteTTL)
+	err := dc.SetWithSync(t.Context(), key, value, localTTL, remoteTTL)
 	require.NoError(t, err)
 
 	// GetWithSync (served from the local cache)
-	val, err := dc.Get("test-key")
+	val, err := dc.Get(t.Context(), "test-key")
 	require.NoError(t, err)
 	require.Equal(t, value, val)
 
 	// after the automatic expiration it is no longer readable
 	time.Sleep(localTTL + 50*time.Millisecond) // add some slack so it has surely expired
-	val, err = dc.Get("test-key")
+	val, err = dc.Get(t.Context(), "test-key")
 	require.ErrorIs(t, err, types.ErrEntryNotFound)
 	require.Empty(t, val)
 
 	// GetWithSync fails without a real Redis in the test environment,
 	// so a value is written first to emulate an entry living in Redis
-	err = dc.SetWithSync(key, value, localTTL, remoteTTL)
+	err = dc.SetWithSync(t.Context(), key, value, localTTL, remoteTTL)
 	require.NoError(t, err)
 
 	// give the set operation a moment to complete
 	time.Sleep(100 * time.Millisecond)
 
-	val, err = dc.GetWithSync(key, localTTL)
+	val, err = dc.GetWithSync(t.Context(), key, localTTL)
 	require.NoError(t, err)
 	require.Equal(t, value, val)
 
 	// explicit Delete
-	err = dc.Delete(key)
+	err = dc.Delete(t.Context(), key)
 	require.NoError(t, err)
-	val, err = dc.Get(key)
+	val, err = dc.Get(t.Context(), key)
 	require.ErrorIs(t, err, types.ErrEntryNotFound)
 	require.Empty(t, val)
 
 	// set the value again for the rest of the test
-	err = dc.SetWithSync(key, value, localTTL, remoteTTL)
+	err = dc.SetWithSync(t.Context(), key, value, localTTL, remoteTTL)
 	require.NoError(t, err)
 
 	// wait for the set to complete
 	time.Sleep(100 * time.Millisecond)
 
-	val, err = dc.GetWithSync(key, localTTL)
+	val, err = dc.GetWithSync(t.Context(), key, localTTL)
 	require.NoError(t, err)
 	require.Equal(t, value, val)
 
 	// explicit DeleteWithSync
-	err = dc.DeleteWithSync(key)
+	err = dc.DeleteWithSync(t.Context(), key)
 	require.NoError(t, err)
-	val, err = dc.Get(key)
+	val, err = dc.Get(t.Context(), key)
 	require.ErrorIs(t, err, types.ErrEntryNotFound)
 	require.Empty(t, val)
 
 	// wait for the state node to delete the key from redis
 	time.Sleep(500 * time.Millisecond)
-	val, err = dc.GetWithSync(key, localTTL)
+	val, err = dc.GetWithSync(t.Context(), key, localTTL)
 	require.ErrorIs(t, err, types.ErrEntryNotFound)
 	require.Empty(t, val)
 }
@@ -171,11 +171,11 @@ func TestDistributedCacheTTL(t *testing.T) {
 	dc := setupTestDistributedCache[string](t)
 
 	// set a very short TTL
-	err := dc.Set("ttl-key", "ttl-value", 100*time.Millisecond)
+	err := dc.Set(t.Context(), "ttl-key", "ttl-value", 100*time.Millisecond)
 	require.NoError(t, err)
 
 	// it must be readable right away
-	val, err := dc.Get("ttl-key")
+	val, err := dc.Get(t.Context(), "ttl-key")
 	require.NoError(t, err)
 	require.Equal(t, "ttl-value", val)
 
@@ -183,7 +183,7 @@ func TestDistributedCacheTTL(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// now it must be gone
-	_, err = dc.Get("ttl-key")
+	_, err = dc.Get(t.Context(), "ttl-key")
 	require.Error(t, err)
 }
 
@@ -192,7 +192,7 @@ func TestDistributedCacheRemoteTTLValidation(t *testing.T) {
 	dc := setupTestDistributedCache[string](t)
 
 	// an invalid TTL pair (remoteTTL < localTTL)
-	err := dc.SetWithSync("invalid-ttl", "value", 2*time.Hour, 1*time.Hour)
+	err := dc.SetWithSync(t.Context(), "invalid-ttl", "value", 2*time.Hour, 1*time.Hour)
 	require.Error(t, err)
 }
 
@@ -215,14 +215,14 @@ func TestDistributedCacheConcurrency(t *testing.T) {
 			value := fmt.Sprintf("value-%d", idx)
 
 			// set the value
-			err := dc.Set(key, value, 1*time.Minute)
+			err := dc.Set(t.Context(), key, value, 1*time.Minute)
 			if err != nil {
 				errCh <- err
 				return
 			}
 
 			// read the value
-			val, err := dc.Get(key)
+			val, err := dc.Get(t.Context(), key)
 			if err != nil {
 				errCh <- err
 				return
@@ -233,7 +233,7 @@ func TestDistributedCacheConcurrency(t *testing.T) {
 			}
 
 			// delete the value
-			err = dc.Delete(key)
+			err = dc.Delete(t.Context(), key)
 			if err != nil {
 				errCh <- err
 				return
@@ -261,25 +261,25 @@ func TestDistributedCacheDifferentTypes(t *testing.T) {
 	personCache := setupTestDistributedCache[Person](t)
 
 	// operate on each type
-	err := strCache.Set("str", "string-value", 1*time.Minute)
+	err := strCache.Set(t.Context(), "str", "string-value", 1*time.Minute)
 	require.NoError(t, err)
 
-	err = intCache.Set("int", 42, 1*time.Minute)
+	err = intCache.Set(t.Context(), "int", 42, 1*time.Minute)
 	require.NoError(t, err)
 
-	err = personCache.Set("person", Person{Name: "Alice", Age: 30}, 1*time.Minute)
+	err = personCache.Set(t.Context(), "person", Person{Name: "Alice", Age: 30}, 1*time.Minute)
 	require.NoError(t, err)
 
 	// check the values
-	strVal, err := strCache.Get("str")
+	strVal, err := strCache.Get(t.Context(), "str")
 	require.NoError(t, err)
 	require.Equal(t, "string-value", strVal)
 
-	intVal, err := intCache.Get("int")
+	intVal, err := intCache.Get(t.Context(), "int")
 	require.NoError(t, err)
 	require.Equal(t, 42, intVal)
 
-	personVal, err := personCache.Get("person")
+	personVal, err := personCache.Get(t.Context(), "person")
 	require.NoError(t, err)
 	require.Equal(t, Person{Name: "Alice", Age: 30}, personVal)
 }
@@ -296,11 +296,11 @@ func TestDistributedCacheLargeValues(t *testing.T) {
 	largeString := string(largeValue)
 
 	// store the large value
-	err := dc.Set("large", largeString, 1*time.Hour)
+	err := dc.Set(t.Context(), "large", largeString, 1*time.Hour)
 	require.NoError(t, err)
 
 	// read it back and verify
-	val, err := dc.Get("large")
+	val, err := dc.Get(t.Context(), "large")
 	require.NoError(t, err)
 	require.Equal(t, largeString, val)
 }
@@ -310,27 +310,27 @@ func TestDistributedCacheEdgeCases(t *testing.T) {
 	dc := setupTestDistributedCache[string](t)
 
 	// an empty key
-	err := dc.Set("", "empty-key", 1*time.Hour)
+	err := dc.Set(t.Context(), "", "empty-key", 1*time.Hour)
 	require.NoError(t, err)
-	val, err := dc.Get("")
+	val, err := dc.Get(t.Context(), "")
 	require.NoError(t, err)
 	require.Equal(t, "empty-key", val)
 
 	// a zero TTL
-	err = dc.Set("zero-ttl", "forever", 0)
+	err = dc.Set(t.Context(), "zero-ttl", "forever", 0)
 	require.NoError(t, err)
 
 	// a tiny TTL
-	err = dc.Set("tiny-ttl", "quick", 1*time.Nanosecond)
+	err = dc.Set(t.Context(), "tiny-ttl", "quick", 1*time.Nanosecond)
 	require.NoError(t, err)
 	time.Sleep(10 * time.Millisecond)
-	_, err = dc.Get("tiny-ttl")
+	_, err = dc.Get(t.Context(), "tiny-ttl")
 	require.Error(t, err) // it must have expired
 
 	// a huge TTL
-	err = dc.Set("huge-ttl", "longterm", 100*365*24*time.Hour) // ~100 years
+	err = dc.Set(t.Context(), "huge-ttl", "longterm", 100*365*24*time.Hour) // ~100 years
 	require.NoError(t, err)
-	val, err = dc.Get("huge-ttl")
+	val, err = dc.Get(t.Context(), "huge-ttl")
 	require.NoError(t, err)
 	require.Equal(t, "longterm", val)
 }

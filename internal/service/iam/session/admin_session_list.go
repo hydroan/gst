@@ -46,7 +46,7 @@ func (a *AdminSessionListService) List(ctx *types.ServiceContext, req *model.Emp
 		return nil, err
 	}
 
-	cache := redis.Cache[modeliamsession.Session]().WithContext(ctx)
+	cache := redis.Cache[modeliamsession.Session]()
 	owners := make(map[string]*adminSessionOwnerItem, len(sessionIDs))
 	var sessionTotal int
 	for i := range sessionIDs {
@@ -55,7 +55,7 @@ func (a *AdminSessionListService) List(ctx *types.ServiceContext, req *model.Emp
 			continue
 		}
 
-		sessionData, getErr := cache.Get(modeliamsession.SessionIDKey(sessionID))
+		sessionData, getErr := cache.Get(ctx, modeliamsession.SessionIDKey(sessionID))
 		if getErr != nil {
 			if errors.Is(getErr, types.ErrEntryNotFound) {
 				_ = modeliamsession.RemoveSessionIndexes(ctx, "", sessionID)

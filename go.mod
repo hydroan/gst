@@ -21,7 +21,6 @@ require (
 	github.com/apache/rocketmq-client-go/v2 v2.1.2
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de
 	github.com/arl/statsviz v0.8.1
-	github.com/bradfitz/gomemcache v0.0.0-20260422231931-4d751bb6e37c
 	github.com/casbin/casbin/v3 v3.10.0
 	github.com/cloverstd/tcping v0.1.1
 	github.com/cockroachdb/errors v1.14.0

@@ -274,7 +274,7 @@ func newDistributedCache[T any](opts ...DistributedCacheOption[T]) (types.Cache[
 		if err != nil {
 			return nil, e
 		}
-		if dc.redisCache, e = NewRedisCache[any](context.Background(), redisCli); e != nil {
+		if dc.redisCache, e = NewRedisCache[any](redisCli); e != nil {
 			return nil, e
 		}
 		if dc.redisCache == nil {
@@ -311,14 +311,14 @@ func newDistributedCache[T any](opts ...DistributedCacheOption[T]) (types.Cache[
 
 // Set sets a key-value pair in the local cache and publishs an event "OpSet"
 // to invalidate redis cache.
-func (dc *distributedCache[T]) Set(key string, value T, ttl time.Duration) (err error) {
+func (dc *distributedCache[T]) Set(ctx context.Context, key string, value T, ttl time.Duration) (err error) {
 	// done := dc.trace("Set")
 	// defer done(err)
 
 	prefixedKey := dc.prefix + key
 
 	// set local cache.
-	if err = dc.localCache.Set(prefixedKey, value, ttl); err != nil {
+	if err = dc.localCache.Set(ctx, prefixedKey, value, ttl); err != nil {
 		dc.logger.Warnz("failed to set local cache", zap.Error(err))
 	}
 
@@ -333,7 +333,7 @@ func (dc *distributedCache[T]) Set(key string, value T, ttl time.Duration) (err 
 	return nil
 }
 
-func (dc *distributedCache[T]) SetWithSync(key string, value T, localTTL time.Duration, remoteTTL time.Duration) (err error) {
+func (dc *distributedCache[T]) SetWithSync(ctx context.Context, key string, value T, localTTL time.Duration, remoteTTL time.Duration) (err error) {
 	// done := dc.trace("Set")
 	// defer done(err)
 
@@ -343,7 +343,7 @@ func (dc *distributedCache[T]) SetWithSync(key string, value T, localTTL time.Du
 	prefixedKey := dc.prefix + key
 
 	// set local cache.
-	if err = dc.localCache.Set(prefixedKey, value, localTTL); err != nil {
+	if err = dc.localCache.Set(ctx, prefixedKey, value, localTTL); err != nil {
 		dc.logger.Warnz("failed to set local cache", zap.Error(err))
 	}
 
@@ -361,14 +361,14 @@ func (dc *distributedCache[T]) SetWithSync(key string, value T, localTTL time.Du
 	return nil
 }
 
-func (dc *distributedCache[T]) Get(key string) (value T, err error) {
+func (dc *distributedCache[T]) Get(ctx context.Context, key string) (value T, err error) {
 	// done := dc.trace("Get")
 	// defer done(err)
 
 	prefixedKey := dc.prefix + key
 
 	// get from local cache.
-	if value, err = dc.localCache.Get(prefixedKey); err == nil {
+	if value, err = dc.localCache.Get(ctx, prefixedKey); err == nil {
 		// local cache hit.
 		dc.localHits.Add(1)
 		return value, nil
@@ -384,7 +384,7 @@ func (dc *distributedCache[T]) Get(key string) (value T, err error) {
 	return zero, err
 }
 
-func (dc *distributedCache[T]) GetWithSync(key string, localTTL time.Duration) (value T, err error) {
+func (dc *distributedCache[T]) GetWithSync(ctx context.Context, key string, localTTL time.Duration) (value T, err error) {
 	// done := dc.trace("Get")
 	// defer done(err)
 
@@ -392,7 +392,7 @@ func (dc *distributedCache[T]) GetWithSync(key string, localTTL time.Duration) (
 
 	var zero T
 	// get from local cache.
-	if value, err = dc.localCache.Get(prefixedKey); err == nil {
+	if value, err = dc.localCache.Get(ctx, prefixedKey); err == nil {
 		// local cache hit.
 		dc.localHits.Add(1)
 		return value, nil
@@ -411,14 +411,14 @@ func (dc *distributedCache[T]) GetWithSync(key string, localTTL time.Duration) (
 		ok       bool
 	)
 	// get from redis cache
-	if result, err = dc.redisCache.Get(prefixedKey); err == nil {
+	if result, err = dc.redisCache.Get(ctx, prefixedKey); err == nil {
 		if redisVal, ok = result.(T); !ok {
 			dc.logger.Warn(fmt.Sprintf("type assertion failed for key %s: expected %T, got %T", prefixedKey, *new(T), result))
 			return zero, types.ErrEntryNotFound
 		}
 		// redis cache hit.
 		dc.redisHits.Add(1)
-		if err = dc.localCache.Set(prefixedKey, redisVal, localTTL); err != nil {
+		if err = dc.localCache.Set(ctx, prefixedKey, redisVal, localTTL); err != nil {
 			dc.logger.Warnz("failed to set local cache", zap.Error(err))
 			return redisVal, err
 		}
@@ -433,7 +433,7 @@ func (dc *distributedCache[T]) GetWithSync(key string, localTTL time.Duration) (
 	return zero, err
 }
 
-func (dc *distributedCache[T]) Delete(key string) (err error) {
+func (dc *distributedCache[T]) Delete(ctx context.Context, key string) (err error) {
 	// done := dc.trace("Delete")
 	// defer done(err)
 
@@ -441,7 +441,7 @@ func (dc *distributedCache[T]) Delete(key string) (err error) {
 	prefixedKey := dc.prefix + key
 
 	// NOTE: After recive kafka "delete" event, we will delete the entry from local cache again, it is a no-op.
-	if err = dc.localCache.Delete(prefixedKey); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+	if err = dc.localCache.Delete(ctx, prefixedKey); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 		dc.logger.Warnz("failed to delete from local cache", zap.Error(err))
 	}
 
@@ -454,7 +454,7 @@ func (dc *distributedCache[T]) Delete(key string) (err error) {
 	return nil
 }
 
-func (dc *distributedCache[T]) DeleteWithSync(key string) (err error) {
+func (dc *distributedCache[T]) DeleteWithSync(ctx context.Context, key string) (err error) {
 	// done := dc.trace("Delete")
 	// defer done(err)
 
@@ -462,7 +462,7 @@ func (dc *distributedCache[T]) DeleteWithSync(key string) (err error) {
 	prefixedKey := dc.prefix + key
 
 	// NOTE: After recive kafka "delete" event, we will delete the entry from local cache again, it is a no-op.
-	if err = dc.localCache.Delete(prefixedKey); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+	if err = dc.localCache.Delete(ctx, prefixedKey); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 		dc.logger.Warnz("failed to delete from local cache", zap.Error(err))
 	}
 
@@ -477,13 +477,9 @@ func (dc *distributedCache[T]) DeleteWithSync(key string) (err error) {
 	return nil
 }
 
-func (dc *distributedCache[T]) Exists(key string) bool {
-	return dc.localCache.Exists(dc.prefix + key)
+func (dc *distributedCache[T]) Exists(ctx context.Context, key string) bool {
+	return dc.localCache.Exists(ctx, dc.prefix+key)
 }
-func (dc *distributedCache[T]) Len() int                                   { return -1 }
-func (dc *distributedCache[T]) Peek(string) (T, error)                     { var t T; return t, nil }
-func (dc *distributedCache[T]) Clear()                                     {}
-func (dc *distributedCache[T]) WithContext(context.Context) types.Cache[T] { return dc }
 
 // listenEvents listen kafka for cache update/delete event and synchronously update the local cache.
 func (dc *distributedCache[T]) listenEvents() {
@@ -554,7 +550,7 @@ func (dc *distributedCache[T]) listenEvents() {
 
 						dc.distributedSet.Add(1)
 						// no prefix + key here, the key sent by the state node already is prefix+key.
-						if err := dc.localCache.Set(evt.Key, val, evt.TTL); err != nil {
+						if err := dc.localCache.Set(context.Background(), evt.Key, val, evt.TTL); err != nil {
 							dc.logger.Warnz("failed to set to local cache", zap.Error(err))
 						}
 					}
@@ -572,7 +568,7 @@ func (dc *distributedCache[T]) listenEvents() {
 					// no prefix + key here, the key sent by the state node already is prefix+key.
 					// Every opDelDone event has to delete from the local cache, because there is no way
 					// to tell whether the key belongs to this cache.
-					if err := dc.localCache.Delete(evt.Key); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+					if err := dc.localCache.Delete(context.Background(), evt.Key); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 						dc.logger.Warnz("failed to delete from local cache", zap.Error(err))
 					}
 				default:

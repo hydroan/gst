@@ -14,6 +14,11 @@ import (
 // ErrEntryNotFound is returned when a cache entry is not found.
 var ErrEntryNotFound = errors.New("cache entry not found")
 
+// ErrTTLNotSupported is returned by Cache.Set when the backend cannot honor
+// the requested ttl semantics, such as a per-entry lifetime on a backend
+// without per-entry expiration.
+var ErrTTLNotSupported = errors.New("cache backend does not support the requested ttl")
+
 // Initializer defines a bootstrap component that performs one-time setup.
 // Implementations should return an error when required configuration, connections,
 // or runtime resources cannot be initialized.
@@ -384,47 +389,41 @@ type Service[M Model, REQ Request, RSP Response] interface {
 	Logger
 }
 
-// Cache provides a typed key/value cache abstraction with TTL and context propagation.
+// Cache provides a typed key/value cache abstraction.
 //
 // Type Parameters:
 //   - T: Cached value type
 //
 // Error Handling:
-//   - Get/Peek return ErrEntryNotFound when key doesn't exist
-//   - Set/Delete return backend errors when storage operations fail
+//   - Get returns ErrEntryNotFound when the key does not exist.
+//   - Delete is idempotent: deleting a missing key returns nil.
+//   - Set returns ErrTTLNotSupported when the backend cannot honor the
+//     requested ttl semantics.
+//
+// TTL Semantics:
+//   - ttl == 0 means the entry never expires.
+//   - ttl > 0 sets a per-entry lifetime; backends that cannot honor it must
+//     return ErrTTLNotSupported instead of silently mis-honoring the request.
+//   - ttl < 0 is invalid and returns an error.
+//
+// The ctx parameter carries cancellation and tracing for backends that talk
+// to remote systems; in-memory backends may ignore it. A nil ctx is treated
+// as context.Background(), so callers never need to normalize it themselves.
 type Cache[T any] interface {
 	// Get retrieves a value from the cache by key.
 	// Returns ErrEntryNotFound if the key does not exist.
-	Get(key string) (T, error)
-
-	// Peek retrieves a value from the cache by key without affecting its position or access time.
-	// Returns ErrEntryNotFound if the key does not exist.
-	Peek(key string) (T, error)
+	Get(ctx context.Context, key string) (T, error)
 
 	// Set stores a value in the cache with the specified TTL.
-	// A zero TTL means the entry will not expire.
-	Set(key string, value T, ttl time.Duration) error
+	Set(ctx context.Context, key string, value T, ttl time.Duration) error
 
 	// Delete removes a key from the cache.
-	// Returns ErrEntryNotFound if the key does not exist.
-	Delete(key string) error
+	// Deleting a key that does not exist is not an error.
+	Delete(ctx context.Context, key string) error
 
 	// Exists checks if a key exists in the cache.
 	// Returns true if the key exists, false otherwise.
-	Exists(key string) bool
-
-	// Len returns the number of entries currently stored in the cache.
-	Len() int
-
-	// Clear removes all entries from the cache.
-	Clear()
-
-	// WithContext returns a cache handle that uses ctx for tracing or cancellation propagation.
-	//
-	// Implementations may return a new handle or mutate and return the receiver.
-	// Callers must not assume the returned handle is independent unless a concrete
-	// provider documents that stronger guarantee.
-	WithContext(ctx context.Context) Cache[T]
+	Exists(ctx context.Context, key string) bool
 }
 
 // DistributedCache extends Cache with explicit local-plus-remote synchronization helpers.
@@ -435,13 +434,13 @@ type DistributedCache[T any] interface {
 	Cache[T]
 
 	// SetWithSync stores a value in both local and distributed cache with synchronization.
-	SetWithSync(key string, value T, localTTL time.Duration, remoteTTL time.Duration) error
+	SetWithSync(ctx context.Context, key string, value T, localTTL time.Duration, remoteTTL time.Duration) error
 
 	// GetWithSync retrieves a value from local cache first, then from distributed cache if not found.
-	GetWithSync(key string, localTTL time.Duration) (T, error)
+	GetWithSync(ctx context.Context, key string, localTTL time.Duration) (T, error)
 
 	// DeleteWithSync removes a value from both local and distributed cache with synchronization.
-	DeleteWithSync(key string) error
+	DeleteWithSync(ctx context.Context, key string) error
 }
 
 // RBAC provides tenant-scoped role, permission, and subject assignment operations.

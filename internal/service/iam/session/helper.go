@@ -1,7 +1,6 @@
 package serviceiamsession
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
@@ -14,13 +13,6 @@ import (
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/service"
 )
-
-func redisContext(ctx context.Context) context.Context {
-	if ctx == nil {
-		return context.Background()
-	}
-	return ctx
-}
 
 // ensureSessionUserActive verifies that the authenticated user can keep using an existing session.
 func ensureSessionUserActive(targetUser *modeliamuser.User) error {

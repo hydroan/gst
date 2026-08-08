@@ -26,7 +26,6 @@ func InvalidateUserSessions(ctx context.Context, userID string) {
 	if userID == "" {
 		return
 	}
-	ctx = redisContext(ctx)
 	InvalidateUserStateCache(ctx, userID)
 
 	userKey := SessionUserKey(userID)
@@ -50,7 +49,7 @@ func InvalidateUserStateCache(ctx context.Context, userID string) {
 	if userID == "" {
 		return
 	}
-	_ = redis.Del(redisContext(ctx), SessionUserStateKey(userID))
+	_ = redis.Del(ctx, SessionUserStateKey(userID))
 }
 
 // RemoveSessionIndexes removes a session id from every index pointing at it.
@@ -66,7 +65,6 @@ func RemoveSessionIndexes(ctx context.Context, userID, sessionID string) error {
 	if sessionID == "" {
 		return nil
 	}
-	ctx = redisContext(ctx)
 	if userID != "" {
 		if err := redis.ZRem(ctx, SessionUserKey(userID), sessionID); err != nil {
 			return err
@@ -76,12 +74,4 @@ func RemoveSessionIndexes(ctx context.Context, userID, sessionID string) error {
 		return err
 	}
 	return redis.ZRem(ctx, SessionLastSeenKey(), sessionID)
-}
-
-// redisContext keeps a nil context from reaching the Redis client.
-func redisContext(ctx context.Context) context.Context {
-	if ctx == nil {
-		return context.Background()
-	}
-	return ctx
 }

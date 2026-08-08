@@ -102,7 +102,7 @@ func dispatchEmail(ctx context.Context, delivery emailDelivery) error {
 	if delivery.To == "" {
 		return service.NewError(http.StatusBadRequest, "email recipient is required")
 	}
-	return activeEmailSender.Send(normalizeContext(ctx), delivery)
+	return activeEmailSender.Send(ctx, delivery)
 }
 
 func issueEmailFlow(ctx context.Context, kind iamEmailFlowKind, flow iamEmailFlowState) (string, iamEmailFlowState, error) {
@@ -124,7 +124,7 @@ func issueEmailFlow(ctx context.Context, kind iamEmailFlowKind, flow iamEmailFlo
 	flow.IssuedAt = now
 	flow.ExpiresAt = now.Add(ttl)
 
-	if err = emailFlowCache().WithContext(normalizeContext(ctx)).Set(emailFlowKey(kind, token), flow, ttl); err != nil {
+	if err = emailFlowCache().Set(ctx, emailFlowKey(kind, token), flow, ttl); err != nil {
 		return "", iamEmailFlowState{}, errors.Wrap(err, "store email flow")
 	}
 
@@ -140,7 +140,7 @@ func loadEmailFlow(ctx context.Context, kind iamEmailFlowKind, token string) (ia
 		return iamEmailFlowState{}, errEmailFlowNotFound
 	}
 
-	flow, err := emailFlowCache().WithContext(normalizeContext(ctx)).Get(emailFlowKey(kind, token))
+	flow, err := emailFlowCache().Get(ctx, emailFlowKey(kind, token))
 	if err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
 			return iamEmailFlowState{}, errEmailFlowNotFound
@@ -151,7 +151,7 @@ func loadEmailFlow(ctx context.Context, kind iamEmailFlowKind, token string) (ia
 		return iamEmailFlowState{}, errEmailFlowKindInvalid
 	}
 	if !flow.ExpiresAt.IsZero() && !flow.ExpiresAt.After(emailNow()) {
-		_ = emailFlowCache().WithContext(normalizeContext(ctx)).Delete(emailFlowKey(kind, token))
+		_ = emailFlowCache().Delete(ctx, emailFlowKey(kind, token))
 		return iamEmailFlowState{}, errEmailFlowExpired
 	}
 
@@ -163,7 +163,7 @@ func consumeEmailFlow(ctx context.Context, kind iamEmailFlowKind, token string) 
 	if err != nil {
 		return iamEmailFlowState{}, err
 	}
-	if err = emailFlowCache().WithContext(normalizeContext(ctx)).Delete(emailFlowKey(kind, strings.TrimSpace(token))); err != nil {
+	if err = emailFlowCache().Delete(ctx, emailFlowKey(kind, strings.TrimSpace(token))); err != nil {
 		return iamEmailFlowState{}, errors.Wrap(err, "consume email flow")
 	}
 	return flow, nil
@@ -182,7 +182,7 @@ func reserveEmailThrottle(ctx context.Context, kind iamEmailFlowKind, action ema
 	}
 
 	key := emailThrottleKey(kind, action, scope)
-	record, err := emailThrottleCache().WithContext(normalizeContext(ctx)).Get(key)
+	record, err := emailThrottleCache().Get(ctx, key)
 	if err == nil {
 		if wait := record.AvailableAt.Sub(emailNow()); wait > 0 {
 			return wait, errEmailFlowThrottled
@@ -199,7 +199,7 @@ func reserveEmailThrottle(ctx context.Context, kind iamEmailFlowKind, action ema
 		CreatedAt:   now,
 		AvailableAt: now.Add(cooldown),
 	}
-	if err = emailThrottleCache().WithContext(normalizeContext(ctx)).Set(key, record, cooldown); err != nil {
+	if err = emailThrottleCache().Set(ctx, key, record, cooldown); err != nil {
 		return 0, errors.Wrap(err, "store email throttle")
 	}
 
@@ -229,13 +229,6 @@ func newEmailFlowToken() (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(buf), nil
-}
-
-func normalizeContext(ctx context.Context) context.Context {
-	if ctx == nil {
-		return context.Background()
-	}
-	return ctx
 }
 
 func emailServiceContext(ctx *types.ServiceContext) context.Context {

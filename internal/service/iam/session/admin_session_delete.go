@@ -30,7 +30,7 @@ func (a *AdminSessionDeleteService) Delete(ctx *types.ServiceContext, req *model
 		return nil, service.NewError(http.StatusBadRequest, "session id is required")
 	}
 
-	targetSession, err := redis.Cache[modeliamsession.Session]().WithContext(ctx).Get(modeliamsession.SessionIDKey(targetSessionID))
+	targetSession, err := redis.Cache[modeliamsession.Session]().Get(ctx, modeliamsession.SessionIDKey(targetSessionID))
 	if err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
 			return nil, service.NewError(http.StatusNotFound, "session not found")

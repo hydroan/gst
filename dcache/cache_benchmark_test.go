@@ -24,11 +24,11 @@ func Benchmark(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	redisCache, err := dcache.NewRedisCache(context.TODO(), redisCli, dcache.WithRedisKeyPrefix[string]("bench-"))
+	redisCache, err := dcache.NewRedisCache(redisCli, dcache.WithRedisKeyPrefix[string]("bench-"))
 	if err != nil {
 		b.Fatal(err)
 	}
-	redisCache2, err := dcache.NewRedisCache(context.TODO(), redisCli, dcache.WithRedisKeyPrefix[any]("any-bench-"))
+	redisCache2, err := dcache.NewRedisCache(redisCli, dcache.WithRedisKeyPrefix[any]("any-bench-"))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -99,6 +99,7 @@ func Benchmark(b *testing.B) {
 
 func benchmark(b *testing.B, cache any) {
 	b.Helper()
+	ctx := context.Background()
 	count := 10000
 	keys := make([]string, count)
 	values := make([]string, count)
@@ -111,7 +112,7 @@ func benchmark(b *testing.B, cache any) {
 	b.Run("set", func(b *testing.B) {
 		for i := range b.N {
 			idx := i % count
-			if err := cm.Set(keys[idx], values[idx], ttl); err != nil {
+			if err := cm.Set(ctx, keys[idx], values[idx], ttl); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -120,7 +121,7 @@ func benchmark(b *testing.B, cache any) {
 		b.Run("setwithsync", func(b *testing.B) {
 			for i := range b.N {
 				idx := i % count
-				if err := dcm.SetWithSync(keys[idx], values[idx], ttl, ttl); err != nil {
+				if err := dcm.SetWithSync(ctx, keys[idx], values[idx], ttl, ttl); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -129,7 +130,7 @@ func benchmark(b *testing.B, cache any) {
 
 	b.Run("get", func(b *testing.B) {
 		for i := range count {
-			if err := cm.Set(keys[i], values[i], ttl); err != nil {
+			if err := cm.Set(ctx, keys[i], values[i], ttl); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -137,7 +138,7 @@ func benchmark(b *testing.B, cache any) {
 
 		for i := range b.N {
 			idx := i % count
-			if _, err := cm.Get(keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+			if _, err := cm.Get(ctx, keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 				b.Fatal(err)
 			}
 		}
@@ -145,7 +146,7 @@ func benchmark(b *testing.B, cache any) {
 	if dcm, ok := cache.(types.DistributedCache[string]); ok {
 		b.Run("getwithsync", func(b *testing.B) {
 			for i := range count {
-				if err := dcm.Set(keys[i], values[i], ttl); err != nil {
+				if err := dcm.Set(ctx, keys[i], values[i], ttl); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -153,7 +154,7 @@ func benchmark(b *testing.B, cache any) {
 
 			for i := range b.N {
 				idx := i % count
-				if _, err := dcm.GetWithSync(keys[idx], ttl); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+				if _, err := dcm.GetWithSync(ctx, keys[idx], ttl); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 					b.Fatal(err)
 				}
 			}
@@ -162,7 +163,7 @@ func benchmark(b *testing.B, cache any) {
 
 	b.Run("mixed", func(b *testing.B) {
 		for i := range count / 2 {
-			if err := cm.Set(keys[i], values[i], ttl); err != nil {
+			if err := cm.Set(ctx, keys[i], values[i], ttl); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -172,12 +173,12 @@ func benchmark(b *testing.B, cache any) {
 			idx := i % count
 			if i%3 == 0 {
 				// 30% set
-				if err := cm.Set(keys[idx], values[idx], ttl); err != nil {
+				if err := cm.Set(ctx, keys[idx], values[idx], ttl); err != nil {
 					b.Fatal(err)
 				}
 			} else {
 				// 70% get
-				if _, err := cm.Get(keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+				if _, err := cm.Get(ctx, keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 					b.Fatal(err)
 				}
 			}
@@ -186,7 +187,7 @@ func benchmark(b *testing.B, cache any) {
 
 	b.Run("delete", func(b *testing.B) {
 		for i := range count {
-			if err := cm.Set(keys[i], values[i], ttl); err != nil {
+			if err := cm.Set(ctx, keys[i], values[i], ttl); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -194,7 +195,7 @@ func benchmark(b *testing.B, cache any) {
 
 		for i := range b.N {
 			idx := i % count
-			if err := cm.Delete(keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+			if err := cm.Delete(ctx, keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 				b.Fatal(err)
 			}
 		}
@@ -202,7 +203,7 @@ func benchmark(b *testing.B, cache any) {
 	if dcm, ok := cache.(types.DistributedCache[string]); ok {
 		b.Run("deletewithsync", func(b *testing.B) {
 			for i := range count {
-				if err := dcm.SetWithSync(keys[i], values[i], ttl, ttl); err != nil {
+				if err := dcm.SetWithSync(ctx, keys[i], values[i], ttl, ttl); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -210,7 +211,7 @@ func benchmark(b *testing.B, cache any) {
 
 			for i := range b.N {
 				idx := i % count
-				if err := dcm.DeleteWithSync(keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+				if err := dcm.DeleteWithSync(ctx, keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 					b.Fatal(err)
 				}
 			}
@@ -220,6 +221,7 @@ func benchmark(b *testing.B, cache any) {
 
 func benchmarkParallel(b *testing.B, cm types.Cache[string]) {
 	b.Helper()
+	ctx := context.Background()
 	count := 10000
 	keys := make([]string, count)
 	values := make([]string, count)
@@ -233,7 +235,7 @@ func benchmarkParallel(b *testing.B, cm types.Cache[string]) {
 			counter := 0
 			for pb.Next() {
 				idx := counter % count
-				err := cm.Set(keys[idx], values[idx], ttl)
+				err := cm.Set(ctx, keys[idx], values[idx], ttl)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -244,7 +246,7 @@ func benchmarkParallel(b *testing.B, cm types.Cache[string]) {
 
 	b.Run("parallel_get", func(b *testing.B) {
 		for i := range count {
-			err := cm.Set(keys[i], values[i], ttl)
+			err := cm.Set(ctx, keys[i], values[i], ttl)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -255,7 +257,7 @@ func benchmarkParallel(b *testing.B, cm types.Cache[string]) {
 			counter := 0
 			for pb.Next() {
 				idx := counter % count
-				if _, err := cm.Get(keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+				if _, err := cm.Get(ctx, keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 					b.Fatal(err)
 				}
 				counter++
@@ -265,7 +267,7 @@ func benchmarkParallel(b *testing.B, cm types.Cache[string]) {
 
 	b.Run("parallel_mixed", func(b *testing.B) {
 		for i := range count / 2 {
-			err := cm.Set(keys[i], values[i], ttl)
+			err := cm.Set(ctx, keys[i], values[i], ttl)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -283,16 +285,16 @@ func benchmarkParallel(b *testing.B, cm types.Cache[string]) {
 
 				switch {
 				case opType < 3: // 30% writes
-					err := cm.Set(keys[idx], values[idx], ttl)
+					err := cm.Set(ctx, keys[idx], values[idx], ttl)
 					if err != nil {
 						b.Fatal(err)
 					}
 				case opType < 9: // 60% reads
-					if _, err := cm.Get(keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+					if _, err := cm.Get(ctx, keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 						b.Fatal(err)
 					}
 				default: // 10% deletes
-					if err := cm.Delete(keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+					if err := cm.Delete(ctx, keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 						b.Fatal(err)
 					}
 				}

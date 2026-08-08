@@ -31,7 +31,7 @@ func (s *SessionListService) List(ctx *types.ServiceContext, req *model.Empty) (
 		return nil, err
 	}
 
-	cache := redis.Cache[modeliamsession.Session]().WithContext(ctx)
+	cache := redis.Cache[modeliamsession.Session]()
 	items := make([]modeliamsession.SessionView, 0, len(sessionIDs))
 	for i := range sessionIDs {
 		sessionID := sessionIDs[i]
@@ -40,7 +40,7 @@ func (s *SessionListService) List(ctx *types.ServiceContext, req *model.Empty) (
 			continue
 		}
 		sessionKey := modeliamsession.SessionIDKey(sessionID)
-		sessionData, getErr := cache.Get(sessionKey)
+		sessionData, getErr := cache.Get(ctx, sessionKey)
 		if getErr != nil {
 			if errors.Is(getErr, types.ErrEntryNotFound) {
 				_ = modeliamsession.RemoveSessionIndexes(ctx, currentSession.UserID, sessionID)
