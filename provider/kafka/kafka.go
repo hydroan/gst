@@ -7,6 +7,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -23,6 +24,12 @@ var (
 	initialized bool
 	client      *kgo.Client
 )
+
+// init registers this provider so importing the package compiles the
+// capability in and hands its lifecycle to bootstrap.
+func init() {
+	provider.Register(provider.Provider{Name: "kafka", Init: Init, Close: Close})
+}
 
 // Init initializes the global Kafka client backed by franz-go.
 // It reads Kafka configuration from config.App.Kafka.
@@ -133,7 +140,7 @@ func Admin() (*kadm.Client, error) {
 
 // Close closes the default Kafka client and resets the initialized state,
 // allowing a subsequent Init to establish a fresh client.
-func Close() {
+func Close() error {
 	mu.Lock()
 	defer mu.Unlock()
 	if client != nil {
@@ -142,4 +149,5 @@ func Close() {
 		client = nil
 	}
 	initialized = false
+	return nil
 }

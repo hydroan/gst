@@ -97,7 +97,7 @@ func TestInit(t *testing.T) {
 		old := config.App.Kafka
 		config.App.Kafka = config.Kafka{Enabled: true, Brokers: addrs, ClientID: "gst-test"}
 		t.Cleanup(func() {
-			Close()
+			_ = Close()
 			config.App.Kafka = old
 		})
 
@@ -127,7 +127,9 @@ func TestInit(t *testing.T) {
 			t.Fatalf("expected topic %s to exist", sampleTopic)
 		}
 
-		Close()
+		if err = Close(); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
 		if _, err = Client(); err == nil {
 			t.Fatal("expected error from Client after Close, got nil")
 		}

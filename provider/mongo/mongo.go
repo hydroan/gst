@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -24,6 +25,12 @@ var (
 	client      *mongo.Client
 	mu          sync.RWMutex
 )
+
+// init registers this provider so importing the package compiles the
+// capability in and hands its lifecycle to bootstrap.
+func init() {
+	provider.Register(provider.Provider{Name: "mongo", Init: Init, Close: Close})
+}
 
 // Init initializes the global MongoDB client.
 // It reads MongoDB configuration from config.App.MongoConfig.

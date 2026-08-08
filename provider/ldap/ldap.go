@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/go-ldap/ldap/v3"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 )
@@ -20,6 +21,12 @@ var (
 	mu          sync.RWMutex
 	heartbeat   *time.Ticker
 )
+
+// init registers this provider so importing the package compiles the
+// capability in and hands its lifecycle to bootstrap.
+func init() {
+	provider.Register(provider.Provider{Name: "ldap", Init: Init, Close: Close})
+}
 
 // Init initializes the global LDAP connection.
 // It reads LDAP configuration from config.App.Ldap.
@@ -122,7 +129,7 @@ func Conn() *ldap.Conn {
 }
 
 // Close closes the global LDAP connection.
-func Close() {
+func Close() error {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -132,15 +139,18 @@ func Close() {
 		heartbeat = nil
 	}
 
-	if gconn != nil {
-		if err := gconn.Close(); err != nil {
-			zap.S().Errorw("failed to close LDAP connection", "error", err)
-		} else {
-			zap.S().Infow("successfully closed LDAP connection")
-		}
-		gconn = nil
+	if gconn == nil {
+		initialized = false
+		return nil
 	}
+	err := gconn.Close()
+	gconn = nil
 	initialized = false
+	if err != nil {
+		return errors.Wrap(err, "failed to close LDAP connection")
+	}
+	zap.S().Infow("successfully closed LDAP connection")
+	return nil
 }
 
 // checkConnection verifies the LDAP connection is still valid

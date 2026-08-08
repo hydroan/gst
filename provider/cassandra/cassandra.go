@@ -7,6 +7,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gocql/gocql"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 )
@@ -16,6 +17,12 @@ var (
 	session     *gocql.Session
 	mu          sync.RWMutex
 )
+
+// init registers this provider so importing the package compiles the
+// capability in and hands its lifecycle to bootstrap.
+func init() {
+	provider.Register(provider.Provider{Name: "cassandra", Init: Init, Close: Close})
+}
 
 // Init initializes the global Cassandra session.
 // It reads Cassandra configuration from config.App.Cassandra.
@@ -171,7 +178,7 @@ func Session() *gocql.Session {
 }
 
 // Close closes the global Cassandra session.
-func Close() {
+func Close() error {
 	mu.Lock()
 	defer mu.Unlock()
 	if session != nil {
@@ -180,4 +187,5 @@ func Close() {
 		session = nil
 	}
 	initialized = false
+	return nil
 }

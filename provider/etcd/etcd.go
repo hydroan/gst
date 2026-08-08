@@ -9,6 +9,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
 	pkgzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
@@ -19,6 +20,12 @@ var (
 	client      *clientv3.Client
 	mu          sync.RWMutex
 )
+
+// init registers this provider so importing the package compiles the
+// capability in and hands its lifecycle to bootstrap.
+func init() {
+	provider.Register(provider.Provider{Name: "etcd", Init: Init, Close: Close})
+}
 
 // Init initializes the global etcd client.
 // It reads etcd configuration from config.App.Etcd.
@@ -128,16 +135,19 @@ func Client() *clientv3.Client {
 }
 
 // Close closes the global etcd client.
-func Close() {
+func Close() error {
 	mu.Lock()
 	defer mu.Unlock()
-	if client != nil {
-		if err := client.Close(); err != nil {
-			zap.S().Errorw("failed to close etcd client", "error", err)
-		} else {
-			zap.S().Infow("successfully closed etcd client")
-		}
-		client = nil
+	if client == nil {
+		initialized = false
+		return nil
 	}
+	err := client.Close()
+	client = nil
 	initialized = false
+	if err != nil {
+		return errors.Wrap(err, "failed to close etcd client")
+	}
+	zap.S().Infow("successfully closed etcd client")
+	return nil
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	"github.com/scylladb/gocqlx/v3"
 	"go.uber.org/zap"
@@ -21,6 +22,12 @@ var (
 	session     gocqlx.Session
 	mu          sync.RWMutex
 )
+
+// init registers this provider so importing the package compiles the
+// capability in and hands its lifecycle to bootstrap.
+func init() {
+	provider.Register(provider.Provider{Name: "scylla", Init: Init, Close: Close})
+}
 
 // Init initializes the global ScyllaDB session.
 // It reads ScyllaDB configuration from config.App.Scylla.

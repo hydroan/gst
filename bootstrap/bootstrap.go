@@ -28,19 +28,6 @@ import (
 	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/module"
 	gstotel "github.com/hydroan/gst/otel"
-	"github.com/hydroan/gst/provider/cassandra"
-	"github.com/hydroan/gst/provider/elastic"
-	"github.com/hydroan/gst/provider/etcd"
-	"github.com/hydroan/gst/provider/influxdb"
-	"github.com/hydroan/gst/provider/kafka"
-	"github.com/hydroan/gst/provider/ldap"
-	"github.com/hydroan/gst/provider/memcached"
-	"github.com/hydroan/gst/provider/minio"
-	"github.com/hydroan/gst/provider/mongo"
-	"github.com/hydroan/gst/provider/mqtt"
-	"github.com/hydroan/gst/provider/nats"
-	"github.com/hydroan/gst/provider/rethinkdb"
-	"github.com/hydroan/gst/provider/rocketmq"
 	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/router"
 	"github.com/hydroan/gst/service"
@@ -86,22 +73,9 @@ func Bootstrap() error {
 	dbruntime.Wait()
 
 	ins.Register(
-		// provider
+		// backbone providers
 		redis.Init,
 		gstotel.Init,
-		elastic.Init,
-		mongo.Init,
-		minio.Init,
-		nats.Init,
-		mqtt.Init,
-		kafka.Init,
-		etcd.Init,
-		cassandra.Init,
-		influxdb.Init,
-		memcached.Init,
-		rethinkdb.Init,
-		rocketmq.Init,
-		ldap.Init,
 	)
 
 	// Optional providers join the registry from their package init
@@ -131,15 +105,6 @@ func Bootstrap() error {
 
 	registerCleanup(redis.Close)
 	registerCleanup(gstotel.Close)
-	registerCleanup(kafka.Close)
-	registerCleanup(etcd.Close)
-	registerCleanup(nats.Close)
-	registerCleanup(cassandra.Close)
-	registerCleanup(influxdb.Close)
-	registerCleanup(memcached.Close)
-	registerCleanup(rethinkdb.Close)
-	registerCleanup(rocketmq.Close)
-	registerCleanup(ldap.Close)
 	registerCleanup(controller.Clean)
 	registerCleanup(pkgzap.Clean)
 	registerCleanup(config.Clean)

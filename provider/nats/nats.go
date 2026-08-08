@@ -8,6 +8,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	"github.com/nats-io/nats.go"
 	"go.uber.org/zap"
@@ -18,6 +19,12 @@ var (
 	initialized bool
 	conn        *nats.Conn
 )
+
+// init registers this provider so importing the package compiles the
+// capability in and hands its lifecycle to bootstrap.
+func init() {
+	provider.Register(provider.Provider{Name: "nats", Init: Init, Close: Close})
+}
 
 // Init initializes the global NATS client.
 // It reads NATS configuration from config.App.NatsConfig.
@@ -124,12 +131,13 @@ func New(cfg config.Nats) (*nats.Conn, error) {
 	return nats.Connect(strings.Join(cfg.Addrs, ","), opts...)
 }
 
-func Close() {
+func Close() error {
 	if conn != nil {
 		conn.Close()
 		zap.S().Infow("successfully close nats client", "url", conn.ConnectedUrl(), "cluster_name", config.App.Nats.ClientName)
 		conn = nil
 	}
+	return nil
 }
 
 func Conn() *nats.Conn { return conn }

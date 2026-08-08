@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/provider"
 	"go.uber.org/zap"
 )
 
@@ -23,6 +24,12 @@ var (
 	defaultAdmin    admin.Admin
 	mu              sync.RWMutex
 )
+
+// init registers this provider so importing the package compiles the
+// capability in and hands its lifecycle to bootstrap.
+func init() {
+	provider.Register(provider.Provider{Name: "rocketmq", Init: Init, Close: Close})
+}
 
 // Init initializes the global RocketMQ producer.
 // It reads RocketMQ configuration from config.App.RocketMQ.
@@ -258,13 +265,14 @@ func Admin() (admin.Admin, error) {
 }
 
 // Close closes the RocketMQ producer connection
-func Close() {
+func Close() error {
 	mu.Lock()
 	defer mu.Unlock()
 
+	var errs []error
 	if defaultProducer != nil {
 		if err := defaultProducer.Shutdown(); err != nil {
-			zap.S().Errorw("failed to shutdown rocketmq producer", "error", err)
+			errs = append(errs, errors.Wrap(err, "failed to shutdown rocketmq producer"))
 		} else {
 			zap.S().Infow("successfully shutdown rocketmq producer")
 		}
@@ -272,7 +280,7 @@ func Close() {
 	}
 	if defaultConsumer != nil {
 		if err := defaultConsumer.Shutdown(); err != nil {
-			zap.S().Errorw("failed to shutdown rocketmq consumer", "error", err)
+			errs = append(errs, errors.Wrap(err, "failed to shutdown rocketmq consumer"))
 		} else {
 			zap.S().Infow("successfully shutdown rocketmq consumer")
 		}
@@ -280,13 +288,14 @@ func Close() {
 	}
 	if defaultAdmin != nil {
 		if err := defaultAdmin.Close(); err != nil {
-			zap.S().Errorw("failed to close rocketmq admin", "error", err)
+			errs = append(errs, errors.Wrap(err, "failed to close rocketmq admin"))
 		} else {
 			zap.S().Infow("successfully close rocketmq admin")
 		}
 		defaultAdmin = nil
 	}
 	initialized = false
+	return errors.Join(errs...)
 }
 
 type customLogger struct{}

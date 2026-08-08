@@ -6,6 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 	r "gopkg.in/rethinkdb/rethinkdb-go.v6"
@@ -16,6 +17,12 @@ var (
 	session     *r.Session
 	mu          sync.RWMutex
 )
+
+// init registers this provider so importing the package compiles the
+// capability in and hands its lifecycle to bootstrap.
+func init() {
+	provider.Register(provider.Provider{Name: "rethinkdb", Init: Init, Close: Close})
+}
 
 // Init initializes the global RethinkDB session.
 // It reads RethinkDB configuration from config.App.RethinkDB.
@@ -112,19 +119,21 @@ func Session() (*r.Session, error) {
 }
 
 // Close closes the RethinkDB session
-func Close() {
+func Close() error {
 	mu.Lock()
 	defer mu.Unlock()
 
-	if session != nil {
-		if err := session.Close(); err != nil {
-			zap.S().Errorw("failed to close rethinkdb session", "error", err)
-		} else {
-			zap.S().Infow("successfully closed rethinkdb session")
-		}
-		session = nil
-		initialized = false
+	if session == nil {
+		return nil
 	}
+	err := session.Close()
+	session = nil
+	initialized = false
+	if err != nil {
+		return errors.Wrap(err, "failed to close rethinkdb session")
+	}
+	zap.S().Infow("successfully closed rethinkdb session")
+	return nil
 }
 
 // Health checks if the RethinkDB connection is healthy

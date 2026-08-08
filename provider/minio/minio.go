@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -83,6 +84,12 @@ type ListOptions struct {
 // CopyOptions configures object copy operations.
 type CopyOptions struct {
 	Bucket string
+}
+
+// init registers this provider so importing the package compiles the
+// capability in and hands its lifecycle to bootstrap.
+func init() {
+	provider.Register(provider.Provider{Name: "minio", Init: Init})
 }
 
 // Init initializes the global MinIO client.

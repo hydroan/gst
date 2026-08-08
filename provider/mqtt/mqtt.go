@@ -12,6 +12,7 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/provider"
 	"go.uber.org/zap"
 )
 
@@ -21,6 +22,12 @@ var (
 	initialized bool
 	clientID    string
 )
+
+// init registers this provider so importing the package compiles the
+// capability in and hands its lifecycle to bootstrap.
+func init() {
+	provider.Register(provider.Provider{Name: "mqtt", Init: Init, Close: Close})
+}
 
 func Init() (err error) {
 	cfg := config.App.Mqtt

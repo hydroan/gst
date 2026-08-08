@@ -6,6 +6,7 @@ import (
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/provider"
 	"go.uber.org/zap"
 )
 
@@ -14,6 +15,12 @@ var (
 	client      *memcache.Client
 	mu          sync.RWMutex
 )
+
+// init registers this provider so importing the package compiles the
+// capability in and hands its lifecycle to bootstrap.
+func init() {
+	provider.Register(provider.Provider{Name: "memcached", Init: Init, Close: Close})
+}
 
 // Init initializes the global Memcached client.
 // It reads Memcached configuration from config.App.Memcached.
@@ -143,19 +150,21 @@ func Decrement(key string, delta uint64) (uint64, error) {
 
 // Close closes the Memcached client connection
 // Note: gomemcache doesn't have a Close method, but we keep this for API consistency
-func Close() {
+func Close() error {
 	mu.Lock()
 	defer mu.Unlock()
 
-	if client != nil {
-		if err := client.Close(); err != nil {
-			zap.S().Errorw("failed to close memcached client", "error", err)
-		} else {
-			zap.S().Infow("successfully close memcached client", "servers", config.App.Memcached.Servers)
-		}
-		client = nil
-		initialized = false
+	if client == nil {
+		return nil
 	}
+	err := client.Close()
+	client = nil
+	initialized = false
+	if err != nil {
+		return errors.Wrap(err, "failed to close memcached client")
+	}
+	zap.S().Infow("successfully close memcached client", "servers", config.App.Memcached.Servers)
+	return nil
 }
 
 // Health checks if the Memcached connection is healthy

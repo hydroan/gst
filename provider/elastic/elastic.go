@@ -16,6 +16,7 @@ import (
 	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 )
@@ -36,6 +37,12 @@ var (
 	Document = new(document)
 	Index    = new(index)
 )
+
+// init registers this provider so importing the package compiles the
+// capability in and hands its lifecycle to bootstrap.
+func init() {
+	provider.Register(provider.Provider{Name: "elastic", Init: Init})
+}
 
 // Init initializes the global elasticsearch client.
 // It reads elasticsearch configuration from config.App.ElasticsearchConfig.
