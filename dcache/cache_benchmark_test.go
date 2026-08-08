@@ -9,7 +9,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/dcache"
-	"github.com/hydroan/gst/provider/redis"
+	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/types"
 )
 

@@ -16,7 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/provider/redis"
+	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"

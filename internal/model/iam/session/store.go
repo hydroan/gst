@@ -3,7 +3,7 @@ package modeliamsession
 import (
 	"context"
 
-	"github.com/hydroan/gst/provider/redis"
+	"github.com/hydroan/gst/redis"
 )
 
 // InvalidateUserSessions revokes every session a user holds.

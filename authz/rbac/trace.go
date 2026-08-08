@@ -5,7 +5,7 @@ import (
 	"maps"
 	"strings"
 
-	gstotel "github.com/hydroan/gst/provider/otel"
+	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/types"
 )
 

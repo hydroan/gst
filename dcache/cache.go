@@ -12,7 +12,7 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/provider/redis"
+	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/util"
 	cmap "github.com/orcaman/concurrent-map/v2"
 	"github.com/panjf2000/ants/v2"

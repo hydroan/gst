@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	gstotel "github.com/hydroan/gst/provider/otel"
+	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/types"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"

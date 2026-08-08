@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	gstotel "github.com/hydroan/gst/provider/otel"
+	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"

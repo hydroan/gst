@@ -11,7 +11,7 @@ import (
 	"github.com/hydroan/gst/logger"
 	pkgzap "github.com/hydroan/gst/logger/zap"
 	"github.com/hydroan/gst/model"
-	gstotel "github.com/hydroan/gst/provider/otel"
+	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 	oteltrace "go.opentelemetry.io/otel/trace"

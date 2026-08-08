@@ -9,7 +9,7 @@ import (
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
-	"github.com/hydroan/gst/provider/redis"
+	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"go.uber.org/zap"

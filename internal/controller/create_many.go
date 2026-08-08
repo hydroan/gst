@@ -11,7 +11,7 @@ import (
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/logger"
-	gstotel "github.com/hydroan/gst/provider/otel"
+	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"

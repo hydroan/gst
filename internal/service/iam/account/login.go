@@ -17,7 +17,7 @@ import (
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	// servicelogmgmt "github.com/hydroan/gst/internal/service/logmgmt"
 	// servicemfa "github.com/hydroan/gst/internal/service/mfa"
-	"github.com/hydroan/gst/provider/redis"
+	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"

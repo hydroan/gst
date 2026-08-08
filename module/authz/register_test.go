@@ -25,7 +25,7 @@ import (
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/module/iam"
-	"github.com/hydroan/gst/provider/redis"
+	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
