@@ -53,7 +53,6 @@ func RecoveryWithTracing(logger *zap.Logger, stack bool) gin.HandlerFunc {
 		}
 
 		if logger != nil {
-
 			httpRequest, _ := httputil.DumpRequest(c.Request, false)
 			headers := strings.Split(string(httpRequest), "\r\n")
 			for idx, header := range headers {
