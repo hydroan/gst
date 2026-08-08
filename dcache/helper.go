@@ -5,8 +5,38 @@ import (
 	"os"
 	"time"
 
+	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/types/consts"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
+
+// setDelTopic returns the Kafka topic carrying cache set/delete events. The
+// default derives from the application name so applications sharing one
+// Kafka cluster do not consume each other's cache events.
+func setDelTopic() string {
+	if t := config.App.Cache.TopicSetDel; t != "" {
+		return t
+	}
+	return appName() + "-dcache-set-del"
+}
+
+// doneTopic returns the Kafka topic broadcasting applied cache events; see
+// setDelTopic for the derivation rule.
+func doneTopic() string {
+	if t := config.App.Cache.TopicDone; t != "" {
+		return t
+	}
+	return appName() + "-dcache-done"
+}
+
+// appName guards topic derivation against reads before the configuration is
+// loaded.
+func appName() string {
+	if config.App.Name != "" {
+		return config.App.Name
+	}
+	return consts.FrameworkName
+}
 
 func newProducer(brokers []string, topic string) (*kgo.Client, error) {
 	hostname, err := os.Hostname()

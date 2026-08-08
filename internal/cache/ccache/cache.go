@@ -30,7 +30,7 @@ type cache[T any] struct {
 // use.
 func Cache[T any]() types.Cache[T] {
 	return registry.Load(store, func() types.Cache[T] {
-		return &cache[T]{c: ccache.New(ccache.Configure[T]().MaxSize(int64(config.App.Cache.MaxEntriesOr(defaultMaxEntries))))}
+		return &cache[T]{c: ccache.New(ccache.Configure[T]().MaxSize(int64(maxEntries())))}
 	})
 }
 
@@ -70,4 +70,14 @@ func (c *cache[T]) Exists(_ context.Context, key string) bool {
 		return false
 	}
 	return !val.Expired()
+}
+
+// maxEntries returns the configured per-type entry bound, falling back to
+// the built-in default when it is unset or the configuration is not loaded
+// yet.
+func maxEntries() int {
+	if v := config.App.Cache.MaxEntries; v > 0 {
+		return v
+	}
+	return defaultMaxEntries
 }

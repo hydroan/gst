@@ -8,10 +8,17 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/dgraph-io/ristretto/v2"
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/types"
 	cmap "github.com/orcaman/concurrent-map/v2"
 	"go.uber.org/zap/zapcore"
 )
+
+// defaultMaxEntries bounds every per-type local cache when the cache
+// configuration does not override it. Instances are created lazily per type,
+// so only used types pay the admission-counter cost of roughly 4MB per
+// instance at this capacity.
+const defaultMaxEntries = 100_000
 
 var (
 	// Why cmap v2:
@@ -19,7 +26,6 @@ var (
 	//  2. cmap v2 performs much better than sync.Map.
 	localCacheMap = cmap.New[any]()
 	localCacheMu  sync.Mutex
-	localMaxItems = 1 << 24
 )
 
 var (
@@ -59,7 +65,8 @@ func (c *localCache[T]) Set(_ context.Context, key string, value T, ttl time.Dur
 	if success := c.c.SetWithTTL(key, value, 1, ttl); !success {
 		return errors.New("cache rejected the set operation")
 	}
-	// Block here until value to be set.
+	// Block until the buffered set is applied so a Set followed by a Get on
+	// the same key observes the value (read-your-write).
 	c.c.Wait()
 	return nil
 }
@@ -136,21 +143,31 @@ func (m *localMetrics) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	return nil
 }
 
+// buildConf sizes the local tier following the backend's own guidance:
+// MaxCost bounds the entry count because every entry costs 1, NumCounters is
+// ten times the expected entries to keep the admission sketch accurate, and
+// BufferItems is the recommended write-buffer size. Metrics stay enabled
+// because the distributed cache monitor reports them.
 func buildConf[T any]() *ristretto.Config[string, T] {
+	entries := int64(maxEntries())
 	return &ristretto.Config[string, T]{
-		// NumCounters should be roughly 10 times the maximum number of entries you expect,
-		// the value drives the accuracy of the internal bloom filter.
-		NumCounters: int64(localMaxItems) * 10,
-
-		// MaxCost is the maximum number of entries to cache,
-		// because the cost of every entry is 1.
-		MaxCost: int64(localMaxItems),
-
-		// BufferItems controls the size of the write buffer,
-		// it is set high here because the entry count is above ten million.
-		BufferItems: 256,
-
-		// collect metrics
-		Metrics: true,
+		NumCounters: entries * 10,
+		MaxCost:     entries,
+		BufferItems: 64,
+		// Every entry costs exactly 1 so MaxCost bounds the entry count; the
+		// backend would otherwise add its per-item bookkeeping bytes to each
+		// cost and silently shrink the capacity about 57-fold.
+		IgnoreInternalCost: true,
+		Metrics:            true,
 	}
+}
+
+// maxEntries returns the configured per-type entry bound, falling back to
+// the built-in default when it is unset or the configuration is not loaded
+// yet.
+func maxEntries() int {
+	if v := config.App.Cache.MaxEntries; v > 0 {
+		return v
+	}
+	return defaultMaxEntries
 }

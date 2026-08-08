@@ -72,10 +72,24 @@ func (c *cache[T]) Exists(_ context.Context, key string) bool {
 // times the expected entries to keep the admission sketch accurate, and
 // BufferItems is the recommended write-buffer size.
 func buildConf[T any]() *ristretto.Config[string, T] {
-	maxEntries := int64(config.App.Cache.MaxEntriesOr(defaultMaxEntries))
+	entries := int64(maxEntries())
 	return &ristretto.Config[string, T]{
-		NumCounters: maxEntries * 10,
-		MaxCost:     maxEntries,
+		NumCounters: entries * 10,
+		MaxCost:     entries,
 		BufferItems: 64,
+		// Every entry costs exactly 1 so MaxCost bounds the entry count; the
+		// backend would otherwise add its per-item bookkeeping bytes to each
+		// cost and silently shrink the capacity about 57-fold.
+		IgnoreInternalCost: true,
 	}
+}
+
+// maxEntries returns the configured per-type entry bound, falling back to
+// the built-in default when it is unset or the configuration is not loaded
+// yet.
+func maxEntries() int {
+	if v := config.App.Cache.MaxEntries; v > 0 {
+		return v
+	}
+	return defaultMaxEntries
 }

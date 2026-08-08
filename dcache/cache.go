@@ -10,11 +10,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/util"
-	cmap "github.com/orcaman/concurrent-map/v2"
 	"github.com/panjf2000/ants/v2"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.uber.org/zap"
@@ -74,6 +74,10 @@ func Init() error {
 		log := logger.Dcache.With("hostname", hostname, compKey, compVal)
 		log.Info("distributed cache setup")
 
+		// Resolve the topics once; the consumer group name follows the topic.
+		topicSetDel := setDelTopic()
+		topicDone := doneTopic()
+
 		redisCli, err := redis.New(config.App.Redis)
 		if err != nil {
 			gerr = err
@@ -88,20 +92,27 @@ func Init() error {
 		}
 
 		// initialize the Kafka consumer and producer
-		consumer, err := newConsumer(config.App.Kafka.Brokers, TOPIC_REDIS_SET_DEL, GROUP_REDIS_SET_DEL)
+		consumer, err := newConsumer(config.App.Kafka.Brokers, topicSetDel, topicSetDel)
 		if err != nil {
 			gerr = err
 			return
 		}
-		producer, err := newProducer(config.App.Kafka.Brokers, TOPIC_REDIS_DONE)
+		producer, err := newProducer(config.App.Kafka.Brokers, topicDone)
 		if err != nil {
 			gerr = err
 			return
 		}
 
 		var wg sync.WaitGroup
-		// keep a separate maximum timestamp per key
-		keyMaxTimestamps := cmap.New[int64]()
+		// keyMaxTimestamps keeps the highest applied timestamp per key so stale
+		// events can be dropped. LRU eviction bounds it: evicting a key reopens
+		// that key's out-of-order acceptance window, which is acceptable
+		// because eviction only hits the least recently written keys.
+		keyMaxTimestamps, err := lru.New[string, int64](maxTrackedKeys)
+		if err != nil {
+			gerr = err
+			return
+		}
 
 		util.SafeGo(func() {
 			for {
@@ -118,7 +129,7 @@ func Init() error {
 					log.Errorz(
 						"failed to fetch from kafka",
 						zap.Error(err),
-						zap.String("topic", TOPIC_REDIS_SET_DEL),
+						zap.String("topic", topicSetDel),
 						zap.String("s", s),
 						zap.Int32("i", i),
 					)
@@ -284,7 +295,7 @@ func Init() error {
 							} else {
 								atomic.AddInt64(&successRecords, 1)
 								// publish the kafka message synchronously
-								produceRecord := &kgo.Record{Topic: TOPIC_REDIS_DONE, Value: data}
+								produceRecord := &kgo.Record{Topic: topicDone, Value: data}
 								if err := producer.ProduceSync(baseCtx, produceRecord).FirstErr(); err != nil {
 									log.Errorz(
 										"failed to produce redis set done event",
@@ -328,7 +339,7 @@ func Init() error {
 							} else {
 								atomic.AddInt64(&successRecords, 1)
 								// publish the kafka message synchronously
-								produceRecord := &kgo.Record{Topic: TOPIC_REDIS_DONE, Value: data}
+								produceRecord := &kgo.Record{Topic: topicDone, Value: data}
 								if err := producer.ProduceSync(baseCtx, produceRecord).FirstErr(); err != nil {
 									log.Errorz(
 										"failed to produce redis del done event",
@@ -352,7 +363,7 @@ func Init() error {
 
 				// the batch is done, update the highest timestamp of every key
 				for key, ts := range batchKeyMaxTS {
-					keyMaxTimestamps.Set(key, ts)
+					keyMaxTimestamps.Add(key, ts)
 				}
 
 				// log the processing statistics

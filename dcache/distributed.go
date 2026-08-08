@@ -187,6 +187,10 @@ type distributedCache[T any] struct {
 	distributedDelete atomic.Int64
 
 	kafkaBrokers []string
+	// topicSetDel and topicDone are resolved once at construction; the
+	// defaults derive from the application name.
+	topicSetDel string
+	topicDone   string
 	// pubSetDel is the kafka producer, publish the event that the entry associated with the key was updated/delete.
 	pubSetDel *kgo.Client
 	// subDone is the kafka consumer, receive the event that the entry associated with the key was updated/delete.
@@ -282,19 +286,21 @@ func newDistributedCache[T any](opts ...DistributedCacheOption[T]) (types.Cache[
 		}
 	}
 
-	// setup kafka
+	// setup kafka; the consumer group name follows the topic
 	if len(dc.kafkaBrokers) == 0 {
 		dc.kafkaBrokers = config.App.Kafka.Brokers
 	}
-	if dc.pubSetDel, err = newProducer(dc.kafkaBrokers, TOPIC_REDIS_SET_DEL); err != nil {
+	dc.topicSetDel = setDelTopic()
+	dc.topicDone = doneTopic()
+	if dc.pubSetDel, err = newProducer(dc.kafkaBrokers, dc.topicSetDel); err != nil {
 		return nil, err
 	}
-	if dc.subDone, err = newConsumer(dc.kafkaBrokers, TOPIC_REDIS_DONE, GROUP_REDIS_DONE); err != nil {
+	if dc.subDone, err = newConsumer(dc.kafkaBrokers, dc.topicDone, dc.topicDone); err != nil {
 		return nil, err
 	}
 
 	// setup goroutines pool.
-	if dc.gocap < MIN_GOROUTINES {
+	if dc.gocap < minGoroutines {
 		dc.gocap = runtime.NumCPU() * 2000
 	}
 	pool, err := ants.NewPool(dc.gocap, ants.WithPreAlloc(false))
@@ -498,7 +504,7 @@ func (dc *distributedCache[T]) listenEvents() {
 				dc.logger.Errorz(
 					"failed to fetch from kafka",
 					zap.Error(err),
-					zap.String("topic", TOPIC_REDIS_DONE),
+					zap.String("topic", dc.topicDone),
 					zap.String("s", s),
 					zap.Int32("i", i),
 				)
@@ -513,7 +519,7 @@ func (dc *distributedCache[T]) listenEvents() {
 					dc.logger.Errorz(
 						"failed to unmarshal event",
 						zap.Error(err),
-						zap.String("topic", TOPIC_REDIS_DONE),
+						zap.String("topic", dc.topicDone),
 						zap.ByteString("value", record.Value),
 					)
 					continue
@@ -608,7 +614,7 @@ func (dc *distributedCache[T]) sendEvent(evt *event) {
 	}
 	err = dc.gopool.Submit(func() {
 		record := &kgo.Record{
-			Topic: TOPIC_REDIS_SET_DEL,
+			Topic: dc.topicSetDel,
 			Value: data,
 		}
 		// TODO: lower this log to debug
