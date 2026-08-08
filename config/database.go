@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/spf13/viper"
+)
 
 type DBType string
 
@@ -32,12 +36,12 @@ type Database struct {
 	ConnMaxIdleTime    time.Duration `json:"conn_max_idle_time" mapstructure:"conn_max_idle_time" ini:"conn_max_idle_time" yaml:"conn_max_idle_time"`
 }
 
-func (*Database) setDefault() {
-	cv.SetDefault("database.type", DBSqlite)
-	cv.SetDefault("database.auto_migrate", false)
-	cv.SetDefault("database.slow_query_threshold", 500*time.Millisecond)
-	cv.SetDefault("database.max_idle_conns", 100)
-	cv.SetDefault("database.max_open_conns", 100)
-	cv.SetDefault("database.conn_max_lifetime", 1*time.Hour)
-	cv.SetDefault("database.conn_max_idle_time", 10*time.Minute)
+func (*Database) setDefault(v *viper.Viper) {
+	v.SetDefault("database.type", DBSqlite)
+	v.SetDefault("database.auto_migrate", false)
+	v.SetDefault("database.slow_query_threshold", 500*time.Millisecond)
+	v.SetDefault("database.max_idle_conns", 100)
+	v.SetDefault("database.max_open_conns", 100)
+	v.SetDefault("database.conn_max_lifetime", 1*time.Hour)
+	v.SetDefault("database.conn_max_idle_time", 10*time.Minute)
 }

@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/spf13/viper"
+)
 
 const (
 	MEMCACHED_SERVERS        = "MEMCACHED_SERVERS"        //nolint:staticcheck
@@ -19,10 +23,10 @@ type Memcached struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Memcached) setDefault() {
-	cv.SetDefault("memcached.servers", "127.0.0.1:11211")
-	cv.SetDefault("memcached.max_idle_conns", 100)
-	cv.SetDefault("memcached.timeout", 100*time.Millisecond)
-	cv.SetDefault("memcached.max_cache_size", 0) // 0 is unlimited
-	cv.SetDefault("memcached.enabled", false)
+func (*Memcached) setDefault(v *viper.Viper) {
+	v.SetDefault("memcached.servers", "127.0.0.1:11211")
+	v.SetDefault("memcached.max_idle_conns", 100)
+	v.SetDefault("memcached.timeout", 100*time.Millisecond)
+	v.SetDefault("memcached.max_cache_size", 0) // 0 is unlimited
+	v.SetDefault("memcached.enabled", false)
 }

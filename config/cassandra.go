@@ -2,6 +2,8 @@ package config
 
 import (
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 const (
@@ -53,27 +55,27 @@ type Cassandra struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Cassandra) setDefault() {
-	cv.SetDefault("cassandra.hosts", []string{"127.0.0.1"})
-	cv.SetDefault("cassandra.port", 9042)
-	cv.SetDefault("cassandra.keyspace", "")
-	cv.SetDefault("cassandra.username", "")
-	cv.SetDefault("cassandra.password", "")
+func (*Cassandra) setDefault(v *viper.Viper) {
+	v.SetDefault("cassandra.hosts", []string{"127.0.0.1"})
+	v.SetDefault("cassandra.port", 9042)
+	v.SetDefault("cassandra.keyspace", "")
+	v.SetDefault("cassandra.username", "")
+	v.SetDefault("cassandra.password", "")
 
-	cv.SetDefault("cassandra.consistency", "QUORUM")
-	cv.SetDefault("cassandra.timeout", 5*time.Second)
-	cv.SetDefault("cassandra.connect_timeout", 5*time.Second)
-	cv.SetDefault("cassandra.num_conns", 2)
-	cv.SetDefault("cassandra.page_size", 5000)
-	cv.SetDefault("cassandra.retry_policy", "default")
-	cv.SetDefault("cassandra.reconnect_interval", 1*time.Second)
-	cv.SetDefault("cassandra.max_retry_count", 3)
+	v.SetDefault("cassandra.consistency", "QUORUM")
+	v.SetDefault("cassandra.timeout", 5*time.Second)
+	v.SetDefault("cassandra.connect_timeout", 5*time.Second)
+	v.SetDefault("cassandra.num_conns", 2)
+	v.SetDefault("cassandra.page_size", 5000)
+	v.SetDefault("cassandra.retry_policy", "default")
+	v.SetDefault("cassandra.reconnect_interval", 1*time.Second)
+	v.SetDefault("cassandra.max_retry_count", 3)
 
-	cv.SetDefault("cassandra.tls_enabled", false)
-	cv.SetDefault("cassandra.cert_file", "")
-	cv.SetDefault("cassandra.key_file", "")
-	cv.SetDefault("cassandra.ca_file", "")
-	cv.SetDefault("cassandra.insecure_skip_verify", false)
+	v.SetDefault("cassandra.tls_enabled", false)
+	v.SetDefault("cassandra.cert_file", "")
+	v.SetDefault("cassandra.key_file", "")
+	v.SetDefault("cassandra.ca_file", "")
+	v.SetDefault("cassandra.insecure_skip_verify", false)
 
-	cv.SetDefault("cassandra.enabled", false)
+	v.SetDefault("cassandra.enabled", false)
 }

@@ -1,5 +1,7 @@
 package config
 
+import "github.com/spf13/viper"
+
 const (
 	S3_ENDPOINT          = "S3_ENDPOINT"          //nolint:staticcheck
 	S3_REGION            = "S3_REGION"            //nolint:staticcheck
@@ -20,12 +22,12 @@ type S3 struct {
 	Enabled         bool   `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*S3) setDefault() {
-	cv.SetDefault("s3.endpoint", "")
-	cv.SetDefault("s3.region", "")
-	cv.SetDefault("s3.access_key_id", "")
-	cv.SetDefault("s3.secret_access_key", "")
-	cv.SetDefault("s3.bucket", "")
-	cv.SetDefault("s3.use_ssl", false)
-	cv.SetDefault("s3.enabled", false)
+func (*S3) setDefault(v *viper.Viper) {
+	v.SetDefault("s3.endpoint", "")
+	v.SetDefault("s3.region", "")
+	v.SetDefault("s3.access_key_id", "")
+	v.SetDefault("s3.secret_access_key", "")
+	v.SetDefault("s3.bucket", "")
+	v.SetDefault("s3.use_ssl", false)
+	v.SetDefault("s3.enabled", false)
 }

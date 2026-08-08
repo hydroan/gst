@@ -1,5 +1,7 @@
 package config
 
+import "github.com/spf13/viper"
+
 const (
 	LOGGER_DIR                     = "LOGGER_DIR"                     //nolint:staticcheck
 	LOGGER_PREFIX                  = "LOGGER_PREFIX"                  //nolint:staticcheck
@@ -125,21 +127,21 @@ type HTTPBodyLogger struct {
 	SkipRoutes []string `json:"skip_routes" ini:"skip_routes" yaml:"skip_routes" mapstructure:"skip_routes"`
 }
 
-func (*Logger) setDefault() {
-	cv.SetDefault("logger.dir", "./logs")
-	cv.SetDefault("logger.prefix", "")
-	cv.SetDefault("logger.file", "")
-	cv.SetDefault("logger.console", true)
-	cv.SetDefault("logger.level", "info")
-	cv.SetDefault("logger.format", "json")
-	cv.SetDefault("logger.encoder", "json")
-	cv.SetDefault("logger.error_stack_disabled", false)
-	cv.SetDefault("logger.max_age", 30)
-	cv.SetDefault("logger.max_size", 100)
-	cv.SetDefault("logger.max_backups", 1)
-	cv.SetDefault("logger.http_body.enabled", true)
-	cv.SetDefault("logger.http_body.log_request", HTTPBodyLogModeAll)
-	cv.SetDefault("logger.http_body.log_response", HTTPBodyLogModeError)
-	cv.SetDefault("logger.http_body.max_body_size", "64KB")
-	cv.SetDefault("logger.http_body.skip_routes", []string{})
+func (*Logger) setDefault(v *viper.Viper) {
+	v.SetDefault("logger.dir", "./logs")
+	v.SetDefault("logger.prefix", "")
+	v.SetDefault("logger.file", "")
+	v.SetDefault("logger.console", true)
+	v.SetDefault("logger.level", "info")
+	v.SetDefault("logger.format", "json")
+	v.SetDefault("logger.encoder", "json")
+	v.SetDefault("logger.error_stack_disabled", false)
+	v.SetDefault("logger.max_age", 30)
+	v.SetDefault("logger.max_size", 100)
+	v.SetDefault("logger.max_backups", 1)
+	v.SetDefault("logger.http_body.enabled", true)
+	v.SetDefault("logger.http_body.log_request", HTTPBodyLogModeAll)
+	v.SetDefault("logger.http_body.log_response", HTTPBodyLogModeError)
+	v.SetDefault("logger.http_body.max_body_size", "64KB")
+	v.SetDefault("logger.http_body.skip_routes", []string{})
 }

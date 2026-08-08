@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/spf13/viper"
+)
 
 const (
 	INFLUXDB_HOST   = "INFLUXDB_HOST"   //nolint:staticcheck
@@ -66,32 +70,32 @@ type Influxdb struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Influxdb) setDefault() {
-	cv.SetDefault("influxdb.host", "127.0.0.1")
-	cv.SetDefault("influxdb.port", 8086)
-	cv.SetDefault("influxdb.token", "")
-	cv.SetDefault("influxdb.org", "")
-	cv.SetDefault("influxdb.bucket", "")
+func (*Influxdb) setDefault(v *viper.Viper) {
+	v.SetDefault("influxdb.host", "127.0.0.1")
+	v.SetDefault("influxdb.port", 8086)
+	v.SetDefault("influxdb.token", "")
+	v.SetDefault("influxdb.org", "")
+	v.SetDefault("influxdb.bucket", "")
 
-	cv.SetDefault("influxdb.batch_size", 0)
-	cv.SetDefault("influxdb.flush_interval", 0)
-	cv.SetDefault("influxdb.retry_interval", 0)
-	cv.SetDefault("influxdb.max_retries", 0)
-	cv.SetDefault("influxdb.retry_buffer_limit", 0)
-	cv.SetDefault("influxdb.max_retry_interval", 0)
-	cv.SetDefault("influxdb.max_retry_time", 0)
-	cv.SetDefault("influxdb.exponential_base", 0)
-	cv.SetDefault("influxdb.precision", 0)
-	cv.SetDefault("influxdb.use_gzip", false)
+	v.SetDefault("influxdb.batch_size", 0)
+	v.SetDefault("influxdb.flush_interval", 0)
+	v.SetDefault("influxdb.retry_interval", 0)
+	v.SetDefault("influxdb.max_retries", 0)
+	v.SetDefault("influxdb.retry_buffer_limit", 0)
+	v.SetDefault("influxdb.max_retry_interval", 0)
+	v.SetDefault("influxdb.max_retry_time", 0)
+	v.SetDefault("influxdb.exponential_base", 0)
+	v.SetDefault("influxdb.precision", 0)
+	v.SetDefault("influxdb.use_gzip", false)
 
-	cv.SetDefault("influxdb.tls_enabled", false)
-	cv.SetDefault("influxdb.cert_file", "")
-	cv.SetDefault("influxdb.key_file", 0)
-	cv.SetDefault("influxdb.ca_file", "")
-	cv.SetDefault("influxdb.insecure_skip_verify", false)
+	v.SetDefault("influxdb.tls_enabled", false)
+	v.SetDefault("influxdb.cert_file", "")
+	v.SetDefault("influxdb.key_file", 0)
+	v.SetDefault("influxdb.ca_file", "")
+	v.SetDefault("influxdb.insecure_skip_verify", false)
 
-	cv.SetDefault("influxdb.default_tags", nil)
-	cv.SetDefault("influxdb.app_name", "")
+	v.SetDefault("influxdb.default_tags", nil)
+	v.SetDefault("influxdb.app_name", "")
 
-	cv.SetDefault("influxdb.enabled", false)
+	v.SetDefault("influxdb.enabled", false)
 }

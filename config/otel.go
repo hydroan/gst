@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/types/consts"
+
+	"github.com/spf13/viper"
 )
 
 const (
@@ -121,19 +123,19 @@ type OTEL struct {
 	BSPExportTimeout time.Duration `json:"bsp_export_timeout" mapstructure:"bsp_export_timeout" ini:"bsp_export_timeout" yaml:"bsp_export_timeout"`
 }
 
-func (o *OTEL) setDefault() {
-	cv.SetDefault("otel.enabled", false)
-	cv.SetDefault("otel.service_name", consts.FrameworkName)
-	cv.SetDefault("otel.exporter_otlp_protocol", OTLPProtocolHTTPProtobuf)
-	cv.SetDefault("otel.exporter_otlp_traces_endpoint", "http://localhost:4318/v1/traces")
-	cv.SetDefault("otel.exporter_otlp_headers", map[string]string{})
-	cv.SetDefault("otel.exporter_otlp_compression", OTLPCompressionNone)
-	cv.SetDefault("otel.traces_sampler", TracesSamplerParentBasedAlwaysOn)
-	cv.SetDefault("otel.traces_sampler_arg", "")
-	cv.SetDefault("otel.log_spans", false)
-	cv.SetDefault("otel.max_tag_value_len", 256)
-	cv.SetDefault("otel.bsp_max_queue_size", 2048)
-	cv.SetDefault("otel.bsp_max_export_batch_size", 512)
-	cv.SetDefault("otel.bsp_schedule_delay", 5*time.Second)
-	cv.SetDefault("otel.bsp_export_timeout", 30*time.Second)
+func (o *OTEL) setDefault(v *viper.Viper) {
+	v.SetDefault("otel.enabled", false)
+	v.SetDefault("otel.service_name", consts.FrameworkName)
+	v.SetDefault("otel.exporter_otlp_protocol", OTLPProtocolHTTPProtobuf)
+	v.SetDefault("otel.exporter_otlp_traces_endpoint", "http://localhost:4318/v1/traces")
+	v.SetDefault("otel.exporter_otlp_headers", map[string]string{})
+	v.SetDefault("otel.exporter_otlp_compression", OTLPCompressionNone)
+	v.SetDefault("otel.traces_sampler", TracesSamplerParentBasedAlwaysOn)
+	v.SetDefault("otel.traces_sampler_arg", "")
+	v.SetDefault("otel.log_spans", false)
+	v.SetDefault("otel.max_tag_value_len", 256)
+	v.SetDefault("otel.bsp_max_queue_size", 2048)
+	v.SetDefault("otel.bsp_max_export_batch_size", 512)
+	v.SetDefault("otel.bsp_schedule_delay", 5*time.Second)
+	v.SetDefault("otel.bsp_export_timeout", 30*time.Second)
 }

@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/spf13/viper"
+)
 
 type (
 	Mode string
@@ -66,24 +70,24 @@ type CircularBuffer struct {
 	SizeOperationLog int64 `json:"size_operation_log" mapstructure:"size_operation_log" ini:"size" yaml:"size_operation_log"`
 }
 
-func (*Server) setDefault() {
-	cv.SetDefault("server.mode", Dev)
-	cv.SetDefault("server.listen", "")
-	cv.SetDefault("server.port", 8080)
-	cv.SetDefault("server.domain", "")
-	cv.SetDefault("server.read_timeout", 15*time.Second)
-	cv.SetDefault("server.write_timeout", 15*time.Second)
-	cv.SetDefault("server.idle_timeout", 60*time.Second)
+func (*Server) setDefault(v *viper.Viper) {
+	v.SetDefault("server.mode", Dev)
+	v.SetDefault("server.listen", "")
+	v.SetDefault("server.port", 8080)
+	v.SetDefault("server.domain", "")
+	v.SetDefault("server.read_timeout", 15*time.Second)
+	v.SetDefault("server.write_timeout", 15*time.Second)
+	v.SetDefault("server.idle_timeout", 60*time.Second)
 
 	// Circuit breaker defaults
-	cv.SetDefault("server.circuit_breaker.name", "backend-server")
-	cv.SetDefault("server.circuit_breaker.max_requests", uint32(100))
-	cv.SetDefault("server.circuit_breaker.interval", 10*time.Second)
-	cv.SetDefault("server.circuit_breaker.timeout", 30*time.Second)
-	cv.SetDefault("server.circuit_breaker.failure_rate", 0.5)
-	cv.SetDefault("server.circuit_breaker.min_requests", uint32(10))
-	cv.SetDefault("server.circuit_breaker.enabled", true)
+	v.SetDefault("server.circuit_breaker.name", "backend-server")
+	v.SetDefault("server.circuit_breaker.max_requests", uint32(100))
+	v.SetDefault("server.circuit_breaker.interval", 10*time.Second)
+	v.SetDefault("server.circuit_breaker.timeout", 30*time.Second)
+	v.SetDefault("server.circuit_breaker.failure_rate", 0.5)
+	v.SetDefault("server.circuit_breaker.min_requests", uint32(10))
+	v.SetDefault("server.circuit_breaker.enabled", true)
 
 	// Circular buffer defaults
-	cv.SetDefault("server.circular_buffer.size_operation_log", int64(10000))
+	v.SetDefault("server.circular_buffer.size_operation_log", int64(10000))
 }

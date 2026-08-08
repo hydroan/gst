@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/spf13/viper"
+)
 
 const (
 	AUTH_NONE_EXPIRE_TOKEN             = "AUTH_NONE_EXPIRE_TOKEN"             //nolint:staticcheck,gosec
@@ -25,14 +29,14 @@ type Auth struct {
 	RBACEnabled bool `json:"rbac_enabled" mapstructure:"rbac_enabled" ini:"rbac_enabled" yaml:"rbac_enabled"`
 }
 
-func (*Auth) setDefault() {
-	cv.SetDefault("auth.none_expire_token", noneExpireToken)
-	cv.SetDefault("auth.none_expire_username", noneExpireUser)
-	cv.SetDefault("auth.none_expire_passord", noneExpirePass)
-	cv.SetDefault("auth.base_auth_username", baseAuthUsername)
-	cv.SetDefault("auth.base_auth_password", baseAuthPassword)
-	cv.SetDefault("auth.access_token_expire_duration", "2h")
-	cv.SetDefault("auth.refresh_token_expire_duration", "168h")
+func (*Auth) setDefault(v *viper.Viper) {
+	v.SetDefault("auth.none_expire_token", noneExpireToken)
+	v.SetDefault("auth.none_expire_username", noneExpireUser)
+	v.SetDefault("auth.none_expire_passord", noneExpirePass)
+	v.SetDefault("auth.base_auth_username", baseAuthUsername)
+	v.SetDefault("auth.base_auth_password", baseAuthPassword)
+	v.SetDefault("auth.access_token_expire_duration", "2h")
+	v.SetDefault("auth.refresh_token_expire_duration", "168h")
 
-	cv.SetDefault("auth.rbac_enabled", false)
+	v.SetDefault("auth.rbac_enabled", false)
 }

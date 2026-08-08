@@ -1,5 +1,7 @@
 package config
 
+import "github.com/spf13/viper"
+
 const (
 	KAFKA_BROKERS   = "KAFKA_BROKERS"   //nolint:staticcheck
 	KAFKA_CLIENT_ID = "KAFKA_CLIENT_ID" //nolint:staticcheck
@@ -51,20 +53,20 @@ type Kafka struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Kafka) setDefault() {
-	cv.SetDefault("kafka.brokers", []string{"127.0.0.1:9092"})
-	cv.SetDefault("kafka.client_id", "gst")
+func (*Kafka) setDefault(v *viper.Viper) {
+	v.SetDefault("kafka.brokers", []string{"127.0.0.1:9092"})
+	v.SetDefault("kafka.client_id", "gst")
 
-	cv.SetDefault("kafka.sasl_enabled", false)
-	cv.SetDefault("kafka.sasl_mechanism", KafkaSASLMechanismPlain)
-	cv.SetDefault("kafka.sasl_username", "")
-	cv.SetDefault("kafka.sasl_password", "")
+	v.SetDefault("kafka.sasl_enabled", false)
+	v.SetDefault("kafka.sasl_mechanism", KafkaSASLMechanismPlain)
+	v.SetDefault("kafka.sasl_username", "")
+	v.SetDefault("kafka.sasl_password", "")
 
-	cv.SetDefault("kafka.tls_enabled", false)
-	cv.SetDefault("kafka.cert_file", "")
-	cv.SetDefault("kafka.key_file", "")
-	cv.SetDefault("kafka.ca_file", "")
-	cv.SetDefault("kafka.insecure_skip_verify", false)
+	v.SetDefault("kafka.tls_enabled", false)
+	v.SetDefault("kafka.cert_file", "")
+	v.SetDefault("kafka.key_file", "")
+	v.SetDefault("kafka.ca_file", "")
+	v.SetDefault("kafka.insecure_skip_verify", false)
 
-	cv.SetDefault("kafka.enabled", false)
+	v.SetDefault("kafka.enabled", false)
 }

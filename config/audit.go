@@ -1,6 +1,10 @@
 package config
 
-import "github.com/hydroan/gst/types/consts"
+import (
+	"github.com/hydroan/gst/types/consts"
+
+	"github.com/spf13/viper"
+)
 
 const (
 	AUDIT_ENABLED            = "AUDIT_ENABLED"            //nolint:staticcheck
@@ -40,21 +44,21 @@ type Audit struct {
 	RecordUserAgent    bool     `json:"record_user_agent" mapstructure:"record_user_agent" ini:"record_user_agent" yaml:"record_user_agent"`
 }
 
-func (*Audit) setDefault() {
-	cv.SetDefault("audit.enabled", false)
-	cv.SetDefault("audit.async_write", true)
-	cv.SetDefault("audit.batch_size", 10000)
-	cv.SetDefault("audit.flush_interval", "5s")
-	cv.SetDefault("audit.exclude_operations", []consts.OP{consts.OP_LIST, consts.OP_GET})
+func (*Audit) setDefault(v *viper.Viper) {
+	v.SetDefault("audit.enabled", false)
+	v.SetDefault("audit.async_write", true)
+	v.SetDefault("audit.batch_size", 10000)
+	v.SetDefault("audit.flush_interval", "5s")
+	v.SetDefault("audit.exclude_operations", []consts.OP{consts.OP_LIST, consts.OP_GET})
 
-	cv.SetDefault("audit.exclude_tables", []string{})
-	cv.SetDefault("audit.record_request_body", true)
-	cv.SetDefault("audit.record_response_body", true)
-	cv.SetDefault("audit.record_old_values", true)
-	cv.SetDefault("audit.record_new_values", true)
-	cv.SetDefault("audit.exclude_fields", []string{"password", "passwd", "pwd", "secret", "token", "key", "private_key"})
-	cv.SetDefault("audit.include_fields", []string{})
-	cv.SetDefault("audit.max_field_length", 1000)
-	cv.SetDefault("audit.record_query_params", true)
-	cv.SetDefault("audit.record_user_agent", true)
+	v.SetDefault("audit.exclude_tables", []string{})
+	v.SetDefault("audit.record_request_body", true)
+	v.SetDefault("audit.record_response_body", true)
+	v.SetDefault("audit.record_old_values", true)
+	v.SetDefault("audit.record_new_values", true)
+	v.SetDefault("audit.exclude_fields", []string{"password", "passwd", "pwd", "secret", "token", "key", "private_key"})
+	v.SetDefault("audit.include_fields", []string{})
+	v.SetDefault("audit.max_field_length", 1000)
+	v.SetDefault("audit.record_query_params", true)
+	v.SetDefault("audit.record_user_agent", true)
 }

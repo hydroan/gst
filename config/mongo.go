@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/spf13/viper"
+)
 
 type ReadConcern string
 
@@ -83,29 +87,29 @@ type Mongo struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Mongo) setDefault() {
-	cv.SetDefault("mongo.host", "127.0.0.1")
-	cv.SetDefault("mongo.port", 27017)
-	cv.SetDefault("mongo.username", "")
-	cv.SetDefault("mongo.password", "")
-	cv.SetDefault("mongo.database", "")
-	cv.SetDefault("mongo.auth_source", "admin")
-	cv.SetDefault("mongo.max_pool_size", 0)
-	cv.SetDefault("mongo.min_pool_size", 0)
+func (*Mongo) setDefault(v *viper.Viper) {
+	v.SetDefault("mongo.host", "127.0.0.1")
+	v.SetDefault("mongo.port", 27017)
+	v.SetDefault("mongo.username", "")
+	v.SetDefault("mongo.password", "")
+	v.SetDefault("mongo.database", "")
+	v.SetDefault("mongo.auth_source", "admin")
+	v.SetDefault("mongo.max_pool_size", 0)
+	v.SetDefault("mongo.min_pool_size", 0)
 
-	cv.SetDefault("mongo.connect_timeout", 0)
-	cv.SetDefault("mongo.server_selection_timeout", 0)
-	cv.SetDefault("mongo.max_conn_idle_time", 0)
-	cv.SetDefault("mongo.max_connecting", 0)
+	v.SetDefault("mongo.connect_timeout", 0)
+	v.SetDefault("mongo.server_selection_timeout", 0)
+	v.SetDefault("mongo.max_conn_idle_time", 0)
+	v.SetDefault("mongo.max_connecting", 0)
 
-	cv.SetDefault("mongo.read_concern", "")
-	cv.SetDefault("mongo.write_concern", "")
+	v.SetDefault("mongo.read_concern", "")
+	v.SetDefault("mongo.write_concern", "")
 
-	cv.SetDefault("mongo.tls_enabled", false)
-	cv.SetDefault("mongo.cert_file", "")
-	cv.SetDefault("mongo.key_file", "")
-	cv.SetDefault("mongo.ca_file", "")
-	cv.SetDefault("mongo.insecure_skip_verify", false)
+	v.SetDefault("mongo.tls_enabled", false)
+	v.SetDefault("mongo.cert_file", "")
+	v.SetDefault("mongo.key_file", "")
+	v.SetDefault("mongo.ca_file", "")
+	v.SetDefault("mongo.insecure_skip_verify", false)
 
-	cv.SetDefault("mongo.enabled", false)
+	v.SetDefault("mongo.enabled", false)
 }

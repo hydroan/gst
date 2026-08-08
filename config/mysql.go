@@ -1,5 +1,7 @@
 package config
 
+import "github.com/spf13/viper"
+
 const (
 	MYSQL_HOST     = "MYSQL_HOST"     //nolint:staticcheck
 	MYSQL_PORT     = "MYSQL_PORT"     //nolint:staticcheck
@@ -20,12 +22,12 @@ type MySQL struct {
 	Enabled  bool   `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*MySQL) setDefault() {
-	cv.SetDefault("mysql.host", "127.0.0.1")
-	cv.SetDefault("mysql.port", 3306)
-	cv.SetDefault("mysql.database", "")
-	cv.SetDefault("mysql.username", "root")
-	cv.SetDefault("mysql.password", "")
-	cv.SetDefault("mysql.charset", "utf8mb4")
-	cv.SetDefault("mysql.enabled", true)
+func (*MySQL) setDefault(v *viper.Viper) {
+	v.SetDefault("mysql.host", "127.0.0.1")
+	v.SetDefault("mysql.port", 3306)
+	v.SetDefault("mysql.database", "")
+	v.SetDefault("mysql.username", "root")
+	v.SetDefault("mysql.password", "")
+	v.SetDefault("mysql.charset", "utf8mb4")
+	v.SetDefault("mysql.enabled", true)
 }

@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/spf13/viper"
+)
 
 const (
 	CACHE_SHARDS       = "CACHE_SHARDS"       //nolint:staticcheck
@@ -18,10 +22,10 @@ type Cache struct {
 	Capacity    int           `json:"capacity" mapstructure:"capacity" ini:"capacity" yaml:"capacity"`
 }
 
-func (*Cache) setDefault() {
-	cv.SetDefault("cache.shards", 16) // 16 shards
-	cv.SetDefault("cache.life_window", 10*time.Minute)
-	cv.SetDefault("cache.clean_window", 5*time.Minute)
-	cv.SetDefault("cache.expiration", 10*time.Minute)
-	cv.SetDefault("cache.capacity", 100000) // 100,000
+func (*Cache) setDefault(v *viper.Viper) {
+	v.SetDefault("cache.shards", 16) // 16 shards
+	v.SetDefault("cache.life_window", 10*time.Minute)
+	v.SetDefault("cache.clean_window", 5*time.Minute)
+	v.SetDefault("cache.expiration", 10*time.Minute)
+	v.SetDefault("cache.capacity", 100000) // 100,000
 }

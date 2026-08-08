@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/spf13/viper"
+)
 
 const (
 	NATS_ADDRS       = "NATS_ADDRS"       //nolint:staticcheck
@@ -56,29 +60,29 @@ type Nats struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Nats) setDefault() {
-	cv.SetDefault("nats.addrs", []string{"nats://127.0.0.1:4222"})
-	cv.SetDefault("nats.client_name", "")
-	cv.SetDefault("nats.username", "")
-	cv.SetDefault("nats.password", "")
-	cv.SetDefault("nats.token", "")
-	cv.SetDefault("nats.credentials_file", "")
-	cv.SetDefault("nats.nkey_file", "")
+func (*Nats) setDefault(v *viper.Viper) {
+	v.SetDefault("nats.addrs", []string{"nats://127.0.0.1:4222"})
+	v.SetDefault("nats.client_name", "")
+	v.SetDefault("nats.username", "")
+	v.SetDefault("nats.password", "")
+	v.SetDefault("nats.token", "")
+	v.SetDefault("nats.credentials_file", "")
+	v.SetDefault("nats.nkey_file", "")
 
-	cv.SetDefault("nats.max_reconnects", 5)
-	cv.SetDefault("nats.reconnect_wait", 1*time.Second)
-	cv.SetDefault("nats.reconnect_jitter", 0)
-	cv.SetDefault("nats.reconnect_jitter_tls", 0)
+	v.SetDefault("nats.max_reconnects", 5)
+	v.SetDefault("nats.reconnect_wait", 1*time.Second)
+	v.SetDefault("nats.reconnect_jitter", 0)
+	v.SetDefault("nats.reconnect_jitter_tls", 0)
 
-	cv.SetDefault("nats.connect_timeout", 2*time.Second)
-	cv.SetDefault("nats.ping_interval", 2*time.Minute)
-	cv.SetDefault("nats.max_pings_outstanding", 2)
+	v.SetDefault("nats.connect_timeout", 2*time.Second)
+	v.SetDefault("nats.ping_interval", 2*time.Minute)
+	v.SetDefault("nats.max_pings_outstanding", 2)
 
-	cv.SetDefault("nats.tls_enabled", false)
-	cv.SetDefault("nats.cert_file", "")
-	cv.SetDefault("nats.key_file", "")
-	cv.SetDefault("nats.ca_file", "")
-	cv.SetDefault("nats.insecure_skip_verify", false)
+	v.SetDefault("nats.tls_enabled", false)
+	v.SetDefault("nats.cert_file", "")
+	v.SetDefault("nats.key_file", "")
+	v.SetDefault("nats.ca_file", "")
+	v.SetDefault("nats.insecure_skip_verify", false)
 
-	cv.SetDefault("nats.enabled", false)
+	v.SetDefault("nats.enabled", false)
 }

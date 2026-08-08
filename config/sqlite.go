@@ -1,5 +1,7 @@
 package config
 
+import "github.com/spf13/viper"
+
 const (
 	SQLITE_PATH      = "SQLITE_PATH"      //nolint:staticcheck
 	SQLITE_DATABASE  = "SQLITE_DATABASE"  //nolint:staticcheck
@@ -14,9 +16,9 @@ type Sqlite struct {
 	Enabled  bool   `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Sqlite) setDefault() {
-	cv.SetDefault("sqlite.path", "./data.db")
-	cv.SetDefault("sqlite.database", "main")
-	cv.SetDefault("sqlite.is_memory", true)
-	cv.SetDefault("sqlite.enabled", true)
+func (*Sqlite) setDefault(v *viper.Viper) {
+	v.SetDefault("sqlite.path", "./data.db")
+	v.SetDefault("sqlite.database", "main")
+	v.SetDefault("sqlite.is_memory", true)
+	v.SetDefault("sqlite.enabled", true)
 }

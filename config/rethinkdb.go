@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/spf13/viper"
+)
 
 const (
 	RETHINKDB_HOSTS          = "RETHINKDB_HOSTS"          //nolint:staticcheck
@@ -52,27 +56,27 @@ type RethinkDB struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*RethinkDB) setDefault() {
-	cv.SetDefault("rethinkdb.hosts", "127.0.0.1:28015")
-	cv.SetDefault("rethinkdb.username", "")
-	cv.SetDefault("rethinkdb.password", "")
-	cv.SetDefault("rethinkdb.database", "")
-	cv.SetDefault("rethinkdb.discovery_host", false)
+func (*RethinkDB) setDefault(v *viper.Viper) {
+	v.SetDefault("rethinkdb.hosts", "127.0.0.1:28015")
+	v.SetDefault("rethinkdb.username", "")
+	v.SetDefault("rethinkdb.password", "")
+	v.SetDefault("rethinkdb.database", "")
+	v.SetDefault("rethinkdb.discovery_host", false)
 
-	cv.SetDefault("rethinkdb.max_idle", 10)
-	cv.SetDefault("rethinkdb.max_open", 100)
-	cv.SetDefault("rethinkdb.num_retries", 3)
+	v.SetDefault("rethinkdb.max_idle", 10)
+	v.SetDefault("rethinkdb.max_open", 100)
+	v.SetDefault("rethinkdb.num_retries", 3)
 
-	cv.SetDefault("rethinkdb.connect_timeout", 5*time.Second)
-	cv.SetDefault("rethinkdb.read_timeout", 10*time.Second)
-	cv.SetDefault("rethinkdb.write_timeout", 10*time.Second)
-	cv.SetDefault("rethinkdb.keep_alive_time", 30*time.Second)
+	v.SetDefault("rethinkdb.connect_timeout", 5*time.Second)
+	v.SetDefault("rethinkdb.read_timeout", 10*time.Second)
+	v.SetDefault("rethinkdb.write_timeout", 10*time.Second)
+	v.SetDefault("rethinkdb.keep_alive_time", 30*time.Second)
 
-	cv.SetDefault("rethinkdb.tls_enabled", false)
-	cv.SetDefault("rethinkdb.cert_file", "")
-	cv.SetDefault("rethinkdb.key_file", "")
-	cv.SetDefault("rethinkdb.ca_file", "")
-	cv.SetDefault("rethinkdb.insecure_skip_verify", false)
+	v.SetDefault("rethinkdb.tls_enabled", false)
+	v.SetDefault("rethinkdb.cert_file", "")
+	v.SetDefault("rethinkdb.key_file", "")
+	v.SetDefault("rethinkdb.ca_file", "")
+	v.SetDefault("rethinkdb.insecure_skip_verify", false)
 
-	cv.SetDefault("rethinkdb.enabled", false)
+	v.SetDefault("rethinkdb.enabled", false)
 }

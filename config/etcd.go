@@ -2,6 +2,8 @@ package config
 
 import (
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 const (
@@ -51,25 +53,25 @@ type Etcd struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Etcd) setDefault() {
-	cv.SetDefault("etcd.endpoints", []string{"127.0.0.1:2379"})
-	cv.SetDefault("etcd.dial_timeout", 5*time.Second)
-	cv.SetDefault("etcd.username", "")
-	cv.SetDefault("etcd.password", "")
-	cv.SetDefault("etcd.auto_sync", false)
-	cv.SetDefault("etcd.auto_sync_interval", 0)
-	cv.SetDefault("etcd.keepalive_time", 0)
-	cv.SetDefault("etcd.keepalive_timeout", 0)
-	cv.SetDefault("etcd.max_call_send_msg_size", 0)
-	cv.SetDefault("etcd.max_call_recv_msg_size", 0)
-	cv.SetDefault("etcd.permit_without_stream", false)
-	cv.SetDefault("etcd.reject_old_cluster", false)
+func (*Etcd) setDefault(v *viper.Viper) {
+	v.SetDefault("etcd.endpoints", []string{"127.0.0.1:2379"})
+	v.SetDefault("etcd.dial_timeout", 5*time.Second)
+	v.SetDefault("etcd.username", "")
+	v.SetDefault("etcd.password", "")
+	v.SetDefault("etcd.auto_sync", false)
+	v.SetDefault("etcd.auto_sync_interval", 0)
+	v.SetDefault("etcd.keepalive_time", 0)
+	v.SetDefault("etcd.keepalive_timeout", 0)
+	v.SetDefault("etcd.max_call_send_msg_size", 0)
+	v.SetDefault("etcd.max_call_recv_msg_size", 0)
+	v.SetDefault("etcd.permit_without_stream", false)
+	v.SetDefault("etcd.reject_old_cluster", false)
 
-	cv.SetDefault("etcd.tls_enabled", false)
-	cv.SetDefault("etcd.cert_file", "")
-	cv.SetDefault("etcd.key_file", "")
-	cv.SetDefault("etcd.ca_file", "")
-	cv.SetDefault("etcd.insecure_skip_verify", false)
+	v.SetDefault("etcd.tls_enabled", false)
+	v.SetDefault("etcd.cert_file", "")
+	v.SetDefault("etcd.key_file", "")
+	v.SetDefault("etcd.ca_file", "")
+	v.SetDefault("etcd.insecure_skip_verify", false)
 
-	cv.SetDefault("etcd.enabled", false)
+	v.SetDefault("etcd.enabled", false)
 }

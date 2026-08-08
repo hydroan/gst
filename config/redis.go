@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/types/consts"
+
+	"github.com/spf13/viper"
 )
 
 const (
@@ -61,29 +63,29 @@ type Redis struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Redis) setDefault() {
-	cv.SetDefault("redis.addr", "127.0.0.1:6379")
-	cv.SetDefault("redis.addrs", []string{"127.0.0.1:6379"})
-	cv.SetDefault("redis.db", 0)
-	cv.SetDefault("redis.password", "")
-	cv.SetDefault("redis.pool_size", runtime.NumCPU())
-	cv.SetDefault("redis.namespace", consts.FrameworkName)
-	cv.SetDefault("redis.expiration", 0)
-	cv.SetDefault("redis.cluster_mode", false)
+func (*Redis) setDefault(v *viper.Viper) {
+	v.SetDefault("redis.addr", "127.0.0.1:6379")
+	v.SetDefault("redis.addrs", []string{"127.0.0.1:6379"})
+	v.SetDefault("redis.db", 0)
+	v.SetDefault("redis.password", "")
+	v.SetDefault("redis.pool_size", runtime.NumCPU())
+	v.SetDefault("redis.namespace", consts.FrameworkName)
+	v.SetDefault("redis.expiration", 0)
+	v.SetDefault("redis.cluster_mode", false)
 
-	cv.SetDefault("redis.dial_timeout", 0)
-	cv.SetDefault("redis.read_timeout", 0)
-	cv.SetDefault("redis.write_timeout", 0)
-	cv.SetDefault("redis.min_idle_conns", 0)
-	cv.SetDefault("redis.max_retries", 0)
-	cv.SetDefault("redis.min_retry_backoff", 0)
-	cv.SetDefault("redis.max_retry_backoff", 0)
+	v.SetDefault("redis.dial_timeout", 0)
+	v.SetDefault("redis.read_timeout", 0)
+	v.SetDefault("redis.write_timeout", 0)
+	v.SetDefault("redis.min_idle_conns", 0)
+	v.SetDefault("redis.max_retries", 0)
+	v.SetDefault("redis.min_retry_backoff", 0)
+	v.SetDefault("redis.max_retry_backoff", 0)
 
-	cv.SetDefault("redis.tls_enabled", false)
-	cv.SetDefault("redis.cert_file", "")
-	cv.SetDefault("redis.key_file", 0)
-	cv.SetDefault("redis.ca_file", "")
-	cv.SetDefault("redis.insecure_skip_verify", false)
+	v.SetDefault("redis.tls_enabled", false)
+	v.SetDefault("redis.cert_file", "")
+	v.SetDefault("redis.key_file", 0)
+	v.SetDefault("redis.ca_file", "")
+	v.SetDefault("redis.insecure_skip_verify", false)
 
-	cv.SetDefault("redis.enabled", false)
+	v.SetDefault("redis.enabled", false)
 }

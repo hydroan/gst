@@ -2,6 +2,8 @@ package config
 
 import (
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 const (
@@ -93,33 +95,33 @@ type Ldap struct {
 }
 
 // setDefault sets default values for the LDAP configuration
-func (*Ldap) setDefault() {
-	cv.SetDefault("ldap.host", "localhost")
-	cv.SetDefault("ldap.port", 389)
-	cv.SetDefault("ldap.base_dn", "")
-	cv.SetDefault("ldap.bind_dn", "")
-	cv.SetDefault("ldap.bind_password", "")
-	cv.SetDefault("ldap.attributes", []string{"*"})
-	cv.SetDefault("ldap.filter", "(objectClass=*)")
-	cv.SetDefault("ldap.group_filter", "(objectClass=groupOfNames)")
-	cv.SetDefault("ldap.user_filter", "(objectClass=person)")
-	cv.SetDefault("ldap.group_dn", "")
-	cv.SetDefault("ldap.user_dn", "")
-	cv.SetDefault("ldap.group_attribute", "member")
-	cv.SetDefault("ldap.user_attribute", "uid")
-	cv.SetDefault("ldap.scope", int(ScopeWholeSubtree))
-	cv.SetDefault("ldap.request_timeout", 10*time.Second)
-	cv.SetDefault("ldap.conn_timeout", 10*time.Second)
-	cv.SetDefault("ldap.referrals", false)
-	cv.SetDefault("ldap.deref", int(NeverDerefAliases))
-	cv.SetDefault("ldap.page_size", 1000)
-	cv.SetDefault("ldap.heartbeat", 30*time.Second)
+func (*Ldap) setDefault(v *viper.Viper) {
+	v.SetDefault("ldap.host", "localhost")
+	v.SetDefault("ldap.port", 389)
+	v.SetDefault("ldap.base_dn", "")
+	v.SetDefault("ldap.bind_dn", "")
+	v.SetDefault("ldap.bind_password", "")
+	v.SetDefault("ldap.attributes", []string{"*"})
+	v.SetDefault("ldap.filter", "(objectClass=*)")
+	v.SetDefault("ldap.group_filter", "(objectClass=groupOfNames)")
+	v.SetDefault("ldap.user_filter", "(objectClass=person)")
+	v.SetDefault("ldap.group_dn", "")
+	v.SetDefault("ldap.user_dn", "")
+	v.SetDefault("ldap.group_attribute", "member")
+	v.SetDefault("ldap.user_attribute", "uid")
+	v.SetDefault("ldap.scope", int(ScopeWholeSubtree))
+	v.SetDefault("ldap.request_timeout", 10*time.Second)
+	v.SetDefault("ldap.conn_timeout", 10*time.Second)
+	v.SetDefault("ldap.referrals", false)
+	v.SetDefault("ldap.deref", int(NeverDerefAliases))
+	v.SetDefault("ldap.page_size", 1000)
+	v.SetDefault("ldap.heartbeat", 30*time.Second)
 
-	cv.SetDefault("ldap.tls_enabled", false)
-	cv.SetDefault("ldap.cert_file", "")
-	cv.SetDefault("ldap.key_file", "")
-	cv.SetDefault("ldap.ca_file", "")
-	cv.SetDefault("ldap.insecure_skip_verify", false)
+	v.SetDefault("ldap.tls_enabled", false)
+	v.SetDefault("ldap.cert_file", "")
+	v.SetDefault("ldap.key_file", "")
+	v.SetDefault("ldap.ca_file", "")
+	v.SetDefault("ldap.insecure_skip_verify", false)
 
-	cv.SetDefault("ldap.enabled", false)
+	v.SetDefault("ldap.enabled", false)
 }

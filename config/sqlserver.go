@@ -1,6 +1,10 @@
 package config
 
-import "github.com/hydroan/gst/types/consts"
+import (
+	"github.com/hydroan/gst/types/consts"
+
+	"github.com/spf13/viper"
+)
 
 const (
 	SQLSERVER_HOST         = "SQLSERVER_HOST"         //nolint:staticcheck
@@ -26,14 +30,14 @@ type SQLServer struct {
 	Enabled     bool   `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*SQLServer) setDefault() {
-	cv.SetDefault("sqlserver.host", "127.0.0.1")
-	cv.SetDefault("sqlserver.port", 1433)
-	cv.SetDefault("sqlserver.database", "")
-	cv.SetDefault("sqlserver.username", "sa")
-	cv.SetDefault("sqlserver.password", "")
-	cv.SetDefault("sqlserver.encrypt", false)
-	cv.SetDefault("sqlserver.trust_server", true)
-	cv.SetDefault("sqlserver.app_name", consts.FrameworkName)
-	cv.SetDefault("sqlserver.enabled", false)
+func (*SQLServer) setDefault(v *viper.Viper) {
+	v.SetDefault("sqlserver.host", "127.0.0.1")
+	v.SetDefault("sqlserver.port", 1433)
+	v.SetDefault("sqlserver.database", "")
+	v.SetDefault("sqlserver.username", "sa")
+	v.SetDefault("sqlserver.password", "")
+	v.SetDefault("sqlserver.encrypt", false)
+	v.SetDefault("sqlserver.trust_server", true)
+	v.SetDefault("sqlserver.app_name", consts.FrameworkName)
+	v.SetDefault("sqlserver.enabled", false)
 }

@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/types/consts"
+
+	"github.com/spf13/viper"
 )
 
 const (
@@ -50,14 +52,14 @@ type AppInfo struct {
 }
 
 // setDefault sets default values for AppInfo configuration
-func (a *AppInfo) setDefault() {
-	cv.SetDefault("app.name", consts.FrameworkName)
-	cv.SetDefault("app.version", "")
-	cv.SetDefault("app.description", fmt.Sprintf("A Go application built with %s framework", consts.FrameworkName))
-	cv.SetDefault("app.license", "MIT")
-	cv.SetDefault("app.go_version", runtime.Version())
-	cv.SetDefault("app.platform", runtime.GOOS+"/"+runtime.GOARCH)
-	cv.SetDefault("app.compiler", runtime.Compiler)
+func (a *AppInfo) setDefault(v *viper.Viper) {
+	v.SetDefault("app.name", consts.FrameworkName)
+	v.SetDefault("app.version", "")
+	v.SetDefault("app.description", fmt.Sprintf("A Go application built with %s framework", consts.FrameworkName))
+	v.SetDefault("app.license", "MIT")
+	v.SetDefault("app.go_version", runtime.Version())
+	v.SetDefault("app.platform", runtime.GOOS+"/"+runtime.GOARCH)
+	v.SetDefault("app.compiler", runtime.Compiler)
 
 	// Try to get build info from runtime
 	a.setBuildInfo()

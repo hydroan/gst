@@ -1,5 +1,7 @@
 package config
 
+import "github.com/spf13/viper"
+
 const (
 	DEBUG_STATSVIZ_ENABLED = "DEBUG_STATSVIZ_ENABLED" //nolint:staticcheck
 	DEBUG_STATSVIZ_LISTEN  = "DEBUG_STATSVIZ_LISTEN"  //nolint:staticcheck
@@ -28,16 +30,16 @@ type Debug struct {
 	GopsPort    int    `json:"gops_port" mapstructure:"gops_port" ini:"gops_port" yaml:"gops_port"`
 }
 
-func (*Debug) setDefault() {
-	cv.SetDefault("debug.statsviz_enabled", false)
-	cv.SetDefault("debug.statsviz_listen", "127.0.0.1")
-	cv.SetDefault("debug.statsviz_port", 10000)
+func (*Debug) setDefault(v *viper.Viper) {
+	v.SetDefault("debug.statsviz_enabled", false)
+	v.SetDefault("debug.statsviz_listen", "127.0.0.1")
+	v.SetDefault("debug.statsviz_port", 10000)
 
-	cv.SetDefault("debug.pprof_enabled", false)
-	cv.SetDefault("debug.pprof_listen", "127.0.0.1")
-	cv.SetDefault("debug.gops_listen", "127.0.0.1")
+	v.SetDefault("debug.pprof_enabled", false)
+	v.SetDefault("debug.pprof_listen", "127.0.0.1")
+	v.SetDefault("debug.gops_listen", "127.0.0.1")
 
-	cv.SetDefault("debug.gops_enabled", false)
-	cv.SetDefault("debug.pprof_port", 10001)
-	cv.SetDefault("debug.gops_port", 10002)
+	v.SetDefault("debug.gops_enabled", false)
+	v.SetDefault("debug.pprof_port", 10001)
+	v.SetDefault("debug.gops_port", 10002)
 }

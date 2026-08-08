@@ -1,5 +1,7 @@
 package config
 
+import "github.com/spf13/viper"
+
 const (
 	CLICKHOUSE_HOST         = "CLICKHOUSE_HOST"         //nolint:staticcheck
 	CLICKHOUSE_PORT         = "CLICKHOUSE_PORT"         //nolint:staticcheck
@@ -30,15 +32,15 @@ type Clickhouse struct {
 	Enabled     bool   `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Clickhouse) setDefault() {
-	cv.SetDefault("clickhouse.host", "127.0.0.1")
-	cv.SetDefault("clickhouse.port", 9000)
-	cv.SetDefault("clickhouse.database", "default")
-	cv.SetDefault("clickhouse.username", "default")
-	cv.SetDefault("clickhouse.password", "")
-	cv.SetDefault("clickhouse.dial_timeout", "5s")
-	cv.SetDefault("clickhouse.read_timeout", "30s")
-	cv.SetDefault("clickhouse.compress", false)
-	cv.SetDefault("clickhouse.debug", false)
-	cv.SetDefault("clickhouse.enabled", false)
+func (*Clickhouse) setDefault(v *viper.Viper) {
+	v.SetDefault("clickhouse.host", "127.0.0.1")
+	v.SetDefault("clickhouse.port", 9000)
+	v.SetDefault("clickhouse.database", "default")
+	v.SetDefault("clickhouse.username", "default")
+	v.SetDefault("clickhouse.password", "")
+	v.SetDefault("clickhouse.dial_timeout", "5s")
+	v.SetDefault("clickhouse.read_timeout", "30s")
+	v.SetDefault("clickhouse.compress", false)
+	v.SetDefault("clickhouse.debug", false)
+	v.SetDefault("clickhouse.enabled", false)
 }

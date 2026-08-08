@@ -1,5 +1,7 @@
 package config
 
+import "github.com/spf13/viper"
+
 const (
 	POSTGRES_HOST     = "POSTGRES_HOST"     //nolint:staticcheck
 	POSTGRES_PORT     = "POSTGRES_PORT"     //nolint:staticcheck
@@ -22,13 +24,13 @@ type Postgres struct {
 	Enabled  bool   `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Postgres) setDefault() {
-	cv.SetDefault("postgres.host", "127.0.0.1")
-	cv.SetDefault("postgres.port", 5432)
-	cv.SetDefault("postgres.database", "postgres")
-	cv.SetDefault("postgres.username", "postgres")
-	cv.SetDefault("postgres.password", "")
-	cv.SetDefault("postgres.sslmode", "disable")
-	cv.SetDefault("postgres.timezone", "UTC")
-	cv.SetDefault("postgres.enabled", true)
+func (*Postgres) setDefault(v *viper.Viper) {
+	v.SetDefault("postgres.host", "127.0.0.1")
+	v.SetDefault("postgres.port", 5432)
+	v.SetDefault("postgres.database", "postgres")
+	v.SetDefault("postgres.username", "postgres")
+	v.SetDefault("postgres.password", "")
+	v.SetDefault("postgres.sslmode", "disable")
+	v.SetDefault("postgres.timezone", "UTC")
+	v.SetDefault("postgres.enabled", true)
 }

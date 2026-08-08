@@ -14,7 +14,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/creasty/defaults"
-	"github.com/go-viper/encoding/ini"
 	"github.com/spf13/viper"
 	"github.com/stoewer/go-strcase"
 	"go.uber.org/zap"
@@ -79,39 +78,39 @@ type Config struct {
 }
 
 // setDefault will set config default value
-func (c *Config) setDefault() {
-	c.AppInfo.setDefault()
-	c.Server.setDefault()
-	c.Middleware.setDefault()
-	c.Grpc.setDefault()
-	c.Auth.setDefault()
-	c.Logger.setDefault()
-	c.Database.setDefault()
-	c.Cache.setDefault()
-	c.Sqlite.setDefault()
-	c.Postgres.setDefault()
-	c.MySQL.setDefault()
-	c.Clickhouse.setDefault()
-	c.SQLServer.setDefault()
-	c.Redis.setDefault()
-	c.OTEL.setDefault()
-	c.Elasticsearch.setDefault()
-	c.Mongo.setDefault()
-	c.Kafka.setDefault()
-	c.Ldap.setDefault()
-	c.Influxdb.setDefault()
-	c.Minio.setDefault()
-	c.S3.setDefault()
-	c.Mqtt.setDefault()
-	c.Nats.setDefault()
-	c.Etcd.setDefault()
-	c.Cassandra.setDefault()
-	c.Scylla.setDefault()
-	c.Memcached.setDefault()
-	c.RethinkDB.setDefault()
-	c.RocketMQ.setDefault()
-	c.Debug.setDefault()
-	c.Audit.setDefault()
+func (c *Config) setDefault(v *viper.Viper) {
+	c.AppInfo.setDefault(v)
+	c.Server.setDefault(v)
+	c.Middleware.setDefault(v)
+	c.Grpc.setDefault(v)
+	c.Auth.setDefault(v)
+	c.Logger.setDefault(v)
+	c.Database.setDefault(v)
+	c.Cache.setDefault(v)
+	c.Sqlite.setDefault(v)
+	c.Postgres.setDefault(v)
+	c.MySQL.setDefault(v)
+	c.Clickhouse.setDefault(v)
+	c.SQLServer.setDefault(v)
+	c.Redis.setDefault(v)
+	c.OTEL.setDefault(v)
+	c.Elasticsearch.setDefault(v)
+	c.Mongo.setDefault(v)
+	c.Kafka.setDefault(v)
+	c.Ldap.setDefault(v)
+	c.Influxdb.setDefault(v)
+	c.Minio.setDefault(v)
+	c.S3.setDefault(v)
+	c.Mqtt.setDefault(v)
+	c.Nats.setDefault(v)
+	c.Etcd.setDefault(v)
+	c.Cassandra.setDefault(v)
+	c.Scylla.setDefault(v)
+	c.Memcached.setDefault(v)
+	c.RethinkDB.setDefault(v)
+	c.RocketMQ.setDefault(v)
+	c.Debug.setDefault(v)
+	c.Audit.setDefault(v)
 }
 
 // Init initializes the application configuration
@@ -130,20 +129,16 @@ func Init() (err error) {
 		fmt.Fprintf(os.Stdout, "create temp dir: %s\n", tempdir)
 	}
 
-	// Breaking change:
-	// https://github.com/spf13/viper/blob/master/UPGRADE.md#breaking-hcl-java-properties-ini-removed-from-core
-	codecRegistry := viper.NewCodecRegistry()
-	if err = codecRegistry.RegisterCodec("ini", ini.Codec{}); err != nil {
+	if cv, err = newViper(); err != nil {
 		return err
 	}
-	cv = viper.NewWithOptions(viper.WithCodecRegistry(codecRegistry))
 	cv.AutomaticEnv()
 	cv.AllowEmptyEnv(true)
 	cv.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	// Set default values before unmarshaling
 	App = new(Config)
-	App.setDefault()
+	App.setDefault(cv)
 
 	cv.AddConfigPath(".")
 

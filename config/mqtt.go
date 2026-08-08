@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/spf13/viper"
+)
 
 const (
 	MQTT_ADDR                 = "MQTT_ADDR"                 //nolint:staticcheck
@@ -34,18 +38,18 @@ type Mqtt struct {
 	Enabled            bool          `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Mqtt) setDefault() {
-	cv.SetDefault("mqtt.addr", "127.0.0.1:1883")
-	cv.SetDefault("mqtt.username", "")
-	cv.SetDefault("mqtt.password", "")
-	cv.SetDefault("mqtt.client_prefix", "")
-	cv.SetDefault("mqtt.connect_timeout", 10*time.Second)
-	cv.SetDefault("mqtt.keepalive", 1*time.Minute)
-	cv.SetDefault("mqtt.clean_session", true)
-	cv.SetDefault("mqtt.auto_reconnect", true)
-	cv.SetDefault("mqtt.use_tls", false)
-	cv.SetDefault("mqtt.cert_file", "")
-	cv.SetDefault("mqtt.key_file", "")
-	cv.SetDefault("mqtt.insecure_skip_verify", true)
-	cv.SetDefault("mqtt.enabled", false)
+func (*Mqtt) setDefault(v *viper.Viper) {
+	v.SetDefault("mqtt.addr", "127.0.0.1:1883")
+	v.SetDefault("mqtt.username", "")
+	v.SetDefault("mqtt.password", "")
+	v.SetDefault("mqtt.client_prefix", "")
+	v.SetDefault("mqtt.connect_timeout", 10*time.Second)
+	v.SetDefault("mqtt.keepalive", 1*time.Minute)
+	v.SetDefault("mqtt.clean_session", true)
+	v.SetDefault("mqtt.auto_reconnect", true)
+	v.SetDefault("mqtt.use_tls", false)
+	v.SetDefault("mqtt.cert_file", "")
+	v.SetDefault("mqtt.key_file", "")
+	v.SetDefault("mqtt.insecure_skip_verify", true)
+	v.SetDefault("mqtt.enabled", false)
 }

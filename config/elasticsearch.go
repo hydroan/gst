@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/spf13/viper"
+)
 
 const (
 	ELASTICSEARCH_ADDRS                   = "ELASTICSEARCH_ADDRS"                   //nolint:staticcheck
@@ -64,33 +68,33 @@ type Elasticsearch struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Elasticsearch) setDefault() {
-	cv.SetDefault("elasticsearch.addrs", []string{"http://localhost:9200"})
-	cv.SetDefault("elasticsearch.username", "")
-	cv.SetDefault("elasticsearch.password", "")
-	cv.SetDefault("elasticsearch.cloud_id", "")
-	cv.SetDefault("elasticsearch.api_key", "")
-	cv.SetDefault("elasticsearch.max_retries", 3)
-	cv.SetDefault("elasticsearch.retry_on_status", []int{502, 503, 504})
-	cv.SetDefault("elasticsearch.disable_retries", false)
-	cv.SetDefault("elasticsearch.retry_backoff", true)
-	cv.SetDefault("elasticsearch.retry_backoff_min", 1*time.Second)
-	cv.SetDefault("elasticsearch.retry_backoff_max", 30*time.Second)
-	cv.SetDefault("elasticsearch.compress", true)
-	cv.SetDefault("elasticsearch.discovery_interval", 5*time.Minute)
-	cv.SetDefault("elasticsearch.metrics_enabled", false)
-	cv.SetDefault("elasticsearch.debug_logger_enabled", false)
-	cv.SetDefault("elasticsearch.connection_pool_size", 0)    // Default is 0 (unlimited)
-	cv.SetDefault("elasticsearch.response_header_timeout", 0) // 0 means no timeout
-	cv.SetDefault("elasticsearch.request_timeout", 0)         // 0 means no timeout
-	cv.SetDefault("elasticsearch.dial_timeout", 30*time.Second)
-	cv.SetDefault("elasticsearch.keep_alive_interval", 15*time.Second)
+func (*Elasticsearch) setDefault(v *viper.Viper) {
+	v.SetDefault("elasticsearch.addrs", []string{"http://localhost:9200"})
+	v.SetDefault("elasticsearch.username", "")
+	v.SetDefault("elasticsearch.password", "")
+	v.SetDefault("elasticsearch.cloud_id", "")
+	v.SetDefault("elasticsearch.api_key", "")
+	v.SetDefault("elasticsearch.max_retries", 3)
+	v.SetDefault("elasticsearch.retry_on_status", []int{502, 503, 504})
+	v.SetDefault("elasticsearch.disable_retries", false)
+	v.SetDefault("elasticsearch.retry_backoff", true)
+	v.SetDefault("elasticsearch.retry_backoff_min", 1*time.Second)
+	v.SetDefault("elasticsearch.retry_backoff_max", 30*time.Second)
+	v.SetDefault("elasticsearch.compress", true)
+	v.SetDefault("elasticsearch.discovery_interval", 5*time.Minute)
+	v.SetDefault("elasticsearch.metrics_enabled", false)
+	v.SetDefault("elasticsearch.debug_logger_enabled", false)
+	v.SetDefault("elasticsearch.connection_pool_size", 0)    // Default is 0 (unlimited)
+	v.SetDefault("elasticsearch.response_header_timeout", 0) // 0 means no timeout
+	v.SetDefault("elasticsearch.request_timeout", 0)         // 0 means no timeout
+	v.SetDefault("elasticsearch.dial_timeout", 30*time.Second)
+	v.SetDefault("elasticsearch.keep_alive_interval", 15*time.Second)
 
-	cv.SetDefault("elasticsearch.tls_enabled", false)
-	cv.SetDefault("elasticsearch.cert_file", "")
-	cv.SetDefault("elasticsearch.key_file", "")
-	cv.SetDefault("elasticsearch.ca_file", "")
-	cv.SetDefault("elasticsearch.insecure_skip_verify", false)
+	v.SetDefault("elasticsearch.tls_enabled", false)
+	v.SetDefault("elasticsearch.cert_file", "")
+	v.SetDefault("elasticsearch.key_file", "")
+	v.SetDefault("elasticsearch.ca_file", "")
+	v.SetDefault("elasticsearch.insecure_skip_verify", false)
 
-	cv.SetDefault("elasticsearch.enabled", false)
+	v.SetDefault("elasticsearch.enabled", false)
 }

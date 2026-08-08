@@ -2,6 +2,8 @@ package config
 
 import (
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 const (
@@ -60,30 +62,30 @@ type Minio struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Minio) setDefault() {
-	cv.SetDefault("minio.endpoint", "localhost:9000")
-	cv.SetDefault("minio.access_key", "")
-	cv.SetDefault("minio.secret_key", "")
-	cv.SetDefault("minio.bucket", "")
-	cv.SetDefault("minio.location", "")
-	cv.SetDefault("minio.secure", false)
-	cv.SetDefault("minio.region", "")
-	cv.SetDefault("minio.timeout", 10*time.Second)
-	cv.SetDefault("minio.part_size", 0) // 5MB part size
-	cv.SetDefault("minio.concurrency", 0)
-	cv.SetDefault("minio.compress", false)
-	cv.SetDefault("minio.trace", false)
-	cv.SetDefault("minio.session_token", "")
-	cv.SetDefault("minio.use_iam", false)
-	cv.SetDefault("minio.use_sts", false)
-	cv.SetDefault("minio.iam_endpoint", "")
-	cv.SetDefault("minio.sts_endpoint", "")
+func (*Minio) setDefault(v *viper.Viper) {
+	v.SetDefault("minio.endpoint", "localhost:9000")
+	v.SetDefault("minio.access_key", "")
+	v.SetDefault("minio.secret_key", "")
+	v.SetDefault("minio.bucket", "")
+	v.SetDefault("minio.location", "")
+	v.SetDefault("minio.secure", false)
+	v.SetDefault("minio.region", "")
+	v.SetDefault("minio.timeout", 10*time.Second)
+	v.SetDefault("minio.part_size", 0) // 5MB part size
+	v.SetDefault("minio.concurrency", 0)
+	v.SetDefault("minio.compress", false)
+	v.SetDefault("minio.trace", false)
+	v.SetDefault("minio.session_token", "")
+	v.SetDefault("minio.use_iam", false)
+	v.SetDefault("minio.use_sts", false)
+	v.SetDefault("minio.iam_endpoint", "")
+	v.SetDefault("minio.sts_endpoint", "")
 
-	cv.SetDefault("minio.tls_enabled", false)
-	cv.SetDefault("minio.cert_file", "")
-	cv.SetDefault("minio.key_file", "")
-	cv.SetDefault("minio.ca_file", "")
-	cv.SetDefault("minio.insecure_skip_verify", false)
+	v.SetDefault("minio.tls_enabled", false)
+	v.SetDefault("minio.cert_file", "")
+	v.SetDefault("minio.key_file", "")
+	v.SetDefault("minio.ca_file", "")
+	v.SetDefault("minio.insecure_skip_verify", false)
 
-	cv.SetDefault("minio.enabled", false)
+	v.SetDefault("minio.enabled", false)
 }

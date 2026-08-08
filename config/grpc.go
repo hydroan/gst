@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/spf13/viper"
+)
 
 const (
 	GRPC_LISTEN                   = "GRPC_LISTEN"                   //nolint:staticcheck
@@ -49,26 +53,26 @@ type Grpc struct {
 	Enabled            bool   `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Grpc) setDefault() {
-	cv.SetDefault("grpc.listen", "127.0.0.1")
-	cv.SetDefault("grpc.port", 9090)
-	cv.SetDefault("grpc.max_recv_msg_size", 4*1024*1024) // 4MB
-	cv.SetDefault("grpc.max_send_msg_size", 4*1024*1024) // 4MB
-	cv.SetDefault("grpc.initial_window_size", 0)         // Use gRPC default
-	cv.SetDefault("grpc.initial_conn_window_size", 0)    // Use gRPC default
+func (*Grpc) setDefault(v *viper.Viper) {
+	v.SetDefault("grpc.listen", "127.0.0.1")
+	v.SetDefault("grpc.port", 9090)
+	v.SetDefault("grpc.max_recv_msg_size", 4*1024*1024) // 4MB
+	v.SetDefault("grpc.max_send_msg_size", 4*1024*1024) // 4MB
+	v.SetDefault("grpc.initial_window_size", 0)         // Use gRPC default
+	v.SetDefault("grpc.initial_conn_window_size", 0)    // Use gRPC default
 
-	cv.SetDefault("grpc.keepalive_time", 30*time.Second)
-	cv.SetDefault("grpc.keepalive_timeout", 10*time.Second)
-	cv.SetDefault("grpc.max_connection_idle", 15*time.Second)
-	cv.SetDefault("grpc.max_connection_age", 30*time.Second)
-	cv.SetDefault("grpc.max_connection_age_grace", 5*time.Second)
+	v.SetDefault("grpc.keepalive_time", 30*time.Second)
+	v.SetDefault("grpc.keepalive_timeout", 10*time.Second)
+	v.SetDefault("grpc.max_connection_idle", 15*time.Second)
+	v.SetDefault("grpc.max_connection_age", 30*time.Second)
+	v.SetDefault("grpc.max_connection_age_grace", 5*time.Second)
 
-	cv.SetDefault("grpc.tls_enabled", false)
-	cv.SetDefault("grpc.cert_file", "")
-	cv.SetDefault("grpc.key_file", "")
-	cv.SetDefault("grpc.ca_file", "")
-	cv.SetDefault("grpc.reflection_enabled", false)
-	cv.SetDefault("grpc.health_check_enabled", true)
+	v.SetDefault("grpc.tls_enabled", false)
+	v.SetDefault("grpc.cert_file", "")
+	v.SetDefault("grpc.key_file", "")
+	v.SetDefault("grpc.ca_file", "")
+	v.SetDefault("grpc.reflection_enabled", false)
+	v.SetDefault("grpc.health_check_enabled", true)
 
-	cv.SetDefault("grpc.enabled", false)
+	v.SetDefault("grpc.enabled", false)
 }

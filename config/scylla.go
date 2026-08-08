@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/spf13/viper"
+)
 
 type Consistency string
 
@@ -96,35 +100,35 @@ type Scylla struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*Scylla) setDefault() {
-	cv.SetDefault("scylla.hosts", []string{"127.0.0.1:9042"})
-	cv.SetDefault("scylla.username", "")
-	cv.SetDefault("scylla.password", "")
-	cv.SetDefault("scylla.keyspace", "")
-	cv.SetDefault("scylla.consistency", ConsistencyQuorum)
-	cv.SetDefault("scylla.num_conns", 0)
+func (*Scylla) setDefault(v *viper.Viper) {
+	v.SetDefault("scylla.hosts", []string{"127.0.0.1:9042"})
+	v.SetDefault("scylla.username", "")
+	v.SetDefault("scylla.password", "")
+	v.SetDefault("scylla.keyspace", "")
+	v.SetDefault("scylla.consistency", ConsistencyQuorum)
+	v.SetDefault("scylla.num_conns", 0)
 
-	cv.SetDefault("scylla.connect_timeout", 5*time.Second)
-	cv.SetDefault("scylla.timeout", 30*time.Second)
-	cv.SetDefault("scylla.page_size", 5000)
+	v.SetDefault("scylla.connect_timeout", 5*time.Second)
+	v.SetDefault("scylla.timeout", 30*time.Second)
+	v.SetDefault("scylla.page_size", 5000)
 
-	cv.SetDefault("scylla.retry_policy", "")
-	cv.SetDefault("scylla.retry_num_retries", 5)
-	cv.SetDefault("scylla.retry_min_interval", 100*time.Millisecond)
-	cv.SetDefault("scylla.retry_max_interval", 5*time.Second)
+	v.SetDefault("scylla.retry_policy", "")
+	v.SetDefault("scylla.retry_num_retries", 5)
+	v.SetDefault("scylla.retry_min_interval", 100*time.Millisecond)
+	v.SetDefault("scylla.retry_max_interval", 5*time.Second)
 
-	cv.SetDefault("scylla.reconnect_policy", "")
-	cv.SetDefault("scylla.reconnect_max_retries", 10)
-	cv.SetDefault("scylla.reconnect_initial_interval", 100*time.Millisecond)
-	cv.SetDefault("scylla.reconnect_max_interval", 10*time.Second)
-	cv.SetDefault("scylla.reconnect_constant_interval", 1*time.Second)
+	v.SetDefault("scylla.reconnect_policy", "")
+	v.SetDefault("scylla.reconnect_max_retries", 10)
+	v.SetDefault("scylla.reconnect_initial_interval", 100*time.Millisecond)
+	v.SetDefault("scylla.reconnect_max_interval", 10*time.Second)
+	v.SetDefault("scylla.reconnect_constant_interval", 1*time.Second)
 
-	cv.SetDefault("scylla.tracing_enabled", false)
-	cv.SetDefault("scylla.tls_enabled", false)
-	cv.SetDefault("scylla.cert_file", "")
-	cv.SetDefault("scylla.key_file", "")
-	cv.SetDefault("scylla.ca_file", "")
-	cv.SetDefault("scylla.insecure_skip_verify", false)
+	v.SetDefault("scylla.tracing_enabled", false)
+	v.SetDefault("scylla.tls_enabled", false)
+	v.SetDefault("scylla.cert_file", "")
+	v.SetDefault("scylla.key_file", "")
+	v.SetDefault("scylla.ca_file", "")
+	v.SetDefault("scylla.insecure_skip_verify", false)
 
-	cv.SetDefault("scylla.enabled", false)
+	v.SetDefault("scylla.enabled", false)
 }

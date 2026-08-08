@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/spf13/viper"
+)
 
 type ConsumeFromWhere string
 
@@ -77,35 +81,35 @@ type RocketMQ struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
-func (*RocketMQ) setDefault() {
-	cv.SetDefault("rocketmq.name_server_addrs", []string{"127.0.0.1:9876"})
-	cv.SetDefault("rocketmq.access_key", "")
-	cv.SetDefault("rocketmq.secret_key", "")
-	cv.SetDefault("rocketmq.namespace", "")
-	cv.SetDefault("rocketmq.group_name", "DEFAULT_PRODUCER")
-	cv.SetDefault("rocketmq.instance_name", "DEFAULT_INSTANCE")
+func (*RocketMQ) setDefault(v *viper.Viper) {
+	v.SetDefault("rocketmq.name_server_addrs", []string{"127.0.0.1:9876"})
+	v.SetDefault("rocketmq.access_key", "")
+	v.SetDefault("rocketmq.secret_key", "")
+	v.SetDefault("rocketmq.namespace", "")
+	v.SetDefault("rocketmq.group_name", "DEFAULT_PRODUCER")
+	v.SetDefault("rocketmq.instance_name", "DEFAULT_INSTANCE")
 
-	cv.SetDefault("rocketmq.num_retries", 2)
-	cv.SetDefault("rocketmq.send_msg_timeout", 3*time.Second)
-	cv.SetDefault("rocketmq.vip_channel_enabled", false)
+	v.SetDefault("rocketmq.num_retries", 2)
+	v.SetDefault("rocketmq.send_msg_timeout", 3*time.Second)
+	v.SetDefault("rocketmq.vip_channel_enabled", false)
 
-	cv.SetDefault("rocketmq.consume_orderly", false)
-	cv.SetDefault("rocketmq.max_reconsume_times", 16)
-	cv.SetDefault("rocketmq.auto_commit", true)
-	cv.SetDefault("rocketmq.consume_concurrently_max_span", 2000)
-	cv.SetDefault("rocketmq.consume_message_batch_max_size", 1)
+	v.SetDefault("rocketmq.consume_orderly", false)
+	v.SetDefault("rocketmq.max_reconsume_times", 16)
+	v.SetDefault("rocketmq.auto_commit", true)
+	v.SetDefault("rocketmq.consume_concurrently_max_span", 2000)
+	v.SetDefault("rocketmq.consume_message_batch_max_size", 1)
 
-	cv.SetDefault("rocketmq.consume_from_where", ConsumeFromWhereLastOffset)
-	cv.SetDefault("rocketmq.consume_timestamp", "")
+	v.SetDefault("rocketmq.consume_from_where", ConsumeFromWhereLastOffset)
+	v.SetDefault("rocketmq.consume_timestamp", "")
 
-	cv.SetDefault("rocketmq.trace_enabled", false)
-	cv.SetDefault("rocketmq.credentials_file", "")
+	v.SetDefault("rocketmq.trace_enabled", false)
+	v.SetDefault("rocketmq.credentials_file", "")
 
-	cv.SetDefault("rocketmq.tls_enabled", false)
-	cv.SetDefault("rocketmq.cert_file", "")
-	cv.SetDefault("rocketmq.key_file", "")
-	cv.SetDefault("rocketmq.ca_file", "")
-	cv.SetDefault("rocketmq.insecure_skip_verify", false)
+	v.SetDefault("rocketmq.tls_enabled", false)
+	v.SetDefault("rocketmq.cert_file", "")
+	v.SetDefault("rocketmq.key_file", "")
+	v.SetDefault("rocketmq.ca_file", "")
+	v.SetDefault("rocketmq.insecure_skip_verify", false)
 
-	cv.SetDefault("rocketmq.enabled", false)
+	v.SetDefault("rocketmq.enabled", false)
 }
