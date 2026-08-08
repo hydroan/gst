@@ -74,11 +74,7 @@ func genRunWithOptions(opts genRunOptions) error {
 		}
 	}
 
-	checks := runProjectChecks
-	if opts.Quiet {
-		checks = func() int { return runProjectChecksQuiet(opts.BaselineViolations) }
-	}
-	if checks() > 0 {
+	if runProjectChecks(opts.Quiet, opts.BaselineViolations) > 0 {
 		return errors.New("project checks failed")
 	}
 

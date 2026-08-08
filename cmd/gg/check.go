@@ -50,7 +50,7 @@ Paths ignored by the project's Git ignore rules are skipped by every check, so r
 }
 
 func checkRun() {
-	totalViolations := runProjectChecks()
+	totalViolations := runProjectChecks(false, nil)
 
 	clioutput.Section("Summary")
 	if totalViolations > 0 {
@@ -66,22 +66,17 @@ type projectCheckResult struct {
 	Violations []string
 }
 
-// runProjectChecks runs all project checks shared by gg check and gg gen.
-func runProjectChecks() int {
-	results := collectProjectChecks()
-	printProjectCheckResults(results)
-	return totalProjectCheckViolations(results)
-}
-
-// runProjectChecksQuiet reports project check violations without printing
-// anything when the project is clean. Violations recorded in baseline are
-// treated as pre-existing and are neither counted nor printed, so callers such
-// as module copy fail only on violations introduced after the baseline
-// snapshot. A nil baseline keeps the full check behavior.
-func runProjectChecksQuiet(baseline map[string]struct{}) int {
+// runProjectChecks runs every project check, shared by gg check and gg gen.
+//
+// quiet suppresses output when the project is clean; violations always
+// print. Violations recorded in baseline are treated as pre-existing and
+// are neither counted nor printed, so callers such as module copy fail only
+// on violations introduced after the baseline snapshot. A nil baseline
+// keeps the full check behavior.
+func runProjectChecks(quiet bool, baseline map[string]struct{}) int {
 	results := filterProjectCheckResults(collectProjectChecks(), baseline)
 	total := totalProjectCheckViolations(results)
-	if total > 0 {
+	if !quiet || total > 0 {
 		printProjectCheckResults(results)
 	}
 	return total
@@ -125,7 +120,7 @@ func collectProjectChecks() []projectCheckResult {
 	// One matcher serves every check: building it scans the whole worktree
 	// for ignore files, which is too expensive to repeat per check.
 	ignore := newProjectIgnoreMatcher()
-	results := []projectCheckResult{
+	return []projectCheckResult{
 		{Name: "Architecture dependencies", Violations: CheckArchitectureDependency(ignore)},
 		{Name: "Model singular naming", Violations: CheckModelSingularNaming(ignore)},
 		{Name: "JSON tag naming", Violations: CheckJSONTagNaming(ignore)},
@@ -140,7 +135,6 @@ func collectProjectChecks() []projectCheckResult {
 		{Name: "Transaction closure context", Violations: CheckTransactionClosureContext(ignore)},
 		{Name: "Service error discipline", Violations: CheckServiceErrorDiscipline(ignore)},
 	}
-	return results
 }
 
 func printProjectCheckResults(results []projectCheckResult) {
