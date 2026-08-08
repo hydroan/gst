@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
 	jsoniter "github.com/json-iterator/go"
 	redisotel "github.com/redis/go-redis/extra/redisotel/v9"
@@ -31,7 +30,7 @@ var (
 	cli     goredis.UniversalClient
 	mu      sync.Mutex
 
-	ErrKeyNotExists    = errors.New("key no loger exists, may be expired")
+	ErrKeyNotExists    = errors.New("key no longer exists, may be expired")
 	ErrRedisIsDisabled = errors.New("redis is disabled")
 )
 
@@ -81,26 +80,26 @@ func Init() (err error) {
 		}
 		cli = cluster
 		zap.S().Infow("successfully connect to redis", "addrs", cfg.Addrs, "cluster_mode", cfg.ClusterMode)
-		return nil
+	} else {
+		if client, err = New(cfg); err != nil {
+			return errors.Wrap(err, "failed to connect to redis")
+		}
+		cli = client
+		zap.S().Infow("successfully connect to redis", "addr", cfg.Addr, "db", cfg.DB, "cluster_mode", cfg.ClusterMode)
 	}
-	if client, err = New(cfg); err != nil {
-		return errors.Wrap(err, "failed to connect to redis")
-	}
-	cli = client
-	zap.S().Infow("successfully connect to redis", "addr", cfg.Addr, "db", cfg.DB, "cluster_mode", cfg.ClusterMode)
 
-	// The probe value is diagnostic text read next to log entries, so it is
-	// rendered like them: UTC in the one log timestamp layout.
-	if err = cli.Set(context.TODO(), cfg.Namespace+"_"+"now", time.Now().UTC().Format(consts.LayoutTimeEncoder), cfg.Expiration).Err(); err != nil {
-		zap.S().Error(err)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err = cli.Ping(ctx).Err(); err != nil {
 		cli.Close()
+		cli = nil
 		client = nil
 		cluster = nil
-		return errors.Wrap(err, "failed to set redis key "+cfg.Namespace+"_"+"now")
+		return errors.Wrap(err, "failed to ping redis")
 	}
 	if err = errors.Join(redisotel.InstrumentTracing(cli), redisotel.InstrumentMetrics(cli)); err != nil {
-		zap.S().Error(err)
 		cli.Close()
+		cli = nil
 		client = nil
 		cluster = nil
 		return err
@@ -195,6 +194,8 @@ func NewCluster(cfg config.Redis) (*goredis.ClusterClient, error) {
 // Client returns the initialized Redis client handle, standalone or
 // cluster depending on configuration.
 func Client() (goredis.UniversalClient, error) {
+	mu.Lock()
+	defer mu.Unlock()
 	if cli == nil {
 		return nil, ErrRedisIsDisabled
 	}
@@ -202,6 +203,9 @@ func Client() (goredis.UniversalClient, error) {
 }
 
 func Close() error {
+	mu.Lock()
+	defer mu.Unlock()
+
 	var errs []error
 	if client != nil {
 		if err := client.Close(); err != nil {
