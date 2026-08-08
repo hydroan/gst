@@ -74,7 +74,6 @@ type Config struct {
 	Memcached     `json:"memcached" mapstructure:"memcached" ini:"memcached" yaml:"memcached"`
 	RethinkDB     `json:"rethinkdb" mapstructure:"rethinkdb" ini:"rethinkdb" yaml:"rethinkdb"`
 	RocketMQ      `json:"rocketmq" mapstructure:"rocketmq" ini:"rocketmq" yaml:"rocketmq"`
-	Feishu        `json:"feishu" mapstructure:"feishu" ini:"feishu" yaml:"feishu"`
 	Debug         `json:"debug" mapstructure:"debug" ini:"debug" yaml:"debug"`
 	Audit         `json:"audit" mapstructure:"audit" ini:"audit" yaml:"audit"`
 }
@@ -111,7 +110,6 @@ func (c *Config) setDefault() {
 	c.Memcached.setDefault()
 	c.RethinkDB.setDefault()
 	c.RocketMQ.setDefault()
-	c.Feishu.setDefault()
 	c.Debug.setDefault()
 	c.Audit.setDefault()
 }

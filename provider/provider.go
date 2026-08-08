@@ -22,8 +22,8 @@ import (
 // lifecycle.
 type Provider struct {
 	// Name uniquely identifies the provider in the registry. Framework
-	// providers use their config section name so bootstrap can match
-	// enabled configuration against compiled-in providers.
+	// providers use their package name (the final import path element) so
+	// bootstrap can match compiled-in providers against its known set.
 	Name string
 
 	// Init brings the provider up. Bootstrap runs it after core
@@ -39,6 +39,7 @@ type Provider struct {
 
 var (
 	mu        sync.Mutex
+	sealed    bool
 	providers = make(map[string]Provider)
 )
 
@@ -61,10 +62,24 @@ func Register(p Provider) {
 	mu.Lock()
 	defer mu.Unlock()
 
+	if sealed {
+		panic(fmt.Sprintf("provider: provider %q registered after bootstrap sealed the registry; register providers in package init functions", p.Name))
+	}
 	if _, ok := providers[p.Name]; ok {
 		panic(fmt.Sprintf("provider: duplicate provider registration for name %q", p.Name))
 	}
 	providers[p.Name] = p
+}
+
+// Seal marks the registry complete. Bootstrap calls it once right after
+// draining the registry, so a Register that runs later panics instead of
+// being silently ignored: a provider registered after the drain would never
+// be initialized. Seal is idempotent. Business code never calls it.
+func Seal() {
+	mu.Lock()
+	defer mu.Unlock()
+
+	sealed = true
 }
 
 // Registered returns the registered providers sorted by name.

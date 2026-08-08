@@ -60,7 +60,6 @@ require (
 	github.com/json-iterator/go v1.1.12
 	github.com/karlseguin/ccache/v3 v3.0.8
 	github.com/kr/pretty v0.3.1
-	github.com/larksuite/oapi-sdk-go/v3 v3.9.9
 	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/maxrichie5/go-sqlfmt v0.0.0-20241025195225-e353be92414a
 	github.com/minio/minio-go/v7 v7.2.1

@@ -60,6 +60,22 @@ func TestRegisterDuplicateNamePanics(t *testing.T) {
 	})
 }
 
+func TestRegisterAfterSealPanics(t *testing.T) {
+	Seal()
+	// Seal is idempotent and permanent in production; tests unseal so the
+	// remaining cases can keep registering.
+	Seal()
+	t.Cleanup(func() {
+		mu.Lock()
+		sealed = false
+		mu.Unlock()
+	})
+
+	require.PanicsWithValue(t, `provider: provider "test_register_sealed" registered after bootstrap sealed the registry; register providers in package init functions`, func() {
+		Register(Provider{Name: "test_register_sealed", Init: func() error { return nil }})
+	})
+}
+
 // registeredByName returns the registered provider with the given name and
 // fails the test when it is absent.
 func registeredByName(t *testing.T, name string) Provider {

@@ -80,7 +80,6 @@ func Init() error {
 	logger.Cassandra = New("cassandra.log")
 	logger.Elastic = New("elastic.log")
 	logger.Etcd = New("etcd.log")
-	logger.Feishu = New("feishu.log")
 	logger.Influxdb = New("influxdb.log")
 	logger.Kafka = New("kafka.log")
 	logger.Ldap = New("ldap.log")
@@ -123,7 +122,6 @@ func Clean() {
 		logger.Cassandra,
 		logger.Elastic,
 		logger.Etcd,
-		logger.Feishu,
 		logger.Influxdb,
 		logger.Kafka,
 		logger.Ldap,

@@ -31,7 +31,6 @@ import (
 	"github.com/hydroan/gst/provider/cassandra"
 	"github.com/hydroan/gst/provider/elastic"
 	"github.com/hydroan/gst/provider/etcd"
-	"github.com/hydroan/gst/provider/feishu"
 	"github.com/hydroan/gst/provider/influxdb"
 	"github.com/hydroan/gst/provider/kafka"
 	"github.com/hydroan/gst/provider/ldap"
@@ -97,15 +96,20 @@ func Bootstrap() error {
 		mqtt.Init,
 		kafka.Init,
 		etcd.Init,
-		nats.Init,
 		cassandra.Init,
 		influxdb.Init,
 		memcached.Init,
 		rethinkdb.Init,
 		rocketmq.Init,
-		feishu.Init,
 		ldap.Init,
+	)
 
+	// Optional providers join the registry from their package init
+	// functions; drain them here so they initialize after the backbone
+	// providers and before the layers that may build on them.
+	drainProviders()
+
+	ins.Register(
 		// Authorization and Authentication
 		rbac.Init,
 		jwt.Init,

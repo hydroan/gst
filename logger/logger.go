@@ -30,7 +30,6 @@ var (
 	Cassandra types.Logger
 	Elastic   types.Logger
 	Etcd      types.Logger
-	Feishu    types.Logger
 	Influxdb  types.Logger
 	Kafka     types.Logger
 	Ldap      types.Logger
