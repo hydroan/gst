@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -21,10 +22,10 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	TIMESTAMP_FILE    = "/tmp/timestamp" //nolint:staticcheck
-	defaultSearchSize = 10000
-)
+const defaultSearchSize = 10000
+
+// timestampFile persists the SearchTimestamp cursor across restarts.
+var timestampFile = filepath.Join(os.TempDir(), "gst_elastic_timestamp")
 
 type (
 	document struct{}
@@ -47,7 +48,6 @@ func init() {
 // Init initializes the global elasticsearch client.
 // It reads elasticsearch configuration from config.App.ElasticsearchConfig.
 // If elasticsearch not enabled, it returns nil.
-// The functions also starts a background goroutines to ensure connection health.
 func Init() (err error) {
 	cfg := config.App.Elasticsearch
 	if !cfg.Enabled {
@@ -63,13 +63,6 @@ func Init() (err error) {
 		client = nil
 		return errors.Wrap(err, "failed to ping elasticsearch")
 	}
-
-	// ticker := time.NewTicker(timeout + 10*time.Second)
-	// go func() {
-	// 	for range ticker.C {
-	// 		_ensureConnection()
-	// 	}
-	// }()
 
 	zap.S().Infow("successfully connect to elasticsearch", "hosts", cfg.Addrs)
 	return nil
@@ -175,7 +168,7 @@ func New(cfg config.Elasticsearch) (*elasticsearch.Client, error) {
 
 // _check will check the client and return an error if it's nil or invalid.
 func _check() error {
-	if client == nil || client == new(elasticsearch.Client) {
+	if client == nil {
 		return errors.New("elasticsearch client not initialized")
 	}
 	return nil
@@ -190,7 +183,7 @@ func Client() (*elasticsearch.Client, error) {
 }
 
 // SearchTimestamp searches index for documents newer than the timestamp persisted in
-// TIMESTAMP_FILE and returns the raw response body.
+// timestampFile and returns the raw response body.
 // index accepts a wildcard, eg "sample-*", to query multiple indices at once.
 func SearchTimestamp(index string, size ...int) ([]byte, error) {
 	_size := defaultSearchSize
@@ -223,11 +216,11 @@ func SearchTimestamp(index string, size ...int) ([]byte, error) {
 
 	now := time.Now().UTC()
 	timestampEnd = time.Date(2099, now.Month(), now.Day(), 23, 59, 59, 0, time.UTC)
-	if timestampStartData, err = os.ReadFile(TIMESTAMP_FILE); err != nil {
+	if timestampStartData, err = os.ReadFile(timestampFile); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			timestampStart = time.Date(now.Year(), now.Month(), now.Day()-1, now.Hour(), now.Minute(), now.Second(), 0, time.UTC) // one day earlier
 			fmt.Println("------------------- touch file and write time: ", timestampStart.Format(time.RFC3339))
-			if err = os.WriteFile(TIMESTAMP_FILE, []byte(timestampStart.Format(time.RFC3339)), 0o600); err != nil {
+			if err = os.WriteFile(timestampFile, []byte(timestampStart.Format(time.RFC3339)), 0o600); err != nil {
 				return nil, err
 			}
 		} else {
