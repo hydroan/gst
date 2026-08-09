@@ -2,6 +2,7 @@ package rbac
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dbruntime"
@@ -32,6 +33,15 @@ type policyRow struct {
 	V3    string `gorm:"column:v3"`
 	V4    string `gorm:"column:v4"`
 	V5    string `gorm:"column:v5"`
+
+	// CreatedAt and UpdatedAt satisfy the base model's timestamp contract:
+	// the columns are NOT NULL without a database default, so every insert
+	// must carry both. gorm's naming convention fills them through the
+	// connection's NowFunc — UTC in production. On a conflicting insert the
+	// existing row keeps its values, which is what an idempotent re-add
+	// should do.
+	CreatedAt time.Time `gorm:"column:created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at"`
 }
 
 // adapter persists the policy set through the framework's database layer.

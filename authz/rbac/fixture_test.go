@@ -119,6 +119,10 @@ func dbruntimeDB() *gorm.DB { return dbruntime.DB }
 //
 // Each caller names its own table because the in-memory database is shared
 // across the package.
+//
+// The timestamp columns mirror the AuthzRule model, whose base declares them
+// NOT NULL without a database default: a write that omits them must fail here
+// the same way it would on the migrated production table.
 func newPolicyTable(tb testing.TB, name string) *adapter {
 	tb.Helper()
 
@@ -127,6 +131,8 @@ func newPolicyTable(tb testing.TB, name string) *adapter {
 		ptype TEXT NOT NULL DEFAULT '',
 		v0 TEXT NOT NULL DEFAULT '', v1 TEXT NOT NULL DEFAULT '', v2 TEXT NOT NULL DEFAULT '',
 		v3 TEXT NOT NULL DEFAULT '', v4 TEXT NOT NULL DEFAULT '', v5 TEXT NOT NULL DEFAULT '',
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL,
 		UNIQUE (ptype, v0, v1, v2, v3, v4, v5)
 	)`
 	if err := dbruntime.DB.Exec(ddl).Error; err != nil {
