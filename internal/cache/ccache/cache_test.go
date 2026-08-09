@@ -31,6 +31,22 @@ func TestWriteVisibilityUnderCapacityPressure(t *testing.T) {
 	cachetest.RunWriteVisibility(t, ccache.Cache[visibilityProbe](), writeVisibilityCapacity)
 }
 
+// TestWriteRetentionUnderCapacityPressure guards the other half of the same
+// property: entries written under pressure survive until a later request, not
+// just until the next line. The forwarded default has to hold this, and the
+// scan-resistant backends do not.
+func TestWriteRetentionUnderCapacityPressure(t *testing.T) {
+	old := config.App.Cache.MaxEntries
+	config.App.Cache.MaxEntries = writeVisibilityCapacity
+	defer func() { config.App.Cache.MaxEntries = old }()
+
+	cachetest.RunWriteRetention(t, ccache.Cache[retentionProbe](), writeVisibilityCapacity)
+}
+
+// retentionProbe gets its own per-type instance for the same reason
+// visibilityProbe does.
+type retentionProbe string
+
 // TestSizedValueDoesNotShrinkCapacity guards the boxing in the wrapper: the
 // backend charges a value's own Size() against MaxSize when the value
 // implements its Sized interface, which would turn the entry bound into a

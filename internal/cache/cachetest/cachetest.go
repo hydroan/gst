@@ -69,6 +69,56 @@ func RunWriteVisibility[T ~string](t *testing.T, cache types.Cache[T], capacity 
 	}
 }
 
+// RunWriteRetention asserts that entries written under capacity pressure are
+// still there when a later request comes looking, not merely readable on the
+// next line.
+//
+// RunWriteVisibility cannot see this. Reading each key immediately after
+// writing it hides any backend that accepts the write and then picks the
+// newcomer as its eviction victim, because the read lands before the eviction
+// does. An admission-weighted policy does exactly that: a fresh key has the
+// lowest frequency estimate in the cache, so it is the first thing evicted
+// once the writes stop. Measured on a warm 100k-entry cache taking 10k new
+// keys, one backend lost none on the immediate read and 44% on a read 200ms
+// later.
+//
+// Preferring old entries over new ones is a legitimate policy — it is the
+// same mechanism that makes a cache resist scans — but it is incompatible
+// with the ordinary write-now-read-later use of a cache, so the forwarded
+// default has to pass this.
+func RunWriteRetention[T ~string](t *testing.T, cache types.Cache[T], capacity int) {
+	t.Helper()
+	ctx := context.Background()
+
+	for i := range capacity {
+		if err := cache.Set(ctx, "resident-"+strconv.Itoa(i), T("resident"), 0); err != nil {
+			t.Fatalf("filling the cache: %v", err)
+		}
+	}
+	for range warmPasses {
+		for i := range capacity {
+			_, _ = cache.Get(ctx, "resident-"+strconv.Itoa(i))
+		}
+	}
+
+	for i := range visibilityProbes {
+		if err := cache.Set(ctx, "retained-"+strconv.Itoa(i), T("retained"), 0); err != nil {
+			t.Fatalf("probe set: %v", err)
+		}
+	}
+	time.Sleep(200 * time.Millisecond)
+
+	var lost int
+	for i := range visibilityProbes {
+		if _, err := cache.Get(ctx, "retained-"+strconv.Itoa(i)); err != nil {
+			lost++
+		}
+	}
+	if lost != 0 {
+		t.Fatalf("%d of %d entries were evicted before a later read could reach them", lost, visibilityProbes)
+	}
+}
+
 // Capabilities declares which parts of the ttl contract a backend honors.
 type Capabilities struct {
 	// PerEntryTTL is true when Set honors ttl > 0 as a per-entry lifetime.

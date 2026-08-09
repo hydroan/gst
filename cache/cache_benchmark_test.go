@@ -11,8 +11,8 @@ import (
 	"github.com/hydroan/gst/internal/cache/cmap"
 	"github.com/hydroan/gst/internal/cache/fastcache"
 	"github.com/hydroan/gst/internal/cache/freecache"
+	"github.com/hydroan/gst/internal/cache/freelru"
 	"github.com/hydroan/gst/internal/cache/lru"
-	"github.com/hydroan/gst/internal/cache/lrue"
 	"github.com/hydroan/gst/internal/cache/otter"
 	"github.com/hydroan/gst/internal/cache/ristretto"
 	"github.com/hydroan/gst/internal/cache/smap"
@@ -27,6 +27,69 @@ type User struct {
 	model.Base
 }
 
+// Recorded results — Apple M4 Pro (14 cores), go1.26.4 darwin/arm64,
+// 2026-08-09, struct values, 1000-key working set, redis on a local
+// container. Reproduce with:
+//
+//	go test -run '^$' -bench 'BenchmarkUser' -benchtime 300ms ./cache/
+//
+// Mixed — 90% reads, 10% writes — comes first because it is the shape a
+// cache actually sees; the single-operation columns follow as breakdown.
+// Rows are grouped by what a value is stored as, because that decides which
+// backends are candidates at all, and both tables carry the same row order,
+// sorted by parallel Mixed, so a backend can be followed across them.
+//
+// Serial, ns/op:
+//
+//	backend    Mixed     Set     Get  Exists  Delete
+//	-- live values --
+//	smap        50.7    87.1    45.1    14.8     8.4
+//	freelru     58.2    36.9    58.8    19.3    11.0
+//	otter      190.6   391.9   170.7   110.5    29.3
+//	cmap        55.9    30.4    58.1    13.2     9.6
+//	ristretto  238.2   718.3   126.1    80.9   235.6
+//	lru         54.2    38.0    53.8     9.8    13.3
+//	ccache     295.2   450.1   225.5   222.0    27.9
+//	-- serialized --
+//	fastcache  353.1   341.7   331.7    31.0    13.5
+//	freecache  369.1   350.3   359.3    92.9    13.1
+//	bigcache   335.2   388.4   306.7    41.1    11.0
+//	-- remote --
+//	redis      91125   94295   91316   85901   86011
+//
+// Parallel across 14 cores, ns/op:
+//
+//	backend    Mixed     Set     Get
+//	-- live values --
+//	smap         8.4    30.1     3.7
+//	freelru     27.2    27.8    26.7
+//	otter       30.2   391.9    14.9
+//	cmap        39.1    41.2    21.5
+//	ristretto  167.2  1357.0    15.1
+//	lru        221.5   199.4   219.7
+//	ccache     385.1   796.2    38.5
+//	-- serialized --
+//	fastcache   42.7    59.0    39.6
+//	freecache   71.0    74.3    62.3
+//	bigcache   131.4   130.4    51.5
+//	-- remote --
+//	redis      21018   21146   20646
+//
+// How to read this. Under contention Mixed is the only column that separates
+// backends whose write path blocks readers from those where the two are
+// independent: ccache sits at 385 ns against freelru's 27 ns, a gap that
+// neither the Set nor the Get column shows on its own, because ccache
+// funnels every write through one worker goroutine. lru is flat across all
+// three columns for the same reason, one global mutex.
+//
+// Speed is not the selection criterion. cmap, smap and lru are fast because
+// they never expire anything and mostly never evict; ristretto's fast reads
+// come from the admission policy that silently drops most writes once the
+// cache is warm; otter keeps writes visible but evicts new entries first; and
+// the serialized backends pay an encoding round trip per operation while
+// being unusable for any type whose state lives in unexported fields. See the
+// cache package documentation for what actually decides the forwarded backend.
+
 func TestMain(m *testing.M) {
 	testutil.Run(m, testutil.Server{Redis: true})
 }
@@ -34,9 +97,6 @@ func TestMain(m *testing.M) {
 func BenchmarkInt(b *testing.B) {
 	b.Run("lru", func(b *testing.B) {
 		benchInt(b, lru.Cache[int]())
-	})
-	b.Run("lrue", func(b *testing.B) {
-		benchInt(b, lrue.Cache[int]())
 	})
 	b.Run("cmap", func(b *testing.B) {
 		benchInt(b, cmap.Cache[int]())
@@ -56,6 +116,9 @@ func BenchmarkInt(b *testing.B) {
 	b.Run("ccache", func(b *testing.B) {
 		benchInt(b, ccache.Cache[int]())
 	})
+	b.Run("freelru", func(b *testing.B) {
+		benchInt(b, freelru.Cache[int]())
+	})
 	b.Run("otter", func(b *testing.B) {
 		benchInt(b, otter.Cache[int]())
 	})
@@ -70,9 +133,6 @@ func BenchmarkInt(b *testing.B) {
 func BenchmarkIntParallel(b *testing.B) {
 	b.Run("lru", func(b *testing.B) {
 		benchIntParallel(b, lru.Cache[int]())
-	})
-	b.Run("lrue", func(b *testing.B) {
-		benchIntParallel(b, lrue.Cache[int]())
 	})
 	b.Run("cmap", func(b *testing.B) {
 		benchIntParallel(b, cmap.Cache[int]())
@@ -92,6 +152,9 @@ func BenchmarkIntParallel(b *testing.B) {
 	b.Run("ccache", func(b *testing.B) {
 		benchIntParallel(b, ccache.Cache[int]())
 	})
+	b.Run("freelru", func(b *testing.B) {
+		benchIntParallel(b, freelru.Cache[int]())
+	})
 	b.Run("otter", func(b *testing.B) {
 		benchIntParallel(b, otter.Cache[int]())
 	})
@@ -106,9 +169,6 @@ func BenchmarkIntParallel(b *testing.B) {
 func BenchmarkString(b *testing.B) {
 	b.Run("lru", func(b *testing.B) {
 		benchString(b, lru.Cache[string]())
-	})
-	b.Run("lrue", func(b *testing.B) {
-		benchString(b, lrue.Cache[string]())
 	})
 	b.Run("cmap", func(b *testing.B) {
 		benchString(b, cmap.Cache[string]())
@@ -128,6 +188,9 @@ func BenchmarkString(b *testing.B) {
 	b.Run("ccache", func(b *testing.B) {
 		benchString(b, ccache.Cache[string]())
 	})
+	b.Run("freelru", func(b *testing.B) {
+		benchString(b, freelru.Cache[string]())
+	})
 	b.Run("otter", func(b *testing.B) {
 		benchString(b, otter.Cache[string]())
 	})
@@ -142,9 +205,6 @@ func BenchmarkString(b *testing.B) {
 func BenchmarkStringParallel(b *testing.B) {
 	b.Run("lru", func(b *testing.B) {
 		benchStringParallel(b, lru.Cache[string]())
-	})
-	b.Run("lrue", func(b *testing.B) {
-		benchStringParallel(b, lrue.Cache[string]())
 	})
 	b.Run("cmap", func(b *testing.B) {
 		benchStringParallel(b, cmap.Cache[string]())
@@ -164,6 +224,9 @@ func BenchmarkStringParallel(b *testing.B) {
 	b.Run("ccache", func(b *testing.B) {
 		benchStringParallel(b, ccache.Cache[string]())
 	})
+	b.Run("freelru", func(b *testing.B) {
+		benchStringParallel(b, freelru.Cache[string]())
+	})
 	b.Run("otter", func(b *testing.B) {
 		benchStringParallel(b, otter.Cache[string]())
 	})
@@ -178,9 +241,6 @@ func BenchmarkStringParallel(b *testing.B) {
 func BenchmarkUser(b *testing.B) {
 	b.Run("lru", func(b *testing.B) {
 		benchUser(b, lru.Cache[User]())
-	})
-	b.Run("lrue", func(b *testing.B) {
-		benchUser(b, lrue.Cache[User]())
 	})
 	b.Run("cmap", func(b *testing.B) {
 		benchUser(b, cmap.Cache[User]())
@@ -200,6 +260,9 @@ func BenchmarkUser(b *testing.B) {
 	b.Run("ccache", func(b *testing.B) {
 		benchUser(b, ccache.Cache[User]())
 	})
+	b.Run("freelru", func(b *testing.B) {
+		benchUser(b, freelru.Cache[User]())
+	})
 	b.Run("otter", func(b *testing.B) {
 		benchUser(b, otter.Cache[User]())
 	})
@@ -214,9 +277,6 @@ func BenchmarkUser(b *testing.B) {
 func BenchmarkUserParallel(b *testing.B) {
 	b.Run("lru", func(b *testing.B) {
 		benchUserParallel(b, lru.Cache[User]())
-	})
-	b.Run("lrue", func(b *testing.B) {
-		benchUserParallel(b, lrue.Cache[User]())
 	})
 	b.Run("cmap", func(b *testing.B) {
 		benchUserParallel(b, cmap.Cache[User]())
@@ -235,6 +295,9 @@ func BenchmarkUserParallel(b *testing.B) {
 	})
 	b.Run("ccache", func(b *testing.B) {
 		benchUserParallel(b, ccache.Cache[User]())
+	})
+	b.Run("freelru", func(b *testing.B) {
+		benchUserParallel(b, freelru.Cache[User]())
 	})
 	b.Run("otter", func(b *testing.B) {
 		benchUserParallel(b, otter.Cache[User]())
@@ -286,11 +349,21 @@ func benchUserValues() []User {
 }
 
 // skipWhenSetUnsupported skips backends whose Set cannot store entries under
-// the ttl contract, such as global-expiration backends.
+// the ttl contract. Every benchmark here stores with ttl 0, the contract's
+// "never expires", so a backend reaching this skip stores nothing at all —
+// measuring its Get would only time misses. Only the global-expiration
+// backends, whose Set rejects every lifetime by design, land here.
 func skipWhenSetUnsupported[T any](b *testing.B, cache types.Cache[T], probe T) {
 	b.Helper()
 	if err := cache.Set(context.Background(), "bench-probe", probe, 0); errors.Is(err, types.ErrTTLNotSupported) {
 		b.Skip("backend cannot store entries under the ttl contract")
+	}
+}
+
+// fill primes the working set so read benchmarks measure the hit path.
+func fill[T any](ctx context.Context, cache types.Cache[T], keys []string, values []T) {
+	for i := range benchKeyCount {
+		_ = cache.Set(ctx, keys[i], values[i], 0)
 	}
 }
 
@@ -307,12 +380,39 @@ func benchCache[T any](b *testing.B, cache types.Cache[T], values []T) {
 		}
 	})
 	b.Run("Get", func(b *testing.B) {
-		for i := range benchKeyCount {
-			_ = cache.Set(ctx, keys[i], values[i], 0)
-		}
+		fill(ctx, cache, keys, values)
 		b.ResetTimer()
 		for i := 0; b.Loop(); i++ {
 			_, _ = cache.Get(ctx, keys[i%benchKeyCount])
+		}
+	})
+	b.Run("Exists", func(b *testing.B) {
+		fill(ctx, cache, keys, values)
+		b.ResetTimer()
+		for i := 0; b.Loop(); i++ {
+			cache.Exists(ctx, keys[i%benchKeyCount])
+		}
+	})
+	b.Run("Delete", func(b *testing.B) {
+		fill(ctx, cache, keys, values)
+		b.ResetTimer()
+		for i := 0; b.Loop(); i++ {
+			_ = cache.Delete(ctx, keys[i%benchKeyCount])
+		}
+	})
+	// Mixed is the shape a cache actually sees: mostly hits, occasional
+	// writes. The per-operation split is what separates backends whose write
+	// path stalls readers from those where the two are independent.
+	b.Run("Mixed", func(b *testing.B) {
+		fill(ctx, cache, keys, values)
+		b.ResetTimer()
+		for i := 0; b.Loop(); i++ {
+			idx := i % benchKeyCount
+			if i%10 == 0 {
+				_ = cache.Set(ctx, keys[idx], values[idx], 0)
+				continue
+			}
+			_, _ = cache.Get(ctx, keys[idx])
 		}
 	})
 }
@@ -334,14 +434,31 @@ func benchCacheParallel[T any](b *testing.B, cache types.Cache[T], values []T) {
 		})
 	})
 	b.Run("Get Parallel", func(b *testing.B) {
-		for i := range benchKeyCount {
-			_ = cache.Set(ctx, keys[i], values[i], 0)
-		}
+		fill(ctx, cache, keys, values)
 		b.ResetTimer()
 		b.RunParallel(func(p *testing.PB) {
 			i := 0
 			for p.Next() {
 				_, _ = cache.Get(ctx, keys[i%benchKeyCount])
+				i++
+			}
+		})
+	})
+	// Mixed under contention is where a backend's write path shows whether it
+	// blocks readers: a single-worker write queue serializes every writer,
+	// while a sharded or lock-free path does not.
+	b.Run("Mixed Parallel", func(b *testing.B) {
+		fill(ctx, cache, keys, values)
+		b.ResetTimer()
+		b.RunParallel(func(p *testing.PB) {
+			i := 0
+			for p.Next() {
+				idx := i % benchKeyCount
+				if i%10 == 0 {
+					_ = cache.Set(ctx, keys[idx], values[idx], 0)
+				} else {
+					_, _ = cache.Get(ctx, keys[idx])
+				}
 				i++
 			}
 		})

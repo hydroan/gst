@@ -6,9 +6,9 @@ import (
 
 	"github.com/VictoriaMetrics/fastcache"
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/cache/codec"
 	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/util"
 )
 
 const (
@@ -46,7 +46,7 @@ func (c *cache[T]) Set(_ context.Context, key string, value T, ttl time.Duration
 	if ttl > 0 {
 		return types.ErrTTLNotSupported
 	}
-	val, err := util.Marshal(value)
+	val, err := codec.Marshal(value)
 	if err != nil {
 		return err
 	}
@@ -64,7 +64,7 @@ func (c *cache[T]) Get(_ context.Context, key string) (T, error) {
 		return zero, types.ErrEntryNotFound
 	}
 	var result T
-	if err := util.Unmarshal(value, &result); err != nil {
+	if err := codec.Unmarshal(value, &result); err != nil {
 		return zero, err
 	}
 	return result, nil

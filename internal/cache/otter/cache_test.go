@@ -2,7 +2,6 @@ package otter_test
 
 import (
 	"context"
-	"strconv"
 	"testing"
 	"time"
 
@@ -102,47 +101,3 @@ func TestReadDoesNotExtendTTL(t *testing.T) {
 // ttlProbe keeps the ttl tests on their own instance so their sleeps do not
 // interact with the other tests' entries.
 type ttlProbe string
-
-// TestScanResistanceUpToCapacity records why this backend is carried: it
-// admits every write and still keeps a hot working set through a sweep of
-// roughly its own size, where a plain-LRU backend keeps none of it. The bar
-// sits far below the measured survival (198 of 200) because the property is
-// statistical, and the sweep stays at one times the capacity because a
-// several-times sweep displaces this backend too — admission buys a bounded
-// amount of resistance, not immunity.
-func TestScanResistanceUpToCapacity(t *testing.T) {
-	ctx := context.Background()
-	c := otter.Cache[scanProbe]()
-
-	const hot = 200
-	for i := range hot {
-		if err := c.Set(ctx, "hot-"+strconv.Itoa(i), "v", 0); err != nil {
-			t.Fatalf("set: %v", err)
-		}
-	}
-	for range 20 {
-		for i := range hot {
-			_, _ = c.Get(ctx, "hot-"+strconv.Itoa(i))
-		}
-	}
-
-	for i := range defaultCapacity {
-		_ = c.Set(ctx, "scan-"+strconv.Itoa(i), "v", 0)
-	}
-
-	var survived int
-	for i := range hot {
-		if c.Exists(ctx, "hot-"+strconv.Itoa(i)) {
-			survived++
-		}
-	}
-	if survived < hot/2 {
-		t.Fatalf("want the hot set to survive a sweep of one capacity, only %d of %d left", survived, hot)
-	}
-}
-
-type scanProbe string
-
-// defaultCapacity mirrors the backend's built-in bound, which the scan test
-// runs against because it does not override the configuration.
-const defaultCapacity = 100_000

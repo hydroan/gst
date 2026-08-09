@@ -10,8 +10,8 @@ import (
 	"github.com/hydroan/gst/internal/cache/cmap"
 	"github.com/hydroan/gst/internal/cache/fastcache"
 	"github.com/hydroan/gst/internal/cache/freecache"
+	"github.com/hydroan/gst/internal/cache/freelru"
 	"github.com/hydroan/gst/internal/cache/lru"
-	"github.com/hydroan/gst/internal/cache/lrue"
 	"github.com/hydroan/gst/internal/cache/otter"
 	"github.com/hydroan/gst/internal/cache/ristretto"
 	"github.com/hydroan/gst/internal/cache/smap"
@@ -26,6 +26,9 @@ func TestConformance(t *testing.T) {
 	})
 	t.Run("otter", func(t *testing.T) {
 		cachetest.Run(t, otter.Cache[string](), cachetest.Capabilities{PerEntryTTL: true, NoExpiry: true})
+	})
+	t.Run("freelru", func(t *testing.T) {
+		cachetest.Run(t, freelru.Cache[string](), cachetest.Capabilities{PerEntryTTL: true, NoExpiry: true})
 	})
 	t.Run("ccache", func(t *testing.T) {
 		cachetest.Run(t, ccache.Cache[string](), cachetest.Capabilities{PerEntryTTL: true, NoExpiry: true})
@@ -42,10 +45,7 @@ func TestConformance(t *testing.T) {
 	t.Run("fastcache", func(t *testing.T) {
 		cachetest.Run(t, fastcache.Cache[string](), cachetest.Capabilities{NoExpiry: true})
 	})
-	t.Run("lrue", func(t *testing.T) {
-		cachetest.Run(t, lrue.Cache[string](), cachetest.Capabilities{})
-	})
 	t.Run("bigcache", func(t *testing.T) {
-		cachetest.Run(t, bigcache.Cache[string](), cachetest.Capabilities{})
+		cachetest.Run(t, bigcache.Cache[string](), cachetest.Capabilities{NoExpiry: true})
 	})
 }

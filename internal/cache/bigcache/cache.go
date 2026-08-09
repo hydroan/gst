@@ -6,18 +6,22 @@ import (
 
 	"github.com/allegro/bigcache/v3"
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/cache/codec"
 	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/util"
 )
 
 const (
 	// shards must be a power of two, per the backend's requirement.
 	shards = 16
-	// lifeWindow is the single global lifetime every entry shares.
-	lifeWindow = 10 * time.Minute
-	// cleanWindow is how often the backend sweeps expired entries.
-	cleanWindow = 5 * time.Minute
+
+	// lifeWindow is the backend's only expiry control and it applies to every
+	// entry alike, so it is set past any process lifetime: the contract's
+	// ttl 0 means the entry does not expire, and a shorter global window
+	// would quietly break that promise. Per-entry lifetimes are rejected by
+	// Set instead.
+	lifeWindow = 100 * 365 * 24 * time.Hour
+
 	// maxEntrySize is the backend's per-entry allocation hint in bytes.
 	maxEntrySize = 64 * 1024
 )
@@ -40,12 +44,20 @@ func Cache[T any]() types.Cache[T] {
 	})
 }
 
-// Set always returns ErrTTLNotSupported: entries in this backend expire on
-// the global life window fixed at construction, so neither ttl == 0 (never
-// expire) nor a per-entry ttl can be honored. The backend stays wired for the
-// day the contract grows an opt-in for global expiration.
-func (c *cache[T]) Set(context.Context, string, T, time.Duration) error {
-	return types.ErrTTLNotSupported
+// Set stores the value under key. The backend expires entries on one global
+// window rather than per entry, so only ttl == 0 is accepted.
+func (c *cache[T]) Set(_ context.Context, key string, value T, ttl time.Duration) error {
+	if ttl < 0 {
+		return errors.New("negative ttl")
+	}
+	if ttl > 0 {
+		return types.ErrTTLNotSupported
+	}
+	val, err := codec.Marshal(value)
+	if err != nil {
+		return err
+	}
+	return c.c.Set(key, val)
 }
 
 func (c *cache[T]) Get(_ context.Context, key string) (T, error) {
@@ -56,7 +68,7 @@ func (c *cache[T]) Get(_ context.Context, key string) (T, error) {
 		return zero, types.ErrEntryNotFound
 	}
 	var result T
-	if err := util.Unmarshal(val, &result); err != nil {
+	if err := codec.Unmarshal(val, &result); err != nil {
 		return zero, err
 	}
 	return result, nil
@@ -78,7 +90,6 @@ func buildConfig() bigcache.Config {
 	return bigcache.Config{
 		Shards:       shards,
 		LifeWindow:   lifeWindow,
-		CleanWindow:  cleanWindow,
 		MaxEntrySize: maxEntrySize,
 	}
 }

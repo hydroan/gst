@@ -1,13 +1,25 @@
 // Package otter is a W-TinyLFU cache.
 //
 // It sits between the two failure modes the other backends occupy, because
-// write honesty and scan resistance are the same dial. ristretto refuses
-// newcomers, so a hot working set survives any sweep and most writes of new
-// keys are silently lost. ccache accepts every write, so nothing is lost and
-// any sweep evicts the hot set. otter accepts every write and still resists a
-// sweep up to about its own capacity: measured on a 200-key hot set in a
-// 100k-entry cache, a 100k-key sweep leaves 198 alive where ccache leaves
-// none — but a sweep several times the capacity displaces it too.
+// retaining new writes and resisting scans are the same dial turned opposite
+// ways. ristretto refuses newcomers outright, so a hot set survives any sweep
+// and most writes of new keys never land at all. ccache evicts oldest-first,
+// so every write lands and stays while any sweep clears the hot set.
+//
+// otter is in between, and the distinction matters when picking it: a write
+// does land — reading the key on the next line always finds it — but a fresh
+// key carries the lowest frequency estimate in the cache, so it is first in
+// line to be evicted once writing stops. Measured on a warm 100k-entry cache
+// taking 10k new keys, none were missing on the immediate read and 44% were
+// gone 200ms later, where ccache lost none at either point. In exchange it
+// keeps much of a hot set through a sweep of about its own size, where ccache
+// keeps none of it — how much varies with how far its background maintenance
+// has got, from roughly a third to nearly all of a 200-key set surviving a
+// 100k-key sweep, so it is a tendency rather than a number to rely on.
+//
+// So this backend suits a read-heavy working set that must survive sweeps,
+// not the ordinary write-now-read-later use a cache is usually put to. That
+// is why the framework forwards ccache and keeps this one here.
 //
 // The dependency is pinned to v2.2.1 on purpose. v2.3.0 ships a mis-named
 // test file (issue_test_1.25.go — Go only treats a _test.go suffix as a test
