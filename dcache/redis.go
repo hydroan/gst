@@ -45,6 +45,12 @@ func NewRedisCache[T any](cli redis.UniversalClient, opts ...RedisCacheOption[T]
 
 func (rc *redisCache[T]) Set(ctx context.Context, key string, value T, ttl time.Duration) error {
 	ctx = orBackground(ctx)
+	// A negative lifetime is not "no lifetime" to the client: -1 is its
+	// KEEPTTL sentinel and anything else below zero drops the expiry
+	// argument entirely, storing the entry forever.
+	if ttl < 0 {
+		return errors.New("negative ttl")
+	}
 	val, err := json.Marshal(value)
 	if err != nil {
 		return err

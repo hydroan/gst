@@ -20,7 +20,13 @@ import (
 	"go.uber.org/zap"
 )
 
-var once sync.Once
+var (
+	once sync.Once
+	// errInit records the outcome of the single Init run so later callers
+	// learn that the state node never started instead of being told the
+	// consumed once succeeded.
+	errInit error
+)
 
 // Init initializes the distributed cache system as a state node that manages Redis operations
 // and coordinates cache synchronization across multiple distributed core nodes.
@@ -61,14 +67,13 @@ var once sync.Once
 //   - Implements batch processing to reduce Redis round trips
 //   - Uses concurrent maps for thread-safe timestamp tracking per key
 func Init() error {
-	var gerr error
 	once.Do(func() {
 		const compKey = "comp"
 		const compVal = "[DistributedCache.Init]"
 
 		hostname, err := os.Hostname()
 		if err != nil {
-			gerr = err
+			errInit = err
 			return
 		}
 		log := logger.Dcache.With("hostname", hostname, compKey, compVal)
@@ -80,26 +85,26 @@ func Init() error {
 
 		redisCli, err := redis.New(config.App.Redis)
 		if err != nil {
-			gerr = err
+			errInit = err
 			return
 		}
 
 		// bound the kafka concurrency manually with a goroutine pool
 		gopool, err := ants.NewPool(runtime.NumCPU()*2000, ants.WithPreAlloc(false))
 		if err != nil {
-			gerr = err
+			errInit = err
 			return
 		}
 
 		// initialize the Kafka consumer and producer
 		consumer, err := newConsumer(config.App.Kafka.Brokers, topicSetDel, topicSetDel)
 		if err != nil {
-			gerr = err
+			errInit = err
 			return
 		}
 		producer, err := newProducer(config.App.Kafka.Brokers, topicDone)
 		if err != nil {
-			gerr = err
+			errInit = err
 			return
 		}
 
@@ -110,7 +115,7 @@ func Init() error {
 		// because eviction only hits the least recently written keys.
 		keyMaxTimestamps, err := lru.New[string, int64](maxTrackedKeys)
 		if err != nil {
-			gerr = err
+			errInit = err
 			return
 		}
 
@@ -141,9 +146,6 @@ func Init() error {
 				var failedRecords int64  // number of messages that failed to process
 				skippedRecords := 0      // number of invalid messages that were skipped
 
-				// tracks the offsets of the messages processed in this batch
-				offsets := make(map[string]map[int32]kgo.EpochOffset)
-
 				// ---------------------------------------------------------------------
 				// Phase one: collect every event and deduplicate by timestamp, keeping the latest operation per key
 				// ---------------------------------------------------------------------
@@ -160,15 +162,7 @@ func Init() error {
 
 					totalRecords += len(p.Records)
 
-					// make sure the offset map of the topic is initialized
-					if _, exists := offsets[p.Topic]; !exists {
-						offsets[p.Topic] = make(map[int32]kgo.EpochOffset)
-					}
-
-					var lastOffset int64 = -1
 					for _, record := range p.Records {
-						lastOffset = record.Offset // remember the offset of the last message
-
 						// parse the event
 						event := new(event)
 						if err := json.Unmarshal(record.Value, event); err != nil {
@@ -203,14 +197,6 @@ func Init() error {
 							keyEvents[event.Key] = event
 						}
 
-					}
-
-					// update the partition offset, in case offsets are committed manually later (probably no longer needed)
-					if lastOffset >= 0 {
-						offsets[p.Topic][p.Partition] = kgo.EpochOffset{
-							Offset: lastOffset + 1,
-							Epoch:  -1,
-						}
 					}
 				})
 
@@ -295,7 +281,7 @@ func Init() error {
 							} else {
 								atomic.AddInt64(&successRecords, 1)
 								// publish the kafka message synchronously
-								produceRecord := &kgo.Record{Topic: topicDone, Value: data}
+								produceRecord := &kgo.Record{Topic: topicDone, Key: []byte(evt.Key), Value: data}
 								if err := producer.ProduceSync(baseCtx, produceRecord).FirstErr(); err != nil {
 									log.Errorz(
 										"failed to produce redis set done event",
@@ -339,7 +325,7 @@ func Init() error {
 							} else {
 								atomic.AddInt64(&successRecords, 1)
 								// publish the kafka message synchronously
-								produceRecord := &kgo.Record{Topic: topicDone, Value: data}
+								produceRecord := &kgo.Record{Topic: topicDone, Key: []byte(evt.Key), Value: data}
 								if err := producer.ProduceSync(baseCtx, produceRecord).FirstErr(); err != nil {
 									log.Errorz(
 										"failed to produce redis del done event",
@@ -384,21 +370,9 @@ func Init() error {
 				eventSlice = nil
 				batchKeyMaxTS = nil //nolint:ineffassign,wastedassign
 
-				// // every restart consumes from the latest offset, so there is no need to persist offsets
-				// if len(offsets) > 0 {
-				// 	consumer.CommitOffsets(ctx, offsets, func(c *kgo.Client, ocr1 *kmsg.OffsetCommitRequest, ocr2 *kmsg.OffsetCommitResponse, err error) {
-				// 		if err != nil {
-				// 			fmt.Println("failed to commit offsets:", err)
-				// 		} else {
-				// 			fmt.Printf("successfully committed offsets: total(%d), success(%d), failed(%d), offset(%v), costed(%s)\n",
-				// 				totalRecords, successRecords, failedRecords, offsets, time.Since(begin).String())
-				// 		}
-				// 	})
-				// }
-
 			}
 		}, "DistributedCache.Init")
 	})
 
-	return gerr
+	return errInit
 }

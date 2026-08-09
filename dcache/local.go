@@ -10,7 +10,6 @@ import (
 	"github.com/dgraph-io/ristretto/v2"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/types"
-	cmap "github.com/orcaman/concurrent-map/v2"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -21,10 +20,9 @@ import (
 const defaultMaxEntries = 100_000
 
 var (
-	// Why cmap v2:
-	//  1. sync.Map has no generics, which is awkward in a cache library built around them.
-	//  2. cmap v2 performs much better than sync.Map.
-	localCacheMap = cmap.New[any]()
+	// One instance per value type, keyed by the type itself; see the note on
+	// distributedCacheMap for why this is a sync.Map.
+	localCacheMap sync.Map
 	localCacheMu  sync.Mutex
 )
 
@@ -40,10 +38,8 @@ type localCache[T any] struct {
 
 // NewLocalCache returns a cache without any distributed capability, use NewDistributedCache when that is needed.
 func NewLocalCache[T any]() (types.Cache[T], error) {
-	typ := reflect.TypeFor[T]()
-	key := typ.PkgPath() + "|" + typ.String()
-	val, exists := localCacheMap.Get(key)
-	if exists {
+	key := reflect.TypeFor[T]()
+	if val, ok := localCacheMap.Load(key); ok {
 		//nolint:errcheck
 		return val.(types.Cache[T]), nil
 	}
@@ -51,14 +47,20 @@ func NewLocalCache[T any]() (types.Cache[T], error) {
 	localCacheMu.Lock()
 	defer localCacheMu.Unlock()
 
-	val, exists = localCacheMap.Get(key)
-	if !exists {
-		c, _ := ristretto.NewCache(buildConf[T]())
-		val = &localCache[T]{c: c}
-		localCacheMap.Set(key, val)
+	if val, ok := localCacheMap.Load(key); ok {
+		//nolint:errcheck
+		return val.(types.Cache[T]), nil
 	}
-	//nolint:errcheck
-	return val.(types.Cache[T]), nil
+	c, err := ristretto.NewCache(buildConf[T]())
+	if err != nil {
+		// Storing a cache built from a failed constructor would answer every
+		// Get with a miss and every Set with a rejection, which reads as a
+		// working but permanently empty cache.
+		return nil, err
+	}
+	val := &localCache[T]{c: c}
+	localCacheMap.Store(key, val)
+	return val, nil
 }
 
 func (c *localCache[T]) Set(_ context.Context, key string, value T, ttl time.Duration) error {

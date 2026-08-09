@@ -14,13 +14,13 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/google/uuid"
+	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
-	cmap "github.com/orcaman/concurrent-map/v2"
 	"github.com/panjf2000/ants/v2"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.uber.org/zap"
@@ -39,10 +39,10 @@ const (
 )
 
 var (
-	// Why cmap v2:
-	//  1. sync.Map has no generics, which is awkward in a cache library built around them.
-	//  2. cmap v2 performs much better than sync.Map.
-	distributedCacheMap = cmap.New[any]()
+	// One instance per value type, keyed by the type itself. Entries are
+	// written once, when a type is first cached, and read for the rest of
+	// the process, which is what sync.Map's lock-free read path is for.
+	distributedCacheMap sync.Map
 	distributedCacheMu  sync.Mutex
 
 	_ types.DistributedCache[any] = (*distributedCache[any])(nil)
@@ -125,12 +125,10 @@ func (e *event) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 //	and normally only one service process runs.
 //	total kafka listeners: consumers per node * number of nodes
 func NewDistributedCache[T any](opts ...DistributedCacheOption[T]) (types.DistributedCache[T], error) {
-	typ := reflect.TypeFor[T]()
-	key := typ.PkgPath() + "|" + typ.String()
+	key := reflect.TypeFor[T]()
 
 	// Fast path: check if cache already exists
-	val, exists := distributedCacheMap.Get(key)
-	if exists {
+	if val, ok := distributedCacheMap.Load(key); ok {
 		return val.(*distributedCache[T]), nil //nolint:errcheck
 	}
 
@@ -138,16 +136,26 @@ func NewDistributedCache[T any](opts ...DistributedCacheOption[T]) (types.Distri
 	defer distributedCacheMu.Unlock()
 
 	// Double-check after acquiring lock
-	val, exists = distributedCacheMap.Get(key)
-	if !exists {
-		cache, err := newDistributedCache(opts...)
-		if err != nil {
-			return nil, err
-		}
-		val = cache
-		distributedCacheMap.Set(key, cache)
+	if val, ok := distributedCacheMap.Load(key); ok {
+		return val.(*distributedCache[T]), nil //nolint:errcheck
 	}
-	return val.(*distributedCache[T]), nil //nolint:errcheck
+	cache, err := newDistributedCache(opts...)
+	if err != nil {
+		return nil, err
+	}
+	distributedCacheMap.Store(key, cache)
+	return cache, nil
+}
+
+// typeName returns a name that identifies T uniquely across packages.
+//
+// reflect's Name is empty for unnamed types such as pointers, slices and
+// maps, and its String uses short package names, so two same-named types from
+// different packages render alike. Pairing the package path with the full
+// string keeps both cases apart.
+func typeName[T any]() string {
+	typ := reflect.TypeFor[T]()
+	return typ.PkgPath() + "|" + typ.String()
 }
 
 // distributedCache implements a two-level cacheing system with local memery cache and redis backend.
@@ -191,6 +199,14 @@ type distributedCache[T any] struct {
 	// defaults derive from the application name.
 	topicSetDel string
 	topicDone   string
+	// appliedTS is the highest event timestamp already applied per key. The
+	// partition key keeps one key's events ordered within a partition, but a
+	// partition count change, a second state node or a replay can still
+	// deliver an older event afterwards, and applying it would resurrect a
+	// deleted entry. Bounded by LRU: evicting a key only reopens that key's
+	// out-of-order window.
+	appliedTS *lru.Cache[string, int64]
+
 	// pubSetDel is the kafka producer, publish the event that the entry associated with the key was updated/delete.
 	pubSetDel *kgo.Client
 	// subDone is the kafka consumer, receive the event that the entry associated with the key was updated/delete.
@@ -215,7 +231,7 @@ type distributedCache[T any] struct {
 //   - localCache: In-Memory cache implementation for fast access.
 //   - brokers: kafka brokers addresses for event publishing and consuming.
 //   - opts: Optional configuration options.
-func newDistributedCache[T any](opts ...DistributedCacheOption[T]) (types.Cache[T], error) {
+func newDistributedCache[T any](opts ...DistributedCacheOption[T]) (*distributedCache[T], error) {
 	cacheID, err := uuid.NewV7()
 	if err != nil {
 		return nil, err
@@ -229,22 +245,19 @@ func newDistributedCache[T any](opts ...DistributedCacheOption[T]) (types.Cache[
 	// localCache is generic and every type has its own localCache: NewLocalCache just returns the
 	// local cache of the current type out of a map holding many of them.
 	// redis has no generics, so the prefix acts as the namespace of the type.
-	typ := reflect.TypeFor[T]()
-	var prefix string
-	var typStr string
-	if len(typ.PkgPath()) > 0 { // not a builtin go type, usually a struct type
-		prefix = fmt.Sprintf("%s:%s:", typ.PkgPath(), typ.Name())
-		typStr = fmt.Sprintf("%s:%s", typ.PkgPath(), typ.Name())
-	} else { // builtin go type
-		prefix = typ.Name() + ":"
-		typStr = typ.Name()
-	}
+	//
+	// The name comes from typeName rather than reflect's Name, which is empty
+	// for every unnamed type: a *User and a []Order would both reduce to an
+	// empty prefix and an empty type tag, sharing one Redis namespace and
+	// defeating the type check on incoming events.
+	typStr := typeName[T]()
+	prefix := typStr + ":"
 
 	dc := &distributedCache[T]{
 		cacheID:  cacheID.String(),
 		prefix:   prefix,
 		typ:      typStr,
-		comp:     fmt.Sprintf("[%s:DistributedCache:%s]", hostname, typ.Name()),
+		comp:     fmt.Sprintf("[%s:DistributedCache:%s]", hostname, reflect.TypeFor[T]().String()),
 		hostname: hostname,
 	}
 
@@ -290,6 +303,9 @@ func newDistributedCache[T any](opts ...DistributedCacheOption[T]) (types.Cache[
 	if len(dc.kafkaBrokers) == 0 {
 		dc.kafkaBrokers = config.App.Kafka.Brokers
 	}
+	if dc.appliedTS, err = lru.New[string, int64](maxTrackedKeys); err != nil {
+		return nil, err
+	}
 	dc.topicSetDel = setDelTopic()
 	dc.topicDone = doneTopic()
 	if dc.pubSetDel, err = newProducer(dc.kafkaBrokers, dc.topicSetDel); err != nil {
@@ -321,11 +337,16 @@ func (dc *distributedCache[T]) Set(ctx context.Context, key string, value T, ttl
 	// done := dc.trace("Set")
 	// defer done(err)
 
+	if ttl < 0 {
+		return errors.New("negative ttl")
+	}
 	prefixedKey := dc.prefix + key
 
-	// set local cache.
+	// Set the local tier first and report its failure: publishing the event
+	// anyway would leave every other instance holding a value this one does
+	// not have, while the caller was told the write succeeded.
 	if err = dc.localCache.Set(ctx, prefixedKey, value, ttl); err != nil {
-		dc.logger.Warnz("failed to set local cache", zap.Error(err))
+		return err
 	}
 
 	dc.sendEvent(&event{
@@ -345,14 +366,17 @@ func (dc *distributedCache[T]) SetWithSync(ctx context.Context, key string, valu
 
 	// A zero ttl means "never expires", which counts as the longest possible
 	// lifetime in this comparison.
+	if localTTL < 0 || remoteTTL < 0 {
+		return errors.New("negative ttl")
+	}
 	if remoteTTL != 0 && (localTTL == 0 || remoteTTL < localTTL) {
 		return errors.New("remoteTTL must not be shorter than localTTL")
 	}
 	prefixedKey := dc.prefix + key
 
-	// set local cache.
+	// See Set: a local failure is the caller's failure, not a warning.
 	if err = dc.localCache.Set(ctx, prefixedKey, value, localTTL); err != nil {
-		dc.logger.Warnz("failed to set local cache", zap.Error(err))
+		return err
 	}
 
 	dc.sendEvent(&event{
@@ -418,9 +442,11 @@ func (dc *distributedCache[T]) GetWithSync(ctx context.Context, key string, loca
 	if err == nil {
 		// redis cache hit.
 		dc.redisHits.Add(1)
+		// The value is good; failing to seed the local tier only costs the
+		// next call another redis round trip, so it must not turn a hit into
+		// an error the caller will read as a miss.
 		if err = dc.localCache.Set(ctx, prefixedKey, redisVal, localTTL); err != nil {
 			dc.logger.Warnz("failed to set local cache", zap.Error(err))
-			return redisVal, err
 		}
 		return redisVal, nil
 	}
@@ -442,7 +468,7 @@ func (dc *distributedCache[T]) Delete(ctx context.Context, key string) (err erro
 
 	// NOTE: After recive kafka "delete" event, we will delete the entry from local cache again, it is a no-op.
 	if err = dc.localCache.Delete(ctx, prefixedKey); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
-		dc.logger.Warnz("failed to delete from local cache", zap.Error(err))
+		return err
 	}
 
 	dc.sendEvent(&event{
@@ -463,7 +489,7 @@ func (dc *distributedCache[T]) DeleteWithSync(ctx context.Context, key string) (
 
 	// NOTE: After recive kafka "delete" event, we will delete the entry from local cache again, it is a no-op.
 	if err = dc.localCache.Delete(ctx, prefixedKey); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
-		dc.logger.Warnz("failed to delete from local cache", zap.Error(err))
+		return err
 	}
 
 	dc.sendEvent(&event{
@@ -483,8 +509,6 @@ func (dc *distributedCache[T]) Exists(ctx context.Context, key string) bool {
 
 // listenEvents listen kafka for cache update/delete event and synchronously update the local cache.
 func (dc *distributedCache[T]) listenEvents() {
-	records := make([]*kgo.Record, 0, 1024)
-
 	util.SafeGo(func() {
 		defer func() {
 			if dc.gopool != nil {
@@ -509,7 +533,7 @@ func (dc *distributedCache[T]) listenEvents() {
 					zap.Int32("i", i),
 				)
 			})
-			records = fetches.Records()
+			records := fetches.Records()
 			if len(records) == 0 {
 				continue
 			}
@@ -541,6 +565,9 @@ func (dc *distributedCache[T]) listenEvents() {
 						continue
 					}
 
+					if !dc.acceptEvent(evt) {
+						continue
+					}
 					// TODO: lower this to debug in production
 					dc.logger.Infoz("consume event", zap.Object("event", evt))
 					var val T
@@ -566,6 +593,9 @@ func (dc *distributedCache[T]) listenEvents() {
 						// fmt.Println("------ delete cache type mismatch:", dc.mark, dc.typ, evt.Typ)
 						continue
 					}
+					if !dc.acceptEvent(evt) {
+						continue
+					}
 					dc.distributedDelete.Add(1)
 					// no prefix + key here, the key sent by the state node already is prefix+key.
 					// Every opDelDone event has to delete from the local cache, because there is no way
@@ -577,11 +607,27 @@ func (dc *distributedCache[T]) listenEvents() {
 					dc.logger.Warnz("unknown event op", zap.String("op", evt.Op.String()), zap.String("key", evt.Key), zap.Object("event", evt))
 				}
 			}
-
-			// reset slice and keep the underlying array.
-			records = records[:0]
 		}
 	}, "DistributedCache.listenEvents")
+}
+
+// acceptEvent reports whether an event is newer than the last one applied
+// for its key, recording it when it is. Out-of-order delivery is rare but not
+// impossible, and applying a stale set after a delete would bring the entry
+// back on every instance that saw them in that order.
+func (dc *distributedCache[T]) acceptEvent(evt *event) bool {
+	if last, ok := dc.appliedTS.Get(evt.Key); ok && evt.TS <= last {
+		dc.logger.Warnz(
+			"skipping out-of-order event",
+			zap.String("key", evt.Key),
+			zap.Int64("event_ts", evt.TS),
+			zap.Int64("applied_ts", last),
+			zap.String("op", evt.Op.String()),
+		)
+		return false
+	}
+	dc.appliedTS.Add(evt.Key, evt.TS)
+	return true
 }
 
 // sendEvent asynchronously publishs cache update or delete events to
@@ -615,6 +661,11 @@ func (dc *distributedCache[T]) sendEvent(evt *event) {
 	err = dc.gopool.Submit(func() {
 		record := &kgo.Record{
 			Topic: dc.topicSetDel,
+			// The key pins every event for one cache key to one partition.
+			// Without it the partitioner spreads them, and Kafka only orders
+			// within a partition, so a delete could be applied before an
+			// older set that follows it.
+			Key:   []byte(evt.Key),
 			Value: data,
 		}
 		// TODO: lower this log to debug
