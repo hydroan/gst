@@ -54,9 +54,125 @@ func TestFrameworkSQLFramePredicate(t *testing.T) {
 		{"github.com/hydroan/gst/model.(*Sample).CreateAfter", false},
 		{"example.com/app/service/report.latestEntry", false},
 		{"testing.tRunner", false},
+		// Prefixes match at a package boundary: a sibling package sharing the
+		// prefix as a name prefix is not a framework frame.
+		{"github.com/hydroan/gst/daox.Migrate", false},
+		{"github.com/hydroan/gst/databases.New", false},
 	}
 	for _, tt := range tests {
 		require.Equal(t, tt.skip, isFrameworkSQLFrame(tt.function), tt.function)
+	}
+}
+
+func TestHasPackagePrefix(t *testing.T) {
+	tests := []struct {
+		function string
+		prefix   string
+		match    bool
+	}{
+		// Package boundary: "." starts a symbol, "/" starts a subpackage.
+		{"example.com/app/dao.Query", "example.com/app/dao", true},
+		{"example.com/app/dao.(*Query).List", "example.com/app/dao", true},
+		{"example.com/app/dao/sub.Helper", "example.com/app/dao", true},
+		{"example.com/app/daox.Query", "example.com/app/dao", false},
+		{"example.com/app/service.Load", "example.com/app/dao", false},
+		// A prefix already ending in "/" or "." matches by plain prefix.
+		{"gorm.io/gorm.(*DB).Find", "gorm.io/", true},
+		{"example.com/app/dao.Query", "example.com/app/dao.", true},
+		// Exact equality counts as a match.
+		{"example.com/app/dao", "example.com/app/dao", true},
+		// An empty prefix never matches: a stray empty configuration entry
+		// must not swallow every frame and erase the caller field.
+		{"example.com/app/dao.Query", "", false},
+	}
+	for _, tt := range tests {
+		require.Equal(t, tt.match, hasPackagePrefix(tt.function, tt.prefix), "%s vs %s", tt.function, tt.prefix)
+	}
+}
+
+// stubSQLCallerSkipPrefixes pins the configured caller-skip prefixes for one
+// test or benchmark so the combined skip predicate is deterministic
+// regardless of config state.
+func stubSQLCallerSkipPrefixes(t testing.TB, prefixes []string) {
+	t.Helper()
+	old := config.App.Logger.SQLCallerSkipPrefixes
+	config.App.Logger.SQLCallerSkipPrefixes = prefixes
+	t.Cleanup(func() { config.App.Logger.SQLCallerSkipPrefixes = old })
+}
+
+func TestSkippedSQLFramePredicateHonorsConfiguredPrefixes(t *testing.T) {
+	// The second entry keeps the surrounding whitespace a comma-separated
+	// environment value carries after splitting; matching must not depend on
+	// the operator remembering to avoid spaces.
+	stubSQLCallerSkipPrefixes(t, []string{"example.com/app/dao", " example.com/app/repo "})
+
+	tests := []struct {
+		function string
+		skip     bool
+	}{
+		// Configured project helper packages are skipped like framework ones.
+		{"example.com/app/dao.QueryHelper", true},
+		{"example.com/app/dao.(*Query).List", true},
+		{"example.com/app/dao/sub.Helper", true},
+		{"example.com/app/repo.Load", true},
+		// Package-boundary matching also applies to configured prefixes.
+		{"example.com/app/daox.Query", false},
+		{"example.com/app/service.Load", false},
+		// Built-in prefixes stay in force and cannot be configured away.
+		{"gorm.io/gorm.(*DB).Find", true},
+		{"github.com/hydroan/gst/database.(*database[go.shape.*uint8]).List", true},
+	}
+	for _, tt := range tests {
+		require.Equal(t, tt.skip, isSkippedSQLFrame(tt.function), tt.function)
+	}
+}
+
+func TestSkippedSQLFramePredicateWithoutConfigMatchesFrameworkPredicate(t *testing.T) {
+	stubSQLCallerSkipPrefixes(t, nil)
+
+	for _, function := range []string{
+		"gorm.io/gorm.(*DB).Find",
+		"github.com/hydroan/gst/dao.QueryModelsMapWithOptions",
+		"example.com/app/dao.QueryHelper",
+		"example.com/app/service/report.latestEntry",
+	} {
+		require.Equal(t, isFrameworkSQLFrame(function), isSkippedSQLFrame(function), function)
+	}
+}
+
+// nestedCallerOutside pads the stack with skipped frames before resolving the
+// caller: every level lives in this package, which the framework prefix list
+// skips, so a depth of N reproduces the N wrapper frames sitting between a
+// real statement log and the business caller.
+//
+//go:noinline
+func nestedCallerOutside(depth int, skip func(function string) bool) (string, bool) {
+	if depth == 0 {
+		return callerOutside(skip)
+	}
+	return nestedCallerOutside(depth-1, skip)
+}
+
+// BenchmarkCallerOutsideSkippedSQLFrames measures the per-statement cost of
+// resolving the business caller through a realistic stack of framework
+// wrapper frames, without configured prefixes.
+func BenchmarkCallerOutsideSkippedSQLFrames(b *testing.B) {
+	stubSQLCallerSkipPrefixes(b, nil)
+
+	b.ReportAllocs()
+	for b.Loop() {
+		nestedCallerOutside(12, isSkippedSQLFrame)
+	}
+}
+
+// BenchmarkCallerOutsideSkippedSQLFramesConfigured is the same walk with two
+// configured project prefixes, isolating the cost the configuration adds.
+func BenchmarkCallerOutsideSkippedSQLFramesConfigured(b *testing.B) {
+	stubSQLCallerSkipPrefixes(b, []string{"example.com/app/dao", "example.com/app/repo"})
+
+	b.ReportAllocs()
+	for b.Loop() {
+		nestedCallerOutside(12, isSkippedSQLFrame)
 	}
 }
 

@@ -110,6 +110,26 @@ func TestRegisterStructFromEnv(t *testing.T) {
 	assert.True(t, nats.Enabled)
 }
 
+// TestLoggerSQLCallerSkipPrefixesFromEnv pins the environment form of the
+// logger.sql_caller_skip_prefixes list: built-in sections unmarshal through
+// viper, whose default decode hook splits an environment string on commas.
+func TestLoggerSQLCallerSkipPrefixesFromEnv(t *testing.T) {
+	if err := os.WriteFile(filename, []byte(configData), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("LOGGER_SQL_CALLER_SKIP_PREFIXES", "example.com/app/dao,example.com/app/repo")
+
+	config.SetConfigFile(filename)
+	if err := config.Init(); err != nil {
+		t.Fatal(err)
+	}
+
+	assert.Equal(t,
+		[]string{"example.com/app/dao", "example.com/app/repo"},
+		config.App.Logger.SQLCallerSkipPrefixes)
+}
+
 func TestRegisterNonStructType(t *testing.T) {
 	// These should be skipped silently without error or panic
 	config.Register[string]()

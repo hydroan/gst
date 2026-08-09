@@ -19,6 +19,8 @@ const (
 	LOGGER_HTTP_BODY_LOG_RESPONSE  = "LOGGER_HTTP_BODY_LOG_RESPONSE"  //nolint:staticcheck
 	LOGGER_HTTP_BODY_MAX_BODY_SIZE = "LOGGER_HTTP_BODY_MAX_BODY_SIZE" //nolint:staticcheck
 	LOGGER_HTTP_BODY_SKIP_ROUTES   = "LOGGER_HTTP_BODY_SKIP_ROUTES"   //nolint:staticcheck
+
+	LOGGER_SQL_CALLER_SKIP_PREFIXES = "LOGGER_SQL_CALLER_SKIP_PREFIXES" //nolint:staticcheck
 )
 
 // Logger represents section "logger" for client-side or server-side configuration,
@@ -77,6 +79,19 @@ type Logger struct {
 	// MaxBackups is the maximum number of old log files to retain.
 	// The value default to 3.
 	MaxBackups int `json:"max_backups" ini:"max_backups" yaml:"max_backups" mapstructure:"max_backups"`
+
+	// SQLCallerSkipPrefixes lists extra function-path prefixes to skip when
+	// resolving the business caller of a SQL statement log, on top of the
+	// built-in gorm and framework prefixes, which are always skipped and
+	// cannot be removed. Configure it when a project routes database calls
+	// through its own helper layer, such as a dao or repository package, so
+	// SQL logs name the code that called the helper instead of the helper
+	// body. Each entry is a function-path prefix matched at a package
+	// boundary: "example.com/app/dao" covers that package and its
+	// subpackages but not "example.com/app/daox". The environment form is
+	// comma-separated, eg.
+	// LOGGER_SQL_CALLER_SKIP_PREFIXES="example.com/app/dao,example.com/app/repo".
+	SQLCallerSkipPrefixes []string `json:"sql_caller_skip_prefixes" ini:"sql_caller_skip_prefixes" yaml:"sql_caller_skip_prefixes" mapstructure:"sql_caller_skip_prefixes"`
 
 	// HTTPBody contains HTTP request and response body logging configurations.
 	HTTPBody HTTPBodyLogger `json:"http_body" ini:"http_body" yaml:"http_body" mapstructure:"http_body"`
@@ -139,6 +154,7 @@ func (*Logger) setDefault(v *viper.Viper) {
 	v.SetDefault("logger.max_age", 30)
 	v.SetDefault("logger.max_size", 100)
 	v.SetDefault("logger.max_backups", 1)
+	v.SetDefault("logger.sql_caller_skip_prefixes", []string{})
 	v.SetDefault("logger.http_body.enabled", true)
 	v.SetDefault("logger.http_body.log_request", HTTPBodyLogModeAll)
 	v.SetDefault("logger.http_body.log_response", HTTPBodyLogModeError)

@@ -32,11 +32,13 @@ func (g *GormLogger) Info(_ context.Context, str string, args ...any)  { g.l.Inf
 func (g *GormLogger) Warn(_ context.Context, str string, args ...any)  { g.l.Warnf(str, args...) }
 func (g *GormLogger) Error(_ context.Context, str string, args ...any) { g.l.Errorf(str, args...) }
 
-// sqlCallerSkipPrefixes are the function-path prefixes of frames that sit
-// between a SQL log entry and the code that issued the SQL: gorm itself and
-// the framework packages wrapping statement execution. The dao package is
-// included so its helpers surface their business caller instead of the
-// helper body.
+// sqlCallerSkipPrefixes are the built-in function-path prefixes of frames
+// that sit between a SQL log entry and the code that issued the SQL: gorm
+// itself and the framework packages wrapping statement execution. The dao
+// package is included so its helpers surface their business caller instead
+// of the helper body. Projects extend the list through
+// logger.sql_caller_skip_prefixes; these built-in entries always stay in
+// force.
 var sqlCallerSkipPrefixes = []string{
 	"gorm.io/",
 	"github.com/hydroan/gst/logger",
@@ -48,7 +50,46 @@ var sqlCallerSkipPrefixes = []string{
 // framework package that wraps SQL execution.
 func isFrameworkSQLFrame(function string) bool {
 	for _, prefix := range sqlCallerSkipPrefixes {
-		if strings.HasPrefix(function, prefix) {
+		if hasPackagePrefix(function, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasPackagePrefix reports whether function lives at or under the package
+// path prefix. A prefix already ending in "/" or "." matches by plain string
+// prefix; any other prefix must be followed by "." (a symbol of that package)
+// or "/" (a subpackage), so "example.com/app/dao" does not swallow
+// "example.com/app/daox". An empty prefix never matches: a stray empty
+// configuration entry must not skip every frame and erase the caller field.
+func hasPackagePrefix(function, prefix string) bool {
+	if len(prefix) == 0 || !strings.HasPrefix(function, prefix) {
+		return false
+	}
+	if len(function) == len(prefix) {
+		return true
+	}
+	if last := prefix[len(prefix)-1]; last == '/' || last == '.' {
+		return true
+	}
+	next := function[len(prefix)]
+	return next == '.' || next == '/'
+}
+
+// isSkippedSQLFrame reports whether a frame must not be named as the business
+// caller of a statement log: it belongs to gorm, to a framework package
+// wrapping SQL execution, or to a project-configured helper layer
+// (logger.sql_caller_skip_prefixes). Built-in prefixes always apply; the
+// configuration can only add more. Configured entries are trimmed because a
+// comma-separated environment value keeps the whitespace around each comma
+// after splitting.
+func isSkippedSQLFrame(function string) bool {
+	if isFrameworkSQLFrame(function) {
+		return true
+	}
+	for _, prefix := range config.App.Logger.SQLCallerSkipPrefixes {
+		if hasPackagePrefix(function, strings.TrimSpace(prefix)) {
 			return true
 		}
 	}
@@ -83,11 +124,6 @@ func callerOutside(skip func(function string) bool) (string, bool) {
 	}
 }
 
-// sqlCaller resolves the business frame a statement log should point at.
-func sqlCaller() (string, bool) {
-	return callerOutside(isFrameworkSQLFrame)
-}
-
 // Trace logs one executed statement with the request identity, timing, the
 // SQL text, and the business caller that issued it.
 //
@@ -112,7 +148,7 @@ func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 	sql, rows := fc()
 
 	fields := make([]zap.Field, 0, 10)
-	if caller, ok := sqlCaller(); ok {
+	if caller, ok := callerOutside(isSkippedSQLFrame); ok {
 		fields = append(fields, zap.String("caller", caller))
 	}
 	fields = append(
