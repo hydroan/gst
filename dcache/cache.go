@@ -238,8 +238,7 @@ func Init() error {
 						batchKeyMaxTS[evt.Key] = evt.TS
 					}
 
-					// TODO: lower this to the Debug level in production
-					log.Infoz("process event", zap.Object("event", evt))
+					log.Debugz("process event", zap.Object("event", evt))
 
 					submitErr := gopool.Submit(func() {
 						defer wg.Done()

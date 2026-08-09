@@ -6,6 +6,7 @@ import (
 
 	"github.com/hydroan/gst/internal/cache/bigcache"
 	"github.com/hydroan/gst/internal/cache/cachetest"
+	"github.com/hydroan/gst/internal/cache/capacity"
 	"github.com/hydroan/gst/internal/cache/ccache"
 	"github.com/hydroan/gst/internal/cache/cmap"
 	"github.com/hydroan/gst/internal/cache/fastcache"
@@ -19,28 +20,28 @@ import (
 
 func TestConformance(t *testing.T) {
 	t.Run("ristretto", func(t *testing.T) {
-		cachetest.Run(t, ristretto.Cache[string](), cachetest.Capabilities{PerEntryTTL: true, NoExpiry: true})
+		cachetest.Run(t, ristretto.Cache[string](), cachetest.Capabilities{PerEntryTTL: true, NoExpiry: true, MaxEntries: capacity.Default})
 	})
 	t.Run("freecache", func(t *testing.T) {
 		cachetest.Run(t, freecache.Cache[string](), cachetest.Capabilities{PerEntryTTL: true, NoExpiry: true, TTLGranularity: time.Second})
 	})
 	t.Run("otter", func(t *testing.T) {
-		cachetest.Run(t, otter.Cache[string](), cachetest.Capabilities{PerEntryTTL: true, NoExpiry: true})
+		cachetest.Run(t, otter.Cache[string](), cachetest.Capabilities{PerEntryTTL: true, NoExpiry: true, MaxEntries: capacity.Default})
 	})
 	t.Run("freelru", func(t *testing.T) {
-		cachetest.Run(t, freelru.Cache[string](), cachetest.Capabilities{PerEntryTTL: true, NoExpiry: true})
+		cachetest.Run(t, freelru.Cache[string](), cachetest.Capabilities{PerEntryTTL: true, NoExpiry: true, MaxEntries: capacity.Default})
 	})
 	t.Run("ccache", func(t *testing.T) {
-		cachetest.Run(t, ccache.Cache[string](), cachetest.Capabilities{PerEntryTTL: true, NoExpiry: true})
+		cachetest.Run(t, ccache.Cache[string](), cachetest.Capabilities{PerEntryTTL: true, NoExpiry: true, MaxEntries: capacity.Default})
 	})
 	t.Run("lru", func(t *testing.T) {
-		cachetest.Run(t, lru.Cache[string](), cachetest.Capabilities{NoExpiry: true})
+		cachetest.Run(t, lru.Cache[string](), cachetest.Capabilities{NoExpiry: true, MaxEntries: capacity.Default})
 	})
 	t.Run("cmap", func(t *testing.T) {
-		cachetest.Run(t, cmap.Cache[string](), cachetest.Capabilities{NoExpiry: true})
+		cachetest.Run(t, cmap.Cache[string](), cachetest.Capabilities{NoExpiry: true, Unbounded: true})
 	})
 	t.Run("smap", func(t *testing.T) {
-		cachetest.Run(t, smap.Cache[string](), cachetest.Capabilities{NoExpiry: true})
+		cachetest.Run(t, smap.Cache[string](), cachetest.Capabilities{NoExpiry: true, Unbounded: true})
 	})
 	t.Run("fastcache", func(t *testing.T) {
 		cachetest.Run(t, fastcache.Cache[string](), cachetest.Capabilities{NoExpiry: true})

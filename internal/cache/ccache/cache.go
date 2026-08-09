@@ -5,16 +5,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/cache/capacity"
 	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/types"
 	"github.com/karlseguin/ccache/v3"
 )
 
 const (
-	// defaultMaxEntries bounds every per-type cache.
-	defaultMaxEntries = 100_000
-
 	// foreverTTL stands in for "never expires": the backend has no such
 	// notion and larger values would overflow its deadline arithmetic.
 	foreverTTL = 100 * 365 * 24 * time.Hour
@@ -45,7 +42,7 @@ type cache[T any] struct {
 // use.
 func Cache[T any]() types.Cache[T] {
 	return registry.Load(store, func() types.Cache[T] {
-		return &cache[T]{c: ccache.New(ccache.Configure[box[T]]().MaxSize(int64(maxEntries())))}
+		return &cache[T]{c: ccache.New(ccache.Configure[box[T]]().MaxSize(int64(capacity.Entries())))}
 	})
 }
 
@@ -82,14 +79,4 @@ func (c *cache[T]) Exists(_ context.Context, key string) bool {
 		return false
 	}
 	return !val.Expired()
-}
-
-// maxEntries returns the configured per-type entry bound, falling back to
-// the built-in default when it is unset or the configuration is not loaded
-// yet.
-func maxEntries() int {
-	if v := config.App.Cache.MaxEntries; v > 0 {
-		return v
-	}
-	return defaultMaxEntries
 }

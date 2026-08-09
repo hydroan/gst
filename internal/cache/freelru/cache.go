@@ -11,18 +11,14 @@ package freelru
 import (
 	"context"
 	"hash/maphash"
-	"math"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/elastic/go-freelru"
-	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/cache/capacity"
 	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/types"
 )
-
-// defaultMaxEntries bounds every per-type cache.
-const defaultMaxEntries = 100_000
 
 var (
 	store = registry.New()
@@ -44,7 +40,7 @@ func Cache[T any]() types.Cache[T] {
 		// core times sixteen, and a quarter more table space than entries so
 		// collisions do not evict early. Both matter — hand-picking a small
 		// shard count serializes readers on a busy cache.
-		c, err := freelru.NewSharded[string, T](capacity(), hashKey)
+		c, err := freelru.NewSharded[string, T](capacity.Entries32(), hashKey)
 		if err != nil {
 			panic(err) // unreachable: the capacity is clamped to a positive range
 		}
@@ -89,19 +85,4 @@ func hashKey(key string) uint32 {
 	// contributing rather than discarding the high word.
 	sum := maphash.String(seed, key)
 	return uint32(sum) ^ uint32(sum>>32) //nolint:gosec // deliberate 64-to-32 fold
-}
-
-// capacity returns the configured per-type entry bound as the backend wants
-// it, falling back to the built-in default when it is unset or the
-// configuration is not loaded yet. The clamp keeps an outsized configured
-// value from wrapping when narrowed to the backend's 32-bit capacity.
-func capacity() uint32 {
-	v := config.App.Cache.MaxEntries
-	if v <= 0 {
-		v = defaultMaxEntries
-	}
-	if v > math.MaxUint32 {
-		v = math.MaxUint32
-	}
-	return uint32(v)
 }

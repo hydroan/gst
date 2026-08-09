@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/cache"
 	"github.com/hydroan/gst/internal/cache/bigcache"
 	"github.com/hydroan/gst/internal/cache/ccache"
 	"github.com/hydroan/gst/internal/cache/cmap"
@@ -81,6 +82,12 @@ type User struct {
 // neither the Set nor the Get column shows on its own, because ccache
 // funnels every write through one worker goroutine. lru is flat across all
 // three columns for the same reason, one global mutex.
+//
+// The tables hold the handle across the measured loop. Resolving it inline
+// on every operation, which the facade invites by promising there is nothing
+// to initialize, costs 66.3 ns against 51.1 ns serial and 184.3 against 157.0
+// on 14 cores, allocating nothing either way — worth hoisting in a tight
+// loop, not worth restructuring code for.
 //
 // Speed is not the selection criterion. cmap, smap and lru are fast because
 // they never expire anything and mostly never evict; ristretto's fast reads
@@ -493,4 +500,45 @@ func benchUser(b *testing.B, cache types.Cache[User]) {
 func benchUserParallel(b *testing.B, cache types.Cache[User]) {
 	b.Helper()
 	benchCacheParallel(b, cache, benchUserValues())
+}
+
+// BenchmarkFacade measures the two ways a caller can reach the forwarded
+// cache: resolving the handle on every operation, which the package
+// documentation invites by promising there is nothing to initialize, and
+// hoisting it once. The tables above measure the hoisted shape, so this is
+// what says whether the inline shape costs anything worth avoiding.
+func BenchmarkFacade(b *testing.B) {
+	ctx := context.Background()
+	_ = cache.Cache[User]().Set(ctx, "facade", User{Name: "n"}, 0)
+
+	b.Run("Inline", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			_, _ = cache.Cache[User]().Get(ctx, "facade")
+		}
+	})
+	b.Run("Hoisted", func(b *testing.B) {
+		c := cache.Cache[User]()
+		b.ReportAllocs()
+		for b.Loop() {
+			_, _ = c.Get(ctx, "facade")
+		}
+	})
+	b.Run("Inline Parallel", func(b *testing.B) {
+		b.ReportAllocs()
+		b.RunParallel(func(p *testing.PB) {
+			for p.Next() {
+				_, _ = cache.Cache[User]().Get(ctx, "facade")
+			}
+		})
+	})
+	b.Run("Hoisted Parallel", func(b *testing.B) {
+		c := cache.Cache[User]()
+		b.ReportAllocs()
+		b.RunParallel(func(p *testing.PB) {
+			for p.Next() {
+				_, _ = c.Get(ctx, "facade")
+			}
+		})
+	})
 }

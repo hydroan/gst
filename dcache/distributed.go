@@ -99,7 +99,10 @@ func (e *event) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddString("typ", e.Typ)
 	enc.AddString("op", e.Op.String())
 	enc.AddString("key", e.Key)
-	_ = enc.AddReflected("value", val)
+	// AddByteString keeps the payload readable. Assigning a json.RawMessage
+	// to a []byte drops its Marshaler, so AddReflected would base64 it and
+	// the truncation above would lose its purpose.
+	enc.AddByteString("value", val)
 	enc.AddString("local_ttl", util.FormatDurationSmart(e.TTL, 2))
 	enc.AddString("redis_ttl", util.FormatDurationSmart(e.RedisTTL, 2))
 	enc.AddBool("sync_to_redis", e.SyncToRedis)
@@ -127,8 +130,13 @@ func (e *event) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 func NewDistributedCache[T any](opts ...DistributedCacheOption[T]) (types.DistributedCache[T], error) {
 	key := reflect.TypeFor[T]()
 
-	// Fast path: check if cache already exists
+	// Fast path: check if cache already exists. Options only take effect when
+	// the instance is created, so a later caller passing its own would
+	// silently get someone else's configuration.
 	if val, ok := distributedCacheMap.Load(key); ok {
+		if len(opts) > 0 {
+			return nil, errors.Newf("distributed cache for %s already exists; options only apply to the first call", key)
+		}
 		return val.(*distributedCache[T]), nil //nolint:errcheck
 	}
 
@@ -315,9 +323,15 @@ func newDistributedCache[T any](opts ...DistributedCacheOption[T]) (*distributed
 		return nil, err
 	}
 
-	// setup goroutines pool.
-	if dc.gocap < minGoroutines {
+	// setup goroutines pool: an unset capacity gets the heuristic default,
+	// and any capacity is then raised to the floor. Doing it in one step
+	// would replace a caller's deliberate 5000 with a value that can be
+	// smaller still on a small machine.
+	if dc.gocap <= 0 {
 		dc.gocap = runtime.NumCPU() * 2000
+	}
+	if dc.gocap < minGoroutines {
+		dc.gocap = minGoroutines
 	}
 	pool, err := ants.NewPool(dc.gocap, ants.WithPreAlloc(false))
 	if err != nil {
@@ -568,8 +582,7 @@ func (dc *distributedCache[T]) listenEvents() {
 					if !dc.acceptEvent(evt) {
 						continue
 					}
-					// TODO: lower this to debug in production
-					dc.logger.Infoz("consume event", zap.Object("event", evt))
+					dc.logger.Debugz("consume event", zap.Object("event", evt))
 					var val T
 					// fmt.Printf("----- %s OpSet %v %v %v\n", dc.mark, event.Typ, event.Key, string(event.Val))
 					if err := json.Unmarshal(evt.Val, &val); err == nil {

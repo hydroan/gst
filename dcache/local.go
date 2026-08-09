@@ -8,16 +8,10 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/dgraph-io/ristretto/v2"
-	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/cache/capacity"
 	"github.com/hydroan/gst/types"
 	"go.uber.org/zap/zapcore"
 )
-
-// defaultMaxEntries bounds every per-type local cache when the cache
-// configuration does not override it. Instances are created lazily per type,
-// so only used types pay the admission-counter cost of roughly 4MB per
-// instance at this capacity.
-const defaultMaxEntries = 100_000
 
 var (
 	// One instance per value type, keyed by the type itself; see the note on
@@ -151,7 +145,7 @@ func (m *localMetrics) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 // BufferItems is the recommended write-buffer size. Metrics stay enabled
 // because the distributed cache monitor reports them.
 func buildConf[T any]() *ristretto.Config[string, T] {
-	entries := int64(maxEntries())
+	entries := int64(capacity.Entries())
 	return &ristretto.Config[string, T]{
 		NumCounters: entries * 10,
 		MaxCost:     entries,
@@ -162,14 +156,4 @@ func buildConf[T any]() *ristretto.Config[string, T] {
 		IgnoreInternalCost: true,
 		Metrics:            true,
 	}
-}
-
-// maxEntries returns the configured per-type entry bound, falling back to
-// the built-in default when it is unset or the configuration is not loaded
-// yet.
-func maxEntries() int {
-	if v := config.App.Cache.MaxEntries; v > 0 {
-		return v
-	}
-	return defaultMaxEntries
 }

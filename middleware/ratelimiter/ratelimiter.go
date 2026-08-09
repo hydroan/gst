@@ -7,7 +7,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/cache"
+	"github.com/hydroan/gst/internal/cache/freelru"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"golang.org/x/time/rate"
@@ -19,11 +19,23 @@ const (
 	defaultTTL   = 24 * time.Hour // default expiration of an idle limiter
 )
 
-// limiterCache lazily fetches the limiter store on first request: the cache
-// backends read the optional cache configuration when an instance is first
-// created, and at package init that configuration is not loaded yet.
+// limiterCache holds one limiter per key.
+//
+// It names a backend instead of going through the cache facade on purpose. A
+// limiter is security state, and the facade's forwarded backend is a
+// framework-wide choice that may change: an admission-weighted one would drop
+// writes for keys it considers cold, and every request from such a key would
+// then build a fresh full bucket and be let through. Pinning the backend
+// keeps that decision from reaching this middleware. Eviction still hands a
+// key a fresh bucket once the store is full, which is the ordinary cost of
+// bounding a rate limiter's memory, but it takes real pressure rather than a
+// policy judgement about one key.
+//
+// Resolution is deferred to the first request because the backend reads the
+// cache configuration when it builds an instance, and at package init that
+// configuration is not loaded yet.
 var limiterCache = sync.OnceValue(func() types.Cache[*rate.Limiter] {
-	return cache.Cache[*rate.Limiter]()
+	return freelru.Cache[*rate.Limiter]()
 })
 
 // Config holds the configuration for the RateLimiter middleware.
@@ -105,6 +117,8 @@ func RateLimiter(opts ...Option) gin.HandlerFunc {
 		limiter, err := limiterCache().Get(c.Request.Context(), key)
 		if errors.Is(err, types.ErrEntryNotFound) {
 			limiter = rate.NewLimiter(conf.Rate, conf.Burst)
+			// The backend only rejects a negative lifetime, and conf.TTL is
+			// forced positive above, so there is no failure to handle here.
 			_ = limiterCache().Set(c.Request.Context(), key, limiter, conf.TTL)
 		} else if err != nil {
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{

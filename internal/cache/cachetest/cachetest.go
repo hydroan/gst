@@ -131,6 +131,18 @@ type Capabilities struct {
 	// means full precision. Second-granularity backends round sub-second ttls
 	// up, so the expiry probe waits accordingly.
 	TTLGranularity time.Duration
+
+	// MaxEntries is the backend's entry bound when it has one, and the suite
+	// overfills it to prove eviction runs. Zero means the backend is not
+	// bounded by entry count — either it evicts by byte budget, which takes
+	// too long to fill in a conformance run, or it never evicts at all.
+	// Unbounded separates those two, so a backend that quietly stopped
+	// enforcing its bound cannot pass as one that never claimed one.
+	MaxEntries int
+
+	// Unbounded declares that the backend never evicts, so a caller-influenced
+	// key space grows until the process runs out of memory.
+	Unbounded bool
 }
 
 // Run asserts the types.Cache contract against cache. Backends that honor
@@ -272,6 +284,31 @@ func Run(t *testing.T, cache types.Cache[string], caps Capabilities) {
 			}
 		})
 	}
+
+	t.Run("CapacityEvicts", func(t *testing.T) {
+		if caps.Unbounded {
+			t.Skip("backend declares that it never evicts")
+		}
+		if caps.MaxEntries == 0 {
+			t.Skip("backend is not bounded by entry count")
+		}
+		// Overfilling by a wide margin proves eviction runs without pinning
+		// the backend to an exact resident count: sharded and asynchronous
+		// eviction both overshoot a little by design.
+		limit := caps.MaxEntries * 3
+		for i := range limit {
+			_ = cache.Set(ctx, "bound-"+strconv.Itoa(i), "value", storeTTL)
+		}
+		var resident int
+		for i := range limit {
+			if cache.Exists(ctx, "bound-"+strconv.Itoa(i)) {
+				resident++
+			}
+		}
+		if resident >= limit {
+			t.Fatalf("want eviction after %d writes, all %d are still resident", limit, resident)
+		}
+	})
 
 	// The concurrency probe is the regression guard for the data race the old
 	// interface carried: every operation used to rewrite a shared ctx field.

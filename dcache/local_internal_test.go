@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/cache/capacity"
 )
 
 // TestLocalBuildConfSizesFromDefault pins the local tier sizing: MaxCost
@@ -13,10 +14,10 @@ import (
 // entries (roughly 768MB per type) up front.
 func TestLocalBuildConfSizesFromDefault(t *testing.T) {
 	conf := buildConf[string]()
-	if conf.MaxCost != defaultMaxEntries {
+	if conf.MaxCost != capacity.Default {
 		t.Fatalf("want MaxCost to equal the default capacity, got %d", conf.MaxCost)
 	}
-	if conf.NumCounters != defaultMaxEntries*10 {
+	if conf.NumCounters != capacity.Default*10 {
 		t.Fatalf("want NumCounters to be ten times the capacity, got %d", conf.NumCounters)
 	}
 	if !conf.Metrics {
