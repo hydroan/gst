@@ -27,6 +27,9 @@ var _ types.Model = (*AutoBase)(nil)
 //     on a unique index; idempotent seeding depends on conflicting keys.
 //   - Updating a record whose ID is unset fails with database.ErrIDRequired;
 //     use database.Upsert for insert-or-update semantics.
+//
+// created_at/updated_at follow the same NOT NULL, no-database-default
+// contract as Base: every writer provides both explicitly, in UTC.
 type AutoBase struct {
 	ID uint64 `json:"id" gorm:"primaryKey;autoIncrement" query:"id" url:"-"` // Auto-increment identifier assigned by the database
 
@@ -34,8 +37,8 @@ type AutoBase struct {
 	// postgres blank-pads char values on read.
 	CreatedBy string         `json:"created_by,omitempty" gorm:"size:36" query:"created_by" url:"-"` // UUIDv7 user ID who created the record
 	UpdatedBy string         `json:"updated_by,omitempty" gorm:"size:36" query:"updated_by" url:"-"` // UUIDv7 user ID who last updated the record
-	CreatedAt time.Time      `json:"created_at,omitzero" query:"-" url:"-"`                          // Timestamp when the record was created
-	UpdatedAt time.Time      `json:"updated_at,omitzero" query:"-" url:"-"`                          // Timestamp when the record was last updated
+	CreatedAt time.Time      `json:"created_at,omitzero" gorm:"not null" query:"-" url:"-"`          // Timestamp when the record was created
+	UpdatedAt time.Time      `json:"updated_at,omitzero" gorm:"not null" query:"-" url:"-"`          // Timestamp when the record was last updated
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index" query:"-" url:"-"`                               // Timestamp when the record was deleted
 }
 

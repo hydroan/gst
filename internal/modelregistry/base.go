@@ -25,6 +25,17 @@ var _ types.Model = (*Base)(nil)
 // Associations are declared so queries can preload them, not to create physical
 // foreign keys, so they carry constraint:- and leave referential integrity to
 // the model hooks.
+//
+// Timestamps: created_at/updated_at are NOT NULL and carry no database
+// default. The framework always provides both, in UTC via dbruntime.NowUTC
+// (Create/Upsert force them, Update refreshes updated_at). A writer that
+// bypasses the framework must set both columns itself, in UTC; omitting them
+// fails fast under strict SQL mode instead of silently storing NULL, which
+// would break created_at ordering, cursor pagination, and time-range
+// filtering. A database default is ruled out on purpose: CURRENT_TIMESTAMP
+// fills in the session-timezone wall clock, which silently diverges from the
+// framework's UTC time base. deleted_at stays nullable: NULL marks the live
+// row under soft deletion.
 type Base struct {
 	// The id columns take a size instead of an explicit char type: postgres
 	// blank-pads char values, so an id shorter than 36 would come back with
@@ -33,8 +44,8 @@ type Base struct {
 
 	CreatedBy string         `json:"created_by,omitempty" gorm:"size:36" query:"created_by" url:"-"` // UUIDv7 user ID who created the record
 	UpdatedBy string         `json:"updated_by,omitempty" gorm:"size:36" query:"updated_by" url:"-"` // UUIDv7 user ID who last updated the record
-	CreatedAt time.Time      `json:"created_at,omitzero" query:"-" url:"-"`                          // Timestamp when the record was created
-	UpdatedAt time.Time      `json:"updated_at,omitzero" query:"-" url:"-"`                          // Timestamp when the record was last updated
+	CreatedAt time.Time      `json:"created_at,omitzero" gorm:"not null" query:"-" url:"-"`          // Timestamp when the record was created
+	UpdatedAt time.Time      `json:"updated_at,omitzero" gorm:"not null" query:"-" url:"-"`          // Timestamp when the record was last updated
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index" query:"-" url:"-"`                               // Timestamp when the record was deleted
 }
 

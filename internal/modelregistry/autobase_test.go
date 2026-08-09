@@ -21,6 +21,12 @@ func TestAutoBaseImplementsModel(t *testing.T) {
 	require.False(t, modelregistry.IsEmpty[AutoUser]())
 }
 
+// TestAutoBaseTimestampColumnsNotNull pins the same NOT NULL timestamp
+// contract as Base for the auto-increment variant.
+func TestAutoBaseTimestampColumnsNotNull(t *testing.T) {
+	requireTimestampColumnsNotNull(t, &AutoUser{})
+}
+
 func TestAutoBaseGetID(t *testing.T) {
 	b := new(modelregistry.AutoBase)
 	// An unset ID reports empty so framework emptiness checks keep working.
