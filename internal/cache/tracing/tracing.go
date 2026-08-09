@@ -2,11 +2,24 @@
 // OpenTelemetry spans. In-memory backends are not wrapped: a span per
 // nanosecond-scale operation costs orders of magnitude more than the
 // operation itself.
+//
+// Spans never carry a cache key verbatim. Callers routinely build keys from
+// bearer credentials — session ids that are the login cookie's own value,
+// MFA challenge ids, password-reset tokens — so exporting the key would
+// stream live credentials to whatever collects traces, where they are
+// readable by anyone with access to it and replayable until they expire.
+// Each span instead carries the key's namespace, which says which cache
+// domain was touched, and a truncated digest, which lets the same key be
+// correlated across spans without being reversible. Everything a cache span
+// is normally read for survives that substitution.
 package tracing
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -40,11 +53,7 @@ func (tw *Wrapper[T]) Get(ctx context.Context, key string) (T, error) {
 	}
 	spanCtx, span := tw.startSpan(ctx, "get")
 	defer span.End()
-	span.SetAttributes(
-		attribute.String("cache.operation", "get"),
-		attribute.String("cache.key", key),
-		attribute.String("cache.type", tw.cacheType),
-	)
+	span.SetAttributes(tw.attributes("get", key)...)
 
 	value, err := tw.cache.Get(spanCtx, key)
 	if err != nil {
@@ -71,12 +80,7 @@ func (tw *Wrapper[T]) Set(ctx context.Context, key string, value T, ttl time.Dur
 	}
 	spanCtx, span := tw.startSpan(ctx, "set")
 	defer span.End()
-	span.SetAttributes(
-		attribute.String("cache.operation", "set"),
-		attribute.String("cache.key", key),
-		attribute.String("cache.ttl", ttl.String()),
-		attribute.String("cache.type", tw.cacheType),
-	)
+	span.SetAttributes(append(tw.attributes("set", key), attribute.String("cache.ttl", ttl.String()))...)
 
 	if err := tw.cache.Set(spanCtx, key, value, ttl); err != nil {
 		span.RecordError(err)
@@ -96,11 +100,7 @@ func (tw *Wrapper[T]) Delete(ctx context.Context, key string) error {
 	}
 	spanCtx, span := tw.startSpan(ctx, "delete")
 	defer span.End()
-	span.SetAttributes(
-		attribute.String("cache.operation", "delete"),
-		attribute.String("cache.key", key),
-		attribute.String("cache.type", tw.cacheType),
-	)
+	span.SetAttributes(tw.attributes("delete", key)...)
 
 	if err := tw.cache.Delete(spanCtx, key); err != nil {
 		span.RecordError(err)
@@ -120,16 +120,42 @@ func (tw *Wrapper[T]) Exists(ctx context.Context, key string) bool {
 	}
 	spanCtx, span := tw.startSpan(ctx, "exists")
 	defer span.End()
-	span.SetAttributes(
-		attribute.String("cache.operation", "exists"),
-		attribute.String("cache.key", key),
-		attribute.String("cache.type", tw.cacheType),
-	)
+	span.SetAttributes(tw.attributes("exists", key)...)
 
 	exists := tw.cache.Exists(spanCtx, key)
 	span.SetAttributes(attribute.Bool("cache.exists", exists))
 	span.SetStatus(codes.Ok, "Cache key existence checked successfully")
 	return exists
+}
+
+// attributes builds the span attributes for one cache operation. Every span
+// attribute the wrapper sets goes through here, so the rule that a key is
+// never recorded verbatim holds in one place and can be tested in one place.
+func (tw *Wrapper[T]) attributes(operation, key string) []attribute.KeyValue {
+	return []attribute.KeyValue{
+		attribute.String("cache.operation", operation),
+		attribute.String("cache.key.namespace", keyNamespace(key)),
+		attribute.String("cache.key.digest", keyDigest(key)),
+		attribute.String("cache.type", tw.cacheType),
+	}
+}
+
+// keyNamespace returns the key up to its last separator, naming the cache
+// domain without the identifier that follows it. Keys with no separator have
+// no namespace to report rather than being reported whole.
+func keyNamespace(key string) string {
+	i := strings.LastIndex(key, ":")
+	if i < 0 {
+		return ""
+	}
+	return key[:i]
+}
+
+// keyDigest returns a truncated SHA-256 of the key, enough to correlate the
+// same key across spans and not enough to recover it.
+func keyDigest(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(sum[:8])
 }
 
 // orBackground implements the contract promise that a nil ctx is treated as
