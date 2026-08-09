@@ -11,9 +11,9 @@ import (
 	"github.com/hydroan/gst/internal/cache/cmap"
 	"github.com/hydroan/gst/internal/cache/fastcache"
 	"github.com/hydroan/gst/internal/cache/freecache"
-	"github.com/hydroan/gst/internal/cache/gocache"
 	"github.com/hydroan/gst/internal/cache/lru"
 	"github.com/hydroan/gst/internal/cache/lrue"
+	"github.com/hydroan/gst/internal/cache/otter"
 	"github.com/hydroan/gst/internal/cache/ristretto"
 	"github.com/hydroan/gst/internal/cache/smap"
 	"github.com/hydroan/gst/internal/testutil"
@@ -56,8 +56,8 @@ func BenchmarkInt(b *testing.B) {
 	b.Run("ccache", func(b *testing.B) {
 		benchInt(b, ccache.Cache[int]())
 	})
-	b.Run("gocache", func(b *testing.B) {
-		benchInt(b, gocache.Cache[int]())
+	b.Run("otter", func(b *testing.B) {
+		benchInt(b, otter.Cache[int]())
 	})
 	b.Run("ristretto", func(b *testing.B) {
 		benchInt(b, ristretto.Cache[int]())
@@ -92,8 +92,8 @@ func BenchmarkIntParallel(b *testing.B) {
 	b.Run("ccache", func(b *testing.B) {
 		benchIntParallel(b, ccache.Cache[int]())
 	})
-	b.Run("gocache", func(b *testing.B) {
-		benchIntParallel(b, gocache.Cache[int]())
+	b.Run("otter", func(b *testing.B) {
+		benchIntParallel(b, otter.Cache[int]())
 	})
 	b.Run("ristretto", func(b *testing.B) {
 		benchIntParallel(b, ristretto.Cache[int]())
@@ -128,8 +128,8 @@ func BenchmarkString(b *testing.B) {
 	b.Run("ccache", func(b *testing.B) {
 		benchString(b, ccache.Cache[string]())
 	})
-	b.Run("gocache", func(b *testing.B) {
-		benchString(b, gocache.Cache[string]())
+	b.Run("otter", func(b *testing.B) {
+		benchString(b, otter.Cache[string]())
 	})
 	b.Run("ristretto", func(b *testing.B) {
 		benchString(b, ristretto.Cache[string]())
@@ -164,8 +164,8 @@ func BenchmarkStringParallel(b *testing.B) {
 	b.Run("ccache", func(b *testing.B) {
 		benchStringParallel(b, ccache.Cache[string]())
 	})
-	b.Run("gocache", func(b *testing.B) {
-		benchStringParallel(b, gocache.Cache[string]())
+	b.Run("otter", func(b *testing.B) {
+		benchStringParallel(b, otter.Cache[string]())
 	})
 	b.Run("ristretto", func(b *testing.B) {
 		benchStringParallel(b, ristretto.Cache[string]())
@@ -200,8 +200,8 @@ func BenchmarkUser(b *testing.B) {
 	b.Run("ccache", func(b *testing.B) {
 		benchUser(b, ccache.Cache[User]())
 	})
-	b.Run("gocache", func(b *testing.B) {
-		benchUser(b, gocache.Cache[User]())
+	b.Run("otter", func(b *testing.B) {
+		benchUser(b, otter.Cache[User]())
 	})
 	b.Run("ristretto", func(b *testing.B) {
 		benchUser(b, ristretto.Cache[User]())
@@ -236,8 +236,8 @@ func BenchmarkUserParallel(b *testing.B) {
 	b.Run("ccache", func(b *testing.B) {
 		benchUserParallel(b, ccache.Cache[User]())
 	})
-	b.Run("gocache", func(b *testing.B) {
-		benchUserParallel(b, gocache.Cache[User]())
+	b.Run("otter", func(b *testing.B) {
+		benchUserParallel(b, otter.Cache[User]())
 	})
 	b.Run("ristretto", func(b *testing.B) {
 		benchUserParallel(b, ristretto.Cache[User]())

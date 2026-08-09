@@ -58,12 +58,12 @@ require (
 	github.com/kr/pretty v0.3.1
 	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/maxrichie5/go-sqlfmt v0.0.0-20241025195225-e353be92414a
+	github.com/maypok86/otter/v2 v2.2.1
 	github.com/minio/minio-go/v7 v7.2.1
 	github.com/mssola/useragent v1.0.0
 	github.com/nats-io/nats.go v1.52.0
 	github.com/orcaman/concurrent-map/v2 v2.0.1
 	github.com/panjf2000/ants/v2 v2.12.1
-	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/pkg/sftp v1.13.10
 	github.com/pquerna/otp v1.5.0
@@ -372,6 +372,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/opentracing/opentracing-go v1.1.0 // indirect
+	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/paulmach/orb v0.11.1 // indirect
 	github.com/pdfcpu/pdfcpu v0.9.1 // indirect
 	github.com/pganalyze/pg_query_go/v6 v6.2.2 // indirect

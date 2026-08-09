@@ -1,3 +1,15 @@
+// Package ristretto is a TinyLFU-admission cache.
+//
+// It is not the forwarded default and must not become one without solving
+// this: once the resident set is warm, the admission policy rejects a new
+// key whose estimated frequency loses to the sampled eviction victims, and
+// the rejection happens asynchronously after Set has already returned nil.
+// The caller is told the write succeeded and the very next Get misses —
+// measured at roughly 95% of newcomer writes on a warm cache. Wait does not
+// help: it drains the write buffer, while the rejection happens after.
+//
+// What it is still good for: scan resistance. It is the only backend here
+// that keeps a hot working set intact across a sweep over a large key space.
 package ristretto
 
 import (

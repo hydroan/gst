@@ -10,9 +10,9 @@ import (
 	"github.com/hydroan/gst/internal/cache/cmap"
 	"github.com/hydroan/gst/internal/cache/fastcache"
 	"github.com/hydroan/gst/internal/cache/freecache"
-	"github.com/hydroan/gst/internal/cache/gocache"
 	"github.com/hydroan/gst/internal/cache/lru"
 	"github.com/hydroan/gst/internal/cache/lrue"
+	"github.com/hydroan/gst/internal/cache/otter"
 	"github.com/hydroan/gst/internal/cache/ristretto"
 	"github.com/hydroan/gst/internal/cache/smap"
 )
@@ -24,8 +24,8 @@ func TestConformance(t *testing.T) {
 	t.Run("freecache", func(t *testing.T) {
 		cachetest.Run(t, freecache.Cache[string](), cachetest.Capabilities{PerEntryTTL: true, NoExpiry: true, TTLGranularity: time.Second})
 	})
-	t.Run("gocache", func(t *testing.T) {
-		cachetest.Run(t, gocache.Cache[string](), cachetest.Capabilities{PerEntryTTL: true, NoExpiry: true})
+	t.Run("otter", func(t *testing.T) {
+		cachetest.Run(t, otter.Cache[string](), cachetest.Capabilities{PerEntryTTL: true, NoExpiry: true})
 	})
 	t.Run("ccache", func(t *testing.T) {
 		cachetest.Run(t, ccache.Cache[string](), cachetest.Capabilities{PerEntryTTL: true, NoExpiry: true})

@@ -15,6 +15,60 @@ import (
 	"github.com/hydroan/gst/types"
 )
 
+const (
+	// warmPasses is how many times each resident entry is read before the
+	// newcomer probes run, so frequency-based admission has accumulated hits
+	// to weigh newcomers against.
+	warmPasses = 20
+
+	// visibilityProbes is how many newcomer writes the visibility check makes.
+	visibilityProbes = 200
+)
+
+// RunWriteVisibility asserts the contract's core write guarantee under
+// capacity pressure: a value stored by Set must be readable by the next Get,
+// even when the cache is full and its resident entries are warm.
+//
+// It is separate from Run because it needs an instance whose capacity it
+// knows and whose contents it owns, so callers pass a freshly created cache —
+// giving the probe its own value type yields its own per-type instance —
+// together with the entry bound that instance was built with.
+//
+// The warm-up pass is what makes this a real guard rather than a formality.
+// A backend that admits entries by estimated frequency only starts rejecting
+// newcomers once the resident entries have accumulated hits; merely filling
+// the cache to capacity leaves the defect invisible, which is why the rest of
+// this suite passes even on a backend that drops most of its writes.
+func RunWriteVisibility[T ~string](t *testing.T, cache types.Cache[T], capacity int) {
+	t.Helper()
+	ctx := context.Background()
+
+	for i := range capacity {
+		if err := cache.Set(ctx, "resident-"+strconv.Itoa(i), T("resident"), 0); err != nil {
+			t.Fatalf("filling the cache: %v", err)
+		}
+	}
+	for range warmPasses {
+		for i := range capacity {
+			_, _ = cache.Get(ctx, "resident-"+strconv.Itoa(i))
+		}
+	}
+
+	var lost int
+	for i := range visibilityProbes {
+		key := "newcomer-" + strconv.Itoa(i)
+		if err := cache.Set(ctx, key, T("newcomer"), 0); err != nil {
+			t.Fatalf("probe set: %v", err)
+		}
+		if _, err := cache.Get(ctx, key); err != nil {
+			lost++
+		}
+	}
+	if lost != 0 {
+		t.Fatalf("%d of %d writes reported success but are not readable", lost, visibilityProbes)
+	}
+}
+
 // Capabilities declares which parts of the ttl contract a backend honors.
 type Capabilities struct {
 	// PerEntryTTL is true when Set honors ttl > 0 as a per-entry lifetime.
