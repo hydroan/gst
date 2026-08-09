@@ -93,11 +93,11 @@ func TestHasPackagePrefix(t *testing.T) {
 // stubSQLCallerSkipPrefixes pins the configured caller-skip prefixes for one
 // test or benchmark so the combined skip predicate is deterministic
 // regardless of config state.
-func stubSQLCallerSkipPrefixes(t testing.TB, prefixes []string) {
-	t.Helper()
+func stubSQLCallerSkipPrefixes(tb testing.TB, prefixes []string) {
+	tb.Helper()
 	old := config.App.Logger.SQLCallerSkipPrefixes
 	config.App.Logger.SQLCallerSkipPrefixes = prefixes
-	t.Cleanup(func() { config.App.Logger.SQLCallerSkipPrefixes = old })
+	tb.Cleanup(func() { config.App.Logger.SQLCallerSkipPrefixes = old })
 }
 
 func TestSkippedSQLFramePredicateHonorsConfiguredPrefixes(t *testing.T) {
