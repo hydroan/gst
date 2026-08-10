@@ -33,13 +33,14 @@ var queryDecoder = func() *schema.Decoder {
 // batch size, but the Size field lives in Pagination.
 //
 // Every remaining key must map to a field of the model, so a mistyped filter
-// name is reported instead of silently widening the result set.
+// name is reported instead of silently widening the result set;
+// translateDecodeError turns the decoder's raw errors into that report.
 func Decode(q url.Values, m types.Model) error {
 	values := withoutFilters(q)
 	if !modelregistry.IsPaginatable(m) {
 		delete(values, consts.QUERY_SIZE)
 	}
-	return queryDecoder.Decode(m, values)
+	return translateDecodeError(values, queryDecoder.Decode(m, values))
 }
 
 // withoutFilters returns a copy of the query without the keys owned by

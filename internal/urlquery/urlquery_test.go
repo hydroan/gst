@@ -134,7 +134,15 @@ func TestFilters(t *testing.T) {
 		_, err := Filters(url.Values{
 			"age[gt]": {"1"},
 		}, &plainModel{})
-		require.Error(t, err)
+		require.EqualError(t, err, `unsupported query parameter "age[gt]"`,
+			"a model that did not embed model.Query has no filterable columns, so the filter key itself is unsupported")
+
+		_, err = Filters(url.Values{
+			"age[gt]":      {"1"},
+			"remark[like]": {"x"},
+		}, &plainModel{})
+		require.EqualError(t, err, `unsupported query parameters "age[gt]", "remark[like]"`,
+			"every filter key is listed, not just the first")
 	})
 
 	t.Run("TimeFieldAcceptsOnlyRFC3339", func(t *testing.T) {
@@ -352,10 +360,33 @@ func TestDecode(t *testing.T) {
 
 	t.Run("RejectsUnknownKeys", func(t *testing.T) {
 		var m filterTestModel
-		require.Error(t, Decode(url.Values{"bogus": {"1"}}, &m),
+		require.EqualError(t, Decode(url.Values{"bogus": {"1"}}, &m),
+			`unsupported query parameter "bogus"`,
 			"an unknown key is a typo and must not silently widen the result set")
-		require.Error(t, Decode(url.Values{"_bogus": {"1"}}, &m),
+		require.EqualError(t, Decode(url.Values{"_bogus": {"1"}}, &m),
+			`unsupported query parameter "_bogus"`,
 			"a mistyped framework parameter must be reported too")
+	})
+
+	t.Run("ListsEveryUnsupportedKey", func(t *testing.T) {
+		var m filterTestModel
+		require.EqualError(t, Decode(url.Values{"bogus": {"1"}, "wrong": {""}, "_bogus": {"1"}}, &m),
+			`unsupported query parameters "_bogus", "bogus", "wrong"`,
+			"every offending key is reported at once and sorted, not gorilla/schema's first error plus a count")
+	})
+
+	t.Run("RejectsMistypedValues", func(t *testing.T) {
+		var m filterTestModel
+		require.EqualError(t, Decode(url.Values{"age": {"abc"}}, &m),
+			`invalid query parameter "age": expect a numeric value, got "abc"`)
+		require.EqualError(t, Decode(url.Values{"enabled": {"maybe"}}, &m),
+			`invalid query parameter "enabled": expect a boolean value, got "maybe"`)
+	})
+
+	t.Run("ReportsUnsupportedAndMistypedTogether", func(t *testing.T) {
+		var m filterTestModel
+		require.EqualError(t, Decode(url.Values{"bogus": {"1"}, "age": {"abc"}}, &m),
+			`unsupported query parameter "bogus"; invalid query parameter "age": expect a numeric value, got "abc"`)
 	})
 }
 

@@ -35,8 +35,7 @@ func Filters(q url.Values, m types.Model) ([]types.Filter, error) {
 		return nil, nil
 	}
 	if !modelregistry.IsQueryable(m) {
-		sort.Strings(keys)
-		return nil, errors.Newf("schema: invalid path %q", keys[0])
+		return nil, UnsupportedParameterError(keys)
 	}
 	sort.Strings(keys)
 

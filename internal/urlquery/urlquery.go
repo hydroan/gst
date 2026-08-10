@@ -8,12 +8,13 @@
 // parse a request exactly the same way.
 //
 // Which parameters a request may use is decided by the model: capabilities are
-// opted in to by embedding model.Query, model.Pagination or model.Cursor.
-// Parameters a model did not opt in to are ignored and fall back to the
-// framework defaults rather than failing the request; rejecting them is the
-// list controller's job, not this package's. Malformed filters are the one
-// exception and always fail, because silently dropping a mistyped filter would
-// widen the result set.
+// opted in to by embedding model.Query, model.Pagination or model.Cursor. The
+// parameter readers (Pagination, Cursor, Orders) ignore parameters the model
+// did not opt in to and fall back to the framework defaults rather than
+// failing the request; rejecting those capability keys is the list
+// controller's job, not this package's. Keys that map to nothing are different
+// and always fail — in Decode and Filters alike — because silently dropping a
+// mistyped filter would widen the result set.
 package urlquery
 
 import (

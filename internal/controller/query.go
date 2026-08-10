@@ -47,42 +47,41 @@ var listCursorQueryKeys = map[string]struct{}{
 
 // decodeListQuery rejects the framework query keys the model has not opted in
 // to via model.Query, model.Pagination, or model.Cursor, then decodes the
-// remaining URL query parameters into the model's own query fields. Rejecting
-// unsupported keys is what separates the List controller from urlquery.Decode,
-// which ignores them instead.
+// remaining URL query parameters into the model's own query fields. The
+// explicit gate keeps the rejection uniform: it reports every non-opted
+// capability key in one error, including _size, which urlquery.Decode would
+// silently drop for a model that cannot carry it.
 func decodeListQuery[M types.Model](m M, query map[string][]string) error {
+	rejected := make([]string, 0)
 	if !modelregistry.IsQueryable(m) {
-		if err := rejectListQueryKeys(query, listQueryKeys); err != nil {
-			return err
-		}
+		rejected = append(rejected, matchQueryKeys(query, listQueryKeys)...)
 	}
 	paginatable := modelregistry.IsPaginatable(m)
 	cursorable := modelregistry.IsCursorable(m)
 	if !paginatable {
-		if err := rejectListQueryKeys(query, listPageQueryKey); err != nil {
-			return err
-		}
+		rejected = append(rejected, matchQueryKeys(query, listPageQueryKey)...)
 	}
 	if !paginatable && !cursorable {
-		if err := rejectListQueryKeys(query, listSizeQueryKey); err != nil {
-			return err
-		}
+		rejected = append(rejected, matchQueryKeys(query, listSizeQueryKey)...)
 	}
 	if !cursorable {
-		if err := rejectListQueryKeys(query, listCursorQueryKeys); err != nil {
-			return err
-		}
+		rejected = append(rejected, matchQueryKeys(query, listCursorQueryKeys)...)
+	}
+	if len(rejected) > 0 {
+		return urlquery.UnsupportedParameterError(rejected)
 	}
 	return urlquery.Decode(query, m)
 }
 
-func rejectListQueryKeys(query map[string][]string, keys map[string]struct{}) error {
+// matchQueryKeys returns the query keys present in the given key set.
+func matchQueryKeys(query map[string][]string, keys map[string]struct{}) []string {
+	matched := make([]string, 0)
 	for key := range query {
 		if _, found := keys[key]; found {
-			return errors.Newf("schema: invalid path %q", key)
+			matched = append(matched, key)
 		}
 	}
-	return nil
+	return matched
 }
 
 // checkCursorOrderConflict reports the client error for combining cursor

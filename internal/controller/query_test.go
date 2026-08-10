@@ -35,8 +35,25 @@ func TestDecodeListQueryGatesQueryKeys(t *testing.T) {
 			modelregistry.Base
 		}
 		var m plainModel
-		require.Error(t, decodeListQuery(&m, map[string][]string{"_sort_by": {"created_at desc"}}),
+		require.EqualError(t, decodeListQuery(&m, map[string][]string{"_sort_by": {"created_at desc"}}),
+			`unsupported query parameter "_sort_by"`,
 			"a model that did not embed modelregistry.Query must not accept the List controls")
+	})
+
+	t.Run("ListsEveryRejectedKeyAtOnce", func(t *testing.T) {
+		type plainModel struct {
+			Name string `query:"name"`
+
+			modelregistry.Base
+		}
+		var m plainModel
+		require.EqualError(t, decodeListQuery(&m, map[string][]string{
+			"_sort_by":      {"created_at desc"},
+			"_page":         {"2"},
+			"_cursor_value": {"abc"},
+		}),
+			`unsupported query parameters "_cursor_value", "_page", "_sort_by"`,
+			"framework keys rejected by different capability gates are still reported together")
 	})
 
 	t.Run("RetiredKeysAreRejected", func(t *testing.T) {
