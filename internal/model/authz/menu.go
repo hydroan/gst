@@ -151,7 +151,7 @@ func errIfMenuWriteForbidden(ctx context.Context) error {
 	}
 	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, subject, consts.AUTHZ_SYSTEM_ROLE_ROOT)
 	if err != nil {
-		return err
+		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}
 	if !systemRoot {
 		return service.NewError(http.StatusForbidden, "only system administrators may modify menus")

@@ -178,7 +178,7 @@ func excludeSystemRootSubjects(ctx *types.ServiceContext, subjectIDs []string) (
 	for _, subjectID := range subjectIDs {
 		systemRoot, err := rbac.RBAC().HasSystemRole(ctx, subjectID, consts.AUTHZ_SYSTEM_ROLE_ROOT)
 		if err != nil {
-			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to resolve subject system role", err)
+			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 		}
 		if systemRoot {
 			continue
