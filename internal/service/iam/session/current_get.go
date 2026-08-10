@@ -4,12 +4,14 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/types/consts"
 )
 
 // CurrentGetService handles retrieval of the current authenticated session.
@@ -36,5 +38,13 @@ func (c *CurrentGetService) Get(ctx *types.ServiceContext, req *model.Empty) (rs
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load email identity", err)
 	}
 
-	return BuildAuthenticatedSessionRsp(currentSession, currentUser, email, time.Now()), nil
+	// Resolved per request rather than read off the session snapshot, so a
+	// system role granted or revoked mid-session is reported here as it stands
+	// instead of as it stood at login.
+	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, currentUser.ID, consts.AUTHZ_SYSTEM_ROLE_ROOT)
+	if err != nil {
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+	}
+
+	return BuildAuthenticatedSessionRsp(currentSession, currentUser, email, time.Now(), systemRoot), nil
 }

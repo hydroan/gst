@@ -51,6 +51,7 @@ const (
 	rolePath        = "/api/authz/roles"
 	roleBindingPath = "/api/authz/role-bindings"
 	userAdminPath   = "/api/iam/admin/users"
+	currentPath     = "/api/iam/session/current"
 )
 
 func TestMain(m *testing.M) {
@@ -806,6 +807,69 @@ func TestIAMLoginRejectsTenantOutsideMembership(t *testing.T) {
 		TenantID: authzTestUsername("tenant_login_forbidden"),
 	})
 	testutil.RequireError(t, err, http.StatusForbidden)
+}
+
+func TestIAMPrincipalReportsSystemRoot(t *testing.T) {
+	t.Run("login_reports_system_root", func(t *testing.T) {
+		cli, err := client.New(baseURL)
+		require.NoError(t, err)
+
+		rsp, err := client.Post[iam.LoginRsp](cli, loginPath, iam.LoginReq{
+			Username: rootUsername,
+			Password: rootPassword,
+		})
+		require.NoError(t, err)
+		require.True(t, rsp.Principal.IsSystemRoot)
+	})
+
+	t.Run("login_reports_subject_without_system_role", func(t *testing.T) {
+		username := authzTestUsername("system_root_plain_user")
+		password := "12345678"
+		authzSignupUser(t, username, password)
+
+		cli, err := client.New(baseURL)
+		require.NoError(t, err)
+
+		rsp, err := client.Post[iam.LoginRsp](cli, loginPath, iam.LoginReq{
+			Username: username,
+			Password: password,
+		})
+		require.NoError(t, err)
+		require.False(t, rsp.Principal.IsSystemRoot)
+	})
+
+	// The current session endpoint resolves the system role per request, so one
+	// session reports a grant and a revocation without logging in again.
+	t.Run("current_session_follows_system_role_changes", func(t *testing.T) {
+		userID, sessionID := authzSignupAndLoginUser(t, authzTestUsername("system_root_toggle_user"), "12345678")
+
+		roleID := authzCreateTenantRole(t, tenant.Default, authzTestUsername("system_root_toggle_role"))
+		authzBindTenantRole(t, tenant.Default, userID, roleID)
+		authzGrantTenantPolicy(t, tenant.Default, roleID, types.Permission{
+			Object: currentPath,
+			Action: http.MethodGet,
+		})
+		cli := authzSessionClient(t, sessionID)
+
+		rsp, err := client.Get[iam.CurrentGetRsp](cli, currentPath)
+		require.NoError(t, err)
+		require.False(t, rsp.Principal.IsSystemRoot)
+
+		t.Cleanup(func() {
+			_ = rbac.RBAC().UnassignSystemRole(context.Background(), userID, consts.AUTHZ_SYSTEM_ROLE_ROOT)
+		})
+		require.NoError(t, rbac.RBAC().AssignSystemRole(context.Background(), userID, consts.AUTHZ_SYSTEM_ROLE_ROOT))
+
+		rsp, err = client.Get[iam.CurrentGetRsp](cli, currentPath)
+		require.NoError(t, err)
+		require.True(t, rsp.Principal.IsSystemRoot)
+
+		require.NoError(t, rbac.RBAC().UnassignSystemRole(context.Background(), userID, consts.AUTHZ_SYSTEM_ROLE_ROOT))
+
+		rsp, err = client.Get[iam.CurrentGetRsp](cli, currentPath)
+		require.NoError(t, err)
+		require.False(t, rsp.Principal.IsSystemRoot)
+	})
 }
 
 func authzAdminSessionID(t *testing.T) string {

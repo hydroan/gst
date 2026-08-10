@@ -130,12 +130,14 @@ func (r *rbac) UnassignSystemRole(ctx context.Context, subject string, role stri
 // HasSystemRole reports whether subject holds a system-level role.
 //
 // It resolves through the role graph, which is what Authorize decides its
-// system role branch from. The two answer one question, and every caller of
-// this one is a guard over the access that branch grants: refusing a tenant
-// administrator a root target, exempting root from menu filtering, reporting
-// root at login. Reading the grouping rules as written answers no for a subject
-// that reaches the role through another role, so the guards would stand open
-// for the one subject Authorize is already letting through everything.
+// system role branch from. The two answer one question. Most callers guard the
+// access that branch grants — refusing a tenant administrator a root target,
+// exempting root from menu filtering, admitting a login that names a tenant —
+// and the authentication endpoints report the answer to the client as part of
+// the principal. Reading the grouping rules as written answers no for a subject
+// that reaches the role through another role: the guards would stand open, and
+// the principal would under-report, for the one subject Authorize is already
+// letting through everything.
 func (r *rbac) HasSystemRole(ctx context.Context, subject string, role string) (bool, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

@@ -97,9 +97,17 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	if err = VerifyPasswordCredential(ctx, credential, req.Password); err != nil {
 		return nil, service.NewErrorWithCause(http.StatusUnauthorized, "invalid username or password", err)
 	}
+	// Resolved for every login, not only the ones that name a tenant: the
+	// principal in the response reports it, and it is what exempts a system
+	// root from the tenant membership check below.
+	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, targetUser.ID, consts.AUTHZ_SYSTEM_ROLE_ROOT)
+	if err != nil {
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+	}
+
 	tenantID := strings.TrimSpace(req.TenantID)
-	if tenantID != "" {
-		if err = ensureLoginTenant(ctx, targetUser.ID, tenantID); err != nil {
+	if tenantID != "" && !systemRoot {
+		if err = ensureLoginTenantMembership(ctx, targetUser.ID, tenantID); err != nil {
 			return nil, err
 		}
 	}
@@ -206,24 +214,18 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		email = emailIdentity.Email
 	}
 
-	return serviceiamsession.BuildAuthenticatedSessionRsp(sessionData, targetUser, email, now), nil
+	return serviceiamsession.BuildAuthenticatedSessionRsp(sessionData, targetUser, email, now, systemRoot), nil
 }
 
-func ensureLoginTenant(ctx *types.ServiceContext, userID string, tenantID string) error {
-	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, userID, consts.AUTHZ_SYSTEM_ROLE_ROOT)
-	if err != nil {
-		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
-	}
-	if systemRoot {
-		return nil
-	}
-
+// ensureLoginTenantMembership refuses a login that names a tenant the user holds
+// no role in. The system root exemption is applied by the caller, which resolves
+// that fact for the response anyway.
+func ensureLoginTenantMembership(ctx *types.ServiceContext, userID string, tenantID string) error {
 	roles, err := rbac.RBAC().RolesForSubject(ctx, tenantID, userID)
-	member := len(roles) > 0
 	if err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}
-	if !member {
+	if len(roles) == 0 {
 		return service.NewError(http.StatusForbidden, "user is not a member of tenant")
 	}
 	return nil

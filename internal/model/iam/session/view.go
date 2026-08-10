@@ -33,4 +33,18 @@ type PrincipalView struct {
 	Username           string `json:"username"`
 	Email              string `json:"email"`
 	MustChangePassword bool   `json:"must_change_password"`
+
+	// IsSystemRoot reports whether the principal holds the system-level
+	// consts.AUTHZ_SYSTEM_ROLE_ROOT role.
+	//
+	// It states one fact about who the principal is, not what the principal may
+	// do. Every request is decided on its own by authorization and by whatever
+	// guard the route itself installs, and a client that reads this as a
+	// permission set will disagree with the server as soon as either of them
+	// says something this bool cannot express.
+	//
+	// It is reported because nothing else in this response tells a client
+	// whether the session it holds is a system-wide one, and the endpoints that
+	// refuse everyone else only say so once the request has been made.
+	IsSystemRoot bool `json:"is_system_root"`
 }
