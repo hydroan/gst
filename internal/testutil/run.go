@@ -30,6 +30,10 @@ type Server struct {
 	// for it. Tests reach it through config.App.Clickhouse or the provider.
 	Clickhouse bool
 
+	// Kafka prepares a kafka container and points the framework provider at
+	// it. Tests reach it through config.App.Kafka or the provider.
+	Kafka bool
+
 	// Register registers the modules under test. It runs before the framework
 	// bootstraps, which is where module registration belongs.
 	Register func()
@@ -99,7 +103,7 @@ func run(m *testing.M, s Server) int {
 // they succeed, so the returned function undoes whatever was already prepared
 // even when a later step fails.
 func (s Server) prepare() (release func(), err error) {
-	releases := make([]func(), 0, 4)
+	releases := make([]func(), 0, 5)
 	release = func() {
 		for _, done := range slices.Backward(releases) {
 			done()
@@ -158,6 +162,18 @@ func (s Server) prepare() (release func(), err error) {
 		// bootstrap reads the prepared instance from the config like the
 		// other services.
 		testcontainer.ApplyConfigToEnv(cfg)
+	}
+
+	if s.Kafka {
+		cleanBroker, err := testcontainer.SetupKafka()
+		if err != nil {
+			return release, err
+		}
+		releases = append(releases, func() {
+			if releaseErr := cleanBroker(); releaseErr != nil {
+				reportReleaseFailure("kafka", releaseErr)
+			}
+		})
 	}
 
 	return release, nil

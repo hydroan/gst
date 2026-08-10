@@ -422,6 +422,7 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/sunshineplan/pdf v1.0.8 // indirect
 	github.com/swaggo/swag v1.16.4 // indirect
+	github.com/testcontainers/testcontainers-go/modules/kafka v0.43.0
 	github.com/tetafro/godot v1.5.6 // indirect
 	github.com/tetratelabs/wazero v1.11.0 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
