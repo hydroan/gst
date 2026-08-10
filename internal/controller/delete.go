@@ -49,12 +49,13 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			var rsp RSP
 			req := meta.newRequest()
 
-			if reqErr := c.ShouldBindJSON(&req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
+			if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 				log.Errorz("bind request body failed", zap.Error(reqErr))
 				JSON(c, CodeInvalidParam.WithErr(reqErr))
 				gstotel.RecordError(span, reqErr)
 				return
 			}
+			meta.normalizeRequest(&req)
 			var serviceCtx *types.ServiceContext
 			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_DELETE, func(spanCtx context.Context) (RSP, error) {
 				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE)

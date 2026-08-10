@@ -53,12 +53,13 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			var rsp RSP
 			req := meta.newRequest()
 
-			if reqErr = c.ShouldBindJSON(&req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
+			if reqErr = bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 				log.Errorz("bind request body failed", zap.Error(reqErr))
 				JSON(c, CodeInvalidParam.WithErr(reqErr))
 				gstotel.RecordError(span, reqErr)
 				return
 			}
+			meta.normalizeRequest(&req)
 			var serviceCtx *types.ServiceContext
 			if rsp, err = meta.traceServiceOperation(ctrlSpanCtx, consts.PHASE_PATCH, func(spanCtx context.Context) (RSP, error) {
 				serviceCtx = types.NewServiceContext(c, spanCtx, consts.PHASE_PATCH)
@@ -95,12 +96,13 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		if len(cfg) > 0 {
 			id = reqMeta.Param(util.Deref(cfg[0]).ParamName)
 		}
-		if err := c.ShouldBindJSON(&req); err != nil {
+		if err := bindJSONRequest(c, &req); err != nil {
 			log.Errorz("bind request body failed", zap.Error(err))
 			JSON(c, CodeFailure.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
 		}
+		meta.normalizeModel(&req)
 		if len(id) == 0 {
 			log.Errorz(CodeNotFoundRouteParam.String())
 			JSON(c, CodeNotFoundRouteParam)
