@@ -11,7 +11,7 @@ import (
 )
 
 func TestSetupRedis(t *testing.T) {
-	isolateEnv(t, config.REDIS_ADDR, config.REDIS_ENABLED)
+	isolateEnv(t, config.REDIS_ADDR, config.REDIS_DB, config.REDIS_ENABLED)
 
 	cleanup, err := SetupRedis()
 	require.NoError(t, err)

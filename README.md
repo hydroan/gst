@@ -641,3 +641,17 @@ gg routes --scope pub
 
 `gg gen` 默认保留已有 service 文件，避免误删手写业务代码。确认旧文件不再需要后
 运行 `gg prune`，或使用 `gg gen --prune`。
+
+### 为什么测试跑完后 gst-test-mysql-8-4 这些容器还在运行？
+
+testutil 的测试容器按镜像版本全局共享：所有测试二进制挂到同一个固定名容器上
+（`gst-test-mysql-8-4`、`gst-test-redis-7-alpine`、`gst-test-postgres-17-alpine`、
+`gst-test-clickhouse-clickhouse-server-24-8-alpine`），隔离在容器内部完成——每个
+测试二进制拿到自己的数据库（Redis 是自己的 DB index），结束时删库/清空；进程被
+强杀漏掉的残留库会在下一次测试运行时按持有进程存活状态自动回收。容器本身刻意
+常驻，让后续测试免掉容器冷启动。
+
+- 清理或重置容器：`docker rm -f <容器名>`，下次测试会自动重建。修改容器启动参数
+  （如连接数上限）后也要先这样删掉旧容器才会生效。
+- 需要每个测试二进制独占容器时（远程 docker daemon、容器被折腾坏、需要全新实例
+  调试），设置 `GST_TEST_DEDICATED_CONTAINERS=1` 回到独占模式，容器随测试结束销毁。

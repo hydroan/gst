@@ -24,8 +24,10 @@ func TestSetupPostgres(t *testing.T) {
 	port := os.Getenv(config.POSTGRES_PORT)
 	require.NotEmpty(t, host)
 	require.NotEmpty(t, port)
-	require.Equal(t, "test", os.Getenv(config.POSTGRES_DATABASE))
-	require.Equal(t, "test", os.Getenv(config.POSTGRES_USERNAME))
+	// The default path shares the container, so the binary runs as the
+	// superuser on a provisioned database of its own.
+	require.Regexp(t, sharedDatabasePattern, os.Getenv(config.POSTGRES_DATABASE))
+	require.Equal(t, postgresSuperUsername, os.Getenv(config.POSTGRES_USERNAME))
 	require.Equal(t, "test", os.Getenv(config.POSTGRES_PASSWORD))
 	require.Equal(t, "disable", os.Getenv(config.POSTGRES_SSLMODE))
 	require.Equal(t, string(config.DBPostgres), os.Getenv(config.DATABASE_TYPE))

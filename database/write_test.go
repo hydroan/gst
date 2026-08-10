@@ -391,6 +391,10 @@ func TestDatabaseUpdate(t *testing.T) {
 		require.NoError(t, database.Database[*TestUser](context.Background()).Get(fresh, u1.ID))
 		before := fresh.UpdatedAt
 		fresh.Name = "utc-refresh"
+		// NowFunc truncates to milliseconds, so an update landing in the same
+		// millisecond as the previous write would not move updated_at at all;
+		// step past that millisecond first.
+		time.Sleep(2 * time.Millisecond)
 		require.NoError(t, database.Database[*TestUser](context.Background()).Update(fresh))
 		// GORM refreshes updated_at through NowFunc; it must carry UTC so the
 		// in-memory value serializes with the same timestamp base Create forces.

@@ -82,7 +82,7 @@ func TestMigrate(t *testing.T) {
 		require.NoError(t, err)
 
 		database := fmt.Sprintf("gst_dbmigrate_test_%d", time.Now().UnixNano())
-		adminConfig := postgresDatabaseConfig("test")
+		adminConfig := postgresDatabaseConfig(os.Getenv(config.POSTGRES_DATABASE))
 		createPostgresDatabase(t, adminConfig, database)
 		t.Cleanup(func() {
 			dropPostgresDatabase(t, adminConfig, database)
