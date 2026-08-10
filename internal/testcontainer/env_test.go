@@ -22,7 +22,7 @@ func TestApplyConfigToEnv(t *testing.T) {
 		username := "test"
 		password := "test"
 
-		applyConfigToEnv(config.MySQL{
+		ApplyConfigToEnv(config.MySQL{
 			Host:     host,
 			Port:     uint(port),
 			Database: database,
@@ -46,7 +46,7 @@ func TestApplyConfigToEnv(t *testing.T) {
 			config.LOGGER_HTTP_BODY_LOG_REQUEST, config.LOGGER_HTTP_BODY_LOG_RESPONSE,
 			config.LOGGER_HTTP_BODY_MAX_BODY_SIZE, config.LOGGER_HTTP_BODY_SKIP_ROUTES)
 
-		applyConfigToEnv(config.Logger{
+		ApplyConfigToEnv(config.Logger{
 			Prefix:  "test",
 			Console: false,
 			MaxAge:  7,
@@ -78,7 +78,7 @@ func TestApplyConfigToEnv(t *testing.T) {
 	t.Run("duration_field", func(t *testing.T) {
 		isolateEnv(t, config.DATABASE_SLOW_QUERY_THRESHOLD)
 
-		applyConfigToEnv(config.Database{SlowQueryThreshold: 500 * time.Millisecond})
+		ApplyConfigToEnv(config.Database{SlowQueryThreshold: 500 * time.Millisecond})
 
 		require.Equal(t, "500ms", os.Getenv(config.DATABASE_SLOW_QUERY_THRESHOLD))
 	})
@@ -86,7 +86,7 @@ func TestApplyConfigToEnv(t *testing.T) {
 	t.Run("section_named_differently_from_its_type", func(t *testing.T) {
 		isolateEnv(t, config.APP_NAME)
 
-		applyConfigToEnv(config.AppInfo{Name: "sample"})
+		ApplyConfigToEnv(config.AppInfo{Name: "sample"})
 
 		require.Equal(t, "sample", os.Getenv(config.APP_NAME))
 	})
@@ -94,16 +94,16 @@ func TestApplyConfigToEnv(t *testing.T) {
 	t.Run("pointer_section", func(t *testing.T) {
 		isolateEnv(t, config.SQLITE_PATH)
 
-		applyConfigToEnv(&config.Sqlite{Path: "/tmp/sample.db"})
+		ApplyConfigToEnv(&config.Sqlite{Path: "/tmp/sample.db"})
 
 		require.Equal(t, "/tmp/sample.db", os.Getenv(config.SQLITE_PATH))
 	})
 
 	t.Run("value_without_fields", func(t *testing.T) {
 		require.NotPanics(t, func() {
-			applyConfigToEnv(nil)
-			applyConfigToEnv(42)
-			applyConfigToEnv((*config.Sqlite)(nil))
+			ApplyConfigToEnv(nil)
+			ApplyConfigToEnv(42)
+			ApplyConfigToEnv((*config.Sqlite)(nil))
 		})
 	})
 }

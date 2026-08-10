@@ -75,7 +75,7 @@ func setupDedicatedMySQL() (func() error, error) {
 		return nil, errors.CombineErrors(err, terminate())
 	}
 
-	applyConfigToEnv(config.MySQL{
+	ApplyConfigToEnv(config.MySQL{
 		Host:     host,
 		Port:     port,
 		Database: mysqlDatabase,
@@ -125,7 +125,7 @@ func setupSharedMySQL() (func() error, error) {
 		return nil, err
 	}
 
-	applyConfigToEnv(config.MySQL{
+	ApplyConfigToEnv(config.MySQL{
 		Host:     host,
 		Port:     port,
 		Database: database,

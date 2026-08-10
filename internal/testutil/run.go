@@ -24,6 +24,12 @@ type Server struct {
 	// that keep sessions or cache entries need it.
 	Redis bool
 
+	// Clickhouse prepares a clickhouse database and points the framework
+	// provider at it, next to whatever Database selects: clickhouse is an
+	// analytical instance beside the default database, never a replacement
+	// for it. Tests reach it through config.App.Clickhouse or the provider.
+	Clickhouse bool
+
 	// Register registers the modules under test. It runs before the framework
 	// bootstraps, which is where module registration belongs.
 	Register func()
@@ -93,7 +99,7 @@ func run(m *testing.M, s Server) int {
 // they succeed, so the returned function undoes whatever was already prepared
 // even when a later step fails.
 func (s Server) prepare() (release func(), err error) {
-	releases := make([]func(), 0, 3)
+	releases := make([]func(), 0, 4)
 	release = func() {
 		for _, done := range slices.Backward(releases) {
 			done()
@@ -135,6 +141,23 @@ func (s Server) prepare() (release func(), err error) {
 				reportReleaseFailure("cache", releaseErr)
 			}
 		})
+	}
+
+	if s.Clickhouse {
+		cfg, cleanAnalytical, err := testcontainer.SetupClickhouse()
+		if err != nil {
+			return release, err
+		}
+		releases = append(releases, func() {
+			if releaseErr := cleanAnalytical(); releaseErr != nil {
+				reportReleaseFailure("clickhouse", releaseErr)
+			}
+		})
+		// SetupClickhouse hands the connection back instead of touching the
+		// environment; exporting it is this server's decision, so the
+		// bootstrap reads the prepared instance from the config like the
+		// other services.
+		testcontainer.ApplyConfigToEnv(cfg)
 	}
 
 	return release, nil

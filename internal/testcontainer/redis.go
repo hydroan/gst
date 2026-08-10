@@ -61,7 +61,7 @@ func setupDedicatedRedis() (func() error, error) {
 	addr := fmt.Sprintf("%s:%d", host, port)
 	// Only Addr is set: the framework reads Addrs in cluster mode alone, which
 	// stays off by default.
-	applyConfigToEnv(config.Redis{
+	ApplyConfigToEnv(config.Redis{
 		Addr:    addr,
 		Enabled: true,
 	})
@@ -107,7 +107,7 @@ func setupSharedRedis() (func() error, error) {
 		return nil, err
 	}
 
-	applyConfigToEnv(config.Redis{
+	ApplyConfigToEnv(config.Redis{
 		Addr:    addr,
 		DB:      index,
 		Enabled: true,

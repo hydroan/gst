@@ -79,7 +79,7 @@ func setupDedicatedPostgres() (func() error, error) {
 		return nil, errors.CombineErrors(err, terminate())
 	}
 
-	applyConfigToEnv(config.Postgres{
+	ApplyConfigToEnv(config.Postgres{
 		Host:     host,
 		Port:     port,
 		Database: postgresDatabase,
@@ -134,7 +134,7 @@ func setupSharedPostgres() (func() error, error) {
 		return nil, err
 	}
 
-	applyConfigToEnv(config.Postgres{
+	ApplyConfigToEnv(config.Postgres{
 		Host:     host,
 		Port:     port,
 		Database: database,
