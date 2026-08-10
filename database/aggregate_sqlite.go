@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	sqlite3 "github.com/mattn/go-sqlite3"
 	"gorm.io/gorm"
 )
 
@@ -158,11 +157,29 @@ func (v *sqliteTimeValue) Scan(src any) error {
 	}
 }
 
+// sqliteTimestampFormats mirrors the mattn/go-sqlite3 SQLiteTimestampFormats
+// list, which is the authority on what timestamp shapes the driver writes and
+// accepts. It is copied rather than imported: that symbol lives in the
+// driver's cgo implementation, and a CGO_ENABLED=0 build — the usual shape of
+// a static deployment binary — compiles the driver's stub instead, where the
+// symbol does not exist.
+var sqliteTimestampFormats = []string{
+	"2006-01-02 15:04:05.999999999-07:00",
+	"2006-01-02T15:04:05.999999999-07:00",
+	"2006-01-02 15:04:05.999999999",
+	"2006-01-02T15:04:05.999999999",
+	"2006-01-02 15:04:05",
+	"2006-01-02T15:04:05",
+	"2006-01-02 15:04",
+	"2006-01-02T15:04",
+	"2006-01-02",
+}
+
 // parse reads s with the driver's own format list, in UTC like the driver,
 // so whatever timestamp shape the driver stored parses back unchanged.
 func (v *sqliteTimeValue) parse(s string) error {
 	trimmed := strings.TrimSuffix(s, "Z")
-	for _, format := range sqlite3.SQLiteTimestampFormats {
+	for _, format := range sqliteTimestampFormats {
 		if t, err := time.ParseInLocation(format, trimmed, time.UTC); err == nil {
 			*v = sqliteTimeValue{t: t, valid: true}
 			return nil
