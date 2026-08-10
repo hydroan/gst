@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/serviceregistry"
@@ -140,4 +141,51 @@ func TestExportFactoryVirtualModelSkipsListing(t *testing.T) {
 	require.Contains(t, rec.Header().Get("Content-Disposition"), csvTestName,
 		"non-xlsx bytes must resolve to the csv attachment")
 	require.Zero(t, svc.gotModels, "a virtual model export must not receive controller-listed rows")
+}
+
+// exportFormatSample is a plain table-backed resource for pinning that the
+// export controller keeps its own QUERY_FORMAT parameter away from the model
+// bind, which rejects unknown keys.
+type exportFormatSample struct {
+	Name string `json:"name,omitempty" query:"name"`
+
+	modelregistry.Query
+	modelregistry.Base
+}
+
+// exportFormatSampleService stops the request deliberately at the Filter step,
+// so the test needs no database: reaching Filter proves the query bind
+// accepted the request.
+type exportFormatSampleService struct {
+	serviceregistry.Base[*exportFormatSample, *exportFormatSample, *exportFormatSample]
+
+	filterReached bool
+}
+
+func (s *exportFormatSampleService) Filter(_ *types.ServiceContext, m *exportFormatSample,
+	opts types.QueryOptions,
+) (*exportFormatSample, types.QueryOptions, error) {
+	s.filterReached = true
+	return m, opts, errors.New("stop before the database stage")
+}
+
+func TestExportFactoryKeepsFormatParamFromModelBind(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logger.Controller = zap.New("")
+
+	const route = "test/export_format_samples/export"
+	svc := &exportFormatSampleService{}
+	serviceregistry.Register[*exportFormatSample, *exportFormatSample, *exportFormatSample](consts.PHASE_EXPORT, route, svc)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/"+route+"?name=sample&_format=csv", nil)
+
+	handler := ExportFactory[*exportFormatSample, *exportFormatSample, *exportFormatSample](
+		&types.ControllerConfig[*exportFormatSample]{Route: route},
+	)
+	handler(c)
+
+	require.True(t, svc.filterReached,
+		"QUERY_FORMAT is the export controller's own parameter and must not reach the model bind")
 }

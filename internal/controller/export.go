@@ -101,6 +101,10 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			// The URL query is parsed once and shared by every parser below;
 			// url.URL.Query re-parses the raw query string on each call.
 			query := c.Request.URL.Query()
+			// QUERY_FORMAT is this controller's own parameter, resolved after
+			// the export bytes exist; the model bind below rejects unknown
+			// keys, so drop it from the copy the parsers see.
+			query.Del(consts.QUERY_FORMAT)
 
 			var err error
 			// A query that cannot decode is a client error, same as on the List
