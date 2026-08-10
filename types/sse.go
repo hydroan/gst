@@ -7,6 +7,37 @@ import (
 	"github.com/hydroan/gst/internal/sse"
 )
 
+// Event is the public alias of the internal SSE event type. internal/sse
+// cannot be imported from outside the framework, so this alias is how business
+// code names an SSE event.
+type Event = sse.Event
+
+// Encode writes an SSE event to the given writer.
+//
+// The event is formatted according to the SSE specification:
+//   - Fields are written in recommended order: id, event, retry, data
+//   - Each field is written as "field: value\n"
+//   - Multiple data fields are concatenated (for multi-line data)
+//   - Events are separated by a blank line (\n\n)
+//
+// If Data is a complex type (map, struct, slice), it will be JSON-encoded.
+// If Data is a primitive type, it will be converted to string.
+// If Data is nil, no data field will be written.
+//
+// Example:
+//
+//	err := ctx.Encode(w, types.Event{
+//		Event: "message",
+//		Data:  "Hello",
+//	})
+func (sc *ServiceContext) Encode(w io.Writer, event Event) error {
+	if sc == nil {
+		return nil
+	}
+
+	return sse.Encode(w, event)
+}
+
 // SSEBuilder provides a fluent interface for building and sending SSE events.
 // It supports chaining methods to configure and send SSE events or streams.
 type SSEBuilder struct {
@@ -65,10 +96,8 @@ func (b *SSEBuilder) Stream(fn func(io.Writer) bool) {
 	}
 
 	if b.interval > 0 {
-		// Stream with interval
 		streamSSEWithInterval(b.ctx, b.interval, fn)
 	} else {
-		// Regular stream
 		streamSSE(b.ctx, fn)
 	}
 }
@@ -105,9 +134,6 @@ func (b *SSEBuilder) WithInterval(duration time.Duration) *SSEBuilder {
 //	})
 //	// Send [DONE] marker to indicate stream completion
 //	_ = ctx.SSE().Done()
-//
-// Returns:
-//   - error: Any error that occurred during encoding
 func (b *SSEBuilder) Done() error {
 	if b == nil || b.ctx == nil {
 		return nil
@@ -115,8 +141,7 @@ func (b *SSEBuilder) Done() error {
 	return sendSSEDone(b.ctx)
 }
 
-// streamSSE starts a Server-Sent Events stream.
-// This is an internal method used by SSEBuilder.
+// streamSSE runs the plain event stream for SSEBuilder.Stream.
 func streamSSE(sc *ServiceContext, fn func(io.Writer) bool) {
 	if sc == nil || sc.ginCtx == nil {
 		return
@@ -124,8 +149,7 @@ func streamSSE(sc *ServiceContext, fn func(io.Writer) bool) {
 	sse.StreamSSE(sc, sc.ginCtx.Writer, sc.ginCtx.Stream, fn)
 }
 
-// streamSSEWithInterval starts a Server-Sent Events stream with a fixed interval between events.
-// This is an internal method used by SSEBuilder.
+// streamSSEWithInterval runs the fixed-interval event stream for SSEBuilder.Stream.
 func streamSSEWithInterval(sc *ServiceContext, interval time.Duration, fn func(io.Writer) bool) {
 	if sc == nil || sc.ginCtx == nil {
 		return
@@ -133,8 +157,7 @@ func streamSSEWithInterval(sc *ServiceContext, interval time.Duration, fn func(i
 	sse.StreamSSEWithInterval(sc, sc.ginCtx.Writer, sc.ginCtx.Stream, interval, fn)
 }
 
-// sendSSEDone sends a [DONE] marker to indicate the end of an SSE stream.
-// This is an internal method used by SSEBuilder.
+// sendSSEDone writes the [DONE] marker for SSEBuilder.Done.
 func sendSSEDone(sc *ServiceContext) error {
 	if sc == nil || sc.ginCtx == nil {
 		return nil

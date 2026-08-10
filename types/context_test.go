@@ -1,23 +1,21 @@
-package types
+package types_test
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/requestctx"
+	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 )
 
 func TestServiceContextContextMethods(t *testing.T) {
-	var _ context.Context = (*ServiceContext)(nil)
-
 	gin.SetMode(gin.TestMode)
 
-	var serviceCtx *ServiceContext
+	var serviceCtx *types.ServiceContext
 	router := gin.New()
 	router.GET("/api/users/:id", func(ctx *gin.Context) {
 		ctx.Set(consts.PARAMS, []string{"id"})
@@ -26,7 +24,7 @@ func TestServiceContextContextMethods(t *testing.T) {
 		ctx.Set(consts.CTX_TENANT_ID, "tenant-1")
 		ctx.Set(consts.TRACE_ID, "trace-1")
 
-		serviceCtx = NewServiceContext(ctx, nil, "")
+		serviceCtx = types.NewServiceContext(ctx, nil, "")
 	})
 	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/users/42?tag=blue", nil))
 
@@ -43,7 +41,7 @@ func TestServiceContextContextMethods(t *testing.T) {
 func TestServiceContextQueryAccessorReturnsCopy(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	var serviceCtx *ServiceContext
+	var serviceCtx *types.ServiceContext
 	router := gin.New()
 	router.GET("/api/users/:id", func(ctx *gin.Context) {
 		ctx.Set(consts.PARAMS, []string{"id"})
@@ -51,7 +49,7 @@ func TestServiceContextQueryAccessorReturnsCopy(t *testing.T) {
 		ctx.Set(consts.CTX_USER_ID, "user-1")
 		ctx.Set(consts.TRACE_ID, "trace-1")
 
-		serviceCtx = NewServiceContext(ctx, nil, "")
+		serviceCtx = types.NewServiceContext(ctx, nil, "")
 	})
 	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/users/42?tag=blue", nil))
 
@@ -66,7 +64,7 @@ func TestServiceContextQueryAccessorReturnsCopy(t *testing.T) {
 }
 
 func TestNewServiceContextStoresPhase(t *testing.T) {
-	serviceCtx := NewServiceContext(nil, nil, consts.PHASE_LIST)
+	serviceCtx := types.NewServiceContext(nil, nil, consts.PHASE_LIST)
 
 	require.Equal(t, consts.PHASE_LIST, serviceCtx.Phase())
 }
@@ -77,7 +75,7 @@ func TestServiceContextRequestAccessors(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodGet, "https://example.com/api/users?tag=blue", nil)
 
-	serviceCtx := NewServiceContext(ctx, nil, "")
+	serviceCtx := types.NewServiceContext(ctx, nil, "")
 
 	require.Equal(t, http.MethodGet, serviceCtx.Method())
 	require.Equal(t, "/api/users", serviceCtx.Path())
@@ -91,7 +89,7 @@ func TestServiceContextNilRequest(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 
-	serviceCtx := NewServiceContext(ctx, nil, "")
+	serviceCtx := types.NewServiceContext(ctx, nil, "")
 
 	require.Empty(t, serviceCtx.Method())
 	require.Empty(t, serviceCtx.Path())
@@ -108,7 +106,7 @@ func TestServiceContextResponseHelpers(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodGet, "https://example.com/api/users?tag=blue", nil)
 
-	serviceCtx := NewServiceContext(ctx, nil, "")
+	serviceCtx := types.NewServiceContext(ctx, nil, "")
 	serviceCtx.SetCookie(&http.Cookie{
 		Name:     "session_id",
 		Value:    "session-1",
@@ -130,7 +128,7 @@ func TestServiceContextResponseHelpers(t *testing.T) {
 }
 
 func TestServiceContextNilGinHelpers(t *testing.T) {
-	serviceCtx := NewServiceContext(nil, nil, "")
+	serviceCtx := types.NewServiceContext(nil, nil, "")
 
 	serviceCtx.Data(http.StatusCreated, "text/plain", []byte("created"))
 	serviceCtx.SetCookie(&http.Cookie{Name: "session_id", Value: "session-1"})
@@ -145,7 +143,7 @@ func TestServiceContextNilGinHelpers(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, file)
 
-	var nilCtx *ServiceContext
+	var nilCtx *types.ServiceContext
 	nilCtx.Data(http.StatusCreated, "text/plain", []byte("created"))
 	nilCtx.SetCookie(&http.Cookie{Name: "session_id", Value: "session-1"})
 	require.Empty(t, nilCtx.PostForm("name"))

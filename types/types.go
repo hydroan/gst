@@ -1,101 +1,50 @@
+// Package types defines the public contracts between the framework and
+// business projects: the Model, Service, Database, Aggregator, Cache, RBAC,
+// and Logger interfaces, the query building blocks they exchange (Filter,
+// Order, Cursor, Column, aggregate terms), and the per-request
+// ServiceContext.
 package types
 
-import (
-	"github.com/hydroan/gst/internal/sse"
-	"github.com/hydroan/gst/types/consts"
-)
-
-// Event is an alias for sse.Event.
-// This allows users to use types.Event instead of importing internal/sse directly.
-type Event = sse.Event
-
-// ControllerConfig customizes how router.Register builds an internal handler for
-// a route. It is the public configuration surface for controller behavior; the
-// concrete controller handlers and their runtime state remain framework-owned.
-type ControllerConfig[M Model] struct {
-	// ParamName names the route parameter that carries the resource ID.
-	ParamName string
-	// Route is the raw route string the handler is registered under. Controller
-	// factories derive the service registry key from it, so it must match the
-	// route passed to the corresponding service.Register call. router.Register
-	// fills it in automatically; an empty route resolves no service and the
-	// handler falls back to the no-op default service.
-	Route string
+// Coder describes an API envelope code, HTTP status, and client-safe message.
+type Coder interface {
+	Code() int
+	Status() int
+	Msg() string
 }
 
-// Permission is one operation a role is allowed to perform on one object. It is
-// the unit the whole-set replacement methods on RBAC take, so a caller states a
-// role's permissions as a set rather than as a sequence of grants.
-type Permission struct {
-	// Object is the protected resource, usually a route path template such as
-	// /api/things/{id}.
-	Object string
+// ESDocumenter represents a document that can be indexed into Elasticsearch.
+// Types implementing this interface should be able to convert themselves
+// into a document format suitable for Elasticsearch indexing.
+type ESDocumenter interface {
+	// Document returns a map representing an Elasticsearch document.
+	// The returned map should contain all fields to be indexed, where:
+	//   - keys are field names (string type)
+	//   - values are field values (any type)
+	//
+	// Implementation notes:
+	//   1. The returned map should only contain JSON-serializable values.
+	//   2. Field names should match those defined in the Elasticsearch mapping.
+	//   3. Complex types (like nested objects or arrays) should be correctly
+	//      represented in the returned map.
+	//
+	// Example:
+	//   return map[string]any{
+	//       "id":    "1234",
+	//       "title": "Sample Document",
+	//       "tags":  []string{"tag1", "tag2"},
+	//   }
+	Document() map[string]any
 
-	// Action is the operation on that object, usually an HTTP method.
-	Action string
-}
-
-// Decision is the outcome of one authorization check.
-//
-// Source names the strongest rule that allowed the request and is empty on a
-// denial, because a denial has no granting rule. MatchedRule is the policy row
-// that allowed it, and is nil unless Source names a policy: the rules that
-// allow without consulting one leave the engine free to report an unrelated
-// row, which would read as the reason for access while being nothing of the
-// kind.
-//
-// Reason is the mirror of Source and is set only on a denial, where naming a
-// rule is not possible and what an operator needs instead is which step is
-// missing. It is empty when the implementation could not tell, so an empty
-// reason on a denial means unknown rather than none.
-type Decision struct {
-	Allowed     bool
-	Source      consts.GrantSource
-	Reason      consts.DenyReason
-	MatchedRule []string
-}
-
-// QueryOptions tunes how WithQuery turns a model value into WHERE conditions.
-// Every condition it produces is AND-combined; the zero value means exact
-// matching with the empty-query safety check enabled. See the WithQuery method
-// for usage examples.
-type QueryOptions struct {
-	// AllowEmpty allows a query without any condition to match all records.
-	// By default a nil model, a zero-value model, or all-empty field values
-	// add the "1 = 0" safety condition instead, so a forgotten filter cannot
-	// return or delete the whole table. RawQuery and Filters count as
-	// real conditions and disable the safety check on their own.
-	AllowEmpty bool
-
-	// RawQuery is a raw parameterized SQL fragment added as an extra WHERE
-	// condition. It works with a nil model and combines with model-field
-	// conditions otherwise.
-	RawQuery string
-
-	// RawQueryArgs are the values bound to the RawQuery placeholders.
-	RawQueryArgs []any
-
-	// PresentFields marks columns whose filter values were explicitly provided
-	// by the caller, keyed by snake case column name. Query construction treats
-	// zero values (false, 0) of these columns as real conditions instead of
-	// dropping them as unset, so a filter like "enabled=false" works. Columns
-	// not listed here keep the default zero-value skip.
-	PresentFields map[string]struct{}
-
-	// Filters are field-level operator filters ("field[op]=value"). They
-	// apply in every WithQuery path, including nil/empty model queries, so
-	// List and Count stay consistent. A condition with an unknown operator
-	// or empty column fails closed: query construction adds "1 = 0" instead
-	// of dropping it.
-	Filters []Filter
-}
-
-// SQLStatement contains a generated SQL statement in executable and rendered forms.
-type SQLStatement struct {
-	// Query is the parameterized SQL with placeholders.
-	Query string
-	// Args contains the values bound to Query.
-	Args []any
-	// RenderedSQL is dialect-rendered SQL for logging, inspection, and manual debugging.
-	RenderedSQL string
+	// GetID returns a string that uniquely identifies the document.
+	// This ID is typically used as the Elasticsearch document ID.
+	//
+	// Implementation notes:
+	//   1. The ID should be unique within the index.
+	//   2. If no custom ID is needed, consider returning an empty string
+	//      to let Elasticsearch auto-generate an ID.
+	//   3. The ID should be a string, even if it's originally a numeric value.
+	//
+	// Example:
+	//   return "user_12345"
+	GetID() string
 }

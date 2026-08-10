@@ -2,7 +2,6 @@ package types
 
 import (
 	"context"
-	"io"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -12,12 +11,16 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/sse"
 	"github.com/hydroan/gst/types/consts"
 )
 
 var _ context.Context = (*ServiceContext)(nil)
 
+// ServiceContext is the per-request context the framework hands to every
+// service method. It implements context.Context by delegating to the request
+// context, exposes request metadata (route, params, user identity, trace),
+// and carries the response helpers a service needs without touching Gin
+// directly.
 type ServiceContext struct {
 	baseCtx        context.Context
 	ginCtx         *gin.Context
@@ -32,11 +35,11 @@ type ServiceContext struct {
 	requiresAuth bool // indicates whether the current API requires authentication
 }
 
-// NewServiceContext creates ServiceContext from gin.Context.
-// Including request details, headers, phase, and user information.
+// NewServiceContext builds a ServiceContext from the Gin request, capturing
+// request details, phase, and user metadata.
 //
-// You can pass a custom context.Context to propagate span tracing.
-// If ctx is nil, the request context is used when available.
+// A non-nil ctx overrides the base context, which is how span tracing is
+// propagated; when ctx is nil, the request context is used when available.
 //
 // NewServiceContext always returns a non-nil *ServiceContext, even when
 // both c and ctx are nil. ServiceContext methods are also nil-receiver
@@ -101,19 +104,6 @@ func (sc *ServiceContext) RequiresAuth() bool {
 		return false
 	}
 	return sc.requiresAuth
-}
-
-// RequestUserID reports the authenticated subject of the request ctx descends
-// from, or "" when no request is behind it.
-//
-// It exists for code that receives a plain context and still has to know who
-// is acting — a model hook guarding an operation, like tenant.From for a model
-// deriving its key. An empty answer means machinery rather than a person:
-// seeding, a scheduled job, framework code. Inside a request it cannot be
-// empty, because authorization refuses anonymous requests before any handler
-// runs.
-func RequestUserID(ctx context.Context) string {
-	return requestctx.FromContext(ctx).UserID()
 }
 
 func (sc *ServiceContext) Query() url.Values       { return requestctx.FromContext(sc).Query() }
@@ -205,36 +195,15 @@ func (sc *ServiceContext) FormFile(name string) (*multipart.FileHeader, error) {
 	return sc.ginCtx.FormFile(name)
 }
 
-// Encode writes an SSE event to the given writer.
-// This is a convenience method that wraps sse.Encode.
+// RequestUserID reports the authenticated subject of the request ctx descends
+// from, or "" when no request is behind it.
 //
-// The event is formatted according to the SSE specification:
-//   - Fields are written in recommended order: id, event, retry, data
-//   - Each field is written as "field: value\n"
-//   - Multiple data fields are concatenated (for multi-line data)
-//   - Events are separated by a blank line (\n\n)
-//
-// If Data is a complex type (map, struct, slice), it will be JSON-encoded.
-// If Data is a primitive type, it will be converted to string.
-// If Data is nil, no data field will be written.
-//
-// Example:
-//
-//	err := ctx.Encode(w, types.Event{
-//		Event: "message",
-//		Data:  "Hello",
-//	})
-//
-// Parameters:
-//   - w: Writer to write the event to
-//   - event: SSE event to encode
-//
-// Returns:
-//   - error: Any error that occurred during encoding
-func (sc *ServiceContext) Encode(w io.Writer, event Event) error {
-	if sc == nil {
-		return nil
-	}
-
-	return sse.Encode(w, event)
+// It exists for code that receives a plain context and still has to know who
+// is acting — a model hook guarding an operation, like tenant.From for a model
+// deriving its key. An empty answer means machinery rather than a person:
+// seeding, a scheduled job, framework code. Inside a request it cannot be
+// empty, because authorization refuses anonymous requests before any handler
+// runs.
+func RequestUserID(ctx context.Context) string {
+	return requestctx.FromContext(ctx).UserID()
 }

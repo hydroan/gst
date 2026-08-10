@@ -49,29 +49,6 @@ const (
 	FilterOpExists       FilterOp = "exists"       // correlated subquery: the Subquery value becomes EXISTS or NOT EXISTS
 )
 
-// Subquery is the correlated EXISTS subquery carried by FilterOpExists. It
-// names the related model, the column pair that correlates it with the outer
-// query, and the conditions narrowing it.
-//
-// A semi join is used rather than a real join on purpose: EXISTS matches a row
-// at most once, so an aggregate over the outer table keeps counting each row
-// once. A join to a one-to-many child multiplies the outer rows instead, and a
-// SUM over that silently doubles.
-type Subquery struct {
-	// Model is an allocated instance of the related model. It carries the
-	// child table name and its soft-delete scope, so a subquery hides the same
-	// rows a List on that model hides.
-	Model Model
-	// ChildColumn is the correlated column on the related model.
-	ChildColumn string
-	// ParentColumn is the correlated column on the model being queried.
-	ParentColumn string
-	// Filters narrow the related rows.
-	Filters []Filter
-	// Negate turns the condition into NOT EXISTS.
-	Negate bool
-}
-
 // filterOps indexes the URL-exposed operators for parsing; service-only
 // operators are deliberately absent (see the FilterOp tier note). Matching is
 // exact and case-sensitive: URL query keys are contract surface, not
@@ -320,6 +297,29 @@ func FilterOr(filters ...Filter) Filter {
 // A group with no children fails closed.
 func FilterAnd(filters ...Filter) Filter {
 	return Filter{Op: FilterOpAnd, Value: filters}
+}
+
+// Subquery is the correlated EXISTS subquery carried by FilterOpExists. It
+// names the related model, the column pair that correlates it with the outer
+// query, and the conditions narrowing it.
+//
+// A semi join is used rather than a real join on purpose: EXISTS matches a row
+// at most once, so an aggregate over the outer table keeps counting each row
+// once. A join to a one-to-many child multiplies the outer rows instead, and a
+// SUM over that silently doubles.
+type Subquery struct {
+	// Model is an allocated instance of the related model. It carries the
+	// child table name and its soft-delete scope, so a subquery hides the same
+	// rows a List on that model hides.
+	Model Model
+	// ChildColumn is the correlated column on the related model.
+	ChildColumn string
+	// ParentColumn is the correlated column on the model being queried.
+	ParentColumn string
+	// Filters narrow the related rows.
+	Filters []Filter
+	// Negate turns the condition into NOT EXISTS.
+	Negate bool
 }
 
 // FilterExists matches rows of the queried model that have at least one

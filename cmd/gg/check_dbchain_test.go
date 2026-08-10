@@ -173,7 +173,7 @@ func keep(ctx context.Context) any {
 // types.Database and types.DatabaseOption interfaces.
 func TestDatabaseChainMethodSetsMatchTypesInterface(t *testing.T) {
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, filepath.Join("..", "..", "types", "interface.go"), nil, 0)
+	file, err := parser.ParseFile(fset, filepath.Join("..", "..", "types", "database.go"), nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func interfaceMethodNames(t *testing.T, file *ast.File, interfaceName string) []
 		return false
 	})
 	if len(names) == 0 {
-		t.Fatalf("no methods found for interface %q in types/interface.go", interfaceName)
+		t.Fatalf("no methods found for interface %q in types/database.go", interfaceName)
 	}
 	return names
 }

@@ -1,5 +1,86 @@
 package types
 
+// Aggregator runs an analytical read over the table of M and scans the result
+// rows into R. It is deliberately separate from Database[M]: an aggregate
+// result is not a model row, so model hooks, association preloading and cursor
+// pagination have nothing to act on and are absent here rather than present
+// and inert.
+//
+// Scoping comes from M — the table name, the soft-delete condition and the
+// dialect — so an aggregate can never read rows a List on the same model
+// hides. R is an ordinary struct the caller declares; its fields bind to the
+// projection aliases, and a mismatch on either side is a build error rather
+// than a silently zero column. A measure that can come back NULL — AVG, MIN
+// or MAX without group keys, carrying conditions, or over a nullable column —
+// must bind to a pointer or sql.Null field, which is again a build error
+// rather than a zero on the report.
+//
+// The entry point is the package-level database.Aggregate[M, R] rather than a
+// method, because a Go method cannot introduce the result type parameter.
+//
+// Row-level access rules are not inherited. A model's List gets its tenant or
+// group scoping from the Filter service hook the controller runs;
+// an aggregate is called straight from service code, so those hooks never run
+// and every scoping condition has to be passed to Where explicitly. Forgetting
+// one aggregates across tenants without any sign that it did.
+//
+// A builder is a specification, not a live statement: it can be read more than
+// once, and each terminal renders the spec afresh. That is what makes the
+// paginated-report idiom safe — Scan for the page, then CountGroups for the
+// total, off the same builder.
+//
+// Example:
+//
+//	type tenantTotal struct {
+//	    TenantID string
+//	    Total    int64
+//	    // ClosedAt is nullable on Sample, so MAX over it can be NULL and
+//	    // needs a field that can hold NULL.
+//	    LastClosed *time.Time
+//	}
+//	total := SampleCols.Amount.Sum().As("total")
+//	rows := make([]tenantTotal, 0)
+//	err := database.Aggregate[*Sample, tenantTotal](ctx).
+//	    Select(SampleCols.TenantID.Group(), total,
+//	        SampleCols.ClosedAt.Max().As("last_closed")).
+//	    Where(SampleCols.Status.Eq(StatusDone)).
+//	    Having(total.Gte(1000)).
+//	    OrderBy(total.Desc()).
+//	    Limit(10).
+//	    Scan(&rows)
+type Aggregator[M Model, R any] interface {
+	// Select declares the projection. A term without an aggregate function is
+	// a group key, and GROUP BY is derived from those keys, so the SELECT and
+	// GROUP BY lists cannot disagree. At least one aggregate term is required.
+	Select(terms ...AggregateTerm) Aggregator[M, R]
+	// Where restricts the rows entering the aggregation, using the same filter
+	// tree as WithQuery.
+	Where(filters ...Filter) Aggregator[M, R]
+	// Having restricts the produced groups by their measures.
+	Having(conditions ...Having) Aggregator[M, R]
+	// OrderBy sorts the result rows by a projection term.
+	OrderBy(orders ...AggregateOrder) Aggregator[M, R]
+	// Limit caps the number of result rows.
+	Limit(n int) Aggregator[M, R]
+	// Offset skips result rows, for paginating a grouped report.
+	Offset(n int) Aggregator[M, R]
+
+	// Scan runs the query and fills dest with one element per group.
+	Scan(dest *[]R) error
+	// ScanOne runs an ungrouped aggregation and fills dest with its single
+	// row. It fails when the projection declares group keys.
+	ScanOne(dest *R) error
+	// CountGroups reports how many groups the query produces, which is the
+	// total a paginated grouped report needs.
+	CountGroups(count *int) error
+
+	// WithBuildSQL builds the SQL for the next terminal operation and appends
+	// it to the collector instead of executing it.
+	WithBuildSQL(statements *[]SQLStatement) Aggregator[M, R]
+	// WithDryRun builds the SQL without database I/O.
+	WithDryRun() Aggregator[M, R]
+}
+
 // AggregateFn is the function applied to one projection term. The set is
 // closed, so a projection can never carry SQL the way a free-form select
 // string could: the renderer maps each constant to a fixed expression and

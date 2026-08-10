@@ -8,14 +8,6 @@ import (
 	"github.com/hydroan/gst/types"
 )
 
-// Note: SSE usage:
-//   - Use types.Event for event types
-//   - Use ctx.Encode() to encode events in stream callbacks
-//   - Use the chainable API for all SSE operations:
-//     - ctx.SSE().Stream(fn) - Start a stream
-//     - ctx.SSE().WithInterval(duration).Stream(fn) - Stream with interval
-//     - ctx.SSE().Done() - Send [DONE] marker
-
 // ExampleServiceContext_SSE_stream demonstrates using the chainable API for streaming.
 func ExampleServiceContext_SSE_stream() {
 	var sc *types.ServiceContext
