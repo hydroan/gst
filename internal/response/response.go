@@ -212,6 +212,20 @@ func NewCode(code Code, status int, msg string) Code {
 	return code
 }
 
+// Abort refuses the request with status and msg, written in the API envelope,
+// and stops the handler chain.
+//
+// It exists so that code outside the controller path — middleware, and the
+// middleware a module ships to the projects that copy it — has one way to
+// refuse. Writing the envelope by hand instead works until the envelope grows:
+// the response code recorded just below was added on this path and reached none
+// of the hand-written ones, so every such refusal logged a code its own body
+// contradicted.
+func Abort(c *gin.Context, status int, msg string) {
+	c.Abort()
+	JSON(c, CodeFailure.WithStatus(status).WithMsg(msg))
+}
+
 func JSON(c *gin.Context, coder types.Coder, data ...any) {
 	// Record the envelope code so post-response middleware (e.g. the HTTP
 	// body logger) can classify the outcome even when the HTTP status is 2xx.
@@ -261,6 +275,7 @@ func BytesList(c *gin.Context, coder types.Coder, total int, data ...[]byte) {
 }
 
 func Text(c *gin.Context, coder types.Coder, data ...any) {
+	c.Set(consts.CTX_RESPONSE_CODE, coder.Code())
 	if len(data) > 0 {
 		c.String(coder.Status(), stringAny(data))
 	} else {
@@ -272,11 +287,13 @@ func Text(c *gin.Context, coder types.Coder, data ...any) {
 // and content type explicitly. It is used for exports where the format decides
 // the file extension and MIME type.
 func Attachment(c *gin.Context, data []byte, filename, contentType string) {
+	c.Set(consts.CTX_RESPONSE_CODE, CodeSuccess.Code())
 	c.Header("Content-Disposition", "attachment; filename="+filename)
 	c.Data(http.StatusOK, contentType, data)
 }
 
 func File(c *gin.Context, filename string) {
+	c.Set(consts.CTX_RESPONSE_CODE, CodeSuccess.Code())
 	c.File(filename)
 }
 
