@@ -45,7 +45,11 @@ func CircuitBreaker() gin.HandlerFunc {
 				"method", method,
 			)
 
-			response.Abort(c, http.StatusServiceUnavailable, err.Error())
+			// The error describes this server to itself — the status a handler
+			// wrote, the path it wrote it for, the gin errors behind it — and
+			// the log above already holds it. The caller is told the one thing
+			// it can act on, which is to try again later.
+			response.Abort(c, http.StatusServiceUnavailable, "service unavailable")
 		}
 	}
 }
