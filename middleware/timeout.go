@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/response"
 	"go.uber.org/zap"
 )
 
@@ -66,12 +66,7 @@ func Timeout(timeout time.Duration) gin.HandlerFunc {
 					"method", c.Request.Method,
 					"timeout", timeout,
 				)
-				c.AbortWithStatusJSON(http.StatusGatewayTimeout, gin.H{
-					"code":          -1,
-					"msg":           "request timeout",
-					"data":          nil,
-					consts.TRACE_ID: c.GetString(consts.TRACE_ID),
-				})
+				response.Abort(c, http.StatusGatewayTimeout, "request timeout")
 			}
 			// Cancel the context to signal handlers to stop
 			cancel()

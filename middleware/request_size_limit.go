@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/response"
 )
 
 // RequestSizeLimit returns a middleware that limits the size of incoming request bodies.
@@ -27,12 +27,7 @@ func RequestSizeLimit(maxSize int64) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Check Content-Length header first (if available and valid)
 		if c.Request.ContentLength > 0 && c.Request.ContentLength > maxSize {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-				"code":          -1,
-				"msg":           "request body too large",
-				"data":          nil,
-				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
-			})
+			response.Abort(c, http.StatusBadRequest, "request body too large")
 			return
 		}
 

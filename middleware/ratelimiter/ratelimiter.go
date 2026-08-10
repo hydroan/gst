@@ -8,8 +8,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/cache/freelru"
+	"github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
 	"golang.org/x/time/rate"
 )
 
@@ -121,12 +121,7 @@ func RateLimiter(opts ...Option) gin.HandlerFunc {
 			// forced positive above, so there is no failure to handle here.
 			_ = limiterCache().Set(c.Request.Context(), key, limiter, conf.TTL)
 		} else if err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-				"code":          -1,
-				"msg":           "rate limiter unavailable",
-				"data":          nil,
-				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
-			})
+			response.Abort(c, http.StatusBadRequest, "rate limiter unavailable")
 			return
 		}
 		if !limiter.Allow() {
@@ -135,12 +130,7 @@ func RateLimiter(opts ...Option) gin.HandlerFunc {
 				c.Abort()
 				return
 			}
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
-				"code":          -1,
-				"msg":           "too many requests",
-				"data":          nil,
-				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
-			})
+			response.Abort(c, http.StatusTooManyRequests, "too many requests")
 			return
 		}
 		c.Next()

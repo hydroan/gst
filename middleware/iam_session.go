@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
+	"github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/mssola/useragent"
@@ -36,26 +37,12 @@ func mustChangePasswordExempt(method, path string) bool {
 	}
 }
 
-// abortSession refuses the request in the API envelope, so a session-layer
-// rejection reads like every other refusal. These used to answer with a bare
-// {"error": ...}: a client parsing the envelope got no code and no trace id,
-// and two of the sites echoed whatever error text the layer below returned —
-// the cache's "entry not found" included — to whoever held an invalid cookie.
-func abortSession(c *gin.Context, status int, msg string) {
-	c.AbortWithStatusJSON(status, gin.H{
-		"code":          -1,
-		"msg":           msg,
-		"data":          nil,
-		consts.TRACE_ID: c.GetString(consts.TRACE_ID),
-	})
-}
-
 func IAMSession() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sessionID, err := c.Cookie(serviceiamsession.SessionCookieName)
 		sessionID = strings.TrimSpace(sessionID)
 		if err != nil || sessionID == "" {
-			abortSession(c, http.StatusUnauthorized, "no session")
+			response.Abort(c, http.StatusUnauthorized, "no session")
 			return
 		}
 
@@ -67,14 +54,14 @@ func IAMSession() gin.HandlerFunc {
 		// names a live session.
 		session, e := serviceiamsession.SessionManager.Load(ctx, sessionID)
 		if e != nil {
-			abortSession(c, http.StatusUnauthorized, "session invalid")
+			response.Abort(c, http.StatusUnauthorized, "session invalid")
 			return
 		}
 		// Validate speaks in client-safe terms — expired, not active — so its
 		// message passes through as it stands.
 		if err = serviceiamsession.SessionManager.Validate(sessionID, session); err != nil {
 			_, _ = serviceiamsession.SessionManager.Delete(ctx, sessionID)
-			abortSession(c, http.StatusUnauthorized, err.Error())
+			response.Abort(c, http.StatusUnauthorized, err.Error())
 			return
 		}
 
@@ -83,19 +70,19 @@ func IAMSession() gin.HandlerFunc {
 		engineName, _ := ua.Engine()
 		browserName, _ := ua.Browser()
 		if session.OS != ua.OS() {
-			abortSession(c, http.StatusUnauthorized, "os mismatch")
+			response.Abort(c, http.StatusUnauthorized, "os mismatch")
 			return
 		}
 		if session.Platform != ua.Platform() {
-			abortSession(c, http.StatusUnauthorized, "platform mismatch")
+			response.Abort(c, http.StatusUnauthorized, "platform mismatch")
 			return
 		}
 		if engineName != session.EngineName {
-			abortSession(c, http.StatusUnauthorized, "engine mismatch")
+			response.Abort(c, http.StatusUnauthorized, "engine mismatch")
 			return
 		}
 		if browserName != session.BrowserName {
-			abortSession(c, http.StatusUnauthorized, "browser mismatch")
+			response.Abort(c, http.StatusUnauthorized, "browser mismatch")
 			return
 		}
 
@@ -109,12 +96,12 @@ func IAMSession() gin.HandlerFunc {
 			if errors.As(err, &serviceErr) {
 				status, msg = serviceErr.Status(), serviceErr.Msg()
 			}
-			abortSession(c, status, msg)
+			response.Abort(c, status, msg)
 			return
 		}
 
 		if sessionRequiresPasswordChange(session) && !mustChangePasswordExempt(c.Request.Method, c.Request.URL.Path) {
-			abortSession(c, http.StatusForbidden, "password change required before using this resource")
+			response.Abort(c, http.StatusForbidden, "password change required before using this resource")
 			return
 		}
 

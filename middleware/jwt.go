@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/authn/jwt"
+	"github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/types/consts"
 )
 
@@ -16,21 +17,11 @@ func JwtAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		accessToken, claims, err := jwt.ParseTokenFromHeader(c.Request.Header)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"code":          -1,
-				"msg":           err.Error(),
-				"data":          nil,
-				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
-			})
+			response.Abort(c, http.StatusUnauthorized, err.Error())
 			return
 		}
 		if err := jwt.Verify(claims, accessToken, c.Request.UserAgent()); err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"code":          -1,
-				"msg":           err.Error(),
-				"data":          nil,
-				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
-			})
+			response.Abort(c, http.StatusUnauthorized, err.Error())
 			return
 		}
 

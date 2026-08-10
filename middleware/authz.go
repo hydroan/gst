@@ -9,6 +9,7 @@ import (
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
@@ -45,12 +46,7 @@ func Authz() gin.HandlerFunc {
 
 		sub := strings.TrimSpace(c.GetString(consts.CTX_USER_ID))
 		if sub == "" {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-				"code":          -1,
-				"msg":           "permission denied",
-				"data":          nil,
-				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
-			})
+			response.Abort(c, http.StatusForbidden, "permission denied")
 			// Anonymous requests are rejected before the tenant is resolved,
 			// so the decision is recorded without one.
 			logAuthzDeny(c, "", sub, obj, act, consts.DenyReasonUnauthenticated)
@@ -70,12 +66,7 @@ func Authz() gin.HandlerFunc {
 		decision, err := rbac.RBAC().
 			Authorize(c.Request.Context(), tenantID, sub, obj, act)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-				"code":          -1,
-				"msg":           "authorization unavailable",
-				"data":          nil,
-				consts.TRACE_ID: c.GetString(consts.TRACE_ID),
-			})
+			response.Abort(c, http.StatusInternalServerError, "authorization unavailable")
 			logAuthzFailure(c, tenantID, sub, obj, act, err)
 			return
 		}
@@ -94,12 +85,7 @@ func Authz() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-			"code":          -1,
-			"msg":           "permission denied",
-			"data":          nil,
-			consts.TRACE_ID: c.GetString(consts.TRACE_ID),
-		})
+		response.Abort(c, http.StatusForbidden, "permission denied")
 		logAuthzDeny(c, tenantID, sub, obj, act, decision.Reason)
 	}
 }

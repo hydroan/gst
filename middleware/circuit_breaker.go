@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/response"
 	"go.uber.org/zap"
 )
 
@@ -44,10 +45,7 @@ func CircuitBreaker() gin.HandlerFunc {
 				"method", method,
 			)
 
-			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
-				"error":  http.StatusText(http.StatusServiceUnavailable),
-				"detail": err.Error(),
-			})
+			response.Abort(c, http.StatusServiceUnavailable, err.Error())
 		}
 	}
 }
