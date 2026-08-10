@@ -64,21 +64,6 @@ func TestDoReturnsStructuredErrorOnRejection(t *testing.T) {
 	require.NotEmpty(t, respErr.Body)
 }
 
-func TestDoReadsLegacyErrorFieldAsMessage(t *testing.T) {
-	// Middleware rejections write {"error": "..."} instead of the standard
-	// envelope; the message must still surface on the structured error.
-	srv, _ := newEnvelopeServer(t, http.StatusForbidden, `{"error":"account locked"}`)
-
-	cli, err := client.New(srv.URL)
-	require.NoError(t, err)
-
-	_, err = cli.Do(http.MethodGet, "/api/records", nil)
-	var respErr *client.Error
-	require.True(t, errors.As(err, &respErr))
-	require.Equal(t, http.StatusForbidden, respErr.StatusCode)
-	require.Equal(t, "account locked", respErr.Msg)
-}
-
 func TestDoReturnsStructuredErrorOnBusinessCodeWith2xx(t *testing.T) {
 	srv, _ := newEnvelopeServer(t, http.StatusOK, `{"code":1001,"msg":"sample failure"}`)
 

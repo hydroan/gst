@@ -105,21 +105,10 @@ func parseEnvelope(httpRsp *http.Response, body []byte) (*Envelope, error) {
 
 	ok := httpRsp.StatusCode >= 200 && httpRsp.StatusCode < 300
 	if !ok || res.Code != 0 {
-		msg := res.Msg
-		if msg == "" {
-			// Middleware rejections write {"error": "..."} instead of the
-			// standard envelope; surface that text as the message.
-			var legacy struct {
-				Error string `json:"error"`
-			}
-			if err := json.Unmarshal(body, &legacy); err == nil {
-				msg = legacy.Error
-			}
-		}
 		return nil, &Error{
 			StatusCode: httpRsp.StatusCode,
 			Code:       res.Code,
-			Msg:        msg,
+			Msg:        res.Msg,
 			TraceID:    res.TraceID,
 			Body:       body,
 		}
