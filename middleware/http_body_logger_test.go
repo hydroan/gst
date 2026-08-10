@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -195,6 +196,28 @@ func TestHTTPBodyLoggerDefaultModesLogRequestAlwaysResponseOnError(t *testing.T)
 		ctx := entries[0].ContextMap()
 		require.Equal(t, int64(1000), ctx["code"])
 		require.JSONEq(t, `{"code":1000,"msg":"invalid parameters"}`, httpBodyLogStringField(t, ctx, "response"))
+	})
+
+	t.Run("a refusal through response.Abort records its code", func(t *testing.T) {
+		// The case above sets the key by hand and proves the logger reads it.
+		// This one proves the only way to refuse from outside the controller
+		// path writes it: the refusals that built the envelope themselves never
+		// did, and logged code 0 beside a body of their own that said -1.
+		logs := setupHTTPBodyLoggerTest(t, config.HTTPBodyLogger{Enabled: true, MaxBodySize: "64KB"})
+		router := newRouter(func(c *gin.Context) {
+			response.Abort(c, http.StatusForbidden, "permission denied")
+		})
+
+		w := performHTTPBodyLoggerRequest(router, "/api/records", `{"a":1}`, "application/json")
+
+		require.Equal(t, http.StatusForbidden, w.Code)
+		entries := logs.All()
+		require.Len(t, entries, 1)
+		ctx := entries[0].ContextMap()
+		require.Equal(t, int64(-1), ctx["code"])
+		require.Equal(t, int64(http.StatusForbidden), ctx["status"])
+		require.JSONEq(t, `{"code":-1,"msg":"permission denied","data":null,"trace_id":""}`,
+			httpBodyLogStringField(t, ctx, "response"))
 	})
 }
 
