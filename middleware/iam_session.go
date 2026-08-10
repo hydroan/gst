@@ -37,6 +37,27 @@ func mustChangePasswordExempt(method, path string) bool {
 	}
 }
 
+// abortInvalidSession refuses the request with one fixed message and keeps the
+// reason in the log.
+//
+// The reasons this layer rejects for are graded — a snapshot storage no longer
+// has, one that expired, one issued to another browser or another OS — and
+// answering each of them in its own words hands the bearer of a stolen cookie a
+// probe: it can vary one component of the request at a time and read back which
+// one the server objected to, which is the session's binding described to the
+// one caller who must not learn it. The holder of a live session is told
+// nothing by the distinction either, since every one of these is answered by
+// logging in again, so only the log keeps it.
+func abortInvalidSession(c *gin.Context, reason string) {
+	zap.S().Warnw(
+		"iam session rejected",
+		"reason", reason,
+		"path", c.Request.URL.Path,
+		"method", c.Request.Method,
+	)
+	response.Abort(c, http.StatusUnauthorized, "session invalid")
+}
+
 func IAMSession() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sessionID, err := c.Cookie(serviceiamsession.SessionCookieName)
@@ -47,21 +68,14 @@ func IAMSession() gin.HandlerFunc {
 		}
 
 		ctx := c.Request.Context()
-		// A load that fails is answered with one fixed message. The cause is a
-		// storage detail — a snapshot that expired, a cache that has no such
-		// entry, a backend that did not answer — and none of it is the
-		// caller's: what the caller can act on is that this cookie no longer
-		// names a live session.
 		session, e := serviceiamsession.SessionManager.Load(ctx, sessionID)
 		if e != nil {
-			response.Abort(c, http.StatusUnauthorized, "session invalid")
+			abortInvalidSession(c, e.Error())
 			return
 		}
-		// Validate speaks in client-safe terms — expired, not active — so its
-		// message passes through as it stands.
 		if err = serviceiamsession.SessionManager.Validate(sessionID, session); err != nil {
 			_, _ = serviceiamsession.SessionManager.Delete(ctx, sessionID)
-			response.Abort(c, http.StatusUnauthorized, err.Error())
+			abortInvalidSession(c, err.Error())
 			return
 		}
 
@@ -70,19 +84,19 @@ func IAMSession() gin.HandlerFunc {
 		engineName, _ := ua.Engine()
 		browserName, _ := ua.Browser()
 		if session.OS != ua.OS() {
-			response.Abort(c, http.StatusUnauthorized, "os mismatch")
+			abortInvalidSession(c, "os mismatch")
 			return
 		}
 		if session.Platform != ua.Platform() {
-			response.Abort(c, http.StatusUnauthorized, "platform mismatch")
+			abortInvalidSession(c, "platform mismatch")
 			return
 		}
 		if engineName != session.EngineName {
-			response.Abort(c, http.StatusUnauthorized, "engine mismatch")
+			abortInvalidSession(c, "engine mismatch")
 			return
 		}
 		if browserName != session.BrowserName {
-			response.Abort(c, http.StatusUnauthorized, "browser mismatch")
+			abortInvalidSession(c, "browser mismatch")
 			return
 		}
 

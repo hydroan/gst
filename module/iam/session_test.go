@@ -458,6 +458,25 @@ func TestSessionRejectionsAnswerInTheEnvelope(t *testing.T) {
 		_, err = client.Get[iam.CurrentGetRsp](sessionClient(t, sessionID), currentPath)
 		requireEnvelopeRejection(t, err, "session invalid")
 	})
+
+	t.Run("a cookie presented from another browser", func(t *testing.T) {
+		// A session is bound to the user agent that opened it, and the binding
+		// is checked one component at a time. Naming the component that failed
+		// would let the bearer of a stolen cookie recover the rest of it one
+		// request at a time, so this answers as every other unusable cookie.
+		account := newSessionTestAccount(t)
+		sessionID := loginSession(t, account.Username, account.Password)
+
+		cli, err := client.New(
+			baseURL,
+			client.WithUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
+			client.WithCookie(&http.Cookie{Name: "session_id", Value: sessionID}),
+		)
+		require.NoError(t, err)
+
+		_, err = client.Get[iam.CurrentGetRsp](cli, currentPath)
+		requireEnvelopeRejection(t, err, "session invalid")
+	})
 }
 
 func TestAdminSessionList(t *testing.T) {
