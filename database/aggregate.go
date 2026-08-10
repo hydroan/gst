@@ -186,7 +186,7 @@ func (a *aggregator[M, R]) Scan(dest *[]R) (err error) {
 	// destination would still hold the previous result. List documents that a
 	// read replaces the destination; an aggregate read behaves the same.
 	*dest = (*dest)[:0]
-	return tx.Scan(dest).Error
+	return scanRowsInto(tx, dest)
 }
 
 // ScanOne runs an ungrouped aggregation, which always produces exactly one
@@ -225,7 +225,7 @@ func (a *aggregator[M, R]) ScanOne(dest *R) (err error) {
 	}
 	var zero R
 	*dest = zero
-	return tx.Scan(dest).Error
+	return scanRowInto(tx, dest)
 }
 
 // CountGroups reports how many groups the aggregation produces. The count runs

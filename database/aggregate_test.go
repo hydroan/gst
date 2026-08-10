@@ -29,9 +29,9 @@ import (
 //	a5 | beta     | failed |    500 |   5.5 | 2024-02-10 08:00
 //	a6 | gamma    | done   |    600 |   6.5 | 2024-02-11 10:00
 //
-// Times are built in time.Local because the MySQL DSN carries loc=Local, so a
-// stored timestamp round-trips to the same wall clock and the bucket labels
-// are the literal strings below.
+// Times are built in time.UTC, the one wall clock the framework stores on
+// every dialect, so a stored timestamp round-trips to the same wall clock and
+// the bucket labels are the literal strings below.
 
 func aggregateSeed() []*TestAggregateRecord {
 	at := func(month, day, hour int) time.Time {
@@ -1294,6 +1294,60 @@ func TestAggregateNullableResultFields(t *testing.T) {
 		require.Nil(t, rows[1].LastSeen)
 		require.Equal(t, "gamma", rows[2].Category)
 		require.Nil(t, rows[2].LastSeen)
+	})
+
+	t.Run("AcceptsNullTimeField", func(t *testing.T) {
+		// The same read through the other accepted shape: sql.NullTime tells
+		// absence apart through Valid. The update is the one AcceptsPointerFields
+		// runs, repeated so the case stands on its own.
+		require.NoError(t, database.DB().Exec(
+			"UPDATE test_aggregate_records SET closed_at = occurred_at WHERE id = 'a1'",
+		).Error)
+
+		type row struct {
+			Category string
+			LastSeen sql.NullTime
+		}
+		rows := make([]row, 0)
+		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](ctx).
+			Select(aggCols.Category.Group(), aggCols.ClosedAt.Max().As("last_seen")).
+			OrderBy(aggCols.Category.Group().Asc()).
+			Scan(&rows))
+		require.Len(t, rows, 3)
+		require.True(t, rows[0].LastSeen.Valid)
+		require.False(t, rows[1].LastSeen.Valid)
+		require.False(t, rows[2].LastSeen.Valid)
+	})
+
+	t.Run("PlainTimeOverNonNullableColumn", func(t *testing.T) {
+		// A grouped, unconditional measure over a non-nullable column keeps a
+		// plain time field, and the value round-trips exactly on every
+		// dialect, including the sqlite TEXT detour.
+		type row struct {
+			Category string
+			LastSeen time.Time
+		}
+		rows := make([]row, 0)
+		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](ctx).
+			Select(aggCols.Category.Group(), aggCols.OccurredAt.Max().As("last_seen")).
+			OrderBy(aggCols.Category.Group().Asc()).
+			Scan(&rows))
+		require.Len(t, rows, 3)
+		expected := []struct {
+			category string
+			lastSeen time.Time
+		}{
+			{"alpha", time.Date(2024, 1, 11, 8, 0, 0, 0, time.UTC)},
+			{"beta", time.Date(2024, 2, 10, 8, 0, 0, 0, time.UTC)},
+			{"gamma", time.Date(2024, 2, 11, 10, 0, 0, 0, time.UTC)},
+		}
+		for i, want := range expected {
+			require.Equal(t, want.category, rows[i].Category)
+			// The instant is what round-trips; the Location a driver hands it
+			// back in differs per dialect, so compare with Equal, not ==.
+			require.True(t, rows[i].LastSeen.Equal(want.lastSeen),
+				"category %s: got %s, want %s", want.category, rows[i].LastSeen, want.lastSeen)
+		}
 	})
 }
 
