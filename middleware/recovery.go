@@ -10,15 +10,22 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
 	pkgzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/response"
 	"go.uber.org/zap"
 )
 
+// Recovery returns the recovery middleware the default router chain installs,
+// logging panics to filename.
+//
+// It binds RecoveryWithTracing to a file logger rather than standing a second
+// implementation beside it. The two had drifted: a panic handled here left the
+// request's span with no error recorded on it, logged the Authorization header
+// as it stood, and answered with a bare 500 carrying no envelope and no trace
+// id — on the one response whose reader most needs one.
 func Recovery(filename string) gin.HandlerFunc {
-	// TODO: replace it using custom logger.
-	return ginzap.RecoveryWithZap(pkgzap.NewGin(filename), true)
+	return RecoveryWithTracing(pkgzap.NewGin(filename), true)
 }
 
 // RecoveryWithTracing returns a gin.HandlerFunc (middleware)
@@ -82,7 +89,10 @@ func RecoveryWithTracing(logger *zap.Logger, stack bool) gin.HandlerFunc {
 			c.Error(recovered.(error)) //nolint: errcheck
 			c.Abort()
 		} else {
-			c.AbortWithStatus(http.StatusInternalServerError)
+			// What the panic was stays in the log above. The caller gets the
+			// envelope every other response carries, so one reader can parse
+			// them all and quote back the trace id that explains this one.
+			response.Abort(c, http.StatusInternalServerError, "internal server error")
 		}
 	})
 }

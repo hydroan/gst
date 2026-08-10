@@ -36,7 +36,6 @@ require (
 	github.com/gertd/go-pluralize v0.2.1
 	github.com/getkin/kin-openapi v0.141.0
 	github.com/gin-contrib/gzip v1.2.6
-	github.com/gin-contrib/zap v1.1.7
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-git/go-billy/v5 v5.9.0
 	github.com/go-git/go-git/v5 v5.19.1
