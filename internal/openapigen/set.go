@@ -2,6 +2,7 @@ package openapigen
 
 import (
 	"strings"
+	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/types"
@@ -12,7 +13,16 @@ import (
 // authRequired reports whether the route sits behind the authenticated route
 // group; public routes are documented with an empty security requirement so
 // they override the document-level security.
+//
+// Test binaries skip the documentation outright: every route registration
+// spawns one Set goroutine, and the reflection walk over every model adds up
+// to real CPU across parallel test packages, paying for a document no test
+// reads. A test exercising the generation itself calls into this package
+// directly rather than relying on the route-registration side effect.
 func Set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, verb ...consts.HTTPVerb) {
+	if testing.Testing() {
+		return
+	}
 	path = convertColonParamsToBraces(path)
 
 	docMutex.Lock()
