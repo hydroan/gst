@@ -18,6 +18,7 @@ import (
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/openapigen"
 	"github.com/hydroan/gst/middleware"
+	"github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -103,6 +104,20 @@ func Init() error {
 		middleware.RouteParams(),
 		// middleware.Gzip(),
 	)
+	// A request matching no route is answered in the envelope like every other
+	// refusal, instead of gin's plain-text default — which carries no code and
+	// no trace id, so a client parsing the documented shape cannot tell it from
+	// a malformed response.
+	//
+	// A method this server has no handler for on a path it does serve lands
+	// here too, and is answered as not found rather than method not allowed.
+	// Nothing that runs before this point has authenticated anyone, so telling
+	// the two apart would let any caller enumerate the paths this server
+	// registers, one request at a time.
+	root.NoRoute(func(c *gin.Context) {
+		response.Abort(c, http.StatusNotFound, "not found")
+	})
+
 	root.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	root.GET("/-/healthz", controller.Probe.Healthz)
 	root.GET("/-/readyz", controller.Probe.Readyz)
