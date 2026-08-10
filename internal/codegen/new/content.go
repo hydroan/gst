@@ -298,12 +298,23 @@ const middlewareContent = `// Package middleware registers the application's cus
 // Example:
 //
 //	import (
+//		"net/http"
+//
 //		"github.com/gin-gonic/gin"
 //		"github.com/hydroan/gst/middleware"
+//		"github.com/hydroan/gst/response"
 //	)
 //
 //	func sample(c *gin.Context) {
-//		// Runs before each handler; call c.Abort() to stop the request.
+//		// Runs before each handler. Refuse a request with response.Abort: it
+//		// answers in the API envelope every other response carries, so one
+//		// client reads them all the same way and can quote back the trace id
+//		// that explains this one.
+//		if c.GetHeader("X-Sample") == "" {
+//			response.Abort(c, http.StatusForbidden, "sample header required")
+//			return
+//		}
+//		c.Next()
 //	}
 //
 //	func init() {

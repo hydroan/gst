@@ -69,6 +69,7 @@ linters:
 
     # Project constraints.
     - depguard
+    - forbidigo
     - gomoddirectives
     - gomodguard_v2
 
@@ -98,6 +99,19 @@ linters:
               desc: "Use github.com/cockroachdb/errors instead"
             - pkg: "github.com/pkg/errors"
               desc: "Use github.com/cockroachdb/errors instead"
+
+    forbidigo:
+      # Refusing a request outside the controller path goes through
+      # response.Abort, which is the single place the API envelope is written.
+      # gin's own aborts stay reachable on *gin.Context forever, so nothing but
+      # this rule stops the next middleware from writing a second envelope by
+      # hand — which is how the response code the body logger records came to be
+      # present on the framework path and missing from every other one.
+      forbid:
+        - pattern: '^.*\.AbortWithStatusJSON$'
+          msg: "write the envelope through response.Abort instead of building it by hand"
+        - pattern: '^.*\.AbortWithStatus$'
+          msg: "an empty body carries neither a code nor a trace id; refuse through response.Abort"
 
     errcheck:
       check-type-assertions: true
@@ -204,6 +218,11 @@ linters:
           - revive
         text: "avoid meaningless package names"
         path: "^(types|util)/|.*/(types|util)/"
+      # A CORS preflight is answered with a bare 204 by protocol: the headers
+      # are the whole answer and there is no body to put an envelope in.
+      - linters:
+          - forbidigo
+        path: middleware/cors\.go
 
 issues:
   # Increase max issues to avoid truncation

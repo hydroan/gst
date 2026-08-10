@@ -16,8 +16,12 @@ func Cors() gin.HandlerFunc {
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Session-Id")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, PATCH, DELETE")
 
+		// A preflight is answered with a bare status by protocol: the headers
+		// set above are the whole answer, and 204 states there is no body to
+		// read. This is why the file is excluded from the lint rule that sends
+		// every other refusal through response.Abort.
 		if c.Request.Method == http.MethodOptions {
-			c.AbortWithStatus(204)
+			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
 
