@@ -230,7 +230,10 @@ func (a *aggregator[M, R]) ScanOne(dest *R) (err error) {
 
 // CountGroups reports how many groups the aggregation produces. The count runs
 // over the grouped query as a derived table, because COUNT(*) beside a GROUP BY
-// counts the rows of each group instead of the groups themselves.
+// counts the rows of each group instead of the groups themselves. OrderBy,
+// Limit and Offset set on the aggregator are ignored here: none of them
+// changes how many groups exist, so pagination prepared for Scan can never
+// skew the count.
 func (a *aggregator[M, R]) CountGroups(count *int) (err error) {
 	if a.err != nil {
 		return a.err
