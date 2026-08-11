@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -55,8 +56,13 @@ func mergeModuleServiceSource(input moduleServiceMergeInput) ([]byte, error) {
 	structDoc := retargetDocLines(commentGroupLines(serviceStructDoc(sourceFile, sourceStruct)), sourceStruct, targetStruct)
 	sourceComments := ast.NewCommentMap(fset, sourceFile, sourceFile.Comments)
 
+	sourceQualifiers := moduleCopyPackageQualifiers(sourceFile)
 	mergeImports(targetFile, sourceFile.Imports)
 	docInserts := mergeSourceServiceDecls(targetFile, sourceFile, sourceStructs, targetStruct, sourceComments)
+	dropUnusedMergedServiceImports(targetFile, sourceQualifiers)
+	if err = requireUsedModuleCopyImports(targetFile, input.TargetPath, input.Rewrite); err != nil {
+		return nil, err
+	}
 
 	code, err := gen.FormatNodeExtraWithFileSet(targetFile, fset, true)
 	if err != nil {
@@ -327,8 +333,131 @@ func mergeImports(targetFile *ast.File, imports []*ast.ImportSpec) {
 			continue
 		}
 		seen[key] = true
-		targetImportDecl.Specs = append(targetImportDecl.Specs, cloneImportSpec(imp))
+		cloned := cloneImportSpec(imp)
+		targetImportDecl.Specs = append(targetImportDecl.Specs, cloned)
+		// ast.File.Imports must stay in step with the import declarations, or
+		// every later pass over the merged file misses the merged-in imports.
+		targetFile.Imports = append(targetFile.Imports, cloned)
 	}
+}
+
+// moduleCopyPackageQualifiers collects every identifier used as a package
+// qualifier, that is the X of a selector expression.
+func moduleCopyPackageQualifiers(node ast.Node) map[string]bool {
+	qualifiers := make(map[string]bool)
+	ast.Inspect(node, func(n ast.Node) bool {
+		sel, ok := n.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		if ident, ok := sel.X.(*ast.Ident); ok {
+			qualifiers[ident.Name] = true
+		}
+		return true
+	})
+	return qualifiers
+}
+
+// dropUnusedMergedServiceImports removes the imports that the merge strands.
+// The target shell owns the service struct declaration, so a source import that
+// only the replaced struct referenced keeps no reference in the merged file,
+// and an unused import does not compile in the copied project.
+//
+// An import is dropped only when sourceQualifiers proves its local name. An
+// import path base is not always the package name, github.com/skip2/go-qrcode
+// declares package qrcode, and the package name cannot be recovered from the
+// path alone. The source file compiles, so every package it imports appears
+// there as a qualifier: a local name the source never qualified is unproven and
+// the import stays. requireUsedModuleCopyImports then reports whatever this
+// conservative rule leaves behind instead of shipping a broken file.
+func dropUnusedMergedServiceImports(targetFile *ast.File, sourceQualifiers map[string]bool) {
+	mergedQualifiers := moduleCopyPackageQualifiers(targetFile)
+	stranded := make(map[*ast.ImportSpec]bool)
+	kept := make([]*ast.ImportSpec, 0, len(targetFile.Imports))
+	for _, imp := range targetFile.Imports {
+		importPath, err := strconv.Unquote(imp.Path.Value)
+		if err != nil {
+			kept = append(kept, imp)
+			continue
+		}
+		local := importLocalName(imp, importPath)
+		if local == "_" || local == "." || mergedQualifiers[local] || !sourceQualifiers[local] {
+			kept = append(kept, imp)
+			continue
+		}
+		stranded[imp] = true
+	}
+	if len(stranded) == 0 {
+		return
+	}
+
+	targetFile.Imports = kept
+	decls := make([]ast.Decl, 0, len(targetFile.Decls))
+	for _, decl := range targetFile.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.IMPORT {
+			decls = append(decls, decl)
+			continue
+		}
+		specs := make([]ast.Spec, 0, len(genDecl.Specs))
+		for _, spec := range genDecl.Specs {
+			if imp, ok := spec.(*ast.ImportSpec); ok && stranded[imp] {
+				continue
+			}
+			specs = append(specs, spec)
+		}
+		// An import declaration emptied by the drop would print as "import ()".
+		if len(specs) == 0 {
+			continue
+		}
+		genDecl.Specs = specs
+		decls = append(decls, genDecl)
+	}
+	targetFile.Decls = decls
+}
+
+// requireUsedModuleCopyImports fails the copy when a framework-owned or
+// project-owned import survives the merge without a reference. Those import
+// paths are owned by gst or by the copied project, so their path base is the
+// package name and an unused one is a compile error in the copied project.
+// Third-party paths are skipped because their package name cannot be derived
+// from the path.
+//
+// This is the guard that keeps a future rewrite from silently shipping a
+// service file that does not compile: any rewrite that strands an import either
+// drops it here or fails the copy.
+func requireUsedModuleCopyImports(file *ast.File, targetPath string, config moduleCopyRewriteConfig) error {
+	qualifiers := moduleCopyPackageQualifiers(file)
+	for _, imp := range file.Imports {
+		importPath, err := strconv.Unquote(imp.Path.Value)
+		if err != nil {
+			continue
+		}
+		if !isModuleCopyOwnedImport(importPath, config) {
+			continue
+		}
+		local := importLocalName(imp, importPath)
+		if local == "_" || local == "." || qualifiers[local] {
+			continue
+		}
+		return errors.Newf("module copy produced %s with unused import %q; the rewrite that stranded it must drop it", targetPath, importPath)
+	}
+	return nil
+}
+
+// isModuleCopyOwnedImport reports whether the import path belongs to the
+// framework or to the project being copied into, the two prefixes whose package
+// names module copy controls.
+func isModuleCopyOwnedImport(importPath string, config moduleCopyRewriteConfig) bool {
+	for _, prefix := range []string{frameworkModulePath, config.ProjectModulePath} {
+		if prefix == "" {
+			continue
+		}
+		if importPath == prefix || strings.HasPrefix(importPath, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 func importKey(imp *ast.ImportSpec) string {
