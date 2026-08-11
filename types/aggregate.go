@@ -25,9 +25,12 @@ package types
 // one aggregates across tenants without any sign that it did.
 //
 // A builder is a specification, not a live statement: it can be read more than
-// once, and each terminal renders the spec afresh. That is what makes the
-// paginated-report idiom safe — Scan for the page, then CountGroups for the
-// total, off the same builder.
+// once, and each terminal renders the spec afresh, taking only the parts that
+// are meaningful to it — Scan and ScanOne render everything, CountGroups
+// ignores OrderBy, Limit and Offset because none of them changes how many
+// groups exist. That is what makes the paginated-report idiom safe — Scan for
+// the page, then CountGroups for the total, off the same builder, with the
+// pagination never skewing the count.
 //
 // Example:
 //
@@ -71,7 +74,8 @@ type Aggregator[M Model, R any] interface {
 	// row. It fails when the projection declares group keys.
 	ScanOne(dest *R) error
 	// CountGroups reports how many groups the query produces, which is the
-	// total a paginated grouped report needs.
+	// total a paginated grouped report needs. OrderBy, Limit and Offset set on
+	// the builder do not apply to it.
 	CountGroups(count *int) error
 
 	// WithBuildSQL builds the SQL for the next terminal operation and appends
