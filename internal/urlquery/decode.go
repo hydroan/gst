@@ -37,6 +37,11 @@ var queryDecoder = func() *schema.Decoder {
 // translateDecodeError turns the decoder's raw errors into that report.
 func Decode(q url.Values, m types.Model) error {
 	values := withoutFilters(q)
+	// QUERY_FORMAT belongs to the export action, never to a model field, so it
+	// is dropped here rather than by each caller: a virtual-resource export
+	// service parses the raw query itself, and without this line the format
+	// parameter would be rejected as an unknown key on that path.
+	delete(values, consts.QUERY_FORMAT)
 	if !modelregistry.IsPaginatable(m) {
 		delete(values, consts.QUERY_SIZE)
 	}

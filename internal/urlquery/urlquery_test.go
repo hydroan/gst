@@ -358,6 +358,14 @@ func TestDecode(t *testing.T) {
 			"a cursor-only model accepts _size as its batch size but has no Size field to decode it into")
 	})
 
+	t.Run("DropsExportFormatKey", func(t *testing.T) {
+		var m filterTestModel
+		require.NoError(t, Decode(url.Values{"_format": {"csv"}, "name": {"alice"}}, &m),
+			"the export format parameter belongs to the export action, not to any model field; "+
+				"a virtual-resource export service parses the raw query itself and must not see it rejected")
+		require.Equal(t, "alice", m.Name)
+	})
+
 	t.Run("RejectsUnknownKeys", func(t *testing.T) {
 		var m filterTestModel
 		require.EqualError(t, Decode(url.Values{"bogus": {"1"}}, &m),
