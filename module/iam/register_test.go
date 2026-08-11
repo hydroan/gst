@@ -56,6 +56,7 @@ func TestMain(m *testing.M) {
 		Database: config.DBMySQL,
 		Redis:    true,
 		Register: func() { iam.Register() },
+		Routes:   registerRequestMetadataProbe,
 		Seed:     seedRootAccount,
 	})
 }

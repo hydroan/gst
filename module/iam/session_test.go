@@ -10,14 +10,18 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	"github.com/hydroan/gst/internal/requestctx"
+	internalresponse "github.com/hydroan/gst/internal/response"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/redis"
+	"github.com/hydroan/gst/router"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
@@ -27,6 +31,14 @@ import (
 const (
 	sessionsPath      = "/api/iam/sessions"
 	adminSessionsPath = "/api/iam/admin/sessions"
+
+	// requestMetadataProbeGroupRoute is the probe registered behind the session
+	// middleware; see registerRequestMetadataProbe. The authenticated group
+	// carries the API path prefix, so requestMetadataProbeRoute is the pattern
+	// the middleware reports and requestMetadataProbePath the concrete path.
+	requestMetadataProbeGroupRoute = "/probe/request-metadata/:id"
+	requestMetadataProbeRoute      = router.APIPathPrefix + requestMetadataProbeGroupRoute
+	requestMetadataProbePath       = router.APIPathPrefix + "/probe/request-metadata/item-1"
 )
 
 func adminUserSessionsPath(userID string) string {
@@ -477,6 +489,32 @@ func TestSessionRejectionsAnswerInTheEnvelope(t *testing.T) {
 		_, err = client.Get[iam.CurrentGetRsp](cli, currentPath)
 		requireEnvelopeRejection(t, err, "session invalid")
 	})
+}
+
+// TestSessionMiddlewareCarriesRequestMetadata pins that the context the session
+// middleware works on, and hands downstream, carries the request metadata. The
+// middleware loads, validates and touches the session before any handler runs,
+// and each of those steps reaches storage on that context; without the metadata
+// their statements are logged with no route and cannot be aggregated per
+// endpoint.
+//
+// Only the fields the request answers for itself are asserted. The identity is
+// not among them: the middleware publishes that once every check has passed, so
+// the context it works on names a route and a path but nobody yet.
+func TestSessionMiddlewareCarriesRequestMetadata(t *testing.T) {
+	clearSessionsAfterTest(t)
+
+	account := newSessionTestAccount(t)
+	sessionID := loginSession(t, account.Username, account.Password)
+
+	rsp, err := client.Get[requestMetadataProbeRsp](
+		sessionClient(t, sessionID), requestMetadataProbePath, client.WithQuery("limit", 10),
+	)
+	require.NoError(t, err)
+
+	require.Equal(t, requestMetadataProbeRoute, rsp.Route)
+	require.Equal(t, requestMetadataProbePath, rsp.Path)
+	require.Equal(t, "limit=10", rsp.RawQuery)
 }
 
 func TestAdminSessionList(t *testing.T) {
@@ -1093,6 +1131,30 @@ func TestSessionDeleteAll(t *testing.T) {
 
 		_, err = client.Get[client.ListResult[iam.SessionView]](cli, sessionsPath)
 		testutil.RequireError(t, err, http.StatusUnauthorized)
+	})
+}
+
+// requestMetadataProbeRsp reports the request metadata found on the context the
+// session middleware handed to the handler.
+type requestMetadataProbeRsp struct {
+	Route    string `json:"route"`
+	Path     string `json:"path"`
+	RawQuery string `json:"raw_query"`
+}
+
+// registerRequestMetadataProbe registers the route TestSessionMiddlewareCarriesRequestMetadata
+// reads the middleware's context through. It is registered on the authenticated
+// group, which is where the session middleware runs, and it is the suite's own
+// route rather than a module route so that the assertions describe the
+// middleware alone instead of whatever a real endpoint does with the context.
+func registerRequestMetadataProbe() {
+	router.Auth().GET(requestMetadataProbeGroupRoute, func(c *gin.Context) {
+		meta := requestctx.FromContext(c.Request.Context())
+		internalresponse.JSON(c, internalresponse.CodeSuccess, requestMetadataProbeRsp{
+			Route:    meta.Route(),
+			Path:     meta.Path(),
+			RawQuery: meta.RawQuery(),
+		})
 	})
 }
 
