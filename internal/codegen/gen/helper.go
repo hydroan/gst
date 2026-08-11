@@ -14,6 +14,13 @@ import (
 	fumpt "mvdan.cc/gofumpt/format"
 )
 
+// formatOnlyImports runs goimports as an import formatter only. Its import
+// fixing resolves unknown qualifiers by scanning the whole module cache for a
+// package that could supply them, which costs seconds per file and cannot tell
+// a package qualifier from any other selector in a single file. Every caller
+// here builds its own import set, so there is nothing left for it to fix.
+var formatOnlyImports = &goimports.Options{Comments: true, TabIndent: true, TabWidth: 8, FormatOnly: true}
+
 // FormatNode use go standard lib "go/format" to format ast.Node into code.
 func FormatNode(node ast.Node, processImport ...bool) (string, error) {
 	var buf bytes.Buffer
@@ -33,7 +40,7 @@ func FormatNode(node ast.Node, processImport ...bool) (string, error) {
 	formattedStr = fixCommentPosition(formattedStr)
 
 	if len(processImport) > 0 && processImport[0] {
-		result, err := goimports.Process("", []byte(formattedStr), nil)
+		result, err := goimports.Process("", []byte(formattedStr), formatOnlyImports)
 		if err != nil {
 			return "", err
 		}
@@ -74,7 +81,7 @@ func FormatNodeExtraWithFileSet(node ast.Node, fset *token.FileSet, processImpor
 
 	if len(processImport) > 0 && processImport[0] {
 		var result []byte
-		if result, err = goimports.Process("", []byte(formattedStr), nil); err != nil {
+		if result, err = goimports.Process("", []byte(formattedStr), formatOnlyImports); err != nil {
 			return "", err
 		}
 		return string(result), nil
