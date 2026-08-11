@@ -79,6 +79,10 @@ func TestHasPackagePrefix(t *testing.T) {
 		// A prefix already ending in "/" or "." matches by plain prefix.
 		{"gorm.io/gorm.(*DB).Find", "gorm.io/", true},
 		{"example.com/app/dao.Query", "example.com/app/dao.", true},
+		// Ending a prefix in "." is how a project skips one package without
+		// its subpackages: the subpackage separator is not the "." the prefix
+		// demands.
+		{"example.com/app/dao/sub.Helper", "example.com/app/dao.", false},
 		// Exact equality counts as a match.
 		{"example.com/app/dao", "example.com/app/dao", true},
 		// An empty prefix never matches: a stray empty configuration entry
