@@ -39,6 +39,12 @@ func (g *GormLogger) Error(_ context.Context, str string, args ...any) { g.l.Err
 // of the helper body. Projects extend the list through
 // logger.sql_caller_skip_prefixes; these built-in entries always stay in
 // force.
+//
+// The controller package is deliberately absent: it holds the statements it
+// issues, and the only frame beneath it is the router's handler dispatch
+// loop, the same line for every route and action. Skipping it would trade an
+// exact statement site for one constant frame; the skip predicate test pins
+// that decision.
 var sqlCallerSkipPrefixes = []string{
 	"gorm.io/",
 	"github.com/hydroan/gst/logger",
