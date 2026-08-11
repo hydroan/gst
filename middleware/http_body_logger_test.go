@@ -106,6 +106,14 @@ func TestHTTPBodyLoggerLogsRequestAndResponseAsOneEntry(t *testing.T) {
 	require.Equal(t, int64(w.Body.Len()), ctx["response_size"])
 	require.NotContains(t, ctx, "request_truncated")
 	require.NotContains(t, ctx, "response_truncated")
+
+	// The entry carries its own elapsed time so the slowest requests can be
+	// found and read without joining the access log, which a log store cannot
+	// do. Both keys come from util.LogDuration, the only writer of the pair.
+	duration, ok := ctx["duration"].(int64)
+	require.True(t, ok, "log field %q is not an int64", "duration")
+	require.Positive(t, duration)
+	require.NotEmpty(t, ctx["duration_human"])
 }
 
 func TestHTTPBodyLoggerRecordsRoutePatternAndConcretePath(t *testing.T) {

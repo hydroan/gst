@@ -5,12 +5,14 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/dustin/go-humanize"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 )
 
@@ -64,6 +66,19 @@ func BodyLogger() gin.HandlerFunc {
 
 		maxBodySize := httpBodyLogMaxSize(cfg.MaxBodySize)
 
+		// The entry times the request itself, even though the access log already
+		// times the same one: a log store cannot join two files, so "which
+		// requests are slow, and what were they sent" has to be answerable from
+		// this entry alone. Every other request attribute is duplicated here for
+		// the same reason; the elapsed time was the one measure missing.
+		//
+		// It is measured from here rather than read from whatever the access log
+		// started, which would make this middleware depend on being registered
+		// inside that one. The two therefore disagree by the work the outer
+		// middleware still has left when this entry is written — microseconds,
+		// and always in that direction.
+		start := time.Now()
+
 		var request *httpBodyCapture
 		if reqMode != config.HTTPBodyLogModeNone {
 			request = captureRequestBody(c, maxBodySize)
@@ -81,7 +96,7 @@ func BodyLogger() gin.HandlerFunc {
 		if writer != nil {
 			response = captureResponseBody(c, writer, maxBodySize)
 		}
-		writeHTTPBodyLog(c, reqMode, rspMode, request, response)
+		writeHTTPBodyLog(c, reqMode, rspMode, request, response, time.Since(start))
 	}
 }
 
@@ -188,7 +203,12 @@ func (w *bodyLogWriter) capture(data []byte) {
 // writeHTTPBodyLog writes at most one log entry for the finished request,
 // carrying whichever captured bodies the configured modes admit. Requests
 // where neither side has content to log produce no entry at all.
-func writeHTTPBodyLog(c *gin.Context, reqMode, rspMode config.HTTPBodyLogMode, request, response *httpBodyCapture) {
+func writeHTTPBodyLog(
+	c *gin.Context,
+	reqMode, rspMode config.HTTPBodyLogMode,
+	request, response *httpBodyCapture,
+	elapsed time.Duration,
+) {
 	if logger.HTTPBody == nil {
 		return
 	}
@@ -206,8 +226,9 @@ func writeHTTPBodyLog(c *gin.Context, reqMode, rspMode config.HTTPBodyLogMode, r
 
 	// httpBodyLogFieldCap must stay >= the fixed fields appended below plus the
 	// four fields each body side can contribute, so the slice is allocated
-	// exactly once. Re-check it when adding or removing fields.
-	const httpBodyLogFieldCap = 18
+	// exactly once. Re-check it when adding or removing fields; util.LogDuration
+	// counts as one, rendering two keys from a single inlined field.
+	const httpBodyLogFieldCap = 19
 	fields := make([]zap.Field, 0, httpBodyLogFieldCap)
 	fields = append(
 		fields,
@@ -221,6 +242,7 @@ func writeHTTPBodyLog(c *gin.Context, reqMode, rspMode config.HTTPBodyLogMode, r
 		zap.String(consts.QUERY, c.Request.URL.RawQuery),
 		zap.Int("status", c.Writer.Status()),
 		zap.Int("code", c.GetInt(consts.CTX_RESPONSE_CODE)),
+		util.LogDuration(elapsed),
 	)
 	fields = appendHTTPBodyLogFields(fields, "request", request)
 	fields = appendHTTPBodyLogFields(fields, "response", response)
