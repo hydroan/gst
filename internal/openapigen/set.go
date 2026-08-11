@@ -9,20 +9,30 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
-// Set registers the OpenAPI document entries for the given path and verbs.
+// Set records the OpenAPI entries for one registered route. It is the only
+// entry point route registration uses.
+//
+// Test binaries skip the work: every route registration would spawn one
+// goroutine whose reflection walk over every model adds up to real CPU across
+// parallel test packages, paying for a document no test reads. The skip lives
+// here rather than in set, which this package's own tests call directly to
+// exercise the generation.
+func Set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, verb consts.HTTPVerb) {
+	if testing.Testing() {
+		return
+	}
+	go set[M, REQ, RSP](path, authRequired, verb)
+}
+
+// set registers the OpenAPI document entries for the given path and verbs.
 // authRequired reports whether the route sits behind the authenticated route
 // group; public routes are documented with an empty security requirement so
 // they override the document-level security.
 //
-// Test binaries skip the documentation outright: every route registration
-// spawns one Set goroutine, and the reflection walk over every model adds up
-// to real CPU across parallel test packages, paying for a document no test
-// reads. A test exercising the generation itself calls into this package
-// directly rather than relying on the route-registration side effect.
-func Set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, verb ...consts.HTTPVerb) {
-	if testing.Testing() {
-		return
-	}
+// Route registration goes through Set, which owns the test-binary skip.
+// Short-circuiting here would also silence the tests that exercise the
+// generation by calling set directly.
+func set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, verb ...consts.HTTPVerb) {
 	path = convertColonParamsToBraces(path)
 
 	docMutex.Lock()
