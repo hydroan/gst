@@ -6,6 +6,11 @@ const (
 	MAX_UPLOAD_SIZE = 1024 * 1024 * 100 //nolint:staticcheck // 100M
 )
 
+// tooLargeFileMsg answers an upload over MAX_IMPORT_SIZE. It is carried as a
+// message under CodeInvalidParam rather than as a code of its own, for the same
+// reason as missingRouteParamMsg.
+const tooLargeFileMsg = "too large file"
+
 const (
 	TOKEN         = "token"
 	ACCESS_TOKEN  = "access_token"  //nolint:staticcheck

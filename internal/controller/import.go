@@ -48,9 +48,9 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		// check file size.
 		if file.Size > int64(MAX_IMPORT_SIZE) {
-			log.Errorz(CodeTooLargeFile.String())
-			JSON(c, CodeTooLargeFile)
-			gstotel.RecordError(span, errors.New(CodeTooLargeFile.Msg()))
+			log.Errorz(tooLargeFileMsg)
+			JSON(c, CodeInvalidParam.WithMsg(tooLargeFileMsg))
+			gstotel.RecordError(span, errors.New(tooLargeFileMsg))
 			return
 		}
 		fd, err := file.Open()

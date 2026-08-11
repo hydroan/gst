@@ -96,9 +96,9 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			id = reqMeta.Param(util.Deref(cfg[0]).ParamName)
 		}
 		if len(id) == 0 {
-			log.Errorz(CodeNotFoundRouteParam.String())
-			JSON(c, CodeNotFoundRouteParam)
-			gstotel.RecordError(span, errors.New(CodeNotFoundRouteParam.Msg()))
+			log.Errorz(missingRouteParamMsg)
+			JSON(c, CodeInvalidParam.WithMsg(missingRouteParamMsg))
+			gstotel.RecordError(span, errors.New(missingRouteParamMsg))
 			return
 		}
 		// 'm' is a fresh model instance, such as: &model.User{ID: myid}.

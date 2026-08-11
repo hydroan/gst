@@ -52,8 +52,8 @@ func TestWithErrKeepsServiceErrorCauseOutOfMessage(t *testing.T) {
 }
 
 func TestCodeStringRendersMessageNotBareInteger(t *testing.T) {
-	got := CodeNotFoundRouteParam.String()
-	want := fmt.Sprintf("not found router param (code=%d)", int32(CodeNotFoundRouteParam))
+	got := CodeNotFound.String()
+	want := fmt.Sprintf("Requested resource not found. (code=%d)", int32(CodeNotFound))
 	if got != want {
 		t.Errorf("String() = %q, want %q", got, want)
 	}

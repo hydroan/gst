@@ -104,9 +104,9 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		}
 		meta.normalizeModel(&req)
 		if len(id) == 0 {
-			log.Errorz(CodeNotFoundRouteParam.String())
-			JSON(c, CodeNotFoundRouteParam)
-			gstotel.RecordError(span, errors.New(CodeNotFoundRouteParam.Msg()))
+			log.Errorz(missingRouteParamMsg)
+			JSON(c, CodeInvalidParam.WithMsg(missingRouteParamMsg))
+			gstotel.RecordError(span, errors.New(missingRouteParamMsg))
 			return
 		}
 		data := make([]M, 0)

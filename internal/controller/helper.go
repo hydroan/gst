@@ -19,6 +19,12 @@ import (
 	"go.uber.org/zap"
 )
 
+// missingRouteParamMsg answers a request whose configured route parameter is
+// absent. It is carried as a message under CodeInvalidParam rather than as a
+// code of its own: the request is malformed in exactly the way that code
+// already names, and a separate number said nothing the text does not.
+const missingRouteParamMsg = "not found router param"
+
 // setRouteID copies the route id parameter into the model and reports whether
 // the model accepted it. UUID-keyed models (Base) accept any non-empty string,
 // so the check never changes their behavior. Integer-keyed models (AutoBase)

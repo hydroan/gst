@@ -27,34 +27,8 @@ const (
 // General API error codes.
 const (
 	CodeInvalidParam Code = 1000 + iota
-	CodeBadRequest
-	CodeInvalidToken
-	CodeNeedLogin
-	CodeUnauthorized
-	CodeNetworkTimeout
-	CodeContextTimeout
-	CodeTooManyRequests
 	CodeNotFound
-	CodeForbidden
 	CodeAlreadyExist
-)
-
-// Domain / business error codes.
-const (
-	CodeInvalidLogin Code = 2000 + iota
-	CodeInvalidSignup
-	CodeOldPasswordNotMatch
-	CodeNewPasswordNotMatch
-
-	CodeNotFoundQueryID
-	CodeNotFoundRouteParam
-	CodeNotFoundUser
-	CodeNotFoundUserID
-
-	CodeAlreadyExistsUser
-	CodeAlreadyExistsRole
-
-	CodeTooLargeFile
 )
 
 type codeValue struct {
@@ -68,30 +42,9 @@ var defaultCodeValueMap = map[Code]codeValue{
 	CodeFailure: {http.StatusBadRequest, "failure"},
 
 	// General codes
-	CodeInvalidParam:    {http.StatusBadRequest, "Invalid parameters provided in the request."},
-	CodeBadRequest:      {http.StatusBadRequest, "Malformed or illegal request."},
-	CodeInvalidToken:    {http.StatusUnauthorized, "Invalid or expired authentication token."},
-	CodeNeedLogin:       {http.StatusUnauthorized, "Authentication required to access the requested resource."},
-	CodeUnauthorized:    {http.StatusUnauthorized, "Unauthorized access to the requested resource."},
-	CodeNetworkTimeout:  {http.StatusGatewayTimeout, "Network operation timed out."},
-	CodeContextTimeout:  {http.StatusGatewayTimeout, "Request context timed out."},
-	CodeTooManyRequests: {http.StatusTooManyRequests, "too many requests, please try again later."},
-	CodeNotFound:        {http.StatusNotFound, "Requested resource not found."},
-	CodeForbidden:       {http.StatusForbidden, "Forbidden: Inadequate privileges for the requested operation."},
-	CodeAlreadyExist:    {http.StatusConflict, "Resource already exists."},
-
-	// Business codes
-	CodeInvalidLogin:        {http.StatusBadRequest, "invalid username or password"},
-	CodeInvalidSignup:       {http.StatusBadRequest, "invalid username or password"},
-	CodeOldPasswordNotMatch: {http.StatusBadRequest, "old password not match"},
-	CodeNewPasswordNotMatch: {http.StatusBadRequest, "new password not match"},
-	CodeNotFoundQueryID:     {http.StatusBadRequest, "not found query parameter 'id'"},
-	CodeNotFoundRouteParam:  {http.StatusBadRequest, "not found router param"},
-	CodeNotFoundUser:        {http.StatusBadRequest, "not found user"},
-	CodeNotFoundUserID:      {http.StatusBadRequest, "not found user id"},
-	CodeAlreadyExistsUser:   {http.StatusConflict, "user already exists"},
-	CodeAlreadyExistsRole:   {http.StatusConflict, "role already exists"},
-	CodeTooLargeFile:        {http.StatusBadRequest, "too large file"},
+	CodeInvalidParam: {http.StatusBadRequest, "Invalid parameters provided in the request."},
+	CodeNotFound:     {http.StatusNotFound, "Requested resource not found."},
+	CodeAlreadyExist: {http.StatusConflict, "Resource already exists."},
 }
 
 // customCodeValueMap holds app-defined overrides from Code to HTTP status and message.
