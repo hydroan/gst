@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/authz/rbac"
@@ -12,6 +13,7 @@ import (
 	"github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types/consts"
+	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 )
 
@@ -41,6 +43,21 @@ func Authz() gin.HandlerFunc {
 	os.Setenv(config.AUTH_RBAC_ENABLED, "true")
 
 	return func(c *gin.Context) {
+		// Every entry reports how long this middleware took to settle the
+		// request. Deciding is in-memory work over the whole policy set, so it
+		// appears in no other log: the access log's duration contains it without
+		// separating it, and the policy set is only read from the database when
+		// it is reloaded, so no statement is logged per request either. Left
+		// unmeasured, a policy set growing until enforcement dominates every
+		// request would be invisible.
+		//
+		// The measure is the middleware, not the Authorize call, so that one
+		// refusal path is not silently exempt from it. It runs to just before
+		// each entry is written, and so covers writing the refusal body on the
+		// paths that refuse. Anonymous requests never reach Authorize and their
+		// durations are correspondingly tiny; denied_by separates them.
+		start := time.Now()
+
 		obj := c.Request.URL.Path
 		act := c.Request.Method
 
@@ -49,7 +66,7 @@ func Authz() gin.HandlerFunc {
 			response.Abort(c, http.StatusForbidden, "permission denied")
 			// Anonymous requests are rejected before the tenant is resolved,
 			// so the decision is recorded without one.
-			logAuthzDeny(c, "", sub, obj, act, consts.DenyReasonUnauthenticated)
+			logAuthzDeny(c, "", sub, obj, act, consts.DenyReasonUnauthenticated, time.Since(start))
 			return
 		}
 		tenantID := strings.TrimSpace(c.GetString(consts.CTX_TENANT_ID))
@@ -67,7 +84,7 @@ func Authz() gin.HandlerFunc {
 			Authorize(c.Request.Context(), tenantID, sub, obj, act)
 		if err != nil {
 			response.Abort(c, http.StatusInternalServerError, "authorization unavailable")
-			logAuthzFailure(c, tenantID, sub, obj, act, err)
+			logAuthzFailure(c, tenantID, sub, obj, act, err, time.Since(start))
 			return
 		}
 		if decision.Allowed {
@@ -81,12 +98,12 @@ func Authz() gin.HandlerFunc {
 			if decision.Source == consts.GrantSourceSystemRoot {
 				c.Request = c.Request.WithContext(tenant.Across(c.Request.Context()))
 			}
-			logAuthzGrant(c, tenantID, sub, obj, act, decision.Source, decision.MatchedRule)
+			logAuthzGrant(c, tenantID, sub, obj, act, decision.Source, decision.MatchedRule, time.Since(start))
 			c.Next()
 			return
 		}
 		response.Abort(c, http.StatusForbidden, "permission denied")
-		logAuthzDeny(c, tenantID, sub, obj, act, decision.Reason)
+		logAuthzDeny(c, tenantID, sub, obj, act, decision.Reason, time.Since(start))
 	}
 }
 
@@ -103,14 +120,15 @@ func Authz() gin.HandlerFunc {
 // concrete path of this request, while the rule holds the pattern that matched
 // it, such as /api/things/{id}.
 func logAuthzGrant(
-	c *gin.Context, tenant, sub, obj, act string, source consts.GrantSource, matchedRule []string,
+	c *gin.Context, tenant, sub, obj, act string,
+	source consts.GrantSource, matchedRule []string, elapsed time.Duration,
 ) {
 	if logger.Authz == nil {
 		return
 	}
 
 	fields := append(
-		authzLogFields(c, tenant, sub, obj, act),
+		authzLogFields(c, tenant, sub, obj, act, elapsed),
 		zap.String("eft", string(consts.EffectAllow)),
 		zap.String("allowed_by", string(source)),
 	)
@@ -132,13 +150,15 @@ func logAuthzGrant(
 // It is called at decision time, before the handler chain runs, so timestamps
 // mean the same thing for every effect and a panicking handler cannot drop a
 // decision.
-func logAuthzDeny(c *gin.Context, tenant, sub, obj, act string, reason consts.DenyReason) {
+func logAuthzDeny(
+	c *gin.Context, tenant, sub, obj, act string, reason consts.DenyReason, elapsed time.Duration,
+) {
 	if logger.Authz == nil {
 		return
 	}
 
 	fields := append(
-		authzLogFields(c, tenant, sub, obj, act),
+		authzLogFields(c, tenant, sub, obj, act, elapsed),
 		zap.String("eft", string(consts.EffectDeny)),
 	)
 	if reason != "" {
@@ -151,31 +171,35 @@ func logAuthzDeny(c *gin.Context, tenant, sub, obj, act string, reason consts.De
 // Such an attempt carries no eft because policy never allowed or denied it:
 // reporting one would hide the failure and inflate the counts the other effect
 // is used to measure. The error level tells the two apart instead.
-func logAuthzFailure(c *gin.Context, tenant, sub, obj, act string, err error) {
+func logAuthzFailure(
+	c *gin.Context, tenant, sub, obj, act string, err error, elapsed time.Duration,
+) {
 	if logger.Authz == nil {
 		return
 	}
 
 	logger.Authz.Errorz("", append(
-		authzLogFields(c, tenant, sub, obj, act),
+		authzLogFields(c, tenant, sub, obj, act, elapsed),
 		zap.Error(err),
 	)...)
 }
 
-// authzLogFieldCount is the six shared fields plus the most any one caller
+// authzLogFieldCount is the seven shared fields plus the most any one caller
 // appends: a grant adds an effect, a source and a matched rule, which is three
 // and more than either other caller. Reserving it keeps the append from growing
 // the slice, which would cost a second allocation and a copy on every
-// authorized request.
+// authorized request. util.LogDuration counts as one of the seven, rendering
+// two keys from a single inlined field.
 //
 // A caller adding a field has to check its own total against this, not raise it
 // on sight: a denial appends two and a failure one, so both stay inside a
 // reservation sized for the grant.
-const authzLogFieldCount = 9
+const authzLogFieldCount = 10
 
 // authzLogFields builds the field set shared by every authz log entry, so
-// entries stay correlatable by trace_id no matter which branch produced them.
-func authzLogFields(c *gin.Context, tenant, sub, obj, act string) []zap.Field {
+// entries stay correlatable by trace_id no matter which branch produced them,
+// and so the elapsed time is reported the same way on all of them.
+func authzLogFields(c *gin.Context, tenant, sub, obj, act string, elapsed time.Duration) []zap.Field {
 	return append(
 		make([]zap.Field, 0, authzLogFieldCount),
 		zap.String("tenant", tenant),
@@ -184,5 +208,6 @@ func authzLogFields(c *gin.Context, tenant, sub, obj, act string) []zap.Field {
 		zap.String("act", act),
 		zap.String("username", c.GetString(consts.CTX_USERNAME)),
 		zap.String("trace_id", c.GetString(consts.TRACE_ID)),
+		util.LogDuration(elapsed),
 	)
 }
