@@ -8,6 +8,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
+	"github.com/hydroan/gst/internal/requestctx"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/service"
@@ -67,7 +68,12 @@ func IAMSession() gin.HandlerFunc {
 			return
 		}
 
-		ctx := c.Request.Context()
+		// Every storage call below runs on this context, so it carries the
+		// request metadata that lets their logs name a route. The identity
+		// fields are empty by design: this middleware is what resolves who is
+		// calling, and it publishes that onto the gin context only once every
+		// check below has passed.
+		ctx := requestctx.WithMetadata(c.Request.Context(), requestctx.FromGin(c))
 		session, e := serviceiamsession.SessionManager.Load(ctx, sessionID)
 		if e != nil {
 			abortInvalidSession(c, e.Error())
