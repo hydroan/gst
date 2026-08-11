@@ -1,6 +1,9 @@
 package ggmodule
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"strings"
 	"testing"
 )
@@ -132,6 +135,74 @@ func (c *Creator) CreateAfter(ctx *types.ServiceContext, req *copytest.CopyTest)
 	}
 	if strings.Contains(code, "modelcopytest") || strings.Contains(code, "ActionService") {
 		t.Fatalf("source package artifacts leaked into target:\n%s", code)
+	}
+}
+
+// TestMergeModuleServiceSourceDropsImportOnlyUsedByReplacedStruct covers the
+// import that the target service shell strands. The shell owns the service
+// struct, so a source import used only by the replaced struct declaration has
+// no reference left in the merged file and must not reach the copied project.
+func TestMergeModuleServiceSourceDropsImportOnlyUsedByReplacedStruct(t *testing.T) {
+	source := []byte(`package servicecopytest
+
+import (
+	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
+	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+)
+
+// ActionService runs the source action flow.
+type ActionService struct {
+	service.Base[*model.Empty, *modelcopytest.ActionReq, *modelcopytest.ActionRsp]
+}
+
+// Create copies the source business logic.
+func (s *ActionService) Create(ctx *types.ServiceContext, req *modelcopytest.ActionReq) (rsp *modelcopytest.ActionRsp, err error) {
+	return &modelcopytest.ActionRsp{}, nil
+}
+`)
+	target := []byte(`package copytest
+
+import (
+	"tmpapp/model/copytest"
+
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
+)
+
+type Creator struct {
+	service.Base[*copytest.Action, *copytest.ActionReq, *copytest.ActionRsp]
+}
+
+func (c *Creator) Create(ctx *types.ServiceContext, req *copytest.ActionReq) (rsp *copytest.ActionRsp, err error) {
+	return rsp, nil
+}
+`)
+
+	got, err := mergeModuleServiceSource(moduleServiceMergeInput{
+		SourcePath: "action.go",
+		Source:     source,
+		TargetPath: "service/copytest/action.go",
+		Target:     target,
+		Rewrite: moduleCopyRewriteConfig{
+			ModuleName:        "copytest",
+			ProjectModulePath: "tmpapp",
+			ModelDir:          "model",
+			ServiceDir:        "service",
+			TargetPackage:     "copytest",
+		},
+	})
+	if err != nil {
+		t.Fatalf("mergeModuleServiceSource() error = %v", err)
+	}
+
+	code := string(got)
+	if strings.Contains(code, `"github.com/hydroan/gst/model"`) {
+		t.Fatalf("import stranded by the replaced service struct was kept:\n%s", code)
+	}
+	if !strings.Contains(code, "service.Base[*copytest.Action, *copytest.ActionReq, *copytest.ActionRsp]") {
+		t.Fatalf("target service struct was not preserved:\n%s", code)
 	}
 }
 
@@ -411,4 +482,167 @@ func (c *Creator) Create(ctx *types.ServiceContext, req *copytest.CopyTest) (rsp
 	if !strings.Contains(code, "// describe copies the doc of a method on a non-service receiver.\nfunc (r *recordState) describe() string") {
 		t.Fatalf("non-service receiver method doc was dropped:\n%s", code)
 	}
+}
+
+// TestDropUnusedMergedServiceImportsRemovesStrandedQualifier pins the narrow
+// rule: an import is dropped only when the source proved its local name is the
+// real package name and the merged file no longer qualifies anything with it.
+func TestDropUnusedMergedServiceImportsRemovesStrandedQualifier(t *testing.T) {
+	source := parseModuleCopyTestFile(t, `package servicecopytest
+
+import "github.com/hydroan/gst/model"
+
+type ActionService struct {
+	service.Base[*model.Empty, *model.Empty, *model.Empty]
+}
+`)
+	merged := parseModuleCopyTestFile(t, `package copytest
+
+import (
+	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/types"
+)
+
+func (c *Creator) Create(ctx *types.ServiceContext) error {
+	return nil
+}
+`)
+
+	dropUnusedMergedServiceImports(merged, moduleCopyPackageQualifiers(source))
+
+	if importPaths := moduleCopyTestImportPaths(merged); strings.Join(importPaths, ",") != "github.com/hydroan/gst/types" {
+		t.Fatalf("dropUnusedMergedServiceImports() imports = %v, want only types", importPaths)
+	}
+}
+
+// TestDropUnusedMergedServiceImportsKeepsImportWhosePathBaseIsNotPackageName
+// guards the drop rule against paths whose last segment is not the package
+// name, such as github.com/skip2/go-qrcode declaring package qrcode. The
+// source never qualifies anything with "go-qrcode", so the merged file must
+// keep the import instead of guessing it is unused.
+func TestDropUnusedMergedServiceImportsKeepsImportWhosePathBaseIsNotPackageName(t *testing.T) {
+	source := parseModuleCopyTestFile(t, `package servicecopytest
+
+import "github.com/skip2/go-qrcode"
+
+func encode() ([]byte, error) {
+	return qrcode.Encode("payload", qrcode.Medium, 256)
+}
+`)
+	merged := parseModuleCopyTestFile(t, `package copytest
+
+import "github.com/skip2/go-qrcode"
+
+func encode() ([]byte, error) {
+	return qrcode.Encode("payload", qrcode.Medium, 256)
+}
+`)
+
+	dropUnusedMergedServiceImports(merged, moduleCopyPackageQualifiers(source))
+
+	if importPaths := moduleCopyTestImportPaths(merged); strings.Join(importPaths, ",") != "github.com/skip2/go-qrcode" {
+		t.Fatalf("dropUnusedMergedServiceImports() imports = %v, want the qrcode import kept", importPaths)
+	}
+}
+
+// TestRequireUsedModuleCopyImportsRejectsUnusedFrameworkImport is the guard that
+// keeps a future rewrite from shipping a service file that cannot compile.
+func TestRequireUsedModuleCopyImportsRejectsUnusedFrameworkImport(t *testing.T) {
+	config := moduleCopyRewriteConfig{ProjectModulePath: "tmpapp"}
+
+	t.Run("unused framework import", func(t *testing.T) {
+		file := parseModuleCopyTestFile(t, `package copytest
+
+import (
+	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/types"
+)
+
+func (c *Creator) Create(ctx *types.ServiceContext) error {
+	return nil
+}
+`)
+
+		err := requireUsedModuleCopyImports(file, "service/copytest/action.go", config)
+		if err == nil {
+			t.Fatal("requireUsedModuleCopyImports() error = nil, want an unused import error")
+		}
+		if !strings.Contains(err.Error(), "github.com/hydroan/gst/model") {
+			t.Fatalf("requireUsedModuleCopyImports() error = %v, want it to name the unused import", err)
+		}
+	})
+
+	t.Run("unused project import", func(t *testing.T) {
+		file := parseModuleCopyTestFile(t, `package copytest
+
+import (
+	"tmpapp/model/copytest"
+	"github.com/hydroan/gst/types"
+)
+
+func (c *Creator) Create(ctx *types.ServiceContext) error {
+	return nil
+}
+`)
+
+		err := requireUsedModuleCopyImports(file, "service/copytest/action.go", config)
+		if err == nil {
+			t.Fatal("requireUsedModuleCopyImports() error = nil, want an unused import error")
+		}
+	})
+
+	t.Run("third party import is not checked", func(t *testing.T) {
+		file := parseModuleCopyTestFile(t, `package copytest
+
+import (
+	"github.com/skip2/go-qrcode"
+	"github.com/hydroan/gst/types"
+)
+
+func (c *Creator) Create(ctx *types.ServiceContext) error {
+	return qrcode.Check()
+}
+`)
+
+		if err := requireUsedModuleCopyImports(file, "service/copytest/action.go", config); err != nil {
+			t.Fatalf("requireUsedModuleCopyImports() error = %v, want third party imports to be skipped", err)
+		}
+	})
+
+	t.Run("used imports pass", func(t *testing.T) {
+		file := parseModuleCopyTestFile(t, `package copytest
+
+import (
+	"tmpapp/model/copytest"
+
+	"github.com/hydroan/gst/types"
+)
+
+func (c *Creator) Create(ctx *types.ServiceContext) (*copytest.ActionRsp, error) {
+	return nil, nil
+}
+`)
+
+		if err := requireUsedModuleCopyImports(file, "service/copytest/action.go", config); err != nil {
+			t.Fatalf("requireUsedModuleCopyImports() error = %v, want no error", err)
+		}
+	})
+}
+
+func parseModuleCopyTestFile(t *testing.T, src string) *ast.File {
+	t.Helper()
+
+	file, err := parser.ParseFile(token.NewFileSet(), "test.go", src, parser.ParseComments)
+	if err != nil {
+		t.Fatalf("parser.ParseFile() error = %v", err)
+	}
+	return file
+}
+
+func moduleCopyTestImportPaths(file *ast.File) []string {
+	paths := make([]string, 0, len(file.Imports))
+	for _, imp := range file.Imports {
+		paths = append(paths, strings.Trim(imp.Path.Value, `"`))
+	}
+	return paths
 }
