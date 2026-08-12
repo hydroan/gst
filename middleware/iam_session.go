@@ -8,8 +8,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
-	"github.com/hydroan/gst/internal/requestctx"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
+	"github.com/hydroan/gst/requestctx"
 	"github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types/consts"
@@ -73,7 +73,7 @@ func IAMSession() gin.HandlerFunc {
 		// fields are empty by design: this middleware is what resolves who is
 		// calling, and it publishes that onto the gin context only once every
 		// check below has passed.
-		ctx := requestctx.WithMetadata(c.Request.Context(), requestctx.FromGin(c))
+		ctx := requestctx.WithGinMetadata(c)
 		session, e := serviceiamsession.SessionManager.Load(ctx, sessionID)
 		if e != nil {
 			abortInvalidSession(c, e.Error())
