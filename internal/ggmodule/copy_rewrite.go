@@ -64,12 +64,33 @@ func normalizeModuleCopySource(filename string, src []byte, config moduleCopyRew
 	if err = selectors.requireUnshadowed(filename, fset, file); err != nil {
 		return nil, err
 	}
+	if err = requirePublicFrameworkImports(filename, file); err != nil {
+		return nil, err
+	}
 
 	code, err := gen.FormatNodeExtraWithFileSet(file, fset, true)
 	if err != nil {
 		return nil, err
 	}
 	return []byte(code), nil
+}
+
+// requirePublicFrameworkImports rejects a copied source that still imports a
+// framework internal package after the module-owned rewrites ran. Inside the
+// framework such an import compiles, but the copied file lives in the consumer
+// project, where Go forbids it; failing the copy names the file instead of
+// shipping code that cannot build.
+func requirePublicFrameworkImports(filename string, file *ast.File) error {
+	for _, imp := range file.Imports {
+		path, err := strconv.Unquote(imp.Path.Value)
+		if err != nil {
+			continue
+		}
+		if strings.HasPrefix(path, frameworkModulePath+"/internal/") {
+			return errors.Newf("module copy source %s imports framework internal package %q; copied files must import public framework packages", filename, path)
+		}
+	}
+	return nil
 }
 
 func rewriteModuleCopyFile(file *ast.File, config moduleCopyRewriteConfig, includeServiceImports bool) map[string]string {

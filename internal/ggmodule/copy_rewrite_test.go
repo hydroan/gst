@@ -322,3 +322,37 @@ func normalizeSourceTree(t *testing.T, root string, moduleName string, normalize
 		t.Fatalf("walk %s error = %v", root, walkErr)
 	}
 }
+
+func TestNormalizeModuleCopySourceRejectsFrameworkInternalImports(t *testing.T) {
+	// Inside the framework an internal import compiles, but the copied file
+	// lands in a consumer project where Go forbids it; the copy must fail
+	// instead of shipping a file that cannot build.
+	source := []byte(`package middlewarecopytest
+
+import (
+	"context"
+
+	"github.com/hydroan/gst/internal/requestctx"
+)
+
+func withMetadata(ctx context.Context) context.Context {
+	return requestctx.WithMetadata(ctx, requestctx.Metadata{})
+}
+`)
+
+	_, err := normalizeModuleMiddlewareSource("sample.go", source, moduleCopyRewriteConfig{
+		ModuleName:        "copytest",
+		ProjectModulePath: "tmpapp",
+		ModelDir:          "model",
+		ServiceDir:        "service",
+		TargetPackage:     "middleware",
+	})
+	if err == nil {
+		t.Fatal("normalizeModuleMiddlewareSource() must reject a surviving framework internal import")
+	}
+	for _, want := range []string{"github.com/hydroan/gst/internal/requestctx", "public"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q missing %q", err.Error(), want)
+		}
+	}
+}

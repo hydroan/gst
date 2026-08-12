@@ -63,6 +63,9 @@ func mergeModuleServiceSource(input moduleServiceMergeInput) ([]byte, error) {
 	if err = requireUsedModuleCopyImports(targetFile, input.TargetPath, input.Rewrite); err != nil {
 		return nil, err
 	}
+	if err = requirePublicFrameworkImports(input.TargetPath, targetFile); err != nil {
+		return nil, err
+	}
 
 	code, err := gen.FormatNodeExtraWithFileSet(targetFile, fset, true)
 	if err != nil {
