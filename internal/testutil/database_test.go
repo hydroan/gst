@@ -37,6 +37,14 @@ func TestRequireListReturnsMatchesInOrder(t *testing.T) {
 	require.Equal(t, "list-c", rows[2].Name)
 }
 
+func TestRequireCountCountsTheMatches(t *testing.T) {
+	createSampleRecord(t, "count-a", "count")
+	createSampleRecord(t, "count-b", "count")
+
+	require.Equal(t, 2, RequireCount(t, &SampleRecord{Tag: "count"}))
+	require.Zero(t, RequireCount(t, &SampleRecord{Tag: "count-none"}))
+}
+
 func TestRequireListWithZeroValueQueryMatchesNothing(t *testing.T) {
 	createSampleRecord(t, "zero-query-row", "zero")
 
