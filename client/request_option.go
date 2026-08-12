@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/go-querystring/query"
 	"github.com/hydroan/gst/model"
@@ -97,6 +98,26 @@ func WithCursor(field, value string, next bool) RequestOption {
 		c.query.CursorField = field
 		c.query.CursorValue = &value
 		c.query.CursorNext = next
+	}
+}
+
+// WithTimeRange adds the framework's time-window filter on column, encoded
+// in the "field[op]=value" operator syntax as column[gte] and column[lte].
+// Bounds are formatted as RFC3339, the only layout the framework accepts for
+// URL time filtering. A zero time leaves that bound unset; a blank column
+// adds nothing.
+func WithTimeRange(column string, from, to time.Time) RequestOption {
+	return func(c *requestConfig) {
+		column = strings.TrimSpace(column)
+		if column == "" {
+			return
+		}
+		if !from.IsZero() {
+			c.values.Add(column+"[gte]", from.Format(time.RFC3339))
+		}
+		if !to.IsZero() {
+			c.values.Add(column+"[lte]", to.Format(time.RFC3339))
+		}
 	}
 }
 
