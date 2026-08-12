@@ -131,6 +131,19 @@ func RequireList[T any, M interface {
 	return testutil.RequireList[T, M](t, query, orders...)
 }
 
+// RequireCount asserts that counting the rows matching the query succeeds
+// and returns the count. A nil or zero-value query matches no rows: WithQuery
+// keeps the framework's empty-query safety check, so a deliberate full-table
+// count stays on the database chain.
+func RequireCount[T any, M interface {
+	types.Model
+	*T
+}](t *testing.T, query M) int {
+	t.Helper()
+
+	return testutil.RequireCount[T, M](t, query)
+}
+
 // RequireNoRow asserts that no row with the given id is visible through the
 // regular query path. A hard-deleted and a soft-deleted row both satisfy it;
 // RequireSoftDeleted additionally pins that a soft-deleted row is kept.
