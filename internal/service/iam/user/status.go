@@ -11,6 +11,13 @@ import (
 	"github.com/hydroan/gst/types"
 )
 
+// Column references for the narrow status write below; module sources carry
+// no generated Cols vars, so the references are declared here.
+var (
+	colUsername   = types.NewColumn[string]("username")
+	colUserStatus = types.NewColumn[modeliamuser.UserStatus]("status")
+)
+
 type UserStatusPatchService struct {
 	service.Base[*modeliamuser.User, *modeliamuser.UserStatusPatchReq, *modeliamuser.UserStatusPatchRsp]
 }
@@ -51,7 +58,7 @@ func (u *UserStatusPatchService) Patch(ctx *types.ServiceContext, req *modeliamu
 	target.Status = req.Status
 	if err = database.Database[*modeliamuser.User](ctx).
 		WithoutHook().
-		WithSelect("username", "status").
+		WithSelect(colUsername, colUserStatus).
 		Update(target); err != nil {
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update user status", err)
 	}

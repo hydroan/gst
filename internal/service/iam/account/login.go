@@ -176,7 +176,7 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	credential.FailedLoginCount = 0
 	if err = database.Database[*modeliamaccount.PasswordCredential](ctx).
 		WithoutHook().
-		WithSelect("user_id", "failed_login_count").
+		WithSelect(colUserID, colFailedLoginCount).
 		Update(credential); err != nil {
 		log.Warnz("failed to update password credential statistics", zap.Error(err))
 	}

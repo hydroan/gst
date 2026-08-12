@@ -10,10 +10,22 @@ import (
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/types"
 	"golang.org/x/crypto/bcrypt"
 )
 
 const minAccountPasswordLength = 6
+
+// Column references for the narrow credential writes in this package; module
+// sources carry no generated Cols vars, so the references are declared once
+// here and shared by the login and password flows.
+var (
+	colUserID             = types.NewColumn[string]("user_id")
+	colPasswordHash       = types.NewColumn[string]("password_hash")
+	colMustChangePassword = types.NewColumn[bool]("must_change_password")
+	colPasswordChangedAt  = types.NewColumn[*time.Time]("password_changed_at")
+	colFailedLoginCount   = types.NewNumericColumn[int]("failed_login_count")
+)
 
 func validateChangePasswordInput(req *modeliamaccount.ChangePasswordReq) error {
 	if req == nil {

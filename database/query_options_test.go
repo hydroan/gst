@@ -288,14 +288,14 @@ func TestDatabaseWithSelect(t *testing.T) {
 	t.Run("Create", func(t *testing.T) {
 		t.Run("with existing column", func(t *testing.T) {
 			defer cleanupTestData()
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("name").Create(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect(colName).Create(ul...))
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 			require.Len(t, users, 3)
 		})
 		t.Run("with non-existing column", func(t *testing.T) {
 			defer cleanupTestData()
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("notexists").Create(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect(colNotExists).Create(ul...))
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 			require.Len(t, users, 3)
@@ -306,16 +306,16 @@ func TestDatabaseWithSelect(t *testing.T) {
 	t.Run("Delete", func(t *testing.T) {
 		t.Run("with existing column", func(t *testing.T) {
 			defer cleanupTestData()
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("name").Create(ul...))
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("name").Delete(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect(colName).Create(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect(colName).Delete(ul...))
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 			require.Empty(t, users)
 		})
 		t.Run("with non-existing column", func(t *testing.T) {
 			defer cleanupTestData()
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("notexists").Create(ul...))
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("notexists").Delete(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect(colNotExists).Create(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect(colNotExists).Delete(ul...))
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 			require.Empty(t, users)
@@ -330,7 +330,7 @@ func TestDatabaseWithSelect(t *testing.T) {
 			u1.Name = "user1_modified"
 			u2.Name = "user2_modified"
 			u3.Name = "user3_modified"
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("name").Update(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect(colName).Update(ul...))
 
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
@@ -360,7 +360,7 @@ func TestDatabaseWithSelect(t *testing.T) {
 			u2.Name = "user2_modified"
 			u3.Name = "user3_modified"
 			// Only update column "age", the modified name will not be updated.
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("age").Update(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect(colAge).Update(ul...))
 
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
@@ -390,7 +390,7 @@ func TestDatabaseWithSelect(t *testing.T) {
 			u2.Name = "user2_modified"
 			u3.Name = "user3_modified"
 			// The non-existing fields will be ignored, and only default columns will be selected.
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("nonexistent").Update(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect(colNotExists).Update(ul...))
 
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
@@ -422,7 +422,7 @@ func TestDatabaseWithSelect(t *testing.T) {
 			u3.Name = "user3_modified"
 			u3.Age = 27
 			// Update both "name" and "age" columns.
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("name", "age").Update(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect(colName, colAge).Update(ul...))
 
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
@@ -450,7 +450,7 @@ func TestDatabaseWithSelect(t *testing.T) {
 			setupTestData(t)
 			// Only select column "name", other columns will be ignored.
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("name").List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect(colName).List(&users))
 			require.Len(t, users, 3)
 			u11, u22, u33 := findUsersByID(users)
 			require.NotNil(t, u11)
@@ -472,7 +472,7 @@ func TestDatabaseWithSelect(t *testing.T) {
 			setupTestData(t)
 			// Only select column "age", other columns will be ignored.
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("age").List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect(colAge).List(&users))
 			require.Len(t, users, 3)
 			u11, u22, u33 := findUsersByID(users)
 			require.NotNil(t, u11)
@@ -494,7 +494,7 @@ func TestDatabaseWithSelect(t *testing.T) {
 			setupTestData(t)
 			// Select both "name" and "age" columns.
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect("name", "age").List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect(colName, colAge).List(&users))
 			require.Len(t, users, 3)
 			u11, u22, u33 := findUsersByID(users)
 			require.NotNil(t, u11)
@@ -516,7 +516,7 @@ func TestDatabaseWithSelect(t *testing.T) {
 			setupTestData(t)
 			// Selecting non-existing column will cause error.
 			users := make([]*TestUser, 0)
-			require.Error(t, database.Database[*TestUser](context.Background()).WithSelect("notexists").List(&users))
+			require.Error(t, database.Database[*TestUser](context.Background()).WithSelect(colNotExists).List(&users))
 		})
 		t.Run("with empty columns", func(t *testing.T) {
 			defer cleanupTestData()
@@ -1239,107 +1239,6 @@ func TestDatabaseWithExpand(t *testing.T) {
 	})
 }
 
-func TestDatabaseWithExclude(t *testing.T) {
-	defer cleanupTestData()
-
-	t.Run("ExcludeByID", func(t *testing.T) {
-		defer cleanupTestData()
-		setupTestData(t)
-
-		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithExclude(map[string][]any{
-			"id": {u1.ID},
-		}).List(&users))
-
-		require.Len(t, users, 2)
-		u11, u22, u33 := findUsersByID(users)
-		require.Nil(t, u11, "u1 should be excluded")
-		require.NotNil(t, u22)
-		require.NotNil(t, u33)
-		require.Equal(t, u2.ID, u22.ID)
-		require.Equal(t, u3.ID, u33.ID)
-	})
-
-	t.Run("ExcludeByName", func(t *testing.T) {
-		defer cleanupTestData()
-		setupTestData(t)
-
-		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithExclude(map[string][]any{
-			"name": {u2.Name},
-		}).List(&users))
-
-		require.Len(t, users, 2)
-		u11, u22, u33 := findUsersByID(users)
-		require.NotNil(t, u11)
-		require.Nil(t, u22, "u2 should be excluded")
-		require.NotNil(t, u33)
-		require.Equal(t, u1.ID, u11.ID)
-		require.Equal(t, u3.ID, u33.ID)
-	})
-
-	t.Run("ExcludeMultipleIDs", func(t *testing.T) {
-		defer cleanupTestData()
-		setupTestData(t)
-
-		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithExclude(map[string][]any{
-			"id": {u1.ID, u2.ID},
-		}).List(&users))
-
-		require.Len(t, users, 1)
-		u11, u22, u33 := findUsersByID(users)
-		require.Nil(t, u11, "u1 should be excluded")
-		require.Nil(t, u22, "u2 should be excluded")
-		require.NotNil(t, u33)
-		require.Equal(t, u3.ID, u33.ID)
-	})
-
-	t.Run("ExcludeMultipleFields", func(t *testing.T) {
-		defer cleanupTestData()
-		setupTestData(t)
-
-		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithExclude(map[string][]any{
-			"id":   {u1.ID},
-			"name": {u2.Name},
-		}).List(&users))
-
-		require.Len(t, users, 1)
-		u11, u22, u33 := findUsersByID(users)
-		require.Nil(t, u11, "u1 should be excluded by id")
-		require.Nil(t, u22, "u2 should be excluded by name")
-		require.NotNil(t, u33)
-		require.Equal(t, u3.ID, u33.ID)
-	})
-
-	t.Run("ExcludeAll", func(t *testing.T) {
-		defer cleanupTestData()
-		setupTestData(t)
-
-		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithExclude(map[string][]any{
-			"id": {u1.ID, u2.ID, u3.ID},
-		}).List(&users))
-
-		require.Empty(t, users, "all users should be excluded")
-	})
-
-	t.Run("ExcludeEmptyMap", func(t *testing.T) {
-		defer cleanupTestData()
-		setupTestData(t)
-
-		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithExclude(map[string][]any{}).List(&users))
-
-		require.Len(t, users, 3, "empty exclude map should not filter any records")
-		u11, u22, u33 := findUsersByID(users)
-		require.NotNil(t, u11)
-		require.NotNil(t, u22)
-		require.NotNil(t, u33)
-	})
-}
-
 func TestDatabaseWithPurge(t *testing.T) {
 	defer cleanupTestData()
 
@@ -1547,7 +1446,7 @@ func TestDatabaseWithOmit(t *testing.T) {
 		t.Run("OmitName", func(t *testing.T) {
 			defer cleanupTestData()
 
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("name").Create(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit(colName).Create(ul...))
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 			require.Len(t, users, 3)
@@ -1565,7 +1464,7 @@ func TestDatabaseWithOmit(t *testing.T) {
 		t.Run("OmitAge", func(t *testing.T) {
 			defer cleanupTestData()
 
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("age").Create(ul...))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit(colAge).Create(ul...))
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 			require.Len(t, users, 3)
@@ -1589,7 +1488,7 @@ func TestDatabaseWithOmit(t *testing.T) {
 			// Update with omit name - name should remain unchanged
 			originalName := u1.Name
 			u1.Age = 25
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("name").Update(u1))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit(colName).Update(u1))
 
 			uu := new(TestUser)
 			require.NoError(t, database.Database[*TestUser](context.Background()).Get(uu, u1.ID))
@@ -1604,7 +1503,7 @@ func TestDatabaseWithOmit(t *testing.T) {
 			// Update with omit age - age should remain unchanged
 			originalAge := u1.Age
 			u1.Name = "updated_name"
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("age").Update(u1))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit(colAge).Update(u1))
 
 			uu := new(TestUser)
 			require.NoError(t, database.Database[*TestUser](context.Background()).Get(uu, u1.ID))
@@ -1623,7 +1522,7 @@ func TestDatabaseWithOmit(t *testing.T) {
 			require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 			require.Equal(t, 3, *count, "should have 3 records initially")
 
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("name", "age").Delete(u1))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit(colName, colAge).Delete(u1))
 			require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 			require.Equal(t, 2, *count, "should have 2 records after soft delete")
 
@@ -1641,7 +1540,7 @@ func TestDatabaseWithOmit(t *testing.T) {
 			require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 			require.Equal(t, 3, *count, "should have 3 records initially")
 
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("name", "age").WithPurge().Delete(u1))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit(colName, colAge).WithPurge().Delete(u1))
 			require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 			require.Equal(t, 2, *count, "should have 2 records after hard delete")
 
@@ -1657,7 +1556,7 @@ func TestDatabaseWithOmit(t *testing.T) {
 			setupTestData(t)
 
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("name").List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit(colName).List(&users))
 			require.Len(t, users, 3)
 
 			for _, u := range users {
@@ -1673,7 +1572,7 @@ func TestDatabaseWithOmit(t *testing.T) {
 			setupTestData(t)
 
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("age").List(&users))
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit(colAge).List(&users))
 			require.Len(t, users, 3)
 
 			for _, u := range users {
@@ -1690,7 +1589,7 @@ func TestDatabaseWithOmit(t *testing.T) {
 		setupTestData(t)
 
 		uu := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("name").Get(uu, u1.ID))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit(colName).Get(uu, u1.ID))
 		require.NotNil(t, uu)
 		require.Equal(t, u1.ID, uu.ID)
 		require.Empty(t, uu.Name, "name should be omitted")
@@ -1704,7 +1603,7 @@ func TestDatabaseWithOmit(t *testing.T) {
 
 		// WithOmit should not affect Count operation
 		count := new(int)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("name", "age").Count(count))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit(colName, colAge).Count(count))
 		require.Equal(t, 3, *count, "count should not be affected by WithOmit")
 	})
 
@@ -1713,7 +1612,7 @@ func TestDatabaseWithOmit(t *testing.T) {
 		setupTestData(t)
 
 		uu := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("name").First(uu))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit(colName).First(uu))
 		require.NotNil(t, uu)
 		require.NotEmpty(t, uu.ID)
 		require.Empty(t, uu.Name, "name should be omitted")
@@ -1726,7 +1625,7 @@ func TestDatabaseWithOmit(t *testing.T) {
 		setupTestData(t)
 
 		uu := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("age").Last(uu))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit(colAge).Last(uu))
 		require.NotNil(t, uu)
 		require.NotEmpty(t, uu.ID)
 		require.NotEmpty(t, uu.Name, "name should not be empty")
@@ -1739,7 +1638,7 @@ func TestDatabaseWithOmit(t *testing.T) {
 		setupTestData(t)
 
 		uu := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit("name").Take(uu))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOmit(colName).Take(uu))
 		require.NotNil(t, uu)
 		require.NotEmpty(t, uu.ID)
 		require.Empty(t, uu.Name, "name should be omitted")

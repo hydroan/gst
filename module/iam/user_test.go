@@ -11,10 +11,18 @@ import (
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/module/iam"
+	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 )
 
 const adminUsersPath = "/api/iam/admin/users"
+
+// Column references for the user fixture writes in the user and session
+// tests; module test code carries no generated Cols vars.
+var (
+	colUsername   = types.NewColumn[string]("username")
+	colUserStatus = types.NewColumn[modeliamuser.UserStatus]("status")
+)
 
 func TestAdminUserList(t *testing.T) {
 	rootSessionID := accountLoginRoot(t)
@@ -182,10 +190,10 @@ func TestUserStatusPatch(t *testing.T) {
 		victimModel := userLoadByUsername(t, victim.Username)
 		prevStatus := victimModel.Status
 		victimModel.Status = modeliamuser.UserStatusInactive
-		require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect("username", "status").Update(victimModel))
+		require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect(colUsername, colUserStatus).Update(victimModel))
 		t.Cleanup(func() {
 			victimModel.Status = prevStatus
-			require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect("username", "status").Update(victimModel))
+			require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect(colUsername, colUserStatus).Update(victimModel))
 			modeliamsession.InvalidateUserStateCache(context.Background(), victim.UserID)
 		})
 
@@ -201,10 +209,10 @@ func TestUserStatusPatch(t *testing.T) {
 		victimModel := userLoadByUsername(t, victim.Username)
 		prevStatus := victimModel.Status
 		victimModel.Status = modeliamuser.UserStatusLocked
-		require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect("username", "status").Update(victimModel))
+		require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect(colUsername, colUserStatus).Update(victimModel))
 		t.Cleanup(func() {
 			victimModel.Status = prevStatus
-			require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect("username", "status").Update(victimModel))
+			require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect(colUsername, colUserStatus).Update(victimModel))
 			modeliamsession.InvalidateUserStateCache(context.Background(), victim.UserID)
 		})
 

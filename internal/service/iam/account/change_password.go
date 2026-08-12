@@ -57,7 +57,7 @@ func (c *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 	// Update password in database
 	if err := database.Database[*modeliamaccount.PasswordCredential](ctx).
 		WithoutHook().
-		WithSelect("user_id", "password_hash", "must_change_password", "password_changed_at").
+		WithSelect(colUserID, colPasswordHash, colMustChangePassword, colPasswordChangedAt).
 		Update(credential); err != nil {
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update password", err)
 	}

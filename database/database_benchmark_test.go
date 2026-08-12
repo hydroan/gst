@@ -8,6 +8,7 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -147,7 +148,7 @@ func BenchmarkDatabaseUpdateByID(b *testing.B) {
 
 	require.NoError(b, database.Database[*TestUser](context.Background()).Create(ul...))
 	for b.Loop() {
-		_ = database.Database[*TestUser](context.Background()).UpdateByID(u1.ID, "name", "user_modified")
+		_ = database.Database[*TestUser](context.Background()).UpdateByID(u1.ID, types.Assign("name", "user_modified"))
 	}
 }
 

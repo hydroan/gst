@@ -92,3 +92,37 @@ func TestColumnBuildsOrders(t *testing.T) {
 	require.Equal(t, types.Order{Column: "created_at", Direction: types.OrderAsc}, created.Asc())
 	require.Equal(t, types.Order{Column: "created_at", Direction: types.OrderDesc}, created.Desc())
 }
+
+func TestColumnBuildsAssignments(t *testing.T) {
+	t.Run("SetTypesTheValueByTheColumn", func(t *testing.T) {
+		status := types.NewColumn[sampleStatus]("status")
+		require.Equal(t,
+			types.Assignment{Column: "status", Value: sampleStatusActive},
+			status.Set(sampleStatusActive))
+	})
+
+	t.Run("AssignIsTheDynamicColumnEscapeHatch", func(t *testing.T) {
+		// Assign takes a plain column name for code that cannot reference a
+		// generated column, mirroring the FilterXxx and Asc/Desc constructors.
+		require.Equal(t,
+			types.Assignment{Column: "age", Value: 18},
+			types.Assign("age", 18))
+	})
+}
+
+func TestAnyColumnRefMixesReferenceKinds(t *testing.T) {
+	// One variadic list mixes references of different Go types, which is what
+	// the column-list options such as WithSelect and WithOmit accept.
+	names := func(columns ...types.AnyColumnRef) []string {
+		collected := make([]string, 0, len(columns))
+		for _, column := range columns {
+			collected = append(collected, column.Name())
+		}
+		return collected
+	}
+	require.Equal(t, []string{"name", "amount", "created_at"}, names(
+		types.NewColumn[string]("name"),
+		types.NewNumericColumn[int64]("amount"),
+		types.NewTimeColumn("created_at"),
+	))
+}

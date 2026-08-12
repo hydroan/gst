@@ -195,7 +195,7 @@ func TestClickhouse(t *testing.T) {
 		// occurred_at here), so a correction narrows the write to the columns
 		// it corrects — the shape every real mutation on this dialect takes.
 		row.Status = "after"
-		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithSelect("status").Update(row))
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithSelect(colStatus).Update(row))
 		require.Eventually(t, func() bool {
 			got := new(TestAggregateRecord)
 			if err := database.DatabaseOn[*TestAggregateRecord](ctx, ins).Get(got, row.ID); err != nil {
@@ -204,7 +204,7 @@ func TestClickhouse(t *testing.T) {
 			return got.Status == "after"
 		}, 5*time.Second, 50*time.Millisecond, "the accepted mutation must eventually rewrite the row")
 
-		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).UpdateByID(row.ID, "status", "byid"))
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).UpdateByID(row.ID, types.Assign("status", "byid")))
 		require.Eventually(t, func() bool {
 			got := new(TestAggregateRecord)
 			if err := database.DatabaseOn[*TestAggregateRecord](ctx, ins).Get(got, row.ID); err != nil {
@@ -215,7 +215,7 @@ func TestClickhouse(t *testing.T) {
 
 		// No matched count comes back from a mutation, so a missing record
 		// passes silently instead of answering ErrRecordNotFound.
-		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithSelect("status").
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithSelect(colStatus).
 			Update(&TestAggregateRecord{Category: "mutate", Base: model.Base{ID: "no-such-row"}}))
 
 		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Delete(row))
@@ -238,7 +238,7 @@ func TestClickhouse(t *testing.T) {
 			"delete must render the lightweight DELETE, not an ALTER TABLE mutation")
 
 		stmts = stmts[:0]
-		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithBuildSQL(&stmts).WithSelect("status").
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithBuildSQL(&stmts).WithSelect(colStatus).
 			Update(&TestAggregateRecord{Status: "y", Base: model.Base{ID: "dry-1"}}))
 		require.Len(t, stmts, 1)
 		require.Contains(t, stmts[0].RenderedSQL, "ALTER TABLE",

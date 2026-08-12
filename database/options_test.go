@@ -232,7 +232,7 @@ func TestDatabaseWithDryRun(t *testing.T) {
 
 		// WithDryRun should not actually update records
 		originalName := u1.Name
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithDryRun().UpdateByID(u1.ID, "name", "updated_name"))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithDryRun().UpdateByID(u1.ID, types.Assign("name", "updated_name")))
 
 		// Verify record is not updated
 		uu := new(TestUser)

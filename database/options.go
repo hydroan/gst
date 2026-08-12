@@ -77,7 +77,7 @@ func (db *database[M]) WithBatchSize(size int) types.Database[M] {
 //	WithDryRun().Create(&user)              // Build INSERT SQL without creating record
 //	WithDryRun().Update(&user)              // Build UPDATE SQL without updating record
 //	WithDryRun().Delete(&user)              // Build DELETE SQL without deleting record
-//	WithDryRun().UpdateByID(id, "name", v)  // Build UPDATE SQL without updating record
+//	WithDryRun().UpdateByID(id, SampleCols.Name.Set(v))  // Build UPDATE SQL without updating record
 //	WithDryRun().List(&users)               // Build SELECT SQL without loading records
 //	WithDryRun().Cleanup()                  // Build cleanup DELETE SQL without removing rows
 //

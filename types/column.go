@@ -2,11 +2,24 @@ package types
 
 import "time"
 
-// ColumnRef is the shared view of every generated column reference. Helpers
-// that accept a column take this interface rather than a concrete struct,
-// because embedding is not subtyping in Go: NumericColumn[T] cannot be passed
-// where Column[T] is expected, so a helper typed on the struct would reject
-// exactly the numeric and time columns it is most often used with.
+// AnyColumnRef is the type-erased view of every generated column reference,
+// for options that take a heterogeneous column list: WithSelect and WithOmit
+// accept columns of different Go types in one call, which the parameterized
+// ColumnRef cannot express. The unexported method keeps the set of
+// implementations closed to this package, so a stray type that happens to
+// carry a Name method cannot slip into a column list.
+type AnyColumnRef interface {
+	// Name returns the database column name resolved by gorm.
+	Name() string
+	sealedAnyColumn()
+}
+
+// ColumnRef is the shared typed view of every generated column reference.
+// Helpers that accept a column take this interface rather than a concrete
+// struct, because embedding is not subtyping in Go: NumericColumn[T] cannot
+// be passed where Column[T] is expected, so a helper typed on the struct
+// would reject exactly the numeric and time columns it is most often used
+// with.
 //
 // The type parameter is load-bearing. sealedColumn mentions T, so two column
 // references only satisfy the same ColumnRef[T] when their Go types match,
@@ -14,8 +27,7 @@ import "time"
 // to compile. The method is also unexported, so the set of implementations
 // stays closed to this package.
 type ColumnRef[T any] interface {
-	// Name returns the database column name resolved by gorm.
-	Name() string
+	AnyColumnRef
 	sealedColumn(T)
 }
 
@@ -59,6 +71,8 @@ func NewColumn[T any](name string) Column[T] {
 func (c Column[T]) Name() string { return c.name }
 
 func (c Column[T]) sealedColumn(T) {}
+
+func (c Column[T]) sealedAnyColumn() {}
 
 // Eq matches rows where the column equals value.
 func (c Column[T]) Eq(value T) Filter { return FilterEq(c.name, value) }
@@ -121,6 +135,11 @@ func (c Column[T]) Asc() Order { return Asc(c.name) }
 
 // Desc orders by the column descending.
 func (c Column[T]) Desc() Order { return Desc(c.name) }
+
+// Set assigns value to the column, the unit UpdateByID accepts. The value is
+// typed by the column, so assigning a wrong-typed value or naming a column
+// the model does not have fails to compile.
+func (c Column[T]) Set(value T) Assignment { return Assignment{Column: c.name, Value: value} }
 
 // The aggregate methods below are the ones that cannot be silently wrong on
 // any column type, so every column carries them. Functions that are silently

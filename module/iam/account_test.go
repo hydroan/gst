@@ -26,6 +26,14 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// Column references for the credential fixture writes in the account tests;
+// module test code carries no generated Cols vars.
+var (
+	colCredentialUserID   = types.NewColumn[string]("user_id")
+	colFailedLoginCount   = types.NewNumericColumn[int]("failed_login_count")
+	colMustChangePassword = types.NewColumn[bool]("must_change_password")
+)
+
 func TestAccountSignup(t *testing.T) {
 	user := accountSignupUserWithEmail(t, "acct_signup", "12345678", "Acct.Signup@Example.COM")
 
@@ -95,7 +103,7 @@ func TestAccountLogin(t *testing.T) {
 		credential.FailedLoginCount = 3
 		require.NoError(t, database.Database[*modeliamaccount.PasswordCredential](context.Background()).
 			WithoutHook().
-			WithSelect("user_id", "failed_login_count").
+			WithSelect(colCredentialUserID, colFailedLoginCount).
 			Update(credential))
 
 		sessionID := accountLoginUser(t, &user, user.Password)
@@ -218,7 +226,7 @@ func TestAccountChangePassword(t *testing.T) {
 		credential.MustChangePassword = true
 		require.NoError(t, database.Database[*modeliamaccount.PasswordCredential](context.Background()).
 			WithoutHook().
-			WithSelect("user_id", "must_change_password").
+			WithSelect(colCredentialUserID, colMustChangePassword).
 			Update(credential))
 
 		serviceCtx := accountNewServiceContext(

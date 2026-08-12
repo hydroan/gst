@@ -14,6 +14,20 @@ import (
 	"github.com/hydroan/gst/types"
 )
 
+// Column references for the narrow credential and identity writes below;
+// module sources carry no generated Cols vars, so the references are declared
+// here.
+var (
+	colUserID             = types.NewColumn[string]("user_id")
+	colPasswordHash       = types.NewColumn[string]("password_hash")
+	colMustChangePassword = types.NewColumn[bool]("must_change_password")
+	colPasswordChangedAt  = types.NewColumn[*time.Time]("password_changed_at")
+	colEmail              = types.NewColumn[string]("email")
+	colNormalizedEmail    = types.NewColumn[string]("normalized_email")
+	colVerifiedAt         = types.NewColumn[*time.Time]("verified_at")
+	colLastChangedAt      = types.NewColumn[*time.Time]("last_changed_at")
+)
+
 // iamAccountGateway adapts the framework IAM user model for the built-in email
 // module. It lives under module/email so copied email service code does not
 // import the framework IAM user model, password hashing policy, or session store.
@@ -83,7 +97,7 @@ func (iamAccountGateway) UpdatePassword(ctx *types.ServiceContext, userID, newPa
 	}
 	return database.Database[*modeliamaccount.PasswordCredential](ctx).
 		WithoutHook().
-		WithSelect("user_id", "password_hash", "must_change_password", "password_changed_at").
+		WithSelect(colUserID, colPasswordHash, colMustChangePassword, colPasswordChangedAt).
 		Update(credential)
 }
 
@@ -97,7 +111,7 @@ func (iamAccountGateway) MarkEmailVerified(ctx *types.ServiceContext, userID str
 	}
 	return database.Database[*modeliamaccount.EmailIdentity](ctx).
 		WithoutHook().
-		WithSelect("user_id", "verified_at").
+		WithSelect(colUserID, colVerifiedAt).
 		Update(identity)
 }
 
@@ -117,7 +131,7 @@ func (iamAccountGateway) ApplyEmailChange(ctx *types.ServiceContext, userID, new
 	}
 	return database.Database[*modeliamaccount.EmailIdentity](ctx).
 		WithoutHook().
-		WithSelect("user_id", "email", "normalized_email", "verified_at", "last_changed_at").
+		WithSelect(colUserID, colEmail, colNormalizedEmail, colVerifiedAt, colLastChangedAt).
 		Update(identity)
 }
 

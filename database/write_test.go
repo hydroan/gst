@@ -559,7 +559,7 @@ func TestDatabaseUpsert(t *testing.T) {
 		// keep the update set to the named columns, so the unique code the
 		// caller left different survives untouched.
 		update := &TestUniqueItem{UniqueCode: "ignored-code", Name: "after", Base: model.Base{ID: first.ID}}
-		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).WithSelect("name").Upsert(update))
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).WithSelect(colName).Upsert(update))
 
 		got := new(TestUniqueItem)
 		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Get(got, first.ID))
@@ -637,7 +637,7 @@ func TestDatabaseUpdateByID(t *testing.T) {
 	// updated_at carries millisecond precision (dbruntime.NowUTC); step past
 	// the current millisecond so consecutive writes observe distinct values.
 	time.Sleep(2 * time.Millisecond)
-	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID(u.ID, "name", newName))
+	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID(u.ID, colName.Set(newName)))
 	u = new(TestUser)
 	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID))
 	require.NotNil(t, u)
@@ -657,7 +657,7 @@ func TestDatabaseUpdateByID(t *testing.T) {
 	newAge := 25
 	previousUpdatedAt := u.UpdatedAt
 	time.Sleep(2 * time.Millisecond)
-	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID(u.ID, "age", newAge))
+	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID(u.ID, colAge.Set(newAge)))
 	u = new(TestUser)
 	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID))
 	require.Equal(t, newName, u.Name, "name should not be changed")
@@ -669,7 +669,7 @@ func TestDatabaseUpdateByID(t *testing.T) {
 	newEmail := "user1_new@example.com"
 	previousUpdatedAt = u.UpdatedAt
 	time.Sleep(2 * time.Millisecond)
-	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID(u.ID, "email", newEmail))
+	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID(u.ID, colEmail.Set(newEmail)))
 	u = new(TestUser)
 	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID))
 	require.Equal(t, newName, u.Name, "name should not be changed")
@@ -678,20 +678,41 @@ func TestDatabaseUpdateByID(t *testing.T) {
 	require.NotEqual(t, previousUpdatedAt, u.UpdatedAt, "updated_at should be updated again")
 
 	// Test UpdateByID with non-existent ID - should not return error
-	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID("non-existent-id", "name", "test"))
+	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID("non-existent-id", colName.Set("test")))
 
 	// Test UpdateByID with empty parameters - should return errors
-	err := database.Database[*TestUser](context.Background()).UpdateByID("", "name", "value")
+	err := database.Database[*TestUser](context.Background()).UpdateByID("", colName.Set("value"))
 	require.Error(t, err, "should return error when id is empty")
 	require.ErrorIs(t, err, database.ErrIDRequired, "error should be ErrIDRequired")
 
-	err = database.Database[*TestUser](context.Background()).UpdateByID("id", "", "value")
+	err = database.Database[*TestUser](context.Background()).UpdateByID("id", types.Assign("", "value"))
 	require.Error(t, err, "should return error when name is empty")
 	require.ErrorIs(t, err, database.ErrEmptyFieldName, "error should be ErrEmptyFieldName")
 
-	err = database.Database[*TestUser](context.Background()).UpdateByID("id", "name", nil)
+	err = database.Database[*TestUser](context.Background()).UpdateByID("id", types.Assign("name", nil))
 	require.Error(t, err, "should return error when value is nil")
 	require.ErrorIs(t, err, database.ErrNilValue, "error should be ErrNilValue")
+
+	// Test UpdateByID with multiple assignments - one call writes every
+	// assigned column and leaves the others untouched.
+	multiName, multiAge := "user1_multi", 30
+	previousUpdatedAt = u.UpdatedAt
+	time.Sleep(2 * time.Millisecond)
+	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID(u.ID, colName.Set(multiName), colAge.Set(multiAge)))
+	u = new(TestUser)
+	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID))
+	require.Equal(t, multiName, u.Name, "name should be updated by the multi-assignment call")
+	require.Equal(t, multiAge, u.Age, "age should be updated by the multi-assignment call")
+	require.Equal(t, newEmail, u.Email, "email should not be changed")
+	require.NotEqual(t, previousUpdatedAt, u.UpdatedAt, "updated_at should be updated again")
+
+	// Test UpdateByID without assignments - should return error
+	err = database.Database[*TestUser](context.Background()).UpdateByID("id")
+	require.ErrorIs(t, err, database.ErrNoAssignments, "error should be ErrNoAssignments")
+
+	// Test UpdateByID with a duplicated column - should return error
+	err = database.Database[*TestUser](context.Background()).UpdateByID("id", colName.Set("a"), colName.Set("b"))
+	require.ErrorIs(t, err, database.ErrDuplicateColumn, "error should be ErrDuplicateColumn")
 }
 
 // TestDatabaseUpdateByIDNormalizesID mirrors Get's id normalization: an id the
@@ -703,14 +724,14 @@ func TestDatabaseUpdateByIDNormalizesID(t *testing.T) {
 	item := &TestAutoItem{Code: "update-by-id-a1", Name: "first"}
 	require.NoError(t, database.Database[*TestAutoItem](context.Background()).Create(item))
 
-	err := database.Database[*TestAutoItem](context.Background()).UpdateByID(item.GetID()+"abc", "name", "hijacked")
+	err := database.Database[*TestAutoItem](context.Background()).UpdateByID(item.GetID()+"abc", colName.Set("hijacked"))
 	require.ErrorIs(t, err, database.ErrRecordNotFound)
 
 	kept := new(TestAutoItem)
 	require.NoError(t, database.Database[*TestAutoItem](context.Background()).Get(kept, item.GetID()))
 	require.Equal(t, "first", kept.Name, "a rejected id must not update the row with its numeric prefix")
 
-	require.NoError(t, database.Database[*TestAutoItem](context.Background()).UpdateByID(item.GetID(), "name", "renamed"))
+	require.NoError(t, database.Database[*TestAutoItem](context.Background()).UpdateByID(item.GetID(), colName.Set("renamed")))
 	renamed := new(TestAutoItem)
 	require.NoError(t, database.Database[*TestAutoItem](context.Background()).Get(renamed, item.GetID()))
 	require.Equal(t, "renamed", renamed.Name)

@@ -33,6 +33,14 @@ var (
 	// ErrNilValue is returned when UpdateByID is handed a nil value.
 	ErrNilValue = errors.New("value cannot be nil")
 
+	// ErrNoAssignments is returned when UpdateByID is called without any
+	// assignment.
+	ErrNoAssignments = errors.New("update requires at least one assignment")
+
+	// ErrDuplicateColumn is returned when one UpdateByID call assigns the
+	// same column twice.
+	ErrDuplicateColumn = errors.New("column is assigned twice in one update")
+
 	// ErrIDRequired is returned when an operation that addresses records by
 	// primary key is handed a record or an id argument without one.
 	ErrIDRequired = errors.New("id is required")

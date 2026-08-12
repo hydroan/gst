@@ -424,40 +424,54 @@ func (db *database[M]) updateRowStatement(session *gorm.DB, tableName string, ob
 	return tx.Omit("created_at", "created_by", "deleted_at")
 }
 
-// UpdateByID updates a specific field of a single record identified by ID.
-// This is a lightweight update operation that bypasses model hooks for performance.
-// Only updates the specified field without triggering validation or business logic.
+// UpdateByID updates database columns of a single record identified by ID in
+// one UPDATE statement. This is a lightweight update operation that bypasses
+// model hooks for performance: it writes the assigned columns without
+// triggering validation or business logic.
 //
 // Parameters:
 //   - id: The primary key of the record to update. Must not be empty.
-//   - column: The database column to update. Must not be empty.
-//   - value: The new value for the column. Must not be nil.
+//   - assignments: The column-value writes, built through the generated
+//     column references (SampleCols.Status.Set(v)) or Assign for dynamic
+//     columns. At least one is required.
 //
 // Behavior:
 //   - Automatically updates the updated_at timestamp
 //   - Does not invoke UpdateBefore/UpdateAfter hooks for performance reasons
 //   - Returns ErrIDRequired if id is empty
-//   - Returns ErrEmptyFieldName if column is empty
-//   - Returns ErrNilValue if value is nil
+//   - Returns ErrNoAssignments without any assignment
+//   - Returns ErrEmptyFieldName if an assignment names an empty column
+//   - Returns ErrNilValue if an assignment carries a nil value
+//   - Returns ErrDuplicateColumn if one column is assigned twice
 //   - Returns nil (no error) if the record with the given ID does not exist
 //   - On a ClickHouse instance the statement is an asynchronous ALTER TABLE
 //     ... UPDATE mutation: a nil error means accepted, not rewritten
 //
 // Example:
 //
-//	UpdateByID("user123", "status", "active")  // Update user status
-//	UpdateByID("record456", "score", 99.99)    // Update record score
-func (db *database[M]) UpdateByID(id string, column string, value any) (err error) {
+//	UpdateByID("user123", UserCols.Status.Set("active"))
+//	UpdateByID("record456", RecordCols.Score.Set(99.99), RecordCols.Kind.Set("exam"))
+func (db *database[M]) UpdateByID(id string, assignments ...types.Assignment) (err error) {
 	defer db.reset()
 
 	if len(id) == 0 {
 		return ErrIDRequired
 	}
-	if len(column) == 0 {
-		return ErrEmptyFieldName
+	if len(assignments) == 0 {
+		return ErrNoAssignments
 	}
-	if value == nil {
-		return ErrNilValue
+	updates := make(map[string]any, len(assignments))
+	for _, assignment := range assignments {
+		if len(assignment.Column) == 0 {
+			return ErrEmptyFieldName
+		}
+		if assignment.Value == nil {
+			return ErrNilValue
+		}
+		if _, exists := updates[assignment.Column]; exists {
+			return ErrDuplicateColumn
+		}
+		updates[assignment.Column] = assignment.Value
 	}
 
 	if err = db.prepare(); err != nil {
@@ -475,11 +489,11 @@ func (db *database[M]) UpdateByID(id string, column string, value any) (err erro
 	tableName := db.m.GetTableName()
 
 	if db.dryRun {
-		tx := db.ins.Session(&gorm.Session{DryRun: true}).Table(tableName).Model(*new(M)).Where("id = ?", id).Update(column, value)
+		tx := db.ins.Session(&gorm.Session{DryRun: true}).Table(tableName).Model(*new(M)).Where("id = ?", id).Updates(updates)
 		return db.collectSQL(tx)
 	}
 
-	if err = db.ins.Session(&gorm.Session{}).Table(tableName).Model(*new(M)).Where("id = ?", id).Update(column, value).Error; err != nil {
+	if err = db.ins.Session(&gorm.Session{}).Table(tableName).Model(*new(M)).Where("id = ?", id).Updates(updates).Error; err != nil {
 		return err
 	}
 	return nil

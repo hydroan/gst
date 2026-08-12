@@ -166,6 +166,12 @@ func TestAuthzMenu(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, list.Items)
 			require.GreaterOrEqual(t, list.Total, 0)
+			// The sentinel rows are declared excluded by the model, so the
+			// seeded root menu must stay invisible to List even though it
+			// exists in the table.
+			for _, item := range list.Items {
+				require.NotEqual(t, model.RootID, item.ID, "the root sentinel menu must not be listed")
+			}
 		})
 
 		t.Run("create", func(t *testing.T) {

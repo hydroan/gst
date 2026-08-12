@@ -12,6 +12,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
 )
@@ -19,6 +20,16 @@ import (
 const (
 	remarkUserCreateBefore = "user create before"
 	remarkUserUpdateBefore = "user update before"
+)
+
+// Column references shared by the option and write tests; test models carry
+// no generated Cols vars.
+var (
+	colName      = types.NewColumn[string]("name")
+	colEmail     = types.NewColumn[string]("email")
+	colAge       = types.NewNumericColumn[int]("age")
+	colStatus    = types.NewColumn[string]("status")
+	colNotExists = types.NewColumn[string]("notexists")
 )
 
 var (
@@ -328,7 +339,7 @@ func (g *TestHookGroup) CreateAfter(ctx context.Context) error {
 	if strings.TrimSpace(g.ConfigID) == "" {
 		return nil
 	}
-	if err := database.Database[*TestHookConfig](ctx).UpdateByID(g.ConfigID, "value", g.Value); err != nil {
+	if err := database.Database[*TestHookConfig](ctx).UpdateByID(g.ConfigID, types.Assign("value", g.Value)); err != nil {
 		return err
 	}
 	return errTestHookGroupCreateAfter

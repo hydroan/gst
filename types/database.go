@@ -40,8 +40,12 @@ type Database[M Model] interface {
 	// hooks and re-syncs caller objects with the persisted rows; reserve it
 	// for deliberate merge writes such as imports and sync jobs.
 	Upsert(objs ...M) error
-	// UpdateByID updates a single database column of a record by its ID.
-	UpdateByID(id string, column string, value any) error
+	// UpdateByID updates database columns of a record by its ID in one
+	// UPDATE statement, without running model hooks. Assignments come from
+	// the generated column references (SampleCols.Status.Set(v)) or the
+	// Assign constructor for dynamic columns; at least one is required, and
+	// empty columns, nil values and a column assigned twice are rejected.
+	UpdateByID(id string, assignments ...Assignment) error
 	// List retrieves multiple records matching the query conditions.
 	// dest must be a non-nil pointer to a slice; the slice value itself may be
 	// nil or preallocated with make. List fully replaces the slice contents with
@@ -81,8 +85,9 @@ type DatabaseOption[M Model] interface {
 	WithQuery(query M, opts ...QueryOptions) Database[M]
 	// WithCursor enables cursor-based pagination for List operations.
 	WithCursor(cursor Cursor) Database[M]
-	// WithSelect specifies fields for SELECT and Update column selection where supported.
-	WithSelect(columns ...string) Database[M]
+	// WithSelect specifies columns for SELECT and Update column selection
+	// where supported, through the generated column references.
+	WithSelect(columns ...AnyColumnRef) Database[M]
 	// WithLock adds row-level locking to SELECT queries (must be used within a transaction).
 	WithLock(mode ...consts.LockMode) Database[M]
 	// WithBatchSize sets the batch size for Create, Update, and Delete.
@@ -93,16 +98,15 @@ type DatabaseOption[M Model] interface {
 	WithLimit(limit int) Database[M]
 	// WithOffset skips records before returning read operation results.
 	WithOffset(offset int) Database[M]
-	// WithExclude excludes records matching specified conditions.
-	WithExclude(map[string][]any) Database[M]
 	// WithOrder adds ORDER BY terms to sort query results.
 	WithOrder(orders ...Order) Database[M]
 	// WithExpand enables eager loading of specified associations.
 	WithExpand(expand []string, orders ...Order) Database[M]
 	// WithPurge controls whether Delete permanently removes records instead of soft deleting them.
 	WithPurge(...bool) Database[M]
-	// WithOmit excludes specified fields from INSERT, UPDATE, and SELECT operations.
-	WithOmit(...string) Database[M]
+	// WithOmit excludes specified columns from INSERT, UPDATE, and SELECT
+	// operations, through the generated column references.
+	WithOmit(...AnyColumnRef) Database[M]
 	// WithBuildSQL builds SQL for the next terminal operation and appends Query, Args, and RenderedSQL to the collector.
 	WithBuildSQL(statements *[]SQLStatement) Database[M]
 	// WithDryRun builds SQL without database I/O, framework hooks, cache mutation, or object field filling.

@@ -75,16 +75,17 @@ func (db *database[M]) applyCursorPagination() {
 	db.ins = db.ins.Order(db.orderClause(types.Order{Column: db.cursor.Order.Column, Direction: direction}))
 }
 
-// WithSelect specifies fields to select when querying or updating records.
-// The method automatically includes defaultsColumns (id, created_by, updated_by, created_at, updated_at, deleted_at)
-// in addition to the specified columns to ensure essential fields are always available.
-// Empty or whitespace-only column names are filtered out, and duplicate defaultsColumns are avoided.
+// WithSelect specifies columns to select when querying or updating records,
+// through the generated column references (SampleCols.Name). The method
+// automatically includes defaultsColumns (id, created_by, updated_by,
+// created_at, updated_at, deleted_at) in addition to the specified columns to
+// ensure essential fields are always available.
 //
 // Parameters:
-//   - columns: Field names to select (defaultsColumns will be automatically added)
+//   - columns: Column references to select (defaultsColumns will be automatically added)
 //     If no columns are provided, this is a no-op operation and no columns will be selected (returns all columns).
-//     If all provided columns are defaultsColumns or empty/whitespace, this is also a no-op (returns all columns).
-//     Only when valid non-default columns are provided will Select be applied (valid columns + defaultsColumns).
+//     If all provided columns are defaultsColumns, this is also a no-op (returns all columns).
+//     Only when non-default columns are provided will Select be applied (given columns + defaultsColumns).
 //
 // Returns the same database instance for method chaining.
 //
@@ -92,7 +93,7 @@ func (db *database[M]) applyCursorPagination() {
 // if there are multiple hooks in the service and model layers. Use with caution.
 //
 // Affected operations: Update, List, Get, First, Last, Take.
-func (db *database[M]) WithSelect(columns ...string) types.Database[M] {
+func (db *database[M]) WithSelect(columns ...types.AnyColumnRef) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	if len(columns) == 0 {
@@ -101,8 +102,8 @@ func (db *database[M]) WithSelect(columns ...string) types.Database[M] {
 	}
 	_columns := make([]string, 0)
 	for i := range columns {
-		col := strings.TrimSpace(columns[i])
-		if len(col) > 0 && !contains(defaultsColumns, col) {
+		col := columns[i].Name()
+		if !contains(defaultsColumns, col) {
 			_columns = append(_columns, col)
 		}
 	}
@@ -400,48 +401,6 @@ func (db *database[M]) WithExpand(expand []string, orders ...types.Order) types.
 	return db
 }
 
-// WithExclude excludes records that match specified conditions.
-// It adds NOT conditions to the query to filter out records with matching values.
-// Multiple fields can be excluded, and each field can have multiple values to exclude.
-//
-// Parameters:
-//   - excludes: Map where keys are field names and values are slices of values to exclude.
-//     Empty map will not filter any records.
-//
-// Behavior:
-//   - Multiple values for the same field are combined with OR logic (exclude if matches any value)
-//   - Multiple fields add separate NOT conditions, so a record is excluded if it matches any excluded filter
-//   - Empty exclude map has no effect
-//
-// Example:
-//
-//	// Exclude users with specific IDs
-//	excludes := map[string][]any{
-//		"id": {"user1", "user2", "user3"},
-//	}
-//	db.WithExclude(excludes).List(&users)
-//
-//	// Exclude users with specific IDs and names (AND logic)
-//	excludes := map[string][]any{
-//		"id":   {"user1", "user2"},
-//		"name": {"admin", "root"},
-//	}
-//	db.WithExclude(excludes).List(&users)
-//
-// Note: This method affects the WHERE clause, not the SELECT clause.
-// Use WithOmit() to exclude fields from SELECT queries.
-// Note: WithExclude affects SELECT queries (List, Get, First, Last, etc.) and
-// also affects Update and Delete operations by adding NOT conditions to WHERE clause.
-// It does not affect Create operations (INSERT statements don't support WHERE clause).
-func (db *database[M]) WithExclude(excludes map[string][]any) types.Database[M] {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	for k, v := range excludes {
-		db.ins = db.ins.Not(k, v)
-	}
-	return db
-}
-
 // WithPurge explicitly controls whether to permanently delete records (hard delete).
 // This option has the HIGHEST PRIORITY and overrides the model's default Purge() behavior.
 //
@@ -474,29 +433,33 @@ func (db *database[M]) WithPurge(enable ...bool) types.Database[M] {
 	return db
 }
 
-// WithOmit excludes specified fields from INSERT, UPDATE, and SELECT operations.
+// WithOmit excludes specified columns from INSERT, UPDATE, and SELECT
+// operations, through the generated column references (SampleCols.Name).
 // Useful for skipping auto-generated fields or fields that shouldn't be modified.
 //
 // Parameters:
-//   - columns: Field names to omit from the operation
+//   - columns: Column references to omit from the operation
 //
 // Behavior:
-//   - Create/Update: Excludes specified fields from INSERT/UPDATE statements
-//   - Query operations (List, Get, First, Last, Take): Excludes specified fields from SELECT statements
+//   - Create/Update: Excludes specified columns from INSERT/UPDATE statements
+//   - Query operations (List, Get, First, Last, Take): Excludes specified columns from SELECT statements
 //   - Delete: Not affected (delete operations are based on WHERE conditions, not fields)
 //   - Count: Not affected (counts records, not fields)
 //
 // Example:
 //
-//	WithOmit("created_at", "updated_at").Create(&user)  // Skip timestamp fields on create
-//	WithOmit("id").Update(&user)                        // Skip ID field during update
-//	WithOmit("password").List(&users)                   // Exclude password from query results
-//	WithOmit("sensitive_data").Get(&user, id)          // Exclude sensitive data from query
-//	WithOmit("name", "age").Delete(&user)              // Delete works normally (WithOmit has no effect)
-func (db *database[M]) WithOmit(columns ...string) types.Database[M] {
+//	WithOmit(SampleCols.CreatedAt, SampleCols.UpdatedAt).Create(&sample)  // Skip timestamp fields on create
+//	WithOmit(SampleCols.ID).Update(&sample)                              // Skip ID field during update
+//	WithOmit(SampleCols.Password).List(&samples)                         // Exclude password from query results
+//	WithOmit(SampleCols.Name, SampleCols.Age).Delete(&sample)            // Delete works normally (WithOmit has no effect)
+func (db *database[M]) WithOmit(columns ...types.AnyColumnRef) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
-	db.ins = db.ins.Omit(columns...)
+	names := make([]string, 0, len(columns))
+	for _, column := range columns {
+		names = append(names, column.Name())
+	}
+	db.ins = db.ins.Omit(names...)
 	return db
 }
 

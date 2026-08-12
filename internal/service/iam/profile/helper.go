@@ -31,7 +31,7 @@ func updateProfileColumns(ctx *types.ServiceContext, record *modeliamprofile.Pro
 	return database.Transaction(ctx, func(ctx context.Context) error {
 		for _, column := range columns {
 			if err := database.Database[*modeliamprofile.Profile](ctx).
-				UpdateByID(record.ID, column, profileColumnValue(record, column)); err != nil {
+				UpdateByID(record.ID, types.Assign(column, profileColumnValue(record, column))); err != nil {
 				return service.NewErrorWithCause(http.StatusInternalServerError, "failed to update profile", err)
 			}
 		}

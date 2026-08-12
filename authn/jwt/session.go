@@ -58,7 +58,7 @@ func GetSession(userID string) (*model.Session, bool) {
 func removeSession(userID string) {
 	sessionCache.Remove(userID)
 	sessions := make([]*model.Session, 0)
-	if err := database.Database[*model.Session](context.Background()).WithLimit(-1).WithSelect("id").WithQuery(&model.Session{UserID: userID}).List(&sessions); err == nil {
+	if err := database.Database[*model.Session](context.Background()).WithLimit(-1).WithQuery(&model.Session{UserID: userID}).List(&sessions); err == nil {
 		_ = database.Database[*model.Session](context.Background()).WithPurge().Delete(sessions...)
 	}
 }

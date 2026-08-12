@@ -111,6 +111,34 @@ type routeIDIntegerRecord struct {
 	modelregistry.AutoBase
 }
 
+type excludingRecord struct {
+	Name string `json:"name"`
+
+	modelregistry.Base
+}
+
+func (excludingRecord) Excludes() map[string][]any {
+	return map[string][]any{
+		"kind": {"none", "unknown"},
+		"id":   {"root"},
+	}
+}
+
+func TestExcludeFilters(t *testing.T) {
+	t.Run("ModelWithoutExclusionsAddsNothing", func(t *testing.T) {
+		require.Empty(t, excludeFilters(new(routeIDUUIDRecord)))
+	})
+
+	t.Run("ExclusionsBecomeSortedNotInFilters", func(t *testing.T) {
+		// Columns render in sorted order so the generated SQL stays stable
+		// across requests regardless of map iteration order.
+		require.Equal(t, []types.Filter{
+			types.FilterNotIn("id", []any{"root"}),
+			types.FilterNotIn("kind", []any{"none", "unknown"}),
+		}, excludeFilters(new(excludingRecord)))
+	})
+}
+
 func TestSetRouteIDAcceptsAnyValueForUUIDKeyedModel(t *testing.T) {
 	m := new(routeIDUUIDRecord)
 

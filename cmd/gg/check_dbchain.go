@@ -48,7 +48,6 @@ var databaseChainMethods = map[string]bool{
 	"WithPagination": true,
 	"WithLimit":      true,
 	"WithOffset":     true,
-	"WithExclude":    true,
 	"WithOrder":      true,
 	"WithExpand":     true,
 	"WithPurge":      true,

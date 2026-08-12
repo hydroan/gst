@@ -1251,7 +1251,7 @@ func sessionSetUserStatus(t *testing.T, username string, status modeliamuser.Use
 	require.Len(t, users, 1)
 
 	users[0].Status = status
-	require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect("username", "status").Update(users[0]))
+	require.NoError(t, database.Database[*iam.User](context.Background()).WithoutHook().WithSelect(colUsername, colUserStatus).Update(users[0]))
 }
 
 func rootSessionTestAccount() sessionTestAccount {
