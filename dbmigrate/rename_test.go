@@ -183,6 +183,7 @@ func requireCopyPasteSafe(t *testing.T, guidance string) {
 		case len(strings.TrimSpace(line)) == 0:
 		case strings.HasPrefix(strings.TrimSpace(line), "--"):
 		case strings.HasPrefix(line, "ALTER TABLE ") && strings.HasSuffix(line, ";"):
+		case strings.HasPrefix(line, "RENAME TABLE ") && strings.HasSuffix(line, ";"):
 		default:
 			t.Fatalf("line is neither comment, blank, nor executable: %q", line)
 		}

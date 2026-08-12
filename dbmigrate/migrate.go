@@ -66,10 +66,13 @@ func newDryRunDatabase(db database.Database) (*database.DryRunDatabase, error) {
 // rebuilt, but the model and the database keep drifting until the migration
 // runs.
 //
-// When a MySQL plan both drops and adds indexes on the same table, suspected
-// renames are returned as advisory text with ready-to-run RENAME INDEX
-// guidance. The caller owns when and how to present it; executing the
-// rename stays a human decision.
+// When a MySQL plan drops and re-creates an identical definition — an index
+// on the same table, or a whole table under a new name — the suspected
+// renames are returned as advisory text with ready-to-run RENAME INDEX and
+// RENAME TABLE guidance. For tables the advisory doubles as a data-loss
+// guard, because the planned DROP TABLE would discard every row that the
+// metadata-only rename keeps. The caller owns when and how to present it;
+// executing the rename stays a human decision.
 func Migrate(schemas []string, dbtyp config.DBType, cfg *DatabaseConfig, opt *MigrateOption) (migrated bool, advisory string, err error) {
 	if len(schemas) == 0 {
 		return false, "", nil
@@ -186,10 +189,15 @@ func run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 		return false, "", nil
 	}
 
-	// Detect verified index renames for the caller to present alongside the
-	// plan. Detection guides only; nothing is rewritten or executed here.
+	// Detect verified table and index renames for the caller to present
+	// alongside the plan. Detection guides only; nothing is rewritten or
+	// executed here. Table renames come first: their DROP TABLE would discard
+	// data, so they are the ones a reviewer must act on before anything else.
 	if generatorMode == schema.GeneratorModeMysql {
-		advisory = formatIndexRenames(detectIndexRenames(ddls, currentDDLs))
+		advisory = combineAdvisories(
+			formatTableRenames(detectTableRenames(generatorMode, sqlParser, options.Config, defaultSchema, ddls, currentDDLs)),
+			formatIndexRenames(detectIndexRenames(ddls, currentDDLs)),
+		)
 	}
 
 	if options.DryRun || len(options.CurrentFile) > 0 {

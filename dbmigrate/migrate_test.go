@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -155,6 +156,47 @@ func TestMigrate(t *testing.T) {
 	})
 }
 
+func TestMigrateTableRenameAdvisory(t *testing.T) {
+	database := fmt.Sprintf("gst_dbmigrate_rename_%d", time.Now().UnixNano())
+	createMySQLDatabase(t, mysqlDatabaseConfig(), database)
+	t.Cleanup(func() {
+		dropMySQLDatabase(t, mysqlDatabaseConfig(), database)
+	})
+	databaseConfig := mysqlDatabaseConfig()
+	databaseConfig.Database = database
+
+	before := "CREATE TABLE `samples` (\n" +
+		"  `id` char(36) NOT NULL,\n" +
+		"  `code` varchar(64) NOT NULL,\n" +
+		"  PRIMARY KEY (`id`),\n" +
+		"  INDEX `idx_samples_code` (`code`)\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;"
+	after := strings.ReplaceAll(before, "samples", "records")
+
+	migrated, advisory, err := dbmigrate.Migrate([]string{before}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOption{})
+	require.NoError(t, err)
+	require.True(t, migrated)
+	require.Empty(t, advisory)
+
+	// The plan for the renamed model drops `samples` and creates `records`;
+	// the advisory must offer the metadata-only statements instead.
+	migrated, advisory, err = dbmigrate.Migrate([]string{after}, config.DBMySQL, databaseConfig,
+		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
+	require.NoError(t, err)
+	require.True(t, migrated)
+	require.Contains(t, advisory, "RENAME TABLE `samples` TO `records`;")
+	require.Contains(t, advisory, "ALTER TABLE `records` RENAME INDEX `idx_samples_code` TO `idx_records_code`;")
+
+	// Applying the advisory instead of the plan leaves nothing to migrate.
+	execMySQL(t, databaseConfig, "RENAME TABLE `samples` TO `records`")
+	execMySQL(t, databaseConfig, "ALTER TABLE `records` RENAME INDEX `idx_samples_code` TO `idx_records_code`")
+	migrated, advisory, err = dbmigrate.Migrate([]string{after}, config.DBMySQL, databaseConfig,
+		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
+	require.NoError(t, err)
+	require.False(t, migrated)
+	require.Empty(t, advisory)
+}
+
 func postgresDatabaseConfig(database string) *dbmigrate.DatabaseConfig {
 	cfg := databaseConfig(config.POSTGRES_HOST, config.POSTGRES_PORT, config.POSTGRES_USERNAME, config.POSTGRES_PASSWORD, database)
 	cfg.SSLMode = "disable"
@@ -180,6 +222,38 @@ func dropPostgresDatabase(t *testing.T, cfg *dbmigrate.DatabaseConfig, database 
 	defer db.Close()
 
 	_, _ = db.Exec("DROP DATABASE IF EXISTS " + database)
+}
+
+// execMySQL runs one statement on the configured MySQL database. The driver
+// is registered by the sqldef mysql package that dbmigrate itself imports.
+func execMySQL(t *testing.T, cfg *dbmigrate.DatabaseConfig, statement string) {
+	t.Helper()
+
+	db, err := sql.Open("mysql", mysqlDSN(cfg))
+	require.NoError(t, err)
+	defer db.Close()
+
+	_, err = db.Exec(statement)
+	require.NoError(t, err)
+}
+
+func createMySQLDatabase(t *testing.T, cfg *dbmigrate.DatabaseConfig, database string) {
+	t.Helper()
+	execMySQL(t, cfg, "CREATE DATABASE "+database)
+}
+
+func dropMySQLDatabase(t *testing.T, cfg *dbmigrate.DatabaseConfig, database string) {
+	t.Helper()
+
+	db, err := sql.Open("mysql", mysqlDSN(cfg))
+	require.NoError(t, err)
+	defer db.Close()
+
+	_, _ = db.Exec("DROP DATABASE IF EXISTS " + database)
+}
+
+func mysqlDSN(cfg *dbmigrate.DatabaseConfig) string {
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
 }
 
 func postgresDSN(cfg *dbmigrate.DatabaseConfig) string {

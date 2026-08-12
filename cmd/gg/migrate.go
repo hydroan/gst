@@ -537,10 +537,10 @@ func performMigration(schema string, cfg *dbmigrate.DatabaseConfig) error {
 		return nil
 	}
 
-	// The advisory gets its own section after the plan, so suspected index
-	// renames stay visible right before the reviewer decides.
+	// The advisory gets its own section after the plan, so suspected table
+	// and index renames stay visible right before the reviewer decides.
 	if len(advisory) != 0 {
-		fmt.Println("\n▶ Index Rename Advisory")
+		fmt.Println("\n▶ Rename Advisory")
 		fmt.Print(advisory)
 	}
 
