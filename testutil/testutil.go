@@ -29,6 +29,11 @@
 // cookie, so every later request through the same client is authenticated.
 // Rejections are asserted with RequireError.
 //
+// Database state is asserted with the Require* family, which reads rows back
+// through the framework query chain and fails the test when the state does
+// not match. Writing rows is not its job: tests seed and mutate data through
+// the database chain or their own seed helpers.
+//
 // This package forwards to the framework-internal implementation and adds no
 // behavior of its own.
 package testutil
@@ -38,6 +43,7 @@ import (
 
 	"github.com/hydroan/gst/client"
 	testutil "github.com/hydroan/gst/internal/testutil"
+	"github.com/hydroan/gst/types"
 )
 
 // Server declares what a test package needs before its tests can run.
@@ -86,4 +92,85 @@ func RequireDataFields(t *testing.T, resp *client.Envelope, fields ...string) {
 	t.Helper()
 
 	testutil.RequireDataFields(t, resp, fields...)
+}
+
+// RequireGet asserts that the row with the given id exists and returns it.
+func RequireGet[T any, M interface {
+	types.Model
+	*T
+}](t *testing.T, id string) M {
+	t.Helper()
+
+	return testutil.RequireGet[T, M](t, id)
+}
+
+// RequireFirst asserts that at least one row matches the query and returns
+// the first match. A nil or zero-value query matches no rows: WithQuery keeps
+// the framework's empty-query safety check, so a deliberate full-table read
+// stays on the database chain.
+func RequireFirst[T any, M interface {
+	types.Model
+	*T
+}](t *testing.T, query M) M {
+	t.Helper()
+
+	return testutil.RequireFirst[T, M](t, query)
+}
+
+// RequireList asserts that listing the rows matching the query succeeds and
+// returns them, sorted by orders when given. An empty result is a valid
+// return; length assertions stay with the caller. A nil or zero-value query
+// matches no rows: WithQuery keeps the framework's empty-query safety check,
+// so a deliberate full-table read stays on the database chain.
+func RequireList[T any, M interface {
+	types.Model
+	*T
+}](t *testing.T, query M, orders ...types.Order) []M {
+	t.Helper()
+
+	return testutil.RequireList[T, M](t, query, orders...)
+}
+
+// RequireNoRow asserts that no row with the given id is visible through the
+// regular query path. A hard-deleted and a soft-deleted row both satisfy it;
+// RequireSoftDeleted additionally pins that a soft-deleted row is kept.
+func RequireNoRow[T any, M interface {
+	types.Model
+	*T
+}](t *testing.T, id string) {
+	t.Helper()
+
+	testutil.RequireNoRow[T, M](t, id)
+}
+
+// RequireSoftDeleted asserts that the row with the given id is gone from the
+// regular query path while its record is kept with the soft-delete column
+// set.
+func RequireSoftDeleted[T any, M interface {
+	types.Model
+	*T
+}](t *testing.T, id string) {
+	t.Helper()
+
+	testutil.RequireSoftDeleted[T, M](t, id)
+}
+
+// SwapValue sets *field to value for the duration of the test and restores
+// the previous value on cleanup, the way t.Setenv does for environment
+// variables. It swaps process-wide state such as bootstrapped configuration
+// fields, so tests touching the same field must not run in parallel.
+func SwapValue[T any](t *testing.T, field *T, value T) {
+	t.Helper()
+
+	testutil.SwapValue(t, field, value)
+}
+
+// DownloadCSV downloads path as a CSV export through cli and parses the
+// attachment into records, stripping a leading UTF-8 BOM if present. The
+// helper sets the CSV format parameter itself; opts carry the remaining
+// query parameters, such as filters.
+func DownloadCSV(t *testing.T, cli *client.Client, path string, opts ...client.RequestOption) [][]string {
+	t.Helper()
+
+	return testutil.DownloadCSV(t, cli, path, opts...)
 }
