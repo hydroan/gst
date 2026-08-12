@@ -466,8 +466,15 @@ gg migrate
 索引做静默 DROP + CREATE 重建，大表代价极高且无确认环节；生产环境默认关闭 auto_migrate，
 先发布虽不会触发重建，但模型与库会持续漂移，直到执行 `gg migrate` 为止。
 
-`gg migrate` 检测到疑似改名（同表索引有删有加）时会在迁移计划前给出 `RENAME INDEX` 指引：
+`gg migrate` 检测到疑似改名（同表索引有删有加）时会随迁移计划给出 `RENAME INDEX` 指引：
 确认列定义一致后手工执行该语句（瞬时元数据操作），再重跑 `gg migrate`，对应删建项即消失。
+
+### 表改名不要执行删表重建
+
+改表名（`GetTableName` 返回值变化）时迁移计划会生成 `DROP TABLE` + `CREATE TABLE`，直接执行会
+清空整表数据。只要新表列覆盖旧表全部列（改名不丢数据），`gg migrate` 就会随迁移计划给出
+`RENAME TABLE` 指引，并附上表名变化连带的 `RENAME INDEX` 语句；同批的加列、索引调整会标注为
+剩余变更。手工执行改名语句后重跑 `gg migrate`，剩余变更会以原地 ALTER 呈现。
 
 ## 内置模块
 
