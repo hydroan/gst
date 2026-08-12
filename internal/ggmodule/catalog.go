@@ -124,6 +124,31 @@ func registerCanBeCalledWithoutArgs(fn *ast.FuncDecl) bool {
 	return ok
 }
 
+// CopyableModuleNames returns the names of the framework modules that declare
+// a copy manifest. gg module copy writes such a module under model/<name> and
+// service/<name>, so these names identify the project subtrees owned by copied
+// module code. A missing framework source tree yields no names instead of an
+// error: gg module copy itself requires the framework source, so a project
+// without it cannot contain copied modules.
+func CopyableModuleNames() ([]string, error) {
+	frameworkRoot, err := findFrameworkRoot()
+	if err != nil {
+		//nolint:nilerr
+		return nil, nil
+	}
+	modules, err := listModulesFromRoot(frameworkRoot)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(modules))
+	for _, module := range modules {
+		if module.Copyable {
+			names = append(names, module.Name)
+		}
+	}
+	return names, nil
+}
+
 func moduleByName(name string) (Module, error) {
 	modules, err := ListModules()
 	if err != nil {
