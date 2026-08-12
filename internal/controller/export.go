@@ -158,9 +158,6 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				gstotel.RecordError(span, err)
 				return
 			}
-			// The model-declared exclusions join after the Filter hook, so a
-			// hook that rewrites the options cannot accidentally drop them.
-			queryOpts.Filters = append(queryOpts.Filters, excludeFilters(m)...)
 			// 3.List resources from database.
 			if err = database.Database[M](requestContext(c)).
 				// WithPagination(page, size). // don't use WithPagination, it makes WithLimit ineffective

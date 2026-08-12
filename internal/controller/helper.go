@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"io"
 	"reflect"
-	"sort"
 	"strings"
 	"sync"
 
@@ -245,28 +244,6 @@ func routeFromConfig[M types.Model](cfg ...*types.ControllerConfig[M]) string {
 		return cfg[0].Route
 	}
 	return ""
-}
-
-// excludeFilters converts the model-declared exclusions into NOT IN filters
-// for the List and Export queries. They are appended after the service Filter
-// hook has run, so a hook that rewrites the query options cannot accidentally
-// drop the model's own exclusions. Columns render in sorted order so the
-// generated SQL stays stable across requests.
-func excludeFilters(m types.Model) []types.Filter {
-	excludes := m.Excludes()
-	if len(excludes) == 0 {
-		return nil
-	}
-	columns := make([]string, 0, len(excludes))
-	for column := range excludes {
-		columns = append(columns, column)
-	}
-	sort.Strings(columns)
-	filters := make([]types.Filter, 0, len(columns))
-	for _, column := range columns {
-		filters = append(filters, types.FilterNotIn(column, excludes[column]))
-	}
-	return filters
 }
 
 func requestContext(c *gin.Context) context.Context {

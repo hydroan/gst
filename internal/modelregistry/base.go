@@ -49,21 +49,20 @@ type Base struct {
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index" query:"-" url:"-"`                               // Timestamp when the record was deleted
 }
 
-func (b *Base) GetTableName() string       { return "" }
-func (b *Base) GetCreatedBy() string       { return b.CreatedBy }
-func (b *Base) GetUpdatedBy() string       { return b.UpdatedBy }
-func (b *Base) GetCreatedAt() time.Time    { return b.CreatedAt }
-func (b *Base) GetUpdatedAt() time.Time    { return b.UpdatedAt }
-func (b *Base) SetCreatedBy(s string)      { b.CreatedBy = s }
-func (b *Base) SetUpdatedBy(s string)      { b.UpdatedBy = s }
-func (b *Base) SetCreatedAt(t time.Time)   { b.CreatedAt = t }
-func (b *Base) SetUpdatedAt(t time.Time)   { b.UpdatedAt = t }
-func (b *Base) GetID() string              { return b.ID }
-func (b *Base) SetID(id ...string)         { setID(b, id...) }
-func (b *Base) ClearID()                   { clearID(b) }
-func (b *Base) Expands() []string          { return nil }
-func (b *Base) Excludes() map[string][]any { return nil }
-func (b *Base) Purge() bool                { return false } // Default to soft delete
+func (b *Base) GetTableName() string     { return "" }
+func (b *Base) GetCreatedBy() string     { return b.CreatedBy }
+func (b *Base) GetUpdatedBy() string     { return b.UpdatedBy }
+func (b *Base) GetCreatedAt() time.Time  { return b.CreatedAt }
+func (b *Base) GetUpdatedAt() time.Time  { return b.UpdatedAt }
+func (b *Base) SetCreatedBy(s string)    { b.CreatedBy = s }
+func (b *Base) SetUpdatedBy(s string)    { b.UpdatedBy = s }
+func (b *Base) SetCreatedAt(t time.Time) { b.CreatedAt = t }
+func (b *Base) SetUpdatedAt(t time.Time) { b.UpdatedAt = t }
+func (b *Base) GetID() string            { return b.ID }
+func (b *Base) SetID(id ...string)       { setID(b, id...) }
+func (b *Base) ClearID()                 { clearID(b) }
+func (b *Base) Expands() []string        { return nil }
+func (b *Base) Purge() bool              { return false } // Default to soft delete
 func (b *Base) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	if b == nil {
 		return nil

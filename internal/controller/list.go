@@ -141,10 +141,6 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			gstotel.RecordError(span, err)
 			return
 		}
-		// The model-declared exclusions join after the Filter hook, so a hook
-		// that rewrites the options cannot accidentally drop them; List and
-		// Count below share the same condition set.
-		queryOpts.Filters = append(queryOpts.Filters, excludeFilters(m)...)
 		// 3.List resources from database.
 		if err = database.Database[M](requestContext(c)).
 			WithPagination(urlquery.Pagination(query, m)).

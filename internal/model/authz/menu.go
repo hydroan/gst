@@ -241,9 +241,6 @@ func (m *Menu) DeleteBefore(ctx context.Context) error {
 }
 
 func (m *Menu) Expands() []string { return []string{"Children", "Parent"} }
-func (m *Menu) Excludes() map[string][]any {
-	return map[string][]any{KeyID: {RootID, UnknownID, NoneID}}
-}
 
 func (m *Menu) validate() error {
 	if len(m.ParentID) == 0 {

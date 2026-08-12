@@ -69,7 +69,6 @@ func (*Empty) GetID() string                                    { return "" }
 func (*Empty) SetID(id ...string)                               {}
 func (*Empty) ClearID()                                         {}
 func (*Empty) Expands() []string                                { return nil }
-func (*Empty) Excludes() map[string][]any                       { return nil }
 func (*Empty) Purge() bool                                      { return false }
 func (*Empty) MarshalLogObject(enc zapcore.ObjectEncoder) error { return nil }
 

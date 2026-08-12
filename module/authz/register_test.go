@@ -101,7 +101,10 @@ func seedBaseline() {
 		panic(err)
 	}
 
-	rootMenu := &modelauthz.Menu{Base: model.Base{ID: model.RootID}, ParentID: model.RootID}
+	// The ID must go into Menu's own shadowing field: the shadowed Base.ID is
+	// never mapped by GORM for this model, so setting it would persist a
+	// generated UUID instead of the sentinel id.
+	rootMenu := &modelauthz.Menu{ID: model.RootID, ParentID: model.RootID}
 	if err := database.Database[*modelauthz.Menu](ctx).Create(rootMenu); err != nil {
 		panic(err)
 	}
@@ -166,9 +169,9 @@ func TestAuthzMenu(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, list.Items)
 			require.GreaterOrEqual(t, list.Total, 0)
-			// The sentinel rows are declared excluded by the model, so the
-			// seeded root menu must stay invisible to List even though it
-			// exists in the table.
+			// The sentinel rows are hidden by the menu service's own filter,
+			// so the seeded root menu must stay invisible to List even for
+			// system_root, whom the visibility filter never restricts.
 			for _, item := range list.Items {
 				require.NotEqual(t, model.RootID, item.ID, "the root sentinel menu must not be listed")
 			}

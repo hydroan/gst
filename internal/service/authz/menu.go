@@ -24,6 +24,13 @@ type MenuService struct {
 // A subject with no visible menu yields an empty ID set, and IN over an empty
 // list matches nothing, so rows and total go to zero together.
 func (m *MenuService) Filter(ctx *types.ServiceContext, menu *modelauthz.Menu, opts types.QueryOptions) (*modelauthz.Menu, types.QueryOptions, error) {
+	// The sentinel rows — the root anchor and the unknown/none placeholders —
+	// are tree bookkeeping, not menus anyone manages. They stay hidden from
+	// every caller, including system_root, which the visibility filter below
+	// deliberately never restricts.
+	opts.Filters = append(opts.Filters, types.FilterNotIn(modelauthz.KeyID,
+		[]string{modelauthz.RootID, modelauthz.UnknownID, modelauthz.NoneID}))
+
 	menuIDs, restricted, err := visibleMenuIDs(ctx, m.WithContext(ctx, ctx.Phase()))
 	if err != nil {
 		return menu, opts, err

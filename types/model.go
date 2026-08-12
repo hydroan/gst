@@ -30,7 +30,6 @@ type Model interface {
 	SetCreatedAt(time.Time)
 	SetUpdatedAt(time.Time)
 	Expands() []string                            // Expands returns association paths that should be preloaded by default.
-	Excludes() map[string][]any                   // Excludes returns per-column values that List and Export hide, rendered as NOT IN filters.
 	Purge() bool                                  // Purge indicates whether to permanently delete records (hard delete). Default is false (soft delete).
 	MarshalLogObject(zapcore.ObjectEncoder) error // MarshalLogObject implements zap.ObjectMarshaler.
 

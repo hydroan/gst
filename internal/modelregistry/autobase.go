@@ -42,18 +42,17 @@ type AutoBase struct {
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index" query:"-" url:"-"`                               // Timestamp when the record was deleted
 }
 
-func (b *AutoBase) GetTableName() string       { return "" }
-func (b *AutoBase) GetCreatedBy() string       { return b.CreatedBy }
-func (b *AutoBase) GetUpdatedBy() string       { return b.UpdatedBy }
-func (b *AutoBase) GetCreatedAt() time.Time    { return b.CreatedAt }
-func (b *AutoBase) GetUpdatedAt() time.Time    { return b.UpdatedAt }
-func (b *AutoBase) SetCreatedBy(s string)      { b.CreatedBy = s }
-func (b *AutoBase) SetUpdatedBy(s string)      { b.UpdatedBy = s }
-func (b *AutoBase) SetCreatedAt(t time.Time)   { b.CreatedAt = t }
-func (b *AutoBase) SetUpdatedAt(t time.Time)   { b.UpdatedAt = t }
-func (b *AutoBase) Expands() []string          { return nil }
-func (b *AutoBase) Excludes() map[string][]any { return nil }
-func (b *AutoBase) Purge() bool                { return false } // Default to soft delete
+func (b *AutoBase) GetTableName() string     { return "" }
+func (b *AutoBase) GetCreatedBy() string     { return b.CreatedBy }
+func (b *AutoBase) GetUpdatedBy() string     { return b.UpdatedBy }
+func (b *AutoBase) GetCreatedAt() time.Time  { return b.CreatedAt }
+func (b *AutoBase) GetUpdatedAt() time.Time  { return b.UpdatedAt }
+func (b *AutoBase) SetCreatedBy(s string)    { b.CreatedBy = s }
+func (b *AutoBase) SetUpdatedBy(s string)    { b.UpdatedBy = s }
+func (b *AutoBase) SetCreatedAt(t time.Time) { b.CreatedAt = t }
+func (b *AutoBase) SetUpdatedAt(t time.Time) { b.UpdatedAt = t }
+func (b *AutoBase) Expands() []string        { return nil }
+func (b *AutoBase) Purge() bool              { return false } // Default to soft delete
 
 // GetID returns the decimal form of the ID, or "" while the ID is unset.
 func (b *AutoBase) GetID() string {
