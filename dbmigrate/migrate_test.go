@@ -197,6 +197,54 @@ func TestMigrateTableRenameAdvisory(t *testing.T) {
 	require.Empty(t, advisory)
 }
 
+func TestMigrateTableRenameAdvisoryWithRemainingChanges(t *testing.T) {
+	database := fmt.Sprintf("gst_dbmigrate_rename_drift_%d", time.Now().UnixNano())
+	createMySQLDatabase(t, mysqlDatabaseConfig(), database)
+	t.Cleanup(func() {
+		dropMySQLDatabase(t, mysqlDatabaseConfig(), database)
+	})
+	databaseConfig := mysqlDatabaseConfig()
+	databaseConfig.Database = database
+
+	before := "CREATE TABLE `samples` (\n" +
+		"  `id` char(36) NOT NULL,\n" +
+		"  `code` varchar(64) NOT NULL,\n" +
+		"  PRIMARY KEY (`id`),\n" +
+		"  INDEX `idx_samples_code` (`code`)\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;"
+
+	migrated, advisory, err := dbmigrate.Migrate([]string{before}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOption{})
+	require.NoError(t, err)
+	require.True(t, migrated)
+	require.Empty(t, advisory)
+
+	// The model renames the table and adds a column in the same step, so the
+	// created table is a column superset of the dropped one. The advisory must
+	// still offer the rename and list the addition as a remaining change.
+	after := strings.ReplaceAll(
+		strings.Replace(before, "  `code` varchar(64) NOT NULL,\n",
+			"  `code` varchar(64) NOT NULL,\n  `remark` varchar(255) NOT NULL DEFAULT '',\n", 1),
+		"samples", "records",
+	)
+	migrated, advisory, err = dbmigrate.Migrate([]string{after}, config.DBMySQL, databaseConfig,
+		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
+	require.NoError(t, err)
+	require.True(t, migrated)
+	require.Contains(t, advisory, "RENAME TABLE `samples` TO `records`;")
+	require.Contains(t, advisory, "ALTER TABLE `records` RENAME INDEX `idx_samples_code` TO `idx_records_code`;")
+	require.Contains(t, advisory, "remaining change: ALTER TABLE `records` ADD COLUMN `remark`")
+
+	// After the rename, only the remaining column addition is left in the
+	// plan, and there is no drop/create pair left to advise about.
+	execMySQL(t, databaseConfig, "RENAME TABLE `samples` TO `records`")
+	execMySQL(t, databaseConfig, "ALTER TABLE `records` RENAME INDEX `idx_samples_code` TO `idx_records_code`")
+	migrated, advisory, err = dbmigrate.Migrate([]string{after}, config.DBMySQL, databaseConfig,
+		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
+	require.NoError(t, err)
+	require.True(t, migrated)
+	require.Empty(t, advisory)
+}
+
 func postgresDatabaseConfig(database string) *dbmigrate.DatabaseConfig {
 	cfg := databaseConfig(config.POSTGRES_HOST, config.POSTGRES_PORT, config.POSTGRES_USERNAME, config.POSTGRES_PASSWORD, database)
 	cfg.SSLMode = "disable"

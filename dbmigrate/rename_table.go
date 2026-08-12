@@ -9,16 +9,20 @@ import (
 	"github.com/sqldef/sqldef/v3/schema"
 )
 
-// tableRenamePair is one confirmed table rename: the dropped and the created
-// table carry the same definition (verified by re-diffing the pair through
-// sqldef itself), so a metadata-only RENAME TABLE can replace the
-// drop-and-recreate pair without discarding the table's rows. IndexRenames
-// carries the index renames that follow the table rename, because generated
-// index names embed the table name and necessarily change with it.
+// tableRenamePair is one confirmed table rename: renaming the dropped table
+// to the created name loses no data, because the created table carries every
+// column of the dropped one (verified by re-diffing the pair through sqldef
+// itself), so a metadata-only RENAME TABLE can replace the drop-and-recreate
+// pair. IndexRenames carries the index renames that follow the table rename,
+// because generated index names embed the table name and necessarily change
+// with it. Residual carries the allowed leftover statements — column
+// additions and unpaired index changes — that the next migration run applies
+// as in-place ALTERs once the table is renamed.
 type tableRenamePair struct {
 	From         string
 	To           string
 	IndexRenames []renamePair
+	Residual     []string
 }
 
 // dropTablePattern matches the DROP TABLE statement shape emitted by the
@@ -26,15 +30,23 @@ type tableRenamePair struct {
 // it is recovered from the exported current schema instead.
 var dropTablePattern = regexp.MustCompile("^DROP TABLE ([^ ]+)$")
 
+// addColumnPattern matches the one non-index statement shape allowed to
+// remain after a rename: adding a column keeps every current row, so the
+// created table stays a data-preserving superset of the dropped one.
+var addColumnPattern = regexp.MustCompile("^ALTER TABLE [^ ]+ ADD COLUMN .+$")
+
 // detectTableRenames pairs every table the migration plan would create with a
-// dropped table of the identical definition, recovering the dropped side's
-// definition from the exported current schema. A candidate pair is verified
-// by rewriting the dropped table's definition to the created table's name and
-// re-diffing the two through sqldef itself, so the comparison normalizes
-// exactly like the migration plan did: an empty diff is a pure rename, and a
-// diff consisting solely of verified index renames still is one. Only exact
-// matches with an unambiguous one-to-one pairing are reported, so every
-// reported pair is safe to rename.
+// dropped table whose data the rename would fully preserve, recovering the
+// dropped side's definition from the exported current schema. A candidate
+// pair is verified by rewriting the dropped table's definition to the created
+// table's name and re-diffing the two through sqldef itself, so the
+// comparison normalizes exactly like the migration plan did. The pair is a
+// rename when the residual diff cannot lose data: verified index renames
+// follow the table rename, other index changes and column additions are
+// reported as remaining changes, and anything else — dropped or modified
+// columns, table options — fails closed as a genuine rebuild. Only pairs with
+// an unambiguous one-to-one pairing are reported, so every reported pair is
+// safe to rename.
 func detectTableRenames(generatorMode schema.GeneratorMode, sqlParser database.Parser, config database.GeneratorConfig, defaultSchema string, ddls []string, currentDDLs string) []tableRenamePair {
 	dropped := make([]string, 0)
 	added := make([]string, 0)
@@ -72,11 +84,11 @@ func detectTableRenames(generatorMode schema.GeneratorMode, sqlParser database.P
 			if !ok {
 				continue
 			}
-			indexRenames, ok := classifyTableRename(generatorMode, sqlParser, config, defaultSchema, desired, renameCurrentTable(current, to))
+			indexRenames, residual, ok := classifyTableRename(generatorMode, sqlParser, config, defaultSchema, desired, renameCurrentTable(current, to))
 			if !ok {
 				continue
 			}
-			candidates = append(candidates, tableRenamePair{From: from, To: to, IndexRenames: indexRenames})
+			candidates = append(candidates, tableRenamePair{From: from, To: to, IndexRenames: indexRenames, Residual: residual})
 		}
 	}
 
@@ -100,27 +112,84 @@ func detectTableRenames(generatorMode schema.GeneratorMode, sqlParser database.P
 
 // classifyTableRename re-diffs one candidate pair through sqldef: desired is
 // the created table's plan statements and current is the dropped table's
-// exported definition rewritten to the created name. EnableDrop is forced on
-// so the residual diff keeps its DROP INDEX statements; without them a
-// definition mismatch could pass as a rename. A sqldef error fails open as
-// "not a rename", because the advisory must never block the migration plan.
-func classifyTableRename(generatorMode schema.GeneratorMode, sqlParser database.Parser, config database.GeneratorConfig, defaultSchema string, desiredDDLs string, currentDDL string) ([]renamePair, bool) {
+// exported definition rewritten to the created name. The pair is a rename
+// when every residual statement is proven data-preserving: index changes
+// never touch row data, and ADD COLUMN only extends it. Verified index
+// drop/add pairs become the RENAME INDEX guidance; the other allowed
+// statements are returned as remaining changes. Anything else fails closed as
+// a genuine rebuild, as does a sqldef error, because the advisory must never
+// block the migration plan. EnableDrop is forced on so the residual keeps its
+// destructive statements; without them a data-losing mismatch could pass as a
+// rename.
+func classifyTableRename(generatorMode schema.GeneratorMode, sqlParser database.Parser, config database.GeneratorConfig, defaultSchema string, desiredDDLs string, currentDDL string) (indexRenames []renamePair, residual []string, ok bool) {
 	if len(currentDDL) == 0 {
-		return nil, false
+		return nil, nil, false
 	}
 	config.EnableDrop = true
-	residual, err := schema.GenerateIdempotentDDLs(generatorMode, sqlParser, desiredDDLs, currentDDL+";", config, defaultSchema)
+	statements, err := schema.GenerateIdempotentDDLs(generatorMode, sqlParser, desiredDDLs, currentDDL+";", config, defaultSchema)
 	if err != nil {
-		return nil, false
+		return nil, nil, false
 	}
-	if len(residual) == 0 {
-		return nil, true
+
+	indexStatements := make([]string, 0, len(statements))
+	for _, statement := range statements {
+		trimmed := strings.TrimSpace(statement)
+		switch {
+		case isIndexStatement(trimmed):
+			indexStatements = append(indexStatements, trimmed)
+		case addColumnPattern.MatchString(trimmed):
+		default:
+			return nil, nil, false
+		}
 	}
-	indexRenames := detectIndexRenames(residual, currentDDL)
-	if len(indexRenames) > 0 && len(residual) == 2*len(indexRenames) {
-		return indexRenames, true
+
+	indexRenames = detectIndexRenames(indexStatements, currentDDL)
+	if len(indexRenames) == 0 {
+		indexRenames = nil
 	}
-	return nil, false
+	for _, statement := range statements {
+		trimmed := strings.TrimSpace(statement)
+		if isIndexStatement(trimmed) && isConsumedByIndexRename(trimmed, indexRenames) {
+			continue
+		}
+		residual = append(residual, trimmed)
+	}
+	return indexRenames, residual, true
+}
+
+// isIndexStatement reports whether the statement drops or adds a secondary
+// index, in any of the shapes the sqldef MySQL generator emits.
+func isIndexStatement(statement string) bool {
+	return dropIndexPattern.MatchString(statement) ||
+		alterAddPattern.MatchString(statement) ||
+		createIndexPattern.MatchString(statement)
+}
+
+// isConsumedByIndexRename reports whether the statement is one side of a
+// verified index rename pair, and therefore already covered by the pair's
+// RENAME INDEX guidance.
+func isConsumedByIndexRename(statement string, renames []renamePair) bool {
+	if m := dropIndexPattern.FindStringSubmatch(statement); m != nil {
+		table, name := unquoteIdent(m[1]), unquoteIdent(m[2])
+		for _, rename := range renames {
+			if rename.Table == table && rename.From == name {
+				return true
+			}
+		}
+		return false
+	}
+	table, name := "", ""
+	if m := alterAddPattern.FindStringSubmatch(statement); m != nil {
+		table, name = unquoteIdent(m[1]), unquoteIdent(m[3])
+	} else if m := createIndexPattern.FindStringSubmatch(statement); m != nil {
+		table, name = unquoteIdent(m[3]), unquoteIdent(m[2])
+	}
+	for _, rename := range renames {
+		if rename.Table == table && rename.To == name {
+			return true
+		}
+	}
+	return false
 }
 
 // renameCurrentTable rewrites only the table name inside the CREATE TABLE
@@ -174,15 +243,23 @@ func parseCurrentTables(currentDDLs string) map[string]string {
 // and only directly executable statements appear unprefixed, grouped at the
 // end after a blank line. Each RENAME TABLE precedes the RENAME INDEX
 // statements of its own table, which only apply once the table is renamed.
+// Remaining changes render as comments only: they belong to the next
+// migration run, not to the rename.
 func formatTableRenames(pairs []tableRenamePair) string {
 	if len(pairs) == 0 {
 		return ""
 	}
 
 	var b strings.Builder
-	b.WriteString("  -- The plan above drops and re-creates the tables below with identical definitions; these are renames.\n")
+	b.WriteString("  -- The plan above drops and re-creates the tables below; the created table keeps every column of the dropped one, so these are renames.\n")
 	b.WriteString("  -- DROP TABLE discards every row; RENAME TABLE only modifies metadata and keeps the data.\n")
 	b.WriteString("  -- Run the statement(s) below instead, then re-run gg migrate.\n")
+	for _, pair := range pairs {
+		if len(pair.Residual) > 0 {
+			b.WriteString("  -- Changes marked \"remaining\" are not covered by the rename; re-run gg migrate after renaming to apply them as in-place ALTERs.\n")
+			break
+		}
+	}
 	for _, pair := range pairs {
 		fmt.Fprintf(&b, "  -- Table `%s` -> `%s`\n", pair.From, pair.To)
 		for _, index := range pair.IndexRenames {
@@ -191,6 +268,9 @@ func formatTableRenames(pairs []tableRenamePair) string {
 				unique = ", UNIQUE"
 			}
 			fmt.Fprintf(&b, "  --   index `%s` -> `%s` (%s%s)\n", index.From, index.To, index.Columns, unique)
+		}
+		for _, statement := range pair.Residual {
+			fmt.Fprintf(&b, "  --   remaining change: %s\n", statement)
 		}
 	}
 	b.WriteString("\n")

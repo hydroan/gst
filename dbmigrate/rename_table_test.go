@@ -85,6 +85,86 @@ func TestDetectTableRenames(t *testing.T) {
 		}}, pairs)
 	})
 
+	t.Run("a pending column addition keeps the rename and reports it as remaining", func(t *testing.T) {
+		// The reported real-world case: the current table is behind on a
+		// not-yet-migrated column, so the created table is a column superset
+		// of the dropped one. Renaming still loses no data.
+		current := "CREATE TABLE `samples` (\n" +
+			"  `id` char(36) NOT NULL,\n" +
+			"  `code` varchar(64) NOT NULL,\n" +
+			"  `deleted_at` datetime(3) NULL,\n" +
+			"  PRIMARY KEY (`id`),\n" +
+			"  UNIQUE KEY `uniq_samples_code` (`code`),\n" +
+			"  KEY `idx_samples_deleted_at` (`deleted_at`)\n" +
+			") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;"
+		pairs := detectTableRenamesMySQL(t, []string{
+			"DROP TABLE `samples`",
+			"CREATE TABLE `records` (\n" +
+				"  `id` char(36) NOT NULL,\n" +
+				"  `code` varchar(64) NOT NULL,\n" +
+				"  `remark` varchar(255) NOT NULL DEFAULT '',\n" +
+				"  `deleted_at` datetime(3) NULL,\n" +
+				"  PRIMARY KEY (`id`),\n" +
+				"  UNIQUE INDEX `uniq_samples_code` (`code`),\n" +
+				"  INDEX `idx_records_deleted_at` (`deleted_at`)\n" +
+				") ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin",
+		}, current)
+		require.Len(t, pairs, 1)
+		require.Equal(t, "samples", pairs[0].From)
+		require.Equal(t, "records", pairs[0].To)
+		require.Equal(t, []renamePair{{
+			Table:   "records",
+			From:    "idx_samples_deleted_at",
+			To:      "idx_records_deleted_at",
+			Columns: "deleted_at",
+		}}, pairs[0].IndexRenames)
+		require.Len(t, pairs[0].Residual, 1)
+		require.Contains(t, pairs[0].Residual[0], "ADD COLUMN `remark`")
+	})
+
+	t.Run("a dropped column is a rebuild, not a rename", func(t *testing.T) {
+		// Losing a column means losing its data; the pair must not be
+		// certified as a safe rename.
+		current := "CREATE TABLE `samples` (\n" +
+			"  `id` char(36) NOT NULL,\n" +
+			"  `code` varchar(64) NOT NULL,\n" +
+			"  `legacy` varchar(64) NOT NULL,\n" +
+			"  PRIMARY KEY (`id`)\n" +
+			") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;"
+		pairs := detectTableRenamesMySQL(t, []string{
+			"DROP TABLE `samples`",
+			"CREATE TABLE `records` (\n" +
+				"  `id` char(36) NOT NULL,\n" +
+				"  `code` varchar(64) NOT NULL,\n" +
+				"  PRIMARY KEY (`id`)\n" +
+				") ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin",
+		}, current)
+		require.Empty(t, pairs)
+	})
+
+	t.Run("a brand-new index keeps the rename and reports it as remaining", func(t *testing.T) {
+		current := "CREATE TABLE `samples` (\n" +
+			"  `id` char(36) NOT NULL,\n" +
+			"  `code` varchar(64) NOT NULL,\n" +
+			"  PRIMARY KEY (`id`)\n" +
+			") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;"
+		pairs := detectTableRenamesMySQL(t, []string{
+			"DROP TABLE `samples`",
+			"CREATE TABLE `records` (\n" +
+				"  `id` char(36) NOT NULL,\n" +
+				"  `code` varchar(64) NOT NULL,\n" +
+				"  PRIMARY KEY (`id`),\n" +
+				"  INDEX `idx_records_code` (`code`)\n" +
+				") ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin",
+		}, current)
+		require.Len(t, pairs, 1)
+		require.Equal(t, "samples", pairs[0].From)
+		require.Equal(t, "records", pairs[0].To)
+		require.Empty(t, pairs[0].IndexRenames)
+		require.Len(t, pairs[0].Residual, 1)
+		require.Contains(t, pairs[0].Residual[0], "idx_records_code")
+	})
+
 	t.Run("changed columns are rebuilds, not renames", func(t *testing.T) {
 		current := "CREATE TABLE `samples` (\n" +
 			"  `id` char(36) NOT NULL,\n" +
@@ -102,7 +182,10 @@ func TestDetectTableRenames(t *testing.T) {
 		require.Empty(t, pairs)
 	})
 
-	t.Run("changed index definitions are rebuilds, not renames", func(t *testing.T) {
+	t.Run("changed index definitions stay a rename with remaining changes", func(t *testing.T) {
+		// Index changes never touch row data, so a rename with a different
+		// index set is still safe; the unpaired drop and add stay behind as
+		// remaining changes instead of forming a RENAME INDEX pair.
 		current := "CREATE TABLE `samples` (\n" +
 			"  `id` char(36) NOT NULL,\n" +
 			"  `code` varchar(64) NOT NULL,\n" +
@@ -120,7 +203,11 @@ func TestDetectTableRenames(t *testing.T) {
 				"  INDEX `idx_records_kind` (`kind`)\n" +
 				") ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin",
 		}, current)
-		require.Empty(t, pairs)
+		require.Len(t, pairs, 1)
+		require.Equal(t, "samples", pairs[0].From)
+		require.Equal(t, "records", pairs[0].To)
+		require.Empty(t, pairs[0].IndexRenames)
+		require.Len(t, pairs[0].Residual, 2)
 	})
 
 	t.Run("ambiguous multiple candidates report nothing", func(t *testing.T) {
@@ -205,6 +292,7 @@ func TestFormatTableRenames(t *testing.T) {
 		}})
 		require.Contains(t, guidance, "  -- Table `samples` -> `records`")
 		require.Contains(t, guidance, "  --   index `uniq_samples_code` -> `uniq_records_code` (code, UNIQUE)")
+		require.NotContains(t, guidance, "remaining", "no remaining-change note without residual statements")
 
 		statementBlock := guidance[strings.LastIndex(guidance, "\n\n"):]
 		require.Contains(t, statementBlock, "RENAME TABLE `samples` TO `records`;")
@@ -213,6 +301,21 @@ func TestFormatTableRenames(t *testing.T) {
 			strings.Index(statementBlock, "RENAME TABLE `samples` TO `records`;"),
 			strings.Index(statementBlock, "ALTER TABLE `records` RENAME INDEX"),
 			"the table must be renamed before its indexes")
+		requireCopyPasteSafe(t, guidance)
+	})
+
+	t.Run("remaining changes render as comments, never as executable statements", func(t *testing.T) {
+		guidance := formatTableRenames([]tableRenamePair{{
+			From:     "samples",
+			To:       "records",
+			Residual: []string{"ALTER TABLE `records` ADD COLUMN `remark` varchar(255) NOT NULL DEFAULT ''"},
+		}})
+		require.Contains(t, guidance, "  --   remaining change: ALTER TABLE `records` ADD COLUMN `remark`")
+		require.Contains(t, guidance, "re-run gg migrate after renaming")
+
+		statementBlock := guidance[strings.LastIndex(guidance, "\n\n"):]
+		require.NotContains(t, statementBlock, "ADD COLUMN", "residual statements stay out of the executable block")
+		require.Contains(t, statementBlock, "RENAME TABLE `samples` TO `records`;")
 		requireCopyPasteSafe(t, guidance)
 	})
 }
