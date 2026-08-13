@@ -5,6 +5,9 @@ package model
 import "github.com/hydroan/gst/apidoc"
 
 func init() {
+	apidoc.Register("demo/model", "Notice", apidoc.StructDoc{
+		Comment: "Notice is a virtual resource demonstrating the SSE streaming action: the\nroute serves a long-lived text/event-stream that a browser consumes through\nan EventSource, or a Go caller through client.Stream.",
+	})
 	apidoc.Register("demo/model", "Record", apidoc.StructDoc{
 		Comment: "Record demonstrates a database-backed resource with custom service hooks.",
 		Fields: map[string]string{

@@ -26,6 +26,7 @@ func Init() error {
 	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/files", &types.ControllerConfig[*config.File]{}, consts.List)
 	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/files/:file", &types.ControllerConfig[*config.File]{ParamName: "file"}, consts.Get)
 	router.Register[*config.File, *config.File, *config.File](router.Auth(), "config/namespaces/:namespace/files", &types.ControllerConfig[*config.File]{}, consts.List)
+	router.Register[*model.Notice, *model.Notice, *model.Notice](router.Pub(), "notices", &types.ControllerConfig[*model.Notice]{}, consts.SSE)
 	router.Register[*model.Ping, *gstmodel.Empty, *model.PingRsp](router.Pub(), "pings", &types.ControllerConfig[*model.Ping]{}, consts.List)
 	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "records/:rec/items", &types.ControllerConfig[*record.Item]{}, consts.Create)
 	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "records/:rec/items/:id", &types.ControllerConfig[*record.Item]{ParamName: "id"}, consts.Patch)
