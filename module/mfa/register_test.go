@@ -200,19 +200,27 @@ func TestTOTPConfirm(t *testing.T) {
 
 func TestTOTPVerify(t *testing.T) {
 	account := newTOTPTestAccount(t, "totp_verify_user")
-	_, secret, _ := bindTOTPDeviceForTest(t, account.SessionID, "test-device-verify")
+	deviceID, secret, _ := bindTOTPDeviceForTest(t, account.SessionID, "test-device-verify")
 	cli := mfaSessionClient(t, account.SessionID)
 
 	t.Run("valid_code", func(t *testing.T) {
 		// The current period's code was consumed by confirm inside
 		// bindTOTPDeviceForTest, so this request needs the next period's code.
 		code := nextPeriodTOTPCode(t, secret)
+		verifyStart := time.Now().UTC().Truncate(time.Millisecond)
 		resp, err := cli.Do(http.MethodPost, verifyPath, mfa.TOTPVerifyReq{TOTPCode: code})
 		require.NoError(t, err)
 		rsp := testutil.DecodeResp[*mfa.TOTPVerifyRsp](t, resp)
 		require.True(t, rsp.Valid)
 		require.NotEmpty(t, rsp.Message)
 		testutil.RequireDataFields(t, resp, "valid")
+
+		// The narrowed usage write must actually land: a mistyped column name
+		// would leave last_used_at untouched and fail silently otherwise.
+		device := getTOTPDeviceForTest(t, deviceID)
+		require.NotNil(t, device.LastUsedAt)
+		require.False(t, device.LastUsedAt.Before(verifyStart),
+			"verify must refresh last_used_at, got %v before %v", device.LastUsedAt, verifyStart)
 	})
 
 	t.Run("invalid_code", func(t *testing.T) {
@@ -371,6 +379,40 @@ func TestTOTPUnbind(t *testing.T) {
 		require.NotEmpty(t, rsp.Message)
 		testutil.RequireDataFields(t, resp, "success", "device_count")
 	})
+}
+
+func TestTOTPUnbindWithBackupCode(t *testing.T) {
+	account := newTOTPTestAccount(t, "totp_unbind_backup_user")
+	keptDeviceID, _, backupCodes := bindTOTPDeviceForTest(t, account.SessionID, "test-device-kept")
+	removedDeviceID, _, _ := bindTOTPDeviceForTest(t, account.SessionID, "test-device-removed")
+	cli := mfaSessionClient(t, account.SessionID)
+
+	// Recovery codes are matched across all of the user's devices, so a code
+	// issued with the kept device can authorize unbinding the other one. The
+	// narrowed consumption write must actually remove the hash: a mistyped
+	// column name would leave all ten hashes in place and fail silently.
+	require.Len(t, backupCodes, 10)
+	resp, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
+		DeviceID:   removedDeviceID,
+		BackupCode: backupCodes[0],
+	})
+	require.NoError(t, err)
+	rsp := testutil.DecodeResp[*mfa.TOTPUnbindRsp](t, resp)
+	require.True(t, rsp.Success)
+	require.Equal(t, 1, rsp.DeviceCount)
+
+	assertBackupCodeHashCount(t, keptDeviceID, 9)
+
+	// A consumed recovery code cannot be replayed for another unbind.
+	resp, err = cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
+		DeviceID:   keptDeviceID,
+		BackupCode: backupCodes[0],
+	})
+	require.NoError(t, err)
+	rsp = testutil.DecodeResp[*mfa.TOTPUnbindRsp](t, resp)
+	require.False(t, rsp.Success)
+	require.Equal(t, 1, rsp.DeviceCount)
+	assertBackupCodeHashCount(t, keptDeviceID, 9)
 }
 
 func TestTOTPVerifyReplayProtection(t *testing.T) {
