@@ -25,7 +25,6 @@ var (
 	ErrNoAggregateFn         = errors.New("aggregate projection declares no aggregate function, use List for a plain read")
 	ErrInvalidAlias          = errors.New("aggregate alias is not a valid identifier")
 	ErrDuplicateAlias        = errors.New("aggregate alias is declared twice")
-	ErrUnknownColumn         = errors.New("aggregate names a column the model does not have")
 	ErrAggregateType         = errors.New("aggregate function does not accept this column type")
 	ErrResultFieldMissing    = errors.New("result row has no field for aggregate alias")
 	ErrAliasMissing          = errors.New("aggregate projection has no alias for result row field")

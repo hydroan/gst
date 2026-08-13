@@ -10,6 +10,7 @@ import (
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -295,10 +296,11 @@ func TestDatabaseWithSelect(t *testing.T) {
 		})
 		t.Run("with non-existing column", func(t *testing.T) {
 			defer cleanupTestData()
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect(colNotExists).Create(ul...))
+			// An unknown column fails the chain before any SQL runs.
+			require.ErrorIs(t, database.Database[*TestUser](context.Background()).WithSelect(colNotExists).Create(ul...), database.ErrUnknownColumn)
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
-			require.Len(t, users, 3)
+			require.Empty(t, users)
 		})
 	})
 
@@ -314,11 +316,13 @@ func TestDatabaseWithSelect(t *testing.T) {
 		})
 		t.Run("with non-existing column", func(t *testing.T) {
 			defer cleanupTestData()
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect(colNotExists).Create(ul...))
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect(colNotExists).Delete(ul...))
+			setupTestData(t)
+			// An unknown column fails the chain no matter the action, so the
+			// rows survive the attempted delete.
+			require.ErrorIs(t, database.Database[*TestUser](context.Background()).WithSelect(colNotExists).Delete(ul...), database.ErrUnknownColumn)
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
-			require.Empty(t, users)
+			require.Len(t, users, 3)
 		})
 	})
 
@@ -389,8 +393,9 @@ func TestDatabaseWithSelect(t *testing.T) {
 			u1.Name = "user1_modified"
 			u2.Name = "user2_modified"
 			u3.Name = "user3_modified"
-			// The non-existing fields will be ignored, and only default columns will be selected.
-			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect(colNotExists).Update(ul...))
+			// An unknown column fails the chain instead of silently writing
+			// nothing, so every row keeps its stored state.
+			require.ErrorIs(t, database.Database[*TestUser](context.Background()).WithSelect(colNotExists).Update(ul...), database.ErrUnknownColumn)
 
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
@@ -411,6 +416,69 @@ func TestDatabaseWithSelect(t *testing.T) {
 			require.Equal(t, u1.IsActive, u11.IsActive)
 			require.Equal(t, u2.IsActive, u22.IsActive)
 			require.Equal(t, u3.IsActive, u33.IsActive)
+		})
+		t.Run("preserves every unselected column including zeroed memory", func(t *testing.T) {
+			defer cleanupTestData()
+			active := true
+			remark := "original remark"
+			row := &TestUser{
+				Name:     "narrow_user",
+				Email:    "narrow@example.com",
+				Age:      30,
+				Addr:     datatypes.NewJSONSlice([]string{"street-1", "street-2"}),
+				IsActive: &active,
+				Remark:   &remark,
+			}
+			require.NoError(t, database.Database[*TestUser](context.Background()).Create(row))
+			stored := new(TestUser)
+			require.NoError(t, database.Database[*TestUser](context.Background()).Get(stored, row.ID))
+
+			// Zero every unselected field in memory: the narrowed update must
+			// write only the selected column, never "the other seven fields
+			// become empty".
+			row.Name = "narrow_user_updated"
+			row.Email = ""
+			row.Age = 0
+			row.Addr = nil
+			row.IsActive = nil
+			row.Remark = nil
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect(colName).Update(row))
+
+			after := new(TestUser)
+			require.NoError(t, database.Database[*TestUser](context.Background()).Get(after, row.ID))
+			require.Equal(t, "narrow_user_updated", after.Name)
+			require.Equal(t, stored.Email, after.Email, "email must survive the narrowed update")
+			require.Equal(t, stored.Age, after.Age, "age must survive the narrowed update")
+			require.Equal(t, stored.Addr, after.Addr, "addr must survive the narrowed update")
+			require.Equal(t, stored.IsActive, after.IsActive, "is_active must survive the narrowed update")
+			require.Equal(t, stored.Remark, after.Remark, "remark must survive the narrowed update")
+			require.Equal(t, stored.CreatedAt, after.CreatedAt, "created_at is never written by Update")
+			require.Equal(t, stored.CreatedBy, after.CreatedBy, "created_by is never written by Update")
+			require.False(t, after.UpdatedAt.Before(stored.UpdatedAt), "updated_at refreshes on every update")
+		})
+		t.Run("writes zero values for selected columns", func(t *testing.T) {
+			defer cleanupTestData()
+			row := &TestUser{Name: "zeroed_user", Email: "zeroed@example.com", Age: 41}
+			require.NoError(t, database.Database[*TestUser](context.Background()).Create(row))
+
+			row.Name = ""
+			row.Age = 0
+			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect(colName, colAge).Update(row))
+
+			after := new(TestUser)
+			require.NoError(t, database.Database[*TestUser](context.Background()).Get(after, row.ID))
+			require.Empty(t, after.Name, "a selected column writes its zero value")
+			require.Zero(t, after.Age, "a selected column writes its zero value")
+			require.Equal(t, "zeroed@example.com", after.Email, "unselected columns stay put")
+		})
+		t.Run("only framework columns fails", func(t *testing.T) {
+			defer cleanupTestData()
+			setupTestData(t)
+			colOnlyID := types.NewColumn[string]("id")
+			require.ErrorIs(t,
+				database.Database[*TestUser](context.Background()).WithSelect(colOnlyID).Update(ul...),
+				database.ErrNoModelColumnSelected,
+				"naming only framework-managed columns must not silently widen to a full-row write")
 		})
 		t.Run("with multiple columns", func(t *testing.T) {
 			defer cleanupTestData()
@@ -514,9 +582,9 @@ func TestDatabaseWithSelect(t *testing.T) {
 		t.Run("with non-existing column", func(t *testing.T) {
 			defer cleanupTestData()
 			setupTestData(t)
-			// Selecting non-existing column will cause error.
+			// An unknown column fails the chain before any SQL runs.
 			users := make([]*TestUser, 0)
-			require.Error(t, database.Database[*TestUser](context.Background()).WithSelect(colNotExists).List(&users))
+			require.ErrorIs(t, database.Database[*TestUser](context.Background()).WithSelect(colNotExists).List(&users), database.ErrUnknownColumn)
 		})
 		t.Run("with empty columns", func(t *testing.T) {
 			defer cleanupTestData()
@@ -1441,6 +1509,16 @@ func TestDatabaseWithPurge(t *testing.T) {
 
 func TestDatabaseWithOmit(t *testing.T) {
 	defer cleanupTestData()
+
+	t.Run("with non-existing column", func(t *testing.T) {
+		defer cleanupTestData()
+		// A mistyped omission fails the chain: silently dropping it would keep
+		// writing the column the caller meant to protect.
+		require.ErrorIs(t, database.Database[*TestUser](context.Background()).WithOmit(colNotExists).Create(ul...), database.ErrUnknownColumn)
+		users := make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
+		require.Empty(t, users)
+	})
 
 	t.Run("Create", func(t *testing.T) {
 		t.Run("OmitName", func(t *testing.T) {

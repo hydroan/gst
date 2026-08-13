@@ -7,6 +7,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"gorm.io/gorm"
@@ -84,8 +85,11 @@ func (db *database[M]) applyCursorPagination() {
 // Parameters:
 //   - columns: Column references to select (defaultsColumns will be automatically added)
 //     If no columns are provided, this is a no-op operation and no columns will be selected (returns all columns).
-//     If all provided columns are defaultsColumns, this is also a no-op (returns all columns).
-//     Only when non-default columns are provided will Select be applied (given columns + defaultsColumns).
+//
+// Column references must exist on the model: an unknown column fails the chain
+// with ErrUnknownColumn instead of silently skipping the write, and naming only
+// framework-managed columns fails with ErrNoModelColumnSelected instead of
+// silently falling back to a full-row write.
 //
 // Returns the same database instance for method chaining.
 //
@@ -100,19 +104,43 @@ func (db *database[M]) WithSelect(columns ...types.AnyColumnRef) types.Database[
 		// No-op: return without selecting any columns
 		return db
 	}
+	known, err := knownModelColumns[M]()
+	if err != nil {
+		db.err = err
+		return db
+	}
 	_columns := make([]string, 0)
 	for i := range columns {
 		col := columns[i].Name()
+		if _, ok := known[col]; !ok {
+			db.err = errors.Wrapf(ErrUnknownColumn, "WithSelect column %q on model %s", col, reflect.TypeOf(*new(M)).Elem().Name())
+			return db
+		}
 		if !contains(defaultsColumns, col) {
 			_columns = append(_columns, col)
 		}
 	}
 	if len(_columns) == 0 {
+		db.err = errors.Wrapf(ErrNoModelColumnSelected, "WithSelect on model %s named only framework-managed columns", reflect.TypeOf(*new(M)).Elem().Name())
 		return db
 	}
 	db.selectColumns = append(db.selectColumns, _columns...)
 	db.selectColumns = append(db.selectColumns, defaultsColumns...)
 	return db
+}
+
+// knownModelColumns returns the model's database column set for validating
+// explicit column references before they reach SQL.
+func knownModelColumns[M types.Model]() (map[string]struct{}, error) {
+	columns, err := modelschema.Columns(reflect.TypeOf(*new(M)).Elem())
+	if err != nil {
+		return nil, err
+	}
+	known := make(map[string]struct{}, len(columns))
+	for _, col := range columns {
+		known[col.DBName] = struct{}{}
+	}
+	return known, nil
 }
 
 // WithLock adds row-level locking to the query for concurrent access control.
@@ -455,9 +483,24 @@ func (db *database[M]) WithPurge(enable ...bool) types.Database[M] {
 func (db *database[M]) WithOmit(columns ...types.AnyColumnRef) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
+	if len(columns) == 0 {
+		return db
+	}
+	// Unknown columns fail the chain like WithSelect: a mistyped omission
+	// would otherwise silently keep writing the column it meant to protect.
+	known, err := knownModelColumns[M]()
+	if err != nil {
+		db.err = err
+		return db
+	}
 	names := make([]string, 0, len(columns))
 	for _, column := range columns {
-		names = append(names, column.Name())
+		name := column.Name()
+		if _, ok := known[name]; !ok {
+			db.err = errors.Wrapf(ErrUnknownColumn, "WithOmit column %q on model %s", name, reflect.TypeOf(*new(M)).Elem().Name())
+			return db
+		}
+		names = append(names, name)
 	}
 	db.ins = db.ins.Omit(names...)
 	return db
