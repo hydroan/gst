@@ -240,46 +240,65 @@ func TestTOTPVerify(t *testing.T) {
 }
 
 func TestTOTPLogin(t *testing.T) {
-	t.Skip("IAM login MFA integration is temporarily disabled.")
-
 	account := newTOTPTestAccount(t, "totp_login_user")
 	deviceID, secret, backupCodes := bindTOTPDeviceForTest(t, account.SessionID, "test-device-login")
 
 	t.Run("requires_second_factor", func(t *testing.T) {
 		cli, err := client.New(baseURL)
 		require.NoError(t, err)
-		resp, err := cli.Do(http.MethodPost, loginPath, iam.LoginReq{
+		_, err = cli.Do(http.MethodPost, loginPath, iam.LoginReq{
 			Username: account.Username,
 			Password: account.Password,
 		})
-		require.Error(t, err)
-		require.Nil(t, resp)
+		// The message is the client contract: login UIs match it to prompt
+		// for the second factor.
+		testutil.RequireError(t, err, http.StatusUnauthorized, "second factor required")
+	})
+
+	t.Run("wrong_password_stays_generic", func(t *testing.T) {
+		// The second-factor gate runs only after the first factor passed, so a
+		// wrong password never reveals whether the account is MFA-enrolled.
+		cli, err := client.New(baseURL)
+		require.NoError(t, err)
+		_, err = cli.Do(http.MethodPost, loginPath, iam.LoginReq{
+			Username: account.Username,
+			Password: "wrong-password",
+		})
+		rejection := testutil.RequireError(t, err, http.StatusUnauthorized, "invalid username or password")
+		require.NotContains(t, rejection.Msg, "second factor")
 	})
 
 	t.Run("with_totp_code", func(t *testing.T) {
-		code, err := totp.GenerateCode(secret, time.Now())
-		require.NoError(t, err)
+		// The current period's code was consumed by confirm; take the next one.
+		code := nextPeriodTOTPCode(t, secret)
 		_ = loginSessionIDFromCookie(t, iam.LoginReq{
 			Username: account.Username,
 			Password: account.Password,
 			TOTPCode: code,
 		})
+
+		// The consumed code cannot log in a second time.
+		cli, err := client.New(baseURL)
+		require.NoError(t, err)
+		_, err = cli.Do(http.MethodPost, loginPath, iam.LoginReq{
+			Username: account.Username,
+			Password: account.Password,
+			TOTPCode: code,
+		})
+		testutil.RequireError(t, err, http.StatusUnauthorized, "invalid TOTP code")
 	})
 
 	t.Run("rejects_conflicting_second_factors", func(t *testing.T) {
 		require.NotEmpty(t, backupCodes)
 		cli, err := client.New(baseURL)
 		require.NoError(t, err)
-		code, err := totp.GenerateCode(secret, time.Now())
-		require.NoError(t, err)
-		resp, err := cli.Do(http.MethodPost, loginPath, iam.LoginReq{
+		_, err = cli.Do(http.MethodPost, loginPath, iam.LoginReq{
 			Username:   account.Username,
 			Password:   account.Password,
-			TOTPCode:   code,
+			TOTPCode:   "000000",
 			BackupCode: backupCodes[0],
 		})
-		require.Error(t, err)
-		require.Nil(t, resp)
+		testutil.RequireError(t, err, http.StatusBadRequest, "provide exactly one second factor")
 		assertBackupCodeHashCount(t, deviceID, 10)
 	})
 
@@ -290,16 +309,23 @@ func TestTOTPLogin(t *testing.T) {
 			Password:   account.Password,
 			BackupCode: backupCodes[1],
 		})
+		assertBackupCodeHashCount(t, deviceID, 9)
+
+		// One-time: the consumed recovery code cannot log in again.
 		cli, err := client.New(baseURL)
 		require.NoError(t, err)
-		resp, err := cli.Do(http.MethodPost, loginPath, iam.LoginReq{
+		_, err = cli.Do(http.MethodPost, loginPath, iam.LoginReq{
 			Username:   account.Username,
 			Password:   account.Password,
 			BackupCode: backupCodes[1],
 		})
-		require.Error(t, err)
-		require.Nil(t, resp)
+		testutil.RequireError(t, err, http.StatusUnauthorized, "invalid backup code")
 		assertBackupCodeHashCount(t, deviceID, 9)
+	})
+
+	t.Run("unenrolled_account_passes_untouched", func(t *testing.T) {
+		plain := newTOTPTestAccount(t, "totp_login_unenrolled")
+		require.NotEmpty(t, plain.SessionID)
 	})
 }
 

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/authn"
 	"github.com/hydroan/gst/database"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/service"
@@ -13,31 +14,24 @@ import (
 	"github.com/pquerna/otp/totp"
 )
 
-var (
-	ErrLoginSecondFactorRequired = errors.New("login second factor required")
-	ErrLoginSecondFactorConflict = errors.New("login second factor conflict")
-	ErrLoginTOTPCodeInvalid      = errors.New("login TOTP code invalid")
-	ErrLoginBackupCodeInvalid    = errors.New("login backup code invalid")
-)
-
-// LoginSecondFactor carries the second-factor fields accepted by IAM login.
-type LoginSecondFactor struct {
-	TOTPCode   string
-	BackupCode string
+// The MFA service arms login second-factor enforcement at package
+// initialization: importing this package — through module/mfa on the add path
+// or the copied service package on the copy path — is what installs the
+// verifier. No separate switch exists.
+func init() {
+	authn.SetLoginSecondFactorVerifier(verifyLoginSecondFactor)
 }
 
-// VerifyLoginSecondFactor enforces the MFA rules used during IAM login.
+// verifyLoginSecondFactor enforces the MFA rules used during IAM login.
 //
-// The helper is intentionally login-specific: it skips all checks when the
-// MFA module is disabled or the user has no active TOTP devices, requires
-// exactly one submitted proof when MFA is active, updates LastUsedAt after a
-// successful TOTP proof, and delegates recovery-code consumption to the shared
-// transactional backup-code helper.
-func VerifyLoginSecondFactor(ctx *types.ServiceContext, userID string, factor LoginSecondFactor) error {
-	if !Enabled {
-		return nil
-	}
-
+// Accounts without active TOTP devices pass untouched. Enrolled accounts must
+// submit exactly one proof: a TOTP code, consumed against replay on success,
+// or a recovery code, removed transactionally. Per the authn contract the
+// verifier owns the client-facing error shape, and clients branch on status
+// plus message: the stable 401 message "second factor required" tells a login
+// UI to prompt for the code, 401 with other messages reports an invalid
+// proof, and 400 reports both proofs arriving at once.
+func verifyLoginSecondFactor(ctx *types.ServiceContext, userID string, factor authn.LoginSecondFactor) error {
 	userID = strings.TrimSpace(userID)
 	if ctx == nil || userID == "" {
 		return service.NewError(http.StatusUnauthorized, "authentication required")
@@ -45,7 +39,7 @@ func VerifyLoginSecondFactor(ctx *types.ServiceContext, userID string, factor Lo
 
 	devices, err := listActiveLoginTOTPDevices(ctx, userID)
 	if err != nil {
-		return err
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
 	}
 	if len(devices) == 0 {
 		return nil
@@ -55,9 +49,11 @@ func VerifyLoginSecondFactor(ctx *types.ServiceContext, userID string, factor Lo
 	backupCode := strings.TrimSpace(factor.BackupCode)
 	switch {
 	case totpCode == "" && backupCode == "":
-		return ErrLoginSecondFactorRequired
+		// "second factor required" is a stable client contract: login UIs match
+		// it to prompt for the code, replacing the pre-login check endpoint.
+		return service.NewError(http.StatusUnauthorized, "second factor required")
 	case totpCode != "" && backupCode != "":
-		return ErrLoginSecondFactorConflict
+		return service.NewError(http.StatusBadRequest, "provide exactly one second factor")
 	case totpCode != "":
 		return verifyLoginTOTPCode(ctx, devices, totpCode)
 	default:
@@ -77,19 +73,20 @@ func listActiveLoginTOTPDevices(ctx *types.ServiceContext, userID string) ([]*mo
 	return devices, nil
 }
 
-// verifyLoginTOTPCode validates a login TOTP code and records the matched device usage.
+// verifyLoginTOTPCode validates a login TOTP code, consumes it against replay,
+// and records the matched device usage.
 func verifyLoginTOTPCode(ctx *types.ServiceContext, devices []*modelmfa.TOTPDevice, code string) error {
 	device := findLoginTOTPDeviceByCode(devices, code)
 	if device == nil {
-		return ErrLoginTOTPCodeInvalid
+		return service.NewError(http.StatusUnauthorized, "invalid TOTP code")
 	}
 
 	// A replayed code fails login exactly like a wrong one.
 	if err := markTOTPCodeUsed(ctx, device.UserID, code); err != nil {
 		if errors.Is(err, errTOTPCodeReplayed) {
-			return ErrLoginTOTPCodeInvalid
+			return service.NewError(http.StatusUnauthorized, "invalid TOTP code")
 		}
-		return errors.Wrap(err, "mark login TOTP code used")
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
 	}
 
 	now := time.Now().UTC()
@@ -99,18 +96,19 @@ func verifyLoginTOTPCode(ctx *types.ServiceContext, devices []*modelmfa.TOTPDevi
 	if err := database.Database[*modelmfa.TOTPDevice](ctx).
 		WithSelect(colTOTPDeviceLastUsedAt).
 		Update(device); err != nil {
-		return errors.Wrap(err, "update login TOTP device usage")
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
 	}
 	return nil
 }
 
-// verifyLoginBackupCode consumes one login recovery code and maps invalid input to login errors.
+// verifyLoginBackupCode consumes one login recovery code and maps invalid input
+// to the login error contract.
 func verifyLoginBackupCode(ctx *types.ServiceContext, userID, code string) error {
 	if err := ConsumeTOTPBackupCode(ctx, userID, code); err != nil {
 		if errors.Is(err, errTOTPBackupCodeInvalid) {
-			return ErrLoginBackupCodeInvalid
+			return service.NewError(http.StatusUnauthorized, "invalid backup code")
 		}
-		return errors.Wrap(err, "consume login TOTP backup code")
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
 	}
 	return nil
 }

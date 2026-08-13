@@ -18,11 +18,12 @@ import (
 // Register wires TOTP-based MFA into the application.
 //
 // Besides registering the routes below and the internal TOTPDevice table, it
-// turns servicemfa.Enabled on, installs the framework IAM account store as
-// the AccountAuthenticator behind password-based MFA flows, and throttles the
-// endpoints that accept a guessable proof. Projects using copied MFA source
-// install their own AccountAuthenticator from project-owned code instead of
-// editing service/mfa.
+// installs the framework IAM account store as the AccountAuthenticator behind
+// password-based MFA flows and throttles the endpoints that accept a guessable
+// proof. Login second-factor enforcement needs no wiring here: importing the
+// MFA service package arms it through the authn login verifier at package
+// initialization. Projects using copied MFA source install their own
+// AccountAuthenticator from project-owned code instead of editing service/mfa.
 //
 // Routes:
 //   - POST /api/mfa/totp/bind
@@ -32,7 +33,6 @@ import (
 //   - POST /api/mfa/totp/unbind
 //   - POST /api/mfa/totp/verify
 func Register() {
-	servicemfa.Enabled = true
 	servicemfa.SetAccountAuthenticator(iamAccountAuthenticator{})
 	model.Register[*modelmfa.TOTPDevice]()
 

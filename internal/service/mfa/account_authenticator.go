@@ -25,10 +25,6 @@ var (
 	ErrAccountAuthenticationFailed = errors.New("mfa account authentication failed")
 )
 
-// Enabled reports whether module/mfa.Register wired MFA into this process.
-// Login-time second-factor enforcement stays inert while it is false.
-var Enabled bool
-
 var (
 	accountAuthenticatorMu sync.RWMutex
 	accountAuthenticator   AccountAuthenticator = missingAccountAuthenticator{}

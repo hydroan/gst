@@ -1,6 +1,9 @@
 {
   "copy": {
     "excludeSourceFiles": [],
+    "includeSourceFiles": [
+      "internal/service/mfa/totp_login.go"
+    ],
     "middleware": [],
     "postNotes": [
       "Password-based MFA checks require servicemfa.SetAccountAuthenticator(...).",
