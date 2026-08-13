@@ -120,6 +120,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/sse"
 	"github.com/hydroan/gst/types"
 	"tmpapp/helper/guard"
 	"tmpapp/model"
@@ -160,6 +161,14 @@ func (u *Updater) validate(req *model.RecordReq) error {
 		return service.NewError(http.StatusBadRequest, "id is required")
 	}
 	return nil
+}
+
+// SSE returns the framework streaming call directly: ServiceContext.SSE
+// errors are framework-governed and count as a sanctioned exit.
+func (u *Updater) SSE(ctx *types.ServiceContext) error {
+	return ctx.SSE(func(conn *sse.Conn) error {
+		return conn.Send(sse.Event{Data: "sample"})
+	})
 }
 
 // loadChecked is a compliant generic helper: the instantiation wrapper must

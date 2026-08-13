@@ -90,6 +90,7 @@ func flattenPruneModel() *gen.ModelInfo {
 			PatchMany:  disabled(consts.PHASE_PATCH_MANY),
 			Import:     disabled(consts.PHASE_IMPORT),
 			Export:     disabled(consts.PHASE_EXPORT),
+			SSE:        disabled(consts.PHASE_SSE),
 		},
 	}
 }

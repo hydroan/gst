@@ -84,6 +84,7 @@ func (s *CustomService) ListAfter(ctx *types.ServiceContext, data *[]any) error 
 			PatchMany:  &dsl.Action{},
 			Import:     &dsl.Action{},
 			Export:     &dsl.Action{},
+			SSE:        &dsl.Action{},
 		},
 	}
 
@@ -154,6 +155,7 @@ type RecordService struct {
 				PatchMany:  &dsl.Action{},
 				Import:     &dsl.Action{},
 				Export:     &dsl.Action{},
+				SSE:        &dsl.Action{},
 			},
 		},
 		{
@@ -178,6 +180,7 @@ type RecordService struct {
 				PatchMany:  &dsl.Action{},
 				Import:     &dsl.Action{},
 				Export:     &dsl.Action{},
+				SSE:        &dsl.Action{},
 			},
 		},
 	}

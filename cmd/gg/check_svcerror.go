@@ -19,6 +19,12 @@ import (
 // that leave a service method.
 const gstServiceImportPath = "github.com/hydroan/gst/service"
 
+// gstTypesImportPath is the framework package declaring ServiceContext, whose
+// SSE method is a sanctioned error exit: its errors are framework-governed —
+// a setup failure carries a framework-built message, and an error after the
+// stream opened never reaches the response envelope at all.
+const gstTypesImportPath = "github.com/hydroan/gst/types"
+
 // CheckServiceErrorDiscipline checks that every error a service method can
 // return is created by service.NewError or service.NewErrorWithCause, either
 // directly at the exit or inside a project function the exit's error flows
@@ -174,6 +180,8 @@ func (a *svcErrAnalysis) collectFile(path string) {
 			collector.svcAliases = append(collector.svcAliases, name)
 		case importPath == gstDatabaseImportPath:
 			collector.dbAliases = append(collector.dbAliases, name)
+		case importPath == gstTypesImportPath:
+			collector.typesAliases = append(collector.typesAliases, name)
 		case importPath == a.modulePath:
 			collector.projectPkg[name] = "."
 		case strings.HasPrefix(importPath, a.modulePath+"/"):
@@ -194,12 +202,13 @@ func (a *svcErrAnalysis) collectFile(path string) {
 // svcErrFileCollector is the per-file context: the parsed file plus import
 // aliases of the framework packages and of project-internal packages.
 type svcErrFileCollector struct {
-	analysis   *svcErrAnalysis
-	file       *ast.File
-	pkgDir     string
-	svcAliases []string
-	dbAliases  []string
-	projectPkg map[string]string
+	analysis     *svcErrAnalysis
+	file         *ast.File
+	pkgDir       string
+	svcAliases   []string
+	dbAliases    []string
+	typesAliases []string
+	projectPkg   map[string]string
 }
 
 // collectPackageVars records the concrete type of package-level variables
@@ -317,6 +326,7 @@ func (c *svcErrFileCollector) collectFunc(decl *ast.FuncDecl) {
 	scope := &svcErrFuncScope{
 		file:       c,
 		numResults: 0,
+		ctxParams:  serviceContextParamNames(decl, c.typesAliases),
 	}
 	for _, field := range results {
 		n := len(field.Names)
@@ -353,6 +363,33 @@ func receiverType(decl *ast.FuncDecl) ast.Expr {
 		return nil
 	}
 	return decl.Recv.List[0].Type
+}
+
+// serviceContextParamNames returns the names of the function's parameters
+// declared as *types.ServiceContext under any recognized types package alias.
+func serviceContextParamNames(decl *ast.FuncDecl, typesAliases []string) map[string]bool {
+	names := map[string]bool{}
+	if decl.Type == nil || decl.Type.Params == nil {
+		return names
+	}
+	for _, field := range decl.Type.Params.List {
+		star, ok := field.Type.(*ast.StarExpr)
+		if !ok {
+			continue
+		}
+		sel, ok := star.X.(*ast.SelectorExpr)
+		if !ok || sel.Sel == nil || sel.Sel.Name != "ServiceContext" {
+			continue
+		}
+		pkg, ok := sel.X.(*ast.Ident)
+		if !ok || !slices.Contains(typesAliases, pkg.Name) {
+			continue
+		}
+		for _, name := range field.Names {
+			names[name.Name] = true
+		}
+	}
+	return names
 }
 
 // isServiceErrorPtr reports whether expr denotes *service.Error under any
@@ -394,6 +431,9 @@ type svcErrFuncScope struct {
 	recvType   string
 	resultObj  svcErrVarObj // named error result, for naked returns
 	numResults int
+	// ctxParams names the function's *types.ServiceContext parameters, whose
+	// SSE method is a sanctioned error exit.
+	ctxParams map[string]bool
 	// assigns maps a declared variable to every expression assigned to it,
 	// closures included. Keying by the parser-resolved declaration object
 	// keeps same-named variables from different scopes apart, and each entry
@@ -715,6 +755,13 @@ func (s *svcErrFuncScope) resolveCall(call *ast.CallExpr, visiting map[svcErrVar
 			return []svcErrSource{s.raw(call)}
 		}
 		if slices.Contains(s.file.svcAliases, ident.Name) && (fun.Sel.Name == "NewError" || fun.Sel.Name == "NewErrorWithCause") {
+			return []svcErrSource{{kind: svcErrSourceNewError}}
+		}
+		// ServiceContext.SSE errors are framework-governed: a setup failure
+		// carries a framework-built message, and an error after the stream
+		// opened never reaches the response envelope, so wrapping the call in
+		// service.NewError adds nothing the client could see.
+		if s.ctxParams[ident.Name] && fun.Sel.Name == "SSE" {
 			return []svcErrSource{{kind: svcErrSourceNewError}}
 		}
 		if slices.Contains(s.file.dbAliases, ident.Name) && fun.Sel.Name == "Transaction" {
