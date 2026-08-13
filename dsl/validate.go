@@ -71,6 +71,16 @@ var fixedContractActionSignatures = map[string]string{
 	consts.PHASE_SSE.MethodName():    "SSE(ctx) error",
 }
 
+// serviceRequiredActionMethodNames are actions whose request cannot be
+// answered without a custom service: their fixed-contract service method is
+// the whole implementation, so declaring them without Service() is a wiring
+// error caught at generation time.
+var serviceRequiredActionMethodNames = map[string]bool{
+	consts.PHASE_IMPORT.MethodName(): true,
+	consts.PHASE_EXPORT.MethodName(): true,
+	consts.PHASE_SSE.MethodName():    true,
+}
+
 var designOnlyMethodNames = map[string]bool{
 	"Endpoint": true,
 	"Param":    true,
@@ -309,11 +319,12 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile, vi
 	if virtual && actionName == consts.PHASE_LIST.MethodName() && !info.result {
 		errs = append(errs, fmt.Errorf("%s: %s action on a virtual model relies on the built-in list controller, but a virtual model has no table to list from; declare Result with a custom service method", filename, actionName))
 	}
-	// SSE has no default streaming behavior: the whole action is the custom
-	// service opening the stream, so a block without Service() registers a
+	// These actions have no built-in implementation able to answer a request
+	// on its own: SSE's stream, Import's parsing, and Export's rendering all
+	// live in the custom service, so a block without Service() registers a
 	// route that can only answer "not implemented".
-	if actionName == consts.PHASE_SSE.MethodName() && !info.service {
-		errs = append(errs, fmt.Errorf("%s: %s action has no default controller behavior and must declare Service()", filename, actionName))
+	if serviceRequiredActionMethodNames[actionName] && !info.service {
+		errs = append(errs, fmt.Errorf("%s: %s action has no built-in implementation and must declare Service()", filename, actionName))
 	}
 
 	return info, errs

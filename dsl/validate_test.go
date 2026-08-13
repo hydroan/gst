@@ -604,10 +604,11 @@ func TestValidateImportExportPayloadResultUsage(t *testing.T) {
 			wantError: "Import action delegates to the fixed service method Import(ctx, io.Reader) ([]M, error) and cannot declare Result",
 		},
 		{
-			name:     "import and export with enabled only",
-			source:   validateEnabledOnlyImportExportSource,
-			modelDir: "/repo/model",
-			filename: "/repo/model/sample/record.go",
+			name:      "import and export without service",
+			source:    validateEnabledOnlyImportExportSource,
+			modelDir:  "/repo/model",
+			filename:  "/repo/model/sample/record.go",
+			wantError: "action has no built-in implementation and must declare Service()",
 		},
 	}
 
@@ -1204,7 +1205,7 @@ func TestValidateSSEUsage(t *testing.T) {
 			source:    validateSSEWithoutServiceSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/sample/record.go",
-			wantError: "SSE action has no default controller behavior and must declare Service()",
+			wantError: "SSE action has no built-in implementation and must declare Service()",
 		},
 		{
 			name:      "payload on sse action",

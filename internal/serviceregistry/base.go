@@ -49,12 +49,19 @@ func (Base[M, REQ, RSP]) UpdateManyAfter(*types.ServiceContext, ...M) error  { r
 func (Base[M, REQ, RSP]) PatchManyBefore(*types.ServiceContext, ...M) error  { return nil }
 func (Base[M, REQ, RSP]) PatchManyAfter(*types.ServiceContext, ...M) error   { return nil }
 
+// Import has no built-in parsing behavior: the DSL requires every Import
+// action to declare Service(), so reaching this default means the route was
+// wired without its service implementation. Answering loudly beats the old
+// empty-slice default, which silently imported nothing and masked the wiring
+// error.
 func (Base[M, REQ, RSP]) Import(*types.ServiceContext, io.Reader) ([]M, error) {
-	return make([]M, 0), nil
+	return nil, errors.New("import service is not implemented")
 }
 
+// Export mirrors Import: the old empty-bytes default exported an empty file
+// instead of surfacing the missing service.
 func (Base[M, REQ, RSP]) Export(*types.ServiceContext, ...M) ([]byte, error) {
-	return make([]byte, 0), nil
+	return nil, errors.New("export service is not implemented")
 }
 
 // SSE has no default streaming behavior: the DSL requires every SSE action to
