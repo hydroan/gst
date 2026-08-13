@@ -1,0 +1,14 @@
+{
+  "copy": {
+    "excludeSourceFiles": [],
+    "includeSourceFiles": [
+      "internal/service/logmgmt/loginlog_observer.go",
+      "internal/service/logmgmt/cleanup.go"
+    ],
+    "middleware": [],
+    "postNotes": [
+      "Operation logs come from the audit pipeline: set AUDIT_ENABLED=true (or the audit.enabled config key), otherwise the operation log stays empty.",
+      "Register the retention job in project-owned cronjob setup: cronjob.Register(servicelogmgmt.Cleanup, \"0 0 * * * *\", \"cleanup logs\")."
+    ]
+  }
+}

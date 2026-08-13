@@ -27,12 +27,21 @@ type OperationLog struct {
 	model.Base
 }
 
+// Purge makes every OperationLog deletion a hard delete: the retention cronjob
+// removes expired rows to reclaim space, and a soft-deleted audit trail row
+// would defeat that while pretending the log was trimmed.
+func (OperationLog) Purge() bool { return true }
+
 func (OperationLog) Design() {
 	Migrate()
-	List(func() {
-		Enabled(true)
-	})
-	Get(func() {
-		Enabled(true)
+	// The route matches the add path registration so the copy path generates
+	// the same endpoints instead of a diverging default prefix.
+	Route("log/operationlog", func() {
+		List(func() {
+			Enabled(true)
+		})
+		Get(func() {
+			Enabled(true)
+		})
 	})
 }

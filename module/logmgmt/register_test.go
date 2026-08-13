@@ -89,8 +89,6 @@ func seedRootAccount() {
 }
 
 func TestLoginLogList(t *testing.T) {
-	t.Skip("IAM login log integration is temporarily disabled.")
-
 	username := logmgmtTestUsername("loginlog_user")
 	password := "12345678"
 	userID := signupLogmgmtTestUser(t, username, password)
@@ -111,7 +109,7 @@ func TestLoginLogList(t *testing.T) {
 		l := list.Items[0]
 		require.Equal(t, userID, l.UserID)
 		require.Equal(t, username, l.Username)
-		require.Equal(t, modellogmgmt.LoginStatusSuccess, string(l.Status))
+		require.Equal(t, modellogmgmt.LoginStatusSuccess, l.Status)
 	})
 
 	t.Run("after_logout_and_login_again", func(t *testing.T) {
@@ -134,15 +132,15 @@ func TestLoginLogList(t *testing.T) {
 
 		require.Equal(t, userID, l1.UserID)
 		require.Equal(t, username, l1.Username)
-		require.Equal(t, modellogmgmt.LoginStatusSuccess, string(l1.Status))
+		require.Equal(t, modellogmgmt.LoginStatusSuccess, l1.Status)
 
 		require.Equal(t, userID, l2.UserID)
 		require.Equal(t, username, l2.Username)
-		require.Equal(t, modellogmgmt.LoginStatusLogout, string(l2.Status))
+		require.Equal(t, modellogmgmt.LoginStatusLogout, l2.Status)
 
 		require.Equal(t, userID, l3.UserID)
 		require.Equal(t, username, l3.Username)
-		require.Equal(t, modellogmgmt.LoginStatusSuccess, string(l3.Status))
+		require.Equal(t, modellogmgmt.LoginStatusSuccess, l3.Status)
 	})
 }
 

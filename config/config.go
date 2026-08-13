@@ -73,6 +73,7 @@ type Config struct {
 	RocketMQ      `json:"rocketmq" mapstructure:"rocketmq" ini:"rocketmq" yaml:"rocketmq"`
 	Debug         `json:"debug" mapstructure:"debug" ini:"debug" yaml:"debug"`
 	Audit         `json:"audit" mapstructure:"audit" ini:"audit" yaml:"audit"`
+	Logmgmt       `json:"logmgmt" mapstructure:"logmgmt" ini:"logmgmt" yaml:"logmgmt"`
 }
 
 // setDefault will set config default value
@@ -107,6 +108,7 @@ func (c *Config) setDefault(v *viper.Viper) {
 	c.RocketMQ.setDefault(v)
 	c.Debug.setDefault(v)
 	c.Audit.setDefault(v)
+	c.Logmgmt.setDefault(v)
 }
 
 // Init initializes the application configuration

@@ -176,30 +176,16 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 
 		// 4.record operation log to database.
 		// NOTE: We should record the `req` instead of `oldVal`, the req is `newVal`.
+		// Record and Request both carry the request payload, so one marshal
+		// feeds both columns; Response carries the resulting row instead.
 		record, _ := json.Marshal(req)
-		reqData, _ := json.Marshal(req)
 		respData, _ := json.Marshal(cur)
-		// cb.Enqueue(&modellogmgmt.OperationLog{
-		// 	OP:        consts.OP_PATCH,
-		// 	Model:     typ.Name(),
-		// 	Table:     tableName,
-		// 	RecordID:  req.GetID(),
-		// 	Record:    util.BytesToString(record),
-		// 	Request:   util.BytesToString(reqData),
-		// 	Response:  util.BytesToString(respData),
-		// 	IP:        c.ClientIP(),
-		// 	User:      c.GetString(consts.CTX_USERNAME),
-		// 	TraceID: c.GetString(consts.TRACE_ID),
-		// 	URI:       c.Request.RequestURI,
-		// 	Method:    c.Request.Method,
-		// 	UserAgent: c.Request.UserAgent(),
-		// })
 		if err := am.RecordOperation(requestContext(c), req, &modellogmgmt.OperationLog{
 			OP:        consts.OP_PATCH,
 			Model:     meta.name,
 			RecordID:  req.GetID(),
 			Record:    util.BytesToString(record),
-			Request:   util.BytesToString(reqData),
+			Request:   util.BytesToString(record),
 			Response:  util.BytesToString(respData),
 			IP:        c.ClientIP(),
 			User:      c.GetString(consts.CTX_USERNAME),

@@ -8,9 +8,9 @@ import (
 type LoginStatus string
 
 const (
-	LoginStatusSuccess = "success"
-	LoginStatusFailure = "failure"
-	LoginStatusLogout  = "logout"
+	LoginStatusSuccess LoginStatus = "success"
+	LoginStatusFailure LoginStatus = "failure"
+	LoginStatusLogout  LoginStatus = "logout"
 )
 
 type LoginLog struct {
@@ -29,12 +29,21 @@ type LoginLog struct {
 	model.Base
 }
 
+// Purge makes every LoginLog deletion a hard delete: the retention cronjob
+// removes expired rows to reclaim space, and a soft-deleted audit trail row
+// would defeat that while pretending the log was trimmed.
+func (LoginLog) Purge() bool { return true }
+
 func (LoginLog) Design() {
 	Migrate()
-	List(func() {
-		Enabled(true)
-	})
-	Get(func() {
-		Enabled(true)
+	// The route matches the add path registration so the copy path generates
+	// the same endpoints instead of a diverging default prefix.
+	Route("log/loginlog", func() {
+		List(func() {
+			Enabled(true)
+		})
+		Get(func() {
+			Enabled(true)
+		})
 	})
 }

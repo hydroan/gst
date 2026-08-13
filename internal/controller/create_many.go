@@ -149,29 +149,15 @@ func CreateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		}
 
 		// 4.record operation log to database.
+		// Record, Request, and Response carry the same serialized payload on
+		// this action, so one marshal feeds all three columns.
 		record, _ := json.Marshal(req)
-		reqData, _ := json.Marshal(req)
-		respData, _ := json.Marshal(req)
-		// cb.Enqueue(&modellogmgmt.OperationLog{
-		// 	OP:        consts.OP_CREATE_MANY,
-		// 	Model:     typ.Name(),
-		// 	Table:     tableName,
-		// 	Record:    util.BytesToString(record),
-		// 	Request:   util.BytesToString(reqData),
-		// 	Response:  util.BytesToString(respData),
-		// 	IP:        c.ClientIP(),
-		// 	User:      c.GetString(consts.CTX_USERNAME),
-		// 	TraceID: c.GetString(consts.TRACE_ID),
-		// 	URI:       c.Request.RequestURI,
-		// 	Method:    c.Request.Method,
-		// 	UserAgent: c.Request.UserAgent(),
-		// })
 		if err = am.RecordOperation(requestContext(c), val, &modellogmgmt.OperationLog{
 			OP:        consts.OP_CREATE_MANY,
 			Model:     meta.name,
 			Record:    util.BytesToString(record),
-			Request:   util.BytesToString(reqData),
-			Response:  util.BytesToString(respData),
+			Request:   util.BytesToString(record),
+			Response:  util.BytesToString(record),
 			IP:        c.ClientIP(),
 			User:      c.GetString(consts.CTX_USERNAME),
 			TraceID:   c.GetString(consts.TRACE_ID),
