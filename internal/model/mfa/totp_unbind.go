@@ -10,10 +10,13 @@ type TOTPUnbind struct {
 	model.Empty
 }
 
-// TOTPUnbindReq requires one fresh verification method before removing a device.
+// TOTPUnbindReq requires one fresh verification method — a TOTP code or a
+// recovery code — before removing a device. The first factor alone can never
+// switch off the second one, so a password is deliberately not accepted; an
+// account that lost both its device and its recovery codes goes through
+// administrative reset instead.
 type TOTPUnbindReq struct {
 	DeviceID   string `json:"device_id" validate:"required"`
-	Password   string `json:"password,omitempty"`
 	TOTPCode   string `json:"totp_code,omitempty" validate:"omitempty,len=6,numeric"`
 	BackupCode string `json:"backup_code,omitempty"`
 }

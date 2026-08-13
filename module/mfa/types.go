@@ -8,9 +8,6 @@ import (
 type (
 	TOTPBindRsp = modelmfa.TOTPBindRsp
 
-	TOTPCheckReq = modelmfa.TOTPCheckReq
-	TOTPCheckRsp = modelmfa.TOTPCheckRsp
-
 	TOTPConfirmReq = modelmfa.TOTPConfirmReq
 	TOTPConfirmRsp = modelmfa.TOTPConfirmRsp
 
@@ -18,7 +15,4 @@ type (
 
 	TOTPUnbindReq = modelmfa.TOTPUnbindReq
 	TOTPUnbindRsp = modelmfa.TOTPUnbindRsp
-
-	TOTPVerifyReq = modelmfa.TOTPVerifyReq
-	TOTPVerifyRsp = modelmfa.TOTPVerifyRsp
 )

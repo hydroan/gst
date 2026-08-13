@@ -29,8 +29,6 @@ var baseURL = testutil.BaseURL()
 const (
 	signupPath  = "/api/signup"
 	loginPath   = "/api/login"
-	verifyPath  = "/api/mfa/totp/verify"
-	checkPath   = "/api/mfa/totp/check"
 	bindPath    = "/api/mfa/totp/bind"
 	confirmPath = "/api/mfa/totp/confirm"
 	unbindPath  = "/api/mfa/totp/unbind"
@@ -68,7 +66,7 @@ func TestTOTPStatus(t *testing.T) {
 		assertResponseDataArrayField(t, resp, "devices")
 	})
 
-	deviceID, _, _ := bindTOTPDeviceForTest(t, account.SessionID, "test-device-status")
+	deviceID, _, backupCodes := bindTOTPDeviceForTest(t, account.SessionID, "test-device-status")
 
 	t.Run("enabled", func(t *testing.T) {
 		resp := requestTOTPStatus(t, account.SessionID)
@@ -84,7 +82,7 @@ func TestTOTPStatus(t *testing.T) {
 		assertResponseDataArrayField(t, resp, "devices")
 	})
 
-	unbindTOTPDeviceWithPassword(t, account.SessionID, deviceID, account.Password)
+	unbindTOTPDeviceWithBackupCode(t, account.SessionID, deviceID, backupCodes[0])
 
 	t.Run("disabled_after_unbind", func(t *testing.T) {
 		resp := requestTOTPStatus(t, account.SessionID)
@@ -94,28 +92,6 @@ func TestTOTPStatus(t *testing.T) {
 		require.Empty(t, rsp.Devices)
 		testutil.RequireDataFields(t, resp, "enabled", "device_count")
 		assertResponseDataArrayField(t, resp, "devices")
-	})
-}
-
-func TestTOTPCheck(t *testing.T) {
-	account := newTOTPTestAccount(t, "totp_check_user")
-
-	t.Run("not_enabled", func(t *testing.T) {
-		resp := requestTOTPCheck(t, account)
-		rsp := testutil.DecodeResp[*mfa.TOTPCheckRsp](t, resp)
-		require.False(t, rsp.RequiresMFA)
-		require.NotEmpty(t, rsp.Message)
-		testutil.RequireDataFields(t, resp, "requires_mfa")
-	})
-
-	bindTOTPDeviceForTest(t, account.SessionID, "test-device-check")
-
-	t.Run("enabled", func(t *testing.T) {
-		resp := requestTOTPCheck(t, account)
-		rsp := testutil.DecodeResp[*mfa.TOTPCheckRsp](t, resp)
-		require.True(t, rsp.RequiresMFA)
-		require.NotEmpty(t, rsp.Message)
-		testutil.RequireDataFields(t, resp, "requires_mfa")
 	})
 }
 
@@ -198,47 +174,6 @@ func TestTOTPConfirm(t *testing.T) {
 	})
 }
 
-func TestTOTPVerify(t *testing.T) {
-	account := newTOTPTestAccount(t, "totp_verify_user")
-	deviceID, secret, _ := bindTOTPDeviceForTest(t, account.SessionID, "test-device-verify")
-	cli := mfaSessionClient(t, account.SessionID)
-
-	t.Run("valid_code", func(t *testing.T) {
-		// The current period's code was consumed by confirm inside
-		// bindTOTPDeviceForTest, so this request needs the next period's code.
-		code := nextPeriodTOTPCode(t, secret)
-		verifyStart := time.Now().UTC().Truncate(time.Millisecond)
-		resp, err := cli.Do(http.MethodPost, verifyPath, mfa.TOTPVerifyReq{TOTPCode: code})
-		require.NoError(t, err)
-		rsp := testutil.DecodeResp[*mfa.TOTPVerifyRsp](t, resp)
-		require.True(t, rsp.Valid)
-		require.NotEmpty(t, rsp.Message)
-		testutil.RequireDataFields(t, resp, "valid")
-
-		// The narrowed usage write must actually land: a mistyped column name
-		// would leave last_used_at untouched and fail silently otherwise.
-		device := getTOTPDeviceForTest(t, deviceID)
-		require.NotNil(t, device.LastUsedAt)
-		require.False(t, device.LastUsedAt.Before(verifyStart),
-			"verify must refresh last_used_at, got %v before %v", device.LastUsedAt, verifyStart)
-	})
-
-	t.Run("invalid_code", func(t *testing.T) {
-		resp, err := cli.Do(http.MethodPost, verifyPath, mfa.TOTPVerifyReq{TOTPCode: "000000"})
-		require.NoError(t, err)
-		rsp := testutil.DecodeResp[*mfa.TOTPVerifyRsp](t, resp)
-		require.False(t, rsp.Valid)
-		require.NotEmpty(t, rsp.Message)
-		testutil.RequireDataFields(t, resp, "valid")
-	})
-
-	t.Run("invalid_format", func(t *testing.T) {
-		resp, err := cli.Do(http.MethodPost, verifyPath, mfa.TOTPVerifyReq{TOTPCode: "abc123"})
-		require.Error(t, err)
-		require.Nil(t, resp)
-	})
-}
-
 func TestTOTPLogin(t *testing.T) {
 	account := newTOTPTestAccount(t, "totp_login_user")
 	deviceID, secret, backupCodes := bindTOTPDeviceForTest(t, account.SessionID, "test-device-login")
@@ -271,11 +206,19 @@ func TestTOTPLogin(t *testing.T) {
 	t.Run("with_totp_code", func(t *testing.T) {
 		// The current period's code was consumed by confirm; take the next one.
 		code := nextPeriodTOTPCode(t, secret)
+		loginStart := time.Now().UTC().Truncate(time.Millisecond)
 		_ = loginSessionIDFromCookie(t, iam.LoginReq{
 			Username: account.Username,
 			Password: account.Password,
 			TOTPCode: code,
 		})
+
+		// The narrowed usage write must actually land: a mistyped column name
+		// would leave last_used_at untouched and fail silently otherwise.
+		device := getTOTPDeviceForTest(t, deviceID)
+		require.NotNil(t, device.LastUsedAt)
+		require.False(t, device.LastUsedAt.Before(loginStart),
+			"login must refresh last_used_at, got %v before %v", device.LastUsedAt, loginStart)
 
 		// The consumed code cannot log in a second time.
 		cli, err := client.New(baseURL)
@@ -344,7 +287,7 @@ func TestTOTPUnbind(t *testing.T) {
 		require.NotEmpty(t, backupCodes)
 		_, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
 			DeviceID:   deviceID,
-			Password:   account.Password,
+			TOTPCode:   "000000",
 			BackupCode: backupCodes[0],
 		})
 		testutil.RequireError(t, err, http.StatusBadRequest, "provide exactly one verification method")
@@ -361,18 +304,16 @@ func TestTOTPUnbind(t *testing.T) {
 		assertTOTPDeviceActive(t, deviceID)
 	})
 
-	t.Run("valid_password", func(t *testing.T) {
-		secondDeviceID, _, _ := bindTOTPDeviceForTest(t, account.SessionID, "test-device-password")
-		resp, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
-			DeviceID: secondDeviceID,
-			Password: account.Password,
+	t.Run("password_is_not_accepted", func(t *testing.T) {
+		// The removed password field simply does not exist on the request
+		// anymore; a request carrying only a password counts as carrying no
+		// verification method at all.
+		_, err := cli.Do(http.MethodPost, unbindPath, map[string]string{
+			"device_id": deviceID,
+			"password":  account.Password,
 		})
-		require.NoError(t, err)
-		rsp := testutil.DecodeResp[*mfa.TOTPUnbindRsp](t, resp)
-		require.True(t, rsp.Success)
-		require.Equal(t, 1, rsp.DeviceCount)
-		require.NotEmpty(t, rsp.Message)
-		testutil.RequireDataFields(t, resp, "success", "device_count")
+		testutil.RequireError(t, err, http.StatusBadRequest, "fresh authentication required")
+		assertTOTPDeviceActive(t, deviceID)
 	})
 
 	t.Run("valid_totp", func(t *testing.T) {
@@ -425,35 +366,37 @@ func TestTOTPUnbindWithBackupCode(t *testing.T) {
 
 func TestTOTPUnbindErrorContract(t *testing.T) {
 	account := newTOTPTestAccount(t, "totp_unbind_contract_user")
-	deviceID, _, _ := bindTOTPDeviceForTest(t, account.SessionID, "test-device-contract")
+	deviceID, secret, _ := bindTOTPDeviceForTest(t, account.SessionID, "test-device-contract")
 	cli := mfaSessionClient(t, account.SessionID)
 
 	t.Run("missing_device_id", func(t *testing.T) {
-		_, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{Password: account.Password})
+		_, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{TOTPCode: "000000"})
 		testutil.RequireError(t, err, http.StatusBadRequest, "device_id is required")
 	})
 
 	t.Run("invalid_credential_hides_device_existence", func(t *testing.T) {
-		// Credentials are judged before the target lookup: a wrong password
-		// with a missing device answers 401, never 404.
+		// Credentials are judged before the target lookup: a wrong code with a
+		// missing device answers 401, never 404.
 		_, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
 			DeviceID: "missing-device",
-			Password: "wrong-password",
+			TOTPCode: "000000",
 		})
 		testutil.RequireError(t, err, http.StatusUnauthorized, "invalid verification")
 	})
 
 	t.Run("device_not_found_with_valid_credential", func(t *testing.T) {
+		// A valid code passes fresh auth before the 404; its replay marker is
+		// burned, which is the accepted safety trade-off.
 		_, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
 			DeviceID: "missing-device",
-			Password: account.Password,
+			TOTPCode: nextPeriodTOTPCode(t, secret),
 		})
 		testutil.RequireError(t, err, http.StatusNotFound, "device not found or already unbound")
 		assertTOTPDeviceActive(t, deviceID)
 	})
 }
 
-func TestTOTPVerifyReplayProtection(t *testing.T) {
+func TestTOTPCrossEndpointReplayProtection(t *testing.T) {
 	account := newTOTPTestAccount(t, "totp_replay_user")
 	challengeID, secret := createTOTPBindingChallenge(t, account.SessionID)
 	cli := mfaSessionClient(t, account.SessionID)
@@ -468,26 +411,14 @@ func TestTOTPVerifyReplayProtection(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, confirmRsp.DeviceID)
 
-	t.Run("code_consumed_by_confirm_is_rejected", func(t *testing.T) {
-		resp, err := cli.Do(http.MethodPost, verifyPath, mfa.TOTPVerifyReq{TOTPCode: confirmCode})
-		require.NoError(t, err)
-		rsp := testutil.DecodeResp[*mfa.TOTPVerifyRsp](t, resp)
-		require.False(t, rsp.Valid)
+	// The replay marker is shared across endpoints: the code consumed by
+	// confirm cannot authorize an unbind within its validation window.
+	_, err = cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
+		DeviceID: confirmRsp.DeviceID,
+		TOTPCode: confirmCode,
 	})
-
-	t.Run("fresh_code_verifies_once_then_rejected", func(t *testing.T) {
-		code := nextPeriodTOTPCode(t, secret)
-
-		resp, err := cli.Do(http.MethodPost, verifyPath, mfa.TOTPVerifyReq{TOTPCode: code})
-		require.NoError(t, err)
-		rsp := testutil.DecodeResp[*mfa.TOTPVerifyRsp](t, resp)
-		require.True(t, rsp.Valid)
-
-		resp, err = cli.Do(http.MethodPost, verifyPath, mfa.TOTPVerifyReq{TOTPCode: code})
-		require.NoError(t, err)
-		rsp = testutil.DecodeResp[*mfa.TOTPVerifyRsp](t, resp)
-		require.False(t, rsp.Valid)
-	})
+	testutil.RequireError(t, err, http.StatusUnauthorized, "invalid verification")
+	assertTOTPDeviceActive(t, confirmRsp.DeviceID)
 }
 
 func TestTOTPConfirmConcurrentDuplicate(t *testing.T) {
@@ -574,14 +505,22 @@ func TestTOTPVerificationRateLimit(t *testing.T) {
 	account := newTOTPTestAccount(t, "totp_ratelimit_user")
 	cli := mfaSessionClient(t, account.SessionID)
 
-	// The user has no bound device: every attempt fails fast but still spends
-	// rate budget, because throttling runs before the handler.
+	// Every attempt fails fast on a bogus challenge but still spends rate
+	// budget, because throttling runs before the handler.
 	for range 5 {
-		_, err := cli.Do(http.MethodPost, verifyPath, mfa.TOTPVerifyReq{TOTPCode: "000000"})
+		_, err := cli.Do(http.MethodPost, confirmPath, mfa.TOTPConfirmReq{
+			ChallengeID: "missing-challenge",
+			Code:        "000000",
+			DeviceName:  "test-device-ratelimit",
+		})
 		testutil.RequireError(t, err, http.StatusBadRequest)
 	}
 
-	_, err := cli.Do(http.MethodPost, verifyPath, mfa.TOTPVerifyReq{TOTPCode: "000000"})
+	_, err := cli.Do(http.MethodPost, confirmPath, mfa.TOTPConfirmReq{
+		ChallengeID: "missing-challenge",
+		Code:        "000000",
+		DeviceName:  "test-device-ratelimit",
+	})
 	testutil.RequireError(t, err, http.StatusTooManyRequests, "too many requests")
 
 	// Other throttled endpoints keep their own budget: the same user's next
@@ -639,18 +578,6 @@ func requestTOTPStatus(t *testing.T, sessionID string) *client.Envelope {
 	return resp
 }
 
-func requestTOTPCheck(t *testing.T, account totpTestAccount) *client.Envelope {
-	t.Helper()
-
-	cli := mfaSessionClient(t, account.SessionID)
-	resp, err := cli.Do(http.MethodPost, checkPath, mfa.TOTPCheckReq{
-		Username: account.Username,
-		Password: account.Password,
-	})
-	require.NoError(t, err)
-	return resp
-}
-
 func createTOTPBindingChallenge(t *testing.T, sessionID string) (string, string) {
 	t.Helper()
 
@@ -662,13 +589,13 @@ func createTOTPBindingChallenge(t *testing.T, sessionID string) (string, string)
 	return rsp.ChallengeID, extractSecretFromOtpauthURL(t, rsp.OtpauthURL)
 }
 
-func unbindTOTPDeviceWithPassword(t *testing.T, sessionID, deviceID, password string) {
+func unbindTOTPDeviceWithBackupCode(t *testing.T, sessionID, deviceID, backupCode string) {
 	t.Helper()
 
 	cli := mfaSessionClient(t, sessionID)
 	rsp, err := client.Post[mfa.TOTPUnbindRsp](cli, unbindPath, mfa.TOTPUnbindReq{
-		DeviceID: deviceID,
-		Password: password,
+		DeviceID:   deviceID,
+		BackupCode: backupCode,
 	})
 	require.NoError(t, err)
 	require.True(t, rsp.Success)

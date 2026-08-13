@@ -5,9 +5,6 @@
       "internal/service/mfa/totp_login.go"
     ],
     "middleware": [],
-    "postNotes": [
-      "Password-based MFA checks require servicemfa.SetAccountAuthenticator(...).",
-      "Create a project-owned adapter outside service/mfa, for example module/mfa_account_authenticator.go."
-    ]
+    "postNotes": []
   }
 }

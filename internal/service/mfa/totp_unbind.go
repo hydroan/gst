@@ -19,12 +19,12 @@ import (
 
 // TOTPUnbindService removes an active TOTP device after fresh authentication.
 //
-// The request must provide exactly one verification method: current password,
-// TOTP code, or recovery code. Password verification is performed before the
-// device transaction to avoid cross-model database work inside the device lock.
-// TOTP and recovery-code verification run against the current user's active
-// devices; recovery-code removal and target-device deletion share the same
-// transaction so the code is consumed only when the unbind operation succeeds.
+// The request must provide exactly one verification method: a TOTP code or a
+// recovery code, both proving possession of the second factor itself — the
+// password alone deliberately cannot switch MFA off. Verification runs against
+// the current user's active devices; recovery-code removal and target-device
+// deletion share the same transaction so the code is consumed only when the
+// unbind operation succeeds.
 //
 // Failures answer through service errors like the rest of the module: 400 for
 // malformed requests, 401 for failed fresh authentication, 404 for a missing
@@ -50,23 +50,6 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 	case 1:
 	default:
 		return nil, service.NewError(http.StatusBadRequest, "provide exactly one verification method")
-	}
-
-	if req.Password != "" {
-		invalid, verifyErr := verifyTOTPUnbindPassword(ctx, ctx.UserID(), req.Password)
-		if verifyErr != nil {
-			log.Errorz("failed to verify password for unbind",
-				zap.String("user_id", ctx.UserID()),
-				zap.String("device_id", req.DeviceID),
-				zap.Error(verifyErr))
-			return nil, verifyErr
-		}
-		if invalid {
-			log.Warnz("invalid password for unbind",
-				zap.String("user_id", ctx.UserID()),
-				zap.String("device_id", req.DeviceID))
-			return nil, service.NewError(http.StatusUnauthorized, "invalid verification")
-		}
 	}
 
 	userID := ctx.UserID()
@@ -139,9 +122,6 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 // countTOTPUnbindVerificationMethods counts which fresh-auth methods are present.
 func countTOTPUnbindVerificationMethods(req *modelmfa.TOTPUnbindReq) int {
 	count := 0
-	if req.Password != "" {
-		count++
-	}
 	if strings.TrimSpace(req.TOTPCode) != "" {
 		count++
 	}
@@ -159,10 +139,9 @@ var errTOTPUnbindVerificationInvalid = errors.New("invalid verification")
 // verifyTOTPUnbindFreshAuth validates the selected fresh-auth method inside the
 // device transaction.
 //
-// Password has already been validated before the transaction. TOTP verification
-// accepts any active device owned by the current user. ctx carries the
-// transaction created by the caller, so recovery-code verification consumes the
-// matching hash in the same transaction as the device removal.
+// TOTP verification accepts any active device owned by the current user. ctx
+// carries the transaction created by the caller, so recovery-code verification
+// consumes the matching hash in the same transaction as the device removal.
 func verifyTOTPUnbindFreshAuth(
 	ctx context.Context,
 	userID string,
@@ -171,8 +150,6 @@ func verifyTOTPUnbindFreshAuth(
 	now time.Time,
 ) error {
 	switch {
-	case req.Password != "":
-		return nil
 	case strings.TrimSpace(req.TOTPCode) != "":
 		return validateTOTPCodeForDevices(ctx, userID, req.TOTPCode, devices)
 	case strings.TrimSpace(req.BackupCode) != "":
@@ -182,51 +159,7 @@ func verifyTOTPUnbindFreshAuth(
 	}
 }
 
-// verifyTOTPUnbindPassword validates the current account's password for fresh
-// auth. invalid reports a wrong or rejected credential, answered with the
-// generic failure response; svcErr carries system failures that must abort the
-// request.
-func verifyTOTPUnbindPassword(ctx *types.ServiceContext, userID, password string) (invalid bool, svcErr *service.Error) {
-	account, err := currentAccountAuthenticator().AuthenticateByAccountID(ctx, userID, password)
-	if err != nil {
-		if errors.Is(err, ErrAccountAuthenticatorNotConfigured) {
-			return false, newAccountAuthenticatorNotConfiguredServiceError(err)
-		}
-		if errors.Is(err, ErrAccountAuthenticationFailed) {
-			return true, nil
-		}
-		return false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify password", err)
-	}
-	if err := validateAuthenticatedAccount(account, userID); err != nil {
-		return false, newAccountAuthenticatorInvalidAccountServiceError(err)
-	}
-	return false, nil
-}
-
 var errTOTPCodeInvalid = errors.New("invalid TOTP code")
-
-// ValidateUserTOTPCode verifies a TOTP code against any active device owned by the user.
-//
-// This helper is for flows that need proof the current user still controls at
-// least one active authenticator, such as fresh authentication before unbinding
-// a different device. It never accepts a device ID from the caller. A valid
-// code is consumed on success and rejected when submitted again within its
-// validation window.
-func ValidateUserTOTPCode(ctx *types.ServiceContext, userID, code string) error {
-	if ctx == nil || strings.TrimSpace(userID) == "" {
-		return service.NewError(http.StatusUnauthorized, "authentication required")
-	}
-
-	devices := make([]*modelmfa.TOTPDevice, 0)
-	if err := database.Database[*modelmfa.TOTPDevice](ctx).WithQuery(&modelmfa.TOTPDevice{
-		UserID:   strings.TrimSpace(userID),
-		IsActive: true,
-	}).List(&devices); err != nil {
-		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to list TOTP devices", err)
-	}
-
-	return validateTOTPCodeForDevices(ctx, userID, code, devices)
-}
 
 // validateTOTPCodeForDevices checks a code against an already-loaded active
 // device list and consumes it on success.

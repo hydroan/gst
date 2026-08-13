@@ -18,37 +18,30 @@ import (
 // Register wires TOTP-based MFA into the application.
 //
 // Besides registering the routes below and the internal TOTPDevice table, it
-// installs the framework IAM account store as the AccountAuthenticator behind
-// password-based MFA flows and throttles the endpoints that accept a guessable
-// proof. Login second-factor enforcement needs no wiring here: importing the
-// MFA service package arms it through the authn login verifier at package
-// initialization. Projects using copied MFA source install their own
-// AccountAuthenticator from project-owned code instead of editing service/mfa.
+// throttles the endpoints that accept a guessable proof. Login second-factor
+// enforcement needs no wiring here: importing the MFA service package arms it
+// through the authn login verifier at package initialization, on the add path
+// and the copy path alike.
 //
 // Routes:
 //   - POST /api/mfa/totp/bind
-//   - POST /api/mfa/totp/check (public)
 //   - POST /api/mfa/totp/confirm
 //   - GET  /api/mfa/totp/status
 //   - POST /api/mfa/totp/unbind
-//   - POST /api/mfa/totp/verify
 func Register() {
-	servicemfa.SetAccountAuthenticator(iamAccountAuthenticator{})
 	model.Register[*modelmfa.TOTPDevice]()
 
 	middleware.RegisterAuth(verificationRateLimiter())
 
 	module.Use(module.NewWrapper("mfa/totp/bind", "id", false, &servicemfa.TOTPBindService{}), module.CRUD(consts.PHASE_CREATE))
-	module.Use(module.NewWrapper("mfa/totp/check", "id", true, &servicemfa.TOTPCheckService{}), module.CRUD(consts.PHASE_CREATE))
 	module.Use(module.NewWrapper("mfa/totp/confirm", "id", false, &servicemfa.TOTPConfirmService{}), module.CRUD(consts.PHASE_CREATE))
 	module.Use(module.NewWrapper("mfa/totp/status", "id", false, &servicemfa.TOTPStatusService{}), module.CRUD(consts.PHASE_LIST))
 	module.Use(module.NewWrapper("mfa/totp/unbind", "id", false, &servicemfa.TOTPUnbindService{}), module.CRUD(consts.PHASE_CREATE))
-	module.Use(module.NewWrapper("mfa/totp/verify", "id", false, &servicemfa.TOTPVerifyService{}), module.CRUD(consts.PHASE_CREATE))
 }
 
 // verificationRateLimiter throttles the MFA endpoints that accept a guessable
-// proof (a TOTP code, recovery code, or password), per user and per endpoint:
-// five attempts of burst with one attempt refilled every 12 seconds. Endpoints
+// proof (a TOTP code or recovery code), per user and per endpoint: five
+// attempts of burst with one attempt refilled every 12 seconds. Endpoints
 // that accept no proof stay unthrottled.
 func verificationRateLimiter() gin.HandlerFunc {
 	return ratelimiter.RateLimiter(
@@ -59,8 +52,7 @@ func verificationRateLimiter() gin.HandlerFunc {
 		}),
 		ratelimiter.WithSkipFunc(func(c *gin.Context) bool {
 			switch c.FullPath() {
-			case router.APIPathPrefix + "/mfa/totp/verify",
-				router.APIPathPrefix + "/mfa/totp/confirm",
+			case router.APIPathPrefix + "/mfa/totp/confirm",
 				router.APIPathPrefix + "/mfa/totp/unbind":
 				return false
 			default:
