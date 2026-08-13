@@ -13,11 +13,40 @@ import (
 	"github.com/hydroan/gst/internal/structdoc"
 )
 
-// structCommentCache caches struct comments parsed from source files to avoid repeated parsing
+// structDocCache caches the source-parsed doc of each type, keyed by package
+// path and type name. Locating the source file goes through go/build, which
+// shells out to `go list` in module mode, so a repeat lookup costs tens of
+// milliseconds and a fork.
+//
+// Misses are cached too, and that is the case worth caching: a deployed binary
+// ships no source files, so every lookup fails, and without the negative entry
+// the failed lookup would repeat for every field of every documented model.
 var (
-	structCommentCache = make(map[string]string)
-	structCommentMutex sync.RWMutex
+	structDocCache = make(map[string]apidoc.StructDoc)
+	structDocMutex sync.RWMutex
 )
+
+// cachedStructDocFromSource parses the source doc of a type at most once,
+// serving both the field docs and the struct comment from the same entry so an
+// unregistered type costs one source lookup rather than one per consumer.
+func cachedStructDocFromSource(pkgPath, typeName string) apidoc.StructDoc {
+	cacheKey := pkgPath + "." + typeName
+
+	structDocMutex.RLock()
+	cached, ok := structDocCache[cacheKey]
+	structDocMutex.RUnlock()
+	if ok {
+		return cached
+	}
+
+	doc, _ := parseStructDocFromSource(pkgPath, typeName)
+
+	structDocMutex.Lock()
+	structDocCache[cacheKey] = doc
+	structDocMutex.Unlock()
+
+	return doc
+}
 
 // parseModelDocs returns a map with the doc comment for each field of the
 // given model. The key is the struct field name, the value is the field doc
@@ -27,7 +56,8 @@ var (
 // framework sources register comments there at build time, which keeps the
 // documentation available in binaries deployed without Go source files.
 // When the struct is not registered, it falls back to locating and parsing
-// the source file on disk (works in development environments).
+// the source file on disk (works in development environments), through the
+// cache so each type is looked up at most once.
 func parseModelDocs(t any) map[string]string {
 	pkgPath, typeName := typeIdentity(t)
 	if pkgPath == "" || typeName == "" {
@@ -47,8 +77,8 @@ func parseModelDocs(t any) map[string]string {
 		return doc.Fields
 	}
 
-	doc, ok := parseStructDocFromSource(pkgPath, typeName)
-	if !ok || doc.Fields == nil {
+	doc := cachedStructDocFromSource(pkgPath, typeName)
+	if doc.Fields == nil {
 		return map[string]string{}
 	}
 	return doc.Fields
@@ -56,8 +86,8 @@ func parseModelDocs(t any) map[string]string {
 
 // parseStructComment returns the doc comment of the struct itself (not its
 // fields). Like parseModelDocs it prefers the apidoc registry and falls back
-// to parsing the source file, caching fallback results to avoid repeated
-// parsing.
+// to the source file through the shared cache, so asking for a type's comment
+// and its field docs costs one source lookup between them.
 func parseStructComment(t any) string {
 	pkgPath, typeName := typeIdentity(t)
 	if pkgPath == "" || typeName == "" {
@@ -69,22 +99,7 @@ func parseStructComment(t any) string {
 		return doc.Comment
 	}
 
-	cacheKey := pkgPath + "." + typeName
-
-	structCommentMutex.RLock()
-	if cached, exists := structCommentCache[cacheKey]; exists {
-		structCommentMutex.RUnlock()
-		return cached
-	}
-	structCommentMutex.RUnlock()
-
-	doc, _ := parseStructDocFromSource(pkgPath, typeName)
-
-	structCommentMutex.Lock()
-	structCommentCache[cacheKey] = doc.Comment
-	structCommentMutex.Unlock()
-
-	return doc.Comment
+	return cachedStructDocFromSource(pkgPath, typeName).Comment
 }
 
 // typeIdentity resolves the package path and type name of the given value,
