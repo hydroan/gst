@@ -8,6 +8,7 @@ import (
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
+	"go.uber.org/zap"
 )
 
 // TOTPCheckService handles the public pre-login check for whether an account must
@@ -37,16 +38,13 @@ func (c *TOTPCheckService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPC
 	account, err := currentAccountAuthenticator().AuthenticateByUsername(ctx, req.Username, req.Password)
 	if err != nil {
 		if errors.Is(err, ErrAccountAuthenticatorNotConfigured) {
-			log.Errorw("mfa account authenticator is not configured", "username", req.Username, "error", err)
+			log.Errorz("mfa account authenticator is not configured", zap.String("username", req.Username), zap.Error(err))
 			return nil, newAccountAuthenticatorNotConfiguredServiceError(err)
-		}
-		if errors.Is(err, ErrAccountAuthenticationFailed) {
-			return nil, service.NewErrorWithCause(http.StatusUnauthorized, "authentication failed", err)
 		}
 		return nil, service.NewErrorWithCause(http.StatusUnauthorized, "authentication failed", err)
 	}
 	if err = validateAuthenticatedAccount(account, ""); err != nil {
-		log.Errorw("mfa account authenticator returned invalid account", "username", req.Username, "error", err)
+		log.Errorz("mfa account authenticator returned invalid account", zap.String("username", req.Username), zap.Error(err))
 		return nil, newAccountAuthenticatorInvalidAccountServiceError(err)
 	}
 
@@ -64,14 +62,14 @@ func (c *TOTPCheckService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPC
 	if username == "" {
 		username = req.Username
 	}
-	log.Infow(
+	log.Infoz(
 		"TOTP check completed",
-		"username", username,
-		"request_username", req.Username,
-		"user_id", account.ID,
-		"requires_mfa", requiresMFA,
-		"active_devices", len(devices),
-		"client_ip", ctx.ClientIP(),
+		zap.String("username", username),
+		zap.String("request_username", req.Username),
+		zap.String("user_id", account.ID),
+		zap.Bool("requires_mfa", requiresMFA),
+		zap.Int("active_devices", len(devices)),
+		zap.String("client_ip", ctx.ClientIP()),
 	)
 
 	// Return the check result.

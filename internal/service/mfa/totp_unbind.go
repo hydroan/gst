@@ -13,6 +13,7 @@ import (
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
+	"github.com/pquerna/otp/totp"
 	"go.uber.org/zap"
 )
 
@@ -97,7 +98,7 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 			return nil
 		}
 
-		now := time.Now()
+		now := time.Now().UTC()
 		if verifyErr := verifyTOTPUnbindFreshAuth(ctx, userID, req, devices, now); verifyErr != nil {
 			if errors.Is(verifyErr, errTOTPUnbindVerificationInvalid) ||
 				errors.Is(verifyErr, errTOTPCodeInvalid) ||
@@ -233,6 +234,48 @@ func verifyTOTPUnbindPassword(ctx *types.ServiceContext, userID, password string
 		return false, newAccountAuthenticatorInvalidAccountServiceError(err)
 	}
 	return false, nil
+}
+
+var errTOTPCodeInvalid = errors.New("invalid TOTP code")
+
+// ValidateUserTOTPCode verifies a TOTP code against any active device owned by the user.
+//
+// This helper is for flows that need proof the current user still controls at
+// least one active authenticator, such as fresh authentication before unbinding
+// a different device. It never accepts a device ID from the caller.
+func ValidateUserTOTPCode(ctx *types.ServiceContext, userID, code string) error {
+	if ctx == nil || strings.TrimSpace(userID) == "" {
+		return service.NewError(http.StatusUnauthorized, "authentication required")
+	}
+
+	devices := make([]*modelmfa.TOTPDevice, 0)
+	if err := database.Database[*modelmfa.TOTPDevice](ctx).WithQuery(&modelmfa.TOTPDevice{
+		UserID:   strings.TrimSpace(userID),
+		IsActive: true,
+	}).List(&devices); err != nil {
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to list TOTP devices", err)
+	}
+
+	return validateTOTPCodeForDevices(code, devices)
+}
+
+// validateTOTPCodeForDevices checks a code against an already-loaded active device list.
+//
+// Transactional callers use this to avoid issuing another query while holding a
+// TOTPDevice lock.
+func validateTOTPCodeForDevices(code string, devices []*modelmfa.TOTPDevice) error {
+	if strings.TrimSpace(code) == "" {
+		return errTOTPCodeInvalid
+	}
+	for _, device := range devices {
+		if device == nil || !device.IsActive {
+			continue
+		}
+		if totp.Validate(code, device.Secret) {
+			return nil
+		}
+	}
+	return errTOTPCodeInvalid
 }
 
 // activeTOTPUnbindDeviceExists checks target ownership before password validation.

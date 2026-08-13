@@ -15,8 +15,6 @@ import (
 	"go.uber.org/zap"
 )
 
-var Enabled bool
-
 // TOTPBindService starts the TOTP binding flow for an authenticated account.
 //
 // The service validates the current user and session, generates a new TOTP
