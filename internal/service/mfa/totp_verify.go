@@ -31,26 +31,17 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 
 	if len(ctx.UserID()) == 0 {
 		log.Errorz("user_id not found in context")
-		return &modelmfa.TOTPVerifyRsp{
-			Valid:   false,
-			Message: "authentication required",
-		}, service.NewError(http.StatusUnauthorized, "authentication required")
+		return nil, service.NewError(http.StatusUnauthorized, "authentication required")
 	}
 
 	code := strings.TrimSpace(req.TOTPCode)
 	if code == "" {
 		log.Errorz("totp code is empty")
-		return &modelmfa.TOTPVerifyRsp{
-			Valid:   false,
-			Message: "TOTP code is required",
-		}, service.NewError(http.StatusBadRequest, "TOTP code is required")
+		return nil, service.NewError(http.StatusBadRequest, "TOTP code is required")
 	}
 	if !isSixDigitTOTPCode(code) {
 		log.Warnz("invalid totp code format", zap.String("user_id", ctx.UserID()))
-		return &modelmfa.TOTPVerifyRsp{
-			Valid:   false,
-			Message: "TOTP code must be 6 digits",
-		}, service.NewError(http.StatusBadRequest, "TOTP code must be 6 digits")
+		return nil, service.NewError(http.StatusBadRequest, "TOTP code must be 6 digits")
 	}
 
 	devices := make([]*modelmfa.TOTPDevice, 0)
@@ -65,18 +56,12 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 
 	if err = database.Database[*modelmfa.TOTPDevice](ctx).WithQuery(query).List(&devices); err != nil {
 		log.Errorz("failed to list totp devices", zap.Error(err))
-		return &modelmfa.TOTPVerifyRsp{
-			Valid:   false,
-			Message: "failed to retrieve device information",
-		}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to retrieve device information", err)
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to retrieve device information", err)
 	}
 
 	if len(devices) == 0 {
 		log.Warnz("no active totp devices found", zap.String("user_id", ctx.UserID()))
-		return &modelmfa.TOTPVerifyRsp{
-			Valid:   false,
-			Message: "no active TOTP devices found",
-		}, service.NewError(http.StatusBadRequest, "no active TOTP devices found")
+		return nil, service.NewError(http.StatusBadRequest, "no active TOTP devices found")
 	}
 
 	var validDevice *modelmfa.TOTPDevice
@@ -97,12 +82,12 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 		}, nil
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 	validDevice.LastUsedAt = &now
 
+	// A failed usage-timestamp update never fails the verification itself.
 	if err = database.Database[*modelmfa.TOTPDevice](ctx).Update(validDevice); err != nil {
 		log.Errorz("failed to update device", zap.Error(err))
-		log.Warnz("device update failed but verification succeeded")
 	}
 
 	log.Infoz("totp verification successful",
