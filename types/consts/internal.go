@@ -38,4 +38,6 @@ const (
 
 	import_ = "import"
 	export  = "export"
+
+	sse = "sse"
 )

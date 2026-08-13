@@ -3,6 +3,7 @@ package serviceregistry
 import (
 	"io"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/types"
 )
@@ -54,6 +55,14 @@ func (Base[M, REQ, RSP]) Import(*types.ServiceContext, io.Reader) ([]M, error) {
 
 func (Base[M, REQ, RSP]) Export(*types.ServiceContext, ...M) ([]byte, error) {
 	return make([]byte, 0), nil
+}
+
+// SSE has no default streaming behavior: the DSL requires every SSE action to
+// declare Service(), so reaching this default means the route was wired
+// without its service implementation, which is answered loudly instead of
+// with a silently empty stream.
+func (Base[M, REQ, RSP]) SSE(*types.ServiceContext) error {
+	return errors.New("sse service is not implemented")
 }
 
 func (Base[M, REQ, RSP]) Filter(_ *types.ServiceContext, m M, opts types.QueryOptions) (M, types.QueryOptions, error) {

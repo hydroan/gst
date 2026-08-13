@@ -108,6 +108,9 @@ func Parse(file *ast.File, endpoint string) map[string]*Design {
 		if design.Export == nil {
 			design.Export = &Action{Payload: starName(name), Result: starName(name)}
 		}
+		if design.SSE == nil {
+			design.SSE = &Action{Payload: starName(name), Result: starName(name)}
+		}
 
 		initDefaultAction(name, design.Create)
 		initDefaultAction(name, design.Delete)
@@ -121,6 +124,7 @@ func Parse(file *ast.File, endpoint string) map[string]*Design {
 		initDefaultAction(name, design.PatchMany)
 		initDefaultAction(name, design.Import)
 		initDefaultAction(name, design.Export)
+		initDefaultAction(name, design.SSE)
 		for _, actions := range design.routes {
 			for _, action := range actions {
 				initDefaultAction(name, action)
@@ -430,6 +434,9 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 						if act, e := parseAction(consts.PHASE_EXPORT, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
+						if act, e := parseAction(consts.PHASE_SSE, funName_, call_.Args[0]); e {
+							defaults.routes[route] = append(defaults.routes[route], act)
+						}
 					}
 				}
 			}
@@ -470,6 +477,9 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 		}
 		if act, e := parseAction(consts.PHASE_EXPORT, funcName, call.Args[0]); e {
 			defaults.Export = act
+		}
+		if act, e := parseAction(consts.PHASE_SSE, funcName, call.Args[0]); e {
+			defaults.SSE = act
 		}
 
 	}

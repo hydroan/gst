@@ -73,6 +73,12 @@ type Service[M Model, REQ Request, RSP Response] interface {
 	Import(*ServiceContext, io.Reader) ([]M, error)
 	Export(*ServiceContext, ...M) ([]byte, error)
 
+	// SSE streams Server-Sent Events for the route: the implementation opens
+	// the stream via ServiceContext.SSE and blocks until it is over. Query
+	// parameters are read from ServiceContext.Query(). The action never binds
+	// Payload or Result types, so the method carries no REQ or RSP.
+	SSE(*ServiceContext) error
+
 	// Filter lets a service rewrite the query condition before the
 	// controller-side listing runs (List and Export). The model carries the
 	// URL-decoded equality condition and the options carry the parsed operator

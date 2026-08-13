@@ -130,17 +130,25 @@ const (
 
 	PHASE_IMPORT Phase = import_
 	PHASE_EXPORT Phase = export
+
+	PHASE_SSE Phase = sse
 )
 
 type Phase string
 
 // MethodName returns the Phase string converted to UpperCamelCase format.
+// PHASE_SSE maps to the fully capitalized initialism instead of the camel
+// case form, matching the DSL keyword and the service method name.
 // Example:
 //
 //	PHASE_CREATE         -> "Create"
 //	PHASE_CREATE_BEFORE  -> "CreateBefore"
 //	PHASE_UPDATE_MANY    -> "UpdateMany"
+//	PHASE_SSE            -> "SSE"
 func (p Phase) MethodName() string {
+	if p == PHASE_SSE {
+		return "SSE"
+	}
 	return strcase.UpperCamelCase(string(p))
 }
 
@@ -206,6 +214,8 @@ func (p Phase) RoleName() string {
 		role = "Importer"
 	case export:
 		role = "Exporter"
+	case sse:
+		role = "Streamer"
 	default:
 		return ""
 	}
@@ -314,6 +324,8 @@ func (p Phase) ToHTTPVerb() HTTPVerb {
 		return Export
 	case import_:
 		return Import
+	case sse:
+		return SSE
 	default:
 		return HTTPVerb("")
 	}
@@ -354,6 +366,7 @@ func (p Phase) Name() string {
 		PHASE_PATCH_MANY_AFTER:   "PHASE_PATCH_MANY_AFTER",
 		PHASE_IMPORT:             "PHASE_IMPORT",
 		PHASE_EXPORT:             "PHASE_EXPORT",
+		PHASE_SSE:                "PHASE_SSE",
 	}
 
 	if name, ok := phaseNames[p]; ok {
@@ -378,6 +391,8 @@ const (
 
 	Export HTTPVerb = export  // GET /resource/export
 	Import HTTPVerb = import_ // POST /resource/import
+
+	SSE HTTPVerb = sse // GET /resource, streaming Server-Sent Events response
 )
 
 // HTTPVerb represents the supported HTTP operations for a resource
@@ -400,7 +415,7 @@ func (v HTTPVerb) HTTPMethod() string {
 		return http.MethodPut
 	case Patch, PatchMany:
 		return http.MethodPatch
-	case List, Get, Export:
+	case List, Get, Export, SSE:
 		return http.MethodGet
 	}
 	return ""

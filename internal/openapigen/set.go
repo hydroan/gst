@@ -82,6 +82,9 @@ func set[M types.Model, REQ types.Request, RSP types.Response](path string, auth
 		case consts.PatchMany:
 			setPatchMany[M, REQ, RSP](path, pathItem)
 			op = pathItem.Patch
+		case consts.SSE:
+			setSSE[M, REQ, RSP](path, pathItem)
+			op = pathItem.Get
 		}
 		if !authRequired {
 			markPublic(op)

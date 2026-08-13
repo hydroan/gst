@@ -435,6 +435,20 @@ func genServiceMethod6(info *ModelInfo, action *dsl.Action, phase consts.Phase, 
 	)
 }
 
+// genServiceMethod7 uses AST to generate the SSE method scaffold. Like the
+// Import scaffold, it returns a literal nil error to keep generated code
+// compliant with the service error discipline check; the business fills in
+// the streaming callback through ctx.SSE.
+func genServiceMethod7(info *ModelInfo, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
+	return serviceMethod7(
+		info.ModelVarName, roleName,
+		StmtLogWithContext(info.ModelVarName),
+		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
+		EmptyLine(),
+		Returns(ast.NewIdent("nil")),
+	)
+}
+
 func GenerateService(info *ModelInfo, action *dsl.Action, phase consts.Phase) *ast.File {
 	return GenerateServiceWithPackage(info, action, phase, strings.ToLower(info.ModelName))
 }
@@ -563,6 +577,8 @@ func GenerateServiceWithPackage(info *ModelInfo, action *dsl.Action, phase const
 		}
 	case consts.PHASE_IMPORT:
 		decls = append(decls, genServiceMethod5(info, action, phase, roleName))
+	case consts.PHASE_SSE:
+		decls = append(decls, genServiceMethod7(info, action, phase, roleName))
 	case consts.PHASE_EXPORT:
 		// The export controller reuses the list pipeline before delegating to
 		// Export: it invokes ListBefore, applies the service Filter hook when

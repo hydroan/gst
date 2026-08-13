@@ -458,6 +458,52 @@ func serviceMethod5(recvName, modelName, modelPkgName string, _ consts.Phase, ro
 	}
 }
 
+// serviceMethod7 generates an ast node that represents the declaration of below:
+// For example:
+//
+//	func (a *Streamer) SSE(ctx *types.ServiceContext) error {\n}
+func serviceMethod7(recvName, roleName string, body ...ast.Stmt) *ast.FuncDecl {
+	return &ast.FuncDecl{
+		Recv: &ast.FieldList{
+			List: []*ast.Field{
+				{
+					Names: []*ast.Ident{ast.NewIdent(recvName)},
+					Type: &ast.StarExpr{
+						X: ast.NewIdent(roleName),
+					},
+				},
+			},
+		},
+		Name: ast.NewIdent("SSE"),
+		Type: &ast.FuncType{
+			Params: &ast.FieldList{
+				List: []*ast.Field{
+					{
+						Names: []*ast.Ident{ast.NewIdent("ctx")},
+						Type: &ast.StarExpr{
+							X: &ast.SelectorExpr{
+								X:   ast.NewIdent("types"),
+								Sel: ast.NewIdent("ServiceContext"),
+							},
+						},
+					},
+				},
+			},
+			Results: &ast.FieldList{
+				List: []*ast.Field{
+					{
+						Names: []*ast.Ident{ast.NewIdent("err")},
+						Type:  ast.NewIdent("error"),
+					},
+				},
+			},
+		},
+		Body: &ast.BlockStmt{
+			List: body,
+		},
+	}
+}
+
 // serviceMethod6 generates an ast node that represents the declaration of below:
 // For example:
 //

@@ -165,8 +165,11 @@ func isParamSegment(segment string) bool {
 }
 
 // verbDisplay renders the framework verb as a summary token, eg. "Create",
-// or "Batch Create" for the *_many verbs.
+// "Batch Create" for the *_many verbs, or "Stream" for the SSE verb.
 func verbDisplay(verb consts.HTTPVerb) string {
+	if verb == consts.SSE {
+		return "Stream"
+	}
 	if base, ok := strings.CutSuffix(string(verb), "_many"); ok {
 		return "Batch " + titleToken(base)
 	}

@@ -43,6 +43,7 @@ func validServicePhaseFiles() map[string]bool {
 		consts.PHASE_PATCH_MANY.Filename():  true,
 		consts.PHASE_IMPORT.Filename():      true,
 		consts.PHASE_EXPORT.Filename():      true,
+		consts.PHASE_SSE.Filename():         true,
 	}
 }
 

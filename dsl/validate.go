@@ -28,6 +28,7 @@ var actionMethodPhases = map[string]consts.Phase{
 	consts.PHASE_PATCH_MANY.MethodName():  consts.PHASE_PATCH_MANY,
 	consts.PHASE_IMPORT.MethodName():      consts.PHASE_IMPORT,
 	consts.PHASE_EXPORT.MethodName():      consts.PHASE_EXPORT,
+	consts.PHASE_SSE.MethodName():         consts.PHASE_SSE,
 }
 
 func isActionMethod(name string) bool {
@@ -61,10 +62,13 @@ var getVerbActionMethodNames = map[string]bool{
 // signatures for error reporting. The Import controller reads the uploaded
 // multipart form file and responds with a bare status code; the Export
 // controller handles an HTTP GET request, reads filters from query
-// parameters, and writes the returned bytes as a file attachment.
+// parameters, and writes the returned bytes as a file attachment; the SSE
+// controller handles an HTTP GET request whose response is the event stream
+// the service opens through ServiceContext.SSE.
 var fixedContractActionSignatures = map[string]string{
 	consts.PHASE_IMPORT.MethodName(): "Import(ctx, io.Reader) ([]M, error)",
 	consts.PHASE_EXPORT.MethodName(): "Export(ctx, ...M) ([]byte, error)",
+	consts.PHASE_SSE.MethodName():    "SSE(ctx) error",
 }
 
 var designOnlyMethodNames = map[string]bool{
@@ -121,6 +125,7 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtu
 
 	records := make([]serviceActionRecord, 0)
 	errs := make([]error, 0)
+	seenActions := make(map[string]bool)
 	for _, stmt := range fn.Body.List {
 		call := exprStmtCall(stmt)
 		if call == nil {
@@ -133,6 +138,7 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtu
 
 		switch {
 		case isActionMethod(name):
+			seenActions[name] = true
 			info, actionErrs := validateActionCall(call, name, rootModelFile, virtual, filename)
 			if record, ok := newServiceActionRecord(info, name, modelName, ""); ok {
 				records = append(records, record)
@@ -148,7 +154,19 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtu
 			errs = append(errs, fmt.Errorf("%s: %s() can only be used inside an action block", filename, name))
 		}
 	}
+	errs = append(errs, validateSSEListConflict(seenActions, filename)...)
 	return records, errs
+}
+
+// validateSSEListConflict rejects SSE and List sharing one route: both
+// register a GET handler on the route path itself, and the router panics on
+// the duplicate at startup. Rejecting the design at generation time reports
+// the mistake where it was made.
+func validateSSEListConflict(seenActions map[string]bool, filename string) []error {
+	if seenActions[consts.PHASE_SSE.MethodName()] && seenActions[consts.PHASE_LIST.MethodName()] {
+		return []error{fmt.Errorf("%s: SSE and List cannot share one route: both register the GET route path itself", filename)}
+	}
+	return nil
 }
 
 func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virtual bool, filename string) ([]serviceActionRecord, []error) {
@@ -163,6 +181,7 @@ func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virt
 	route := stringArgValue(call, "")
 	records := make([]serviceActionRecord, 0)
 	errs := make([]error, 0)
+	seenActions := make(map[string]bool)
 	for _, stmt := range flit.Body.List {
 		child := exprStmtCall(stmt)
 		if child == nil {
@@ -175,6 +194,7 @@ func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virt
 
 		switch {
 		case isActionMethod(name):
+			seenActions[name] = true
 			info, actionErrs := validateActionCall(child, name, rootModelFile, virtual, filename)
 			if record, ok := newServiceActionRecord(info, name, modelName, route); ok {
 				records = append(records, record)
@@ -190,6 +210,7 @@ func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virt
 			errs = append(errs, fmt.Errorf("%s: %s() can only be used at Design() top level", filename, name))
 		}
 	}
+	errs = append(errs, validateSSEListConflict(seenActions, filename)...)
 	return records, errs
 }
 
@@ -287,6 +308,12 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile, vi
 	// skips the table phases for virtual models and delegates to the service.
 	if virtual && actionName == consts.PHASE_LIST.MethodName() && !info.result {
 		errs = append(errs, fmt.Errorf("%s: %s action on a virtual model relies on the built-in list controller, but a virtual model has no table to list from; declare Result with a custom service method", filename, actionName))
+	}
+	// SSE has no default streaming behavior: the whole action is the custom
+	// service opening the stream, so a block without Service() registers a
+	// route that can only answer "not implemented".
+	if actionName == consts.PHASE_SSE.MethodName() && !info.service {
+		errs = append(errs, fmt.Errorf("%s: %s action has no default controller behavior and must declare Service()", filename, actionName))
 	}
 
 	return info, errs

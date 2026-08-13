@@ -362,6 +362,18 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router gin.I
 		middleware.RouteManager.Add(endpoint)
 		openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.Export)
 	}
+
+	if verbMap[consts.SSE] {
+		endpoint := gopath.Join(base, path)
+		router.GET(path, controller.SSEFactory[M, REQ, RSP](cfg...))
+		registerRoute(endpoint, http.MethodGet)
+		middleware.RouteManager.Add(endpoint)
+		// Streaming responses are exempt from request-scoped response
+		// treatment (body capture, circuit breaking, request timeouts); the
+		// registry is how the middlewares concerned recognize them.
+		middleware.MarkStreamingRoute(http.MethodGet, endpoint)
+		openapigen.Set[M, REQ, RSP](endpoint, authRequired, consts.SSE)
+	}
 }
 
 func validPath(route string) bool {

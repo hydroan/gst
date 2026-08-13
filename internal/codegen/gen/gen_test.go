@@ -260,6 +260,7 @@ func TestFindModels(t *testing.T) {
 						PatchMany:  &dsl.Action{Payload: "*User", Result: "*User"},
 						Import:     &dsl.Action{Payload: "*User", Result: "*User"},
 						Export:     &dsl.Action{Payload: "*User", Result: "*User"},
+						SSE:        &dsl.Action{Payload: "*User", Result: "*User"},
 					},
 				},
 				{
@@ -285,6 +286,7 @@ func TestFindModels(t *testing.T) {
 						PatchMany:  &dsl.Action{Payload: "*Group", Result: "*Group"},
 						Import:     &dsl.Action{Payload: "*Group", Result: "*Group"},
 						Export:     &dsl.Action{Payload: "*Group", Result: "*Group"},
+						SSE:        &dsl.Action{Payload: "*Group", Result: "*Group"},
 					},
 				},
 				{
@@ -310,6 +312,7 @@ func TestFindModels(t *testing.T) {
 						PatchMany:  &dsl.Action{Payload: "*Device", Result: "*Device"},
 						Import:     &dsl.Action{Payload: "*Device", Result: "*Device"},
 						Export:     &dsl.Action{Payload: "*Device", Result: "*Device"},
+						SSE:        &dsl.Action{Payload: "*Device", Result: "*Device"},
 					},
 				},
 			},
@@ -344,6 +347,7 @@ func TestFindModels(t *testing.T) {
 						PatchMany:  &dsl.Action{Payload: "*User", Result: "*User"},
 						Import:     &dsl.Action{Payload: "*User", Result: "*User"},
 						Export:     &dsl.Action{Payload: "*User", Result: "*User"},
+						SSE:        &dsl.Action{Payload: "*User", Result: "*User"},
 					},
 				},
 				{
@@ -369,6 +373,7 @@ func TestFindModels(t *testing.T) {
 						PatchMany:  &dsl.Action{Payload: "*Group", Result: "*Group"},
 						Import:     &dsl.Action{Payload: "*Group", Result: "*Group"},
 						Export:     &dsl.Action{Payload: "*Group", Result: "*Group"},
+						SSE:        &dsl.Action{Payload: "*Group", Result: "*Group"},
 					},
 				},
 				{
@@ -394,6 +399,7 @@ func TestFindModels(t *testing.T) {
 						PatchMany:  &dsl.Action{Payload: "*Device", Result: "*Device"},
 						Import:     &dsl.Action{Payload: "*Device", Result: "*Device"},
 						Export:     &dsl.Action{Payload: "*Device", Result: "*Device"},
+						SSE:        &dsl.Action{Payload: "*Device", Result: "*Device"},
 					},
 				},
 			},
@@ -872,4 +878,46 @@ func TestGenerateServiceExport(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestGenerateServiceSSE(t *testing.T) {
+	info := &ModelInfo{
+		ModulePath:   "helloworld",
+		ModelPkgName: "model",
+		ModelName:    "User",
+		ModelVarName: "u",
+		ModelFileDir: "model",
+		Design:       &dsl.Design{IsEmpty: true},
+	}
+	// dsl.Parse defaults an action's Payload/Result to the starred model name.
+	action := &dsl.Action{
+		Enabled: true,
+		Service: true,
+		Payload: "*User",
+		Result:  "*User",
+		Phase:   consts.PHASE_SSE,
+	}
+
+	file := GenerateServiceWithPackage(info, action, consts.PHASE_SSE, "user")
+	if file == nil {
+		t.Fatal("GenerateServiceWithPackage returned nil")
+	}
+	got, err := FormatNodeExtra(file)
+	if err != nil {
+		t.Fatalf("format generated service failed: %v", err)
+	}
+
+	structDecl := "type Streamer struct"
+	if !strings.Contains(got, structDecl) {
+		t.Errorf("generated service missing %q, got:\n%s", structDecl, got)
+	}
+	sseSig := "func (u *Streamer) SSE(ctx *types.ServiceContext) (err error)"
+	if !strings.Contains(got, sseSig) {
+		t.Errorf("generated service missing %q, got:\n%s", sseSig, got)
+	}
+	for _, hook := range []string{"Before", "After"} {
+		if strings.Contains(got, hook) {
+			t.Errorf("generated SSE service must not scaffold %s hooks, got:\n%s", hook, got)
+		}
+	}
 }

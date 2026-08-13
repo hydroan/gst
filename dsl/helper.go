@@ -16,6 +16,7 @@ var routePhaseOrder = []consts.Phase{
 	consts.PHASE_LIST,
 	consts.PHASE_IMPORT,
 	consts.PHASE_EXPORT,
+	consts.PHASE_SSE,
 	consts.PHASE_GET,
 	consts.PHASE_CREATE_MANY,
 	consts.PHASE_DELETE_MANY,
@@ -36,8 +37,9 @@ var routePhaseOrder = []consts.Phase{
 // Iteration order:
 //  1. Single record operations: Create, Delete, Update, Patch, List
 //  2. Data transfer operations: Import, Export
-//  3. Single record retrieval: Get
-//  4. Batch operations: CreateMany, DeleteMany, UpdateMany, PatchMany
+//  3. Streaming operations: SSE
+//  4. Single record retrieval: Get
+//  5. Batch operations: CreateMany, DeleteMany, UpdateMany, PatchMany
 //
 // For each enabled action, the callback receives:
 //   - endpoint: The API endpoint path from the Design
@@ -73,6 +75,9 @@ func rangeAction(d *Design, fn func(string, *Action)) {
 	}
 	if d.Export.Enabled {
 		fn(d.Endpoint, d.Export)
+	}
+	if d.SSE.Enabled {
+		fn(d.Endpoint, d.SSE)
 	}
 	if d.Get.Enabled {
 		fn(d.Endpoint, d.Get)

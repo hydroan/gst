@@ -16,7 +16,14 @@ import (
 // should fail the scan instead of growing the buffer without bound.
 const maxSSELineLength = 1024 * 1024
 
+// ErrStopStream stops consuming the stream without reporting a failure: a
+// callback returns it once it has seen enough events, and Stream answers nil.
+// Tests asserting on the first few events of an endless stream are the
+// typical user.
+var ErrStopStream = errors.New("stop consuming the stream")
+
 // StreamCallback handles one SSE event; returning an error stops the stream.
+// Returning ErrStopStream stops it without surfacing an error.
 type StreamCallback func(event sse.Event) error
 
 // Stream sends the request and consumes the response as a Server-Sent Events
@@ -91,6 +98,9 @@ func parseSSEStream(body io.Reader, callback StreamCallback) error {
 					Data:  strings.Join(dataLines, "\n"),
 				}
 				if err := callback(event); err != nil {
+					if errors.Is(err, ErrStopStream) {
+						return nil
+					}
 					return err
 				}
 			}

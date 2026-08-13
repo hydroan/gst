@@ -64,6 +64,7 @@
 //   - CreateMany, UpdateMany, DeleteMany, PatchMany: Batch operations
 //   - List, Get: Read operations
 //   - Import, Export: Data transfer operations
+//   - SSE: Server-Sent Events streaming operations
 //
 // Model Types:
 //   - Models with model.Base: Full-featured models with database persistence
@@ -398,6 +399,20 @@ func Import(func()) {}
 // Export(ctx, ...M) ([]byte, error) as a file attachment.
 func Export(func()) {}
 
+// SSE defines the configuration for a Server-Sent Events streaming operation.
+// The route handles an HTTP GET request whose response is a long-lived
+// text/event-stream; the registered route is automatically marked as
+// streaming, which exempts it from request-scoped response treatment such as
+// response body capture and request timeouts.
+//
+// SSE must declare Service(): there is no default streaming behavior, the
+// fixed service method SSE(ctx) error opens the stream via ServiceContext.SSE
+// and blocks until it is over. SSE must not declare Payload or Result — query
+// parameters are read from ServiceContext.Query(), and the response is the
+// event stream itself. An SSE action cannot share a route with List, as both
+// register the GET route path itself.
+func SSE(func()) {}
+
 // Design represents the complete API design configuration for a model.
 // It contains global settings and individual action configurations.
 // This struct is populated by parsing the model's Design() method.
@@ -492,6 +507,9 @@ type Design struct {
 	// Data transfer operations
 	Import *Action // Import operation configuration
 	Export *Action // Export operation configuration
+
+	// Streaming operations
+	SSE *Action // Server-Sent Events streaming operation configuration
 }
 
 // Range iterates over all enabled actions in the Design and calls the provided function
@@ -501,7 +519,7 @@ type Design struct {
 //   - fn: Callback function that receives (endpoint, action) for each enabled action
 //
 // The iteration order is fixed: Create, Delete, Update, Patch, List, Import,
-// Export, Get, CreateMany, DeleteMany, UpdateMany, PatchMany.
+// Export, SSE, Get, CreateMany, DeleteMany, UpdateMany, PatchMany.
 //
 // Example:
 //
@@ -616,4 +634,6 @@ var methodList = []string{
 
 	consts.PHASE_IMPORT.MethodName(),
 	consts.PHASE_EXPORT.MethodName(),
+
+	consts.PHASE_SSE.MethodName(),
 }

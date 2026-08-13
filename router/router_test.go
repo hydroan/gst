@@ -17,6 +17,7 @@ func TestMain(m *testing.M) {
 			if err := router.Init(); err != nil {
 				panic(err)
 			}
+			registerSSERoutes()
 		},
 	})
 }

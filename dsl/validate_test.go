@@ -1178,3 +1178,243 @@ func (Sample) Design() {
 	})
 }
 `
+
+func TestValidateSSEUsage(t *testing.T) {
+	tests := []struct {
+		name      string
+		source    string
+		modelDir  string
+		filename  string
+		wantError string
+	}{
+		{
+			name:     "valid sse action",
+			source:   validateSSESource,
+			modelDir: "/repo/model",
+			filename: "/repo/model/sample/record.go",
+		},
+		{
+			name:     "sse and get share a route",
+			source:   validateSSEWithGetSource,
+			modelDir: "/repo/model",
+			filename: "/repo/model/sample/record.go",
+		},
+		{
+			name:      "sse without service",
+			source:    validateSSEWithoutServiceSource,
+			modelDir:  "/repo/model",
+			filename:  "/repo/model/sample/record.go",
+			wantError: "SSE action has no default controller behavior and must declare Service()",
+		},
+		{
+			name:      "payload on sse action",
+			source:    validatePayloadOnSSESource,
+			modelDir:  "/repo/model",
+			filename:  "/repo/model/sample/record.go",
+			wantError: "SSE action delegates to the fixed service method SSE(ctx) error and cannot declare Payload",
+		},
+		{
+			name:      "result on sse action",
+			source:    validateResultOnSSESource,
+			modelDir:  "/repo/model",
+			filename:  "/repo/model/sample/record.go",
+			wantError: "SSE action delegates to the fixed service method SSE(ctx) error and cannot declare Result",
+		},
+		{
+			name:      "sse and list share a route block",
+			source:    validateSSEWithListInRouteSource,
+			modelDir:  "/repo/model",
+			filename:  "/repo/model/sample/record.go",
+			wantError: "SSE and List cannot share one route: both register the GET route path itself",
+		},
+		{
+			name:      "sse and list share the design top level",
+			source:    validateSSEWithListTopLevelSource,
+			modelDir:  "/repo/model",
+			filename:  "/repo/model/sample/record.go",
+			wantError: "SSE and List cannot share one route: both register the GET route path itself",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			file, err := parser.ParseFile(fset, tt.filename, tt.source, parser.ParseComments)
+			if err != nil {
+				t.Fatalf("parse source failed: %v", err)
+			}
+
+			errs := Validate(file, tt.modelDir, tt.filename)
+			if tt.wantError == "" {
+				if len(errs) != 0 {
+					t.Fatalf("Validate returned errors: %v", errs)
+				}
+				return
+			}
+			if len(errs) == 0 {
+				t.Fatalf("Validate returned no errors, want %q", tt.wantError)
+			}
+			var got strings.Builder
+			for _, err := range errs {
+				got.WriteString(err.Error())
+				got.WriteString("\n")
+			}
+			if !strings.Contains(got.String(), tt.wantError) {
+				t.Fatalf("Validate errors = %q, want substring %q", got.String(), tt.wantError)
+			}
+		})
+	}
+}
+
+const validateSSESource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Empty
+}
+
+func (Record) Design() {
+	Route("sample/records/events", func() {
+		SSE(func() {
+			Service()
+		})
+	})
+}
+`
+
+const validateSSEWithGetSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("sample/records", func() {
+		SSE(func() {
+			Service()
+		})
+		Get(func() {
+			Service()
+			Result[*RecordGetRsp]()
+		})
+	})
+}
+`
+
+const validateSSEWithoutServiceSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+func (Record) Design() {
+	SSE(func() {
+		Public()
+	})
+}
+
+type Record struct {
+	model.Empty
+}
+`
+
+const validatePayloadOnSSESource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Empty
+}
+
+func (Record) Design() {
+	SSE(func() {
+		Service()
+		Payload[*RecordSSEReq]()
+	})
+}
+`
+
+const validateResultOnSSESource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Empty
+}
+
+func (Record) Design() {
+	SSE(func() {
+		Service()
+		Result[*RecordSSERsp]()
+	})
+}
+`
+
+const validateSSEWithListInRouteSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("sample/records", func() {
+		SSE(func() {
+			Service()
+		})
+		List(func() {
+			Service()
+			Result[*RecordListRsp]()
+		})
+	})
+}
+`
+
+const validateSSEWithListTopLevelSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	SSE(func() {
+		Service()
+	})
+	List(func() {
+		Service()
+		Result[*RecordListRsp]()
+	})
+}
+`
