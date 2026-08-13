@@ -84,7 +84,7 @@ func verifyLoginTOTPCode(ctx *types.ServiceContext, devices []*modelmfa.TOTPDevi
 		return ErrLoginTOTPCodeInvalid
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 	device.LastUsedAt = &now
 	if err := database.Database[*modelmfa.TOTPDevice](ctx).Update(device); err != nil {
 		return errors.Wrap(err, "update login TOTP device usage")

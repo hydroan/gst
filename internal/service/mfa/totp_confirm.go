@@ -80,7 +80,7 @@ func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modelmfa.TOT
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to hash backup codes", err)
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 	device := &modelmfa.TOTPDevice{
 		UserID:           ctx.UserID(),
 		DeviceName:       req.DeviceName,

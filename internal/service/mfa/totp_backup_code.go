@@ -76,7 +76,7 @@ func ConsumeTOTPBackupCode(ctx *types.ServiceContext, userID, code string) error
 	}
 
 	return database.Transaction(ctx, func(ctx context.Context) error {
-		return consumeTOTPBackupCodeInTx(ctx, userID, code, time.Now())
+		return consumeTOTPBackupCodeInTx(ctx, userID, code, time.Now().UTC())
 	})
 }
 
