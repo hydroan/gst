@@ -27,7 +27,7 @@ var (
 //	myproject/model/sample.Record                    -> sample.Record
 //	myproject/model.Item                             -> Item
 //	.../gst/internal/model/iam/user.User             -> iam.user.User
-//	.../gst/module/mfa.TOTPBind                      -> module.mfa.TOTPBind
+//	.../gst/module/iam.LoginReq                      -> module.iam.LoginReq
 func schemaComponentName(typ reflect.Type) string {
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
