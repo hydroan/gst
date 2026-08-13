@@ -28,6 +28,13 @@ import (
 //	router.Use(middleware.Timeout(5 * time.Second))
 func Timeout(timeout time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// A streaming response legitimately outlives any request timeout;
+		// cutting it down here would end every stream at the deadline.
+		if isStreamingRequest(c) {
+			c.Next()
+			return
+		}
+
 		// Create a context with timeout
 		ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
 		defer cancel()

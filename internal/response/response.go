@@ -4,15 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/serviceregistry"
-	"github.com/hydroan/gst/internal/sse"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
@@ -275,88 +272,4 @@ func stringAny(v any) string {
 		}
 		return string(data)
 	}
-}
-
-// SSE sends a Server-Sent Events (SSE) response.
-// This function sets the appropriate headers for SSE and writes the event to the response.
-//
-// Note: This function sends a single event, not a stream. If you need to send a [DONE] marker
-// after this event (e.g., for AI chat completions), you should use sse.EncodeDone() or
-// call SendSSEDone() if available in your context.
-//
-// Parameters:
-//   - c: Gin context
-//   - event: SSE event to send
-//
-// Example:
-//
-//	SSE(c, sse.Event{
-//	    Event: "message",
-//	    Data:  "Hello, World!",
-//	})
-func SSE(c *gin.Context, event sse.Event) error {
-	return sse.SendSSE(c.Writer, event)
-}
-
-// StreamSSE starts a Server-Sent Events stream.
-// The provided function will be called repeatedly until it returns false.
-// The stream will automatically stop if:
-//   - The function returns false
-//   - The request context is canceled (timeout, client disconnect, etc.)
-//   - An error occurs while writing to the client
-//
-// Note: This function does NOT automatically send a [DONE] marker when the stream ends.
-// If your protocol requires a [DONE] marker (e.g., AI chat completions), you must
-// manually call sse.EncodeDone(c.Writer) after StreamSSE() returns.
-//
-// Parameters:
-//   - c: Gin context
-//   - fn: Function that sends events. Returns false to stop streaming.
-//     The function receives the writer and should check context cancellation if needed.
-//
-// Example:
-//
-//	StreamSSE(c, func(w io.Writer) bool {
-//	    sse.Encode(w, sse.Event{
-//	        Event: "message",
-//	        Data:  "Hello",
-//	    })
-//	    return true // Continue streaming
-//	})
-//	// Send [DONE] marker if required by your protocol
-//	sse.EncodeDone(c.Writer)
-func StreamSSE(c *gin.Context, fn func(io.Writer) bool) {
-	sse.StreamSSE(c.Request.Context(), c.Writer, c.Stream, fn)
-}
-
-// StreamSSEWithInterval starts a Server-Sent Events stream with a fixed interval between events.
-// The provided function will be called repeatedly at the specified interval until it returns false.
-// The stream will automatically stop if:
-//   - The function returns false
-//   - The request context is canceled (timeout, client disconnect, etc.)
-//   - An error occurs while writing to the client
-//
-// Note: This function does NOT automatically send a [DONE] marker when the stream ends.
-// If your protocol requires a [DONE] marker (e.g., AI chat completions), you must
-// manually call sse.EncodeDone(c.Writer) after StreamSSEWithInterval() returns.
-//
-// Parameters:
-//   - c: Gin context
-//   - interval: Time interval between events
-//   - fn: Function that sends events. Returns false to stop streaming.
-//     The function receives the writer and should check context cancellation if needed.
-//
-// Example:
-//
-//	StreamSSEWithInterval(c, 1*time.Second, func(w io.Writer) bool {
-//	    sse.Encode(w, sse.Event{
-//	        Event: "message",
-//	        Data:  time.Now().String(),
-//	    })
-//	    return true // Continue streaming
-//	})
-//	// Send [DONE] marker if required by your protocol
-//	sse.EncodeDone(c.Writer)
-func StreamSSEWithInterval(c *gin.Context, interval time.Duration, fn func(io.Writer) bool) {
-	sse.StreamSSEWithInterval(c.Request.Context(), c.Writer, c.Stream, interval, fn)
 }

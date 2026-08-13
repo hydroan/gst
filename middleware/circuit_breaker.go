@@ -11,6 +11,15 @@ import (
 
 func CircuitBreaker() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// A streaming request holds its connection open for as long as the
+		// client listens; counted as an in-flight request it would sit in the
+		// breaker's counts forever and, worse, occupy the half-open probe
+		// budget so the breaker never closes again.
+		if isStreamingRequest(c) {
+			c.Next()
+			return
+		}
+
 		// Get request info for better logging
 		path := c.Request.URL.Path
 		method := c.Request.Method

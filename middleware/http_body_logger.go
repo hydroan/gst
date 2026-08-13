@@ -84,8 +84,11 @@ func BodyLogger() gin.HandlerFunc {
 			request = captureRequestBody(c, maxBodySize)
 		}
 
+		// A streaming response is one unbounded body that only ends with the
+		// connection; teeing it would capture the first bytes of a stream that
+		// is never a loggable JSON document. Requests stay captured as usual.
 		var writer *bodyLogWriter
-		if rspMode != config.HTTPBodyLogModeNone {
+		if rspMode != config.HTTPBodyLogModeNone && !isStreamingRequest(c) {
 			writer = newBodyLogWriter(c.Writer, maxBodySize)
 			c.Writer = writer
 		}
@@ -177,6 +180,13 @@ func newBodyLogWriter(writer gin.ResponseWriter, maxBodySize int64) *bodyLogWrit
 		ResponseWriter: writer,
 		limit:          maxBodySize + 1,
 	}
+}
+
+// Unwrap exposes the wrapped writer so http.ResponseController reaches the
+// underlying connection's deadline methods through the wrapper chain; without
+// it, clearing the per-request deadlines for streaming responses fails.
+func (w *bodyLogWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
 }
 
 func (w *bodyLogWriter) Write(data []byte) (int, error) {

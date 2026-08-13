@@ -77,6 +77,64 @@ func TestEncode_WithRetry(t *testing.T) {
 	}
 }
 
+func TestEncode_CommentOnly(t *testing.T) {
+	var buf bytes.Buffer
+	event := Event{Comment: "ping"}
+
+	if err := Encode(&buf, event); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	expected := ": ping\n\n"
+	if buf.String() != expected {
+		t.Errorf("Expected %q, got %q", expected, buf.String())
+	}
+}
+
+func TestEncode_MultiLineComment(t *testing.T) {
+	var buf bytes.Buffer
+	event := Event{Comment: "first\nsecond"}
+
+	if err := Encode(&buf, event); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	expected := ": first\n: second\n\n"
+	if buf.String() != expected {
+		t.Errorf("Expected %q, got %q", expected, buf.String())
+	}
+}
+
+func TestEncode_CommentPrecedesFields(t *testing.T) {
+	var buf bytes.Buffer
+	event := Event{Comment: "note", ID: "7", Event: "message", Data: "payload"}
+
+	if err := Encode(&buf, event); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	expected := ": note\nid: 7\nevent: message\ndata: payload\n\n"
+	if buf.String() != expected {
+		t.Errorf("Expected %q, got %q", expected, buf.String())
+	}
+}
+
+func TestEncode_EmptyStringData(t *testing.T) {
+	var buf bytes.Buffer
+	event := Event{Event: "message", Data: ""}
+
+	if err := Encode(&buf, event); err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	// An empty payload still writes a data line, so the client dispatches an
+	// event whose payload is the empty string.
+	expected := "event: message\ndata: \n\n"
+	if buf.String() != expected {
+		t.Errorf("Expected %q, got %q", expected, buf.String())
+	}
+}
+
 func TestEncode_ComplexData(t *testing.T) {
 	var buf bytes.Buffer
 	event := Event{
@@ -122,9 +180,9 @@ func TestEncode_ComplexData(t *testing.T) {
 func TestEncode_EmptyObject(t *testing.T) {
 	var buf bytes.Buffer
 	event := Event{
-		ID:    "chatcmpl-123",
+		ID:    "123",
 		Event: "message",
-		Data:  map[string]any{}, // Empty object, like finish_reason scenario
+		Data:  map[string]any{}, // Empty object must still be sent as data: {}
 	}
 
 	if err := Encode(&buf, event); err != nil {
@@ -216,35 +274,29 @@ func TestEncode_PrimitiveTypes(t *testing.T) {
 	}
 }
 
-func TestEncodeDone(t *testing.T) {
-	var buf bytes.Buffer
-
-	if err := EncodeDone(&buf); err != nil {
-		t.Fatalf("EncodeDone failed: %v", err)
-	}
-
-	expected := "data: [DONE]\n\n"
-	if buf.String() != expected {
-		t.Errorf("Expected %q, got %q", expected, buf.String())
-	}
-}
-
-func TestEscape(t *testing.T) {
+func TestEncode_RejectsInvalidEvents(t *testing.T) {
 	tests := []struct {
-		input    string
-		expected string
+		name  string
+		event Event
 	}{
-		{"normal text", "normal text"},
-		{"text\nwith\nnewlines", "text\\nwith\\nnewlines"},
-		{"text\rwith\rcarriage", "text\\rwith\\rcarriage"},
-		{"text\n\rwith\n\rboth", "text\\n\\rwith\\n\\rboth"},
+		{"empty event", Event{}},
+		{"id with newline", Event{ID: "1\n2", Data: "x"}},
+		{"id with carriage return", Event{ID: "1\r2", Data: "x"}},
+		{"id with NUL", Event{ID: "1\x002", Data: "x"}},
+		{"event type with newline", Event{Event: "a\nb", Data: "x"}},
+		{"event type with carriage return", Event{Event: "a\rb", Data: "x"}},
+		{"comment with carriage return", Event{Comment: "a\rb"}},
+		{"negative retry", Event{Retry: -1, Data: "x"}},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			result := escape(tt.input)
-			if result != tt.expected {
-				t.Errorf("Expected %q, got %q", tt.expected, result)
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := Encode(&buf, tt.event); err == nil {
+				t.Fatalf("Expected an error, got output %q", buf.String())
+			}
+			if buf.Len() != 0 {
+				t.Errorf("Expected no bytes written for a rejected event, got %q", buf.String())
 			}
 		})
 	}
