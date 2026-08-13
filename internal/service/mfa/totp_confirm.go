@@ -31,8 +31,8 @@ type TOTPConfirmService struct {
 // The method verifies challenge ownership, checks and consumes the submitted
 // TOTP code, consumes the challenge, creates recovery codes, stores only their
 // hashes, and persists the device. The (user_id, secret) unique index is the
-// authoritative duplicate guard; the List pre-check only provides the friendly
-// conflict message on the common path.
+// duplicate guard: a concurrent confirm of the same challenge loses on Create
+// with a conflict.
 func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPConfirmReq) (rsp *modelmfa.TOTPConfirmRsp, err error) {
 	log := t.WithContext(ctx, ctx.Phase())
 
@@ -82,22 +82,15 @@ func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modelmfa.TOT
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to consume TOTP binding challenge", err)
 	}
 
-	devices := make([]*modelmfa.TOTPDevice, 0)
-	if err = database.Database[*modelmfa.TOTPDevice](ctx).WithQuery(&modelmfa.TOTPDevice{
-		UserID: ctx.UserID(),
-		Secret: challenge.Secret,
-	}).WithLimit(1).List(&devices); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to list devices", err)
-	}
-	if len(devices) > 0 {
-		return nil, service.NewError(http.StatusConflict, "device already bound")
-	}
-
+	// No duplicate pre-check: the challenge secret is a fresh 256-bit random
+	// value, so a lookup by (user_id, secret) can only ever match a concurrent
+	// confirm of this same challenge — which the unique index answers with a
+	// conflict on Create anyway.
 	backupCodes, err := GenerateTOTPBackupCodes()
 	if err != nil {
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to generate backup codes", err)
 	}
-	backupCodeHashes, err := HashTOTPBackupCodes(backupCodes)
+	backupCodeHashes, err := HashTOTPBackupCodes(challenge.Secret, backupCodes)
 	if err != nil {
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to hash backup codes", err)
 	}

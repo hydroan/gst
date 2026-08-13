@@ -2,7 +2,10 @@ package servicemfa
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -15,7 +18,6 @@ import (
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
-	"golang.org/x/crypto/bcrypt"
 	"gorm.io/datatypes"
 )
 
@@ -54,24 +56,39 @@ func GenerateTOTPBackupCodes() ([]string, error) {
 	return codes, nil
 }
 
-// HashTOTPBackupCodes normalizes and hashes recovery codes before storage.
+// HashTOTPBackupCodes normalizes and hashes recovery codes before storage,
+// keyed by the owning device's TOTP secret.
 //
-// Stored devices keep only bcrypt hashes of normalized recovery codes. This
-// keeps database reads from exposing usable recovery credentials.
-func HashTOTPBackupCodes(codes []string) ([]string, error) {
+// Stored devices keep only HMAC-SHA256 digests of normalized recovery codes,
+// so database reads never expose usable recovery credentials. A recovery code
+// is an 80-bit high-entropy random string, not a human-chosen password, so a
+// slow password hash would add cost without adding brute-force resistance;
+// HMAC keyed per device with the secret the device already owns needs no new
+// key management and keeps digests independent across devices.
+func HashTOTPBackupCodes(secret string, codes []string) ([]string, error) {
 	hashes := make([]string, 0, len(codes))
 	for _, code := range codes {
 		normalizedCode, err := normalizeTOTPBackupCode(code)
 		if err != nil {
 			return nil, err
 		}
-		hash, err := bcrypt.GenerateFromPassword([]byte(normalizedCode), bcrypt.DefaultCost)
-		if err != nil {
-			return nil, errors.Wrap(err, "hash TOTP backup code")
-		}
-		hashes = append(hashes, string(hash))
+		hashes = append(hashes, hashTOTPBackupCode(secret, normalizedCode))
 	}
 	return hashes, nil
+}
+
+// hashTOTPBackupCode digests one normalized recovery code with the device
+// secret as the HMAC key.
+func hashTOTPBackupCode(secret, normalizedCode string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(normalizedCode))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// matchTOTPBackupCode reports whether a normalized recovery code matches one
+// stored digest, in constant time.
+func matchTOTPBackupCode(secret, normalizedCode, storedHash string) bool {
+	return hmac.Equal([]byte(hashTOTPBackupCode(secret, normalizedCode)), []byte(storedHash))
 }
 
 // ConsumeTOTPBackupCode verifies and removes one recovery code for the user.
@@ -111,7 +128,7 @@ func consumeTOTPBackupCodeInTx(ctx context.Context, userID, code string, now tim
 
 	for _, device := range devices {
 		for i, hash := range device.BackupCodeHashes {
-			if bcrypt.CompareHashAndPassword([]byte(hash), []byte(normalizedCode)) != nil {
+			if !matchTOTPBackupCode(device.Secret, normalizedCode, hash) {
 				continue
 			}
 

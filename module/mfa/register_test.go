@@ -2,6 +2,9 @@ package mfa_test
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -24,7 +27,6 @@ import (
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/crypto/bcrypt"
 )
 
 var baseURL = testutil.BaseURL()
@@ -184,7 +186,7 @@ func TestTOTPConfirm(t *testing.T) {
 		for _, bc := range rsp.BackupCodes {
 			require.Regexp(t, `^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}(-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}){3}$`, bc)
 		}
-		assertBackupCodeHashesStored(t, rsp.DeviceID, rsp.BackupCodes)
+		assertBackupCodeHashesStored(t, rsp.DeviceID, secret, rsp.BackupCodes)
 	})
 
 	t.Run("duplicate_challenge", func(t *testing.T) {
@@ -732,7 +734,7 @@ func extractSecretFromOtpauthURL(t *testing.T, otpauthURL string) string {
 	return key.Secret()
 }
 
-func assertBackupCodeHashesStored(t *testing.T, deviceID string, backupCodes []string) {
+func assertBackupCodeHashesStored(t *testing.T, deviceID, secret string, backupCodes []string) {
 	t.Helper()
 
 	device := getTOTPDeviceForTest(t, deviceID)
@@ -741,7 +743,11 @@ func assertBackupCodeHashesStored(t *testing.T, deviceID string, backupCodes []s
 		normalizedCode := normalizeBackupCodeForTest(code)
 		require.NotEqual(t, code, device.BackupCodeHashes[i])
 		require.NotEqual(t, normalizedCode, device.BackupCodeHashes[i])
-		require.NoError(t, bcrypt.CompareHashAndPassword([]byte(device.BackupCodeHashes[i]), []byte(normalizedCode)))
+		// Recompute the digest independently: HMAC-SHA256 keyed by the owning
+		// device's TOTP secret over the normalized code.
+		mac := hmac.New(sha256.New, []byte(secret))
+		mac.Write([]byte(normalizedCode))
+		require.Equal(t, hex.EncodeToString(mac.Sum(nil)), device.BackupCodeHashes[i])
 	}
 }
 
