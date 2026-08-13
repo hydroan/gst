@@ -63,22 +63,24 @@ const rootPassword = "12345678"
 
 // seedRootAccount creates the built-in system root, the only actor the noop
 // RBAC grants, so administrative MFA routes have a passing caller to test.
-func seedRootAccount() {
+func seedRootAccount() error {
 	ctx := context.Background()
 
 	user := &modeliamuser.User{Username: consts.AUTHZ_USER_ROOT, Status: modeliamuser.UserStatusActive}
 	user.ID = consts.AUTHZ_USER_ROOT
 	if err := database.Database[*modeliamuser.User](ctx).Create(user); err != nil {
-		panic(err)
+		return err
 	}
 
 	credential, err := serviceiamaccount.NewPasswordCredential(ctx, user.ID, rootPassword, false)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	if err := database.Database[*modeliamaccount.PasswordCredential](ctx).Create(credential); err != nil {
-		panic(err)
+		return err
 	}
+
+	return nil
 }
 
 func TestTOTPStatus(t *testing.T) {

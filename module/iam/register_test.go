@@ -64,20 +64,22 @@ func TestMain(m *testing.M) {
 // seedRootAccount creates the root user and password credential the tests
 // authenticate with. Baseline accounts are application data, so the test
 // creates them explicitly through the standard database chain.
-func seedRootAccount() {
+func seedRootAccount() error {
 	ctx := context.Background()
 
 	user := &modeliamuser.User{Username: consts.AUTHZ_USER_ROOT, Status: modeliamuser.UserStatusActive}
 	user.ID = consts.AUTHZ_USER_ROOT
 	if err := database.Database[*modeliamuser.User](ctx).Create(user); err != nil {
-		panic(err)
+		return err
 	}
 
 	credential, err := serviceiamaccount.NewPasswordCredential(ctx, user.ID, rootPassword, false)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	if err := database.Database[*modeliamaccount.PasswordCredential](ctx).Create(credential); err != nil {
-		panic(err)
+		return err
 	}
+
+	return nil
 }

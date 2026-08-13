@@ -12,7 +12,7 @@
 //		testutil.Run(m, testutil.Server{
 //			Database: config.DBMySQL,
 //			Redis:    true,
-//			Routes:   func() { util.RunOrDie(router.Init) },
+//			Routes:   router.Init,
 //		})
 //	}
 //

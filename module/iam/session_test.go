@@ -1147,7 +1147,7 @@ type requestMetadataProbeRsp struct {
 // group, which is where the session middleware runs, and it is the suite's own
 // route rather than a module route so that the assertions describe the
 // middleware alone instead of whatever a real endpoint does with the context.
-func registerRequestMetadataProbe() {
+func registerRequestMetadataProbe() error {
 	router.Auth().GET(requestMetadataProbeGroupRoute, func(c *gin.Context) {
 		meta := requestctx.FromContext(c.Request.Context())
 		internalresponse.JSON(c, internalresponse.CodeSuccess, requestMetadataProbeRsp{
@@ -1156,6 +1156,8 @@ func registerRequestMetadataProbe() {
 			RawQuery: meta.RawQuery(),
 		})
 	})
+
+	return nil
 }
 
 func loadStoredSession(t *testing.T, sessionID string) modeliamsession.Session {

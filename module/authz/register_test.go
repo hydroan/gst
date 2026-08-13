@@ -84,21 +84,21 @@ func TestMain(m *testing.M) {
 // with its password credential, and the root menu row anchoring the menu
 // tree. Baseline data is application data, so the test creates it explicitly
 // through the standard database chain.
-func seedBaseline() {
+func seedBaseline() error {
 	ctx := context.Background()
 
 	user := &modeliamuser.User{Username: rootUsername, Status: modeliamuser.UserStatusActive}
 	user.ID = "root"
 	if err := database.Database[*modeliamuser.User](ctx).Create(user); err != nil {
-		panic(err)
+		return err
 	}
 
 	credential, err := serviceiamaccount.NewPasswordCredential(ctx, user.ID, rootPassword, false)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	if err := database.Database[*modeliamaccount.PasswordCredential](ctx).Create(credential); err != nil {
-		panic(err)
+		return err
 	}
 
 	// The ID must go into Menu's own shadowing field: the shadowed Base.ID is
@@ -106,8 +106,10 @@ func seedBaseline() {
 	// generated UUID instead of the sentinel id.
 	rootMenu := &modelauthz.Menu{ID: model.RootID, ParentID: model.RootID}
 	if err := database.Database[*modelauthz.Menu](ctx).Create(rootMenu); err != nil {
-		panic(err)
+		return err
 	}
+
+	return nil
 }
 
 func TestAuthzRoutes(t *testing.T) {

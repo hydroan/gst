@@ -35,18 +35,21 @@ type Server struct {
 	Kafka bool
 
 	// Register registers the modules under test. It runs before the framework
-	// bootstraps, which is where module registration belongs.
+	// bootstraps, which is where module registration belongs. Registration
+	// mirrors the framework's Register style and reports nothing.
 	Register func()
 
 	// Routes registers routes that need a bootstrapped framework, such as the
-	// generated router.Init of a project. It runs after the bootstrap and
-	// before Seed.
-	Routes func()
+	// generated router.Init of a project — which the field accepts directly:
+	// Routes: router.Init. It runs after the bootstrap and before Seed; a
+	// returned error fails the test setup.
+	Routes func() error
 
 	// Seed plants baseline rows such as a root account. It runs after Routes,
 	// once the framework is up and the database is reachable, but before the
 	// server starts serving, so no request can observe a half prepared state.
-	Seed func()
+	// A returned error fails the test setup.
+	Seed func() error
 }
 
 // Run prepares what s declares, starts the test server, runs the tests and
@@ -58,6 +61,7 @@ type Server struct {
 //			Database: config.DBMySQL,
 //			Redis:    true,
 //			Register: func() { iam.Register() },
+//			Routes:   router.Init,
 //		})
 //	}
 //
@@ -82,10 +86,14 @@ func run(m *testing.M, s Server) int {
 		panic(err)
 	}
 	if s.Routes != nil {
-		s.Routes()
+		if err := s.Routes(); err != nil {
+			panic(err)
+		}
 	}
 	if s.Seed != nil {
-		s.Seed()
+		if err := s.Seed(); err != nil {
+			panic(err)
+		}
 	}
 
 	go func() {

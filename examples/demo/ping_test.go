@@ -16,7 +16,6 @@ import (
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/testutil"
-	"github.com/hydroan/gst/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,7 +30,7 @@ func TestMain(m *testing.M) {
 	testutil.Run(m, testutil.Server{
 		Database: config.DBMySQL,
 		Redis:    true,
-		Routes:   func() { util.RunOrDie(router.Init) },
+		Routes:   router.Init,
 	})
 }
 

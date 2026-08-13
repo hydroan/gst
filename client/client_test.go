@@ -39,7 +39,7 @@ func (r *TestRecord) Purge() bool { return true }
 func TestMain(m *testing.M) {
 	testutil.Run(m, testutil.Server{
 		Register: func() { model.Register[*TestRecord]() },
-		Routes: func() {
+		Routes: func() error {
 			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record", nil, consts.Create)
 			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &types.ControllerConfig[*TestRecord]{ParamName: "id"}, consts.Delete)
 			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &types.ControllerConfig[*TestRecord]{ParamName: "id"}, consts.Update)
@@ -50,6 +50,8 @@ func TestMain(m *testing.M) {
 			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/batch", nil, consts.DeleteMany)
 			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/batch", nil, consts.UpdateMany)
 			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/batch", nil, consts.PatchMany)
+
+			return nil
 		},
 	})
 }

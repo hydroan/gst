@@ -13,11 +13,13 @@ import (
 
 func TestMain(m *testing.M) {
 	testutil.Run(m, testutil.Server{
-		Routes: func() {
+		Routes: func() error {
 			if err := router.Init(); err != nil {
-				panic(err)
+				return err
 			}
 			registerSSERoutes()
+
+			return nil
 		},
 	})
 }
