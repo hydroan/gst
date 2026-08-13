@@ -55,6 +55,21 @@ func currentAccountAdministrator() AccountAdministrator {
 	return accountAdministrator
 }
 
+// ensureCanAdministerMFA runs the installed administrative authorizer and
+// shapes its outcome as a service error: adapters already answer with one and
+// are passed through untouched, while anything else is reported as 500.
+func ensureCanAdministerMFA(ctx *types.ServiceContext, targetUserID string) *service.Error {
+	err := currentAccountAdministrator().EnsureCanAdminister(ctx, targetUserID)
+	if err == nil {
+		return nil
+	}
+	var svcErr *service.Error
+	if errors.As(err, &svcErr) {
+		return svcErr
+	}
+	return service.NewErrorWithCause(http.StatusInternalServerError, "administrative authorization failed", err)
+}
+
 // missingAccountAdministrator is the deny-by-default used until the host
 // application installs a real AccountAdministrator. It keeps copied MFA code
 // buildable while making the missing wiring loud instead of silently granting

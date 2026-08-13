@@ -34,8 +34,8 @@ func (a *AdminTOTPResetService) Delete(ctx *types.ServiceContext, req *model.Emp
 	if targetUserID == "" {
 		return nil, service.NewError(http.StatusBadRequest, "user id is required")
 	}
-	if err = currentAccountAdministrator().EnsureCanAdminister(ctx, targetUserID); err != nil {
-		return nil, err
+	if svcErr := ensureCanAdministerMFA(ctx, targetUserID); svcErr != nil {
+		return nil, svcErr
 	}
 
 	removed := 0

@@ -118,11 +118,11 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	// The second-factor gate runs only after every first-factor check passed,
 	// so a failed second factor never reveals more than a failed password. The
 	// installed verifier owns the client-facing error shape.
-	if err = authn.VerifyLoginSecondFactor(ctx, targetUser.ID, authn.LoginSecondFactor{
+	if svcErr := verifyLoginSecondFactor(ctx, targetUser.ID, authn.LoginSecondFactor{
 		TOTPCode:   req.TOTPCode,
 		BackupCode: req.BackupCode,
-	}); err != nil {
-		return nil, err
+	}); svcErr != nil {
+		return nil, svcErr
 	}
 
 	now := time.Now()
@@ -186,6 +186,22 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	}
 
 	return serviceiamsession.BuildAuthenticatedSessionRsp(sessionData, targetUser, email, now, systemRoot), nil
+}
+
+// verifyLoginSecondFactor runs the authn second-factor gate and shapes its
+// outcome as a service error: the installed verifier already answers with one
+// per the authn contract and is passed through untouched, while anything else
+// is an infrastructure failure reported as 500.
+func verifyLoginSecondFactor(ctx *types.ServiceContext, userID string, factor authn.LoginSecondFactor) *service.Error {
+	err := authn.VerifyLoginSecondFactor(ctx, userID, factor)
+	if err == nil {
+		return nil
+	}
+	var svcErr *service.Error
+	if errors.As(err, &svcErr) {
+		return svcErr
+	}
+	return service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
 }
 
 // ensureLoginTenantMembership refuses a login that names a tenant the user holds

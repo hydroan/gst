@@ -28,8 +28,8 @@ func (a *AdminTOTPStatusService) Get(ctx *types.ServiceContext, req *model.Empty
 	if targetUserID == "" {
 		return nil, service.NewError(http.StatusBadRequest, "user id is required")
 	}
-	if err = currentAccountAdministrator().EnsureCanAdminister(ctx, targetUserID); err != nil {
-		return nil, err
+	if svcErr := ensureCanAdministerMFA(ctx, targetUserID); svcErr != nil {
+		return nil, svcErr
 	}
 
 	rsp, err = buildTOTPStatusRsp(ctx, targetUserID)
