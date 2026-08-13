@@ -2,7 +2,6 @@ package servicemfa
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/hydroan/gst/database"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
@@ -64,16 +63,12 @@ func buildTOTPStatusRsp(ctx *types.ServiceContext, userID string) (*modelmfa.TOT
 
 	deviceInfos := make([]modelmfa.TOTPDeviceInfo, 0, len(devices))
 	for _, device := range devices {
-		deviceInfo := modelmfa.TOTPDeviceInfo{
+		deviceInfos = append(deviceInfos, modelmfa.TOTPDeviceInfo{
 			ID:         device.ID,
 			DeviceName: device.DeviceName,
-			CreatedAt:  device.CreatedAt.Format(time.RFC3339),
-		}
-		if device.LastUsedAt != nil {
-			lastUsedStr := device.LastUsedAt.Format(time.RFC3339)
-			deviceInfo.LastUsedAt = &lastUsedStr
-		}
-		deviceInfos = append(deviceInfos, deviceInfo)
+			LastUsedAt: device.LastUsedAt,
+			CreatedAt:  device.CreatedAt,
+		})
 	}
 
 	return &modelmfa.TOTPStatusRsp{

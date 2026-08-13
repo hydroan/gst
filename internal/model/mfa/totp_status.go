@@ -1,6 +1,8 @@
 package modelmfa
 
 import (
+	"time"
+
 	. "github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 )
@@ -16,10 +18,10 @@ type TOTPStatusRsp struct {
 }
 
 type TOTPDeviceInfo struct {
-	ID         string  `json:"id"`
-	DeviceName string  `json:"device_name"`
-	LastUsedAt *string `json:"last_used_at,omitempty"`
-	CreatedAt  string  `json:"created_at"`
+	ID         string     `json:"id"`
+	DeviceName string     `json:"device_name"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"` // nil until the device is first used
+	CreatedAt  time.Time  `json:"created_at"`
 }
 
 func (TOTPStatus) Design() {
