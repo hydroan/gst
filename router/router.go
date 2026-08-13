@@ -102,7 +102,6 @@ func Init() error {
 		middleware.Recovery("recovery.log"),
 		middleware.Cors(),
 		middleware.RouteParams(),
-		// middleware.Gzip(),
 	)
 	// A request matching no route is answered in the envelope like every other
 	// refusal, instead of gin's plain-text default — which carries no code and

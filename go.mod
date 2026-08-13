@@ -35,7 +35,6 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.13
 	github.com/gertd/go-pluralize v0.2.1
 	github.com/getkin/kin-openapi v0.141.0
-	github.com/gin-contrib/gzip v1.2.6
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-git/go-billy/v5 v5.9.0
 	github.com/go-git/go-git/v5 v5.19.1
@@ -131,6 +130,8 @@ require (
 	gorm.io/gorm v1.31.2
 	mvdan.cc/gofumpt v0.10.0
 )
+
+require github.com/gin-contrib/gzip v1.2.6 // indirect
 
 require (
 	4d63.com/gocheckcompilerdirectives v1.3.0 // indirect
