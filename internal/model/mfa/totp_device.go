@@ -20,11 +20,11 @@ import (
 // value it wants.
 //
 // The (user_id, secret) unique index is the authoritative guard against binding
-// the same secret twice for one user; the service-level duplicate check is only
-// a friendlier fast path. The index assumes hard deletion (see Purge): a
-// soft-deleted row would keep occupying the unique key.
+// the same secret twice for one user, and its leftmost prefix serves every
+// per-user lookup, so no separate user_id index exists. The index assumes hard
+// deletion (see Purge): a soft-deleted row would keep occupying the unique key.
 type TOTPDevice struct {
-	UserID           string                      `json:"user_id" gorm:"type:varchar(191);not null;index;uniqueIndex:idx_totp_devices_user_id_secret,priority:1"`
+	UserID           string                      `json:"user_id" gorm:"type:varchar(191);not null;uniqueIndex:idx_totp_devices_user_id_secret,priority:1"`
 	DeviceName       string                      `json:"device_name" gorm:"type:varchar(100);not null"`
 	Secret           string                      `json:"-" gorm:"type:varchar(64);not null;uniqueIndex:idx_totp_devices_user_id_secret,priority:2"` // Base32 encoded secret (52 chars at SecretSize 32), not exposed in JSON
 	BackupCodeHashes datatypes.JSONSlice[string] `json:"-"`

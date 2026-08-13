@@ -21,11 +21,11 @@ type TOTPUnbindReq struct {
 	BackupCode string `json:"backup_code,omitempty"`
 }
 
-// TOTPUnbindRsp returns the device removal result.
+// TOTPUnbindRsp returns the remaining active-device count after removal. The
+// HTTP status already reports success, and the removed device is the one the
+// caller named, so no other fields are needed.
 type TOTPUnbindRsp struct {
-	Success     bool   `json:"success"`
-	Message     string `json:"message,omitempty"`
-	DeviceCount int    `json:"device_count"`
+	DeviceCount int `json:"device_count"`
 }
 
 func (TOTPUnbind) Design() {

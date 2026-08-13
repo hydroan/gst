@@ -87,10 +87,9 @@ func TestTOTPStatus(t *testing.T) {
 	t.Run("not_enabled", func(t *testing.T) {
 		resp := requestTOTPStatus(t, account.SessionID)
 		rsp := testutil.DecodeResp[*mfa.TOTPStatusRsp](t, resp)
-		require.Equal(t, 0, rsp.DeviceCount)
 		require.Empty(t, rsp.Devices)
 		require.False(t, rsp.Enabled)
-		testutil.RequireDataFields(t, resp, "enabled", "device_count")
+		testutil.RequireDataFields(t, resp, "enabled")
 		assertResponseDataArrayField(t, resp, "devices")
 	})
 
@@ -100,13 +99,13 @@ func TestTOTPStatus(t *testing.T) {
 		resp := requestTOTPStatus(t, account.SessionID)
 		rsp := testutil.DecodeResp[*mfa.TOTPStatusRsp](t, resp)
 		require.True(t, rsp.Enabled)
-		require.NotEmpty(t, rsp.DeviceCount)
+		require.NotEmpty(t, rsp.Devices)
 		for _, d := range rsp.Devices {
 			require.NotEmpty(t, d.ID)
 			require.NotEmpty(t, d.DeviceName)
 			require.NotEmpty(t, d.LastUsedAt)
 		}
-		testutil.RequireDataFields(t, resp, "enabled", "device_count")
+		testutil.RequireDataFields(t, resp, "enabled")
 		assertResponseDataArrayField(t, resp, "devices")
 	})
 
@@ -116,9 +115,8 @@ func TestTOTPStatus(t *testing.T) {
 		resp := requestTOTPStatus(t, account.SessionID)
 		rsp := testutil.DecodeResp[*mfa.TOTPStatusRsp](t, resp)
 		require.False(t, rsp.Enabled)
-		require.Equal(t, 0, rsp.DeviceCount)
 		require.Empty(t, rsp.Devices)
-		testutil.RequireDataFields(t, resp, "enabled", "device_count")
+		testutil.RequireDataFields(t, resp, "enabled")
 		assertResponseDataArrayField(t, resp, "devices")
 	})
 }
@@ -180,7 +178,6 @@ func TestTOTPConfirm(t *testing.T) {
 		require.NoError(t, err)
 		rsp := testutil.DecodeResp[*mfa.TOTPConfirmRsp](t, resp)
 		require.NotEmpty(t, rsp.DeviceID)
-		require.NotEmpty(t, rsp.Message)
 		require.NotEmpty(t, rsp.BackupCodes)
 		require.Len(t, rsp.BackupCodes, 10)
 		for _, bc := range rsp.BackupCodes {
@@ -354,10 +351,8 @@ func TestTOTPUnbind(t *testing.T) {
 		})
 		require.NoError(t, err)
 		rsp := testutil.DecodeResp[*mfa.TOTPUnbindRsp](t, resp)
-		require.True(t, rsp.Success)
 		require.Equal(t, 0, rsp.DeviceCount)
-		require.NotEmpty(t, rsp.Message)
-		testutil.RequireDataFields(t, resp, "success", "device_count")
+		testutil.RequireDataFields(t, resp, "device_count")
 	})
 }
 
@@ -378,7 +373,6 @@ func TestTOTPUnbindWithBackupCode(t *testing.T) {
 	})
 	require.NoError(t, err)
 	rsp := testutil.DecodeResp[*mfa.TOTPUnbindRsp](t, resp)
-	require.True(t, rsp.Success)
 	require.Equal(t, 1, rsp.DeviceCount)
 
 	assertBackupCodeHashCount(t, keptDeviceID, 9)
@@ -440,7 +434,6 @@ func TestTOTPAdmin(t *testing.T) {
 		require.NoError(t, err)
 		rsp := testutil.DecodeResp[*mfa.TOTPStatusRsp](t, resp)
 		require.True(t, rsp.Enabled)
-		require.Equal(t, 1, rsp.DeviceCount)
 		require.Len(t, rsp.Devices, 1)
 		require.Equal(t, deviceID, rsp.Devices[0].ID)
 	})
@@ -696,8 +689,7 @@ func unbindTOTPDeviceWithBackupCode(t *testing.T, sessionID, deviceID, backupCod
 		BackupCode: backupCode,
 	})
 	require.NoError(t, err)
-	require.True(t, rsp.Success)
-	require.NotEmpty(t, rsp.Message)
+	require.Zero(t, rsp.DeviceCount, "the status fixture unbinds its only device")
 }
 
 func loginSessionIDFromCookie(t *testing.T, reqPayload iam.LoginReq) string {

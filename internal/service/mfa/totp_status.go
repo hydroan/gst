@@ -42,7 +42,7 @@ func (t *TOTPStatusService) List(ctx *types.ServiceContext, req *model.Empty) (r
 
 	log.Infoz("totp status retrieved successfully",
 		zap.String("user_id", ctx.UserID()),
-		zap.Int("active_devices", rsp.DeviceCount),
+		zap.Int("active_devices", len(rsp.Devices)),
 		zap.Bool("enabled", rsp.Enabled))
 
 	return rsp, nil
@@ -72,8 +72,7 @@ func buildTOTPStatusRsp(ctx *types.ServiceContext, userID string) (*modelmfa.TOT
 	}
 
 	return &modelmfa.TOTPStatusRsp{
-		Enabled:     len(devices) > 0,
-		DeviceCount: len(devices),
-		Devices:     deviceInfos,
+		Enabled: len(devices) > 0,
+		Devices: deviceInfos,
 	}, nil
 }

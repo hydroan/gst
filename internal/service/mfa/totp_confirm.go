@@ -115,7 +115,6 @@ func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modelmfa.TOT
 
 	rsp = &modelmfa.TOTPConfirmRsp{
 		DeviceID:    device.ID,
-		Message:     "TOTP device confirmed and activated successfully",
 		BackupCodes: backupCodes,
 	}
 

@@ -2,7 +2,6 @@ package servicemfa
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -94,8 +93,6 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 		}
 
 		rsp = &modelmfa.TOTPUnbindRsp{
-			Success:     true,
-			Message:     fmt.Sprintf("Device '%s' unbound successfully", device.DeviceName),
 			DeviceCount: countRemainingTOTPDevices(devices, device.ID),
 		}
 		return nil

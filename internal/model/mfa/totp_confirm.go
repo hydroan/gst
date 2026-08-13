@@ -20,7 +20,6 @@ type TOTPConfirmReq struct {
 // TOTPConfirmRsp returns the created device and one-time backup codes.
 type TOTPConfirmRsp struct {
 	DeviceID    string   `json:"device_id,omitempty"`
-	Message     string   `json:"message,omitempty"`
 	BackupCodes []string `json:"backup_codes,omitempty"` // One-time recovery codes shown only after binding
 }
 
