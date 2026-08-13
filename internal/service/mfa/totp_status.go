@@ -5,6 +5,7 @@ import (
 
 	"github.com/hydroan/gst/database"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
+	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"go.uber.org/zap"
@@ -14,14 +15,18 @@ import (
 // state. The service keeps the status view scoped to ctx.UserID(), counts only
 // active devices as enabling MFA, and returns device metadata without exposing
 // secrets or recovery-code hashes.
+//
+// The request type is *model.Empty to match the DSL: a List action that only
+// declares a Result always parses with an empty payload, and the add path must
+// register the same request type the copy path generates.
 type TOTPStatusService struct {
-	service.Base[*modelmfa.TOTPStatus, *modelmfa.TOTPStatus, *modelmfa.TOTPStatusRsp]
+	service.Base[*modelmfa.TOTPStatus, *model.Empty, *modelmfa.TOTPStatusRsp]
 }
 
 // List loads the current user's TOTP devices and builds the status response
 // used by clients to render MFA settings. It requires an authenticated request,
 // returns active devices only, and derives Enabled from the active device count.
-func (t *TOTPStatusService) List(ctx *types.ServiceContext, req *modelmfa.TOTPStatus) (rsp *modelmfa.TOTPStatusRsp, err error) {
+func (t *TOTPStatusService) List(ctx *types.ServiceContext, req *model.Empty) (rsp *modelmfa.TOTPStatusRsp, err error) {
 	log := t.WithContext(ctx, ctx.Phase())
 
 	// 1. Verify the authenticated account.

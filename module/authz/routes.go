@@ -3,10 +3,11 @@ package authz
 import (
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
 	serviceauthz "github.com/hydroan/gst/internal/service/authz"
+	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 )
 
-var _ types.Module[*Routes, *Routes, *RoutesRsp] = (*RoutesModule)(nil)
+var _ types.Module[*Routes, *model.Empty, *RoutesRsp] = (*RoutesModule)(nil)
 
 type (
 	Route        = modelauthz.Route
@@ -15,7 +16,7 @@ type (
 	RoutesModule struct{}
 )
 
-func (*RoutesModule) Service() types.Service[*Routes, *Routes, *RoutesRsp] {
+func (*RoutesModule) Service() types.Service[*Routes, *model.Empty, *RoutesRsp] {
 	return &serviceauthz.RoutesService{}
 }
 func (*RoutesModule) Route() string { return "authz/routes" }

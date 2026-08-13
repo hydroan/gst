@@ -100,7 +100,7 @@ func Register() {
 
 	module.Use[
 		*Routes,
-		*Routes,
+		*model.Empty,
 		*RoutesRsp](
 		&RoutesModule{},
 		module.CRUD(consts.PHASE_LIST),
