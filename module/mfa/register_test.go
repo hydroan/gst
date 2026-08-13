@@ -309,44 +309,29 @@ func TestTOTPUnbind(t *testing.T) {
 	cli := mfaSessionClient(t, account.SessionID)
 
 	t.Run("missing_fresh_auth", func(t *testing.T) {
-		resp, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{DeviceID: deviceID})
-		require.NoError(t, err)
-		rsp := testutil.DecodeResp[*mfa.TOTPUnbindRsp](t, resp)
-		require.False(t, rsp.Success)
-		require.Equal(t, 1, rsp.DeviceCount)
-		require.NotEmpty(t, rsp.Message)
-		testutil.RequireDataFields(t, resp, "success", "device_count")
+		_, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{DeviceID: deviceID})
+		testutil.RequireError(t, err, http.StatusBadRequest, "fresh authentication required")
 		assertTOTPDeviceActive(t, deviceID)
 	})
 
 	t.Run("multiple_verification_methods", func(t *testing.T) {
 		require.NotEmpty(t, backupCodes)
-		resp, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
+		_, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
 			DeviceID:   deviceID,
 			Password:   account.Password,
 			BackupCode: backupCodes[0],
 		})
-		require.NoError(t, err)
-		rsp := testutil.DecodeResp[*mfa.TOTPUnbindRsp](t, resp)
-		require.False(t, rsp.Success)
-		require.Equal(t, 1, rsp.DeviceCount)
-		require.NotEmpty(t, rsp.Message)
-		testutil.RequireDataFields(t, resp, "success", "device_count")
+		testutil.RequireError(t, err, http.StatusBadRequest, "provide exactly one verification method")
 		assertTOTPDeviceActive(t, deviceID)
 		assertBackupCodeHashCount(t, deviceID, 10)
 	})
 
 	t.Run("invalid_totp", func(t *testing.T) {
-		resp, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
+		_, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
 			DeviceID: deviceID,
 			TOTPCode: "000000",
 		})
-		require.NoError(t, err)
-		rsp := testutil.DecodeResp[*mfa.TOTPUnbindRsp](t, resp)
-		require.False(t, rsp.Success)
-		require.Equal(t, 1, rsp.DeviceCount)
-		require.NotEmpty(t, rsp.Message)
-		testutil.RequireDataFields(t, resp, "success", "device_count")
+		testutil.RequireError(t, err, http.StatusUnauthorized, "invalid verification")
 		assertTOTPDeviceActive(t, deviceID)
 	})
 
@@ -404,15 +389,42 @@ func TestTOTPUnbindWithBackupCode(t *testing.T) {
 	assertBackupCodeHashCount(t, keptDeviceID, 9)
 
 	// A consumed recovery code cannot be replayed for another unbind.
-	resp, err = cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
+	_, err = cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
 		DeviceID:   keptDeviceID,
 		BackupCode: backupCodes[0],
 	})
-	require.NoError(t, err)
-	rsp = testutil.DecodeResp[*mfa.TOTPUnbindRsp](t, resp)
-	require.False(t, rsp.Success)
-	require.Equal(t, 1, rsp.DeviceCount)
+	testutil.RequireError(t, err, http.StatusUnauthorized, "invalid verification")
 	assertBackupCodeHashCount(t, keptDeviceID, 9)
+}
+
+func TestTOTPUnbindErrorContract(t *testing.T) {
+	account := newTOTPTestAccount(t, "totp_unbind_contract_user")
+	deviceID, _, _ := bindTOTPDeviceForTest(t, account.SessionID, "test-device-contract")
+	cli := mfaSessionClient(t, account.SessionID)
+
+	t.Run("missing_device_id", func(t *testing.T) {
+		_, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{Password: account.Password})
+		testutil.RequireError(t, err, http.StatusBadRequest, "device_id is required")
+	})
+
+	t.Run("invalid_credential_hides_device_existence", func(t *testing.T) {
+		// Credentials are judged before the target lookup: a wrong password
+		// with a missing device answers 401, never 404.
+		_, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
+			DeviceID: "missing-device",
+			Password: "wrong-password",
+		})
+		testutil.RequireError(t, err, http.StatusUnauthorized, "invalid verification")
+	})
+
+	t.Run("device_not_found_with_valid_credential", func(t *testing.T) {
+		_, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
+			DeviceID: "missing-device",
+			Password: account.Password,
+		})
+		testutil.RequireError(t, err, http.StatusNotFound, "device not found or already unbound")
+		assertTOTPDeviceActive(t, deviceID)
+	})
 }
 
 func TestTOTPVerifyReplayProtection(t *testing.T) {
@@ -547,11 +559,9 @@ func TestTOTPVerificationRateLimit(t *testing.T) {
 	testutil.RequireError(t, err, http.StatusTooManyRequests, "too many requests")
 
 	// Other throttled endpoints keep their own budget: the same user's next
-	// unbind attempt is judged by the handler, not the limiter.
-	resp, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{DeviceID: "missing-device"})
-	require.NoError(t, err)
-	rsp := testutil.DecodeResp[*mfa.TOTPUnbindRsp](t, resp)
-	require.False(t, rsp.Success)
+	// unbind attempt is judged by the handler (400), not the limiter (429).
+	_, err = cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{DeviceID: "missing-device"})
+	testutil.RequireError(t, err, http.StatusBadRequest, "fresh authentication required")
 }
 
 func newTOTPTestAccount(t *testing.T, prefix string) totpTestAccount {

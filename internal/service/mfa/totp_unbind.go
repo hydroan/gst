@@ -25,40 +25,34 @@ import (
 // TOTP and recovery-code verification run against the current user's active
 // devices; recovery-code removal and target-device deletion share the same
 // transaction so the code is consumed only when the unbind operation succeeds.
+//
+// Failures answer through service errors like the rest of the module: 400 for
+// malformed requests, 401 for failed fresh authentication, 404 for a missing
+// target device. Credentials are always judged before the target device is
+// looked up, so an unauthenticated caller cannot probe device existence.
 type TOTPUnbindService struct {
 	service.Base[*modelmfa.TOTPUnbind, *modelmfa.TOTPUnbindReq, *modelmfa.TOTPUnbindRsp]
 }
 
-var errTOTPUnbindVerificationInvalid = errors.New("invalid verification")
-
 // Create validates fresh authentication, removes the target device, and returns the remaining active count.
-//
-// The method rejects requests with zero or multiple verification methods,
-// verifies the chosen proof, locks the current user's active devices, removes
-// the target device, and reports how many active devices remain. Backup-code
-// verification is performed in the same transaction as the device removal.
 func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPUnbindReq) (rsp *modelmfa.TOTPUnbindRsp, err error) {
 	log := t.WithContext(ctx, ctx.Phase())
 
 	if len(ctx.UserID()) == 0 {
 		return nil, service.NewError(http.StatusUnauthorized, "authentication required")
 	}
-
+	if strings.TrimSpace(req.DeviceID) == "" {
+		return nil, service.NewError(http.StatusBadRequest, "device_id is required")
+	}
 	switch countTOTPUnbindVerificationMethods(req) {
 	case 0:
-		return newTOTPUnbindFailureRsp(ctx, "fresh authentication required")
+		return nil, service.NewError(http.StatusBadRequest, "fresh authentication required")
 	case 1:
 	default:
-		return newTOTPUnbindFailureRsp(ctx, "provide exactly one verification method")
+		return nil, service.NewError(http.StatusBadRequest, "provide exactly one verification method")
 	}
 
 	if req.Password != "" {
-		if !activeTOTPUnbindDeviceExists(ctx, ctx.UserID(), req.DeviceID) {
-			log.Warnz("device not found or not active",
-				zap.String("user_id", ctx.UserID()),
-				zap.String("device_id", req.DeviceID))
-			return newTOTPUnbindFailureRsp(ctx, "Device not found or already unbound")
-		}
 		invalid, verifyErr := verifyTOTPUnbindPassword(ctx, ctx.UserID(), req.Password)
 		if verifyErr != nil {
 			log.Errorz("failed to verify password for unbind",
@@ -71,7 +65,7 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 			log.Warnz("invalid password for unbind",
 				zap.String("user_id", ctx.UserID()),
 				zap.String("device_id", req.DeviceID))
-			return newTOTPUnbindFailureRsp(ctx, "invalid verification")
+			return nil, service.NewError(http.StatusUnauthorized, "invalid verification")
 		}
 	}
 
@@ -85,37 +79,31 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 			return service.NewErrorWithCause(http.StatusInternalServerError, "failed to list active TOTP devices", listErr)
 		}
 
-		device := findTOTPUnbindDevice(devices, req.DeviceID)
-		if device == nil {
-			log.Warnz("device not found or not active",
-				zap.String("user_id", userID),
-				zap.String("device_id", req.DeviceID))
-			rsp = &modelmfa.TOTPUnbindRsp{
-				Success:     false,
-				Message:     "Device not found or already unbound",
-				DeviceCount: len(devices),
-			}
-			return nil
-		}
-
+		// Fresh authentication is judged before the target device so a failed
+		// proof never reveals whether the device exists. A service error here
+		// rolls the transaction back, which also restores a consumed recovery
+		// code; a burned replay marker for a valid TOTP code is the accepted
+		// cost of erring toward safety.
 		now := time.Now().UTC()
 		if verifyErr := verifyTOTPUnbindFreshAuth(ctx, userID, req, devices, now); verifyErr != nil {
-			if errors.Is(verifyErr, errTOTPUnbindVerificationInvalid) ||
-				errors.Is(verifyErr, errTOTPCodeInvalid) ||
+			if errors.Is(verifyErr, errTOTPCodeInvalid) ||
 				errors.Is(verifyErr, errTOTPCodeReplayed) ||
 				errors.Is(verifyErr, errTOTPBackupCodeInvalid) {
 				log.Warnz("invalid fresh authentication for unbind",
 					zap.String("user_id", userID),
 					zap.String("device_id", req.DeviceID),
 					zap.Error(verifyErr))
-				rsp = &modelmfa.TOTPUnbindRsp{
-					Success:     false,
-					Message:     "invalid verification",
-					DeviceCount: len(devices),
-				}
-				return nil
+				return service.NewError(http.StatusUnauthorized, "invalid verification")
 			}
 			return service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify fresh authentication", verifyErr)
+		}
+
+		device := findTOTPUnbindDevice(devices, req.DeviceID)
+		if device == nil {
+			log.Warnz("device not found or not active",
+				zap.String("user_id", userID),
+				zap.String("device_id", req.DeviceID))
+			return service.NewError(http.StatusNotFound, "device not found or already unbound")
 		}
 
 		if deleteErr := database.Database[*modelmfa.TOTPDevice](ctx).WithPurge(true).Delete(device); deleteErr != nil {
@@ -140,39 +128,12 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 	if rsp == nil {
 		return nil, service.NewError(http.StatusInternalServerError, "failed to build TOTP unbind response")
 	}
-	if rsp.Success {
-		log.Infoz("totp device unbound successfully",
-			zap.String("user_id", ctx.UserID()),
-			zap.String("device_id", req.DeviceID),
-			zap.Int("device_count", rsp.DeviceCount))
-	}
+	log.Infoz("totp device unbound successfully",
+		zap.String("user_id", ctx.UserID()),
+		zap.String("device_id", req.DeviceID),
+		zap.Int("device_count", rsp.DeviceCount))
 
 	return rsp, nil
-}
-
-// newTOTPUnbindFailureRsp builds a failed response with the current active-device count.
-func newTOTPUnbindFailureRsp(ctx *types.ServiceContext, message string) (*modelmfa.TOTPUnbindRsp, error) {
-	count, err := countActiveTOTPUnbindDevices(ctx, ctx.UserID())
-	if err != nil {
-		return nil, err
-	}
-	return &modelmfa.TOTPUnbindRsp{
-		Success:     false,
-		Message:     message,
-		DeviceCount: count,
-	}, nil
-}
-
-// countActiveTOTPUnbindDevices returns the current user's active TOTP device count.
-func countActiveTOTPUnbindDevices(ctx *types.ServiceContext, userID string) (int, error) {
-	devices := make([]*modelmfa.TOTPDevice, 0)
-	if err := database.Database[*modelmfa.TOTPDevice](ctx).WithQuery(&modelmfa.TOTPDevice{
-		UserID:   userID,
-		IsActive: true,
-	}).List(&devices); err != nil {
-		return 0, service.NewErrorWithCause(http.StatusInternalServerError, "failed to count active TOTP devices", err)
-	}
-	return len(devices), nil
 }
 
 // countTOTPUnbindVerificationMethods counts which fresh-auth methods are present.
@@ -189,6 +150,11 @@ func countTOTPUnbindVerificationMethods(req *modelmfa.TOTPUnbindReq) int {
 	}
 	return count
 }
+
+// errTOTPUnbindVerificationInvalid guards the defensive default below. Create
+// enforces exactly one verification method before the transaction, so hitting
+// it is a programming error and surfaces as a 500 through the generic branch.
+var errTOTPUnbindVerificationInvalid = errors.New("invalid verification")
 
 // verifyTOTPUnbindFreshAuth validates the selected fresh-auth method inside the
 // device transaction.
@@ -281,26 +247,6 @@ func validateTOTPCodeForDevices(ctx context.Context, userID, code string, device
 		}
 	}
 	return errTOTPCodeInvalid
-}
-
-// activeTOTPUnbindDeviceExists checks target ownership before password validation.
-//
-// The password path performs this preflight outside the device transaction to
-// keep IAM user lookup out of the TOTPDevice transaction while preserving the
-// same device-not-found response semantics.
-func activeTOTPUnbindDeviceExists(ctx *types.ServiceContext, userID, deviceID string) bool {
-	deviceID = strings.TrimSpace(deviceID)
-	if deviceID == "" {
-		return false
-	}
-
-	device := new(modelmfa.TOTPDevice)
-	query := &modelmfa.TOTPDevice{
-		UserID:   userID,
-		IsActive: true,
-	}
-	query.ID = deviceID
-	return database.Database[*modelmfa.TOTPDevice](ctx).WithQuery(query).First(device) == nil
 }
 
 // findTOTPUnbindDevice selects the target active device from the locked device list.
