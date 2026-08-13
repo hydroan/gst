@@ -461,51 +461,6 @@ func (db *database[M]) WithPurge(enable ...bool) types.Database[M] {
 	return db
 }
 
-// WithOmit excludes specified columns from INSERT, UPDATE, and SELECT
-// operations, through the generated column references (SampleCols.Name).
-// Useful for skipping auto-generated fields or fields that shouldn't be modified.
-//
-// Parameters:
-//   - columns: Column references to omit from the operation
-//
-// Behavior:
-//   - Create/Update: Excludes specified columns from INSERT/UPDATE statements
-//   - Query operations (List, Get, First, Last, Take): Excludes specified columns from SELECT statements
-//   - Delete: Not affected (delete operations are based on WHERE conditions, not fields)
-//   - Count: Not affected (counts records, not fields)
-//
-// Example:
-//
-//	WithOmit(SampleCols.CreatedAt, SampleCols.UpdatedAt).Create(&sample)  // Skip timestamp fields on create
-//	WithOmit(SampleCols.ID).Update(&sample)                              // Skip ID field during update
-//	WithOmit(SampleCols.Password).List(&samples)                         // Exclude password from query results
-//	WithOmit(SampleCols.Name, SampleCols.Age).Delete(&sample)            // Delete works normally (WithOmit has no effect)
-func (db *database[M]) WithOmit(columns ...types.AnyColumnRef) types.Database[M] {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	if len(columns) == 0 {
-		return db
-	}
-	// Unknown columns fail the chain like WithSelect: a mistyped omission
-	// would otherwise silently keep writing the column it meant to protect.
-	known, err := knownModelColumns[M]()
-	if err != nil {
-		db.err = err
-		return db
-	}
-	names := make([]string, 0, len(columns))
-	for _, column := range columns {
-		name := column.Name()
-		if _, ok := known[name]; !ok {
-			db.err = errors.Wrapf(ErrUnknownColumn, "WithOmit column %q on model %s", name, reflect.TypeOf(*new(M)).Elem().Name())
-			return db
-		}
-		names = append(names, name)
-	}
-	db.ins = db.ins.Omit(names...)
-	return db
-}
-
 // contains checks if a string item exists in a string slice.
 // Uses a map-based approach for O(n) time complexity with O(n) space complexity.
 // More efficient than linear search for larger slices.

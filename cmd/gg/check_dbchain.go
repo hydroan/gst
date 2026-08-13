@@ -51,7 +51,6 @@ var databaseChainMethods = map[string]bool{
 	"WithOrder":      true,
 	"WithExpand":     true,
 	"WithPurge":      true,
-	"WithOmit":       true,
 	"WithBuildSQL":   true,
 	"WithDryRun":     true,
 	"WithoutHook":    true,

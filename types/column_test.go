@@ -112,7 +112,7 @@ func TestColumnBuildsAssignments(t *testing.T) {
 
 func TestAnyColumnRefMixesReferenceKinds(t *testing.T) {
 	// One variadic list mixes references of different Go types, which is what
-	// the column-list options such as WithSelect and WithOmit accept.
+	// the column-list options such as WithSelect accept.
 	names := func(columns ...types.AnyColumnRef) []string {
 		collected := make([]string, 0, len(columns))
 		for _, column := range columns {

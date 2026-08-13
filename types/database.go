@@ -104,9 +104,6 @@ type DatabaseOption[M Model] interface {
 	WithExpand(expand []string, orders ...Order) Database[M]
 	// WithPurge controls whether Delete permanently removes records instead of soft deleting them.
 	WithPurge(...bool) Database[M]
-	// WithOmit excludes specified columns from INSERT, UPDATE, and SELECT
-	// operations, through the generated column references.
-	WithOmit(...AnyColumnRef) Database[M]
 	// WithBuildSQL builds SQL for the next terminal operation and appends Query, Args, and RenderedSQL to the collector.
 	WithBuildSQL(statements *[]SQLStatement) Database[M]
 	// WithDryRun builds SQL without database I/O, framework hooks, cache mutation, or object field filling.

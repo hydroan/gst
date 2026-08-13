@@ -3,8 +3,8 @@ package types
 import "time"
 
 // AnyColumnRef is the type-erased view of every generated column reference,
-// for options that take a heterogeneous column list: WithSelect and WithOmit
-// accept columns of different Go types in one call, which the parameterized
+// for options that take a heterogeneous column list: WithSelect accepts
+// columns of different Go types in one call, which the parameterized
 // ColumnRef cannot express. The unexported method keeps the set of
 // implementations closed to this package, so a stray type that happens to
 // carry a Name method cannot slip into a column list.

@@ -46,7 +46,6 @@ import (
 //	// Combined with other methods
 //	database.Database[*model.User](context.Background()).
 //	    WithBatchSize(1000).
-//	    WithOmit("created_at").
 //	    Create(users...)
 //
 // NOTE: If size is 0 or not set, default batch sizes are used (1000 for Create/Update, 10000 for Delete).

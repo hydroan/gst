@@ -92,10 +92,9 @@ var (
 	ErrAfterCommit = errors.New("after-commit action failed")
 
 	// ErrUnknownColumn is returned when an explicit column reference — a
-	// WithSelect or WithOmit argument, or an aggregate term — names a column
-	// that does not exist on the model. A mistyped column must fail the chain:
-	// silently dropping it would turn a narrowed update into a no-op write and
-	// a narrowed omission into an unprotected one.
+	// WithSelect argument or an aggregate term — names a column that does not
+	// exist on the model. A mistyped column must fail the chain: silently
+	// dropping it would turn a narrowed update into a no-op write.
 	ErrUnknownColumn = errors.New("column does not exist on the model")
 
 	// ErrNoModelColumnSelected is returned when WithSelect names only
