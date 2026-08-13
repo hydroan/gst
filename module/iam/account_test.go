@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/authn"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
@@ -20,6 +22,7 @@ import (
 	loggerzap "github.com/hydroan/gst/logger/zap"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/redis"
+	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
@@ -164,6 +167,157 @@ func TestAccountLogout(t *testing.T) {
 
 		_, err := client.Post[iam.LogoutRsp](cli, logoutPath, nil)
 		testutil.RequireError(t, err, http.StatusInternalServerError, "failed to logout")
+	})
+}
+
+func TestAccountLoginSecondFactorVerifier(t *testing.T) {
+	t.Cleanup(func() { authn.SetLoginSecondFactorVerifier(nil) })
+
+	user := accountSignupUser(t, "acct_login_verifier", "12345678")
+
+	var mu sync.Mutex
+	var allow bool
+	var gotUserID string
+	var gotFactor authn.LoginSecondFactor
+	authn.SetLoginSecondFactorVerifier(func(_ *types.ServiceContext, userID string, factor authn.LoginSecondFactor) error {
+		mu.Lock()
+		defer mu.Unlock()
+		gotUserID = userID
+		gotFactor = factor
+		if allow {
+			return nil
+		}
+		return service.NewError(http.StatusUnauthorized, "second factor required")
+	})
+
+	t.Run("verifier_rejection_blocks_login", func(t *testing.T) {
+		cli := accountNewClient(t)
+
+		_, err := client.Post[iam.LoginRsp](cli, loginPath, iam.LoginReq{
+			Username: user.Username,
+			Password: user.Password,
+			TOTPCode: "654321",
+		})
+		testutil.RequireError(t, err, http.StatusUnauthorized, "second factor required")
+
+		mu.Lock()
+		defer mu.Unlock()
+		require.Equal(t, user.UserID, gotUserID)
+		require.Equal(t, authn.LoginSecondFactor{TOTPCode: "654321"}, gotFactor)
+	})
+
+	t.Run("verifier_runs_only_after_first_factor_passed", func(t *testing.T) {
+		mu.Lock()
+		gotUserID = ""
+		mu.Unlock()
+
+		cli := accountNewClient(t)
+		_, err := client.Post[iam.LoginRsp](cli, loginPath, iam.LoginReq{
+			Username: user.Username,
+			Password: "wrong-password",
+		})
+		testutil.RequireError(t, err, http.StatusUnauthorized)
+
+		mu.Lock()
+		defer mu.Unlock()
+		require.Empty(t, gotUserID)
+	})
+
+	t.Run("verifier_pass_allows_login", func(t *testing.T) {
+		mu.Lock()
+		allow = true
+		mu.Unlock()
+
+		user.SessionID = accountLoginUser(t, &user, user.Password)
+		require.NotEmpty(t, user.SessionID)
+	})
+}
+
+func TestAccountLoginObservers(t *testing.T) {
+	var mu sync.Mutex
+	var events []authn.LoginEvent
+	remove := authn.AddLoginObserver(func(_ *types.ServiceContext, event authn.LoginEvent) {
+		mu.Lock()
+		defer mu.Unlock()
+		events = append(events, event)
+	})
+	t.Cleanup(remove)
+
+	takeEvents := func() []authn.LoginEvent {
+		mu.Lock()
+		defer mu.Unlock()
+		taken := events
+		events = nil
+		return taken
+	}
+
+	user := accountSignupUser(t, "acct_login_observer", "12345678")
+
+	t.Run("successful_login_notifies_succeeded", func(t *testing.T) {
+		takeEvents()
+
+		user.SessionID = accountLoginUser(t, &user, user.Password)
+
+		got := takeEvents()
+		require.Len(t, got, 1)
+		event := got[0]
+		require.Equal(t, authn.LoginEventSucceeded, event.Kind)
+		require.Equal(t, user.UserID, event.UserID)
+		require.Equal(t, user.Username, event.Username)
+		require.NotEmpty(t, event.ClientIP)
+		require.False(t, event.At.IsZero())
+		require.Equal(t, time.UTC, event.At.Location())
+	})
+
+	t.Run("failed_password_notifies_failed_with_resolved_user", func(t *testing.T) {
+		takeEvents()
+
+		cli := accountNewClient(t)
+		_, err := client.Post[iam.LoginRsp](cli, loginPath, iam.LoginReq{
+			Username: user.Username,
+			Password: "wrong-password",
+		})
+		testutil.RequireError(t, err, http.StatusUnauthorized)
+
+		got := takeEvents()
+		require.Len(t, got, 1)
+		event := got[0]
+		require.Equal(t, authn.LoginEventFailed, event.Kind)
+		require.Equal(t, user.UserID, event.UserID)
+		require.Equal(t, user.Username, event.Username)
+	})
+
+	t.Run("unknown_username_notifies_failed_without_user_id", func(t *testing.T) {
+		takeEvents()
+
+		cli := accountNewClient(t)
+		_, err := client.Post[iam.LoginRsp](cli, loginPath, iam.LoginReq{
+			Username: "acct_login_observer_missing",
+			Password: "12345678",
+		})
+		testutil.RequireError(t, err, http.StatusUnauthorized)
+
+		got := takeEvents()
+		require.Len(t, got, 1)
+		require.Equal(t, authn.LoginEventFailed, got[0].Kind)
+		require.Empty(t, got[0].UserID)
+		require.Equal(t, "acct_login_observer_missing", got[0].Username)
+	})
+
+	t.Run("logout_notifies_logged_out", func(t *testing.T) {
+		user.SessionID = accountLoginUser(t, &user, user.Password)
+		takeEvents()
+
+		cli := accountSessionClient(t, user.SessionID)
+		_, err := client.Post[iam.LogoutRsp](cli, logoutPath, nil)
+		require.NoError(t, err)
+
+		got := takeEvents()
+		require.Len(t, got, 1)
+		event := got[0]
+		require.Equal(t, authn.LoginEventLoggedOut, event.Kind)
+		require.Equal(t, user.UserID, event.UserID)
+		require.Equal(t, user.Username, event.Username)
 	})
 }
 

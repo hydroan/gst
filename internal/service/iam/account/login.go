@@ -1,22 +1,18 @@
 package serviceiamaccount
 
 import (
-	// "fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/authn"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
-
-	// modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
-	// servicelogmgmt "github.com/hydroan/gst/internal/service/logmgmt"
-	// servicemfa "github.com/hydroan/gst/internal/service/mfa"
 	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
@@ -44,28 +40,35 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	}
 
 	ua := useragent.New(ctx.UserAgent())
-	engineName, _ := ua.Engine()
-	browserName, _ := ua.Browser()
+	engineName, engineVersion := ua.Engine()
+	browserName, browserVersion := ua.Browser()
 
-	// Logmgmt integration is disabled while IAM is decoupled from optional modules.
-	//
-	// var success bool
-	// defer func() {
-	// 	// Write failed login log.
-	// 	if !success && servicelogmgmt.Enabled {
-	// 		if logErr := database.Database[*modellogmgmt.LoginLog](ctx).Create(&modellogmgmt.LoginLog{
-	// 			Username: req.Username,
-	// 			ClientIP: ctx.ClientIP(),
-	// 			Status:   modellogmgmt.LoginStatusFailure,
-	// 			Source:   ctx.UserAgent(),
-	// 			Platform: fmt.Sprintf("%s %s", ua.Platform(), ua.OS()),
-	// 			Engine:   fmt.Sprintf("%s %s", engineName, engineVersion),
-	// 			Browser:  fmt.Sprintf("%s %s", browserName, browserVersion),
-	// 		}); logErr != nil {
-	// 			log.Warnz("failed to write login log", zap.Error(logErr))
-	// 		}
-	// 	}
-	// }()
+	// Login observers hear the settled outcome of every attempt that passed
+	// input validation, no matter which branch below rejected it.
+	var targetUser *modeliamuser.User
+	defer func() {
+		event := authn.LoginEvent{
+			Kind:           authn.LoginEventFailed,
+			Username:       req.Username,
+			TenantID:       strings.TrimSpace(req.TenantID),
+			ClientIP:       ctx.ClientIP(),
+			UserAgent:      ctx.UserAgent(),
+			OS:             ua.OS(),
+			Platform:       ua.Platform(),
+			EngineName:     engineName,
+			EngineVersion:  engineVersion,
+			BrowserName:    browserName,
+			BrowserVersion: browserVersion,
+			At:             time.Now().UTC(),
+		}
+		if err == nil {
+			event.Kind = authn.LoginEventSucceeded
+		}
+		if targetUser != nil {
+			event.UserID = targetUser.ID
+		}
+		authn.NotifyLogin(ctx, event)
+	}()
 
 	// Find user by username
 	users := make([]*modeliamuser.User, 0)
@@ -75,7 +78,7 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	if len(users) == 0 {
 		return nil, service.NewError(http.StatusUnauthorized, "invalid username or password")
 	}
-	targetUser := users[0]
+	targetUser = users[0]
 
 	// Check if user is enabled
 	if targetUser.Status == modeliamuser.UserStatusInactive {
@@ -112,28 +115,15 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		}
 	}
 
-	// MFA integration is disabled while IAM is decoupled from optional modules.
-	//
-	// if err = servicemfa.VerifyLoginSecondFactor(ctx, user.ID, servicemfa.LoginSecondFactor{
-	// 	TOTPCode:   req.TOTPCode,
-	// 	BackupCode: req.BackupCode,
-	// }); err != nil {
-	// 	switch {
-	// 	case errors.Is(err, servicemfa.ErrLoginSecondFactorRequired):
-	// 		log.Infoz("MFA required but no code provided", zap.String("username", req.Username))
-	// 		return nil, errors.New("MFA verification required")
-	// 	case errors.Is(err, servicemfa.ErrLoginSecondFactorConflict),
-	// 		errors.Is(err, servicemfa.ErrLoginTOTPCodeInvalid):
-	// 		log.Warnz("invalid TOTP code", zap.String("username", req.Username), zap.Error(err))
-	// 		return nil, errors.New("invalid MFA code")
-	// 	case errors.Is(err, servicemfa.ErrLoginBackupCodeInvalid):
-	// 		log.Warnz("invalid backup code", zap.String("username", req.Username), zap.Error(err))
-	// 		return nil, errors.New("invalid backup code")
-	// 	default:
-	// 		log.Errorz("failed to verify login MFA", zap.String("user_id", user.ID), zap.Error(err))
-	// 		return nil, errors.New("internal server error")
-	// 	}
-	// }
+	// The second-factor gate runs only after every first-factor check passed,
+	// so a failed second factor never reveals more than a failed password. The
+	// installed verifier owns the client-facing error shape.
+	if err = authn.VerifyLoginSecondFactor(ctx, targetUser.ID, authn.LoginSecondFactor{
+		TOTPCode:   req.TOTPCode,
+		BackupCode: req.BackupCode,
+	}); err != nil {
+		return nil, err
+	}
 
 	now := time.Now()
 	// Create session
@@ -184,25 +174,6 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	serviceiamsession.SessionManager.SetCookie(ctx, sessionID, expire)
 
 	log.Infoz("user logged in successfully", zap.String("username", req.Username), zap.String("user_id", targetUser.ID))
-
-	// Logmgmt integration is disabled while IAM is decoupled from optional modules.
-	//
-	// success = true
-	// if servicelogmgmt.Enabled {
-	// 	if err = database.Database[*modellogmgmt.LoginLog](ctx).Create(&modellogmgmt.LoginLog{
-	// 		UserID:   user.ID,
-	// 		Username: user.Username,
-	// 		ClientIP: ctx.ClientIP(),
-	// 		Status:   modellogmgmt.LoginStatusSuccess,
-	//
-	// 		Source:   ctx.UserAgent(),
-	// 		Platform: fmt.Sprintf("%s %s", ua.Platform(), ua.OS()),
-	// 		Engine:   fmt.Sprintf("%s %s", engineName, engineVersion),
-	// 		Browser:  fmt.Sprintf("%s %s", browserName, browserVersion),
-	// 	}); err != nil {
-	// 		log.Warnz("failed to write login log", zap.Error(err))
-	// 	}
-	// }
 
 	email := ""
 	emailIdentity, err := LoadEmailIdentity(ctx, targetUser.ID)

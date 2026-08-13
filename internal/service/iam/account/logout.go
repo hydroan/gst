@@ -1,19 +1,17 @@
 package serviceiamaccount
 
 import (
-	// "fmt"
 	"net/http"
+	"time"
 
 	"github.com/cockroachdb/errors"
-	// "github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/authn"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
-	// modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
-	// "github.com/mssola/useragent"
-	// "go.uber.org/zap"
+	"github.com/mssola/useragent"
 )
 
 // LogoutService handles logout requests for the current authenticated session.
@@ -42,25 +40,26 @@ func (l *LogoutService) Create(ctx *types.ServiceContext, req *model.Empty) (rsp
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to logout", err)
 	}
 
-	// Logmgmt integration is disabled while IAM is decoupled from optional modules.
-	//
-	// ua := useragent.New(ctx.UserAgent())
-	// engineName, engineVersion := ua.Engine()
-	// browserName, browserVersion := ua.Browser()
-	//
-	// if logErr := database.Database[*modellogmgmt.LoginLog](ctx).Create(&modellogmgmt.LoginLog{
-	// 	UserID:   session.UserID,
-	// 	Username: session.Username,
-	// 	ClientIP: ctx.ClientIP(),
-	// 	Status:   modellogmgmt.LoginStatusLogout,
-	// 	Source:   ctx.UserAgent(),
-	// 	Platform: fmt.Sprintf("%s %s", ua.Platform(), ua.OS()),
-	// 	Engine:   fmt.Sprintf("%s %s", engineName, engineVersion),
-	// 	Browser:  fmt.Sprintf("%s %s", browserName, browserVersion),
-	// }); logErr != nil {
-	// 	log.Warnz("failed to write logout log", zap.Error(logErr))
-	// }
-	_ = deletedSession
+	// Only a logout that actually ended a session is a lifecycle event; the
+	// cookie-less and already-expired branches above end nothing.
+	ua := useragent.New(ctx.UserAgent())
+	engineName, engineVersion := ua.Engine()
+	browserName, browserVersion := ua.Browser()
+	authn.NotifyLogin(ctx, authn.LoginEvent{
+		Kind:           authn.LoginEventLoggedOut,
+		UserID:         deletedSession.UserID,
+		Username:       deletedSession.Username,
+		TenantID:       deletedSession.TenantID,
+		ClientIP:       ctx.ClientIP(),
+		UserAgent:      ctx.UserAgent(),
+		OS:             ua.OS(),
+		Platform:       ua.Platform(),
+		EngineName:     engineName,
+		EngineVersion:  engineVersion,
+		BrowserName:    browserName,
+		BrowserVersion: browserVersion,
+		At:             time.Now().UTC(),
+	})
 
 	serviceiamsession.SessionManager.ClearCookie(ctx)
 
