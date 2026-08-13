@@ -5,6 +5,8 @@
       "internal/service/mfa/totp_login.go"
     ],
     "middleware": [],
-    "postNotes": []
+    "postNotes": [
+      "Administrative MFA routes deny everything until the project installs its authorizer with servicemfa.SetAccountAdministrator(...) from project-owned code outside service/mfa."
+    ]
   }
 }

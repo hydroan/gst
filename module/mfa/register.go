@@ -18,17 +18,21 @@ import (
 // Register wires TOTP-based MFA into the application.
 //
 // Besides registering the routes below and the internal TOTPDevice table, it
-// throttles the endpoints that accept a guessable proof. Login second-factor
-// enforcement needs no wiring here: importing the MFA service package arms it
-// through the authn login verifier at package initialization, on the add path
-// and the copy path alike.
+// throttles the endpoints that accept a guessable proof and installs the
+// framework IAM tenant-admin rules as the AccountAdministrator behind the
+// administrative routes. Login second-factor enforcement needs no wiring here:
+// importing the MFA service package arms it through the authn login verifier
+// at package initialization, on the add path and the copy path alike.
 //
 // Routes:
-//   - POST /api/mfa/totp/bind
-//   - POST /api/mfa/totp/confirm
-//   - GET  /api/mfa/totp/status
-//   - POST /api/mfa/totp/unbind
+//   - POST   /api/mfa/totp/bind
+//   - POST   /api/mfa/totp/confirm
+//   - GET    /api/mfa/totp/status
+//   - POST   /api/mfa/totp/unbind
+//   - GET    /api/mfa/admin/users/:id/totp
+//   - DELETE /api/mfa/admin/users/:id/totp
 func Register() {
+	servicemfa.SetAccountAdministrator(iamAccountAdministrator{})
 	model.Register[*modelmfa.TOTPDevice]()
 
 	middleware.RegisterAuth(verificationRateLimiter())
@@ -37,6 +41,8 @@ func Register() {
 	module.Use(module.NewWrapper("mfa/totp/confirm", "id", false, &servicemfa.TOTPConfirmService{}), module.CRUD(consts.PHASE_CREATE))
 	module.Use(module.NewWrapper("mfa/totp/status", "id", false, &servicemfa.TOTPStatusService{}), module.CRUD(consts.PHASE_LIST))
 	module.Use(module.NewWrapper("mfa/totp/unbind", "id", false, &servicemfa.TOTPUnbindService{}), module.CRUD(consts.PHASE_CREATE))
+	module.Use(module.NewWrapper("mfa/admin/users/:id/totp", "id", false, &servicemfa.AdminTOTPStatusService{}), module.Exact(consts.PHASE_GET))
+	module.Use(module.NewWrapper("mfa/admin/users/:id/totp", "id", false, &servicemfa.AdminTOTPResetService{}), module.Exact(consts.PHASE_DELETE))
 }
 
 // verificationRateLimiter throttles the MFA endpoints that accept a guessable

@@ -2,6 +2,7 @@ package servicemfa
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/hydroan/gst/database"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
@@ -34,50 +35,50 @@ func (t *TOTPStatusService) List(ctx *types.ServiceContext, req *model.Empty) (r
 		return nil, service.NewError(http.StatusUnauthorized, "authentication required")
 	}
 
-	// 2. Load active TOTP devices for the user.
-	devices := make([]*modelmfa.TOTPDevice, 0)
-	query := &modelmfa.TOTPDevice{
-		UserID:   ctx.UserID(),
-		IsActive: true,
-	}
-
-	if err = database.Database[*modelmfa.TOTPDevice](ctx).WithQuery(query).List(&devices); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to retrieve device information", err)
-	}
-
-	// 3. Count device states and build the public device view.
-	activeDeviceCount := len(devices)
-	deviceInfos := make([]modelmfa.TOTPDeviceInfo, 0, len(devices))
-
-	for _, device := range devices {
-		// Convert device metadata without sensitive fields.
-		deviceInfo := modelmfa.TOTPDeviceInfo{
-			ID:         device.ID,
-			DeviceName: device.DeviceName,
-			CreatedAt:  device.CreatedAt.Format("2006-01-02T15:04:05Z07:00"), // RFC3339 format
-		}
-
-		// Format the last-used timestamp when present.
-		if device.LastUsedAt != nil {
-			lastUsedStr := device.LastUsedAt.Format("2006-01-02T15:04:05Z07:00")
-			deviceInfo.LastUsedAt = &lastUsedStr
-		}
-
-		deviceInfos = append(deviceInfos, deviceInfo)
-	}
-
-	// 4. Build the response.
-	rsp = &modelmfa.TOTPStatusRsp{
-		Enabled:     activeDeviceCount > 0, // Active devices enable MFA
-		DeviceCount: activeDeviceCount,
-		Devices:     deviceInfos,
+	// 2. Build the status view scoped to the current user.
+	rsp, err = buildTOTPStatusRsp(ctx, ctx.UserID())
+	if err != nil {
+		return nil, err
 	}
 
 	log.Infoz("totp status retrieved successfully",
 		zap.String("user_id", ctx.UserID()),
-		zap.Int("total_devices", len(devices)),
-		zap.Int("active_devices", activeDeviceCount),
+		zap.Int("active_devices", rsp.DeviceCount),
 		zap.Bool("enabled", rsp.Enabled))
 
 	return rsp, nil
+}
+
+// buildTOTPStatusRsp loads one account's active TOTP devices and renders the
+// sanitized enrollment view shared by the self-service and administrative
+// status endpoints: device metadata only, never secrets or recovery-code
+// hashes.
+func buildTOTPStatusRsp(ctx *types.ServiceContext, userID string) (*modelmfa.TOTPStatusRsp, error) {
+	devices := make([]*modelmfa.TOTPDevice, 0)
+	if err := database.Database[*modelmfa.TOTPDevice](ctx).WithQuery(&modelmfa.TOTPDevice{
+		UserID:   userID,
+		IsActive: true,
+	}).List(&devices); err != nil {
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to retrieve device information", err)
+	}
+
+	deviceInfos := make([]modelmfa.TOTPDeviceInfo, 0, len(devices))
+	for _, device := range devices {
+		deviceInfo := modelmfa.TOTPDeviceInfo{
+			ID:         device.ID,
+			DeviceName: device.DeviceName,
+			CreatedAt:  device.CreatedAt.Format(time.RFC3339),
+		}
+		if device.LastUsedAt != nil {
+			lastUsedStr := device.LastUsedAt.Format(time.RFC3339)
+			deviceInfo.LastUsedAt = &lastUsedStr
+		}
+		deviceInfos = append(deviceInfos, deviceInfo)
+	}
+
+	return &modelmfa.TOTPStatusRsp{
+		Enabled:     len(devices) > 0,
+		DeviceCount: len(devices),
+		Devices:     deviceInfos,
+	}, nil
 }

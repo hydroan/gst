@@ -2,15 +2,7 @@
 
 本文记录 `module/mfa` 在多租户项目中的边界。MFA 管理的是账号主体的第二因素，不直接归属某个 tenant。tenant 是否要求 MFA 是租户策略、权限或登录策略问题，不是 MFA 设备本身的归属问题。
 
-## 当前接口结论
-
-当前 `module/mfa` 没有 in tenant 接口，也没有跨 tenant 接口。所有已注册接口都不属于 tenant。
-
 ## 不属于 tenant 的接口
-
-- `POST /api/mfa/totp/check`
-
-  登录前检查账号是否需要 TOTP。该接口是 public pre-login 接口，通过 `AccountAuthenticator` 校验用户名和密码，再按认证出的账号 ID 查询该账号是否存在可用 TOTP 设备。它不使用 tenant membership。
 
 - `POST /api/mfa/totp/bind`
 
@@ -24,35 +16,33 @@
 
   查询当前已登录用户自己的 TOTP 状态。查询范围是当前 `UserID`，不是当前 tenant。
 
-- `POST /api/mfa/totp/verify`
-
-  当前已登录用户验证 TOTP code。即使请求带了 device ID，校验范围也限定在当前 `UserID` 下的可用设备。
-
 - `POST /api/mfa/totp/unbind`
 
-  当前已登录用户解绑自己的 TOTP 设备。解绑前需要一次 fresh auth，解绑范围仍限定在当前 `UserID`。
+  当前已登录用户解绑自己的 TOTP 设备。解绑前需要一次 fresh auth——提交 TOTP code 或恢复码，证明仍持有第二因素本身；密码不被接受。解绑范围仍限定在当前 `UserID`。
+
+登录时的二因子强制不是独立接口：`POST /api/login` 通过 authn login verifier 调用 MFA 校验，作用范围是登录的账号本身，不归属 tenant。
 
 ## in tenant 的接口
 
-当前没有。
+- `GET /api/mfa/admin/users/:id/totp`
 
-如果以后新增租户管理员管理成员 MFA 的接口，例如重置、停用某个租户成员的 MFA，这类接口才属于 in tenant。它们应该要求当前 tenant 下的 RBAC 权限，并校验目标用户属于当前 tenant。
+  管理员查看目标用户的 TOTP 注册状态（脱敏视图，不含秘钥与恢复码哈希）。
+
+- `DELETE /api/mfa/admin/users/:id/totp`
+
+  管理员强制清除目标用户的全部 TOTP 设备。这是自助 unbind 砍掉密码路径后的救援通道：同时丢失设备与恢复码的账号只能由管理员重置。
+
+两条接口的授权都经 `AccountAdministrator` 判定。内置 module adapter 委托框架 IAM 的 `EnsureTenantAdmin` 规则：system root 全局放行；tenant 管理员必须在当前 tenant 通过路由授权，且目标用户必须是该 tenant 成员；system root 永远不能作为 tenant 管理面的目标。
 
 ## 跨 tenant 的接口
 
 当前没有。
 
-如果以后新增平台级全局查询、清理或强制解绑 MFA 设备的接口，这类接口属于跨 tenant 管理面。它们应该只对 root 或 platform admin 开放，不应授予普通 tenant admin。
+system root 通过上述 in tenant 接口即可管理任意账号（`EnsureTenantAdmin` 对 root actor 全局放行）。如果以后新增平台级全局查询、批量清理接口，它们应该只对 root 或 platform admin 开放，不应授予普通 tenant admin。
 
 ## 模型边界
 
 - `TOTPDevice` 不需要增加 `TenantID`。它表示用户账号的第二因素设备，不表示租户资源。
 - MFA 设备与 `UserID` 或账号 ID 绑定，不与 tenant 绑定。
 - tenant 是否要求登录或访问时完成 MFA，应由 tenant policy、authz 或项目自己的登录策略表达。
-- `module/mfa` 通过 `AccountAuthenticator` 连接宿主账号系统。module copy 模式下，业务项目应安装自己的 authenticator adapter，不要让 `internal/service/mfa` 直接依赖具体 IAM 或 User 模型。
-
-## 与 tenant resolver 的关系
-
-当前 MFA 接口不依赖 authz tenant resolver。`POST /api/mfa/totp/check` 是 public pre-login 接口，默认不会经过 authz tenant resolver。
-
-如果业务项目的登录本身是 tenant-scoped，应在项目自己的 `AccountAuthenticator` 中根据可信来源解析 tenant，例如 host、path、session，或由网关写入且服务端信任的 header。通用 MFA 模块不应该直接拥有 tenant 语义。
+- `module/mfa` 通过 `AccountAdministrator` 连接宿主的管理授权模型。module copy 模式下，业务项目应从 service/mfa 之外的项目自有代码安装自己的 authorizer adapter；未安装时管理接口全部拒绝。

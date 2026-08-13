@@ -13,7 +13,10 @@ import (
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
+	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
+	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
+	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/module/mfa"
@@ -50,7 +53,30 @@ func TestMain(m *testing.M) {
 			iam.Register()
 			mfa.Register()
 		},
+		Seed: seedRootAccount,
 	})
+}
+
+const rootPassword = "12345678"
+
+// seedRootAccount creates the built-in system root, the only actor the noop
+// RBAC grants, so administrative MFA routes have a passing caller to test.
+func seedRootAccount() {
+	ctx := context.Background()
+
+	user := &modeliamuser.User{Username: consts.AUTHZ_USER_ROOT, Status: modeliamuser.UserStatusActive}
+	user.ID = consts.AUTHZ_USER_ROOT
+	if err := database.Database[*modeliamuser.User](ctx).Create(user); err != nil {
+		panic(err)
+	}
+
+	credential, err := serviceiamaccount.NewPasswordCredential(ctx, user.ID, rootPassword, false)
+	if err != nil {
+		panic(err)
+	}
+	if err := database.Database[*modeliamaccount.PasswordCredential](ctx).Create(credential); err != nil {
+		panic(err)
+	}
 }
 
 func TestTOTPStatus(t *testing.T) {
@@ -393,6 +419,76 @@ func TestTOTPUnbindErrorContract(t *testing.T) {
 		})
 		testutil.RequireError(t, err, http.StatusNotFound, "device not found or already unbound")
 		assertTOTPDeviceActive(t, deviceID)
+	})
+}
+
+func TestTOTPAdmin(t *testing.T) {
+	account := newTOTPTestAccount(t, "totp_admin_target")
+	deviceID, _, _ := bindTOTPDeviceForTest(t, account.SessionID, "test-device-admin")
+
+	rootSessionID := loginSessionIDFromCookie(t, iam.LoginReq{
+		Username: consts.AUTHZ_USER_ROOT,
+		Password: rootPassword,
+	})
+	rootCli := mfaSessionClient(t, rootSessionID)
+	adminPath := "/api/mfa/admin/users/" + account.UserID + "/totp"
+
+	t.Run("root_reads_target_status", func(t *testing.T) {
+		resp, err := rootCli.Do(http.MethodGet, adminPath, nil)
+		require.NoError(t, err)
+		rsp := testutil.DecodeResp[*mfa.TOTPStatusRsp](t, resp)
+		require.True(t, rsp.Enabled)
+		require.Equal(t, 1, rsp.DeviceCount)
+		require.Len(t, rsp.Devices, 1)
+		require.Equal(t, deviceID, rsp.Devices[0].ID)
+	})
+
+	t.Run("ordinary_user_is_denied", func(t *testing.T) {
+		other := newTOTPTestAccount(t, "totp_admin_bystander")
+		otherCli := mfaSessionClient(t, other.SessionID)
+
+		_, err := otherCli.Do(http.MethodGet, adminPath, nil)
+		testutil.RequireError(t, err, http.StatusForbidden)
+		_, err = otherCli.Do(http.MethodDelete, adminPath, nil)
+		testutil.RequireError(t, err, http.StatusForbidden)
+		assertTOTPDeviceActive(t, deviceID)
+	})
+
+	t.Run("root_cannot_be_targeted_by_itself_through_tenant_api", func(t *testing.T) {
+		// EnsureTenantAdmin grants root as an actor, so root may manage any
+		// account, including inspecting the root account: system-root actors
+		// bypass the target checks entirely.
+		resp, err := rootCli.Do(http.MethodGet, "/api/mfa/admin/users/"+consts.AUTHZ_USER_ROOT+"/totp", nil)
+		require.NoError(t, err)
+		rsp := testutil.DecodeResp[*mfa.TOTPStatusRsp](t, resp)
+		require.False(t, rsp.Enabled)
+	})
+
+	t.Run("root_resets_enrollment_and_target_logs_in_without_second_factor", func(t *testing.T) {
+		resp, err := rootCli.Do(http.MethodDelete, adminPath, nil)
+		require.NoError(t, err)
+		rsp := testutil.DecodeResp[*mfa.AdminTOTPResetRsp](t, resp)
+		require.Equal(t, 1, rsp.RemovedDeviceCount)
+
+		devices := make([]*modelmfa.TOTPDevice, 0)
+		require.NoError(t, database.Database[*modelmfa.TOTPDevice](context.Background()).
+			WithQuery(&modelmfa.TOTPDevice{UserID: account.UserID}).
+			List(&devices))
+		require.Empty(t, devices, "reset must hard-delete every device row")
+
+		// The rescue closes end to end: the reset account logs in with the
+		// first factor alone.
+		_ = loginSessionIDFromCookie(t, iam.LoginReq{
+			Username: account.Username,
+			Password: account.Password,
+		})
+	})
+
+	t.Run("reset_without_enrollment_removes_nothing", func(t *testing.T) {
+		resp, err := rootCli.Do(http.MethodDelete, adminPath, nil)
+		require.NoError(t, err)
+		rsp := testutil.DecodeResp[*mfa.AdminTOTPResetRsp](t, resp)
+		require.Zero(t, rsp.RemovedDeviceCount)
 	})
 }
 
