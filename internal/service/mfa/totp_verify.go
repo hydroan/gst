@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/service"
@@ -82,11 +83,28 @@ func (t *TOTPVerifyService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 		}, nil
 	}
 
+	// A replayed code answers exactly like a wrong one so callers cannot
+	// distinguish replay detection from ordinary failure.
+	if err = markTOTPCodeUsed(ctx, ctx.UserID(), code); err != nil {
+		if errors.Is(err, errTOTPCodeReplayed) {
+			log.Warnz("replayed totp code rejected", zap.String("user_id", ctx.UserID()))
+			return &modelmfa.TOTPVerifyRsp{
+				Valid:   false,
+				Message: "invalid verification code",
+			}, nil
+		}
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify TOTP code", err)
+	}
+
 	now := time.Now().UTC()
 	validDevice.LastUsedAt = &now
 
-	// A failed usage-timestamp update never fails the verification itself.
-	if err = database.Database[*modelmfa.TOTPDevice](ctx).Update(validDevice); err != nil {
+	// A failed usage-timestamp update never fails the verification itself. The
+	// write stays narrowed to last_used_at: this path holds no lock, and a full
+	// row write could resurrect recovery-code hashes consumed concurrently.
+	if err = database.Database[*modelmfa.TOTPDevice](ctx).
+		WithSelect(colTOTPDeviceLastUsedAt).
+		Update(validDevice); err != nil {
 		log.Errorz("failed to update device", zap.Error(err))
 	}
 

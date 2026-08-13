@@ -129,10 +129,11 @@ func loadTOTPBindChallenge(ctx context.Context, challengeID string) (totpBindCha
 	return challenge, nil
 }
 
-// consumeTOTPBindChallenge deletes a confirmed challenge so it cannot be reused.
+// consumeTOTPBindChallenge deletes a validated challenge so it cannot be reused.
 //
-// Confirm calls this only after the active device has been created, preserving
-// the challenge when the user submits a wrong TOTP code or storage fails.
+// Confirm calls this after code validation and before any storage work: a
+// wrong code keeps the challenge alive for retry, while a consumed challenge
+// can never start a second device creation even when later steps fail.
 func consumeTOTPBindChallenge(ctx context.Context, challengeID string) error {
 	challengeID = strings.TrimSpace(challengeID)
 	if challengeID == "" {

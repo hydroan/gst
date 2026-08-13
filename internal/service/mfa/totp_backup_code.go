@@ -16,6 +16,7 @@ import (
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/datatypes"
 )
 
 const (
@@ -23,6 +24,15 @@ const (
 	totpBackupCodeRawLength = 16
 	totpBackupCodeGroupSize = 4
 	totpBackupCodeAlphabet  = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+)
+
+// Column references for narrowed TOTPDevice updates; MFA services carry no
+// generated Cols vars. Usage writes stay narrowed to the columns they own so a
+// stale in-memory device snapshot can never write back a recovery-code hash
+// that a concurrently committed consumption already removed.
+var (
+	colTOTPDeviceBackupCodeHashes = types.NewColumn[datatypes.JSONSlice[string]]("backup_code_hashes")
+	colTOTPDeviceLastUsedAt       = types.NewTimeColumn("last_used_at")
 )
 
 var errTOTPBackupCodeInvalid = errors.New("invalid backup code")
@@ -107,7 +117,9 @@ func consumeTOTPBackupCodeInTx(ctx context.Context, userID, code string, now tim
 
 			device.BackupCodeHashes = append(device.BackupCodeHashes[:i], device.BackupCodeHashes[i+1:]...)
 			device.LastUsedAt = &now
-			if err := database.Database[*modelmfa.TOTPDevice](ctx).Update(device); err != nil {
+			if err := database.Database[*modelmfa.TOTPDevice](ctx).
+				WithSelect(colTOTPDeviceBackupCodeHashes, colTOTPDeviceLastUsedAt).
+				Update(device); err != nil {
 				return errors.Wrap(err, "consume TOTP backup code")
 			}
 			return nil

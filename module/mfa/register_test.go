@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -203,8 +204,9 @@ func TestTOTPVerify(t *testing.T) {
 	cli := mfaSessionClient(t, account.SessionID)
 
 	t.Run("valid_code", func(t *testing.T) {
-		code, err := totp.GenerateCode(secret, time.Now())
-		require.NoError(t, err)
+		// The current period's code was consumed by confirm inside
+		// bindTOTPDeviceForTest, so this request needs the next period's code.
+		code := nextPeriodTOTPCode(t, secret)
 		resp, err := cli.Do(http.MethodPost, verifyPath, mfa.TOTPVerifyReq{TOTPCode: code})
 		require.NoError(t, err)
 		rsp := testutil.DecodeResp[*mfa.TOTPVerifyRsp](t, resp)
@@ -355,8 +357,9 @@ func TestTOTPUnbind(t *testing.T) {
 	})
 
 	t.Run("valid_totp", func(t *testing.T) {
-		code, err := totp.GenerateCode(secret, time.Now())
-		require.NoError(t, err)
+		// The current period's code was consumed by confirm inside
+		// bindTOTPDeviceForTest, so this request needs the next period's code.
+		code := nextPeriodTOTPCode(t, secret)
 		resp, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
 			DeviceID: deviceID,
 			TOTPCode: code,
@@ -368,6 +371,145 @@ func TestTOTPUnbind(t *testing.T) {
 		require.NotEmpty(t, rsp.Message)
 		testutil.RequireDataFields(t, resp, "success", "device_count")
 	})
+}
+
+func TestTOTPVerifyReplayProtection(t *testing.T) {
+	account := newTOTPTestAccount(t, "totp_replay_user")
+	challengeID, secret := createTOTPBindingChallenge(t, account.SessionID)
+	cli := mfaSessionClient(t, account.SessionID)
+
+	confirmCode, err := totp.GenerateCode(secret, time.Now())
+	require.NoError(t, err)
+	confirmRsp, err := client.Post[mfa.TOTPConfirmRsp](cli, confirmPath, mfa.TOTPConfirmReq{
+		ChallengeID: challengeID,
+		Code:        confirmCode,
+		DeviceName:  "test-device-replay",
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, confirmRsp.DeviceID)
+
+	t.Run("code_consumed_by_confirm_is_rejected", func(t *testing.T) {
+		resp, err := cli.Do(http.MethodPost, verifyPath, mfa.TOTPVerifyReq{TOTPCode: confirmCode})
+		require.NoError(t, err)
+		rsp := testutil.DecodeResp[*mfa.TOTPVerifyRsp](t, resp)
+		require.False(t, rsp.Valid)
+	})
+
+	t.Run("fresh_code_verifies_once_then_rejected", func(t *testing.T) {
+		code := nextPeriodTOTPCode(t, secret)
+
+		resp, err := cli.Do(http.MethodPost, verifyPath, mfa.TOTPVerifyReq{TOTPCode: code})
+		require.NoError(t, err)
+		rsp := testutil.DecodeResp[*mfa.TOTPVerifyRsp](t, resp)
+		require.True(t, rsp.Valid)
+
+		resp, err = cli.Do(http.MethodPost, verifyPath, mfa.TOTPVerifyReq{TOTPCode: code})
+		require.NoError(t, err)
+		rsp = testutil.DecodeResp[*mfa.TOTPVerifyRsp](t, resp)
+		require.False(t, rsp.Valid)
+	})
+}
+
+func TestTOTPConfirmConcurrentDuplicate(t *testing.T) {
+	account := newTOTPTestAccount(t, "totp_concurrent_user")
+	challengeID, secret := createTOTPBindingChallenge(t, account.SessionID)
+
+	code, err := totp.GenerateCode(secret, time.Now())
+	require.NoError(t, err)
+
+	// Clients are built on the main goroutine because the session helper
+	// asserts through t, which must not run on spawned goroutines.
+	clients := []*client.Client{
+		mfaSessionClient(t, account.SessionID),
+		mfaSessionClient(t, account.SessionID),
+	}
+	results := make([]error, len(clients))
+	var wg sync.WaitGroup
+	for i, cli := range clients {
+		wg.Add(1)
+		go func(i int, cli *client.Client) {
+			defer wg.Done()
+			_, results[i] = cli.Do(http.MethodPost, confirmPath, mfa.TOTPConfirmReq{
+				ChallengeID: challengeID,
+				Code:        code,
+				DeviceName:  fmt.Sprintf("test-device-concurrent-%d", i),
+			})
+		}(i, cli)
+	}
+	wg.Wait()
+
+	succeeded := 0
+	for _, resultErr := range results {
+		if resultErr == nil {
+			succeeded++
+		}
+	}
+	require.Equal(t, 1, succeeded, "exactly one concurrent confirm must win: %v", results)
+
+	devices := make([]*modelmfa.TOTPDevice, 0)
+	require.NoError(t, database.Database[*modelmfa.TOTPDevice](context.Background()).
+		WithQuery(&modelmfa.TOTPDevice{UserID: account.UserID}).
+		List(&devices))
+	require.Len(t, devices, 1)
+}
+
+func TestTOTPDeviceUniqueSecretIndex(t *testing.T) {
+	ctx := context.Background()
+	secret := "UNIQUEINDEXSECRETUNIQUEINDEXSECRETUNIQUEINDEXSECRETA"
+
+	first := &modelmfa.TOTPDevice{
+		UserID:     "unique-index-user-1",
+		DeviceName: "device-a",
+		Secret:     secret,
+		IsActive:   true,
+	}
+	require.NoError(t, database.Database[*modelmfa.TOTPDevice](ctx).Create(first))
+	t.Cleanup(func() {
+		_ = database.Database[*modelmfa.TOTPDevice](ctx).WithPurge(true).Delete(first)
+	})
+
+	duplicate := &modelmfa.TOTPDevice{
+		UserID:     "unique-index-user-1",
+		DeviceName: "device-b",
+		Secret:     secret,
+		IsActive:   true,
+	}
+	require.Error(t, database.Database[*modelmfa.TOTPDevice](ctx).Create(duplicate),
+		"binding the same secret twice for one user must hit the unique index")
+
+	otherUser := &modelmfa.TOTPDevice{
+		UserID:     "unique-index-user-2",
+		DeviceName: "device-c",
+		Secret:     secret,
+		IsActive:   true,
+	}
+	require.NoError(t, database.Database[*modelmfa.TOTPDevice](ctx).Create(otherUser),
+		"the unique index scopes secrets per user, not globally")
+	t.Cleanup(func() {
+		_ = database.Database[*modelmfa.TOTPDevice](ctx).WithPurge(true).Delete(otherUser)
+	})
+}
+
+func TestTOTPVerificationRateLimit(t *testing.T) {
+	account := newTOTPTestAccount(t, "totp_ratelimit_user")
+	cli := mfaSessionClient(t, account.SessionID)
+
+	// The user has no bound device: every attempt fails fast but still spends
+	// rate budget, because throttling runs before the handler.
+	for range 5 {
+		_, err := cli.Do(http.MethodPost, verifyPath, mfa.TOTPVerifyReq{TOTPCode: "000000"})
+		testutil.RequireError(t, err, http.StatusBadRequest)
+	}
+
+	_, err := cli.Do(http.MethodPost, verifyPath, mfa.TOTPVerifyReq{TOTPCode: "000000"})
+	testutil.RequireError(t, err, http.StatusTooManyRequests, "too many requests")
+
+	// Other throttled endpoints keep their own budget: the same user's next
+	// unbind attempt is judged by the handler, not the limiter.
+	resp, err := cli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{DeviceID: "missing-device"})
+	require.NoError(t, err)
+	rsp := testutil.DecodeResp[*mfa.TOTPUnbindRsp](t, resp)
+	require.False(t, rsp.Success)
 }
 
 func newTOTPTestAccount(t *testing.T, prefix string) totpTestAccount {
@@ -540,6 +682,18 @@ func bindTOTPDeviceForTest(t *testing.T, sessionID, deviceName string) (string, 
 	require.NotEmpty(t, confirmRsp.BackupCodes)
 
 	return confirmRsp.DeviceID, secret, confirmRsp.BackupCodes
+}
+
+// nextPeriodTOTPCode returns a code from the next TOTP period. Replay
+// protection consumes the current period's code at confirm time, so follow-up
+// requests inside the same test period need the adjacent code, which
+// Validate's default skew of one period still accepts.
+func nextPeriodTOTPCode(t *testing.T, secret string) string {
+	t.Helper()
+
+	code, err := totp.GenerateCode(secret, time.Now().Add(30*time.Second))
+	require.NoError(t, err)
+	return code
 }
 
 func getTOTPDeviceForTest(t *testing.T, deviceID string) *modelmfa.TOTPDevice {

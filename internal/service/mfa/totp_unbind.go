@@ -102,6 +102,7 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 		if verifyErr := verifyTOTPUnbindFreshAuth(ctx, userID, req, devices, now); verifyErr != nil {
 			if errors.Is(verifyErr, errTOTPUnbindVerificationInvalid) ||
 				errors.Is(verifyErr, errTOTPCodeInvalid) ||
+				errors.Is(verifyErr, errTOTPCodeReplayed) ||
 				errors.Is(verifyErr, errTOTPBackupCodeInvalid) {
 				log.Warnz("invalid fresh authentication for unbind",
 					zap.String("user_id", userID),
@@ -207,7 +208,7 @@ func verifyTOTPUnbindFreshAuth(
 	case req.Password != "":
 		return nil
 	case strings.TrimSpace(req.TOTPCode) != "":
-		return validateTOTPCodeForDevices(req.TOTPCode, devices)
+		return validateTOTPCodeForDevices(ctx, userID, req.TOTPCode, devices)
 	case strings.TrimSpace(req.BackupCode) != "":
 		return consumeTOTPBackupCodeInTx(ctx, userID, req.BackupCode, now)
 	default:
@@ -242,7 +243,9 @@ var errTOTPCodeInvalid = errors.New("invalid TOTP code")
 //
 // This helper is for flows that need proof the current user still controls at
 // least one active authenticator, such as fresh authentication before unbinding
-// a different device. It never accepts a device ID from the caller.
+// a different device. It never accepts a device ID from the caller. A valid
+// code is consumed on success and rejected when submitted again within its
+// validation window.
 func ValidateUserTOTPCode(ctx *types.ServiceContext, userID, code string) error {
 	if ctx == nil || strings.TrimSpace(userID) == "" {
 		return service.NewError(http.StatusUnauthorized, "authentication required")
@@ -256,14 +259,16 @@ func ValidateUserTOTPCode(ctx *types.ServiceContext, userID, code string) error 
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to list TOTP devices", err)
 	}
 
-	return validateTOTPCodeForDevices(code, devices)
+	return validateTOTPCodeForDevices(ctx, userID, code, devices)
 }
 
-// validateTOTPCodeForDevices checks a code against an already-loaded active device list.
+// validateTOTPCodeForDevices checks a code against an already-loaded active
+// device list and consumes it on success.
 //
 // Transactional callers use this to avoid issuing another query while holding a
-// TOTPDevice lock.
-func validateTOTPCodeForDevices(code string, devices []*modelmfa.TOTPDevice) error {
+// TOTPDevice lock. The replay marker is written even when the surrounding
+// transaction later rolls back; erring toward a burned code is the safe side.
+func validateTOTPCodeForDevices(ctx context.Context, userID, code string, devices []*modelmfa.TOTPDevice) error {
 	if strings.TrimSpace(code) == "" {
 		return errTOTPCodeInvalid
 	}
@@ -272,7 +277,7 @@ func validateTOTPCodeForDevices(code string, devices []*modelmfa.TOTPDevice) err
 			continue
 		}
 		if totp.Validate(code, device.Secret) {
-			return nil
+			return markTOTPCodeUsed(ctx, userID, code)
 		}
 	}
 	return errTOTPCodeInvalid

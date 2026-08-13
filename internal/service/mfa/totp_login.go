@@ -84,9 +84,21 @@ func verifyLoginTOTPCode(ctx *types.ServiceContext, devices []*modelmfa.TOTPDevi
 		return ErrLoginTOTPCodeInvalid
 	}
 
+	// A replayed code fails login exactly like a wrong one.
+	if err := markTOTPCodeUsed(ctx, device.UserID, code); err != nil {
+		if errors.Is(err, errTOTPCodeReplayed) {
+			return ErrLoginTOTPCodeInvalid
+		}
+		return errors.Wrap(err, "mark login TOTP code used")
+	}
+
 	now := time.Now().UTC()
 	device.LastUsedAt = &now
-	if err := database.Database[*modelmfa.TOTPDevice](ctx).Update(device); err != nil {
+	// Narrowed for the same reason as verify: this lock-free write must not
+	// resurrect concurrently consumed recovery-code hashes.
+	if err := database.Database[*modelmfa.TOTPDevice](ctx).
+		WithSelect(colTOTPDeviceLastUsedAt).
+		Update(device); err != nil {
 		return errors.Wrap(err, "update login TOTP device usage")
 	}
 	return nil

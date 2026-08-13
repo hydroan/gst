@@ -17,18 +17,22 @@ import (
 //
 // The service loads the cached binding challenge, ensures it belongs to the
 // current user and session, validates the submitted TOTP code against the
-// server-held secret, and then creates the active device. It returns one-time
-// recovery codes only in this response while storing bcrypt hashes in the device
-// record. The binding challenge is consumed only after the device is saved.
+// server-held secret, consumes the challenge, and then creates the active
+// device. It returns one-time recovery codes only in this response while
+// storing bcrypt hashes in the device record. Consuming the challenge before
+// any storage work means a failure can never leave an activated device whose
+// recovery codes were generated but never delivered.
 type TOTPConfirmService struct {
 	service.Base[*modelmfa.TOTPConfirm, *modelmfa.TOTPConfirmReq, *modelmfa.TOTPConfirmRsp]
 }
 
 // Create turns a valid binding challenge into an active TOTP device.
 //
-// The method verifies challenge ownership, checks the submitted TOTP code,
-// prevents duplicate binding for the same secret, creates recovery codes, stores
-// only their hashes, persists the device, and then consumes the challenge.
+// The method verifies challenge ownership, checks and consumes the submitted
+// TOTP code, consumes the challenge, creates recovery codes, stores only their
+// hashes, and persists the device. The (user_id, secret) unique index is the
+// authoritative duplicate guard; the List pre-check only provides the friendly
+// conflict message on the common path.
 func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPConfirmReq) (rsp *modelmfa.TOTPConfirmRsp, err error) {
 	log := t.WithContext(ctx, ctx.Phase())
 
@@ -57,8 +61,26 @@ func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modelmfa.TOT
 	if !valid {
 		return nil, service.NewError(http.StatusBadRequest, "invalid TOTP code")
 	}
+	// A wrong code above keeps the challenge alive for retry; a replayed code
+	// answers like a wrong one and also keeps the challenge, so the user can
+	// retry with the next period's code.
+	if err = markTOTPCodeUsed(ctx, ctx.UserID(), req.Code); err != nil {
+		if errors.Is(err, errTOTPCodeReplayed) {
+			return nil, service.NewError(http.StatusBadRequest, "invalid TOTP code")
+		}
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to confirm TOTP binding", err)
+	}
 
 	log.Infoz("totp code validated successfully", zap.String("user_id", ctx.UserID()))
+
+	// Consuming the challenge before any storage work is the atomicity anchor
+	// of this flow: once consumed it cannot start a second device creation, and
+	// a later storage failure aborts before recovery codes exist, so nothing is
+	// silently lost. Concurrent confirms that already loaded the challenge are
+	// stopped by the (user_id, secret) unique index instead.
+	if err = consumeTOTPBindChallenge(ctx, req.ChallengeID); err != nil {
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to consume TOTP binding challenge", err)
+	}
 
 	devices := make([]*modelmfa.TOTPDevice, 0)
 	if err = database.Database[*modelmfa.TOTPDevice](ctx).WithQuery(&modelmfa.TOTPDevice{
@@ -97,10 +119,6 @@ func (t *TOTPConfirmService) Create(ctx *types.ServiceContext, req *modelmfa.TOT
 	log.Infoz("totp device created successfully",
 		zap.String("user_id", ctx.UserID()),
 		zap.String("device_id", device.ID))
-
-	if err = consumeTOTPBindChallenge(ctx, req.ChallengeID); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to consume TOTP binding challenge", err)
-	}
 
 	rsp = &modelmfa.TOTPConfirmRsp{
 		DeviceID:    device.ID,
