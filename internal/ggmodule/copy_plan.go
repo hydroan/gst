@@ -3,9 +3,11 @@ package ggmodule
 import (
 	"fmt"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/codegen/gen"
@@ -40,6 +42,7 @@ type CopyPlan struct {
 	TargetModelImportPath string
 
 	ExcludeSourceFiles []string
+	IncludeSourceFiles []string
 	PostNotes          []string
 
 	Actions    []moduleCopyAction
@@ -137,6 +140,9 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 	}
 	plan.PostNotes = manifest.Copy.PostNotes
 	plan.ExcludeSourceFiles = manifest.Copy.ExcludeSourceFiles
+	if includeErr := plan.resolveIncludeSourceFiles(manifest.Copy.IncludeSourceFiles); includeErr != nil {
+		return nil, includeErr
+	}
 	middleware, err := plan.resolveMiddleware(manifest.Copy.Middleware)
 	if err != nil {
 		return nil, err
@@ -265,6 +271,49 @@ func (p *CopyPlan) checkConflicts(force bool) error {
 		}
 	}
 	return nil
+}
+
+// resolveIncludeSourceFiles validates manifest include entries and stores them
+// on the plan. Includes are forced helper copies, so every entry must be a real
+// non-test file under the module's service source tree, must not also be
+// excluded, and must not declare a service struct: action service files are
+// copied through their DSL actions, not through the manifest.
+func (p *CopyPlan) resolveIncludeSourceFiles(includes []string) error {
+	servicePrefix := pathpkg.Join("internal", "service", p.Name) + "/"
+	for _, rel := range includes {
+		if !strings.HasPrefix(rel, servicePrefix) {
+			return fmt.Errorf("includeSourceFiles entry %q must live under %s", rel, servicePrefix)
+		}
+		if strings.HasSuffix(rel, "_test.go") {
+			return fmt.Errorf("includeSourceFiles entry %q must not be a test file", rel)
+		}
+		if slices.Contains(p.ExcludeSourceFiles, rel) {
+			return fmt.Errorf("includeSourceFiles entry %q is also listed in excludeSourceFiles", rel)
+		}
+		sourcePath := filepath.Join(p.FrameworkRoot, filepath.FromSlash(rel))
+		if _, err := os.Stat(sourcePath); err != nil {
+			return fmt.Errorf("includeSourceFiles entry %q not found: %w", rel, err)
+		}
+		count, err := countServiceStructsInFile(sourcePath)
+		if err != nil {
+			return err
+		}
+		if count > 0 {
+			return fmt.Errorf("includeSourceFiles entry %q declares a service struct; action service files are copied through their DSL actions", rel)
+		}
+	}
+	p.IncludeSourceFiles = includes
+	return nil
+}
+
+// includeSourceFilePaths returns the manifest-included service files as
+// absolute framework paths, ready to join helper dependency discovery.
+func (p *CopyPlan) includeSourceFilePaths() []string {
+	paths := make([]string, 0, len(p.IncludeSourceFiles))
+	for _, rel := range p.IncludeSourceFiles {
+		paths = append(paths, filepath.Join(p.FrameworkRoot, filepath.FromSlash(rel)))
+	}
+	return paths
 }
 
 // ignoredSourcePath matches module.json copy.excludeSourceFiles against source files

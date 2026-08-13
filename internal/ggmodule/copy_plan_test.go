@@ -666,6 +666,104 @@ func TestBuildCopyPlanCopiesNestedActionsAndReachableHelpers(t *testing.T) {
 	}
 }
 
+func TestBuildCopyPlanCopiesManifestIncludedServiceFiles(t *testing.T) {
+	projectDir := newModuleCopyPlanProject(t)
+	writeNestedCopyTestModuleSource(t, projectDir)
+	frameworkRoot := filepath.Join(projectDir, "internal", "gst")
+
+	// standalone.go is referenced by no action service file, so dependency
+	// discovery never reaches it; the manifest include must force it in. It
+	// references a sibling that is equally unreachable, which must follow
+	// through the in-package closure seeded by the include.
+	entryServiceDir := filepath.Join(frameworkRoot, "internal", "service", "copytest", "entry")
+	if err := os.WriteFile(filepath.Join(entryServiceDir, "standalone.go"), []byte(`package servicecopytestentry
+
+func standaloneEntryHelper() string {
+	return standaloneOrphan()
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(entryServiceDir, "orphan.go"), []byte(`package servicecopytestentry
+
+func standaloneOrphan() string {
+	return "orphan"
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "module", "copytest", moduleManifestFilename), []byte(`{"copy":{"includeSourceFiles":["internal/service/copytest/entry/standalone.go"]}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(projectDir)
+
+	plan, err := BuildCopyPlan("copytest", CopyOptions{})
+	if err != nil {
+		t.Fatalf("BuildCopyPlan() error = %v", err)
+	}
+
+	helperTargets := plan.HelperTargets()
+	includedHelper := filepath.Join("service", "copytest", "entry", "standalone.go")
+	if !slices.Contains(helperTargets, includedHelper) {
+		t.Fatalf("HelperTargets() = %v, want manifest-included %s", helperTargets, includedHelper)
+	}
+	closureHelper := filepath.Join("service", "copytest", "entry", "orphan.go")
+	if !slices.Contains(helperTargets, closureHelper) {
+		t.Fatalf("HelperTargets() = %v, want include-seeded sibling %s", helperTargets, closureHelper)
+	}
+	includedContent := moduleCopyPlanFileContent(t, plan, includedHelper)
+	if !strings.Contains(includedContent, "package entry\n") {
+		t.Fatalf("manifest-included helper was not normalized:\n%s", includedContent)
+	}
+}
+
+func TestBuildCopyPlanRejectsInvalidIncludeSourceFiles(t *testing.T) {
+	cases := map[string]struct {
+		manifest string
+		wantErr  string
+	}{
+		"outside module service tree": {
+			manifest: `{"copy":{"includeSourceFiles":["internal/model/copytest/entry/entry.go"]}}`,
+			wantErr:  "must live under internal/service/copytest/",
+		},
+		"missing file": {
+			manifest: `{"copy":{"includeSourceFiles":["internal/service/copytest/entry/missing.go"]}}`,
+			wantErr:  "not found",
+		},
+		"test file": {
+			manifest: `{"copy":{"includeSourceFiles":["internal/service/copytest/entry/standalone_test.go"]}}`,
+			wantErr:  "must not be a test file",
+		},
+		"also excluded": {
+			manifest: `{"copy":{"excludeSourceFiles":["internal/service/copytest/entry/standalone.go"],"includeSourceFiles":["internal/service/copytest/entry/standalone.go"]}}`,
+			wantErr:  "also listed in excludeSourceFiles",
+		},
+		"action service file": {
+			manifest: `{"copy":{"includeSourceFiles":["internal/service/copytest/entry/create.go"]}}`,
+			wantErr:  "declares a service struct",
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			projectDir := newModuleCopyPlanProject(t)
+			writeNestedCopyTestModuleSource(t, projectDir)
+			frameworkRoot := filepath.Join(projectDir, "internal", "gst")
+			if err := os.WriteFile(filepath.Join(frameworkRoot, "module", "copytest", moduleManifestFilename), []byte(tc.manifest), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			t.Chdir(projectDir)
+
+			_, err := BuildCopyPlan("copytest", CopyOptions{})
+			if err == nil {
+				t.Fatalf("BuildCopyPlan() expected error containing %q, got nil", tc.wantErr)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("BuildCopyPlan() error = %v, want it to contain %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestBuildCopyPlanReportsExtraTargetModelFiles(t *testing.T) {
 	projectDir := newModuleCopyPlanProject(t)
 	writeCopyTestModuleSource(t, projectDir, nil)

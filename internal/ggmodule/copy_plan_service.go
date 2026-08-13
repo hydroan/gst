@@ -144,6 +144,17 @@ func (p *CopyPlan) collectHelperDependencyFiles(actions []moduleCopyAction) ([]s
 		helperFiles = append(helperFiles, clean)
 		return enqueueScan(clean)
 	}
+	// Manifest-included files join discovery exactly like referenced helpers:
+	// the file itself becomes a helper copy, and it seeds both the in-package
+	// symbol closure and the imported-package scan below.
+	for _, includePath := range p.includeSourceFilePaths() {
+		if err := addHelperFile(includePath); err != nil {
+			return nil, err
+		}
+		packageDir := filepath.Dir(includePath)
+		packageActions[packageDir] = append(packageActions[packageDir], includePath)
+	}
+
 	for packageDir, selectedFiles := range packageActions {
 		files, err := moduleCopyHelperDependencyFiles(packageDir, selectedFiles)
 		if err != nil {

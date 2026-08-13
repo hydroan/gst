@@ -21,7 +21,13 @@ type moduleCopyManifest struct {
 	// copy should skip, for example "internal/model/copytest/ignored.go". Excluded
 	// files are not copied and do not participate in copy-time model/action
 	// planning.
-	ExcludeSourceFiles []string                       `json:"excludeSourceFiles"`
+	ExcludeSourceFiles []string `json:"excludeSourceFiles"`
+	// IncludeSourceFiles lists framework-root relative files under the module's
+	// service source tree that copy must always carry as helper files, even when
+	// no action service file references them. Modules declare source here that is
+	// only reachable through hooks installed at package init, such as a login
+	// second-factor verifier.
+	IncludeSourceFiles []string                       `json:"includeSourceFiles"`
 	Middleware         []moduleCopyMiddlewareManifest `json:"middleware"`
 	PostNotes          []string                       `json:"postNotes"`
 }
@@ -63,11 +69,16 @@ func loadModuleManifest(moduleDir string) (moduleManifest, error) {
 	}
 
 	manifest.Copy.PostNotes = cleanModuleCopyPostNotes(manifest.Copy.PostNotes)
-	excludeSourceFiles, excludeErr := cleanModuleCopyExcludeSourceFiles(manifest.Copy.ExcludeSourceFiles)
+	excludeSourceFiles, excludeErr := cleanModuleCopySourceFiles("excludeSourceFiles", manifest.Copy.ExcludeSourceFiles)
 	if excludeErr != nil {
 		return moduleManifest{}, fmt.Errorf("parse %s: %w", path, excludeErr)
 	}
 	manifest.Copy.ExcludeSourceFiles = excludeSourceFiles
+	includeSourceFiles, includeErr := cleanModuleCopySourceFiles("includeSourceFiles", manifest.Copy.IncludeSourceFiles)
+	if includeErr != nil {
+		return moduleManifest{}, fmt.Errorf("parse %s: %w", path, includeErr)
+	}
+	manifest.Copy.IncludeSourceFiles = includeSourceFiles
 	middleware, middlewareErr := cleanModuleCopyMiddleware(manifest.Copy.Middleware)
 	if middlewareErr != nil {
 		return moduleManifest{}, fmt.Errorf("parse %s: %w", path, middlewareErr)
@@ -88,12 +99,12 @@ func cleanModuleCopyPostNotes(values []string) []string {
 	return cleaned
 }
 
-func cleanModuleCopyExcludeSourceFiles(values []string) ([]string, error) {
+func cleanModuleCopySourceFiles(field string, values []string) ([]string, error) {
 	cleaned := make([]string, 0, len(values))
 	for _, raw := range values {
 		value, err := cleanModuleCopyRelativePath(raw)
 		if err != nil {
-			return nil, fmt.Errorf("excludeSourceFiles contains unsafe framework-root relative path %q", raw)
+			return nil, fmt.Errorf("%s contains unsafe framework-root relative path %q", field, raw)
 		}
 		if value == "" {
 			continue

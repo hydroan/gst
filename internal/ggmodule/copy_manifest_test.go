@@ -78,6 +78,38 @@ func TestLoadModuleManifestReadsExcludeSourceFiles(t *testing.T) {
 	}, manifest.Copy.ExcludeSourceFiles)
 }
 
+func TestLoadModuleManifestReadsIncludeSourceFiles(t *testing.T) {
+	moduleDir := t.TempDir()
+	writeModuleManifestForTest(t, moduleDir, `{
+		"copy": {
+			"includeSourceFiles": [
+				" internal/service/copytest/standalone.go ",
+				"",
+				"internal/service/copytest/../copytest/orphan.go"
+			]
+		}
+	}`)
+
+	manifest, err := loadModuleManifest(moduleDir)
+
+	require.NoError(t, err)
+	require.Equal(t, []string{
+		"internal/service/copytest/standalone.go",
+		"internal/service/copytest/orphan.go",
+	}, manifest.Copy.IncludeSourceFiles)
+}
+
+func TestLoadModuleManifestRejectsUnsafeIncludeSourceFiles(t *testing.T) {
+	moduleDir := t.TempDir()
+	writeModuleManifestForTest(t, moduleDir, `{"copy":{"includeSourceFiles":["../internal/service/copytest/standalone.go"]}}`)
+
+	_, err := loadModuleManifest(moduleDir)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), moduleManifestFilename)
+	require.Contains(t, err.Error(), "includeSourceFiles")
+}
+
 func TestLoadModuleManifestReadsMiddleware(t *testing.T) {
 	moduleDir := t.TempDir()
 	writeModuleManifestForTest(t, moduleDir, `{
