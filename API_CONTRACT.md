@@ -129,6 +129,19 @@ query 名不要以 `_` 开头。反过来，所有裸名参数都属于业务字
 }
 ```
 
+## SSE 事件流接口
+
+部分接口以 Server-Sent Events 提供实时通知，前端用 `EventSource` 消费（自动携带
+登录态 cookie）；此类接口在 Swagger 中标注为 `text/event-stream` 响应。
+
+- 连接成功后是 `text/event-stream` 长连接，不使用统一 envelope；连接建立失败
+  （未登录、无权限、参数非法）时返回普通 envelope 错误。
+- 事件采用「薄提示」形态：只说明某资源有变化，不携带业务数据；前端收到后对
+  相关视图做防抖回查，数据一律以查询接口为准。事件名与回查范围以具体接口文档为准。
+- 服务端周期发送 `: ping` 注释帧保活，`EventSource` 自动忽略。
+- 断线由 `EventSource` 自动重连；`onopen`（含重连成功）时应对相关视图全量回查
+  一遍，作为漏事件的一致性兜底。
+
 ## 关键规则
 
 - 单个资源的 `id` 必须放在 URL 中，例如 `/api/groups/group-id-1`。
