@@ -41,7 +41,12 @@ func (c *TOTPCheckService) Create(ctx *types.ServiceContext, req *modelmfa.TOTPC
 			log.Errorz("mfa account authenticator is not configured", zap.String("username", req.Username), zap.Error(err))
 			return nil, newAccountAuthenticatorNotConfiguredServiceError(err)
 		}
-		return nil, service.NewErrorWithCause(http.StatusUnauthorized, "authentication failed", err)
+		if errors.Is(err, ErrAccountAuthenticationFailed) {
+			return nil, service.NewErrorWithCause(http.StatusUnauthorized, "authentication failed", err)
+		}
+		// Infrastructure failures are system errors; disguising them as 401
+		// would mislead callers and monitoring alike.
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to authenticate account", err)
 	}
 	if err = validateAuthenticatedAccount(account, ""); err != nil {
 		log.Errorz("mfa account authenticator returned invalid account", zap.String("username", req.Username), zap.Error(err))
