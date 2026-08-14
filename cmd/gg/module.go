@@ -150,7 +150,7 @@ func runModuleCopy(name string, opts moduleCopyOptions) error {
 		return runModuleCopyGen(baseline)
 	}}
 	if err := exec.Run(); err != nil {
-		if len(exec.WrittenFiles) > 0 {
+		if len(exec.WrittenFiles) > 0 || len(exec.DeletedFiles) > 0 {
 			printModuleCopyCleanup(name)
 		}
 		return err
@@ -159,8 +159,6 @@ func runModuleCopy(name string, opts moduleCopyOptions) error {
 	clioutput.Section("Done")
 	clioutput.Done("Module copied successfully")
 	printModuleCopyCleanup(name)
-	printModuleCopyExtraModelReminder(plan)
-	printModuleCopyExtraServiceReminder(plan)
 	printModuleCopyPostNotes(plan.PostNotes)
 	return nil
 }
@@ -209,8 +207,8 @@ func printModuleCopyPlan(plan *ggmodule.CopyPlan) {
 	printModuleCopyPlanGroup("Service files", plan.ServiceTargets())
 	printModuleCopyPlanGroup("Helper files", plan.HelperTargets())
 	printModuleCopyPlanGroup("Middleware files", plan.MiddlewareTargets())
-	printModuleCopyExtraModelReminder(plan)
-	printModuleCopyExtraServiceReminder(plan)
+	printModuleCopyStaleModelFiles(plan)
+	printModuleCopyStaleServiceFiles(plan)
 }
 
 func printModuleCopyPlanGroup(title string, files []string) {
@@ -228,32 +226,39 @@ func printModuleCopyCleanup(name string) {
 	clioutput.Item("", "To remove copied module code, delete model/%s, then run: gg gen --prune --clean-orphans", name)
 }
 
-func printModuleCopyExtraModelReminder(plan *ggmodule.CopyPlan) {
-	extraModelFiles := plan.ExtraModelTargets()
-	if len(extraModelFiles) == 0 {
+// printModuleCopyStaleModelFiles previews the stale model files the copy
+// execution will delete. It prints before the confirmation prompt, so
+// answering yes consents to exactly this list; test files and generated files
+// never appear here because the plan exempts them from pruning.
+func printModuleCopyStaleModelFiles(plan *ggmodule.CopyPlan) {
+	staleModelFiles := plan.StaleModelTargets()
+	if len(staleModelFiles) == 0 {
 		return
 	}
 
-	clioutput.Section("Extra Target Model Files")
-	clioutput.Warn("", "The target model directory contains files not present in the framework source")
-	for _, file := range extraModelFiles {
+	clioutput.Section("Stale Target Model Files")
+	clioutput.Warn("", "The target model directory contains files no longer present in the framework source")
+	for _, file := range staleModelFiles {
 		clioutput.Item("", "%s", file)
 	}
-	clioutput.Item("", "These files are not deleted automatically; review them before deleting")
+	clioutput.Item("", "These files will be deleted to keep the copied module in sync with the framework source")
 }
 
-func printModuleCopyExtraServiceReminder(plan *ggmodule.CopyPlan) {
-	extraServiceFiles := plan.ExtraServiceTargets()
-	if len(extraServiceFiles) == 0 {
+// printModuleCopyStaleServiceFiles previews the stale service files the copy
+// execution will delete, under the same consent contract as
+// printModuleCopyStaleModelFiles.
+func printModuleCopyStaleServiceFiles(plan *ggmodule.CopyPlan) {
+	staleServiceFiles := plan.StaleServiceTargets()
+	if len(staleServiceFiles) == 0 {
 		return
 	}
 
-	clioutput.Section("Extra Target Service Files")
-	clioutput.Warn("", "The target service directory contains files not produced by this module copy plan")
-	for _, file := range extraServiceFiles {
+	clioutput.Section("Stale Target Service Files")
+	clioutput.Warn("", "The target service directory contains files no longer produced by this module copy plan")
+	for _, file := range staleServiceFiles {
 		clioutput.Item("", "%s", file)
 	}
-	clioutput.Item("", "These files are not deleted automatically; review them before deleting")
+	clioutput.Item("", "These files will be deleted to keep the copied module in sync with the framework source")
 }
 
 func printModuleCopyPostNotes(notes []string) {

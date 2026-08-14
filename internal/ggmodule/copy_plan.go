@@ -49,18 +49,19 @@ type CopyPlan struct {
 	Middleware []moduleCopyMiddleware
 	Files      []moduleCopyFile
 
-	// ExtraModelFiles is warning-only upgrade guidance for files already
-	// present in TargetModelDir that do not have a matching source file under
-	// SourceModelDir in this copy plan. Module copy reports these files so
-	// callers can clean up stale local copies after framework module changes,
-	// but it must not delete them automatically because model directories can
-	// intentionally contain project-owned files.
-	ExtraModelFiles []string
-	// ExtraServiceFiles is warning-only upgrade guidance for target service
-	// files that are already present but are not produced by this copy plan.
-	// Module copy must not delete them automatically because service packages can
-	// intentionally contain project-owned adapters next to copied module code.
-	ExtraServiceFiles []string
+	// StaleModelFiles lists Go files already present in TargetModelDir that do
+	// not have a matching source file under SourceModelDir in this copy plan.
+	// They are stale copies left behind by an older framework version, and the
+	// copy execution deletes them so the target directory keeps mirroring the
+	// framework module source. Test files and generated files never enter the
+	// list; see staleTargetFiles for the exemptions.
+	StaleModelFiles []string
+	// StaleServiceFiles lists target service files that are already present
+	// but are not produced by this copy plan. The copy execution deletes them
+	// under the same mirror contract as StaleModelFiles: project-owned code
+	// belongs outside copied service directories, as the module postNotes
+	// instruct, so a non-exempt leftover here is stale module code.
+	StaleServiceFiles []string
 }
 
 // moduleCopyAction connects one DSL action to the framework service file that
@@ -161,8 +162,8 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 	if addModelErr := plan.addModelFiles(); addModelErr != nil {
 		return nil, addModelErr
 	}
-	if extraModelErr := plan.collectExtraModelFiles(); extraModelErr != nil {
-		return nil, extraModelErr
+	if staleModelErr := plan.collectStaleModelFiles(); staleModelErr != nil {
+		return nil, staleModelErr
 	}
 
 	actions, err := plan.collectActions(models)
@@ -182,8 +183,8 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 	if addServiceErr := plan.addServiceFiles(helperFiles); addServiceErr != nil {
 		return nil, addServiceErr
 	}
-	if extraServiceErr := plan.collectExtraServiceFiles(); extraServiceErr != nil {
-		return nil, extraServiceErr
+	if staleServiceErr := plan.collectStaleServiceFiles(); staleServiceErr != nil {
+		return nil, staleServiceErr
 	}
 	if addMiddlewareErr := plan.addMiddlewareFiles(); addMiddlewareErr != nil {
 		return nil, addMiddlewareErr
@@ -207,12 +208,16 @@ func (p *CopyPlan) checkSourceDirs() error {
 	return nil
 }
 
-// extraTargetFiles lists Go files already present in dir that this copy plan
+// staleTargetFiles lists Go files already present in dir that this copy plan
 // does not produce. The caller passes the plan file kinds that land in dir,
 // because copy output is not a mirror of the framework source tree: action
 // service files come from DSL ServiceFilename(), helper files from dependency
 // discovery, and excluded sources produce no target at all.
-func (p *CopyPlan) extraTargetFiles(dir string, kinds ...moduleCopyFileKind) ([]string, error) {
+//
+// Two kinds of project-owned files never count as stale: test files, which
+// goFilesInDir already skips, and generated files, which belong to their
+// generator (gg gen Cols files in particular) rather than to module copy.
+func (p *CopyPlan) staleTargetFiles(dir string, kinds ...moduleCopyFileKind) ([]string, error) {
 	info, err := os.Stat(dir)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -240,18 +245,26 @@ func (p *CopyPlan) extraTargetFiles(dir string, kinds ...moduleCopyFileKind) ([]
 	if err != nil {
 		return nil, err
 	}
-	extra := make([]string, 0)
+	stale := make([]string, 0)
 	for _, targetPath := range targetFiles {
 		rel, err := filepath.Rel(dir, targetPath)
 		if err != nil {
 			return nil, err
 		}
-		if !expectedTargets[rel] {
-			extra = append(extra, targetPath)
+		if expectedTargets[rel] {
+			continue
 		}
+		generated, err := isGeneratedFile(targetPath)
+		if err != nil {
+			return nil, err
+		}
+		if generated {
+			continue
+		}
+		stale = append(stale, targetPath)
 	}
-	sort.Strings(extra)
-	return extra, nil
+	sort.Strings(stale)
+	return stale, nil
 }
 
 func (p *CopyPlan) checkConflicts(force bool) error {
@@ -353,20 +366,20 @@ func (p *CopyPlan) MiddlewareTargets() []string {
 	return p.targetsByKind(moduleCopyFileMiddleware)
 }
 
-// ExtraModelTargets returns current-project model files that are not part of
-// the current copy plan. These are warnings only: copied model packages can
-// contain project-owned files, and module copy cannot prove an extra file is
-// obsolete just because the framework source no longer produces it.
-func (p *CopyPlan) ExtraModelTargets() []string {
-	return append([]string(nil), p.ExtraModelFiles...)
+// StaleModelTargets returns current-project model files that the copy
+// execution will delete: files an older copy produced that the current
+// framework module source no longer contains. Preview and execution consume
+// this same list, so the files shown as pending deletion are exactly the
+// files the prune phase removes.
+func (p *CopyPlan) StaleModelTargets() []string {
+	return append([]string(nil), p.StaleModelFiles...)
 }
 
-// ExtraServiceTargets returns current-project service files that are not part
-// of the current copy plan. These are warnings only: copied service packages can
-// contain project-owned adapters, and module copy cannot prove an extra file is
-// obsolete just because the framework source no longer produces it.
-func (p *CopyPlan) ExtraServiceTargets() []string {
-	return append([]string(nil), p.ExtraServiceFiles...)
+// StaleServiceTargets returns current-project service files that the copy
+// execution will delete, under the same preview/execution contract as
+// StaleModelTargets.
+func (p *CopyPlan) StaleServiceTargets() []string {
+	return append([]string(nil), p.StaleServiceFiles...)
 }
 
 func (p *CopyPlan) targetsByKind(kind moduleCopyFileKind) []string {

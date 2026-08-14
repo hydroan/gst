@@ -80,9 +80,9 @@ func TestRunModuleListDoesNotDependOnGoPretty(t *testing.T) {
 	}
 }
 
-func TestPrintModuleCopyPlanReportsExtraTargetModelFilesAsWarningSection(t *testing.T) {
+func TestPrintModuleCopyPlanPreviewsStaleTargetModelFilesForDeletion(t *testing.T) {
 	plan := &ggmodule.CopyPlan{
-		ExtraModelFiles: []string{filepath.Join("model", "copytest", "design.go")},
+		StaleModelFiles: []string{filepath.Join("model", "copytest", "design.go")},
 	}
 
 	output := captureStdout(t, func() {
@@ -90,23 +90,23 @@ func TestPrintModuleCopyPlanReportsExtraTargetModelFilesAsWarningSection(t *test
 	})
 
 	for _, want := range []string{
-		"Extra Target Model Files",
+		"Stale Target Model Files",
 		filepath.Join("model", "copytest", "design.go"),
-		"not present in the framework source",
-		"not deleted automatically",
+		"no longer present in the framework source",
+		"will be deleted",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("output missing %q:\n%s", want, output)
 		}
 	}
-	if strings.Contains(output, "Extra target model files:") {
-		t.Fatalf("output should not show extra model files as a normal plan group:\n%s", output)
+	if strings.Contains(output, "Stale target model files:") {
+		t.Fatalf("output should not show stale model files as a normal plan group:\n%s", output)
 	}
 }
 
-func TestPrintModuleCopyPlanReportsExtraTargetServiceFilesAsWarningSection(t *testing.T) {
+func TestPrintModuleCopyPlanPreviewsStaleTargetServiceFilesForDeletion(t *testing.T) {
 	plan := &ggmodule.CopyPlan{
-		ExtraServiceFiles: []string{filepath.Join("service", "copytest", "adapter.go")},
+		StaleServiceFiles: []string{filepath.Join("service", "copytest", "adapter.go")},
 	}
 
 	output := captureStdout(t, func() {
@@ -114,17 +114,17 @@ func TestPrintModuleCopyPlanReportsExtraTargetServiceFilesAsWarningSection(t *te
 	})
 
 	for _, want := range []string{
-		"Extra Target Service Files",
+		"Stale Target Service Files",
 		filepath.Join("service", "copytest", "adapter.go"),
-		"not produced by this module copy plan",
-		"not deleted automatically",
+		"no longer produced by this module copy plan",
+		"will be deleted",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("output missing %q:\n%s", want, output)
 		}
 	}
-	if strings.Contains(output, "Extra target service files:") {
-		t.Fatalf("output should not show extra service files as a normal plan group:\n%s", output)
+	if strings.Contains(output, "Stale target service files:") {
+		t.Fatalf("output should not show stale service files as a normal plan group:\n%s", output)
 	}
 }
 

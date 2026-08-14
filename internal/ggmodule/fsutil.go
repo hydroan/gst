@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -75,6 +76,31 @@ func goFilesInPackageDir(root string) ([]string, error) {
 
 func isGoSourceFile(name string) bool {
 	return strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") && !strings.HasPrefix(name, ".")
+}
+
+// generatedFileHeader matches the Go convention for generated files
+// (https://go.dev/s/generatedcode). gst's own consts.CodeGeneratedComment()
+// header matches it, and so does the output of other generators such as
+// mockgen or stringer.
+var generatedFileHeader = regexp.MustCompile(`^// Code generated .* DO NOT EDIT\.$`)
+
+// isGeneratedFile reports whether the file marks itself as generated code
+// under the Go convention: a matching comment line before the package clause.
+func isGeneratedFile(path string) (bool, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return false, err
+	}
+	for line := range strings.SplitSeq(string(content), "\n") {
+		line = strings.TrimSuffix(line, "\r")
+		if generatedFileHeader.MatchString(line) {
+			return true, nil
+		}
+		if strings.HasPrefix(strings.TrimSpace(line), "package ") {
+			break
+		}
+	}
+	return false, nil
 }
 
 func ensureParentDir(filename string) error {

@@ -280,15 +280,16 @@ func (p *CopyPlan) addServiceFiles(helperFiles []string) error {
 	return nil
 }
 
-// collectExtraServiceFiles records target service files this copy plan will not
-// write. Service packages can legitimately hold project-owned adapters next to
-// copied module code, so the leftovers are reported rather than deleted.
-func (p *CopyPlan) collectExtraServiceFiles() error {
-	extra, err := p.extraTargetFiles(p.TargetServiceDir, moduleCopyFileService, moduleCopyFileHelper)
+// collectStaleServiceFiles records target service files this copy plan will
+// not write. Copied service packages hold module code only — project-owned
+// code belongs outside them, as the module postNotes instruct — so a
+// non-exempt leftover is a stale copy that the execution prune deletes.
+func (p *CopyPlan) collectStaleServiceFiles() error {
+	stale, err := p.staleTargetFiles(p.TargetServiceDir, moduleCopyFileService, moduleCopyFileHelper)
 	if err != nil {
 		return err
 	}
-	p.ExtraServiceFiles = extra
+	p.StaleServiceFiles = stale
 	return nil
 }
 

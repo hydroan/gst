@@ -57,10 +57,10 @@
 
 以 `module/mfa` 为例：
 
-- `internal/service/mfa` 定义 `AccountAuthenticator` 和 `AuthenticatedAccount`，MFA 业务只关心稳定账号 ID 和可选用户名。
-- `internal/service/mfa` 的 TOTP check、unbind 等流程通过 `currentAccountAuthenticator()` 完成账号认证，不 import `internal/model/iam/user`。
-- `module/mfa/iam_account_authenticator.go` 是框架内置 IAM adapter，负责查询 IAM user、校验密码和状态，再转换成 `servicemfa.AuthenticatedAccount`。
-- `module/mfa/register.go` 安装内置 adapter；业务项目通过 `gg module copy mfa` 后，应在项目自己的接入文件里调用 `servicemfa.SetAccountAuthenticator(...)`。
+- `internal/service/mfa` 定义 `AccountAdministrator`，管理端 MFA 流程只关心「当前操作者是否有权管理目标账号的绑定」。
+- `internal/service/mfa` 的 admin status/reset 流程通过 `currentAccountAdministrator()` 完成授权判定，未安装 adapter 时安全默认全部拒绝，不 import IAM 实现。
+- `module/mfa/iam_account_administrator.go` 是框架内置 IAM adapter，把框架 IAM 的租户管理员规则转换成 `servicemfa.AccountAdministrator`。
+- `module/mfa/register.go` 安装内置 adapter；业务项目通过 `gg module copy mfa` 后，应在 `service/mfa` 之外的项目自有文件里调用 `servicemfa.SetAccountAdministrator(...)`。
 - `module/mfa/module.json` 的 `postNotes` 必须提示 copy 后需要补齐项目自有 adapter。
 
 设计新的 provider/adapter 边界时遵守这些规则：

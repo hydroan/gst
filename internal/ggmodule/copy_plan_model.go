@@ -77,16 +77,16 @@ func (p *CopyPlan) addModelFiles() error {
 	return nil
 }
 
-// collectExtraModelFiles records target model files this copy plan will not
-// write. Model copy is a SourceModelDir -> TargetModelDir mirror, so anything
-// left over is either project-owned or a stale copy from an older framework
-// version; module copy reports it and never deletes it.
-func (p *CopyPlan) collectExtraModelFiles() error {
-	extra, err := p.extraTargetFiles(p.TargetModelDir, moduleCopyFileModel)
+// collectStaleModelFiles records target model files this copy plan will not
+// write. Model copy is a SourceModelDir -> TargetModelDir mirror, so a
+// non-exempt leftover is a stale copy from an older framework version that
+// the execution prune deletes.
+func (p *CopyPlan) collectStaleModelFiles() error {
+	stale, err := p.staleTargetFiles(p.TargetModelDir, moduleCopyFileModel)
 	if err != nil {
 		return err
 	}
-	p.ExtraModelFiles = extra
+	p.StaleModelFiles = stale
 	return nil
 }
 
