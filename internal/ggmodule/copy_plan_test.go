@@ -631,12 +631,17 @@ func TestBuildCopyPlanCopiesNestedActionsAndReachableHelpers(t *testing.T) {
 	if !slices.Contains(helperTargets, importedHelper) {
 		t.Fatalf("HelperTargets() = %v, want %s", helperTargets, importedHelper)
 	}
+	importedDetailHelper := filepath.Join("service", "copytest", "shared", "shared_detail.go")
+	if !slices.Contains(helperTargets, importedDetailHelper) {
+		t.Fatalf("HelperTargets() = %v, want in-package closure inside the imported package to add %s", helperTargets, importedDetailHelper)
+	}
 	for _, unwanted := range []string{
 		filepath.Join("service", "copytest", "entry", "standalone.go"),
 		filepath.Join("service", "copytest", "unrelated", "unrelated.go"),
+		filepath.Join("service", "copytest", "shared", "unreferenced.go"),
 	} {
 		if slices.Contains(helperTargets, unwanted) {
-			t.Fatalf("HelperTargets() = %v, should not include unrelated service file %s", helperTargets, unwanted)
+			t.Fatalf("HelperTargets() = %v, should not include unreferenced service file %s", helperTargets, unwanted)
 		}
 	}
 
@@ -855,6 +860,8 @@ func TestBuildCopyPlanIgnoresFrameworkRootRelativeFiles(t *testing.T) {
 		filepath.Join(frameworkRoot, "module", "copytest"),
 		filepath.Join(frameworkRoot, "internal", "model", "copytest"),
 		filepath.Join(frameworkRoot, "internal", "service", "copytest"),
+		filepath.Join(frameworkRoot, "dsl"),
+		filepath.Join(frameworkRoot, "model"),
 	} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
@@ -864,6 +871,22 @@ func TestBuildCopyPlanIgnoresFrameworkRootRelativeFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(frameworkRoot, "go.mod"), []byte("module github.com/hydroan/gst\n\ngo 1.26\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The excluded-model reference check type-checks the model tree, so the
+	// stub framework packages the model files import must exist.
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "dsl", "dsl.go"), []byte(`package dsl
+
+func Create(func()) {}
+func Service(...bool) {}
+func Filename(string) {}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "model", "model.go"), []byte(`package model
+
+type Empty struct{}
+`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(frameworkRoot, "module", "copytest", moduleManifestFilename), []byte(`{
@@ -1022,7 +1045,27 @@ func Unrelated() string {
 	}
 	if err := os.WriteFile(filepath.Join(sourceSharedServiceDir, "shared.go"), []byte(`package shared
 
-func Ensure(any) {}
+func Ensure(any) {
+	ensureDetail()
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// ensureDetail lives in a second file of the imported package, so the
+	// closure must follow references file by file inside imported packages too.
+	if err := os.WriteFile(filepath.Join(sourceSharedServiceDir, "shared_detail.go"), []byte(`package shared
+
+func ensureDetail() {}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Nothing references this file; helper discovery must leave it behind even
+	// though its package is imported by a copied action file.
+	if err := os.WriteFile(filepath.Join(sourceSharedServiceDir, "unreferenced.go"), []byte(`package shared
+
+func Unreferenced() string {
+	return "unreferenced"
+}
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}

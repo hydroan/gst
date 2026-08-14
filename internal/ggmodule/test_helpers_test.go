@@ -126,8 +126,11 @@ type Empty struct{}
 
 func Route(string, func()) {}
 func Create(func()) {}
+func List(func()) {}
+func Get(func()) {}
 func Service(...bool) {}
 func Filename(string) {}
+func Result[T any]() {}
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}

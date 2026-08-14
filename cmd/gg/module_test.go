@@ -128,6 +128,30 @@ func TestPrintModuleCopyPlanPreviewsStaleTargetServiceFilesForDeletion(t *testin
 	}
 }
 
+func TestPrintModuleCopyPlanPreviewsStaleTargetMiddlewareFilesForDeletion(t *testing.T) {
+	plan := &ggmodule.CopyPlan{
+		StaleMiddlewareFiles: []string{filepath.Join("middleware", "old_auth.go")},
+	}
+
+	output := captureStdout(t, func() {
+		printModuleCopyPlan(plan)
+	})
+
+	for _, want := range []string{
+		"Stale Target Middleware Files",
+		filepath.Join("middleware", "old_auth.go"),
+		"no longer declared by the module manifest",
+		"will be deleted together with their register calls",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output missing %q:\n%s", want, output)
+		}
+	}
+	if strings.Contains(output, "Stale target middleware files:") {
+		t.Fatalf("output should not show stale middleware files as a normal plan group:\n%s", output)
+	}
+}
+
 func TestPrintModuleCopyPlanListsMiddlewareTargets(t *testing.T) {
 	projectDir := newModuleCopyMiddlewarePlanProject(t)
 	t.Chdir(projectDir)

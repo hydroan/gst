@@ -2,8 +2,12 @@ package ggmodule
 
 import (
 	"os"
+	pathpkg "path"
 	"path/filepath"
+	"sort"
+	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/codegen/gen"
 )
 
@@ -73,6 +77,53 @@ func (p *CopyPlan) addModelFiles() error {
 			Content:     content,
 			Preexisting: fileExists(targetPath),
 		})
+	}
+	return nil
+}
+
+// requireExcludedModelFilesUnreferenced fails the plan when a model file the
+// manifest excludes is still referenced by a model file the copy mirrors. The
+// mirror ships every non-excluded file, so such a reference is guaranteed not
+// to compile in the target project; reporting it at preflight names the broken
+// manifest entry instead of shipping a broken package.
+//
+// The walk loads the model tree only when the manifest excludes files under
+// it, and it covers references inside that tree. A copied service file
+// referencing an excluded model symbol still surfaces through the copied
+// project's build: the service closure walks the service tree only.
+func (p *CopyPlan) requireExcludedModelFilesUnreferenced() error {
+	modelTreePrefix := pathpkg.Join("internal", "model", p.Name) + "/"
+	excludesModelSources := false
+	for _, rel := range p.ExcludeSourceFiles {
+		if strings.HasPrefix(rel, modelTreePrefix) {
+			excludesModelSources = true
+			break
+		}
+	}
+	if !excludesModelSources {
+		return nil
+	}
+
+	tree, err := loadModuleCopyPackageTree(p.SourceModelDir)
+	if err != nil {
+		return err
+	}
+	copied := make([]string, 0, len(tree.files))
+	for path := range tree.files {
+		if !p.canonicalIgnoredSourcePath(path) {
+			copied = append(copied, path)
+		}
+	}
+	sort.Strings(copied)
+	for _, path := range copied {
+		for _, declFile := range tree.referencedTreeFiles(path) {
+			if p.canonicalIgnoredSourcePath(declFile) {
+				return errors.Newf(
+					"module copy: %s references %s, which excludeSourceFiles skips; remove the exclusion or the references",
+					p.describeFrameworkPath(path), p.describeFrameworkPath(declFile),
+				)
+			}
+		}
 	}
 	return nil
 }

@@ -2,12 +2,10 @@ package ggmodule
 
 import (
 	"fmt"
-	"go/parser"
-	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/hydroan/gst/dsl"
@@ -91,138 +89,46 @@ func requireServiceSourceFile(action moduleCopyAction) error {
 	return nil
 }
 
+// collectHelperDependencyFiles resolves the helper files this copy must carry:
+// the type-informed closure over the module service tree, seeded by the action
+// service files and the manifest includeSourceFiles. See
+// moduleServiceHelperClosure for the walk and its guard rules.
 func (p *CopyPlan) collectHelperDependencyFiles(actions []moduleCopyAction) ([]string, error) {
 	actionFiles := make(map[string]bool)
-	scanQueue := make([]string, 0)
-	scanned := make(map[string]bool)
-	enqueueScan := func(sourcePath string) error {
-		clean, err := canonicalModuleCopyPath("", sourcePath)
-		if err != nil {
-			return err
-		}
-		if scanned[clean] {
-			return nil
-		}
-		scanned[clean] = true
-		scanQueue = append(scanQueue, clean)
-		return nil
-	}
-
-	packageActions := make(map[string][]string)
+	seeds := make([]string, 0)
 	for _, sourcePath := range actionSourcePaths(actions) {
-		clean, err := canonicalModuleCopyPath("", sourcePath)
+		clean, err := canonicalModuleCopyPath(sourcePath)
 		if err != nil {
 			return nil, err
 		}
-		actionFiles[clean] = true
-		if err = enqueueScan(clean); err != nil {
-			return nil, err
+		if !actionFiles[clean] {
+			actionFiles[clean] = true
+			seeds = append(seeds, clean)
 		}
-		packageDir := filepath.Dir(sourcePath)
-		packageActions[packageDir] = append(packageActions[packageDir], sourcePath)
 	}
-
-	helperFiles := make([]string, 0)
-	seen := make(map[string]bool)
-	addHelperFile := func(sourcePath string) error {
-		clean, err := canonicalModuleCopyPath("", sourcePath)
-		if err != nil {
-			return err
-		}
-		if seen[clean] || actionFiles[clean] {
-			return nil
-		}
-		// Imported service packages can contain action service files too. Those
-		// files must stay owned by explicit module actions; only helper-only files
-		// are safe to copy as imported helper dependencies.
-		if serviceStructs, countErr := countServiceStructsInFile(clean); countErr != nil {
-			return countErr
-		} else if serviceStructs > 0 {
-			return nil
-		}
-		seen[clean] = true
-		helperFiles = append(helperFiles, clean)
-		return enqueueScan(clean)
-	}
-	// Manifest-included files join discovery exactly like referenced helpers:
-	// the file itself becomes a helper copy, and it seeds both the in-package
-	// symbol closure and the imported-package scan below.
 	for _, includePath := range p.includeSourceFilePaths() {
-		if err := addHelperFile(includePath); err != nil {
-			return nil, err
-		}
-		packageDir := filepath.Dir(includePath)
-		packageActions[packageDir] = append(packageActions[packageDir], includePath)
-	}
-
-	for packageDir, selectedFiles := range packageActions {
-		files, err := moduleCopyHelperDependencyFiles(packageDir, selectedFiles)
+		clean, err := canonicalModuleCopyPath(includePath)
 		if err != nil {
 			return nil, err
 		}
-		for _, file := range files {
-			if err = addHelperFile(file); err != nil {
-				return nil, err
-			}
+		if !slices.Contains(seeds, clean) {
+			seeds = append(seeds, clean)
 		}
+	}
+	// No action and no include sources means a middleware-only module: there
+	// is nothing to discover, and the service tree may hold no loadable
+	// package at all.
+	if len(seeds) == 0 {
+		return nil, nil
 	}
 
-	for len(scanQueue) > 0 {
-		current := scanQueue[0]
-		scanQueue = scanQueue[1:]
-		files, err := p.importedServiceHelperFiles(current)
-		if err != nil {
-			return nil, err
-		}
-		for _, file := range files {
-			if err = addHelperFile(file); err != nil {
-				return nil, err
-			}
-		}
-	}
-	sort.Strings(helperFiles)
-	return helperFiles, nil
-}
-
-// importedServiceHelperFiles returns helper candidates from service packages
-// imported through github.com/hydroan/gst/internal/service/<module>/... imports.
-// This lets module copy include shared service helpers that live in a nested
-// service package without treating every service subtree as part of the copied
-// module action set.
-func (p *CopyPlan) importedServiceHelperFiles(sourcePath string) ([]string, error) {
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, sourcePath, nil, parser.ImportsOnly)
-	if err != nil {
-		return nil, err
-	}
-
-	helpers := make([]string, 0)
-	for _, imp := range file.Imports {
-		importPath, err := strconv.Unquote(imp.Path.Value)
-		if err != nil {
-			continue
-		}
-		serviceDir, ok := p.moduleServiceImportDir(importPath)
-		if !ok {
-			continue
-		}
-		files, err := goFilesInPackageDir(serviceDir)
-		if err != nil {
-			return nil, err
-		}
-		helpers = append(helpers, files...)
-	}
-	sort.Strings(helpers)
-	return helpers, nil
-}
-
-func (p *CopyPlan) moduleServiceImportDir(importPath string) (string, bool) {
-	prefix := frameworkModulePath + "/internal/service/" + p.Name
-	if importPath != prefix && !strings.HasPrefix(importPath, prefix+"/") {
-		return "", false
-	}
-	suffix := strings.TrimPrefix(importPath, prefix)
-	return filepath.Join(p.SourceServiceDir, filepath.FromSlash(strings.TrimPrefix(suffix, "/"))), true
+	return moduleServiceHelperClosure(seeds, moduleServiceClosureConfig{
+		serviceRoot:  p.SourceServiceDir,
+		importPrefix: frameworkModulePath + "/internal/service/" + p.Name,
+		actionFiles:  actionFiles,
+		isExcluded:   p.canonicalIgnoredSourcePath,
+		describe:     p.describeFrameworkPath,
+	})
 }
 
 func (p *CopyPlan) addServiceFiles(helperFiles []string) error {
@@ -255,9 +161,6 @@ func (p *CopyPlan) addServiceFiles(helperFiles []string) error {
 	}
 
 	for _, sourcePath := range helperFiles {
-		if p.ignoredSourcePath(sourcePath) {
-			continue
-		}
 		targetPath, err := p.targetServicePath(sourcePath)
 		if err != nil {
 			return err
@@ -341,8 +244,8 @@ func (p *CopyPlan) targetServicePath(sourcePath string) (string, error) {
 		return filepath.Join(p.TargetServiceDir, rel), nil
 	}
 
-	sourceRoot, rootErr := canonicalModuleCopyPath("", p.SourceServiceDir)
-	cleanSource, sourceErr := canonicalModuleCopyPath("", sourcePath)
+	sourceRoot, rootErr := canonicalModuleCopyPath(p.SourceServiceDir)
+	cleanSource, sourceErr := canonicalModuleCopyPath(sourcePath)
 	if rootErr != nil {
 		return "", rootErr
 	}

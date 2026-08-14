@@ -98,17 +98,24 @@ func (e *CopyExecution) Run() error {
 
 	if len(e.Plan.Middleware) > 0 {
 		clioutput.Section("Copy Middleware Files")
+		// Snapshot module-owned handler names before the writes below replace
+		// the old file contents; reconciliation needs them to retire register
+		// calls of renamed handlers.
+		obsoleteHandlers, err := e.middlewareHandlersOnDisk()
+		if err != nil {
+			return err
+		}
 		for _, file := range e.Plan.Files {
 			if file.Kind != moduleCopyFileMiddleware {
 				continue
 			}
-			if err := e.write(file); err != nil {
-				return err
+			if writeErr := e.write(file); writeErr != nil {
+				return writeErr
 			}
 		}
 
 		clioutput.Section("Register Middleware")
-		status, path, err := e.registerMiddleware()
+		status, path, err := e.reconcileMiddlewareRegistrations(obsoleteHandlers)
 		if err != nil {
 			return err
 		}
@@ -127,7 +134,8 @@ func (e *CopyExecution) Run() error {
 func (e *CopyExecution) pruneStaleFiles() error {
 	staleModelFiles := e.Plan.StaleModelTargets()
 	staleServiceFiles := e.Plan.StaleServiceTargets()
-	if len(staleModelFiles) == 0 && len(staleServiceFiles) == 0 {
+	staleMiddlewareFiles := e.Plan.StaleMiddlewareTargets()
+	if len(staleModelFiles) == 0 && len(staleServiceFiles) == 0 && len(staleMiddlewareFiles) == 0 {
 		return nil
 	}
 
@@ -145,7 +153,31 @@ func (e *CopyExecution) pruneStaleFiles() error {
 			}
 		}
 	}
-	return nil
+	return e.pruneStaleMiddleware(staleMiddlewareFiles)
+}
+
+// pruneStaleMiddleware deletes stale middleware files and then drops their
+// register calls from the registration file: the calls reference handler
+// functions the deleted files declared, so leaving them behind would break
+// the project build the moment the files are gone.
+func (e *CopyExecution) pruneStaleMiddleware(staleFiles []string) error {
+	if len(staleFiles) == 0 {
+		return nil
+	}
+	handlerNames := make(map[string]bool)
+	for _, path := range staleFiles {
+		names, err := topLevelFunctionNames(path)
+		if err != nil {
+			return err
+		}
+		for _, name := range names {
+			handlerNames[name] = true
+		}
+		if err := e.remove(path, e.Plan.TargetMiddlewareDir); err != nil {
+			return err
+		}
+	}
+	return e.removeMiddlewareRegistrations(handlerNames)
 }
 
 // remove deletes one stale file after the same path-traversal check writes go

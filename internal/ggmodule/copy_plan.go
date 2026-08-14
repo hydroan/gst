@@ -62,6 +62,12 @@ type CopyPlan struct {
 	// belongs outside copied service directories, as the module postNotes
 	// instruct, so a non-exempt leftover here is stale module code.
 	StaleServiceFiles []string
+	// StaleMiddlewareFiles lists project middleware files this module's copy
+	// marker claims but the current manifest no longer declares. The shared
+	// middleware directory holds project-owned handlers too, so unlike the
+	// model/service lists, membership requires positive proof of ownership:
+	// only marker-carrying files of this module can become stale here.
+	StaleMiddlewareFiles []string
 }
 
 // moduleCopyAction connects one DSL action to the framework service file that
@@ -159,6 +165,9 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 		return nil, err
 	}
 
+	if excludedRefErr := plan.requireExcludedModelFilesUnreferenced(); excludedRefErr != nil {
+		return nil, excludedRefErr
+	}
 	if addModelErr := plan.addModelFiles(); addModelErr != nil {
 		return nil, addModelErr
 	}
@@ -188,6 +197,9 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 	}
 	if addMiddlewareErr := plan.addMiddlewareFiles(); addMiddlewareErr != nil {
 		return nil, addMiddlewareErr
+	}
+	if staleMiddlewareErr := plan.collectStaleMiddlewareFiles(); staleMiddlewareErr != nil {
+		return nil, staleMiddlewareErr
 	}
 	if conflictErr := plan.checkConflicts(opts.Force); conflictErr != nil {
 		return nil, conflictErr
@@ -345,6 +357,41 @@ func (p *CopyPlan) ignoredSourcePath(sourcePath string) bool {
 	return slices.Contains(p.ExcludeSourceFiles, rel)
 }
 
+// canonicalIgnoredSourcePath answers ignoredSourcePath for canonical absolute
+// paths, the form the type-informed reference walks work in. The manifest
+// stores framework-root relative entries, so the path must be re-relativized
+// against the canonical framework root before an entry can match it.
+func (p *CopyPlan) canonicalIgnoredSourcePath(sourcePath string) bool {
+	if len(p.ExcludeSourceFiles) == 0 {
+		return false
+	}
+	root, err := canonicalModuleCopyPath(p.FrameworkRoot)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(root, sourcePath)
+	if err != nil {
+		return false
+	}
+	rel = filepath.ToSlash(filepath.Clean(rel))
+	return slices.Contains(p.ExcludeSourceFiles, rel)
+}
+
+// describeFrameworkPath renders a canonical absolute source path as its
+// framework-root relative form for error messages, falling back to the input
+// when the path does not sit under the framework root.
+func (p *CopyPlan) describeFrameworkPath(sourcePath string) string {
+	root, err := canonicalModuleCopyPath(p.FrameworkRoot)
+	if err != nil {
+		return sourcePath
+	}
+	rel, err := filepath.Rel(root, sourcePath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return sourcePath
+	}
+	return filepath.ToSlash(rel)
+}
+
 // ModelTargets returns current-project model files that copy will write.
 func (p *CopyPlan) ModelTargets() []string {
 	return p.targetsByKind(moduleCopyFileModel)
@@ -380,6 +427,13 @@ func (p *CopyPlan) StaleModelTargets() []string {
 // StaleModelTargets.
 func (p *CopyPlan) StaleServiceTargets() []string {
 	return append([]string(nil), p.StaleServiceFiles...)
+}
+
+// StaleMiddlewareTargets returns current-project middleware files that the
+// copy execution will delete together with their registration calls, under
+// the same preview/execution contract as StaleModelTargets.
+func (p *CopyPlan) StaleMiddlewareTargets() []string {
+	return append([]string(nil), p.StaleMiddlewareFiles...)
 }
 
 func (p *CopyPlan) targetsByKind(kind moduleCopyFileKind) []string {

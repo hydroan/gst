@@ -1,142 +1,144 @@
 package ggmodule
 
 import (
-	"fmt"
 	"go/ast"
-	"go/types"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 
-	"golang.org/x/tools/go/packages"
+	"github.com/cockroachdb/errors"
 )
 
-// moduleCopyHelperDependencyFiles uses go/packages type information instead of
-// name matching. If selected action/helper files reference any top-level object
-// declared in another helper file in the same service package, that whole file
-// is added.
-func moduleCopyHelperDependencyFiles(serviceDir string, selectedFiles []string) ([]string, error) {
-	baseDir, err := filepath.Abs(serviceDir)
+// moduleServiceClosureConfig parameterizes helper discovery over one module's
+// service source tree.
+type moduleServiceClosureConfig struct {
+	// serviceRoot is the module service tree root on disk.
+	serviceRoot string
+	// importPrefix is the framework import path of serviceRoot, used to map
+	// blank imports of tree subpackages back to directories.
+	importPrefix string
+	// actionFiles are the canonical action service sources the plan already
+	// copies through DSL actions; references into them need no helper copy.
+	actionFiles map[string]bool
+	// isExcluded reports whether a canonical path is manifest-excluded.
+	isExcluded func(string) bool
+	// describe renders a canonical path for error messages.
+	describe func(string) string
+}
+
+// moduleServiceHelperClosure discovers the helper files one module copy must
+// carry: the fixed point of "a copied file references a top-level object whose
+// declaring file is not copied yet", walked with type information over the
+// whole service tree so references may cross package boundaries, always at
+// whole-file granularity.
+//
+// Two rules guard the walk. A referenced file that the manifest excludes fails
+// the copy: the exclusion would strand the reference and the copied project
+// could not compile. A referenced file that declares a service struct without
+// being copied through a DSL action fails the copy too: action files are
+// copied only through their actions, so shared code must live in helper files.
+//
+// A blank import of a tree subpackage carries no identifier the reference walk
+// could follow, but it is an explicit request for the package's init side
+// effects, so every file of that package joins the copy — minus files excluded
+// by the manifest and files declaring a service struct, which are skipped
+// rather than reported because a package-level import proves no need for any
+// single file.
+func moduleServiceHelperClosure(seeds []string, config moduleServiceClosureConfig) ([]string, error) {
+	tree, err := loadModuleCopyPackageTree(config.serviceRoot)
 	if err != nil {
 		return nil, err
 	}
 
-	selected := make(map[string]bool, len(selectedFiles))
-	queue := make([]string, 0, len(selectedFiles))
-	for _, file := range selectedFiles {
-		clean, cleanErr := canonicalModuleCopyPath("", file)
-		if cleanErr != nil {
-			return nil, cleanErr
-		}
-		selected[clean] = true
-		queue = append(queue, clean)
-	}
-
-	pkg, err := loadModuleCopyServicePackage(serviceDir)
-	if err != nil {
-		return nil, err
-	}
-	declFiles := packageDeclFiles(pkg, baseDir)
-	helperCandidates := make(map[string]bool)
-	for _, file := range pkg.GoFiles {
-		if !isGoSourceFile(filepath.Base(file)) {
+	selected := make(map[string]bool, len(seeds))
+	queue := make([]string, 0, len(seeds))
+	helpers := make([]string, 0)
+	// Seeds outside the action set are manifest includeSourceFiles: no other
+	// channel copies them, so they are helper output themselves, not just
+	// closure starting points.
+	for _, seed := range seeds {
+		if selected[seed] {
 			continue
 		}
-		abs, err := canonicalModuleCopyPath(baseDir, file)
-		if err != nil {
-			return nil, err
+		selected[seed] = true
+		queue = append(queue, seed)
+		if !config.actionFiles[seed] {
+			helpers = append(helpers, seed)
 		}
-		if !selected[abs] {
-			helperCandidates[abs] = true
-		}
+	}
+
+	addHelper := func(path string) {
+		selected[path] = true
+		helpers = append(helpers, path)
+		queue = append(queue, path)
 	}
 
 	for len(queue) > 0 {
 		current := queue[0]
 		queue = queue[1:]
-
-		file := syntaxFileByPath(pkg, baseDir, current)
-		if file == nil {
+		file, ok := tree.files[current]
+		if !ok {
 			continue
 		}
-		ast.Inspect(file, func(node ast.Node) bool {
-			ident, ok := node.(*ast.Ident)
-			if !ok {
-				return true
-			}
-			obj := pkg.TypesInfo.Uses[ident]
-			if obj == nil || obj.Pkg() != pkg.Types {
-				return true
-			}
-			declFile := declFiles[obj]
-			if declFile == "" || selected[declFile] || !helperCandidates[declFile] {
-				return true
-			}
-			selected[declFile] = true
-			queue = append(queue, declFile)
-			return true
-		})
-	}
 
-	helpers := make([]string, 0)
-	for file := range selected {
-		if helperCandidates[file] {
-			helpers = append(helpers, file)
+		for _, declFile := range tree.referencedTreeFiles(current) {
+			if selected[declFile] || config.actionFiles[declFile] {
+				continue
+			}
+			if config.isExcluded(declFile) {
+				return nil, errors.Newf(
+					"module copy: %s references %s, which excludeSourceFiles skips; remove the exclusion or the references",
+					config.describe(current), config.describe(declFile),
+				)
+			}
+			if len(serviceStructNames(tree.files[declFile].syntax)) > 0 {
+				return nil, errors.Newf(
+					"module copy: %s references %s, which declares a service struct but is copied by no DSL action; move the shared code into a helper file",
+					config.describe(current), config.describe(declFile),
+				)
+			}
+			addHelper(declFile)
+		}
+
+		for _, dir := range blankImportTreeDirs(file.syntax, config) {
+			for _, packageFile := range tree.filesInDir(dir) {
+				if selected[packageFile] || config.actionFiles[packageFile] || config.isExcluded(packageFile) {
+					continue
+				}
+				if len(serviceStructNames(tree.files[packageFile].syntax)) > 0 {
+					continue
+				}
+				addHelper(packageFile)
+			}
 		}
 	}
+
 	sort.Strings(helpers)
 	return helpers, nil
 }
 
-func loadModuleCopyServicePackage(serviceDir string) (*packages.Package, error) {
-	cfg := &packages.Config{
-		Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo,
-		Dir:  serviceDir,
-	}
-	pkgs, err := packages.Load(cfg, ".")
-	if err != nil {
-		return nil, err
-	}
-	if len(pkgs) != 1 {
-		return nil, fmt.Errorf("expected one service package in %s, found %d", serviceDir, len(pkgs))
-	}
-	if packages.PrintErrors(pkgs) > 0 {
-		return nil, fmt.Errorf("failed to load service package %s", serviceDir)
-	}
-	return pkgs[0], nil
-}
-
-func packageDeclFiles(pkg *packages.Package, baseDir string) map[types.Object]string {
-	files := make(map[types.Object]string)
-	for ident, obj := range pkg.TypesInfo.Defs {
-		if ident == nil || obj == nil {
+// blankImportTreeDirs returns the canonical directories of tree subpackages
+// the file imports blankly, for their init side effects.
+func blankImportTreeDirs(file *ast.File, config moduleServiceClosureConfig) []string {
+	dirs := make([]string, 0)
+	for _, imp := range file.Imports {
+		if imp.Name == nil || imp.Name.Name != "_" {
 			continue
 		}
-		if obj.Pkg() != pkg.Types {
-			continue
-		}
-		pos := obj.Pos()
-		for idx, syntax := range pkg.Syntax {
-			if syntax.Pos() <= pos && pos <= syntax.End() {
-				abs, err := canonicalModuleCopyPath(baseDir, pkg.GoFiles[idx])
-				if err == nil {
-					files[obj] = abs
-				}
-				break
-			}
-		}
-	}
-	return files
-}
-
-func syntaxFileByPath(pkg *packages.Package, baseDir string, path string) *ast.File {
-	for idx, file := range pkg.GoFiles {
-		abs, err := canonicalModuleCopyPath(baseDir, file)
+		importPath, err := strconv.Unquote(imp.Path.Value)
 		if err != nil {
 			continue
 		}
-		if abs == path {
-			return pkg.Syntax[idx]
+		if importPath != config.importPrefix && !strings.HasPrefix(importPath, config.importPrefix+"/") {
+			continue
 		}
+		suffix := strings.TrimPrefix(strings.TrimPrefix(importPath, config.importPrefix), "/")
+		dir, dirErr := canonicalModuleCopyPath(filepath.Join(config.serviceRoot, filepath.FromSlash(suffix)))
+		if dirErr != nil {
+			continue
+		}
+		dirs = append(dirs, dir)
 	}
-	return nil
+	return dirs
 }

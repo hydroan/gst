@@ -33,6 +33,9 @@ func writeGoFile(path string, fset *token.FileSet, file *ast.File) error {
 	if err := ensureParentDir(path); err != nil {
 		return err
 	}
+	// #nosec G703 -- every caller passes a path joined from the project
+	// middleware directory and a constant filename, validated by
+	// requirePathUnderRoot where plan data is involved.
 	return os.WriteFile(path, formatted, 0o600)
 }
 

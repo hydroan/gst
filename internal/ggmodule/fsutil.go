@@ -136,10 +136,7 @@ func requirePathUnderRoot(path, root string) (string, error) {
 	return path, nil
 }
 
-func canonicalModuleCopyPath(baseDir string, path string) (string, error) {
-	if !filepath.IsAbs(path) && baseDir != "" {
-		path = filepath.Join(baseDir, path)
-	}
+func canonicalModuleCopyPath(path string) (string, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return "", err
