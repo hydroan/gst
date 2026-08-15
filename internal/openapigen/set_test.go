@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -469,4 +470,53 @@ func schemaNames(schemas openapi3.Schemas) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// TestBuildRunsEveryQueuedRegistrationExactlyOnce covers the queue Set feeds.
+// Concurrent first requests are the case worth pinning: build holds the queue
+// lock while it drains, so a second request waits for a finished document
+// instead of serving one that is still filling up, and no registration runs
+// twice.
+func TestBuildRunsEveryQueuedRegistrationExactlyOnce(t *testing.T) {
+	pendingMu.Lock()
+	queued := pending
+	pending = nil
+	pendingMu.Unlock()
+	t.Cleanup(func() {
+		pendingMu.Lock()
+		pending = queued
+		pendingMu.Unlock()
+	})
+
+	const registrations = 20
+	var (
+		mu    sync.Mutex
+		calls = make(map[int]int, registrations)
+	)
+	pendingMu.Lock()
+	for i := range registrations {
+		pending = append(pending, func() {
+			mu.Lock()
+			defer mu.Unlock()
+			calls[i]++
+		})
+	}
+	pendingMu.Unlock()
+
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(build)
+	}
+	wg.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(calls) != registrations {
+		t.Fatalf("ran %d registrations, want all %d", len(calls), registrations)
+	}
+	for i, count := range calls {
+		if count != 1 {
+			t.Fatalf("registration %d ran %d times, want exactly once", i, count)
+		}
+	}
 }

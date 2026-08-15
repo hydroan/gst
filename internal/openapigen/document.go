@@ -3,7 +3,6 @@ package openapigen
 import (
 	"encoding/json"
 	"net/http"
-	"os"
 	"sync"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -25,22 +24,13 @@ var (
 	docMutex sync.RWMutex
 )
 
-func Write(filename string) error {
-	docMutex.RLock()
-	data, err := json.MarshalIndent(doc, "", "  ")
-	docMutex.RUnlock()
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(filename, data, 0o600)
-}
-
-// DocumentHandler returns an http.Handler that serves the OpenAPI document
+// DocumentHandler returns an http.Handler that serves the OpenAPI document.
+// The document is built on the first request rather than at route registration,
+// so a process that never serves it never pays for building it.
 func DocumentHandler() http.Handler {
-	docMutex.Lock()
-	setDocInfo(doc)
-	docMutex.Unlock()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		build()
+
 		w.Header().Set("Content-Type", "application/json")
 		docMutex.RLock()
 		data, _ := json.Marshal(doc)

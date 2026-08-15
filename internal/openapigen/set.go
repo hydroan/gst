@@ -2,26 +2,53 @@ package openapigen
 
 import (
 	"strings"
-	"testing"
+	"sync"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 )
 
-// Set records the OpenAPI entries for one registered route. It is the only
+// pending holds one closure per registered route, each capturing that route's
+// generic type arguments. Registration only appends to it, because building the
+// document means walking every model with reflection, and a process that never
+// serves the document should not pay for that — which is most processes, and
+// every test binary.
+var (
+	pendingMu sync.Mutex
+	pending   []func()
+)
+
+// Set records one registered route for the OpenAPI document. It is the only
 // entry point route registration uses.
-//
-// Test binaries skip the work: every route registration would spawn one
-// goroutine whose reflection walk over every model adds up to real CPU across
-// parallel test packages, paying for a document no test reads. The skip lives
-// here rather than in set, which this package's own tests call directly to
-// exercise the generation.
 func Set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, verb consts.HTTPVerb) {
-	if testing.Testing() {
-		return
+	pendingMu.Lock()
+	defer pendingMu.Unlock()
+
+	pending = append(pending, func() { set[M, REQ, RSP](path, authRequired, verb) })
+}
+
+// build turns the routes Set recorded into document entries, and refreshes the
+// info block from live configuration. It runs on the first request for the
+// document and holds the queue lock throughout, so a second concurrent request
+// waits for a finished document rather than serving a half-built one. Later
+// calls find an empty queue and cost nothing.
+//
+// Building on the request goroutine also keeps a panic inside the generator
+// where the recovery middleware answers it, instead of on a bare goroutine that
+// would take the process down.
+func build() {
+	pendingMu.Lock()
+	defer pendingMu.Unlock()
+
+	for _, register := range pending {
+		register()
 	}
-	go set[M, REQ, RSP](path, authRequired, verb)
+	pending = nil
+
+	docMutex.Lock()
+	setDocInfo(doc)
+	docMutex.Unlock()
 }
 
 // set registers the OpenAPI document entries for the given path and verbs.
@@ -29,9 +56,9 @@ func Set[M types.Model, REQ types.Request, RSP types.Response](path string, auth
 // group; public routes are documented with an empty security requirement so
 // they override the document-level security.
 //
-// Route registration goes through Set, which owns the test-binary skip.
-// Short-circuiting here would also silence the tests that exercise the
-// generation by calling set directly.
+// Route registration goes through Set, which queues this call until the first
+// request asks for the document; this package's own tests call set directly to
+// exercise the generation.
 func set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, verb ...consts.HTTPVerb) {
 	path = convertColonParamsToBraces(path)
 

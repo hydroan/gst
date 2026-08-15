@@ -18,6 +18,7 @@ func TestMain(m *testing.M) {
 				return err
 			}
 			registerSSERoutes()
+			registerOpenAPIDocRoutes()
 
 			return nil
 		},
