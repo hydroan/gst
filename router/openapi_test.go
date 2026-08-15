@@ -9,7 +9,6 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/router"
-	"github.com/hydroan/gst/testutil"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
@@ -27,29 +26,12 @@ type pagedRecord struct {
 	model.Base
 }
 
-// registerOpenAPIDocRoutes registers that route; TestMain calls it after
+// registerDocumentedRoute registers that route; TestMain calls it after
 // router.Init, mirroring where generated route registration runs.
-func registerOpenAPIDocRoutes() {
+func registerDocumentedRoute() {
 	router.Register[*pagedRecord, *pagedRecord, *pagedRecord](
 		router.Auth(), pagedRecordRoute, &types.ControllerConfig[*pagedRecord]{}, consts.List,
 	)
-}
-
-// openAPIDocument is the part of the served document these tests read.
-type openAPIDocument struct {
-	OpenAPI string `json:"openapi"`
-	Info    struct {
-		Title   string `json:"title"`
-		Version string `json:"version"`
-	} `json:"info"`
-	Paths map[string]map[string]struct {
-		Summary    string `json:"summary"`
-		Parameters []struct {
-			Name        string `json:"name"`
-			In          string `json:"in"`
-			Description string `json:"description"`
-		} `json:"parameters"`
-	} `json:"paths"`
 }
 
 // TestOpenAPIDocumentIsBuiltOnRequest covers the document endpoint end to end.
@@ -100,11 +82,26 @@ func TestOpenAPIDocumentIsStableAcrossRequests(t *testing.T) {
 	require.Equal(t, first.Info.Version, second.Info.Version)
 }
 
+// openAPIDocument is the part of the served document these tests assert on.
+type openAPIDocument struct {
+	OpenAPI string `json:"openapi"`
+	Info    struct {
+		Version string `json:"version"`
+	} `json:"info"`
+	Paths map[string]map[string]struct {
+		Parameters []struct {
+			Name        string `json:"name"`
+			In          string `json:"in"`
+			Description string `json:"description"`
+		} `json:"parameters"`
+	} `json:"paths"`
+}
+
 // requireOpenAPIDocument fetches and decodes the served OpenAPI document.
 func requireOpenAPIDocument(t *testing.T) openAPIDocument {
 	t.Helper()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, testutil.BaseURL()+"/openapi.json", nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/openapi.json", nil)
 	require.NoError(t, err)
 	req.SetBasicAuth(config.App.Auth.BaseAuthUsername, config.App.Auth.BaseAuthPassword)
 

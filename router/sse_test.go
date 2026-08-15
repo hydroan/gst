@@ -11,7 +11,6 @@ import (
 	"github.com/hydroan/gst/router"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/sse"
-	"github.com/hydroan/gst/testutil"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
@@ -62,6 +61,9 @@ func (s *endlessStreamer) SSE(ctx *types.ServiceContext) error {
 	})
 }
 
+// The services register in init because service registration has to happen
+// before the framework bootstraps, while the routes below register after
+// router.Init — the same split generated code has.
 func init() {
 	service.Register[*noticeStreamer](consts.PHASE_SSE, sseStreamRoute)
 	service.Register[*endlessStreamer](consts.PHASE_SSE, sseEndlessRoute)
@@ -79,7 +81,7 @@ func registerSSERoutes() {
 }
 
 func TestSSERouteStreamsEvents(t *testing.T) {
-	cli, err := client.New(testutil.BaseURL())
+	cli, err := client.New(baseURL)
 	require.NoError(t, err)
 
 	var events []sse.Event
@@ -102,7 +104,7 @@ func TestSSERouteIsMarkedStreaming(t *testing.T) {
 }
 
 func TestSSEStreamStopsOnClientRequest(t *testing.T) {
-	cli, err := client.New(testutil.BaseURL())
+	cli, err := client.New(baseURL)
 	require.NoError(t, err)
 
 	var seen int

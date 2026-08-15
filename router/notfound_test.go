@@ -6,24 +6,9 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/client"
-	"github.com/hydroan/gst/router"
 	"github.com/hydroan/gst/testutil"
 	"github.com/stretchr/testify/require"
 )
-
-func TestMain(m *testing.M) {
-	testutil.Run(m, testutil.Server{
-		Routes: func() error {
-			if err := router.Init(); err != nil {
-				return err
-			}
-			registerSSERoutes()
-			registerOpenAPIDocRoutes()
-
-			return nil
-		},
-	})
-}
 
 // TestUnmatchedRequestsAnswerInTheEnvelope pins what this server answers when
 // no route matches.
@@ -40,7 +25,7 @@ func TestUnmatchedRequestsAnswerInTheEnvelope(t *testing.T) {
 	requireNotFoundEnvelope := func(t *testing.T, method, path string) {
 		t.Helper()
 
-		cli, err := client.New(testutil.BaseURL())
+		cli, err := client.New(baseURL)
 		require.NoError(t, err)
 
 		_, err = cli.Do(method, path, nil)
