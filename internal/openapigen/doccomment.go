@@ -80,7 +80,7 @@ func trimOpenAPIDocCopula(comment, copula string) (string, bool) {
 func openAPIStructComment(typ reflect.Type) string {
 	instance := elemInstance(typ)
 	_, typeName := typeIdentity(instance)
-	return openAPIDocComment(typeName, parseStructComment(instance))
+	return openAPIDocComment(typeName, modelStructComment(instance))
 }
 
 // elemInstance creates a model instance for comment parsing, unwrapping

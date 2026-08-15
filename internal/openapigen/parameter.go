@@ -172,7 +172,7 @@ func collectQueryDocFields(typ reflect.Type) []schemaDocField {
 			}
 			visited[currentType] = true
 
-			docs := parseModelDocs(reflect.New(currentType).Interface())
+			docs := modelFieldDocs(reflect.New(currentType).Interface())
 			for field := range currentType.Fields() {
 				queryTag := getFieldTag(field, consts.TAG_QUERY)
 				if queryTag != "" {

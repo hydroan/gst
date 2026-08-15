@@ -60,8 +60,13 @@ func TestSchemaFromTypeKeepsRegularStructsAsObjects(t *testing.T) {
 }
 
 type mapDocModel struct {
-	// GroupRoles binds groups to their roles.
 	GroupRoles map[string][]string `json:"group_roles,omitempty"`
+}
+
+func init() {
+	registerFixtureDoc("mapDocModel", "", map[string]string{
+		"GroupRoles": "GroupRoles binds groups to their roles.",
+	})
 }
 
 func TestAddSchemaDocsForTypeSetsDescriptionWithoutTitle(t *testing.T) {
@@ -134,13 +139,20 @@ func TestAddSchemaDocsForTypeDoesNotDuplicateIntoMapAdditionalProperties(t *test
 }
 
 type jsonDocPayload struct {
-	// Code is the payload code.
 	Code string `json:"code"`
 }
 
 type jsonDocModel struct {
-	// Config is the configuration payload.
 	Config datatypes.JSONType[jsonDocPayload] `json:"config"`
+}
+
+func init() {
+	registerFixtureDoc("jsonDocPayload", "", map[string]string{
+		"Code": "Code is the payload code.",
+	})
+	registerFixtureDoc("jsonDocModel", "", map[string]string{
+		"Config": "Config is the configuration payload.",
+	})
 }
 
 func TestAddSchemaDocsForTypeDecoratesJSONTypeWithoutTitle(t *testing.T) {
@@ -175,10 +187,15 @@ func TestAddSchemaDocsForTypeDecoratesJSONTypeWithoutTitle(t *testing.T) {
 }
 
 type enumFieldModel struct {
-	// Status is the record status.
 	Status enumFieldStatus `json:"status"`
 
 	Codes []enumFieldStatus `json:"codes"`
+}
+
+func init() {
+	registerFixtureDoc("enumFieldModel", "", map[string]string{
+		"Status": "Status is the record status.",
+	})
 }
 
 func TestAddSchemaDocsForTypeSetsEnumValues(t *testing.T) {
@@ -234,18 +251,25 @@ func TestAddSchemaDocsForTypeSetsEnumOnSliceItemsWithoutFieldComment(t *testing.
 
 // nestedPayloadOption is one nested payload item for schema decoration tests.
 type nestedPayloadOption struct {
-	// Code is the option code.
 	Code string `json:"code"`
-	// Name is the option name.
 	Name string `json:"name"`
 }
 
 // nestedPayloadReq is a request body carrying a nested item collection.
 type nestedPayloadReq struct {
-	// MaxAmount is the request level limit.
-	MaxAmount int64 `json:"max_amount"`
-	// Options is the full nested option collection.
-	Options []*nestedPayloadOption `json:"options"`
+	MaxAmount int64                  `json:"max_amount"`
+	Options   []*nestedPayloadOption `json:"options"`
+}
+
+func init() {
+	registerFixtureDoc("nestedPayloadOption", "", map[string]string{
+		"Code": "Code is the option code.",
+		"Name": "Name is the option name.",
+	})
+	registerFixtureDoc("nestedPayloadReq", "", map[string]string{
+		"MaxAmount": "MaxAmount is the request level limit.",
+		"Options":   "Options is the full nested option collection.",
+	})
 }
 
 func TestAddSchemaDocsForTypeDecoratesNestedStructFields(t *testing.T) {
@@ -321,17 +345,24 @@ func TestAddSchemaDocsForTypeDecoratesAnonymousStructBySignature(t *testing.T) {
 
 // embeddedSchemeRow is the persisted row promoted into view structs.
 type embeddedSchemeRow struct {
-	// Status is the record status.
 	Status enumFieldStatus `json:"status"`
-	// Label is the row label.
-	Label string `json:"label"`
+	Label  string          `json:"label"`
 }
 
 // embeddedSchemeView is a response view embedding the persisted row.
 type embeddedSchemeView struct {
 	*embeddedSchemeRow
-	// Options is the nested option collection of the row.
 	Options []*nestedPayloadOption `json:"options"`
+}
+
+func init() {
+	registerFixtureDoc("embeddedSchemeRow", "", map[string]string{
+		"Status": "Status is the record status.",
+		"Label":  "Label is the row label.",
+	})
+	registerFixtureDoc("embeddedSchemeView", "", map[string]string{
+		"Options": "Options is the nested option collection of the row.",
+	})
 }
 
 func TestAddSchemaDocsForTypeDecoratesEmbeddedStructFields(t *testing.T) {
@@ -369,10 +400,15 @@ func TestAddSchemaDocsForTypeDecoratesEmbeddedStructFields(t *testing.T) {
 
 // cyclicCategory is a self referential type for the cycle guard test.
 type cyclicCategory struct {
-	// Title is the category title.
 	Title string `json:"title"`
 
 	Children []*cyclicCategory `json:"children"`
+}
+
+func init() {
+	registerFixtureDoc("cyclicCategory", "", map[string]string{
+		"Title": "Title is the category title.",
+	})
 }
 
 func TestAddSchemaDocsForTypeCutsCyclicStructTypes(t *testing.T) {

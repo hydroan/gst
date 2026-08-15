@@ -7,43 +7,26 @@ import (
 	"github.com/hydroan/gst/apidoc"
 )
 
-// registryPriorityModel is the source comment, which must lose to the registry.
-type registryPriorityModel struct {
-	// Name source comment, which must lose to the registry.
+// registryDocModel deliberately carries no doc comments: everything the
+// generator documents it with has to come from the registry.
+type registryDocModel struct {
 	Name string `json:"name"`
 }
 
-// fallbackOnlyModel is parsed from this source file when not registered.
-type fallbackOnlyModel struct {
-	// Name is parsed from this source file.
-	Name string `json:"name"`
-}
-
-func TestParseModelDocsPrefersRegistry(t *testing.T) {
-	pkgPath := reflect.TypeFor[registryPriorityModel]().PkgPath()
-	apidoc.Register(pkgPath, "registryPriorityModel", apidoc.StructDoc{
+func TestModelFieldDocsReadsRegistry(t *testing.T) {
+	pkgPath := reflect.TypeFor[registryDocModel]().PkgPath()
+	apidoc.Register(pkgPath, "registryDocModel", apidoc.StructDoc{
 		Comment: "registered struct comment",
 		Fields:  map[string]string{"Name": "registered field comment"},
 	})
 
-	docs := parseModelDocs(&registryPriorityModel{})
+	docs := modelFieldDocs(&registryDocModel{})
 	if docs["Name"] != "registered field comment" {
 		t.Fatalf(`docs[Name] = %q, want "registered field comment"`, docs["Name"])
 	}
 
-	if comment := parseStructComment(&registryPriorityModel{}); comment != "registered struct comment" {
-		t.Fatalf(`parseStructComment() = %q, want "registered struct comment"`, comment)
-	}
-}
-
-func TestParseModelDocsFallsBackToSourceFile(t *testing.T) {
-	docs := parseModelDocs(&fallbackOnlyModel{})
-	if want := "Name is parsed from this source file."; docs["Name"] != want {
-		t.Fatalf("docs[Name] = %q, want %q", docs["Name"], want)
-	}
-
-	if want := "fallbackOnlyModel is parsed from this source file when not registered."; parseStructComment(&fallbackOnlyModel{}) != want {
-		t.Fatalf("parseStructComment() = %q, want %q", parseStructComment(&fallbackOnlyModel{}), want)
+	if comment := modelStructComment(&registryDocModel{}); comment != "registered struct comment" {
+		t.Fatalf(`modelStructComment() = %q, want "registered struct comment"`, comment)
 	}
 }
 
@@ -55,7 +38,7 @@ type anonAliasPayload = struct {
 	Summary string `json:"summary"`
 }
 
-func TestParseModelDocsRecoversAnonymousStructBySignature(t *testing.T) {
+func TestModelFieldDocsRecoversAnonymousStructBySignature(t *testing.T) {
 	apidoc.Register("openapigen/anon", "anonAliasPayloadDoc", apidoc.StructDoc{
 		Fields: map[string]string{
 			"Title":   "The title.",
@@ -63,7 +46,7 @@ func TestParseModelDocsRecoversAnonymousStructBySignature(t *testing.T) {
 		},
 	})
 
-	docs := parseModelDocs(new(anonAliasPayload))
+	docs := modelFieldDocs(new(anonAliasPayload))
 	if want := "The title."; docs["Title"] != want {
 		t.Fatalf("docs[Title] = %q, want %q", docs["Title"], want)
 	}
@@ -72,7 +55,7 @@ func TestParseModelDocsRecoversAnonymousStructBySignature(t *testing.T) {
 	}
 }
 
-func TestParseModelDocsIgnoresAmbiguousAnonymousSignature(t *testing.T) {
+func TestModelFieldDocsIgnoresAmbiguousAnonymousSignature(t *testing.T) {
 	// Two structs share a field-name set but carry different field docs, so the
 	// signature is ambiguous and must not resolve to either struct's docs.
 	apidoc.Register("openapigen/anon", "ambiguousDocA", apidoc.StructDoc{
@@ -87,7 +70,7 @@ func TestParseModelDocsIgnoresAmbiguousAnonymousSignature(t *testing.T) {
 		Beta  string `json:"beta"`
 	}
 
-	docs := parseModelDocs(new(ambiguousAnon))
+	docs := modelFieldDocs(new(ambiguousAnon))
 	if len(docs) != 0 {
 		t.Fatalf("docs = %v, want empty for ambiguous signature", docs)
 	}

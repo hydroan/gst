@@ -12,14 +12,31 @@ import (
 	"github.com/hydroan/gst/internal/modelregistry"
 )
 
+// registerFixtureDoc registers the doc comments the generator is expected to
+// read for a fixture declared in this package. The generator reads the apidoc
+// registry and nothing else, so a fixture documents itself here instead of
+// through a Go doc comment, exactly like a generated model/apidoc.gen.go
+// documents a project's models.
+func registerFixtureDoc(typeName, comment string, fields map[string]string) {
+	apidoc.Register(reflect.TypeFor[openapiTimeQueryModel]().PkgPath(), typeName, apidoc.StructDoc{
+		Comment: comment,
+		Fields:  fields,
+	})
+}
+
 // Fixtures shared by more than one test file. Fixtures used by a single file
 // live next to the test that uses them.
 
 type openapiTimeQueryModel struct {
-	// ExpiresAt is the expiration time.
 	ExpiresAt *time.Time `json:"expires_at,omitempty" query:"expires_at"`
 
 	modelregistry.Base
+}
+
+func init() {
+	registerFixtureDoc("openapiTimeQueryModel", "", map[string]string{
+		"ExpiresAt": "ExpiresAt is the expiration time.",
+	})
 }
 
 type openapiEmbeddedQueryModel struct {

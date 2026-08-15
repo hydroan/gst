@@ -33,10 +33,13 @@ func TestTagsSkipPathParameters(t *testing.T) {
 	}
 }
 
-// summaryFirstLineModel is the human readable summary line.
-// The second comment line must not leak into the summary.
 type summaryFirstLineModel struct {
 	Name string `json:"name"`
+}
+
+func init() {
+	registerFixtureDoc("summaryFirstLineModel",
+		"summaryFirstLineModel is the human readable summary line.\nThe second comment line must not leak into the summary.", nil)
 }
 
 func TestSummaryCombinesVerbAndStructCommentFirstLine(t *testing.T) {

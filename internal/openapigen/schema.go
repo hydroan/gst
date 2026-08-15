@@ -142,7 +142,7 @@ func collectSchemaDocFields(typ reflect.Type, fields map[string]schemaDocField, 
 	}
 	visited[typ] = true
 
-	docs := parseModelDocs(reflect.New(typ).Interface())
+	docs := modelFieldDocs(reflect.New(typ).Interface())
 
 	var embedded []reflect.Type
 	for field := range typ.Fields() {
