@@ -1,4 +1,4 @@
-.PHONY: check build format vet lint test testv fix install uninstall help
+.PHONY: check build format vet lint test testv generate fix install uninstall help
 
 # Tool versions - must match go.mod exactly
 GOLANGCI_LINT_VERSION := $(shell go list -m -f '{{.Version}}' github.com/golangci/golangci-lint/v2)
@@ -37,6 +37,7 @@ help:
 	@echo "  lint           - Run golangci-lint (includes modernize, nilness and shadow)"
 	@echo "  test           - Run unit tests (simple output)"
 	@echo "  testv          - Run unit tests with verbose output"
+	@echo "  generate       - Regenerate the framework's own generated sources"
 	@echo "  fix            - Auto-fix code issues (gofumpt, golangci-lint)"
 	@echo "  install        - Install gg command and development tools"
 	@echo "  uninstall      - Uninstall gg command and development tools"
@@ -100,6 +101,14 @@ testv:
 	GST_TEST_DATABASE=sqlite go test -v ./database/...
 	@echo "Running example project tests with verbose output..."
 	go -C examples/demo test -v ./...
+
+# Regenerate the framework's own generated sources.
+# The framework registers its model doc comments at build time, the same way a
+# generated project registers its own, so nothing parses Go sources at runtime.
+# A forgotten run is caught by the test suite, not by review.
+generate:
+	@echo "Regenerating framework sources..."
+	go run ./internal/codegen/cmd/apidocgen
 
 # Auto-fix code issues
 fix:

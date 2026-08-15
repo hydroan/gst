@@ -30,11 +30,13 @@ var _ types.Model = (*AutoBase)(nil)
 //
 // created_at/updated_at follow the same NOT NULL, no-database-default
 // contract as Base: every writer provides both explicitly, in UTC.
+//
+// The uuid columns take a size instead of an explicit char type for the same
+// reason as Base: postgres blank-pads char values on read. The note belongs
+// here rather than above the field, for the reason Base's comment spells out.
 type AutoBase struct {
 	ID uint64 `json:"id" gorm:"primaryKey;autoIncrement" query:"id" url:"-"` // Auto-increment identifier assigned by the database
 
-	// size instead of an explicit char type for the same reason as Base:
-	// postgres blank-pads char values on read.
 	CreatedBy string         `json:"created_by,omitempty" gorm:"size:36" query:"created_by" url:"-"` // UUIDv7 user ID who created the record
 	UpdatedBy string         `json:"updated_by,omitempty" gorm:"size:36" query:"updated_by" url:"-"` // UUIDv7 user ID who last updated the record
 	CreatedAt time.Time      `json:"created_at,omitzero" gorm:"not null" query:"-" url:"-"`          // Timestamp when the record was created

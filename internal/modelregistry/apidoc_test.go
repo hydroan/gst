@@ -7,7 +7,11 @@ import (
 	"github.com/hydroan/gst/apidoc"
 )
 
-func TestEmbeddedDocsRegisteredForEveryDeclaredStruct(t *testing.T) {
+// TestGeneratedDocsRegisterEveryDeclaredStruct checks that apidoc.gen.go
+// registers the doc comments the OpenAPI generator turns into schema and query
+// parameter descriptions. The generator reads the registry and nothing else, so
+// a struct missing here is a struct that ships undocumented.
+func TestGeneratedDocsRegisterEveryDeclaredStruct(t *testing.T) {
 	baseFields := []string{"ID", "CreatedBy", "UpdatedBy", "CreatedAt", "UpdatedAt", "DeletedAt"}
 
 	tests := []struct {
@@ -41,12 +45,33 @@ func TestEmbeddedDocsRegisteredForEveryDeclaredStruct(t *testing.T) {
 	}
 }
 
-func TestRegisterEmbeddedDocsPanicsOnUnparsableSource(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Fatal("registerEmbeddedDocs() returned normally, want a panic when the embedded source stops parsing")
-		}
-	}()
+// TestGeneratedDocsKeepImplementationNotesOutOfFieldDocs pins the field docs an
+// implementation note would silently take over. Doc comment extraction prefers
+// a field's doc comment over its trailing one, so a note written above a field
+// stops being a note and becomes that field's API-facing description; these
+// fields carry notes about their column type, which is exactly the trap.
+func TestGeneratedDocsKeepImplementationNotesOutOfFieldDocs(t *testing.T) {
+	tests := []struct {
+		typeName string
+		field    string
+		want     string
+	}{
+		{typeName: "Base", field: "ID", want: "UUIDv7 identifier for the record"},
+		{typeName: "Base", field: "CreatedBy", want: "UUIDv7 user ID who created the record"},
+		{typeName: "AutoBase", field: "CreatedBy", want: "UUIDv7 user ID who created the record"},
+		{typeName: "AutoBase", field: "UpdatedBy", want: "UUIDv7 user ID who last updated the record"},
+	}
 
-	registerEmbeddedDocs("broken.go", []byte("package modelregistry\nfunc ("))
+	for _, tt := range tests {
+		t.Run(tt.typeName+"."+tt.field, func(t *testing.T) {
+			doc, ok := apidoc.Lookup(reflect.TypeFor[Base]().PkgPath(), tt.typeName)
+			if !ok {
+				t.Fatalf("apidoc.Lookup(%s) ok = false, want docs registered at init", tt.typeName)
+			}
+
+			if got := doc.Fields[tt.field]; got != tt.want {
+				t.Fatalf("doc.Fields[%s] = %q, want the trailing field comment %q", tt.field, got, tt.want)
+			}
+		})
+	}
 }

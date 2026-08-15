@@ -36,10 +36,14 @@ var _ types.Model = (*Base)(nil)
 // fills in the session-timezone wall clock, which silently diverges from the
 // framework's UTC time base. deleted_at stays nullable: NULL marks the live
 // row under soft deletion.
+//
+// The uuid columns take a size instead of an explicit char type: postgres
+// blank-pads char values, so an id shorter than 36 would come back with
+// trailing spaces there. varchar stores every id verbatim on all dialects.
+// The note belongs here rather than above the field: doc comment extraction
+// prefers a field's doc comment over its trailing one, so an implementation
+// note placed above a field becomes that field's API-facing description.
 type Base struct {
-	// The id columns take a size instead of an explicit char type: postgres
-	// blank-pads char values, so an id shorter than 36 would come back with
-	// trailing spaces there. varchar stores every id verbatim on all dialects.
 	ID string `json:"id" gorm:"primaryKey;size:36" query:"id" url:"-"` // UUIDv7 identifier for the record
 
 	CreatedBy string         `json:"created_by,omitempty" gorm:"size:36" query:"created_by" url:"-"` // UUIDv7 user ID who created the record
