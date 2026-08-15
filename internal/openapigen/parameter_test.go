@@ -106,6 +106,19 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 			if len(parameters) != len(tt.parameters) {
 				t.Fatalf("query parameters = %v, want exactly %v", parameterNames(parameters), tt.parameters)
 			}
+
+			// Framework parameters live in the "_" namespace and describe
+			// themselves through the doc comments modelregistry registers from
+			// its embedded source, so the description must hold up in a binary
+			// shipped without Go source files.
+			for _, name := range tt.parameters {
+				if !strings.HasPrefix(name, "_") {
+					continue
+				}
+				if parameter := parameters[name]; parameter != nil && parameter.Description == "" {
+					t.Errorf("query parameter %q description is empty, want the registered doc comment", name)
+				}
+			}
 		})
 	}
 
