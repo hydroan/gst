@@ -12,6 +12,42 @@ import (
 	"gorm.io/datatypes"
 )
 
+// The doc comments the schema tests expect on the fixtures declared in this
+// file. They are registered rather than written as Go doc comments because the
+// registry is the only thing the generator reads.
+func init() {
+	registerFixtureDoc("mapDocModel", "", map[string]string{
+		"GroupRoles": "GroupRoles binds groups to their roles.",
+	})
+	registerFixtureDoc("jsonDocPayload", "", map[string]string{
+		"Code": "Code is the payload code.",
+	})
+	registerFixtureDoc("jsonDocModel", "", map[string]string{
+		"Config": "Config is the configuration payload.",
+	})
+	registerFixtureDoc("enumFieldModel", "", map[string]string{
+		"Status": "Status is the record status.",
+	})
+	registerFixtureDoc("nestedPayloadOption", "", map[string]string{
+		"Code": "Code is the option code.",
+		"Name": "Name is the option name.",
+	})
+	registerFixtureDoc("nestedPayloadReq", "", map[string]string{
+		"MaxAmount": "MaxAmount is the request level limit.",
+		"Options":   "Options is the full nested option collection.",
+	})
+	registerFixtureDoc("embeddedSchemeRow", "", map[string]string{
+		"Status": "Status is the record status.",
+		"Label":  "Label is the row label.",
+	})
+	registerFixtureDoc("embeddedSchemeView", "", map[string]string{
+		"Options": "Options is the nested option collection of the row.",
+	})
+	registerFixtureDoc("cyclicCategory", "", map[string]string{
+		"Title": "Title is the category title.",
+	})
+}
+
 func TestSchemaFromTypeUsesDateTimeFormatForTime(t *testing.T) {
 	tests := []struct {
 		name string
@@ -61,12 +97,6 @@ func TestSchemaFromTypeKeepsRegularStructsAsObjects(t *testing.T) {
 
 type mapDocModel struct {
 	GroupRoles map[string][]string `json:"group_roles,omitempty"`
-}
-
-func init() {
-	registerFixtureDoc("mapDocModel", "", map[string]string{
-		"GroupRoles": "GroupRoles binds groups to their roles.",
-	})
 }
 
 func TestAddSchemaDocsForTypeSetsDescriptionWithoutTitle(t *testing.T) {
@@ -146,15 +176,6 @@ type jsonDocModel struct {
 	Config datatypes.JSONType[jsonDocPayload] `json:"config"`
 }
 
-func init() {
-	registerFixtureDoc("jsonDocPayload", "", map[string]string{
-		"Code": "Code is the payload code.",
-	})
-	registerFixtureDoc("jsonDocModel", "", map[string]string{
-		"Config": "Config is the configuration payload.",
-	})
-}
-
 func TestAddSchemaDocsForTypeDecoratesJSONTypeWithoutTitle(t *testing.T) {
 	schemaRef, err := openapi3gen.NewSchemaRefForValue(jsonDocModel{}, nil)
 	if err != nil {
@@ -190,12 +211,6 @@ type enumFieldModel struct {
 	Status enumFieldStatus `json:"status"`
 
 	Codes []enumFieldStatus `json:"codes"`
-}
-
-func init() {
-	registerFixtureDoc("enumFieldModel", "", map[string]string{
-		"Status": "Status is the record status.",
-	})
 }
 
 func TestAddSchemaDocsForTypeSetsEnumValues(t *testing.T) {
@@ -259,17 +274,6 @@ type nestedPayloadOption struct {
 type nestedPayloadReq struct {
 	MaxAmount int64                  `json:"max_amount"`
 	Options   []*nestedPayloadOption `json:"options"`
-}
-
-func init() {
-	registerFixtureDoc("nestedPayloadOption", "", map[string]string{
-		"Code": "Code is the option code.",
-		"Name": "Name is the option name.",
-	})
-	registerFixtureDoc("nestedPayloadReq", "", map[string]string{
-		"MaxAmount": "MaxAmount is the request level limit.",
-		"Options":   "Options is the full nested option collection.",
-	})
 }
 
 func TestAddSchemaDocsForTypeDecoratesNestedStructFields(t *testing.T) {
@@ -355,16 +359,6 @@ type embeddedSchemeView struct {
 	Options []*nestedPayloadOption `json:"options"`
 }
 
-func init() {
-	registerFixtureDoc("embeddedSchemeRow", "", map[string]string{
-		"Status": "Status is the record status.",
-		"Label":  "Label is the row label.",
-	})
-	registerFixtureDoc("embeddedSchemeView", "", map[string]string{
-		"Options": "Options is the nested option collection of the row.",
-	})
-}
-
 func TestAddSchemaDocsForTypeDecoratesEmbeddedStructFields(t *testing.T) {
 	registerEnumFieldStatus()
 
@@ -403,12 +397,6 @@ type cyclicCategory struct {
 	Title string `json:"title"`
 
 	Children []*cyclicCategory `json:"children"`
-}
-
-func init() {
-	registerFixtureDoc("cyclicCategory", "", map[string]string{
-		"Title": "Title is the category title.",
-	})
 }
 
 func TestAddSchemaDocsForTypeCutsCyclicStructTypes(t *testing.T) {
