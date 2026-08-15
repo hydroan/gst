@@ -74,9 +74,14 @@ func FromGin(c *gin.Context) Metadata {
 		return Metadata{}
 	}
 
-	params := make(map[string]string)
-	for _, key := range c.GetStringSlice(consts.PARAMS) {
-		params[key] = c.Param(key)
+	// Routes declaring no parameters are the common case; leaving params nil
+	// there keeps a map out of every one of their requests.
+	var params map[string]string
+	if keys := c.GetStringSlice(consts.PARAMS); len(keys) > 0 {
+		params = make(map[string]string, len(keys))
+		for _, key := range keys {
+			params[key] = c.Param(key)
+		}
 	}
 
 	var path string
@@ -135,23 +140,19 @@ func (m Metadata) RawQuery() string { return m.rawQuery }
 type metadataContextKey struct{}
 
 // WithMetadata returns a context carrying immutable request metadata.
+//
+// The metadata is stored as given rather than rebuilt from its own getters.
+// Metadata is immutable: its fields are unexported, nothing writes them after
+// construction, and the two getters exposing maps hand out clones, so no
+// caller can reach the stored maps to change them. Rebuilding here cloned
+// those maps twice more on every request to produce a copy nothing could tell
+// apart from the original.
 func WithMetadata(ctx context.Context, meta Metadata) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	return context.WithValue(ctx, metadataContextKey{}, New(Fields{
-		Route:     meta.Route(),
-		Path:      meta.Path(),
-		Username:  meta.Username(),
-		UserID:    meta.UserID(),
-		SessionID: meta.SessionID(),
-		TenantID:  meta.TenantID(),
-		TraceID:   meta.TraceID(),
-		Params:    meta.Params(),
-		Query:     meta.Query(),
-		RawQuery:  meta.RawQuery(),
-	}))
+	return context.WithValue(ctx, metadataContextKey{}, meta)
 }
 
 // FromContext extracts request metadata from ctx.
@@ -177,8 +178,16 @@ func rawQueryOf(rawQuery string, query url.Values) string {
 	return query.Encode()
 }
 
+// cloneStringMap copies src, returning nil when there is nothing to copy.
+//
+// The clone exists so callers cannot reach the metadata's own map. An empty
+// source has nothing to protect, while allocating a map to hand back costs one
+// allocation per request on the routes that declare no parameters — the common
+// case. Nil is not a new state for readers to handle: metadata built outside a
+// request carries nil here already, so every reader tolerates it. Reads on a
+// nil map are well defined, and these clones are handed out to be read.
 func cloneStringMap(src map[string]string) map[string]string {
-	if src == nil {
+	if len(src) == 0 {
 		return nil
 	}
 
@@ -187,8 +196,10 @@ func cloneStringMap(src map[string]string) map[string]string {
 	return dst
 }
 
+// cloneURLValues copies src, returning nil when there is nothing to copy, for
+// the reasons given on cloneStringMap.
 func cloneURLValues(src url.Values) url.Values {
-	if src == nil {
+	if len(src) == 0 {
 		return nil
 	}
 

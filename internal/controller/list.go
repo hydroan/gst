@@ -43,7 +43,6 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_LIST)
 		svc := meta.service()
-		ctx := types.NewServiceContext(c, nil, consts.PHASE_LIST)
 
 		if !meta.typesEqual {
 			var err error
@@ -66,6 +65,11 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			}
 			return
 		}
+
+		// Built only after the custom-typed branch has returned: that branch
+		// runs the service with a context of its own, so building this one
+		// earlier would extract and clone request metadata nothing reads.
+		ctx := types.NewServiceContext(c, nil, consts.PHASE_LIST)
 
 		// The URL query is parsed once and shared by every parser below;
 		// url.URL.Query re-parses the raw query string on each call.
