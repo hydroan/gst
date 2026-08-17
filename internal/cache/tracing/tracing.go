@@ -53,11 +53,18 @@ func (tw *Wrapper[T]) Get(ctx context.Context, key string) (T, error) {
 	}
 	spanCtx, span := tw.startSpan(ctx, "get")
 	defer span.End()
-	span.SetAttributes(tw.attributes("get", key)...)
+	// Attributes are built only for a span that records them: the key digest is
+	// a SHA-256 hash, so assembling them unconditionally would hash a key on
+	// every cache operation of every sampled-out request. They are submitted in
+	// one call once the outcome is known, because each call on a recording span
+	// locks it and re-runs attribute deduplication.
+	recording := gstotel.IsSpanRecording(span)
 
 	value, err := tw.cache.Get(spanCtx, key)
+	if recording {
+		span.SetAttributes(append(tw.attributes("get", key), attribute.Bool("cache.hit", err == nil))...)
+	}
 	if err != nil {
-		span.SetAttributes(attribute.Bool("cache.hit", false))
 		if !errors.Is(err, types.ErrEntryNotFound) {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, fmt.Sprintf("Failed to get cache key: %v", err))
@@ -67,7 +74,6 @@ func (tw *Wrapper[T]) Get(ctx context.Context, key string) (T, error) {
 		return value, err
 	}
 
-	span.SetAttributes(attribute.Bool("cache.hit", true))
 	span.SetStatus(codes.Ok, "Cache key retrieved successfully")
 	return value, nil
 }
@@ -80,7 +86,9 @@ func (tw *Wrapper[T]) Set(ctx context.Context, key string, value T, ttl time.Dur
 	}
 	spanCtx, span := tw.startSpan(ctx, "set")
 	defer span.End()
-	span.SetAttributes(append(tw.attributes("set", key), attribute.String("cache.ttl", ttl.String()))...)
+	if gstotel.IsSpanRecording(span) {
+		span.SetAttributes(append(tw.attributes("set", key), attribute.String("cache.ttl", ttl.String()))...)
+	}
 
 	if err := tw.cache.Set(spanCtx, key, value, ttl); err != nil {
 		span.RecordError(err)
@@ -100,7 +108,9 @@ func (tw *Wrapper[T]) Delete(ctx context.Context, key string) error {
 	}
 	spanCtx, span := tw.startSpan(ctx, "delete")
 	defer span.End()
-	span.SetAttributes(tw.attributes("delete", key)...)
+	if gstotel.IsSpanRecording(span) {
+		span.SetAttributes(tw.attributes("delete", key)...)
+	}
 
 	if err := tw.cache.Delete(spanCtx, key); err != nil {
 		span.RecordError(err)
@@ -120,10 +130,12 @@ func (tw *Wrapper[T]) Exists(ctx context.Context, key string) bool {
 	}
 	spanCtx, span := tw.startSpan(ctx, "exists")
 	defer span.End()
-	span.SetAttributes(tw.attributes("exists", key)...)
+	recording := gstotel.IsSpanRecording(span)
 
 	exists := tw.cache.Exists(spanCtx, key)
-	span.SetAttributes(attribute.Bool("cache.exists", exists))
+	if recording {
+		span.SetAttributes(append(tw.attributes("exists", key), attribute.Bool("cache.exists", exists))...)
+	}
 	span.SetStatus(codes.Ok, "Cache key existence checked successfully")
 	return exists
 }

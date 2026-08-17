@@ -106,10 +106,12 @@ func VerifyPasswordCredential(ctx context.Context, credential *modeliamaccount.P
 		return err
 	}
 
+	// No recording gate here: the attribute is a single boolean already at hand,
+	// so there is nothing to skip building, and the bcrypt comparison above
+	// dominates this function by orders of magnitude. Gate where assembling the
+	// attributes costs something, not on principle.
 	err := bcrypt.CompareHashAndPassword([]byte(credential.PasswordHash), []byte(password))
-	if gstotel.IsSpanRecording(span) {
-		span.SetAttributes(attribute.Bool("iam.password.match", err == nil))
-	}
+	span.SetAttributes(attribute.Bool("iam.password.match", err == nil))
 	if err != nil && !errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
 		gstotel.RecordError(span, err)
 	}

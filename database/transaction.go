@@ -82,12 +82,13 @@ func transactionOn(ctx context.Context, base *gorm.DB, fn func(ctx context.Conte
 
 	spanCtx, span := gstotel.StartSpan(ctx, gstotel.OperationSpanName("database", "Transaction"))
 	defer span.End()
-	if gstotel.IsSpanRecording(span) {
-		span.SetAttributes(
-			attribute.String("component", "database"),
-			attribute.String("database.operation", "Transaction"),
-		)
-	}
+	// No recording gate here: both attributes are constants, so there is nothing
+	// to skip building. Gate where assembling the attributes costs something —
+	// see the per-statement batch in GormTracingPlugin.finishSpan.
+	span.SetAttributes(
+		attribute.String("component", "database"),
+		attribute.String("database.operation", "Transaction"),
+	)
 
 	begin := time.Now()
 	// Deriving the closure context from spanCtx makes per-statement spans from
