@@ -91,7 +91,7 @@ func (db *database[M]) Create(objs ...M) (err error) {
 		dryRunObjs := cloneDryRunModels(objs)
 		for i := 0; i < len(dryRunObjs); i += batchSize {
 			end := min(i+batchSize, len(dryRunObjs))
-			tx := db.ins.Session(&gorm.Session{DryRun: true}).Table(tableName).Create(dryRunObjs[i:end])
+			tx := dryRunSession(db.ins).Table(tableName).Create(dryRunObjs[i:end])
 			if err = db.collectSQL(tx); err != nil {
 				return err
 			}
@@ -207,13 +207,13 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 		for i := 0; i < len(dryRunObjs); i += batchSize {
 			end := min(i+batchSize, len(dryRunObjs))
 			if util.Deref(db.enablePurge) {
-				tx := db.ins.Session(&gorm.Session{DryRun: true}).Table(tableName).Unscoped().Delete(dryRunObjs[i:end])
+				tx := dryRunSession(db.ins).Table(tableName).Unscoped().Delete(dryRunObjs[i:end])
 				if err = db.collectSQL(tx); err != nil {
 					return err
 				}
 				continue
 			}
-			tx := db.ins.Session(&gorm.Session{DryRun: true}).Table(tableName).Delete(dryRunObjs[i:end])
+			tx := dryRunSession(db.ins).Table(tableName).Delete(dryRunObjs[i:end])
 			if err = db.collectSQL(tx); err != nil {
 				return err
 			}
@@ -355,7 +355,7 @@ func (db *database[M]) Update(objs ...M) (err error) {
 	if db.dryRun {
 		dryRunObjs := cloneDryRunModels(objs)
 		for i := range dryRunObjs {
-			tx := db.updateRowStatement(db.ins.Session(&gorm.Session{DryRun: true}), tableName, dryRunObjs[i]).Updates(dryRunObjs[i])
+			tx := db.updateRowStatement(dryRunSession(db.ins), tableName, dryRunObjs[i]).Updates(dryRunObjs[i])
 			if err = db.collectSQL(tx); err != nil {
 				return err
 			}
@@ -489,7 +489,7 @@ func (db *database[M]) UpdateByID(id string, assignments ...types.Assignment) (e
 	tableName := db.m.GetTableName()
 
 	if db.dryRun {
-		tx := db.ins.Session(&gorm.Session{DryRun: true}).Table(tableName).Model(*new(M)).Where("id = ?", id).Updates(updates)
+		tx := dryRunSession(db.ins).Table(tableName).Model(*new(M)).Where("id = ?", id).Updates(updates)
 		return db.collectSQL(tx)
 	}
 

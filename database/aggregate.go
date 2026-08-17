@@ -179,7 +179,7 @@ func (a *aggregator[M, R]) Scan(dest *[]R) (err error) {
 	if a.db.dryRun {
 		// Find, not Scan: Scan executes through Rows, which gorm refuses in dry
 		// run mode. Both build the same statement, and dry run only needs that.
-		return a.db.collectSQL(tx.Session(&gorm.Session{DryRun: true}).Find(dest))
+		return a.db.collectSQL(dryRunSession(tx).Find(dest))
 	}
 	// gorm keeps the existing elements when a Scan returns no rows, so a reused
 	// destination would still hold the previous result. List documents that a
@@ -220,7 +220,7 @@ func (a *aggregator[M, R]) ScanOne(dest *R) (err error) {
 		return err
 	}
 	if a.db.dryRun {
-		return a.db.collectSQL(tx.Session(&gorm.Session{DryRun: true}).Find(dest))
+		return a.db.collectSQL(dryRunSession(tx).Find(dest))
 	}
 	var zero R
 	*dest = zero
@@ -260,7 +260,7 @@ func (a *aggregator[M, R]) CountGroups(count *int) (err error) {
 	var total int64
 	outer := a.db.ins.Session(&gorm.Session{NewDB: true}).Table("(?) AS grouped", inner)
 	if a.db.dryRun {
-		return a.db.collectSQL(outer.Session(&gorm.Session{DryRun: true}).Count(&total))
+		return a.db.collectSQL(dryRunSession(outer).Count(&total))
 	}
 	if err = outer.Count(&total).Error; err != nil {
 		return err

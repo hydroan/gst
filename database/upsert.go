@@ -92,7 +92,7 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 		dryRunObjs := cloneDryRunModels(objs)
 		for i := 0; i < len(dryRunObjs); i += batchSize {
 			end := min(i+batchSize, len(dryRunObjs))
-			tx := db.ins.Session(&gorm.Session{DryRun: true}).Table(tableName).Save(dryRunObjs[i:end])
+			tx := dryRunSession(db.ins).Table(tableName).Save(dryRunObjs[i:end])
 			if err = db.collectSQL(tx); err != nil {
 				return err
 			}

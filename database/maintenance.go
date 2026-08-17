@@ -87,7 +87,7 @@ func (db *database[M]) Health() error {
 		return err
 	}
 	if db.buildingSQL {
-		tx := db.ins.Session(&gorm.Session{DryRun: true}).Exec("SELECT 1")
+		tx := dryRunSession(db.ins).Exec("SELECT 1")
 		return db.collectSQL(tx)
 	}
 

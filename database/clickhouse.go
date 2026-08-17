@@ -90,7 +90,7 @@ func (db *database[M]) clickhouseDelete(objs []M) (err error) {
 	deleteSQL := "DELETE FROM " + db.quoteIdent(db.outerTableName()) + " WHERE " + db.quoteIdent("id") + " IN ?"
 
 	if db.dryRun {
-		tx := db.ins.Session(&gorm.Session{DryRun: true}).Exec(deleteSQL, ids)
+		tx := dryRunSession(db.ins).Exec(deleteSQL, ids)
 		return db.collectSQL(tx)
 	}
 	for i := 0; i < len(ids); i += batchSize {
@@ -121,7 +121,7 @@ func (db *database[M]) clickhouseUpdate(objs []M) (err error) {
 	if db.dryRun {
 		dryRunObjs := cloneDryRunModels(objs)
 		for i := range dryRunObjs {
-			tx := db.updateRowStatement(db.ins.Session(&gorm.Session{DryRun: true}), tableName, dryRunObjs[i]).Updates(dryRunObjs[i])
+			tx := db.updateRowStatement(dryRunSession(db.ins), tableName, dryRunObjs[i]).Updates(dryRunObjs[i])
 			if err = db.collectSQL(tx); err != nil {
 				return err
 			}

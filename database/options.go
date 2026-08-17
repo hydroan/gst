@@ -3,6 +3,7 @@ package database
 import (
 	"github.com/hydroan/gst/types"
 	"gorm.io/gorm"
+	glogger "gorm.io/gorm/logger"
 )
 
 // This file holds the execution-mode options: how an operation runs (batch
@@ -86,6 +87,19 @@ func (db *database[M]) WithDryRun() types.Database[M] {
 	defer db.mu.Unlock()
 	db.dryRun = true
 	return db
+}
+
+// dryRunSession derives the session a dry run builds its statement on.
+//
+// Statement logging is off because a dry run never reaches the database. The
+// SQL log reports what a statement did — how long it took, how many rows it
+// touched, which caller issued it — and a statement that was only built has
+// none of that to report. Logging it anyway files an entry saying a write
+// happened that never did, into the record an operator reconstructs history
+// from. Routing every dry run through here keeps that decision in one place
+// instead of leaving each operation to remember it.
+func dryRunSession(tx *gorm.DB) *gorm.DB {
+	return tx.Session(&gorm.Session{DryRun: true, Logger: glogger.Default.LogMode(glogger.Silent)})
 }
 
 // WithBuildSQL enables SQL build mode for the next terminal operation.

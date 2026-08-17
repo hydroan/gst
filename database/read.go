@@ -7,14 +7,7 @@ import (
 
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
-	"gorm.io/gorm"
-	glogger "gorm.io/gorm/logger"
 )
-
-// dryRunReadSession builds read SQL through GORM without executing database I/O.
-func (db *database[M]) dryRunReadSession() *gorm.DB {
-	return db.ins.Session(&gorm.Session{DryRun: true, Logger: glogger.Default.LogMode(glogger.Silent)})
-}
 
 // nilModel reports whether a read destination is unusable: a nil or invalid
 // model pointer cannot be filled by the query.
@@ -77,7 +70,7 @@ func (db *database[M]) List(dest *[]M) (err error) {
 	if db.dryRun {
 		tableName := db.m.GetTableName()
 		db.applyCursorPagination()
-		tx := db.dryRunReadSession().Table(tableName).Find(dest)
+		tx := dryRunSession(db.ins).Table(tableName).Find(dest)
 		return db.collectSQL(tx)
 	}
 	// Invoke model hook: ListBefore.
@@ -177,10 +170,10 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 		dryRunDest := cloneDryRunModel(dest)
 		dryRunDest.ClearID()
 		if len(tableName) == 0 {
-			tx := db.dryRunReadSession().Where("id = ?", id).Find(dryRunDest)
+			tx := dryRunSession(db.ins).Where("id = ?", id).Find(dryRunDest)
 			return db.collectSQL(tx)
 		}
-		tx := db.dryRunReadSession().Table(tableName).Where(db.quoteTableColumn(tableName, "id")+" = ?", id).Find(dryRunDest)
+		tx := dryRunSession(db.ins).Table(tableName).Where(db.quoteTableColumn(tableName, "id")+" = ?", id).Find(dryRunDest)
 		return db.collectSQL(tx)
 	}
 	// Invoke model hook: GetBefore.
@@ -250,7 +243,7 @@ func (db *database[M]) Count(count *int) (err error) {
 	var count64 int64
 	if db.dryRun {
 		tableName := db.m.GetTableName()
-		tx := db.dryRunReadSession().Table(tableName).Model(*new(M)).Limit(-1).Offset(-1).Count(&count64)
+		tx := dryRunSession(db.ins).Table(tableName).Model(*new(M)).Limit(-1).Offset(-1).Count(&count64)
 		return db.collectSQL(tx)
 	}
 	tableName := db.m.GetTableName()
@@ -297,7 +290,7 @@ func (db *database[M]) First(dest M) (err error) {
 	db.applySelect()
 	if db.dryRun {
 		tableName := db.m.GetTableName()
-		tx := db.dryRunReadSession().Table(tableName).First(dest)
+		tx := dryRunSession(db.ins).Table(tableName).First(dest)
 		return db.collectSQL(tx)
 	}
 	// Invoke model hook: GetBefore
@@ -360,7 +353,7 @@ func (db *database[M]) Last(dest M) (err error) {
 	db.applySelect()
 	if db.dryRun {
 		tableName := db.m.GetTableName()
-		tx := db.dryRunReadSession().Table(tableName).Last(dest)
+		tx := dryRunSession(db.ins).Table(tableName).Last(dest)
 		return db.collectSQL(tx)
 	}
 	// Invoke model hook: GetBefore.
@@ -423,7 +416,7 @@ func (db *database[M]) Take(dest M) (err error) {
 	db.applySelect()
 	if db.dryRun {
 		tableName := db.m.GetTableName()
-		tx := db.dryRunReadSession().Table(tableName).Take(dest)
+		tx := dryRunSession(db.ins).Table(tableName).Take(dest)
 		return db.collectSQL(tx)
 	}
 	// Invoke model hook: GetBefore.
