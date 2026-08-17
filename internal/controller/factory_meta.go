@@ -12,6 +12,7 @@ import (
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -133,14 +134,19 @@ func (meta *factoryMeta[M, REQ, RSP]) startControllerSpan(c *gin.Context) (conte
 	// Update request context with new span context
 	c.Request = c.Request.WithContext(requestctx.WithMetadata(spanCtx, requestctx.FromGin(c)))
 
+	// Attributes are built as typed values and submitted in one call, the same
+	// shape the tracing middleware uses. Passing them as map[string]any instead
+	// allocates the map, boxes every value into an interface, and then costs a
+	// type switch to arrive back at these very attributes — per request, on the
+	// sampled path.
 	if gstotel.IsSpanRecording(span) {
-		gstotel.AddSpanTags(span, map[string]any{
-			"component":            "controller",
-			"controller.operation": meta.controllerSpan.operation,
-			"controller.model":     meta.name,
-			"controller.method":    c.Request.Method,
-			"controller.path":      c.FullPath(),
-		})
+		span.SetAttributes(
+			attribute.String("component", "controller"),
+			attribute.String("controller.operation", meta.controllerSpan.operation),
+			attribute.String("controller.model", meta.name),
+			attribute.String("controller.method", c.Request.Method),
+			attribute.String("controller.path", c.FullPath()),
+		)
 	}
 
 	return spanCtx, span
@@ -179,11 +185,11 @@ func traceServiceCall[T any](parentCtx context.Context, span phaseSpan, modelNam
 
 	recording := gstotel.IsSpanRecording(s)
 	if recording {
-		gstotel.AddSpanTags(s, map[string]any{
-			"component":         "service",
-			"service.operation": span.operation,
-			"service.model":     modelName,
-		})
+		s.SetAttributes(
+			attribute.String("component", "service"),
+			attribute.String("service.operation", span.operation),
+			attribute.String("service.model", modelName),
+		)
 	}
 
 	// Declare result variables for use in defer
@@ -198,10 +204,10 @@ func traceServiceCall[T any](parentCtx context.Context, span phaseSpan, modelNam
 	defer func() {
 		if recording {
 			duration := time.Since(startTime)
-			gstotel.AddSpanTags(s, map[string]any{
-				"hook.duration_ms": duration.Milliseconds(),
-				"hook.success":     err == nil,
-			})
+			s.SetAttributes(
+				attribute.Int64("hook.duration_ms", duration.Milliseconds()),
+				attribute.Bool("hook.success", err == nil),
+			)
 			if err != nil {
 				gstotel.RecordError(s, err)
 			}

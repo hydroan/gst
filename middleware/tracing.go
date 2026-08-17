@@ -56,9 +56,14 @@ func Tracing() gin.HandlerFunc {
 			// dominated allocation profiles under load. When adding attributes,
 			// extend the batches below instead of adding SetAttributes calls, and
 			// keep the recording gate so the sampled-out path stays allocation-free.
+			// The trace and span IDs are deliberately not attributes: every span
+			// already carries both in its own envelope, which is what tracing
+			// backends index and display. Repeating them cost two string
+			// formats, two attributes and their encoding on every sampled
+			// request, for values a backend already had.
 			recording = gstotel.IsSpanRecording(span)
 			if recording {
-				attrs := make([]attribute.KeyValue, 0, 12)
+				attrs := make([]attribute.KeyValue, 0, 10)
 				attrs = append(
 					attrs,
 					attribute.String("http.method", c.Request.Method),
@@ -69,8 +74,6 @@ func Tracing() gin.HandlerFunc {
 					attribute.String("http.route", c.FullPath()),
 					attribute.String("http.user_agent", c.Request.UserAgent()),
 					attribute.String("http.remote_addr", c.ClientIP()),
-					gstotel.TraceIDAttrKey().String(traceID),
-					gstotel.SpanIDAttrKey().String(spanID),
 				)
 
 				// Add request headers as attributes (selective)
