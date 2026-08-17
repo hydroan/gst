@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -101,6 +102,60 @@ func TestCreateFactoryCompactsNullSliceEntries(t *testing.T) {
 		"null entries must be removed while real items survive")
 	require.NotContains(t, recorder.Body.String(), `"got_nil_item":true`,
 		"the service must never observe a nil slice element")
+}
+
+// TestCreateFactoryRejectsTrailingContentAfterJSONBody pins where a request
+// body ends: it must be one JSON value and nothing after it. Reading the body
+// as a stream stops at the first value and drops whatever follows, so a second
+// document — or the tail of a retry appended to the first — would bind as if
+// the body had been clean.
+func TestCreateFactoryRejectsTrailingContentAfterJSONBody(t *testing.T) {
+	engine := newNormalizeProbeEngine(t, "normalize-trailing-content-probes")
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/normalize-trailing-content-probes",
+		strings.NewReader(`{"items":[{"name":"first"}]} {"items":[{"name":"second"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code,
+		"a body carrying more than one JSON value must be refused, not bound from the first one")
+}
+
+// TestCreateFactoryAcceptsTrailingWhitespace keeps the rule above from
+// overreaching: whitespace after the body is not content, and bodies written
+// with a trailing newline are ordinary.
+func TestCreateFactoryAcceptsTrailingWhitespace(t *testing.T) {
+	engine := newNormalizeProbeEngine(t, "normalize-trailing-space-probes")
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/normalize-trailing-space-probes",
+		strings.NewReader("{\"items\":[{\"name\":\"first\"}]}\n  "))
+	req.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Contains(t, recorder.Body.String(), `"item_count":1`)
+}
+
+// BenchmarkBindJSONRequest measures what binding one request body costs, the
+// price every write endpoint pays before its service sees anything.
+func BenchmarkBindJSONRequest(b *testing.B) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"items":[{"name":"first"},{"name":"second"}]}`)
+
+	b.ReportAllocs()
+	for b.Loop() {
+		req := httptest.NewRequest(http.MethodPost, "/bind-probes", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = req
+
+		target := &normalizeProbeReq{}
+		if err := bindJSONRequest(c, &target); err != nil {
+			b.Fatal(err)
+		}
+	}
 }
 
 // TestCompactNilSliceElements covers the reflective walk over the value

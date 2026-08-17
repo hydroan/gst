@@ -6,6 +6,8 @@ import (
 	"reflect"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
+	ginjson "github.com/gin-gonic/gin/codec/json"
 	"github.com/hydroan/gst/types"
 )
 
@@ -24,6 +26,19 @@ var jsonNull = []byte("null")
 // — the sentinel the handlers already tolerate for empty bodies. This also
 // keeps the null body away from gin's validator, which panics on the nil
 // pointer such a body would decode into.
+//
+// The body is decoded from the bytes already read rather than handed back to
+// gin as a reader: binding through gin wraps those bytes in a reader and drives
+// a streaming decoder across them, paying for a decoder and its buffer to
+// re-read what is already in memory. Decoding still goes through gin's codec
+// and validation through gin's validator, so an application that swapped the
+// JSON implementation keeps that choice here, and a bound request is checked
+// exactly as gin would check it. The body is put back either way — reading it
+// here must not stop anything downstream from reading it again.
+//
+// Decoding whole bytes also ends the body where the body ends: a streaming
+// decoder stops at the first JSON value and silently drops whatever follows,
+// so a second document appended to the first would bind as if it were clean.
 func bindJSONRequest(c *gin.Context, target any) error {
 	raw, err := c.GetRawData()
 	if err != nil {
@@ -33,7 +48,11 @@ func bindJSONRequest(c *gin.Context, target any) error {
 		return io.EOF
 	}
 	c.Request.Body = io.NopCloser(bytes.NewReader(raw))
-	return c.ShouldBindJSON(target)
+
+	if err = ginjson.API.Unmarshal(raw, target); err != nil {
+		return err
+	}
+	return binding.Validator.ValidateStruct(target)
 }
 
 // normalizeRequest restores req to the zero-value instance when a JSON null
