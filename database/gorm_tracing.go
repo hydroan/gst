@@ -153,10 +153,10 @@ func (p *GormTracingPlugin) startSpan(db *gorm.DB, operation string) {
 
 	if gstotel.IsSpanRecording(span) {
 		// Add GORM-specific attributes
-		gstotel.AddSpanTags(span, map[string]any{
-			"gorm.operation": operation,
-			"gorm.table":     db.Statement.Table,
-		})
+		span.SetAttributes(
+			attribute.String("gorm.operation", operation),
+			attribute.String("gorm.table", db.Statement.Table),
+		)
 
 		db.Set("tracing:start_time", time.Now())
 	}
@@ -184,45 +184,43 @@ func (p *GormTracingPlugin) finishSpan(db *gorm.DB) {
 		return
 	}
 
+	// Every attribute of this statement is collected first and submitted in one
+	// call. Each SetAttributes call on a recording span locks the span, grows
+	// its attribute slice and re-runs deduplication, and this function runs
+	// once per executed statement — the busiest traced path in the framework.
+	attrs := make([]attribute.KeyValue, 0, 5)
+
 	// Get start time
 	startTimeValue, exists := db.Get("tracing:start_time")
 	if exists {
 		if startTime, ok := startTimeValue.(time.Time); ok {
 			duration := time.Since(startTime)
-			gstotel.AddSpanTags(span, map[string]any{
-				"gorm.duration_ms": duration.Milliseconds(),
-			})
+			attrs = append(attrs, attribute.Int64("gorm.duration_ms", duration.Milliseconds()))
 		}
 	}
 
 	// Add SQL information if available
-	if db.Statement.SQL.String() != "" {
-		gstotel.AddSpanTags(span, map[string]any{
-			"gorm.sql": db.Statement.SQL.String(),
-		})
+	if sql := db.Statement.SQL.String(); sql != "" {
+		attrs = append(attrs, attribute.String("gorm.sql", sql))
 	}
 
 	// Add affected rows count
 	if db.Statement.RowsAffected >= 0 {
-		gstotel.AddSpanTags(span, map[string]any{
-			"gorm.rows_affected": db.Statement.RowsAffected,
-		})
+		attrs = append(attrs, attribute.Int64("gorm.rows_affected", db.Statement.RowsAffected))
 	}
 
 	// Record error if any
 	if db.Error != nil {
 		gstotel.RecordError(span, db.Error)
-		gstotel.AddSpanTags(span, map[string]any{
-			"gorm.error": db.Error.Error(),
-		})
+		attrs = append(attrs, attribute.String("gorm.error", db.Error.Error()))
 	}
 
 	// Add database connection info
 	if db.Statement.ConnPool != nil {
-		gstotel.AddSpanTags(span, map[string]any{
-			"gorm.connection_pool": fmt.Sprintf("%T", db.Statement.ConnPool),
-		})
+		attrs = append(attrs, attribute.String("gorm.connection_pool", fmt.Sprintf("%T", db.Statement.ConnPool)))
 	}
+
+	span.SetAttributes(attrs...)
 }
 
 // InstallGormTracingPlugin installs the GORM tracing plugin to the given database instance.
