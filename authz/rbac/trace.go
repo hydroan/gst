@@ -2,11 +2,11 @@ package rbac
 
 import (
 	"context"
-	"maps"
 	"strings"
 
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/types"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func contextOrBackground(ctx context.Context) context.Context {
@@ -19,7 +19,7 @@ func contextOrBackground(ctx context.Context) context.Context {
 // traceRBAC starts a gst-owned RBAC span and returns a finish callback.
 // The returned context must be passed down the write path so adapter and
 // database spans appear under the RBAC operation in the request trace.
-func traceRBAC(ctx context.Context, operation string, fields map[string]any) (context.Context, func(error)) {
+func traceRBAC(ctx context.Context, operation string, fields []attribute.KeyValue) (context.Context, func(error)) {
 	ctx = contextOrBackground(ctx)
 	if !gstotel.IsEnabled() {
 		return ctx, func(error) {}
@@ -28,12 +28,14 @@ func traceRBAC(ctx context.Context, operation string, fields map[string]any) (co
 	spanCtx, span := gstotel.StartSpan(ctx, gstotel.OperationSpanName("rbac", operation))
 	recording := gstotel.IsSpanRecording(span)
 	if recording {
-		tags := map[string]any{
-			"component":      "rbac",
-			"rbac.operation": operation,
-		}
-		maps.Copy(tags, fields)
-		gstotel.AddSpanTags(span, tags)
+		attrs := make([]attribute.KeyValue, 0, len(fields)+2)
+		attrs = append(
+			attrs,
+			attribute.String("component", "rbac"),
+			attribute.String("rbac.operation", operation),
+		)
+		attrs = append(attrs, fields...)
+		span.SetAttributes(attrs...)
 	}
 
 	return spanCtx, func(err error) {
@@ -41,9 +43,7 @@ func traceRBAC(ctx context.Context, operation string, fields map[string]any) (co
 		if !recording {
 			return
 		}
-		gstotel.AddSpanTags(span, map[string]any{
-			"rbac.success": err == nil,
-		})
+		span.SetAttributes(attribute.Bool("rbac.success", err == nil))
 		if err != nil {
 			gstotel.RecordError(span, err)
 		}
@@ -74,37 +74,39 @@ func traceAuthorize(ctx context.Context, tenant string) func(types.Decision, err
 	if !gstotel.IsSpanRecording(span) {
 		return func(types.Decision, error) { span.End() }
 	}
-	gstotel.AddSpanTags(span, map[string]any{
-		"component":      "rbac",
-		"rbac.operation": "authorize",
-		"rbac.tenant":    tenant,
-	})
+	span.SetAttributes(
+		attribute.String("component", "rbac"),
+		attribute.String("rbac.operation", "authorize"),
+		attribute.String("rbac.tenant", tenant),
+	)
 
 	return func(decision types.Decision, err error) {
 		defer span.End()
 
-		tags := map[string]any{
-			"rbac.success": err == nil,
-			"rbac.allowed": decision.Allowed,
-		}
+		attrs := make([]attribute.KeyValue, 0, 5)
+		attrs = append(
+			attrs,
+			attribute.Bool("rbac.success", err == nil),
+			attribute.Bool("rbac.allowed", decision.Allowed),
+		)
 		// Exactly one of the two is set, and which one is the outcome: a grant
 		// names the rule kind that allowed it, a denial names the step it was
 		// missing. Recording both keys would leave a reader guessing which
 		// applied.
 		if decision.Source != "" {
-			tags["rbac.allowed_by"] = string(decision.Source)
+			attrs = append(attrs, attribute.String("rbac.allowed_by", string(decision.Source)))
 		}
 		if decision.Reason != "" {
-			tags["rbac.denied_by"] = string(decision.Reason)
+			attrs = append(attrs, attribute.String("rbac.denied_by", string(decision.Reason)))
 		}
 		// The matched rule is the policy row, not the request path: it carries
 		// the template that matched, which is what an operator revokes. A span
 		// attribute is not an index key, so its cardinality costs nothing here
 		// the way it would on a metric label.
 		if len(decision.MatchedRule) > 0 {
-			tags["rbac.matched_rule"] = strings.Join(decision.MatchedRule, ",")
+			attrs = append(attrs, attribute.String("rbac.matched_rule", strings.Join(decision.MatchedRule, ",")))
 		}
-		gstotel.AddSpanTags(span, tags)
+		span.SetAttributes(attrs...)
 
 		if err != nil {
 			gstotel.RecordError(span, err)
@@ -115,13 +117,13 @@ func traceAuthorize(ctx context.Context, tenant string) func(types.Decision, err
 // rbacTraceFields keeps RBAC span attributes low-cardinality enough for tracing.
 // Subject identifiers are intentionally excluded because they are identity data
 // and would make Jaeger labels noisy for role-binding write paths.
-func rbacTraceFields(tenant string, role string) map[string]any {
-	fields := make(map[string]any, 2)
+func rbacTraceFields(tenant string, role string) []attribute.KeyValue {
+	fields := make([]attribute.KeyValue, 0, 2)
 	if tenant = strings.TrimSpace(tenant); tenant != "" {
-		fields["rbac.tenant"] = tenant
+		fields = append(fields, attribute.String("rbac.tenant", tenant))
 	}
 	if role = strings.TrimSpace(role); role != "" {
-		fields["rbac.role"] = role
+		fields = append(fields, attribute.String("rbac.role", role))
 	}
 	return fields
 }

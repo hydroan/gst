@@ -11,6 +11,7 @@ import (
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -106,7 +107,9 @@ func VerifyPasswordCredential(ctx context.Context, credential *modeliamaccount.P
 	}
 
 	err := bcrypt.CompareHashAndPassword([]byte(credential.PasswordHash), []byte(password))
-	gstotel.AddSpanTags(span, map[string]any{"iam.password.match": err == nil})
+	if gstotel.IsSpanRecording(span) {
+		span.SetAttributes(attribute.Bool("iam.password.match", err == nil))
+	}
 	if err != nil && !errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
 		gstotel.RecordError(span, err)
 	}

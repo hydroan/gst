@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	pkgzap "github.com/hydroan/gst/logger/zap"
 	"github.com/hydroan/gst/response"
+	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 )
 
@@ -39,10 +40,10 @@ func RecoveryWithTracing(logger *zap.Logger, stack bool) gin.HandlerFunc {
 		span := GetSpanFromContext(c)
 		if span != nil && span.IsRecording() {
 			RecordError(c, fmt.Errorf("panic recovered: %v", recovered))
-			AddSpanTags(c, map[string]any{
-				"error.panic":     true,
-				"error.recovered": fmt.Sprintf("%v", recovered),
-			})
+			span.SetAttributes(
+				attribute.Bool("error.panic", true),
+				attribute.String("error.recovered", fmt.Sprintf("%v", recovered)),
+			)
 		}
 
 		// Check for a broken connection, as it is not really a

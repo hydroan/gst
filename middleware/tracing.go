@@ -202,22 +202,6 @@ func GetSpanFromContext(c *gin.Context) trace.Span {
 	return trace.SpanFromContext(c.Request.Context())
 }
 
-// AddSpanTags adds custom tags to the current span
-func AddSpanTags(c *gin.Context, tags map[string]any) {
-	span := GetSpanFromContext(c)
-	if span != nil && span.IsRecording() {
-		gstotel.AddSpanTags(span, tags)
-	}
-}
-
-// AddSpanEvent adds an event to the current span
-func AddSpanEvent(c *gin.Context, name string, attrs ...attribute.KeyValue) {
-	span := GetSpanFromContext(c)
-	if span != nil && span.IsRecording() {
-		gstotel.AddSpanEvent(span, name, attrs...)
-	}
-}
-
 // RecordError records an error in the current span
 func RecordError(c *gin.Context, err error) {
 	span := GetSpanFromContext(c)

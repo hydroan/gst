@@ -507,40 +507,6 @@ func newBatchSpanProcessorOptions(cfg config.OTEL) []sdktrace.BatchSpanProcessor
 	}
 }
 
-// AddSpanTags adds tags to the current span
-func AddSpanTags(span trace.Span, tags map[string]any) {
-	if !IsSpanRecording(span) || len(tags) == 0 {
-		return
-	}
-
-	attrs := make([]attribute.KeyValue, 0, len(tags))
-	for key, value := range tags {
-		switch v := value.(type) {
-		case string:
-			attrs = append(attrs, attribute.String(key, v))
-		case int:
-			attrs = append(attrs, attribute.Int(key, v))
-		case int64:
-			attrs = append(attrs, attribute.Int64(key, v))
-		case float64:
-			attrs = append(attrs, attribute.Float64(key, v))
-		case bool:
-			attrs = append(attrs, attribute.Bool(key, v))
-		default:
-			attrs = append(attrs, attribute.String(key, "unsupported_type"))
-		}
-	}
-	span.SetAttributes(attrs...)
-}
-
-// AddSpanEvent adds an event to the current span
-func AddSpanEvent(span trace.Span, name string, attrs ...attribute.KeyValue) {
-	if !IsSpanRecording(span) {
-		return
-	}
-	span.AddEvent(name, trace.WithAttributes(attrs...))
-}
-
 // RecordError records err on the span as an exception event and marks the
 // span status as Error.
 //
