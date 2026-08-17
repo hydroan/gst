@@ -225,20 +225,14 @@ func IsSpanRecording(span trace.Span) bool {
 	return span != nil && span.IsRecording()
 }
 
-// Hot-path span attribute values derived from the service name. Building them
+// Hot-path span attribute value derived from the service name. Building it
 // per request means string concatenation on every traced request, which shows
-// up directly in allocation profiles under load, so Init precomputes them.
-// They are plain variables instead of sync.OnceValue so re-running Init with a
-// different configuration (tests do this) refreshes them.
-var (
-	traceIDAttrKey  attribute.Key
-	spanIDAttrKey   attribute.Key
-	serviceNameAttr attribute.KeyValue
-)
+// up directly in allocation profiles under load, so Init precomputes it.
+// It is a plain variable instead of sync.OnceValue so re-running Init with a
+// different configuration (tests do this) refreshes it.
+var serviceNameAttr attribute.KeyValue
 
 func initHotPathAttrs(serviceName string) {
-	traceIDAttrKey = attribute.Key(serviceName + ".trace_id")
-	spanIDAttrKey = attribute.Key(serviceName + ".span_id")
 	// Leave the zero (invalid) KeyValue when unset so callers checking Valid()
 	// skip the attribute, matching the previous per-request emptiness check.
 	serviceNameAttr = attribute.KeyValue{}
@@ -246,12 +240,6 @@ func initHotPathAttrs(serviceName string) {
 		serviceNameAttr = attribute.String("service.name", serviceName)
 	}
 }
-
-// TraceIDAttrKey returns the cached "<service>.trace_id" span attribute key.
-func TraceIDAttrKey() attribute.Key { return traceIDAttrKey }
-
-// SpanIDAttrKey returns the cached "<service>.span_id" span attribute key.
-func SpanIDAttrKey() attribute.Key { return spanIDAttrKey }
 
 // ServiceNameAttr returns the cached "service.name" span attribute. The result
 // is invalid when no service name is configured; callers must check Valid()
