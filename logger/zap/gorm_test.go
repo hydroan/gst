@@ -191,6 +191,36 @@ func TestCallerOutsideReportsMissWhenEveryFrameSkipped(t *testing.T) {
 	require.False(t, ok)
 }
 
+// TestCallerOutsideFollowsConfiguredPrefixesAcrossCalls pins the boundary of the
+// caller path cache: only the formatting of a resolved position is remembered,
+// never which frame the walk stops at. Configuring another prefix must move the
+// answer to the next frame out on the very next call, so an operator adding a
+// helper package to logger.sql_caller_skip_prefixes still sees the caller they
+// asked for rather than a position cached before the change.
+func TestCallerOutsideFollowsConfiguredPrefixesAcrossCalls(t *testing.T) {
+	// Every frame from here up to the test runner belongs to the framework, so
+	// the walk lands on testing while nothing extra is configured.
+	stubSQLCallerSkipPrefixes(t, nil)
+	unconfigured, ok := callerOutside(isSkippedSQLFrame)
+	require.True(t, ok)
+	require.Contains(t, unconfigured, "testing.go:")
+
+	// Skipping the runner too has to push the walk one frame further out; a
+	// cache keyed on anything but the position would replay the answer above.
+	stubSQLCallerSkipPrefixes(t, []string{"testing"})
+	configured, ok := callerOutside(isSkippedSQLFrame)
+	require.True(t, ok)
+	require.NotEqual(t, unconfigured, configured)
+	require.NotContains(t, configured, "testing.go:")
+
+	// Removing the prefix restores the earlier caller, proving the first answer
+	// was not pinned by having been cached.
+	stubSQLCallerSkipPrefixes(t, nil)
+	restored, ok := callerOutside(isSkippedSQLFrame)
+	require.True(t, ok)
+	require.Equal(t, unconfigured, restored)
+}
+
 func TestGormLoggerTraceLogsSuccessAtInfoWithCaller(t *testing.T) {
 	stubSlowQueryThreshold(t, time.Hour)
 	g, logs := newObservedGormLogger()

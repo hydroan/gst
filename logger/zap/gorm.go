@@ -4,6 +4,7 @@ import (
 	"context"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -113,7 +114,12 @@ func isSkippedSQLFrame(function string) bool {
 // those depths. Walking the stack against a package predicate names the
 // right frame at every depth, the same way gorm's own FileWithLineNum does.
 func callerOutside(skip func(function string) bool) (string, bool) {
-	var pcs [64]uintptr
+	pcs, ok := sqlCallerPCs.Get().(*[sqlCallerDepth]uintptr)
+	if !ok {
+		pcs = new([sqlCallerDepth]uintptr)
+	}
+	defer sqlCallerPCs.Put(pcs)
+
 	// Skip runtime.Callers and callerOutside itself; the predicate drops the
 	// remaining framework frames, so the start offset needs no fine-tuning.
 	n := runtime.Callers(2, pcs[:])
@@ -121,13 +127,52 @@ func callerOutside(skip func(function string) bool) (string, bool) {
 	for {
 		frame, more := frames.Next()
 		if frame.Function != "" && !skip(frame.Function) {
-			caller := zapcore.EntryCaller{File: frame.File, Line: frame.Line, Defined: true}
-			return caller.TrimmedPath(), true
+			return sqlCallerPath(frame.File, frame.Line), true
 		}
 		if !more {
 			return "", false
 		}
 	}
+}
+
+// sqlCallerDepth bounds the stack walk that names a statement's caller.
+const sqlCallerDepth = 64
+
+// sqlCallerPCs pools the program-counter buffers callerOutside walks with.
+// runtime.CallersFrames keeps the slice it is handed, so the buffer escapes to
+// the heap; without the pool every logged statement allocates one, and
+// statement logging is on for every statement in every environment.
+var sqlCallerPCs = sync.Pool{
+	New: func() any { return new([sqlCallerDepth]uintptr) },
+}
+
+// sqlCallerSite is one source position that issued a statement.
+type sqlCallerSite struct {
+	file string
+	line int
+}
+
+// sqlCallerPaths caches the trimmed path of each site that issues statements.
+//
+// The trimmed path is pure formatting of a position that repeats on every
+// statement the same code path runs, so it is computed once per site instead of
+// once per statement. The cache cannot grow with traffic: its keys come from
+// the program's own call sites, which are fixed at build time.
+var sqlCallerPaths sync.Map
+
+// sqlCallerPath returns the trimmed file:line of one caller, formatting it only
+// the first time that site is seen.
+func sqlCallerPath(file string, line int) string {
+	site := sqlCallerSite{file: file, line: line}
+	if cached, found := sqlCallerPaths.Load(site); found {
+		if path, ok := cached.(string); ok {
+			return path
+		}
+	}
+
+	path := zapcore.EntryCaller{File: file, Line: line, Defined: true}.TrimmedPath()
+	sqlCallerPaths.Store(site, path)
+	return path
 }
 
 // Trace logs one executed statement with the request identity, timing, the
