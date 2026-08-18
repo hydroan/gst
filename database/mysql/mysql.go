@@ -51,7 +51,14 @@ func New(cfg config.MySQL) (*gorm.DB, error) {
 	// TranslateError maps dialect-specific write failures to portable gorm
 	// sentinels (gorm.ErrDuplicatedKey, gorm.ErrForeignKeyViolated) that
 	// database.Create/Update surface to callers.
-	db, err := gorm.Open(mysql.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
+	// PrepareStmt caches prepared statements per connection, so a statement's
+	// text is parsed and planned by the server once and every later run goes
+	// through the binary protocol. The statement-shape set is bounded by the
+	// application's query shapes and sits far under MySQL's
+	// max_prepared_stmt_count default; DDL invalidates prepared statements,
+	// which only matters for runtime DDL — migration runs at startup before
+	// the server takes traffic.
+	db, err := gorm.Open(mysql.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC, PrepareStmt: true})
 	if err != nil {
 		return nil, err
 	}

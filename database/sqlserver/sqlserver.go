@@ -48,7 +48,9 @@ func Init() (err error) {
 // so application-held instances passed to DatabaseOn, AggregateOn, and
 // TransactionOn are traced like the default database.
 func New(cfg config.SQLServer) (*gorm.DB, error) {
-	db, err := gorm.Open(sqlserver.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
+	// PrepareStmt caches prepared statements (sp_prepare/sp_execute on this
+	// dialect), so a statement is parsed and planned once per connection.
+	db, err := gorm.Open(sqlserver.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC, PrepareStmt: true})
 	if err != nil {
 		return nil, err
 	}

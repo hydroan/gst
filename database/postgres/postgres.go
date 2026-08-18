@@ -48,6 +48,10 @@ func Init() (err error) {
 // so application-held instances passed to DatabaseOn, AggregateOn, and
 // TransactionOn are traced like the default database.
 func New(cfg config.Postgres) (*gorm.DB, error) {
+	// PrepareStmt stays off on purpose: pgx already caches prepared
+	// statements at the driver level (QueryExecModeCacheStatement is its
+	// default), so the gorm-level cache would only stack a second statement
+	// registry on top of it.
 	db, err := gorm.Open(postgres.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
 	if err != nil {
 		return nil, err
