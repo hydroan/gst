@@ -39,6 +39,9 @@ var jsonNull = []byte("null")
 // Decoding whole bytes also ends the body where the body ends: a streaming
 // decoder stops at the first JSON value and silently drops whatever follows,
 // so a second document appended to the first would bind as if it were clean.
+// One knob does not carry over: gin's EnableDecoderUseNumber and
+// EnableDecoderDisallowUnknownFields configure the streaming decoder only, so
+// they never apply here.
 func bindJSONRequest(c *gin.Context, target any) error {
 	raw, err := c.GetRawData()
 	if err != nil {
@@ -51,6 +54,11 @@ func bindJSONRequest(c *gin.Context, target any) error {
 
 	if err = ginjson.API.Unmarshal(raw, target); err != nil {
 		return err
+	}
+	// A nil binding.Validator is gin's documented way to turn validation off;
+	// gin's own binding paths nil-check it, so binding here does the same.
+	if binding.Validator == nil {
+		return nil
 	}
 	return binding.Validator.ValidateStruct(target)
 }

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/logger"
@@ -136,6 +137,28 @@ func TestCreateFactoryAcceptsTrailingWhitespace(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Contains(t, recorder.Body.String(), `"item_count":1`)
+}
+
+// TestBindJSONRequestHonorsDisabledValidator pins gin's validator-disable
+// convention: an application may turn validation off by setting
+// binding.Validator to nil, and gin's own binding paths treat that as "skip
+// validation". Binding here must do the same instead of dereferencing the
+// nil interface and panicking on every request body.
+func TestBindJSONRequestHonorsDisabledValidator(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	restore := binding.Validator
+	binding.Validator = nil
+	t.Cleanup(func() { binding.Validator = restore })
+
+	req := httptest.NewRequest(http.MethodPost, "/bind-probes",
+		strings.NewReader(`{"items":[{"name":"first"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = req
+
+	target := &normalizeProbeReq{}
+	require.NoError(t, bindJSONRequest(c, target))
+	require.Len(t, target.Items, 1)
 }
 
 // BenchmarkBindJSONRequest measures what binding one request body costs, the
