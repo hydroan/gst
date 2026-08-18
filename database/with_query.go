@@ -145,7 +145,7 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 	// Column names come from gorm through modelschema. A model gorm cannot
 	// parse has no usable columns at all, so the query falls closed instead
 	// of matching on a guessed column name.
-	parsedColumns, parseErr := modelschema.Columns(typ)
+	goNames, parseErr := modelschema.GoNameIndex(typ)
 	if parseErr != nil {
 		logger.Database.WithContext(db.ctx, phaseWithQuery).Warnz(
 			"cannot resolve model columns, adding safety condition",
@@ -155,7 +155,7 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 		db.ins = db.ins.Where("1 = 0")
 		return db
 	}
-	structFieldToMap(db.ctx, typ, val, q, opt.PresentFields, modelschema.ByGoName(parsedColumns))
+	structFieldToMap(db.ctx, typ, val, q, opt.PresentFields, goNames)
 
 	// A JSON document is not a scalar, so both matching modes below treat its
 	// columns specially: exact matching fails closed and fuzzy matching runs

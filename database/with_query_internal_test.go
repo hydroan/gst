@@ -40,9 +40,9 @@ func TestStructFieldToMap(t *testing.T) {
 		}
 		typ := reflect.TypeOf(m).Elem()
 		val := reflect.ValueOf(m).Elem()
-		columns, err := modelschema.Columns(typ)
+		goNames, err := modelschema.GoNameIndex(typ)
 		require.NoError(t, err)
-		structFieldToMap(context.Background(), typ, val, q, present, modelschema.ByGoName(columns))
+		structFieldToMap(context.Background(), typ, val, q, present, goNames)
 		return q
 	}
 

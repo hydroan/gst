@@ -2,10 +2,12 @@ package urlquery
 
 import (
 	"net/url"
+	"reflect"
 	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 )
@@ -27,7 +29,7 @@ func Orders(q url.Values, m types.Model) ([]types.Order, error) {
 	if len(expression) == 0 {
 		return nil, nil
 	}
-	columns, err := filterableColumns(m)
+	columns, err := modelschema.FilterableIndex(reflect.TypeOf(m))
 	if err != nil {
 		return nil, err
 	}

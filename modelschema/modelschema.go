@@ -45,21 +45,6 @@ func ClassifyColumn(typ reflect.Type) ColumnClass {
 	return modelschema.ClassifyColumn(typ)
 }
 
-// ByQueryName indexes columns by the URL parameter name clients filter with.
-func ByQueryName(columns []Column) map[string]Column {
-	return modelschema.ByQueryName(columns)
-}
-
-// ByGoName indexes columns by their Go struct field name.
-func ByGoName(columns []Column) map[string]Column {
-	return modelschema.ByGoName(columns)
-}
-
-// QueryColumnName resolves the URL parameter name of a struct field.
-func QueryColumnName(field reflect.StructField) string {
-	return modelschema.QueryColumnName(field)
-}
-
 // IsQueryable reports whether m opted in to framework query parameters by
 // embedding model.Query. The inspection program uses it to keep only the
 // unregistered models that own a filter and sort column namespace; the

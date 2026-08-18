@@ -44,7 +44,7 @@ func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
 	column := ""
 	var columnType reflect.Type
 	if field := strings.TrimSpace(q.Get(consts.QUERY_CURSOR_FIELD)); len(field) > 0 {
-		columns, err := filterableColumns(m)
+		columns, err := modelschema.FilterableIndex(reflect.TypeOf(m))
 		if err != nil {
 			return types.Cursor{}, err
 		}

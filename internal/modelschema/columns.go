@@ -177,7 +177,7 @@ func Columns(typ reflect.Type) ([]Column, error) {
 	for _, field := range parsed.FieldsByDBName {
 		columns = append(columns, Column{
 			GoName:    field.StructField.Name,
-			QueryName: QueryColumnName(field.StructField),
+			QueryName: queryColumnName(field.StructField),
 			DBName:    field.DBName,
 			Type:      field.FieldType,
 			Index:     field.StructField.Index,
@@ -193,17 +193,8 @@ func Columns(typ reflect.Type) ([]Column, error) {
 	return columns, nil
 }
 
-// ByQueryName indexes columns by the URL parameter name clients filter with.
-func ByQueryName(columns []Column) map[string]Column {
-	indexed := make(map[string]Column, len(columns))
-	for _, col := range columns {
-		indexed[col.QueryName] = col
-	}
-	return indexed
-}
-
-// ByGoName indexes columns by their Go struct field name.
-func ByGoName(columns []Column) map[string]Column {
+// byGoName indexes columns by their Go struct field name.
+func byGoName(columns []Column) map[string]Column {
 	indexed := make(map[string]Column, len(columns))
 	for _, col := range columns {
 		indexed[col.GoName] = col
@@ -211,14 +202,76 @@ func ByGoName(columns []Column) map[string]Column {
 	return indexed
 }
 
-// QueryColumnName resolves the URL parameter name of a struct field: the
+// The cached indexes below exist for the per-request paths: deriving the same
+// index from the same type on every request would rebuild an identical map
+// each time. Both indexes are pure derivations of the cached columns, and a
+// model type's columns are fixed at build time, so each is resolved once per
+// type. The returned maps are shared across callers and are read-only.
+
+// goNameIndexCache memoizes the by-Go-name index per model type.
+var goNameIndexCache sync.Map
+
+// GoNameIndex returns the columns of a model type indexed by Go struct field
+// name, resolved once per type and cached. The type may be a struct or a
+// pointer to one.
+func GoNameIndex(typ reflect.Type) (map[string]Column, error) {
+	for typ != nil && typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	if cached, ok := goNameIndexCache.Load(typ); ok {
+		return cached.(map[string]Column), nil //nolint:errcheck
+	}
+
+	columns, err := Columns(typ)
+	if err != nil {
+		return nil, err
+	}
+	index := byGoName(columns)
+	goNameIndexCache.Store(typ, index)
+	return index, nil
+}
+
+// filterableIndexCache memoizes the filterable-column index per model type.
+var filterableIndexCache sync.Map
+
+// FilterableIndex returns the client-filterable columns of a model type
+// indexed by the URL parameter name clients filter with, resolved once per
+// type and cached. The type may be a struct or a pointer to one.
+//
+// Both the parameter name and the database column name come from the parsed
+// columns, so a filter can never name a column gorm does not emit; fields
+// hidden from JSON stay out, because clients must not filter on them.
+func FilterableIndex(typ reflect.Type) (map[string]Column, error) {
+	for typ != nil && typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	if cached, ok := filterableIndexCache.Load(typ); ok {
+		return cached.(map[string]Column), nil //nolint:errcheck
+	}
+
+	columns, err := Columns(typ)
+	if err != nil {
+		return nil, err
+	}
+	index := make(map[string]Column, len(columns))
+	for _, col := range columns {
+		if !col.Filterable {
+			continue
+		}
+		index[col.QueryName] = col
+	}
+	filterableIndexCache.Store(typ, index)
+	return index, nil
+}
+
+// queryColumnName resolves the URL parameter name of a struct field: the
 // query tag wins over the json tag, which wins over the field name, and the
 // result is converted to snake case. A "-" tag is skipped rather than used
 // as a name, so the next source decides.
 //
 // This is the client-facing name only. It never decides the database column
 // name, which comes from gorm (see Column).
-func QueryColumnName(field reflect.StructField) string {
+func queryColumnName(field reflect.StructField) string {
 	name := tagName(field, "query")
 	if name == "" {
 		name = tagName(field, "json")

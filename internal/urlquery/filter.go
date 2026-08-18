@@ -39,7 +39,7 @@ func Filters(q url.Values, m types.Model) ([]types.Filter, error) {
 	}
 	sort.Strings(keys)
 
-	columns, err := filterableColumns(m)
+	columns, err := modelschema.FilterableIndex(reflect.TypeOf(m))
 	if err != nil {
 		return nil, err
 	}
@@ -121,25 +121,6 @@ func splitFilterKey(key string) (field, op string, ok bool) {
 		return "", "", false
 	}
 	return field, op, true
-}
-
-// filterableColumns returns the columns a client may filter on, keyed by the
-// URL parameter name. Both the parameter name and the database column name
-// come from modelschema, the single place that maps struct fields to columns,
-// so a filter can never name a column gorm does not emit.
-func filterableColumns(m types.Model) (map[string]modelschema.Column, error) {
-	parsed, err := modelschema.Columns(reflect.TypeOf(m))
-	if err != nil {
-		return nil, err
-	}
-	columns := make(map[string]modelschema.Column, len(parsed))
-	for _, col := range parsed {
-		if !col.Filterable {
-			continue
-		}
-		columns[col.QueryName] = col
-	}
-	return columns, nil
 }
 
 // timeType is the reflect type time-typed columns are recognized by.

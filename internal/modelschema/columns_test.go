@@ -49,6 +49,7 @@ type sampleRecord struct {
 	MD5Hash     string `json:"md5_hash"`
 	Renamed     string `json:"renamed" gorm:"column:custom_column"`
 	QueryTagged string `json:"query_tagged" query:"alias"`
+	Hidden      string `json:"-"`
 	Skipped     string `json:"skipped" gorm:"-"`
 	SkippedAll  string `json:"skipped_all" gorm:"-:all"`
 	NoMigration string `json:"no_migration" gorm:"-:migration"`
@@ -57,10 +58,19 @@ type sampleRecord struct {
 
 func (sampleRecord) TableName() string { return "sample_records" }
 
+// indexByQueryName indexes columns by URL parameter name for assertions.
+func indexByQueryName(columns []Column) map[string]Column {
+	indexed := make(map[string]Column, len(columns))
+	for _, col := range columns {
+		indexed[col.QueryName] = col
+	}
+	return indexed
+}
+
 func TestColumns(t *testing.T) {
 	parsed, err := Columns(reflect.TypeFor[sampleRecord]())
 	require.NoError(t, err)
-	cols := ByQueryName(parsed)
+	cols := indexByQueryName(parsed)
 
 	t.Run("ResolvesDBNameThroughGorm", func(t *testing.T) {
 		// gorm's commonInitialisms handling differs from a plain snake case
@@ -106,10 +116,45 @@ func TestColumns(t *testing.T) {
 	})
 }
 
+// TestGoNameIndexResolvesOnceAndCaches pins both properties of the cached
+// index: it carries the same content as deriving the by-Go-name transform from the parsed
+// columns, and repeated calls hand back the very same map — what makes it
+// safe to consult on every request without rebuilding.
+func TestGoNameIndexResolvesOnceAndCaches(t *testing.T) {
+	first, err := GoNameIndex(reflect.TypeFor[*sampleRecord]())
+	require.NoError(t, err)
+
+	parsed, err := Columns(reflect.TypeFor[sampleRecord]())
+	require.NoError(t, err)
+	require.Equal(t, byGoName(parsed), first)
+
+	second, err := GoNameIndex(reflect.TypeFor[sampleRecord]())
+	require.NoError(t, err)
+	require.Equal(t, reflect.ValueOf(first).Pointer(), reflect.ValueOf(second).Pointer(),
+		"pointer and struct type must share one cached index")
+}
+
+// TestFilterableIndexKeepsOnlyClientFilterableColumns pins the index's two
+// jobs: keying by the URL parameter name and keeping json-hidden columns out
+// of the client-filterable set, plus the same per-type caching as above.
+func TestFilterableIndexKeepsOnlyClientFilterableColumns(t *testing.T) {
+	index, err := FilterableIndex(reflect.TypeFor[*sampleRecord]())
+	require.NoError(t, err)
+
+	require.Equal(t, "query_tagged", index["alias"].DBName, "the index is keyed by URL parameter name")
+	_, hidden := index["hidden"]
+	require.False(t, hidden, "a json-hidden column must not be client-filterable")
+
+	second, err := FilterableIndex(reflect.TypeFor[sampleRecord]())
+	require.NoError(t, err)
+	require.Equal(t, reflect.ValueOf(index).Pointer(), reflect.ValueOf(second).Pointer(),
+		"pointer and struct type must share one cached index")
+}
+
 func TestColumnsSkipsAssociationFields(t *testing.T) {
 	parsed, err := Columns(reflect.TypeFor[sampleAssociating]())
 	require.NoError(t, err)
-	cols := ByQueryName(parsed)
+	cols := indexByQueryName(parsed)
 
 	require.Contains(t, cols, "id")
 	require.Contains(t, cols, "name")
