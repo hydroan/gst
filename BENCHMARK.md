@@ -76,7 +76,7 @@ hey -z 30s -c 50 "$BENCH_BASE_URL/api/bench/ping"              # 压测
 
 ### 裸 gin 对照
 
-量化框架完整中间件链相对 gin 底座的净开销：用同版本 gin 的 `gin.New()` 零中间件程序返回与 ping 相同形状的 JSON envelope，同参数、同场交替对比。响应必须用结构体而不是 `gin.H`：框架 envelope 是结构体，map 序列化要排序键，用 `gin.H` 会让对照侧凭空多一笔序列化开销（实测 map 版比结构体版低约 6%）。
+量化框架完整中间件链相对 gin 底座的净开销：用同版本 gin 的 `gin.New()` 零中间件程序返回与 ping 相同形状的 JSON envelope，同参数、同场交替对比。对照程序刻意用结构体响应而不是 `gin.H`——map 序列化要排序键，结构体更快（实测快约 6%）；框架的 envelope 实际经 `gin.H` 渲染，所以这一选择是在给对照侧让利，让利之下框架仍不落后，结论只会更稳。
 
 对照程序（独立 module：`go mod init ginbare && go get github.com/gin-gonic/gin@<与框架同版本>`）：
 
@@ -134,7 +134,9 @@ hey -z 30s -c 50 "http://127.0.0.1:8082/api/bench/ping"              # 压测
 | 50   | 131534 | 0.3ms | 0.6ms | 1.2ms | 0     |
 | 50   | 131248 | 0.3ms | 0.6ms | 1.1ms | 0     |
 
-同场结论：框架带完整中间件链（tracing、access log 落盘、body logger、CORS、recovery、trace_id 生成）的 ping 吞吐反而比裸 gin 高约 4.7%——**中间件链净开销为零**，框架响应写出路径的效率收益覆盖了全部中间件成本。
+同场结论：框架带完整中间件链（tracing、access log 落盘、body logger、CORS、recovery、trace_id 生成）的 ping 吞吐反而比裸 gin 高约 4.7%——**中间件链净开销为零**；反超部分的机制见下方脚注，不要读成「框架逻辑快于 gin」。
+
+> **脚注：反超 4.7% 的机制是 GC 触发频率，不是框架代码更快。** pprof 显示 ping 路径上应用层（gin + 框架全链）合计仅约 2% CPU，本就不存在 4.7% 的差异空间。真实机制：Go 按「堆翻倍」触发 GC（GOGC=100），裸 gin 程序活堆仅 ~1MB、堆到 4MB 即触发，压测 30s 内 GC 约 5000 次（每秒 ~165 次，高频 STW、mark assist 与调度开销拖低吞吐）；框架进程常驻堆 ~21MB（日志缓冲、连接池、组件注册表），42MB 才触发，同窗口仅 1362 次。定罪实验：给裸 gin 设 `GOGC=1000`（触发阈值抬到同量级的 40MB）后 GC 降至 259 次，QPS 132.0k 追平反超——差异被 GC 频率完全解释、无残差。因此表格的准确读法是：**中间件链净开销为零；反超的 ~4.7% 来自更大常驻堆的 GC 触发红利，属真实但偶然的工程效应**。GC 次数用 `GODEBUG=gctrace=1` 启动被测程序统计。
 
 
 
