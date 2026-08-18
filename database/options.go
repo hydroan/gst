@@ -98,8 +98,13 @@ func (db *database[M]) WithDryRun() types.Database[M] {
 // happened that never did, into the record an operator reconstructs history
 // from. Routing every dry run through here keeps that decision in one place
 // instead of leaving each operation to remember it.
+//
+// The default transaction is skipped for the same reason: gorm's
+// BeginTransaction callback consults SkipDefaultTransaction only, not DryRun,
+// so without the skip a dry-run write still opens a real BEGIN/COMMIT pair on
+// the connection pool — database I/O issued for a statement that never runs.
 func dryRunSession(tx *gorm.DB) *gorm.DB {
-	return tx.Session(&gorm.Session{DryRun: true, Logger: glogger.Default.LogMode(glogger.Silent)})
+	return tx.Session(&gorm.Session{DryRun: true, SkipDefaultTransaction: true, Logger: glogger.Default.LogMode(glogger.Silent)})
 }
 
 // WithBuildSQL enables SQL build mode for the next terminal operation.

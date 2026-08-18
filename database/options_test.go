@@ -324,6 +324,23 @@ func TestDatabaseWithDryRun(t *testing.T) {
 		require.NotNil(t, uu)
 		require.Empty(t, uu.ID, "Take should not return results in dry-run mode")
 	})
+
+	t.Run("NeverTouchesDatabase", func(t *testing.T) {
+		// A dry run only builds statements, so it must succeed even when the
+		// connection pool is closed. This pins the write path in particular:
+		// gorm's BeginTransaction callback consults SkipDefaultTransaction
+		// only, so unless the dry-run session skips the default transaction,
+		// a "dry" write still opens a real BEGIN/COMMIT pair on the pool.
+		ins := newInstance(t, "dry_run_closed.db")
+		sqlDB, err := ins.DB()
+		require.NoError(t, err)
+		require.NoError(t, sqlDB.Close())
+
+		user := &TestUser{Name: "dry-run-closed", Email: "dry-run-closed@example.com", Base: model.Base{ID: "dry-run-closed"}}
+		require.NoError(t, database.DatabaseOn[*TestUser](context.Background(), ins).WithDryRun().Create(user), "Create must not reach the closed pool in dry-run mode")
+		require.NoError(t, database.DatabaseOn[*TestUser](context.Background(), ins).WithDryRun().Update(user), "Update must not reach the closed pool in dry-run mode")
+		require.NoError(t, database.DatabaseOn[*TestUser](context.Background(), ins).WithDryRun().Delete(user), "Delete must not reach the closed pool in dry-run mode")
+	})
 }
 
 func TestDatabaseWithBuildSQL(t *testing.T) {
