@@ -69,6 +69,18 @@ func New(fields Fields) Metadata {
 // matter where in the handler chain it is taken. The route is empty for
 // requests gin did not match to a registered route (NoRoute, NoMethod); the
 // path stays populated in those cases and identifies the request on its own.
+//
+// Metadata is constructed several times per request — the controller span,
+// every service context, and every database handle each build one — so the
+// expensive part, parsing the query string, is memoized on the gin context by
+// GinQueryValues. Identity fields are deliberately read fresh on every call:
+// they are cheap context lookups, and re-reading them keeps a construction
+// that runs before the identity middleware from freezing empty identity into
+// the constructions that follow it.
+//
+// The struct is built without New: New defensively clones the params and
+// query maps of its caller, while both maps here are already owned — params
+// is built below and the query values are the package's own memoized parse.
 func FromGin(c *gin.Context) Metadata {
 	if c == nil {
 		return Metadata{}
@@ -84,27 +96,56 @@ func FromGin(c *gin.Context) Metadata {
 		}
 	}
 
-	var path string
-	var query url.Values
-	var rawQuery string
+	var path, rawQuery string
 	if c.Request != nil && c.Request.URL != nil {
 		path = c.Request.URL.Path
-		query = c.Request.URL.Query()
 		rawQuery = c.Request.URL.RawQuery
 	}
 
-	return New(Fields{
-		Route:     c.FullPath(),
-		Path:      path,
-		Username:  c.GetString(consts.CTX_USERNAME),
-		UserID:    c.GetString(consts.CTX_USER_ID),
-		SessionID: c.GetString(consts.CTX_SESSION_ID),
-		TenantID:  c.GetString(consts.CTX_TENANT_ID),
-		TraceID:   c.GetString(consts.TRACE_ID),
-		Params:    params,
-		Query:     query,
-		RawQuery:  rawQuery,
-	})
+	return Metadata{
+		route:     c.FullPath(),
+		path:      path,
+		username:  c.GetString(consts.CTX_USERNAME),
+		userID:    c.GetString(consts.CTX_USER_ID),
+		sessionID: c.GetString(consts.CTX_SESSION_ID),
+		tenantID:  c.GetString(consts.CTX_TENANT_ID),
+		traceID:   c.GetString(consts.TRACE_ID),
+		params:    params,
+		query:     GinQueryValues(c),
+		rawQuery:  rawQuery,
+	}
+}
+
+// ginQueryKey keys the request's parsed query values on the gin context.
+const ginQueryKey = "gst/requestctx/query"
+
+// GinQueryValues returns the request's parsed query parameters, parsing them
+// on the first call and reusing that result for the rest of the request.
+//
+// url.URL.Query re-parses the raw query string on every call. Only the parsed
+// values are memoized, nothing else: they derive from the request URL alone,
+// which cannot change for the lifetime of a request, so the memo is correct
+// no matter where in the middleware chain the first call happens.
+//
+// The returned map is owned by this package and never written after it is
+// stored. Metadata getters hand out clones, so callers of the public API
+// cannot reach it; framework code reading it directly must treat it as
+// read-only.
+func GinQueryValues(c *gin.Context) url.Values {
+	if c == nil {
+		return nil
+	}
+	if cached, ok := c.Get(ginQueryKey); ok {
+		if query, ok := cached.(url.Values); ok {
+			return query
+		}
+	}
+	if c.Request == nil || c.Request.URL == nil {
+		return nil
+	}
+	query := c.Request.URL.Query()
+	c.Set(ginQueryKey, query)
+	return query
 }
 
 func (m Metadata) Route() string     { return m.route }
@@ -166,6 +207,19 @@ func FromContext(ctx context.Context) Metadata {
 		return Metadata{}
 	}
 	return meta
+}
+
+// QueryValues returns the request's parsed query parameters for read-only
+// framework use, without the defensive copy Metadata.Query makes for
+// arbitrary callers.
+//
+// The framework's own query parsers only read the values, and several of them
+// run on every list request — one per query argument a database query is
+// built from — so each paying for a deep clone would multiply the very cost
+// the memoized parse removes. Callers must not modify the returned map; code
+// outside the framework goes through Metadata.Query and gets a clone.
+func QueryValues(ctx context.Context) url.Values {
+	return FromContext(ctx).query
 }
 
 // rawQueryOf resolves the raw query string, re-encoding the parsed values for

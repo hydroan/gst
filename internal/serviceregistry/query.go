@@ -3,6 +3,7 @@ package serviceregistry
 import (
 	"reflect"
 
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/hydroan/gst/types"
 )
@@ -79,7 +80,7 @@ import (
 // a caller that tolerates partial input can still use it.
 func (Base[M, REQ, RSP]) QueryModel(ctx *types.ServiceContext) (M, error) {
 	m := reflect.New(reflect.TypeFor[M]().Elem()).Interface().(M) //nolint:errcheck
-	return m, urlquery.Decode(ctx.Query(), m)
+	return m, urlquery.Decode(requestctx.QueryValues(ctx), m)
 }
 
 // QueryFilters returns the field-level operator filters ("field[op]=value") of
@@ -89,14 +90,14 @@ func (Base[M, REQ, RSP]) QueryModel(ctx *types.ServiceContext) (M, error) {
 // is rejected so a mistyped filter can never silently widen the result set.
 // Filters require the model to embed model.Query.
 func (Base[M, REQ, RSP]) QueryFilters(ctx *types.ServiceContext) ([]types.Filter, error) {
-	return urlquery.Filters(ctx.Query(), zeroModel[M]())
+	return urlquery.Filters(requestctx.QueryValues(ctx), zeroModel[M]())
 }
 
 // QueryPresentFields returns the model filter keys the request provided
 // explicitly, so the database layer keeps their zero values (false, 0) as real
 // conditions instead of dropping them as unset.
 func (Base[M, REQ, RSP]) QueryPresentFields(ctx *types.ServiceContext) map[string]struct{} {
-	return urlquery.PresentFields(ctx.Query())
+	return urlquery.PresentFields(requestctx.QueryValues(ctx))
 }
 
 // QueryOrders returns the ORDER BY terms of the request, ready to be passed to
@@ -104,7 +105,7 @@ func (Base[M, REQ, RSP]) QueryPresentFields(ctx *types.ServiceContext) map[strin
 // any other model yields no order. An unknown column or direction is a client
 // error and is reported as such.
 func (Base[M, REQ, RSP]) QueryOrders(ctx *types.ServiceContext) ([]types.Order, error) {
-	return urlquery.Orders(ctx.Query(), zeroModel[M]())
+	return urlquery.Orders(requestctx.QueryValues(ctx), zeroModel[M]())
 }
 
 // QueryPagination returns the page and size arguments of the request, ready to
@@ -114,7 +115,7 @@ func (Base[M, REQ, RSP]) QueryOrders(ctx *types.ServiceContext) ([]types.Order, 
 // page is always at least 1, so a service slicing in-memory pages or computing
 // offsets itself can use it without normalizing again.
 func (Base[M, REQ, RSP]) QueryPagination(ctx *types.ServiceContext) (page, size int) {
-	return urlquery.Pagination(ctx.Query(), zeroModel[M]())
+	return urlquery.Pagination(requestctx.QueryValues(ctx), zeroModel[M]())
 }
 
 // QueryCursor returns the cursor position of the request, ready to be passed
@@ -123,7 +124,7 @@ func (Base[M, REQ, RSP]) QueryPagination(ctx *types.ServiceContext) (page, size 
 // cursor value the column's Go type cannot represent, is a client error and
 // is reported as such.
 func (Base[M, REQ, RSP]) QueryCursor(ctx *types.ServiceContext) (types.Cursor, error) {
-	return urlquery.Cursor(ctx.Query(), zeroModel[M]())
+	return urlquery.Cursor(requestctx.QueryValues(ctx), zeroModel[M]())
 }
 
 // zeroModel returns the typed nil of M. The parsers only read the model's type

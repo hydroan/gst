@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
+	"github.com/hydroan/gst/internal/requestctx"
 	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/hydroan/gst/logger"
@@ -71,9 +72,10 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		// earlier would extract and clone request metadata nothing reads.
 		ctx := types.NewServiceContext(c, nil, consts.PHASE_LIST)
 
-		// The URL query is parsed once and shared by every parser below;
-		// url.URL.Query re-parses the raw query string on each call.
-		query := c.Request.URL.Query()
+		// The request's memoized query parse, shared by every parser below and
+		// by each metadata construction of this request; the parsers only read
+		// the values.
+		query := requestctx.GinQueryValues(c)
 
 		// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
 		m := meta.newModel()

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -75,6 +76,46 @@ func TestMetadataProtectsParamsAndQuery(t *testing.T) {
 
 	require.Equal(t, "42", meta.Param("id"))
 	require.Equal(t, []string{"blue"}, meta.Query()["tag"])
+}
+
+// TestFromGinReadsIdentityFreshWhileQueryStaysMemoized pins the split the
+// query memo is built on: identity fields are read from the gin context on
+// every construction, so a construction that runs before the identity
+// middleware never freezes empty identity into the constructions that follow
+// it, while the parsed query is one shared parse for the whole request.
+func TestFromGinReadsIdentityFreshWhileQueryStaysMemoized(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/users?tag=blue", nil)
+
+	before := FromGin(ctx)
+	require.Empty(t, before.Username(), "identity middleware has not run yet")
+	require.Equal(t, []string{"blue"}, before.Query()["tag"])
+
+	ctx.Set(consts.CTX_USERNAME, "admin")
+	after := FromGin(ctx)
+	require.Equal(t, "admin", after.Username(),
+		"identity must be read fresh, not frozen by the first construction")
+	require.Equal(t, []string{"blue"}, after.Query()["tag"])
+}
+
+// TestQueryValuesSharesTheMemoizedParse pins what QueryValues is for: the
+// framework's read-only accessor returns the stored values without a clone,
+// so every parser of one request reads the very same parse.
+func TestQueryValuesSharesTheMemoizedParse(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ginCtx.Request = httptest.NewRequest(http.MethodGet, "/api/users?tag=blue&tag=green", nil)
+
+	ctx := WithMetadata(context.Background(), FromGin(ginCtx))
+	values := QueryValues(ctx)
+	require.Equal(t, url.Values{"tag": {"blue", "green"}}, values)
+	require.Equal(t, reflect.ValueOf(values).Pointer(), reflect.ValueOf(QueryValues(ctx)).Pointer(),
+		"QueryValues must hand back the stored map, not a clone")
+	require.Equal(t, reflect.ValueOf(values).Pointer(), reflect.ValueOf(GinQueryValues(ginCtx)).Pointer(),
+		"every construction of one request must share one parse")
 }
 
 func TestMetadataContextRoundTrip(t *testing.T) {

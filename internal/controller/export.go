@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/requestctx"
 	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/hydroan/gst/logger"
@@ -98,12 +99,13 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			if limitStr, ok := c.GetQuery(consts.QUERY_LIMIT); ok {
 				limit, _ = strconv.Atoi(limitStr)
 			}
-			// The URL query is parsed once and shared by every parser below;
-			// url.URL.Query re-parses the raw query string on each call.
+			// The request's memoized query parse, shared by every parser below
+			// and by each metadata construction of this request; the parsers
+			// only read the values.
 			// QUERY_FORMAT is this controller's own parameter, resolved after
 			// the export bytes exist; urlquery.Decode drops it for every
 			// caller, including virtual-resource services parsing on their own.
-			query := c.Request.URL.Query()
+			query := requestctx.GinQueryValues(c)
 
 			var err error
 			// A query that cannot decode is a client error, same as on the List
