@@ -3,7 +3,6 @@ package database
 import (
 	"fmt"
 	"reflect"
-	"sync"
 
 	"github.com/cockroachdb/errors"
 
@@ -64,72 +63,9 @@ func (db *database[M]) outerScope() filterScope {
 	typ := reflect.TypeOf(*new(M))
 	return filterScope{
 		parent:      db.outerTableName(),
-		timeColumns: timeColumnSet(typ),
-		jsonColumns: jsonColumnSet(typ),
+		timeColumns: modelschema.TimeColumnSet(typ),
+		jsonColumns: modelschema.JSONColumnSet(typ),
 	}
-}
-
-// timeColumnSets and jsonColumnSets memoize the column sets below per model
-// type: both are pure derivations of the cached columns, and the scopes that
-// consult them are rebuilt on every filtered query. A resolution failure is
-// cached as well — the type cannot heal within one process, so retrying the
-// parse on every request would only repeat the failure. The cached sets are
-// shared across requests and read-only.
-var (
-	timeColumnSets sync.Map
-	jsonColumnSets sync.Map
-)
-
-// timeColumnSet reports the time-typed columns of a model type by database
-// name, resolved once per type and cached, for the comparison normalization
-// in comparisonSQL. A type whose columns cannot be resolved yields an empty
-// set: its comparisons then render without normalization, which is the exact
-// SQL every column renders on the dialects that compare time natively.
-func timeColumnSet(typ reflect.Type) map[string]struct{} {
-	for typ != nil && typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
-	}
-	if cached, ok := timeColumnSets.Load(typ); ok {
-		return cached.(map[string]struct{}) //nolint:errcheck
-	}
-
-	var set map[string]struct{}
-	if columns, err := modelschema.Columns(typ); err == nil {
-		set = make(map[string]struct{})
-		for _, c := range columns {
-			if modelschema.ClassifyColumn(c.Type) == modelschema.ColumnClassTime {
-				set[c.DBName] = struct{}{}
-			}
-		}
-	}
-	timeColumnSets.Store(typ, set)
-	return set
-}
-
-// jsonColumnSet reports the JSON-typed columns of a model type by database
-// name, resolved once per type and cached, for the like-family cast in the
-// filter renderer and the exact-match fail-closed rule in WithQuery.
-// Resolution failures yield an empty set, and the columns then render without
-// the cast.
-func jsonColumnSet(typ reflect.Type) map[string]struct{} {
-	for typ != nil && typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
-	}
-	if cached, ok := jsonColumnSets.Load(typ); ok {
-		return cached.(map[string]struct{}) //nolint:errcheck
-	}
-
-	var set map[string]struct{}
-	if columns, err := modelschema.Columns(typ); err == nil {
-		set = make(map[string]struct{})
-		for _, c := range columns {
-			if modelschema.IsJSONType(c.Type) {
-				set[c.DBName] = struct{}{}
-			}
-		}
-	}
-	jsonColumnSets.Store(typ, set)
-	return set
 }
 
 // applyFilters appends field-level operator filters, each as an AND

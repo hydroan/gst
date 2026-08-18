@@ -69,7 +69,7 @@ func (db *database[M]) applyCursorPagination() {
 		operator = " < "
 	}
 	lhs, rhs := db.quoteOrderField(db.cursor.Order.Column), "?"
-	if _, isTime := timeColumnSet(reflect.TypeOf(*new(M)))[db.cursor.Order.Column]; isTime {
+	if _, isTime := modelschema.TimeColumnSet(reflect.TypeOf(*new(M)))[db.cursor.Order.Column]; isTime {
 		lhs, rhs = db.timeComparableExpr(lhs), db.timeComparableExpr(rhs)
 	}
 	db.ins = db.ins.Where(lhs+operator+rhs, db.cursor.Value)

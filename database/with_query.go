@@ -160,7 +160,7 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 	// A JSON document is not a scalar, so both matching modes below treat its
 	// columns specially: exact matching fails closed and fuzzy matching runs
 	// over the document's text form.
-	jsonColumns := jsonColumnSet(typ)
+	jsonColumns := modelschema.JSONColumnSet(typ)
 
 	// CRITICAL SAFETY CHECK: Empty query conditions
 	//
