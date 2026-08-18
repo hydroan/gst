@@ -572,6 +572,17 @@ gen:
 - [生成的路由注册](./examples/demo/router/router.gen.go)
 - [生成的 service 注册](./examples/demo/service/service.gen.go)
 
+`examples/bench` 是压测专用项目（由 `gg new` 生成），提供 [BENCHMARK.md](./BENCHMARK.md) 中全部压测接口。
+
+## 性能
+
+框架不是瓶颈，有数据支撑（单机本地口径，完整压测协议、对照程序与 pprof 分析见 [BENCHMARK.md](./BENCHMARK.md)）：
+
+- **中间件链净开销为零**：带完整中间件链（tracing、access log 落盘、body logger、CORS、recovery）的 ping 约 13.1w QPS，与同场裸 `gin.New()` 对照（约 12.5w）持平甚至略高。
+- **框架完整 CRUD 路径（dry run，无 DB I/O）10.5w-12w QPS**：参数绑定、路由、钩子判定、SQL 构建、日志、响应序列化合计每请求不足 10µs。
+- **真实 MySQL 路径贴着往返数上限跑**：单语句写（update/delete/updatebyid）3.6w-3.9w QPS 与单键读（get）同量级，每请求恰好一次 DB 往返。
+- **pprof 定量实证**：纯框架路径上应用层合计仅约 2% CPU，带 DB 路径上框架自有 CPU 份额 <5%、无单点热点，其余为网络 syscall、DB driver 与 runtime。
+
 ## 常见问题
 
 ### 什么时候用 model.Base，什么时候用 model.Empty？

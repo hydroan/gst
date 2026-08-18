@@ -1,0 +1,169 @@
+version: "2"
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+severity:
+  default: error
+
+linters:
+  default: none
+  enable:
+    # Core correctness.
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+
+    # Error handling.
+    - errorlint
+    - errname
+    - errchkjson
+    - nilerr
+    - nilnil
+    - nilnesserr
+
+    # Backend resource safety.
+    - bidichk
+    - bodyclose
+    - rowserrcheck
+    - sqlclosecheck
+    - durationcheck
+    - fatcontext
+    - gosec
+
+    # Code hygiene.
+    - asciicheck
+    - dupword
+    - gocheckcompilerdirectives
+    - iface
+    - makezero
+    - mirror
+    - misspell
+    - musttag
+    - nolintlint
+    - predeclared
+    - reassign
+    - recvcheck
+    - revive
+    - unconvert
+    - unparam
+    - wastedassign
+
+    # Go modernization.
+    - copyloopvar
+    - exptostd
+    - intrange
+    - modernize
+    - perfsprint
+    - usestdlibvars
+
+    # Broad complementary suite (diagnostic, style, performance).
+    - gocritic
+
+    # Test quality.
+    - testifylint
+    - thelper
+    - tparallel
+    - usetesting
+
+    # Project constraints.
+    - depguard
+    - gomoddirectives
+
+  settings:
+    # This project lives inside the gst repository and must build against the
+    # framework source tree, so the local replace is deliberate.
+    gomoddirectives:
+      replace-local: true
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: "errors"
+              desc: "Use github.com/cockroachdb/errors instead"
+            - pkg: "github.com/pkg/errors"
+              desc: "Use github.com/cockroachdb/errors instead"
+
+    errcheck:
+      check-type-assertions: true
+      exclude-functions:
+        - io.Copy(*bytes.Buffer)
+        - io.Copy(os.Stdout)
+
+    govet:
+      # These analyzers are not part of the default go vet analyzer set.
+      enable:
+        - shadow
+        - nilness
+        - unusedwrite
+        - reflectvaluecompare
+        - deepequalerrors
+        - sortslice
+
+    misspell:
+      locale: US
+
+    recvcheck:
+      # Design, GetTableName, Purge and Indexes are stateless declaration
+      # methods that use value receivers by framework convention, while
+      # stateful hooks require pointer receivers.
+      exclusions:
+        - "*.Design"
+        - "*.GetTableName"
+        - "*.Purge"
+        - "*.Indexes"
+
+    staticcheck:
+      dot-import-whitelist:
+        - github.com/hydroan/gst/dsl
+
+    revive:
+      rules:
+        - name: blank-imports
+        - name: dot-imports
+          arguments:
+            - allowedPackages:
+                - github.com/hydroan/gst/dsl
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: indent-error-flow
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: var-declaration
+        - name: var-naming
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - std-error-handling
+      - common-false-positives
+      - legacy
+    rules:
+      # unparam is excluded in tests because test helpers commonly keep
+      # parameters for signature symmetry across cases.
+      - path: _test\.go
+        linters:
+          - gosec
+          - unparam
+      # The gofix //go:fix directive is valid but not yet in
+      # gocheckcompilerdirectives' known directive list.
+      - linters:
+          - gocheckcompilerdirectives
+        text: "//go:fix"
+      # Revive var-naming: ignore ALL_CAPS (redundant with staticcheck) and underscores in names.
+      - linters:
+          - revive
+        text: "don't use (ALL_CAPS|underscores) in Go names"
+
+issues:
+  max-same-issues: 100
