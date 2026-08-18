@@ -75,7 +75,7 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		var req requestData[M]
 		if reqErr = bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 			log.Errorz("bind request body failed", zap.Error(reqErr))
-			JSON(c, CodeFailure.WithErr(err))
+			JSON(c, CodeInvalidParam.WithErr(err))
 			gstotel.RecordError(span, reqErr)
 			return
 		}

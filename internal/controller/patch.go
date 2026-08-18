@@ -81,14 +81,14 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		body, err := readJSONRequestBody(c)
 		if err != nil {
 			log.Errorz("bind request body failed", zap.Error(err))
-			JSON(c, CodeFailure.WithErr(err))
+			JSON(c, CodeInvalidParam.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
 		}
 		fields, err := patchFieldSetFromJSONBody(meta.typ, body)
 		if err != nil && !errors.Is(err, io.EOF) {
 			log.Errorz("bind request body failed", zap.Error(err))
-			JSON(c, CodeFailure.WithErr(err))
+			JSON(c, CodeInvalidParam.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
 		}
@@ -98,7 +98,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		}
 		if err := bindJSONRequest(c, &req); err != nil {
 			log.Errorz("bind request body failed", zap.Error(err))
-			JSON(c, CodeFailure.WithErr(err))
+			JSON(c, CodeInvalidParam.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
 		}

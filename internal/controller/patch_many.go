@@ -52,7 +52,7 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 
 			if reqErr = bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 				log.Errorz("bind request body failed", zap.Error(reqErr))
-				JSON(c, CodeFailure.WithErr(reqErr))
+				JSON(c, CodeInvalidParam.WithErr(reqErr))
 				gstotel.RecordError(span, reqErr)
 				return
 			}
@@ -79,20 +79,20 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 		body, err := readJSONRequestBody(c)
 		if err != nil {
 			log.Errorz("bind request body failed", zap.Error(err))
-			JSON(c, CodeFailure.WithErr(err))
+			JSON(c, CodeInvalidParam.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
 		}
 		fieldSets, fieldErr := patchManyFieldSetsFromJSONBody(meta.typ, body)
 		if fieldErr != nil && !errors.Is(fieldErr, io.EOF) {
 			log.Errorz("bind request body failed", zap.Error(fieldErr))
-			JSON(c, CodeFailure.WithErr(fieldErr))
+			JSON(c, CodeInvalidParam.WithErr(fieldErr))
 			gstotel.RecordError(span, fieldErr)
 			return
 		}
 		if reqErr = bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 			log.Errorz("bind request body failed", zap.Error(reqErr))
-			JSON(c, CodeFailure.WithErr(reqErr))
+			JSON(c, CodeInvalidParam.WithErr(reqErr))
 			gstotel.RecordError(span, reqErr)
 			return
 		}

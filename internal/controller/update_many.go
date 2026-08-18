@@ -50,7 +50,7 @@ func UpdateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 
 			if reqErr = bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 				log.Errorz("bind request body failed", zap.Error(reqErr))
-				JSON(c, CodeFailure.WithErr(reqErr))
+				JSON(c, CodeInvalidParam.WithErr(reqErr))
 				gstotel.RecordError(span, reqErr)
 				return
 			}
@@ -75,7 +75,7 @@ func UpdateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		var req requestData[M]
 		if reqErr = bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 			log.Errorz("bind request body failed", zap.Error(reqErr))
-			JSON(c, CodeFailure.WithErr(reqErr))
+			JSON(c, CodeInvalidParam.WithErr(reqErr))
 			gstotel.RecordError(span, reqErr)
 			return
 		}

@@ -174,6 +174,29 @@ func TestCreateFactoryBindFailureOnMalformedJSON(t *testing.T) {
 		"a malformed body must render the stable client-safe message, not the raw decoder error")
 }
 
+// TestUpdateManyFactoryBindFailureRendersInvalidParamCode pins the error code
+// of a model-path bind failure: every bind failure classifies as invalid
+// parameters, aligning the batch and patch handlers with the create/update
+// single-resource ones.
+func TestUpdateManyFactoryBindFailureRendersInvalidParamCode(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logger.Controller = zap.New("")
+
+	engine := gin.New()
+	engine.PUT("/bind-error-code-probes/batch",
+		UpdateManyFactory[*normalizeProbeModel, *normalizeProbeModel, *normalizeProbeModel]())
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/bind-error-code-probes/batch", strings.NewReader(`{"items":3}`))
+	req.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), `"code":1000`,
+		"a bind failure must classify as invalid parameters, not the generic failure code")
+	require.Contains(t, recorder.Body.String(), `"msg":"invalid value for field 'items'"`)
+}
+
 // TestClientSafeBindError pins the translation table of body decoding
 // failures: one stable client-safe message per decoder error kind, with the
 // original error preserved as the cause so logs keep the full decoder text.
