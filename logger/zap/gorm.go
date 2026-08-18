@@ -2,6 +2,7 @@ package zap
 
 import (
 	"context"
+	"encoding/binary"
 	"runtime"
 	"strings"
 	"sync"
@@ -114,36 +115,95 @@ func isSkippedSQLFrame(function string) bool {
 // those depths. Walking the stack against a package predicate names the
 // right frame at every depth, the same way gorm's own FileWithLineNum does.
 func callerOutside(skip func(function string) bool) (string, bool) {
-	pcs, ok := sqlCallerPCs.Get().(*[sqlCallerDepth]uintptr)
+	buffer, ok := sqlCallerBuffers.Get().(*sqlCallerBuffer)
 	if !ok {
-		pcs = new([sqlCallerDepth]uintptr)
+		buffer = new(sqlCallerBuffer)
 	}
-	defer sqlCallerPCs.Put(pcs)
+	defer sqlCallerBuffers.Put(buffer)
 
 	// Skip runtime.Callers and callerOutside itself; the predicate drops the
 	// remaining framework frames, so the start offset needs no fine-tuning.
-	n := runtime.Callers(2, pcs[:])
-	frames := runtime.CallersFrames(pcs[:n])
-	for {
-		frame, more := frames.Next()
-		if frame.Function != "" && !skip(frame.Function) {
-			return sqlCallerPath(frame.File, frame.Line), true
-		}
-		if !more {
-			return "", false
+	n := runtime.Callers(2, buffer.pcs[:])
+	frames := sqlCallerFrames(buffer, n)
+	// The predicate deliberately runs on every call rather than being baked
+	// into the cache: an operator changing the configured skip prefixes keeps
+	// moving the answer, the property the prefix test pins.
+	for i := range frames {
+		if frames[i].function != "" && !skip(frames[i].function) {
+			return sqlCallerPath(frames[i].file, frames[i].line), true
 		}
 	}
+	return "", false
 }
 
 // sqlCallerDepth bounds the stack walk that names a statement's caller.
 const sqlCallerDepth = 64
 
-// sqlCallerPCs pools the program-counter buffers callerOutside walks with.
-// runtime.CallersFrames keeps the slice it is handed, so the buffer escapes to
-// the heap; without the pool every logged statement allocates one, and
-// statement logging is on for every statement in every environment.
-var sqlCallerPCs = sync.Pool{
-	New: func() any { return new([sqlCallerDepth]uintptr) },
+// sqlCallerBuffer carries the scratch state of one caller resolution: the
+// program-counter capture and the byte rendering of it that keys the stack
+// cache.
+type sqlCallerBuffer struct {
+	pcs [sqlCallerDepth]uintptr
+	key [sqlCallerDepth * 8]byte
+}
+
+// sqlCallerBuffers pools the capture buffers callerOutside works with.
+// Without the pool every logged statement allocates one, and statement
+// logging is on for every statement in every environment.
+var sqlCallerBuffers = sync.Pool{
+	New: func() any { return new(sqlCallerBuffer) },
+}
+
+// sqlCallerFrame is one resolved frame of a statement-issuing stack.
+type sqlCallerFrame struct {
+	function string
+	file     string
+	line     int
+}
+
+// sqlCallerStacks caches the resolved frames of each distinct
+// statement-issuing stack, keyed by the raw program-counter bytes.
+// runtime.CallersFrames re-runs the pc-to-source table walk on every
+// statement, while that mapping is fixed for the life of the binary, so each
+// distinct stack is resolved once. The key set cannot grow with traffic: it
+// is bounded by the program's own statement-issuing call paths. Lookups go
+// through a plain map under RWMutex because the compiler elides the
+// byte-to-string conversion of a map index, which a sync.Map load cannot do.
+var (
+	sqlCallerStacksMu sync.RWMutex
+	sqlCallerStacks   = make(map[string][]sqlCallerFrame)
+)
+
+// sqlCallerFrames returns the resolved frames of the buffer's captured stack,
+// resolving each distinct stack only once.
+func sqlCallerFrames(buffer *sqlCallerBuffer, n int) []sqlCallerFrame {
+	for i := range n {
+		binary.LittleEndian.PutUint64(buffer.key[i*8:], uint64(buffer.pcs[i]))
+	}
+	key := buffer.key[:n*8]
+
+	sqlCallerStacksMu.RLock()
+	frames, cached := sqlCallerStacks[string(key)]
+	sqlCallerStacksMu.RUnlock()
+	if cached {
+		return frames
+	}
+
+	// The resolving slice is a copy: CallersFrames retains what it is handed,
+	// and the pooled capture buffer goes back into circulation on return.
+	resolved := make([]sqlCallerFrame, 0, n)
+	iterator := runtime.CallersFrames(append([]uintptr(nil), buffer.pcs[:n]...))
+	for {
+		frame, more := iterator.Next()
+		resolved = append(resolved, sqlCallerFrame{function: frame.Function, file: frame.File, line: frame.Line})
+		if !more {
+			break
+		}
+	}
+	sqlCallerStacksMu.Lock()
+	sqlCallerStacks[string(key)] = resolved
+	sqlCallerStacksMu.Unlock()
+	return resolved
 }
 
 // sqlCallerSite is one source position that issued a statement.
