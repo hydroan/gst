@@ -305,22 +305,21 @@ func TestFilters(t *testing.T) {
 	})
 }
 
-func TestWithoutFilters(t *testing.T) {
-	q := url.Values{
-		"name":            {"alice"},
-		"age[gt]":         {"20"},
-		"created_at":      {"2026-07-01"},
-		"updated_at[lte]": {"2026-07-15"},
-		"_page":           {"2"},
-		"_page[gt]":       {"1"},
+func TestFilterQueryKeyOwnership(t *testing.T) {
+	// The decoder steps around exactly the keys Filters owns: operator keys
+	// and the bare framework timestamps. Underscore keys never count, with or
+	// without brackets — a bracketed underscore key stays a framework
+	// parameter and is rejected by the decoding path instead.
+	for key, owned := range map[string]bool{
+		"name":            false,
+		"age[gt]":         true,
+		"created_at":      true,
+		"updated_at[lte]": true,
+		"_page":           false,
+		"_page[gt]":       false,
+	} {
+		require.Equal(t, owned, isFilterQueryKey(key), key)
 	}
-	require.Equal(t, url.Values{
-		"name":      {"alice"},
-		"_page":     {"2"},
-		"_page[gt]": {"1"},
-	}, withoutFilters(q), "operator keys and bare framework timestamps belong to Filters, underscore keys never do")
-
-	require.Len(t, q, 6, "the input query must be left untouched")
 }
 
 func TestDecode(t *testing.T) {
@@ -328,7 +327,48 @@ func TestDecode(t *testing.T) {
 		var m filterTestModel
 		require.NoError(t, Decode(url.Values{"name": {"alice"}, "age": {"10"}}, &m))
 		require.Equal(t, "alice", m.Name)
-		require.Equal(t, 10, m.Age, "fields are mapped by the query alias tag, falling back to the field name")
+		require.Equal(t, 10, m.Age, "fields are mapped by the query tag, falling back to the json tag and the field name")
+	})
+
+	t.Run("FillsMultiWordJSONNamedFields", func(t *testing.T) {
+		var m filterTestModel
+		require.NoError(t, Decode(url.Values{"item_count": {"7"}, "group_ids": {"g1"}}, &m))
+		require.Equal(t, 7, m.ItemCount,
+			"a multi-word json name is a legal bare key; the streaming decoder silently rejected it")
+		require.Equal(t, "g1", m.GroupIDs)
+	})
+
+	t.Run("RejectsCaseVariantKeys", func(t *testing.T) {
+		var m filterTestModel
+		require.EqualError(t, Decode(url.Values{"Age": {"1"}}, &m),
+			`unsupported query parameter "Age"`,
+			"query keys are contract surface: the documented snake case name is the only spelling")
+	})
+
+	t.Run("SkipsEmptyValues", func(t *testing.T) {
+		var m filterTestModel
+		require.NoError(t, Decode(url.Values{"age": {""}}, &m))
+		require.Zero(t, m.Age, "an empty value means the caller is not filtering by that key")
+	})
+
+	t.Run("LastValueOfRepeatedKeyWins", func(t *testing.T) {
+		var m filterTestModel
+		require.NoError(t, Decode(url.Values{"age": {"1", "2"}}, &m))
+		require.Equal(t, 2, m.Age)
+	})
+
+	t.Run("AllocatesPointerFields", func(t *testing.T) {
+		var m filterTestModel
+		require.NoError(t, Decode(url.Values{"_expand": {"related"}}, &m))
+		require.NotNil(t, m.Expand)
+		require.Equal(t, "related", *m.Expand)
+	})
+
+	t.Run("LeavesNonScalarFieldsUnsupported", func(t *testing.T) {
+		var m filterTestModel
+		require.EqualError(t, Decode(url.Values{"expired_at": {"2026-07-01"}}, &m),
+			`unsupported query parameter "expired_at"`,
+			"a time column filters through created_at-style operator keys, never through a bare key")
 	})
 
 	t.Run("KeepsFilterKeysAwayFromTheDecoder", func(t *testing.T) {

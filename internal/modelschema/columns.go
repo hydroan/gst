@@ -94,7 +94,7 @@ func Columns(typ reflect.Type) ([]Column, error) {
 	for _, field := range parsed.FieldsByDBName {
 		columns = append(columns, Column{
 			GoName:    field.StructField.Name,
-			QueryName: queryColumnName(field.StructField),
+			QueryName: QueryColumnName(field.StructField),
 			DBName:    field.DBName,
 			Type:      field.FieldType,
 			Index:     field.StructField.Index,
@@ -110,14 +110,16 @@ func Columns(typ reflect.Type) ([]Column, error) {
 	return columns, nil
 }
 
-// queryColumnName resolves the URL parameter name of a struct field: the
+// QueryColumnName resolves the URL parameter name of a struct field: the
 // query tag wins over the json tag, which wins over the field name, and the
 // result is converted to snake case. A "-" tag is skipped rather than used
 // as a name, so the next source decides.
 //
 // This is the client-facing name only. It never decides the database column
-// name, which comes from gorm (see Column).
-func queryColumnName(field reflect.StructField) string {
+// name, which comes from gorm (see Column). Column resolution above and the
+// urlquery decode plan are its two consumers, which is what keeps a field's
+// bare key and its operator-filter key on one naming rule.
+func QueryColumnName(field reflect.StructField) string {
 	name := tagName(field, "query")
 	if name == "" {
 		name = tagName(field, "json")
