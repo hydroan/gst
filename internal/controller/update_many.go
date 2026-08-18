@@ -99,7 +99,7 @@ func UpdateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		if !errors.Is(reqErr, io.EOF) {
 			if err = database.Database[M](requestContext(c)).Update(req.Items...); err != nil {
 				log.Errorz("database operation failed", zap.Error(err))
-				JSON(c, writeErrorCoder(err))
+				JSON(c, databaseErrorCoder(err))
 				gstotel.RecordError(span, err)
 				return
 			}

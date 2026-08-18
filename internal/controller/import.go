@@ -42,7 +42,7 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		file, err := c.FormFile("file")
 		if err != nil {
 			log.Errorz("read upload file failed", zap.Error(err))
-			JSON(c, CodeFailure.WithErr(err))
+			JSON(c, CodeInvalidParam.WithMsg(missingUploadFileMsg))
 			gstotel.RecordError(span, err)
 			return
 		}
@@ -56,7 +56,7 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		fd, err := file.Open()
 		if err != nil {
 			log.Errorz("read upload file failed", zap.Error(err))
-			JSON(c, CodeFailure.WithErr(err))
+			JSON(c, CodeFailure)
 			gstotel.RecordError(span, err)
 			return
 		}
@@ -65,7 +65,7 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		buf := new(bytes.Buffer)
 		if _, err = io.Copy(buf, fd); err != nil {
 			log.Errorz("read upload file failed", zap.Error(err))
-			JSON(c, CodeFailure.WithErr(err))
+			JSON(c, CodeFailure)
 			gstotel.RecordError(span, err)
 			return
 		}
@@ -81,7 +81,7 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		})
 		if err != nil {
 			log.Errorz("service operation failed", zap.Error(err))
-			JSON(c, CodeFailure.WithErr(err))
+			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
 		}
@@ -109,7 +109,7 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			return database.Database[M](txCtx).Update(toUpdate...)
 		}); err != nil {
 			log.Errorz("database operation failed", zap.Error(err))
-			JSON(c, writeErrorCoder(err))
+			JSON(c, databaseErrorCoder(err))
 			gstotel.RecordError(span, err)
 			return
 		}

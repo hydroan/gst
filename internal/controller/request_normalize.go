@@ -74,6 +74,20 @@ func bindJSONRequest(c *gin.Context, target any) error {
 	return nil
 }
 
+// requiredBodyError translates the io.EOF sentinel of an absent request body
+// into a client-safe rejection, for the model-path handlers that require a
+// body: create, full update, and single-resource patch, where an empty body
+// would fabricate, zero, or skip the whole resource. Handlers that tolerate
+// an empty body keep treating io.EOF as "no body" and never call this.
+// Non-EOF errors pass through unchanged — they were already wrapped at the
+// decoding entry points.
+func requiredBodyError(err error) error {
+	if errors.Is(err, io.EOF) {
+		return serviceregistry.NewErrorWithCause(http.StatusBadRequest, "request body is required", err)
+	}
+	return err
+}
+
 // clientSafeBindError wraps a request-body decoding or validation failure
 // into a service-layer error whose client-safe message stays stable and free
 // of implementation detail. Decoder errors spell out Go struct and package

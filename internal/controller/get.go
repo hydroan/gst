@@ -103,12 +103,13 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			gstotel.RecordError(span, err)
 			return
 		}
-		// 2.Get resource from database.
+		// 2.Get resource from database. The database layer answers existence:
+		// database.ErrRecordNotFound renders 404 instead of a generic failure.
 		if err = database.Database[M](requestContext(c)).
 			WithExpand(expands).
 			Get(m, m.GetID()); err != nil {
 			log.Errorz("database operation failed", zap.Error(err))
-			JSON(c, CodeFailure.WithErr(err))
+			JSON(c, databaseErrorCoder(err))
 			gstotel.RecordError(span, err)
 			return
 		}

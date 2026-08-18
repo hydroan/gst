@@ -83,6 +83,9 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 
 		req := meta.newModel()
 		if reqErr := bindJSONRequest(c, &req); reqErr != nil {
+			// A full update replaces the resource, so an absent body is refused
+			// rather than tolerated as "nothing to change".
+			reqErr = requiredBodyError(reqErr)
 			log.Errorz("bind request body failed", zap.Error(reqErr))
 			JSON(c, CodeInvalidParam.WithErr(reqErr))
 			gstotel.RecordError(span, reqErr)
@@ -128,7 +131,7 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// ErrRecordNotFound renders 404, ErrDuplicatedKey renders 409.
 		if err = database.Database[M](requestContext(c)).Update(req); err != nil {
 			log.Errorz("database operation failed", zap.Error(err))
-			JSON(c, writeErrorCoder(err))
+			JSON(c, databaseErrorCoder(err))
 			gstotel.RecordError(span, err)
 			return
 		}

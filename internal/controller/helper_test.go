@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/types"
@@ -157,6 +158,51 @@ func TestPatchManyFieldSetsFromJSONBodyKeepItemFieldsSeparate(t *testing.T) {
 	require.NotContains(t, fieldSets[0], "Name")
 	require.Contains(t, fieldSets[1], "Name")
 	require.NotContains(t, fieldSets[1], "Enabled")
+}
+
+// TestHandleServiceErrorHidesInternalErrorText pins the fallback branch: an
+// error that is not a service-layer error renders the generic failure message,
+// keeping driver and infrastructure text out of the envelope.
+func TestHandleServiceErrorHidesInternalErrorText(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	internal := errors.New("dial tcp 10.0.0.1:3306: connection refused")
+
+	handleServiceError(ctx, internal)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.JSONEq(t, `{"code":-1,"msg":"failure","data":null,"trace_id":""}`, recorder.Body.String())
+	require.NotContains(t, recorder.Body.String(), internal.Error())
+}
+
+// TestDatabaseErrorCoder pins the canonical mapping of database errors: a
+// service error keeps its own status and message, the two database sentinels
+// render their fixed codes, and everything else falls back to the generic
+// failure message without carrying internal error text.
+func TestDatabaseErrorCoder(t *testing.T) {
+	serviceErr := serviceregistry.NewError(http.StatusForbidden, "operation refused")
+
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus int
+		wantMsg    string
+	}{
+		{"service error keeps status and message", serviceErr, http.StatusForbidden, "operation refused"},
+		{"record not found renders 404", errors.Wrap(database.ErrRecordNotFound, "get sample"), http.StatusNotFound, "Requested resource not found."},
+		{"duplicated key renders 409", errors.Wrap(database.ErrDuplicatedKey, "create sample"), http.StatusConflict, "Resource already exists."},
+		{"other errors hide internal text", errors.New("Error 1146: Table 'sample' doesn't exist"), http.StatusBadRequest, "failure"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			coder := databaseErrorCoder(tt.err)
+
+			require.Equal(t, tt.wantStatus, coder.Status())
+			require.Equal(t, tt.wantMsg, coder.Msg())
+		})
+	}
 }
 
 // TestPatchFieldSetFromJSONBodyWrapsDecodeError pins that patch-path body

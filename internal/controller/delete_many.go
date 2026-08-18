@@ -75,7 +75,7 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		var req requestData[M]
 		if reqErr = bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 			log.Errorz("bind request body failed", zap.Error(reqErr))
-			JSON(c, CodeInvalidParam.WithErr(err))
+			JSON(c, CodeInvalidParam.WithErr(reqErr))
 			gstotel.RecordError(span, reqErr)
 			return
 		}
@@ -113,7 +113,7 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 			// if err = database.Database[M](requestContext(c)).WithPurge(req.Options.Purge).Delete(req.Items...); err != nil {
 			if err = database.Database[M](requestContext(c)).Delete(req.Items...); err != nil {
 				log.Errorz("database operation failed", zap.Error(err))
-				JSON(c, writeErrorCoder(err))
+				JSON(c, databaseErrorCoder(err))
 				gstotel.RecordError(span, err)
 				return
 			}

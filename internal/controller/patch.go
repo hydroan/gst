@@ -97,6 +97,9 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			id = reqMeta.Param(util.Deref(cfg[0]).ParamName)
 		}
 		if err := bindJSONRequest(c, &req); err != nil {
+			// A single-resource patch without a body patches nothing; refuse it
+			// with a stable message instead of the bare io.EOF text.
+			err = requiredBodyError(err)
 			log.Errorz("bind request body failed", zap.Error(err))
 			JSON(c, CodeInvalidParam.WithErr(err))
 			gstotel.RecordError(span, err)
@@ -123,7 +126,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		// Make sure the record must be already exists.
 		if err := database.Database[M](requestContext(c)).WithLimit(1).WithQuery(m).List(&data); err != nil {
 			log.Errorz("database operation failed", zap.Error(err))
-			JSON(c, CodeFailure.WithErr(err))
+			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
 		}
@@ -158,7 +161,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		// collisions from the patched values render 409.
 		if err := database.Database[M](requestContext(c)).Update(cur); err != nil {
 			log.Errorz("database operation failed", zap.Error(err))
-			JSON(c, writeErrorCoder(err))
+			JSON(c, databaseErrorCoder(err))
 			gstotel.RecordError(span, err)
 			return
 		}

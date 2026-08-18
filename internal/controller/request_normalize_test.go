@@ -174,6 +174,77 @@ func TestCreateFactoryBindFailureOnMalformedJSON(t *testing.T) {
 		"a malformed body must render the stable client-safe message, not the raw decoder error")
 }
 
+// TestCreateFactoryRequiresBodyOnModelPath pins the model-path create
+// contract: creating a resource requires a body, so an absent one renders the
+// stable required-body rejection instead of a success without a row. The
+// delegation path keeps tolerating an empty body — action endpoints without a
+// payload live there, pinned by TestCreateFactoryRestoresNullBodyRequest.
+func TestCreateFactoryRequiresBodyOnModelPath(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logger.Controller = zap.New("")
+
+	engine := gin.New()
+	engine.POST("/required-body-create-probes",
+		CreateFactory[*normalizeProbeModel, *normalizeProbeModel, *normalizeProbeModel]())
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/required-body-create-probes", nil)
+	req.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), `"code":1000`)
+	require.Contains(t, recorder.Body.String(), `"msg":"request body is required"`,
+		"an absent body must be refused, not answered as an empty success")
+}
+
+// TestUpdateFactoryRequiresBody pins the model-path full update contract: an
+// absent request body renders the stable required-body message instead of the
+// bare io.EOF text.
+func TestUpdateFactoryRequiresBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logger.Controller = zap.New("")
+
+	engine := gin.New()
+	engine.PUT("/required-body-probes/:id",
+		UpdateFactory[*normalizeProbeModel, *normalizeProbeModel, *normalizeProbeModel](
+			&types.ControllerConfig[*normalizeProbeModel]{Route: "required-body-probes", ParamName: "id"},
+		))
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/required-body-probes/sample-id", nil)
+	req.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), `"code":1000`)
+	require.Contains(t, recorder.Body.String(), `"msg":"request body is required"`,
+		"an absent body must render the stable message, not the bare io.EOF text")
+}
+
+// TestDeleteManyFactoryBindFailureRendersClientSafeMessage pins the model-path
+// batch-delete bind failure to the ordinary invalid-parameter envelope. The
+// rendered error must be the bind error itself: this handler once passed a
+// separate, still-nil error variable into the envelope, turning every bind
+// failure into a nil-dereference panic instead of a 400.
+func TestDeleteManyFactoryBindFailureRendersClientSafeMessage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logger.Controller = zap.New("")
+
+	engine := gin.New()
+	engine.DELETE("/bind-error-delete-probes/batch",
+		DeleteManyFactory[*normalizeProbeModel, *normalizeProbeModel, *normalizeProbeModel]())
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/bind-error-delete-probes/batch", strings.NewReader(`{"ids":3}`))
+	req.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), `"code":1000`)
+	require.Contains(t, recorder.Body.String(), `"msg":"invalid value for field 'ids'"`)
+}
+
 // TestUpdateManyFactoryBindFailureRendersInvalidParamCode pins the error code
 // of a model-path bind failure: every bind failure classifies as invalid
 // parameters, aligning the batch and patch handlers with the create/update

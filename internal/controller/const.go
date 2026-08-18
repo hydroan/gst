@@ -11,6 +11,11 @@ const (
 // reason as missingRouteParamMsg.
 const tooLargeFileMsg = "too large file"
 
+// missingUploadFileMsg answers an import request whose multipart form carries
+// no "file" field, keeping the multipart reader's own error text out of the
+// response for the same reason bind failures render stable messages.
+const missingUploadFileMsg = "upload file is required"
+
 const (
 	TOKEN         = "token"
 	ACCESS_TOKEN  = "access_token"  //nolint:staticcheck

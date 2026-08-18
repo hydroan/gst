@@ -117,7 +117,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// 2.Delete resource in database.
 		if err := database.Database[M](requestContext(c)).Delete(m); err != nil {
 			log.Errorz("database operation failed", zap.Error(err))
-			JSON(c, writeErrorCoder(err))
+			JSON(c, databaseErrorCoder(err))
 			gstotel.RecordError(span, err)
 			return
 		}

@@ -256,7 +256,11 @@ func requestContext(c *gin.Context) context.Context {
 	return requestctx.WithMetadata(c.Request.Context(), requestctx.FromGin(c))
 }
 
-// handleServiceError handles service-layer errors.
+// handleServiceError renders a service-layer failure: a service error keeps
+// the status and message it was constructed with, and anything else renders
+// the generic failure message. Internal error text — database drivers naming
+// tables and columns, third-party client output — never reaches the envelope;
+// handlers log the full error themselves before calling here.
 func handleServiceError(c *gin.Context, err error) {
 	var serviceErr *serviceregistry.Error
 	if errors.As(err, &serviceErr) {
@@ -264,23 +268,21 @@ func handleServiceError(c *gin.Context, err error) {
 		return
 	}
 
-	// Default error handling
-	JSON(c, CodeFailure.WithErr(err))
+	JSON(c, CodeFailure)
 }
 
-// writeErrorCoder maps database write errors to their canonical API codes: a
+// databaseErrorCoder maps database errors to their canonical API codes: a
 // service-layer error keeps the status and message it was constructed with,
 // database.ErrRecordNotFound renders 404 and database.ErrDuplicatedKey renders
-// 409 with their fixed client-safe messages; anything else falls back to
-// CodeFailure carrying the error text. Handlers log the full error themselves,
-// so the not-found/duplicate branches deliberately drop internal detail from
-// the response.
+// 409 with their fixed client-safe messages; anything else falls back to the
+// generic failure message. Handlers log the full error themselves, so every
+// branch deliberately keeps internal detail out of the response.
 //
 // The service error is honored first, and here as well as in the action path:
 // a model hook refusing an operation states its status deliberately — a guard
 // answering 403 — and flattening that to a generic failure would misreport a
 // permission boundary as a malformed request.
-func writeErrorCoder(err error) types.Coder {
+func databaseErrorCoder(err error) types.Coder {
 	var serviceErr *serviceregistry.Error
 	switch {
 	case errors.As(err, &serviceErr):
@@ -290,6 +292,6 @@ func writeErrorCoder(err error) types.Coder {
 	case errors.Is(err, database.ErrDuplicatedKey):
 		return CodeAlreadyExist
 	default:
-		return CodeFailure.WithErr(err)
+		return CodeFailure
 	}
 }

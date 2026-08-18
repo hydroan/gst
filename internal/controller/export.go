@@ -141,7 +141,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				return svc.ListBefore(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), &data)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
-				JSON(c, CodeFailure.WithErr(err))
+				handleServiceError(c, err)
 				gstotel.RecordError(span, err)
 				return
 			}
@@ -169,7 +169,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				WithOrder(orders...).
 				List(&data); err != nil {
 				log.Errorz("database operation failed", zap.Error(err))
-				JSON(c, CodeFailure.WithErr(err))
+				handleServiceError(c, err)
 				gstotel.RecordError(span, err)
 				return
 			}
@@ -178,7 +178,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				return svc.ListAfter(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), &data)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
-				JSON(c, CodeFailure.WithErr(err))
+				handleServiceError(c, err)
 				gstotel.RecordError(span, err)
 				return
 			}
@@ -189,7 +189,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		})
 		if err != nil {
 			log.Errorz("service operation failed", zap.Error(err))
-			JSON(c, CodeFailure.WithErr(err))
+			handleServiceError(c, err)
 			gstotel.RecordError(span, err)
 			return
 		}

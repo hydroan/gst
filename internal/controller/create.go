@@ -29,7 +29,9 @@ func Create[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into
 // M, fills the creator/updater fields, runs the create hooks, writes the model
 // through the configured database handler, records an operation log, and
-// returns the created model.
+// returns the created model. Creating a resource requires a body: an absent
+// one is refused, and a client wanting a resource with all defaults states
+// that intent with an explicit {} body.
 //
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's Create method. Multipart form
@@ -38,7 +40,6 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_CREATE, consts.PHASE_CREATE_BEFORE, consts.PHASE_CREATE_AFTER)
 	return func(c *gin.Context) {
 		var err error
-		var reqErr error
 
 		ctrlSpanCtx, span := meta.startControllerSpan(c)
 		defer span.End()
@@ -53,7 +54,7 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			// If the request content type if "multipart/form-data", then the request body is a file.
 			// We should not try to parse it as JSON.
 			if !strings.EqualFold(c.ContentType(), "multipart/form-data") {
-				if reqErr = bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
+				if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
 					log.Errorz("bind request body failed", zap.Error(reqErr))
 					JSON(c, CodeInvalidParam.WithErr(reqErr))
 					gstotel.RecordError(span, reqErr)
@@ -79,17 +80,18 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 
 		req := meta.newModel()
-		if reqErr = bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
+		if reqErr := bindJSONRequest(c, &req); reqErr != nil {
+			// Creating a resource requires a body, so an absent one is refused
+			// rather than answered as a success that wrote nothing.
+			reqErr = requiredBodyError(reqErr)
 			log.Errorz("bind request body failed", zap.Error(reqErr))
 			JSON(c, CodeInvalidParam.WithErr(reqErr))
 			gstotel.RecordError(span, reqErr)
 			return
 		}
 		meta.normalizeModel(&req)
-		if !errors.Is(reqErr, io.EOF) {
-			req.SetCreatedBy(c.GetString(consts.CTX_USERNAME))
-			req.SetUpdatedBy(c.GetString(consts.CTX_USERNAME))
-		}
+		req.SetCreatedBy(c.GetString(consts.CTX_USERNAME))
+		req.SetUpdatedBy(c.GetString(consts.CTX_USERNAME))
 
 		// 1.Perform business logic processing before create resource.
 		var serviceCtxBefore *types.ServiceContext
@@ -105,13 +107,11 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// 2.Create resource in database. Create is a pure INSERT: a primary or
 		// unique key collision (including one held by a soft-deleted row)
 		// surfaces as ErrDuplicatedKey and renders 409.
-		if !errors.Is(reqErr, io.EOF) {
-			if err = database.Database[M](requestContext(c)).WithExpand(req.Expands()).Create(req); err != nil {
-				log.Errorz("database operation failed", zap.Error(err))
-				JSON(c, writeErrorCoder(err))
-				gstotel.RecordError(span, err)
-				return
-			}
+		if err = database.Database[M](requestContext(c)).WithExpand(req.Expands()).Create(req); err != nil {
+			log.Errorz("database operation failed", zap.Error(err))
+			JSON(c, databaseErrorCoder(err))
+			gstotel.RecordError(span, err)
+			return
 		}
 		// 3.Perform business logic processing after create resource
 		var serviceCtxAfter *types.ServiceContext
