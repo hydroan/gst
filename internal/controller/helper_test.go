@@ -159,6 +159,32 @@ func TestPatchManyFieldSetsFromJSONBodyKeepItemFieldsSeparate(t *testing.T) {
 	require.NotContains(t, fieldSets[1], "Enabled")
 }
 
+// TestPatchFieldSetFromJSONBodyWrapsDecodeError pins that patch-path body
+// decoding failures carry the client-safe message instead of the raw decoder
+// text, matching the bindJSONRequest contract.
+func TestPatchFieldSetFromJSONBodyWrapsDecodeError(t *testing.T) {
+	typ := reflect.TypeFor[patchValueTestRecord]()
+
+	_, err := patchFieldSetFromJSONBody(typ, []byte(`{"enabled":`))
+
+	var serviceErr *serviceregistry.Error
+	require.ErrorAs(t, err, &serviceErr)
+	require.Equal(t, "request body is not valid JSON", serviceErr.Msg())
+}
+
+// TestPatchManyFieldSetsFromJSONBodyWrapsDecodeError is the batch-path
+// counterpart: a type mismatch on the items envelope must name the field
+// through the client-safe message.
+func TestPatchManyFieldSetsFromJSONBodyWrapsDecodeError(t *testing.T) {
+	typ := reflect.TypeFor[patchValueTestRecord]()
+
+	_, err := patchManyFieldSetsFromJSONBody(typ, []byte(`{"items":3}`))
+
+	var serviceErr *serviceregistry.Error
+	require.ErrorAs(t, err, &serviceErr)
+	require.Equal(t, "invalid value for field 'items'", serviceErr.Msg())
+}
+
 func BenchmarkPatchValueModelPatch(b *testing.B) {
 	typ := reflect.TypeFor[patchValueTestRecord]()
 	newRecord := &patchValueTestRecord{

@@ -2,12 +2,14 @@ package controller
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/hydroan/gst/internal/modelregistry"
@@ -137,6 +139,67 @@ func TestCreateFactoryAcceptsTrailingWhitespace(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Contains(t, recorder.Body.String(), `"item_count":1`)
+}
+
+// TestCreateFactoryBindFailureNamesOffendingField pins the response envelope
+// of a type-mismatch bind failure: a stable message naming the offending field
+// through its JSON path, never the decoder's own text with Go struct and
+// package internals.
+func TestCreateFactoryBindFailureNamesOffendingField(t *testing.T) {
+	engine := newNormalizeProbeEngine(t, "bind-error-field-probes")
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/bind-error-field-probes", strings.NewReader(`{"items":3}`))
+	req.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), `"msg":"invalid value for field 'items'"`,
+		"a bind failure must render the stable client-safe message, not the raw decoder error")
+}
+
+// TestCreateFactoryBindFailureOnMalformedJSON pins the response envelope of a
+// syntactically broken body: the generic not-valid-JSON message, with the
+// decoder's position details kept for logs only.
+func TestCreateFactoryBindFailureOnMalformedJSON(t *testing.T) {
+	engine := newNormalizeProbeEngine(t, "bind-error-syntax-probes")
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/bind-error-syntax-probes", strings.NewReader(`{"items":`))
+	req.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), `"msg":"request body is not valid JSON"`,
+		"a malformed body must render the stable client-safe message, not the raw decoder error")
+}
+
+// TestClientSafeBindError pins the translation table of body decoding
+// failures: one stable client-safe message per decoder error kind, with the
+// original error preserved as the cause so logs keep the full decoder text.
+func TestClientSafeBindError(t *testing.T) {
+	tests := []struct {
+		name    string
+		err     error
+		wantMsg string
+	}{
+		{"type mismatch names the field", json.Unmarshal([]byte(`{"items":3}`), &normalizeProbeReq{}), "invalid value for field 'items'"},
+		{"top-level type mismatch has no field", json.Unmarshal([]byte(`[1]`), &normalizeProbeReq{}), "request body has an unexpected JSON type"},
+		{"malformed body", json.Unmarshal([]byte(`{`), &normalizeProbeReq{}), "request body is not valid JSON"},
+		{"other errors fall back to the generic message", errors.New("read failed"), "invalid request body"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wrapped := clientSafeBindError(tt.err)
+
+			var serviceErr *serviceregistry.Error
+			require.ErrorAs(t, wrapped, &serviceErr)
+			require.Equal(t, tt.wantMsg, serviceErr.Msg())
+			require.Equal(t, http.StatusBadRequest, serviceErr.Status())
+			require.ErrorIs(t, wrapped, tt.err, "the original error must survive as the cause")
+			require.Contains(t, wrapped.Error(), tt.err.Error(), "logs must keep the full decoder text")
+		})
+	}
 }
 
 // TestBindJSONRequestHonorsDisabledValidator pins gin's validator-disable

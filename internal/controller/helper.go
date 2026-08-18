@@ -154,7 +154,10 @@ func readJSONRequestBody(c *gin.Context) ([]byte, error) {
 	}
 	body, err := io.ReadAll(c.Request.Body)
 	c.Request.Body = io.NopCloser(bytes.NewReader(body))
-	return body, err
+	if err != nil {
+		return body, clientSafeBindError(err)
+	}
+	return body, nil
 }
 
 func patchFieldSetFromJSONBody(typ reflect.Type, body []byte) (patchFieldSet, error) {
@@ -163,7 +166,7 @@ func patchFieldSetFromJSONBody(typ reflect.Type, body []byte) (patchFieldSet, er
 	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(body, &fields); err != nil {
-		return nil, err
+		return nil, clientSafeBindError(err)
 	}
 	return patchFieldSetFromJSONFields(typ, fields), nil
 }
@@ -176,7 +179,7 @@ func patchManyFieldSetsFromJSONBody(typ reflect.Type, body []byte) ([]patchField
 		Items []map[string]json.RawMessage `json:"items"`
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
-		return nil, err
+		return nil, clientSafeBindError(err)
 	}
 	fieldSets := make([]patchFieldSet, 0, len(req.Items))
 	for _, item := range req.Items {

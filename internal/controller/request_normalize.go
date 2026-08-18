@@ -2,21 +2,29 @@ package controller
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
+	"net/http"
 	"reflect"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	ginjson "github.com/gin-gonic/gin/codec/json"
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/types"
 )
 
-// This file keeps every bound request body service-safe. JSON binding alone
-// cannot guarantee that: a literal JSON null body decodes into a nil pointer
-// and then panics inside gin's validator step, and null entries inside JSON
-// arrays decode into nil slice elements. Phase services and the shared batch
-// pipeline must never observe either shape, so every handler binds through
-// bindJSONRequest and normalizes the bound value right after it succeeds.
+// This file keeps every bound request body service-safe and every body
+// decoding failure client-safe. JSON binding alone guarantees neither: a
+// literal JSON null body decodes into a nil pointer and then panics inside
+// gin's validator step, null entries inside JSON arrays decode into nil slice
+// elements, and decoder errors spell out Go struct and package internals.
+// Phase services and the shared batch pipeline must never observe the former
+// shapes, so every handler binds through bindJSONRequest and normalizes the
+// bound value right after it succeeds; response envelopes must never carry
+// the latter text, so every body-decoding entry point wraps its errors
+// through clientSafeBindError.
 
 // jsonNull is the literal JSON null body treated as "no body".
 var jsonNull = []byte("null")
@@ -53,14 +61,43 @@ func bindJSONRequest(c *gin.Context, target any) error {
 	c.Request.Body = io.NopCloser(bytes.NewReader(raw))
 
 	if err = ginjson.API.Unmarshal(raw, target); err != nil {
-		return err
+		return clientSafeBindError(err)
 	}
 	// A nil binding.Validator is gin's documented way to turn validation off;
 	// gin's own binding paths nil-check it, so binding here does the same.
 	if binding.Validator == nil {
 		return nil
 	}
-	return binding.Validator.ValidateStruct(target)
+	if err = binding.Validator.ValidateStruct(target); err != nil {
+		return clientSafeBindError(err)
+	}
+	return nil
+}
+
+// clientSafeBindError wraps a request-body decoding or validation failure
+// into a service-layer error whose client-safe message stays stable and free
+// of implementation detail. Decoder errors spell out Go struct and package
+// internals ("json: cannot unmarshal bool into Go struct field ..."), and the
+// response envelope renders non-service errors verbatim, so wrapping at the
+// decoding entry points is what keeps that text out of every bind failure at
+// once. The original error stays wrapped as the cause: logs render the full
+// decoder text through Error, io.EOF sentinels never reach this function
+// (each entry point returns them before decoding), and type-mismatch field
+// paths come from the target struct's JSON tags, not from client input.
+func clientSafeBindError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	var syntaxErr *json.SyntaxError
+	switch {
+	case errors.As(err, &typeErr):
+		if typeErr.Field != "" {
+			return serviceregistry.NewErrorWithCause(http.StatusBadRequest, "invalid value for field '"+typeErr.Field+"'", err)
+		}
+		return serviceregistry.NewErrorWithCause(http.StatusBadRequest, "request body has an unexpected JSON type", err)
+	case errors.As(err, &syntaxErr):
+		return serviceregistry.NewErrorWithCause(http.StatusBadRequest, "request body is not valid JSON", err)
+	default:
+		return serviceregistry.NewErrorWithCause(http.StatusBadRequest, "invalid request body", err)
+	}
 }
 
 // normalizeRequest restores req to the zero-value instance when a JSON null
