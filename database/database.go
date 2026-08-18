@@ -104,7 +104,22 @@ var (
 )
 
 var (
-	defaultLimit           = -1
+	defaultLimit = -1
+
+	// The write paths slice batches themselves instead of delegating to
+	// GORM's CreateBatchSize/CreateInBatches, deliberately:
+	//   - The write's transaction boundary must span the model hooks around
+	//     the statements (withWriteTransaction); the transaction
+	//     CreateInBatches opens wraps only its own batch loop, so the outer
+	//     boundary would still be needed and the inner one would be
+	//     redundant.
+	//   - A write that fits one batch must be able to drop the wrapping
+	//     transaction entirely (withSingleStatementWrite); under
+	//     CreateInBatches that single INSERT is still wrapped by GORM's
+	//     default per-statement transaction.
+	//   - Delete slices id lists into WHERE ... IN batches, which GORM has
+	//     no batching for; one hand-rolled loop keeps Create and Delete
+	//     symmetric.
 	defaultBatchSize       = 1000
 	defaultDeleteBatchSize = 10000
 	defaultsColumns        = []string{

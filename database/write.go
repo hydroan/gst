@@ -6,6 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
@@ -49,7 +50,9 @@ func compactModels[M types.Model](objs []M) []M {
 //     forge audit fields.
 //   - Runs hooks and all batches in one transaction: a failure in any batch or
 //     hook rolls back the whole call (all-or-nothing), joining the transaction
-//     carried by ctx when present.
+//     carried by ctx when present. A call that fits one batch and runs no
+//     overridden create hooks skips the wrapping transaction: the single
+//     INSERT's own atomicity is the whole contract.
 //   - Returns nil if no valid objects provided (empty slice or all objects are empty)
 //
 // Returns ErrDuplicatedKey when a primary or unique key already exists, or an
@@ -82,12 +85,13 @@ func (db *database[M]) Create(objs ...M) (err error) {
 	done, span := db.trace(consts.PHASE_CREATE, len(objs))
 	defer func() { done(err) }()
 
+	tableName := db.m.GetTableName()
+	batchSize := defaultBatchSize
+	if db.batchSize > 0 {
+		batchSize = db.batchSize
+	}
+
 	if db.dryRun {
-		tableName := db.m.GetTableName()
-		batchSize := defaultBatchSize
-		if db.batchSize > 0 {
-			batchSize = db.batchSize
-		}
 		dryRunObjs := cloneDryRunModels(objs)
 		for i := 0; i < len(dryRunObjs); i += batchSize {
 			end := min(i+batchSize, len(dryRunObjs))
@@ -99,7 +103,7 @@ func (db *database[M]) Create(objs ...M) (err error) {
 		return nil
 	}
 
-	return db.withWriteTransaction(func() error {
+	write := func() error {
 		// Invoke model hook: CreateBefore for the entire batch.
 		if !db.noHook {
 			if err = traceModelHook[M](db.ctx, consts.PHASE_CREATE_BEFORE, span, func(spanCtx context.Context) error {
@@ -117,11 +121,6 @@ func (db *database[M]) Create(objs ...M) (err error) {
 			objs[i].SetID() // set id when id is empty.
 		}
 
-		tableName := db.m.GetTableName()
-		batchSize := defaultBatchSize
-		if db.batchSize > 0 {
-			batchSize = db.batchSize
-		}
 		// Force created_at/updated_at to now; see the timestamp note in the doc
 		// comment. dbruntime.NowUTC owns the time base (UTC, millisecond
 		// precision) so the values handed back equal what a later read returns.
@@ -150,7 +149,13 @@ func (db *database[M]) Create(objs ...M) (err error) {
 			}
 		}
 		return nil
-	})
+	}
+	// One batch is one multi-row INSERT; without overridden create hooks the
+	// statement's own atomicity is the whole contract.
+	if (db.noHook || !modelregistry.OverridesCreateHooks(db.m)) && len(objs) <= batchSize {
+		return db.withSingleStatementWrite(write)
+	}
+	return db.withWriteTransaction(write)
 }
 
 // Delete removes one or multiple records from the database.
@@ -166,6 +171,11 @@ func (db *database[M]) Create(objs ...M) (err error) {
 //   - Hard delete (with WithPurge): Permanently removes records from database
 //   - Soft-deleted records are automatically excluded from List, Get, First, Last, Count, and other query operations
 //   - Supports batch processing for performance
+//   - Runs hooks and all batches in one transaction, joining the transaction
+//     carried by ctx when present. A call that fits one batch and runs no
+//     overridden delete hooks skips the wrapping transaction: the single
+//     UPDATE ... IN / DELETE ... IN statement's own atomicity is the whole
+//     contract.
 //   - Returns nil if no valid objects provided (empty slice or all objects are empty)
 //   - WithDryRun builds SQL only and does not execute hooks, database I/O, or object field filling
 //
@@ -197,12 +207,13 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	done, span := db.trace(consts.PHASE_DELETE, len(objs))
 	defer func() { done(err) }()
 
+	tableName := db.m.GetTableName()
+	batchSize := defaultDeleteBatchSize
+	if db.batchSize > 0 {
+		batchSize = db.batchSize
+	}
+
 	if db.dryRun {
-		tableName := db.m.GetTableName()
-		batchSize := defaultDeleteBatchSize
-		if db.batchSize > 0 {
-			batchSize = db.batchSize
-		}
 		dryRunObjs := cloneDryRunModels(objs)
 		for i := 0; i < len(dryRunObjs); i += batchSize {
 			end := min(i+batchSize, len(dryRunObjs))
@@ -221,7 +232,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 		return nil
 	}
 
-	return db.withWriteTransaction(func() error {
+	write := func() error {
 		// Invoke model hook: DeleteBefore.
 		if !db.noHook {
 			if err = traceModelHook[M](db.ctx, consts.PHASE_DELETE_BEFORE, span, func(spanCtx context.Context) error {
@@ -235,13 +246,8 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 				return err
 			}
 		}
-		tableName := db.m.GetTableName()
 		if util.Deref(db.enablePurge) {
 			// delete permanently.
-			batchSize := defaultDeleteBatchSize
-			if db.batchSize > 0 {
-				batchSize = db.batchSize
-			}
 			for i := 0; i < len(objs); i += batchSize {
 				end := min(i+batchSize, len(objs))
 				if err = db.ins.Session(&gorm.Session{}).Table(tableName).Unscoped().Delete(objs[i:end]).Error; err != nil {
@@ -252,10 +258,6 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 			// Soft delete: only set "deleted_at" to the current time. The row keeps
 			// occupying its unique keys, so a later Create with the same unique key
 			// fails with ErrDuplicatedKey; only Upsert can update such a row again.
-			batchSize := defaultDeleteBatchSize
-			if db.batchSize > 0 {
-				batchSize = db.batchSize
-			}
 			for i := 0; i < len(objs); i += batchSize {
 				end := min(i+batchSize, len(objs))
 				if err = db.ins.Session(&gorm.Session{}).Table(tableName).Delete(objs[i:end]).Error; err != nil {
@@ -277,7 +279,14 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 			}
 		}
 		return nil
-	})
+	}
+	// One batch is one UPDATE ... IN (soft delete) or DELETE ... IN (purge);
+	// without overridden delete hooks the statement's own atomicity is the
+	// whole contract.
+	if (db.noHook || !modelregistry.OverridesDeleteHooks(db.m)) && len(objs) <= batchSize {
+		return db.withSingleStatementWrite(write)
+	}
+	return db.withWriteTransaction(write)
 }
 
 // Update saves the full state of one or multiple existing records.
@@ -305,7 +314,9 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 //     missing. Custom database connections must keep that flag.
 //   - Runs hooks and all row updates in one transaction: any missing record or
 //     failed hook rolls back the whole call (all-or-nothing), joining the
-//     transaction carried by ctx when present.
+//     transaction carried by ctx when present. A single-record call that runs
+//     no overridden update hooks skips the wrapping transaction: the one
+//     UPDATE statement's own atomicity is the whole contract.
 //   - Returns nil if no valid objects provided (empty slice or all objects are empty)
 //
 // Returns ErrIDRequired when an object has no ID, ErrRecordNotFound when a
@@ -363,7 +374,7 @@ func (db *database[M]) Update(objs ...M) (err error) {
 		return nil
 	}
 
-	return db.withWriteTransaction(func() error {
+	write := func() error {
 		// Invoke model hook: UpdateBefore.
 		if !db.noHook {
 			if err = traceModelHook[M](db.ctx, consts.PHASE_UPDATE_BEFORE, span, func(spanCtx context.Context) error {
@@ -403,7 +414,15 @@ func (db *database[M]) Update(objs ...M) (err error) {
 			}
 		}
 		return nil
-	})
+	}
+	// Update issues one UPDATE per record and relies on rollback when a later
+	// record turns out missing, so only a single-record call is a single
+	// statement; without overridden update hooks its own atomicity is the
+	// whole contract.
+	if (db.noHook || !modelregistry.OverridesUpdateHooks(db.m)) && len(objs) == 1 {
+		return db.withSingleStatementWrite(write)
+	}
+	return db.withWriteTransaction(write)
 }
 
 // updateRowStatement builds the single-row UPDATE statement Update issues per
@@ -438,6 +457,8 @@ func (db *database[M]) updateRowStatement(session *gorm.DB, tableName string, ob
 // Behavior:
 //   - Automatically updates the updated_at timestamp
 //   - Does not invoke UpdateBefore/UpdateAfter hooks for performance reasons
+//   - Runs as one bare UPDATE without any transaction wrapper; inside an
+//     ambient transaction it joins that transaction unchanged
 //   - Returns ErrIDRequired if id is empty
 //   - Returns ErrNoAssignments without any assignment
 //   - Returns ErrEmptyFieldName if an assignment names an empty column
@@ -493,7 +514,11 @@ func (db *database[M]) UpdateByID(id string, assignments ...types.Assignment) (e
 		return db.collectSQL(tx)
 	}
 
-	if err = db.ins.Session(&gorm.Session{}).Table(tableName).Model(*new(M)).Where("id = ?", id).Updates(updates).Error; err != nil {
+	// One UPDATE with no hooks around it: its own atomicity is the whole
+	// contract, so GORM's default per-statement transaction is pure overhead.
+	// Inside an ambient transaction db.ins is already that transaction's
+	// handle and the flag changes nothing.
+	if err = db.ins.Session(&gorm.Session{SkipDefaultTransaction: true}).Table(tableName).Model(*new(M)).Where("id = ?", id).Updates(updates).Error; err != nil {
 		return err
 	}
 	return nil

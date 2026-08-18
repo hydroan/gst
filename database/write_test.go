@@ -3,6 +3,7 @@ package database_test
 import (
 	"context"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 // TestDatabase
@@ -735,4 +737,151 @@ func TestDatabaseUpdateByIDNormalizesID(t *testing.T) {
 	renamed := new(TestAutoItem)
 	require.NoError(t, database.Database[*TestAutoItem](context.Background()).Get(renamed, item.GetID()))
 	require.Equal(t, "renamed", renamed.Name)
+}
+
+// txProbe records, for every executed write statement, whether the statement
+// ran on a transaction handle. Transaction connections implement
+// gorm.TxCommitter across dialects and prepared-statement wrappers, which is
+// what lets the assertions below stay dialect-agnostic.
+type txProbe struct {
+	mu   sync.Mutex
+	inTx []bool
+}
+
+func (p *txProbe) record(tx *gorm.DB) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	_, isTx := tx.Statement.ConnPool.(gorm.TxCommitter)
+	p.inTx = append(p.inTx, isTx)
+}
+
+// take returns the observations recorded since the last call and clears them.
+func (p *txProbe) take() []bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	got := p.inTx
+	p.inTx = nil
+	return got
+}
+
+// TestDatabaseSingleStatementWriteSkipsTransaction pins the write transaction
+// boundary: a write that needs no model hooks and compiles to a single SQL
+// statement runs on the statement's own atomicity, while overridden hooks,
+// multi-statement writes, and ambient transactions keep the wrapping
+// transaction.
+func TestDatabaseSingleStatementWriteSkipsTransaction(t *testing.T) {
+	defer cleanupTestData()
+	t.Cleanup(func() {
+		_ = database.DB().Exec("DELETE FROM test_items").Error
+	})
+
+	probe := new(txProbe)
+	require.NoError(t, database.DB().Callback().Create().After("gorm:create").Register("gst:test:tx_probe_create", probe.record))
+	require.NoError(t, database.DB().Callback().Update().After("gorm:update").Register("gst:test:tx_probe_update", probe.record))
+	require.NoError(t, database.DB().Callback().Delete().After("gorm:delete").Register("gst:test:tx_probe_delete", probe.record))
+	t.Cleanup(func() {
+		require.NoError(t, database.DB().Callback().Create().Remove("gst:test:tx_probe_create"))
+		require.NoError(t, database.DB().Callback().Update().Remove("gst:test:tx_probe_update"))
+		require.NoError(t, database.DB().Callback().Delete().Remove("gst:test:tx_probe_delete"))
+	})
+
+	t.Run("hook free single create runs without transaction", func(t *testing.T) {
+		item := &TestItem{Name: "tx-skip-create"}
+		require.NoError(t, database.Database[*TestItem](context.Background()).Create(item))
+		require.Equal(t, []bool{false}, probe.take())
+
+		got := new(TestItem)
+		require.NoError(t, database.Database[*TestItem](context.Background()).Get(got, item.ID))
+		require.Equal(t, item.Name, got.Name, "the write must land even without a wrapping transaction")
+	})
+
+	t.Run("multi batch create keeps the transaction", func(t *testing.T) {
+		items := []*TestItem{{Name: "tx-batch-1"}, {Name: "tx-batch-2"}}
+		require.NoError(t, database.Database[*TestItem](context.Background()).WithBatchSize(1).Create(items...))
+		require.Equal(t, []bool{true, true}, probe.take())
+	})
+
+	t.Run("hooked model create keeps the transaction", func(t *testing.T) {
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(u1))
+		require.Equal(t, []bool{true}, probe.take())
+	})
+
+	t.Run("without hook single create runs without transaction", func(t *testing.T) {
+		user := &TestUser{Name: "tx-nohook", Email: "tx-nohook@example.com", Base: model.Base{ID: "tx-nohook"}}
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithoutHook().Create(user))
+		require.Equal(t, []bool{false}, probe.take())
+	})
+
+	t.Run("hook free single update runs without transaction", func(t *testing.T) {
+		item := &TestItem{Name: "tx-update"}
+		require.NoError(t, database.Database[*TestItem](context.Background()).Create(item))
+		probe.take()
+
+		item.Name = "tx-updated"
+		require.NoError(t, database.Database[*TestItem](context.Background()).Update(item))
+		require.Equal(t, []bool{false}, probe.take())
+
+		got := new(TestItem)
+		require.NoError(t, database.Database[*TestItem](context.Background()).Get(got, item.ID))
+		require.Equal(t, "tx-updated", got.Name)
+	})
+
+	t.Run("multi object update keeps the transaction", func(t *testing.T) {
+		items := []*TestItem{{Name: "tx-multi-1"}, {Name: "tx-multi-2"}}
+		require.NoError(t, database.Database[*TestItem](context.Background()).Create(items...))
+		probe.take()
+
+		items[0].Name, items[1].Name = "tx-multi-1b", "tx-multi-2b"
+		require.NoError(t, database.Database[*TestItem](context.Background()).Update(items...))
+		require.Equal(t, []bool{true, true}, probe.take())
+	})
+
+	t.Run("hooked pairs guard only their own operation", func(t *testing.T) {
+		// TestUser overrides the create and update pairs but not the delete
+		// pair, so its delete runs unwrapped.
+		user := &TestUser{Name: "tx-del", Email: "tx-del@example.com", Base: model.Base{ID: "tx-del"}}
+		require.NoError(t, database.Database[*TestUser](context.Background()).Create(user))
+		probe.take()
+
+		require.NoError(t, database.Database[*TestUser](context.Background()).Delete(user))
+		require.Equal(t, []bool{false}, probe.take())
+	})
+
+	t.Run("hook free delete single batch runs without transaction", func(t *testing.T) {
+		item := &TestItem{Name: "tx-delete"}
+		require.NoError(t, database.Database[*TestItem](context.Background()).Create(item))
+		probe.take()
+
+		require.NoError(t, database.Database[*TestItem](context.Background()).Delete(item))
+		require.Equal(t, []bool{false}, probe.take())
+	})
+
+	t.Run("hook free purge single batch runs without transaction", func(t *testing.T) {
+		item := &TestItem{Name: "tx-purge"}
+		require.NoError(t, database.Database[*TestItem](context.Background()).Create(item))
+		probe.take()
+
+		require.NoError(t, database.Database[*TestItem](context.Background()).WithPurge().Delete(item))
+		require.Equal(t, []bool{false}, probe.take())
+	})
+
+	t.Run("ambient transaction is joined", func(t *testing.T) {
+		require.NoError(t, database.Transaction(context.Background(), func(txCtx context.Context) error {
+			return database.Database[*TestItem](txCtx).Create(&TestItem{Name: "tx-ambient"})
+		}))
+		require.Equal(t, []bool{true}, probe.take())
+	})
+
+	t.Run("update by id runs without transaction", func(t *testing.T) {
+		item := &TestItem{Name: "tx-updatebyid"}
+		require.NoError(t, database.Database[*TestItem](context.Background()).Create(item))
+		probe.take()
+
+		require.NoError(t, database.Database[*TestItem](context.Background()).UpdateByID(item.ID, colName.Set("tx-updatebyid-b")))
+		require.Equal(t, []bool{false}, probe.take())
+
+		got := new(TestItem)
+		require.NoError(t, database.Database[*TestItem](context.Background()).Get(got, item.ID))
+		require.Equal(t, "tx-updatebyid-b", got.Name)
+	})
 }

@@ -85,14 +85,17 @@ func isOpenTransaction(instance *gorm.DB) bool {
 // one database transaction when this operation is responsible for creating the
 // boundary.
 //
-// Every write path (Create, Update, Upsert, Delete) needs this boundary, with
-// or without model hooks:
+// A write path (Create, Update, Upsert, Delete) needs this boundary whenever
+// it has more than the bare statement to keep atomic:
 //   - Model hooks can update a second model; without the boundary a hook could
 //     fail after the primary write already committed.
 //   - Multi-row and multi-batch writes must be all-or-nothing; without the
 //     boundary a mid-loop failure would leave earlier rows committed. This
-//     also holds for WithoutHook chains, which is why noHook does not skip
-//     the transaction: it only skips hook invocation inside fn.
+//     also holds for WithoutHook chains: noHook only skips hook invocation
+//     inside fn, never the boundary of a multi-statement write.
+//
+// A write with neither concern — no overridden hooks (or WithoutHook) and
+// exactly one SQL statement — takes withSingleStatementWrite instead.
 //
 // WithDryRun skips the boundary because it performs no database I/O.
 //
@@ -127,4 +130,26 @@ func (db *database[M]) withWriteTransaction(fn func() error) error {
 
 		return fn()
 	})
+}
+
+// withSingleStatementWrite runs a write that needs no transaction of its own:
+// none of the operation's model hooks is overridden (or the caller chose
+// WithoutHook) and the operation compiles to exactly one SQL statement, whose
+// own atomicity already makes it all-or-nothing. Paying a BEGIN/COMMIT pair
+// around it would buy nothing, so the write runs with GORM's default
+// per-statement transaction switched off.
+//
+// An ambient transaction still wins: when db.ctx carries one, db.ins is
+// already that transaction's handle and the write joins it unchanged, exactly
+// as in withWriteTransaction. Without a boundary, AfterCommit falls back to
+// its documented immediate-execution semantics — and no-op hooks register
+// nothing, so nothing is lost.
+func (db *database[M]) withSingleStatementWrite(fn func() error) error {
+	if _, ok := dbruntime.TxFromContext(db.ctx, db.base); ok {
+		return fn()
+	}
+	parentIns := db.ins
+	db.ins = db.ins.Session(&gorm.Session{SkipDefaultTransaction: true}).WithContext(db.ctx)
+	defer func() { db.ins = parentIns }()
+	return fn()
 }
