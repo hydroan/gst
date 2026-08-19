@@ -32,7 +32,7 @@ func CheckServiceTestCoverage(ignore gitignore.Matcher) []string {
 		return violations
 	}
 
-	owned, err := copyableModuleServiceOwners()
+	owned, err := copyableModuleOwners()
 	if err != nil {
 		return append(violations, fmt.Sprintf("listing copyable framework modules: %v", err))
 	}
@@ -67,7 +67,7 @@ func CheckServiceTestCoverage(ignore gitignore.Matcher) []string {
 			}
 			seen[target.FilePath] = true
 
-			if moduleOwnedServicePath(owned, target.FilePath) || isIgnoredProjectPath(ignore, target.FilePath, false) {
+			if moduleOwnedPath(owned, serviceDir, target.FilePath) || isIgnoredProjectPath(ignore, target.FilePath, false) {
 				return
 			}
 			// A service file that does not exist yet is gg gen's business:
@@ -113,14 +113,14 @@ func CheckServiceTestOrganization(ignore gitignore.Matcher) []string {
 		return violations
 	}
 
-	owned, err := copyableModuleServiceOwners()
+	owned, err := copyableModuleOwners()
 	if err != nil {
 		return append(violations, fmt.Sprintf("listing copyable framework modules: %v", err))
 	}
 
 	walkErr := walkProjectDir(serviceDir, ignore, func(path string, info os.FileInfo) error {
 		if info.IsDir() {
-			if path != serviceDir && moduleOwnedServicePath(owned, path) {
+			if path != serviceDir && moduleOwnedPath(owned, serviceDir, path) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -250,10 +250,10 @@ func hasSingleTestingParam(fn *ast.FuncDecl, sel string) bool {
 	return ok && ident.Name == "testing"
 }
 
-// copyableModuleServiceOwners returns the first path segments under the
-// service directory owned by copyable framework modules: gg module copy
-// writes module service code to service/<module>/... subtrees.
-func copyableModuleServiceOwners() (map[string]bool, error) {
+// copyableModuleOwners returns the first path segments under the model and
+// service directories owned by copyable framework modules: gg module copy
+// writes module code to model/<module>/... and service/<module>/... subtrees.
+func copyableModuleOwners() (map[string]bool, error) {
 	names, err := ggmodule.CopyableModuleNames()
 	if err != nil {
 		return nil, err
@@ -265,13 +265,13 @@ func copyableModuleServiceOwners() (map[string]bool, error) {
 	return owned, nil
 }
 
-// moduleOwnedServicePath reports whether a path below the service directory
-// falls under a service subtree owned by a copyable framework module.
-func moduleOwnedServicePath(owned map[string]bool, path string) bool {
+// moduleOwnedPath reports whether a path below root falls under a subtree
+// owned by a copyable framework module.
+func moduleOwnedPath(owned map[string]bool, root, path string) bool {
 	if len(owned) == 0 {
 		return false
 	}
-	rel, err := filepath.Rel(serviceDir, filepath.Clean(path))
+	rel, err := filepath.Rel(root, filepath.Clean(path))
 	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return false
 	}

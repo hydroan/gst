@@ -44,8 +44,9 @@ var checkCmd = &cobra.Command{
 16. Explicit DSL Payload/Result types must be named types declared in the same model package: struct types use the pointer form, slice and map types use the value form, and an empty struct type may only pair with an empty peer side
 17. Service files generated for DSL Service() actions must have a matching test file (create.go pairs with create_test.go or create_internal_test.go)
 18. Test files under the service directory must pair with a source file of their package; main_test.go only declares TestMain, fixtures_test.go only holds shared test fixtures, and test cases without a source file of their own belong in the test file of a related source file
+19. Project code must not declare MarshalLogObject or MarshalLogArray methods and must not call zap.Namespace: zapcore marshalers and nested namespaces bypass the reflected-value collapsing that keeps log-store field mappings bounded
 
-Service subtrees owned by copyable framework modules are skipped by the service test checks: copied module code is tested inside the framework repository.
+Model and service subtrees owned by copyable framework modules are skipped by the service test checks and the log field check: copied module code is tested inside the framework repository.
 Paths ignored by the project's Git ignore rules are skipped by every check, so runtime artifacts such as log directories never fail checks.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		checkRun()
@@ -139,6 +140,7 @@ func collectProjectChecks() []projectCheckResult {
 		{Name: "Service error discipline", Violations: CheckServiceErrorDiscipline(ignore)},
 		{Name: "Service test coverage", Violations: CheckServiceTestCoverage(ignore)},
 		{Name: "Service test organization", Violations: CheckServiceTestOrganization(ignore)},
+		{Name: "Log field boundedness", Violations: CheckLogFieldBoundedness(ignore)},
 	}
 }
 
