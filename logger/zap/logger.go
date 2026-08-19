@@ -52,14 +52,6 @@ func (l *Logger) Fatalz(msg string, fields ...zap.Field) { l.zlog.Fatal(msg, fie
 
 func (l *Logger) ZapLogger() *zap.Logger { return l.zlog }
 
-func (l *Logger) WithObject(name string, obj zapcore.ObjectMarshaler) types.Logger {
-	return &Logger{zlog: l.zlog.With(zap.Object(name, obj))}
-}
-
-func (l *Logger) WithArray(name string, arr zapcore.ArrayMarshaler) types.Logger {
-	return &Logger{zlog: l.zlog.With(zap.Array(name, arr))}
-}
-
 // With creates a new logger with additional string key-value pairs.
 // Each pair of arguments must be a key(string) followed by its value(string).
 // If an odd number of arguments is provided, an empty string will be appended as the last value.
@@ -104,9 +96,9 @@ func (l *Logger) With(fields ...string) types.Logger {
 
 // withMetadata binds request metadata fields to a derived logger. This runs
 // for every request-scoped logger, so all fields go through one zap With call:
-// each With call clones the logger core, and chaining With/WithObject here
+// each With call clones the logger core, and chaining several With calls here
 // used to cost three clones per call. When adding metadata fields, extend this
-// single call instead of chaining further With/WithObject calls.
+// single call instead of chaining further With calls.
 //
 // Route params stay structured because their keys come from the registered
 // routes and are therefore bounded; the query is logged as one raw string

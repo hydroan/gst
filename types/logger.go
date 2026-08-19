@@ -5,7 +5,6 @@ import (
 
 	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 // StandardLogger provides plain and printf-style leveled logging methods.
@@ -46,13 +45,10 @@ type ZapLogger interface {
 }
 
 // Logger combines plain, sugared structured, and typed zap logging methods.
-// With attaches string key/value fields. WithObject, WithArray, and the context
-// helpers return derived loggers with additional structured fields.
+// With attaches string key/value fields; WithContext derives a logger carrying
+// request metadata fields.
 type Logger interface {
 	With(fields ...string) Logger
-
-	WithObject(name string, obj zapcore.ObjectMarshaler) Logger
-	WithArray(name string, arr zapcore.ArrayMarshaler) Logger
 
 	WithContext(context.Context, consts.Phase) Logger
 

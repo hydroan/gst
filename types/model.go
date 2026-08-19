@@ -3,8 +3,6 @@ package types
 import (
 	"context"
 	"time"
-
-	"go.uber.org/zap/zapcore"
 )
 
 // Model defines the framework contract for database-backed and action models.
@@ -29,9 +27,8 @@ type Model interface {
 	SetUpdatedBy(string)
 	SetCreatedAt(time.Time)
 	SetUpdatedAt(time.Time)
-	Expands() []string                            // Expands returns association paths that should be preloaded by default.
-	Purge() bool                                  // Purge indicates whether to permanently delete records (hard delete). Default is false (soft delete).
-	MarshalLogObject(zapcore.ObjectEncoder) error // MarshalLogObject implements zap.ObjectMarshaler.
+	Expands() []string // Expands returns association paths that should be preloaded by default.
+	Purge() bool       // Purge indicates whether to permanently delete records (hard delete). Default is false (soft delete).
 
 	CreateBefore(context.Context) error
 	CreateAfter(context.Context) error

@@ -8,7 +8,6 @@ import (
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
-	"go.uber.org/zap/zapcore"
 	"gorm.io/gorm"
 )
 
@@ -67,15 +66,6 @@ func (b *Base) SetID(id ...string)       { setID(b, id...) }
 func (b *Base) ClearID()                 { clearID(b) }
 func (b *Base) Expands() []string        { return nil }
 func (b *Base) Purge() bool              { return false } // Default to soft delete
-func (b *Base) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	if b == nil {
-		return nil
-	}
-	enc.AddString("id", b.ID)
-	enc.AddString("created_by", b.CreatedBy)
-	enc.AddString("updated_by", b.UpdatedBy)
-	return nil
-}
 
 func (*Base) CreateBefore(context.Context) error { return nil }
 func (*Base) CreateAfter(context.Context) error  { return nil }
@@ -99,7 +89,6 @@ func setID(m types.Model, id ...string) {
 		return
 	}
 
-	// zap.S().Debug("setting id: " + id[0])
 	if len(id[0]) == 0 {
 		idField.SetString(util.UUID())
 	} else {

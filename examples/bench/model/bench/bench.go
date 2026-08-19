@@ -3,7 +3,6 @@ package bench
 import (
 	. "github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
-	"go.uber.org/zap/zapcore"
 )
 
 type Bench struct {
@@ -21,15 +20,6 @@ type Bench struct {
 
 func (Bench) GetTableName() string { return "benches" }
 func (Bench) Purge() bool          { return true }
-func (b *Bench) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	if b == nil {
-		return nil
-	}
-	enc.AddString("field1", b.Field1)
-	enc.AddInt("field2", b.Field2)
-
-	return nil
-}
 
 type (
 	PingRsp struct {

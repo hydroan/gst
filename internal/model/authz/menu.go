@@ -16,7 +16,6 @@ import (
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"gorm.io/datatypes"
 )
 
@@ -175,7 +174,7 @@ func (m *Menu) UpdateAfter(ctx context.Context) error {
 			if err := r.syncPermissions(ctx); err != nil {
 				return err
 			}
-			zap.L().Info("successfully update role's permissions", zap.Object("role", r))
+			zap.L().Info("successfully update role's permissions", zap.Any("role", r))
 		}
 	}
 
@@ -256,28 +255,6 @@ func (m *Menu) validate() error {
 		m.Path = strings.TrimSuffix(strings.TrimSpace(m.Path), "/")
 	}
 	return nil
-}
-
-func (m *Menu) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	if m == nil {
-		return nil
-	}
-	enc.AddString("routes", strings.Join(routePaths(m.Routes), ","))
-	enc.AddString("path", m.Path)
-	enc.AddString("label", m.Label)
-	enc.AddInt("children len", len(m.Children))
-
-	return nil
-}
-
-func routePaths(routes []Route) []string {
-	paths := make([]string, 0, len(routes))
-	for _, route := range routes {
-		if len(route.Path) != 0 {
-			paths = append(paths, route.Path)
-		}
-	}
-	return paths
 }
 
 func removeMenuID(ids datatypes.JSONSlice[string], menuID string) datatypes.JSONSlice[string] {

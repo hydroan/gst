@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/types"
-	"go.uber.org/zap/zapcore"
 	"gorm.io/gorm"
 )
 
@@ -80,16 +79,6 @@ func (b *AutoBase) SetID(id ...string) {
 }
 
 func (b *AutoBase) ClearID() { b.ID = 0 }
-
-func (b *AutoBase) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	if b == nil {
-		return nil
-	}
-	enc.AddUint64("id", b.ID)
-	enc.AddString("created_by", b.CreatedBy)
-	enc.AddString("updated_by", b.UpdatedBy)
-	return nil
-}
 
 func (*AutoBase) CreateBefore(context.Context) error { return nil }
 func (*AutoBase) CreateAfter(context.Context) error  { return nil }

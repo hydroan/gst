@@ -14,7 +14,6 @@ import (
 	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
-	"go.uber.org/zap/zapcore"
 	"gorm.io/datatypes"
 )
 
@@ -317,14 +316,4 @@ func RoutePermissionsForMenu(m *Menu) []types.Permission {
 		}
 	}
 	return permissions
-}
-
-func (r *Role) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	if r == nil {
-		return nil
-	}
-	enc.AddString("tenant_id", string(r.TenantID))
-	enc.AddString("name", r.Name)
-	enc.AddString("id", r.ID)
-	return nil
 }

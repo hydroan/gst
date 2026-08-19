@@ -6,7 +6,6 @@ import (
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zapcore"
 )
 
 type AutoUser struct {
@@ -65,17 +64,4 @@ func TestAutoBaseClearID(t *testing.T) {
 	b.ClearID()
 	require.Zero(t, b.ID)
 	require.Empty(t, b.GetID())
-}
-
-func TestAutoBaseMarshalLogObject(t *testing.T) {
-	require.NoError(t, (*modelregistry.AutoBase)(nil).MarshalLogObject(zapcore.NewMapObjectEncoder()))
-
-	enc := zapcore.NewMapObjectEncoder()
-	b := &modelregistry.AutoBase{ID: 7}
-	b.CreatedBy = "creator"
-	b.UpdatedBy = "updater"
-	require.NoError(t, b.MarshalLogObject(enc))
-	require.Equal(t, uint64(7), enc.Fields["id"])
-	require.Equal(t, "creator", enc.Fields["created_by"])
-	require.Equal(t, "updater", enc.Fields["updated_by"])
 }

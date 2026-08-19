@@ -17,7 +17,6 @@ import (
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 type patchValueTestRecord struct {
@@ -260,14 +259,6 @@ func BenchmarkPatchValueModelPatch(b *testing.B) {
 type nopControllerLogger struct{}
 
 func (nopControllerLogger) With(fields ...string) types.Logger { return nopControllerLogger{} }
-func (nopControllerLogger) WithObject(name string, obj zapcore.ObjectMarshaler) types.Logger {
-	return nopControllerLogger{}
-}
-
-func (nopControllerLogger) WithArray(name string, arr zapcore.ArrayMarshaler) types.Logger {
-	return nopControllerLogger{}
-}
-
 func (nopControllerLogger) WithContext(context.Context, consts.Phase) types.Logger {
 	return nopControllerLogger{}
 }

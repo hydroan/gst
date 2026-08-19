@@ -10,7 +10,6 @@ import (
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/util"
-	"go.uber.org/zap/zapcore"
 )
 
 type RoleBinding struct {
@@ -98,15 +97,4 @@ func (r *RoleBinding) DeleteBefore(ctx context.Context) error {
 		return err
 	}
 	return rbac.RBAC().UnassignRole(ctx, r.tenant(), r.SubjectID, r.RoleID)
-}
-
-func (r *RoleBinding) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	if r == nil {
-		return nil
-	}
-	enc.AddString("tenant_id", string(r.TenantID))
-	enc.AddString("subject_id", r.SubjectID)
-	enc.AddString("role_id", r.RoleID)
-	_ = enc.AddObject("base", &r.Base)
-	return nil
 }
