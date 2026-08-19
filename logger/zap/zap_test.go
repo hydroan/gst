@@ -183,6 +183,68 @@ func TestNewLogEncoderTimestampIsUTCAndOrdersWithinASecond(t *testing.T) {
 	require.Equal(t, 0, offset)
 }
 
+func TestNewLogEncoderReflectedValuesCollapseToOneStringField(t *testing.T) {
+	encoder := newLogEncoder()
+
+	encode := func(t *testing.T, fields ...zapcore.Field) map[string]any {
+		t.Helper()
+		buf, err := encoder.EncodeEntry(zapcore.Entry{Time: time.Now()}, fields)
+		require.NoError(t, err)
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &entry),
+			"every entry must stay one valid JSON document")
+		return entry
+	}
+
+	type sampleRecord struct {
+		Name  string `json:"name"`
+		Count int    `json:"count"`
+	}
+
+	// The struct, map, and slice shapes below all reach the encoder through
+	// zap.Any's reflection fallback. Each must land as a single string field
+	// so the log store's field mapping stays bounded; the string still parses
+	// as the value's JSON.
+	t.Run("struct", func(t *testing.T) {
+		entry := encode(t, zap.Any("record", &sampleRecord{Name: "sample", Count: 3}))
+		collapsed, ok := entry["record"].(string)
+		require.True(t, ok, "reflected struct must encode as one string field, got %T", entry["record"])
+		var record sampleRecord
+		require.NoError(t, json.Unmarshal([]byte(collapsed), &record))
+		require.Equal(t, sampleRecord{Name: "sample", Count: 3}, record)
+	})
+
+	t.Run("map", func(t *testing.T) {
+		entry := encode(t, zap.Any("attributes", map[string]int{"total": 7}))
+		collapsed, ok := entry["attributes"].(string)
+		require.True(t, ok, "reflected map must encode as one string field, got %T", entry["attributes"])
+		require.JSONEq(t, `{"total":7}`, collapsed)
+	})
+
+	t.Run("slice of structs", func(t *testing.T) {
+		entry := encode(t, zap.Any("records", []sampleRecord{{Name: "first", Count: 1}}))
+		collapsed, ok := entry["records"].(string)
+		require.True(t, ok, "reflected slice must encode as one string field, got %T", entry["records"])
+		require.JSONEq(t, `[{"name":"first","count":1}]`, collapsed)
+	})
+
+	t.Run("unmarshalable value falls back to Go syntax", func(t *testing.T) {
+		entry := encode(t, zap.Any("stream", map[string]chan int{"items": make(chan int)}))
+		collapsed, ok := entry["stream"].(string)
+		require.True(t, ok, "fallback must still encode as one string field, got %T", entry["stream"])
+		require.Contains(t, collapsed, "chan int")
+	})
+
+	// Typed fields never touch the reflected encoder: scalar key-value pairs
+	// keep their native JSON types and stay individually indexable.
+	t.Run("typed fields keep their native JSON types", func(t *testing.T) {
+		entry := encode(t, zap.String("kind", "sample"), zap.Int("count", 3))
+		require.Equal(t, "sample", entry["kind"])
+		require.IsType(t, float64(0), entry["count"], "count must stay a native JSON number")
+		require.InDelta(t, 3, entry["count"], 0)
+	})
+}
+
 func TestWithContextAddsMetadataFields(t *testing.T) {
 	core, logs := observer.New(zapcore.InfoLevel)
 	log := &Logger{zlog: zap.New(core)}

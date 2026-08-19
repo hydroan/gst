@@ -1,6 +1,9 @@
 package zap
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -326,6 +329,9 @@ func newLogEncoder(opt ...Option) zapcore.Encoder {
 	// backstops any time.Duration that reaches a logger without going through
 	// util.LogDuration, so no entry can carry a differently scaled duration.
 	encConfig.EncodeDuration = zapcore.NanosDurationEncoder
+	// Reflected values collapse into a single JSON string field instead of a
+	// nested object; see stringifyReflectedEncoder for why.
+	encConfig.NewReflectedEncoder = newStringifyReflectedEncoder
 	// encConfig.EncodeCaller = zapcore.ShortCallerEncoder
 	// encConfig.EncodeLevel = zapcore.LowercaseColorLevelEncoder
 	// encConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
@@ -359,6 +365,45 @@ func newLogEncoder(opt ...Option) zapcore.Encoder {
 // entry; see the layout constant for why the stream is UTC.
 func utcTimeEncoder(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 	enc.AppendString(t.UTC().Format(consts.LayoutTimeEncoder))
+}
+
+// stringifyReflectedEncoder renders every reflected log value as a single
+// JSON string instead of a nested JSON object. zap falls back to reflection
+// for values no typed Field constructor understands (structs, maps, and
+// slices or arrays of either), and the default reflected encoder inlines
+// their JSON shape into the entry. A log store that indexes each key then
+// grows its field mapping with every distinct shape logged anywhere in the
+// codebase and eventually hits its per-index field cap, after which it drops
+// entries. Collapsing the value into one string field keeps the mapping
+// bounded no matter what gets logged, and the string still carries the
+// value's JSON, so the content stays machine-readable. Typed fields and
+// zapcore.ObjectMarshaler implementations are unaffected; the marshaler
+// escape hatch is reserved for framework-internal objects whose key sets are
+// fixed, never for open-ended shapes such as data models.
+type stringifyReflectedEncoder struct{ w io.Writer }
+
+// newStringifyReflectedEncoder is the zapcore.EncoderConfig.NewReflectedEncoder
+// hook wired by newLogEncoder, the single point every logger's encoder is
+// built at, so all loggers share the bounded-field behavior.
+func newStringifyReflectedEncoder(w io.Writer) zapcore.ReflectedEncoder {
+	return stringifyReflectedEncoder{w: w}
+}
+
+// Encode implements zapcore.ReflectedEncoder. The second json.Marshal turns
+// the value's JSON into one escaped JSON string; a value json cannot handle
+// (cycles, channels, functions) falls back to Go syntax rather than failing
+// the whole entry.
+func (e stringifyReflectedEncoder) Encode(value any) error {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		raw = []byte(fmt.Sprintf("%#v", value))
+	}
+	quoted, err := json.Marshal(string(raw))
+	if err != nil {
+		return err
+	}
+	_, err = e.w.Write(quoted)
+	return err
 }
 
 func readConf() {
