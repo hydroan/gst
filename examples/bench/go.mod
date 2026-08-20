@@ -1,6 +1,6 @@
 module bench
 
-go 1.26.4
+go 1.27
 
 require github.com/hydroan/gst v0.0.0-20260818140852-22595f383e72
 

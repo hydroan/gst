@@ -1,6 +1,6 @@
 module demo
 
-go 1.26
+go 1.27
 
 require (
 	github.com/cockroachdb/errors v1.14.0
