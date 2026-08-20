@@ -17,6 +17,9 @@ type User struct {
 
 	/* Address is the user address. */
 	Address string
+
+	// secret is internal state and must stay out of the API docs.
+	secret string
 }
 
 // Alias is not a struct and must be skipped.
@@ -34,6 +37,13 @@ type (
 
 type undocumented struct {
 	Value string
+}
+
+// writeState is commented but unexported, mirroring internal bookkeeping
+// structs that must stay out of the API docs.
+type writeState struct {
+	// Create reports the create hook pair.
+	Create bool
 }
 `
 
@@ -83,11 +93,18 @@ func TestParseSource(t *testing.T) {
 		t.Fatalf("rsp.Comment = %q, want %q", rsp.Comment, want)
 	}
 
+	if _, hasSecret := user.Fields["secret"]; hasSecret {
+		t.Fatal("user.Fields[secret] present, want absent for unexported field")
+	}
+
 	if _, hasAlias := docs["Alias"]; hasAlias {
 		t.Fatal("docs[Alias] present, want absent for non-struct type")
 	}
 	if _, hasUndocumented := docs["undocumented"]; hasUndocumented {
 		t.Fatal("docs[undocumented] present, want absent for struct without any comment")
+	}
+	if _, hasWriteState := docs["writeState"]; hasWriteState {
+		t.Fatal("docs[writeState] present, want absent for commented but unexported struct")
 	}
 }
 
@@ -99,6 +116,15 @@ type SampleStatus string
 const (
 	SampleStatusActive   SampleStatus = "active"   // the record is active
 	SampleStatusArchived SampleStatus = "archived" // the record is archived
+	sampleStatusHidden   SampleStatus = "hidden"   // internal sentinel, not part of the API
+)
+
+// internalMode is commented but unexported and must be skipped entirely.
+type internalMode string
+
+const (
+	internalModeFast internalMode = "fast" // unexported enum value
+	InternalModeSlow internalMode = "slow" // exported constant of an unexported type
 )
 
 // Priority is an integer enum using iota.
@@ -174,10 +200,16 @@ func TestParseSourceDocsEnums(t *testing.T) {
 	if _, ok := docs.Enums["StatusAlias"]; ok {
 		t.Fatal("Enums[StatusAlias] present, want alias types skipped")
 	}
+	if _, ok := docs.Enums["internalMode"]; ok {
+		t.Fatal("Enums[internalMode] present, want unexported enum types skipped")
+	}
 	for name, enum := range docs.Enums {
 		for _, v := range enum.Values {
 			if v.Value == "a" || v.Value == "b" {
 				t.Fatalf("untyped constant leaked into enum %s: %#v", name, v)
+			}
+			if v.Value == "hidden" || v.Value == "fast" || v.Value == "slow" {
+				t.Fatalf("unexported constant or enum leaked into enum %s: %#v", name, v)
 			}
 		}
 	}

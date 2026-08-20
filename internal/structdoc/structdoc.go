@@ -1,5 +1,7 @@
 // Package structdoc parses Go source code and extracts the doc comments of
-// struct declarations and their fields.
+// exported struct declarations and their exported fields. Unexported types,
+// fields and constants never reach the API surface, so their comments stay
+// out of the extracted documentation.
 //
 // It is the single comment-extraction implementation shared by the OpenAPI
 // generator (runtime fallback when source files are available), the model
@@ -20,14 +22,14 @@ import (
 
 // Docs holds everything extracted from one Go source file.
 type Docs struct {
-	// Structs maps a struct type name to its doc comments. Structs without
-	// any struct or field comment are omitted.
+	// Structs maps an exported struct type name to its doc comments. Structs
+	// without any struct or field comment are omitted.
 	Structs map[string]apidoc.StructDoc
-	// Enums maps an enum-like named type (eg. `type Status string`) to its
-	// doc comment and declared constant values. An entry may carry only the
-	// comment (type declared here, constants elsewhere) or only values
-	// (constants declared here, type elsewhere); callers merge entries of
-	// the same package before use.
+	// Enums maps an exported enum-like named type (eg. `type Status string`)
+	// to its doc comment and declared exported constant values. An entry may
+	// carry only the comment (type declared here, constants elsewhere) or
+	// only values (constants declared here, type elsewhere); callers merge
+	// entries of the same package before use.
 	Enums map[string]apidoc.EnumDoc
 }
 
@@ -39,8 +41,8 @@ var enumBaseKinds = map[string]bool{
 	"uint": true, "uint8": true, "uint16": true, "uint32": true, "uint64": true,
 }
 
-// ParseFile reads filename and returns the doc comments of every struct
-// declared in it, keyed by struct type name.
+// ParseFile reads filename and returns the doc comments of every exported
+// struct declared in it, keyed by struct type name.
 func ParseFile(filename string) (map[string]apidoc.StructDoc, error) {
 	docs, err := ParseFileDocs(filename)
 	if err != nil {
@@ -49,8 +51,8 @@ func ParseFile(filename string) (map[string]apidoc.StructDoc, error) {
 	return docs.Structs, nil
 }
 
-// ParseFileDocs reads filename and returns the struct and enum doc comments
-// declared in it.
+// ParseFileDocs reads filename and returns the exported struct and enum doc
+// comments declared in it.
 func ParseFileDocs(filename string) (Docs, error) {
 	src, err := os.ReadFile(filename) // #nosec G304 -- callers pass trusted source file paths
 	if err != nil {
@@ -60,9 +62,9 @@ func ParseFileDocs(filename string) (Docs, error) {
 }
 
 // ParseSource parses Go source code and returns the doc comments of every
-// struct declared in it, keyed by struct type name. Structs without any
-// struct or field comment are omitted. The filename is only used for error
-// positions.
+// exported struct declared in it, keyed by struct type name. Structs without
+// any struct or field comment are omitted. The filename is only used for
+// error positions.
 func ParseSource(filename string, src []byte) (map[string]apidoc.StructDoc, error) {
 	docs, err := ParseSourceDocs(filename, src)
 	if err != nil {
@@ -71,8 +73,9 @@ func ParseSource(filename string, src []byte) (map[string]apidoc.StructDoc, erro
 	return docs.Structs, nil
 }
 
-// ParseSourceDocs parses Go source code and returns the struct and enum doc
-// comments declared in it. The filename is only used for error positions.
+// ParseSourceDocs parses Go source code and returns the exported struct and
+// enum doc comments declared in it. The filename is only used for error
+// positions.
 func ParseSourceDocs(filename string, src []byte) (Docs, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, filename, src, parser.ParseComments)
@@ -101,11 +104,11 @@ func ParseSourceDocs(filename string, src []byte) (Docs, error) {
 }
 
 // parseTypeDecl collects struct doc comments and enum-like named type doc
-// comments from a type declaration.
+// comments from a type declaration, skipping unexported types.
 func parseTypeDecl(genDecl *ast.GenDecl, docs *Docs) {
 	for _, spec := range genDecl.Specs {
 		typeSpec, ok := spec.(*ast.TypeSpec)
-		if !ok {
+		if !ok || !ast.IsExported(typeSpec.Name.Name) {
 			continue
 		}
 
@@ -132,9 +135,10 @@ func parseTypeDecl(genDecl *ast.GenDecl, docs *Docs) {
 	}
 }
 
-// parseConstDecl collects the constants of enum-like named types from a
-// const declaration. Within one const block the named type carries over to
-// bare iota continuation lines, matching Go type inference for constants.
+// parseConstDecl collects the constants of exported enum-like named types
+// from a const declaration. Within one const block the named type carries
+// over to bare iota continuation lines, matching Go type inference for
+// constants.
 func parseConstDecl(genDecl *ast.GenDecl, enums map[string]apidoc.EnumDoc) {
 	currentType := ""
 	for specIndex, spec := range genDecl.Specs {
@@ -146,8 +150,9 @@ func parseConstDecl(genDecl *ast.GenDecl, enums map[string]apidoc.EnumDoc) {
 		switch {
 		case valueSpec.Type != nil:
 			ident, ok := valueSpec.Type.(*ast.Ident)
-			if !ok || enumBaseKinds[ident.Name] {
-				// A qualified or builtin type is not a local enum type.
+			if !ok || enumBaseKinds[ident.Name] || !ast.IsExported(ident.Name) {
+				// A qualified, builtin or unexported type is not an enum type
+				// of the API surface.
 				currentType = ""
 				continue
 			}
@@ -169,7 +174,8 @@ func parseConstDecl(genDecl *ast.GenDecl, enums map[string]apidoc.EnumDoc) {
 		}
 
 		for nameIndex, name := range valueSpec.Names {
-			if name.Name == "_" {
+			// IsExported also rejects the blank identifier.
+			if !ast.IsExported(name.Name) {
 				continue
 			}
 			value, ok := constValue(valueSpec, nameIndex, specIndex)
@@ -234,9 +240,9 @@ func structComment(genDecl *ast.GenDecl, typeSpec *ast.TypeSpec) string {
 	return ""
 }
 
-// fieldComments returns the doc comments of named struct fields, preferring
-// the field doc comment over the trailing line comment. Fields without any
-// comment and embedded fields are omitted.
+// fieldComments returns the doc comments of exported named struct fields,
+// preferring the field doc comment over the trailing line comment. Fields
+// without any comment, unexported fields and embedded fields are omitted.
 func fieldComments(structType *ast.StructType) map[string]string {
 	fields := make(map[string]string)
 	for _, field := range structType.Fields.List {
@@ -250,6 +256,9 @@ func fieldComments(structType *ast.StructType) map[string]string {
 			continue
 		}
 		for _, name := range field.Names {
+			if !ast.IsExported(name.Name) {
+				continue
+			}
 			fields[name.Name] = comment
 		}
 	}

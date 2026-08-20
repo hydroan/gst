@@ -63,8 +63,9 @@ func FindModels(module, modelDir, serviceDir string, excludes []string) ([]*gen.
 }
 
 // ExtractAPIDocs extracts the struct doc comments and enum declarations of
-// every type declared under modelDir, including custom request and response
-// types. Enum constants may live in a different file than their type
+// every exported type declared under modelDir, including custom request and
+// response types; unexported types never reach the API surface and are
+// skipped. Enum constants may live in a different file than their type
 // declaration; entries of the same package are merged. The returned entries
 // are sorted by package path and type name so generated output stays
 // deterministic.
