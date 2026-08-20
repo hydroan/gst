@@ -28,7 +28,6 @@ const (
 	dialectMySQL      dialect = "mysql"
 	dialectPostgres   dialect = "postgres"
 	dialectSQLite     dialect = "sqlite"
-	dialectSQLServer  dialect = "sqlserver"
 	dialectClickHouse dialect = "clickhouse"
 )
 
@@ -140,8 +139,6 @@ func (db *database[M]) timeBucketExpr(quotedColumn string, bucket types.TimeBuck
 		return "to_char(" + quotedColumn + ", '" + postgresBucketFormat(bucket) + "')"
 	case dialectSQLite:
 		return "strftime('" + strftimeBucketFormat(bucket) + "', " + quotedColumn + ")"
-	case dialectSQLServer:
-		return "FORMAT(" + quotedColumn + ", '" + sqlserverBucketFormat(bucket) + "')"
 	case dialectClickHouse:
 		return "formatDateTime(" + quotedColumn + ", '" + strftimeBucketFormat(bucket) + "')"
 	default:
@@ -174,16 +171,5 @@ func postgresBucketFormat(bucket types.TimeBucket) string {
 		return "YYYY-MM"
 	default:
 		return "YYYY-MM-DD"
-	}
-}
-
-func sqlserverBucketFormat(bucket types.TimeBucket) string {
-	switch bucket {
-	case types.TimeBucketHour:
-		return "yyyy-MM-dd HH:00:00"
-	case types.TimeBucketMonth:
-		return "yyyy-MM"
-	default:
-		return "yyyy-MM-dd"
 	}
 }

@@ -52,7 +52,6 @@ type Config struct {
 	Sqlite        `json:"sqlite" mapstructure:"sqlite" ini:"sqlite" yaml:"sqlite"`
 	Postgres      `json:"postgres" mapstructure:"postgres" ini:"postgres" yaml:"postgres"`
 	MySQL         `json:"mysql" mapstructure:"mysql" ini:"mysql" yaml:"mysql"`
-	SQLServer     `json:"sqlserver" mapstructure:"sqlserver" ini:"sqlserver" yaml:"sqlserver"`
 	Clickhouse    `json:"clickhouse" mapstructure:"clickhouse" ini:"clickhouse" yaml:"clickhouse"`
 	Redis         `json:"redis" mapstructure:"redis" ini:"redis" yaml:"redis"`
 	OTEL          `json:"otel" mapstructure:"otel" ini:"otel" yaml:"otel"`
@@ -89,7 +88,6 @@ func (c *Config) setDefault(v *viper.Viper) {
 	c.Postgres.setDefault(v)
 	c.MySQL.setDefault(v)
 	c.Clickhouse.setDefault(v)
-	c.SQLServer.setDefault(v)
 	c.Redis.setDefault(v)
 	c.OTEL.setDefault(v)
 	c.Elasticsearch.setDefault(v)

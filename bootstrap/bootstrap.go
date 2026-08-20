@@ -14,7 +14,6 @@ import (
 	"github.com/hydroan/gst/database/mysql"
 	"github.com/hydroan/gst/database/postgres"
 	"github.com/hydroan/gst/database/sqlite"
-	"github.com/hydroan/gst/database/sqlserver"
 	"github.com/hydroan/gst/debug/gops"
 	debugpprof "github.com/hydroan/gst/debug/pprof"
 	"github.com/hydroan/gst/debug/statsviz"
@@ -56,7 +55,6 @@ func Bootstrap() error {
 		postgres.Init,
 		mysql.Init,
 		clickhouse.Init,
-		sqlserver.Init,
 	)
 	if err := ins.Init(); err != nil {
 		return err

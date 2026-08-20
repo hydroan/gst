@@ -126,7 +126,6 @@ require (
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/driver/postgres v1.6.2
 	gorm.io/driver/sqlite v1.6.0
-	gorm.io/driver/sqlserver v1.6.4
 	gorm.io/gorm v1.31.2
 	mvdan.cc/gofumpt v0.11.0
 )
@@ -264,8 +263,6 @@ require (
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/godoc-lint/godoc-lint v0.11.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
-	github.com/golang-sql/sqlexp v0.1.0 // indirect
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
@@ -343,7 +340,6 @@ require (
 	github.com/mattn/go-runewidth v0.0.24 // indirect
 	github.com/mdelapenya/tlscert v0.2.0 // indirect
 	github.com/mgechev/revive v1.15.0 // indirect
-	github.com/microsoft/go-mssqldb v1.10.0 // indirect
 	github.com/minio/crc64nvme v1.1.1 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect

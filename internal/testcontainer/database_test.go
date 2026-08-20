@@ -21,9 +21,9 @@ func TestSetupDatabase(t *testing.T) {
 	})
 
 	t.Run("unsupported_type_is_rejected", func(t *testing.T) {
-		_, err := SetupDatabase(config.DBSQLServer)
+		_, err := SetupDatabase(config.DBType("oracle"))
 
 		require.Error(t, err)
-		require.ErrorContains(t, err, string(config.DBSQLServer))
+		require.ErrorContains(t, err, "oracle")
 	})
 }

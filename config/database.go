@@ -12,7 +12,6 @@ const (
 	DBSqlite     DBType = "sqlite"
 	DBPostgres   DBType = "postgres"
 	DBMySQL      DBType = "mysql"
-	DBSQLServer  DBType = "sqlserver"
 	DBClickHouse DBType = "clickhouse"
 )
 
