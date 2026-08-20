@@ -9,7 +9,7 @@ import (
 
 // PasswordCredential stores password authentication state for an IAM user.
 type PasswordCredential struct {
-	UserID             string     `json:"user_id" query:"user_id" gorm:"size:36;uniqueIndex;not null"`
+	UserID             string     `json:"user_id" query:"user_id" gorm:"size:36;not null"`
 	PasswordHash       string     `json:"-" binding:"required"`
 	MustChangePassword bool       `json:"must_change_password"`
 	FailedLoginCount   int        `json:"failed_login_count"`
@@ -21,6 +21,14 @@ type PasswordCredential struct {
 
 func (PasswordCredential) Design() {
 	Migrate()
+}
+
+// Indexes declares one credential row per user; Purge explains why that
+// uniqueness requires hard deletion.
+func (PasswordCredential) Indexes() []model.Index {
+	return []model.Index{
+		{Fields: []string{"UserID"}, Unique: true},
+	}
 }
 
 // Purge hard-deletes, which is what the row's own uniqueness requires.

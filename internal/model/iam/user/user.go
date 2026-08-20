@@ -17,8 +17,8 @@ const (
 )
 
 type User struct {
-	Username string     `json:"username" gorm:"type:varchar(50);uniqueIndex;not null"`
-	Status   UserStatus `json:"status" gorm:"type:varchar(20);default:'active';index"`
+	Username string     `json:"username" gorm:"type:varchar(50);not null"`
+	Status   UserStatus `json:"status" gorm:"type:varchar(20);default:'active'"`
 
 	model.Base
 }
@@ -83,6 +83,15 @@ func (User) Design() {
 			Result[*UserStatusPatchRsp]()
 		})
 	})
+}
+
+// Indexes declares the login uniqueness of usernames and the status filter
+// path used by administrator listings.
+func (User) Indexes() []model.Index {
+	return []model.Index{
+		{Fields: []string{"Username"}, Unique: true},
+		{Fields: []string{"Status"}},
+	}
 }
 
 func (User) Purge() bool { return true }

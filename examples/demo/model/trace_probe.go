@@ -14,7 +14,7 @@ import (
 // TraceProbe exercises standard CRUD context propagation through service,
 // database, GORM, and model hooks.
 type TraceProbe struct {
-	Name string `json:"name" query:"name" gorm:"size:191;index"`
+	Name string `json:"name" query:"name" gorm:"size:191"`
 	Note string `json:"note,omitempty" query:"note" gorm:"size:1024"`
 
 	Hook      string `json:"hook,omitempty" query:"hook" gorm:"size:64"`
@@ -49,6 +49,13 @@ func (TraceProbe) Design() {
 	Get(func() {
 		Service()
 	})
+}
+
+// Indexes declares the name lookup path the trace assertions filter by.
+func (TraceProbe) Indexes() []model.Index {
+	return []model.Index{
+		{Fields: []string{"Name"}},
+	}
 }
 
 func (t *TraceProbe) CreateBefore(ctx context.Context) error {

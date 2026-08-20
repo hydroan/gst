@@ -17,9 +17,11 @@ var _ types.Model = (*Base)(nil)
 // Custom models can override these default methods when needed.
 //
 // Usually, there are some gorm tags that may be of interest to you.
-// gorm:"unique"
 // gorm:"foreignKey:ParentID;constraint:-"
 // gorm:"foreignKey:ParentID;references:ID;constraint:-"
+//
+// Indexes are not declared through gorm tags; models declare them through
+// the optional Indexes() []Index method instead.
 //
 // Associations are declared so queries can preload them, not to create physical
 // foreign keys, so they carry constraint:- and leave referential integrity to

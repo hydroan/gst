@@ -8,7 +8,7 @@ import (
 
 // Profile stores the generic self-service profile data for an IAM user.
 type Profile struct {
-	UserID      string            `json:"user_id" query:"user_id" gorm:"size:36;uniqueIndex;not null"`
+	UserID      string            `json:"user_id" query:"user_id" gorm:"size:36;not null"`
 	DisplayName string            `json:"display_name,omitempty" query:"display_name" gorm:"size:191"`
 	FirstName   string            `json:"first_name,omitempty" query:"first_name" gorm:"size:191"`
 	LastName    string            `json:"last_name,omitempty" query:"last_name" gorm:"size:191"`
@@ -54,6 +54,13 @@ func (Profile) Design() {
 			Result[*ProfilePatchRsp]()
 		})
 	})
+}
+
+// Indexes declares one profile row per user.
+func (Profile) Indexes() []model.Index {
+	return []model.Index{
+		{Fields: []string{"UserID"}, Unique: true},
+	}
 }
 
 func (Profile) Purge() bool { return true }

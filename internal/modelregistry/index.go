@@ -15,19 +15,28 @@ import (
 // databases (MySQL enforces 64); generated index names never exceed it.
 const indexNameMaxLen = 64
 
-// Index declares one custom index on the model's table.
+// Index declares one secondary index on the model's table.
 //
-// Custom indexes complement gorm struct tag indexes instead of replacing
-// them: they cover index shapes struct tags cannot express, such as indexes
-// on columns promoted from the embedded Base or AutoBase. Regular
-// business-column indexes should keep using gorm struct tags.
+// Indexes are the single way models declare secondary indexes: gorm struct
+// tag indexes (index, uniqueIndex, unique) are banned in business projects
+// by gg check, and the declaration also covers index shapes struct tags
+// cannot express, such as indexes on columns promoted from the embedded
+// Base or AutoBase.
+//
+// The declaration shape is deliberately minimal: ordered columns plus
+// uniqueness cover the index forms whose semantics are identical on every
+// supported dialect. Extensions follow real demand, descending columns
+// first (identical semantics everywhere), then MySQL prefix lengths
+// (dialect-specific, so they need an explicit cross-dialect failure
+// contract). Partial, functional and fulltext indexes stay out: their
+// semantics diverge per dialect, so hand-written DDL owns them.
 type Index struct {
 	Fields []string // Go struct field names; slice order is the index column order
 	Unique bool     // Unique makes the index a unique index
 }
 
-// Indexer is the optional capability interface for models that declare
-// custom indexes beyond gorm struct tags.
+// Indexer is the optional capability interface through which models declare
+// their secondary indexes.
 //
 // Indexes must be a pure declaration: it is invoked on zero-value model
 // instances and must not depend on model data. Index names are always
@@ -146,6 +155,11 @@ func buildIndexPlans(sch *schema.Schema, tableName string, decls []Index) ([]Ind
 // checkTagIndexConflicts rejects declarations that duplicate a struct tag
 // index by name or by column sequence. Duplicated declarations drift apart
 // over time, so they fail fast instead of being merged silently.
+//
+// The guard is permanent, not transitional: gg check bans struct tag indexes
+// in business projects, but running gg check is the project's choice, so
+// this entry point keeps validating its own input instead of trusting that
+// the ban was enforced elsewhere.
 func checkTagIndexConflicts(sch *schema.Schema, plans []IndexPlan) error {
 	for _, tagIndex := range sch.ParseIndexes() {
 		columns := make([]string, 0, len(tagIndex.Fields))
