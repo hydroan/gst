@@ -100,7 +100,18 @@ linters:
 
     # Project constraints.
     - depguard
+    - forbidigo
     - gomoddirectives
+
+    # Project-specific checks.
+    # canonicalheader v1.1.2 panics on parameterized method calls (go1.27);
+    # re-enable once an upstream release handles them.
+    # - canonicalheader
+    - loggercheck
+    - spancheck
+
+    # Documentation.
+    - godoclint
 
   settings:
     depguard:
@@ -117,6 +128,34 @@ linters:
       exclude-functions:
         - io.Copy(*bytes.Buffer)
         - io.Copy(os.Stdout)
+
+    forbidigo:
+      # Refusing a request outside the controller path goes through
+      # response.Abort, which is the single place the API envelope is written.
+      # gin's own aborts stay reachable on *gin.Context forever, so nothing but
+      # this rule stops the next middleware from writing a second envelope by
+      # hand.
+      forbid:
+        - pattern: '^.*\.AbortWithStatusJSON$'
+          msg: "write the envelope through response.Abort instead of building it by hand"
+        - pattern: '^.*\.AbortWithStatus$'
+          msg: "an empty body carries neither a code nor a trace id; refuse through response.Abort"
+
+    godoclint:
+      # Default set of rules to enable.
+      # Possible values are: 'basic', 'all' or 'none'.
+      # Default: 'basic' (enables 'pkg-doc', 'single-pkg-doc', 'start-with-name', and 'deprecated')
+      default: basic
+      # List of rules to enable in addition to the default set.
+      enable:
+        # Check proper package-level godoc, if any.
+        - pkg-doc
+        # Assert at most one godoc per package.
+        - single-pkg-doc
+        # Check godocs start with the corresponding symbol name.
+        - start-with-name
+        # Check deprecated symbols have proper deprecation notice.
+        - deprecated
 
     govet:
       # These analyzers are not part of the default go vet analyzer set.
@@ -141,10 +180,6 @@ linters:
         - "*.Purge"
         - "*.Indexes"
 
-    staticcheck:
-      dot-import-whitelist:
-        - github.com/hydroan/gst/dsl
-
     revive:
       rules:
         - name: blank-imports
@@ -166,6 +201,16 @@ linters:
         - name: var-declaration
         - name: var-naming
 
+    staticcheck:
+      # SA4023 is the only check requiring the nilness fact, whose analyzer in
+      # staticcheck v0.8.0-rc.1 panics on getsentry/sentry-go ("unhandled
+      # builtin recover"); dropping the check prunes the fact from the run.
+      # govet's nilness analyzer still covers nil-consistency independently.
+      # Re-enable once a stable staticcheck release fixes the fact analyzer.
+      checks: ["all", "-QF1008", "-SA4023"]
+      dot-import-whitelist:
+        - github.com/hydroan/gst/dsl
+
   exclusions:
     generated: lax
     presets:
@@ -179,6 +224,7 @@ linters:
       - path: _test\.go
         linters:
           - gosec
+          - godoclint
           - unparam
       # The gofix //go:fix directive is valid but not yet in
       # gocheckcompilerdirectives' known directive list.
@@ -189,6 +235,11 @@ linters:
       - linters:
           - revive
         text: "don't use (ALL_CAPS|underscores) in Go names"
+      # Allow package names "types" and "util" (meaningful in our context).
+      - linters:
+          - revive
+        text: "avoid meaningless package names"
+        path: "^(types|util)/|.*/(types|util)/"
 
 issues:
   max-same-issues: 100
