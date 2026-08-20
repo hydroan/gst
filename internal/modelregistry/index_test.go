@@ -120,6 +120,21 @@ func (*TagColumnsConflictSample) Indexes() []modelregistry.Index {
 	return []modelregistry.Index{{Fields: []string{"Code"}}}
 }
 
+// UniqueTagConflictSample marks a column unique through the bare unique tag
+// and declares a unique index on the same single column, which would create
+// two unique indexes over one column.
+type UniqueTagConflictSample struct {
+	Code string `gorm:"unique"`
+
+	modelregistry.Base
+}
+
+func (*UniqueTagConflictSample) TableName() string { return "unique_tag_conflict_samples" }
+
+func (*UniqueTagConflictSample) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"Code"}, Unique: true}}
+}
+
 // NoTableNameSample implements Indexer but never declares its table name.
 type NoTableNameSample struct {
 	Kind string
@@ -184,6 +199,7 @@ func TestParseIndexPlansValidation(t *testing.T) {
 		{"duplicate declaration", &DuplicateDeclSample{}, "duplicate custom index"},
 		{"tag index name conflict", &TagNameConflictSample{}, "conflicts with struct tag index"},
 		{"tag index columns conflict", &TagColumnsConflictSample{}, `duplicates struct tag index "custom_code_idx"`},
+		{"unique tag columns conflict", &UniqueTagConflictSample{}, `custom index on column "code" duplicates the unique struct tag`},
 		{"missing table name", &NoTableNameSample{}, "must declare an explicit table name"},
 		{"column name instead of field name", &ColumnNameSample{}, `unknown field "kind"`},
 	} {

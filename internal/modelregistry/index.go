@@ -157,8 +157,11 @@ func buildIndexPlans(sch *schema.Schema, tableName string, decls []Index) ([]Ind
 }
 
 // checkTagIndexConflicts rejects declarations that duplicate a struct tag
-// index by name or by column sequence. Duplicated declarations drift apart
-// over time, so they fail fast instead of being merged silently.
+// index by name or by column sequence, and declarations that duplicate a
+// bare unique tag — gorm keeps those out of ParseIndexes, so they take their
+// own pass, or the same column would silently end up under two unique
+// indexes. Duplicated declarations drift apart over time, so they fail fast
+// instead of being merged silently.
 //
 // The guard is permanent, not transitional: gg check bans struct tag indexes
 // in business projects, but running gg check is the project's choice, so
@@ -177,6 +180,17 @@ func checkTagIndexConflicts(sch *schema.Schema, plans []IndexPlan) error {
 			}
 			if strings.Join(plan.Columns, ",") == key {
 				return errors.Newf("model %s: custom index on columns (%s) duplicates struct tag index %q", sch.Name, key, tagIndex.Name)
+			}
+		}
+	}
+
+	for _, field := range sch.Fields {
+		if !field.Unique || field.PrimaryKey || field.DBName == "" {
+			continue
+		}
+		for _, plan := range plans {
+			if len(plan.Columns) == 1 && plan.Columns[0] == field.DBName {
+				return errors.Newf("model %s: custom index on column %q duplicates the unique struct tag on the same column", sch.Name, field.DBName)
 			}
 		}
 	}
