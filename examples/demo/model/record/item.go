@@ -31,6 +31,8 @@ type Item struct {
 	model.Base
 }
 
+func (Item) TableName() string { return "items" }
+
 func (Item) Design() {
 	Migrate()
 	Endpoint("items")

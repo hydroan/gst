@@ -26,6 +26,8 @@ type Record struct {
 	model.Base
 }
 
+func (Record) TableName() string { return "records" }
+
 func (Record) Design() {
 	Migrate()
 	Endpoint("records")
