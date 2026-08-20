@@ -12,6 +12,7 @@ import (
 	"github.com/hydroan/gst/internal/testcontainer"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -21,16 +22,23 @@ var (
 	mysqlOnce    sync.Once
 	releaseMySQL func() error
 	errMySQL     error
+
+	postgresOnce    sync.Once
+	releasePostgres func() error
+	errPostgres     error
 )
 
-// TestMain releases the mysql container newMySQLDB prepares. Only the tests
-// covering mysql index behavior ask for one, so it is started lazily and this
-// is the only place that knows whether there is anything to release.
+// TestMain releases the mysql and postgres containers newMySQLDB and
+// newPostgresDB prepare. Only the tests covering server-dialect index
+// behavior ask for one, so both start lazily and this is the only place that
+// knows whether there is anything to release.
 func TestMain(m *testing.M) {
 	code := m.Run()
-	if releaseMySQL != nil {
-		if err := releaseMySQL(); err != nil {
-			fmt.Fprintf(os.Stderr, "failed to release the test database: %v\n", err)
+	for _, release := range []func() error{releaseMySQL, releasePostgres} {
+		if release != nil {
+			if err := release(); err != nil {
+				fmt.Fprintf(os.Stderr, "failed to release the test database: %v\n", err)
+			}
 		}
 	}
 	os.Exit(code)
@@ -210,6 +218,44 @@ func TestEnsureCustomIndexesOnMySQL(t *testing.T) {
 	require.ErrorContains(t, err, `already exists as "legacy_sized_records_code_kind"`)
 }
 
+// TestEnsureCustomIndexesOnPostgres covers the same contract on PostgreSQL,
+// whose migrator reads index metadata from the system catalogs.
+func TestEnsureCustomIndexesOnPostgres(t *testing.T) {
+	db := newPostgresDB(t)
+	m := &sizedRecord{}
+
+	require.NoError(t, db.Migrator().DropTable(m))
+	t.Cleanup(func() { _ = db.Migrator().DropTable(m) })
+	require.NoError(t, db.AutoMigrate(m))
+
+	require.NoError(t, ensureCustomIndexes(db, m))
+	// A second run must be idempotent.
+	require.NoError(t, ensureCustomIndexes(db, m))
+
+	indexes, err := db.Migrator().GetIndexes("sized_records")
+	require.NoError(t, err)
+	columnsByName := make(map[string][]string, len(indexes))
+	uniqueByName := make(map[string]bool, len(indexes))
+	for _, idx := range indexes {
+		columnsByName[idx.Name()] = idx.Columns()
+		if unique, ok := idx.Unique(); ok {
+			uniqueByName[idx.Name()] = unique
+		}
+	}
+	require.Equal(t, []string{"code", "kind"}, columnsByName["uniq_sized_records_code_kind"])
+	require.True(t, uniqueByName["uniq_sized_records_code_kind"])
+
+	// The same definition living under a foreign name must be reported as a
+	// rename candidate instead of being created a second time. The index is
+	// dropped through raw SQL because the gorm postgres migrator's DropIndex
+	// renders CURRENT_SCHEMA() into a position DROP INDEX does not accept.
+	require.NoError(t, db.Exec("DROP INDEX uniq_sized_records_code_kind").Error)
+	require.NoError(t, db.Exec("CREATE UNIQUE INDEX legacy_sized_records_code_kind ON sized_records(code, kind)").Error)
+
+	err = ensureCustomIndexes(db, m)
+	require.ErrorContains(t, err, `already exists as "legacy_sized_records_code_kind"`)
+}
+
 func TestEnsureCustomIndexesRejectsInvalidDeclaration(t *testing.T) {
 	db := newSQLiteDB(t)
 	m := &invalidRecord{}
@@ -251,6 +297,31 @@ func newMySQLDB(t *testing.T) *gorm.DB {
 		os.Getenv(config.MYSQL_HOST), port, os.Getenv(config.MYSQL_DATABASE))
 
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: logger.Discard, TranslateError: true})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	require.NoError(t, sqlDB.Ping())
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	return db
+}
+
+// newPostgresDB opens a postgres container of its own, prepared once for the
+// whole package like the mysql one.
+func newPostgresDB(t *testing.T) *gorm.DB {
+	t.Helper()
+
+	postgresOnce.Do(func() {
+		releasePostgres, errPostgres = testcontainer.SetupDatabase(config.DBPostgres)
+	})
+	require.NoError(t, errPostgres)
+
+	port, err := strconv.Atoi(os.Getenv(config.POSTGRES_PORT))
+	require.NoError(t, err)
+	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+		os.Getenv(config.POSTGRES_HOST), port, os.Getenv(config.POSTGRES_USERNAME),
+		os.Getenv(config.POSTGRES_PASSWORD), os.Getenv(config.POSTGRES_DATABASE))
+
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Discard, TranslateError: true})
 	require.NoError(t, err)
 	sqlDB, err := db.DB()
 	require.NoError(t, err)

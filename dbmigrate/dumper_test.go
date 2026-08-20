@@ -28,10 +28,12 @@ type Group struct {
 func (*Group) TableName() string { return "groups" }
 
 // Sample declares custom indexes through the Indexer capability while also
-// carrying a plain struct tag column.
+// carrying a plain struct tag column. The indexed columns carry a size:
+// without one gorm maps them to TEXT on MySQL, which cannot be indexed
+// whole (key length error 1170).
 type Sample struct {
-	Title string `json:"title"`
-	Tag   string `json:"tag"`
+	Title string `json:"title" gorm:"size:191"`
+	Tag   string `json:"tag" gorm:"size:191"`
 
 	model.Base
 }

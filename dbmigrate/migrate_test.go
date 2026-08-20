@@ -44,22 +44,42 @@ func TestMigrate(t *testing.T) {
 	t.Run("mysql", func(t *testing.T) {
 		dumper, err := dbmigrate.NewSchemaDumper()
 		require.NoError(t, err)
-		schema, err := dumper.Dump(config.DBMySQL, User{}, Group{})
+		schema, err := dumper.Dump(config.DBMySQL, User{}, Group{}, Sample{})
 		require.NoError(t, err)
 
-		migrated, _, err := dbmigrate.Migrate([]string{schema}, config.DBMySQL,
-			mysqlDatabaseConfig(),
+		database := fmt.Sprintf("gst_dbmigrate_test_%d", time.Now().UnixNano())
+		createMySQLDatabase(t, mysqlDatabaseConfig(), database)
+		t.Cleanup(func() {
+			dropMySQLDatabase(t, mysqlDatabaseConfig(), database)
+		})
+		databaseConfig := mysqlDatabaseConfig()
+		databaseConfig.Database = database
+
+		migrated, _, err := dbmigrate.Migrate([]string{schema}, config.DBMySQL, databaseConfig,
 			&dbmigrate.MigrateOption{
 				DryRun: true,
 			})
 		require.NoError(t, err)
 		require.True(t, migrated)
+
+		migrated, _, err = dbmigrate.Migrate([]string{schema}, config.DBMySQL, databaseConfig,
+			&dbmigrate.MigrateOption{})
+		require.NoError(t, err)
+		require.True(t, migrated)
+
+		// A converged schema plans nothing on a re-run, custom indexes included.
+		migrated, _, err = dbmigrate.Migrate([]string{schema}, config.DBMySQL, databaseConfig,
+			&dbmigrate.MigrateOption{
+				DryRun: true,
+			})
+		require.NoError(t, err)
+		require.False(t, migrated)
 	})
 
 	t.Run("postgres", func(t *testing.T) {
 		dumper, err := dbmigrate.NewSchemaDumper()
 		require.NoError(t, err)
-		schema, err := dumper.Dump(config.DBPostgres, User{}, Group{})
+		schema, err := dumper.Dump(config.DBPostgres, User{}, Group{}, Sample{})
 		require.NoError(t, err)
 
 		database := fmt.Sprintf("gst_dbmigrate_test_%d", time.Now().UnixNano())
@@ -102,7 +122,7 @@ func TestMigrate(t *testing.T) {
 	t.Run("sqlite", func(t *testing.T) {
 		dumper, err := dbmigrate.NewSchemaDumper()
 		require.NoError(t, err)
-		schema, err := dumper.Dump(config.DBSqlite, User{}, Group{})
+		schema, err := dumper.Dump(config.DBSqlite, User{}, Group{}, Sample{})
 		require.NoError(t, err)
 
 		database := filepath.Join(t.TempDir(), "test.db")
