@@ -64,6 +64,8 @@ jobs:
             model.Base
           }
 
+          func (User) TableName() string { return "users" }
+
           func (User) Design() {
             Migrate()
 
