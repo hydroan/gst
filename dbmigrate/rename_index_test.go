@@ -41,6 +41,23 @@ func TestDetectIndexRenames(t *testing.T) {
 		require.Empty(t, pairs)
 	})
 
+	t.Run("same columns in a different order are rebuilds, not renames", func(t *testing.T) {
+		// (group_id, created_at) and (created_at, group_id) serve different
+		// leftmost-prefix queries: reordering the columns changes the index
+		// definition, so the advisory must leave the drop/add pair as a
+		// rebuild instead of suggesting a metadata-only rename.
+		current := "CREATE TABLE `samples` (\n" +
+			"  `id` char(36) NOT NULL,\n" +
+			"  PRIMARY KEY (`id`),\n" +
+			"  KEY `idx_samples_group_created` (`group_id`,`created_at`)\n" +
+			") ENGINE=InnoDB;"
+		pairs := detectIndexRenames([]string{
+			"ALTER TABLE `samples` ADD INDEX `idx_samples_created_group` (`created_at`, `group_id`)",
+			"ALTER TABLE `samples` DROP INDEX `idx_samples_group_created`",
+		}, current)
+		require.Empty(t, pairs)
+	})
+
 	t.Run("uniqueness changes are rebuilds, not renames", func(t *testing.T) {
 		current := "CREATE TABLE `samples` (\n" +
 			"  PRIMARY KEY (`id`),\n" +
