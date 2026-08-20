@@ -68,9 +68,8 @@ func (db *database[M]) List(dest *[]M) (err error) {
 
 	db.applySelect()
 	if db.dryRun {
-		tableName := db.m.TableName()
 		db.applyCursorPagination()
-		tx := dryRunSession(db.ins).Table(tableName).Find(dest)
+		tx := dryRunSession(db.ins).Find(dest)
 		return db.collectSQL(tx)
 	}
 	// Invoke model hook: ListBefore.
@@ -88,10 +87,9 @@ func (db *database[M]) List(dest *[]M) (err error) {
 			return err
 		}
 	}
-	tableName := db.m.TableName()
 	// apply cursor-based pagination.
 	db.applyCursorPagination()
-	if err = db.ins.Table(tableName).Find(dest).Error; err != nil {
+	if err = db.ins.Find(dest).Error; err != nil {
 		return err
 	}
 	// A backward cursor read walks the feed in reverse, so the rows come back
@@ -169,11 +167,7 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 		tableName := db.m.TableName()
 		dryRunDest := cloneDryRunModel(dest)
 		dryRunDest.ClearID()
-		if len(tableName) == 0 {
-			tx := dryRunSession(db.ins).Where("id = ?", id).Find(dryRunDest)
-			return db.collectSQL(tx)
-		}
-		tx := dryRunSession(db.ins).Table(tableName).Where(db.quoteTableColumn(tableName, "id")+" = ?", id).Find(dryRunDest)
+		tx := dryRunSession(db.ins).Where(db.quoteTableColumn(tableName, "id")+" = ?", id).Find(dryRunDest)
 		return db.collectSQL(tx)
 	}
 	// Invoke model hook: GetBefore.
@@ -188,7 +182,7 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 	// Use an explicit WHERE clause instead of relying on primary key fields
 	// already present on dest.
 	dest.ClearID()
-	tx := db.ins.Table(tableName).Where(db.quoteTableColumn(tableName, "id")+" = ?", id).Find(dest)
+	tx := db.ins.Where(db.quoteTableColumn(tableName, "id")+" = ?", id).Find(dest)
 	if err = tx.Error; err != nil {
 		return err
 	}
@@ -242,12 +236,10 @@ func (db *database[M]) Count(count *int) (err error) {
 	// GORM's Count only accepts *int64, so bridge through a local variable.
 	var count64 int64
 	if db.dryRun {
-		tableName := db.m.TableName()
-		tx := dryRunSession(db.ins).Table(tableName).Model(*new(M)).Limit(-1).Offset(-1).Count(&count64)
+		tx := dryRunSession(db.ins).Model(*new(M)).Limit(-1).Offset(-1).Count(&count64)
 		return db.collectSQL(tx)
 	}
-	tableName := db.m.TableName()
-	if err = db.ins.Table(tableName).Model(*new(M)).Limit(-1).Offset(-1).Count(&count64).Error; err != nil {
+	if err = db.ins.Model(*new(M)).Limit(-1).Offset(-1).Count(&count64).Error; err != nil {
 		return err
 	}
 	*count = int(count64)
@@ -289,8 +281,7 @@ func (db *database[M]) First(dest M) (err error) {
 
 	db.applySelect()
 	if db.dryRun {
-		tableName := db.m.TableName()
-		tx := dryRunSession(db.ins).Table(tableName).First(dest)
+		tx := dryRunSession(db.ins).First(dest)
 		return db.collectSQL(tx)
 	}
 	// Invoke model hook: GetBefore
@@ -301,8 +292,7 @@ func (db *database[M]) First(dest M) (err error) {
 			return err
 		}
 	}
-	tableName := db.m.TableName()
-	if err = db.ins.Table(tableName).First(dest).Error; err != nil {
+	if err = db.ins.First(dest).Error; err != nil {
 		return err
 	}
 	// Invoke model hook: GetAfter
@@ -352,8 +342,7 @@ func (db *database[M]) Last(dest M) (err error) {
 
 	db.applySelect()
 	if db.dryRun {
-		tableName := db.m.TableName()
-		tx := dryRunSession(db.ins).Table(tableName).Last(dest)
+		tx := dryRunSession(db.ins).Last(dest)
 		return db.collectSQL(tx)
 	}
 	// Invoke model hook: GetBefore.
@@ -364,8 +353,7 @@ func (db *database[M]) Last(dest M) (err error) {
 			return err
 		}
 	}
-	tableName := db.m.TableName()
-	if err = db.ins.Table(tableName).Last(dest).Error; err != nil {
+	if err = db.ins.Last(dest).Error; err != nil {
 		return err
 	}
 	// Invoke model hook: GetAfter
@@ -415,8 +403,7 @@ func (db *database[M]) Take(dest M) (err error) {
 
 	db.applySelect()
 	if db.dryRun {
-		tableName := db.m.TableName()
-		tx := dryRunSession(db.ins).Table(tableName).Take(dest)
+		tx := dryRunSession(db.ins).Take(dest)
 		return db.collectSQL(tx)
 	}
 	// Invoke model hook: GetBefore.
@@ -427,8 +414,7 @@ func (db *database[M]) Take(dest M) (err error) {
 			return err
 		}
 	}
-	tableName := db.m.TableName()
-	if err = db.ins.Table(tableName).Take(dest).Error; err != nil {
+	if err = db.ins.Take(dest).Error; err != nil {
 		return err
 	}
 	// Invoke model hook: GetAfter.

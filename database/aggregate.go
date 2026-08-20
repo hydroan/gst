@@ -301,16 +301,15 @@ func (a *aggregator[M, R]) build(mode buildMode) (*gorm.DB, error) {
 	a.db.buildingSQL = a.statements != nil
 	a.db.sqlStatements = a.statements
 
-	table := a.db.m.TableName()
-	// Model is what carries the schema, and the schema is what adds the
-	// soft-delete condition. Table alone names the table but parses no model,
-	// so an aggregate scanning into R would silently read deleted rows while a
-	// List on the same model hides them.
+	// Model is what names the table and carries the schema: gorm reads the
+	// model's own TableName for the FROM clause, and the schema is what adds
+	// the soft-delete condition — an aggregate scanning into R would otherwise
+	// silently read deleted rows while a List on the same model hides them.
 	//
 	// The model must be the allocated instance rather than a nil *M: Scan runs
 	// through Rows(), which leaves Dest nil until the callback assigns Dest
 	// from Model, and dereferencing a nil Model there yields an invalid value.
-	tx := a.db.ins.Table(table).Model(a.db.m)
+	tx := a.db.ins.Model(a.db.m)
 
 	terms := a.terms
 	if mode == buildCountInner {

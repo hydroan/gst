@@ -25,7 +25,6 @@ func (db *database[M]) clickhouseCreate(objs []M) (err error) {
 	done, _ := db.trace(consts.PHASE_CREATE, len(objs))
 	defer func() { done(err) }()
 
-	tableName := db.m.TableName()
 	batchSize := defaultBatchSize
 	if db.batchSize > 0 {
 		batchSize = db.batchSize
@@ -51,7 +50,7 @@ func (db *database[M]) clickhouseCreate(objs []M) (err error) {
 	}
 	for i := 0; i < len(objs); i += batchSize {
 		end := min(i+batchSize, len(objs))
-		if err = db.ins.Session(&gorm.Session{}).Table(tableName).Create(objs[i:end]).Error; err != nil {
+		if err = db.ins.Session(&gorm.Session{}).Create(objs[i:end]).Error; err != nil {
 			return err
 		}
 	}
@@ -116,12 +115,10 @@ func (db *database[M]) clickhouseUpdate(objs []M) (err error) {
 	done, _ := db.trace(consts.PHASE_UPDATE, len(objs))
 	defer func() { done(err) }()
 
-	tableName := db.m.TableName()
-
 	if db.dryRun {
 		dryRunObjs := cloneDryRunModels(objs)
 		for i := range dryRunObjs {
-			tx := db.updateRowStatement(dryRunSession(db.ins), tableName, dryRunObjs[i]).Updates(dryRunObjs[i])
+			tx := db.updateRowStatement(dryRunSession(db.ins), dryRunObjs[i]).Updates(dryRunObjs[i])
 			if err = db.collectSQL(tx); err != nil {
 				return err
 			}
@@ -130,7 +127,7 @@ func (db *database[M]) clickhouseUpdate(objs []M) (err error) {
 	}
 
 	for i := range objs {
-		if err = db.updateRowStatement(db.ins.Session(&gorm.Session{}), tableName, objs[i]).Updates(objs[i]).Error; err != nil {
+		if err = db.updateRowStatement(db.ins.Session(&gorm.Session{}), objs[i]).Updates(objs[i]).Error; err != nil {
 			return err
 		}
 	}

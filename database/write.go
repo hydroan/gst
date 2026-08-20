@@ -85,7 +85,6 @@ func (db *database[M]) Create(objs ...M) (err error) {
 	done, span := db.trace(consts.PHASE_CREATE, len(objs))
 	defer func() { done(err) }()
 
-	tableName := db.m.TableName()
 	batchSize := defaultBatchSize
 	if db.batchSize > 0 {
 		batchSize = db.batchSize
@@ -95,7 +94,7 @@ func (db *database[M]) Create(objs ...M) (err error) {
 		dryRunObjs := cloneDryRunModels(objs)
 		for i := 0; i < len(dryRunObjs); i += batchSize {
 			end := min(i+batchSize, len(dryRunObjs))
-			tx := dryRunSession(db.ins).Table(tableName).Create(dryRunObjs[i:end])
+			tx := dryRunSession(db.ins).Create(dryRunObjs[i:end])
 			if err = db.collectSQL(tx); err != nil {
 				return err
 			}
@@ -131,7 +130,7 @@ func (db *database[M]) Create(objs ...M) (err error) {
 		}
 		for i := 0; i < len(objs); i += batchSize {
 			end := min(i+batchSize, len(objs))
-			if err = db.ins.Session(&gorm.Session{}).Table(tableName).Create(objs[i:end]).Error; err != nil {
+			if err = db.ins.Session(&gorm.Session{}).Create(objs[i:end]).Error; err != nil {
 				return err
 			}
 		}
@@ -207,7 +206,6 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	done, span := db.trace(consts.PHASE_DELETE, len(objs))
 	defer func() { done(err) }()
 
-	tableName := db.m.TableName()
 	batchSize := defaultDeleteBatchSize
 	if db.batchSize > 0 {
 		batchSize = db.batchSize
@@ -218,13 +216,13 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 		for i := 0; i < len(dryRunObjs); i += batchSize {
 			end := min(i+batchSize, len(dryRunObjs))
 			if util.Deref(db.enablePurge) {
-				tx := dryRunSession(db.ins).Table(tableName).Unscoped().Delete(dryRunObjs[i:end])
+				tx := dryRunSession(db.ins).Unscoped().Delete(dryRunObjs[i:end])
 				if err = db.collectSQL(tx); err != nil {
 					return err
 				}
 				continue
 			}
-			tx := dryRunSession(db.ins).Table(tableName).Delete(dryRunObjs[i:end])
+			tx := dryRunSession(db.ins).Delete(dryRunObjs[i:end])
 			if err = db.collectSQL(tx); err != nil {
 				return err
 			}
@@ -250,7 +248,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 			// delete permanently.
 			for i := 0; i < len(objs); i += batchSize {
 				end := min(i+batchSize, len(objs))
-				if err = db.ins.Session(&gorm.Session{}).Table(tableName).Unscoped().Delete(objs[i:end]).Error; err != nil {
+				if err = db.ins.Session(&gorm.Session{}).Unscoped().Delete(objs[i:end]).Error; err != nil {
 					return err
 				}
 			}
@@ -260,7 +258,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 			// fails with ErrDuplicatedKey; only Upsert can update such a row again.
 			for i := 0; i < len(objs); i += batchSize {
 				end := min(i+batchSize, len(objs))
-				if err = db.ins.Session(&gorm.Session{}).Table(tableName).Delete(objs[i:end]).Error; err != nil {
+				if err = db.ins.Session(&gorm.Session{}).Delete(objs[i:end]).Error; err != nil {
 					return err
 				}
 			}
@@ -366,7 +364,7 @@ func (db *database[M]) Update(objs ...M) (err error) {
 	if db.dryRun {
 		dryRunObjs := cloneDryRunModels(objs)
 		for i := range dryRunObjs {
-			tx := db.updateRowStatement(dryRunSession(db.ins), tableName, dryRunObjs[i]).Updates(dryRunObjs[i])
+			tx := db.updateRowStatement(dryRunSession(db.ins), dryRunObjs[i]).Updates(dryRunObjs[i])
 			if err = db.collectSQL(tx); err != nil {
 				return err
 			}
@@ -389,7 +387,7 @@ func (db *database[M]) Update(objs ...M) (err error) {
 			}
 		}
 		for i := range objs {
-			res := db.updateRowStatement(db.ins.Session(&gorm.Session{}), tableName, objs[i]).Updates(objs[i])
+			res := db.updateRowStatement(db.ins.Session(&gorm.Session{}), objs[i]).Updates(objs[i])
 			if res.Error != nil {
 				return res.Error
 			}
@@ -433,8 +431,8 @@ func (db *database[M]) Update(objs ...M) (err error) {
 // soft-delete a row, or resurrect one through Update. updated_at stays
 // writable because GORM's auto-update-time handling always overwrites it with
 // the current time, even under a narrowed WithSelect.
-func (db *database[M]) updateRowStatement(session *gorm.DB, tableName string, obj M) *gorm.DB {
-	tx := session.Table(tableName).Model(obj)
+func (db *database[M]) updateRowStatement(session *gorm.DB, obj M) *gorm.DB {
+	tx := session.Model(obj)
 	if len(db.selectColumns) > 0 {
 		tx = tx.Select(db.selectColumns)
 	} else {
@@ -507,10 +505,8 @@ func (db *database[M]) UpdateByID(id string, assignments ...types.Assignment) (e
 	done, _ := db.trace(phaseUpdateByID)
 	defer func() { done(err) }()
 
-	tableName := db.m.TableName()
-
 	if db.dryRun {
-		tx := dryRunSession(db.ins).Table(tableName).Model(*new(M)).Where("id = ?", id).Updates(updates)
+		tx := dryRunSession(db.ins).Model(*new(M)).Where("id = ?", id).Updates(updates)
 		return db.collectSQL(tx)
 	}
 
@@ -518,7 +514,7 @@ func (db *database[M]) UpdateByID(id string, assignments ...types.Assignment) (e
 	// contract, so GORM's default per-statement transaction is pure overhead.
 	// Inside an ambient transaction db.ins is already that transaction's
 	// handle and the flag changes nothing.
-	if err = db.ins.Session(&gorm.Session{SkipDefaultTransaction: true}).Table(tableName).Model(*new(M)).Where("id = ?", id).Updates(updates).Error; err != nil {
+	if err = db.ins.Session(&gorm.Session{SkipDefaultTransaction: true}).Model(*new(M)).Where("id = ?", id).Updates(updates).Error; err != nil {
 		return err
 	}
 	return nil
