@@ -85,6 +85,9 @@ func (User) Design() {
 	})
 }
 
+// TableName pins the table name gorm would otherwise derive.
+func (User) TableName() string { return "users" }
+
 // Indexes declares the login uniqueness of usernames and the status filter
 // path used by administrator listings.
 func (User) Indexes() []model.Index {

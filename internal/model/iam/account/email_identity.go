@@ -22,6 +22,9 @@ func (EmailIdentity) Design() {
 	Migrate()
 }
 
+// TableName pins the table name gorm would otherwise derive.
+func (EmailIdentity) TableName() string { return "email_identities" }
+
 // Indexes declares one identity row per user and the global uniqueness of
 // normalized email addresses used for lookup and duplicate detection.
 func (EmailIdentity) Indexes() []model.Index {

@@ -34,6 +34,9 @@ type TOTPDevice struct {
 	model.Base
 }
 
+// TableName pins the table name gorm would otherwise derive.
+func (TOTPDevice) TableName() string { return "totp_devices" }
+
 // Purge makes every TOTPDevice deletion a hard delete. An unbound device must
 // not leave its shared secret and recovery-code hashes behind as a soft-deleted
 // row, and the (user_id, secret) unique index relies on removed rows actually

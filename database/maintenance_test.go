@@ -105,6 +105,8 @@ type cleanupSoftDeleteUser struct {
 	model.Base
 }
 
+func (*cleanupSoftDeleteUser) TableName() string { return "cleanup_soft_delete_users" }
+
 func countSoftDeletedCleanupUsers(t *testing.T) int64 {
 	t.Helper()
 

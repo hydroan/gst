@@ -60,6 +60,9 @@ func (Role) Design() {
 
 func (r *Role) Purge() bool { return true }
 
+// TableName pins the table name gorm would otherwise derive.
+func (r *Role) TableName() string { return "roles" }
+
 // Indexes declares the uniqueness of a role name inside its tenant.
 //
 // It moved off the struct tags because the tenant column now arrives through an

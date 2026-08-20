@@ -18,8 +18,8 @@ type Bench struct {
 	model.Query
 }
 
-func (Bench) GetTableName() string { return "benches" }
-func (Bench) Purge() bool          { return true }
+func (Bench) TableName() string { return "benches" }
+func (Bench) Purge() bool       { return true }
 
 type (
 	PingRsp struct {

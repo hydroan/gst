@@ -75,6 +75,9 @@ type Menu struct {
 	model.Base
 }
 
+// TableName pins the table name gorm would otherwise derive.
+func (m *Menu) TableName() string { return "menus" }
+
 func (Menu) Design() {
 	dsl.Migrate()
 	dsl.Route("authz/menus", func() {

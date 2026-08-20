@@ -56,6 +56,9 @@ func (Profile) Design() {
 	})
 }
 
+// TableName pins the table name gorm would otherwise derive.
+func (Profile) TableName() string { return "profiles" }
+
 // Indexes declares one profile row per user.
 func (Profile) Indexes() []model.Index {
 	return []model.Index{

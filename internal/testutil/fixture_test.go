@@ -18,7 +18,7 @@ type SampleRecord struct {
 	modelregistry.Base
 }
 
-func (r *SampleRecord) GetTableName() string { return "testutil_sample_records" }
+func (r *SampleRecord) TableName() string { return "testutil_sample_records" }
 
 // TestMain boots the framework against the default sqlite database and
 // registers the sample model the database assertions run against.

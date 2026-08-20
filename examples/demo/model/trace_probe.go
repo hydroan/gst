@@ -23,8 +23,8 @@ type TraceProbe struct {
 	model.Base
 }
 
-func (TraceProbe) GetTableName() string { return "demo_trace_probes" }
-func (TraceProbe) Purge() bool          { return true }
+func (TraceProbe) TableName() string { return "demo_trace_probes" }
+func (TraceProbe) Purge() bool       { return true }
 
 func (TraceProbe) Design() {
 	Migrate()

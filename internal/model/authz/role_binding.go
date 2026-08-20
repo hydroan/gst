@@ -32,6 +32,9 @@ func (RoleBinding) Indexes() []model.Index {
 
 func (r *RoleBinding) Purge() bool { return true }
 
+// TableName pins the table name gorm would otherwise derive.
+func (r *RoleBinding) TableName() string { return "role_bindings" }
+
 func (r *RoleBinding) tenant() string {
 	if r != nil && len(r.TenantID) > 0 {
 		return string(r.TenantID)

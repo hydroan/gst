@@ -15,6 +15,9 @@ type Helloworld2 struct {
 	model.Base
 }
 
+// TableName pins the table name gorm would otherwise derive.
+func (Helloworld2) TableName() string { return "helloworld2" }
+
 type Service2 struct {
 	service.Base[*Helloworld2, *Helloworld2, *Helloworld2]
 }

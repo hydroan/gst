@@ -170,7 +170,8 @@ type TestUser struct {
 	model.Base
 }
 
-func (t *TestUser) Purge() bool { return true }
+func (t *TestUser) TableName() string { return "test_users" }
+func (t *TestUser) Purge() bool       { return true }
 func (t *TestUser) CreateBefore(ctx context.Context) error {
 	t.Remark = new(string(remarkUserCreateBefore))
 	return nil
@@ -191,8 +192,8 @@ type TestUser2 struct {
 	model.Base
 }
 
-func (t *TestUser2) Purge() bool          { return true }
-func (t *TestUser2) GetTableName() string { return "test_users" }
+func (t *TestUser2) Purge() bool       { return true }
+func (t *TestUser2) TableName() string { return "test_users" }
 
 type TestItem struct {
 	Name        string  `json:"name"`
@@ -203,7 +204,8 @@ type TestItem struct {
 	model.Base
 }
 
-func (*TestItem) Purge() bool { return true }
+func (*TestItem) TableName() string { return "test_items" }
+func (*TestItem) Purge() bool       { return true }
 
 type TestPlainItem struct {
 	Code          string `json:"code" gorm:"size:191"`
@@ -213,7 +215,8 @@ type TestPlainItem struct {
 	model.Base
 }
 
-func (*TestPlainItem) Purge() bool { return true }
+func (*TestPlainItem) TableName() string { return "test_plain_items" }
+func (*TestPlainItem) Purge() bool       { return true }
 
 func (i *TestPlainItem) CreateAfter(ctx context.Context) error {
 	i.CreateAfterID = i.ID
@@ -229,7 +232,8 @@ type TestUniqueItem struct {
 	model.Base
 }
 
-func (*TestUniqueItem) Purge() bool { return true }
+func (*TestUniqueItem) TableName() string { return "test_unique_items" }
+func (*TestUniqueItem) Purge() bool       { return true }
 
 func (i *TestUniqueItem) CreateAfter(ctx context.Context) error {
 	i.CreateAfterID = i.ID
@@ -248,7 +252,8 @@ type TestAutoItem struct {
 	model.AutoBase
 }
 
-func (*TestAutoItem) Purge() bool { return true }
+func (*TestAutoItem) TableName() string { return "test_auto_items" }
+func (*TestAutoItem) Purge() bool       { return true }
 
 // TestSoftDeleteItem keeps the model.Base default Purge (soft delete) so write
 // tests can assert how writes treat soft-deleted rows. Its table is migrated
@@ -260,6 +265,8 @@ type TestSoftDeleteItem struct {
 
 	model.Base
 }
+
+func (*TestSoftDeleteItem) TableName() string { return "test_soft_delete_items" }
 
 // TestAggregateRecord is the fixture for aggregate reads: a group key, a
 // second dimension for conditional aggregation, a numeric measure, a float
@@ -284,6 +291,8 @@ type TestAggregateRecord struct {
 	model.Base
 }
 
+func (*TestAggregateRecord) TableName() string { return "test_aggregate_records" }
+
 // TestRecordTag is the related model of TestAggregateRecord, used by the
 // correlated-subquery filters. It soft deletes like its parent, so the tests
 // can assert that a subquery hides the same rows a List on it hides.
@@ -294,12 +303,13 @@ type TestRecordTag struct {
 	model.Base
 }
 
-// TestTagAlias points at the same table as TestRecordTag but under a struct
-// name gorm would derive a different table from ("test_tag_aliases"). gorm
-// reads its own TableName method, not the framework's GetTableName, so a
-// subquery that takes its FROM from the struct and its correlation prefix from
-// GetTableName would name two different tables. It deliberately declares only
-// the framework method, which is what every model in a real project does.
+func (*TestRecordTag) TableName() string { return "test_record_tags" }
+
+// TestTagAlias points at the same table as TestRecordTag while its struct
+// name would derive a different one ("test_tag_aliases"). gorm and the
+// framework read the same TableName method, so the subquery's FROM and its
+// correlation prefix must both resolve to the declared table rather than
+// anything derived from the struct name.
 type TestTagAlias struct {
 	RecordID string `json:"record_id" gorm:"size:191"`
 	Label    string `json:"label" gorm:"size:191"`
@@ -307,7 +317,7 @@ type TestTagAlias struct {
 	model.Base
 }
 
-func (*TestTagAlias) GetTableName() string { return "test_record_tags" }
+func (*TestTagAlias) TableName() string { return "test_record_tags" }
 
 // TestTagNote is the grandchild used by the nested-subquery test: a subquery
 // inside a subquery must correlate against the table directly enclosing it.
@@ -318,13 +328,16 @@ type TestTagNote struct {
 	model.Base
 }
 
+func (*TestTagNote) TableName() string { return "test_tag_notes" }
+
 type TestHookConfig struct {
 	Value string `json:"value" gorm:"size:191"`
 
 	model.Base
 }
 
-func (*TestHookConfig) Purge() bool { return true }
+func (*TestHookConfig) TableName() string { return "test_hook_configs" }
+func (*TestHookConfig) Purge() bool       { return true }
 
 type TestHookGroup struct {
 	ConfigID string `json:"config_id" gorm:"size:191"`
@@ -333,7 +346,8 @@ type TestHookGroup struct {
 	model.Base
 }
 
-func (*TestHookGroup) Purge() bool { return true }
+func (*TestHookGroup) TableName() string { return "test_hook_groups" }
+func (*TestHookGroup) Purge() bool       { return true }
 
 func (g *TestHookGroup) CreateAfter(ctx context.Context) error {
 	if strings.TrimSpace(g.ConfigID) == "" {
@@ -353,7 +367,8 @@ type TestCategory struct {
 	model.Base
 }
 
-func (*TestCategory) Purge() bool { return true }
+func (*TestCategory) TableName() string { return "test_categories" }
+func (*TestCategory) Purge() bool       { return true }
 
 // envTestDatabase overrides the dialect this suite runs against. It is a
 // contract between this TestMain and the Makefile test target, which repeats

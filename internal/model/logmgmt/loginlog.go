@@ -29,6 +29,9 @@ type LoginLog struct {
 	model.Base
 }
 
+// TableName pins the table name gorm would otherwise derive.
+func (LoginLog) TableName() string { return "login_logs" }
+
 // Purge makes every LoginLog deletion a hard delete: the retention cronjob
 // removes expired rows to reclaim space, and a soft-deleted audit trail row
 // would defeat that while pretending the log was trimmed.

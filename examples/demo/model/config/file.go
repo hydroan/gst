@@ -37,8 +37,8 @@ type File struct {
 	model.Base
 }
 
-func (File) GetTableName() string { return "demo_config_files" }
-func (File) Purge() bool          { return true }
+func (File) TableName() string { return "demo_config_files" }
+func (File) Purge() bool       { return true }
 
 func (File) Design() {
 	Endpoint("files")

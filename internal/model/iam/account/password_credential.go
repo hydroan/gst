@@ -23,6 +23,9 @@ func (PasswordCredential) Design() {
 	Migrate()
 }
 
+// TableName pins the table name gorm would otherwise derive.
+func (PasswordCredential) TableName() string { return "password_credentials" }
+
 // Indexes declares one credential row per user; Purge explains why that
 // uniqueness requires hard deletion.
 func (PasswordCredential) Indexes() []model.Index {

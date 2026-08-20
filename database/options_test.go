@@ -544,3 +544,5 @@ type dryRunSoftDeleteUser struct {
 
 	model.Base
 }
+
+func (*dryRunSoftDeleteUser) TableName() string { return "dry_run_soft_delete_users" }
