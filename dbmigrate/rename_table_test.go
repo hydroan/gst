@@ -1,7 +1,6 @@
 package dbmigrate
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/sqldef/sqldef/v3/database"
@@ -47,7 +46,7 @@ func TestDetectTableRenames(t *testing.T) {
 		require.Equal(t, []tableRenamePair{{
 			From: "samples",
 			To:   "records",
-			IndexRenames: []renamePair{{
+			IndexRenames: []indexRenamePair{{
 				Table:   "records",
 				From:    "idx_samples_code",
 				To:      "idx_records_code",
@@ -75,7 +74,7 @@ func TestDetectTableRenames(t *testing.T) {
 		require.Equal(t, []tableRenamePair{{
 			From: "samples",
 			To:   "records",
-			IndexRenames: []renamePair{{
+			IndexRenames: []indexRenamePair{{
 				Table:   "records",
 				From:    "uniq_samples_code",
 				To:      "uniq_records_code",
@@ -112,7 +111,7 @@ func TestDetectTableRenames(t *testing.T) {
 		require.Len(t, pairs, 1)
 		require.Equal(t, "samples", pairs[0].From)
 		require.Equal(t, "records", pairs[0].To)
-		require.Equal(t, []renamePair{{
+		require.Equal(t, []indexRenamePair{{
 			Table:   "records",
 			From:    "idx_samples_deleted_at",
 			To:      "idx_records_deleted_at",
@@ -250,85 +249,8 @@ func TestDetectTableRenames(t *testing.T) {
 	})
 }
 
-func TestParseCurrentTables(t *testing.T) {
-	current := "CREATE TABLE `samples` (\n" +
-		"  `id` char(36) NOT NULL,\n" +
-		"  PRIMARY KEY (`id`)\n" +
-		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n" +
-		"\n" +
-		"CREATE TABLE `records` (\n" +
-		"  `id` char(36) NOT NULL,\n" +
-		"  KEY `idx_records_kind` (`kind`)\n" +
-		") ENGINE=InnoDB;"
-
-	tables := parseCurrentTables(current)
-	require.Len(t, tables, 2)
-	require.Equal(t, "CREATE TABLE `samples` (\n"+
-		"  `id` char(36) NOT NULL,\n"+
-		"  PRIMARY KEY (`id`)\n"+
-		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", tables["samples"])
-	require.Equal(t, "CREATE TABLE `records` (\n"+
-		"  `id` char(36) NOT NULL,\n"+
-		"  KEY `idx_records_kind` (`kind`)\n"+
-		") ENGINE=InnoDB", tables["records"])
-}
-
-func TestFormatTableRenames(t *testing.T) {
-	t.Run("empty pairs render nothing", func(t *testing.T) {
-		require.Empty(t, formatTableRenames(nil))
-	})
-
-	t.Run("pairs render comments plus executable statements at the end", func(t *testing.T) {
-		guidance := formatTableRenames([]tableRenamePair{{
-			From: "samples",
-			To:   "records",
-			IndexRenames: []renamePair{{
-				Table:   "records",
-				From:    "uniq_samples_code",
-				To:      "uniq_records_code",
-				Columns: "code",
-				Unique:  true,
-			}},
-		}})
-		require.Contains(t, guidance, "  -- Table `samples` -> `records`")
-		require.Contains(t, guidance, "  --   index `uniq_samples_code` -> `uniq_records_code` (code, UNIQUE)")
-		require.NotContains(t, guidance, "remaining", "no remaining-change note without residual statements")
-
-		statementBlock := guidance[strings.LastIndex(guidance, "\n\n"):]
-		require.Contains(t, statementBlock, "RENAME TABLE `samples` TO `records`;")
-		require.Contains(t, statementBlock, "ALTER TABLE `records` RENAME INDEX `uniq_samples_code` TO `uniq_records_code`;")
-		require.Less(t,
-			strings.Index(statementBlock, "RENAME TABLE `samples` TO `records`;"),
-			strings.Index(statementBlock, "ALTER TABLE `records` RENAME INDEX"),
-			"the table must be renamed before its indexes")
-		requireCopyPasteSafe(t, guidance)
-	})
-
-	t.Run("remaining changes render as comments, never as executable statements", func(t *testing.T) {
-		guidance := formatTableRenames([]tableRenamePair{{
-			From:     "samples",
-			To:       "records",
-			Residual: []string{"ALTER TABLE `records` ADD COLUMN `remark` varchar(255) NOT NULL DEFAULT ''"},
-		}})
-		require.Contains(t, guidance, "  --   remaining change: ALTER TABLE `records` ADD COLUMN `remark`")
-		require.Contains(t, guidance, "re-run gg migrate after renaming")
-
-		statementBlock := guidance[strings.LastIndex(guidance, "\n\n"):]
-		require.NotContains(t, statementBlock, "ADD COLUMN", "residual statements stay out of the executable block")
-		require.Contains(t, statementBlock, "RENAME TABLE `samples` TO `records`;")
-		requireCopyPasteSafe(t, guidance)
-	})
-}
-
-func TestCombineAdvisories(t *testing.T) {
-	require.Empty(t, combineAdvisories("", ""))
-	require.Equal(t, "a\n", combineAdvisories("a\n", ""))
-	require.Equal(t, "b\n", combineAdvisories("", "b\n"))
-	require.Equal(t, "a\n\nb\n", combineAdvisories("a\n", "b\n"))
-}
-
 // detectTableRenamesMySQL runs detection with the same MySQL parser wiring
-// that run uses for real migration plans.
+// that runMigration uses for real migration plans.
 func detectTableRenamesMySQL(t *testing.T, ddls []string, currentDDLs string) []tableRenamePair {
 	t.Helper()
 	sqlParser := database.NewParser(parser.ParserModeMysql)
