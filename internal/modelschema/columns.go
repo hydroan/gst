@@ -45,28 +45,6 @@ var namer = schema.NamingStrategy{}
 // columnsCache memoizes the resolved columns per model type.
 var columnsCache sync.Map
 
-// TableName resolves the table a model type maps to, using the same gorm
-// naming strategy the drivers run with.
-//
-// It exists because a model's own GetTableName is empty unless the model
-// overrides it: the framework base returns "", and gorm then derives the name
-// from the struct. Code that has to write the table name into SQL itself, such
-// as the correlated-subquery filters, cannot rely on GetTableName alone and
-// must not re-derive the name with its own snake case conversion either.
-func TableName(typ reflect.Type) (string, error) {
-	for typ != nil && typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
-	}
-	if typ == nil || typ.Kind() != reflect.Struct {
-		return "", errors.Newf("modelschema: expect a struct type, got %v", typ)
-	}
-	parsed, err := schema.Parse(reflect.New(typ).Interface(), schemaCache, namer)
-	if err != nil {
-		return "", errors.Wrapf(err, "modelschema: parse %s", typ.String())
-	}
-	return parsed.Table, nil
-}
-
 // Columns returns every database column of a model struct type, sorted by
 // database column name so repeated calls and generated code stay stable. The
 // type may be a struct or a pointer to one.

@@ -102,22 +102,15 @@ func (s *SchemaDumper) Dump(driver config.DBType, dst ...any) (string, error) {
 
 	statements := make([]schemaStatement, 0, len(models))
 	for _, v := range models {
-		var tableName string
-		if namer, ok := v.(interface{ GetTableName() string }); ok {
-			tableName = namer.GetTableName()
-		} else {
-			rv := reflect.ValueOf(v)
-			if rv.Kind() == reflect.Struct {
-				if namer, ok := reflect.TypeAssert[interface{ GetTableName() string }](reflect.New(rv.Type())); ok {
-					tableName = namer.GetTableName()
-				}
-			}
+		if err = requireExplicitTableName(v); err != nil {
+			return "", err
 		}
 
+		// The table name is not supplied through Table(): gorm reads the
+		// model's own TableName method through its Tabler interface, and a
+		// supplied name would make gorm re-parse the schema under a special
+		// table name, renaming the constraints of associated models.
 		tx := db.Set("gorm:table_options", tableOptions)
-		if tableName != "" {
-			tx = tx.Table(tableName)
-		}
 		sqlStart := len(dumpLog.SQLs)
 		if err = tx.Migrator().CreateTable(v); err != nil {
 			return "", err
@@ -133,7 +126,7 @@ func (s *SchemaDumper) Dump(driver config.DBType, dst ...any) (string, error) {
 		// Plans and statement rendering are shared with the bootstrap
 		// executor, so the desired schema always matches the DDL that the
 		// runtime actually applies.
-		plans, planErr := modelregistry.ParseIndexPlans(db, v, tableName)
+		plans, planErr := modelregistry.ParseIndexPlans(db, v)
 		if planErr != nil {
 			return "", planErr
 		}
@@ -214,6 +207,25 @@ func schemaModelName(model any) string {
 		typ = typ.Elem()
 	}
 	return typ.String()
+}
+
+// requireExplicitTableName rejects models that do not declare an explicit
+// table name. gorm reads the same TableName method through its Tabler
+// interface while rendering the DDL, so a model without one would dump a
+// schema targeting an empty table name. Value models are probed through a
+// zero-value pointer because the method lives on the pointer receiver.
+func requireExplicitTableName(model any) error {
+	tabler, ok := model.(interface{ TableName() string })
+	if !ok {
+		rv := reflect.ValueOf(model)
+		if rv.Kind() == reflect.Struct {
+			tabler, ok = reflect.TypeAssert[interface{ TableName() string }](reflect.New(rv.Type()))
+		}
+	}
+	if !ok || len(tabler.TableName()) == 0 {
+		return errors.Newf("model %T must declare an explicit table name by overriding TableName", model)
+	}
+	return nil
 }
 
 // shouldAnnotateSchemaStatement reports whether the statement opens a model's

@@ -4,12 +4,8 @@ import (
 	"reflect"
 	"sync/atomic"
 
-	"github.com/gertd/go-pluralize"
 	"github.com/hydroan/gst/types"
-	"github.com/stoewer/go-strcase"
 )
-
-var pluralizeCli = pluralize.NewClient()
 
 // TableChan is the internal queue for default-database table registration.
 // It receives model values from EnqueueTable for processing by dbruntime.InitDatabase.
@@ -39,11 +35,6 @@ func TableDone() {
 // prepared.
 func TablesPending() int {
 	return int(tablesPending.Load())
-}
-
-// GetTableName returns the default table name for a model type.
-func GetTableName[M types.Model]() string {
-	return strcase.SnakeCase(pluralizeCli.Plural(reflect.TypeOf(*new(M)).Elem().Name()))
 }
 
 // AreTypesEqual reports whether M, REQ, and RSP are the same concrete type.

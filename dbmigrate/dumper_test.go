@@ -17,11 +17,15 @@ type User struct {
 	model.Base
 }
 
+func (*User) TableName() string { return "users" }
+
 type Group struct {
 	Name string `json:"name"`
 
 	model.Base
 }
+
+func (*Group) TableName() string { return "groups" }
 
 // Sample declares custom indexes through the Indexer capability while also
 // carrying a plain struct tag column.
@@ -32,7 +36,7 @@ type Sample struct {
 	model.Base
 }
 
-func (*Sample) GetTableName() string { return "samples" }
+func (*Sample) TableName() string { return "samples" }
 
 func (*Sample) Indexes() []model.Index {
 	return []model.Index{

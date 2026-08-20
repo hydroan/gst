@@ -13,12 +13,15 @@ import (
 // Type Requirements:
 //   - Must be a pointer to struct (e.g., *User)
 //   - Database resources should expose an ID primary key through GetID/SetID/ClearID
+//   - Database resources must override TableName with an explicit non-empty
+//     name: gorm's Tabler reads the same method, and the base default "" is
+//     rejected at table preparation and inside gg migrate
 //   - Hooks should be idempotent enough to run as part of framework CRUD phases
 type Model interface {
-	GetTableName() string // GetTableName returns the table name.
-	GetID() string        // GetID returns the string form of the id, or "" when the id is unset.
-	SetID(id ...string)   // SetID sets the id when unset; Base generates a UUID without an argument while AutoBase leaves generation to the database.
-	ClearID()             // ClearID always set the id to empty.
+	TableName() string  // TableName returns the explicit table name; gorm's Tabler reads the same method.
+	GetID() string      // GetID returns the string form of the id, or "" when the id is unset.
+	SetID(id ...string) // SetID sets the id when unset; Base generates a UUID without an argument while AutoBase leaves generation to the database.
+	ClearID()           // ClearID always set the id to empty.
 	GetCreatedBy() string
 	GetUpdatedBy() string
 	GetCreatedAt() time.Time

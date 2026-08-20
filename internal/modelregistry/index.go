@@ -87,9 +87,10 @@ func (p IndexPlan) CreateSQL(dialector gorm.Dialector) string {
 // model against its gorm schema parsed through db. It returns nil plans when
 // the model does not implement Indexer or declares no indexes.
 //
-// tableName overrides the schema-derived table name; callers should pass the
-// model's GetTableName result so names and DDL target the real table.
-func ParseIndexPlans(db *gorm.DB, model any, tableName string) ([]IndexPlan, error) {
+// The table name comes from the parsed schema, which reads the model's own
+// TableName method through gorm's Tabler; a model without an explicit name is
+// rejected so no plan ever targets an empty table.
+func ParseIndexPlans(db *gorm.DB, model any) ([]IndexPlan, error) {
 	indexer, ok := asIndexer(model)
 	if !ok {
 		return nil, nil
@@ -104,10 +105,10 @@ func ParseIndexPlans(db *gorm.DB, model any, tableName string) ([]IndexPlan, err
 		return nil, errors.Wrapf(err, "failed to parse schema for custom indexes of %T", model)
 	}
 	sch := stmt.Schema
-	if len(tableName) == 0 {
-		tableName = sch.Table
+	if len(sch.Table) == 0 {
+		return nil, errors.Newf("model %s must declare an explicit table name by overriding TableName", sch.Name)
 	}
-	return buildIndexPlans(sch, tableName, decls)
+	return buildIndexPlans(sch, sch.Table, decls)
 }
 
 // buildIndexPlans validates declarations and resolves them into plans:

@@ -42,20 +42,17 @@ func NowUTC() time.Time { return time.Now().UTC().Truncate(time.Millisecond) }
 // startedTable is an atomic flag to ensure table processing goroutine starts only once
 var startedTable atomic.Int32
 
-// resolveTableName returns the table a model is backed by. Models may either
-// declare an explicit name through GetTableName or leave it empty and rely on
-// gorm's naming strategy; both forms are supported, so every consumer of a
-// model table name must resolve through this helper instead of trusting
-// GetTableName alone.
-func resolveTableName(handler *gorm.DB, m types.Model) (string, error) {
-	if tableName := m.GetTableName(); len(tableName) > 0 {
-		return tableName, nil
+// requireTableName returns the model's explicit table name and rejects the
+// base default "". gorm's Tabler reads the same TableName method, so a model
+// without an explicit name would flow an empty table into every statement;
+// failing here turns the missing declaration into a clear startup error
+// naming the model instead.
+func requireTableName(m types.Model) (string, error) {
+	tableName := m.TableName()
+	if len(tableName) == 0 {
+		return "", errors.Newf("model %T must declare an explicit table name by overriding TableName", m)
 	}
-	stmt := &gorm.Statement{DB: handler}
-	if err := stmt.Parse(m); err != nil {
-		return "", err
-	}
-	return stmt.Schema.Table, nil
+	return tableName, nil
 }
 
 // ensureTable prepares the backing table for a registered model.
@@ -72,15 +69,16 @@ func resolveTableName(handler *gorm.DB, m types.Model) (string, error) {
 // keeps the zero-config defaults (sqlite, in-memory, auto_migrate off) bootable
 // instead of panicking on the first registered model.
 func ensureTable(handler *gorm.DB, m types.Model) error {
+	tableName, err := requireTableName(m)
+	if err != nil {
+		return err
+	}
+
 	// ClickHouse schema — engine, ORDER BY, partitioning, TTL — is a
 	// query-model design the framework cannot derive from a Go struct, so it
 	// is never created or migrated here: the application owns it through
 	// hand-written DDL, and bootstrap only verifies the table exists.
 	if handler.Dialector != nil && strings.ToLower(handler.Dialector.Name()) == "clickhouse" {
-		tableName, err := resolveTableName(handler, m)
-		if err != nil {
-			return err
-		}
 		if !handler.Migrator().HasTable(tableName) {
 			return errors.Newf("table %q does not exist: clickhouse tables are managed by hand-written DDL on the application side, create it before starting", tableName)
 		}
@@ -89,18 +87,14 @@ func ensureTable(handler *gorm.DB, m types.Model) error {
 
 	inMemory := config.App.Database.Type == config.DBSqlite && config.App.Sqlite.IsMemory
 	if config.App.Database.AutoMigrate || inMemory {
-		// AutoMigrate takes the raw GetTableName, not a resolved name: gorm
-		// re-parses the schema under a special table name whenever one is
-		// supplied, which renames the constraints of associated models. An
-		// empty name is what lets gorm apply its own naming strategy here.
-		if err := handler.Table(m.GetTableName()).AutoMigrate(m); err != nil {
+		// AutoMigrate reads the table name through gorm's Tabler, which is
+		// the model's own TableName method. Supplying it again through
+		// Table() would make gorm re-parse the schema under a special table
+		// name, which renames the constraints of associated models.
+		if err := handler.AutoMigrate(m); err != nil {
 			return err
 		}
 		return ensureCustomIndexes(handler, m)
-	}
-	tableName, err := resolveTableName(handler, m)
-	if err != nil {
-		return err
 	}
 	if !handler.Migrator().HasTable(tableName) {
 		return errors.Newf("table %q does not exist: run \"gg migrate\" to apply the schema, or enable database.auto_migrate for local development", tableName)

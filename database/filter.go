@@ -373,15 +373,12 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 		return db.failClosedFilter(f, "cannot resolve the table to correlate against")
 	}
 	childType := reflect.TypeOf(sq.Model)
-	childTable := sq.Model.GetTableName()
+	childTable := sq.Model.TableName()
 	if len(childTable) == 0 {
-		// A model only reports a table name when it overrides GetTableName;
-		// otherwise gorm derives it, so the same resolution is used here.
-		resolved, err := modelschema.TableName(childType)
-		if err != nil {
-			return db.failClosedFilter(f, "related model has no resolvable table name")
-		}
-		childTable = resolved
+		// Every model must declare its table name; a missing declaration
+		// fails the predicate closed instead of flowing an empty table name
+		// into SQL.
+		return db.failClosedFilter(f, "related model declares no table name")
 	}
 	childColumns, err := modelschema.Columns(childType)
 	if err != nil {
@@ -421,11 +418,10 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 	correlation := db.quoteTableColumn(childRef, sq.ChildColumn) +
 		" = " + db.quoteTableColumn(scope.parent, sq.ParentColumn)
 
-	// Table is set explicitly alongside Model. Model alone would let gorm name
-	// the FROM from the struct, and gorm reads its own TableName method rather
-	// than the framework's GetTableName, so a model that overrides only the
-	// latter would be selected FROM one table while the correlation qualifies
-	// another.
+	// Table is set explicitly alongside Model: the correlation and nested
+	// filters qualify columns with childRef, so the FROM clause must carry
+	// the same name — including its aliased form — rather than the bare name
+	// gorm would take from the struct.
 	sub := db.ins.Session(&gorm.Session{NewDB: true}).
 		Table(from).
 		Model(sq.Model).
@@ -460,9 +456,10 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 }
 
 // outerTableName resolves the table the current chain reads, for qualifying
-// the outer side of a correlation. It derives the name from M directly instead
+// the outer side of a correlation. It reads the name from M directly instead
 // of from the prepared model, because filters are built while the chain is
-// still being assembled, before the terminal operation prepares it.
+// still being assembled, before the terminal operation prepares it. A model
+// without an explicit table name yields "", which the caller fails closed.
 func (db *database[M]) outerTableName() string {
 	typ := reflect.TypeOf(*new(M))
 	if typ == nil || typ.Kind() != reflect.Pointer {
@@ -472,12 +469,5 @@ func (db *database[M]) outerTableName() string {
 	if !ok {
 		return ""
 	}
-	if name := m.GetTableName(); len(name) > 0 {
-		return name
-	}
-	name, err := modelschema.TableName(typ)
-	if err != nil {
-		return ""
-	}
-	return name
+	return m.TableName()
 }

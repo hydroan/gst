@@ -2,13 +2,10 @@ package auditmanager
 
 import (
 	"context"
-	"reflect"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/gertd/go-pluralize"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/ds/queue/circularbuffer"
@@ -16,8 +13,6 @@ import (
 	"github.com/hydroan/gst/types"
 	"go.uber.org/zap"
 )
-
-var pluralizeCli = pluralize.NewClient()
 
 // AuditManager manages audit logging based on configuration.
 // It provides a centralized way to handle operation logging across all Factory functions,
@@ -51,16 +46,8 @@ func (am *AuditManager) RecordOperation(ctx context.Context, m types.Model, oper
 		return nil
 	}
 
-	// Record the table name
-	tableName := m.GetTableName()
-	if len(tableName) == 0 {
-		typ := reflect.TypeOf(m).Elem()
-		items := strings.Split(typ.Name(), ".")
-		if len(items) > 0 {
-			tableName = pluralizeCli.Plural(strings.ToLower(items[len(items)-1]))
-		}
-	}
-	operationLog.Table = tableName
+	// Record the table name; every model declares it explicitly.
+	operationLog.Table = m.TableName()
 
 	if am.config.AsyncWrite {
 		// Use existing circular buffer for async writing
@@ -85,15 +72,8 @@ func (am *AuditManager) RecordBatchOperations(ctx context.Context, m types.Model
 		return nil
 	}
 
-	// Record the table name
-	tableName := m.GetTableName()
-	if len(tableName) == 0 {
-		typ := reflect.TypeOf(m).Elem()
-		items := strings.Split(typ.Name(), ".")
-		if len(items) > 0 {
-			tableName = pluralizeCli.Plural(strings.ToLower(items[len(items)-1]))
-		}
-	}
+	// Record the table name; every model declares it explicitly.
+	tableName := m.TableName()
 	for _, operationLog := range operationLogs {
 		operationLog.Table = tableName
 	}

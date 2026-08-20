@@ -44,7 +44,7 @@ type indexedRecord struct {
 	modelregistry.Base
 }
 
-func (*indexedRecord) GetTableName() string { return "indexed_records" }
+func (*indexedRecord) TableName() string { return "indexed_records" }
 
 func (*indexedRecord) Indexes() []modelregistry.Index {
 	return []modelregistry.Index{
@@ -60,7 +60,7 @@ type renamedRecord struct {
 	modelregistry.Base
 }
 
-func (*renamedRecord) GetTableName() string { return "renamed_records" }
+func (*renamedRecord) TableName() string { return "renamed_records" }
 
 func (*renamedRecord) Indexes() []modelregistry.Index {
 	return []modelregistry.Index{{Fields: []string{"Kind", "CreatedAt"}}}
@@ -74,16 +74,14 @@ type occupiedRecord struct {
 	modelregistry.Base
 }
 
-func (*occupiedRecord) GetTableName() string { return "occupied_records" }
+func (*occupiedRecord) TableName() string { return "occupied_records" }
 
 func (*occupiedRecord) Indexes() []modelregistry.Index {
 	return []modelregistry.Index{{Fields: []string{"Kind", "CreatedAt"}}}
 }
 
-// unnamedRecord leaves GetTableName at the Base default, relying on gorm's
-// naming strategy for its table. Custom indexes must resolve the same table
-// name the model is actually migrated into. The column sizes keep the indexed
-// columns within the key length MySQL allows.
+// unnamedRecord leaves TableName at the Base default; ensuring its indexes
+// must be rejected, because no model may leave its table name undeclared.
 type unnamedRecord struct {
 	Code string `gorm:"size:64"`
 	Kind string `gorm:"size:64"`
@@ -95,6 +93,21 @@ func (*unnamedRecord) Indexes() []modelregistry.Index {
 	return []modelregistry.Index{{Fields: []string{"Code", "Kind"}, Unique: true}}
 }
 
+// sizedRecord declares its table name and caps the indexed column sizes so
+// the unique key stays within the key length MySQL allows.
+type sizedRecord struct {
+	Code string `gorm:"size:64"`
+	Kind string `gorm:"size:64"`
+
+	modelregistry.Base
+}
+
+func (*sizedRecord) TableName() string { return "sized_records" }
+
+func (*sizedRecord) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"Code", "Kind"}, Unique: true}}
+}
+
 // invalidRecord declares an index on a field that does not exist.
 type invalidRecord struct {
 	Name string
@@ -102,7 +115,7 @@ type invalidRecord struct {
 	modelregistry.Base
 }
 
-func (*invalidRecord) GetTableName() string { return "invalid_records" }
+func (*invalidRecord) TableName() string { return "invalid_records" }
 
 func (*invalidRecord) Indexes() []modelregistry.Index {
 	return []modelregistry.Index{{Fields: []string{"Missing"}}}
@@ -111,13 +124,13 @@ func (*invalidRecord) Indexes() []modelregistry.Index {
 func TestEnsureCustomIndexes(t *testing.T) {
 	db := newSQLiteDB(t)
 	m := &indexedRecord{}
-	require.NoError(t, db.Table(m.GetTableName()).AutoMigrate(m))
+	require.NoError(t, db.Table(m.TableName()).AutoMigrate(m))
 
 	require.NoError(t, ensureCustomIndexes(db, m))
 	// A second run must be idempotent.
 	require.NoError(t, ensureCustomIndexes(db, m))
 
-	indexes, err := db.Migrator().GetIndexes(m.GetTableName())
+	indexes, err := db.Migrator().GetIndexes(m.TableName())
 	require.NoError(t, err)
 	columnsByName := make(map[string][]string, len(indexes))
 	uniqueByName := make(map[string]bool, len(indexes))
@@ -135,7 +148,7 @@ func TestEnsureCustomIndexes(t *testing.T) {
 func TestEnsureCustomIndexesRejectsRenameCandidate(t *testing.T) {
 	db := newSQLiteDB(t)
 	m := &renamedRecord{}
-	require.NoError(t, db.Table(m.GetTableName()).AutoMigrate(m))
+	require.NoError(t, db.Table(m.TableName()).AutoMigrate(m))
 	require.NoError(t, db.Exec("CREATE INDEX legacy_records_kind ON renamed_records(kind, created_at)").Error)
 
 	err := ensureCustomIndexes(db, m)
@@ -146,41 +159,18 @@ func TestEnsureCustomIndexesRejectsRenameCandidate(t *testing.T) {
 func TestEnsureCustomIndexesRejectsOccupiedName(t *testing.T) {
 	db := newSQLiteDB(t)
 	m := &occupiedRecord{}
-	require.NoError(t, db.Table(m.GetTableName()).AutoMigrate(m))
+	require.NoError(t, db.Table(m.TableName()).AutoMigrate(m))
 	require.NoError(t, db.Exec("CREATE INDEX idx_occupied_records_kind_created_at ON occupied_records(code)").Error)
 
 	err := ensureCustomIndexes(db, m)
 	require.ErrorContains(t, err, "exists with a different definition")
 }
 
-func TestEnsureCustomIndexesWithoutDeclaredTableName(t *testing.T) {
-	m := &unnamedRecord{}
+func TestEnsureCustomIndexesRejectsUndeclaredTableName(t *testing.T) {
+	db := newSQLiteDB(t)
 
-	t.Run("creates and stays idempotent", func(t *testing.T) {
-		db := newSQLiteDB(t)
-		require.NoError(t, db.AutoMigrate(m))
-
-		require.NoError(t, ensureCustomIndexes(db, m))
-		// A second run must be idempotent.
-		require.NoError(t, ensureCustomIndexes(db, m))
-
-		indexes, err := db.Migrator().GetIndexes("unnamed_records")
-		require.NoError(t, err)
-		columnsByName := make(map[string][]string, len(indexes))
-		for _, idx := range indexes {
-			columnsByName[idx.Name()] = idx.Columns()
-		}
-		require.Equal(t, []string{"code", "kind"}, columnsByName["uniq_unnamed_records_code_kind"])
-	})
-
-	t.Run("rejects rename candidate", func(t *testing.T) {
-		db := newSQLiteDB(t)
-		require.NoError(t, db.AutoMigrate(m))
-		require.NoError(t, db.Exec("CREATE UNIQUE INDEX legacy_unnamed_records_code_kind ON unnamed_records(code, kind)").Error)
-
-		err := ensureCustomIndexes(db, m)
-		require.ErrorContains(t, err, `already exists as "legacy_unnamed_records_code_kind"`)
-	})
+	err := ensureCustomIndexes(db, &unnamedRecord{})
+	require.ErrorContains(t, err, "must declare an explicit table name")
 }
 
 // TestEnsureCustomIndexesOnMySQL covers the same contract on MySQL, whose
@@ -188,7 +178,7 @@ func TestEnsureCustomIndexesWithoutDeclaredTableName(t *testing.T) {
 // duplicate name outright. It skips when no server is reachable.
 func TestEnsureCustomIndexesOnMySQL(t *testing.T) {
 	db := newMySQLDB(t)
-	m := &unnamedRecord{}
+	m := &sizedRecord{}
 
 	require.NoError(t, db.Migrator().DropTable(m))
 	t.Cleanup(func() { _ = db.Migrator().DropTable(m) })
@@ -198,7 +188,7 @@ func TestEnsureCustomIndexesOnMySQL(t *testing.T) {
 	// A second run must be idempotent.
 	require.NoError(t, ensureCustomIndexes(db, m))
 
-	indexes, err := db.Migrator().GetIndexes("unnamed_records")
+	indexes, err := db.Migrator().GetIndexes("sized_records")
 	require.NoError(t, err)
 	columnsByName := make(map[string][]string, len(indexes))
 	uniqueByName := make(map[string]bool, len(indexes))
@@ -208,22 +198,22 @@ func TestEnsureCustomIndexesOnMySQL(t *testing.T) {
 			uniqueByName[idx.Name()] = unique
 		}
 	}
-	require.Equal(t, []string{"code", "kind"}, columnsByName["uniq_unnamed_records_code_kind"])
-	require.True(t, uniqueByName["uniq_unnamed_records_code_kind"])
+	require.Equal(t, []string{"code", "kind"}, columnsByName["uniq_sized_records_code_kind"])
+	require.True(t, uniqueByName["uniq_sized_records_code_kind"])
 
 	// The same definition living under a foreign name must be reported as a
 	// rename candidate instead of being created a second time.
-	require.NoError(t, db.Migrator().DropIndex(m, "uniq_unnamed_records_code_kind"))
-	require.NoError(t, db.Exec("CREATE UNIQUE INDEX legacy_unnamed_records_code_kind ON unnamed_records(code, kind)").Error)
+	require.NoError(t, db.Migrator().DropIndex(m, "uniq_sized_records_code_kind"))
+	require.NoError(t, db.Exec("CREATE UNIQUE INDEX legacy_sized_records_code_kind ON sized_records(code, kind)").Error)
 
 	err = ensureCustomIndexes(db, m)
-	require.ErrorContains(t, err, `already exists as "legacy_unnamed_records_code_kind"`)
+	require.ErrorContains(t, err, `already exists as "legacy_sized_records_code_kind"`)
 }
 
 func TestEnsureCustomIndexesRejectsInvalidDeclaration(t *testing.T) {
 	db := newSQLiteDB(t)
 	m := &invalidRecord{}
-	require.NoError(t, db.Table(m.GetTableName()).AutoMigrate(m))
+	require.NoError(t, db.Table(m.TableName()).AutoMigrate(m))
 
 	err := ensureCustomIndexes(db, m)
 	require.ErrorContains(t, err, `unknown field "Missing"`)

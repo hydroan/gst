@@ -15,7 +15,7 @@ type plainRecord struct {
 	modelregistry.Base
 }
 
-func (*plainRecord) GetTableName() string { return "plain_records" }
+func (*plainRecord) TableName() string { return "plain_records" }
 
 func TestEnsureTableCreatesTableWhenAutoMigrateEnabled(t *testing.T) {
 	db := newSQLiteDB(t)
@@ -54,30 +54,21 @@ func TestEnsureTablePassesWhenDisabledAndTableExists(t *testing.T) {
 	require.NoError(t, ensureTable(db, &plainRecord{}))
 }
 
-// derivedRecord omits an explicit table name and relies on gorm's naming strategy.
-type derivedRecord struct {
+// undeclaredRecord omits an explicit table name; table preparation must
+// reject it instead of falling back to gorm's naming strategy.
+type undeclaredRecord struct {
 	Name string
 
 	modelregistry.Base
 }
 
-func TestEnsureTableResolvesDerivedTableName(t *testing.T) {
+func TestEnsureTableRejectsUndeclaredTableName(t *testing.T) {
 	db := newSQLiteDB(t)
 	withAutoMigrate(t, true)
-	require.NoError(t, ensureTable(db, &derivedRecord{}))
-	require.True(t, db.Migrator().HasTable("derived_records"))
 
-	withAutoMigrate(t, false)
-	require.NoError(t, ensureTable(db, &derivedRecord{}))
-}
-
-func TestEnsureTableReportsDerivedTableNameWhenMissing(t *testing.T) {
-	db := newSQLiteDB(t)
-	withAutoMigrate(t, false)
-
-	err := ensureTable(db, &derivedRecord{})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), `"derived_records"`)
+	err := ensureTable(db, &undeclaredRecord{})
+	require.ErrorContains(t, err, "must declare an explicit table name")
+	require.False(t, db.Migrator().HasTable("undeclared_records"))
 }
 
 // withAutoMigrate overrides the auto-migrate option and restores it on cleanup.

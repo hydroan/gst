@@ -20,7 +20,7 @@ type IndexedSample struct {
 	modelregistry.Base
 }
 
-func (*IndexedSample) GetTableName() string { return "indexed_samples" }
+func (*IndexedSample) TableName() string { return "indexed_samples" }
 
 func (*IndexedSample) Indexes() []modelregistry.Index {
 	return []modelregistry.Index{
@@ -43,6 +43,8 @@ type EmptyFieldsSample struct {
 	modelregistry.Base
 }
 
+func (*EmptyFieldsSample) TableName() string { return "empty_fields_samples" }
+
 func (*EmptyFieldsSample) Indexes() []modelregistry.Index {
 	return []modelregistry.Index{{}}
 }
@@ -53,6 +55,8 @@ type UnknownFieldSample struct {
 
 	modelregistry.Base
 }
+
+func (*UnknownFieldSample) TableName() string { return "unknown_field_samples" }
 
 func (*UnknownFieldSample) Indexes() []modelregistry.Index {
 	return []modelregistry.Index{{Fields: []string{"Missing"}}}
@@ -65,6 +69,8 @@ type RepeatedColumnSample struct {
 	modelregistry.Base
 }
 
+func (*RepeatedColumnSample) TableName() string { return "repeated_column_samples" }
+
 func (*RepeatedColumnSample) Indexes() []modelregistry.Index {
 	return []modelregistry.Index{{Fields: []string{"Kind", "Kind"}}}
 }
@@ -75,6 +81,8 @@ type DuplicateDeclSample struct {
 
 	modelregistry.Base
 }
+
+func (*DuplicateDeclSample) TableName() string { return "duplicate_decl_samples" }
 
 func (*DuplicateDeclSample) Indexes() []modelregistry.Index {
 	return []modelregistry.Index{
@@ -92,6 +100,8 @@ type TagNameConflictSample struct {
 	modelregistry.Base
 }
 
+func (*TagNameConflictSample) TableName() string { return "tag_name_conflict_samples" }
+
 func (*TagNameConflictSample) Indexes() []modelregistry.Index {
 	return []modelregistry.Index{{Fields: []string{"Kind"}}}
 }
@@ -104,8 +114,21 @@ type TagColumnsConflictSample struct {
 	modelregistry.Base
 }
 
+func (*TagColumnsConflictSample) TableName() string { return "tag_columns_conflict_samples" }
+
 func (*TagColumnsConflictSample) Indexes() []modelregistry.Index {
 	return []modelregistry.Index{{Fields: []string{"Code"}}}
+}
+
+// NoTableNameSample implements Indexer but never declares its table name.
+type NoTableNameSample struct {
+	Kind string
+
+	modelregistry.Base
+}
+
+func (*NoTableNameSample) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"Kind"}}}
 }
 
 func TestParseIndexPlans(t *testing.T) {
@@ -117,24 +140,17 @@ func TestParseIndexPlans(t *testing.T) {
 			{Name: "uniq_indexed_samples_code_kind", Table: "indexed_samples", Columns: []string{"code", "kind"}, Unique: true},
 		}
 
-		plans, err := modelregistry.ParseIndexPlans(db, &IndexedSample{}, "indexed_samples")
+		plans, err := modelregistry.ParseIndexPlans(db, &IndexedSample{})
 		require.NoError(t, err)
 		require.Equal(t, want, plans)
 
-		plans, err = modelregistry.ParseIndexPlans(db, IndexedSample{}, "indexed_samples")
+		plans, err = modelregistry.ParseIndexPlans(db, IndexedSample{})
 		require.NoError(t, err)
 		require.Equal(t, want, plans)
-	})
-
-	t.Run("empty table name falls back to the schema table", func(t *testing.T) {
-		plans, err := modelregistry.ParseIndexPlans(db, &IndexedSample{}, "")
-		require.NoError(t, err)
-		require.Len(t, plans, 2)
-		require.Equal(t, "indexed_samples", plans[0].Table)
 	})
 
 	t.Run("models without the capability yield no plans", func(t *testing.T) {
-		plans, err := modelregistry.ParseIndexPlans(db, &PlainSample{}, "plain_samples")
+		plans, err := modelregistry.ParseIndexPlans(db, &PlainSample{})
 		require.NoError(t, err)
 		require.Nil(t, plans)
 	})
@@ -154,26 +170,44 @@ func TestParseIndexPlansValidation(t *testing.T) {
 		{"duplicate declaration", &DuplicateDeclSample{}, "duplicate custom index"},
 		{"tag index name conflict", &TagNameConflictSample{}, "conflicts with struct tag index"},
 		{"tag index columns conflict", &TagColumnsConflictSample{}, `duplicates struct tag index "custom_code_idx"`},
+		{"missing table name", &NoTableNameSample{}, "must declare an explicit table name"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := modelregistry.ParseIndexPlans(db, tt.model, "")
+			_, err := modelregistry.ParseIndexPlans(db, tt.model)
 			require.ErrorContains(t, err, tt.want)
 		})
 	}
 }
 
+// LongTableNameSample carries a table name long enough to push generated
+// index names past the identifier limit.
+type LongTableNameSample struct {
+	Code string
+	Kind string
+
+	modelregistry.Base
+}
+
+func (*LongTableNameSample) TableName() string {
+	return "an_extremely_long_table_name_used_to_exercise_truncation"
+}
+
+func (*LongTableNameSample) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"Kind", "CreatedAt"}}}
+}
+
 func TestParseIndexPlansTruncatesLongNames(t *testing.T) {
 	db := newSchemaDB(t)
-	table := "an_extremely_long_table_name_used_to_exercise_truncation"
+	table := (&LongTableNameSample{}).TableName()
 
-	plans, err := modelregistry.ParseIndexPlans(db, &IndexedSample{}, table)
+	plans, err := modelregistry.ParseIndexPlans(db, &LongTableNameSample{})
 	require.NoError(t, err)
-	require.Len(t, plans, 2)
+	require.Len(t, plans, 1)
 	require.Len(t, plans[0].Name, 64)
 	require.True(t, strings.HasPrefix(plans[0].Name, "idx_"+table[:20]))
 
 	// Truncation must stay deterministic across runs.
-	again, err := modelregistry.ParseIndexPlans(db, &IndexedSample{}, table)
+	again, err := modelregistry.ParseIndexPlans(db, &LongTableNameSample{})
 	require.NoError(t, err)
 	require.Equal(t, plans[0].Name, again[0].Name)
 }
