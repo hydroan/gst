@@ -96,7 +96,7 @@ func (cr *AuthzRule) Indexes() []model.Index {
 // reported it gone.
 func (cr *AuthzRule) Purge() bool { return true }
 
-// GetTableName pins the policy table name. It matches what GORM's default
+// TableName pins the policy table name. It matches what GORM's default
 // pluralization would derive today, and stating it keeps the table's identity
 // out of the naming strategy's hands.
-func (cr *AuthzRule) GetTableName() string { return "authz_rules" }
+func (cr *AuthzRule) TableName() string { return "authz_rules" }

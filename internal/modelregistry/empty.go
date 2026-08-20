@@ -55,7 +55,7 @@ func IsVirtual(m any) bool {
 	return ok
 }
 
-func (*Empty) GetTableName() string     { return "" }
+func (*Empty) TableName() string        { return "" } // Virtual models have no table; the empty name never reaches gorm
 func (*Empty) GetCreatedBy() string     { return "" }
 func (*Empty) GetUpdatedBy() string     { return "" }
 func (*Empty) GetCreatedAt() time.Time  { return time.Time{} }

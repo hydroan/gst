@@ -100,7 +100,7 @@ func RequireSoftDeleted[T any, M interface {
 
 	RequireNoRow[T, M](t, id)
 
-	table := M(new(T)).GetTableName()
+	table := M(new(T)).TableName()
 	var kept int64
 	require.NoError(t, database.DB().
 		Table(table).

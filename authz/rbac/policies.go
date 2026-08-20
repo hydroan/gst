@@ -12,7 +12,7 @@ const (
 
 // policyTable is the table the policy adapter reads and writes. Its schema is
 // owned by the AuthzRule model, so the name has to agree with that model's
-// GetTableName.
+// TableName.
 const policyTable = "authz_rules"
 
 // ruleTokens fixes how many values each rule kind carries: a permission is

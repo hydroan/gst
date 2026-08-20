@@ -30,7 +30,7 @@ type TestRecord struct {
 	model.Base
 }
 
-func (r *TestRecord) GetTableName() string {
+func (r *TestRecord) TableName() string {
 	return "test_records"
 }
 

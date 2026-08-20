@@ -79,7 +79,7 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 	done, _ := db.trace(phaseUpsert, len(objs))
 	defer func() { done(err) }()
 
-	tableName := db.m.GetTableName()
+	tableName := db.m.TableName()
 	batchSize := defaultBatchSize
 	if db.batchSize > 0 {
 		batchSize = db.batchSize

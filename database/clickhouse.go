@@ -25,7 +25,7 @@ func (db *database[M]) clickhouseCreate(objs []M) (err error) {
 	done, _ := db.trace(consts.PHASE_CREATE, len(objs))
 	defer func() { done(err) }()
 
-	tableName := db.m.GetTableName()
+	tableName := db.m.TableName()
 	batchSize := defaultBatchSize
 	if db.batchSize > 0 {
 		batchSize = db.batchSize
@@ -116,7 +116,7 @@ func (db *database[M]) clickhouseUpdate(objs []M) (err error) {
 	done, _ := db.trace(consts.PHASE_UPDATE, len(objs))
 	defer func() { done(err) }()
 
-	tableName := db.m.GetTableName()
+	tableName := db.m.TableName()
 
 	if db.dryRun {
 		dryRunObjs := cloneDryRunModels(objs)

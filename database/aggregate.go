@@ -301,7 +301,7 @@ func (a *aggregator[M, R]) build(mode buildMode) (*gorm.DB, error) {
 	a.db.buildingSQL = a.statements != nil
 	a.db.sqlStatements = a.statements
 
-	table := a.db.m.GetTableName()
+	table := a.db.m.TableName()
 	// Model is what carries the schema, and the schema is what adds the
 	// soft-delete condition. Table alone names the table but parses no model,
 	// so an aggregate scanning into R would silently read deleted rows while a

@@ -43,7 +43,7 @@ type AutoBase struct {
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index" query:"-" url:"-"`                               // Timestamp when the record was deleted
 }
 
-func (b *AutoBase) GetTableName() string     { return "" }
+func (b *AutoBase) TableName() string        { return "" } // Business models must override with an explicit table name
 func (b *AutoBase) GetCreatedBy() string     { return b.CreatedBy }
 func (b *AutoBase) GetUpdatedBy() string     { return b.UpdatedBy }
 func (b *AutoBase) GetCreatedAt() time.Time  { return b.CreatedAt }

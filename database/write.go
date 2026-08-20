@@ -85,7 +85,7 @@ func (db *database[M]) Create(objs ...M) (err error) {
 	done, span := db.trace(consts.PHASE_CREATE, len(objs))
 	defer func() { done(err) }()
 
-	tableName := db.m.GetTableName()
+	tableName := db.m.TableName()
 	batchSize := defaultBatchSize
 	if db.batchSize > 0 {
 		batchSize = db.batchSize
@@ -207,7 +207,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	done, span := db.trace(consts.PHASE_DELETE, len(objs))
 	defer func() { done(err) }()
 
-	tableName := db.m.GetTableName()
+	tableName := db.m.TableName()
 	batchSize := defaultDeleteBatchSize
 	if db.batchSize > 0 {
 		batchSize = db.batchSize
@@ -361,7 +361,7 @@ func (db *database[M]) Update(objs ...M) (err error) {
 	done, span := db.trace(consts.PHASE_UPDATE, len(objs))
 	defer func() { done(err) }()
 
-	tableName := db.m.GetTableName()
+	tableName := db.m.TableName()
 
 	if db.dryRun {
 		dryRunObjs := cloneDryRunModels(objs)
@@ -507,7 +507,7 @@ func (db *database[M]) UpdateByID(id string, assignments ...types.Assignment) (e
 	done, _ := db.trace(phaseUpdateByID)
 	defer func() { done(err) }()
 
-	tableName := db.m.GetTableName()
+	tableName := db.m.TableName()
 
 	if db.dryRun {
 		tx := dryRunSession(db.ins).Table(tableName).Model(*new(M)).Where("id = ?", id).Updates(updates)

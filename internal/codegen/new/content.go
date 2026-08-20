@@ -171,12 +171,12 @@ linters:
       locale: US
 
     recvcheck:
-      # Design, GetTableName, Purge and Indexes are stateless declaration
+      # Design, TableName, Purge and Indexes are stateless declaration
       # methods that use value receivers by framework convention, while
       # stateful hooks require pointer receivers.
       exclusions:
         - "*.Design"
-        - "*.GetTableName"
+        - "*.TableName"
         - "*.Purge"
         - "*.Indexes"
 

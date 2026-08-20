@@ -54,7 +54,7 @@ type Base struct {
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index" query:"-" url:"-"`                               // Timestamp when the record was deleted
 }
 
-func (b *Base) GetTableName() string     { return "" }
+func (b *Base) TableName() string        { return "" } // Business models must override with an explicit table name
 func (b *Base) GetCreatedBy() string     { return b.CreatedBy }
 func (b *Base) GetUpdatedBy() string     { return b.UpdatedBy }
 func (b *Base) GetCreatedAt() time.Time  { return b.CreatedAt }

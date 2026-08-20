@@ -952,7 +952,7 @@ func TestAggregateConditionalOnSubquery(t *testing.T) {
 // TestFilterExistsTableResolution pins the subquery's FROM to the same table
 // its correlation qualifies. gorm names the FROM from the struct unless told
 // otherwise, and it reads its own TableName method rather than the framework's
-// GetTableName, so a model that overrides only the framework method would be
+// TableName, so a model that overrides only the framework method would be
 // selected FROM one table while the correlation referenced another.
 func TestFilterExistsTableResolution(t *testing.T) {
 	defer cleanupAggregateData()
@@ -961,7 +961,7 @@ func TestFilterExistsTableResolution(t *testing.T) {
 	setupTagData(t)
 
 	ctx := context.Background()
-	// TestTagAlias resolves to test_record_tags through GetTableName, while its
+	// TestTagAlias resolves to test_record_tags through TableName, while its
 	// struct name would make gorm derive test_tag_aliases.
 	vip := types.FilterExists[*TestTagAlias](tagCols.RecordID, recordIDCol, tagCols.Label.Eq("vip"))
 
