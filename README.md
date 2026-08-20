@@ -87,6 +87,8 @@ git init
 
 普通资源使用 `model.Base`。如果这个资源需要建表或迁移，声明 `Migrate()`。
 
+索引一律通过模型的 `Indexes() []model.Index` 方法集中声明：`Fields` 写 Go 字段名、顺序即列序，`Unique` 声明唯一索引，索引名由框架统一生成。唯一的例外是主键——它由 `model.Base`/`model.AutoBase` 内置声明，业务模型不写主键。不要用 gorm tag 的 `index`/`uniqueIndex`/`unique` 配置索引，`gg check` 会拒绝。
+
 ```go
 package model
 
