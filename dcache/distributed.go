@@ -11,9 +11,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"uuid"
 
 	"github.com/cockroachdb/errors"
-	"github.com/google/uuid"
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
@@ -240,10 +240,7 @@ type distributedCache[T any] struct {
 //   - brokers: kafka brokers addresses for event publishing and consuming.
 //   - opts: Optional configuration options.
 func newDistributedCache[T any](opts ...DistributedCacheOption[T]) (*distributedCache[T], error) {
-	cacheID, err := uuid.NewV7()
-	if err != nil {
-		return nil, err
-	}
+	cacheID := uuid.NewV7()
 	hostname, err := os.Hostname()
 	if err != nil {
 		return nil, err

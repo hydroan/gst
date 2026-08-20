@@ -49,9 +49,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"uuid"
 
 	"github.com/cockroachdb/errors"
-	"github.com/google/uuid"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/errorstack"
 	"github.com/hydroan/gst/logger"
@@ -399,7 +399,7 @@ func resolveInstanceID(hostname string, hostErr error) string {
 	if hostErr == nil && strings.TrimSpace(hostname) != "" {
 		return hostname
 	}
-	return uuid.NewString()
+	return uuid.New().String()
 }
 
 // newExporter creates an OTLP trace exporter based on startup configuration.

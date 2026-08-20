@@ -3,6 +3,7 @@ package authz_test
 import (
 	"context"
 	"testing"
+	"uuid"
 
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
@@ -11,7 +12,6 @@ import (
 	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
-	"github.com/hydroan/gst/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,7 +27,7 @@ func TestReconcilePoliciesDetectsDrift(t *testing.T) {
 	})
 
 	t.Run("reports a permission no record derives", func(t *testing.T) {
-		role := util.UUID()
+		role := uuid.NewV7().String()
 		object := "/api/reconcile/" + role
 		require.NoError(t, rbac.RBAC().SetRolePermissions(ctx, tenant.Default, role, []types.Permission{
 			{Object: object, Action: "GET"},
@@ -96,7 +96,7 @@ func TestReconcilePoliciesSkipsRulesNoRecordDerives(t *testing.T) {
 // becomes something nobody reads.
 func TestReconcilePoliciesSkipsTheBuiltInAdminAssignment(t *testing.T) {
 	ctx := context.Background()
-	subject := util.UUID()
+	subject := uuid.NewV7().String()
 
 	require.NoError(t, rbac.RBAC().AssignRole(ctx, tenant.Default, subject, consts.AUTHZ_ROLE_ADMIN))
 
@@ -112,10 +112,10 @@ func seedReconcilableBinding(t *testing.T) *modelauthz.RoleBinding {
 	t.Helper()
 	ctx := context.Background()
 
-	role := &modelauthz.Role{Name: "reconcile-" + util.UUID()}
+	role := &modelauthz.Role{Name: "reconcile-" + uuid.NewV7().String()}
 	require.NoError(t, database.Database[*modelauthz.Role](ctx).Create(role))
 
-	binding := &modelauthz.RoleBinding{SubjectID: util.UUID(), RoleID: role.ID}
+	binding := &modelauthz.RoleBinding{SubjectID: uuid.NewV7().String(), RoleID: role.ID}
 	require.NoError(t, database.Database[*modelauthz.RoleBinding](ctx).Create(binding))
 
 	// The binding must go: this fixture deliberately drops its casbin rule, so

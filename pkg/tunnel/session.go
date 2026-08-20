@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"uuid"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gorilla/websocket"
@@ -126,7 +127,7 @@ func (s *Session) Write(event *Event) error {
 	// because events sharing the same ID belong to the same ongoing exchange,
 	// while a different ID marks a different one.
 	if event.ID == "" {
-		event.ID = util.UUID()
+		event.ID = uuid.NewV7().String()
 	}
 	// 1.marshal data
 	buf, err := msgpack.Marshal(event)

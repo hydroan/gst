@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"uuid"
 
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
@@ -14,7 +15,6 @@ import (
 	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
-	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 	"gorm.io/datatypes"
 )
@@ -102,7 +102,7 @@ func (m *Menu) SetID(id ...string) {
 		return
 	}
 	if len(id) == 0 || len(id[0]) == 0 {
-		m.ID = util.UUID()
+		m.ID = uuid.NewV7().String()
 		return
 	}
 	m.ID = id[0]

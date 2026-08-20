@@ -4,10 +4,10 @@ import (
 	"context"
 	"reflect"
 	"time"
+	"uuid"
 
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
-	"github.com/hydroan/gst/util"
 	"gorm.io/gorm"
 )
 
@@ -85,12 +85,12 @@ func setID(m types.Model, id ...string) {
 		return
 	}
 	if len(id) == 0 {
-		idField.SetString(util.UUID())
+		idField.SetString(uuid.NewV7().String())
 		return
 	}
 
 	if len(id[0]) == 0 {
-		idField.SetString(util.UUID())
+		idField.SetString(uuid.NewV7().String())
 	} else {
 		idField.SetString(id[0])
 	}

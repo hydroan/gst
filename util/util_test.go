@@ -14,21 +14,7 @@ import (
 )
 
 func TestUtil(t *testing.T) {
-	fmt.Println(UUID())
 	fmt.Println(TraceID())
-	fmt.Println(IndexedUUID())
-}
-
-func BenchmarkUUID(b *testing.B) {
-	for b.Loop() {
-		UUID()
-	}
-}
-
-func BenchmarkIndexedUUID(b *testing.B) {
-	for b.Loop() {
-		IndexedUUID()
-	}
 }
 
 func BenchmarkTraceID(b *testing.B) {

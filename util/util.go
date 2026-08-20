@@ -22,36 +22,17 @@ import (
 
 	tcping "github.com/cloverstd/tcping/ping"
 	"github.com/cockroachdb/errors"
-	"github.com/google/uuid"
 	"github.com/hydroan/gst/types/consts"
 	probing "github.com/prometheus-community/pro-bing"
 	"github.com/rs/xid"
-	"github.com/segmentio/ksuid"
 	"github.com/spf13/cast"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
-func UUID(prefix ...string) string {
-	var id uuid.UUID
-	if v7, err := uuid.NewV7(); err == nil {
-		id = v7
-	} else {
-		id = uuid.New()
-	}
-	if len(prefix) > 0 {
-		if len(prefix[0]) > 0 {
-			return fmt.Sprintf("%s%s", prefix[0], id.String())
-		}
-	}
-	return id.String()
-}
-
 func TraceID() string { return xid.New().String() }
 func SpanID() string  { return xid.New().String() }
-
-func IndexedUUID() string { return ksuid.New().String() }
 
 // Pointer will return a pointer to T with given value.
 func Pointer[T comparable](t T) *T {
