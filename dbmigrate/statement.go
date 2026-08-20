@@ -5,21 +5,25 @@ import (
 	"strings"
 )
 
-// Statement shapes emitted by the sqldef MySQL generator for secondary
-// indexes. ADD statements keep the desired-side keyword (INDEX in the
-// gorm-generated schema; KEY tolerated for safety) and carry the column
+// Statement shapes emitted by the sqldef MySQL and PostgreSQL generators for
+// secondary indexes. ADD statements keep the desired-side keyword (INDEX in
+// the gorm-generated schema; KEY tolerated for safety) and carry the column
 // list, DROP statements never carry column information — their definitions
 // are recovered from the exported current schema instead. Covers plain,
-// composite, and unique indexes in both the ALTER TABLE ADD form (struct
-// tag indexes embedded in CREATE TABLE) and the standalone CREATE INDEX
-// form (Indexer capability indexes).
+// composite, and unique indexes in the ALTER TABLE ADD form (MySQL struct
+// tag indexes embedded in CREATE TABLE), the standalone CREATE INDEX form
+// (Indexer capability indexes; the optional USING clause appears in the
+// PostgreSQL export), and the bare DROP INDEX form the PostgreSQL generator
+// emits, which names no table — the owning table is recovered from the
+// exported current schema.
 var (
-	dropIndexPattern   = regexp.MustCompile(`^ALTER TABLE ([^ ]+) DROP INDEX ([^ ]+)$`)
-	alterAddPattern    = regexp.MustCompile(`^ALTER TABLE ([^ ]+) ADD (UNIQUE )?(?:FULLTEXT |SPATIAL )?(?:INDEX|KEY) ([^ ]+) \((.+)\)$`)
-	createIndexPattern = regexp.MustCompile(`^CREATE (UNIQUE )?INDEX ([^ ]+) ON ([^ ]+) \((.+)\)$`)
+	dropIndexPattern     = regexp.MustCompile(`^ALTER TABLE ([^ ]+) DROP INDEX ([^ ]+)$`)
+	bareDropIndexPattern = regexp.MustCompile(`^DROP INDEX ([^ ]+)$`)
+	alterAddPattern      = regexp.MustCompile(`^ALTER TABLE ([^ ]+) ADD (UNIQUE )?(?:FULLTEXT |SPATIAL )?(?:INDEX|KEY) ([^ ]+) \((.+)\)$`)
+	createIndexPattern   = regexp.MustCompile(`^CREATE (UNIQUE )?INDEX ([^ ]+) ON ([^ ]+)(?: USING [^ ]+)? \((.+)\)$`)
 )
 
-// Statement shapes emitted by the sqldef MySQL generator for whole tables.
+// Statement shapes emitted by the sqldef generators for whole tables.
 var (
 	// dropTablePattern matches the DROP TABLE statement shape. DROP statements
 	// never carry the table definition; it is recovered from the exported
@@ -50,22 +54,41 @@ type currentIndex struct {
 }
 
 // isIndexStatement reports whether the statement drops or adds a secondary
-// index, in any of the shapes the sqldef MySQL generator emits.
+// index, in any of the shapes the sqldef generators emit.
 func isIndexStatement(statement string) bool {
 	return dropIndexPattern.MatchString(statement) ||
+		bareDropIndexPattern.MatchString(statement) ||
 		alterAddPattern.MatchString(statement) ||
 		createIndexPattern.MatchString(statement)
 }
 
 // parseCurrentIndexes extracts the secondary index definitions per table
-// from the SHOW CREATE TABLE style DDLs exported from the current database.
+// from the DDLs exported from the current database: MySQL embeds them as KEY
+// lines inside the SHOW CREATE TABLE body, PostgreSQL exports standalone
+// CREATE INDEX statements.
 func parseCurrentIndexes(currentDDLs string) map[string]map[string]currentIndex {
 	indexes := make(map[string]map[string]currentIndex)
+	ensure := func(table string) map[string]currentIndex {
+		if m, ok := indexes[table]; ok {
+			return m
+		}
+		m := make(map[string]currentIndex)
+		indexes[table] = m
+		return m
+	}
 	table := ""
 	for line := range strings.SplitSeq(currentDDLs, "\n") {
 		if m := currentTablePattern.FindStringSubmatch(line); m != nil {
-			table = m[1]
-			indexes[table] = make(map[string]currentIndex)
+			table = unquoteIdent(m[1])
+			ensure(table)
+			continue
+		}
+		standalone := strings.TrimSuffix(strings.TrimSpace(line), ";")
+		if m := createIndexPattern.FindStringSubmatch(standalone); m != nil {
+			ensure(unquoteIdent(m[3]))[unquoteIdent(m[2])] = currentIndex{
+				Columns: normalizeColumns(m[4]),
+				Unique:  strings.TrimSpace(m[1]) == "UNIQUE",
+			}
 			continue
 		}
 		if table == "" {
@@ -83,7 +106,7 @@ func parseCurrentIndexes(currentDDLs string) map[string]map[string]currentIndex 
 		if start < 0 || end <= start {
 			continue
 		}
-		indexes[table][m[2]] = currentIndex{
+		ensure(table)[m[2]] = currentIndex{
 			Columns: normalizeColumns(trimmed[start+1 : end]),
 			Unique:  strings.TrimSpace(m[1]) == "UNIQUE",
 		}
@@ -92,16 +115,16 @@ func parseCurrentIndexes(currentDDLs string) map[string]map[string]currentIndex 
 }
 
 // parseCurrentTables extracts each table's full CREATE TABLE statement from
-// the SHOW CREATE TABLE style DDLs exported from the current database. The
-// trailing statement terminator is stripped so the definition can be embedded
-// in new statement lists.
+// the DDLs exported from the current database. The trailing statement
+// terminator is stripped so the definition can be embedded in new statement
+// lists.
 func parseCurrentTables(currentDDLs string) map[string]string {
 	tables := make(map[string]string)
 	table := ""
 	lines := make([]string, 0)
 	for line := range strings.SplitSeq(currentDDLs, "\n") {
 		if m := currentTablePattern.FindStringSubmatch(line); m != nil {
-			table = m[1]
+			table = unquoteIdent(m[1])
 			lines = append(lines[:0], line)
 			continue
 		}
@@ -125,11 +148,19 @@ func parseCurrentTables(currentDDLs string) map[string]string {
 // so plan-side and current-side definitions compare by content.
 func normalizeColumns(columns string) string {
 	columns = strings.ReplaceAll(columns, "`", "")
+	columns = strings.ReplaceAll(columns, `"`, "")
 	columns = strings.ReplaceAll(columns, " ", "")
 	return columns
 }
 
-// unquoteIdent strips MySQL backtick quoting from an identifier.
+// unquoteIdent strips a leading schema qualifier and identifier quoting
+// (MySQL backticks, standard double quotes) from an identifier. A quoted
+// identifier that itself contains a dot loses its prefix and then matches
+// nothing downstream, which fails safe: an unmatched name never produces
+// rename guidance.
 func unquoteIdent(s string) string {
-	return strings.Trim(s, "`")
+	if i := strings.LastIndex(s, "."); i >= 0 {
+		s = s[i+1:]
+	}
+	return strings.Trim(s, "`\"")
 }

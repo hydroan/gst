@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sqldef/sqldef/v3/schema"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,11 +17,11 @@ func TestCombineAdvisories(t *testing.T) {
 
 func TestFormatTableRenames(t *testing.T) {
 	t.Run("empty pairs render nothing", func(t *testing.T) {
-		require.Empty(t, formatTableRenames(nil))
+		require.Empty(t, formatTableRenames(schema.GeneratorModeMysql, nil))
 	})
 
 	t.Run("pairs render comments plus executable statements at the end", func(t *testing.T) {
-		guidance := formatTableRenames([]tableRenamePair{{
+		guidance := formatTableRenames(schema.GeneratorModeMysql, []tableRenamePair{{
 			From: "samples",
 			To:   "records",
 			IndexRenames: []indexRenamePair{{
@@ -46,7 +47,7 @@ func TestFormatTableRenames(t *testing.T) {
 	})
 
 	t.Run("remaining changes render as comments, never as executable statements", func(t *testing.T) {
-		guidance := formatTableRenames([]tableRenamePair{{
+		guidance := formatTableRenames(schema.GeneratorModeMysql, []tableRenamePair{{
 			From:     "samples",
 			To:       "records",
 			Residual: []string{"ALTER TABLE `records` ADD COLUMN `remark` varchar(255) NOT NULL DEFAULT ''"},
@@ -59,15 +60,35 @@ func TestFormatTableRenames(t *testing.T) {
 		require.Contains(t, statementBlock, "RENAME TABLE `samples` TO `records`;")
 		requireCopyPasteSafe(t, guidance)
 	})
+
+	t.Run("postgres pairs render that server's rename syntax", func(t *testing.T) {
+		guidance := formatTableRenames(schema.GeneratorModePostgres, []tableRenamePair{{
+			From: "samples",
+			To:   "records",
+			IndexRenames: []indexRenamePair{{
+				Table:   "records",
+				From:    "uniq_samples_code",
+				To:      "uniq_records_code",
+				Columns: "code",
+				Unique:  true,
+			}},
+		}})
+		require.Contains(t, guidance, `  -- Table "samples" -> "records"`)
+
+		statementBlock := guidance[strings.LastIndex(guidance, "\n\n"):]
+		require.Contains(t, statementBlock, `ALTER TABLE "samples" RENAME TO "records";`)
+		require.Contains(t, statementBlock, `ALTER INDEX "uniq_samples_code" RENAME TO "uniq_records_code";`)
+		requireCopyPasteSafe(t, guidance)
+	})
 }
 
 func TestFormatIndexRenames(t *testing.T) {
 	t.Run("empty pairs render nothing", func(t *testing.T) {
-		require.Empty(t, formatIndexRenames(nil))
+		require.Empty(t, formatIndexRenames(schema.GeneratorModeMysql, nil))
 	})
 
 	t.Run("pairs render comments plus executable statements at the end", func(t *testing.T) {
-		guidance := formatIndexRenames([]indexRenamePair{
+		guidance := formatIndexRenames(schema.GeneratorModeMysql, []indexRenamePair{
 			{Table: "groups", From: "idx_groups_group_no", To: "idx_groups_group_no2", Columns: "group_no", Unique: true},
 			{Table: "records", From: "idx_records_kind", To: "idx_records_kind2", Columns: "kind"},
 		})
@@ -79,11 +100,22 @@ func TestFormatIndexRenames(t *testing.T) {
 		require.Contains(t, statementBlock, "ALTER TABLE `records` RENAME INDEX `idx_records_kind` TO `idx_records_kind2`;")
 		requireCopyPasteSafe(t, guidance)
 	})
+
+	t.Run("postgres pairs render that server's rename syntax", func(t *testing.T) {
+		guidance := formatIndexRenames(schema.GeneratorModePostgres, []indexRenamePair{
+			{Table: "groups", From: "idx_groups_group_no", To: "idx_groups_group_no2", Columns: "group_no", Unique: true},
+		})
+		require.Contains(t, guidance, `  -- Table "groups": "idx_groups_group_no" -> "idx_groups_group_no2" (group_no, UNIQUE)`)
+
+		statementBlock := guidance[strings.LastIndex(guidance, "\n\n"):]
+		require.Contains(t, statementBlock, `ALTER INDEX "idx_groups_group_no" RENAME TO "idx_groups_group_no2";`)
+		requireCopyPasteSafe(t, guidance)
+	})
 }
 
 // requireCopyPasteSafe asserts that every advisory line is either a comment,
 // a blank line, or a directly executable statement, so pasting any part of
-// the block into MySQL cannot fail.
+// the block into the server cannot fail.
 func requireCopyPasteSafe(t *testing.T, guidance string) {
 	t.Helper()
 
@@ -92,6 +124,7 @@ func requireCopyPasteSafe(t *testing.T, guidance string) {
 		case len(strings.TrimSpace(line)) == 0:
 		case strings.HasPrefix(strings.TrimSpace(line), "--"):
 		case strings.HasPrefix(line, "ALTER TABLE ") && strings.HasSuffix(line, ";"):
+		case strings.HasPrefix(line, "ALTER INDEX ") && strings.HasSuffix(line, ";"):
 		case strings.HasPrefix(line, "RENAME TABLE ") && strings.HasSuffix(line, ";"):
 		default:
 			t.Fatalf("line is neither comment, blank, nor executable: %q", line)

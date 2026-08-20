@@ -25,6 +25,10 @@ type addedIndex struct {
 // columns from the exported current schema. Only exact matches (same table,
 // same column sequence, same uniqueness) with an unambiguous one-to-one
 // pairing are reported, so every reported pair is safe to rename.
+//
+// The PostgreSQL generator drops indexes through a bare DROP INDEX that
+// names no table; the owning table is recovered from the exported current
+// schema, where index names are unique per schema.
 func detectIndexRenames(ddls []string, currentDDLs string) []indexRenamePair {
 	type tableChanges struct {
 		dropped []string
@@ -42,11 +46,33 @@ func detectIndexRenames(ddls []string, currentDDLs string) []indexRenamePair {
 		return c
 	}
 
+	current := parseCurrentIndexes(currentDDLs)
+	tableByIndex := make(map[string]string)
+	for table, defs := range current {
+		for name := range defs {
+			if _, dup := tableByIndex[name]; dup {
+				// The same index name on two tables (possible on MySQL) is
+				// ambiguous for a bare DROP INDEX; report no owner at all.
+				tableByIndex[name] = ""
+				continue
+			}
+			tableByIndex[name] = table
+		}
+	}
+
 	for _, ddl := range ddls {
 		statement := strings.TrimSpace(ddl)
 		if m := dropIndexPattern.FindStringSubmatch(statement); m != nil {
 			c := track(unquoteIdent(m[1]))
 			c.dropped = append(c.dropped, unquoteIdent(m[2]))
+			continue
+		}
+		if m := bareDropIndexPattern.FindStringSubmatch(statement); m != nil {
+			name := unquoteIdent(m[1])
+			if table := tableByIndex[name]; table != "" {
+				c := track(table)
+				c.dropped = append(c.dropped, name)
+			}
 			continue
 		}
 		if m := alterAddPattern.FindStringSubmatch(statement); m != nil {
@@ -60,7 +86,6 @@ func detectIndexRenames(ddls []string, currentDDLs string) []indexRenamePair {
 		}
 	}
 
-	current := parseCurrentIndexes(currentDDLs)
 	pairs := make([]indexRenamePair, 0)
 	for _, table := range tables {
 		c := changes[table]

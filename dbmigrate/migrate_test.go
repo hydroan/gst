@@ -245,6 +245,96 @@ func TestMigrateTableRenameAdvisoryWithRemainingChanges(t *testing.T) {
 	require.Empty(t, advisory)
 }
 
+func TestMigrateTableRenameAdvisoryOnPostgres(t *testing.T) {
+	database := fmt.Sprintf("gst_dbmigrate_rename_pg_%d", time.Now().UnixNano())
+	adminConfig := postgresDatabaseConfig(os.Getenv(config.POSTGRES_DATABASE))
+	createPostgresDatabase(t, adminConfig, database)
+	t.Cleanup(func() {
+		dropPostgresDatabase(t, adminConfig, database)
+	})
+	databaseConfig := postgresDatabaseConfig(database)
+
+	before := "CREATE TABLE samples (\n" +
+		"  id char(36) NOT NULL,\n" +
+		"  code varchar(64) NOT NULL,\n" +
+		"  PRIMARY KEY (id)\n" +
+		");\n" +
+		"CREATE INDEX idx_samples_code ON samples (code);"
+	after := strings.ReplaceAll(before, "samples", "records")
+
+	migrated, advisory, err := dbmigrate.Migrate([]string{before}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOption{})
+	require.NoError(t, err)
+	require.True(t, migrated)
+	require.Empty(t, advisory)
+
+	// The plan for the renamed model drops "samples" and creates "records";
+	// the advisory must offer the metadata-only statements in postgres syntax.
+	migrated, advisory, err = dbmigrate.Migrate([]string{after}, config.DBPostgres, databaseConfig,
+		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
+	require.NoError(t, err)
+	require.True(t, migrated)
+	require.Contains(t, advisory, `ALTER TABLE "samples" RENAME TO "records";`)
+	require.Contains(t, advisory, `ALTER INDEX "idx_samples_code" RENAME TO "idx_records_code";`)
+
+	// Applying the advisory instead of the plan leaves nothing to migrate.
+	execPostgres(t, databaseConfig, `ALTER TABLE "samples" RENAME TO "records"`)
+	execPostgres(t, databaseConfig, `ALTER INDEX "idx_samples_code" RENAME TO "idx_records_code"`)
+	migrated, advisory, err = dbmigrate.Migrate([]string{after}, config.DBPostgres, databaseConfig,
+		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
+	require.NoError(t, err)
+	require.False(t, migrated)
+	require.Empty(t, advisory)
+}
+
+func TestMigrateTableRenameAdvisoryWithRemainingChangesOnPostgres(t *testing.T) {
+	database := fmt.Sprintf("gst_dbmigrate_rename_pg_drift_%d", time.Now().UnixNano())
+	adminConfig := postgresDatabaseConfig(os.Getenv(config.POSTGRES_DATABASE))
+	createPostgresDatabase(t, adminConfig, database)
+	t.Cleanup(func() {
+		dropPostgresDatabase(t, adminConfig, database)
+	})
+	databaseConfig := postgresDatabaseConfig(database)
+
+	before := "CREATE TABLE samples (\n" +
+		"  id char(36) NOT NULL,\n" +
+		"  code varchar(64) NOT NULL,\n" +
+		"  PRIMARY KEY (id)\n" +
+		");\n" +
+		"CREATE INDEX idx_samples_code ON samples (code);"
+
+	migrated, advisory, err := dbmigrate.Migrate([]string{before}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOption{})
+	require.NoError(t, err)
+	require.True(t, migrated)
+	require.Empty(t, advisory)
+
+	// The model renames the table and adds a column in the same step, so the
+	// created table is a column superset of the dropped one. The advisory must
+	// still offer the rename and list the addition as a remaining change.
+	after := strings.ReplaceAll(
+		strings.Replace(before, "  code varchar(64) NOT NULL,\n",
+			"  code varchar(64) NOT NULL,\n  remark varchar(255) NOT NULL DEFAULT '',\n", 1),
+		"samples", "records",
+	)
+	migrated, advisory, err = dbmigrate.Migrate([]string{after}, config.DBPostgres, databaseConfig,
+		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
+	require.NoError(t, err)
+	require.True(t, migrated)
+	require.Contains(t, advisory, `ALTER TABLE "samples" RENAME TO "records";`)
+	require.Contains(t, advisory, `ALTER INDEX "idx_samples_code" RENAME TO "idx_records_code";`)
+	require.Contains(t, advisory, "remaining change:")
+	require.Contains(t, advisory, "ADD COLUMN")
+
+	// After the rename, only the remaining column addition is left in the
+	// plan, and there is no drop/create pair left to advise about.
+	execPostgres(t, databaseConfig, `ALTER TABLE "samples" RENAME TO "records"`)
+	execPostgres(t, databaseConfig, `ALTER INDEX "idx_samples_code" RENAME TO "idx_records_code"`)
+	migrated, advisory, err = dbmigrate.Migrate([]string{after}, config.DBPostgres, databaseConfig,
+		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
+	require.NoError(t, err)
+	require.True(t, migrated)
+	require.Empty(t, advisory)
+}
+
 // newDatabaseConfig reads back the connection the test container was prepared on.
 func newDatabaseConfig(hostKey, portKey, userKey, passwordKey, database string) *dbmigrate.DatabaseConfig {
 	port, err := strconv.Atoi(os.Getenv(portKey))
@@ -322,6 +412,20 @@ func dropPostgresDatabase(t *testing.T, cfg *dbmigrate.DatabaseConfig, database 
 	defer db.Close()
 
 	_, _ = db.Exec("DROP DATABASE IF EXISTS " + database)
+}
+
+// execPostgres runs one statement on the configured PostgreSQL database. The
+// driver is registered by the sqldef postgres package that dbmigrate itself
+// imports.
+func execPostgres(t *testing.T, cfg *dbmigrate.DatabaseConfig, statement string) {
+	t.Helper()
+
+	db, err := sql.Open("postgres", postgresDSN(cfg))
+	require.NoError(t, err)
+	defer db.Close()
+
+	_, err = db.Exec(statement)
+	require.NoError(t, err)
 }
 
 func postgresDSN(cfg *dbmigrate.DatabaseConfig) string {

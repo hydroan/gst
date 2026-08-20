@@ -60,13 +60,13 @@ type MigrateOption struct {
 // rebuilt, but the model and the database keep drifting until the migration
 // runs.
 //
-// When a MySQL plan drops and re-creates an identical definition — an index
-// on the same table, or a whole table under a new name — the suspected
-// renames are returned as advisory text with ready-to-run RENAME INDEX and
-// RENAME TABLE guidance. For tables the advisory doubles as a data-loss
-// guard, because the planned DROP TABLE would discard every row that the
-// metadata-only rename keeps. The caller owns when and how to present it;
-// executing the rename stays a human decision.
+// When a MySQL or PostgreSQL plan drops and re-creates an identical
+// definition — an index on the same table, or a whole table under a new name
+// — the suspected renames are returned as advisory text with ready-to-run
+// rename statements in that server's syntax. For tables the advisory doubles
+// as a data-loss guard, because the planned DROP TABLE would discard every
+// row that the metadata-only rename keeps. The caller owns when and how to
+// present it; executing the rename stays a human decision.
 func Migrate(schemas []string, dbtyp config.DBType, cfg *DatabaseConfig, opt *MigrateOption) (migrated bool, advisory string, err error) {
 	if len(schemas) == 0 || cfg == nil {
 		return false, "", nil
@@ -159,10 +159,12 @@ func runMigration(generatorMode schema.GeneratorMode, db database.Database, sqlP
 	// alongside the plan. Detection guides only; nothing is rewritten or
 	// executed here. Table renames come first: their DROP TABLE would discard
 	// data, so they are the ones a reviewer must act on before anything else.
-	if generatorMode == schema.GeneratorModeMysql {
+	// SQLite stays out: it backs local development and tests, where databases
+	// are created fresh and hold no schema worth renaming.
+	if generatorMode == schema.GeneratorModeMysql || generatorMode == schema.GeneratorModePostgres {
 		advisory = combineAdvisories(
-			formatTableRenames(detectTableRenames(generatorMode, sqlParser, options.Config, defaultSchema, ddls, currentDDLs)),
-			formatIndexRenames(detectIndexRenames(ddls, currentDDLs)),
+			formatTableRenames(generatorMode, detectTableRenames(generatorMode, sqlParser, options.Config, defaultSchema, ddls, currentDDLs)),
+			formatIndexRenames(generatorMode, detectIndexRenames(ddls, currentDDLs)),
 		)
 	}
 

@@ -194,8 +194,8 @@ README.md 面向使用 gst 框架的后端开发者，应保持简洁并聚焦�
 
 - 修改 model 的 DSL、接口路径、REQ/RSP、service 开关后，需要重新执行 `gg gen`，并检查生成的 router 和 service 注册是否符合预期。
 - 修改声明了 `Migrate()` 的数据库模型字段后，需要执行 `gg migrate --dry-run` 检查 `generated/migrate/<dbtype>/schema.sql` 和迁移计划，再用 `gg migrate` 按确认处理 schema 变化。
-- 改索引名必须"先 `gg migrate` 后发布"，先发布会触发 gorm 启动期对单列唯一索引的静默 DROP + CREATE 重建；migrate 计划前的疑似改名提示应优先按指引改用 `RENAME INDEX` 处理。
-- 改表名同理：迁移计划会给出 `DROP TABLE` + `CREATE TABLE`，直接执行会清空整表数据；应按 Rename Advisory 指引改用 `RENAME TABLE`（连同伴生的 `RENAME INDEX`）处理后重跑 `gg migrate`。
+- 改索引名必须"先 `gg migrate` 后发布"，先发布会触发 gorm 启动期对单列唯一索引的静默 DROP + CREATE 重建；migrate 计划前的疑似改名提示应优先按指引执行改名语句（advisory 按方言给出：MySQL `RENAME INDEX`，PostgreSQL `ALTER INDEX ... RENAME TO`）。
+- 改表名同理：迁移计划会给出 `DROP TABLE` + `CREATE TABLE`，直接执行会清空整表数据；应按 Rename Advisory 指引执行表改名语句（MySQL `RENAME TABLE`，PostgreSQL `ALTER TABLE ... RENAME TO`，连同伴生的索引改名）后重跑 `gg migrate`。
 - 不要手写覆盖生成文件；如果生成结果不符合预期，优先修正 model DSL 或框架生成逻辑。
 - 后端服务启动后，通过 `/docs/index.html` 检查生成的 Swagger 文档和接口路径。
 - 后端项目自身如果已有测试，修改业务逻辑后需要运行对应测试；涉及框架仓库改动时仍按 gst 仓库要求执行 `make check`。

@@ -1,6 +1,8 @@
 package dbmigrate
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/sqldef/sqldef/v3/database"
@@ -61,6 +63,7 @@ func detectTableRenames(generatorMode schema.GeneratorMode, sqlParser database.P
 	}
 
 	currentTables := parseCurrentTables(currentDDLs)
+	currentIndexes := parseCurrentIndexes(currentDDLs)
 	candidates := make([]tableRenamePair, 0)
 	for _, to := range added {
 		desired := strings.Join(append([]string{addedTables[to]}, addedIndexes[to]...), ";\n")
@@ -72,7 +75,16 @@ func detectTableRenames(generatorMode schema.GeneratorMode, sqlParser database.P
 			if !ok {
 				continue
 			}
-			indexRenames, residual, ok := classifyTableRename(generatorMode, sqlParser, config, defaultSchema, desired, renameCurrentTable(current, to))
+			currentDDL := renameCurrentTable(current, to)
+			if generatorMode == schema.GeneratorModePostgres {
+				// PostgreSQL exports indexes as standalone statements outside
+				// the CREATE TABLE body, so the dropped table's definition has
+				// to carry them explicitly for the re-diff to see them. They
+				// are synthesized from the parsed definitions, pointed at the
+				// created name like the table itself.
+				currentDDL = appendCurrentIndexes(currentDDL, to, currentIndexes[from])
+			}
+			indexRenames, residual, ok := classifyTableRename(generatorMode, sqlParser, config, defaultSchema, desired, currentDDL)
 			if !ok {
 				continue
 			}
@@ -147,12 +159,23 @@ func classifyTableRename(generatorMode schema.GeneratorMode, sqlParser database.
 
 // isConsumedByIndexRename reports whether the statement is one side of a
 // verified index rename pair, and therefore already covered by the pair's
-// RENAME INDEX guidance.
+// rename guidance.
 func isConsumedByIndexRename(statement string, renames []indexRenamePair) bool {
 	if m := dropIndexPattern.FindStringSubmatch(statement); m != nil {
 		table, name := unquoteIdent(m[1]), unquoteIdent(m[2])
 		for _, rename := range renames {
 			if rename.Table == table && rename.From == name {
+				return true
+			}
+		}
+		return false
+	}
+	if m := bareDropIndexPattern.FindStringSubmatch(statement); m != nil {
+		// The bare PostgreSQL form names no table; index names are unique per
+		// schema, so the dropped name alone identifies the pair.
+		name := unquoteIdent(m[1])
+		for _, rename := range renames {
+			if rename.From == name {
 				return true
 			}
 		}
@@ -181,4 +204,30 @@ func renameCurrentTable(statement, to string) string {
 		return ""
 	}
 	return statement[:loc[2]] + to + statement[loc[3]:]
+}
+
+// appendCurrentIndexes appends CREATE INDEX statements synthesized from the
+// dropped table's parsed index definitions, targeting the created table name.
+// The names sort so the synthesized definition stays deterministic.
+func appendCurrentIndexes(currentDDL, to string, indexes map[string]currentIndex) string {
+	if len(indexes) == 0 {
+		return currentDDL
+	}
+	names := make([]string, 0, len(indexes))
+	for name := range indexes {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+
+	var b strings.Builder
+	b.WriteString(currentDDL)
+	for _, name := range names {
+		def := indexes[name]
+		unique := ""
+		if def.Unique {
+			unique = "UNIQUE "
+		}
+		fmt.Fprintf(&b, ";\nCREATE %sINDEX %s ON %s (%s)", unique, name, to, def.Columns)
+	}
+	return b.String()
 }

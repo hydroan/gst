@@ -125,6 +125,28 @@ func TestDetectIndexRenames(t *testing.T) {
 		require.Empty(t, pairs)
 	})
 
+	t.Run("postgres statement shapes pair through the current schema", func(t *testing.T) {
+		// The postgres export carries standalone CREATE INDEX statements and
+		// the plan drops indexes without naming the table; the owner comes
+		// from the exported schema.
+		current := "CREATE TABLE public.samples (\n" +
+			"    id character(36) NOT NULL,\n" +
+			"    CONSTRAINT samples_pkey PRIMARY KEY (\"id\")\n" +
+			");\n" +
+			"CREATE UNIQUE INDEX uniq_samples_code_kind ON public.samples USING btree (code, kind);"
+		pairs := detectIndexRenames([]string{
+			"CREATE UNIQUE INDEX uniq_samples_code_kind2 ON public.samples (code, kind)",
+			"DROP INDEX public.uniq_samples_code_kind",
+		}, current)
+		require.Equal(t, []indexRenamePair{{
+			Table:   "samples",
+			From:    "uniq_samples_code_kind",
+			To:      "uniq_samples_code_kind2",
+			Columns: "code,kind",
+			Unique:  true,
+		}}, pairs)
+	})
+
 	t.Run("non-index DDL statements are ignored", func(t *testing.T) {
 		require.Empty(t, detectIndexRenames([]string{
 			"ALTER TABLE `samples` ADD COLUMN `kind` varchar(64)",
