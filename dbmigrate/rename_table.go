@@ -161,6 +161,7 @@ func classifyTableRename(generatorMode schema.GeneratorMode, sqlParser database.
 // verified index rename pair, and therefore already covered by the pair's
 // rename guidance.
 func isConsumedByIndexRename(statement string, renames []indexRenamePair) bool {
+	statement = flattenStatement(statement)
 	if m := dropIndexPattern.FindStringSubmatch(statement); m != nil {
 		table, name := unquoteIdent(m[1]), unquoteIdent(m[2])
 		for _, rename := range renames {

@@ -53,9 +53,20 @@ type currentIndex struct {
 	Unique  bool
 }
 
+// flattenStatement collapses a statement onto one line, folding every run of
+// whitespace into a single space. The schema dumper pretty-prints statements
+// past the formatter's width — a long CREATE INDEX arrives with its column
+// list spread across indented lines — and the statement patterns above match
+// single lines only, so every plan-side statement flattens before matching.
+// The exported current schema never flattens: it is parsed line by line.
+func flattenStatement(statement string) string {
+	return strings.Join(strings.Fields(statement), " ")
+}
+
 // isIndexStatement reports whether the statement drops or adds a secondary
 // index, in any of the shapes the sqldef generators emit.
 func isIndexStatement(statement string) bool {
+	statement = flattenStatement(statement)
 	return dropIndexPattern.MatchString(statement) ||
 		bareDropIndexPattern.MatchString(statement) ||
 		alterAddPattern.MatchString(statement) ||

@@ -1,7 +1,5 @@
 package dbmigrate
 
-import "strings"
-
 // indexRenamePair is one confirmed index rename: the dropped and the added
 // index carry exactly the same column sequence and uniqueness, so a
 // metadata-only RENAME INDEX can replace the drop-and-rebuild pair.
@@ -61,7 +59,7 @@ func detectIndexRenames(ddls []string, currentDDLs string) []indexRenamePair {
 	}
 
 	for _, ddl := range ddls {
-		statement := strings.TrimSpace(ddl)
+		statement := flattenStatement(ddl)
 		if m := dropIndexPattern.FindStringSubmatch(statement); m != nil {
 			c := track(unquoteIdent(m[1]))
 			c.dropped = append(c.dropped, unquoteIdent(m[2]))

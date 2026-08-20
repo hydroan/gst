@@ -171,4 +171,31 @@ func TestDetectIndexRenames(t *testing.T) {
 			"ALTER TABLE `samples` DROP INDEX `idx_samples_kind`",
 		}, ""))
 	})
+
+	t.Run("pretty-printed multi-line statements still pair", func(t *testing.T) {
+		// The schema dumper pretty-prints statements past the formatter's
+		// width, so a long CREATE INDEX reaches the plan with its column list
+		// spread across indented lines; detection must flatten the statement
+		// instead of missing the pair.
+		current := "CREATE TABLE `samples` (\n" +
+			"  `id` char(36) NOT NULL,\n" +
+			"  PRIMARY KEY (`id`),\n" +
+			"  KEY `idx_samples_group_time` (`group_id`,`code`,`kind`,`created_at`)\n" +
+			") ENGINE=InnoDB;"
+		pairs := detectIndexRenames([]string{
+			"CREATE INDEX `idx_samples_group_id_code_kind_created_at_0f3a9b2c` ON `samples` (\n" +
+				"  `group_id`,\n" +
+				"  `code`,\n" +
+				"  `kind`,\n" +
+				"  `created_at`\n" +
+				")",
+			"ALTER TABLE `samples` DROP INDEX `idx_samples_group_time`",
+		}, current)
+		require.Equal(t, []indexRenamePair{{
+			Table:   "samples",
+			From:    "idx_samples_group_time",
+			To:      "idx_samples_group_id_code_kind_created_at_0f3a9b2c",
+			Columns: "group_id,code,kind,created_at",
+		}}, pairs)
+	})
 }
