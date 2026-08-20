@@ -5,9 +5,16 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	// newSQLiteDatabase opens the "sqlite3" driver by name, so the package that
+	// registers it has to be imported here; relying on another package's import
+	// to pull it in would break the SQLite migration path at run time.
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/sqldef/sqldef/v3/database"
 )
 
+// sqliteDatabase is the sqldef database adapter the SQLite migration path runs
+// on. sqldef drives the migration through this interface; everything below the
+// interface methods only serves ExportDDLs.
 type sqliteDatabase struct {
 	config          database.Config
 	db              *sql.DB
@@ -64,6 +71,38 @@ func (d *sqliteDatabase) ExportDDLs() (string, error) {
 	ddls = append(ddls, triggerDDLs...)
 
 	return strings.Join(ddls, "\n\n"), nil
+}
+
+func (d *sqliteDatabase) DB() *sql.DB {
+	return d.db
+}
+
+func (d *sqliteDatabase) Close() error {
+	return d.db.Close()
+}
+
+func (d *sqliteDatabase) GetDefaultSchema() string {
+	return ""
+}
+
+func (d *sqliteDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
+	d.generatorConfig = config
+}
+
+func (d *sqliteDatabase) GetGeneratorConfig() database.GeneratorConfig {
+	return d.generatorConfig
+}
+
+func (d *sqliteDatabase) GetTransactionQueries() database.TransactionQueries {
+	return database.TransactionQueries{
+		Begin:    "BEGIN",
+		Commit:   "COMMIT",
+		Rollback: "ROLLBACK",
+	}
+}
+
+func (d *sqliteDatabase) GetConfig() database.Config {
+	return d.config
 }
 
 func (d *sqliteDatabase) tableNames() ([]string, error) {
@@ -155,36 +194,4 @@ func (d *sqliteDatabase) ddls(query string) ([]string, error) {
 		return nil, err
 	}
 	return ddls, nil
-}
-
-func (d *sqliteDatabase) DB() *sql.DB {
-	return d.db
-}
-
-func (d *sqliteDatabase) Close() error {
-	return d.db.Close()
-}
-
-func (d *sqliteDatabase) GetDefaultSchema() string {
-	return ""
-}
-
-func (d *sqliteDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
-	d.generatorConfig = config
-}
-
-func (d *sqliteDatabase) GetGeneratorConfig() database.GeneratorConfig {
-	return d.generatorConfig
-}
-
-func (d *sqliteDatabase) GetTransactionQueries() database.TransactionQueries {
-	return database.TransactionQueries{
-		Begin:    "BEGIN",
-		Commit:   "COMMIT",
-		Rollback: "ROLLBACK",
-	}
-}
-
-func (d *sqliteDatabase) GetConfig() database.Config {
-	return d.config
 }
