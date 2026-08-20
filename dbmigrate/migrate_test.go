@@ -40,26 +40,6 @@ func runTests(m *testing.M) int {
 	return m.Run()
 }
 
-// databaseConfig reads back the connection the test container was prepared on.
-func databaseConfig(hostKey, portKey, userKey, passwordKey, database string) *dbmigrate.DatabaseConfig {
-	port, err := strconv.Atoi(os.Getenv(portKey))
-	if err != nil {
-		panic(err)
-	}
-	return &dbmigrate.DatabaseConfig{
-		Host:     os.Getenv(hostKey),
-		Port:     port,
-		Username: os.Getenv(userKey),
-		Password: os.Getenv(passwordKey),
-		Database: database,
-	}
-}
-
-func mysqlDatabaseConfig() *dbmigrate.DatabaseConfig {
-	return databaseConfig(config.MYSQL_HOST, config.MYSQL_PORT, config.MYSQL_USERNAME, config.MYSQL_PASSWORD,
-		os.Getenv(config.MYSQL_DATABASE))
-}
-
 func TestMigrate(t *testing.T) {
 	t.Run("mysql", func(t *testing.T) {
 		dumper, err := dbmigrate.NewSchemaDumper()
@@ -245,8 +225,60 @@ func TestMigrateTableRenameAdvisoryWithRemainingChanges(t *testing.T) {
 	require.Empty(t, advisory)
 }
 
+// newDatabaseConfig reads back the connection the test container was prepared on.
+func newDatabaseConfig(hostKey, portKey, userKey, passwordKey, database string) *dbmigrate.DatabaseConfig {
+	port, err := strconv.Atoi(os.Getenv(portKey))
+	if err != nil {
+		panic(err)
+	}
+	return &dbmigrate.DatabaseConfig{
+		Host:     os.Getenv(hostKey),
+		Port:     port,
+		Username: os.Getenv(userKey),
+		Password: os.Getenv(passwordKey),
+		Database: database,
+	}
+}
+
+func mysqlDatabaseConfig() *dbmigrate.DatabaseConfig {
+	return newDatabaseConfig(config.MYSQL_HOST, config.MYSQL_PORT, config.MYSQL_USERNAME, config.MYSQL_PASSWORD,
+		os.Getenv(config.MYSQL_DATABASE))
+}
+
+func createMySQLDatabase(t *testing.T, cfg *dbmigrate.DatabaseConfig, database string) {
+	t.Helper()
+	execMySQL(t, cfg, "CREATE DATABASE "+database)
+}
+
+func dropMySQLDatabase(t *testing.T, cfg *dbmigrate.DatabaseConfig, database string) {
+	t.Helper()
+
+	db, err := sql.Open("mysql", mysqlDSN(cfg))
+	require.NoError(t, err)
+	defer db.Close()
+
+	_, _ = db.Exec("DROP DATABASE IF EXISTS " + database)
+}
+
+// execMySQL runs one statement on the configured MySQL database. The driver
+// is registered by the sqldef mysql package that dbmigrate itself imports.
+func execMySQL(t *testing.T, cfg *dbmigrate.DatabaseConfig, statement string) {
+	t.Helper()
+
+	db, err := sql.Open("mysql", mysqlDSN(cfg))
+	require.NoError(t, err)
+	defer db.Close()
+
+	_, err = db.Exec(statement)
+	require.NoError(t, err)
+}
+
+func mysqlDSN(cfg *dbmigrate.DatabaseConfig) string {
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
+}
+
 func postgresDatabaseConfig(database string) *dbmigrate.DatabaseConfig {
-	cfg := databaseConfig(config.POSTGRES_HOST, config.POSTGRES_PORT, config.POSTGRES_USERNAME, config.POSTGRES_PASSWORD, database)
+	cfg := newDatabaseConfig(config.POSTGRES_HOST, config.POSTGRES_PORT, config.POSTGRES_USERNAME, config.POSTGRES_PASSWORD, database)
 	cfg.SSLMode = "disable"
 	return cfg
 }
@@ -270,38 +302,6 @@ func dropPostgresDatabase(t *testing.T, cfg *dbmigrate.DatabaseConfig, database 
 	defer db.Close()
 
 	_, _ = db.Exec("DROP DATABASE IF EXISTS " + database)
-}
-
-// execMySQL runs one statement on the configured MySQL database. The driver
-// is registered by the sqldef mysql package that dbmigrate itself imports.
-func execMySQL(t *testing.T, cfg *dbmigrate.DatabaseConfig, statement string) {
-	t.Helper()
-
-	db, err := sql.Open("mysql", mysqlDSN(cfg))
-	require.NoError(t, err)
-	defer db.Close()
-
-	_, err = db.Exec(statement)
-	require.NoError(t, err)
-}
-
-func createMySQLDatabase(t *testing.T, cfg *dbmigrate.DatabaseConfig, database string) {
-	t.Helper()
-	execMySQL(t, cfg, "CREATE DATABASE "+database)
-}
-
-func dropMySQLDatabase(t *testing.T, cfg *dbmigrate.DatabaseConfig, database string) {
-	t.Helper()
-
-	db, err := sql.Open("mysql", mysqlDSN(cfg))
-	require.NoError(t, err)
-	defer db.Close()
-
-	_, _ = db.Exec("DROP DATABASE IF EXISTS " + database)
-}
-
-func mysqlDSN(cfg *dbmigrate.DatabaseConfig) string {
-	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
 }
 
 func postgresDSN(cfg *dbmigrate.DatabaseConfig) string {

@@ -1,55 +1,49 @@
+// Package dbmigrate renders registered Go models into a target schema and
+// migrates a database towards it.
+//
+// SchemaDumper produces the target schema from the models themselves, so it
+// always matches the DDL the runtime applies. Migrate then diffs that schema
+// against the live database through sqldef and applies the difference, or
+// only plans it in dry-run mode. A plan that would drop and re-create an
+// identical definition comes back with advisory text offering the
+// metadata-only rename instead; executing it stays a human decision.
 package dbmigrate
 
 import (
-	"fmt"
 	"strings"
 	"sync"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/sqldef/sqldef/v3"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/database/mysql"
 	"github.com/sqldef/sqldef/v3/database/postgres"
-
-	// "github.com/sqldef/sqldef/v3/database/sqlite3"
 	"github.com/sqldef/sqldef/v3/parser"
 	"github.com/sqldef/sqldef/v3/schema"
 )
 
+// DatabaseConfig is the connection the migration runs against.
 type DatabaseConfig struct {
+	// Database is the schema name on MySQL and PostgreSQL, and the file path
+	// on SQLite.
 	Database string
 	Username string
 	Password string
 	Host     string
 	Port     int
-	SSLMode  string
+	// SSLMode is the PostgreSQL sslmode parameter; the other dialects ignore it.
+	SSLMode string
 }
 
+// MigrateOption tunes a single migration run.
 type MigrateOption struct {
-	Schemas    []string
-	DryRun     bool
+	// DryRun plans the migration and reports what would change without
+	// touching the database.
+	DryRun bool
+	// EnableDrop lets the plan contain destructive statements. Without it
+	// sqldef keeps every table, column and index the models no longer declare.
 	EnableDrop bool
-}
-
-var (
-	dryRunDatabaseWrapperMu sync.Mutex
-	dryRunDatabaseWrappers  []*dryRunDatabaseWrapper
-)
-
-type dryRunDatabaseWrapper struct {
-	database.Database
-}
-
-func newDryRunDatabase(db database.Database) (*database.DryRunDatabase, error) {
-	wrapper := &dryRunDatabaseWrapper{Database: db}
-
-	// sqldef derives dry-run driver names from the wrapped DB pointer.
-	// Keep wrappers alive so a later dry-run cannot reuse the same address.
-	dryRunDatabaseWrapperMu.Lock()
-	dryRunDatabaseWrappers = append(dryRunDatabaseWrappers, wrapper)
-	dryRunDatabaseWrapperMu.Unlock()
-
-	return database.NewDryRunDatabase(wrapper)
 }
 
 // Migrate applies the schema changes to the database.
@@ -74,10 +68,7 @@ func newDryRunDatabase(db database.Database) (*database.DryRunDatabase, error) {
 // metadata-only rename keeps. The caller owns when and how to present it;
 // executing the rename stays a human decision.
 func Migrate(schemas []string, dbtyp config.DBType, cfg *DatabaseConfig, opt *MigrateOption) (migrated bool, advisory string, err error) {
-	if len(schemas) == 0 {
-		return false, "", nil
-	}
-	if cfg == nil {
+	if len(schemas) == 0 || cfg == nil {
 		return false, "", nil
 	}
 	if opt == nil {
@@ -122,7 +113,7 @@ func Migrate(schemas []string, dbtyp config.DBType, cfg *DatabaseConfig, opt *Mi
 		// migratable here: its schema is a query-model design — engine,
 		// ORDER BY, partitioning, TTL — that cannot be derived from Go models,
 		// so the application owns it through hand-written DDL.
-		return false, "", fmt.Errorf("schema migration does not support %q: its schema is managed by hand-written DDL on the application side", dbtyp)
+		return false, "", errors.Newf("schema migration does not support %q: its schema is managed by hand-written DDL on the application side", dbtyp)
 	}
 	if err != nil {
 		return false, "", err
@@ -130,15 +121,20 @@ func Migrate(schemas []string, dbtyp config.DBType, cfg *DatabaseConfig, opt *Mi
 	defer db.Close()
 
 	sqlParser := database.NewParser(parseMode)
-	return run(genMode, db, sqlParser, migOpt)
+	return runMigration(genMode, db, sqlParser, migOpt)
 }
 
-// run executes the database migration logic.
+// runMigration executes the database migration logic.
 // This function is derived from sqldef.Run (https://github.com/sqldef/sqldef),
 // but modified to return a boolean indicating whether any migration was
-// performed, the index-rename advisory text for the caller to present, and
-// an error if any occurred, instead of exiting the program directly.
-func run(generatorMode schema.GeneratorMode, db database.Database, sqlParser database.Parser, options *sqldef.Options) (migrated bool, advisory string, err error) {
+// performed, the rename advisory text for the caller to present, and an error
+// if any occurred, instead of exiting the program directly.
+//
+// The upstream paths this package cannot reach are dropped, because Migrate is
+// the only caller and never asks for them: schema export, the current-file
+// diff, the before-apply hook, and the SQL Server statement suffix. Consult
+// sqldef itself if one of them ever becomes necessary here.
+func runMigration(generatorMode schema.GeneratorMode, db database.Database, sqlParser database.Parser, options *sqldef.Options) (migrated bool, advisory string, err error) {
 	// Set the generator config on the database for privilege filtering
 	// Note: MySQL will populate MysqlLowerCaseTableNames from the server
 	db.SetGeneratorConfig(options.Config)
@@ -146,46 +142,16 @@ func run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 
 	currentDDLs, exportErr := db.ExportDDLs()
 	if exportErr != nil {
-		return false, "", fmt.Errorf("Error on ExportDDLs: %w", exportErr)
+		return false, "", errors.Wrap(exportErr, "failed to export ddls")
 	}
 
 	defaultSchema := db.GetDefaultSchema()
-
-	var ddlSuffix string
-	if generatorMode == schema.GeneratorModeMssql {
-		ddlSuffix = "GO\n"
-	} else {
-		ddlSuffix = ""
-	}
-
-	if options.Export {
-		if currentDDLs == "" {
-			// fmt.Printf("-- No table exists --\n")
-		} else {
-			ddls, parseErr := schema.ParseDDLs(generatorMode, sqlParser, currentDDLs, defaultSchema)
-			if parseErr != nil {
-				return false, "", parseErr
-			}
-			ddls = schema.FilterTables(ddls, options.Config)
-			ddls = schema.FilterViews(ddls, options.Config)
-			ddls = schema.FilterPrivileges(ddls, options.Config)
-			for i, ddl := range ddls {
-				if i > 0 {
-					fmt.Println()
-				}
-				fmt.Printf("%s;\n", ddl.Statement())
-				fmt.Print(ddlSuffix)
-			}
-		}
-		return false, "", nil
-	}
 
 	ddls, genErr := schema.GenerateIdempotentDDLs(generatorMode, sqlParser, options.DesiredDDLs, currentDDLs, options.Config, defaultSchema)
 	if genErr != nil {
 		return false, "", genErr
 	}
 	if len(ddls) == 0 {
-		// fmt.Println("-- Nothing is modified --")
 		return false, "", nil
 	}
 
@@ -200,7 +166,7 @@ func run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 		)
 	}
 
-	if options.DryRun || len(options.CurrentFile) > 0 {
+	if options.DryRun {
 		dryRunDB, dryRunErr := newDryRunDatabase(db)
 		if dryRunErr != nil {
 			return false, "", dryRunErr
@@ -209,9 +175,30 @@ func run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 		db = dryRunDB
 	}
 
-	err = database.RunDDLs(db, ddls, options.BeforeApply, ddlSuffix, database.StdoutLogger{})
+	err = database.RunDDLs(db, ddls, "", "", database.StdoutLogger{})
 	if err != nil {
 		return false, "", err
 	}
 	return true, advisory, nil
+}
+
+var (
+	dryRunDatabaseWrapperMu sync.Mutex
+	dryRunDatabaseWrappers  []*dryRunDatabaseWrapper
+)
+
+type dryRunDatabaseWrapper struct {
+	database.Database
+}
+
+func newDryRunDatabase(db database.Database) (*database.DryRunDatabase, error) {
+	wrapper := &dryRunDatabaseWrapper{Database: db}
+
+	// sqldef derives dry-run driver names from the wrapped DB pointer.
+	// Keep wrappers alive so a later dry-run cannot reuse the same address.
+	dryRunDatabaseWrapperMu.Lock()
+	dryRunDatabaseWrappers = append(dryRunDatabaseWrappers, wrapper)
+	dryRunDatabaseWrapperMu.Unlock()
+
+	return database.NewDryRunDatabase(wrapper)
 }
