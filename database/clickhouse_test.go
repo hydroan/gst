@@ -8,7 +8,6 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/database/clickhouse"
 	"github.com/hydroan/gst/internal/testcontainer"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 )
@@ -216,7 +215,7 @@ func TestClickhouse(t *testing.T) {
 		// No matched count comes back from a mutation, so a missing record
 		// passes silently instead of answering ErrRecordNotFound.
 		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithSelect(colStatus).
-			Update(&TestAggregateRecord{Category: "mutate", Base: model.Base{ID: "no-such-row"}}))
+			Update(&TestAggregateRecord{Category: "mutate", ID: "no-such-row"}))
 
 		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Delete(row))
 	})
@@ -232,14 +231,14 @@ func TestClickhouse(t *testing.T) {
 		require.Empty(t, listIDs(t, types.FilterEq("category", "dry")), "the refused dry run must not persist rows")
 
 		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithBuildSQL(&stmts).
-			Delete(&TestAggregateRecord{Base: model.Base{ID: "dry-1"}}))
+			Delete(&TestAggregateRecord{ID: "dry-1"}))
 		require.Len(t, stmts, 1)
 		require.Contains(t, stmts[0].RenderedSQL, "DELETE FROM",
 			"delete must render the lightweight DELETE, not an ALTER TABLE mutation")
 
 		stmts = stmts[:0]
 		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithBuildSQL(&stmts).WithSelect(colStatus).
-			Update(&TestAggregateRecord{Status: "y", Base: model.Base{ID: "dry-1"}}))
+			Update(&TestAggregateRecord{Status: "y", ID: "dry-1"}))
 		require.Len(t, stmts, 1)
 		require.Contains(t, stmts[0].RenderedSQL, "ALTER TABLE",
 			"update must render the ALTER TABLE mutation")
@@ -248,7 +247,7 @@ func TestClickhouse(t *testing.T) {
 	// The capability-miss rule: nothing below is carried by clickhouse, and
 	// each entry answers ErrUnsupportedOnDialect instead of half-working.
 	t.Run("UnsupportedEntriesFailFast", func(t *testing.T) {
-		record := &TestAggregateRecord{Category: "x", Base: model.Base{ID: "w1"}}
+		record := &TestAggregateRecord{Category: "x", ID: "w1"}
 
 		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Upsert(record), database.ErrUnsupportedOnDialect)
 		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Cleanup(), database.ErrUnsupportedOnDialect)

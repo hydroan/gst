@@ -43,7 +43,7 @@ func BenchmarkSyncSaveResultsByUniqueIndexes(b *testing.B) {
 			{
 				Code: "code",
 				Name: "name",
-				Base: model.Base{ID: "id"},
+				ID:   "id",
 			},
 		}
 
@@ -66,7 +66,7 @@ func BenchmarkSyncSaveResultsByUniqueIndexes(b *testing.B) {
 			{
 				Code: "code",
 				Name: "name",
-				Base: model.Base{ID: "id"},
+				ID:   "id",
 			},
 		}
 

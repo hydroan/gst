@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
@@ -348,7 +347,7 @@ func TestDatabaseFilters(t *testing.T) {
 	// (remark is unusable here: the TestUser CreateBefore hook fills it on
 	// every create, so it is never NULL.)
 	active := true
-	flaggedUser := &TestUser{Name: "user4", Email: "user4@example.com", Age: 21, IsActive: &active, Base: model.Base{ID: "u4"}}
+	flaggedUser := &TestUser{Name: "user4", Email: "user4@example.com", Age: 21, IsActive: &active, ID: "u4"}
 	require.NoError(t, database.Database[*TestUser](context.Background()).Create(flaggedUser))
 
 	users = make([]*TestUser, 0)
@@ -376,7 +375,7 @@ func TestDatabaseFilters(t *testing.T) {
 	// pattern. An unescaped "user_" would match every "userX" via the
 	// "_" single-character wildcard; escaped it only matches the record
 	// whose name literally contains "user_".
-	underscoreUser := &TestUser{Name: "user_x", Email: "user.x@example.com", Age: 22, Base: model.Base{ID: "u5"}}
+	underscoreUser := &TestUser{Name: "user_x", Email: "user.x@example.com", Age: 22, ID: "u5"}
 	require.NoError(t, database.Database[*TestUser](context.Background()).Create(underscoreUser))
 
 	users = make([]*TestUser, 0)
@@ -448,7 +447,7 @@ func TestDatabaseFilters(t *testing.T) {
 		List(&users))
 
 	// Test the service-only jsoncontains operator on a JSON array column.
-	addrUser := &TestUser{Name: "user6", Email: "user6@example.com", Age: 23, Addr: datatypes.NewJSONSlice([]string{"alpha", "beta"}), Base: model.Base{ID: "u6"}}
+	addrUser := &TestUser{Name: "user6", Email: "user6@example.com", Age: 23, Addr: datatypes.NewJSONSlice([]string{"alpha", "beta"}), ID: "u6"}
 	require.NoError(t, database.Database[*TestUser](context.Background()).Create(addrUser))
 
 	users = make([]*TestUser, 0)

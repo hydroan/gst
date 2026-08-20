@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 )
@@ -68,7 +67,7 @@ func TestDatabaseList(t *testing.T) {
 		Name:  "user2_1",
 		Email: "user2_1@example.com",
 		Age:   25,
-		Base:  model.Base{ID: "u2_1"},
+		ID:    "u2_1",
 	}
 	u2_1.Remark = &testRemark
 	require.NoError(t, database.Database[*TestUser2](context.Background()).Create(u2_1))
@@ -77,7 +76,7 @@ func TestDatabaseList(t *testing.T) {
 		Name:  "user2_2",
 		Email: "user2_2@example.com",
 		Age:   26,
-		Base:  model.Base{ID: "u2_2"},
+		ID:    "u2_2",
 	}
 	// u2_2 has no remark (nil)
 	require.NoError(t, database.Database[*TestUser2](context.Background()).Create(u2_2))

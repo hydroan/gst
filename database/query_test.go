@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -166,7 +165,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// value binds as one literal, so a record whose value contains a comma
 		// stays queryable and two names never ride in on one string. An
 		// explicit list of values goes through the in operator filter.
-		commaUser := &TestUser{Name: "user1,user2", Email: "comma@example.com", Age: 40, Base: model.Base{ID: "u-comma"}}
+		commaUser := &TestUser{Name: "user1,user2", Email: "comma@example.com", Age: 40, ID: "u-comma"}
 		require.NoError(t, database.Database[*TestUser](context.Background()).Create(commaUser))
 
 		users := make([]*TestUser, 0)
@@ -310,7 +309,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 	t.Run("PresentFields", func(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
-		zeroAgeUser := &TestUser{Name: "user0", Email: "user0@example.com", Age: 0, Base: model.Base{ID: "u0"}}
+		zeroAgeUser := &TestUser{Name: "user0", Email: "user0@example.com", Age: 0, ID: "u0"}
 		require.NoError(t, database.Database[*TestUser](context.Background()).Create(zeroAgeUser))
 
 		// Without presence a zero-value field is treated as unset, so the query
@@ -679,7 +678,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Filter by the embedded auto increment id.
 		got := make([]*TestAutoItem, 0)
 		require.NoError(t, database.Database[*TestAutoItem](context.Background()).
-			WithQuery(&TestAutoItem{AutoBase: model.AutoBase{ID: items[0].ID}}).
+			WithQuery(&TestAutoItem{ID: items[0].ID}).
 			List(&got))
 		require.Len(t, got, 1)
 		require.Equal(t, items[0].ID, got[0].ID)
@@ -696,7 +695,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// DeletedAt on the embedded base must not leak bogus conditions into the query.
 		got = make([]*TestAutoItem, 0)
 		require.NoError(t, database.Database[*TestAutoItem](context.Background()).
-			WithQuery(&TestAutoItem{AutoBase: model.AutoBase{DeletedAt: gorm.DeletedAt{Time: time.Now(), Valid: true}}}).
+			WithQuery(&TestAutoItem{DeletedAt: gorm.DeletedAt{Time: time.Now(), Valid: true}}).
 			List(&got))
 	})
 }

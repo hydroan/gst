@@ -9,7 +9,6 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/database/sqlite"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -34,7 +33,7 @@ func TestDatabaseOn(t *testing.T) {
 	ins := newInstance(t, "on_crud.db")
 	defer cleanupTestData()
 
-	user := &TestUser{Name: "named", Email: "named@example.com", Age: 30, Base: model.Base{ID: "named-1"}}
+	user := &TestUser{Name: "named", Email: "named@example.com", Age: 30, ID: "named-1"}
 	require.NoError(t, database.DatabaseOn[*TestUser](context.Background(), ins).Create(user))
 
 	// Visible on the application-held instance.
@@ -58,8 +57,8 @@ func TestAggregateOn(t *testing.T) {
 	ins := newInstance(t, "on_aggregate.db")
 
 	users := []*TestUser{
-		{Name: "agg1", Email: "agg1@example.com", Age: 10, Base: model.Base{ID: "agg-1"}},
-		{Name: "agg2", Email: "agg2@example.com", Age: 20, Base: model.Base{ID: "agg-2"}},
+		{Name: "agg1", Email: "agg1@example.com", Age: 10, ID: "agg-1"},
+		{Name: "agg2", Email: "agg2@example.com", Age: 20, ID: "agg-2"},
 	}
 	require.NoError(t, database.DatabaseOn[*TestUser](context.Background(), ins).Create(users...))
 
@@ -80,13 +79,13 @@ func TestTransactionOn(t *testing.T) {
 
 	rollback := errors.New("force rollback")
 	err := database.TransactionOn(context.Background(), ins, func(txCtx context.Context) error {
-		u := &TestUser{Name: "txu", Email: "txu@example.com", Age: 1, Base: model.Base{ID: "tx-1"}}
+		u := &TestUser{Name: "txu", Email: "txu@example.com", Age: 1, ID: "tx-1"}
 		if err := database.DatabaseOn[*TestUser](txCtx, ins).Create(u); err != nil {
 			return err
 		}
 		// A default-database chain inside the closure must NOT join this
 		// instance's transaction: it commits independently.
-		d := &TestUser{Name: "default", Email: "default@example.com", Age: 2, Base: model.Base{ID: "tx-default-1"}}
+		d := &TestUser{Name: "default", Email: "default@example.com", Age: 2, ID: "tx-default-1"}
 		if err := database.Database[*TestUser](txCtx).Create(d); err != nil {
 			return err
 		}

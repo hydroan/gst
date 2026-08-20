@@ -68,8 +68,8 @@ func TestDatabaseCleanupWithDryRun(t *testing.T) {
 		require.NoError(t, database.DB().Migrator().DropTable(&cleanupSoftDeleteUser{}))
 	})
 
-	u1 := &cleanupSoftDeleteUser{Name: "cleanup-user-1", Base: model.Base{ID: "cleanup-user-1"}}
-	u2 := &cleanupSoftDeleteUser{Name: "cleanup-user-2", Base: model.Base{ID: "cleanup-user-2"}}
+	u1 := &cleanupSoftDeleteUser{Name: "cleanup-user-1", ID: "cleanup-user-1"}
+	u2 := &cleanupSoftDeleteUser{Name: "cleanup-user-2", ID: "cleanup-user-2"}
 	require.NoError(t, database.Database[*cleanupSoftDeleteUser](context.Background()).Create(u1, u2))
 	require.NoError(t, database.Database[*cleanupSoftDeleteUser](context.Background()).Delete(u1, u2))
 	require.Equal(t, int64(2), countSoftDeletedCleanupUsers(t), "setup should leave two soft-deleted users")

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +17,7 @@ func BenchmarkDatabaseCreate(b *testing.B) {
 	b.Run("size_1", func(b *testing.B) {
 		for b.Loop() {
 			id := strconv.Itoa(int(time.Now().UnixNano()))
-			_ = database.Database[*TestUser](context.Background()).Create(&TestUser{Name: id, Base: model.Base{ID: id}})
+			_ = database.Database[*TestUser](context.Background()).Create(&TestUser{Name: id, ID: id})
 		}
 	})
 	b.Run("size_10", func(b *testing.B) {
@@ -103,7 +102,7 @@ func BenchmarkDatabaseDelete(b *testing.B) {
 	b.Run("size_1", func(b *testing.B) {
 		for b.Loop() {
 			id := strconv.Itoa(int(time.Now().UnixNano()))
-			user := &TestUser{Name: id, Base: model.Base{ID: id}}
+			user := &TestUser{Name: id, ID: id}
 			_ = database.Database[*TestUser](context.Background()).Create(user)
 			_ = database.Database[*TestUser](context.Background()).Delete(user)
 		}
@@ -125,7 +124,7 @@ func BenchmarkDatabaseUpdate(b *testing.B) {
 	b.Run("size_1", func(b *testing.B) {
 		for b.Loop() {
 			id := strconv.Itoa(int(time.Now().UnixNano()))
-			user := &TestUser{Name: id, Base: model.Base{ID: id}}
+			user := &TestUser{Name: id, ID: id}
 			_ = database.Database[*TestUser](context.Background()).Create(user)
 
 			user.Name = id + "_updated"
@@ -224,7 +223,7 @@ func benchmarkDatabaseCreateBatch(b *testing.B, size int) {
 			id := strconv.FormatInt(baseID+int64(i), 10)
 			users[i] = &TestUser{
 				Name: id,
-				Base: model.Base{ID: id},
+				ID:   id,
 			}
 		}
 
@@ -244,7 +243,7 @@ func benchmarkDatabaseDeleteBatch(b *testing.B, size int) {
 			id := strconv.FormatInt(baseID+int64(i), 10)
 			users[i] = &TestUser{
 				Name: id,
-				Base: model.Base{ID: id},
+				ID:   id,
 			}
 		}
 
@@ -265,7 +264,7 @@ func benchmarkDatabaseUpdateBatch(b *testing.B, size int) {
 			id := strconv.FormatInt(baseID+int64(i), 10)
 			users[i] = &TestUser{
 				Name: id,
-				Base: model.Base{ID: id},
+				ID:   id,
 			}
 		}
 

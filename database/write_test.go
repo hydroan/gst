@@ -9,7 +9,6 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -120,7 +119,7 @@ func TestDatabaseCreate(t *testing.T) {
 	// Test Create with empty resources - should not return error
 	require.NoError(t, database.Database[*TestUser](context.Background()).Create(nil))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Create([]*TestUser{nil, nil, nil}...))
-	nilFilterUser := &TestUser{Name: "nil-filter", Base: model.Base{ID: "nil-filter-id"}}
+	nilFilterUser := &TestUser{Name: "nil-filter", ID: "nil-filter-id"}
 	require.NoError(t, database.Database[*TestUser](context.Background()).Create([]*TestUser{nil, nilFilterUser, nil}...))
 
 	t.Run("duplicated unique key is rejected", func(t *testing.T) {
@@ -410,7 +409,7 @@ func TestDatabaseUpdate(t *testing.T) {
 	})
 
 	t.Run("missing record fails with not found", func(t *testing.T) {
-		ghost := &TestUser{Name: "ghost", Base: model.Base{ID: "missing-id"}}
+		ghost := &TestUser{Name: "ghost", ID: "missing-id"}
 		require.ErrorIs(t, database.Database[*TestUser](context.Background()).Update(ghost), database.ErrRecordNotFound)
 	})
 
@@ -418,7 +417,7 @@ func TestDatabaseUpdate(t *testing.T) {
 		fresh := new(TestUser)
 		require.NoError(t, database.Database[*TestUser](context.Background()).Get(fresh, u1.ID))
 		fresh.Name = "batch-rollback"
-		ghost := &TestUser{Name: "ghost", Base: model.Base{ID: "missing-id"}}
+		ghost := &TestUser{Name: "ghost", ID: "missing-id"}
 
 		err := database.Database[*TestUser](context.Background()).Update(fresh, ghost)
 		require.ErrorIs(t, err, database.ErrRecordNotFound)
@@ -432,7 +431,7 @@ func TestDatabaseUpdate(t *testing.T) {
 		fresh := new(TestUser)
 		require.NoError(t, database.Database[*TestUser](context.Background()).Get(fresh, u1.ID))
 		fresh.Name = "nohook-rollback"
-		ghost := &TestUser{Name: "ghost", Base: model.Base{ID: "missing-id"}}
+		ghost := &TestUser{Name: "ghost", ID: "missing-id"}
 
 		err := database.Database[*TestUser](context.Background()).WithoutHook().Update(fresh, ghost)
 		require.ErrorIs(t, err, database.ErrRecordNotFound)
@@ -560,7 +559,7 @@ func TestDatabaseUpsert(t *testing.T) {
 		// A primary-key collision merges on every dialect; WithSelect must
 		// keep the update set to the named columns, so the unique code the
 		// caller left different survives untouched.
-		update := &TestUniqueItem{UniqueCode: "ignored-code", Name: "after", Base: model.Base{ID: first.ID}}
+		update := &TestUniqueItem{UniqueCode: "ignored-code", Name: "after", ID: first.ID}
 		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).WithSelect(colName).Upsert(update))
 
 		got := new(TestUniqueItem)
@@ -574,7 +573,7 @@ func TestDatabaseUpsert(t *testing.T) {
 		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Upsert(item))
 		require.NotEmpty(t, item.ID)
 
-		again := &TestUniqueItem{UniqueCode: "upsert-pk", Name: "after", Base: model.Base{ID: item.ID}}
+		again := &TestUniqueItem{UniqueCode: "upsert-pk", Name: "after", ID: item.ID}
 		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Upsert(again))
 
 		got := new(TestUniqueItem)
@@ -807,7 +806,7 @@ func TestDatabaseSingleStatementWriteSkipsTransaction(t *testing.T) {
 	})
 
 	t.Run("without hook single create runs without transaction", func(t *testing.T) {
-		user := &TestUser{Name: "tx-nohook", Email: "tx-nohook@example.com", Base: model.Base{ID: "tx-nohook"}}
+		user := &TestUser{Name: "tx-nohook", Email: "tx-nohook@example.com", ID: "tx-nohook"}
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithoutHook().Create(user))
 		require.Equal(t, []bool{false}, probe.take())
 	})
@@ -839,7 +838,7 @@ func TestDatabaseSingleStatementWriteSkipsTransaction(t *testing.T) {
 	t.Run("hooked pairs guard only their own operation", func(t *testing.T) {
 		// TestUser overrides the create and update pairs but not the delete
 		// pair, so its delete runs unwrapped.
-		user := &TestUser{Name: "tx-del", Email: "tx-del@example.com", Base: model.Base{ID: "tx-del"}}
+		user := &TestUser{Name: "tx-del", Email: "tx-del@example.com", ID: "tx-del"}
 		require.NoError(t, database.Database[*TestUser](context.Background()).Create(user))
 		probe.take()
 

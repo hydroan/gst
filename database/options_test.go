@@ -195,7 +195,7 @@ func TestDatabaseWithDryRun(t *testing.T) {
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 		require.Equal(t, 3, *count, "records should not be deleted in dry-run mode")
 
-		softDeleteUser := &dryRunSoftDeleteUser{Name: "dry-run-soft-delete", Base: model.Base{ID: "dry-run-soft-delete"}}
+		softDeleteUser := &dryRunSoftDeleteUser{Name: "dry-run-soft-delete", ID: "dry-run-soft-delete"}
 		require.NoError(t, database.Database[*dryRunSoftDeleteUser](context.Background()).WithDryRun().Delete(softDeleteUser))
 		require.False(t, softDeleteUser.DeletedAt.Valid, "Delete should not set deleted_at in dry-run mode")
 	})
@@ -276,7 +276,7 @@ func TestDatabaseWithDryRun(t *testing.T) {
 		})
 
 		existingID := u1.ID
-		uu := &TestUser{Base: model.Base{ID: existingID}}
+		uu := &TestUser{ID: existingID}
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithDryRun().Get(uu, u2.ID))
 		require.Equal(t, existingID, uu.ID, "Get should leave destination values unchanged in dry-run mode")
 		require.Equal(t, []any{u2.ID}, gotVars, "Get dry-run SQL should only use the requested id")
@@ -336,7 +336,7 @@ func TestDatabaseWithDryRun(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, sqlDB.Close())
 
-		user := &TestUser{Name: "dry-run-closed", Email: "dry-run-closed@example.com", Base: model.Base{ID: "dry-run-closed"}}
+		user := &TestUser{Name: "dry-run-closed", Email: "dry-run-closed@example.com", ID: "dry-run-closed"}
 		require.NoError(t, database.DatabaseOn[*TestUser](context.Background(), ins).WithDryRun().Create(user), "Create must not reach the closed pool in dry-run mode")
 		require.NoError(t, database.DatabaseOn[*TestUser](context.Background(), ins).WithDryRun().Update(user), "Update must not reach the closed pool in dry-run mode")
 		require.NoError(t, database.DatabaseOn[*TestUser](context.Background(), ins).WithDryRun().Delete(user), "Delete must not reach the closed pool in dry-run mode")
@@ -375,19 +375,13 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 			users := make([]*queryableTestUser, 0)
 			cursorValue := "cursor-001"
 			query := &queryableTestUser{
-				Name: "queryable-user",
-				Query: model.Query{
-					Pagination: model.Pagination{
-						Page: 2,
-						Size: 10,
-					},
-					Cursor: model.Cursor{
-						CursorValue: &cursorValue,
-						CursorField: "id",
-						CursorNext:  true,
-					},
-					SortBy: "created_at desc",
-				},
+				Name:        "queryable-user",
+				Page:        2,
+				Size:        10,
+				CursorValue: &cursorValue,
+				CursorField: "id",
+				CursorNext:  true,
+				SortBy:      "created_at desc",
 			}
 
 			err := database.Database[*queryableTestUser](context.Background()).
@@ -411,8 +405,8 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 			var stmts []types.SQLStatement
 			users := make([]*paginatableTestUser, 0)
 			query := &paginatableTestUser{
-				Name:       "paginatable-user",
-				Pagination: model.Pagination{Page: 2, Size: 10},
+				Name: "paginatable-user",
+				Page: 2, Size: 10,
 			}
 
 			err := database.Database[*paginatableTestUser](context.Background()).
@@ -433,12 +427,10 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 			users := make([]*cursorableTestUser, 0)
 			cursorValue := "cursor-001"
 			query := &cursorableTestUser{
-				Name: "cursorable-user",
-				Cursor: model.Cursor{
-					CursorValue: &cursorValue,
-					CursorField: "id",
-					CursorNext:  true,
-				},
+				Name:        "cursorable-user",
+				CursorValue: &cursorValue,
+				CursorField: "id",
+				CursorNext:  true,
 			}
 
 			err := database.Database[*cursorableTestUser](context.Background()).
@@ -507,7 +499,7 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 	t.Run("GetIgnoresDestinationID", func(t *testing.T) {
 		existingID := u1.ID
 		requestedID := u2.ID
-		dest := &TestUser{Base: model.Base{ID: existingID}}
+		dest := &TestUser{ID: existingID}
 		var stmts []types.SQLStatement
 
 		err := database.Database[*TestUser](context.Background()).WithBuildSQL(&stmts).Get(dest, requestedID)

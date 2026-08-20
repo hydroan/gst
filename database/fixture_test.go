@@ -35,9 +35,9 @@ var (
 var (
 	errTestHookGroupCreateAfter = errors.New("test hook group create after failed")
 
-	u1 = &TestUser{Name: "user1", Email: "user1@example.com", Age: 18, Base: model.Base{ID: "u1"}}
-	u2 = &TestUser{Name: "user2", Email: "user2@example.com", Age: 19, Base: model.Base{ID: "u2"}}
-	u3 = &TestUser{Name: "user3", Email: "user3@example.com", Age: 20, Base: model.Base{ID: "u3"}}
+	u1 = &TestUser{Name: "user1", Email: "user1@example.com", Age: 18, ID: "u1"}
+	u2 = &TestUser{Name: "user2", Email: "user2@example.com", Age: 19, ID: "u2"}
+	u3 = &TestUser{Name: "user3", Email: "user3@example.com", Age: 20, ID: "u3"}
 
 	ul = []*TestUser{u1, u2, u3}
 
@@ -45,14 +45,14 @@ var (
 	categoryRoot   = &TestCategory{
 		Name:     categoryRootID,
 		ParentID: categoryRootID, // parent is itself
-		Base:     model.Base{ID: categoryRootID},
+		ID:       categoryRootID,
 	}
 
 	categoryParentID = "parent"
 	categoryParent   = &TestCategory{
 		Name:     categoryParentID,
 		ParentID: categoryRootID, // parent is "root"
-		Base:     model.Base{ID: categoryParentID},
+		ID:       categoryParentID,
 	}
 )
 
@@ -66,9 +66,9 @@ func cleanupTestData() {
 	// occupying primary/unique keys and would break later pure INSERTs.
 	_ = database.DB().Exec("DELETE FROM test_users").Error
 	// Restore original values
-	u1 = &TestUser{Name: "user1", Email: "user1@example.com", Age: 18, Base: model.Base{ID: "u1"}}
-	u2 = &TestUser{Name: "user2", Email: "user2@example.com", Age: 19, Base: model.Base{ID: "u2"}}
-	u3 = &TestUser{Name: "user3", Email: "user3@example.com", Age: 20, Base: model.Base{ID: "u3"}}
+	u1 = &TestUser{Name: "user1", Email: "user1@example.com", Age: 18, ID: "u1"}
+	u2 = &TestUser{Name: "user2", Email: "user2@example.com", Age: 19, ID: "u2"}
+	u3 = &TestUser{Name: "user3", Email: "user3@example.com", Age: 20, ID: "u3"}
 	ul = []*TestUser{u1, u2, u3}
 
 	categories := make([]*TestCategory, 0)

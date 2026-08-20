@@ -135,13 +135,13 @@ func TestScopeRefusesAnUpdateThatNamesAnotherTenant(t *testing.T) {
 	seed(t, db, map[string]string{"a1": "alpha"})
 	ctx := tenant.In(context.Background(), "alpha")
 
-	err := db.WithContext(ctx).Save(&Record{ID: "a1", Name: "moved", Scope: tenant.Scope{TenantID: "beta"}}).Error
+	err := db.WithContext(ctx).Save(&Record{ID: "a1", Name: "moved", TenantID: "beta"}).Error
 	require.ErrorIs(t, err, tenant.ErrTenantImmutable)
 
 	// Naming the tenant the row already belongs to is what every read-modify-write
 	// round trip does, so it has to go through.
 	require.NoError(t, db.WithContext(ctx).
-		Save(&Record{ID: "a1", Name: "renamed", Scope: tenant.Scope{TenantID: "alpha"}}).Error)
+		Save(&Record{ID: "a1", Name: "renamed", TenantID: "alpha"}).Error)
 	// Naming none is the other ordinary shape.
 	require.NoError(t, db.WithContext(ctx).Model(&Record{}).Where("id = ?", "a1").
 		Update("name", "renamed twice").Error)
@@ -195,7 +195,7 @@ func TestAcrossRefusesAnInsertThatNamesNoTenant(t *testing.T) {
 	require.ErrorIs(t, err, tenant.ErrTenantRequired)
 
 	require.NoError(t, db.WithContext(ctx).
-		Create(&Record{ID: "r2", Name: "r2", Scope: tenant.Scope{TenantID: "beta"}}).Error)
+		Create(&Record{ID: "r2", Name: "r2", TenantID: "beta"}).Error)
 	var stored Record
 	require.NoError(t, db.WithContext(ctx).First(&stored, "id = ?", "r2").Error)
 	assert.EqualValues(t, "beta", stored.TenantID, "a cross-tenant insert has to keep the tenant it named")

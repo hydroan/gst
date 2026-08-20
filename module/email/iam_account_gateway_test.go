@@ -6,7 +6,6 @@ import (
 
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
-	"github.com/hydroan/gst/model"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -15,7 +14,7 @@ func TestIAMAccountSnapshotMapsMinimalEmailAccountState(t *testing.T) {
 	email := "User@Example.COM"
 	verifiedAt := time.Date(2026, 3, 31, 15, 30, 0, 0, time.UTC)
 	user := &modeliamuser.User{
-		Base:   model.Base{ID: "user-1"},
+		ID:     "user-1",
 		Status: modeliamuser.UserStatusActive,
 	}
 	identity := &modeliamaccount.EmailIdentity{
@@ -34,7 +33,7 @@ func TestIAMAccountSnapshotMapsMinimalEmailAccountState(t *testing.T) {
 
 func TestIAMAccountSnapshotMarksInactiveAccountsInactive(t *testing.T) {
 	user := &modeliamuser.User{
-		Base:   model.Base{ID: "user-2"},
+		ID:     "user-2",
 		Status: modeliamuser.UserStatusLocked,
 	}
 

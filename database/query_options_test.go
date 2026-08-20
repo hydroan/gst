@@ -44,7 +44,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 		data := make([]*TestUser, 0, count)
 		for i := range count {
 			name := fmt.Sprintf("user%05d", i)
-			data = append(data, &TestUser{Name: name, Base: model.Base{ID: name}})
+			data = append(data, &TestUser{Name: name, ID: name})
 		}
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithBatchSize(1000).Create(data...))
 
@@ -75,7 +75,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 		data := make([]*TestUser, 0, count)
 		for i := range count {
 			name := fmt.Sprintf("user%05d", i)
-			data = append(data, &TestUser{Name: name, Base: model.Base{ID: name}})
+			data = append(data, &TestUser{Name: name, ID: name})
 		}
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithBatchSize(1000).Create(data...))
 
@@ -178,7 +178,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 		data := make([]*TestUser, 0, count)
 		for i := range count {
 			name := fmt.Sprintf("user%05d", i)
-			data = append(data, &TestUser{Name: name, Base: model.Base{ID: name}})
+			data = append(data, &TestUser{Name: name, ID: name})
 		}
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithBatchSize(1000).Create(data...))
 
@@ -204,7 +204,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 		data := make([]*TestUser, 0, 5)
 		for i := range 5 {
 			name := fmt.Sprintf("user%05d", i)
-			data = append(data, &TestUser{Name: name, Base: model.Base{ID: name}})
+			data = append(data, &TestUser{Name: name, ID: name})
 		}
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithBatchSize(1000).Create(data...))
 
@@ -244,7 +244,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 		data := make([]*TestUser, 0, count)
 		for i := range count {
 			name := fmt.Sprintf("user%05d", i)
-			data = append(data, &TestUser{Name: name, Base: model.Base{ID: name}})
+			data = append(data, &TestUser{Name: name, ID: name})
 		}
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithBatchSize(1000).Create(data...))
 
@@ -718,7 +718,7 @@ func TestDatabaseWithPagination(t *testing.T) {
 				Name:  fmt.Sprintf("%s_name_%05d", prefix, i),
 				Email: fmt.Sprintf("%s_%05d@example.com", prefix, i),
 				Age:   18 + i,
-				Base:  model.Base{ID: id},
+				ID:    id,
 			})
 			ids = append(ids, id)
 		}
@@ -851,7 +851,7 @@ func TestDatabaseWithOffset(t *testing.T) {
 				Name:  fmt.Sprintf("%s_name_%05d", prefix, i),
 				Email: fmt.Sprintf("%s_%05d@example.com", prefix, i),
 				Age:   18 + i,
-				Base:  model.Base{ID: id},
+				ID:    id,
 			})
 			ids = append(ids, id)
 		}
@@ -937,7 +937,7 @@ func TestDatabaseWithLimit(t *testing.T) {
 				Name:  fmt.Sprintf("%s_name_%05d", prefix, i),
 				Email: fmt.Sprintf("%s_%05d@example.com", prefix, i),
 				Age:   18 + i,
-				Base:  model.Base{ID: id},
+				ID:    id,
 			})
 			ids = append(ids, id)
 		}
@@ -1065,12 +1065,12 @@ func TestDatabaseWithExpand(t *testing.T) {
 			{
 				Name:     "child1",
 				ParentID: categoryParentID,
-				Base:     model.Base{ID: "child1"},
+				ID:       "child1",
 			},
 			{
 				Name:     "child2",
 				ParentID: categoryParentID,
-				Base:     model.Base{ID: "child2"},
+				ID:       "child2",
 			},
 		}
 		require.NoError(t, database.Database[*TestCategory](context.Background()).Create(children...))

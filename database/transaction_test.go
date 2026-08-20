@@ -10,7 +10,6 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/logger"
 	pkgzap "github.com/hydroan/gst/logger/zap"
-	"github.com/hydroan/gst/model"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
@@ -24,12 +23,12 @@ func TestDatabaseTransactionModelHook(t *testing.T) {
 		ctx := context.Background()
 		config := &TestHookConfig{
 			Value: "initial",
-			Base:  model.Base{ID: "hook-config-create-after"},
+			ID:    "hook-config-create-after",
 		}
 		group := &TestHookGroup{
 			ConfigID: config.ID,
 			Value:    "updated",
-			Base:     model.Base{ID: "hook-group-create-after"},
+			ID:       "hook-group-create-after",
 		}
 
 		require.NoError(t, database.Database[*TestHookConfig](ctx).Create(config))
@@ -52,12 +51,12 @@ func TestDatabaseTransactionModelHook(t *testing.T) {
 		ctx := context.Background()
 		config := &TestHookConfig{
 			Value: "initial",
-			Base:  model.Base{ID: "hook-config-tx-ctx"},
+			ID:    "hook-config-tx-ctx",
 		}
 		group := &TestHookGroup{
 			ConfigID: config.ID,
 			Value:    "updated",
-			Base:     model.Base{ID: "hook-group-tx-ctx"},
+			ID:       "hook-group-tx-ctx",
 		}
 
 		require.NoError(t, database.Database[*TestHookConfig](ctx).Create(config))

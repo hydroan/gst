@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 )
@@ -41,12 +40,12 @@ func aggregateSeed() []*TestAggregateRecord {
 		return time.Date(2024, time.Month(month), day, hour, 0, 0, 0, time.UTC)
 	}
 	return []*TestAggregateRecord{
-		{Base: model.Base{ID: "a1"}, Category: "alpha", Status: "done", Amount: 100, Score: 1.5, OccurredAt: at(1, 10, 8)},
-		{Base: model.Base{ID: "a2"}, Category: "alpha", Status: "done", Amount: 200, Score: 2.5, OccurredAt: at(1, 10, 9)},
-		{Base: model.Base{ID: "a3"}, Category: "alpha", Status: "failed", Amount: 300, Score: 3.5, OccurredAt: at(1, 11, 8)},
-		{Base: model.Base{ID: "a4"}, Category: "beta", Status: "done", Amount: 400, Score: 4.5, OccurredAt: at(2, 10, 8)},
-		{Base: model.Base{ID: "a5"}, Category: "beta", Status: "failed", Amount: 500, Score: 5.5, OccurredAt: at(2, 10, 8)},
-		{Base: model.Base{ID: "a6"}, Category: "gamma", Status: "done", Amount: 600, Score: 6.5, OccurredAt: at(2, 11, 10)},
+		{ID: "a1", Category: "alpha", Status: "done", Amount: 100, Score: 1.5, OccurredAt: at(1, 10, 8)},
+		{ID: "a2", Category: "alpha", Status: "done", Amount: 200, Score: 2.5, OccurredAt: at(1, 10, 9)},
+		{ID: "a3", Category: "alpha", Status: "failed", Amount: 300, Score: 3.5, OccurredAt: at(1, 11, 8)},
+		{ID: "a4", Category: "beta", Status: "done", Amount: 400, Score: 4.5, OccurredAt: at(2, 10, 8)},
+		{ID: "a5", Category: "beta", Status: "failed", Amount: 500, Score: 5.5, OccurredAt: at(2, 10, 8)},
+		{ID: "a6", Category: "gamma", Status: "done", Amount: 600, Score: 6.5, OccurredAt: at(2, 11, 10)},
 	}
 }
 
@@ -467,7 +466,7 @@ func TestAggregateHidesSoftDeletedRows(t *testing.T) {
 	setupAggregateData(t)
 
 	ctx := context.Background()
-	gamma := &TestAggregateRecord{Base: model.Base{ID: "a6"}}
+	gamma := &TestAggregateRecord{ID: "a6"}
 	require.NoError(t, database.Database[*TestAggregateRecord](ctx).Delete(gamma))
 
 	// The row is soft deleted, so List no longer sees it.
@@ -772,9 +771,9 @@ func setupTagData(t *testing.T) {
 	t.Helper()
 	cleanupTagData()
 	require.NoError(t, database.Database[*TestRecordTag](context.Background()).Create(
-		&TestRecordTag{Base: model.Base{ID: "t1"}, RecordID: "a1", Label: "vip"},
-		&TestRecordTag{Base: model.Base{ID: "t2"}, RecordID: "a3", Label: "vip"},
-		&TestRecordTag{Base: model.Base{ID: "t3"}, RecordID: "a4", Label: "bulk"},
+		&TestRecordTag{ID: "t1", RecordID: "a1", Label: "vip"},
+		&TestRecordTag{ID: "t2", RecordID: "a3", Label: "vip"},
+		&TestRecordTag{ID: "t3", RecordID: "a4", Label: "bulk"},
 	))
 }
 
@@ -822,7 +821,7 @@ func TestFilterExists(t *testing.T) {
 		// a1 gets a second vip tag. A join would duplicate the row and double
 		// its amount; a semi join matches it once.
 		require.NoError(t, database.Database[*TestRecordTag](ctx).Create(
-			&TestRecordTag{Base: model.Base{ID: "t4"}, RecordID: "a1", Label: "vip"},
+			&TestRecordTag{ID: "t4", RecordID: "a1", Label: "vip"},
 		))
 		type row struct {
 			Total   int64
@@ -839,7 +838,7 @@ func TestFilterExists(t *testing.T) {
 
 	t.Run("HidesSoftDeletedRelatedRows", func(t *testing.T) {
 		require.NoError(t, database.Database[*TestRecordTag](ctx).Delete(
-			&TestRecordTag{Base: model.Base{ID: "t2"}},
+			&TestRecordTag{ID: "t2"},
 		))
 		records := make([]*TestAggregateRecord, 0)
 		require.NoError(t, database.Database[*TestAggregateRecord](ctx).
@@ -935,7 +934,7 @@ func TestAggregateConditionalOnSubquery(t *testing.T) {
 
 	t.Run("SecondRelatedRowDoesNotDoubleCount", func(t *testing.T) {
 		require.NoError(t, database.Database[*TestRecordTag](ctx).Create(
-			&TestRecordTag{Base: model.Base{ID: "t9"}, RecordID: "a1", Label: "vip"},
+			&TestRecordTag{ID: "t9", RecordID: "a1", Label: "vip"},
 		))
 		again := row{}
 		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](ctx).
@@ -991,7 +990,7 @@ func TestFilterExistsNested(t *testing.T) {
 	// A note on t1 only. t1 tags a1, so a1 is the single record reachable
 	// through tag -> note.
 	require.NoError(t, database.Database[*TestTagNote](ctx).Create(
-		&TestTagNote{Base: model.Base{ID: "n1"}, TagID: "t1", Body: "checked"},
+		&TestTagNote{ID: "n1", TagID: "t1", Body: "checked"},
 	))
 
 	noteCols := struct {

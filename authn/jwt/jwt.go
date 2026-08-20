@@ -111,15 +111,13 @@ func RevokeTokens(userID string) {
 func genAccessToken(userID string, username string) (token string, err error) {
 	now := time.Now()
 	claims := Claims{
-		UserID:   userID,
-		Username: username,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(config.App.Auth.AccessTokenExpireDuration)), // expiration time
-			IssuedAt:  jwt.NewNumericDate(now),
-			NotBefore: jwt.NewNumericDate(now),
-			Issuer:    issuer, // issuer
-			Subject:   userID,
-		},
+		UserID:    userID,
+		Username:  username,
+		ExpiresAt: jwt.NewNumericDate(now.Add(config.App.Auth.AccessTokenExpireDuration)), // expiration time
+		IssuedAt:  jwt.NewNumericDate(now),
+		NotBefore: jwt.NewNumericDate(now),
+		Issuer:    issuer, // issuer
+		Subject:   userID,
 	}
 	// NewWithClaims builds a signing object using the given signing method,
 	// SignedString signs it with the given secret and returns the fully encoded token string.
@@ -187,8 +185,8 @@ func ParseToken(tokenStr string) (*Claims, error) {
 			UserID: "root",
 			// This must be either root or admin, but admin is reserved for regular
 			// administration, so root is used here. It pairs with casbin.
-			Username:         "root",
-			RegisteredClaims: jwt.RegisteredClaims{Issuer: issuer, Subject: "root"},
+			Username: "root",
+			Issuer:   issuer, Subject: "root",
 		}, nil
 	}
 
