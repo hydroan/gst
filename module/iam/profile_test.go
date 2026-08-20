@@ -28,7 +28,7 @@ func TestProfileGet(t *testing.T) {
 	account := newProfileTestAccount(t)
 	cli := sessionClient(t, account.SessionID)
 
-	rsp, err := client.Get[iam.ProfileGetRsp](cli, profilePath)
+	rsp, err := cli.Get[iam.ProfileGetRsp](profilePath)
 	require.NoError(t, err)
 
 	require.Equal(t, account.UserID, rsp.UserID)
@@ -54,7 +54,7 @@ func TestProfilePatch(t *testing.T) {
 			"public": true,
 		}
 
-		rsp, err := client.Patch[iam.ProfilePatchRsp](cli, profilePath, &iam.ProfilePatchReq{
+		rsp, err := cli.Patch[iam.ProfilePatchRsp](profilePath, &iam.ProfilePatchReq{
 			DisplayName: &displayName,
 			FirstName:   &firstName,
 			Avatar:      &avatar,
@@ -75,7 +75,7 @@ func TestProfilePatch(t *testing.T) {
 	t.Run("patch_only_requested_fields", func(t *testing.T) {
 		lastName := "Tester"
 
-		rsp, err := client.Patch[iam.ProfilePatchRsp](cli, profilePath, &iam.ProfilePatchReq{
+		rsp, err := cli.Patch[iam.ProfilePatchRsp](profilePath, &iam.ProfilePatchReq{
 			LastName: &lastName,
 		})
 		require.NoError(t, err)
@@ -96,7 +96,7 @@ func TestProfilePatch(t *testing.T) {
 			"timezone": "UTC",
 		}
 
-		rsp, err := client.Patch[iam.ProfilePatchRsp](cli, profilePath, &iam.ProfilePatchReq{
+		rsp, err := cli.Patch[iam.ProfilePatchRsp](profilePath, &iam.ProfilePatchReq{
 			Metadata: metadata,
 		})
 		require.NoError(t, err)
@@ -121,7 +121,7 @@ func newProfileTestAccount(t *testing.T) profileTestAccount {
 	cli, err := client.New(baseURL)
 	require.NoError(t, err)
 
-	rsp, err := client.Post[iam.SignupRsp](cli, signupPath, iam.SignupReq{
+	rsp, err := cli.Post[iam.SignupRsp](signupPath, iam.SignupReq{
 		Username:   account.Username,
 		Password:   account.Password,
 		RePassword: account.Password,

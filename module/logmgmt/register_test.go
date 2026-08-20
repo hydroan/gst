@@ -18,7 +18,6 @@ import (
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	"github.com/hydroan/gst/internal/testutil"
-	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/module/logmgmt"
@@ -104,7 +103,7 @@ func TestLoginLogList(t *testing.T) {
 	t.Run("after_login", func(t *testing.T) {
 		cli := logmgmtSessionClient(t, sessionID)
 
-		list, err := client.Get[client.ListResult[*logmgmt.LoginLog]](cli, loginlogPath)
+		list, err := cli.Get[client.ListResult[*logmgmt.LoginLog]](loginlogPath)
 		require.NoError(t, err)
 
 		require.Len(t, list.Items, 1)
@@ -116,7 +115,7 @@ func TestLoginLogList(t *testing.T) {
 
 	t.Run("after_logout_and_login_again", func(t *testing.T) {
 		logoutCli := logmgmtSessionClient(t, sessionID)
-		_, err := client.Post[iam.LogoutRsp](logoutCli, logoutPath, nil)
+		_, err := logoutCli.Post[iam.LogoutRsp](logoutPath, nil)
 		require.NoError(t, err)
 
 		sessionID = loginSessionIDFromCookie(t, iam.LoginReq{
@@ -126,7 +125,7 @@ func TestLoginLogList(t *testing.T) {
 
 		cli := logmgmtSessionClient(t, sessionID)
 
-		list, err := client.Get[client.ListResult[*logmgmt.LoginLog]](cli, loginlogPath)
+		list, err := cli.Get[client.ListResult[*logmgmt.LoginLog]](loginlogPath)
 		require.NoError(t, err)
 
 		require.Len(t, list.Items, 3)
@@ -160,7 +159,7 @@ func TestOperationLogList(t *testing.T) {
 	t.Run("before_operation", func(t *testing.T) {
 		cli := logmgmtSessionClient(t, sessionID)
 
-		list, err := client.Get[client.ListResult[*logmgmt.OperationLog]](cli, operationlogPath,
+		list, err := cli.Get[client.ListResult[*logmgmt.OperationLog]](operationlogPath,
 			client.WithQuery("record_id", roleID))
 		require.NoError(t, err)
 		require.Empty(t, list.Items)
@@ -172,10 +171,10 @@ func TestOperationLogList(t *testing.T) {
 	})
 	cli := logmgmtSessionClient(t, adminSessionID)
 	createReq := &authz.Role{
-		Base: model.Base{ID: roleID},
+		ID:   roleID,
 		Name: roleName,
 	}
-	created, err := client.Post[authz.Role](cli, rolePath, createReq)
+	created, err := cli.Post[authz.Role](rolePath, createReq)
 	require.NoError(t, err)
 	require.NotNil(t, created)
 	require.Equal(t, createReq.Name, created.Name)
@@ -184,7 +183,7 @@ func TestOperationLogList(t *testing.T) {
 	t.Run("after_operation", func(t *testing.T) {
 		cli := logmgmtSessionClient(t, sessionID)
 
-		list, err := client.Get[client.ListResult[*logmgmt.OperationLog]](cli, operationlogPath,
+		list, err := cli.Get[client.ListResult[*logmgmt.OperationLog]](operationlogPath,
 			client.WithQuery("record_id", roleID))
 		require.NoError(t, err)
 
@@ -204,7 +203,7 @@ func signupLogmgmtTestUser(t *testing.T, username, password string) string {
 
 	cli, err := client.New(baseURL)
 	require.NoError(t, err)
-	rsp, err := client.Post[iam.SignupRsp](cli, signupPath, iam.SignupReq{
+	rsp, err := cli.Post[iam.SignupRsp](signupPath, iam.SignupReq{
 		Username:   username,
 		Password:   password,
 		RePassword: password,

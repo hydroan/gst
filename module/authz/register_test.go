@@ -126,7 +126,7 @@ func TestAuthzRoutes(t *testing.T) {
 		//     }
 		//   ]
 		// }
-		rsp, err := client.Get[authz.RoutesRsp](cli, routesPath)
+		rsp, err := cli.Get[authz.RoutesRsp](routesPath)
 		require.NoError(t, err)
 
 		require.NotEmpty(t, rsp.Items, "routes list should not be empty")
@@ -148,12 +148,12 @@ func TestAuthzRoutes(t *testing.T) {
 		authzGrantTenantPolicy(t, tenantA, roleID, types.Permission{Object: "/api/authz/routes", Action: http.MethodGet})
 
 		cli := authzTenantClient(t, userSessionID, tenantA)
-		rsp, err := client.Get[authz.RoutesRsp](cli, routesPath)
+		rsp, err := cli.Get[authz.RoutesRsp](routesPath)
 		require.NoError(t, err)
 		requireRoute(t, rsp.Items, "/api/authz/routes", []string{http.MethodGet})
 
 		cli = authzTenantClient(t, userSessionID, tenantB)
-		_, err = client.Get[authz.RoutesRsp](cli, routesPath)
+		_, err = cli.Get[authz.RoutesRsp](routesPath)
 		require.Error(t, err)
 	})
 }
@@ -167,7 +167,7 @@ func TestAuthzMenu(t *testing.T) {
 		var menuID string
 
 		t.Run("list", func(t *testing.T) {
-			list, err := client.Get[client.ListResult[*authz.Menu]](cli, menuPath)
+			list, err := cli.Get[client.ListResult[*authz.Menu]](menuPath)
 			require.NoError(t, err)
 			require.NotNil(t, list.Items)
 			require.GreaterOrEqual(t, list.Total, 0)
@@ -188,7 +188,7 @@ func TestAuthzMenu(t *testing.T) {
 					{Path: "/api/authz/routes", Methods: []string{http.MethodGet}},
 				},
 			}
-			rsp, err := client.Post[authz.Menu](cli, menuPath, createReq)
+			rsp, err := cli.Post[authz.Menu](menuPath, createReq)
 			require.NoError(t, err)
 			require.NotEmpty(t, rsp.ID)
 			require.Equal(t, createReq.Label, rsp.Label)
@@ -199,7 +199,7 @@ func TestAuthzMenu(t *testing.T) {
 		})
 
 		t.Run("get", func(t *testing.T) {
-			rsp, err := client.Get[authz.Menu](cli, menuPath+"/"+menuID)
+			rsp, err := cli.Get[authz.Menu](menuPath + "/" + menuID)
 			require.NoError(t, err)
 			require.Equal(t, menuID, rsp.ID)
 			require.Equal(t, "Test Menu", rsp.Label)
@@ -217,7 +217,7 @@ func TestAuthzMenu(t *testing.T) {
 					{Path: "/api/authz/roles", Methods: []string{http.MethodGet}},
 				},
 			}
-			rsp, err := client.Put[authz.Menu](cli, menuPath+"/"+menuID, updateReq)
+			rsp, err := cli.Put[authz.Menu](menuPath+"/"+menuID, updateReq)
 			require.NoError(t, err)
 			require.Equal(t, menuID, rsp.ID)
 			require.Equal(t, updateReq.Label, rsp.Label)
@@ -227,7 +227,7 @@ func TestAuthzMenu(t *testing.T) {
 
 		t.Run("patch", func(t *testing.T) {
 			patchReq := map[string]string{"label": "Test Menu Patched"}
-			rsp, err := client.Patch[authz.Menu](cli, menuPath+"/"+menuID, patchReq)
+			rsp, err := cli.Patch[authz.Menu](menuPath+"/"+menuID, patchReq)
 			require.NoError(t, err)
 			require.Equal(t, menuID, rsp.ID)
 			require.Equal(t, patchReq["label"], rsp.Label)
@@ -235,7 +235,7 @@ func TestAuthzMenu(t *testing.T) {
 		})
 
 		t.Run("list_expand", func(t *testing.T) {
-			list, err := client.Get[client.ListResult[*authz.Menu]](cli, menuPath,
+			list, err := cli.Get[client.ListResult[*authz.Menu]](menuPath,
 				client.WithExpand("Children,Parent", 1))
 			require.NoError(t, err)
 			require.NotNil(t, list.Items)
@@ -243,7 +243,7 @@ func TestAuthzMenu(t *testing.T) {
 		})
 
 		t.Run("delete", func(t *testing.T) {
-			_, err := client.Delete[struct{}](cli, menuPath+"/"+menuID, nil)
+			_, err := cli.Delete[struct{}](menuPath+"/"+menuID, nil)
 			require.NoError(t, err, "delete should return success")
 		})
 
@@ -263,7 +263,7 @@ func TestAuthzMenu(t *testing.T) {
 				types.Permission{Object: menuPath, Action: http.MethodPost})
 
 			memberCli := authzTenantClient(t, memberSessionID, guardTenant)
-			_, err := client.Post[authz.Menu](memberCli, menuPath, &authz.Menu{
+			_, err := memberCli.Post[authz.Menu](menuPath, &authz.Menu{
 				ParentID: "root",
 				Label:    "Guarded Menu",
 				Path:     "/guarded-menu",
@@ -272,7 +272,7 @@ func TestAuthzMenu(t *testing.T) {
 		})
 
 		t.Run("delete_removes_menu_references", func(t *testing.T) {
-			created, err := client.Post[authz.Menu](cli, menuPath, &authz.Menu{
+			created, err := cli.Post[authz.Menu](menuPath, &authz.Menu{
 				ParentID: "root",
 				Label:    "Referenced Menu",
 				Path:     "/referenced-menu",
@@ -281,7 +281,7 @@ func TestAuthzMenu(t *testing.T) {
 			require.NotEmpty(t, created.ID)
 			referencedMenuID := created.ID
 
-			role, err := client.Post[authz.Role](cli, rolePath, &authz.Role{
+			role, err := cli.Post[authz.Role](rolePath, &authz.Role{
 				Name:    "menu_reference_role",
 				MenuIDs: []string{referencedMenuID},
 			})
@@ -289,19 +289,19 @@ func TestAuthzMenu(t *testing.T) {
 			require.NotEmpty(t, role.ID)
 			referencedRoleID := role.ID
 
-			_, err = client.Delete[struct{}](cli, menuPath+"/"+referencedMenuID, nil)
+			_, err = cli.Delete[struct{}](menuPath+"/"+referencedMenuID, nil)
 			require.NoError(t, err)
 
-			got, err := client.Get[authz.Role](cli, rolePath+"/"+referencedRoleID)
+			got, err := cli.Get[authz.Role](rolePath + "/" + referencedRoleID)
 			require.NoError(t, err)
 			require.NotContains(t, []string(got.MenuIDs), referencedMenuID)
 
-			_, err = client.Delete[struct{}](cli, rolePath+"/"+referencedRoleID, nil)
+			_, err = cli.Delete[struct{}](rolePath+"/"+referencedRoleID, nil)
 			require.NoError(t, err)
 		})
 
 		t.Run("invalid_role_binding_does_not_fallback_to_default_role", func(t *testing.T) {
-			created, err := client.Post[authz.Menu](cli, menuPath, &authz.Menu{
+			created, err := cli.Post[authz.Menu](menuPath, &authz.Menu{
 				ParentID: "root",
 				Label:    "Default Fallback Menu",
 				Path:     "/default-fallback-menu",
@@ -311,7 +311,7 @@ func TestAuthzMenu(t *testing.T) {
 			defaultMenuID := created.ID
 
 			defaultRole := true
-			role, err := client.Post[authz.Role](cli, rolePath, &authz.Role{
+			role, err := cli.Post[authz.Role](rolePath, &authz.Role{
 				Name:    "default_fallback_role",
 				Default: &defaultRole,
 				MenuIDs: []string{defaultMenuID},
@@ -321,10 +321,10 @@ func TestAuthzMenu(t *testing.T) {
 
 			missingRoleID := "missing_default_fallback_role"
 			invalidRoleBinding := &authz.RoleBinding{
-				Scope:     tenant.Scope{TenantID: tenant.Default},
+				TenantID:  tenant.Default,
 				SubjectID: userID,
 				RoleID:    missingRoleID,
-				Base:      model.Base{ID: util.HashID(userID, missingRoleID)},
+				ID:        util.HashID(userID, missingRoleID),
 			}
 			require.NoError(t, database.Database[*authz.RoleBinding](context.Background()).WithoutHook().Create(invalidRoleBinding))
 			rbacPolicy := rbac.RBAC()
@@ -335,7 +335,7 @@ func TestAuthzMenu(t *testing.T) {
 			}))
 
 			userMenuCli := authzSessionClient(t, userSessionID)
-			list, err := client.Get[client.ListResult[*authz.Menu]](userMenuCli, menuPath)
+			list, err := userMenuCli.Get[client.ListResult[*authz.Menu]](menuPath)
 			require.NoError(t, err)
 			requireNoMenu(t, list.Items, defaultMenuID)
 		})
@@ -345,7 +345,7 @@ func TestAuthzMenu(t *testing.T) {
 			tenantB := authzTestUsername("tenant_menu_b")
 			tenantUserID, tenantUserSessionID := authzSignupAndLoginUserWithUserAgent(t, authzTestUsername("tenant_menu_user"), "12345678", tenantUserAgent)
 
-			menuA, err := client.Post[authz.Menu](cli, menuPath, &authz.Menu{
+			menuA, err := cli.Post[authz.Menu](menuPath, &authz.Menu{
 				ParentID: "root",
 				Label:    "Tenant A Menu",
 				Path:     "/tenant-a-menu",
@@ -357,7 +357,7 @@ func TestAuthzMenu(t *testing.T) {
 			require.NotEmpty(t, menuA.ID)
 			tenantAMenuID := menuA.ID
 
-			menuB, err := client.Post[authz.Menu](cli, menuPath, &authz.Menu{
+			menuB, err := cli.Post[authz.Menu](menuPath, &authz.Menu{
 				ParentID: "root",
 				Label:    "Tenant B Menu",
 				Path:     "/tenant-b-menu",
@@ -375,13 +375,13 @@ func TestAuthzMenu(t *testing.T) {
 			authzBindTenantRole(t, tenantB, tenantUserID, tenantBRoleID)
 
 			userMenuCli := authzTenantClient(t, tenantUserSessionID, tenantA)
-			list, err := client.Get[client.ListResult[*authz.Menu]](userMenuCli, menuPath)
+			list, err := userMenuCli.Get[client.ListResult[*authz.Menu]](menuPath)
 			require.NoError(t, err)
 			requireMenu(t, list.Items, tenantAMenuID)
 			requireNoMenu(t, list.Items, tenantBMenuID)
 
 			userMenuCli = authzTenantClient(t, tenantUserSessionID, tenantB)
-			list, err = client.Get[client.ListResult[*authz.Menu]](userMenuCli, menuPath)
+			list, err = userMenuCli.Get[client.ListResult[*authz.Menu]](menuPath)
 			require.NoError(t, err)
 			requireMenu(t, list.Items, tenantBMenuID)
 			requireNoMenu(t, list.Items, tenantAMenuID)
@@ -397,7 +397,7 @@ func TestAuthzRole(t *testing.T) {
 		var roleID string
 		var roleName string
 
-		roleMenu, menuErr := client.Post[authz.Menu](cli, menuPath, &authz.Menu{
+		roleMenu, menuErr := cli.Post[authz.Menu](menuPath, &authz.Menu{
 			ParentID: "root",
 			Label:    "Role Test Menu",
 			Path:     "/role-test",
@@ -410,26 +410,26 @@ func TestAuthzRole(t *testing.T) {
 		roleMenuID := roleMenu.ID
 
 		t.Run("list", func(t *testing.T) {
-			list, err := client.Get[client.ListResult[*authz.Role]](cli, rolePath)
+			list, err := cli.Get[client.ListResult[*authz.Role]](rolePath)
 			require.NoError(t, err)
 			require.NotNil(t, list.Items)
 			require.GreaterOrEqual(t, list.Total, 0)
 		})
 
 		t.Run("create_requires_name", func(t *testing.T) {
-			_, err := client.Post[authz.Role](cli, rolePath, &authz.Role{})
+			_, err := cli.Post[authz.Role](rolePath, &authz.Role{})
 			require.Error(t, err)
 		})
 
 		t.Run("create_rejects_system_root", func(t *testing.T) {
 			// Both the reserved ID and the reserved name are rejected, so a
 			// user-created role can never masquerade as the system role.
-			_, err := client.Post[authz.Role](cli, rolePath, &authz.Role{
-				Base: model.Base{ID: consts.AUTHZ_SYSTEM_ROLE_ROOT},
+			_, err := cli.Post[authz.Role](rolePath, &authz.Role{
+				ID:   consts.AUTHZ_SYSTEM_ROLE_ROOT,
 				Name: "some_role_name",
 			})
 			require.Error(t, err)
-			_, err = client.Post[authz.Role](cli, rolePath, &authz.Role{
+			_, err = cli.Post[authz.Role](rolePath, &authz.Role{
 				Name: consts.AUTHZ_SYSTEM_ROLE_ROOT,
 			})
 			require.Error(t, err)
@@ -440,25 +440,25 @@ func TestAuthzRole(t *testing.T) {
 			// permission sync silently expanded only the menus it could find —
 			// a role that looked configured with a slice of it missing, and
 			// nothing downstream able to see the gap.
-			_, err := client.Post[authz.Role](cli, rolePath, &authz.Role{
+			_, err := cli.Post[authz.Role](rolePath, &authz.Role{
 				Name:    authzTestUsername("dangling_menu_role"),
 				MenuIDs: []string{roleMenuID, "no/such/menu"},
 			})
 			testutil.RequireError(t, err, http.StatusBadRequest)
 			require.ErrorContains(t, err, "menus do not exist: no/such/menu")
 
-			created, err := client.Post[authz.Role](cli, rolePath, &authz.Role{
+			created, err := cli.Post[authz.Role](rolePath, &authz.Role{
 				Name:    authzTestUsername("dangling_menu_role"),
 				MenuIDs: []string{roleMenuID},
 			})
 			require.NoError(t, err)
-			_, err = client.Put[authz.Role](cli, rolePath+"/"+created.ID, &authz.Role{
+			_, err = cli.Put[authz.Role](rolePath+"/"+created.ID, &authz.Role{
 				Name:    created.Name,
 				MenuIDs: []string{"no/such/menu"},
 			})
 			testutil.RequireError(t, err, http.StatusBadRequest)
 
-			_, err = client.Delete[struct{}](cli, rolePath+"/"+created.ID, nil)
+			_, err = cli.Delete[struct{}](rolePath+"/"+created.ID, nil)
 			require.NoError(t, err)
 		})
 
@@ -469,7 +469,7 @@ func TestAuthzRole(t *testing.T) {
 				Name:    roleName,
 				MenuIDs: []string{roleMenuID},
 			}
-			rsp, err := client.Post[authz.Role](cli, rolePath, createReq)
+			rsp, err := cli.Post[authz.Role](rolePath, createReq)
 			require.NoError(t, err)
 			require.NotEmpty(t, rsp.ID)
 			require.EqualValues(t, tenant.Default, rsp.TenantID)
@@ -480,7 +480,7 @@ func TestAuthzRole(t *testing.T) {
 		})
 
 		t.Run("get", func(t *testing.T) {
-			rsp, err := client.Get[authz.Role](cli, rolePath+"/"+roleID)
+			rsp, err := cli.Get[authz.Role](rolePath + "/" + roleID)
 			require.NoError(t, err)
 			require.Equal(t, roleID, rsp.ID)
 			require.Equal(t, roleName, rsp.Name)
@@ -491,7 +491,7 @@ func TestAuthzRole(t *testing.T) {
 				Name:    authzTestUsername("test_role_updated"),
 				MenuIDs: []string{roleMenuID},
 			}
-			rsp, err := client.Put[authz.Role](cli, rolePath+"/"+roleID, updateReq)
+			rsp, err := cli.Put[authz.Role](rolePath+"/"+roleID, updateReq)
 			require.NoError(t, err)
 			require.Equal(t, roleID, rsp.ID)
 			require.Equal(t, updateReq.Name, rsp.Name)
@@ -500,13 +500,13 @@ func TestAuthzRole(t *testing.T) {
 
 		t.Run("update_name_preserves_role_id_policies", func(t *testing.T) {
 			nextName := authzTestUsername("test_role_updated_again")
-			_, err := client.Put[authz.Role](cli, rolePath+"/"+roleID, &authz.Role{
+			_, err := cli.Put[authz.Role](rolePath+"/"+roleID, &authz.Role{
 				Name:    nextName,
 				MenuIDs: []string{roleMenuID},
 			})
 			require.NoError(t, err)
 
-			got, err := client.Get[authz.Role](cli, rolePath+"/"+roleID)
+			got, err := cli.Get[authz.Role](rolePath + "/" + roleID)
 			require.NoError(t, err)
 			require.Equal(t, nextName, got.Name)
 			roleName = got.Name
@@ -528,17 +528,17 @@ func TestAuthzRole(t *testing.T) {
 			// update dropping them would revoke the role's permissions on its
 			// own, which is the documented replace semantics and not what is
 			// under test here.
-			current, err := client.Get[authz.Role](cli, rolePath+"/"+roleID)
+			current, err := cli.Get[authz.Role](rolePath + "/" + roleID)
 			require.NoError(t, err)
 
-			_, err = client.Put[authz.Role](cli, rolePath+"/"+roleID, &authz.Role{
-				Scope:   tenant.Scope{TenantID: "other"},
-				Name:    current.Name,
-				MenuIDs: current.MenuIDs,
+			_, err = cli.Put[authz.Role](rolePath+"/"+roleID, &authz.Role{
+				TenantID: "other",
+				Name:     current.Name,
+				MenuIDs:  current.MenuIDs,
 			})
 			require.NoError(t, err)
 
-			moved, err := client.Get[authz.Role](cli, rolePath+"/"+roleID)
+			moved, err := cli.Get[authz.Role](rolePath + "/" + roleID)
 			require.NoError(t, err)
 			require.EqualValues(t, tenant.Default, moved.TenantID)
 
@@ -548,7 +548,7 @@ func TestAuthzRole(t *testing.T) {
 
 		t.Run("patch", func(t *testing.T) {
 			patchReq := &authz.Role{Name: roleName}
-			rsp, err := client.Patch[authz.Role](cli, rolePath+"/"+roleID, patchReq)
+			rsp, err := cli.Patch[authz.Role](rolePath+"/"+roleID, patchReq)
 			require.NoError(t, err)
 			require.Equal(t, roleID, rsp.ID)
 			require.Equal(t, roleName, rsp.Name)
@@ -556,28 +556,28 @@ func TestAuthzRole(t *testing.T) {
 
 		t.Run("patch_name", func(t *testing.T) {
 			nextName := authzTestUsername("test_role_patched")
-			_, err := client.Patch[authz.Role](cli, rolePath+"/"+roleID, &authz.Role{Name: nextName})
+			_, err := cli.Patch[authz.Role](rolePath+"/"+roleID, &authz.Role{Name: nextName})
 			require.NoError(t, err)
 
-			got, err := client.Get[authz.Role](cli, rolePath+"/"+roleID)
+			got, err := cli.Get[authz.Role](rolePath + "/" + roleID)
 			require.NoError(t, err)
 			require.Equal(t, nextName, got.Name)
 			roleName = got.Name
 		})
 
 		t.Run("list_expand", func(t *testing.T) {
-			list, err := client.Get[client.ListResult[*authz.Role]](cli, rolePath)
+			list, err := cli.Get[client.ListResult[*authz.Role]](rolePath)
 			require.NoError(t, err)
 			require.NotNil(t, list.Items)
 			require.GreaterOrEqual(t, list.Total, 0)
 		})
 
 		t.Run("delete", func(t *testing.T) {
-			_, err := client.Delete[struct{}](cli, rolePath+"/"+roleID, nil)
+			_, err := cli.Delete[struct{}](rolePath+"/"+roleID, nil)
 			require.NoError(t, err, "delete should return success")
 		})
 
-		_, menuDelErr := client.Delete[struct{}](cli, menuPath+"/"+roleMenuID, nil)
+		_, menuDelErr := cli.Delete[struct{}](menuPath+"/"+roleMenuID, nil)
 		require.NoError(t, menuDelErr)
 	})
 }
@@ -593,7 +593,7 @@ func TestAuthzRoleBinding(t *testing.T) {
 
 		// Create a role for assigning to user.
 		bindingRoleName := authzTestUsername("rb_role")
-		role, err := client.Post[authz.Role](cli, rolePath, &authz.Role{
+		role, err := cli.Post[authz.Role](rolePath, &authz.Role{
 			Name: bindingRoleName,
 		})
 		require.NoError(t, err)
@@ -601,7 +601,7 @@ func TestAuthzRoleBinding(t *testing.T) {
 		roleID = role.ID
 
 		t.Run("list", func(t *testing.T) {
-			list, err := client.Get[client.ListResult[*authz.RoleBinding]](cli, roleBindingPath)
+			list, err := cli.Get[client.ListResult[*authz.RoleBinding]](roleBindingPath)
 			require.NoError(t, err)
 			require.NotNil(t, list.Items)
 			require.GreaterOrEqual(t, list.Total, 0)
@@ -612,7 +612,7 @@ func TestAuthzRoleBinding(t *testing.T) {
 				SubjectID: userID,
 				RoleID:    roleID,
 			}
-			rsp, err := client.Post[authz.RoleBinding](cli, roleBindingPath, createReq)
+			rsp, err := cli.Post[authz.RoleBinding](roleBindingPath, createReq)
 			require.NoError(t, err)
 			require.NotEmpty(t, rsp.ID)
 			require.EqualValues(t, tenant.Default, rsp.TenantID)
@@ -623,7 +623,7 @@ func TestAuthzRoleBinding(t *testing.T) {
 		})
 
 		t.Run("get", func(t *testing.T) {
-			rsp, err := client.Get[authz.RoleBinding](cli, roleBindingPath+"/"+roleBindingID)
+			rsp, err := cli.Get[authz.RoleBinding](roleBindingPath + "/" + roleBindingID)
 			require.NoError(t, err)
 			require.Equal(t, roleBindingID, rsp.ID)
 			require.EqualValues(t, tenant.Default, rsp.TenantID)
@@ -632,7 +632,7 @@ func TestAuthzRoleBinding(t *testing.T) {
 		})
 
 		t.Run("list_expand", func(t *testing.T) {
-			list, err := client.Get[client.ListResult[*authz.RoleBinding]](cli, roleBindingPath)
+			list, err := cli.Get[client.ListResult[*authz.RoleBinding]](roleBindingPath)
 			require.NoError(t, err)
 			require.NotNil(t, list.Items)
 			require.GreaterOrEqual(t, list.Total, 0)
@@ -643,26 +643,26 @@ func TestAuthzRoleBinding(t *testing.T) {
 		// that the authorization did: a rule left behind keeps allowing requests
 		// with no record left to revoke it.
 		t.Run("delete_role_cleans_bindings_and_their_rules", func(t *testing.T) {
-			deletedRole, err := client.Post[authz.Role](cli, rolePath, &authz.Role{
+			deletedRole, err := cli.Post[authz.Role](rolePath, &authz.Role{
 				Name: "deleted_role",
 			})
 			require.NoError(t, err)
 			require.NotEmpty(t, deletedRole.ID)
 			deletedRoleID := deletedRole.ID
 
-			binding, err := client.Post[authz.RoleBinding](cli, roleBindingPath, &authz.RoleBinding{
+			binding, err := cli.Post[authz.RoleBinding](roleBindingPath, &authz.RoleBinding{
 				SubjectID: userID,
 				RoleID:    deletedRoleID,
 			})
 			require.NoError(t, err)
 			require.NotEmpty(t, binding.ID)
 
-			_, err = client.Delete[struct{}](cli, rolePath+"/"+deletedRoleID, nil)
+			_, err = cli.Delete[struct{}](rolePath+"/"+deletedRoleID, nil)
 			require.NoError(t, err)
 
 			remaining := make([]*authz.RoleBinding, 0)
 			err = database.Database[*authz.RoleBinding](context.Background()).
-				WithQuery(&authz.RoleBinding{Scope: tenant.Scope{TenantID: tenant.Default}, RoleID: deletedRoleID}).
+				WithQuery(&authz.RoleBinding{TenantID: tenant.Default, RoleID: deletedRoleID}).
 				List(&remaining)
 			require.NoError(t, err)
 			require.Empty(t, remaining)
@@ -672,7 +672,7 @@ func TestAuthzRoleBinding(t *testing.T) {
 		})
 
 		t.Run("delete", func(t *testing.T) {
-			_, err := client.Delete[struct{}](cli, roleBindingPath+"/"+roleBindingID, nil)
+			_, err := cli.Delete[struct{}](roleBindingPath+"/"+roleBindingID, nil)
 			require.NoError(t, err, "delete should return success")
 		})
 	})
@@ -701,21 +701,21 @@ func TestIAMUserStatusTenantAuthorization(t *testing.T) {
 	authzBindTenantRole(t, tenantA, rootUsername, rootMemberRoleID)
 
 	cli := authzTenantClient(t, adminSessionID, tenantA)
-	rsp, err := client.Patch[iam.UserStatusPatchRsp](cli, userAdminPath+"/"+targetTenantAUserID+"/status",
+	rsp, err := cli.Patch[iam.UserStatusPatchRsp](userAdminPath+"/"+targetTenantAUserID+"/status",
 		iam.UserStatusPatchReq{Status: iam.UserStatusActive})
 	require.NoError(t, err)
 	require.NotEmpty(t, rsp.Msg)
 
-	_, err = client.Patch[iam.UserStatusPatchRsp](cli, userAdminPath+"/"+rootUsername+"/status",
+	_, err = cli.Patch[iam.UserStatusPatchRsp](userAdminPath+"/"+rootUsername+"/status",
 		iam.UserStatusPatchReq{Status: iam.UserStatusActive})
 	testutil.RequireError(t, err, http.StatusForbidden)
 
-	_, err = client.Patch[iam.UserStatusPatchRsp](cli, userAdminPath+"/"+targetTenantBUserID+"/status",
+	_, err = cli.Patch[iam.UserStatusPatchRsp](userAdminPath+"/"+targetTenantBUserID+"/status",
 		iam.UserStatusPatchReq{Status: iam.UserStatusActive})
 	require.Error(t, err)
 
 	cli = authzTenantClient(t, adminSessionID, tenantB)
-	_, err = client.Patch[iam.UserStatusPatchRsp](cli, userAdminPath+"/"+targetTenantAUserID+"/status",
+	_, err = cli.Patch[iam.UserStatusPatchRsp](userAdminPath+"/"+targetTenantAUserID+"/status",
 		iam.UserStatusPatchReq{Status: iam.UserStatusActive})
 	require.Error(t, err)
 }
@@ -742,7 +742,7 @@ func TestIAMAdminUserTenantListGet(t *testing.T) {
 	cli := authzTenantClient(t, adminSessionID, tenantA)
 
 	t.Run("list_tenant_users", func(t *testing.T) {
-		list, err := client.Get[client.ListResult[iam.AdminUserView]](cli, userAdminPath)
+		list, err := cli.Get[client.ListResult[iam.AdminUserView]](userAdminPath)
 		require.NoError(t, err)
 		require.Positive(t, list.Total)
 		requireAdminUserView(t, list.Items, adminUserID)
@@ -752,13 +752,13 @@ func TestIAMAdminUserTenantListGet(t *testing.T) {
 	})
 
 	t.Run("get_tenant_user", func(t *testing.T) {
-		got, err := client.Get[iam.AdminUserGetRsp](cli, userAdminPath+"/"+targetTenantAUserID)
+		got, err := cli.Get[iam.AdminUserGetRsp](userAdminPath + "/" + targetTenantAUserID)
 		require.NoError(t, err)
 		require.Equal(t, targetTenantAUserID, got.User.ID)
 	})
 
 	t.Run("get_other_tenant_user_forbidden", func(t *testing.T) {
-		_, err := client.Get[iam.AdminUserGetRsp](cli, userAdminPath+"/"+targetTenantBUserID)
+		_, err := cli.Get[iam.AdminUserGetRsp](userAdminPath + "/" + targetTenantBUserID)
 		require.Error(t, err)
 	})
 }
@@ -812,7 +812,7 @@ func TestIAMLoginRejectsTenantOutsideMembership(t *testing.T) {
 	cli, err := client.New(baseURL, client.WithUserAgent(tenantUserAgent))
 	require.NoError(t, err)
 
-	_, err = client.Post[iam.LoginRsp](cli, loginPath, iam.LoginReq{
+	_, err = cli.Post[iam.LoginRsp](loginPath, iam.LoginReq{
 		Username: username,
 		Password: password,
 		TenantID: authzTestUsername("tenant_login_forbidden"),
@@ -825,7 +825,7 @@ func TestIAMPrincipalReportsSystemRoot(t *testing.T) {
 		cli, err := client.New(baseURL)
 		require.NoError(t, err)
 
-		rsp, err := client.Post[iam.LoginRsp](cli, loginPath, iam.LoginReq{
+		rsp, err := cli.Post[iam.LoginRsp](loginPath, iam.LoginReq{
 			Username: rootUsername,
 			Password: rootPassword,
 		})
@@ -841,7 +841,7 @@ func TestIAMPrincipalReportsSystemRoot(t *testing.T) {
 		cli, err := client.New(baseURL)
 		require.NoError(t, err)
 
-		rsp, err := client.Post[iam.LoginRsp](cli, loginPath, iam.LoginReq{
+		rsp, err := cli.Post[iam.LoginRsp](loginPath, iam.LoginReq{
 			Username: username,
 			Password: password,
 		})
@@ -862,7 +862,7 @@ func TestIAMPrincipalReportsSystemRoot(t *testing.T) {
 		})
 		cli := authzSessionClient(t, sessionID)
 
-		rsp, err := client.Get[iam.CurrentGetRsp](cli, currentPath)
+		rsp, err := cli.Get[iam.CurrentGetRsp](currentPath)
 		require.NoError(t, err)
 		require.False(t, rsp.Principal.IsSystemRoot)
 
@@ -871,13 +871,13 @@ func TestIAMPrincipalReportsSystemRoot(t *testing.T) {
 		})
 		require.NoError(t, rbac.RBAC().AssignSystemRole(context.Background(), userID, consts.AUTHZ_SYSTEM_ROLE_ROOT))
 
-		rsp, err = client.Get[iam.CurrentGetRsp](cli, currentPath)
+		rsp, err = cli.Get[iam.CurrentGetRsp](currentPath)
 		require.NoError(t, err)
 		require.True(t, rsp.Principal.IsSystemRoot)
 
 		require.NoError(t, rbac.RBAC().UnassignSystemRole(context.Background(), userID, consts.AUTHZ_SYSTEM_ROLE_ROOT))
 
-		rsp, err = client.Get[iam.CurrentGetRsp](cli, currentPath)
+		rsp, err = cli.Get[iam.CurrentGetRsp](currentPath)
 		require.NoError(t, err)
 		require.False(t, rsp.Principal.IsSystemRoot)
 	})
@@ -919,7 +919,7 @@ func authzSignupUser(t *testing.T, username, password string) string {
 
 	cli, err := client.New(baseURL)
 	require.NoError(t, err)
-	rsp, err := client.Post[iam.SignupRsp](cli, signupPath, iam.SignupReq{
+	rsp, err := cli.Post[iam.SignupRsp](signupPath, iam.SignupReq{
 		Username:   username,
 		Password:   password,
 		RePassword: password,
@@ -1011,7 +1011,7 @@ func authzCreateTenantRole(t *testing.T, tenantID, name string, menuIDs ...strin
 	// setting the column here would be overwritten by the stamp anyway.
 	ctx := tenant.In(context.Background(), tenantID)
 	role := &authz.Role{
-		Base:    model.Base{ID: util.HashID(tenantID, name)},
+		ID:      util.HashID(tenantID, name),
 		Name:    name,
 		MenuIDs: menuIDs,
 	}

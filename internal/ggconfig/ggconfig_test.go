@@ -376,7 +376,7 @@ gen:
 			"not a mapping":       "version: 1\ngen:\n  models:\n    ignore: [Profile]\n",
 			"unexported name":     "version: 1\ngen:\n  models:\n    ignore:\n      profile:\n",
 			"invalid identifier":  "version: 1\ngen:\n  models:\n    ignore:\n      \"My-Model\":\n",
-			"duplicate name":      "version: 1\ngen:\n  models:\n    ignore:\n      Profile:\n      Profile:\n",
+			"duplicate name":      "version: 1\ngen:\n  models:\n    ignore:\n      Profile:\n      Profile:\n", //nolint:dupword // the duplicate key is the invalid input under test
 			"unknown value field": "version: 1\ngen:\n  models:\n    ignore:\n      Profile:\n        source: model/iam\n",
 			"value not a mapping": "version: 1\ngen:\n  models:\n    ignore:\n      Profile: model/iam\n",
 			"empty from":          "version: 1\ngen:\n  models:\n    ignore:\n      Profile:\n        from: \"\"\n",

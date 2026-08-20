@@ -41,7 +41,7 @@ func TestPing(t *testing.T) {
 	cli, err := client.New(baseURL)
 	require.NoError(t, err)
 
-	rsp, err := client.Get[model.PingRsp](cli, pingPath)
+	rsp, err := cli.Get[model.PingRsp](pingPath)
 	require.NoError(t, err)
 	require.NotNil(t, rsp)
 }

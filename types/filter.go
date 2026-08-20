@@ -366,7 +366,7 @@ func subqueryFilter[C Model, T any](child, parent ColumnRef[T], filters []Filter
 	}
 	typ := reflect.TypeFor[C]()
 	if typ.Kind() == reflect.Pointer {
-		if m, ok := reflect.New(typ.Elem()).Interface().(C); ok {
+		if m, ok := reflect.TypeAssert[C](reflect.New(typ.Elem())); ok {
 			sub.Model = m
 		}
 	}

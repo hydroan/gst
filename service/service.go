@@ -61,7 +61,7 @@ func Register[S types.Service[M, REQ, RSP], M types.Model, REQ types.Request, RS
 		typ = typ.Elem()
 	}
 
-	svc, ok := reflect.New(typ).Interface().(types.Service[M, REQ, RSP])
+	svc, ok := reflect.TypeAssert[types.Service[M, REQ, RSP]](reflect.New(typ))
 	if !ok {
 		return
 	}

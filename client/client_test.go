@@ -66,28 +66,28 @@ func TestClientCRUDRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 
 	id := newRecordID("crud")
-	record := &TestRecord{Name: "sample-a", Note: "note-1", Base: model.Base{ID: id}}
+	record := &TestRecord{Name: "sample-a", Note: "note-1", ID: id}
 
 	created, err := cli.Post[TestRecord](recordPath, record)
 	require.NoError(t, err)
 	require.Equal(t, id, created.ID)
 	require.Equal(t, "sample-a", created.Name)
 
-	got, err := cli.Get[TestRecord](recordPath+"/"+id)
+	got, err := cli.Get[TestRecord](recordPath + "/" + id)
 	require.NoError(t, err)
 	require.Equal(t, "sample-a", got.Name)
 	require.Equal(t, "note-1", got.Note)
 
-	_, err = cli.Put[TestRecord](recordPath+"/"+id, &TestRecord{Name: "sample-b", Base: model.Base{ID: id}})
+	_, err = cli.Put[TestRecord](recordPath+"/"+id, &TestRecord{Name: "sample-b", ID: id})
 	require.NoError(t, err)
 
-	got, err = cli.Get[TestRecord](recordPath+"/"+id)
+	got, err = cli.Get[TestRecord](recordPath + "/" + id)
 	require.NoError(t, err)
 	require.Equal(t, "sample-b", got.Name)
 	// A full update replaces the row, so the note written at create is gone.
 	require.Empty(t, got.Note)
 
-	patched, err := cli.Patch[TestRecord](recordPath+"/"+id, &TestRecord{Tag: "tag-1", Base: model.Base{ID: id}})
+	patched, err := cli.Patch[TestRecord](recordPath+"/"+id, &TestRecord{Tag: "tag-1", ID: id})
 	require.NoError(t, err)
 	require.Equal(t, "tag-1", patched.Tag)
 	// A partial update keeps the fields it does not name.
@@ -98,7 +98,7 @@ func TestClientCRUDRoundTrip(t *testing.T) {
 
 	// The database layer answers existence, so a vanished record renders the
 	// framework's 404 with its fixed message instead of the driver's own text.
-	_, err = cli.Get[TestRecord](recordPath+"/"+id)
+	_, err = cli.Get[TestRecord](recordPath + "/" + id)
 	testutil.RequireError(t, err, http.StatusNotFound, "Requested resource not found.")
 }
 
@@ -109,7 +109,7 @@ func TestClientListQueryOptions(t *testing.T) {
 	ids := make([]string, 0, 3)
 	for i := range 3 {
 		id := newRecordID("list" + strconv.Itoa(i))
-		_, createErr := cli.Post[TestRecord](recordPath, &TestRecord{Name: "list-sample", Base: model.Base{ID: id}})
+		_, createErr := cli.Post[TestRecord](recordPath, &TestRecord{Name: "list-sample", ID: id})
 		require.NoError(t, createErr)
 		ids = append(ids, id)
 	}
@@ -132,14 +132,14 @@ func TestClientBatchRoundTrip(t *testing.T) {
 	id1 := newRecordID("batch_a")
 	id2 := newRecordID("batch_b")
 	records := []*TestRecord{
-		{Name: "batch-sample", Base: model.Base{ID: id1}},
-		{Name: "batch-sample", Base: model.Base{ID: id2}},
+		{Name: "batch-sample", ID: id1},
+		{Name: "batch-sample", ID: id2},
 	}
 
 	_, err = cli.Post[struct{}](recordPath+"/batch", client.BatchItems(records))
 	require.NoError(t, err)
 
-	got, err := cli.Get[TestRecord](recordPath+"/"+id1)
+	got, err := cli.Get[TestRecord](recordPath + "/" + id1)
 	require.NoError(t, err)
 	require.Equal(t, "batch-sample", got.Name)
 
@@ -148,14 +148,14 @@ func TestClientBatchRoundTrip(t *testing.T) {
 	_, err = cli.Put[struct{}](recordPath+"/batch", client.BatchItems(records))
 	require.NoError(t, err)
 
-	got, err = cli.Get[TestRecord](recordPath+"/"+id2)
+	got, err = cli.Get[TestRecord](recordPath + "/" + id2)
 	require.NoError(t, err)
 	require.Equal(t, "batch-note", got.Note)
 
 	_, err = cli.Delete[struct{}](recordPath+"/batch", client.BatchIDs([]string{id1, id2}))
 	require.NoError(t, err)
 
-	_, err = cli.Get[TestRecord](recordPath+"/"+id1)
+	_, err = cli.Get[TestRecord](recordPath + "/" + id1)
 	testutil.RequireError(t, err, http.StatusNotFound, "Requested resource not found.")
 }
 
@@ -163,7 +163,7 @@ func TestClientRejectionCarriesEnvelope(t *testing.T) {
 	cli, err := client.New(baseURL)
 	require.NoError(t, err)
 
-	_, err = cli.Get[TestRecord](recordPath+"/absent-record-id")
+	_, err = cli.Get[TestRecord](recordPath + "/absent-record-id")
 	var respErr *client.Error
 	require.ErrorAs(t, err, &respErr)
 	require.Equal(t, http.StatusNotFound, respErr.StatusCode)

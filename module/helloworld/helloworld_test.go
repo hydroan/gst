@@ -85,25 +85,25 @@ func TestHelloworldModule(t *testing.T) {
 
 			switch tt.name {
 			case "create":
-				rsp, err = client.Post[helloworld.Rsp](cli, helloworldPath, req)
+				rsp, err = cli.Post[helloworld.Rsp](helloworldPath, req)
 			case "delete":
-				rsp, err = client.Delete[helloworld.Rsp](cli, helloworldPath+"/123", nil)
+				rsp, err = cli.Delete[helloworld.Rsp](helloworldPath+"/123", nil)
 			case "update":
-				rsp, err = client.Put[helloworld.Rsp](cli, helloworldPath+"/123", req)
+				rsp, err = cli.Put[helloworld.Rsp](helloworldPath+"/123", req)
 			case "patch":
-				rsp, err = client.Patch[helloworld.Rsp](cli, helloworldPath+"/123", req)
+				rsp, err = cli.Patch[helloworld.Rsp](helloworldPath+"/123", req)
 			case "list":
-				rsp, err = client.Get[helloworld.Rsp](cli, helloworldPath)
+				rsp, err = cli.Get[helloworld.Rsp](helloworldPath)
 			case "get":
-				rsp, err = client.Get[helloworld.Rsp](cli, helloworldPath+"/123")
+				rsp, err = cli.Get[helloworld.Rsp](helloworldPath + "/123")
 			case "create_many":
-				rsp, err = client.Post[helloworld.Rsp](cli, helloworldPath+"/batch", client.BatchItems([]helloworld.Req{*req}))
+				rsp, err = cli.Post[helloworld.Rsp](helloworldPath+"/batch", client.BatchItems([]helloworld.Req{*req}))
 			case "delete_many":
-				rsp, err = client.Delete[helloworld.Rsp](cli, helloworldPath+"/batch", client.BatchIDs([]string{}))
+				rsp, err = cli.Delete[helloworld.Rsp](helloworldPath+"/batch", client.BatchIDs([]string{}))
 			case "update_many":
-				rsp, err = client.Put[helloworld.Rsp](cli, helloworldPath+"/batch", client.BatchItems([]helloworld.Req{*req}))
+				rsp, err = cli.Put[helloworld.Rsp](helloworldPath+"/batch", client.BatchItems([]helloworld.Req{*req}))
 			case "patch_many":
-				rsp, err = client.Patch[helloworld.Rsp](cli, helloworldPath+"/batch", client.BatchItems([]helloworld.Req{*req}))
+				rsp, err = cli.Patch[helloworld.Rsp](helloworldPath+"/batch", client.BatchItems([]helloworld.Req{*req}))
 			}
 
 			require.NoError(t, err)

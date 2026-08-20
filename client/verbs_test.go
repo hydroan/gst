@@ -29,23 +29,23 @@ func TestVerbsDecodeEnvelopeData(t *testing.T) {
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)
 
-	got, err := client.Get[sampleRecordRsp](cli, "/api/records/one")
+	got, err := cli.Get[sampleRecordRsp]("/api/records/one")
 	require.NoError(t, err)
 	require.Equal(t, "GET-one", got.Name)
 
-	got, err = client.Post[sampleRecordRsp](cli, "/api/records/two", map[string]string{"name": "two"})
+	got, err = cli.Post[sampleRecordRsp]("/api/records/two", map[string]string{"name": "two"})
 	require.NoError(t, err)
 	require.Equal(t, "POST-two", got.Name)
 
-	got, err = client.Put[sampleRecordRsp](cli, "/api/records/three", nil)
+	got, err = cli.Put[sampleRecordRsp]("/api/records/three", nil)
 	require.NoError(t, err)
 	require.Equal(t, "PUT-three", got.Name)
 
-	got, err = client.Patch[sampleRecordRsp](cli, "/api/records/four", nil)
+	got, err = cli.Patch[sampleRecordRsp]("/api/records/four", nil)
 	require.NoError(t, err)
 	require.Equal(t, "PATCH-four", got.Name)
 
-	got, err = client.Delete[sampleRecordRsp](cli, "/api/records/five", nil)
+	got, err = cli.Delete[sampleRecordRsp]("/api/records/five", nil)
 	require.NoError(t, err)
 	require.Equal(t, "DELETE-five", got.Name)
 }
@@ -60,7 +60,7 @@ func TestVerbsDecodeEmptyDataToZeroValue(t *testing.T) {
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)
 
-	got, err := client.Post[struct{}](cli, "/api/records", nil)
+	got, err := cli.Post[struct{}]("/api/records", nil)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 }
@@ -75,7 +75,7 @@ func TestListResultDecodesItemsAndTotal(t *testing.T) {
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)
 
-	list, err := client.Get[client.ListResult[sampleRecordRsp]](cli, "/api/records")
+	list, err := cli.Get[client.ListResult[sampleRecordRsp]]("/api/records")
 	require.NoError(t, err)
 	require.Len(t, list.Items, 2)
 	require.Equal(t, 7, list.Total)
@@ -103,7 +103,7 @@ func TestGetSendsNoBody(t *testing.T) {
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)
 
-	got, err := client.Get[sampleRecordRsp](cli, "/api/records")
+	got, err := cli.Get[sampleRecordRsp]("/api/records")
 	require.NoError(t, err)
 	require.Zero(t, got.Count)
 }

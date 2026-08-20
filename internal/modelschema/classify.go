@@ -81,9 +81,9 @@ func IsJSONType(typ reflect.Type) bool {
 		typ = typ.Elem()
 	}
 	value := reflect.New(typ)
-	decl, ok := value.Elem().Interface().(schema.GormDataTypeInterface)
+	decl, ok := reflect.TypeAssert[schema.GormDataTypeInterface](value.Elem())
 	if !ok {
-		if decl, ok = value.Interface().(schema.GormDataTypeInterface); !ok {
+		if decl, ok = reflect.TypeAssert[schema.GormDataTypeInterface](value); !ok {
 			return false
 		}
 	}

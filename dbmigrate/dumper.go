@@ -91,7 +91,7 @@ func (s *SchemaDumper) Dump(driver config.DBType, dst ...any) (string, error) {
 		} else {
 			rv := reflect.ValueOf(v)
 			if rv.Kind() == reflect.Struct {
-				if namer, ok := reflect.New(rv.Type()).Interface().(interface{ GetTableName() string }); ok {
+				if namer, ok := reflect.TypeAssert[interface{ GetTableName() string }](reflect.New(rv.Type())); ok {
 					tableName = namer.GetTableName()
 				}
 			}

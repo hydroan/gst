@@ -496,7 +496,7 @@ func TestTOTPCrossEndpointReplayProtection(t *testing.T) {
 
 	confirmCode, err := totp.GenerateCode(secret, time.Now())
 	require.NoError(t, err)
-	confirmRsp, err := client.Post[mfa.TOTPConfirmRsp](cli, confirmPath, mfa.TOTPConfirmReq{
+	confirmRsp, err := cli.Post[mfa.TOTPConfirmRsp](confirmPath, mfa.TOTPConfirmReq{
 		ChallengeID: challengeID,
 		Code:        confirmCode,
 		DeviceName:  "test-device-replay",
@@ -632,7 +632,7 @@ func newTOTPTestAccount(t *testing.T, prefix string) totpTestAccount {
 
 	cli, err := client.New(baseURL)
 	require.NoError(t, err)
-	rsp, err := client.Post[iam.SignupRsp](cli, signupPath, iam.SignupReq{
+	rsp, err := cli.Post[iam.SignupRsp](signupPath, iam.SignupReq{
 		Username:   account.Username,
 		Password:   account.Password,
 		RePassword: account.Password,
@@ -675,7 +675,7 @@ func createTOTPBindingChallenge(t *testing.T, sessionID string) (string, string)
 	t.Helper()
 
 	cli := mfaSessionClient(t, sessionID)
-	rsp, err := client.Post[mfa.TOTPBindRsp](cli, bindPath, nil)
+	rsp, err := cli.Post[mfa.TOTPBindRsp](bindPath, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, rsp.ChallengeID)
 	require.NotEmpty(t, rsp.OtpauthURL)
@@ -686,7 +686,7 @@ func unbindTOTPDeviceWithBackupCode(t *testing.T, sessionID, deviceID, backupCod
 	t.Helper()
 
 	cli := mfaSessionClient(t, sessionID)
-	rsp, err := client.Post[mfa.TOTPUnbindRsp](cli, unbindPath, mfa.TOTPUnbindReq{
+	rsp, err := cli.Post[mfa.TOTPUnbindRsp](unbindPath, mfa.TOTPUnbindReq{
 		DeviceID:   deviceID,
 		BackupCode: backupCode,
 	})
@@ -764,7 +764,7 @@ func bindTOTPDeviceForTest(t *testing.T, sessionID, deviceName string) (string, 
 
 	cli := mfaSessionClient(t, sessionID)
 
-	bindRsp, err := client.Post[mfa.TOTPBindRsp](cli, bindPath, nil)
+	bindRsp, err := cli.Post[mfa.TOTPBindRsp](bindPath, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, bindRsp.ChallengeID)
 	require.NotEmpty(t, bindRsp.OtpauthURL)
@@ -773,7 +773,7 @@ func bindTOTPDeviceForTest(t *testing.T, sessionID, deviceName string) (string, 
 	code, err := totp.GenerateCode(secret, time.Now())
 	require.NoError(t, err)
 
-	confirmRsp, err := client.Post[mfa.TOTPConfirmRsp](cli, confirmPath, mfa.TOTPConfirmReq{
+	confirmRsp, err := cli.Post[mfa.TOTPConfirmRsp](confirmPath, mfa.TOTPConfirmReq{
 		ChallengeID: bindRsp.ChallengeID,
 		Code:        code,
 		DeviceName:  deviceName,

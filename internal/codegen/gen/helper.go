@@ -69,7 +69,7 @@ func FormatNodeExtraWithFileSet(node ast.Node, fset *token.FileSet, processImpor
 
 	formatted, err := fumpt.Source(buf.Bytes(), fumpt.Options{
 		LangVersion: "",
-		ExtraRules:  true,
+		Extra:       fumpt.Extra{GroupParams: true, ClotheReturns: true, BalanceCalls: true},
 	})
 	if err != nil {
 		return "", err

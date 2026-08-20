@@ -195,6 +195,6 @@ func asIndexer(model any) (Indexer, bool) {
 	if typ == nil || typ.Kind() == reflect.Pointer {
 		return nil, false
 	}
-	indexer, ok := reflect.New(typ).Interface().(Indexer)
+	indexer, ok := reflect.TypeAssert[Indexer](reflect.New(typ))
 	return indexer, ok
 }

@@ -34,7 +34,7 @@ func TestAdminUserList(t *testing.T) {
 	t.Run("list_users", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		list, err := client.Get[client.ListResult[iam.AdminUserView]](cli, adminUsersPath)
+		list, err := cli.Get[client.ListResult[iam.AdminUserView]](adminUsersPath)
 		require.NoError(t, err)
 		require.Positive(t, list.Total)
 
@@ -49,7 +49,7 @@ func TestAdminUserList(t *testing.T) {
 	t.Run("filter_by_username", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		list, err := client.Get[client.ListResult[iam.AdminUserView]](cli, adminUsersPath,
+		list, err := cli.Get[client.ListResult[iam.AdminUserView]](adminUsersPath,
 			client.WithQuery("username", "fuzzy_match"))
 		require.NoError(t, err)
 		require.Equal(t, 1, list.Total)
@@ -61,7 +61,7 @@ func TestAdminUserList(t *testing.T) {
 	t.Run("forbidden_without_admin_permission", func(t *testing.T) {
 		cli := accountSessionClient(t, actor.SessionID)
 
-		_, err := client.Get[client.ListResult[iam.AdminUserView]](cli, adminUsersPath)
+		_, err := cli.Get[client.ListResult[iam.AdminUserView]](adminUsersPath)
 		testutil.RequireError(t, err, http.StatusForbidden, "permission denied")
 	})
 }
@@ -75,7 +75,7 @@ func TestAdminUserGet(t *testing.T) {
 	t.Run("get_user", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		got, err := client.Get[iam.AdminUserGetRsp](cli, adminUsersPath+"/"+user.UserID)
+		got, err := cli.Get[iam.AdminUserGetRsp](adminUsersPath + "/" + user.UserID)
 		require.NoError(t, err)
 		require.Equal(t, user.UserID, got.User.ID)
 		require.Equal(t, user.Username, got.User.Username)
@@ -87,14 +87,14 @@ func TestAdminUserGet(t *testing.T) {
 	t.Run("missing_target_returns_not_found", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		_, err := client.Get[iam.AdminUserGetRsp](cli, adminUsersPath+"/missing-admin-user-get-target")
+		_, err := cli.Get[iam.AdminUserGetRsp](adminUsersPath + "/missing-admin-user-get-target")
 		testutil.RequireError(t, err, http.StatusNotFound, "user not found")
 	})
 
 	t.Run("forbidden_without_admin_permission", func(t *testing.T) {
 		cli := accountSessionClient(t, actor.SessionID)
 
-		_, err := client.Get[iam.AdminUserGetRsp](cli, adminUsersPath+"/"+user.UserID)
+		_, err := cli.Get[iam.AdminUserGetRsp](adminUsersPath + "/" + user.UserID)
 		testutil.RequireError(t, err, http.StatusForbidden, "permission denied")
 	})
 }
@@ -113,7 +113,7 @@ func TestUserStatusPatch(t *testing.T) {
 	t.Run("forbidden_without_admin_permission", func(t *testing.T) {
 		cli := accountSessionClient(t, actor.SessionID)
 
-		_, err := client.Patch[iam.UserStatusPatchRsp](cli, userStatusPath(victim.UserID), iam.UserStatusPatchReq{
+		_, err := cli.Patch[iam.UserStatusPatchRsp](userStatusPath(victim.UserID), iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusInactive,
 		})
 		testutil.RequireError(t, err, http.StatusForbidden, "permission denied")
@@ -122,7 +122,7 @@ func TestUserStatusPatch(t *testing.T) {
 	t.Run("missing_target_returns_not_found", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		_, err := client.Patch[iam.UserStatusPatchRsp](cli, userStatusPath("missing-user-status-target"), iam.UserStatusPatchReq{
+		_, err := cli.Patch[iam.UserStatusPatchRsp](userStatusPath("missing-user-status-target"), iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusInactive,
 		})
 		testutil.RequireError(t, err, http.StatusNotFound, "user not found")
@@ -131,7 +131,7 @@ func TestUserStatusPatch(t *testing.T) {
 	t.Run("disable_user", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		rsp, err := client.Patch[iam.UserStatusPatchRsp](cli, userStatusPath(victim.UserID), iam.UserStatusPatchReq{
+		rsp, err := cli.Patch[iam.UserStatusPatchRsp](userStatusPath(victim.UserID), iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusInactive,
 		})
 		require.NoError(t, err)
@@ -144,14 +144,14 @@ func TestUserStatusPatch(t *testing.T) {
 
 		cli := accountSessionClient(t, victim.SessionID)
 
-		_, err := client.Get[iam.CurrentGetRsp](cli, currentPath)
+		_, err := cli.Get[iam.CurrentGetRsp](currentPath)
 		testutil.RequireError(t, err, http.StatusUnauthorized)
 	})
 
 	t.Run("inactive_already_inactive_unchanged_still_ok", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		rsp, err := client.Patch[iam.UserStatusPatchRsp](cli, userStatusPath(victim.UserID), iam.UserStatusPatchReq{
+		rsp, err := cli.Patch[iam.UserStatusPatchRsp](userStatusPath(victim.UserID), iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusInactive,
 		})
 		require.NoError(t, err)
@@ -162,7 +162,7 @@ func TestUserStatusPatch(t *testing.T) {
 		cli, err := client.New(baseURL)
 		require.NoError(t, err)
 
-		_, err = client.Post[iam.LoginRsp](cli, loginPath, iam.LoginReq{
+		_, err = cli.Post[iam.LoginRsp](loginPath, iam.LoginReq{
 			Username: victim.Username,
 			Password: victim.Password,
 		})
@@ -173,7 +173,7 @@ func TestUserStatusPatch(t *testing.T) {
 	t.Run("enable_user", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		rsp, err := client.Patch[iam.UserStatusPatchRsp](cli, userStatusPath(victim.UserID), iam.UserStatusPatchReq{
+		rsp, err := cli.Patch[iam.UserStatusPatchRsp](userStatusPath(victim.UserID), iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusActive,
 		})
 		require.NoError(t, err)
@@ -199,7 +199,7 @@ func TestUserStatusPatch(t *testing.T) {
 
 		cli := accountSessionClient(t, victimSessionAfterEnable)
 
-		_, err := client.Get[iam.CurrentGetRsp](cli, currentPath)
+		_, err := cli.Get[iam.CurrentGetRsp](currentPath)
 		testutil.RequireError(t, err, http.StatusForbidden, "account disabled")
 		accountRequireSessionNotFound(t, victimSessionAfterEnable)
 	})
@@ -218,7 +218,7 @@ func TestUserStatusPatch(t *testing.T) {
 
 		cli := accountSessionClient(t, sessionID)
 
-		_, err := client.Get[iam.CurrentGetRsp](cli, currentPath)
+		_, err := cli.Get[iam.CurrentGetRsp](currentPath)
 		testutil.RequireError(t, err, http.StatusForbidden, "account locked")
 		accountRequireSessionNotFound(t, sessionID)
 	})
@@ -226,7 +226,7 @@ func TestUserStatusPatch(t *testing.T) {
 	t.Run("invalid_status_rejected", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		_, err := client.Patch[iam.UserStatusPatchRsp](cli, userStatusPath(victim.UserID), iam.UserStatusPatchReq{
+		_, err := cli.Patch[iam.UserStatusPatchRsp](userStatusPath(victim.UserID), iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatus("not-a-valid-status"),
 		})
 		testutil.RequireError(t, err, http.StatusBadRequest, "invalid")
@@ -235,7 +235,7 @@ func TestUserStatusPatch(t *testing.T) {
 	t.Run("lock_user", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		rsp, err := client.Patch[iam.UserStatusPatchRsp](cli, userStatusPath(victim.UserID), iam.UserStatusPatchReq{
+		rsp, err := cli.Patch[iam.UserStatusPatchRsp](userStatusPath(victim.UserID), iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusLocked,
 		})
 		require.NoError(t, err)
@@ -248,7 +248,7 @@ func TestUserStatusPatch(t *testing.T) {
 
 		cli := accountSessionClient(t, victimSessionAfterEnable)
 
-		_, err := client.Get[iam.CurrentGetRsp](cli, currentPath)
+		_, err := cli.Get[iam.CurrentGetRsp](currentPath)
 		testutil.RequireError(t, err, http.StatusUnauthorized)
 	})
 
@@ -256,7 +256,7 @@ func TestUserStatusPatch(t *testing.T) {
 		cli, err := client.New(baseURL)
 		require.NoError(t, err)
 
-		_, err = client.Post[iam.LoginRsp](cli, loginPath, iam.LoginReq{
+		_, err = cli.Post[iam.LoginRsp](loginPath, iam.LoginReq{
 			Username: victim.Username,
 			Password: victim.Password,
 		})
@@ -267,7 +267,7 @@ func TestUserStatusPatch(t *testing.T) {
 	t.Run("unlock_user", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		rsp, err := client.Patch[iam.UserStatusPatchRsp](cli, userStatusPath(victim.UserID), iam.UserStatusPatchReq{
+		rsp, err := cli.Patch[iam.UserStatusPatchRsp](userStatusPath(victim.UserID), iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusActive,
 		})
 		require.NoError(t, err)
@@ -277,7 +277,7 @@ func TestUserStatusPatch(t *testing.T) {
 	t.Run("status_unchanged_idempotent", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		rsp, err := client.Patch[iam.UserStatusPatchRsp](cli, userStatusPath(victim.UserID), iam.UserStatusPatchReq{
+		rsp, err := cli.Patch[iam.UserStatusPatchRsp](userStatusPath(victim.UserID), iam.UserStatusPatchReq{
 			Status: modeliamuser.UserStatusActive,
 		})
 		require.NoError(t, err)

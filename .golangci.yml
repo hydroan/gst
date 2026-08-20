@@ -14,7 +14,7 @@ linters:
   # v2 config does not support `disable-all`; use `default: none` instead
   default: none
   enable:
-    # Core quality gate.
+    # Core correctness.
     - errcheck
     - govet
     - ineffassign
@@ -29,17 +29,22 @@ linters:
     - nilnil
     - nilnesserr
 
-    # Resource safety and security.
+    # Backend resource safety.
     - bidichk
     - bodyclose
-    - gosec
     - rowserrcheck
     - sqlclosecheck
+    - durationcheck
+    - fatcontext
+    - gosec
 
     # Code hygiene.
+    - asciicheck
     - dupword
     - gocheckcompilerdirectives
     - iface
+    - makezero
+    - mirror
     - misspell
     - musttag
     - nolintlint
@@ -49,6 +54,7 @@ linters:
     - revive
     - unconvert
     - unparam
+    - wastedassign
 
     # Go modernization.
     - copyloopvar
@@ -74,20 +80,14 @@ linters:
     - gomodguard_v2
 
     # Project-specific checks.
-    - canonicalheader
+    # canonicalheader v1.1.2 panics on parameterized method calls (go1.27);
+    # re-enable once an upstream release handles them.
+    # - canonicalheader
     - loggercheck
     - spancheck
 
     # Documentation.
     - godoclint
-
-    # Additional low-noise safeguards.
-    - asciicheck
-    - durationcheck
-    - fatcontext
-    - makezero
-    - mirror
-    - wastedassign
 
   # Linter-specific settings (moved under linters.settings for v2)
   settings:
@@ -99,6 +99,12 @@ linters:
               desc: "Use github.com/cockroachdb/errors instead"
             - pkg: "github.com/pkg/errors"
               desc: "Use github.com/cockroachdb/errors instead"
+
+    errcheck:
+      check-type-assertions: true
+      exclude-functions:
+        - io.Copy(*bytes.Buffer)
+        - io.Copy(os.Stdout)
 
     forbidigo:
       # Refusing a request outside the controller path goes through
@@ -112,45 +118,6 @@ linters:
           msg: "write the envelope through response.Abort instead of building it by hand"
         - pattern: '^.*\.AbortWithStatus$'
           msg: "an empty body carries neither a code nor a trace id; refuse through response.Abort"
-
-    errcheck:
-      check-type-assertions: true
-      exclude-functions:
-        - io.Copy(*bytes.Buffer)
-        - io.Copy(os.Stdout)
-
-    govet:
-      # shadow and nilness are not part of the default go vet analyzer set;
-      # they replace the standalone shadow/nilness binaries previously run by make.
-      enable:
-        - shadow
-        - nilness
-        - unusedwrite
-        - reflectvaluecompare
-        - deepequalerrors
-        - sortslice
-
-    revive:
-      rules:
-        - name: dot-imports
-          arguments:
-            - allowedPackages:
-                - "github.com/hydroan/gst/dsl"
-                - "github.com/hydroan/gst/internal/response"
-        - name: blank-imports
-        - name: context-as-argument
-        - name: context-keys-type
-        - name: error-naming
-        - name: error-return
-        - name: error-strings
-        - name: errorf
-        - name: indent-error-flow
-        - name: range
-        - name: receiver-naming
-        - name: time-naming
-        - name: unexported-return
-        - name: var-declaration
-        - name: var-naming
 
     godoclint:
       # Default set of rules to enable.
@@ -168,6 +135,17 @@ linters:
         # Check deprecated symbols have proper deprecation notice.
         - deprecated
 
+    govet:
+      # shadow and nilness are not part of the default go vet analyzer set;
+      # they replace the standalone shadow/nilness binaries previously run by make.
+      enable:
+        - shadow
+        - nilness
+        - unusedwrite
+        - reflectvaluecompare
+        - deepequalerrors
+        - sortslice
+
     misspell:
       locale: US
 
@@ -181,8 +159,38 @@ linters:
         - "*.Purge"
         - "*.Indexes"
 
+    revive:
+      rules:
+        - name: blank-imports
+        - name: dot-imports
+          arguments:
+            - allowedPackages:
+                - "github.com/hydroan/gst/dsl"
+                - "github.com/hydroan/gst/internal/response"
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: indent-error-flow
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: var-declaration
+        - name: var-naming
+
     staticcheck:
-      checks: ["all", "-QF1008", "-ST1001"]
+      # SA4023 is the only check requiring the nilness fact, whose analyzer in
+      # staticcheck v0.8.0-rc.1 panics on getsentry/sentry-go ("unhandled
+      # builtin recover"); dropping the check prunes the fact from the run.
+      # govet's nilness analyzer still covers nil-consistency independently.
+      # Re-enable once a stable staticcheck release fixes the fact analyzer.
+      checks: ["all", "-QF1008", "-SA4023"]
+      dot-import-whitelist:
+        - github.com/hydroan/gst/dsl
+        - github.com/hydroan/gst/internal/response
 
   # Exclusions moved under linters.exclusions for v2
   exclusions:
@@ -200,10 +208,6 @@ linters:
           - gosec
           - godoclint
           - unparam
-      # Ignore nilerr in specific patterns (example)
-      # - linters:
-      #     - nilerr
-      #   text: "error is not nil but it returns nil"
       # The gofix //go:fix directive is valid but not yet in
       # gocheckcompilerdirectives' known directive list.
       - linters:

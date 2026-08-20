@@ -468,7 +468,7 @@ func (db *database[M]) outerTableName() string {
 	if typ == nil || typ.Kind() != reflect.Pointer {
 		return ""
 	}
-	m, ok := reflect.New(typ.Elem()).Interface().(M)
+	m, ok := reflect.TypeAssert[M](reflect.New(typ.Elem()))
 	if !ok {
 		return ""
 	}

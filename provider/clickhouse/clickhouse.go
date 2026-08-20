@@ -9,6 +9,7 @@ package clickhouse
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/provider"
 	"go.uber.org/zap"
+	"go.uber.org/zap/exp/zapslog"
 )
 
 // pingTimeout bounds the connectivity check performed during Init.
@@ -82,8 +84,7 @@ func New(cfg config.Clickhouse) (driver.Conn, error) {
 		opts.Compression = &clickhouse.Compression{Method: clickhouse.CompressionLZ4}
 	}
 	if cfg.Debug {
-		opts.Debug = true
-		opts.Debugf = zap.S().Debugf
+		opts.Logger = slog.New(zapslog.NewHandler(zap.L().Core()))
 	}
 	if cfg.DialTimeout != "" {
 		d, err := time.ParseDuration(cfg.DialTimeout)

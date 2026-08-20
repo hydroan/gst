@@ -114,7 +114,7 @@ func copyMirrorRow(mirror, dest reflect.Value) {
 	for i := range dest.NumField() {
 		source := mirror.Field(i)
 		if source.Type() == sqliteTimeValueType {
-			value, _ := source.Interface().(sqliteTimeValue)
+			value, _ := reflect.TypeAssert[sqliteTimeValue](source)
 			value.assignTo(dest.Field(i))
 			continue
 		}

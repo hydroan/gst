@@ -545,7 +545,7 @@ func cloneDryRunModel[M types.Model](obj M) M {
 	}
 	cloned := reflect.New(elem.Type())
 	cloned.Elem().Set(elem)
-	model, ok := cloned.Interface().(M)
+	model, ok := reflect.TypeAssert[M](cloned)
 	if !ok {
 		return obj
 	}
