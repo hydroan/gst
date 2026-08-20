@@ -16,7 +16,7 @@ func serveCSV(t *testing.T, body []byte) (*client.Client, *map[string]string) {
 	t.Helper()
 
 	seen := make(map[string]string)
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		for key, values := range r.URL.Query() {
 			seen[key] = values[0]
 		}
@@ -26,7 +26,7 @@ func serveCSV(t *testing.T, body []byte) (*client.Client, *map[string]string) {
 			t.Errorf("failed to write the response body: %v", err)
 		}
 	}))
-	t.Cleanup(ts.Close)
+	ts.Start()
 
 	cli, err := client.New(ts.URL)
 	require.NoError(t, err)

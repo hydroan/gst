@@ -14,13 +14,13 @@ import (
 
 func TestStreamDeliversEventsInOrder(t *testing.T) {
 	var gotAccept string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAccept = r.Header.Get("Accept")
 		w.Header().Set("Content-Type", "text/event-stream")
 		fmt.Fprint(w, "event: tick\ndata: one\n\n")
 		fmt.Fprint(w, "data: two\n\n")
 	}))
-	t.Cleanup(srv.Close)
+	srv.Start()
 
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)
@@ -103,11 +103,11 @@ func TestStreamParsesPerSpec(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "text/event-stream")
 				fmt.Fprint(w, tt.body)
 			}))
-			t.Cleanup(srv.Close)
+			srv.Start()
 
 			cli, err := client.New(srv.URL)
 			require.NoError(t, err)
@@ -124,11 +124,11 @@ func TestStreamParsesPerSpec(t *testing.T) {
 }
 
 func TestStreamStopsOnCallbackError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		fmt.Fprint(w, "data: one\n\ndata: two\n\n")
 	}))
-	t.Cleanup(srv.Close)
+	srv.Start()
 
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)
@@ -143,12 +143,12 @@ func TestStreamStopsOnCallbackError(t *testing.T) {
 }
 
 func TestStreamSurfacesEnvelopeRejection(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
 		fmt.Fprint(w, `{"code":403,"msg":"permission denied"}`)
 	}))
-	t.Cleanup(srv.Close)
+	srv.Start()
 
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)

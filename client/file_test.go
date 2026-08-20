@@ -15,13 +15,13 @@ import (
 
 func TestDownloadReadsAttachment(t *testing.T) {
 	var gotFormat string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotFormat = r.URL.Query().Get("_format")
 		w.Header().Set("Content-Disposition", "attachment; filename=records.csv")
 		w.Header().Set("Content-Type", "text/csv")
 		fmt.Fprint(w, "name\nsample\n")
 	}))
-	t.Cleanup(srv.Close)
+	srv.Start()
 
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)
@@ -35,12 +35,12 @@ func TestDownloadReadsAttachment(t *testing.T) {
 }
 
 func TestDownloadReturnsStructuredErrorOnRejection(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
 		fmt.Fprint(w, `{"code":403,"msg":"permission denied"}`)
 	}))
-	t.Cleanup(srv.Close)
+	srv.Start()
 
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)
@@ -56,7 +56,7 @@ func TestUploadSendsMultipartFileAndFields(t *testing.T) {
 	// handler goroutine cannot stop the test.
 	var gotFile, gotField, gotName string
 	var handlerErr error
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if handlerErr = r.ParseMultipartForm(1 << 20); handlerErr != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -80,7 +80,7 @@ func TestUploadSendsMultipartFileAndFields(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"code":0,"msg":"success"}`)
 	}))
-	t.Cleanup(srv.Close)
+	srv.Start()
 
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)

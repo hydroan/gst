@@ -41,8 +41,8 @@ func TestWrappedResponse(t *testing.T) {
 	})
 
 	t.Run("http", func(t *testing.T) {
-		srv := httptest.NewServer(handler)
-		defer srv.Close()
+		srv := httptest.NewTestServer(t, handler)
+		srv.Start()
 
 		resp, err := srv.Client().Get(srv.URL)
 		require.NoError(t, err)
@@ -51,8 +51,8 @@ func TestWrappedResponse(t *testing.T) {
 	})
 
 	t.Run("https", func(t *testing.T) {
-		srv := httptest.NewTLSServer(handler)
-		defer srv.Close()
+		srv := httptest.NewTestServer(t, handler)
+		srv.StartTLS()
 
 		resp, err := srv.Client().Get(srv.URL)
 		require.NoError(t, err)

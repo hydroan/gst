@@ -17,13 +17,13 @@ func newEnvelopeServer(t *testing.T, status int, envelope string) (*httptest.Ser
 	t.Helper()
 
 	captured := new(http.Request)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		*captured = *r
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		fmt.Fprint(w, envelope)
 	}))
-	t.Cleanup(srv.Close)
+	srv.Start()
 	return srv, captured
 }
 
@@ -81,7 +81,7 @@ func TestClientKeepsSessionCookieAcrossRequests(t *testing.T) {
 	// The login-shaped first request sets a cookie; the second request must
 	// carry it back automatically through the client's cookie jar.
 	var gotCookie string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/enter" {
 			http.SetCookie(w, &http.Cookie{Name: "session_id", Value: "sample-session", Path: "/"})
 		}
@@ -91,7 +91,7 @@ func TestClientKeepsSessionCookieAcrossRequests(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"code":0,"msg":"success"}`)
 	}))
-	t.Cleanup(srv.Close)
+	srv.Start()
 
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)

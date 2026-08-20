@@ -77,7 +77,6 @@ linters:
     - depguard
     - forbidigo
     - gomoddirectives
-    - gomodguard_v2
 
     # Project-specific checks.
     # canonicalheader v1.1.2 panics on parameterized method calls (go1.27);
