@@ -125,7 +125,10 @@ func buildIndexPlans(sch *schema.Schema, tableName string, decls []Index) ([]Ind
 		columns := make([]string, 0, len(decl.Fields))
 		seenColumns := make(map[string]struct{}, len(decl.Fields))
 		for _, name := range decl.Fields {
-			field := sch.LookUpField(name)
+			// Only Go struct field names resolve, exactly as declared.
+			// Database column names are deliberately rejected: accepting both
+			// spellings would let the two forms mix across declarations.
+			field := sch.FieldsByName[name]
 			if field == nil {
 				return nil, errors.Newf("model %s: custom index references unknown field %q", sch.Name, name)
 			}

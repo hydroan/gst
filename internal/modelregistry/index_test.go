@@ -131,6 +131,20 @@ func (*NoTableNameSample) Indexes() []modelregistry.Index {
 	return []modelregistry.Index{{Fields: []string{"Kind"}}}
 }
 
+// ColumnNameSample references its column by database name instead of the Go
+// field name, which the declaration contract rejects.
+type ColumnNameSample struct {
+	Kind string
+
+	modelregistry.Base
+}
+
+func (*ColumnNameSample) TableName() string { return "column_name_samples" }
+
+func (*ColumnNameSample) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"kind"}}}
+}
+
 func TestParseIndexPlans(t *testing.T) {
 	db := newSchemaDB(t)
 
@@ -171,6 +185,7 @@ func TestParseIndexPlansValidation(t *testing.T) {
 		{"tag index name conflict", &TagNameConflictSample{}, "conflicts with struct tag index"},
 		{"tag index columns conflict", &TagColumnsConflictSample{}, `duplicates struct tag index "custom_code_idx"`},
 		{"missing table name", &NoTableNameSample{}, "must declare an explicit table name"},
+		{"column name instead of field name", &ColumnNameSample{}, `unknown field "kind"`},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := modelregistry.ParseIndexPlans(db, tt.model)
