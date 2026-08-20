@@ -616,6 +616,71 @@ func TestDatabaseUpsert(t *testing.T) {
 		require.Equal(t, "second", items[0].Name)
 		require.WithinDuration(t, firstPersisted.CreatedAt, items[0].CreatedAt, time.Second, "a conflict update keeps the original created_at")
 	})
+
+	// The same per-dialect contract with the unique key declared through the
+	// Indexes method instead of a struct tag: the result sync must pick the
+	// key up from the resolved index plans, or the collided object keeps the
+	// id generated for the insert attempt.
+	t.Run("collision on a unique key declared through Indexes", func(t *testing.T) {
+		first := &TestIndexerUniqueItem{Code: "upsert-indexer", Kind: "k1", Name: "first"}
+		require.NoError(t, database.Database[*TestIndexerUniqueItem](context.Background()).Upsert(first))
+		require.NotEmpty(t, first.ID)
+
+		firstPersisted := new(TestIndexerUniqueItem)
+		require.NoError(t, database.Database[*TestIndexerUniqueItem](context.Background()).Get(firstPersisted, first.ID))
+
+		second := &TestIndexerUniqueItem{Code: "upsert-indexer", Kind: "k1", Name: "second"}
+		err := database.Database[*TestIndexerUniqueItem](context.Background()).Upsert(second)
+
+		if config.App.Database.Type != config.DBMySQL {
+			require.ErrorIs(t, err, database.ErrDuplicatedKey)
+			items := make([]*TestIndexerUniqueItem, 0)
+			require.NoError(t, database.Database[*TestIndexerUniqueItem](context.Background()).WithQuery(&TestIndexerUniqueItem{Code: "upsert-indexer"}).List(&items))
+			require.Len(t, items, 1)
+			require.Equal(t, "first", items[0].Name, "a failed upsert must leave the persisted row untouched")
+			return
+		}
+
+		require.NoError(t, err)
+		require.Equal(t, first.ID, second.ID, "the collided object must expose the persisted row id")
+
+		items := make([]*TestIndexerUniqueItem, 0)
+		require.NoError(t, database.Database[*TestIndexerUniqueItem](context.Background()).WithQuery(&TestIndexerUniqueItem{Code: "upsert-indexer"}).List(&items))
+		require.Len(t, items, 1)
+		require.Equal(t, "second", items[0].Name)
+		require.WithinDuration(t, firstPersisted.CreatedAt, items[0].CreatedAt, time.Second, "a conflict update keeps the original created_at")
+	})
+
+	// A model carrying both a tag-declared and an Indexes-declared unique key:
+	// the sync must reconcile a collision on either one, proving the two
+	// sources are merged rather than one replacing the other.
+	t.Run("collisions on tag and Indexes unique keys on one model", func(t *testing.T) {
+		rowA := &TestMixedUniqueItem{Code: "mixed-a", Ref: "mixed-ra", Name: "first"}
+		require.NoError(t, database.Database[*TestMixedUniqueItem](context.Background()).Upsert(rowA))
+		require.NotEmpty(t, rowA.ID)
+
+		if config.App.Database.Type != config.DBMySQL {
+			// Both keys must reject a non-primary collision here, which also
+			// proves the Indexes-declared unique index really exists.
+			byTag := &TestMixedUniqueItem{Code: "mixed-a", Ref: "mixed-other", Name: "second"}
+			require.ErrorIs(t, database.Database[*TestMixedUniqueItem](context.Background()).Upsert(byTag), database.ErrDuplicatedKey)
+			byRef := &TestMixedUniqueItem{Code: "mixed-other", Ref: "mixed-ra", Name: "second"}
+			require.ErrorIs(t, database.Database[*TestMixedUniqueItem](context.Background()).Upsert(byRef), database.ErrDuplicatedKey)
+			return
+		}
+
+		byTag := &TestMixedUniqueItem{Code: "mixed-a", Ref: "mixed-ra2", Name: "second"}
+		require.NoError(t, database.Database[*TestMixedUniqueItem](context.Background()).Upsert(byTag))
+		require.Equal(t, rowA.ID, byTag.ID, "a collision on the tag-declared key must still reconcile the id")
+
+		rowB := &TestMixedUniqueItem{Code: "mixed-b", Ref: "mixed-rb", Name: "first"}
+		require.NoError(t, database.Database[*TestMixedUniqueItem](context.Background()).Upsert(rowB))
+		require.NotEmpty(t, rowB.ID)
+
+		byRef := &TestMixedUniqueItem{Code: "mixed-b2", Ref: "mixed-rb", Name: "second"}
+		require.NoError(t, database.Database[*TestMixedUniqueItem](context.Background()).Upsert(byRef))
+		require.Equal(t, rowB.ID, byRef.ID, "a collision on the Indexes-declared key must reconcile the id")
+	})
 }
 
 func TestDatabaseUpdateByID(t *testing.T) {

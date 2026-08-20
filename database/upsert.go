@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"gorm.io/gorm"
 	gormschema "gorm.io/gorm/schema"
 )
@@ -143,7 +145,8 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 // moves to another row.
 //
 // The reconciliation is intentionally narrow:
-//   - models without non-primary unique indexes pay no extra query cost;
+//   - models without non-primary unique indexes pay no extra query cost, and
+//     the indexes themselves are resolved once per model type;
 //   - only complete unique-index values are used for lookup;
 //   - only GORM-persistent fields are copied back, preserving gorm:"-" values
 //     that hooks or controllers may have placed on the object.
@@ -152,13 +155,17 @@ func (db *database[M]) syncSaveResultsByUniqueIndexes(tableName string, objs []M
 		return nil
 	}
 
+	indexes, err := db.saveResultSyncUniqueIndexes()
+	if err != nil {
+		return err
+	}
+	if len(indexes) == 0 {
+		return nil
+	}
+
 	stmt := &gorm.Statement{DB: db.ins}
 	if err := stmt.Parse(db.m); err != nil {
 		return err
-	}
-	indexes := saveResultSyncUniqueIndexes(stmt.Schema)
-	if len(indexes) == 0 {
-		return nil
 	}
 
 	syncedIDs := make(map[string]struct{}, len(objs))
@@ -217,7 +224,51 @@ func (db *database[M]) syncSaveResultsByUniqueIndexes(tableName string, objs []M
 	return nil
 }
 
-func saveResultSyncUniqueIndexes(schema *gormschema.Schema) []*gormschema.Index {
+// saveResultSyncUniqueIndexCache memoizes the resolved unique indexes per
+// model type. The key space is bounded: keys are the canonical reflect.Type
+// singletons of the model structs compiled into the binary, the same shape as
+// the per-type caches gorm and internal/modelschema keep, so the map never
+// grows past the number of model types. Caching is sound because both index
+// sources are static: struct tags are fixed at compile time and Indexes is a
+// pure declaration invoked on zero-value instances.
+var saveResultSyncUniqueIndexCache sync.Map
+
+// saveResultSyncUniqueIndexes returns the unique indexes the save-result sync
+// must look through for db's model, resolving them on the first call per
+// model type and answering every later call from the cache. gorm re-parses
+// tag indexes on every ParseIndexes call, so without the cache each Upsert
+// batch would pay the full tag parse plus the index plan validation again.
+// Resolution errors are returned without being cached.
+func (db *database[M]) saveResultSyncUniqueIndexes() ([]*gormschema.Index, error) {
+	typ := reflect.TypeOf(db.m)
+	if cached, ok := saveResultSyncUniqueIndexCache.Load(typ); ok {
+		return cached.([]*gormschema.Index), nil //nolint:errcheck
+	}
+
+	stmt := &gorm.Statement{DB: db.ins}
+	if err := stmt.Parse(db.m); err != nil {
+		return nil, err
+	}
+	plans, err := modelregistry.ParseIndexPlans(db.ins, db.m)
+	if err != nil {
+		return nil, err
+	}
+	indexes, err := collectSaveResultSyncUniqueIndexes(stmt.Schema, plans)
+	if err != nil {
+		return nil, err
+	}
+	saveResultSyncUniqueIndexCache.Store(typ, indexes)
+	return indexes, nil
+}
+
+// collectSaveResultSyncUniqueIndexes gathers the model's unique indexes from
+// every declaration source: composite tag indexes parsed by gorm, single
+// column unique tags, and the plans resolved from the model's Indexes method,
+// which never appear in the gorm schema. The sources merge without
+// deduplication: plan declarations duplicating a parsed tag index are already
+// rejected at resolution (checkTagIndexConflicts), and the sync marks
+// reconciled objects, so a redundant index entry could never re-sync one.
+func collectSaveResultSyncUniqueIndexes(schema *gormschema.Schema, plans []modelregistry.IndexPlan) ([]*gormschema.Index, error) {
 	indexes := make([]*gormschema.Index, 0)
 	for _, index := range schema.ParseIndexes() {
 		if !saveResultSyncUniqueIndexUsable(index) {
@@ -238,7 +289,33 @@ func saveResultSyncUniqueIndexes(schema *gormschema.Schema) []*gormschema.Index 
 			},
 		})
 	}
-	return indexes
+
+	for _, plan := range plans {
+		if !plan.Unique {
+			continue
+		}
+		fields := make([]gormschema.IndexOption, 0, len(plan.Columns))
+		for _, column := range plan.Columns {
+			field := schema.FieldsByDBName[column]
+			if field == nil {
+				// Plans are resolved against the same parsed schema, so a
+				// missing column is a broken invariant rather than a user
+				// mistake; failing beats silently skipping the index and
+				// shipping unreconciled ids.
+				return nil, errors.Newf("unique index %q names column %q that the schema of %s does not carry", plan.Name, column, schema.Name)
+			}
+			fields = append(fields, gormschema.IndexOption{Field: field})
+		}
+		// The usability filter also drops declarations covering only primary
+		// key columns: a primary-key merge keeps the caller's id and needs no
+		// reconciliation.
+		index := &gormschema.Index{Name: plan.Name, Class: "UNIQUE", Fields: fields}
+		if !saveResultSyncUniqueIndexUsable(index) {
+			continue
+		}
+		indexes = append(indexes, index)
+	}
+	return indexes, nil
 }
 
 func saveResultSyncUniqueIndexUsable(index *gormschema.Index) bool {

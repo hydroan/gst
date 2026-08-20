@@ -112,6 +112,14 @@ func cleanupTestData() {
 	_ = database.Database[*TestUniqueItem](context.Background()).List(&uniqueItems)
 	_ = database.Database[*TestUniqueItem](context.Background()).Delete(uniqueItems...)
 
+	indexerUniqueItems := make([]*TestIndexerUniqueItem, 0)
+	_ = database.Database[*TestIndexerUniqueItem](context.Background()).List(&indexerUniqueItems)
+	_ = database.Database[*TestIndexerUniqueItem](context.Background()).Delete(indexerUniqueItems...)
+
+	mixedUniqueItems := make([]*TestMixedUniqueItem, 0)
+	_ = database.Database[*TestMixedUniqueItem](context.Background()).List(&mixedUniqueItems)
+	_ = database.Database[*TestMixedUniqueItem](context.Background()).Delete(mixedUniqueItems...)
+
 	autoItems := make([]*TestAutoItem, 0)
 	_ = database.Database[*TestAutoItem](context.Background()).List(&autoItems)
 	_ = database.Database[*TestAutoItem](context.Background()).Delete(autoItems...)
@@ -243,6 +251,44 @@ func (i *TestUniqueItem) CreateAfter(ctx context.Context) error {
 func (i *TestUniqueItem) UpdateAfter(ctx context.Context) error {
 	i.UpdateAfterID = i.ID
 	return nil
+}
+
+// TestIndexerUniqueItem declares its composite unique key only through the
+// Indexes method: the struct tags carry no index at all, mirroring models
+// whose secondary indexes moved off gorm tags entirely.
+type TestIndexerUniqueItem struct {
+	Code string `json:"code" gorm:"size:191"`
+	Kind string `json:"kind" gorm:"size:191"`
+	Name string `json:"name" gorm:"size:191"`
+
+	model.Base
+}
+
+func (*TestIndexerUniqueItem) TableName() string { return "test_indexer_unique_items" }
+func (*TestIndexerUniqueItem) Purge() bool       { return true }
+
+// Indexes declares the composite unique key on (Code, Kind).
+func (*TestIndexerUniqueItem) Indexes() []model.Index {
+	return []model.Index{{Fields: []string{"Code", "Kind"}, Unique: true}}
+}
+
+// TestMixedUniqueItem carries one unique key in a struct tag and a second one
+// on another column through the Indexes method, so a collector reading only
+// one of the two sources loses a key.
+type TestMixedUniqueItem struct {
+	Code string `json:"code" gorm:"size:191;uniqueIndex"`
+	Ref  string `json:"ref" gorm:"size:191"`
+	Name string `json:"name" gorm:"size:191"`
+
+	model.Base
+}
+
+func (*TestMixedUniqueItem) TableName() string { return "test_mixed_unique_items" }
+func (*TestMixedUniqueItem) Purge() bool       { return true }
+
+// Indexes declares the unique key on Ref, next to the tag-declared one on Code.
+func (*TestMixedUniqueItem) Indexes() []model.Index {
+	return []model.Index{{Fields: []string{"Ref"}, Unique: true}}
 }
 
 type TestAutoItem struct {
@@ -397,6 +443,8 @@ func TestMain(m *testing.M) {
 			model.Register[*TestItem]()
 			model.Register[*TestPlainItem]()
 			model.Register[*TestUniqueItem]()
+			model.Register[*TestIndexerUniqueItem]()
+			model.Register[*TestMixedUniqueItem]()
 			model.Register[*TestAutoItem]()
 			model.Register[*TestHookConfig]()
 			model.Register[*TestHookGroup]()
