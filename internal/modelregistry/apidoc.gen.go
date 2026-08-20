@@ -69,4 +69,7 @@ func init() {
 			"SortBy": "SortBy is the comma-separated ORDER BY expression; the List controller validates its columns and turns it into typed orders.",
 		},
 	})
+	apidoc.Register("github.com/hydroan/gst/internal/modelregistry", "writeHookOverrides", apidoc.StructDoc{
+		Comment: "writeHookOverrides records which write-hook pairs a model type overrides.",
+	})
 }
