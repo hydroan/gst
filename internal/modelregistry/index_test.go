@@ -243,6 +243,47 @@ func TestParseIndexPlansTruncatesLongNames(t *testing.T) {
 	require.Equal(t, plans[0].Name, again[0].Name)
 }
 
+func TestCheckCrossModelIndexPlanConflicts(t *testing.T) {
+	plan := func(table, name string, unique bool, columns ...string) modelregistry.IndexPlan {
+		return modelregistry.IndexPlan{Name: name, Table: table, Columns: columns, Unique: unique}
+	}
+
+	t.Run("same column sequence on one table conflicts whatever the uniqueness", func(t *testing.T) {
+		err := modelregistry.CheckCrossModelIndexPlanConflicts([]modelregistry.ModelIndexPlans{
+			{Model: "pkg.SampleA", Plans: []modelregistry.IndexPlan{plan("samples", "idx_samples_kind", false, "kind")}},
+			{Model: "pkg.SampleB", Plans: []modelregistry.IndexPlan{plan("samples", "uniq_samples_kind", true, "kind")}},
+		})
+		require.ErrorContains(t, err, `conflict on table "samples"`)
+		require.ErrorContains(t, err, "pkg.SampleA")
+		require.ErrorContains(t, err, "pkg.SampleB")
+		require.ErrorContains(t, err, "(kind)")
+	})
+
+	t.Run("same generated name for different definitions conflicts", func(t *testing.T) {
+		err := modelregistry.CheckCrossModelIndexPlanConflicts([]modelregistry.ModelIndexPlans{
+			{Model: "pkg.SampleA", Plans: []modelregistry.IndexPlan{plan("samples", "idx_samples_collision", false, "code")}},
+			{Model: "pkg.SampleB", Plans: []modelregistry.IndexPlan{plan("samples", "idx_samples_collision", false, "kind")}},
+		})
+		require.ErrorContains(t, err, `same index name "idx_samples_collision"`)
+	})
+
+	t.Run("same columns on different tables do not conflict", func(t *testing.T) {
+		require.NoError(t, modelregistry.CheckCrossModelIndexPlanConflicts([]modelregistry.ModelIndexPlans{
+			{Model: "pkg.SampleA", Plans: []modelregistry.IndexPlan{plan("samples", "idx_samples_kind", false, "kind")}},
+			{Model: "pkg.RecordB", Plans: []modelregistry.IndexPlan{plan("records", "idx_records_kind", false, "kind")}},
+		}))
+	})
+
+	t.Run("one declaring model per table passes", func(t *testing.T) {
+		require.NoError(t, modelregistry.CheckCrossModelIndexPlanConflicts([]modelregistry.ModelIndexPlans{
+			{Model: "pkg.SampleA", Plans: []modelregistry.IndexPlan{
+				plan("samples", "idx_samples_kind", false, "kind"),
+				plan("samples", "uniq_samples_code", true, "code"),
+			}},
+		}))
+	})
+}
+
 func TestIndexPlanCreateSQL(t *testing.T) {
 	plan := modelregistry.IndexPlan{
 		Name:    "idx_samples_kind_created_at",

@@ -129,6 +129,33 @@ func (*invalidRecord) Indexes() []modelregistry.Index {
 	return []modelregistry.Index{{Fields: []string{"Missing"}}}
 }
 
+// conflictKindRecord and conflictKindTwin declare an index over the same
+// column sequence of one table; ensuring the second model must fail instead
+// of silently skipping the already-existing index.
+type conflictKindRecord struct {
+	Kind string
+
+	modelregistry.Base
+}
+
+func (*conflictKindRecord) TableName() string { return "conflict_kind_records" }
+
+func (*conflictKindRecord) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"Kind", "CreatedAt"}}}
+}
+
+type conflictKindTwin struct {
+	Kind string
+
+	modelregistry.Base
+}
+
+func (*conflictKindTwin) TableName() string { return "conflict_kind_records" }
+
+func (*conflictKindTwin) Indexes() []modelregistry.Index {
+	return []modelregistry.Index{{Fields: []string{"Kind", "CreatedAt"}}}
+}
+
 func TestEnsureCustomIndexes(t *testing.T) {
 	db := newSQLiteDB(t)
 	m := &indexedRecord{}
@@ -263,6 +290,21 @@ func TestEnsureCustomIndexesRejectsInvalidDeclaration(t *testing.T) {
 
 	err := ensureCustomIndexes(db, m)
 	require.ErrorContains(t, err, `unknown field "Missing"`)
+}
+
+func TestEnsureCustomIndexesRejectsCrossModelConflict(t *testing.T) {
+	db := newSQLiteDB(t)
+	first := &conflictKindRecord{}
+	require.NoError(t, db.Table(first.TableName()).AutoMigrate(first))
+	require.NoError(t, ensureCustomIndexes(db, first))
+	// Re-ensuring the same model is no conflict: its plans replace the
+	// recorded ones instead of colliding with them.
+	require.NoError(t, ensureCustomIndexes(db, first))
+
+	err := ensureCustomIndexes(db, &conflictKindTwin{})
+	require.ErrorContains(t, err, `conflict on table "conflict_kind_records"`)
+	require.ErrorContains(t, err, "conflictKindRecord")
+	require.ErrorContains(t, err, "conflictKindTwin")
 }
 
 // newSQLiteDB opens an isolated in-memory sqlite database. The connection

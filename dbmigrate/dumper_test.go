@@ -47,6 +47,33 @@ func (*Sample) Indexes() []model.Index {
 	}
 }
 
+// ConflictSampleA and ConflictSampleB declare an index over the same column
+// sequence of one table; Dump must reject the pair instead of rendering the
+// statements of both.
+type ConflictSampleA struct {
+	Kind string `json:"kind" gorm:"size:191"`
+
+	model.Base
+}
+
+func (*ConflictSampleA) TableName() string { return "conflict_samples" }
+
+func (*ConflictSampleA) Indexes() []model.Index {
+	return []model.Index{{Fields: []string{"Kind"}}}
+}
+
+type ConflictSampleB struct {
+	Kind string `json:"kind" gorm:"size:191"`
+
+	model.Base
+}
+
+func (*ConflictSampleB) TableName() string { return "conflict_samples" }
+
+func (*ConflictSampleB) Indexes() []model.Index {
+	return []model.Index{{Fields: []string{"Kind"}, Unique: true}}
+}
+
 func TestDumper(t *testing.T) {
 	dumper, err := dbmigrate.NewSchemaDumper()
 	require.NoError(t, err)
@@ -147,6 +174,17 @@ func TestDumperClosed(t *testing.T) {
 
 	_, err = dumper.Dump(config.DBMySQL, &User{})
 	require.ErrorContains(t, err, "schema dumper is closed")
+}
+
+func TestDumperRejectsCrossModelIndexConflicts(t *testing.T) {
+	dumper, err := dbmigrate.NewSchemaDumper()
+	require.NoError(t, err)
+	defer dumper.Close()
+
+	_, err = dumper.Dump(config.DBMySQL, &ConflictSampleA{}, &ConflictSampleB{})
+	require.ErrorContains(t, err, `conflict on table "conflict_samples"`)
+	require.ErrorContains(t, err, "ConflictSampleA")
+	require.ErrorContains(t, err, "ConflictSampleB")
 }
 
 func requireOnlyBaseSoftDeleteIndex(t *testing.T, schema, table string) {

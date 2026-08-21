@@ -101,6 +101,7 @@ func (s *SchemaDumper) Dump(driver config.DBType, dst ...any) (string, error) {
 	}
 
 	statements := make([]schemaStatement, 0, len(models))
+	indexSets := make([]modelregistry.ModelIndexPlans, 0, len(models))
 	for _, v := range models {
 		if err = requireExplicitTableName(v); err != nil {
 			return "", err
@@ -130,12 +131,22 @@ func (s *SchemaDumper) Dump(driver config.DBType, dst ...any) (string, error) {
 		if planErr != nil {
 			return "", planErr
 		}
+		if len(plans) > 0 {
+			indexSets = append(indexSets, modelregistry.ModelIndexPlans{Model: schemaModelName(v), Plans: plans})
+		}
 		for _, plan := range plans {
 			statements = append(statements, schemaStatement{
 				ModelName: schemaModelName(v),
 				SQL:       plan.CreateSQL(db.Dialector),
 			})
 		}
+	}
+
+	// Models resolve their plans in isolation; colliding declarations across
+	// the models of one table would render duplicate statements here and split
+	// into two indexes on the database, so they fail the dump instead.
+	if err = modelregistry.CheckCrossModelIndexPlanConflicts(indexSets); err != nil {
+		return "", err
 	}
 
 	if len(statements) == 0 {

@@ -1,13 +1,62 @@
 package dbruntime
 
 import (
+	"reflect"
+	"sort"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/types"
 	"gorm.io/gorm"
 )
+
+// crossModelIndexPlans accumulates, per database handle, the index plans of
+// every model whose indexes were ensured, so a later model mapping the same
+// table is validated against them. Table creation consumes a stream that
+// accepts registration at any stage, so there is no all-models synchronization
+// point to validate at: the set grows one model at a time and revalidates in
+// full on every arrival, which keeps the check independent of arrival order.
+// Handles key the outer map because the same table name on two databases is
+// two tables; the map is bounded by handles times model types and entries are
+// never removed.
+var (
+	crossModelIndexPlansMu sync.Mutex
+	crossModelIndexPlans   = make(map[*gorm.DB]map[reflect.Type]modelregistry.ModelIndexPlans)
+)
+
+// checkCrossModelIndexPlans records m's resolved plans and validates them
+// against every other model already ensured on handler. Repeated arrivals of
+// one model type are no conflict: the recorded plans are replaced.
+func checkCrossModelIndexPlans(handler *gorm.DB, m types.Model, plans []modelregistry.IndexPlan) error {
+	crossModelIndexPlansMu.Lock()
+	defer crossModelIndexPlansMu.Unlock()
+
+	byType := crossModelIndexPlans[handler]
+	if byType == nil {
+		byType = make(map[reflect.Type]modelregistry.ModelIndexPlans)
+		crossModelIndexPlans[handler] = byType
+	}
+	byType[reflect.TypeOf(m)] = modelregistry.ModelIndexPlans{Model: modelDisplayName(m), Plans: plans}
+
+	sets := make([]modelregistry.ModelIndexPlans, 0, len(byType))
+	for _, set := range byType {
+		sets = append(sets, set)
+	}
+	// Deterministic order keeps the reported conflict pair stable across runs.
+	sort.Slice(sets, func(i, j int) bool { return sets[i].Model < sets[j].Model })
+	return modelregistry.CheckCrossModelIndexPlanConflicts(sets)
+}
+
+// modelDisplayName renders the model's type name without pointer markers.
+func modelDisplayName(m types.Model) string {
+	typ := reflect.TypeOf(m)
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	return typ.String()
+}
 
 // ensureCustomIndexes validates the model's custom index declarations and
 // creates the missing ones right after AutoMigrate, mirroring how struct tag
@@ -27,6 +76,9 @@ func ensureCustomIndexes(handler *gorm.DB, m types.Model) error {
 
 	plans, err := modelregistry.ParseIndexPlans(handler, m)
 	if err != nil || len(plans) == 0 {
+		return err
+	}
+	if err = checkCrossModelIndexPlans(handler, m, plans); err != nil {
 		return err
 	}
 

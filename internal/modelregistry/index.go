@@ -197,6 +197,54 @@ func checkTagIndexConflicts(sch *schema.Schema, plans []IndexPlan) error {
 	return nil
 }
 
+// ModelIndexPlans binds the resolved index plans to the model that declared
+// them, so cross-model validation can name both sides of a conflict.
+type ModelIndexPlans struct {
+	Model string      // display name of the declaring model
+	Plans []IndexPlan // the model's resolved plans
+}
+
+// CheckCrossModelIndexPlanConflicts rejects conflicting index declarations
+// across the models mapping one table. Several models may legitimately share
+// a table (a query-shape alias, a copied module next to a business override),
+// and each resolves its plans in isolation, so colliding declarations would
+// otherwise duplicate silently: the bootstrap executor skips an index that
+// already exists, and the schema dumper would render the statement twice.
+//
+// Two shapes conflict on one table:
+//   - two plans covering the same column sequence, whatever their uniqueness:
+//     equal declarations are a duplicate, diverging uniqueness would put two
+//     indexes over one column sequence;
+//   - two plans generating the same name for different definitions, which the
+//     deterministic naming only produces through truncation-hash collisions.
+func CheckCrossModelIndexPlanConflicts(sets []ModelIndexPlans) error {
+	type owner struct {
+		model   string
+		columns string
+	}
+	byColumns := make(map[string]owner)
+	byName := make(map[string]owner)
+	for _, set := range sets {
+		for _, plan := range set.Plans {
+			columns := strings.Join(plan.Columns, ",")
+			columnsKey := plan.Table + "\x00" + columns
+			if prev, ok := byColumns[columnsKey]; ok {
+				return errors.Newf("index plans conflict on table %q: %s and %s both declare columns (%s)",
+					plan.Table, prev.model, set.Model, columns)
+			}
+			byColumns[columnsKey] = owner{model: set.Model, columns: columns}
+
+			nameKey := plan.Table + "\x00" + plan.Name
+			if prev, ok := byName[nameKey]; ok {
+				return errors.Newf("index plans conflict on table %q: %s and %s generate the same index name %q for different definitions",
+					plan.Table, prev.model, set.Model, plan.Name)
+			}
+			byName[nameKey] = owner{model: set.Model, columns: columns}
+		}
+	}
+	return nil
+}
+
 // indexName generates the deterministic framework index name: an idx_ (or
 // uniq_ for unique) prefix, the table name, and the column names. Names
 // beyond the identifier limit keep a readable prefix and end with an fnv-32a
