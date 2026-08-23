@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/errors"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
@@ -34,15 +35,16 @@ var Store = store{}
 
 type store struct{}
 
-// The Redis key layout, in two namespaces.
+// The Redis key layout, in three namespaces.
 //
 // Every key names the role it plays before it names what it is keyed by, so a
 // prefix scan can address one role at a time and no key is a prefix of another.
 //
-// The split between the namespaces follows what a key is scoped to rather than
-// which code writes it. Everything a session owns is reclaimed by dropping
-// sessionNamespace; the user-state cache survives the sessions that read it,
-// because it describes the user.
+// The split between them follows what a key is scoped to rather than which code
+// writes it. Everything a session owns is reclaimed by dropping
+// sessionNamespace; the user-state cache and the login failure counters sit
+// outside it because they describe a user and a username, and both outlive any
+// session either of them affects.
 const (
 	sessionNamespace          = "iam:session"
 	sessionDataNamespace      = sessionNamespace + ":data"
@@ -53,6 +55,9 @@ const (
 
 	userNamespace      = "iam:user"
 	userStateNamespace = userNamespace + ":state"
+
+	loginNamespace        = "iam:login"
+	loginFailureNamespace = loginNamespace + ":failure"
 )
 
 // sessionTouchInterval is how often a live session refreshes its activity
@@ -72,6 +77,9 @@ func sessionIndexUserKey(userID string) string {
 func sessionIndexAllKey() string        { return sessionIndexAllNamespace }
 func sessionIndexSeenKey() string       { return sessionIndexSeenNamespace }
 func userStateKey(userID string) string { return namespacedKey(userStateNamespace, userID) }
+func loginFailureKey(username string) string {
+	return namespacedKey(loginFailureNamespace, username)
+}
 
 // UserState is the mutable user state an authenticated request has to confirm
 // before a session may keep going.
@@ -449,7 +457,7 @@ func (store) LoadUserState(ctx context.Context, userID string) (UserState, bool)
 		return state, true
 	}
 	if !errors.Is(err, types.ErrEntryNotFound) {
-		logSessionStoreWarning("failed to load iam user state cache", userID, err)
+		logStoreWarning("failed to load iam user state cache", userID, err)
 	}
 	return UserState{}, false
 }
@@ -461,7 +469,7 @@ func (store) LoadUserState(ctx context.Context, userID string) (UserState, bool)
 // database read instead.
 func (store) SaveUserState(ctx context.Context, userID string, state UserState) {
 	if err := redis.Cache[UserState]().Set(ctx, userStateKey(userID), state, GetSessionUserStateTTL()); err != nil {
-		logSessionStoreWarning("failed to cache iam user state", userID, err)
+		logStoreWarning("failed to cache iam user state", userID, err)
 	}
 }
 
@@ -478,21 +486,90 @@ func (store) DropUserState(ctx context.Context, userID string) {
 	_ = redis.Del(ctx, userStateKey(userID))
 }
 
+// ---------- login failures ----------
+
+// LoginFailures returns how many consecutive failed attempts an account has on
+// record.
+//
+// A counter that cannot be read answers zero. The alternative is refusing every
+// login while Redis is unwell, which turns a degraded cache into an outage, and
+// the account is still protected by the password itself.
+func (store) LoginFailures(ctx context.Context, username string) int64 {
+	count, err := redis.GetInt(ctx, loginFailureKey(username))
+	if err != nil {
+		if !errors.Is(err, redis.ErrKeyNotExists) {
+			logStoreWarning("failed to read iam login failure count", username, err)
+		}
+		return 0
+	}
+	return count
+}
+
+// RecordLoginFailure counts one failed attempt and returns the new total.
+//
+// The window starts at the first failure and is not extended by later ones, so
+// a lockout always ends a fixed time after it began. Extending it on every
+// attempt would let an attacker hold an account locked indefinitely by
+// continuing to fail against it.
+func (store) RecordLoginFailure(ctx context.Context, username string, window time.Duration) int64 {
+	key := loginFailureKey(username)
+	count, err := redis.Incr(ctx, key)
+	if err != nil {
+		logStoreWarning("failed to count iam login failure", username, err)
+		return 0
+	}
+	if count == 1 {
+		if err = redis.Expire(ctx, key, window); err != nil {
+			// Without the ttl this counter would never reset, locking the
+			// account out for good; dropping it restarts the window instead.
+			_ = redis.Del(ctx, key)
+			logStoreWarning("failed to bound iam login failure window", username, err)
+			return 0
+		}
+	}
+	return count
+}
+
+// ClearLoginFailures forgets an account's failed attempts, which is what a
+// successful login does to them.
+func (store) ClearLoginFailures(ctx context.Context, username string) {
+	if username == "" {
+		return
+	}
+	_ = redis.Del(ctx, loginFailureKey(username))
+}
+
 // ---------- maintenance ----------
 
 // Purge drops every key IAM owns.
 //
-// It exists for tests that need a store with nothing in it. Both namespaces are
-// dropped, because the user-state cache is deliberately outside the session one.
+// It exists for tests that need a store with nothing in it. Every namespace is
+// dropped, not just the session one: the user-state cache and the login failure
+// counters are deliberately outside it, and a purge that left them would hand
+// the next test a locked-out account.
 func (store) Purge(ctx context.Context) error {
 	if err := redis.RemovePrefix(ctx, sessionNamespace); err != nil {
 		return err
 	}
-	return redis.RemovePrefix(ctx, userNamespace)
+	if err := redis.RemovePrefix(ctx, userNamespace); err != nil {
+		return err
+	}
+	return redis.RemovePrefix(ctx, loginNamespace)
 }
 
-// logSessionStoreWarning reports a storage failure the caller is not expected
-// to act on, which is why it is logged here rather than returned.
-func logSessionStoreWarning(msg, userID string, err error) {
-	zap.S().Warnw(msg, "user_id", userID, "error", err)
+// logStoreWarning reports a storage failure the caller is not expected to act
+// on, which is why it is logged here rather than returned.
+//
+// It writes to the application logger rather than to zap's global. The global
+// mirrors to stdout and is what the framework's own startup and middleware use;
+// this is service code, and its output belongs in the application log with the
+// rest of what a request did.
+//
+// logger.App stays nil until logger initialization, so storage reached before
+// then must not require a configured logger to stay safe.
+func logStoreWarning(msg, subject string, err error) {
+	if logger.App == nil {
+		return
+	}
+	logger.App.Warnz(msg, zap.String("subject", subject), zap.Error(err))
 }

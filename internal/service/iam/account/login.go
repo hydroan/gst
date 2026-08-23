@@ -91,12 +91,15 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	if err != nil {
 		return nil, service.NewErrorWithCause(http.StatusUnauthorized, "invalid username or password", err)
 	}
-	if credential.LockedUntil != nil && credential.LockedUntil.After(time.Now()) {
-		return nil, service.NewError(http.StatusForbidden, "account locked")
+	// Checked after the account is known to exist, so the counter is only ever
+	// keyed by a real username.
+	if err = ensureLoginNotLockedOut(ctx, targetUser.Username); err != nil {
+		return nil, err
 	}
 
 	// Verify password
 	if err = VerifyPasswordCredential(ctx, credential, req.Password); err != nil {
+		recordLoginFailure(ctx, targetUser.Username)
 		return nil, service.NewErrorWithCause(http.StatusUnauthorized, "invalid username or password", err)
 	}
 	// Resolved for every login, not only the ones that name a tenant: the
@@ -121,6 +124,8 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		TOTPCode:   req.TOTPCode,
 		BackupCode: req.BackupCode,
 	}); svcErr != nil {
+		// A guessable proof, counted like the password it follows.
+		recordLoginFailure(ctx, targetUser.Username)
 		return nil, svcErr
 	}
 
@@ -160,13 +165,7 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to track user session", err)
 	}
 
-	credential.FailedLoginCount = 0
-	if err = database.Database[*modeliamaccount.PasswordCredential](ctx).
-		WithoutHook().
-		WithSelect(colUserID, colFailedLoginCount).
-		Update(credential); err != nil {
-		log.Warnz("failed to update password credential statistics", zap.Error(err))
-	}
+	clearLoginFailures(ctx, targetUser.Username)
 
 	serviceiamsession.SetCookie(ctx, sessionID, expire)
 

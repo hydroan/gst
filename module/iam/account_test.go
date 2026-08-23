@@ -33,7 +33,6 @@ import (
 // module test code carries no generated Cols vars.
 var (
 	colCredentialUserID   = types.NewColumn[string]("user_id")
-	colFailedLoginCount   = types.NewNumericColumn[int]("failed_login_count")
 	colMustChangePassword = types.NewColumn[bool]("must_change_password")
 )
 
@@ -98,22 +97,66 @@ func TestAccountLogin(t *testing.T) {
 		require.Positive(t, cookie.MaxAge)
 	})
 
-	t.Run("resets_failed_login_count_after_successful_session_create", func(t *testing.T) {
+	t.Run("counts_failed_attempts_and_clears_them_on_success", func(t *testing.T) {
 		user := accountSignupUser(t, "acct_login_stats", "12345678")
+		t.Cleanup(func() {
+			serviceiamsession.Store.ClearLoginFailures(context.Background(), user.Username)
+		})
 
-		credential := accountRequirePasswordCredential(t, user.UserID)
-		credential.FailedLoginCount = 3
-		require.NoError(t, database.Database[*modeliamaccount.PasswordCredential](context.Background()).
-			WithoutHook().
-			WithSelect(colCredentialUserID, colFailedLoginCount).
-			Update(credential))
+		for i := 1; i <= 3; i++ {
+			accountRequireLoginRejected(t, user.Username, "wrong-password")
+			require.EqualValues(t, i, serviceiamsession.Store.LoginFailures(t.Context(), user.Username))
+		}
 
 		sessionID := accountLoginUser(t, &user, user.Password)
 		accountRequireUserSessionContains(t, user.UserID, sessionID)
 
-		credential = accountRequirePasswordCredential(t, user.UserID)
-		require.Zero(t, credential.FailedLoginCount)
+		// Proving the password forgets the attempts that missed it, so a user
+		// who eventually gets it right does not stay one attempt from a lockout.
+		require.Zero(t, serviceiamsession.Store.LoginFailures(t.Context(), user.Username))
 	})
+
+	// The lockout is what makes a password worth guessing at expensive. Without
+	// it the only cost of an attempt is the bcrypt comparison, which an attacker
+	// is happy to pay a few million times.
+	t.Run("locks_out_after_the_configured_number_of_failures", func(t *testing.T) {
+		t.Setenv("IAM_LOGIN_FAILURE_LIMIT", "3")
+		t.Setenv("IAM_LOGIN_FAILURE_WINDOW", "1m")
+
+		user := accountSignupUser(t, "acct_login_lockout", "12345678")
+		t.Cleanup(func() {
+			serviceiamsession.Store.ClearLoginFailures(context.Background(), user.Username)
+		})
+
+		for range 3 {
+			accountRequireLoginRejected(t, user.Username, "wrong-password")
+		}
+
+		// The correct password is refused too: the lockout is about the account,
+		// not about the credential offered this time.
+		accountRequireLoginRejected(t, user.Username, user.Password)
+
+		// Clearing the counter is what a window expiring would do, and the
+		// account works again immediately after.
+		serviceiamsession.Store.ClearLoginFailures(t.Context(), user.Username)
+		require.NotEmpty(t, accountLoginUser(t, &user, user.Password))
+	})
+}
+
+// accountRequireLoginRejected asserts a login attempt is refused, and refused
+// with the one reply every failed attempt gets.
+//
+// The reply is asserted rather than assumed: a lockout that announced itself
+// would let anyone tell an account that exists from one that does not by
+// failing five times against a guess.
+func accountRequireLoginRejected(t *testing.T, username, password string) {
+	t.Helper()
+
+	_, err := accountNewClient(t).Post[iam.LoginRsp](loginPath, iam.LoginReq{
+		Username: username,
+		Password: password,
+	})
+	testutil.RequireError(t, err, http.StatusUnauthorized)
 }
 
 func TestAccountLogout(t *testing.T) {

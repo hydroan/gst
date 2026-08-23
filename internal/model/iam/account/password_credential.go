@@ -8,12 +8,15 @@ import (
 )
 
 // PasswordCredential stores password authentication state for an IAM user.
+//
+// Failed attempts are not counted here. A lockout has to be atomic under
+// concurrent attempts and has to expire on its own, and a row read back,
+// incremented, and written would deliver neither; the counter lives in Redis,
+// where an increment is one operation and a window is a ttl.
 type PasswordCredential struct {
 	UserID             string     `json:"user_id" query:"user_id" gorm:"size:36;not null"`
 	PasswordHash       string     `json:"-" binding:"required"`
 	MustChangePassword bool       `json:"must_change_password"`
-	FailedLoginCount   int        `json:"failed_login_count"`
-	LockedUntil        *time.Time `json:"locked_until,omitempty"`
 	PasswordChangedAt  *time.Time `json:"password_changed_at,omitempty"`
 
 	model.Base

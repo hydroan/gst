@@ -447,6 +447,24 @@ func Expire(ctx context.Context, key string, expiration time.Duration) error {
 	return client.Expire(ctx, key, expiration).Err()
 }
 
+// Incr increments the integer at key by one and returns the new value,
+// creating the key at zero first when it does not exist.
+//
+// The read and the write are one Redis operation, which is what makes it usable
+// as a counter under concurrency: a caller that instead read, added, and wrote
+// back would lose increments to every interleaving of two requests.
+func Incr(ctx context.Context, key string) (int64, error) {
+	if !config.App.Redis.Enabled {
+		zap.S().Warn(ErrRedisIsDisabled.Error())
+		return 0, nil
+	}
+	key = redisKey(key)
+	if config.App.Redis.ClusterMode {
+		return cluster.Incr(ctx, key).Result()
+	}
+	return client.Incr(ctx, key).Result()
+}
+
 // TTL reports the remaining ttl of a key.
 //
 // Redis answers the two "nothing to report" cases with negative durations
