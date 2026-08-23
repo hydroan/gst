@@ -42,7 +42,7 @@ func ensureAdminSessionTarget(ctx *types.ServiceContext, target *modeliamuser.Us
 }
 
 func loadAdminSessionActor(ctx *types.ServiceContext) (*modeliamuser.User, error) {
-	_, session, err := SessionManager.Current(ctx)
+	_, session, err := CurrentSession(ctx)
 	if err != nil {
 		return nil, err
 	}

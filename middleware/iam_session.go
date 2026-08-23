@@ -74,13 +74,13 @@ func IAMSession() gin.HandlerFunc {
 		// calling, and it publishes that onto the gin context only once every
 		// check below has passed.
 		ctx := requestctx.WithGinMetadata(c)
-		session, e := serviceiamsession.SessionManager.Load(ctx, sessionID)
+		session, e := serviceiamsession.Store.LoadSession(ctx, sessionID)
 		if e != nil {
 			abortInvalidSession(c, e.Error())
 			return
 		}
-		if err = serviceiamsession.SessionManager.Validate(sessionID, session); err != nil {
-			_, _ = serviceiamsession.SessionManager.Delete(ctx, sessionID)
+		if err = serviceiamsession.ValidateSession(sessionID, session); err != nil {
+			_, _ = serviceiamsession.Store.DeleteSession(ctx, sessionID)
 			abortInvalidSession(c, err.Error())
 			return
 		}
@@ -107,7 +107,7 @@ func IAMSession() gin.HandlerFunc {
 		}
 
 		if session, err = serviceiamsession.ValidateSessionUserState(ctx, session); err != nil {
-			_, _ = serviceiamsession.SessionManager.Delete(ctx, sessionID)
+			_, _ = serviceiamsession.Store.DeleteSession(ctx, sessionID)
 			// A service error carries a status and a message written for the
 			// client. Anything else is an internal failure whose text belongs
 			// in logs, not in the response.
@@ -125,7 +125,7 @@ func IAMSession() gin.HandlerFunc {
 			return
 		}
 
-		if err = serviceiamsession.TouchSession(ctx, sessionID, session, time.Now()); err != nil {
+		if err = serviceiamsession.Store.TouchSession(ctx, sessionID, session, time.Now()); err != nil {
 			zap.S().Warnw("failed to touch iam session", "session_id", sessionID, "error", err)
 		}
 

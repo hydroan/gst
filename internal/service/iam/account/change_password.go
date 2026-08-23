@@ -5,7 +5,6 @@ import (
 
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
-	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/service"
@@ -25,7 +24,7 @@ func (c *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 	}
 
 	// Get current session
-	sessionID, currentSession, err := serviceiamsession.SessionManager.Current(ctx)
+	sessionID, currentSession, err := serviceiamsession.CurrentSession(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +49,7 @@ func (c *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 		return nil, err
 	}
 
-	if err = serviceiamsession.DeleteUserSessionsExceptCurrent(ctx, currentUser.GetID(), sessionID); err != nil {
+	if err = serviceiamsession.Store.DeleteUserSessionsExcept(ctx, currentUser.GetID(), sessionID); err != nil {
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to revoke other sessions", err)
 	}
 
@@ -67,7 +66,7 @@ func (c *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 	// authentication overwrites it from this cache on every request, and the
 	// next request will miss and read the cleared flag straight from the row
 	// written above.
-	modeliamsession.InvalidateUserStateCache(ctx, currentUser.GetID())
+	serviceiamsession.Store.DropUserState(ctx, currentUser.GetID())
 
 	log.Info("password changed successfully", "username", currentUser.Username)
 	return &modeliamaccount.ChangePasswordRsp{Msg: "password changed successfully"}, nil

@@ -128,12 +128,15 @@ func TestCurrentSessionGet(t *testing.T) {
 	t.Run("reject_session_when_stored_snapshot_id_mismatches", func(t *testing.T) {
 		account := newSessionTestAccount(t)
 		sessionID := loginSession(t, account.Username, account.Password)
-		sessionKey := modeliamsession.SessionDataKey(sessionID)
 
-		session, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), sessionKey)
+		session, err := serviceiamsession.Store.LoadSession(t.Context(), sessionID)
 		require.NoError(t, err)
 		session.ID = sessionID + "_mismatch"
-		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), sessionKey, session, time.Hour))
+		// Written through the raw key on purpose: SaveSession derives the key
+		// from the snapshot's own id, so the disagreement this asserts on is one
+		// the store cannot be asked to create.
+		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(
+			t.Context(), sessionDataKeyForCorruption(t, sessionID), session, time.Hour))
 
 		cli := sessionClient(t, sessionID)
 
@@ -144,12 +147,11 @@ func TestCurrentSessionGet(t *testing.T) {
 	t.Run("reject_session_when_stored_snapshot_is_expired", func(t *testing.T) {
 		account := newSessionTestAccount(t)
 		sessionID := loginSession(t, account.Username, account.Password)
-		sessionKey := modeliamsession.SessionDataKey(sessionID)
 
-		session, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), sessionKey)
+		session, err := serviceiamsession.Store.LoadSession(t.Context(), sessionID)
 		require.NoError(t, err)
 		session.ExpiresAt = time.Now().Add(-time.Minute)
-		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), sessionKey, session, time.Hour))
+		require.NoError(t, serviceiamsession.Store.SaveSession(t.Context(), session, time.Hour))
 
 		cli := sessionClient(t, sessionID)
 
@@ -310,11 +312,10 @@ func TestSessionList(t *testing.T) {
 		expiredSessionID := loginSession(t, account.Username, account.Password)
 		currentSessionID := loginSession(t, account.Username, account.Password)
 
-		sessionKey := modeliamsession.SessionDataKey(expiredSessionID)
-		session, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), sessionKey)
+		session, err := serviceiamsession.Store.LoadSession(t.Context(), expiredSessionID)
 		require.NoError(t, err)
 		session.ExpiresAt = time.Now().Add(-time.Minute)
-		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), sessionKey, session, time.Hour))
+		require.NoError(t, serviceiamsession.Store.SaveSession(t.Context(), session, time.Hour))
 		requireUserSessionContains(t, account.UserID, expiredSessionID)
 		requireAllSessionContains(t, expiredSessionID)
 
@@ -340,7 +341,7 @@ func TestSessionUserStateRefresh(t *testing.T) {
 		account := newSessionTestAccount(t)
 		sessionID := loginSession(t, account.Username, account.Password)
 		session := loadStoredSession(t, sessionID)
-		modeliamsession.InvalidateUserStateCache(context.Background(), account.UserID)
+		serviceiamsession.Store.DropUserState(context.Background(), account.UserID)
 
 		canceledCtx, cancel := context.WithCancel(context.Background())
 		cancel()
@@ -374,7 +375,7 @@ func TestInvalidateUserSessions(t *testing.T) {
 		_, err := sessionClient(t, firstSessionID).Get[iam.CurrentGetRsp](currentPath)
 		require.NoError(t, err)
 
-		modeliamsession.InvalidateUserSessions(context.Background(), account.UserID)
+		require.NoError(t, serviceiamsession.Store.DeleteUserSessions(context.Background(), account.UserID))
 
 		requireSessionNotFound(t, firstSessionID)
 		requireSessionNotFound(t, secondSessionID)
@@ -397,7 +398,7 @@ func TestInvalidateUserSessions(t *testing.T) {
 		bystander := newSessionTestAccount(t)
 		bystanderSessionID := loginSession(t, bystander.Username, bystander.Password)
 
-		modeliamsession.InvalidateUserSessions(context.Background(), target.UserID)
+		require.NoError(t, serviceiamsession.Store.DeleteUserSessions(context.Background(), target.UserID))
 
 		requireSessionNotFound(t, targetSessionID)
 		requireUserSessionContains(t, bystander.UserID, bystanderSessionID)
@@ -461,7 +462,7 @@ func TestSessionRejectionsAnswerInTheEnvelope(t *testing.T) {
 		_, err := sessionClient(t, sessionID).Get[iam.CurrentGetRsp](currentPath)
 		require.NoError(t, err)
 
-		modeliamsession.InvalidateUserSessions(context.Background(), account.UserID)
+		require.NoError(t, serviceiamsession.Store.DeleteUserSessions(context.Background(), account.UserID))
 
 		_, err = sessionClient(t, sessionID).Get[iam.CurrentGetRsp](currentPath)
 		requireEnvelopeRejection(t, err, "session invalid")
@@ -1110,7 +1111,7 @@ func TestSessionDeleteAll(t *testing.T) {
 		requireUserSessionContains(t, account.UserID, currentSessionID)
 		requireUserSessionContains(t, account.UserID, staleSessionID)
 
-		require.NoError(t, redis.Cache[modeliamsession.Session]().Delete(t.Context(), modeliamsession.SessionDataKey(staleSessionID)))
+		require.NoError(t, redis.Del(t.Context(), sessionDataKeyForCorruption(t, staleSessionID)))
 		requireUserSessionContains(t, account.UserID, staleSessionID)
 
 		cli := sessionClient(t, currentSessionID)
@@ -1158,7 +1159,7 @@ func registerRequestMetadataProbe() error {
 func loadStoredSession(t *testing.T, sessionID string) modeliamsession.Session {
 	t.Helper()
 
-	session, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), modeliamsession.SessionDataKey(sessionID))
+	session, err := serviceiamsession.Store.LoadSession(t.Context(), sessionID)
 	require.NoError(t, err)
 	return session
 }
@@ -1170,7 +1171,7 @@ func setSessionLastSeenAt(t *testing.T, sessionID string, lastSeenAt time.Time) 
 	session.LastSeenAt = lastSeenAt.UTC()
 	ttl := time.Until(session.ExpiresAt)
 	require.Greater(t, ttl, time.Duration(0))
-	require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), modeliamsession.SessionDataKey(sessionID), session, ttl))
+	require.NoError(t, serviceiamsession.Store.SaveSession(t.Context(), session, ttl))
 	return session
 }
 
@@ -1181,22 +1182,21 @@ func setSessionTenantID(t *testing.T, sessionID string, tenantID string) modelia
 	session.TenantID = tenantID
 	ttl := time.Until(session.ExpiresAt)
 	require.Greater(t, ttl, time.Duration(0))
-	require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), modeliamsession.SessionDataKey(sessionID), session, ttl))
+	require.NoError(t, serviceiamsession.Store.SaveSession(t.Context(), session, ttl))
 	return session
 }
 
 func requireSessionNotFound(t *testing.T, sessionID string) {
 	t.Helper()
 
-	sessionKey := modeliamsession.SessionDataKey(sessionID)
-	_, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), sessionKey)
+	_, err := serviceiamsession.Store.LoadSession(t.Context(), sessionID)
 	require.ErrorIs(t, err, types.ErrEntryNotFound)
 }
 
 func requireUserSessionContains(t *testing.T, userID, sessionID string) {
 	t.Helper()
 
-	userSessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionIndexUserKey(userID), 0, -1)
+	userSessionIDs, err := serviceiamsession.Store.ListUserSessionIDs(t.Context(), userID)
 	require.NoError(t, err)
 	require.Contains(t, userSessionIDs, sessionID)
 }
@@ -1204,7 +1204,7 @@ func requireUserSessionContains(t *testing.T, userID, sessionID string) {
 func requireUserSessionNotContains(t *testing.T, userID, sessionID string) {
 	t.Helper()
 
-	userSessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionIndexUserKey(userID), 0, -1)
+	userSessionIDs, err := serviceiamsession.Store.ListUserSessionIDs(t.Context(), userID)
 	require.NoError(t, err)
 	require.NotContains(t, userSessionIDs, sessionID)
 }
@@ -1212,7 +1212,7 @@ func requireUserSessionNotContains(t *testing.T, userID, sessionID string) {
 func requireAllSessionContains(t *testing.T, sessionID string) {
 	t.Helper()
 
-	sessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionIndexAllKey(), 0, -1)
+	sessionIDs, err := serviceiamsession.Store.ListAllSessionIDs(t.Context())
 	require.NoError(t, err)
 	require.Contains(t, sessionIDs, sessionID)
 }
@@ -1220,7 +1220,7 @@ func requireAllSessionContains(t *testing.T, sessionID string) {
 func requireAllSessionNotContains(t *testing.T, sessionID string) {
 	t.Helper()
 
-	sessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionIndexAllKey(), 0, -1)
+	sessionIDs, err := serviceiamsession.Store.ListAllSessionIDs(t.Context())
 	require.NoError(t, err)
 	require.NotContains(t, sessionIDs, sessionID)
 }
@@ -1228,14 +1228,14 @@ func requireAllSessionNotContains(t *testing.T, sessionID string) {
 func requireUserStateCacheCleared(t *testing.T, userID string) {
 	t.Helper()
 
-	_, err := redis.Get(t.Context(), modeliamsession.UserStateKey(userID))
-	require.ErrorIs(t, err, redis.ErrKeyNotExists)
+	_, found := serviceiamsession.Store.LoadUserState(t.Context(), userID)
+	require.False(t, found)
 }
 
 func requireSeenIndexNotContains(t *testing.T, sessionID string) {
 	t.Helper()
 
-	sessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionIndexSeenKey(), 0, -1)
+	sessionIDs, err := serviceiamsession.Store.ListSeenSessionIDs(t.Context(), time.Unix(1, 0))
 	require.NoError(t, err)
 	require.NotContains(t, sessionIDs, sessionID)
 }
@@ -1298,7 +1298,7 @@ func sessionLoginRoot(t *testing.T) string {
 
 	sessionID := loginSession(t, consts.AUTHZ_USER_ROOT, rootPassword)
 	t.Cleanup(func() {
-		modeliamsession.InvalidateUserSessions(context.Background(), consts.AUTHZ_USER_ROOT)
+		require.NoError(t, serviceiamsession.Store.DeleteUserSessions(context.Background(), consts.AUTHZ_USER_ROOT))
 	})
 	return sessionID
 }
@@ -1347,7 +1347,27 @@ func clearSessionsAfterTest(t *testing.T) {
 	t.Cleanup(func() {
 		// Both namespaces, because the user-state cache is keyed by user and is
 		// therefore deliberately outside the session prefix.
-		require.NoError(t, redis.RemovePrefix(context.Background(), modeliamsession.SessionNamespace))
-		require.NoError(t, redis.RemovePrefix(context.Background(), modeliamsession.UserNamespace))
+		require.NoError(t, serviceiamsession.Store.Purge(context.Background()))
 	})
+}
+
+// sessionDataKeyForCorruption spells out a session snapshot's Redis key for the
+// cases that have to damage storage rather than use it: deleting a snapshot but
+// leaving its index members behind, or storing a snapshot whose own id
+// disagrees with the key holding it.
+//
+// The store has no method for either, and should not — they are states its
+// callers are written to survive, never ones they would create; SaveSession
+// even derives the key from the snapshot's id precisely so the second cannot
+// happen by accident. The literal is guarded — the session was just created, so
+// the key must exist — which makes a layout change fail here rather than turn
+// these into tests that corrupt nothing and pass for the wrong reason.
+func sessionDataKeyForCorruption(t *testing.T, sessionID string) string {
+	t.Helper()
+
+	key := "iam:session:data:" + sessionID
+	ttl, err := redis.TTL(t.Context(), key)
+	require.NoError(t, err)
+	require.NotEqual(t, redis.TTLKeyNotExists, ttl, "key %q does not exist: the store's key layout changed", key)
+	return key
 }

@@ -17,15 +17,14 @@ import (
 	"github.com/hydroan/gst/database"
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
-	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
+	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/module/iam"
-	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
@@ -799,7 +798,7 @@ func TestIAMLoginStoresSessionTenant(t *testing.T) {
 		TenantID: tenantID,
 	}, tenantUserAgent)
 
-	session, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), modeliamsession.SessionDataKey(sessionID))
+	session, err := serviceiamsession.Store.LoadSession(t.Context(), sessionID)
 	require.NoError(t, err)
 	require.Equal(t, tenantID, session.TenantID)
 }

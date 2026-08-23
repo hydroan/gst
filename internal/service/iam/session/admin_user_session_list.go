@@ -10,7 +10,6 @@ import (
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
@@ -22,7 +21,7 @@ type AdminUserSessionListService struct {
 
 // List returns all indexed sessions of a specified user for a privileged administrator.
 func (a *AdminUserSessionListService) List(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamsession.AdminUserSessionListRsp, err error) {
-	currentSessionID, _, err := SessionManager.Current(ctx)
+	currentSessionID, _, err := CurrentSession(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -86,37 +85,36 @@ func (a *AdminUserSessionListService) buildView(ctx *types.ServiceContext, user 
 	var indexUserID string
 	var sessionIDs []string
 	if onlineOnly {
-		sessionIDs, err = listOnlineSessionIDs(ctx, onlineSince)
+		sessionIDs, err = Store.ListSeenSessionIDs(ctx, onlineSince)
 	} else {
 		indexUserID = user.ID
-		sessionIDs, err = listUserSessionIDs(ctx, user.ID)
+		sessionIDs, err = Store.ListUserSessionIDs(ctx, user.ID)
 	}
 	if err != nil {
 		return modeliamsession.AdminSessionOwnerView{}, err
 	}
 
-	cache := redis.Cache[modeliamsession.Session]()
 	for i := range sessionIDs {
 		sessionID := sessionIDs[i]
 		if sessionID == "" {
 			continue
 		}
 
-		sessionData, getErr := cache.Get(ctx, modeliamsession.SessionDataKey(sessionID))
+		sessionData, getErr := Store.LoadSession(ctx, sessionID)
 		if getErr != nil {
 			if errors.Is(getErr, types.ErrEntryNotFound) {
-				_ = modeliamsession.RemoveSessionIndexes(ctx, indexUserID, sessionID)
+				_ = Store.DropSessionIndexes(ctx, indexUserID, sessionID)
 				continue
 			}
 			return modeliamsession.AdminSessionOwnerView{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", getErr)
 		}
-		if validateErr := SessionManager.Validate(sessionID, sessionData); validateErr != nil {
-			_, _ = SessionManager.Delete(ctx, sessionID)
+		if validateErr := ValidateSession(sessionID, sessionData); validateErr != nil {
+			_, _ = Store.DeleteSession(ctx, sessionID)
 			continue
 		}
 		if sessionData.UserID != user.ID {
 			if indexUserID != "" {
-				_ = redis.ZRem(ctx, modeliamsession.SessionIndexUserKey(indexUserID), sessionID)
+				_ = Store.DropUserSessionIndexMember(ctx, indexUserID, sessionID)
 			}
 			continue
 		}

@@ -15,16 +15,16 @@ type CurrentDeleteService struct {
 
 // Delete invalidates the current authenticated session and clears the session cookie.
 func (c *CurrentDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.CurrentDeleteReq) (rsp *modeliamsession.CurrentDeleteRsp, err error) {
-	sessionID, err := SessionManager.SessionID(ctx)
+	sessionID, err := CookieSessionID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	if _, err = SessionManager.Delete(ctx, sessionID); err != nil {
+	if _, err = Store.DeleteSession(ctx, sessionID); err != nil {
 		return nil, service.NewErrorWithCause(http.StatusUnauthorized, "session not exists", err)
 	}
 
-	SessionManager.ClearCookie(ctx)
+	ClearCookie(ctx)
 
 	return &modeliamsession.CurrentDeleteRsp{}, nil
 }

@@ -21,7 +21,7 @@ type CurrentGetService struct {
 
 // Get returns the current authenticated session together with the latest user snapshot.
 func (c *CurrentGetService) Get(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamsession.CurrentGetRsp, err error) {
-	_, currentSession, err := SessionManager.Current(ctx)
+	_, currentSession, err := CurrentSession(ctx)
 	if err != nil {
 		return nil, err
 	}

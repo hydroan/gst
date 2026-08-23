@@ -57,7 +57,7 @@ func (r *ResetPasswordService) Create(ctx *types.ServiceContext, req *modeliamac
 		}
 	}
 
-	if err = serviceiamsession.DeleteUserSessions(ctx, req.UserID); err != nil {
+	if err = serviceiamsession.Store.DeleteUserSessions(ctx, req.UserID); err != nil {
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to revoke user sessions", err)
 	}
 

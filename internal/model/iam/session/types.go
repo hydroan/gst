@@ -1,53 +1,6 @@
 package modeliamsession
 
-import (
-	"fmt"
-	"time"
-)
-
-// The Redis key layout of IAM, in two namespaces.
-//
-// Every key names the role it plays before it names what it is keyed by, so a
-// scan can address one role at a time. That also keeps any key from being a
-// prefix of another: a prefix scan for one of them cannot reach into the keys
-// of another, which a layout that put the identifier directly under the
-// namespace could not promise.
-//
-// The split between the two namespaces follows what a key is scoped to rather
-// than which code writes it. Everything a session owns is reclaimed by dropping
-// SessionNamespace; the user-state cache survives the sessions that read it,
-// because it describes the user.
-//
-// Only the two roots are exported. A key is built by the constructor that owns
-// it, never by a caller assembling one out of parts, which is what lets the
-// layout above change without a caller having to agree to it.
-const (
-	// SessionNamespace covers every key whose lifetime is a session's.
-	SessionNamespace = "iam:session"
-
-	// sessionDataNamespace stores session snapshots by session ID.
-	sessionDataNamespace = SessionNamespace + ":data"
-
-	// sessionIndexNamespace covers the sorted sets that index sessions.
-	sessionIndexNamespace = SessionNamespace + ":index"
-
-	// sessionIndexUserNamespace indexes a user's sessions by expiry.
-	sessionIndexUserNamespace = sessionIndexNamespace + ":user"
-
-	// sessionIndexAllNamespace indexes every session by expiry.
-	sessionIndexAllNamespace = sessionIndexNamespace + ":all"
-
-	// sessionIndexSeenNamespace indexes every session by last activity.
-	sessionIndexSeenNamespace = sessionIndexNamespace + ":seen"
-)
-
-const (
-	// UserNamespace covers every key whose lifetime is a user's.
-	UserNamespace = "iam:user"
-
-	// userStateNamespace stores the short-lived mutable user-state cache by user ID.
-	userStateNamespace = UserNamespace + ":state"
-)
+import "time"
 
 // Session stores the authenticated session snapshot used by IAM middleware and session APIs.
 //
@@ -106,34 +59,4 @@ type AuthenticatedSessionView struct {
 	LastSeenAt       time.Time `json:"last_seen_at"`
 	ExpiresAt        time.Time `json:"expires_at"`
 	ExpiresInSeconds int64     `json:"expires_in_seconds"`
-}
-
-// namespacedKey builds a Redis key for the specified namespace and identifier.
-func namespacedKey(namespace, id string) string {
-	return fmt.Sprintf("%s:%s", namespace, id)
-}
-
-// SessionDataKey builds the Redis key for a session snapshot identified by session ID.
-func SessionDataKey(sessionID string) string {
-	return namespacedKey(sessionDataNamespace, sessionID)
-}
-
-// SessionIndexUserKey builds the Redis key for the session index of a user.
-func SessionIndexUserKey(userID string) string {
-	return namespacedKey(sessionIndexUserNamespace, userID)
-}
-
-// SessionIndexAllKey builds the Redis key for the session index of all sessions.
-func SessionIndexAllKey() string {
-	return sessionIndexAllNamespace
-}
-
-// SessionIndexSeenKey builds the Redis key for the session index by last activity.
-func SessionIndexSeenKey() string {
-	return sessionIndexSeenNamespace
-}
-
-// UserStateKey builds the Redis key for cached mutable user state by user ID.
-func UserStateKey(userID string) string {
-	return namespacedKey(userStateNamespace, userID)
 }

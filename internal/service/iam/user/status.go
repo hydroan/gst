@@ -4,9 +4,9 @@ import (
 	"net/http"
 
 	"github.com/hydroan/gst/database"
-	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/internal/service/iam/adminauth"
+	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
@@ -47,11 +47,7 @@ func (u *UserStatusPatchService) Patch(ctx *types.ServiceContext, req *modeliamu
 
 	if target.Status == req.Status {
 		// Still revoke sessions when the target state is inactive or locked so Redis cannot drift.
-		if shouldInvalidateUserSessions(req.Status) {
-			modeliamsession.InvalidateUserSessions(ctx, targetUserID)
-		} else {
-			modeliamsession.InvalidateUserStateCache(ctx, targetUserID)
-		}
+		revokeSessionsForStatus(ctx, log, req.Status, targetUserID)
 		return &modeliamuser.UserStatusPatchRsp{Msg: "user status unchanged"}, nil
 	}
 
@@ -63,12 +59,24 @@ func (u *UserStatusPatchService) Patch(ctx *types.ServiceContext, req *modeliamu
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update user status", err)
 	}
 
-	if shouldInvalidateUserSessions(req.Status) {
-		modeliamsession.InvalidateUserSessions(ctx, targetUserID)
-	} else {
-		modeliamsession.InvalidateUserStateCache(ctx, targetUserID)
-	}
+	revokeSessionsForStatus(ctx, log, req.Status, targetUserID)
 
 	log.Info("user status updated", "target_user_id", targetUserID, "status", req.Status, "actor_user_id", actor.GetID(), "actor_username", actor.Username)
 	return &modeliamuser.UserStatusPatchRsp{Msg: "user status updated successfully"}, nil
+}
+
+// revokeSessionsForStatus applies a status change to the target's live sessions.
+//
+// The row is already written by the time this runs, so a storage failure is
+// logged rather than returned: failing the request would report a change that
+// did happen as one that did not, and the user-state cache expiring on its own
+// is the backstop either way.
+func revokeSessionsForStatus(ctx *types.ServiceContext, log types.Logger, status modeliamuser.UserStatus, targetUserID string) {
+	if !shouldInvalidateUserSessions(status) {
+		serviceiamsession.Store.DropUserState(ctx, targetUserID)
+		return
+	}
+	if err := serviceiamsession.Store.DeleteUserSessions(ctx, targetUserID); err != nil {
+		log.Warn("failed to revoke sessions after user status change", err)
+	}
 }

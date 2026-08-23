@@ -13,16 +13,16 @@ type SessionDeleteAllService struct {
 
 // Delete invalidates all sessions for the current authenticated user.
 func (s *SessionDeleteAllService) Delete(ctx *types.ServiceContext, req *modeliamsession.SessionDeleteAllReq) (rsp *modeliamsession.SessionDeleteAllRsp, err error) {
-	_, currentSession, err := SessionManager.Current(ctx)
+	_, currentSession, err := CurrentSession(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	if err = DeleteUserSessions(ctx, currentSession.UserID); err != nil {
+	if err = Store.DeleteUserSessions(ctx, currentSession.UserID); err != nil {
 		return nil, err
 	}
 
-	SessionManager.ClearCookie(ctx)
+	ClearCookie(ctx)
 
 	return &modeliamsession.SessionDeleteAllRsp{}, nil
 }

@@ -5,7 +5,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
-	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
@@ -21,7 +20,7 @@ type SessionDeleteService struct {
 // same user and keeps the current cookie-backed session active. The endpoint
 // remains idempotent: deleting a missing session still returns success.
 func (s *SessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.SessionDeleteReq) (rsp *modeliamsession.SessionDeleteRsp, err error) {
-	currentSessionID, currentSession, err := SessionManager.Current(ctx)
+	currentSessionID, currentSession, err := CurrentSession(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -34,26 +33,26 @@ func (s *SessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamse
 		// DELETE /api/iam/sessions/others is a bulk self-service logout for
 		// secondary sessions. The current cookie-backed session must survive so
 		// the caller can continue using the API after the request completes.
-		if err = DeleteUserSessionsExceptCurrent(ctx, currentSession.UserID, currentSessionID); err != nil {
+		if err = Store.DeleteUserSessionsExcept(ctx, currentSession.UserID, currentSessionID); err != nil {
 			return nil, err
 		}
 		return &modeliamsession.SessionDeleteRsp{}, nil
 	}
 
-	targetSession, err := redis.Cache[modeliamsession.Session]().Get(ctx, modeliamsession.SessionDataKey(targetSessionID))
+	targetSession, err := Store.LoadSession(ctx, targetSessionID)
 	if err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
 			if targetSessionID == currentSessionID {
-				SessionManager.ClearCookie(ctx)
+				ClearCookie(ctx)
 			}
 			return &modeliamsession.SessionDeleteRsp{}, nil
 		}
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load target session", err)
 	}
-	if err = SessionManager.Validate(targetSessionID, targetSession); err != nil {
-		_, _ = SessionManager.Delete(ctx, targetSessionID)
+	if err = ValidateSession(targetSessionID, targetSession); err != nil {
+		_, _ = Store.DeleteSession(ctx, targetSessionID)
 		if targetSessionID == currentSessionID {
-			SessionManager.ClearCookie(ctx)
+			ClearCookie(ctx)
 		}
 		return &modeliamsession.SessionDeleteRsp{}, nil
 	}
@@ -61,17 +60,17 @@ func (s *SessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamse
 		return nil, service.NewError(http.StatusForbidden, "forbidden")
 	}
 
-	if _, err = SessionManager.Delete(ctx, targetSessionID); err != nil {
+	if _, err = Store.DeleteSession(ctx, targetSessionID); err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
 			if targetSessionID == currentSessionID {
-				SessionManager.ClearCookie(ctx)
+				ClearCookie(ctx)
 			}
 			return &modeliamsession.SessionDeleteRsp{}, nil
 		}
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to delete session", err)
 	}
 	if targetSessionID == currentSessionID {
-		SessionManager.ClearCookie(ctx)
+		ClearCookie(ctx)
 	}
 
 	return &modeliamsession.SessionDeleteRsp{}, nil

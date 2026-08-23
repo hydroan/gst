@@ -18,7 +18,7 @@ type AdminUserSessionDeleteService struct {
 
 // Delete invalidates all indexed sessions of a specified user for a privileged administrator.
 func (a *AdminUserSessionDeleteService) Delete(ctx *types.ServiceContext, req *modeliamsession.AdminUserSessionDeleteReq) (rsp *modeliamsession.AdminUserSessionDeleteRsp, err error) {
-	_, currentSession, err := SessionManager.Current(ctx)
+	_, currentSession, err := CurrentSession(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -39,11 +39,11 @@ func (a *AdminUserSessionDeleteService) Delete(ctx *types.ServiceContext, req *m
 		return nil, err
 	}
 
-	if err = DeleteUserSessions(ctx, targetUserID); err != nil {
+	if err = Store.DeleteUserSessions(ctx, targetUserID); err != nil {
 		return nil, err
 	}
 	if currentSession.UserID == targetUserID {
-		SessionManager.ClearCookie(ctx)
+		ClearCookie(ctx)
 	}
 
 	return &modeliamsession.AdminUserSessionDeleteRsp{}, nil

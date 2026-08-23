@@ -6,7 +6,6 @@ import (
 	"github.com/cockroachdb/errors"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
@@ -18,7 +17,7 @@ type AdminSessionGetService struct {
 
 // Get returns the detail of a specified session for a privileged administrator.
 func (a *AdminSessionGetService) Get(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamsession.AdminSessionGetRsp, err error) {
-	currentSessionID, _, err := SessionManager.Current(ctx)
+	currentSessionID, _, err := CurrentSession(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -31,15 +30,15 @@ func (a *AdminSessionGetService) Get(ctx *types.ServiceContext, req *model.Empty
 		return nil, service.NewError(http.StatusBadRequest, "session id is required")
 	}
 
-	targetSession, err := redis.Cache[modeliamsession.Session]().Get(ctx, modeliamsession.SessionDataKey(targetSessionID))
+	targetSession, err := Store.LoadSession(ctx, targetSessionID)
 	if err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
 			return nil, service.NewError(http.StatusNotFound, "session not found")
 		}
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load target session", err)
 	}
-	if err = SessionManager.Validate(targetSessionID, targetSession); err != nil {
-		_, _ = SessionManager.Delete(ctx, targetSessionID)
+	if err = ValidateSession(targetSessionID, targetSession); err != nil {
+		_, _ = Store.DeleteSession(ctx, targetSessionID)
 		return nil, service.NewError(http.StatusNotFound, "session not found")
 	}
 

@@ -10,7 +10,6 @@ import (
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
@@ -38,15 +37,14 @@ func (a *AdminSessionListService) List(ctx *types.ServiceContext, req *model.Emp
 
 	var sessionIDs []string
 	if onlineOnly {
-		sessionIDs, err = listOnlineSessionIDs(ctx, onlineSince)
+		sessionIDs, err = Store.ListSeenSessionIDs(ctx, onlineSince)
 	} else {
-		sessionIDs, err = listAllSessionIDs(ctx)
+		sessionIDs, err = Store.ListAllSessionIDs(ctx)
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	cache := redis.Cache[modeliamsession.Session]()
 	owners := make(map[string]*adminSessionOwnerItem, len(sessionIDs))
 	var sessionTotal int
 	for i := range sessionIDs {
@@ -55,16 +53,16 @@ func (a *AdminSessionListService) List(ctx *types.ServiceContext, req *model.Emp
 			continue
 		}
 
-		sessionData, getErr := cache.Get(ctx, modeliamsession.SessionDataKey(sessionID))
+		sessionData, getErr := Store.LoadSession(ctx, sessionID)
 		if getErr != nil {
 			if errors.Is(getErr, types.ErrEntryNotFound) {
-				_ = modeliamsession.RemoveSessionIndexes(ctx, "", sessionID)
+				_ = Store.DropSessionIndexes(ctx, "", sessionID)
 				continue
 			}
 			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", getErr)
 		}
-		if validateErr := SessionManager.Validate(sessionID, sessionData); validateErr != nil {
-			_, _ = SessionManager.Delete(ctx, sessionID)
+		if validateErr := ValidateSession(sessionID, sessionData); validateErr != nil {
+			_, _ = Store.DeleteSession(ctx, sessionID)
 			continue
 		}
 		if onlineOnly && !sessionSeenSince(sessionData, onlineSince) {
@@ -130,7 +128,7 @@ func (a *AdminSessionListService) buildItem(ctx *types.ServiceContext, sourceSes
 	targetUser := new(modeliamuser.User)
 	if err := database.Database[*modeliamuser.User](ctx).Get(targetUser, sourceSession.UserID); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
-			_, _ = SessionManager.Delete(ctx, sourceSession.ID)
+			_, _ = Store.DeleteSession(ctx, sourceSession.ID)
 			return nil, false, nil
 		}
 		return nil, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session owner", err)
@@ -138,7 +136,7 @@ func (a *AdminSessionListService) buildItem(ctx *types.ServiceContext, sourceSes
 	credential, err := loadSessionPasswordCredential(ctx, targetUser.ID)
 	if err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
-			_, _ = SessionManager.Delete(ctx, sourceSession.ID)
+			_, _ = Store.DeleteSession(ctx, sourceSession.ID)
 			return nil, false, nil
 		}
 		return nil, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session owner", err)

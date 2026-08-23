@@ -9,16 +9,9 @@ import (
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
-	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 	"go.uber.org/zap"
 )
-
-type sessionUserState struct {
-	Status             modeliamuser.UserStatus `json:"status"`
-	MustChangePassword bool                    `json:"must_change_password"`
-}
 
 // ValidateSessionUserState refreshes the mutable user state required to keep using a session.
 func ValidateSessionUserState(ctx context.Context, session modeliamsession.Session) (modeliamsession.Session, error) {
@@ -26,7 +19,7 @@ func ValidateSessionUserState(ctx context.Context, session modeliamsession.Sessi
 		return session, service.NewError(http.StatusUnauthorized, "session invalid")
 	}
 
-	state, ok := loadCachedSessionUserState(ctx, session.UserID)
+	state, ok := Store.LoadUserState(ctx, session.UserID)
 	if !ok {
 		var err error
 		if state, err = refreshSessionUserState(ctx, session.UserID); err != nil {
@@ -38,49 +31,36 @@ func ValidateSessionUserState(ctx context.Context, session modeliamsession.Sessi
 	return session, ensureSessionUserActive(&modeliamuser.User{Status: state.Status})
 }
 
-func loadCachedSessionUserState(ctx context.Context, userID string) (sessionUserState, bool) {
-	state, err := redis.Cache[sessionUserState]().Get(ctx, modeliamsession.UserStateKey(userID))
-	if err == nil {
-		return state, true
-	}
-	if !errors.Is(err, types.ErrEntryNotFound) {
-		zap.S().Warnw("failed to load iam session user state cache", "user_id", userID, "error", err)
-	}
-	return sessionUserState{}, false
-}
-
 // refreshSessionUserState reads the mutable user state from the database and
 // caches it.
 //
 // A user or credential row that is gone is reported as an invalid session
 // rather than as an absent state: nothing else deletes a session when its owner
 // is deleted, so this refusal is what ends the sessions of a deleted user.
-func refreshSessionUserState(ctx context.Context, userID string) (sessionUserState, error) {
+func refreshSessionUserState(ctx context.Context, userID string) (UserState, error) {
 	targetUser := new(modeliamuser.User)
 	if err := database.Database[*modeliamuser.User](ctx).Get(targetUser, userID); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
-			return sessionUserState{}, service.NewError(http.StatusUnauthorized, "session invalid")
+			return UserState{}, service.NewError(http.StatusUnauthorized, "session invalid")
 		}
 		zap.S().Warnw("failed to refresh iam session user state", "user_id", userID, "error", err)
-		return sessionUserState{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to refresh session user state", err)
+		return UserState{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to refresh session user state", err)
 	}
 
 	credential, err := loadSessionPasswordCredential(ctx, userID)
 	if err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
-			return sessionUserState{}, service.NewError(http.StatusUnauthorized, "session invalid")
+			return UserState{}, service.NewError(http.StatusUnauthorized, "session invalid")
 		}
 		zap.S().Warnw("failed to refresh iam session password credential state", "user_id", userID, "error", err)
-		return sessionUserState{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to refresh session user state", err)
+		return UserState{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to refresh session user state", err)
 	}
 
-	state := sessionUserState{
+	state := UserState{
 		Status:             targetUser.Status,
 		MustChangePassword: credential.MustChangePassword,
 	}
-	if err := redis.Cache[sessionUserState]().Set(ctx, modeliamsession.UserStateKey(userID), state, GetSessionUserStateTTL()); err != nil {
-		zap.S().Warnw("failed to cache iam session user state", "user_id", userID, "error", err)
-	}
+	Store.SaveUserState(ctx, userID, state)
 	return state, nil
 }
 

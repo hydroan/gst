@@ -14,7 +14,6 @@ import (
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
-	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
@@ -148,15 +147,15 @@ func TestAccountLogout(t *testing.T) {
 		brokenIndexUser := accountSignupUser(t, "acct_logout_broken_index", "12345678")
 		brokenIndexUser.SessionID = accountLoginUser(t, &brokenIndexUser, brokenIndexUser.Password)
 
-		userSessionKey := modeliamsession.SessionIndexUserKey(brokenIndexUser.UserID)
+		userSessionKey := accountUserSessionIndexKey(t, brokenIndexUser.UserID)
 		// This case deliberately corrupts the user session index below. Repair
 		// it afterwards: a string left where a zset belongs makes every later
 		// read of that key fail, and nothing else clears it.
 		t.Cleanup(func() {
-			require.NoError(t, redis.Del(context.Background(), userSessionKey, modeliamsession.SessionDataKey(brokenIndexUser.SessionID)))
-			require.NoError(t, redis.ZRem(context.Background(), modeliamsession.SessionIndexAllKey(), brokenIndexUser.SessionID))
-			require.NoError(t, redis.ZRem(context.Background(), modeliamsession.SessionIndexSeenKey(), brokenIndexUser.SessionID))
-			modeliamsession.InvalidateUserSessions(context.Background(), brokenIndexUser.UserID)
+			require.NoError(t, redis.Del(context.Background(), userSessionKey))
+			require.NoError(t, serviceiamsession.Store.DropSessionIndexes(context.Background(), "", brokenIndexUser.SessionID))
+			_, _ = serviceiamsession.Store.DeleteSession(context.Background(), brokenIndexUser.SessionID)
+			_ = serviceiamsession.Store.DeleteUserSessions(context.Background(), brokenIndexUser.UserID)
 		})
 
 		require.NoError(t, redis.Del(t.Context(), userSessionKey))
@@ -372,7 +371,7 @@ func TestAccountChangePassword(t *testing.T) {
 		syncFailUser.SessionID = accountLoginUser(t, &syncFailUser, syncFailUser.Password)
 		syncFailPassword := "syncpass9"
 
-		session, err := serviceiamsession.SessionManager.Load(t.Context(), syncFailUser.SessionID)
+		session, err := serviceiamsession.Store.LoadSession(t.Context(), syncFailUser.SessionID)
 		require.NoError(t, err)
 
 		credential := accountRequirePasswordCredential(t, syncFailUser.UserID)
@@ -389,7 +388,7 @@ func TestAccountChangePassword(t *testing.T) {
 			syncFailUser.SessionID,
 			consts.PHASE_CREATE,
 		)
-		require.NoError(t, redis.Set(t.Context(), modeliamsession.SessionDataKey(syncFailUser.SessionID), "not-a-session", time.Hour))
+		require.NoError(t, redis.Set(t.Context(), accountSessionDataKey(t, syncFailUser.SessionID), "not-a-session", time.Hour))
 
 		svc := &serviceiamaccount.ChangePasswordService{}
 		svc.Logger = loggerzap.New("")
@@ -514,14 +513,14 @@ func TestAccountResetPassword(t *testing.T) {
 		brokenIndexVictim := accountSignupUser(t, "acct_reset_broken_index", "87654321")
 		brokenSessionID := accountLoginUser(t, &brokenIndexVictim, brokenIndexVictim.Password)
 
-		userSessionKey := modeliamsession.SessionIndexUserKey(brokenIndexVictim.UserID)
+		userSessionKey := accountUserSessionIndexKey(t, brokenIndexVictim.UserID)
 		// See the note in TestAccountLogout: the corrupted index has to be
 		// repaired here, nothing else clears it.
 		t.Cleanup(func() {
-			require.NoError(t, redis.Del(context.Background(), userSessionKey, modeliamsession.SessionDataKey(brokenSessionID)))
-			require.NoError(t, redis.ZRem(context.Background(), modeliamsession.SessionIndexAllKey(), brokenSessionID))
-			require.NoError(t, redis.ZRem(context.Background(), modeliamsession.SessionIndexSeenKey(), brokenSessionID))
-			modeliamsession.InvalidateUserSessions(context.Background(), brokenIndexVictim.UserID)
+			require.NoError(t, redis.Del(context.Background(), userSessionKey))
+			require.NoError(t, serviceiamsession.Store.DropSessionIndexes(context.Background(), "", brokenSessionID))
+			_, _ = serviceiamsession.Store.DeleteSession(context.Background(), brokenSessionID)
+			_ = serviceiamsession.Store.DeleteUserSessions(context.Background(), brokenIndexVictim.UserID)
 		})
 
 		require.NoError(t, redis.Del(t.Context(), userSessionKey))
@@ -668,7 +667,7 @@ func accountLoginRoot(t *testing.T) string {
 
 	_, sessionID := accountLoginClient(t, consts.AUTHZ_USER_ROOT, rootPassword)
 	t.Cleanup(func() {
-		modeliamsession.InvalidateUserSessions(context.Background(), consts.AUTHZ_USER_ROOT)
+		_ = serviceiamsession.Store.DeleteUserSessions(context.Background(), consts.AUTHZ_USER_ROOT)
 	})
 	return sessionID
 }
@@ -749,15 +748,14 @@ func accountNewServiceContext(baseCtx context.Context, method, path, sessionID s
 func accountRequireSessionNotFound(t *testing.T, sessionID string) {
 	t.Helper()
 
-	sessionKey := modeliamsession.SessionDataKey(sessionID)
-	_, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), sessionKey)
+	_, err := serviceiamsession.Store.LoadSession(t.Context(), sessionID)
 	require.ErrorIs(t, err, types.ErrEntryNotFound)
 }
 
 func accountRequireUserSessionContains(t *testing.T, userID, sessionID string) {
 	t.Helper()
 
-	userSessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionIndexUserKey(userID), 0, -1)
+	userSessionIDs, err := serviceiamsession.Store.ListUserSessionIDs(t.Context(), userID)
 	require.NoError(t, err)
 	require.Contains(t, userSessionIDs, sessionID)
 }
@@ -765,7 +763,38 @@ func accountRequireUserSessionContains(t *testing.T, userID, sessionID string) {
 func accountRequireUserSessionNotContains(t *testing.T, userID, sessionID string) {
 	t.Helper()
 
-	userSessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionIndexUserKey(userID), 0, -1)
+	userSessionIDs, err := serviceiamsession.Store.ListUserSessionIDs(t.Context(), userID)
 	require.NoError(t, err)
 	require.NotContains(t, userSessionIDs, sessionID)
+}
+
+// The two helpers below spell out Redis keys the store keeps private.
+//
+// They exist for the cases that plant broken storage — an index that is not a
+// sorted set, a snapshot that is not a session — which no method of the store
+// can express, because no correct caller would ever ask for it.
+//
+// The spelling is guarded rather than trusted. The caller has just logged in,
+// so the key is known to exist; if the store's layout moves out from under
+// these literals the guard fails here, instead of letting a test quietly
+// corrupt a key nothing reads and pass for the wrong reason.
+func accountUserSessionIndexKey(t *testing.T, userID string) string {
+	t.Helper()
+
+	return accountRequireExistingKey(t, "iam:session:index:user:"+userID)
+}
+
+func accountSessionDataKey(t *testing.T, sessionID string) string {
+	t.Helper()
+
+	return accountRequireExistingKey(t, "iam:session:data:"+sessionID)
+}
+
+func accountRequireExistingKey(t *testing.T, key string) string {
+	t.Helper()
+
+	ttl, err := redis.TTL(t.Context(), key)
+	require.NoError(t, err)
+	require.NotEqual(t, redis.TTLKeyNotExists, ttl, "key %q does not exist: the store's key layout changed", key)
+	return key
 }

@@ -21,7 +21,7 @@ import (
 // they still reload the user row from the database so status, IDs, and system
 // role checks operate on the current persisted user.
 func LoadActor(ctx *types.ServiceContext) (*modeliamuser.User, error) {
-	_, session, err := serviceiamsession.SessionManager.Current(ctx)
+	_, session, err := serviceiamsession.CurrentSession(ctx)
 	if err != nil {
 		return nil, service.NewErrorWithCause(http.StatusUnauthorized, "invalid session", err)
 	}

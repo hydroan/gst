@@ -7,7 +7,6 @@ import (
 	"github.com/cockroachdb/errors"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
@@ -19,19 +18,18 @@ type SessionListService struct {
 
 // List returns all active sessions for the current authenticated user.
 func (s *SessionListService) List(ctx *types.ServiceContext, req *model.Empty) (rsp *modeliamsession.SessionListRsp, err error) {
-	// SessionManager.Current already guarantees that the resolved session is bound to
+	// CurrentSession already guarantees that the resolved session is bound to
 	// an authenticated user, so the service can directly use currentSession.UserID.
-	currentSessionID, currentSession, err := SessionManager.Current(ctx)
+	currentSessionID, currentSession, err := CurrentSession(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	sessionIDs, err := listUserSessionIDs(ctx, currentSession.UserID)
+	sessionIDs, err := Store.ListUserSessionIDs(ctx, currentSession.UserID)
 	if err != nil {
 		return nil, err
 	}
 
-	cache := redis.Cache[modeliamsession.Session]()
 	items := make([]modeliamsession.SessionView, 0, len(sessionIDs))
 	for i := range sessionIDs {
 		sessionID := sessionIDs[i]
@@ -39,17 +37,16 @@ func (s *SessionListService) List(ctx *types.ServiceContext, req *model.Empty) (
 			items = append(items, buildSessionView(currentSession, currentSessionID))
 			continue
 		}
-		sessionKey := modeliamsession.SessionDataKey(sessionID)
-		sessionData, getErr := cache.Get(ctx, sessionKey)
+		sessionData, getErr := Store.LoadSession(ctx, sessionID)
 		if getErr != nil {
 			if errors.Is(getErr, types.ErrEntryNotFound) {
-				_ = modeliamsession.RemoveSessionIndexes(ctx, currentSession.UserID, sessionID)
+				_ = Store.DropSessionIndexes(ctx, currentSession.UserID, sessionID)
 				continue
 			}
 			return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", getErr)
 		}
-		if validateErr := SessionManager.Validate(sessionID, sessionData); validateErr != nil {
-			_, _ = SessionManager.Delete(ctx, sessionID)
+		if validateErr := ValidateSession(sessionID, sessionData); validateErr != nil {
+			_, _ = Store.DeleteSession(ctx, sessionID)
 			continue
 		}
 		items = append(items, buildSessionView(sessionData, currentSessionID))

@@ -13,7 +13,6 @@ import (
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
-	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
@@ -131,7 +130,6 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	if err != nil {
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to create session id", err)
 	}
-	prefixedSessionID := modeliamsession.SessionDataKey(sessionID)
 	expire := serviceiamsession.GetSessionExpiration()
 	expiresAt := now.Add(expire)
 
@@ -152,13 +150,13 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		LastSeenAt:         now,
 		ExpiresAt:          expiresAt,
 	}
-	// Store session in Redis
-	redisCache := redis.Cache[modeliamsession.Session]()
-	if err = redisCache.Set(ctx, prefixedSessionID, sessionData, expire); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to store session", err)
+	if err = serviceiamsession.Store.SaveSession(ctx, sessionData, expire); err != nil {
+		return nil, err
 	}
-	if err = serviceiamsession.IndexSession(ctx, sessionData); err != nil {
-		_ = redisCache.Delete(ctx, prefixedSessionID)
+	if err = serviceiamsession.Store.IndexSession(ctx, sessionData); err != nil {
+		// A snapshot no index names can never be listed or revoked, so the
+		// session is dropped rather than left behind unreachable.
+		_, _ = serviceiamsession.Store.DeleteSession(ctx, sessionID)
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to track user session", err)
 	}
 
@@ -170,7 +168,7 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		log.Warnz("failed to update password credential statistics", zap.Error(err))
 	}
 
-	serviceiamsession.SessionManager.SetCookie(ctx, sessionID, expire)
+	serviceiamsession.SetCookie(ctx, sessionID, expire)
 
 	log.Infoz("user logged in successfully", zap.String("username", req.Username), zap.String("user_id", targetUser.ID))
 
