@@ -235,6 +235,22 @@ func TestNewLogEncoderReflectedValuesCollapseToOneStringField(t *testing.T) {
 		require.Contains(t, collapsed, "chan int")
 	})
 
+	// Angle brackets and ampersands survive both encoding passes. They are
+	// dense in third-party error pages, URLs and query strings, and a log entry
+	// is never rendered as HTML, so escaping them would only cost readability.
+	t.Run("html characters stay verbatim", func(t *testing.T) {
+		const raw = `<h2>Bad Gateway</h2> a&b`
+		entry := encode(t, zap.Any("payload", map[string]string{"body": raw}))
+		collapsed, ok := entry["payload"].(string)
+		require.True(t, ok, "reflected map must encode as one string field, got %T", entry["payload"])
+		require.Contains(t, collapsed, raw, "html characters must not be escaped")
+
+		var payload map[string]string
+		require.NoError(t, json.Unmarshal([]byte(collapsed), &payload),
+			"the collapsed string must still parse as the value's JSON")
+		require.Equal(t, raw, payload["body"])
+	})
+
 	// Typed fields never touch the reflected encoder: scalar key-value pairs
 	// keep their native JSON types and stay individually indexable.
 	t.Run("typed fields keep their native JSON types", func(t *testing.T) {

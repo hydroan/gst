@@ -1,6 +1,7 @@
 package zap
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -389,21 +390,50 @@ func newStringifyReflectedEncoder(w io.Writer) zapcore.ReflectedEncoder {
 	return stringifyReflectedEncoder{w: w}
 }
 
-// Encode implements zapcore.ReflectedEncoder. The second json.Marshal turns
-// the value's JSON into one escaped JSON string; a value json cannot handle
-// (cycles, channels, functions) falls back to Go syntax rather than failing
-// the whole entry.
+// reflectedValueBuffers pools the buffer holding a value's JSON between the
+// two encoding passes below. Reflected values reach the encoder on every
+// request that logs one, so the buffer would otherwise be allocated per entry.
+var reflectedValueBuffers = sync.Pool{
+	New: func() any { return new(bytes.Buffer) },
+}
+
+// Encode implements zapcore.ReflectedEncoder. It writes the value's JSON into
+// a pooled buffer, then writes that JSON as one JSON string, so the entry
+// gains a single string field. A value json cannot handle (cycles, channels,
+// functions) falls back to Go syntax rather than failing the whole entry.
+//
+// Both passes leave <, > and & as written. HTML escaping exists to keep JSON
+// safe inside an HTML document, and a log entry is never rendered as one: it
+// is consumed by log stores and by people reading them. The only effect here
+// would be turning those three characters into six-character escapes, and they
+// appear densely in exactly the payloads worth reading back — third-party
+// error pages, URLs and query strings. Escaping has to be off on both passes:
+// the second one re-escapes the characters the first one left alone, so
+// disabling it on the value pass by itself changes nothing.
 func (e stringifyReflectedEncoder) Encode(value any) error {
-	raw, err := json.Marshal(value)
-	if err != nil {
-		raw = []byte(fmt.Sprintf("%#v", value))
+	buf, _ := reflectedValueBuffers.Get().(*bytes.Buffer)
+	defer func() {
+		buf.Reset()
+		reflectedValueBuffers.Put(buf)
+	}()
+
+	if err := newVerbatimJSONEncoder(buf).Encode(value); err != nil {
+		buf.Reset()
+		fmt.Fprintf(buf, "%#v", value)
 	}
-	quoted, err := json.Marshal(string(raw))
-	if err != nil {
-		return err
-	}
-	_, err = e.w.Write(quoted)
-	return err
+
+	// Encode terminates its output with a newline, which must not travel into
+	// the quoted string; zapcore trims the one this second pass appends.
+	return newVerbatimJSONEncoder(e.w).Encode(string(bytes.TrimRight(buf.Bytes(), "\n")))
+}
+
+// newVerbatimJSONEncoder returns a json encoder that emits <, > and & as
+// written instead of escaping them.
+func newVerbatimJSONEncoder(w io.Writer) *json.Encoder {
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false)
+
+	return enc
 }
 
 func readConf() {
