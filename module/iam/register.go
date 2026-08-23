@@ -3,6 +3,9 @@ package iam
 import (
 	"time"
 
+	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/config"
+
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamprofile "github.com/hydroan/gst/internal/model/iam/profile"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
@@ -13,6 +16,7 @@ import (
 	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module"
+	"github.com/hydroan/gst/router"
 	"github.com/hydroan/gst/types/consts"
 )
 
@@ -67,6 +71,13 @@ func Register(config ...Config) {
 		cfg = config[0]
 	}
 
+	// Sessions live only in Redis, so a deployment without it cannot
+	// authenticate anyone. Refusing at startup states that in the one place a
+	// deployment can still act on it.
+	router.OnRoutesReady(func(map[string][]string) error {
+		return requireRedisEnabled()
+	})
+
 	// Set session expiration in service layer
 	serviceiamsession.SetSessionExpiration(cfg.SessionExpiration)
 	// Resolve once during registration so invalid environment configuration fails during startup.
@@ -117,4 +128,17 @@ func Register(config ...Config) {
 // If not configured, it returns the default value of 8 hours.
 func GetSessionExpiration() time.Duration {
 	return serviceiamsession.GetSessionExpiration()
+}
+
+// requireRedisEnabled fails startup when IAM is registered without the Redis it
+// stores every session in.
+//
+// Without this the failure surfaces one request at a time, as a 500 from the
+// first login, long after the only moment the configuration could have been
+// corrected.
+func requireRedisEnabled() error {
+	if config.App.Redis.Enabled {
+		return nil
+	}
+	return errors.Newf("module iam requires redis: set %s=true or the redis.enabled config key", config.REDIS_ENABLED)
 }
