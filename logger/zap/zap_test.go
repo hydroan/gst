@@ -251,6 +251,19 @@ func TestNewLogEncoderReflectedValuesCollapseToOneStringField(t *testing.T) {
 		require.Equal(t, raw, payload["body"])
 	})
 
+	// A value larger than the pooled buffer size takes the path that drops the
+	// buffer instead of recycling it; the entry it produces must be unaffected.
+	t.Run("value larger than the pooled buffer size", func(t *testing.T) {
+		oversized := strings.Repeat("x", maxPooledReflectedValueBytes+1)
+		entry := encode(t, zap.Any("payload", map[string]string{"body": oversized}))
+		collapsed, ok := entry["payload"].(string)
+		require.True(t, ok, "reflected map must encode as one string field, got %T", entry["payload"])
+
+		var payload map[string]string
+		require.NoError(t, json.Unmarshal([]byte(collapsed), &payload))
+		require.Equal(t, oversized, payload["body"])
+	})
+
 	// Typed fields never touch the reflected encoder: scalar key-value pairs
 	// keep their native JSON types and stay individually indexable.
 	t.Run("typed fields keep their native JSON types", func(t *testing.T) {

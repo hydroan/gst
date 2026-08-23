@@ -397,6 +397,25 @@ var reflectedValueBuffers = sync.Pool{
 	New: func() any { return new(bytes.Buffer) },
 }
 
+// maxPooledReflectedValueBytes caps the buffer a finished Encode hands back.
+// sync.Pool assumes its entries cost about the same, so a single oversized
+// value would otherwise pin its buffer for the life of the process. The limit
+// matches the one the standard library's fmt package applies to its own pooled
+// output buffer, and is far above any value worth reading back in a log entry.
+// See https://go.dev/issue/23199.
+const maxPooledReflectedValueBytes = 64 * 1024
+
+// releaseReflectedValueBuffer returns buf to the pool unless it outgrew the
+// pooled size, in which case it is dropped for the garbage collector.
+func releaseReflectedValueBuffer(buf *bytes.Buffer) {
+	if buf.Cap() > maxPooledReflectedValueBytes {
+		return
+	}
+
+	buf.Reset()
+	reflectedValueBuffers.Put(buf)
+}
+
 // Encode implements zapcore.ReflectedEncoder. It writes the value's JSON into
 // a pooled buffer, then writes that JSON as one JSON string, so the entry
 // gains a single string field. A value json cannot handle (cycles, channels,
@@ -412,10 +431,7 @@ var reflectedValueBuffers = sync.Pool{
 // disabling it on the value pass by itself changes nothing.
 func (e stringifyReflectedEncoder) Encode(value any) error {
 	buf, _ := reflectedValueBuffers.Get().(*bytes.Buffer)
-	defer func() {
-		buf.Reset()
-		reflectedValueBuffers.Put(buf)
-	}()
+	defer releaseReflectedValueBuffer(buf)
 
 	if err := newVerbatimJSONEncoder(buf).Encode(value); err != nil {
 		buf.Reset()
