@@ -86,10 +86,12 @@ func (u *AdminUserCreateService) Create(ctx *types.ServiceContext, req *modeliam
 		return database.Database[*modeliamaccount.EmailIdentity](ctx).Create(identity)
 	}); err != nil {
 		// A rejected password is the caller's mistake, not the server's, and the
-		// hashing helper already says which rule it broke.
+		// hashing helper already said which rule it broke. Its status and message
+		// are rebuilt here rather than passed through, so this exit is one the
+		// service constructed and the cause keeps its stack.
 		var svcErr *service.Error
 		if errors.As(err, &svcErr) {
-			return nil, svcErr
+			return nil, service.NewErrorWithCause(svcErr.Status(), svcErr.Msg(), err)
 		}
 		if errors.Is(err, database.ErrDuplicatedKey) {
 			return nil, service.NewErrorWithCause(http.StatusConflict, "username or email already exists", err)
