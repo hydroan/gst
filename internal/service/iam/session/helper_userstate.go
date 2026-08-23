@@ -29,12 +29,8 @@ func ValidateSessionUserState(ctx context.Context, session modeliamsession.Sessi
 	state, ok := loadCachedSessionUserState(ctx, session.UserID)
 	if !ok {
 		var err error
-		state, ok, err = refreshSessionUserState(ctx, session.UserID)
-		if err != nil {
+		if state, err = refreshSessionUserState(ctx, session.UserID); err != nil {
 			return session, err
-		}
-		if !ok {
-			return session, nil
 		}
 	}
 
@@ -53,23 +49,29 @@ func loadCachedSessionUserState(ctx context.Context, userID string) (sessionUser
 	return sessionUserState{}, false
 }
 
-func refreshSessionUserState(ctx context.Context, userID string) (sessionUserState, bool, error) {
+// refreshSessionUserState reads the mutable user state from the database and
+// caches it.
+//
+// A user or credential row that is gone is reported as an invalid session
+// rather than as an absent state: nothing else deletes a session when its owner
+// is deleted, so this refusal is what ends the sessions of a deleted user.
+func refreshSessionUserState(ctx context.Context, userID string) (sessionUserState, error) {
 	targetUser := new(modeliamuser.User)
 	if err := database.Database[*modeliamuser.User](ctx).Get(targetUser, userID); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
-			return sessionUserState{}, false, service.NewError(http.StatusUnauthorized, "session invalid")
+			return sessionUserState{}, service.NewError(http.StatusUnauthorized, "session invalid")
 		}
 		zap.S().Warnw("failed to refresh iam session user state", "user_id", userID, "error", err)
-		return sessionUserState{}, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to refresh session user state", err)
+		return sessionUserState{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to refresh session user state", err)
 	}
 
 	credential, err := loadSessionPasswordCredential(ctx, userID)
 	if err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
-			return sessionUserState{}, false, service.NewError(http.StatusUnauthorized, "session invalid")
+			return sessionUserState{}, service.NewError(http.StatusUnauthorized, "session invalid")
 		}
 		zap.S().Warnw("failed to refresh iam session password credential state", "user_id", userID, "error", err)
-		return sessionUserState{}, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to refresh session user state", err)
+		return sessionUserState{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to refresh session user state", err)
 	}
 
 	state := sessionUserState{
@@ -79,7 +81,7 @@ func refreshSessionUserState(ctx context.Context, userID string) (sessionUserSta
 	if err := redis.Cache[sessionUserState]().Set(ctx, modeliamsession.SessionUserStateKey(userID), state, GetSessionUserStateTTL()); err != nil {
 		zap.S().Warnw("failed to cache iam session user state", "user_id", userID, "error", err)
 	}
-	return state, true, nil
+	return state, nil
 }
 
 func loadSessionPasswordCredential(ctx context.Context, userID string) (*modeliamaccount.PasswordCredential, error) {

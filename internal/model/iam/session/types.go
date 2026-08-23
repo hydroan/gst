@@ -20,25 +20,15 @@ const SessionAllNamespace = SessionNamespacePrefix + ":all"
 // SessionLastSeenNamespace stores the global last-seen index by session ID.
 const SessionLastSeenNamespace = SessionNamespacePrefix + ":last_seen"
 
-// SessionTouchNamespace stores short-lived touch locks by session ID.
-const SessionTouchNamespace = SessionNamespacePrefix + ":touch"
-
 // SessionUserStateNamespace stores short-lived mutable user-state cache by user ID.
 const SessionUserStateNamespace = SessionNamespacePrefix + ":user_state"
 
-// SessionStatus describes the lifecycle state of an IAM session snapshot.
-type SessionStatus string
-
-const (
-	// SessionStatusActive marks a session that can still be used.
-	SessionStatusActive SessionStatus = "active"
-	// SessionStatusRevoked marks a session that was explicitly invalidated.
-	SessionStatusRevoked SessionStatus = "revoked"
-	// SessionStatusExpired marks a session whose expiration time has passed.
-	SessionStatusExpired SessionStatus = "expired"
-)
-
 // Session stores the authenticated session snapshot used by IAM middleware and session APIs.
+//
+// A stored snapshot is a usable session. Revocation deletes the snapshot and
+// expiry lets Redis drop it, so neither has a state left to name: the key is
+// either there or it is not, and no reader has to agree with a status field
+// about which.
 type Session struct {
 	ID string `json:"id"`
 
@@ -54,10 +44,9 @@ type Session struct {
 	EngineName  string `json:"engine_name"`
 	BrowserName string `json:"browser_name"`
 
-	Status     SessionStatus `json:"status"`
-	IssuedAt   time.Time     `json:"issued_at"`
-	LastSeenAt time.Time     `json:"last_seen_at"`
-	ExpiresAt  time.Time     `json:"expires_at"`
+	IssuedAt   time.Time `json:"issued_at"`
+	LastSeenAt time.Time `json:"last_seen_at"`
+	ExpiresAt  time.Time `json:"expires_at"`
 
 	Token Token `json:"token"`
 }
@@ -86,12 +75,11 @@ type AuthenticatedSessionRsp struct {
 
 // AuthenticatedSessionView describes the current authenticated session without exposing its bearer session id.
 type AuthenticatedSessionView struct {
-	TenantID         string        `json:"tenant_id,omitempty"`
-	Status           SessionStatus `json:"status"`
-	IssuedAt         time.Time     `json:"issued_at"`
-	LastSeenAt       time.Time     `json:"last_seen_at"`
-	ExpiresAt        time.Time     `json:"expires_at"`
-	ExpiresInSeconds int64         `json:"expires_in_seconds"`
+	TenantID         string    `json:"tenant_id,omitempty"`
+	IssuedAt         time.Time `json:"issued_at"`
+	LastSeenAt       time.Time `json:"last_seen_at"`
+	ExpiresAt        time.Time `json:"expires_at"`
+	ExpiresInSeconds int64     `json:"expires_in_seconds"`
 }
 
 // sessionRedisKey builds a Redis key for the specified namespace and identifier.
@@ -117,16 +105,6 @@ func SessionAllKey() string {
 // SessionLastSeenKey builds the Redis key for the global session last-seen index.
 func SessionLastSeenKey() string {
 	return SessionLastSeenNamespace
-}
-
-// SessionTouchKey builds the Redis key for throttling LastSeenAt updates by session ID.
-func SessionTouchKey(sessionID string) string {
-	return sessionRedisKey(SessionTouchNamespace, sessionID)
-}
-
-// SessionLastSeenPruneKey builds the Redis key for throttling last-seen index pruning.
-func SessionLastSeenPruneKey() string {
-	return sessionRedisKey(SessionLastSeenNamespace, "prune")
 }
 
 // SessionUserStateKey builds the Redis key for cached mutable user state by user ID.

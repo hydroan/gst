@@ -14,10 +14,7 @@ import (
 	"github.com/hydroan/gst/types"
 )
 
-const (
-	sessionTouchInterval        = 30 * time.Second
-	sessionLastSeenPruneLockTTL = time.Minute
-)
+const sessionTouchInterval = 30 * time.Second
 
 // listUserSessionIDs loads all indexed session ids for a user.
 //
@@ -33,7 +30,7 @@ func listUserSessionIDs(ctx context.Context, userID string) ([]string, error) {
 		return make([]string, 0), nil
 	}
 	userKey := modeliamsession.SessionUserKey(userID)
-	if err := pruneExpiredSessionIDs(ctx, userKey); err != nil {
+	if err := pruneIndex(ctx, userKey, time.Now()); err != nil {
 		return nil, err
 	}
 	sessionIDs, err := redis.ZRange(ctx, userKey, 0, -1)
@@ -50,7 +47,7 @@ func listUserSessionIDs(ctx context.Context, userID string) ([]string, error) {
 // remove them. Pruning here makes admin session views count only sessions whose
 // index score says they are still within their configured lifetime.
 func listAllSessionIDs(ctx context.Context) ([]string, error) {
-	if err := pruneExpiredSessionIDs(ctx, modeliamsession.SessionAllKey()); err != nil {
+	if err := pruneIndex(ctx, modeliamsession.SessionAllKey(), time.Now()); err != nil {
 		return nil, err
 	}
 	sessionIDs, err := redis.ZRange(ctx, modeliamsession.SessionAllKey(), 0, -1)
@@ -71,7 +68,9 @@ func listOnlineSessionIDs(ctx context.Context, since time.Time) ([]string, error
 	if since.IsZero() {
 		return make([]string, 0), nil
 	}
-	pruneStaleLastSeenSessionIDs(ctx, time.Now())
+	// Sweeping is hygiene for a query that already filters by score, so its
+	// failure is not this caller's answer to give.
+	_ = pruneIndex(ctx, modeliamsession.SessionLastSeenKey(), seenIndexCutoff(time.Now()))
 	sessionIDs, err := redis.ZRangeByScore(
 		ctx,
 		modeliamsession.SessionLastSeenKey(),
@@ -84,39 +83,37 @@ func listOnlineSessionIDs(ctx context.Context, since time.Time) ([]string, error
 	return sessionIDs, nil
 }
 
-// pruneExpiredSessionIDs removes expired session ids from a session index ZSET.
+// pruneIndex removes members scored before cutoff from a session index ZSET.
 //
-// It relies on the invariant established by IndexSession: every member's
-// score is the session ExpiresAt timestamp in Unix milliseconds. This function
-// intentionally only prunes by index score. It does not validate the session
-// payload itself; callers still load and validate each remaining payload because
-// Redis state can drift after partial writes, manual cache edits, or old data.
-func pruneExpiredSessionIDs(ctx context.Context, key string) error {
-	if err := redis.ZRemRangeByScore(ctx, key, "-inf", strconv.FormatInt(time.Now().UnixMilli(), 10)); err != nil {
+// Redis expires whole keys, never individual ZSET members, so a session whose
+// payload key has already expired leaves its id behind in every index pointing
+// at it. Every index is therefore swept on the paths that read or extend it,
+// which is what keeps session counts from being inflated by ids that resolve to
+// nothing.
+//
+// The cutoff is what the caller's index means by stale, because the two index
+// families are scored differently: the user and global indexes carry ExpiresAt,
+// so anything scored before now is gone; the last-seen index carries
+// LastSeenAt, so staleness is bounded by seenIndexCutoff instead.
+//
+// Pruning by score alone does not make the remaining members trustworthy.
+// Callers still load and validate each payload, because Redis state can drift
+// after a partial write or an edit made outside this package.
+func pruneIndex(ctx context.Context, key string, cutoff time.Time) error {
+	if err := redis.ZRemRangeByScore(ctx, key, "-inf", strconv.FormatInt(cutoff.UnixMilli(), 10)); err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to prune expired sessions", err)
 	}
 	return nil
 }
 
-// pruneStaleLastSeenSessionIDs bounds the global last-seen index by the maximum session lifetime.
+// seenIndexCutoff returns the last-seen timestamp before which a member of the
+// last-seen index cannot belong to any session that is still alive.
 //
-// SessionLastSeenKey is scored by LastSeenAt instead of ExpiresAt so online
-// queries can search by recent activity. Redis cannot expire individual ZSET
-// members when session payload keys naturally expire, so this helper lazily
-// removes members whose last-seen timestamp is older than any valid session can
-// still be. A short Redis lock keeps high-frequency request paths from pruning
-// the same global index on every request.
-func pruneStaleLastSeenSessionIDs(ctx context.Context, now time.Time) {
-	acquired, err := redis.SetNX(ctx, modeliamsession.SessionLastSeenPruneKey(), "1", sessionLastSeenPruneLockTTL)
-	if err != nil || !acquired {
-		return
-	}
-	if now.IsZero() {
-		now = time.Now()
-	}
-	retention := GetSessionExpiration() + sessionTouchInterval
-	cutoff := now.Add(-retention)
-	_ = redis.ZRemRangeByScore(ctx, modeliamsession.SessionLastSeenKey(), "-inf", strconv.FormatInt(cutoff.UnixMilli(), 10))
+// A session is touched at most once per interval, so the newest LastSeenAt a
+// live session can carry lags the present by that interval at most, and the
+// session itself cannot outlive its configured lifetime.
+func seenIndexCutoff(now time.Time) time.Time {
+	return now.Add(-(GetSessionExpiration() + sessionTouchInterval))
 }
 
 // removeSessionIndexes removes a live session id from every Redis index.
@@ -143,7 +140,9 @@ func IndexSession(ctx context.Context, sessionData modeliamsession.Session) erro
 	if sessionData.UserID == "" || sessionData.ID == "" {
 		return nil
 	}
-	pruneStaleLastSeenSessionIDs(ctx, time.Now())
+	// A login is the one moment cheap enough to sweep the global last-seen index
+	// on; failing to sweep is no reason to fail the login.
+	_ = pruneIndex(ctx, modeliamsession.SessionLastSeenKey(), seenIndexCutoff(time.Now()))
 	ttl := time.Until(sessionData.ExpiresAt)
 	if ttl <= 0 {
 		return service.NewError(http.StatusInternalServerError, "session expired")
@@ -175,38 +174,17 @@ func IndexSession(ctx context.Context, sessionData modeliamsession.Session) erro
 	return nil
 }
 
-// UpdateSessionMustChangePassword updates the stored session after the user clears MustChangePassword in the database.
-func UpdateSessionMustChangePassword(ctx context.Context, sessionID string, mustChange bool) error {
-	if sessionID == "" {
-		return nil
-	}
-	cache := redis.Cache[modeliamsession.Session]()
-	sessionKey := modeliamsession.SessionIDKey(sessionID)
-	session, err := cache.Get(ctx, sessionKey)
-	if err != nil {
-		if errors.Is(err, types.ErrEntryNotFound) {
-			return nil
-		}
-		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", err)
-	}
-	session.MustChangePassword = mustChange
-	ttl := time.Until(session.ExpiresAt)
-	if ttl <= 0 {
-		_, _ = SessionManager.Delete(ctx, sessionID)
-		return types.ErrEntryNotFound
-	}
-	if err := cache.Set(ctx, sessionKey, session, ttl); err != nil {
-		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to store session", err)
-	}
-	return nil
-}
-
 // TouchSession refreshes LastSeenAt for an active session at most once per touch interval.
 //
-// The touch key is a short-lived SetNX lock. It throttles repeated reads of the
-// current session and protects against concurrent requests writing older
-// snapshots over a fresher LastSeenAt. When a touch is accepted, both the stored
-// session snapshot and the global last-seen ZSET are updated with the same time.
+// The interval is enforced against the snapshot the caller already holds, so a
+// request inside the interval costs nothing: the comparison happens before any
+// Redis command is sent, and that is what keeps a per-request activity stamp
+// from turning into a per-request snapshot rewrite.
+//
+// Concurrent requests that all read the same interval-old snapshot each write,
+// rather than one of them taking a lock and the rest standing down. They write
+// timestamps milliseconds apart into a field nothing reads for ordering, so the
+// last write winning is the whole of the resolution the field needs.
 func TouchSession(ctx context.Context, sessionID string, sessionData modeliamsession.Session, now time.Time) error {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
@@ -225,25 +203,14 @@ func TouchSession(ctx context.Context, sessionID string, sessionData modeliamses
 		return types.ErrEntryNotFound
 	}
 
-	touchKey := modeliamsession.SessionTouchKey(sessionID)
-	acquired, err := redis.SetNX(ctx, touchKey, "1", sessionTouchInterval)
-	if err != nil {
-		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to touch session", err)
-	}
-	if !acquired {
-		return nil
-	}
-
 	sessionData.LastSeenAt = now
-	if err = redis.Cache[modeliamsession.Session]().Set(ctx, modeliamsession.SessionIDKey(sessionID), sessionData, ttl); err != nil {
-		_ = redis.Del(ctx, touchKey)
+	if err := redis.Cache[modeliamsession.Session]().Set(ctx, modeliamsession.SessionIDKey(sessionID), sessionData, ttl); err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to touch session", err)
 	}
-	if err = redis.ZAdd(ctx, modeliamsession.SessionLastSeenKey(), float64(now.UnixMilli()), sessionID); err != nil {
-		_ = redis.Del(ctx, touchKey)
+	if err := redis.ZAdd(ctx, modeliamsession.SessionLastSeenKey(), float64(now.UnixMilli()), sessionID); err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to touch session", err)
 	}
-	pruneStaleLastSeenSessionIDs(ctx, now)
+	_ = pruneIndex(ctx, modeliamsession.SessionLastSeenKey(), seenIndexCutoff(now))
 	return nil
 }
 

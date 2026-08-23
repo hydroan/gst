@@ -148,7 +148,6 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 		Platform:           ua.Platform(),
 		EngineName:         engineName,
 		BrowserName:        browserName,
-		Status:             modeliamsession.SessionStatusActive,
 		IssuedAt:           now,
 		LastSeenAt:         now,
 		ExpiresAt:          expiresAt,

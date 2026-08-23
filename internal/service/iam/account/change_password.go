@@ -62,10 +62,12 @@ func (c *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update password", err)
 	}
 
+	// Dropping the cache is the whole of the sync. The kept session's snapshot
+	// still says a password change is required, but no reader trusts that copy:
+	// authentication overwrites it from this cache on every request, and the
+	// next request will miss and read the cleared flag straight from the row
+	// written above.
 	modeliamsession.InvalidateUserStateCache(ctx, currentUser.GetID())
-	if syncErr := serviceiamsession.UpdateSessionMustChangePassword(ctx, sessionID, false); syncErr != nil {
-		log.Warn("failed to sync session after password change", syncErr)
-	}
 
 	log.Info("password changed successfully", "username", currentUser.Username)
 	return &modeliamaccount.ChangePasswordRsp{Msg: "password changed successfully"}, nil

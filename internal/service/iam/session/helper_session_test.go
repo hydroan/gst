@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -50,33 +51,58 @@ func TestGetSessionUserStateTTL(t *testing.T) {
 func TestTouchSession(t *testing.T) {
 	clearSessions(t)
 
-	t.Run("throttles_stale_concurrent_snapshot", func(t *testing.T) {
+	// The touch interval is the only throttle on the activity stamp, and it is
+	// evaluated against the snapshot the caller already holds, so a touch inside
+	// the interval must leave the stored snapshot exactly as it was.
+	t.Run("skips_touch_inside_interval", func(t *testing.T) {
 		now := time.Now().UTC()
-		sessionID := "touch-session"
+		sessionID := "touch-session-recent"
+		lastSeenAt := now.Add(-time.Second)
 		session := modeliamsession.Session{
 			ID:         sessionID,
 			UserID:     "user-1",
-			Status:     modeliamsession.SessionStatusActive,
+			IssuedAt:   now.Add(-time.Hour),
+			LastSeenAt: lastSeenAt,
+			ExpiresAt:  now.Add(time.Hour),
+		}
+		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), modeliamsession.SessionIDKey(sessionID), session, time.Until(session.ExpiresAt)))
+
+		require.NoError(t, serviceiamsession.TouchSession(t.Context(), sessionID, session, now))
+
+		stored, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), modeliamsession.SessionIDKey(sessionID))
+		require.NoError(t, err)
+		require.True(t, stored.LastSeenAt.Equal(lastSeenAt))
+	})
+
+	t.Run("writes_snapshot_and_index_outside_interval", func(t *testing.T) {
+		now := time.Now().UTC()
+		sessionID := "touch-session-stale"
+		session := modeliamsession.Session{
+			ID:         sessionID,
+			UserID:     "user-1",
 			IssuedAt:   now.Add(-time.Hour),
 			LastSeenAt: now.Add(-time.Minute),
 			ExpiresAt:  now.Add(time.Hour),
 		}
 		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), modeliamsession.SessionIDKey(sessionID), session, time.Until(session.ExpiresAt)))
 
-		firstTouchAt := now
-		require.NoError(t, serviceiamsession.TouchSession(t.Context(), sessionID, session, firstTouchAt))
+		require.NoError(t, serviceiamsession.TouchSession(t.Context(), sessionID, session, now))
 
-		afterFirstTouch, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), modeliamsession.SessionIDKey(sessionID))
+		stored, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), modeliamsession.SessionIDKey(sessionID))
 		require.NoError(t, err)
-		require.True(t, afterFirstTouch.LastSeenAt.Equal(firstTouchAt))
+		require.True(t, stored.LastSeenAt.Equal(now))
+		require.Equal(t, session.ExpiresAt.UnixMilli(), stored.ExpiresAt.UnixMilli())
 
-		staleSnapshot := afterFirstTouch
-		staleSnapshot.LastSeenAt = session.LastSeenAt
-		require.NoError(t, serviceiamsession.TouchSession(t.Context(), sessionID, staleSnapshot, firstTouchAt.Add(time.Second)))
-
-		afterSecondTouch, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), modeliamsession.SessionIDKey(sessionID))
+		// The snapshot and the last-seen index carry the same activity time, which
+		// is what lets the online-window query answer from the index alone.
+		indexed, err := redis.ZRangeByScore(
+			t.Context(),
+			modeliamsession.SessionLastSeenKey(),
+			strconv.FormatInt(now.UnixMilli(), 10),
+			strconv.FormatInt(now.UnixMilli(), 10),
+		)
 		require.NoError(t, err)
-		require.True(t, afterSecondTouch.LastSeenAt.Equal(afterFirstTouch.LastSeenAt))
+		require.Contains(t, indexed, sessionID)
 	})
 }
 
@@ -99,7 +125,6 @@ func TestIndexSessionPrunesStaleLastSeenIndex(t *testing.T) {
 	session := modeliamsession.Session{
 		ID:         currentSessionID,
 		UserID:     "user-1",
-		Status:     modeliamsession.SessionStatusActive,
 		IssuedAt:   now.Add(-time.Minute),
 		LastSeenAt: now,
 		ExpiresAt:  now.Add(time.Hour),
@@ -119,7 +144,6 @@ func TestSessionManagerCurrentUsesRequestCache(t *testing.T) {
 	session := modeliamsession.Session{
 		ID:        sessionID,
 		UserID:    "user-1",
-		Status:    modeliamsession.SessionStatusActive,
 		IssuedAt:  now.Add(-time.Minute),
 		ExpiresAt: now.Add(time.Hour),
 	}
@@ -140,7 +164,6 @@ func TestSessionManagerCurrentIgnoresMismatchedRequestCache(t *testing.T) {
 	cookieSession := modeliamsession.Session{
 		ID:        cookieSessionID,
 		UserID:    "user-1",
-		Status:    modeliamsession.SessionStatusActive,
 		IssuedAt:  now.Add(-time.Minute),
 		ExpiresAt: now.Add(time.Hour),
 	}
@@ -150,7 +173,6 @@ func TestSessionManagerCurrentIgnoresMismatchedRequestCache(t *testing.T) {
 	cachedSession := modeliamsession.Session{
 		ID:        cachedSessionID,
 		UserID:    "user-2",
-		Status:    modeliamsession.SessionStatusActive,
 		IssuedAt:  now.Add(-time.Minute),
 		ExpiresAt: now.Add(time.Hour),
 	}

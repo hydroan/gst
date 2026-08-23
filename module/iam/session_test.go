@@ -67,7 +67,6 @@ func TestCurrentSessionGet(t *testing.T) {
 		require.NotEmpty(t, rsp.Principal.UserID)
 		require.Equal(t, account.Username, rsp.Principal.Username)
 		require.False(t, rsp.Principal.MustChangePassword)
-		require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
 		require.False(t, rsp.Session.IssuedAt.IsZero())
 		require.False(t, rsp.Session.LastSeenAt.IsZero())
 		require.False(t, rsp.Session.ExpiresAt.IsZero())
@@ -87,7 +86,6 @@ func TestCurrentSessionGet(t *testing.T) {
 		rsp, err := cli.Get[iam.CurrentGetRsp](currentPath)
 		require.NoError(t, err)
 
-		require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
 		require.False(t, rsp.Session.LastSeenAt.IsZero())
 
 		after := loadStoredSession(t, sessionID)
@@ -106,7 +104,6 @@ func TestCurrentSessionGet(t *testing.T) {
 
 		rsp, err := cli.Get[iam.CurrentGetRsp](currentPath)
 		require.NoError(t, err)
-		require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
 		require.False(t, rsp.Session.LastSeenAt.IsZero())
 
 		after := loadStoredSession(t, sessionID)
@@ -128,14 +125,14 @@ func TestCurrentSessionGet(t *testing.T) {
 		require.Equal(t, tenantID, rsp.Session.TenantID)
 	})
 
-	t.Run("reject_session_when_stored_snapshot_is_not_active", func(t *testing.T) {
+	t.Run("reject_session_when_stored_snapshot_id_mismatches", func(t *testing.T) {
 		account := newSessionTestAccount(t)
 		sessionID := loginSession(t, account.Username, account.Password)
 		sessionKey := modeliamsession.SessionIDKey(sessionID)
 
 		session, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), sessionKey)
 		require.NoError(t, err)
-		session.Status = modeliamsession.SessionStatusRevoked
+		session.ID = sessionID + "_mismatch"
 		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), sessionKey, session, time.Hour))
 
 		cli := sessionClient(t, sessionID)
@@ -662,7 +659,6 @@ func TestAdminSessionGet(t *testing.T) {
 		rsp, err := cli.Get[modeliamsession.AdminSessionGetRsp](adminSessionsPath + "/" + targetSessionID)
 		require.NoError(t, err)
 		require.Equal(t, targetSessionID, rsp.Session.ID)
-		require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
 		require.False(t, rsp.Session.IsCurrent)
 		require.NotEmpty(t, rsp.Session.ClientIP)
 		require.NotEmpty(t, rsp.Session.BrowserName)
@@ -1321,7 +1317,6 @@ func loginSessionIDFromCookie(t *testing.T, username, password string) string {
 
 	rsp := testutil.DecodeResp[iam.LoginRsp](t, apiResp)
 	require.False(t, rsp.ServerTime.IsZero())
-	require.Equal(t, modeliamsession.SessionStatusActive, rsp.Session.Status)
 	require.False(t, rsp.Session.IssuedAt.IsZero())
 	require.False(t, rsp.Session.LastSeenAt.IsZero())
 	require.False(t, rsp.Session.ExpiresAt.IsZero())

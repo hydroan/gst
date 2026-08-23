@@ -45,7 +45,6 @@ func buildAuthenticatedSessionView(sessionData modeliamsession.Session, now time
 	}
 	return modeliamsession.AuthenticatedSessionView{
 		TenantID:         sessionData.TenantID,
-		Status:           sessionData.Status,
 		IssuedAt:         sessionData.IssuedAt,
 		LastSeenAt:       sessionData.LastSeenAt,
 		ExpiresAt:        sessionData.ExpiresAt,

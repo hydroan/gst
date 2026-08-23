@@ -40,8 +40,6 @@ func (sessionManager) Validate(sessionID string, sessionData modeliamsession.Ses
 		return errors.New("session id mismatch")
 	case sessionData.UserID == "":
 		return errors.New("user not authenticated")
-	case sessionData.Status != modeliamsession.SessionStatusActive:
-		return errors.New("session is not active")
 	case sessionData.ExpiresAt.IsZero():
 		return errors.New("session expiration is required")
 	case !sessionData.ExpiresAt.After(time.Now()):

@@ -14,17 +14,16 @@ type AdminSessionOwnerView struct {
 
 // SessionView describes a session snapshot returned by session query endpoints.
 type SessionView struct {
-	ID          string        `json:"id"`
-	TenantID    string        `json:"tenant_id,omitempty"`
-	Status      SessionStatus `json:"status"`
-	IssuedAt    time.Time     `json:"issued_at"`
-	LastSeenAt  time.Time     `json:"last_seen_at"`
-	ExpiresAt   time.Time     `json:"expires_at"`
-	ClientIP    string        `json:"client_ip"`
-	Platform    string        `json:"platform"`
-	OS          string        `json:"os"`
-	BrowserName string        `json:"browser_name"`
-	IsCurrent   bool          `json:"is_current"`
+	ID          string    `json:"id"`
+	TenantID    string    `json:"tenant_id,omitempty"`
+	IssuedAt    time.Time `json:"issued_at"`
+	LastSeenAt  time.Time `json:"last_seen_at"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	ClientIP    string    `json:"client_ip"`
+	Platform    string    `json:"platform"`
+	OS          string    `json:"os"`
+	BrowserName string    `json:"browser_name"`
+	IsCurrent   bool      `json:"is_current"`
 }
 
 // PrincipalView describes the authenticated principal bound to the current session.
