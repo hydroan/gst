@@ -10,7 +10,6 @@ import (
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/service"
-	"go.uber.org/zap"
 )
 
 // ValidateSessionUserState refreshes the mutable user state required to keep using a session.
@@ -43,7 +42,7 @@ func refreshSessionUserState(ctx context.Context, userID string) (UserState, err
 		if errors.Is(err, database.ErrRecordNotFound) {
 			return UserState{}, service.NewError(http.StatusUnauthorized, "session invalid")
 		}
-		zap.S().Warnw("failed to refresh iam session user state", "user_id", userID, "error", err)
+		logStoreWarning("failed to refresh iam session user state", userID, err)
 		return UserState{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to refresh session user state", err)
 	}
 
@@ -52,7 +51,7 @@ func refreshSessionUserState(ctx context.Context, userID string) (UserState, err
 		if errors.Is(err, database.ErrRecordNotFound) {
 			return UserState{}, service.NewError(http.StatusUnauthorized, "session invalid")
 		}
-		zap.S().Warnw("failed to refresh iam session password credential state", "user_id", userID, "error", err)
+		logStoreWarning("failed to refresh iam session password credential state", userID, err)
 		return UserState{}, service.NewErrorWithCause(http.StatusInternalServerError, "failed to refresh session user state", err)
 	}
 
