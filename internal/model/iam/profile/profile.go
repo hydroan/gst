@@ -41,6 +41,7 @@ func (Profile) Design() {
 		Get(func() {
 			Service()
 			Flatten()
+			Filename("get.go")
 			Exact()
 			Result[*ProfileGetRsp]()
 		})
@@ -49,6 +50,7 @@ func (Profile) Design() {
 		Patch(func() {
 			Service()
 			Flatten()
+			Filename("patch.go")
 			Exact()
 			Payload[*ProfilePatchReq]()
 			Result[*ProfilePatchRsp]()
