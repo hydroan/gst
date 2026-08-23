@@ -20,11 +20,6 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
-// Config is the configuration for iam module.
-type Config struct {
-	SessionExpiration time.Duration // SessionExpiration is the session expiration time. It defaults to 8 hours and can be configured by IAM_SESSION_EXPIRATION.
-}
-
 // Register registers IAM models, API routes, middleware, and scheduled jobs.
 //
 // API Routes:
@@ -61,16 +56,12 @@ type Config struct {
 //   - IAMSession for protected IAM routes and session-aware APIs
 //
 // Configuration:
-//   - SessionExpiration defaults to 8 hours when not configured.
-//   - IAM_SESSION_EXPIRATION overrides the default when SessionExpiration is empty.
+//   - IAM_SESSION_EXPIRATION sets the session lifetime; it defaults to 8 hours.
+//     It is read at registration so an unparseable value fails startup rather
+//     than the first login.
 //
 // NOTE: Register IAM modules before authz modules because authz middleware depends on IAMSession.
-func Register(config ...Config) {
-	cfg := Config{}
-	if len(config) > 0 {
-		cfg = config[0]
-	}
-
+func Register() {
 	// Sessions live only in Redis, so a deployment without it cannot
 	// authenticate anyone. Refusing at startup states that in the one place a
 	// deployment can still act on it.
@@ -78,9 +69,8 @@ func Register(config ...Config) {
 		return requireRedisEnabled()
 	})
 
-	// Set session expiration in service layer
-	serviceiamsession.SetSessionExpiration(cfg.SessionExpiration)
-	// Resolve once during registration so invalid environment configuration fails during startup.
+	// Resolve once during registration so invalid environment configuration
+	// fails during startup rather than at the first login.
 	_ = serviceiamsession.GetSessionExpiration()
 
 	// Register auth middleware before protected routes so auth handlers are attached deterministically.
