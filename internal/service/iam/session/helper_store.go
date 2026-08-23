@@ -106,14 +106,31 @@ func pruneIndex(ctx context.Context, key string, cutoff time.Time) error {
 	return nil
 }
 
-// seenIndexCutoff returns the last-seen timestamp before which a member of the
-// last-seen index cannot belong to any session that is still alive.
+// indexRetention is how long an index key has to outlive the write that last
+// extended it before nothing it holds can describe a live session.
 //
-// A session is touched at most once per interval, so the newest LastSeenAt a
-// live session can carry lags the present by that interval at most, and the
-// session itself cannot outlive its configured lifetime.
+// A session cannot outlive the configured lifetime, so an index scored by
+// ExpiresAt is spent one lifetime after its newest member was added.
+func indexRetention() time.Duration {
+	return GetSessionExpiration()
+}
+
+// seenIndexRetention is the same span for the last-seen index, which is scored
+// by activity rather than by expiry.
+//
+// A live session's LastSeenAt lags the present by at most one touch interval,
+// because that is how often it is refreshed, so the last-seen index stays
+// meaningful for one interval longer than the session lifetime itself.
+func seenIndexRetention() time.Duration {
+	return GetSessionExpiration() + sessionTouchInterval
+}
+
+// seenIndexCutoff returns the last-seen timestamp before which a member of the
+// last-seen index cannot belong to any session that is still alive. It is the
+// member-level counterpart of seenIndexRetention, and both read the same span
+// so a member and the key holding it cannot disagree about staleness.
 func seenIndexCutoff(now time.Time) time.Time {
-	return now.Add(-(GetSessionExpiration() + sessionTouchInterval))
+	return now.Add(-seenIndexRetention())
 }
 
 // removeSessionIndexes removes a live session id from every Redis index.
@@ -134,8 +151,19 @@ func removeSessionIndexes(ctx context.Context, userID, sessionID string) error {
 // SessionUserKey and SessionAllKey use ExpiresAt as the ZSET score so list
 // paths can prune expired ids before loading payloads. SessionLastSeenKey uses
 // LastSeenAt as the score so admin online-window queries can avoid scanning all
-// active sessions. The session payload key owns the TTL; index cleanup is lazy
-// because Redis ZSET members do not expire independently.
+// active sessions.
+//
+// Pruning keeps each index's contents honest, and the ttl set here keeps the
+// key itself from outliving every session it names. The two are not
+// interchangeable: Redis expires whole keys and never individual ZSET members,
+// so without the sweep an index accumulates ids that resolve to nothing, and
+// without the ttl an index nobody reads is never reclaimed at all.
+//
+// Every index is a shared key, so its lifetime is a property of the module and
+// not of the session being written: it comes from the configured session
+// lifetime rather than from this session's remaining time. Deriving it from the
+// member would let a session with little time left cut short a key that older,
+// longer-lived members still depend on.
 func IndexSession(ctx context.Context, sessionData modeliamsession.Session) error {
 	if sessionData.UserID == "" || sessionData.ID == "" {
 		return nil
@@ -143,8 +171,7 @@ func IndexSession(ctx context.Context, sessionData modeliamsession.Session) erro
 	// A login is the one moment cheap enough to sweep the global last-seen index
 	// on; failing to sweep is no reason to fail the login.
 	_ = pruneIndex(ctx, modeliamsession.SessionLastSeenKey(), seenIndexCutoff(time.Now()))
-	ttl := time.Until(sessionData.ExpiresAt)
-	if ttl <= 0 {
+	if time.Until(sessionData.ExpiresAt) <= 0 {
 		return service.NewError(http.StatusInternalServerError, "session expired")
 	}
 	// Store the expiration timestamp as the index score. The list paths use this
@@ -163,11 +190,15 @@ func IndexSession(ctx context.Context, sessionData modeliamsession.Session) erro
 		_ = modeliamsession.RemoveSessionIndexes(ctx, sessionData.UserID, sessionData.ID)
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to index session", err)
 	}
-	if err := redis.Expire(ctx, userKey, ttl); err != nil {
+	if err := redis.Expire(ctx, userKey, indexRetention()); err != nil {
 		_ = modeliamsession.RemoveSessionIndexes(ctx, sessionData.UserID, sessionData.ID)
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to index session", err)
 	}
-	if err := redis.Expire(ctx, modeliamsession.SessionAllKey(), ttl); err != nil {
+	if err := redis.Expire(ctx, modeliamsession.SessionAllKey(), indexRetention()); err != nil {
+		_ = modeliamsession.RemoveSessionIndexes(ctx, sessionData.UserID, sessionData.ID)
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to index session", err)
+	}
+	if err := redis.Expire(ctx, modeliamsession.SessionLastSeenKey(), seenIndexRetention()); err != nil {
 		_ = modeliamsession.RemoveSessionIndexes(ctx, sessionData.UserID, sessionData.ID)
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to index session", err)
 	}

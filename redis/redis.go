@@ -34,6 +34,16 @@ var (
 	ErrRedisIsDisabled = errors.New("redis is disabled")
 )
 
+// The two durations Redis answers TTL with when there is no deadline to report.
+// Both are negative, so a caller that compares the result against a positive
+// duration has to test for them before reading it as a remaining lifetime.
+const (
+	// TTLKeyNotExists is reported for a key that does not exist.
+	TTLKeyNotExists = -2 * time.Second
+	// TTLNoExpiry is reported for a key that exists without a ttl.
+	TTLNoExpiry = -1 * time.Second
+)
+
 func redisKey(key string) string {
 	namespace := strings.Trim(config.App.Redis.Namespace, ": ")
 	if namespace == "" || hasNamespace(key, namespace) {
@@ -435,6 +445,25 @@ func Expire(ctx context.Context, key string, expiration time.Duration) error {
 		return cluster.Expire(ctx, key, expiration).Err()
 	}
 	return client.Expire(ctx, key, expiration).Err()
+}
+
+// TTL reports the remaining ttl of a key.
+//
+// Redis answers the two "nothing to report" cases with negative durations
+// instead of an error, and they are passed through unchanged: TTLKeyNotExists
+// for a key that is not there, TTLNoExpiry for a key that is there and never
+// expires. A caller comparing the result against a deadline has to rule both
+// out first, because either one compares as less than any positive duration.
+func TTL(ctx context.Context, key string) (time.Duration, error) {
+	if !config.App.Redis.Enabled {
+		zap.S().Warn(ErrRedisIsDisabled.Error())
+		return TTLKeyNotExists, nil
+	}
+	key = redisKey(key)
+	if config.App.Redis.ClusterMode {
+		return cluster.TTL(ctx, key).Result()
+	}
+	return client.TTL(ctx, key).Result()
 }
 
 // ZAdd adds one or multiple string members with the same score into a sorted set.

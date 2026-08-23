@@ -106,6 +106,70 @@ func TestTouchSession(t *testing.T) {
 	})
 }
 
+func TestIndexSessionSetsIndexTTL(t *testing.T) {
+	const lifetime = time.Hour
+
+	previousExpiration := serviceiamsession.GetSessionExpiration()
+	serviceiamsession.SetSessionExpiration(lifetime)
+	t.Cleanup(func() {
+		serviceiamsession.SetSessionExpiration(previousExpiration)
+	})
+
+	t.Run("every_index_expires", func(t *testing.T) {
+		clearSessions(t)
+
+		now := time.Now().UTC()
+		session := modeliamsession.Session{
+			ID:         "ttl-session",
+			UserID:     "user-ttl",
+			IssuedAt:   now,
+			LastSeenAt: now,
+			ExpiresAt:  now.Add(lifetime),
+		}
+		require.NoError(t, serviceiamsession.IndexSession(t.Context(), session))
+
+		for _, key := range []string{modeliamsession.SessionUserKey(session.UserID), modeliamsession.SessionAllKey()} {
+			ttl, err := redis.TTL(t.Context(), key)
+			require.NoError(t, err)
+			require.LessOrEqual(t, ttl, lifetime, key)
+			require.Greater(t, ttl, lifetime-time.Minute, key)
+		}
+
+		// The last-seen index is scored by activity rather than by expiry, so it
+		// has to outlive the sessions themselves by one touch interval.
+		seenTTL, err := redis.TTL(t.Context(), modeliamsession.SessionLastSeenKey())
+		require.NoError(t, err)
+		require.Greater(t, seenTTL, lifetime)
+	})
+
+	t.Run("short_lived_session_keeps_shared_index_alive", func(t *testing.T) {
+		clearSessions(t)
+
+		now := time.Now().UTC()
+		longLived := modeliamsession.Session{
+			ID:         "ttl-session-long",
+			UserID:     "user-shared-ttl",
+			IssuedAt:   now,
+			LastSeenAt: now,
+			ExpiresAt:  now.Add(lifetime),
+		}
+		require.NoError(t, serviceiamsession.IndexSession(t.Context(), longLived))
+
+		shortLived := longLived
+		shortLived.ID = "ttl-session-short"
+		shortLived.ExpiresAt = now.Add(time.Minute)
+		require.NoError(t, serviceiamsession.IndexSession(t.Context(), shortLived))
+
+		// A shared index belongs to every member, so the one with the least time
+		// left must not decide when the whole index is reclaimed.
+		for _, key := range []string{modeliamsession.SessionUserKey(longLived.UserID), modeliamsession.SessionAllKey()} {
+			ttl, err := redis.TTL(t.Context(), key)
+			require.NoError(t, err)
+			require.Greater(t, ttl, lifetime-time.Minute, key)
+		}
+	})
+}
+
 func TestIndexSessionPrunesStaleLastSeenIndex(t *testing.T) {
 	clearSessions(t)
 
