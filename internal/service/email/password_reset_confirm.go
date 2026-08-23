@@ -64,7 +64,7 @@ func (s *PasswordResetConfirmService) Create(ctx *types.ServiceContext, req *mod
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update password", err)
 	}
 
-	gateway.InvalidateSessions(user.ID)
+	gateway.InvalidateSessions(ctx, user.ID)
 	return &modelemail.PasswordResetConfirmRsp{
 		Reset: true,
 		Msg:   "password reset successfully",

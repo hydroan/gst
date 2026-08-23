@@ -135,11 +135,11 @@ func (iamAccountGateway) ApplyEmailChange(ctx *types.ServiceContext, userID, new
 		Update(identity)
 }
 
-func (iamAccountGateway) InvalidateSessions(userID string) {
+func (iamAccountGateway) InvalidateSessions(ctx *types.ServiceContext, userID string) {
 	// The gateway contract reports nothing back, and the caller has already
 	// applied the change this revokes for, so a storage failure is left to the
 	// user-state cache expiring on its own.
-	_ = serviceiamsession.Store.DeleteUserSessions(context.Background(), userID)
+	_ = serviceiamsession.Store.DeleteUserSessions(ctx, userID)
 }
 
 func loadIAMUserByID(ctx *types.ServiceContext, userID string) (*modeliamuser.User, error) {

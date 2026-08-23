@@ -62,7 +62,11 @@ type AccountGateway interface {
 	ApplyEmailChange(ctx *types.ServiceContext, userID, newEmail string, changedAt time.Time) error
 
 	// InvalidateSessions revokes cached sessions for an account after password reset.
-	InvalidateSessions(userID string)
+	//
+	// It takes the request context like every other method here, so the revoke
+	// it performs is attributed to the request that caused it rather than
+	// appearing as unowned background work in traces.
+	InvalidateSessions(ctx *types.ServiceContext, userID string)
 }
 
 // AccountSnapshot is the minimal account state required by email flows. ID must be
@@ -147,4 +151,4 @@ func (missingAccountGateway) ApplyEmailChange(*types.ServiceContext, string, str
 	return ErrAccountGatewayNotConfigured
 }
 
-func (missingAccountGateway) InvalidateSessions(string) {}
+func (missingAccountGateway) InvalidateSessions(*types.ServiceContext, string) {}

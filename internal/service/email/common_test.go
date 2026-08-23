@@ -93,7 +93,7 @@ type testAccountGateway struct {
 	updatePassword     func(*types.ServiceContext, string, string) error
 	markEmailVerified  func(*types.ServiceContext, string, time.Time) error
 	applyEmailChange   func(*types.ServiceContext, string, string, time.Time) error
-	invalidateSessions func(string)
+	invalidateSessions func(*types.ServiceContext, string)
 }
 
 func (p testAccountGateway) FindByEmail(ctx *types.ServiceContext, email string) (*AccountSnapshot, error) {
@@ -138,9 +138,9 @@ func (p testAccountGateway) ApplyEmailChange(ctx *types.ServiceContext, userID, 
 	return p.applyEmailChange(ctx, userID, newEmail, changedAt)
 }
 
-func (p testAccountGateway) InvalidateSessions(userID string) {
+func (p testAccountGateway) InvalidateSessions(ctx *types.ServiceContext, userID string) {
 	if p.invalidateSessions != nil {
-		p.invalidateSessions(userID)
+		p.invalidateSessions(ctx, userID)
 	}
 }
 
@@ -1041,7 +1041,10 @@ func TestPasswordResetConfirmCreate(t *testing.T) {
 
 	var resetUserID string
 	var updatePassword string
-	var invalidated string
+	var (
+		invalidated    string
+		invalidatedCtx *types.ServiceContext
+	)
 	SetAccountGateway(testAccountGateway{
 		getByID: func(_ *types.ServiceContext, userID string) (*AccountSnapshot, error) {
 			require.Equal(t, "user-2", userID)
@@ -1052,7 +1055,9 @@ func TestPasswordResetConfirmCreate(t *testing.T) {
 			updatePassword = newPassword
 			return nil
 		},
-		invalidateSessions: func(userID string) { invalidated = userID },
+		invalidateSessions: func(ctx *types.ServiceContext, userID string) {
+			invalidated, invalidatedCtx = userID, ctx
+		},
 	})
 
 	svc := &PasswordResetConfirmService{}
@@ -1069,6 +1074,9 @@ func TestPasswordResetConfirmCreate(t *testing.T) {
 	require.Equal(t, "user-2", resetUserID)
 	require.Equal(t, "new-password-123", updatePassword)
 	require.Equal(t, "user-2", invalidated)
+	// The revoke runs on the request's own context, which is what keeps it
+	// attributed to the reset that caused it instead of to nothing.
+	require.Same(t, ctx, invalidatedCtx)
 	_, err = loadEmailFlow(context.Background(), iamEmailFlowKindPasswordReset, token)
 	require.ErrorIs(t, err, errEmailFlowNotFound)
 }
