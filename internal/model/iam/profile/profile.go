@@ -7,11 +7,15 @@ import (
 )
 
 // Profile stores the generic self-service profile data for an IAM user.
+//
+// A name is one field here, not a given one and a family one. Splitting it
+// assumes an ordering and a structure that plenty of the world's names do not
+// have, and nothing in the framework reads the halves separately; a project
+// that needs its own decomposition can put it in Metadata, which exists for
+// exactly the fields the framework cannot know about.
 type Profile struct {
 	UserID      string            `json:"user_id" query:"user_id" gorm:"size:36;not null"`
 	DisplayName string            `json:"display_name,omitempty" query:"display_name" gorm:"size:191"`
-	FirstName   string            `json:"first_name,omitempty" query:"first_name" gorm:"size:191"`
-	LastName    string            `json:"last_name,omitempty" query:"last_name" gorm:"size:191"`
 	Avatar      string            `json:"avatar,omitempty" query:"avatar" gorm:"size:512"`
 	Metadata    datatypes.JSONMap `json:"metadata,omitempty"`
 
@@ -24,8 +28,6 @@ type ProfileGetRsp = Profile
 // ProfilePatchReq is the request payload for patching the current user's profile.
 type ProfilePatchReq struct {
 	DisplayName *string           `json:"display_name,omitempty"`
-	FirstName   *string           `json:"first_name,omitempty"`
-	LastName    *string           `json:"last_name,omitempty"`
 	Avatar      *string           `json:"avatar,omitempty"`
 	Metadata    datatypes.JSONMap `json:"metadata,omitempty"`
 }

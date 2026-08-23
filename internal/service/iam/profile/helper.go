@@ -44,18 +44,10 @@ func applyProfilePatch(record *modeliamprofile.Profile, req *modeliamprofile.Pro
 		return nil
 	}
 
-	columns := make([]string, 0, 5)
+	columns := make([]string, 0, 3)
 	if req.DisplayName != nil {
 		record.DisplayName = *req.DisplayName
 		columns = append(columns, "display_name")
-	}
-	if req.FirstName != nil {
-		record.FirstName = *req.FirstName
-		columns = append(columns, "first_name")
-	}
-	if req.LastName != nil {
-		record.LastName = *req.LastName
-		columns = append(columns, "last_name")
 	}
 	if req.Avatar != nil {
 		record.Avatar = *req.Avatar
@@ -72,10 +64,6 @@ func profileColumnValue(record *modeliamprofile.Profile, column string) any {
 	switch column {
 	case "display_name":
 		return record.DisplayName
-	case "first_name":
-		return record.FirstName
-	case "last_name":
-		return record.LastName
 	case "avatar":
 		return record.Avatar
 	case "metadata":

@@ -34,8 +34,6 @@ func TestProfileGet(t *testing.T) {
 	require.Equal(t, account.UserID, rsp.UserID)
 	require.Empty(t, rsp.ID)
 	require.Empty(t, rsp.DisplayName)
-	require.Empty(t, rsp.FirstName)
-	require.Empty(t, rsp.LastName)
 	require.Empty(t, rsp.Avatar)
 	require.Empty(t, rsp.Metadata)
 	require.Zero(t, profileCountForUser(t, account.UserID))
@@ -47,7 +45,6 @@ func TestProfilePatch(t *testing.T) {
 
 	t.Run("create_profile", func(t *testing.T) {
 		displayName := "Profile Test"
-		firstName := "Profile"
 		avatar := "https://example.com/avatar.png"
 		metadata := datatypes.JSONMap{
 			"locale": "en-US",
@@ -56,7 +53,6 @@ func TestProfilePatch(t *testing.T) {
 
 		rsp, err := cli.Patch[iam.ProfilePatchRsp](profilePath, &iam.ProfilePatchReq{
 			DisplayName: &displayName,
-			FirstName:   &firstName,
 			Avatar:      &avatar,
 			Metadata:    metadata,
 		})
@@ -65,26 +61,24 @@ func TestProfilePatch(t *testing.T) {
 		require.NotEmpty(t, rsp.ID)
 		require.Equal(t, account.UserID, rsp.UserID)
 		require.Equal(t, displayName, rsp.DisplayName)
-		require.Equal(t, firstName, rsp.FirstName)
-		require.Empty(t, rsp.LastName)
 		require.Equal(t, avatar, rsp.Avatar)
 		require.Equal(t, metadata, rsp.Metadata)
 		require.Equal(t, 1, profileCountForUser(t, account.UserID))
 	})
 
 	t.Run("patch_only_requested_fields", func(t *testing.T) {
-		lastName := "Tester"
+		avatar := "https://example.com/other.png"
 
 		rsp, err := cli.Patch[iam.ProfilePatchRsp](profilePath, &iam.ProfilePatchReq{
-			LastName: &lastName,
+			Avatar: &avatar,
 		})
 		require.NoError(t, err)
 
 		require.Equal(t, account.UserID, rsp.UserID)
+		require.Equal(t, avatar, rsp.Avatar)
+		// The fields the request left out keep what they had, which is what
+		// makes this a patch rather than a replace.
 		require.Equal(t, "Profile Test", rsp.DisplayName)
-		require.Equal(t, "Profile", rsp.FirstName)
-		require.Equal(t, lastName, rsp.LastName)
-		require.Equal(t, "https://example.com/avatar.png", rsp.Avatar)
 		require.Equal(t, datatypes.JSONMap{
 			"locale": "en-US",
 			"public": true,
@@ -103,9 +97,7 @@ func TestProfilePatch(t *testing.T) {
 
 		require.Equal(t, account.UserID, rsp.UserID)
 		require.Equal(t, "Profile Test", rsp.DisplayName)
-		require.Equal(t, "Profile", rsp.FirstName)
-		require.Equal(t, "Tester", rsp.LastName)
-		require.Equal(t, "https://example.com/avatar.png", rsp.Avatar)
+		require.Equal(t, "https://example.com/other.png", rsp.Avatar)
 		require.Equal(t, metadata, rsp.Metadata)
 	})
 }
