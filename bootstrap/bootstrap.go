@@ -6,7 +6,6 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/hydroan/gst/authn/jwt"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/cronjob"
@@ -77,7 +76,6 @@ func Bootstrap() error {
 	ins.Register(
 		// Authorization and Authentication
 		rbac.Init,
-		jwt.Init,
 
 		// service
 		service.Init,

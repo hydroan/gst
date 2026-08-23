@@ -57,7 +57,6 @@ type (
 	AuthenticatedSessionRsp  = modeliamsession.AuthenticatedSessionRsp
 	AuthenticatedSessionView = modeliamsession.AuthenticatedSessionView
 	PrincipalView            = modeliamsession.PrincipalView
-	Token                    = modeliamsession.Token
 
 	CurrentGetRsp    = modeliamsession.CurrentGetRsp
 	CurrentDeleteReq = modeliamsession.CurrentDeleteReq

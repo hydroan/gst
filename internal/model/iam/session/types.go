@@ -26,23 +26,6 @@ type Session struct {
 	IssuedAt   time.Time `json:"issued_at"`
 	LastSeenAt time.Time `json:"last_seen_at"`
 	ExpiresAt  time.Time `json:"expires_at"`
-
-	Token Token `json:"token"`
-}
-
-// Token stores the token payload associated with an IAM session.
-type Token struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-
-	ExpiresIn        int `json:"expires_in"`
-	RefreshExpiresIn int `json:"refresh_expires_in"`
-
-	TokenType string `json:"token_type"`
-	Scope     string `json:"scope"`
-
-	NotBeforePolicy int    `json:"not-before-policy"`
-	SessionState    string `json:"session_state"`
 }
 
 // AuthenticatedSessionRsp returns the authenticated session timing contract and principal snapshot.
