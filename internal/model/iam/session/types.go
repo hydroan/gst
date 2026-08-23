@@ -5,23 +5,49 @@ import (
 	"time"
 )
 
-// SessionNamespacePrefix is the shared Redis key prefix for IAM session storage.
-const SessionNamespacePrefix = "iam:session"
+// The Redis key layout of IAM, in two namespaces.
+//
+// Every key names the role it plays before it names what it is keyed by, so a
+// scan can address one role at a time. That also keeps any key from being a
+// prefix of another: a prefix scan for one of them cannot reach into the keys
+// of another, which a layout that put the identifier directly under the
+// namespace could not promise.
+//
+// The split between the two namespaces follows what a key is scoped to rather
+// than which code writes it. Everything a session owns is reclaimed by dropping
+// SessionNamespace; the user-state cache survives the sessions that read it,
+// because it describes the user.
+//
+// Only the two roots are exported. A key is built by the constructor that owns
+// it, never by a caller assembling one out of parts, which is what lets the
+// layout above change without a caller having to agree to it.
+const (
+	// SessionNamespace covers every key whose lifetime is a session's.
+	SessionNamespace = "iam:session"
 
-// SessionIDNamespace stores session snapshots by session ID.
-const SessionIDNamespace = SessionNamespacePrefix + ":id"
+	// sessionDataNamespace stores session snapshots by session ID.
+	sessionDataNamespace = SessionNamespace + ":data"
 
-// SessionUserNamespace stores the session index set by user ID.
-const SessionUserNamespace = SessionNamespacePrefix + ":user"
+	// sessionIndexNamespace covers the sorted sets that index sessions.
+	sessionIndexNamespace = SessionNamespace + ":index"
 
-// SessionAllNamespace stores the global session index set by session ID.
-const SessionAllNamespace = SessionNamespacePrefix + ":all"
+	// sessionIndexUserNamespace indexes a user's sessions by expiry.
+	sessionIndexUserNamespace = sessionIndexNamespace + ":user"
 
-// SessionLastSeenNamespace stores the global last-seen index by session ID.
-const SessionLastSeenNamespace = SessionNamespacePrefix + ":last_seen"
+	// sessionIndexAllNamespace indexes every session by expiry.
+	sessionIndexAllNamespace = sessionIndexNamespace + ":all"
 
-// SessionUserStateNamespace stores short-lived mutable user-state cache by user ID.
-const SessionUserStateNamespace = SessionNamespacePrefix + ":user_state"
+	// sessionIndexSeenNamespace indexes every session by last activity.
+	sessionIndexSeenNamespace = sessionIndexNamespace + ":seen"
+)
+
+const (
+	// UserNamespace covers every key whose lifetime is a user's.
+	UserNamespace = "iam:user"
+
+	// userStateNamespace stores the short-lived mutable user-state cache by user ID.
+	userStateNamespace = UserNamespace + ":state"
+)
 
 // Session stores the authenticated session snapshot used by IAM middleware and session APIs.
 //
@@ -82,32 +108,32 @@ type AuthenticatedSessionView struct {
 	ExpiresInSeconds int64     `json:"expires_in_seconds"`
 }
 
-// sessionRedisKey builds a Redis key for the specified namespace and identifier.
-func sessionRedisKey(namespace, id string) string {
+// namespacedKey builds a Redis key for the specified namespace and identifier.
+func namespacedKey(namespace, id string) string {
 	return fmt.Sprintf("%s:%s", namespace, id)
 }
 
-// SessionIDKey builds the Redis key for a session snapshot identified by session ID.
-func SessionIDKey(sessionID string) string {
-	return sessionRedisKey(SessionIDNamespace, sessionID)
+// SessionDataKey builds the Redis key for a session snapshot identified by session ID.
+func SessionDataKey(sessionID string) string {
+	return namespacedKey(sessionDataNamespace, sessionID)
 }
 
-// SessionUserKey builds the Redis key for the indexed session set of a user.
-func SessionUserKey(userID string) string {
-	return sessionRedisKey(SessionUserNamespace, userID)
+// SessionIndexUserKey builds the Redis key for the session index of a user.
+func SessionIndexUserKey(userID string) string {
+	return namespacedKey(sessionIndexUserNamespace, userID)
 }
 
-// SessionAllKey builds the Redis key for the indexed session set of all sessions.
-func SessionAllKey() string {
-	return SessionAllNamespace
+// SessionIndexAllKey builds the Redis key for the session index of all sessions.
+func SessionIndexAllKey() string {
+	return sessionIndexAllNamespace
 }
 
-// SessionLastSeenKey builds the Redis key for the global session last-seen index.
-func SessionLastSeenKey() string {
-	return SessionLastSeenNamespace
+// SessionIndexSeenKey builds the Redis key for the session index by last activity.
+func SessionIndexSeenKey() string {
+	return sessionIndexSeenNamespace
 }
 
-// SessionUserStateKey builds the Redis key for cached mutable user state by user ID.
-func SessionUserStateKey(userID string) string {
-	return sessionRedisKey(SessionUserStateNamespace, userID)
+// UserStateKey builds the Redis key for cached mutable user state by user ID.
+func UserStateKey(userID string) string {
+	return namespacedKey(userStateNamespace, userID)
 }

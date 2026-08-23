@@ -55,7 +55,7 @@ func (a *AdminSessionListService) List(ctx *types.ServiceContext, req *model.Emp
 			continue
 		}
 
-		sessionData, getErr := cache.Get(ctx, modeliamsession.SessionIDKey(sessionID))
+		sessionData, getErr := cache.Get(ctx, modeliamsession.SessionDataKey(sessionID))
 		if getErr != nil {
 			if errors.Is(getErr, types.ErrEntryNotFound) {
 				_ = modeliamsession.RemoveSessionIndexes(ctx, "", sessionID)

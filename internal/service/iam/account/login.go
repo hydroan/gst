@@ -131,7 +131,7 @@ func (l *LoginService) Create(ctx *types.ServiceContext, req *modeliamaccount.Lo
 	if err != nil {
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to create session id", err)
 	}
-	prefixedSessionID := modeliamsession.SessionIDKey(sessionID)
+	prefixedSessionID := modeliamsession.SessionDataKey(sessionID)
 	expire := serviceiamsession.GetSessionExpiration()
 	expiresAt := now.Add(expire)
 

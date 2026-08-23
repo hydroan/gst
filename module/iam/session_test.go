@@ -128,7 +128,7 @@ func TestCurrentSessionGet(t *testing.T) {
 	t.Run("reject_session_when_stored_snapshot_id_mismatches", func(t *testing.T) {
 		account := newSessionTestAccount(t)
 		sessionID := loginSession(t, account.Username, account.Password)
-		sessionKey := modeliamsession.SessionIDKey(sessionID)
+		sessionKey := modeliamsession.SessionDataKey(sessionID)
 
 		session, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), sessionKey)
 		require.NoError(t, err)
@@ -144,7 +144,7 @@ func TestCurrentSessionGet(t *testing.T) {
 	t.Run("reject_session_when_stored_snapshot_is_expired", func(t *testing.T) {
 		account := newSessionTestAccount(t)
 		sessionID := loginSession(t, account.Username, account.Password)
-		sessionKey := modeliamsession.SessionIDKey(sessionID)
+		sessionKey := modeliamsession.SessionDataKey(sessionID)
 
 		session, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), sessionKey)
 		require.NoError(t, err)
@@ -310,7 +310,7 @@ func TestSessionList(t *testing.T) {
 		expiredSessionID := loginSession(t, account.Username, account.Password)
 		currentSessionID := loginSession(t, account.Username, account.Password)
 
-		sessionKey := modeliamsession.SessionIDKey(expiredSessionID)
+		sessionKey := modeliamsession.SessionDataKey(expiredSessionID)
 		session, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), sessionKey)
 		require.NoError(t, err)
 		session.ExpiresAt = time.Now().Add(-time.Minute)
@@ -382,8 +382,8 @@ func TestInvalidateUserSessions(t *testing.T) {
 		requireUserSessionNotContains(t, account.UserID, secondSessionID)
 		requireAllSessionNotContains(t, firstSessionID)
 		requireAllSessionNotContains(t, secondSessionID)
-		requireLastSeenSessionNotContains(t, firstSessionID)
-		requireLastSeenSessionNotContains(t, secondSessionID)
+		requireSeenIndexNotContains(t, firstSessionID)
+		requireSeenIndexNotContains(t, secondSessionID)
 		requireUserStateCacheCleared(t, account.UserID)
 
 		_, err = sessionClient(t, firstSessionID).Get[iam.CurrentGetRsp](currentPath)
@@ -1110,7 +1110,7 @@ func TestSessionDeleteAll(t *testing.T) {
 		requireUserSessionContains(t, account.UserID, currentSessionID)
 		requireUserSessionContains(t, account.UserID, staleSessionID)
 
-		require.NoError(t, redis.Cache[modeliamsession.Session]().Delete(t.Context(), modeliamsession.SessionIDKey(staleSessionID)))
+		require.NoError(t, redis.Cache[modeliamsession.Session]().Delete(t.Context(), modeliamsession.SessionDataKey(staleSessionID)))
 		requireUserSessionContains(t, account.UserID, staleSessionID)
 
 		cli := sessionClient(t, currentSessionID)
@@ -1158,7 +1158,7 @@ func registerRequestMetadataProbe() error {
 func loadStoredSession(t *testing.T, sessionID string) modeliamsession.Session {
 	t.Helper()
 
-	session, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), modeliamsession.SessionIDKey(sessionID))
+	session, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), modeliamsession.SessionDataKey(sessionID))
 	require.NoError(t, err)
 	return session
 }
@@ -1170,7 +1170,7 @@ func setSessionLastSeenAt(t *testing.T, sessionID string, lastSeenAt time.Time) 
 	session.LastSeenAt = lastSeenAt.UTC()
 	ttl := time.Until(session.ExpiresAt)
 	require.Greater(t, ttl, time.Duration(0))
-	require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), modeliamsession.SessionIDKey(sessionID), session, ttl))
+	require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), modeliamsession.SessionDataKey(sessionID), session, ttl))
 	return session
 }
 
@@ -1181,14 +1181,14 @@ func setSessionTenantID(t *testing.T, sessionID string, tenantID string) modelia
 	session.TenantID = tenantID
 	ttl := time.Until(session.ExpiresAt)
 	require.Greater(t, ttl, time.Duration(0))
-	require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), modeliamsession.SessionIDKey(sessionID), session, ttl))
+	require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), modeliamsession.SessionDataKey(sessionID), session, ttl))
 	return session
 }
 
 func requireSessionNotFound(t *testing.T, sessionID string) {
 	t.Helper()
 
-	sessionKey := modeliamsession.SessionIDKey(sessionID)
+	sessionKey := modeliamsession.SessionDataKey(sessionID)
 	_, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), sessionKey)
 	require.ErrorIs(t, err, types.ErrEntryNotFound)
 }
@@ -1196,7 +1196,7 @@ func requireSessionNotFound(t *testing.T, sessionID string) {
 func requireUserSessionContains(t *testing.T, userID, sessionID string) {
 	t.Helper()
 
-	userSessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionUserKey(userID), 0, -1)
+	userSessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionIndexUserKey(userID), 0, -1)
 	require.NoError(t, err)
 	require.Contains(t, userSessionIDs, sessionID)
 }
@@ -1204,7 +1204,7 @@ func requireUserSessionContains(t *testing.T, userID, sessionID string) {
 func requireUserSessionNotContains(t *testing.T, userID, sessionID string) {
 	t.Helper()
 
-	userSessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionUserKey(userID), 0, -1)
+	userSessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionIndexUserKey(userID), 0, -1)
 	require.NoError(t, err)
 	require.NotContains(t, userSessionIDs, sessionID)
 }
@@ -1212,7 +1212,7 @@ func requireUserSessionNotContains(t *testing.T, userID, sessionID string) {
 func requireAllSessionContains(t *testing.T, sessionID string) {
 	t.Helper()
 
-	sessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionAllKey(), 0, -1)
+	sessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionIndexAllKey(), 0, -1)
 	require.NoError(t, err)
 	require.Contains(t, sessionIDs, sessionID)
 }
@@ -1220,7 +1220,7 @@ func requireAllSessionContains(t *testing.T, sessionID string) {
 func requireAllSessionNotContains(t *testing.T, sessionID string) {
 	t.Helper()
 
-	sessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionAllKey(), 0, -1)
+	sessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionIndexAllKey(), 0, -1)
 	require.NoError(t, err)
 	require.NotContains(t, sessionIDs, sessionID)
 }
@@ -1228,14 +1228,14 @@ func requireAllSessionNotContains(t *testing.T, sessionID string) {
 func requireUserStateCacheCleared(t *testing.T, userID string) {
 	t.Helper()
 
-	_, err := redis.Get(t.Context(), modeliamsession.SessionUserStateKey(userID))
+	_, err := redis.Get(t.Context(), modeliamsession.UserStateKey(userID))
 	require.ErrorIs(t, err, redis.ErrKeyNotExists)
 }
 
-func requireLastSeenSessionNotContains(t *testing.T, sessionID string) {
+func requireSeenIndexNotContains(t *testing.T, sessionID string) {
 	t.Helper()
 
-	sessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionLastSeenKey(), 0, -1)
+	sessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionIndexSeenKey(), 0, -1)
 	require.NoError(t, err)
 	require.NotContains(t, sessionIDs, sessionID)
 }
@@ -1345,6 +1345,9 @@ func clearSessionsAfterTest(t *testing.T) {
 	t.Helper()
 
 	t.Cleanup(func() {
-		require.NoError(t, redis.RemovePrefix(context.Background(), modeliamsession.SessionNamespacePrefix))
+		// Both namespaces, because the user-state cache is keyed by user and is
+		// therefore deliberately outside the session prefix.
+		require.NoError(t, redis.RemovePrefix(context.Background(), modeliamsession.SessionNamespace))
+		require.NoError(t, redis.RemovePrefix(context.Background(), modeliamsession.UserNamespace))
 	})
 }

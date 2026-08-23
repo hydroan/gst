@@ -31,7 +31,7 @@ func (a *AdminSessionGetService) Get(ctx *types.ServiceContext, req *model.Empty
 		return nil, service.NewError(http.StatusBadRequest, "session id is required")
 	}
 
-	targetSession, err := redis.Cache[modeliamsession.Session]().Get(ctx, modeliamsession.SessionIDKey(targetSessionID))
+	targetSession, err := redis.Cache[modeliamsession.Session]().Get(ctx, modeliamsession.SessionDataKey(targetSessionID))
 	if err != nil {
 		if errors.Is(err, types.ErrEntryNotFound) {
 			return nil, service.NewError(http.StatusNotFound, "session not found")

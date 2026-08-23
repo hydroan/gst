@@ -102,7 +102,7 @@ func (a *AdminUserSessionListService) buildView(ctx *types.ServiceContext, user 
 			continue
 		}
 
-		sessionData, getErr := cache.Get(ctx, modeliamsession.SessionIDKey(sessionID))
+		sessionData, getErr := cache.Get(ctx, modeliamsession.SessionDataKey(sessionID))
 		if getErr != nil {
 			if errors.Is(getErr, types.ErrEntryNotFound) {
 				_ = modeliamsession.RemoveSessionIndexes(ctx, indexUserID, sessionID)
@@ -116,7 +116,7 @@ func (a *AdminUserSessionListService) buildView(ctx *types.ServiceContext, user 
 		}
 		if sessionData.UserID != user.ID {
 			if indexUserID != "" {
-				_ = redis.ZRem(ctx, modeliamsession.SessionUserKey(indexUserID), sessionID)
+				_ = redis.ZRem(ctx, modeliamsession.SessionIndexUserKey(indexUserID), sessionID)
 			}
 			continue
 		}

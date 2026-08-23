@@ -799,7 +799,7 @@ func TestIAMLoginStoresSessionTenant(t *testing.T) {
 		TenantID: tenantID,
 	}, tenantUserAgent)
 
-	session, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), modeliamsession.SessionIDKey(sessionID))
+	session, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), modeliamsession.SessionDataKey(sessionID))
 	require.NoError(t, err)
 	require.Equal(t, tenantID, session.TenantID)
 }

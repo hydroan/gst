@@ -39,7 +39,7 @@ func ValidateSessionUserState(ctx context.Context, session modeliamsession.Sessi
 }
 
 func loadCachedSessionUserState(ctx context.Context, userID string) (sessionUserState, bool) {
-	state, err := redis.Cache[sessionUserState]().Get(ctx, modeliamsession.SessionUserStateKey(userID))
+	state, err := redis.Cache[sessionUserState]().Get(ctx, modeliamsession.UserStateKey(userID))
 	if err == nil {
 		return state, true
 	}
@@ -78,7 +78,7 @@ func refreshSessionUserState(ctx context.Context, userID string) (sessionUserSta
 		Status:             targetUser.Status,
 		MustChangePassword: credential.MustChangePassword,
 	}
-	if err := redis.Cache[sessionUserState]().Set(ctx, modeliamsession.SessionUserStateKey(userID), state, GetSessionUserStateTTL()); err != nil {
+	if err := redis.Cache[sessionUserState]().Set(ctx, modeliamsession.UserStateKey(userID), state, GetSessionUserStateTTL()); err != nil {
 		zap.S().Warnw("failed to cache iam session user state", "user_id", userID, "error", err)
 	}
 	return state, nil

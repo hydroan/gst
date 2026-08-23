@@ -10,7 +10,7 @@ import (
 // password-reset tokens.
 const (
 	secret = "9f8e7d6c5b4a39281706f5e4d3c2b1a0"
-	key    = "iam:session:id:" + secret
+	key    = "sample:session:data:" + secret
 )
 
 // TestAttributesNeverCarryTheKey is the regression guard for credential
@@ -31,7 +31,7 @@ func TestAttributesNeverCarryTheKey(t *testing.T) {
 // TestKeyNamespaceKeepsTheDomain asserts the attribute still says which cache
 // domain was touched, which is what a span is read for.
 func TestKeyNamespaceKeepsTheDomain(t *testing.T) {
-	if got := keyNamespace(key); got != "iam:session:id" {
+	if got := keyNamespace(key); got != "sample:session:data" {
 		t.Fatalf("want the domain, got %q", got)
 	}
 	if got := keyNamespace("noseparator"); got != "" {

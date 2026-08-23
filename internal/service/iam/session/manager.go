@@ -55,7 +55,7 @@ func (sessionManager) Load(ctx context.Context, sessionID string) (modeliamsessi
 	if sessionID == "" {
 		return modeliamsession.Session{}, types.ErrEntryNotFound
 	}
-	return redis.Cache[modeliamsession.Session]().Get(ctx, modeliamsession.SessionIDKey(sessionID))
+	return redis.Cache[modeliamsession.Session]().Get(ctx, modeliamsession.SessionDataKey(sessionID))
 }
 
 // Delete deletes the stored session payload and removes it from every Redis index.
@@ -65,7 +65,7 @@ func (sessionManager) Delete(ctx context.Context, sessionID string) (modeliamses
 	}
 	cache := redis.Cache[modeliamsession.Session]()
 
-	sessionKey := modeliamsession.SessionIDKey(sessionID)
+	sessionKey := modeliamsession.SessionDataKey(sessionID)
 	sessionData, err := cache.Get(ctx, sessionKey)
 	if err != nil {
 		return modeliamsession.Session{}, err

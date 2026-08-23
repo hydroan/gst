@@ -148,14 +148,14 @@ func TestAccountLogout(t *testing.T) {
 		brokenIndexUser := accountSignupUser(t, "acct_logout_broken_index", "12345678")
 		brokenIndexUser.SessionID = accountLoginUser(t, &brokenIndexUser, brokenIndexUser.Password)
 
-		userSessionKey := modeliamsession.SessionUserKey(brokenIndexUser.UserID)
+		userSessionKey := modeliamsession.SessionIndexUserKey(brokenIndexUser.UserID)
 		// This case deliberately corrupts the user session index below. Repair
 		// it afterwards: a string left where a zset belongs makes every later
 		// read of that key fail, and nothing else clears it.
 		t.Cleanup(func() {
-			require.NoError(t, redis.Del(context.Background(), userSessionKey, modeliamsession.SessionIDKey(brokenIndexUser.SessionID)))
-			require.NoError(t, redis.ZRem(context.Background(), modeliamsession.SessionAllKey(), brokenIndexUser.SessionID))
-			require.NoError(t, redis.ZRem(context.Background(), modeliamsession.SessionLastSeenKey(), brokenIndexUser.SessionID))
+			require.NoError(t, redis.Del(context.Background(), userSessionKey, modeliamsession.SessionDataKey(brokenIndexUser.SessionID)))
+			require.NoError(t, redis.ZRem(context.Background(), modeliamsession.SessionIndexAllKey(), brokenIndexUser.SessionID))
+			require.NoError(t, redis.ZRem(context.Background(), modeliamsession.SessionIndexSeenKey(), brokenIndexUser.SessionID))
 			modeliamsession.InvalidateUserSessions(context.Background(), brokenIndexUser.UserID)
 		})
 
@@ -389,7 +389,7 @@ func TestAccountChangePassword(t *testing.T) {
 			syncFailUser.SessionID,
 			consts.PHASE_CREATE,
 		)
-		require.NoError(t, redis.Set(t.Context(), modeliamsession.SessionIDKey(syncFailUser.SessionID), "not-a-session", time.Hour))
+		require.NoError(t, redis.Set(t.Context(), modeliamsession.SessionDataKey(syncFailUser.SessionID), "not-a-session", time.Hour))
 
 		svc := &serviceiamaccount.ChangePasswordService{}
 		svc.Logger = loggerzap.New("")
@@ -514,13 +514,13 @@ func TestAccountResetPassword(t *testing.T) {
 		brokenIndexVictim := accountSignupUser(t, "acct_reset_broken_index", "87654321")
 		brokenSessionID := accountLoginUser(t, &brokenIndexVictim, brokenIndexVictim.Password)
 
-		userSessionKey := modeliamsession.SessionUserKey(brokenIndexVictim.UserID)
+		userSessionKey := modeliamsession.SessionIndexUserKey(brokenIndexVictim.UserID)
 		// See the note in TestAccountLogout: the corrupted index has to be
 		// repaired here, nothing else clears it.
 		t.Cleanup(func() {
-			require.NoError(t, redis.Del(context.Background(), userSessionKey, modeliamsession.SessionIDKey(brokenSessionID)))
-			require.NoError(t, redis.ZRem(context.Background(), modeliamsession.SessionAllKey(), brokenSessionID))
-			require.NoError(t, redis.ZRem(context.Background(), modeliamsession.SessionLastSeenKey(), brokenSessionID))
+			require.NoError(t, redis.Del(context.Background(), userSessionKey, modeliamsession.SessionDataKey(brokenSessionID)))
+			require.NoError(t, redis.ZRem(context.Background(), modeliamsession.SessionIndexAllKey(), brokenSessionID))
+			require.NoError(t, redis.ZRem(context.Background(), modeliamsession.SessionIndexSeenKey(), brokenSessionID))
 			modeliamsession.InvalidateUserSessions(context.Background(), brokenIndexVictim.UserID)
 		})
 
@@ -749,7 +749,7 @@ func accountNewServiceContext(baseCtx context.Context, method, path, sessionID s
 func accountRequireSessionNotFound(t *testing.T, sessionID string) {
 	t.Helper()
 
-	sessionKey := modeliamsession.SessionIDKey(sessionID)
+	sessionKey := modeliamsession.SessionDataKey(sessionID)
 	_, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), sessionKey)
 	require.ErrorIs(t, err, types.ErrEntryNotFound)
 }
@@ -757,7 +757,7 @@ func accountRequireSessionNotFound(t *testing.T, sessionID string) {
 func accountRequireUserSessionContains(t *testing.T, userID, sessionID string) {
 	t.Helper()
 
-	userSessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionUserKey(userID), 0, -1)
+	userSessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionIndexUserKey(userID), 0, -1)
 	require.NoError(t, err)
 	require.Contains(t, userSessionIDs, sessionID)
 }
@@ -765,7 +765,7 @@ func accountRequireUserSessionContains(t *testing.T, userID, sessionID string) {
 func accountRequireUserSessionNotContains(t *testing.T, userID, sessionID string) {
 	t.Helper()
 
-	userSessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionUserKey(userID), 0, -1)
+	userSessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionIndexUserKey(userID), 0, -1)
 	require.NoError(t, err)
 	require.NotContains(t, userSessionIDs, sessionID)
 }

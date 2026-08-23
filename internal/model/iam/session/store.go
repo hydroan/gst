@@ -28,13 +28,13 @@ func InvalidateUserSessions(ctx context.Context, userID string) {
 	}
 	InvalidateUserStateCache(ctx, userID)
 
-	userKey := SessionUserKey(userID)
+	userKey := SessionIndexUserKey(userID)
 	sessionIDs, _ := redis.ZRange(ctx, userKey, 0, -1)
 	for i := range sessionIDs {
 		if sessionIDs[i] == "" {
 			continue
 		}
-		_ = redis.Del(ctx, SessionIDKey(sessionIDs[i]))
+		_ = redis.Del(ctx, SessionDataKey(sessionIDs[i]))
 		_ = RemoveSessionIndexes(ctx, userID, sessionIDs[i])
 	}
 	_ = redis.Del(ctx, userKey)
@@ -49,7 +49,7 @@ func InvalidateUserStateCache(ctx context.Context, userID string) {
 	if userID == "" {
 		return
 	}
-	_ = redis.Del(ctx, SessionUserStateKey(userID))
+	_ = redis.Del(ctx, UserStateKey(userID))
 }
 
 // RemoveSessionIndexes removes a session id from every index pointing at it.
@@ -66,12 +66,12 @@ func RemoveSessionIndexes(ctx context.Context, userID, sessionID string) error {
 		return nil
 	}
 	if userID != "" {
-		if err := redis.ZRem(ctx, SessionUserKey(userID), sessionID); err != nil {
+		if err := redis.ZRem(ctx, SessionIndexUserKey(userID), sessionID); err != nil {
 			return err
 		}
 	}
-	if err := redis.ZRem(ctx, SessionAllKey(), sessionID); err != nil {
+	if err := redis.ZRem(ctx, SessionIndexAllKey(), sessionID); err != nil {
 		return err
 	}
-	return redis.ZRem(ctx, SessionLastSeenKey(), sessionID)
+	return redis.ZRem(ctx, SessionIndexSeenKey(), sessionID)
 }

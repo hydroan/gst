@@ -65,11 +65,11 @@ func TestTouchSession(t *testing.T) {
 			LastSeenAt: lastSeenAt,
 			ExpiresAt:  now.Add(time.Hour),
 		}
-		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), modeliamsession.SessionIDKey(sessionID), session, time.Until(session.ExpiresAt)))
+		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), modeliamsession.SessionDataKey(sessionID), session, time.Until(session.ExpiresAt)))
 
 		require.NoError(t, serviceiamsession.TouchSession(t.Context(), sessionID, session, now))
 
-		stored, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), modeliamsession.SessionIDKey(sessionID))
+		stored, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), modeliamsession.SessionDataKey(sessionID))
 		require.NoError(t, err)
 		require.True(t, stored.LastSeenAt.Equal(lastSeenAt))
 	})
@@ -84,11 +84,11 @@ func TestTouchSession(t *testing.T) {
 			LastSeenAt: now.Add(-time.Minute),
 			ExpiresAt:  now.Add(time.Hour),
 		}
-		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), modeliamsession.SessionIDKey(sessionID), session, time.Until(session.ExpiresAt)))
+		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), modeliamsession.SessionDataKey(sessionID), session, time.Until(session.ExpiresAt)))
 
 		require.NoError(t, serviceiamsession.TouchSession(t.Context(), sessionID, session, now))
 
-		stored, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), modeliamsession.SessionIDKey(sessionID))
+		stored, err := redis.Cache[modeliamsession.Session]().Get(t.Context(), modeliamsession.SessionDataKey(sessionID))
 		require.NoError(t, err)
 		require.True(t, stored.LastSeenAt.Equal(now))
 		require.Equal(t, session.ExpiresAt.UnixMilli(), stored.ExpiresAt.UnixMilli())
@@ -97,7 +97,7 @@ func TestTouchSession(t *testing.T) {
 		// is what lets the online-window query answer from the index alone.
 		indexed, err := redis.ZRangeByScore(
 			t.Context(),
-			modeliamsession.SessionLastSeenKey(),
+			modeliamsession.SessionIndexSeenKey(),
 			strconv.FormatInt(now.UnixMilli(), 10),
 			strconv.FormatInt(now.UnixMilli(), 10),
 		)
@@ -128,7 +128,7 @@ func TestIndexSessionSetsIndexTTL(t *testing.T) {
 		}
 		require.NoError(t, serviceiamsession.IndexSession(t.Context(), session))
 
-		for _, key := range []string{modeliamsession.SessionUserKey(session.UserID), modeliamsession.SessionAllKey()} {
+		for _, key := range []string{modeliamsession.SessionIndexUserKey(session.UserID), modeliamsession.SessionIndexAllKey()} {
 			ttl, err := redis.TTL(t.Context(), key)
 			require.NoError(t, err)
 			require.LessOrEqual(t, ttl, lifetime, key)
@@ -137,7 +137,7 @@ func TestIndexSessionSetsIndexTTL(t *testing.T) {
 
 		// The last-seen index is scored by activity rather than by expiry, so it
 		// has to outlive the sessions themselves by one touch interval.
-		seenTTL, err := redis.TTL(t.Context(), modeliamsession.SessionLastSeenKey())
+		seenTTL, err := redis.TTL(t.Context(), modeliamsession.SessionIndexSeenKey())
 		require.NoError(t, err)
 		require.Greater(t, seenTTL, lifetime)
 	})
@@ -162,7 +162,7 @@ func TestIndexSessionSetsIndexTTL(t *testing.T) {
 
 		// A shared index belongs to every member, so the one with the least time
 		// left must not decide when the whole index is reclaimed.
-		for _, key := range []string{modeliamsession.SessionUserKey(longLived.UserID), modeliamsession.SessionAllKey()} {
+		for _, key := range []string{modeliamsession.SessionIndexUserKey(longLived.UserID), modeliamsession.SessionIndexAllKey()} {
 			ttl, err := redis.TTL(t.Context(), key)
 			require.NoError(t, err)
 			require.Greater(t, ttl, lifetime-time.Minute, key)
@@ -170,7 +170,7 @@ func TestIndexSessionSetsIndexTTL(t *testing.T) {
 	})
 }
 
-func TestIndexSessionPrunesStaleLastSeenIndex(t *testing.T) {
+func TestIndexSessionPrunesStaleSeenIndex(t *testing.T) {
 	clearSessions(t)
 
 	previousExpiration := serviceiamsession.GetSessionExpiration()
@@ -183,8 +183,8 @@ func TestIndexSessionPrunesStaleLastSeenIndex(t *testing.T) {
 	staleSessionID := "stale-last-seen-session"
 	retainedSessionID := "retained-last-seen-session"
 	currentSessionID := "current-session"
-	require.NoError(t, redis.ZAdd(t.Context(), modeliamsession.SessionLastSeenKey(), float64(now.Add(-2*time.Hour).UnixMilli()), staleSessionID))
-	require.NoError(t, redis.ZAdd(t.Context(), modeliamsession.SessionLastSeenKey(), float64(now.Add(-30*time.Minute).UnixMilli()), retainedSessionID))
+	require.NoError(t, redis.ZAdd(t.Context(), modeliamsession.SessionIndexSeenKey(), float64(now.Add(-2*time.Hour).UnixMilli()), staleSessionID))
+	require.NoError(t, redis.ZAdd(t.Context(), modeliamsession.SessionIndexSeenKey(), float64(now.Add(-30*time.Minute).UnixMilli()), retainedSessionID))
 
 	session := modeliamsession.Session{
 		ID:         currentSessionID,
@@ -195,11 +195,11 @@ func TestIndexSessionPrunesStaleLastSeenIndex(t *testing.T) {
 	}
 	require.NoError(t, serviceiamsession.IndexSession(t.Context(), session))
 
-	lastSeenSessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionLastSeenKey(), 0, -1)
+	seenIndexSessionIDs, err := redis.ZRange(t.Context(), modeliamsession.SessionIndexSeenKey(), 0, -1)
 	require.NoError(t, err)
-	require.NotContains(t, lastSeenSessionIDs, staleSessionID)
-	require.Contains(t, lastSeenSessionIDs, retainedSessionID)
-	require.Contains(t, lastSeenSessionIDs, currentSessionID)
+	require.NotContains(t, seenIndexSessionIDs, staleSessionID)
+	require.Contains(t, seenIndexSessionIDs, retainedSessionID)
+	require.Contains(t, seenIndexSessionIDs, currentSessionID)
 }
 
 func TestSessionManagerCurrentUsesRequestCache(t *testing.T) {
@@ -231,7 +231,7 @@ func TestSessionManagerCurrentIgnoresMismatchedRequestCache(t *testing.T) {
 		IssuedAt:  now.Add(-time.Minute),
 		ExpiresAt: now.Add(time.Hour),
 	}
-	require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), modeliamsession.SessionIDKey(cookieSessionID), cookieSession, time.Until(cookieSession.ExpiresAt)))
+	require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), modeliamsession.SessionDataKey(cookieSessionID), cookieSession, time.Until(cookieSession.ExpiresAt)))
 
 	cachedSessionID := "cached-session"
 	cachedSession := modeliamsession.Session{
@@ -255,7 +255,10 @@ func TestSessionManagerCurrentIgnoresMismatchedRequestCache(t *testing.T) {
 func clearSessions(t *testing.T) {
 	t.Helper()
 
-	require.NoError(t, redis.RemovePrefix(context.Background(), modeliamsession.SessionNamespacePrefix))
+	// Both namespaces, because the user-state cache is keyed by user and is
+	// therefore deliberately outside the session prefix.
+	require.NoError(t, redis.RemovePrefix(context.Background(), modeliamsession.SessionNamespace))
+	require.NoError(t, redis.RemovePrefix(context.Background(), modeliamsession.UserNamespace))
 }
 
 func newSessionServiceContext(baseCtx context.Context, t *testing.T, sessionID string) *types.ServiceContext {

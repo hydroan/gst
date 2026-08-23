@@ -39,7 +39,7 @@ func (s *SessionListService) List(ctx *types.ServiceContext, req *model.Empty) (
 			items = append(items, buildSessionView(currentSession, currentSessionID))
 			continue
 		}
-		sessionKey := modeliamsession.SessionIDKey(sessionID)
+		sessionKey := modeliamsession.SessionDataKey(sessionID)
 		sessionData, getErr := cache.Get(ctx, sessionKey)
 		if getErr != nil {
 			if errors.Is(getErr, types.ErrEntryNotFound) {

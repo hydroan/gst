@@ -19,7 +19,7 @@ const sessionTouchInterval = 30 * time.Second
 // listUserSessionIDs loads all indexed session ids for a user.
 //
 // Session indexes are stored as Redis ZSETs. Redis can automatically expire the
-// session payload key (iam:session:id:<sessionID>), but it cannot automatically
+// session payload key (iam:session:data:<sessionID>), but it cannot automatically
 // remove that sessionID from the user/global ZSET indexes. IndexSession uses
 // ExpiresAt.UnixMilli() as the ZSET score, so this read path first removes
 // members whose score is already in the past. That keeps session list totals
@@ -29,7 +29,7 @@ func listUserSessionIDs(ctx context.Context, userID string) ([]string, error) {
 	if userID == "" {
 		return make([]string, 0), nil
 	}
-	userKey := modeliamsession.SessionUserKey(userID)
+	userKey := modeliamsession.SessionIndexUserKey(userID)
 	if err := pruneIndex(ctx, userKey, time.Now()); err != nil {
 		return nil, err
 	}
@@ -47,10 +47,10 @@ func listUserSessionIDs(ctx context.Context, userID string) ([]string, error) {
 // remove them. Pruning here makes admin session views count only sessions whose
 // index score says they are still within their configured lifetime.
 func listAllSessionIDs(ctx context.Context) ([]string, error) {
-	if err := pruneIndex(ctx, modeliamsession.SessionAllKey(), time.Now()); err != nil {
+	if err := pruneIndex(ctx, modeliamsession.SessionIndexAllKey(), time.Now()); err != nil {
 		return nil, err
 	}
-	sessionIDs, err := redis.ZRange(ctx, modeliamsession.SessionAllKey(), 0, -1)
+	sessionIDs, err := redis.ZRange(ctx, modeliamsession.SessionIndexAllKey(), 0, -1)
 	if err != nil {
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to list sessions", err)
 	}
@@ -59,7 +59,7 @@ func listAllSessionIDs(ctx context.Context) ([]string, error) {
 
 // listOnlineSessionIDs loads session ids whose last-seen score falls inside the requested window.
 //
-// SessionLastSeenKey is a global ZSET scored by Session.LastSeenAt in Unix
+// SessionIndexSeenKey is a global ZSET scored by Session.LastSeenAt in Unix
 // milliseconds. This helper intentionally returns only candidate ids; callers
 // must still load and validate each session snapshot because the last-seen
 // index can outlive expired payload keys or contain ids from partially written
@@ -70,10 +70,10 @@ func listOnlineSessionIDs(ctx context.Context, since time.Time) ([]string, error
 	}
 	// Sweeping is hygiene for a query that already filters by score, so its
 	// failure is not this caller's answer to give.
-	_ = pruneIndex(ctx, modeliamsession.SessionLastSeenKey(), seenIndexCutoff(time.Now()))
+	_ = pruneIndex(ctx, modeliamsession.SessionIndexSeenKey(), seenIndexCutoff(time.Now()))
 	sessionIDs, err := redis.ZRangeByScore(
 		ctx,
-		modeliamsession.SessionLastSeenKey(),
+		modeliamsession.SessionIndexSeenKey(),
 		strconv.FormatInt(since.UnixMilli(), 10),
 		"+inf",
 	)
@@ -148,8 +148,8 @@ func removeSessionIndexes(ctx context.Context, userID, sessionID string) error {
 
 // IndexSession stores a session id in every Redis index used by IAM session queries.
 //
-// SessionUserKey and SessionAllKey use ExpiresAt as the ZSET score so list
-// paths can prune expired ids before loading payloads. SessionLastSeenKey uses
+// SessionIndexUserKey and SessionIndexAllKey use ExpiresAt as the ZSET score so list
+// paths can prune expired ids before loading payloads. SessionIndexSeenKey uses
 // LastSeenAt as the score so admin online-window queries can avoid scanning all
 // active sessions.
 //
@@ -170,23 +170,23 @@ func IndexSession(ctx context.Context, sessionData modeliamsession.Session) erro
 	}
 	// A login is the one moment cheap enough to sweep the global last-seen index
 	// on; failing to sweep is no reason to fail the login.
-	_ = pruneIndex(ctx, modeliamsession.SessionLastSeenKey(), seenIndexCutoff(time.Now()))
+	_ = pruneIndex(ctx, modeliamsession.SessionIndexSeenKey(), seenIndexCutoff(time.Now()))
 	if time.Until(sessionData.ExpiresAt) <= 0 {
 		return service.NewError(http.StatusInternalServerError, "session expired")
 	}
 	// Store the expiration timestamp as the index score. The list paths use this
 	// contract to prune expired ZSET members before loading session payloads.
 	score := float64(sessionData.ExpiresAt.UnixMilli())
-	userKey := modeliamsession.SessionUserKey(sessionData.UserID)
+	userKey := modeliamsession.SessionIndexUserKey(sessionData.UserID)
 	if err := redis.ZAdd(ctx, userKey, score, sessionData.ID); err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to index session", err)
 	}
-	if err := redis.ZAdd(ctx, modeliamsession.SessionAllKey(), score, sessionData.ID); err != nil {
+	if err := redis.ZAdd(ctx, modeliamsession.SessionIndexAllKey(), score, sessionData.ID); err != nil {
 		_ = redis.ZRem(ctx, userKey, sessionData.ID)
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to index session", err)
 	}
 	lastSeenScore := float64(sessionData.LastSeenAt.UnixMilli())
-	if err := redis.ZAdd(ctx, modeliamsession.SessionLastSeenKey(), lastSeenScore, sessionData.ID); err != nil {
+	if err := redis.ZAdd(ctx, modeliamsession.SessionIndexSeenKey(), lastSeenScore, sessionData.ID); err != nil {
 		_ = modeliamsession.RemoveSessionIndexes(ctx, sessionData.UserID, sessionData.ID)
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to index session", err)
 	}
@@ -194,11 +194,11 @@ func IndexSession(ctx context.Context, sessionData modeliamsession.Session) erro
 		_ = modeliamsession.RemoveSessionIndexes(ctx, sessionData.UserID, sessionData.ID)
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to index session", err)
 	}
-	if err := redis.Expire(ctx, modeliamsession.SessionAllKey(), indexRetention()); err != nil {
+	if err := redis.Expire(ctx, modeliamsession.SessionIndexAllKey(), indexRetention()); err != nil {
 		_ = modeliamsession.RemoveSessionIndexes(ctx, sessionData.UserID, sessionData.ID)
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to index session", err)
 	}
-	if err := redis.Expire(ctx, modeliamsession.SessionLastSeenKey(), seenIndexRetention()); err != nil {
+	if err := redis.Expire(ctx, modeliamsession.SessionIndexSeenKey(), seenIndexRetention()); err != nil {
 		_ = modeliamsession.RemoveSessionIndexes(ctx, sessionData.UserID, sessionData.ID)
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to index session", err)
 	}
@@ -235,13 +235,13 @@ func TouchSession(ctx context.Context, sessionID string, sessionData modeliamses
 	}
 
 	sessionData.LastSeenAt = now
-	if err := redis.Cache[modeliamsession.Session]().Set(ctx, modeliamsession.SessionIDKey(sessionID), sessionData, ttl); err != nil {
+	if err := redis.Cache[modeliamsession.Session]().Set(ctx, modeliamsession.SessionDataKey(sessionID), sessionData, ttl); err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to touch session", err)
 	}
-	if err := redis.ZAdd(ctx, modeliamsession.SessionLastSeenKey(), float64(now.UnixMilli()), sessionID); err != nil {
+	if err := redis.ZAdd(ctx, modeliamsession.SessionIndexSeenKey(), float64(now.UnixMilli()), sessionID); err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to touch session", err)
 	}
-	_ = pruneIndex(ctx, modeliamsession.SessionLastSeenKey(), seenIndexCutoff(now))
+	_ = pruneIndex(ctx, modeliamsession.SessionIndexSeenKey(), seenIndexCutoff(now))
 	return nil
 }
 
@@ -308,7 +308,7 @@ func DeleteUserSessions(ctx context.Context, userID string) error {
 		}
 	}
 
-	if err = redis.Del(ctx, modeliamsession.SessionUserKey(userID)); err != nil {
+	if err = redis.Del(ctx, modeliamsession.SessionIndexUserKey(userID)); err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to delete user session index", err)
 	}
 	return nil
