@@ -54,6 +54,13 @@ func init() {
 			"Unique":  "whether the index is unique",
 		},
 	})
+	apidoc.Register("github.com/hydroan/gst/internal/modelregistry", "ModelIndexPlans", apidoc.StructDoc{
+		Comment: "ModelIndexPlans binds the resolved index plans to the model that declared\nthem, so cross-model validation can name both sides of a conflict.",
+		Fields: map[string]string{
+			"Model": "display name of the declaring model",
+			"Plans": "the model's resolved plans",
+		},
+	})
 	apidoc.Register("github.com/hydroan/gst/internal/modelregistry", "Pagination", apidoc.StructDoc{
 		Comment: "Pagination declares offset-pagination query parameters for List actions.\n\nEmbedding Pagination only enables _page and _size. It does not imply\nsorting, fuzzy matching, cursor pagination, or any other List query\ncontrols.\n\nLike every framework-owned query parameter, _page and _size live in the\n\"_\" prefix namespace, so bare names such as page and size stay available\nas business filter fields on embedding models.\n\nNeither parameter can be used to retrieve a whole table. A size the client\ndoes not set, or sets to zero or less, becomes the default page size; a size\nabove the cap is clamped to it rather than refused, which is what keeps a\nclient asking for everything from being served everything. Bulk retrieval is\nthe Export action's job, and it is the only one that answers unbounded.",
 		Fields: map[string]string{
