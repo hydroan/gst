@@ -2,7 +2,6 @@ package serviceiamuser
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
@@ -23,12 +22,6 @@ type AdminUserListService struct {
 	service.Base[*modeliamuser.User, *model.Empty, *modeliamuser.AdminUserListRsp]
 }
 
-type adminUserListFilters struct {
-	Username string
-	Page     int
-	Size     int
-}
-
 // List returns users visible to the current administrator.
 //
 // Passing nil as the target to EnsureTenantAdmin means this call only verifies
@@ -44,7 +37,7 @@ func (a *AdminUserListService) List(ctx *types.ServiceContext, _ *model.Empty) (
 		return nil, err
 	}
 
-	users, total, err := listUsers(ctx, actor)
+	users, total, err := a.listUsers(ctx, actor)
 	if err != nil {
 		return nil, err
 	}
@@ -59,75 +52,61 @@ func (a *AdminUserListService) List(ctx *types.ServiceContext, _ *model.Empty) (
 	}, nil
 }
 
-// listUsers applies the authorization-derived scope and request filters, counts
-// the full filtered result set, then applies request pagination only to the
-// returned page.
-func listUsers(ctx *types.ServiceContext, actor *modeliamuser.User) ([]*modeliamuser.User, int, error) {
+// listUsers applies the authorization-derived scope and the request's own
+// query parameters, counts the full filtered set, then pages the returned slice.
+//
+// The parameters are parsed by the service base, which is the same parsing the
+// framework list controller does; this action only reaches for it directly
+// because declaring a Result type takes the request over from that controller.
+// Doing it by hand here instead is what previously left this endpoint with a
+// username filter and paging while every other list also answered to ordering
+// and operator filters.
+//
+// The count and the page are built from one query value and one set of options,
+// because a total computed from anything else describes a different result set
+// than the page beside it.
+func (a *AdminUserListService) listUsers(ctx *types.ServiceContext, actor *modeliamuser.User) ([]*modeliamuser.User, int, error) {
 	opts, err := userVisibilityQueryOptions(ctx, actor)
 	if err != nil {
 		return nil, 0, service.NewErrorWithCause(http.StatusInternalServerError, "failed to list users", err)
 	}
-	filters := readAdminUserListFilters(ctx)
-	userQuery, opts := adminUserListQuery(filters, opts)
+
+	userQuery, err := a.QueryModel(ctx)
+	if err != nil {
+		return nil, 0, service.NewError(http.StatusBadRequest, err.Error())
+	}
+	filters, err := a.QueryFilters(ctx)
+	if err != nil {
+		return nil, 0, service.NewError(http.StatusBadRequest, err.Error())
+	}
+	orders, err := a.QueryOrders(ctx)
+	if err != nil {
+		return nil, 0, service.NewError(http.StatusBadRequest, err.Error())
+	}
+	// The visibility filters come first: they are the scope the client cannot
+	// influence, and appending the client's own filters to them can only narrow
+	// what is already allowed.
+	opts.Filters = append(opts.Filters, filters...)
+	opts.PresentFields = a.QueryPresentFields(ctx)
 
 	var total int
 	if err = database.Database[*modeliamuser.User](ctx).WithQuery(userQuery, opts).Count(&total); err != nil {
 		return nil, 0, service.NewErrorWithCause(http.StatusInternalServerError, "failed to count users", err)
 	}
 
-	// WithPagination(0, 0) falls back to page 1 with the default limit instead
-	// of disabling pagination, so an unpaginated request needs its own chain.
-	users := make([]*modeliamuser.User, 0)
-	if filters.Page > 0 || filters.Size > 0 {
-		err = database.Database[*modeliamuser.User](ctx).
-			WithQuery(userQuery, opts).
-			WithOrder(types.Desc("created_at")).
-			WithPagination(filters.Page, filters.Size).
-			List(&users)
-	} else {
-		err = database.Database[*modeliamuser.User](ctx).
-			WithQuery(userQuery, opts).
-			WithOrder(types.Desc("created_at")).
-			List(&users)
+	if len(orders) == 0 {
+		orders = []types.Order{types.Desc("created_at")}
 	}
-	if err != nil {
+	page, size := a.QueryPagination(ctx)
+	users := make([]*modeliamuser.User, 0)
+	if err = database.Database[*modeliamuser.User](ctx).
+		WithQuery(userQuery, opts).
+		WithOrder(orders...).
+		WithPagination(page, size).
+		List(&users); err != nil {
 		return nil, 0, service.NewErrorWithCause(http.StatusInternalServerError, "failed to list users", err)
 	}
 	return users, total, nil
-}
-
-// readAdminUserListFilters reads the URL query parameters supported by GET
-// /iam/admin/users. The endpoint has no request body; pagination and username
-// filters are carried by the URL query string.
-func readAdminUserListFilters(ctx *types.ServiceContext) adminUserListFilters {
-	query := ctx.Query()
-	return adminUserListFilters{
-		Username: query.Get("username"),
-		Page:     parseAdminUserListInt(query.Get(consts.QUERY_PAGE)),
-		Size:     parseAdminUserListInt(query.Get(consts.QUERY_SIZE)),
-	}
-}
-
-func parseAdminUserListInt(value string) int {
-	parsed, err := strconv.Atoi(value)
-	if err != nil {
-		return 0
-	}
-	return parsed
-}
-
-// adminUserListQuery converts URL filters into the model query consumed by
-// database.WithQuery. Tenant visibility remains in opts (a Filters IN condition, or the
-// fail-closed RawQuery for an empty visible set) and WithQuery combines it
-// with the username condition using AND semantics. The username searches as a
-// substring through the like operator filter, the framework's one fuzzy path.
-func adminUserListQuery(filters adminUserListFilters, opts types.QueryOptions) (*modeliamuser.User, types.QueryOptions) {
-	query := new(modeliamuser.User)
-	if filters.Username == "" {
-		return query, opts
-	}
-	opts.Filters = append(opts.Filters, types.FilterLike("username", filters.Username))
-	return query, opts
 }
 
 // userVisibilityQueryOptions converts IAM admin visibility rules into a database query.

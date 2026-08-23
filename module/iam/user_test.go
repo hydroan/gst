@@ -46,16 +46,67 @@ func TestAdminUserList(t *testing.T) {
 		require.NotZero(t, view.CreatedAt)
 	})
 
-	t.Run("filter_by_username", func(t *testing.T) {
+	// A bare field name is an exact match, and a substring is asked for with the
+	// like operator. This endpoint used to read the bare name as a substring,
+	// which is the one place in the framework where it meant that.
+	t.Run("filters_by_exact_username", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
 		list, err := cli.Get[client.ListResult[iam.AdminUserView]](adminUsersPath,
-			client.WithQuery("username", "fuzzy_match"))
+			client.WithQuery("username", fuzzyUser.Username))
 		require.NoError(t, err)
 		require.Equal(t, 1, list.Total)
 		require.Len(t, list.Items, 1)
 		require.Equal(t, fuzzyUser.UserID, list.Items[0].ID)
-		require.Equal(t, fuzzyUser.Username, list.Items[0].Username)
+
+		// The substring alone matches nothing, because it is not the username.
+		list, err = cli.Get[client.ListResult[iam.AdminUserView]](adminUsersPath,
+			client.WithQuery("username", "fuzzy_match"))
+		require.NoError(t, err)
+		require.Zero(t, list.Total)
+	})
+
+	t.Run("filters_by_username_substring", func(t *testing.T) {
+		cli := accountSessionClient(t, rootSessionID)
+
+		list, err := cli.Get[client.ListResult[iam.AdminUserView]](adminUsersPath,
+			client.WithQuery("username[like]", "fuzzy_match"))
+		require.NoError(t, err)
+		require.Equal(t, 1, list.Total)
+		require.Len(t, list.Items, 1)
+		require.Equal(t, fuzzyUser.UserID, list.Items[0].ID)
+	})
+
+	// Ordering is one of the general list parameters this endpoint answers to
+	// now that it parses the request the way every other list does; it used to
+	// understand a username filter and paging and nothing else.
+	t.Run("orders_by_a_requested_column", func(t *testing.T) {
+		cli := accountSessionClient(t, rootSessionID)
+
+		descending, err := cli.Get[client.ListResult[iam.AdminUserView]](adminUsersPath,
+			client.WithQuery("username[like]", "admin_user_list"),
+			client.WithQuery("_sort_by", "username desc"))
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, len(descending.Items), 2)
+
+		ascending, err := cli.Get[client.ListResult[iam.AdminUserView]](adminUsersPath,
+			client.WithQuery("username[like]", "admin_user_list"),
+			client.WithQuery("_sort_by", "username asc"))
+		require.NoError(t, err)
+		require.Len(t, ascending.Items, len(descending.Items))
+
+		require.Equal(t, descending.Items[0].Username, ascending.Items[len(ascending.Items)-1].Username)
+		require.Greater(t, descending.Items[0].Username, descending.Items[len(descending.Items)-1].Username)
+	})
+
+	t.Run("rejects_a_filter_naming_no_column", func(t *testing.T) {
+		cli := accountSessionClient(t, rootSessionID)
+
+		// A mistyped filter is refused rather than ignored: dropping it would
+		// silently return more rows than the caller asked for.
+		_, err := cli.Get[client.ListResult[iam.AdminUserView]](adminUsersPath,
+			client.WithQuery("nosuchfield[like]", "x"))
+		testutil.RequireError(t, err, http.StatusBadRequest)
 	})
 
 	t.Run("forbidden_without_admin_permission", func(t *testing.T) {

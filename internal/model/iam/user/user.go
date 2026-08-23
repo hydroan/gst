@@ -20,6 +20,15 @@ type User struct {
 	Username string     `json:"username" gorm:"type:varchar(50);not null"`
 	Status   UserStatus `json:"status" gorm:"type:varchar(20);default:'active'"`
 
+	// Query gives the administrator user list the framework's own paging,
+	// ordering and operator filters, rather than the handful of parameters that
+	// list once parsed for itself.
+	//
+	// Paging and ordering arrive together on purpose: a page is only meaningful
+	// over an ordered set, since without an order the database may return rows
+	// however it likes, and a second page drawn from a different one repeats
+	// rows it already showed and skips rows it never did.
+	model.Query
 	model.Base
 }
 
