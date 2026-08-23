@@ -30,8 +30,10 @@ type (
 	AdminUserListRsp = modeliamuser.AdminUserListRsp
 	AdminUserGetRsp  = modeliamuser.AdminUserGetRsp
 
-	UserStatusPatchReq = modeliamuser.UserStatusPatchReq
-	UserStatusPatchRsp = modeliamuser.UserStatusPatchRsp
+	AdminUserCreateReq = modeliamuser.AdminUserCreateReq
+	AdminUserCreateRsp = modeliamuser.AdminUserCreateRsp
+	AdminUserPatchReq  = modeliamuser.AdminUserPatchReq
+	AdminUserPatchRsp  = modeliamuser.AdminUserPatchRsp
 	PasswordCredential = modeliamaccount.PasswordCredential
 	EmailIdentity      = modeliamaccount.EmailIdentity
 )

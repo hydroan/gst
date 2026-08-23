@@ -6,6 +6,7 @@ import (
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	"github.com/hydroan/gst/internal/service/iam/adminauth"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
@@ -29,7 +30,7 @@ type AdminUserListService struct {
 // userVisibilityQueryOptions because list requests do not have one concrete target
 // user to check.
 func (a *AdminUserListService) List(ctx *types.ServiceContext, _ *model.Empty) (rsp *modeliamuser.AdminUserListRsp, err error) {
-	actor, err := LoadActor(ctx)
+	actor, err := serviceiamaccount.LoadActor(ctx)
 	if err != nil {
 		return nil, err
 	}

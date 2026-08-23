@@ -54,20 +54,54 @@ type AdminUserView struct {
 	UpdatedAt          time.Time  `json:"updated_at,omitzero"`
 }
 
-// UserStatusPatchReq is the request payload for changing a user's lifecycle status.
-type UserStatusPatchReq struct {
-	Status UserStatus `json:"status" validate:"required"`
+// AdminUserCreateReq is the request payload for creating a user.
+//
+// The account is created with an identity and a way to sign in, and with
+// nothing else: which tenants it belongs to and what it may do there are role
+// bindings, which authz owns and this module deliberately does not write.
+type AdminUserCreateReq struct {
+	Username string `json:"username" validate:"required"`
+	Password string `json:"password" validate:"required"`
+	Email    string `json:"email,omitempty"`
+
+	// MustChangePassword defaults to true when omitted, because a password
+	// someone else chose is a password two people know. Sending false is how an
+	// automated caller provisioning a service account opts out.
+	MustChangePassword *bool `json:"must_change_password,omitempty"`
 }
 
-// UserStatusPatchRsp returns the user status update result.
-type UserStatusPatchRsp struct {
-	Msg string `json:"msg,omitempty"`
+// AdminUserCreateRsp returns the created user.
+type AdminUserCreateRsp struct {
+	User AdminUserView `json:"user"`
+}
+
+// AdminUserPatchReq is the request payload for updating a user.
+//
+// Every field is optional and only the ones present are written, which is what
+// PATCH means; a request naming none of them is refused rather than treated as
+// a no-op, because it cannot be told apart from one whose field names are
+// misspelled.
+type AdminUserPatchReq struct {
+	Username *string     `json:"username,omitempty"`
+	Status   *UserStatus `json:"status,omitempty"`
+}
+
+// AdminUserPatchRsp returns the updated user.
+type AdminUserPatchRsp struct {
+	User AdminUserView `json:"user"`
 }
 
 func (User) Design() {
 	Migrate()
 
 	Route("/iam/admin/users", func() {
+		Create(func() {
+			Service()
+			Flatten()
+			Filename("create.go")
+			Payload[*AdminUserCreateReq]()
+			Result[*AdminUserCreateRsp]()
+		})
 		List(func() {
 			Service()
 			Flatten()
@@ -80,16 +114,12 @@ func (User) Design() {
 			Filename("get.go")
 			Result[*AdminUserGetRsp]()
 		})
-	})
-
-	Route("/iam/admin/users/:id/status", func() {
 		Patch(func() {
 			Service()
 			Flatten()
-			Exact()
-			Filename("status.go")
-			Payload[*UserStatusPatchReq]()
-			Result[*UserStatusPatchRsp]()
+			Filename("patch.go")
+			Payload[*AdminUserPatchReq]()
+			Result[*AdminUserPatchRsp]()
 		})
 	})
 }

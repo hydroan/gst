@@ -2,7 +2,6 @@ package iam_test
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"testing"
 
@@ -32,8 +31,8 @@ const (
 	currentPath        = "/api/iam/session/current"
 )
 
-func userStatusPath(userID string) string {
-	return fmt.Sprintf("/api/iam/admin/users/%s/status", userID)
+func adminUserPath(userID string) string {
+	return "/api/iam/admin/users/" + userID
 }
 
 // sessionClient returns a client that presents the given session id.

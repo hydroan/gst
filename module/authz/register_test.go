@@ -681,7 +681,14 @@ func TestAuthzRoleBinding(t *testing.T) {
 	})
 }
 
-func TestIAMUserStatusTenantAuthorization(t *testing.T) {
+// TestIAMUserPatchTenantAuthorization covers who a tenant administrator may
+// update, which is a narrower question than whether they may call the endpoint.
+//
+// The permission is granted on the patch route itself. Updating a user is one
+// route rather than a route per field, so the grant covers every field the
+// payload carries; a deployment wanting to hand out "may disable an account"
+// without "may rename one" cannot express that through the route alone.
+func TestIAMUserPatchTenantAuthorization(t *testing.T) {
 	tenantA := authzTestUsername("tenant_iam_a")
 	tenantB := authzTestUsername("tenant_iam_b")
 	adminUserID, adminSessionID := authzSignupAndLoginUserWithUserAgent(t, authzTestUsername("tenant_iam_admin"), "12345678", tenantUserAgent)
@@ -691,7 +698,7 @@ func TestIAMUserStatusTenantAuthorization(t *testing.T) {
 	adminRoleID := authzCreateTenantRole(t, tenantA, authzTestUsername("tenant_iam_admin_role"))
 	authzBindTenantRole(t, tenantA, adminUserID, adminRoleID)
 	authzGrantTenantPolicy(t, tenantA, adminRoleID,
-		types.Permission{Object: "/api/iam/admin/users/{id}/status", Action: http.MethodPatch})
+		types.Permission{Object: "/api/iam/admin/users/{id}", Action: http.MethodPatch})
 	tenantAMemberRoleID := authzCreateTenantRole(t, tenantA, authzTestUsername("tenant_iam_member_a_role"))
 	authzBindTenantRole(t, tenantA, targetTenantAUserID, tenantAMemberRoleID)
 	tenantBMemberRoleID := authzCreateTenantRole(t, tenantB, authzTestUsername("tenant_iam_member_b_role"))
@@ -700,22 +707,22 @@ func TestIAMUserStatusTenantAuthorization(t *testing.T) {
 	authzBindTenantRole(t, tenantA, rootUsername, rootMemberRoleID)
 
 	cli := authzTenantClient(t, adminSessionID, tenantA)
-	rsp, err := cli.Patch[iam.UserStatusPatchRsp](userAdminPath+"/"+targetTenantAUserID+"/status",
-		iam.UserStatusPatchReq{Status: iam.UserStatusActive})
+	rsp, err := cli.Patch[iam.AdminUserPatchRsp](userAdminPath+"/"+targetTenantAUserID,
+		iam.AdminUserPatchReq{Status: new(iam.UserStatusActive)})
 	require.NoError(t, err)
-	require.NotEmpty(t, rsp.Msg)
+	require.Equal(t, iam.UserStatusActive, rsp.User.Status)
 
-	_, err = cli.Patch[iam.UserStatusPatchRsp](userAdminPath+"/"+rootUsername+"/status",
-		iam.UserStatusPatchReq{Status: iam.UserStatusActive})
+	_, err = cli.Patch[iam.AdminUserPatchRsp](userAdminPath+"/"+rootUsername,
+		iam.AdminUserPatchReq{Status: new(iam.UserStatusActive)})
 	testutil.RequireError(t, err, http.StatusForbidden)
 
-	_, err = cli.Patch[iam.UserStatusPatchRsp](userAdminPath+"/"+targetTenantBUserID+"/status",
-		iam.UserStatusPatchReq{Status: iam.UserStatusActive})
+	_, err = cli.Patch[iam.AdminUserPatchRsp](userAdminPath+"/"+targetTenantBUserID,
+		iam.AdminUserPatchReq{Status: new(iam.UserStatusActive)})
 	require.Error(t, err)
 
 	cli = authzTenantClient(t, adminSessionID, tenantB)
-	_, err = cli.Patch[iam.UserStatusPatchRsp](userAdminPath+"/"+targetTenantAUserID+"/status",
-		iam.UserStatusPatchReq{Status: iam.UserStatusActive})
+	_, err = cli.Patch[iam.AdminUserPatchRsp](userAdminPath+"/"+targetTenantAUserID,
+		iam.AdminUserPatchReq{Status: new(iam.UserStatusActive)})
 	require.Error(t, err)
 }
 

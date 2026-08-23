@@ -46,9 +46,10 @@ import (
 //   - POST   /api/signup
 //   - POST   /api/iam/change-password
 //   - POST   /api/iam/reset-password
+//   - POST   /api/iam/admin/users
 //   - GET    /api/iam/admin/users
 //   - GET    /api/iam/admin/users/:id
-//   - PATCH  /api/iam/admin/users/:id/status
+//   - PATCH  /api/iam/admin/users/:id
 //   - GET    /api/iam/profile
 //   - PATCH  /api/iam/profile
 //
@@ -86,9 +87,10 @@ func Register() {
 	module.Use(module.NewWrapper("/signup", "id", true, &serviceiamaccount.SignupService{}), module.CRUD(consts.PHASE_CREATE))
 	module.Use(module.NewWrapper("/iam/change-password", "id", false, &serviceiamaccount.ChangePasswordService{}), module.CRUD(consts.PHASE_CREATE))
 	module.Use(module.NewWrapper("/iam/reset-password", "id", false, &serviceiamaccount.ResetPasswordService{}), module.CRUD(consts.PHASE_CREATE))
+	module.Use(module.NewWrapper("/iam/admin/users", "id", false, &serviceiamuser.AdminUserCreateService{}), module.CRUD(consts.PHASE_CREATE))
 	module.Use(module.NewWrapper("/iam/admin/users", "id", false, &serviceiamuser.AdminUserListService{}), module.CRUD(consts.PHASE_LIST))
 	module.Use(module.NewWrapper("/iam/admin/users", "id", false, &serviceiamuser.AdminUserGetService{}), module.CRUD(consts.PHASE_GET))
-	module.Use(module.NewWrapper("/iam/admin/users/:id/status", "id", false, &serviceiamuser.UserStatusPatchService{}), module.Exact(consts.PHASE_PATCH))
+	module.Use(module.NewWrapper("/iam/admin/users", "id", false, &serviceiamuser.AdminUserPatchService{}), module.CRUD(consts.PHASE_PATCH))
 	module.Use(module.NewWrapper("/iam/profile", "id", false, &serviceiamprofile.ProfileGetService{}), module.Exact(consts.PHASE_GET))
 	module.Use(module.NewWrapper("/iam/profile", "id", false, &serviceiamprofile.ProfilePatchService{}), module.Exact(consts.PHASE_PATCH))
 
@@ -103,6 +105,12 @@ func Register() {
 	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionGetService{}), module.CRUD(consts.PHASE_GET))
 	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionDeleteAllService{}), module.Exact(consts.PHASE_DELETE))
 	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionDeleteService{}), module.CRUD(consts.PHASE_DELETE))
+
+	// TODO: add DELETE /api/iam/admin/users/:id. Deleting the IAM rows is the
+	// easy half; the account's authz role bindings have to go with it, and IAM
+	// cannot write them without depending on the authz module. It needs an
+	// adapter the way module/mfa installs one for AccountAdministrator, so that
+	// a deployment without authz still deletes cleanly.
 
 	// Register the backing IAM tables. Baseline accounts are application
 	// data: create them explicitly through the standard database chain in a

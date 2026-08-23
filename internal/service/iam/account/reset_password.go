@@ -8,7 +8,6 @@ import (
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	"github.com/hydroan/gst/internal/service/iam/adminauth"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
-	serviceiamuser "github.com/hydroan/gst/internal/service/iam/user"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
 )
@@ -25,7 +24,7 @@ func (r *ResetPasswordService) Create(ctx *types.ServiceContext, req *modeliamac
 		return nil, err
 	}
 
-	actor, target, err := serviceiamuser.LoadActorAndTarget(ctx, req.UserID)
+	actor, target, err := LoadActorAndTarget(ctx, req.UserID)
 	if err != nil {
 		return nil, err
 	}

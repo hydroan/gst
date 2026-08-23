@@ -150,7 +150,7 @@ func TestAdminUserGet(t *testing.T) {
 	})
 }
 
-func TestUserStatusPatch(t *testing.T) {
+func TestAdminUserPatch(t *testing.T) {
 	actor := accountSignupUser(t, "user_status_actor", "12345678")
 	actor.SessionID = accountLoginUser(t, &actor, actor.Password)
 	rootSessionID := accountLoginRoot(t)
@@ -164,29 +164,23 @@ func TestUserStatusPatch(t *testing.T) {
 	t.Run("forbidden_without_admin_permission", func(t *testing.T) {
 		cli := accountSessionClient(t, actor.SessionID)
 
-		_, err := cli.Patch[iam.UserStatusPatchRsp](userStatusPath(victim.UserID), iam.UserStatusPatchReq{
-			Status: modeliamuser.UserStatusInactive,
-		})
+		_, err := cli.Patch[iam.AdminUserPatchRsp](adminUserPath(victim.UserID), iam.AdminUserPatchReq{Status: new(modeliamuser.UserStatusInactive)})
 		testutil.RequireError(t, err, http.StatusForbidden, "permission denied")
 	})
 
 	t.Run("missing_target_returns_not_found", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		_, err := cli.Patch[iam.UserStatusPatchRsp](userStatusPath("missing-user-status-target"), iam.UserStatusPatchReq{
-			Status: modeliamuser.UserStatusInactive,
-		})
+		_, err := cli.Patch[iam.AdminUserPatchRsp](adminUserPath("missing-user-status-target"), iam.AdminUserPatchReq{Status: new(modeliamuser.UserStatusInactive)})
 		testutil.RequireError(t, err, http.StatusNotFound, "user not found")
 	})
 
 	t.Run("disable_user", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		rsp, err := cli.Patch[iam.UserStatusPatchRsp](userStatusPath(victim.UserID), iam.UserStatusPatchReq{
-			Status: modeliamuser.UserStatusInactive,
-		})
+		rsp, err := cli.Patch[iam.AdminUserPatchRsp](adminUserPath(victim.UserID), iam.AdminUserPatchReq{Status: new(modeliamuser.UserStatusInactive)})
 		require.NoError(t, err)
-		require.Contains(t, rsp.Msg, "success")
+		require.Equal(t, modeliamuser.UserStatusInactive, rsp.User.Status)
 	})
 
 	t.Run("session_invalid_after_disable", func(t *testing.T) {
@@ -202,11 +196,9 @@ func TestUserStatusPatch(t *testing.T) {
 	t.Run("inactive_already_inactive_unchanged_still_ok", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		rsp, err := cli.Patch[iam.UserStatusPatchRsp](userStatusPath(victim.UserID), iam.UserStatusPatchReq{
-			Status: modeliamuser.UserStatusInactive,
-		})
+		rsp, err := cli.Patch[iam.AdminUserPatchRsp](adminUserPath(victim.UserID), iam.AdminUserPatchReq{Status: new(modeliamuser.UserStatusInactive)})
 		require.NoError(t, err)
-		require.Contains(t, rsp.Msg, "unchanged")
+		require.Equal(t, modeliamuser.UserStatusInactive, rsp.User.Status)
 	})
 
 	t.Run("login_fails_when_inactive", func(t *testing.T) {
@@ -224,11 +216,9 @@ func TestUserStatusPatch(t *testing.T) {
 	t.Run("enable_user", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		rsp, err := cli.Patch[iam.UserStatusPatchRsp](userStatusPath(victim.UserID), iam.UserStatusPatchReq{
-			Status: modeliamuser.UserStatusActive,
-		})
+		rsp, err := cli.Patch[iam.AdminUserPatchRsp](adminUserPath(victim.UserID), iam.AdminUserPatchReq{Status: new(modeliamuser.UserStatusActive)})
 		require.NoError(t, err)
-		require.Contains(t, rsp.Msg, "success")
+		require.Equal(t, modeliamuser.UserStatusActive, rsp.User.Status)
 	})
 
 	t.Run("login_after_enable", func(t *testing.T) {
@@ -277,8 +267,8 @@ func TestUserStatusPatch(t *testing.T) {
 	t.Run("invalid_status_rejected", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		_, err := cli.Patch[iam.UserStatusPatchRsp](userStatusPath(victim.UserID), iam.UserStatusPatchReq{
-			Status: modeliamuser.UserStatus("not-a-valid-status"),
+		_, err := cli.Patch[iam.AdminUserPatchRsp](adminUserPath(victim.UserID), iam.AdminUserPatchReq{
+			Status: new(modeliamuser.UserStatus("not-a-valid-status")),
 		})
 		testutil.RequireError(t, err, http.StatusBadRequest, "invalid")
 	})
@@ -286,11 +276,9 @@ func TestUserStatusPatch(t *testing.T) {
 	t.Run("lock_user", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		rsp, err := cli.Patch[iam.UserStatusPatchRsp](userStatusPath(victim.UserID), iam.UserStatusPatchReq{
-			Status: modeliamuser.UserStatusLocked,
-		})
+		rsp, err := cli.Patch[iam.AdminUserPatchRsp](adminUserPath(victim.UserID), iam.AdminUserPatchReq{Status: new(modeliamuser.UserStatusLocked)})
 		require.NoError(t, err)
-		require.Contains(t, rsp.Msg, "success")
+		require.Equal(t, modeliamuser.UserStatusLocked, rsp.User.Status)
 	})
 
 	t.Run("session_invalid_after_lock", func(t *testing.T) {
@@ -318,21 +306,17 @@ func TestUserStatusPatch(t *testing.T) {
 	t.Run("unlock_user", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		rsp, err := cli.Patch[iam.UserStatusPatchRsp](userStatusPath(victim.UserID), iam.UserStatusPatchReq{
-			Status: modeliamuser.UserStatusActive,
-		})
+		rsp, err := cli.Patch[iam.AdminUserPatchRsp](adminUserPath(victim.UserID), iam.AdminUserPatchReq{Status: new(modeliamuser.UserStatusActive)})
 		require.NoError(t, err)
-		require.Contains(t, rsp.Msg, "success")
+		require.Equal(t, modeliamuser.UserStatusActive, rsp.User.Status)
 	})
 
 	t.Run("status_unchanged_idempotent", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 
-		rsp, err := cli.Patch[iam.UserStatusPatchRsp](userStatusPath(victim.UserID), iam.UserStatusPatchReq{
-			Status: modeliamuser.UserStatusActive,
-		})
+		rsp, err := cli.Patch[iam.AdminUserPatchRsp](adminUserPath(victim.UserID), iam.AdminUserPatchReq{Status: new(modeliamuser.UserStatusActive)})
 		require.NoError(t, err)
-		require.Contains(t, rsp.Msg, "unchanged")
+		require.Equal(t, modeliamuser.UserStatusActive, rsp.User.Status)
 	})
 }
 
@@ -356,4 +340,125 @@ func requireAdminUserView(t *testing.T, items []iam.AdminUserView, userID string
 
 	require.Failf(t, "admin user view not found", "user_id=%s", userID)
 	return iam.AdminUserView{}
+}
+
+// TestAdminUserCreate covers how an account comes into being in a deployment
+// that does not offer public signup, which is most of them.
+func TestAdminUserCreate(t *testing.T) {
+	rootSessionID := accountLoginRoot(t)
+	actor := accountSignupUser(t, "admin_user_create_actor", "12345678")
+	actor.SessionID = accountLoginUser(t, &actor, actor.Password)
+
+	t.Run("creates_a_user_that_can_sign_in", func(t *testing.T) {
+		cli := accountSessionClient(t, rootSessionID)
+		username := "admin_user_create_target"
+		password := "created-pass9"
+
+		created, err := cli.Post[iam.AdminUserCreateRsp](adminUsersPath, iam.AdminUserCreateReq{
+			Username: username,
+			Password: password,
+			Email:    "admin.user.create@example.com",
+			// Opted out so the account is usable straight away; the default is
+			// covered by the subtest below.
+			MustChangePassword: new(false),
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, created.User.ID)
+		require.Equal(t, username, created.User.Username)
+		require.Equal(t, "admin.user.create@example.com", created.User.Email)
+		require.Equal(t, modeliamuser.UserStatusActive, created.User.Status)
+		require.False(t, created.User.MustChangePassword)
+
+		// The credential is the point of creating the account, so the assertion
+		// is that it actually signs in rather than that a row exists.
+		newUser := accountTestUser{Username: username, Password: password, UserID: created.User.ID}
+		require.NotEmpty(t, accountLoginUser(t, &newUser, password))
+	})
+
+	t.Run("defaults_to_requiring_a_password_change", func(t *testing.T) {
+		cli := accountSessionClient(t, rootSessionID)
+
+		created, err := cli.Post[iam.AdminUserCreateRsp](adminUsersPath, iam.AdminUserCreateReq{
+			Username: "admin_user_create_must_change",
+			Password: "created-pass9",
+		})
+		require.NoError(t, err)
+		require.True(t, created.User.MustChangePassword,
+			"a password someone else chose is a password two people know")
+	})
+
+	t.Run("rejects_a_duplicate_username", func(t *testing.T) {
+		cli := accountSessionClient(t, rootSessionID)
+
+		_, err := cli.Post[iam.AdminUserCreateRsp](adminUsersPath, iam.AdminUserCreateReq{
+			Username: "admin_user_create_target",
+			Password: "created-pass9",
+		})
+		testutil.RequireError(t, err, http.StatusConflict)
+	})
+
+	t.Run("rejects_a_password_the_policy_refuses", func(t *testing.T) {
+		cli := accountSessionClient(t, rootSessionID)
+
+		_, err := cli.Post[iam.AdminUserCreateRsp](adminUsersPath, iam.AdminUserCreateReq{
+			Username: "admin_user_create_short_password",
+			Password: "short",
+		})
+		testutil.RequireError(t, err, http.StatusBadRequest)
+
+		// Nothing is left behind by the rejected attempt: the user row and the
+		// credential are created in one transaction.
+		list, err := cli.Get[client.ListResult[iam.AdminUserView]](adminUsersPath,
+			client.WithQuery("username", "admin_user_create_short_password"))
+		require.NoError(t, err)
+		require.Zero(t, list.Total)
+	})
+
+	t.Run("forbidden_without_admin_permission", func(t *testing.T) {
+		cli := accountSessionClient(t, actor.SessionID)
+
+		_, err := cli.Post[iam.AdminUserCreateRsp](adminUsersPath, iam.AdminUserCreateReq{
+			Username: "admin_user_create_forbidden",
+			Password: "created-pass9",
+		})
+		testutil.RequireError(t, err, http.StatusForbidden, "permission denied")
+	})
+}
+
+// TestAdminUserPatchUsername covers the field the patch route gained when the
+// per-field status route was folded into it.
+func TestAdminUserPatchUsername(t *testing.T) {
+	rootSessionID := accountLoginRoot(t)
+	target := accountSignupUser(t, "admin_user_rename", "12345678")
+
+	t.Run("renames_a_user", func(t *testing.T) {
+		cli := accountSessionClient(t, rootSessionID)
+		renamed := "admin_user_renamed"
+
+		rsp, err := cli.Patch[iam.AdminUserPatchRsp](adminUserPath(target.UserID), iam.AdminUserPatchReq{
+			Username: &renamed,
+		})
+		require.NoError(t, err)
+		require.Equal(t, renamed, rsp.User.Username)
+
+		// The status was not named by the request and is left as it was.
+		require.Equal(t, modeliamuser.UserStatusActive, rsp.User.Status)
+	})
+
+	t.Run("rejects_a_request_naming_no_field", func(t *testing.T) {
+		cli := accountSessionClient(t, rootSessionID)
+
+		_, err := cli.Patch[iam.AdminUserPatchRsp](adminUserPath(target.UserID), iam.AdminUserPatchReq{})
+		testutil.RequireError(t, err, http.StatusBadRequest)
+	})
+
+	t.Run("rejects_an_empty_username", func(t *testing.T) {
+		cli := accountSessionClient(t, rootSessionID)
+		empty := "   "
+
+		_, err := cli.Patch[iam.AdminUserPatchRsp](adminUserPath(target.UserID), iam.AdminUserPatchReq{
+			Username: &empty,
+		})
+		testutil.RequireError(t, err, http.StatusBadRequest)
+	})
 }

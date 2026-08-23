@@ -9,6 +9,7 @@ import (
 	"github.com/hydroan/gst/types"
 
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 )
 
 // AdminUserGetService handles GET /iam/admin/users/:id for privileged administrators.
@@ -30,7 +31,7 @@ func (a *AdminUserGetService) Get(ctx *types.ServiceContext, req *model.Empty) (
 	// Load the actor and target before authorization so EnsureTenantAdmin can
 	// reject system-root targets and verify tenant membership using the concrete
 	// target user ID.
-	actor, target, err := LoadActorAndTarget(ctx, targetUserID)
+	actor, target, err := serviceiamaccount.LoadActorAndTarget(ctx, targetUserID)
 	if err != nil {
 		return nil, err
 	}

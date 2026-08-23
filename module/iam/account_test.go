@@ -526,9 +526,7 @@ func TestAccountChangePassword(t *testing.T) {
 	t.Run("user_status_forbidden_without_admin_permission", func(t *testing.T) {
 		cli := accountSessionClient(t, user.SessionID)
 
-		_, err := cli.Patch[iam.UserStatusPatchRsp](userStatusPath(user.UserID), iam.UserStatusPatchReq{
-			Status: modeliamuser.UserStatusActive,
-		})
+		_, err := cli.Patch[iam.AdminUserPatchRsp](adminUserPath(user.UserID), iam.AdminUserPatchReq{Status: new(modeliamuser.UserStatusActive)})
 		testutil.RequireError(t, err, http.StatusForbidden, "permission denied")
 	})
 }
@@ -659,9 +657,7 @@ func TestAccountResetPassword(t *testing.T) {
 	t.Run("must_change_password_blocks_list", func(t *testing.T) {
 		cli := accountSessionClient(t, victimSessionAfterReset)
 
-		_, err := cli.Patch[iam.UserStatusPatchRsp](userStatusPath(victim.UserID), iam.UserStatusPatchReq{
-			Status: modeliamuser.UserStatusActive,
-		})
+		_, err := cli.Patch[iam.AdminUserPatchRsp](adminUserPath(victim.UserID), iam.AdminUserPatchReq{Status: new(modeliamuser.UserStatusActive)})
 		testutil.RequireError(t, err, http.StatusForbidden, "password change required")
 	})
 
@@ -679,9 +675,7 @@ func TestAccountResetPassword(t *testing.T) {
 	t.Run("victim_account_status_forbidden_without_admin_permission_after_change_password", func(t *testing.T) {
 		cli := accountSessionClient(t, victimSessionAfterReset)
 
-		_, err := cli.Patch[iam.UserStatusPatchRsp](userStatusPath(victim.UserID), iam.UserStatusPatchReq{
-			Status: modeliamuser.UserStatusActive,
-		})
+		_, err := cli.Patch[iam.AdminUserPatchRsp](adminUserPath(victim.UserID), iam.AdminUserPatchReq{Status: new(modeliamuser.UserStatusActive)})
 		testutil.RequireError(t, err, http.StatusForbidden, "permission denied")
 	})
 }
