@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/authn"
 	"github.com/hydroan/gst/client"
@@ -366,7 +367,7 @@ func TestAccountChangePassword(t *testing.T) {
 		testutil.RequireError(t, err, http.StatusBadRequest, "password must be at least 6 characters long")
 	})
 
-	t.Run("succeeds_when_current_session_sync_fails_after_db_update", func(t *testing.T) {
+	t.Run("succeeds_when_current_session_snapshot_is_unreadable", func(t *testing.T) {
 		syncFailUser := accountSignupUser(t, "acct_changepwd_sync_fail", "12345678")
 		syncFailUser.SessionID = accountLoginUser(t, &syncFailUser, syncFailUser.Password)
 		syncFailPassword := "syncpass9"
@@ -404,6 +405,57 @@ func TestAccountChangePassword(t *testing.T) {
 		changed := accountRequirePasswordCredential(t, syncFailUser.UserID)
 		require.NoError(t, bcrypt.CompareHashAndPassword([]byte(changed.PasswordHash), []byte(syncFailPassword)))
 		require.False(t, changed.MustChangePassword)
+	})
+
+	// The password is written before any session is revoked, so a revoke that
+	// fails reports a password that did change. The reverse order would report
+	// the same failure for a password that had not changed at all, having
+	// already logged the user out of the devices it was changing it for.
+	t.Run("keeps_new_password_when_revoking_other_sessions_fails", func(t *testing.T) {
+		revokeFailUser := accountSignupUser(t, "acct_changepwd_revoke_fail", "12345678")
+		revokeFailUser.SessionID = accountLoginUser(t, &revokeFailUser, revokeFailUser.Password)
+		revokeFailOtherSessionID := accountLoginUser(t, &revokeFailUser, revokeFailUser.Password)
+		revokeFailPassword := "revokepass9"
+
+		session, err := serviceiamsession.Store.LoadSession(t.Context(), revokeFailUser.SessionID)
+		require.NoError(t, err)
+
+		// The other session's snapshot is left unreadable, which is what the
+		// revoke below trips over. The current session is skipped by the revoke,
+		// so it has to be a different one for this to reach the failure at all.
+		otherSessionKey := accountSessionDataKey(t, revokeFailOtherSessionID)
+		require.NoError(t, redis.Set(t.Context(), otherSessionKey, "not-a-session", time.Hour))
+		// Only this user's wreckage is cleared. The subtests around this one
+		// share a session of their own, so purging the store would take theirs
+		// with it.
+		t.Cleanup(func() {
+			require.NoError(t, redis.Del(context.Background(), otherSessionKey))
+			require.NoError(t, serviceiamsession.Store.DropSessionIndexes(context.Background(), revokeFailUser.UserID, revokeFailOtherSessionID))
+			require.NoError(t, serviceiamsession.Store.DeleteUserSessions(context.Background(), revokeFailUser.UserID))
+		})
+
+		serviceCtx := accountNewServiceContext(
+			serviceiamsession.WithCurrentSession(t.Context(), revokeFailUser.SessionID, session),
+			http.MethodPost,
+			"/api/iam/change-password",
+			revokeFailUser.SessionID,
+			consts.PHASE_CREATE,
+		)
+		svc := &serviceiamaccount.ChangePasswordService{}
+		svc.Logger = loggerzap.New("")
+
+		_, err = svc.Create(serviceCtx, &iam.ChangePasswordReq{
+			OldPassword: revokeFailUser.Password,
+			NewPassword: revokeFailPassword,
+		})
+		require.Error(t, err)
+
+		var serviceErr *service.Error
+		require.True(t, errors.As(err, &serviceErr))
+		require.Equal(t, http.StatusInternalServerError, serviceErr.Status())
+
+		changed := accountRequirePasswordCredential(t, revokeFailUser.UserID)
+		require.NoError(t, bcrypt.CompareHashAndPassword([]byte(changed.PasswordHash), []byte(revokeFailPassword)))
 	})
 
 	t.Run("change_password", func(t *testing.T) {

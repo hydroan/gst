@@ -49,24 +49,31 @@ func (c *ChangePasswordService) Create(ctx *types.ServiceContext, req *modeliama
 		return nil, err
 	}
 
-	if err = serviceiamsession.Store.DeleteUserSessionsExcept(ctx, currentUser.GetID(), sessionID); err != nil {
-		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to revoke other sessions", err)
-	}
-
-	// Update password in database
-	if err := database.Database[*modeliamaccount.PasswordCredential](ctx).
+	// The new password is written before anything is revoked. Revoking first
+	// would log the user out of their other devices for a password change that
+	// the write below could still fail to make, leaving them with the old
+	// password and none of the sessions they had.
+	if err = database.Database[*modeliamaccount.PasswordCredential](ctx).
 		WithoutHook().
 		WithSelect(colUserID, colPasswordHash, colMustChangePassword, colPasswordChangedAt).
 		Update(credential); err != nil {
 		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update password", err)
 	}
 
-	// Dropping the cache is the whole of the sync. The kept session's snapshot
-	// still says a password change is required, but no reader trusts that copy:
-	// authentication overwrites it from this cache on every request, and the
-	// next request will miss and read the cleared flag straight from the row
-	// written above.
+	// Dropping the cache is the whole of the sync for the session that stays.
+	// Its snapshot still says a password change is required, but no reader
+	// trusts that copy: authentication overwrites it from this cache on every
+	// request, and the next request will miss and read the cleared flag straight
+	// from the row written above.
 	serviceiamsession.Store.DropUserState(ctx, currentUser.GetID())
+
+	// Revoking last means a failure here reports a password that did change and
+	// devices that may not have been logged out — the honest answer, and the one
+	// a caller can act on by asking again. The reverse order could only report
+	// the same failure for a password that had not changed at all.
+	if err = serviceiamsession.Store.DeleteUserSessionsExcept(ctx, currentUser.GetID(), sessionID); err != nil {
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to revoke other sessions", err)
+	}
 
 	log.Info("password changed successfully", "username", currentUser.Username)
 	return &modeliamaccount.ChangePasswordRsp{Msg: "password changed successfully"}, nil
