@@ -98,26 +98,22 @@ func (User) Design() {
 		Create(func() {
 			Service()
 			Flatten()
-			Filename("create.go")
 			Payload[*AdminUserCreateReq]()
 			Result[*AdminUserCreateRsp]()
 		})
 		List(func() {
 			Service()
 			Flatten()
-			Filename("list.go")
 			Result[*AdminUserListRsp]()
 		})
 		Get(func() {
 			Service()
 			Flatten()
-			Filename("get.go")
 			Result[*AdminUserGetRsp]()
 		})
 		Patch(func() {
 			Service()
 			Flatten()
-			Filename("patch.go")
 			Payload[*AdminUserPatchReq]()
 			Result[*AdminUserPatchRsp]()
 		})
