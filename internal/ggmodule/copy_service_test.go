@@ -45,6 +45,7 @@ func (s *ActionService) CreateAfter(ctx *types.ServiceContext, req *modelcopytes
 
 // describe copies source receiver helpers.
 func (s *ActionService) describe(step string) string {
+	fmt.Println(s)
 	return helperValue + ":" + step
 }
 
@@ -121,8 +122,14 @@ func (c *Creator) CreateAfter(ctx *types.ServiceContext, req *copytest.CopyTest)
 	if !strings.Contains(code, "// Keep source hook body comments.") {
 		t.Fatalf("source hook body comment was not copied:\n%s", code)
 	}
-	if !strings.Contains(code, "// describe copies source receiver helpers.\nfunc (s *Creator) describe(step string) string") {
-		t.Fatalf("source receiver helper was not copied onto target receiver:\n%s", code)
+	if !strings.Contains(code, "// describe copies source receiver helpers.\nfunc (c *Creator) describe(step string) string") {
+		t.Fatalf("source receiver helper was not aligned to the target receiver name:\n%s", code)
+	}
+	if !strings.Contains(code, "fmt.Println(c)") {
+		t.Fatalf("receiver reference inside the copied helper body was not renamed:\n%s", code)
+	}
+	if strings.Contains(code, "(s *Creator)") {
+		t.Fatalf("copied helper kept the source receiver name and mixes receiver names on the target struct:\n%s", code)
 	}
 	if !strings.Contains(code, "// packageHelper copies ordinary package functions.\nfunc packageHelper() string") {
 		t.Fatalf("ordinary package function comment was not copied:\n%s", code)

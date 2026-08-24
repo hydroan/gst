@@ -160,6 +160,11 @@ func mergeSourceServiceDecls(
 					appendSourceComments(targetFile, sourceComments, d.Body)
 					continue
 				}
+				// Extra methods keep their source body instead of being grafted
+				// onto a generated signature, so the receiver variable must be
+				// renamed to the shell's receiver name here; otherwise the merged
+				// struct mixes receiver names and trips receiver-naming linters.
+				alignReceiverName(d, structReceiverName(targetFile, targetStruct))
 				retargetReceiver(d, targetStruct)
 				docInserts.methods[methodDocKey{receiver: targetStruct, name: d.Name.Name}] = commentGroupLines(d.Doc)
 				d.Doc = nil
@@ -214,6 +219,38 @@ func retargetReceiver(fn *ast.FuncDecl, targetStruct string) {
 		}
 	case *ast.Ident:
 		typ.Name = targetStruct
+	}
+}
+
+// structReceiverName returns the receiver variable name the target shell uses
+// for methods on recvType, or "" when no method declares a named receiver.
+// Generated shells name every receiver consistently, so the first named one is
+// authoritative.
+func structReceiverName(file *ast.File, recvType string) string {
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || receiverTypeName(fn) != recvType {
+			continue
+		}
+		if name := methodReceiverName(fn); name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
+// alignReceiverName renames a copied method's receiver variable, declaration
+// and body references alike, to name. A blank name on either side keeps the
+// source receiver untouched: an unnamed receiver has no references to rename,
+// and without a shell receiver name there is nothing to align to.
+func alignReceiverName(fn *ast.FuncDecl, name string) {
+	current := methodReceiverName(fn)
+	if current == "" || name == "" || current == name {
+		return
+	}
+	fn.Recv.List[0].Names[0].Name = name
+	if fn.Body != nil {
+		renameIdent(fn.Body, current, name)
 	}
 }
 

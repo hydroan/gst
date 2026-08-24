@@ -201,7 +201,10 @@
 //   - The source owns method bodies, hook methods, receiver helper methods,
 //     ordinary declarations and comments. Bodies are grafted onto the
 //     generated signatures with receiver and parameter/result names renamed
-//     to the generated ones.
+//     to the generated ones. Methods without a generated signature are
+//     carried over whole, with their receiver variable renamed to the
+//     shell's receiver name so the merged struct keeps one consistent
+//     receiver and passes receiver-naming linters.
 //   - Every source service struct collapses onto the single generated
 //     target struct; one method name declared on two source structs fails
 //     the copy, because the collapse would make them collide.
