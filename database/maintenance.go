@@ -37,6 +37,9 @@ import (
 func (db *database[M]) Cleanup() (err error) {
 	defer db.reset()
 
+	if db.includeDeleted {
+		return errors.Wrap(ErrWithDeletedOnWrite, "Cleanup")
+	}
 	if err = db.prepare(); err != nil {
 		return err
 	}

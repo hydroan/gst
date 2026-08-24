@@ -104,6 +104,10 @@ type DatabaseOption[M Model] interface {
 	WithExpand(expand []string, orders ...Order) Database[M]
 	// WithPurge controls whether Delete permanently removes records instead of soft deleting them.
 	WithPurge(...bool) Database[M]
+	// WithDeleted includes soft-deleted records in read operations (List, Get,
+	// First, Last, Take, Count). Only the soft-delete condition is lifted;
+	// combining it with a write operation or Cleanup fails the chain.
+	WithDeleted() Database[M]
 	// WithBuildSQL builds SQL for the next terminal operation and appends Query, Args, and RenderedSQL to the collector.
 	WithBuildSQL(statements *[]SQLStatement) Database[M]
 	// WithDryRun builds SQL without database I/O, framework hooks, cache mutation, or object field filling.

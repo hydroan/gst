@@ -84,6 +84,12 @@ var (
 	// released as soon as the statement finished.
 	ErrLockOutsideTransaction = errors.New("WithLock requires a transaction: wrap the operation in database.Transaction")
 
+	// ErrWithDeletedOnWrite is returned when WithDeleted is combined with a
+	// write operation or Cleanup. The option only widens what a read can see;
+	// soft-deleted rows cannot be written, and removing them for good is what
+	// Cleanup and WithPurge are for.
+	ErrWithDeletedOnWrite = errors.New("WithDeleted applies only to read operations")
+
 	// ErrAfterCommit marks a failure that happened after the transaction
 	// committed. Callers distinguish it with errors.Is because the two outcomes
 	// call for opposite handling: an ordinary error means the write was rolled
@@ -182,10 +188,11 @@ type database[M types.Model] struct {
 	err error
 
 	// options
-	enablePurge *bool // delete resource permanently, not only update deleted_at field, only works on 'Delete' method.
-	batchSize   int   // batch size for bulk operations. affects Create, Update, Delete.
-	noHook      bool  // disable model hook.
-	dryRun      bool  // build SQL without database I/O, hooks, or object field filling.
+	enablePurge    *bool // delete resource permanently, not only update deleted_at field, only works on 'Delete' method.
+	includeDeleted bool  // include soft-deleted records in read operations; see WithDeleted.
+	batchSize      int   // batch size for bulk operations. affects Create, Update, Delete.
+	noHook         bool  // disable model hook.
+	dryRun         bool  // build SQL without database I/O, hooks, or object field filling.
 
 	// sql
 	buildingSQL   bool // collect generated SQL statements for WithBuildSQL.
@@ -244,6 +251,7 @@ func (db *database[M]) reset() {
 	db.typ = nil
 
 	db.enablePurge = nil
+	db.includeDeleted = false
 	db.batchSize = 0
 	db.noHook = false
 	db.dryRun = false

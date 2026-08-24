@@ -461,6 +461,34 @@ func (db *database[M]) WithPurge(enable ...bool) types.Database[M] {
 	return db
 }
 
+// WithDeleted includes soft-deleted records in read operations: List, Get,
+// First, Last, Take and Count stop filtering on deleted_at, so live and
+// soft-deleted rows come back together. A returned row's DeletedAt field
+// reports which it is; the json:"-" tag keeps that field out of serialized
+// responses either way.
+//
+// Only the soft-delete condition is lifted. Query conditions, filters,
+// ordering, pagination and tenant scoping all stay in force — the tenant
+// predicate deliberately ignores GORM's Unscoped flag (see tenant.ID) — and
+// associations preloaded with WithExpand keep their default scope, because
+// GORM runs preload queries on fresh sessions that do not inherit the flag.
+//
+// On models whose rows are hard-deleted there is nothing extra to see, so the
+// option is a harmless no-op. Combining it with a write operation or Cleanup
+// fails the chain with ErrWithDeletedOnWrite: soft-deleted rows cannot be
+// written, and removing them for good is what Cleanup and WithPurge are for.
+//
+// Example:
+//
+//	all := make([]*Sample, 0)
+//	Database[*Sample](ctx).WithDeleted().WithQuery(&Sample{Kind: "billing"}).List(&all)  // live + soft-deleted
+func (db *database[M]) WithDeleted() types.Database[M] {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	db.includeDeleted = true
+	return db
+}
+
 // contains checks if a string item exists in a string slice.
 // Uses a map-based approach for O(n) time complexity with O(n) space complexity.
 // More efficient than linear search for larger slices.

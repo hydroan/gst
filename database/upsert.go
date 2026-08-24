@@ -64,6 +64,9 @@ import (
 func (db *database[M]) Upsert(objs ...M) (err error) {
 	defer db.reset()
 
+	if db.includeDeleted {
+		return errors.Wrap(ErrWithDeletedOnWrite, "Upsert")
+	}
 	objs = compactModels(objs)
 	if len(objs) == 0 {
 		return nil

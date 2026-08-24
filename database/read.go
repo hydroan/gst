@@ -24,6 +24,15 @@ func (db *database[M]) applySelect() {
 	}
 }
 
+// applyDeletedScope lifts GORM's soft-delete condition when WithDeleted asked
+// for it. Only the read terminals call it, before building their statements;
+// the write terminals refuse the option instead (ErrWithDeletedOnWrite).
+func (db *database[M]) applyDeletedScope() {
+	if db.includeDeleted {
+		db.ins = db.ins.Unscoped()
+	}
+}
+
 // List retrieves multiple records from the database based on applied conditions.
 // Returns all records if no conditions are specified, or filtered records with WithQuery.
 // Supports pagination, sorting, and eager loading of associations.
@@ -67,6 +76,7 @@ func (db *database[M]) List(dest *[]M) (err error) {
 	}
 
 	db.applySelect()
+	db.applyDeletedScope()
 	if db.dryRun {
 		db.applyCursorPagination()
 		tx := dryRunSession(db.ins).Find(dest)
@@ -163,6 +173,7 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 	defer func() { done(err) }()
 
 	db.applySelect()
+	db.applyDeletedScope()
 	if db.dryRun {
 		tableName := db.m.TableName()
 		dryRunDest := cloneDryRunModel(dest)
@@ -233,6 +244,7 @@ func (db *database[M]) Count(count *int) (err error) {
 	done, _ := db.trace(phaseCount)
 	defer func() { done(err) }()
 
+	db.applyDeletedScope()
 	// GORM's Count only accepts *int64, so bridge through a local variable.
 	var count64 int64
 	if db.dryRun {
@@ -280,6 +292,7 @@ func (db *database[M]) First(dest M) (err error) {
 	defer func() { done(err) }()
 
 	db.applySelect()
+	db.applyDeletedScope()
 	if db.dryRun {
 		tx := dryRunSession(db.ins).First(dest)
 		return db.collectSQL(tx)
@@ -341,6 +354,7 @@ func (db *database[M]) Last(dest M) (err error) {
 	defer func() { done(err) }()
 
 	db.applySelect()
+	db.applyDeletedScope()
 	if db.dryRun {
 		tx := dryRunSession(db.ins).Last(dest)
 		return db.collectSQL(tx)
@@ -402,6 +416,7 @@ func (db *database[M]) Take(dest M) (err error) {
 	defer func() { done(err) }()
 
 	db.applySelect()
+	db.applyDeletedScope()
 	if db.dryRun {
 		tx := dryRunSession(db.ins).Take(dest)
 		return db.collectSQL(tx)

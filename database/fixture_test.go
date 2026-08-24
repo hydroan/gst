@@ -12,6 +12,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
@@ -313,6 +314,20 @@ type TestSoftDeleteItem struct {
 }
 
 func (*TestSoftDeleteItem) TableName() string { return "test_soft_delete_items" }
+
+// TestTenantSoftDeleteItem is tenant-scoped and keeps the model.Base default
+// Purge (soft delete), so the WithDeleted tests can assert that lifting the
+// soft-delete condition never lifts tenant scoping: the tenant predicate
+// ignores GORM's Unscoped flag by design (see tenant.ID). Its table is
+// migrated on demand and cleaned up with raw SQL like TestSoftDeleteItem.
+type TestTenantSoftDeleteItem struct {
+	Name string `json:"name" gorm:"size:191"`
+
+	tenant.Scope
+	model.Base
+}
+
+func (*TestTenantSoftDeleteItem) TableName() string { return "test_tenant_soft_delete_items" }
 
 // TestAggregateRecord is the fixture for aggregate reads: a group key, a
 // second dimension for conditional aggregation, a numeric measure, a float

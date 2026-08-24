@@ -110,8 +110,8 @@ func (s *Scope) GetTenantID() string { return string(s.TenantID) }
 //
 // It deliberately does not consult Statement.Unscoped. That flag turns off soft
 // deletion, and a caller reaching for deleted rows is not asking to reach into
-// other tenants — the framework's own hard-delete path uses it, and tenant
-// scoping has to survive that.
+// other tenants — the framework's hard-delete path and WithDeleted reads both
+// set it, and tenant scoping has to survive both.
 type predicateClause struct{ field *schema.Field }
 
 func (predicateClause) Name() string               { return "" }

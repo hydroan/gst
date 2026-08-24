@@ -71,6 +71,9 @@ func compactModels[M types.Model](objs []M) []M {
 func (db *database[M]) Create(objs ...M) (err error) {
 	defer db.reset()
 
+	if db.includeDeleted {
+		return errors.Wrap(ErrWithDeletedOnWrite, "Create")
+	}
 	objs = compactModels(objs)
 	if len(objs) == 0 {
 		return nil
@@ -192,6 +195,9 @@ func (db *database[M]) Create(objs ...M) (err error) {
 func (db *database[M]) Delete(objs ...M) (err error) {
 	defer db.reset()
 
+	if db.includeDeleted {
+		return errors.Wrap(ErrWithDeletedOnWrite, "Delete")
+	}
 	objs = compactModels(objs)
 	if len(objs) == 0 {
 		return nil
@@ -338,6 +344,9 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 func (db *database[M]) Update(objs ...M) (err error) {
 	defer db.reset()
 
+	if db.includeDeleted {
+		return errors.Wrap(ErrWithDeletedOnWrite, "Update")
+	}
 	objs = compactModels(objs)
 	if len(objs) == 0 {
 		return nil
@@ -473,6 +482,9 @@ func (db *database[M]) updateRowStatement(session *gorm.DB, obj M) *gorm.DB {
 func (db *database[M]) UpdateByID(id string, assignments ...types.Assignment) (err error) {
 	defer db.reset()
 
+	if db.includeDeleted {
+		return errors.Wrap(ErrWithDeletedOnWrite, "UpdateByID")
+	}
 	if len(id) == 0 {
 		return ErrIDRequired
 	}

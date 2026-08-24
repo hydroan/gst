@@ -8,6 +8,7 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
@@ -1504,5 +1505,154 @@ func TestDatabaseWithPurge(t *testing.T) {
 
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge(false).Get(u, u3.ID))
 		require.Equal(t, u3.ID, u.ID)
+	})
+}
+
+func TestDatabaseWithDeleted(t *testing.T) {
+	require.NoError(t, database.DB().AutoMigrate(&TestSoftDeleteItem{}))
+	defer func() {
+		_ = database.DB().Exec("DELETE FROM test_soft_delete_items").Error
+	}()
+
+	// seed resets the table to one live and one soft-deleted row.
+	seed := func(t *testing.T) (alive, buried *TestSoftDeleteItem) {
+		t.Helper()
+		require.NoError(t, database.DB().Exec("DELETE FROM test_soft_delete_items").Error)
+		alive = &TestSoftDeleteItem{Code: "with-deleted-alive", Name: "alive"}
+		buried = &TestSoftDeleteItem{Code: "with-deleted-buried", Name: "buried"}
+		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).Create(alive, buried))
+		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).Delete(buried))
+		return alive, buried
+	}
+
+	t.Run("ListAndCountSeeSoftDeleted", func(t *testing.T) {
+		alive, buried := seed(t)
+
+		items := make([]*TestSoftDeleteItem, 0)
+		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).List(&items))
+		require.Len(t, items, 1, "a default List must keep hiding soft-deleted rows")
+		require.Equal(t, alive.ID, items[0].ID)
+
+		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).WithDeleted().List(&items))
+		require.Len(t, items, 2, "WithDeleted should return live and soft-deleted rows together")
+		byID := make(map[string]*TestSoftDeleteItem, len(items))
+		for _, item := range items {
+			byID[item.ID] = item
+		}
+		require.False(t, byID[alive.ID].DeletedAt.Valid, "the live row keeps a zero DeletedAt")
+		require.True(t, byID[buried.ID].DeletedAt.Valid, "the soft-deleted row reports its DeletedAt")
+
+		count := new(int)
+		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).Count(count))
+		require.Equal(t, 1, *count)
+		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).WithDeleted().Count(count))
+		require.Equal(t, 2, *count)
+	})
+
+	t.Run("GetFirstLastTakeSeeSoftDeleted", func(t *testing.T) {
+		_, buried := seed(t)
+		query := &TestSoftDeleteItem{Code: buried.Code}
+
+		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](context.Background()).Get(new(TestSoftDeleteItem), buried.ID), database.ErrRecordNotFound)
+		found := new(TestSoftDeleteItem)
+		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).WithDeleted().Get(found, buried.ID))
+		require.Equal(t, buried.Code, found.Code)
+		require.True(t, found.DeletedAt.Valid)
+
+		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](context.Background()).WithQuery(query).First(new(TestSoftDeleteItem)), database.ErrRecordNotFound)
+		found = new(TestSoftDeleteItem)
+		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).WithDeleted().WithQuery(query).First(found))
+		require.Equal(t, buried.ID, found.ID)
+
+		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](context.Background()).WithQuery(query).Last(new(TestSoftDeleteItem)), database.ErrRecordNotFound)
+		found = new(TestSoftDeleteItem)
+		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).WithDeleted().WithQuery(query).Last(found))
+		require.Equal(t, buried.ID, found.ID)
+
+		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](context.Background()).WithQuery(query).Take(new(TestSoftDeleteItem)), database.ErrRecordNotFound)
+		found = new(TestSoftDeleteItem)
+		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).WithDeleted().WithQuery(query).Take(found))
+		require.Equal(t, buried.ID, found.ID)
+	})
+
+	t.Run("QueryConditionsStillApply", func(t *testing.T) {
+		alive, _ := seed(t)
+
+		items := make([]*TestSoftDeleteItem, 0)
+		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).
+			WithDeleted().
+			WithQuery(&TestSoftDeleteItem{Code: alive.Code}).
+			List(&items))
+		require.Len(t, items, 1, "WithDeleted widens the scope, never the query conditions")
+		require.Equal(t, alive.ID, items[0].ID)
+	})
+
+	t.Run("WritesRefused", func(t *testing.T) {
+		alive, _ := seed(t)
+		ctx := context.Background()
+
+		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().Create(&TestSoftDeleteItem{Code: "with-deleted-refused"}), database.ErrWithDeletedOnWrite)
+		alive.Name = "renamed"
+		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().Update(alive), database.ErrWithDeletedOnWrite)
+		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().UpdateByID(alive.ID, colName.Set("renamed")), database.ErrWithDeletedOnWrite)
+		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().Upsert(alive), database.ErrWithDeletedOnWrite)
+		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().Delete(alive), database.ErrWithDeletedOnWrite)
+		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().Cleanup(), database.ErrWithDeletedOnWrite)
+
+		count := new(int)
+		require.NoError(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().Count(count))
+		require.Equal(t, 2, *count, "refused writes must leave the table untouched")
+	})
+
+	t.Run("HardDeletedRowsStayGone", func(t *testing.T) {
+		defer cleanupTestData()
+		setupTestData(t)
+
+		// TestUser purges by default, so this Delete removes the row for good.
+		require.NoError(t, database.Database[*TestUser](context.Background()).Delete(u1))
+
+		users := make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithDeleted().List(&users))
+		require.Len(t, users, 2, "a hard-deleted row is gone for WithDeleted too")
+	})
+
+	t.Run("TenantScopeSurvives", func(t *testing.T) {
+		require.NoError(t, database.DB().AutoMigrate(&TestTenantSoftDeleteItem{}))
+		defer func() {
+			_ = database.DB().Exec("DELETE FROM test_tenant_soft_delete_items").Error
+		}()
+
+		ctxA := tenant.In(context.Background(), "tenant-a")
+		ctxB := tenant.In(context.Background(), "tenant-b")
+		mine := &TestTenantSoftDeleteItem{Name: "mine"}
+		theirs := &TestTenantSoftDeleteItem{Name: "theirs"}
+		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxA).Create(mine))
+		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxB).Create(theirs))
+		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxA).Delete(mine))
+		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxB).Delete(theirs))
+
+		rows := make([]*TestTenantSoftDeleteItem, 0)
+		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxA).List(&rows))
+		require.Empty(t, rows, "both rows are soft-deleted for a default List")
+
+		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxA).WithDeleted().List(&rows))
+		require.Len(t, rows, 1, "WithDeleted must not reach other tenants' rows")
+		require.Equal(t, "mine", rows[0].Name)
+		require.True(t, rows[0].DeletedAt.Valid)
+	})
+
+	t.Run("BuildSQLDropsSoftDeleteCondition", func(t *testing.T) {
+		seed(t)
+
+		var defaultStmts []types.SQLStatement
+		items := make([]*TestSoftDeleteItem, 0)
+		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).WithBuildSQL(&defaultStmts).List(&items))
+		require.Len(t, defaultStmts, 1)
+		require.Contains(t, defaultStmts[0].RenderedSQL, "deleted_at", "a default read keeps the soft-delete condition")
+
+		var withDeletedStmts []types.SQLStatement
+		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).WithDeleted().WithBuildSQL(&withDeletedStmts).List(&items))
+		require.Len(t, withDeletedStmts, 1)
+		require.NotContains(t, withDeletedStmts[0].RenderedSQL, "deleted_at", "WithDeleted lifts the soft-delete condition from the built SQL")
 	})
 }
