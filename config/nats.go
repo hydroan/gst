@@ -42,6 +42,11 @@ type Nats struct {
 	CredentialsFile string   `json:"credentials_file" mapstructure:"credentials_file" ini:"credentials_file" yaml:"credentials_file"`
 	NKeyFile        string   `json:"nkey_file" mapstructure:"nkey_file" ini:"nkey_file" yaml:"nkey_file"`
 
+	// MaxReconnects is handed to the NATS client verbatim: -1 reconnects
+	// forever, 0 disables reconnecting, a positive value bounds the attempts.
+	// The default is -1 because a bounded budget turns any outage longer than
+	// max_reconnects*reconnect_wait into a permanently closed connection that
+	// only a process restart can recover.
 	MaxReconnects      int           `json:"max_reconnects" mapstructure:"max_reconnects" ini:"max_reconnects" yaml:"max_reconnects"`
 	ReconnectWait      time.Duration `json:"reconnect_wait" mapstructure:"reconnect_wait" ini:"reconnect_wait" yaml:"reconnect_wait"`
 	ReconnectJitter    time.Duration `json:"reconnect_jitter" mapstructure:"reconnect_jitter" ini:"reconnect_jitter" yaml:"reconnect_jitter"`
@@ -69,7 +74,7 @@ func (*Nats) setDefault(v *viper.Viper) {
 	v.SetDefault("nats.credentials_file", "")
 	v.SetDefault("nats.nkey_file", "")
 
-	v.SetDefault("nats.max_reconnects", 5)
+	v.SetDefault("nats.max_reconnects", -1)
 	v.SetDefault("nats.reconnect_wait", 1*time.Second)
 	v.SetDefault("nats.reconnect_jitter", 0)
 	v.SetDefault("nats.reconnect_jitter_tls", 0)

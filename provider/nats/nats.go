@@ -59,6 +59,16 @@ func Init() (err error) {
 // It's the caller's responsibility to close the client,
 // caller should always call Close() when it's no longer needed.
 func New(cfg config.Nats) (*nats.Conn, error) {
+	opts, err := connectOptions(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return nats.Connect(strings.Join(cfg.Addrs, ","), opts...)
+}
+
+// connectOptions translates the framework configuration into NATS client
+// options.
+func connectOptions(cfg config.Nats) ([]nats.Option, error) {
 	var err error
 	opts := []nats.Option{}
 
@@ -82,9 +92,11 @@ func New(cfg config.Nats) (*nats.Conn, error) {
 		opts = append(opts, opt)
 	}
 
-	if cfg.MaxReconnects > 0 {
-		opts = append(opts, nats.MaxReconnects(cfg.MaxReconnects))
-	}
+	// Handed over verbatim: -1 reconnects forever (the framework default),
+	// 0 disables reconnecting, a positive value bounds the attempts. Gating
+	// this on > 0 would silently swap -1 and 0 for the NATS library default
+	// of 60 attempts, which permanently closes the connection once spent.
+	opts = append(opts, nats.MaxReconnects(cfg.MaxReconnects))
 	if cfg.ReconnectWait > 0 {
 		opts = append(opts, nats.ReconnectWait(cfg.ReconnectWait))
 	}
@@ -126,7 +138,7 @@ func New(cfg config.Nats) (*nats.Conn, error) {
 		logger.Nats.Errorw("nats error", "error", err, "subject", sub.Subject)
 	}))
 
-	return nats.Connect(strings.Join(cfg.Addrs, ","), opts...)
+	return opts, nil
 }
 
 // Client returns the initialized NATS connection, the client handle of

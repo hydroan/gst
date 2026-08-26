@@ -15,6 +15,8 @@ func TestLoadAppliesFrameworkDefaults(t *testing.T) {
 
 	require.Equal(t, DBSqlite, c.Database.Type)
 	require.True(t, c.Sqlite.Enabled)
+	// -1 keeps the NATS client reconnecting forever; see config.Nats.MaxReconnects.
+	require.Equal(t, -1, c.Nats.MaxReconnects)
 }
 
 func TestLoadReadsFileContent(t *testing.T) {
