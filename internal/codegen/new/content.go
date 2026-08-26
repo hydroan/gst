@@ -202,12 +202,7 @@ linters:
         - name: var-naming
 
     staticcheck:
-      # SA4023 is the only check requiring the nilness fact, whose analyzer in
-      # staticcheck v0.8.0-rc.1 panics on getsentry/sentry-go ("unhandled
-      # builtin recover"); dropping the check prunes the fact from the run.
-      # govet's nilness analyzer still covers nil-consistency independently.
-      # Re-enable once a stable staticcheck release fixes the fact analyzer.
-      checks: ["all", "-QF1008", "-SA4023"]
+      checks: ["all", "-QF1008"]
       dot-import-whitelist:
         - github.com/hydroan/gst/dsl
 
