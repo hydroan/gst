@@ -80,9 +80,25 @@ func New(cfg config.MySQL) (*gorm.DB, error) {
 // by its date functions. A local loc would make the same instant a different
 // stored wall clock per dialect (and per server timezone), which is what
 // breaks time bucket labels, boundary comparisons, and URL time filters.
+//
+// The timeout parameters mirror config.MySQL: timeout (dial) is on by
+// default so a black-holed host fails in seconds instead of blocking until
+// the OS gives up; readTimeout and writeTimeout are appended only when
+// configured, because their default is deliberately off — see the field
+// comments on config.MySQL.
 func buildDSN(cfg config.MySQL) string {
-	return fmt.Sprintf(
+	dsn := fmt.Sprintf(
 		"%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=UTC&clientFoundRows=true",
 		cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database, cfg.Charset,
 	)
+	if cfg.DialTimeout > 0 {
+		dsn += "&timeout=" + cfg.DialTimeout.String()
+	}
+	if cfg.ReadTimeout > 0 {
+		dsn += "&readTimeout=" + cfg.ReadTimeout.String()
+	}
+	if cfg.WriteTimeout > 0 {
+		dsn += "&writeTimeout=" + cfg.WriteTimeout.String()
+	}
+	return dsn
 }

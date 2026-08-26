@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -17,6 +18,11 @@ func TestLoadAppliesFrameworkDefaults(t *testing.T) {
 	require.True(t, c.Sqlite.Enabled)
 	// -1 keeps the NATS client reconnecting forever; see config.Nats.MaxReconnects.
 	require.Equal(t, -1, c.Nats.MaxReconnects)
+	// Dial is bounded by default, per-connection I/O deadlines are not; see
+	// the field comments on config.MySQL.
+	require.Equal(t, 10*time.Second, c.MySQL.DialTimeout)
+	require.Zero(t, c.MySQL.ReadTimeout)
+	require.Zero(t, c.MySQL.WriteTimeout)
 }
 
 func TestLoadReadsFileContent(t *testing.T) {
