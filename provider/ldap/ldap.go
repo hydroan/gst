@@ -152,46 +152,51 @@ func Close() error {
 	return nil
 }
 
-// checkConnection verifies the LDAP connection is still valid
-// and reconnects if necessary.
+// checkConnection verifies the LDAP connection is healthy and replaces it when
+// it is not. A nil connection, the state a failed reconnect leaves behind, is
+// retried as well: the heartbeat keeps trying to bring LDAP back instead of
+// giving up after the first failed reconnect and staying disconnected until
+// the process restarts.
+//
+// The lock is held across the probe and the reconnect. Callers through
+// Client() wait behind it for at most one request timeout, and only on the
+// heartbeat tick of an unhealthy connection they could not have used anyway.
 func checkConnection() {
-	if gconn == nil {
-		return
-	}
+	mu.Lock()
+	defer mu.Unlock()
 
 	cfg := config.App.Ldap
 
-	// Create a simple search request to test the connection
-	searchRequest := ldap.NewSearchRequest(
-		cfg.BaseDN,
-		ldap.ScopeBaseObject,
-		ldap.NeverDerefAliases,
-		1,
-		int(cfg.RequestTimeout.Seconds()),
-		false,
-		"(objectClass=*)",
-		[]string{"1.1"},
-		nil,
-	)
-
-	// Test the connection
-	if _, err := gconn.Search(searchRequest); err != nil {
-		zap.S().Warnw("LDAP connection check failed, reconnecting", "error", err)
-
-		// Close the old connection
-		gconn.Close()
-
-		// Try to create a new connection
-		newClient, err := New(cfg)
-		if err != nil {
-			zap.S().Errorw("failed to reconnect to LDAP server", "error", err)
-			gconn = nil
+	if gconn != nil {
+		// Probe the connection with a minimal base-object search.
+		searchRequest := ldap.NewSearchRequest(
+			cfg.BaseDN,
+			ldap.ScopeBaseObject,
+			ldap.NeverDerefAliases,
+			1,
+			int(cfg.RequestTimeout.Seconds()),
+			false,
+			"(objectClass=*)",
+			[]string{"1.1"},
+			nil,
+		)
+		_, err := gconn.Search(searchRequest)
+		if err == nil {
 			return
 		}
-
-		gconn = newClient
-		zap.S().Infow("successfully reconnected to LDAP server")
+		zap.S().Warnw("LDAP connection check failed, reconnecting", "error", err)
+		gconn.Close()
+		gconn = nil
 	}
+
+	newClient, err := New(cfg)
+	if err != nil {
+		zap.S().Errorw("failed to reconnect to LDAP server", "error", err)
+		return
+	}
+
+	gconn = newClient
+	zap.S().Infow("successfully reconnected to LDAP server")
 }
 
 // Search performs an LDAP search with the given parameters
