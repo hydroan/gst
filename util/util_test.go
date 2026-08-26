@@ -8,9 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestUtil(t *testing.T) {
@@ -271,6 +274,21 @@ func TestLogDuration(t *testing.T) {
 			t.Errorf("LogDuration(%v) = %v; want %v", tc.input, got, tc.expected)
 		}
 	}
+}
+
+func TestLogStartupFailure(t *testing.T) {
+	core, logs := observer.New(zapcore.ErrorLevel)
+	restoreGlobals := zap.ReplaceGlobals(zap.New(core))
+	t.Cleanup(restoreGlobals)
+
+	logStartupFailure("main.run", errors.New("listen failed"))
+
+	entries := logs.All()
+	require.Len(t, entries, 1)
+	require.Equal(t, "startup failed", entries[0].Message)
+	fields := entries[0].ContextMap()
+	require.Equal(t, "main.run", fields["func"])
+	require.Contains(t, fmt.Sprintf("%v", fields["error"]), "listen failed")
 }
 
 func BenchmarkRound(b *testing.B) {
