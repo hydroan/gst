@@ -94,9 +94,13 @@ func (db *database[M]) versionedOnConflict(versionColumn string) (clause.OnConfl
 	}
 
 	now := dbruntime.NowUTC()
+	// The bump expression qualifies the column with the target table: in
+	// postgres an unqualified name inside DO UPDATE SET is ambiguous between
+	// the existing row and the excluded pseudo-row (SQLSTATE 42702), and the
+	// qualified form reads as the existing row on every dialect.
 	doUpdates := clause.Set{{
 		Column: clause.Column{Name: versionColumn},
-		Value:  gorm.Expr(db.quoteIdent(versionColumn) + " + 1"),
+		Value:  clause.Expr{SQL: "? + 1", Vars: []any{clause.Column{Table: clause.CurrentTable, Name: versionColumn}}},
 	}}
 	columns := make([]string, 0, len(stmt.Schema.DBNames))
 	for _, dbName := range stmt.Schema.DBNames {

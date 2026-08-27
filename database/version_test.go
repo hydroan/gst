@@ -276,33 +276,51 @@ func TestVersionBatchUpdateRollsBack(t *testing.T) {
 	require.EqualValues(t, 1, second.Version)
 }
 
+// legacyAdoptedNote is the adoption fixture. It deliberately has a table of
+// its own: the scenario is a table no versioned test has ever touched, and a
+// shared table would also trip pgx's statement cache on the DROP COLUMN
+// below (a runtime-DDL-only hazard the framework's migrate-then-deploy
+// order never hits in production).
+type legacyAdoptedNote struct {
+	Title   string        `json:"title" gorm:"size:191"`
+	Version model.Version `json:"version" gorm:"not null;default:1"`
+
+	model.Base
+}
+
+func (*legacyAdoptedNote) TableName() string { return "legacy_adopted_notes" }
+
 func TestVersionLegacyTableAdoption(t *testing.T) {
 	// The adoption path: a table that already holds rows gains the version
 	// column through a migration. The default:1 in the declared tag is what
 	// backfills those rows to a live version — without it they would be
 	// backfilled to zero and locked out of Update forever. This test pins
 	// that the documented tag shape keeps legacy rows updatable.
-	setupVersionedNotes(t)
 	ctx := context.Background()
+	require.NoError(t, database.DB().AutoMigrate(&legacyAdoptedNote{}))
+	t.Cleanup(func() {
+		require.NoError(t, database.DB().Migrator().DropTable(&legacyAdoptedNote{}))
+	})
 
 	// Rewind the table to its pre-adoption shape and insert a legacy row the
 	// way a pre-lock deployment would have: without a version column.
-	require.NoError(t, database.DB().Exec("ALTER TABLE versioned_notes DROP COLUMN version").Error)
+	require.NoError(t, database.DB().Exec("ALTER TABLE legacy_adopted_notes DROP COLUMN version").Error)
 	require.NoError(t, database.DB().Exec(
-		"INSERT INTO versioned_notes (id, title, body, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())",
-		"legacy-note", "written-before-adoption", "").Error)
+		"INSERT INTO legacy_adopted_notes (id, title, created_at, updated_at) VALUES (?, ?, NOW(), NOW())",
+		"legacy-note", "written-before-adoption").Error)
 
 	// Adoption: the migration adds the column, and the database backfills
 	// the existing row with the declared default.
-	require.NoError(t, database.DB().AutoMigrate(&versionedNote{}))
+	require.NoError(t, database.DB().AutoMigrate(&legacyAdoptedNote{}))
 
-	adopted := reloadNote(t, "legacy-note")
+	adopted := new(legacyAdoptedNote)
+	require.NoError(t, database.Database[*legacyAdoptedNote](ctx).Get(adopted, "legacy-note"))
 	require.EqualValues(t, 1, adopted.Version, "legacy rows must come back at version 1, not zero")
 
 	// The legacy row is a first-class citizen of the lock from here on.
 	adopted.Title = "updated-after-adoption"
-	require.NoError(t, database.Database[*versionedNote](ctx).Update(adopted))
-	require.EqualValues(t, 2, reloadNote(t, "legacy-note").Version)
+	require.NoError(t, database.Database[*legacyAdoptedNote](ctx).Update(adopted))
+	require.EqualValues(t, 2, adopted.Version)
 }
 
 func TestUnversionedNotFoundUnchanged(t *testing.T) {
