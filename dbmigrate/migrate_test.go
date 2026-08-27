@@ -213,6 +213,60 @@ func TestMigrateDropsRemovedIndex(t *testing.T) {
 	require.False(t, migrated)
 }
 
+// TestMigrateDropsRemovedIndexOnPostgres pins the same drop path on
+// postgres, where the shape differs from mysql on both sides: the dumper
+// renders a tag index as a standalone CREATE INDEX statement, and the plan
+// drops it with postgres DDL.
+func TestMigrateDropsRemovedIndexOnPostgres(t *testing.T) {
+	dumper, err := dbmigrate.NewSchemaDumper()
+	require.NoError(t, err)
+	defer dumper.Close()
+
+	withIndex, err := dumper.Dump(config.DBPostgres, &TagIndexedWidget{})
+	require.NoError(t, err)
+	require.Contains(t, withIndex, "idx_widgets_tag")
+	withoutIndex, err := dumper.Dump(config.DBPostgres, &PlainWidget{})
+	require.NoError(t, err)
+	require.NotContains(t, withoutIndex, "idx_widgets_tag")
+
+	database := fmt.Sprintf("gst_dbmigrate_dropindex_pg_%d", time.Now().UnixNano())
+	adminConfig := postgresDatabaseConfig(os.Getenv(config.POSTGRES_DATABASE))
+	createPostgresDatabase(t, adminConfig, database)
+	t.Cleanup(func() {
+		dropPostgresDatabase(t, adminConfig, database)
+	})
+	databaseConfig := postgresDatabaseConfig(database)
+
+	migrated, _, err := dbmigrate.Migrate([]string{withIndex}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOption{})
+	require.NoError(t, err)
+	require.True(t, migrated)
+	require.Equal(t, 1, postgresIndexCount(t, databaseConfig, "widgets", "idx_widgets_tag"))
+
+	// Without EnableDrop the index survives: the plan still reports the
+	// change, but renders the destructive statement as skipped instead of
+	// executing it.
+	migrated, _, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOption{})
+	require.NoError(t, err)
+	require.True(t, migrated)
+	require.Equal(t, 1, postgresIndexCount(t, databaseConfig, "widgets", "idx_widgets_tag"))
+
+	// With EnableDrop the removal is planned...
+	migrated, _, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
+	require.NoError(t, err)
+	require.True(t, migrated)
+
+	// ...and applying it drops the index for good.
+	migrated, _, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOption{EnableDrop: true})
+	require.NoError(t, err)
+	require.True(t, migrated)
+	require.Equal(t, 0, postgresIndexCount(t, databaseConfig, "widgets", "idx_widgets_tag"))
+
+	// The converged schema plans nothing on a re-run.
+	migrated, _, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
+	require.NoError(t, err)
+	require.False(t, migrated)
+}
+
 func TestMigrateTableRenameAdvisory(t *testing.T) {
 	database := fmt.Sprintf("gst_dbmigrate_rename_%d", time.Now().UnixNano())
 	createMySQLDatabase(t, mysqlDatabaseConfig(), database)
@@ -458,6 +512,24 @@ func mysqlIndexCount(t *testing.T, cfg *dbmigrate.DatabaseConfig, table, index s
 	require.NoError(t, db.QueryRow(
 		"SELECT COUNT(DISTINCT index_name) FROM information_schema.statistics WHERE table_schema = ? AND table_name = ? AND index_name = ?",
 		cfg.Database, table, index,
+	).Scan(&count))
+	return count
+}
+
+// postgresIndexCount reports whether the named index exists on one table, as
+// the number of matching index names pg_indexes holds: 1 when present, 0
+// when dropped.
+func postgresIndexCount(t *testing.T, cfg *dbmigrate.DatabaseConfig, table, index string) int {
+	t.Helper()
+
+	db, err := sql.Open("postgres", postgresDSN(cfg))
+	require.NoError(t, err)
+	defer db.Close()
+
+	var count int
+	require.NoError(t, db.QueryRow(
+		"SELECT COUNT(*) FROM pg_indexes WHERE schemaname = 'public' AND tablename = $1 AND indexname = $2",
+		table, index,
 	).Scan(&count))
 	return count
 }
