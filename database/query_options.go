@@ -12,6 +12,7 @@ import (
 	"github.com/hydroan/gst/types/consts"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"gorm.io/plugin/dbresolver"
 )
 
 // WithCursor enables cursor-based pagination for efficient large dataset
@@ -487,6 +488,71 @@ func (db *database[M]) WithDeleted() types.Database[M] {
 	defer db.mu.Unlock()
 	db.includeDeleted = true
 	return db
+}
+
+// WithReplica routes this chain's read to a configured read replica;
+// WithReplica(false) forces the primary instead. Calling it declares that
+// this particular read tolerates replication staleness — or, with false,
+// that it must not, overriding the model's PreferReplica default (the same
+// declaration-then-override pairing WithPurge has with the model's Purge).
+//
+// Read routing resolves in strict precedence order, highest first:
+//
+//  1. Transaction: a chain inside database.Transaction always runs on the
+//     primary connection the transaction was opened on; nothing below can
+//     move it.
+//  2. Chain option: WithReplica() sends this read to a replica,
+//     WithReplica(false) forces the primary, overriding the model default.
+//  3. Model default: a model declaring PreferReplica() true reads from
+//     replicas by default.
+//  4. Global default: reads run on the primary.
+//
+// Writes, locking reads, and migrations never leave the primary regardless
+// of any declaration above. With no replicas configured, every level falls
+// back to the primary, so replica preferences are always safe to declare:
+// the option asks for staleness tolerance, and the primary answering with
+// fresher data is never wrong.
+//
+// Reads only: combining it with a write operation, in either direction,
+// fails the chain with ErrWithReplicaOnWrite. On a ClickHouse instance the
+// read fails with ErrUnsupportedOnDialect, per the capability-miss rule —
+// replica topology is that dialect's own cluster concern, and an error keeps
+// anyone from believing the framework routes it. SQLite is the deliberate
+// opposite, a no-op like WithLock there: the single file is the only node,
+// so the primary answering IS the fallback contract, and business code
+// carrying WithReplica keeps running unchanged under the sqlite test
+// database.
+//
+// Example:
+//
+//	rows := make([]*AuditLog, 0)
+//	Database[*AuditLog](ctx).WithReplica().WithQuery(query).List(&rows)  // replica-eligible read
+//	Database[*Report](ctx).WithReplica(false).Get(report, id)            // fresh read of a PreferReplica model
+func (db *database[M]) WithReplica(prefer ...bool) types.Database[M] {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	use := true
+	if len(prefer) > 0 {
+		use = prefer[0]
+	}
+	db.replicaRead = &use
+	if use {
+		db.ins = db.ins.Clauses(dbresolver.Read)
+	} else {
+		db.ins = db.ins.Clauses(dbresolver.Write)
+	}
+	return db
+}
+
+// rejectReplicaReadTarget answers the capability-miss error for a WithReplica
+// read on a dialect that carries no replica role. Read terminals call it
+// after prepare, once the dialect is known.
+func (db *database[M]) rejectReplicaReadTarget() error {
+	if db.replicaRead != nil && db.dialect() == dialectClickHouse {
+		return errors.Wrap(ErrUnsupportedOnDialect, "read with WithReplica on clickhouse")
+	}
+	return nil
 }
 
 // contains checks if a string item exists in a string slice.

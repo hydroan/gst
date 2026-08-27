@@ -74,6 +74,9 @@ func (db *database[M]) Create(objs ...M) (err error) {
 	if db.includeDeleted {
 		return errors.Wrap(ErrWithDeletedOnWrite, "Create")
 	}
+	if db.replicaRead != nil {
+		return errors.Wrap(ErrWithReplicaOnWrite, "Create")
+	}
 	objs = compactModels(objs)
 	if len(objs) == 0 {
 		return nil
@@ -206,6 +209,9 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 
 	if db.includeDeleted {
 		return errors.Wrap(ErrWithDeletedOnWrite, "Delete")
+	}
+	if db.replicaRead != nil {
+		return errors.Wrap(ErrWithReplicaOnWrite, "Delete")
 	}
 	objs = compactModels(objs)
 	if len(objs) == 0 {
@@ -423,6 +429,9 @@ func (db *database[M]) Update(objs ...M) (err error) {
 	if db.includeDeleted {
 		return errors.Wrap(ErrWithDeletedOnWrite, "Update")
 	}
+	if db.replicaRead != nil {
+		return errors.Wrap(ErrWithReplicaOnWrite, "Update")
+	}
 	objs = compactModels(objs)
 	if len(objs) == 0 {
 		return nil
@@ -609,6 +618,9 @@ func (db *database[M]) UpdateByID(id string, assignments ...types.Assignment) (e
 
 	if db.includeDeleted {
 		return errors.Wrap(ErrWithDeletedOnWrite, "UpdateByID")
+	}
+	if db.replicaRead != nil {
+		return errors.Wrap(ErrWithReplicaOnWrite, "UpdateByID")
 	}
 	if len(id) == 0 {
 		return ErrIDRequired

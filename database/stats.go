@@ -2,12 +2,17 @@ package database
 
 import (
 	"database/sql"
+
+	"github.com/hydroan/gst/internal/dbruntime"
 )
 
-// RolePrimary names the writable node of a database in NodeStats. Today the
-// default database is that single node; read replicas will report their own
-// role once read/write splitting lands.
-const RolePrimary = "primary"
+// Node roles reported in NodeStats: the writable primary, and the read
+// replicas attached through the mysql.replicas / postgres.replicas
+// configuration.
+const (
+	RolePrimary = dbruntime.RolePrimary
+	RoleReplica = dbruntime.RoleReplica
+)
 
 // NodeStats is the connection pool snapshot of one database node.
 type NodeStats struct {
@@ -25,6 +30,9 @@ type NodeStats struct {
 // framework registers at initialization reads the same source; this is the
 // programmatic view of it.
 //
+// With read replicas configured it reports one snapshot per node, the
+// primary first in registration order; without them, the single primary.
+//
 // It returns nil when the database is not initialized: a snapshot of nothing
 // is empty rather than an error, unlike Health, which is asked for an
 // authoritative answer and panics there like Database[M].
@@ -32,6 +40,13 @@ func Stats() []NodeStats {
 	db := DB()
 	if db == nil {
 		return nil
+	}
+	if nodes := dbruntime.NodesFor(db); len(nodes) > 0 {
+		stats := make([]NodeStats, 0, len(nodes))
+		for _, node := range nodes {
+			stats = append(stats, NodeStats{Role: node.Role, DBStats: node.DB.Stats()})
+		}
+		return stats
 	}
 	sqlDB, err := db.DB()
 	if err != nil {

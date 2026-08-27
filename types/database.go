@@ -104,6 +104,10 @@ type DatabaseOption[M Model] interface {
 	// First, Last, Take, Count). Only the soft-delete condition is lifted;
 	// combining it with a write operation or Cleanup fails the chain.
 	WithDeleted() Database[M]
+	// WithReplica routes this read to a configured read replica —
+	// WithReplica(false) forces the primary instead, overriding a model's
+	// PreferReplica default. Reads only; a write operation fails the chain.
+	WithReplica(prefer ...bool) Database[M]
 	// WithDryRun builds SQL without database I/O, framework hooks, cache
 	// mutation, or object field filling. An optional collector receives the
 	// generated Query, Args, and RenderedSQL of the next terminal operation.

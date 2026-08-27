@@ -127,6 +127,7 @@ require (
 	gorm.io/driver/postgres v1.6.2
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.2
+	gorm.io/plugin/dbresolver v1.6.2
 	mvdan.cc/gofumpt v0.11.0
 )
 

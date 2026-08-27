@@ -65,7 +65,39 @@ func New(cfg config.MySQL) (*gorm.DB, error) {
 	if err := db.Use(otelgorm.NewPlugin()); err != nil {
 		zap.S().Warnw("failed to install GORM OpenTelemetry tracing plugin", "dialect", "mysql", "error", err)
 	}
-	return db, nil
+	return attachReplicas(db, cfg)
+}
+
+// attachReplicas wires the configured read replicas into the handle and pins
+// its default route to the primary. Without replicas it returns the handle
+// untouched, so a replica-free deployment pays nothing.
+//
+// Each replica shares the primary's DSN settings — credentials, database,
+// charset, timeouts, and the UTC wire location, all of which reads depend on
+// — and differs by address only. The returned handle carries a Write pin:
+// with the resolver installed, gorm would otherwise route every plain read
+// to a replica, and that silent default breaks read-your-writes everywhere
+// (a session read right after login, a list right after create). Reads move
+// only where a model declares PreferReplica or a call site opts in with
+// WithReplica; transactions never move at all, because the resolver leaves
+// statements inside one alone. See WithReplica for the full routing
+// precedence.
+func attachReplicas(db *gorm.DB, cfg config.MySQL) (*gorm.DB, error) {
+	if len(cfg.Replicas) == 0 {
+		return db, nil
+	}
+	dialectors := make([]gorm.Dialector, 0, len(cfg.Replicas))
+	for _, endpoint := range cfg.Replicas {
+		host, port, err := dbruntime.ParseReplicaEndpoint(endpoint)
+		if err != nil {
+			return nil, errors.Wrap(err, "mysql replicas")
+		}
+		replicaCfg := cfg
+		replicaCfg.Host, replicaCfg.Port = host, port
+		replicaCfg.Replicas = nil
+		dialectors = append(dialectors, mysql.Open(buildDSN(replicaCfg)))
+	}
+	return dbruntime.AttachResolver(db, dialectors)
 }
 
 // buildDSN assembles the go-sql-driver DSN. clientFoundRows=true makes UPDATE

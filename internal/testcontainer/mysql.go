@@ -88,6 +88,50 @@ func setupDedicatedMySQL() (func() error, error) {
 	return terminate, nil
 }
 
+// SetupStandaloneMySQL starts a mysql container of its own with the given
+// database name and credentials, and returns its connection settings without
+// touching the process environment or the framework's default database.
+// Tests use it for topologies the single default database cannot express —
+// a non-replicating stand-in replica for routing assertions, a second
+// instance for cross-instance behavior. The returned function terminates
+// the container.
+func SetupStandaloneMySQL(database, username, password string) (config.MySQL, func() error, error) {
+	prepareContainerRuntime()
+	ctx := context.Background()
+
+	options := []testcontainers.ContainerCustomizer{
+		mysql.WithDatabase(database),
+		mysql.WithPassword(password),
+	}
+	// The mysql module refuses to provision root as a plain user; root works
+	// through the root password alone.
+	if username != mysqlRootUsername {
+		options = append(options, mysql.WithUsername(username))
+	}
+	c, err := mysql.Run(ctx, mysqlImage, options...)
+	if err != nil {
+		return config.MySQL{}, nil, errors.Wrap(err, "failed to start standalone mysql container")
+	}
+	terminate := func() error { return c.Terminate(ctx) }
+
+	host, port, err := endpoint(ctx, c, mysqlPort)
+	if err != nil {
+		return config.MySQL{}, nil, errors.CombineErrors(err, terminate())
+	}
+
+	cfg := config.MySQL{
+		Host:     host,
+		Port:     port,
+		Database: database,
+		Username: username,
+		Password: password,
+		Charset:  "utf8mb4",
+		Enabled:  true,
+	}
+	reportServiceReady("mysql-standalone", fmt.Sprintf("%s:%d/%s", host, port, database))
+	return cfg, terminate, nil
+}
+
 // setupSharedMySQL attaches to the shared mysql container, creating it when
 // it is not running yet, and provisions a database of its own for this test
 // binary. The returned function drops that database; the container stays.

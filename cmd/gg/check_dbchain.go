@@ -50,6 +50,7 @@ var databaseChainMethods = map[string]bool{
 	"WithExpand":     true,
 	"WithPurge":      true,
 	"WithDeleted":    true,
+	"WithReplica":    true,
 	"WithDryRun":     true,
 	"WithoutHook":    true,
 }

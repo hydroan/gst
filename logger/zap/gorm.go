@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
@@ -258,7 +259,10 @@ func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 	elapsed := time.Since(begin)
 	sql, rows := fc()
 
-	fields := make([]zap.Field, 0, 10)
+	// Sized to the exact worst case so the hot path never regrows: caller,
+	// the seven base fields, db_role, record_not_found, and the one field the
+	// error/slow branches append (mutually exclusive in the switch below).
+	fields := make([]zap.Field, 0, 11)
 	if caller, ok := callerOutside(isSkippedSQLFrame); ok {
 		fields = append(fields, zap.String("caller", caller))
 	}
@@ -272,6 +276,11 @@ func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 		util.LogDuration(elapsed),
 		zap.Int64("rows", rows),
 	)
+	// Present only on handles with read replicas attached, where "which node
+	// served this query" stops being answerable by assumption.
+	if role := dbruntime.RoleFromContext(ctx); len(role) > 0 {
+		fields = append(fields, zap.String("db_role", role))
+	}
 	notFound := errors.Is(err, gorml.ErrRecordNotFound)
 	if notFound {
 		fields = append(fields, zap.Bool("record_not_found", true))

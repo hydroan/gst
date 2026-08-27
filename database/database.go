@@ -9,8 +9,10 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/types"
 	"gorm.io/gorm"
+	"gorm.io/plugin/dbresolver"
 )
 
 var (
@@ -107,6 +109,13 @@ var (
 	// soft-deleted rows cannot be written, and removing them for good is what
 	// Cleanup and WithPurge are for.
 	ErrWithDeletedOnWrite = errors.New("WithDeleted applies only to read operations")
+
+	// ErrWithReplicaOnWrite is returned when WithReplica is combined with a
+	// write operation, in either direction. Writes are never routable — they
+	// run on the primary unconditionally — so the option on a write is a
+	// misunderstanding worth failing loudly rather than a no-op worth
+	// tolerating.
+	ErrWithReplicaOnWrite = errors.New("WithReplica applies only to read operations")
 
 	// ErrAfterCommit marks a failure that happened after the transaction
 	// committed. Callers distinguish it with errors.Is because the two outcomes
@@ -208,6 +217,7 @@ type database[M types.Model] struct {
 	// options
 	enablePurge    *bool // delete resource permanently, not only update deleted_at field, only works on 'Delete' method.
 	includeDeleted bool  // include soft-deleted records in read operations; see WithDeleted.
+	replicaRead    *bool // WithReplica's routing choice for this read; nil when the option was not used.
 	batchSize      int   // batch size for bulk operations. affects Create, Update, Delete.
 	noHook         bool  // disable model hook.
 	dryRun         bool  // build SQL without database I/O, hooks, or object field filling.
@@ -269,6 +279,7 @@ func (db *database[M]) reset() {
 
 	db.enablePurge = nil
 	db.includeDeleted = false
+	db.replicaRead = nil
 	db.batchSize = 0
 	db.noHook = false
 	db.dryRun = false
@@ -398,6 +409,14 @@ func databaseFor[M types.Model](ctx context.Context, base *gorm.DB) types.Databa
 		ins = running.Debug().WithContext(gctx).Limit(defaultLimit)
 	} else {
 		ins = running.WithContext(gctx).Limit(defaultLimit)
+	}
+	// A model that declared PreferReplica reads from a replica by default;
+	// the clause overrides the handle-level Write pin for this chain, a call
+	// site's WithReplica(false) overrides it back, and inside a transaction
+	// the resolver leaves the statement alone entirely. With no replicas
+	// configured the clause is inert and the read stays on the primary.
+	if modelregistry.PrefersReplica(*new(M)) {
+		ins = ins.Clauses(dbresolver.Read)
 	}
 
 	chain := &database[M]{

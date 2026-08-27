@@ -10,6 +10,7 @@ const (
 	POSTGRES_PASSWORD = "POSTGRES_PASSWORD" //nolint:staticcheck,gosec
 	POSTGRES_SSLMODE  = "POSTGRES_SSLMODE"  //nolint:staticcheck
 	POSTGRES_TIMEZONE = "POSTGRES_TIMEZONE" //nolint:staticcheck
+	POSTGRES_REPLICAS = "POSTGRES_REPLICAS" //nolint:staticcheck
 	POSTGRES_ENABLED  = "POSTGRES_ENABLED"  //nolint:staticcheck
 )
 
@@ -21,7 +22,16 @@ type Postgres struct {
 	Password string `json:"password" mapstructure:"password" ini:"password" yaml:"password"`
 	SSLMode  string `json:"sslmode" mapstructure:"sslmode" ini:"sslmode" yaml:"sslmode"`
 	TimeZone string `json:"timezone" mapstructure:"timezone" ini:"timezone" yaml:"timezone"`
-	Enabled  bool   `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
+
+	// Replicas lists read-replica endpoints as host:port entries (comma
+	// separated in ini), sharing every other connection setting with the
+	// primary. Same contract as the MySQL field: replicas make reads
+	// eligible for routing, moved only by PreferReplica models or WithReplica
+	// call sites; replication, health, and failover belong to the
+	// infrastructure.
+	Replicas []string `json:"replicas" mapstructure:"replicas" ini:"replicas" yaml:"replicas"`
+
+	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*Postgres) setDefault(v *viper.Viper) {

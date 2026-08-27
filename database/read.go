@@ -69,6 +69,9 @@ func (db *database[M]) List(dest *[]M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
+	if err = db.rejectReplicaReadTarget(); err != nil {
+		return err
+	}
 	done, span := db.trace(consts.PHASE_LIST)
 	defer func() { done(err) }()
 	if dest == nil {
@@ -169,6 +172,9 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
+	if err = db.rejectReplicaReadTarget(); err != nil {
+		return err
+	}
 	done, span := db.trace(consts.PHASE_GET)
 	defer func() { done(err) }()
 
@@ -241,6 +247,9 @@ func (db *database[M]) Count(count *int) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
+	if err = db.rejectReplicaReadTarget(); err != nil {
+		return err
+	}
 	done, _ := db.trace(phaseCount)
 	defer func() { done(err) }()
 
@@ -286,6 +295,9 @@ func (db *database[M]) First(dest M) (err error) {
 		return ErrNilDest
 	}
 	if err = db.prepare(); err != nil {
+		return err
+	}
+	if err = db.rejectReplicaReadTarget(); err != nil {
 		return err
 	}
 	done, span := db.trace(phaseFirst)
@@ -350,6 +362,9 @@ func (db *database[M]) Last(dest M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
+	if err = db.rejectReplicaReadTarget(); err != nil {
+		return err
+	}
 	done, span := db.trace(phaseLast)
 	defer func() { done(err) }()
 
@@ -410,6 +425,9 @@ func (db *database[M]) Take(dest M) (err error) {
 		return ErrNilDest
 	}
 	if err = db.prepare(); err != nil {
+		return err
+	}
+	if err = db.rejectReplicaReadTarget(); err != nil {
 		return err
 	}
 	done, span := db.trace(phaseTake)

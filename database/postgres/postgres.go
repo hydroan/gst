@@ -59,7 +59,32 @@ func New(cfg config.Postgres) (*gorm.DB, error) {
 	if err := db.Use(otelgorm.NewPlugin()); err != nil {
 		zap.S().Warnw("failed to install GORM OpenTelemetry tracing plugin", "dialect", "postgres", "error", err)
 	}
-	return db, nil
+	return attachReplicas(db, cfg)
+}
+
+// attachReplicas wires the configured read replicas into the handle and pins
+// its default route to the primary; without replicas the handle is returned
+// untouched. Same contract as the MySQL twin: replicas share every DSN
+// setting with the primary and differ by address only, the Write pin keeps
+// reads on the primary by default, and reads move only through PreferReplica
+// models or WithReplica call sites. See WithReplica for the routing
+// precedence.
+func attachReplicas(db *gorm.DB, cfg config.Postgres) (*gorm.DB, error) {
+	if len(cfg.Replicas) == 0 {
+		return db, nil
+	}
+	dialectors := make([]gorm.Dialector, 0, len(cfg.Replicas))
+	for _, endpoint := range cfg.Replicas {
+		host, port, err := dbruntime.ParseReplicaEndpoint(endpoint)
+		if err != nil {
+			return nil, errors.Wrap(err, "postgres replicas")
+		}
+		replicaCfg := cfg
+		replicaCfg.Host, replicaCfg.Port = host, port
+		replicaCfg.Replicas = nil
+		dialectors = append(dialectors, postgres.Open(buildDSN(replicaCfg)))
+	}
+	return dbruntime.AttachResolver(db, dialectors)
 }
 
 func buildDSN(cfg config.Postgres) string {

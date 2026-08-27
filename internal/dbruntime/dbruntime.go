@@ -130,11 +130,22 @@ func InitDatabase(db *gorm.DB) (err error) {
 	return nil
 }
 
-// registerPoolMetrics exposes the default database's connection pool to the
-// metrics registry, under the stable name "default". Failures only log:
+// registerPoolMetrics exposes the default database's connection pools to the
+// metrics registry: the single pool of a plain handle under the stable name
+// "default", and with replicas attached, every node — the primary as
+// "default" and replicas as "default_replica_N". Failures only log:
 // observability must never block startup, and a deployment without a metrics
-// endpoint simply leaves the collector unserved.
+// endpoint simply leaves the collectors unserved.
 func registerPoolMetrics(db *gorm.DB) {
+	if nodes := NodesFor(db); len(nodes) > 0 {
+		names := ReplicaPoolMetricNames("default", nodes)
+		for i, node := range nodes {
+			if err := prommetrics.RegisterDBStats(node.DB, names[i]); err != nil {
+				zap.S().Warnw("failed to register database pool metrics collector", "db_name", names[i], "error", err)
+			}
+		}
+		return
+	}
 	sqlDB, err := db.DB()
 	if err != nil {
 		zap.S().Warnw("failed to reach sql.DB for pool metrics", "error", err)

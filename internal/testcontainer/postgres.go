@@ -54,6 +54,50 @@ func setupPostgres() (func() error, error) {
 	return setupSharedPostgres()
 }
 
+// SetupStandalonePostgres starts a postgres container of its own with the
+// given database name and credentials, and returns its connection settings
+// without touching the process environment or the framework's default
+// database. Tests use it for topologies the single default database cannot
+// express — a non-replicating stand-in replica for routing assertions, a
+// second instance for cross-instance behavior. The returned function
+// terminates the container.
+func SetupStandalonePostgres(database, username, password string) (config.Postgres, func() error, error) {
+	prepareContainerRuntime()
+	ctx := context.Background()
+
+	c, err := postgres.Run(
+		ctx, postgresImage,
+		postgres.WithDatabase(database),
+		postgres.WithUsername(username),
+		postgres.WithPassword(password),
+		// postgres restarts itself once during initdb, so it only counts as
+		// ready after logging readiness twice and after the port is served.
+		postgres.BasicWaitStrategies(),
+	)
+	if err != nil {
+		return config.Postgres{}, nil, errors.Wrap(err, "failed to start standalone postgres container")
+	}
+	terminate := func() error { return c.Terminate(ctx) }
+
+	host, port, err := endpoint(ctx, c, postgresPort)
+	if err != nil {
+		return config.Postgres{}, nil, errors.CombineErrors(err, terminate())
+	}
+
+	cfg := config.Postgres{
+		Host:     host,
+		Port:     port,
+		Database: database,
+		Username: username,
+		Password: password,
+		SSLMode:  "disable",
+		TimeZone: "UTC",
+		Enabled:  true,
+	}
+	reportServiceReady("postgres-standalone", fmt.Sprintf("%s:%d/%s", host, port, database))
+	return cfg, terminate, nil
+}
+
 // setupDedicatedPostgres starts a postgres container of its own and points
 // the framework at it. The returned function terminates that container.
 func setupDedicatedPostgres() (func() error, error) {

@@ -251,6 +251,8 @@ func TestClickhouse(t *testing.T) {
 
 		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Upsert(record), database.ErrUnsupportedOnDialect)
 		require.ErrorIs(t, database.CleanupOn[*TestAggregateRecord](ctx, ins), database.ErrUnsupportedOnDialect)
+		rows := make([]*TestAggregateRecord, 0)
+		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithReplica().List(&rows), database.ErrUnsupportedOnDialect)
 		require.ErrorIs(t, database.TransactionOn(ctx, ins, func(ctx context.Context) error { return nil }), database.ErrUnsupportedOnDialect)
 
 		got := new(TestAggregateRecord)

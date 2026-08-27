@@ -18,6 +18,8 @@ const (
 	MYSQL_READ_TIMEOUT  = "MYSQL_READ_TIMEOUT"  //nolint:staticcheck
 	MYSQL_WRITE_TIMEOUT = "MYSQL_WRITE_TIMEOUT" //nolint:staticcheck
 
+	MYSQL_REPLICAS = "MYSQL_REPLICAS" //nolint:staticcheck
+
 	MYSQL_ENABLED = "MYSQL_ENABLED" //nolint:staticcheck
 )
 
@@ -42,6 +44,17 @@ type MySQL struct {
 	// context deadline instead.
 	ReadTimeout  time.Duration `json:"read_timeout" mapstructure:"read_timeout" ini:"read_timeout" yaml:"read_timeout"`
 	WriteTimeout time.Duration `json:"write_timeout" mapstructure:"write_timeout" ini:"write_timeout" yaml:"write_timeout"`
+
+	// Replicas lists read-replica endpoints as host:port entries (comma
+	// separated in ini). Every other connection setting — credentials,
+	// database, charset, timeouts, the UTC wire location — is shared with the
+	// primary, so a replica differs by address only. Configuring replicas
+	// makes framework reads eligible for replica routing, but never moves
+	// them by default: reads go to a replica only where a model declares
+	// PreferReplica or a call site opts in with WithReplica. Replication
+	// itself, replica health, and failover belong to the infrastructure;
+	// prefer a single load-balanced read endpoint where one exists.
+	Replicas []string `json:"replicas" mapstructure:"replicas" ini:"replicas" yaml:"replicas"`
 
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }

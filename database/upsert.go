@@ -75,6 +75,9 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 	if db.includeDeleted {
 		return errors.Wrap(ErrWithDeletedOnWrite, "Upsert")
 	}
+	if db.replicaRead != nil {
+		return errors.Wrap(ErrWithReplicaOnWrite, "Upsert")
+	}
 	objs = compactModels(objs)
 	if len(objs) == 0 {
 		return nil
