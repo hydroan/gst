@@ -51,7 +51,7 @@ type Base struct {
 	UpdatedBy string         `json:"updated_by,omitempty" gorm:"size:36" query:"updated_by" url:"-"` // UUIDv7 user ID who last updated the record
 	CreatedAt time.Time      `json:"created_at,omitzero" gorm:"not null" query:"-" url:"-"`          // Timestamp when the record was created
 	UpdatedAt time.Time      `json:"updated_at,omitzero" gorm:"not null" query:"-" url:"-"`          // Timestamp when the record was last updated
-	DeletedAt gorm.DeletedAt `json:"-" gorm:"index" query:"-" url:"-"`                               // Timestamp when the record was deleted
+	DeletedAt gorm.DeletedAt `json:"-" query:"-" url:"-"`                                            // Timestamp when the record was deleted
 }
 
 func (b *Base) TableName() string        { return "" } // Business models must override with an explicit table name

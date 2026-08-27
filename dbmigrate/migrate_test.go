@@ -14,6 +14,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/dbmigrate"
 	"github.com/hydroan/gst/internal/testcontainer"
+	"github.com/hydroan/gst/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -154,6 +155,62 @@ func TestMigrate(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, migrated)
 	})
+}
+
+// TestMigrateDropsRemovedIndex pins the planner's drop path for a secondary
+// index that disappears from the desired schema: the index survives without
+// EnableDrop, and is planned and executed as a drop with it. The fixture
+// index comes from a struct tag because that is the shape a base-struct tag
+// removal produces on every table at once, and tag indexes flow through the
+// same desired-DDL rendering as everything else the dumper emits.
+func TestMigrateDropsRemovedIndex(t *testing.T) {
+	dumper, err := dbmigrate.NewSchemaDumper()
+	require.NoError(t, err)
+	defer dumper.Close()
+
+	withIndex, err := dumper.Dump(config.DBMySQL, &TagIndexedWidget{})
+	require.NoError(t, err)
+	require.Contains(t, withIndex, "`idx_widgets_tag`")
+	withoutIndex, err := dumper.Dump(config.DBMySQL, &PlainWidget{})
+	require.NoError(t, err)
+	require.NotContains(t, withoutIndex, "idx_widgets_tag")
+
+	database := fmt.Sprintf("gst_dbmigrate_dropindex_%d", time.Now().UnixNano())
+	createMySQLDatabase(t, mysqlDatabaseConfig(), database)
+	t.Cleanup(func() {
+		dropMySQLDatabase(t, mysqlDatabaseConfig(), database)
+	})
+	databaseConfig := mysqlDatabaseConfig()
+	databaseConfig.Database = database
+
+	migrated, _, err := dbmigrate.Migrate([]string{withIndex}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOption{})
+	require.NoError(t, err)
+	require.True(t, migrated)
+	require.Equal(t, 1, mysqlIndexCount(t, databaseConfig, "widgets", "idx_widgets_tag"))
+
+	// Without EnableDrop the index survives: the plan still reports the
+	// change, but renders the destructive statement as skipped instead of
+	// executing it.
+	migrated, _, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOption{})
+	require.NoError(t, err)
+	require.True(t, migrated)
+	require.Equal(t, 1, mysqlIndexCount(t, databaseConfig, "widgets", "idx_widgets_tag"))
+
+	// With EnableDrop the removal is planned...
+	migrated, _, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
+	require.NoError(t, err)
+	require.True(t, migrated)
+
+	// ...and applying it drops the index for good.
+	migrated, _, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOption{EnableDrop: true})
+	require.NoError(t, err)
+	require.True(t, migrated)
+	require.Equal(t, 0, mysqlIndexCount(t, databaseConfig, "widgets", "idx_widgets_tag"))
+
+	// The converged schema plans nothing on a re-run.
+	migrated, _, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
+	require.NoError(t, err)
+	require.False(t, migrated)
 }
 
 func TestMigrateTableRenameAdvisory(t *testing.T) {
@@ -386,6 +443,43 @@ func execMySQL(t *testing.T, cfg *dbmigrate.DatabaseConfig, statement string) {
 func mysqlDSN(cfg *dbmigrate.DatabaseConfig) string {
 	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
 }
+
+// mysqlIndexCount reports whether the named index exists on one table, as the
+// number of matching index names information_schema holds: 1 when present, 0
+// when dropped.
+func mysqlIndexCount(t *testing.T, cfg *dbmigrate.DatabaseConfig, table, index string) int {
+	t.Helper()
+
+	db, err := sql.Open("mysql", mysqlDSN(cfg))
+	require.NoError(t, err)
+	defer db.Close()
+
+	var count int
+	require.NoError(t, db.QueryRow(
+		"SELECT COUNT(DISTINCT index_name) FROM information_schema.statistics WHERE table_schema = ? AND table_name = ? AND index_name = ?",
+		cfg.Database, table, index,
+	).Scan(&count))
+	return count
+}
+
+// TagIndexedWidget and PlainWidget share one table: the second is the first
+// with its struct-tag index removed, which is the change
+// TestMigrateDropsRemovedIndex drives through the planner.
+type TagIndexedWidget struct {
+	Tag string `json:"tag" gorm:"size:191;index"`
+
+	model.Base
+}
+
+func (*TagIndexedWidget) TableName() string { return "widgets" }
+
+type PlainWidget struct {
+	Tag string `json:"tag" gorm:"size:191"`
+
+	model.Base
+}
+
+func (*PlainWidget) TableName() string { return "widgets" }
 
 func postgresDatabaseConfig(database string) *dbmigrate.DatabaseConfig {
 	cfg := newDatabaseConfig(config.POSTGRES_HOST, config.POSTGRES_PORT, config.POSTGRES_USERNAME, config.POSTGRES_PASSWORD, database)

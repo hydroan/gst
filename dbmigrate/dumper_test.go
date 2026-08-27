@@ -85,8 +85,8 @@ func TestDumper(t *testing.T) {
 		require.NotEmpty(t, schema)
 		require.Contains(t, schema, "-- Model: dbmigrate_test.Group\nCREATE TABLE `groups`")
 		require.Contains(t, schema, "-- Model: dbmigrate_test.User\nCREATE TABLE `users`")
-		requireOnlyBaseSoftDeleteIndex(t, schema, "groups")
-		requireOnlyBaseSoftDeleteIndex(t, schema, "users")
+		requireNoBaseSecondaryIndexes(t, schema, "groups")
+		requireNoBaseSecondaryIndexes(t, schema, "users")
 		require.NotContains(t, schema, "DROP TABLE IF EXISTS")
 	})
 
@@ -187,10 +187,14 @@ func TestDumperRejectsCrossModelIndexConflicts(t *testing.T) {
 	require.ErrorContains(t, err, "ConflictSampleB")
 }
 
-func requireOnlyBaseSoftDeleteIndex(t *testing.T, schema, table string) {
+// requireNoBaseSecondaryIndexes asserts that the base struct contributes no
+// secondary index of its own: the primary key is the framework's only
+// tag-declared index, and everything else is a model's explicit Indexes()
+// decision.
+func requireNoBaseSecondaryIndexes(t *testing.T, schema, table string) {
 	t.Helper()
 
-	require.Contains(t, schema, "INDEX `idx_"+table+"_deleted_at` (`deleted_at`)")
+	require.NotContains(t, schema, "idx_"+table+"_deleted_at")
 	require.NotContains(t, schema, "idx_"+table+"_created_by")
 	require.NotContains(t, schema, "idx_"+table+"_updated_by")
 	require.NotContains(t, schema, "idx_"+table+"_created_at")

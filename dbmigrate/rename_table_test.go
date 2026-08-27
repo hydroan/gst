@@ -91,10 +91,10 @@ func TestDetectTableRenames(t *testing.T) {
 		current := "CREATE TABLE `samples` (\n" +
 			"  `id` char(36) NOT NULL,\n" +
 			"  `code` varchar(64) NOT NULL,\n" +
-			"  `deleted_at` datetime(3) NULL,\n" +
+			"  `note` varchar(255) NULL,\n" +
 			"  PRIMARY KEY (`id`),\n" +
 			"  UNIQUE KEY `uniq_samples_code` (`code`),\n" +
-			"  KEY `idx_samples_deleted_at` (`deleted_at`)\n" +
+			"  KEY `idx_samples_note` (`note`)\n" +
 			") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;"
 		pairs := detectTableRenamesMySQL(t, []string{
 			"DROP TABLE `samples`",
@@ -102,10 +102,10 @@ func TestDetectTableRenames(t *testing.T) {
 				"  `id` char(36) NOT NULL,\n" +
 				"  `code` varchar(64) NOT NULL,\n" +
 				"  `remark` varchar(255) NOT NULL DEFAULT '',\n" +
-				"  `deleted_at` datetime(3) NULL,\n" +
+				"  `note` varchar(255) NULL,\n" +
 				"  PRIMARY KEY (`id`),\n" +
 				"  UNIQUE INDEX `uniq_samples_code` (`code`),\n" +
-				"  INDEX `idx_records_deleted_at` (`deleted_at`)\n" +
+				"  INDEX `idx_records_note` (`note`)\n" +
 				") ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin",
 		}, current)
 		require.Len(t, pairs, 1)
@@ -113,9 +113,9 @@ func TestDetectTableRenames(t *testing.T) {
 		require.Equal(t, "records", pairs[0].To)
 		require.Equal(t, []indexRenamePair{{
 			Table:   "records",
-			From:    "idx_samples_deleted_at",
-			To:      "idx_records_deleted_at",
-			Columns: "deleted_at",
+			From:    "idx_samples_note",
+			To:      "idx_records_note",
+			Columns: "note",
 		}}, pairs[0].IndexRenames)
 		require.Len(t, pairs[0].Residual, 1)
 		require.Contains(t, pairs[0].Residual[0], "ADD COLUMN `remark`")
