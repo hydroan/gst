@@ -26,6 +26,7 @@ const (
 	CodeInvalidParam Code = 1000 + iota
 	CodeNotFound
 	CodeAlreadyExist
+	CodeStaleObject
 )
 
 type codeValue struct {
@@ -42,6 +43,7 @@ var defaultCodeValueMap = map[Code]codeValue{
 	CodeInvalidParam: {http.StatusBadRequest, "Invalid parameters provided in the request."},
 	CodeNotFound:     {http.StatusNotFound, "Requested resource not found."},
 	CodeAlreadyExist: {http.StatusConflict, "Resource already exists."},
+	CodeStaleObject:  {http.StatusConflict, "Resource was modified by another operation. Reload and retry."},
 }
 
 // customCodeValueMap holds app-defined overrides from Code to HTTP status and message.

@@ -291,6 +291,14 @@ func databaseErrorCoder(err error) types.Coder {
 		return CodeNotFound
 	case errors.Is(err, database.ErrDuplicatedKey):
 		return CodeAlreadyExist
+	case errors.Is(err, database.ErrStaleObject):
+		// The optimistic-lock miss of a versioned model: modified or deleted
+		// by someone else after this caller read it. 409, reload and retry.
+		return CodeStaleObject
+	case errors.Is(err, database.ErrVersionRequired):
+		// A versioned record arrived without the version it was read with —
+		// a request defect, not a conflict.
+		return CodeInvalidParam
 	default:
 		return CodeFailure
 	}

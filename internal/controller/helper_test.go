@@ -192,6 +192,8 @@ func TestDatabaseErrorCoder(t *testing.T) {
 		{"service error keeps status and message", serviceErr, http.StatusForbidden, "operation refused"},
 		{"record not found renders 404", errors.Wrap(database.ErrRecordNotFound, "get sample"), http.StatusNotFound, "Requested resource not found."},
 		{"duplicated key renders 409", errors.Wrap(database.ErrDuplicatedKey, "create sample"), http.StatusConflict, "Resource already exists."},
+		{"stale object renders 409", errors.Wrap(database.ErrStaleObject, "update sample"), http.StatusConflict, "Resource was modified by another operation. Reload and retry."},
+		{"missing version renders 400", errors.Wrap(database.ErrVersionRequired, "update sample"), http.StatusBadRequest, "Invalid parameters provided in the request."},
 		{"other errors hide internal text", errors.New("Error 1146: Table 'sample' doesn't exist"), http.StatusBadRequest, "failure"},
 	}
 	for _, tt := range tests {
