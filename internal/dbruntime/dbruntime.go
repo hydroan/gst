@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/modelregistry"
+	prommetrics "github.com/hydroan/gst/metrics"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
@@ -125,7 +126,23 @@ func InitDatabase(db *gorm.DB) (err error) {
 	// set default database to 'Default'.
 	DB = db
 
+	registerPoolMetrics(db)
 	return nil
+}
+
+// registerPoolMetrics exposes the default database's connection pool to the
+// metrics registry, under the stable name "default". Failures only log:
+// observability must never block startup, and a deployment without a metrics
+// endpoint simply leaves the collector unserved.
+func registerPoolMetrics(db *gorm.DB) {
+	sqlDB, err := db.DB()
+	if err != nil {
+		zap.S().Warnw("failed to reach sql.DB for pool metrics", "error", err)
+		return
+	}
+	if err := prommetrics.RegisterDBStats(sqlDB, "default"); err != nil {
+		zap.S().Warnw("failed to register database pool metrics collector", "db_name", "default", "error", err)
+	}
 }
 
 // prepareTable creates the table backing one queued model in the default

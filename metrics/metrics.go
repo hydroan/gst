@@ -3,6 +3,9 @@
 package prommetrics
 
 import (
+	"database/sql"
+	"sync"
+
 	"github.com/cockroachdb/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
@@ -198,4 +201,38 @@ func Init() error {
 	// 	collectors.WithGoCollections(collectors.GoRuntimeMemStatsCollection),
 	// )))
 	return errors.WithStack(multierr.Combine(errs...))
+}
+
+var (
+	dbStatsMu         sync.Mutex
+	dbStatsCollectors = map[string]prometheus.Collector{}
+)
+
+// RegisterDBStats exposes one database handle's connection pool to the
+// default Prometheus registry under dbName (the collector's db_name label).
+// The standard collector reads sql.DB.Stats at scrape time, so registration
+// adds no background work.
+//
+// Registering a name again replaces that name's previous collector, which
+// keeps re-initialization idempotent: a test harness that reopens the
+// database re-registers instead of failing, and the collector never outlives
+// the handle it reads. It does not require Init to have run — collectors on
+// the default registry simply stay unserved until a metrics endpoint is up.
+func RegisterDBStats(db *sql.DB, dbName string) error {
+	if db == nil {
+		return errors.New("db cannot be nil")
+	}
+	dbStatsMu.Lock()
+	defer dbStatsMu.Unlock()
+
+	if old, ok := dbStatsCollectors[dbName]; ok {
+		prometheus.Unregister(old)
+		delete(dbStatsCollectors, dbName)
+	}
+	collector := collectors.NewDBStatsCollector(db, dbName)
+	if err := prometheus.Register(collector); err != nil {
+		return errors.WithStack(err)
+	}
+	dbStatsCollectors[dbName] = collector
+	return nil
 }
