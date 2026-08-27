@@ -272,7 +272,7 @@ func (db *database[M]) prepare() error {
 	if db.err != nil {
 		return db.err
 	}
-	if db.ins == nil || db.ins == new(gorm.DB) {
+	if db.ins == nil {
 		return ErrInvalidDB
 	}
 	db.typ = reflect.TypeOf(*new(M)).Elem()
@@ -345,7 +345,7 @@ func (db *database[M]) prepare() error {
 //	// Non-service layer
 //	_ = Database[*User](context.Background()).WithQuery(&User{Name: "John"}).List(&users)
 func Database[M types.Model](ctx context.Context) types.Database[M] {
-	if DB() == nil || DB() == new(gorm.DB) {
+	if DB() == nil {
 		panic("database is not initialized")
 	}
 	return databaseFor[M](ctx, DB())

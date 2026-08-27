@@ -25,7 +25,7 @@ import (
 // On a ClickHouse instance it answers ErrUnsupportedOnDialect: the
 // soft-delete regime does not exist there.
 func Cleanup[M types.Model](ctx context.Context) error {
-	if DB() == nil || DB() == new(gorm.DB) {
+	if DB() == nil {
 		panic("database is not initialized")
 	}
 	return cleanupOn[M](ctx, DB())
@@ -78,7 +78,7 @@ func cleanupOn[M types.Model](ctx context.Context, base *gorm.DB) (err error) {
 // Returns nil if all checks pass. Panics if the database is not initialized,
 // consistent with Database[M].
 func Health(ctx context.Context) error {
-	if DB() == nil || DB() == new(gorm.DB) {
+	if DB() == nil {
 		panic("database is not initialized")
 	}
 	return healthOn(ctx, DB())

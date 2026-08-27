@@ -39,7 +39,7 @@ func Transaction(ctx context.Context, fn func(ctx context.Context) error) error 
 	if fn == nil {
 		return ErrNilTransaction
 	}
-	if DB() == nil || DB() == new(gorm.DB) {
+	if DB() == nil {
 		panic("database is not initialized")
 	}
 	return transactionOn(ctx, DB(), fn)

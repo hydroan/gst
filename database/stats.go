@@ -2,8 +2,6 @@ package database
 
 import (
 	"database/sql"
-
-	"gorm.io/gorm"
 )
 
 // RolePrimary names the writable node of a database in NodeStats. Today the
@@ -32,7 +30,7 @@ type NodeStats struct {
 // authoritative answer and panics there like Database[M].
 func Stats() []NodeStats {
 	db := DB()
-	if db == nil || db == new(gorm.DB) {
+	if db == nil {
 		return nil
 	}
 	sqlDB, err := db.DB()
