@@ -14,10 +14,17 @@ import (
 //
 //	type Config struct {
 //		Name    string        `json:"name"`
-//		Version model.Version `json:"version" gorm:"not null;default:1"`
+//		Version model.Version `json:"version,omitempty" gorm:"not null;default:1"`
 //
 //		model.Base
 //	}
+//
+// The json tag must keep the field serializable (not "-": clients read the
+// version they must hand back) and must carry omitempty: an unset version on
+// a struct a client marshals would otherwise serialize as an explicit
+// "version":0, which the write paths rightly reject — omitempty keeps
+// "unset" out of request bodies entirely. Stored versions start at 1, so
+// omitempty never hides a real version on the way out.
 //
 // The shape is enforced, not advised: "gg gen" fills the gorm tag in for a
 // bare declaration, "gg check" reports deviations, and the framework panics
@@ -138,7 +145,7 @@ func versionFieldOf(m any) versionField {
 		// into an immediate, explained startup failure.
 		if field.Anonymous {
 			panic(fmt.Sprintf(
-				"model %s embeds model.Version; optimistic locking requires a named field: Version model.Version `gorm:\"not null;default:1\"` (an embedded Version is not recognized and the lock would silently not engage)",
+				"model %s embeds model.Version; optimistic locking requires a named field: Version model.Version `json:\"version,omitempty\" gorm:\"not null;default:1\"` (an embedded Version is not recognized and the lock would silently not engage)",
 				typ))
 		}
 		if missing := VersionTagMissing(field.Tag); len(missing) > 0 {
@@ -147,7 +154,7 @@ func versionFieldOf(m any) versionField {
 				quoted[i] = "`" + setting + "`"
 			}
 			panic(fmt.Sprintf(
-				"model %s field %s (model.Version) must carry gorm:\"not null;default:1\", missing %s; default:1 backfills existing rows to a live version when the column is added — without it they are locked out of Update forever. Run \"gg gen\" to fill the tag in",
+				"model %s field %s (model.Version) must carry json:\",omitempty\" and gorm:\"not null;default:1\", missing %s; default:1 backfills existing rows to a live version when the column is added — without it they are locked out of Update forever — and omitempty keeps an unset version out of marshaled request bodies, where an explicit zero is rejected. Run \"gg gen\" to fill the tags in",
 				typ, field.Name, strings.Join(quoted, " and ")))
 		}
 		info = versionField{index: i, column: versionColumnName(field), has: true}
@@ -157,12 +164,12 @@ func versionFieldOf(m any) versionField {
 	return info
 }
 
-// VersionTagMissing reports which of the two required gorm tag settings the
-// Version field lacks. Matching is case-insensitive and whitespace-tolerant,
-// but the requirement itself is exact: `not null` and `default:1` are the
-// only shape the contract accepts (see the Version documentation for why the
-// default is load-bearing).
-func VersionTagMissing(tag reflect.StructTag) []string {
+// VersionGormTagMissing reports which of the two required gorm tag settings
+// the Version field lacks. Matching is case-insensitive and
+// whitespace-tolerant, but the requirement itself is exact: `not null` and
+// `default:1` are the only shape the contract accepts (see the Version
+// documentation for why the default is load-bearing).
+func VersionGormTagMissing(tag reflect.StructTag) []string {
 	hasNotNull, hasDefault := false, false
 	for part := range strings.SplitSeq(tag.Get("gorm"), ";") {
 		if strings.EqualFold(strings.Join(strings.Fields(part), " "), "not null") {
@@ -181,6 +188,45 @@ func VersionTagMissing(tag reflect.StructTag) []string {
 	}
 	if !hasDefault {
 		missing = append(missing, "default:1")
+	}
+	return missing
+}
+
+// VersionJSONTagState classifies the Version field's json tag against the
+// contract: the field must stay serializable (clients read the version they
+// hand back) and must carry omitempty (an unset version on a marshaled
+// struct would otherwise serialize as an explicit "version":0, which the
+// write paths rightly reject). compliant reports whether the tag already
+// satisfies both; healable is false only for json:"-", where adding
+// omitempty cannot help and un-hiding the field is a semantic decision no
+// tool should make.
+func VersionJSONTagState(tag reflect.StructTag) (compliant, healable bool) {
+	value, ok := tag.Lookup("json")
+	if !ok {
+		return false, true
+	}
+	name, options, _ := strings.Cut(value, ",")
+	if strings.TrimSpace(name) == "-" && len(options) == 0 {
+		return false, false
+	}
+	for option := range strings.SplitSeq(options, ",") {
+		if strings.TrimSpace(option) == "omitempty" {
+			return true, true
+		}
+	}
+	return false, true
+}
+
+// versionJSONRequirement is the missing-setting label for a json tag that
+// does not satisfy VersionJSONTagState, phrased as the fix.
+const versionJSONRequirement = `json:",omitempty" serialization`
+
+// VersionTagMissing reports every required tag setting the Version field
+// lacks, gorm and json combined; the runtime enforcement panics on any.
+func VersionTagMissing(tag reflect.StructTag) []string {
+	missing := VersionGormTagMissing(tag)
+	if compliant, _ := VersionJSONTagState(tag); !compliant {
+		missing = append(missing, versionJSONRequirement)
 	}
 	return missing
 }

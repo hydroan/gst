@@ -8,7 +8,7 @@ import (
 
 type versionedRecord struct {
 	Name    string
-	Version Version `gorm:"not null;default:1"`
+	Version Version `json:"version,omitempty" gorm:"not null;default:1"`
 
 	Base
 }
@@ -16,7 +16,7 @@ type versionedRecord struct {
 func (*versionedRecord) TableName() string { return "versioned_records" }
 
 type taggedVersionRecord struct {
-	Revision Version `gorm:"column:rev;not null;default:1"`
+	Revision Version `json:"rev,omitempty" gorm:"column:rev;not null;default:1"`
 
 	Base
 }
@@ -57,13 +57,13 @@ func TestVersionDeclarationEnforcement(t *testing.T) {
 		Base
 	}
 	require.PanicsWithValue(t,
-		"model modelregistry.embeddedVersionRecord embeds model.Version; optimistic locking requires a named field: Version model.Version `gorm:\"not null;default:1\"` (an embedded Version is not recognized and the lock would silently not engage)",
+		"model modelregistry.embeddedVersionRecord embeds model.Version; optimistic locking requires a named field: Version model.Version `json:\"version,omitempty\" gorm:\"not null;default:1\"` (an embedded Version is not recognized and the lock would silently not engage)",
 		func() { IsVersioned(&embeddedVersionRecord{}) })
 
 	// A missing default:1 would backfill adopted rows to zero and lock them
 	// out of Update; a missing not null weakens the column contract.
 	type missingDefaultRecord struct {
-		Version Version `gorm:"not null"`
+		Version Version `json:"version,omitempty" gorm:"not null"`
 
 		Base
 	}
@@ -76,9 +76,27 @@ func TestVersionDeclarationEnforcement(t *testing.T) {
 	}
 	require.Panics(t, func() { IsVersioned(&bareVersionRecord{}) })
 
-	// The compliant shape passes, whitespace and case tolerated.
+	// A json tag without omitempty serializes an unset version as an
+	// explicit zero the write paths reject; json:"-" hides the version
+	// clients must hand back. Both fail on first touch.
+	type missingOmitemptyRecord struct {
+		Version Version `json:"version" gorm:"not null;default:1"`
+
+		Base
+	}
+	require.Panics(t, func() { IsVersioned(&missingOmitemptyRecord{}) })
+
+	type hiddenVersionRecord struct {
+		Version Version `json:"-" gorm:"not null;default:1"`
+
+		Base
+	}
+	require.Panics(t, func() { IsVersioned(&hiddenVersionRecord{}) })
+
+	// The compliant shape passes, whitespace and case tolerated, and a bare
+	// json:",omitempty" (wire name from the field) is compliant too.
 	type tolerantTagRecord struct {
-		Version Version `gorm:"NOT  NULL; default: 1"`
+		Version Version `json:",omitempty" gorm:"NOT  NULL; default: 1"`
 
 		Base
 	}

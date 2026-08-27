@@ -22,7 +22,7 @@ var (
 type versionedNote struct {
 	Title   string        `json:"title" gorm:"size:191"`
 	Body    string        `json:"body" gorm:"size:191"`
-	Version model.Version `json:"version" gorm:"not null;default:1"`
+	Version model.Version `json:"version,omitempty" gorm:"not null;default:1"`
 
 	model.Base
 }
@@ -283,7 +283,7 @@ func TestVersionBatchUpdateRollsBack(t *testing.T) {
 // order never hits in production).
 type legacyAdoptedNote struct {
 	Title   string        `json:"title" gorm:"size:191"`
-	Version model.Version `json:"version" gorm:"not null;default:1"`
+	Version model.Version `json:"version,omitempty" gorm:"not null;default:1"`
 
 	model.Base
 }

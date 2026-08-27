@@ -45,12 +45,20 @@ type Partial struct {
 func (Partial) TableName() string { return "partials" }
 
 type Compliant struct {
-	Version model.Version `+"`json:\"version\" gorm:\"not null;default:1\"`"+`
+	Version model.Version `+"`json:\"version,omitempty\" gorm:\"not null;default:1\"`"+`
 
 	model.Base
 }
 
 func (Compliant) TableName() string { return "compliant_rows" }
+
+type Hidden struct {
+	Version model.Version `+"`json:\"-\" gorm:\"not null;default:1\"`"+`
+
+	model.Base
+}
+
+func (Hidden) TableName() string { return "hiddens" }
 `)
 	writeCheckFile(t, filepath.Join(projectDir, "model", "config", "aliased.go"), `package config
 
@@ -96,11 +104,12 @@ type UpdateReq struct {
 		}
 		t.Fatalf("expected a violation containing %q, got %#v", substr, violations)
 	}
-	if len(violations) != 4 {
-		t.Fatalf("expected 4 violations, got %#v", violations)
+	if len(violations) != 5 {
+		t.Fatalf("expected 5 violations, got %#v", violations)
 	}
 	require("struct 'Embedded' embeds model.Version")
-	require("field 'Bare.Version' (model.Version) is missing gorm setting(s) not null, default:1")
-	require("field 'Partial.Version' (model.Version) is missing gorm setting(s) default:1")
-	require("field 'Aliased.Revision' (model.Version) is missing gorm setting(s) not null, default:1")
+	require("field 'Bare.Version' (model.Version) is missing gorm not null, gorm default:1, json omitempty")
+	require("field 'Partial.Version' (model.Version) is missing gorm default:1, json omitempty")
+	require("field 'Aliased.Revision' (model.Version) is missing gorm not null, gorm default:1, json omitempty")
+	require("field 'Hidden.Version' (model.Version) carries json:\"-\"")
 }

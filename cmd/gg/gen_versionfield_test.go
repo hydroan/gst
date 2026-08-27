@@ -55,17 +55,11 @@ func (Partial) TableName() string { return "partials" }
 	}
 	source := string(healed)
 
-	// A bare field gains the whole tag; a tag without a gorm section gains
-	// one; a partial gorm section gains the missing setting.
-	requireContains := func(substr string) {
-		t.Helper()
-		if !strings.Contains(source, substr) {
-			t.Fatalf("healed source should contain %q, got:\n%s", substr, source)
-		}
-	}
-	requireContains("Version model.Version `gorm:\"not null;default:1\"`")
-	if got := strings.Count(source, "`json:\"version\" gorm:\"not null;default:1\"`"); got != 2 {
-		t.Fatalf("both the tagged and the partial field should heal to the full tag, found %d of them in:\n%s", got, source)
+	// A bare field gains the whole tag (json included); a json section
+	// without omitempty gains it in place; a missing or partial gorm section
+	// gains the missing settings. All three converge on the same full shape.
+	if got := strings.Count(source, "`json:\"version,omitempty\" gorm:\"not null;default:1\"`"); got != 3 {
+		t.Fatalf("all three fields should heal to the full tag, found %d of them in:\n%s", got, source)
 	}
 
 	// The healed file passes the check and a second run changes nothing.
@@ -108,5 +102,34 @@ func (Embedded) TableName() string { return "embeddeds" }
 	err := fillVersionFieldTags(true)
 	if err == nil || !strings.Contains(err.Error(), "embeds model.Version") {
 		t.Fatalf("embedded declaration must abort generation, got %v", err)
+	}
+}
+
+func TestFillVersionFieldTagsRejectsHiddenJSON(t *testing.T) {
+	oldModelDir := modelDir
+	t.Cleanup(func() { modelDir = oldModelDir })
+
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	modelDir = "model"
+
+	// json:"-" hides the version clients must hand back; un-hiding it is a
+	// semantic decision, so gen aborts instead of healing.
+	writeCheckFile(t, filepath.Join(projectDir, "model", "config", "config.go"), `package config
+
+import "github.com/hydroan/gst/model"
+
+type Hidden struct {
+	Version model.Version `+"`json:\"-\" gorm:\"not null;default:1\"`"+`
+
+	model.Base
+}
+
+func (Hidden) TableName() string { return "hiddens" }
+`)
+
+	err := fillVersionFieldTags(true)
+	if err == nil || !strings.Contains(err.Error(), "json:\"-\"") {
+		t.Fatalf("a hidden json field must abort generation, got %v", err)
 	}
 }

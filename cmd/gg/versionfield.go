@@ -16,13 +16,13 @@ import (
 // Shared detection for model.Version declarations.
 //
 // The declaration shape is a framework contract with no user freedom: a
-// NAMED top-level field carrying gorm:"not null;default:1" (see
-// modelregistry.Version for why the default is load-bearing). Three layers
-// enforce it, all reading the detection below: "gg gen" heals bare named
-// fields by filling the tag in, "gg check" reports deviations read-only, and
-// the framework panics at runtime on first touch as the last net. Dot
-// imports of the model package are not resolved here; the runtime layer
-// still catches those.
+// NAMED top-level field carrying json:",omitempty" serialization and
+// gorm:"not null;default:1" (see modelregistry.Version for why the default
+// and the omitempty are load-bearing). Three layers enforce it, all reading
+// the detection below: "gg gen" heals named fields by filling the tags in,
+// "gg check" reports deviations read-only, and the framework panics at
+// runtime on first touch as the last net. Dot imports of the model package
+// are not resolved here; the runtime layer still catches those.
 
 // gstModelImportPath is the framework package whose Version type opts a
 // model into optimistic locking.
@@ -43,11 +43,20 @@ type versionFieldFinding struct {
 	Embedded bool
 	Missing  []string // required gorm settings absent from the tag, bare
 
+	// JSONMissing marks a json tag that does not satisfy the omitempty
+	// contract; JSONBlocked marks json:"-", which no tool may heal:
+	// un-hiding a field the author silenced is a semantic decision, exactly
+	// like reshaping an embedded declaration.
+	JSONMissing bool
+	JSONBlocked bool
+
 	// rewrite geometry, named fields only; offsets are into the file bytes
 	hasTag         bool
 	tagEnd         int // one past the tag literal's closing backquote
 	hasGormSection bool
 	gormValueEnd   int // offset of the gorm value's closing double quote
+	hasJSONSection bool
+	jsonValueEnd   int // offset of the json value's closing double quote
 	insertAfter    int // offset right after the field type, for a new tag
 }
 
@@ -149,20 +158,29 @@ func versionFieldDeviation(fset *token.FileSet, path, structName string, field *
 		}
 	}
 
-	missing := modelregistry.VersionTagMissing(reflect.StructTag(rawTag))
-	if len(missing) == 0 {
+	finding.Missing = modelregistry.VersionGormTagMissing(reflect.StructTag(rawTag))
+	jsonCompliant, jsonHealable := modelregistry.VersionJSONTagState(reflect.StructTag(rawTag))
+	finding.JSONMissing = !jsonCompliant
+	finding.JSONBlocked = !jsonHealable
+	if len(finding.Missing) == 0 && !finding.JSONMissing {
 		return versionFieldFinding{}, false
 	}
-	finding.Missing = missing
 
 	if finding.hasTag {
 		literal := field.Tag.Value
+		tagStart := fset.Position(field.Tag.Pos()).Offset
 		if idx := strings.Index(literal, `gorm:"`); idx >= 0 {
 			valueStart := idx + len(`gorm:"`)
 			if rel := strings.Index(literal[valueStart:], `"`); rel >= 0 {
 				finding.hasGormSection = true
-				tagStart := fset.Position(field.Tag.Pos()).Offset
 				finding.gormValueEnd = tagStart + valueStart + rel
+			}
+		}
+		if idx := strings.Index(literal, `json:"`); idx >= 0 {
+			valueStart := idx + len(`json:"`)
+			if rel := strings.Index(literal[valueStart:], `"`); rel >= 0 {
+				finding.hasJSONSection = true
+				finding.jsonValueEnd = tagStart + valueStart + rel
 			}
 		}
 	}

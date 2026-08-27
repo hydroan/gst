@@ -11,12 +11,15 @@ import (
 
 // CheckVersionFieldDeclarations reports model.Version declarations that
 // deviate from the required shape: a NAMED top-level field carrying
-// gorm:"not null;default:1". An embedded Version is not recognized by the
-// framework and the lock silently does not engage; a missing default:1
-// backfills adopted rows to zero and locks them out of Update. "gg gen"
-// heals the named-field cases automatically — this check is the read-only
-// net for code that was committed without running it. Model subtrees owned
-// by copyable framework modules are skipped, like every model check.
+// json:",omitempty" serialization and gorm:"not null;default:1". An embedded
+// Version is not recognized by the framework and the lock silently does not
+// engage; a missing default:1 backfills adopted rows to zero and locks them
+// out of Update; a json tag without omitempty serializes an unset version as
+// an explicit zero the write paths reject, and json:"-" hides the version
+// clients must hand back. "gg gen" heals the healable cases automatically —
+// this check is the read-only net for code that was committed without
+// running it. Model subtrees owned by copyable framework modules are
+// skipped, like every model check.
 func CheckVersionFieldDeclarations(ignore gitignore.Matcher) []string {
 	findings, err := collectVersionFieldFindings(ignore)
 	if err != nil {
@@ -28,14 +31,28 @@ func CheckVersionFieldDeclarations(ignore gitignore.Matcher) []string {
 		relPath := relativePath(finding.Path)
 		if finding.Embedded {
 			violations = append(violations, fmt.Sprintf(
-				"%s:%d: struct '%s' embeds model.Version; optimistic locking requires a named field: Version model.Version `gorm:\"%s\"` (an embedded Version is not recognized and the lock silently does not engage)",
+				"%s:%d: struct '%s' embeds model.Version; optimistic locking requires a named field: Version model.Version `json:\"version,omitempty\" gorm:\"%s\"` (an embedded Version is not recognized and the lock silently does not engage)",
 				relPath, finding.Line, finding.Struct, versionRequiredTag,
 			))
 			continue
 		}
+		if finding.JSONBlocked {
+			violations = append(violations, fmt.Sprintf(
+				"%s:%d: field '%s.%s' (model.Version) carries json:\"-\"; the version must serialize so clients can hand it back",
+				relPath, finding.Line, finding.Struct, finding.Field,
+			))
+			continue
+		}
+		missing := make([]string, 0, len(finding.Missing)+1)
+		for _, setting := range finding.Missing {
+			missing = append(missing, "gorm "+setting)
+		}
+		if finding.JSONMissing {
+			missing = append(missing, "json omitempty")
+		}
 		violations = append(violations, fmt.Sprintf(
-			"%s:%d: field '%s.%s' (model.Version) is missing gorm setting(s) %s; run \"gg gen\" to fill in gorm:\"%s\" — default:1 backfills existing rows to a live version when the column is added",
-			relPath, finding.Line, finding.Struct, finding.Field, strings.Join(finding.Missing, ", "), versionRequiredTag,
+			"%s:%d: field '%s.%s' (model.Version) is missing %s; run \"gg gen\" to fill the tags in — default:1 backfills existing rows to a live version when the column is added, and omitempty keeps an unset version out of marshaled request bodies",
+			relPath, finding.Line, finding.Struct, finding.Field, strings.Join(missing, ", "),
 		))
 	}
 	return violations
