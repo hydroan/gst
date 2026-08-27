@@ -145,6 +145,7 @@ func collectProjectChecks() []projectCheckResult {
 		{Name: "Log field boundedness", Violations: CheckLogFieldBoundedness(ignore)},
 		{Name: "Model table name declaration", Violations: CheckModelTableNameDeclaration(ignore)},
 		{Name: "Gorm tag index ban", Violations: CheckGormTagIndexBan(ignore)},
+		{Name: "Version field declaration", Violations: CheckVersionFieldDeclarations(ignore)},
 	}
 }
 

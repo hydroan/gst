@@ -74,6 +74,13 @@ func genRunWithOptions(opts genRunOptions) error {
 		}
 	}
 
+	// Heal bare model.Version declarations before the checks run: the tag
+	// shape is framework-owned, and gen filling it in is what keeps the
+	// version-field check below from failing the very command that fixes it.
+	if err := fillVersionFieldTags(opts.Quiet); err != nil {
+		return err
+	}
+
 	if runProjectChecks(opts.Quiet, opts.BaselineViolations) > 0 {
 		return errors.New("project checks failed")
 	}
