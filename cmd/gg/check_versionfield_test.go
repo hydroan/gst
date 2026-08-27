@@ -113,3 +113,88 @@ type UpdateReq struct {
 	require("field 'Aliased.Revision' (model.Version) is missing gorm not null, gorm default:1, json omitempty")
 	require("field 'Hidden.Version' (model.Version) carries json:\"-\"")
 }
+
+func TestCheckVersionFieldDeclarationsActionTypes(t *testing.T) {
+	oldModelDir := modelDir
+	t.Cleanup(func() { modelDir = oldModelDir })
+
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	modelDir = "model"
+
+	// The Design-referenced request deviates by wire name, its nested item
+	// type (reached through a slice of pointers) by a missing omitempty, and
+	// the response — referenced only through a type alias — hides the field
+	// entirely. The compliant request and the unreferenced stray DTO must
+	// stay silent, and the model struct itself is left to the model-side
+	// scan.
+	writeCheckFile(t, filepath.Join(projectDir, "model", "note", "note.go"), `package note
+
+import "github.com/hydroan/gst/model"
+
+type Note struct {
+	Version model.Version `+"`json:\"version,omitempty\" gorm:\"not null;default:1\"`"+`
+
+	model.Base
+}
+
+func (Note) TableName() string { return "notes" }
+
+func (Note) Design() {
+	Update(func() {
+		Payload[*NoteUpdateReq]()
+		Result[*NoteRenameRsp]()
+	})
+	Patch(func() {
+		Payload[*NotePatchReq]()
+	})
+}
+`)
+	writeCheckFile(t, filepath.Join(projectDir, "model", "note", "request.go"), `package note
+
+import "github.com/hydroan/gst/model"
+
+type NoteUpdateReq struct {
+	Title   string        `+"`json:\"title\"`"+`
+	Items   []*NoteItem   `+"`json:\"items\"`"+`
+	Version model.Version `+"`json:\"revision,omitempty\"`"+`
+}
+
+type NoteItem struct {
+	Content string        `+"`json:\"content\"`"+`
+	Version model.Version `+"`json:\"version\"`"+`
+}
+
+type NoteUpdateRsp struct {
+	Version model.Version `+"`json:\"-\"`"+`
+}
+
+type NoteRenameRsp = NoteUpdateRsp
+
+type NotePatchReq struct {
+	Version model.Version `+"`json:\"version,omitempty\"`"+`
+}
+
+type StrayReq struct {
+	Version model.Version `+"`json:\"ver\"`"+`
+}
+`)
+
+	violations := CheckVersionFieldDeclarations(newProjectIgnoreMatcher())
+
+	require := func(substr string) {
+		t.Helper()
+		for _, violation := range violations {
+			if strings.Contains(violation, substr) {
+				return
+			}
+		}
+		t.Fatalf("expected a violation containing %q, got %#v", substr, violations)
+	}
+	if len(violations) != 3 {
+		t.Fatalf("expected 3 violations, got %#v", violations)
+	}
+	require(`field 'NoteUpdateReq.Version' (model.Version) in a DSL action type must carry json:"version,omitempty" (got json:"revision,omitempty")`)
+	require(`field 'NoteItem.Version' (model.Version) in a DSL action type must carry json:"version,omitempty" (got json:"version")`)
+	require(`field 'NoteUpdateRsp.Version' (model.Version) in a DSL action type carries json:"-"`)
+}

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/internal/modelregistry"
 )
 
@@ -185,6 +186,216 @@ func versionFieldDeviation(fset *token.FileSet, path, structName string, field *
 		}
 	}
 	return finding, true
+}
+
+// --- DSL action types ---
+//
+// Request and response DTOs carry model.Version too — that is how a client
+// hands the version back — but they never reach the database, so only the
+// json half of the contract applies, and it applies harder: the wire name
+// must be exactly "version". A missing or mismatched name is the one
+// deviation Go-side integration tests cannot catch — both ends marshal the
+// same struct and stay green — while real clients sending "version" never
+// bind it and every save is rejected. Like the snake_case naming check, only
+// types referenced by a Design method and declared in the same package are
+// held to this; unreferenced DTOs may mirror external wire contracts.
+
+// actionTypeVersionFinding describes one model.Version field of a DSL action
+// type whose json tag deviates from the required json:"version,omitempty".
+type actionTypeVersionFinding struct {
+	Path   string
+	Line   int
+	Struct string
+	Field  string
+
+	// Got is the raw json tag value; HasJSON distinguishes an absent tag
+	// from an empty one. Blocked marks json:"-", which mirrors the model
+	// finding of the same name: no tool may un-hide a silenced field.
+	Got     string
+	HasJSON bool
+	Blocked bool
+}
+
+// scanPackageActionTypeVersionFields reports every deviating model.Version
+// field reachable from the DSL action types of one model package. Reachable
+// means the Payload/Result types referenced by Design methods plus,
+// transitively, the same-package types their fields point at through
+// pointers, slices, arrays, map values and type aliases: nested item types
+// carry per-row versions the same way top-level requests do. Structs
+// embedding the framework base are left to the model-side scan, and files
+// that fail to parse are skipped here because the model-side scan already
+// reports the parse error.
+func scanPackageActionTypeVersionFields(paths []string) []actionTypeVersionFinding {
+	fset := token.NewFileSet()
+	type declaration struct {
+		path string
+		spec *ast.TypeSpec
+	}
+	files := make(map[string]*ast.File, len(paths))
+	aliasesByPath := make(map[string][]string, len(paths))
+	covered := make(map[string]bool)
+	declarations := make(map[string]declaration)
+	for _, path := range paths {
+		node, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+		if err != nil {
+			continue
+		}
+		files[path] = node
+		aliasesByPath[path] = modelAliasesOf(node)
+		for _, name := range slices.Concat(dsl.FindAllModelBase(node), dsl.FindAllModelEmpty(node)) {
+			covered[name] = true
+		}
+		for _, decl := range node.Decls {
+			genDecl, ok := decl.(*ast.GenDecl)
+			if !ok || genDecl.Tok != token.TYPE {
+				continue
+			}
+			for _, spec := range genDecl.Specs {
+				if typeSpec, ok := spec.(*ast.TypeSpec); ok && typeSpec.Name != nil {
+					declarations[typeSpec.Name.Name] = declaration{path: path, spec: typeSpec}
+				}
+			}
+		}
+	}
+
+	// Seed the worklist with the Payload/Result references of every Design
+	// method, in file walk order so findings come out deterministically.
+	var worklist []string
+	seen := make(map[string]bool)
+	enqueue := func(name string) {
+		if _, ok := declarations[name]; ok && !covered[name] && !seen[name] {
+			seen[name] = true
+			worklist = append(worklist, name)
+		}
+	}
+	for _, path := range paths {
+		node, ok := files[path]
+		if !ok {
+			continue
+		}
+		for _, decl := range node.Decls {
+			funcDecl, ok := decl.(*ast.FuncDecl)
+			if !ok || funcDecl.Name == nil || funcDecl.Name.Name != "Design" || funcDecl.Recv == nil || funcDecl.Body == nil {
+				continue
+			}
+			ast.Inspect(funcDecl.Body, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				if _, typeExpr, ok := dslActionTypeCall(call.Fun); ok {
+					if name, ok := localActionTypeName(typeExpr); ok {
+						enqueue(name)
+					}
+				}
+				return true
+			})
+		}
+	}
+
+	var findings []actionTypeVersionFinding
+	for len(worklist) > 0 {
+		decl := declarations[worklist[0]]
+		worklist = worklist[1:]
+		aliases := aliasesByPath[decl.path]
+		switch typed := decl.spec.Type.(type) {
+		case *ast.Ident:
+			// A type alias or defined type hops to its target declaration.
+			enqueue(typed.Name)
+		case *ast.StructType:
+			if typed.Fields == nil {
+				continue
+			}
+			for _, field := range typed.Fields.List {
+				if !isModelVersionType(field.Type, aliases) {
+					for _, name := range localFieldTypeNames(field.Type) {
+						enqueue(name)
+					}
+					continue
+				}
+				finding := actionTypeVersionFinding{
+					Path:   decl.path,
+					Line:   fset.Position(field.Pos()).Line,
+					Struct: decl.spec.Name.Name,
+					Field:  "Version",
+				}
+				if len(field.Names) > 0 {
+					finding.Field = field.Names[0].Name
+				}
+				rawTag := ""
+				if field.Tag != nil {
+					if unquoted, err := strconv.Unquote(field.Tag.Value); err == nil {
+						rawTag = unquoted
+					}
+				}
+				if got, hasJSON, blocked, deviates := actionTypeVersionTagDeviation(reflect.StructTag(rawTag)); deviates {
+					finding.Got, finding.HasJSON, finding.Blocked = got, hasJSON, blocked
+					findings = append(findings, finding)
+				}
+			}
+		}
+	}
+	return findings
+}
+
+// actionTypeVersionTagDeviation classifies the json tag of a model.Version
+// field in a DSL action type against the required json:"version,omitempty":
+// the wire name must be exactly "version" and omitempty must keep an unset
+// version out of marshaled bodies. json:"-" is reported separately because
+// no tool may heal it.
+func actionTypeVersionTagDeviation(tag reflect.StructTag) (got string, hasJSON, blocked, deviates bool) {
+	value, ok := tag.Lookup("json")
+	if !ok {
+		return "", false, false, true
+	}
+	name, options, _ := strings.Cut(value, ",")
+	if strings.TrimSpace(name) == "-" && len(options) == 0 {
+		return value, true, true, true
+	}
+	if strings.TrimSpace(name) != "version" {
+		return value, true, false, true
+	}
+	for option := range strings.SplitSeq(options, ",") {
+		if strings.TrimSpace(option) == "omitempty" {
+			return value, true, false, false
+		}
+	}
+	return value, true, false, true
+}
+
+// localFieldTypeNames collects the same-package type names a field type can
+// reach: bare identifiers, unwrapped through pointers, slices, arrays and map
+// values. Qualified names live in other packages and are out of scope.
+func localFieldTypeNames(expr ast.Expr) []string {
+	switch typed := expr.(type) {
+	case *ast.Ident:
+		return []string{typed.Name}
+	case *ast.StarExpr:
+		return localFieldTypeNames(typed.X)
+	case *ast.ArrayType:
+		return localFieldTypeNames(typed.Elt)
+	case *ast.MapType:
+		return localFieldTypeNames(typed.Value)
+	}
+	return nil
+}
+
+// modelAliasesOf returns the local names under which an already parsed file
+// imports the framework model package.
+func modelAliasesOf(file *ast.File) []string {
+	var aliases []string
+	for _, imp := range file.Imports {
+		if imp.Path == nil || imp.Path.Value != `"`+gstModelImportPath+`"` {
+			continue
+		}
+		switch {
+		case imp.Name == nil:
+			aliases = append(aliases, "model")
+		case imp.Name.Name != "_" && imp.Name.Name != ".":
+			aliases = append(aliases, imp.Name.Name)
+		}
+	}
+	return aliases
 }
 
 // modelImportAliases returns the local names under which path imports the
