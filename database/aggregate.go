@@ -145,14 +145,17 @@ func (a *aggregator[M, R]) Offset(n int) types.Aggregator[M, R] {
 // that failed to attach: the error surfaces at the terminal instead of as a nil
 // dereference partway through building the query.
 
-func (a *aggregator[M, R]) WithBuildSQL(statements *[]types.SQLStatement) types.Aggregator[M, R] {
+func (a *aggregator[M, R]) WithDryRun(collector ...*[]types.SQLStatement) types.Aggregator[M, R] {
 	a.dryRun = true
-	a.statements = statements
-	return a
-}
-
-func (a *aggregator[M, R]) WithDryRun() types.Aggregator[M, R] {
-	a.dryRun = true
+	if len(collector) > 0 {
+		if collector[0] == nil {
+			if a.err == nil {
+				a.err = ErrNilSQLBuilder
+			}
+			return a
+		}
+		a.statements = collector[0]
+	}
 	return a
 }
 
@@ -298,7 +301,6 @@ func (a *aggregator[M, R]) build(mode buildMode) (*gorm.DB, error) {
 	// Scan for the page, then CountGroups for the total.
 	a.db.ins = a.session()
 	a.db.dryRun = a.dryRun
-	a.db.buildingSQL = a.statements != nil
 	a.db.sqlStatements = a.statements
 
 	// Model is what names the table and carries the schema: gorm reads the

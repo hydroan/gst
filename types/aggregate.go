@@ -78,11 +78,10 @@ type Aggregator[M Model, R any] interface {
 	// the builder do not apply to it.
 	CountGroups(count *int) error
 
-	// WithBuildSQL builds the SQL for the next terminal operation and appends
-	// it to the collector instead of executing it.
-	WithBuildSQL(statements *[]SQLStatement) Aggregator[M, R]
-	// WithDryRun builds the SQL without database I/O.
-	WithDryRun() Aggregator[M, R]
+	// WithDryRun builds the SQL without database I/O. An optional collector
+	// receives the generated Query, Args, and RenderedSQL of the next
+	// terminal operation instead of executing it.
+	WithDryRun(collector ...*[]SQLStatement) Aggregator[M, R]
 }
 
 // AggregateFn is the function applied to one projection term. The set is

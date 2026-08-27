@@ -32,8 +32,6 @@ var databaseTerminalMethods = map[string]bool{
 	"Last":       true,
 	"Take":       true,
 	"Count":      true,
-	"Cleanup":    true,
-	"Health":     true,
 }
 
 // databaseChainMethods lists the types.DatabaseOption methods that keep the
@@ -51,7 +49,7 @@ var databaseChainMethods = map[string]bool{
 	"WithOrder":      true,
 	"WithExpand":     true,
 	"WithPurge":      true,
-	"WithBuildSQL":   true,
+	"WithDeleted":    true,
 	"WithDryRun":     true,
 	"WithoutHook":    true,
 }

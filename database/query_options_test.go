@@ -1597,7 +1597,6 @@ func TestDatabaseWithDeleted(t *testing.T) {
 		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().UpdateByID(alive.ID, colName.Set("renamed")), database.ErrWithDeletedOnWrite)
 		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().Upsert(alive), database.ErrWithDeletedOnWrite)
 		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().Delete(alive), database.ErrWithDeletedOnWrite)
-		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().Cleanup(), database.ErrWithDeletedOnWrite)
 
 		count := new(int)
 		require.NoError(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().Count(count))
@@ -1646,12 +1645,12 @@ func TestDatabaseWithDeleted(t *testing.T) {
 
 		var defaultStmts []types.SQLStatement
 		items := make([]*TestSoftDeleteItem, 0)
-		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).WithBuildSQL(&defaultStmts).List(&items))
+		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).WithDryRun(&defaultStmts).List(&items))
 		require.Len(t, defaultStmts, 1)
 		require.Contains(t, defaultStmts[0].RenderedSQL, "deleted_at", "a default read keeps the soft-delete condition")
 
 		var withDeletedStmts []types.SQLStatement
-		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).WithDeleted().WithBuildSQL(&withDeletedStmts).List(&items))
+		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).WithDeleted().WithDryRun(&withDeletedStmts).List(&items))
 		require.Len(t, withDeletedStmts, 1)
 		require.NotContains(t, withDeletedStmts[0].RenderedSQL, "deleted_at", "WithDeleted lifts the soft-delete condition from the built SQL")
 	})

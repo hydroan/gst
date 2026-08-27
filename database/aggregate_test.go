@@ -433,7 +433,7 @@ func TestAggregateCountGroups(t *testing.T) {
 		var groups int
 		statements := make([]types.SQLStatement, 0)
 		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
-			WithBuildSQL(&statements).
+			WithDryRun(&statements).
 			Select(aggCols.Category.Group(), total).
 			Having(total.Gt(600)).
 			CountGroups(&groups))
@@ -729,7 +729,7 @@ func TestAggregateBuildErrors(t *testing.T) {
 	})
 }
 
-func TestAggregateBuildSQL(t *testing.T) {
+func TestAggregateWithDryRunCollector(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
 
@@ -740,7 +740,7 @@ func TestAggregateBuildSQL(t *testing.T) {
 	rows := make([]row, 0)
 	statements := make([]types.SQLStatement, 0)
 	require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
-		WithBuildSQL(&statements).
+		WithDryRun(&statements).
 		Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
 		Scan(&rows))
 
@@ -1109,7 +1109,7 @@ func TestFilterExistsQualifiesInnerColumns(t *testing.T) {
 	statements := make([]types.SQLStatement, 0)
 	records := make([]*TestAggregateRecord, 0)
 	require.NoError(t, database.Database[*TestAggregateRecord](context.Background()).
-		WithBuildSQL(&statements).
+		WithDryRun(&statements).
 		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{byTagID}}).
 		List(&records))
 
@@ -1431,7 +1431,7 @@ func TestAggregateGroupByRendersRawExpression(t *testing.T) {
 	statements := make([]types.SQLStatement, 0)
 	rows := make([]row, 0)
 	require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
-		WithBuildSQL(&statements).
+		WithDryRun(&statements).
 		Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
 		Scan(&rows))
 

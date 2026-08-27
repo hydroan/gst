@@ -537,10 +537,10 @@ func TestDatabaseUpsert(t *testing.T) {
 		require.True(t, items[0].UpdatedAt.Equal(got.UpdatedAt), "updated_at on the upserted object must equal the persisted value")
 	})
 
-	t.Run("builds SQL without executing under WithBuildSQL", func(t *testing.T) {
+	t.Run("builds SQL without executing under WithDryRun", func(t *testing.T) {
 		stmts := make([]types.SQLStatement, 0)
 		item := &TestUniqueItem{UniqueCode: "upsert-dry", Name: "dry"}
-		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).WithBuildSQL(&stmts).Upsert(item))
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).WithDryRun(&stmts).Upsert(item))
 		require.Len(t, stmts, 1)
 		require.Contains(t, stmts[0].RenderedSQL, "upsert-dry")
 		require.Empty(t, item.ID, "dry run must not fill ids")

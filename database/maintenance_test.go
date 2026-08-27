@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,8 +31,8 @@ func TestDatabaseCleanup(t *testing.T) {
 	require.Equal(t, u3.ID, u.ID)
 	require.Equal(t, u3.Name, u.Name)
 
-	// Test Cleanup - should permanently delete soft-deleted records (u1 and u2)
-	require.NoError(t, database.Database[*TestUser](context.Background()).Cleanup())
+	// Cleanup permanently deletes the soft-deleted records (u1 and u2)
+	require.NoError(t, database.Cleanup[*TestUser](context.Background()))
 
 	// Verify soft-deleted records are permanently removed
 	// After Cleanup, u1 and u2 should be permanently deleted
@@ -50,67 +49,50 @@ func TestDatabaseCleanup(t *testing.T) {
 	require.Equal(t, u3.Age, u.Age)
 	require.Equal(t, u3.Email, u.Email)
 
-	// Test Cleanup with no soft-deleted records - should not error
-	require.NoError(t, database.Database[*TestUser](context.Background()).Cleanup())
+	// Cleanup with no soft-deleted records left - should not error
+	require.NoError(t, database.Cleanup[*TestUser](context.Background()))
 
 	// Verify u3 still exists after second Cleanup
 	require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 	require.Equal(t, 1, *count, "u3 should still exist after second Cleanup")
 
-	// Test Cleanup with different model types
-	require.NoError(t, database.Database[*TestItem](context.Background()).Cleanup())
-	require.NoError(t, database.Database[*TestCategory](context.Background()).Cleanup())
+	// Cleanup works for different model types
+	require.NoError(t, database.Cleanup[*TestItem](context.Background()))
+	require.NoError(t, database.Cleanup[*TestCategory](context.Background()))
 }
 
-func TestDatabaseCleanupWithDryRun(t *testing.T) {
-	require.NoError(t, database.DB().AutoMigrate(&cleanupSoftDeleteUser{}))
-	t.Cleanup(func() {
-		require.NoError(t, database.DB().Migrator().DropTable(&cleanupSoftDeleteUser{}))
-	})
+func TestDatabaseCleanupOn(t *testing.T) {
+	defer cleanupTestData()
+	setupTestData(t)
 
-	u1 := &cleanupSoftDeleteUser{Name: "cleanup-user-1", ID: "cleanup-user-1"}
-	u2 := &cleanupSoftDeleteUser{Name: "cleanup-user-2", ID: "cleanup-user-2"}
-	require.NoError(t, database.Database[*cleanupSoftDeleteUser](context.Background()).Create(u1, u2))
-	require.NoError(t, database.Database[*cleanupSoftDeleteUser](context.Background()).Delete(u1, u2))
-	require.Equal(t, int64(2), countSoftDeletedCleanupUsers(t), "setup should leave two soft-deleted users")
+	// CleanupOn against the default handle behaves exactly like Cleanup.
+	require.NoError(t, database.Database[*TestUser](context.Background()).Delete(u1))
+	require.NoError(t, database.CleanupOn[*TestUser](context.Background(), database.DB()))
 
-	require.NoError(t, database.Database[*cleanupSoftDeleteUser](context.Background()).WithDryRun().Cleanup())
-	require.Equal(t, int64(2), countSoftDeletedCleanupUsers(t), "dry-run Cleanup should not remove soft-deleted users")
-
-	require.NoError(t, database.Database[*cleanupSoftDeleteUser](context.Background()).Cleanup())
-	require.Equal(t, int64(0), countSoftDeletedCleanupUsers(t), "Cleanup should permanently remove soft-deleted users")
+	count := new(int)
+	require.NoError(t, database.Database[*TestUser](context.Background()).WithDeleted().Count(count))
+	require.Equal(t, 2, *count, "CleanupOn should remove the soft-deleted row for good")
 }
 
 func TestDatabaseHealth(t *testing.T) {
-	// Test basic health check - should pass when database is healthy
-	require.NoError(t, database.Database[*TestUser](context.Background()).Health())
+	// Basic health check - should pass when the database is healthy, and stay
+	// idempotent across repeated probes.
+	require.NoError(t, database.Health(context.Background()))
+	require.NoError(t, database.Health(context.Background()))
 
-	// Test health check multiple times - should be idempotent
-	require.NoError(t, database.Database[*TestUser](context.Background()).Health())
-	require.NoError(t, database.Database[*TestUser](context.Background()).Health())
-
-	// Test health check after database operations - should still pass
+	// Health check after database operations - should still pass
 	defer cleanupTestData()
 	setupTestData(t)
-	require.NoError(t, database.Database[*TestUser](context.Background()).Health())
-
-	// Test health check with different model types - should work for all models
-	require.NoError(t, database.Database[*TestItem](context.Background()).Health())
-	require.NoError(t, database.Database[*TestCategory](context.Background()).Health())
+	require.NoError(t, database.Health(context.Background()))
 }
 
-type cleanupSoftDeleteUser struct {
-	Name string `json:"name"`
+func TestDatabaseHealthOn(t *testing.T) {
+	// HealthOn against the default handle behaves exactly like Health.
+	require.NoError(t, database.HealthOn(context.Background(), database.DB()))
 
-	model.Base
-}
-
-func (*cleanupSoftDeleteUser) TableName() string { return "cleanup_soft_delete_users" }
-
-func countSoftDeletedCleanupUsers(t *testing.T) int64 {
-	t.Helper()
-
-	var count int64
-	require.NoError(t, database.DB().Model(&cleanupSoftDeleteUser{}).Unscoped().Where("deleted_at IS NOT NULL").Count(&count).Error)
-	return count
+	// An open transaction is not a connection pool; HealthOn refuses it.
+	tx := database.DB().Begin()
+	require.NoError(t, tx.Error)
+	defer tx.Rollback()
+	require.ErrorIs(t, database.HealthOn(context.Background(), tx), database.ErrTransactionInstance)
 }

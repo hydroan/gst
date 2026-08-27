@@ -53,8 +53,9 @@ var (
 	// primary or unique key, translated from the dialect's own error.
 	ErrDuplicatedKey = gorm.ErrDuplicatedKey
 
-	// ErrNilSQLBuilder is returned when WithBuildSQL runs without a statement
-	// collector to append to.
+	// ErrNilSQLBuilder is returned when WithDryRun is handed an explicitly nil
+	// statement collector: the caller asked for statements it could never
+	// receive.
 	ErrNilSQLBuilder = errors.New("sql statement collector cannot be nil")
 
 	// ErrNilTransaction is returned when Transaction or TransactionOn is
@@ -85,7 +86,7 @@ var (
 	ErrLockOutsideTransaction = errors.New("WithLock requires a transaction: wrap the operation in database.Transaction")
 
 	// ErrWithDeletedOnWrite is returned when WithDeleted is combined with a
-	// write operation or Cleanup. The option only widens what a read can see;
+	// write operation. The option only widens what a read can see;
 	// soft-deleted rows cannot be written, and removing them for good is what
 	// Cleanup and WithPurge are for.
 	ErrWithDeletedOnWrite = errors.New("WithDeleted applies only to read operations")
@@ -195,8 +196,7 @@ type database[M types.Model] struct {
 	dryRun         bool  // build SQL without database I/O, hooks, or object field filling.
 
 	// sql
-	buildingSQL   bool // collect generated SQL statements for WithBuildSQL.
-	sqlStatements *[]types.SQLStatement
+	sqlStatements *[]types.SQLStatement // collector supplied to WithDryRun, nil when the dry run only builds.
 
 	// cursor pagination
 	cursor types.Cursor // feed ordering, boundary value, and travel direction; a zero Value disables cursor pagination.
@@ -257,7 +257,6 @@ func (db *database[M]) reset() {
 	db.dryRun = false
 
 	// reset sql build state
-	db.buildingSQL = false
 	db.sqlStatements = nil
 
 	// reset cursor pagination

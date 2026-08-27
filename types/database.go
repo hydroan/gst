@@ -3,15 +3,15 @@ package types
 import "github.com/hydroan/gst/types/consts"
 
 // Database defines the model-scoped database operation contract.
-// It provides CRUD operations, query builders, transactions, cleanup, health checks,
-// and optional cache/dry-run behavior for a single Model type.
+// It provides CRUD operations, query builders, transactions, and optional
+// dry-run behavior for a single Model type.
 //
 // Type Parameters:
 //   - M: Model type that implements Model interface
 //
 // The interface embeds DatabaseOption[M] to provide chainable query building.
 // A chain is expected to end with one terminal operation, such as Create, List,
-// Get, Count, Cleanup, or Health.
+// Get, or Count.
 //
 // Implementations share an underlying GORM session. Call database.Database[M](ctx)
 // again for each independent operation chain. Keeping the returned value in a
@@ -69,10 +69,6 @@ type Database[M Model] interface {
 	Take(dest M) error
 	// Count returns the total number of records matching the query conditions.
 	Count(*int) error
-	// Cleanup permanently deletes all soft-deleted records; WithDryRun only builds the cleanup SQL.
-	Cleanup() error
-	// Health checks database connectivity and is not disabled by WithDryRun.
-	Health() error
 
 	DatabaseOption[M]
 }
@@ -108,10 +104,10 @@ type DatabaseOption[M Model] interface {
 	// First, Last, Take, Count). Only the soft-delete condition is lifted;
 	// combining it with a write operation or Cleanup fails the chain.
 	WithDeleted() Database[M]
-	// WithBuildSQL builds SQL for the next terminal operation and appends Query, Args, and RenderedSQL to the collector.
-	WithBuildSQL(statements *[]SQLStatement) Database[M]
-	// WithDryRun builds SQL without database I/O, framework hooks, cache mutation, or object field filling.
-	WithDryRun() Database[M]
+	// WithDryRun builds SQL without database I/O, framework hooks, cache
+	// mutation, or object field filling. An optional collector receives the
+	// generated Query, Args, and RenderedSQL of the next terminal operation.
+	WithDryRun(collector ...*[]SQLStatement) Database[M]
 	// WithoutHook disables model hooks for the operation.
 	WithoutHook() Database[M]
 }

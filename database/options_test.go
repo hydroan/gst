@@ -343,10 +343,10 @@ func TestDatabaseWithDryRun(t *testing.T) {
 	})
 }
 
-func TestDatabaseWithBuildSQL(t *testing.T) {
+func TestDatabaseWithDryRunCollector(t *testing.T) {
 	t.Run("NilCollector", func(t *testing.T) {
 		users := make([]*TestUser, 0)
-		err := database.Database[*TestUser](context.Background()).WithBuildSQL(nil).List(&users)
+		err := database.Database[*TestUser](context.Background()).WithDryRun(nil).List(&users)
 
 		require.ErrorIs(t, err, database.ErrNilSQLBuilder)
 	})
@@ -356,7 +356,7 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 		users := make([]*TestUser, 0)
 
 		err := database.Database[*TestUser](context.Background()).
-			WithBuildSQL(&stmts).
+			WithDryRun(&stmts).
 			WithQuery(&TestUser{Name: u1.Name}).
 			WithOrder(types.Desc("created_at")).
 			List(&users)
@@ -366,7 +366,7 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 		requireSQLContains(t, stmts[0], "SELECT", "FROM", "test_users", "WHERE", "ORDER BY")
 		require.Contains(t, stmts[0].Args, u1.Name)
 		require.Contains(t, stmts[0].RenderedSQL, u1.Name)
-		require.Empty(t, users, "WithBuildSQL should not execute the query or fill the destination")
+		require.Empty(t, users, "WithDryRun should not execute the query or fill the destination")
 	})
 
 	t.Run("ListWithModelQuery", func(t *testing.T) {
@@ -385,7 +385,7 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 			}
 
 			err := database.Database[*queryableTestUser](context.Background()).
-				WithBuildSQL(&stmts).
+				WithDryRun(&stmts).
 				WithQuery(query).
 				List(&users)
 
@@ -398,7 +398,7 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 			require.NotContains(t, stmts[0].Args, *query.CursorValue)
 			require.NotContains(t, stmts[0].Args, query.CursorField)
 			require.NotContains(t, stmts[0].Args, query.SortBy)
-			require.Empty(t, users, "WithBuildSQL should not execute the query or fill the destination")
+			require.Empty(t, users, "WithDryRun should not execute the query or fill the destination")
 		})
 
 		t.Run("Pagination", func(t *testing.T) {
@@ -410,7 +410,7 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 			}
 
 			err := database.Database[*paginatableTestUser](context.Background()).
-				WithBuildSQL(&stmts).
+				WithDryRun(&stmts).
 				WithQuery(query).
 				List(&users)
 
@@ -419,7 +419,7 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 			require.Contains(t, stmts[0].Args, query.Name)
 			require.NotContains(t, stmts[0].Args, "2")
 			require.NotContains(t, stmts[0].Args, "10")
-			require.Empty(t, users, "WithBuildSQL should not execute the query or fill the destination")
+			require.Empty(t, users, "WithDryRun should not execute the query or fill the destination")
 		})
 
 		t.Run("Cursor", func(t *testing.T) {
@@ -434,7 +434,7 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 			}
 
 			err := database.Database[*cursorableTestUser](context.Background()).
-				WithBuildSQL(&stmts).
+				WithDryRun(&stmts).
 				WithQuery(query).
 				List(&users)
 
@@ -444,7 +444,7 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 			require.NotContains(t, stmts[0].Args, *query.CursorValue)
 			require.NotContains(t, stmts[0].Args, query.CursorField)
 			require.NotContains(t, stmts[0].Args, "1")
-			require.Empty(t, users, "WithBuildSQL should not execute the query or fill the destination")
+			require.Empty(t, users, "WithDryRun should not execute the query or fill the destination")
 		})
 	})
 
@@ -453,23 +453,23 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 
 		var stmts []types.SQLStatement
 		user := &TestUser{Name: "build-sql-create", Email: "build-sql-create@example.com"}
-		err := database.Database[*TestUser](context.Background()).WithBuildSQL(&stmts).Create(user)
+		err := database.Database[*TestUser](context.Background()).WithDryRun(&stmts).Create(user)
 
 		require.NoError(t, err)
 		require.Len(t, stmts, 1)
 		requireSQLContains(t, stmts[0], "INSERT", "INTO", "test_users")
 		require.Contains(t, stmts[0].Args, user.Name)
 		require.Contains(t, stmts[0].RenderedSQL, user.Name)
-		require.Empty(t, user.ID, "WithBuildSQL should not fill model IDs")
-		require.True(t, user.CreatedAt.IsZero(), "WithBuildSQL should not fill created_at")
-		require.True(t, user.UpdatedAt.IsZero(), "WithBuildSQL should not fill updated_at")
-		require.Nil(t, user.Remark, "WithBuildSQL should not run model hooks")
+		require.Empty(t, user.ID, "WithDryRun should not fill model IDs")
+		require.True(t, user.CreatedAt.IsZero(), "WithDryRun should not fill created_at")
+		require.True(t, user.UpdatedAt.IsZero(), "WithDryRun should not fill updated_at")
+		require.Nil(t, user.Remark, "WithDryRun should not run model hooks")
 
 		users := make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithQuery(&TestUser{Name: user.Name}).
 			List(&users))
-		require.Empty(t, users, "WithBuildSQL should not create database rows")
+		require.Empty(t, users, "WithDryRun should not create database rows")
 	})
 
 	t.Run("BatchCreate", func(t *testing.T) {
@@ -481,7 +481,7 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 		}
 
 		err := database.Database[*TestUser](context.Background()).
-			WithBuildSQL(&stmts).
+			WithDryRun(&stmts).
 			WithBatchSize(2).
 			Create(users...)
 
@@ -502,14 +502,14 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 		dest := &TestUser{ID: existingID}
 		var stmts []types.SQLStatement
 
-		err := database.Database[*TestUser](context.Background()).WithBuildSQL(&stmts).Get(dest, requestedID)
+		err := database.Database[*TestUser](context.Background()).WithDryRun(&stmts).Get(dest, requestedID)
 
 		require.NoError(t, err)
 		require.Len(t, stmts, 1)
 		requireSQLContains(t, stmts[0], "SELECT", "FROM", "test_users", "WHERE")
 		require.Equal(t, []any{requestedID}, stmts[0].Args, "Get SQL should only use the requested id")
 		require.Contains(t, stmts[0].RenderedSQL, requestedID)
-		require.Equal(t, existingID, dest.ID, "WithBuildSQL should leave destination values unchanged")
+		require.Equal(t, existingID, dest.ID, "WithDryRun should leave destination values unchanged")
 	})
 
 	t.Run("ResetsAfterAction", func(t *testing.T) {
@@ -517,7 +517,7 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 
 		var stmts []types.SQLStatement
 		user := &TestUser{Name: "build-sql-reset", Email: "build-sql-reset@example.com"}
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithBuildSQL(&stmts).Create(user))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithDryRun(&stmts).Create(user))
 		require.Len(t, stmts, 1)
 
 		require.NoError(t, database.Database[*TestUser](context.Background()).Create(user))
@@ -526,7 +526,7 @@ func TestDatabaseWithBuildSQL(t *testing.T) {
 		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithQuery(&TestUser{Name: user.Name}).
 			List(&users))
-		require.Len(t, users, 1, "normal actions after WithBuildSQL should execute database I/O")
+		require.Len(t, users, 1, "normal actions after WithDryRun should execute database I/O")
 	})
 }
 

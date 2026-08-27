@@ -226,18 +226,18 @@ func TestClickhouse(t *testing.T) {
 		// would write real rows.
 		stmts := make([]types.SQLStatement, 0)
 		row := &TestAggregateRecord{Category: "dry", Status: "x", OccurredAt: time.Date(2024, 3, 3, 0, 0, 0, 0, time.UTC)}
-		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithBuildSQL(&stmts).Create(row),
+		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithDryRun(&stmts).Create(row),
 			database.ErrUnsupportedOnDialect)
 		require.Empty(t, listIDs(t, types.FilterEq("category", "dry")), "the refused dry run must not persist rows")
 
-		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithBuildSQL(&stmts).
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithDryRun(&stmts).
 			Delete(&TestAggregateRecord{ID: "dry-1"}))
 		require.Len(t, stmts, 1)
 		require.Contains(t, stmts[0].RenderedSQL, "DELETE FROM",
 			"delete must render the lightweight DELETE, not an ALTER TABLE mutation")
 
 		stmts = stmts[:0]
-		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithBuildSQL(&stmts).WithSelect(colStatus).
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithDryRun(&stmts).WithSelect(colStatus).
 			Update(&TestAggregateRecord{Status: "y", ID: "dry-1"}))
 		require.Len(t, stmts, 1)
 		require.Contains(t, stmts[0].RenderedSQL, "ALTER TABLE",
@@ -250,7 +250,7 @@ func TestClickhouse(t *testing.T) {
 		record := &TestAggregateRecord{Category: "x", ID: "w1"}
 
 		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Upsert(record), database.ErrUnsupportedOnDialect)
-		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Cleanup(), database.ErrUnsupportedOnDialect)
+		require.ErrorIs(t, database.CleanupOn[*TestAggregateRecord](ctx, ins), database.ErrUnsupportedOnDialect)
 		require.ErrorIs(t, database.TransactionOn(ctx, ins, func(ctx context.Context) error { return nil }), database.ErrUnsupportedOnDialect)
 
 		got := new(TestAggregateRecord)

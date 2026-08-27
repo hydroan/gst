@@ -63,11 +63,16 @@ func (db *database[M]) WithBatchSize(size int) types.Database[M] {
 // framework overhead without touching the backing database.
 // The generated SQL will be built by GORM but not executed against the database.
 //
+// An optional collector receives the generated statements: pass a
+// *[]types.SQLStatement and the next terminal operation appends its Query,
+// Args, and RenderedSQL to it instead of executing. Passing an explicitly nil
+// collector fails the chain with ErrNilSQLBuilder, because the caller asked
+// for statements it could never receive. Without a collector the SQL is only
+// built, which still exercises query construction and validation.
+//
 // Behavior:
 //   - Create/Update/Delete/UpdateByID: Builds SQL without modifying database rows
 //   - List/Get/Count/First/Last/Take: Builds SQL without reading database rows
-//   - Cleanup: Builds cleanup DELETE SQL without permanently removing soft-deleted rows
-//   - Health: Not affected; it still executes connection checks
 //   - Read operations leave destination values unchanged because no rows are loaded
 //   - Model hooks are not executed because dry-run is limited to SQL construction
 //   - Input model objects are left unchanged; no ID, timestamp, or soft-delete fields are filled
@@ -75,17 +80,27 @@ func (db *database[M]) WithBatchSize(size int) types.Database[M] {
 // Example:
 //
 //	WithDryRun().Create(&user)              // Build INSERT SQL without creating record
-//	WithDryRun().Update(&user)              // Build UPDATE SQL without updating record
-//	WithDryRun().Delete(&user)              // Build DELETE SQL without deleting record
 //	WithDryRun().UpdateByID(id, SampleCols.Name.Set(v))  // Build UPDATE SQL without updating record
-//	WithDryRun().List(&users)               // Build SELECT SQL without loading records
-//	WithDryRun().Cleanup()                  // Build cleanup DELETE SQL without removing rows
+//
+//	var statements []types.SQLStatement
+//	err := database.Database[*User](context.Background()).
+//	    WithDryRun(&statements).
+//	    WithQuery(&User{Name: "John"}).
+//	    List(&users)
 //
 // WithDryRun is build-only: it does not execute generated SQL, model hooks, or object field filling.
-func (db *database[M]) WithDryRun() types.Database[M] {
+// Transaction helpers are not supported because they manage real transaction control flow.
+func (db *database[M]) WithDryRun(collector ...*[]types.SQLStatement) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	db.dryRun = true
+	if len(collector) > 0 {
+		if collector[0] == nil {
+			db.err = ErrNilSQLBuilder
+			return db
+		}
+		db.sqlStatements = collector[0]
+	}
 	return db
 }
 
@@ -107,42 +122,16 @@ func dryRunSession(tx *gorm.DB) *gorm.DB {
 	return tx.Session(&gorm.Session{DryRun: true, SkipDefaultTransaction: true, Logger: glogger.Default.LogMode(glogger.Silent)})
 }
 
-// WithBuildSQL enables SQL build mode for the next terminal operation.
-// It appends generated Query, Args, and RenderedSQL values to statements without
-// executing database I/O, model hooks, or object field filling.
-//
-// WithBuildSQL is intended for CRUD, read, cleanup, and health-check SQL generation.
-// Transaction helpers are not supported because they manage real transaction control flow.
-//
-// Example:
-//
-//	var statements []types.SQLStatement
-//	err := database.Database[*User](context.Background()).
-//	    WithBuildSQL(&statements).
-//	    WithQuery(&User{Name: "John"}).
-//	    List(&users)
-func (db *database[M]) WithBuildSQL(statements *[]types.SQLStatement) types.Database[M] {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-
-	db.dryRun = true
-	db.buildingSQL = true
-	db.sqlStatements = statements
-	return db
-}
-
-// collectSQL appends generated SQL to the active WithBuildSQL collector.
-// It preserves placeholders in Query, keeps bound values in Args, and stores
-// dialect-rendered SQL in RenderedSQL for inspection.
+// collectSQL appends generated SQL to the active WithDryRun collector, when
+// one was supplied. It preserves placeholders in Query, keeps bound values in
+// Args, and stores dialect-rendered SQL in RenderedSQL for inspection. A dry
+// run without a collector only builds, so there is nothing to append.
 func (db *database[M]) collectSQL(tx *gorm.DB) error {
 	if tx == nil {
 		return nil
 	}
-	if !db.buildingSQL {
-		return tx.Error
-	}
 	if db.sqlStatements == nil {
-		return ErrNilSQLBuilder
+		return tx.Error
 	}
 	if tx.Statement != nil {
 		if query := tx.Statement.SQL.String(); len(query) > 0 {
