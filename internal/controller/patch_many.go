@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
+	"github.com/hydroan/gst/internal/modelregistry"
 	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
@@ -97,6 +98,25 @@ func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg 
 			return
 		}
 		normalizeBatchRequest(&req)
+		// A versioned model must carry a version on every item, exactly like
+		// the single-resource patch; failing the whole batch up front keeps
+		// the all-or-nothing shape a defective request deserves. See
+		// modelregistry.Version.
+		if versionField, versioned := modelregistry.VersionFieldName(meta.newModel()); versioned {
+			for i := range req.Items {
+				itemFields := patchFieldSet{}
+				if i < len(fieldSets) {
+					itemFields = fieldSets[i]
+				}
+				if _, ok := itemFields[versionField]; !ok {
+					log.Errorz("versioned model patched without its version",
+						zap.Int("item", i), zap.String("field", versionField))
+					JSON(c, databaseErrorCoder(database.ErrVersionRequired))
+					gstotel.RecordError(span, database.ErrVersionRequired)
+					return
+				}
+			}
+		}
 		for i, m := range req.Items {
 			var results []M
 			v := meta.newModel()

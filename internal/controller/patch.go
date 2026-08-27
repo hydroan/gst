@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/requestctx"
 	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/logger"
@@ -91,6 +92,19 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			JSON(c, CodeInvalidParam.WithErr(err))
 			gstotel.RecordError(span, err)
 			return
+		}
+		// A versioned model must carry the version it was read with on every
+		// partial update, exactly like Update: the merge would otherwise keep
+		// the freshly loaded row's version and the lock would silently check
+		// the row against itself. Enforced before the existence query so a
+		// defective request costs no database work. See modelregistry.Version.
+		if versionField, versioned := modelregistry.VersionFieldName(req); versioned {
+			if _, ok := fields[versionField]; !ok {
+				log.Errorz("versioned model patched without its version", zap.String("field", versionField))
+				JSON(c, databaseErrorCoder(database.ErrVersionRequired))
+				gstotel.RecordError(span, database.ErrVersionRequired)
+				return
+			}
 		}
 		// The resource id comes from the configured route parameter only.
 		if len(cfg) > 0 {

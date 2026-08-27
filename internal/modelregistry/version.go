@@ -54,6 +54,11 @@ import (
 //	            ErrVersionRequired, and zero matched rows fail with
 //	            ErrStaleObject. On success the version is bumped by one, in
 //	            the row and in the object.
+//	Patch       the framework partial-update controllers hold the request to
+//	            the same bar: a body without the version field fails with
+//	            ErrVersionRequired before any database work — the merge would
+//	            otherwise keep the freshly loaded row's version and the lock
+//	            would silently check the row against itself.
 //	UpdateByID  exempt from the check (the caller holds no object, so there
 //	            is no version to compare), but the statement still bumps the
 //	            column so everyone else's carried version expires. An
@@ -100,9 +105,10 @@ type Version int64
 // versionField describes where a model keeps its Version column. The zero
 // value (has == false) is the answer for models without one.
 type versionField struct {
-	index  int    // top-level struct field index of the Version field
-	column string // database column name the field maps to
-	has    bool
+	index     int    // top-level struct field index of the Version field
+	fieldName string // Go field name, keyed by the partial-update field sets
+	column    string // database column name the field maps to
+	has       bool
 }
 
 // versionFieldCache memoizes the per-type detection; a type's fields are
@@ -157,7 +163,7 @@ func versionFieldOf(m any) versionField {
 				"model %s field %s (model.Version) must carry json:\",omitempty\" and gorm:\"not null;default:1\", missing %s; default:1 backfills existing rows to a live version when the column is added — without it they are locked out of Update forever — and omitempty keeps an unset version out of marshaled request bodies, where an explicit zero is rejected. Run \"gg gen\" to fill the tags in",
 				typ, field.Name, strings.Join(quoted, " and ")))
 		}
-		info = versionField{index: i, column: versionColumnName(field), has: true}
+		info = versionField{index: i, fieldName: field.Name, column: versionColumnName(field), has: true}
 		break
 	}
 	versionFieldCache.Store(typ, info)
@@ -246,6 +252,18 @@ func versionColumnName(field reflect.StructField) string {
 // IsVersioned reports whether m declares a Version field and therefore takes
 // part in optimistic locking.
 func IsVersioned(m any) bool { return versionFieldOf(m).has }
+
+// VersionFieldName reports the Go field name of m's Version declaration, and
+// whether m declares one. The partial-update controllers key their body field
+// sets by Go field name, and use this to require the version on every patch
+// of a versioned model.
+func VersionFieldName(m any) (string, bool) {
+	info := versionFieldOf(m)
+	if !info.has {
+		return "", false
+	}
+	return info.fieldName, true
+}
 
 // VersionColumn reports the database column name of m's Version field, and
 // whether m declares one.
