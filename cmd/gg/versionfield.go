@@ -81,6 +81,14 @@ func scanVersionFieldFile(path string) ([]versionFieldFinding, error) {
 			if !ok || structType.Fields == nil {
 				continue
 			}
+			// Only database models are held to the tag contract. A request
+			// or response DTO may carry model.Version too — that is how a
+			// client hands the version back — but it never reaches the
+			// database, and a gorm tag on it would be dead weight. The
+			// embedded framework base is what marks a struct as a model.
+			if !structEmbedsModelBase(structType, aliases) {
+				continue
+			}
 			for _, field := range structType.Fields.List {
 				if !isModelVersionType(field.Type, aliases) {
 					continue
@@ -92,6 +100,28 @@ func scanVersionFieldFile(path string) ([]versionFieldFinding, error) {
 		}
 	}
 	return findings, nil
+}
+
+// structEmbedsModelBase reports whether the struct embeds the framework's
+// model.Base or model.AutoBase under one of the file's import aliases, which
+// is what marks it as a database model rather than a request/response type.
+func structEmbedsModelBase(structType *ast.StructType, aliases []string) bool {
+	for _, field := range structType.Fields.List {
+		if len(field.Names) > 0 {
+			continue
+		}
+		selector, ok := field.Type.(*ast.SelectorExpr)
+		if !ok || selector.Sel == nil {
+			continue
+		}
+		if selector.Sel.Name != "Base" && selector.Sel.Name != "AutoBase" {
+			continue
+		}
+		if ident, ok := selector.X.(*ast.Ident); ok && slices.Contains(aliases, ident.Name) {
+			return true
+		}
+	}
+	return false
 }
 
 // versionFieldDeviation classifies one model.Version field against the

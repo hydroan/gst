@@ -72,6 +72,18 @@ type Unrelated struct {
 	Value Version
 }
 `)
+	// A request DTO carries model.Version so clients can hand the version
+	// back; it is not a database model (no embedded base) and must not be
+	// held to the gorm tag contract.
+	writeCheckFile(t, filepath.Join(projectDir, "model", "config", "request.go"), `package config
+
+import "github.com/hydroan/gst/model"
+
+type UpdateReq struct {
+	GroupID string        `+"`json:\"group_id\"`"+`
+	Version model.Version `+"`json:\"version\"`"+`
+}
+`)
 
 	violations := CheckVersionFieldDeclarations(newProjectIgnoreMatcher())
 
