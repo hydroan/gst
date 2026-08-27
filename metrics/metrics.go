@@ -30,7 +30,6 @@ var (
 	CPUCount              prometheus.Gauge
 	CPUUsedPercent        prometheus.Gauge
 	ConcurrentConnections prometheus.Gauge
-	DBConnectionsOpen     prometheus.Gauge
 	CacheHit              *prometheus.CounterVec
 	CacheMiss             *prometheus.CounterVec
 	QueueSize             prometheus.Gauge
@@ -122,12 +121,6 @@ func Init() error {
 		Name:      "concurrent_connections",
 		Help:      "Number of concurrent connections",
 	})
-	DBConnectionsOpen = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: NAMESPACE,
-		Subsystem: SUBSYSTEM,
-		Name:      "db_connections_open",
-		Help:      "Number of open database connections",
-	})
 	CacheHit = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: NAMESPACE,
 		Subsystem: SUBSYSTEM,
@@ -186,7 +179,6 @@ func Init() error {
 	errs = append(errs, prometheus.Register(CPUCount))
 	errs = append(errs, prometheus.Register(CPUUsedPercent))
 	errs = append(errs, prometheus.Register(ConcurrentConnections))
-	errs = append(errs, prometheus.Register(DBConnectionsOpen))
 	errs = append(errs, prometheus.Register(CacheHit))
 	errs = append(errs, prometheus.Register(CacheMiss))
 	errs = append(errs, prometheus.Register(QueueSize))
