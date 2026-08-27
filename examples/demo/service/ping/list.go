@@ -25,9 +25,9 @@ func (p *Lister) List(ctx *types.ServiceContext, req *gstmodel.Empty) (rsp *mode
 
 	// sqls := make([]types.SQLStatement, 0)
 	//
-	// _ = database.Database[*iam.User](ctx).WithBuildSQL(&sqls).WithQuery(&iam.User{Username: "test"}).List(&users)
+	// _ = database.Database[*iam.User](ctx).WithDryRun(&sqls).WithQuery(&iam.User{Username: "test"}).List(&users)
 	// pretty.Println(sqls)
-	// _ = database.Database[*iam.User](ctx).WithBuildSQL(&sqls).Count(n)
+	// _ = database.Database[*iam.User](ctx).WithDryRun(&sqls).Count(n)
 	// pretty.Println(sqls)
 
 	return &model.PingRsp{
