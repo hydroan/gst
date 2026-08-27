@@ -11,6 +11,7 @@ import (
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	gormschema "gorm.io/gorm/schema"
 )
 
@@ -52,6 +53,13 @@ import (
 // model hooks — create/update hooks would lie for one of the two paths — and
 // must not be used to smuggle business writes past hook logic.
 //
+// A versioned model (model.Version) is exempt from the optimistic-lock check
+// — merge-overwrite is the point of Upsert — but the version column stays
+// honest on both paths: inserted rows start at version 1, and a conflict
+// update bumps the ROW's own version instead of writing the object's, so an
+// upsert can never move a row's version backwards and every carried version
+// out there expires. See model.Version.
+//
 // On a ClickHouse instance Upsert answers ErrUnsupportedOnDialect: there are
 // no conflict semantics to build on.
 //
@@ -90,15 +98,32 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 		batchSize = db.batchSize
 	}
 
+	// A versioned model replaces the UpdateAll clause gorm's slice Save would
+	// add: the conflict branch must bump the row's own version rather than
+	// write the object's over it. Save adopts a pre-set ON CONFLICT clause,
+	// so everything else about the slice save stays as it is. See
+	// versionedOnConflict and model.Version.
+	var onConflict clause.OnConflict
+	versionColumn, versioned := modelregistry.VersionColumn(db.m)
+	if versioned {
+		if onConflict, err = db.versionedOnConflict(versionColumn); err != nil {
+			return err
+		}
+	}
+
 	if db.dryRun {
 		if len(db.selectColumns) > 0 {
 			db.ins = db.ins.Select(db.selectColumns)
 		}
 		dryRunObjs := cloneDryRunModels(objs)
+		initializeVersions(dryRunObjs)
 		for i := 0; i < len(dryRunObjs); i += batchSize {
 			end := min(i+batchSize, len(dryRunObjs))
-			tx := dryRunSession(db.ins).Save(dryRunObjs[i:end])
-			if err = db.collectSQL(tx); err != nil {
+			tx := dryRunSession(db.ins)
+			if versioned {
+				tx = tx.Clauses(onConflict)
+			}
+			if err = db.collectSQL(tx.Save(dryRunObjs[i:end])); err != nil {
 				return err
 			}
 		}
@@ -117,12 +142,19 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 			objs[i].SetCreatedAt(now)
 			objs[i].SetUpdatedAt(now)
 		}
+		// Insert candidates start at version 1; a conflict never reads the
+		// object's version (the pre-set clause bumps the row's own instead).
+		initializeVersions(objs)
 		if len(db.selectColumns) > 0 {
 			db.ins = db.ins.Select(db.selectColumns)
 		}
 		for i := 0; i < len(objs); i += batchSize {
 			end := min(i+batchSize, len(objs))
-			if err = db.ins.Session(&gorm.Session{}).Save(objs[i:end]).Error; err != nil {
+			tx := db.ins.Session(&gorm.Session{})
+			if versioned {
+				tx = tx.Clauses(onConflict)
+			}
+			if err = tx.Save(objs[i:end]).Error; err != nil {
 				return err
 			}
 			if err = db.syncSaveResultsByUniqueIndexes(tableName, objs[i:end]); err != nil {

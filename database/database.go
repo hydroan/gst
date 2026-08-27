@@ -45,6 +45,23 @@ var (
 	// primary key is handed a record or an id argument without one.
 	ErrIDRequired = errors.New("id is required")
 
+	// ErrVersionRequired is returned when Update is handed a versioned record
+	// (a model declaring model.Version) whose version is zero. A full-row
+	// Update writes every column, so an object that was never read from the
+	// database would both wipe columns with zero values and dodge the
+	// optimistic lock; failing fast at the entry keeps the lock meaningful.
+	// UpdateByID is the sanctioned way to write specific columns without
+	// carrying a version.
+	ErrVersionRequired = errors.New("version is required: a versioned record must carry the version it was read with")
+
+	// ErrStaleObject is returned when a versioned write matched no row: the
+	// record was modified — or deleted — by someone else after this caller
+	// read it. The two cases are deliberately not distinguished (doing so
+	// would take an extra query and still race); the handling is the same:
+	// reload the record, let the caller re-decide over current data. Service
+	// layers typically map it to HTTP 409.
+	ErrStaleObject = errors.New("record was modified or deleted by another operation: reload and retry")
+
 	// ErrRecordNotFound is the gorm sentinel for a read that matches no live
 	// row; Get and Update also answer it for a missing or soft-deleted record.
 	ErrRecordNotFound = gorm.ErrRecordNotFound

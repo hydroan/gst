@@ -152,6 +152,11 @@ func registerPoolMetrics(db *gorm.DB) {
 func prepareTable(db *gorm.DB, m types.Model) {
 	defer modelregistry.TableDone()
 
+	// Touching the version metadata here makes a defective model.Version
+	// declaration (embedded, or missing its required tag) fail at startup
+	// for every registered model, instead of on its first write.
+	modelregistry.IsVersioned(m)
+
 	begin := time.Now()
 	typ := reflect.TypeOf(m).Elem()
 	if err := ensureTable(db, m); err != nil {
