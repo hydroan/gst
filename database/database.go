@@ -418,6 +418,11 @@ func databaseFor[M types.Model](ctx context.Context, base *gorm.DB) types.Databa
 	if modelregistry.PrefersReplica(*new(M)) {
 		ins = ins.Clauses(dbresolver.Read)
 	}
+	// Statement comments carry the issuing route (and trace id, by mode) to
+	// the database-side views; see comment.go.
+	if comment := sqlCommentFor(gctx); len(comment) > 0 {
+		ins = ins.Clauses(commentClauses(comment)...)
+	}
 
 	chain := &database[M]{
 		ins:  ins,

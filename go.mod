@@ -484,6 +484,7 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
+	gorm.io/hints v1.1.2 // indirect
 	honnef.co/go/tools v0.8.0 // indirect
 	mvdan.cc/unparam v0.0.0-20260818115549-3f964bcb5673 // indirect
 	stathat.com/c/consistent v1.0.0 // indirect

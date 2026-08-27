@@ -329,3 +329,10 @@ func clearConfigEnvForTest(t *testing.T) {
 		}
 	}
 }
+
+func TestSQLCommentModeValidate(t *testing.T) {
+	assert.NoError(t, config.SQLCommentOff.Validate())
+	assert.NoError(t, config.SQLCommentRoute.Validate())
+	assert.NoError(t, config.SQLCommentTrace.Validate())
+	assert.Error(t, config.SQLCommentMode("bogus").Validate(), "a typo must fail the boot, not silently disable comments")
+}

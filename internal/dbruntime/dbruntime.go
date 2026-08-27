@@ -115,6 +115,11 @@ func ensureTable(handler *gorm.DB, m types.Model) error {
 // NOTE: The version of gorm.io/driver/postgres lower than v1.5.4 have some issues.
 // More details see: https://github.com/go-gorm/gorm/issues/6886
 func InitDatabase(db *gorm.DB) (err error) {
+	// A mistyped comment mode must fail the boot, not silently strip the
+	// annotations an operator relies on; see config.SQLCommentMode.
+	if err := config.App.Database.SQLComment.Validate(); err != nil {
+		return err
+	}
 	if startedTable.CompareAndSwap(0, 1) {
 		go func() {
 			for m := range modelregistry.TableChan {

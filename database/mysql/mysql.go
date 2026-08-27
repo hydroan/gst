@@ -58,7 +58,13 @@ func New(cfg config.MySQL) (*gorm.DB, error) {
 	// max_prepared_stmt_count default; DDL invalidates prepared statements,
 	// which only matters for runtime DDL — migration runs at startup before
 	// the server takes traffic.
-	db, err := gorm.Open(mysql.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC, PrepareStmt: true})
+	//
+	// The trace comment mode is the one exception: per-request-unique
+	// statement texts would blow the cache instead of hitting it, so that
+	// mode turns PrepareStmt off and switches the driver to client-side
+	// interpolation — see traceCommentDSNSuffix and config.SQLCommentTrace.
+	prepareStmt := config.App.Database.SQLComment != config.SQLCommentTrace
+	db, err := gorm.Open(mysql.Open(buildDSN(cfg)+traceCommentDSNSuffix()), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC, PrepareStmt: prepareStmt})
 	if err != nil {
 		return nil, err
 	}
@@ -95,9 +101,23 @@ func attachReplicas(db *gorm.DB, cfg config.MySQL) (*gorm.DB, error) {
 		replicaCfg := cfg
 		replicaCfg.Host, replicaCfg.Port = host, port
 		replicaCfg.Replicas = nil
-		dialectors = append(dialectors, mysql.Open(buildDSN(replicaCfg)))
+		dialectors = append(dialectors, mysql.Open(buildDSN(replicaCfg)+traceCommentDSNSuffix()))
 	}
 	return dbruntime.AttachResolver(db, dialectors)
+}
+
+// traceCommentDSNSuffix is the DSN addition the trace comment mode needs on
+// every connection, replicas included: with per-request-unique statement
+// texts, server-side prepared statements would never be reused, so the
+// driver interpolates parameters client-side instead — one round trip per
+// statement over the text protocol. Interpolation is safe under the
+// framework's utf8mb4 charset; the driver refuses the character sets where
+// it would not be.
+func traceCommentDSNSuffix() string {
+	if config.App.Database.SQLComment == config.SQLCommentTrace {
+		return "&interpolateParams=true"
+	}
+	return ""
 }
 
 // buildDSN assembles the go-sql-driver DSN. clientFoundRows=true makes UPDATE
