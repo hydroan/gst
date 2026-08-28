@@ -200,24 +200,30 @@ func TestCacheDifferentTypes(t *testing.T) {
 	// One key shared across types must stay isolated twice over: the local
 	// stores are one per type, and the broadcast events carry the type tag.
 	// Word and string are JSON-compatible, so a broken type filter would let
-	// one leak into the other once the events loop back.
+	// one leak into the other once the events loop back. The word cache
+	// writes first and the string events are republished with ever newer
+	// timestamps afterwards: a leak cannot hide behind the watermark, and
+	// the republishing keeps pressing until the word consumer has surely
+	// joined.
 	wordCache := setupTestCache[Word](t)
-	err = strCache.Set(t.Context(), "shared-key", "string-value", 1*time.Minute)
-	require.NoError(t, err)
 	err = wordCache.Set(t.Context(), "shared-key", Word("word-value"), 1*time.Minute)
 	require.NoError(t, err)
-
-	// give the broadcast a moment to loop back before asserting nothing leaked
-	time.Sleep(time.Second)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		require.NoError(t, strCache.Set(t.Context(), "shared-key", "string-value", 1*time.Minute))
+		time.Sleep(100 * time.Millisecond)
+	}
 
 	strVal, err = strCache.Get(t.Context(), "shared-key")
 	require.NoError(t, err)
 	require.Equal(t, "string-value", strVal)
 	wordVal, err := wordCache.Get(t.Context(), "shared-key")
 	require.NoError(t, err)
-	require.Equal(t, Word("word-value"), wordVal)
+	require.Equal(t, Word("word-value"), wordVal, "string events must not leak into the word cache")
 
-	// deleting the key in one type must not touch the other
+	// Deleting the key in one type must not touch the other; the string
+	// delete carries the newest timestamp of all, so a filter leak would
+	// remove the word entry.
 	require.NoError(t, strCache.Delete(t.Context(), "shared-key"))
 	time.Sleep(time.Second)
 	require.False(t, strCache.Exists(t.Context(), "shared-key"))
