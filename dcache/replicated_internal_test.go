@@ -80,6 +80,22 @@ func TestCacheRequiresKafkaEnabled(t *testing.T) {
 	require.Error(t, err, "a disabled kafka must fail the construction")
 }
 
+// TestWriteRejectsInvalidUTF8Key pins the key contract: a key that JSON
+// would silently rewrite (invalid UTF-8 becomes U+FFFD) must be rejected up
+// front, or the peers would apply the operation to a different key than the
+// local store did.
+func TestWriteRejectsInvalidUTF8Key(t *testing.T) {
+	ctx := context.Background()
+
+	dc, err := newReplicatedCache[int](newFakeStore[int]())
+	require.NoError(t, err)
+
+	badKey := "a\xff\xfeb"
+	require.Error(t, dc.Set(ctx, badKey, 1, time.Minute))
+	require.Error(t, dc.Delete(ctx, badKey))
+	require.False(t, dc.Exists(ctx, badKey), "the rejected write must not reach the store")
+}
+
 // TestWatermarkCoversLocalWrites is the regression guard for the write-path
 // watermark: local Set and Delete enter the same per-key watermark as peer
 // events, so a stale peer event arriving later is rejected instead of

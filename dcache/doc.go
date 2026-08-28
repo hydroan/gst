@@ -17,8 +17,11 @@
 //   - Values travel between instances as JSON. T must round-trip through
 //     encoding/json without loss: a value whose state lives in unexported
 //     fields is stored intact locally but arrives at every peer as a hollow
-//     decoded copy, and nothing reports it. A marshal failure, by contrast,
-//     is returned by Set.
+//     decoded copy, and nothing reports it. Strings inside T must be valid
+//     UTF-8 for the same reason — encoding/json silently replaces invalid
+//     bytes with U+FFFD, so the peers would decode a different value. Keys
+//     are validated up front; values are not. A marshal failure, by
+//     contrast, is returned by Set.
 //   - Consumers join Kafka with a fresh group id at the end of the topic.
 //     Events published while an instance is down are never replayed for it;
 //     its store misses those writes until the same key is written again or
@@ -30,7 +33,10 @@
 //     that exceeds the broker's message size limit, or that arrives while
 //     the publishing pool is saturated is dropped with an error log,
 //     leaving the peers behind until the key is written again or the TTL
-//     expires.
+//     expires. When an in-flight request wedges on a dead connection,
+//     failing an attempt can additionally take roughly the produce request
+//     timeout, and the records buffered for the same partition fail
+//     together with it.
 //   - A peer stores an entry with the ttl the event carries, counted from
 //     the moment the event is applied, so the entry lives on the peer for
 //     the propagation delay longer than on the writer.

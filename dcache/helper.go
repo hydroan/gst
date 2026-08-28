@@ -53,24 +53,27 @@ func newProducer(cfg config.Kafka, topic string) (*kgo.Client, error) {
 		// kgo.ProducerBatchMaxBytes(n),           // smaller batches
 		// kgo.MaxBufferedRecords(n),              // large buffer to absorb traffic bursts
 
-		// trade reliability for lower latency
-		// message idempotency is not needed: every instance deduplicates through its per-key
-		// timestamp watermark, which is what guarantees eventual state consistency
-		// locally the settings below were found to cut 100-200ms per operator batch
-		// kgo.RequiredAcks(kgo.NoAck()),
-		// kgo.DisableIdempotentWrite(),           // disable idempotency to reduce the overhead
+		// Idempotent dedup is not needed for correctness — every instance
+		// deduplicates through its per-key timestamp watermark — so the
+		// produce path may cancel idempotent batches when the limits below
+		// expire, accepting a possible duplicate delivery, which the
+		// watermark absorbs. Without the cancellation the limits would only
+		// hold while no request is in flight.
+		kgo.AllowIdempotentProduceCancellation(),
 
 		// Bound the produce path for real: RetryTimeout only covers the
-		// client's own metadata requests, never produces, so the record
-		// limits below are what keeps a kafka outage from buffering and
-		// retrying forever until the publishing pool blocks.
+		// client's own metadata requests, never produces; the record limits
+		// below are what keeps a kafka outage from buffering and retrying
+		// forever until the publishing pool blocks. A request wedged on a
+		// dead connection can still hold one attempt for roughly the produce
+		// request timeout before the record fails.
 		kgo.RetryTimeout(300*time.Millisecond),
 		kgo.RecordRetries(3),
 		kgo.RecordDeliveryTimeout(3*time.Second),
 
 		// TCP connection tuning
 		kgo.DialTimeout(300*time.Millisecond),     // short connect timeout
-		kgo.RequestTimeoutOverhead(1*time.Second), // at least 1s, otherwise kgo.NewClient errors out
+		kgo.RequestTimeoutOverhead(1*time.Second), // well above franz-go's 100ms floor, tolerant of slow brokers
 	)
 }
 

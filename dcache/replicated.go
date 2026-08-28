@@ -12,12 +12,14 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 	"uuid"
 
 	"github.com/cockroachdb/errors"
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/hydroan/gst/cache"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/cache/capacity"
 	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types"
@@ -30,7 +32,19 @@ import (
 
 const (
 	compKey = "comp"
+
+	// minGoroutines is the floor of the event-publishing pool capacity.
+	minGoroutines = 10000
 )
+
+// watermarkEntries bounds the per-key timestamp table: an order of magnitude
+// above the store's entry bound, because the watermark must keep covering
+// keys the store has already evicted or expired — a stale peer event could
+// otherwise resurrect them — and capped so a huge store configuration cannot
+// balloon the table, which exists once per cached type.
+func watermarkEntries() int {
+	return min(10*capacity.Entries(), 10_000_000)
+}
 
 const (
 	opSet op = iota
@@ -94,6 +108,12 @@ func (v eventLogView) MarshalJSON() ([]byte, error) {
 	if len(val) > maxLoggedValue {
 		val = val[:maxLoggedValue]
 	}
+	// A zero ttl means "never expires" in the cache contract; rendering it
+	// as a zero duration would read as "expired on arrival".
+	ttl := "never"
+	if v.e.TTL != 0 {
+		ttl = util.FormatDurationSmart(v.e.TTL, 2)
+	}
 	return json.Marshal(map[string]any{
 		"ts":       time.Unix(0, v.e.TS).UTC().Format(consts.LayoutTimeEncoder),
 		"cache_id": v.e.CacheID,
@@ -102,7 +122,7 @@ func (v eventLogView) MarshalJSON() ([]byte, error) {
 		"op":       v.e.Op.String(),
 		"key":      v.e.Key,
 		"value":    string(val),
-		"ttl":      util.FormatDurationSmart(v.e.TTL, 2),
+		"ttl":      ttl,
 	})
 }
 
@@ -186,11 +206,14 @@ type replicatedCache[T any] struct {
 	hostname string
 
 	// stats
-	hits        atomic.Int64
-	misses      atomic.Int64
-	deletes     atomic.Int64
-	peerSets    atomic.Int64
-	peerDeletes atomic.Int64
+	hits           atomic.Int64
+	misses         atomic.Int64
+	sets           atomic.Int64
+	deletes        atomic.Int64
+	peerSets       atomic.Int64
+	peerDeletes    atomic.Int64
+	publishDropped atomic.Int64
+	publishFailed  atomic.Int64
 
 	// topic carries the set and delete events of every instance; it is
 	// resolved once at construction and the default derives from the
@@ -264,12 +287,13 @@ func newReplicatedCache[T any](store types.Cache[entry[T]]) (*replicatedCache[T]
 		}
 	}()
 
+	if dc.appliedTS, err = lru.New[string, int64](watermarkEntries()); err != nil {
+		return nil, err
+	}
+
 	// setup kafka; the consumer group name follows the topic, and the group
 	// suffix is the instance's own id so two instances can never share a
 	// group and split the partitions between them.
-	if dc.appliedTS, err = lru.New[string, int64](maxTrackedKeys); err != nil {
-		return nil, err
-	}
 	dc.topic = cacheTopic()
 	cfg := config.App.Kafka
 	if dc.pub, err = newProducer(cfg, dc.topic); err != nil {
@@ -285,7 +309,17 @@ func newReplicatedCache[T any](store types.Cache[entry[T]]) (*replicatedCache[T]
 	// every worker is stuck producing, a new event is dropped with a log
 	// line instead of blocking the write path.
 	gocap := max(runtime.NumCPU()*2000, minGoroutines)
-	pool, err := ants.NewPool(gocap, ants.WithPreAlloc(false), ants.WithNonblocking(true))
+	pool, err := ants.NewPool(gocap, ants.WithPreAlloc(false), ants.WithNonblocking(true),
+		// Publishing tasks panic into the component logger, matching
+		// logPanic; the pool's default handler would print to stderr, out of
+		// the collected log stream.
+		ants.WithPanicHandler(func(r any) {
+			dc.logger.Errorz(
+				"publishing task panicked",
+				zap.Any("panic", r),
+				zap.ByteString("stack", debug.Stack()),
+			)
+		}))
 	if err != nil {
 		return nil, err
 	}
@@ -300,9 +334,17 @@ func newReplicatedCache[T any](store types.Cache[entry[T]]) (*replicatedCache[T]
 
 // Set sets a key-value pair in the store and publishes an opSet event that
 // carries the value to the store of every other instance.
+//
+// An error can arrive after the local store already holds the change: it
+// then reports a failed publication, not a failed write — the peers will not
+// see the value. A nil return does not guarantee peer delivery either; the
+// package documentation lists the drop cases of the best-effort broadcast.
 func (dc *replicatedCache[T]) Set(ctx context.Context, key string, value T, ttl time.Duration) (err error) {
 	if ttl < 0 {
 		return errors.New("negative ttl")
+	}
+	if err = validKey(key); err != nil {
+		return err
 	}
 
 	// The write and its watermark entry are one critical section shared with
@@ -318,6 +360,7 @@ func (dc *replicatedCache[T]) Set(ctx context.Context, key string, value T, ttl 
 	}
 	dc.advanceWatermarkLocked(key, ts)
 	dc.watermarkMu.Unlock()
+	dc.sets.Add(1)
 
 	// A publication error reaches the caller: the local tier already holds
 	// the value, but the peers never will.
@@ -328,6 +371,16 @@ func (dc *replicatedCache[T]) Set(ctx context.Context, key string, value T, ttl 
 		raw: value,
 		TTL: ttl,
 	})
+}
+
+// validKey rejects a key JSON would silently rewrite: encoding/json replaces
+// invalid UTF-8 with U+FFFD, so the peers would apply the operation to a
+// different key than the local store did.
+func validKey(key string) error {
+	if !utf8.ValidString(key) {
+		return errors.New("the key is not valid UTF-8 and would reach the peers rewritten")
+	}
+	return nil
 }
 
 func (dc *replicatedCache[T]) Get(ctx context.Context, key string) (value T, err error) {
@@ -347,8 +400,12 @@ func (dc *replicatedCache[T]) Get(ctx context.Context, key string) (value T, err
 }
 
 // Delete removes the entry from the store and publishes an opDel event that
-// removes it from the store of every other instance.
+// removes it from the store of every other instance. See Set for the
+// semantics of the returned error.
 func (dc *replicatedCache[T]) Delete(ctx context.Context, key string) (err error) {
+	if err = validKey(key); err != nil {
+		return err
+	}
 	// See Set: the delete and its watermark entry are one critical section,
 	// so a stale peer set cannot resurrect the key this instance removed.
 	dc.watermarkMu.Lock()
@@ -567,10 +624,12 @@ func (dc *replicatedCache[T]) sendEvent(evt *event) error {
 		}
 		dc.logger.Debugz("publish event", zap.Any("event", eventLogView{evt}))
 		if pubErr := dc.pub.ProduceSync(context.Background(), record).FirstErr(); pubErr != nil {
+			dc.publishFailed.Add(1)
 			dc.logger.Errorz("failed to publish event", zap.Error(pubErr), zap.Any("event", eventLogView{evt}))
 		}
 	})
 	if err != nil {
+		dc.publishDropped.Add(1)
 		dc.logger.Errorz("event dropped: failed to submit it to the publishing pool", zap.Error(err), zap.Any("event", eventLogView{evt}))
 	}
 	return nil
@@ -595,10 +654,14 @@ func (dc *replicatedCache[T]) metrics() *replicatedMetrics {
 		Hits:    dc.hits.Load(),
 		Misses:  dc.misses.Load(),
 		Ratio:   hitRatio(dc.hits.Load(), dc.misses.Load()),
+		Sets:    dc.sets.Load(),
 		Deletes: dc.deletes.Load(),
 
 		PeerSets:    dc.peerSets.Load(),
 		PeerDeletes: dc.peerDeletes.Load(),
+
+		PublishDropped: dc.publishDropped.Load(),
+		PublishFailed:  dc.publishFailed.Load(),
 
 		GoroutinesPoolCap: int64(dc.pubPool.Cap()),
 		GoroutinesUsed:    int64(dc.pubPool.Running()),
@@ -607,15 +670,20 @@ func (dc *replicatedCache[T]) metrics() *replicatedMetrics {
 
 // replicatedMetrics is the monitor snapshot of one instance's counters. The
 // peer counters record how many peer events this instance applied to its
-// store.
+// store; the publish counters record broadcast events lost to a saturated
+// pool and to failed produces.
 type replicatedMetrics struct {
 	Hits    int64 `json:"hits"`
 	Misses  int64 `json:"misses"`
 	Ratio   int64 `json:"ratio"`
+	Sets    int64 `json:"sets"`
 	Deletes int64 `json:"deletes"`
 
 	PeerSets    int64 `json:"peer_sets"`
 	PeerDeletes int64 `json:"peer_deletes"`
+
+	PublishDropped int64 `json:"publish_dropped"`
+	PublishFailed  int64 `json:"publish_failed"`
 
 	GoroutinesPoolCap int64 `json:"goroutines_pool_cap"`
 	GoroutinesUsed    int64 `json:"goroutines_used"`
