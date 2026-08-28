@@ -45,8 +45,8 @@ func newProducer(brokers []string, topic string) (*kgo.Client, error) {
 		// kgo.MaxBufferedRecords(n),              // large buffer to absorb traffic bursts
 
 		// trade reliability for lower latency
-		// message idempotency is not needed: the state node deduplicates and tracks the highest
-		// timestamp, which is what guarantees eventual state consistency
+		// message idempotency is not needed: every instance deduplicates through its per-key
+		// timestamp watermark, which is what guarantees eventual state consistency
 		// locally the settings below were found to cut 100-200ms per operator batch
 		// kgo.RequiredAcks(kgo.NoAck()),
 		// kgo.DisableIdempotentWrite(),           // disable idempotency to reduce the overhead
@@ -65,7 +65,7 @@ func newProducer(brokers []string, topic string) (*kgo.Client, error) {
 	)
 }
 
-// newConsumer creates a kafka consumer; there are several of them.
+// newConsumer creates a kafka consumer; each cache type's instance owns one.
 func newConsumer(brokers []string, topic string, group string) (*kgo.Client, error) {
 	hostname, err := os.Hostname()
 	if err != nil {

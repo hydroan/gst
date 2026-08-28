@@ -14,16 +14,30 @@
 // These are accepted trade-offs of the current design, documented so callers
 // can judge whether they fit their workload:
 //
+//   - Values travel between instances as JSON. T must round-trip through
+//     encoding/json without loss: a value whose state lives in unexported
+//     fields is stored intact locally but arrives at every peer as a hollow
+//     decoded copy, and nothing reports it. A marshal failure, by contrast,
+//     is returned by Set.
 //   - Consumers join Kafka with a fresh group id at the end of the topic.
 //     Events published while an instance is down are never replayed for it;
 //     its store misses those writes until the same key is written again or
 //     the TTL expires.
 //   - Cross-host ordering is decided by producer UnixNano timestamps. Clock
-//     skew between hosts can drop a legitimately newer write as stale.
-//   - The producer fails fast (a 300ms retry budget). A Kafka outage longer
-//     than that drops the event with only a log line, leaving instance
-//     caches inconsistent until the key is written again or the TTL
+//     skew between hosts can drop a legitimately newer write as stale. On
+//     one instance, taking the timestamp and writing the store are not one
+//     atomic step either, so two goroutines racing on the same key can
+//     leave the writer's own store and the peers on different sides of the
+//     race until the next write or expiry.
+//   - Delivery is best-effort and bounded: a record that cannot be
+//     delivered within its budget (a few retries inside a few seconds),
+//     that exceeds the broker's message size limit, or that arrives while
+//     the publishing pool is saturated is dropped with an error log,
+//     leaving the peers behind until the key is written again or the TTL
 //     expires.
+//   - A peer stores an entry with the ttl the event carries, counted from
+//     the moment the event is applied, so the entry lives on the peer for
+//     the propagation delay longer than on the writer.
 //   - Each instance bounds its per-key timestamp table by LRU eviction;
 //     evicting a key reopens that key's out-of-order acceptance window.
 //   - There is no lifecycle API: producers, consumers, goroutine pools and

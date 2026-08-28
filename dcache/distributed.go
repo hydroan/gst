@@ -522,10 +522,11 @@ func (dc *distributedCache[T]) sendEvent(evt *event) error {
 	err = dc.gopool.Submit(func() {
 		record := &kgo.Record{
 			Topic: dc.topic,
-			// The key pins every event for one cache key to one partition.
-			// Without it the partitioner spreads them, and Kafka only orders
-			// within a partition, so a delete could be applied before an
-			// older set that follows it.
+			// The key pins every event for one cache key to one partition,
+			// so every instance observes one key's events in one shared
+			// order. Correctness against reordering rests on the timestamp
+			// watermark; the pinning just keeps the common path free of
+			// out-of-order rejections.
 			Key:   []byte(evt.Key),
 			Value: data,
 		}
