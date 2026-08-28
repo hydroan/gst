@@ -21,6 +21,11 @@ type Person struct {
 	Age  int
 }
 
+// Word is JSON-compatible with string on purpose: the cross-type isolation
+// test uses the pair to prove the event type filter, not just unmarshal
+// failures, keeps types apart.
+type Word string
+
 func TestMain(m *testing.M) {
 	os.Exit(runTests(m))
 }
@@ -102,7 +107,7 @@ func TestDistributedCacheTTL(t *testing.T) {
 
 	// now it must be gone
 	_, err = dc.Get(t.Context(), "ttl-key")
-	require.Error(t, err)
+	require.ErrorIs(t, err, types.ErrEntryNotFound)
 }
 
 // TestDistributedCacheConcurrency tests concurrent operations.
@@ -191,10 +196,43 @@ func TestDistributedCacheDifferentTypes(t *testing.T) {
 	personVal, err := personCache.Get(t.Context(), "person")
 	require.NoError(t, err)
 	require.Equal(t, Person{Name: "Alice", Age: 30}, personVal)
+
+	// One key shared across types must stay isolated twice over: the local
+	// stores are one per type, and the broadcast events carry the type tag.
+	// Word and string are JSON-compatible, so a broken type filter would let
+	// one leak into the other once the events loop back.
+	wordCache := setupTestDistributedCache[Word](t)
+	err = strCache.Set(t.Context(), "shared-key", "string-value", 1*time.Minute)
+	require.NoError(t, err)
+	err = wordCache.Set(t.Context(), "shared-key", Word("word-value"), 1*time.Minute)
+	require.NoError(t, err)
+
+	// give the broadcast a moment to loop back before asserting nothing leaked
+	time.Sleep(time.Second)
+
+	strVal, err = strCache.Get(t.Context(), "shared-key")
+	require.NoError(t, err)
+	require.Equal(t, "string-value", strVal)
+	wordVal, err := wordCache.Get(t.Context(), "shared-key")
+	require.NoError(t, err)
+	require.Equal(t, Word("word-value"), wordVal)
+
+	// deleting the key in one type must not touch the other
+	require.NoError(t, strCache.Delete(t.Context(), "shared-key"))
+	time.Sleep(time.Second)
+	require.False(t, strCache.Exists(t.Context(), "shared-key"))
+	wordVal, err = wordCache.Get(t.Context(), "shared-key")
+	require.NoError(t, err)
+	require.Equal(t, Word("word-value"), wordVal)
 }
 
-// TestDistributedCacheLargeValues tests large values.
-func TestDistributedCacheLargeValues(t *testing.T) {
+// TestDistributedCacheLargeValueStoresLocally pins the local half of the
+// large-value behavior: the store accepts the value and serves it back. The
+// broadcast is best-effort — this 1MB value expands beyond the broker's
+// default message limit once JSON-escaped, so its event is dropped with an
+// error log and the value never reaches the peers, as the package
+// documentation declares.
+func TestDistributedCacheLargeValueStoresLocally(t *testing.T) {
 	dc := setupTestDistributedCache[string](t)
 
 	// build a large string
@@ -225,9 +263,13 @@ func TestDistributedCacheEdgeCases(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "empty-key", val)
 
-	// a zero TTL
+	// a zero TTL never expires; reading it back pins the contract the store
+	// backend implements with a dedicated branch
 	err = dc.Set(t.Context(), "zero-ttl", "forever", 0)
 	require.NoError(t, err)
+	val, err = dc.Get(t.Context(), "zero-ttl")
+	require.NoError(t, err)
+	require.Equal(t, "forever", val)
 
 	// the smallest honored TTL: sub-millisecond lifetimes are rejected by
 	// the store backend, so a millisecond is the shortest that stores
@@ -235,7 +277,7 @@ func TestDistributedCacheEdgeCases(t *testing.T) {
 	require.NoError(t, err)
 	time.Sleep(20 * time.Millisecond)
 	_, err = dc.Get(t.Context(), "tiny-ttl")
-	require.Error(t, err) // it must have expired
+	require.ErrorIs(t, err, types.ErrEntryNotFound) // it must have expired
 
 	// a sub-millisecond TTL cannot be honored and is rejected outright
 	err = dc.Set(t.Context(), "sub-ms-ttl", "rejected", time.Nanosecond)

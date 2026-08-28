@@ -30,7 +30,8 @@ func TestPeerPropagation(t *testing.T) {
 	// would satisfy the assertions without any kafka round trip.
 	source, err := newDistributedCache[typedProbe](cache.Cache[entry[typedProbe]]())
 	require.NoError(t, err)
-	peer, err := newDistributedCache[typedProbe](newFakeStore[typedProbe]())
+	peerStore := newFakeStore[typedProbe]()
+	peer, err := newDistributedCache[typedProbe](peerStore)
 	require.NoError(t, err)
 
 	want := typedProbe{Name: "typed", Num: 42}
@@ -50,6 +51,8 @@ func TestPeerPropagation(t *testing.T) {
 		return true
 	}, 30*time.Second, 100*time.Millisecond, "the set event must reach the peer's store")
 	require.Equal(t, want, got)
+	// The event carries the original ttl through to the peer store.
+	require.Equal(t, time.Minute, peerStore.lastTTL("propagated-key"))
 
 	// A delete on the source removes the entry from the peer as well. The
 	// republished deletes carry ever newer timestamps, so any set event still
@@ -120,22 +123,31 @@ func TestWatermarkAdvancesOnlyOnApply(t *testing.T) {
 }
 
 // fakeStore is a minimal map-backed store giving the peer a private key
-// space in TestPeerPropagation. Lifetimes are irrelevant there, so ttl is
-// accepted and ignored.
+// space in TestPeerPropagation. Entries never expire here; the ttl of every
+// write is recorded instead, so the test can assert what the event carried.
 type fakeStore[T any] struct {
-	mu sync.Mutex
-	m  map[string]entry[T]
+	mu   sync.Mutex
+	m    map[string]entry[T]
+	ttls map[string]time.Duration
 }
 
 func newFakeStore[T any]() *fakeStore[T] {
-	return &fakeStore[T]{m: make(map[string]entry[T])}
+	return &fakeStore[T]{m: make(map[string]entry[T]), ttls: make(map[string]time.Duration)}
 }
 
-func (s *fakeStore[T]) Set(_ context.Context, key string, value entry[T], _ time.Duration) error {
+func (s *fakeStore[T]) Set(_ context.Context, key string, value entry[T], ttl time.Duration) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.m[key] = value
+	s.ttls[key] = ttl
 	return nil
+}
+
+// lastTTL returns the ttl recorded by the latest Set of key.
+func (s *fakeStore[T]) lastTTL(key string) time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ttls[key]
 }
 
 func (s *fakeStore[T]) Get(_ context.Context, key string) (entry[T], error) {

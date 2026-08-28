@@ -28,10 +28,10 @@ func Benchmark(b *testing.B) {
 		benchmark(b, distributed)
 	})
 
-	b.Run("local", func(b *testing.B) {
+	b.Run("local_parallel", func(b *testing.B) {
 		benchmarkParallel(b, localcache)
 	})
-	b.Run("distributed", func(b *testing.B) {
+	b.Run("distributed_parallel", func(b *testing.B) {
 		benchmarkParallel(b, distributed)
 	})
 }
