@@ -129,9 +129,11 @@ func benchmarkParallel(b *testing.B, cm types.Cache[string]) {
 			counter := 0
 			for pb.Next() {
 				idx := counter % count
-				err := cm.Set(ctx, keys[idx], values[idx], ttl)
-				if err != nil {
-					b.Fatal(err)
+				// b.Error, not b.Fatal: FailNow must run on the benchmark
+				// goroutine, and RunParallel bodies do not.
+				if err := cm.Set(ctx, keys[idx], values[idx], ttl); err != nil {
+					b.Error(err)
+					return
 				}
 				counter++
 			}
@@ -152,7 +154,8 @@ func benchmarkParallel(b *testing.B, cm types.Cache[string]) {
 			for pb.Next() {
 				idx := counter % count
 				if _, err := cm.Get(ctx, keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
-					b.Fatal(err)
+					b.Error(err)
+					return
 				}
 				counter++
 			}
@@ -179,17 +182,19 @@ func benchmarkParallel(b *testing.B, cm types.Cache[string]) {
 
 				switch {
 				case opType < 3: // 30% writes
-					err := cm.Set(ctx, keys[idx], values[idx], ttl)
-					if err != nil {
-						b.Fatal(err)
+					if err := cm.Set(ctx, keys[idx], values[idx], ttl); err != nil {
+						b.Error(err)
+						return
 					}
 				case opType < 9: // 60% reads
 					if _, err := cm.Get(ctx, keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
-						b.Fatal(err)
+						b.Error(err)
+						return
 					}
 				default: // 10% deletes
 					if err := cm.Delete(ctx, keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
-						b.Fatal(err)
+						b.Error(err)
+						return
 					}
 				}
 
