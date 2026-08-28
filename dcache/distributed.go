@@ -72,29 +72,38 @@ type event struct {
 	Hostname string `json:"hostname"` // which server produced the event
 }
 
-// logView returns the bounded log form of the event: every field verbatim
-// except the payload, which is truncated so a large cached value cannot
-// flood a log line — the collapsing encoder has no truncation of its own.
-func (e *event) logView() map[string]any {
-	if e == nil {
-		return nil
+// eventLogView is the lazy, bounded log form of an event. It is a separate
+// type because the truncation must never reach the wire: event itself
+// marshals verbatim into the kafka payload, while the log encoder marshals
+// this wrapper — and only when the entry is actually written, so a disabled
+// log level costs no more than boxing one pointer.
+type eventLogView struct {
+	e *event
+}
+
+// MarshalJSON renders every field verbatim except the payload, which is
+// truncated so a large cached value cannot flood a log line — the collapsing
+// encoder has no truncation of its own.
+func (v eventLogView) MarshalJSON() ([]byte, error) {
+	if v.e == nil {
+		return []byte("null"), nil
 	}
 
 	const maxLoggedValue = 1024
-	val := e.Val
+	val := v.e.Val
 	if len(val) > maxLoggedValue {
 		val = val[:maxLoggedValue]
 	}
-	return map[string]any{
-		"ts":       time.Unix(0, e.TS).UTC().Format(consts.LayoutTimeEncoder),
-		"cache_id": e.CacheID,
-		"hostname": e.Hostname,
-		"typ":      e.Typ,
-		"op":       e.Op.String(),
-		"key":      e.Key,
+	return json.Marshal(map[string]any{
+		"ts":       time.Unix(0, v.e.TS).UTC().Format(consts.LayoutTimeEncoder),
+		"cache_id": v.e.CacheID,
+		"hostname": v.e.Hostname,
+		"typ":      v.e.Typ,
+		"op":       v.e.Op.String(),
+		"key":      v.e.Key,
 		"value":    string(val),
-		"ttl":      util.FormatDurationSmart(e.TTL, 2),
-	}
+		"ttl":      util.FormatDurationSmart(v.e.TTL, 2),
+	})
 }
 
 // NewDistributedCache returns the distributed cache of type T, creating it on first use.
@@ -322,11 +331,10 @@ func (dc *distributedCache[T]) Get(ctx context.Context, key string) (value T, er
 // Delete removes the entry from the store and publishes an opDel event that
 // removes it from the store of every other instance.
 func (dc *distributedCache[T]) Delete(ctx context.Context, key string) (err error) {
-	dc.deletes.Add(1)
-
 	if err = dc.store.Delete(ctx, key); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 		return err
 	}
+	dc.deletes.Add(1)
 
 	// See Set: the local delete enters the watermark, so a stale peer set
 	// cannot resurrect the key this instance just removed.
@@ -418,29 +426,29 @@ func (dc *distributedCache[T]) listenEvents() {
 				if !dc.shouldApply(evt) {
 					continue
 				}
-				dc.logger.Debugz("consume event", zap.Any("event", evt.logView()))
+				dc.logger.Debugz("consume event", zap.Any("event", eventLogView{evt}))
 				switch evt.Op {
 				case opSet:
 					var val T
 					if err := json.Unmarshal(evt.Val, &val); err != nil {
-						dc.logger.Errorz("failed to unmarshal event value", zap.Error(err), zap.Any("event", evt.logView()))
+						dc.logger.Errorz("failed to unmarshal event value", zap.Error(err), zap.Any("event", eventLogView{evt}))
 						continue
 					}
-					dc.peerSets.Add(1)
 					if err := dc.store.Set(context.Background(), evt.Key, entry[T]{Value: val}, evt.TTL); err != nil {
 						dc.logger.Warnz("failed to set to the store", zap.Error(err))
 						continue
 					}
+					dc.peerSets.Add(1)
 					dc.advanceWatermark(evt.Key, evt.TS)
 				case opDel:
-					dc.peerDeletes.Add(1)
 					if err := dc.store.Delete(context.Background(), evt.Key); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 						dc.logger.Warnz("failed to delete from the store", zap.Error(err))
 						continue
 					}
+					dc.peerDeletes.Add(1)
 					dc.advanceWatermark(evt.Key, evt.TS)
 				default:
-					dc.logger.Warnz("unknown event op", zap.Any("event", evt.logView()))
+					dc.logger.Warnz("unknown event op", zap.Any("event", eventLogView{evt}))
 				}
 			}
 		}
@@ -521,13 +529,13 @@ func (dc *distributedCache[T]) sendEvent(evt *event) error {
 			Key:   []byte(evt.Key),
 			Value: data,
 		}
-		dc.logger.Debugz("publish event", zap.Any("event", evt.logView()))
+		dc.logger.Debugz("publish event", zap.Any("event", eventLogView{evt}))
 		if pubErr := dc.pub.ProduceSync(context.Background(), record).FirstErr(); pubErr != nil {
-			dc.logger.Errorz("failed to publish event", zap.Error(pubErr), zap.Any("event", evt.logView()))
+			dc.logger.Errorz("failed to publish event", zap.Error(pubErr), zap.Any("event", eventLogView{evt}))
 		}
 	})
 	if err != nil {
-		dc.logger.Errorz("event dropped: failed to submit it to the gopool", zap.Error(err), zap.Any("event", evt.logView()))
+		dc.logger.Errorz("event dropped: failed to submit it to the gopool", zap.Error(err), zap.Any("event", eventLogView{evt}))
 	}
 	return nil
 }
@@ -538,13 +546,15 @@ func (dc *distributedCache[T]) startMonitor() {
 		defer dc.logPanic("DistributedCache.startMonitor")
 		for range ticker.C {
 			if flag.Lookup("test.v") == nil {
-				dc.logger.Infoz("cache metrics", zap.Any("metrics", dc.Metrics()))
+				dc.logger.Infoz("cache metrics", zap.Any("metrics", dc.metrics()))
 			}
 		}
 	}()
 }
 
-func (dc *distributedCache[T]) Metrics() *distributedMetrics {
+// metrics snapshots the instance counters for the monitor. It is unexported:
+// the exported surface is types.Cache[T], which has no metrics channel.
+func (dc *distributedCache[T]) metrics() *distributedMetrics {
 	return &distributedMetrics{
 		Hits:    dc.hits.Load(),
 		Misses:  dc.misses.Load(),
