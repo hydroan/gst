@@ -262,6 +262,7 @@ func newLogWriter(opts ...Option) zapcore.WriteSyncer {
 	case "":
 		return zapcore.AddSync(os.Stdout)
 	default:
+		precreateLogFile(filepath.Join(config.App.Dir, logFile))
 		writer := &zapcore.BufferedWriteSyncer{
 			WS: zapcore.AddSync(&lumberjack.Logger{
 				Filename:   filepath.Join(config.App.Dir, logFile),
@@ -280,6 +281,31 @@ func newLogWriter(opts ...Option) zapcore.WriteSyncer {
 		}
 		return writer
 	}
+}
+
+// precreateLogFile creates the log file and its directory at sink construction
+// time instead of leaving both to lumberjack's lazy first-Write open. A sink
+// that never logs would otherwise never touch disk, so log collectors find no
+// file to tail after a quiet deploy, and a misconfigured directory or
+// permission would stay silent until the first entry is dropped. Directory and
+// file modes match what lumberjack itself uses, so which side creates them
+// first makes no difference; an existing file is opened in append mode and
+// kept as is.
+//
+// Failure only warns on stderr: logging is observability, not the business
+// itself, and the constructors carry no error channel, so a sink that cannot
+// be precreated must not stop the process or the other sinks.
+func precreateLogFile(path string) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "precreate log file %s: %v\n", path, err)
+		return
+	}
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600) // #nosec G304 -- path is built from trusted logger config.
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "precreate log file %s: %v\n", path, err)
+		return
+	}
+	_ = file.Close()
 }
 
 func registerBufferedLogWriter(writer *zapcore.BufferedWriteSyncer) {

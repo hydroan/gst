@@ -132,6 +132,70 @@ func TestNewLogWriterConsoleOptionIgnoredForStdStreams(t *testing.T) {
 	}
 }
 
+func TestNewLogWriterPrecreatesEmptyLogFile(t *testing.T) {
+	dir := t.TempDir()
+	withLogWriterConfig(t, dir, "precreated.log")
+
+	writer := newLogWriter()
+	t.Cleanup(func() {
+		if buffered, ok := writer.(*zapcore.BufferedWriteSyncer); ok {
+			_ = buffered.Stop()
+		}
+	})
+
+	// The file must exist before the first entry is written: log collectors
+	// discover files by path, and a config error (bad dir, bad permissions)
+	// must surface at startup, not at the first log write.
+	info, err := os.Stat(filepath.Join(dir, "precreated.log"))
+	require.NoError(t, err, "constructing a file sink must create the log file")
+	require.Zero(t, info.Size())
+}
+
+func TestNewLogWriterPrecreationKeepsExistingContent(t *testing.T) {
+	dir := t.TempDir()
+	withLogWriterConfig(t, dir, "existing.log")
+	path := filepath.Join(dir, "existing.log")
+	require.NoError(t, os.WriteFile(path, []byte("entry before restart\n"), 0o600))
+
+	writer := newLogWriter()
+	t.Cleanup(func() {
+		if buffered, ok := writer.(*zapcore.BufferedWriteSyncer); ok {
+			_ = buffered.Stop()
+		}
+	})
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "entry before restart\n", string(data),
+		"precreation must not truncate a log file that survived a restart")
+}
+
+func TestNewLogWriterPrecreationFailureWarnsAndKeepsSink(t *testing.T) {
+	// A plain file where the log directory should be makes both MkdirAll and
+	// the file open fail deterministically.
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "blocker")
+	require.NoError(t, os.WriteFile(blocker, nil, 0o600))
+	withLogWriterConfig(t, filepath.Join(blocker, "sub"), "warn.log")
+
+	var writer zapcore.WriteSyncer
+	output := captureStderr(t, func() {
+		writer = newLogWriter()
+	})
+	t.Cleanup(func() {
+		if buffered, ok := writer.(*zapcore.BufferedWriteSyncer); ok {
+			_ = buffered.Stop()
+		}
+	})
+
+	// Logging is observability, not the business itself: a sink that cannot
+	// be precreated still returns a writer and only warns, so the process
+	// starts and every other sink keeps working.
+	require.NotNil(t, writer)
+	require.Contains(t, output, "precreate log file")
+	require.Contains(t, output, "warn.log")
+}
+
 func TestCleanFlushesBufferedFileSink(t *testing.T) {
 	dir := t.TempDir()
 	withLogWriterConfig(t, dir, "clean.log")
@@ -353,6 +417,25 @@ func captureStdout(t *testing.T, fn func()) string {
 
 	require.NoError(t, writePipe.Close())
 	os.Stdout = oldStdout
+
+	output, err := io.ReadAll(readPipe)
+	require.NoError(t, err)
+	require.NoError(t, readPipe.Close())
+	return string(output)
+}
+
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+
+	oldStderr := os.Stderr
+	readPipe, writePipe, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = writePipe
+
+	fn()
+
+	require.NoError(t, writePipe.Close())
+	os.Stderr = oldStderr
 
 	output, err := io.ReadAll(readPipe)
 	require.NoError(t, err)
