@@ -1,12 +1,10 @@
 package bootstrap
 
 import (
-	"context"
 	"fmt"
 	"os"
+	"slices"
 	"sync"
-
-	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -14,38 +12,27 @@ var (
 	once     sync.Once
 )
 
-// exit will call all registered cleanup handlers and then exit.
-//
-//nolint:unused
-func exit(code int) {
-	runHandlers()
-	os.Exit(code)
-}
-
 // clean will call all registered clean handlers.
 func clean() {
 	once.Do(runHandlers)
 }
 
-// registerCleanup append custom cleanup handler, the handler will be invoked by `Cleanup` function.
-// first handler will be called first
+// registerCleanup appends a cleanup handler. Handlers run serially in
+// reverse registration order (LIFO) when the process shuts down: register
+// dependencies first and dependents later, exactly like defer.
 func registerCleanup(handler func()) {
 	handlers = append(handlers, handler)
 }
 
-// deferCleanup same as RegisterCleanup, but last handler will be called first.
-//
-//nolint:unused
-func deferCleanup(handler func()) {
-	handlers = append([]func(){handler}, handlers...)
-}
-
+// runHandlers runs the cleanup handlers serially in reverse registration
+// order: teardown mirrors setup the way a defer stack unwinds, so whatever
+// was brought up last (the HTTP listener draining in-flight requests) is
+// torn down first, and what everything else depends on (connections, log
+// writers, the temp directory) is torn down after the drain finished.
 func runHandlers() {
-	g, _ := errgroup.WithContext(context.Background())
-	for _, handler := range handlers {
-		g.Go(func() error { runSafe(handler); return nil })
+	for _, handler := range slices.Backward(handlers) {
+		runSafe(handler)
 	}
-	_ = g.Wait()
 }
 
 func runSafe(handler func()) {
