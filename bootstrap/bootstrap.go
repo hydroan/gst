@@ -136,6 +136,10 @@ func Run() error {
 		gops.Run,
 	)
 
+	// Registered before router.Stop so LIFO runs it right after the HTTP
+	// drain: scheduling halts and in-flight jobs finish while the
+	// connections they may be using are still open.
+	registerCleanup(cronjob.Stop)
 	registerCleanup(router.Stop)
 	registerCleanup(statsviz.Stop)
 	registerCleanup(debugpprof.Stop)

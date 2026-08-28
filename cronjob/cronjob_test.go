@@ -3,7 +3,9 @@ package cronjob
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
@@ -53,6 +55,78 @@ func TestInitFallsBackToLocalLoggerWithoutShared(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(dir, "cronjob.log"))
 	require.NoError(t, err)
 	require.Contains(t, string(data), "successfully add cronjob")
+}
+
+// TestStopWaitsForInFlightJob proves Stop halts scheduling and blocks until
+// a job that is already running finishes, so shutdown cannot tear the
+// connections out from under a half-done job.
+func TestStopWaitsForInFlightJob(t *testing.T) {
+	withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+
+	var startOnce, doneOnce sync.Once
+	jobStarted := make(chan struct{})
+	jobDone := make(chan struct{})
+	Register(func() error {
+		startOnce.Do(func() { close(jobStarted) })
+		time.Sleep(300 * time.Millisecond)
+		doneOnce.Do(func() { close(jobDone) })
+		return nil
+	}, "* * * * * *", "inflight-job")
+	require.NoError(t, Init())
+
+	select {
+	case <-jobStarted:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the scheduled job never started")
+	}
+
+	Stop()
+
+	select {
+	case <-jobDone:
+	default:
+		t.Fatal("Stop returned before the in-flight job finished")
+	}
+}
+
+// TestStopGivesUpOnStuckJob proves a job that never finishes cannot hold the
+// shutdown hostage: Stop returns once the bounded wait elapses.
+func TestStopGivesUpOnStuckJob(t *testing.T) {
+	withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+
+	originalTimeout := stopTimeout
+	stopTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { stopTimeout = originalTimeout })
+
+	var startOnce sync.Once
+	jobStarted := make(chan struct{})
+	Register(func() error {
+		startOnce.Do(func() { close(jobStarted) })
+		time.Sleep(10 * time.Second)
+		return nil
+	}, "* * * * * *", "stuck-job")
+	require.NoError(t, Init())
+
+	select {
+	case <-jobStarted:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the scheduled job never started")
+	}
+
+	begin := time.Now()
+	Stop()
+	require.Less(t, time.Since(begin), 2*time.Second,
+		"Stop must return once the bounded wait elapses")
+}
+
+// TestStopWithoutInitIsNoop keeps Stop safe in processes that never started
+// the scheduler.
+func TestStopWithoutInitIsNoop(t *testing.T) {
+	resetCronjobState(t)
+
+	Stop()
 }
 
 // withCronjobLoggerConfig points config.App at a scratch logger setup so the

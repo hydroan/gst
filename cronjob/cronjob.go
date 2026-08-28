@@ -42,6 +42,29 @@ func init() {
 	parser = cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
 }
 
+// stopTimeout bounds how long Stop waits for in-flight jobs, so a stuck job
+// cannot hold the shutdown hostage.
+var stopTimeout = 30 * time.Second
+
+// Stop halts scheduling and waits for in-flight jobs to finish, bounded by
+// stopTimeout. Bootstrap registers it into the shutdown sequence after the
+// HTTP drain and before the connections jobs may still be using are closed;
+// without it, shutdown would kill jobs mid-write. In a process that never
+// ran Init it is a no-op.
+func Stop() {
+	mu.Lock()
+	defer mu.Unlock()
+	if c == nil {
+		return
+	}
+
+	select {
+	case <-c.Stop().Done():
+	case <-time.After(stopTimeout):
+		log.Warnz("cronjob stop timed out waiting for in-flight jobs", zap.Duration("timeout", stopTimeout))
+	}
+}
+
 func Init() (err error) {
 	if log == nil {
 		// Adopt the shared cronjob logger so this package never opens a
