@@ -26,7 +26,7 @@ const (
 // Logger represents section "logger" for client-side or server-side configuration,
 // and there is only one copy during the application entire lifetime.
 type Logger struct {
-	// Dir specifies which direcotory log to.
+	// Dir specifies which directory log to.
 	Dir string `json:"dir" ini:"dir" yaml:"dir" mapstructure:"dir"`
 
 	// Prefix specifies the log prefix.
