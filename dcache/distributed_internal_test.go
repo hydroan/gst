@@ -64,6 +64,45 @@ func TestPeerPropagation(t *testing.T) {
 	}, 30*time.Second, 100*time.Millisecond, "the delete event must reach the peer's store")
 }
 
+// TestWatermarkCoversLocalWrites is the regression guard for the write-path
+// watermark: local Set and Delete enter the same per-key watermark as peer
+// events, so a stale peer event arriving later is rejected instead of
+// overwriting the newer local write or resurrecting the deleted key.
+func TestWatermarkCoversLocalWrites(t *testing.T) {
+	ctx := context.Background()
+
+	dc, err := newDistributedCache[int](newFakeStore[int]())
+	require.NoError(t, err)
+
+	require.NoError(t, dc.Set(ctx, "watermark-key", 1, time.Minute))
+
+	stale := &event{TS: time.Now().Add(-time.Second).UnixNano(), Op: opSet, Key: "watermark-key", Typ: dc.typ, CacheID: "peer"}
+	require.False(t, dc.shouldApply(stale), "a peer event older than the local write must be rejected")
+
+	fresh := &event{TS: time.Now().Add(time.Second).UnixNano(), Op: opSet, Key: "watermark-key", Typ: dc.typ, CacheID: "peer"}
+	require.True(t, dc.shouldApply(fresh), "a peer event newer than the local write must pass")
+
+	require.NoError(t, dc.Delete(ctx, "watermark-key"))
+	staleSet := &event{TS: time.Now().Add(-time.Second).UnixNano(), Op: opSet, Key: "watermark-key", Typ: dc.typ, CacheID: "peer"}
+	require.False(t, dc.shouldApply(staleSet), "a stale peer set must not resurrect a locally deleted key")
+}
+
+// TestWatermarkAdvancesOnlyOnApply asserts the judge/record split: passing
+// shouldApply does not claim the timestamp, only advanceWatermark does, so a
+// failed application leaves the watermark untouched.
+func TestWatermarkAdvancesOnlyOnApply(t *testing.T) {
+	dc, err := newDistributedCache[uint](newFakeStore[uint]())
+	require.NoError(t, err)
+
+	evt := &event{TS: 100, Op: opSet, Key: "apply-key", Typ: dc.typ, CacheID: "peer"}
+	require.True(t, dc.shouldApply(evt))
+	// Not applied yet: the same timestamp must still pass.
+	require.True(t, dc.shouldApply(evt))
+
+	dc.advanceWatermark(evt.Key, evt.TS)
+	require.False(t, dc.shouldApply(evt), "an applied timestamp must be rejected afterwards")
+}
+
 // fakeStore is a minimal map-backed store giving the peer a private key
 // space in TestPeerPropagation. Lifetimes are irrelevant there, so ttl is
 // accepted and ignored.
