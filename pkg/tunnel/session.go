@@ -9,7 +9,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gorilla/websocket"
-	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
 	"github.com/vmihailenco/msgpack/v5"
@@ -64,9 +63,9 @@ type Session struct {
 //   - Failed to read the event data
 //   - Failed to unmarshal the data into Event
 func (s *Session) Read() (*Event, error) {
-	// logger.Protocol.Infow("Session.Read() S", "key", s.locker.key) // S: start
+	// protocolLog().Infow("Session.Read() S", "key", s.locker.key) // S: start
 	// s.locker.rmu.Lock()
-	// logger.Protocol.Infow("Session.Read() L", "key", s.locker.key) // L: lock
+	// protocolLog().Infow("Session.Read() L", "key", s.locker.key) // L: lock
 	// defer s.locker.rmu.Unlock()
 
 	// cmdBuf, err := internal.ReadBinary(s.tcpconn)
@@ -90,14 +89,14 @@ func (s *Session) Read() (*Event, error) {
 	if _, err := io.ReadFull(s.tcpconn, cmdBuf); err != nil {
 		return nil, err
 	}
-	logger.Binary.Infoz("Read", zap.Uint32("size", size), zap.ByteString("data", cmdBuf), zap.Binary("binary", cmdBuf))
+	binaryLog().Infoz("Read", zap.Uint32("size", size), zap.ByteString("data", cmdBuf), zap.Binary("binary", cmdBuf))
 	// 3.unmarshal data.
 	event := &Event{}
 	if err := msgpack.Unmarshal(cmdBuf, event); err != nil {
 		return nil, err
 	}
 
-	logger.Protocol.Infow("Session.Read()", "key", s.locker.key, "event", event.Cmd)
+	protocolLog().Infow("Session.Read()", "key", s.locker.key, "event", event.Cmd)
 	return event, nil
 }
 
@@ -119,9 +118,9 @@ func (s *Session) Write(event *Event) error {
 	if event == nil {
 		return nil
 	}
-	logger.Protocol.Infow("Session.Write() S", "key", s.locker.key, "event", event.Cmd) // S: start
+	protocolLog().Infow("Session.Write() S", "key", s.locker.key, "event", event.Cmd) // S: start
 	s.locker.wmu.Lock()
-	logger.Protocol.Infow("Session.Write() L", "key", s.locker.key, "event", event.Cmd) // L: lock
+	protocolLog().Infow("Session.Write() L", "key", s.locker.key, "event", event.Cmd) // L: lock
 	defer s.locker.wmu.Unlock()
 	// This ID is critical: never overwrite an ID the caller already set,
 	// because events sharing the same ID belong to the same ongoing exchange,
@@ -139,7 +138,7 @@ func (s *Session) Write(event *Event) error {
 	if err := binary.Write(s.tcpconn, binary.BigEndian, uint32(len(buf))); err != nil { //nolint:gosec
 		return err
 	}
-	logger.Binary.Infoz("Write", zap.Int("size", len(buf)), zap.ByteString("data", buf), zap.Binary("binary", buf))
+	binaryLog().Infoz("Write", zap.Int("size", len(buf)), zap.ByteString("data", buf), zap.Binary("binary", buf))
 	// 3.write data
 	if err := binary.Write(s.tcpconn, binary.BigEndian, buf); err != nil {
 		return err
@@ -188,13 +187,13 @@ func NewSession(_conn any, appSide consts.AppSide, cid ...string) (*Session, err
 					key = cid[0]
 				}
 			}
-			// logger.Protocol.Infow(key.(string), "rip", nd.Rip, "rport", nd.Rport, "lip", nd.Lip, "lport", nd.Lport)
+			// protocolLog().Infow(key.(string), "rip", nd.Rip, "rport", nd.Rport, "lip", nd.Lip, "lport", nd.Lport)
 		case consts.Client:
 			// NOTE:local port is the key in client-side app.
 			// local port always is server listen port in server-side.
 			nd = util.GetConnection(conn)
 			key = nd.LocalPort
-			// logger.Protocol.Infow(strconv.Itoa(key.(int)), "rip", nd.Rip, "rport", nd.Rport, "lip", nd.Lip, "lport", nd.Lport)
+			// protocolLog().Infow(strconv.Itoa(key.(int)), "rip", nd.Rip, "rport", nd.Rport, "lip", nd.Lip, "lport", nd.Lport)
 		default:
 			panic("unknow app side: " + appSide)
 		}

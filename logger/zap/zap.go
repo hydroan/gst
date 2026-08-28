@@ -101,9 +101,6 @@ func Init() error {
 	logger.RethinkDB = newProviderFallback("rethinkdb")
 	logger.RocketMQ = newProviderFallback("rocketmq")
 
-	logger.Protocol = New("protocol.log")
-	logger.Binary = New("binary.log")
-
 	logger.Gin = NewGin("access.log")
 	logger.HTTPBody = NewGin("http_body.log")
 	logger.Gorm = NewGorm("gorm.log")
@@ -141,9 +138,6 @@ func Clean() {
 		logger.Scylla,
 		logger.RethinkDB,
 		logger.RocketMQ,
-
-		logger.Protocol,
-		logger.Binary,
 	}
 	for _, log := range logs {
 		if l, ok := log.(*Logger); ok {

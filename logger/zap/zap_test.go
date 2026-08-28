@@ -526,7 +526,6 @@ func restoreGlobalLoggers(t *testing.T) {
 		&logger.Etcd, &logger.Influxdb, &logger.Kafka, &logger.Ldap,
 		&logger.Minio, &logger.Mongo, &logger.Mqtt, &logger.Nats,
 		&logger.RethinkDB, &logger.RocketMQ, &logger.Scylla,
-		&logger.Protocol, &logger.Binary,
 	} {
 		savedTyped[ref] = *ref
 	}

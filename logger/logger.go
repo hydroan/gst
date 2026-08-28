@@ -41,9 +41,6 @@ var (
 	RocketMQ  types.Logger
 	Scylla    types.Logger
 
-	Protocol types.Logger
-	Binary   types.Logger
-
 	Gin      *zap.Logger
 	HTTPBody *zap.Logger
 	Gorm     gorml.Interface
