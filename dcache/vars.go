@@ -1,7 +1,7 @@
 package dcache
 
 const (
-	// maxTrackedKeys bounds the state node's per-key timestamp table; see the
+	// maxTrackedKeys bounds each instance's per-key timestamp table; see the
 	// package documentation for the eviction trade-off.
 	maxTrackedKeys = 1_000_000
 

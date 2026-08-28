@@ -51,20 +51,3 @@ type Cache[T any] interface {
 	// Returns true if the key exists, false otherwise.
 	Exists(ctx context.Context, key string) bool
 }
-
-// DistributedCache extends Cache with explicit local-plus-remote synchronization helpers.
-//
-// Type Parameters:
-//   - T: Cached value type
-type DistributedCache[T any] interface {
-	Cache[T]
-
-	// SetWithSync stores a value in both local and distributed cache with synchronization.
-	SetWithSync(ctx context.Context, key string, value T, localTTL time.Duration, remoteTTL time.Duration) error
-
-	// GetWithSync retrieves a value from local cache first, then from distributed cache if not found.
-	GetWithSync(ctx context.Context, key string, localTTL time.Duration) (T, error)
-
-	// DeleteWithSync removes a value from both local and distributed cache with synchronization.
-	DeleteWithSync(ctx context.Context, key string) error
-}

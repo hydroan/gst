@@ -45,8 +45,8 @@
 // distributed cache: a policy-version entry written on every mutate, carried
 // to every replica's local map by its Kafka-backed broadcast, watched there
 // for nearly nothing, and feeding the same ReloadPolicies entry point. It can
-// only ever sit on top — delivery is at-most-once, and it rests on components
-// the framework treats as optional (Kafka, and Redis for the synced tier) —
+// only ever sit on top — delivery is at-most-once, and it rests on a
+// component the framework treats as optional (Kafka) —
 // so the reconciliation stays underneath, and a missed notification costs
 // latency rather than correctness.
 //

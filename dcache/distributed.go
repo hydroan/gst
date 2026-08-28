@@ -17,7 +17,6 @@ import (
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
@@ -34,8 +33,6 @@ const (
 const (
 	opSet op = iota
 	opDel
-	opSetDone
-	opDelDone
 )
 
 var (
@@ -45,7 +42,7 @@ var (
 	distributedCacheMap sync.Map
 	distributedCacheMu  sync.Mutex
 
-	_ types.DistributedCache[any] = (*distributedCache[any])(nil)
+	_ types.Cache[any] = (*distributedCache[any])(nil)
 )
 
 type op int
@@ -56,10 +53,6 @@ func (o op) String() string {
 		return "set"
 	case opDel:
 		return "del"
-	case opSetDone:
-		return "set_done"
-	case opDelDone:
-		return "del_done"
 	default:
 		return "unknown"
 	}
@@ -68,7 +61,7 @@ func (o op) String() string {
 type event struct {
 	CacheID string `json:"cache_id"`
 
-	Key string          `json:"key"` // redis key
+	Key string          `json:"key"` // cache key
 	TS  int64           `json:"ts"`  // unix nanoseconds
 	Op  op              `json:"op"`
 	Val json.RawMessage `json:"val"`
@@ -77,9 +70,6 @@ type event struct {
 	TTL time.Duration `json:"ttl"`
 
 	Hostname string `json:"hostname"` // which server produced the event
-
-	SyncToRedis bool          `json:"sync_to_redis"`
-	RedisTTL    time.Duration `json:"redis_ttl"`
 }
 
 func (e *event) MarshalLogObject(enc zapcore.ObjectEncoder) error {
@@ -103,9 +93,7 @@ func (e *event) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	// to a []byte drops its Marshaler, so AddReflected would base64 it and
 	// the truncation above would lose its purpose.
 	enc.AddByteString("value", val)
-	enc.AddString("local_ttl", util.FormatDurationSmart(e.TTL, 2))
-	enc.AddString("redis_ttl", util.FormatDurationSmart(e.RedisTTL, 2))
-	enc.AddBool("sync_to_redis", e.SyncToRedis)
+	enc.AddString("ttl", util.FormatDurationSmart(e.TTL, 2))
 
 	return nil
 }
@@ -113,7 +101,7 @@ func (e *event) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 // NewDistributedCache returns the distributed cache of type T, creating it on first use.
 //
 // Why keep one cache per type in a concurrent map?
-// Each type's cache owns the goroutine that watches the opSetDone and opDelDone events, and they
+// Each type's cache owns the goroutine that watches the peer set and delete events, and they
 // never interfere with each other. The number of types is bounded, so only a few goroutines ever
 // listen for kafka events, and fewer listeners means better throughput.
 //
@@ -127,7 +115,7 @@ func (e *event) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 //	kafka consumers on one node: number of service processes * number of DistributedCache instances,
 //	and normally only one service process runs.
 //	total kafka listeners: consumers per node * number of nodes
-func NewDistributedCache[T any](opts ...DistributedCacheOption[T]) (types.DistributedCache[T], error) {
+func NewDistributedCache[T any](opts ...DistributedCacheOption[T]) (types.Cache[T], error) {
 	key := reflect.TypeFor[T]()
 
 	// Fast path: check if cache already exists. Options only take effect when
@@ -166,28 +154,26 @@ func typeName[T any]() string {
 	return typ.PkgPath() + "|" + typ.String()
 }
 
-// distributedCache implements a two-level cacheing system with local memery cache and redis backend.
-// It provides cache synchronization across multiple instances using kafka for event publishing and consuming:
+// distributedCache is a replicated in-memory cache. Every instance owns a
+// process-local tier and mirrors its set and delete operations to the local
+// tier of every other instance through kafka events:
 //   - Local memory cache for high-speed access.
-//   - Redis for distributed persistence and high availability.
-//   - Kafka for cross-instance cache invalidation.
+//   - Kafka for cross-instance propagation of set and delete operations.
 //
-// Performance metrics are tracked (hits/misses) and a controlled goroutine pool handles
+// There is no shared storage tier; see the package documentation for the
+// consistency trade-offs. Performance metrics are tracked (hits/misses) and
+// a controlled goroutine pool handles event publishing.
 type distributedCache[T any] struct {
 	localCache types.Cache[T]
-	redisCache types.Cache[T]
-
-	// prefix keeps the types apart inside the redis cache.
-	prefix string
 
 	// typ is the type of the distributed cache.
-	// When an instance receives an opSetDone or opDelDone event it compares event.Typ with its own
+	// When an instance receives a peer event it compares event.Typ with its own
 	// type and ignores the event when they differ.
 	// NOTE: the typ of the distributed cache instances of one type is always the same.
 	typ string
 
 	// cacheID identifies one distributed cache instance, and every instance has its own.
-	// When an instance receives an opSetDone or opDelDone event it compares event.CacheID with its
+	// When an instance receives a peer event it compares event.CacheID with its
 	// own ID and ignores the event when they are equal, because it published that event itself.
 	// NOTE: the cacheID of two distributed cache instances is never the same.
 	cacheID  string
@@ -197,28 +183,26 @@ type distributedCache[T any] struct {
 	localHits         atomic.Int64
 	localMisses       atomic.Int64
 	localDelete       atomic.Int64
-	redisHits         atomic.Int64
-	redisMisses       atomic.Int64
 	distributedSet    atomic.Int64
 	distributedDelete atomic.Int64
 
 	kafkaBrokers []string
-	// topicSetDel and topicDone are resolved once at construction; the
-	// defaults derive from the application name.
-	topicSetDel string
-	topicDone   string
+	// topic carries the set and delete events of every instance; it is
+	// resolved once at construction and the default derives from the
+	// application name.
+	topic string
 	// appliedTS is the highest event timestamp already applied per key. The
 	// partition key keeps one key's events ordered within a partition, but a
-	// partition count change, a second state node or a replay can still
-	// deliver an older event afterwards, and applying it would resurrect a
-	// deleted entry. Bounded by LRU: evicting a key only reopens that key's
-	// out-of-order window.
+	// partition count change or a replay can still deliver an older event
+	// afterwards, and applying it would resurrect a deleted entry. Bounded
+	// by LRU: evicting a key only reopens that key's out-of-order window.
 	appliedTS *lru.Cache[string, int64]
 
-	// pubSetDel is the kafka producer, publish the event that the entry associated with the key was updated/delete.
-	pubSetDel *kgo.Client
-	// subDone is the kafka consumer, receive the event that the entry associated with the key was updated/delete.
-	subDone *kgo.Client
+	// pub publishes this instance's set and delete events; sub receives the
+	// events of every instance, including this one's own, which are skipped
+	// by cacheID.
+	pub *kgo.Client
+	sub *kgo.Client
 
 	// logger is the cache internal logger, call "WithLogger" to replace it.
 	logger types.Logger
@@ -234,11 +218,8 @@ type distributedCache[T any] struct {
 	comp string
 }
 
-// newDistributedCache creates and initializes a new Distributed Cache system with local and Redis backend.
-// Parameters:
-//   - localCache: In-Memory cache implementation for fast access.
-//   - brokers: kafka brokers addresses for event publishing and consuming.
-//   - opts: Optional configuration options.
+// newDistributedCache creates and initializes one distributed cache instance
+// with its local tier and kafka producer/consumer pair.
 func newDistributedCache[T any](opts ...DistributedCacheOption[T]) (*distributedCache[T], error) {
 	cacheID := uuid.NewV7()
 	hostname, err := os.Hostname()
@@ -246,22 +227,9 @@ func newDistributedCache[T any](opts ...DistributedCacheOption[T]) (*distributed
 		return nil, err
 	}
 
-	// Why add a prefix here?
-	// localCache is generic and every type has its own localCache: NewLocalCache just returns the
-	// local cache of the current type out of a map holding many of them.
-	// redis has no generics, so the prefix acts as the namespace of the type.
-	//
-	// The name comes from typeName rather than reflect's Name, which is empty
-	// for every unnamed type: a *User and a []Order would both reduce to an
-	// empty prefix and an empty type tag, sharing one Redis namespace and
-	// defeating the type check on incoming events.
-	typStr := typeName[T]()
-	prefix := typStr + ":"
-
 	dc := &distributedCache[T]{
 		cacheID:  cacheID.String(),
-		prefix:   prefix,
-		typ:      typStr,
+		typ:      typeName[T](),
 		comp:     fmt.Sprintf("[%s:DistributedCache:%s]", hostname, reflect.TypeFor[T]().String()),
 		hostname: hostname,
 	}
@@ -290,20 +258,6 @@ func newDistributedCache[T any](opts ...DistributedCacheOption[T]) (*distributed
 		}
 	}
 
-	// setup redis cache
-	if dc.redisCache == nil {
-		redisCli, e := redis.New(config.App.Redis)
-		if e != nil {
-			return nil, e
-		}
-		if dc.redisCache, e = NewRedisCache[T](redisCli); e != nil {
-			return nil, e
-		}
-		if dc.redisCache == nil {
-			return nil, errors.New("redis cache is nil")
-		}
-	}
-
 	// setup kafka; the consumer group name follows the topic
 	if len(dc.kafkaBrokers) == 0 {
 		dc.kafkaBrokers = config.App.Kafka.Brokers
@@ -311,12 +265,11 @@ func newDistributedCache[T any](opts ...DistributedCacheOption[T]) (*distributed
 	if dc.appliedTS, err = lru.New[string, int64](maxTrackedKeys); err != nil {
 		return nil, err
 	}
-	dc.topicSetDel = setDelTopic()
-	dc.topicDone = doneTopic()
-	if dc.pubSetDel, err = newProducer(dc.kafkaBrokers, dc.topicSetDel); err != nil {
+	dc.topic = cacheTopic()
+	if dc.pub, err = newProducer(dc.kafkaBrokers, dc.topic); err != nil {
 		return nil, err
 	}
-	if dc.subDone, err = newConsumer(dc.kafkaBrokers, dc.topicDone, dc.topicDone); err != nil {
+	if dc.sub, err = newConsumer(dc.kafkaBrokers, dc.topic, dc.topic); err != nil {
 		return nil, err
 	}
 
@@ -342,8 +295,8 @@ func newDistributedCache[T any](opts ...DistributedCacheOption[T]) (*distributed
 	return dc, nil
 }
 
-// Set sets a key-value pair in the local cache and publishs an event "OpSet"
-// to invalidate redis cache.
+// Set sets a key-value pair in the local cache and publishes an opSet event
+// that carries the value to the local tier of every other instance.
 func (dc *distributedCache[T]) Set(ctx context.Context, key string, value T, ttl time.Duration) (err error) {
 	// done := dc.trace("Set")
 	// defer done(err)
@@ -351,54 +304,20 @@ func (dc *distributedCache[T]) Set(ctx context.Context, key string, value T, ttl
 	if ttl < 0 {
 		return errors.New("negative ttl")
 	}
-	prefixedKey := dc.prefix + key
 
 	// Set the local tier first and report its failure: publishing the event
 	// anyway would leave every other instance holding a value this one does
 	// not have, while the caller was told the write succeeded.
-	if err = dc.localCache.Set(ctx, prefixedKey, value, ttl); err != nil {
+	if err = dc.localCache.Set(ctx, key, value, ttl); err != nil {
 		return err
 	}
 
 	dc.sendEvent(&event{
 		TS:  time.Now().UnixNano(),
 		Op:  opSet,
-		Key: prefixedKey,
+		Key: key,
 		raw: value,
 		TTL: ttl,
-	})
-
-	return nil
-}
-
-func (dc *distributedCache[T]) SetWithSync(ctx context.Context, key string, value T, localTTL time.Duration, remoteTTL time.Duration) (err error) {
-	// done := dc.trace("Set")
-	// defer done(err)
-
-	// A zero ttl means "never expires", which counts as the longest possible
-	// lifetime in this comparison.
-	if localTTL < 0 || remoteTTL < 0 {
-		return errors.New("negative ttl")
-	}
-	if remoteTTL != 0 && (localTTL == 0 || remoteTTL < localTTL) {
-		return errors.New("remoteTTL must not be shorter than localTTL")
-	}
-	prefixedKey := dc.prefix + key
-
-	// See Set: a local failure is the caller's failure, not a warning.
-	if err = dc.localCache.Set(ctx, prefixedKey, value, localTTL); err != nil {
-		return err
-	}
-
-	dc.sendEvent(&event{
-		TS:  time.Now().UnixNano(),
-		Op:  opSet,
-		Key: prefixedKey,
-		raw: value,
-		TTL: localTTL,
-
-		SyncToRedis: true,
-		RedisTTL:    remoteTTL,
 	})
 
 	return nil
@@ -408,10 +327,8 @@ func (dc *distributedCache[T]) Get(ctx context.Context, key string) (value T, er
 	// done := dc.trace("Get")
 	// defer done(err)
 
-	prefixedKey := dc.prefix + key
-
 	// get from local cache.
-	if value, err = dc.localCache.Get(ctx, prefixedKey); err == nil {
+	if value, err = dc.localCache.Get(ctx, key); err == nil {
 		// local cache hit.
 		dc.localHits.Add(1)
 		return value, nil
@@ -427,98 +344,33 @@ func (dc *distributedCache[T]) Get(ctx context.Context, key string) (value T, er
 	return zero, err
 }
 
-func (dc *distributedCache[T]) GetWithSync(ctx context.Context, key string, localTTL time.Duration) (value T, err error) {
-	// done := dc.trace("Get")
-	// defer done(err)
-
-	prefixedKey := dc.prefix + key
-
-	var zero T
-	// get from local cache.
-	if value, err = dc.localCache.Get(ctx, prefixedKey); err == nil {
-		// local cache hit.
-		dc.localHits.Add(1)
-		return value, nil
-	}
-	if errors.Is(err, types.ErrEntryNotFound) {
-		// local cache miss.
-		dc.localMisses.Add(1)
-	} else {
-		dc.logger.Warnz("failed to get from local cache", zap.Error(err))
-		return zero, err
-	}
-
-	// get from redis cache
-	redisVal, err := dc.redisCache.Get(ctx, prefixedKey)
-	if err == nil {
-		// redis cache hit.
-		dc.redisHits.Add(1)
-		// The value is good; failing to seed the local tier only costs the
-		// next call another redis round trip, so it must not turn a hit into
-		// an error the caller will read as a miss.
-		if err = dc.localCache.Set(ctx, prefixedKey, redisVal, localTTL); err != nil {
-			dc.logger.Warnz("failed to set local cache", zap.Error(err))
-		}
-		return redisVal, nil
-	}
-	if errors.Is(err, types.ErrEntryNotFound) {
-		// redis cache miss.
-		dc.redisMisses.Add(1)
-		return zero, types.ErrEntryNotFound
-	}
-	dc.logger.Warnz("failed to get from redis cache", zap.Error(err))
-	return zero, err
-}
-
+// Delete removes the entry from the local cache and publishes an opDel event
+// that removes it from the local tier of every other instance.
 func (dc *distributedCache[T]) Delete(ctx context.Context, key string) (err error) {
 	// done := dc.trace("Delete")
 	// defer done(err)
 
 	dc.localDelete.Add(1)
-	prefixedKey := dc.prefix + key
 
-	// NOTE: After recive kafka "delete" event, we will delete the entry from local cache again, it is a no-op.
-	if err = dc.localCache.Delete(ctx, prefixedKey); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+	if err = dc.localCache.Delete(ctx, key); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 		return err
 	}
 
 	dc.sendEvent(&event{
 		TS:  time.Now().UnixNano(),
 		Op:  opDel,
-		Key: prefixedKey,
-	})
-
-	return nil
-}
-
-func (dc *distributedCache[T]) DeleteWithSync(ctx context.Context, key string) (err error) {
-	// done := dc.trace("Delete")
-	// defer done(err)
-
-	dc.localDelete.Add(1)
-	prefixedKey := dc.prefix + key
-
-	// NOTE: After recive kafka "delete" event, we will delete the entry from local cache again, it is a no-op.
-	if err = dc.localCache.Delete(ctx, prefixedKey); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
-		return err
-	}
-
-	dc.sendEvent(&event{
-		TS:  time.Now().UnixNano(),
-		Op:  opDel,
-		Key: prefixedKey,
-
-		SyncToRedis: true,
+		Key: key,
 	})
 
 	return nil
 }
 
 func (dc *distributedCache[T]) Exists(ctx context.Context, key string) bool {
-	return dc.localCache.Exists(ctx, dc.prefix+key)
+	return dc.localCache.Exists(ctx, key)
 }
 
-// listenEvents listen kafka for cache update/delete event and synchronously update the local cache.
+// listenEvents consumes the set and delete events published by the other
+// instances and applies them to the local tier.
 func (dc *distributedCache[T]) listenEvents() {
 	util.SafeGo(func() {
 		defer func() {
@@ -528,18 +380,18 @@ func (dc *distributedCache[T]) listenEvents() {
 		}()
 
 		for {
-			fetches := dc.subDone.PollFetches(context.Background())
+			fetches := dc.sub.PollFetches(context.Background())
 			if fetches.IsClientClosed() {
 				// A closed client cannot recover here; stop the listener
 				// instead of spinning on an immediately returning poll.
-				dc.logger.Error("kafka consumer client closed, stopping the done-event listener")
+				dc.logger.Error("kafka consumer client closed, stopping the event listener")
 				return
 			}
 			fetches.EachError(func(s string, i int32, err error) {
 				dc.logger.Errorz(
 					"failed to fetch from kafka",
 					zap.Error(err),
-					zap.String("topic", dc.topicDone),
+					zap.String("topic", dc.topic),
 					zap.String("s", s),
 					zap.Int32("i", i),
 				)
@@ -554,62 +406,45 @@ func (dc *distributedCache[T]) listenEvents() {
 					dc.logger.Errorz(
 						"failed to unmarshal event",
 						zap.Error(err),
-						zap.String("topic", dc.topicDone),
+						zap.String("topic", dc.topic),
 						zap.ByteString("value", record.Value),
 					)
 					continue
 				}
+				// Skip the events this instance published itself: publishing
+				// already applied the operation to its local tier. Check the
+				// cache ID first, after which the cache type barely needs
+				// checking.
+				if evt.CacheID == dc.cacheID {
+					continue
+				}
+				// The topic is shared by the caches of every type, so foreign
+				// types are filtered out here. Local stores are one per type,
+				// which is what keeps one key from colliding across types.
+				// The filter must also run before acceptEvent: appliedTS is
+				// keyed by the bare cache key, and recording a foreign type's
+				// event would advance the watermark of this type's same-named
+				// key.
+				if evt.Typ != dc.typ {
+					continue
+				}
+				if !dc.acceptEvent(evt) {
+					continue
+				}
+				dc.logger.Debugz("consume event", zap.Object("event", evt))
 				switch evt.Op {
-				case opSetDone:
-					// skip the events this instance published itself,
-					// check the cache ID first, after which the cache type barely needs checking
-					if evt.CacheID == dc.cacheID {
-						// fmt.Println("----- set cache ID matched", dc.mark, dc.cacheId, evt.CacheId)
-						continue
-					}
-					// events of any type arrive here, builtin as well as custom ones, so the type has to be checked.
-					// Two types sharing a key can never set the wrong entry, because the keys always differ, eg:
-					// key1 of the string localCache is string:key1 in redisCache
-					// key1 of the int localCache is int:key1 in redisCache
-					if evt.Typ != dc.typ {
-						// fmt.Println("----- set cache type mismatch", dc.mark, dc.typ, evt.Typ)
-						continue
-					}
-
-					if !dc.acceptEvent(evt) {
-						continue
-					}
-					dc.logger.Debugz("consume event", zap.Object("event", evt))
+				case opSet:
 					var val T
-					// fmt.Printf("----- %s OpSet %v %v %v\n", dc.mark, event.Typ, event.Key, string(event.Val))
-					if err := json.Unmarshal(evt.Val, &val); err == nil {
-						// TODO: how should this be solved?
-						// The local entry is already gone, and handling opSetDone removes it a second
-						// time, which looks like an unnecessary repeat.
-
-						dc.distributedSet.Add(1)
-						// no prefix + key here, the key sent by the state node already is prefix+key.
-						if err := dc.localCache.Set(context.Background(), evt.Key, val, evt.TTL); err != nil {
-							dc.logger.Warnz("failed to set to local cache", zap.Error(err))
-						}
-					}
-				case opDelDone:
-					// check the cache ID first, the cache type barely needs checking afterwards
-					if evt.CacheID == dc.cacheID {
-						// fmt.Println("------ delete cache ID matched", dc.mark, dc.cacheId, evt.CacheId)
+					if err := json.Unmarshal(evt.Val, &val); err != nil {
+						dc.logger.Errorz("failed to unmarshal event value", zap.Error(err), zap.Object("event", evt))
 						continue
 					}
-					if evt.Typ != dc.typ {
-						// fmt.Println("------ delete cache type mismatch:", dc.mark, dc.typ, evt.Typ)
-						continue
+					dc.distributedSet.Add(1)
+					if err := dc.localCache.Set(context.Background(), evt.Key, val, evt.TTL); err != nil {
+						dc.logger.Warnz("failed to set to local cache", zap.Error(err))
 					}
-					if !dc.acceptEvent(evt) {
-						continue
-					}
+				case opDel:
 					dc.distributedDelete.Add(1)
-					// no prefix + key here, the key sent by the state node already is prefix+key.
-					// Every opDelDone event has to delete from the local cache, because there is no way
-					// to tell whether the key belongs to this cache.
 					if err := dc.localCache.Delete(context.Background(), evt.Key); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 						dc.logger.Warnz("failed to delete from local cache", zap.Error(err))
 					}
@@ -670,7 +505,7 @@ func (dc *distributedCache[T]) sendEvent(evt *event) {
 	}
 	err = dc.gopool.Submit(func() {
 		record := &kgo.Record{
-			Topic: dc.topicSetDel,
+			Topic: dc.topic,
 			// The key pins every event for one cache key to one partition.
 			// Without it the partitioner spreads them, and Kafka only orders
 			// within a partition, so a delete could be applied before an
@@ -680,7 +515,7 @@ func (dc *distributedCache[T]) sendEvent(evt *event) {
 		}
 		// TODO: lower this log to debug
 		dc.logger.Infoz("publish event", zap.Object("event", evt))
-		if pubErr := dc.pubSetDel.ProduceSync(context.Background(), record).FirstErr(); pubErr != nil {
+		if pubErr := dc.pub.ProduceSync(context.Background(), record).FirstErr(); pubErr != nil {
 			dc.logger.Errorz("failed to publish event", zap.Error(pubErr), zap.Object("event", evt))
 		}
 	})
@@ -706,13 +541,10 @@ func (dc *distributedCache[T]) startMonitor() {
 
 func (dc *distributedCache[T]) Metrics() *distributedMetrics {
 	return &distributedMetrics{
-		LocalHists:  dc.localHits.Load(),
+		LocalHits:   dc.localHits.Load(),
 		LocalMisses: dc.localMisses.Load(),
 		LocalRatio:  calculateHitRatio(dc.localHits.Load(), dc.localMisses.Load()),
 		LocalDelete: dc.localDelete.Load(),
-
-		RedisHits:   dc.redisHits.Load(),
-		RedisMisses: dc.redisMisses.Load(),
 
 		DistributedSet:    dc.distributedSet.Load(),
 		DistributedDelete: dc.distributedDelete.Load(),
@@ -723,13 +555,10 @@ func (dc *distributedCache[T]) Metrics() *distributedMetrics {
 }
 
 type distributedMetrics struct {
-	LocalHists  int64
+	LocalHits   int64
 	LocalMisses int64
 	LocalRatio  int64
 	LocalDelete int64
-
-	RedisHits   int64
-	RedisMisses int64
 
 	DistributedSet    int64
 	DistributedDelete int64
@@ -743,12 +572,10 @@ func (m *distributedMetrics) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 		return nil
 	}
 
-	enc.AddInt64("local_hits", m.LocalHists)
+	enc.AddInt64("local_hits", m.LocalHits)
 	enc.AddInt64("local_misses", m.LocalMisses)
 	enc.AddInt64("local_ratio", m.LocalRatio)
 	enc.AddInt64("local_delete", m.LocalDelete)
-	enc.AddInt64("redis_hists", m.RedisHits)
-	enc.AddInt64("redis_misses", m.RedisMisses)
 	enc.AddInt64("distributed_set", m.DistributedSet)
 	enc.AddInt64("distributed_delete", m.DistributedDelete)
 	enc.AddInt64("goroutines_pool_cap", m.GoroutinesPoolCap)
@@ -776,13 +603,6 @@ func (dc *distributedCache[T]) trace(op string) func(error) {
 }
 
 type DistributedCacheOption[T any] func(*distributedCache[T]) error
-
-func WithRedisCache[T any](redisCache types.Cache[T]) DistributedCacheOption[T] {
-	return func(dc *distributedCache[T]) error {
-		dc.redisCache = redisCache
-		return nil
-	}
-}
 
 func WithLocalCache[T any](localCache types.Cache[T]) DistributedCacheOption[T] {
 	return func(dc *distributedCache[T]) error {
