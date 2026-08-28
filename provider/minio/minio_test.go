@@ -11,6 +11,7 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/provider/minio"
 	"github.com/stretchr/testify/require"
 )
@@ -25,9 +26,14 @@ func TestMain(m *testing.M) {
 	if err := zap.Init(); err != nil {
 		panic(err)
 	}
-	if err := minio.Init(); err != nil {
-		fmt.Println("minio not available, skipping tests:", err)
-		os.Exit(0)
+	// Bring the compiled-in providers up through the registry — the same
+	// entry bootstrap's drain uses — instead of a test-only export of the
+	// unexported lifecycle.
+	for _, p := range provider.Registered() {
+		if err := p.Init(); err != nil {
+			fmt.Println("minio not available, skipping tests:", err)
+			os.Exit(0)
+		}
 	}
 
 	if err := minio.EnsureBucket(context.Background(), "bucket-exists", "bucket-presign", "bucket-list"); err != nil {

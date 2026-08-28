@@ -11,6 +11,7 @@ import (
 	"github.com/araddon/dateparse"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/provider/elastic"
 	"github.com/hydroan/gst/util"
 	"github.com/stretchr/testify/assert"
@@ -35,8 +36,13 @@ func setupElastic(t *testing.T) {
 	if err := zap.Init(); err != nil {
 		t.Fatalf("init logger: %v", err)
 	}
-	if err := elastic.Init(); err != nil {
-		t.Fatalf("init elastic: %v", err)
+	// Bring the compiled-in providers up through the registry — the same
+	// entry bootstrap's drain uses — instead of a test-only export of the
+	// unexported lifecycle.
+	for _, p := range provider.Registered() {
+		if err := p.Init(); err != nil {
+			t.Fatalf("init elastic: %v", err)
+		}
 	}
 }
 

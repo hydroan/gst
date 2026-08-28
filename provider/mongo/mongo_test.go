@@ -7,6 +7,7 @@ import (
 
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/provider/mongo"
 	"github.com/hydroan/gst/util"
 	"github.com/stretchr/testify/assert"
@@ -21,7 +22,15 @@ func TestMongo(t *testing.T) {
 
 	config.SetConfigFile("../../examples/demo/config.ini")
 	RunOrDie(bootstrap.Bootstrap)
-	defer func() { _ = mongo.Close() }()
+	// Close through the registry — the same exit bootstrap's cleanup uses —
+	// instead of a test-only export of the unexported lifecycle.
+	defer func() {
+		for _, p := range provider.Registered() {
+			if p.Close != nil {
+				_ = p.Close()
+			}
+		}
+	}()
 	require.NoError(t, mongo.Health())
 
 	dbName := "test"
