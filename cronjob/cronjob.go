@@ -5,7 +5,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hydroan/gst/logger"
 	pkgzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/util"
 	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
@@ -13,7 +15,7 @@ import (
 
 var (
 	c        *cron.Cron
-	log      *pkgzap.Logger
+	log      types.Logger
 	cronjobs = make([]*cronjob, 0)
 	parser   cron.Parser
 	mu       sync.Mutex
@@ -42,7 +44,14 @@ func init() {
 
 func Init() (err error) {
 	if log == nil {
-		log = pkgzap.New("cronjob.log")
+		// Adopt the shared cronjob logger so this package never opens a
+		// second lumberjack instance on the same file, which would race its
+		// rotation. Bootstrap initializes logging before cronjob.Init, so
+		// the local fallback only serves processes that never ran the
+		// logging setup (e.g. unit tests).
+		if log = logger.Cronjob; log == nil {
+			log = pkgzap.New("cronjob.log")
+		}
 	}
 	if c == nil {
 		c = cron.New(cron.WithSeconds())
