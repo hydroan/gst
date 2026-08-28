@@ -30,7 +30,6 @@ func TestOptionalProvidersTableMatchesProviderDirectories(t *testing.T) {
 			dirs[entry.Name()] = true
 		}
 	}
-
 	tabled := make(map[string]bool, len(optionalProviders))
 	for name := range optionalProviders {
 		tabled[name] = true
