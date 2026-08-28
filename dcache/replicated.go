@@ -194,9 +194,14 @@ type replicatedCache[T any] struct {
 	// an older event afterwards. Bounded by LRU: evicting a key only
 	// reopens that key's out-of-order window.
 	appliedTS *lru.Cache[string, int64]
-	// watermarkMu serializes the check-then-act on appliedTS so the concurrent
-	// writers (the event listener and local Set/Delete callers) cannot
-	// regress the watermark.
+	// watermarkMu guards the compound invariant that a store write and its
+	// watermark entry happen as one atomic step, on the local write path and
+	// the peer apply path alike; without it a peer event that passed its
+	// staleness check could land on top of a newer concurrent local write,
+	// with the advanced watermark then blocking every later correction. A
+	// single mutex is deliberate: every write already pays two JSON marshals
+	// and a pool submit, so the lock is not the bottleneck; shard it by key
+	// only if profiles ever say otherwise.
 	watermarkMu sync.Mutex
 
 	// pub publishes this instance's set and delete events; sub receives the
@@ -290,17 +295,20 @@ func (dc *replicatedCache[T]) Set(ctx context.Context, key string, value T, ttl 
 		return errors.New("negative ttl")
 	}
 
-	// Set the own store first and report its failure: publishing the event
-	// anyway would leave every other instance holding a value this one does
-	// not have, while the caller was told the write succeeded.
+	// The write and its watermark entry are one critical section shared with
+	// the peer apply path, so an older peer event that already passed its
+	// staleness check cannot land on top of this newer write. Writing the
+	// store first and reporting its failure also keeps the peers from
+	// holding a value this instance does not have.
+	dc.watermarkMu.Lock()
+	ts := time.Now().UnixNano()
 	if err = dc.store.Set(ctx, key, entry[T]{Value: value}, ttl); err != nil {
+		dc.watermarkMu.Unlock()
 		return err
 	}
+	dc.advanceWatermarkLocked(key, ts)
+	dc.watermarkMu.Unlock()
 
-	// The local write enters the same watermark as accepted peer events, so
-	// an older peer event still in flight cannot overwrite it.
-	ts := time.Now().UnixNano()
-	dc.advanceWatermark(key, ts)
 	// A publication error reaches the caller: the local tier already holds
 	// the value, but the peers never will.
 	return dc.sendEvent(&event{
@@ -331,15 +339,18 @@ func (dc *replicatedCache[T]) Get(ctx context.Context, key string) (value T, err
 // Delete removes the entry from the store and publishes an opDel event that
 // removes it from the store of every other instance.
 func (dc *replicatedCache[T]) Delete(ctx context.Context, key string) (err error) {
+	// See Set: the delete and its watermark entry are one critical section,
+	// so a stale peer set cannot resurrect the key this instance removed.
+	dc.watermarkMu.Lock()
+	ts := time.Now().UnixNano()
 	if err = dc.store.Delete(ctx, key); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+		dc.watermarkMu.Unlock()
 		return err
 	}
+	dc.advanceWatermarkLocked(key, ts)
+	dc.watermarkMu.Unlock()
 	dc.deletes.Add(1)
 
-	// See Set: the local delete enters the watermark, so a stale peer set
-	// cannot resurrect the key this instance just removed.
-	ts := time.Now().UnixNano()
-	dc.advanceWatermark(key, ts)
 	return dc.sendEvent(&event{
 		TS:  ts,
 		Op:  opDel,
@@ -423,9 +434,6 @@ func (dc *replicatedCache[T]) listenEvents() {
 				if evt.Typ != dc.typ {
 					continue
 				}
-				if !dc.shouldApply(evt) {
-					continue
-				}
 				dc.logger.Debugz("consume event", zap.Any("event", eventLogView{evt}))
 				switch evt.Op {
 				case opSet:
@@ -434,19 +442,27 @@ func (dc *replicatedCache[T]) listenEvents() {
 						dc.logger.Errorz("failed to unmarshal event value", zap.Error(err), zap.Any("event", eventLogView{evt}))
 						continue
 					}
-					if err := dc.store.Set(context.Background(), evt.Key, entry[T]{Value: val}, evt.TTL); err != nil {
+					stale, err := dc.applyPeerSet(evt, val)
+					if err != nil {
 						dc.logger.Warnz("failed to set to the store", zap.Error(err))
 						continue
 					}
+					if stale {
+						dc.logger.Debugz("skipping a stale peer event superseded by a newer write", zap.Any("event", eventLogView{evt}))
+						continue
+					}
 					dc.peerSets.Add(1)
-					dc.advanceWatermark(evt.Key, evt.TS)
 				case opDel:
-					if err := dc.store.Delete(context.Background(), evt.Key); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+					stale, err := dc.applyPeerDelete(evt)
+					if err != nil {
 						dc.logger.Warnz("failed to delete from the store", zap.Error(err))
 						continue
 					}
+					if stale {
+						dc.logger.Debugz("skipping a stale peer event superseded by a newer write", zap.Any("event", eventLogView{evt}))
+						continue
+					}
 					dc.peerDeletes.Add(1)
-					dc.advanceWatermark(evt.Key, evt.TS)
 				default:
 					dc.logger.Warnz("unknown event op", zap.Any("event", eventLogView{evt}))
 				}
@@ -455,36 +471,45 @@ func (dc *replicatedCache[T]) listenEvents() {
 	}()
 }
 
-// shouldApply reports whether an event is newer than the watermark of its
-// key. Out-of-order delivery is rare but not impossible, and applying a
-// stale set after a delete would bring the entry back on every instance
-// that saw them in that order. The watermark itself advances only through
-// advanceWatermark, after the event took effect, so a failed application
-// does not claim its timestamp.
-func (dc *replicatedCache[T]) shouldApply(evt *event) bool {
-	dc.watermarkMu.Lock()
-	last, ok := dc.appliedTS.Get(evt.Key)
-	dc.watermarkMu.Unlock()
-	if ok && evt.TS <= last {
-		dc.logger.Warnz(
-			"skipping out-of-order event",
-			zap.String("key", evt.Key),
-			zap.Int64("event_ts", evt.TS),
-			zap.Int64("applied_ts", last),
-			zap.String("op", evt.Op.String()),
-		)
-		return false
-	}
-	return true
-}
-
-// advanceWatermark records ts as the newest applied timestamp of key when it
-// is newer than the recorded one. Local writes and accepted peer events feed
-// the same watermark; watermarkMu keeps the check-then-act monotonic under
-// concurrent callers.
-func (dc *replicatedCache[T]) advanceWatermark(key string, ts int64) {
+// applyPeerSet applies a peer set event to the store when it is newer than
+// its key's watermark. The staleness check, the store write and the
+// watermark advance are one critical section shared with the local write
+// path — a stale set after a delete would otherwise bring the entry back —
+// while unmarshaling stays outside of it. A failed store write does not
+// claim the event's timestamp, so a redelivery can still apply. It reports
+// stale=true when a newer write already claimed the key.
+func (dc *replicatedCache[T]) applyPeerSet(evt *event, val T) (stale bool, err error) {
 	dc.watermarkMu.Lock()
 	defer dc.watermarkMu.Unlock()
+	if last, ok := dc.appliedTS.Get(evt.Key); ok && evt.TS <= last {
+		return true, nil
+	}
+	if err := dc.store.Set(context.Background(), evt.Key, entry[T]{Value: val}, evt.TTL); err != nil {
+		return false, err
+	}
+	dc.appliedTS.Add(evt.Key, evt.TS)
+	return false, nil
+}
+
+// applyPeerDelete removes the event's key from the store when the event is
+// newer than the key's watermark; see applyPeerSet for the locking.
+func (dc *replicatedCache[T]) applyPeerDelete(evt *event) (stale bool, err error) {
+	dc.watermarkMu.Lock()
+	defer dc.watermarkMu.Unlock()
+	if last, ok := dc.appliedTS.Get(evt.Key); ok && evt.TS <= last {
+		return true, nil
+	}
+	if err := dc.store.Delete(context.Background(), evt.Key); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+		return false, err
+	}
+	dc.appliedTS.Add(evt.Key, evt.TS)
+	return false, nil
+}
+
+// advanceWatermarkLocked records ts as the newest applied timestamp of key
+// when it is newer than the recorded one. The caller holds watermarkMu; the
+// monotonic check keeps a clock anomaly from regressing the watermark.
+func (dc *replicatedCache[T]) advanceWatermarkLocked(key string, ts int64) {
 	if last, ok := dc.appliedTS.Get(key); ok && ts <= last {
 		return
 	}

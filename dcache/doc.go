@@ -24,11 +24,7 @@
 //     its store misses those writes until the same key is written again or
 //     the TTL expires.
 //   - Cross-host ordering is decided by producer UnixNano timestamps. Clock
-//     skew between hosts can drop a legitimately newer write as stale. On
-//     one instance, taking the timestamp and writing the store are not one
-//     atomic step either, so two goroutines racing on the same key can
-//     leave the writer's own store and the peers on different sides of the
-//     race until the next write or expiry.
+//     skew between hosts can drop a legitimately newer write as stale.
 //   - Delivery is best-effort and bounded: a record that cannot be
 //     delivered within its budget (a few retries inside a few seconds),
 //     that exceeds the broker's message size limit, or that arrives while

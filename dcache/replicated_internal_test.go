@@ -79,15 +79,26 @@ func TestWatermarkCoversLocalWrites(t *testing.T) {
 
 	require.NoError(t, dc.Set(ctx, "watermark-key", 1, time.Minute))
 
-	stale := &event{TS: time.Now().Add(-time.Second).UnixNano(), Op: opSet, Key: "watermark-key", Typ: dc.typ, CacheID: "peer"}
-	require.False(t, dc.shouldApply(stale), "a peer event older than the local write must be rejected")
+	// A peer event older than the local write must be rejected as stale, and
+	// the newer local value must survive it.
+	stale, err := dc.applyPeerSet(&event{TS: time.Now().Add(-time.Second).UnixNano(), Op: opSet, Key: "watermark-key", Typ: dc.typ, CacheID: "peer"}, 99)
+	require.NoError(t, err)
+	require.True(t, stale, "a peer event older than the local write must be rejected")
+	got, err := dc.Get(ctx, "watermark-key")
+	require.NoError(t, err)
+	require.Equal(t, 1, got, "the newer local write must survive a stale peer event")
 
-	fresh := &event{TS: time.Now().Add(time.Second).UnixNano(), Op: opSet, Key: "watermark-key", Typ: dc.typ, CacheID: "peer"}
-	require.True(t, dc.shouldApply(fresh), "a peer event newer than the local write must pass")
+	// A peer event newer than the local write lands.
+	stale, err = dc.applyPeerSet(&event{TS: time.Now().Add(time.Second).UnixNano(), Op: opSet, Key: "watermark-key", Typ: dc.typ, CacheID: "peer"}, 2)
+	require.NoError(t, err)
+	require.False(t, stale, "a peer event newer than the local write must pass")
 
+	// After a local delete, a stale peer set must not resurrect the key.
 	require.NoError(t, dc.Delete(ctx, "watermark-key"))
-	staleSet := &event{TS: time.Now().Add(-time.Second).UnixNano(), Op: opSet, Key: "watermark-key", Typ: dc.typ, CacheID: "peer"}
-	require.False(t, dc.shouldApply(staleSet), "a stale peer set must not resurrect a locally deleted key")
+	stale, err = dc.applyPeerSet(&event{TS: time.Now().Add(-time.Second).UnixNano(), Op: opSet, Key: "watermark-key", Typ: dc.typ, CacheID: "peer"}, 3)
+	require.NoError(t, err)
+	require.True(t, stale, "a stale peer set must not resurrect a locally deleted key")
+	require.False(t, dc.Exists(ctx, "watermark-key"))
 }
 
 // TestSetReturnsMarshalFailure asserts that a value the event pipeline
@@ -106,20 +117,30 @@ func TestSetReturnsMarshalFailure(t *testing.T) {
 	require.True(t, dc.Exists(ctx, "unmarshalable-key"))
 }
 
-// TestWatermarkAdvancesOnlyOnApply asserts the judge/record split: passing
-// shouldApply does not claim the timestamp, only advanceWatermark does, so a
-// failed application leaves the watermark untouched.
+// TestWatermarkAdvancesOnlyOnApply asserts that a failed store application
+// does not claim the event's timestamp: the same event still applies on a
+// redelivery instead of being rejected as stale.
 func TestWatermarkAdvancesOnlyOnApply(t *testing.T) {
-	dc, err := newReplicatedCache[uint](newFakeStore[uint]())
+	store := newFakeStore[uint]()
+	dc, err := newReplicatedCache[uint](store)
 	require.NoError(t, err)
 
 	evt := &event{TS: 100, Op: opSet, Key: "apply-key", Typ: dc.typ, CacheID: "peer"}
-	require.True(t, dc.shouldApply(evt))
-	// Not applied yet: the same timestamp must still pass.
-	require.True(t, dc.shouldApply(evt))
 
-	dc.advanceWatermark(evt.Key, evt.TS)
-	require.False(t, dc.shouldApply(evt), "an applied timestamp must be rejected afterwards")
+	store.failSets = 1
+	stale, err := dc.applyPeerSet(evt, 7)
+	require.Error(t, err, "the injected store failure must surface")
+	require.False(t, stale)
+
+	// The watermark is untouched: the same timestamp still applies.
+	stale, err = dc.applyPeerSet(evt, 7)
+	require.NoError(t, err)
+	require.False(t, stale)
+
+	// Now the timestamp is claimed and a redelivery is rejected.
+	stale, err = dc.applyPeerSet(evt, 7)
+	require.NoError(t, err)
+	require.True(t, stale)
 }
 
 // fakeStore is a minimal map-backed store giving the peer a private key
@@ -129,6 +150,9 @@ type fakeStore[T any] struct {
 	mu   sync.Mutex
 	m    map[string]entry[T]
 	ttls map[string]time.Duration
+	// failSets makes that many upcoming Set calls fail, for the tests that
+	// assert a failed application claims nothing.
+	failSets int
 }
 
 func newFakeStore[T any]() *fakeStore[T] {
@@ -138,6 +162,10 @@ func newFakeStore[T any]() *fakeStore[T] {
 func (s *fakeStore[T]) Set(_ context.Context, key string, value entry[T], ttl time.Duration) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.failSets > 0 {
+		s.failSets--
+		return errors.New("injected store failure")
+	}
 	s.m[key] = value
 	s.ttls[key] = ttl
 	return nil
