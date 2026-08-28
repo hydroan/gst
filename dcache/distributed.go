@@ -193,9 +193,6 @@ type distributedCache[T any] struct {
 
 	// gopool bounds the goroutines publishing events.
 	gopool *ants.Pool
-
-	// comp is used to mark the distributed cache name that is convenient for logger search.
-	comp string
 }
 
 // newDistributedCache creates and initializes one distributed cache instance
@@ -213,10 +210,11 @@ func newDistributedCache[T any](store types.Cache[entry[T]]) (*distributedCache[
 		store:    store,
 		cacheID:  cacheID.String(),
 		typ:      typeName[T](),
-		comp:     fmt.Sprintf("[%s:DistributedCache:%s]", hostname, reflect.TypeFor[T]().String()),
 		hostname: hostname,
 	}
-	dc.logger = logger.Dcache.With("hostname", hostname, compKey, dc.comp)
+	// comp marks the distributed cache name so its log lines are searchable.
+	comp := fmt.Sprintf("[%s:DistributedCache:%s]", hostname, reflect.TypeFor[T]().String())
+	dc.logger = logger.Dcache.With("hostname", hostname, compKey, comp)
 
 	// setup kafka; the consumer group name follows the topic
 	if dc.appliedTS, err = lru.New[string, int64](maxTrackedKeys); err != nil {
@@ -453,8 +451,7 @@ func (dc *distributedCache[T]) sendEvent(evt *event) {
 			Key:   []byte(evt.Key),
 			Value: data,
 		}
-		// TODO: lower this log to debug
-		dc.logger.Infoz("publish event", zap.Any("event", evt.logView()))
+		dc.logger.Debugz("publish event", zap.Any("event", evt.logView()))
 		if pubErr := dc.pub.ProduceSync(context.Background(), record).FirstErr(); pubErr != nil {
 			dc.logger.Errorz("failed to publish event", zap.Error(pubErr), zap.Any("event", evt.logView()))
 		}
