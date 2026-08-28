@@ -6,6 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
@@ -20,14 +21,14 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{Name: "rethinkdb", Init: Init, Close: Close})
+	provider.Register(provider.Provider{Name: "rethinkdb", Logger: &logger.RethinkDB, Init: initProvider, Close: closeProvider})
 }
 
-// Init initializes the global RethinkDB session.
+// initProvider initializes the global RethinkDB session.
 // It reads RethinkDB configuration from config.App.RethinkDB.
 // If RethinkDB is not enabled, it returns nil.
 // The function is thread-safe and ensures the session is initialized only once.
-func Init() (err error) {
+func initProvider() (err error) {
 	cfg := config.App.RethinkDB
 	if !cfg.Enabled {
 		return nil
@@ -117,8 +118,8 @@ func Client() (*r.Session, error) {
 	return session, nil
 }
 
-// Close closes the RethinkDB session
-func Close() error {
+// closeProvider closes the RethinkDB session
+func closeProvider() error {
 	mu.Lock()
 	defer mu.Unlock()
 

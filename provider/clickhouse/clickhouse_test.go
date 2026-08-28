@@ -15,7 +15,7 @@ func TestClickhouse(t *testing.T) {
 		config.App.Clickhouse = config.Clickhouse{Enabled: false}
 		t.Cleanup(func() { config.App.Clickhouse = old })
 
-		if err := Init(); err != nil {
+		if err := initProvider(); err != nil {
 			t.Fatalf("Init with clickhouse disabled: %v", err)
 		}
 		if _, err := Client(); err == nil {
@@ -34,11 +34,11 @@ func TestClickhouse(t *testing.T) {
 		cfg.Compress = true
 		config.App.Clickhouse = cfg
 		t.Cleanup(func() {
-			_ = Close()
+			_ = closeProvider()
 			config.App.Clickhouse = old
 		})
 
-		if err = Init(); err != nil {
+		if err = initProvider(); err != nil {
 			t.Fatalf("Init: %v", err)
 		}
 
@@ -74,7 +74,7 @@ func TestClickhouse(t *testing.T) {
 			t.Fatalf("expected 3 rows, got %d", count)
 		}
 
-		if err = Close(); err != nil {
+		if err = closeProvider(); err != nil {
 			t.Fatalf("Close: %v", err)
 		}
 		if _, err = Client(); err == nil {

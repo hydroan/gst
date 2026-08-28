@@ -7,6 +7,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gocql/gocql"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
@@ -20,14 +21,14 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{Name: "cassandra", Init: Init, Close: Close})
+	provider.Register(provider.Provider{Name: "cassandra", Logger: &logger.Cassandra, Init: initProvider, Close: closeProvider})
 }
 
-// Init initializes the global Cassandra session.
+// initProvider initializes the global Cassandra session.
 // It reads Cassandra configuration from config.App.Cassandra.
 // If Cassandra is not enabled, it returns nil.
 // The function is thread-safe and ensures the session is initialized only once.
-func Init() (err error) {
+func initProvider() (err error) {
 	cfg := config.App.Cassandra
 	if !cfg.Enabled {
 		return nil
@@ -178,8 +179,8 @@ func Client() (*gocql.Session, error) {
 	return session, nil
 }
 
-// Close closes the global Cassandra session.
-func Close() error {
+// closeProvider closes the global Cassandra session.
+func closeProvider() error {
 	mu.Lock()
 	defer mu.Unlock()
 	if session != nil {

@@ -33,13 +33,13 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{Name: "clickhouse", Init: Init, Close: Close})
+	provider.Register(provider.Provider{Name: "clickhouse", Init: initProvider, Close: closeProvider})
 }
 
-// Init initializes the global native ClickHouse connection.
+// initProvider initializes the global native ClickHouse connection.
 // It reads the configuration from config.App.Clickhouse.
 // If ClickHouse is not enabled, it returns nil.
-func Init() (err error) {
+func initProvider() (err error) {
 	cfg := config.App.Clickhouse
 	if !cfg.Enabled {
 		return nil
@@ -114,8 +114,8 @@ func Client() (driver.Conn, error) {
 	return conn, nil
 }
 
-// Close closes the global native ClickHouse connection.
-func Close() error {
+// closeProvider closes the global native ClickHouse connection.
+func closeProvider() error {
 	mu.Lock()
 	defer mu.Unlock()
 	if conn == nil {

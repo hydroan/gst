@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/provider"
+	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,15 +52,27 @@ func TestMissingProviders(t *testing.T) {
 }
 
 // TestDrainProvidersWiresRegisteredProviders proves the drain hands Init to
-// the initializer, adapts Close into a cleanup handler, and seals the
-// registry. It mutates package-level bootstrap state, which is fine because
-// bootstrap never runs inside this test binary.
+// the initializer, adapts Close into a cleanup handler, assigns a dedicated
+// logger through a declared handle before Init runs, and seals the registry.
+// It mutates package-level bootstrap state, which is fine because bootstrap
+// never runs inside this test binary.
 func TestDrainProvidersWiresRegisteredProviders(t *testing.T) {
+	original := config.App
+	config.App = new(config.Config)
+	config.App.Logger.Dir = t.TempDir()
+	t.Cleanup(func() { config.App = original })
+
 	initCalled := false
 	closeCalled := false
+	var handleLogger types.Logger
 	provider.Register(provider.Provider{
-		Name: "test_drain_sample",
-		Init: func() error { initCalled = true; return nil },
+		Name:   "test_drain_sample",
+		Logger: &handleLogger,
+		Init: func() error {
+			// The dedicated logger must already be assigned when Init runs.
+			initCalled = handleLogger != nil
+			return nil
+		},
 		Close: func() error {
 			closeCalled = true
 			return errors.New("close sentinel")
@@ -78,6 +91,12 @@ func TestDrainProvidersWiresRegisteredProviders(t *testing.T) {
 	require.Len(t, handlers, handlersBefore+1)
 	handlers[handlersBefore]()
 	require.True(t, closeCalled)
+
+	// The dedicated logger's file name follows the registry name, and sink
+	// construction precreates the file, so its existence proves the handle
+	// points at the right sink.
+	require.NotNil(t, handleLogger)
+	require.FileExists(t, filepath.Join(config.App.Dir, "test_drain_sample.log"))
 
 	// The drain seals the registry, so late registration must fail fast.
 	require.Panics(t, func() {

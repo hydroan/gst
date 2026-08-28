@@ -22,14 +22,14 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{Name: "nats", Init: Init, Close: Close})
+	provider.Register(provider.Provider{Name: "nats", Logger: &logger.Nats, Init: initProvider, Close: closeProvider})
 }
 
-// Init initializes the global NATS client.
+// initProvider initializes the global NATS client.
 // It reads NATS configuration from config.App.NatsConfig.
 // If NATS is not enabled, it returns nil.
 // The function is thread-safe and ensures the client is initialized only once.
-func Init() (err error) {
+func initProvider() (err error) {
 	cfg := config.App.Nats
 	if !cfg.Enabled {
 		return nil
@@ -152,7 +152,7 @@ func Client() (*nats.Conn, error) {
 	return conn, nil
 }
 
-func Close() error {
+func closeProvider() error {
 	mu.Lock()
 	defer mu.Unlock()
 	if conn != nil {

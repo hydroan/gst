@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/provider"
 	"github.com/hydroan/gst/util"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -28,14 +29,14 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{Name: "mongo", Init: Init, Close: Close})
+	provider.Register(provider.Provider{Name: "mongo", Logger: &logger.Mongo, Init: initProvider, Close: closeProvider})
 }
 
-// Init initializes the global MongoDB client.
+// initProvider initializes the global MongoDB client.
 // It reads MongoDB configuration from config.App.MongoConfig.
 // If MongoDB is not enabled, it returns nil.
 // The function is thread-safe and ensures the client is initialized only once.
-func Init() (err error) {
+func initProvider() (err error) {
 	cfg := config.App.Mongo
 	if !cfg.Enabled {
 		return nil
@@ -197,8 +198,8 @@ func Collection(dbName, collName string) (*mongo.Collection, error) {
 	return db.Collection(collName), nil
 }
 
-// Close closes the MongoDB client connection
-func Close() error {
+// closeProvider closes the MongoDB client connection
+func closeProvider() error {
 	mu.Lock()
 	defer mu.Unlock()
 

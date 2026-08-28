@@ -12,6 +12,8 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/requestctx"
+	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -130,6 +132,49 @@ func TestNewLogWriterConsoleOptionIgnoredForStdStreams(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestInitInstallsFallbackForOptionalProviderLoggers(t *testing.T) {
+	dir := t.TempDir()
+	withLoggerInitConfig(t, dir, "global.log")
+	restoreGlobalLoggers(t)
+
+	require.NoError(t, Init())
+
+	// Optional provider loggers stay usable but file-less until bootstrap's
+	// provider drain assigns dedicated loggers for the providers actually
+	// compiled in; only that assignment may create their log files.
+	optional := map[string]types.Logger{
+		"cassandra": logger.Cassandra,
+		"elastic":   logger.Elastic,
+		"etcd":      logger.Etcd,
+		"influxdb":  logger.Influxdb,
+		"kafka":     logger.Kafka,
+		"ldap":      logger.Ldap,
+		"minio":     logger.Minio,
+		"mongo":     logger.Mongo,
+		"mqtt":      logger.Mqtt,
+		"nats":      logger.Nats,
+		"rethinkdb": logger.RethinkDB,
+		"rocketmq":  logger.RocketMQ,
+		"scylla":    logger.Scylla,
+	}
+	for name, optionalLogger := range optional {
+		require.NotNil(t, optionalLogger, "optional provider logger %s must fall back, not stay nil", name)
+		require.NoFileExists(t, filepath.Join(dir, name+".log"),
+			"optional provider %s must not own a log file before its provider is drained", name)
+	}
+
+	// Core loggers keep their dedicated, precreated files.
+	require.FileExists(t, filepath.Join(dir, "service.log"))
+	require.FileExists(t, filepath.Join(dir, "app.log"))
+
+	// A fallback entry routes to the global sink instead of vanishing.
+	logger.Kafka.Infow("fallback routed to the global sink")
+	Clean()
+	data, err := os.ReadFile(filepath.Join(dir, "global.log"))
+	require.NoError(t, err)
+	require.Contains(t, string(data), "fallback routed to the global sink")
 }
 
 func TestNewLogWriterPrecreatesEmptyLogFile(t *testing.T) {
@@ -441,6 +486,57 @@ func captureStderr(t *testing.T, fn func()) string {
 	require.NoError(t, err)
 	require.NoError(t, readPipe.Close())
 	return string(output)
+}
+
+// withLoggerInitConfig points config.App at a scratch logger setup for tests
+// that run Init, which re-reads every logger setting from config.App rather
+// than the package-level variables withLogWriterConfig covers.
+func withLoggerInitConfig(t *testing.T, dir, file string) {
+	t.Helper()
+
+	original := config.App
+	config.App = new(config.Config)
+	config.App.Logger.Dir = dir
+	config.App.Logger.File = file
+	config.App.Logger.Level = "info"
+	config.App.Logger.Format = "json"
+	config.App.Logger.MaxAge = 30
+	config.App.Logger.MaxSize = 100
+	config.App.Logger.MaxBackups = 1
+
+	t.Cleanup(func() { config.App = original })
+}
+
+// restoreGlobalLoggers snapshots every logger package global plus the zap
+// global and restores them on cleanup, so a test that runs Init cannot leak
+// loggers pointing at its scratch directory into later tests.
+func restoreGlobalLoggers(t *testing.T) {
+	t.Helper()
+
+	savedTyped := map[*types.Logger]types.Logger{}
+	for _, ref := range []*types.Logger{
+		&logger.App,
+		&logger.Runtime, &logger.Cronjob, &logger.Task,
+		&logger.Controller, &logger.Service, &logger.Database,
+		&logger.Cache, &logger.Dcache, &logger.Redis,
+		&logger.Authz, &logger.OTEL, &logger.Cassandra, &logger.Elastic,
+		&logger.Etcd, &logger.Influxdb, &logger.Kafka, &logger.Ldap,
+		&logger.Minio, &logger.Mongo, &logger.Mqtt, &logger.Nats,
+		&logger.RethinkDB, &logger.RocketMQ, &logger.Scylla,
+		&logger.Protocol, &logger.Binary,
+	} {
+		savedTyped[ref] = *ref
+	}
+	savedGin, savedHTTPBody, savedGorm := logger.Gin, logger.HTTPBody, logger.Gorm
+	savedZap := zap.L()
+
+	t.Cleanup(func() {
+		for ref, saved := range savedTyped {
+			*ref = saved
+		}
+		logger.Gin, logger.HTTPBody, logger.Gorm = savedGin, savedHTTPBody, savedGorm
+		zap.ReplaceGlobals(savedZap)
+	})
 }
 
 func withLogWriterConfig(t *testing.T, dir, file string) {

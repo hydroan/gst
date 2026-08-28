@@ -21,7 +21,7 @@ func TestMongo(t *testing.T) {
 
 	config.SetConfigFile("../../examples/demo/config.ini")
 	RunOrDie(bootstrap.Bootstrap)
-	defer mongo.Close()
+	defer func() { _ = mongo.Close() }()
 	require.NoError(t, mongo.Health())
 
 	dbName := "test"

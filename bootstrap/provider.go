@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/hydroan/gst/config"
+	pkgzap "github.com/hydroan/gst/logger/zap"
 	"github.com/hydroan/gst/provider"
 	"go.uber.org/zap"
 )
@@ -37,11 +38,11 @@ var optionalProviders = map[string]func() bool{
 }
 
 // drainProviders hands every registered provider to the initializer, wires
-// its Close into shutdown cleanup, and seals the registry so a later
-// Register fails fast instead of being silently skipped. It then warns
-// about providers that configuration enables but the binary does not
-// contain. Bootstrap calls it after the core phase, so configuration and
-// logging are ready.
+// its Close into shutdown cleanup, assigns each declared logger handle its
+// dedicated logger, and seals the registry so a later Register fails fast
+// instead of being silently skipped. It then warns about providers that
+// configuration enables but the binary does not contain. Bootstrap calls it
+// after the core phase, so configuration and logging are ready.
 func drainProviders() {
 	drained := provider.Registered()
 	provider.Seal()
@@ -49,6 +50,13 @@ func drainProviders() {
 	registered := make(map[string]bool, len(drained))
 	for _, p := range drained {
 		registered[p.Name] = true
+		// The registry name decides the file name, and the assignment lands
+		// before Init is even queued: a compiled-in provider always logs to
+		// its own file, while the loggers of providers never imported keep
+		// the fallback the logging package installed.
+		if p.Logger != nil {
+			*p.Logger = pkgzap.New(p.Name + ".log")
+		}
 		ins.Register(p.Init)
 		if p.Close != nil {
 			registerCleanup(closeComponent(p.Name, p.Close))

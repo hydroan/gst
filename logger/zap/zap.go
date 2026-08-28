@@ -81,19 +81,25 @@ func Init() error {
 
 	logger.Authz = New("authz.log", Option{DisableMsg: true, DisableCaller: true})
 	logger.OTEL = New("otel.log")
-	logger.Cassandra = New("cassandra.log")
-	logger.Elastic = New("elastic.log")
-	logger.Etcd = New("etcd.log")
-	logger.Influxdb = New("influxdb.log")
-	logger.Kafka = New("kafka.log")
-	logger.Ldap = New("ldap.log")
-	logger.Minio = New("minio.log")
-	logger.Mongo = New("mongo.log")
-	logger.Mqtt = New("mqtt.log")
-	logger.Nats = New("nats.log")
-	logger.Scylla = New("scylla.log")
-	logger.RethinkDB = New("rethinkdb.log")
-	logger.RocketMQ = New("rocketmq.log")
+
+	// Optional provider loggers start on a fallback sharing the global core:
+	// non-nil and safe to use, but owning no file and no sink of their own.
+	// Bootstrap's provider drain replaces each with a dedicated logger for
+	// the providers actually compiled in (see provider.Provider.Logger), so
+	// a log file exists exactly for the capabilities the binary carries.
+	logger.Cassandra = newProviderFallback("cassandra")
+	logger.Elastic = newProviderFallback("elastic")
+	logger.Etcd = newProviderFallback("etcd")
+	logger.Influxdb = newProviderFallback("influxdb")
+	logger.Kafka = newProviderFallback("kafka")
+	logger.Ldap = newProviderFallback("ldap")
+	logger.Minio = newProviderFallback("minio")
+	logger.Mongo = newProviderFallback("mongo")
+	logger.Mqtt = newProviderFallback("mqtt")
+	logger.Nats = newProviderFallback("nats")
+	logger.Scylla = newProviderFallback("scylla")
+	logger.RethinkDB = newProviderFallback("rethinkdb")
+	logger.RocketMQ = newProviderFallback("rocketmq")
 
 	logger.Protocol = New("protocol.log")
 	logger.Binary = New("binary.log")
@@ -168,6 +174,19 @@ func Clean() {
 	}
 
 	stopBufferedLogWriters()
+}
+
+// newProviderFallback builds the logger an optional provider variable holds
+// until bootstrap's provider drain assigns its dedicated one. It derives from
+// the global zap logger installed by Init — no file, no extra sink, and in
+// particular no second lumberjack instance on any path — so an entry written
+// through it lands in the global log stream, tagged with the component name.
+// In a process that never ran Init (unit tests), the global logger is zap's
+// no-op and the entry is dropped, which matches how such processes behave for
+// every other logger. The caller-skip mirrors New so callers are attributed
+// identically through either logger.
+func newProviderFallback(component string) types.Logger {
+	return (&Logger{zlog: zap.L().WithOptions(zap.AddCallerSkip(1))}).With("component", component)
 }
 
 // New builds a types.Logger backed by *zap.Logger.

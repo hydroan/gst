@@ -19,7 +19,7 @@ func TestMqtt(t *testing.T) {
 
 	config.SetConfigFile("../../examples/demo/config.ini")
 	util.RunOrDie(bootstrap.Bootstrap)
-	defer mqtt.Close()
+	defer func() { _ = mqtt.Close() }()
 
 	require.NoError(t, mqtt.Health())
 

@@ -14,8 +14,10 @@ type kgoLogger struct{}
 func (kgoLogger) Level() kgo.LogLevel { return kgo.LogLevelInfo }
 
 // Log forwards a franz-go log line to the component logger. logger.Kafka is
-// wired during bootstrap; outside a bootstrapped process (e.g. unit tests)
-// the line is dropped.
+// installed by the logging setup (a global-sink fallback, replaced with the
+// dedicated kafka logger by bootstrap's provider drain); in a process that
+// never ran that setup (e.g. unit tests) it is still nil and the line is
+// dropped.
 func (kgoLogger) Log(level kgo.LogLevel, msg string, keyvals ...any) {
 	l := logger.Kafka
 	if l == nil {

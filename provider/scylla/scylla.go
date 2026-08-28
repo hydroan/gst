@@ -25,14 +25,14 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{Name: "scylla", Init: Init, Close: Close})
+	provider.Register(provider.Provider{Name: "scylla", Logger: &logger.Scylla, Init: initProvider, Close: closeProvider})
 }
 
-// Init initializes the global ScyllaDB session.
+// initProvider initializes the global ScyllaDB session.
 // It reads ScyllaDB configuration from config.App.Scylla.
 // If ScyllaDB is not enabled, it returns nil.
 // The function is thread-safe and ensures the session is initialized only once.
-func Init() (err error) {
+func initProvider() (err error) {
 	cfg := config.App.Scylla
 	if !cfg.Enabled {
 		return nil
@@ -229,8 +229,8 @@ func Client() (gocqlx.Session, error) {
 	return session, nil
 }
 
-// Close closes the ScyllaDB session
-func Close() error {
+// closeProvider closes the ScyllaDB session
+func closeProvider() error {
 	mu.Lock()
 	defer mu.Unlock()
 

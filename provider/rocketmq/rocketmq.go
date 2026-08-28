@@ -27,14 +27,14 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{Name: "rocketmq", Init: Init, Close: Close})
+	provider.Register(provider.Provider{Name: "rocketmq", Logger: &logger.RocketMQ, Init: initProvider, Close: closeProvider})
 }
 
-// Init initializes the global RocketMQ producer.
+// initProvider initializes the global RocketMQ producer.
 // It reads RocketMQ configuration from config.App.RocketMQ.
 // If RocketMQ is not enabled, it returns nil.
 // The function is thread-safe and ensures the producer is initialized only once.
-func Init() (err error) {
+func initProvider() (err error) {
 	cfg := config.App.RocketMQ
 	if !cfg.Enabled {
 		return nil
@@ -262,8 +262,8 @@ func Admin() (admin.Admin, error) {
 	return defaultAdmin, nil
 }
 
-// Close closes the RocketMQ producer connection
-func Close() error {
+// closeProvider closes the RocketMQ producer connection
+func closeProvider() error {
 	mu.Lock()
 	defer mu.Unlock()
 

@@ -42,13 +42,13 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{Name: "elastic", Init: Init})
+	provider.Register(provider.Provider{Name: "elastic", Logger: &logger.Elastic, Init: initProvider})
 }
 
-// Init initializes the global elasticsearch client.
+// initProvider initializes the global elasticsearch client.
 // It reads elasticsearch configuration from config.App.ElasticsearchConfig.
 // If elasticsearch not enabled, it returns nil.
-func Init() (err error) {
+func initProvider() (err error) {
 	cfg := config.App.Elasticsearch
 	if !cfg.Enabled {
 		return nil

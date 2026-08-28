@@ -16,6 +16,8 @@ import (
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/hydroan/gst/types"
 )
 
 // Provider describes an optional capability that joins the bootstrap
@@ -35,6 +37,16 @@ type Provider struct {
 	// Optional; bootstrap runs it on shutdown when set, logs the returned
 	// error, and always continues with the remaining shutdown work.
 	Close func() error
+
+	// Logger, when set, points at the package-level logger variable the
+	// provider logs through. Right before bootstrap runs Init, the drain
+	// assigns a dedicated logger writing <Name>.log through the handle, so
+	// declaring the handle is all a provider does: it can neither forget to
+	// create its logger nor misname its file. Providers without a dedicated
+	// log file leave it nil. Until the drain assignment the variable keeps
+	// the fallback the logging package installed, which routes entries to
+	// the global log sink.
+	Logger *types.Logger
 }
 
 var (

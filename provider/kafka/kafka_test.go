@@ -78,13 +78,13 @@ func TestNew(t *testing.T) {
 	})
 }
 
-func TestInit(t *testing.T) {
+func TestInitProvider(t *testing.T) {
 	t.Run("disabled", func(t *testing.T) {
 		old := config.App.Kafka
 		config.App.Kafka = config.Kafka{Enabled: false}
 		t.Cleanup(func() { config.App.Kafka = old })
 
-		if err := Init(); err != nil {
+		if err := initProvider(); err != nil {
 			t.Fatalf("Init with kafka disabled: %v", err)
 		}
 		if _, err := Client(); err == nil {
@@ -97,11 +97,11 @@ func TestInit(t *testing.T) {
 		old := config.App.Kafka
 		config.App.Kafka = config.Kafka{Enabled: true, Brokers: addrs, ClientID: "gst-test"}
 		t.Cleanup(func() {
-			_ = Close()
+			_ = closeProvider()
 			config.App.Kafka = old
 		})
 
-		if err := Init(); err != nil {
+		if err := initProvider(); err != nil {
 			t.Fatalf("Init: %v", err)
 		}
 
@@ -127,7 +127,7 @@ func TestInit(t *testing.T) {
 			t.Fatalf("expected topic %s to exist", sampleTopic)
 		}
 
-		if err = Close(); err != nil {
+		if err = closeProvider(); err != nil {
 			t.Fatalf("Close: %v", err)
 		}
 		if _, err = Client(); err == nil {
