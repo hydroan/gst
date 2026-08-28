@@ -50,7 +50,14 @@ func newProducer(brokers []string, topic string) (*kgo.Client, error) {
 		// locally the settings below were found to cut 100-200ms per operator batch
 		// kgo.RequiredAcks(kgo.NoAck()),
 		// kgo.DisableIdempotentWrite(),           // disable idempotency to reduce the overhead
-		kgo.RetryTimeout(300*time.Millisecond), // fail fast instead of retrying for a long time
+
+		// Bound the produce path for real: RetryTimeout only covers the
+		// client's own metadata requests, never produces, so the record
+		// limits below are what keeps a kafka outage from buffering and
+		// retrying forever until the publishing pool blocks.
+		kgo.RetryTimeout(300*time.Millisecond),
+		kgo.RecordRetries(3),
+		kgo.RecordDeliveryTimeout(3*time.Second),
 
 		// TCP connection tuning
 		kgo.DialTimeout(300*time.Millisecond),     // short connect timeout
@@ -72,8 +79,10 @@ func newConsumer(brokers []string, topic string, group string) (*kgo.Client, err
 
 		// neither automatic nor manual commits are needed, every restart starts from the latest offset
 		kgo.DisableAutoCommit(),
-		// a fresh group id on every start
-		kgo.ConsumerGroup(fmt.Sprintf("%s-%d", group, time.Now().UnixNano())),
+		// The group is private to the instance (the caller suffixes it with
+		// the instance id), so every instance receives every partition; a
+		// shared group would silently split the partitions between members.
+		kgo.ConsumerGroup(group),
 		// always consume the newest messages after a start
 		kgo.ConsumeResetOffset(kgo.NewOffset().AtEnd()),
 

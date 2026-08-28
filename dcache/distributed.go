@@ -224,7 +224,25 @@ func newDistributedCache[T any](store types.Cache[entry[T]]) (*distributedCache[
 	comp := fmt.Sprintf("[%s:DistributedCache:%s]", hostname, reflect.TypeFor[T]().String())
 	dc.logger = logger.Dcache.With("hostname", hostname, compKey, comp)
 
-	// setup kafka; the consumer group name follows the topic
+	// Undo the partially built kafka clients when a later step fails: the
+	// registry does not cache failed constructions, so a retried call would
+	// otherwise leak another set of connections and goroutines each time.
+	succeeded := false
+	defer func() {
+		if succeeded {
+			return
+		}
+		if dc.pub != nil {
+			dc.pub.Close()
+		}
+		if dc.sub != nil {
+			dc.sub.Close()
+		}
+	}()
+
+	// setup kafka; the consumer group name follows the topic, and the group
+	// suffix is the instance's own id so two instances can never share a
+	// group and split the partitions between them.
 	if dc.appliedTS, err = lru.New[string, int64](maxTrackedKeys); err != nil {
 		return nil, err
 	}
@@ -233,14 +251,17 @@ func newDistributedCache[T any](store types.Cache[entry[T]]) (*distributedCache[
 	if dc.pub, err = newProducer(brokers, dc.topic); err != nil {
 		return nil, err
 	}
-	if dc.sub, err = newConsumer(brokers, dc.topic, dc.topic); err != nil {
+	if dc.sub, err = newConsumer(brokers, dc.topic, dc.topic+"-"+dc.cacheID); err != nil {
 		return nil, err
 	}
 
 	// setup the goroutine pool: the heuristic capacity is raised to the
-	// floor, which matters on a small machine.
+	// floor, which matters on a small machine. Nonblocking keeps a kafka
+	// outage from propagating backpressure into Set/Delete callers: when
+	// every worker is stuck producing, a new event is dropped with a log
+	// line instead of blocking the write path.
 	gocap := max(runtime.NumCPU()*2000, minGoroutines)
-	pool, err := ants.NewPool(gocap, ants.WithPreAlloc(false))
+	pool, err := ants.NewPool(gocap, ants.WithPreAlloc(false), ants.WithNonblocking(true))
 	if err != nil {
 		return nil, err
 	}
@@ -249,6 +270,7 @@ func newDistributedCache[T any](store types.Cache[entry[T]]) (*distributedCache[
 	dc.listenEvents()
 	dc.startMonitor()
 
+	succeeded = true
 	return dc, nil
 }
 
@@ -270,15 +292,15 @@ func (dc *distributedCache[T]) Set(ctx context.Context, key string, value T, ttl
 	// an older peer event still in flight cannot overwrite it.
 	ts := time.Now().UnixNano()
 	dc.advanceWatermark(key, ts)
-	dc.sendEvent(&event{
+	// A publication error reaches the caller: the local tier already holds
+	// the value, but the peers never will.
+	return dc.sendEvent(&event{
 		TS:  ts,
 		Op:  opSet,
 		Key: key,
 		raw: value,
 		TTL: ttl,
 	})
-
-	return nil
 }
 
 func (dc *distributedCache[T]) Get(ctx context.Context, key string) (value T, err error) {
@@ -310,13 +332,11 @@ func (dc *distributedCache[T]) Delete(ctx context.Context, key string) (err erro
 	// cannot resurrect the key this instance just removed.
 	ts := time.Now().UnixNano()
 	dc.advanceWatermark(key, ts)
-	dc.sendEvent(&event{
+	return dc.sendEvent(&event{
 		TS:  ts,
 		Op:  opDel,
 		Key: key,
 	})
-
-	return nil
 }
 
 func (dc *distributedCache[T]) Exists(ctx context.Context, key string) bool {
@@ -325,9 +345,10 @@ func (dc *distributedCache[T]) Exists(ctx context.Context, key string) bool {
 
 // logPanic recovers a panic that would otherwise kill the process and turns
 // it into a structured error record. The goroutine still ends: for the event
-// listener that means the instance degrades to a process-local cache
-// reconciled by TTLs, and restarting is a lifecycle this package
-// deliberately does not have.
+// listener that means the instance stops receiving peer events and its store
+// serves stale entries until their TTLs expire, while its own writes keep
+// publishing. Restarting is a lifecycle this package deliberately does not
+// have.
 func (dc *distributedCache[T]) logPanic(goroutine string) {
 	if r := recover(); r != nil {
 		dc.logger.Errorz(
@@ -343,11 +364,6 @@ func (dc *distributedCache[T]) logPanic(goroutine string) {
 // instances and applies them to the local tier.
 func (dc *distributedCache[T]) listenEvents() {
 	go func() {
-		defer func() {
-			if dc.gopool != nil {
-				dc.gopool.Release()
-			}
-		}()
 		defer dc.logPanic("DistributedCache.listenEvents")
 
 		for {
@@ -467,33 +483,33 @@ func (dc *distributedCache[T]) advanceWatermark(key string, ts int64) {
 	dc.appliedTS.Add(key, ts)
 }
 
-// sendEvent asynchronously publishs cache update or delete events to
-// kafka topic using a controlled goroutines pool to prevent excessive
-// goroutines creation and properly handle sub-groutines panic.
-func (dc *distributedCache[T]) sendEvent(evt *event) {
+// sendEvent publishes a cache event to the kafka topic through the bounded
+// goroutine pool. A marshal failure is returned to the caller: the value is
+// already stored locally but can never reach the peers, and that must not
+// stay silent. A full pool drops the event with a log line instead of
+// blocking the caller, matching the documented best-effort delivery.
+func (dc *distributedCache[T]) sendEvent(evt *event) error {
 	if evt == nil {
-		return
+		return nil
 	}
+	evt.CacheID = dc.cacheID
+	evt.Typ = dc.typ
+	evt.Hostname = dc.hostname
+
 	// Marshal the caller's value synchronously: doing it in the pool goroutine
 	// would keep reading the value concurrently after Set has returned.
 	val, err := json.Marshal(evt.raw)
 	if err != nil {
-		dc.logger.Errorz("failed to marshal event raw data", zap.Error(err), zap.Any("event", evt.logView()))
-		return
+		return errors.Wrap(err, "marshal the cached value for publication")
 	}
-	if len(val) == 0 {
-		dc.logger.Warnz("the marshaled value is empty", zap.Any("event", evt.logView()))
-		return
-	}
-	evt.CacheID = dc.cacheID
-	evt.Typ = dc.typ
 	evt.Val = val
-	evt.Hostname = dc.hostname
-	evt.raw = nil // clear it to keep the event small
+	// Drop the reference to the caller's value: it does not marshal into the
+	// event (raw is unexported), but keeping it would pin the value while the
+	// event queues in the pool.
+	evt.raw = nil
 	data, err := json.Marshal(evt)
 	if err != nil {
-		dc.logger.Errorz("failed to marshal event", zap.Error(err), zap.Any("event", evt.logView()))
-		return
+		return errors.Wrap(err, "marshal the cache event")
 	}
 	err = dc.gopool.Submit(func() {
 		record := &kgo.Record{
@@ -511,8 +527,9 @@ func (dc *distributedCache[T]) sendEvent(evt *event) {
 		}
 	})
 	if err != nil {
-		dc.logger.Errorz("failed to submit event to gopool", zap.Error(err))
+		dc.logger.Errorz("event dropped: failed to submit it to the gopool", zap.Error(err), zap.Any("event", evt.logView()))
 	}
+	return nil
 }
 
 func (dc *distributedCache[T]) startMonitor() {

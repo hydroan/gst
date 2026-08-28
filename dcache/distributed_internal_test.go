@@ -87,6 +87,22 @@ func TestWatermarkCoversLocalWrites(t *testing.T) {
 	require.False(t, dc.shouldApply(staleSet), "a stale peer set must not resurrect a locally deleted key")
 }
 
+// TestSetReturnsMarshalFailure asserts that a value the event pipeline
+// cannot serialize surfaces as an error instead of silently never reaching
+// the peers; the local tier has already stored it by then.
+func TestSetReturnsMarshalFailure(t *testing.T) {
+	ctx := context.Background()
+
+	dc, err := newDistributedCache[chan int](newFakeStore[chan int]())
+	require.NoError(t, err)
+
+	err = dc.Set(ctx, "unmarshalable-key", make(chan int), time.Minute)
+	require.Error(t, err, "a JSON-unmarshalable value must fail the publication")
+
+	// The local tier holds the value regardless, as documented.
+	require.True(t, dc.Exists(ctx, "unmarshalable-key"))
+}
+
 // TestWatermarkAdvancesOnlyOnApply asserts the judge/record split: passing
 // shouldApply does not claim the timestamp, only advanceWatermark does, so a
 // failed application leaves the watermark untouched.
