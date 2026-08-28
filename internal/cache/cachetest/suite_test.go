@@ -29,7 +29,7 @@ func TestConformance(t *testing.T) {
 		cachetest.Run(t, otter.Cache[string](), cachetest.Capabilities{PerEntryTTL: true, NoExpiry: true, MaxEntries: capacity.Default})
 	})
 	t.Run("freelru", func(t *testing.T) {
-		cachetest.Run(t, freelru.Cache[string](), cachetest.Capabilities{PerEntryTTL: true, NoExpiry: true, MaxEntries: capacity.Default})
+		cachetest.Run(t, freelru.Cache[string](), cachetest.Capabilities{PerEntryTTL: true, NoExpiry: true, MaxEntries: capacity.Default, TTLGranularity: time.Millisecond})
 	})
 	t.Run("ccache", func(t *testing.T) {
 		cachetest.Run(t, ccache.Cache[string](), cachetest.Capabilities{PerEntryTTL: true, NoExpiry: true, MaxEntries: capacity.Default})

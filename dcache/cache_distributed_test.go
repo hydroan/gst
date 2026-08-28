@@ -229,12 +229,17 @@ func TestDistributedCacheEdgeCases(t *testing.T) {
 	err = dc.Set(t.Context(), "zero-ttl", "forever", 0)
 	require.NoError(t, err)
 
-	// a tiny TTL
-	err = dc.Set(t.Context(), "tiny-ttl", "quick", 1*time.Nanosecond)
+	// the smallest honored TTL: sub-millisecond lifetimes are rejected by
+	// the store backend, so a millisecond is the shortest that stores
+	err = dc.Set(t.Context(), "tiny-ttl", "quick", time.Millisecond)
 	require.NoError(t, err)
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(20 * time.Millisecond)
 	_, err = dc.Get(t.Context(), "tiny-ttl")
 	require.Error(t, err) // it must have expired
+
+	// a sub-millisecond TTL cannot be honored and is rejected outright
+	err = dc.Set(t.Context(), "sub-ms-ttl", "rejected", time.Nanosecond)
+	require.ErrorIs(t, err, types.ErrTTLNotSupported)
 
 	// a huge TTL
 	err = dc.Set(t.Context(), "huge-ttl", "longterm", 100*365*24*time.Hour) // ~100 years

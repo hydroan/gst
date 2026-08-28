@@ -3,6 +3,7 @@ package freelru_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
@@ -33,6 +34,19 @@ func TestCacheIsolatesTypes(t *testing.T) {
 	}
 	if _, err := freelru.Cache[string]().Get(ctx, "package-isolation-key"); !errors.Is(err, types.ErrEntryNotFound) {
 		t.Fatalf("want ErrEntryNotFound from the other type's cache, got %v", err)
+	}
+}
+
+// TestSetRejectsSubMillisecondTTL pins the granularity contract: a lifetime
+// below the backend's millisecond resolution would truncate to expired on
+// arrival, so it must be rejected instead of silently mis-honored.
+func TestSetRejectsSubMillisecondTTL(t *testing.T) {
+	ctx := context.Background()
+	if err := freelru.Cache[int]().Set(ctx, "sub-ms-key", 7, 500*time.Microsecond); !errors.Is(err, types.ErrTTLNotSupported) {
+		t.Fatalf("want ErrTTLNotSupported for a sub-millisecond ttl, got %v", err)
+	}
+	if err := freelru.Cache[int]().Set(ctx, "ms-key", 7, time.Millisecond); err != nil {
+		t.Fatalf("want the smallest representable ttl to be accepted, got %v", err)
 	}
 }
 

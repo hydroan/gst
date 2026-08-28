@@ -1,8 +1,8 @@
 // Package freelru is a sharded LRU cache that stores live values.
 //
 // It is the backend that meets the selection criteria without giving
-// anything up: writes land and stay, per-entry lifetimes are honored at full
-// precision, the entry bound evicts, and the read and write paths are
+// anything up: writes land and stay, per-entry lifetimes are honored at
+// millisecond granularity, the entry bound evicts, and the read and write paths are
 // allocation-free and sharded rather than funneled through a worker
 // goroutine. Eviction is plain LRU per shard, so it is not scan-resistant —
 // the same trade the forwarded default makes.
@@ -57,6 +57,12 @@ func (c *cache[T]) Set(_ context.Context, key string, value T, ttl time.Duration
 	if ttl == 0 {
 		c.c.Add(key, value)
 		return nil
+	}
+	// The backend keeps expiry at millisecond granularity: a sub-millisecond
+	// lifetime truncates to zero and would silently expire on arrival, which
+	// the contract forbids.
+	if ttl < time.Millisecond {
+		return types.ErrTTLNotSupported
 	}
 	c.c.AddWithLifetime(key, value, ttl)
 	return nil
