@@ -64,6 +64,11 @@ func (c *cache[T]) Set(_ context.Context, key string, value T, ttl time.Duration
 	if ttl < time.Millisecond {
 		return types.ErrTTLNotSupported
 	}
+	// Round a mid-granularity lifetime up to the next millisecond: the
+	// backend truncates, and truncating shortens the promised lifetime.
+	if rem := ttl % time.Millisecond; rem != 0 {
+		ttl += time.Millisecond - rem
+	}
 	c.c.AddWithLifetime(key, value, ttl)
 	return nil
 }

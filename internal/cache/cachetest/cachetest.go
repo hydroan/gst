@@ -128,8 +128,11 @@ type Capabilities struct {
 	NoExpiry bool
 
 	// TTLGranularity is the coarsest ttl unit the backend can represent; zero
-	// means full precision. Second-granularity backends round sub-second ttls
-	// up, so the expiry probe waits accordingly.
+	// means full precision. A backend with a granularity rejects a ttl below
+	// it with ErrTTLNotSupported — honoring it would mean silently extending
+	// the lifetime — and rounds a ttl above it up to the next unit, since
+	// truncating would shorten the promised lifetime. The expiry probe waits
+	// accordingly, and the suite asserts the sub-granularity rejection.
 	TTLGranularity time.Duration
 
 	// MaxEntries is the backend's entry bound when it has one, and the suite
@@ -259,6 +262,14 @@ func Run(t *testing.T, cache types.Cache[string], caps Capabilities) {
 				t.Fatalf("want ErrEntryNotFound after expiry, got %v", err)
 			}
 		})
+
+		if caps.TTLGranularity > 0 {
+			t.Run("SubGranularityTTLReturnsErrTTLNotSupported", func(t *testing.T) {
+				if err := cache.Set(ctx, "conformance-sub-granularity", "value", caps.TTLGranularity/2); !errors.Is(err, types.ErrTTLNotSupported) {
+					t.Fatalf("want ErrTTLNotSupported for a ttl below the granularity, got %v", err)
+				}
+			})
+		}
 	} else {
 		t.Run("PositiveTTLReturnsErrTTLNotSupported", func(t *testing.T) {
 			if err := cache.Set(ctx, "conformance-expiry", "value", time.Minute); !errors.Is(err, types.ErrTTLNotSupported) {

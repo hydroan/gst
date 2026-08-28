@@ -38,8 +38,14 @@ func (c *cache[T]) Set(_ context.Context, key string, value T, ttl time.Duration
 	if err != nil {
 		return err
 	}
-	// Round sub-second ttls up to one second: the backend has second
-	// granularity and rounding down would turn them into "never expires".
+	// The backend has second granularity: a sub-second lifetime would have
+	// to be stretched to a full second — silently mis-honoring the request,
+	// which the contract forbids — so it is rejected instead.
+	if ttl > 0 && ttl < time.Second {
+		return types.ErrTTLNotSupported
+	}
+	// Round a mid-granularity lifetime up to the next second: truncating
+	// would shorten the promised lifetime.
 	seconds := 0
 	if ttl > 0 {
 		seconds = int(ttl / time.Second)
