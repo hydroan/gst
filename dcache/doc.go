@@ -1,11 +1,8 @@
-// Package dcache provides a replicated in-memory cache: a per-process local
-// tier whose set and delete operations propagate to the local tier of every
-// other instance through Kafka events.
-//
-// Choosing an entry point:
-//   - NewLocalCache: the cache lives only in the current process.
-//   - NewDistributedCache: every instance keeps its own local tier and
-//     mirrors set/delete operations to the local tier of every peer.
+// Package dcache provides a replicated in-memory cache: a per-process store
+// whose set and delete operations propagate to the store of every other
+// instance through Kafka events. A cache that lives only in the current
+// process is the cache package instead; this one is for state every
+// instance must see.
 //
 // There is no shared storage tier. Entries must be rebuildable from their
 // source of truth on a miss (cache-aside), and a bounded TTL is the only
@@ -19,8 +16,8 @@
 //
 //   - Consumers join Kafka with a fresh group id at the end of the topic.
 //     Events published while an instance is down are never replayed for it;
-//     its local tier misses those writes until the same key is written
-//     again or the TTL expires.
+//     its store misses those writes until the same key is written again or
+//     the TTL expires.
 //   - Cross-host ordering is decided by producer UnixNano timestamps. Clock
 //     skew between hosts can drop a legitimately newer write as stale.
 //   - The producer fails fast (a 300ms retry budget). A Kafka outage longer

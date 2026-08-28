@@ -54,3 +54,32 @@ func Load[C any](s *Store, create func() C) C {
 	s.m.Store(key, v)
 	return v
 }
+
+// LoadE returns the instance registered under type C, creating it with create
+// on first use. A failed create is not registered: the error is returned and
+// the next call runs create again, so a transient construction failure cannot
+// pin a broken instance for the life of the process.
+//
+// LoadE mirrors Load rather than sharing one implementation: expressing Load
+// through LoadE would build an adapter closure on every call, including the
+// lock-free hits that dominate.
+func LoadE[C any](s *Store, create func() (C, error)) (C, error) {
+	key := reflect.TypeFor[C]()
+	if v, ok := s.m.Load(key); ok {
+		return v.(C), nil //nolint:errcheck
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if v, ok := s.m.Load(key); ok {
+		return v.(C), nil //nolint:errcheck
+	}
+	v, err := create()
+	if err != nil {
+		var zero C
+		return zero, err
+	}
+	s.m.Store(key, v)
+	return v, nil
+}

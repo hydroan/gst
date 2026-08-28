@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/cache/registry"
 )
 
@@ -51,5 +52,63 @@ func TestLoadKeysByType(t *testing.T) {
 	}
 	if registry.Load(store, func() *string { t.Fatal("create must not rerun"); return nil }) != stringInstance {
 		t.Fatal("want the registered string instance")
+	}
+}
+
+// TestLoadECreatesOncePerType asserts the double-checked creation on the
+// error-aware path: concurrent first loads of one type run create exactly
+// once and share the instance.
+func TestLoadECreatesOncePerType(t *testing.T) {
+	store := registry.New()
+	var created atomic.Int32
+
+	const workers = 8
+	results := make([]*int, workers)
+	var wg sync.WaitGroup
+	for i := range workers {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			v, err := registry.LoadE(store, func() (*int, error) {
+				created.Add(1)
+				return new(int), nil
+			})
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			results[i] = v
+		}(i)
+	}
+	wg.Wait()
+
+	if got := created.Load(); got != 1 {
+		t.Fatalf("want create to run once, ran %d times", got)
+	}
+	for i := 1; i < workers; i++ {
+		if results[i] != results[0] {
+			t.Fatal("want every load to return the same instance")
+		}
+	}
+}
+
+// TestLoadEDoesNotCacheFailure asserts that a failed create is not
+// registered: the error reaches the caller, the next call runs create again,
+// and only its success is cached.
+func TestLoadEDoesNotCacheFailure(t *testing.T) {
+	store := registry.New()
+	boom := errors.New("construction failed")
+
+	if _, err := registry.LoadE(store, func() (*int, error) { return nil, boom }); !errors.Is(err, boom) {
+		t.Fatalf("want the construction error, got %v", err)
+	}
+
+	instance, err := registry.LoadE(store, func() (*int, error) { return new(int), nil })
+	if err != nil {
+		t.Fatalf("want the retried create to succeed, got %v", err)
+	}
+	got, err := registry.LoadE(store, func() (*int, error) { t.Fatal("create must not rerun"); return new(int), nil })
+	if err != nil || got != instance {
+		t.Fatalf("want the registered instance, got %v, %v", got, err)
 	}
 }

@@ -2,11 +2,12 @@ package dcache
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/dgraph-io/ristretto/v2"
+	"github.com/hydroan/gst/cache"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 )
@@ -18,20 +19,18 @@ type typedProbe struct {
 }
 
 // TestPeerPropagation is the regression guard for the kafka broadcast: a set
-// or delete on one instance reaches the local tier of a peer instance of the
-// same type, with the value decoded into T.
+// or delete on one instance reaches the store of a peer instance of the same
+// type, with the value decoded into T.
 func TestPeerPropagation(t *testing.T) {
 	ctx := context.Background()
 
 	// The peer is built through the internal constructor: the exported one
-	// keeps a single instance per type. It also gets a private local tier,
-	// because NewLocalCache is one store per type and sharing it with the
-	// source would satisfy the assertions without any kafka round trip.
-	source, err := newDistributedCache[typedProbe]()
+	// keeps a single instance per type. It also gets a private store, because
+	// the source's cache.Cache store is one instance per type and sharing it
+	// would satisfy the assertions without any kafka round trip.
+	source, err := newDistributedCache[typedProbe](cache.Cache[entry[typedProbe]]())
 	require.NoError(t, err)
-	peerLocal, err := ristretto.NewCache(buildConf[typedProbe]())
-	require.NoError(t, err)
-	peer, err := newDistributedCache(WithLocalCache[typedProbe](&localCache[typedProbe]{c: peerLocal}))
+	peer, err := newDistributedCache[typedProbe](newFakeStore[typedProbe]())
 	require.NoError(t, err)
 
 	want := typedProbe{Name: "typed", Num: 42}
@@ -49,7 +48,7 @@ func TestPeerPropagation(t *testing.T) {
 		}
 		got = val
 		return true
-	}, 30*time.Second, 100*time.Millisecond, "the set event must reach the peer's local tier")
+	}, 30*time.Second, 100*time.Millisecond, "the set event must reach the peer's store")
 	require.Equal(t, want, got)
 
 	// A delete on the source removes the entry from the peer as well. The
@@ -62,5 +61,48 @@ func TestPeerPropagation(t *testing.T) {
 		}
 		_, err := peer.Get(ctx, "propagated-key")
 		return errors.Is(err, types.ErrEntryNotFound)
-	}, 30*time.Second, 100*time.Millisecond, "the delete event must reach the peer's local tier")
+	}, 30*time.Second, 100*time.Millisecond, "the delete event must reach the peer's store")
+}
+
+// fakeStore is a minimal map-backed store giving the peer a private key
+// space in TestPeerPropagation. Lifetimes are irrelevant there, so ttl is
+// accepted and ignored.
+type fakeStore[T any] struct {
+	mu sync.Mutex
+	m  map[string]entry[T]
+}
+
+func newFakeStore[T any]() *fakeStore[T] {
+	return &fakeStore[T]{m: make(map[string]entry[T])}
+}
+
+func (s *fakeStore[T]) Set(_ context.Context, key string, value entry[T], _ time.Duration) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.m[key] = value
+	return nil
+}
+
+func (s *fakeStore[T]) Get(_ context.Context, key string) (entry[T], error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	value, ok := s.m[key]
+	if !ok {
+		return entry[T]{}, types.ErrEntryNotFound
+	}
+	return value, nil
+}
+
+func (s *fakeStore[T]) Delete(_ context.Context, key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.m, key)
+	return nil
+}
+
+func (s *fakeStore[T]) Exists(_ context.Context, key string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.m[key]
+	return ok
 }

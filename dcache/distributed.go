@@ -8,14 +8,15 @@ import (
 	"os"
 	"reflect"
 	"runtime"
-	"sync"
 	"sync/atomic"
 	"time"
 	"uuid"
 
 	"github.com/cockroachdb/errors"
 	lru "github.com/hashicorp/golang-lru/v2"
+	"github.com/hydroan/gst/cache"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
@@ -23,7 +24,6 @@ import (
 	"github.com/panjf2000/ants/v2"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 const (
@@ -36,11 +36,9 @@ const (
 )
 
 var (
-	// One instance per value type, keyed by the type itself. Entries are
-	// written once, when a type is first cached, and read for the rest of
-	// the process, which is what sync.Map's lock-free read path is for.
-	distributedCacheMap sync.Map
-	distributedCacheMu  sync.Mutex
+	// distributedCaches keeps one instance per value type; see the registry
+	// package for the lookup and double-checked creation semantics.
+	distributedCaches = registry.New()
 
 	_ types.Cache[any] = (*distributedCache[any])(nil)
 )
@@ -72,75 +70,52 @@ type event struct {
 	Hostname string `json:"hostname"` // which server produced the event
 }
 
-func (e *event) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+// logView returns the bounded log form of the event: every field verbatim
+// except the payload, which is truncated so a large cached value cannot
+// flood a log line — the collapsing encoder has no truncation of its own.
+func (e *event) logView() map[string]any {
 	if e == nil {
 		return nil
 	}
 
-	var val []byte
-	if len(e.Val) > 1024 {
-		val = e.Val[:1024]
-	} else {
-		val = e.Val
+	const maxLoggedValue = 1024
+	val := e.Val
+	if len(val) > maxLoggedValue {
+		val = val[:maxLoggedValue]
 	}
-	enc.AddString("ts", time.Unix(0, e.TS).UTC().Format(consts.LayoutTimeEncoder))
-	enc.AddString("cache_id", e.CacheID)
-	enc.AddString("hostname", e.Hostname)
-	enc.AddString("typ", e.Typ)
-	enc.AddString("op", e.Op.String())
-	enc.AddString("key", e.Key)
-	// AddByteString keeps the payload readable. Assigning a json.RawMessage
-	// to a []byte drops its Marshaler, so AddReflected would base64 it and
-	// the truncation above would lose its purpose.
-	enc.AddByteString("value", val)
-	enc.AddString("ttl", util.FormatDurationSmart(e.TTL, 2))
-
-	return nil
+	return map[string]any{
+		"ts":       time.Unix(0, e.TS).UTC().Format(consts.LayoutTimeEncoder),
+		"cache_id": e.CacheID,
+		"hostname": e.Hostname,
+		"typ":      e.Typ,
+		"op":       e.Op.String(),
+		"key":      e.Key,
+		"value":    string(val),
+		"ttl":      util.FormatDurationSmart(e.TTL, 2),
+	}
 }
 
 // NewDistributedCache returns the distributed cache of type T, creating it on first use.
 //
-// Why keep one cache per type in a concurrent map?
+// Why keep one cache per type in a registry?
 // Each type's cache owns the goroutine that watches the peer set and delete events, and they
 // never interfere with each other. The number of types is bounded, so only a few goroutines ever
 // listen for kafka events, and fewer listeners means better throughput.
 //
-// Without the map, every NewDistributedCache call would spawn another goroutine listening for
-// kafka events and therefore far too many kafka consumers, which is not what we want. Since this
-// function is exported we cannot stop other developers from calling it repeatedly, so the control
-// has to stay here.
+// Without the registry, every NewDistributedCache call would spawn another goroutine listening
+// for kafka events and therefore far too many kafka consumers, which is not what we want. Since
+// this function is exported we cannot stop other developers from calling it repeatedly, so the
+// control has to stay here.
 //
 // The arithmetic:
 //
 //	kafka consumers on one node: number of service processes * number of DistributedCache instances,
 //	and normally only one service process runs.
 //	total kafka listeners: consumers per node * number of nodes
-func NewDistributedCache[T any](opts ...DistributedCacheOption[T]) (types.Cache[T], error) {
-	key := reflect.TypeFor[T]()
-
-	// Fast path: check if cache already exists. Options only take effect when
-	// the instance is created, so a later caller passing its own would
-	// silently get someone else's configuration.
-	if val, ok := distributedCacheMap.Load(key); ok {
-		if len(opts) > 0 {
-			return nil, errors.Newf("distributed cache for %s already exists; options only apply to the first call", key)
-		}
-		return val.(*distributedCache[T]), nil //nolint:errcheck
-	}
-
-	distributedCacheMu.Lock()
-	defer distributedCacheMu.Unlock()
-
-	// Double-check after acquiring lock
-	if val, ok := distributedCacheMap.Load(key); ok {
-		return val.(*distributedCache[T]), nil //nolint:errcheck
-	}
-	cache, err := newDistributedCache(opts...)
-	if err != nil {
-		return nil, err
-	}
-	distributedCacheMap.Store(key, cache)
-	return cache, nil
+func NewDistributedCache[T any]() (types.Cache[T], error) {
+	return registry.LoadE(distributedCaches, func() (types.Cache[T], error) {
+		return newDistributedCache[T](cache.Cache[entry[T]]())
+	})
 }
 
 // typeName returns a name that identifies T uniquely across packages.
@@ -154,6 +129,14 @@ func typeName[T any]() string {
 	return typ.PkgPath() + "|" + typ.String()
 }
 
+// entry wraps the cached value so the store below is keyed by a type of
+// dcache's own. cache.Cache keeps one process-wide instance per value type,
+// and the wrapper gives dcache a registry slot — and so a key space — that
+// business code holding cache.Cache[T]() can never share or collide with,
+// while the store still follows whatever backend the cache facade forwards
+// to.
+type entry[T any] struct{ Value T }
+
 // distributedCache is a replicated in-memory cache. Every instance owns a
 // process-local tier and mirrors its set and delete operations to the local
 // tier of every other instance through kafka events:
@@ -164,7 +147,9 @@ func typeName[T any]() string {
 // consistency trade-offs. Performance metrics are tracked (hits/misses) and
 // a controlled goroutine pool handles event publishing.
 type distributedCache[T any] struct {
-	localCache types.Cache[T]
+	// store is the process-local tier the instance reads from and applies
+	// peer events to.
+	store types.Cache[entry[T]]
 
 	// typ is the type of the distributed cache.
 	// When an instance receives a peer event it compares event.Typ with its own
@@ -180,13 +165,12 @@ type distributedCache[T any] struct {
 	hostname string
 
 	// stats
-	localHits         atomic.Int64
-	localMisses       atomic.Int64
-	localDelete       atomic.Int64
-	distributedSet    atomic.Int64
-	distributedDelete atomic.Int64
+	hits        atomic.Int64
+	misses      atomic.Int64
+	deletes     atomic.Int64
+	peerSets    atomic.Int64
+	peerDeletes atomic.Int64
 
-	kafkaBrokers []string
 	// topic carries the set and delete events of every instance; it is
 	// resolved once at construction and the default derives from the
 	// application name.
@@ -204,23 +188,21 @@ type distributedCache[T any] struct {
 	pub *kgo.Client
 	sub *kgo.Client
 
-	// logger is the cache internal logger, call "WithLogger" to replace it.
+	// logger is the cache internal logger.
 	logger types.Logger
 
-	// "gopool" is the goroutines pool, the pool capacity is determined by "gocap".
-	// call "WithMaxGoroutines" to set the goroutines pool capacity.
-	gocap  int
+	// gopool bounds the goroutines publishing events.
 	gopool *ants.Pool
 
-	// call "WithTrace" to enable set traceEnabled to true to logger each operation costed time.
-	traceEnabled bool
 	// comp is used to mark the distributed cache name that is convenient for logger search.
 	comp string
 }
 
 // newDistributedCache creates and initializes one distributed cache instance
-// with its local tier and kafka producer/consumer pair.
-func newDistributedCache[T any](opts ...DistributedCacheOption[T]) (*distributedCache[T], error) {
+// around the given store and a kafka producer/consumer pair. The store is a
+// parameter so tests can watch propagation between two instances holding
+// separate stores.
+func newDistributedCache[T any](store types.Cache[entry[T]]) (*distributedCache[T], error) {
 	cacheID := uuid.NewV7()
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -228,62 +210,31 @@ func newDistributedCache[T any](opts ...DistributedCacheOption[T]) (*distributed
 	}
 
 	dc := &distributedCache[T]{
+		store:    store,
 		cacheID:  cacheID.String(),
 		typ:      typeName[T](),
 		comp:     fmt.Sprintf("[%s:DistributedCache:%s]", hostname, reflect.TypeFor[T]().String()),
 		hostname: hostname,
 	}
-
-	for _, opt := range opts {
-		if opt == nil {
-			continue
-		}
-		if err = opt(dc); err != nil {
-			return nil, err
-		}
-	}
-
-	// setup logger
-	if dc.logger == nil {
-		dc.logger = logger.Dcache.With("hostname", hostname, compKey, dc.comp)
-	}
-
-	// setup local cache.
-	if dc.localCache == nil {
-		if dc.localCache, err = NewLocalCache[T](); err != nil {
-			return nil, err
-		}
-		if dc.localCache == nil {
-			return nil, errors.New("local cache is nil")
-		}
-	}
+	dc.logger = logger.Dcache.With("hostname", hostname, compKey, dc.comp)
 
 	// setup kafka; the consumer group name follows the topic
-	if len(dc.kafkaBrokers) == 0 {
-		dc.kafkaBrokers = config.App.Kafka.Brokers
-	}
 	if dc.appliedTS, err = lru.New[string, int64](maxTrackedKeys); err != nil {
 		return nil, err
 	}
 	dc.topic = cacheTopic()
-	if dc.pub, err = newProducer(dc.kafkaBrokers, dc.topic); err != nil {
+	brokers := config.App.Kafka.Brokers
+	if dc.pub, err = newProducer(brokers, dc.topic); err != nil {
 		return nil, err
 	}
-	if dc.sub, err = newConsumer(dc.kafkaBrokers, dc.topic, dc.topic); err != nil {
+	if dc.sub, err = newConsumer(brokers, dc.topic, dc.topic); err != nil {
 		return nil, err
 	}
 
-	// setup goroutines pool: an unset capacity gets the heuristic default,
-	// and any capacity is then raised to the floor. Doing it in one step
-	// would replace a caller's deliberate 5000 with a value that can be
-	// smaller still on a small machine.
-	if dc.gocap <= 0 {
-		dc.gocap = runtime.NumCPU() * 2000
-	}
-	if dc.gocap < minGoroutines {
-		dc.gocap = minGoroutines
-	}
-	pool, err := ants.NewPool(dc.gocap, ants.WithPreAlloc(false))
+	// setup the goroutine pool: the heuristic capacity is raised to the
+	// floor, which matters on a small machine.
+	gocap := max(runtime.NumCPU()*2000, minGoroutines)
+	pool, err := ants.NewPool(gocap, ants.WithPreAlloc(false))
 	if err != nil {
 		return nil, err
 	}
@@ -295,20 +246,17 @@ func newDistributedCache[T any](opts ...DistributedCacheOption[T]) (*distributed
 	return dc, nil
 }
 
-// Set sets a key-value pair in the local cache and publishes an opSet event
-// that carries the value to the local tier of every other instance.
+// Set sets a key-value pair in the store and publishes an opSet event that
+// carries the value to the store of every other instance.
 func (dc *distributedCache[T]) Set(ctx context.Context, key string, value T, ttl time.Duration) (err error) {
-	// done := dc.trace("Set")
-	// defer done(err)
-
 	if ttl < 0 {
 		return errors.New("negative ttl")
 	}
 
-	// Set the local tier first and report its failure: publishing the event
+	// Set the own store first and report its failure: publishing the event
 	// anyway would leave every other instance holding a value this one does
 	// not have, while the caller was told the write succeeded.
-	if err = dc.localCache.Set(ctx, key, value, ttl); err != nil {
+	if err = dc.store.Set(ctx, key, entry[T]{Value: value}, ttl); err != nil {
 		return err
 	}
 
@@ -324,35 +272,27 @@ func (dc *distributedCache[T]) Set(ctx context.Context, key string, value T, ttl
 }
 
 func (dc *distributedCache[T]) Get(ctx context.Context, key string) (value T, err error) {
-	// done := dc.trace("Get")
-	// defer done(err)
-
-	// get from local cache.
-	if value, err = dc.localCache.Get(ctx, key); err == nil {
-		// local cache hit.
-		dc.localHits.Add(1)
-		return value, nil
+	stored, err := dc.store.Get(ctx, key)
+	if err == nil {
+		dc.hits.Add(1)
+		return stored.Value, nil
 	}
 	var zero T
 	if errors.Is(err, types.ErrEntryNotFound) {
-		// local cache miss.
-		dc.localMisses.Add(1)
+		dc.misses.Add(1)
 		return zero, types.ErrEntryNotFound
 	}
 
-	dc.logger.Warnz("failed to get from local cache", zap.Error(err))
+	dc.logger.Warnz("failed to get from the store", zap.Error(err))
 	return zero, err
 }
 
-// Delete removes the entry from the local cache and publishes an opDel event
-// that removes it from the local tier of every other instance.
+// Delete removes the entry from the store and publishes an opDel event that
+// removes it from the store of every other instance.
 func (dc *distributedCache[T]) Delete(ctx context.Context, key string) (err error) {
-	// done := dc.trace("Delete")
-	// defer done(err)
+	dc.deletes.Add(1)
 
-	dc.localDelete.Add(1)
-
-	if err = dc.localCache.Delete(ctx, key); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+	if err = dc.store.Delete(ctx, key); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 		return err
 	}
 
@@ -366,7 +306,7 @@ func (dc *distributedCache[T]) Delete(ctx context.Context, key string) (err erro
 }
 
 func (dc *distributedCache[T]) Exists(ctx context.Context, key string) bool {
-	return dc.localCache.Exists(ctx, key)
+	return dc.store.Exists(ctx, key)
 }
 
 // listenEvents consumes the set and delete events published by the other
@@ -431,25 +371,25 @@ func (dc *distributedCache[T]) listenEvents() {
 				if !dc.acceptEvent(evt) {
 					continue
 				}
-				dc.logger.Debugz("consume event", zap.Object("event", evt))
+				dc.logger.Debugz("consume event", zap.Any("event", evt.logView()))
 				switch evt.Op {
 				case opSet:
 					var val T
 					if err := json.Unmarshal(evt.Val, &val); err != nil {
-						dc.logger.Errorz("failed to unmarshal event value", zap.Error(err), zap.Object("event", evt))
+						dc.logger.Errorz("failed to unmarshal event value", zap.Error(err), zap.Any("event", evt.logView()))
 						continue
 					}
-					dc.distributedSet.Add(1)
-					if err := dc.localCache.Set(context.Background(), evt.Key, val, evt.TTL); err != nil {
-						dc.logger.Warnz("failed to set to local cache", zap.Error(err))
+					dc.peerSets.Add(1)
+					if err := dc.store.Set(context.Background(), evt.Key, entry[T]{Value: val}, evt.TTL); err != nil {
+						dc.logger.Warnz("failed to set to the store", zap.Error(err))
 					}
 				case opDel:
-					dc.distributedDelete.Add(1)
-					if err := dc.localCache.Delete(context.Background(), evt.Key); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
-						dc.logger.Warnz("failed to delete from local cache", zap.Error(err))
+					dc.peerDeletes.Add(1)
+					if err := dc.store.Delete(context.Background(), evt.Key); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+						dc.logger.Warnz("failed to delete from the store", zap.Error(err))
 					}
 				default:
-					dc.logger.Warnz("unknown event op", zap.String("op", evt.Op.String()), zap.String("key", evt.Key), zap.Object("event", evt))
+					dc.logger.Warnz("unknown event op", zap.Any("event", evt.logView()))
 				}
 			}
 		}
@@ -486,11 +426,11 @@ func (dc *distributedCache[T]) sendEvent(evt *event) {
 	// would keep reading the value concurrently after Set has returned.
 	val, err := json.Marshal(evt.raw)
 	if err != nil {
-		dc.logger.Errorz("failed to marshal event raw data", zap.Error(err), zap.Object("event", evt))
+		dc.logger.Errorz("failed to marshal event raw data", zap.Error(err), zap.Any("event", evt.logView()))
 		return
 	}
 	if len(val) == 0 {
-		dc.logger.Warnz("the marshaled value is empty", zap.Object("event", evt))
+		dc.logger.Warnz("the marshaled value is empty", zap.Any("event", evt.logView()))
 		return
 	}
 	evt.CacheID = dc.cacheID
@@ -500,7 +440,7 @@ func (dc *distributedCache[T]) sendEvent(evt *event) {
 	evt.raw = nil // clear it to keep the event small
 	data, err := json.Marshal(evt)
 	if err != nil {
-		dc.logger.Errorz("failed to marshal event", zap.Error(err), zap.Object("event", evt))
+		dc.logger.Errorz("failed to marshal event", zap.Error(err), zap.Any("event", evt.logView()))
 		return
 	}
 	err = dc.gopool.Submit(func() {
@@ -514,9 +454,9 @@ func (dc *distributedCache[T]) sendEvent(evt *event) {
 			Value: data,
 		}
 		// TODO: lower this log to debug
-		dc.logger.Infoz("publish event", zap.Object("event", evt))
+		dc.logger.Infoz("publish event", zap.Any("event", evt.logView()))
 		if pubErr := dc.pub.ProduceSync(context.Background(), record).FirstErr(); pubErr != nil {
-			dc.logger.Errorz("failed to publish event", zap.Error(pubErr), zap.Object("event", evt))
+			dc.logger.Errorz("failed to publish event", zap.Error(pubErr), zap.Any("event", evt.logView()))
 		}
 	})
 	if err != nil {
@@ -529,11 +469,7 @@ func (dc *distributedCache[T]) startMonitor() {
 	util.SafeGo(func() {
 		for range ticker.C {
 			if flag.Lookup("test.v") == nil {
-				if local, ok := dc.localCache.(CacheMetricsProvider); ok {
-					dc.logger.Infoz("cache metrics", zap.Object("distributed", dc.Metrics()), zap.Object("local", local.Metrics()))
-				} else {
-					dc.logger.Infoz("cache metrics", zap.Object("distributed", dc.Metrics()))
-				}
+				dc.logger.Infoz("cache metrics", zap.Any("metrics", dc.Metrics()))
 			}
 		}
 	}, "DistributedCache.startMonitor")
@@ -541,103 +477,31 @@ func (dc *distributedCache[T]) startMonitor() {
 
 func (dc *distributedCache[T]) Metrics() *distributedMetrics {
 	return &distributedMetrics{
-		LocalHits:   dc.localHits.Load(),
-		LocalMisses: dc.localMisses.Load(),
-		LocalRatio:  calculateHitRatio(dc.localHits.Load(), dc.localMisses.Load()),
-		LocalDelete: dc.localDelete.Load(),
+		Hits:    dc.hits.Load(),
+		Misses:  dc.misses.Load(),
+		Ratio:   calculateHitRatio(dc.hits.Load(), dc.misses.Load()),
+		Deletes: dc.deletes.Load(),
 
-		DistributedSet:    dc.distributedSet.Load(),
-		DistributedDelete: dc.distributedDelete.Load(),
+		PeerSets:    dc.peerSets.Load(),
+		PeerDeletes: dc.peerDeletes.Load(),
 
 		GoroutinesPoolCap: int64(dc.gopool.Cap()),
 		GoroutinesUsed:    int64(dc.gopool.Running()),
 	}
 }
 
+// distributedMetrics is the monitor snapshot of one instance's counters. The
+// peer counters record how many peer events this instance applied to its
+// store.
 type distributedMetrics struct {
-	LocalHits   int64
-	LocalMisses int64
-	LocalRatio  int64
-	LocalDelete int64
+	Hits    int64 `json:"hits"`
+	Misses  int64 `json:"misses"`
+	Ratio   int64 `json:"ratio"`
+	Deletes int64 `json:"deletes"`
 
-	DistributedSet    int64
-	DistributedDelete int64
+	PeerSets    int64 `json:"peer_sets"`
+	PeerDeletes int64 `json:"peer_deletes"`
 
-	GoroutinesPoolCap int64
-	GoroutinesUsed    int64
-}
-
-func (m *distributedMetrics) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	if m == nil {
-		return nil
-	}
-
-	enc.AddInt64("local_hits", m.LocalHits)
-	enc.AddInt64("local_misses", m.LocalMisses)
-	enc.AddInt64("local_ratio", m.LocalRatio)
-	enc.AddInt64("local_delete", m.LocalDelete)
-	enc.AddInt64("distributed_set", m.DistributedSet)
-	enc.AddInt64("distributed_delete", m.DistributedDelete)
-	enc.AddInt64("goroutines_pool_cap", m.GoroutinesPoolCap)
-	enc.AddInt64("goroutines_used", m.GoroutinesUsed)
-
-	return nil
-}
-
-// trace
-//
-//nolint:unused
-func (dc *distributedCache[T]) trace(op string) func(error) {
-	if !dc.traceEnabled {
-		return func(error) {}
-	}
-
-	begin := time.Now()
-	return func(err error) {
-		if err != nil {
-			dc.logger.Errorz("trace", zap.Error(err), zap.String("op", op), util.LogDuration(time.Since(begin)))
-		} else {
-			dc.logger.Infoz("trace", zap.String("op", op), util.LogDuration(time.Since(begin)))
-		}
-	}
-}
-
-type DistributedCacheOption[T any] func(*distributedCache[T]) error
-
-func WithLocalCache[T any](localCache types.Cache[T]) DistributedCacheOption[T] {
-	return func(dc *distributedCache[T]) error {
-		dc.localCache = localCache
-		return nil
-	}
-}
-
-func WithLogger[T any](logger types.Logger) DistributedCacheOption[T] {
-	return func(dc *distributedCache[T]) error {
-		if logger == nil {
-			return errors.New("logger is nil")
-		}
-		dc.logger = logger
-		return nil
-	}
-}
-
-func WithMaxGoroutines[T any](maxGoRoutines int) DistributedCacheOption[T] {
-	return func(dc *distributedCache[T]) error {
-		dc.gocap = maxGoRoutines
-		return nil
-	}
-}
-
-func WithTrace[T any](trace bool) DistributedCacheOption[T] {
-	return func(dc *distributedCache[T]) error {
-		dc.traceEnabled = trace
-		return nil
-	}
-}
-
-func WithKafkaBrokers[T any](brokers []string) DistributedCacheOption[T] {
-	return func(dc *distributedCache[T]) error {
-		dc.kafkaBrokers = brokers
-		return nil
-	}
+	GoroutinesPoolCap int64 `json:"goroutines_pool_cap"`
+	GoroutinesUsed    int64 `json:"goroutines_used"`
 }
