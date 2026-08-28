@@ -165,9 +165,12 @@ func TestInitInstallsFallbackForOptionalProviderLoggers(t *testing.T) {
 			"optional provider %s must not own a log file before its provider is drained", name)
 	}
 
-	// Core loggers keep their dedicated, precreated files.
+	// Core loggers keep their dedicated, precreated files. The distributed
+	// cache is a framework capability like the in-process cache, not a
+	// provider, so its logger belongs to this core group.
 	require.FileExists(t, filepath.Join(dir, "service.log"))
 	require.FileExists(t, filepath.Join(dir, "app.log"))
+	require.FileExists(t, filepath.Join(dir, "dcache.log"))
 
 	// A fallback entry routes to the global sink instead of vanishing.
 	logger.Kafka.Infow("fallback routed to the global sink")
