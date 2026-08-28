@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 	"runtime"
+	"runtime/debug"
 	"sync/atomic"
 	"time"
 	"uuid"
@@ -307,15 +308,32 @@ func (dc *distributedCache[T]) Exists(ctx context.Context, key string) bool {
 	return dc.store.Exists(ctx, key)
 }
 
+// logPanic recovers a panic that would otherwise kill the process and turns
+// it into a structured error record. The goroutine still ends: for the event
+// listener that means the instance degrades to a process-local cache
+// reconciled by TTLs, and restarting is a lifecycle this package
+// deliberately does not have.
+func (dc *distributedCache[T]) logPanic(goroutine string) {
+	if r := recover(); r != nil {
+		dc.logger.Errorz(
+			"goroutine panicked",
+			zap.String("goroutine", goroutine),
+			zap.Any("panic", r),
+			zap.ByteString("stack", debug.Stack()),
+		)
+	}
+}
+
 // listenEvents consumes the set and delete events published by the other
 // instances and applies them to the local tier.
 func (dc *distributedCache[T]) listenEvents() {
-	util.SafeGo(func() {
+	go func() {
 		defer func() {
 			if dc.gopool != nil {
 				dc.gopool.Release()
 			}
 		}()
+		defer dc.logPanic("DistributedCache.listenEvents")
 
 		for {
 			fetches := dc.sub.PollFetches(context.Background())
@@ -391,7 +409,7 @@ func (dc *distributedCache[T]) listenEvents() {
 				}
 			}
 		}
-	}, "DistributedCache.listenEvents")
+	}()
 }
 
 // acceptEvent reports whether an event is newer than the last one applied
@@ -463,13 +481,14 @@ func (dc *distributedCache[T]) sendEvent(evt *event) {
 
 func (dc *distributedCache[T]) startMonitor() {
 	ticker := time.NewTicker(3 * time.Minute)
-	util.SafeGo(func() {
+	go func() {
+		defer dc.logPanic("DistributedCache.startMonitor")
 		for range ticker.C {
 			if flag.Lookup("test.v") == nil {
 				dc.logger.Infoz("cache metrics", zap.Any("metrics", dc.Metrics()))
 			}
 		}
-	}, "DistributedCache.startMonitor")
+	}()
 }
 
 func (dc *distributedCache[T]) Metrics() *distributedMetrics {

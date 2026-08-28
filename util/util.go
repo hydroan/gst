@@ -13,7 +13,6 @@ import (
 	"os"
 	"reflect"
 	"runtime"
-	"runtime/debug"
 	"slices"
 	"strconv"
 	"strings"
@@ -25,7 +24,6 @@ import (
 	"github.com/hydroan/gst/types/consts"
 	probing "github.com/prometheus-community/pro-bing"
 	"github.com/rs/xid"
-	"github.com/spf13/cast"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -437,30 +435,4 @@ func (d logDuration) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddInt64(consts.LOG_DURATION, int64(d))
 	enc.AddString(consts.LOG_DURATION_HUMAN, FormatDurationSmart(time.Duration(d)))
 	return nil
-}
-
-func SafeGo(fn func(), names ...any) {
-	go func() {
-		var name string
-		if len(names) == 0 {
-			name = "unnamed goroutine"
-		}
-		var nameBuilder strings.Builder
-		for _, v := range names {
-			nameBuilder.WriteByte(':')
-			nameBuilder.WriteString(cast.ToString(v))
-		}
-		name += nameBuilder.String()
-
-		defer func() { Recovery(name) }()
-
-		fn()
-	}()
-}
-
-// Recovery global Recovery recover panic
-func Recovery(name string) {
-	if err := recover(); err != nil {
-		fmt.Fprintf(os.Stdout, "%s recover: %+v\n%s", name, err, debug.Stack())
-	}
 }
