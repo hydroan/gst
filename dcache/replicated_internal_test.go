@@ -8,6 +8,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/cache"
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 )
@@ -65,6 +66,18 @@ func TestPeerPropagation(t *testing.T) {
 		_, err := peer.Get(ctx, "propagated-key")
 		return errors.Is(err, types.ErrEntryNotFound)
 	}, 30*time.Second, 100*time.Millisecond, "the delete event must reach the peer's store")
+}
+
+// TestCacheRequiresKafkaEnabled asserts the exported constructor fails fast
+// when kafka is disabled, instead of handing out an instance that silently
+// degrades to a process-local cache.
+func TestCacheRequiresKafkaEnabled(t *testing.T) {
+	old := config.App.Kafka.Enabled
+	config.App.Kafka.Enabled = false
+	defer func() { config.App.Kafka.Enabled = old }()
+
+	_, err := Cache[struct{ Disabled int }]()
+	require.Error(t, err, "a disabled kafka must fail the construction")
 }
 
 // TestWatermarkCoversLocalWrites is the regression guard for the write-path

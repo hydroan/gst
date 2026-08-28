@@ -125,6 +125,16 @@ func (v eventLogView) MarshalJSON() ([]byte, error) {
 //	total kafka listeners: consumers per node * number of nodes
 func Cache[T any]() (types.Cache[T], error) {
 	return registry.LoadE(caches, func() (types.Cache[T], error) {
+		// Fail fast on an environment where the cache could never replicate,
+		// instead of handing out an instance that silently degrades to a
+		// process-local cache. Both conditions are re-checked on the next
+		// call: a failed construction is not cached.
+		if logger.Dcache == nil {
+			return nil, errors.New("the logging setup has not run yet, dcache requires it")
+		}
+		if !config.App.Kafka.Enabled {
+			return nil, errors.New("kafka is not enabled, the replicated cache requires it")
+		}
 		return newReplicatedCache[T](cache.Cache[entry[T]]())
 	})
 }
@@ -261,11 +271,11 @@ func newReplicatedCache[T any](store types.Cache[entry[T]]) (*replicatedCache[T]
 		return nil, err
 	}
 	dc.topic = cacheTopic()
-	brokers := config.App.Kafka.Brokers
-	if dc.pub, err = newProducer(brokers, dc.topic); err != nil {
+	cfg := config.App.Kafka
+	if dc.pub, err = newProducer(cfg, dc.topic); err != nil {
 		return nil, err
 	}
-	if dc.sub, err = newConsumer(brokers, dc.topic, dc.topic+"-"+dc.cacheID); err != nil {
+	if dc.sub, err = newConsumer(cfg, dc.topic, dc.topic+"-"+dc.cacheID); err != nil {
 		return nil, err
 	}
 

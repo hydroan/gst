@@ -80,11 +80,15 @@ func New(cfg config.Kafka, opts ...kgo.Opt) (*kgo.Client, error) {
 	return kgo.NewClient(append(base, opts...)...)
 }
 
-// buildOpts translates framework configuration into franz-go client options.
+// buildOpts translates framework configuration into franz-go client options:
+// brokers, logging, client id, SASL and TLS. It is the single owner of that
+// translation — every framework component building a kafka client of its own
+// goes through New on top of it, so a connection concern such as SASL or TLS
+// is configured once and honored everywhere.
 func buildOpts(cfg config.Kafka) ([]kgo.Opt, error) {
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(cfg.Brokers...),
-		kgo.WithLogger(kgoLogger{}),
+		Logger(&logger.Kafka),
 	}
 	if cfg.ClientID != "" {
 		opts = append(opts, kgo.ClientID(cfg.ClientID))

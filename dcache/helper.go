@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/provider/kafka"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
@@ -29,13 +31,20 @@ func appName() string {
 	return consts.FrameworkName
 }
 
-func newProducer(brokers []string, topic string) (*kgo.Client, error) {
+// newProducer builds the publishing client through the kafka provider's New,
+// so SASL, TLS and the other connection concerns configured there are
+// honored; dcache's own tuning is appended on top. Importing the provider
+// also registers it with bootstrap — deliberate: dcache requires kafka, and
+// the provider's startup ping surfaces a dead broker configuration at boot.
+func newProducer(cfg config.Kafka, topic string) (*kgo.Client, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
 		return nil, err
 	}
-	return kgo.NewClient(
-		kgo.SeedBrokers(brokers...),
+	return kafka.New(cfg,
+		// Route the client's own log lines into dcache's file instead of the
+		// kafka provider's; the last logger option wins.
+		kafka.Logger(&logger.Dcache),
 		kgo.AllowAutoTopicCreation(),
 		kgo.ClientID(fmt.Sprintf("producer-%s-%s", topic, hostname)),
 
@@ -66,13 +75,14 @@ func newProducer(brokers []string, topic string) (*kgo.Client, error) {
 }
 
 // newConsumer creates a kafka consumer; each cache type's instance owns one.
-func newConsumer(brokers []string, topic string, group string) (*kgo.Client, error) {
+// Like newProducer it goes through the kafka provider's New.
+func newConsumer(cfg config.Kafka, topic string, group string) (*kgo.Client, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
 		return nil, err
 	}
-	return kgo.NewClient(
-		kgo.SeedBrokers(brokers...),
+	return kafka.New(cfg,
+		kafka.Logger(&logger.Dcache),
 		kgo.AllowAutoTopicCreation(),
 		kgo.ConsumeTopics(topic),
 		kgo.ClientID(fmt.Sprintf("consumer-%s-%s", topic, hostname)),
