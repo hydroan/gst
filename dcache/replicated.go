@@ -38,11 +38,11 @@ const (
 )
 
 var (
-	// distributedCaches keeps one instance per value type; see the registry
+	// caches keeps one instance per value type; see the registry
 	// package for the lookup and double-checked creation semantics.
-	distributedCaches = registry.New()
+	caches = registry.New()
 
-	_ types.Cache[any] = (*distributedCache[any])(nil)
+	_ types.Cache[any] = (*replicatedCache[any])(nil)
 )
 
 type op int
@@ -106,26 +106,26 @@ func (v eventLogView) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// NewDistributedCache returns the distributed cache of type T, creating it on first use.
+// Cache returns the replicated cache of type T, creating it on first use.
 //
 // Why keep one cache per type in a registry?
 // Each type's cache owns the goroutine that watches the peer set and delete events, and they
 // never interfere with each other. The number of types is bounded, so only a few goroutines ever
 // listen for kafka events, and fewer listeners means better throughput.
 //
-// Without the registry, every NewDistributedCache call would spawn another goroutine listening
+// Without the registry, every Cache call would spawn another goroutine listening
 // for kafka events and therefore far too many kafka consumers, which is not what we want. Since
 // this function is exported we cannot stop other developers from calling it repeatedly, so the
 // control has to stay here.
 //
 // The arithmetic:
 //
-//	kafka consumers on one node: number of service processes * number of DistributedCache instances,
+//	kafka consumers on one node: number of service processes * number of dcache instances,
 //	and normally only one service process runs.
 //	total kafka listeners: consumers per node * number of nodes
-func NewDistributedCache[T any]() (types.Cache[T], error) {
-	return registry.LoadE(distributedCaches, func() (types.Cache[T], error) {
-		return newDistributedCache[T](cache.Cache[entry[T]]())
+func Cache[T any]() (types.Cache[T], error) {
+	return registry.LoadE(caches, func() (types.Cache[T], error) {
+		return newReplicatedCache[T](cache.Cache[entry[T]]())
 	})
 }
 
@@ -148,30 +148,30 @@ func typeName[T any]() string {
 // to.
 type entry[T any] struct{ Value T }
 
-// distributedCache is a replicated in-memory cache. Every instance owns a
-// process-local tier and mirrors its set and delete operations to the local
-// tier of every other instance through kafka events:
+// replicatedCache implements types.Cache by replication. Every instance owns
+// a process-local tier and mirrors its set and delete operations to the
+// local tier of every other instance through kafka events:
 //   - Local memory cache for high-speed access.
 //   - Kafka for cross-instance propagation of set and delete operations.
 //
 // There is no shared storage tier; see the package documentation for the
 // consistency trade-offs. Performance metrics are tracked (hits/misses) and
 // a controlled goroutine pool handles event publishing.
-type distributedCache[T any] struct {
+type replicatedCache[T any] struct {
 	// store is the process-local tier the instance reads from and applies
 	// peer events to.
 	store types.Cache[entry[T]]
 
-	// typ is the type of the distributed cache.
+	// typ is the type of the replicated cache.
 	// When an instance receives a peer event it compares event.Typ with its own
 	// type and ignores the event when they differ.
-	// NOTE: the typ of the distributed cache instances of one type is always the same.
+	// NOTE: the typ of the replicated cache instances of one type is always the same.
 	typ string
 
-	// cacheID identifies one distributed cache instance, and every instance has its own.
+	// cacheID identifies one replicated cache instance, and every instance has its own.
 	// When an instance receives a peer event it compares event.CacheID with its
 	// own ID and ignores the event when they are equal, because it published that event itself.
-	// NOTE: the cacheID of two distributed cache instances is never the same.
+	// NOTE: the cacheID of two replicated cache instances is never the same.
 	cacheID  string
 	hostname string
 
@@ -194,10 +194,10 @@ type distributedCache[T any] struct {
 	// an older event afterwards. Bounded by LRU: evicting a key only
 	// reopens that key's out-of-order window.
 	appliedTS *lru.Cache[string, int64]
-	// wmMu serializes the check-then-act on appliedTS so the concurrent
+	// watermarkMu serializes the check-then-act on appliedTS so the concurrent
 	// writers (the event listener and local Set/Delete callers) cannot
 	// regress the watermark.
-	wmMu sync.Mutex
+	watermarkMu sync.Mutex
 
 	// pub publishes this instance's set and delete events; sub receives the
 	// events of every instance, including this one's own, which are skipped
@@ -208,29 +208,29 @@ type distributedCache[T any] struct {
 	// logger is the cache internal logger.
 	logger types.Logger
 
-	// gopool bounds the goroutines publishing events.
-	gopool *ants.Pool
+	// pubPool bounds the goroutines publishing events.
+	pubPool *ants.Pool
 }
 
-// newDistributedCache creates and initializes one distributed cache instance
+// newReplicatedCache creates and initializes one replicated cache instance
 // around the given store and a kafka producer/consumer pair. The store is a
 // parameter so tests can watch propagation between two instances holding
 // separate stores.
-func newDistributedCache[T any](store types.Cache[entry[T]]) (*distributedCache[T], error) {
+func newReplicatedCache[T any](store types.Cache[entry[T]]) (*replicatedCache[T], error) {
 	cacheID := uuid.NewV7()
 	hostname, err := os.Hostname()
 	if err != nil {
 		return nil, err
 	}
 
-	dc := &distributedCache[T]{
+	dc := &replicatedCache[T]{
 		store:    store,
 		cacheID:  cacheID.String(),
 		typ:      typeName[T](),
 		hostname: hostname,
 	}
-	// comp marks the distributed cache name so its log lines are searchable.
-	comp := fmt.Sprintf("[%s:DistributedCache:%s]", hostname, reflect.TypeFor[T]().String())
+	// comp marks the replicated cache name so its log lines are searchable.
+	comp := fmt.Sprintf("[%s:dcache:%s]", hostname, reflect.TypeFor[T]().String())
 	dc.logger = logger.Dcache.With("hostname", hostname, compKey, comp)
 
 	// Undo the partially built kafka clients when a later step fails: the
@@ -274,7 +274,7 @@ func newDistributedCache[T any](store types.Cache[entry[T]]) (*distributedCache[
 	if err != nil {
 		return nil, err
 	}
-	dc.gopool = pool
+	dc.pubPool = pool
 
 	dc.listenEvents()
 	dc.startMonitor()
@@ -285,7 +285,7 @@ func newDistributedCache[T any](store types.Cache[entry[T]]) (*distributedCache[
 
 // Set sets a key-value pair in the store and publishes an opSet event that
 // carries the value to the store of every other instance.
-func (dc *distributedCache[T]) Set(ctx context.Context, key string, value T, ttl time.Duration) (err error) {
+func (dc *replicatedCache[T]) Set(ctx context.Context, key string, value T, ttl time.Duration) (err error) {
 	if ttl < 0 {
 		return errors.New("negative ttl")
 	}
@@ -312,7 +312,7 @@ func (dc *distributedCache[T]) Set(ctx context.Context, key string, value T, ttl
 	})
 }
 
-func (dc *distributedCache[T]) Get(ctx context.Context, key string) (value T, err error) {
+func (dc *replicatedCache[T]) Get(ctx context.Context, key string) (value T, err error) {
 	stored, err := dc.store.Get(ctx, key)
 	if err == nil {
 		dc.hits.Add(1)
@@ -330,7 +330,7 @@ func (dc *distributedCache[T]) Get(ctx context.Context, key string) (value T, er
 
 // Delete removes the entry from the store and publishes an opDel event that
 // removes it from the store of every other instance.
-func (dc *distributedCache[T]) Delete(ctx context.Context, key string) (err error) {
+func (dc *replicatedCache[T]) Delete(ctx context.Context, key string) (err error) {
 	if err = dc.store.Delete(ctx, key); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
 		return err
 	}
@@ -347,7 +347,7 @@ func (dc *distributedCache[T]) Delete(ctx context.Context, key string) (err erro
 	})
 }
 
-func (dc *distributedCache[T]) Exists(ctx context.Context, key string) bool {
+func (dc *replicatedCache[T]) Exists(ctx context.Context, key string) bool {
 	return dc.store.Exists(ctx, key)
 }
 
@@ -357,7 +357,7 @@ func (dc *distributedCache[T]) Exists(ctx context.Context, key string) bool {
 // serves stale entries until their TTLs expire, while its own writes keep
 // publishing. Restarting is a lifecycle this package deliberately does not
 // have.
-func (dc *distributedCache[T]) logPanic(goroutine string) {
+func (dc *replicatedCache[T]) logPanic(goroutine string) {
 	if r := recover(); r != nil {
 		dc.logger.Errorz(
 			"goroutine panicked",
@@ -370,9 +370,9 @@ func (dc *distributedCache[T]) logPanic(goroutine string) {
 
 // listenEvents consumes the set and delete events published by the other
 // instances and applies them to the local tier.
-func (dc *distributedCache[T]) listenEvents() {
+func (dc *replicatedCache[T]) listenEvents() {
 	go func() {
-		defer dc.logPanic("DistributedCache.listenEvents")
+		defer dc.logPanic("replicatedCache.listenEvents")
 
 		for {
 			fetches := dc.sub.PollFetches(context.Background())
@@ -461,10 +461,10 @@ func (dc *distributedCache[T]) listenEvents() {
 // that saw them in that order. The watermark itself advances only through
 // advanceWatermark, after the event took effect, so a failed application
 // does not claim its timestamp.
-func (dc *distributedCache[T]) shouldApply(evt *event) bool {
-	dc.wmMu.Lock()
+func (dc *replicatedCache[T]) shouldApply(evt *event) bool {
+	dc.watermarkMu.Lock()
 	last, ok := dc.appliedTS.Get(evt.Key)
-	dc.wmMu.Unlock()
+	dc.watermarkMu.Unlock()
 	if ok && evt.TS <= last {
 		dc.logger.Warnz(
 			"skipping out-of-order event",
@@ -480,11 +480,11 @@ func (dc *distributedCache[T]) shouldApply(evt *event) bool {
 
 // advanceWatermark records ts as the newest applied timestamp of key when it
 // is newer than the recorded one. Local writes and accepted peer events feed
-// the same watermark; wmMu keeps the check-then-act monotonic under
+// the same watermark; watermarkMu keeps the check-then-act monotonic under
 // concurrent callers.
-func (dc *distributedCache[T]) advanceWatermark(key string, ts int64) {
-	dc.wmMu.Lock()
-	defer dc.wmMu.Unlock()
+func (dc *replicatedCache[T]) advanceWatermark(key string, ts int64) {
+	dc.watermarkMu.Lock()
+	defer dc.watermarkMu.Unlock()
 	if last, ok := dc.appliedTS.Get(key); ok && ts <= last {
 		return
 	}
@@ -496,7 +496,7 @@ func (dc *distributedCache[T]) advanceWatermark(key string, ts int64) {
 // already stored locally but can never reach the peers, and that must not
 // stay silent. A full pool drops the event with a log line instead of
 // blocking the caller, matching the documented best-effort delivery.
-func (dc *distributedCache[T]) sendEvent(evt *event) error {
+func (dc *replicatedCache[T]) sendEvent(evt *event) error {
 	if evt == nil {
 		return nil
 	}
@@ -519,7 +519,7 @@ func (dc *distributedCache[T]) sendEvent(evt *event) error {
 	if err != nil {
 		return errors.Wrap(err, "marshal the cache event")
 	}
-	err = dc.gopool.Submit(func() {
+	err = dc.pubPool.Submit(func() {
 		record := &kgo.Record{
 			Topic: dc.topic,
 			// The key pins every event for one cache key to one partition,
@@ -536,15 +536,15 @@ func (dc *distributedCache[T]) sendEvent(evt *event) error {
 		}
 	})
 	if err != nil {
-		dc.logger.Errorz("event dropped: failed to submit it to the gopool", zap.Error(err), zap.Any("event", eventLogView{evt}))
+		dc.logger.Errorz("event dropped: failed to submit it to the publishing pool", zap.Error(err), zap.Any("event", eventLogView{evt}))
 	}
 	return nil
 }
 
-func (dc *distributedCache[T]) startMonitor() {
+func (dc *replicatedCache[T]) startMonitor() {
 	ticker := time.NewTicker(3 * time.Minute)
 	go func() {
-		defer dc.logPanic("DistributedCache.startMonitor")
+		defer dc.logPanic("replicatedCache.startMonitor")
 		for range ticker.C {
 			if flag.Lookup("test.v") == nil {
 				dc.logger.Infoz("cache metrics", zap.Any("metrics", dc.metrics()))
@@ -555,25 +555,25 @@ func (dc *distributedCache[T]) startMonitor() {
 
 // metrics snapshots the instance counters for the monitor. It is unexported:
 // the exported surface is types.Cache[T], which has no metrics channel.
-func (dc *distributedCache[T]) metrics() *distributedMetrics {
-	return &distributedMetrics{
+func (dc *replicatedCache[T]) metrics() *replicatedMetrics {
+	return &replicatedMetrics{
 		Hits:    dc.hits.Load(),
 		Misses:  dc.misses.Load(),
-		Ratio:   calculateHitRatio(dc.hits.Load(), dc.misses.Load()),
+		Ratio:   hitRatio(dc.hits.Load(), dc.misses.Load()),
 		Deletes: dc.deletes.Load(),
 
 		PeerSets:    dc.peerSets.Load(),
 		PeerDeletes: dc.peerDeletes.Load(),
 
-		GoroutinesPoolCap: int64(dc.gopool.Cap()),
-		GoroutinesUsed:    int64(dc.gopool.Running()),
+		GoroutinesPoolCap: int64(dc.pubPool.Cap()),
+		GoroutinesUsed:    int64(dc.pubPool.Running()),
 	}
 }
 
-// distributedMetrics is the monitor snapshot of one instance's counters. The
+// replicatedMetrics is the monitor snapshot of one instance's counters. The
 // peer counters record how many peer events this instance applied to its
 // store.
-type distributedMetrics struct {
+type replicatedMetrics struct {
 	Hits    int64 `json:"hits"`
 	Misses  int64 `json:"misses"`
 	Ratio   int64 `json:"ratio"`

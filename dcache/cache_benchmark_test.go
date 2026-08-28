@@ -16,7 +16,7 @@ var ttl = 1 * time.Minute
 
 func Benchmark(b *testing.B) {
 	localcache := cache.Cache[string]()
-	distributed, err := dcache.NewDistributedCache[string]()
+	replicated, err := dcache.Cache[string]()
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -24,15 +24,15 @@ func Benchmark(b *testing.B) {
 	b.Run("local", func(b *testing.B) {
 		benchmark(b, localcache)
 	})
-	b.Run("distributed", func(b *testing.B) {
-		benchmark(b, distributed)
+	b.Run("replicated", func(b *testing.B) {
+		benchmark(b, replicated)
 	})
 
 	b.Run("local_parallel", func(b *testing.B) {
 		benchmarkParallel(b, localcache)
 	})
-	b.Run("distributed_parallel", func(b *testing.B) {
-		benchmarkParallel(b, distributed)
+	b.Run("replicated_parallel", func(b *testing.B) {
+		benchmarkParallel(b, replicated)
 	})
 }
 

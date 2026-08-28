@@ -30,7 +30,7 @@ func TestMain(m *testing.M) {
 	os.Exit(runTests(m))
 }
 
-// runTests prepares the kafka broker the distributed cache propagates
+// runTests prepares the kafka broker the replicated cache propagates
 // through. os.Exit in TestMain would skip the deferred release, hence the
 // wrapper.
 func runTests(m *testing.M) int {
@@ -52,20 +52,20 @@ func runTests(m *testing.M) int {
 	return m.Run()
 }
 
-func setupTestDistributedCache[T any](t *testing.T) types.Cache[T] {
+func setupTestCache[T any](t *testing.T) types.Cache[T] {
 	t.Helper()
 
-	distributed, err := dcache.NewDistributedCache[T]()
+	replicated, err := dcache.Cache[T]()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	return distributed
+	return replicated
 }
 
-// TestDistributedCacheBasicOperations tests the basic operations.
-func TestDistributedCacheBasicOperations(t *testing.T) {
-	dc := setupTestDistributedCache[string](t)
+// TestCacheBasicOperations tests the basic operations.
+func TestCacheBasicOperations(t *testing.T) {
+	dc := setupTestCache[string](t)
 
 	// Set
 	err := dc.Set(t.Context(), "test-key", "test-value", 1*time.Minute)
@@ -89,9 +89,9 @@ func TestDistributedCacheBasicOperations(t *testing.T) {
 	require.True(t, errors.Is(err, types.ErrEntryNotFound))
 }
 
-// TestDistributedCacheTTL tests the TTL handling.
-func TestDistributedCacheTTL(t *testing.T) {
-	dc := setupTestDistributedCache[string](t)
+// TestCacheTTL tests the TTL handling.
+func TestCacheTTL(t *testing.T) {
+	dc := setupTestCache[string](t)
 
 	// set a very short TTL
 	err := dc.Set(t.Context(), "ttl-key", "ttl-value", 100*time.Millisecond)
@@ -110,9 +110,9 @@ func TestDistributedCacheTTL(t *testing.T) {
 	require.ErrorIs(t, err, types.ErrEntryNotFound)
 }
 
-// TestDistributedCacheConcurrency tests concurrent operations.
-func TestDistributedCacheConcurrency(t *testing.T) {
-	dc := setupTestDistributedCache[string](t)
+// TestCacheConcurrency tests concurrent operations.
+func TestCacheConcurrency(t *testing.T) {
+	dc := setupTestCache[string](t)
 
 	// a wait group to synchronize the goroutines
 	var wg sync.WaitGroup
@@ -164,15 +164,15 @@ func TestDistributedCacheConcurrency(t *testing.T) {
 	}
 }
 
-// TestDistributedCacheDifferentTypes tests caches of different types.
-func TestDistributedCacheDifferentTypes(t *testing.T) {
+// TestCacheDifferentTypes tests caches of different types.
+func TestCacheDifferentTypes(t *testing.T) {
 	// string cache
-	strCache := setupTestDistributedCache[string](t)
+	strCache := setupTestCache[string](t)
 
 	// int cache
-	intCache := setupTestDistributedCache[int](t)
+	intCache := setupTestCache[int](t)
 
-	personCache := setupTestDistributedCache[Person](t)
+	personCache := setupTestCache[Person](t)
 
 	// operate on each type
 	err := strCache.Set(t.Context(), "str", "string-value", 1*time.Minute)
@@ -201,7 +201,7 @@ func TestDistributedCacheDifferentTypes(t *testing.T) {
 	// stores are one per type, and the broadcast events carry the type tag.
 	// Word and string are JSON-compatible, so a broken type filter would let
 	// one leak into the other once the events loop back.
-	wordCache := setupTestDistributedCache[Word](t)
+	wordCache := setupTestCache[Word](t)
 	err = strCache.Set(t.Context(), "shared-key", "string-value", 1*time.Minute)
 	require.NoError(t, err)
 	err = wordCache.Set(t.Context(), "shared-key", Word("word-value"), 1*time.Minute)
@@ -226,14 +226,14 @@ func TestDistributedCacheDifferentTypes(t *testing.T) {
 	require.Equal(t, Word("word-value"), wordVal)
 }
 
-// TestDistributedCacheLargeValueStoresLocally pins the local half of the
+// TestCacheLargeValueStoresLocally pins the local half of the
 // large-value behavior: the store accepts the value and serves it back. The
 // broadcast is best-effort — this 1MB value expands beyond the broker's
 // default message limit once JSON-escaped, so its event is dropped with an
 // error log and the value never reaches the peers, as the package
 // documentation declares.
-func TestDistributedCacheLargeValueStoresLocally(t *testing.T) {
-	dc := setupTestDistributedCache[string](t)
+func TestCacheLargeValueStoresLocally(t *testing.T) {
+	dc := setupTestCache[string](t)
 
 	// build a large string
 	largeValue := make([]byte, 1<<20) // 1MB
@@ -252,9 +252,9 @@ func TestDistributedCacheLargeValueStoresLocally(t *testing.T) {
 	require.Equal(t, largeString, val)
 }
 
-// TestDistributedCacheEdgeCases tests the edge cases.
-func TestDistributedCacheEdgeCases(t *testing.T) {
-	dc := setupTestDistributedCache[string](t)
+// TestCacheEdgeCases tests the edge cases.
+func TestCacheEdgeCases(t *testing.T) {
+	dc := setupTestCache[string](t)
 
 	// an empty key
 	err := dc.Set(t.Context(), "", "empty-key", 1*time.Hour)

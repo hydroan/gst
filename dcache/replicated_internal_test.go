@@ -28,10 +28,10 @@ func TestPeerPropagation(t *testing.T) {
 	// keeps a single instance per type. It also gets a private store, because
 	// the source's cache.Cache store is one instance per type and sharing it
 	// would satisfy the assertions without any kafka round trip.
-	source, err := newDistributedCache[typedProbe](cache.Cache[entry[typedProbe]]())
+	source, err := newReplicatedCache[typedProbe](cache.Cache[entry[typedProbe]]())
 	require.NoError(t, err)
 	peerStore := newFakeStore[typedProbe]()
-	peer, err := newDistributedCache[typedProbe](peerStore)
+	peer, err := newReplicatedCache[typedProbe](peerStore)
 	require.NoError(t, err)
 
 	want := typedProbe{Name: "typed", Num: 42}
@@ -74,7 +74,7 @@ func TestPeerPropagation(t *testing.T) {
 func TestWatermarkCoversLocalWrites(t *testing.T) {
 	ctx := context.Background()
 
-	dc, err := newDistributedCache[int](newFakeStore[int]())
+	dc, err := newReplicatedCache[int](newFakeStore[int]())
 	require.NoError(t, err)
 
 	require.NoError(t, dc.Set(ctx, "watermark-key", 1, time.Minute))
@@ -96,7 +96,7 @@ func TestWatermarkCoversLocalWrites(t *testing.T) {
 func TestSetReturnsMarshalFailure(t *testing.T) {
 	ctx := context.Background()
 
-	dc, err := newDistributedCache[chan int](newFakeStore[chan int]())
+	dc, err := newReplicatedCache[chan int](newFakeStore[chan int]())
 	require.NoError(t, err)
 
 	err = dc.Set(ctx, "unmarshalable-key", make(chan int), time.Minute)
@@ -110,7 +110,7 @@ func TestSetReturnsMarshalFailure(t *testing.T) {
 // shouldApply does not claim the timestamp, only advanceWatermark does, so a
 // failed application leaves the watermark untouched.
 func TestWatermarkAdvancesOnlyOnApply(t *testing.T) {
-	dc, err := newDistributedCache[uint](newFakeStore[uint]())
+	dc, err := newReplicatedCache[uint](newFakeStore[uint]())
 	require.NoError(t, err)
 
 	evt := &event{TS: 100, Op: opSet, Key: "apply-key", Typ: dc.typ, CacheID: "peer"}

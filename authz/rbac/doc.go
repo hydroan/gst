@@ -42,7 +42,7 @@
 //
 // TODO: cut the cross-process delay under the interval with a published
 // notification on top of the reconciliation. The intended carrier is dcache's
-// distributed cache: a policy-version entry written on every mutate, carried
+// replicated cache: a policy-version entry written on every mutate, carried
 // to every replica's local map by its Kafka-backed broadcast, watched there
 // for nearly nothing, and feeding the same ReloadPolicies entry point. It can
 // only ever sit on top — delivery is at-most-once, and it rests on a

@@ -96,7 +96,7 @@ func newConsumer(brokers []string, topic string, group string) (*kgo.Client, err
 	)
 }
 
-func calculateHitRatio(hits, misses int64) int64 {
+func hitRatio(hits, misses int64) int64 {
 	if hits+misses == 0 {
 		return 0
 	}
