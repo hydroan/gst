@@ -9,9 +9,11 @@
 //     login lifecycle events after the outcome is settled, and they can
 //     never block or fail the login itself.
 //
-// Optional modules install their hooks from package init so the add path
-// (framework module registration) and the copy path (project-owned copied
-// source) share one mechanism with no manual wiring steps.
+// Optional modules install their hooks explicitly: module registration calls
+// them on the add path, project-owned assembly code calls them on the copy
+// path. Nothing installs itself from package init, because a copied service
+// package is linked only when generated code happens to import it, and route
+// configuration can silently take that import away.
 package authn
 
 import (
@@ -27,10 +29,23 @@ type LoginSecondFactor struct {
 	BackupCode string
 }
 
+// MsgSecondFactorRequired is the challenge a verifier reports with 401 when the
+// account needs a second factor it has not submitted. Login UIs match it to
+// decide whether to prompt for a code, so the wording is a client contract and
+// must stay stable.
+//
+// It lives here rather than with any one verifier because the challenge belongs
+// to the login protocol, not to a kind of factor: a UI must recognize it
+// whether the installed verifier checks TOTP, SMS, or anything else.
+// Proof-specific rejections stay the verifier's own wording.
+const MsgSecondFactorRequired = "second factor required"
+
 // LoginSecondFactorVerifier decides the second factor of one IAM login
 // attempt after the first factor already passed. Returning nil lets the login
 // proceed. A non-nil error rejects the login and reaches the login caller
-// unchanged, so the verifier owns the client-facing error shape.
+// unchanged, so the verifier owns the client-facing error shape. For the one
+// challenge every login UI must recognize, report MsgSecondFactorRequired with
+// 401 instead of wording it again.
 type LoginSecondFactorVerifier func(ctx *types.ServiceContext, userID string, factor LoginSecondFactor) error
 
 var (

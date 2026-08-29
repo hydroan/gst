@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydroan/gst/authn"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
@@ -214,7 +215,7 @@ func TestTOTPLogin(t *testing.T) {
 		})
 		// The message is the client contract: login UIs match it to prompt
 		// for the second factor.
-		testutil.RequireError(t, err, http.StatusUnauthorized, "second factor required")
+		testutil.RequireError(t, err, http.StatusUnauthorized, authn.MsgSecondFactorRequired)
 	})
 
 	t.Run("wrong_password_stays_generic", func(t *testing.T) {

@@ -23,7 +23,7 @@ func TestSetLoginSecondFactorVerifierInstallsGate(t *testing.T) {
 	t.Cleanup(func() { authn.SetLoginSecondFactorVerifier(nil) })
 
 	ctx := &types.ServiceContext{}
-	gateErr := service.NewError(http.StatusUnauthorized, "second factor required")
+	gateErr := service.NewError(http.StatusUnauthorized, authn.MsgSecondFactorRequired)
 
 	var gotCtx *types.ServiceContext
 	var gotUserID string

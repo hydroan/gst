@@ -229,7 +229,7 @@ func TestAccountLoginSecondFactorVerifier(t *testing.T) {
 		if allow {
 			return nil
 		}
-		return service.NewError(http.StatusUnauthorized, "second factor required")
+		return service.NewError(http.StatusUnauthorized, authn.MsgSecondFactorRequired)
 	})
 
 	t.Run("verifier_rejection_blocks_login", func(t *testing.T) {
@@ -240,7 +240,7 @@ func TestAccountLoginSecondFactorVerifier(t *testing.T) {
 			Password: user.Password,
 			TOTPCode: "654321",
 		})
-		testutil.RequireError(t, err, http.StatusUnauthorized, "second factor required")
+		testutil.RequireError(t, err, http.StatusUnauthorized, authn.MsgSecondFactorRequired)
 
 		mu.Lock()
 		defer mu.Unlock()

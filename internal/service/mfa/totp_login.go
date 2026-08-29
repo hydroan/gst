@@ -24,7 +24,7 @@ import (
 // submit exactly one proof: a TOTP code, consumed against replay on success,
 // or a recovery code, removed transactionally. Per the authn contract the
 // verifier owns the client-facing error shape, and clients branch on status
-// plus message: the stable 401 message "second factor required" tells a login
+// plus message: the stable 401 authn.MsgSecondFactorRequired tells a login
 // UI to prompt for the code, 401 with other messages reports an invalid
 // proof, and 400 reports both proofs arriving at once.
 func LoginSecondFactorVerifier(ctx *types.ServiceContext, userID string, factor authn.LoginSecondFactor) error {
@@ -45,9 +45,9 @@ func LoginSecondFactorVerifier(ctx *types.ServiceContext, userID string, factor 
 	backupCode := strings.TrimSpace(factor.BackupCode)
 	switch {
 	case totpCode == "" && backupCode == "":
-		// "second factor required" is a stable client contract: login UIs match
+		// authn.MsgSecondFactorRequired is a stable client contract: login UIs match
 		// it to prompt for the code, replacing the pre-login check endpoint.
-		return service.NewError(http.StatusUnauthorized, "second factor required")
+		return service.NewError(http.StatusUnauthorized, authn.MsgSecondFactorRequired)
 	case totpCode != "" && backupCode != "":
 		return service.NewError(http.StatusBadRequest, "provide exactly one second factor")
 	case totpCode != "":
