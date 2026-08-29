@@ -21,12 +21,14 @@ func (AdminTOTP) Design() {
 		Get(func() {
 			Service()
 			Flatten()
+			Exact()
 			Filename("admin_totp_status.go")
 			Result[*TOTPStatusRsp]()
 		})
 		Delete(func() {
 			Service()
 			Flatten()
+			Exact()
 			Filename("admin_totp_reset.go")
 			Result[*AdminTOTPResetRsp]()
 		})
