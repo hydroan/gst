@@ -1,8 +1,7 @@
 package mfa
 
 import (
-	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
-	"github.com/hydroan/gst/internal/service/iam/adminauth"
+	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/types"
 )
 
@@ -13,13 +12,5 @@ import (
 type iamAccountAdministrator struct{}
 
 func (iamAccountAdministrator) EnsureCanAdminister(ctx *types.ServiceContext, targetUserID string) error {
-	// EnsureTenantAdmin grants system-root actors globally. For tenant admins
-	// it first checks route permission in the current tenant, then checks that
-	// the target user is a member of that same tenant; system-root targets are
-	// never manageable through tenant-local admin APIs.
-	actor, target, err := serviceiamaccount.LoadActorAndTarget(ctx, targetUserID)
-	if err != nil {
-		return err
-	}
-	return adminauth.EnsureTenantAdmin(ctx, actor, target)
+	return iam.EnsureAdminOnUser(ctx, targetUserID)
 }

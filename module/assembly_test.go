@@ -20,6 +20,13 @@ import (
 // aliased import is read correctly.
 const middlewareImportPath = "github.com/hydroan/gst/middleware"
 
+// moduleTreeImportPrefixes are the framework import prefixes whose next path
+// segment names the owning module.
+var moduleTreeImportPrefixes = []string{
+	"github.com/hydroan/gst/internal/model/",
+	"github.com/hydroan/gst/internal/service/",
+}
+
 // copyableModuleManifests returns every module that declares a copy manifest,
 // keyed by module name. Only copyable modules are subject to the rules here:
 // an add-only module is always linked through the Register call the project
@@ -219,4 +226,72 @@ func importPathsByLocalName(file *ast.File) map[string]string {
 	}
 
 	return paths
+}
+
+// TestCopyableModuleServiceTreesAreSelfContained pins the invariant gg module
+// copy is built on: a module's service tree may reach into its own model and
+// service packages and nowhere else in internal/model or internal/service.
+//
+// Copy carries internal/model/<name> and internal/service/<name> and computes
+// its helper closure inside that tree. A reference to another module's tree
+// therefore copies to a project that does not have it, and the failure lands on
+// the project as an unresolved import rather than on the module that caused it.
+//
+// Cross-module access belongs in module/<name>, which is the adapter layer and
+// is never copied: both iamAccountAdministrator and iamAccountGateway live
+// there for exactly this reason. Test files are out of scope — they are not
+// copied, and reaching into internals to seed a fixture is legitimate.
+func TestCopyableModuleServiceTreesAreSelfContained(t *testing.T) {
+	for name := range copyableModuleManifests(t) {
+		t.Run(name, func(t *testing.T) {
+			root := filepath.Join("..", "internal", "service", name)
+			if _, err := os.Stat(root); os.IsNotExist(err) {
+				return
+			}
+
+			require.NoError(t, filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+				if entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+					return nil
+				}
+				file, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+				if parseErr != nil {
+					return parseErr
+				}
+				for _, spec := range file.Imports {
+					if spec.Path == nil {
+						continue
+					}
+					importPath, unquoteErr := strconv.Unquote(spec.Path.Value)
+					if unquoteErr != nil {
+						continue
+					}
+					owner, ok := moduleTreeOwner(importPath)
+					require.Truef(t, !ok || owner == name,
+						"%s imports %q, which belongs to module %s; cross-module access belongs in module/%s",
+						path, importPath, owner, name)
+				}
+
+				return nil
+			}))
+		})
+	}
+}
+
+// moduleTreeOwner returns the module a framework model or service import
+// belongs to, and whether the path names one at all.
+func moduleTreeOwner(importPath string) (string, bool) {
+	for _, prefix := range moduleTreeImportPrefixes {
+		rest, found := strings.CutPrefix(importPath, prefix)
+		if !found || rest == "" {
+			continue
+		}
+		owner, _, _ := strings.Cut(rest, "/")
+
+		return owner, owner != ""
+	}
+
+	return "", false
 }
