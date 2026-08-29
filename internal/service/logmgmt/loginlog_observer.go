@@ -11,20 +11,17 @@ import (
 	"go.uber.org/zap"
 )
 
-// The login-log service wires itself into the IAM login flow at package
-// initialization: importing this package — through module/logmgmt on the add
-// path or the copied service package on the copy path — is what starts
-// recording login lifecycle events. No separate switch exists.
-func init() {
-	authn.AddLoginObserver(recordLoginEvent)
-}
-
-// recordLoginEvent persists one login lifecycle event as a LoginLog row.
+// RecordLoginEvent persists one login lifecycle event as a LoginLog row. It is
+// the observer added through authn.AddLoginObserver: module/logmgmt adds it on
+// the add path, and project-owned assembly code adds it on the copy path.
+// Nothing here adds itself, so login recording is never started by a package
+// import alone — and adding it twice would record every event twice, because
+// observers multicast.
 //
 // Observers never block or fail the login itself, so a failed insert is only
 // logged. The user-agent columns keep the historical "<name> <version>" and
 // "<platform> <os>" renderings so rows stay comparable across versions.
-func recordLoginEvent(ctx *types.ServiceContext, event authn.LoginEvent) {
+func RecordLoginEvent(ctx *types.ServiceContext, event authn.LoginEvent) {
 	entry := &modellogmgmt.LoginLog{
 		UserID:   event.UserID,
 		Username: event.Username,

@@ -7,6 +7,7 @@
     ],
     "middleware": [],
     "postNotes": [
+      "Login logs stay empty until the project adds the observer with authn.AddLoginObserver(servicelogmgmt.RecordLoginEvent) from project-owned assembly code, for example module/module.go. Add it exactly once: observers multicast, so a second call records every login twice.",
       "Operation logs come from the audit pipeline: set AUDIT_ENABLED=true (or the audit.enabled config key), otherwise the operation log stays empty.",
       "Register the retention job in project-owned cronjob setup: cronjob.Register(servicelogmgmt.Cleanup, \"0 0 * * * *\", \"cleanup logs\")."
     ]

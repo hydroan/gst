@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/authn"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/cronjob"
 	servicelogmgmt "github.com/hydroan/gst/internal/service/logmgmt"
@@ -27,11 +28,18 @@ import (
 // Cronjob:
 //   - cleanup operationlog and loginlog hourly.
 //
+// Login rows come from the authn login observer added below. That is an
+// explicit call, like every other wiring here: nothing arms itself through a
+// package import, so a copied module reproduces this list from project-owned
+// assembly code instead of inheriting hidden initialization.
+//
 // Operation logs come from the audit pipeline, which stays a deployment
 // decision: the module requires AUDIT_ENABLED=true (or the audit.enabled
 // config key) and fails startup when it is missing, instead of silently
 // flipping the configuration on behalf of the deployment.
 func Register() {
+	authn.AddLoginObserver(servicelogmgmt.RecordLoginEvent)
+
 	// The check runs on the routes-ready hook: it fires after config loading
 	// and module.Wait, the earliest point where both the loaded configuration
 	// and the finished registration are visible.
