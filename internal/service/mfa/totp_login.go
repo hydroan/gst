@@ -14,15 +14,11 @@ import (
 	"github.com/pquerna/otp/totp"
 )
 
-// The MFA service arms login second-factor enforcement at package
-// initialization: importing this package — through module/mfa on the add path
-// or the copied service package on the copy path — is what installs the
-// verifier. No separate switch exists.
-func init() {
-	authn.SetLoginSecondFactorVerifier(verifyLoginSecondFactor)
-}
-
-// verifyLoginSecondFactor enforces the MFA rules used during IAM login.
+// LoginSecondFactorVerifier enforces the MFA rules used during IAM login. It
+// is the gate installed through authn.SetLoginSecondFactorVerifier: module/mfa
+// installs it on the add path, and project-owned assembly code installs it on
+// the copy path. Nothing here installs itself, so the gate is never armed by a
+// package import alone.
 //
 // Accounts without active TOTP devices pass untouched. Enrolled accounts must
 // submit exactly one proof: a TOTP code, consumed against replay on success,
@@ -31,7 +27,7 @@ func init() {
 // plus message: the stable 401 message "second factor required" tells a login
 // UI to prompt for the code, 401 with other messages reports an invalid
 // proof, and 400 reports both proofs arriving at once.
-func verifyLoginSecondFactor(ctx *types.ServiceContext, userID string, factor authn.LoginSecondFactor) error {
+func LoginSecondFactorVerifier(ctx *types.ServiceContext, userID string, factor authn.LoginSecondFactor) error {
 	userID = strings.TrimSpace(userID)
 	if ctx == nil || userID == "" {
 		return service.NewError(http.StatusUnauthorized, "authentication required")

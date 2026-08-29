@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/authn"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	servicemfa "github.com/hydroan/gst/internal/service/mfa"
 	"github.com/hydroan/gst/middleware"
@@ -18,11 +19,12 @@ import (
 // Register wires TOTP-based MFA into the application.
 //
 // Besides registering the routes below and the internal TOTPDevice table, it
-// throttles the endpoints that accept a guessable proof and installs the
+// throttles the endpoints that accept a guessable proof, installs the
 // framework IAM tenant-admin rules as the AccountAdministrator behind the
-// administrative routes. Login second-factor enforcement needs no wiring here:
-// importing the MFA service package arms it through the authn login verifier
-// at package initialization, on the add path and the copy path alike.
+// administrative routes, and installs the login second-factor gate. Every one
+// of those is an explicit call below: nothing arms itself through a package
+// import, so a copied module reproduces this list from project-owned assembly
+// code instead of inheriting hidden initialization.
 //
 // Routes:
 //   - POST   /api/mfa/totp/bind
@@ -33,6 +35,7 @@ import (
 //   - DELETE /api/mfa/admin/users/:id/totp
 func Register() {
 	servicemfa.SetAccountAdministrator(iamAccountAdministrator{})
+	authn.SetLoginSecondFactorVerifier(servicemfa.LoginSecondFactorVerifier)
 	model.Register[*modelmfa.TOTPDevice]()
 
 	middleware.RegisterAuth(verificationRateLimiter())
