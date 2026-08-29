@@ -98,9 +98,18 @@ func requireMiddlewareSourceFile(sourcePath string, handler string) error {
 	}
 	for _, decl := range file.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
-		if ok && fn.Recv == nil && fn.Name != nil && fn.Name.Name == handler {
-			return nil
+		if !ok || fn.Recv != nil || fn.Name == nil || fn.Name.Name != handler {
+			continue
 		}
+		// Registration is written into the project middleware package as
+		// handler(), so a handler that takes arguments would emit code that
+		// does not compile. Failing here names the manifest entry instead of
+		// leaving the copied project broken.
+		if fn.Type.Params != nil && len(fn.Type.Params.List) > 0 {
+			return fmt.Errorf("middleware handler %s in %s must take no arguments", handler, sourcePath)
+		}
+
+		return nil
 	}
 	return fmt.Errorf("source middleware file %s does not declare handler %s", sourcePath, handler)
 }

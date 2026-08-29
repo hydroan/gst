@@ -69,6 +69,44 @@ func CopyAuth() any {
 	}
 }
 
+// TestBuildCopyPlanRejectsMiddlewareHandlerWithArguments pins the plan-time
+// guard on the handler signature. Registration is written into the project as
+// handler(), so a handler taking arguments would copy cleanly and only fail
+// when the copied project is compiled; the plan names the manifest instead.
+func TestBuildCopyPlanRejectsMiddlewareHandlerWithArguments(t *testing.T) {
+	projectDir := newModuleCopyPlanProject(t)
+	frameworkRoot := filepath.Join(projectDir, "internal", "gst")
+	manifest := []byte(`{
+		"copy": {
+			"middleware": [
+				{"sourceFile": "middleware/copy_auth.go", "scope": "auth", "handler": "CopyAuth"}
+			]
+		}
+	}`)
+	writeCopyTestModuleSource(t, projectDir, manifest)
+	if err := os.MkdirAll(filepath.Join(frameworkRoot, "middleware"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "middleware", "copy_auth.go"), []byte(`package middleware
+
+func CopyAuth(burst int) any {
+	return burst
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Chdir(projectDir)
+
+	_, err := BuildCopyPlan("copytest", CopyOptions{})
+	if err == nil {
+		t.Fatal("BuildCopyPlan() error = nil, want a handler signature error")
+	}
+	if !strings.Contains(err.Error(), "must take no arguments") {
+		t.Fatalf("BuildCopyPlan() error = %v, want it to report the handler signature", err)
+	}
+}
+
 func TestBuildCopyPlanCollectsStaleMiddlewareFiles(t *testing.T) {
 	projectDir := newModuleCopyPlanProject(t)
 	frameworkRoot := filepath.Join(projectDir, "internal", "gst")
