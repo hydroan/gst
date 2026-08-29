@@ -30,7 +30,18 @@
 - public/auth 语义必须一致。内置 module 的 `Pub()` 或 `module.NewWrapper(..., pub, ...)` 是 public 时，`Design()` 对应 action 必须写 `Public()`；需要登录的 action 不写 `Public()`。
 - request/response 契约必须一致。自定义请求、响应类型要通过 `Payload[T]()`、`Result[T]()` 写进 `Design()`，避免 copy 后生成默认模型签名。List、Get 是 HTTP GET 接口，禁止声明 `Payload[T]()`，只声明 `Result[T]()`，service 请求类型统一使用 `*model.Empty`。Import、Export 委托固定签名的 service 方法，禁止声明 `Payload[T]()` 和 `Result[T]()`。
 - service 文件目标必须一致。存在自定义 service 代码的 action 必须写 `Service()`；如果多个 action 共用一个 service 文件，所有相关 action 都要写相同的 `Filename(...)`。
-- middleware 注册必须一致。内置 module 如果调用 `middleware.Register(...)` 或 `middleware.RegisterAuth(...)`，对应 middleware 源文件、作用域和 handler 必须写进 copy manifest，避免 `gg module copy` 后少挂全局或鉴权中间件。
+
+
+
+## 装配一致性
+
+`Design()` 只覆盖模型、路由和 service。`Register()` 里其余的装配语句——安装框架钩子、挂中间件——copy 不会自动复现，必须按下面的规则声明，否则 add 路径正常而 copy 路径静默缺失。
+
+- 模块的 `internal/service/<name>` 禁止用 `init()` 安装框架钩子。包只在被 import 时才链接，而 copy 路径的 import 来自生成的路由注册，项目屏蔽路由就会连带抹掉它，装配随之静默失效。
+- 需要安装的钩子实现必须导出，由 `Register()` 显式调用；copy 路径由项目自有装配代码调用同一个函数。
+- 该实现文件如果不服务任何路由，必须写进 `module.json` 的 `includeSourceFiles`，否则 copy 不会带上它。
+- copy 路径必须执行的装配调用写进 `module.json` 的 `requiredAssembly`，`gg check` 会强制项目做出该调用；`postNotes` 只保留机器检查不了的接入步骤。
+- 中间件实现必须放在框架 `middleware/<file>.go` 并导出零参构造函数，`Register()` 调用它完成注册，同一文件和 handler 写进 `module.json` 的 `middleware`；实现写在 `module/<name>` 内部会让它只在 add 路径生效。
 
 
 
@@ -97,7 +108,9 @@
 ```
 
 - `excludeSourceFiles` 使用 framework root 相对路径，表示 `gg module copy` 不复制这些源文件，也不让它们参与 model/action 规划。
+- `includeSourceFiles` 使用 framework root 相对路径，表示这些 service 源文件即使不被任何 action 引用也必须复制。
 - `middleware[].sourceFile` 只能指向 framework `middleware/*.go` 源文件，目标固定复制到项目 `middleware/` 下的同名文件。
 - `middleware[].scope` 只能是 `global` 或 `auth`，分别对应 `middleware.Register(...)` 和 `middleware.RegisterAuth(...)`。
 - `middleware[].handler` 是 `sourceFile` 中返回 gin handler 的零参函数名，例如 `Authz`。
-- `postNotes` 只在复制成功后输出，用于提示项目侧必须补齐的 adapter、配置或初始化步骤。
+- `requiredAssembly[]` 声明项目必须做出的装配调用，字段为 `import`（包全路径）、`function`（导出函数名）和 `reason`（缺失后果），由 `gg check` 强制。
+- `postNotes` 只在复制成功后输出，用于提示项目侧必须补齐、且机器检查不了的 adapter、配置或初始化步骤。
