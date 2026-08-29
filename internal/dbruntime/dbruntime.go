@@ -194,9 +194,10 @@ func prepareTable(db *gorm.DB, m types.Model) {
 //   - Application startup sequences that depend on specific tables being available
 //   - Migration scripts that require all tables to be created before data operations
 //
-// The function polls the channel every 100 milliseconds and prints progress
-// information showing the number of pending operations. It returns only when the
-// channel is empty, indicating that the InitDatabase background processing is complete.
+// The function blocks until every queued model has its table, waking on each
+// table that finishes and reporting the remaining backlog on a fixed cadence.
+// It returns only when nothing is pending, indicating that the InitDatabase
+// background processing is complete.
 //
 // NOTE: This function should be called after InitDatabase() has been invoked, as it
 // relies on the background goroutine started by InitDatabase to process the channel.
@@ -216,22 +217,25 @@ func Wait() {
 	startTime := time.Now()
 	var lastLogTime time.Time
 
-	for modelregistry.TablesPending() != 0 {
-		tablePending := modelregistry.TablesPending()
+	for {
+		pending := modelregistry.TablesPending()
+		if pending == 0 {
+			break
+		}
 
-		// Log progress every 500ms to avoid spam
-		if time.Since(lastLogTime) >= 500*time.Millisecond {
-			elapsed := time.Since(startTime)
-
+		// The zero lastLogTime reports the backlog once up front, before the
+		// cadence takes over, so a run that stalls on its very first table is
+		// visible too.
+		if time.Since(lastLogTime) >= tableProgressLogInterval {
 			zap.S().Infow(
 				"waiting for database initialization",
-				util.LogDuration(elapsed),
-				"total_pending", tablePending,
+				util.LogDuration(time.Since(startTime)),
+				"total_pending", pending,
 			)
 			lastLogTime = time.Now()
 		}
 
-		time.Sleep(100 * time.Millisecond)
+		awaitTableProgress(lastLogTime)
 	}
 
 	// Log completion
@@ -240,4 +244,24 @@ func Wait() {
 		"database initialization completed",
 		util.LogDuration(elapsed),
 	)
+}
+
+// tableProgressLogInterval is how often Wait reports the remaining backlog. It
+// doubles as the upper bound on how long Wait sleeps in one go, so a lost or
+// coalesced wakeup delays the next look at the pending count by this much
+// rather than forever.
+const tableProgressLogInterval = 500 * time.Millisecond
+
+// awaitTableProgress blocks until a table finishes preparing or the next
+// progress report falls due, whichever comes first. Waiting on the signal
+// rather than polling is what keeps the last table of a drain from adding a
+// poll interval to every startup.
+func awaitTableProgress(lastLogTime time.Time) {
+	timer := time.NewTimer(time.Until(lastLogTime.Add(tableProgressLogInterval)))
+	defer timer.Stop()
+
+	select {
+	case <-modelregistry.TablesChanged():
+	case <-timer.C:
+	}
 }

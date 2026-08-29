@@ -25,10 +25,29 @@ func EnqueueTable(m types.Model) {
 	TableChan <- m
 }
 
+// tablesChanged carries a wakeup for a waiter whenever a table finishes
+// preparing, so that waiting for the queue to drain costs no polling latency.
+// It is buffered and written without blocking on purpose: the signal carries
+// no information beyond "read the count again", so a wakeup already queued
+// stands in for the one being sent.
+var tablesChanged = make(chan struct{}, 1)
+
 // TableDone reports that one queued model now has its table, and is called by
 // the database runtime once table preparation returns.
 func TableDone() {
 	tablesPending.Add(-1)
+	select {
+	case tablesChanged <- struct{}{}:
+	default:
+	}
+}
+
+// TablesChanged returns the channel a waiter blocks on until a table finishes
+// preparing. A receive means the pending count is worth reading again, never
+// that it reached zero: TablesPending stays the only authority on that, which
+// is what keeps a stale or coalesced wakeup harmless.
+func TablesChanged() <-chan struct{} {
+	return tablesChanged
 }
 
 // TablesPending returns how many models are queued or still having their table

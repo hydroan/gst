@@ -214,3 +214,65 @@ func BenchmarkIsModelEmpty(b *testing.B) {
 		}
 	})
 }
+
+func TestTableDoneSignalsWaiters(t *testing.T) {
+	// The queue and its wakeup are package-level state, so every subtest starts
+	// from a drained signal and hands back a drained one.
+	drain := func() {
+		for {
+			select {
+			case <-modelregistry.TablesChanged():
+			default:
+				return
+			}
+		}
+	}
+	drain()
+	t.Cleanup(drain)
+
+	// enqueue counts one model as pending the way the database runtime sees it:
+	// queued by EnqueueTable, then taken off the queue and prepared.
+	enqueue := func(t *testing.T, count int) {
+		t.Helper()
+		for range count {
+			modelregistry.EnqueueTable(&IndexedSample{})
+			<-modelregistry.TableChan
+		}
+	}
+
+	t.Run("a_finished_table_wakes_a_waiter", func(t *testing.T) {
+		drain()
+		enqueue(t, 1)
+		require.Equal(t, 1, modelregistry.TablesPending())
+
+		modelregistry.TableDone()
+
+		require.Equal(t, 0, modelregistry.TablesPending())
+		select {
+		case <-modelregistry.TablesChanged():
+		default:
+			t.Fatal("TableDone left no wakeup for a waiter")
+		}
+	})
+
+	t.Run("wakeups_coalesce_and_never_block", func(t *testing.T) {
+		drain()
+		// More finished tables than the signal buffer holds: the sends have to
+		// fall through rather than block, because TableDone runs on the
+		// goroutine that prepares the tables.
+		enqueue(t, 4)
+		for range 4 {
+			modelregistry.TableDone()
+		}
+
+		require.Equal(t, 0, modelregistry.TablesPending())
+		// One wakeup stands in for all four: it only says the count is worth
+		// reading again, and the count is what a waiter trusts.
+		<-modelregistry.TablesChanged()
+		select {
+		case <-modelregistry.TablesChanged():
+			t.Fatal("the wakeups should have coalesced into one")
+		default:
+		}
+	})
+}

@@ -2,6 +2,7 @@ package dbruntime
 
 import (
 	"testing"
+	"time"
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/modelregistry"
@@ -88,4 +89,37 @@ func withSqlite(t *testing.T, inMemory bool) {
 	t.Cleanup(func() {
 		config.App.Database.Type, config.App.Sqlite.IsMemory = oldType, oldIsMemory
 	})
+}
+
+func TestWaitReturnsOnceTheQueueDrains(t *testing.T) {
+	// Wait reports back immediately unless InitDatabase started the processing
+	// goroutine; this stands in for that start without a database.
+	startedTable.Store(1)
+	t.Cleanup(func() { startedTable.Store(0) })
+
+	// Queue a model and take it off the way the processing goroutine does, so
+	// it counts as pending until its TableDone lands.
+	modelregistry.EnqueueTable(&plainRecord{})
+	<-modelregistry.TableChan
+	require.Equal(t, 1, modelregistry.TablesPending())
+
+	returned := make(chan struct{})
+	go func() {
+		Wait()
+		close(returned)
+	}()
+
+	select {
+	case <-returned:
+		t.Fatal("Wait returned while a table was still pending")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	modelregistry.TableDone()
+
+	select {
+	case <-returned:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Wait did not return after the last table finished")
+	}
 }
