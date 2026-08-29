@@ -11,9 +11,15 @@
         "handler": "MFAVerificationRateLimit"
       }
     ],
+    "requiredAssembly": [
+      {
+        "import": "github.com/hydroan/gst/authn",
+        "function": "SetLoginSecondFactorVerifier",
+        "reason": "enrolled accounts can log in without a second factor until the gate is installed"
+      }
+    ],
     "postNotes": [
-      "Administrative MFA routes deny everything until the project installs its authorizer with servicemfa.SetAccountAdministrator(...) from project-owned code outside service/mfa.",
-      "Login second-factor enforcement stays off until the project installs the gate with authn.SetLoginSecondFactorVerifier(servicemfa.LoginSecondFactorVerifier) from project-owned assembly code, for example module/module.go."
+      "Administrative MFA routes deny everything until the project installs its authorizer with servicemfa.SetAccountAdministrator(...) from project-owned code outside service/mfa."
     ]
   }
 }

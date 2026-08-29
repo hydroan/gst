@@ -29,7 +29,23 @@ type moduleCopyManifest struct {
 	// as a login second-factor verifier or a login observer.
 	IncludeSourceFiles []string                       `json:"includeSourceFiles"`
 	Middleware         []moduleCopyMiddlewareManifest `json:"middleware"`
-	PostNotes          []string                       `json:"postNotes"`
+	// RequiredAssembly lists the framework calls a copied module needs the
+	// project to make, because copy reproduces routes, models and middleware
+	// but not the rest of the module's Register body. Declaring a call here
+	// makes gg check enforce it; postNotes stay for the wiring no check can
+	// verify, such as writing an adapter type.
+	RequiredAssembly []moduleCopyAssemblyManifest `json:"requiredAssembly"`
+	PostNotes        []string                     `json:"postNotes"`
+}
+
+// moduleCopyAssemblyManifest declares one call the project must make for a
+// copied module to work. Import is the full path of the package declaring the
+// function, so the check resolves the call through each file's own import
+// table and is not fooled by an alias.
+type moduleCopyAssemblyManifest struct {
+	Import   string `json:"import"`
+	Function string `json:"function"`
+	Reason   string `json:"reason"`
 }
 
 type moduleCopyMiddlewareScope string
@@ -84,6 +100,11 @@ func loadModuleManifest(moduleDir string) (moduleManifest, error) {
 		return moduleManifest{}, fmt.Errorf("parse %s: %w", path, middlewareErr)
 	}
 	manifest.Copy.Middleware = middleware
+	assembly, assemblyErr := cleanModuleCopyAssembly(manifest.Copy.RequiredAssembly)
+	if assemblyErr != nil {
+		return moduleManifest{}, fmt.Errorf("parse %s: %w", path, assemblyErr)
+	}
+	manifest.Copy.RequiredAssembly = assembly
 	return manifest, nil
 }
 
@@ -144,6 +165,32 @@ func cleanModuleCopyMiddleware(values []moduleCopyMiddlewareManifest) ([]moduleC
 			Scope:      scope,
 			Handler:    handler,
 		})
+	}
+	return cleaned, nil
+}
+
+// cleanModuleCopyAssembly validates the required assembly calls. Every field is
+// mandatory: an entry missing any of them would either fail to match anything
+// or report a violation nobody can act on.
+func cleanModuleCopyAssembly(values []moduleCopyAssemblyManifest) ([]moduleCopyAssemblyManifest, error) {
+	cleaned := make([]moduleCopyAssemblyManifest, 0, len(values))
+	for i, value := range values {
+		importPath := strings.TrimSpace(value.Import)
+		if importPath == "" {
+			return nil, fmt.Errorf("requiredAssembly[%d].import must not be empty", i)
+		}
+
+		function := strings.TrimSpace(value.Function)
+		if !token.IsIdentifier(function) || !token.IsExported(function) {
+			return nil, fmt.Errorf("requiredAssembly[%d].function must be an exported Go identifier: %q", i, value.Function)
+		}
+
+		reason := strings.TrimSpace(value.Reason)
+		if reason == "" {
+			return nil, fmt.Errorf("requiredAssembly[%d].reason must not be empty", i)
+		}
+
+		cleaned = append(cleaned, moduleCopyAssemblyManifest{Import: importPath, Function: function, Reason: reason})
 	}
 	return cleaned, nil
 }

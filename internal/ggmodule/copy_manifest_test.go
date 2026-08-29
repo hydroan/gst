@@ -136,6 +136,51 @@ func TestLoadModuleManifestReadsMiddleware(t *testing.T) {
 	}, manifest.Copy.Middleware)
 }
 
+func TestLoadModuleManifestReadsRequiredAssembly(t *testing.T) {
+	moduleDir := t.TempDir()
+	writeModuleManifestForTest(t, moduleDir, `{
+		"copy": {
+			"requiredAssembly": [
+				{"import": "github.com/hydroan/gst/authn", "function": "SetSampleGate", "reason": "the gate stays off"}
+			]
+		}
+	}`)
+
+	manifest, err := loadModuleManifest(moduleDir)
+	if err != nil {
+		t.Fatalf("loadModuleManifest() error = %v", err)
+	}
+	if len(manifest.Copy.RequiredAssembly) != 1 {
+		t.Fatalf("RequiredAssembly = %v, want one entry", manifest.Copy.RequiredAssembly)
+	}
+	entry := manifest.Copy.RequiredAssembly[0]
+	if entry.Import != "github.com/hydroan/gst/authn" || entry.Function != "SetSampleGate" || entry.Reason != "the gate stays off" {
+		t.Fatalf("RequiredAssembly[0] = %+v, want the declared call", entry)
+	}
+}
+
+func TestLoadModuleManifestRejectsIncompleteRequiredAssembly(t *testing.T) {
+	// Each field carries weight: without an import the call cannot be resolved,
+	// an unexported or malformed function can never be called from a project,
+	// and without a reason the violation tells nobody what broke.
+	for name, entry := range map[string]string{
+		"missing import":    `{"function": "SetSampleGate", "reason": "the gate stays off"}`,
+		"missing function":  `{"import": "github.com/hydroan/gst/authn", "reason": "the gate stays off"}`,
+		"unexported":        `{"import": "github.com/hydroan/gst/authn", "function": "setSampleGate", "reason": "the gate stays off"}`,
+		"not an identifier": `{"import": "github.com/hydroan/gst/authn", "function": "Set Sample", "reason": "the gate stays off"}`,
+		"missing reason":    `{"import": "github.com/hydroan/gst/authn", "function": "SetSampleGate"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			moduleDir := t.TempDir()
+			writeModuleManifestForTest(t, moduleDir, `{"copy": {"requiredAssembly": [`+entry+`]}}`)
+
+			if _, err := loadModuleManifest(moduleDir); err == nil {
+				t.Fatal("loadModuleManifest() error = nil, want a requiredAssembly error")
+			}
+		})
+	}
+}
+
 func TestLoadModuleManifestRejectsInvalidJSON(t *testing.T) {
 	moduleDir := t.TempDir()
 	writeModuleManifestForTest(t, moduleDir, `{`)

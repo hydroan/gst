@@ -147,6 +147,7 @@ func collectProjectChecks() []projectCheckResult {
 		{Name: "Model table name declaration", Violations: CheckModelTableNameDeclaration(ignore)},
 		{Name: "Gorm tag index ban", Violations: CheckGormTagIndexBan(ignore)},
 		{Name: "Version field declaration", Violations: CheckVersionFieldDeclarations(ignore)},
+		{Name: "Module assembly", Violations: CheckModuleAssembly(ignore)},
 	}
 }
 

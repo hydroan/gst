@@ -185,3 +185,52 @@ func moduleAliasFromImportSpec(spec *ast.ImportSpec, module Module) (string, boo
 	}
 	return module.PackageName, true
 }
+
+// AssemblyCall is one call a copied module needs the project to make.
+type AssemblyCall struct {
+	// Module is the module that declared the requirement.
+	Module string
+	// Import is the full path of the package declaring Function.
+	Import string
+	// Function is the exported function the project must call.
+	Function string
+	// Reason states what stays broken while the call is missing.
+	Reason string
+}
+
+// RequiredAssembly returns the assembly calls the named modules declare, in the
+// order the names are given. Copy reproduces a module's routes, models and
+// middleware, but the rest of its Register body is the project's to write, so
+// these are the calls gg check holds a project to once it copies the module.
+//
+// Callers pass only the modules a project actually copied, so a project that
+// copied nothing reads no manifest at all. A missing framework source tree
+// yields no calls instead of an error, matching CopyableModuleNames.
+func RequiredAssembly(modules []string) ([]AssemblyCall, error) {
+	if len(modules) == 0 {
+		return nil, nil
+	}
+	frameworkRoot, err := findFrameworkRoot()
+	if err != nil {
+		//nolint:nilerr
+		return nil, nil
+	}
+
+	calls := make([]AssemblyCall, 0)
+	for _, name := range modules {
+		manifest, manifestErr := loadModuleManifest(filepath.Join(frameworkRoot, "module", name))
+		if manifestErr != nil {
+			return nil, manifestErr
+		}
+		for _, entry := range manifest.Copy.RequiredAssembly {
+			calls = append(calls, AssemblyCall{
+				Module:   name,
+				Import:   entry.Import,
+				Function: entry.Function,
+				Reason:   entry.Reason,
+			})
+		}
+	}
+
+	return calls, nil
+}

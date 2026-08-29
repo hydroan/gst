@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -23,7 +24,13 @@ var manifestKnownKeys = map[string]bool{
 	"includeSourceFiles": true,
 	"middleware":         true,
 	"postNotes":          true,
+	"requiredAssembly":   true,
 }
+
+// frameworkImportPrefix is the framework's own module path. A requiredAssembly
+// entry naming a package under it resolves to a directory in this tree, so the
+// function it demands can be checked for real.
+const frameworkImportPrefix = "github.com/hydroan/gst/"
 
 // moduleManifest mirrors the parts of module.json that name files and symbols.
 type moduleManifest struct {
@@ -35,6 +42,10 @@ type moduleManifest struct {
 			Scope      string `json:"scope"`
 			Handler    string `json:"handler"`
 		} `json:"middleware"`
+		RequiredAssembly []struct {
+			Import   string `json:"import"`
+			Function string `json:"function"`
+		} `json:"requiredAssembly"`
 	} `json:"copy"`
 }
 
@@ -81,6 +92,9 @@ func TestModuleManifestsMatchFrameworkTree(t *testing.T) {
 			for _, mw := range manifest.Copy.Middleware {
 				path := requireFrameworkFile(t, frameworkRoot, manifestPath, "middleware.sourceFile", mw.SourceFile)
 				requireExportedNiladicFunc(t, path, mw.Handler)
+			}
+			for _, call := range manifest.Copy.RequiredAssembly {
+				requireFrameworkPackageFunc(t, frameworkRoot, manifestPath, call.Import, call.Function)
 			}
 		})
 	}
@@ -139,4 +153,37 @@ func requireExportedNiladicFunc(t *testing.T, path, name string) {
 		return
 	}
 	t.Fatalf("%s does not declare handler %s", path, name)
+}
+
+// requireFrameworkPackageFunc fails unless the framework package at importPath
+// declares name as an exported function. gg check holds every project that
+// copies the module to this call, so a renamed function would turn the check
+// into a demand no project can satisfy.
+func requireFrameworkPackageFunc(t *testing.T, frameworkRoot, manifestPath, importPath, name string) {
+	t.Helper()
+
+	require.True(t, strings.HasPrefix(importPath, frameworkImportPrefix),
+		"%s requiredAssembly names %q, which is outside %s and cannot be checked here",
+		manifestPath, importPath, frameworkImportPrefix)
+	require.True(t, ast.IsExported(name), "%s requiredAssembly function %s must be exported", manifestPath, name)
+
+	dir := filepath.Join(frameworkRoot, filepath.FromSlash(strings.TrimPrefix(importPath, frameworkImportPrefix)))
+	entries, err := os.ReadDir(dir)
+	require.NoErrorf(t, err, "%s requiredAssembly names package %q, which has no directory", manifestPath, importPath)
+
+	for _, entry := range entries {
+		name0 := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name0, ".go") || strings.HasSuffix(name0, "_test.go") {
+			continue
+		}
+		file, parseErr := parser.ParseFile(token.NewFileSet(), filepath.Join(dir, name0), nil, parser.SkipObjectResolution)
+		require.NoError(t, parseErr)
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if ok && fn.Recv == nil && fn.Name != nil && fn.Name.Name == name {
+				return
+			}
+		}
+	}
+	t.Fatalf("%s requiredAssembly names %s.%s, which the package does not declare", manifestPath, importPath, name)
 }
