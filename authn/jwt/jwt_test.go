@@ -2,6 +2,7 @@ package jwt_test
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -82,9 +83,18 @@ func TestParseToken(t *testing.T) {
 		accessToken, _, err := jwt.GenTokens(sampleUserID, sampleUsername)
 		require.NoError(t, err)
 
-		// Flipping the last character breaks the signature without touching the
-		// claims, which is the forgery the signature exists to catch.
-		tampered := accessToken[:len(accessToken)-1] + "x"
+		// Flipping a character inside the signature breaks it without touching
+		// the claims, which is the forgery the signature exists to catch. The
+		// last character is deliberately left alone: it carries only four
+		// significant bits, so one replacement in sixteen decodes to the very
+		// same signature bytes and would leave the token valid.
+		signatureStart := strings.LastIndexByte(accessToken, '.') + 1
+		require.Positive(t, signatureStart)
+		replacement := byte('A')
+		if accessToken[signatureStart] == replacement {
+			replacement = 'B'
+		}
+		tampered := accessToken[:signatureStart] + string(replacement) + accessToken[signatureStart+1:]
 		_, err = jwt.ParseToken(tampered)
 		require.Error(t, err)
 	})
