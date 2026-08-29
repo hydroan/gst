@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
@@ -303,11 +304,15 @@ func TestVersionLegacyTableAdoption(t *testing.T) {
 	})
 
 	// Rewind the table to its pre-adoption shape and insert a legacy row the
-	// way a pre-lock deployment would have: without a version column.
+	// way a pre-lock deployment would have: without a version column. The
+	// timestamps are bound explicitly instead of read from a SQL clock: the
+	// base columns carry no database default, and a clock expression is
+	// neither portable across dialects nor in the framework's UTC time base.
 	require.NoError(t, database.DB().Exec("ALTER TABLE legacy_adopted_notes DROP COLUMN version").Error)
+	legacyStamp := dbruntime.NowUTC()
 	require.NoError(t, database.DB().Exec(
-		"INSERT INTO legacy_adopted_notes (id, title, created_at, updated_at) VALUES (?, ?, NOW(), NOW())",
-		"legacy-note", "written-before-adoption").Error)
+		"INSERT INTO legacy_adopted_notes (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
+		"legacy-note", "written-before-adoption", legacyStamp, legacyStamp).Error)
 
 	// Adoption: the migration adds the column, and the database backfills
 	// the existing row with the declared default.
@@ -316,6 +321,10 @@ func TestVersionLegacyTableAdoption(t *testing.T) {
 	adopted := new(legacyAdoptedNote)
 	require.NoError(t, database.Database[*legacyAdoptedNote](ctx).Get(adopted, "legacy-note"))
 	require.EqualValues(t, 1, adopted.Version, "legacy rows must come back at version 1, not zero")
+	require.True(t, legacyStamp.Equal(adopted.CreatedAt),
+		"a writer bypassing the framework stamps the base timestamps itself, and they must read back as the same instant")
+	require.True(t, legacyStamp.Equal(adopted.UpdatedAt),
+		"a writer bypassing the framework stamps the base timestamps itself, and they must read back as the same instant")
 
 	// The legacy row is a first-class citizen of the lock from here on.
 	adopted.Title = "updated-after-adoption"
