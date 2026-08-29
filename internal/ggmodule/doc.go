@@ -135,11 +135,11 @@
 //     walks and surface through the copied project's build.)
 //   - includeSourceFiles: files under internal/service/<name>/ that copy
 //     must always carry as helper files even when no action references
-//     them, for hook implementations installed at package init (a login
-//     second-factor verifier, a login observer). Entries must exist, must
-//     not be test files, must not also be excluded, and must not declare a
-//     service struct — action service files are copied through their DSL
-//     actions only.
+//     them, for hook implementations reached only from project-owned
+//     assembly code (a login second-factor verifier, a login observer).
+//     Entries must exist, must not be test files, must not also be excluded,
+//     and must not declare a service struct — action service files are
+//     copied through their DSL actions only.
 //   - middleware: manifest-declared middleware copies, see "Middleware copy
 //     rules".
 //   - postNotes: free-form lines printed after a successful copy, for the

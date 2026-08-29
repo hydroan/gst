@@ -24,9 +24,9 @@ type moduleCopyManifest struct {
 	ExcludeSourceFiles []string `json:"excludeSourceFiles"`
 	// IncludeSourceFiles lists framework-root relative files under the module's
 	// service source tree that copy must always carry as helper files, even when
-	// no action service file references them. Modules declare source here that is
-	// only reachable through hooks installed at package init, such as a login
-	// second-factor verifier.
+	// no action service file references them. Modules declare source here that
+	// serves no route and is reached only from project-owned assembly code, such
+	// as a login second-factor verifier or a login observer.
 	IncludeSourceFiles []string                       `json:"includeSourceFiles"`
 	Middleware         []moduleCopyMiddlewareManifest `json:"middleware"`
 	PostNotes          []string                       `json:"postNotes"`
