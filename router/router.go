@@ -28,9 +28,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// APIPathPrefix is the base group all business API routes are mounted under.
-const APIPathPrefix = "/api"
-
 var (
 	root *gin.Engine
 	auth *gin.RouterGroup
@@ -126,7 +123,7 @@ func Init() error {
 	root.GET("/scalar", middleware.BaseAuth(), controller.Scalar)
 	root.GET("/stoplight", middleware.BaseAuth(), controller.Stoplight)
 
-	base := root.Group(APIPathPrefix)
+	base := root.Group(consts.APIPathPrefix)
 	auth = base.Group("")
 	auth.Use(middleware.AuthMarker())
 	pub = base.Group("")
@@ -446,9 +443,9 @@ func httpMethodRank(method string) (int, bool) {
 
 // buildPath normalizes the API path.
 func buildPath(path string) string {
-	path = strings.TrimPrefix(path, APIPathPrefix+"/") // remove the '/api/' base prefix
-	path = strings.TrimPrefix(path, "/")               // trim left "/"
-	path = strings.TrimSuffix(path, "/")               // trim right "/"
+	path = strings.TrimPrefix(path, consts.APIPathPrefix+"/") // remove the '/api/' base prefix
+	path = strings.TrimPrefix(path, "/")                      // trim left "/"
+	path = strings.TrimSuffix(path, "/")                      // trim right "/"
 	return "/" + path
 }
 

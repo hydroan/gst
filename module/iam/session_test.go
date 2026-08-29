@@ -37,8 +37,8 @@ const (
 	// carries the API path prefix, so requestMetadataProbeRoute is the pattern
 	// the middleware reports and requestMetadataProbePath the concrete path.
 	requestMetadataProbeGroupRoute = "/probe/request-metadata/:id"
-	requestMetadataProbeRoute      = router.APIPathPrefix + requestMetadataProbeGroupRoute
-	requestMetadataProbePath       = router.APIPathPrefix + "/probe/request-metadata/item-1"
+	requestMetadataProbeRoute      = consts.APIPathPrefix + requestMetadataProbeGroupRoute
+	requestMetadataProbePath       = consts.APIPathPrefix + "/probe/request-metadata/item-1"
 )
 
 func adminUserSessionsPath(userID string) string {

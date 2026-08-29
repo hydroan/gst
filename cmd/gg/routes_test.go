@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hydroan/gst/router"
+	"github.com/hydroan/gst/types/consts"
 )
 
 func TestRoutePhaseMethodMatchesRuntimeRegistration(t *testing.T) {
@@ -51,7 +51,7 @@ func TestRoutesHeaderShowsAPIBasePath(t *testing.T) {
 		{"router", printRouterRoutes},
 		{"model", printModelRoutes},
 	}
-	want := "base: " + router.APIPathPrefix
+	want := "base: " + consts.APIPathPrefix
 	for _, view := range views {
 		t.Run(view.name, func(t *testing.T) {
 			var buf bytes.Buffer
