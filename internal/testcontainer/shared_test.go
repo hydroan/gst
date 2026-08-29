@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -27,9 +28,55 @@ func TestDedicatedContainersRequested(t *testing.T) {
 }
 
 func TestSharedContainerName(t *testing.T) {
-	require.Equal(t, "gst-test-mysql-8-4", sharedContainerName("mysql:8.4"))
-	require.Equal(t, "gst-test-redis-7-alpine", sharedContainerName("redis:7-alpine"))
-	require.Equal(t, "gst-test-sample-server-24-8-alpine", sharedContainerName("sample/server:24.8-alpine"))
+	t.Run("image_reference_shapes_the_name", func(t *testing.T) {
+		require.Equal(t, "gst-test-mysql-8-4", sharedContainerName("mysql:8.4"))
+		require.Equal(t, "gst-test-redis-7-alpine", sharedContainerName("redis:7-alpine"))
+		require.Equal(t, "gst-test-sample-server-24-8-alpine", sharedContainerName("sample/server:24.8-alpine"))
+	})
+
+	t.Run("arguments_are_fingerprinted_into_the_name", func(t *testing.T) {
+		plain := sharedContainerName("sample:1")
+		tuned := sharedContainerName("sample:1", "--flag=1")
+
+		// The fingerprint extends the image-derived name rather than replacing
+		// it, so the container a name belongs to stays readable.
+		require.Equal(t, "gst-test-sample-1", plain)
+		require.True(t, strings.HasPrefix(tuned, plain+"-"), "name %q", tuned)
+
+		// Same arguments, same name: a rerun of an unchanged setup attaches to
+		// the container the previous run created.
+		require.Equal(t, tuned, sharedContainerName("sample:1", "--flag=1"))
+
+		// Any change to the command line names a container that does not exist
+		// yet, which is what makes a tuning change take effect on its own.
+		require.NotEqual(t, tuned, sharedContainerName("sample:1", "--flag=2"))
+		require.NotEqual(t, tuned, sharedContainerName("sample:1", "--flag=1", "--extra"))
+		require.NotEqual(t, plain, tuned)
+
+		// Arguments are fingerprinted as a list, not as concatenated text, so
+		// a differently split command line is a different container.
+		require.NotEqual(t,
+			sharedContainerName("sample:1", "-c", "a=1"),
+			sharedContainerName("sample:1", "-ca=1"))
+	})
+
+	t.Run("every_shared_setup_fingerprints_its_command_line", func(t *testing.T) {
+		// Each setup creates its container with arguments, so each name must
+		// carry a fingerprint rather than the bare image-derived name; that is
+		// what keeps the name and the running command line in step.
+		for _, tt := range []struct {
+			image string
+			args  []string
+		}{
+			{image: mysqlImage, args: mysqlSharedArgs},
+			{image: postgresImage, args: postgresSharedArgs},
+			{image: redisImage, args: redisSharedArgs},
+		} {
+			require.NotEmpty(t, tt.args, "image %q", tt.image)
+			require.NotEqual(t, sharedContainerName(tt.image), sharedContainerName(tt.image, tt.args...),
+				"image %q", tt.image)
+		}
+	})
 }
 
 func TestWithSharedContainerLock(t *testing.T) {

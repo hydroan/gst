@@ -3,6 +3,7 @@ package testcontainer
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"fmt"
@@ -30,10 +31,11 @@ import (
 // but never terminates the container, so later runs start against a warm
 // instance.
 //
-// The shared containers survive on purpose. Removing them is a manual
-// `docker rm -f <name>`, which is also how a tuning change in the container
-// command line is rolled out: an existing container is reused as it is, the
-// request options only shape the first creation.
+// The shared containers survive on purpose; removing one is a manual
+// `docker rm -f <name>`. A tuning change in a container command line needs no
+// such step: the arguments are part of the container name, so a changed
+// command line names a container that does not exist yet and the previous one
+// is simply left behind. See sharedContainerName.
 
 // envDedicatedContainers switches every setup back to a dedicated container
 // per test binary, terminated on release and watched by the reaper. It is the
@@ -78,17 +80,40 @@ func prepareContainerRuntime() {
 }
 
 // sharedContainerName derives the fixed container name from an image
-// reference, e.g. "mysql:8.4" becomes "gst-test-mysql-8-4". The image version
-// is part of the name, so an image bump abandons the old container instead of
-// reusing a stale one; the abandoned container is removed by hand.
-func sharedContainerName(image string) string {
+// reference and the command line the container is created with, e.g.
+// "mysql:8.4" without arguments becomes "gst-test-mysql-8-4" and with
+// arguments "gst-test-mysql-8-4-1f2e3d4c".
+//
+// Both inputs shape the name because reuse attaches to whatever container
+// already carries it, while the creation options only shape a container that
+// does not exist yet. A name blind to the arguments would keep serving an
+// instance created by an older revision of this package, running a command
+// line nothing in the source mentions any more and with no sign that it does.
+// Folding the arguments in abandons that instance the way an image bump does,
+// so a tuning change takes effect on its own instead of waiting for someone to
+// remember to remove a container. Abandoned containers are removed by hand.
+func sharedContainerName(image string, args ...string) string {
 	return "gst-test-" + strings.Map(func(r rune) rune {
 		switch r {
 		case ':', '.', '/':
 			return '-'
 		}
 		return r
-	}, image)
+	}, image) + sharedContainerArgsFingerprint(args)
+}
+
+// sharedContainerArgsFingerprint returns the suffix sharedContainerName
+// carries for the command line arguments a container is created with. An
+// empty command line has no fingerprint, so a container that takes no
+// arguments keeps the plain image-derived name.
+func sharedContainerArgsFingerprint(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	// The separator keeps two argument lists that concatenate to the same
+	// text apart; it cannot occur inside an argument, those are C strings.
+	sum := sha256.Sum256([]byte(strings.Join(args, "\x00")))
+	return "-" + hex.EncodeToString(sum[:4])
 }
 
 // withSharedContainerLock runs fn while holding a file lock named after the

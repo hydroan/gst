@@ -22,14 +22,20 @@ const (
 	// redisSharedDatabases raises the server default of 16: the shared
 	// container hands every test binary a database index of its own, and the
 	// indexes 1 through 255 are the isolation slots. Index 0 stays unclaimed,
-	// it is where a hand-typed debugging connection lands. Applied on first
-	// creation only, see the shared containers comment in shared.go.
+	// it is where a hand-typed debugging connection lands.
 	redisSharedDatabases = 256
 
 	// redisLeaseKey marks a claimed database index. Its value names the
 	// claiming process, see formatRedisLease.
 	redisLeaseKey = "gst:test:lease"
 )
+
+// redisSharedArgs is the command line the shared redis container is created
+// with, and the single source for both the arguments themselves and the
+// fingerprint sharedContainerName folds into the container name. Redis serves
+// the isolation slots out of memory, so there is no durability work to strip
+// here; only the slot count needs raising.
+var redisSharedArgs = []string{"--databases", strconv.Itoa(redisSharedDatabases)}
 
 // SetupRedis prepares a redis database and points the framework at it,
 // returning the function that releases it. Modules that keep sessions or
@@ -77,7 +83,7 @@ func setupDedicatedRedis() (func() error, error) {
 func setupSharedRedis() (func() error, error) {
 	prepareContainerRuntime()
 	ctx := context.Background()
-	containerName := sharedContainerName(redisImage)
+	containerName := sharedContainerName(redisImage, redisSharedArgs...)
 
 	var (
 		addr   string
@@ -87,7 +93,7 @@ func setupSharedRedis() (func() error, error) {
 	err := withSharedContainerLock(containerName, func() error {
 		c, err := redis.Run(
 			ctx, redisImage,
-			testcontainers.WithCmdArgs("--databases", strconv.Itoa(redisSharedDatabases)),
+			testcontainers.WithCmdArgs(redisSharedArgs...),
 			testcontainers.WithReuseByName(containerName),
 		)
 		if err != nil {

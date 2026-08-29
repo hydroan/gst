@@ -25,10 +25,30 @@ const (
 	mysqlPassword     = "test"
 
 	// mysqlSharedMaxConnections raises the server default of 151, which many
-	// binaries sharing one instance would exhaust. Applied on first creation
-	// only, see the shared containers comment in shared.go.
+	// binaries sharing one instance would exhaust.
 	mysqlSharedMaxConnections = 500
 )
+
+// mysqlSharedArgs is the command line the shared mysql container is created
+// with. It is the single source for both the arguments themselves and the
+// fingerprint sharedContainerName folds into the container name.
+//
+// Past the connection limit it turns off the durability machinery a throwaway
+// instance has no use for. Creating the tables of every registered model is
+// what a test binary spends most of its startup on, and every one of those DDL
+// statements otherwise flushes the binary log and the redo log, twice per
+// statement; the flushes, not the schema work, dominate. A test container that
+// crashes is recreated rather than recovered, so the durability being traded
+// away buys nothing to begin with.
+//
+// performance_schema stays on: it costs nothing measurable here and the sys
+// views built on it are what a human debugging a shared instance reaches for.
+var mysqlSharedArgs = []string{
+	fmt.Sprintf("--max-connections=%d", mysqlSharedMaxConnections),
+	"--skip-log-bin",
+	"--innodb-flush-log-at-trx-commit=0",
+	"--innodb-doublewrite=0",
+}
 
 // mysqlSharedDialect provisions per-binary databases inside the shared mysql
 // container. DROP DATABASE cuts off live connections on its own here, no
@@ -138,7 +158,7 @@ func SetupStandaloneMySQL(database, username, password string) (config.MySQL, fu
 func setupSharedMySQL() (func() error, error) {
 	prepareContainerRuntime()
 	ctx := context.Background()
-	containerName := sharedContainerName(mysqlImage)
+	containerName := sharedContainerName(mysqlImage, mysqlSharedArgs...)
 
 	var (
 		host     string
@@ -151,7 +171,7 @@ func setupSharedMySQL() (func() error, error) {
 			ctx, mysqlImage,
 			mysql.WithUsername(mysqlRootUsername),
 			mysql.WithPassword(mysqlPassword),
-			testcontainers.WithCmdArgs(fmt.Sprintf("--max-connections=%d", mysqlSharedMaxConnections)),
+			testcontainers.WithCmdArgs(mysqlSharedArgs...),
 			testcontainers.WithReuseByName(containerName),
 		)
 		if err != nil {

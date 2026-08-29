@@ -26,10 +26,21 @@ const (
 	postgresPassword      = "test"
 
 	// postgresSharedMaxConnections raises the server default of 100, which
-	// many binaries sharing one instance would exhaust. Applied on first
-	// creation only, see the shared containers comment in shared.go.
+	// many binaries sharing one instance would exhaust.
 	postgresSharedMaxConnections = 500
 )
+
+// postgresSharedArgs is the command line the shared postgres container is
+// created with, and the single source for both the arguments themselves and
+// the fingerprint sharedContainerName folds into the container name.
+//
+// It carries no durability settings, unlike mysqlSharedArgs: the postgres
+// module already runs its containers with fsync off, which is the whole of
+// what there is to gain here, and postgres executes schema creation an order
+// of magnitude more cheaply than mysql does to begin with.
+var postgresSharedArgs = []string{
+	"-c", fmt.Sprintf("max_connections=%d", postgresSharedMaxConnections),
+}
 
 // postgresSharedDialect provisions per-binary databases inside the shared
 // postgres container. Unlike mysql, postgres refuses to drop a database with
@@ -144,7 +155,7 @@ func setupDedicatedPostgres() (func() error, error) {
 func setupSharedPostgres() (func() error, error) {
 	prepareContainerRuntime()
 	ctx := context.Background()
-	containerName := sharedContainerName(postgresImage)
+	containerName := sharedContainerName(postgresImage, postgresSharedArgs...)
 
 	var (
 		host     string
@@ -156,7 +167,7 @@ func setupSharedPostgres() (func() error, error) {
 		c, err := postgres.Run(
 			ctx, postgresImage,
 			postgres.WithPassword(postgresPassword),
-			testcontainers.WithCmdArgs("-c", fmt.Sprintf("max_connections=%d", postgresSharedMaxConnections)),
+			testcontainers.WithCmdArgs(postgresSharedArgs...),
 			// postgres restarts itself once during initdb, so it only counts
 			// as ready after logging readiness twice and after the port is
 			// served.
