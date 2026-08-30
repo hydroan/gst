@@ -26,6 +26,14 @@ import (
 // table whose definition moved, but never drops what a model stopped
 // declaring, and that is the case the fingerprint is built not to miss.
 //
+// A template outlives the run that built it. The database a binary provisions
+// for itself is dropped the moment that binary releases, but a template is the
+// cache those binaries share, so it stays behind and turns up in the container
+// as a gst_tmpl_ database nothing appears to own — which is the point, not a
+// leak. Only structure lives there: CREATE TABLE ... LIKE copies a table's
+// definition and none of its rows. A template goes away only once it is
+// unusable, see schemaTemplateReadyTable and schemaTemplateStaleAfter.
+//
 // Nothing here can fail a test run. Every step reports what stopped it and
 // leaves the binary to migrate, because the framework's own migration runs
 // either way and a table already in place is one it has nothing left to do
