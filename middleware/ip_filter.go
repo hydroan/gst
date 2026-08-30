@@ -21,10 +21,6 @@ type IPFilterConfig struct {
 	// Blacklist contains blocked IP addresses or CIDR ranges
 	// IPs in this list will always be blocked
 	Blacklist []string
-
-	// TrustedProxies contains IP addresses of trusted proxy servers
-	// Used to correctly extract the real client IP from X-Forwarded-For header
-	TrustedProxies []string
 }
 
 // IPWhitelist returns a middleware that only allows requests from IP addresses in the whitelist.
@@ -73,6 +69,11 @@ func IPBlacklist(blacklist []string) gin.HandlerFunc {
 
 // IPFilter returns a middleware that filters requests based on IP whitelist and blacklist.
 // Blacklist takes precedence over whitelist.
+//
+// The address filtered on is the one the engine reports: the peer of the
+// connection, or the address a trusted proxy forwarded. Which proxies count is
+// server.trusted_proxies, applied to the engine at startup — behind a proxy
+// that is not named there, every request filters as the proxy's own address.
 //
 // Parameters:
 //   - config: Configuration for IP filtering
@@ -134,8 +135,11 @@ func IPFilter(config *IPFilterConfig) gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
-		// Get client IP
-		clientIP := getClientIP(c, config.TrustedProxies)
+		// The address is the one the engine settled on, which is the peer of
+		// the connection unless a trusted proxy forwarded another. Whether a
+		// forwarding header counts is decided once for the whole server by
+		// server.trusted_proxies, so this filter never has to judge it.
+		clientIP := util.IPv6ToIPv4(c.ClientIP())
 		ip := net.ParseIP(clientIP)
 		if ip == nil {
 			zap.S().Warnw("failed to parse client IP", "ip", clientIP)
@@ -182,64 +186,4 @@ func IPFilter(config *IPFilterConfig) gin.HandlerFunc {
 
 		c.Next()
 	}
-}
-
-// getClientIP extracts the real client IP from the request, considering proxy headers.
-func getClientIP(c *gin.Context, trustedProxies []string) string {
-	// First, try to get IP from X-Forwarded-For header if proxy is trusted
-	if len(trustedProxies) > 0 {
-		forwardedFor := c.GetHeader("X-Forwarded-For")
-		if forwardedFor != "" {
-			// X-Forwarded-For can contain multiple IPs, take the last one (closest to server)
-			ips := strings.Split(forwardedFor, ",")
-			if len(ips) > 0 {
-				// Get the last IP in the chain (closest to the server)
-				clientIP := strings.TrimSpace(ips[len(ips)-1])
-				// Verify the proxy is trusted
-				proxyIP := c.ClientIP()
-				if isTrustedProxy(proxyIP, trustedProxies) {
-					return util.IPv6ToIPv4(clientIP)
-				}
-			}
-		}
-
-		// Try X-Real-IP header
-		realIP := c.GetHeader("X-Real-IP")
-		if realIP != "" {
-			proxyIP := c.ClientIP()
-			if isTrustedProxy(proxyIP, trustedProxies) {
-				return util.IPv6ToIPv4(realIP)
-			}
-		}
-	}
-
-	// Fall back to gin's ClientIP() method
-	return util.IPv6ToIPv4(c.ClientIP())
-}
-
-// isTrustedProxy checks if the given IP is in the trusted proxies list.
-func isTrustedProxy(ip string, trustedProxies []string) bool {
-	proxyIP := net.ParseIP(ip)
-	if proxyIP == nil {
-		return false
-	}
-
-	for _, trusted := range trustedProxies {
-		if strings.Contains(trusted, "/") {
-			_, ipNet, err := net.ParseCIDR(trusted)
-			if err != nil {
-				continue
-			}
-			if ipNet.Contains(proxyIP) {
-				return true
-			}
-		} else {
-			trustedIP := net.ParseIP(trusted)
-			if trustedIP != nil && proxyIP.Equal(trustedIP) {
-				return true
-			}
-		}
-	}
-
-	return false
 }
