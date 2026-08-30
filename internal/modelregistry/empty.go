@@ -35,15 +35,15 @@ type Empty struct{}
 // IsVirtual looks for it.
 func (*Empty) virtualModel() {}
 
-// Virtual is implemented by models that embed Empty.
+// virtual is implemented by models that embed Empty.
 //
 // The marker method is unexported, so embedding Empty is the only way to
-// satisfy Virtual: models outside this package can neither declare the method
+// satisfy virtual: models outside this package can neither declare the method
 // themselves nor accidentally opt in. A virtual resource has routes and
 // services but no database table behind it, so table-touching controller
 // phases must be skipped for it instead of querying a table that does not
 // exist.
-type Virtual interface {
+type virtual interface {
 	virtualModel()
 }
 
@@ -51,11 +51,11 @@ type Virtual interface {
 // Empty directly or through a pointer. m must be a model pointer, which is
 // the only shape models flow through the framework in.
 func IsVirtual(m any) bool {
-	_, ok := m.(Virtual)
+	_, ok := m.(virtual)
 	return ok
 }
 
-func (*Empty) TableName() string        { return "" } // Virtual models have no table; the empty name never reaches gorm
+func (*Empty) TableName() string        { return "" } // virtual models have no table; the empty name never reaches gorm
 func (*Empty) GetCreatedBy() string     { return "" }
 func (*Empty) GetUpdatedBy() string     { return "" }
 func (*Empty) GetCreatedAt() time.Time  { return time.Time{} }

@@ -66,8 +66,8 @@ func modelDeclaration(m types.Model) string {
 	var declaration strings.Builder
 	fmt.Fprintf(&declaration, "%s table=%s", typ.String(), m.TableName())
 	writeFieldDeclarations(&declaration, typ, map[reflect.Type]bool{})
-	if indexer, ok := asIndexer(m); ok {
-		for _, index := range indexer.Indexes() {
+	if declarer, ok := asIndexer(m); ok {
+		for _, index := range declarer.Indexes() {
 			fmt.Fprintf(&declaration, " index=%v unique=%t", index.Fields, index.Unique)
 		}
 	}

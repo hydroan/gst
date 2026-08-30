@@ -12,10 +12,10 @@ import (
 // are recovered from the exported current schema instead. Covers plain,
 // composite, and unique indexes in the ALTER TABLE ADD form (MySQL struct
 // tag indexes embedded in CREATE TABLE), the standalone CREATE INDEX form
-// (Indexer capability indexes; the optional USING clause appears in the
-// PostgreSQL export), and the bare DROP INDEX form the PostgreSQL generator
-// emits, which names no table — the owning table is recovered from the
-// exported current schema.
+// (indexes declared through a model's Indexes method; the optional USING
+// clause appears in the PostgreSQL export), and the bare DROP INDEX form the
+// PostgreSQL generator emits, which names no table — the owning table is
+// recovered from the exported current schema.
 var (
 	dropIndexPattern     = regexp.MustCompile(`^ALTER TABLE ([^ ]+) DROP INDEX ([^ ]+)$`)
 	bareDropIndexPattern = regexp.MustCompile(`^DROP INDEX ([^ ]+)$`)

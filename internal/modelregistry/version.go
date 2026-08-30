@@ -154,7 +154,7 @@ func versionFieldOf(m any) versionField {
 				"model %s embeds model.Version; optimistic locking requires a named field: Version model.Version `json:\"version,omitempty\" gorm:\"not null;default:1\"` (an embedded Version is not recognized and the lock would silently not engage)",
 				typ))
 		}
-		if missing := VersionTagMissing(field.Tag); len(missing) > 0 {
+		if missing := versionTagMissing(field.Tag); len(missing) > 0 {
 			quoted := make([]string, len(missing))
 			for i, setting := range missing {
 				quoted[i] = "`" + setting + "`"
@@ -227,9 +227,9 @@ func VersionJSONTagState(tag reflect.StructTag) (compliant, healable bool) {
 // does not satisfy VersionJSONTagState, phrased as the fix.
 const versionJSONRequirement = `json:",omitempty" serialization`
 
-// VersionTagMissing reports every required tag setting the Version field
+// versionTagMissing reports every required tag setting the Version field
 // lacks, gorm and json combined; the runtime enforcement panics on any.
-func VersionTagMissing(tag reflect.StructTag) []string {
+func versionTagMissing(tag reflect.StructTag) []string {
 	missing := VersionGormTagMissing(tag)
 	if compliant, _ := VersionJSONTagState(tag); !compliant {
 		missing = append(missing, versionJSONRequirement)

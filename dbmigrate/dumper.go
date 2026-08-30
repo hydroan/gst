@@ -47,7 +47,7 @@ func NewSchemaDumper() (*SchemaDumper, error) {
 
 // Dump renders dst as the target schema for driver: one CREATE TABLE per
 // model, each followed by the CREATE INDEX statements of the indexes it
-// declares through the Indexer capability, and each annotated with the model
+// declares through its optional Indexes method, and each annotated with the model
 // it came from. Models are sorted by type name, so the same input always
 // renders the same schema.
 func (s *SchemaDumper) Dump(driver config.DBType, dst ...any) (string, error) {
@@ -123,7 +123,7 @@ func (s *SchemaDumper) Dump(driver config.DBType, dst ...any) (string, error) {
 			})
 		}
 
-		// Append custom indexes declared through the Indexer capability.
+		// Append the custom indexes a model declares through its Indexes method.
 		// Plans and statement rendering are shared with the bootstrap
 		// executor, so the desired schema always matches the DDL that the
 		// runtime actually applies.

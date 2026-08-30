@@ -34,13 +34,13 @@ type Query struct {
 // queryEnabled marks models that opt in to general framework query parameters.
 func (Query) queryEnabled() {}
 
-// Queryable is implemented by models that embed Query.
+// queryable is implemented by models that embed Query.
 //
 // The marker method is unexported, so embedding Query is the only way to
-// satisfy Queryable: models outside this package can neither declare the
+// satisfy queryable: models outside this package can neither declare the
 // method themselves nor accidentally opt in without the Query fields.
 // The other marker interfaces below are sealed the same way.
-type Queryable interface {
+type queryable interface {
 	queryEnabled()
 }
 
@@ -67,8 +67,8 @@ type Pagination struct {
 // paginationEnabled marks models that opt in to page and size query parameters.
 func (Pagination) paginationEnabled() {}
 
-// Paginatable is implemented by models that embed Pagination.
-type Paginatable interface {
+// paginatable is implemented by models that embed Pagination.
+type paginatable interface {
 	paginationEnabled()
 }
 
@@ -89,8 +89,8 @@ type Cursor struct {
 // cursorEnabled marks models that opt in to cursor query parameters.
 func (Cursor) cursorEnabled() {}
 
-// Cursorable is implemented by models that embed Cursor.
-type Cursorable interface {
+// cursorable is implemented by models that embed Cursor.
+type cursorable interface {
 	cursorEnabled()
 }
 
@@ -105,21 +105,21 @@ const DefaultCursorColumn = "id"
 // IsQueryable reports whether m opted in to general framework query parameters
 // by embedding Query.
 func IsQueryable(m any) bool {
-	_, ok := m.(Queryable)
+	_, ok := m.(queryable)
 	return ok
 }
 
 // IsPaginatable reports whether m opted in to page and size query parameters
 // by embedding Pagination directly or through Query.
 func IsPaginatable(m any) bool {
-	_, ok := m.(Paginatable)
+	_, ok := m.(paginatable)
 	return ok
 }
 
 // IsCursorable reports whether m opted in to cursor query parameters by
 // embedding Cursor directly or through Query.
 func IsCursorable(m any) bool {
-	_, ok := m.(Cursorable)
+	_, ok := m.(cursorable)
 	return ok
 }
 
@@ -127,9 +127,9 @@ func IsCursorable(m any) bool {
 // framework query structs above. Matching by capability instead of by concrete
 // type keeps pointer embedding and nested marker structs working.
 var queryMarkerTypes = []reflect.Type{
-	reflect.TypeFor[Queryable](),
-	reflect.TypeFor[Paginatable](),
-	reflect.TypeFor[Cursorable](),
+	reflect.TypeFor[queryable](),
+	reflect.TypeFor[paginatable](),
+	reflect.TypeFor[cursorable](),
 }
 
 // IsQueryMarkerType reports whether t carries framework query parameters, that

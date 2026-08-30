@@ -27,7 +27,7 @@ type Group struct {
 
 func (*Group) TableName() string { return "groups" }
 
-// Sample declares custom indexes through the Indexer capability while also
+// Sample declares custom indexes through its Indexes method while also
 // carrying a plain struct tag column. The indexed columns carry a size:
 // without one gorm maps them to TEXT on MySQL, which cannot be indexed
 // whole (key length error 1170).

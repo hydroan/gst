@@ -29,7 +29,7 @@ func (*IndexedSample) Indexes() []modelregistry.Index {
 	}
 }
 
-// PlainSample does not implement the Indexer capability.
+// PlainSample does not implement the indexer capability.
 type PlainSample struct {
 	Name string `json:"name"`
 
@@ -135,7 +135,7 @@ func (*UniqueTagConflictSample) Indexes() []modelregistry.Index {
 	return []modelregistry.Index{{Fields: []string{"Code"}, Unique: true}}
 }
 
-// NoTableNameSample implements Indexer but never declares its table name.
+// NoTableNameSample implements indexer but never declares its table name.
 type NoTableNameSample struct {
 	Kind string
 
