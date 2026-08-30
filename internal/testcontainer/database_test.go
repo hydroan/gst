@@ -12,7 +12,7 @@ func TestSetupDatabase(t *testing.T) {
 	t.Run("empty_type_falls_back_to_the_framework_default", func(t *testing.T) {
 		isolateEnv(t, config.DATABASE_TYPE, config.SQLITE_PATH)
 
-		release, err := SetupDatabase("")
+		release, _, err := SetupDatabase("")
 		require.NoError(t, err)
 		t.Cleanup(func() { require.NoError(t, release()) })
 
@@ -21,7 +21,7 @@ func TestSetupDatabase(t *testing.T) {
 	})
 
 	t.Run("unsupported_type_is_rejected", func(t *testing.T) {
-		_, err := SetupDatabase(config.DBType("oracle"))
+		_, _, err := SetupDatabase(config.DBType("oracle"))
 
 		require.Error(t, err)
 		require.ErrorContains(t, err, "oracle")

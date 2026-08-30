@@ -73,7 +73,7 @@ func Run(m *testing.M, s Server) {
 // run holds the body of Run so that the deferred releases still happen: the
 // os.Exit in Run would skip them.
 func run(m *testing.M, s Server) int {
-	release, err := s.prepare()
+	release, afterMigrate, err := s.prepare()
 	defer release()
 	if err != nil {
 		panic(err)
@@ -85,6 +85,10 @@ func run(m *testing.M, s Server) int {
 	if err := bootstrap.Bootstrap(); err != nil {
 		panic(err)
 	}
+	// The bootstrap has migrated, so the schema is now what a later binary can
+	// start from. Publishing here rather than earlier is what keeps a template
+	// made of the tables the migration itself produced.
+	afterMigrate()
 	if s.Routes != nil {
 		if err := s.Routes(); err != nil {
 			panic(err)
@@ -107,10 +111,11 @@ func run(m *testing.M, s Server) int {
 }
 
 // prepare sets up the backing services and the shared test configuration,
-// returning the function that releases them. The releases are collected as
-// they succeed, so the returned function undoes whatever was already prepared
-// even when a later step fails.
-func (s Server) prepare() (release func(), err error) {
+// returning the function that releases them and the one to run once the
+// framework has migrated the database. The releases are collected as they
+// succeed, so the returned function undoes whatever was already prepared even
+// when a later step fails.
+func (s Server) prepare() (release func(), afterMigrate func(), err error) {
 	releases := make([]func(), 0, 5)
 	release = func() {
 		for _, done := range slices.Backward(releases) {
@@ -118,9 +123,13 @@ func (s Server) prepare() (release func(), err error) {
 		}
 	}
 
+	// Every early return hands back a no-op hook: nothing was migrated, so
+	// there is nothing to publish.
+	afterMigrate = func() {}
+
 	logDir, err := os.MkdirTemp("", "gst_logs_")
 	if err != nil {
-		return release, errors.Wrap(err, "failed to create the test log directory")
+		return release, afterMigrate, errors.Wrap(err, "failed to create the test log directory")
 	}
 	releases = append(releases, func() {
 		if removeErr := os.RemoveAll(logDir); removeErr != nil {
@@ -133,10 +142,11 @@ func (s Server) prepare() (release func(), err error) {
 	os.Setenv(config.LOGGER_DIR, logDir)
 	listenOnFreePort()
 
-	cleanDatabase, err := testcontainer.SetupDatabase(s.Database)
+	cleanDatabase, publishTemplate, err := testcontainer.SetupDatabase(s.Database)
 	if err != nil {
-		return release, err
+		return release, afterMigrate, err
 	}
+	afterMigrate = publishTemplate
 	releases = append(releases, func() {
 		if releaseErr := cleanDatabase(); releaseErr != nil {
 			reportReleaseFailure("database", releaseErr)
@@ -146,7 +156,7 @@ func (s Server) prepare() (release func(), err error) {
 	if s.Redis {
 		cleanCache, err := testcontainer.SetupRedis()
 		if err != nil {
-			return release, err
+			return release, afterMigrate, err
 		}
 		releases = append(releases, func() {
 			if releaseErr := cleanCache(); releaseErr != nil {
@@ -158,7 +168,7 @@ func (s Server) prepare() (release func(), err error) {
 	if s.Clickhouse {
 		cfg, cleanAnalytical, err := testcontainer.SetupClickhouse()
 		if err != nil {
-			return release, err
+			return release, afterMigrate, err
 		}
 		releases = append(releases, func() {
 			if releaseErr := cleanAnalytical(); releaseErr != nil {
@@ -175,7 +185,7 @@ func (s Server) prepare() (release func(), err error) {
 	if s.Kafka {
 		cleanBroker, err := testcontainer.SetupKafka()
 		if err != nil {
-			return release, err
+			return release, afterMigrate, err
 		}
 		releases = append(releases, func() {
 			if releaseErr := cleanBroker(); releaseErr != nil {
@@ -184,7 +194,7 @@ func (s Server) prepare() (release func(), err error) {
 		})
 	}
 
-	return release, nil
+	return release, afterMigrate, nil
 }
 
 // reportReleaseFailure reports that a prepared service could not be released.

@@ -141,11 +141,11 @@ func TestSharedMySQLProvisioning(t *testing.T) {
 
 	// Two setups stand in for two test binaries: each gets a database of its
 	// own inside the one shared container.
-	releaseFirst, err := setupSharedMySQL()
+	releaseFirst, _, err := setupSharedMySQL()
 	require.NoError(t, err)
 	first := os.Getenv(config.MYSQL_DATABASE)
 
-	releaseSecond, err := setupSharedMySQL()
+	releaseSecond, _, err := setupSharedMySQL()
 	require.NoError(t, err)
 	second := os.Getenv(config.MYSQL_DATABASE)
 

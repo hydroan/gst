@@ -65,10 +65,14 @@ var mysqlSharedDialect = sharedSQLDialect{
 }
 
 // setupMySQL prepares a mysql database and points the framework at it. The
-// returned function releases it.
-func setupMySQL() (func() error, error) {
+// returned functions release it and publish its schema template, see
+// prepareSchemaTemplate.
+func setupMySQL() (func() error, func(), error) {
 	if dedicatedContainersRequested() {
-		return setupDedicatedMySQL()
+		// A container of its own is shared with nobody, so there is no
+		// template to copy from or to leave behind.
+		release, err := setupDedicatedMySQL()
+		return release, noSchemaTemplatePublish, err
 	}
 	return setupSharedMySQL()
 }
@@ -154,8 +158,10 @@ func SetupStandaloneMySQL(database, username, password string) (config.MySQL, fu
 
 // setupSharedMySQL attaches to the shared mysql container, creating it when
 // it is not running yet, and provisions a database of its own for this test
-// binary. The returned function drops that database; the container stays.
-func setupSharedMySQL() (func() error, error) {
+// binary, filled from the shared schema template where one matches. The first
+// returned function drops that database and the second publishes the template,
+// see prepareSchemaTemplate; the container stays either way.
+func setupSharedMySQL() (func() error, func(), error) {
 	prepareContainerRuntime()
 	ctx := context.Background()
 	containerName := sharedContainerName(mysqlImage, mysqlSharedArgs...)
@@ -186,7 +192,7 @@ func setupSharedMySQL() (func() error, error) {
 		return err
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	ApplyConfigToEnv(config.MySQL{
@@ -199,5 +205,5 @@ func setupSharedMySQL() (func() error, error) {
 	useDatabase(config.DBMySQL)
 	reportServiceReady(string(config.DBMySQL), fmt.Sprintf("%s:%d/%s", host, port, database))
 
-	return release, nil
+	return release, prepareSchemaTemplate(host, port, database), nil
 }

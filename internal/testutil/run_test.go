@@ -16,7 +16,7 @@ func TestServerPreparesClickhouse(t *testing.T) {
 		require.NoError(t, os.Unsetenv(key))
 	}
 
-	release, err := Server{Clickhouse: true}.prepare()
+	release, _, err := Server{Clickhouse: true}.prepare()
 	t.Cleanup(release)
 	require.NoError(t, err)
 
@@ -39,7 +39,7 @@ func TestServerPreparesKafka(t *testing.T) {
 		require.NoError(t, os.Unsetenv(key))
 	}
 
-	release, err := Server{Kafka: true}.prepare()
+	release, _, err := Server{Kafka: true}.prepare()
 	t.Cleanup(release)
 	require.NoError(t, err)
 

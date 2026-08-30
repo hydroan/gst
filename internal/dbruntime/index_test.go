@@ -328,7 +328,7 @@ func newMySQLDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
 	mysqlOnce.Do(func() {
-		releaseMySQL, errMySQL = testcontainer.SetupDatabase(config.DBMySQL)
+		releaseMySQL, _, errMySQL = testcontainer.SetupDatabase(config.DBMySQL)
 	})
 	require.NoError(t, errMySQL)
 
@@ -353,7 +353,7 @@ func newPostgresDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
 	postgresOnce.Do(func() {
-		releasePostgres, errPostgres = testcontainer.SetupDatabase(config.DBPostgres)
+		releasePostgres, _, errPostgres = testcontainer.SetupDatabase(config.DBPostgres)
 	})
 	require.NoError(t, errPostgres)
 

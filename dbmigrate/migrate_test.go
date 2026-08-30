@@ -26,13 +26,13 @@ func TestMain(m *testing.M) {
 // once and no server at all, which is what SetupDatabase is for; os.Exit in
 // TestMain would skip the deferred releases, hence the wrapper.
 func runTests(m *testing.M) int {
-	releaseMySQL, err := testcontainer.SetupDatabase(config.DBMySQL)
+	releaseMySQL, _, err := testcontainer.SetupDatabase(config.DBMySQL)
 	if err != nil {
 		panic(err)
 	}
 	defer func() { _ = releaseMySQL() }()
 
-	releasePostgres, err := testcontainer.SetupDatabase(config.DBPostgres)
+	releasePostgres, _, err := testcontainer.SetupDatabase(config.DBPostgres)
 	if err != nil {
 		panic(err)
 	}

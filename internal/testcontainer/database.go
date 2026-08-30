@@ -8,13 +8,14 @@ import (
 )
 
 // SetupDatabase prepares the database that dbType names and points the
-// framework at it, returning the function that releases it. An empty dbType
-// selects the framework default.
+// framework at it, returning the function that releases it and the one to run
+// once the framework has migrated it, see prepareSchemaTemplate. An empty
+// dbType selects the framework default.
 //
 // A database the framework can connect to but that has no preparation here is
 // rejected rather than quietly replaced, so a test never runs against a
 // different database than the one it asked for.
-func SetupDatabase(dbType config.DBType) (func() error, error) {
+func SetupDatabase(dbType config.DBType) (release func() error, afterMigrate func(), err error) {
 	if len(dbType) == 0 {
 		dbType = config.DBSqlite
 	}
@@ -23,11 +24,13 @@ func SetupDatabase(dbType config.DBType) (func() error, error) {
 	case config.DBMySQL:
 		return setupMySQL()
 	case config.DBPostgres:
-		return setupPostgres()
+		release, err = setupPostgres()
+		return release, noSchemaTemplatePublish, err
 	case config.DBSqlite:
-		return setupSqlite()
+		release, err = setupSqlite()
+		return release, noSchemaTemplatePublish, err
 	default:
-		return nil, errors.Newf("no test database available for %q, supported are %q, %q and %q",
+		return nil, nil, errors.Newf("no test database available for %q, supported are %q, %q and %q",
 			dbType, config.DBMySQL, config.DBPostgres, config.DBSqlite)
 	}
 }
