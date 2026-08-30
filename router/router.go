@@ -91,6 +91,9 @@ func OnRoutesReady(fn func(routes map[string][]string) error) {
 func Init() error {
 	gin.SetMode(gin.ReleaseMode)
 	root = gin.New()
+	if err := applyTrustedProxies(root); err != nil {
+		return err
+	}
 
 	root.Use(
 		middleware.Tracing(),

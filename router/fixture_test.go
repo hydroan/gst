@@ -22,6 +22,7 @@ func TestMain(m *testing.M) {
 			}
 			registerSSERoutes()
 			registerDocumentedRoute()
+			registerClientIPRoute()
 
 			return nil
 		},

@@ -25,6 +25,8 @@ const (
 	SERVER_LISTEN = "SERVER_LISTEN" //nolint:staticcheck
 	SERVER_PORT   = "SERVER_PORT"   //nolint:staticcheck
 
+	SERVER_TRUSTED_PROXIES = "SERVER_TRUSTED_PROXIES" //nolint:staticcheck
+
 	SERVER_READ_TIMEOUT  = "SERVER_READ_TIMEOUT"  //nolint:staticcheck
 	SERVER_WRITE_TIMEOUT = "SERVER_WRITE_TIMEOUT" //nolint:staticcheck
 	SERVER_IDLE_TIMEOUT  = "SERVER_IDLE_TIMEOUT"  //nolint:staticcheck
@@ -45,6 +47,16 @@ type Server struct {
 	Listen string `json:"listen" mapstructure:"listen" ini:"listen" yaml:"listen"`
 	Port   int    `json:"port" mapstructure:"port" ini:"port" yaml:"port"`
 	Domain string `json:"domain" mapstructure:"domain" ini:"domain" yaml:"domain"`
+
+	// TrustedProxies lists the CIDR blocks of the proxies allowed to report a
+	// client address through X-Forwarded-For or X-Real-IP.
+	//
+	// It is empty by default, and an empty list trusts no peer: the client
+	// address is then read off the connection, which the caller cannot
+	// rewrite. A deployment behind a load balancer or ingress names that
+	// network here — until it does, every client address it records, logs and
+	// rate-limits on is the one the request asked for.
+	TrustedProxies []string `json:"trusted_proxies" mapstructure:"trusted_proxies" ini:"trusted_proxies" yaml:"trusted_proxies"`
 
 	ReadTimeout  time.Duration `json:"read_timeout" mapstructure:"read_timeout" ini:"read_timeout" yaml:"read_timeout"`
 	WriteTimeout time.Duration `json:"write_timeout" mapstructure:"write_timeout" ini:"write_timeout" yaml:"write_timeout"`
@@ -75,6 +87,7 @@ func (*Server) setDefault(v *viper.Viper) {
 	v.SetDefault("server.listen", "")
 	v.SetDefault("server.port", 8080)
 	v.SetDefault("server.domain", "")
+	v.SetDefault("server.trusted_proxies", []string{})
 	v.SetDefault("server.read_timeout", 15*time.Second)
 	v.SetDefault("server.write_timeout", 15*time.Second)
 	v.SetDefault("server.idle_timeout", 60*time.Second)
