@@ -25,23 +25,31 @@ import (
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 var (
-	client  *goredis.Client
-	cluster *goredis.ClusterClient
-	cli     goredis.UniversalClient
-	mu      sync.Mutex
+	// cli is the one client handle this package holds. Standalone and cluster
+	// connections both satisfy it, so every operation reads the same variable
+	// under the same lock: a handle that is absent — never initialized, or
+	// closed during shutdown — is absent for all of them at once.
+	cli goredis.UniversalClient
+	mu  sync.RWMutex
 
 	ErrKeyNotExists    = errors.New("key no longer exists, may be expired")
 	ErrRedisIsDisabled = errors.New("redis is disabled")
 )
 
-// The two durations Redis answers TTL with when there is no deadline to report.
+// The two values Redis answers TTL with when there is no deadline to report.
 // Both are negative, so a caller that compares the result against a positive
 // duration has to test for them before reading it as a remaining lifetime.
+//
+// They are status codes rather than lengths of time: the client hands the
+// reply integer back as a Duration without scaling it by the reply's unit, so
+// -2 arrives as -2 nanoseconds. Spelling them in seconds would build
+// constants no reply can ever equal, and every comparison against them would
+// silently report "not this case".
 const (
 	// TTLKeyNotExists is reported for a key that does not exist.
-	TTLKeyNotExists = -2 * time.Second
+	TTLKeyNotExists = time.Duration(-2)
 	// TTLNoExpiry is reported for a key that exists without a ttl.
-	TTLNoExpiry = -1 * time.Second
+	TTLNoExpiry = time.Duration(-1)
 )
 
 func redisKey(key string) string {
@@ -92,12 +100,14 @@ func Init() (err error) {
 	}
 
 	if cfg.ClusterMode {
+		var cluster *goredis.ClusterClient
 		if cluster, err = NewCluster(cfg); err != nil {
 			return errors.Wrap(err, "failed to connect to redis")
 		}
 		cli = cluster
 		zap.S().Infow("successfully connect to redis", "addrs", cfg.Addrs, "cluster_mode", cfg.ClusterMode)
 	} else {
+		var client *goredis.Client
 		if client, err = New(cfg); err != nil {
 			return errors.Wrap(err, "failed to connect to redis")
 		}
@@ -110,15 +120,11 @@ func Init() (err error) {
 	if err = cli.Ping(ctx).Err(); err != nil {
 		cli.Close()
 		cli = nil
-		client = nil
-		cluster = nil
 		return errors.Wrap(err, "failed to ping redis")
 	}
 	if err = errors.Join(redisotel.InstrumentTracing(cli), redisotel.InstrumentMetrics(cli)); err != nil {
 		cli.Close()
 		cli = nil
-		client = nil
-		cluster = nil
 		return err
 	}
 
@@ -210,9 +216,15 @@ func NewCluster(cfg config.Redis) (*goredis.ClusterClient, error) {
 
 // Client returns the initialized Redis client handle, standalone or
 // cluster depending on configuration.
+//
+// It reports ErrRedisIsDisabled whenever no handle is held, which covers a
+// deployment that never enabled Redis, one whose Init failed, and a process
+// past Close. Every operation in this package goes through it, so an absent
+// handle is an error at the call site instead of a zero value the caller
+// cannot tell from a real answer.
 func Client() (goredis.UniversalClient, error) {
-	mu.Lock()
-	defer mu.Unlock()
+	mu.RLock()
+	defer mu.RUnlock()
 	if cli == nil {
 		return nil, ErrRedisIsDisabled
 	}
@@ -223,69 +235,50 @@ func Close() error {
 	mu.Lock()
 	defer mu.Unlock()
 
-	var errs []error
-	if client != nil {
-		if err := client.Close(); err != nil {
-			errs = append(errs, errors.Wrap(err, "failed to close redis client"))
-		} else {
-			zap.S().Infow("successfully close redis client")
-		}
-		cli = nil
-		client = nil
+	if cli == nil {
+		return nil
 	}
-
-	if cluster != nil {
-		if err := cluster.Close(); err != nil {
-			errs = append(errs, errors.Wrap(err, "failed to close redis cluster client"))
-		} else {
-			zap.S().Infow("successfully close redis cluster client")
-		}
-		cli = nil
-		cluster = nil
+	err := cli.Close()
+	cli = nil
+	if err != nil {
+		return errors.Wrap(err, "failed to close redis client")
 	}
-	return errors.Join(errs...)
+	zap.S().Infow("successfully close redis client", "cluster_mode", config.App.Redis.ClusterMode)
+	return nil
 }
 
 // Set set any data into redis with specific key.
 // If the data type is custom type or structure, you must implement the interface encoding.BinaryMarshaler.
 func Set(ctx context.Context, key string, data any, expiration ...time.Duration) error {
-	if !config.App.Redis.Enabled {
-		zap.S().Warn(ErrRedisIsDisabled.Error())
-		return nil
+	client, err := Client()
+	if err != nil {
+		return err
 	}
 	_expiration := config.App.Redis.Expiration
 	if len(expiration) > 0 {
 		_expiration = expiration[0]
 	}
-	key = redisKey(key)
-	if config.App.Redis.ClusterMode {
-		return cluster.Set(ctx, key, data, _expiration).Err()
-	}
-	return client.Set(ctx, key, data, _expiration).Err()
+	return client.Set(ctx, redisKey(key), data, _expiration).Err()
 }
 
 // SetM set types.Model into redis with specific key.
 func SetM[M types.Model](ctx context.Context, key string, m M, expiration ...time.Duration) error {
-	if !config.App.Redis.Enabled {
-		zap.S().Warn(ErrRedisIsDisabled.Error())
-		return nil
+	client, err := Client()
+	if err != nil {
+		return err
 	}
 	_expiration := config.App.Redis.Expiration
 	if len(expiration) > 0 {
 		_expiration = expiration[0]
 	}
-	key = redisKey(key)
-	if config.App.Redis.ClusterMode {
-		return cluster.Set(ctx, key, modelMarshaler[M]{Model: m}, _expiration).Err()
-	}
-	return client.Set(ctx, key, modelMarshaler[M]{Model: m}, _expiration).Err()
+	return client.Set(ctx, redisKey(key), modelMarshaler[M]{Model: m}, _expiration).Err()
 }
 
 // SetML set one or multiple types.Model into redis with specific key.
 func SetML[M types.Model](ctx context.Context, key string, ml []M, expiration ...time.Duration) error {
-	if !config.App.Redis.Enabled {
-		zap.S().Warn(ErrRedisIsDisabled.Error())
-		return nil
+	client, err := Client()
+	if err != nil {
+		return err
 	}
 	_expiration := config.App.Redis.Expiration
 	if len(expiration) > 0 {
@@ -295,47 +288,37 @@ func SetML[M types.Model](ctx context.Context, key string, ml []M, expiration ..
 	for i := range ml {
 		bl = append(bl, modelMarshaler[M]{Model: ml[i]})
 	}
-	key = redisKey(key)
-	if config.App.Redis.ClusterMode {
-		return cluster.Set(ctx, key, modelMarshalerList[M](bl), _expiration).Err()
-	}
-	return client.Set(ctx, key, modelMarshalerList[M](bl), _expiration).Err()
+	return client.Set(ctx, redisKey(key), modelMarshalerList[M](bl), _expiration).Err()
 }
 
 // Get will get raw cache([]byte) from redis.
 func Get(ctx context.Context, key string) (cache []byte, err error) {
-	if !config.App.Redis.Enabled {
-		zap.S().Warn(ErrRedisIsDisabled.Error())
-		return make([]byte, 0), nil
+	client, err := Client()
+	if err != nil {
+		return nil, err
 	}
-	key = redisKey(key)
-	if config.App.Redis.ClusterMode {
-		cache, err = cluster.Get(ctx, key).Bytes()
-	} else {
-		cache, err = client.Get(ctx, key).Bytes()
-	}
-	if errors.Is(err, goredis.Nil) {
-		return nil, ErrKeyNotExists
+	cache, err = client.Get(ctx, redisKey(key)).Bytes()
+	if err != nil {
+		if errors.Is(err, goredis.Nil) {
+			return nil, ErrKeyNotExists
+		}
+		return nil, err
 	}
 	return cache, nil
 }
 
 // GetInt get cache from redis and decode into integer.
 func GetInt(ctx context.Context, key string) (int64, error) {
-	if !config.App.Redis.Enabled {
-		zap.S().Warn(ErrRedisIsDisabled.Error())
-		return 0, nil
+	client, err := Client()
+	if err != nil {
+		return 0, err
 	}
-	key = redisKey(key)
-	var cache string
-	var err error
-	if config.App.Redis.ClusterMode {
-		cache, err = cluster.Get(ctx, key).Result()
-	} else {
-		cache, err = client.Get(ctx, key).Result()
-	}
-	if errors.Is(err, goredis.Nil) {
-		return 0, ErrKeyNotExists
+	cache, err := client.Get(ctx, redisKey(key)).Result()
+	if err != nil {
+		if errors.Is(err, goredis.Nil) {
+			return 0, ErrKeyNotExists
+		}
+		return 0, err
 	}
 	val, err := strconv.Atoi(cache)
 	if err != nil {
@@ -346,18 +329,11 @@ func GetInt(ctx context.Context, key string) (int64, error) {
 
 // GetM will get cache from redis and decode into types.Model.
 func GetM[M types.Model](ctx context.Context, key string) (M, error) {
-	if !config.App.Redis.Enabled {
-		zap.S().Warn(ErrRedisIsDisabled.Error())
-		return *new(M), nil
+	client, err := Client()
+	if err != nil {
+		return *new(M), err
 	}
-	key = redisKey(key)
-	var data []byte
-	var err error
-	if config.App.Redis.ClusterMode {
-		data, err = cluster.Get(ctx, key).Bytes()
-	} else {
-		data, err = client.Get(ctx, key).Bytes()
-	}
+	data, err := client.Get(ctx, redisKey(key)).Bytes()
 	if err != nil {
 		if errors.Is(err, goredis.Nil) {
 			return *new(M), ErrKeyNotExists
@@ -376,18 +352,11 @@ func GetM[M types.Model](ctx context.Context, key string) (M, error) {
 
 // GetML will get cache from redis and decode into []types.Model.
 func GetML[M types.Model](ctx context.Context, key string) ([]M, error) {
-	if !config.App.Redis.Enabled {
-		zap.S().Warn(ErrRedisIsDisabled.Error())
-		return make([]M, 0), nil
+	client, err := Client()
+	if err != nil {
+		return nil, err
 	}
-	key = redisKey(key)
-	var data []byte
-	var err error
-	if config.App.Redis.ClusterMode {
-		data, err = cluster.Get(ctx, key).Bytes()
-	} else {
-		data, err = client.Get(ctx, key).Bytes()
-	}
+	data, err := client.Get(ctx, redisKey(key)).Bytes()
 	if err != nil {
 		if errors.Is(err, goredis.Nil) {
 			return nil, ErrKeyNotExists
@@ -395,7 +364,6 @@ func GetML[M types.Model](ctx context.Context, key string) ([]M, error) {
 		zap.S().Error(err)
 		return nil, err
 	}
-	// typ := reflect.TypeOf(*new(M)).Elem()
 
 	dest := make([]modelMarshaler[M], 0)
 	if err := json.Unmarshal(data, &dest); err != nil {
@@ -410,41 +378,29 @@ func GetML[M types.Model](ctx context.Context, key string) ([]M, error) {
 }
 
 func Del(ctx context.Context, keys ...string) error {
-	if !config.App.Redis.Enabled {
-		zap.S().Warn(ErrRedisIsDisabled.Error())
-		return nil
+	client, err := Client()
+	if err != nil {
+		return err
 	}
-	keys = redisKeys(keys)
-	if config.App.Redis.ClusterMode {
-		return cluster.Del(ctx, keys...).Err()
-	}
-	return client.Del(ctx, keys...).Err()
+	return client.Del(ctx, redisKeys(keys)...).Err()
 }
 
 // SetNX sets key to value with expiration only when the key does not already exist.
 func SetNX(ctx context.Context, key, value string, expiration time.Duration) (bool, error) {
-	if !config.App.Redis.Enabled {
-		zap.S().Warn(ErrRedisIsDisabled.Error())
-		return true, nil
+	client, err := Client()
+	if err != nil {
+		return false, err
 	}
-	key = redisKey(key)
-	if config.App.Redis.ClusterMode {
-		return cluster.SetNX(ctx, key, value, expiration).Result()
-	}
-	return client.SetNX(ctx, key, value, expiration).Result()
+	return client.SetNX(ctx, redisKey(key), value, expiration).Result()
 }
 
 // Expire updates the ttl for an existing key.
 func Expire(ctx context.Context, key string, expiration time.Duration) error {
-	if !config.App.Redis.Enabled {
-		zap.S().Warn(ErrRedisIsDisabled.Error())
-		return nil
+	client, err := Client()
+	if err != nil {
+		return err
 	}
-	key = redisKey(key)
-	if config.App.Redis.ClusterMode {
-		return cluster.Expire(ctx, key, expiration).Err()
-	}
-	return client.Expire(ctx, key, expiration).Err()
+	return client.Expire(ctx, redisKey(key), expiration).Err()
 }
 
 // Incr increments the integer at key by one and returns the new value,
@@ -454,15 +410,11 @@ func Expire(ctx context.Context, key string, expiration time.Duration) error {
 // as a counter under concurrency: a caller that instead read, added, and wrote
 // back would lose increments to every interleaving of two requests.
 func Incr(ctx context.Context, key string) (int64, error) {
-	if !config.App.Redis.Enabled {
-		zap.S().Warn(ErrRedisIsDisabled.Error())
-		return 0, nil
+	client, err := Client()
+	if err != nil {
+		return 0, err
 	}
-	key = redisKey(key)
-	if config.App.Redis.ClusterMode {
-		return cluster.Incr(ctx, key).Result()
-	}
-	return client.Incr(ctx, key).Result()
+	return client.Incr(ctx, redisKey(key)).Result()
 }
 
 // TTL reports the remaining ttl of a key.
@@ -473,113 +425,88 @@ func Incr(ctx context.Context, key string) (int64, error) {
 // expires. A caller comparing the result against a deadline has to rule both
 // out first, because either one compares as less than any positive duration.
 func TTL(ctx context.Context, key string) (time.Duration, error) {
-	if !config.App.Redis.Enabled {
-		zap.S().Warn(ErrRedisIsDisabled.Error())
-		return TTLKeyNotExists, nil
+	client, err := Client()
+	if err != nil {
+		return 0, err
 	}
-	key = redisKey(key)
-	if config.App.Redis.ClusterMode {
-		return cluster.TTL(ctx, key).Result()
-	}
-	return client.TTL(ctx, key).Result()
+	return client.TTL(ctx, redisKey(key)).Result()
 }
 
 // ZAdd adds one or multiple string members with the same score into a sorted set.
 func ZAdd(ctx context.Context, key string, score float64, members ...string) error {
-	if !config.App.Redis.Enabled {
-		zap.S().Warn(ErrRedisIsDisabled.Error())
-		return nil
+	client, err := Client()
+	if err != nil {
+		return err
 	}
 	if len(members) == 0 {
 		return nil
 	}
-	key = redisKey(key)
 	entries := make([]goredis.Z, 0, len(members))
 	for i := range members {
 		entries = append(entries, goredis.Z{Score: score, Member: members[i]})
 	}
-	if config.App.Redis.ClusterMode {
-		return cluster.ZAdd(ctx, key, entries...).Err()
-	}
-	return client.ZAdd(ctx, key, entries...).Err()
+	return client.ZAdd(ctx, redisKey(key), entries...).Err()
 }
 
 // ZRange returns sorted set members in ascending score order.
 func ZRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
-	if !config.App.Redis.Enabled {
-		zap.S().Warn(ErrRedisIsDisabled.Error())
-		return make([]string, 0), nil
+	client, err := Client()
+	if err != nil {
+		return nil, err
 	}
-	key = redisKey(key)
-	if config.App.Redis.ClusterMode {
-		return cluster.ZRange(ctx, key, start, stop).Result()
-	}
-	return client.ZRange(ctx, key, start, stop).Result()
+	return client.ZRange(ctx, redisKey(key), start, stop).Result()
 }
 
 // ZRangeByScore returns sorted set members whose scores are between minScore and maxScore.
 func ZRangeByScore(ctx context.Context, key, minScore, maxScore string) ([]string, error) {
-	if !config.App.Redis.Enabled {
-		zap.S().Warn(ErrRedisIsDisabled.Error())
-		return make([]string, 0), nil
+	client, err := Client()
+	if err != nil {
+		return nil, err
 	}
-	key = redisKey(key)
 	args := goredis.ZRangeArgs{
-		Key:     key,
+		Key:     redisKey(key),
 		Start:   minScore,
 		Stop:    maxScore,
 		ByScore: true,
-	}
-	if config.App.Redis.ClusterMode {
-		return cluster.ZRangeArgs(ctx, args).Result()
 	}
 	return client.ZRangeArgs(ctx, args).Result()
 }
 
 // ZRem removes one or multiple members from a sorted set.
 func ZRem(ctx context.Context, key string, members ...string) error {
-	if !config.App.Redis.Enabled {
-		zap.S().Warn(ErrRedisIsDisabled.Error())
-		return nil
+	client, err := Client()
+	if err != nil {
+		return err
 	}
 	if len(members) == 0 {
 		return nil
 	}
-	key = redisKey(key)
 	memberArgs := make([]any, 0, len(members))
 	for i := range members {
 		memberArgs = append(memberArgs, members[i])
 	}
-	if config.App.Redis.ClusterMode {
-		return cluster.ZRem(ctx, key, memberArgs...).Err()
-	}
-	return client.ZRem(ctx, key, memberArgs...).Err()
+	return client.ZRem(ctx, redisKey(key), memberArgs...).Err()
 }
 
 // ZRemRangeByScore removes sorted set members whose score is between minScore and maxScore.
 func ZRemRangeByScore(ctx context.Context, key, minScore, maxScore string) error {
-	if !config.App.Redis.Enabled {
-		zap.S().Warn(ErrRedisIsDisabled.Error())
-		return nil
+	client, err := Client()
+	if err != nil {
+		return err
 	}
-	key = redisKey(key)
-	if config.App.Redis.ClusterMode {
-		return cluster.ZRemRangeByScore(ctx, key, minScore, maxScore).Err()
-	}
-	return client.ZRemRangeByScore(ctx, key, minScore, maxScore).Err()
+	return client.ZRemRangeByScore(ctx, redisKey(key), minScore, maxScore).Err()
 }
 
 // RemovePrefix will scan and delete all redis key that matchs the `prefix`.
 // for example: myprefix*
 func RemovePrefix(ctx context.Context, prefix string) (err error) {
-	if !config.App.Redis.Enabled {
-		zap.S().Warn(ErrRedisIsDisabled.Error())
-		return nil
+	client, err := Client()
+	if err != nil {
+		return err
 	}
-	prefix = redisPattern(prefix)
-	iter := cli.Scan(ctx, 0, prefix, 0).Iterator()
+	iter := client.Scan(ctx, 0, redisPattern(prefix), 0).Iterator()
 	for iter.Next(ctx) {
-		err = cli.Del(ctx, iter.Val()).Err()
+		err = client.Del(ctx, iter.Val()).Err()
 		if err != nil {
 			zap.S().Error(err)
 			return err
