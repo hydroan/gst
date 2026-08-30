@@ -48,11 +48,16 @@ type (
 	Version = modelregistry.Version
 )
 
-// RegisteredModels returns independent model values registered through Register.
+// RegisteredModels returns independent model values registered through
+// Register. Mutating the returned values does not change what is registered.
 //
-// It is primarily used by tools that need to inspect registered model definitions,
-// such as migration schema generation. Mutating the returned values does not
-// change the registered models.
+// Searching this repository makes it look unused by anything but cmd/gg, and
+// makes the forwarder look like one the tool could skip by reading the
+// registry directly. It cannot. Those call sites sit inside the program
+// templates gg writes out and builds against the business project's own
+// go.mod, which makes them business-module code, and the internal registry
+// behind this forwarder is out of reach from there. What breaks if this goes
+// is "gg gen" and "gg migrate", not anything in this repository.
 func RegisteredModels() []any {
 	return modelregistry.RegisteredModels()
 }
