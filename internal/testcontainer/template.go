@@ -113,6 +113,10 @@ func copySchemaTemplate(ctx context.Context, admin *sql.DB, template, database s
 
 	for _, table := range tables {
 		statement := fmt.Sprintf("CREATE TABLE `%s`.`%s` LIKE `%s`.`%s`", database, table, template, table)
+		// #nosec G701 -- an identifier cannot be a placeholder, so the names
+		// are interpolated. Both come from this package: the database it
+		// provisioned itself, and the tables of a template it published from a
+		// database it provisioned, listed out of information_schema.
 		if _, err := admin.ExecContext(ctx, statement); err != nil {
 			reportSchemaTemplateSkipped(errors.Wrapf(err, "failed to copy table %s", table))
 			return
