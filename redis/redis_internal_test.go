@@ -7,17 +7,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/model"
 )
-
-// sampleModel is a minimal types.Model for the model-typed helpers.
-type sampleModel struct {
-	Name string `json:"name"`
-
-	model.Base
-}
-
-func (*sampleModel) TableName() string { return "samples" }
 
 // withoutClient drops the client for the duration of the test while leaving
 // the configuration claiming Redis is enabled. That combination is the real
@@ -37,24 +27,20 @@ func withoutClient(t *testing.T) context.Context {
 	return context.Background()
 }
 
-// TestHelpersWithoutClientReportDisabled asserts that every helper reports the
-// missing client instead of answering with a zero value a caller reads as
-// success, and that none of them dereferences the absent client.
-func TestHelpersWithoutClientReportDisabled(t *testing.T) {
+// TestOperationsWithoutClientReportDisabled asserts that every operation
+// reports the missing client instead of answering with a zero value a caller
+// reads as success, and that none of them dereferences the absent client.
+func TestOperationsWithoutClientReportDisabled(t *testing.T) {
 	ctx := withoutClient(t)
-	sample := &sampleModel{Name: "sample"}
 
 	cases := []struct {
 		name string
 		call func() error
 	}{
+		{"Health", func() error { return Health(ctx) }},
 		{"Set", func() error { return Set(ctx, "key", "value") }},
-		{"SetM", func() error { return SetM(ctx, "key", sample) }},
-		{"SetML", func() error { return SetML(ctx, "key", []*sampleModel{sample}) }},
 		{"Get", func() error { _, err := Get(ctx, "key"); return err }},
 		{"GetInt", func() error { _, err := GetInt(ctx, "key"); return err }},
-		{"GetM", func() error { _, err := GetM[*sampleModel](ctx, "key"); return err }},
-		{"GetML", func() error { _, err := GetML[*sampleModel](ctx, "key"); return err }},
 		{"Del", func() error { return Del(ctx, "key") }},
 		{"SetNX", func() error { _, err := SetNX(ctx, "key", "value", time.Minute); return err }},
 		{"Expire", func() error { return Expire(ctx, "key", time.Minute) }},

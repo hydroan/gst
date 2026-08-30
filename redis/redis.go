@@ -25,6 +25,10 @@ import (
 // not portable to every platform the framework targets.
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
+// pingTimeout bounds the round trip both connection probes wait for: the one
+// Init runs before it accepts a handle, and the one Health runs afterwards.
+const pingTimeout = 5 * time.Second
+
 var (
 	// cli is the one client handle this package holds. Standalone and cluster
 	// connections both satisfy it, so every operation reads the same variable
@@ -68,7 +72,7 @@ func Init() (err error) {
 		zap.S().Infow("successfully connect to redis", "addr", cfg.Addr, "db", cfg.DB, "cluster_mode", cfg.ClusterMode)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), pingTimeout)
 	defer cancel()
 	if err = cli.Ping(ctx).Err(); err != nil {
 		cli.Close()
@@ -187,6 +191,30 @@ func Client() (goredis.UniversalClient, error) {
 		return nil, ErrRedisIsDisabled
 	}
 	return cli, nil
+}
+
+// Health reports whether the held connection still answers, which is what a
+// readiness probe asks. A process holding no handle reports
+// ErrRedisIsDisabled, the same answer every operation gives it.
+//
+// A nil ctx is treated as context.Background. The round trip is bounded by
+// pingTimeout regardless, so a caller whose own deadline is further out does
+// not wait on a connection that is gone.
+func Health(ctx context.Context) error {
+	client, err := Client()
+	if err != nil {
+		return err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, pingTimeout)
+	defer cancel()
+
+	if err := client.Ping(ctx).Err(); err != nil {
+		return errors.Wrap(err, "redis health check failed")
+	}
+	return nil
 }
 
 // Close releases the connection and drops the handle, so operations that
