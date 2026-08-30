@@ -39,7 +39,7 @@ func NowUTC() time.Time { return time.Now().UTC().Truncate(time.Millisecond) }
 // Preparation runs on a goroutine of its own that drains the registration
 // queue as it fills, so models may register at any stage: before, during or
 // after this call. Wait is what blocks until the queue is empty.
-func InitDatabase(db *gorm.DB) (err error) {
+func InitDatabase(db *gorm.DB) error {
 	// A mistyped comment mode must fail the boot, not silently strip the
 	// annotations an operator relies on; see config.SQLCommentMode.
 	if err := config.App.Database.SQLComment.Validate(); err != nil {
@@ -61,6 +61,12 @@ func InitDatabase(db *gorm.DB) (err error) {
 	return nil
 }
 
+// defaultPoolMetricName is the name the framework's default database is
+// exposed under in the metrics registry. A plain handle registers its one pool
+// under it; with replicas attached the primary keeps it and the replicas
+// derive theirs from it.
+const defaultPoolMetricName = "default"
+
 // registerPoolMetrics exposes the default database's connection pools to the
 // metrics registry: the single pool of a plain handle under the stable name
 // "default", and with replicas attached, every node — the primary as
@@ -69,7 +75,7 @@ func InitDatabase(db *gorm.DB) (err error) {
 // endpoint simply leaves the collectors unserved.
 func registerPoolMetrics(db *gorm.DB) {
 	if nodes := NodesFor(db); len(nodes) > 0 {
-		names := ReplicaPoolMetricNames("default", nodes)
+		names := replicaPoolMetricNames(defaultPoolMetricName, nodes)
 		for i, node := range nodes {
 			if err := prommetrics.RegisterDBStats(node.DB, names[i]); err != nil {
 				zap.S().Warnw("failed to register database pool metrics collector", "db_name", names[i], "error", err)
@@ -82,7 +88,8 @@ func registerPoolMetrics(db *gorm.DB) {
 		zap.S().Warnw("failed to reach sql.DB for pool metrics", "error", err)
 		return
 	}
-	if err := prommetrics.RegisterDBStats(sqlDB, "default"); err != nil {
-		zap.S().Warnw("failed to register database pool metrics collector", "db_name", "default", "error", err)
+	if err := prommetrics.RegisterDBStats(sqlDB, defaultPoolMetricName); err != nil {
+		zap.S().Warnw("failed to register database pool metrics collector",
+			"db_name", defaultPoolMetricName, "error", err)
 	}
 }

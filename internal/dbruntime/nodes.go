@@ -178,9 +178,9 @@ func markStatementRole(stmt *gorm.DB, primaryPool gorm.ConnPool) {
 	}
 }
 
-// ReplicaPoolMetricNames names the pool metric of each node for one handle:
+// replicaPoolMetricNames names the pool metric of each node for one handle:
 // the primary keeps the base name, replicas append their index.
-func ReplicaPoolMetricNames(base string, nodes []DBNode) []string {
+func replicaPoolMetricNames(base string, nodes []DBNode) []string {
 	names := make([]string, 0, len(nodes))
 	replicaIndex := 0
 	for _, node := range nodes {
