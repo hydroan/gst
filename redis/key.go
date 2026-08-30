@@ -14,7 +14,7 @@ func Del(ctx context.Context, keys ...string) error {
 	if err != nil {
 		return err
 	}
-	return client.Del(ctx, redisKeys(keys)...).Err()
+	return client.Del(ctx, namespacedKeys(keys)...).Err()
 }
 
 // Expire updates the ttl for an existing key.
@@ -23,7 +23,7 @@ func Expire(ctx context.Context, key string, expiration time.Duration) error {
 	if err != nil {
 		return err
 	}
-	return client.Expire(ctx, redisKey(key), expiration).Err()
+	return client.Expire(ctx, Key(key), expiration).Err()
 }
 
 // The two values Redis answers TTL with when there is no deadline to report.
@@ -54,7 +54,7 @@ func TTL(ctx context.Context, key string) (time.Duration, error) {
 	if err != nil {
 		return 0, err
 	}
-	return client.TTL(ctx, redisKey(key)).Result()
+	return client.TTL(ctx, Key(key)).Result()
 }
 
 // RemovePrefix will scan and delete all redis key that matchs the `prefix`.
@@ -64,7 +64,7 @@ func RemovePrefix(ctx context.Context, prefix string) (err error) {
 	if err != nil {
 		return err
 	}
-	iter := client.Scan(ctx, 0, redisPattern(prefix), 0).Iterator()
+	iter := client.Scan(ctx, 0, pattern(prefix), 0).Iterator()
 	for iter.Next(ctx) {
 		err = client.Del(ctx, iter.Val()).Err()
 		if err != nil {

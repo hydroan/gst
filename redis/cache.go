@@ -57,7 +57,7 @@ func (cache[T]) Set(ctx context.Context, key string, data T, ttl time.Duration) 
 	if len(val) == 0 {
 		return errors.New("cannot store empty value in redis")
 	}
-	return client.Set(ctx, redisKey(key), val, ttl).Err()
+	return client.Set(ctx, Key(key), val, ttl).Err()
 }
 
 func (cache[T]) Get(ctx context.Context, key string) (T, error) {
@@ -66,7 +66,7 @@ func (cache[T]) Get(ctx context.Context, key string) (T, error) {
 	if err != nil {
 		return zero, err
 	}
-	data, err := client.Get(ctx, redisKey(key)).Bytes()
+	data, err := client.Get(ctx, Key(key)).Bytes()
 	if err != nil {
 		if errors.Is(err, goredis.Nil) {
 			return zero, types.ErrEntryNotFound
@@ -88,7 +88,7 @@ func (cache[T]) Delete(ctx context.Context, key string) error {
 	if err != nil {
 		return err
 	}
-	return client.Del(ctx, redisKey(key)).Err()
+	return client.Del(ctx, Key(key)).Err()
 }
 
 // Exists reports whether key exists. It has no error channel, so a
@@ -98,7 +98,7 @@ func (cache[T]) Exists(ctx context.Context, key string) bool {
 	if err != nil {
 		return false
 	}
-	res, err := client.Exists(ctx, redisKey(key)).Result()
+	res, err := client.Exists(ctx, Key(key)).Result()
 	if err != nil {
 		return false
 	}

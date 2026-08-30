@@ -21,7 +21,7 @@ func Set(ctx context.Context, key string, data any, expiration ...time.Duration)
 	if len(expiration) > 0 {
 		ttl = expiration[0]
 	}
-	return client.Set(ctx, redisKey(key), data, ttl).Err()
+	return client.Set(ctx, Key(key), data, ttl).Err()
 }
 
 // Get will get raw cache([]byte) from redis.
@@ -30,7 +30,7 @@ func Get(ctx context.Context, key string) (cache []byte, err error) {
 	if err != nil {
 		return nil, err
 	}
-	cache, err = client.Get(ctx, redisKey(key)).Bytes()
+	cache, err = client.Get(ctx, Key(key)).Bytes()
 	if err != nil {
 		if errors.Is(err, goredis.Nil) {
 			return nil, ErrKeyNotExists
@@ -46,7 +46,7 @@ func SetNX(ctx context.Context, key, value string, expiration time.Duration) (bo
 	if err != nil {
 		return false, err
 	}
-	return client.SetNX(ctx, redisKey(key), value, expiration).Result()
+	return client.SetNX(ctx, Key(key), value, expiration).Result()
 }
 
 // Incr increments the integer at key by one and returns the new value,
@@ -60,7 +60,7 @@ func Incr(ctx context.Context, key string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return client.Incr(ctx, redisKey(key)).Result()
+	return client.Incr(ctx, Key(key)).Result()
 }
 
 // GetInt get cache from redis and decode into integer.
@@ -69,7 +69,7 @@ func GetInt(ctx context.Context, key string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	cache, err := client.Get(ctx, redisKey(key)).Result()
+	cache, err := client.Get(ctx, Key(key)).Result()
 	if err != nil {
 		if errors.Is(err, goredis.Nil) {
 			return 0, ErrKeyNotExists

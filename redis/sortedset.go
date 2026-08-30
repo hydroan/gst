@@ -19,7 +19,7 @@ func ZAdd(ctx context.Context, key string, score float64, members ...string) err
 	for i := range members {
 		entries = append(entries, goredis.Z{Score: score, Member: members[i]})
 	}
-	return client.ZAdd(ctx, redisKey(key), entries...).Err()
+	return client.ZAdd(ctx, Key(key), entries...).Err()
 }
 
 // ZRange returns sorted set members in ascending score order.
@@ -28,7 +28,7 @@ func ZRange(ctx context.Context, key string, start, stop int64) ([]string, error
 	if err != nil {
 		return nil, err
 	}
-	return client.ZRange(ctx, redisKey(key), start, stop).Result()
+	return client.ZRange(ctx, Key(key), start, stop).Result()
 }
 
 // ZRangeByScore returns sorted set members whose scores are between minScore and maxScore.
@@ -38,7 +38,7 @@ func ZRangeByScore(ctx context.Context, key, minScore, maxScore string) ([]strin
 		return nil, err
 	}
 	args := goredis.ZRangeArgs{
-		Key:     redisKey(key),
+		Key:     Key(key),
 		Start:   minScore,
 		Stop:    maxScore,
 		ByScore: true,
@@ -59,7 +59,7 @@ func ZRem(ctx context.Context, key string, members ...string) error {
 	for i := range members {
 		memberArgs = append(memberArgs, members[i])
 	}
-	return client.ZRem(ctx, redisKey(key), memberArgs...).Err()
+	return client.ZRem(ctx, Key(key), memberArgs...).Err()
 }
 
 // ZRemRangeByScore removes sorted set members whose score is between minScore and maxScore.
@@ -68,5 +68,5 @@ func ZRemRangeByScore(ctx context.Context, key, minScore, maxScore string) error
 	if err != nil {
 		return err
 	}
-	return client.ZRemRangeByScore(ctx, redisKey(key), minScore, maxScore).Err()
+	return client.ZRemRangeByScore(ctx, Key(key), minScore, maxScore).Err()
 }
