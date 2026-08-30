@@ -2,6 +2,7 @@ package modelregistry
 
 import (
 	"reflect"
+	"sync"
 	"sync/atomic"
 
 	"github.com/hydroan/gst/types"
@@ -54,6 +55,60 @@ func TablesChanged() <-chan struct{} {
 // prepared.
 func TablesPending() int {
 	return int(tablesPending.Load())
+}
+
+// registeredModels holds one value per model registered for table setup, in
+// registration order. The queue cannot stand in for it: the database runtime
+// drains the queue, so everything that needs the registered set afterwards —
+// a schema dump, a migration plan — has to read it from here.
+var (
+	registeredMu     sync.Mutex
+	registeredModels []types.Model
+)
+
+// RegisterTable records M as a registered model and queues it for table
+// setup. Models that embed Empty are ignored: they map to no table.
+//
+// It is the single entry point for both steps, so the recorded set and the
+// queue can never disagree about what was registered.
+func RegisterTable[M types.Model]() {
+	if !IsValid[M]() {
+		return
+	}
+	table := newModelSnapshot[M]()
+
+	registeredMu.Lock()
+	registeredModels = append(registeredModels, newModelSnapshot[M]())
+	registeredMu.Unlock()
+
+	EnqueueTable(table)
+}
+
+// RegisteredModels returns independent values of the models registered
+// through RegisterTable. Mutating them does not change what is registered.
+func RegisteredModels() []any {
+	registeredMu.Lock()
+	defer registeredMu.Unlock()
+
+	models := make([]any, 0, len(registeredModels))
+	for _, m := range registeredModels {
+		models = append(models, newModelSnapshotOf(m))
+	}
+	return models
+}
+
+// newModelSnapshot returns a fresh zero value of M.
+func newModelSnapshot[M types.Model]() M {
+	return reflect.New(reflect.TypeOf(*new(M)).Elem()).Interface().(M) //nolint:errcheck
+}
+
+// newModelSnapshotOf returns a fresh zero value of m's concrete type.
+func newModelSnapshotOf(m types.Model) types.Model {
+	typ := reflect.TypeOf(m)
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	return reflect.New(typ).Interface().(types.Model) //nolint:errcheck
 }
 
 // AreTypesEqual reports whether M, REQ, and RSP are the same concrete type.

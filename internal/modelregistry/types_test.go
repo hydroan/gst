@@ -2,6 +2,7 @@ package modelregistry_test
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/hydroan/gst/internal/modelregistry"
@@ -274,5 +275,73 @@ func TestTableDoneSignalsWaiters(t *testing.T) {
 			t.Fatal("the wakeups should have coalesced into one")
 		default:
 		}
+	})
+}
+
+// RegisteredSample is a database-backed model, so registering it records and
+// queues it.
+type RegisteredSample struct {
+	Name string
+
+	modelregistry.Base
+}
+
+func (*RegisteredSample) TableName() string { return "registered_samples" }
+
+// SkippedSample embeds Empty, so it maps to no table and registering it does
+// nothing.
+type SkippedSample struct {
+	modelregistry.Empty
+}
+
+func TestRegisterTable(t *testing.T) {
+	registered := func() bool {
+		return slices.ContainsFunc(modelregistry.RegisteredModels(), func(m any) bool {
+			_, ok := m.(*RegisteredSample)
+			return ok
+		})
+	}
+
+	t.Run("a_database_backed_model_is_recorded_and_queued", func(t *testing.T) {
+		require.False(t, registered(), "the sample must not be registered before the subtest registers it")
+
+		modelregistry.RegisterTable[*RegisteredSample]()
+
+		// The recorded set is what a schema dump reads; the queue is what the
+		// database runtime prepares tables from. Registering feeds both, which
+		// is the whole point of having one entry point for it.
+		require.True(t, registered())
+		queued := <-modelregistry.TableChan
+		require.IsType(t, &RegisteredSample{}, queued)
+		// Report the model done so the pending count returns to where the
+		// subtest found it.
+		modelregistry.TableDone()
+	})
+
+	t.Run("an_empty_model_maps_to_no_table", func(t *testing.T) {
+		before := len(modelregistry.RegisteredModels())
+
+		modelregistry.RegisterTable[*SkippedSample]()
+
+		require.Len(t, modelregistry.RegisteredModels(), before)
+		require.Empty(t, modelregistry.TableChan)
+	})
+
+	t.Run("recorded_models_are_handed_out_independently", func(t *testing.T) {
+		require.True(t, registered(), "the first subtest registers the sample this one reads back")
+
+		sample := func() *RegisteredSample {
+			for _, m := range modelregistry.RegisteredModels() {
+				if s, ok := m.(*RegisteredSample); ok {
+					return s
+				}
+			}
+			t.Fatal("the registered sample went missing")
+			return nil
+		}
+
+		sample().Name = "mutated"
+
+		require.Empty(t, sample().Name, "mutating a handed-out model must not change what is registered")
 	})
 }

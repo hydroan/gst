@@ -1,16 +1,8 @@
 package model
 
 import (
-	"reflect"
-	"sync"
-
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/types"
-)
-
-var (
-	mu               sync.Mutex
-	registeredModels []types.Model
 )
 
 var (
@@ -62,14 +54,7 @@ type (
 // such as migration schema generation. Mutating the returned values does not
 // change the registered models.
 func RegisteredModels() []any {
-	mu.Lock()
-	defer mu.Unlock()
-
-	models := make([]any, 0, len(registeredModels))
-	for _, m := range registeredModels {
-		models = append(models, newModelSnapshot(m))
-	}
-	return models
+	return modelregistry.RegisteredModels()
 }
 
 // Register registers a database-backed model for table setup.
@@ -92,22 +77,5 @@ func RegisteredModels() []any {
 //  2. Ensure the model package is imported by the application entrypoint.
 //  3. The function is safe for concurrent use.
 func Register[M types.Model]() {
-	if !modelregistry.IsValid[M]() {
-		return
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-
-	table := reflect.New(reflect.TypeOf(*new(M)).Elem()).Interface().(M) //nolint:errcheck
-	registeredModels = append(registeredModels, newModelSnapshot(table))
-	modelregistry.EnqueueTable(table)
-}
-
-func newModelSnapshot(m types.Model) types.Model {
-	typ := reflect.TypeOf(m)
-	for typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
-	}
-	return reflect.New(typ).Interface().(types.Model) //nolint:errcheck
+	modelregistry.RegisterTable[M]()
 }
