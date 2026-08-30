@@ -99,7 +99,7 @@ func TestWaitReturnsOnceTheQueueDrains(t *testing.T) {
 
 	// Queue a model and take it off the way the processing goroutine does, so
 	// it counts as pending until its TableDone lands.
-	modelregistry.EnqueueTable(&plainRecord{})
+	modelregistry.RegisterTable[*plainRecord]()
 	<-modelregistry.TableChan
 	require.Equal(t, 1, modelregistry.TablesPending())
 

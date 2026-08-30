@@ -24,7 +24,7 @@ func (r *SampleRecord) TableName() string { return "testutil_sample_records" }
 // registers the sample model the database assertions run against.
 func TestMain(m *testing.M) {
 	Run(m, Server{
-		Register: func() { modelregistry.EnqueueTable(&SampleRecord{}) },
+		Register: func() { modelregistry.RegisterTable[*SampleRecord]() },
 	})
 }
 
