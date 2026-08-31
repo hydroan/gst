@@ -28,7 +28,7 @@ const (
 )
 
 // SQLCommentMode selects what the framework annotates onto every SQL
-// statement as a trailing key='value' comment, for the database-side view:
+// statement as a key='value' comment, for the database-side view:
 // SHOW PROCESSLIST, the slow query log, and audit plugins show the comment,
 // so an operator holding a problem statement can see where it came from
 // without a reverse text search through the application logs.
@@ -39,7 +39,7 @@ const (
 	SQLCommentOff SQLCommentMode = "off"
 
 	// SQLCommentRoute annotates statements with the issuing HTTP route, e.g.
-	// /*route='GET+%2Fapi%2Fv1%2Fusers'*/. The default: routes are a small,
+	// /*route='%2Fapi%2Fv1%2Fusers'*/. The default: routes are a small,
 	// fixed set, so the prepared-statement cache splits by at most the
 	// handful of routes issuing each statement shape and server-side
 	// statement caching keeps its value.

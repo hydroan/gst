@@ -61,19 +61,19 @@ func TestSQLCommentAnnotatesStatements(t *testing.T) {
 
 	capture := &sqlTextCaptureLogger{Interface: database.DB().Logger}
 	session := database.DB().Session(&gorm.Session{Logger: capture})
-	ctx := requestContext("GET /api/v1/users", "trace-0001")
+	ctx := requestContext("/api/v1/users", "trace-0001")
 	users := make([]*TestUser, 0)
 
 	// The route mode annotates with the URL-encoded issuing route.
 	swapSQLCommentMode(t, config.SQLCommentRoute)
 	require.NoError(t, database.DatabaseOn[*TestUser](ctx, session).List(&users))
-	require.Contains(t, capture.last(), "route='GET+%2Fapi%2Fv1%2Fusers'")
+	require.Contains(t, capture.last(), "route='%2Fapi%2Fv1%2Fusers'")
 	require.NotContains(t, capture.last(), "trace_id")
 
 	// The trace mode adds the request's trace id.
 	swapSQLCommentMode(t, config.SQLCommentTrace)
 	require.NoError(t, database.DatabaseOn[*TestUser](ctx, session).List(&users))
-	require.Contains(t, capture.last(), "route='GET+%2Fapi%2Fv1%2Fusers'")
+	require.Contains(t, capture.last(), "route='%2Fapi%2Fv1%2Fusers'")
 	require.Contains(t, capture.last(), "trace_id='trace-0001'")
 
 	// Off renders nothing.
@@ -97,7 +97,7 @@ func TestSQLCommentEscapesHostileValues(t *testing.T) {
 
 	capture := &sqlTextCaptureLogger{Interface: database.DB().Logger}
 	session := database.DB().Session(&gorm.Session{Logger: capture})
-	ctx := requestContext("GET /x */ DROP TABLE test_users --", "")
+	ctx := requestContext("/x */ DROP TABLE test_users --", "")
 
 	users := make([]*TestUser, 0)
 	require.NoError(t, database.DatabaseOn[*TestUser](ctx, session).List(&users))
