@@ -258,7 +258,9 @@ func newReplicatedCache[T any](store types.Cache[entry[T]]) (*replicatedCache[T]
 	cacheID := uuid.NewV7()
 	hostname, err := os.Hostname()
 	if err != nil {
-		return nil, err
+		// First-hand exit of a stack-less third-party/standard-library error;
+		// see the error-stack contract in the database package doc.
+		return nil, errors.WithStack(err)
 	}
 
 	dc := &replicatedCache[T]{
@@ -288,7 +290,7 @@ func newReplicatedCache[T any](store types.Cache[entry[T]]) (*replicatedCache[T]
 	}()
 
 	if dc.appliedTS, err = lru.New[string, int64](watermarkEntries()); err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	// setup kafka; the consumer group name follows the topic, and the group
@@ -321,7 +323,7 @@ func newReplicatedCache[T any](store types.Cache[entry[T]]) (*replicatedCache[T]
 			)
 		}))
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	dc.pubPool = pool
 

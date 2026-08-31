@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/provider/kafka"
@@ -39,7 +40,9 @@ func appName() string {
 func newProducer(cfg config.Kafka, topic string) (*kgo.Client, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
-		return nil, err
+		// First-hand exit of a stack-less third-party/standard-library error;
+		// see the error-stack contract in the database package doc.
+		return nil, errors.WithStack(err)
 	}
 	return kafka.New(cfg,
 		// Route the client's own log lines into dcache's file instead of the
@@ -82,7 +85,7 @@ func newProducer(cfg config.Kafka, topic string) (*kgo.Client, error) {
 func newConsumer(cfg config.Kafka, topic string, group string) (*kgo.Client, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	return kafka.New(cfg,
 		kafka.Logger(&logger.Dcache),
