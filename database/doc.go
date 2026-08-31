@@ -26,6 +26,31 @@
 // are Upsert's conflict target (see Upsert) and row locks on SQLite (see
 // WithLock).
 //
+// # Error-stack contract
+//
+// GORM and the SQL drivers hand back errors that carry no run-time stack
+// trace, and the framework sentinels (ErrRecordNotFound, ErrDuplicatedKey)
+// only carry the useless init-time stack of their package-level definition.
+// This package therefore embeds the run-time stack at every first-hand exit
+// of such an error — the first line where the error enters framework code —
+// via errors.WithStack. The stack captured there still holds every caller
+// frame, so the error_stack log field written by the logging layer (which
+// reports the deepest run-time stack in the unwrap chain) locates the exact
+// call site in any caller: service code, model hooks, DAOs, cron jobs — with
+// no logging or wrapping required at the call sites themselves.
+//
+// The rules, so a change keeps exactly one capture point per error chain:
+//
+//   - a stack-less GORM/driver/sentinel error is wrapped once, at its
+//     first-hand exit;
+//   - errors this package builds itself (errors.New / errors.Wrap of a
+//     sentinel) already capture the stack at construction and are left alone;
+//   - forwarding sites return errors unchanged: re-wrapping adds a shallower
+//     stack the deepest-stack rule ignores, at pure cost.
+//
+// Wrapping preserves the unwrap chain, so errors.Is/As checks against
+// ErrRecordNotFound, ErrDuplicatedKey, and friends behave exactly as before.
+//
 // ClickHouse is an analytical instance (see clickhouse.New), never the
 // default database. Supported on it:
 //
