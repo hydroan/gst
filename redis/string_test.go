@@ -95,6 +95,12 @@ func TestReadHelpersReportBackendErrors(t *testing.T) {
 	if errors.Is(err, redis.ErrKeyNotExists) {
 		t.Fatalf("want the backend error, got ErrKeyNotExists: %v", err)
 	}
+	// The backend error must carry the run-time stack embedded at its
+	// first-hand exit, per the error-stack contract in the database package
+	// doc, so the error_stack log field can locate the caller.
+	if errors.GetReportableStackTrace(err) == nil {
+		t.Fatalf("want a run-time stack on the backend error, got none: %v", err)
+	}
 
 	count, err := redis.GetInt(ctx, key)
 	if err == nil {
@@ -121,5 +127,7 @@ func TestGetIntReportsUndecodableValue(t *testing.T) {
 		t.Fatal("want a decode error for a non-numeric value")
 	} else if !strings.Contains(err.Error(), "strconv") {
 		t.Fatalf("want the decode error, got %v", err)
+	} else if errors.GetReportableStackTrace(err) == nil {
+		t.Fatalf("want a run-time stack on the decode error, got none: %v", err)
 	}
 }
