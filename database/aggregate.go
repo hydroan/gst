@@ -266,7 +266,9 @@ func (a *aggregator[M, R]) CountGroups(count *int) (err error) {
 		return a.db.collectSQL(dryRunSession(outer).Count(&total))
 	}
 	if err = outer.Count(&total).Error; err != nil {
-		return err
+		// First-hand exit of a stack-less GORM/driver error; see the
+		// error-stack contract in doc.go.
+		return errors.WithStack(err)
 	}
 	*count = int(total)
 	return nil

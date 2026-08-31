@@ -36,12 +36,14 @@ var (
 func scanRowsInto[R any](tx *gorm.DB, dest *[]R) error {
 	mirrorType, ok := scanMirrorType[R](tx)
 	if !ok {
-		return tx.Scan(dest).Error
+		// First-hand exit of a stack-less GORM/driver error; see the
+		// error-stack contract in doc.go. WithStack passes nil through.
+		return errors.WithStack(tx.Scan(dest).Error)
 	}
 
 	rows := reflect.New(reflect.SliceOf(mirrorType))
 	if err := tx.Scan(rows.Interface()).Error; err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	mirrored := rows.Elem()
 	for i := range mirrored.Len() {
@@ -56,12 +58,12 @@ func scanRowsInto[R any](tx *gorm.DB, dest *[]R) error {
 func scanRowInto[R any](tx *gorm.DB, dest *R) error {
 	mirrorType, ok := scanMirrorType[R](tx)
 	if !ok {
-		return tx.Scan(dest).Error
+		return errors.WithStack(tx.Scan(dest).Error)
 	}
 
 	row := reflect.New(mirrorType)
 	if err := tx.Scan(row.Interface()).Error; err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	copyMirrorRow(row.Elem(), reflect.ValueOf(dest).Elem())
 	return nil

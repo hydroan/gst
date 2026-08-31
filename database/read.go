@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"slices"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 )
@@ -103,7 +104,9 @@ func (db *database[M]) List(dest *[]M) (err error) {
 	// apply cursor-based pagination.
 	db.applyCursorPagination()
 	if err = db.ins.Find(dest).Error; err != nil {
-		return err
+		// First-hand exit of a stack-less GORM/driver error; see the
+		// error-stack contract in doc.go.
+		return errors.WithStack(err)
 	}
 	// A backward cursor read walks the feed in reverse, so the rows come back
 	// upside down; reversing them restores the feed's own order.
@@ -167,7 +170,7 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 	// which must stay untouched until the query fills it.
 	var ok bool
 	if id, ok = normalizeModelID(dest, id); !ok {
-		return ErrRecordNotFound
+		return errors.WithStack(ErrRecordNotFound)
 	}
 	if err = db.prepare(); err != nil {
 		return err
@@ -201,10 +204,10 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 	dest.ClearID()
 	tx := db.ins.Where(db.quoteTableColumn(tableName, "id")+" = ?", id).Find(dest)
 	if err = tx.Error; err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	if tx.RowsAffected == 0 {
-		return ErrRecordNotFound
+		return errors.WithStack(ErrRecordNotFound)
 	}
 	// Invoke model hook: GetAfter.
 	if !db.noHook {
@@ -261,7 +264,7 @@ func (db *database[M]) Count(count *int) (err error) {
 		return db.collectSQL(tx)
 	}
 	if err = db.ins.Model(*new(M)).Limit(-1).Offset(-1).Count(&count64).Error; err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	*count = int(count64)
 	return nil
@@ -318,7 +321,7 @@ func (db *database[M]) First(dest M) (err error) {
 		}
 	}
 	if err = db.ins.First(dest).Error; err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	// Invoke model hook: GetAfter
 	if !db.noHook {
@@ -383,7 +386,7 @@ func (db *database[M]) Last(dest M) (err error) {
 		}
 	}
 	if err = db.ins.Last(dest).Error; err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	// Invoke model hook: GetAfter
 	if !db.noHook {
@@ -448,7 +451,7 @@ func (db *database[M]) Take(dest M) (err error) {
 		}
 	}
 	if err = db.ins.Take(dest).Error; err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	// Invoke model hook: GetAfter.
 	if !db.noHook {

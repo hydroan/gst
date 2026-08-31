@@ -1,6 +1,7 @@
 package database
 
 import (
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/types"
 	"gorm.io/gorm"
 	glogger "gorm.io/gorm/logger"
@@ -131,7 +132,9 @@ func (db *database[M]) collectSQL(tx *gorm.DB) error {
 		return nil
 	}
 	if db.sqlStatements == nil {
-		return tx.Error
+		// First-hand exit of a stack-less GORM build error; see the
+		// error-stack contract in doc.go. WithStack passes nil through.
+		return errors.WithStack(tx.Error)
 	}
 	if tx.Statement != nil {
 		if query := tx.Statement.SQL.String(); len(query) > 0 {
@@ -149,7 +152,7 @@ func (db *database[M]) collectSQL(tx *gorm.DB) error {
 			db.mu.Unlock()
 		}
 	}
-	return tx.Error
+	return errors.WithStack(tx.Error)
 }
 
 // WithoutHook disables model hooks (callbacks) for the current operation.

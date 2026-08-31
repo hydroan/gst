@@ -51,7 +51,9 @@ func (db *database[M]) clickhouseCreate(objs []M) (err error) {
 	for i := 0; i < len(objs); i += batchSize {
 		end := min(i+batchSize, len(objs))
 		if err = db.ins.Session(&gorm.Session{}).Create(objs[i:end]).Error; err != nil {
-			return err
+			// First-hand exit of a stack-less GORM/driver error; see the
+			// error-stack contract in doc.go.
+			return errors.WithStack(err)
 		}
 	}
 	return nil
@@ -95,7 +97,7 @@ func (db *database[M]) clickhouseDelete(objs []M) (err error) {
 	for i := 0; i < len(ids); i += batchSize {
 		end := min(i+batchSize, len(ids))
 		if err = db.ins.Session(&gorm.Session{}).Exec(deleteSQL, ids[i:end]).Error; err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 	}
 	return nil
@@ -128,7 +130,7 @@ func (db *database[M]) clickhouseUpdate(objs []M) (err error) {
 
 	for i := range objs {
 		if err = db.updateRowStatement(db.ins.Session(&gorm.Session{}), objs[i]).Updates(objs[i]).Error; err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 	}
 	return nil

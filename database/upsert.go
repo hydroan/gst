@@ -158,7 +158,9 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 				tx = tx.Clauses(onConflict)
 			}
 			if err = tx.Save(objs[i:end]).Error; err != nil {
-				return err
+				// First-hand exit of a stack-less GORM/driver error; see the
+				// error-stack contract in doc.go.
+				return errors.WithStack(err)
 			}
 			if err = db.syncSaveResultsByUniqueIndexes(tableName, objs[i:end]); err != nil {
 				return err
@@ -241,7 +243,7 @@ func (db *database[M]) syncSaveResultsByUniqueIndexes(tableName string, objs []M
 
 		persisted := make([]M, 0, len(candidatesByKey))
 		if err := query.Find(&persisted).Error; err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 		for _, current := range persisted {
 			values, ok := saveResultSyncUniqueValues(db.ctx, index, current)

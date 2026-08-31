@@ -2,7 +2,6 @@ package database
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -64,7 +63,9 @@ func cleanupOn[M types.Model](ctx context.Context, base *gorm.DB) (err error) {
 	defer func() { done(err) }()
 
 	tx := db.ins.Session(&gorm.Session{}).Limit(-1).Where("deleted_at IS NOT NULL").Model(*new(M)).Unscoped().Delete(make([]M, 0))
-	return tx.Error
+	// First-hand exit of a stack-less GORM/driver error; see the error-stack
+	// contract in doc.go. WithStack passes nil through.
+	return errors.WithStack(tx.Error)
 }
 
 // Health checks connectivity of the default database: a round-trip statement,
@@ -112,7 +113,7 @@ func healthOn(ctx context.Context, instance *gorm.DB) error {
 			zap.Error(err),
 			util.LogDuration(time.Since(begin)),
 		)
-		return fmt.Errorf("database connection check failed: %w", err)
+		return errors.Wrap(err, "database connection check failed")
 	}
 
 	// 2.check database connection pool
@@ -123,7 +124,7 @@ func healthOn(ctx context.Context, instance *gorm.DB) error {
 			zap.Error(err),
 			util.LogDuration(time.Since(begin)),
 		)
-		return fmt.Errorf("get sql.DB instance failed: %w", err)
+		return errors.Wrap(err, "get sql.DB instance failed")
 	}
 
 	// check database connection pool config
@@ -146,7 +147,7 @@ func healthOn(ctx context.Context, instance *gorm.DB) error {
 			zap.Error(err),
 			util.LogDuration(time.Since(begin)),
 		)
-		return fmt.Errorf("database ping failed: %w", err)
+		return errors.Wrap(err, "database ping failed")
 	}
 
 	// A passing check is the expected outcome; probes may run it on a tight

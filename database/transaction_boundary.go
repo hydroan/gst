@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"gorm.io/gorm"
 )
@@ -59,7 +60,12 @@ func withTransactionBoundary(
 	if err := ins.Transaction(func(tx *gorm.DB) error {
 		return fn(contextWithBoundary(dbruntime.WithTx(ctx, tx, base), boundary), tx)
 	}); err != nil {
-		return err
+		// The stack embedded here covers BEGIN/COMMIT failures, which GORM
+		// hands back without one. An error from fn usually already carries a
+		// deeper stack from its own first-hand exit; the shallower one added
+		// here is ignored by the deepest-stack rule (see the error-stack
+		// contract in doc.go).
+		return errors.WithStack(err)
 	}
 	return boundary.run(ctx)
 }

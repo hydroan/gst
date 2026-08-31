@@ -139,7 +139,12 @@ func (db *database[M]) Create(objs ...M) (err error) {
 		for i := 0; i < len(objs); i += batchSize {
 			end := min(i+batchSize, len(objs))
 			if err = db.ins.Session(&gorm.Session{}).Create(objs[i:end]).Error; err != nil {
-				return err
+				// First-hand exit of a stack-less GORM/driver error: embed the
+				// run-time stack here so the error_stack log field can locate
+				// any caller — service code, model hooks, cron jobs — without
+				// each call site logging or wrapping. See the error-stack
+				// contract in doc.go.
+				return errors.WithStack(err)
 			}
 		}
 		// Invoke model hook: CreateAfter for the entire batch.
@@ -318,7 +323,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 				}
 				res := tx.Delete(objs[i])
 				if res.Error != nil {
-					return res.Error
+					return errors.WithStack(res.Error)
 				}
 				if v > 0 && res.RowsAffected == 0 {
 					return errors.Wrapf(ErrStaleObject, "delete %s id=%s version=%d", tableName, objs[i].GetID(), v)
@@ -329,7 +334,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 			for i := 0; i < len(objs); i += batchSize {
 				end := min(i+batchSize, len(objs))
 				if err = db.ins.Session(&gorm.Session{}).Unscoped().Delete(objs[i:end]).Error; err != nil {
-					return err
+					return errors.WithStack(err)
 				}
 			}
 		default:
@@ -339,7 +344,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 			for i := 0; i < len(objs); i += batchSize {
 				end := min(i+batchSize, len(objs))
 				if err = db.ins.Session(&gorm.Session{}).Delete(objs[i:end]).Error; err != nil {
-					return err
+					return errors.WithStack(err)
 				}
 			}
 		}
@@ -522,7 +527,7 @@ func (db *database[M]) Update(objs ...M) (err error) {
 			}
 			res := db.updateRowStatement(session, objs[i]).Updates(objs[i])
 			if res.Error != nil {
-				return res.Error
+				return errors.WithStack(res.Error)
 			}
 			// Zero matched rows means no live row satisfies the WHERE;
 			// matched-rows semantics make this reliable even when nothing
@@ -649,7 +654,7 @@ func (db *database[M]) UpdateByID(id string, assignments ...types.Assignment) (e
 	// see normalizeModelID for the coercion hazard it guards against.
 	var ok bool
 	if id, ok = normalizeModelID(db.m, id); !ok {
-		return ErrRecordNotFound
+		return errors.WithStack(ErrRecordNotFound)
 	}
 	// A versioned model bumps its version column even here, where the check
 	// itself is waived (the caller holds no object to compare): the write
@@ -675,7 +680,7 @@ func (db *database[M]) UpdateByID(id string, assignments ...types.Assignment) (e
 	// Inside an ambient transaction db.ins is already that transaction's
 	// handle and the flag changes nothing.
 	if err = db.ins.Session(&gorm.Session{SkipDefaultTransaction: true}).Model(*new(M)).Where("id = ?", id).Updates(updates).Error; err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	return nil
 }
