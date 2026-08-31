@@ -59,7 +59,6 @@ type Config struct {
 	Mongo         `json:"mongo" mapstructure:"mongo" ini:"mongo" yaml:"mongo"`
 	Kafka         `json:"kafka" mapstructure:"kafka" ini:"kafka" yaml:"kafka"`
 	Minio         `json:"minio" mapstructure:"minio" ini:"minio" yaml:"minio"`
-	S3            `json:"s3" mapstructure:"s3" ini:"s3" yaml:"s3"`
 	Logger        `json:"logger" mapstructure:"logger" ini:"logger" yaml:"logger"`
 	Ldap          `json:"ldap" mapstructure:"ldap" ini:"ldap" yaml:"ldap"`
 	Influxdb      `json:"influxdb" mapstructure:"influxdb" ini:"influxdb" yaml:"influxdb"`
@@ -96,7 +95,6 @@ func (c *Config) setDefault(v *viper.Viper) {
 	c.Ldap.setDefault(v)
 	c.Influxdb.setDefault(v)
 	c.Minio.setDefault(v)
-	c.S3.setDefault(v)
 	c.Mqtt.setDefault(v)
 	c.Nats.setDefault(v)
 	c.Etcd.setDefault(v)
