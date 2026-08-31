@@ -260,15 +260,16 @@ func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 	sql, rows := fc()
 
 	// Sized to the exact worst case so the hot path never regrows: caller,
-	// the seven base fields, db_role, record_not_found, and the one field the
+	// the eight base fields, db_role, record_not_found, and the one field the
 	// error/slow branches append (mutually exclusive in the switch below).
-	fields := make([]zap.Field, 0, 11)
+	fields := make([]zap.Field, 0, 12)
 	if caller, ok := callerOutside(isSkippedSQLFrame); ok {
 		fields = append(fields, zap.String("caller", caller))
 	}
 	fields = append(
 		fields,
 		zap.String(consts.CTX_ROUTE, meta.Route()),
+		zap.String(consts.CTX_METHOD, meta.Method()),
 		zap.String(consts.CTX_USERNAME, username),
 		zap.String(consts.CTX_USER_ID, userID),
 		zap.String(consts.TRACE_ID, traceID),

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -392,6 +393,7 @@ func TestWithContextAddsMetadataFields(t *testing.T) {
 	meta := requestctx.New(requestctx.Fields{
 		Route:    "/api/users/:id",
 		Path:     "/api/users/42",
+		Method:   http.MethodGet,
 		Username: "admin",
 		UserID:   "user-1",
 		TraceID:  "trace-1",
@@ -413,6 +415,7 @@ func TestWithContextAddsMetadataFields(t *testing.T) {
 	require.Equal(t, string(consts.PHASE_LIST), fields[consts.PHASE])
 	require.Equal(t, "/api/users/:id", fields[consts.CTX_ROUTE])
 	require.Equal(t, "/api/users/42", fields[consts.CTX_PATH])
+	require.Equal(t, http.MethodGet, fields[consts.CTX_METHOD])
 	require.Equal(t, "admin", fields[consts.CTX_USERNAME])
 	require.Equal(t, "user-1", fields[consts.CTX_USER_ID])
 	require.Equal(t, "trace-1", fields[consts.TRACE_ID])
@@ -425,6 +428,7 @@ func TestGormTraceUsesMetadata(t *testing.T) {
 	core, logs := observer.New(zapcore.InfoLevel)
 	log := &Logger{zlog: zap.New(core)}
 	meta := requestctx.New(requestctx.Fields{
+		Method:   http.MethodPost,
 		Username: "admin",
 		UserID:   "user-1",
 		TraceID:  "trace-1",
@@ -446,6 +450,7 @@ func TestGormTraceUsesMetadata(t *testing.T) {
 	require.Len(t, entries, 1)
 
 	fields := entries[0].ContextMap()
+	require.Equal(t, http.MethodPost, fields[consts.CTX_METHOD])
 	require.Equal(t, "admin", fields[consts.CTX_USERNAME])
 	require.Equal(t, "user-1", fields[consts.CTX_USER_ID])
 	require.Equal(t, "trace-1", fields[consts.TRACE_ID])

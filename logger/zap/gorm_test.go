@@ -234,6 +234,7 @@ func TestGormLoggerTraceLogsSuccessAtInfoWithCaller(t *testing.T) {
 	require.Equal(t, "SELECT 1", fields["sql"])
 	require.Equal(t, int64(1), fields["rows"])
 	require.Contains(t, fields, "route")
+	require.Contains(t, fields, "method")
 	require.Contains(t, fields, "username")
 	require.Contains(t, fields, "user_id")
 	require.Contains(t, fields, "trace_id")

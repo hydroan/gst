@@ -108,6 +108,7 @@ func (l *Logger) withMetadata(meta requestctx.Metadata, phase consts.Phase, trac
 		zap.String(consts.PHASE, string(phase)),
 		zap.String(consts.CTX_ROUTE, meta.Route()),
 		zap.String(consts.CTX_PATH, meta.Path()),
+		zap.String(consts.CTX_METHOD, meta.Method()),
 		zap.String(consts.CTX_USERNAME, meta.Username()),
 		zap.String(consts.CTX_USER_ID, meta.UserID()),
 		zap.String(consts.TRACE_ID, traceID),
