@@ -149,7 +149,6 @@ func SetupStandaloneMySQL(database, username, password string) (config.MySQL, fu
 		Database: database,
 		Username: username,
 		Password: password,
-		Charset:  "utf8mb4",
 		Enabled:  true,
 	}
 	reportServiceReady("mysql-standalone", fmt.Sprintf("%s:%d/%s", host, port, database))

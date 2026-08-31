@@ -12,7 +12,6 @@ const (
 	MYSQL_DATABASE = "MYSQL_DATABASE" //nolint:staticcheck
 	MYSQL_USERNAME = "MYSQL_USERNAME" //nolint:staticcheck
 	MYSQL_PASSWORD = "MYSQL_PASSWORD" //nolint:staticcheck
-	MYSQL_CHARSET  = "MYSQL_CHARSET"  //nolint:staticcheck
 
 	MYSQL_DIAL_TIMEOUT  = "MYSQL_DIAL_TIMEOUT"  //nolint:staticcheck
 	MYSQL_READ_TIMEOUT  = "MYSQL_READ_TIMEOUT"  //nolint:staticcheck
@@ -29,7 +28,6 @@ type MySQL struct {
 	Database string `json:"database" mapstructure:"database" ini:"database" yaml:"database"`
 	Username string `json:"username" mapstructure:"username" ini:"username" yaml:"username"`
 	Password string `json:"password" mapstructure:"password" ini:"password" yaml:"password"`
-	Charset  string `json:"charset" mapstructure:"charset" ini:"charset" yaml:"charset"`
 
 	// DialTimeout bounds establishing a TCP connection to the server. Without
 	// it a dial against a host that drops packets instead of refusing them
@@ -47,8 +45,8 @@ type MySQL struct {
 
 	// Replicas lists read-replica endpoints as host:port entries (comma
 	// separated in ini). Every other connection setting — credentials,
-	// database, charset, timeouts, the UTC wire location — is shared with the
-	// primary, so a replica differs by address only. Configuring replicas
+	// database, timeouts, the utf8mb4 charset, the UTC wire location — is
+	// shared with the primary, so a replica differs by address only. Configuring replicas
 	// makes framework reads eligible for replica routing, but never moves
 	// them by default: reads go to a replica only where a model declares
 	// PreferReplica or a call site opts in with WithReplica. Replication
@@ -65,7 +63,6 @@ func (*MySQL) setDefault(v *viper.Viper) {
 	v.SetDefault("mysql.database", "")
 	v.SetDefault("mysql.username", "root")
 	v.SetDefault("mysql.password", "")
-	v.SetDefault("mysql.charset", "utf8mb4")
 
 	v.SetDefault("mysql.dial_timeout", 10*time.Second)
 	v.SetDefault("mysql.read_timeout", 0)

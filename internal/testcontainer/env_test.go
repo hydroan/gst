@@ -14,7 +14,7 @@ func TestApplyConfigToEnv(t *testing.T) {
 	t.Run("flat_section", func(t *testing.T) {
 		isolateEnv(t,
 			config.MYSQL_HOST, config.MYSQL_PORT, config.MYSQL_DATABASE,
-			config.MYSQL_USERNAME, config.MYSQL_PASSWORD, config.MYSQL_CHARSET)
+			config.MYSQL_USERNAME, config.MYSQL_PASSWORD, config.MYSQL_DIAL_TIMEOUT)
 
 		host := "localhost"
 		port := 3306
@@ -35,8 +35,9 @@ func TestApplyConfigToEnv(t *testing.T) {
 		require.Equal(t, database, os.Getenv(config.MYSQL_DATABASE))
 		require.Equal(t, username, os.Getenv(config.MYSQL_USERNAME))
 		require.Equal(t, password, os.Getenv(config.MYSQL_PASSWORD))
-		// Charset was left at its zero value, so the framework default stands.
-		require.Empty(t, os.Getenv(config.MYSQL_CHARSET))
+		// DialTimeout was left at its zero value, so the framework default
+		// stands.
+		require.Empty(t, os.Getenv(config.MYSQL_DIAL_TIMEOUT))
 	})
 
 	t.Run("nested_section", func(t *testing.T) {

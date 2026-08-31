@@ -69,8 +69,8 @@ func New(cfg config.MySQL) (*gorm.DB, error) {
 // untouched, so a replica-free deployment pays nothing.
 //
 // Each replica shares the primary's DSN settings — credentials, database,
-// charset, timeouts, and the UTC wire location, all of which reads depend on
-// — and differs by address only. The returned handle carries a Write pin:
+// timeouts, the utf8mb4 charset, and the UTC wire location, all of which
+// reads depend on — and differs by address only. The returned handle carries a Write pin:
 // with the resolver installed, gorm would otherwise route every plain read
 // to a replica, and that silent default breaks read-your-writes everywhere
 // (a session read right after login, a list right after create). Reads move
@@ -110,11 +110,15 @@ func attachReplicas(db *gorm.DB, cfg config.MySQL) (*gorm.DB, error) {
 // PrepareStmt above the driver or the server's prepared statements under it
 // — would never be reused and only grow: dead client entries, dead
 // per-connection server handles counted against the server-global
-// max_prepared_stmt_count. Interpolation's escaping is charset-sensitive:
-// it is sound under the default utf8mb4, and the unsafe multibyte charsets
-// (big5, cp932, gb2312, gbk, sjis) must never be configured — the driver's
-// own refusal covers only the collation DSN parameter, not charset, so
-// nothing downstream catches a bad charset here.
+// max_prepared_stmt_count. Interpolation's escaping is charset-sensitive,
+// which is why the connection charset is hard-coded utf8mb4 rather than
+// configurable: under the unsafe multibyte charsets (big5, cp932, gb2312,
+// gbk, sjis) crafted bytes can swallow the escaping backslash, and the
+// driver's own refusal covers only the collation DSN parameter, not
+// charset — the framework removes the knob instead of trusting a guard
+// that does not exist. This is the connection character set, independent
+// of any column's storage charset: the server converts between the two,
+// and utf8mb4 maps Go's UTF-8 strings exactly.
 //
 // loc=UTC makes the driver store and read DATETIME values as UTC wall-clock
 // time, which is the framework's one time base across dialects: postgres
@@ -130,8 +134,8 @@ func attachReplicas(db *gorm.DB, cfg config.MySQL) (*gorm.DB, error) {
 // comments on config.MySQL.
 func buildDSN(cfg config.MySQL) string {
 	dsn := fmt.Sprintf(
-		"%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=UTC&clientFoundRows=true&interpolateParams=true",
-		cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database, cfg.Charset,
+		"%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=UTC&clientFoundRows=true&interpolateParams=true",
+		cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database,
 	)
 	if cfg.DialTimeout > 0 {
 		dsn += "&timeout=" + cfg.DialTimeout.String()
