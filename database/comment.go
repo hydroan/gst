@@ -42,17 +42,32 @@ func sqlCommentFor(ctx context.Context) string {
 	meta := requestctx.FromContext(ctx)
 	parts := make([]string, 0, 2)
 	if route := meta.Route(); len(route) > 0 {
-		parts = append(parts, "route='"+url.QueryEscape(route)+"'")
+		parts = append(parts, "route='"+encodeCommentValue(route)+"'")
 	}
 	if mode == config.SQLCommentTrace {
 		if traceID := meta.TraceID(); len(traceID) > 0 {
-			parts = append(parts, "trace_id='"+url.QueryEscape(traceID)+"'")
+			parts = append(parts, "trace_id='"+encodeCommentValue(traceID)+"'")
 		}
 	}
 	if len(parts) == 0 {
 		return ""
 	}
 	return strings.Join(parts, ",")
+}
+
+// encodeCommentValue renders one value the way the sqlcommenter convention
+// requires: percent-encoded, spaces included.
+//
+// url.QueryEscape reserves exactly the RFC 3986 unreserved set, which covers
+// the convention's escaping and leaves a value unable to close the comment
+// ("*" becomes "%2A", so "*/" cannot form) or to break out of its quotes
+// ("'" becomes "%27"). Its single departure is the form-urlencoded space,
+// rendered as "+" where the convention wants "%20". Rewriting that back is
+// unambiguous: a literal plus is already encoded as "%2B", so no "+" the
+// escape produces means anything but a space, and a consumer
+// percent-decoding the value recovers it exactly.
+func encodeCommentValue(value string) string {
+	return strings.ReplaceAll(url.QueryEscape(value), "+", "%20")
 }
 
 // commentClauses covers every statement verb with the comment; a chain runs

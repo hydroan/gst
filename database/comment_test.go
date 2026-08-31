@@ -105,6 +105,24 @@ func TestSQLCommentEscapesHostileValues(t *testing.T) {
 	require.Contains(t, capture.last(), "route='")
 }
 
+// TestSQLCommentPercentEncodesValues pins the sqlcommenter escaping
+// convention on the value the comment carries.
+func TestSQLCommentPercentEncodesValues(t *testing.T) {
+	// A space renders as %20 rather than the form-urlencoded +, and a literal
+	// plus as %2B, so percent-decoding the value recovers it exactly.
+	defer cleanupTestData()
+	setupTestData(t)
+	swapSQLCommentMode(t, config.SQLCommentRoute)
+
+	capture := &sqlTextCaptureLogger{Interface: database.DB().Logger}
+	session := database.DB().Session(&gorm.Session{Logger: capture})
+	ctx := requestContext("/a b+c", "")
+
+	users := make([]*TestUser, 0)
+	require.NoError(t, database.DatabaseOn[*TestUser](ctx, session).List(&users))
+	require.Contains(t, capture.last(), "route='%2Fa%20b%2Bc'")
+}
+
 func TestSQLCommentTraceConnection(t *testing.T) {
 	// The trace mode switches new connections to per-statement text protocol
 	// (interpolateParams on MySQL, simple protocol on postgres); this pins
