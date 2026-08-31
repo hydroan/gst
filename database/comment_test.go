@@ -57,15 +57,15 @@ func TestSQLCommentAnnotatesStatements(t *testing.T) {
 	ctx := requestContext(http.MethodGet, "/api/v1/users", "trace-0001")
 	users := make([]*TestUser, 0)
 
-	// A request's statements carry its URL-encoded method, route, and trace
-	// id. Asserting the keys as one run pins the ascending order the
-	// sqlcommenter convention requires.
+	// A request's statements carry its trace id and nothing else — the
+	// request context above holds method and route too, and asserting the
+	// full comment pins that they stay out of it.
 	require.NoError(t, database.DatabaseOn[*TestUser](ctx, session).List(&users))
-	require.Contains(t, capture.last(), "method='GET',route='%2Fapi%2Fv1%2Fusers',trace_id='trace-0001'")
+	require.Contains(t, capture.last(), "/* trace_id='trace-0001' */")
 
 	// Outside a request there is nothing to report and statements stay clean.
 	require.NoError(t, database.DatabaseOn[*TestUser](context.Background(), session).List(&users))
-	require.NotContains(t, capture.last(), "route=")
+	require.NotContains(t, capture.last(), "trace_id=")
 }
 
 func TestSQLCommentEscapesHostileValues(t *testing.T) {
@@ -76,12 +76,12 @@ func TestSQLCommentEscapesHostileValues(t *testing.T) {
 
 	capture := &sqlTextCaptureLogger{Interface: database.DB().Logger}
 	session := database.DB().Session(&gorm.Session{Logger: capture})
-	ctx := requestContext("", "/x */ DROP TABLE test_users --", "")
+	ctx := requestContext("", "", "/x */ DROP TABLE test_users --")
 
 	users := make([]*TestUser, 0)
 	require.NoError(t, database.DatabaseOn[*TestUser](ctx, session).List(&users))
 	require.NotContains(t, capture.last(), "*/ DROP")
-	require.Contains(t, capture.last(), "route='")
+	require.Contains(t, capture.last(), "trace_id='")
 }
 
 // TestSQLCommentPercentEncodesValues pins the sqlcommenter escaping
@@ -94,11 +94,11 @@ func TestSQLCommentPercentEncodesValues(t *testing.T) {
 
 	capture := &sqlTextCaptureLogger{Interface: database.DB().Logger}
 	session := database.DB().Session(&gorm.Session{Logger: capture})
-	ctx := requestContext("", "/a b+c", "")
+	ctx := requestContext("", "", "/a b+c")
 
 	users := make([]*TestUser, 0)
 	require.NoError(t, database.DatabaseOn[*TestUser](ctx, session).List(&users))
-	require.Contains(t, capture.last(), "route='%2Fa%20b%2Bc'")
+	require.Contains(t, capture.last(), "trace_id='%2Fa%20b%2Bc'")
 }
 
 func TestSQLCommentTextProtocolConnection(t *testing.T) {

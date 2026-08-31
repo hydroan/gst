@@ -12,25 +12,30 @@ import (
 
 // SQL statement comments.
 //
-// Every statement a request issues carries a /*key='value'*/ comment naming
-// where it came from — method, route, and trace id — closing the reverse
-// direction of observability: the application-side SQL log already maps a
-// statement to its trace, and the comment gives an operator starting FROM
-// the database — SHOW PROCESSLIST, the slow query log, an audit plugin —
-// the same jump back to the request.
+// Every statement a request issues carries a /* trace_id='...' */ comment,
+// closing the reverse direction of observability: the application-side SQL
+// log already maps a statement to its trace, and the comment gives an
+// operator starting FROM the database — SHOW PROCESSLIST, the slow query
+// log, an audit plugin — the key back to the request's full trail.
 //
-// The trace id makes every statement text request-unique, which rules out
-// text-keyed statement caching wholesale; the dialect packages therefore run
-// their connections on per-statement text protocol instead of prepared
-// statements — see the mysql and postgres buildDSN for that half of the
-// contract.
+// The trace id is deliberately the only key. Everything else about the
+// request — method, route, user, parameters — is one trace-id lookup away
+// in the log store, and the application-side SQL log already carries those
+// as structured fields, so more keys would only duplicate them into every
+// statement text and bury the SQL under an URL-encoded preamble.
+//
+// The per-request-unique comment rules out text-keyed statement caching
+// wholesale; the dialect packages therefore run their connections on
+// per-statement text protocol instead of prepared statements — see the
+// mysql and postgres buildDSN for that half of the contract.
 //
 // The comment sits after the statement verb (SELECT /*...*/ ... FROM),
 // rendered through gorm's own hints clauses — a deliberate trade against the
 // sqlcommenter convention of trailing comments: both positions reach every
 // database-side view, and the verb position needs no reliance on gorm build
-// internals. Values are URL-encoded, which both matches the sqlcommenter
-// escaping convention and keeps a value from ever closing the comment.
+// internals. The value is URL-encoded, which both matches the sqlcommenter
+// escaping convention and keeps a value from ever closing the comment; for
+// the usual hex trace id the encoding changes nothing.
 //
 // Outside a request — cron jobs, startup, tests without request metadata —
 // there is nothing to report and statements stay clean.
@@ -38,24 +43,11 @@ import (
 // sqlCommentFor renders the comment content for one chain's statements, and
 // "" when the context carries nothing to annotate.
 func sqlCommentFor(ctx context.Context) string {
-	meta := requestctx.FromContext(ctx)
-	// The sqlcommenter convention orders the serialized keys ascending, so
-	// the appends below run in that order rather than in importance order:
-	// method, route, trace_id. Keep any new key in its sorted position.
-	parts := make([]string, 0, 3)
-	if method := meta.Method(); len(method) > 0 {
-		parts = append(parts, "method='"+encodeCommentValue(method)+"'")
-	}
-	if route := meta.Route(); len(route) > 0 {
-		parts = append(parts, "route='"+encodeCommentValue(route)+"'")
-	}
-	if traceID := meta.TraceID(); len(traceID) > 0 {
-		parts = append(parts, "trace_id='"+encodeCommentValue(traceID)+"'")
-	}
-	if len(parts) == 0 {
+	traceID := requestctx.FromContext(ctx).TraceID()
+	if len(traceID) == 0 {
 		return ""
 	}
-	return strings.Join(parts, ",")
+	return "trace_id='" + encodeCommentValue(traceID) + "'"
 }
 
 // encodeCommentValue renders one value the way the sqlcommenter convention
