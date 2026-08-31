@@ -9,7 +9,6 @@ const (
 	LOGGER_CONSOLE                 = "LOGGER_CONSOLE"                 //nolint:staticcheck
 	LOGGER_LEVEL                   = "LOGGER_LEVEL"                   //nolint:staticcheck
 	LOGGER_FORMAT                  = "LOGGER_FORMAT"                  //nolint:staticcheck
-	LOGGER_ENCODER                 = "LOGGER_ENCODER"                 //nolint:staticcheck
 	LOGGER_ERROR_STACK_DISABLED    = "LOGGER_ERROR_STACK_DISABLED"    //nolint:staticcheck
 	LOGGER_MAX_AGE                 = "LOGGER_MAX_AGE"                 //nolint:staticcheck
 	LOGGER_MAX_SIZE                = "LOGGER_MAX_SIZE"                //nolint:staticcheck
@@ -55,9 +54,6 @@ type Logger struct {
 	// Format specifies the log format, supported values are: (json|text).
 	// The Value default to "text" and ignore case.
 	Format string `json:"format" ini:"format" yaml:"format" mapstructure:"format"`
-
-	// Encoder is the same as LogFormat.
-	Encoder string `json:"encoder" ini:"encoder" yaml:"encoder" mapstructure:"encoder"`
 
 	// ErrorStackDisabled disables attaching the error_stack field to
 	// error-level logs when a logged error carries a stack trace embedded at
@@ -149,7 +145,6 @@ func (*Logger) setDefault(v *viper.Viper) {
 	v.SetDefault("logger.console", true)
 	v.SetDefault("logger.level", "info")
 	v.SetDefault("logger.format", "json")
-	v.SetDefault("logger.encoder", "json")
 	v.SetDefault("logger.error_stack_disabled", false)
 	v.SetDefault("logger.max_age", 30)
 	v.SetDefault("logger.max_size", 100)

@@ -32,7 +32,6 @@ var (
 	logFile       string
 	logLevel      string
 	logFormat     string
-	logEncoder    string //nolint:unused
 	logMaxAge     int
 	logMaxSize    int
 	logMaxBackups int
@@ -496,7 +495,6 @@ func readConf() {
 	logFile = config.App.Logger.File
 	logLevel = config.App.Logger.Level
 	logFormat = config.App.Logger.Format
-	logEncoder = config.App.Logger.Encoder
 	logMaxAge = config.App.Logger.MaxAge
 	logMaxSize = config.App.Logger.MaxSize
 	logMaxBackups = config.App.Logger.MaxBackups
