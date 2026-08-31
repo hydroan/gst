@@ -38,11 +38,14 @@ const (
 	// SQLCommentOff renders no statement comments.
 	SQLCommentOff SQLCommentMode = "off"
 
-	// SQLCommentRoute annotates statements with the issuing HTTP route, e.g.
-	// /*route='%2Fapi%2Fv1%2Fusers'*/. The default: routes are a small,
-	// fixed set, so the prepared-statement cache splits by at most the
-	// handful of routes issuing each statement shape and server-side
-	// statement caching keeps its value.
+	// SQLCommentRoute annotates statements with the issuing HTTP method and
+	// route, e.g. /*method='GET',route='%2Fapi%2Fv1%2Fusers'*/. The verb is
+	// what separates the actions one route pattern serves: the four verbs of
+	// a CRUD resource all open with the same lookup by id, and the route
+	// alone cannot tell them apart. The default: method and route together
+	// are a small, fixed set, so the prepared-statement cache splits by at
+	// most the handful of endpoints issuing each statement shape and
+	// server-side statement caching keeps its value.
 	SQLCommentRoute SQLCommentMode = "route"
 
 	// SQLCommentTrace adds the request's trace id to the route comment,

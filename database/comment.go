@@ -29,7 +29,7 @@ import (
 // escaping convention and keeps a value from ever closing the comment.
 //
 // Outside a request — cron jobs, startup, tests without request metadata —
-// there is no route to report and statements stay clean.
+// there is nothing to report and statements stay clean.
 
 // sqlCommentFor renders the comment content for one chain's statements, and
 // "" when the mode or the context yields nothing to annotate.
@@ -40,7 +40,13 @@ func sqlCommentFor(ctx context.Context) string {
 	}
 
 	meta := requestctx.FromContext(ctx)
-	parts := make([]string, 0, 2)
+	// The sqlcommenter convention orders the serialized keys ascending, so
+	// the appends below run in that order rather than in importance order:
+	// method, route, trace_id. Keep any new key in its sorted position.
+	parts := make([]string, 0, 3)
+	if method := meta.Method(); len(method) > 0 {
+		parts = append(parts, "method='"+encodeCommentValue(method)+"'")
+	}
 	if route := meta.Route(); len(route) > 0 {
 		parts = append(parts, "route='"+encodeCommentValue(route)+"'")
 	}

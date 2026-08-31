@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"context"
+	"net/http"
 	"sync"
 	"testing"
 	"time"
@@ -50,8 +51,8 @@ func swapSQLCommentMode(t *testing.T, mode config.SQLCommentMode) {
 
 // requestContext builds a context carrying the request metadata the comment
 // draws from, the way a real request's middleware would.
-func requestContext(route, traceID string) context.Context {
-	meta := requestctx.New(requestctx.Fields{Route: route, TraceID: traceID})
+func requestContext(method, route, traceID string) context.Context {
+	meta := requestctx.New(requestctx.Fields{Method: method, Route: route, TraceID: traceID})
 	return requestctx.WithMetadata(context.Background(), meta)
 }
 
@@ -61,20 +62,20 @@ func TestSQLCommentAnnotatesStatements(t *testing.T) {
 
 	capture := &sqlTextCaptureLogger{Interface: database.DB().Logger}
 	session := database.DB().Session(&gorm.Session{Logger: capture})
-	ctx := requestContext("/api/v1/users", "trace-0001")
+	ctx := requestContext(http.MethodGet, "/api/v1/users", "trace-0001")
 	users := make([]*TestUser, 0)
 
-	// The route mode annotates with the URL-encoded issuing route.
+	// The route mode annotates with the URL-encoded issuing method and route.
 	swapSQLCommentMode(t, config.SQLCommentRoute)
 	require.NoError(t, database.DatabaseOn[*TestUser](ctx, session).List(&users))
-	require.Contains(t, capture.last(), "route='%2Fapi%2Fv1%2Fusers'")
+	require.Contains(t, capture.last(), "method='GET',route='%2Fapi%2Fv1%2Fusers'")
 	require.NotContains(t, capture.last(), "trace_id")
 
-	// The trace mode adds the request's trace id.
+	// The trace mode adds the request's trace id. Asserting the keys as one
+	// run pins the ascending order the sqlcommenter convention requires.
 	swapSQLCommentMode(t, config.SQLCommentTrace)
 	require.NoError(t, database.DatabaseOn[*TestUser](ctx, session).List(&users))
-	require.Contains(t, capture.last(), "route='%2Fapi%2Fv1%2Fusers'")
-	require.Contains(t, capture.last(), "trace_id='trace-0001'")
+	require.Contains(t, capture.last(), "method='GET',route='%2Fapi%2Fv1%2Fusers',trace_id='trace-0001'")
 
 	// Off renders nothing.
 	swapSQLCommentMode(t, config.SQLCommentOff)
@@ -97,7 +98,7 @@ func TestSQLCommentEscapesHostileValues(t *testing.T) {
 
 	capture := &sqlTextCaptureLogger{Interface: database.DB().Logger}
 	session := database.DB().Session(&gorm.Session{Logger: capture})
-	ctx := requestContext("/x */ DROP TABLE test_users --", "")
+	ctx := requestContext("", "/x */ DROP TABLE test_users --", "")
 
 	users := make([]*TestUser, 0)
 	require.NoError(t, database.DatabaseOn[*TestUser](ctx, session).List(&users))
@@ -116,7 +117,7 @@ func TestSQLCommentPercentEncodesValues(t *testing.T) {
 
 	capture := &sqlTextCaptureLogger{Interface: database.DB().Logger}
 	session := database.DB().Session(&gorm.Session{Logger: capture})
-	ctx := requestContext("/a b+c", "")
+	ctx := requestContext("", "/a b+c", "")
 
 	users := make([]*TestUser, 0)
 	require.NoError(t, database.DatabaseOn[*TestUser](ctx, session).List(&users))
@@ -147,7 +148,7 @@ func TestSQLCommentTraceConnection(t *testing.T) {
 	session := handle.Session(&gorm.Session{Logger: capture})
 
 	users := make([]*TestUser, 0)
-	require.NoError(t, database.DatabaseOn[*TestUser](requestContext("GET /trace", "trace-conn"), session).
+	require.NoError(t, database.DatabaseOn[*TestUser](requestContext(http.MethodGet, "/trace", "trace-conn"), session).
 		WithQuery(&TestUser{Name: u1.Name}).List(&users))
 	require.Len(t, users, 1)
 	require.Contains(t, capture.last(), "trace_id='trace-conn'")
