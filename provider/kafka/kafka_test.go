@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/provider"
 	"github.com/twmb/franz-go/pkg/kfake"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
@@ -84,8 +85,20 @@ func TestInitProvider(t *testing.T) {
 		config.App.Kafka = config.Kafka{Enabled: false}
 		t.Cleanup(func() { config.App.Kafka = old })
 
-		if err := initProvider(); err != nil {
-			t.Fatalf("Init with kafka disabled: %v", err)
+		// The disabled contract moved out of initProvider: bootstrap gates
+		// Init by the registered Enabled function, so it must report false
+		// here and the client stays uninitialized.
+		var enabled func() bool
+		for _, p := range provider.Registered() {
+			if p.Name == "kafka" {
+				enabled = p.Enabled
+			}
+		}
+		if enabled == nil {
+			t.Fatal("kafka provider must register an Enabled function")
+		}
+		if enabled() {
+			t.Fatal("want Enabled to report false while kafka is disabled")
 		}
 		if _, err := Client(); err == nil {
 			t.Fatal("expected error from Client before initialization, got nil")

@@ -28,18 +28,20 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{Name: "kafka", Logger: &logger.Kafka, Init: initProvider, Close: closeProvider})
+	provider.Register(provider.Provider{
+		Name:    "kafka",
+		Enabled: func() bool { return config.App.Kafka.Enabled },
+		Logger:  &logger.Kafka,
+		Init:    initProvider,
+		Close:   closeProvider,
+	})
 }
 
 // initProvider initializes the global Kafka client backed by franz-go.
 // It reads Kafka configuration from config.App.Kafka.
-// If Kafka is not enabled, it returns nil.
 // The function is thread-safe and ensures the client is initialized only once.
 func initProvider() (err error) {
 	cfg := config.App.Kafka
-	if !cfg.Enabled {
-		return nil
-	}
 	mu.Lock()
 	defer mu.Unlock()
 	if client != nil {

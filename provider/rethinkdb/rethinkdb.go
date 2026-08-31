@@ -21,18 +21,20 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{Name: "rethinkdb", Logger: &logger.RethinkDB, Init: initProvider, Close: closeProvider})
+	provider.Register(provider.Provider{
+		Name:    "rethinkdb",
+		Enabled: func() bool { return config.App.RethinkDB.Enabled },
+		Logger:  &logger.RethinkDB,
+		Init:    initProvider,
+		Close:   closeProvider,
+	})
 }
 
 // initProvider initializes the global RethinkDB session.
 // It reads RethinkDB configuration from config.App.RethinkDB.
-// If RethinkDB is not enabled, it returns nil.
 // The function is thread-safe and ensures the session is initialized only once.
 func initProvider() (err error) {
 	cfg := config.App.RethinkDB
-	if !cfg.Enabled {
-		return nil
-	}
 	mu.Lock()
 	defer mu.Unlock()
 	if session != nil {

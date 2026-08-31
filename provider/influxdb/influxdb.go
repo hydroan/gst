@@ -28,19 +28,20 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{Name: "influxdb", Logger: &logger.Influxdb, Init: initProvider, Close: closeProvider})
+	provider.Register(provider.Provider{
+		Name:    "influxdb",
+		Enabled: func() bool { return config.App.Influxdb.Enabled },
+		Logger:  &logger.Influxdb,
+		Init:    initProvider,
+		Close:   closeProvider,
+	})
 }
 
 // initProvider initializes the global InfluxDB client.
 // It reads InfluxDB configuration from config.App.Influxdb.
-// If InfluxDB is not enabled, it returns nil.
 // The function is thread-safe and ensures the client is initialized only once.
 func initProvider() (err error) {
 	cfg := config.App.Influxdb
-	if !cfg.Enabled {
-		return nil
-	}
-
 	mu.Lock()
 	defer mu.Unlock()
 	if client != nil {

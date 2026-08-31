@@ -7,6 +7,7 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/testcontainer"
+	"github.com/hydroan/gst/provider"
 )
 
 func TestClickhouse(t *testing.T) {
@@ -15,8 +16,20 @@ func TestClickhouse(t *testing.T) {
 		config.App.Clickhouse = config.Clickhouse{Enabled: false}
 		t.Cleanup(func() { config.App.Clickhouse = old })
 
-		if err := initProvider(); err != nil {
-			t.Fatalf("Init with clickhouse disabled: %v", err)
+		// The disabled contract moved out of initProvider: bootstrap gates
+		// Init by the registered Enabled function, so it must report false
+		// here and the connection stays uninitialized.
+		var enabled func() bool
+		for _, p := range provider.Registered() {
+			if p.Name == "clickhouse" {
+				enabled = p.Enabled
+			}
+		}
+		if enabled == nil {
+			t.Fatal("clickhouse provider must register an Enabled function")
+		}
+		if enabled() {
+			t.Fatal("want Enabled to report false while clickhouse is disabled")
 		}
 		if _, err := Client(); err == nil {
 			t.Fatal("expected error from Client before initialization, got nil")

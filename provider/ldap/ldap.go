@@ -25,18 +25,20 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{Name: "ldap", Logger: &logger.Ldap, Init: initProvider, Close: closeProvider})
+	provider.Register(provider.Provider{
+		Name:    "ldap",
+		Enabled: func() bool { return config.App.Ldap.Enabled },
+		Logger:  &logger.Ldap,
+		Init:    initProvider,
+		Close:   closeProvider,
+	})
 }
 
 // initProvider initializes the global LDAP connection.
 // It reads LDAP configuration from config.App.Ldap.
-// If LDAP is not enabled, it returns nil.
 // The function is thread-safe and ensures the connection is initialized only once.
 func initProvider() (err error) {
 	cfg := config.App.Ldap
-	if !cfg.Enabled {
-		return nil
-	}
 	mu.Lock()
 	defer mu.Unlock()
 	if gconn != nil {

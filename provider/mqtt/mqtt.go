@@ -26,15 +26,17 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{Name: "mqtt", Logger: &logger.Mqtt, Init: initProvider, Close: closeProvider})
+	provider.Register(provider.Provider{
+		Name:    "mqtt",
+		Enabled: func() bool { return config.App.Mqtt.Enabled },
+		Logger:  &logger.Mqtt,
+		Init:    initProvider,
+		Close:   closeProvider,
+	})
 }
 
 func initProvider() (err error) {
 	cfg := config.App.Mqtt
-	if !cfg.Enabled {
-		return nil
-	}
-
 	mu.Lock()
 	defer mu.Unlock()
 	if client != nil {

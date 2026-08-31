@@ -88,18 +88,19 @@ type CopyOptions struct {
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{Name: "minio", Logger: &logger.Minio, Init: initProvider})
+	provider.Register(provider.Provider{
+		Name:    "minio",
+		Enabled: func() bool { return config.App.Minio.Enabled },
+		Logger:  &logger.Minio,
+		Init:    initProvider,
+	})
 }
 
 // initProvider initializes the global MinIO client.
 // It reads MinIO configuration from config.App.Minio.
-// If MinIO is not enabled, it returns nil.
 // The function is thread-safe and ensures the client is initialized only once.
 func initProvider() (err error) {
 	cfg := config.App.Minio
-	if !cfg.Enabled {
-		return nil
-	}
 	mu.Lock()
 	defer mu.Unlock()
 	if client != nil {

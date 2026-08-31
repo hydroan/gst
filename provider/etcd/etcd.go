@@ -23,18 +23,20 @@ var (
 // init registers this provider so importing the package compiles the
 // capability in and hands its lifecycle to bootstrap.
 func init() {
-	provider.Register(provider.Provider{Name: "etcd", Logger: &logger.Etcd, Init: initProvider, Close: closeProvider})
+	provider.Register(provider.Provider{
+		Name:    "etcd",
+		Enabled: func() bool { return config.App.Etcd.Enabled },
+		Logger:  &logger.Etcd,
+		Init:    initProvider,
+		Close:   closeProvider,
+	})
 }
 
 // initProvider initializes the global etcd client.
 // It reads etcd configuration from config.App.Etcd.
-// If etcd is not enabled, it returns nil.
 // The function is thread-safe and ensures the client is initialized only once.
 func initProvider() (err error) {
 	cfg := config.App.Etcd
-	if !cfg.Enabled {
-		return nil
-	}
 	mu.Lock()
 	defer mu.Unlock()
 	if client != nil {
