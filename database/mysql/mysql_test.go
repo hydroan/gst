@@ -10,7 +10,7 @@ import (
 
 func TestBuildDSN(t *testing.T) {
 	base := config.MySQL{Host: "127.0.0.1", Port: 3306, Database: "sample", Username: "root", Password: "secret", Charset: "utf8mb4"}
-	prefix := "root:secret@tcp(127.0.0.1:3306)/sample?charset=utf8mb4&parseTime=True&loc=UTC&clientFoundRows=true"
+	prefix := "root:secret@tcp(127.0.0.1:3306)/sample?charset=utf8mb4&parseTime=True&loc=UTC&clientFoundRows=true&interpolateParams=true"
 
 	t.Run("without timeouts", func(t *testing.T) {
 		require.Equal(t, prefix, buildDSN(base))

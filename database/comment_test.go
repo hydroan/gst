@@ -41,14 +41,6 @@ func (l *sqlTextCaptureLogger) last() string {
 	return l.sqls[len(l.sqls)-1]
 }
 
-// swapSQLCommentMode switches the comment mode for one test and restores it.
-func swapSQLCommentMode(t *testing.T, mode config.SQLCommentMode) {
-	t.Helper()
-	previous := config.App.Database.SQLComment
-	config.App.Database.SQLComment = mode
-	t.Cleanup(func() { config.App.Database.SQLComment = previous })
-}
-
 // requestContext builds a context carrying the request metadata the comment
 // draws from, the way a real request's middleware would.
 func requestContext(method, route, traceID string) context.Context {
@@ -65,26 +57,13 @@ func TestSQLCommentAnnotatesStatements(t *testing.T) {
 	ctx := requestContext(http.MethodGet, "/api/v1/users", "trace-0001")
 	users := make([]*TestUser, 0)
 
-	// The route mode annotates with the URL-encoded issuing method and route.
-	swapSQLCommentMode(t, config.SQLCommentRoute)
-	require.NoError(t, database.DatabaseOn[*TestUser](ctx, session).List(&users))
-	require.Contains(t, capture.last(), "method='GET',route='%2Fapi%2Fv1%2Fusers'")
-	require.NotContains(t, capture.last(), "trace_id")
-
-	// The trace mode adds the request's trace id. Asserting the keys as one
-	// run pins the ascending order the sqlcommenter convention requires.
-	swapSQLCommentMode(t, config.SQLCommentTrace)
+	// A request's statements carry its URL-encoded method, route, and trace
+	// id. Asserting the keys as one run pins the ascending order the
+	// sqlcommenter convention requires.
 	require.NoError(t, database.DatabaseOn[*TestUser](ctx, session).List(&users))
 	require.Contains(t, capture.last(), "method='GET',route='%2Fapi%2Fv1%2Fusers',trace_id='trace-0001'")
 
-	// Off renders nothing.
-	swapSQLCommentMode(t, config.SQLCommentOff)
-	require.NoError(t, database.DatabaseOn[*TestUser](ctx, session).List(&users))
-	require.NotContains(t, capture.last(), "route=")
-
-	// Outside a request there is no route to report and statements stay
-	// clean, whatever the mode.
-	swapSQLCommentMode(t, config.SQLCommentRoute)
+	// Outside a request there is nothing to report and statements stay clean.
 	require.NoError(t, database.DatabaseOn[*TestUser](context.Background(), session).List(&users))
 	require.NotContains(t, capture.last(), "route=")
 }
@@ -94,7 +73,6 @@ func TestSQLCommentEscapesHostileValues(t *testing.T) {
 	// URL encoding turns the closing sequence into inert text.
 	defer cleanupTestData()
 	setupTestData(t)
-	swapSQLCommentMode(t, config.SQLCommentRoute)
 
 	capture := &sqlTextCaptureLogger{Interface: database.DB().Logger}
 	session := database.DB().Session(&gorm.Session{Logger: capture})
@@ -113,7 +91,6 @@ func TestSQLCommentPercentEncodesValues(t *testing.T) {
 	// plus as %2B, so percent-decoding the value recovers it exactly.
 	defer cleanupTestData()
 	setupTestData(t)
-	swapSQLCommentMode(t, config.SQLCommentRoute)
 
 	capture := &sqlTextCaptureLogger{Interface: database.DB().Logger}
 	session := database.DB().Session(&gorm.Session{Logger: capture})
@@ -124,12 +101,10 @@ func TestSQLCommentPercentEncodesValues(t *testing.T) {
 	require.Contains(t, capture.last(), "route='%2Fa%20b%2Bc'")
 }
 
-func TestSQLCommentTraceConnection(t *testing.T) {
-	// The trace mode switches new connections to per-statement text protocol
+func TestSQLCommentTextProtocolConnection(t *testing.T) {
+	// mysql and postgres connections run per-statement text protocol
 	// (interpolateParams on MySQL, simple protocol on postgres); this pins
 	// that such a connection serves real queries, comments included.
-	swapSQLCommentMode(t, config.SQLCommentTrace)
-
 	var handle *gorm.DB
 	var err error
 	switch config.App.Database.Type {
@@ -138,7 +113,7 @@ func TestSQLCommentTraceConnection(t *testing.T) {
 	case config.DBPostgres:
 		handle, err = gstpostgres.New(config.App.Postgres)
 	default:
-		t.Skipf("trace-mode connections exist on mysql and postgres, the test database is %s", config.App.Database.Type)
+		t.Skipf("text-protocol connection settings exist on mysql and postgres, the test database is %s", config.App.Database.Type)
 	}
 	require.NoError(t, err)
 

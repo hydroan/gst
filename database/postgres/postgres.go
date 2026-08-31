@@ -48,12 +48,10 @@ func Init() (err error) {
 // so application-held instances passed to DatabaseOn, AggregateOn, and
 // TransactionOn are traced like the default database.
 func New(cfg config.Postgres) (*gorm.DB, error) {
-	// PrepareStmt stays off on purpose: pgx already caches prepared
-	// statements at the driver level (QueryExecModeCacheStatement is its
-	// default), so the gorm-level cache would only stack a second statement
-	// registry on top of it. The trace comment mode switches pgx to the
-	// simple protocol instead — see traceCommentDSNSuffix.
-	db, err := gorm.Open(postgres.Open(buildDSN(cfg)+traceCommentDSNSuffix()), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
+	// Statements run over pgx's simple protocol — no gorm PrepareStmt, no
+	// pgx statement cache, no server-side statement state; buildDSN explains
+	// why.
+	db, err := gorm.Open(postgres.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
 	if err != nil {
 		return nil, err
 	}
@@ -83,26 +81,22 @@ func attachReplicas(db *gorm.DB, cfg config.Postgres) (*gorm.DB, error) {
 		replicaCfg := cfg
 		replicaCfg.Host, replicaCfg.Port = host, port
 		replicaCfg.Replicas = nil
-		dialectors = append(dialectors, postgres.Open(buildDSN(replicaCfg)+traceCommentDSNSuffix()))
+		dialectors = append(dialectors, postgres.Open(buildDSN(replicaCfg)))
 	}
 	return dbruntime.AttachResolver(db, dialectors)
 }
 
-// traceCommentDSNSuffix is the DSN addition the trace comment mode needs on
-// every connection, replicas included: with per-request-unique statement
-// texts, pgx's statement cache would never be reused and would only grow, so
-// the connection switches to the simple text protocol — one round trip per
-// statement, no server-side statement state.
-func traceCommentDSNSuffix() string {
-	if config.App.Database.SQLComment == config.SQLCommentTrace {
-		return " default_query_exec_mode=simple_protocol"
-	}
-	return ""
-}
-
+// buildDSN assembles the pgx connection string.
+//
+// default_query_exec_mode=simple_protocol sends every statement as one text
+// query — one round trip, no server-side statement state. The framework's
+// SQL comments carry the request's trace id (see the database package's
+// comment.go), making every statement text request-unique, so a text-keyed
+// statement cache — gorm's PrepareStmt or pgx's default statement caching —
+// would never be reused and only grow.
 func buildDSN(cfg config.Postgres) string {
 	return fmt.Sprintf(
-		"host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=%s",
+		"host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=%s default_query_exec_mode=simple_protocol",
 		cfg.Host, cfg.Username, cfg.Password, cfg.Database, cfg.Port, cfg.SSLMode, cfg.TimeZone,
 	)
 }

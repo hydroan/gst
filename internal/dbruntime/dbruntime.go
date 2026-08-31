@@ -3,7 +3,6 @@ package dbruntime
 import (
 	"time"
 
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/modelregistry"
 	prommetrics "github.com/hydroan/gst/metrics"
 	"go.uber.org/zap"
@@ -40,11 +39,6 @@ func NowUTC() time.Time { return time.Now().UTC().Truncate(time.Millisecond) }
 // queue as it fills, so models may register at any stage: before, during or
 // after this call. Wait is what blocks until the queue is empty.
 func InitDatabase(db *gorm.DB) error {
-	// A mistyped comment mode must fail the boot, not silently strip the
-	// annotations an operator relies on; see config.SQLCommentMode.
-	if err := config.App.Database.SQLComment.Validate(); err != nil {
-		return err
-	}
 	if tablePreparationStarted.CompareAndSwap(0, 1) {
 		go func() {
 			for m := range modelregistry.TableChan {

@@ -5,7 +5,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/requestctx"
 	"gorm.io/gorm/clause"
 	"gorm.io/hints"
@@ -13,13 +12,18 @@ import (
 
 // SQL statement comments.
 //
-// Every statement a request issues can carry a /*key='value'*/ comment naming
-// where it came from, closing the reverse direction of observability: the
-// application-side SQL log already maps a statement to its trace, but an
-// operator starting FROM the database — SHOW PROCESSLIST, the slow query
-// log, an audit plugin — held only bare SQL until now. The content is
-// decided by database.sql_comment (see config.SQLCommentMode for the modes
-// and the statement-cache trade the trace mode makes).
+// Every statement a request issues carries a /*key='value'*/ comment naming
+// where it came from — method, route, and trace id — closing the reverse
+// direction of observability: the application-side SQL log already maps a
+// statement to its trace, and the comment gives an operator starting FROM
+// the database — SHOW PROCESSLIST, the slow query log, an audit plugin —
+// the same jump back to the request.
+//
+// The trace id makes every statement text request-unique, which rules out
+// text-keyed statement caching wholesale; the dialect packages therefore run
+// their connections on per-statement text protocol instead of prepared
+// statements — see the mysql and postgres buildDSN for that half of the
+// contract.
 //
 // The comment sits after the statement verb (SELECT /*...*/ ... FROM),
 // rendered through gorm's own hints clauses — a deliberate trade against the
@@ -32,13 +36,8 @@ import (
 // there is nothing to report and statements stay clean.
 
 // sqlCommentFor renders the comment content for one chain's statements, and
-// "" when the mode or the context yields nothing to annotate.
+// "" when the context carries nothing to annotate.
 func sqlCommentFor(ctx context.Context) string {
-	mode := config.App.Database.SQLComment
-	if mode != config.SQLCommentRoute && mode != config.SQLCommentTrace {
-		return ""
-	}
-
 	meta := requestctx.FromContext(ctx)
 	// The sqlcommenter convention orders the serialized keys ascending, so
 	// the appends below run in that order rather than in importance order:
@@ -50,10 +49,8 @@ func sqlCommentFor(ctx context.Context) string {
 	if route := meta.Route(); len(route) > 0 {
 		parts = append(parts, "route='"+encodeCommentValue(route)+"'")
 	}
-	if mode == config.SQLCommentTrace {
-		if traceID := meta.TraceID(); len(traceID) > 0 {
-			parts = append(parts, "trace_id='"+encodeCommentValue(traceID)+"'")
-		}
+	if traceID := meta.TraceID(); len(traceID) > 0 {
+		parts = append(parts, "trace_id='"+encodeCommentValue(traceID)+"'")
 	}
 	if len(parts) == 0 {
 		return ""

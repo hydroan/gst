@@ -130,10 +130,12 @@ func Init() (err error) {
 // Connections open through this package's own driver, which carries the
 // framework's REGEXP implementation; see registerRegexpFunc.
 func New(cfg config.Sqlite) (*gorm.DB, error) {
-	// PrepareStmt reuses each statement's in-process compilation; sqlite's
-	// prepare_v2 machinery recompiles automatically after a schema change, so
-	// the cache never serves a stale statement.
-	db, err := gorm.Open(sqlite.New(sqlite.Config{DriverName: driverName, DSN: buildDSN(cfg)}), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC, PrepareStmt: true})
+	// No PrepareStmt: the framework's SQL comments carry the request's trace
+	// id (see the database package's comment.go), making statement texts
+	// request-unique, so a text-keyed statement cache would hold one dead
+	// entry per request. Sqlite compiles statements in-process at
+	// microsecond cost, so each run simply compiles its statement.
+	db, err := gorm.Open(sqlite.New(sqlite.Config{DriverName: driverName, DSN: buildDSN(cfg)}), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
 	if err != nil {
 		return nil, err
 	}
