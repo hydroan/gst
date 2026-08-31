@@ -137,6 +137,7 @@ func TestDatabaseCreate(t *testing.T) {
 		}
 		err := database.Database[*TestUniqueItem](context.Background()).Create(second)
 		require.ErrorIs(t, err, database.ErrDuplicatedKey, "create must reject a unique key collision instead of overwriting")
+		requireRuntimeStack(t, err)
 
 		items := make([]*TestUniqueItem, 0)
 		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).List(&items))
@@ -457,7 +458,9 @@ func TestDatabaseUpdate(t *testing.T) {
 		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Create(first, second))
 
 		second.UniqueCode = "update-code-a"
-		require.ErrorIs(t, database.Database[*TestUniqueItem](context.Background()).Update(second), database.ErrDuplicatedKey)
+		err := database.Database[*TestUniqueItem](context.Background()).Update(second)
+		require.ErrorIs(t, err, database.ErrDuplicatedKey)
+		requireRuntimeStack(t, err)
 	})
 
 	t.Run("creation audit columns cannot be forged", func(t *testing.T) {
@@ -792,6 +795,7 @@ func TestDatabaseUpdateByIDNormalizesID(t *testing.T) {
 
 	err := database.Database[*TestAutoItem](context.Background()).UpdateByID(item.GetID()+"abc", colName.Set("hijacked"))
 	require.ErrorIs(t, err, database.ErrRecordNotFound)
+	requireRuntimeStack(t, err)
 
 	kept := new(TestAutoItem)
 	require.NoError(t, database.Database[*TestAutoItem](context.Background()).Get(kept, item.GetID()))

@@ -226,6 +226,7 @@ func TestDatabaseGet(t *testing.T) {
 	u = new(TestUser)
 	err = database.Database[*TestUser](context.Background()).Get(u, "non-existent-id")
 	require.ErrorIs(t, err, database.ErrRecordNotFound)
+	requireRuntimeStack(t, err)
 	require.Empty(t, u.CreatedAt)
 	require.Empty(t, u.UpdatedAt)
 	require.Empty(t, u.Name)
@@ -278,7 +279,9 @@ func TestDatabaseGet(t *testing.T) {
 		// string-to-integer coercion would otherwise match the row whose id is
 		// the numeric prefix ('7abc' would match id=7).
 		hijack := new(TestAutoItem)
-		require.ErrorIs(t, database.Database[*TestAutoItem](context.Background()).Get(hijack, item.GetID()+"abc"), database.ErrRecordNotFound)
+		probeErr := database.Database[*TestAutoItem](context.Background()).Get(hijack, item.GetID()+"abc")
+		require.ErrorIs(t, probeErr, database.ErrRecordNotFound)
+		requireRuntimeStack(t, probeErr)
 		require.ErrorIs(t, database.Database[*TestAutoItem](context.Background()).Get(hijack, "0198adf1-4e14-7d2c-b2f7-0123456789ab"), database.ErrRecordNotFound)
 
 		// Leading zeros normalize to the same decimal id and still match.
@@ -337,6 +340,13 @@ func TestDatabaseFirst(t *testing.T) {
 	err = database.Database[*TestUser](context.Background()).First(nilFirst)
 	require.Error(t, err, "should return error when dest is nil")
 	require.ErrorIs(t, err, database.ErrNilDest)
+
+	// First with a condition matching nothing pins the error-stack contract
+	// (doc.go) on the First exit deterministically: the not-found answer must
+	// carry a run-time stack alongside its classification.
+	err = database.Database[*TestUser](context.Background()).WithQuery(&TestUser{Name: "no-such-name"}).First(new(TestUser))
+	require.ErrorIs(t, err, database.ErrRecordNotFound)
+	requireRuntimeStack(t, err)
 }
 
 func TestDatabaseLast(t *testing.T) {

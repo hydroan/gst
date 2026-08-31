@@ -57,6 +57,17 @@ var (
 	}
 )
 
+// requireRuntimeStack asserts that err carries a run-time stack trace, per
+// the error-stack contract in doc.go: every first-hand exit of a stack-less
+// GORM/driver/sentinel error embeds the stack via errors.WithStack, so the
+// error_stack log field can locate the call site without call-site logging.
+func requireRuntimeStack(t *testing.T, err error) {
+	t.Helper()
+	require.Error(t, err)
+	require.NotNil(t, errors.GetReportableStackTrace(err),
+		"error must carry a run-time stack captured at its first-hand database exit")
+}
+
 // cleanupTestData deletes test data from database and restores original values of test users.
 // This function should be called in defer to ensure cleanup after each test.
 func cleanupTestData() {
