@@ -21,7 +21,11 @@ func Set(ctx context.Context, key string, data any, expiration ...time.Duration)
 	if len(expiration) > 0 {
 		ttl = expiration[0]
 	}
-	return client.Set(ctx, Key(key), data, ttl).Err()
+	// First-hand exit of a stack-less go-redis error: embed the run-time
+	// stack so the error_stack log field can locate any caller without
+	// call-site logging (see the error-stack contract in the database
+	// package doc). WithStack passes nil through.
+	return errors.WithStack(client.Set(ctx, Key(key), data, ttl).Err())
 }
 
 // Get will get raw cache([]byte) from redis.
@@ -35,7 +39,7 @@ func Get(ctx context.Context, key string) (cache []byte, err error) {
 		if errors.Is(err, goredis.Nil) {
 			return nil, ErrKeyNotExists
 		}
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	return cache, nil
 }
@@ -46,7 +50,8 @@ func SetNX(ctx context.Context, key, value string, expiration time.Duration) (bo
 	if err != nil {
 		return false, err
 	}
-	return client.SetNX(ctx, Key(key), value, expiration).Result()
+	ok, err := client.SetNX(ctx, Key(key), value, expiration).Result()
+	return ok, errors.WithStack(err)
 }
 
 // Incr increments the integer at key by one and returns the new value,
@@ -60,7 +65,8 @@ func Incr(ctx context.Context, key string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return client.Incr(ctx, Key(key)).Result()
+	count, err := client.Incr(ctx, Key(key)).Result()
+	return count, errors.WithStack(err)
 }
 
 // GetInt get cache from redis and decode into integer.
@@ -74,11 +80,11 @@ func GetInt(ctx context.Context, key string) (int64, error) {
 		if errors.Is(err, goredis.Nil) {
 			return 0, ErrKeyNotExists
 		}
-		return 0, err
+		return 0, errors.WithStack(err)
 	}
 	val, err := strconv.Atoi(cache)
 	if err != nil {
-		return 0, err
+		return 0, errors.WithStack(err)
 	}
 	return int64(val), nil
 }

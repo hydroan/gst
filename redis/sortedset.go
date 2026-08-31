@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 
+	"github.com/cockroachdb/errors"
 	goredis "github.com/redis/go-redis/v9"
 )
 
@@ -19,7 +20,9 @@ func ZAdd(ctx context.Context, key string, score float64, members ...string) err
 	for i := range members {
 		entries = append(entries, goredis.Z{Score: score, Member: members[i]})
 	}
-	return client.ZAdd(ctx, Key(key), entries...).Err()
+	// First-hand exit of a stack-less go-redis error; see the error-stack
+	// contract in the database package doc. WithStack passes nil through.
+	return errors.WithStack(client.ZAdd(ctx, Key(key), entries...).Err())
 }
 
 // ZRange returns sorted set members in ascending score order.
@@ -28,7 +31,8 @@ func ZRange(ctx context.Context, key string, start, stop int64) ([]string, error
 	if err != nil {
 		return nil, err
 	}
-	return client.ZRange(ctx, Key(key), start, stop).Result()
+	members, err := client.ZRange(ctx, Key(key), start, stop).Result()
+	return members, errors.WithStack(err)
 }
 
 // ZRangeByScore returns sorted set members whose scores are between minScore and maxScore.
@@ -43,7 +47,8 @@ func ZRangeByScore(ctx context.Context, key, minScore, maxScore string) ([]strin
 		Stop:    maxScore,
 		ByScore: true,
 	}
-	return client.ZRangeArgs(ctx, args).Result()
+	members, err := client.ZRangeArgs(ctx, args).Result()
+	return members, errors.WithStack(err)
 }
 
 // ZRem removes one or multiple members from a sorted set.
@@ -59,7 +64,7 @@ func ZRem(ctx context.Context, key string, members ...string) error {
 	for i := range members {
 		memberArgs = append(memberArgs, members[i])
 	}
-	return client.ZRem(ctx, Key(key), memberArgs...).Err()
+	return errors.WithStack(client.ZRem(ctx, Key(key), memberArgs...).Err())
 }
 
 // ZRemRangeByScore removes sorted set members whose score is between minScore and maxScore.
@@ -68,5 +73,5 @@ func ZRemRangeByScore(ctx context.Context, key, minScore, maxScore string) error
 	if err != nil {
 		return err
 	}
-	return client.ZRemRangeByScore(ctx, Key(key), minScore, maxScore).Err()
+	return errors.WithStack(client.ZRemRangeByScore(ctx, Key(key), minScore, maxScore).Err())
 }

@@ -52,12 +52,14 @@ func (cache[T]) Set(ctx context.Context, key string, data T, ttl time.Duration) 
 	}
 	val, err := json.Marshal(data)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	if len(val) == 0 {
 		return errors.New("cannot store empty value in redis")
 	}
-	return client.Set(ctx, Key(key), val, ttl).Err()
+	// First-hand exit of a stack-less go-redis error; see the error-stack
+	// contract in the database package doc. WithStack passes nil through.
+	return errors.WithStack(client.Set(ctx, Key(key), val, ttl).Err())
 }
 
 func (cache[T]) Get(ctx context.Context, key string) (T, error) {
@@ -71,14 +73,14 @@ func (cache[T]) Get(ctx context.Context, key string) (T, error) {
 		if errors.Is(err, goredis.Nil) {
 			return zero, types.ErrEntryNotFound
 		}
-		return zero, err
+		return zero, errors.WithStack(err)
 	}
 	if len(data) == 0 {
 		return zero, types.ErrEntryNotFound
 	}
 	var result T
 	if err = json.Unmarshal(data, &result); err != nil {
-		return zero, err
+		return zero, errors.WithStack(err)
 	}
 	return result, nil
 }
@@ -88,7 +90,7 @@ func (cache[T]) Delete(ctx context.Context, key string) error {
 	if err != nil {
 		return err
 	}
-	return client.Del(ctx, Key(key)).Err()
+	return errors.WithStack(client.Del(ctx, Key(key)).Err())
 }
 
 // Exists reports whether key exists. It has no error channel, so a

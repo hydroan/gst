@@ -82,7 +82,7 @@ func Init() (err error) {
 	if err = errors.Join(redisotel.InstrumentTracing(cli), redisotel.InstrumentMetrics(cli)); err != nil {
 		cli.Close()
 		cli = nil
-		return err
+		return errors.WithStack(err)
 	}
 
 	return nil
@@ -188,7 +188,12 @@ func Client() (goredis.UniversalClient, error) {
 	mu.RLock()
 	defer mu.RUnlock()
 	if cli == nil {
-		return nil, ErrRedisIsDisabled
+		// The sentinel is package-level, so its embedded stack is the useless
+		// init-time one; capturing here instead lets the error_stack log field
+		// locate the operation that ran without a handle. Every helper in this
+		// package forwards this error as-is, so this is its single capture
+		// point (see the error-stack contract in the database package doc).
+		return nil, errors.WithStack(ErrRedisIsDisabled)
 	}
 	return cli, nil
 }

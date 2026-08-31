@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"go.uber.org/zap"
 )
 
@@ -14,7 +15,9 @@ func Del(ctx context.Context, keys ...string) error {
 	if err != nil {
 		return err
 	}
-	return client.Del(ctx, namespacedKeys(keys)...).Err()
+	// First-hand exit of a stack-less go-redis error; see the error-stack
+	// contract in the database package doc. WithStack passes nil through.
+	return errors.WithStack(client.Del(ctx, namespacedKeys(keys)...).Err())
 }
 
 // Expire updates the ttl for an existing key.
@@ -23,7 +26,7 @@ func Expire(ctx context.Context, key string, expiration time.Duration) error {
 	if err != nil {
 		return err
 	}
-	return client.Expire(ctx, Key(key), expiration).Err()
+	return errors.WithStack(client.Expire(ctx, Key(key), expiration).Err())
 }
 
 // The two values Redis answers TTL with when there is no deadline to report.
@@ -54,7 +57,8 @@ func TTL(ctx context.Context, key string) (time.Duration, error) {
 	if err != nil {
 		return 0, err
 	}
-	return client.TTL(ctx, Key(key)).Result()
+	ttl, err := client.TTL(ctx, Key(key)).Result()
+	return ttl, errors.WithStack(err)
 }
 
 // RemovePrefix will scan and delete all redis key that matchs the `prefix`.
@@ -69,12 +73,12 @@ func RemovePrefix(ctx context.Context, prefix string) (err error) {
 		err = client.Del(ctx, iter.Val()).Err()
 		if err != nil {
 			zap.S().Error(err)
-			return err
+			return errors.WithStack(err)
 		}
 	}
 	if err := iter.Err(); err != nil {
 		zap.S().Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 	return nil
 }
