@@ -28,7 +28,10 @@ func (*document) BulkIndex(_ context.Context, indexName string, docs ...types.ES
 	for i := range docs {
 		meta := fmt.Appendf(nil, `{ "index" : { "_id" : "%s" } }%s`, docs[i].GetID(), "\n")
 		if data, err = json.Marshal(docs[i].Document()); err != nil {
-			err = errors.New("failed to marshaling document: " + err.Error())
+			// Wrap keeps the cause on the unwrap chain (the string
+			// concatenation it replaces dropped it) and embeds the run-time
+			// stack; see the error-stack contract in the database package doc.
+			err = errors.Wrap(err, "failed to marshaling document")
 			logger.Elastic.Error(err)
 			return err
 		}
@@ -41,7 +44,7 @@ func (*document) BulkIndex(_ context.Context, indexName string, docs ...types.ES
 	// execute the bulk request
 	res, err = client.Bulk(bytes.NewReader(buf.Bytes()), client.Bulk.WithIndex(indexName))
 	if err != nil {
-		err = fmt.Errorf("failed to execute bulk request: %w", err)
+		err = errors.Wrap(err, "failed to execute bulk request")
 		logger.Elastic.Error(err)
 		return err
 	}
@@ -49,18 +52,18 @@ func (*document) BulkIndex(_ context.Context, indexName string, docs ...types.ES
 
 	if res.IsError() {
 		if err = json.NewDecoder(res.Body).Decode(&raw); err != nil {
-			err = fmt.Errorf("failed to parse response body: %w", err)
+			err = errors.Wrap(err, "failed to parse response body")
 			logger.Elastic.Error(err)
 			return err
 		}
-		err = fmt.Errorf("failed to execute bulk request: %v", raw)
+		err = errors.Newf("failed to execute bulk request: %v", raw)
 		logger.Elastic.Error(err)
 		return err
 	}
 
 	var blk map[string]any
 	if err = json.NewDecoder(res.Body).Decode(&blk); err != nil {
-		err = fmt.Errorf("failed to parse response body: %w", err)
+		err = errors.Wrap(err, "failed to parse response body")
 		logger.Elastic.Error(err)
 		return err
 	}
@@ -68,7 +71,7 @@ func (*document) BulkIndex(_ context.Context, indexName string, docs ...types.ES
 		for _, item := range blk["items"].([]any) { //nolint:errcheck
 			if idx, ok := item.(map[string]any)["index"].(map[string]any); ok {
 				if idx["error"] != nil {
-					err = fmt.Errorf("error in item: %v", idx["error"])
+					err = errors.Newf("error in item: %v", idx["error"])
 					logger.Elastic.Error(err)
 					return err
 				}

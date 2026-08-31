@@ -208,7 +208,7 @@ func closeProvider() error {
 		defer cancel()
 
 		if err := client.Disconnect(ctx); err != nil {
-			return fmt.Errorf("failed to disconnect MongoDB client: %w", err)
+			return errors.Wrap(err, "failed to disconnect MongoDB client")
 		}
 		client = nil
 	}
@@ -225,5 +225,7 @@ func Health() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	return c.Ping(ctx, readpref.Primary())
+	// First-hand exit of a stack-less mongo-driver error; see the error-stack
+	// contract in the database package doc. WithStack passes nil through.
+	return errors.WithStack(c.Ping(ctx, readpref.Primary()))
 }
