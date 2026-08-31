@@ -29,9 +29,18 @@ type Provider struct {
 	Name string
 
 	// Init brings the provider up. Bootstrap runs it after core
-	// facilities (config, logging, metrics, databases) are ready. Init
-	// must be a no-op when the provider is disabled by configuration.
+	// facilities (config, logging, metrics, databases) are ready, and only
+	// when Enabled reports true, so Init does not need its own disabled
+	// guard.
 	Init func() error
+
+	// Enabled reports whether configuration enables the provider. Bootstrap
+	// calls it after configuration is loaded — registration happens in
+	// package init functions, before any configuration exists, which is why
+	// this is a function and not a value — and skips Init and Close for a
+	// provider that reports false. A nil Enabled means always enabled, so a
+	// provider without a configuration switch registers nothing extra.
+	Enabled func() bool
 
 	// Close releases the provider's resources, mirroring io.Closer.
 	// Optional; bootstrap runs it on shutdown when set, logs the returned

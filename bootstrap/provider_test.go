@@ -53,6 +53,9 @@ func TestMissingProviders(t *testing.T) {
 // TestDrainProvidersWiresRegisteredProviders proves the drain hands Init to
 // the initializer, adapts Close into a cleanup handler, assigns a dedicated
 // logger through a declared handle before Init runs, and seals the registry.
+// A provider without an Enabled function counts as enabled (the sample below
+// declares none), while one whose Enabled reports false is left out of the
+// lifecycle — no Init, no Close — though its logger handle is still bound.
 // It mutates package-level bootstrap state, which is fine because bootstrap
 // never runs inside this test binary.
 func TestDrainProvidersWiresRegisteredProviders(t *testing.T) {
@@ -78,18 +81,44 @@ func TestDrainProvidersWiresRegisteredProviders(t *testing.T) {
 		},
 	})
 
+	disabledInitCalled := false
+	disabledCloseCalled := false
+	var disabledLogger types.Logger
+	provider.Register(provider.Provider{
+		Name:    "test_drain_disabled",
+		Enabled: func() bool { return false },
+		Logger:  &disabledLogger,
+		Init: func() error {
+			disabledInitCalled = true
+			return nil
+		},
+		Close: func() error {
+			disabledCloseCalled = true
+			return nil
+		},
+	})
+
 	fnsBefore := len(ins.fns)
 	handlersBefore := len(handlers)
 
 	drainProviders()
 
+	// Exactly one Init and one Close joined the lifecycle: the disabled
+	// provider was skipped, so the single new entries belong to the enabled
+	// sample.
 	require.Len(t, ins.fns, fnsBefore+1)
 	require.NoError(t, ins.fns[fnsBefore]())
 	require.True(t, initCalled)
+	require.False(t, disabledInitCalled)
 
 	require.Len(t, handlers, handlersBefore+1)
 	handlers[handlersBefore]()
 	require.True(t, closeCalled)
+	require.False(t, disabledCloseCalled)
+
+	// The disabled provider keeps its dedicated logger binding: the handle
+	// must not stay on the fallback just because the provider is off.
+	require.NotNil(t, disabledLogger)
 
 	// The dedicated logger's file name follows the registry name, and sink
 	// construction precreates the file, so its existence proves the handle
