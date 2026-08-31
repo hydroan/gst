@@ -244,7 +244,7 @@ func writeHTTPBodyLog(
 		fields,
 		zap.String(consts.CTX_ROUTE, c.FullPath()),
 		zap.String(consts.CTX_PATH, c.Request.URL.Path),
-		zap.String("method", c.Request.Method),
+		zap.String(consts.CTX_METHOD, c.Request.Method),
 		zap.String(consts.CTX_USERNAME, c.GetString(consts.CTX_USERNAME)),
 		zap.String(consts.CTX_USER_ID, c.GetString(consts.CTX_USER_ID)),
 		zap.String(consts.TRACE_ID, c.GetString(consts.TRACE_ID)),
