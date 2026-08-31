@@ -5,6 +5,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/config"
@@ -155,8 +156,32 @@ func Run() error {
 	select {
 	case sig := <-sigCh:
 		zap.S().Infow("canceled by signal", "signal", sig)
+		// Stop answering readiness before anything is torn down, then hold
+		// there for the configured window. Teardown starts when it elapses.
+		controller.Probe.Drain()
+		awaitDrain(sigCh)
 		return nil
 	case err := <-errCh:
 		return err
+	}
+}
+
+// awaitDrain holds the process in its not-ready state for the configured
+// delay. That window is what a load balancer routing by readiness needs to
+// notice this process dropped out and stop opening connections to it; without
+// it, the listener can start refusing connections the balancer is still
+// sending. A second signal ends the wait, so an operator can always cut a
+// drain short.
+func awaitDrain(sigCh <-chan os.Signal) {
+	delay := config.App.Server.ShutdownDelay
+	if delay <= 0 {
+		return
+	}
+
+	zap.S().Infow("draining before shutdown", "delay", delay)
+	select {
+	case <-time.After(delay):
+	case sig := <-sigCh:
+		zap.S().Infow("drain cut short by signal", "signal", sig)
 	}
 }

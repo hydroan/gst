@@ -27,6 +27,8 @@ const (
 
 	SERVER_TRUSTED_PROXIES = "SERVER_TRUSTED_PROXIES" //nolint:staticcheck
 
+	SERVER_SHUTDOWN_DELAY = "SERVER_SHUTDOWN_DELAY" //nolint:staticcheck
+
 	SERVER_READ_TIMEOUT  = "SERVER_READ_TIMEOUT"  //nolint:staticcheck
 	SERVER_WRITE_TIMEOUT = "SERVER_WRITE_TIMEOUT" //nolint:staticcheck
 	SERVER_IDLE_TIMEOUT  = "SERVER_IDLE_TIMEOUT"  //nolint:staticcheck
@@ -58,6 +60,17 @@ type Server struct {
 	// rate-limits on is the one the request asked for.
 	TrustedProxies []string `json:"trusted_proxies" mapstructure:"trusted_proxies" ini:"trusted_proxies" yaml:"trusted_proxies"`
 
+	// ShutdownDelay is how long the process keeps serving after it is asked
+	// to stop, before the listener starts draining.
+	//
+	// It is zero by default, which begins the drain at once. A deployment
+	// whose load balancer routes by readiness sets it to that balancer's
+	// polling interval plus a margin: readiness starts failing the moment the
+	// signal arrives, and this window is what the balancer needs to notice and
+	// stop opening new connections here. Without it the process can refuse
+	// connections the balancer is still sending. A second signal ends the wait.
+	ShutdownDelay time.Duration `json:"shutdown_delay" mapstructure:"shutdown_delay" ini:"shutdown_delay" yaml:"shutdown_delay"`
+
 	ReadTimeout  time.Duration `json:"read_timeout" mapstructure:"read_timeout" ini:"read_timeout" yaml:"read_timeout"`
 	WriteTimeout time.Duration `json:"write_timeout" mapstructure:"write_timeout" ini:"write_timeout" yaml:"write_timeout"`
 	IdleTimeout  time.Duration `json:"idle_timeout" mapstructure:"idle_timeout" ini:"idle_timeout" yaml:"idle_timeout"`
@@ -88,6 +101,7 @@ func (*Server) setDefault(v *viper.Viper) {
 	v.SetDefault("server.port", 8080)
 	v.SetDefault("server.domain", "")
 	v.SetDefault("server.trusted_proxies", []string{})
+	v.SetDefault("server.shutdown_delay", 0)
 	v.SetDefault("server.read_timeout", 15*time.Second)
 	v.SetDefault("server.write_timeout", 15*time.Second)
 	v.SetDefault("server.idle_timeout", 60*time.Second)
