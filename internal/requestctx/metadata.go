@@ -15,10 +15,13 @@ import (
 // the route is the matched route pattern ("/api/users/:id") that groups every
 // request of one endpoint together, the path is the concrete request path
 // ("/api/users/42") that pins down a single request. Consumers aggregating
-// requests must use the route; the path only locates one of them.
+// requests must use the route; the path only locates one of them. The method
+// is the request verb, which separates the actions one route pattern serves
+// and neither of the other two distinguishes.
 type Metadata struct {
 	route     string
 	path      string
+	method    string
 	username  string
 	userID    string
 	sessionID string
@@ -36,6 +39,7 @@ type Metadata struct {
 type Fields struct {
 	Route     string
 	Path      string
+	Method    string
 	Username  string
 	UserID    string
 	SessionID string
@@ -51,6 +55,7 @@ func New(fields Fields) Metadata {
 	return Metadata{
 		route:     fields.Route,
 		path:      fields.Path,
+		method:    fields.Method,
 		username:  fields.Username,
 		userID:    fields.UserID,
 		sessionID: fields.SessionID,
@@ -96,15 +101,19 @@ func FromGin(c *gin.Context) Metadata {
 		}
 	}
 
-	var path, rawQuery string
-	if c.Request != nil && c.Request.URL != nil {
-		path = c.Request.URL.Path
-		rawQuery = c.Request.URL.RawQuery
+	var method, path, rawQuery string
+	if c.Request != nil {
+		method = c.Request.Method
+		if c.Request.URL != nil {
+			path = c.Request.URL.Path
+			rawQuery = c.Request.URL.RawQuery
+		}
 	}
 
 	return Metadata{
 		route:     c.FullPath(),
 		path:      path,
+		method:    method,
 		username:  c.GetString(consts.CTX_USERNAME),
 		userID:    c.GetString(consts.CTX_USER_ID),
 		sessionID: c.GetString(consts.CTX_SESSION_ID),
@@ -150,6 +159,7 @@ func GinQueryValues(c *gin.Context) url.Values {
 
 func (m Metadata) Route() string     { return m.route }
 func (m Metadata) Path() string      { return m.path }
+func (m Metadata) Method() string    { return m.method }
 func (m Metadata) Username() string  { return m.username }
 func (m Metadata) UserID() string    { return m.userID }
 func (m Metadata) SessionID() string { return m.sessionID }

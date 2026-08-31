@@ -50,7 +50,7 @@ func Logger(filename ...string) gin.HandlerFunc {
 		fields = append(
 			fields,
 			zap.Int("status", c.Writer.Status()),
-			zap.String("method", c.Request.Method),
+			zap.String(consts.CTX_METHOD, c.Request.Method),
 			zap.String(consts.CTX_USERNAME, c.GetString(consts.CTX_USERNAME)),
 			zap.String(consts.CTX_USER_ID, c.GetString(consts.CTX_USER_ID)),
 			zap.String(consts.TRACE_ID, traceID),

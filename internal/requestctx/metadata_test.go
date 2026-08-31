@@ -34,6 +34,7 @@ func TestFromGinExtractsRequestFields(t *testing.T) {
 
 	require.Equal(t, "/api/users/:id", meta.Route())
 	require.Equal(t, "/api/users/42", meta.Path())
+	require.Equal(t, http.MethodGet, meta.Method())
 	require.Equal(t, "admin", meta.Username())
 	require.Equal(t, "user-1", meta.UserID())
 	require.Equal(t, "session-1", meta.SessionID())

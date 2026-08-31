@@ -28,7 +28,6 @@ type ServiceContext struct {
 	responseWriter http.ResponseWriter
 
 	request   *http.Request
-	method    string
 	clientIP  string
 	userAgent string
 
@@ -73,7 +72,6 @@ func NewServiceContext(c *gin.Context, ctx context.Context, phase consts.Phase) 
 	}
 	if c.Request != nil {
 		serviceCtx.request = c.Request
-		serviceCtx.method = c.Request.Method
 		serviceCtx.clientIP = c.ClientIP()
 		serviceCtx.userAgent = c.Request.UserAgent()
 	}
@@ -111,18 +109,13 @@ func (sc *ServiceContext) Query() url.Values       { return requestctx.FromConte
 func (sc *ServiceContext) Param(key string) string { return requestctx.FromContext(sc).Param(key) }
 func (sc *ServiceContext) Route() string           { return requestctx.FromContext(sc).Route() }
 func (sc *ServiceContext) Path() string            { return requestctx.FromContext(sc).Path() }
+func (sc *ServiceContext) Method() string          { return requestctx.FromContext(sc).Method() }
 func (sc *ServiceContext) Username() string        { return requestctx.FromContext(sc).Username() }
 func (sc *ServiceContext) UserID() string          { return requestctx.FromContext(sc).UserID() }
 func (sc *ServiceContext) SessionID() string       { return requestctx.FromContext(sc).SessionID() }
 
 func (sc *ServiceContext) TenantID() string { return requestctx.FromContext(sc).TenantID() }
 func (sc *ServiceContext) TraceID() string  { return requestctx.FromContext(sc).TraceID() }
-func (sc *ServiceContext) Method() string {
-	if sc == nil {
-		return ""
-	}
-	return sc.method
-}
 
 func (sc *ServiceContext) Host() string {
 	if sc == nil || sc.request == nil {

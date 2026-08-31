@@ -34,8 +34,11 @@ const (
 	// same request: the pattern has low cardinality and groups every request
 	// of one endpoint together, the path pins down a single request. Log
 	// aggregation and alerting must key on the route, never on the path.
+	// CTX_METHOD names the request verb, which separates the actions one
+	// route pattern serves.
 	CTX_ROUTE         = "route"
 	CTX_PATH          = "path"
+	CTX_METHOD        = "method"
 	CTX_USERNAME      = "username"
 	CTX_USER_ID       = "user_id"
 	CTX_SESSION_ID    = "session_id"
