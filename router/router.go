@@ -102,6 +102,10 @@ func Init() error {
 		middleware.Recovery("recovery.log"),
 		middleware.Cors(),
 		middleware.RouteParams(),
+		// Last in the chain so refusals still carry a trace and an access log
+		// line; everything before it never parses the query, so the gate's
+		// parse is the request's first and, through the memo, its only one.
+		middleware.StrictQuery(),
 	)
 	// A request matching no route is answered in the envelope like every other
 	// refusal, instead of gin's plain-text default — which carries no code and
