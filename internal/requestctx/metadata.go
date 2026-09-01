@@ -157,6 +157,32 @@ func GinQueryValues(c *gin.Context) url.Values {
 	return query
 }
 
+// ParseGinQuery parses the request's query string with the error url.URL.Query
+// silently drops, and memoizes the parsed values on the gin context for
+// GinQueryValues and everything built on it to reuse.
+//
+// It exists for the strict-query gate: the gate must see the parse error to
+// reject malformed input, while every consumer after it should reuse the parse
+// instead of paying for another one. The memo is written unconditionally — the
+// gate runs before anything else parses the query, and overwriting with the
+// authoritative parse keeps a memo an earlier lenient parse may have stored
+// from surviving past the gate.
+func ParseGinQuery(c *gin.Context) (url.Values, error) {
+	if c == nil || c.Request == nil || c.Request.URL == nil {
+		// Nothing to parse and nothing to memoize; empty values keep the
+		// no-request construction paths of tests working like GinQueryValues.
+		return url.Values{}, nil
+	}
+
+	query, err := url.ParseQuery(c.Request.URL.RawQuery)
+	if err != nil {
+		return nil, err
+	}
+	c.Set(ginQueryKey, query)
+
+	return query, nil
+}
+
 func (m Metadata) Route() string     { return m.route }
 func (m Metadata) Path() string      { return m.path }
 func (m Metadata) Method() string    { return m.method }

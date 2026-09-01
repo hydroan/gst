@@ -119,6 +119,44 @@ func TestQueryValuesSharesTheMemoizedParse(t *testing.T) {
 		"every construction of one request must share one parse")
 }
 
+// TestParseGinQueryMemoizesTheAuthoritativeParse pins the strict-query gate's
+// contract with the memo: a successful parse is stored for GinQueryValues to
+// reuse, and it overwrites whatever an earlier lenient parse may have stored,
+// so everything after the gate reads the gate's own parse.
+func TestParseGinQueryMemoizesTheAuthoritativeParse(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ginCtx.Request = httptest.NewRequest(http.MethodGet, "/api/records?tag=blue", nil)
+
+	// An earlier construction memoizes a lenient parse first.
+	lenient := GinQueryValues(ginCtx)
+	require.Equal(t, url.Values{"tag": {"blue"}}, lenient)
+
+	parsed, err := ParseGinQuery(ginCtx)
+	require.NoError(t, err)
+	require.Equal(t, url.Values{"tag": {"blue"}}, parsed)
+	require.NotEqual(t, reflect.ValueOf(lenient).Pointer(), reflect.ValueOf(parsed).Pointer(),
+		"the gate parses unconditionally and overwrites the memo")
+	require.Equal(t, reflect.ValueOf(parsed).Pointer(), reflect.ValueOf(GinQueryValues(ginCtx)).Pointer(),
+		"everything after the gate must reuse the gate's parse")
+}
+
+// TestParseGinQueryReportsMalformedWithoutMemoizing pins the failure side: the
+// error url.URL.Query drops is surfaced, and no partial parse is stored.
+func TestParseGinQueryReportsMalformedWithoutMemoizing(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ginCtx.Request = httptest.NewRequest(http.MethodGet, "/api/records", nil)
+	ginCtx.Request.URL.RawQuery = "a=%zz"
+
+	_, err := ParseGinQuery(ginCtx)
+	require.Error(t, err)
+	_, stored := ginCtx.Get(ginQueryKey)
+	require.False(t, stored, "a failed parse must not memoize a partial result")
+}
+
 func TestMetadataContextRoundTrip(t *testing.T) {
 	meta := New(Fields{
 		Route:    "/api/users/:id",
