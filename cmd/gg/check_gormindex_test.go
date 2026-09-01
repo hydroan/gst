@@ -11,6 +11,7 @@ func TestCheckGormTagIndexBanFlagsIndexKeys(t *testing.T) {
 
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
+	writeCheckProjectGoMod(t, projectDir)
 	modelDir = "model"
 
 	writeCheckFile(t, filepath.Join(projectDir, "model", "group", "group.go"), `package group
@@ -70,6 +71,7 @@ func TestCheckGormTagIndexBanSkipsCopiedModulesGeneratedAndTests(t *testing.T) {
 
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
+	writeCheckProjectGoMod(t, projectDir)
 	modelDir = "model"
 
 	writeFrameworkModuleFixture(t, projectDir, "sample")

@@ -10,7 +10,7 @@ func TestCheckServiceTestCoverageAllowsCoveredAndExemptServiceFiles(t *testing.T
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 
-	writeCheckFile(t, filepath.Join(projectDir, "go.mod"), "module tmpapp\n\ngo 1.26\n")
+	writeCheckProjectGoMod(t, projectDir)
 
 	// A covered default action and a covered custom-filename action.
 	writeCheckFile(t, filepath.Join(projectDir, "model", "record.go"), `package model
@@ -147,7 +147,7 @@ func TestCheckServiceTestCoverageFlagsServiceFilesWithoutTests(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
 
-	writeCheckFile(t, filepath.Join(projectDir, "go.mod"), "module tmpapp\n\ngo 1.26\n")
+	writeCheckProjectGoMod(t, projectDir)
 	writeCheckFile(t, filepath.Join(projectDir, "model", "record.go"), `package model
 
 import (
@@ -192,6 +192,7 @@ func (Record) Design() {
 func TestCheckServiceTestOrganizationAllowsPairedSpecialAndMarkedFiles(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
+	writeCheckProjectGoMod(t, projectDir)
 
 	writeCheckFile(t, filepath.Join(projectDir, "service", "record", "create.go"), "package record\n")
 	writeCheckFile(t, filepath.Join(projectDir, "service", "record", "create_test.go"), `package record
@@ -236,6 +237,7 @@ func requireItem(t *testing.T, ok bool) { t.Helper() }
 func TestCheckServiceTestOrganizationFlagsUnpairedAndMisplacedTests(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
+	writeCheckProjectGoMod(t, projectDir)
 
 	writeCheckFile(t, filepath.Join(projectDir, "service", "record", "create.go"), "package record\n")
 	writeCheckFile(t, filepath.Join(projectDir, "service", "record", "stray_test.go"), `package record

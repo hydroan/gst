@@ -13,6 +13,7 @@ func TestFillVersionFieldTags(t *testing.T) {
 
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
+	writeCheckProjectGoMod(t, projectDir)
 	modelDir = "model"
 
 	path := filepath.Join(projectDir, "model", "config", "config.go")
@@ -84,6 +85,7 @@ func TestFillVersionFieldTagsRejectsEmbedded(t *testing.T) {
 
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
+	writeCheckProjectGoMod(t, projectDir)
 	modelDir = "model"
 
 	writeCheckFile(t, filepath.Join(projectDir, "model", "config", "config.go"), `package config
@@ -111,6 +113,7 @@ func TestFillVersionFieldTagsRejectsHiddenJSON(t *testing.T) {
 
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
+	writeCheckProjectGoMod(t, projectDir)
 	modelDir = "model"
 
 	// json:"-" hides the version clients must hand back; un-hiding it is a

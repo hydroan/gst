@@ -199,7 +199,7 @@ func newModuleCopyMiddlewarePlanProject(t *testing.T) string {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(projectDir, "go.mod"), "module tmpapp\n\ngo 1.26\n")
+	write(filepath.Join(projectDir, "go.mod"), "module tmpapp\n\ngo 1.26\n\nrequire github.com/hydroan/gst v0.0.0-00010101000000-000000000000\n\nreplace github.com/hydroan/gst => ./internal/gst\n")
 	write(filepath.Join(frameworkRoot, "go.mod"), "module github.com/hydroan/gst\n\ngo 1.26\n")
 	write(filepath.Join(frameworkRoot, "module", "copytest", "module.json"), `{
 	"copy": {
@@ -301,9 +301,7 @@ func newModuleCopyGenProject(t *testing.T) string {
 	prune = false
 	cleanOrphans = false
 
-	if err := os.WriteFile(filepath.Join(projectDir, "go.mod"), []byte("module tmpapp\n\ngo 1.26\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	writeCheckProjectGoModAgainstRealFramework(t, projectDir)
 	return projectDir
 }
 
@@ -381,12 +379,7 @@ func newModuleListProjectWithFramework(t *testing.T) string {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(projectDir, "go.mod"), []byte("module tmpapp\n\ngo 1.26\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(projectDir, "internal", "gst", "go.mod"), []byte("module github.com/hydroan/gst\n\ngo 1.26\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	writeCheckProjectGoMod(t, projectDir)
 	return projectDir
 }
 

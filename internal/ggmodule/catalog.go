@@ -127,14 +127,13 @@ func registerCanBeCalledWithoutArgs(fn *ast.FuncDecl) bool {
 // CopyableModuleNames returns the names of the framework modules that declare
 // a copy manifest. gg module copy writes such a module under model/<name> and
 // service/<name>, so these names identify the project subtrees owned by copied
-// module code. A missing framework source tree yields no names instead of an
-// error: gg module copy itself requires the framework source, so a project
-// without it cannot contain copied modules.
+// module code. The framework source resolves through the project's go module
+// graph; a project that cannot resolve it gets the error instead of a silent
+// empty catalog.
 func CopyableModuleNames() ([]string, error) {
 	frameworkRoot, err := findFrameworkRoot()
 	if err != nil {
-		//nolint:nilerr
-		return nil, nil
+		return nil, err
 	}
 	modules, err := listModulesFromRoot(frameworkRoot)
 	if err != nil {
@@ -204,16 +203,14 @@ type AssemblyCall struct {
 // these are the calls gg check holds a project to once it copies the module.
 //
 // Callers pass only the modules a project actually copied, so a project that
-// copied nothing reads no manifest at all. A missing framework source tree
-// yields no calls instead of an error, matching CopyableModuleNames.
+// copied nothing reads no manifest at all.
 func RequiredAssembly(modules []string) ([]AssemblyCall, error) {
 	if len(modules) == 0 {
 		return nil, nil
 	}
 	frameworkRoot, err := findFrameworkRoot()
 	if err != nil {
-		//nolint:nilerr
-		return nil, nil
+		return nil, err
 	}
 
 	calls := make([]AssemblyCall, 0)

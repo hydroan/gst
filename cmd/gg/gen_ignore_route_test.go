@@ -397,9 +397,7 @@ func TestGenRunAppliesRouteIgnoresFromGstYAML(t *testing.T) {
 	prune = false
 	cleanOrphans = false
 
-	if err := os.WriteFile(filepath.Join(projectDir, "go.mod"), []byte("module tmpapp\n\ngo 1.26\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	writeCheckProjectGoModAgainstRealFramework(t, projectDir)
 	if err := os.WriteFile(filepath.Join(projectDir, "gst.yaml"), []byte(`version: 1
 gen:
   routes:

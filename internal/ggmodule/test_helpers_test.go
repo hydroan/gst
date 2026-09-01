@@ -28,6 +28,18 @@ func init() {
 	return projectDir
 }
 
+// writeProjectGoModWithFramework writes the project's go.mod requiring the
+// framework and resolving it to ./internal/gst through a replace directive:
+// the framework source resolves through the go module graph, so every fixture
+// project carries the dependency explicitly.
+func writeProjectGoModWithFramework(t *testing.T, projectDir string) {
+	t.Helper()
+	goMod := "module tmpapp\n\ngo 1.26\n\nrequire " + frameworkModulePath + " v0.0.0-00010101000000-000000000000\n\nreplace " + frameworkModulePath + " => ./internal/gst\n"
+	if err := os.WriteFile(filepath.Join(projectDir, "go.mod"), []byte(goMod), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func newModuleCommandProjectWithFramework(t *testing.T) string {
 	t.Helper()
 	projectDir := newModuleCommandProject(t)
@@ -58,6 +70,7 @@ func writeFakeFrameworkModule(t *testing.T, projectDir string, name string, pack
 	if err := os.WriteFile(frameworkMod, []byte("module github.com/hydroan/gst\n\ngo 1.26\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	writeProjectGoModWithFramework(t, projectDir)
 }
 
 func frameworkModuleDir(t *testing.T, projectDir string, name string) string {
@@ -98,9 +111,7 @@ func newModuleCopyPlanProject(t *testing.T) string {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(projectDir, "go.mod"), []byte("module tmpapp\n\ngo 1.26\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	writeProjectGoModWithFramework(t, projectDir)
 	if err := os.WriteFile(filepath.Join(frameworkRoot, "go.mod"), []byte("module github.com/hydroan/gst\n\ngo 1.26\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}

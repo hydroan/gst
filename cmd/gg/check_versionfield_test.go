@@ -12,6 +12,7 @@ func TestCheckVersionFieldDeclarations(t *testing.T) {
 
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
+	writeCheckProjectGoMod(t, projectDir)
 	modelDir = "model"
 
 	// An embedded Version and a bare named field are both deviations; a
@@ -120,6 +121,7 @@ func TestCheckVersionFieldDeclarationsActionTypes(t *testing.T) {
 
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
+	writeCheckProjectGoMod(t, projectDir)
 	modelDir = "model"
 
 	// The Design-referenced request deviates by wire name, its nested item

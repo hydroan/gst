@@ -11,6 +11,7 @@ func TestCheckModelTableNameDeclarationFlagsMissingAndNonLiteral(t *testing.T) {
 
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
+	writeCheckProjectGoMod(t, projectDir)
 	modelDir = "model"
 
 	// A model without any TableName declaration.
@@ -97,6 +98,7 @@ func TestCheckModelTableNameDeclarationSkipsCopiedModulesGeneratedAndTests(t *te
 
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
+	writeCheckProjectGoMod(t, projectDir)
 	modelDir = "model"
 
 	writeFrameworkModuleFixture(t, projectDir, "sample")

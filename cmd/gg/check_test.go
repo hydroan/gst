@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -392,4 +393,55 @@ func writeCheckFile(t *testing.T, path string, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// writeCheckProjectGoMod writes the fixture project's go.mod together with the
+// minimal framework source it resolves through the go module graph: checks
+// that exempt copied framework modules resolve the framework source for every
+// project they inspect.
+func writeCheckProjectGoMod(t *testing.T, projectDir string) {
+	t.Helper()
+
+	writeCheckFile(t, filepath.Join(projectDir, "go.mod"), "module tmpapp\n\ngo 1.26\n\nrequire github.com/hydroan/gst v0.0.0-00010101000000-000000000000\n\nreplace github.com/hydroan/gst => ./internal/gst\n")
+	writeCheckFile(t, filepath.Join(projectDir, "internal", "gst", "go.mod"), "module github.com/hydroan/gst\n\ngo 1.26\n")
+	if err := os.MkdirAll(filepath.Join(projectDir, "internal", "gst", "module"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// writeCheckProjectGoModAgainstRealFramework writes the fixture project's
+// go.mod resolving the framework to this repository's own source tree. Gen
+// fixtures need it because the generated inspection program compiles against
+// the framework for real, which a stub source tree cannot satisfy. The
+// fixture reuses this repository's own go.mod requirements and go.sum so the
+// build resolves the exact dependency versions the framework pins, instead of
+// re-resolving the graph from scratch (which trips over ambiguous-import
+// splits such as google.golang.org/genproto).
+func writeCheckProjectGoModAgainstRealFramework(t *testing.T, projectDir string) {
+	t.Helper()
+
+	root := frameworkRepoRoot(t)
+	goMod, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := strings.Replace(string(goMod), "module github.com/hydroan/gst\n", "module tmpapp\n", 1)
+	content += "\nrequire github.com/hydroan/gst v0.0.0-00010101000000-000000000000\n\nreplace github.com/hydroan/gst => " + root + "\n"
+	writeCheckFile(t, filepath.Join(projectDir, "go.mod"), content)
+	goSum, err := os.ReadFile(filepath.Join(root, "go.sum"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeCheckFile(t, filepath.Join(projectDir, "go.sum"), string(goSum))
+}
+
+// frameworkRepoRoot returns the absolute path of this repository's root.
+func frameworkRepoRoot(t *testing.T) string {
+	t.Helper()
+
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	return filepath.Dir(filepath.Dir(filepath.Dir(file)))
 }

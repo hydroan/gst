@@ -13,6 +13,7 @@ func TestCheckLogFieldBoundednessFlagsMarshalerMethodsAndNamespaceCalls(t *testi
 
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
+	writeCheckProjectGoMod(t, projectDir)
 	modelDir = "model"
 	serviceDir = "service"
 
@@ -78,6 +79,7 @@ func TestCheckLogFieldBoundednessResolvesZapImportForms(t *testing.T) {
 
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
+	writeCheckProjectGoMod(t, projectDir)
 	modelDir = "model"
 	serviceDir = "service"
 
@@ -129,6 +131,7 @@ func TestCheckLogFieldBoundednessSkipsCopiedModulesAndGeneratedFiles(t *testing.
 
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
+	writeCheckProjectGoMod(t, projectDir)
 	modelDir = "model"
 	serviceDir = "service"
 

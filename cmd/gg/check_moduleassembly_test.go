@@ -8,7 +8,7 @@ import (
 
 // writeAssemblyFixtureFramework lays down a minimal framework source tree with
 // one copyable module declaring one required assembly call. The check locates
-// it the same way gg module copy does, through ./internal/gst.
+// it the same way gg module copy does, through the project's go module graph.
 func writeAssemblyFixtureFramework(t *testing.T, projectDir string) {
 	t.Helper()
 
@@ -32,7 +32,7 @@ func writeAssemblyFixtureFramework(t *testing.T, projectDir string) {
 func writeAssemblyFixtureProject(t *testing.T, projectDir string) {
 	t.Helper()
 
-	writeCheckFile(t, filepath.Join(projectDir, "go.mod"), "module tmpapp\n\ngo 1.26\n")
+	writeCheckProjectGoMod(t, projectDir)
 	writeAssemblyFixtureFramework(t, projectDir)
 	writeCheckFile(t, filepath.Join(projectDir, "model", "sample", "sample.go"), "package sample\n")
 	writeCheckFile(t, filepath.Join(projectDir, "service", "sample", "gate.go"), "package sample\n")
@@ -124,7 +124,7 @@ func init() {
 func TestCheckModuleAssemblySkipsModuleTheProjectNeverCopied(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	writeCheckFile(t, filepath.Join(projectDir, "go.mod"), "module tmpapp\n\ngo 1.26\n")
+	writeCheckProjectGoMod(t, projectDir)
 	writeAssemblyFixtureFramework(t, projectDir)
 
 	// No model/sample subtree means the module was never copied, so the

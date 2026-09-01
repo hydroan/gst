@@ -30,9 +30,8 @@ import (
 // exists to prevent. Test files are skipped for the same reason — wiring that
 // only runs under go test does not arm the binary.
 func CheckModuleAssembly(ignore gitignore.Matcher) []string {
-	// Cheapest first: without the framework source there are no copyable
-	// modules, and a name whose model subtree is absent was never copied. A
-	// project that copied nothing reads no manifest and walks nothing.
+	// Cheapest first: a name whose model subtree is absent was never copied,
+	// so a project that copied nothing reads no manifest and walks nothing.
 	names, err := ggmodule.CopyableModuleNames()
 	if err != nil {
 		return []string{fmt.Sprintf("listing copyable framework modules: %v", err)}
