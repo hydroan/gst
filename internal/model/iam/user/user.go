@@ -18,7 +18,7 @@ const (
 
 type User struct {
 	Username string     `json:"username" gorm:"type:varchar(50);not null"`
-	Status   UserStatus `json:"status" gorm:"type:varchar(20);default:'active'"`
+	Status   UserStatus `json:"status" gorm:"type:varchar(20);default:active"`
 
 	// Query gives the administrator user list the framework's own paging,
 	// ordering and operator filters, rather than the handful of parameters that
