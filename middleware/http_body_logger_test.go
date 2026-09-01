@@ -48,7 +48,7 @@ func TestHTTPBodyLoggerDisabledDoesNothing(t *testing.T) {
 			logs := setupHTTPBodyLoggerTest(t, tc.cfg)
 
 			router := gin.New()
-			router.Use(BodyLogger())
+			router.Use(bodyLogger())
 			router.POST("/api/records", func(c *gin.Context) {
 				body, err := io.ReadAll(c.Request.Body)
 				require.NoError(t, err)
@@ -73,7 +73,7 @@ func TestHTTPBodyLoggerLogsRequestAndResponseAsOneEntry(t *testing.T) {
 	})
 
 	router := gin.New()
-	router.Use(BodyLogger())
+	router.Use(bodyLogger())
 	router.POST("/api/records", func(c *gin.Context) {
 		c.Set(consts.CTX_USERNAME, "alice")
 		c.Set(consts.CTX_USER_ID, "u-1")
@@ -125,7 +125,7 @@ func TestHTTPBodyLoggerRecordsRoutePatternAndConcretePath(t *testing.T) {
 	})
 
 	router := gin.New()
-	router.Use(BodyLogger())
+	router.Use(bodyLogger())
 	router.POST("/api/records/:id/notes", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
@@ -149,7 +149,7 @@ func TestHTTPBodyLoggerDefaultModesLogRequestAlwaysResponseOnError(t *testing.T)
 	// for responses.
 	newRouter := func(handler gin.HandlerFunc) *gin.Engine {
 		router := gin.New()
-		router.Use(BodyLogger())
+		router.Use(bodyLogger())
 		router.POST("/api/records", handler)
 		return router
 	}
@@ -239,7 +239,7 @@ func TestHTTPBodyLoggerSkipsConfiguredRoutes(t *testing.T) {
 	}
 	newRouter := func() *gin.Engine {
 		router := gin.New()
-		router.Use(BodyLogger())
+		router.Use(bodyLogger())
 		handler := func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) }
 		router.POST("/api/login", handler)
 		router.POST("/api/records/:id/notes", handler)
@@ -297,7 +297,7 @@ func TestHTTPBodyLoggerSkipsLargeRequestBodyContent(t *testing.T) {
 	})
 
 	router := gin.New()
-	router.Use(BodyLogger())
+	router.Use(bodyLogger())
 	router.POST("/api/records", func(c *gin.Context) {
 		// The oversized body is not buffered by the middleware, so the
 		// handler must still receive the original stream untouched.
@@ -327,7 +327,7 @@ func TestHTTPBodyLoggerTruncatesLargeResponseBody(t *testing.T) {
 	})
 
 	router := gin.New()
-	router.Use(BodyLogger())
+	router.Use(bodyLogger())
 	router.GET("/api/records", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"sum": 3})
 	})
@@ -354,7 +354,7 @@ func TestHTTPBodyLoggerIgnoresNonJSONBodies(t *testing.T) {
 	})
 
 	router := gin.New()
-	router.Use(BodyLogger())
+	router.Use(bodyLogger())
 	router.POST("/api/records", func(c *gin.Context) {
 		c.String(http.StatusOK, "sum=3")
 	})
@@ -374,7 +374,7 @@ func TestHTTPBodyLoggerLogsMalformedJSONVerbatim(t *testing.T) {
 	})
 
 	router := gin.New()
-	router.Use(BodyLogger())
+	router.Use(bodyLogger())
 	router.POST("/api/records", func(c *gin.Context) {
 		body, err := io.ReadAll(c.Request.Body)
 		require.NoError(t, err)

@@ -25,7 +25,7 @@ const (
 	defaultHTTPBodyLogMaxSize = "64KB"
 )
 
-// BodyLogger returns a middleware that logs JSON HTTP request and response
+// bodyLogger returns a middleware that logs JSON HTTP request and response
 // bodies as a single log entry per request, correlated by trace id.
 //
 // Bodies are deliberately logged verbatim as raw JSON text and must never be
@@ -52,7 +52,7 @@ const (
 // decided after the handler chain finished, so the all|error|none modes can
 // use the final response status and the envelope code recorded by the
 // response helpers.
-func BodyLogger() gin.HandlerFunc {
+func bodyLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cfg := config.App.Logger.HTTPBody
 		reqMode := normalizeHTTPBodyLogMode(cfg.LogRequest, config.HTTPBodyLogModeAll)

@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-func Logger(filename ...string) gin.HandlerFunc {
+func accessLogger(filename ...string) gin.HandlerFunc {
 	// return ginzap.Ginzap(pkgzap.NewGinLogger(filename...), time.RFC3339, true)
 	return func(c *gin.Context) {
 		start := time.Now()

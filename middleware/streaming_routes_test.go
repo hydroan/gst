@@ -32,7 +32,7 @@ func TestBodyLoggerLeavesStreamingResponseUnwrapped(t *testing.T) {
 	MarkStreamingRoute(http.MethodGet, "/api/bodylogger/stream")
 
 	router := gin.New()
-	router.Use(BodyLogger())
+	router.Use(bodyLogger())
 	var streamWrapped, plainWrapped bool
 	router.GET("/api/bodylogger/stream", func(c *gin.Context) {
 		_, streamWrapped = c.Writer.(*bodyLogWriter)

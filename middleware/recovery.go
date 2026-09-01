@@ -17,24 +17,24 @@ import (
 	"go.uber.org/zap"
 )
 
-// Recovery returns the recovery middleware the default router chain installs,
+// recovery returns the recovery middleware the default router chain installs,
 // logging panics to filename.
 //
-// It binds RecoveryWithTracing to a file logger rather than standing a second
+// It binds recoveryWithTracing to a file logger rather than standing a second
 // implementation beside it. The two had drifted: a panic handled here left the
 // request's span with no error recorded on it, logged the Authorization header
 // as it stood, and answered with a bare 500 carrying no envelope and no trace
 // id — on the one response whose reader most needs one.
-func Recovery(filename string) gin.HandlerFunc {
-	return RecoveryWithTracing(pkgzap.NewGin(filename), true)
+func recovery(filename string) gin.HandlerFunc {
+	return recoveryWithTracing(pkgzap.NewGin(filename), true)
 }
 
-// RecoveryWithTracing returns a gin.HandlerFunc (middleware)
+// recoveryWithTracing returns a gin.HandlerFunc (middleware)
 // that recovers from any panics and logs requests using uber-go/zap.
 // All errors are logged using zap.Error().
 // stack means whether output the stack info.
 // The stack info is easy to find where the error occurs but the stack info is too large.
-func RecoveryWithTracing(logger *zap.Logger, stack bool) gin.HandlerFunc {
+func recoveryWithTracing(logger *zap.Logger, stack bool) gin.HandlerFunc {
 	return gin.CustomRecoveryWithWriter(nil, func(c *gin.Context, recovered any) {
 		// Record panic in tracing span
 		span := GetSpanFromContext(c)
@@ -77,10 +77,10 @@ func RecoveryWithTracing(logger *zap.Logger, stack bool) gin.HandlerFunc {
 			case brokenPipe:
 				logger.Error(fmt.Sprintf("%s\n%s", recovered, headersToStr))
 			case stack:
-				logger.Error(fmt.Sprintf("[Recovery] panic recovered:\n%s\n%s\n%s",
+				logger.Error(fmt.Sprintf("[recovery] panic recovered:\n%s\n%s\n%s",
 					headersToStr, recovered, debug.Stack()))
 			default:
-				logger.Error(fmt.Sprintf("[Recovery] panic recovered:\n%s\n%s",
+				logger.Error(fmt.Sprintf("[recovery] panic recovered:\n%s\n%s",
 					headersToStr, recovered))
 			}
 		}

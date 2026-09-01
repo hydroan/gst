@@ -18,9 +18,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// Tracing returns a middleware that handles both trace ID generation and OpenTelemetry tracing
-// This middleware combines the functionality of TraceID() and Tracing() middlewares
-func Tracing() gin.HandlerFunc {
+// tracing returns a middleware that handles both trace ID generation and OpenTelemetry tracing
+// This middleware combines the functionality of TraceID() and tracing() middlewares
+func tracing() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var traceID, spanID string
 		var span trace.Span

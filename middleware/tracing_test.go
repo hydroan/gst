@@ -23,7 +23,7 @@ func TestTracingUsesIncomingTraceparent(t *testing.T) {
 	const incomingTraceID = "11111111111111111111111111111111"
 
 	router := gin.New()
-	router.Use(Tracing())
+	router.Use(tracing())
 	router.GET("/api/ping", func(c *gin.Context) {
 		spanContext := oteltrace.SpanFromContext(c.Request.Context()).SpanContext()
 		require.True(t, spanContext.HasTraceID())
@@ -47,7 +47,7 @@ func TestTracingUsesIncomingTraceIDHeader(t *testing.T) {
 	const incomingTraceID = "33333333333333333333333333333333"
 
 	router := gin.New()
-	router.Use(Tracing())
+	router.Use(tracing())
 	router.GET("/api/ping", func(c *gin.Context) {
 		spanContext := oteltrace.SpanFromContext(c.Request.Context()).SpanContext()
 		require.True(t, spanContext.HasTraceID())
@@ -69,7 +69,7 @@ func TestTracingSkipsRecordingOnlyStateWhenSamplerDrops(t *testing.T) {
 	setupTracingTestWithSampler(t, config.TracesSamplerAlwaysOff)
 
 	router := gin.New()
-	router.Use(Tracing())
+	router.Use(tracing())
 	router.GET("/api/ping", func(c *gin.Context) {
 		span := oteltrace.SpanFromContext(c.Request.Context())
 		require.True(t, span.SpanContext().HasTraceID())
@@ -95,7 +95,7 @@ func TestMiddlewareWrapperKeepsMiddlewareSpanWhenSamplerDrops(t *testing.T) {
 	var middlewareSpanContext oteltrace.SpanContext
 
 	router := gin.New()
-	router.Use(Tracing())
+	router.Use(tracing())
 	router.Use(middlewareWrapper("test", func(c *gin.Context) {
 		rootSpan, exists := c.Get("otel_span")
 		require.True(t, exists)

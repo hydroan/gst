@@ -8,8 +8,8 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
-// RouteParams is a middleware to get route parameters
-func RouteParams() gin.HandlerFunc {
+// routeParams is a middleware to get route parameters
+func routeParams() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Set(consts.PARAMS, RouteManager.Get(c.FullPath()))
 		c.Next()

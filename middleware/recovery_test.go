@@ -21,7 +21,7 @@ func TestRecoveryWithTracingAnswersInTheEnvelope(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	engine := gin.New()
-	engine.Use(RecoveryWithTracing(nil, false))
+	engine.Use(recoveryWithTracing(nil, false))
 	engine.GET("/panic", func(*gin.Context) { panic("boom") })
 
 	recorder := httptest.NewRecorder()

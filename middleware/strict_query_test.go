@@ -17,7 +17,7 @@ func strictQueryResult(t *testing.T, method, rawQuery string) (int, string) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	engine.Use(StrictQuery())
+	engine.Use(strictQuery())
 	handle := func(c *gin.Context) { c.Status(http.StatusOK) }
 	engine.GET("/probe", handle)
 	engine.POST("/probe", handle)
@@ -115,7 +115,7 @@ func TestStrictQueryRefusalUsesEnvelope(t *testing.T) {
 func BenchmarkStrictQuery(b *testing.B) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	engine.Use(StrictQuery())
+	engine.Use(strictQuery())
 	engine.GET("/probe", func(c *gin.Context) { c.Status(http.StatusOK) })
 
 	cases := []struct {

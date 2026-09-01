@@ -10,7 +10,7 @@ import (
 	"github.com/hydroan/gst/response"
 )
 
-// StrictQuery returns a middleware that rejects ambiguous query strings before
+// strictQuery returns a middleware that rejects ambiguous query strings before
 // any handler runs: a query that fails to parse, or one that repeats a key.
 //
 // The framework's query contract is one value per key — the framework itself
@@ -30,7 +30,7 @@ import (
 // The gate performs the request's one query parse and memoizes it for the
 // framework's request metadata to reuse, so it adds no parse over a chain that
 // parses the query anyway; requests without a query string skip it entirely.
-func StrictQuery() gin.HandlerFunc {
+func strictQuery() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.Request == nil || c.Request.URL == nil || c.Request.URL.RawQuery == "" {
 			c.Next()
