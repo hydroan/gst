@@ -115,50 +115,67 @@ func Register(fn func() error, spec string, name string, config ...Config) {
 }
 
 func register(cj *cronjob) {
-	var err error
 	if cj == nil {
 		return
 	}
 	if cj.spec == "" {
 		return
 	}
-	if cj.sched, err = parser.Parse(cj.spec); err != nil {
+	sched, err := parser.Parse(cj.spec)
+	if err != nil {
 		log.Errorz(fmt.Sprintf("failed to parse cronjob spec: %s", err), zap.String("name", cj.name), zap.String("spec", cj.spec))
 		return
 	}
+	cj.sched = sched
 
-	// Execute immediately if configured to do so
-	if cj.runImmediately {
-		go func() {
-			defer func() {
-				if err := recover(); err != nil {
-					log.Errorw(fmt.Sprintf("cronjob immediate execution panic: %s", err), "name", cj.name, "spec", cj.spec)
-				}
-			}()
-			begin := time.Now()
-			if err = cj.fn(); err != nil {
-				log.Errorz(fmt.Sprintf("finished immediate cronjob execution with error: %s", err), zap.String("name", cj.name), zap.String("spec", cj.spec), util.LogDuration(time.Since(begin)))
-			} else {
-				log.Infoz("finished immediate cronjob execution", zap.String("name", cj.name), zap.String("spec", cj.spec), util.LogDuration(time.Since(begin)))
-			}
-		}()
-	}
-
-	if _, err = c.AddFunc(cj.spec, func() {
+	// run executes one round. Panic recovery, timing and outcome logging live
+	// here so the immediate run and every scheduled run share a single code
+	// path; runErr stays local to the round so concurrent rounds of different
+	// jobs never share error state.
+	run := func() {
 		defer func() {
-			if err := recover(); err != nil {
-				log.Errorw(fmt.Sprintf("cronjob panic: %s", err), "name", cj.name, "spec", cj.spec)
+			if r := recover(); r != nil {
+				log.Errorw(fmt.Sprintf("cronjob panic: %s", r), "name", cj.name, "spec", cj.spec)
 			}
 		}()
 		begin := time.Now()
-		if err = cj.fn(); err != nil {
-			log.Errorz(fmt.Sprintf("finished cronjob with error: %s", err), zap.String("name", cj.name), zap.String("spec", cj.spec), zap.Time("next", cj.sched.Next(begin)), util.LogDuration(time.Since(begin)))
+		if runErr := cj.fn(); runErr != nil {
+			log.Errorz(fmt.Sprintf("finished cronjob with error: %s", runErr), zap.String("name", cj.name), zap.String("spec", cj.spec), zap.Time("next", cj.sched.Next(begin)), util.LogDuration(time.Since(begin)))
 		} else {
 			log.Infoz("finished cronjob", zap.String("name", cj.name), zap.String("spec", cj.spec), zap.Time("next", cj.sched.Next(begin)), util.LogDuration(time.Since(begin)))
 		}
-	}); err != nil {
-		log.Errorz(fmt.Sprintf("failed to add cronjob: %s", err), zap.String("name", cj.name), zap.String("spec", cj.spec))
+	}
+	// SkipIfStillRunning drops a tick while the previous round is still in
+	// flight: a slow round must never have new rounds piled on top of it,
+	// multiplying downstream calls. The immediate run goes through the same
+	// wrapped job, so it holds the same in-flight guard as scheduled rounds;
+	// if it overlaps the first tick the two collapse into one round, which is
+	// exactly the "run once as soon as possible" the flag promises.
+	job := cron.NewChain(cron.SkipIfStillRunning(cronLogger{name: cj.name})).Then(cron.FuncJob(run))
+
+	if cj.runImmediately {
+		go job.Run()
+	}
+
+	if _, addErr := c.AddJob(cj.spec, job); addErr != nil {
+		log.Errorz(fmt.Sprintf("failed to add cronjob: %s", addErr), zap.String("name", cj.name), zap.String("spec", cj.spec))
 	} else {
 		log.Infoz("successfully add cronjob", zap.String("name", cj.name), zap.String("spec", cj.spec), zap.Bool("run_immediately", cj.runImmediately))
 	}
+}
+
+// cronLogger adapts the package logger to cron.Logger for chain wrappers such
+// as SkipIfStillRunning, tagging every entry with the job name the wrapper
+// itself does not know — a bare "skip" line would leave no way to tell which
+// job was dropped.
+type cronLogger struct {
+	name string
+}
+
+func (l cronLogger) Info(msg string, keysAndValues ...any) {
+	log.Infow("cronjob "+msg, append([]any{"name", l.name}, keysAndValues...)...)
+}
+
+func (l cronLogger) Error(err error, msg string, keysAndValues ...any) {
+	log.Errorw("cronjob "+msg, append([]any{"name", l.name, "error", err}, keysAndValues...)...)
 }
