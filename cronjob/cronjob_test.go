@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -127,6 +128,85 @@ func TestStopWithoutInitIsNoop(t *testing.T) {
 	resetCronjobState(t)
 
 	Stop()
+}
+
+// TestScheduledRunsSkipWhileStillRunning proves overlapping ticks are dropped
+// while a run is still in flight: a slow job on a fast schedule must never run
+// concurrently with itself. Without the guard a slow round piles new rounds on
+// top of it, multiplying its downstream calls and interleaving its logs.
+func TestScheduledRunsSkipWhileStillRunning(t *testing.T) {
+	withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+
+	var running, maxRunning atomic.Int32
+	var startOnce sync.Once
+	started := make(chan struct{})
+	block := make(chan struct{})
+	Register(func() error {
+		observeConcurrentRuns(&running, &maxRunning)
+		startOnce.Do(func() { close(started) })
+		<-block
+		running.Add(-1)
+		return nil
+	}, "* * * * * *", "overlap-job")
+	require.NoError(t, Init())
+
+	select {
+	case <-started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the scheduled job never started")
+	}
+	// Hold the first run across at least two more scheduling ticks, then let
+	// everything finish so Stop does not have to wait out its timeout.
+	time.Sleep(2200 * time.Millisecond)
+	close(block)
+	Stop()
+
+	require.EqualValues(t, 1, maxRunning.Load(),
+		"ticks firing while a run is in flight must be skipped, not piled on top of it")
+}
+
+// TestImmediateRunSharesSkipMutex proves the immediate run and the scheduled
+// runs hold the same in-flight guard: a slow immediate run on a fast schedule
+// must not race the first tick.
+func TestImmediateRunSharesSkipMutex(t *testing.T) {
+	withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+
+	var running, maxRunning atomic.Int32
+	var startOnce sync.Once
+	started := make(chan struct{})
+	Register(func() error {
+		observeConcurrentRuns(&running, &maxRunning)
+		startOnce.Do(func() { close(started) })
+		time.Sleep(1500 * time.Millisecond)
+		running.Add(-1)
+		return nil
+	}, "* * * * * *", "immediate-overlap-job", Config{RunImmediately: true})
+	require.NoError(t, Init())
+
+	select {
+	case <-started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the immediate run never started")
+	}
+	time.Sleep(1800 * time.Millisecond)
+	Stop()
+
+	require.EqualValues(t, 1, maxRunning.Load(),
+		"the immediate run must hold the same guard as scheduled runs")
+}
+
+// observeConcurrentRuns bumps the number of in-flight runs and records the
+// highest concurrency seen across the test.
+func observeConcurrentRuns(running, maxRunning *atomic.Int32) {
+	cur := running.Add(1)
+	for {
+		seen := maxRunning.Load()
+		if cur <= seen || maxRunning.CompareAndSwap(seen, cur) {
+			return
+		}
+	}
 }
 
 // withCronjobLoggerConfig points config.App at a scratch logger setup so the
