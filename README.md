@@ -421,8 +421,10 @@ err := database.Aggregate[*appmodel.Record, categoryTotal](ctx).
 
 单行结果用 `ScanOne`，分页报表的总组数用 `CountGroups`。跨表条件用
 `types.FilterExists` / `FilterNotExists` 半连接，不要用 join —— join 到一对多
-子表会让 `SUM` 静默翻倍。它们是普通的 `Filter` 算子，`List`/`Count`/`Export`
-同样能用。
+子表会让 `SUM` 静默翻倍。子表与外层的关联列对用 `子表列.Correlate(外层列)`
+作为谓词传入（字符串列写 `types.FilterCorrelate`），复合键就多传几对，每一对都
+必须成立；没有任何关联对的子查询按 fail closed 处理。它们是普通的 `Filter` 算子，
+`List`/`Count`/`Export` 同样能用。
 
 框架**不做** join、窗口函数、UNION、递归 CTE，聚合能力也不向 URL 暴露：
 报表口径属于服务端契约，让客户端自选分组键等于开放一个无界扫描入口。
