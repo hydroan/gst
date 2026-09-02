@@ -109,7 +109,6 @@ func RateLimiter(opts ...Option) gin.HandlerFunc {
 
 	return func(c *gin.Context) {
 		if conf.SkipFunc != nil && conf.SkipFunc(c) {
-			c.Next()
 			return
 		}
 
@@ -133,6 +132,5 @@ func RateLimiter(opts ...Option) gin.HandlerFunc {
 			response.Abort(c, http.StatusTooManyRequests, "too many requests")
 			return
 		}
-		c.Next()
 	}
 }

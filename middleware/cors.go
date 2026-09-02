@@ -24,7 +24,5 @@ func cors() gin.HandlerFunc {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
-
-		c.Next()
 	}
 }

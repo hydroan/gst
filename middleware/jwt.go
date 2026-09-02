@@ -52,6 +52,5 @@ func JwtAuth() gin.HandlerFunc {
 		c.Set(consts.CTX_USER_ID, claims.UserID)
 		c.Set(consts.CTX_USERNAME, claims.Username)
 		c.Set(consts.CTX_SESSION_ID, c.GetHeader("X-Session-Id"))
-		c.Next()
 	}
 }

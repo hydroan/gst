@@ -26,7 +26,6 @@ import (
 func Delay(duration time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		time.Sleep(duration)
-		c.Next()
 	}
 }
 
@@ -64,7 +63,6 @@ func DelayRandom(minDuration, maxDuration time.Duration) gin.HandlerFunc {
 		} else if minDuration > 0 {
 			time.Sleep(minDuration)
 		}
-		c.Next()
 	}
 }
 
@@ -92,6 +90,5 @@ func DelayWithConfig(delayFunc func(*gin.Context) time.Duration) gin.HandlerFunc
 		if duration > 0 {
 			time.Sleep(duration)
 		}
-		c.Next()
 	}
 }

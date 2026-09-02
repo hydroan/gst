@@ -92,7 +92,5 @@ func SecurityHeaders(config *SecurityHeadersConfig) gin.HandlerFunc {
 		if config.PermissionsPolicy != "" {
 			c.Header("Permissions-Policy", config.PermissionsPolicy)
 		}
-
-		c.Next()
 	}
 }

@@ -99,7 +99,6 @@ func Authz() gin.HandlerFunc {
 				c.Request = c.Request.WithContext(tenant.Across(c.Request.Context()))
 			}
 			logAuthzGrant(c, tenantID, sub, obj, act, decision.Source, decision.MatchedRule, time.Since(start))
-			c.Next()
 			return
 		}
 		response.Abort(c, http.StatusForbidden, "permission denied")

@@ -60,7 +60,6 @@ func bodyLogger() gin.HandlerFunc {
 		if !cfg.Enabled ||
 			(reqMode == config.HTTPBodyLogModeNone && rspMode == config.HTTPBodyLogModeNone) ||
 			matchHTTPBodyLogSkipRoute(cfg.SkipRoutes, httpBodyLogSkipTarget(c)) {
-			c.Next()
 			return
 		}
 

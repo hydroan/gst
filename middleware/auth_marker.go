@@ -10,6 +10,5 @@ import (
 func AuthMarker() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Set(consts.CTX_REQUIRES_AUTH, true)
-		c.Next()
 	}
 }

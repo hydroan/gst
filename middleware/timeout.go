@@ -31,7 +31,6 @@ func Timeout(timeout time.Duration) gin.HandlerFunc {
 		// A streaming response legitimately outlives any request timeout;
 		// cutting it down here would end every stream at the deadline.
 		if isStreamingRequest(c) {
-			c.Next()
 			return
 		}
 

@@ -183,7 +183,5 @@ func IPFilter(config *IPFilterConfig) gin.HandlerFunc {
 				return
 			}
 		}
-
-		c.Next()
 	}
 }

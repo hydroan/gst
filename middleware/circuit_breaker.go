@@ -16,7 +16,6 @@ func CircuitBreaker() gin.HandlerFunc {
 		// breaker's counts forever and, worse, occupy the half-open probe
 		// budget so the breaker never closes again.
 		if isStreamingRequest(c) {
-			c.Next()
 			return
 		}
 

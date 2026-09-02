@@ -35,6 +35,5 @@ func RequestSizeLimit(maxSize int64) gin.HandlerFunc {
 		if c.Request.Body != nil {
 			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxSize)
 		}
-		c.Next()
 	}
 }

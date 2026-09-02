@@ -33,7 +33,6 @@ import (
 func strictQuery() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.Request == nil || c.Request.URL == nil || c.Request.URL.RawQuery == "" {
-			c.Next()
 			return
 		}
 
@@ -57,7 +56,5 @@ func strictQuery() gin.HandlerFunc {
 				"duplicate query parameter: "+strings.Join(duplicated, ", "))
 			return
 		}
-
-		c.Next()
 	}
 }
