@@ -352,15 +352,20 @@ const middlewareContent = `// Package middleware registers the application's cus
 //	)
 //
 //	func sample(c *gin.Context) {
-//		// Runs before each handler. Refuse a request with response.Abort: it
-//		// answers in the API envelope every other response carries, so one
-//		// client reads them all the same way and can quote back the trace id
-//		// that explains this one.
+//		// Runs before each handler and simply returns: gin carries the chain
+//		// on by itself, and the tracing span wrapped around this middleware
+//		// then covers only its own work. Call c.Next() only when code has to
+//		// run after the handler, such as reading the response status; the
+//		// span then covers the handler as well.
+//		//
+//		// Refuse a request with response.Abort: it answers in the API
+//		// envelope every other response carries, so one client reads them
+//		// all the same way and can quote back the trace id that explains
+//		// this one.
 //		if c.GetHeader("X-Sample") == "" {
 //			response.Abort(c, http.StatusForbidden, "sample header required")
 //			return
 //		}
-//		c.Next()
 //	}
 //
 //	func init() {
