@@ -367,10 +367,13 @@ func (*TestAggregateRecord) TableName() string { return "test_aggregate_records"
 
 // TestRecordTag is the related model of TestAggregateRecord, used by the
 // correlated-subquery filters. It soft deletes like its parent, so the tests
-// can assert that a subquery hides the same rows a List on it hides.
+// can assert that a subquery hides the same rows a List on it hides. Category
+// denormalizes the record's category onto the tag, giving the composite-key
+// tests a second column to correlate on.
 type TestRecordTag struct {
 	RecordID string `json:"record_id" gorm:"size:191"`
 	Label    string `json:"label" gorm:"size:191"`
+	Category string `json:"category" gorm:"size:191"`
 
 	model.Base
 }

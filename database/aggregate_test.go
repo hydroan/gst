@@ -757,23 +757,26 @@ var tagCols = struct {
 	ID       types.Column[string]
 	RecordID types.Column[string]
 	Label    types.Column[string]
+	Category types.Column[string]
 }{
 	ID:       types.NewColumn[string]("id"),
 	RecordID: types.NewColumn[string]("record_id"),
 	Label:    types.NewColumn[string]("label"),
+	Category: types.NewColumn[string]("category"),
 }
 
 var recordIDCol = types.NewColumn[string]("id")
 
 // setupTagData seeds tags on a1, a3 and a4. a1 and a3 are alpha rows, a4 is a
-// beta row, so a subquery on the "vip" label selects across categories.
+// beta row, so a subquery on the "vip" label selects across categories. Each
+// tag carries its record's category, consistent with the record it points at.
 func setupTagData(t *testing.T) {
 	t.Helper()
 	cleanupTagData()
 	require.NoError(t, database.Database[*TestRecordTag](context.Background()).Create(
-		&TestRecordTag{ID: "t1", RecordID: "a1", Label: "vip"},
-		&TestRecordTag{ID: "t2", RecordID: "a3", Label: "vip"},
-		&TestRecordTag{ID: "t3", RecordID: "a4", Label: "bulk"},
+		&TestRecordTag{ID: "t1", RecordID: "a1", Label: "vip", Category: "alpha"},
+		&TestRecordTag{ID: "t2", RecordID: "a3", Label: "vip", Category: "alpha"},
+		&TestRecordTag{ID: "t3", RecordID: "a4", Label: "bulk", Category: "beta"},
 	))
 }
 
@@ -788,7 +791,7 @@ func TestFilterExists(t *testing.T) {
 	setupTagData(t)
 
 	ctx := context.Background()
-	vip := types.FilterExists[*TestRecordTag](tagCols.RecordID, recordIDCol, tagCols.Label.Eq("vip"))
+	vip := types.FilterExists[*TestRecordTag](tagCols.RecordID.Correlate(recordIDCol), tagCols.Label.Eq("vip"))
 
 	// The same filter serves List and Aggregate: it is a Filter operator, not
 	// an aggregate feature.
@@ -857,7 +860,7 @@ func TestFilterNotExists(t *testing.T) {
 
 	ctx := context.Background()
 	// Rows with no vip tag at all, plus rows whose tags are not vip.
-	noVip := types.FilterNotExists[*TestRecordTag](tagCols.RecordID, recordIDCol, tagCols.Label.Eq("vip"))
+	noVip := types.FilterNotExists[*TestRecordTag](tagCols.RecordID.Correlate(recordIDCol), tagCols.Label.Eq("vip"))
 
 	records := make([]*TestAggregateRecord, 0)
 	require.NoError(t, database.Database[*TestAggregateRecord](ctx).
@@ -880,7 +883,7 @@ func TestFilterExistsCombinesWithOtherFilters(t *testing.T) {
 	setupTagData(t)
 
 	ctx := context.Background()
-	vip := types.FilterExists[*TestRecordTag](tagCols.RecordID, recordIDCol, tagCols.Label.Eq("vip"))
+	vip := types.FilterExists[*TestRecordTag](tagCols.RecordID.Correlate(recordIDCol), tagCols.Label.Eq("vip"))
 
 	records := make([]*TestAggregateRecord, 0)
 	require.NoError(t, database.Database[*TestAggregateRecord](ctx).
@@ -908,8 +911,8 @@ func TestAggregateConditionalOnSubquery(t *testing.T) {
 	setupTagData(t)
 
 	ctx := context.Background()
-	tagged := types.FilterExists[*TestRecordTag](tagCols.RecordID, recordIDCol, tagCols.Label.Eq("vip"))
-	untagged := types.FilterNotExists[*TestRecordTag](tagCols.RecordID, recordIDCol, tagCols.Label.Eq("vip"))
+	tagged := types.FilterExists[*TestRecordTag](tagCols.RecordID.Correlate(recordIDCol), tagCols.Label.Eq("vip"))
+	untagged := types.FilterNotExists[*TestRecordTag](tagCols.RecordID.Correlate(recordIDCol), tagCols.Label.Eq("vip"))
 
 	type row struct {
 		TaggedAmount   int64
@@ -963,7 +966,7 @@ func TestFilterExistsTableResolution(t *testing.T) {
 	ctx := context.Background()
 	// TestTagAlias resolves to test_record_tags through TableName, while its
 	// struct name would make gorm derive test_tag_aliases.
-	vip := types.FilterExists[*TestTagAlias](tagCols.RecordID, recordIDCol, tagCols.Label.Eq("vip"))
+	vip := types.FilterExists[*TestTagAlias](tagCols.RecordID.Correlate(recordIDCol), tagCols.Label.Eq("vip"))
 
 	records := make([]*TestAggregateRecord, 0)
 	require.NoError(t, database.Database[*TestAggregateRecord](ctx).
@@ -1009,8 +1012,8 @@ func TestFilterExistsNested(t *testing.T) {
 	// would compare note.tag_id against record.id, which happens to be a legal
 	// comparison of two id columns and silently matches nothing here.
 	hasCheckedNote := types.FilterExists[*TestRecordTag](
-		tagCols.RecordID, recordIDCol,
-		types.FilterExists[*TestTagNote](noteCols.TagID, tagIDCol, noteCols.Body.Eq("checked")),
+		tagCols.RecordID.Correlate(recordIDCol),
+		types.FilterExists[*TestTagNote](noteCols.TagID.Correlate(tagIDCol), noteCols.Body.Eq("checked")),
 	)
 
 	records := make([]*TestAggregateRecord, 0)
@@ -1047,13 +1050,13 @@ func TestFilterExistsFailsClosedUnderNegation(t *testing.T) {
 
 	t.Run("ExistsMatchesNothing", func(t *testing.T) {
 		require.Equal(t, 0, list(t, types.FilterExists[*TestRecordTag](
-			tagCols.RecordID, recordIDCol, broken,
+			tagCols.RecordID.Correlate(recordIDCol), broken,
 		)))
 	})
 
 	t.Run("NotExistsAlsoMatchesNothing", func(t *testing.T) {
 		require.Equal(t, 0, list(t, types.FilterNotExists[*TestRecordTag](
-			tagCols.RecordID, recordIDCol, broken,
+			tagCols.RecordID.Correlate(recordIDCol), broken,
 		)),
 			"negating a fail-closed subquery must not return the whole table")
 	})
@@ -1070,9 +1073,9 @@ func TestFilterExistsValidatesInnerColumns(t *testing.T) {
 	setupTagData(t)
 
 	ctx := context.Background()
-	// "category" exists on the record table but not on the tag table.
+	// "status" exists on the record table but not on the tag table.
 	outerOnly := types.FilterExists[*TestRecordTag](
-		tagCols.RecordID, recordIDCol, aggCols.Category.Eq("alpha"),
+		tagCols.RecordID.Correlate(recordIDCol), aggCols.Status.Eq("done"),
 	)
 
 	records := make([]*TestAggregateRecord, 0)
@@ -1103,7 +1106,7 @@ func TestFilterExistsQualifiesInnerColumns(t *testing.T) {
 
 	// Both tables carry an "id"; the filter names the tag's own.
 	byTagID := types.FilterExists[*TestRecordTag](
-		tagCols.RecordID, recordIDCol, tagCols.ID.Eq("t1"),
+		tagCols.RecordID.Correlate(recordIDCol), tagCols.ID.Eq("t1"),
 	)
 
 	statements := make([]types.SQLStatement, 0)
@@ -1138,13 +1141,114 @@ func TestFilterExistsSelfJoin(t *testing.T) {
 
 	// Categories that are somebody's parent. root parents itself and parent,
 	// parent has no children, so only root matches.
-	hasChild := types.FilterExists[*TestCategory](catCols.ParentID, catCols.ID)
+	hasChild := types.FilterExists[*TestCategory](catCols.ParentID.Correlate(catCols.ID))
 	cats := make([]*TestCategory, 0)
 	require.NoError(t, database.Database[*TestCategory](ctx).
 		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{hasChild}}).
 		List(&cats))
 	require.Len(t, cats, 1)
 	require.Equal(t, categoryRootID, cats[0].ID)
+}
+
+// TestFilterExistsMultipleCorrelations covers a related model reached through
+// a composite key: every Correlate must hold at once. A tag whose denormalized
+// category disagrees with its record is reachable by record_id alone but not
+// by the (record_id, category) pair. A correlation is a predicate like any
+// other, so it also composes with FilterOr and has a string-column spelling;
+// a subquery without one, or a correlation with nothing enclosing it, fails
+// closed.
+func TestFilterExistsMultipleCorrelations(t *testing.T) {
+	defer cleanupAggregateData()
+	defer cleanupTagData()
+	setupAggregateData(t)
+	setupTagData(t)
+
+	ctx := context.Background()
+	// a2 gets an "audit" tag whose category went stale (a2 is alpha), a3 gets
+	// a consistent one.
+	require.NoError(t, database.Database[*TestRecordTag](ctx).Create(
+		&TestRecordTag{ID: "t5", RecordID: "a2", Label: "audit", Category: "beta"},
+		&TestRecordTag{ID: "t6", RecordID: "a3", Label: "audit", Category: "alpha"},
+	))
+	byRecord := tagCols.RecordID.Correlate(recordIDCol)
+	byCategory := tagCols.Category.Correlate(aggCols.Category)
+	audit := tagCols.Label.Eq("audit")
+	audited := types.FilterExists[*TestRecordTag](byRecord, byCategory, audit)
+	ids := func(filter types.Filter) []string {
+		t.Helper()
+		records := make([]*TestAggregateRecord, 0)
+		require.NoError(t, database.Database[*TestAggregateRecord](ctx).
+			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{filter}}).
+			WithOrder(types.Asc("id")).
+			List(&records))
+		got := make([]string, 0, len(records))
+		for _, r := range records {
+			got = append(got, r.ID)
+		}
+		return got
+	}
+
+	t.Run("RequiresEveryPair", func(t *testing.T) {
+		require.Equal(t, []string{"a3"}, ids(audited), "a2's tag fails the category pair")
+		require.Equal(t, []string{"a2", "a3"}, ids(types.FilterExists[*TestRecordTag](byRecord, audit)),
+			"a single pair still reaches the stale tag")
+	})
+
+	t.Run("NegatesAsAWhole", func(t *testing.T) {
+		unaudited := types.FilterNotExists[*TestRecordTag](byRecord, byCategory, audit)
+		require.Equal(t, []string{"a1", "a2", "a4", "a5", "a6"}, ids(unaudited))
+	})
+
+	t.Run("MatchesAnyPairInsideOr", func(t *testing.T) {
+		// t5 reaches a2 by record and every beta record by category; t6
+		// reaches a3 by record and every alpha record by category.
+		anyPair := types.FilterExists[*TestRecordTag](types.FilterOr(byRecord, byCategory), audit)
+		require.Equal(t, []string{"a1", "a2", "a3", "a4", "a5"}, ids(anyPair))
+	})
+
+	t.Run("RendersPairsInOrder", func(t *testing.T) {
+		statements := make([]types.SQLStatement, 0)
+		records := make([]*TestAggregateRecord, 0)
+		require.NoError(t, database.Database[*TestAggregateRecord](ctx).
+			WithDryRun(&statements).
+			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{audited}}).
+			List(&records))
+		require.Len(t, statements, 1)
+		sql := statements[0].Query
+		tags, parents := quoteIdent("test_record_tags"), quoteIdent("test_aggregate_records")
+		first := tags + "." + quoteIdent("record_id") + " = " + parents + "." + quoteIdent("id")
+		second := tags + "." + quoteIdent("category") + " = " + parents + "." + quoteIdent("category")
+		require.Contains(t, sql, first, "each side is qualified with its own table")
+		require.Contains(t, sql, second)
+		require.Less(t, strings.Index(sql, first), strings.Index(sql, second), "pairs render in the order given")
+	})
+
+	t.Run("FailsClosedWithoutCorrelation", func(t *testing.T) {
+		require.Empty(t, ids(types.FilterExists[*TestRecordTag](audit)))
+		// Negation would widen "match nothing" into "match everything", so
+		// the whole condition still collapses to no rows.
+		require.Empty(t, ids(types.FilterNotExists[*TestRecordTag](audit)))
+	})
+
+	t.Run("StringTierMatchesTypedTier", func(t *testing.T) {
+		// FilterCorrelate is what the column method delegates to, so naming the
+		// columns as strings selects the same rows.
+		byNames := types.FilterExists[*TestRecordTag](
+			types.FilterCorrelate("record_id", "id"), types.FilterCorrelate("category", "category"), audit,
+		)
+		require.Equal(t, []string{"a3"}, ids(byNames))
+	})
+
+	t.Run("FailsClosedOnUnknownChildColumn", func(t *testing.T) {
+		unknown := types.FilterExists[*TestRecordTag](
+			byRecord, types.NewColumn[string]("missing").Correlate(aggCols.Category), audit,
+		)
+		require.Empty(t, ids(unknown))
+	})
+
+	t.Run("FailsClosedOutsideSubquery", func(t *testing.T) {
+		require.Empty(t, ids(byRecord), "a Correlate at the top level has no enclosing query to tie to")
+	})
 }
 
 // TestSumOfRejectsTextBackedValuer pins SUM to the single classification rule.

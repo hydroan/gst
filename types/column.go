@@ -130,6 +130,17 @@ func (c Column[T]) NotRegex(expr string) Filter { return FilterNotRegex(c.name, 
 // JSONContains matches rows whose JSON array column contains value.
 func (c Column[T]) JSONContains(value string) Filter { return FilterJSONContains(c.name, value) }
 
+// Correlate ties the column, on the related model a subquery reads, to
+// parent, a column of the query enclosing that subquery; see FilterCorrelate.
+// Both must be columns of the same Go type. A nil parent leaves the outer
+// side empty, and the predicate then fails closed.
+func (c Column[T]) Correlate(parent ColumnRef[T]) Filter {
+	if parent == nil {
+		return FilterCorrelate(c.name, "")
+	}
+	return FilterCorrelate(c.name, parent.Name())
+}
+
 // Asc orders by the column ascending.
 func (c Column[T]) Asc() Order { return Asc(c.name) }
 

@@ -36,6 +36,10 @@ type filterScope struct {
 	qualify string
 	// parent is the table a correlated subquery joins back to.
 	parent string
+	// outer is the table the scope's own Correlate predicates equate against:
+	// the table of the query directly enclosing this subquery. It is empty at
+	// the top level, where a Correlate has nothing to tie to and fails closed.
+	outer string
 	// columns restricts which columns may be named, keyed by database name. It
 	// is nil at the top level, where the producer already owns validation, and
 	// set inside a subquery, where a name the related model does not have would
@@ -224,9 +228,50 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 			return db.failClosedFilter(f, "expects a string value")
 		}
 		return datatypes.JSONArrayQuery(f.Column).Contains(s), nil
+	case types.FilterOpCorrelate:
+		return db.correlateCondition(f, column, scope)
 	default:
 		return db.failClosedFilter(f, "is unknown")
 	}
+}
+
+// correlateCondition renders a Correlate predicate: the scope's own column on
+// the left, the enclosing query's column on the right. Outside a subquery
+// there is no enclosing query to tie to, so the predicate fails closed rather
+// than comparing the table with itself. The column arrives qualified by the
+// caller, so inside an aliased self join it already names the alias.
+//
+// The caller must hold db.mu.
+func (db *database[M]) correlateCondition(f types.Filter, column string, scope filterScope) (clause.Expression, error) {
+	if len(scope.outer) == 0 {
+		return db.failClosedFilter(f, "correlates outside a subquery")
+	}
+	parent, ok := f.Value.(string)
+	if !ok {
+		return db.failClosedFilter(f, "expects a string value")
+	}
+	if len(parent) == 0 {
+		return db.failClosedFilter(f, "has an empty correlation column")
+	}
+	return clause.Expr{SQL: column + " = " + db.quoteTableColumn(scope.outer, parent)}, nil
+}
+
+// hasCorrelation reports whether a subquery's predicates tie it to the query
+// around it: a Correlate directly in the list or inside a group, at this level
+// only. A nested subquery correlates against this level, not on its behalf,
+// so its own predicates do not count.
+func hasCorrelation(filters []types.Filter) bool {
+	for _, f := range filters {
+		switch f.Op {
+		case types.FilterOpCorrelate:
+			return true
+		case types.FilterOpOr, types.FilterOpAnd:
+			if children, ok := f.Value.([]types.Filter); ok && hasCorrelation(children) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // groupCondition builds one filter group as a single nested predicate, so the
@@ -366,8 +411,8 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 	if sq.Model == nil {
 		return db.failClosedFilter(f, "has no related model")
 	}
-	if len(sq.ChildColumn) == 0 || len(sq.ParentColumn) == 0 {
-		return db.failClosedFilter(f, "has an empty correlation column")
+	if !hasCorrelation(sq.Filters) {
+		return db.failClosedFilter(f, "has no correlation")
 	}
 	if len(scope.parent) == 0 {
 		return db.failClosedFilter(f, "cannot resolve the table to correlate against")
@@ -396,9 +441,6 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 			childJSONColumns[c.DBName] = struct{}{}
 		}
 	}
-	if _, ok := allowed[sq.ChildColumn]; !ok {
-		return db.failClosedFilter(f, "correlates on a column the related model does not have")
-	}
 
 	// A subquery reading the same table as the query around it needs its own
 	// name, or both sides of the correlation resolve to the inner table and the
@@ -415,23 +457,22 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 		childRef = alias
 	}
 
-	correlation := db.quoteTableColumn(childRef, sq.ChildColumn) +
-		" = " + db.quoteTableColumn(scope.parent, sq.ParentColumn)
-
-	// Table is set explicitly alongside Model: the correlation and nested
-	// filters qualify columns with childRef, so the FROM clause must carry
+	// Table is set explicitly alongside Model: the predicates, correlations
+	// included, qualify columns with childRef, so the FROM clause must carry
 	// the same name — including its aliased form — rather than the bare name
 	// gorm would take from the struct.
 	sub := db.ins.Session(&gorm.Session{NewDB: true}).
 		Table(from).
 		Model(sq.Model).
-		Select("1").
-		Where(correlation)
-	// Nested filters read the subquery's own table, correlate back to it, and
-	// may only name its columns.
+		Select("1")
+	// The predicates read the subquery's own table and may only name its
+	// columns; their Correlate predicates equate against the table this
+	// subquery hangs off, while a subquery nested one level further down
+	// correlates back to this one.
 	inner := filterScope{
 		qualify:     childRef,
 		parent:      childRef,
+		outer:       scope.parent,
 		columns:     allowed,
 		timeColumns: childTimeColumns,
 		jsonColumns: childJSONColumns,
