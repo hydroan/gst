@@ -69,16 +69,10 @@ const (
 
 	TRACE_ID = "trace_id"
 	SPAN_ID  = "span_id"
-	PSPAN_ID = "pspan_id"
 	SEQ      = "seq"
-
-	PREFIX_TRACE_ID = "tr_"
-	PREFIX_SPAN_ID  = "sp"
-	PREFIX_PSPAN_ID = "psp_"
 
 	HEADER_TRACE_ID = "X-Trace-ID"
 	HEADER_SPAN_ID  = "X-Span-ID"
-	HEADER_PSPAN_ID = "X-Pspan-ID"
 
 	FIELD_ID = "ID"
 
