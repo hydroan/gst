@@ -10,7 +10,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/dcache"
-	"github.com/hydroan/gst/internal/testcontainer"
+	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/hydroan/gst/logger/zap"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"

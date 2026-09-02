@@ -9,7 +9,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/bootstrap"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/testcontainer"
+	"github.com/hydroan/gst/internal/testutil/testcontainer"
 )
 
 // Server declares what a test package needs before its tests can run. Every

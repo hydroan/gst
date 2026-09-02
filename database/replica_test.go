@@ -23,7 +23,7 @@ import (
 	gstmysql "github.com/hydroan/gst/database/mysql"
 	gstpostgres "github.com/hydroan/gst/database/postgres"
 	"github.com/hydroan/gst/internal/dbruntime"
-	"github.com/hydroan/gst/internal/testcontainer"
+	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/hydroan/gst/model"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
