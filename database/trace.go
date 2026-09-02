@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
@@ -172,34 +173,33 @@ func (db *database[M]) trace(phase consts.Phase, batch ...int) (func(error), tra
 	}, span
 }
 
-// traceModelHook traces model hook execution with OpenTelemetry spans.
-// Creates a span for the hook execution and records timing and error information.
+// traceModelHook runs one model hook under a span of its own, nested under
+// the database operation span, and records its timing and outcome on it.
+//
+// The span is skipped and fn runs directly when tracing is disabled, when
+// there is no parent span to nest under, or when the model does not override
+// the hook: an unoverridden hook is the framework base's no-op, which still
+// runs so the hook sequence stays the same for every model, but has nothing
+// worth timing.
 //
 // Parameters:
-//   - ctx: Database context for span creation
-//   - hookName: Name of the hook being executed (CreateBefore, CreateAfter, etc.)
-//   - modelName: Name of the model type
-//   - fn: Hook function to execute
+//   - ctx: Database context the hook runs under; nil falls back to context.Background
+//   - phase: Hook phase (consts.PHASE_CREATE_BEFORE, ...), naming the span "model.{Model}.{Hook}"
+//   - parentSpan: Database operation span the hook span nests under
+//   - fn: Hook invocation, receiving the context that carries the hook span
 //
-// Returns error from hook execution, with span automatically completed.
-//
-// Features:
-//   - Automatic span creation with naming pattern: "Hook.{HookName} {ModelName}"
-//   - Records hook execution timing and success/failure status
-//   - Integrates with existing tracing infrastructure
-//   - Error recording and span status management
-//
-// Usage Pattern:
-//
-//	err := traceModelHook(db.ctx, "CreateBefore", "User", func() error {
-//		return obj.CreateBefore()
-//	})
+// Returns the hook's error, with the span completed either way.
 func traceModelHook[M types.Model](ctx context.Context, phase consts.Phase, parentSpan trace.Span, fn func(ctx context.Context) error) error {
 	hookCtx := context.Background()
 	if ctx != nil {
 		hookCtx = ctx
 	}
 	if !gstotel.IsEnabled() || ctx == nil || parentSpan == nil {
+		return fn(hookCtx)
+	}
+	// An unoverridden hook is the framework base's no-op: it still runs, but
+	// there is nothing to time.
+	if !modelregistry.OverridesHook(*new(M), phase) {
 		return fn(hookCtx)
 	}
 

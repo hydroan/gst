@@ -3,14 +3,9 @@ package database_test
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/logger"
-	pkgzap "github.com/hydroan/gst/logger/zap"
-	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 	oteltrace "go.opentelemetry.io/otel/trace"
@@ -207,7 +202,7 @@ func TestDatabaseWithLock(t *testing.T) {
 // not change commit/rollback behavior, and that the closure context carries the
 // transaction span so inner operation spans nest under it.
 func TestTransactionWithOTELEnabled(t *testing.T) {
-	setupOTELTestForTransaction(t)
+	setupOTELTest(t)
 	defer cleanupTestData()
 
 	t.Run("commit", func(t *testing.T) {
@@ -305,39 +300,4 @@ func TestTransaction(t *testing.T) {
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 	require.Empty(t, users, "inner write must roll back with the outer transaction")
-}
-
-// setupOTELTestForTransaction enables real OTel tracing for one test, mirroring
-// middleware/tracing_test.go's setupTracingTestWithEndpointAndSampler. Unlike that helper,
-// this only swaps config.App.OTEL rather than all of config.App, because config.App.Database
-// (set up once by this package's init()) must stay intact for the transaction itself to work.
-func setupOTELTestForTransaction(t *testing.T) {
-	t.Helper()
-
-	originalOTEL := config.App.OTEL
-	config.App.OTEL.Enabled = true
-	config.App.OTEL.ServiceName = "gst-test"
-	config.App.OTEL.ExporterOTLPProtocol = config.OTLPProtocolHTTPProtobuf
-	config.App.OTEL.ExporterOTLPTracesEndpoint = "http://127.0.0.1:1/v1/traces"
-	config.App.OTEL.ExporterOTLPCompression = config.OTLPCompressionNone
-	config.App.OTEL.TracesSampler = config.TracesSamplerParentBasedAlwaysOn
-	config.App.OTEL.BSPMaxQueueSize = 100
-	config.App.OTEL.BSPMaxExportBatchSize = 100
-	config.App.OTEL.BSPScheduleDelay = 10 * time.Millisecond
-	config.App.OTEL.BSPExportTimeout = time.Second
-	t.Cleanup(func() {
-		config.App.OTEL = originalOTEL
-	})
-
-	originalOTELLogger := logger.OTEL
-	logger.OTEL = pkgzap.New("/dev/null")
-	t.Cleanup(func() {
-		logger.OTEL = originalOTELLogger
-	})
-
-	gstotel.Close()
-	require.NoError(t, gstotel.Init())
-	t.Cleanup(func() {
-		gstotel.Close()
-	})
 }
