@@ -161,7 +161,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 
 		// 1.Perform business logic processing before partial update resource.
 		var serviceCtxBefore *types.ServiceContext
-		if err := meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_PATCH_BEFORE, func(spanCtx context.Context) error {
+		if err := meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_PATCH_BEFORE, svc, func(spanCtx context.Context) error {
 			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_PATCH_BEFORE)
 			return svc.PatchBefore(serviceCtxBefore, cur)
 		}); err != nil {
@@ -181,7 +181,7 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		}
 		// 3.Perform business logic processing after partial update resource.
 		var serviceCtxAfter *types.ServiceContext
-		if err := meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_PATCH_AFTER, func(spanCtx context.Context) error {
+		if err := meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_PATCH_AFTER, svc, func(spanCtx context.Context) error {
 			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_PATCH_AFTER)
 			return svc.PatchAfter(serviceCtxAfter, cur)
 		}); err != nil {

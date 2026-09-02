@@ -83,7 +83,7 @@ func UpdateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 
 		// 1.Perform business logic processing before batch update resource.
 		var serviceCtxBefore *types.ServiceContext
-		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_UPDATE_MANY_BEFORE, func(spanCtx context.Context) error {
+		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_UPDATE_MANY_BEFORE, svc, func(spanCtx context.Context) error {
 			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_UPDATE_MANY_BEFORE)
 			return svc.UpdateManyBefore(serviceCtxBefore, req.Items...)
 		}); err != nil {
@@ -106,7 +106,7 @@ func UpdateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		}
 		// 3.Perform business logic processing after batch update resource.
 		var serviceCtxAfter *types.ServiceContext
-		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_UPDATE_MANY_AFTER, func(spanCtx context.Context) error {
+		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_UPDATE_MANY_AFTER, svc, func(spanCtx context.Context) error {
 			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_UPDATE_MANY_AFTER)
 			return svc.UpdateManyAfter(serviceCtxAfter, req.Items...)
 		}); err != nil {

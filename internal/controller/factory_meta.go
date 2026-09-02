@@ -152,9 +152,16 @@ func (meta *factoryMeta[M, REQ, RSP]) startControllerSpan(c *gin.Context) (conte
 	return spanCtx, span
 }
 
-// traceServiceHook traces a service hook that returns only an error.
-func (meta *factoryMeta[M, REQ, RSP]) traceServiceHook(parentCtx context.Context, phase consts.Phase, fn func(context.Context) error) error {
-	_, err := traceServiceCall[struct{}](parentCtx, meta.serviceSpan(phase), meta.name, func(spanCtx context.Context) (struct{}, error) {
+// traceServiceHook traces a service hook that returns only an error. A hook
+// the service does not override is the framework base's no-op: it still runs,
+// so the hook sequence stays the same for every service, but it has nothing
+// worth timing and gets no span.
+func (meta *factoryMeta[M, REQ, RSP]) traceServiceHook(parentCtx context.Context, phase consts.Phase, svc types.Service[M, REQ, RSP], fn func(context.Context) error) error {
+	span := meta.serviceSpan(phase)
+	if !gstotel.IsEnabled() || !serviceregistry.OverridesHook(svc, span.operation) {
+		return fn(parentCtx)
+	}
+	_, err := traceServiceCall[struct{}](parentCtx, span, meta.name, func(spanCtx context.Context) (struct{}, error) {
 		return struct{}{}, fn(spanCtx)
 	})
 	return err

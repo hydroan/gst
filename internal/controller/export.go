@@ -71,7 +71,7 @@ func Export[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context
 // and query options, delegates byte generation to the phase service's Export
 // method, and writes the result as an attachment
 func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_EXPORT)
+	meta := newFactoryMeta[M, REQ, RSP](routeFromConfig(cfg...), consts.PHASE_EXPORT, consts.PHASE_LIST_BEFORE, consts.PHASE_LIST_AFTER)
 	return func(c *gin.Context) {
 		ctrlSpanCtx, span := meta.startControllerSpan(c)
 		defer span.End()
@@ -137,7 +137,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			expands := parseExpandQuery(c, m)
 			svcCtx := types.NewServiceContext(c, nil, consts.PHASE_EXPORT)
 			// 1.Perform business logic processing before list resources.
-			if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) error {
+			if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_LIST_BEFORE, svc, func(spanCtx context.Context) error {
 				return svc.ListBefore(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), &data)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))
@@ -174,7 +174,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				return
 			}
 			// 4.Perform business logic processing after list resources.
-			if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_EXPORT, func(spanCtx context.Context) error {
+			if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_LIST_AFTER, svc, func(spanCtx context.Context) error {
 				return svc.ListAfter(types.NewServiceContext(c, spanCtx, consts.PHASE_EXPORT), &data)
 			}); err != nil {
 				log.Errorz("service operation failed", zap.Error(err))

@@ -95,7 +95,7 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 
 		// 1.Perform business logic processing before create resource.
 		var serviceCtxBefore *types.ServiceContext
-		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_CREATE_BEFORE, func(spanCtx context.Context) error {
+		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_CREATE_BEFORE, svc, func(spanCtx context.Context) error {
 			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_CREATE_BEFORE)
 			return svc.CreateBefore(serviceCtxBefore, req)
 		}); err != nil {
@@ -115,7 +115,7 @@ func CreateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		// 3.Perform business logic processing after create resource
 		var serviceCtxAfter *types.ServiceContext
-		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_CREATE_AFTER, func(spanCtx context.Context) error {
+		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_CREATE_AFTER, svc, func(spanCtx context.Context) error {
 			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_CREATE_AFTER)
 			return svc.CreateAfter(serviceCtxAfter, req)
 		}); err != nil {

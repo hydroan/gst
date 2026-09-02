@@ -96,7 +96,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 
 		// 1.Perform business logic processing before delete resource.
 		var serviceCtxBefore *types.ServiceContext
-		if err := meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_DELETE_BEFORE, func(spanCtx context.Context) error {
+		if err := meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_DELETE_BEFORE, svc, func(spanCtx context.Context) error {
 			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE_BEFORE)
 			return svc.DeleteBefore(serviceCtxBefore, m)
 		}); err != nil {
@@ -123,7 +123,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		// 3.Perform business logic processing after delete resource.
 		var serviceCtxAfter *types.ServiceContext
-		if err := meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_DELETE_AFTER, func(spanCtx context.Context) error {
+		if err := meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_DELETE_AFTER, svc, func(spanCtx context.Context) error {
 			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_DELETE_AFTER)
 			return svc.DeleteAfter(serviceCtxAfter, m)
 		}); err != nil {

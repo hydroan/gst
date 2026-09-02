@@ -115,7 +115,7 @@ func CreateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 
 		// 1.Perform business logic processing before batch create resource.
 		var serviceCtxBefore *types.ServiceContext
-		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_CREATE_MANY_BEFORE, func(spanCtx context.Context) error {
+		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_CREATE_MANY_BEFORE, svc, func(spanCtx context.Context) error {
 			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_CREATE_MANY_BEFORE)
 			return svc.CreateManyBefore(serviceCtxBefore, req.Items...)
 		}); err != nil {
@@ -138,7 +138,7 @@ func CreateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		}
 		// 3.Perform business logic processing after batch create resource
 		var serviceCtxAfter *types.ServiceContext
-		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_CREATE_MANY_AFTER, func(spanCtx context.Context) error {
+		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_CREATE_MANY_AFTER, svc, func(spanCtx context.Context) error {
 			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_CREATE_MANY_AFTER)
 			return svc.CreateManyAfter(serviceCtxAfter, req.Items...)
 		}); err != nil {

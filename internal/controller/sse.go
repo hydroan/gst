@@ -33,8 +33,9 @@ func SSEFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		defer span.End()
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PHASE_SSE)
-		if err := meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_SSE, func(spanCtx context.Context) error {
-			return meta.service().SSE(types.NewServiceContext(c, spanCtx, consts.PHASE_SSE))
+		svc := meta.service()
+		if err := meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_SSE, svc, func(spanCtx context.Context) error {
+			return svc.SSE(types.NewServiceContext(c, spanCtx, consts.PHASE_SSE))
 		}); err != nil {
 			log.Errorz("service operation failed", zap.Error(err))
 			gstotel.RecordError(span, err)

@@ -94,7 +94,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 
 		// 1.Perform business logic processing before get resource.
 		var serviceCtxBefore *types.ServiceContext
-		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_GET_BEFORE, func(spanCtx context.Context) error {
+		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_GET_BEFORE, svc, func(spanCtx context.Context) error {
 			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_GET_BEFORE)
 			return svc.GetBefore(serviceCtxBefore, m)
 		}); err != nil {
@@ -115,7 +115,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		}
 		// 3.Perform business logic processing after get resource.
 		var serviceCtxAfter *types.ServiceContext
-		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_GET_AFTER, func(spanCtx context.Context) error {
+		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_GET_AFTER, svc, func(spanCtx context.Context) error {
 			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_GET_AFTER)
 			return svc.GetAfter(serviceCtxAfter, m)
 		}); err != nil {

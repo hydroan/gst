@@ -118,7 +118,7 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 
 		// 1.Perform business logic processing before update resource.
 		var serviceCtxBefore *types.ServiceContext
-		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_UPDATE_BEFORE, func(spanCtx context.Context) error {
+		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_UPDATE_BEFORE, svc, func(spanCtx context.Context) error {
 			serviceCtxBefore = types.NewServiceContext(c, spanCtx, consts.PHASE_UPDATE_BEFORE)
 			return svc.UpdateBefore(serviceCtxBefore, req)
 		}); err != nil {
@@ -137,7 +137,7 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		// 3.Perform business logic processing after update resource.
 		var serviceCtxAfter *types.ServiceContext
-		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_UPDATE_AFTER, func(spanCtx context.Context) error {
+		if err = meta.traceServiceHook(ctrlSpanCtx, consts.PHASE_UPDATE_AFTER, svc, func(spanCtx context.Context) error {
 			serviceCtxAfter = types.NewServiceContext(c, spanCtx, consts.PHASE_UPDATE_AFTER)
 			return svc.UpdateAfter(serviceCtxAfter, req)
 		}); err != nil {
