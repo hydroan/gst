@@ -1249,6 +1249,16 @@ func TestFilterExistsMultipleCorrelations(t *testing.T) {
 	t.Run("FailsClosedOutsideSubquery", func(t *testing.T) {
 		require.Empty(t, ids(byRecord), "a Correlate at the top level has no enclosing query to tie to")
 	})
+
+	t.Run("FailsClosedOnUnknownParentColumn", func(t *testing.T) {
+		// The plain-name spelling cannot be checked at compile time, so the
+		// renderer checks the outer side against the enclosing model instead
+		// of letting the database answer with an unknown-column error.
+		unknown := types.FilterExists[*TestRecordTag](
+			byRecord, types.FilterCorrelate("category", "missing"), audit,
+		)
+		require.Empty(t, ids(unknown))
+	})
 }
 
 // TestSumOfRejectsTextBackedValuer pins SUM to the single classification rule.

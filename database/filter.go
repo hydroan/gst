@@ -40,6 +40,11 @@ type filterScope struct {
 	// the table of the query directly enclosing this subquery. It is empty at
 	// the top level, where a Correlate has nothing to tie to and fails closed.
 	outer string
+	// outerColumns names the columns of the enclosing model, keyed by database
+	// name, so the outer side of a Correlate is checked the same way the inner
+	// side is instead of reaching the database as an unknown column. It is nil
+	// at the top level, alongside outer.
+	outerColumns map[string]struct{}
 	// columns restricts which columns may be named, keyed by database name. It
 	// is nil at the top level, where the producer already owns validation, and
 	// set inside a subquery, where a name the related model does not have would
@@ -239,7 +244,10 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 // the left, the enclosing query's column on the right. Outside a subquery
 // there is no enclosing query to tie to, so the predicate fails closed rather
 // than comparing the table with itself. The column arrives qualified by the
-// caller, so inside an aliased self join it already names the alias.
+// caller, so inside an aliased self join it already names the alias. The
+// parent column must belong to the enclosing model: the inner side is already
+// checked by renderFilter, and an unchecked outer side would surface as a
+// database error instead of the fail-closed answer every other mistake gets.
 //
 // The caller must hold db.mu.
 func (db *database[M]) correlateCondition(f types.Filter, column string, scope filterScope) (clause.Expression, error) {
@@ -252,6 +260,12 @@ func (db *database[M]) correlateCondition(f types.Filter, column string, scope f
 	}
 	if len(parent) == 0 {
 		return db.failClosedFilter(f, "has an empty correlation column")
+	}
+	if scope.outerColumns == nil {
+		return db.failClosedFilter(f, "cannot resolve the enclosing model's columns")
+	}
+	if _, ok := scope.outerColumns[parent]; !ok {
+		return db.failClosedFilter(f, "correlates on a column the enclosing model does not have")
 	}
 	return clause.Expr{SQL: column + " = " + db.quoteTableColumn(scope.outer, parent)}, nil
 }
@@ -389,9 +403,12 @@ func (db *database[M]) scopedColumn(column string, scope filterScope) string {
 // soft-delete scope: a subquery can never match a row a List on the related
 // model hides.
 //
-// The correlation compares two qualified columns rather than binding a value,
-// so it is written into the SQL; both sides are quoted identifiers taken from
-// column references, which cannot carry SQL.
+// The correlation predicates compare two qualified columns rather than binding
+// a value, so they are written into the SQL as identifiers quoted by the
+// dialect (see correlateCondition): the related side is checked against the
+// related model's columns, and both sides are named by service code — through
+// a column reference or a plain name — never by a client, because the operator
+// has no URL spelling.
 //
 // scope carries the table the outer side of the correlation refers to. It
 // travels with the renderer rather than being read from the chain, because a
@@ -468,15 +485,22 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 	// The predicates read the subquery's own table and may only name its
 	// columns; their Correlate predicates equate against the table this
 	// subquery hangs off, while a subquery nested one level further down
-	// correlates back to this one.
+	// correlates back to this one. The enclosing model's columns come from the
+	// scope around this subquery when it is itself a subquery, and from the
+	// queried model at the first level.
+	outerColumns := scope.columns
+	if outerColumns == nil {
+		outerColumns = db.outerColumnSet()
+	}
 	inner := filterScope{
-		qualify:     childRef,
-		parent:      childRef,
-		outer:       scope.parent,
-		columns:     allowed,
-		timeColumns: childTimeColumns,
-		jsonColumns: childJSONColumns,
-		depth:       scope.depth + 1,
+		qualify:      childRef,
+		parent:       childRef,
+		outer:        scope.parent,
+		outerColumns: outerColumns,
+		columns:      allowed,
+		timeColumns:  childTimeColumns,
+		jsonColumns:  childJSONColumns,
+		depth:        scope.depth + 1,
 	}
 	expr, failure := db.renderFilters(sq.Filters, false, inner)
 	if expr != nil {
@@ -494,6 +518,27 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 		return clause.Expr{SQL: "NOT EXISTS (?)", Vars: []any{sub}}, nil
 	}
 	return clause.Expr{SQL: "EXISTS (?)", Vars: []any{sub}}, nil
+}
+
+// outerColumnSet lists the columns of the model the current chain reads, keyed
+// by database name, for checking the outer side of a first-level correlation.
+// It resolves M through the same cached schema parse the related model goes
+// through; a model whose columns cannot be resolved yields nil, which the
+// correlation fails closed on.
+func (db *database[M]) outerColumnSet() map[string]struct{} {
+	typ := reflect.TypeOf(*new(M))
+	if typ == nil {
+		return nil
+	}
+	columns, err := modelschema.Columns(typ)
+	if err != nil {
+		return nil
+	}
+	set := make(map[string]struct{}, len(columns))
+	for _, c := range columns {
+		set[c.DBName] = struct{}{}
+	}
+	return set
 }
 
 // outerTableName resolves the table the current chain reads, for qualifying

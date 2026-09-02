@@ -309,10 +309,11 @@ func FilterAnd(filters ...Filter) Filter {
 // of the enclosing query's model. It only means something inside FilterExists
 // or FilterNotExists, where it renders as `child_table.column =
 // outer_table.parent`; at the top level of a query there is nothing to tie to
-// and it fails closed, as does an empty name on either side. Several of them
-// express a composite key, and one inside a FilterOr group matches on any of
-// its pairs. Column.Correlate is the typed front end that keeps the two
-// columns of the same Go type.
+// and it fails closed, as does an empty name on either side or a name the
+// related or the enclosing model does not have. Several of them express a
+// composite key, and one inside a FilterOr group matches on any of its pairs.
+// Column.Correlate is the typed front end that keeps the two columns of the
+// same Go type.
 func FilterCorrelate(column, parent string) Filter {
 	return Filter{Column: column, Op: FilterOpCorrelate, Value: parent}
 }
