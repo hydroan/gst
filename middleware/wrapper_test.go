@@ -9,11 +9,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/middleware/ratelimiter"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
@@ -59,7 +57,7 @@ func TestMiddlewareWrapperKeepsContextOfMiddlewareThatReturns(t *testing.T) {
 // rate limiter is the framework middleware of that shape.
 func TestMiddlewareWrapperEndsSpanBeforeHandlerWhenMiddlewareReturns(t *testing.T) {
 	setupTracingTest(t)
-	recorder := recordSpans(t)
+	recorder := oteltest.Record(t)
 
 	var endedBeforeHandler []string
 
@@ -67,7 +65,7 @@ func TestMiddlewareWrapperEndsSpanBeforeHandlerWhenMiddlewareReturns(t *testing.
 	router.Use(tracing())
 	router.Use(middlewareWrapper("RateLimiter", ratelimiter.RateLimiter()))
 	router.GET("/api/ping", func(c *gin.Context) {
-		endedBeforeHandler = endedSpanNames(recorder)
+		endedBeforeHandler = oteltest.EndedNames(recorder)
 		c.Status(http.StatusNoContent)
 	})
 
@@ -83,7 +81,7 @@ func TestMiddlewareWrapperEndsSpanBeforeHandlerWhenMiddlewareReturns(t *testing.
 // down.
 func TestMiddlewareWrapperCoversDownstreamOfMiddlewareThatCallsNext(t *testing.T) {
 	setupTracingTest(t)
-	recorder := recordSpans(t)
+	recorder := oteltest.Record(t)
 
 	var endedBeforeHandler []string
 	var handlerStamp any
@@ -95,7 +93,7 @@ func TestMiddlewareWrapperCoversDownstreamOfMiddlewareThatCallsNext(t *testing.T
 		c.Next()
 	}))
 	router.GET("/api/ping", func(c *gin.Context) {
-		endedBeforeHandler = endedSpanNames(recorder)
+		endedBeforeHandler = oteltest.EndedNames(recorder)
 		handlerStamp = c.Request.Context().Value(wrapperStampKey{})
 		c.Status(http.StatusNoContent)
 	})
@@ -105,11 +103,11 @@ func TestMiddlewareWrapperCoversDownstreamOfMiddlewareThatCallsNext(t *testing.T
 	require.Equal(t, http.StatusNoContent, w.Code)
 	require.Equal(t, "stamped", handlerStamp)
 	require.False(t, slices.Contains(endedBeforeHandler, "middleware.Observe"), "a middleware that calls Next keeps its span open over the handler")
-	require.Contains(t, endedSpanNames(recorder), "middleware.Observe")
+	require.Contains(t, oteltest.EndedNames(recorder), "middleware.Observe")
 }
 
 func TestMiddlewareWrapperKeepsMiddlewareSpanWhenSamplerDrops(t *testing.T) {
-	setupTracingTestWithSampler(t, config.TracesSamplerAlwaysOff)
+	setupTracingTest(t, oteltest.WithSampler(config.TracesSamplerAlwaysOff))
 
 	var rootSpanContext oteltrace.SpanContext
 	var middlewareSpanContext oteltrace.SpanContext
@@ -154,26 +152,4 @@ func performWrapperRequest(router *gin.Engine) *httptest.ResponseRecorder {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/ping", nil))
 	return w
-}
-
-// recordSpans attaches an in-memory span recorder to the SDK tracer provider
-// that setupTracingTest installed, so a test can read back which spans have
-// ended at any point of a request.
-func recordSpans(t *testing.T) *tracetest.SpanRecorder {
-	t.Helper()
-	provider, ok := otel.GetTracerProvider().(*sdktrace.TracerProvider)
-	require.True(t, ok, "otel.Init must install the SDK tracer provider globally")
-	recorder := tracetest.NewSpanRecorder()
-	provider.RegisterSpanProcessor(recorder)
-	return recorder
-}
-
-// endedSpanNames returns the names of every span the recorder has seen end.
-func endedSpanNames(recorder *tracetest.SpanRecorder) []string {
-	ended := recorder.Ended()
-	names := make([]string, 0, len(ended))
-	for _, span := range ended {
-		names = append(names, span.Name())
-	}
-	return names
 }

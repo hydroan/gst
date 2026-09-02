@@ -6,6 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 	oteltrace "go.opentelemetry.io/otel/trace"
@@ -202,7 +203,7 @@ func TestDatabaseWithLock(t *testing.T) {
 // not change commit/rollback behavior, and that the closure context carries the
 // transaction span so inner operation spans nest under it.
 func TestTransactionWithOTELEnabled(t *testing.T) {
-	setupOTELTest(t)
+	oteltest.Enable(t)
 	defer cleanupTestData()
 
 	t.Run("commit", func(t *testing.T) {

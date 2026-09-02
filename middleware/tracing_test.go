@@ -5,13 +5,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/logger"
-	pkgzap "github.com/hydroan/gst/logger/zap"
-	gstotel "github.com/hydroan/gst/otel"
+	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 	oteltrace "go.opentelemetry.io/otel/trace"
@@ -66,7 +63,7 @@ func TestTracingUsesIncomingTraceIDHeader(t *testing.T) {
 }
 
 func TestTracingSkipsRecordingOnlyStateWhenSamplerDrops(t *testing.T) {
-	setupTracingTestWithSampler(t, config.TracesSamplerAlwaysOff)
+	setupTracingTest(t, oteltest.WithSampler(config.TracesSamplerAlwaysOff))
 
 	router := gin.New()
 	router.Use(tracing())
@@ -93,55 +90,13 @@ func TestTracingMarksHTTPSpanAsRequestRoot(t *testing.T) {
 	require.Contains(t, source, "ctx = gstotel.ContextWithRequestRootSpan(ctx)")
 }
 
-func setupTracingTest(t *testing.T) {
-	t.Helper()
-
-	setupTracingTestWithEndpoint(t, "http://127.0.0.1:1/v1/traces")
-}
-
-func setupTracingTestWithEndpoint(t *testing.T, endpoint string) {
-	t.Helper()
-	setupTracingTestWithEndpointAndSampler(t, endpoint, config.TracesSamplerParentBasedAlwaysOn)
-}
-
-func setupTracingTestWithSampler(t *testing.T, sampler config.TracesSampler) {
-	t.Helper()
-
-	setupTracingTestWithEndpointAndSampler(t, "http://127.0.0.1:1/v1/traces", sampler)
-}
-
-func setupTracingTestWithEndpointAndSampler(t *testing.T, endpoint string, sampler config.TracesSampler) {
+// setupTracingTest enables real tracing for one middleware test and puts gin
+// into test mode; opts adjust the sampler or the exporter endpoint.
+func setupTracingTest(t *testing.T, opts ...oteltest.Option) {
 	t.Helper()
 
 	gin.SetMode(gin.TestMode)
-
-	originalConfig := config.App
-	config.App = new(config.Config)
-	config.App.OTEL.Enabled = true
-	config.App.OTEL.ServiceName = "gst-test"
-	config.App.OTEL.ExporterOTLPProtocol = config.OTLPProtocolHTTPProtobuf
-	config.App.OTEL.ExporterOTLPTracesEndpoint = endpoint
-	config.App.OTEL.ExporterOTLPCompression = config.OTLPCompressionNone
-	config.App.OTEL.TracesSampler = sampler
-	config.App.OTEL.BSPMaxQueueSize = 100
-	config.App.OTEL.BSPMaxExportBatchSize = 100
-	config.App.OTEL.BSPScheduleDelay = 10 * time.Millisecond
-	config.App.OTEL.BSPExportTimeout = time.Second
-	t.Cleanup(func() {
-		config.App = originalConfig
-	})
-
-	originalOTELLogger := logger.OTEL
-	logger.OTEL = pkgzap.New("/dev/null")
-	t.Cleanup(func() {
-		logger.OTEL = originalOTELLogger
-	})
-
-	gstotel.Close()
-	require.NoError(t, gstotel.Init())
-	t.Cleanup(func() {
-		gstotel.Close()
-	})
+	oteltest.Enable(t, opts...)
 }
 
 func readMiddlewareSource(t *testing.T, filename string) string {

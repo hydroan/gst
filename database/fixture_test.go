@@ -11,10 +11,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/testutil"
-	"github.com/hydroan/gst/logger"
-	pkgzap "github.com/hydroan/gst/logger/zap"
 	"github.com/hydroan/gst/model"
-	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
@@ -485,41 +482,5 @@ func TestMain(m *testing.M) {
 			model.Register[*TestRecordTag]()
 			model.Register[*TestTagNote]()
 		},
-	})
-}
-
-// setupOTELTest enables real OTel tracing for one test, mirroring
-// middleware/tracing_test.go's setupTracingTestWithEndpointAndSampler. Unlike
-// that helper, this only swaps config.App.OTEL rather than all of config.App,
-// because config.App.Database (set up once by this package's TestMain) must
-// stay intact for the traced database operations to work.
-func setupOTELTest(t *testing.T) {
-	t.Helper()
-
-	originalOTEL := config.App.OTEL
-	config.App.OTEL.Enabled = true
-	config.App.OTEL.ServiceName = "gst-test"
-	config.App.OTEL.ExporterOTLPProtocol = config.OTLPProtocolHTTPProtobuf
-	config.App.OTEL.ExporterOTLPTracesEndpoint = "http://127.0.0.1:1/v1/traces"
-	config.App.OTEL.ExporterOTLPCompression = config.OTLPCompressionNone
-	config.App.OTEL.TracesSampler = config.TracesSamplerParentBasedAlwaysOn
-	config.App.OTEL.BSPMaxQueueSize = 100
-	config.App.OTEL.BSPMaxExportBatchSize = 100
-	config.App.OTEL.BSPScheduleDelay = 10 * time.Millisecond
-	config.App.OTEL.BSPExportTimeout = time.Second
-	t.Cleanup(func() {
-		config.App.OTEL = originalOTEL
-	})
-
-	originalOTELLogger := logger.OTEL
-	logger.OTEL = pkgzap.New("/dev/null")
-	t.Cleanup(func() {
-		logger.OTEL = originalOTELLogger
-	})
-
-	gstotel.Close()
-	require.NoError(t, gstotel.Init())
-	t.Cleanup(func() {
-		gstotel.Close()
 	})
 }
