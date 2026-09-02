@@ -288,7 +288,8 @@ func TestClickhouse(t *testing.T) {
 			updated_at DateTime64(3),
 			deleted_at Nullable(DateTime64(3)),
 			record_id  String,
-			label      String
+			label      String,
+			category   String
 		) ENGINE = MergeTree ORDER BY (record_id)`).Error)
 		require.NoError(t, ins.Exec(`INSERT INTO test_record_tags (id, record_id, label, created_at, updated_at) VALUES
 			('t1','a1','vip','2024-01-01 00:00:00','2024-01-01 00:00:00')`).Error)
