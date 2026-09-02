@@ -84,7 +84,7 @@ func transactionOn(ctx context.Context, base *gorm.DB, fn func(ctx context.Conte
 	defer span.End()
 	// No recording gate here: both attributes are constants, so there is nothing
 	// to skip building. Gate where assembling the attributes costs something —
-	// see the per-statement batch in GormTracingPlugin.finishSpan.
+	// see the per-operation batch in database[M].trace.
 	span.SetAttributes(
 		attribute.String("component", "database"),
 		attribute.String("database.operation", "Transaction"),
@@ -92,7 +92,7 @@ func transactionOn(ctx context.Context, base *gorm.DB, fn func(ctx context.Conte
 
 	begin := time.Now()
 	// Deriving the closure context from spanCtx makes per-statement spans from
-	// GormTracingPlugin nest under this transaction span, and the boundary makes
+	// otelgorm nest under this transaction span, and the boundary makes
 	// every chain opened on the same handle inside fn join gormTx while
 	// collecting the actions to run once it commits.
 	txErr := withTransactionBoundary(spanCtx, base, base.WithContext(spanCtx),

@@ -180,7 +180,7 @@ var (
 //     context, so its SQL log entries have empty trace/user fields and can
 //     never be joined with access/controller/service logs when tracing a
 //     request by trace_id.
-//   - Tracing: GormTracingPlugin parents each SQL span on the statement
+//   - Tracing: otelgorm parents each SQL span on the statement
 //     context. Statements on the raw handle produce orphan root spans outside
 //     the request trace, and with parent-based sampling they may not be
 //     recorded at all.
