@@ -79,7 +79,15 @@ func Init() (err error) {
 		cli = nil
 		return errors.Wrap(err, "failed to ping redis")
 	}
-	if err = errors.Join(redisotel.InstrumentTracing(cli), redisotel.InstrumentMetrics(cli)); err != nil {
+	// Caller attributes are left off the command spans: redisotel resolves
+	// them to the first frame outside go-redis, which is always one of this
+	// package's helpers rather than the code that called it, and finding
+	// that frame walks the stack on every command. The statement itself stays
+	// on the span, as it is what a redis span is read for.
+	if err = errors.Join(
+		redisotel.InstrumentTracing(cli, redisotel.WithCallerEnabled(false)),
+		redisotel.InstrumentMetrics(cli),
+	); err != nil {
 		cli.Close()
 		cli = nil
 		return errors.WithStack(err)
