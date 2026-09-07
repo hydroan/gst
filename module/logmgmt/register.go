@@ -26,7 +26,7 @@ import (
 //   - GET /api/log/operationlog/:id
 //
 // Cronjob:
-//   - cleanup operationlog and loginlog hourly.
+//   - logmgmt_cleanup trims operationlog and loginlog hourly.
 //
 // Login rows come from the authn login observer added below. That is an
 // explicit call, like every other wiring here: nothing arms itself through a
@@ -68,7 +68,7 @@ func Register() {
 		),
 	)
 
-	cronjob.Register(servicelogmgmt.Cleanup, cleanupSchedule(), "cleanup operationlog and loginlog")
+	cronjob.Register(servicelogmgmt.Cleanup, cleanupSchedule(), "logmgmt_cleanup")
 }
 
 // cleanupSchedule resolves the cleanup cron expression. Registration happens
