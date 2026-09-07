@@ -15,6 +15,7 @@ import (
 	gstpostgres "github.com/hydroan/gst/database/postgres"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
+	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -122,6 +123,42 @@ func BenchmarkSQLCommentChain(b *testing.B) {
 			}
 		}
 	})
+}
+
+// TestSQLCommentCarriesCronjobRound pins the annotation of a cron round: the
+// job name joins the trace id, keys in sqlcommenter's ascending order, the
+// name encoded like any other value.
+func TestSQLCommentCarriesCronjobRound(t *testing.T) {
+	defer cleanupTestData()
+	setupTestData(t)
+
+	capture := &sqlTextCaptureLogger{Interface: database.DB().Logger}
+	session := database.DB().Session(&gorm.Session{Logger: capture})
+	ctx := execctx.WithCronjob(context.Background(), "sample job", "trace-cron")
+
+	users := make([]*TestUser, 0)
+	require.NoError(t, database.DatabaseOn[*TestUser](ctx, session).List(&users))
+	require.Contains(t, capture.last(), "/* cronjob='sample%20job',trace_id='trace-cron' */")
+}
+
+// TestSQLCommentMatchesOperationSpanOutsideRequest pins that the comment is
+// attached once the operation's span is open: outside any request or cron
+// round the statement carries that span's trace id — the id the SQL log
+// records for it — instead of staying clean.
+func TestSQLCommentMatchesOperationSpanOutsideRequest(t *testing.T) {
+	oteltest.Enable(t)
+	recorder := oteltest.Record(t)
+	defer cleanupTestData()
+	setupTestData(t)
+
+	capture := &sqlTextCaptureLogger{Interface: database.DB().Logger}
+	session := database.DB().Session(&gorm.Session{Logger: capture})
+
+	users := make([]*TestUser, 0)
+	require.NoError(t, database.DatabaseOn[*TestUser](context.Background(), session).List(&users))
+
+	span := oteltest.EndedNamed(t, recorder, "database.TestUser.List")
+	require.Contains(t, capture.last(), "/* trace_id='"+span.SpanContext().TraceID().String()+"' */")
 }
 
 // afterVerbExpr stands in for an expression another party registered after

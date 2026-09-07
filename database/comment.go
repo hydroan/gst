@@ -13,18 +13,26 @@ import (
 // SQL statement comments.
 //
 // Every statement a request issues carries a /* trace_id='...' */ comment,
-// closing the reverse direction of observability: the application-side SQL
-// log already maps a statement to its trace, and the comment gives an
-// operator starting FROM the database — SHOW PROCESSLIST, the slow query
-// log, an audit plugin — the key back to the request's full trail.
+// and every statement a cron round issues carries
+// /* cronjob='...',trace_id='...' */, closing the reverse direction of
+// observability: the application-side SQL log already maps a statement to
+// its trace, and the comment gives an operator starting FROM the database —
+// SHOW PROCESSLIST, the slow query log, an audit plugin — the key back to
+// the execution's full trail.
 //
-// The trace id is deliberately the only key. Everything else about the
-// request — method, route, user, parameters — is one trace-id lookup away
-// in the log store, and the application-side SQL log already carries those
-// as structured fields, so more keys would only duplicate them into every
-// statement text and bury the SQL under an URL-encoded preamble.
+// The trace id is the key back to that trail, and the cron job's name is the
+// only other key. Everything else about a request — method, route, user,
+// parameters — is one trace-id lookup away in the log store, and the
+// application-side SQL log already carries those as structured fields, so
+// more keys would only duplicate them into every statement text and bury the
+// SQL under an URL-encoded preamble. The job name earns its place because
+// origin is what an operator classifies a slow query by, scanning the
+// database-side views in bulk, where a lookup per statement does not scale:
+// a statement naming a job came from that job's round, one with a trace id
+// alone came from a request, and one with no comment came from outside this
+// process.
 //
-// The per-request-unique comment rules out text-keyed statement caching
+// The per-execution-unique comment rules out text-keyed statement caching
 // wholesale; the dialect packages therefore run their connections on
 // per-statement text protocol instead of prepared statements — see the
 // mysql and postgres buildDSN for that half of the contract.
@@ -33,25 +41,91 @@ import (
 // attached through the clause map gorm builds statements from — a
 // deliberate trade against the sqlcommenter convention of trailing comments:
 // both positions reach every database-side view, and the verb position needs
-// no reliance on gorm build internals. The value is URL-encoded, which both
-// matches the sqlcommenter escaping convention and keeps a value from ever
-// closing the comment; for the usual hex trace id the encoding changes
-// nothing.
+// no reliance on gorm build internals. Keys follow the sqlcommenter format,
+// ascending and comma-separated, and values are URL-encoded, which both
+// matches the convention's escaping and keeps a value from ever closing the
+// comment; for the usual hex trace id the encoding changes nothing.
 //
-// A context carrying no execution identity — cron jobs, startup, tests —
-// has nothing to report unless a span is open on it, and its statements stay
-// clean; execctx defines what counts as an identity.
+// The comment is attached when the operation opens, not when the chain is
+// built: that is where the operation's context is final, the span it just
+// opened included, so the id in the comment is the id the SQL log records
+// for the same statement. A context carrying no execution identity —
+// startup, tests — has nothing to report unless a span is open on it, and
+// its statements stay clean; execctx defines what counts as an identity.
 
-// sqlCommentFor renders the comment block for one chain's statements,
-// delimiters included, and "" when the context carries nothing to annotate.
-// The block is rendered once per chain, in a single concatenation, and
-// written into every statement as is.
+// sqlCommentFor renders the comment block for the statements of one
+// operation, delimiters included, and "" when the context carries nothing to
+// annotate. The block is rendered once per operation and written into every
+// statement as is.
 func sqlCommentFor(ctx context.Context) string {
-	traceID := execctx.FromContext(ctx).TraceID
-	if len(traceID) == 0 {
+	id := execctx.FromContext(ctx)
+	// The table lists the keys in ascending order, the order sqlcommenter
+	// prescribes and the order they render in; a key whose value is unset
+	// is left out. Another identity field joins the comment by taking a row
+	// here, at its sorted position.
+	pairs := [...]commentPair{
+		{key: "cronjob", value: id.Cronjob},
+		{key: "trace_id", value: id.TraceID},
+	}
+	return renderComment(pairs[:])
+}
+
+// commentPair is one key of the comment with the value the identity carries
+// for it.
+type commentPair struct {
+	key   string
+	value string
+}
+
+// renderComment renders the pairs whose value is set as one comment block,
+// and "" when none is. The block takes a single allocation: its size is
+// counted first, and strings.Builder hands its buffer over without copying.
+// Values are percent-encoded on the way in; pairs is the caller's scratch
+// array and is overwritten with the encoded values.
+func renderComment(pairs []commentPair) string {
+	size := 0
+	for i := range pairs {
+		if len(pairs[i].value) == 0 {
+			continue
+		}
+		pairs[i].value = encodeCommentValue(pairs[i].value)
+		// key='value' plus the comma that separates it from the next pair.
+		size += len(pairs[i].key) + len("=''") + len(pairs[i].value) + 1
+	}
+	if size == 0 {
 		return ""
 	}
-	return "/* trace_id='" + encodeCommentValue(traceID) + "' */"
+
+	var b strings.Builder
+	// The last pair carries no separating comma, hence the one byte back.
+	b.Grow(len("/* ") + size - 1 + len(" */"))
+	b.WriteString("/* ")
+	first := true
+	for _, pair := range pairs {
+		if len(pair.value) == 0 {
+			continue
+		}
+		if !first {
+			b.WriteByte(',')
+		}
+		first = false
+		b.WriteString(pair.key)
+		b.WriteString("='")
+		b.WriteString(pair.value)
+		b.WriteByte('\'')
+	}
+	b.WriteString(" */")
+	return b.String()
+}
+
+// attachStatementComment renders the comment for the operation's context and
+// registers it on the chain's statement. trace calls it once the operation's
+// context is final; a context without identity attaches nothing.
+func (db *database[M]) attachStatementComment() {
+	if text := sqlCommentFor(db.ctx); len(text) > 0 {
+		db.comment.text = text
+		db.ins = db.ins.Clauses(&db.comment)
+	}
 }
 
 // encodeCommentValue renders one value the way the sqlcommenter convention

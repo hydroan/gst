@@ -208,7 +208,7 @@ type database[M types.Model] struct {
 
 	// identity
 	base    *gorm.DB         // connection handle this chain was opened on; it keys context transactions and stays the original handle even after the chain joins one. Set at entry, never reset.
-	comment statementComment // this chain's statement comment, empty outside a request; see comment.go. Set at entry, never reset.
+	comment statementComment // the operation's statement comment, attached by trace once the operation's context is final; see comment.go. Empty for a context without identity, never reset.
 
 	// err is a defect in how this chain was built, reported by whichever
 	// terminal operation runs first. It is deliberately not cleared by reset:
@@ -423,13 +423,6 @@ func databaseFor[M types.Model](ctx context.Context, base *gorm.DB) types.Databa
 		ins:  ins,
 		ctx:  gctx,
 		base: base,
-	}
-	// Statement comments carry the request's trace id to the database-side
-	// views; see comment.go. The chain owns the modifier, so attaching it
-	// allocates nothing beyond the rendered text.
-	if text := sqlCommentFor(gctx); len(text) > 0 {
-		chain.comment.text = text
-		chain.ins = chain.ins.Clauses(&chain.comment)
 	}
 	if isOpenTransaction(base) {
 		chain.err = ErrTransactionInstance

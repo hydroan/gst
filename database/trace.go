@@ -121,6 +121,10 @@ func (db *database[M]) trace(phase consts.Phase, batch ...int) (func(error), tra
 		}
 	}
 
+	// The comment reads the context as it is now, span included; comment.go
+	// says why it is attached here rather than when the chain was built.
+	db.attachStatementComment()
+
 	return func(err error) {
 		if span != nil {
 			defer span.End()
