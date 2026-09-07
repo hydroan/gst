@@ -3,10 +3,10 @@ package zap
 import (
 	"context"
 
+	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
-	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -117,22 +117,14 @@ func (l *Logger) withMetadata(meta requestctx.Metadata, phase consts.Phase, trac
 	)}
 }
 
-// WithContext creates a new logger with request metadata fields from ctx.
+// WithContext creates a new logger carrying the request metadata and the
+// execution identity found on ctx.
 func (l *Logger) WithContext(ctx context.Context, phase consts.Phase) types.Logger {
 	if ctx == nil {
 		return l.With(consts.PHASE, string(phase))
 	}
 
-	meta := requestctx.FromContext(ctx)
-	traceID := meta.TraceID()
-	if len(traceID) == 0 {
-		spanCtx := trace.SpanFromContext(ctx).SpanContext()
-		if spanCtx.HasTraceID() {
-			traceID = spanCtx.TraceID().String()
-		}
-	}
-
-	return l.withMetadata(meta, phase, traceID)
+	return l.withMetadata(requestctx.FromContext(ctx), phase, execctx.FromContext(ctx).TraceID)
 }
 
 type paramsObject map[string]string

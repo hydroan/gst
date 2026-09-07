@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/sse"
 	"github.com/hydroan/gst/types/consts"
@@ -115,7 +116,7 @@ func (sc *ServiceContext) UserID() string          { return requestctx.FromConte
 func (sc *ServiceContext) SessionID() string       { return requestctx.FromContext(sc).SessionID() }
 
 func (sc *ServiceContext) TenantID() string { return requestctx.FromContext(sc).TenantID() }
-func (sc *ServiceContext) TraceID() string  { return requestctx.FromContext(sc).TraceID() }
+func (sc *ServiceContext) TraceID() string  { return execctx.FromContext(sc).TraceID }
 
 func (sc *ServiceContext) Host() string {
 	if sc == nil || sc.request == nil {

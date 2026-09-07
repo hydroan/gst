@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/types"
@@ -396,7 +397,6 @@ func TestWithContextAddsMetadataFields(t *testing.T) {
 		Method:   http.MethodGet,
 		Username: "admin",
 		UserID:   "user-1",
-		TraceID:  "trace-1",
 		Params: map[string]string{
 			"id": "42",
 		},
@@ -404,7 +404,7 @@ func TestWithContextAddsMetadataFields(t *testing.T) {
 			"tag": {"blue", "green"},
 		},
 	})
-	ctx := requestctx.WithMetadata(context.Background(), meta)
+	ctx := execctx.WithTraceID(requestctx.WithMetadata(context.Background(), meta), "trace-1")
 
 	log.WithContext(ctx, consts.PHASE_LIST).Infoz("database request")
 
@@ -431,9 +431,8 @@ func TestGormTraceUsesMetadata(t *testing.T) {
 		Method:   http.MethodPost,
 		Username: "admin",
 		UserID:   "user-1",
-		TraceID:  "trace-1",
 	})
-	ctx := requestctx.WithMetadata(context.Background(), meta)
+	ctx := execctx.WithTraceID(requestctx.WithMetadata(context.Background(), meta), "trace-1")
 
 	oldThreshold := config.App.Database.SlowQueryThreshold
 	config.App.Database.SlowQueryThreshold = time.Hour

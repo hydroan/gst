@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/hydroan/gst/internal/requestctx"
+	"github.com/hydroan/gst/internal/execctx"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -38,15 +38,16 @@ import (
 // closing the comment; for the usual hex trace id the encoding changes
 // nothing.
 //
-// Outside a request — cron jobs, startup, tests without request metadata —
-// there is nothing to report and statements stay clean.
+// A context carrying no execution identity — cron jobs, startup, tests —
+// has nothing to report unless a span is open on it, and its statements stay
+// clean; execctx defines what counts as an identity.
 
 // sqlCommentFor renders the comment block for one chain's statements,
 // delimiters included, and "" when the context carries nothing to annotate.
 // The block is rendered once per chain, in a single concatenation, and
 // written into every statement as is.
 func sqlCommentFor(ctx context.Context) string {
-	traceID := requestctx.FromContext(ctx).TraceID()
+	traceID := execctx.FromContext(ctx).TraceID
 	if len(traceID) == 0 {
 		return ""
 	}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/internal/execctx"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
@@ -18,7 +19,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// tracing returns the middleware that opens the request root span and
+// tracing returns the middleware that opens the request root span, stamps
+// the trace id on the request context as the identity of this execution, and
 // publishes the trace and span ids to the gin context and the response
 // headers, falling back to generated ids when OpenTelemetry is disabled.
 func tracing() gin.HandlerFunc {
@@ -93,7 +95,6 @@ func tracing() gin.HandlerFunc {
 
 			// Store span in context for use in handlers
 			c.Set("otel_span", span)
-			c.Request = c.Request.WithContext(ctx)
 
 			// Defer span completion. Response attributes are batched into one
 			// SetAttributes call for the same performance reason as the request
@@ -135,6 +136,7 @@ func tracing() gin.HandlerFunc {
 			}()
 		} else {
 			// Fallback to custom ID generation if OTEL is not enabled
+			ctx = c.Request.Context()
 			customTraceID := c.Request.Header.Get(consts.HEADER_TRACE_ID)
 			customSpanID := util.SpanID()
 			if len(customTraceID) == 0 {
@@ -143,6 +145,13 @@ func tracing() gin.HandlerFunc {
 			traceID = customTraceID
 			spanID = customSpanID
 		}
+
+		// The trace id is the identity of this execution: everything downstream
+		// that annotates its output — statement comments, the SQL log, the
+		// business log — reads it off the request context, whether it runs on a
+		// service context or on the raw request context. The gin keys below serve
+		// the parts that only see gin.
+		c.Request = c.Request.WithContext(execctx.WithTraceID(ctx, traceID))
 
 		// Set trace fields in gin context.
 		c.Set(consts.TRACE_ID, traceID)

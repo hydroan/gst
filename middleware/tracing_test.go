@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
@@ -26,6 +27,7 @@ func TestTracingUsesIncomingTraceparent(t *testing.T) {
 		require.True(t, spanContext.HasTraceID())
 		require.Equal(t, incomingTraceID, spanContext.TraceID().String())
 		require.Equal(t, incomingTraceID, c.GetString(consts.TRACE_ID))
+		require.Equal(t, incomingTraceID, execctx.FromContext(c.Request.Context()).TraceID)
 		c.Status(http.StatusNoContent)
 	})
 
@@ -50,6 +52,7 @@ func TestTracingUsesIncomingTraceIDHeader(t *testing.T) {
 		require.True(t, spanContext.HasTraceID())
 		require.Equal(t, incomingTraceID, spanContext.TraceID().String())
 		require.Equal(t, incomingTraceID, c.GetString(consts.TRACE_ID))
+		require.Equal(t, incomingTraceID, execctx.FromContext(c.Request.Context()).TraceID)
 		c.Status(http.StatusNoContent)
 	})
 
@@ -60,6 +63,31 @@ func TestTracingUsesIncomingTraceIDHeader(t *testing.T) {
 
 	require.Equal(t, http.StatusNoContent, w.Code)
 	require.Equal(t, incomingTraceID, w.Header().Get(consts.HEADER_TRACE_ID))
+}
+
+// TestTracingStampsGeneratedTraceIDWhenOTELDisabled pins the fallback branch:
+// with tracing off the middleware still stamps the id it publishes, so the
+// annotations downstream carry the same id the caller was handed.
+func TestTracingStampsGeneratedTraceIDWhenOTELDisabled(t *testing.T) {
+	original := config.App.OTEL.Enabled
+	config.App.OTEL.Enabled = false
+	t.Cleanup(func() { config.App.OTEL.Enabled = original })
+
+	var stamped, published string
+	router := gin.New()
+	router.Use(tracing())
+	router.GET("/api/ping", func(c *gin.Context) {
+		stamped = execctx.FromContext(c.Request.Context()).TraceID
+		published = c.GetString(consts.TRACE_ID)
+		c.Status(http.StatusNoContent)
+	})
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/ping", nil))
+
+	require.NotEmpty(t, stamped)
+	require.Equal(t, published, stamped)
+	require.Equal(t, stamped, w.Header().Get(consts.HEADER_TRACE_ID))
 }
 
 func TestTracingSkipsRecordingOnlyStateWhenSamplerDrops(t *testing.T) {

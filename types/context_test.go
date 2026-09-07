@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
@@ -22,7 +23,7 @@ func TestServiceContextContextMethods(t *testing.T) {
 		ctx.Set(consts.CTX_USERNAME, "admin")
 		ctx.Set(consts.CTX_USER_ID, "user-1")
 		ctx.Set(consts.CTX_TENANT_ID, "tenant-1")
-		ctx.Set(consts.TRACE_ID, "trace-1")
+		ctx.Request = ctx.Request.WithContext(execctx.WithTraceID(ctx.Request.Context(), "trace-1"))
 
 		serviceCtx = types.NewServiceContext(ctx, nil, "")
 	})
@@ -33,7 +34,7 @@ func TestServiceContextContextMethods(t *testing.T) {
 	require.Equal(t, "admin", serviceCtx.Username())
 	require.Equal(t, "user-1", serviceCtx.UserID())
 	require.Equal(t, "tenant-1", serviceCtx.TenantID())
-	require.Equal(t, "trace-1", meta.TraceID())
+	require.Equal(t, "trace-1", serviceCtx.TraceID())
 	require.Equal(t, "42", meta.Param("id"))
 	require.Equal(t, []string{"blue"}, meta.Query()["tag"])
 }
@@ -47,7 +48,7 @@ func TestServiceContextQueryAccessorReturnsCopy(t *testing.T) {
 		ctx.Set(consts.PARAMS, []string{"id"})
 		ctx.Set(consts.CTX_USERNAME, "admin")
 		ctx.Set(consts.CTX_USER_ID, "user-1")
-		ctx.Set(consts.TRACE_ID, "trace-1")
+		ctx.Request = ctx.Request.WithContext(execctx.WithTraceID(ctx.Request.Context(), "trace-1"))
 
 		serviceCtx = types.NewServiceContext(ctx, nil, "")
 	})

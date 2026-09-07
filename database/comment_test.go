@@ -13,6 +13,7 @@ import (
 	"github.com/hydroan/gst/database"
 	gstmysql "github.com/hydroan/gst/database/mysql"
 	gstpostgres "github.com/hydroan/gst/database/postgres"
+	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -57,11 +58,12 @@ func (l *sqlTextCaptureLogger) lastStartingWith(verb string) string {
 	return ""
 }
 
-// requestContext builds a context carrying the request metadata the comment
-// draws from, the way a real request's middleware would.
+// requestContext builds a context carrying the trace id the comment draws
+// from and the request metadata it must leave out, the way a real request's
+// middleware and service context would.
 func requestContext(method, route, traceID string) context.Context {
-	meta := requestctx.New(requestctx.Fields{Method: method, Route: route, TraceID: traceID})
-	return requestctx.WithMetadata(context.Background(), meta)
+	meta := requestctx.New(requestctx.Fields{Method: method, Route: route})
+	return execctx.WithTraceID(requestctx.WithMetadata(context.Background(), meta), traceID)
 }
 
 func TestSQLCommentAnnotatesStatements(t *testing.T) {

@@ -11,11 +11,11 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
-	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	gorml "gorm.io/gorm/logger"
@@ -248,14 +248,7 @@ func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 	meta := requestctx.FromContext(ctx)
 	username := meta.Username()
 	userID := meta.UserID()
-	traceID := meta.TraceID()
-	// Fallback to OTEL span context trace ID when request metadata has no trace ID.
-	if len(traceID) == 0 {
-		spanCtx := trace.SpanFromContext(ctx).SpanContext()
-		if spanCtx.HasTraceID() {
-			traceID = spanCtx.TraceID().String()
-		}
-	}
+	traceID := execctx.FromContext(ctx).TraceID
 	elapsed := time.Since(begin)
 	sql, rows := fc()
 
