@@ -1,6 +1,7 @@
 package redis_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,9 @@ import (
 // and every later one is told it lost while the key lives.
 func TestSetNXIsExclusive(t *testing.T) {
 	ctx := t.Context()
+	// An earlier run in this process may have left the key behind, and the
+	// first setnx below only wins on a key that does not exist.
+	clearKey(t, "redis-test:setnx")
 
 	acquired, err := redis.SetNX(ctx, "redis-test:setnx", "first", time.Minute)
 	if err != nil {
@@ -56,6 +60,8 @@ func TestStringHelpersRoundtrip(t *testing.T) {
 
 func TestCounterHelpersRoundtrip(t *testing.T) {
 	ctx := t.Context()
+	// The counts below start from an absent key.
+	clearKey(t, "redis-test:counter")
 
 	count, err := redis.Incr(ctx, "redis-test:counter")
 	if err != nil {
@@ -130,4 +136,14 @@ func TestGetIntReportsUndecodableValue(t *testing.T) {
 	} else if errors.GetReportableStackTrace(err) == nil {
 		t.Fatalf("want a run-time stack on the decode error, got none: %v", err)
 	}
+}
+
+// clearKey deletes key now and again when the test ends, so a test that
+// depends on the key being absent holds in a repeated run of the process.
+func clearKey(t *testing.T, key string) {
+	t.Helper()
+	if err := redis.Del(t.Context(), key); err != nil {
+		t.Fatalf("del %s: %v", key, err)
+	}
+	t.Cleanup(func() { _ = redis.Del(context.Background(), key) })
 }
