@@ -42,9 +42,9 @@ var (
 )
 
 // Init connects the process-wide client and verifies it with a ping, then
-// installs tracing and metrics on it. A deployment that leaves Redis disabled
-// keeps no handle, which every operation reports through Client. A second
-// call on a connected process does nothing.
+// instruments it for tracing when tracing is configured on. A deployment
+// that leaves Redis disabled keeps no handle, which every operation reports
+// through Client. A second call on a connected process does nothing.
 func Init() (err error) {
 	cfg := config.App.Redis
 	if !cfg.Enabled {
@@ -79,18 +79,29 @@ func Init() (err error) {
 		cli = nil
 		return errors.Wrap(err, "failed to ping redis")
 	}
-	// Caller attributes are left off the command spans: redisotel resolves
-	// them to the first frame outside go-redis, which is always one of this
-	// package's helpers rather than the code that called it, and finding
-	// that frame walks the stack on every command. The statement itself stays
-	// on the span, as it is what a redis span is read for.
-	if err = errors.Join(
-		redisotel.InstrumentTracing(cli, redisotel.WithCallerEnabled(false)),
-		redisotel.InstrumentMetrics(cli),
-	); err != nil {
-		cli.Close()
-		cli = nil
-		return errors.WithStack(err)
+	// Instrumentation follows the configured flag for the reason
+	// dbruntime.InstallTracing gives for the database handles: the client
+	// connects before the otel package initializes, and the hook binds its
+	// tracer when installed. Left on regardless, every command would still
+	// format its full statement and open a non-recording span for nobody,
+	// nine allocations per command measured on a SET.
+	//
+	// No metrics hook is installed. The framework never installs an
+	// OpenTelemetry meter provider — its metrics are served through the
+	// metrics package — so the hook would only build an attribute set for a
+	// no-op meter on every command, four allocations more.
+	if config.App.OTEL.Enabled {
+		// Caller attributes are left off the command spans: redisotel
+		// resolves them to the first frame outside go-redis, which is always
+		// one of this package's helpers rather than the code that called it,
+		// and finding that frame walks the stack on every command. The
+		// statement itself stays on the span, as it is what a redis span is
+		// read for.
+		if err = redisotel.InstrumentTracing(cli, redisotel.WithCallerEnabled(false)); err != nil {
+			cli.Close()
+			cli = nil
+			return errors.WithStack(err)
+		}
 	}
 
 	return nil
