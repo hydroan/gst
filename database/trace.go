@@ -52,7 +52,8 @@ const (
 //   - Automatic timing measurement from call to completion
 //   - OTEL distributed tracing integration with OpenTelemetry spans
 //   - Comprehensive span attributes including operation metadata
-//   - Error-aware logging and span status management
+//   - Error-aware logging and span status management, with record-not-found
+//     treated as a normal outcome by both
 //   - Batch operation support with size tracking
 //   - Dry-run mode status recording
 //   - Smart duration formatting for readability
@@ -134,17 +135,27 @@ func (db *database[M]) trace(phase consts.Phase, batch ...int) (func(error), tra
 		duration := time.Since(begin)
 
 		// Update span with results if available; keep this a single batched
-		// SetAttributes call (see the performance note above).
+		// SetAttributes call (see the performance note above). The span and
+		// the log below read the outcome the same way: success and
+		// record-not-found are normal outcomes, so neither marks the span as
+		// failed — a missing row is answered by an OK span carrying
+		// database.record_not_found, the counterpart of the log's
+		// record_not_found field — and only a real failure records the error
+		// and sets the error status.
 		if gstotel.IsSpanRecording(span) {
 			attrs := make([]attribute.KeyValue, 0, 2)
 			attrs = append(attrs, attribute.Int64("database.duration_ms", duration.Milliseconds()))
 
-			if err != nil {
+			switch {
+			case err == nil:
+				span.SetStatus(codes.Ok, "")
+			case errors.Is(err, ErrRecordNotFound):
+				span.SetStatus(codes.Ok, "")
+				attrs = append(attrs, attribute.Bool("database.record_not_found", true))
+			default:
 				span.SetStatus(codes.Error, err.Error())
 				gstotel.RecordError(span, err)
 				attrs = append(attrs, attribute.Bool("error", true))
-			} else {
-				span.SetStatus(codes.Ok, "")
 			}
 			span.SetAttributes(attrs...)
 		}
