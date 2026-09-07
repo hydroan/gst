@@ -16,10 +16,7 @@ import (
 	"gorm.io/gorm"
 )
 
-var (
-	Default *gorm.DB
-	db      *sql.DB
-)
+var Default *gorm.DB
 
 // driverName is the database/sql driver this package opens connections with:
 // the stock sqlite3 driver extended with the SQL functions the framework's
@@ -103,16 +100,6 @@ func Init() (err error) {
 	if Default, err = New(cfg); err != nil {
 		return errors.Wrap(err, "failed to connect to sqlite")
 	}
-	if db, err = Default.DB(); err != nil {
-		return errors.Wrap(err, "failed to get sqlite db")
-	}
-
-	// SQLite works best with limited concurrent connections to avoid lock contention
-	db.SetMaxIdleConns(1)
-	db.SetMaxOpenConns(1) // Use single connection to avoid "database table is locked" errors
-	db.SetConnMaxLifetime(config.App.Database.ConnMaxLifetime)
-	db.SetConnMaxIdleTime(config.App.Database.ConnMaxIdleTime)
-
 	// Optimize database performance with PRAGMA settings
 	if err = optimizeDatabase(Default); err != nil {
 		zap.S().Warnw("failed to optimize sqlite database", "error", err)
@@ -127,6 +114,8 @@ func Init() (err error) {
 // OpenTelemetry tracing plugin, so application-held instances passed to
 // DatabaseOn, AggregateOn, and TransactionOn are traced like the default
 // database.
+// The pool runs under the connection limits of the [database] configuration
+// narrowed to a single connection, the same as the default handle.
 // Connections open through this package's own driver, which carries the
 // framework's REGEXP implementation; see registerRegexpFunc.
 func New(cfg config.Sqlite) (*gorm.DB, error) {
@@ -139,6 +128,17 @@ func New(cfg config.Sqlite) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	pool, err := db.DB()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get sqlite db")
+	}
+	dbruntime.ConfigurePool(pool)
+	// SQLite serializes writers on the file, so a pool of one connection
+	// avoids the "database table is locked" failures concurrent connections
+	// run into; an in-memory database would even be a separate database per
+	// connection. The lifetime and idle-time limits stay as configured.
+	pool.SetMaxIdleConns(1)
+	pool.SetMaxOpenConns(1)
 	dbruntime.InstallTracing(db)
 	return db, nil
 }

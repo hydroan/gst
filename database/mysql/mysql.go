@@ -1,7 +1,6 @@
 package mysql
 
 import (
-	"database/sql"
 	"fmt"
 
 	"github.com/cockroachdb/errors"
@@ -13,10 +12,7 @@ import (
 	"gorm.io/gorm"
 )
 
-var (
-	Default *gorm.DB
-	db      *sql.DB
-)
+var Default *gorm.DB
 
 // Init initializes the default MySQL connection.
 // It checks if MySQL is enabled and selected as the default database.
@@ -30,14 +26,6 @@ func Init() (err error) {
 	if Default, err = New(cfg); err != nil {
 		return errors.Wrap(err, "failed to connect to mysql")
 	}
-	if db, err = Default.DB(); err != nil {
-		return errors.Wrap(err, "failed to get mysql db")
-	}
-	db.SetMaxIdleConns(config.App.Database.MaxIdleConns)
-	db.SetMaxOpenConns(config.App.Database.MaxOpenConns)
-	db.SetConnMaxLifetime(config.App.Database.ConnMaxLifetime)
-	db.SetConnMaxIdleTime(config.App.Database.ConnMaxIdleTime)
-
 	zap.S().Infow("successfully connect to mysql", "host", cfg.Host, "port", cfg.Port, "database", cfg.Database)
 	return dbruntime.InitDatabase(Default)
 }
@@ -47,6 +35,8 @@ func Init() (err error) {
 // OpenTelemetry tracing plugin, so application-held instances passed to
 // DatabaseOn, AggregateOn, and TransactionOn are traced like the default
 // database.
+// The pool runs under the connection limits of the [database] configuration,
+// the same ones the default handle runs under.
 func New(cfg config.MySQL) (*gorm.DB, error) {
 	// TranslateError maps dialect-specific write failures to portable gorm
 	// sentinels (gorm.ErrDuplicatedKey, gorm.ErrForeignKeyViolated) that
@@ -58,6 +48,11 @@ func New(cfg config.MySQL) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	pool, err := db.DB()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get mysql db")
+	}
+	dbruntime.ConfigurePool(pool)
 	dbruntime.InstallTracing(db)
 	return attachReplicas(db, cfg)
 }

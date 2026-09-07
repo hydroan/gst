@@ -1,7 +1,6 @@
 package clickhouse
 
 import (
-	"database/sql"
 	"fmt"
 
 	"github.com/cockroachdb/errors"
@@ -13,10 +12,7 @@ import (
 	"gorm.io/gorm"
 )
 
-var (
-	Default *gorm.DB
-	db      *sql.DB
-)
+var Default *gorm.DB
 
 // Init initializes the default Clickhouse connection.
 // It checks if Clickhouse is enabled and selected as the default database.
@@ -30,14 +26,6 @@ func Init() (err error) {
 	if Default, err = New(cfg); err != nil {
 		return errors.Wrap(err, "failed to connect to clickhouse")
 	}
-	if db, err = Default.DB(); err != nil {
-		return errors.Wrap(err, "failed to get clickhouse db")
-	}
-	db.SetMaxIdleConns(config.App.Database.MaxIdleConns)
-	db.SetMaxOpenConns(config.App.Database.MaxOpenConns)
-	db.SetConnMaxLifetime(config.App.Database.ConnMaxLifetime)
-	db.SetConnMaxIdleTime(config.App.Database.ConnMaxIdleTime)
-
 	zap.S().Infow("successfully connect to clickhouse", "host", cfg.Host, "port", cfg.Port, "database", cfg.Database)
 	return dbruntime.InitDatabase(Default)
 }
@@ -46,6 +34,8 @@ func Init() (err error) {
 // With tracing configured on, the returned handle carries the GORM
 // OpenTelemetry tracing plugin, so application-held instances passed to
 // DatabaseOn and AggregateOn are traced like the default database.
+// The pool runs under the connection limits of the [database] configuration,
+// the same ones the default handle runs under.
 //
 // ClickHouse is an analytical instance. The handle carries the read side of
 // the framework — List/Get/Count/First/Last/Take, the filter operators
@@ -75,6 +65,7 @@ func New(cfg config.Clickhouse) (*gorm.DB, error) {
 	if _, err = sqlDB.Exec("SET allow_suspicious_fixed_string_types = 1"); err != nil {
 		return nil, err
 	}
+	dbruntime.ConfigurePool(sqlDB)
 	dbruntime.InstallTracing(db)
 	return db, nil
 }

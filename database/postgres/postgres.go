@@ -1,7 +1,6 @@
 package postgres
 
 import (
-	"database/sql"
 	"fmt"
 
 	"github.com/cockroachdb/errors"
@@ -13,10 +12,7 @@ import (
 	"gorm.io/gorm"
 )
 
-var (
-	Default *gorm.DB
-	db      *sql.DB
-)
+var Default *gorm.DB
 
 // Init initializes the default PostgreSQL connection.
 // It checks if PostgreSQL is enabled and selected as the default database.
@@ -30,14 +26,6 @@ func Init() (err error) {
 	if Default, err = New(cfg); err != nil {
 		return errors.Wrap(err, "failed to connect to postgres")
 	}
-	if db, err = Default.DB(); err != nil {
-		return errors.Wrap(err, "failed to get postgres db")
-	}
-	db.SetMaxIdleConns(config.App.Database.MaxIdleConns)
-	db.SetMaxOpenConns(config.App.Database.MaxOpenConns)
-	db.SetConnMaxLifetime(config.App.Database.ConnMaxLifetime)
-	db.SetConnMaxIdleTime(config.App.Database.ConnMaxIdleTime)
-
 	zap.S().Infow("successfully connect to postgres", "host", cfg.Host, "port", cfg.Port, "database", cfg.Database, "sslmode", cfg.SSLMode, "timezone", cfg.TimeZone)
 	return dbruntime.InitDatabase(Default)
 }
@@ -47,6 +35,8 @@ func Init() (err error) {
 // OpenTelemetry tracing plugin, so application-held instances passed to
 // DatabaseOn, AggregateOn, and TransactionOn are traced like the default
 // database.
+// The pool runs under the connection limits of the [database] configuration,
+// the same ones the default handle runs under.
 func New(cfg config.Postgres) (*gorm.DB, error) {
 	// Statements run over pgx's simple protocol — no gorm PrepareStmt, no
 	// pgx statement cache, no server-side statement state; buildDSN explains
@@ -55,6 +45,11 @@ func New(cfg config.Postgres) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	pool, err := db.DB()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get postgres db")
+	}
+	dbruntime.ConfigurePool(pool)
 	dbruntime.InstallTracing(db)
 	return attachReplicas(db, cfg)
 }

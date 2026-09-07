@@ -8,6 +8,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
+	gstmysql "github.com/hydroan/gst/database/mysql"
+	gstpostgres "github.com/hydroan/gst/database/postgres"
 	"github.com/hydroan/gst/database/sqlite"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
@@ -106,5 +108,35 @@ func TestTransactionOn(t *testing.T) {
 func TestTransactionOnNilInstancePanics(t *testing.T) {
 	require.Panics(t, func() {
 		_ = database.TransactionOn(context.Background(), nil, func(ctx context.Context) error { return nil })
+	})
+}
+
+// TestNewInstancesRunUnderTheConfiguredPoolLimits pins that an instance a
+// dialect's New hands out runs under the same pool limits as the default
+// handle: the [database] open-connection cap on the SQL dialect under test,
+// and the single connection sqlite pins its pool to.
+func TestNewInstancesRunUnderTheConfiguredPoolLimits(t *testing.T) {
+	t.Run("sqlite pins the pool to one connection", func(t *testing.T) {
+		pool, err := newInstance(t, "pool.db").DB()
+		require.NoError(t, err)
+		require.Equal(t, 1, pool.Stats().MaxOpenConnections)
+	})
+
+	t.Run("the SQL dialect carries the configured cap", func(t *testing.T) {
+		var handle *gorm.DB
+		var err error
+		switch config.App.Database.Type {
+		case config.DBMySQL:
+			handle, err = gstmysql.New(config.App.MySQL)
+		case config.DBPostgres:
+			handle, err = gstpostgres.New(config.App.Postgres)
+		default:
+			t.Skipf("pool limits are asserted on mysql and postgres, the test database is %s", config.App.Database.Type)
+		}
+		require.NoError(t, err)
+		pool, err := handle.DB()
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = pool.Close() })
+		require.Equal(t, config.App.Database.MaxOpenConns, pool.Stats().MaxOpenConnections)
 	})
 }
