@@ -7,8 +7,10 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
+	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/codes"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
@@ -231,6 +233,34 @@ func TestTransactionWithOTELEnabled(t *testing.T) {
 		require.NoError(t, database.Database[*TestUser](context.Background()).List(&users))
 		require.Empty(t, users, "should have 0 records after rollback")
 	})
+}
+
+// TestTransactionFailureIsRecordedOnSpan proves the transaction span carries
+// the failure of a rolled-back transaction: error status, the error text as
+// its description and the exception event. The span is where this package
+// records the failure; logging the error belongs to the boundary that owns
+// it, such as the controller fallback for a request or the cronjob runner for
+// a job.
+func TestTransactionFailureIsRecordedOnSpan(t *testing.T) {
+	oteltest.Enable(t)
+	recorder := oteltest.Record(t)
+	defer cleanupTestData()
+
+	errTest := errors.New("sample failure")
+	err := database.Transaction(context.Background(), func(ctx context.Context) error {
+		require.NoError(t, database.Database[*TestUser](ctx).Create(ul...))
+		return errTest
+	})
+	require.ErrorIs(t, err, errTest)
+
+	span := oteltest.EndedNamed(t, recorder, gstotel.OperationSpanName("database", "Transaction"))
+	require.Equal(t, codes.Error, span.Status().Code)
+	require.Equal(t, errTest.Error(), span.Status().Description)
+	exception := false
+	for _, event := range span.Events() {
+		exception = exception || event.Name == "exception"
+	}
+	require.True(t, exception, "the transaction span must carry the exception event")
 }
 
 // TestTransaction covers the package-level context-injecting transaction entry:
