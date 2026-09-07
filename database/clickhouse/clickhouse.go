@@ -8,7 +8,6 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/logger"
-	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"go.uber.org/zap"
 	"gorm.io/driver/clickhouse"
 	"gorm.io/gorm"
@@ -76,9 +75,7 @@ func New(cfg config.Clickhouse) (*gorm.DB, error) {
 	if _, err = sqlDB.Exec("SET allow_suspicious_fixed_string_types = 1"); err != nil {
 		return nil, err
 	}
-	if err := db.Use(otelgorm.NewPlugin()); err != nil {
-		zap.S().Warnw("failed to install GORM OpenTelemetry tracing plugin", "dialect", "clickhouse", "error", err)
-	}
+	dbruntime.InstallTracing(db)
 	return db, nil
 }
 

@@ -8,7 +8,6 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/logger"
-	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -58,9 +57,7 @@ func New(cfg config.MySQL) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := db.Use(otelgorm.NewPlugin()); err != nil {
-		zap.S().Warnw("failed to install GORM OpenTelemetry tracing plugin", "dialect", "mysql", "error", err)
-	}
+	dbruntime.InstallTracing(db)
 	return attachReplicas(db, cfg)
 }
 
