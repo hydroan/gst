@@ -26,7 +26,6 @@ type Metadata struct {
 	userID    string
 	sessionID string
 	tenantID  string
-	traceID   string
 	params    map[string]string
 	query     url.Values
 	rawQuery  string
@@ -44,7 +43,6 @@ type Fields struct {
 	UserID    string
 	SessionID string
 	TenantID  string
-	TraceID   string
 	Params    map[string]string
 	Query     url.Values
 	RawQuery  string
@@ -60,7 +58,6 @@ func New(fields Fields) Metadata {
 		userID:    fields.UserID,
 		sessionID: fields.SessionID,
 		tenantID:  fields.TenantID,
-		traceID:   fields.TraceID,
 		params:    cloneStringMap(fields.Params),
 		query:     cloneURLValues(fields.Query),
 		rawQuery:  rawQueryOf(fields.RawQuery, fields.Query),
@@ -118,7 +115,6 @@ func FromGin(c *gin.Context) Metadata {
 		userID:    c.GetString(consts.CTX_USER_ID),
 		sessionID: c.GetString(consts.CTX_SESSION_ID),
 		tenantID:  c.GetString(consts.CTX_TENANT_ID),
-		traceID:   c.GetString(consts.TRACE_ID),
 		params:    params,
 		query:     GinQueryValues(c),
 		rawQuery:  rawQuery,
@@ -190,7 +186,6 @@ func (m Metadata) Username() string  { return m.username }
 func (m Metadata) UserID() string    { return m.userID }
 func (m Metadata) SessionID() string { return m.sessionID }
 func (m Metadata) TenantID() string  { return m.tenantID }
-func (m Metadata) TraceID() string   { return m.traceID }
 
 func (m Metadata) Param(key string) string {
 	if m.params == nil {
