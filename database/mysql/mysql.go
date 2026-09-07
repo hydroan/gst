@@ -43,9 +43,10 @@ func Init() (err error) {
 }
 
 // New creates and returns a new MySQL database connection with the given configuration.
-// The returned handle already carries the GORM OpenTelemetry tracing plugin,
-// so application-held instances passed to DatabaseOn, AggregateOn, and
-// TransactionOn are traced like the default database.
+// With tracing configured on, the returned handle carries the GORM
+// OpenTelemetry tracing plugin, so application-held instances passed to
+// DatabaseOn, AggregateOn, and TransactionOn are traced like the default
+// database.
 func New(cfg config.MySQL) (*gorm.DB, error) {
 	// TranslateError maps dialect-specific write failures to portable gorm
 	// sentinels (gorm.ErrDuplicatedKey, gorm.ErrForeignKeyViolated) that

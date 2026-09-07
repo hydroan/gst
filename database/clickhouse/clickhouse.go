@@ -43,9 +43,9 @@ func Init() (err error) {
 }
 
 // New creates and returns a new Clickhouse database connection with the given configuration.
-// The returned handle already carries the GORM OpenTelemetry tracing plugin,
-// so application-held instances passed to DatabaseOn and AggregateOn are
-// traced like the default database.
+// With tracing configured on, the returned handle carries the GORM
+// OpenTelemetry tracing plugin, so application-held instances passed to
+// DatabaseOn and AggregateOn are traced like the default database.
 //
 // ClickHouse is an analytical instance. The handle carries the read side of
 // the framework — List/Get/Count/First/Last/Take, the filter operators

@@ -123,9 +123,10 @@ func Init() (err error) {
 }
 
 // New creates and returns a new SQLite database connection with the given configuration.
-// The returned handle already carries the GORM OpenTelemetry tracing plugin,
-// so application-held instances passed to DatabaseOn, AggregateOn, and
-// TransactionOn are traced like the default database.
+// With tracing configured on, the returned handle carries the GORM
+// OpenTelemetry tracing plugin, so application-held instances passed to
+// DatabaseOn, AggregateOn, and TransactionOn are traced like the default
+// database.
 // Connections open through this package's own driver, which carries the
 // framework's REGEXP implementation; see registerRegexpFunc.
 func New(cfg config.Sqlite) (*gorm.DB, error) {

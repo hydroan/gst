@@ -43,9 +43,10 @@ func Init() (err error) {
 }
 
 // New creates and returns a new PostgreSQL database connection with the given configuration.
-// The returned handle already carries the GORM OpenTelemetry tracing plugin,
-// so application-held instances passed to DatabaseOn, AggregateOn, and
-// TransactionOn are traced like the default database.
+// With tracing configured on, the returned handle carries the GORM
+// OpenTelemetry tracing plugin, so application-held instances passed to
+// DatabaseOn, AggregateOn, and TransactionOn are traced like the default
+// database.
 func New(cfg config.Postgres) (*gorm.DB, error) {
 	// Statements run over pgx's simple protocol — no gorm PrepareStmt, no
 	// pgx statement cache, no server-side statement state; buildDSN explains
