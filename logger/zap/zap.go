@@ -23,6 +23,10 @@ import (
 )
 
 const (
+	// File sinks buffer their entries and write them out when the buffer
+	// fills, the flush interval elapses, or Clean (or a Sync on the logger)
+	// runs. Until then the file on disk stays behind what was logged, which
+	// is all a reader inspecting it right after the fact gets to see.
 	defaultLogBufferSize    = 256 * 1024
 	defaultLogFlushInterval = time.Second
 )
@@ -107,6 +111,9 @@ func Init() error {
 	return nil
 }
 
+// Clean flushes the loggers built by Init and stops every buffered file
+// writer the constructors registered, so a process about to exit — or a test
+// about to read a log file back — sees everything that was logged.
 func Clean() {
 	// types.Logger
 	_ = zap.L().Sync()

@@ -139,6 +139,15 @@ func (s Server) prepare() (release func(), afterMigrate func(), err error) {
 
 	// A log directory of its own keeps the logs of a test run out of the
 	// package source tree, where they would otherwise pile up next to the code.
+	//
+	// The files in it are not evidence a test can read back: the directory
+	// goes away at release, and every file sink buffers its entries (see the
+	// buffered writer in logger/zap), so a test process that ends within the
+	// flush interval leaves most of them empty. A test that needs to assert
+	// on log output instead swaps the package logger it cares about for a
+	// scratch file logger under its own t.TempDir and flushes that one before
+	// reading — see withCronjobLoggerConfig and readLogEntry in the cronjob
+	// tests.
 	os.Setenv(config.LOGGER_DIR, logDir)
 	listenOnFreePort()
 

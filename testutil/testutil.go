@@ -52,6 +52,12 @@ type Server = testutil.Server
 // Run prepares what s declares, starts the test server, runs the tests and
 // releases everything afterwards. It is the whole body of a test package's
 // TestMain and does not return: it exits with the result of the tests.
+//
+// The log files of the run live in a temporary directory that is removed at
+// release, and their sinks are buffered, so they are not something a test can
+// read back. A test that asserts on logging swaps in a scratch logger of its
+// own; the note at the log directory setup in the internal harness's
+// Server.prepare shows the pattern.
 func Run(m *testing.M, s Server) {
 	testutil.Run(m, s)
 }
