@@ -1,15 +1,21 @@
 package cronjob
 
 import (
+	"context"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/logger"
 	pkgzap "github.com/hydroan/gst/logger/zap"
+	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
 	"github.com/robfig/cron/v3"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -26,7 +32,7 @@ var (
 type cronjob struct {
 	name           string
 	spec           string
-	fn             func() error
+	fn             func(ctx context.Context) error
 	sched          cron.Schedule
 	runImmediately bool
 }
@@ -92,7 +98,13 @@ func Init() (err error) {
 
 // Register cronjob can be called at any point before or after Init().
 // The config parameter is optional and can be used to customize cronjob behavior.
-func Register(fn func() error, spec string, name string, config ...Config) {
+//
+// fn receives the context of the round it runs in. The context carries the
+// round's identity — the job name and a trace id of the round's own, see
+// execctx — and, with tracing on, the round's root span, so every statement,
+// log line and span the job produces is annotated with the round and can be
+// found again from any of them.
+func Register(fn func(ctx context.Context) error, spec string, name string, config ...Config) {
 	var cfg Config
 	if len(config) > 0 {
 		cfg = config[0]
@@ -128,26 +140,34 @@ func register(cj *cronjob) {
 	}
 	cj.sched = sched
 
-	// run executes one round. Panic recovery, timing and outcome logging live
-	// here so the immediate run and every scheduled run share a single code
-	// path; runErr stays local to the round so concurrent rounds of different
-	// jobs never share error state.
+	// run executes one round. Round identity, panic recovery, timing and
+	// outcome logging live here so the immediate run and every scheduled run
+	// share a single code path; runErr stays local to the round so concurrent
+	// rounds of different jobs never share error state.
 	//
 	// A failure goes out as a typed error field, never formatted into the
 	// message: the logging layer derives error_stack from that field, and for
 	// a job this entry is the only record of the failure, so it has to
-	// locate the failing line and not just name the job.
+	// locate the failing line and not just name the job. Every outcome entry
+	// carries the round's trace id — the id the round's statements and log
+	// lines carry too — so the round is found again from any of them.
 	run := func() {
+		ctx, traceID, end := beginRound(cj.name)
+		var runErr error
+		// Registered before the recovery below so that it runs after it: a
+		// panic is recorded on the round's span as its outcome.
+		defer func() { end(runErr) }()
 		defer func() {
 			if r := recover(); r != nil {
-				log.Errorz("cronjob panicked", zap.Error(panicError(r)), zap.String("name", cj.name), zap.String("spec", cj.spec))
+				runErr = panicError(r)
+				log.Errorz("cronjob panicked", zap.Error(runErr), zap.String("name", cj.name), zap.String("spec", cj.spec), zap.String(consts.TRACE_ID, traceID))
 			}
 		}()
 		begin := time.Now()
-		if runErr := cj.fn(); runErr != nil {
-			log.Errorz("finished cronjob with error", zap.Error(runErr), zap.String("name", cj.name), zap.String("spec", cj.spec), zap.Time("next", cj.sched.Next(begin)), util.LogDuration(time.Since(begin)))
+		if runErr = cj.fn(ctx); runErr != nil {
+			log.Errorz("finished cronjob with error", zap.Error(runErr), zap.String("name", cj.name), zap.String("spec", cj.spec), zap.String(consts.TRACE_ID, traceID), zap.Time("next", cj.sched.Next(begin)), util.LogDuration(time.Since(begin)))
 		} else {
-			log.Infoz("finished cronjob", zap.String("name", cj.name), zap.String("spec", cj.spec), zap.Time("next", cj.sched.Next(begin)), util.LogDuration(time.Since(begin)))
+			log.Infoz("finished cronjob", zap.String("name", cj.name), zap.String("spec", cj.spec), zap.String(consts.TRACE_ID, traceID), zap.Time("next", cj.sched.Next(begin)), util.LogDuration(time.Since(begin)))
 		}
 	}
 	// SkipIfStillRunning drops a tick while the previous round is still in
@@ -166,6 +186,44 @@ func register(cj *cronjob) {
 		log.Errorz("failed to add cronjob", zap.Error(addErr), zap.String("name", cj.name), zap.String("spec", cj.spec))
 	} else {
 		log.Infoz("successfully add cronjob", zap.String("name", cj.name), zap.String("spec", cj.spec), zap.Bool("run_immediately", cj.runImmediately))
+	}
+}
+
+// beginRound opens one round of the named job and returns the context the job
+// runs on, the round's trace id, and the function that closes the round with
+// its outcome.
+//
+// The context carries the round's identity — the job name and the trace id —
+// for everything the job does downstream: statement comments, the SQL log and
+// the business log annotate themselves with it, the way they do with a
+// request's. With tracing on the round also gets a root span, the parent of
+// every span the job's operations open, and the trace id is that span's; with
+// tracing off the id is generated, the way the request middleware generates
+// one.
+func beginRound(name string) (ctx context.Context, traceID string, end func(err error)) {
+	ctx = context.Background()
+	var span trace.Span
+	if gstotel.IsEnabled() {
+		ctx, span = gstotel.StartSpan(ctx, gstotel.OperationSpanName("cronjob", name))
+		traceID = span.SpanContext().TraceID().String()
+	} else {
+		traceID = util.TraceID()
+	}
+	ctx = execctx.WithCronjob(ctx, name, traceID)
+
+	return ctx, traceID, func(err error) {
+		if span == nil {
+			return
+		}
+		if gstotel.IsSpanRecording(span) {
+			if err != nil {
+				span.SetStatus(codes.Error, err.Error())
+				gstotel.RecordError(span, err)
+			} else {
+				span.SetStatus(codes.Ok, "")
+			}
+		}
+		span.End()
 	}
 }
 

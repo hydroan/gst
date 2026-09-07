@@ -1,6 +1,7 @@
 package cronjob
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -12,9 +13,13 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/logger"
 	pkgzap "github.com/hydroan/gst/logger/zap"
+	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 // TestInitAdoptsSharedCronjobLogger proves scheduling logs flow through the
@@ -29,7 +34,7 @@ func TestInitAdoptsSharedCronjobLogger(t *testing.T) {
 	logger.Cronjob = shared
 	t.Cleanup(func() { logger.Cronjob = original })
 
-	Register(func() error { return nil }, "0 0 * * * *", "sample-job")
+	Register(func(context.Context) error { return nil }, "0 0 * * * *", "sample-job")
 	require.NoError(t, Init())
 	pkgzap.Clean()
 
@@ -52,7 +57,7 @@ func TestInitFallsBackToLocalLoggerWithoutShared(t *testing.T) {
 	logger.Cronjob = nil
 	t.Cleanup(func() { logger.Cronjob = original })
 
-	Register(func() error { return nil }, "0 0 * * * *", "fallback-job")
+	Register(func(context.Context) error { return nil }, "0 0 * * * *", "fallback-job")
 	require.NoError(t, Init())
 	pkgzap.Clean()
 
@@ -71,7 +76,7 @@ func TestStopWaitsForInFlightJob(t *testing.T) {
 	var startOnce, doneOnce sync.Once
 	jobStarted := make(chan struct{})
 	jobDone := make(chan struct{})
-	Register(func() error {
+	Register(func(context.Context) error {
 		startOnce.Do(func() { close(jobStarted) })
 		time.Sleep(300 * time.Millisecond)
 		doneOnce.Do(func() { close(jobDone) })
@@ -106,9 +111,12 @@ func TestStopGivesUpOnStuckJob(t *testing.T) {
 
 	var startOnce sync.Once
 	jobStarted := make(chan struct{})
-	Register(func() error {
+	Register(func(context.Context) error {
 		startOnce.Do(func() { close(jobStarted) })
-		time.Sleep(10 * time.Second)
+		// Outlives the bounded wait by far, yet ends within the test: a job
+		// running on into later tests would log into their loggers and
+		// temporary directories.
+		time.Sleep(10 * stopTimeout)
 		return nil
 	}, "* * * * * *", "stuck-job")
 	require.NoError(t, Init())
@@ -123,6 +131,9 @@ func TestStopGivesUpOnStuckJob(t *testing.T) {
 	Stop()
 	require.Less(t, time.Since(begin), 2*time.Second,
 		"Stop must return once the bounded wait elapses")
+	// Drain the round Stop gave up on before the test returns, logging
+	// included, so nothing of it runs on into the next test.
+	<-c.Stop().Done()
 }
 
 // TestStopWithoutInitIsNoop keeps Stop safe in processes that never started
@@ -145,7 +156,7 @@ func TestScheduledRunsSkipWhileStillRunning(t *testing.T) {
 	var startOnce sync.Once
 	started := make(chan struct{})
 	block := make(chan struct{})
-	Register(func() error {
+	Register(func(context.Context) error {
 		observeConcurrentRuns(&running, &maxRunning)
 		startOnce.Do(func() { close(started) })
 		<-block
@@ -179,7 +190,7 @@ func TestImmediateRunSharesSkipMutex(t *testing.T) {
 	var running, maxRunning atomic.Int32
 	var startOnce sync.Once
 	started := make(chan struct{})
-	Register(func() error {
+	Register(func(context.Context) error {
 		observeConcurrentRuns(&running, &maxRunning)
 		startOnce.Do(func() { close(started) })
 		time.Sleep(1500 * time.Millisecond)
@@ -232,7 +243,7 @@ func TestRunLogsFailureWithErrorStack(t *testing.T) {
 
 			var startOnce sync.Once
 			started := make(chan struct{})
-			Register(func() error {
+			Register(func(context.Context) error {
 				startOnce.Do(func() { close(started) })
 				return tc.job()
 			}, "* * * * * *", "failing-job")
@@ -250,10 +261,86 @@ func TestRunLogsFailureWithErrorStack(t *testing.T) {
 
 			entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), tc.msg)
 			require.Equal(t, tc.err, entry["error"])
+			require.NotEmpty(t, entry[consts.TRACE_ID], "the outcome entry must carry the round's trace id")
 			require.Contains(t, entry["error_stack"], "cronjob_test.go",
 				"error_stack must point at the line inside the job that failed")
 		})
 	}
+}
+
+// TestRunStampsRoundIdentity proves the context a job runs on carries the
+// round's identity, and that the outcome entry carries the same trace id, so
+// the round is found again from either side.
+func TestRunStampsRoundIdentity(t *testing.T) {
+	dir := withCronjobLoggerConfig(t)
+	resetCronjobState(t)
+
+	var once sync.Once
+	seen := make(chan execctx.Identity, 1)
+	Register(func(ctx context.Context) error {
+		once.Do(func() { seen <- execctx.FromContext(ctx) })
+		return nil
+	}, "* * * * * *", "identity-job")
+	require.NoError(t, Init())
+
+	var id execctx.Identity
+	select {
+	case id = <-seen:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the scheduled job never started")
+	}
+	Stop()
+	pkgzap.Clean()
+
+	require.Equal(t, "identity-job", id.Cronjob)
+	require.NotEmpty(t, id.TraceID)
+	entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "finished cronjob")
+	require.Equal(t, id.TraceID, entry[consts.TRACE_ID])
+}
+
+// TestRunOpensRoundSpanWhenTracingIsOn proves a round gets a root span of its
+// own when tracing is on: the job runs under it, and the round's trace id is
+// the span's, so the trace in the tracing backend and the id in the logs and
+// statement comments are one trail.
+func TestRunOpensRoundSpanWhenTracingIsOn(t *testing.T) {
+	withCronjobLoggerConfig(t)
+	oteltest.Enable(t)
+	recorder := oteltest.Record(t)
+	resetCronjobState(t)
+
+	var once sync.Once
+	seen := make(chan roundObservation, 1)
+	Register(func(ctx context.Context) error {
+		once.Do(func() {
+			seen <- roundObservation{
+				identity: execctx.FromContext(ctx),
+				span:     oteltrace.SpanFromContext(ctx).SpanContext(),
+			}
+		})
+		return nil
+	}, "* * * * * *", "traced-job")
+	require.NoError(t, Init())
+
+	var got roundObservation
+	select {
+	case got = <-seen:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the scheduled job never started")
+	}
+	Stop()
+	pkgzap.Clean()
+
+	require.True(t, got.span.HasTraceID(), "the job must run under the round's span")
+	require.Equal(t, got.span.TraceID().String(), got.identity.TraceID)
+	span := oteltest.EndedNamed(t, recorder, "cronjob.TracedJob")
+	require.Equal(t, got.identity.TraceID, span.SpanContext().TraceID().String())
+}
+
+// roundObservation is what a job sees of its round: the identity on its
+// context and the span it runs under.
+type roundObservation struct {
+	identity execctx.Identity
+	span     oteltrace.SpanContext
 }
 
 // observeConcurrentRuns bumps the number of in-flight runs and records the

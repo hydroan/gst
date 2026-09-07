@@ -34,7 +34,7 @@ func TestCleanup(t *testing.T) {
 	t.Cleanup(func() { config.App.Logmgmt.Retention = originalRetention })
 	config.App.Logmgmt.Retention = -time.Hour
 
-	require.NoError(t, servicelogmgmt.Cleanup())
+	require.NoError(t, servicelogmgmt.Cleanup(context.Background()))
 
 	remaining := make([]*modellogmgmt.LoginLog, 0)
 	require.NoError(t, database.Database[*modellogmgmt.LoginLog](context.Background()).

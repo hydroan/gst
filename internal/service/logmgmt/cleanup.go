@@ -21,15 +21,17 @@ const cleanupBatchSize = 1000
 // default). Errors surface to the cronjob runner instead of being swallowed:
 // a log table that stops being trimmed must alarm, not rot silently.
 //
-// The add path registers it through module/logmgmt; projects using copied
-// logmgmt source register it in their own cronjob setup, for example
-// cronjob.Register(servicelogmgmt.Cleanup, "0 0 * * * *", "cleanup logs").
-func Cleanup() error {
+// It runs on the context of its cron round, so its statements and log lines
+// carry the round's identity. The add path registers it through
+// module/logmgmt; projects using copied logmgmt source register it in their
+// own cronjob setup, for example
+// cronjob.Register(servicelogmgmt.Cleanup, "0 0 * * * *", "logmgmt_cleanup").
+func Cleanup(ctx context.Context) error {
 	cutoff := time.Now().UTC().Add(-config.App.Logmgmt.Retention)
-	if err := cleanupExpired[*modellogmgmt.OperationLog](cutoff); err != nil {
+	if err := cleanupExpired[*modellogmgmt.OperationLog](ctx, cutoff); err != nil {
 		return errors.Wrap(err, "cleanup operation logs")
 	}
-	if err := cleanupExpired[*modellogmgmt.LoginLog](cutoff); err != nil {
+	if err := cleanupExpired[*modellogmgmt.LoginLog](ctx, cutoff); err != nil {
 		return errors.Wrap(err, "cleanup login logs")
 	}
 	return nil
@@ -39,11 +41,11 @@ func Cleanup() error {
 // most one batch and deletes it in its own transaction, so neither memory nor
 // a single long transaction grows with the backlog. Both log models purge on
 // delete, so each round physically reclaims space.
-func cleanupExpired[M types.Model](cutoff time.Time) error {
+func cleanupExpired[M types.Model](ctx context.Context, cutoff time.Time) error {
 	expired := types.QueryOptions{Filters: []types.Filter{types.FilterLte("created_at", cutoff)}}
 	for {
 		batch := make([]M, 0, cleanupBatchSize)
-		if err := database.Database[M](context.Background()).
+		if err := database.Database[M](ctx).
 			WithQuery(*new(M), expired).
 			WithLimit(cleanupBatchSize).
 			List(&batch); err != nil {
@@ -52,7 +54,7 @@ func cleanupExpired[M types.Model](cutoff time.Time) error {
 		if len(batch) == 0 {
 			return nil
 		}
-		if err := database.Database[M](context.Background()).Delete(batch...); err != nil {
+		if err := database.Database[M](ctx).Delete(batch...); err != nil {
 			return errors.Wrap(err, "delete expired rows")
 		}
 		if len(batch) < cleanupBatchSize {
