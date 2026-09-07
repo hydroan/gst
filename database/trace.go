@@ -35,7 +35,6 @@ const (
 	phaseAggregateCountGroups consts.Phase = "aggregate_count_groups"
 	phaseCleanup              consts.Phase = "cleanup"
 	phaseHealth               consts.Phase = "health"
-	phaseTransaction          consts.Phase = "transaction"
 	phaseWithQuery            consts.Phase = "with_query"
 )
 

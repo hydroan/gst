@@ -2,15 +2,11 @@ package database
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dbruntime"
-	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
-	"github.com/hydroan/gst/util"
 	"go.opentelemetry.io/otel/attribute"
-	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -90,32 +86,20 @@ func transactionOn(ctx context.Context, base *gorm.DB, fn func(ctx context.Conte
 		attribute.String("database.operation", "Transaction"),
 	)
 
-	begin := time.Now()
 	// Deriving the closure context from spanCtx makes per-statement spans from
 	// otelgorm nest under this transaction span, and the boundary makes
-	// every chain opened on the same handle inside fn join gormTx while
-	// collecting the actions to run once it commits.
+	// every chain opened on the same handle inside fn join the transaction
+	// while collecting the actions to run once it commits.
 	txErr := withTransactionBoundary(spanCtx, base, base.WithContext(spanCtx),
 		func(txCtx context.Context, _ *gorm.DB) error {
-			if err := fn(txCtx); err != nil {
-				logger.Database.WithContext(ctx, phaseTransaction).Errorz(
-					"transaction rolled back due to error",
-					zap.Error(err),
-					util.LogDuration(time.Since(begin)),
-				)
-				return err
-			}
-			// Commit is the expected outcome and the transaction span already
-			// records its duration, so success stays at debug level.
-			logger.Database.WithContext(ctx, phaseTransaction).Debugz(
-				"transaction committed successfully",
-				util.LogDuration(time.Since(begin)),
-			)
-			return nil
+			return fn(txCtx)
 		})
 
 	// Recorded after the transaction returns so commit-phase failures are also
-	// captured on the span.
+	// captured on the span. The span is this function's only failure record:
+	// logging the error belongs to the boundary that owns it (the controller
+	// fallback for a request, the cronjob runner for a job), so no log line
+	// is written here.
 	gstotel.RecordError(span, txErr)
 	return txErr
 }
