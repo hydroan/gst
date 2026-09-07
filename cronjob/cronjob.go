@@ -1,10 +1,10 @@
 package cronjob
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/logger"
 	pkgzap "github.com/hydroan/gst/logger/zap"
 	"github.com/hydroan/gst/types"
@@ -123,7 +123,7 @@ func register(cj *cronjob) {
 	}
 	sched, err := parser.Parse(cj.spec)
 	if err != nil {
-		log.Errorz(fmt.Sprintf("failed to parse cronjob spec: %s", err), zap.String("name", cj.name), zap.String("spec", cj.spec))
+		log.Errorz("failed to parse cronjob spec", zap.Error(err), zap.String("name", cj.name), zap.String("spec", cj.spec))
 		return
 	}
 	cj.sched = sched
@@ -132,15 +132,20 @@ func register(cj *cronjob) {
 	// here so the immediate run and every scheduled run share a single code
 	// path; runErr stays local to the round so concurrent rounds of different
 	// jobs never share error state.
+	//
+	// A failure goes out as a typed error field, never formatted into the
+	// message: the logging layer derives error_stack from that field, and for
+	// a job this entry is the only record of the failure, so it has to
+	// locate the failing line and not just name the job.
 	run := func() {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Errorw(fmt.Sprintf("cronjob panic: %s", r), "name", cj.name, "spec", cj.spec)
+				log.Errorz("cronjob panicked", zap.Error(panicError(r)), zap.String("name", cj.name), zap.String("spec", cj.spec))
 			}
 		}()
 		begin := time.Now()
 		if runErr := cj.fn(); runErr != nil {
-			log.Errorz(fmt.Sprintf("finished cronjob with error: %s", runErr), zap.String("name", cj.name), zap.String("spec", cj.spec), zap.Time("next", cj.sched.Next(begin)), util.LogDuration(time.Since(begin)))
+			log.Errorz("finished cronjob with error", zap.Error(runErr), zap.String("name", cj.name), zap.String("spec", cj.spec), zap.Time("next", cj.sched.Next(begin)), util.LogDuration(time.Since(begin)))
 		} else {
 			log.Infoz("finished cronjob", zap.String("name", cj.name), zap.String("spec", cj.spec), zap.Time("next", cj.sched.Next(begin)), util.LogDuration(time.Since(begin)))
 		}
@@ -158,10 +163,24 @@ func register(cj *cronjob) {
 	}
 
 	if _, addErr := c.AddJob(cj.spec, job); addErr != nil {
-		log.Errorz(fmt.Sprintf("failed to add cronjob: %s", addErr), zap.String("name", cj.name), zap.String("spec", cj.spec))
+		log.Errorz("failed to add cronjob", zap.Error(addErr), zap.String("name", cj.name), zap.String("spec", cj.spec))
 	} else {
 		log.Infoz("successfully add cronjob", zap.String("name", cj.name), zap.String("spec", cj.spec), zap.Bool("run_immediately", cj.runImmediately))
 	}
+}
+
+// panicError turns a recovered panic value into an error carrying the stack
+// of the panic site. It must be called from the deferred function that
+// recovered, while the goroutine is still unwinding: the frames captured then
+// still include the line that panicked, whereas a stack taken after recovery
+// would only show this package. A panic value that is already an error keeps
+// its own, deeper stack if it has one — the error_stack field reports the
+// deepest stack in the chain — and gains this one otherwise.
+func panicError(recovered any) error {
+	if err, ok := recovered.(error); ok {
+		return errors.WithStack(err)
+	}
+	return errors.Newf("%v", recovered)
 }
 
 // cronLogger adapts the package logger to cron.Logger for chain wrappers such

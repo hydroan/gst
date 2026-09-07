@@ -1,13 +1,16 @@
 package cronjob
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/logger"
 	pkgzap "github.com/hydroan/gst/logger/zap"
@@ -197,6 +200,62 @@ func TestImmediateRunSharesSkipMutex(t *testing.T) {
 		"the immediate run must hold the same guard as scheduled runs")
 }
 
+// TestRunLogsFailureWithErrorStack proves a failed round leaves an entry the
+// error_stack field can locate. For a job the cronjob log is the only record
+// of its failure, so the entry has to point at the failing line, not just
+// name the job: the returned error goes out as a typed error field, and a
+// panic becomes an error whose stack still points at the line that panicked.
+func TestRunLogsFailureWithErrorStack(t *testing.T) {
+	cases := []struct {
+		name string
+		job  func() error
+		msg  string
+		err  string
+	}{
+		{
+			name: "returned error",
+			job:  func() error { return errors.New("sample failure") },
+			msg:  "finished cronjob with error",
+			err:  "sample failure",
+		},
+		{
+			name: "panic",
+			job:  func() error { panic("sample panic") },
+			msg:  "cronjob panicked",
+			err:  "sample panic",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := withCronjobLoggerConfig(t)
+			resetCronjobState(t)
+
+			var startOnce sync.Once
+			started := make(chan struct{})
+			Register(func() error {
+				startOnce.Do(func() { close(started) })
+				return tc.job()
+			}, "* * * * * *", "failing-job")
+			require.NoError(t, Init())
+
+			select {
+			case <-started:
+			case <-time.After(3 * time.Second):
+				t.Fatal("the scheduled job never started")
+			}
+			// Stop waits for the in-flight round, whose outcome entry is
+			// written before the round returns.
+			Stop()
+			pkgzap.Clean()
+
+			entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), tc.msg)
+			require.Equal(t, tc.err, entry["error"])
+			require.Contains(t, entry["error_stack"], "cronjob_test.go",
+				"error_stack must point at the line inside the job that failed")
+		})
+	}
+}
+
 // observeConcurrentRuns bumps the number of in-flight runs and records the
 // highest concurrency seen across the test.
 func observeConcurrentRuns(running, maxRunning *atomic.Int32) {
@@ -237,4 +296,22 @@ func resetCronjobState(t *testing.T) {
 	log = nil
 	cronjobs = nil
 	inited = false
+}
+
+// readLogEntry returns the first JSON entry of the log file whose msg field
+// equals msg, failing the test when the file has none.
+func readLogEntry(t *testing.T, path, msg string) map[string]any {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	for line := range strings.SplitSeq(strings.TrimSpace(string(data)), "\n") {
+		entry := make(map[string]any)
+		require.NoError(t, json.Unmarshal([]byte(line), &entry), "log line must be JSON: %s", line)
+		if entry["msg"] == msg {
+			return entry
+		}
+	}
+	require.Failf(t, "missing log entry", "no entry with msg %q in %s", msg, path)
+	return nil
 }
