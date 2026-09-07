@@ -7,7 +7,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/types"
@@ -97,7 +96,6 @@ func (db *database[M]) trace(phase consts.Phase, batch ...int) (func(error), tra
 	if gstotel.IsEnabled() && ctx != nil {
 		spanName := gstotel.FrameworkSpanName("database", modelName, phase.MethodName())
 		ctx, span = gstotel.StartSpan(ctx, spanName)
-		ctx = requestctx.WithMetadata(ctx, requestctx.FromContext(db.ctx))
 		db.ctx = ctx
 
 		// Update GORM database context with new span context

@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/internal/requestctx"
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"gorm.io/hints"
 )
 
 // SQL statement comments.
@@ -30,24 +30,27 @@ import (
 // mysql and postgres buildDSN for that half of the contract.
 //
 // The comment sits after the statement verb (SELECT /*...*/ ... FROM),
-// rendered through gorm's own hints clauses — a deliberate trade against the
-// sqlcommenter convention of trailing comments: both positions reach every
-// database-side view, and the verb position needs no reliance on gorm build
-// internals. The value is URL-encoded, which both matches the sqlcommenter
-// escaping convention and keeps a value from ever closing the comment; for
-// the usual hex trace id the encoding changes nothing.
+// attached through the clause map gorm builds statements from — a
+// deliberate trade against the sqlcommenter convention of trailing comments:
+// both positions reach every database-side view, and the verb position needs
+// no reliance on gorm build internals. The value is URL-encoded, which both
+// matches the sqlcommenter escaping convention and keeps a value from ever
+// closing the comment; for the usual hex trace id the encoding changes
+// nothing.
 //
 // Outside a request — cron jobs, startup, tests without request metadata —
 // there is nothing to report and statements stay clean.
 
-// sqlCommentFor renders the comment content for one chain's statements, and
-// "" when the context carries nothing to annotate.
+// sqlCommentFor renders the comment block for one chain's statements,
+// delimiters included, and "" when the context carries nothing to annotate.
+// The block is rendered once per chain, in a single concatenation, and
+// written into every statement as is.
 func sqlCommentFor(ctx context.Context) string {
 	traceID := requestctx.FromContext(ctx).TraceID()
 	if len(traceID) == 0 {
 		return ""
 	}
-	return "trace_id='" + encodeCommentValue(traceID) + "'"
+	return "/* trace_id='" + encodeCommentValue(traceID) + "' */"
 }
 
 // encodeCommentValue renders one value the way the sqlcommenter convention
@@ -65,14 +68,62 @@ func encodeCommentValue(value string) string {
 	return strings.ReplaceAll(url.QueryEscape(value), "+", "%20")
 }
 
-// commentClauses covers every statement verb with the comment; a chain runs
-// exactly one verb, and the three hints that never match cost nothing at
-// build time.
-func commentClauses(comment string) []clause.Expression {
-	return []clause.Expression{
-		hints.CommentAfter("select", comment),
-		hints.CommentAfter("insert", comment),
-		hints.CommentAfter("update", comment),
-		hints.CommentAfter("delete", comment),
+// statementComment attaches one chain's comment to whichever statement verb
+// the chain runs. One value serves all four verbs: gorm keeps a statement's
+// clauses in a map keyed by verb name, so the modifier registers itself as
+// the after-expression of each, and the three entries that never match cost
+// only their map slots. The chain owns the value and hands gorm a pointer to
+// it, so attaching the comment allocates nothing beyond the rendered text;
+// the four gorm.io/hints comment hints this replaces each boxed a hint value
+// and a clause-name slice of their own, per chain.
+type statementComment struct {
+	text string // the rendered comment block, delimiters included
+}
+
+// gorm recognizes the modifier by a run-time type assertion inside Clauses
+// and would otherwise take the value for a WHERE condition, so the interface
+// is pinned at compile time; the expression side is pinned alongside it.
+var (
+	_ gorm.StatementModifier = (*statementComment)(nil)
+	_ clause.Expression      = (*statementComment)(nil)
+)
+
+// commentedVerbs are the gorm clause names of the statement verbs, in the
+// form the clause map is keyed by.
+var commentedVerbs = [...]string{"SELECT", "INSERT", "UPDATE", "DELETE"}
+
+// ModifyStatement implements gorm.StatementModifier: it registers the comment
+// as the after-expression of every verb clause, composing with an expression
+// already there the way gorm.io/hints does.
+func (c *statementComment) ModifyStatement(stmt *gorm.Statement) {
+	for _, name := range commentedVerbs {
+		verb := stmt.Clauses[name]
+		if verb.AfterExpression == nil {
+			verb.AfterExpression = c
+		} else {
+			verb.AfterExpression = commentExprs{verb.AfterExpression, c}
+		}
+		stmt.Clauses[name] = verb
+	}
+}
+
+// Build implements clause.Expression, writing the comment block after the
+// verb clause it is registered on. The builder writes into memory and never
+// reports an error, so the result is discarded.
+func (c *statementComment) Build(builder clause.Builder) {
+	_, _ = builder.WriteString(c.text)
+}
+
+// commentExprs renders expressions in order, one space apart: the form an
+// after-expression takes when the comment joins an expression that was
+// registered before it.
+type commentExprs []clause.Expression
+
+func (exprs commentExprs) Build(builder clause.Builder) {
+	for i, expr := range exprs {
+		if i > 0 {
+			_ = builder.WriteByte(' ')
+		}
+		expr.Build(builder)
 	}
 }

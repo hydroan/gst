@@ -355,7 +355,9 @@ func TestDatabaseWithDryRunCollector(t *testing.T) {
 		var stmts []types.SQLStatement
 		users := make([]*TestUser, 0)
 
-		err := database.Database[*TestUser](context.Background()).
+		// A request context annotates the built statement the same way it
+		// annotates an executed one: the dry run builds the real statement.
+		err := database.Database[*TestUser](requestContext("", "", "trace-dry")).
 			WithDryRun(&stmts).
 			WithQuery(&TestUser{Name: u1.Name}).
 			WithOrder(types.Desc("created_at")).
@@ -364,6 +366,8 @@ func TestDatabaseWithDryRunCollector(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, stmts, 1)
 		requireSQLContains(t, stmts[0], "SELECT", "FROM", "test_users", "WHERE", "ORDER BY")
+		require.Contains(t, stmts[0].Query, "/* trace_id='trace-dry' */")
+		require.Contains(t, stmts[0].RenderedSQL, "/* trace_id='trace-dry' */")
 		require.Contains(t, stmts[0].Args, u1.Name)
 		require.Contains(t, stmts[0].RenderedSQL, u1.Name)
 		require.Empty(t, users, "WithDryRun should not execute the query or fill the destination")

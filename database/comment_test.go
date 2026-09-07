@@ -3,6 +3,8 @@ package database_test
 import (
 	"context"
 	"net/http"
+	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	gormlogger "gorm.io/gorm/logger"
 )
 
@@ -41,6 +44,19 @@ func (l *sqlTextCaptureLogger) last() string {
 	return l.sqls[len(l.sqls)-1]
 }
 
+// lastStartingWith returns the most recent statement text opening with the
+// given verb, and "" when none was recorded.
+func (l *sqlTextCaptureLogger) lastStartingWith(verb string) string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, sql := range slices.Backward(l.sqls) {
+		if strings.HasPrefix(sql, verb) {
+			return sql
+		}
+	}
+	return ""
+}
+
 // requestContext builds a context carrying the request metadata the comment
 // draws from, the way a real request's middleware would.
 func requestContext(method, route, traceID string) context.Context {
@@ -63,9 +79,73 @@ func TestSQLCommentAnnotatesStatements(t *testing.T) {
 	require.NoError(t, database.DatabaseOn[*TestUser](ctx, session).List(&users))
 	require.Contains(t, capture.last(), "/* trace_id='trace-0001' */")
 
+	// Every statement verb carries the same comment: a chain runs one verb,
+	// and the annotation must reach INSERT, UPDATE and DELETE like SELECT.
+	fresh := &TestUser{Name: "user4", Email: "user4@example.com", Age: 21, ID: "u4"}
+	require.NoError(t, database.DatabaseOn[*TestUser](ctx, session).Create(fresh))
+	require.Contains(t, capture.lastStartingWith("INSERT"), "/* trace_id='trace-0001' */")
+	require.NoError(t, database.DatabaseOn[*TestUser](ctx, session).UpdateByID(fresh.ID, colName.Set("user4-renamed")))
+	require.Contains(t, capture.lastStartingWith("UPDATE"), "/* trace_id='trace-0001' */")
+	require.NoError(t, database.DatabaseOn[*TestUser](ctx, session).Delete(fresh))
+	require.Contains(t, capture.lastStartingWith("DELETE"), "/* trace_id='trace-0001' */")
+
 	// Outside a request there is nothing to report and statements stay clean.
 	require.NoError(t, database.DatabaseOn[*TestUser](context.Background(), session).List(&users))
 	require.NotContains(t, capture.last(), "trace_id=")
+}
+
+// BenchmarkSQLCommentChain measures what the statement comment adds to a
+// chain: the request-context case renders and attaches it, the background
+// case skips it, and the two share every other cost including the database
+// round trip. allocs/op is the number to compare between them.
+func BenchmarkSQLCommentChain(b *testing.B) {
+	defer cleanupTestData()
+	setupTestData(b)
+
+	users := make([]*TestUser, 0, len(ul))
+	b.Run("request_context", func(b *testing.B) {
+		ctx := requestContext(http.MethodGet, "/api/v1/users", "trace-bench")
+		for b.Loop() {
+			users = users[:0]
+			if err := database.Database[*TestUser](ctx).List(&users); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("background_context", func(b *testing.B) {
+		for b.Loop() {
+			users = users[:0]
+			if err := database.Database[*TestUser](context.Background()).List(&users); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
+// afterVerbExpr stands in for an expression another party registered after
+// the SELECT verb before the chain attached its comment.
+type afterVerbExpr string
+
+func (e afterVerbExpr) ModifyStatement(stmt *gorm.Statement) {
+	verb := stmt.Clauses["SELECT"]
+	verb.AfterExpression = e
+	stmt.Clauses["SELECT"] = verb
+}
+
+func (e afterVerbExpr) Build(builder clause.Builder) { _, _ = builder.WriteString(string(e)) }
+
+func TestSQLCommentJoinsExistingAfterExpression(t *testing.T) {
+	defer cleanupTestData()
+	setupTestData(t)
+
+	capture := &sqlTextCaptureLogger{Interface: database.DB().Logger}
+	// The session already carries an expression after the verb when the chain
+	// attaches its comment; both must render, in registration order.
+	session := database.DB().Session(&gorm.Session{Logger: capture}).Clauses(afterVerbExpr("/* first */"))
+
+	users := make([]*TestUser, 0)
+	require.NoError(t, database.DatabaseOn[*TestUser](requestContext("", "", "trace-join"), session).List(&users))
+	require.Contains(t, capture.last(), "/* first */ /* trace_id='trace-join' */")
 }
 
 func TestSQLCommentEscapesHostileValues(t *testing.T) {
