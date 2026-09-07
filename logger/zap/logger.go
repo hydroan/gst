@@ -94,8 +94,9 @@ func (l *Logger) With(fields ...string) types.Logger {
 	return &Logger{zlog: l.zlog.With(zapFields...)}
 }
 
-// withMetadata binds request metadata fields to a derived logger. This runs
-// for every request-scoped logger, so all fields go through one zap With call:
+// withContextFields binds the fields derived from a context — the request
+// metadata and the execution identity — to a derived logger. This runs for
+// every context-scoped logger, so all fields go through one zap With call:
 // each With call clones the logger core, and chaining several With calls here
 // used to cost three clones per call. When adding metadata fields, extend this
 // single call instead of chaining further With calls.
@@ -103,18 +104,26 @@ func (l *Logger) With(fields ...string) types.Logger {
 // Route params stay structured because their keys come from the registered
 // routes and are therefore bounded; the query is logged as one raw string
 // because its keys are not. See requestctx.Metadata.RawQuery.
-func (l *Logger) withMetadata(meta requestctx.Metadata, phase consts.Phase, traceID string) types.Logger {
-	return &Logger{zlog: l.zlog.With(
+//
+// The cron job name is present only inside a round: a request's lines carry
+// no empty field for a capability they do not use.
+func (l *Logger) withContextFields(meta requestctx.Metadata, id execctx.Identity, phase consts.Phase) types.Logger {
+	fields := make([]zap.Field, 0, 10)
+	fields = append(fields,
 		zap.String(consts.PHASE, string(phase)),
 		zap.String(consts.CTX_ROUTE, meta.Route()),
 		zap.String(consts.CTX_PATH, meta.Path()),
 		zap.String(consts.CTX_METHOD, meta.Method()),
 		zap.String(consts.CTX_USERNAME, meta.Username()),
 		zap.String(consts.CTX_USER_ID, meta.UserID()),
-		zap.String(consts.TRACE_ID, traceID),
+		zap.String(consts.TRACE_ID, id.TraceID),
 		zap.Object(consts.PARAMS, paramsObject(meta.Params())),
 		zap.String(consts.QUERY, meta.RawQuery()),
-	)}
+	)
+	if len(id.Cronjob) > 0 {
+		fields = append(fields, zap.String(consts.CRONJOB, id.Cronjob))
+	}
+	return &Logger{zlog: l.zlog.With(fields...)}
 }
 
 // WithContext creates a new logger carrying the request metadata and the
@@ -124,7 +133,7 @@ func (l *Logger) WithContext(ctx context.Context, phase consts.Phase) types.Logg
 		return l.With(consts.PHASE, string(phase))
 	}
 
-	return l.withMetadata(requestctx.FromContext(ctx), phase, execctx.FromContext(ctx).TraceID)
+	return l.withContextFields(requestctx.FromContext(ctx), execctx.FromContext(ctx), phase)
 }
 
 type paramsObject map[string]string

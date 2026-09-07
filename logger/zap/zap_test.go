@@ -422,6 +422,23 @@ func TestWithContextAddsMetadataFields(t *testing.T) {
 	require.Equal(t, map[string]any{"id": "42"}, fields[consts.PARAMS])
 	// Fields carries no RawQuery, so the logged query is re-encoded from Query.
 	require.Equal(t, "tag=blue&tag=green", fields[consts.QUERY])
+	// A request runs in no cron round, so its lines carry no field for one.
+	require.NotContains(t, fields, consts.CRONJOB)
+}
+
+func TestWithContextAddsCronjobField(t *testing.T) {
+	core, logs := observer.New(zapcore.InfoLevel)
+	log := &Logger{zlog: zap.New(core)}
+	ctx := execctx.WithCronjob(context.Background(), "sample_job", "trace-cron")
+
+	log.WithContext(ctx, consts.PHASE_LIST).Infoz("round request")
+
+	entries := logs.All()
+	require.Len(t, entries, 1)
+
+	fields := entries[0].ContextMap()
+	require.Equal(t, "trace-cron", fields[consts.TRACE_ID])
+	require.Equal(t, "sample_job", fields[consts.CRONJOB])
 }
 
 func TestGormTraceUsesMetadata(t *testing.T) {
@@ -455,6 +472,31 @@ func TestGormTraceUsesMetadata(t *testing.T) {
 	require.Equal(t, "trace-1", fields[consts.TRACE_ID])
 	require.Equal(t, "select 1", fields["sql"])
 	require.Equal(t, int64(1), fields["rows"])
+	require.NotContains(t, fields, consts.CRONJOB)
+}
+
+func TestGormTraceAddsCronjobField(t *testing.T) {
+	core, logs := observer.New(zapcore.InfoLevel)
+	log := &Logger{zlog: zap.New(core)}
+	ctx := execctx.WithCronjob(context.Background(), "sample_job", "trace-cron")
+
+	oldThreshold := config.App.Database.SlowQueryThreshold
+	config.App.Database.SlowQueryThreshold = time.Hour
+	t.Cleanup(func() {
+		config.App.Database.SlowQueryThreshold = oldThreshold
+	})
+
+	gormLog := &GormLogger{l: log}
+	gormLog.Trace(ctx, time.Now(), func() (string, int64) {
+		return "select 1", 1
+	}, nil)
+
+	entries := logs.All()
+	require.Len(t, entries, 1)
+
+	fields := entries[0].ContextMap()
+	require.Equal(t, "trace-cron", fields[consts.TRACE_ID])
+	require.Equal(t, "sample_job", fields[consts.CRONJOB])
 }
 
 func captureStdout(t *testing.T, fn func()) string {

@@ -248,14 +248,15 @@ func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 	meta := requestctx.FromContext(ctx)
 	username := meta.Username()
 	userID := meta.UserID()
-	traceID := execctx.FromContext(ctx).TraceID
+	id := execctx.FromContext(ctx)
 	elapsed := time.Since(begin)
 	sql, rows := fc()
 
 	// Sized to the exact worst case so the hot path never regrows: caller,
-	// the eight base fields, db_role, record_not_found, and the one field the
-	// error/slow branches append (mutually exclusive in the switch below).
-	fields := make([]zap.Field, 0, 12)
+	// the eight base fields, cronjob, db_role, record_not_found, and the one
+	// field the error/slow branches append (mutually exclusive in the switch
+	// below).
+	fields := make([]zap.Field, 0, 13)
 	if caller, ok := callerOutside(isSkippedSQLFrame); ok {
 		fields = append(fields, zap.String("caller", caller))
 	}
@@ -265,11 +266,16 @@ func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 		zap.String(consts.CTX_METHOD, meta.Method()),
 		zap.String(consts.CTX_USERNAME, username),
 		zap.String(consts.CTX_USER_ID, userID),
-		zap.String(consts.TRACE_ID, traceID),
+		zap.String(consts.TRACE_ID, id.TraceID),
 		zap.String("sql", sql),
 		util.LogDuration(elapsed),
 		zap.Int64("rows", rows),
 	)
+	// Present only inside a cron round; a request's lines carry no empty field
+	// for a capability they do not use.
+	if len(id.Cronjob) > 0 {
+		fields = append(fields, zap.String(consts.CRONJOB, id.Cronjob))
+	}
 	// Present only on handles with read replicas attached, where "which node
 	// served this query" stops being answerable by assumption.
 	if role := dbruntime.RoleFromContext(ctx); len(role) > 0 {

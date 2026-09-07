@@ -70,6 +70,7 @@ const (
 	TRACE_ID = "trace_id"
 	SPAN_ID  = "span_id"
 	SEQ      = "seq"
+	CRONJOB  = "cronjob"
 
 	HEADER_TRACE_ID = "X-Trace-ID"
 	HEADER_SPAN_ID  = "X-Span-ID"
