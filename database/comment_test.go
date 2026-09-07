@@ -161,6 +161,49 @@ func TestSQLCommentMatchesOperationSpanOutsideRequest(t *testing.T) {
 	require.Contains(t, capture.last(), "/* trace_id='"+span.SpanContext().TraceID().String()+"' */")
 }
 
+// TestSQLCommentAnnotatesAggregates pins the annotation on the aggregate
+// paths, which build their statement on a fresh session: the comment the
+// operation attached must reach that statement all the same, on the outer
+// count of CountGroups too and not only inside its derived table.
+func TestSQLCommentAnnotatesAggregates(t *testing.T) {
+	defer cleanupAggregateData()
+	setupAggregateData(t)
+
+	capture := &sqlTextCaptureLogger{Interface: database.DB().Logger}
+	session := database.DB().Session(&gorm.Session{Logger: capture})
+	ctx := requestContext(http.MethodGet, "/api/v1/reports", "trace-agg")
+
+	// Each result row type names exactly the terms its read selects: the
+	// aggregate builder rejects a result field no term produces.
+	type groupRow struct {
+		Category string
+		Total    int64
+	}
+	rows := make([]groupRow, 0)
+	require.NoError(t, database.AggregateOn[*TestAggregateRecord, groupRow](ctx, session).
+		Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+		Scan(&rows))
+	require.Contains(t, capture.last(), "/* trace_id='trace-agg' */")
+
+	type totalRow struct {
+		Total int64
+	}
+	one := totalRow{}
+	require.NoError(t, database.AggregateOn[*TestAggregateRecord, totalRow](ctx, session).
+		Select(aggCols.Amount.Sum().As("total")).
+		ScanOne(&one))
+	require.Contains(t, capture.last(), "/* trace_id='trace-agg' */")
+
+	groups := 0
+	require.NoError(t, database.AggregateOn[*TestAggregateRecord, groupRow](ctx, session).
+		Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+		CountGroups(&groups))
+	sql := capture.last()
+	require.Contains(t, sql, "/* trace_id='trace-agg' */")
+	require.Less(t, strings.Index(sql, "trace_id="), strings.Index(sql, " FROM ("),
+		"the outer count must carry the comment itself, before the derived table")
+}
+
 // afterVerbExpr stands in for an expression another party registered after
 // the SELECT verb before the chain attached its comment.
 type afterVerbExpr string

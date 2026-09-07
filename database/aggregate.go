@@ -261,7 +261,10 @@ func (a *aggregator[M, R]) CountGroups(count *int) (err error) {
 		return err
 	}
 	var total int64
-	outer := a.db.ins.Session(&gorm.Session{NewDB: true}).Table("(?) AS grouped", inner)
+	// The outer count is its own statement and carries the comment after its
+	// own verb, where a database-side view reads it; the inner query keeps
+	// its copy inside the derived table.
+	outer := a.db.annotate(a.db.ins.Session(&gorm.Session{NewDB: true})).Table("(?) AS grouped", inner)
 	if a.db.dryRun {
 		return a.db.collectSQL(dryRunSession(outer).Count(&total))
 	}
@@ -300,8 +303,9 @@ func (a *aggregator[M, R]) build(mode buildMode) (*gorm.DB, error) {
 	// second read off the same builder would otherwise inherit the first
 	// query's WHERE, GROUP BY and LIMIT and quietly answer a different
 	// question. That shape is the one the paginated-report idiom produces:
-	// Scan for the page, then CountGroups for the total.
-	a.db.ins = a.session()
+	// Scan for the page, then CountGroups for the total. The fresh statement
+	// also lacks the operation's comment, so it is attached again here.
+	a.db.ins = a.db.annotate(a.session())
 	a.db.dryRun = a.dryRun
 	a.db.sqlStatements = a.statements
 

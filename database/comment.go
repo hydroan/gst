@@ -128,6 +128,17 @@ func (db *database[M]) attachStatementComment() {
 	}
 }
 
+// annotate registers the operation's comment on a session opened fresh from
+// the chain. A NewDB session starts from an empty statement, which drops the
+// chain's clauses and the comment with them; a statement built on it would go
+// out bare. A chain that attached no comment hands the session back as is.
+func (db *database[M]) annotate(tx *gorm.DB) *gorm.DB {
+	if len(db.comment.text) == 0 {
+		return tx
+	}
+	return tx.Clauses(&db.comment)
+}
+
 // encodeCommentValue renders one value the way the sqlcommenter convention
 // requires: percent-encoded, spaces included.
 //
