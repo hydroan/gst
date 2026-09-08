@@ -42,7 +42,6 @@ var (
 	ErrSelectorUnusable      = errors.New("aggregate could not attach to the database chain")
 	ErrHavingValue           = errors.New("having compares against a value SQL cannot order")
 	ErrUnknownOrderDirection = errors.New("order direction is not one the framework defines")
-	ErrColumnTable           = errors.New("column reference belongs to another table")
 )
 
 // aliasPattern is what an alias must look like. An alias reaches SQL as an

@@ -134,6 +134,14 @@ var (
 	// framework-managed columns. The caller asked for a narrowed operation, so
 	// silently widening back to a full-row write is not an acceptable answer.
 	ErrNoModelColumnSelected = errors.New("no model column selected")
+
+	// ErrColumnTable is returned when an explicit column reference — a
+	// WithSelect argument or a Select term — was generated for another
+	// model's table. The other model often has a column of the same name,
+	// so the name alone would pass and the statement would read or write
+	// the wrong table as valid SQL; the table the reference carries is what
+	// tells the mistake apart from a typo.
+	ErrColumnTable = errors.New("column reference belongs to another table")
 )
 
 var (
