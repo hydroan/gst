@@ -40,7 +40,9 @@ func PartitionBy(keys ...Expr) Window {
 }
 
 // OrderBy opens a window over the whole result ordered by orders, the window
-// a ranking across every row reads.
+// a ranking across every row reads. It is the short spelling of
+// PartitionBy().OrderBy(orders...), the two rendering the same OVER clause;
+// a window with keys starts from PartitionBy.
 func OrderBy(orders ...Ordering) Window {
 	return Window{Orders: orders}
 }
