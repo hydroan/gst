@@ -56,3 +56,13 @@ func Asc(column string) Order { return Order{Column: column, Direction: OrderAsc
 
 // Desc builds a descending order term for column.
 func Desc(column string) Order { return Order{Column: column, Direction: OrderDesc} }
+
+// Ordering is what the OrderBy methods of a select, a window and a union
+// accept: an Order sorting by a column reference, or a TermOrder sorting by a
+// projection term. The set is closed, so an ordering can never carry SQL the
+// way a free-form string could.
+type Ordering interface {
+	sealedOrdering()
+}
+
+func (Order) sealedOrdering() {}

@@ -160,6 +160,30 @@ func TestClickhouse(t *testing.T) {
 		require.Equal(t, 3, groups)
 	})
 
+	t.Run("WindowLatestPerCategory", func(t *testing.T) {
+		// The window path renders the same OVER clause on every dialect, and
+		// Qualify wraps it in a derived table ClickHouse reads like any other.
+		type row struct {
+			ID       string
+			Category string
+			Rn       int64
+		}
+		rn := types.RowNumber().
+			Over(types.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Desc())).
+			As("rn")
+		rows := make([]row, 0)
+		require.NoError(t, database.SelectOn[*TestAggregateRecord, row](ctx, ins,
+			TestAggregateRecordCols.ID, TestAggregateRecordCols.Category, rn).
+			Qualify(rn.Eq(1)).
+			OrderBy(TestAggregateRecordCols.Category.Asc()).
+			Scan(&rows))
+		require.Equal(t, []row{
+			{ID: "a3", Category: "alpha", Rn: 1},
+			{ID: "a4", Category: "beta", Rn: 1},
+			{ID: "a6", Category: "gamma", Rn: 1},
+		}, rows)
+	})
+
 	// The clickhouse write path: the same entry points, a weaker contract —
 	// no hooks, no transaction. Every subtest cleans up its own rows so the
 	// seed-based assertions above and below stay untouched.

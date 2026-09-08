@@ -17,6 +17,16 @@ const (
 	FnAvg           TermFn = "AVG"
 	FnMin           TermFn = "MIN"
 	FnMax           TermFn = "MAX"
+
+	// FnRowNumber, FnRank, FnDenseRank, FnLag and FnLead are the window
+	// functions, only meaningful over a window, which Term.Over declares. A
+	// term carrying one of them without a window is a build error, as is
+	// COUNT DISTINCT over a window, which no dialect supports.
+	FnRowNumber TermFn = "ROW_NUMBER"
+	FnRank      TermFn = "RANK"
+	FnDenseRank TermFn = "DENSE_RANK"
+	FnLag       TermFn = "LAG"
+	FnLead      TermFn = "LEAD"
 )
 
 // Valid reports whether the function is one this package defines. The renderer
@@ -25,7 +35,8 @@ const (
 func (f TermFn) Valid() bool {
 	switch f {
 	case FnNone, FnCount, FnCountDistinct,
-		FnSum, FnAvg, FnMin, FnMax:
+		FnSum, FnAvg, FnMin, FnMax,
+		FnRowNumber, FnRank, FnDenseRank, FnLag, FnLead:
 		return true
 	default:
 		return false
@@ -58,8 +69,9 @@ func (b TimeBucket) Valid() bool {
 	}
 }
 
-// Term is one term of a projection: a group key when Fn is FnNone, a measure
-// otherwise.
+// Term is one term of a projection: a group key when Fn is FnNone, a plain
+// column when Plain is also set, a measure otherwise, and a window function
+// when Window is set.
 //
 // Terms are built through the column references: the generated Cols vars,
 // or references minted with NewColumn and its siblings by code that has no
@@ -72,8 +84,18 @@ func (b TimeBucket) Valid() bool {
 // A term never holds SQL. Column names are quoted by the database layer,
 // values bind as statement parameters, and Fn and Bucket come from closed sets.
 type Term struct {
-	// Fn is the aggregate function, or FnNone for a group key.
+	// Fn is the aggregate or window function, or FnNone for a group key or
+	// a plain column.
 	Fn TermFn
+	// Plain marks a column projected as it is stored, which is what a column
+	// reference selects as when it is passed to Select directly. It belongs
+	// to a row-level projection, one carrying window functions and no
+	// aggregate; next to an aggregate it is a build error, because there
+	// every column has to be a group key or be aggregated.
+	Plain bool
+	// Window makes the function a window function, evaluated over the rows
+	// the window names instead of collapsing them; see Over.
+	Window *Window
 	// Table is the table the column belongs to, carried over from the column
 	// reference. It is empty only on COUNT(*), which names no column.
 	Table string
@@ -91,8 +113,19 @@ type Term struct {
 	Alias string
 }
 
-// IsMeasure reports whether the term is an aggregate rather than a group key.
+// IsMeasure reports whether the term applies a function rather than naming a
+// column, a window function included.
 func (t Term) IsMeasure() bool { return t.Fn != FnNone }
+
+// IsWindowed reports whether the term is evaluated over a window.
+func (t Term) IsWindowed() bool { return t.Window != nil }
+
+// IsGroupKey reports whether the term is a group key: a column or time bucket
+// projected next to aggregates, which the framework derives GROUP BY from.
+func (t Term) IsGroupKey() bool { return t.Fn == FnNone && !t.Plain }
+
+// IsPlain reports whether the term is a column projected as it is stored.
+func (t Term) IsPlain() bool { return t.Fn == FnNone && t.Plain }
 
 // As renames the term in the SELECT list.
 //
@@ -215,3 +248,54 @@ func (t Term) Asc() TermOrder {
 func (t Term) Desc() TermOrder {
 	return TermOrder{Term: t, Direction: OrderDesc}
 }
+
+// Over evaluates the term over a window instead of collapsing the rows it
+// reads: every row keeps its place and gains the function's value computed
+// over the rows the window names. It applies to the aggregate functions and
+// to the window functions; a group key, a time bucket and COUNT DISTINCT
+// cannot be windowed and fail when the query is built.
+//
+// With an ordered window the aggregate functions accumulate: SUM becomes a
+// running total, COUNT a running count, and so on, always over the rows from
+// the partition's first up to the current one — the frame is fixed to that,
+// so two rows sorting equal never fold into one step the way the SQL default
+// frame would fold them.
+//
+//	SampleCols.Amount.Sum().Over(PartitionBy(SampleCols.TenantID).OrderBy(SampleCols.CreatedAt.Asc()))
+//	// COALESCE(SUM(`amount`) OVER (PARTITION BY `tenant_id` ORDER BY `created_at` ASC, `id` ASC
+//	//   ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW), 0)
+func (t Term) Over(window Window) Term {
+	t.Window = &window
+	return t
+}
+
+// The window functions below carry no column and, like Count, project under
+// a default alias until renamed with As. They only exist over a window whose
+// OrderBy is set: without an order there is no first row to number.
+
+// RowNumber numbers the rows of each partition from 1 in the window's order,
+// with no ties: two rows sorting equal still get consecutive numbers, in a
+// stable order the framework completes with the primary key.
+func RowNumber() Term { return Term{Fn: FnRowNumber, Alias: "row_number"} }
+
+// Rank ranks the rows of each partition in the window's order. Rows sorting
+// equal share a rank and the next rank skips past them: 1, 2, 2, 4.
+func Rank() Term { return Term{Fn: FnRank, Alias: "rank"} }
+
+// DenseRank ranks like Rank without skipping: 1, 2, 2, 3.
+func DenseRank() Term { return Term{Fn: FnDenseRank, Alias: "dense_rank"} }
+
+// Expr is what a projection selects and a window partitions by: a column
+// reference, projected as it is stored, or a Term. The set is closed to this
+// package, so a projection can never carry SQL text.
+type Expr interface {
+	exprTerm() Term
+}
+
+func (t Term) exprTerm() Term { return t }
+
+// TermOf returns the term an expression selects as: a term unchanged, a column
+// reference as the plain projection of that column.
+func TermOf(expr Expr) Term { return expr.exprTerm() }
+
+func (TermOrder) sealedOrdering() {}

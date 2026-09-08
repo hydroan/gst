@@ -56,8 +56,9 @@
 //
 //   - the read path: List, Get, Count, First, Last, Take, WithQuery, the
 //     filter operators, ordering, paging, and cursor pagination;
-//   - the whole aggregate path: grouping, measures, conditional measures,
-//     time buckets, HAVING, ordering, paging, and Count;
+//   - the whole select path: grouping, measures, conditional measures,
+//     time buckets, HAVING, window functions, Qualify, ordering, paging,
+//     and Count;
 //   - a write path with a deliberately weaker contract — no model hooks, no
 //     transaction boundary: Create is plain batch INSERTs (no
 //     ErrDuplicatedKey; ClickHouse has no unique constraints), Delete is a

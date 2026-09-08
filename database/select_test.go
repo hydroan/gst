@@ -511,7 +511,7 @@ func TestSelectBuildErrors(t *testing.T) {
 		type keyOnly struct{ Category string }
 		rows := make([]keyOnly, 0)
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, keyOnly](ctx, TestAggregateRecordCols.Category.Group()).
-			Scan(&rows), database.ErrNoAggregateFn)
+			Scan(&rows), database.ErrPlainSelect)
 	})
 
 	t.Run("UnknownColumn", func(t *testing.T) {

@@ -220,6 +220,24 @@ func (c Column[T]) Min() Term { return c.term(FnMin) }
 // Max returns the largest value of this column. The NULL rules match Min.
 func (c Column[T]) Max() Term { return c.term(FnMax) }
 
+// Lag reads this column from the previous row of the window, in the window's
+// order; the first row of each partition has no previous row and yields NULL,
+// so the result field must be a pointer. It only exists over an ordered
+// window; see Term.Over.
+func (c Column[T]) Lag() Term { return c.term(FnLag) }
+
+// Lead reads this column from the next row of the window; the last row of
+// each partition yields NULL. The rules match Lag.
+func (c Column[T]) Lead() Term { return c.term(FnLead) }
+
+// exprTerm projects the column as it is stored, which is what passing a
+// column reference to Select directly means.
+func (c Column[T]) exprTerm() Term {
+	term := c.term(FnNone)
+	term.Plain = true
+	return term
+}
+
 // Group makes this column a group key of the projection. The framework derives
 // GROUP BY from the group keys, so a projection cannot disagree with its own
 // GROUP BY list.

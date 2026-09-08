@@ -24,10 +24,14 @@ package types
 // and every scoping condition has to be passed to Where explicitly. Forgetting
 // one aggregates across tenants without any sign that it did.
 //
-// The projection is declared at the entry point: a term without an aggregate
-// function is a group key, and GROUP BY is derived from those keys, so the
-// SELECT and GROUP BY lists cannot disagree. At least one aggregate term is
-// required.
+// The projection is declared at the entry point and takes one of two shapes.
+// A grouped projection carries aggregates: a term without a function is a
+// group key, and GROUP BY is derived from those keys, so the SELECT and
+// GROUP BY lists cannot disagree. A row-level projection carries window
+// functions and no aggregate: every row keeps its place, a column reference
+// passed directly is projected as stored, and the window functions add their
+// value per row. A projection with neither an aggregate nor a window
+// function is a plain read and belongs to List.
 //
 // A builder is a specification, not a live statement: it can be read more than
 // once, and each terminal renders the spec afresh, taking only the parts that
@@ -61,8 +65,13 @@ type Selector[M Model, R any] interface {
 	Where(filters ...Filter) Selector[M, R]
 	// Having restricts the produced groups by their measures.
 	Having(conditions ...TermCondition) Selector[M, R]
-	// OrderBy sorts the result rows by a projection term.
-	OrderBy(orders ...TermOrder) Selector[M, R]
+	// Qualify restricts the result rows by their window functions, which a
+	// WHERE cannot see: the framework wraps the projection in a derived
+	// table and filters that. A condition must name a window term the
+	// projection declares.
+	Qualify(conditions ...TermCondition) Selector[M, R]
+	// OrderBy sorts the result rows by a projected column or term.
+	OrderBy(orders ...Ordering) Selector[M, R]
 	// Limit caps the number of result rows.
 	Limit(n int) Selector[M, R]
 	// Offset skips result rows, for paginating a grouped report.
