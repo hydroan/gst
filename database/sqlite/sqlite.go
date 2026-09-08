@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var Default *gorm.DB
@@ -128,6 +129,7 @@ func New(cfg config.Sqlite) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	restoreInsertClauseContract(db)
 	pool, err := db.DB()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get sqlite db")
@@ -141,6 +143,20 @@ func New(cfg config.Sqlite) (*gorm.DB, error) {
 	pool.SetMaxOpenConns(1)
 	dbruntime.InstallTracing(db)
 	return db, nil
+}
+
+// restoreInsertClauseContract renders INSERT the way every other dialect does.
+// The sqlite driver installs its own INSERT clause builder, which writes the
+// verb, the modifier and the table and returns, skipping the before- and
+// after-expressions gorm's default clause rendering places around them. The
+// framework registers the statement comment as the after-expression of every
+// verb clause (see the database package's comment.go), so on this dialect
+// alone INSERT statements went out without their trace comment while SELECT,
+// UPDATE and DELETE carried it. Dropping the driver's builder hands the clause
+// back to the default rendering, which resolves the table through the same
+// placeholder the other dialects use and handles the modifier the same way.
+func restoreInsertClauseContract(db *gorm.DB) {
+	delete(db.ClauseBuilders, clause.Insert{}.Name())
 }
 
 // optimizeDatabase applies performance optimization settings to the SQLite database.
