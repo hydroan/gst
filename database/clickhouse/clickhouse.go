@@ -71,15 +71,22 @@ func New(cfg config.Clickhouse) (*gorm.DB, error) {
 }
 
 // buildDSN assembles the clickhouse-go DSN, e.g.
-// "clickhouse://default:secret@localhost:9000/default?debug=false&compress=false&read_timeout=30s&dial_timeout=5s".
+// "clickhouse://default:secret@localhost:9000/default?debug=false&compress=false&read_timeout=30s&dial_timeout=5s&join_use_nulls=1".
 // The query parameters join with "&": an earlier spelling joined them with
 // "?", which URL parsing reads as one malformed first parameter and silently
 // drops every option after the first. Only options clickhouse-go v2 defines
-// may appear — it forwards unknown ones to the server as settings, and the
-// server rejects the connection over them.
+// and server settings may appear — it forwards unknown ones to the server as
+// settings, and the server rejects the connection over a setting it does not
+// know.
+//
+// join_use_nulls is the one server setting set here. ClickHouse fills the
+// unmatched side of a LEFT JOIN with the columns' default values unless it
+// is on; the framework's joins promise NULL there, the same answer every
+// other dialect gives and the one a pointer result field can tell from a
+// real zero, so the setting travels with every connection of the instance.
 func buildDSN(cfg config.Clickhouse) string {
 	return fmt.Sprintf(
-		"clickhouse://%s:%s@%s:%d/%s?debug=%t&compress=%t&read_timeout=%s&dial_timeout=%s",
+		"clickhouse://%s:%s@%s:%d/%s?debug=%t&compress=%t&read_timeout=%s&dial_timeout=%s&join_use_nulls=1",
 		cfg.Username, cfg.Password,
 		cfg.Host, cfg.Port, cfg.Database,
 		cfg.Debug, cfg.Compress, cfg.ReadTimeout, cfg.DialTimeout,
