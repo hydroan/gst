@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestServiceContextContextMethods(t *testing.T) {
+func TestServiceContextCarriesRequestMetadata(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	var serviceCtx *types.ServiceContext

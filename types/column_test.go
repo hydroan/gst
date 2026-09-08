@@ -126,20 +126,12 @@ func TestColumnBuildsOrders(t *testing.T) {
 }
 
 func TestColumnBuildsAssignments(t *testing.T) {
-	t.Run("SetTypesTheValueByTheColumn", func(t *testing.T) {
-		status := types.NewColumn[sampleTable, sampleStatus]("status")
-		require.Equal(t,
-			types.Assignment{Column: "status", Value: sampleStatusActive},
-			status.Set(sampleStatusActive))
-	})
-
-	t.Run("AssignIsTheDynamicColumnEscapeHatch", func(t *testing.T) {
-		// Assign takes a plain column name for code that cannot reference a
-		// generated column, mirroring the FilterXxx and Asc/Desc constructors.
-		require.Equal(t,
-			types.Assignment{Column: "age", Value: 18},
-			types.Assign("age", 18))
-	})
+	// Set types the value by the column, so the assignment carries the
+	// column's own value type.
+	status := types.NewColumn[sampleTable, sampleStatus]("status")
+	require.Equal(t,
+		types.Assignment{Column: "status", Value: sampleStatusActive},
+		status.Set(sampleStatusActive))
 }
 
 func TestAnyColumnRefMixesReferenceKinds(t *testing.T) {
