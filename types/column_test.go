@@ -21,7 +21,8 @@ type sampleTable struct{}
 
 func (sampleTable) TableName() string { return "samples" }
 
-// nameless is a model that declares no table, which a reference must refuse.
+// nameless stands in for a virtual model: it declares no table, the way a
+// model embedding model.Empty reports none.
 type nameless struct{}
 
 func (nameless) TableName() string { return "" }
@@ -50,12 +51,17 @@ func TestNewColumnReferences(t *testing.T) {
 	// Column references are built by generated code during package
 	// initialization, so an incomplete reference must not survive startup.
 	t.Run("PanicsOnEmptyName", func(t *testing.T) {
-		require.Panics(t, func() { types.NewColumn[sampleTable, string]("") })
+		require.PanicsWithValue(t, "types: a column reference of types_test.sampleTable requires a column name",
+			func() { types.NewColumn[sampleTable, string]("") })
 	})
 
-	t.Run("PanicsOnEmptyTable", func(t *testing.T) {
-		require.Panics(t, func() { types.NewColumn[nameless, string]("age") })
-		require.Panics(t, func() { types.NewColumn[*nameless, string]("age") })
+	t.Run("VirtualModelCarriesNoTable", func(t *testing.T) {
+		// A virtual model has no table, and gg gen still emits its Cols for
+		// the query parameters it opted in to; the references carry no table
+		// and read as the plain-name constructors do.
+		require.Empty(t, types.NewColumn[nameless, string]("age").Table())
+		require.Empty(t, types.NewColumn[*nameless, string]("age").Table())
+		require.Equal(t, types.Filter{Column: "age", Op: types.FilterOpEq, Value: "x"}, types.NewColumn[*nameless, string]("age").Eq("x"))
 	})
 
 	t.Run("ReadsTheTableThroughAPointerModel", func(t *testing.T) {
@@ -173,10 +179,10 @@ func TestColumnBuildsOrders(t *testing.T) {
 
 func TestColumnBuildsAssignments(t *testing.T) {
 	// Set types the value by the column, so the assignment carries the
-	// column's own value type.
+	// column's own value type, and the table the reference was built for.
 	status := types.NewColumn[sampleTable, sampleStatus]("status")
 	require.Equal(t,
-		types.Assignment{Column: "status", Value: sampleStatusActive},
+		types.Assignment{Table: "samples", Column: "status", Value: sampleStatusActive},
 		status.Set(sampleStatusActive))
 }
 

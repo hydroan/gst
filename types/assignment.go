@@ -10,11 +10,17 @@ package types
 // An Assignment never holds SQL. Column names are quoted by the database
 // layer and values bind as statement parameters.
 type Assignment struct {
+	// Table is the table the column belongs to: filled in by a column
+	// reference, empty from Assign, which names the chain's own model. A
+	// write refuses an assignment of another model's column, which may well
+	// share the name with one of its own.
+	Table  string
 	Column string
 	Value  any
 }
 
-// Assign builds an assignment of value to the named database column.
+// Assign builds an assignment of value to the named database column of the
+// chain's own model.
 func Assign(column string, value any) Assignment {
 	return Assignment{Column: column, Value: value}
 }

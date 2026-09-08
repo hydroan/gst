@@ -10,11 +10,13 @@ package types
 // order, and fixes the frame of an ordered aggregate to the rows from the
 // partition's first up to the current one. Neither is a knob: the SQL
 // defaults they replace are the two classic ways a running total goes wrong.
+// Rank and DenseRank take no tie breaker: ranking peers equally is what they
+// are for.
 //
 //	RowNumber().Over(PartitionBy(SampleCols.TenantID).OrderBy(SampleCols.CreatedAt.Desc()))
 //	// ROW_NUMBER() OVER (PARTITION BY `tenant_id` ORDER BY `created_at` DESC, `id` ASC)
 //	Rank().Over(OrderBy(total.Desc()))
-//	// RANK() OVER (ORDER BY COALESCE(SUM(`amount`), 0) DESC, `tenant_id` ASC)
+//	// RANK() OVER (ORDER BY COALESCE(SUM(`amount`), 0) DESC)
 type Window struct {
 	// Partition holds the partition keys. Each is a column of the queried
 	// model in a row-level projection, or one of the projection's group keys

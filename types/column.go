@@ -1,6 +1,7 @@
 package types
 
 import (
+	"fmt"
 	"reflect"
 	"time"
 )
@@ -80,18 +81,18 @@ type Column[T any] struct {
 // model. The fields are unexported so a shared reference cannot be repointed
 // at another column after construction.
 //
-// A model without a table name and an empty column name panic: references
-// are constructed while generated code initializes its package-level Cols
-// vars, so an incomplete one must not survive process startup.
+// A virtual model, one embedding model.Empty, has no table and reports an
+// empty TableName; its references carry no table and resolve to the table of
+// whichever query reads them, the way the plain-name constructors do, which
+// is all a resource without a table of its own can mean. An empty column
+// name panics: references are constructed while generated code initializes
+// its package-level Cols vars, so an incomplete one must not survive process
+// startup.
 func NewColumn[M TableNamer, T any](name string) Column[T] {
-	table := tableNameOf[M]()
-	if table == "" {
-		panic("types: a column reference requires a model with a table name")
-	}
 	if name == "" {
-		panic("types: a column reference requires a column name")
+		panic(fmt.Sprintf("types: a column reference of %s requires a column name", reflect.TypeFor[M]()))
 	}
-	return Column[T]{table: table, name: name}
+	return Column[T]{table: tableNameOf[M](), name: name}
 }
 
 // tableNameOf reads the table name of M from a fresh value of it. A pointer
@@ -203,16 +204,22 @@ func (c Column[T]) filter(op FilterOp, value any) Filter {
 }
 
 // Asc orders by the column ascending. The order carries the table the
-// reference was built for, which a select that joins reads.
+// reference was built for, which every read checks: a select that joins
+// tells two tables' columns of one name apart by it, and a chain refuses an
+// order of another model.
 func (c Column[T]) Asc() Order { return Order{Table: c.table, Column: c.name, Direction: OrderAsc} }
 
 // Desc orders by the column descending; see Asc.
 func (c Column[T]) Desc() Order { return Order{Table: c.table, Column: c.name, Direction: OrderDesc} }
 
 // Set assigns value to the column, the unit UpdateByID accepts. The value is
-// typed by the column, so assigning a wrong-typed value or naming a column
-// the model does not have fails to compile.
-func (c Column[T]) Set(value T) Assignment { return Assignment{Column: c.name, Value: value} }
+// typed by the column, so a wrong-typed value or a misspelled column fails to
+// compile; the assignment carries the table the reference was built for, so
+// a column of another model, which may well share the name, is refused when
+// the write is built.
+func (c Column[T]) Set(value T) Assignment {
+	return Assignment{Table: c.table, Column: c.name, Value: value}
+}
 
 // The projection methods below turn the column into a Term. Every column
 // carries the ones that cannot be silently wrong on any column type; the

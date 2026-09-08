@@ -47,7 +47,7 @@ const (
 	FilterOpOr           FilterOp = "or"           // group: the []Filter value is OR-combined, the group itself AND-combined
 	FilterOpAnd          FilterOp = "and"          // group: the []Filter value is AND-combined, for nesting inside an OR group
 	FilterOpExists       FilterOp = "exists"       // correlated subquery: the Subquery value becomes EXISTS or NOT EXISTS
-	FilterOpEqCol        FilterOp = "eqcol"        // inside a subquery: the column equals the enclosing query's column named by the string value
+	FilterOpEqCol        FilterOp = "eqcol"        // column equals another column, named by the value as a plain name or a column reference: the enclosing query's inside a subquery, a table read beside it inside a join
 	FilterOpFalse        FilterOp = "false"        // constant predicate: matches nothing, see FilterFalse
 )
 
@@ -330,6 +330,9 @@ func FilterAnd(filters ...Filter) Filter {
 // tie to and it fails closed, as does an empty name on either side or a name
 // the related or the enclosing model does not have. Several of them express a
 // composite key, and one inside a FilterOr group matches on any of its pairs.
+// Inside a join only the pairs at the top level of the ON count toward the
+// key the join is proved unique on: one inside a FilterOr group narrows the
+// match but proves nothing.
 //
 // The string form names the columns alone, which a subquery can place because
 // both of its tables are known; a join needs the tables too, so its predicates

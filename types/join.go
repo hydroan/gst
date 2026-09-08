@@ -132,6 +132,14 @@ func (SelectJoin) sealedJoinSource() {}
 // no OrderBy, Limit or Offset of its own: a derived table has no use for
 // them.
 //
+// One table backs at most one source of a query. A joined select is
+// addressed through its model's column references, so a select over the
+// queried table, or a second select over a table another source already
+// reads, could not be told apart and is refused; a per-row total over the
+// queried table's own groups is a window instead, Sum().Over(PartitionBy(key)).
+// A select grouped by a time bucket cannot be joined either: the bucket is a
+// label of the column, not a value a column of the query equals.
+//
 // The derived table is materialized by the database, its rows being the
 // groups of the select: a select narrowed by Where materializes fewer of
 // them, so the conditions belong inside it rather than on the query around
