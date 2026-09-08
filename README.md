@@ -474,7 +474,51 @@ rank := types.Rank().Over(types.OrderBy(total.Desc()))
 - **`ScanOne`** 只读纯度量投影；行级投影用 `Scan`。既无聚合也无窗口的投影仍然拒绝，
   那是 `List` 的活。
 
-框架**不做** join、UNION、递归 CTE，聚合能力也不向 URL 暴露：
+#### 联合查询
+
+几张表的同形态行叠成一份列表，例如收款和退款按时间统一分页，用 `database.UnionAll[R]`。
+分支是普通的 `Select`，各自扫进同一个结果行 `R`；框架按 `R` 的字段顺序渲染每个分支的
+SELECT 列表，按位置对齐写反的错误写不出来。列名不一致的用 `列.As("...")` 对齐，来源
+标记用 `types.Literal` 投影一列常量：
+
+```go
+type flow struct {
+    Kind      string
+    ID        string
+    Amount    int64
+    CreatedAt time.Time
+}
+
+payments := database.Select[*appmodel.Payment, flow](ctx,
+    types.Literal("payment").As("kind"), PaymentCols.ID, PaymentCols.Amount, PaymentCols.CreatedAt).
+    Where(PaymentCols.TenantID.Eq(tenantID))
+refunds := database.Select[*appmodel.Refund, flow](ctx,
+    types.Literal("refund").As("kind"), RefundCols.ID, RefundCols.Amount, RefundCols.SettledAt.As("created_at")).
+    Where(RefundCols.TenantID.Eq(tenantID))
+
+feed := database.UnionAll[flow](ctx, payments, refunds).
+    OrderBy(PaymentCols.CreatedAt.Desc(), PaymentCols.ID.Desc()).
+    Limit(20).Offset(40)
+err := feed.Scan(&rows)  // 这一页
+err = feed.Count(&total) // 总数
+```
+
+规则：
+
+- **只有 `UNION ALL`**，不做去重的 UNION：两笔金额相同的记录会被去重版悄悄合并。
+  INTERSECT、EXCEPT 用 `FilterExists`、`FilterNotExists` 表达。
+- **分支可以是纯列投影**，也可以分组、开窗、`Qualify`，各自带 `Where`、`Having`；
+  分支上不能写 `OrderBy`、`Limit`、`Offset`，它们属于联合，写了构建期报错。
+  联合结果没有 `Where`，条件写进分支，每个分支用自己的索引。
+- **排序分页下推**：带 `Limit` 时框架把同样的排序和 `offset + limit` 下推到每个分支，
+  各分支按索引只读前几十行，外层最多排 N 倍这个行数。排序项按结果列名对齐，用任一
+  分支模型的列引用或已投影的项来写。
+- **`Count` 是各分支计数相加**，不物化任何一行，同样忽略排序分页。
+- **`Literal` 的值只能是标识符**（字母、数字、下划线，不以数字开头），内联为 `'x'`
+  而不是绑定参数，且必须 `As` 起别名。
+- 四种方言渲染同一条语句；ClickHouse 用 `UnionAllOn`，分支在同一实例上用 `SelectOn` 建。
+
+框架**不做** join 和递归 CTE，聚合能力也不向 URL 暴露：
 报表口径属于服务端契约，让客户端自选分组键等于开放一个无界扫描入口。
 
 ## 配置和迁移
