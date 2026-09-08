@@ -1,6 +1,9 @@
 package types
 
-import "time"
+import (
+	"reflect"
+	"time"
+)
 
 // AnyColumnRef is the type-erased view of every generated column reference,
 // for options that take a heterogeneous column list: WithSelect accepts
@@ -11,7 +14,18 @@ import "time"
 type AnyColumnRef interface {
 	// Name returns the database column name resolved by gorm.
 	Name() string
+	// Table returns the table the column belongs to, read from the model's
+	// TableName when the reference was built.
+	Table() string
 	sealedAnyColumn()
+}
+
+// TableNamer is the one method a column reference needs from its model: the
+// table the column belongs to. Every Model satisfies it; the narrower
+// interface lets a reference name its model as a type argument alone, with
+// nothing else of the model contract in play.
+type TableNamer interface {
+	TableName() string
 }
 
 // ColumnRef is the shared typed view of every generated column reference.
@@ -37,6 +51,11 @@ type ColumnRef[T any] interface {
 // type: both mistakes stop at compile time instead of surfacing as a SQL
 // error or a silently wrong result set.
 //
+// A reference also knows the table it was generated for. That is what lets a
+// read reject a column of another model up front: two models often share a
+// column name, and a query reading the wrong one is valid SQL over the wrong
+// table, which no schema check would catch.
+//
 // The methods are typed front ends for the FilterXxx, Asc and Desc
 // constructors and produce exactly the same Filter and Order values. Code that
 // cannot reference a concrete model (generic helpers, framework internals, URL
@@ -46,29 +65,58 @@ type ColumnRef[T any] interface {
 // or TimeColumn instead, which embed this type and add the aggregate methods
 // that are only meaningful there.
 type Column[T any] struct {
-	name string
+	table string
+	name  string
 }
 
-// NewColumn returns a typed reference to the named database column. gg gen
-// emits the calls in each model's generated file; handwritten code that
-// cannot reference a generated Cols var should keep using the FilterXxx, Asc
-// and Desc constructors with a plain column name instead of minting
-// references. The name is unexported so a shared reference cannot be
-// repointed at another column after construction.
+// NewColumn returns a typed reference to the named column of M's table. gg gen
+// emits the calls in each model's generated file, naming the model as the
+// first type argument, so the table comes from the model's own TableName and
+// is never restated as a literal. Handwritten code that cannot reference a
+// generated Cols var should keep using the FilterXxx, Asc, Desc and Assign
+// constructors with a plain column name instead of minting references; module
+// sources, which have no generated file, mint them the same way with their
+// model. The fields are unexported so a shared reference cannot be repointed
+// at another column after construction.
 //
-// An empty name panics: references are constructed while generated code
-// initializes its package-level Cols vars, so a nameless one must not
-// survive process startup.
-func NewColumn[T any](name string) Column[T] {
+// A model without a table name and an empty column name panic: references
+// are constructed while generated code initializes its package-level Cols
+// vars, so an incomplete one must not survive process startup.
+func NewColumn[M TableNamer, T any](name string) Column[T] {
+	table := tableNameOf[M]()
+	if table == "" {
+		panic("types: a column reference requires a model with a table name")
+	}
 	if name == "" {
 		panic("types: a column reference requires a column name")
 	}
-	return Column[T]{name: name}
+	return Column[T]{table: table, name: name}
+}
+
+// tableNameOf reads the table name of M from a fresh value of it. A pointer
+// model is instantiated through its pointee rather than left at its nil zero
+// value, so TableName runs on a real value whatever receiver it declares: a
+// value-receiver method reached through a nil pointer would dereference it.
+func tableNameOf[M TableNamer]() string {
+	var m M
+	if typ := reflect.TypeFor[M](); typ.Kind() == reflect.Pointer {
+		instance, ok := reflect.TypeAssert[M](reflect.New(typ.Elem()))
+		if !ok {
+			// Unreachable: New returns exactly the pointer type M names.
+			panic("types: cannot instantiate the model of a column reference")
+		}
+		m = instance
+	}
+	return m.TableName()
 }
 
 // Name returns the database column name resolved by gorm. It is also what the
 // order and cursor constructors taking a plain column name expect.
 func (c Column[T]) Name() string { return c.name }
+
+// Table returns the table the column belongs to, as the model's TableName
+// reported it when the reference was built.
+func (c Column[T]) Table() string { return c.table }
 
 func (c Column[T]) sealedColumn(T) {}
 
@@ -178,7 +226,7 @@ func (c Column[T]) Max() Term { return c.term(FnMax) }
 func (c Column[T]) Group() Term { return c.term(FnNone) }
 
 func (c Column[T]) term(fn TermFn) Term {
-	return Term{Fn: fn, Column: c.name, Alias: c.name}
+	return Term{Fn: fn, Table: c.table, Column: c.name, Alias: c.name}
 }
 
 // NumericColumn is the reference generated for a column whose Go type is
@@ -194,10 +242,10 @@ type NumericColumn[T any] struct {
 	Column[T]
 }
 
-// NewNumericColumn returns the numeric reference to the named database
-// column, carrying Sum and Avg on top of everything Column has.
-func NewNumericColumn[T any](name string) NumericColumn[T] {
-	return NumericColumn[T]{Column: NewColumn[T](name)}
+// NewNumericColumn returns the numeric reference to the named column of M's
+// table, carrying Sum and Avg on top of everything Column has.
+func NewNumericColumn[M TableNamer, T any](name string) NumericColumn[T] {
+	return NumericColumn[T]{Column: NewColumn[M, T](name)}
 }
 
 // Sum adds up this column. The renderer wraps it in COALESCE(..., 0) so an
@@ -216,10 +264,10 @@ type TimeColumn struct {
 	Column[time.Time]
 }
 
-// NewTimeColumn returns the time reference to the named database column,
+// NewTimeColumn returns the time reference to the named column of M's table,
 // carrying the bucketing group keys on top of everything Column has.
-func NewTimeColumn(name string) TimeColumn {
-	return TimeColumn{Column: NewColumn[time.Time](name)}
+func NewTimeColumn[M TableNamer](name string) TimeColumn {
+	return TimeColumn{Column: NewColumn[M, time.Time](name)}
 }
 
 // ByHour, ByDay and ByMonth make this column a group key truncated to the

@@ -42,6 +42,7 @@ var (
 	ErrSelectorUnusable      = errors.New("aggregate could not attach to the database chain")
 	ErrHavingValue           = errors.New("having compares against a value SQL cannot order")
 	ErrUnknownOrderDirection = errors.New("order direction is not one the framework defines")
+	ErrColumnTable           = errors.New("column reference belongs to another table")
 )
 
 // aliasPattern is what an alias must look like. An alias reaches SQL as an
@@ -620,6 +621,13 @@ func (a *selector[M, R]) validateTerm(t types.Term, byName map[string]modelschem
 	}
 	if t.IsMeasure() && t.Bucket != types.TimeBucketNone {
 		return errors.Wrapf(ErrBucketOnMeasure, "%q", a.alias(t))
+	}
+	// A generated reference carries the table it was generated for. A term
+	// naming a column of another model may well name a column the queried
+	// model also has, which is valid SQL over the wrong table, so the table is
+	// checked before the name is. The string-name constructors carry none.
+	if len(t.Table) > 0 && t.Table != a.db.outerTableName() {
+		return errors.Wrapf(ErrColumnTable, "%q belongs to table %q, the select reads %q", t.Column, t.Table, a.db.outerTableName())
 	}
 	if len(t.Column) == 0 {
 		// COUNT(*) is the only term without a column.

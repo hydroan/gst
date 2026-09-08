@@ -20,8 +20,8 @@ const adminUsersPath = "/api/iam/admin/users"
 // Column references for the user fixture writes in the user and session
 // tests; module test code carries no generated Cols vars.
 var (
-	colUsername   = types.NewColumn[string]("username")
-	colUserStatus = types.NewColumn[modeliamuser.UserStatus]("status")
+	colUsername   = types.NewColumn[*modeliamuser.User, string]("username")
+	colUserStatus = types.NewColumn[*modeliamuser.User, modeliamuser.UserStatus]("status")
 )
 
 func TestAdminUserList(t *testing.T) {

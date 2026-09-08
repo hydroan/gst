@@ -191,7 +191,7 @@ func TestClickhouse(t *testing.T) {
 		// occurred_at here), so a correction narrows the write to the columns
 		// it corrects — the shape every real mutation on this dialect takes.
 		row.Status = "after"
-		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithSelect(colStatus).Update(row))
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithSelect(aggCols.Status).Update(row))
 		require.Eventually(t, func() bool {
 			got := new(TestAggregateRecord)
 			if err := database.DatabaseOn[*TestAggregateRecord](ctx, ins).Get(got, row.ID); err != nil {
@@ -211,7 +211,7 @@ func TestClickhouse(t *testing.T) {
 
 		// No matched count comes back from a mutation, so a missing record
 		// passes silently instead of answering ErrRecordNotFound.
-		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithSelect(colStatus).
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithSelect(aggCols.Status).
 			Update(&TestAggregateRecord{Category: "mutate", ID: "no-such-row"}))
 
 		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Delete(row))
@@ -234,7 +234,7 @@ func TestClickhouse(t *testing.T) {
 			"delete must render the lightweight DELETE, not an ALTER TABLE mutation")
 
 		stmts = stmts[:0]
-		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithDryRun(&stmts).WithSelect(colStatus).
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithDryRun(&stmts).WithSelect(aggCols.Status).
 			Update(&TestAggregateRecord{Status: "y", ID: "dry-1"}))
 		require.Len(t, stmts, 1)
 		require.Contains(t, stmts[0].RenderedSQL, "ALTER TABLE",

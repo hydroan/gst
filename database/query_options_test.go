@@ -286,6 +286,16 @@ func TestDatabaseWithCursor(t *testing.T) {
 func TestDatabaseWithSelect(t *testing.T) {
 	defer cleanupTestData()
 
+	t.Run("column of another table fails", func(t *testing.T) {
+		// The aggregate fixture has a status column too, so the name alone
+		// would pass; the table the reference carries tells a wrong-model
+		// write from a typo.
+		users := make([]*TestUser, 0)
+		require.ErrorIs(t,
+			database.Database[*TestUser](context.Background()).WithSelect(aggCols.Status).List(&users),
+			database.ErrColumnTable)
+	})
+
 	// No effect on "Create"
 	t.Run("Create", func(t *testing.T) {
 		t.Run("with existing column", func(t *testing.T) {
@@ -475,7 +485,7 @@ func TestDatabaseWithSelect(t *testing.T) {
 		t.Run("only framework columns fails", func(t *testing.T) {
 			defer cleanupTestData()
 			setupTestData(t)
-			colOnlyID := types.NewColumn[string]("id")
+			colOnlyID := types.NewColumn[*TestUser, string]("id")
 			require.ErrorIs(t,
 				database.Database[*TestUser](context.Background()).WithSelect(colOnlyID).Update(ul...),
 				database.ErrNoModelColumnSelected,

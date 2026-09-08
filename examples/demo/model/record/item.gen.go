@@ -21,14 +21,14 @@ var ItemCols = struct {
 	UpdatedBy types.Column[string]
 	UserID    types.Column[string]
 }{
-	Content:   types.NewColumn[string]("content"),
-	CreatedAt: types.NewTimeColumn("created_at"),
-	CreatedBy: types.NewColumn[string]("created_by"),
-	DeletedAt: types.NewColumn[gorm.DeletedAt]("deleted_at"),
-	ID:        types.NewColumn[string]("id"),
-	Kind:      types.NewColumn[ItemKind]("kind"),
-	RecordID:  types.NewColumn[string]("record_id"),
-	UpdatedAt: types.NewTimeColumn("updated_at"),
-	UpdatedBy: types.NewColumn[string]("updated_by"),
-	UserID:    types.NewColumn[string]("user_id"),
+	Content:   types.NewColumn[*Item, string]("content"),
+	CreatedAt: types.NewTimeColumn[*Item]("created_at"),
+	CreatedBy: types.NewColumn[*Item, string]("created_by"),
+	DeletedAt: types.NewColumn[*Item, gorm.DeletedAt]("deleted_at"),
+	ID:        types.NewColumn[*Item, string]("id"),
+	Kind:      types.NewColumn[*Item, ItemKind]("kind"),
+	RecordID:  types.NewColumn[*Item, string]("record_id"),
+	UpdatedAt: types.NewTimeColumn[*Item]("updated_at"),
+	UpdatedBy: types.NewColumn[*Item, string]("updated_by"),
+	UserID:    types.NewColumn[*Item, string]("user_id"),
 }

@@ -15,29 +15,61 @@ const (
 	sampleStatusRemoved sampleStatus = "removed"
 )
 
+// sampleTable stands in for the model a column reference is generated for;
+// only its table name takes part.
+type sampleTable struct{}
+
+func (sampleTable) TableName() string { return "samples" }
+
+// nameless is a model that declares no table, which a reference must refuse.
+type nameless struct{}
+
+func (nameless) TableName() string { return "" }
+
 func TestNewColumnReferences(t *testing.T) {
 	t.Run("CarriesTheColumnName", func(t *testing.T) {
-		require.Equal(t, "age", types.NewColumn[int]("age").Name())
+		require.Equal(t, "age", types.NewColumn[sampleTable, int]("age").Name())
 	})
 
 	t.Run("PromotesNameThroughSpecializedReferences", func(t *testing.T) {
 		// NumericColumn and TimeColumn embed Column, so the accessor stays
 		// available on them alongside the filter and order constructors.
-		require.Equal(t, "amount", types.NewNumericColumn[int64]("amount").Name())
-		require.Equal(t, "created_at", types.NewTimeColumn("created_at").Name())
+		require.Equal(t, "amount", types.NewNumericColumn[sampleTable, int64]("amount").Name())
+		require.Equal(t, "created_at", types.NewTimeColumn[sampleTable]("created_at").Name())
 	})
 
+	t.Run("CarriesTheTable", func(t *testing.T) {
+		// The table comes from the model the reference was built for, so a
+		// read can tell a column of another model apart even when the two
+		// models share the column name.
+		require.Equal(t, "samples", types.NewColumn[sampleTable, int]("age").Table())
+		require.Equal(t, "samples", types.NewNumericColumn[sampleTable, int64]("amount").Table())
+		require.Equal(t, "samples", types.NewTimeColumn[sampleTable]("created_at").Table())
+	})
+
+	// Column references are built by generated code during package
+	// initialization, so an incomplete reference must not survive startup.
 	t.Run("PanicsOnEmptyName", func(t *testing.T) {
-		// Column references are built by generated code during package
-		// initialization, so a nameless reference must not survive startup.
-		require.Panics(t, func() { types.NewColumn[string]("") })
+		require.Panics(t, func() { types.NewColumn[sampleTable, string]("") })
+	})
+
+	t.Run("PanicsOnEmptyTable", func(t *testing.T) {
+		require.Panics(t, func() { types.NewColumn[nameless, string]("age") })
+		require.Panics(t, func() { types.NewColumn[*nameless, string]("age") })
+	})
+
+	t.Run("ReadsTheTableThroughAPointerModel", func(t *testing.T) {
+		// Generated code names the model as a pointer, the way the rest of the
+		// framework refers to it; the reference instantiates the pointee, so a
+		// value-receiver TableName is reached without a nil dereference.
+		require.Equal(t, "samples", types.NewColumn[*sampleTable, int]("age").Table())
 	})
 }
 
 func TestColumnBuildsFilters(t *testing.T) {
-	age := types.NewColumn[int]("age")
-	status := types.NewColumn[sampleStatus]("status")
-	name := types.NewColumn[string]("name")
+	age := types.NewColumn[sampleTable, int]("age")
+	status := types.NewColumn[sampleTable, sampleStatus]("status")
+	name := types.NewColumn[sampleTable, string]("name")
 
 	tests := []struct {
 		label string
@@ -78,7 +110,7 @@ func TestColumnBuildsFilters(t *testing.T) {
 }
 
 func TestColumnInWithoutValues(t *testing.T) {
-	status := types.NewColumn[sampleStatus]("status")
+	status := types.NewColumn[sampleTable, sampleStatus]("status")
 	// A variadic call with no arguments yields a nil slice. It still carries
 	// the slice type, so the database layer treats it as an empty set and
 	// matches nothing rather than widening the query.
@@ -88,14 +120,14 @@ func TestColumnInWithoutValues(t *testing.T) {
 }
 
 func TestColumnBuildsOrders(t *testing.T) {
-	created := types.NewColumn[int]("created_at")
+	created := types.NewColumn[sampleTable, int]("created_at")
 	require.Equal(t, types.Order{Column: "created_at", Direction: types.OrderAsc}, created.Asc())
 	require.Equal(t, types.Order{Column: "created_at", Direction: types.OrderDesc}, created.Desc())
 }
 
 func TestColumnBuildsAssignments(t *testing.T) {
 	t.Run("SetTypesTheValueByTheColumn", func(t *testing.T) {
-		status := types.NewColumn[sampleStatus]("status")
+		status := types.NewColumn[sampleTable, sampleStatus]("status")
 		require.Equal(t,
 			types.Assignment{Column: "status", Value: sampleStatusActive},
 			status.Set(sampleStatusActive))
@@ -121,8 +153,8 @@ func TestAnyColumnRefMixesReferenceKinds(t *testing.T) {
 		return collected
 	}
 	require.Equal(t, []string{"name", "amount", "created_at"}, names(
-		types.NewColumn[string]("name"),
-		types.NewNumericColumn[int64]("amount"),
-		types.NewTimeColumn("created_at"),
+		types.NewColumn[sampleTable, string]("name"),
+		types.NewNumericColumn[sampleTable, int64]("amount"),
+		types.NewTimeColumn[sampleTable]("created_at"),
 	))
 }

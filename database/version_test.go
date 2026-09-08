@@ -13,8 +13,8 @@ import (
 )
 
 var (
-	colVersionedNoteTitle   = types.NewColumn[string]("title")
-	colVersionedNoteVersion = types.NewColumn[int64]("version")
+	colVersionedNoteTitle   = types.NewColumn[*versionedNote, string]("title")
+	colVersionedNoteVersion = types.NewColumn[*versionedNote, int64]("version")
 )
 
 // versionedNote is the optimistic-locking fixture: a model that declares

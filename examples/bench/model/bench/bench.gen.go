@@ -22,15 +22,15 @@ var BenchCols = struct {
 	UpdatedAt types.TimeColumn
 	UpdatedBy types.Column[string]
 }{
-	CreatedAt: types.NewTimeColumn("created_at"),
-	CreatedBy: types.NewColumn[string]("created_by"),
-	DeletedAt: types.NewColumn[gorm.DeletedAt]("deleted_at"),
-	Field1:    types.NewColumn[string]("field1"),
-	Field2:    types.NewNumericColumn[int]("field2"),
-	Field3:    types.NewColumn[string]("field3"),
-	Field4:    types.NewNumericColumn[int]("field4"),
-	Field5:    types.NewColumn[bool]("field5"),
-	ID:        types.NewColumn[string]("id"),
-	UpdatedAt: types.NewTimeColumn("updated_at"),
-	UpdatedBy: types.NewColumn[string]("updated_by"),
+	CreatedAt: types.NewTimeColumn[*Bench]("created_at"),
+	CreatedBy: types.NewColumn[*Bench, string]("created_by"),
+	DeletedAt: types.NewColumn[*Bench, gorm.DeletedAt]("deleted_at"),
+	Field1:    types.NewColumn[*Bench, string]("field1"),
+	Field2:    types.NewNumericColumn[*Bench, int]("field2"),
+	Field3:    types.NewColumn[*Bench, string]("field3"),
+	Field4:    types.NewNumericColumn[*Bench, int]("field4"),
+	Field5:    types.NewColumn[*Bench, bool]("field5"),
+	ID:        types.NewColumn[*Bench, string]("id"),
+	UpdatedAt: types.NewTimeColumn[*Bench]("updated_at"),
+	UpdatedBy: types.NewColumn[*Bench, string]("updated_by"),
 }

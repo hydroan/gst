@@ -73,12 +73,12 @@ var aggCols = struct {
 	OccurredAt types.TimeColumn
 	ClosedAt   types.TimeColumn
 }{
-	Category:   types.NewColumn[string]("category"),
-	Status:     types.NewColumn[string]("status"),
-	Amount:     types.NewNumericColumn[int64]("amount"),
-	Score:      types.NewNumericColumn[float64]("score"),
-	OccurredAt: types.NewTimeColumn("occurred_at"),
-	ClosedAt:   types.NewTimeColumn("closed_at"),
+	Category:   types.NewColumn[*TestAggregateRecord, string]("category"),
+	Status:     types.NewColumn[*TestAggregateRecord, string]("status"),
+	Amount:     types.NewNumericColumn[*TestAggregateRecord, int64]("amount"),
+	Score:      types.NewNumericColumn[*TestAggregateRecord, float64]("score"),
+	OccurredAt: types.NewTimeColumn[*TestAggregateRecord]("occurred_at"),
+	ClosedAt:   types.NewTimeColumn[*TestAggregateRecord]("closed_at"),
 }
 
 func TestSelectScalar(t *testing.T) {
@@ -495,6 +495,14 @@ func TestSelectBuildErrors(t *testing.T) {
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx).Scan(&rows), database.ErrEmptyProjection)
 	})
 
+	t.Run("ColumnOfAnotherTable", func(t *testing.T) {
+		// TestUser has a status column too, so the name alone would pass the
+		// schema check; the table the reference carries is what refuses it.
+		rows := make([]row, 0)
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Category.Group(), colStatus.Count().As("total")).
+			Scan(&rows), database.ErrColumnTable)
+	})
+
 	t.Run("ProjectionWithoutAggregateFunction", func(t *testing.T) {
 		// Group keys alone are a plain read, which List already does.
 		type keyOnly struct{ Category string }
@@ -720,13 +728,13 @@ var tagCols = struct {
 	Label    types.Column[string]
 	Category types.Column[string]
 }{
-	ID:       types.NewColumn[string]("id"),
-	RecordID: types.NewColumn[string]("record_id"),
-	Label:    types.NewColumn[string]("label"),
-	Category: types.NewColumn[string]("category"),
+	ID:       types.NewColumn[*TestRecordTag, string]("id"),
+	RecordID: types.NewColumn[*TestRecordTag, string]("record_id"),
+	Label:    types.NewColumn[*TestRecordTag, string]("label"),
+	Category: types.NewColumn[*TestRecordTag, string]("category"),
 }
 
-var recordIDCol = types.NewColumn[string]("id")
+var recordIDCol = types.NewColumn[*TestAggregateRecord, string]("id")
 
 // setupTagData seeds tags on a1, a3 and a4. a1 and a3 are alpha rows, a4 is a
 // beta row, so a subquery on the "vip" label selects across categories. Each
@@ -975,10 +983,10 @@ func TestFilterExistsNested(t *testing.T) {
 		TagID types.Column[string]
 		Body  types.Column[string]
 	}{
-		TagID: types.NewColumn[string]("tag_id"),
-		Body:  types.NewColumn[string]("body"),
+		TagID: types.NewColumn[*TestTagNote, string]("tag_id"),
+		Body:  types.NewColumn[*TestTagNote, string]("body"),
 	}
-	tagIDCol := types.NewColumn[string]("id")
+	tagIDCol := types.NewColumn[*TestRecordTag, string]("id")
 
 	// EXISTS(tag WHERE tag.record_id = record.id AND EXISTS(note WHERE
 	// note.tag_id = tag.id AND note.body = 'checked'))
@@ -1108,8 +1116,8 @@ func TestFilterExistsSelfJoin(t *testing.T) {
 		ID       types.Column[string]
 		ParentID types.Column[string]
 	}{
-		ID:       types.NewColumn[string]("id"),
-		ParentID: types.NewColumn[string]("parent_id"),
+		ID:       types.NewColumn[*TestCategory, string]("id"),
+		ParentID: types.NewColumn[*TestCategory, string]("parent_id"),
 	}
 	require.NoError(t, database.Database[*TestCategory](ctx).Create(categoryRoot, categoryParent))
 
@@ -1215,7 +1223,7 @@ func TestFilterExistsMultipleCorrelations(t *testing.T) {
 
 	t.Run("FailsClosedOnUnknownChildColumn", func(t *testing.T) {
 		unknown := types.FilterExists[*TestRecordTag](
-			byRecord, types.NewColumn[string]("missing").Equal(aggCols.Category), audit,
+			byRecord, types.NewColumn[*TestRecordTag, string]("missing").Equal(aggCols.Category), audit,
 		)
 		require.Empty(t, ids(unknown))
 	})

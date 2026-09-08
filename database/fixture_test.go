@@ -26,12 +26,16 @@ const (
 // Column references shared by the option and write tests; test models carry
 // no generated Cols vars.
 var (
-	colName      = types.NewColumn[string]("name")
-	colEmail     = types.NewColumn[string]("email")
-	colAge       = types.NewNumericColumn[int]("age")
-	colStatus    = types.NewColumn[string]("status")
-	colNotExists = types.NewColumn[string]("notexists")
+	colName      = types.NewColumn[*TestUser, string]("name")
+	colEmail     = types.NewColumn[*TestUser, string]("email")
+	colAge       = types.NewNumericColumn[*TestUser, int]("age")
+	colStatus    = types.NewColumn[*TestUser, string]("status")
+	colNotExists = types.NewColumn[*TestUser, string]("notexists")
 )
+
+// colUniqueItemName is the name column of the unique-key fixture; the upsert
+// tests narrow a merge to it, and a reference must name the model it writes.
+var colUniqueItemName = types.NewColumn[*TestUniqueItem, string]("name")
 
 var (
 	errTestHookGroupCreateAfter = errors.New("test hook group create after failed")

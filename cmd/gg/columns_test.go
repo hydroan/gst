@@ -203,27 +203,27 @@ func TestRenderColumnsFile(t *testing.T) {
 	})
 
 	t.Run("DeclaresTypedColumns", func(t *testing.T) {
-		require.Contains(t, rendered, `types.NewColumn[string]("id")`)
-		require.Contains(t, rendered, `types.NewColumn[RecordStatus]("status")`)
+		require.Contains(t, rendered, `types.NewColumn[*Record, string]("id")`)
+		require.Contains(t, rendered, `types.NewColumn[*Record, RecordStatus]("status")`)
 	})
 
 	t.Run("SpecializesNumericColumns", func(t *testing.T) {
 		// SUM and AVG only belong on a numeric column, because a database
 		// answers SUM over text with 0 rather than an error. A named numeric
 		// type keeps its own name as the type argument.
-		require.Contains(t, rendered, `types.NewNumericColumn[int64]("amount")`)
-		require.Contains(t, rendered, `types.NewNumericColumn[RecordScore]("score")`)
+		require.Contains(t, rendered, `types.NewNumericColumn[*Record, int64]("amount")`)
+		require.Contains(t, rendered, `types.NewNumericColumn[*Record, RecordScore]("score")`)
 	})
 
 	t.Run("SpecializesTimeColumns", func(t *testing.T) {
-		require.Contains(t, rendered, `types.NewTimeColumn("created_at")`)
+		require.Contains(t, rendered, `types.NewTimeColumn[*Record]("created_at")`)
 	})
 
 	t.Run("DegradesUnreproducibleTypesToAny", func(t *testing.T) {
 		// A generic instantiation cannot be written back as source, so the
 		// column keeps its exact name but loses the value type. The original
 		// type is recorded in a comment.
-		require.Contains(t, rendered, `types.NewColumn[any]("tags")`)
+		require.Contains(t, rendered, `types.NewColumn[*Record, any]("tags")`)
 		require.Contains(t, rendered, "datatypes.JSONSlice[string]")
 	})
 
@@ -231,7 +231,7 @@ func TestRenderColumnsFile(t *testing.T) {
 		// Specializing would need the type as a type argument, and any is not
 		// the column's type. The plain reference keeps the column usable and
 		// SumOf stays available for it.
-		require.Contains(t, rendered, `types.NewColumn[any]("weight")`)
+		require.Contains(t, rendered, `types.NewColumn[*Record, any]("weight")`)
 		require.NotContains(t, rendered, "types.NewNumericColumn[any]")
 	})
 
@@ -266,7 +266,7 @@ func TestRenderColumnsFileKeepsImportsUsedByTypeArguments(t *testing.T) {
 
 	rendered, err := renderColumnsFile("tmpapp", "sample", "model/sample/record.go", models)
 	require.NoError(t, err)
-	require.Contains(t, rendered, `types.NewNumericColumn[time.Duration]("elapsed")`)
+	require.Contains(t, rendered, `types.NewNumericColumn[*Record, time.Duration]("elapsed")`)
 	require.Contains(t, rendered, `time "time"`)
 }
 

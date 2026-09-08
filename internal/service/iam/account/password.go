@@ -21,10 +21,10 @@ const minAccountPasswordLength = 6
 // sources carry no generated Cols vars, so the references are declared once
 // here and shared by the password flows.
 var (
-	colUserID             = types.NewColumn[string]("user_id")
-	colPasswordHash       = types.NewColumn[string]("password_hash")
-	colMustChangePassword = types.NewColumn[bool]("must_change_password")
-	colPasswordChangedAt  = types.NewColumn[*time.Time]("password_changed_at")
+	colUserID             = types.NewColumn[*modeliamaccount.PasswordCredential, string]("user_id")
+	colPasswordHash       = types.NewColumn[*modeliamaccount.PasswordCredential, string]("password_hash")
+	colMustChangePassword = types.NewColumn[*modeliamaccount.PasswordCredential, bool]("must_change_password")
+	colPasswordChangedAt  = types.NewColumn[*modeliamaccount.PasswordCredential, *time.Time]("password_changed_at")
 )
 
 func validateChangePasswordInput(req *modeliamaccount.ChangePasswordReq) error {

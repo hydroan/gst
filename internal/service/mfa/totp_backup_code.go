@@ -33,8 +33,8 @@ const (
 // stale in-memory device snapshot can never write back a recovery-code hash
 // that a concurrently committed consumption already removed.
 var (
-	colTOTPDeviceBackupCodeHashes = types.NewColumn[datatypes.JSONSlice[string]]("backup_code_hashes")
-	colTOTPDeviceLastUsedAt       = types.NewTimeColumn("last_used_at")
+	colTOTPDeviceBackupCodeHashes = types.NewColumn[*modelmfa.TOTPDevice, datatypes.JSONSlice[string]]("backup_code_hashes")
+	colTOTPDeviceLastUsedAt       = types.NewTimeColumn[*modelmfa.TOTPDevice]("last_used_at")
 )
 
 var errTOTPBackupCodeInvalid = errors.New("invalid backup code")

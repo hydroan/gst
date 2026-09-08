@@ -471,7 +471,7 @@ func renderColumnsFile(module string, pkgName string, source string, models []mo
 		}
 		buf.WriteString("}{\n")
 		for _, col := range m.Columns {
-			fmt.Fprintf(&buf, "\t%s: %s,\n", col.GoName, columnRefLiteral(col))
+			fmt.Fprintf(&buf, "\t%s: %s,\n", col.GoName, columnRefLiteral(m.Name, col))
 		}
 		buf.WriteString("}\n")
 	}
@@ -509,16 +509,19 @@ func columnRefType(col columnInfo) string {
 
 // columnRefLiteral returns the constructor call initializing one generated
 // column reference. Construction goes through the NewXxx constructors rather
-// than composite literals because the column name field is unexported: a
-// generated reference cannot be repointed at another column at run time.
-func columnRefLiteral(col columnInfo) string {
+// than composite literals because the fields are unexported: a generated
+// reference cannot be repointed at another column at run time. The model is
+// the first type argument: the constructor reads TableName from a fresh value
+// of it at package initialization, so the table name is never restated as a
+// literal that could drift from the model.
+func columnRefLiteral(model string, col columnInfo) string {
 	switch {
 	case col.Time && col.TypeExpr != "":
-		return fmt.Sprintf("types.NewTimeColumn(%q)", col.DBName)
+		return fmt.Sprintf("types.NewTimeColumn[*%s](%q)", model, col.DBName)
 	case col.Numeric && col.TypeExpr != "":
-		return fmt.Sprintf("types.NewNumericColumn[%s](%q)", col.TypeExpr, col.DBName)
+		return fmt.Sprintf("types.NewNumericColumn[*%s, %s](%q)", model, col.TypeExpr, col.DBName)
 	default:
-		return fmt.Sprintf("types.NewColumn[%s](%q)", columnTypeParam(col), col.DBName)
+		return fmt.Sprintf("types.NewColumn[*%s, %s](%q)", model, columnTypeParam(col), col.DBName)
 	}
 }
 

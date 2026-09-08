@@ -18,14 +18,15 @@ import (
 // module sources carry no generated Cols vars, so the references are declared
 // here.
 var (
-	colUserID             = types.NewColumn[string]("user_id")
-	colPasswordHash       = types.NewColumn[string]("password_hash")
-	colMustChangePassword = types.NewColumn[bool]("must_change_password")
-	colPasswordChangedAt  = types.NewColumn[*time.Time]("password_changed_at")
-	colEmail              = types.NewColumn[string]("email")
-	colNormalizedEmail    = types.NewColumn[string]("normalized_email")
-	colVerifiedAt         = types.NewColumn[*time.Time]("verified_at")
-	colLastChangedAt      = types.NewColumn[*time.Time]("last_changed_at")
+	colCredentialUserID   = types.NewColumn[*modeliamaccount.PasswordCredential, string]("user_id")
+	colPasswordHash       = types.NewColumn[*modeliamaccount.PasswordCredential, string]("password_hash")
+	colMustChangePassword = types.NewColumn[*modeliamaccount.PasswordCredential, bool]("must_change_password")
+	colPasswordChangedAt  = types.NewColumn[*modeliamaccount.PasswordCredential, *time.Time]("password_changed_at")
+	colIdentityUserID     = types.NewColumn[*modeliamaccount.EmailIdentity, string]("user_id")
+	colEmail              = types.NewColumn[*modeliamaccount.EmailIdentity, string]("email")
+	colNormalizedEmail    = types.NewColumn[*modeliamaccount.EmailIdentity, string]("normalized_email")
+	colVerifiedAt         = types.NewColumn[*modeliamaccount.EmailIdentity, *time.Time]("verified_at")
+	colLastChangedAt      = types.NewColumn[*modeliamaccount.EmailIdentity, *time.Time]("last_changed_at")
 )
 
 // iamAccountGateway adapts the framework IAM user model for the built-in email
@@ -97,7 +98,7 @@ func (iamAccountGateway) UpdatePassword(ctx *types.ServiceContext, userID, newPa
 	}
 	return database.Database[*modeliamaccount.PasswordCredential](ctx).
 		WithoutHook().
-		WithSelect(colUserID, colPasswordHash, colMustChangePassword, colPasswordChangedAt).
+		WithSelect(colCredentialUserID, colPasswordHash, colMustChangePassword, colPasswordChangedAt).
 		Update(credential)
 }
 
@@ -111,7 +112,7 @@ func (iamAccountGateway) MarkEmailVerified(ctx *types.ServiceContext, userID str
 	}
 	return database.Database[*modeliamaccount.EmailIdentity](ctx).
 		WithoutHook().
-		WithSelect(colUserID, colVerifiedAt).
+		WithSelect(colIdentityUserID, colVerifiedAt).
 		Update(identity)
 }
 
@@ -131,7 +132,7 @@ func (iamAccountGateway) ApplyEmailChange(ctx *types.ServiceContext, userID, new
 	}
 	return database.Database[*modeliamaccount.EmailIdentity](ctx).
 		WithoutHook().
-		WithSelect(colUserID, colEmail, colNormalizedEmail, colVerifiedAt, colLastChangedAt).
+		WithSelect(colIdentityUserID, colEmail, colNormalizedEmail, colVerifiedAt, colLastChangedAt).
 		Update(identity)
 }
 

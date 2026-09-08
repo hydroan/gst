@@ -74,6 +74,10 @@ func (b TimeBucket) Valid() bool {
 type Term struct {
 	// Fn is the aggregate function, or FnNone for a group key.
 	Fn TermFn
+	// Table is the table the column belongs to, carried over from a generated
+	// column reference. It is empty on the string-name constructors, whose
+	// column is read against the queried model without a check.
+	Table string
 	// Column is the snake case column name. It is empty only for COUNT(*).
 	Column string
 	// Bucket truncates a time group key. It is only meaningful when Fn is

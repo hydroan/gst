@@ -20,13 +20,13 @@ var RecordCols = struct {
 	UpdatedBy types.Column[string]
 	UserID    types.Column[string]
 }{
-	CreatedAt: types.NewTimeColumn("created_at"),
-	CreatedBy: types.NewColumn[string]("created_by"),
-	DeletedAt: types.NewColumn[gorm.DeletedAt]("deleted_at"),
-	ID:        types.NewColumn[string]("id"),
-	Title:     types.NewColumn[string]("title"),
-	Type:      types.NewColumn[RecordType]("type"),
-	UpdatedAt: types.NewTimeColumn("updated_at"),
-	UpdatedBy: types.NewColumn[string]("updated_by"),
-	UserID:    types.NewColumn[string]("user_id"),
+	CreatedAt: types.NewTimeColumn[*Record]("created_at"),
+	CreatedBy: types.NewColumn[*Record, string]("created_by"),
+	DeletedAt: types.NewColumn[*Record, gorm.DeletedAt]("deleted_at"),
+	ID:        types.NewColumn[*Record, string]("id"),
+	Title:     types.NewColumn[*Record, string]("title"),
+	Type:      types.NewColumn[*Record, RecordType]("type"),
+	UpdatedAt: types.NewTimeColumn[*Record]("updated_at"),
+	UpdatedBy: types.NewColumn[*Record, string]("updated_by"),
+	UserID:    types.NewColumn[*Record, string]("user_id"),
 }

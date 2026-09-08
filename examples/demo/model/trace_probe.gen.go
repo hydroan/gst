@@ -20,13 +20,13 @@ var TraceProbeCols = struct {
 	UpdatedAt types.TimeColumn
 	UpdatedBy types.Column[string]
 }{
-	CreatedAt: types.NewTimeColumn("created_at"),
-	CreatedBy: types.NewColumn[string]("created_by"),
-	DeletedAt: types.NewColumn[gorm.DeletedAt]("deleted_at"),
-	Hook:      types.NewColumn[string]("hook"),
-	ID:        types.NewColumn[string]("id"),
-	Name:      types.NewColumn[string]("name"),
-	Note:      types.NewColumn[string]("note"),
-	UpdatedAt: types.NewTimeColumn("updated_at"),
-	UpdatedBy: types.NewColumn[string]("updated_by"),
+	CreatedAt: types.NewTimeColumn[*TraceProbe]("created_at"),
+	CreatedBy: types.NewColumn[*TraceProbe, string]("created_by"),
+	DeletedAt: types.NewColumn[*TraceProbe, gorm.DeletedAt]("deleted_at"),
+	Hook:      types.NewColumn[*TraceProbe, string]("hook"),
+	ID:        types.NewColumn[*TraceProbe, string]("id"),
+	Name:      types.NewColumn[*TraceProbe, string]("name"),
+	Note:      types.NewColumn[*TraceProbe, string]("note"),
+	UpdatedAt: types.NewTimeColumn[*TraceProbe]("updated_at"),
+	UpdatedBy: types.NewColumn[*TraceProbe, string]("updated_by"),
 }

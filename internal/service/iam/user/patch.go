@@ -18,8 +18,8 @@ import (
 // Column references for the narrow writes below; module sources carry no
 // generated Cols vars, so the references are declared here.
 var (
-	colUsername   = types.NewColumn[string]("username")
-	colUserStatus = types.NewColumn[modeliamuser.UserStatus]("status")
+	colUsername   = types.NewColumn[*modeliamuser.User, string]("username")
+	colUserStatus = types.NewColumn[*modeliamuser.User, modeliamuser.UserStatus]("status")
 )
 
 // AdminUserPatchService handles PATCH /iam/admin/users/:id for privileged

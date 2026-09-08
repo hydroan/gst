@@ -67,7 +67,7 @@ func TestSelectOn(t *testing.T) {
 	type row struct {
 		Total int64 `json:"total"`
 	}
-	age := types.NewNumericColumn[int64]("age")
+	age := types.NewNumericColumn[*TestUser, int64]("age")
 	var out row
 	require.NoError(t, database.SelectOn[*TestUser, row](context.Background(), ins, age.Sum().As("total")).
 		ScanOne(&out))

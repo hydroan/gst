@@ -32,8 +32,8 @@ import (
 // Column references for the credential fixture writes in the account tests;
 // module test code carries no generated Cols vars.
 var (
-	colCredentialUserID   = types.NewColumn[string]("user_id")
-	colMustChangePassword = types.NewColumn[bool]("must_change_password")
+	colCredentialUserID   = types.NewColumn[*modeliamaccount.PasswordCredential, string]("user_id")
+	colMustChangePassword = types.NewColumn[*modeliamaccount.PasswordCredential, bool]("must_change_password")
 )
 
 func TestAccountSignup(t *testing.T) {

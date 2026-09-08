@@ -563,7 +563,7 @@ func TestDatabaseUpsert(t *testing.T) {
 		// keep the update set to the named columns, so the unique code the
 		// caller left different survives untouched.
 		update := &TestUniqueItem{UniqueCode: "ignored-code", Name: "after", ID: first.ID}
-		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).WithSelect(colName).Upsert(update))
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).WithSelect(colUniqueItemName).Upsert(update))
 
 		got := new(TestUniqueItem)
 		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Get(got, first.ID))
