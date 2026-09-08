@@ -476,8 +476,9 @@ rank := types.Rank().Over(types.OrderBy(total.Desc()))
   `SUM(SUM(amount)) OVER (...)`，`Avg`、`Lag`、`Lead` 在分组投影上直接拒绝。
 - **`Qualify`** 按窗口列筛行，条件只能引用已投影的窗口项；`Where`、`Having` 留在
   内层，排序、分页和 `Count` 作用在筛完之后的行集。
-- **`ScanOne`** 只读纯度量投影；行级投影用 `Scan`。既无聚合也无窗口的投影仍然拒绝，
-  那是 `List` 的活。
+- **`ScanOne`** 只读纯度量投影；行级投影用 `Scan`。既无聚合也无窗口的独立投影仍然拒绝，
+  那是 `List` 的活；作为联合分支或带连接时放行。行级投影里裸列直接传入即可，写成
+  `.Group()` 会把查询变成分组投影。
 
 #### 联合查询
 
@@ -509,8 +510,9 @@ err := feed.Scan(&rows)  // 这一页
 err = feed.Count(&total) // 总数
 ```
 
-排序项按结果列名对齐：写某个分支投影过的项（值相等即可，共享变量最稳），或分支模型的列引用，
-也可以直接按结果列名写 `types.Desc("at")`。
+排序项按结果列名对齐：写某个分支投影过的项（值相等即可，共享变量最稳），或列名恰好等于结果
+列名的列引用（`As` 改过名的列要用共享的那个项），也可以直接按结果列名写 `types.Desc("at")`。
+联合只认结果列名，列引用所属的表在这里不参与判定。
 
 规则：
 
@@ -556,7 +558,9 @@ err := database.Select[*appmodel.Payment, paymentWithAccount](ctx,
   `Indexes()` 唯一索引，框架在构建期证明，证明不了报错。一对多从「多」的一侧出发写，或者
   只问有没有就用 `FilterExists`；join 到一对多子表会让 `SUM` 静默翻倍，这条路写不出来。
 - **`Join` 丢掉对不上的行，`LeftJoin` 保留它们**并把被连列置 NULL；左连接来的字段必须是指针
-  或 sql.Null 类型，否则构建期报错。
+  或 sql.Null 类型，否则构建期报错。被连表的条件写在 `Where` 里会把 `LeftJoin` 没对上的行一起
+  过滤掉（那些行的被连列是 NULL），要保留它们就把条件写进 ON；ON 里不带表的裸列名指的是
+  被连模型的列。
 - **被连模型的软删条件和租户条件由框架写进 ON**，`List` 在它上面看不到的行连接也看不到；
   ON 里可以再加条件，例如 `AccountCols.Tier.Eq("gold")`；`EqCol` 两边先写谁都行，框架按表名分辨。
 - **分组投影里被连侧只能做分组键或 `Min`、`Max`、`CountDistinct`**：组内每一行都对着同一
@@ -596,6 +600,8 @@ err := database.Select[*appmodel.Record, recordWithTags](ctx, RecordCols.ID, tag
 
 - 子投影必须是分组投影，ON 里的 `EqCol` 和常量等值要覆盖它的全部分组键，键通过子投影模型
   的列引用来写；子投影自己不能带 `OrderBy`、`Limit`、`Offset`。
+- 子投影的分组键必须全是它自己模型的列，每列一次：它自己再连进来的表的列当不了键，主查询
+  没法用引用指到它；它从自己连的子投影里读来的项是临时表的列，不算键。
 - 主查询只能读子投影投影出来的项，传同一个项即可；子投影模型的其他列不是临时表的列。
   要按子投影的度量筛行，条件写进子投影的 `Having`。
 - 主查询本身分组时，子投影的项会成为主查询的分组键，这只在主查询按连接列分组时才成立，
@@ -608,6 +614,18 @@ err := database.Select[*appmodel.Record, recordWithTags](ctx, RecordCols.ID, tag
 - 派生表连接在 ClickHouse 上可用；那里的 LEFT JOIN 对不上的行也返回 NULL，框架连
   ClickHouse 时开着 `join_use_nulls`。这是连接级的服务端设置，同一实例上业务自己写的
   LEFT JOIN 对不上的行也会因此返回 NULL，而不是列的默认值。
+
+派生表连接构建期报错时的改法：
+
+| 报错 | 改法 |
+|---|---|
+| `ErrJoinSelectNotGrouped` | 子投影加分组键，`Cols.X.Group()` |
+| `ErrJoinSelectKey` | 子投影只按自己模型的列分组，每列一次 |
+| `ErrJoinSelectBucketKey` | 不按时间桶分组后再连，同粒度的汇总改用窗口 |
+| `ErrJoinNotUnique` | ON 用 `EqCol`、常量等值钉住子投影的全部分组键 |
+| `ErrJoinSelectColumn` | 主查询只能读子投影投影出来的项，把同一个项（共享变量）再传一遍 |
+| `ErrJoinSelectNotKeyed` | 主查询分组时按连接列分组 |
+| `ErrJoinDuplicateTable` | 一张表只能作为一个来源，同组合计用窗口 |
 
 框架**不做**递归 CTE，聚合能力也不向 URL 暴露：
 报表口径属于服务端契约，让客户端自选分组键等于开放一个无界扫描入口。
