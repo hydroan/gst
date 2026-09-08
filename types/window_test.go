@@ -23,6 +23,13 @@ func TestPartitionBy(t *testing.T) {
 	t.Run("WithoutKeysIsOnePartition", func(t *testing.T) {
 		require.Empty(t, types.PartitionBy().Partition)
 	})
+
+	t.Run("WithoutKeysIsTheOrderedWindow", func(t *testing.T) {
+		// The two spellings build one value, so a term declared through one
+		// is found by a condition or an ordering written through the other.
+		total := types.NewNumericColumn[sampleTable, int64]("amount").Sum()
+		require.Equal(t, types.OrderBy(total.Desc()), types.PartitionBy().OrderBy(total.Desc()))
+	})
 }
 
 func TestWindowOrderBy(t *testing.T) {
@@ -32,6 +39,15 @@ func TestWindowOrderBy(t *testing.T) {
 	t.Run("OpensAnUnpartitionedWindow", func(t *testing.T) {
 		window := types.OrderBy(total.Desc())
 		require.Empty(t, window.Partition)
+		require.Equal(t, []types.Ordering{total.Desc()}, window.Orders)
+	})
+
+	t.Run("CopiesTheOrders", func(t *testing.T) {
+		// The window keeps its own copy: a caller rewriting the slice it
+		// passed does not rewrite the window.
+		orders := []types.Ordering{total.Desc()}
+		window := types.OrderBy(orders...)
+		orders[0] = total.Asc()
 		require.Equal(t, []types.Ordering{total.Desc()}, window.Orders)
 	})
 

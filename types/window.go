@@ -30,8 +30,13 @@ type Window struct {
 }
 
 // PartitionBy opens a window partitioned by keys. Without keys the whole
-// result is one partition, which is what a ranking over every row wants.
+// result is one partition, which is what a ranking over every row wants, and
+// the window is the one OrderBy opens: the two spellings build the same
+// value, so a term declared with one is found by the other.
 func PartitionBy(keys ...Expr) Window {
+	if len(keys) == 0 {
+		return Window{}
+	}
 	terms := make([]Term, 0, len(keys))
 	for _, key := range keys {
 		terms = append(terms, key.exprTerm())
@@ -41,10 +46,11 @@ func PartitionBy(keys ...Expr) Window {
 
 // OrderBy opens a window over the whole result ordered by orders, the window
 // a ranking across every row reads. It is the short spelling of
-// PartitionBy().OrderBy(orders...), the two rendering the same OVER clause;
-// a window with keys starts from PartitionBy.
+// PartitionBy().OrderBy(orders...), the two building the same window; a
+// window with keys starts from PartitionBy. It orders the window, not the
+// result: the result is ordered by the Selector's OrderBy.
 func OrderBy(orders ...Ordering) Window {
-	return Window{Orders: orders}
+	return Window{}.OrderBy(orders...)
 }
 
 // OrderBy orders each partition of the window.
