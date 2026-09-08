@@ -380,10 +380,11 @@ database.Database[*appmodel.Record](ctx)
 `WithLimit` 等选项。一次查询或写入使用一个新的 `database.Database[T](...)`
 链式调用，不要在无关操作之间复用同一个 database 句柄。
 
-### 聚合查询
+### 分析查询（Select）
 
 看板和报表用 `database.Select[M, R](ctx, 投影项...)`，不要把整表 `List` 进内存再用
-Go 循环累加。`M` 决定表、软删除范围和方言，`R` 是自己声明的结果行结构体：
+Go 循环累加：分组聚合、窗口函数、联合、连接都从它出发。`M` 决定表、软删除范围和方言，
+`R` 是自己声明的结果行结构体：
 
 ```go
 type categoryTotal struct {
@@ -450,6 +451,10 @@ running := RecordCols.Amount.Sum().
     Over(types.PartitionBy(RecordCols.TenantID).OrderBy(RecordCols.CreatedAt.Asc())).
     As("running")
 
+// 同组合计：每一行旁边带上本租户的总额，窗口不带 OrderBy 就不累计，整组一个数
+// COALESCE(SUM(amount) OVER (PARTITION BY tenant_id), 0)
+tenantTotal := RecordCols.Amount.Sum().Over(types.PartitionBy(RecordCols.TenantID)).As("tenant_total")
+
 // 排行：分组投影上开窗，窗口按度量排序，RANK() OVER (ORDER BY COALESCE(SUM(amount), 0) DESC)
 total := RecordCols.Amount.Sum().As("total")
 rank := types.Rank().Over(types.OrderBy(total.Desc()))
@@ -489,19 +494,23 @@ type flow struct {
     At     time.Time // 付款的 paid_at、退款的 settled_at，两边都用 As 对齐到 at
 }
 
+paidAt := PaymentCols.PaidAt.As("at") // 排序还要用它，提成变量共享
 payments := database.Select[*appmodel.Payment, flow](ctx,
-    types.Literal("payment").As("kind"), PaymentCols.ID, PaymentCols.Amount, PaymentCols.PaidAt.As("at")).
+    types.Literal("payment").As("kind"), PaymentCols.ID, PaymentCols.Amount, paidAt).
     Where(PaymentCols.TenantID.Eq(tenantID))
 refunds := database.Select[*appmodel.Refund, flow](ctx,
     types.Literal("refund").As("kind"), RefundCols.ID, RefundCols.Amount, RefundCols.SettledAt.As("at")).
     Where(RefundCols.TenantID.Eq(tenantID))
 
 feed := database.UnionAll[flow](ctx, payments, refunds).
-    OrderBy(PaymentCols.PaidAt.As("at").Desc(), PaymentCols.ID.Desc()). // 按结果列 at、id 排
+    OrderBy(paidAt.Desc(), PaymentCols.ID.Desc()). // 按结果列 at、id 排
     Limit(20).Offset(40)
 err := feed.Scan(&rows)  // 这一页
 err = feed.Count(&total) // 总数
 ```
+
+排序项按结果列名对齐：写某个分支投影过的项（值相等即可，共享变量最稳），或分支模型的列引用，
+也可以直接按结果列名写 `types.Desc("at")`。
 
 规则：
 
@@ -511,8 +520,7 @@ err = feed.Count(&total) // 总数
   分支上不能写 `OrderBy`、`Limit`、`Offset`，它们属于联合，写了构建期报错。
   联合结果没有 `Where`，条件写进分支，每个分支用自己的索引。
 - **排序分页下推**：带 `Limit` 时框架把同样的排序和 `offset + limit` 下推到每个分支，
-  各分支按索引只读前几十行，外层最多排 N 倍这个行数。排序项按结果列名对齐，用任一
-  分支模型的列引用或已投影的项来写。
+  各分支按索引只读前几十行，外层最多排 N 倍这个行数。
 - **`Count` 是各分支计数相加**，不物化任何一行，同样忽略排序分页。
 - **`Literal` 的值只能是标识符**（字母、数字、下划线，不以数字开头），内联为 `'x'`
   而不是绑定参数，且必须 `As` 起别名。
