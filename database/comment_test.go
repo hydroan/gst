@@ -199,6 +199,23 @@ func TestSQLCommentAnnotatesSelects(t *testing.T) {
 	require.Contains(t, sql, "/* trace_id='trace-agg' */")
 	require.Less(t, strings.Index(sql, "trace_id="), strings.Index(sql, " FROM ("),
 		"the outer count must carry the comment itself, before the derived table")
+
+	// A union builds its statement on a chain minted for it and stacks
+	// members rendered without a comment: the comment must reach the union's
+	// own statement, once, for the scan and for the count alike.
+	done := database.SelectOn[*TestAggregateRecord, groupRow](ctx, session, TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum().As("total")).
+		Where(TestAggregateRecordCols.Status.Eq("done"))
+	failed := database.SelectOn[*TestAggregateRecord, groupRow](ctx, session, TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum().As("total")).
+		Where(TestAggregateRecordCols.Status.Eq("failed"))
+	stacked := make([]groupRow, 0)
+	require.NoError(t, database.UnionAllOn[groupRow](ctx, session, done, failed).Scan(&stacked))
+	sql = capture.last()
+	require.Contains(t, sql, "/* trace_id='trace-agg' */")
+	require.Equal(t, 1, strings.Count(sql, "trace_id="), "the members carry no comment of their own")
+	require.NoError(t, database.UnionAllOn[groupRow](ctx, session, done, failed).Count(&groups))
+	sql = capture.last()
+	require.Contains(t, sql, "/* trace_id='trace-agg' */")
+	require.Equal(t, 1, strings.Count(sql, "trace_id="))
 }
 
 // afterVerbExpr stands in for an expression another party registered after

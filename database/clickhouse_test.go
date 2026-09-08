@@ -319,4 +319,44 @@ func TestClickhouse(t *testing.T) {
 			TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID),
 		)))
 	})
+
+	t.Run("UnionAllStacksRecordsAndTags", func(t *testing.T) {
+		// The tag table and its one row come from the EXISTS subtest above.
+		// The union renders the same statement as on the other dialects: a
+		// derived table per member and one around the stack, which is what
+		// keeps the trailing ORDER BY on the stack rather than on the last
+		// member, where ClickHouse would otherwise put it.
+		type feed struct {
+			Kind     string
+			ID       string
+			Category string
+		}
+		records := database.SelectOn[*TestAggregateRecord, feed](ctx, ins,
+			types.Literal("record").As("kind"), TestAggregateRecordCols.ID, TestAggregateRecordCols.Category)
+		tags := database.SelectOn[*TestRecordTag, feed](ctx, ins,
+			types.Literal("tag").As("kind"), TestRecordTagCols.ID, TestRecordTagCols.Category)
+
+		rows := make([]feed, 0)
+		require.NoError(t, database.UnionAllOn[feed](ctx, ins, records, tags).
+			OrderBy(TestAggregateRecordCols.ID.Desc()).
+			Limit(3).Offset(4).
+			Scan(&rows))
+		require.Equal(t, []feed{
+			{Kind: "record", ID: "a3", Category: "alpha"},
+			{Kind: "record", ID: "a2", Category: "alpha"},
+			{Kind: "record", ID: "a1", Category: "alpha"},
+		}, rows, "under id descending the stack reads t1 a6 a5 a4 a3 a2 a1; the page skips four")
+
+		total := 0
+		require.NoError(t, database.UnionAllOn[feed](ctx, ins, records, tags).Count(&total))
+		require.Equal(t, 7, total)
+
+		// A branch opened on another instance cannot be stacked: the union
+		// runs its statement on one connection, and every member must be
+		// rendered for it.
+		other := database.Select[*TestAggregateRecord, feed](ctx,
+			types.Literal("record").As("kind"), TestAggregateRecordCols.ID, TestAggregateRecordCols.Category)
+		require.ErrorIs(t, database.UnionAllOn[feed](ctx, ins, records, other).Scan(&rows), database.ErrUnionBranchInstance)
+		require.ErrorIs(t, database.UnionAll[feed](ctx, records).Scan(&rows), database.ErrUnionBranchInstance)
+	})
 }

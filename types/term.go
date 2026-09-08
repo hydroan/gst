@@ -27,6 +27,11 @@ const (
 	FnDenseRank TermFn = "DENSE_RANK"
 	FnLag       TermFn = "LAG"
 	FnLead      TermFn = "LEAD"
+
+	// FnLiteral marks a constant projected as a column, which Literal
+	// builds. Like FnNone it is a kind rather than a function: the term
+	// carries its value in Literal and names no column.
+	FnLiteral TermFn = "LITERAL"
 )
 
 // Valid reports whether the function is one this package defines. The renderer
@@ -36,7 +41,8 @@ func (f TermFn) Valid() bool {
 	switch f {
 	case FnNone, FnCount, FnCountDistinct,
 		FnSum, FnAvg, FnMin, FnMax,
-		FnRowNumber, FnRank, FnDenseRank, FnLag, FnLead:
+		FnRowNumber, FnRank, FnDenseRank, FnLag, FnLead,
+		FnLiteral:
 		return true
 	default:
 		return false
@@ -70,8 +76,8 @@ func (b TimeBucket) Valid() bool {
 }
 
 // Term is one term of a projection: a group key when Fn is FnNone, a plain
-// column when Plain is also set, a measure otherwise, and a window function
-// when Window is set.
+// column when Plain is also set, a constant when Fn is FnLiteral, a measure
+// otherwise, and a window function when Window is set.
 //
 // Terms are built through the column references: the generated Cols vars,
 // or references minted with NewColumn and its siblings by code that has no
@@ -84,8 +90,8 @@ func (b TimeBucket) Valid() bool {
 // A term never holds SQL. Column names are quoted by the database layer,
 // values bind as statement parameters, and Fn and Bucket come from closed sets.
 type Term struct {
-	// Fn is the aggregate or window function, or FnNone for a group key or
-	// a plain column.
+	// Fn is the aggregate or window function, FnLiteral for a constant, or
+	// FnNone for a group key or a plain column.
 	Fn TermFn
 	// Plain marks a column projected as it is stored, which is what a column
 	// reference selects as when it is passed to Select directly. It belongs
@@ -111,11 +117,17 @@ type Term struct {
 	// Alias names the term in the SELECT list and binds it to a field of the
 	// result row. An empty alias defaults to the column name.
 	Alias string
+	// Literal is the constant a FnLiteral term projects, a plain identifier
+	// rendered as a string literal; see Literal.
+	Literal string
 }
 
 // IsMeasure reports whether the term applies a function rather than naming a
-// column, a window function included.
-func (t Term) IsMeasure() bool { return t.Fn != FnNone }
+// column, a window function included; a constant is neither.
+func (t Term) IsMeasure() bool { return t.Fn != FnNone && t.Fn != FnLiteral }
+
+// IsLiteral reports whether the term projects a constant.
+func (t Term) IsLiteral() bool { return t.Fn == FnLiteral }
 
 // IsWindowed reports whether the term is evaluated over a window.
 func (t Term) IsWindowed() bool { return t.Window != nil }
@@ -210,6 +222,22 @@ func Rank() Term { return Term{Fn: FnRank, Alias: "rank"} }
 
 // DenseRank ranks like Rank without skipping: 1, 2, 2, 3.
 func DenseRank() Term { return Term{Fn: FnDenseRank, Alias: "dense_rank"} }
+
+// Literal projects a constant, which is how the branches of a union tell
+// their rows apart:
+//
+//	Literal("payment").As("kind")
+//	// 'payment' AS `kind`
+//
+// The value must be a plain identifier — letters, digits and underscores,
+// not starting with a digit — and the term needs an alias, which As gives
+// it; both are checked when the query is built. The constant is written into
+// the statement as a string literal rather than bound as a parameter, because
+// a UNION cannot infer the type of an untyped parameter on every dialect, and
+// the identifier rule is what keeps that inlining safe. A constant is neither
+// a group key nor a measure: it stays out of GROUP BY and never comes back
+// NULL.
+func Literal(value string) Term { return Term{Fn: FnLiteral, Literal: value} }
 
 // Expr is what a projection selects and a window partitions by: a column
 // reference, projected as it is stored, or a Term. The set is closed to this

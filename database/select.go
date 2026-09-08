@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -34,7 +35,7 @@ var (
 	ErrUnknownAggregateFn         = errors.New("aggregate function is not one the framework defines")
 	ErrUnknownTimeBucket          = errors.New("time bucket is not one the framework defines")
 	ErrUnknownCompareOp           = errors.New("having comparison is not one the framework defines")
-	ErrConditionOnGroupKey        = errors.New("a group key cannot carry conditions, they only restrict a measure")
+	ErrConditionOnGroupKey        = errors.New("a group key or literal cannot carry conditions, they only restrict a measure")
 	ErrBucketOnMeasure            = errors.New("a measure cannot carry a time bucket, it only truncates a group key")
 	ErrHavingTermNotSelected      = errors.New("having references a measure the projection does not declare")
 	ErrHavingWithoutGroups        = errors.New("having needs an aggregate to restrict, a row-level select has none")
@@ -47,12 +48,14 @@ var (
 	ErrUnknownOrderDirection      = errors.New("order direction is not one the framework defines")
 	ErrWindowFnWithoutWindow      = errors.New("window function needs a window, declare one with Over")
 	ErrWindowWithoutOrder         = errors.New("window function needs an ordered window, there is no first row without an order")
-	ErrWindowOnKey                = errors.New("a group key or time bucket cannot be windowed, only a function can")
+	ErrWindowOnKey                = errors.New("a group key, time bucket or literal cannot be windowed, only a function can")
 	ErrWindowCountDistinct        = errors.New("COUNT DISTINCT cannot be windowed on any supported dialect")
 	ErrWindowOverGroups           = errors.New("AVG, LAG and LEAD cannot be windowed over a grouped projection, only SUM, COUNT, MIN, MAX and the ranking functions can")
 	ErrWindowTermNotSelected      = errors.New("window references a key or term the projection does not declare")
 	ErrWindowNested               = errors.New("a window cannot be ordered by another window function")
 	ErrQualifyTermNotWindow       = errors.New("qualify references a term that is not a window function of the projection")
+	ErrInvalidLiteral             = errors.New("literal is not a plain identifier")
+	ErrLiteralWithoutAlias        = errors.New("a literal needs an alias, name it with As")
 )
 
 // aliasPattern is what an alias must look like. An alias reaches SQL as an
@@ -86,6 +89,13 @@ type selector[M types.Model, R any] struct {
 	limit     int
 	offset    int
 	hasLimit  bool
+
+	// The pushdown a union set on this member: the union's ordering by
+	// output alias and its offset plus limit, rendered inside the member so
+	// it reads only the rows the union can use. buildBranch sets them on a
+	// copy, never on the caller's selector.
+	branchOrders []aliasOrder
+	branchLimit  int
 }
 
 // Select creates an analytical read over the table of M that projects exprs
@@ -325,7 +335,20 @@ const (
 	// ordering or paging; Count wraps it in a derived table and counts its
 	// rows.
 	buildCountInner
+	// buildBranchRead renders the projection as a member of a union: the
+	// SELECT list in the result row's order, without a comment of its own,
+	// ordered and capped as the union pushed down.
+	buildBranchRead
+	// buildBranchCount is buildCountInner for a member of a union.
+	buildBranchCount
 )
+
+// branch reports whether the mode renders a member of a union.
+func (m buildMode) branch() bool { return m == buildBranchRead || m == buildBranchCount }
+
+// countsRows reports whether the mode renders only what decides the row
+// count.
+func (m buildMode) countsRows() bool { return m == buildCountInner || m == buildBranchCount }
 
 // projectionShape is what validate learned about the projection and what the
 // renderer needs to know about it: whether the read is grouped, which terms
@@ -337,12 +360,15 @@ type projectionShape struct {
 	grouped bool
 	keys    []types.Term
 	columns map[string]modelschema.Column
+	// resultOrder is the result row's fields in declaration order, the
+	// order a member of a union renders its SELECT list in.
+	resultOrder []string
 }
 
 // build validates the projection and assembles the query in the shape the
 // mode asks for.
 func (a *selector[M, R]) build(mode buildMode) (*gorm.DB, error) {
-	shape, err := a.validate()
+	shape, err := a.validate(mode)
 	if err != nil {
 		return nil, err
 	}
@@ -354,8 +380,13 @@ func (a *selector[M, R]) build(mode buildMode) (*gorm.DB, error) {
 	// query's WHERE, GROUP BY and LIMIT and quietly answer a different
 	// question. That shape is the one the paginated-report idiom produces:
 	// Scan for the page, then Count for the total. The fresh statement
-	// also lacks the operation's comment, so it is attached again here.
-	a.db.ins = a.db.annotate(a.session())
+	// also lacks the operation's comment, so it is attached again here; a
+	// member of a union carries none of its own, the union's statement does.
+	if mode.branch() {
+		a.db.ins = a.session()
+	} else {
+		a.db.ins = a.db.annotate(a.session())
+	}
 	a.db.dryRun = a.dryRun
 	a.db.sqlStatements = a.statements
 
@@ -370,9 +401,14 @@ func (a *selector[M, R]) build(mode buildMode) (*gorm.DB, error) {
 	tx := a.db.ins.Model(a.db.m)
 
 	terms := a.terms
-	if mode == buildCountInner && len(a.qualifies) == 0 {
+	switch {
+	case mode.countsRows() && len(a.qualifies) == 0:
 		// Without a Qualify nothing outside the keys decides the count.
 		terms = shape.keys
+	case mode == buildBranchRead:
+		// The members of a union line up by position, so every one of them
+		// spells its SELECT list in the result row's order.
+		terms = a.termsInResultOrder(shape)
 	}
 	selects := make([]string, 0, len(terms))
 	vars := make([]any, 0)
@@ -468,7 +504,8 @@ func (a *selector[M, R]) build(mode buildMode) (*gorm.DB, error) {
 		tx = outer
 	}
 
-	if mode == buildRead {
+	switch mode {
+	case buildRead:
 		// ORDER BY may use the output alias: every supported dialect accepts
 		// one there, and the alias is also what the wrapped rows are named by.
 		for _, o := range a.orders {
@@ -484,8 +521,65 @@ func (a *selector[M, R]) build(mode buildMode) (*gorm.DB, error) {
 		if a.offset > 0 {
 			tx = tx.Offset(a.offset)
 		}
+	case buildBranchRead:
+		// The union's ordering by output alias and its offset plus limit,
+		// so the member reads only the rows the union can use: the first
+		// rows of every member under the union's order are all the union
+		// needs to sort its page from.
+		for _, o := range a.branchOrders {
+			tx = tx.Order(a.db.quoteIdent(o.alias) + " " + string(o.direction))
+		}
+		if a.branchLimit > 0 {
+			tx = tx.Limit(a.branchLimit)
+		}
 	}
 	return tx, nil
+}
+
+// termsInResultOrder returns the projection's terms in the order of the
+// result row's fields. validate has matched the aliases against the fields
+// in both directions, so every field has exactly one term here.
+func (a *selector[M, R]) termsInResultOrder(shape projectionShape) []types.Term {
+	byAlias := make(map[string]types.Term, len(a.terms))
+	for _, t := range a.terms {
+		byAlias[a.alias(t)] = t
+	}
+	ordered := make([]types.Term, 0, len(shape.resultOrder))
+	for _, alias := range shape.resultOrder {
+		ordered = append(ordered, byAlias[alias])
+	}
+	return ordered
+}
+
+// The methods below are the side of a selector a union reads; see
+// unionBranch. They exist on every instantiation, which is what lets a union
+// take branches over different models.
+
+func (a *selector[M, R]) attachError() error { return a.err }
+
+func (a *selector[M, R]) baseHandle() *gorm.DB { return a.db.base }
+
+func (a *selector[M, R]) chainFor(ctx context.Context, base *gorm.DB) operationChain {
+	chain, ok := databaseFor[M](ctx, base).(*database[M])
+	if !ok {
+		return nil
+	}
+	return chain
+}
+
+func (a *selector[M, R]) selects(t types.Term) bool { return a.isSelected(t) }
+
+// buildBranch renders the selector as a member of a union, ordered and
+// capped as the union pushed down. The chain is prepared here because no
+// terminal of the selector runs: the union's terminal does. The pushdown is
+// set on a copy so the caller's selector stays the specification it wrote.
+func (a *selector[M, R]) buildBranch(mode buildMode, orders []aliasOrder, limit int) (*gorm.DB, error) {
+	if err := a.db.prepare(); err != nil {
+		return nil, err
+	}
+	member := *a
+	member.branchOrders, member.branchLimit = orders, limit
+	return member.build(mode)
 }
 
 // orderedTerm resolves one ordering of the select to the projected term it
@@ -536,7 +630,11 @@ func compareOperator(op types.CompareOp) string {
 }
 
 // alias returns the name a term is projected under, defaulting to its column.
-func (a *selector[M, R]) alias(t types.Term) string {
+func (a *selector[M, R]) alias(t types.Term) string { return termAlias(t) }
+
+// termAlias is the name a term is projected under: its alias, or its column
+// when it has none.
+func termAlias(t types.Term) string {
 	if len(t.Alias) > 0 {
 		return t.Alias
 	}
@@ -548,6 +646,9 @@ func (a *selector[M, R]) alias(t types.Term) string {
 // expression, so the filter renderer stays the only place predicates are
 // built; a windowed term carries its window after the function.
 func (a *selector[M, R]) termExpr(t types.Term, shape projectionShape) (string, []any, error) {
+	if t.IsLiteral() {
+		return literalExpr(t.Literal), nil, nil
+	}
 	if !t.IsMeasure() {
 		return a.keyExpr(t), nil, nil
 	}
@@ -581,6 +682,11 @@ func (a *selector[M, R]) termExpr(t types.Term, shape projectionShape) (string, 
 	}
 	return sql, args, nil
 }
+
+// literalExpr renders a constant as a string literal. validate has held the
+// value to a plain identifier, so the quotes cannot be closed from inside and
+// the spelling is the same on every dialect.
+func literalExpr(value string) string { return "'" + value + "'" }
 
 // keyExpr renders a group key or plain column: the column itself, or its time
 // bucket.
@@ -646,11 +752,16 @@ func (a *selector[M, R]) functionExpr(t types.Term) (sql string, args []any, coa
 
 // validate checks the projection against the model schema and the result row
 // before any SQL is built, and returns what the renderer needs to know about
-// the projection's shape.
-func (a *selector[M, R]) validate() (projectionShape, error) {
+// the projection's shape. The mode says whether the projection is read on its
+// own or as a member of a union, which changes two rules: a member may be a
+// plain projection of columns, and it carries no ordering or paging.
+func (a *selector[M, R]) validate(mode buildMode) (projectionShape, error) {
 	shape := projectionShape{}
 	if len(a.terms) == 0 {
 		return shape, ErrEmptyProjection
+	}
+	if mode.branch() && (len(a.orders) > 0 || a.hasLimit || a.offset > 0) {
+		return shape, ErrUnionBranchOrdered
 	}
 	columns, err := modelschema.Columns(a.db.typ)
 	if err != nil {
@@ -688,8 +799,9 @@ func (a *selector[M, R]) validate() (projectionShape, error) {
 	}
 	// A projection of plain columns or keys alone is a plain read wearing a
 	// select's clothes, and List already does that better. Rejecting it keeps
-	// one official path for reading rows.
-	if measures == 0 && windowed == 0 {
+	// one official path for reading rows. Stacked into a union it is a
+	// report again, so a member is allowed to be one.
+	if measures == 0 && windowed == 0 && !mode.branch() {
 		return shape, ErrPlainSelect
 	}
 	for _, t := range a.terms {
@@ -744,7 +856,7 @@ func (a *selector[M, R]) validate() (projectionShape, error) {
 			return shape, err
 		}
 	}
-	if err = a.validateResultRow(aliases, shape); err != nil {
+	if shape.resultOrder, err = a.validateResultRow(aliases, shape); err != nil {
 		return shape, err
 	}
 	return shape, nil
@@ -844,6 +956,17 @@ func (a *selector[M, R]) validateTerm(t types.Term, shape projectionShape) error
 	if err := a.validateWindow(t, shape); err != nil {
 		return err
 	}
+	if t.IsLiteral() {
+		// A constant names no column and reads no schema: its value must be
+		// safe to inline, and it needs a name to project under.
+		if !aliasPattern.MatchString(t.Literal) {
+			return errors.Wrapf(ErrInvalidLiteral, "%q", t.Literal)
+		}
+		if len(t.Alias) == 0 {
+			return errors.Wrapf(ErrLiteralWithoutAlias, "%q", t.Literal)
+		}
+		return nil
+	}
 	// A column reference carries the table it was built for. A term naming
 	// a column of another model may well name a column the queried model also
 	// has, which is valid SQL over the wrong table, so the table is checked
@@ -884,28 +1007,24 @@ func (a *selector[M, R]) validateTerm(t types.Term, shape projectionShape) error
 }
 
 // validateResultRow matches the projection aliases against the fields of R in
-// both directions. gorm leaves an unmatched field at its zero value and drops
-// an unmatched column, so without this check a renamed alias shows up as a
-// column of zeros on a report rather than as an error.
-func (a *selector[M, R]) validateResultRow(aliases map[string]struct{}, shape projectionShape) error {
-	typ := reflect.TypeFor[R]()
-	for typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
-	}
-	if typ.Kind() != reflect.Struct {
-		return errors.Newf("aggregate result row %s is not a struct", typ)
-	}
-	fields, err := modelschema.Columns(typ)
+// both directions, and returns the fields in declaration order. gorm leaves an
+// unmatched field at its zero value and drops an unmatched column, so without
+// this check a renamed alias shows up as a column of zeros on a report rather
+// than as an error.
+func (a *selector[M, R]) validateResultRow(aliases map[string]struct{}, shape projectionShape) ([]string, error) {
+	typ, fields, err := resultRowFields[R]()
 	if err != nil {
-		return errors.Wrapf(err, "resolve fields of result row %s", typ)
+		return nil, err
 	}
+	order := make([]string, 0, len(fields))
 	byName := make(map[string]struct{}, len(fields))
 	for _, f := range fields {
+		order = append(order, f.DBName)
 		byName[f.DBName] = struct{}{}
 	}
 	for alias := range aliases {
 		if _, ok := byName[alias]; !ok {
-			return errors.Wrapf(ErrResultFieldMissing, "%s has no field for %q", typ, alias)
+			return nil, errors.Wrapf(ErrResultFieldMissing, "%s has no field for %q", typ, alias)
 		}
 	}
 	// gorm leaves a non-pointer field at its zero value when it scans NULL,
@@ -917,15 +1036,38 @@ func (a *selector[M, R]) validateResultRow(aliases map[string]struct{}, shape pr
 	nullable := a.nullableAliases(shape)
 	for _, f := range fields {
 		if _, ok := aliases[f.DBName]; !ok {
-			return errors.Wrapf(ErrAliasMissing, "%s.%s has no matching alias", typ, f.GoName)
+			return nil, errors.Wrapf(ErrAliasMissing, "%s.%s has no matching alias", typ, f.GoName)
 		}
 		if why, isNullable := nullable[f.DBName]; isNullable && !holdsNull(f.Type) {
-			return errors.Wrapf(ErrNullableResultField,
+			return nil, errors.Wrapf(ErrNullableResultField,
 				"%s.%s holds %s; declare it as *%s or a sql.Null type",
 				typ, f.GoName, why, f.Type)
 		}
 	}
-	return nil
+	return order, nil
+}
+
+// resultRowFields resolves the result row type R to its struct type and its
+// fields in declaration order, the order a union member's SELECT list
+// follows. A pointer row type is read through.
+func resultRowFields[R any]() (reflect.Type, []modelschema.Column, error) {
+	typ := reflect.TypeFor[R]()
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	if typ.Kind() != reflect.Struct {
+		return typ, nil, errors.Newf("result row %s is not a struct", typ)
+	}
+	columns, err := modelschema.Columns(typ)
+	if err != nil {
+		return typ, nil, errors.Wrapf(err, "resolve fields of result row %s", typ)
+	}
+	// Columns answers in column-name order from a shared cache; the union
+	// wants the row as it was declared, so a copy is put back into field
+	// order, embedded structs included, by the index path.
+	fields := slices.Clone(columns)
+	slices.SortFunc(fields, func(a, b modelschema.Column) int { return slices.Compare(a.Index, b.Index) })
+	return typ, fields, nil
 }
 
 // isSelected reports whether the projection declares this exact term. Equality

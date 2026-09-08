@@ -225,6 +225,21 @@ func (c Column[T]) exprTerm() Term {
 	return term
 }
 
+// As projects the column as it is stored under alias, the way a column
+// reference passed to Select directly projects under its own name. It aligns
+// a column with a differently named field of the result row, which a union
+// branch needs when the models it stacks spell a column differently:
+//
+//	RefundCols.SettledAt.As("created_at")
+//	// `settled_at` AS `created_at`
+//
+// A group key is renamed on the term instead: Cols.X.Group().As("y").
+func (c Column[T]) As(alias string) Term {
+	term := c.exprTerm()
+	term.Alias = alias
+	return term
+}
+
 // Count counts the rows whose value of this column is not NULL. Use the
 // package-level Count for COUNT(*), which counts every row.
 func (c Column[T]) Count() Term { return c.term(FnCount) }

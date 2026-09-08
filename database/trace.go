@@ -23,18 +23,20 @@ import (
 // phase field stays uniform across every log source; span names derive their
 // UpperCamelCase form via Phase.MethodName.
 const (
-	phaseUpsert      consts.Phase = "upsert"
-	phaseCount       consts.Phase = "count"
-	phaseFirst       consts.Phase = "first"
-	phaseLast        consts.Phase = "last"
-	phaseTake        consts.Phase = "take"
-	phaseUpdateByID  consts.Phase = "update_by_id"
-	phaseSelect      consts.Phase = "aggregate"
-	phaseSelectOne   consts.Phase = "aggregate_one"
-	phaseSelectCount consts.Phase = "aggregate_count_groups"
-	phaseCleanup     consts.Phase = "cleanup"
-	phaseHealth      consts.Phase = "health"
-	phaseWithQuery   consts.Phase = "with_query"
+	phaseUpsert        consts.Phase = "upsert"
+	phaseCount         consts.Phase = "count"
+	phaseFirst         consts.Phase = "first"
+	phaseLast          consts.Phase = "last"
+	phaseTake          consts.Phase = "take"
+	phaseUpdateByID    consts.Phase = "update_by_id"
+	phaseSelect        consts.Phase = "aggregate"
+	phaseSelectOne     consts.Phase = "aggregate_one"
+	phaseSelectCount   consts.Phase = "aggregate_count_groups"
+	phaseUnionAll      consts.Phase = "union_all"
+	phaseUnionAllCount consts.Phase = "union_all_count"
+	phaseCleanup       consts.Phase = "cleanup"
+	phaseHealth        consts.Phase = "health"
+	phaseWithQuery     consts.Phase = "with_query"
 )
 
 // trace returns a timing function for database operations that provides comprehensive
@@ -85,8 +87,15 @@ const (
 // Note: Must be called after `defer db.reset()` to ensure proper cleanup order.
 // Jaeger tracing is automatically enabled when gstotel.IsEnabled() returns true.
 func (db *database[M]) trace(phase consts.Phase, batch ...int) (func(error), trace.Span) {
+	return db.traceAs(reflect.TypeOf(*new(M)).Elem().Name(), phase, batch...)
+}
+
+// traceAs is trace with the operation's subject named by the caller: the
+// model for an operation on one model, which trace passes, or the result row
+// for a union, which reads several models through a chain borrowed from one
+// of them. The subject is what the span and the log call the model.
+func (db *database[M]) traceAs(modelName string, phase consts.Phase, batch ...int) (func(error), trace.Span) {
 	begin := time.Now()
-	modelName := reflect.TypeOf(*new(M)).Elem().Name()
 	var _batch int
 	if len(batch) > 0 {
 		_batch = batch[0]

@@ -34,6 +34,11 @@ package types
 // value per row. A projection with neither an aggregate nor a window
 // function is a plain read and belongs to List.
 //
+// A Selector is also a SelectBranch: UnionAll stacks several of them, over
+// different models, into one result. In that role a plain projection of
+// columns is allowed, and OrderBy, Limit and Offset belong to the union; see
+// Union.
+//
 // A builder is a specification, not a live statement: it can be read more than
 // once, and each terminal renders the spec afresh, taking only the parts that
 // are meaningful to it — Scan and ScanOne render everything, Count

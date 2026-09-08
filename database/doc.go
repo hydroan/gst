@@ -58,7 +58,7 @@
 //     filter operators, ordering, paging, and cursor pagination;
 //   - the whole select path: grouping, measures, conditional measures,
 //     time buckets, HAVING, window functions, Qualify, ordering, paging,
-//     and Count;
+//     and Count, and UnionAll over selects of the instance;
 //   - a write path with a deliberately weaker contract — no model hooks, no
 //     transaction boundary: Create is plain batch INSERTs (no
 //     ErrDuplicatedKey; ClickHouse has no unique constraints), Delete is a
