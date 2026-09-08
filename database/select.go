@@ -359,9 +359,9 @@ func (a *selector[M, R]) build(mode buildMode) (*gorm.DB, error) {
 	}
 
 	// Group keys and HAVING render the full expression rather than the output
-	// alias. An alias is legal in GROUP BY and HAVING on MySQL, SQLite and
-	// ClickHouse but not on PostgreSQL or SQL Server, and re-rendering costs
-	// nothing, so one portable spelling replaces a per-dialect branch.
+	// alias. An output alias is accepted in GROUP BY and HAVING by MySQL, SQLite
+	// and ClickHouse but rejected in HAVING by PostgreSQL, and re-rendering
+	// costs nothing, so one portable spelling replaces a per-dialect branch.
 	//
 	// Both go through gorm's own clause building so their values bind as
 	// statement parameters. Rendering them with Dialector.Explain would be
