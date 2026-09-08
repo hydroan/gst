@@ -30,24 +30,24 @@ import (
 // declares its own in select_group.go, the window side in select_window.go
 // and the constants in select_literal.go.
 var (
-	ErrEmptyProjection       = errors.New("aggregate projection is empty")
+	ErrEmptyProjection       = errors.New("projection is empty")
 	ErrPlainSelect           = errors.New("projection declares neither an aggregate nor a window function, use List for a plain read")
-	ErrInvalidAlias          = errors.New("aggregate alias is not a valid identifier")
-	ErrDuplicateAlias        = errors.New("aggregate alias is declared twice")
-	ErrResultFieldMissing    = errors.New("result row has no field for aggregate alias")
-	ErrAliasMissing          = errors.New("aggregate projection has no alias for result row field")
-	ErrNullableResultField   = errors.New("result row field must be a pointer for an aggregate that yields NULL")
+	ErrInvalidAlias          = errors.New("alias is not a valid identifier")
+	ErrDuplicateAlias        = errors.New("alias is declared twice")
+	ErrResultFieldMissing    = errors.New("result row has no field for alias")
+	ErrAliasMissing          = errors.New("projection has no alias for result row field")
+	ErrNullableResultField   = errors.New("result row field must be a pointer for a term that yields NULL")
 	ErrGroupedScanOne        = errors.New("ScanOne cannot run a grouped aggregation, use Scan")
 	ErrScanOneRowLevel       = errors.New("ScanOne cannot run a row-level select, use Scan")
 	ErrScanOnePaged          = errors.New("ScanOne cannot use Having, Limit or Offset, it always reads one row")
-	ErrUnknownAggregateFn    = errors.New("aggregate function is not one the framework defines")
+	ErrUnknownTermFn         = errors.New("term function is not one the framework defines")
 	ErrUnknownTimeBucket     = errors.New("time bucket is not one the framework defines")
 	ErrUnknownCompareOp      = errors.New("having comparison is not one the framework defines")
 	ErrUnknownOrderDirection = errors.New("order direction is not one the framework defines")
 	ErrHavingValue           = errors.New("having compares against a value SQL cannot order")
 	ErrOrderTermNotSelected  = errors.New("order by references a term the projection does not declare")
 	ErrOffsetWithoutLimit    = errors.New("Offset needs a Limit")
-	ErrSelectorUnusable      = errors.New("aggregate could not attach to the database chain")
+	ErrSelectorUnusable      = errors.New("select could not attach to the database chain")
 )
 
 // aliasPattern is what an alias must look like. An alias reaches SQL as an
@@ -737,7 +737,7 @@ func (a *selector[M, R]) validateTerm(t types.Term, shape projectionShape) error
 	// The renderer composes SQL from these constants, so a value from outside
 	// the closed set would reach the statement as text.
 	if !t.Fn.Valid() {
-		return errors.Wrapf(ErrUnknownAggregateFn, "%q", t.Fn)
+		return errors.Wrapf(ErrUnknownTermFn, "%q", t.Fn)
 	}
 	if !t.Bucket.Valid() {
 		return errors.Wrapf(ErrUnknownTimeBucket, "%q", t.Bucket)

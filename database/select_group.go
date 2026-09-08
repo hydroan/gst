@@ -128,7 +128,7 @@ func (a *selector[M, R]) functionExpr(t types.Term) (sql string, args []any, coa
 		// renderer runs, so reaching this arm means the two drifted apart.
 		// Composing SQL from the value would put caller text into the
 		// statement, so it errors instead.
-		return "", nil, false, errors.Wrapf(ErrUnknownAggregateFn, "%q", t.Fn)
+		return "", nil, false, errors.Wrapf(ErrUnknownTermFn, "%q", t.Fn)
 	}
 }
 

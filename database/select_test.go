@@ -244,7 +244,7 @@ func TestSelectBuildErrors(t *testing.T) {
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), types.Term{
 			Fn: "TOTALLY_NOT_SQL", Column: "amount", Alias: "total",
 		}).
-			Scan(&rows), database.ErrUnknownAggregateFn)
+			Scan(&rows), database.ErrUnknownTermFn)
 	})
 
 	t.Run("UnknownTimeBucket", func(t *testing.T) {
