@@ -16,7 +16,7 @@ import (
 // Errors reported while a grouped projection is built; see the select
 // errors for why they fail fast.
 var (
-	ErrPlainColumnInGroupedSelect = errors.New("a column next to an aggregate must be a group key or be aggregated")
+	ErrPlainColumnInGroupedSelect = errors.New("a column next to an aggregate must be a group key, Cols.X.Group(), or be aggregated")
 	ErrAggregateType              = errors.New("aggregate function does not accept this column type")
 	ErrConditionOnGroupKey        = errors.New("a group key or literal cannot carry conditions, they only restrict a measure")
 	ErrBucketOnMeasure            = errors.New("a measure cannot carry a time bucket, it only truncates a group key")

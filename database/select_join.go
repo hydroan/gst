@@ -123,7 +123,7 @@ func (a *selector[M, R]) resolveJoins(shape *projectionShape) error {
 			return errors.Wrapf(ErrJoinNoCorrelation, "%q", jt.table)
 		}
 		if !coversKey(pinned, keys) {
-			return errors.Wrapf(ErrJoinNotUnique, "%q is pinned on (%s)", jt.table, strings.Join(sortedColumns(pinned), ", "))
+			return errors.Wrapf(ErrJoinNotUnique, "%q is pinned on (%s), its keys are %s", jt.table, strings.Join(sortedColumns(pinned), ", "), describeKeys(keys))
 		}
 		shape.joins = append(shape.joins, jt)
 		shape.joined[jt.table] = jt
@@ -317,6 +317,16 @@ func coversKey(pinned map[string]struct{}, keys [][]string) bool {
 		}
 	}
 	return false
+}
+
+// describeKeys spells the keys a join may be proved on, for an error message:
+// (id), (code, kind).
+func describeKeys(keys [][]string) string {
+	spelled := make([]string, 0, len(keys))
+	for _, key := range keys {
+		spelled = append(spelled, "("+strings.Join(key, ", ")+")")
+	}
+	return strings.Join(spelled, ", ")
 }
 
 // sortedColumns lists a column set in a stable order, for an error message.
@@ -603,7 +613,7 @@ func (a *selector[M, R]) columnOf(table, column string, shape projectionShape) (
 			return modelschema.Column{}, errors.Wrapf(ErrColumnTable, "%q belongs to table %q, the select reads %q", column, table, shape.main)
 		}
 		if jt.sub != nil {
-			return modelschema.Column{}, errors.Wrapf(ErrJoinSelectColumn, "%q of %q", column, table)
+			return modelschema.Column{}, errors.Wrapf(ErrJoinSelectColumn, "%q of %q; the select projects %s, pass its own term to read one", column, table, strings.Join(sortedColumns(jt.derived.aliases), ", "))
 		}
 		columns = jt.columns
 	}

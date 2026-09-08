@@ -31,7 +31,7 @@ import (
 // and the constants in select_literal.go.
 var (
 	ErrEmptyProjection       = errors.New("projection is empty")
-	ErrPlainSelect           = errors.New("projection declares neither an aggregate nor a window function, use List for a plain read")
+	ErrPlainSelect           = errors.New("projection declares neither an aggregate nor a window function: read rows with List, read distinct keys by adding a measure such as Count; a union member and a joining select may stay plain")
 	ErrInvalidAlias          = errors.New("alias is not a valid identifier")
 	ErrDuplicateAlias        = errors.New("alias is declared twice")
 	ErrResultFieldMissing    = errors.New("result row has no field for alias")
@@ -836,7 +836,7 @@ func (a *selector[M, R]) validateOrdering(o types.Ordering, shape projectionShap
 			return errors.Wrapf(ErrUnknownOrderDirection, "%q", o.Direction)
 		}
 		if _, ok := a.selectedColumn(o.Table, o.Column, shape.main); !ok {
-			return errors.Wrapf(ErrOrderTermNotSelected, "column %q", o.Column)
+			return errors.Wrapf(ErrOrderTermNotSelected, "column %q, which a plain name matches by column name rather than by alias; order by the term itself to sort by its alias", o.Column)
 		}
 	default:
 		return errors.Wrapf(ErrUnknownOrderDirection, "%T", o)
