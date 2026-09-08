@@ -58,6 +58,27 @@ func feedMember(kind, table string) string {
 		" FROM " + quoteIdent(table) + " WHERE " + quoteIdent(table) + "." + quoteIdent("deleted_at") + " IS NULL"
 }
 
+func TestUnionAllDryRunAppliesToTheNextTerminalOnly(t *testing.T) {
+	defer cleanupUnionData()
+	setupUnionData(t)
+	ctx := context.Background()
+
+	feed := database.UnionAll[feedRow](ctx, recordsBranch(ctx), tagsBranch(ctx))
+	statements := make([]types.SQLStatement, 0)
+	rows := make([]feedRow, 0)
+	require.NoError(t, feed.WithDryRun(&statements).Scan(&rows))
+	require.Len(t, statements, 1)
+	require.Empty(t, rows)
+
+	// The union read again runs for real: a page and its total from one
+	// builder, the dry run consumed by the terminal it was set for.
+	require.NoError(t, feed.Scan(&rows))
+	require.Len(t, rows, 9)
+	total := 0
+	require.NoError(t, feed.Count(&total))
+	require.Equal(t, 9, total)
+}
+
 func TestUnionAllStacksBranches(t *testing.T) {
 	defer cleanupUnionData()
 	setupUnionData(t)

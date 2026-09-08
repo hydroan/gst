@@ -199,6 +199,13 @@ func (u *union[R]) WithDryRun(collector ...*[]types.SQLStatement) types.Union[R]
 	return u
 }
 
+// consumeDryRun clears the dry-run option once a terminal has read it; see
+// selector.consumeDryRun.
+func (u *union[R]) consumeDryRun() {
+	u.dryRun = false
+	u.statements = nil
+}
+
 // Scan runs the union and replaces the contents of dest with the stacked
 // rows.
 func (u *union[R]) Scan(dest *[]R) (err error) {
@@ -206,6 +213,7 @@ func (u *union[R]) Scan(dest *[]R) (err error) {
 		return u.err
 	}
 	defer u.chain.reset()
+	defer u.consumeDryRun()
 	if dest == nil {
 		return ErrNilDest
 	}
@@ -240,6 +248,7 @@ func (u *union[R]) Count(count *int) (err error) {
 		return u.err
 	}
 	defer u.chain.reset()
+	defer u.consumeDryRun()
 	if count == nil {
 		return ErrNilCount
 	}
@@ -486,10 +495,21 @@ func (a *selector[M, R]) describe() (derivedInfo, error) {
 	if err != nil {
 		return derivedInfo{}, err
 	}
+	// The keys a query ties the select on are the select's own: a term it
+	// reads from a select it joins itself is a column of that derived table,
+	// constant within the groups its own keys define, and no column of the
+	// query equals it.
+	keys := make([]types.Term, 0, len(shape.keys))
+	for _, key := range shape.keys {
+		if _, derived := a.derivedOf(key, shape); derived {
+			continue
+		}
+		keys = append(keys, key)
+	}
 	info := derivedInfo{
 		table:    shape.main,
 		grouped:  shape.grouped,
-		keys:     shape.keys,
+		keys:     keys,
 		columns:  shape.columns,
 		aliases:  make(map[string]struct{}, len(a.terms)),
 		nullable: a.nullableAliases(shape),

@@ -293,8 +293,25 @@ func TestDatabaseWithCursor(t *testing.T) {
 	})
 }
 
+// virtualUser stands in for a virtual model, one without a table: its
+// column references carry no table and read as plain names.
+type virtualUser struct {
+	Name string `json:"name"`
+	model.Empty
+}
+
 func TestDatabaseWithSelect(t *testing.T) {
 	defer cleanupTestData()
+
+	t.Run("column without a table names this model", func(t *testing.T) {
+		defer cleanupTestData()
+		setupTestData(t)
+		users := make([]*TestUser, 0)
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect(types.NewColumn[*virtualUser, string]("name")).List(&users))
+		require.NotEmpty(t, users)
+		require.NotEmpty(t, users[0].Name)
+		require.Empty(t, users[0].Email, "the select is narrowed to the named column")
+	})
 
 	t.Run("column of another table fails", func(t *testing.T) {
 		// The aggregate fixture has a status column too, so the name alone
@@ -1624,7 +1641,7 @@ func TestDatabaseWithDeleted(t *testing.T) {
 		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().Create(&TestSoftDeleteItem{Code: "with-deleted-refused"}), database.ErrWithDeletedOnWrite)
 		alive.Name = "renamed"
 		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().Update(alive), database.ErrWithDeletedOnWrite)
-		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().UpdateByID(alive.ID, colName.Set("renamed")), database.ErrWithDeletedOnWrite)
+		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().UpdateByID(alive.ID, types.NewColumn[*TestSoftDeleteItem, string]("name").Set("renamed")), database.ErrWithDeletedOnWrite)
 		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().Upsert(alive), database.ErrWithDeletedOnWrite)
 		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().Delete(alive), database.ErrWithDeletedOnWrite)
 

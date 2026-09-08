@@ -33,6 +33,7 @@ var (
 	ErrJoinSelectColumn     = errors.New("a joined select is read through its own terms, its model's columns are not columns of the derived table")
 	ErrJoinSelectNotKeyed   = errors.New("a grouped select projects a joined select's term only when it groups by the columns the select is joined on")
 	ErrJoinSelectBucketKey  = errors.New("a select grouped by a time bucket cannot be joined, the bucket is a label of the column and no column of the query equals it")
+	ErrJoinSelectKey        = errors.New("a joined select is tied by its own model's group keys, each column once: a key of a table it joins cannot be named from outside")
 )
 
 // joinedTable is one source joined to the select, resolved from its source
@@ -191,12 +192,24 @@ func (a *selector[M, R]) resolveSelectJoin(sj types.SelectJoin, alias string) (*
 	if !info.grouped || len(info.keys) == 0 {
 		return nil, nil, ErrJoinSelectNotGrouped
 	}
+	seen := make(map[string]struct{}, len(info.keys))
 	for _, key := range info.keys {
 		// A bucket key projects a label such as '2024-01-10', which no column
 		// of the query equals; an ON pinning it would silently match nothing.
 		if key.Bucket != types.TimeBucketNone {
 			return nil, nil, errors.Wrapf(ErrJoinSelectBucketKey, "%q", termAlias(key))
 		}
+		// The query names the select's keys through its model's column
+		// references, so a key of a table the select joins has no spelling
+		// from outside, and two keys on one column would be one reference
+		// naming both.
+		if len(key.Table) > 0 && key.Table != info.table {
+			return nil, nil, errors.Wrapf(ErrJoinSelectKey, "%q groups by %q of %q", termAlias(key), key.Column, key.Table)
+		}
+		if _, dup := seen[key.Column]; dup {
+			return nil, nil, errors.Wrapf(ErrJoinSelectKey, "%q groups by %q twice", termAlias(key), key.Column)
+		}
+		seen[key.Column] = struct{}{}
 	}
 	keyColumns := make([]string, 0, len(info.keys))
 	keyInfo := tableInfo{
@@ -488,19 +501,26 @@ func (a *selector[M, R]) joinScope(jt *joinedTable, before map[string]tableInfo)
 // projects: the query passes the select's own terms, so a match is the whole
 // term, the way isSelected matches. Each is a column of that select's
 // derived table.
-func (a *selector[M, R]) derivedTerms(shape projectionShape) map[string]*joinedTable {
+func (a *selector[M, R]) derivedTerms(shape projectionShape) (map[string]*joinedTable, error) {
 	derived := make(map[string]*joinedTable)
 	for _, jt := range shape.joins {
 		if jt.sub == nil {
 			continue
 		}
 		for _, t := range a.terms {
-			if jt.sub.selects(t) {
-				derived[a.alias(t)] = jt
+			if !jt.sub.selects(t) {
+				continue
 			}
+			// Two selects projecting the same term, a shared Count().As("n")
+			// say, would each answer for it; the query has to tell them apart
+			// by alias.
+			if other, taken := derived[a.alias(t)]; taken && other != jt {
+				return nil, errors.Wrapf(ErrDuplicateAlias, "%q is projected by two joined selects, alias one of them differently", a.alias(t))
+			}
+			derived[a.alias(t)] = jt
 		}
 	}
-	return derived
+	return derived, nil
 }
 
 // derivedOf reports the joined select a term is a column of. The alias
@@ -551,7 +571,7 @@ func (a *selector[M, R]) groupDerivedTerms(shape *projectionShape) error {
 		return nil
 	}
 	for _, t := range a.terms {
-		jt, derived := shape.derived[a.alias(t)]
+		jt, derived := a.derivedOf(t, *shape)
 		if !derived {
 			continue
 		}
@@ -573,6 +593,12 @@ func (a *selector[M, R]) groupDerivedTerms(shape *projectionShape) error {
 // matched with its table.
 func (a *selector[M, R]) groupsBy(table, column string, shape projectionShape) bool {
 	for _, key := range shape.keys {
+		// A joined select's measure is a group key under its alias, not under
+		// the column it measured; only the select's own key term names that
+		// column.
+		if _, derived := a.derivedOf(key, shape); derived && key.Fn != types.FnNone {
+			continue
+		}
 		if key.Column == column && key.Bucket == types.TimeBucketNone && shape.tableOf(key) == table {
 			return true
 		}

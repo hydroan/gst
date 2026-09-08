@@ -40,9 +40,11 @@ func (d OrderDirection) Flip() OrderDirection {
 // the producer (the List controller validates URL input; service code passing
 // orders directly carries the same responsibility). Table is the table the
 // column belongs to, filled in by a column reference and empty from the Asc
-// and Desc constructors; every read checks it: a select that joins tells two
-// tables' columns of one name apart by it, and a chain refuses an order of
-// another model. An Order with an empty column is skipped rather than
+// and Desc constructors. The chain's reads and a select check it: a select
+// that joins tells two tables' columns of one name apart by it, and a chain
+// refuses an order of another model. A union orders its result columns by
+// name and reads no table, and WithExpand orders the associated table, so
+// neither checks it. An Order with an empty column is skipped rather than
 // rendered.
 //
 // Service code should build orders through the generated column references

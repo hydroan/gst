@@ -1,6 +1,7 @@
 package database
 
 import (
+	"reflect"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -247,14 +248,25 @@ func (a *selector[M, R]) validateWindow(t types.Term, shape projectionShape) err
 		return errors.Wrapf(ErrWindowWithoutOrder, "%q", a.alias(t))
 	}
 	for _, key := range t.Window.Partition {
-		if key.IsMeasure() {
-			return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by a measure %q", a.alias(t), a.alias(key))
+		// A key carries no conditions and a measure no bucket, here as in
+		// the projection: a condition the renderer never reads would
+		// otherwise vanish without a word.
+		if err := a.validateGrouping(key); err != nil {
+			return errors.Wrapf(err, "%q partitions by", a.alias(t))
 		}
 		if shape.grouped {
-			if !a.isGroupKey(key, shape) {
-				return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by %q, which is not a group key", a.alias(t), a.alias(key))
+			// A group key of the projection, or a joined select's term the
+			// projection groups by, passed as it is; a measure is neither.
+			if _, ok := a.groupKey(key, shape); ok {
+				continue
 			}
-			continue
+			if key.IsMeasure() {
+				return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by a measure %q", a.alias(t), a.alias(key))
+			}
+			return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by %q, which is not a group key", a.alias(t), a.alias(key))
+		}
+		if key.IsMeasure() {
+			return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by a measure %q", a.alias(t), a.alias(key))
 		}
 		if err := a.validateRowLevelKey(key, shape); err != nil {
 			return errors.Wrapf(err, "%q partitions by", a.alias(t))
@@ -292,20 +304,21 @@ func (a *selector[M, R]) validateWindow(t types.Term, shape projectionShape) err
 	return nil
 }
 
-// isGroupKey reports whether a window key names one of the projection's
-// group keys.
-func (a *selector[M, R]) isGroupKey(key types.Term, shape projectionShape) bool {
-	_, ok := a.groupKey(key, shape)
-	return ok
-}
-
 // groupKey finds the projection's group key a window key names: the same
 // column, bucket and table, an empty table naming the queried model's. The
 // alias and the plain flag are the caller's spelling and do not decide. The
 // table does: two tables of the query may share a column name, and a key of
-// the wrong one would partition by a column the caller never named.
+// the wrong one would partition by a column the caller never named. A
+// joined select's term is a group key under its own alias, not under the
+// column its measure read, so only the term itself names it.
 func (a *selector[M, R]) groupKey(key types.Term, shape projectionShape) (types.Term, bool) {
 	for _, k := range shape.keys {
+		if _, derived := a.derivedOf(k, shape); derived {
+			if reflect.DeepEqual(k, key) {
+				return k, true
+			}
+			continue
+		}
 		if k.Column == key.Column && k.Bucket == key.Bucket && shape.tableOf(k) == shape.tableOf(key) {
 			return k, true
 		}

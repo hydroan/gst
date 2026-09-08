@@ -729,6 +729,15 @@ func TestFilterOfAnotherTableFailsTheChain(t *testing.T) {
 	require.ErrorIs(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{TestAggregateRecordCols.Category.Eq("alpha")}}).
 		Count(&count), database.ErrColumnTable)
+	// Inside a subquery a filter names the related model's table; a third
+	// table is as foreign there as at the top level, and only service code
+	// could have written it.
+	records := make([]*TestAggregateRecord, 0)
+	require.ErrorIs(t, database.Database[*TestAggregateRecord](context.Background()).
+		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{
+			types.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestPaymentCols.Account.Eq("acme")),
+		}}).
+		List(&records), database.ErrColumnTable)
 }
 
 // The semi-join tests below cover FilterExists and FilterNotExists over the
@@ -1043,13 +1052,18 @@ func TestFilterExistsValidatesInnerColumns(t *testing.T) {
 		TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestAggregateRecordCols.Status.Eq("done"),
 	)
 
+	// The reference carries the record table, which the subquery over the
+	// tags does not read: a wrong-model condition only service code could
+	// have written, so the chain fails rather than correlating outward or
+	// answering with an empty page.
 	records := make([]*TestAggregateRecord, 0)
-	require.NoError(t, database.Database[*TestAggregateRecord](ctx).
+	err := database.Database[*TestAggregateRecord](ctx).
 		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{outerOnly}}).
-		List(&records))
-	require.Empty(t, records, "an unknown inner column fails closed instead of correlating outward")
+		List(&records)
+	require.ErrorIs(t, err, database.ErrColumnTable)
+	require.ErrorContains(t, err, "the subquery over")
 
-	// The aggregate path reports the reason rather than answering with zero.
+	// The select path reports the reason rather than answering with zero.
 	got := struct{ Total int64 }{}
 	require.ErrorIs(t, database.Select[*TestAggregateRecord, struct{ Total int64 }](ctx, TestAggregateRecordCols.Amount.Sum().As("total")).
 		Where(outerOnly).
@@ -1208,6 +1222,25 @@ func TestFilterExistsMultipleCorrelations(t *testing.T) {
 			byRecord, types.NewColumn[*TestRecordTag, string]("missing").EqCol(TestAggregateRecordCols.Category), audit,
 		)
 		require.Empty(t, ids(unknown))
+	})
+
+	t.Run("ParentOfAnotherTableIsRefused", func(t *testing.T) {
+		// The users have an id too, so the name alone would tie the tags to
+		// the records as valid SQL; the table the reference carries refuses
+		// it, on the row path and on the select path alike.
+		userID := types.NewColumn[*TestUser, string]("id")
+		records := make([]*TestAggregateRecord, 0)
+		require.ErrorIs(t, database.Database[*TestAggregateRecord](ctx).
+			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{
+				types.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(userID), audit),
+			}}).
+			List(&records), database.ErrColumnTable)
+		type total struct{ Total int64 }
+		err := database.Select[*TestAggregateRecord, total](ctx, TestAggregateRecordCols.Amount.Sum().As("total")).
+			Where(types.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(userID), audit)).
+			ScanOne(&total{})
+		require.ErrorIs(t, err, database.ErrColumnTable)
+		require.ErrorIs(t, err, database.ErrUnusableFilter)
 	})
 
 	t.Run("FailsClosedOutsideSubquery", func(t *testing.T) {

@@ -373,6 +373,31 @@ func TestSelectWindowBuildErrors(t *testing.T) {
 			database.ErrQualifyTermNotWindow)
 	})
 
+	t.Run("PartitionKeyCannotCarryConditions", func(t *testing.T) {
+		// A key's conditions are never rendered, in a partition as in the
+		// projection, so they are refused rather than dropped.
+		require.ErrorIs(t, scan(database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID,
+			types.RowNumber().Over(types.PartitionBy(TestAggregateRecordCols.Category.Group().Where(TestAggregateRecordCols.Status.Eq("done"))).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn"))),
+			database.ErrConditionOnGroupKey)
+	})
+
+	t.Run("EitherWindowSpellingFindsTheTerm", func(t *testing.T) {
+		// OrderBy is the short spelling of PartitionBy().OrderBy: a term
+		// declared with one is the same term written with the other.
+		type ranked struct {
+			ID   string
+			Rank int64
+		}
+		short := types.Rank().Over(types.OrderBy(TestAggregateRecordCols.Amount.Desc())).As("rank")
+		long := types.Rank().Over(types.PartitionBy().OrderBy(TestAggregateRecordCols.Amount.Desc())).As("rank")
+		rows := make([]ranked, 0)
+		require.NoError(t, database.Select[*TestAggregateRecord, ranked](ctx, TestAggregateRecordCols.ID, short).
+			Qualify(long.Lte(2)).
+			OrderBy(long.Asc()).
+			Scan(&rows))
+		require.Equal(t, []ranked{{ID: "a6", Rank: 1}, {ID: "a5", Rank: 2}}, rows)
+	})
+
 	t.Run("HavingCannotReadAWindowTerm", func(t *testing.T) {
 		// A window is computed after HAVING; every dialect rejects the
 		// statement, so the builder refuses it and points at Qualify.

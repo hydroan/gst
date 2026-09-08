@@ -133,7 +133,7 @@ func (db *database[M]) WithSelect(columns ...types.AnyColumnRef) types.Database[
 		// The reference names the table it was generated for; a column of
 		// another model is refused even when this model has a column of the
 		// same name, because that is a wrong-model write, not a typo.
-		if table := columns[i].Table(); table != db.outerTableName() {
+		if table := columns[i].Table(); len(table) > 0 && table != db.outerTableName() {
 			db.err = errors.Wrapf(ErrColumnTable, "WithSelect column %q belongs to table %q, model %s reads %q", col, table, reflect.TypeOf(*new(M)).Elem().Name(), db.outerTableName())
 			return db
 		}

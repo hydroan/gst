@@ -31,11 +31,38 @@ func TestSelectWithDryRun(t *testing.T) {
 		Total    int64
 	}
 	rows := []row{{Category: "stale", Total: 1}}
-	require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(), TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum().As("total")).
-		WithDryRun().
-		Scan(&rows))
+	sel := database.Select[*TestAggregateRecord, row](context.Background(), TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum().As("total"))
+	require.NoError(t, sel.WithDryRun().Scan(&rows))
 	require.Equal(t, []row{{Category: "stale", Total: 1}}, rows,
 		"dry run loads no rows and leaves the destination unchanged")
+
+	// The option names the next terminal alone: the builder read again runs
+	// for real, the way a paginated report scans a page and counts the total.
+	require.NoError(t, sel.Scan(&rows))
+	require.Len(t, rows, 3)
+	groups := 0
+	require.NoError(t, sel.Count(&groups))
+	require.Equal(t, 3, groups)
+}
+
+func TestSelectScansPointerRows(t *testing.T) {
+	defer cleanupAggregateData()
+	setupAggregateData(t)
+
+	// A pointer row type is read through its struct on every dialect, the
+	// time columns included, which sqlite reads through a stand-in struct.
+	type latest struct {
+		Category string
+		Last     *time.Time
+	}
+	rows := make([]*latest, 0)
+	require.NoError(t, database.Select[*TestAggregateRecord, *latest](context.Background(), TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.OccurredAt.Max().As("last")).
+		OrderBy(TestAggregateRecordCols.Category.Group().Asc()).
+		Scan(&rows))
+	require.Len(t, rows, 3)
+	require.Equal(t, "alpha", rows[0].Category)
+	require.NotNil(t, rows[0].Last)
+	require.Equal(t, time.Date(2024, 1, 11, 8, 0, 0, 0, time.UTC), rows[0].Last.UTC())
 }
 
 func TestSelectWhereReusesFilters(t *testing.T) {
@@ -181,6 +208,29 @@ func TestSelectBuildErrors(t *testing.T) {
 		rows := make([]keyOnly, 0)
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, keyOnly](ctx, TestAggregateRecordCols.Category.Group()).
 			Scan(&rows), database.ErrPlainSelect)
+	})
+
+	t.Run("WhereOfAnotherTable", func(t *testing.T) {
+		// The same mistake List refuses with ErrColumnTable: the predicate
+		// fails closed for the renderer and is marked for the caller.
+		rows := make([]row, 0)
+		err := database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum().As("total")).
+			Where(TestRecordTagCols.Label.Eq("vip")).
+			Scan(&rows)
+		require.ErrorIs(t, err, database.ErrColumnTable)
+		require.ErrorIs(t, err, database.ErrUnusableFilter)
+		require.ErrorContains(t, err, "test_record_tags")
+	})
+
+	t.Run("ConditionalMeasureOfAnotherTable", func(t *testing.T) {
+		// Count leaves the measures out of its statement; the condition is
+		// checked when the query is validated, so it refuses what Scan does.
+		sel := database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(),
+			TestAggregateRecordCols.Amount.Sum().Where(TestRecordTagCols.Label.Eq("vip")).As("total"))
+		rows := make([]row, 0)
+		require.ErrorIs(t, sel.Scan(&rows), database.ErrColumnTable)
+		groups := 0
+		require.ErrorIs(t, sel.Count(&groups), database.ErrColumnTable)
 	})
 
 	t.Run("InvalidAlias", func(t *testing.T) {

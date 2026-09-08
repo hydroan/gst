@@ -45,7 +45,7 @@ var (
 	ErrUnknownCompareOp      = errors.New("having comparison is not one the framework defines")
 	ErrUnknownOrderDirection = errors.New("order direction is not one the framework defines")
 	ErrHavingValue           = errors.New("having compares against a value SQL cannot order")
-	ErrHavingValueType       = errors.New("having or qualify compares against a value of a kind the term cannot yield")
+	ErrHavingValueType       = errors.New("having or qualify compares against a value of a kind the term cannot yield; a time term takes a time.Time, which Filter.TimeValue reads from a URL filter's boundary")
 	ErrOrderTermNotSelected  = errors.New("order by references a term the projection does not declare")
 	ErrOffsetWithoutLimit    = errors.New("Offset needs a Limit")
 	ErrSelectorUnusable      = errors.New("select could not attach to the database chain")
@@ -65,8 +65,9 @@ type selector[M types.Model, R any] struct {
 	err error // set when the chain could not be attached; surfaced by the terminal
 
 	// The options live here rather than on the shared chain because reset()
-	// clears the chain's copies after every terminal, which would silently drop
-	// them from a second read off the same builder.
+	// clears the chain's copies before the terminal reads them. They hold for
+	// the next terminal alone, which consumeDryRun clears them after: a
+	// builder read again runs for real, as it promises.
 	dryRun     bool
 	statements *[]types.SQLStatement
 
@@ -198,6 +199,7 @@ func (a *selector[M, R]) Scan(dest *[]R) (err error) {
 		return a.err
 	}
 	defer a.db.reset()
+	defer a.consumeDryRun()
 	if dest == nil {
 		return ErrNilDest
 	}
@@ -231,6 +233,7 @@ func (a *selector[M, R]) ScanOne(dest *R) (err error) {
 		return a.err
 	}
 	defer a.db.reset()
+	defer a.consumeDryRun()
 	if dest == nil {
 		return ErrNilDest
 	}
@@ -282,6 +285,7 @@ func (a *selector[M, R]) Count(count *int) (err error) {
 		return a.err
 	}
 	defer a.db.reset()
+	defer a.consumeDryRun()
 	if count == nil {
 		return ErrNilCount
 	}
@@ -541,6 +545,14 @@ func compareOperator(op types.CompareOp) string {
 	}
 }
 
+// consumeDryRun clears the dry-run option once a terminal has read it: the
+// option names the next terminal operation alone, so a builder read again
+// after a dry run executes for real.
+func (a *selector[M, R]) consumeDryRun() {
+	a.dryRun = false
+	a.statements = nil
+}
+
 // alias returns the name a term is projected under, defaulting to its column.
 func (a *selector[M, R]) alias(t types.Term) string { return termAlias(t) }
 
@@ -615,7 +627,9 @@ func (a *selector[M, R]) validate(mode buildMode) (projectionShape, error) {
 	if err = a.resolveJoins(&shape); err != nil {
 		return shape, err
 	}
-	shape.derived = a.derivedTerms(shape)
+	if shape.derived, err = a.derivedTerms(shape); err != nil {
+		return shape, err
+	}
 
 	// The projection takes one of two shapes, and which one decides what the
 	// keys mean. An aggregate or an explicit group key makes it grouped: every
@@ -888,13 +902,21 @@ func (a *selector[M, R]) validateTerm(t types.Term, shape projectionShape) error
 	if !t.Bucket.Valid() {
 		return errors.Wrapf(ErrUnknownTimeBucket, "%q", t.Bucket)
 	}
-	if _, derived := shape.derived[a.alias(t)]; derived {
+	if _, derived := a.derivedOf(t, shape); derived {
 		// The joined select validated the term against its own model; here
 		// it is a column of the derived table, with nothing left to check.
 		return nil
 	}
 	if err := a.validateGrouping(t); err != nil {
 		return err
+	}
+	if len(t.Conditions) > 0 {
+		// A measure's conditions render inside its CASE, which Count leaves
+		// out of its statement; they are rendered here once so a predicate
+		// the renderer cannot place fails whichever terminal runs first.
+		if _, err := a.db.renderFilters(t.Conditions, false, a.whereScope(shape)); err != nil {
+			return errors.Wrapf(err, "%q", a.alias(t))
+		}
 	}
 	if err := a.validateWindow(t, shape); err != nil {
 		return err

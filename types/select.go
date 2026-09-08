@@ -108,6 +108,7 @@ type Selector[M Model, R any] interface {
 
 	// WithDryRun builds the SQL without database I/O. An optional collector
 	// receives the generated Query, Args, and RenderedSQL of the next
-	// terminal operation instead of executing it.
+	// terminal operation instead of executing it; that terminal consumes the
+	// option, so the builder read again executes.
 	WithDryRun(collector ...*[]SQLStatement) Selector[M, R]
 }

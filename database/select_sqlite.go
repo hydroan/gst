@@ -48,7 +48,7 @@ func scanRowsInto[R any](tx *gorm.DB, dest *[]R) error {
 	mirrored := rows.Elem()
 	for i := range mirrored.Len() {
 		var row R
-		copyMirrorRow(mirrored.Index(i), reflect.ValueOf(&row).Elem())
+		copyMirrorRow(mirrored.Index(i), rowStruct(reflect.ValueOf(&row).Elem()))
 		*dest = append(*dest, row)
 	}
 	return nil
@@ -65,18 +65,36 @@ func scanRowInto[R any](tx *gorm.DB, dest *R) error {
 	if err := tx.Scan(row.Interface()).Error; err != nil {
 		return errors.WithStack(err)
 	}
-	copyMirrorRow(row.Elem(), reflect.ValueOf(dest).Elem())
+	copyMirrorRow(row.Elem(), rowStruct(reflect.ValueOf(dest).Elem()))
 	return nil
 }
 
 // scanMirrorType returns the stand-in type for R when the scan needs one,
 // which is only the case on sqlite: every other dialect delivers time values
-// already parsed.
+// already parsed. A pointer row type is mirrored through its struct, the way
+// the result row is validated.
 func scanMirrorType[R any](tx *gorm.DB) (reflect.Type, bool) {
 	if tx.Dialector.Name() != sqliteDialectName {
 		return nil, false
 	}
-	return sqliteTimeMirrorType(reflect.TypeFor[R]())
+	typ := reflect.TypeFor[R]()
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	return sqliteTimeMirrorType(typ)
+}
+
+// rowStruct returns the struct a row value holds, allocating through a
+// pointer row type, so a mirror row copies into R whether R is the struct or
+// a pointer to it.
+func rowStruct(row reflect.Value) reflect.Value {
+	for row.Kind() == reflect.Pointer {
+		if row.IsNil() {
+			row.Set(reflect.New(row.Type().Elem()))
+		}
+		row = row.Elem()
+	}
+	return row
 }
 
 // sqliteTimeMirrorType returns the scan-side stand-in for a result type: the

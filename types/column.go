@@ -204,9 +204,9 @@ func (c Column[T]) filter(op FilterOp, value any) Filter {
 }
 
 // Asc orders by the column ascending. The order carries the table the
-// reference was built for, which every read checks: a select that joins
-// tells two tables' columns of one name apart by it, and a chain refuses an
-// order of another model.
+// reference was built for, which the chain's reads and a select check: a
+// select that joins tells two tables' columns of one name apart by it, and a
+// chain refuses an order of another model; see Order.
 func (c Column[T]) Asc() Order { return Order{Table: c.table, Column: c.name, Direction: OrderAsc} }
 
 // Desc orders by the column descending; see Asc.

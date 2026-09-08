@@ -37,9 +37,13 @@ type filterScope struct {
 	// parent is the table a correlated subquery joins back to.
 	parent string
 	// outer is the table the scope's own EqCol predicates equate against:
-	// the table of the query directly enclosing this subquery. It is empty at
-	// the top level, where an EqCol predicate has nothing to tie to and fails closed.
-	outer string
+	// the table of the query directly enclosing this subquery, under the name
+	// it is read by, which is an alias when the subquery reads the same
+	// table. It is empty at the top level, where an EqCol predicate has
+	// nothing to tie to and fails closed. outerTable is that table's own
+	// name, which the outer side of an EqCol must name when it carries one.
+	outer      string
+	outerTable string
 	// outerColumns names the columns of the enclosing model, keyed by database
 	// name, so the outer side of an EqCol predicate is checked the same way the inner
 	// side is instead of reaching the database as an unknown column. It is nil
@@ -155,8 +159,12 @@ func (db *database[M]) applyFilters(filters []types.Filter) {
 	// client filter that cannot be applied narrows the query instead of
 	// failing the request. Server-built callers such as the select builder
 	// read the reason and fail fast instead.
-	if f, foreign := db.foreignTableFilter(filters); foreign {
-		db.err = errors.Wrapf(ErrColumnTable, "filter %q on column %q belongs to table %q, model %s reads %q", f.Op, f.Column, f.Table, reflect.TypeOf(*new(M)).Elem().Name(), db.outerTableName())
+	if f, table, own, foreign := db.foreignTableFilter(filters, db.outerTableName(), ""); foreign {
+		reader := fmt.Sprintf("model %s reading %q", reflect.TypeOf(*new(M)).Elem().Name(), db.outerTableName())
+		if own != db.outerTableName() {
+			reader = fmt.Sprintf("the subquery over %q", own)
+		}
+		db.err = errors.Wrapf(ErrColumnTable, "filter %q on column %q names table %q, which %s does not read", f.Op, f.Column, table, reader)
 		return
 	}
 	if expr, _ := db.renderFilters(filters, false, db.outerScope()); expr != nil {
@@ -164,26 +172,41 @@ func (db *database[M]) applyFilters(filters []types.Filter) {
 	}
 }
 
-// foreignTableFilter finds a filter that names a column of a table the chain
-// does not read, looking through the OR and AND groups; a subquery's filters
-// name the related model's table and are that subquery's to place.
-func (db *database[M]) foreignTableFilter(filters []types.Filter) (types.Filter, bool) {
+// foreignTableFilter finds a filter that names a column of a table its scope
+// does not read, with the table it names and the table its scope reads:
+// looking through the OR and AND groups and into the subqueries, where a
+// filter names the related model's table, own, and the outer side of an
+// EqCol the table enclosing the subquery. At the top level there is no
+// enclosing table, and an EqCol there is the renderer's to refuse.
+func (db *database[M]) foreignTableFilter(filters []types.Filter, own, enclosing string) (found types.Filter, table, scope string, foreign bool) {
 	for _, f := range filters {
 		switch f.Op {
 		case types.FilterOpOr, types.FilterOpAnd:
 			if children, ok := f.Value.([]types.Filter); ok {
-				if found, foreign := db.foreignTableFilter(children); foreign {
-					return found, true
+				if found, table, scope, foreign = db.foreignTableFilter(children, own, enclosing); foreign {
+					return found, table, scope, true
 				}
 			}
 		case types.FilterOpExists:
+			if sq, ok := f.Value.(types.Subquery); ok && sq.Model != nil {
+				if found, table, scope, foreign = db.foreignTableFilter(sq.Filters, sq.Model.TableName(), own); foreign {
+					return found, table, scope, true
+				}
+			}
+		case types.FilterOpEqCol:
+			if len(f.Table) > 0 && f.Table != own {
+				return f, f.Table, own, true
+			}
+			if _, parentTable, ok := eqColParent(f.Value); ok && len(enclosing) > 0 && len(parentTable) > 0 && parentTable != enclosing {
+				return f, parentTable, own, true
+			}
 		default:
-			if len(f.Table) > 0 && f.Table != db.outerTableName() {
-				return f, true
+			if len(f.Table) > 0 && f.Table != own {
+				return f, f.Table, own, true
 			}
 		}
 	}
-	return types.Filter{}, false
+	return types.Filter{}, "", "", false
 }
 
 // renderFilters turns a filter list into one composable predicate rather than
@@ -346,8 +369,10 @@ func (db *database[M]) placeFilter(f types.Filter, scope filterScope) (string, t
 	if len(f.Table) > 0 && len(scope.table) > 0 && f.Table != scope.table {
 		info, ok := scope.tables[f.Table]
 		if !ok {
-			_, err := db.failClosedFilter(f, "names a column of a table the query does not read")
-			return "", tableInfo{}, err
+			// Joined with the column-table sentinel as well, so a caller
+			// matching either sees the same mistake List reports.
+			_, err := db.failClosedFilter(f, fmt.Sprintf("names a column of table %q, which the query does not read", f.Table))
+			return "", tableInfo{}, errors.Join(err, ErrColumnTable)
 		}
 		if _, ok := info.columns[f.Column]; !ok {
 			_, err := db.failClosedFilter(f, "names a column its table does not have")
@@ -407,6 +432,13 @@ func (db *database[M]) eqColCondition(f types.Filter, column string, scope filte
 	}
 	if scope.outerColumns == nil {
 		return db.failClosedFilter(f, "cannot resolve the enclosing model's columns")
+	}
+	// A reference names its table; the enclosing model may well have a
+	// column of the same name, and the name alone would tie the subquery to
+	// it as valid SQL over the wrong rows.
+	if len(parentTable) > 0 && parentTable != scope.outerTable {
+		expr, err := db.failClosedFilter(f, fmt.Sprintf("ties to a column of %q, which is not the enclosing table %q", parentTable, scope.outerTable))
+		return expr, errors.Join(err, ErrColumnTable)
 	}
 	if _, ok := scope.outerColumns[parent]; !ok {
 		return db.failClosedFilter(f, "correlates on a column the enclosing model does not have")
@@ -681,6 +713,7 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 		qualify:      childRef,
 		parent:       childRef,
 		outer:        scope.parent,
+		outerTable:   scope.table,
 		outerColumns: outerColumns,
 		columns:      child.columns,
 		timeColumns:  child.timeColumns,

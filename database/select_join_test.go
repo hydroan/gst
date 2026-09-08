@@ -395,13 +395,15 @@ func TestSelectJoinRowLevelReads(t *testing.T) {
 			ID    string
 			Total int64
 		}
+		// t4 points at no record: its LEFT JOIN side is NULL and adds zero.
+		require.NoError(t, database.Database[*TestRecordTag](ctx).Create(&TestRecordTag{ID: "t4", RecordID: "zz", Label: "loose", Category: "none"}))
 		rows := make([]running, 0)
 		require.NoError(t, database.Select[*TestRecordTag, running](ctx, TestRecordTagCols.ID,
 			TestAggregateRecordCols.Amount.Sum().Over(types.OrderBy(TestRecordTagCols.ID.Asc())).As("total")).
 			Join(types.LeftJoin[*TestAggregateRecord](onRecord)).
 			OrderBy(TestRecordTagCols.ID.Asc()).
 			Scan(&rows))
-		require.Equal(t, []running{{ID: "t1", Total: 100}, {ID: "t2", Total: 400}, {ID: "t3", Total: 800}}, rows)
+		require.Equal(t, []running{{ID: "t1", Total: 100}, {ID: "t2", Total: 400}, {ID: "t3", Total: 800}, {ID: "t4", Total: 800}}, rows)
 	})
 
 	t.Run("PlainNameOrdersByTheQueriedModelsColumn", func(t *testing.T) {
@@ -786,6 +788,55 @@ func TestSelectJoinSelectReadsTheDerivedTerms(t *testing.T) {
 		require.Contains(t, statements[0].Query, ") AS j0 ON "+qualified("test_aggregate_records", "id")+" = "+qualified("j0", "record_id")+" WHERE ")
 	})
 
+	t.Run("NestedJoinedSelectIsTiedByItsOwnKeys", func(t *testing.T) {
+		// The tags count their notes through a select of their own; a query
+		// joining that select ties it on the tag id alone: the notes are a
+		// column of the derived table, not a key a column of the query equals.
+		noteID := types.NewColumn[*TestTagNote, string]("id")
+		noteTag := types.NewColumn[*TestTagNote, string]("tag_id")
+		notes := noteID.Count().As("notes")
+		perTag := database.Select[*TestTagNote, struct {
+			TagID string
+			Notes int64
+		}](ctx, noteTag.Group(), notes)
+		perRecordTag := database.Select[*TestRecordTag, struct {
+			ID    string
+			Notes *int64
+		}](ctx, TestRecordTagCols.ID.Group(), notes).
+			Join(types.LeftJoinSelect(perTag, noteTag.EqCol(TestRecordTagCols.ID)))
+		type noted struct {
+			ID    string
+			Notes *int64
+		}
+		statements := make([]types.SQLStatement, 0)
+		rows := make([]noted, 0)
+		require.NoError(t, database.Select[*TestAggregateRecord, noted](ctx, TestAggregateRecordCols.ID, notes).
+			Join(types.LeftJoinSelect(perRecordTag, TestRecordTagCols.ID.EqCol(TestAggregateRecordCols.ID))).
+			WithDryRun(&statements).Scan(&rows))
+		require.Contains(t, statements[0].Query, ") AS j0 ON "+qualified("j0", "id")+" = "+qualified("test_aggregate_records", "id"))
+		require.Contains(t, statements[0].Query, qualified("j0", "notes")+" AS "+quoteIdent("notes"))
+	})
+
+	t.Run("PartitionsByTheDerivedTerm", func(t *testing.T) {
+		// A grouped query groups by the term it reads from the select, so a
+		// window may partition by it: every record with the same tag count
+		// shares the partition.
+		type share struct {
+			ID    string
+			Tags  *int64
+			Share int64
+		}
+		tags, counts := tagCounts(ctx)
+		statements := make([]types.SQLStatement, 0)
+		rows := make([]share, 0)
+		require.NoError(t, database.Select[*TestAggregateRecord, share](ctx,
+			TestAggregateRecordCols.ID.Group(), tags,
+			TestAggregateRecordCols.Amount.Sum().Over(types.PartitionBy(tags)).As("share")).
+			Join(types.LeftJoinSelect(counts, onRecord())).
+			WithDryRun(&statements).Scan(&rows))
+		require.Contains(t, statements[0].Query, "OVER (PARTITION BY "+qualified("j0", "tags")+")")
+	})
+
 	t.Run("JoinsOnAColumnTheQueryRepeats", func(t *testing.T) {
 		// The derived table is unique on its key; the query's side need not
 		// be: every alpha record reads alpha's tag count.
@@ -1036,6 +1087,65 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			Join(types.LeftJoinSelect(stacked, onRecord)).
 			Scan(&rows)
 		require.ErrorIs(t, err, database.ErrJoinSource)
+	})
+
+	t.Run("KeyOfATableTheSelectJoins", func(t *testing.T) {
+		// The select groups by the record's category beside the tag's; both
+		// columns are named category, and the query could name only the
+		// tag's. Tied on one, the join would match a record several groups.
+		tags := TestRecordTagCols.ID.Count().As("tags")
+		perCategories := database.Select[*TestRecordTag, struct {
+			TagCat string
+			RecCat string
+			Tags   int64
+		}](ctx, TestRecordTagCols.Category.Group().As("tag_cat"), TestAggregateRecordCols.Category.Group().As("rec_cat"), tags).
+			Join(types.Join[*TestAggregateRecord](TestAggregateRecordCols.ID.EqCol(TestRecordTagCols.RecordID)))
+		err := database.Select[*TestAggregateRecord, recordTags](ctx, TestAggregateRecordCols.ID, tags).
+			Join(types.LeftJoinSelect(perCategories, TestRecordTagCols.Category.EqCol(TestAggregateRecordCols.Category))).
+			Scan(&rows)
+		require.ErrorIs(t, err, database.ErrJoinSelectKey)
+		require.ErrorContains(t, err, "test_aggregate_records")
+	})
+
+	t.Run("TermProjectedByTwoJoinedSelects", func(t *testing.T) {
+		// One Count().As("n") shared by two selects would read from either;
+		// the query has to alias them apart.
+		n := types.Count().As("n")
+		noteTag := types.NewColumn[*TestTagNote, string]("tag_id")
+		type keyed struct {
+			RecordID string
+			N        int64
+		}
+		perRecord := database.Select[*TestRecordTag, keyed](ctx, TestRecordTagCols.RecordID.Group(), n)
+		perTag := database.Select[*TestTagNote, keyed](ctx, noteTag.Group().As("record_id"), n)
+		err := database.Select[*TestAggregateRecord, struct {
+			ID string
+			N  *int64
+		}](ctx, TestAggregateRecordCols.ID, n).
+			Join(types.LeftJoinSelect(perRecord, onRecord), types.LeftJoinSelect(perTag, noteTag.EqCol(TestAggregateRecordCols.ID))).
+			Scan(&[]struct {
+				ID string
+				N  *int64
+			}{})
+		require.ErrorIs(t, err, database.ErrDuplicateAlias)
+		require.ErrorContains(t, err, "two joined selects")
+	})
+
+	t.Run("PartitionByAColumnTheSelectMeasured", func(t *testing.T) {
+		// The select counts the tag ids; the query cannot partition by the id
+		// column that count read, which is no column of the derived table.
+		tags, counts := tagCounts(ctx)
+		type share struct {
+			ID    string
+			Tags  *int64
+			Share int64
+		}
+		err := database.Select[*TestAggregateRecord, share](ctx,
+			TestAggregateRecordCols.ID.Group(), tags,
+			TestAggregateRecordCols.Amount.Sum().Over(types.PartitionBy(TestRecordTagCols.ID)).As("share")).
+			Join(types.LeftJoinSelect(counts, onRecord)).
+			Scan(&[]share{})
+		require.ErrorIs(t, err, database.ErrWindowTermNotSelected)
 	})
 
 	t.Run("ScanOneRefusesADerivedTerm", func(t *testing.T) {

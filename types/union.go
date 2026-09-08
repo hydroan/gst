@@ -70,7 +70,9 @@ type SelectBranch[R any] interface {
 type Union[R any] interface {
 	// OrderBy sorts the stacked rows by their columns. An ordering names a
 	// column of the result row, through a column reference of that name or
-	// through a term a branch projects under it.
+	// through a term a branch projects under it. The name alone decides: the
+	// union reads no table of its own, so the table a reference carries is
+	// not checked here.
 	OrderBy(orders ...Ordering) Union[R]
 	// Limit caps the number of stacked rows.
 	Limit(n int) Union[R]

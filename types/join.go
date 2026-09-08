@@ -43,6 +43,10 @@ import "reflect"
 //	LEFT JOIN `accounts` ON `accounts`.`code` = `payments`.`account` AND `accounts`.`deleted_at` IS NULL
 //	WHERE `payments`.`deleted_at` IS NULL
 //
+// Inside the ON a filter built from a plain name, FilterEq say, names a
+// column of the joined model; a column of the query is named through its
+// reference, which carries its table.
+//
 // ClickHouse carries no unique constraints, so a model join cannot be proved
 // there and is rejected on a ClickHouse instance.
 type JoinSource interface {
@@ -138,7 +142,11 @@ func (SelectJoin) sealedJoinSource() {}
 // reads, could not be told apart and is refused; a per-row total over the
 // queried table's own groups is a window instead, Sum().Over(PartitionBy(key)).
 // A select grouped by a time bucket cannot be joined either: the bucket is a
-// label of the column, not a value a column of the query equals.
+// label of the column, not a value a column of the query equals. The select
+// is tied by its own model's group keys, each column once: a key of a table
+// the select joins has no spelling from outside and is refused, while a term
+// the select reads from a select of its own is a column of the derived
+// table, not a key.
 //
 // The derived table is materialized by the database, its rows being the
 // groups of the select: a select narrowed by Where materializes fewer of
