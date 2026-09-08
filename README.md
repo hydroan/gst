@@ -518,7 +518,82 @@ err = feed.Count(&total) // 总数
   而不是绑定参数，且必须 `As` 起别名。
 - 四种方言渲染同一条语句；ClickHouse 用 `UnionAllOn`，分支在同一实例上用 `SelectOn` 建。
 
-框架**不做** join 和递归 CTE，聚合能力也不向 URL 暴露：
+#### 连接
+
+行里要带出另一张表的字段，例如付款单带出账户名称，用 `Join`：被连模型直接用它自己的
+Cols 投影、过滤、分组、开窗、排序，多张表时列名自动带表名限定。只有裸列的投影也可以连接，
+这是 `List` 跨不了的：
+
+```go
+type paymentWithAccount struct {
+    ID          string
+    Amount      int64
+    AccountName *string // LEFT JOIN 对不上的行这一列是 NULL，字段必须能装 NULL
+}
+
+err := database.Select[*appmodel.Payment, paymentWithAccount](ctx,
+        PaymentCols.ID, PaymentCols.Amount, AccountCols.Name.As("account_name")).
+    Join(types.LeftJoin[*appmodel.Account](AccountCols.Code.EqCol(PaymentCols.Account))).
+    Where(PaymentCols.TenantID.Eq(tenantID)).
+    Scan(&rows)
+// SELECT `payments`.`id` AS `id`, `payments`.`amount` AS `amount`, `accounts`.`name` AS `account_name`
+// FROM `payments`
+// LEFT JOIN `accounts` ON `accounts`.`code` = `payments`.`account` AND `accounts`.`deleted_at` IS NULL
+// WHERE `payments`.`tenant_id` = ? AND `payments`.`deleted_at` IS NULL
+```
+
+规则：
+
+- **只允许每行最多对上一行的连接**。ON 里的 `EqCol` 和常量等值必须覆盖被连模型的主键或某个
+  `Indexes()` 唯一索引，框架在构建期证明，证明不了报错。一对多从「多」的一侧出发写，或者
+  只问有没有就用 `FilterExists`；join 到一对多子表会让 `SUM` 静默翻倍，这条路写不出来。
+- **`Join` 丢掉对不上的行，`LeftJoin` 保留它们**并把被连列置 NULL；左连接来的字段必须是指针
+  或 sql.Null 类型，否则构建期报错。
+- **被连模型的软删条件由框架写进 ON**；ON 里可以再加条件，例如 `AccountCols.Tier.Eq("gold")`；
+  `EqCol` 两边先写谁都行，框架按表名分辨。
+- **分组投影里被连侧只能做分组键或 `Min`、`Max`、`CountDistinct`**：组内每一行都对着同一
+  个被连行，`Sum`、`Count`、`Avg` 会把它按组内行数重复计入，直接拒绝。
+- 同一模型只能连一次，也不能连自己；ClickHouse 没有唯一约束，模型连接在它上面直接报错。
+- `Where` 里的条件按列引用所属的表落到对应表上；引用了没连进来的表，构建期报错。
+
+一对多的关系用 `JoinSelect`：先把「多」的一侧按键分组成一条 `Select`，每个键只剩一行，再把它当
+一张临时表连上来。主查询里直接传子投影的那个项，就能把它读成一列；对不上的行用
+`LeftJoinSelect` 保留：
+
+```go
+type tagsPerRecord struct {
+    RecordID string
+    Tags     int64
+}
+tags := TagCols.ID.Count().As("tags")
+counts := database.Select[*appmodel.Tag, tagsPerRecord](ctx, TagCols.RecordID.Group(), tags)
+
+type recordWithTags struct {
+    ID   string
+    Tags *int64 // 没有标签的记录对不上，这一列是 NULL
+}
+err := database.Select[*appmodel.Record, recordWithTags](ctx, RecordCols.ID, tags).
+    Join(types.LeftJoinSelect(counts, TagCols.RecordID.EqCol(RecordCols.ID))).
+    Scan(&rows)
+// SELECT `records`.`id` AS `id`, `j0`.`tags` AS `tags`
+// FROM `records`
+// LEFT JOIN (SELECT `record_id` AS `record_id`, COUNT(`id`) AS `tags`
+//            FROM `tags` WHERE `tags`.`deleted_at` IS NULL GROUP BY `record_id`) AS j0
+//   ON `j0`.`record_id` = `records`.`id`
+// WHERE `records`.`deleted_at` IS NULL
+```
+
+- 子投影必须是分组投影，ON 里的 `EqCol` 和常量等值要覆盖它的全部分组键，键通过子投影模型
+  的列引用来写；子投影自己不能带 `OrderBy`、`Limit`、`Offset`。
+- 主查询只能读子投影投影出来的项，传同一个项即可；子投影模型的其他列不是临时表的列。
+  要按子投影的度量筛行，条件写进子投影的 `Having`。
+- 主查询本身分组时，子投影的项会成为主查询的分组键，这只在主查询按连接列分组时才成立，
+  框架会检查，例如按账户分组再连每个账户的退款合计。
+- 临时表由数据库物化，行数就是子投影的组数：条件写进子投影，物化得越少越好。
+- 派生表连接在 ClickHouse 上可用；那里的 LEFT JOIN 对不上的行也返回 NULL，框架连
+  ClickHouse 时开着 `join_use_nulls`。
+
+框架**不做**递归 CTE，聚合能力也不向 URL 暴露：
 报表口径属于服务端契约，让客户端自选分组键等于开放一个无界扫描入口。
 
 ## 配置和迁移
