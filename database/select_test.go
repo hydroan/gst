@@ -739,14 +739,21 @@ var recordIDCol = types.NewColumn[*TestAggregateRecord, string]("id")
 // setupTagData seeds tags on a1, a3 and a4. a1 and a3 are alpha rows, a4 is a
 // beta row, so a subquery on the "vip" label selects across categories. Each
 // tag carries its record's category, consistent with the record it points at.
+// tagSeed is the related-row fixture: two vip tags on alpha records and one
+// bulk tag on a beta record, so a semi join narrows alpha and leaves gamma
+// without any tag at all.
+func tagSeed() []*TestRecordTag {
+	return []*TestRecordTag{
+		{ID: "t1", RecordID: "a1", Label: "vip", Category: "alpha"},
+		{ID: "t2", RecordID: "a3", Label: "vip", Category: "alpha"},
+		{ID: "t3", RecordID: "a4", Label: "bulk", Category: "beta"},
+	}
+}
+
 func setupTagData(t *testing.T) {
 	t.Helper()
 	cleanupTagData()
-	require.NoError(t, database.Database[*TestRecordTag](context.Background()).Create(
-		&TestRecordTag{ID: "t1", RecordID: "a1", Label: "vip", Category: "alpha"},
-		&TestRecordTag{ID: "t2", RecordID: "a3", Label: "vip", Category: "alpha"},
-		&TestRecordTag{ID: "t3", RecordID: "a4", Label: "bulk", Category: "beta"},
-	))
+	require.NoError(t, database.Database[*TestRecordTag](context.Background()).Create(tagSeed()...))
 }
 
 func cleanupTagData() {
