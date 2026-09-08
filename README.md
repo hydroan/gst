@@ -405,6 +405,10 @@ err := database.Select[*appmodel.Record, categoryTotal](ctx,
 
 框架从分组键推导 `GROUP BY`，所以 SELECT 和 GROUP BY 不可能写不一致。
 
+要在别处再引用的项先赋给变量：`Having`、`OrderBy`、`Qualify`、窗口的 `PartitionBy` 和
+`OrderBy`、联合的排序、主查询读子投影的项，都是按项的值在投影里找同一个项，把同一个变量
+传两遍最稳，改了别名的项就不再是同一个项。
+
 几条会影响正确性的约定：
 
 - **`SUM` 空集恒为 0**（内部包了 `COALESCE`）；`AVG`/`MIN`/`MAX` 空集是 NULL，
@@ -422,9 +426,10 @@ err := database.Select[*appmodel.Record, categoryTotal](ctx,
   （`Filter`/`FilterRaw`），而聚合是 service 直接调用的，那些钩子不会执行——
   每个隔离条件都必须自己写进 `Where`。漏掉一个就会跨租户聚合，且没有任何迹象。
 
-单行结果用 `ScanOne`，分页报表的总组数用 `Count`。跨表条件用
-`types.FilterExists` / `FilterNotExists` 半连接，不要用 join —— join 到一对多
-子表会让 `SUM` 静默翻倍。子表与外层的关联列对用 `子表列.EqCol(外层列)`
+单行结果用 `ScanOne`，分页报表的总组数用 `Count`。只问「有没有相关行」的跨表条件用
+`types.FilterExists` / `FilterNotExists` 半连接；要把另一张表的字段带进结果行，看下面的
+「连接」小节，框架只放行每行最多对上一行的连接，join 到一对多子表让 `SUM` 静默翻倍的
+那条路写不出来。子表与外层的关联列对用 `子表列.EqCol(外层列)`
 作为谓词传入（字符串列写 `types.FilterEqCol`），复合键就多传几对，每一对都
 必须成立；没有任何关联对的子查询按 fail closed 处理。它们是普通的 `Filter` 算子，
 `List`/`Count`/`Export` 同样能用。
@@ -468,11 +473,11 @@ rank := types.Rank().Over(types.OrderBy(total.Desc()))
   分组键和时间桶也不能。
 - **决胜列由框架补**：带 `OrderBy` 的窗口在行级投影末尾补主键升序，在分组投影补
   分组键，同值行的编号和累计在每次运行都一样。`Rank`、`DenseRank` 不补，它们按定义
-  把并列行当同一名次。
+  把并列行当同一名次；模型没有框架的 `id` 主键列时也不补，窗口就按写的顺序算。
 - **累计的帧固定为 ROWS**：带顺序的聚合总是从分区第一行累加到当前行，不会像 SQL
   默认的 RANGE 那样把同值行一起算进去。
-- **分组投影上的窗口读的是组**：`PartitionBy` 只能用分组键，`OrderBy` 用分组键或已
-  投影的度量；聚合函数在这里作用于组的度量，`Sum().Over(...)` 渲染成
+- **分组投影上的窗口读的是组**：`PartitionBy` 只能用分组键或子投影的项，度量不行，
+  即便它读的列正是分组键；`OrderBy` 用分组键或已投影的度量；聚合函数在这里作用于组的度量，`Sum().Over(...)` 渲染成
   `SUM(SUM(amount)) OVER (...)`，`Avg`、`Lag`、`Lead` 在分组投影上直接拒绝。
 - **`Qualify`** 按窗口列筛行，条件只能引用已投影的窗口项；`Where`、`Having` 留在
   内层，排序、分页和 `Count` 作用在筛完之后的行集。
@@ -593,21 +598,25 @@ err := database.Select[*appmodel.Record, recordWithTags](ctx, RecordCols.ID, tag
 // SELECT `records`.`id` AS `id`, `j0`.`tags` AS `tags`
 // FROM `records`
 // LEFT JOIN (SELECT `record_id` AS `record_id`, COUNT(`id`) AS `tags`
-//            FROM `tags` WHERE `tags`.`deleted_at` IS NULL GROUP BY `record_id`) AS j0
+//            FROM `tags` WHERE `tags`.`deleted_at` IS NULL GROUP BY `record_id`) AS `j0`
 //   ON `j0`.`record_id` = `records`.`id`
 // WHERE `records`.`deleted_at` IS NULL
 ```
 
 - 子投影必须是分组投影，ON 里的 `EqCol` 和常量等值要覆盖它的全部分组键，键通过子投影模型
-  的列引用来写；子投影自己不能带 `OrderBy`、`Limit`、`Offset`。
+  的列引用来写；子投影自己不能带 `OrderBy`、`Limit`、`Offset`。ON 里不能写 `FilterExists`：
+  临时表的行是子投影的组，没有可关联的行，这种条件写进子投影的 `Where`。
 - 子投影的分组键必须全是它自己模型的列，每列一次：它自己再连进来的表的列当不了键，主查询
   没法用引用指到它；它从自己连的子投影里读来的项是临时表的列，不算键。
-- 主查询只能读子投影投影出来的项，传同一个项即可；子投影模型的其他列不是临时表的列。
-  要按子投影的度量筛行，条件写进子投影的 `Having`。
+- 主查询只能读子投影投影出来的项，传同一个项即可，改了别名就不是同一个项；子投影模型的
+  其他列不是临时表的列，`Where` 里也只能用它的键列。要按子投影的度量筛行，条件写进子投影
+  的 `Having`；要筛它的行，写进子投影的 `Where`。子投影的项可以做主查询窗口的分区键和
+  排序项，行级、分组投影都行。
 - 主查询本身分组时，子投影的项会成为主查询的分组键，这只在主查询按连接列分组时才成立，
-  框架会检查，例如按账户分组再连每个账户的退款合计。
-- 子投影读的表不能是主查询的表，也不能是已经连进来的表：临时表是通过子投影模型的列引用来
-  寻址的，同一张表出现两次就分不清。要给每一行带上本表按某个维度的合计，用窗口
+  框架会检查，例如按账户分组再连每个账户的退款合计。主查询没有自己的度量时是行级读：
+  每条主表行带上子投影的项，时间桶只是每行的标签；要按桶汇总就加上度量。
+- 子投影读的表不能是主查询的表，也不能是已经连进来的表，它自己通过连接读到的表也算在内：
+  临时表是通过子投影模型的列引用来寻址的，同一张表出现两次就分不清。要给每一行带上本表按某个维度的合计，用窗口
   `Sum().Over(PartitionBy(键))`，不用连接。
 - 子投影不能按时间桶分组后再连：桶是列的标签（如 `2024-01-10`），没有哪一列等于它，构建期报错。
 - 临时表由数据库物化，行数就是子投影的组数：条件写进子投影，物化得越少越好。
@@ -622,10 +631,16 @@ err := database.Select[*appmodel.Record, recordWithTags](ctx, RecordCols.ID, tag
 | `ErrJoinSelectNotGrouped` | 子投影加分组键，`Cols.X.Group()` |
 | `ErrJoinSelectKey` | 子投影只按自己模型的列分组，每列一次 |
 | `ErrJoinSelectBucketKey` | 不按时间桶分组后再连，同粒度的汇总改用窗口 |
+| `ErrNestedSelectOrdered` | 子投影去掉 `OrderBy`、`Limit`、`Offset`，它们属于主查询 |
+| `ErrJoinSelectInstance` | 子投影用 `SelectOn` 开在主查询的实例上 |
+| `ErrJoinNoCorrelation` | ON 里至少一对 `EqCol` 连到主查询或更早连入的表 |
 | `ErrJoinNotUnique` | ON 用 `EqCol`、常量等值钉住子投影的全部分组键 |
-| `ErrJoinSelectColumn` | 主查询只能读子投影投影出来的项，把同一个项（共享变量）再传一遍 |
-| `ErrJoinSelectNotKeyed` | 主查询分组时按连接列分组 |
+| `ErrJoinSelectColumn` | 主查询只能读子投影投影出来的项，把同一个项（共享变量）再传一遍，别改它的别名；`Where` 里只能用它的键列，别的条件写进子投影 |
+| `ErrDuplicateAlias` | 两个子投影投影了同一个项，给其中一个 `As` 别的别名 |
+| `ErrJoinSelectNotKeyed` | 主查询分组时按连接列分组；连接列是另一个子投影的键时，把那个键项也投影成分组键 |
 | `ErrJoinDuplicateTable` | 一张表只能作为一个来源，同组合计用窗口 |
+| `ErrJoinMeasure` | 分组投影里被连模型的列只能做分组键或 `Min`、`Max`、`CountDistinct` |
+| `ErrWindowTermNotSelected` | 分区键用分组键或子投影的项，窗口排序用分组键或已投影的度量 |
 
 框架**不做**递归 CTE，聚合能力也不向 URL 暴露：
 报表口径属于服务端契约，让客户端自选分组键等于开放一个无界扫描入口。
