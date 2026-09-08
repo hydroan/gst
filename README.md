@@ -423,8 +423,8 @@ err := database.Select[*appmodel.Record, categoryTotal](ctx,
 
 单行结果用 `ScanOne`，分页报表的总组数用 `Count`。跨表条件用
 `types.FilterExists` / `FilterNotExists` 半连接，不要用 join —— join 到一对多
-子表会让 `SUM` 静默翻倍。子表与外层的关联列对用 `子表列.Equal(外层列)`
-作为谓词传入（字符串列写 `types.FilterEqual`），复合键就多传几对，每一对都
+子表会让 `SUM` 静默翻倍。子表与外层的关联列对用 `子表列.EqCol(外层列)`
+作为谓词传入（字符串列写 `types.FilterEqCol`），复合键就多传几对，每一对都
 必须成立；没有任何关联对的子查询按 fail closed 处理。它们是普通的 `Filter` 算子，
 `List`/`Count`/`Export` 同样能用。
 

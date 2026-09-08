@@ -316,7 +316,7 @@ func TestClickhouse(t *testing.T) {
 			('t1','a1','vip','2024-01-01 00:00:00','2024-01-01 00:00:00')`).Error)
 
 		require.Empty(t, listIDs(t, types.FilterExists[*TestRecordTag](
-			TestRecordTagCols.RecordID.Equal(TestAggregateRecordCols.ID),
+			TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID),
 		)))
 	})
 }

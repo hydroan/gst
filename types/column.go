@@ -37,7 +37,7 @@ type TableNamer interface {
 //
 // The type parameter is load-bearing. sealedColumn mentions T, so two column
 // references only satisfy the same ColumnRef[T] when their Go types match,
-// which is what makes tying a string column to an integer column with Equal
+// which is what makes tying a string column to an integer column with EqCol
 // fail to compile. The method is also unexported, so the set of
 // implementations stays closed to this package.
 type ColumnRef[T any] interface {
@@ -179,15 +179,19 @@ func (c Column[T]) NotRegex(expr string) Filter { return FilterNotRegex(c.name, 
 // JSONContains matches rows whose JSON array column contains value.
 func (c Column[T]) JSONContains(value string) Filter { return FilterJSONContains(c.name, value) }
 
-// Equal ties the column, on the related model a subquery reads, to
-// parent, a column of the query enclosing that subquery; see FilterEqual.
+// EqCol ties the column, on the related model a subquery reads, to
+// parent, a column of the query enclosing that subquery; see FilterEqCol.
 // Both must be columns of the same Go type. A nil parent leaves the outer
 // side empty, and the predicate then fails closed.
-func (c Column[T]) Equal(parent ColumnRef[T]) Filter {
+//
+// The Col suffix says that the argument is a column rather than a value,
+// which Eq takes; Go has no overloading to tell the two apart by type, and
+// gorm gen spells the same comparison the same way.
+func (c Column[T]) EqCol(parent ColumnRef[T]) Filter {
 	if parent == nil {
-		return FilterEqual(c.name, "")
+		return FilterEqCol(c.name, "")
 	}
-	return FilterEqual(c.name, parent.Name())
+	return FilterEqCol(c.name, parent.Name())
 }
 
 // Asc orders by the column ascending.

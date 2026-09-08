@@ -464,7 +464,7 @@ func ExampleSelect_filterFalse() {
 }
 
 // FilterExists is a semi join: it keeps the rows that have at least one
-// related row, and Equal is the predicate that ties the related row to the
+// related row, and EqCol is the predicate that ties the related row to the
 // queried one. A row matches at most once, so the counts never double the
 // way a join to a one-to-many table would. FilterNotExists keeps the rows
 // without such a related row. Rendered for the first projection:
@@ -485,8 +485,8 @@ func ExampleSelect_filterExists() {
 		Category string
 		Count    int64
 	}
-	vip := types.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.Equal(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
-	noVip := types.FilterNotExists[*TestRecordTag](TestRecordTagCols.RecordID.Equal(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
+	vip := types.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
+	noVip := types.FilterNotExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
 	for _, scope := range []struct {
 		name   string
 		filter types.Filter
@@ -519,7 +519,7 @@ func ExampleDatabase_filterExists() {
 	seedTagExample()
 	defer cleanupTagData()
 
-	vip := types.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.Equal(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
+	vip := types.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
 	records := make([]*TestAggregateRecord, 0)
 	if err := database.Database[*TestAggregateRecord](context.Background()).
 		WithQuery(nil, types.QueryOptions{Filters: []types.Filter{vip}}).
