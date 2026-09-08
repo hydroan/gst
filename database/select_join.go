@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
+	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types"
 	"gorm.io/gorm"
 )
@@ -24,13 +25,14 @@ import (
 var (
 	ErrJoinNotUnique        = errors.New("join must pin the joined model's primary key or one of its unique indexes, or every group key of the joined select, with equalities, or a row could match several joined rows")
 	ErrJoinNoCorrelation    = errors.New("join predicates tie the joined model to no table of the query")
-	ErrJoinDuplicateTable   = errors.New("a model can be joined once, and the queried model cannot join itself")
+	ErrJoinDuplicateTable   = errors.New("one table backs at most one source of a query: a model is joined once, the queried model does not join itself, and a joined select reads a table no other source reads")
 	ErrJoinMeasure          = errors.New("a measure over a joined column must be MIN, MAX or COUNT DISTINCT, the other aggregates would count the joined row once per row of the group")
 	ErrJoinSource           = errors.New("join source is not one the framework defines")
 	ErrJoinSelectNotGrouped = errors.New("a joined select must be grouped, its group keys are what it is joined on")
 	ErrJoinSelectInstance   = errors.New("joined select was opened on another database instance")
 	ErrJoinSelectColumn     = errors.New("a joined select is read through its own terms, its model's columns are not columns of the derived table")
 	ErrJoinSelectNotKeyed   = errors.New("a grouped select projects a joined select's term only when it groups by the columns the select is joined on")
+	ErrJoinSelectBucketKey  = errors.New("a select grouped by a time bucket cannot be joined, the bucket is a label of the column and no column of the query equals it")
 )
 
 // joinedTable is one source joined to the select, resolved from its source
@@ -44,10 +46,12 @@ type joinedTable struct {
 	alias string
 	left  bool
 	on    []types.Filter
-	// columns and softDelete describe a joined model; sub and derived a
-	// joined select, whose derived table has no soft delete of its own.
+	// columns, softDelete and tenant describe a joined model, the last two
+	// being the conditions a List on it hides rows by; sub and derived a
+	// joined select, whose own statement carries those conditions.
 	columns    map[string]modelschema.Column
 	softDelete string
+	tenant     string
 	sub        nestedSelect
 	derived    *derivedInfo
 	// info is what the filter renderer knows about the source's columns,
@@ -100,11 +104,19 @@ func (a *selector[M, R]) resolveJoins(shape *projectionShape) error {
 		if err != nil {
 			return err
 		}
+		// A joined select is addressed through its model's column references,
+		// so the table it reads is what it is told apart by, exactly as a
+		// joined model is; a per-row total over the queried table's own groups
+		// is a window, not a join.
+		source := "model"
+		if jt.sub != nil {
+			source = "joined select over"
+		}
 		if jt.table == shape.main {
-			return errors.Wrapf(ErrJoinDuplicateTable, "%q is the queried table", jt.table)
+			return errors.Wrapf(ErrJoinDuplicateTable, "%s %q, the queried table", source, jt.table)
 		}
 		if _, dup := shape.joined[jt.table]; dup {
-			return errors.Wrapf(ErrJoinDuplicateTable, "%q", jt.table)
+			return errors.Wrapf(ErrJoinDuplicateTable, "%s %q, which another source reads", source, jt.table)
 		}
 		pinned, tied := pinnedColumns(jt, shape.tables)
 		if !tied {
@@ -151,6 +163,7 @@ func (a *selector[M, R]) resolveModelJoin(mj types.ModelJoin) (*joinedTable, [][
 		on:         mj.On,
 		columns:    columnsByName(columns),
 		softDelete: softDeleteColumn(columns),
+		tenant:     tenantColumn(columns),
 		info:       tableInfoOf(columns),
 	}, keys, nil
 }
@@ -177,6 +190,13 @@ func (a *selector[M, R]) resolveSelectJoin(sj types.SelectJoin, alias string) (*
 	}
 	if !info.grouped || len(info.keys) == 0 {
 		return nil, nil, ErrJoinSelectNotGrouped
+	}
+	for _, key := range info.keys {
+		// A bucket key projects a label such as '2024-01-10', which no column
+		// of the query equals; an ON pinning it would silently match nothing.
+		if key.Bucket != types.TimeBucketNone {
+			return nil, nil, errors.Wrapf(ErrJoinSelectBucketKey, "%q", termAlias(key))
+		}
 	}
 	keyColumns := make([]string, 0, len(info.keys))
 	keyInfo := tableInfo{
@@ -365,6 +385,22 @@ func softDeleteColumn(columns []modelschema.Column) string {
 	return ""
 }
 
+// tenantIDType is the type the tenant package scopes a model's rows by; a
+// model carrying a column of it belongs to one tenant per row, and a read on
+// it sees the context's tenant alone.
+var tenantIDType = reflect.TypeFor[tenant.ID]()
+
+// tenantColumn returns the tenant column of a model, or "" when its rows
+// belong to no tenant.
+func tenantColumn(columns []modelschema.Column) string {
+	for _, c := range columns {
+		if c.Type == tenantIDType {
+			return c.DBName
+		}
+	}
+	return ""
+}
+
 // columnsByName indexes a model's columns by database name.
 func columnsByName(columns []modelschema.Column) map[string]modelschema.Column {
 	byName := make(map[string]modelschema.Column, len(columns))
@@ -376,11 +412,15 @@ func columnsByName(columns []modelschema.Column) map[string]modelschema.Column {
 
 // joinClauses adds the JOIN clauses to the statement, each ON rendered by
 // the filter renderer in the joined source's own scope. A joined model
-// carries its soft-delete condition in the ON, so a join never reads a row a
-// List on that model hides; it sits in the ON rather than the WHERE because
-// in the WHERE it would turn a LEFT JOIN back into an inner one. A joined
-// select is rendered as a derived table, its own statement bound into the
-// join.
+// carries in the ON the conditions a List on it hides rows by — its
+// soft-delete condition, and its tenant condition when its rows belong to a
+// tenant — so a join never reads a row a List on that model hides; they sit
+// in the ON rather than the WHERE because in the WHERE they would turn a LEFT
+// JOIN back into an inner one. gorm adds both to the queried model on its
+// own, through the model's schema, and to a joined select's statement the
+// same way; a joined model is no statement's model, so they are written
+// here. A joined select is rendered as a derived table, its own statement
+// bound into the join.
 func (a *selector[M, R]) joinClauses(tx *gorm.DB, shape projectionShape) (*gorm.DB, error) {
 	before := map[string]tableInfo{shape.main: shape.mainInfo}
 	for _, jt := range shape.joins {
@@ -400,10 +440,17 @@ func (a *selector[M, R]) joinClauses(tx *gorm.DB, shape projectionShape) (*gorm.
 			tx = tx.Joins(kind+" (?) AS "+jt.alias+" ON ?", sub, expr)
 		} else {
 			sql := kind + " " + a.db.quoteIdent(jt.table) + " ON ?"
+			vars := []any{expr}
 			if len(jt.softDelete) > 0 {
 				sql += " AND " + a.db.quoteTableColumn(jt.table, jt.softDelete) + " IS NULL"
 			}
-			tx = tx.Joins(sql, expr)
+			// A cross-tenant context reads every tenant's rows, as it does
+			// on the queried model; any other acts in exactly one tenant.
+			if id, one := tenant.From(a.db.ctx); len(jt.tenant) > 0 && one {
+				sql += " AND " + a.db.quoteTableColumn(jt.table, jt.tenant) + " = ?"
+				vars = append(vars, id)
+			}
+			tx = tx.Joins(sql, vars...)
 		}
 		before[jt.table] = jt.info
 	}
@@ -444,6 +491,27 @@ func (a *selector[M, R]) derivedTerms(shape projectionShape) map[string]*joinedT
 		}
 	}
 	return derived
+}
+
+// derivedOf reports the joined select a term is a column of. The alias
+// finds the candidate and the whole term confirms it: another term of the
+// query may carry the same alias — the tie breaker a window is completed
+// with reads under the primary key's name — and it is not the select's.
+func (a *selector[M, R]) derivedOf(t types.Term, shape projectionShape) (*joinedTable, bool) {
+	jt, ok := shape.derived[a.alias(t)]
+	if !ok || !jt.sub.selects(t) {
+		return nil, false
+	}
+	return jt, true
+}
+
+// tableOf is the table a term names: its own, or the queried model's when
+// it carries none, which is what a plain name means everywhere.
+func (s projectionShape) tableOf(t types.Term) string {
+	if len(t.Table) > 0 {
+		return t.Table
+	}
+	return s.main
 }
 
 // readsDerived reports whether a term is one a joined select projects,
@@ -495,14 +563,7 @@ func (a *selector[M, R]) groupDerivedTerms(shape *projectionShape) error {
 // matched with its table.
 func (a *selector[M, R]) groupsBy(table, column string, shape projectionShape) bool {
 	for _, key := range shape.keys {
-		if key.Column != column || key.Bucket != types.TimeBucketNone {
-			continue
-		}
-		keyTable := key.Table
-		if len(keyTable) == 0 {
-			keyTable = shape.main
-		}
-		if keyTable == table {
+		if key.Column == column && key.Bucket == types.TimeBucketNone && shape.tableOf(key) == table {
 			return true
 		}
 	}

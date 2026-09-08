@@ -61,7 +61,10 @@
 //     and Count, UnionAll over selects of the instance, and the joined
 //     selects of Select (JoinSelect, LeftJoinSelect), whose LEFT JOIN answers
 //     NULL for an unmatched row because the instance is opened with
-//     join_use_nulls on;
+//     join_use_nulls on — a server setting of the connection, so a LEFT JOIN
+//     the application writes itself against the handle answers NULL there
+//     too, where the server's default would answer the column's default
+//     value;
 //   - a write path with a deliberately weaker contract — no model hooks, no
 //     transaction boundary: Create is plain batch INSERTs (no
 //     ErrDuplicatedKey; ClickHouse has no unique constraints), Delete is a

@@ -703,19 +703,32 @@ func TestDatabaseFiltersOnTimeColumns(t *testing.T) {
 	})
 }
 
-func TestFilterOfAnotherTableFailsClosed(t *testing.T) {
+func TestFilterOfAnotherTableFailsTheChain(t *testing.T) {
 	defer cleanupTestData()
 	setupTestData(t)
 
-	// A column reference carries its table. On the row path a filter of a
-	// table the query does not read fails closed like an unknown column,
-	// where the name alone could have matched a column of the queried model
-	// by coincidence and filtered the wrong table as valid SQL.
+	// A column reference carries its table, and only service code writes
+	// one: a filter of a table the query does not read is a wrong-model read,
+	// not client input, so it fails the chain the way WithSelect refuses the
+	// same reference, rather than failing closed to an empty page that reads
+	// like "no data today". The name alone could have matched a column of
+	// the queried model by coincidence and filtered the wrong table as valid
+	// SQL.
 	users := make([]*TestUser, 0)
-	require.NoError(t, database.Database[*TestUser](context.Background()).
+	require.ErrorIs(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{TestAggregateRecordCols.Category.Eq("alpha")}}).
-		List(&users))
-	require.Empty(t, users)
+		List(&users), database.ErrColumnTable)
+	// Inside a group as well: the groups are walked, a subquery's filters
+	// are the subquery's own.
+	require.ErrorIs(t, database.Database[*TestUser](context.Background()).
+		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{
+			types.FilterOr(colName.Eq("user1"), types.FilterAnd(TestAggregateRecordCols.Status.Eq("done"))),
+		}}).
+		List(&users), database.ErrColumnTable)
+	count := 0
+	require.ErrorIs(t, database.Database[*TestUser](context.Background()).
+		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{TestAggregateRecordCols.Category.Eq("alpha")}}).
+		Count(&count), database.ErrColumnTable)
 }
 
 // The semi-join tests below cover FilterExists and FilterNotExists over the
@@ -731,8 +744,8 @@ func TestFilterExists(t *testing.T) {
 	ctx := context.Background()
 	vip := types.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
 
-	// The same filter serves List and Aggregate: it is a Filter operator, not
-	// an aggregate feature.
+	// The same filter serves List and Select: it is a Filter operator, not
+	// a select feature.
 	t.Run("NarrowsList", func(t *testing.T) {
 		records := make([]*TestAggregateRecord, 0)
 		require.NoError(t, database.Database[*TestAggregateRecord](ctx).
@@ -744,7 +757,7 @@ func TestFilterExists(t *testing.T) {
 		require.Equal(t, "a3", records[1].ID)
 	})
 
-	t.Run("NarrowsAggregate", func(t *testing.T) {
+	t.Run("NarrowsSelect", func(t *testing.T) {
 		type row struct {
 			Total   int64
 			Records int64
@@ -1198,7 +1211,15 @@ func TestFilterExistsMultipleCorrelations(t *testing.T) {
 	})
 
 	t.Run("FailsClosedOutsideSubquery", func(t *testing.T) {
-		require.Empty(t, ids(byRecord), "an EqCol predicate at the top level has no enclosing query to tie to")
+		// A plain-name EqCol at the top level has no enclosing query to tie
+		// to and fails closed; the typed one names the tag table, which the
+		// chain does not read, and fails the chain like any other reference
+		// of another model.
+		require.Empty(t, ids(types.FilterEqCol("record_id", "id")))
+		records := make([]*TestAggregateRecord, 0)
+		require.ErrorIs(t, database.Database[*TestAggregateRecord](ctx).
+			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{byRecord}}).
+			List(&records), database.ErrColumnTable)
 	})
 
 	t.Run("FailsClosedOnUnknownParentColumn", func(t *testing.T) {

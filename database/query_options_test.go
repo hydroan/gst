@@ -39,6 +39,16 @@ type cursorableTestUser struct {
 func TestDatabaseWithCursor(t *testing.T) {
 	defer cleanupTestData()
 
+	t.Run("column of another table fails", func(t *testing.T) {
+		// The aggregate fixture has an id column too, so the name alone
+		// would pass; the table the reference carries refuses it, the way
+		// WithSelect refuses a column of another model.
+		users := make([]*TestUser, 0)
+		require.ErrorIs(t,
+			database.Database[*TestUser](context.Background()).WithCursor(types.CursorForward(TestAggregateRecordCols.ID.Asc(), "a1")).List(&users),
+			database.ErrColumnTable)
+	})
+
 	t.Run("NextPage", func(t *testing.T) {
 		defer cleanupTestData()
 		count := 100
@@ -638,6 +648,16 @@ func TestDatabaseWithOrder(t *testing.T) {
 			require.Equal(t, expected[i], users[i].ID)
 		}
 	}
+
+	t.Run("column of another table fails", func(t *testing.T) {
+		// The aggregate fixture has a status column too, so the name alone
+		// would pass; the table the reference carries refuses it, the way
+		// WithSelect refuses a column of another model.
+		users := make([]*TestUser, 0)
+		require.ErrorIs(t,
+			database.Database[*TestUser](context.Background()).WithOrder(TestAggregateRecordCols.Status.Desc()).List(&users),
+			database.ErrColumnTable)
+	})
 
 	t.Run("SingleField", func(t *testing.T) {
 		defer cleanupTestData()

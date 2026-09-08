@@ -16,6 +16,7 @@ import (
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
+	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -216,6 +217,38 @@ func TestSQLCommentAnnotatesSelects(t *testing.T) {
 	sql = capture.last()
 	require.Contains(t, sql, "/* trace_id='trace-agg' */")
 	require.Equal(t, 1, strings.Count(sql, "trace_id="))
+}
+
+func TestSQLCommentAnnotatesAQualifiedSelectOnce(t *testing.T) {
+	defer cleanupAggregateData()
+	setupAggregateData(t)
+
+	capture := &sqlTextCaptureLogger{Interface: database.DB().Logger}
+	session := database.DB().Session(&gorm.Session{Logger: capture})
+	ctx := requestContext(http.MethodGet, "/api/v1/reports", "trace-qualify")
+
+	// Qualify wraps the projection in a derived table; the statement is one
+	// statement and carries the comment once, on the outer select.
+	type numbered struct {
+		ID string
+		Rn int64
+	}
+	rn := types.RowNumber().Over(types.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Desc())).As("rn")
+	latest := database.SelectOn[*TestAggregateRecord, numbered](ctx, session, TestAggregateRecordCols.ID, rn).Qualify(rn.Eq(1))
+	rows := make([]numbered, 0)
+	require.NoError(t, latest.Scan(&rows))
+	sql := capture.last()
+	require.Contains(t, sql, "/* trace_id='trace-qualify' */")
+	require.Equal(t, 1, strings.Count(sql, "trace_id="))
+
+	// A select that already ran keeps the comment of its own operation; as a
+	// member of a union it still renders without one, the union's statement
+	// carrying the comment once.
+	other := database.SelectOn[*TestAggregateRecord, numbered](ctx, session, TestAggregateRecordCols.ID, rn).Qualify(rn.Eq(2))
+	require.NoError(t, database.UnionAllOn[numbered](ctx, session, latest, other).Scan(&rows))
+	sql = capture.last()
+	require.Contains(t, sql, "/* trace_id='trace-qualify' */")
+	require.Equal(t, 1, strings.Count(sql, "trace_id="), "the members carry no comment of their own, however they were used before")
 }
 
 // afterVerbExpr stands in for an expression another party registered after

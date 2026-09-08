@@ -148,12 +148,42 @@ func (db *database[M]) outerScope() filterScope {
 //
 // The caller must hold db.mu.
 func (db *database[M]) applyFilters(filters []types.Filter) {
-	// The reason is discarded here on purpose: a client filter that cannot be
-	// applied narrows the query instead of failing the request. Server-built
-	// callers such as the aggregate builder read it and fail fast instead.
+	// A filter of another model's column is not client input: only a column
+	// reference carries a table, and service code wrote it, so it fails the
+	// chain the way WithSelect refuses the same reference. Every other
+	// mismatch is left to fail closed, its reason discarded on purpose: a
+	// client filter that cannot be applied narrows the query instead of
+	// failing the request. Server-built callers such as the select builder
+	// read the reason and fail fast instead.
+	if f, foreign := db.foreignTableFilter(filters); foreign {
+		db.err = errors.Wrapf(ErrColumnTable, "filter %q on column %q belongs to table %q, model %s reads %q", f.Op, f.Column, f.Table, reflect.TypeOf(*new(M)).Elem().Name(), db.outerTableName())
+		return
+	}
 	if expr, _ := db.renderFilters(filters, false, db.outerScope()); expr != nil {
 		db.ins = db.ins.Where(expr)
 	}
+}
+
+// foreignTableFilter finds a filter that names a column of a table the chain
+// does not read, looking through the OR and AND groups; a subquery's filters
+// name the related model's table and are that subquery's to place.
+func (db *database[M]) foreignTableFilter(filters []types.Filter) (types.Filter, bool) {
+	for _, f := range filters {
+		switch f.Op {
+		case types.FilterOpOr, types.FilterOpAnd:
+			if children, ok := f.Value.([]types.Filter); ok {
+				if found, foreign := db.foreignTableFilter(children); foreign {
+					return found, true
+				}
+			}
+		case types.FilterOpExists:
+		default:
+			if len(f.Table) > 0 && f.Table != db.outerTableName() {
+				return f, true
+			}
+		}
+	}
+	return types.Filter{}, false
 }
 
 // renderFilters turns a filter list into one composable predicate rather than
@@ -280,8 +310,10 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 		// jsonb operator on Postgres, a json_each EXISTS subquery on SQLite.
 		// It covers only those three — on any other dialect its expression
 		// renders empty, which would silently WIDEN the result, so the filter
-		// fails closed there instead. The column is passed unquoted because
-		// the expression quotes it itself.
+		// fails closed there instead. The column is passed unquoted, under
+		// the table it was placed in, because the expression quotes it
+		// itself, every dialect's quoting spelling table.column as two
+		// identifiers.
 		switch db.dialect() {
 		case dialectMySQL, dialectPostgres, dialectSQLite:
 		default:
@@ -291,7 +323,7 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 		if !ok {
 			return db.failClosedFilter(f, "expects a string value")
 		}
-		return datatypes.JSONArrayQuery(f.Column).Contains(s), nil
+		return datatypes.JSONArrayQuery(db.placedName(f, scope, info)).Contains(s), nil
 	case types.FilterOpEqCol:
 		return db.eqColCondition(f, column, scope)
 	default:
@@ -330,6 +362,22 @@ func (db *database[M]) placeFilter(f types.Filter, scope filterScope) (string, t
 		}
 	}
 	return db.scopedColumn(f.Column, scope), scope.own(), nil
+}
+
+// placedName spells a placed column unquoted, under the table placeFilter
+// placed it in, for an expression that quotes its operand itself: bare at
+// the top level of a single-table read, table.column wherever the renderer
+// qualifies.
+func (db *database[M]) placedName(f types.Filter, scope filterScope, info tableInfo) string {
+	qualify := info.qualify
+	if len(qualify) == 0 && len(f.Table) > 0 && len(scope.table) > 0 && f.Table != scope.table {
+		qualify = f.Table
+	}
+	name := info.column(f.Column)
+	if len(qualify) == 0 {
+		return name
+	}
+	return qualify + "." + name
 }
 
 // eqColCondition renders an EqCol predicate. Inside a subquery it ties the

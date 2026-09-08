@@ -183,6 +183,25 @@ func TestSelectBuildErrors(t *testing.T) {
 			Scan(&rows), database.ErrPlainSelect)
 	})
 
+	t.Run("InvalidAlias", func(t *testing.T) {
+		// An alias reaches SQL as an identifier, so it is restricted to one
+		// rather than quoted and hoped for.
+		rows := make([]row, 0)
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum().As("to`tal")).
+			Scan(&rows), database.ErrInvalidAlias)
+	})
+
+	t.Run("OffsetWithoutLimit", func(t *testing.T) {
+		// Validation covers the whole specification, so Count refuses what
+		// Scan refuses rather than answering as if the offset were not there.
+		sel := database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum().As("total")).
+			Offset(1)
+		rows := make([]row, 0)
+		require.ErrorIs(t, sel.Scan(&rows), database.ErrOffsetWithoutLimit)
+		groups := 0
+		require.ErrorIs(t, sel.Count(&groups), database.ErrOffsetWithoutLimit)
+	})
+
 	t.Run("UnknownColumn", func(t *testing.T) {
 		rows := make([]row, 0)
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), types.NewNumericColumn[*TestAggregateRecord, int64]("nonexistent").Sum().As("total")).

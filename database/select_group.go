@@ -73,7 +73,7 @@ func (a *selector[M, R]) groupClauses(tx *gorm.DB, shape projectionShape) (*gorm
 // keyExpr renders a group key or plain column: the column itself, or its time
 // bucket.
 func (a *selector[M, R]) keyExpr(t types.Term, shape projectionShape) string {
-	if jt, derived := shape.derived[a.alias(t)]; derived {
+	if jt, derived := a.derivedOf(t, shape); derived {
 		return a.derivedExpr(jt, t)
 	}
 	column := a.columnExpr(t.Table, t.Column, shape)
@@ -175,8 +175,9 @@ func (a *selector[M, R]) validateColumnClass(t types.Term, column modelschema.Co
 }
 
 // validateHaving checks the HAVING conditions: there are groups to restrict,
-// and every condition names a measure the projection declares and compares
-// against a value SQL can order.
+// and every condition names a measure the projection declares, not a window
+// over it, which is computed after HAVING and filtered by Qualify, and
+// compares against a value SQL can order.
 func (a *selector[M, R]) validateHaving(shape projectionShape) error {
 	if !shape.grouped && len(a.havings) > 0 {
 		return ErrHavingWithoutGroups
@@ -185,7 +186,10 @@ func (a *selector[M, R]) validateHaving(shape projectionShape) error {
 		if !a.isSelected(h.Term) {
 			return errors.Wrapf(ErrHavingTermNotSelected, "%q", a.alias(h.Term))
 		}
-		if err := validateConditionValue(h, a.alias(h.Term)); err != nil {
+		if h.Term.IsWindowed() {
+			return errors.Wrapf(ErrHavingWindowTerm, "%q", a.alias(h.Term))
+		}
+		if err := validateConditionValue(h, a.alias(h.Term), a.termKind(h.Term, shape)); err != nil {
 			return err
 		}
 	}

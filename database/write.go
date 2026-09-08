@@ -606,6 +606,8 @@ func (db *database[M]) updateRowStatement(session *gorm.DB, obj M) *gorm.DB {
 //   - Returns ErrEmptyFieldName if an assignment names an empty column
 //   - Returns ErrNilValue if an assignment carries a nil value
 //   - Returns ErrDuplicateColumn if one column is assigned twice
+//   - Returns ErrColumnTable if an assignment was built from another model's
+//     column reference, even when this model has a column of the same name
 //   - Returns nil (no error) if the record with the given ID does not exist
 //   - On a versioned model (model.Version) the version check is waived — the
 //     caller holds no object to compare — but the statement still bumps the
@@ -637,6 +639,12 @@ func (db *database[M]) UpdateByID(id string, assignments ...types.Assignment) (e
 	for _, assignment := range assignments {
 		if len(assignment.Column) == 0 {
 			return ErrEmptyFieldName
+		}
+		// The reference names the table it was generated for; a column of
+		// another model is refused even when this model has a column of the
+		// same name, because that is a wrong-model write, not a typo.
+		if len(assignment.Table) > 0 && assignment.Table != db.outerTableName() {
+			return errors.Wrapf(ErrColumnTable, "UpdateByID column %q belongs to table %q, model %s writes %q", assignment.Column, assignment.Table, reflect.TypeOf(*new(M)).Elem().Name(), db.outerTableName())
 		}
 		if assignment.Value == nil {
 			return ErrNilValue

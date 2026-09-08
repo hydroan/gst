@@ -20,8 +20,8 @@ var (
 	// that was never initialized.
 	ErrInvalidDB = errors.New("invalid database, maybe not initialized")
 
-	// ErrNilCount is returned when Count or Count is handed a nil
-	// destination.
+	// ErrNilCount is returned when a Count — the chain's, a select's or a
+	// union's — is handed a nil destination.
 	ErrNilCount = errors.New("count parameter cannot be nil")
 
 	// ErrNilDest is returned when a read operation is handed a nil
@@ -125,7 +125,7 @@ var (
 	ErrAfterCommit = errors.New("after-commit action failed")
 
 	// ErrUnknownColumn is returned when an explicit column reference — a
-	// WithSelect argument or an aggregate term — names a column that does not
+	// WithSelect argument or a Select term — names a column that does not
 	// exist on the model. A mistyped column must fail the chain: silently
 	// dropping it would turn a narrowed update into a no-op write.
 	ErrUnknownColumn = errors.New("column does not exist on the model")
@@ -136,11 +136,13 @@ var (
 	ErrNoModelColumnSelected = errors.New("no model column selected")
 
 	// ErrColumnTable is returned when an explicit column reference — a
-	// WithSelect argument or a Select term — was generated for another
-	// model's table. The other model often has a column of the same name,
-	// so the name alone would pass and the statement would read or write
-	// the wrong table as valid SQL; the table the reference carries is what
-	// tells the mistake apart from a typo.
+	// WithSelect column, a WithOrder or WithCursor order, an UpdateByID
+	// assignment, a WithQuery filter or a Select term — was generated for
+	// another model's table. The other model often has a column of the same
+	// name, so the name alone would pass and the statement would read or
+	// write the wrong table as valid SQL; the table the reference carries is
+	// what tells the mistake apart from a typo. A plain name carries no table
+	// and always means the chain's own model.
 	ErrColumnTable = errors.New("column reference belongs to another table")
 )
 

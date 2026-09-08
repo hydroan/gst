@@ -13,7 +13,7 @@ import (
 )
 
 // TestClickhouse covers the contract of an application-held clickhouse
-// instance: the read and aggregate paths work, and the write path, the
+// instance: the read and select paths work, and the write path, the
 // transaction boundary and row locks fail fast per the capability-miss rule.
 //
 // The container, the table and the seed are prepared once for all subtests.
@@ -110,7 +110,7 @@ func TestClickhouse(t *testing.T) {
 		require.Equal(t, "a2", page[0].ID, "the boundary row itself must not leak back into the page")
 	})
 
-	t.Run("AggregateGroupsMeasuresAndHaving", func(t *testing.T) {
+	t.Run("SelectGroupsMeasuresAndHaving", func(t *testing.T) {
 		type row struct {
 			Category string
 			Total    int64
@@ -132,7 +132,7 @@ func TestClickhouse(t *testing.T) {
 		}, rows)
 	})
 
-	t.Run("AggregateTimeBuckets", func(t *testing.T) {
+	t.Run("SelectTimeBuckets", func(t *testing.T) {
 		type row struct {
 			Bucket  string
 			Records int64

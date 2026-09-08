@@ -27,6 +27,7 @@ var (
 	ErrWindowTermNotSelected = errors.New("window references a key or term the projection does not declare")
 	ErrWindowNested          = errors.New("a window cannot be ordered by another window function")
 	ErrQualifyTermNotWindow  = errors.New("qualify references a term that is not a window function of the projection")
+	ErrHavingWindowTerm      = errors.New("having cannot read a window function, which is computed after HAVING, filter it with Qualify")
 )
 
 // qualifiedAlias is the alias of the derived table a Qualify wraps the
@@ -55,13 +56,18 @@ func (a *selector[M, R]) windowExpr(t types.Term, sql string, args []any, shape 
 // the projection is wrapped in a derived table and that is filtered, the one
 // portable spelling of the QUALIFY clause some databases offer natively;
 // ordering and paging then apply to the filtered rows, outside the wrap. A
-// select without Qualify is handed back as it is.
-func (a *selector[M, R]) qualifyWrap(tx *gorm.DB) *gorm.DB {
+// select without Qualify is handed back as it is. The wrap is the statement
+// now, so it is the wrap that carries the operation's comment, once, and
+// build leaves the inner select bare; a member of a union carries none.
+func (a *selector[M, R]) qualifyWrap(tx *gorm.DB, mode buildMode) *gorm.DB {
 	if len(a.qualifies) == 0 {
 		return tx
 	}
-	outer := a.db.annotate(a.db.ins.Session(&gorm.Session{NewDB: true})).
-		Table("(?) AS "+qualifiedAlias, tx)
+	outer := a.db.ins.Session(&gorm.Session{NewDB: true})
+	if !mode.branch() {
+		outer = a.db.annotate(outer)
+	}
+	outer = outer.Table("(?) AS "+qualifiedAlias, tx)
 	for _, q := range a.qualifies {
 		outer = outer.Where(clause.Expr{
 			SQL:  a.db.quoteTableColumn(qualifiedAlias, a.alias(q.Term)) + " " + compareOperator(q.Op) + " ?",
@@ -73,12 +79,12 @@ func (a *selector[M, R]) qualifyWrap(tx *gorm.DB) *gorm.DB {
 
 // validateQualify checks the Qualify conditions: every one names a window
 // term the projection declares and compares against a value SQL can order.
-func (a *selector[M, R]) validateQualify() error {
+func (a *selector[M, R]) validateQualify(shape projectionShape) error {
 	for _, q := range a.qualifies {
 		if !a.isSelected(q.Term) || !q.Term.IsWindowed() {
 			return errors.Wrapf(ErrQualifyTermNotWindow, "%q", a.alias(q.Term))
 		}
-		if err := validateConditionValue(q, a.alias(q.Term)); err != nil {
+		if err := validateConditionValue(q, a.alias(q.Term), a.termKind(q.Term, shape)); err != nil {
 			return err
 		}
 	}
@@ -144,10 +150,8 @@ func (a *selector[M, R]) windowKey(key types.Term, shape projectionShape) types.
 	if !shape.grouped {
 		return key
 	}
-	for _, k := range shape.keys {
-		if k.Column == key.Column && k.Bucket == key.Bucket {
-			return k
-		}
+	if k, ok := a.groupKey(key, shape); ok {
+		return k
 	}
 	// Unreachable: validateWindow has matched every partition key against the
 	// group keys. Rendering the key as given is the harmless answer.
@@ -161,7 +165,7 @@ func (a *selector[M, R]) windowOrderExpr(o types.Ordering, shape projectionShape
 	switch o := o.(type) {
 	case types.Order:
 		if shape.grouped {
-			return a.keyExpr(a.selectedColumnTerm(o.Table, o.Column), shape), nil, orderDirection(o.Direction), nil
+			return a.keyExpr(a.selectedColumnTerm(o.Table, o.Column, shape.main), shape), nil, orderDirection(o.Direction), nil
 		}
 		return a.columnExpr(o.Table, o.Column, shape), nil, orderDirection(o.Direction), nil
 	case types.TermOrder:
@@ -192,7 +196,9 @@ func (a *selector[M, R]) tieBreakers(t types.Term, shape projectionShape) []type
 	if _, ok := shape.columns[modelregistry.DefaultCursorColumn]; !ok {
 		return nil
 	}
-	return []types.Term{{Column: modelregistry.DefaultCursorColumn, Plain: true}}
+	// The breaker names the queried table: a joined select may project a
+	// term under the primary key's name, and the breaker must not read as it.
+	return []types.Term{{Table: shape.main, Column: modelregistry.DefaultCursorColumn, Plain: true}}
 }
 
 // isAggregateFn reports whether the function accumulates rows, which is what
@@ -261,7 +267,7 @@ func (a *selector[M, R]) validateWindow(t types.Term, shape projectionShape) err
 				return errors.Wrapf(ErrUnknownOrderDirection, "%q", o.Direction)
 			}
 			if shape.grouped {
-				if _, ok := a.selectedColumn(o.Table, o.Column); !ok {
+				if _, ok := a.selectedColumn(o.Table, o.Column, shape.main); !ok {
 					return errors.Wrapf(ErrWindowTermNotSelected, "%q orders by column %q, which is not a group key", a.alias(t), o.Column)
 				}
 				continue
@@ -286,16 +292,25 @@ func (a *selector[M, R]) validateWindow(t types.Term, shape projectionShape) err
 	return nil
 }
 
-// isGroupKey reports whether a window key matches one of the projection's
-// group keys by column and bucket; the alias and the plain flag are the
-// caller's spelling and do not decide.
+// isGroupKey reports whether a window key names one of the projection's
+// group keys.
 func (a *selector[M, R]) isGroupKey(key types.Term, shape projectionShape) bool {
+	_, ok := a.groupKey(key, shape)
+	return ok
+}
+
+// groupKey finds the projection's group key a window key names: the same
+// column, bucket and table, an empty table naming the queried model's. The
+// alias and the plain flag are the caller's spelling and do not decide. The
+// table does: two tables of the query may share a column name, and a key of
+// the wrong one would partition by a column the caller never named.
+func (a *selector[M, R]) groupKey(key types.Term, shape projectionShape) (types.Term, bool) {
 	for _, k := range shape.keys {
-		if k.Column == key.Column && k.Bucket == key.Bucket {
-			return true
+		if k.Column == key.Column && k.Bucket == key.Bucket && shape.tableOf(k) == shape.tableOf(key) {
+			return k, true
 		}
 	}
-	return false
+	return types.Term{}, false
 }
 
 // validateRowLevelKey checks a partition key of a row-level window against

@@ -5,8 +5,10 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
+	"gorm.io/datatypes"
 )
 
 // The join tests read the seeded payments (see paymentSeed in
@@ -332,6 +334,195 @@ func TestSelectJoinGroupedAndWindowed(t *testing.T) {
 				" ORDER BY "+qualified("test_payments", "paid_at")+" DESC, "+qualified("test_payments", "id")+" ASC) AS "+quoteIdent("rn"),
 			"the window's keys and tie breaker are qualified like every other column")
 	})
+
+	t.Run("PartitionsGroupsByAJoinedKey", func(t *testing.T) {
+		// Both group keys are named id; the partition names the account's,
+		// and every payment of an account shares the account's total. A
+		// partition by the payment's own id would answer each payment's own
+		// amount instead.
+		type share struct {
+			ID        string
+			AccountID *string
+			Amount    int64
+			Share     int64
+		}
+		rows := make([]share, 0)
+		sel := database.Select[*TestPayment, share](ctx,
+			TestPaymentCols.ID.Group(), TestAccountCols.ID.Group().As("account_id"),
+			TestPaymentCols.Amount.Sum(), TestPaymentCols.Amount.Sum().Over(types.PartitionBy(TestAccountCols.ID)).As("share")).
+			Join(types.LeftJoin[*TestAccount](onCode)).
+			OrderBy(TestPaymentCols.ID.Group().Asc())
+		require.NoError(t, sel.Scan(&rows))
+		require.Equal(t, []share{
+			{ID: "p1", AccountID: new("acc1"), Amount: 100, Share: 700},
+			{ID: "p2", AccountID: new("acc1"), Amount: 200, Share: 700},
+			{ID: "p3", AccountID: nil, Amount: 300, Share: 300},
+			{ID: "p4", AccountID: new("acc1"), Amount: 400, Share: 700},
+		}, rows)
+
+		statements := make([]types.SQLStatement, 0)
+		require.NoError(t, sel.WithDryRun(&statements).Scan(&rows))
+		require.Contains(t, statements[0].Query, "OVER (PARTITION BY "+qualified("test_accounts", "id")+")")
+	})
+
+	t.Run("PartitionByAJoinedColumnThatIsNotAKey", func(t *testing.T) {
+		// The payment's id is a group key, the account's is not: the name
+		// alone matches, the table refuses.
+		type wrong struct {
+			ID    string
+			Share int64
+		}
+		err := database.Select[*TestPayment, wrong](ctx, TestPaymentCols.ID.Group(),
+			TestPaymentCols.Amount.Sum().Over(types.PartitionBy(TestAccountCols.ID)).As("share")).
+			Join(types.LeftJoin[*TestAccount](onCode)).
+			Scan(&[]wrong{})
+		require.ErrorIs(t, err, database.ErrWindowTermNotSelected)
+	})
+}
+
+func TestSelectJoinRowLevelReads(t *testing.T) {
+	defer cleanupAggregateData()
+	defer cleanupTagData()
+	setupAggregateData(t)
+	setupTagData(t)
+	ctx := context.Background()
+	onRecord := TestAggregateRecordCols.ID.EqCol(TestRecordTagCols.RecordID)
+
+	t.Run("WindowedSumOverALeftJoinedColumnIsNeverNull", func(t *testing.T) {
+		// The renderer coalesces SUM, so the running total of a LEFT JOIN
+		// column reads into a plain field: an unmatched row adds zero.
+		type running struct {
+			ID    string
+			Total int64
+		}
+		rows := make([]running, 0)
+		require.NoError(t, database.Select[*TestRecordTag, running](ctx, TestRecordTagCols.ID,
+			TestAggregateRecordCols.Amount.Sum().Over(types.OrderBy(TestRecordTagCols.ID.Asc())).As("total")).
+			Join(types.LeftJoin[*TestAggregateRecord](onRecord)).
+			OrderBy(TestRecordTagCols.ID.Asc()).
+			Scan(&rows))
+		require.Equal(t, []running{{ID: "t1", Total: 100}, {ID: "t2", Total: 400}, {ID: "t3", Total: 800}}, rows)
+	})
+
+	t.Run("PlainNameOrdersByTheQueriedModelsColumn", func(t *testing.T) {
+		// Both tables project a category; a plain name orders by the queried
+		// model's, whichever of the two is projected first.
+		type tagged struct {
+			ID             string
+			RecordCategory string
+			Category       string
+		}
+		rows := make([]tagged, 0)
+		sel := database.Select[*TestRecordTag, tagged](ctx,
+			TestAggregateRecordCols.Category.As("record_category"), TestRecordTagCols.ID, TestRecordTagCols.Category).
+			Join(types.Join[*TestAggregateRecord](onRecord)).
+			OrderBy(types.Desc("category"), types.Asc("id"))
+		require.NoError(t, sel.Scan(&rows))
+		require.Equal(t, []tagged{
+			{ID: "t3", RecordCategory: "beta", Category: "beta"},
+			{ID: "t1", RecordCategory: "alpha", Category: "alpha"},
+			{ID: "t2", RecordCategory: "alpha", Category: "alpha"},
+		}, rows)
+
+		statements := make([]types.SQLStatement, 0)
+		require.NoError(t, sel.WithDryRun(&statements).Scan(&rows))
+		require.Contains(t, statements[0].Query, " ORDER BY "+quoteIdent("category")+" DESC,"+quoteIdent("id")+" ASC")
+	})
+
+	t.Run("TieBreakerIsTheQueriedModelsKey", func(t *testing.T) {
+		// The joined select projects its count under the primary key's
+		// name; the window's tie breaker still reads the queried model's
+		// key, not the derived column that shares the name.
+		perRecord := TestRecordTagCols.ID.Count().As("id")
+		counts := database.Select[*TestRecordTag, struct {
+			RecordID string
+			ID       int64
+		}](ctx, TestRecordTagCols.RecordID.Group(), perRecord)
+		type numbered struct {
+			Category string
+			ID       *int64
+			Rn       int64
+		}
+		statements := make([]types.SQLStatement, 0)
+		rows := make([]numbered, 0)
+		require.NoError(t, database.Select[*TestAggregateRecord, numbered](ctx, TestAggregateRecordCols.Category, perRecord,
+			types.RowNumber().Over(types.OrderBy(TestAggregateRecordCols.Category.Asc())).As("rn")).
+			Join(types.LeftJoinSelect(counts, TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID))).
+			WithDryRun(&statements).Scan(&rows))
+		require.Contains(t, statements[0].Query,
+			"ROW_NUMBER() OVER (ORDER BY "+qualified("test_aggregate_records", "category")+" ASC, "+qualified("test_aggregate_records", "id")+" ASC)")
+	})
+
+	t.Run("JSONContainsIsQualified", func(t *testing.T) {
+		// The JSON predicate quotes its own operand, so it is handed the
+		// column under its table; bare, two tables with the column name
+		// would make the statement ambiguous.
+		userID := types.NewColumn[*TestUser, string]("id")
+		userAddr := types.NewColumn[*TestUser, datatypes.JSONSlice[string]]("addr")
+		type named struct {
+			ID   string
+			Name string
+		}
+		statements := make([]types.SQLStatement, 0)
+		rows := make([]named, 0)
+		require.NoError(t, database.Select[*TestRecordTag, named](ctx, TestRecordTagCols.ID, colName.As("name")).
+			Join(types.Join[*TestUser](userID.EqCol(TestRecordTagCols.RecordID))).
+			Where(userAddr.JSONContains("home")).
+			WithDryRun(&statements).Scan(&rows))
+		require.Contains(t, statements[0].Query, qualified("test_users", "addr"))
+		require.NotContains(t, statements[0].Query, "("+quoteIdent("addr")+")")
+	})
+}
+
+func TestSelectJoinKeepsTheJoinedModelsTenant(t *testing.T) {
+	ctx := context.Background()
+	require.NoError(t, database.DB().AutoMigrate(&TestTenantSoftDeleteItem{}))
+	cleanup := func() {
+		_ = database.DB().Exec("DELETE FROM test_tenant_soft_delete_items").Error
+		cleanupTagData()
+	}
+	defer cleanup()
+	cleanup()
+
+	// One item per tenant, each tagged; a read in tenant-a joins the tag
+	// of tenant-b's item to nothing, the way a List in tenant-a hides that
+	// item.
+	mine := &TestTenantSoftDeleteItem{Name: "mine"}
+	theirs := &TestTenantSoftDeleteItem{Name: "theirs"}
+	require.NoError(t, database.Database[*TestTenantSoftDeleteItem](tenant.In(ctx, "tenant-a")).Create(mine))
+	require.NoError(t, database.Database[*TestTenantSoftDeleteItem](tenant.In(ctx, "tenant-b")).Create(theirs))
+	require.NoError(t, database.Database[*TestRecordTag](ctx).Create(
+		&TestRecordTag{ID: "tg1", RecordID: mine.ID, Label: "a"},
+		&TestRecordTag{ID: "tg2", RecordID: theirs.ID, Label: "b"},
+	))
+	itemID := types.NewColumn[*TestTenantSoftDeleteItem, string]("id")
+	itemName := types.NewColumn[*TestTenantSoftDeleteItem, string]("name")
+	type taggedItem struct {
+		ID   string
+		Name *string
+	}
+	read := func(ctx context.Context) ([]taggedItem, []types.SQLStatement) {
+		t.Helper()
+		sel := database.Select[*TestRecordTag, taggedItem](ctx, TestRecordTagCols.ID, itemName.As("name")).
+			Join(types.LeftJoin[*TestTenantSoftDeleteItem](itemID.EqCol(TestRecordTagCols.RecordID))).
+			OrderBy(TestRecordTagCols.ID.Asc())
+		rows := make([]taggedItem, 0)
+		require.NoError(t, sel.Scan(&rows))
+		statements := make([]types.SQLStatement, 0)
+		require.NoError(t, sel.WithDryRun(&statements).Scan(&rows))
+		return rows, statements
+	}
+
+	rows, statements := read(tenant.In(ctx, "tenant-a"))
+	require.Equal(t, []taggedItem{{ID: "tg1", Name: new("mine")}, {ID: "tg2", Name: nil}}, rows)
+	require.Contains(t, statements[0].Query,
+		" AND "+qualified("test_tenant_soft_delete_items", "deleted_at")+" IS NULL AND "+qualified("test_tenant_soft_delete_items", "tenant_id")+" = ",
+		"the tenant condition sits in the ON beside the soft delete")
+	require.Equal(t, []any{"tenant-a"}, statements[0].Args)
+
+	rows, statements = read(tenant.Across(ctx))
+	require.Equal(t, []taggedItem{{ID: "tg1", Name: new("mine")}, {ID: "tg2", Name: new("theirs")}}, rows, "a cross-tenant context reads every tenant's rows")
+	require.NotContains(t, statements[0].Query, "tenant_id")
 }
 
 func TestSelectJoinInsideAUnionBranch(t *testing.T) {
@@ -424,6 +615,28 @@ func TestSelectJoinBuildErrors(t *testing.T) {
 
 	t.Run("ModelJoiningItself", func(t *testing.T) {
 		require.ErrorIs(t, withAccount(types.Join[*TestPayment](TestPaymentCols.ID.EqCol(TestPaymentCols.Account))).Scan(&rows), database.ErrJoinDuplicateTable)
+	})
+
+	t.Run("JoinedSelectOverTheQueriedTable", func(t *testing.T) {
+		// A select over the payments is addressed through the payment
+		// columns, the same references the query reads its own table by; the
+		// error names the source so the reader is not sent looking for a
+		// model join.
+		type accountTotal struct {
+			Account string
+			Total   int64
+		}
+		total := TestPaymentCols.Amount.Sum().As("total")
+		perAccount := database.Select[*TestPayment, accountTotal](ctx, TestPaymentCols.Account.Group(), total)
+		type paymentShare struct {
+			ID    string
+			Total *int64
+		}
+		err := database.Select[*TestPayment, paymentShare](ctx, TestPaymentCols.ID, total).
+			Join(types.LeftJoinSelect(perAccount, TestPaymentCols.Account.EqCol(TestPaymentCols.Account))).
+			Scan(&[]paymentShare{})
+		require.ErrorIs(t, err, database.ErrJoinDuplicateTable)
+		require.ErrorContains(t, err, "joined select over")
 	})
 
 	t.Run("SumOverAJoinedColumnInAGroupedSelect", func(t *testing.T) {
@@ -760,6 +973,25 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			Join(types.LeftJoinSelect(counts.OrderBy(tags.Desc()), onRecord)).
 			Scan(&rows)
 		require.ErrorIs(t, err, database.ErrNestedSelectOrdered)
+	})
+
+	t.Run("BucketKeyCannotBeJoined", func(t *testing.T) {
+		// The select's key is a day label; no time column of the query
+		// equals a label, so the join could only ever match nothing.
+		type dayTotal struct {
+			Day   string
+			Total int64
+		}
+		total := TestPaymentCols.Amount.Sum().As("total")
+		perDay := database.Select[*TestPayment, dayTotal](ctx, TestPaymentCols.PaidAt.ByDay().As("day"), total)
+		type refundDay struct {
+			ID    string
+			Total *int64
+		}
+		err := database.Select[*TestRefund, refundDay](ctx, TestRefundCols.ID, total).
+			Join(types.LeftJoinSelect(perDay, TestPaymentCols.PaidAt.EqCol(TestRefundCols.SettledAt))).
+			Scan(&[]refundDay{})
+		require.ErrorIs(t, err, database.ErrJoinSelectBucketKey)
 	})
 
 	t.Run("KeyNotFullyPinned", func(t *testing.T) {

@@ -702,6 +702,11 @@ func TestDatabaseUpdateByID(t *testing.T) {
 	require.Equal(t, u1.Email, u.Email)
 	originalUpdatedAt := u.UpdatedAt
 
+	// The account fixture has a name column too, so the name alone would
+	// pass; the table the reference carries refuses the write to the wrong
+	// model before anything reaches the database.
+	require.ErrorIs(t, database.Database[*TestUser](context.Background()).UpdateByID(u.ID, TestAccountCols.Name.Set("hacked")), database.ErrColumnTable)
+
 	newName := "user1_modified"
 	// updated_at carries millisecond precision (dbruntime.NowUTC); step past
 	// the current millisecond so consecutive writes observe distinct values.
@@ -792,8 +797,9 @@ func TestDatabaseUpdateByIDNormalizesID(t *testing.T) {
 
 	item := &TestAutoItem{Code: "update-by-id-a1", Name: "first"}
 	require.NoError(t, database.Database[*TestAutoItem](context.Background()).Create(item))
+	autoItemName := types.NewColumn[*TestAutoItem, string]("name")
 
-	err := database.Database[*TestAutoItem](context.Background()).UpdateByID(item.GetID()+"abc", colName.Set("hijacked"))
+	err := database.Database[*TestAutoItem](context.Background()).UpdateByID(item.GetID()+"abc", autoItemName.Set("hijacked"))
 	require.ErrorIs(t, err, database.ErrRecordNotFound)
 	requireRuntimeStack(t, err)
 
@@ -801,7 +807,7 @@ func TestDatabaseUpdateByIDNormalizesID(t *testing.T) {
 	require.NoError(t, database.Database[*TestAutoItem](context.Background()).Get(kept, item.GetID()))
 	require.Equal(t, "first", kept.Name, "a rejected id must not update the row with its numeric prefix")
 
-	require.NoError(t, database.Database[*TestAutoItem](context.Background()).UpdateByID(item.GetID(), colName.Set("renamed")))
+	require.NoError(t, database.Database[*TestAutoItem](context.Background()).UpdateByID(item.GetID(), autoItemName.Set("renamed")))
 	renamed := new(TestAutoItem)
 	require.NoError(t, database.Database[*TestAutoItem](context.Background()).Get(renamed, item.GetID()))
 	require.Equal(t, "renamed", renamed.Name)
@@ -945,7 +951,7 @@ func TestDatabaseSingleStatementWriteSkipsTransaction(t *testing.T) {
 		require.NoError(t, database.Database[*TestItem](context.Background()).Create(item))
 		probe.take()
 
-		require.NoError(t, database.Database[*TestItem](context.Background()).UpdateByID(item.ID, colName.Set("tx-updatebyid-b")))
+		require.NoError(t, database.Database[*TestItem](context.Background()).UpdateByID(item.ID, types.NewColumn[*TestItem, string]("name").Set("tx-updatebyid-b")))
 		require.Equal(t, []bool{false}, probe.take())
 
 		got := new(TestItem)

@@ -45,6 +45,7 @@ var (
 	ErrUnknownCompareOp      = errors.New("having comparison is not one the framework defines")
 	ErrUnknownOrderDirection = errors.New("order direction is not one the framework defines")
 	ErrHavingValue           = errors.New("having compares against a value SQL cannot order")
+	ErrHavingValueType       = errors.New("having or qualify compares against a value of a kind the term cannot yield")
 	ErrOrderTermNotSelected  = errors.New("order by references a term the projection does not declare")
 	ErrOffsetWithoutLimit    = errors.New("Offset needs a Limit")
 	ErrSelectorUnusable      = errors.New("select could not attach to the database chain")
@@ -390,8 +391,9 @@ func (a *selector[M, R]) build(mode buildMode) (*gorm.DB, error) {
 	// question. That shape is the one the paginated-report idiom produces:
 	// Scan for the page, then Count for the total. The fresh statement
 	// also lacks the operation's comment, so it is attached again here; a
-	// member of a union carries none of its own, the union's statement does.
-	if mode.branch() {
+	// member of a union carries none of its own, the union's statement does,
+	// and a select Qualify wraps carries it on the wrap, see qualifyWrap.
+	if mode.branch() || len(a.qualifies) > 0 {
 		a.db.ins = a.session()
 	} else {
 		a.db.ins = a.db.annotate(a.session())
@@ -461,18 +463,15 @@ func (a *selector[M, R]) build(mode buildMode) (*gorm.DB, error) {
 	if tx, err = a.groupClauses(tx, shape); err != nil {
 		return nil, err
 	}
-	tx = a.qualifyWrap(tx)
+	tx = a.qualifyWrap(tx, mode)
 
 	switch mode {
 	case buildRead:
 		// ORDER BY may use the output alias: every supported dialect accepts
 		// one there, and the alias is also what the wrapped rows are named by.
 		for _, o := range a.orders {
-			term, direction := a.orderedTerm(o)
+			term, direction := a.orderedTerm(o, shape)
 			tx = tx.Order(a.db.quoteIdent(a.alias(term)) + " " + string(direction))
-		}
-		if a.offset > 0 && !a.hasLimit {
-			return nil, ErrOffsetWithoutLimit
 		}
 		if a.hasLimit {
 			tx = tx.Limit(a.limit)
@@ -498,12 +497,12 @@ func (a *selector[M, R]) build(mode buildMode) (*gorm.DB, error) {
 // orderedTerm resolves one ordering of the select to the projected term it
 // sorts by and the direction it sorts in. validate has checked that the term
 // is selected, so the lookup cannot miss here.
-func (a *selector[M, R]) orderedTerm(o types.Ordering) (types.Term, types.OrderDirection) {
+func (a *selector[M, R]) orderedTerm(o types.Ordering, shape projectionShape) (types.Term, types.OrderDirection) {
 	switch o := o.(type) {
 	case types.TermOrder:
 		return o.Term, orderDirection(o.Direction)
 	case types.Order:
-		return a.selectedColumnTerm(o.Table, o.Column), orderDirection(o.Direction)
+		return a.selectedColumnTerm(o.Table, o.Column, shape.main), orderDirection(o.Direction)
 	default:
 		// Unreachable: Ordering is sealed to the two types above.
 		return types.Term{}, types.OrderAsc
@@ -559,7 +558,7 @@ func termAlias(t types.Term) string {
 // expression, so the filter renderer stays the only place predicates are
 // built; a windowed term carries its window after the function.
 func (a *selector[M, R]) termExpr(t types.Term, shape projectionShape) (string, []any, error) {
-	if jt, derived := shape.derived[a.alias(t)]; derived {
+	if jt, derived := a.derivedOf(t, shape); derived {
 		return a.derivedExpr(jt, t), nil, nil
 	}
 	if t.IsLiteral() {
@@ -601,6 +600,11 @@ func (a *selector[M, R]) validate(mode buildMode) (projectionShape, error) {
 	if mode.branch() && (len(a.orders) > 0 || a.hasLimit || a.offset > 0) {
 		return shape, ErrNestedSelectOrdered
 	}
+	// Checked here rather than where paging renders, so Count refuses the
+	// specification Scan would: validation covers the whole of it.
+	if !mode.branch() && a.offset > 0 && !a.hasLimit {
+		return shape, ErrOffsetWithoutLimit
+	}
 	columns, err := modelschema.Columns(a.db.typ)
 	if err != nil {
 		return shape, errors.Wrapf(err, "resolve columns of %s", a.db.typ)
@@ -621,7 +625,7 @@ func (a *selector[M, R]) validate(mode buildMode) (projectionShape, error) {
 	// plain columns and time buckets are projected as they are.
 	windowed, measures := 0, 0
 	for _, t := range a.terms {
-		if _, derived := shape.derived[a.alias(t)]; derived {
+		if _, derived := a.derivedOf(t, shape); derived {
 			// A joined select's term is a column of the derived table, whatever
 			// function it applied inside the select: it neither groups nor
 			// windows the query.
@@ -653,7 +657,7 @@ func (a *selector[M, R]) validate(mode buildMode) (projectionShape, error) {
 		return shape, ErrPlainSelect
 	}
 	for _, t := range a.terms {
-		if _, derived := shape.derived[a.alias(t)]; derived {
+		if _, derived := a.derivedOf(t, shape); derived {
 			continue
 		}
 		switch {
@@ -689,11 +693,11 @@ func (a *selector[M, R]) validate(mode buildMode) (projectionShape, error) {
 	if err = a.validateHaving(shape); err != nil {
 		return shape, err
 	}
-	if err = a.validateQualify(); err != nil {
+	if err = a.validateQualify(shape); err != nil {
 		return shape, err
 	}
 	for _, o := range a.orders {
-		if err = a.validateOrdering(o); err != nil {
+		if err = a.validateOrdering(o, shape); err != nil {
 			return shape, err
 		}
 	}
@@ -706,8 +710,11 @@ func (a *selector[M, R]) validate(mode buildMode) (projectionShape, error) {
 // validateConditionValue checks the operator and value of a having or qualify
 // condition. The comparison is rendered with the value bound, so anything SQL
 // cannot order either fails at the database or, for nil, compares against
-// NULL and quietly answers with no rows at all.
-func validateConditionValue(c types.TermCondition, alias string) error {
+// NULL and quietly answers with no rows at all; and a value of another kind
+// than the term yields — text against a count, a number against a name — is
+// a comparison some dialects answer with no rows rather than an error, so it
+// is refused where both kinds are known.
+func validateConditionValue(c types.TermCondition, alias string, yields valueKind) error {
 	if !c.Op.Valid() {
 		return errors.Wrapf(ErrUnknownCompareOp, "%q", c.Op)
 	}
@@ -720,18 +727,102 @@ func validateConditionValue(c types.TermCondition, alias string) error {
 	// A typed nil pointer slips past the untyped nil check above but binds
 	// the same way: the driver dereferences non-nil pointers and turns a
 	// nil one at any depth into NULL, which quietly answers with no rows.
-	for v := reflect.ValueOf(c.Value); v.Kind() == reflect.Pointer; v = v.Elem() {
+	v := reflect.ValueOf(c.Value)
+	for ; v.Kind() == reflect.Pointer; v = v.Elem() {
 		if v.IsNil() {
 			return errors.Wrapf(ErrHavingValue, "%q compares against a nil %s", alias, v.Type())
 		}
 	}
+	if given := valueKindOf(v); yields != kindUnknown && given != kindUnknown && given != yields {
+		return errors.Wrapf(ErrHavingValueType, "%q yields %s, the value %v is %s", alias, yields, c.Value, given)
+	}
 	return nil
+}
+
+// valueKind is the kind of value a term yields or a condition compares
+// against, as far as a comparison between the two can be judged before the
+// query runs: a number, text, or an instant. Anything else is unknown and
+// left to the database.
+type valueKind int
+
+const (
+	kindUnknown valueKind = iota
+	kindNumeric
+	kindText
+	kindTime
+)
+
+func (k valueKind) String() string {
+	switch k {
+	case kindNumeric:
+		return "a number"
+	case kindText:
+		return "text"
+	case kindTime:
+		return "an instant"
+	default:
+		return "an unknown kind"
+	}
+}
+
+// valueKindOf classifies a condition's value by its Go type, the pointer
+// already dereferenced.
+func valueKindOf(v reflect.Value) valueKind {
+	if v.Type() == timeType {
+		return kindTime
+	}
+	switch v.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		return kindNumeric
+	case reflect.String:
+		return kindText
+	default:
+		return kindUnknown
+	}
+}
+
+// termKind reports the kind of value a term yields: the counts and ranks
+// are numbers whatever they count, AVG and SUM are numbers over the numeric
+// columns they exist on, a time bucket and a literal are text, and every
+// other term yields what its column stores. A joined select's term is
+// classified by the select that projects it, which is out of reach here.
+func (a *selector[M, R]) termKind(t types.Term, shape projectionShape) valueKind {
+	if _, derived := a.derivedOf(t, shape); derived {
+		return kindUnknown
+	}
+	switch {
+	case t.IsLiteral(), t.Bucket != types.TimeBucketNone:
+		return kindText
+	case t.Fn == types.FnCount, t.Fn == types.FnCountDistinct, t.Fn == types.FnRowNumber,
+		t.Fn == types.FnRank, t.Fn == types.FnDenseRank, t.Fn == types.FnSum, t.Fn == types.FnAvg:
+		return kindNumeric
+	}
+	column, err := a.columnOf(t.Table, t.Column, shape)
+	if err != nil {
+		return kindUnknown
+	}
+	switch modelschema.ClassifyColumn(column.Type) {
+	case modelschema.ColumnClassNumeric:
+		return kindNumeric
+	case modelschema.ColumnClassTime:
+		return kindTime
+	}
+	typ := column.Type
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	if typ.Kind() == reflect.String {
+		return kindText
+	}
+	return kindUnknown
 }
 
 // validateOrdering checks one ordering of the select: a term order must name a
 // projected term, a column order a projected column or group key, so the
 // output can never be sorted by something it does not carry.
-func (a *selector[M, R]) validateOrdering(o types.Ordering) error {
+func (a *selector[M, R]) validateOrdering(o types.Ordering, shape projectionShape) error {
 	switch o := o.(type) {
 	case types.TermOrder:
 		if !o.Direction.Valid() {
@@ -744,7 +835,7 @@ func (a *selector[M, R]) validateOrdering(o types.Ordering) error {
 		if !o.Direction.Valid() {
 			return errors.Wrapf(ErrUnknownOrderDirection, "%q", o.Direction)
 		}
-		if _, ok := a.selectedColumn(o.Table, o.Column); !ok {
+		if _, ok := a.selectedColumn(o.Table, o.Column, shape.main); !ok {
 			return errors.Wrapf(ErrOrderTermNotSelected, "column %q", o.Column)
 		}
 	default:
@@ -755,15 +846,20 @@ func (a *selector[M, R]) validateOrdering(o types.Ordering) error {
 
 // selectedColumn finds the projected term that carries a column as it is: a
 // group key or a plain column, never a bucket, a measure or a window over it.
-// A table narrows the match to that table's column, which tells two joined
+// The table narrows the match to that table's column, which tells two joined
 // tables' columns of one name apart; an ordering built from a plain name
-// carries none and matches the first.
-func (a *selector[M, R]) selectedColumn(table, column string) (types.Term, bool) {
+// carries none and names the queried model's column, as a plain name does
+// everywhere else, never whichever table's column happens to be projected
+// first.
+func (a *selector[M, R]) selectedColumn(table, column, main string) (types.Term, bool) {
+	if len(table) == 0 {
+		table = main
+	}
 	for _, t := range a.terms {
 		if t.Fn != types.FnNone || t.Bucket != types.TimeBucketNone || t.Column != column {
 			continue
 		}
-		if len(table) > 0 && len(t.Table) > 0 && t.Table != table {
+		if termTable := t.Table; len(termTable) > 0 && termTable != table || len(termTable) == 0 && table != main {
 			continue
 		}
 		return t, true
@@ -773,8 +869,8 @@ func (a *selector[M, R]) selectedColumn(table, column string) (types.Term, bool)
 
 // selectedColumnTerm is selectedColumn for a column validation has already
 // matched.
-func (a *selector[M, R]) selectedColumnTerm(table, column string) types.Term {
-	term, _ := a.selectedColumn(table, column)
+func (a *selector[M, R]) selectedColumnTerm(table, column, main string) types.Term {
+	term, _ := a.selectedColumn(table, column, main)
 	return term
 }
 
@@ -930,7 +1026,7 @@ func (a *selector[M, R]) nullableAliases(shape projectionShape) map[string]strin
 	for _, t := range a.terms {
 		// A joined select's term is NULL where a LEFT JOIN matched no group,
 		// and where the select itself answered NULL.
-		if jt, derived := shape.derived[a.alias(t)]; derived {
+		if jt, derived := a.derivedOf(t, shape); derived {
 			switch why, isNullable := jt.derived.nullable[a.alias(t)]; {
 			case jt.left:
 				nullable[a.alias(t)] = fmt.Sprintf("term %q of the joined select, which is NULL when the LEFT JOIN matches no group", a.alias(t))
@@ -941,8 +1037,8 @@ func (a *selector[M, R]) nullableAliases(shape projectionShape) map[string]strin
 		}
 		// A column of a LEFT JOIN table is NULL on every row the join left
 		// unmatched, whatever reads it, except the counts, which count no
-		// row as zero.
-		if jt, joined := shape.joined[t.Table]; joined && jt.left && t.Fn != types.FnCount && t.Fn != types.FnCountDistinct {
+		// row as zero, and SUM, which the renderer coalesces to zero.
+		if jt, joined := shape.joined[t.Table]; joined && jt.left && t.Fn != types.FnCount && t.Fn != types.FnCountDistinct && t.Fn != types.FnSum {
 			nullable[a.alias(t)] = fmt.Sprintf("column %q of %q, which is NULL when the LEFT JOIN matches no row", t.Column, t.Table)
 			continue
 		}

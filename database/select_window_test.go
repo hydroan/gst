@@ -373,6 +373,54 @@ func TestSelectWindowBuildErrors(t *testing.T) {
 			database.ErrQualifyTermNotWindow)
 	})
 
+	t.Run("HavingCannotReadAWindowTerm", func(t *testing.T) {
+		// A window is computed after HAVING; every dialect rejects the
+		// statement, so the builder refuses it and points at Qualify.
+		type grouped struct {
+			Category string
+			Total    int64
+			Rn       int64
+		}
+		total := TestAggregateRecordCols.Amount.Sum().As("total")
+		running := total.Over(types.OrderBy(total.Desc())).As("rn")
+		err := database.Select[*TestAggregateRecord, grouped](ctx, TestAggregateRecordCols.Category.Group(), total, running).
+			Having(running.Gt(100)).
+			Scan(&[]grouped{})
+		require.ErrorIs(t, err, database.ErrHavingWindowTerm)
+	})
+
+	t.Run("ConditionValueOfAnotherKind", func(t *testing.T) {
+		// A row number is a number and a count is a number: text compared
+		// against either is a comparison SQLite answers with no rows rather
+		// than an error, so it is refused when the query is built.
+		rn := types.RowNumber().Over(ordered).As("rn")
+		require.ErrorIs(t, scan(database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID, rn).
+			Qualify(rn.Eq("one"))),
+			database.ErrHavingValueType)
+		type counted struct {
+			Category string
+			Rn       int64
+		}
+		records := types.Count().As("rn")
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, counted](ctx, TestAggregateRecordCols.Category.Group(), records).
+			Having(records.Gte("many")).
+			Scan(&[]counted{}),
+			database.ErrHavingValueType)
+		// A number against a count, and an instant against the latest
+		// occurrence, are the kinds the terms yield and pass.
+		require.NoError(t, database.Select[*TestAggregateRecord, counted](ctx, TestAggregateRecordCols.Category.Group(), records).
+			Having(records.Gte(2)).
+			Scan(&[]counted{}))
+		type latest struct {
+			Category string
+			Last     *time.Time
+		}
+		last := TestAggregateRecordCols.OccurredAt.Max().As("last")
+		require.NoError(t, database.Select[*TestAggregateRecord, latest](ctx, TestAggregateRecordCols.Category.Group(), last).
+			Having(last.Gt(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))).
+			Scan(&[]latest{}))
+	})
+
 	t.Run("HavingNeedsGroups", func(t *testing.T) {
 		rn := types.RowNumber().Over(ordered).As("rn")
 		require.ErrorIs(t, scan(database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID, rn).

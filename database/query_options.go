@@ -43,12 +43,29 @@ func (db *database[M]) WithCursor(cursor types.Cursor) types.Database[M] {
 	if !cursor.Enabled() {
 		return db
 	}
+	if err := db.ownOrder("WithCursor", cursor.Order); err != nil {
+		db.err = err
+		return db
+	}
 	if len(cursor.Order.Column) == 0 {
 		cursor.Order.Column = modelregistry.DefaultCursorColumn
 	}
 	db.cursor = cursor
 
 	return db
+}
+
+// ownOrder refuses an order of another model's column. The reference names
+// the table it was generated for; a column of another model is refused even
+// when this model has a column of the same name, because that is a wrong-model
+// read, not a typo, and the statement would sort by the wrong column as valid
+// SQL. An order built from a plain name carries no table and names this
+// model's column.
+func (db *database[M]) ownOrder(option string, order types.Order) error {
+	if len(order.Table) > 0 && order.Table != db.outerTableName() {
+		return errors.Wrapf(ErrColumnTable, "%s column %q belongs to table %q, model %s reads %q", option, order.Column, order.Table, reflect.TypeOf(*new(M)).Elem().Name(), db.outerTableName())
+	}
+	return nil
 }
 
 // applyCursorPagination applies cursor-based pagination to the query if a
@@ -256,13 +273,18 @@ func (db *database[M]) WithLock(mode ...consts.LockMode) types.Database[M] {
 //	WithOrder(types.Desc("created_at"))                       // same, by column name
 //
 // Calling WithOrder without any term, or with a term whose column is empty,
-// adds nothing.
+// adds nothing. A reference of another model's column fails the chain with
+// ErrColumnTable, the way WithSelect refuses one.
 func (db *database[M]) WithOrder(orders ...types.Order) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	for _, order := range orders {
 		if len(order.Column) == 0 {
 			continue
+		}
+		if err := db.ownOrder("WithOrder", order); err != nil {
+			db.err = err
+			return db
 		}
 		db.ins = db.ins.Order(db.orderClause(order))
 	}
@@ -408,7 +430,9 @@ func (db *database[M]) WithExpand(expand []string, orders ...types.Order) types.
 	defer db.mu.Unlock()
 	// The order terms sort the preloaded rows of each association, so their
 	// columns must exist on the associated table; a self-referencing tree,
-	// where parent and child share the schema, is the case this serves.
+	// where parent and child share the schema, is the case this serves. The
+	// table a reference carries is the associated model's, not this one's,
+	// so it is not checked here the way WithOrder checks it.
 	withOrder := func(preload *gorm.DB) *gorm.DB {
 		for _, order := range orders {
 			if len(order.Column) == 0 {

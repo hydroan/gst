@@ -40,15 +40,18 @@ func Init() (err error) {
 // ClickHouse is an analytical instance. The handle carries the read side of
 // the framework — List/Get/Count/First/Last/Take, the filter operators
 // (correlated EXISTS subqueries and JSON containment excepted, those fail
-// closed), cursor pagination, and the whole aggregate path including time
-// buckets — plus a write path with a deliberately weaker contract: no model
-// hooks and no transaction boundary; Create is plain batch INSERTs, Delete a
+// closed), cursor pagination, and the whole select path: grouping, time
+// buckets, window functions, UnionAll and the joined selects of Select —
+// plus a write path with a deliberately weaker contract: no model hooks and
+// no transaction boundary; Create is plain batch INSERTs, Delete a
 // lightweight physical DELETE by primary key, Update an asynchronous ALTER
 // TABLE mutation for low-frequency data correction. Upsert, Cleanup, the
-// transaction boundary, and row locks are not carried and fail with
-// database.ErrUnsupportedOnDialect. The schema (engine, ORDER BY,
-// partitioning) is hand-written DDL owned by the application; the framework
-// never creates or migrates ClickHouse tables.
+// transaction boundary, row locks, and the model joins of Select (no unique
+// constraint to prove a join on) are not carried and fail with
+// database.ErrUnsupportedOnDialect; the database package doc lists the
+// whole contract. The schema (engine, ORDER BY, partitioning) is
+// hand-written DDL owned by the application; the framework never creates or
+// migrates ClickHouse tables.
 func New(cfg config.Clickhouse) (*gorm.DB, error) {
 	// PrepareStmt stays off on purpose: clickhouse-go implements Prepare as
 	// its batch-INSERT mechanism only, so routing ordinary statements through
