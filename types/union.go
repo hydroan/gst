@@ -24,19 +24,19 @@ type SelectBranch[R any] interface {
 // is projected with Literal:
 //
 //	type flow struct {
-//	    Kind      string
-//	    ID        string
-//	    Amount    int64
-//	    CreatedAt time.Time
+//	    Kind    string
+//	    ID      string
+//	    Amount  int64
+//	    At      time.Time
 //	}
 //	payments := database.Select[*Payment, flow](ctx,
-//	    types.Literal("payment").As("kind"), PaymentCols.ID, PaymentCols.Amount, PaymentCols.CreatedAt).
+//	    types.Literal("payment").As("kind"), PaymentCols.ID, PaymentCols.Amount, PaymentCols.PaidAt.As("at")).
 //	    Where(PaymentCols.TenantID.Eq(tenant))
 //	refunds := database.Select[*Refund, flow](ctx,
-//	    types.Literal("refund").As("kind"), RefundCols.ID, RefundCols.Amount, RefundCols.SettledAt.As("created_at")).
+//	    types.Literal("refund").As("kind"), RefundCols.ID, RefundCols.Amount, RefundCols.SettledAt.As("at")).
 //	    Where(RefundCols.TenantID.Eq(tenant))
 //	feed := database.UnionAll[flow](ctx, payments, refunds).
-//	    OrderBy(PaymentCols.CreatedAt.Desc(), PaymentCols.ID.Desc()).
+//	    OrderBy(PaymentCols.PaidAt.As("at").Desc(), PaymentCols.ID.Desc()).
 //	    Limit(20).Offset(40)
 //	err := feed.Scan(&rows)
 //	err = feed.Count(&total)
@@ -47,14 +47,14 @@ type SelectBranch[R any] interface {
 // most:
 //
 //	SELECT * FROM (
-//	  SELECT * FROM (SELECT 'payment' AS `kind`, `id` AS `id`, `amount` AS `amount`, `created_at` AS `created_at`
+//	  SELECT * FROM (SELECT 'payment' AS `kind`, `id` AS `id`, `amount` AS `amount`, `paid_at` AS `at`
 //	                 FROM `payments` WHERE `tenant_id` = ? AND `payments`.`deleted_at` IS NULL
-//	                 ORDER BY `created_at` DESC,`id` DESC LIMIT ?) AS b0
+//	                 ORDER BY `at` DESC,`id` DESC LIMIT ?) AS b0
 //	  UNION ALL
-//	  SELECT * FROM (SELECT 'refund' AS `kind`, `id` AS `id`, `amount` AS `amount`, `settled_at` AS `created_at`
+//	  SELECT * FROM (SELECT 'refund' AS `kind`, `id` AS `id`, `amount` AS `amount`, `settled_at` AS `at`
 //	                 FROM `refunds` WHERE `tenant_id` = ? AND `refunds`.`deleted_at` IS NULL
-//	                 ORDER BY `created_at` DESC,`id` DESC LIMIT ?) AS b1
-//	) AS u ORDER BY `created_at` DESC,`id` DESC LIMIT ? OFFSET ?
+//	                 ORDER BY `at` DESC,`id` DESC LIMIT ?) AS b1
+//	) AS u ORDER BY `at` DESC,`id` DESC LIMIT ? OFFSET ?
 //
 // A branch keeps its own Where, Having and Qualify, and may be a plain
 // projection of columns, which a select on its own rejects: stacked, the rows

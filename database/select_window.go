@@ -7,11 +7,83 @@ import (
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/types"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // This file is the window side of the select builder: how a windowed term
-// renders its OVER clause, and how a window is validated against the shape of
-// the projection it sits in. The rest of the builder lives in select.go.
+// renders its OVER clause, how a window is validated against the shape of the
+// projection it sits in, and how Qualify filters the windowed rows. The rest
+// of the builder lives in select.go.
+
+// Errors reported while a window or a Qualify is built; see the select errors
+// for why they fail fast.
+var (
+	ErrWindowFnWithoutWindow = errors.New("window function needs a window, declare one with Over")
+	ErrWindowWithoutOrder    = errors.New("window function needs an ordered window, there is no first row without an order")
+	ErrWindowOnKey           = errors.New("a group key, time bucket or literal cannot be windowed, only a function can")
+	ErrWindowCountDistinct   = errors.New("COUNT DISTINCT cannot be windowed on any supported dialect")
+	ErrWindowOverGroups      = errors.New("AVG, LAG and LEAD cannot be windowed over a grouped projection, only SUM, COUNT, MIN, MAX and the ranking functions can")
+	ErrWindowTermNotSelected = errors.New("window references a key or term the projection does not declare")
+	ErrWindowNested          = errors.New("a window cannot be ordered by another window function")
+	ErrQualifyTermNotWindow  = errors.New("qualify references a term that is not a window function of the projection")
+)
+
+// qualifiedAlias is the alias of the derived table a Qualify wraps the
+// projection in; the outer conditions read the window columns through it.
+const qualifiedAlias = "q"
+
+// windowExpr completes the function expression of a windowed term with its
+// window. Over a grouped projection the window reads the groups, so an
+// aggregate is applied to the group measure it names: SUM over the window of
+// the per-group sums, the count of groups, the largest of the group maxima.
+// validateWindow keeps AVG out, whose nesting would answer an average of
+// averages.
+func (a *selector[M, R]) windowExpr(t types.Term, sql string, args []any, shape projectionShape) (string, []any, error) {
+	if shape.grouped && isAggregateFn(t.Fn) {
+		sql = string(t.Fn) + "(" + sql + ")"
+	}
+	over, overArgs, err := a.overExpr(t, shape)
+	if err != nil {
+		return "", nil, err
+	}
+	return sql + " " + over, append(args, overArgs...), nil
+}
+
+// qualifyWrap applies the Qualify conditions. A window function is computed
+// after WHERE, GROUP BY and HAVING, so a condition on it cannot join them:
+// the projection is wrapped in a derived table and that is filtered, the one
+// portable spelling of the QUALIFY clause some databases offer natively;
+// ordering and paging then apply to the filtered rows, outside the wrap. A
+// select without Qualify is handed back as it is.
+func (a *selector[M, R]) qualifyWrap(tx *gorm.DB) *gorm.DB {
+	if len(a.qualifies) == 0 {
+		return tx
+	}
+	outer := a.db.annotate(a.db.ins.Session(&gorm.Session{NewDB: true})).
+		Table("(?) AS "+qualifiedAlias, tx)
+	for _, q := range a.qualifies {
+		outer = outer.Where(clause.Expr{
+			SQL:  a.db.quoteTableColumn(qualifiedAlias, a.alias(q.Term)) + " " + compareOperator(q.Op) + " ?",
+			Vars: []any{q.Value},
+		})
+	}
+	return outer
+}
+
+// validateQualify checks the Qualify conditions: every one names a window
+// term the projection declares and compares against a value SQL can order.
+func (a *selector[M, R]) validateQualify() error {
+	for _, q := range a.qualifies {
+		if !a.isSelected(q.Term) || !q.Term.IsWindowed() {
+			return errors.Wrapf(ErrQualifyTermNotWindow, "%q", a.alias(q.Term))
+		}
+		if err := validateConditionValue(q, a.alias(q.Term)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 // overExpr renders the OVER clause of a windowed term: the partition keys, the
 // order completed with a tie breaker, and for an ordered aggregate the frame

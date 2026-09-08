@@ -172,6 +172,11 @@ func (t Term) Where(filters ...Filter) Term {
 	return t
 }
 
+// The terms below name no column and are built by package-level functions,
+// the way SQL writes them without one: COUNT(*), the ranking functions and a
+// constant. Count and the ranking functions project under a default alias
+// until As renames them; a constant has no name of its own and needs As.
+
 // DefaultCountAlias is the alias COUNT(*) projects under when the caller does
 // not rename it. A column term defaults to its column name, but COUNT(*) names
 // no column, so without a default of its own it would be the one term that
@@ -187,33 +192,11 @@ func Count() Term {
 	return Term{Fn: FnCount, Alias: DefaultCountAlias}
 }
 
-// Over evaluates the term over a window instead of collapsing the rows it
-// reads: every row keeps its place and gains the function's value computed
-// over the rows the window names. It applies to the aggregate functions and
-// to the window functions; a group key, a time bucket and COUNT DISTINCT
-// cannot be windowed and fail when the query is built.
-//
-// With an ordered window the aggregate functions accumulate: SUM becomes a
-// running total, COUNT a running count, and so on, always over the rows from
-// the partition's first up to the current one — the frame is fixed to that,
-// so two rows sorting equal never fold into one step the way the SQL default
-// frame would fold them.
-//
-//	SampleCols.Amount.Sum().Over(PartitionBy(SampleCols.TenantID).OrderBy(SampleCols.CreatedAt.Asc()))
-//	// COALESCE(SUM(`amount`) OVER (PARTITION BY `tenant_id` ORDER BY `created_at` ASC, `id` ASC
-//	//   ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW), 0)
-func (t Term) Over(window Window) Term {
-	t.Window = &window
-	return t
-}
-
-// The window functions below carry no column and, like Count, project under
-// a default alias until renamed with As. They only exist over a window whose
-// OrderBy is set: without an order there is no first row to number.
-
 // RowNumber numbers the rows of each partition from 1 in the window's order,
 // with no ties: two rows sorting equal still get consecutive numbers, in a
-// stable order the framework completes with the primary key.
+// stable order the framework completes with the primary key. Like Rank and
+// DenseRank it only exists over a window whose OrderBy is set, which Over
+// declares: without an order there is no first row to number.
 func RowNumber() Term { return Term{Fn: FnRowNumber, Alias: "row_number"} }
 
 // Rank ranks the rows of each partition in the window's order. Rows sorting
@@ -238,6 +221,26 @@ func DenseRank() Term { return Term{Fn: FnDenseRank, Alias: "dense_rank"} }
 // a group key nor a measure: it stays out of GROUP BY and never comes back
 // NULL.
 func Literal(value string) Term { return Term{Fn: FnLiteral, Literal: value} }
+
+// Over evaluates the term over a window instead of collapsing the rows it
+// reads: every row keeps its place and gains the function's value computed
+// over the rows the window names. It applies to the aggregate functions and
+// to the window functions; a group key, a time bucket and COUNT DISTINCT
+// cannot be windowed and fail when the query is built.
+//
+// With an ordered window the aggregate functions accumulate: SUM becomes a
+// running total, COUNT a running count, and so on, always over the rows from
+// the partition's first up to the current one — the frame is fixed to that,
+// so two rows sorting equal never fold into one step the way the SQL default
+// frame would fold them.
+//
+//	SampleCols.Amount.Sum().Over(PartitionBy(SampleCols.TenantID).OrderBy(SampleCols.CreatedAt.Asc()))
+//	// COALESCE(SUM(`amount`) OVER (PARTITION BY `tenant_id` ORDER BY `created_at` ASC, `id` ASC
+//	//   ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW), 0)
+func (t Term) Over(window Window) Term {
+	t.Window = &window
+	return t
+}
 
 // Expr is what a projection selects and a window partitions by: a column
 // reference, projected as it is stored, or a Term. The set is closed to this

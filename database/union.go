@@ -422,3 +422,49 @@ func (u *union[R]) subject() string {
 	}
 	return "union"
 }
+
+// The methods below are the side of a selector a union reads; see
+// unionBranch. They exist on every instantiation, which is what lets a union
+// take branches over different models.
+
+func (a *selector[M, R]) attachError() error { return a.err }
+
+func (a *selector[M, R]) baseHandle() *gorm.DB { return a.db.base }
+
+func (a *selector[M, R]) chainFor(ctx context.Context, base *gorm.DB) operationChain {
+	chain, ok := databaseFor[M](ctx, base).(*database[M])
+	if !ok {
+		return nil
+	}
+	return chain
+}
+
+func (a *selector[M, R]) selects(t types.Term) bool { return a.isSelected(t) }
+
+// buildBranch renders the selector as a member of a union, ordered and
+// capped as the union pushed down. The chain is prepared here because no
+// terminal of the selector runs: the union's terminal does. The pushdown is
+// set on a copy so the caller's selector stays the specification it wrote.
+func (a *selector[M, R]) buildBranch(mode buildMode, orders []aliasOrder, limit int) (*gorm.DB, error) {
+	if err := a.db.prepare(); err != nil {
+		return nil, err
+	}
+	member := *a
+	member.branchOrders, member.branchLimit = orders, limit
+	return member.build(mode)
+}
+
+// termsInResultOrder returns the projection's terms in the order of the
+// result row's fields. validate has matched the aliases against the fields
+// in both directions, so every field has exactly one term here.
+func (a *selector[M, R]) termsInResultOrder(shape projectionShape) []types.Term {
+	byAlias := make(map[string]types.Term, len(a.terms))
+	for _, t := range a.terms {
+		byAlias[a.alias(t)] = t
+	}
+	ordered := make([]types.Term, 0, len(shape.resultOrder))
+	for _, alias := range shape.resultOrder {
+		ordered = append(ordered, byAlias[alias])
+	}
+	return ordered
+}

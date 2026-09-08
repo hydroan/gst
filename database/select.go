@@ -16,56 +16,44 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// The select builder: the specification a Select call assembles, its
+// terminals, and the shape the renderer and the validator agree on. The
+// grouped side — measures, group keys, HAVING — lives in select_group.go, the
+// window side in select_window.go, the constants in select_literal.go, and
+// the side a union reads in union.go.
+
 // Errors reported while a select is built. They all fail fast: a projection
 // is written by service code, not parsed from a request, so a mistake in it is
 // a programming error. Answering it with an empty result the way the filter
 // layer answers a malformed client filter would disguise the bug as "no data
-// today", which is the hardest reporting failure to trace.
+// today", which is the hardest reporting failure to trace. The grouped side
+// declares its own in select_group.go, the window side in select_window.go
+// and the constants in select_literal.go.
 var (
-	ErrEmptyProjection            = errors.New("aggregate projection is empty")
-	ErrPlainSelect                = errors.New("projection declares neither an aggregate nor a window function, use List for a plain read")
-	ErrPlainColumnInGroupedSelect = errors.New("a column next to an aggregate must be a group key or be aggregated")
-	ErrInvalidAlias               = errors.New("aggregate alias is not a valid identifier")
-	ErrDuplicateAlias             = errors.New("aggregate alias is declared twice")
-	ErrAggregateType              = errors.New("aggregate function does not accept this column type")
-	ErrResultFieldMissing         = errors.New("result row has no field for aggregate alias")
-	ErrAliasMissing               = errors.New("aggregate projection has no alias for result row field")
-	ErrGroupedScanOne             = errors.New("ScanOne cannot run a grouped aggregation, use Scan")
-	ErrScanOneRowLevel            = errors.New("ScanOne cannot run a row-level select, use Scan")
-	ErrUnknownAggregateFn         = errors.New("aggregate function is not one the framework defines")
-	ErrUnknownTimeBucket          = errors.New("time bucket is not one the framework defines")
-	ErrUnknownCompareOp           = errors.New("having comparison is not one the framework defines")
-	ErrConditionOnGroupKey        = errors.New("a group key or literal cannot carry conditions, they only restrict a measure")
-	ErrBucketOnMeasure            = errors.New("a measure cannot carry a time bucket, it only truncates a group key")
-	ErrHavingTermNotSelected      = errors.New("having references a measure the projection does not declare")
-	ErrHavingWithoutGroups        = errors.New("having needs an aggregate to restrict, a row-level select has none")
-	ErrOrderTermNotSelected       = errors.New("order by references a term the projection does not declare")
-	ErrNullableResultField        = errors.New("result row field must be a pointer for an aggregate that yields NULL")
-	ErrScanOnePaged               = errors.New("ScanOne cannot use Having, Limit or Offset, it always reads one row")
-	ErrOffsetWithoutLimit         = errors.New("Offset needs a Limit")
-	ErrSelectorUnusable           = errors.New("aggregate could not attach to the database chain")
-	ErrHavingValue                = errors.New("having compares against a value SQL cannot order")
-	ErrUnknownOrderDirection      = errors.New("order direction is not one the framework defines")
-	ErrWindowFnWithoutWindow      = errors.New("window function needs a window, declare one with Over")
-	ErrWindowWithoutOrder         = errors.New("window function needs an ordered window, there is no first row without an order")
-	ErrWindowOnKey                = errors.New("a group key, time bucket or literal cannot be windowed, only a function can")
-	ErrWindowCountDistinct        = errors.New("COUNT DISTINCT cannot be windowed on any supported dialect")
-	ErrWindowOverGroups           = errors.New("AVG, LAG and LEAD cannot be windowed over a grouped projection, only SUM, COUNT, MIN, MAX and the ranking functions can")
-	ErrWindowTermNotSelected      = errors.New("window references a key or term the projection does not declare")
-	ErrWindowNested               = errors.New("a window cannot be ordered by another window function")
-	ErrQualifyTermNotWindow       = errors.New("qualify references a term that is not a window function of the projection")
-	ErrInvalidLiteral             = errors.New("literal is not a plain identifier")
-	ErrLiteralWithoutAlias        = errors.New("a literal needs an alias, name it with As")
+	ErrEmptyProjection       = errors.New("aggregate projection is empty")
+	ErrPlainSelect           = errors.New("projection declares neither an aggregate nor a window function, use List for a plain read")
+	ErrInvalidAlias          = errors.New("aggregate alias is not a valid identifier")
+	ErrDuplicateAlias        = errors.New("aggregate alias is declared twice")
+	ErrResultFieldMissing    = errors.New("result row has no field for aggregate alias")
+	ErrAliasMissing          = errors.New("aggregate projection has no alias for result row field")
+	ErrNullableResultField   = errors.New("result row field must be a pointer for an aggregate that yields NULL")
+	ErrGroupedScanOne        = errors.New("ScanOne cannot run a grouped aggregation, use Scan")
+	ErrScanOneRowLevel       = errors.New("ScanOne cannot run a row-level select, use Scan")
+	ErrScanOnePaged          = errors.New("ScanOne cannot use Having, Limit or Offset, it always reads one row")
+	ErrUnknownAggregateFn    = errors.New("aggregate function is not one the framework defines")
+	ErrUnknownTimeBucket     = errors.New("time bucket is not one the framework defines")
+	ErrUnknownCompareOp      = errors.New("having comparison is not one the framework defines")
+	ErrUnknownOrderDirection = errors.New("order direction is not one the framework defines")
+	ErrHavingValue           = errors.New("having compares against a value SQL cannot order")
+	ErrOrderTermNotSelected  = errors.New("order by references a term the projection does not declare")
+	ErrOffsetWithoutLimit    = errors.New("Offset needs a Limit")
+	ErrSelectorUnusable      = errors.New("aggregate could not attach to the database chain")
 )
 
 // aliasPattern is what an alias must look like. An alias reaches SQL as an
 // identifier rather than a bound value, so it is restricted to a plain
 // identifier instead of being quoted and hoped for.
 var aliasPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-
-// qualifiedAlias is the alias of the derived table a Qualify wraps the
-// projection in; the outer conditions read the window columns through it.
-const qualifiedAlias = "q"
 
 // selector implements types.Selector by borrowing the Database chain for
 // everything an analytical read shares with a plain one: the transaction
@@ -446,63 +434,10 @@ func (a *selector[M, R]) build(mode buildMode) (*gorm.DB, error) {
 		tx = tx.Where(whereExpr)
 	}
 
-	// Group keys and HAVING render the full expression rather than the output
-	// alias. An output alias is accepted in GROUP BY and HAVING by MySQL, SQLite
-	// and ClickHouse but rejected in HAVING by PostgreSQL, and re-rendering
-	// costs nothing, so one portable spelling replaces a per-dialect branch.
-	//
-	// Both go through gorm's own clause building so their values bind as
-	// statement parameters. Rendering them with Dialector.Explain would be
-	// wrong twice over: Explain exists to format SQL for the log, so it inlines
-	// values instead of binding them, and it has no case for a nested
-	// clause.Expression, so a conditional measure would reach the query as the
-	// Go formatting of a struct rather than as its predicate.
-	for _, t := range shape.keys {
-		sql, args, termErr := a.termExpr(t, shape)
-		if termErr != nil {
-			return nil, termErr
-		}
-		if len(args) > 0 {
-			// Unreachable today: only measures carry conditions, and a group
-			// key renders to a column or a bucket expression, neither of which
-			// binds a value. Fail loudly rather than drop the values if a
-			// future group key gains any.
-			return nil, errors.Newf("group key %q renders bound values", a.alias(t))
-		}
-		// Raw keeps gorm from quoting an already quoted expression: the
-		// MySQL, PostgreSQL and SQLite quoters are idempotent, but the
-		// ClickHouse one is not and would emit ""col"".
-		tx.Statement.AddClause(clause.GroupBy{
-			Columns: []clause.Column{{Name: sql, Raw: true}},
-		})
+	if tx, err = a.groupClauses(tx, shape); err != nil {
+		return nil, err
 	}
-	for _, h := range a.havings {
-		sql, args, termErr := a.termExpr(h.Term, shape)
-		if termErr != nil {
-			return nil, termErr
-		}
-		tx = tx.Having(clause.Expr{
-			SQL:  sql + " " + compareOperator(h.Op) + " ?",
-			Vars: append(append([]any(nil), args...), h.Value),
-		})
-	}
-
-	// A window function is computed after WHERE, GROUP BY and HAVING, so a
-	// condition on it cannot join them. Qualify wraps the projection in a
-	// derived table and filters that, the one portable spelling of the
-	// QUALIFY clause some databases offer natively; ordering and paging then
-	// apply to the filtered rows, outside the wrap.
-	if len(a.qualifies) > 0 {
-		outer := a.db.annotate(a.db.ins.Session(&gorm.Session{NewDB: true})).
-			Table("(?) AS "+qualifiedAlias, tx)
-		for _, q := range a.qualifies {
-			outer = outer.Where(clause.Expr{
-				SQL:  a.db.quoteTableColumn(qualifiedAlias, a.alias(q.Term)) + " " + compareOperator(q.Op) + " ?",
-				Vars: []any{q.Value},
-			})
-		}
-		tx = outer
-	}
+	tx = a.qualifyWrap(tx)
 
 	switch mode {
 	case buildRead:
@@ -534,52 +469,6 @@ func (a *selector[M, R]) build(mode buildMode) (*gorm.DB, error) {
 		}
 	}
 	return tx, nil
-}
-
-// termsInResultOrder returns the projection's terms in the order of the
-// result row's fields. validate has matched the aliases against the fields
-// in both directions, so every field has exactly one term here.
-func (a *selector[M, R]) termsInResultOrder(shape projectionShape) []types.Term {
-	byAlias := make(map[string]types.Term, len(a.terms))
-	for _, t := range a.terms {
-		byAlias[a.alias(t)] = t
-	}
-	ordered := make([]types.Term, 0, len(shape.resultOrder))
-	for _, alias := range shape.resultOrder {
-		ordered = append(ordered, byAlias[alias])
-	}
-	return ordered
-}
-
-// The methods below are the side of a selector a union reads; see
-// unionBranch. They exist on every instantiation, which is what lets a union
-// take branches over different models.
-
-func (a *selector[M, R]) attachError() error { return a.err }
-
-func (a *selector[M, R]) baseHandle() *gorm.DB { return a.db.base }
-
-func (a *selector[M, R]) chainFor(ctx context.Context, base *gorm.DB) operationChain {
-	chain, ok := databaseFor[M](ctx, base).(*database[M])
-	if !ok {
-		return nil
-	}
-	return chain
-}
-
-func (a *selector[M, R]) selects(t types.Term) bool { return a.isSelected(t) }
-
-// buildBranch renders the selector as a member of a union, ordered and
-// capped as the union pushed down. The chain is prepared here because no
-// terminal of the selector runs: the union's terminal does. The pushdown is
-// set on a copy so the caller's selector stays the specification it wrote.
-func (a *selector[M, R]) buildBranch(mode buildMode, orders []aliasOrder, limit int) (*gorm.DB, error) {
-	if err := a.db.prepare(); err != nil {
-		return nil, err
-	}
-	member := *a
-	member.branchOrders, member.branchLimit = orders, limit
-	return member.build(mode)
 }
 
 // orderedTerm resolves one ordering of the select to the projected term it
@@ -657,20 +546,9 @@ func (a *selector[M, R]) termExpr(t types.Term, shape projectionShape) (string, 
 		return "", nil, err
 	}
 	if t.IsWindowed() {
-		if shape.grouped && isAggregateFn(t.Fn) {
-			// Over a grouped projection the window reads the groups, so the
-			// aggregate is applied to the group measure it names: SUM over
-			// the window of the per-group sums, the count of groups, the
-			// largest of the group maxima. validateWindow keeps AVG out,
-			// whose nesting would answer an average of averages.
-			sql = string(t.Fn) + "(" + sql + ")"
+		if sql, args, err = a.windowExpr(t, sql, args, shape); err != nil {
+			return "", nil, err
 		}
-		over, overArgs, overErr := a.overExpr(t, shape)
-		if overErr != nil {
-			return "", nil, overErr
-		}
-		sql += " " + over
-		args = append(args, overArgs...)
 	}
 	if coalesce {
 		// An empty sum is zero, which is a fact about addition rather than a
@@ -681,73 +559,6 @@ func (a *selector[M, R]) termExpr(t types.Term, shape projectionShape) (string, 
 		sql = "COALESCE(" + sql + ", 0)"
 	}
 	return sql, args, nil
-}
-
-// literalExpr renders a constant as a string literal. validate has held the
-// value to a plain identifier, so the quotes cannot be closed from inside and
-// the spelling is the same on every dialect.
-func literalExpr(value string) string { return "'" + value + "'" }
-
-// keyExpr renders a group key or plain column: the column itself, or its time
-// bucket.
-func (a *selector[M, R]) keyExpr(t types.Term) string {
-	column := a.db.quoteIdent(t.Column)
-	if t.Bucket == types.TimeBucketNone {
-		return column
-	}
-	return a.db.timeBucketExpr(column, t.Bucket)
-}
-
-// functionExpr renders the function call of a measure or window function
-// without its window and without the COALESCE a SUM takes, which the caller
-// adds around the complete expression; coalesce reports whether it must.
-func (a *selector[M, R]) functionExpr(t types.Term) (sql string, args []any, coalesce bool, err error) {
-	column := a.db.quoteIdent(t.Column)
-	cond, condErr := a.db.renderFilters(t.Conditions, false, a.db.outerScope())
-	if condErr != nil {
-		return "", nil, false, condErr
-	}
-	switch t.Fn {
-	case types.FnCount:
-		if cond != nil {
-			// COUNT(*) and COUNT(column) both become a conditional count:
-			// CASE yields NULL outside the predicate, and COUNT skips NULLs.
-			if len(t.Column) == 0 {
-				return "COUNT(CASE WHEN ? THEN 1 END)", []any{cond}, false, nil
-			}
-			return "COUNT(CASE WHEN ? THEN " + column + " END)", []any{cond}, false, nil
-		}
-		if len(t.Column) == 0 {
-			return "COUNT(*)", nil, false, nil
-		}
-		return "COUNT(" + column + ")", nil, false, nil
-	case types.FnCountDistinct:
-		if cond != nil {
-			return "COUNT(DISTINCT CASE WHEN ? THEN " + column + " END)", []any{cond}, false, nil
-		}
-		return "COUNT(DISTINCT " + column + ")", nil, false, nil
-	case types.FnSum:
-		if cond != nil {
-			return "SUM(CASE WHEN ? THEN " + column + " ELSE 0 END)", []any{cond}, true, nil
-		}
-		return "SUM(" + column + ")", nil, true, nil
-	case types.FnAvg, types.FnMin, types.FnMax:
-		fn := string(t.Fn)
-		if cond != nil {
-			return fn + "(CASE WHEN ? THEN " + column + " END)", []any{cond}, false, nil
-		}
-		return fn + "(" + column + ")", nil, false, nil
-	case types.FnRowNumber, types.FnRank, types.FnDenseRank:
-		return string(t.Fn) + "()", nil, false, nil
-	case types.FnLag, types.FnLead:
-		return string(t.Fn) + "(" + column + ")", nil, false, nil
-	default:
-		// validate rejects any function outside the closed set before the
-		// renderer runs, so reaching this arm means the two drifted apart.
-		// Composing SQL from the value would put caller text into the
-		// statement, so it errors instead.
-		return "", nil, false, errors.Wrapf(ErrUnknownAggregateFn, "%q", t.Fn)
-	}
 }
 
 // validate checks the projection against the model schema and the result row
@@ -832,24 +643,11 @@ func (a *selector[M, R]) validate(mode buildMode) (projectionShape, error) {
 	// alias but a different expression would filter or sort by something the
 	// projection never declared. Requiring the whole term to match makes the
 	// two agree by construction.
-	if !shape.grouped && len(a.havings) > 0 {
-		return shape, ErrHavingWithoutGroups
+	if err = a.validateHaving(shape); err != nil {
+		return shape, err
 	}
-	for _, h := range a.havings {
-		if !a.isSelected(h.Term) {
-			return shape, errors.Wrapf(ErrHavingTermNotSelected, "%q", a.alias(h.Term))
-		}
-		if err = validateConditionValue(h, a.alias(h.Term)); err != nil {
-			return shape, err
-		}
-	}
-	for _, q := range a.qualifies {
-		if !a.isSelected(q.Term) || !q.Term.IsWindowed() {
-			return shape, errors.Wrapf(ErrQualifyTermNotWindow, "%q", a.alias(q.Term))
-		}
-		if err = validateConditionValue(q, a.alias(q.Term)); err != nil {
-			return shape, err
-		}
+	if err = a.validateQualify(); err != nil {
+		return shape, err
 	}
 	for _, o := range a.orders {
 		if err = a.validateOrdering(o); err != nil {
@@ -944,28 +742,15 @@ func (a *selector[M, R]) validateTerm(t types.Term, shape projectionShape) error
 	if !t.Bucket.Valid() {
 		return errors.Wrapf(ErrUnknownTimeBucket, "%q", t.Bucket)
 	}
-	// A condition on a group key and a bucket on a measure are both meaningless
-	// and were previously dropped without a word, which is how a report ends up
-	// silently counting the wrong rows.
-	if !t.IsMeasure() && len(t.Conditions) > 0 {
-		return errors.Wrapf(ErrConditionOnGroupKey, "%q", a.alias(t))
-	}
-	if t.IsMeasure() && t.Bucket != types.TimeBucketNone {
-		return errors.Wrapf(ErrBucketOnMeasure, "%q", a.alias(t))
+	if err := a.validateGrouping(t); err != nil {
+		return err
 	}
 	if err := a.validateWindow(t, shape); err != nil {
 		return err
 	}
 	if t.IsLiteral() {
-		// A constant names no column and reads no schema: its value must be
-		// safe to inline, and it needs a name to project under.
-		if !aliasPattern.MatchString(t.Literal) {
-			return errors.Wrapf(ErrInvalidLiteral, "%q", t.Literal)
-		}
-		if len(t.Alias) == 0 {
-			return errors.Wrapf(ErrLiteralWithoutAlias, "%q", t.Literal)
-		}
-		return nil
+		// A constant names no column and reads no schema.
+		return validateLiteral(t)
 	}
 	// A column reference carries the table it was built for. A term naming
 	// a column of another model may well name a column the queried model also
@@ -985,25 +770,7 @@ func (a *selector[M, R]) validateTerm(t types.Term, shape projectionShape) error
 	if !ok {
 		return errors.Wrapf(ErrUnknownColumn, "%q", t.Column)
 	}
-	class := modelschema.ClassifyColumn(column.Type)
-	switch {
-	case t.Fn == types.FnSum || t.Fn == types.FnAvg:
-		// The generated reference already blocks this at compile time for the
-		// types it can classify, so the check only bites on minted
-		// references. It asks ClassifyColumn rather than keeping a rule of
-		// its own: a second rule admitted every struct storing itself through
-		// driver.Valuer, which is also how uuid, JSON and text-backed null
-		// wrappers travel, and gorm.DeletedAt is on every model. Two rules
-		// disagreeing about the same type is worse than one rule being strict.
-		if class != modelschema.ColumnClassNumeric {
-			return errors.Wrapf(ErrAggregateType, "%s over non-numeric column %q", t.Fn, t.Column)
-		}
-	case !t.IsMeasure() && t.Bucket != types.TimeBucketNone:
-		if class != modelschema.ColumnClassTime {
-			return errors.Wrapf(ErrAggregateType, "time bucket over non-time column %q", t.Column)
-		}
-	}
-	return nil
+	return a.validateColumnClass(t, column)
 }
 
 // validateResultRow matches the projection aliases against the fields of R in
