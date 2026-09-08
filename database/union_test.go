@@ -367,7 +367,7 @@ func TestUnionAllBuildErrors(t *testing.T) {
 		} {
 			t.Run(name, func(t *testing.T) {
 				err := database.UnionAll[feedRow](ctx, tagsBranch(ctx), branch).Scan(&rows)
-				require.ErrorIs(t, err, database.ErrUnionBranchOrdered)
+				require.ErrorIs(t, err, database.ErrNestedSelectOrdered)
 				require.ErrorContains(t, err, "union branch 1")
 			})
 		}

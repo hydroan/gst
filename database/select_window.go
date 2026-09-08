@@ -103,7 +103,7 @@ func (a *selector[M, R]) overExpr(t types.Term, shape projectionShape) (string, 
 	if len(t.Window.Partition) > 0 {
 		keys := make([]string, 0, len(t.Window.Partition))
 		for _, key := range t.Window.Partition {
-			keys = append(keys, a.keyExpr(a.windowKey(key, shape)))
+			keys = append(keys, a.keyExpr(a.windowKey(key, shape), shape))
 		}
 		parts = append(parts, "PARTITION BY "+strings.Join(keys, ", "))
 	}
@@ -121,7 +121,7 @@ func (a *selector[M, R]) overExpr(t types.Term, shape projectionShape) (string, 
 			ordered[sql] = struct{}{}
 		}
 		for _, breaker := range a.tieBreakers(t, shape) {
-			sql := a.keyExpr(breaker)
+			sql := a.keyExpr(breaker, shape)
 			if _, done := ordered[sql]; done {
 				continue
 			}
@@ -161,9 +161,9 @@ func (a *selector[M, R]) windowOrderExpr(o types.Ordering, shape projectionShape
 	switch o := o.(type) {
 	case types.Order:
 		if shape.grouped {
-			return a.keyExpr(a.selectedColumnTerm(o.Column)), nil, orderDirection(o.Direction), nil
+			return a.keyExpr(a.selectedColumnTerm(o.Table, o.Column), shape), nil, orderDirection(o.Direction), nil
 		}
-		return a.db.quoteIdent(o.Column), nil, orderDirection(o.Direction), nil
+		return a.columnExpr(o.Table, o.Column, shape), nil, orderDirection(o.Direction), nil
 	case types.TermOrder:
 		sql, args, err := a.termExpr(o.Term, shape)
 		if err != nil {
@@ -261,13 +261,13 @@ func (a *selector[M, R]) validateWindow(t types.Term, shape projectionShape) err
 				return errors.Wrapf(ErrUnknownOrderDirection, "%q", o.Direction)
 			}
 			if shape.grouped {
-				if _, ok := a.selectedColumn(o.Column); !ok {
+				if _, ok := a.selectedColumn(o.Table, o.Column); !ok {
 					return errors.Wrapf(ErrWindowTermNotSelected, "%q orders by column %q, which is not a group key", a.alias(t), o.Column)
 				}
 				continue
 			}
-			if _, ok := shape.columns[o.Column]; !ok {
-				return errors.Wrapf(ErrUnknownColumn, "%q orders by %q", a.alias(t), o.Column)
+			if _, err := a.columnOf(o.Table, o.Column, shape); err != nil {
+				return errors.Wrapf(err, "%q orders by", a.alias(t))
 			}
 		case types.TermOrder:
 			if !o.Direction.Valid() {
@@ -299,15 +299,12 @@ func (a *selector[M, R]) isGroupKey(key types.Term, shape projectionShape) bool 
 }
 
 // validateRowLevelKey checks a partition key of a row-level window against
-// the queried model: the column must exist, and a bucket must sit on a time
-// column, exactly as a group key would be checked.
+// the tables the select reads: the column must exist on its table, and a
+// bucket must sit on a time column, exactly as a group key would be checked.
 func (a *selector[M, R]) validateRowLevelKey(key types.Term, shape projectionShape) error {
-	if len(key.Table) > 0 && key.Table != a.db.outerTableName() {
-		return errors.Wrapf(ErrColumnTable, "%q belongs to table %q, the select reads %q", key.Column, key.Table, a.db.outerTableName())
-	}
-	column, ok := shape.columns[key.Column]
-	if !ok {
-		return errors.Wrapf(ErrUnknownColumn, "%q", key.Column)
+	column, err := a.columnOf(key.Table, key.Column, shape)
+	if err != nil {
+		return err
 	}
 	if key.Bucket != types.TimeBucketNone && modelschema.ClassifyColumn(column.Type) != modelschema.ColumnClassTime {
 		return errors.Wrapf(ErrAggregateType, "time bucket over non-time column %q", key.Column)

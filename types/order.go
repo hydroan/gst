@@ -38,8 +38,11 @@ func (d OrderDirection) Flip() OrderDirection {
 // Order is one ORDER BY term: a column and the direction to sort it by.
 // Column must already be validated against the model's queryable columns by
 // the producer (the List controller validates URL input; service code passing
-// orders directly carries the same responsibility). An Order with an empty
-// column is skipped rather than rendered.
+// orders directly carries the same responsibility). Table is the table the
+// column belongs to, filled in by a column reference and empty from the Asc
+// and Desc constructors; a select that joins reads it to tell two tables'
+// columns of one name apart. An Order with an empty column is skipped rather
+// than rendered.
 //
 // Service code should build orders through the generated column references
 // (SampleCols.CreatedAt.Desc()), which cannot name a column the model does not
@@ -47,6 +50,7 @@ func (d OrderDirection) Flip() OrderDirection {
 // code that cannot reference a concrete model: generic helpers, framework
 // internals, and URL parsing.
 type Order struct {
+	Table     string
 	Column    string
 	Direction OrderDirection
 }

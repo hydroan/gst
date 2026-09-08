@@ -72,8 +72,11 @@ func (a *selector[M, R]) groupClauses(tx *gorm.DB, shape projectionShape) (*gorm
 
 // keyExpr renders a group key or plain column: the column itself, or its time
 // bucket.
-func (a *selector[M, R]) keyExpr(t types.Term) string {
-	column := a.db.quoteIdent(t.Column)
+func (a *selector[M, R]) keyExpr(t types.Term, shape projectionShape) string {
+	if jt, derived := shape.derived[a.alias(t)]; derived {
+		return a.derivedExpr(jt, t)
+	}
+	column := a.columnExpr(t.Table, t.Column, shape)
 	if t.Bucket == types.TimeBucketNone {
 		return column
 	}
@@ -83,9 +86,9 @@ func (a *selector[M, R]) keyExpr(t types.Term) string {
 // functionExpr renders the function call of a measure or window function
 // without its window and without the COALESCE a SUM takes, which the caller
 // adds around the complete expression; coalesce reports whether it must.
-func (a *selector[M, R]) functionExpr(t types.Term) (sql string, args []any, coalesce bool, err error) {
-	column := a.db.quoteIdent(t.Column)
-	cond, condErr := a.db.renderFilters(t.Conditions, false, a.db.outerScope())
+func (a *selector[M, R]) functionExpr(t types.Term, shape projectionShape) (sql string, args []any, coalesce bool, err error) {
+	column := a.columnExpr(t.Table, t.Column, shape)
+	cond, condErr := a.db.renderFilters(t.Conditions, false, a.whereScope(shape))
 	if condErr != nil {
 		return "", nil, false, condErr
 	}

@@ -359,4 +359,50 @@ func TestClickhouse(t *testing.T) {
 		require.ErrorIs(t, database.UnionAllOn[feed](ctx, ins, records, other).Scan(&rows), database.ErrUnionBranchInstance)
 		require.ErrorIs(t, database.UnionAll[feed](ctx, records).Scan(&rows), database.ErrUnionBranchInstance)
 	})
+
+	t.Run("ModelJoinIsRejected", func(t *testing.T) {
+		// ClickHouse carries no unique constraint, so a join cannot be proved
+		// to match one row and the entry fails instead of running a join that
+		// might multiply rows.
+		type tagged struct {
+			ID       string
+			Category string
+		}
+		rows := make([]tagged, 0)
+		err := database.SelectOn[*TestRecordTag, tagged](ctx, ins, TestRecordTagCols.ID, TestAggregateRecordCols.Category).
+			Join(types.Join[*TestAggregateRecord](TestAggregateRecordCols.ID.EqCol(TestRecordTagCols.RecordID))).
+			Scan(&rows)
+		require.ErrorIs(t, err, database.ErrUnsupportedOnDialect)
+	})
+
+	t.Run("JoinSelectReadsADerivedTable", func(t *testing.T) {
+		// A joined select needs no unique constraint: its group keys make it
+		// unique, so it runs here. The tag table carries t1 on a1 alone, and
+		// the unmatched side of the LEFT JOIN comes back NULL, not as the
+		// column's default, because the instance is opened with
+		// join_use_nulls on.
+		type tagsPerRecord struct {
+			RecordID string
+			Tags     int64
+		}
+		tags := TestRecordTagCols.ID.Count().As("tags")
+		counts := database.SelectOn[*TestRecordTag, tagsPerRecord](ctx, ins, TestRecordTagCols.RecordID.Group(), tags)
+		type recordTags struct {
+			ID   string
+			Tags *int64
+		}
+		rows := make([]recordTags, 0)
+		require.NoError(t, database.SelectOn[*TestAggregateRecord, recordTags](ctx, ins, TestAggregateRecordCols.ID, tags).
+			Join(types.LeftJoinSelect(counts, TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID))).
+			OrderBy(TestAggregateRecordCols.ID.Asc()).
+			Scan(&rows))
+		require.Len(t, rows, 6)
+		require.Equal(t, recordTags{ID: "a1", Tags: new(int64(1))}, rows[0])
+		require.Equal(t, recordTags{ID: "a2", Tags: nil}, rows[1])
+
+		other := database.Select[*TestRecordTag, tagsPerRecord](ctx, TestRecordTagCols.RecordID.Group(), tags)
+		require.ErrorIs(t, database.SelectOn[*TestAggregateRecord, recordTags](ctx, ins, TestAggregateRecordCols.ID, tags).
+			Join(types.LeftJoinSelect(other, TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID))).
+			Scan(&rows), database.ErrJoinSelectInstance)
+	})
 }

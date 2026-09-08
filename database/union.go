@@ -19,28 +19,33 @@ import (
 var (
 	ErrUnionNoBranch         = errors.New("union has no branch")
 	ErrUnionBranch           = errors.New("union branch is not a select this package built")
-	ErrUnionBranchOrdered    = errors.New("a union branch cannot carry OrderBy, Limit or Offset, they belong to the union")
+	ErrNestedSelectOrdered   = errors.New("a select nested in a union or a join cannot carry OrderBy, Limit or Offset, they belong to the outer query")
 	ErrUnionBranchInstance   = errors.New("union branch was opened on another database instance")
 	ErrUnionOrderNotSelected = errors.New("union order by references a column the result row does not carry")
 	ErrUnionUnusable         = errors.New("union could not attach to the database chain")
 )
 
-// unionBranch is the side of a selector a union reads. *selector implements
-// it for every model type, which is what lets UnionAll stack branches over
-// different models: the assertion to this interface names no M.
-type unionBranch[R any] interface {
-	// attachError is the error the branch's entry point recorded, if any.
+// nestedSelect is the side of a selector another query reads: a union its
+// branches, a join its joined selects. *selector implements it for every
+// model type, which is what lets those queries take selects over different
+// models: the assertion to this interface names no M or R.
+type nestedSelect interface {
+	// attachError is the error the select's entry point recorded, if any.
 	attachError() error
-	// baseHandle is the connection handle the branch was opened on.
+	// baseHandle is the connection handle the select was opened on.
 	baseHandle() *gorm.DB
-	// chainFor mints a chain of the branch's model on the union's context
-	// and handle, the chain the union runs its own statements through.
+	// chainFor mints a chain of the select's model on the outer query's
+	// context and handle, the chain that query runs its own statements
+	// through.
 	chainFor(ctx context.Context, base *gorm.DB) operationChain
-	// selects reports whether the branch projects exactly this term.
+	// selects reports whether the select projects exactly this term.
 	selects(t types.Term) bool
-	// buildBranch renders the branch as a member: read, ordered and capped
+	// buildBranch renders the select as a member: read, ordered and capped
 	// as pushed down, or reduced to what decides its row count.
 	buildBranch(mode buildMode, orders []aliasOrder, limit int) (*gorm.DB, error)
+	// describe validates the select as a joined one and reports what a query
+	// joining it reads.
+	describe() (derivedInfo, error)
 }
 
 // operationChain is the model-agnostic face of a database chain: what an
@@ -87,7 +92,7 @@ type union[R any] struct {
 	chain operationChain
 	err   error // set when the union could not be assembled; surfaced by the terminal
 
-	branches   []unionBranch[R]
+	branches   []nestedSelect
 	orders     []types.Ordering
 	limit      int
 	offset     int
@@ -130,7 +135,7 @@ func unionFor[R any](ctx context.Context, base *gorm.DB, branches []types.Select
 		return u
 	}
 	for i, b := range branches {
-		member, ok := b.(unionBranch[R])
+		member, ok := b.(nestedSelect)
 		if !ok {
 			u.err = errors.Wrapf(ErrUnionBranch, "branch %d is a %T", i, b)
 			return u
@@ -423,9 +428,9 @@ func (u *union[R]) subject() string {
 	return "union"
 }
 
-// The methods below are the side of a selector a union reads; see
-// unionBranch. They exist on every instantiation, which is what lets a union
-// take branches over different models.
+// The methods below are the side of a selector another query reads; see
+// nestedSelect. They exist on every instantiation, which is what lets a union
+// or a join take selects over different models.
 
 func (a *selector[M, R]) attachError() error { return a.err }
 
@@ -467,4 +472,30 @@ func (a *selector[M, R]) termsInResultOrder(shape projectionShape) []types.Term 
 		ordered = append(ordered, byAlias[alias])
 	}
 	return ordered
+}
+
+// describe validates the selector as a joined select and reports what a
+// query joining it reads: its model's table, its group keys, the aliases it
+// projects and the ones that can come back NULL. The chain is prepared here
+// because no terminal of the selector runs.
+func (a *selector[M, R]) describe() (derivedInfo, error) {
+	if err := a.db.prepare(); err != nil {
+		return derivedInfo{}, err
+	}
+	shape, err := a.validate(buildBranchRead)
+	if err != nil {
+		return derivedInfo{}, err
+	}
+	info := derivedInfo{
+		table:    shape.main,
+		grouped:  shape.grouped,
+		keys:     shape.keys,
+		columns:  shape.columns,
+		aliases:  make(map[string]struct{}, len(a.terms)),
+		nullable: a.nullableAliases(shape),
+	}
+	for _, t := range a.terms {
+		info.aliases[a.alias(t)] = struct{}{}
+	}
+	return info, nil
 }

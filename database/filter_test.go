@@ -703,6 +703,21 @@ func TestDatabaseFiltersOnTimeColumns(t *testing.T) {
 	})
 }
 
+func TestFilterOfAnotherTableFailsClosed(t *testing.T) {
+	defer cleanupTestData()
+	setupTestData(t)
+
+	// A column reference carries its table. On the row path a filter of a
+	// table the query does not read fails closed like an unknown column,
+	// where the name alone could have matched a column of the queried model
+	// by coincidence and filtered the wrong table as valid SQL.
+	users := make([]*TestUser, 0)
+	require.NoError(t, database.Database[*TestUser](context.Background()).
+		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{TestAggregateRecordCols.Category.Eq("alpha")}}).
+		List(&users))
+	require.Empty(t, users)
+}
+
 // The semi-join tests below cover FilterExists and FilterNotExists over the
 // aggregate fixture: the records and the tags that point at them, described at
 // aggregateSeed and tagSeed in fixture_test.go.

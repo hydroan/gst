@@ -95,8 +95,12 @@ func FilterOps() []FilterOp {
 // Filter is one field-level filter to apply as an AND condition.
 // Column must already be validated against the model's queryable columns by
 // the producer (the List controller validates URL input; service code passing
-// filters directly carries the same responsibility). Value holds a normalized
-// typed value and is always bound as a statement parameter:
+// filters directly carries the same responsibility). Table is the table the
+// column belongs to: a column reference fills it in, the string constructors
+// and URL parsing leave it empty, which names the queried model's own table.
+// A filter carrying another table is applied to that table when the query
+// joins it and fails closed otherwise. Value holds a normalized typed value
+// and is always bound as a statement parameter:
 //
 //   - FilterOpIn and FilterOpNotIn require a slice or array value.
 //   - FilterOpIsNull requires a bool value.
@@ -107,8 +111,9 @@ func FilterOps() []FilterOp {
 //     no column: they group their children instead of naming one themselves.
 //   - FilterOpExists requires a Subquery value and carries no column; see
 //     FilterExists.
-//   - FilterOpEqCol requires a string value naming the enclosing query's
-//     column and only renders inside a subquery; see FilterEqCol.
+//   - FilterOpEqCol requires the other column: its name as a string, or the
+//     column reference itself, which also carries its table. It renders
+//     inside a subquery and inside a join; see FilterEqCol.
 //   - FilterOpFalse carries neither column nor value; see FilterFalse.
 //   - The comparison operators take a scalar value (string, numeric,
 //     time.Time); slices, arrays, and nil are rejected.
@@ -117,6 +122,7 @@ func FilterOps() []FilterOp {
 // Service code should build filters with the FilterEq/FilterIn/... helper
 // constructors: their signatures enforce the value shape at compile time.
 type Filter struct {
+	Table  string
 	Column string
 	Op     FilterOp
 	Value  any
@@ -316,16 +322,19 @@ func FilterAnd(filters ...Filter) Filter {
 	return Filter{Op: FilterOpAnd, Value: filters}
 }
 
-// FilterEqCol is the predicate that ties a subquery to the query around
-// it: column, on the related model the subquery reads, equals parent, a column
-// of the enclosing query's model. It only means something inside FilterExists
-// or FilterNotExists, where it renders as `child_table.column =
-// outer_table.parent`; at the top level of a query there is nothing to tie to
-// and it fails closed, as does an empty name on either side or a name the
-// related or the enclosing model does not have. Several of them express a
+// FilterEqCol is the predicate that ties two tables together by a column
+// each: inside FilterExists or FilterNotExists, column on the related model
+// equals parent on the enclosing query's model, rendered as
+// `child_table.column = outer_table.parent`; inside a Join, it is the ON
+// condition. At the top level of a query without a join there is nothing to
+// tie to and it fails closed, as does an empty name on either side or a name
+// the related or the enclosing model does not have. Several of them express a
 // composite key, and one inside a FilterOr group matches on any of its pairs.
-// Column.EqCol is the typed front end that keeps the two columns of the
-// same Go type.
+//
+// The string form names the columns alone, which a subquery can place because
+// both of its tables are known; a join needs the tables too, so its predicates
+// are written with Column.EqCol, the typed front end that keeps the two
+// columns of the same Go type and carries both tables.
 func FilterEqCol(column, parent string) Filter {
 	return Filter{Column: column, Op: FilterOpEqCol, Value: parent}
 }

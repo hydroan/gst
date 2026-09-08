@@ -70,6 +70,7 @@ type selector[M types.Model, R any] struct {
 	statements *[]types.SQLStatement
 
 	terms     []types.Term
+	joins     []types.JoinSource
 	filters   []types.Filter
 	havings   []types.TermCondition
 	qualifies []types.TermCondition
@@ -125,6 +126,11 @@ func termsOf(exprs []types.Expr) []types.Term {
 
 func (a *selector[M, R]) Where(filters ...types.Filter) types.Selector[M, R] {
 	a.filters = append(a.filters, filters...)
+	return a
+}
+
+func (a *selector[M, R]) Join(sources ...types.JoinSource) types.Selector[M, R] {
+	a.joins = append(a.joins, sources...)
 	return a
 }
 
@@ -234,13 +240,14 @@ func (a *selector[M, R]) ScanOne(dest *R) (err error) {
 	defer func() { done(err) }()
 
 	for _, t := range a.terms {
-		// A group key makes the read grouped and a plain column or window
-		// function makes it row-level; either yields one row per group or
-		// per row, never the single row ScanOne promises.
+		// A group key makes the read grouped and a plain column, window
+		// function or joined select's term makes it row-level; either yields
+		// one row per group or per row, never the single row ScanOne
+		// promises.
 		if t.IsGroupKey() {
 			return errors.Wrapf(ErrGroupedScanOne, "group key %q", t.Column)
 		}
-		if t.IsPlain() || t.IsWindowed() {
+		if t.IsPlain() || t.IsWindowed() || a.readsDerived(t) {
 			return errors.Wrapf(ErrScanOneRowLevel, "term %q", a.alias(t))
 		}
 	}
@@ -351,6 +358,20 @@ type projectionShape struct {
 	// resultOrder is the result row's fields in declaration order, the
 	// order a member of a union renders its SELECT list in.
 	resultOrder []string
+	// main is the queried model's table, and mainInfo what the filter
+	// renderer knows about its columns.
+	main     string
+	mainInfo tableInfo
+	// joins are the joined tables in the order declared, joined the same
+	// keyed by table, and tables the queried and joined tables together as
+	// the filter renderer reads them; all empty without a join.
+	joins  []*joinedTable
+	joined map[string]*joinedTable
+	tables map[string]tableInfo
+	// derived maps the alias of every term the projection reads from a
+	// joined select to that select's table: the term is the select's own,
+	// projected again as a column of the derived table.
+	derived map[string]*joinedTable
 }
 
 // build validates the projection and assembles the query in the shape the
@@ -387,6 +408,9 @@ func (a *selector[M, R]) build(mode buildMode) (*gorm.DB, error) {
 	// through Rows(), which leaves Dest nil until the callback assigns Dest
 	// from Model, and dereferencing a nil Model there yields an invalid value.
 	tx := a.db.ins.Model(a.db.m)
+	if tx, err = a.joinClauses(tx, shape); err != nil {
+		return nil, err
+	}
 
 	terms := a.terms
 	switch {
@@ -426,7 +450,7 @@ func (a *selector[M, R]) build(mode buildMode) (*gorm.DB, error) {
 	// A predicate the renderer cannot apply narrows a client query to nothing,
 	// which is the right answer for request input. Here it would turn a report
 	// into a silent zero, so the reason is surfaced instead.
-	whereExpr, err := a.db.renderFilters(a.filters, false, a.db.outerScope())
+	whereExpr, err := a.db.renderFilters(a.filters, false, a.whereScope(shape))
 	if err != nil {
 		return nil, err
 	}
@@ -479,7 +503,7 @@ func (a *selector[M, R]) orderedTerm(o types.Ordering) (types.Term, types.OrderD
 	case types.TermOrder:
 		return o.Term, orderDirection(o.Direction)
 	case types.Order:
-		return a.selectedColumnTerm(o.Column), orderDirection(o.Direction)
+		return a.selectedColumnTerm(o.Table, o.Column), orderDirection(o.Direction)
 	default:
 		// Unreachable: Ordering is sealed to the two types above.
 		return types.Term{}, types.OrderAsc
@@ -535,13 +559,16 @@ func termAlias(t types.Term) string {
 // expression, so the filter renderer stays the only place predicates are
 // built; a windowed term carries its window after the function.
 func (a *selector[M, R]) termExpr(t types.Term, shape projectionShape) (string, []any, error) {
+	if jt, derived := shape.derived[a.alias(t)]; derived {
+		return a.derivedExpr(jt, t), nil, nil
+	}
 	if t.IsLiteral() {
 		return literalExpr(t.Literal), nil, nil
 	}
 	if !t.IsMeasure() {
-		return a.keyExpr(t), nil, nil
+		return a.keyExpr(t, shape), nil, nil
 	}
-	sql, args, coalesce, err := a.functionExpr(t)
+	sql, args, coalesce, err := a.functionExpr(t, shape)
 	if err != nil {
 		return "", nil, err
 	}
@@ -572,16 +599,19 @@ func (a *selector[M, R]) validate(mode buildMode) (projectionShape, error) {
 		return shape, ErrEmptyProjection
 	}
 	if mode.branch() && (len(a.orders) > 0 || a.hasLimit || a.offset > 0) {
-		return shape, ErrUnionBranchOrdered
+		return shape, ErrNestedSelectOrdered
 	}
 	columns, err := modelschema.Columns(a.db.typ)
 	if err != nil {
 		return shape, errors.Wrapf(err, "resolve columns of %s", a.db.typ)
 	}
-	shape.columns = make(map[string]modelschema.Column, len(columns))
-	for _, c := range columns {
-		shape.columns[c.DBName] = c
+	shape.columns = columnsByName(columns)
+	shape.main = a.db.outerTableName()
+	shape.mainInfo = tableInfoOf(columns)
+	if err = a.resolveJoins(&shape); err != nil {
+		return shape, err
 	}
+	shape.derived = a.derivedTerms(shape)
 
 	// The projection takes one of two shapes, and which one decides what the
 	// keys mean. An aggregate or an explicit group key makes it grouped: every
@@ -591,6 +621,12 @@ func (a *selector[M, R]) validate(mode buildMode) (projectionShape, error) {
 	// plain columns and time buckets are projected as they are.
 	windowed, measures := 0, 0
 	for _, t := range a.terms {
+		if _, derived := shape.derived[a.alias(t)]; derived {
+			// A joined select's term is a column of the derived table, whatever
+			// function it applied inside the select: it neither groups nor
+			// windows the query.
+			continue
+		}
 		if isWindowFn(t.Fn) && !t.IsWindowed() {
 			return shape, errors.Wrapf(ErrWindowFnWithoutWindow, "%q", a.alias(t))
 		}
@@ -611,17 +647,24 @@ func (a *selector[M, R]) validate(mode buildMode) (projectionShape, error) {
 	// A projection of plain columns or keys alone is a plain read wearing a
 	// select's clothes, and List already does that better. Rejecting it keeps
 	// one official path for reading rows. Stacked into a union it is a
-	// report again, so a member is allowed to be one.
-	if measures == 0 && windowed == 0 && !mode.branch() {
+	// report again, and across a join it reads what List cannot, so a member
+	// and a joining select are allowed to be one.
+	if measures == 0 && windowed == 0 && !mode.branch() && len(shape.joins) == 0 {
 		return shape, ErrPlainSelect
 	}
 	for _, t := range a.terms {
+		if _, derived := shape.derived[a.alias(t)]; derived {
+			continue
+		}
 		switch {
 		case shape.grouped && t.IsPlain():
 			return shape, errors.Wrapf(ErrPlainColumnInGroupedSelect, "%q", a.alias(t))
 		case shape.grouped && t.IsGroupKey():
 			shape.keys = append(shape.keys, t)
 		}
+	}
+	if err = a.groupDerivedTerms(&shape); err != nil {
+		return shape, err
 	}
 
 	aliases := make(map[string]struct{}, len(a.terms))
@@ -701,7 +744,7 @@ func (a *selector[M, R]) validateOrdering(o types.Ordering) error {
 		if !o.Direction.Valid() {
 			return errors.Wrapf(ErrUnknownOrderDirection, "%q", o.Direction)
 		}
-		if _, ok := a.selectedColumn(o.Column); !ok {
+		if _, ok := a.selectedColumn(o.Table, o.Column); !ok {
 			return errors.Wrapf(ErrOrderTermNotSelected, "column %q", o.Column)
 		}
 	default:
@@ -712,19 +755,26 @@ func (a *selector[M, R]) validateOrdering(o types.Ordering) error {
 
 // selectedColumn finds the projected term that carries a column as it is: a
 // group key or a plain column, never a bucket, a measure or a window over it.
-func (a *selector[M, R]) selectedColumn(column string) (types.Term, bool) {
+// A table narrows the match to that table's column, which tells two joined
+// tables' columns of one name apart; an ordering built from a plain name
+// carries none and matches the first.
+func (a *selector[M, R]) selectedColumn(table, column string) (types.Term, bool) {
 	for _, t := range a.terms {
-		if t.Fn == types.FnNone && t.Bucket == types.TimeBucketNone && t.Column == column {
-			return t, true
+		if t.Fn != types.FnNone || t.Bucket != types.TimeBucketNone || t.Column != column {
+			continue
 		}
+		if len(table) > 0 && len(t.Table) > 0 && t.Table != table {
+			continue
+		}
+		return t, true
 	}
 	return types.Term{}, false
 }
 
 // selectedColumnTerm is selectedColumn for a column validation has already
 // matched.
-func (a *selector[M, R]) selectedColumnTerm(column string) types.Term {
-	term, _ := a.selectedColumn(column)
+func (a *selector[M, R]) selectedColumnTerm(table, column string) types.Term {
+	term, _ := a.selectedColumn(table, column)
 	return term
 }
 
@@ -742,6 +792,11 @@ func (a *selector[M, R]) validateTerm(t types.Term, shape projectionShape) error
 	if !t.Bucket.Valid() {
 		return errors.Wrapf(ErrUnknownTimeBucket, "%q", t.Bucket)
 	}
+	if _, derived := shape.derived[a.alias(t)]; derived {
+		// The joined select validated the term against its own model; here
+		// it is a column of the derived table, with nothing left to check.
+		return nil
+	}
 	if err := a.validateGrouping(t); err != nil {
 		return err
 	}
@@ -752,13 +807,6 @@ func (a *selector[M, R]) validateTerm(t types.Term, shape projectionShape) error
 		// A constant names no column and reads no schema.
 		return validateLiteral(t)
 	}
-	// A column reference carries the table it was built for. A term naming
-	// a column of another model may well name a column the queried model also
-	// has, which is valid SQL over the wrong table, so the table is checked
-	// before the name is. Only COUNT(*) and the ranking functions carry none.
-	if len(t.Table) > 0 && t.Table != a.db.outerTableName() {
-		return errors.Wrapf(ErrColumnTable, "%q belongs to table %q, the select reads %q", t.Column, t.Table, a.db.outerTableName())
-	}
 	if len(t.Column) == 0 {
 		// COUNT(*) and the ranking functions are the terms without a column.
 		if t.IsMeasure() && (t.Fn == types.FnCount || t.Fn == types.FnRowNumber || t.Fn == types.FnRank || t.Fn == types.FnDenseRank) {
@@ -766,9 +814,17 @@ func (a *selector[M, R]) validateTerm(t types.Term, shape projectionShape) error
 		}
 		return errors.Wrapf(ErrUnknownColumn, "term %q has no column", t.Fn)
 	}
-	column, ok := shape.columns[t.Column]
-	if !ok {
-		return errors.Wrapf(ErrUnknownColumn, "%q", t.Column)
+	// A column reference carries the table it was built for, which columnOf
+	// checks before the name: the queried model's, or a joined model's.
+	column, err := a.columnOf(t.Table, t.Column, shape)
+	if err != nil {
+		return err
+	}
+	// Under GROUP BY a joined row is shared by every row of the group that
+	// matched it, so only the aggregates that answer the same over repeats
+	// may read a joined column.
+	if _, joined := shape.joined[t.Table]; joined && shape.grouped && t.IsMeasure() && !joinedMeasureAllowed(t.Fn) {
+		return errors.Wrapf(ErrJoinMeasure, "%s over %q of %q", t.Fn, t.Column, t.Table)
 	}
 	return a.validateColumnClass(t, column)
 }
@@ -872,7 +928,26 @@ func (a *selector[M, R]) nullableAliases(shape projectionShape) map[string]strin
 	grouped := len(shape.keys) > 0
 	nullable := make(map[string]string)
 	for _, t := range a.terms {
-		source, known := shape.columns[t.Column]
+		// A joined select's term is NULL where a LEFT JOIN matched no group,
+		// and where the select itself answered NULL.
+		if jt, derived := shape.derived[a.alias(t)]; derived {
+			switch why, isNullable := jt.derived.nullable[a.alias(t)]; {
+			case jt.left:
+				nullable[a.alias(t)] = fmt.Sprintf("term %q of the joined select, which is NULL when the LEFT JOIN matches no group", a.alias(t))
+			case isNullable:
+				nullable[a.alias(t)] = why
+			}
+			continue
+		}
+		// A column of a LEFT JOIN table is NULL on every row the join left
+		// unmatched, whatever reads it, except the counts, which count no
+		// row as zero.
+		if jt, joined := shape.joined[t.Table]; joined && jt.left && t.Fn != types.FnCount && t.Fn != types.FnCountDistinct {
+			nullable[a.alias(t)] = fmt.Sprintf("column %q of %q, which is NULL when the LEFT JOIN matches no row", t.Column, t.Table)
+			continue
+		}
+		source, err := a.columnOf(t.Table, t.Column, shape)
+		known := err == nil
 		switch {
 		case t.IsPlain():
 			if known && holdsNull(source.Type) {

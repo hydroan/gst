@@ -34,6 +34,11 @@ package types
 // value per row. A projection with neither an aggregate nor a window
 // function is a plain read and belongs to List.
 //
+// A select joins other models on a unique key with Join: the joined model's
+// columns then project, filter, group, partition and order like the queried
+// model's own, and the projection may be plain columns alone, which List
+// cannot read across tables; see JoinSource for the rules.
+//
 // A Selector is also a SelectBranch: UnionAll stacks several of them, over
 // different models, into one result. In that role a plain projection of
 // columns is allowed, and OrderBy, Limit and Offset belong to the union; see
@@ -69,6 +74,10 @@ type Selector[M Model, R any] interface {
 	// Where restricts the rows entering the projection, using the same filter
 	// tree as WithQuery.
 	Where(filters ...Filter) Selector[M, R]
+	// Join adds the sources the select joins: models joined on a unique key,
+	// built by Join and LeftJoin. The joined model's columns are referenced
+	// through its own Cols everywhere in the select.
+	Join(sources ...JoinSource) Selector[M, R]
 	// Having restricts the produced groups by their measures.
 	Having(conditions ...TermCondition) Selector[M, R]
 	// Qualify restricts the result rows by their window functions, which a

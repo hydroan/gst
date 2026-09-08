@@ -76,37 +76,37 @@ func TestColumnBuildsFilters(t *testing.T) {
 		got   types.Filter
 		want  types.Filter
 	}{
-		{"Eq", age.Eq(18), types.Filter{Column: "age", Op: types.FilterOpEq, Value: 18}},
-		{"Ne", age.Ne(18), types.Filter{Column: "age", Op: types.FilterOpNe, Value: 18}},
-		{"Gt", age.Gt(18), types.Filter{Column: "age", Op: types.FilterOpGt, Value: 18}},
-		{"Gte", age.Gte(18), types.Filter{Column: "age", Op: types.FilterOpGte, Value: 18}},
-		{"Lt", age.Lt(18), types.Filter{Column: "age", Op: types.FilterOpLt, Value: 18}},
-		{"Lte", age.Lte(18), types.Filter{Column: "age", Op: types.FilterOpLte, Value: 18}},
+		{"Eq", age.Eq(18), types.Filter{Table: "samples", Column: "age", Op: types.FilterOpEq, Value: 18}},
+		{"Ne", age.Ne(18), types.Filter{Table: "samples", Column: "age", Op: types.FilterOpNe, Value: 18}},
+		{"Gt", age.Gt(18), types.Filter{Table: "samples", Column: "age", Op: types.FilterOpGt, Value: 18}},
+		{"Gte", age.Gte(18), types.Filter{Table: "samples", Column: "age", Op: types.FilterOpGte, Value: 18}},
+		{"Lt", age.Lt(18), types.Filter{Table: "samples", Column: "age", Op: types.FilterOpLt, Value: 18}},
+		{"Lte", age.Lte(18), types.Filter{Table: "samples", Column: "age", Op: types.FilterOpLte, Value: 18}},
 		{
 			"In",
 			status.In(sampleStatusActive, sampleStatusRemoved),
-			types.Filter{Column: "status", Op: types.FilterOpIn, Value: []sampleStatus{sampleStatusActive, sampleStatusRemoved}},
+			types.Filter{Table: "samples", Column: "status", Op: types.FilterOpIn, Value: []sampleStatus{sampleStatusActive, sampleStatusRemoved}},
 		},
 		{
 			"NotIn",
 			status.NotIn(sampleStatusRemoved),
-			types.Filter{Column: "status", Op: types.FilterOpNotIn, Value: []sampleStatus{sampleStatusRemoved}},
+			types.Filter{Table: "samples", Column: "status", Op: types.FilterOpNotIn, Value: []sampleStatus{sampleStatusRemoved}},
 		},
-		{"Like", name.Like("sam"), types.Filter{Column: "name", Op: types.FilterOpLike, Value: "sam"}},
-		{"NotLike", name.NotLike("sam"), types.Filter{Column: "name", Op: types.FilterOpNotLike, Value: "sam"}},
-		{"StartsWith", name.StartsWith("sa"), types.Filter{Column: "name", Op: types.FilterOpStartsWith, Value: "sa"}},
-		{"EndsWith", name.EndsWith("le"), types.Filter{Column: "name", Op: types.FilterOpEndsWith, Value: "le"}},
-		{"IsNull", name.IsNull(), types.Filter{Column: "name", Op: types.FilterOpIsNull, Value: true}},
-		{"IsNotNull", name.IsNotNull(), types.Filter{Column: "name", Op: types.FilterOpIsNull, Value: false}},
-		{"Regex", name.Regex("^sa"), types.Filter{Column: "name", Op: types.FilterOpRegex, Value: "^sa"}},
-		{"NotRegex", name.NotRegex("^sa"), types.Filter{Column: "name", Op: types.FilterOpNotRegex, Value: "^sa"}},
-		{"JSONContains", name.JSONContains("sam"), types.Filter{Column: "name", Op: types.FilterOpJSONContains, Value: "sam"}},
+		{"Like", name.Like("sam"), types.Filter{Table: "samples", Column: "name", Op: types.FilterOpLike, Value: "sam"}},
+		{"NotLike", name.NotLike("sam"), types.Filter{Table: "samples", Column: "name", Op: types.FilterOpNotLike, Value: "sam"}},
+		{"StartsWith", name.StartsWith("sa"), types.Filter{Table: "samples", Column: "name", Op: types.FilterOpStartsWith, Value: "sa"}},
+		{"EndsWith", name.EndsWith("le"), types.Filter{Table: "samples", Column: "name", Op: types.FilterOpEndsWith, Value: "le"}},
+		{"IsNull", name.IsNull(), types.Filter{Table: "samples", Column: "name", Op: types.FilterOpIsNull, Value: true}},
+		{"IsNotNull", name.IsNotNull(), types.Filter{Table: "samples", Column: "name", Op: types.FilterOpIsNull, Value: false}},
+		{"Regex", name.Regex("^sa"), types.Filter{Table: "samples", Column: "name", Op: types.FilterOpRegex, Value: "^sa"}},
+		{"NotRegex", name.NotRegex("^sa"), types.Filter{Table: "samples", Column: "name", Op: types.FilterOpNotRegex, Value: "^sa"}},
+		{"JSONContains", name.JSONContains("sam"), types.Filter{Table: "samples", Column: "name", Op: types.FilterOpJSONContains, Value: "sam"}},
 		{
 			"EqCol",
 			age.EqCol(types.NewColumn[sampleTable, int]("parent_age")),
-			types.Filter{Column: "age", Op: types.FilterOpEqCol, Value: "parent_age"},
+			types.Filter{Table: "samples", Column: "age", Op: types.FilterOpEqCol, Value: types.NewColumn[sampleTable, int]("parent_age")},
 		},
-		{"EqColWithoutParent", age.EqCol(nil), types.Filter{Column: "age", Op: types.FilterOpEqCol, Value: ""}},
+		{"EqColWithoutParent", age.EqCol(nil), types.Filter{Table: "samples", Column: "age", Op: types.FilterOpEqCol, Value: ""}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
@@ -121,7 +121,7 @@ func TestColumnInWithoutValues(t *testing.T) {
 	// the slice type, so the database layer treats it as an empty set and
 	// matches nothing rather than widening the query.
 	require.Equal(t,
-		types.Filter{Column: "status", Op: types.FilterOpIn, Value: []sampleStatus(nil)},
+		types.Filter{Table: "samples", Column: "status", Op: types.FilterOpIn, Value: []sampleStatus(nil)},
 		status.In())
 }
 
@@ -167,8 +167,8 @@ func TestColumnBuildsTerms(t *testing.T) {
 
 func TestColumnBuildsOrders(t *testing.T) {
 	created := types.NewColumn[sampleTable, int]("created_at")
-	require.Equal(t, types.Order{Column: "created_at", Direction: types.OrderAsc}, created.Asc())
-	require.Equal(t, types.Order{Column: "created_at", Direction: types.OrderDesc}, created.Desc())
+	require.Equal(t, types.Order{Table: "samples", Column: "created_at", Direction: types.OrderAsc}, created.Asc())
+	require.Equal(t, types.Order{Table: "samples", Column: "created_at", Direction: types.OrderDesc}, created.Desc())
 }
 
 func TestColumnBuildsAssignments(t *testing.T) {

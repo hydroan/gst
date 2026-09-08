@@ -57,10 +57,10 @@ type ColumnRef[T any] interface {
 // table, which no schema check would catch.
 //
 // The methods are typed front ends for the FilterXxx, Asc, Desc and Assign
-// constructors and produce exactly the same Filter, Order and Assignment
-// values. Code that cannot reference a concrete model (generic helpers,
-// framework internals, URL parsing) keeps using those constructors with a
-// string column name.
+// constructors and produce the same Filter, Order and Assignment values, with
+// the table the reference was built for filled in. Code that cannot reference
+// a concrete model (generic helpers, framework internals, URL parsing) keeps
+// using those constructors with a string column name.
 //
 // Columns whose Go type is numeric or time.Time are generated as NumericColumn
 // or TimeColumn instead, which embed this type and add the functions that are
@@ -124,81 +124,90 @@ func (c Column[T]) sealedColumn(T) {}
 func (c Column[T]) sealedAnyColumn() {}
 
 // Eq matches rows where the column equals value.
-func (c Column[T]) Eq(value T) Filter { return FilterEq(c.name, value) }
+func (c Column[T]) Eq(value T) Filter { return c.filter(FilterOpEq, value) }
 
 // Ne matches rows where the column does not equal value.
-func (c Column[T]) Ne(value T) Filter { return FilterNe(c.name, value) }
+func (c Column[T]) Ne(value T) Filter { return c.filter(FilterOpNe, value) }
 
 // Gt matches rows where the column is greater than value.
-func (c Column[T]) Gt(value T) Filter { return FilterGt(c.name, value) }
+func (c Column[T]) Gt(value T) Filter { return c.filter(FilterOpGt, value) }
 
 // Gte matches rows where the column is greater than or equal to value.
-func (c Column[T]) Gte(value T) Filter { return FilterGte(c.name, value) }
+func (c Column[T]) Gte(value T) Filter { return c.filter(FilterOpGte, value) }
 
 // Lt matches rows where the column is less than value.
-func (c Column[T]) Lt(value T) Filter { return FilterLt(c.name, value) }
+func (c Column[T]) Lt(value T) Filter { return c.filter(FilterOpLt, value) }
 
 // Lte matches rows where the column is less than or equal to value.
-func (c Column[T]) Lte(value T) Filter { return FilterLte(c.name, value) }
+func (c Column[T]) Lte(value T) Filter { return c.filter(FilterOpLte, value) }
 
 // In matches rows where the column is one of values. Calling it without any
 // value matches nothing, mirroring SQL list semantics.
-func (c Column[T]) In(values ...T) Filter { return FilterIn(c.name, values) }
+func (c Column[T]) In(values ...T) Filter { return c.filter(FilterOpIn, values) }
 
 // NotIn matches rows where the column is none of values. Calling it without
 // any value matches nothing; it does not mean "exclude nothing".
-func (c Column[T]) NotIn(values ...T) Filter { return FilterNotIn(c.name, values) }
+func (c Column[T]) NotIn(values ...T) Filter { return c.filter(FilterOpNotIn, values) }
 
 // Like matches rows where the column contains value as a substring. The
 // pattern is a string on every column type, because substring matching runs
 // against the database's string rendering of the value.
-func (c Column[T]) Like(value string) Filter { return FilterLike(c.name, value) }
+func (c Column[T]) Like(value string) Filter { return c.filter(FilterOpLike, value) }
 
 // NotLike matches rows where the column does not contain value as a substring.
-func (c Column[T]) NotLike(value string) Filter { return FilterNotLike(c.name, value) }
+func (c Column[T]) NotLike(value string) Filter { return c.filter(FilterOpNotLike, value) }
 
 // StartsWith matches rows where the column starts with value.
-func (c Column[T]) StartsWith(value string) Filter { return FilterStartsWith(c.name, value) }
+func (c Column[T]) StartsWith(value string) Filter { return c.filter(FilterOpStartsWith, value) }
 
 // EndsWith matches rows where the column ends with value.
-func (c Column[T]) EndsWith(value string) Filter { return FilterEndsWith(c.name, value) }
+func (c Column[T]) EndsWith(value string) Filter { return c.filter(FilterOpEndsWith, value) }
 
 // IsNull matches rows where the column is NULL.
-func (c Column[T]) IsNull() Filter { return FilterIsNull(c.name) }
+func (c Column[T]) IsNull() Filter { return c.filter(FilterOpIsNull, true) }
 
 // IsNotNull matches rows where the column is not NULL.
-func (c Column[T]) IsNotNull() Filter { return FilterIsNotNull(c.name) }
+func (c Column[T]) IsNotNull() Filter { return c.filter(FilterOpIsNull, false) }
 
 // Regex matches rows where the column matches the regular expression expr.
-func (c Column[T]) Regex(expr string) Filter { return FilterRegex(c.name, expr) }
+func (c Column[T]) Regex(expr string) Filter { return c.filter(FilterOpRegex, expr) }
 
 // NotRegex matches rows where the column does not match the regular
 // expression expr.
-func (c Column[T]) NotRegex(expr string) Filter { return FilterNotRegex(c.name, expr) }
+func (c Column[T]) NotRegex(expr string) Filter { return c.filter(FilterOpNotRegex, expr) }
 
 // JSONContains matches rows whose JSON array column contains value.
-func (c Column[T]) JSONContains(value string) Filter { return FilterJSONContains(c.name, value) }
+func (c Column[T]) JSONContains(value string) Filter { return c.filter(FilterOpJSONContains, value) }
 
-// EqCol ties the column, on the related model a subquery reads, to
-// parent, a column of the query enclosing that subquery; see FilterEqCol.
-// Both must be columns of the same Go type. A nil parent leaves the outer
-// side empty, and the predicate then fails closed.
+// EqCol ties this column to parent, a column of another table of the query:
+// the enclosing query's model inside a subquery, the queried model or an
+// earlier joined one inside a join; see FilterEqCol. Both must be columns of
+// the same Go type, and the predicate carries both tables, so inside a join
+// either column may be written first. A nil parent leaves the other side
+// empty, and the predicate then fails closed.
 //
 // The Col suffix says that the argument is a column rather than a value,
 // which Eq takes; Go has no overloading to tell the two apart by type, and
 // gorm gen spells the same comparison the same way.
 func (c Column[T]) EqCol(parent ColumnRef[T]) Filter {
 	if parent == nil {
-		return FilterEqCol(c.name, "")
+		return c.filter(FilterOpEqCol, "")
 	}
-	return FilterEqCol(c.name, parent.Name())
+	return c.filter(FilterOpEqCol, parent)
 }
 
-// Asc orders by the column ascending.
-func (c Column[T]) Asc() Order { return Asc(c.name) }
+// filter builds a filter on this column, carrying the table the reference
+// was built for.
+func (c Column[T]) filter(op FilterOp, value any) Filter {
+	return Filter{Table: c.table, Column: c.name, Op: op, Value: value}
+}
 
-// Desc orders by the column descending.
-func (c Column[T]) Desc() Order { return Desc(c.name) }
+// Asc orders by the column ascending. The order carries the table the
+// reference was built for, which a select that joins reads.
+func (c Column[T]) Asc() Order { return Order{Table: c.table, Column: c.name, Direction: OrderAsc} }
+
+// Desc orders by the column descending; see Asc.
+func (c Column[T]) Desc() Order { return Order{Table: c.table, Column: c.name, Direction: OrderDesc} }
 
 // Set assigns value to the column, the unit UpdateByID accepts. The value is
 // typed by the column, so assigning a wrong-typed value or naming a column

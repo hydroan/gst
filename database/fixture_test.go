@@ -641,6 +641,63 @@ func cleanupFlowData() {
 	_ = database.DB().Exec("DELETE FROM test_refunds").Error
 }
 
+// TestAccount is the model the joins read: the account a payment names by
+// code. Code is unique through the Indexes method, which is what proves that
+// a join on it matches at most one account. The seed carries acme alone, so
+// bolt's payments meet no account and a LEFT JOIN has rows to keep with
+// NULLs.
+type TestAccount struct {
+	Code string `json:"code" gorm:"size:191"`
+	Name string `json:"name" gorm:"size:191"`
+	Tier string `json:"tier" gorm:"size:191"`
+
+	model.Base
+}
+
+func (*TestAccount) TableName() string { return "test_accounts" }
+
+func (*TestAccount) Indexes() []model.Index {
+	return []model.Index{{Fields: []string{"Code"}, Unique: true}}
+}
+
+// TestAccountCols mirrors the generated column references of the account
+// model.
+var TestAccountCols = struct {
+	ID   types.Column[string]
+	Code types.Column[string]
+	Name types.Column[string]
+	Tier types.Column[string]
+}{
+	ID:   types.NewColumn[*TestAccount, string]("id"),
+	Code: types.NewColumn[*TestAccount, string]("code"),
+	Name: types.NewColumn[*TestAccount, string]("name"),
+	Tier: types.NewColumn[*TestAccount, string]("tier"),
+}
+
+// accountSeed is the one account the payments can join: acme, tier gold.
+func accountSeed() []*TestAccount {
+	return []*TestAccount{{ID: "acc1", Code: "acme", Name: "Acme Ltd", Tier: "gold"}}
+}
+
+func setupAccountData(t *testing.T) {
+	t.Helper()
+	cleanupAccountData()
+	require.NoError(t, database.Database[*TestAccount](context.Background()).Create(accountSeed()...))
+}
+
+func cleanupAccountData() {
+	_ = database.DB().Exec("DELETE FROM test_accounts").Error
+}
+
+// seedAccountExample resets the account fixture to its seed; it panics on
+// failure like the other example seeds.
+func seedAccountExample() {
+	cleanupAccountData()
+	if err := database.Database[*TestAccount](context.Background()).Create(accountSeed()...); err != nil {
+		panic(err)
+	}
+}
+
 type TestHookConfig struct {
 	Value string `json:"value" gorm:"size:191"`
 
@@ -719,6 +776,7 @@ func TestMain(m *testing.M) {
 			model.Register[*TestTagNote]()
 			model.Register[*TestPayment]()
 			model.Register[*TestRefund]()
+			model.Register[*TestAccount]()
 		},
 	})
 }

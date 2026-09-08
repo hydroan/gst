@@ -63,6 +63,66 @@ type filterScope struct {
 	// depth numbers the nesting level so each subquery can take a distinct
 	// alias when it reads the same table as the query enclosing it.
 	depth int
+	// table is the table the scope's own columns belong to, unaliased. A
+	// filter carrying another table is applied to that table when tables
+	// lists it, and fails closed otherwise.
+	table string
+	// tables are the other tables a predicate may name inside a join, keyed
+	// by table name, each with the columns it may name. It is nil outside a
+	// join, where a predicate reads one table only.
+	tables map[string]tableInfo
+	// rename maps the scope's own columns to the names they are read under,
+	// for the ON of a joined select; nil everywhere else.
+	rename map[string]string
+}
+
+// tableInfo is what the renderer knows about one table's columns: which
+// exist, and which store time or JSON, keyed by database name. A derived
+// table also knows the name it is read under and the aliases its key columns
+// project as, which is how a column named through the joined select's model
+// reaches the derived column it became.
+type tableInfo struct {
+	columns     map[string]struct{}
+	timeColumns map[string]struct{}
+	jsonColumns map[string]struct{}
+	// qualify is the name the table's columns are qualified with in SQL;
+	// empty means the table's own name.
+	qualify string
+	// rename maps a column name to the name it is read under, for a derived
+	// table whose key columns project under aliases; nil for a model table.
+	rename map[string]string
+}
+
+// column returns the name a column is read under in this table.
+func (info tableInfo) column(name string) string {
+	if alias, ok := info.rename[name]; ok {
+		return alias
+	}
+	return name
+}
+
+// tableInfoOf reads a model's resolved columns into a tableInfo.
+func tableInfoOf(columns []modelschema.Column) tableInfo {
+	info := tableInfo{
+		columns:     make(map[string]struct{}, len(columns)),
+		timeColumns: make(map[string]struct{}),
+		jsonColumns: make(map[string]struct{}),
+	}
+	for _, c := range columns {
+		info.columns[c.DBName] = struct{}{}
+		if modelschema.ClassifyColumn(c.Type) == modelschema.ColumnClassTime {
+			info.timeColumns[c.DBName] = struct{}{}
+		}
+		if modelschema.IsJSONType(c.Type) {
+			info.jsonColumns[c.DBName] = struct{}{}
+		}
+	}
+	return info
+}
+
+// own is the scope's own table as a tableInfo.
+func (s filterScope) own() tableInfo {
+	return tableInfo{columns: s.columns, timeColumns: s.timeColumns, jsonColumns: s.jsonColumns, qualify: s.qualify, rename: s.rename}
 }
 
 // outerScope is the filterScope of a top-level predicate: it correlates
@@ -72,6 +132,7 @@ func (db *database[M]) outerScope() filterScope {
 	typ := reflect.TypeOf(*new(M))
 	return filterScope{
 		parent:      db.outerTableName(),
+		table:       db.outerTableName(),
 		timeColumns: modelschema.TimeColumnSet(typ),
 		jsonColumns: modelschema.JSONColumnSet(typ),
 	}
@@ -172,41 +233,35 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 	if len(f.Column) == 0 {
 		return db.failClosedFilter(f, "has an empty column")
 	}
-	// Inside a subquery a name the related model does not have is not a typo
-	// the database rejects: it resolves against the enclosing query instead and
-	// turns the condition into a correlated reference, which is valid SQL over
-	// the wrong rows.
-	if scope.columns != nil {
-		if _, ok := scope.columns[f.Column]; !ok {
-			return db.failClosedFilter(f, "names a column the related model does not have")
-		}
+	column, info, err := db.placeFilter(f, scope)
+	if err != nil {
+		return falseExpr(), err
 	}
-	column := db.scopedColumn(f.Column, scope)
 	switch f.Op {
 	case types.FilterOpEq:
-		return db.scalarFilter(f, db.comparisonSQL(scope, f.Column, column, " = "))
+		return db.scalarFilter(f, db.comparisonSQL(info, f.Column, column, " = "))
 	case types.FilterOpNe:
-		return db.scalarFilter(f, db.comparisonSQL(scope, f.Column, column, " <> "))
+		return db.scalarFilter(f, db.comparisonSQL(info, f.Column, column, " <> "))
 	case types.FilterOpGt:
-		return db.scalarFilter(f, db.comparisonSQL(scope, f.Column, column, " > "))
+		return db.scalarFilter(f, db.comparisonSQL(info, f.Column, column, " > "))
 	case types.FilterOpGte:
-		return db.scalarFilter(f, db.comparisonSQL(scope, f.Column, column, " >= "))
+		return db.scalarFilter(f, db.comparisonSQL(info, f.Column, column, " >= "))
 	case types.FilterOpLt:
-		return db.scalarFilter(f, db.comparisonSQL(scope, f.Column, column, " < "))
+		return db.scalarFilter(f, db.comparisonSQL(info, f.Column, column, " < "))
 	case types.FilterOpLte:
-		return db.scalarFilter(f, db.comparisonSQL(scope, f.Column, column, " <= "))
+		return db.scalarFilter(f, db.comparisonSQL(info, f.Column, column, " <= "))
 	case types.FilterOpIn:
 		return db.listFilter(f, column+" IN ?")
 	case types.FilterOpNotIn:
 		return db.listFilter(f, column+" NOT IN ?")
 	case types.FilterOpLike:
-		return db.patternFilter(f, db.likeColumn(scope, f.Column, column)+" LIKE ?"+db.likeEscapeSuffix(), "%", "%")
+		return db.patternFilter(f, db.likeColumn(info, f.Column, column)+" LIKE ?"+db.likeEscapeSuffix(), "%", "%")
 	case types.FilterOpNotLike:
-		return db.patternFilter(f, db.likeColumn(scope, f.Column, column)+" NOT LIKE ?"+db.likeEscapeSuffix(), "%", "%")
+		return db.patternFilter(f, db.likeColumn(info, f.Column, column)+" NOT LIKE ?"+db.likeEscapeSuffix(), "%", "%")
 	case types.FilterOpStartsWith:
-		return db.patternFilter(f, db.likeColumn(scope, f.Column, column)+" LIKE ?"+db.likeEscapeSuffix(), "", "%")
+		return db.patternFilter(f, db.likeColumn(info, f.Column, column)+" LIKE ?"+db.likeEscapeSuffix(), "", "%")
 	case types.FilterOpEndsWith:
-		return db.patternFilter(f, db.likeColumn(scope, f.Column, column)+" LIKE ?"+db.likeEscapeSuffix(), "%", "")
+		return db.patternFilter(f, db.likeColumn(info, f.Column, column)+" LIKE ?"+db.likeEscapeSuffix(), "%", "")
 	case types.FilterOpIsNull:
 		b, ok := f.Value.(bool)
 		if !ok {
@@ -244,26 +299,63 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 	}
 }
 
-// eqColCondition renders an EqCol predicate: the scope's own column on
-// the left, the enclosing query's column on the right. Outside a subquery
-// there is no enclosing query to tie to, so the predicate fails closed rather
-// than comparing the table with itself. The column arrives qualified by the
-// caller, so inside an aliased self join it already names the alias. The
-// parent column must belong to the enclosing model: the inner side is already
-// checked by renderFilter, and an unchecked outer side would surface as a
-// database error instead of the fail-closed answer every other mistake gets.
+// placeFilter resolves the table a filter reads: the scope's own table when
+// the filter carries none or names it, one of the tables read beside it when
+// the query joins that table, and nothing otherwise, which fails closed like
+// an unknown column would. It returns the column quoted for that table and
+// what the renderer knows about the table's columns.
+//
+// Inside a subquery a name the related model does not have is not a typo the
+// database rejects: it resolves against the enclosing query instead and turns
+// the condition into a correlated reference, which is valid SQL over the
+// wrong rows. The scope's own columns are therefore checked wherever the
+// scope lists them.
+func (db *database[M]) placeFilter(f types.Filter, scope filterScope) (string, tableInfo, error) {
+	if len(f.Table) > 0 && len(scope.table) > 0 && f.Table != scope.table {
+		info, ok := scope.tables[f.Table]
+		if !ok {
+			_, err := db.failClosedFilter(f, "names a column of a table the query does not read")
+			return "", tableInfo{}, err
+		}
+		if _, ok := info.columns[f.Column]; !ok {
+			_, err := db.failClosedFilter(f, "names a column its table does not have")
+			return "", tableInfo{}, err
+		}
+		return db.tableColumn(f.Table, info, f.Column), info, nil
+	}
+	if scope.columns != nil {
+		if _, ok := scope.columns[f.Column]; !ok {
+			_, err := db.failClosedFilter(f, "names a column the related model does not have")
+			return "", tableInfo{}, err
+		}
+	}
+	return db.scopedColumn(f.Column, scope), scope.own(), nil
+}
+
+// eqColCondition renders an EqCol predicate. Inside a subquery it ties the
+// scope's own column, on the left, to the enclosing query's column on the
+// right; outside a subquery there is an enclosing query only when the select
+// joins, where the predicate ties two tables of the query, and it fails
+// closed everywhere else rather than comparing a table with itself. The
+// column arrives placed by the caller, so inside an aliased self join it
+// already names the alias. The other column must belong to the table it
+// names: an unchecked side would surface as a database error instead of the
+// fail-closed answer every other mistake gets.
 //
 // The caller must hold db.mu.
 func (db *database[M]) eqColCondition(f types.Filter, column string, scope filterScope) (clause.Expression, error) {
-	if len(scope.outer) == 0 {
-		return db.failClosedFilter(f, "correlates outside a subquery")
-	}
-	parent, ok := f.Value.(string)
+	parent, parentTable, ok := eqColParent(f.Value)
 	if !ok {
-		return db.failClosedFilter(f, "expects a string value")
+		return db.failClosedFilter(f, "expects a column name or a column reference value")
 	}
 	if len(parent) == 0 {
 		return db.failClosedFilter(f, "has an empty correlation column")
+	}
+	if scope.tables != nil && len(scope.outer) == 0 {
+		return db.joinEqCol(f, column, parent, parentTable, scope)
+	}
+	if len(scope.outer) == 0 {
+		return db.failClosedFilter(f, "correlates outside a subquery")
 	}
 	if scope.outerColumns == nil {
 		return db.failClosedFilter(f, "cannot resolve the enclosing model's columns")
@@ -272,6 +364,57 @@ func (db *database[M]) eqColCondition(f types.Filter, column string, scope filte
 		return db.failClosedFilter(f, "correlates on a column the enclosing model does not have")
 	}
 	return clause.Expr{SQL: column + " = " + db.quoteTableColumn(scope.outer, parent)}, nil
+}
+
+// joinEqCol renders an EqCol predicate inside a join: the placed column on
+// one side, the other column qualified by its own table, which must be the
+// scope's own table or one read beside it. The other side has to carry its
+// table, which only a column reference does: a plain name could belong to
+// either table.
+//
+// The caller must hold db.mu.
+func (db *database[M]) joinEqCol(f types.Filter, column, parent, parentTable string, scope filterScope) (clause.Expression, error) {
+	if len(parentTable) == 0 {
+		return db.failClosedFilter(f, "ties to a column without a table, name it through a column reference")
+	}
+	var info tableInfo
+	switch parentTable {
+	case scope.table:
+		info = scope.own()
+	default:
+		other, ok := scope.tables[parentTable]
+		if !ok {
+			return db.failClosedFilter(f, "ties to a table the query does not read")
+		}
+		info = other
+	}
+	if _, ok := info.columns[parent]; !ok {
+		return db.failClosedFilter(f, "ties to a column its table does not have")
+	}
+	return clause.Expr{SQL: column + " = " + db.tableColumn(parentTable, info, parent)}, nil
+}
+
+// tableColumn renders a column of a table in scope, under the name the table
+// is read by and the name the column is read under.
+func (db *database[M]) tableColumn(table string, info tableInfo, column string) string {
+	qualify := info.qualify
+	if len(qualify) == 0 {
+		qualify = table
+	}
+	return db.quoteTableColumn(qualify, info.column(column))
+}
+
+// eqColParent reads the other column of an EqCol predicate: a plain name,
+// which carries no table, or a column reference, which carries its own.
+func eqColParent(value any) (name, table string, ok bool) {
+	switch v := value.(type) {
+	case string:
+		return v, "", true
+	case types.AnyColumnRef:
+		return v.Name(), v.Table(), true
+	default:
+		return "", "", false
+	}
 }
 
 // hasCorrelation reports whether a subquery's predicates tie it to the query
@@ -328,12 +471,12 @@ func (db *database[M]) failClosedFilter(f types.Filter, msg string) (clause.Expr
 	return falseExpr(), errors.Wrapf(ErrUnusableFilter, "operator %q on column %q %s", f.Op, f.Column, msg)
 }
 
-// comparisonSQL renders "column op ?" for one comparison filter. A column the
-// scope knows to store time takes both sides through timeComparableExpr, so
-// the comparison agrees across storage spellings; every other column renders
-// the plain comparison.
-func (db *database[M]) comparisonSQL(scope filterScope, dbName, quotedColumn, op string) string {
-	if _, isTime := scope.timeColumns[dbName]; isTime {
+// comparisonSQL renders "column op ?" for one comparison filter. A column its
+// table is known to store time in takes both sides through
+// timeComparableExpr, so the comparison agrees across storage spellings;
+// every other column renders the plain comparison.
+func (db *database[M]) comparisonSQL(info tableInfo, dbName, quotedColumn, op string) string {
+	if _, isTime := info.timeColumns[dbName]; isTime {
 		return db.timeComparableExpr(quotedColumn) + op + db.timeComparableExpr("?")
 	}
 	return quotedColumn + op + "?"
@@ -342,8 +485,8 @@ func (db *database[M]) comparisonSQL(scope filterScope, dbName, quotedColumn, op
 // likeColumn renders the column a like-family filter matches against: a JSON
 // document matches by its text form, so a JSON column goes through
 // textPatternColumn and is cast where the dialect requires it.
-func (db *database[M]) likeColumn(scope filterScope, dbName, quotedColumn string) string {
-	_, isJSON := scope.jsonColumns[dbName]
+func (db *database[M]) likeColumn(info tableInfo, dbName, quotedColumn string) string {
+	_, isJSON := info.jsonColumns[dbName]
 	return db.textPatternColumn(quotedColumn, isJSON)
 }
 
@@ -398,9 +541,9 @@ func (db *database[M]) stringFilter(f types.Filter, sql string) (clause.Expressi
 // without removing any ambiguity.
 func (db *database[M]) scopedColumn(column string, scope filterScope) string {
 	if len(scope.qualify) == 0 {
-		return db.quoteIdent(column)
+		return db.quoteIdent(scope.own().column(column))
 	}
-	return db.quoteTableColumn(scope.qualify, column)
+	return db.quoteTableColumn(scope.qualify, scope.own().column(column))
 }
 
 // existsCondition renders a correlated subquery as a semi join. The related
@@ -451,18 +594,7 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 	if err != nil {
 		return db.failClosedFilter(f, "related model has no resolvable columns")
 	}
-	allowed := make(map[string]struct{}, len(childColumns))
-	childTimeColumns := make(map[string]struct{})
-	childJSONColumns := make(map[string]struct{})
-	for _, c := range childColumns {
-		allowed[c.DBName] = struct{}{}
-		if modelschema.ClassifyColumn(c.Type) == modelschema.ColumnClassTime {
-			childTimeColumns[c.DBName] = struct{}{}
-		}
-		if modelschema.IsJSONType(c.Type) {
-			childJSONColumns[c.DBName] = struct{}{}
-		}
-	}
+	child := tableInfoOf(childColumns)
 
 	// A subquery reading the same table as the query around it needs its own
 	// name, or both sides of the correlation resolve to the inner table and the
@@ -502,10 +634,11 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 		parent:       childRef,
 		outer:        scope.parent,
 		outerColumns: outerColumns,
-		columns:      allowed,
-		timeColumns:  childTimeColumns,
-		jsonColumns:  childJSONColumns,
+		columns:      child.columns,
+		timeColumns:  child.timeColumns,
+		jsonColumns:  child.jsonColumns,
 		depth:        scope.depth + 1,
+		table:        childTable,
 	}
 	expr, failure := db.renderFilters(sq.Filters, false, inner)
 	if expr != nil {

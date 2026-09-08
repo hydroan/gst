@@ -58,7 +58,10 @@
 //     filter operators, ordering, paging, and cursor pagination;
 //   - the whole select path: grouping, measures, conditional measures,
 //     time buckets, HAVING, window functions, Qualify, ordering, paging,
-//     and Count, and UnionAll over selects of the instance;
+//     and Count, UnionAll over selects of the instance, and the joined
+//     selects of Select (JoinSelect, LeftJoinSelect), whose LEFT JOIN answers
+//     NULL for an unmatched row because the instance is opened with
+//     join_use_nulls on;
 //   - a write path with a deliberately weaker contract — no model hooks, no
 //     transaction boundary: Create is plain batch INSERTs (no
 //     ErrDuplicatedKey; ClickHouse has no unique constraints), Delete is a
@@ -71,7 +74,8 @@
 // EXISTS subqueries (FilterExists) and JSON containment (jsoncontains).
 // Not carried, answering ErrUnsupportedOnDialect: Upsert (no conflict
 // semantics), Cleanup (no soft-delete regime), Transaction/TransactionOn,
-// and WithLock. The instance's schema — engine, ORDER BY, partitioning —
+// WithLock, and the model joins of Select (no unique constraint to prove a
+// join on). The instance's schema — engine, ORDER BY, partitioning —
 // is hand-written DDL owned by the application: neither bootstrap nor
 // "gg migrate" creates or alters ClickHouse tables, bootstrap only verifies
 // that a registered model's table exists.
