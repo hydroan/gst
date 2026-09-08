@@ -428,7 +428,53 @@ err := database.Select[*appmodel.Record, categoryTotal](ctx,
 必须成立；没有任何关联对的子查询按 fail closed 处理。它们是普通的 `Filter` 算子，
 `List`/`Count`/`Export` 同样能用。
 
-框架**不做** join、窗口函数、UNION、递归 CTE，聚合能力也不向 URL 暴露：
+#### 窗口函数
+
+窗口函数让每一行保留，旁边多出一列由同组其他行算出来的值：每组最新一行、累计、
+排名、上一行的值都是它。窗口用 `types.PartitionBy` 开出分区，再用 `OrderBy` 定
+组内顺序，把它交给度量或排名函数的 `Over`；行级投影直接把列引用传给 `Select`，
+它们按原值投影：
+
+```go
+// 每个租户最新一条：ROW_NUMBER() OVER (PARTITION BY tenant_id ORDER BY created_at DESC, id ASC)
+rn := types.RowNumber().
+    Over(types.PartitionBy(RecordCols.TenantID).OrderBy(RecordCols.CreatedAt.Desc())).
+    As("rn")
+err := database.Select[*appmodel.Record, latest](ctx, RecordCols.ID, RecordCols.TenantID, RecordCols.Amount, rn).
+    Qualify(rn.Eq(1)). // WHERE 看不见窗口列，Qualify 由框架套一层派生表再筛
+    Scan(&rows)
+
+// 累计：COALESCE(SUM(amount) OVER (PARTITION BY tenant_id ORDER BY created_at ASC, id ASC
+//                 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW), 0)
+running := RecordCols.Amount.Sum().
+    Over(types.PartitionBy(RecordCols.TenantID).OrderBy(RecordCols.CreatedAt.Asc())).
+    As("running")
+
+// 排行：分组投影上开窗，窗口按度量排序，RANK() OVER (ORDER BY COALESCE(SUM(amount), 0) DESC)
+total := RecordCols.Amount.Sum().As("total")
+rank := types.Rank().Over(types.OrderBy(total.Desc()))
+```
+
+关键字与规则：
+
+- **`RowNumber`、`Rank`、`DenseRank`** 是包级函数，必须配带 `OrderBy` 的窗口；
+  **`Lag`、`Lead`** 挂在列上，取窗内上一行、下一行的值，分区两端是 NULL，结果字段
+  必须能装 NULL。五个聚合函数加 `.Over` 即在窗口上算；`CountDistinct` 不能开窗，
+  分组键和时间桶也不能。
+- **决胜列由框架补**：带 `OrderBy` 的窗口在行级投影末尾补主键升序，在分组投影补
+  分组键，同值行的编号和累计在每次运行都一样。`Rank`、`DenseRank` 不补，它们按定义
+  把并列行当同一名次。
+- **累计的帧固定为 ROWS**：带顺序的聚合总是从分区第一行累加到当前行，不会像 SQL
+  默认的 RANGE 那样把同值行一起算进去。
+- **分组投影上的窗口读的是组**：`PartitionBy` 只能用分组键，`OrderBy` 用分组键或已
+  投影的度量；聚合函数在这里作用于组的度量，`Sum().Over(...)` 渲染成
+  `SUM(SUM(amount)) OVER (...)`，`Avg`、`Lag`、`Lead` 在分组投影上直接拒绝。
+- **`Qualify`** 按窗口列筛行，条件只能引用已投影的窗口项；`Where`、`Having` 留在
+  内层，排序、分页和 `Count` 作用在筛完之后的行集。
+- **`ScanOne`** 只读纯度量投影；行级投影用 `Scan`。既无聚合也无窗口的投影仍然拒绝，
+  那是 `List` 的活。
+
+框架**不做** join、UNION、递归 CTE，聚合能力也不向 URL 暴露：
 报表口径属于服务端契约，让客户端自选分组键等于开放一个无界扫描入口。
 
 ## 配置和迁移
