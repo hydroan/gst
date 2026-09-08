@@ -483,21 +483,21 @@ SELECT 列表，按位置对齐写反的错误写不出来。列名不一致的�
 
 ```go
 type flow struct {
-    Kind      string
-    ID        string
-    Amount    int64
-    CreatedAt time.Time
+    Kind   string    // 来源标记：payment 或 refund，由 Literal 写进每一行
+    ID     string
+    Amount int64
+    At     time.Time // 付款的 paid_at、退款的 settled_at，两边都用 As 对齐到 at
 }
 
 payments := database.Select[*appmodel.Payment, flow](ctx,
-    types.Literal("payment").As("kind"), PaymentCols.ID, PaymentCols.Amount, PaymentCols.CreatedAt).
+    types.Literal("payment").As("kind"), PaymentCols.ID, PaymentCols.Amount, PaymentCols.PaidAt.As("at")).
     Where(PaymentCols.TenantID.Eq(tenantID))
 refunds := database.Select[*appmodel.Refund, flow](ctx,
-    types.Literal("refund").As("kind"), RefundCols.ID, RefundCols.Amount, RefundCols.SettledAt.As("created_at")).
+    types.Literal("refund").As("kind"), RefundCols.ID, RefundCols.Amount, RefundCols.SettledAt.As("at")).
     Where(RefundCols.TenantID.Eq(tenantID))
 
 feed := database.UnionAll[flow](ctx, payments, refunds).
-    OrderBy(PaymentCols.CreatedAt.Desc(), PaymentCols.ID.Desc()).
+    OrderBy(PaymentCols.PaidAt.As("at").Desc(), PaymentCols.ID.Desc()). // 按结果列 at、id 排
     Limit(20).Offset(40)
 err := feed.Scan(&rows)  // 这一页
 err = feed.Count(&total) // 总数
