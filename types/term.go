@@ -61,22 +61,21 @@ func (b TimeBucket) Valid() bool {
 // Term is one term of a projection: a group key when Fn is FnNone, a measure
 // otherwise.
 //
-// Terms are built through the generated column references
-// (SampleCols.Amount.Sum()). The typed path cannot express a function the
-// column type does not support, because the generated reference does not
-// carry the method. Code that has no generated reference builds them through
-// the string-name constructors further down (SumOf("amount")), whose column
-// is checked against the model schema when the query is built; the note
-// above those constructors says which code that is.
+// Terms are built through the column references: the generated Cols vars,
+// or references minted with NewColumn and its siblings by code that has no
+// generated file, such as framework module sources. A generated reference
+// cannot express a function its column type does not support, because it
+// does not carry the method; a minted reference names whatever type its
+// author chose, so the column and its type are checked against the model
+// schema when the query is built.
 //
 // A term never holds SQL. Column names are quoted by the database layer,
 // values bind as statement parameters, and Fn and Bucket come from closed sets.
 type Term struct {
 	// Fn is the aggregate function, or FnNone for a group key.
 	Fn TermFn
-	// Table is the table the column belongs to, carried over from a generated
-	// column reference. It is empty on the string-name constructors, whose
-	// column is read against the queried model without a check.
+	// Table is the table the column belongs to, carried over from the column
+	// reference. It is empty only on COUNT(*), which names no column.
 	Table string
 	// Column is the snake case column name. It is empty only for COUNT(*).
 	Column string
@@ -141,71 +140,6 @@ const DefaultCountAlias = "count"
 // It projects as "count" unless renamed with As.
 func Count() Term {
 	return Term{Fn: FnCount, Alias: DefaultCountAlias}
-}
-
-// The string-name constructors below build the same terms from a plain column
-// name. They exist for the two kinds of code that cannot reference a generated
-// Cols var, and they stay as long as either does:
-//
-//   - framework module source under internal/model and internal/service: it
-//     compiles inside this repository, where gg gen never runs, and gg module
-//     copy replicates it verbatim into projects, so it can only name columns
-//     by string. The FilterXxx, Asc, Desc and Assign constructors exist for
-//     the same reason.
-//   - generic helpers that operate on a model type they do not know.
-//
-// Business project code has the generated column references and should use
-// them: a misspelled column or a SUM over a text column then fails to compile
-// instead of failing when the query is built. The string path carries no Go
-// type, so the column type rules are enforced against the model schema at
-// build time. The default alias is the column name, as on the typed path.
-
-// CountOf counts non-NULL values of a column.
-func CountOf(column string) Term {
-	return Term{Fn: FnCount, Column: column, Alias: column}
-}
-
-// CountDistinctOf counts distinct non-NULL values of a column.
-func CountDistinctOf(column string) Term {
-	return Term{Fn: FnCountDistinct, Column: column, Alias: column}
-}
-
-// SumOf adds up a numeric column.
-func SumOf(column string) Term {
-	return Term{Fn: FnSum, Column: column, Alias: column}
-}
-
-// AvgOf averages a numeric column.
-func AvgOf(column string) Term {
-	return Term{Fn: FnAvg, Column: column, Alias: column}
-}
-
-// MinOf returns the smallest value of a column.
-func MinOf(column string) Term {
-	return Term{Fn: FnMin, Column: column, Alias: column}
-}
-
-// MaxOf returns the largest value of a column.
-func MaxOf(column string) Term {
-	return Term{Fn: FnMax, Column: column, Alias: column}
-}
-
-// GroupOf groups by the raw value of a column.
-func GroupOf(column string) Term {
-	return Term{Column: column, Alias: column}
-}
-
-// ByHourOf, ByDayOf and ByMonthOf group a time column by a truncated bucket.
-func ByHourOf(column string) Term {
-	return Term{Column: column, Bucket: TimeBucketHour, Alias: column}
-}
-
-func ByDayOf(column string) Term {
-	return Term{Column: column, Bucket: TimeBucketDay, Alias: column}
-}
-
-func ByMonthOf(column string) Term {
-	return Term{Column: column, Bucket: TimeBucketMonth, Alias: column}
 }
 
 // CompareOp is a comparison applied to an aggregated value. Only the six

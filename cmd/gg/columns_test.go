@@ -229,8 +229,8 @@ func TestRenderColumnsFile(t *testing.T) {
 
 	t.Run("DoesNotSpecializeWhenTypeIsUnreproducible", func(t *testing.T) {
 		// Specializing would need the type as a type argument, and any is not
-		// the column's type. The plain reference keeps the column usable and
-		// SumOf stays available for it.
+		// the column's type. The plain reference keeps the column usable; a
+		// NumericColumn minted by hand can still sum it.
 		require.Contains(t, rendered, `types.NewColumn[*Record, any]("weight")`)
 		require.NotContains(t, rendered, "types.NewNumericColumn[any]")
 	})

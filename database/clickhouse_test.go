@@ -118,12 +118,12 @@ func TestClickhouse(t *testing.T) {
 		}
 		rows := make([]row, 0)
 		require.NoError(t, database.SelectOn[*TestAggregateRecord, row](ctx, ins,
-			aggCols.Category.Group(),
-			aggCols.Amount.Sum().As("total"),
-			types.Count().Where(aggCols.Status.Eq("done")).As("done"),
+			TestAggregateRecordCols.Category.Group(),
+			TestAggregateRecordCols.Amount.Sum().As("total"),
+			types.Count().Where(TestAggregateRecordCols.Status.Eq("done")).As("done"),
 		).
-			Having(aggCols.Amount.Sum().As("total").Gte(600)).
-			OrderBy(aggCols.Category.Group().Asc()).
+			Having(TestAggregateRecordCols.Amount.Sum().As("total").Gte(600)).
+			OrderBy(TestAggregateRecordCols.Category.Group().Asc()).
 			Scan(&rows))
 		require.Equal(t, []row{
 			{Category: "alpha", Total: 600, Done: 2},
@@ -138,8 +138,8 @@ func TestClickhouse(t *testing.T) {
 			Records int64
 		}
 		rows := make([]row, 0)
-		require.NoError(t, database.SelectOn[*TestAggregateRecord, row](ctx, ins, aggCols.OccurredAt.ByDay().As("bucket"), types.Count().As("records")).
-			OrderBy(aggCols.OccurredAt.ByDay().As("bucket").Asc()).
+		require.NoError(t, database.SelectOn[*TestAggregateRecord, row](ctx, ins, TestAggregateRecordCols.OccurredAt.ByDay().As("bucket"), types.Count().As("records")).
+			OrderBy(TestAggregateRecordCols.OccurredAt.ByDay().As("bucket").Asc()).
 			Scan(&rows))
 		require.Equal(t, []row{
 			{Bucket: "2024-01-10", Records: 2},
@@ -155,7 +155,7 @@ func TestClickhouse(t *testing.T) {
 			Total    int64
 		}
 		var groups int
-		require.NoError(t, database.SelectOn[*TestAggregateRecord, row](ctx, ins, aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+		require.NoError(t, database.SelectOn[*TestAggregateRecord, row](ctx, ins, TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum().As("total")).
 			Count(&groups))
 		require.Equal(t, 3, groups)
 	})
@@ -191,7 +191,7 @@ func TestClickhouse(t *testing.T) {
 		// occurred_at here), so a correction narrows the write to the columns
 		// it corrects — the shape every real mutation on this dialect takes.
 		row.Status = "after"
-		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithSelect(aggCols.Status).Update(row))
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithSelect(TestAggregateRecordCols.Status).Update(row))
 		require.Eventually(t, func() bool {
 			got := new(TestAggregateRecord)
 			if err := database.DatabaseOn[*TestAggregateRecord](ctx, ins).Get(got, row.ID); err != nil {
@@ -211,7 +211,7 @@ func TestClickhouse(t *testing.T) {
 
 		// No matched count comes back from a mutation, so a missing record
 		// passes silently instead of answering ErrRecordNotFound.
-		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithSelect(aggCols.Status).
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithSelect(TestAggregateRecordCols.Status).
 			Update(&TestAggregateRecord{Category: "mutate", ID: "no-such-row"}))
 
 		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Delete(row))
@@ -234,7 +234,7 @@ func TestClickhouse(t *testing.T) {
 			"delete must render the lightweight DELETE, not an ALTER TABLE mutation")
 
 		stmts = stmts[:0]
-		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithDryRun(&stmts).WithSelect(aggCols.Status).
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithDryRun(&stmts).WithSelect(TestAggregateRecordCols.Status).
 			Update(&TestAggregateRecord{Status: "y", ID: "dry-1"}))
 		require.Len(t, stmts, 1)
 		require.Contains(t, stmts[0].RenderedSQL, "ALTER TABLE",
@@ -292,7 +292,7 @@ func TestClickhouse(t *testing.T) {
 			('t1','a1','vip','2024-01-01 00:00:00','2024-01-01 00:00:00')`).Error)
 
 		require.Empty(t, listIDs(t, types.FilterExists[*TestRecordTag](
-			tagCols.RecordID.Equal(recordIDCol),
+			TestRecordTagCols.RecordID.Equal(TestAggregateRecordCols.ID),
 		)))
 	})
 }

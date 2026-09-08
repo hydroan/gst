@@ -11,7 +11,9 @@ import (
 
 // The examples below are the runnable reference for the Select builder: one
 // per keyword, each reading the six seeded rows described at the top of
-// select_test.go and printing its result rows. They print rows rather than
+// select_test.go and printing its result rows. They are written the way
+// project code is written: through the Cols vars gg gen generates next to a
+// model, which the fixture mirrors under the same names. They print rows rather than
 // SQL because the rendered statement differs between dialects only in its
 // identifier quotes while the rows must not differ at all; the SQL each one
 // renders is quoted in its comment in MySQL spelling, and locked per dialect
@@ -55,11 +57,11 @@ func ExampleSelect_group() {
 	}
 	rows := make([]row, 0)
 	if err := database.Select[*TestAggregateRecord, row](context.Background(),
-		aggCols.Category.Group(),
-		aggCols.Amount.Sum(),
+		TestAggregateRecordCols.Category.Group(),
+		TestAggregateRecordCols.Amount.Sum(),
 		types.Count(),
 	).
-		OrderBy(aggCols.Category.Group().Asc()).
+		OrderBy(TestAggregateRecordCols.Category.Group().Asc()).
 		Scan(&rows); err != nil {
 		panic(err)
 	}
@@ -92,11 +94,11 @@ func ExampleSelect_scanOne() {
 	}
 	got := totals{}
 	if err := database.Select[*TestAggregateRecord, totals](context.Background(),
-		aggCols.Amount.Sum().As("total"),
+		TestAggregateRecordCols.Amount.Sum().As("total"),
 		types.Count().As("records"),
-		aggCols.Amount.Min().As("smallest"),
-		aggCols.Amount.Max().As("largest"),
-		aggCols.Amount.Avg().As("average"),
+		TestAggregateRecordCols.Amount.Min().As("smallest"),
+		TestAggregateRecordCols.Amount.Max().As("largest"),
+		TestAggregateRecordCols.Amount.Avg().As("average"),
 	).ScanOne(&got); err != nil {
 		panic(err)
 	}
@@ -125,8 +127,8 @@ func ExampleSelect_count() {
 	got := counts{}
 	if err := database.Select[*TestAggregateRecord, counts](context.Background(),
 		types.Count().As("rows"),
-		aggCols.ClosedAt.Count().As("closed"),
-		aggCols.Category.CountDistinct().As("categories"),
+		TestAggregateRecordCols.ClosedAt.Count().As("closed"),
+		TestAggregateRecordCols.Category.CountDistinct().As("categories"),
 	).ScanOne(&got); err != nil {
 		panic(err)
 	}
@@ -154,11 +156,11 @@ func ExampleSelect_conditionalMeasure() {
 	}
 	rows := make([]row, 0)
 	if err := database.Select[*TestAggregateRecord, row](context.Background(),
-		aggCols.Category.Group(),
-		aggCols.Amount.Sum().Where(aggCols.Status.Eq("done")).As("done_amount"),
-		aggCols.Amount.Sum().Where(aggCols.Status.Eq("failed")).As("failed_amount"),
+		TestAggregateRecordCols.Category.Group(),
+		TestAggregateRecordCols.Amount.Sum().Where(TestAggregateRecordCols.Status.Eq("done")).As("done_amount"),
+		TestAggregateRecordCols.Amount.Sum().Where(TestAggregateRecordCols.Status.Eq("failed")).As("failed_amount"),
 	).
-		OrderBy(aggCols.Category.Group().Asc()).
+		OrderBy(TestAggregateRecordCols.Category.Group().Asc()).
 		Scan(&rows); err != nil {
 		panic(err)
 	}
@@ -185,7 +187,7 @@ func ExampleSelect_byHour() {
 		Hour  string
 		Count int64
 	}
-	hour := aggCols.OccurredAt.ByHour().As("hour")
+	hour := TestAggregateRecordCols.OccurredAt.ByHour().As("hour")
 	rows := make([]row, 0)
 	if err := database.Select[*TestAggregateRecord, row](context.Background(), hour, types.Count()).
 		OrderBy(hour.Asc()).
@@ -216,7 +218,7 @@ func ExampleSelect_byDay() {
 		Day   string
 		Count int64
 	}
-	day := aggCols.OccurredAt.ByDay().As("day")
+	day := TestAggregateRecordCols.OccurredAt.ByDay().As("day")
 	rows := make([]row, 0)
 	if err := database.Select[*TestAggregateRecord, row](context.Background(), day, types.Count()).
 		OrderBy(day.Asc()).
@@ -246,9 +248,9 @@ func ExampleSelect_byMonth() {
 		Month  string
 		Amount int64
 	}
-	month := aggCols.OccurredAt.ByMonth().As("month")
+	month := TestAggregateRecordCols.OccurredAt.ByMonth().As("month")
 	rows := make([]row, 0)
-	if err := database.Select[*TestAggregateRecord, row](context.Background(), month, aggCols.Amount.Sum()).
+	if err := database.Select[*TestAggregateRecord, row](context.Background(), month, TestAggregateRecordCols.Amount.Sum()).
 		OrderBy(month.Asc()).
 		Scan(&rows); err != nil {
 		panic(err)
@@ -277,7 +279,7 @@ func ExampleSelect_having() {
 		Category string
 		Total    int64
 	}
-	total := aggCols.Amount.Sum().As("total")
+	total := TestAggregateRecordCols.Amount.Sum().As("total")
 	comparisons := []struct {
 		name string
 		cond types.TermCondition
@@ -291,9 +293,9 @@ func ExampleSelect_having() {
 	}
 	for _, c := range comparisons {
 		rows := make([]row, 0)
-		if err := database.Select[*TestAggregateRecord, row](context.Background(), aggCols.Category.Group(), total).
+		if err := database.Select[*TestAggregateRecord, row](context.Background(), TestAggregateRecordCols.Category.Group(), total).
 			Having(c.cond).
-			OrderBy(aggCols.Category.Group().Asc()).
+			OrderBy(TestAggregateRecordCols.Category.Group().Asc()).
 			Scan(&rows); err != nil {
 			panic(err)
 		}
@@ -331,9 +333,9 @@ func ExampleSelect_orderByLimitOffset() {
 		Category string
 		Total    int64
 	}
-	total := aggCols.Amount.Sum().As("total")
-	ranking := database.Select[*TestAggregateRecord, row](context.Background(), aggCols.Category.Group(), total).
-		OrderBy(total.Desc(), aggCols.Category.Group().Asc()).
+	total := TestAggregateRecordCols.Amount.Sum().As("total")
+	ranking := database.Select[*TestAggregateRecord, row](context.Background(), TestAggregateRecordCols.Category.Group(), total).
+		OrderBy(total.Desc(), TestAggregateRecordCols.Category.Group().Asc()).
 		Limit(2)
 
 	first := make([]row, 0)
@@ -365,10 +367,10 @@ func ExampleSelect_countRows() {
 		Category string
 		Total    int64
 	}
-	total := aggCols.Amount.Sum().As("total")
-	report := database.Select[*TestAggregateRecord, row](context.Background(), aggCols.Category.Group(), total).
-		Where(aggCols.Status.Eq("done")).
-		OrderBy(aggCols.Category.Group().Asc()).
+	total := TestAggregateRecordCols.Amount.Sum().As("total")
+	report := database.Select[*TestAggregateRecord, row](context.Background(), TestAggregateRecordCols.Category.Group(), total).
+		Where(TestAggregateRecordCols.Status.Eq("done")).
+		OrderBy(TestAggregateRecordCols.Category.Group().Asc()).
 		Limit(2)
 
 	groups := 0
@@ -401,8 +403,8 @@ func ExampleSelect_as() {
 	}
 	got := bounds{}
 	if err := database.Select[*TestAggregateRecord, bounds](context.Background(),
-		aggCols.Amount.Min().As("smallest"),
-		aggCols.Amount.Max().As("largest"),
+		TestAggregateRecordCols.Amount.Min().As("smallest"),
+		TestAggregateRecordCols.Amount.Max().As("largest"),
 	).ScanOne(&got); err != nil {
 		panic(err)
 	}
@@ -426,10 +428,10 @@ func ExampleSelect_emptySet() {
 	}
 	got := totals{}
 	if err := database.Select[*TestAggregateRecord, totals](context.Background(),
-		aggCols.Amount.Sum().As("total"),
-		aggCols.Amount.Avg().As("average"),
+		TestAggregateRecordCols.Amount.Sum().As("total"),
+		TestAggregateRecordCols.Amount.Avg().As("average"),
 	).
-		Where(aggCols.Category.Eq("delta")).
+		Where(TestAggregateRecordCols.Category.Eq("delta")).
 		ScanOne(&got); err != nil {
 		panic(err)
 	}
@@ -461,38 +463,6 @@ func ExampleSelect_filterFalse() {
 	// count: 0
 }
 
-// The string-name constructors build the same terms from plain column names,
-// for framework module sources and generic code that have no generated Cols
-// var; the column is checked against the model schema when the query is
-// built. Rendered exactly like ExampleSelect_group.
-func ExampleSelect_stringNames() {
-	seedAggregateExample()
-	defer cleanupAggregateData()
-
-	type row struct {
-		Category string
-		Amount   int64
-		Count    int64
-	}
-	rows := make([]row, 0)
-	if err := database.Select[*TestAggregateRecord, row](context.Background(),
-		types.GroupOf("category"),
-		types.SumOf("amount"),
-		types.CountOf("category").As("count"),
-	).
-		OrderBy(types.GroupOf("category").Asc()).
-		Scan(&rows); err != nil {
-		panic(err)
-	}
-	for _, r := range rows {
-		fmt.Println(r.Category, r.Amount, r.Count)
-	}
-	// Output:
-	// alpha 600 3
-	// beta 900 2
-	// gamma 600 1
-}
-
 // FilterExists is a semi join: it keeps the rows that have at least one
 // related row, and Equal is the predicate that ties the related row to the
 // queried one. A row matches at most once, so the counts never double the
@@ -515,16 +485,16 @@ func ExampleSelect_filterExists() {
 		Category string
 		Count    int64
 	}
-	vip := types.FilterExists[*TestRecordTag](tagCols.RecordID.Equal(recordIDCol), tagCols.Label.Eq("vip"))
-	noVip := types.FilterNotExists[*TestRecordTag](tagCols.RecordID.Equal(recordIDCol), tagCols.Label.Eq("vip"))
+	vip := types.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.Equal(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
+	noVip := types.FilterNotExists[*TestRecordTag](TestRecordTagCols.RecordID.Equal(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
 	for _, scope := range []struct {
 		name   string
 		filter types.Filter
 	}{{"vip", vip}, {"no vip", noVip}} {
 		rows := make([]row, 0)
-		if err := database.Select[*TestAggregateRecord, row](context.Background(), aggCols.Category.Group(), types.Count()).
+		if err := database.Select[*TestAggregateRecord, row](context.Background(), TestAggregateRecordCols.Category.Group(), types.Count()).
 			Where(scope.filter).
-			OrderBy(aggCols.Category.Group().Asc()).
+			OrderBy(TestAggregateRecordCols.Category.Group().Asc()).
 			Scan(&rows); err != nil {
 			panic(err)
 		}
@@ -549,7 +519,7 @@ func ExampleDatabase_filterExists() {
 	seedTagExample()
 	defer cleanupTagData()
 
-	vip := types.FilterExists[*TestRecordTag](tagCols.RecordID.Equal(recordIDCol), tagCols.Label.Eq("vip"))
+	vip := types.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.Equal(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
 	records := make([]*TestAggregateRecord, 0)
 	if err := database.Database[*TestAggregateRecord](context.Background()).
 		WithQuery(nil, types.QueryOptions{Filters: []types.Filter{vip}}).

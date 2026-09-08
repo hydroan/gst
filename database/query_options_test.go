@@ -292,7 +292,7 @@ func TestDatabaseWithSelect(t *testing.T) {
 		// write from a typo.
 		users := make([]*TestUser, 0)
 		require.ErrorIs(t,
-			database.Database[*TestUser](context.Background()).WithSelect(aggCols.Status).List(&users),
+			database.Database[*TestUser](context.Background()).WithSelect(TestAggregateRecordCols.Status).List(&users),
 			database.ErrColumnTable)
 	})
 

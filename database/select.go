@@ -600,9 +600,10 @@ func (a *selector[M, R]) validate() error {
 }
 
 // validateTerm checks that a term names a real column and that the column's
-// type accepts the function. The type check only bites on the string-name
-// constructors: a term built from a generated column reference cannot reach a
-// function its type rejects, because the reference does not carry the method.
+// type accepts the function. The type check only bites on minted references:
+// a term built from a generated column reference cannot reach a function its
+// type rejects, because the reference does not carry the method, while a
+// reference minted by hand names whatever type its author chose.
 func (a *selector[M, R]) validateTerm(t types.Term, byName map[string]modelschema.Column) error {
 	// The renderer composes SQL from these constants, so a value from outside
 	// the closed set would reach the statement as text.
@@ -621,10 +622,10 @@ func (a *selector[M, R]) validateTerm(t types.Term, byName map[string]modelschem
 	if t.IsMeasure() && t.Bucket != types.TimeBucketNone {
 		return errors.Wrapf(ErrBucketOnMeasure, "%q", a.alias(t))
 	}
-	// A generated reference carries the table it was generated for. A term
-	// naming a column of another model may well name a column the queried
-	// model also has, which is valid SQL over the wrong table, so the table is
-	// checked before the name is. The string-name constructors carry none.
+	// A column reference carries the table it was built for. A term naming
+	// a column of another model may well name a column the queried model also
+	// has, which is valid SQL over the wrong table, so the table is checked
+	// before the name is. Only COUNT(*) carries none.
 	if len(t.Table) > 0 && t.Table != a.db.outerTableName() {
 		return errors.Wrapf(ErrColumnTable, "%q belongs to table %q, the select reads %q", t.Column, t.Table, a.db.outerTableName())
 	}
@@ -643,8 +644,8 @@ func (a *selector[M, R]) validateTerm(t types.Term, byName map[string]modelschem
 	switch {
 	case t.Fn == types.FnSum || t.Fn == types.FnAvg:
 		// The generated reference already blocks this at compile time for the
-		// types it can classify, so the check only bites on the string-name
-		// constructors. It asks ClassifyColumn rather than keeping a rule of
+		// types it can classify, so the check only bites on minted
+		// references. It asks ClassifyColumn rather than keeping a rule of
 		// its own: a second rule admitted every struct storing itself through
 		// driver.Valuer, which is also how uuid, JSON and text-backed null
 		// wrappers travel, and gorm.DeletedAt is on every model. Two rules

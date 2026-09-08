@@ -10,8 +10,8 @@ import (
 
 // ColumnClass is the aggregate capability a column type carries. It decides
 // which reference gg gen writes for the column and which aggregate functions
-// the string-name constructors accept for it, so both consumers read the same
-// rule rather than each carrying a copy that could drift.
+// the query builder accepts for it at build time, so both consumers read the
+// same rule rather than each carrying a copy that could drift.
 type ColumnClass int
 
 const (
@@ -38,8 +38,9 @@ var timeType = reflect.TypeFor[time.Time]()
 // the failure the split exists to prevent: MySQL and SQLite answer SUM over a
 // text column with 0 and a warning rather than an error, so the mistake
 // reaches a report as a plausible wrong number instead of a failure. A decimal
-// stored as a struct is therefore classified as other, and is summed through
-// SumOf, whose column is checked against the model schema at build time.
+// stored as a struct is therefore classified as other; summing it takes a
+// reference minted as NumericColumn by hand, whose column is checked against
+// the model schema at build time.
 func ClassifyColumn(typ reflect.Type) ColumnClass {
 	if typ == nil {
 		return ColumnClassOther

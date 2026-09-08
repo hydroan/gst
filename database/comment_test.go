@@ -180,7 +180,7 @@ func TestSQLCommentAnnotatesSelects(t *testing.T) {
 		Total    int64
 	}
 	rows := make([]groupRow, 0)
-	require.NoError(t, database.SelectOn[*TestAggregateRecord, groupRow](ctx, session, aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+	require.NoError(t, database.SelectOn[*TestAggregateRecord, groupRow](ctx, session, TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum().As("total")).
 		Scan(&rows))
 	require.Contains(t, capture.last(), "/* trace_id='trace-agg' */")
 
@@ -188,12 +188,12 @@ func TestSQLCommentAnnotatesSelects(t *testing.T) {
 		Total int64
 	}
 	one := totalRow{}
-	require.NoError(t, database.SelectOn[*TestAggregateRecord, totalRow](ctx, session, aggCols.Amount.Sum().As("total")).
+	require.NoError(t, database.SelectOn[*TestAggregateRecord, totalRow](ctx, session, TestAggregateRecordCols.Amount.Sum().As("total")).
 		ScanOne(&one))
 	require.Contains(t, capture.last(), "/* trace_id='trace-agg' */")
 
 	groups := 0
-	require.NoError(t, database.SelectOn[*TestAggregateRecord, groupRow](ctx, session, aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+	require.NoError(t, database.SelectOn[*TestAggregateRecord, groupRow](ctx, session, TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum().As("total")).
 		Count(&groups))
 	sql := capture.last()
 	require.Contains(t, sql, "/* trace_id='trace-agg' */")
