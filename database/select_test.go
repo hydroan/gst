@@ -81,7 +81,7 @@ var aggCols = struct {
 	ClosedAt:   types.NewTimeColumn("closed_at"),
 }
 
-func TestAggregateScalar(t *testing.T) {
+func TestSelectScalar(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
 
@@ -95,14 +95,13 @@ func TestAggregateScalar(t *testing.T) {
 		AvgScore *float64
 	}
 	got := row{}
-	require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
-		Select(
-			aggCols.Amount.Sum().As("total"),
-			types.Count().As("records"),
-			aggCols.Amount.Min().As("smallest"),
-			aggCols.Amount.Max().As("largest"),
-			aggCols.Score.Avg().As("avg_score"),
-		).
+	require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(),
+		aggCols.Amount.Sum().As("total"),
+		types.Count().As("records"),
+		aggCols.Amount.Min().As("smallest"),
+		aggCols.Amount.Max().As("largest"),
+		aggCols.Score.Avg().As("avg_score"),
+	).
 		ScanOne(&got))
 
 	require.EqualValues(t, 2100, got.Total)
@@ -115,7 +114,7 @@ func TestAggregateScalar(t *testing.T) {
 	require.InDelta(t, 4.0, *got.AvgScore, 0.0001)
 }
 
-func TestAggregateGroupBy(t *testing.T) {
+func TestSelectGroupBy(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
 
@@ -125,12 +124,11 @@ func TestAggregateGroupBy(t *testing.T) {
 		Records  int64
 	}
 	rows := make([]row, 0)
-	require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
-		Select(
-			aggCols.Category.Group(),
-			aggCols.Amount.Sum().As("total"),
-			types.Count().As("records"),
-		).
+	require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(),
+		aggCols.Category.Group(),
+		aggCols.Amount.Sum().As("total"),
+		types.Count().As("records"),
+	).
 		OrderBy(aggCols.Category.Group().Asc()).
 		Scan(&rows))
 
@@ -141,7 +139,7 @@ func TestAggregateGroupBy(t *testing.T) {
 	}, rows)
 }
 
-func TestAggregateConditional(t *testing.T) {
+func TestSelectConditional(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
 
@@ -154,13 +152,12 @@ func TestAggregateConditional(t *testing.T) {
 		DoneRecords int64
 	}
 	rows := make([]row, 0)
-	require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
-		Select(
-			aggCols.Category.Group(),
-			aggCols.Amount.Sum().Where(aggCols.Status.Eq("done")).As("done_amount"),
-			aggCols.Amount.Sum().Where(aggCols.Status.Eq("failed")).As("fail_amount"),
-			types.Count().Where(aggCols.Status.Eq("done")).As("done_records"),
-		).
+	require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(),
+		aggCols.Category.Group(),
+		aggCols.Amount.Sum().Where(aggCols.Status.Eq("done")).As("done_amount"),
+		aggCols.Amount.Sum().Where(aggCols.Status.Eq("failed")).As("fail_amount"),
+		types.Count().Where(aggCols.Status.Eq("done")).As("done_records"),
+	).
 		OrderBy(aggCols.Category.Group().Asc()).
 		Scan(&rows))
 
@@ -172,7 +169,7 @@ func TestAggregateConditional(t *testing.T) {
 	}, rows)
 }
 
-func TestAggregateHavingAndTopN(t *testing.T) {
+func TestSelectHavingAndTopN(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
 
@@ -184,8 +181,7 @@ func TestAggregateHavingAndTopN(t *testing.T) {
 
 	t.Run("HavingFiltersGroups", func(t *testing.T) {
 		rows := make([]row, 0)
-		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
-			Select(aggCols.Category.Group(), total).
+		require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(), aggCols.Category.Group(), total).
 			Having(total.Gt(600)).
 			Scan(&rows))
 		require.Equal(t, []row{{Category: "beta", Total: 900}}, rows)
@@ -202,8 +198,7 @@ func TestAggregateHavingAndTopN(t *testing.T) {
 		}
 		done := types.Count().Where(aggCols.Status.Eq("done")).As("done")
 		rows := make([]condRow, 0)
-		require.NoError(t, database.Aggregate[*TestAggregateRecord, condRow](context.Background()).
-			Select(aggCols.Category.Group(), done).
+		require.NoError(t, database.Select[*TestAggregateRecord, condRow](context.Background(), aggCols.Category.Group(), done).
 			Having(done.Gt(1)).
 			Scan(&rows))
 		// done rows per category: alpha 2, beta 1, gamma 1.
@@ -214,8 +209,7 @@ func TestAggregateHavingAndTopN(t *testing.T) {
 		// alpha and gamma tie on 600, so the group key breaks the tie: without
 		// it the databases would be free to answer either group second.
 		rows := make([]row, 0)
-		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
-			Select(aggCols.Category.Group(), total).
+		require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(), aggCols.Category.Group(), total).
 			OrderBy(total.Desc(), aggCols.Category.Group().Asc()).
 			Limit(2).
 			Scan(&rows))
@@ -224,8 +218,7 @@ func TestAggregateHavingAndTopN(t *testing.T) {
 
 	t.Run("OffsetPagesGroups", func(t *testing.T) {
 		rows := make([]row, 0)
-		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
-			Select(aggCols.Category.Group(), total).
+		require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(), aggCols.Category.Group(), total).
 			OrderBy(total.Desc(), aggCols.Category.Group().Asc()).
 			Limit(1).
 			Offset(1).
@@ -239,7 +232,7 @@ func TestAggregateHavingAndTopN(t *testing.T) {
 	t.Run("HavingOperators", func(t *testing.T) {
 		cases := []struct {
 			name   string
-			having types.Having
+			having types.TermCondition
 			want   []row
 		}{
 			{"Eq", total.Eq(900), []row{{Category: "beta", Total: 900}}},
@@ -251,8 +244,7 @@ func TestAggregateHavingAndTopN(t *testing.T) {
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
 				rows := make([]row, 0)
-				require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
-					Select(aggCols.Category.Group(), total).
+				require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(), aggCols.Category.Group(), total).
 					Having(tc.having).
 					OrderBy(aggCols.Category.Group().Asc()).
 					Scan(&rows))
@@ -265,8 +257,7 @@ func TestAggregateHavingAndTopN(t *testing.T) {
 	// matching Database.WithLimit/WithOffset so the two APIs read the same.
 	t.Run("NonPositiveLimitAndOffsetReset", func(t *testing.T) {
 		rows := make([]row, 0)
-		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
-			Select(aggCols.Category.Group(), total).
+		require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(), aggCols.Category.Group(), total).
 			OrderBy(aggCols.Category.Group().Asc()).
 			Limit(1).
 			Limit(0).
@@ -276,10 +267,10 @@ func TestAggregateHavingAndTopN(t *testing.T) {
 	})
 }
 
-// TestAggregateWithDryRun pins that WithDryRun builds the aggregate without
+// TestSelectWithDryRun pins that WithDryRun builds the aggregate without
 // executing it: no error, no database read, and the destination is left
 // untouched, matching the WithDryRun contract of the Database chain.
-func TestAggregateWithDryRun(t *testing.T) {
+func TestSelectWithDryRun(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
 
@@ -288,15 +279,14 @@ func TestAggregateWithDryRun(t *testing.T) {
 		Total    int64
 	}
 	rows := []row{{Category: "stale", Total: 1}}
-	require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
+	require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(), aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
 		WithDryRun().
-		Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
 		Scan(&rows))
 	require.Equal(t, []row{{Category: "stale", Total: 1}}, rows,
 		"dry run loads no rows and leaves the destination unchanged")
 }
 
-func TestAggregateCountDistinct(t *testing.T) {
+func TestSelectCountDistinct(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
 
@@ -304,13 +294,12 @@ func TestAggregateCountDistinct(t *testing.T) {
 		Categories int64
 	}
 	got := row{}
-	require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
-		Select(aggCols.Category.CountDistinct().As("categories")).
+	require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(), aggCols.Category.CountDistinct().As("categories")).
 		ScanOne(&got))
 	require.EqualValues(t, 3, got.Categories)
 }
 
-func TestAggregateTimeBucket(t *testing.T) {
+func TestSelectTimeBucket(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
 
@@ -322,12 +311,11 @@ func TestAggregateTimeBucket(t *testing.T) {
 
 	t.Run("ByDay", func(t *testing.T) {
 		rows := make([]row, 0)
-		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
-			Select(
-				aggCols.OccurredAt.ByDay().As("bucket"),
-				aggCols.Amount.Sum().As("total"),
-				types.Count().As("records"),
-			).
+		require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(),
+			aggCols.OccurredAt.ByDay().As("bucket"),
+			aggCols.Amount.Sum().As("total"),
+			types.Count().As("records"),
+		).
 			OrderBy(aggCols.OccurredAt.ByDay().As("bucket").Asc()).
 			Scan(&rows))
 
@@ -341,12 +329,11 @@ func TestAggregateTimeBucket(t *testing.T) {
 
 	t.Run("ByMonth", func(t *testing.T) {
 		rows := make([]row, 0)
-		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
-			Select(
-				aggCols.OccurredAt.ByMonth().As("bucket"),
-				aggCols.Amount.Sum().As("total"),
-				types.Count().As("records"),
-			).
+		require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(),
+			aggCols.OccurredAt.ByMonth().As("bucket"),
+			aggCols.Amount.Sum().As("total"),
+			types.Count().As("records"),
+		).
 			OrderBy(aggCols.OccurredAt.ByMonth().As("bucket").Asc()).
 			Scan(&rows))
 
@@ -358,12 +345,11 @@ func TestAggregateTimeBucket(t *testing.T) {
 
 	t.Run("ByHour", func(t *testing.T) {
 		rows := make([]row, 0)
-		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
-			Select(
-				aggCols.OccurredAt.ByHour().As("bucket"),
-				aggCols.Amount.Sum().As("total"),
-				types.Count().As("records"),
-			).
+		require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(),
+			aggCols.OccurredAt.ByHour().As("bucket"),
+			aggCols.Amount.Sum().As("total"),
+			types.Count().As("records"),
+		).
 			Where(aggCols.Category.Eq("alpha")).
 			OrderBy(aggCols.OccurredAt.ByHour().As("bucket").Asc()).
 			Scan(&rows))
@@ -376,7 +362,7 @@ func TestAggregateTimeBucket(t *testing.T) {
 	})
 }
 
-func TestAggregateWhereReusesFilters(t *testing.T) {
+func TestSelectWhereReusesFilters(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
 
@@ -387,8 +373,7 @@ func TestAggregateWhereReusesFilters(t *testing.T) {
 
 	// A filter group is AND-combined with the rest, so the category condition
 	// cannot be absorbed into the OR.
-	require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
-		Select(aggCols.Amount.Sum().As("total")).
+	require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(), aggCols.Amount.Sum().As("total")).
 		Where(
 			aggCols.Category.Eq("alpha"),
 			types.FilterOr(aggCols.Status.Eq("failed"), aggCols.Amount.Gte(200)),
@@ -398,7 +383,7 @@ func TestAggregateWhereReusesFilters(t *testing.T) {
 	require.EqualValues(t, 500, got.Total)
 }
 
-func TestAggregateCountGroups(t *testing.T) {
+func TestSelectCount(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
 
@@ -410,18 +395,16 @@ func TestAggregateCountGroups(t *testing.T) {
 
 	t.Run("CountsGroupsNotRows", func(t *testing.T) {
 		var groups int
-		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
-			Select(aggCols.Category.Group(), total).
-			CountGroups(&groups))
+		require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(), aggCols.Category.Group(), total).
+			Count(&groups))
 		require.Equal(t, 3, groups, "six rows fall into three categories")
 	})
 
 	t.Run("RespectsHaving", func(t *testing.T) {
 		var groups int
-		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
-			Select(aggCols.Category.Group(), total).
+		require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(), aggCols.Category.Group(), total).
 			Having(total.Gt(600)).
-			CountGroups(&groups))
+			Count(&groups))
 		require.Equal(t, 1, groups)
 	})
 
@@ -432,11 +415,10 @@ func TestAggregateCountGroups(t *testing.T) {
 		// the select list because it renders its own expression.
 		var groups int
 		statements := make([]types.SQLStatement, 0)
-		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
+		require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(), aggCols.Category.Group(), total).
 			WithDryRun(&statements).
-			Select(aggCols.Category.Group(), total).
 			Having(total.Gt(600)).
-			CountGroups(&groups))
+			Count(&groups))
 		require.Len(t, statements, 1)
 		sql := statements[0].RenderedSQL
 		require.Contains(t, sql, "GROUP BY")
@@ -450,18 +432,17 @@ func TestAggregateCountGroups(t *testing.T) {
 		// Without group keys the whole read is a single group, and the count
 		// answers one even though nothing scans the measure values.
 		var groups int
-		require.NoError(t, database.Aggregate[*TestAggregateRecord, struct{ Total int64 }](context.Background()).
-			Select(total).
-			CountGroups(&groups))
+		require.NoError(t, database.Select[*TestAggregateRecord, struct{ Total int64 }](context.Background(), total).
+			Count(&groups))
 		require.Equal(t, 1, groups)
 	})
 }
 
-// TestAggregateHidesSoftDeletedRows is the regression test for the failure an
+// TestSelectHidesSoftDeletedRows is the regression test for the failure an
 // aggregate is most likely to have: it scans into a plain result row, so gorm
 // parses no model and the soft-delete condition silently disappears unless the
 // model is attached to the statement.
-func TestAggregateHidesSoftDeletedRows(t *testing.T) {
+func TestSelectHidesSoftDeletedRows(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
 
@@ -479,8 +460,7 @@ func TestAggregateHidesSoftDeletedRows(t *testing.T) {
 		Records int64
 	}
 	got := row{}
-	require.NoError(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-		Select(aggCols.Amount.Sum().As("total"), types.Count().As("records")).
+	require.NoError(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Amount.Sum().As("total"), types.Count().As("records")).
 		ScanOne(&got))
 
 	require.EqualValues(t, 5, got.Records, "aggregate must not count soft-deleted rows")
@@ -491,13 +471,12 @@ func TestAggregateHidesSoftDeletedRows(t *testing.T) {
 		Total    int64
 	}
 	var groups int
-	require.NoError(t, database.Aggregate[*TestAggregateRecord, groupRow](ctx).
-		Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
-		CountGroups(&groups))
+	require.NoError(t, database.Select[*TestAggregateRecord, groupRow](ctx, aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+		Count(&groups))
 	require.Equal(t, 2, groups, "the gamma group disappears with its only row")
 }
 
-func TestAggregateBuildErrors(t *testing.T) {
+func TestSelectBuildErrors(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
 
@@ -509,22 +488,20 @@ func TestAggregateBuildErrors(t *testing.T) {
 
 	t.Run("EmptyProjection", func(t *testing.T) {
 		rows := make([]row, 0)
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).Scan(&rows), database.ErrEmptyProjection)
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx).Scan(&rows), database.ErrEmptyProjection)
 	})
 
 	t.Run("ProjectionWithoutAggregateFunction", func(t *testing.T) {
 		// Group keys alone are a plain read, which List already does.
 		type keyOnly struct{ Category string }
 		rows := make([]keyOnly, 0)
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, keyOnly](ctx).
-			Select(aggCols.Category.Group()).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, keyOnly](ctx, aggCols.Category.Group()).
 			Scan(&rows), database.ErrNoAggregateFn)
 	})
 
 	t.Run("UnknownColumn", func(t *testing.T) {
 		rows := make([]row, 0)
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(aggCols.Category.Group(), types.SumOf("nonexistent").As("total")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Category.Group(), types.SumOf("nonexistent").As("total")).
 			Scan(&rows), database.ErrUnknownColumn)
 	})
 
@@ -533,22 +510,19 @@ func TestAggregateBuildErrors(t *testing.T) {
 		// string constructor can, so the build-time rule table has to stop it,
 		// otherwise MySQL answers with 0 and a warning.
 		rows := make([]row, 0)
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(aggCols.Category.Group(), types.SumOf("status").As("total")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Category.Group(), types.SumOf("status").As("total")).
 			Scan(&rows), database.ErrAggregateType)
 	})
 
 	t.Run("TimeBucketOverNonTimeColumn", func(t *testing.T) {
 		rows := make([]row, 0)
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(types.ByDayOf("amount").As("category"), aggCols.Amount.Sum().As("total")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, types.ByDayOf("amount").As("category"), aggCols.Amount.Sum().As("total")).
 			Scan(&rows), database.ErrAggregateType)
 	})
 
 	t.Run("DuplicateAlias", func(t *testing.T) {
 		rows := make([]row, 0)
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(aggCols.Amount.Sum().As("total"), aggCols.Amount.Max().As("total")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Amount.Sum().As("total"), aggCols.Amount.Max().As("total")).
 			Scan(&rows), database.ErrDuplicateAlias)
 	})
 
@@ -557,8 +531,7 @@ func TestAggregateBuildErrors(t *testing.T) {
 		// reaches a report as a column of zeros.
 		type missing struct{ Category string }
 		rows := make([]missing, 0)
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, missing](ctx).
-			Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, missing](ctx, aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
 			Scan(&rows), database.ErrResultFieldMissing)
 	})
 
@@ -569,15 +542,13 @@ func TestAggregateBuildErrors(t *testing.T) {
 			Unbound  int64
 		}
 		rows := make([]extra, 0)
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, extra](ctx).
-			Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, extra](ctx, aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
 			Scan(&rows), database.ErrAliasMissing)
 	})
 
 	t.Run("HavingReferencesUnselectedMeasure", func(t *testing.T) {
 		rows := make([]row, 0)
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
 			Having(aggCols.Score.Avg().As("avg_score").Gt(1)).
 			Scan(&rows), database.ErrHavingTermNotSelected)
 	})
@@ -586,18 +557,16 @@ func TestAggregateBuildErrors(t *testing.T) {
 		// The renderer composes SQL from the constant, so a value from outside
 		// the closed set would otherwise reach the statement as text.
 		rows := make([]row, 0)
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(aggCols.Category.Group(), types.AggregateTerm{
-				Fn: "TOTALLY_NOT_SQL", Column: "amount", Alias: "total",
-			}).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Category.Group(), types.Term{
+			Fn: "TOTALLY_NOT_SQL", Column: "amount", Alias: "total",
+		}).
 			Scan(&rows), database.ErrUnknownAggregateFn)
 	})
 
 	t.Run("UnknownTimeBucket", func(t *testing.T) {
 		rows := make([]row, 0)
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(types.AggregateTerm{Column: "occurred_at", Bucket: "fortnight", Alias: "category"},
-				aggCols.Amount.Sum().As("total")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, types.Term{Column: "occurred_at", Bucket: "fortnight", Alias: "category"},
+			aggCols.Amount.Sum().As("total")).
 			Scan(&rows), database.ErrUnknownTimeBucket)
 	})
 
@@ -605,18 +574,16 @@ func TestAggregateBuildErrors(t *testing.T) {
 		// Conditions only restrict a measure. They used to be dropped without a
 		// word, which reads as a report quietly counting the wrong rows.
 		rows := make([]row, 0)
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(aggCols.Category.Group().Where(aggCols.Status.Eq("done")),
-				aggCols.Amount.Sum().As("total")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Category.Group().Where(aggCols.Status.Eq("done")),
+			aggCols.Amount.Sum().As("total")).
 			Scan(&rows), database.ErrConditionOnGroupKey)
 	})
 
 	t.Run("BucketOnMeasure", func(t *testing.T) {
 		rows := make([]row, 0)
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(aggCols.Category.Group(), types.AggregateTerm{
-				Fn: types.AggregateSum, Column: "amount", Bucket: types.TimeBucketDay, Alias: "total",
-			}).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Category.Group(), types.Term{
+			Fn: types.FnSum, Column: "amount", Bucket: types.TimeBucketDay, Alias: "total",
+		}).
 			Scan(&rows), database.ErrBucketOnMeasure)
 	})
 
@@ -629,8 +596,7 @@ func TestAggregateBuildErrors(t *testing.T) {
 			Done     int64
 		}
 		rows := make([]condRow, 0)
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, condRow](ctx).
-			Select(aggCols.Category.Group(), types.Count().Where(aggCols.Status.Eq("done")).As("done")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, condRow](ctx, aggCols.Category.Group(), types.Count().Where(aggCols.Status.Eq("done")).As("done")).
 			Having(types.Count().As("done").Gt(1)).
 			Scan(&rows), database.ErrHavingTermNotSelected)
 	})
@@ -643,9 +609,8 @@ func TestAggregateBuildErrors(t *testing.T) {
 			Peak     int64
 		}
 		rows := make([]flat, 0)
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, flat](ctx).
-			Select(aggCols.Category.Group(),
-				aggCols.Amount.Max().Where(aggCols.Status.Eq("done")).As("peak")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, flat](ctx, aggCols.Category.Group(),
+			aggCols.Amount.Max().Where(aggCols.Status.Eq("done")).As("peak")).
 			Scan(&rows), database.ErrNullableResultField)
 	})
 
@@ -653,35 +618,31 @@ func TestAggregateBuildErrors(t *testing.T) {
 		// A client filter that cannot be applied narrows the query. Here the
 		// same predicate would turn a report into a silent zero, so it errors.
 		got := struct{ Total int64 }{}
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, struct{ Total int64 }](ctx).
-			Select(aggCols.Amount.Sum().As("total")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, struct{ Total int64 }](ctx, aggCols.Amount.Sum().As("total")).
 			Where(types.FilterOr()).
 			ScanOne(&got), database.ErrUnusableFilter)
 	})
 
 	t.Run("OffsetWithoutLimit", func(t *testing.T) {
 		rows := make([]row, 0)
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
 			Offset(1).
 			Scan(&rows), database.ErrOffsetWithoutLimit)
 	})
 
-	t.Run("UnknownHavingOperator", func(t *testing.T) {
+	t.Run("UnknownCompareOperator", func(t *testing.T) {
 		rows := make([]row, 0)
 		total := aggCols.Amount.Sum().As("total")
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(aggCols.Category.Group(), total).
-			Having(types.Having{Term: total, Op: "approximately", Value: 1}).
-			Scan(&rows), database.ErrUnknownHavingOp)
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Category.Group(), total).
+			Having(types.TermCondition{Term: total, Op: "approximately", Value: 1}).
+			Scan(&rows), database.ErrUnknownCompareOp)
 	})
 
 	t.Run("UnknownOrderDirection", func(t *testing.T) {
 		rows := make([]row, 0)
 		total := aggCols.Amount.Sum().As("total")
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(aggCols.Category.Group(), total).
-			OrderBy(types.AggregateOrder{Term: total, Direction: "sideways"}).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Category.Group(), total).
+			OrderBy(types.TermOrder{Term: total, Direction: "sideways"}).
 			Scan(&rows), database.ErrUnknownOrderDirection)
 	})
 
@@ -694,42 +655,39 @@ func TestAggregateBuildErrors(t *testing.T) {
 			Done     int64
 		}
 		rows := make([]condRow, 0)
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, condRow](ctx).
-			Select(aggCols.Category.Group(), types.Count().Where(aggCols.Status.Eq("done")).As("done")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, condRow](ctx, aggCols.Category.Group(), types.Count().Where(aggCols.Status.Eq("done")).As("done")).
 			OrderBy(types.Count().As("done").Desc()).
 			Scan(&rows), database.ErrOrderTermNotSelected)
 	})
 
 	// ScanOne rejects all three pagination inputs, not just the one that
 	// happened to be covered.
-	for name, build := range map[string]func(types.Aggregator[*TestAggregateRecord, struct{ Total int64 }]) types.Aggregator[*TestAggregateRecord, struct{ Total int64 }]{
-		"Limit": func(a types.Aggregator[*TestAggregateRecord, struct{ Total int64 }]) types.Aggregator[*TestAggregateRecord, struct{ Total int64 }] {
+	for name, build := range map[string]func(types.Selector[*TestAggregateRecord, struct{ Total int64 }]) types.Selector[*TestAggregateRecord, struct{ Total int64 }]{
+		"Limit": func(a types.Selector[*TestAggregateRecord, struct{ Total int64 }]) types.Selector[*TestAggregateRecord, struct{ Total int64 }] {
 			return a.Limit(1)
 		},
-		"Offset": func(a types.Aggregator[*TestAggregateRecord, struct{ Total int64 }]) types.Aggregator[*TestAggregateRecord, struct{ Total int64 }] {
+		"Offset": func(a types.Selector[*TestAggregateRecord, struct{ Total int64 }]) types.Selector[*TestAggregateRecord, struct{ Total int64 }] {
 			return a.Limit(1).Offset(1)
 		},
-		"Having": func(a types.Aggregator[*TestAggregateRecord, struct{ Total int64 }]) types.Aggregator[*TestAggregateRecord, struct{ Total int64 }] {
+		"Having": func(a types.Selector[*TestAggregateRecord, struct{ Total int64 }]) types.Selector[*TestAggregateRecord, struct{ Total int64 }] {
 			return a.Having(aggCols.Amount.Sum().As("total").Gt(1))
 		},
 	} {
 		t.Run("ScanOneRejects"+name, func(t *testing.T) {
 			got := struct{ Total int64 }{}
-			base := database.Aggregate[*TestAggregateRecord, struct{ Total int64 }](ctx).
-				Select(aggCols.Amount.Sum().As("total"))
+			base := database.Select[*TestAggregateRecord, struct{ Total int64 }](ctx, aggCols.Amount.Sum().As("total"))
 			require.ErrorIs(t, build(base).ScanOne(&got), database.ErrScanOnePaged)
 		})
 	}
 
 	t.Run("ScanOneRejectsGroupedQuery", func(t *testing.T) {
 		got := row{}
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
 			ScanOne(&got), database.ErrGroupedScanOne)
 	})
 }
 
-func TestAggregateWithDryRunCollector(t *testing.T) {
+func TestSelectWithDryRunCollector(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
 
@@ -739,9 +697,8 @@ func TestAggregateWithDryRunCollector(t *testing.T) {
 	}
 	rows := make([]row, 0)
 	statements := make([]types.SQLStatement, 0)
-	require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
+	require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(), aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
 		WithDryRun(&statements).
-		Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
 		Scan(&rows))
 
 	require.Len(t, statements, 1)
@@ -791,7 +748,7 @@ func TestFilterExists(t *testing.T) {
 	setupTagData(t)
 
 	ctx := context.Background()
-	vip := types.FilterExists[*TestRecordTag](tagCols.RecordID.Correlate(recordIDCol), tagCols.Label.Eq("vip"))
+	vip := types.FilterExists[*TestRecordTag](tagCols.RecordID.Equal(recordIDCol), tagCols.Label.Eq("vip"))
 
 	// The same filter serves List and Aggregate: it is a Filter operator, not
 	// an aggregate feature.
@@ -812,8 +769,7 @@ func TestFilterExists(t *testing.T) {
 			Records int64
 		}
 		got := row{}
-		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(aggCols.Amount.Sum().As("total"), types.Count().As("records")).
+		require.NoError(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Amount.Sum().As("total"), types.Count().As("records")).
 			Where(vip).
 			ScanOne(&got))
 		require.EqualValues(t, 2, got.Records)
@@ -831,8 +787,7 @@ func TestFilterExists(t *testing.T) {
 			Records int64
 		}
 		got := row{}
-		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(aggCols.Amount.Sum().As("total"), types.Count().As("records")).
+		require.NoError(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Amount.Sum().As("total"), types.Count().As("records")).
 			Where(vip).
 			ScanOne(&got))
 		require.EqualValues(t, 2, got.Records, "a second tag must not duplicate the row")
@@ -860,7 +815,7 @@ func TestFilterNotExists(t *testing.T) {
 
 	ctx := context.Background()
 	// Rows with no vip tag at all, plus rows whose tags are not vip.
-	noVip := types.FilterNotExists[*TestRecordTag](tagCols.RecordID.Correlate(recordIDCol), tagCols.Label.Eq("vip"))
+	noVip := types.FilterNotExists[*TestRecordTag](tagCols.RecordID.Equal(recordIDCol), tagCols.Label.Eq("vip"))
 
 	records := make([]*TestAggregateRecord, 0)
 	require.NoError(t, database.Database[*TestAggregateRecord](ctx).
@@ -883,7 +838,7 @@ func TestFilterExistsCombinesWithOtherFilters(t *testing.T) {
 	setupTagData(t)
 
 	ctx := context.Background()
-	vip := types.FilterExists[*TestRecordTag](tagCols.RecordID.Correlate(recordIDCol), tagCols.Label.Eq("vip"))
+	vip := types.FilterExists[*TestRecordTag](tagCols.RecordID.Equal(recordIDCol), tagCols.Label.Eq("vip"))
 
 	records := make([]*TestAggregateRecord, 0)
 	require.NoError(t, database.Database[*TestAggregateRecord](ctx).
@@ -896,7 +851,7 @@ func TestFilterExistsCombinesWithOtherFilters(t *testing.T) {
 	require.Equal(t, "a3", records[0].ID)
 }
 
-// TestAggregateConditionalOnSubquery covers the combination a report reaches
+// TestSelectConditionalOnSubquery covers the combination a report reaches
 // for when the measure's own table carries no flag to split on: the split
 // lives in a related table, so the CASE predicate is a correlated subquery
 // rather than a column comparison.
@@ -904,15 +859,15 @@ func TestFilterExistsCombinesWithOtherFilters(t *testing.T) {
 // A join would be the obvious alternative and the wrong one: joining a
 // one-to-many child multiplies the outer rows, and the SUM then counts a row
 // once per related row instead of once.
-func TestAggregateConditionalOnSubquery(t *testing.T) {
+func TestSelectConditionalOnSubquery(t *testing.T) {
 	defer cleanupAggregateData()
 	defer cleanupTagData()
 	setupAggregateData(t)
 	setupTagData(t)
 
 	ctx := context.Background()
-	tagged := types.FilterExists[*TestRecordTag](tagCols.RecordID.Correlate(recordIDCol), tagCols.Label.Eq("vip"))
-	untagged := types.FilterNotExists[*TestRecordTag](tagCols.RecordID.Correlate(recordIDCol), tagCols.Label.Eq("vip"))
+	tagged := types.FilterExists[*TestRecordTag](tagCols.RecordID.Equal(recordIDCol), tagCols.Label.Eq("vip"))
+	untagged := types.FilterNotExists[*TestRecordTag](tagCols.RecordID.Equal(recordIDCol), tagCols.Label.Eq("vip"))
 
 	type row struct {
 		TaggedAmount   int64
@@ -920,12 +875,11 @@ func TestAggregateConditionalOnSubquery(t *testing.T) {
 		TaggedRecords  int64
 	}
 	got := row{}
-	require.NoError(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-		Select(
-			aggCols.Amount.Sum().Where(tagged).As("tagged_amount"),
-			aggCols.Amount.Sum().Where(untagged).As("untagged_amount"),
-			types.Count().Where(tagged).As("tagged_records"),
-		).
+	require.NoError(t, database.Select[*TestAggregateRecord, row](ctx,
+		aggCols.Amount.Sum().Where(tagged).As("tagged_amount"),
+		aggCols.Amount.Sum().Where(untagged).As("untagged_amount"),
+		types.Count().Where(tagged).As("tagged_records"),
+	).
 		ScanOne(&got))
 
 	// vip tags sit on a1 (100) and a3 (300); the rest carry no vip tag.
@@ -940,12 +894,11 @@ func TestAggregateConditionalOnSubquery(t *testing.T) {
 			&TestRecordTag{ID: "t9", RecordID: "a1", Label: "vip"},
 		))
 		again := row{}
-		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(
-				aggCols.Amount.Sum().Where(tagged).As("tagged_amount"),
-				aggCols.Amount.Sum().Where(untagged).As("untagged_amount"),
-				types.Count().Where(tagged).As("tagged_records"),
-			).
+		require.NoError(t, database.Select[*TestAggregateRecord, row](ctx,
+			aggCols.Amount.Sum().Where(tagged).As("tagged_amount"),
+			aggCols.Amount.Sum().Where(untagged).As("untagged_amount"),
+			types.Count().Where(tagged).As("tagged_records"),
+		).
 			ScanOne(&again))
 		require.EqualValues(t, 400, again.TaggedAmount, "a semi join matches a row once")
 		require.EqualValues(t, 2, again.TaggedRecords)
@@ -966,7 +919,7 @@ func TestFilterExistsTableResolution(t *testing.T) {
 	ctx := context.Background()
 	// TestTagAlias resolves to test_record_tags through TableName, while its
 	// struct name would make gorm derive test_tag_aliases.
-	vip := types.FilterExists[*TestTagAlias](tagCols.RecordID.Correlate(recordIDCol), tagCols.Label.Eq("vip"))
+	vip := types.FilterExists[*TestTagAlias](tagCols.RecordID.Equal(recordIDCol), tagCols.Label.Eq("vip"))
 
 	records := make([]*TestAggregateRecord, 0)
 	require.NoError(t, database.Database[*TestAggregateRecord](ctx).
@@ -1012,8 +965,8 @@ func TestFilterExistsNested(t *testing.T) {
 	// would compare note.tag_id against record.id, which happens to be a legal
 	// comparison of two id columns and silently matches nothing here.
 	hasCheckedNote := types.FilterExists[*TestRecordTag](
-		tagCols.RecordID.Correlate(recordIDCol),
-		types.FilterExists[*TestTagNote](noteCols.TagID.Correlate(tagIDCol), noteCols.Body.Eq("checked")),
+		tagCols.RecordID.Equal(recordIDCol),
+		types.FilterExists[*TestTagNote](noteCols.TagID.Equal(tagIDCol), noteCols.Body.Eq("checked")),
 	)
 
 	records := make([]*TestAggregateRecord, 0)
@@ -1050,13 +1003,13 @@ func TestFilterExistsFailsClosedUnderNegation(t *testing.T) {
 
 	t.Run("ExistsMatchesNothing", func(t *testing.T) {
 		require.Equal(t, 0, list(t, types.FilterExists[*TestRecordTag](
-			tagCols.RecordID.Correlate(recordIDCol), broken,
+			tagCols.RecordID.Equal(recordIDCol), broken,
 		)))
 	})
 
 	t.Run("NotExistsAlsoMatchesNothing", func(t *testing.T) {
 		require.Equal(t, 0, list(t, types.FilterNotExists[*TestRecordTag](
-			tagCols.RecordID.Correlate(recordIDCol), broken,
+			tagCols.RecordID.Equal(recordIDCol), broken,
 		)),
 			"negating a fail-closed subquery must not return the whole table")
 	})
@@ -1075,7 +1028,7 @@ func TestFilterExistsValidatesInnerColumns(t *testing.T) {
 	ctx := context.Background()
 	// "status" exists on the record table but not on the tag table.
 	outerOnly := types.FilterExists[*TestRecordTag](
-		tagCols.RecordID.Correlate(recordIDCol), aggCols.Status.Eq("done"),
+		tagCols.RecordID.Equal(recordIDCol), aggCols.Status.Eq("done"),
 	)
 
 	records := make([]*TestAggregateRecord, 0)
@@ -1086,8 +1039,7 @@ func TestFilterExistsValidatesInnerColumns(t *testing.T) {
 
 	// The aggregate path reports the reason rather than answering with zero.
 	got := struct{ Total int64 }{}
-	require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, struct{ Total int64 }](ctx).
-		Select(aggCols.Amount.Sum().As("total")).
+	require.ErrorIs(t, database.Select[*TestAggregateRecord, struct{ Total int64 }](ctx, aggCols.Amount.Sum().As("total")).
 		Where(outerOnly).
 		ScanOne(&got), database.ErrUnusableFilter)
 }
@@ -1106,7 +1058,7 @@ func TestFilterExistsQualifiesInnerColumns(t *testing.T) {
 
 	// Both tables carry an "id"; the filter names the tag's own.
 	byTagID := types.FilterExists[*TestRecordTag](
-		tagCols.RecordID.Correlate(recordIDCol), tagCols.ID.Eq("t1"),
+		tagCols.RecordID.Equal(recordIDCol), tagCols.ID.Eq("t1"),
 	)
 
 	statements := make([]types.SQLStatement, 0)
@@ -1141,7 +1093,7 @@ func TestFilterExistsSelfJoin(t *testing.T) {
 
 	// Categories that are somebody's parent. root parents itself and parent,
 	// parent has no children, so only root matches.
-	hasChild := types.FilterExists[*TestCategory](catCols.ParentID.Correlate(catCols.ID))
+	hasChild := types.FilterExists[*TestCategory](catCols.ParentID.Equal(catCols.ID))
 	cats := make([]*TestCategory, 0)
 	require.NoError(t, database.Database[*TestCategory](ctx).
 		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{hasChild}}).
@@ -1151,7 +1103,7 @@ func TestFilterExistsSelfJoin(t *testing.T) {
 }
 
 // TestFilterExistsMultipleCorrelations covers a related model reached through
-// a composite key: every Correlate must hold at once. A tag whose denormalized
+// a composite key: every Equal must hold at once. A tag whose denormalized
 // category disagrees with its record is reachable by record_id alone but not
 // by the (record_id, category) pair. A correlation is a predicate like any
 // other, so it also composes with FilterOr and has a string-column spelling;
@@ -1170,8 +1122,8 @@ func TestFilterExistsMultipleCorrelations(t *testing.T) {
 		&TestRecordTag{ID: "t5", RecordID: "a2", Label: "audit", Category: "beta"},
 		&TestRecordTag{ID: "t6", RecordID: "a3", Label: "audit", Category: "alpha"},
 	))
-	byRecord := tagCols.RecordID.Correlate(recordIDCol)
-	byCategory := tagCols.Category.Correlate(aggCols.Category)
+	byRecord := tagCols.RecordID.Equal(recordIDCol)
+	byCategory := tagCols.Category.Equal(aggCols.Category)
 	audit := tagCols.Label.Eq("audit")
 	audited := types.FilterExists[*TestRecordTag](byRecord, byCategory, audit)
 	ids := func(filter types.Filter) []string {
@@ -1231,23 +1183,23 @@ func TestFilterExistsMultipleCorrelations(t *testing.T) {
 	})
 
 	t.Run("StringTierMatchesTypedTier", func(t *testing.T) {
-		// FilterCorrelate is what the column method delegates to, so naming the
+		// FilterEqual is what the column method delegates to, so naming the
 		// columns as strings selects the same rows.
 		byNames := types.FilterExists[*TestRecordTag](
-			types.FilterCorrelate("record_id", "id"), types.FilterCorrelate("category", "category"), audit,
+			types.FilterEqual("record_id", "id"), types.FilterEqual("category", "category"), audit,
 		)
 		require.Equal(t, []string{"a3"}, ids(byNames))
 	})
 
 	t.Run("FailsClosedOnUnknownChildColumn", func(t *testing.T) {
 		unknown := types.FilterExists[*TestRecordTag](
-			byRecord, types.NewColumn[string]("missing").Correlate(aggCols.Category), audit,
+			byRecord, types.NewColumn[string]("missing").Equal(aggCols.Category), audit,
 		)
 		require.Empty(t, ids(unknown))
 	})
 
 	t.Run("FailsClosedOutsideSubquery", func(t *testing.T) {
-		require.Empty(t, ids(byRecord), "a Correlate at the top level has no enclosing query to tie to")
+		require.Empty(t, ids(byRecord), "an Equal predicate at the top level has no enclosing query to tie to")
 	})
 
 	t.Run("FailsClosedOnUnknownParentColumn", func(t *testing.T) {
@@ -1255,7 +1207,7 @@ func TestFilterExistsMultipleCorrelations(t *testing.T) {
 		// renderer checks the outer side against the enclosing model instead
 		// of letting the database answer with an unknown-column error.
 		unknown := types.FilterExists[*TestRecordTag](
-			byRecord, types.FilterCorrelate("category", "missing"), audit,
+			byRecord, types.FilterEqual("category", "missing"), audit,
 		)
 		require.Empty(t, ids(unknown))
 	})
@@ -1270,17 +1222,16 @@ func TestSumOfRejectsTextBackedValuer(t *testing.T) {
 	setupAggregateData(t)
 
 	rows := make([]struct{ Total int64 }, 0)
-	require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, struct{ Total int64 }](context.Background()).
-		Select(types.SumOf("deleted_at").As("total")).
+	require.ErrorIs(t, database.Select[*TestAggregateRecord, struct{ Total int64 }](context.Background(), types.SumOf("deleted_at").As("total")).
 		Scan(&rows), database.ErrAggregateType)
 }
 
-// TestAggregateBuilderReuse pins the paginated-report idiom: read the page,
+// TestSelectBuilderReuse pins the paginated-report idiom: read the page,
 // then count the groups off the same builder. The chain's gorm session keeps
 // the clauses of whatever ran on it before, so without a fresh statement per
 // build the count inherits the page's LIMIT and reports the page size as the
 // total -- silently, and only when tracing is off.
-func TestAggregateBuilderReuse(t *testing.T) {
+func TestSelectBuilderReuse(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
 
@@ -1289,8 +1240,7 @@ func TestAggregateBuilderReuse(t *testing.T) {
 		Total    int64
 	}
 	ctx := context.Background()
-	builder := database.Aggregate[*TestAggregateRecord, row](ctx).
-		Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+	builder := database.Select[*TestAggregateRecord, row](ctx, aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
 		Where(aggCols.Status.Eq("done")).
 		OrderBy(aggCols.Category.Group().Asc()).
 		Limit(1)
@@ -1300,7 +1250,7 @@ func TestAggregateBuilderReuse(t *testing.T) {
 	require.Equal(t, []row{{Category: "alpha", Total: 300}}, rows)
 
 	var groups int
-	require.NoError(t, builder.CountGroups(&groups))
+	require.NoError(t, builder.Count(&groups))
 	require.Equal(t, 3, groups, "the page limit must not leak into the total")
 
 	// A second identical read repeats the query rather than compounding it.
@@ -1309,12 +1259,12 @@ func TestAggregateBuilderReuse(t *testing.T) {
 	require.Equal(t, rows, again)
 }
 
-// TestAggregateNullableResultFields pins where a result field must be able to
+// TestSelectNullableResultFields pins where a result field must be able to
 // tell NULL apart from zero. AVG, MIN and MAX return NULL when they see no
 // value, so the field needs a pointer or a sql.Null wrapper — except for a
 // grouped, unconditional measure over a non-nullable column, where every group
 // holds at least one real value and a plain field cannot receive NULL.
-func TestAggregateNullableResultFields(t *testing.T) {
+func TestSelectNullableResultFields(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
 
@@ -1326,8 +1276,7 @@ func TestAggregateNullableResultFields(t *testing.T) {
 			AvgScore sql.NullFloat64
 		}
 		got := row{}
-		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(aggCols.Amount.Max().As("peak"), aggCols.Score.Avg().As("avg_score")).
+		require.NoError(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Amount.Max().As("peak"), aggCols.Score.Avg().As("avg_score")).
 			ScanOne(&got))
 		require.True(t, got.Peak.Valid)
 		require.EqualValues(t, 600, got.Peak.Int64)
@@ -1339,8 +1288,7 @@ func TestAggregateNullableResultFields(t *testing.T) {
 		// the filters match no rows.
 		type row struct{ Peak int64 }
 		got := row{}
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(aggCols.Amount.Max().As("peak")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Amount.Max().As("peak")).
 			ScanOne(&got), database.ErrNullableResultField)
 	})
 
@@ -1354,11 +1302,10 @@ func TestAggregateNullableResultFields(t *testing.T) {
 			AvgScore float64
 		}
 		rows := make([]row, 0)
-		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(aggCols.Category.Group(),
-				aggCols.Amount.Max().As("peak"),
-				aggCols.Amount.Min().As("earliest"),
-				aggCols.Score.Avg().As("avg_score")).
+		require.NoError(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Category.Group(),
+			aggCols.Amount.Max().As("peak"),
+			aggCols.Amount.Min().As("earliest"),
+			aggCols.Score.Avg().As("avg_score")).
 			OrderBy(aggCols.Category.Group().Asc()).
 			Scan(&rows))
 		require.Equal(t, []row{
@@ -1376,8 +1323,7 @@ func TestAggregateNullableResultFields(t *testing.T) {
 			LastSeen time.Time
 		}
 		rows := make([]row, 0)
-		require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(aggCols.Category.Group(), aggCols.ClosedAt.Max().As("last_seen")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Category.Group(), aggCols.ClosedAt.Max().As("last_seen")).
 			Scan(&rows), database.ErrNullableResultField)
 	})
 
@@ -1396,8 +1342,7 @@ func TestAggregateNullableResultFields(t *testing.T) {
 			LastSeen *time.Time
 		}
 		rows := make([]row, 0)
-		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(aggCols.Category.Group(), aggCols.ClosedAt.Max().As("last_seen")).
+		require.NoError(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Category.Group(), aggCols.ClosedAt.Max().As("last_seen")).
 			OrderBy(aggCols.Category.Group().Asc()).
 			Scan(&rows))
 		require.Len(t, rows, 3)
@@ -1422,8 +1367,7 @@ func TestAggregateNullableResultFields(t *testing.T) {
 			LastSeen sql.NullTime
 		}
 		rows := make([]row, 0)
-		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(aggCols.Category.Group(), aggCols.ClosedAt.Max().As("last_seen")).
+		require.NoError(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Category.Group(), aggCols.ClosedAt.Max().As("last_seen")).
 			OrderBy(aggCols.Category.Group().Asc()).
 			Scan(&rows))
 		require.Len(t, rows, 3)
@@ -1441,8 +1385,7 @@ func TestAggregateNullableResultFields(t *testing.T) {
 			LastSeen time.Time
 		}
 		rows := make([]row, 0)
-		require.NoError(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-			Select(aggCols.Category.Group(), aggCols.OccurredAt.Max().As("last_seen")).
+		require.NoError(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Category.Group(), aggCols.OccurredAt.Max().As("last_seen")).
 			OrderBy(aggCols.Category.Group().Asc()).
 			Scan(&rows))
 		require.Len(t, rows, 3)
@@ -1464,10 +1407,10 @@ func TestAggregateNullableResultFields(t *testing.T) {
 	})
 }
 
-// TestAggregateHavingValue pins the values a post-aggregation comparison
+// TestSelectHavingValue pins the values a post-aggregation comparison
 // accepts. nil renders as a comparison against NULL, which no group satisfies,
 // so a report would come back empty with no sign of the mistake.
-func TestAggregateHavingValue(t *testing.T) {
+func TestSelectHavingValue(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
 
@@ -1486,19 +1429,18 @@ func TestAggregateHavingValue(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			rows := make([]row, 0)
-			require.ErrorIs(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-				Select(aggCols.Category.Group(), total).
+			require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Category.Group(), total).
 				Having(total.Gt(value)).
 				Scan(&rows), database.ErrHavingValue)
 		})
 	}
 }
 
-// TestAggregateScanReplacesDest pins that a read replaces the destination
+// TestSelectScanReplacesDest pins that a read replaces the destination
 // rather than appending to it. gorm keeps the existing elements when a scan
 // returns no rows, so a reused destination would still hold the previous
 // result and the caller would read a stale report as a fresh one.
-func TestAggregateScanReplacesDest(t *testing.T) {
+func TestSelectScanReplacesDest(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
 
@@ -1508,14 +1450,12 @@ func TestAggregateScanReplacesDest(t *testing.T) {
 		Total    int64
 	}
 	rows := make([]row, 0)
-	require.NoError(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-		Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+	require.NoError(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
 		Scan(&rows))
 	require.Len(t, rows, 3)
 
 	// A second read matching nothing must empty it, not leave the first result.
-	require.NoError(t, database.Aggregate[*TestAggregateRecord, row](ctx).
-		Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+	require.NoError(t, database.Select[*TestAggregateRecord, row](ctx, aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
 		Where(aggCols.Category.Eq("nonexistent")).
 		Scan(&rows))
 	require.Empty(t, rows, "a read with no rows must clear the destination")
@@ -1523,18 +1463,17 @@ func TestAggregateScanReplacesDest(t *testing.T) {
 	// ScanOne behaves the same for a single row.
 	type one struct{ Total int64 }
 	got := one{Total: 999}
-	require.NoError(t, database.Aggregate[*TestAggregateRecord, one](ctx).
-		Select(aggCols.Amount.Sum().As("total")).
+	require.NoError(t, database.Select[*TestAggregateRecord, one](ctx, aggCols.Amount.Sum().As("total")).
 		Where(aggCols.Category.Eq("nonexistent")).
 		ScanOne(&got))
 	require.EqualValues(t, 0, got.Total, "the stale 999 must not survive")
 }
 
-// TestAggregateGroupByRendersRawExpression pins that the group key reaches gorm
+// TestSelectGroupByRendersRawExpression pins that the group key reaches gorm
 // as an already-quoted expression it must not quote again. The MySQL, SQLite
 // and PostgreSQL quoters are idempotent so a double quote is invisible there;
 // the SQL Server and ClickHouse ones are not, and would emit ""col"".
-func TestAggregateGroupByRendersRawExpression(t *testing.T) {
+func TestSelectGroupByRendersRawExpression(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
 
@@ -1544,9 +1483,8 @@ func TestAggregateGroupByRendersRawExpression(t *testing.T) {
 	}
 	statements := make([]types.SQLStatement, 0)
 	rows := make([]row, 0)
-	require.NoError(t, database.Aggregate[*TestAggregateRecord, row](context.Background()).
+	require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(), aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
 		WithDryRun(&statements).
-		Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
 		Scan(&rows))
 
 	require.Len(t, statements, 1)

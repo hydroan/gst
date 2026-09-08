@@ -161,11 +161,11 @@ func TestSQLCommentMatchesOperationSpanOutsideRequest(t *testing.T) {
 	require.Contains(t, capture.last(), "/* trace_id='"+span.SpanContext().TraceID().String()+"' */")
 }
 
-// TestSQLCommentAnnotatesAggregates pins the annotation on the aggregate
+// TestSQLCommentAnnotatesSelects pins the annotation on the aggregate
 // paths, which build their statement on a fresh session: the comment the
 // operation attached must reach that statement all the same, on the outer
-// count of CountGroups too and not only inside its derived table.
-func TestSQLCommentAnnotatesAggregates(t *testing.T) {
+// statement Count issues too and not only inside its derived table.
+func TestSQLCommentAnnotatesSelects(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
 
@@ -180,8 +180,7 @@ func TestSQLCommentAnnotatesAggregates(t *testing.T) {
 		Total    int64
 	}
 	rows := make([]groupRow, 0)
-	require.NoError(t, database.AggregateOn[*TestAggregateRecord, groupRow](ctx, session).
-		Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+	require.NoError(t, database.SelectOn[*TestAggregateRecord, groupRow](ctx, session, aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
 		Scan(&rows))
 	require.Contains(t, capture.last(), "/* trace_id='trace-agg' */")
 
@@ -189,15 +188,13 @@ func TestSQLCommentAnnotatesAggregates(t *testing.T) {
 		Total int64
 	}
 	one := totalRow{}
-	require.NoError(t, database.AggregateOn[*TestAggregateRecord, totalRow](ctx, session).
-		Select(aggCols.Amount.Sum().As("total")).
+	require.NoError(t, database.SelectOn[*TestAggregateRecord, totalRow](ctx, session, aggCols.Amount.Sum().As("total")).
 		ScanOne(&one))
 	require.Contains(t, capture.last(), "/* trace_id='trace-agg' */")
 
 	groups := 0
-	require.NoError(t, database.AggregateOn[*TestAggregateRecord, groupRow](ctx, session).
-		Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
-		CountGroups(&groups))
+	require.NoError(t, database.SelectOn[*TestAggregateRecord, groupRow](ctx, session, aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+		Count(&groups))
 	sql := capture.last()
 	require.Contains(t, sql, "/* trace_id='trace-agg' */")
 	require.Less(t, strings.Index(sql, "trace_id="), strings.Index(sql, " FROM ("),

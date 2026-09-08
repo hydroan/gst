@@ -1,6 +1,6 @@
 package types
 
-// Aggregator runs an analytical read over the table of M and scans the result
+// Selector runs an analytical read over the table of M and scans the result
 // rows into R. It is deliberately separate from Database[M]: an aggregate
 // result is not a model row, so model hooks, association preloading and cursor
 // pagination have nothing to act on and are absent here rather than present
@@ -15,7 +15,7 @@ package types
 // must bind to a pointer or sql.Null field, which is again a build error
 // rather than a zero on the report.
 //
-// The entry point is the package-level database.Aggregate[M, R] rather than a
+// The entry point is the package-level database.Select[M, R] rather than a
 // method, because a Go method cannot introduce the result type parameter.
 //
 // Row-level access rules are not inherited. A model's List gets its tenant or
@@ -24,12 +24,17 @@ package types
 // and every scoping condition has to be passed to Where explicitly. Forgetting
 // one aggregates across tenants without any sign that it did.
 //
+// The projection is declared at the entry point: a term without an aggregate
+// function is a group key, and GROUP BY is derived from those keys, so the
+// SELECT and GROUP BY lists cannot disagree. At least one aggregate term is
+// required.
+//
 // A builder is a specification, not a live statement: it can be read more than
 // once, and each terminal renders the spec afresh, taking only the parts that
-// are meaningful to it — Scan and ScanOne render everything, CountGroups
+// are meaningful to it — Scan and ScanOne render everything, Count
 // ignores OrderBy, Limit and Offset because none of them changes how many
 // groups exist. That is what makes the paginated-report idiom safe — Scan for
-// the page, then CountGroups for the total, off the same builder, with the
+// the page, then Count for the total, off the same builder, with the
 // pagination never skewing the count.
 //
 // Example:
@@ -43,73 +48,68 @@ package types
 //	}
 //	total := SampleCols.Amount.Sum().As("total")
 //	rows := make([]tenantTotal, 0)
-//	err := database.Aggregate[*Sample, tenantTotal](ctx).
-//	    Select(SampleCols.TenantID.Group(), total,
-//	        SampleCols.ClosedAt.Max().As("last_closed")).
+//	err := database.Select[*Sample, tenantTotal](ctx,
+//	    SampleCols.TenantID.Group(), total, SampleCols.ClosedAt.Max().As("last_closed")).
 //	    Where(SampleCols.Status.Eq(StatusDone)).
 //	    Having(total.Gte(1000)).
 //	    OrderBy(total.Desc()).
 //	    Limit(10).
 //	    Scan(&rows)
-type Aggregator[M Model, R any] interface {
-	// Select declares the projection. A term without an aggregate function is
-	// a group key, and GROUP BY is derived from those keys, so the SELECT and
-	// GROUP BY lists cannot disagree. At least one aggregate term is required.
-	Select(terms ...AggregateTerm) Aggregator[M, R]
+type Selector[M Model, R any] interface {
 	// Where restricts the rows entering the aggregation, using the same filter
 	// tree as WithQuery.
-	Where(filters ...Filter) Aggregator[M, R]
+	Where(filters ...Filter) Selector[M, R]
 	// Having restricts the produced groups by their measures.
-	Having(conditions ...Having) Aggregator[M, R]
+	Having(conditions ...TermCondition) Selector[M, R]
 	// OrderBy sorts the result rows by a projection term.
-	OrderBy(orders ...AggregateOrder) Aggregator[M, R]
+	OrderBy(orders ...TermOrder) Selector[M, R]
 	// Limit caps the number of result rows.
-	Limit(n int) Aggregator[M, R]
+	Limit(n int) Selector[M, R]
 	// Offset skips result rows, for paginating a grouped report.
-	Offset(n int) Aggregator[M, R]
+	Offset(n int) Selector[M, R]
 
 	// Scan runs the query and fills dest with one element per group.
 	Scan(dest *[]R) error
 	// ScanOne runs an ungrouped aggregation and fills dest with its single
 	// row. It fails when the projection declares group keys.
 	ScanOne(dest *R) error
-	// CountGroups reports how many groups the query produces, which is the
+	// Count reports how many groups the query produces, which is the
 	// total a paginated grouped report needs. OrderBy, Limit and Offset set on
 	// the builder do not apply to it.
-	CountGroups(count *int) error
+	Count(count *int) error
 
 	// WithDryRun builds the SQL without database I/O. An optional collector
 	// receives the generated Query, Args, and RenderedSQL of the next
 	// terminal operation instead of executing it.
-	WithDryRun(collector ...*[]SQLStatement) Aggregator[M, R]
+	WithDryRun(collector ...*[]SQLStatement) Selector[M, R]
 }
 
-// AggregateFn is the function applied to one projection term. The set is
+// TermFn is the function applied to one projection term. The set is
 // closed, so a projection can never carry SQL the way a free-form select
 // string could: the renderer maps each constant to a fixed expression and
 // rejects anything else.
-type AggregateFn string
+type TermFn string
 
 const (
-	// AggregateNone marks a group key rather than a measure. A projection term
+	// FnNone marks a group key rather than a measure. A projection term
 	// without an aggregate function is what the framework derives GROUP BY
 	// from, so the SELECT and GROUP BY lists can never disagree.
-	AggregateNone          AggregateFn = ""
-	AggregateCount         AggregateFn = "COUNT"
-	AggregateCountDistinct AggregateFn = "COUNT_DISTINCT"
-	AggregateSum           AggregateFn = "SUM"
-	AggregateAvg           AggregateFn = "AVG"
-	AggregateMin           AggregateFn = "MIN"
-	AggregateMax           AggregateFn = "MAX"
+	FnNone          TermFn = ""
+	FnCount         TermFn = "COUNT"
+	FnCountDistinct TermFn = "COUNT_DISTINCT"
+	FnSum           TermFn = "SUM"
+	FnAvg           TermFn = "AVG"
+	FnMin           TermFn = "MIN"
+	FnMax           TermFn = "MAX"
 )
 
 // Valid reports whether the function is one this package defines. The renderer
 // composes SQL from the constant, so a value from outside the set would reach
 // the statement as text; the query builder rejects it instead.
-func (f AggregateFn) Valid() bool {
+func (f TermFn) Valid() bool {
 	switch f {
-	case AggregateNone, AggregateCount, AggregateCountDistinct,
-		AggregateSum, AggregateAvg, AggregateMin, AggregateMax:
+	case FnNone, FnCount, FnCountDistinct,
+		FnSum, FnAvg, FnMin, FnMax:
 		return true
 	default:
 		return false
@@ -142,8 +142,8 @@ func (b TimeBucket) Valid() bool {
 	}
 }
 
-// AggregateTerm is one term of an aggregate projection: a group key when Fn is
-// AggregateNone, a measure otherwise.
+// Term is one term of an aggregate projection: a group key when Fn is
+// FnNone, a measure otherwise.
 //
 // Terms are built through the generated column references
 // (SampleCols.Amount.Sum()) or, for code that cannot name a concrete model,
@@ -154,13 +154,13 @@ func (b TimeBucket) Valid() bool {
 //
 // A term never holds SQL. Column names are quoted by the database layer,
 // values bind as statement parameters, and Fn and Bucket come from closed sets.
-type AggregateTerm struct {
-	// Fn is the aggregate function, or AggregateNone for a group key.
-	Fn AggregateFn
+type Term struct {
+	// Fn is the aggregate function, or FnNone for a group key.
+	Fn TermFn
 	// Column is the snake case column name. It is empty only for COUNT(*).
 	Column string
 	// Bucket truncates a time group key. It is only meaningful when Fn is
-	// AggregateNone and the column is a time column.
+	// FnNone and the column is a time column.
 	Bucket TimeBucket
 	// Conditions restrict a measure to the rows matching them, rendering as a
 	// CASE expression inside the aggregate call. They reuse the query filter
@@ -172,7 +172,7 @@ type AggregateTerm struct {
 }
 
 // IsMeasure reports whether the term is an aggregate rather than a group key.
-func (t AggregateTerm) IsMeasure() bool { return t.Fn != AggregateNone }
+func (t Term) IsMeasure() bool { return t.Fn != FnNone }
 
 // As renames the term in the SELECT list.
 //
@@ -189,7 +189,7 @@ func (t AggregateTerm) IsMeasure() bool { return t.Fn != AggregateNone }
 //
 // The alias belongs to the result contract rather than to the column, which is
 // why it is applied here instead of being a parameter of the constructors.
-func (t AggregateTerm) As(alias string) AggregateTerm {
+func (t Term) As(alias string) Term {
 	t.Alias = alias
 	return t
 }
@@ -202,7 +202,7 @@ func (t AggregateTerm) As(alias string) AggregateTerm {
 //
 // The filters are the ordinary query filters, including nested groups, so the
 // same fail-closed rules and the same renderer apply.
-func (t AggregateTerm) Where(filters ...Filter) AggregateTerm {
+func (t Term) Where(filters ...Filter) Term {
 	t.Conditions = append(append([]Filter(nil), t.Conditions...), filters...)
 	return t
 }
@@ -218,8 +218,8 @@ const DefaultCountAlias = "count"
 // COUNT(column), which skips NULLs.
 //
 // It projects as "count" unless renamed with As.
-func Count() AggregateTerm {
-	return AggregateTerm{Fn: AggregateCount, Alias: DefaultCountAlias}
+func Count() Term {
+	return Term{Fn: FnCount, Alias: DefaultCountAlias}
 }
 
 // The string-name variants below build the same terms from a plain column
@@ -229,87 +229,87 @@ func Count() AggregateTerm {
 // This mirrors the existing split between Column.Asc and the Asc constructor.
 
 // CountOf counts non-NULL values of a column.
-func CountOf(column string) AggregateTerm {
-	return AggregateTerm{Fn: AggregateCount, Column: column, Alias: column}
+func CountOf(column string) Term {
+	return Term{Fn: FnCount, Column: column, Alias: column}
 }
 
 // CountDistinctOf counts distinct non-NULL values of a column.
-func CountDistinctOf(column string) AggregateTerm {
-	return AggregateTerm{Fn: AggregateCountDistinct, Column: column, Alias: column}
+func CountDistinctOf(column string) Term {
+	return Term{Fn: FnCountDistinct, Column: column, Alias: column}
 }
 
 // SumOf adds up a numeric column.
-func SumOf(column string) AggregateTerm {
-	return AggregateTerm{Fn: AggregateSum, Column: column, Alias: column}
+func SumOf(column string) Term {
+	return Term{Fn: FnSum, Column: column, Alias: column}
 }
 
 // AvgOf averages a numeric column.
-func AvgOf(column string) AggregateTerm {
-	return AggregateTerm{Fn: AggregateAvg, Column: column, Alias: column}
+func AvgOf(column string) Term {
+	return Term{Fn: FnAvg, Column: column, Alias: column}
 }
 
 // MinOf returns the smallest value of a column.
-func MinOf(column string) AggregateTerm {
-	return AggregateTerm{Fn: AggregateMin, Column: column, Alias: column}
+func MinOf(column string) Term {
+	return Term{Fn: FnMin, Column: column, Alias: column}
 }
 
 // MaxOf returns the largest value of a column.
-func MaxOf(column string) AggregateTerm {
-	return AggregateTerm{Fn: AggregateMax, Column: column, Alias: column}
+func MaxOf(column string) Term {
+	return Term{Fn: FnMax, Column: column, Alias: column}
 }
 
 // GroupOf groups by the raw value of a column.
-func GroupOf(column string) AggregateTerm {
-	return AggregateTerm{Column: column, Alias: column}
+func GroupOf(column string) Term {
+	return Term{Column: column, Alias: column}
 }
 
 // ByHourOf, ByDayOf and ByMonthOf group a time column by a truncated bucket.
-func ByHourOf(column string) AggregateTerm {
-	return AggregateTerm{Column: column, Bucket: TimeBucketHour, Alias: column}
+func ByHourOf(column string) Term {
+	return Term{Column: column, Bucket: TimeBucketHour, Alias: column}
 }
 
-func ByDayOf(column string) AggregateTerm {
-	return AggregateTerm{Column: column, Bucket: TimeBucketDay, Alias: column}
+func ByDayOf(column string) Term {
+	return Term{Column: column, Bucket: TimeBucketDay, Alias: column}
 }
 
-func ByMonthOf(column string) AggregateTerm {
-	return AggregateTerm{Column: column, Bucket: TimeBucketMonth, Alias: column}
+func ByMonthOf(column string) Term {
+	return Term{Column: column, Bucket: TimeBucketMonth, Alias: column}
 }
 
-// HavingOp is a comparison applied to an aggregated value. Only the six
+// CompareOp is a comparison applied to an aggregated value. Only the six
 // orderings exist: the pattern and set operators of FilterOp have no meaning
 // over a measure.
-type HavingOp string
+type CompareOp string
 
 const (
-	HavingOpEq  HavingOp = "eq"
-	HavingOpNe  HavingOp = "ne"
-	HavingOpGt  HavingOp = "gt"
-	HavingOpGte HavingOp = "gte"
-	HavingOpLt  HavingOp = "lt"
-	HavingOpLte HavingOp = "lte"
+	CompareEq  CompareOp = "eq"
+	CompareNe  CompareOp = "ne"
+	CompareGt  CompareOp = "gt"
+	CompareGte CompareOp = "gte"
+	CompareLt  CompareOp = "lt"
+	CompareLte CompareOp = "lte"
 )
 
 // Valid reports whether the comparison is one this package defines. An unknown
 // operator would otherwise fall through to equality and silently filter by the
 // wrong comparison.
-func (o HavingOp) Valid() bool {
+func (o CompareOp) Valid() bool {
 	switch o {
-	case HavingOpEq, HavingOpNe, HavingOpGt, HavingOpGte, HavingOpLt, HavingOpLte:
+	case CompareEq, CompareNe, CompareGt, CompareGte, CompareLt, CompareLte:
 		return true
 	default:
 		return false
 	}
 }
 
-// Having is one post-aggregation condition. It carries the term itself rather
+// TermCondition is one post-aggregation condition. It carries the term itself rather
 // than an alias string, which has two consequences: a condition can never name
 // a measure the projection did not declare, and the renderer can emit the full
 // expression instead of the alias, which is required because PostgreSQL and
 // SQL Server do not accept an output alias in HAVING.
-type Having struct {
-	Term  AggregateTerm
-	Op    HavingOp
+type TermCondition struct {
+	Term  Term
+	Op    CompareOp
 	Value any
 }
 
@@ -317,31 +317,35 @@ type Having struct {
 // The value type is checked when the query is built, because an aggregate's
 // value type follows its function rather than its column: COUNT always yields
 // an integer, AVG a float, and SUM widens.
-func (t AggregateTerm) Eq(value any) Having { return Having{Term: t, Op: HavingOpEq, Value: value} }
+func (t Term) Eq(value any) TermCondition { return TermCondition{Term: t, Op: CompareEq, Value: value} }
 
-func (t AggregateTerm) Ne(value any) Having { return Having{Term: t, Op: HavingOpNe, Value: value} }
+func (t Term) Ne(value any) TermCondition { return TermCondition{Term: t, Op: CompareNe, Value: value} }
 
-func (t AggregateTerm) Gt(value any) Having { return Having{Term: t, Op: HavingOpGt, Value: value} }
+func (t Term) Gt(value any) TermCondition { return TermCondition{Term: t, Op: CompareGt, Value: value} }
 
-func (t AggregateTerm) Gte(value any) Having { return Having{Term: t, Op: HavingOpGte, Value: value} }
+func (t Term) Gte(value any) TermCondition {
+	return TermCondition{Term: t, Op: CompareGte, Value: value}
+}
 
-func (t AggregateTerm) Lt(value any) Having { return Having{Term: t, Op: HavingOpLt, Value: value} }
+func (t Term) Lt(value any) TermCondition { return TermCondition{Term: t, Op: CompareLt, Value: value} }
 
-func (t AggregateTerm) Lte(value any) Having { return Having{Term: t, Op: HavingOpLte, Value: value} }
+func (t Term) Lte(value any) TermCondition {
+	return TermCondition{Term: t, Op: CompareLte, Value: value}
+}
 
-// AggregateOrder is one ORDER BY term of an aggregate query. Unlike Order it
+// TermOrder is one ORDER BY term of an aggregate query. Unlike Order it
 // sorts by a projection term, which is what a TopN report ranks by.
-type AggregateOrder struct {
-	Term      AggregateTerm
+type TermOrder struct {
+	Term      Term
 	Direction OrderDirection
 }
 
 // Asc and Desc sort the result rows by this term. An output alias is legal in
 // ORDER BY on every supported dialect, so these render as the alias.
-func (t AggregateTerm) Asc() AggregateOrder {
-	return AggregateOrder{Term: t, Direction: OrderAsc}
+func (t Term) Asc() TermOrder {
+	return TermOrder{Term: t, Direction: OrderAsc}
 }
 
-func (t AggregateTerm) Desc() AggregateOrder {
-	return AggregateOrder{Term: t, Direction: OrderDesc}
+func (t Term) Desc() TermOrder {
+	return TermOrder{Term: t, Direction: OrderDesc}
 }

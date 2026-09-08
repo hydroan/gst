@@ -23,18 +23,18 @@ import (
 // phase field stays uniform across every log source; span names derive their
 // UpperCamelCase form via Phase.MethodName.
 const (
-	phaseUpsert               consts.Phase = "upsert"
-	phaseCount                consts.Phase = "count"
-	phaseFirst                consts.Phase = "first"
-	phaseLast                 consts.Phase = "last"
-	phaseTake                 consts.Phase = "take"
-	phaseUpdateByID           consts.Phase = "update_by_id"
-	phaseAggregate            consts.Phase = "aggregate"
-	phaseAggregateOne         consts.Phase = "aggregate_one"
-	phaseAggregateCountGroups consts.Phase = "aggregate_count_groups"
-	phaseCleanup              consts.Phase = "cleanup"
-	phaseHealth               consts.Phase = "health"
-	phaseWithQuery            consts.Phase = "with_query"
+	phaseUpsert      consts.Phase = "upsert"
+	phaseCount       consts.Phase = "count"
+	phaseFirst       consts.Phase = "first"
+	phaseLast        consts.Phase = "last"
+	phaseTake        consts.Phase = "take"
+	phaseUpdateByID  consts.Phase = "update_by_id"
+	phaseSelect      consts.Phase = "aggregate"
+	phaseSelectOne   consts.Phase = "aggregate_one"
+	phaseSelectCount consts.Phase = "aggregate_count_groups"
+	phaseCleanup     consts.Phase = "cleanup"
+	phaseHealth      consts.Phase = "health"
+	phaseWithQuery   consts.Phase = "with_query"
 )
 
 // trace returns a timing function for database operations that provides comprehensive

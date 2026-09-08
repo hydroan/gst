@@ -68,7 +68,7 @@ func TestFilterConstructors(t *testing.T) {
 		{"StartsWith", types.FilterStartsWith("name", "sam"), types.Filter{Column: "name", Op: types.FilterOpStartsWith, Value: "sam"}},
 		{"EndsWith", types.FilterEndsWith("name", "ple"), types.Filter{Column: "name", Op: types.FilterOpEndsWith, Value: "ple"}},
 		{"IsNull", types.FilterIsNull("expired_at"), types.Filter{Column: "expired_at", Op: types.FilterOpIsNull, Value: true}},
-		{"NotNull", types.FilterNotNull("expired_at"), types.Filter{Column: "expired_at", Op: types.FilterOpIsNull, Value: false}},
+		{"IsNotNull", types.FilterIsNotNull("expired_at"), types.Filter{Column: "expired_at", Op: types.FilterOpIsNull, Value: false}},
 		{"Regex", types.FilterRegex("name", "^sam"), types.Filter{Column: "name", Op: types.FilterOpRegex, Value: "^sam"}},
 		{"NotRegex", types.FilterNotRegex("name", "^sam"), types.Filter{Column: "name", Op: types.FilterOpNotRegex, Value: "^sam"}},
 		{"JSONContains", types.FilterJSONContains("tags", "sample"), types.Filter{Column: "tags", Op: types.FilterOpJSONContains, Value: "sample"}},

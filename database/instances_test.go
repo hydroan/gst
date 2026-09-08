@@ -55,7 +55,7 @@ func TestDatabaseOnNilInstancePanics(t *testing.T) {
 	})
 }
 
-func TestAggregateOn(t *testing.T) {
+func TestSelectOn(t *testing.T) {
 	ins := newInstance(t, "on_aggregate.db")
 
 	users := []*TestUser{
@@ -69,8 +69,7 @@ func TestAggregateOn(t *testing.T) {
 	}
 	age := types.NewNumericColumn[int64]("age")
 	var out row
-	require.NoError(t, database.AggregateOn[*TestUser, row](context.Background(), ins).
-		Select(age.Sum().As("total")).
+	require.NoError(t, database.SelectOn[*TestUser, row](context.Background(), ins, age.Sum().As("total")).
 		ScanOne(&out))
 	require.EqualValues(t, 30, out.Total)
 }

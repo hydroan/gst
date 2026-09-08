@@ -379,7 +379,7 @@ database.Database[*appmodel.Record](ctx)
 
 ### 聚合查询
 
-看板和报表用 `database.Aggregate[M, R](ctx)`，不要把整表 `List` 进内存再用
+看板和报表用 `database.Select[M, R](ctx, 投影项...)`，不要把整表 `List` 进内存再用
 Go 循环累加。`M` 决定表、软删除范围和方言，`R` 是自己声明的结果行结构体：
 
 ```go
@@ -390,8 +390,7 @@ type categoryTotal struct {
 }
 
 rows := make([]categoryTotal, 0)
-err := database.Aggregate[*appmodel.Record, categoryTotal](ctx).
-    Select(
+err := database.Select[*appmodel.Record, categoryTotal](ctx,
         appmodel.RecordCols.Category.Group(), // 不带聚合函数的项即分组键
         appmodel.RecordCols.Amount.Sum(),     // 默认别名就是列名，多数情况不用写 As
         types.Count().As("records"),
@@ -419,10 +418,10 @@ err := database.Aggregate[*appmodel.Record, categoryTotal](ctx).
   （`Filter`/`FilterRaw`），而聚合是 service 直接调用的，那些钩子不会执行——
   每个隔离条件都必须自己写进 `Where`。漏掉一个就会跨租户聚合，且没有任何迹象。
 
-单行结果用 `ScanOne`，分页报表的总组数用 `CountGroups`。跨表条件用
+单行结果用 `ScanOne`，分页报表的总组数用 `Count`。跨表条件用
 `types.FilterExists` / `FilterNotExists` 半连接，不要用 join —— join 到一对多
-子表会让 `SUM` 静默翻倍。子表与外层的关联列对用 `子表列.Correlate(外层列)`
-作为谓词传入（字符串列写 `types.FilterCorrelate`），复合键就多传几对，每一对都
+子表会让 `SUM` 静默翻倍。子表与外层的关联列对用 `子表列.Equal(外层列)`
+作为谓词传入（字符串列写 `types.FilterEqual`），复合键就多传几对，每一对都
 必须成立；没有任何关联对的子查询按 fail closed 处理。它们是普通的 `Filter` 算子，
 `List`/`Count`/`Export` 同样能用。
 

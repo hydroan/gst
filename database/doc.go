@@ -12,7 +12,7 @@
 //
 // A non-default database instance is a plain *gorm.DB the application builds
 // once, typically with a dialect New function such as clickhouse.New, and
-// holds itself. Chains reach it through DatabaseOn, AggregateOn, and
+// holds itself. Chains reach it through DatabaseOn, SelectOn, and
 // TransactionOn; the entry point that opens a chain decides the instance,
 // never a mid-chain option. Transactions never cross instances, and the
 // application owns the instance's schema: the framework does not create
@@ -57,7 +57,7 @@
 //   - the read path: List, Get, Count, First, Last, Take, WithQuery, the
 //     filter operators, ordering, paging, and cursor pagination;
 //   - the whole aggregate path: grouping, measures, conditional measures,
-//     time buckets, HAVING, ordering, paging, and CountGroups;
+//     time buckets, HAVING, ordering, paging, and Count;
 //   - a write path with a deliberately weaker contract — no model hooks, no
 //     transaction boundary: Create is plain batch INSERTs (no
 //     ErrDuplicatedKey; ClickHouse has no unique constraints), Delete is a

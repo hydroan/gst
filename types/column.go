@@ -117,8 +117,8 @@ func (c Column[T]) EndsWith(value string) Filter { return FilterEndsWith(c.name,
 // IsNull matches rows where the column is NULL.
 func (c Column[T]) IsNull() Filter { return FilterIsNull(c.name) }
 
-// NotNull matches rows where the column is not NULL.
-func (c Column[T]) NotNull() Filter { return FilterNotNull(c.name) }
+// IsNotNull matches rows where the column is not NULL.
+func (c Column[T]) IsNotNull() Filter { return FilterIsNotNull(c.name) }
 
 // Regex matches rows where the column matches the regular expression expr.
 func (c Column[T]) Regex(expr string) Filter { return FilterRegex(c.name, expr) }
@@ -130,15 +130,15 @@ func (c Column[T]) NotRegex(expr string) Filter { return FilterNotRegex(c.name, 
 // JSONContains matches rows whose JSON array column contains value.
 func (c Column[T]) JSONContains(value string) Filter { return FilterJSONContains(c.name, value) }
 
-// Correlate ties the column, on the related model a subquery reads, to
-// parent, a column of the query enclosing that subquery; see FilterCorrelate.
+// Equal ties the column, on the related model a subquery reads, to
+// parent, a column of the query enclosing that subquery; see FilterEqual.
 // Both must be columns of the same Go type. A nil parent leaves the outer
 // side empty, and the predicate then fails closed.
-func (c Column[T]) Correlate(parent ColumnRef[T]) Filter {
+func (c Column[T]) Equal(parent ColumnRef[T]) Filter {
 	if parent == nil {
-		return FilterCorrelate(c.name, "")
+		return FilterEqual(c.name, "")
 	}
-	return FilterCorrelate(c.name, parent.Name())
+	return FilterEqual(c.name, parent.Name())
 }
 
 // Asc orders by the column ascending.
@@ -160,25 +160,25 @@ func (c Column[T]) Set(value T) Assignment { return Assignment{Column: c.name, V
 
 // Count counts the rows whose value of this column is not NULL. Use the
 // package-level Count for COUNT(*), which counts every row.
-func (c Column[T]) Count() AggregateTerm { return c.term(AggregateCount) }
+func (c Column[T]) Count() Term { return c.term(FnCount) }
 
 // CountDistinct counts the distinct non-NULL values of this column.
-func (c Column[T]) CountDistinct() AggregateTerm { return c.term(AggregateCountDistinct) }
+func (c Column[T]) CountDistinct() Term { return c.term(FnCountDistinct) }
 
 // Min returns the smallest value of this column. It yields NULL for a group
 // with no non-NULL value, so the result row field must be a pointer.
-func (c Column[T]) Min() AggregateTerm { return c.term(AggregateMin) }
+func (c Column[T]) Min() Term { return c.term(FnMin) }
 
 // Max returns the largest value of this column. The NULL rules match Min.
-func (c Column[T]) Max() AggregateTerm { return c.term(AggregateMax) }
+func (c Column[T]) Max() Term { return c.term(FnMax) }
 
 // Group makes this column a group key of the projection. The framework derives
 // GROUP BY from the group keys, so a projection cannot disagree with its own
 // GROUP BY list.
-func (c Column[T]) Group() AggregateTerm { return c.term(AggregateNone) }
+func (c Column[T]) Group() Term { return c.term(FnNone) }
 
-func (c Column[T]) term(fn AggregateFn) AggregateTerm {
-	return AggregateTerm{Fn: fn, Column: c.name, Alias: c.name}
+func (c Column[T]) term(fn TermFn) Term {
+	return Term{Fn: fn, Column: c.name, Alias: c.name}
 }
 
 // NumericColumn is the reference generated for a column whose Go type is
@@ -202,12 +202,12 @@ func NewNumericColumn[T any](name string) NumericColumn[T] {
 
 // Sum adds up this column. The renderer wraps it in COALESCE(..., 0) so an
 // empty group sums to zero rather than scanning NULL into the result row.
-func (c NumericColumn[T]) Sum() AggregateTerm { return c.term(AggregateSum) }
+func (c NumericColumn[T]) Sum() Term { return c.term(FnSum) }
 
 // Avg averages this column. It yields NULL for a group with no non-NULL value
 // and is never coalesced, because a zero average and no data are different
 // answers; the result row field must be a pointer.
-func (c NumericColumn[T]) Avg() AggregateTerm { return c.term(AggregateAvg) }
+func (c NumericColumn[T]) Avg() Term { return c.term(FnAvg) }
 
 // TimeColumn is the reference generated for a time.Time column. It embeds
 // Column and adds time bucketing, which is only meaningful over a time value
@@ -226,14 +226,14 @@ func NewTimeColumn(name string) TimeColumn {
 // bucket, which is what a trend report groups by. The truncation expression
 // differs per dialect and is rendered by the database layer, so callers never
 // deal with a format string.
-func (c TimeColumn) ByHour() AggregateTerm { return c.bucket(TimeBucketHour) }
+func (c TimeColumn) ByHour() Term { return c.bucket(TimeBucketHour) }
 
-func (c TimeColumn) ByDay() AggregateTerm { return c.bucket(TimeBucketDay) }
+func (c TimeColumn) ByDay() Term { return c.bucket(TimeBucketDay) }
 
-func (c TimeColumn) ByMonth() AggregateTerm { return c.bucket(TimeBucketMonth) }
+func (c TimeColumn) ByMonth() Term { return c.bucket(TimeBucketMonth) }
 
-func (c TimeColumn) bucket(bucket TimeBucket) AggregateTerm {
-	term := c.term(AggregateNone)
+func (c TimeColumn) bucket(bucket TimeBucket) Term {
+	term := c.term(FnNone)
 	term.Bucket = bucket
 	return term
 }

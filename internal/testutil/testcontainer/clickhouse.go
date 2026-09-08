@@ -42,7 +42,7 @@ var clickhouseSharedDialect = sharedSQLDialect{
 // Unlike SetupDatabase it never points the framework default database at the
 // container: clickhouse is an analytical instance held next to the default
 // database, not a replacement for it, so tests build their own handle and
-// pass it to DatabaseOn and AggregateOn.
+// pass it to DatabaseOn and SelectOn.
 func SetupClickhouse() (config.Clickhouse, func() error, error) {
 	if dedicatedContainersRequested() {
 		return setupDedicatedClickhouse()

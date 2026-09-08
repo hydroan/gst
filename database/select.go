@@ -31,7 +31,7 @@ var (
 	ErrGroupedScanOne        = errors.New("ScanOne cannot run a grouped aggregation, use Scan")
 	ErrUnknownAggregateFn    = errors.New("aggregate function is not one the framework defines")
 	ErrUnknownTimeBucket     = errors.New("time bucket is not one the framework defines")
-	ErrUnknownHavingOp       = errors.New("having comparison is not one the framework defines")
+	ErrUnknownCompareOp      = errors.New("having comparison is not one the framework defines")
 	ErrConditionOnGroupKey   = errors.New("a group key cannot carry conditions, they only restrict a measure")
 	ErrBucketOnMeasure       = errors.New("a measure cannot carry a time bucket, it only truncates a group key")
 	ErrHavingTermNotSelected = errors.New("having references a measure the projection does not declare")
@@ -39,7 +39,7 @@ var (
 	ErrNullableResultField   = errors.New("result row field must be a pointer for an aggregate that yields NULL")
 	ErrScanOnePaged          = errors.New("ScanOne cannot use Having, Limit or Offset, it always reads one row")
 	ErrOffsetWithoutLimit    = errors.New("Offset needs a Limit")
-	ErrAggregatorUnusable    = errors.New("aggregate could not attach to the database chain")
+	ErrSelectorUnusable      = errors.New("aggregate could not attach to the database chain")
 	ErrHavingValue           = errors.New("having compares against a value SQL cannot order")
 	ErrUnknownOrderDirection = errors.New("order direction is not one the framework defines")
 )
@@ -49,11 +49,11 @@ var (
 // identifier instead of being quoted and hoped for.
 var aliasPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
-// aggregator implements types.Aggregator by borrowing the Database chain for
+// selector implements types.Selector by borrowing the Database chain for
 // everything an analytical read shares with a plain one: the transaction
 // carried by the context, identifier quoting, the filter renderer, tracing and
 // SQL collection.
-type aggregator[M types.Model, R any] struct {
+type selector[M types.Model, R any] struct {
 	db  *database[M]
 	err error // set when the chain could not be attached; surfaced by the terminal
 
@@ -63,56 +63,53 @@ type aggregator[M types.Model, R any] struct {
 	dryRun     bool
 	statements *[]types.SQLStatement
 
-	terms    []types.AggregateTerm
+	terms    []types.Term
 	filters  []types.Filter
-	havings  []types.Having
-	orders   []types.AggregateOrder
+	havings  []types.TermCondition
+	orders   []types.TermOrder
 	limit    int
 	offset   int
 	hasLimit bool
 }
 
-// Aggregate creates an analytical read over the table of M whose result rows
-// scan into R. See types.Aggregator for the contract and an example.
-func Aggregate[M types.Model, R any](ctx context.Context) types.Aggregator[M, R] {
+// Select creates an analytical read over the table of M that projects terms
+// and scans the result rows into R. The projection is declared here, at the
+// entry, so a selection has exactly one place that says what it reads; see
+// types.Selector for the contract and an example.
+func Select[M types.Model, R any](ctx context.Context, terms ...types.Term) types.Selector[M, R] {
 	inner, ok := Database[M](ctx).(*database[M])
 	if !ok {
 		// Unreachable while Database returns the concrete chain, but swallowing
 		// it would surface later as a nil dereference far from the cause.
-		return &aggregator[M, R]{err: ErrAggregatorUnusable}
+		return &selector[M, R]{err: ErrSelectorUnusable}
 	}
-	return &aggregator[M, R]{db: inner}
+	return &selector[M, R]{db: inner, terms: append([]types.Term(nil), terms...)}
 }
 
-// AggregateOn is Aggregate on an application-held database instance. See
+// SelectOn is Select on an application-held database instance. See
 // DatabaseOn for the instance semantics, including the panic on nil.
-func AggregateOn[M types.Model, R any](ctx context.Context, instance *gorm.DB) types.Aggregator[M, R] {
+func SelectOn[M types.Model, R any](ctx context.Context, instance *gorm.DB, terms ...types.Term) types.Selector[M, R] {
 	inner, ok := DatabaseOn[M](ctx, instance).(*database[M])
 	if !ok {
 		// Unreachable while DatabaseOn returns the concrete chain, but
 		// swallowing it would surface later as a nil dereference far from
 		// the cause.
-		return &aggregator[M, R]{err: ErrAggregatorUnusable}
+		return &selector[M, R]{err: ErrSelectorUnusable}
 	}
-	return &aggregator[M, R]{db: inner}
+	return &selector[M, R]{db: inner, terms: append([]types.Term(nil), terms...)}
 }
 
-func (a *aggregator[M, R]) Select(terms ...types.AggregateTerm) types.Aggregator[M, R] {
-	a.terms = append(a.terms, terms...)
-	return a
-}
-
-func (a *aggregator[M, R]) Where(filters ...types.Filter) types.Aggregator[M, R] {
+func (a *selector[M, R]) Where(filters ...types.Filter) types.Selector[M, R] {
 	a.filters = append(a.filters, filters...)
 	return a
 }
 
-func (a *aggregator[M, R]) Having(conditions ...types.Having) types.Aggregator[M, R] {
+func (a *selector[M, R]) Having(conditions ...types.TermCondition) types.Selector[M, R] {
 	a.havings = append(a.havings, conditions...)
 	return a
 }
 
-func (a *aggregator[M, R]) OrderBy(orders ...types.AggregateOrder) types.Aggregator[M, R] {
+func (a *selector[M, R]) OrderBy(orders ...types.TermOrder) types.Selector[M, R] {
 	a.orders = append(a.orders, orders...)
 	return a
 }
@@ -120,7 +117,7 @@ func (a *aggregator[M, R]) OrderBy(orders ...types.AggregateOrder) types.Aggrega
 // Limit caps the number of result rows. A non-positive limit means no limit,
 // matching Database.WithLimit: the two would otherwise read the same and mean
 // opposite things.
-func (a *aggregator[M, R]) Limit(n int) types.Aggregator[M, R] {
+func (a *selector[M, R]) Limit(n int) types.Selector[M, R] {
 	if n <= 0 {
 		a.limit, a.hasLimit = 0, false
 		return a
@@ -132,7 +129,7 @@ func (a *aggregator[M, R]) Limit(n int) types.Aggregator[M, R] {
 // Offset skips result rows. It needs a Limit: an OFFSET without one is a
 // syntax error on MySQL, so the combination is rejected when the query is
 // built rather than by the database.
-func (a *aggregator[M, R]) Offset(n int) types.Aggregator[M, R] {
+func (a *selector[M, R]) Offset(n int) types.Selector[M, R] {
 	if n <= 0 {
 		a.offset = 0
 		return a
@@ -141,11 +138,11 @@ func (a *aggregator[M, R]) Offset(n int) types.Aggregator[M, R] {
 	return a
 }
 
-// The option methods never touch the chain, so they stay safe on an aggregator
+// The option methods never touch the chain, so they stay safe on a selector
 // that failed to attach: the error surfaces at the terminal instead of as a nil
 // dereference partway through building the query.
 
-func (a *aggregator[M, R]) WithDryRun(collector ...*[]types.SQLStatement) types.Aggregator[M, R] {
+func (a *selector[M, R]) WithDryRun(collector ...*[]types.SQLStatement) types.Selector[M, R] {
 	a.dryRun = true
 	if len(collector) > 0 {
 		if collector[0] == nil {
@@ -160,7 +157,7 @@ func (a *aggregator[M, R]) WithDryRun(collector ...*[]types.SQLStatement) types.
 }
 
 // Scan runs the aggregation and replaces the contents of dest.
-func (a *aggregator[M, R]) Scan(dest *[]R) (err error) {
+func (a *selector[M, R]) Scan(dest *[]R) (err error) {
 	if a.err != nil {
 		return a.err
 	}
@@ -171,7 +168,7 @@ func (a *aggregator[M, R]) Scan(dest *[]R) (err error) {
 	if err = a.db.prepare(); err != nil {
 		return err
 	}
-	done, _ := a.db.trace(phaseAggregate)
+	done, _ := a.db.trace(phaseSelect)
 	// done must read the named return, not the nil err captured at defer time.
 	defer func() { done(err) }()
 
@@ -193,7 +190,7 @@ func (a *aggregator[M, R]) Scan(dest *[]R) (err error) {
 
 // ScanOne runs an ungrouped aggregation, which always produces exactly one
 // row, and fills dest with it.
-func (a *aggregator[M, R]) ScanOne(dest *R) (err error) {
+func (a *selector[M, R]) ScanOne(dest *R) (err error) {
 	if a.err != nil {
 		return a.err
 	}
@@ -204,7 +201,7 @@ func (a *aggregator[M, R]) ScanOne(dest *R) (err error) {
 	if err = a.db.prepare(); err != nil {
 		return err
 	}
-	done, _ := a.db.trace(phaseAggregateOne)
+	done, _ := a.db.trace(phaseSelectOne)
 	defer func() { done(err) }()
 
 	for _, t := range a.terms {
@@ -230,13 +227,13 @@ func (a *aggregator[M, R]) ScanOne(dest *R) (err error) {
 	return scanRowInto(tx, dest)
 }
 
-// CountGroups reports how many groups the aggregation produces. The count runs
+// Count reports how many groups the aggregation produces. The count runs
 // over the grouped query as a derived table, because COUNT(*) beside a GROUP BY
 // counts the rows of each group instead of the groups themselves. OrderBy,
-// Limit and Offset set on the aggregator are ignored here: none of them
+// Limit and Offset set on the selector are ignored here: none of them
 // changes how many groups exist, so pagination prepared for Scan can never
 // skew the count.
-func (a *aggregator[M, R]) CountGroups(count *int) (err error) {
+func (a *selector[M, R]) Count(count *int) (err error) {
 	if a.err != nil {
 		return a.err
 	}
@@ -247,7 +244,7 @@ func (a *aggregator[M, R]) CountGroups(count *int) (err error) {
 	if err = a.db.prepare(); err != nil {
 		return err
 	}
-	done, _ := a.db.trace(phaseAggregateCountGroups)
+	done, _ := a.db.trace(phaseSelectCount)
 	defer func() { done(err) }()
 
 	// The inner query projects only the group keys: the outer count reads
@@ -286,13 +283,13 @@ const (
 	// and ScanOne read it.
 	buildRead buildMode = iota
 	// buildCountInner renders only the group keys, without ordering or
-	// paging; CountGroups wraps it in a derived table and counts its rows.
+	// paging; Count wraps it in a derived table and counts its rows.
 	buildCountInner
 )
 
 // build validates the projection and assembles the query in the shape the
 // mode asks for.
-func (a *aggregator[M, R]) build(mode buildMode) (*gorm.DB, error) {
+func (a *selector[M, R]) build(mode buildMode) (*gorm.DB, error) {
 	if err := a.validate(); err != nil {
 		return nil, err
 	}
@@ -303,7 +300,7 @@ func (a *aggregator[M, R]) build(mode buildMode) (*gorm.DB, error) {
 	// second read off the same builder would otherwise inherit the first
 	// query's WHERE, GROUP BY and LIMIT and quietly answer a different
 	// question. That shape is the one the paginated-report idiom produces:
-	// Scan for the page, then CountGroups for the total. The fresh statement
+	// Scan for the page, then Count for the total. The fresh statement
 	// also lacks the operation's comment, so it is attached again here.
 	a.db.ins = a.db.annotate(a.session())
 	a.db.dryRun = a.dryRun
@@ -321,7 +318,7 @@ func (a *aggregator[M, R]) build(mode buildMode) (*gorm.DB, error) {
 
 	terms := a.terms
 	if mode == buildCountInner {
-		keys := make([]types.AggregateTerm, 0, len(a.terms))
+		keys := make([]types.Term, 0, len(a.terms))
 		for _, t := range a.terms {
 			if !t.IsMeasure() {
 				keys = append(keys, t)
@@ -429,17 +426,17 @@ func (a *aggregator[M, R]) build(mode buildMode) (*gorm.DB, error) {
 }
 
 // havingOperator maps a post-aggregation comparison to its SQL spelling.
-func havingOperator(op types.HavingOp) string {
+func havingOperator(op types.CompareOp) string {
 	switch op {
-	case types.HavingOpNe:
+	case types.CompareNe:
 		return "<>"
-	case types.HavingOpGt:
+	case types.CompareGt:
 		return ">"
-	case types.HavingOpGte:
+	case types.CompareGte:
 		return ">="
-	case types.HavingOpLt:
+	case types.CompareLt:
 		return "<"
-	case types.HavingOpLte:
+	case types.CompareLte:
 		return "<="
 	default:
 		// validate rejects an operator outside the closed set before the
@@ -451,7 +448,7 @@ func havingOperator(op types.HavingOp) string {
 }
 
 // alias returns the name a term is projected under, defaulting to its column.
-func (a *aggregator[M, R]) alias(t types.AggregateTerm) string {
+func (a *selector[M, R]) alias(t types.Term) string {
 	if len(t.Alias) > 0 {
 		return t.Alias
 	}
@@ -462,7 +459,7 @@ func (a *aggregator[M, R]) alias(t types.AggregateTerm) string {
 // placeholders bind. A conditional measure carries its predicate as a nested
 // expression, so the filter renderer stays the only place predicates are
 // built.
-func (a *aggregator[M, R]) termExpr(t types.AggregateTerm) (string, []any, error) {
+func (a *selector[M, R]) termExpr(t types.Term) (string, []any, error) {
 	column := a.db.quoteIdent(t.Column)
 	if !t.IsMeasure() {
 		if t.Bucket == types.TimeBucketNone {
@@ -476,7 +473,7 @@ func (a *aggregator[M, R]) termExpr(t types.AggregateTerm) (string, []any, error
 		return "", nil, condErr
 	}
 	switch t.Fn {
-	case types.AggregateCount:
+	case types.FnCount:
 		if cond != nil {
 			// COUNT(*) and COUNT(column) both become a conditional count:
 			// CASE yields NULL outside the predicate, and COUNT skips NULLs.
@@ -489,12 +486,12 @@ func (a *aggregator[M, R]) termExpr(t types.AggregateTerm) (string, []any, error
 			return "COUNT(*)", nil, nil
 		}
 		return "COUNT(" + column + ")", nil, nil
-	case types.AggregateCountDistinct:
+	case types.FnCountDistinct:
 		if cond != nil {
 			return "COUNT(DISTINCT CASE WHEN ? THEN " + column + " END)", []any{cond}, nil
 		}
 		return "COUNT(DISTINCT " + column + ")", nil, nil
-	case types.AggregateSum:
+	case types.FnSum:
 		// An empty sum is zero, which is a fact about addition rather than a
 		// guess, so SUM is always coalesced and its result field never has to
 		// be a pointer. AVG, MIN and MAX are left alone on purpose: for them
@@ -504,7 +501,7 @@ func (a *aggregator[M, R]) termExpr(t types.AggregateTerm) (string, []any, error
 			return "COALESCE(SUM(CASE WHEN ? THEN " + column + " ELSE 0 END), 0)", []any{cond}, nil
 		}
 		return "COALESCE(SUM(" + column + "), 0)", nil, nil
-	case types.AggregateAvg, types.AggregateMin, types.AggregateMax:
+	case types.FnAvg, types.FnMin, types.FnMax:
 		fn := string(t.Fn)
 		if cond != nil {
 			return fn + "(CASE WHEN ? THEN " + column + " END)", []any{cond}, nil
@@ -521,7 +518,7 @@ func (a *aggregator[M, R]) termExpr(t types.AggregateTerm) (string, []any, error
 
 // validate checks the projection against the model schema and the result row
 // before any SQL is built, and returns the model's columns for the renderer.
-func (a *aggregator[M, R]) validate() error {
+func (a *selector[M, R]) validate() error {
 	if len(a.terms) == 0 {
 		return ErrEmptyProjection
 	}
@@ -565,7 +562,7 @@ func (a *aggregator[M, R]) validate() error {
 	// two agree by construction.
 	for _, h := range a.havings {
 		if !h.Op.Valid() {
-			return errors.Wrapf(ErrUnknownHavingOp, "%q", h.Op)
+			return errors.Wrapf(ErrUnknownCompareOp, "%q", h.Op)
 		}
 		if !a.isSelected(h.Term) {
 			return errors.Wrapf(ErrHavingTermNotSelected, "%q", a.alias(h.Term))
@@ -606,7 +603,7 @@ func (a *aggregator[M, R]) validate() error {
 // type accepts the function. The type check only bites on the string-name
 // constructors: a term built from a generated column reference cannot reach a
 // function its type rejects, because the reference does not carry the method.
-func (a *aggregator[M, R]) validateTerm(t types.AggregateTerm, byName map[string]modelschema.Column) error {
+func (a *selector[M, R]) validateTerm(t types.Term, byName map[string]modelschema.Column) error {
 	// The renderer composes SQL from these constants, so a value from outside
 	// the closed set would reach the statement as text.
 	if !t.Fn.Valid() {
@@ -626,7 +623,7 @@ func (a *aggregator[M, R]) validateTerm(t types.AggregateTerm, byName map[string
 	}
 	if len(t.Column) == 0 {
 		// COUNT(*) is the only term without a column.
-		if t.Fn == types.AggregateCount && t.IsMeasure() {
+		if t.Fn == types.FnCount && t.IsMeasure() {
 			return nil
 		}
 		return errors.Wrapf(ErrUnknownColumn, "term %q has no column", t.Fn)
@@ -637,7 +634,7 @@ func (a *aggregator[M, R]) validateTerm(t types.AggregateTerm, byName map[string
 	}
 	class := modelschema.ClassifyColumn(column.Type)
 	switch {
-	case t.Fn == types.AggregateSum || t.Fn == types.AggregateAvg:
+	case t.Fn == types.FnSum || t.Fn == types.FnAvg:
 		// The generated reference already blocks this at compile time for the
 		// types it can classify, so the check only bites on the string-name
 		// constructors. It asks ClassifyColumn rather than keeping a rule of
@@ -660,7 +657,7 @@ func (a *aggregator[M, R]) validateTerm(t types.AggregateTerm, byName map[string
 // both directions. gorm leaves an unmatched field at its zero value and drops
 // an unmatched column, so without this check a renamed alias shows up as a
 // column of zeros on a report rather than as an error.
-func (a *aggregator[M, R]) validateResultRow(aliases map[string]struct{}, sources map[string]modelschema.Column) error {
+func (a *selector[M, R]) validateResultRow(aliases map[string]struct{}, sources map[string]modelschema.Column) error {
 	typ := reflect.TypeFor[R]()
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
@@ -705,7 +702,7 @@ func (a *aggregator[M, R]) validateResultRow(aliases map[string]struct{}, source
 // covers the whole term rather than its alias, because HAVING and ORDER BY are
 // rendered from the term itself: an alias match alone would let a condition
 // filter by an expression the projection never selected.
-func (a *aggregator[M, R]) isSelected(t types.AggregateTerm) bool {
+func (a *selector[M, R]) isSelected(t types.Term) bool {
 	for _, selected := range a.terms {
 		if a.alias(selected) == a.alias(t) && reflect.DeepEqual(selected, t) {
 			return true
@@ -727,7 +724,7 @@ func (a *aggregator[M, R]) isSelected(t types.AggregateTerm) bool {
 // source column is nullable, and a group holds only NULLs. A grouped,
 // unconditional measure over a non-nullable column can keep a plain result
 // field — the alternative would demand a pointer nothing ever sets to nil.
-func (a *aggregator[M, R]) nullableAliases(sources map[string]modelschema.Column) map[string]string {
+func (a *selector[M, R]) nullableAliases(sources map[string]modelschema.Column) map[string]string {
 	grouped := false
 	for _, t := range a.terms {
 		if !t.IsMeasure() {
@@ -738,7 +735,7 @@ func (a *aggregator[M, R]) nullableAliases(sources map[string]modelschema.Column
 	nullable := make(map[string]string)
 	for _, t := range a.terms {
 		switch t.Fn {
-		case types.AggregateAvg, types.AggregateMin, types.AggregateMax:
+		case types.FnAvg, types.FnMin, types.FnMax:
 		default:
 			continue
 		}
@@ -761,7 +758,7 @@ func (a *aggregator[M, R]) nullableAliases(sources map[string]modelschema.Column
 // session returns a statement-free handle onto the same connection. It keeps
 // the context and any transaction the chain joined, and drops only the clauses
 // a previous terminal left behind.
-func (a *aggregator[M, R]) session() *gorm.DB {
+func (a *selector[M, R]) session() *gorm.DB {
 	return a.db.ins.Session(&gorm.Session{NewDB: true})
 }
 

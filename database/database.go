@@ -20,7 +20,7 @@ var (
 	// that was never initialized.
 	ErrInvalidDB = errors.New("invalid database, maybe not initialized")
 
-	// ErrNilCount is returned when Count or CountGroups is handed a nil
+	// ErrNilCount is returned when Count or Count is handed a nil
 	// destination.
 	ErrNilCount = errors.New("count parameter cannot be nil")
 

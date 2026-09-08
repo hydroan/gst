@@ -1,5 +1,5 @@
 // Package types defines the public contracts between the framework and
-// business projects: the Model, Service, Database, Aggregator, Cache, RBAC,
+// business projects: the Model, Service, Database, Selector, Cache, RBAC,
 // and Logger interfaces, the query building blocks they exchange (Filter,
 // Order, Cursor, Column, aggregate terms), and the per-request
 // ServiceContext.

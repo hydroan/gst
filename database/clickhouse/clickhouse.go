@@ -33,7 +33,7 @@ func Init() (err error) {
 // New creates and returns a new Clickhouse database connection with the given configuration.
 // With tracing configured on, the returned handle carries the GORM
 // OpenTelemetry tracing plugin, so application-held instances passed to
-// DatabaseOn and AggregateOn are traced like the default database.
+// DatabaseOn and SelectOn are traced like the default database.
 // The pool runs under the connection limits of the [database] configuration,
 // the same ones the default handle runs under.
 //

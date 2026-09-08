@@ -117,12 +117,11 @@ func TestClickhouse(t *testing.T) {
 			Done     int64
 		}
 		rows := make([]row, 0)
-		require.NoError(t, database.AggregateOn[*TestAggregateRecord, row](ctx, ins).
-			Select(
-				aggCols.Category.Group(),
-				aggCols.Amount.Sum().As("total"),
-				types.Count().Where(aggCols.Status.Eq("done")).As("done"),
-			).
+		require.NoError(t, database.SelectOn[*TestAggregateRecord, row](ctx, ins,
+			aggCols.Category.Group(),
+			aggCols.Amount.Sum().As("total"),
+			types.Count().Where(aggCols.Status.Eq("done")).As("done"),
+		).
 			Having(aggCols.Amount.Sum().As("total").Gte(600)).
 			OrderBy(aggCols.Category.Group().Asc()).
 			Scan(&rows))
@@ -139,8 +138,7 @@ func TestClickhouse(t *testing.T) {
 			Records int64
 		}
 		rows := make([]row, 0)
-		require.NoError(t, database.AggregateOn[*TestAggregateRecord, row](ctx, ins).
-			Select(aggCols.OccurredAt.ByDay().As("bucket"), types.Count().As("records")).
+		require.NoError(t, database.SelectOn[*TestAggregateRecord, row](ctx, ins, aggCols.OccurredAt.ByDay().As("bucket"), types.Count().As("records")).
 			OrderBy(aggCols.OccurredAt.ByDay().As("bucket").Asc()).
 			Scan(&rows))
 		require.Equal(t, []row{
@@ -151,15 +149,14 @@ func TestClickhouse(t *testing.T) {
 		}, rows)
 	})
 
-	t.Run("CountGroups", func(t *testing.T) {
+	t.Run("Count", func(t *testing.T) {
 		type row struct {
 			Category string
 			Total    int64
 		}
 		var groups int
-		require.NoError(t, database.AggregateOn[*TestAggregateRecord, row](ctx, ins).
-			Select(aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
-			CountGroups(&groups))
+		require.NoError(t, database.SelectOn[*TestAggregateRecord, row](ctx, ins, aggCols.Category.Group(), aggCols.Amount.Sum().As("total")).
+			Count(&groups))
 		require.Equal(t, 3, groups)
 	})
 
@@ -295,7 +292,7 @@ func TestClickhouse(t *testing.T) {
 			('t1','a1','vip','2024-01-01 00:00:00','2024-01-01 00:00:00')`).Error)
 
 		require.Empty(t, listIDs(t, types.FilterExists[*TestRecordTag](
-			tagCols.RecordID.Correlate(recordIDCol),
+			tagCols.RecordID.Equal(recordIDCol),
 		)))
 	})
 }

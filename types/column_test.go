@@ -65,7 +65,7 @@ func TestColumnBuildsFilters(t *testing.T) {
 		{"StartsWith", name.StartsWith("sa"), types.Filter{Column: "name", Op: types.FilterOpStartsWith, Value: "sa"}},
 		{"EndsWith", name.EndsWith("le"), types.Filter{Column: "name", Op: types.FilterOpEndsWith, Value: "le"}},
 		{"IsNull", name.IsNull(), types.Filter{Column: "name", Op: types.FilterOpIsNull, Value: true}},
-		{"NotNull", name.NotNull(), types.Filter{Column: "name", Op: types.FilterOpIsNull, Value: false}},
+		{"IsNotNull", name.IsNotNull(), types.Filter{Column: "name", Op: types.FilterOpIsNull, Value: false}},
 		{"Regex", name.Regex("^sa"), types.Filter{Column: "name", Op: types.FilterOpRegex, Value: "^sa"}},
 		{"NotRegex", name.NotRegex("^sa"), types.Filter{Column: "name", Op: types.FilterOpNotRegex, Value: "^sa"}},
 		{"JSONContains", name.JSONContains("sam"), types.Filter{Column: "name", Op: types.FilterOpJSONContains, Value: "sam"}},

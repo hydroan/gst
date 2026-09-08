@@ -36,12 +36,12 @@ type filterScope struct {
 	qualify string
 	// parent is the table a correlated subquery joins back to.
 	parent string
-	// outer is the table the scope's own Correlate predicates equate against:
+	// outer is the table the scope's own Equal predicates equate against:
 	// the table of the query directly enclosing this subquery. It is empty at
-	// the top level, where a Correlate has nothing to tie to and fails closed.
+	// the top level, where an Equal predicate has nothing to tie to and fails closed.
 	outer string
 	// outerColumns names the columns of the enclosing model, keyed by database
-	// name, so the outer side of a Correlate is checked the same way the inner
+	// name, so the outer side of an Equal predicate is checked the same way the inner
 	// side is instead of reaching the database as an unknown column. It is nil
 	// at the top level, alongside outer.
 	outerColumns map[string]struct{}
@@ -233,14 +233,14 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 			return db.failClosedFilter(f, "expects a string value")
 		}
 		return datatypes.JSONArrayQuery(f.Column).Contains(s), nil
-	case types.FilterOpCorrelate:
-		return db.correlateCondition(f, column, scope)
+	case types.FilterOpEqual:
+		return db.equalCondition(f, column, scope)
 	default:
 		return db.failClosedFilter(f, "is unknown")
 	}
 }
 
-// correlateCondition renders a Correlate predicate: the scope's own column on
+// equalCondition renders an Equal predicate: the scope's own column on
 // the left, the enclosing query's column on the right. Outside a subquery
 // there is no enclosing query to tie to, so the predicate fails closed rather
 // than comparing the table with itself. The column arrives qualified by the
@@ -250,7 +250,7 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 // database error instead of the fail-closed answer every other mistake gets.
 //
 // The caller must hold db.mu.
-func (db *database[M]) correlateCondition(f types.Filter, column string, scope filterScope) (clause.Expression, error) {
+func (db *database[M]) equalCondition(f types.Filter, column string, scope filterScope) (clause.Expression, error) {
 	if len(scope.outer) == 0 {
 		return db.failClosedFilter(f, "correlates outside a subquery")
 	}
@@ -271,13 +271,13 @@ func (db *database[M]) correlateCondition(f types.Filter, column string, scope f
 }
 
 // hasCorrelation reports whether a subquery's predicates tie it to the query
-// around it: a Correlate directly in the list or inside a group, at this level
+// around it: an Equal predicate directly in the list or inside a group, at this level
 // only. A nested subquery correlates against this level, not on its behalf,
 // so its own predicates do not count.
 func hasCorrelation(filters []types.Filter) bool {
 	for _, f := range filters {
 		switch f.Op {
-		case types.FilterOpCorrelate:
+		case types.FilterOpEqual:
 			return true
 		case types.FilterOpOr, types.FilterOpAnd:
 			if children, ok := f.Value.([]types.Filter); ok && hasCorrelation(children) {
@@ -405,7 +405,7 @@ func (db *database[M]) scopedColumn(column string, scope filterScope) string {
 //
 // The correlation predicates compare two qualified columns rather than binding
 // a value, so they are written into the SQL as identifiers quoted by the
-// dialect (see correlateCondition): the related side is checked against the
+// dialect (see equalCondition): the related side is checked against the
 // related model's columns, and both sides are named by service code — through
 // a column reference or a plain name — never by a client, because the operator
 // has no URL spelling.
@@ -483,7 +483,7 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 		Model(sq.Model).
 		Select("1")
 	// The predicates read the subquery's own table and may only name its
-	// columns; their Correlate predicates equate against the table this
+	// columns; their Equal predicates equate against the table this
 	// subquery hangs off, while a subquery nested one level further down
 	// correlates back to this one. The enclosing model's columns come from the
 	// scope around this subquery when it is itself a subquery, and from the

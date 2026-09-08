@@ -47,7 +47,7 @@ const (
 	FilterOpOr           FilterOp = "or"           // group: the []Filter value is OR-combined, the group itself AND-combined
 	FilterOpAnd          FilterOp = "and"          // group: the []Filter value is AND-combined, for nesting inside an OR group
 	FilterOpExists       FilterOp = "exists"       // correlated subquery: the Subquery value becomes EXISTS or NOT EXISTS
-	FilterOpCorrelate    FilterOp = "correlate"    // inside a subquery: the column equals the enclosing query's column named by the string value
+	FilterOpEqual        FilterOp = "equal"        // inside a subquery: the column equals the enclosing query's column named by the string value
 )
 
 // filterOps indexes the URL-exposed operators for parsing; service-only
@@ -106,8 +106,8 @@ func FilterOps() []FilterOp {
 //     no column: they group their children instead of naming one themselves.
 //   - FilterOpExists requires a Subquery value and carries no column; see
 //     FilterExists.
-//   - FilterOpCorrelate requires a string value naming the enclosing query's
-//     column and only renders inside a subquery; see FilterCorrelate.
+//   - FilterOpEqual requires a string value naming the enclosing query's
+//     column and only renders inside a subquery; see FilterEqual.
 //   - The comparison operators take a scalar value (string, numeric,
 //     time.Time); slices, arrays, and nil are rejected.
 //
@@ -235,8 +235,8 @@ func FilterIsNull(column string) Filter {
 	return Filter{Column: column, Op: FilterOpIsNull, Value: true}
 }
 
-// FilterNotNull matches rows whose column is not NULL.
-func FilterNotNull(column string) Filter {
+// FilterIsNotNull matches rows whose column is not NULL.
+func FilterIsNotNull(column string) Filter {
 	return Filter{Column: column, Op: FilterOpIsNull, Value: false}
 }
 
@@ -304,7 +304,7 @@ func FilterAnd(filters ...Filter) Filter {
 	return Filter{Op: FilterOpAnd, Value: filters}
 }
 
-// FilterCorrelate is the predicate that ties a subquery to the query around
+// FilterEqual is the predicate that ties a subquery to the query around
 // it: column, on the related model the subquery reads, equals parent, a column
 // of the enclosing query's model. It only means something inside FilterExists
 // or FilterNotExists, where it renders as `child_table.column =
@@ -312,15 +312,15 @@ func FilterAnd(filters ...Filter) Filter {
 // and it fails closed, as does an empty name on either side or a name the
 // related or the enclosing model does not have. Several of them express a
 // composite key, and one inside a FilterOr group matches on any of its pairs.
-// Column.Correlate is the typed front end that keeps the two columns of the
+// Column.Equal is the typed front end that keeps the two columns of the
 // same Go type.
-func FilterCorrelate(column, parent string) Filter {
-	return Filter{Column: column, Op: FilterOpCorrelate, Value: parent}
+func FilterEqual(column, parent string) Filter {
+	return Filter{Column: column, Op: FilterOpEqual, Value: parent}
 }
 
 // Subquery is the correlated EXISTS subquery carried by FilterOpExists. It
 // names the related model and the predicates narrowing its rows, at least one
-// of which must be a FilterCorrelate tying them to the enclosing query.
+// of which must be a FilterEqual tying them to the enclosing query.
 //
 // A semi join is used rather than a real join on purpose: EXISTS matches a row
 // at most once, so an aggregate over the outer table keeps counting each row
@@ -331,7 +331,7 @@ type Subquery struct {
 	// child table name and its soft-delete scope, so a subquery hides the same
 	// rows a List on that model hides.
 	Model Model
-	// Filters narrow the related rows. They must include a FilterCorrelate,
+	// Filters narrow the related rows. They must include a FilterEqual,
 	// directly or inside a group: without one the subquery would be a cross
 	// join, so it fails closed instead.
 	Filters []Filter
@@ -340,12 +340,12 @@ type Subquery struct {
 }
 
 // FilterExists matches rows of the queried model that have at least one
-// related row in C satisfying filters. Correlate predicates tie the related
+// related row in C satisfying filters. Equal predicates tie the related
 // rows to the queried row, one per column pair, next to the ordinary
 // conditions narrowing them:
 //
 //	types.FilterExists[*Item](
-//	    ItemCols.SampleID.Correlate(SampleCols.ID),
+//	    ItemCols.SampleID.Equal(SampleCols.ID),
 //	    ItemCols.Status.Eq(StatusDone))
 //	// EXISTS (SELECT 1 FROM `items`
 //	//         WHERE `items`.`sample_id` = `samples`.`id`
@@ -354,13 +354,13 @@ type Subquery struct {
 // A composite key is just more pairs, rendered in the order given:
 //
 //	types.FilterExists[*Item](
-//	    ItemCols.TenantID.Correlate(SampleCols.TenantID),
-//	    ItemCols.SampleID.Correlate(SampleCols.ID),
+//	    ItemCols.TenantID.Equal(SampleCols.TenantID),
+//	    ItemCols.SampleID.Equal(SampleCols.ID),
 //	    ItemCols.Status.Eq(StatusDone))
 //
 // The table names come from C and from the queried model, so a column
 // reference never has to carry a table name. A subquery without any
-// FilterCorrelate fails closed rather than matching every row: nothing to
+// FilterEqual fails closed rather than matching every row: nothing to
 // correlate on is a mistake, not a request for a cross join.
 //
 // It is an ordinary Filter, so List, Count, Export and Aggregate all accept
@@ -373,7 +373,7 @@ func FilterExists[C Model](filters ...Filter) Filter {
 // FilterNotExists matches rows that have no related row in C satisfying
 // filters. Note that it is not the negation of a filtered FilterExists over the
 // same rows: a row whose related rows all fail filters matches, and so does a
-// row with no related rows at all. A subquery without any FilterCorrelate
+// row with no related rows at all. A subquery without any FilterEqual
 // fails closed here as well: negating "match nothing" would otherwise widen
 // into "match everything".
 func FilterNotExists[C Model](filters ...Filter) Filter {
