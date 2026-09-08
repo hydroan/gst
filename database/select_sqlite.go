@@ -71,8 +71,9 @@ func scanRowInto[R any](tx *gorm.DB, dest *R) error {
 
 // scanMirrorType returns the stand-in type for R when the scan needs one,
 // which is only the case on sqlite: every other dialect delivers time values
-// already parsed. A pointer row type is mirrored through its struct, the way
-// the result row is validated.
+// already parsed. A pointer row type is mirrored through its struct, and an
+// embedded struct through its fields, the shapes the result row is validated
+// through.
 func scanMirrorType[R any](tx *gorm.DB) (reflect.Type, bool) {
 	if tx.Dialector.Name() != sqliteDialectName {
 		return nil, false
@@ -98,11 +99,12 @@ func rowStruct(row reflect.Value) reflect.Value {
 }
 
 // sqliteTimeMirrorType returns the scan-side stand-in for a result type: the
-// same struct with every time-shaped field replaced by sqliteTimeValue. The
+// same struct with every time-shaped field replaced by sqliteTimeValue, an
+// embedded struct replaced by its own stand-in when it carries one. The
 // second return is false when no stand-in is needed or possible — the type
 // has no time-shaped fields, is no struct, or carries unexported fields,
 // which reflect.StructOf cannot rebuild; those types scan the regular way.
-// Embedded structs are not descended into.
+// A struct embedded through a pointer is not descended into.
 func sqliteTimeMirrorType(rt reflect.Type) (reflect.Type, bool) {
 	if rt.Kind() != reflect.Struct {
 		return nil, false
@@ -119,6 +121,13 @@ func sqliteTimeMirrorType(rt reflect.Type) (reflect.Type, bool) {
 		case timeType, timePtrType, nullTimeType:
 			field.Type = sqliteTimeValueType
 			mirrored = true
+		default:
+			if field.Anonymous && field.Type.Kind() == reflect.Struct {
+				if inner, ok := sqliteTimeMirrorType(field.Type); ok {
+					field.Type = inner
+					mirrored = true
+				}
+			}
 		}
 		fields[i] = field
 	}
@@ -129,16 +138,20 @@ func sqliteTimeMirrorType(rt reflect.Type) (reflect.Type, bool) {
 }
 
 // copyMirrorRow writes one scanned mirror row into the caller's row,
-// converting the stand-in fields back to the shape the caller declared.
+// converting the stand-in fields back to the shape the caller declared, an
+// embedded stand-in field by field.
 func copyMirrorRow(mirror, dest reflect.Value) {
 	for i := range dest.NumField() {
 		source := mirror.Field(i)
-		if source.Type() == sqliteTimeValueType {
+		switch {
+		case source.Type() == sqliteTimeValueType:
 			value, _ := reflect.TypeAssert[sqliteTimeValue](source)
 			value.assignTo(dest.Field(i))
-			continue
+		case source.Type() != dest.Field(i).Type():
+			copyMirrorRow(source, dest.Field(i))
+		default:
+			dest.Field(i).Set(source)
 		}
-		dest.Field(i).Set(source)
 	}
 }
 

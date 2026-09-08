@@ -55,11 +55,11 @@ func refundFlows(ctx context.Context) types.Selector[*TestRefund, flow] {
 //
 //	SELECT * FROM (
 //	  SELECT * FROM (SELECT 'payment' AS `kind`, `id` AS `id`, `account` AS `account`, `amount` AS `amount`, `paid_at` AS `at`
-//	                 FROM `test_payments` WHERE `test_payments`.`deleted_at` IS NULL) AS b0
+//	                 FROM `test_payments` WHERE `test_payments`.`deleted_at` IS NULL) AS `b0`
 //	  UNION ALL
 //	  SELECT * FROM (SELECT 'refund' AS `kind`, `id` AS `id`, `account` AS `account`, `amount` AS `amount`, `settled_at` AS `at`
-//	                 FROM `test_refunds` WHERE `test_refunds`.`deleted_at` IS NULL) AS b1
-//	) AS u ORDER BY `at` DESC,`id` DESC
+//	                 FROM `test_refunds` WHERE `test_refunds`.`deleted_at` IS NULL) AS `b1`
+//	) AS `u` ORDER BY `at` DESC,`id` DESC
 func ExampleUnionAll() {
 	seedFlowExample()
 	defer cleanupFlowData()
@@ -91,11 +91,11 @@ func ExampleUnionAll() {
 //
 //	SELECT * FROM (
 //	  SELECT * FROM (SELECT 'payment' AS `kind`, ... FROM `test_payments` WHERE ...
-//	                 ORDER BY `at` DESC,`id` DESC LIMIT ?) AS b0
+//	                 ORDER BY `at` DESC,`id` DESC LIMIT ?) AS `b0`
 //	  UNION ALL
 //	  SELECT * FROM (SELECT 'refund' AS `kind`, ... FROM `test_refunds` WHERE ...
-//	                 ORDER BY `at` DESC,`id` DESC LIMIT ?) AS b1
-//	) AS u ORDER BY `at` DESC,`id` DESC LIMIT ? OFFSET ?
+//	                 ORDER BY `at` DESC,`id` DESC LIMIT ?) AS `b1`
+//	) AS `u` ORDER BY `at` DESC,`id` DESC LIMIT ? OFFSET ?
 func ExampleUnionAll_pagination() {
 	seedFlowExample()
 	defer cleanupFlowData()
@@ -121,8 +121,8 @@ func ExampleUnionAll_pagination() {
 // which is what the total of a paginated flow needs. A branch keeps its own
 // Where, so one account's payments stack with every refund. Rendered:
 //
-//	SELECT n FROM (SELECT (SELECT COUNT(*) FROM (SELECT 1 AS `row_marker` FROM `test_payments` WHERE `account` = ? AND ...) AS b0)
-//	                    + (SELECT COUNT(*) FROM (SELECT 1 AS `row_marker` FROM `test_refunds` WHERE ...) AS b1) AS n) AS counts
+//	SELECT `n` FROM (SELECT (SELECT COUNT(*) FROM (SELECT 1 AS `row_marker` FROM `test_payments` WHERE `account` = ? AND ...) AS `b0`)
+//	                    + (SELECT COUNT(*) FROM (SELECT 1 AS `row_marker` FROM `test_refunds` WHERE ...) AS `b1`) AS `n`) AS `counts`
 func ExampleUnionAll_count() {
 	seedFlowExample()
 	defer cleanupFlowData()
@@ -160,11 +160,11 @@ func ExampleUnionAll_count() {
 //
 //	SELECT * FROM (
 //	  SELECT * FROM (SELECT 'payment' AS `kind`, `account` AS `account`, COALESCE(SUM(`amount`), 0) AS `amount`
-//	                 FROM `test_payments` WHERE `test_payments`.`deleted_at` IS NULL GROUP BY `account`) AS b0
+//	                 FROM `test_payments` WHERE `test_payments`.`deleted_at` IS NULL GROUP BY `account`) AS `b0`
 //	  UNION ALL
 //	  SELECT * FROM (SELECT 'refund' AS `kind`, `account` AS `account`, COALESCE(SUM(`amount`), 0) AS `amount`
-//	                 FROM `test_refunds` WHERE `test_refunds`.`deleted_at` IS NULL GROUP BY `account`) AS b1
-//	) AS u ORDER BY `account` ASC,`amount` DESC
+//	                 FROM `test_refunds` WHERE `test_refunds`.`deleted_at` IS NULL GROUP BY `account`) AS `b1`
+//	) AS `u` ORDER BY `account` ASC,`amount` DESC
 func ExampleUnionAll_groupedBranches() {
 	seedFlowExample()
 	defer cleanupFlowData()

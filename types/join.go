@@ -123,20 +123,26 @@ func (SelectJoin) sealedJoinSource() {}
 //	// SELECT `customers`.`id` AS `id`, `customers`.`name` AS `name`, `j0`.`order_total` AS `order_total`
 //	// FROM `customers`
 //	// LEFT JOIN (SELECT `customer_id` AS `customer_id`, COALESCE(SUM(`amount`), 0) AS `order_total`
-//	//            FROM `orders` WHERE `orders`.`deleted_at` IS NULL GROUP BY `customer_id`) AS j0
+//	//            FROM `orders` WHERE `orders`.`deleted_at` IS NULL GROUP BY `customer_id`) AS `j0`
 //	//   ON `j0`.`customer_id` = `customers`.`id`
 //	// WHERE `customers`.`deleted_at` IS NULL
 //
-// Only the select's terms are readable this way: its model's other columns
-// are not columns of the derived table. In a grouped query a joined select's
-// term is projected as a group key of the query, which is exact only when
-// the query groups by the columns the select is joined on — the term is then
-// constant within a group — and the framework requires it. A condition on a
-// joined select's measure belongs to that select's Having. The select carries
-// no OrderBy, Limit or Offset of its own: a derived table has no use for
-// them.
+// Only the select's terms are readable this way, passed as they are: its
+// model's other columns are not columns of the derived table, and the term
+// under another alias is not the term. A term read this way may also key a
+// window's partition or order it. In a grouped query a joined select's term
+// is projected as a group key of the query, which is exact only when the
+// query groups by the columns the select is joined on — the term is then
+// constant within a group — and the framework requires it; a query with no
+// measure of its own reads row-level, every row beside the select's terms.
+// A condition on a joined select's measure belongs to that select's Having,
+// and a condition on its rows to its Where: the ON names its keys, and an
+// EXISTS subquery there has no row of the select's model to correlate with,
+// so it is refused. The select carries no OrderBy, Limit or Offset of its
+// own: a derived table has no use for them.
 //
-// One table backs at most one source of a query. A joined select is
+// One table backs at most one source of a query, counting the tables a
+// joined select reads through joins of its own. A joined select is
 // addressed through its model's column references, so a select over the
 // queried table, or a second select over a table another source already
 // reads, could not be told apart and is refused; a per-row total over the

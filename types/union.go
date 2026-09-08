@@ -49,12 +49,12 @@ type SelectBranch[R any] interface {
 //	SELECT * FROM (
 //	  SELECT * FROM (SELECT 'payment' AS `kind`, `id` AS `id`, `amount` AS `amount`, `paid_at` AS `at`
 //	                 FROM `payments` WHERE `tenant_id` = ? AND `payments`.`deleted_at` IS NULL
-//	                 ORDER BY `at` DESC,`id` DESC LIMIT ?) AS b0
+//	                 ORDER BY `at` DESC,`id` DESC LIMIT ?) AS `b0`
 //	  UNION ALL
 //	  SELECT * FROM (SELECT 'refund' AS `kind`, `id` AS `id`, `amount` AS `amount`, `settled_at` AS `at`
 //	                 FROM `refunds` WHERE `tenant_id` = ? AND `refunds`.`deleted_at` IS NULL
-//	                 ORDER BY `at` DESC,`id` DESC LIMIT ?) AS b1
-//	) AS u ORDER BY `at` DESC,`id` DESC LIMIT ? OFFSET ?
+//	                 ORDER BY `at` DESC,`id` DESC LIMIT ?) AS `b1`
+//	) AS `u` ORDER BY `at` DESC,`id` DESC LIMIT ? OFFSET ?
 //
 // A branch keeps its own Where, Having and Qualify, and may be a plain
 // projection of columns, which a select on its own rejects: stacked, the rows
@@ -85,6 +85,7 @@ type Union[R any] interface {
 	Count(count *int) error
 
 	// WithDryRun builds the SQL without database I/O; see
-	// Selector.WithDryRun.
+	// Selector.WithDryRun. A dry run set on a branch is the branch's own:
+	// the union's terminal runs the branch for real and consumes it.
 	WithDryRun(collector ...*[]SQLStatement) Union[R]
 }

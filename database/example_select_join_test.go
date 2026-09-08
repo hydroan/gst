@@ -147,7 +147,7 @@ func ExampleSelect_joinGrouped() {
 //	SELECT `test_aggregate_records`.`id` AS `id`, `test_aggregate_records`.`category` AS `category`, `j0`.`tags` AS `tags`
 //	FROM `test_aggregate_records`
 //	LEFT JOIN (SELECT `record_id` AS `record_id`, COUNT(`id`) AS `tags`
-//	           FROM `test_record_tags` WHERE `test_record_tags`.`deleted_at` IS NULL GROUP BY `record_id`) AS j0
+//	           FROM `test_record_tags` WHERE `test_record_tags`.`deleted_at` IS NULL GROUP BY `record_id`) AS `j0`
 //	  ON `j0`.`record_id` = `test_aggregate_records`.`id`
 //	WHERE `test_aggregate_records`.`deleted_at` IS NULL ORDER BY `id` ASC
 func ExampleSelect_joinSelect() {
@@ -200,7 +200,7 @@ func ExampleSelect_joinSelect() {
 //	SELECT `test_payments`.`account` AS `account`, COALESCE(SUM(`test_payments`.`amount`), 0) AS `paid`, `j0`.`refunded` AS `refunded`
 //	FROM `test_payments`
 //	LEFT JOIN (SELECT `account` AS `account`, COALESCE(SUM(`amount`), 0) AS `refunded`
-//	           FROM `test_refunds` WHERE `test_refunds`.`deleted_at` IS NULL GROUP BY `account`) AS j0
+//	           FROM `test_refunds` WHERE `test_refunds`.`deleted_at` IS NULL GROUP BY `account`) AS `j0`
 //	  ON `j0`.`account` = `test_payments`.`account`
 //	WHERE `test_payments`.`deleted_at` IS NULL
 //	GROUP BY `test_payments`.`account`,`j0`.`refunded` ORDER BY `account` ASC

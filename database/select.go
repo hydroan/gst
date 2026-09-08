@@ -630,6 +630,21 @@ func (a *selector[M, R]) validate(mode buildMode) (projectionShape, error) {
 	if shape.derived, err = a.derivedTerms(shape); err != nil {
 		return shape, err
 	}
+	// A joined select's term passed under another alias is not the term the
+	// select projects: it would read as a measure or a column of the
+	// select's model and fail on some other term of the projection, far from
+	// the mistake, so it is named here. A term carrying no table, a plain
+	// Count say, is the query's own wherever a select projects one alike.
+	for _, t := range a.terms {
+		if _, derived := a.derivedOf(t, shape); derived || len(t.Table) == 0 {
+			continue
+		}
+		if jt, ok := shape.joined[t.Table]; ok && jt.sub != nil {
+			if alias, projected := jt.sub.projectsAs(t); projected {
+				return shape, errors.Wrapf(ErrJoinSelectColumn, "%q is the term %q of the joined select over %q under another alias; pass the very term the select projects", a.alias(t), alias, jt.table)
+			}
+		}
+	}
 
 	// The projection takes one of two shapes, and which one decides what the
 	// keys mean. An aggregate or an explicit group key makes it grouped: every

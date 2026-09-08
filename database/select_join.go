@@ -25,7 +25,7 @@ import (
 var (
 	ErrJoinNotUnique        = errors.New("join must pin the joined model's primary key or one of its unique indexes, or every group key of the joined select, with equalities, or a row could match several joined rows")
 	ErrJoinNoCorrelation    = errors.New("join predicates tie the joined model to no table of the query")
-	ErrJoinDuplicateTable   = errors.New("one table backs at most one source of a query: a model is joined once, the queried model does not join itself, and a joined select reads a table no other source reads")
+	ErrJoinDuplicateTable   = errors.New("one table backs at most one source of a query: a model is joined once, the queried model does not join itself, and a joined select reads, itself or through joins of its own, a table no other source reads")
 	ErrJoinMeasure          = errors.New("a measure over a joined column must be MIN, MAX or COUNT DISTINCT, the other aggregates would count the joined row once per row of the group")
 	ErrJoinSource           = errors.New("join source is not one the framework defines")
 	ErrJoinSelectNotGrouped = errors.New("a joined select must be grouped, its group keys are what it is joined on")
@@ -33,7 +33,7 @@ var (
 	ErrJoinSelectColumn     = errors.New("a joined select is read through its own terms, its model's columns are not columns of the derived table")
 	ErrJoinSelectNotKeyed   = errors.New("a grouped select projects a joined select's term only when it groups by the columns the select is joined on")
 	ErrJoinSelectBucketKey  = errors.New("a select grouped by a time bucket cannot be joined, the bucket is a label of the column and no column of the query equals it")
-	ErrJoinSelectKey        = errors.New("a joined select is tied by its own model's group keys, each column once: a key of a table it joins cannot be named from outside")
+	ErrJoinSelectKey        = errors.New("a joined select is tied by its own model's group keys, each column once, so a key of a table it joins, or a column grouped twice, has no spelling from outside")
 )
 
 // joinedTable is one source joined to the select, resolved from its source
@@ -64,8 +64,8 @@ type joinedTable struct {
 
 // derivedInfo is what a query joining a select reads about it: its model's
 // table, whether it groups and by which keys, the aliases it projects, the
-// ones that can come back NULL, and its model's columns for classifying the
-// keys.
+// ones that can come back NULL, its model's columns for classifying the
+// keys, and every table it reads, its own and through joins of its own.
 type derivedInfo struct {
 	table    string
 	grouped  bool
@@ -73,6 +73,7 @@ type derivedInfo struct {
 	columns  map[string]modelschema.Column
 	aliases  map[string]struct{}
 	nullable map[string]string
+	reads    map[string]struct{}
 }
 
 // resolveJoins turns the join sources into joined tables, in order, and
@@ -87,6 +88,9 @@ func (a *selector[M, R]) resolveJoins(shape *projectionShape) error {
 	}
 	shape.tables = map[string]tableInfo{shape.main: shape.mainInfo}
 	shape.joined = make(map[string]*joinedTable, len(a.joins))
+	// nested maps a table a joined select reads through a join of its own
+	// to that select's table.
+	nested := make(map[string]string)
 	for i, source := range a.joins {
 		var (
 			jt   *joinedTable
@@ -118,6 +122,29 @@ func (a *selector[M, R]) resolveJoins(shape *projectionShape) error {
 		}
 		if _, dup := shape.joined[jt.table]; dup {
 			return errors.Wrapf(ErrJoinDuplicateTable, "%s %q, which another source reads", source, jt.table)
+		}
+		if via, dup := nested[jt.table]; dup {
+			return errors.Wrapf(ErrJoinDuplicateTable, "%s %q, which the joined select over %q reads through a join of its own", source, jt.table, via)
+		}
+		// The tables a joined select reads through joins of its own count as
+		// well: a term of such a table read through the select is spelled
+		// like the query's own, and the two could not be told apart.
+		if jt.derived != nil {
+			for table := range jt.derived.reads {
+				if table == jt.table {
+					continue
+				}
+				if table == shape.main {
+					return errors.Wrapf(ErrJoinDuplicateTable, "joined select over %q reads %q, the queried table, through a join of its own", jt.table, table)
+				}
+				if _, dup := shape.joined[table]; dup {
+					return errors.Wrapf(ErrJoinDuplicateTable, "joined select over %q reads %q, which another source reads, through a join of its own", jt.table, table)
+				}
+				if via, dup := nested[table]; dup {
+					return errors.Wrapf(ErrJoinDuplicateTable, "joined select over %q reads %q, which the joined select over %q reads as well, through joins of their own", jt.table, table, via)
+				}
+				nested[table] = jt.table
+			}
 		}
 		pinned, tied := pinnedColumns(jt, shape.tables)
 		if !tied {
@@ -218,6 +245,7 @@ func (a *selector[M, R]) resolveSelectJoin(sj types.SelectJoin, alias string) (*
 		jsonColumns: make(map[string]struct{}),
 		qualify:     alias,
 		rename:      make(map[string]string, len(info.keys)),
+		aliases:     sortedColumns(info.aliases),
 	}
 	for _, key := range info.keys {
 		keyColumns = append(keyColumns, key.Column)
@@ -460,7 +488,7 @@ func (a *selector[M, R]) joinClauses(tx *gorm.DB, shape projectionShape) (*gorm.
 			if err != nil {
 				return nil, errors.Wrapf(err, "joined select %q", jt.table)
 			}
-			tx = tx.Joins(kind+" (?) AS "+jt.alias+" ON ?", sub, expr)
+			tx = tx.Joins(kind+" (?) AS "+a.db.quoteIdent(jt.alias)+" ON ?", sub, expr)
 		} else {
 			sql := kind + " " + a.db.quoteIdent(jt.table) + " ON ?"
 			vars := []any{expr}
@@ -494,6 +522,7 @@ func (a *selector[M, R]) joinScope(jt *joinedTable, before map[string]tableInfo)
 		jsonColumns: jt.info.jsonColumns,
 		tables:      before,
 		rename:      jt.info.rename,
+		derived:     jt.sub != nil,
 	}
 }
 
@@ -578,7 +607,7 @@ func (a *selector[M, R]) groupDerivedTerms(shape *projectionShape) error {
 		for table, columns := range jt.joinColumns {
 			for column := range columns {
 				if !a.groupsBy(table, column, *shape) {
-					return errors.Wrapf(ErrJoinSelectNotKeyed, "%q reads %q, which is joined on %q of %q", a.alias(t), jt.table, column, table)
+					return errors.Wrapf(ErrJoinSelectNotKeyed, "%q reads %q, which is joined on %q of %q, and the projection does not group by it; a column of another joined select is grouped by through that select's key term", a.alias(t), jt.table, column, table)
 				}
 			}
 		}
@@ -614,14 +643,17 @@ func (a *selector[M, R]) derivedExpr(jt *joinedTable, t types.Term) string {
 
 // whereScope is the scope the select's own predicates render in: the queried
 // model's, and when the select joins, widened to the joined tables with every
-// column qualified, because a name may exist on both sides.
+// column qualified, because a name may exist on both sides. The model's
+// columns are listed in either case: a select's predicates are written by
+// service code, so a column the model does not have is a mistake the build
+// reports rather than the database.
 func (a *selector[M, R]) whereScope(shape projectionShape) filterScope {
 	scope := a.db.outerScope()
+	scope.columns = shape.mainInfo.columns
 	if len(shape.joins) == 0 {
 		return scope
 	}
 	scope.qualify = shape.main
-	scope.columns = shape.mainInfo.columns
 	scope.tables = shape.tables
 	return scope
 }

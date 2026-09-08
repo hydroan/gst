@@ -25,7 +25,7 @@ var (
 	ErrWindowOnKey           = errors.New("a group key, time bucket or literal cannot be windowed, only a function can")
 	ErrWindowCountDistinct   = errors.New("COUNT DISTINCT cannot be windowed on any supported dialect")
 	ErrWindowOverGroups      = errors.New("AVG, LAG and LEAD cannot be windowed over a grouped projection, only SUM, COUNT, MIN, MAX and the ranking functions can")
-	ErrWindowTermNotSelected = errors.New("window references a key or term the projection does not declare")
+	ErrWindowTermNotSelected = errors.New("window references a key or term the projection does not declare: a partition key is a group key or a joined select's term, and a window orders by a key or a projected measure")
 	ErrWindowNested          = errors.New("a window cannot be ordered by another window function")
 	ErrQualifyTermNotWindow  = errors.New("qualify references a term that is not a window function of the projection")
 	ErrHavingWindowTerm      = errors.New("having cannot read a window function, which is computed after HAVING, filter it with Qualify")
@@ -250,23 +250,32 @@ func (a *selector[M, R]) validateWindow(t types.Term, shape projectionShape) err
 	for _, key := range t.Window.Partition {
 		// A key carries no conditions and a measure no bucket, here as in
 		// the projection: a condition the renderer never reads would
-		// otherwise vanish without a word.
+		// otherwise vanish without a word. The constants are checked the
+		// same way, so a key from outside the closed sets cannot fall
+		// through to a rendering it never named.
 		if err := a.validateGrouping(key); err != nil {
 			return errors.Wrapf(err, "%q partitions by", a.alias(t))
 		}
-		if shape.grouped {
-			// A group key of the projection, or a joined select's term the
-			// projection groups by, passed as it is; a measure is neither.
-			if _, ok := a.groupKey(key, shape); ok {
-				continue
-			}
-			if key.IsMeasure() {
-				return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by a measure %q", a.alias(t), a.alias(key))
-			}
-			return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by %q, which is not a group key", a.alias(t), a.alias(key))
+		if !key.Fn.Valid() {
+			return errors.Wrapf(ErrUnknownTermFn, "%q partitions by %q", a.alias(t), key.Fn)
+		}
+		if !key.Bucket.Valid() {
+			return errors.Wrapf(ErrUnknownTimeBucket, "%q partitions by %q", a.alias(t), key.Bucket)
+		}
+		// A joined select's term the projection reads is a column of the
+		// derived table, a key in either shape of the projection, passed as
+		// it is; a measure of the projection's own is a key in neither.
+		if _, derived := a.derivedOf(key, shape); derived {
+			continue
 		}
 		if key.IsMeasure() {
 			return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by a measure %q", a.alias(t), a.alias(key))
+		}
+		if shape.grouped {
+			if _, ok := a.groupKey(key, shape); ok {
+				continue
+			}
+			return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by %q, which is not a group key; the projection groups by %s", a.alias(t), a.alias(key), a.groupKeyNames(shape))
 		}
 		if err := a.validateRowLevelKey(key, shape); err != nil {
 			return errors.Wrapf(err, "%q partitions by", a.alias(t))
@@ -280,7 +289,7 @@ func (a *selector[M, R]) validateWindow(t types.Term, shape projectionShape) err
 			}
 			if shape.grouped {
 				if _, ok := a.selectedColumn(o.Table, o.Column, shape.main); !ok {
-					return errors.Wrapf(ErrWindowTermNotSelected, "%q orders by column %q, which is not a group key", a.alias(t), o.Column)
+					return errors.Wrapf(ErrWindowTermNotSelected, "%q orders by column %q, which is not a group key; the projection groups by %s", a.alias(t), o.Column, a.groupKeyNames(shape))
 				}
 				continue
 			}
@@ -305,7 +314,8 @@ func (a *selector[M, R]) validateWindow(t types.Term, shape projectionShape) err
 }
 
 // groupKey finds the projection's group key a window key names: the same
-// column, bucket and table, an empty table naming the queried model's. The
+// column, bucket and table, an empty table naming the queried model's, and
+// no function, because a measure over a key's column is not the key. The
 // alias and the plain flag are the caller's spelling and do not decide. The
 // table does: two tables of the query may share a column name, and a key of
 // the wrong one would partition by a column the caller never named. A
@@ -319,11 +329,21 @@ func (a *selector[M, R]) groupKey(key types.Term, shape projectionShape) (types.
 			}
 			continue
 		}
-		if k.Column == key.Column && k.Bucket == key.Bucket && shape.tableOf(k) == shape.tableOf(key) {
+		if key.Fn == types.FnNone && k.Column == key.Column && k.Bucket == key.Bucket && shape.tableOf(k) == shape.tableOf(key) {
 			return k, true
 		}
 	}
 	return types.Term{}, false
+}
+
+// groupKeyNames spells the projection's group keys for an error message, so
+// the caller sees what a window may partition or order by.
+func (a *selector[M, R]) groupKeyNames(shape projectionShape) string {
+	names := make([]string, 0, len(shape.keys))
+	for _, k := range shape.keys {
+		names = append(names, a.alias(k))
+	}
+	return strings.Join(names, ", ")
 }
 
 // validateRowLevelKey checks a partition key of a row-level window against

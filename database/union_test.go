@@ -77,6 +77,23 @@ func TestUnionAllDryRunAppliesToTheNextTerminalOnly(t *testing.T) {
 	total := 0
 	require.NoError(t, feed.Count(&total))
 	require.Equal(t, 9, total)
+
+	// A member's own dry run is the member's: the union's terminal runs the
+	// member for real and consumes the option, so the member read again on
+	// its own executes as well.
+	type categoryCount struct {
+		Category string
+		N        int64
+	}
+	perCategory := database.Select[*TestAggregateRecord, categoryCount](ctx, TestAggregateRecordCols.Category.Group(), types.Count().As("n"))
+	perLabel := database.Select[*TestRecordTag, categoryCount](ctx, TestRecordTagCols.Label.Group().As("category"), types.Count().As("n"))
+	statements = statements[:0]
+	counts := make([]categoryCount, 0)
+	require.NoError(t, database.UnionAll[categoryCount](ctx, perCategory.WithDryRun(&statements), perLabel).Scan(&counts))
+	require.Len(t, counts, 5)
+	require.Empty(t, statements)
+	require.NoError(t, perCategory.Scan(&counts))
+	require.Len(t, counts, 3)
 }
 
 func TestUnionAllStacksBranches(t *testing.T) {
@@ -112,8 +129,8 @@ func TestUnionAllStacksBranches(t *testing.T) {
 			WithDryRun(&statements).Scan(&rows))
 		require.Len(t, statements, 1)
 		require.Equal(t,
-			"SELECT * FROM (SELECT * FROM ("+feedMember("record", "test_aggregate_records")+") AS b0"+
-				" UNION ALL SELECT * FROM ("+feedMember("tag", "test_record_tags")+") AS b1) AS u"+
+			"SELECT * FROM (SELECT * FROM ("+feedMember("record", "test_aggregate_records")+") AS "+quoteIdent("b0")+
+				" UNION ALL SELECT * FROM ("+feedMember("tag", "test_record_tags")+") AS "+quoteIdent("b1")+") AS "+quoteIdent("u")+
 				" ORDER BY "+quoteIdent("category")+" ASC,"+quoteIdent("id")+" ASC",
 			statements[0].Query,
 			"every member is a derived table spelling its SELECT list in feedRow's order, and the union is one too")
@@ -160,9 +177,9 @@ func TestUnionAllPushesOrderAndLimitIntoBranches(t *testing.T) {
 		require.Contains(t, sql, " IS NULL "+ordered)
 		require.Equal(t, 1, strings.Count(sql, "OFFSET "), "the offset applies to the stacked rows alone")
 		rendered := statements[0].RenderedSQL
-		require.Equal(t, 2, strings.Count(rendered, " LIMIT 5) AS b"),
+		require.Equal(t, 2, strings.Count(rendered, " LIMIT 5) AS "+quoteIdent("b")[:1]),
 			"each member reads offset plus limit rows")
-		require.Contains(t, rendered, ") AS u "+ordered+"2 OFFSET 3", "the union pages the stacked rows")
+		require.Contains(t, rendered, ") AS "+quoteIdent("u")+" "+ordered+"2 OFFSET 3", "the union pages the stacked rows")
 	})
 
 	t.Run("PushesTheCapAloneWithoutAnOrder", func(t *testing.T) {
@@ -226,7 +243,7 @@ func TestUnionAllStacksProjectionShapes(t *testing.T) {
 		require.Len(t, statements, 1)
 		require.Contains(t, statements[0].Query,
 			"COALESCE(SUM("+quoteIdent("amount")+"), 0) AS "+quoteIdent("amount")+" FROM "+quoteIdent("test_aggregate_records")+
-				" WHERE "+quoteIdent("test_aggregate_records")+"."+quoteIdent("deleted_at")+" IS NULL GROUP BY "+quoteIdent("category")+") AS b0",
+				" WHERE "+quoteIdent("test_aggregate_records")+"."+quoteIdent("deleted_at")+" IS NULL GROUP BY "+quoteIdent("category")+") AS "+quoteIdent("b0"),
 			"a grouped member keeps its GROUP BY, and the literal stays out of it")
 	})
 
@@ -269,7 +286,7 @@ func TestUnionAllStacksProjectionShapes(t *testing.T) {
 		qualified := strings.Index(sql, ") AS q WHERE ")
 		pushed := strings.Index(sql, "ORDER BY "+quoteIdent("category")+" ASC,"+quoteIdent("id")+" ASC LIMIT ")
 		require.Less(t, qualified, pushed, "the pushed order and cap sit outside the wrap, on the qualified rows")
-		require.Less(t, pushed, strings.Index(sql, ") AS b0"), "and inside the member")
+		require.Less(t, pushed, strings.Index(sql, ") AS "+quoteIdent("b0")), "and inside the member")
 		require.Equal(t, 3, strings.Count(statements[0].RenderedSQL, " LIMIT 4"), "both members and the union are capped")
 	})
 }
@@ -310,7 +327,7 @@ func TestUnionAllCount(t *testing.T) {
 				" WHERE " + quoteIdent(table) + "." + quoteIdent("deleted_at") + " IS NULL) AS "
 		}
 		require.Equal(t,
-			"SELECT n FROM (SELECT "+member("test_aggregate_records")+"b0) + "+member("test_record_tags")+"b1) AS n) AS counts",
+			"SELECT "+quoteIdent("n")+" FROM (SELECT "+member("test_aggregate_records")+quoteIdent("b0")+") + "+member("test_record_tags")+quoteIdent("b1")+") AS "+quoteIdent("n")+") AS "+quoteIdent("counts"),
 			statements[0].Query,
 			"the count adds scalar subqueries over what decides each branch's count and materializes no row")
 		require.Empty(t, statements[0].Args, "the union's ordering and paging never reach the count")
@@ -335,7 +352,7 @@ func TestUnionAllCount(t *testing.T) {
 		require.Len(t, statements, 1)
 		require.Contains(t, statements[0].Query,
 			"(SELECT COUNT(*) FROM (SELECT "+quoteIdent("category")+" AS "+quoteIdent("category")+" FROM "+quoteIdent("test_aggregate_records")+
-				" WHERE "+quoteIdent("test_aggregate_records")+"."+quoteIdent("deleted_at")+" IS NULL GROUP BY "+quoteIdent("category")+") AS b0)",
+				" WHERE "+quoteIdent("test_aggregate_records")+"."+quoteIdent("deleted_at")+" IS NULL GROUP BY "+quoteIdent("category")+") AS "+quoteIdent("b0")+")",
 			"a grouped member counts its groups through its keys alone")
 	})
 }

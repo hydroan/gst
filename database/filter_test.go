@@ -738,6 +738,17 @@ func TestFilterOfAnotherTableFailsTheChain(t *testing.T) {
 			types.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestPaymentCols.Account.Eq("acme")),
 		}}).
 		List(&records), database.ErrColumnTable)
+	// A subquery over the chain's own table is a subquery still: the
+	// message names it, not the model around it.
+	self := types.FilterExists[*TestAggregateRecord](
+		types.NewColumn[*TestAggregateRecord, string]("category").EqCol(TestAggregateRecordCols.Category),
+		TestRecordTagCols.Label.Eq("vip"),
+	)
+	err := database.Database[*TestAggregateRecord](context.Background()).
+		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{self}}).
+		List(&records)
+	require.ErrorIs(t, err, database.ErrColumnTable)
+	require.ErrorContains(t, err, `the subquery over "test_aggregate_records"`)
 }
 
 // The semi-join tests below cover FilterExists and FilterNotExists over the
@@ -1241,6 +1252,16 @@ func TestFilterExistsMultipleCorrelations(t *testing.T) {
 			ScanOne(&total{})
 		require.ErrorIs(t, err, database.ErrColumnTable)
 		require.ErrorIs(t, err, database.ErrUnusableFilter)
+
+		// Both sides on the subquery's own table tie it to nothing enclosing;
+		// the message says which table was expected.
+		err = database.Database[*TestAggregateRecord](ctx).
+			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{
+				types.FilterExists[*TestRecordTag](byRecord, TestRecordTagCols.Label.EqCol(TestRecordTagCols.Category)),
+			}}).
+			List(&records)
+		require.ErrorIs(t, err, database.ErrColumnTable)
+		require.ErrorContains(t, err, `is not the table enclosing the subquery over "test_record_tags"`)
 	})
 
 	t.Run("FailsClosedOutsideSubquery", func(t *testing.T) {

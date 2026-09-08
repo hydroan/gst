@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/cockroachdb/errors"
 
@@ -78,6 +79,10 @@ type filterScope struct {
 	// rename maps the scope's own columns to the names they are read under,
 	// for the ON of a joined select; nil everywhere else.
 	rename map[string]string
+	// derived marks the ON scope of a joined select, whose rows are the
+	// groups the select materialized: a subquery has no row of the select's
+	// model to correlate with there.
+	derived bool
 }
 
 // tableInfo is what the renderer knows about one table's columns: which
@@ -95,6 +100,9 @@ type tableInfo struct {
 	// rename maps a column name to the name it is read under, for a derived
 	// table whose key columns project under aliases; nil for a model table.
 	rename map[string]string
+	// aliases lists what a derived table projects, in order, for the message
+	// a column it does not have gets; nil for a model table.
+	aliases []string
 }
 
 // column returns the name a column is read under in this table.
@@ -159,12 +167,8 @@ func (db *database[M]) applyFilters(filters []types.Filter) {
 	// client filter that cannot be applied narrows the query instead of
 	// failing the request. Server-built callers such as the select builder
 	// read the reason and fail fast instead.
-	if f, table, own, foreign := db.foreignTableFilter(filters, db.outerTableName(), ""); foreign {
-		reader := fmt.Sprintf("model %s reading %q", reflect.TypeOf(*new(M)).Elem().Name(), db.outerTableName())
-		if own != db.outerTableName() {
-			reader = fmt.Sprintf("the subquery over %q", own)
-		}
-		db.err = errors.Wrapf(ErrColumnTable, "filter %q on column %q names table %q, which %s does not read", f.Op, f.Column, table, reader)
+	if f, reason, foreign := db.foreignTableFilter(filters, db.outerTableName(), ""); foreign {
+		db.err = errors.Wrapf(ErrColumnTable, "filter %q on column %q %s", f.Op, f.Column, reason)
 		return
 	}
 	if expr, _ := db.renderFilters(filters, false, db.outerScope()); expr != nil {
@@ -173,40 +177,46 @@ func (db *database[M]) applyFilters(filters []types.Filter) {
 }
 
 // foreignTableFilter finds a filter that names a column of a table its scope
-// does not read, with the table it names and the table its scope reads:
-// looking through the OR and AND groups and into the subqueries, where a
-// filter names the related model's table, own, and the outer side of an
-// EqCol the table enclosing the subquery. At the top level there is no
-// enclosing table, and an EqCol there is the renderer's to refuse.
-func (db *database[M]) foreignTableFilter(filters []types.Filter, own, enclosing string) (found types.Filter, table, scope string, foreign bool) {
+// does not read, with the reason it is refused for: looking through the OR
+// and AND groups and into the subqueries, where a filter names the related
+// model's table, own, and the outer side of an EqCol the table enclosing the
+// subquery. At the top level there is no enclosing table, and an EqCol there
+// is the renderer's to refuse. The reason names the reader that refused the
+// column: the chain's model at the top level, the subquery below it, which
+// may well read the same table.
+func (db *database[M]) foreignTableFilter(filters []types.Filter, own, enclosing string) (found types.Filter, reason string, foreign bool) {
+	reader := fmt.Sprintf("model %s reading %q", reflect.TypeOf(*new(M)).Elem().Name(), own)
+	if len(enclosing) > 0 {
+		reader = fmt.Sprintf("the subquery over %q", own)
+	}
 	for _, f := range filters {
 		switch f.Op {
 		case types.FilterOpOr, types.FilterOpAnd:
 			if children, ok := f.Value.([]types.Filter); ok {
-				if found, table, scope, foreign = db.foreignTableFilter(children, own, enclosing); foreign {
-					return found, table, scope, true
+				if found, reason, foreign = db.foreignTableFilter(children, own, enclosing); foreign {
+					return found, reason, true
 				}
 			}
 		case types.FilterOpExists:
 			if sq, ok := f.Value.(types.Subquery); ok && sq.Model != nil {
-				if found, table, scope, foreign = db.foreignTableFilter(sq.Filters, sq.Model.TableName(), own); foreign {
-					return found, table, scope, true
+				if found, reason, foreign = db.foreignTableFilter(sq.Filters, sq.Model.TableName(), own); foreign {
+					return found, reason, true
 				}
 			}
 		case types.FilterOpEqCol:
 			if len(f.Table) > 0 && f.Table != own {
-				return f, f.Table, own, true
+				return f, fmt.Sprintf("names table %q, which %s does not read", f.Table, reader), true
 			}
 			if _, parentTable, ok := eqColParent(f.Value); ok && len(enclosing) > 0 && len(parentTable) > 0 && parentTable != enclosing {
-				return f, parentTable, own, true
+				return f, fmt.Sprintf("ties to a column of %q, which is not the table enclosing %s", parentTable, reader), true
 			}
 		default:
 			if len(f.Table) > 0 && f.Table != own {
-				return f, f.Table, own, true
+				return f, fmt.Sprintf("names table %q, which %s does not read", f.Table, reader), true
 			}
 		}
 	}
-	return types.Filter{}, "", "", false
+	return types.Filter{}, "", false
 }
 
 // renderFilters turns a filter list into one composable predicate rather than
@@ -375,6 +385,13 @@ func (db *database[M]) placeFilter(f types.Filter, scope filterScope) (string, t
 			return "", tableInfo{}, errors.Join(err, ErrColumnTable)
 		}
 		if _, ok := info.columns[f.Column]; !ok {
+			if info.rename != nil {
+				// A derived table has the columns the joined select projects,
+				// and a filter names one of its keys; a condition on the
+				// select's rows narrows the select itself.
+				_, err := db.failClosedFilter(f, fmt.Sprintf("names %q, which is not a key of the joined select over %q; the select projects %s, and a condition on its rows belongs to its own Where or Having", f.Column, f.Table, strings.Join(info.aliases, ", ")))
+				return "", tableInfo{}, errors.Join(err, ErrJoinSelectColumn)
+			}
 			_, err := db.failClosedFilter(f, "names a column its table does not have")
 			return "", tableInfo{}, err
 		}
@@ -382,7 +399,7 @@ func (db *database[M]) placeFilter(f types.Filter, scope filterScope) (string, t
 	}
 	if scope.columns != nil {
 		if _, ok := scope.columns[f.Column]; !ok {
-			_, err := db.failClosedFilter(f, "names a column the related model does not have")
+			_, err := db.failClosedFilter(f, fmt.Sprintf("names a column %q does not have", scope.table))
 			return "", tableInfo{}, err
 		}
 	}
@@ -464,7 +481,10 @@ func (db *database[M]) joinEqCol(f types.Filter, column, parent, parentTable str
 	default:
 		other, ok := scope.tables[parentTable]
 		if !ok {
-			return db.failClosedFilter(f, "ties to a table the query does not read")
+			// Joined with the column-table sentinel as well, the way a
+			// filter naming such a table is refused.
+			expr, err := db.failClosedFilter(f, fmt.Sprintf("ties to a column of table %q, which the query does not read", parentTable))
+			return expr, errors.Join(err, ErrColumnTable)
 		}
 		info = other
 	}
@@ -658,6 +678,12 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 	}
 	if !hasCorrelation(sq.Filters) {
 		return db.failClosedFilter(f, "has no correlation")
+	}
+	if scope.derived {
+		// The ON of a joined select ties the query to the select's groups,
+		// which are no rows of the select's model a subquery could correlate
+		// with; the select's own Where narrows the rows it groups.
+		return db.failClosedFilter(f, "correlates inside the ON of a joined select, whose rows are its groups; narrow the select with its own Where instead")
 	}
 	if len(scope.parent) == 0 {
 		return db.failClosedFilter(f, "cannot resolve the table to correlate against")

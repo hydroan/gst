@@ -137,12 +137,15 @@ var (
 
 	// ErrColumnTable is returned when an explicit column reference — a
 	// WithSelect column, a WithOrder or WithCursor order, an UpdateByID
-	// assignment, a WithQuery filter or a Select term — was generated for
-	// another model's table. The other model often has a column of the same
-	// name, so the name alone would pass and the statement would read or
-	// write the wrong table as valid SQL; the table the reference carries is
-	// what tells the mistake apart from a typo. A plain name carries no table
-	// and always means the chain's own model.
+	// assignment, a WithQuery filter, a Select term or a Select's Where
+	// filter, which carries ErrUnusableFilter as well — was generated for
+	// another model's table, and when the outer side of an EqCol inside an
+	// EXISTS subquery names a table other than the one enclosing the
+	// subquery. The other model often has a column of the same name, so the
+	// name alone would pass and the statement would read or write the wrong
+	// table as valid SQL; the table the reference carries is what tells the
+	// mistake apart from a typo. A plain name carries no table and always
+	// means the chain's own model.
 	ErrColumnTable = errors.New("column reference belongs to another table")
 )
 

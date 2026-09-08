@@ -75,8 +75,11 @@ type Selector[M Model, R any] interface {
 	// tree as WithQuery.
 	Where(filters ...Filter) Selector[M, R]
 	// Join adds the sources the select joins: models joined on a unique key,
-	// built by Join and LeftJoin. The joined model's columns are referenced
-	// through its own Cols everywhere in the select.
+	// built by Join and LeftJoin, and grouped selects joined on their group
+	// keys as derived tables, built by JoinSelect and LeftJoinSelect; see
+	// JoinSource. A joined model's columns are referenced through its own
+	// Cols everywhere in the select, a joined select's terms by passing the
+	// very terms it projects.
 	Join(sources ...JoinSource) Selector[M, R]
 	// Having restricts the produced groups by their measures.
 	Having(conditions ...TermCondition) Selector[M, R]
@@ -96,9 +99,10 @@ type Selector[M Model, R any] interface {
 	// group of a grouped projection, a row of a row-level one.
 	Scan(dest *[]R) error
 	// ScanOne runs a projection of measures alone, which is one row by
-	// definition, and fills dest with it. A group key, a plain column or a
-	// window function makes the read grouped or row-level and fails it, as do
-	// Having, Limit and Offset, which could only turn the one row into none.
+	// definition, and fills dest with it. A group key, a plain column, a
+	// window function or a joined select's term makes the read grouped or
+	// row-level and fails it, as do Having, Limit and Offset, which could
+	// only turn the one row into none.
 	ScanOne(dest *R) error
 	// Count reports how many rows the query produces after Having and
 	// Qualify — the groups of a grouped projection, the rows of a row-level
@@ -109,6 +113,10 @@ type Selector[M Model, R any] interface {
 	// WithDryRun builds the SQL without database I/O. An optional collector
 	// receives the generated Query, Args, and RenderedSQL of the next
 	// terminal operation instead of executing it; that terminal consumes the
-	// option, so the builder read again executes.
+	// option, so the builder read again executes. The terminal writes
+	// nothing: Scan leaves dest as it was and Count leaves count untouched.
+	// A builder used as a union member or a joined select is run by the
+	// enclosing query's terminal, for real, which consumes the option the
+	// same way.
 	WithDryRun(collector ...*[]SQLStatement) Selector[M, R]
 }

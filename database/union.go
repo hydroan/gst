@@ -40,6 +40,10 @@ type nestedSelect interface {
 	chainFor(ctx context.Context, base *gorm.DB) operationChain
 	// selects reports whether the select projects exactly this term.
 	selects(t types.Term) bool
+	// projectsAs reports whether the select projects this term under another
+	// alias, and which: the mistake a query reading the select makes when
+	// it re-aliases the term instead of passing it as it is.
+	projectsAs(t types.Term) (string, bool)
 	// buildBranch renders the select as a member: read, ordered and capped
 	// as pushed down, or reduced to what decides its row count.
 	buildBranch(mode buildMode, orders []aliasOrder, limit int) (*gorm.DB, error)
@@ -304,10 +308,10 @@ func (u *union[R]) build(mode buildMode) (*gorm.DB, error) {
 		)
 		if mode == buildCountInner {
 			tx, err = b.buildBranch(buildBranchCount, nil, 0)
-			members = append(members, "(SELECT COUNT(*) FROM (?) AS "+alias+")")
+			members = append(members, "(SELECT COUNT(*) FROM (?) AS "+u.chain.quoteIdent(alias)+")")
 		} else {
 			tx, err = b.buildBranch(buildBranchRead, pushed, limit)
-			members = append(members, "SELECT * FROM (?) AS "+alias)
+			members = append(members, "SELECT * FROM (?) AS "+u.chain.quoteIdent(alias))
 		}
 		if err != nil {
 			return nil, errors.Wrapf(err, "union branch %d", i)
@@ -322,9 +326,10 @@ func (u *union[R]) build(mode buildMode) (*gorm.DB, error) {
 		// The counts are scalar subqueries added up, so no stacked row is
 		// ever materialized, and the addition of integer counts stays an
 		// integer on every dialect, which a SUM over them would not.
-		return session.Table("(SELECT "+strings.Join(members, " + ")+" AS n) AS counts", vars...).Select("n"), nil
+		n, counts := u.chain.quoteIdent("n"), u.chain.quoteIdent("counts")
+		return session.Table("(SELECT "+strings.Join(members, " + ")+" AS "+n+") AS "+counts, vars...).Select(n), nil
 	}
-	tx := session.Table("("+strings.Join(members, " UNION ALL ")+") AS u", vars...)
+	tx := session.Table("("+strings.Join(members, " UNION ALL ")+") AS "+u.chain.quoteIdent("u"), vars...)
 	for _, o := range orders {
 		tx = tx.Order(u.chain.quoteIdent(o.alias) + " " + string(o.direction))
 	}
@@ -455,11 +460,27 @@ func (a *selector[M, R]) chainFor(ctx context.Context, base *gorm.DB) operationC
 
 func (a *selector[M, R]) selects(t types.Term) bool { return a.isSelected(t) }
 
+func (a *selector[M, R]) projectsAs(t types.Term) (string, bool) {
+	t.Alias = ""
+	for _, selected := range a.terms {
+		alias := a.alias(selected)
+		selected.Alias = ""
+		if reflect.DeepEqual(selected, t) {
+			return alias, true
+		}
+	}
+	return "", false
+}
+
 // buildBranch renders the selector as a member of a union, ordered and
 // capped as the union pushed down. The chain is prepared here because no
-// terminal of the selector runs: the union's terminal does. The pushdown is
-// set on a copy so the caller's selector stays the specification it wrote.
+// terminal of the selector runs: the union's terminal does, and runs for
+// real, so a dry run set on the member is consumed here the way its own
+// terminal would, and the member read again on its own executes. The
+// pushdown is set on a copy so the caller's selector stays the
+// specification it wrote.
 func (a *selector[M, R]) buildBranch(mode buildMode, orders []aliasOrder, limit int) (*gorm.DB, error) {
+	a.consumeDryRun()
 	if err := a.db.prepare(); err != nil {
 		return nil, err
 	}
@@ -513,9 +534,21 @@ func (a *selector[M, R]) describe() (derivedInfo, error) {
 		columns:  shape.columns,
 		aliases:  make(map[string]struct{}, len(a.terms)),
 		nullable: a.nullableAliases(shape),
+		reads:    map[string]struct{}{shape.main: {}},
 	}
 	for _, t := range a.terms {
 		info.aliases[a.alias(t)] = struct{}{}
+	}
+	// The tables the select reads through joins of its own are read by the
+	// query joining it as well, which tells its sources apart by table.
+	for _, jt := range shape.joins {
+		if jt.derived == nil {
+			info.reads[jt.table] = struct{}{}
+			continue
+		}
+		for table := range jt.derived.reads {
+			info.reads[table] = struct{}{}
+		}
 	}
 	return info, nil
 }

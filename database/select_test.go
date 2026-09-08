@@ -65,6 +65,32 @@ func TestSelectScansPointerRows(t *testing.T) {
 	require.Equal(t, time.Date(2024, 1, 11, 8, 0, 0, 0, time.UTC), rows[0].Last.UTC())
 }
 
+func TestSelectScansEmbeddedRowFields(t *testing.T) {
+	defer cleanupAggregateData()
+	setupAggregateData(t)
+
+	// A time field inside an embedded struct is read on every dialect, the
+	// stand-in sqlite scans through following the embedding.
+	type Window struct {
+		First time.Time
+		Last  *time.Time
+	}
+	type span struct {
+		Category string
+		Window
+	}
+	rows := make([]span, 0)
+	require.NoError(t, database.Select[*TestAggregateRecord, span](context.Background(), TestAggregateRecordCols.Category.Group(),
+		TestAggregateRecordCols.OccurredAt.Min().As("first"), TestAggregateRecordCols.OccurredAt.Max().As("last")).
+		OrderBy(TestAggregateRecordCols.Category.Group().Asc()).
+		Scan(&rows))
+	require.Len(t, rows, 3)
+	require.Equal(t, "alpha", rows[0].Category)
+	require.Equal(t, time.Date(2024, 1, 10, 8, 0, 0, 0, time.UTC), rows[0].First.UTC())
+	require.NotNil(t, rows[0].Last)
+	require.Equal(t, time.Date(2024, 1, 11, 8, 0, 0, 0, time.UTC), rows[0].Last.UTC())
+}
+
 func TestSelectWhereReusesFilters(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
@@ -220,6 +246,17 @@ func TestSelectBuildErrors(t *testing.T) {
 		require.ErrorIs(t, err, database.ErrColumnTable)
 		require.ErrorIs(t, err, database.ErrUnusableFilter)
 		require.ErrorContains(t, err, "test_record_tags")
+	})
+
+	t.Run("WhereOfAnUnknownColumn", func(t *testing.T) {
+		// A select's predicates are service code: a column the model does
+		// not have fails the build rather than the statement.
+		rows := make([]row, 0)
+		err := database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum().As("total")).
+			Where(types.FilterEq("nosuch", "x")).
+			Scan(&rows)
+		require.ErrorIs(t, err, database.ErrUnusableFilter)
+		require.ErrorContains(t, err, `"test_aggregate_records" does not have`)
 	})
 
 	t.Run("ConditionalMeasureOfAnotherTable", func(t *testing.T) {

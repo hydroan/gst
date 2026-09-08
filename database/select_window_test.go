@@ -469,10 +469,49 @@ func TestSelectWindowBuildErrors(t *testing.T) {
 			Rn       int64
 		}
 		rows := make([]grouped, 0)
-		require.ErrorIs(t, database.Select[*TestAggregateRecord, grouped](ctx,
+		err := database.Select[*TestAggregateRecord, grouped](ctx,
 			TestAggregateRecordCols.Category.Group(),
 			types.Count().Over(types.PartitionBy(TestAggregateRecordCols.Status)).As("rn")).
+			Scan(&rows)
+		require.ErrorIs(t, err, database.ErrWindowTermNotSelected)
+		require.ErrorContains(t, err, "the projection groups by category")
+	})
+
+	t.Run("PartitionByAMeasureOverAKeyColumn", func(t *testing.T) {
+		// A measure over the key's column is not the key: partitioning by it
+		// is refused rather than read as the key with its function and
+		// conditions dropped.
+		type grouped struct {
+			Category string
+			Total    int64
+			Share    int64
+		}
+		rows := make([]grouped, 0)
+		total := TestAggregateRecordCols.Category.Count().As("total")
+		err := database.Select[*TestAggregateRecord, grouped](ctx,
+			TestAggregateRecordCols.Category.Group(), total,
+			TestAggregateRecordCols.Amount.Sum().Over(types.PartitionBy(total)).As("share")).
+			Scan(&rows)
+		require.ErrorIs(t, err, database.ErrWindowTermNotSelected)
+		require.ErrorContains(t, err, "partitions by a measure")
+		conditional := TestAggregateRecordCols.Category.Count().Where(TestAggregateRecordCols.Status.Eq("done")).As("total")
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, grouped](ctx,
+			TestAggregateRecordCols.Category.Group(), conditional,
+			TestAggregateRecordCols.Amount.Sum().Over(types.PartitionBy(conditional)).As("share")).
 			Scan(&rows), database.ErrWindowTermNotSelected)
+	})
+
+	t.Run("PartitionKeyOutsideTheClosedSets", func(t *testing.T) {
+		// A key minted by hand with a bucket or a function the framework does
+		// not define is refused, as the same term is in the projection.
+		week := types.Term{Table: "test_aggregate_records", Column: "occurred_at", Bucket: types.TimeBucket("week")}
+		require.ErrorIs(t, scan(database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID,
+			types.RowNumber().Over(types.PartitionBy(week).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn"))),
+			database.ErrUnknownTimeBucket)
+		median := types.Term{Table: "test_aggregate_records", Column: "amount", Fn: types.TermFn("median")}
+		require.ErrorIs(t, scan(database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID,
+			types.RowNumber().Over(types.PartitionBy(median).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn"))),
+			database.ErrUnknownTermFn)
 	})
 
 	t.Run("AverageCannotBeWindowedOverGroups", func(t *testing.T) {
