@@ -296,6 +296,14 @@ func (t Term) exprTerm() Term { return t }
 
 // TermOf returns the term an expression selects as: a term unchanged, a column
 // reference as the plain projection of that column.
+//
+// It is the one way a renderer outside this package reads an Expr, and it
+// exists for two reasons. The interface is sealed through an unexported
+// method so the set of expressions stays closed, which also puts that method
+// out of reach of the database package. And Column is generic, so a type
+// switch there cannot enumerate its instantiations the way it enumerates the
+// two Ordering types. It is an accessor, not a constructor: removing it would
+// leave the database layer no way to turn a projection into terms.
 func TermOf(expr Expr) Term { return expr.exprTerm() }
 
 func (TermOrder) sealedOrdering() {}
