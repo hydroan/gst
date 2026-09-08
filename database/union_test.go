@@ -12,10 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The union tests stack the six seeded records (see the seed table at the top
-// of select_test.go) with the three seeded tags (see tagSeed): t1 and t2 sit
-// on alpha records, t3 on a beta record. Every expectation below is a literal
-// a reader can check against those two tables by hand.
+// The union tests stack the six seeded records (see aggregateSeed in
+// fixture_test.go) with the three seeded tags (see tagSeed): t1 and t2 sit on
+// alpha records, t3 on a beta record. Every expectation below is a literal a
+// reader can check against those two tables by hand.
 
 // feedRow is the row type the record and tag branches stack into.
 type feedRow struct {

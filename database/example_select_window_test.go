@@ -10,7 +10,7 @@ import (
 )
 
 // The window examples read the same six seeded rows as the aggregate examples
-// (see select_test.go) and are written the way project code is written,
+// (see aggregateSeed in fixture_test.go) and are written the way project code is written,
 // through the generated Cols vars the fixture mirrors. The SQL each one
 // renders is quoted in MySQL spelling; the other dialects differ only in the
 // identifier quotes.

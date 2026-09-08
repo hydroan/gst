@@ -3,249 +3,195 @@ package database_test
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/types"
 )
 
-// The union examples stack the six seeded records (see select_test.go) with
-// the three seeded tags (see tagSeed), and are written the way project code
-// is written, through the generated Cols vars the fixture mirrors. The SQL
-// each one renders is quoted in MySQL spelling; the other dialects differ
-// only in the identifier quotes.
+// The union examples stack the seeded payments and refunds (see paymentSeed
+// and refundSeed in fixture_test.go) into one flow, and are written the way
+// project code is written, through the generated Cols vars the fixture
+// mirrors. The SQL each one renders is quoted in MySQL spelling; the other
+// dialects differ only in the identifier quotes.
 
-// UnionAll stacks the rows of several selects into one result: every record
-// and every tag as one feed, with Literal telling the two apart. Each branch
-// is an ordinary select scanning into the same row type, and the framework
-// renders every branch's SELECT list in that row type's field order, so the
-// columns line up by name rather than by the position they were written in.
+// flow is the row a payment and a refund both scan into. Kind is the tag the
+// branch writes into its rows, payment or refund. At is the payment's paid_at
+// or the refund's settled_at: the two models spell it differently, and As
+// aligns both on the row's own name.
+type flow struct {
+	Kind    string
+	ID      string
+	Account string
+	Amount  int64
+	At      time.Time
+}
+
+// paymentFlows and refundFlows are the two branches every flow example
+// stacks, kept the way a service keeps them: each is an ordinary select
+// scanning into flow, tagged by its kind.
+func paymentFlows(ctx context.Context) types.Selector[*TestPayment, flow] {
+	return database.Select[*TestPayment, flow](ctx,
+		types.Literal("payment").As("kind"),
+		TestPaymentCols.ID, TestPaymentCols.Account, TestPaymentCols.Amount,
+		TestPaymentCols.PaidAt.As("at"))
+}
+
+func refundFlows(ctx context.Context) types.Selector[*TestRefund, flow] {
+	return database.Select[*TestRefund, flow](ctx,
+		types.Literal("refund").As("kind"),
+		TestRefundCols.ID, TestRefundCols.Account, TestRefundCols.Amount,
+		TestRefundCols.SettledAt.As("at"))
+}
+
+// UnionAll stacks the rows of several selects into one result: here every
+// payment and every refund as one flow, newest first. Each branch is an
+// ordinary select scanning into the same row type; Literal tags the rows with
+// the branch they come from, and the framework renders every branch's SELECT
+// list in the row type's field order, so the columns line up by name rather
+// than by the position they were written in. The flow is ordered by the term
+// the payments project their time under, which names the row's at column.
 // Rendered:
 //
 //	SELECT * FROM (
-//	  SELECT * FROM (SELECT 'record' AS `kind`, `id` AS `id`, `category` AS `category`
-//	                 FROM `test_aggregate_records` WHERE `test_aggregate_records`.`deleted_at` IS NULL) AS b0
+//	  SELECT * FROM (SELECT 'payment' AS `kind`, `id` AS `id`, `account` AS `account`, `amount` AS `amount`, `paid_at` AS `at`
+//	                 FROM `test_payments` WHERE `test_payments`.`deleted_at` IS NULL) AS b0
 //	  UNION ALL
-//	  SELECT * FROM (SELECT 'tag' AS `kind`, `id` AS `id`, `category` AS `category`
-//	                 FROM `test_record_tags` WHERE `test_record_tags`.`deleted_at` IS NULL) AS b1
-//	) AS u ORDER BY `category` ASC,`id` ASC
+//	  SELECT * FROM (SELECT 'refund' AS `kind`, `id` AS `id`, `account` AS `account`, `amount` AS `amount`, `settled_at` AS `at`
+//	                 FROM `test_refunds` WHERE `test_refunds`.`deleted_at` IS NULL) AS b1
+//	) AS u ORDER BY `at` DESC,`id` DESC
 func ExampleUnionAll() {
-	seedAggregateExample()
-	defer cleanupAggregateData()
-	seedTagExample()
-	defer cleanupTagData()
+	seedFlowExample()
+	defer cleanupFlowData()
+	ctx := context.Background()
 
-	type feed struct {
-		Kind     string
-		ID       string
-		Category string
-	}
-	records := database.Select[*TestAggregateRecord, feed](context.Background(),
-		types.Literal("record").As("kind"), TestAggregateRecordCols.ID, TestAggregateRecordCols.Category)
-	tags := database.Select[*TestRecordTag, feed](context.Background(),
-		types.Literal("tag").As("kind"), TestRecordTagCols.ID, TestRecordTagCols.Category)
-
-	rows := make([]feed, 0)
-	if err := database.UnionAll[feed](context.Background(), records, tags).
-		OrderBy(TestAggregateRecordCols.Category.Asc(), TestAggregateRecordCols.ID.Asc()).
+	rows := make([]flow, 0)
+	if err := database.UnionAll[flow](ctx, paymentFlows(ctx), refundFlows(ctx)).
+		OrderBy(TestPaymentCols.PaidAt.As("at").Desc(), TestPaymentCols.ID.Desc()).
 		Scan(&rows); err != nil {
 		panic(err)
 	}
 	for _, r := range rows {
-		fmt.Println(r.Category, r.Kind, r.ID)
+		fmt.Println(r.At.Format("2006-01-02 15:04"), r.Kind, r.ID, r.Account, r.Amount)
 	}
 	// Output:
-	// alpha record a1
-	// alpha record a2
-	// alpha record a3
-	// alpha tag t1
-	// alpha tag t2
-	// beta record a4
-	// beta record a5
-	// beta tag t3
-	// gamma record a6
+	// 2024-02-02 09:00 refund r2 bolt 30
+	// 2024-02-01 08:00 payment p4 acme 400
+	// 2024-01-12 10:00 payment p3 bolt 300
+	// 2024-01-11 12:00 refund r1 acme 50
+	// 2024-01-11 09:00 payment p2 acme 200
+	// 2024-01-10 08:00 payment p1 acme 100
 }
 
-// A union pages like a select, and with a Limit the framework pushes the
+// A flow pages like a select, and with a Limit the framework pushes the
 // ordering and offset plus limit into every branch: each branch reads its
-// first six rows by its own index, and the union sorts twelve rows at most
-// to take the page. Rendered, with 6 bound inside each member and 3 and 3
+// first four rows by its own index, and the union sorts eight rows at most to
+// take the page. Rendered, with 4 bound inside each member and 2 and 2
 // outside:
 //
 //	SELECT * FROM (
-//	  SELECT * FROM (SELECT 'record' AS `kind`, ... FROM `test_aggregate_records` WHERE ...
-//	                 ORDER BY `category` ASC,`id` ASC LIMIT ?) AS b0
+//	  SELECT * FROM (SELECT 'payment' AS `kind`, ... FROM `test_payments` WHERE ...
+//	                 ORDER BY `at` DESC,`id` DESC LIMIT ?) AS b0
 //	  UNION ALL
-//	  SELECT * FROM (SELECT 'tag' AS `kind`, ... FROM `test_record_tags` WHERE ...
-//	                 ORDER BY `category` ASC,`id` ASC LIMIT ?) AS b1
-//	) AS u ORDER BY `category` ASC,`id` ASC LIMIT ? OFFSET ?
+//	  SELECT * FROM (SELECT 'refund' AS `kind`, ... FROM `test_refunds` WHERE ...
+//	                 ORDER BY `at` DESC,`id` DESC LIMIT ?) AS b1
+//	) AS u ORDER BY `at` DESC,`id` DESC LIMIT ? OFFSET ?
 func ExampleUnionAll_pagination() {
-	seedAggregateExample()
-	defer cleanupAggregateData()
-	seedTagExample()
-	defer cleanupTagData()
+	seedFlowExample()
+	defer cleanupFlowData()
+	ctx := context.Background()
 
-	type feed struct {
-		Kind     string
-		ID       string
-		Category string
-	}
-	records := database.Select[*TestAggregateRecord, feed](context.Background(),
-		types.Literal("record").As("kind"), TestAggregateRecordCols.ID, TestAggregateRecordCols.Category)
-	tags := database.Select[*TestRecordTag, feed](context.Background(),
-		types.Literal("tag").As("kind"), TestRecordTagCols.ID, TestRecordTagCols.Category)
-
-	page := make([]feed, 0)
-	if err := database.UnionAll[feed](context.Background(), records, tags).
-		OrderBy(TestAggregateRecordCols.Category.Asc(), TestAggregateRecordCols.ID.Asc()).
-		Limit(3).Offset(3).
+	page := make([]flow, 0)
+	if err := database.UnionAll[flow](ctx, paymentFlows(ctx), refundFlows(ctx)).
+		OrderBy(TestPaymentCols.PaidAt.As("at").Desc(), TestPaymentCols.ID.Desc()).
+		Limit(2).Offset(2).
 		Scan(&page); err != nil {
 		panic(err)
 	}
 	for _, r := range page {
-		fmt.Println(r.Category, r.Kind, r.ID)
+		fmt.Println(r.At.Format("2006-01-02 15:04"), r.Kind, r.ID)
 	}
 	// Output:
-	// alpha tag t1
-	// alpha tag t2
-	// beta record a4
+	// 2024-01-12 10:00 payment p3
+	// 2024-01-11 12:00 refund r1
 }
 
 // Count adds up the counts of the branches and materializes no stacked row;
 // like a select's Count it ignores the ordering and paging set on the union,
-// which is what the total of a paginated feed needs. Rendered:
+// which is what the total of a paginated flow needs. A branch keeps its own
+// Where, so one account's payments stack with every refund. Rendered:
 //
-//	SELECT n FROM (SELECT (SELECT COUNT(*) FROM (SELECT 1 AS `row_marker` FROM `test_aggregate_records` WHERE ...) AS b0)
-//	                    + (SELECT COUNT(*) FROM (SELECT 1 AS `row_marker` FROM `test_record_tags` WHERE ...) AS b1) AS n) AS counts
+//	SELECT n FROM (SELECT (SELECT COUNT(*) FROM (SELECT 1 AS `row_marker` FROM `test_payments` WHERE `account` = ? AND ...) AS b0)
+//	                    + (SELECT COUNT(*) FROM (SELECT 1 AS `row_marker` FROM `test_refunds` WHERE ...) AS b1) AS n) AS counts
 func ExampleUnionAll_count() {
-	seedAggregateExample()
-	defer cleanupAggregateData()
-	seedTagExample()
-	defer cleanupTagData()
+	seedFlowExample()
+	defer cleanupFlowData()
+	ctx := context.Background()
 
-	type feed struct {
-		Kind     string
-		ID       string
-		Category string
-	}
-	records := database.Select[*TestAggregateRecord, feed](context.Background(),
-		types.Literal("record").As("kind"), TestAggregateRecordCols.ID, TestAggregateRecordCols.Category).
-		Where(TestAggregateRecordCols.Category.Eq("alpha"))
-	tags := database.Select[*TestRecordTag, feed](context.Background(),
-		types.Literal("tag").As("kind"), TestRecordTagCols.ID, TestRecordTagCols.Category)
-
-	feedOfAlpha := database.UnionAll[feed](context.Background(), records, tags).
-		OrderBy(TestAggregateRecordCols.ID.Asc()).
+	acme := database.UnionAll[flow](ctx,
+		paymentFlows(ctx).Where(TestPaymentCols.Account.Eq("acme")),
+		refundFlows(ctx),
+	).
+		OrderBy(TestPaymentCols.PaidAt.As("at").Desc(), TestPaymentCols.ID.Desc()).
 		Limit(2)
+
 	total := 0
-	if err := feedOfAlpha.Count(&total); err != nil {
+	if err := acme.Count(&total); err != nil {
 		panic(err)
 	}
-	page := make([]feed, 0)
-	if err := feedOfAlpha.Scan(&page); err != nil {
+	page := make([]flow, 0)
+	if err := acme.Scan(&page); err != nil {
 		panic(err)
 	}
 	fmt.Println("total:", total)
 	for _, r := range page {
-		fmt.Println(r.Kind, r.ID)
+		fmt.Println(r.Kind, r.ID, r.Amount)
 	}
 	// Output:
-	// total: 6
-	// record a1
-	// record a2
+	// total: 5
+	// refund r2 30
+	// payment p4 400
 }
 
-// The columns of the branches line up by name, so a column spelled
-// differently in one model is aligned with As: here every tag is listed under
-// the record it marks, its record_id projected as ref next to the records'
-// own id. A term shared between a branch and OrderBy lets the union sort by
-// the literal too. Rendered:
+// A branch takes any shape a select takes: two grouped projections stack every
+// account's paid total beside its refunded total. Literal stays out of GROUP
+// BY, and the flow is ordered by result columns named through the payment
+// model's references. Rendered:
 //
 //	SELECT * FROM (
-//	  SELECT * FROM (SELECT 'record' AS `kind`, `id` AS `ref`, `category` AS `category` FROM `test_aggregate_records` WHERE ...) AS b0
+//	  SELECT * FROM (SELECT 'payment' AS `kind`, `account` AS `account`, COALESCE(SUM(`amount`), 0) AS `amount`
+//	                 FROM `test_payments` WHERE `test_payments`.`deleted_at` IS NULL GROUP BY `account`) AS b0
 //	  UNION ALL
-//	  SELECT * FROM (SELECT 'tag' AS `kind`, `record_id` AS `ref`, `category` AS `category` FROM `test_record_tags` WHERE ...) AS b1
-//	) AS u ORDER BY `category` ASC,`ref` ASC,`kind` ASC
-func ExampleUnionAll_columnAlias() {
-	seedAggregateExample()
-	defer cleanupAggregateData()
-	seedTagExample()
-	defer cleanupTagData()
+//	  SELECT * FROM (SELECT 'refund' AS `kind`, `account` AS `account`, COALESCE(SUM(`amount`), 0) AS `amount`
+//	                 FROM `test_refunds` WHERE `test_refunds`.`deleted_at` IS NULL GROUP BY `account`) AS b1
+//	) AS u ORDER BY `account` ASC,`amount` DESC
+func ExampleUnionAll_groupedBranches() {
+	seedFlowExample()
+	defer cleanupFlowData()
+	ctx := context.Background()
 
-	type feed struct {
-		Kind     string
-		Ref      string
-		Category string
+	type accountTotal struct {
+		Kind    string
+		Account string
+		Amount  int64
 	}
-	kind := types.Literal("record").As("kind")
-	records := database.Select[*TestAggregateRecord, feed](context.Background(),
-		kind, TestAggregateRecordCols.ID.As("ref"), TestAggregateRecordCols.Category)
-	tags := database.Select[*TestRecordTag, feed](context.Background(),
-		types.Literal("tag").As("kind"), TestRecordTagCols.RecordID.As("ref"), TestRecordTagCols.Category)
+	paid := database.Select[*TestPayment, accountTotal](ctx,
+		types.Literal("payment").As("kind"), TestPaymentCols.Account.Group(), TestPaymentCols.Amount.Sum())
+	refunded := database.Select[*TestRefund, accountTotal](ctx,
+		types.Literal("refund").As("kind"), TestRefundCols.Account.Group(), TestRefundCols.Amount.Sum())
 
-	rows := make([]feed, 0)
-	if err := database.UnionAll[feed](context.Background(), records, tags).
-		OrderBy(TestAggregateRecordCols.Category.Asc(), TestAggregateRecordCols.ID.As("ref").Asc(), kind.Asc()).
+	rows := make([]accountTotal, 0)
+	if err := database.UnionAll[accountTotal](ctx, paid, refunded).
+		OrderBy(TestPaymentCols.Account.Asc(), TestPaymentCols.Amount.Desc()).
 		Scan(&rows); err != nil {
 		panic(err)
 	}
 	for _, r := range rows {
-		fmt.Println(r.Category, r.Ref, r.Kind)
+		fmt.Println(r.Account, r.Kind, r.Amount)
 	}
 	// Output:
-	// alpha a1 record
-	// alpha a1 tag
-	// alpha a2 record
-	// alpha a3 record
-	// alpha a3 tag
-	// beta a4 record
-	// beta a4 tag
-	// beta a5 record
-	// gamma a6 record
-}
-
-// A branch can take any shape a select takes: a grouped projection stacks
-// beside a plain one, so every category's total sits with its rows. The
-// literal stays out of GROUP BY. Rendered:
-//
-//	SELECT * FROM (
-//	  SELECT * FROM (SELECT 'total' AS `kind`, `category` AS `category`, COALESCE(SUM(`amount`), 0) AS `amount`
-//	                 FROM `test_aggregate_records` WHERE ... GROUP BY `category`) AS b0
-//	  UNION ALL
-//	  SELECT * FROM (SELECT 'row' AS `kind`, `category` AS `category`, `amount` AS `amount`
-//	                 FROM `test_aggregate_records` WHERE ...) AS b1
-//	) AS u ORDER BY `category` ASC,`amount` ASC,`kind` ASC
-func ExampleUnionAll_groupedBranch() {
-	seedAggregateExample()
-	defer cleanupAggregateData()
-
-	type line struct {
-		Kind     string
-		Category string
-		Amount   int64
-	}
-	kind := types.Literal("total").As("kind")
-	totals := database.Select[*TestAggregateRecord, line](context.Background(),
-		kind, TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum())
-	each := database.Select[*TestAggregateRecord, line](context.Background(),
-		types.Literal("row").As("kind"), TestAggregateRecordCols.Category, TestAggregateRecordCols.Amount)
-
-	rows := make([]line, 0)
-	if err := database.UnionAll[line](context.Background(), totals, each).
-		OrderBy(TestAggregateRecordCols.Category.Asc(), TestAggregateRecordCols.Amount.Asc(), kind.Asc()).
-		Scan(&rows); err != nil {
-		panic(err)
-	}
-	for _, r := range rows {
-		fmt.Println(r.Category, r.Kind, r.Amount)
-	}
-	// Output:
-	// alpha row 100
-	// alpha row 200
-	// alpha row 300
-	// alpha total 600
-	// beta row 400
-	// beta row 500
-	// beta total 900
-	// gamma row 600
-	// gamma total 600
+	// acme payment 700
+	// acme refund 50
+	// bolt payment 300
+	// bolt refund 30
 }

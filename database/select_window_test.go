@@ -11,8 +11,8 @@ import (
 )
 
 // The window tests read the same six seeded rows as the aggregate tests (see
-// the seed table at the top of select_test.go), so every expectation below is
-// a literal a reader can check against that table by hand.
+// aggregateSeed in fixture_test.go), so every expectation below is a literal
+// a reader can check against that table by hand.
 
 // latestRow is the row-level projection the latest-per-group idiom reads.
 type latestRow struct {

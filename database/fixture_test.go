@@ -409,6 +409,238 @@ type TestTagNote struct {
 
 func (*TestTagNote) TableName() string { return "test_tag_notes" }
 
+// The aggregate tests run against seeded rows rather than generated SQL: an
+// aggregate that builds plausible SQL but returns a wrong number is exactly
+// the failure these tests exist to catch, and only real rows show it.
+//
+// The seed is small and hand-checkable. Every expectation below is written as
+// a literal, not computed from the fixture, so a wrong implementation cannot
+// make the assertion agree with it.
+//
+//	id | category | status | amount | score | occurred_at
+//	a1 | alpha    | done   |    100 |   1.5 | 2024-01-10 08:00
+//	a2 | alpha    | done   |    200 |   2.5 | 2024-01-10 09:00
+//	a3 | alpha    | failed |    300 |   3.5 | 2024-01-11 08:00
+//	a4 | beta     | done   |    400 |   4.5 | 2024-02-10 08:00
+//	a5 | beta     | failed |    500 |   5.5 | 2024-02-10 08:00
+//	a6 | gamma    | done   |    600 |   6.5 | 2024-02-11 10:00
+//
+// Times are built in time.UTC, the one wall clock the framework stores on
+// every dialect, so a stored timestamp round-trips to the same wall clock and
+// the bucket labels are the literal strings below.
+
+func aggregateSeed() []*TestAggregateRecord {
+	at := func(month, day, hour int) time.Time {
+		// UTC, matching the one wall clock the framework stores on every
+		// dialect: bucket labels below then read exactly like these literals,
+		// independent of the machine's timezone.
+		return time.Date(2024, time.Month(month), day, hour, 0, 0, 0, time.UTC)
+	}
+	return []*TestAggregateRecord{
+		{ID: "a1", Category: "alpha", Status: "done", Amount: 100, Score: 1.5, OccurredAt: at(1, 10, 8)},
+		{ID: "a2", Category: "alpha", Status: "done", Amount: 200, Score: 2.5, OccurredAt: at(1, 10, 9)},
+		{ID: "a3", Category: "alpha", Status: "failed", Amount: 300, Score: 3.5, OccurredAt: at(1, 11, 8)},
+		{ID: "a4", Category: "beta", Status: "done", Amount: 400, Score: 4.5, OccurredAt: at(2, 10, 8)},
+		{ID: "a5", Category: "beta", Status: "failed", Amount: 500, Score: 5.5, OccurredAt: at(2, 10, 8)},
+		{ID: "a6", Category: "gamma", Status: "done", Amount: 600, Score: 6.5, OccurredAt: at(2, 11, 10)},
+	}
+}
+
+// setupAggregateData clears the table and inserts the seed.
+func setupAggregateData(t *testing.T) {
+	t.Helper()
+	cleanupAggregateData()
+	require.NoError(t, database.Database[*TestAggregateRecord](context.Background()).Create(aggregateSeed()...))
+}
+
+// cleanupAggregateData removes every row, including the soft-deleted ones a
+// List cannot see but which would still be counted by a later seed.
+func cleanupAggregateData() {
+	_ = database.DB().Exec("DELETE FROM test_aggregate_records").Error
+}
+
+// Column references for the fixture. gg gen writes these next to a real
+// model; the database package has no generated code, so the tests build the
+// same values by hand, named the way gg gen names them, and exercise the same
+// API. Test and example code therefore reads like project code.
+var TestAggregateRecordCols = struct {
+	ID         types.Column[string]
+	Category   types.Column[string]
+	Status     types.Column[string]
+	Amount     types.NumericColumn[int64]
+	Score      types.NumericColumn[float64]
+	OccurredAt types.TimeColumn
+	ClosedAt   types.TimeColumn
+}{
+	ID:         types.NewColumn[*TestAggregateRecord, string]("id"),
+	Category:   types.NewColumn[*TestAggregateRecord, string]("category"),
+	Status:     types.NewColumn[*TestAggregateRecord, string]("status"),
+	Amount:     types.NewNumericColumn[*TestAggregateRecord, int64]("amount"),
+	Score:      types.NewNumericColumn[*TestAggregateRecord, float64]("score"),
+	OccurredAt: types.NewTimeColumn[*TestAggregateRecord]("occurred_at"),
+	ClosedAt:   types.NewTimeColumn[*TestAggregateRecord]("closed_at"),
+}
+
+// TestRecordTagCols mirrors the generated column references of the related
+// model.
+var TestRecordTagCols = struct {
+	ID       types.Column[string]
+	RecordID types.Column[string]
+	Label    types.Column[string]
+	Category types.Column[string]
+}{
+	ID:       types.NewColumn[*TestRecordTag, string]("id"),
+	RecordID: types.NewColumn[*TestRecordTag, string]("record_id"),
+	Label:    types.NewColumn[*TestRecordTag, string]("label"),
+	Category: types.NewColumn[*TestRecordTag, string]("category"),
+}
+
+// setupTagData seeds tags on a1, a3 and a4. a1 and a3 are alpha rows, a4 is a
+// beta row, so a subquery on the "vip" label selects across categories. Each
+// tag carries its record's category, consistent with the record it points at.
+// tagSeed is the related-row fixture: two vip tags on alpha records and one
+// bulk tag on a beta record, so a semi join narrows alpha and leaves gamma
+// without any tag at all.
+func tagSeed() []*TestRecordTag {
+	return []*TestRecordTag{
+		{ID: "t1", RecordID: "a1", Label: "vip", Category: "alpha"},
+		{ID: "t2", RecordID: "a3", Label: "vip", Category: "alpha"},
+		{ID: "t3", RecordID: "a4", Label: "bulk", Category: "beta"},
+	}
+}
+
+func setupTagData(t *testing.T) {
+	t.Helper()
+	cleanupTagData()
+	require.NoError(t, database.Database[*TestRecordTag](context.Background()).Create(tagSeed()...))
+}
+
+func cleanupTagData() {
+	_ = database.DB().Exec("DELETE FROM test_record_tags").Error
+}
+
+// Examples run without a testing.T, so the seed helpers below panic on
+// failure: an example that cannot seed its rows has nothing to demonstrate.
+
+// seedAggregateExample resets the aggregate fixture to the seed every example
+// reads.
+func seedAggregateExample() {
+	cleanupAggregateData()
+	if err := database.Database[*TestAggregateRecord](context.Background()).Create(aggregateSeed()...); err != nil {
+		panic(err)
+	}
+}
+
+// seedTagExample resets the related-row fixture the semi-join examples read.
+func seedTagExample() {
+	cleanupTagData()
+	if err := database.Database[*TestRecordTag](context.Background()).Create(tagSeed()...); err != nil {
+		panic(err)
+	}
+}
+
+// TestPayment and TestRefund are the fixtures for the union reads: two models
+// whose rows a report stacks into one flow. They spell their time column
+// differently on purpose, paid_at and settled_at, which is what Column.As
+// aligns, and share an account column the grouped branches group by.
+type TestPayment struct {
+	Account string    `json:"account" gorm:"size:191"`
+	Amount  int64     `json:"amount"`
+	PaidAt  time.Time `json:"paid_at"`
+
+	model.Base
+}
+
+func (*TestPayment) TableName() string { return "test_payments" }
+
+type TestRefund struct {
+	Account   string    `json:"account" gorm:"size:191"`
+	Amount    int64     `json:"amount"`
+	SettledAt time.Time `json:"settled_at"`
+
+	model.Base
+}
+
+func (*TestRefund) TableName() string { return "test_refunds" }
+
+// TestPaymentCols and TestRefundCols mirror the generated column references
+// of the two flow models.
+var TestPaymentCols = struct {
+	ID      types.Column[string]
+	Account types.Column[string]
+	Amount  types.NumericColumn[int64]
+	PaidAt  types.TimeColumn
+}{
+	ID:      types.NewColumn[*TestPayment, string]("id"),
+	Account: types.NewColumn[*TestPayment, string]("account"),
+	Amount:  types.NewNumericColumn[*TestPayment, int64]("amount"),
+	PaidAt:  types.NewTimeColumn[*TestPayment]("paid_at"),
+}
+
+var TestRefundCols = struct {
+	ID        types.Column[string]
+	Account   types.Column[string]
+	Amount    types.NumericColumn[int64]
+	SettledAt types.TimeColumn
+}{
+	ID:        types.NewColumn[*TestRefund, string]("id"),
+	Account:   types.NewColumn[*TestRefund, string]("account"),
+	Amount:    types.NewNumericColumn[*TestRefund, int64]("amount"),
+	SettledAt: types.NewTimeColumn[*TestRefund]("settled_at"),
+}
+
+// The flow seed the union examples stack, hand-checkable like the aggregate
+// seed. Times are UTC, the one wall clock the framework stores.
+//
+//	payments: id | account | amount | paid_at
+//	          p1 | acme    |    100 | 2024-01-10 08:00
+//	          p2 | acme    |    200 | 2024-01-11 09:00
+//	          p3 | bolt    |    300 | 2024-01-12 10:00
+//	          p4 | acme    |    400 | 2024-02-01 08:00
+//	refunds:  id | account | amount | settled_at
+//	          r1 | acme    |     50 | 2024-01-11 12:00
+//	          r2 | bolt    |     30 | 2024-02-02 09:00
+
+func paymentSeed() []*TestPayment {
+	return []*TestPayment{
+		{ID: "p1", Account: "acme", Amount: 100, PaidAt: seedTime(1, 10, 8)},
+		{ID: "p2", Account: "acme", Amount: 200, PaidAt: seedTime(1, 11, 9)},
+		{ID: "p3", Account: "bolt", Amount: 300, PaidAt: seedTime(1, 12, 10)},
+		{ID: "p4", Account: "acme", Amount: 400, PaidAt: seedTime(2, 1, 8)},
+	}
+}
+
+func refundSeed() []*TestRefund {
+	return []*TestRefund{
+		{ID: "r1", Account: "acme", Amount: 50, SettledAt: seedTime(1, 11, 12)},
+		{ID: "r2", Account: "bolt", Amount: 30, SettledAt: seedTime(2, 2, 9)},
+	}
+}
+
+// seedTime builds a seed instant in 2024, in UTC.
+func seedTime(month, day, hour int) time.Time {
+	return time.Date(2024, time.Month(month), day, hour, 0, 0, 0, time.UTC)
+}
+
+// seedFlowExample resets both flow fixtures to their seeds; it panics on
+// failure like the other example seeds.
+func seedFlowExample() {
+	cleanupFlowData()
+	if err := database.Database[*TestPayment](context.Background()).Create(paymentSeed()...); err != nil {
+		panic(err)
+	}
+	if err := database.Database[*TestRefund](context.Background()).Create(refundSeed()...); err != nil {
+		panic(err)
+	}
+}
+
+// cleanupFlowData removes every payment and refund, soft-deleted ones
+// included.
+func cleanupFlowData() {
+	_ = database.DB().Exec("DELETE FROM test_payments").Error
+	_ = database.DB().Exec("DELETE FROM test_refunds").Error
+}
+
 type TestHookConfig struct {
 	Value string `json:"value" gorm:"size:191"`
 
@@ -485,6 +717,8 @@ func TestMain(m *testing.M) {
 			model.Register[*TestAggregateRecord]()
 			model.Register[*TestRecordTag]()
 			model.Register[*TestTagNote]()
+			model.Register[*TestPayment]()
+			model.Register[*TestRefund]()
 		},
 	})
 }
