@@ -42,6 +42,7 @@ func TestParseFilterOp(t *testing.T) {
 		for _, op := range []types.FilterOp{
 			types.FilterOpRegex, types.FilterOpNotRegex, types.FilterOpJSONContains,
 			types.FilterOpOr, types.FilterOpAnd, types.FilterOpExists,
+			types.FilterOpEqCol, types.FilterOpFalse,
 		} {
 			_, ok := types.ParseFilterOp(string(op))
 			require.False(t, ok, "service-only operator %q must not be reachable from URL parsing", op)

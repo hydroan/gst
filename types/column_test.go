@@ -101,6 +101,12 @@ func TestColumnBuildsFilters(t *testing.T) {
 		{"Regex", name.Regex("^sa"), types.Filter{Column: "name", Op: types.FilterOpRegex, Value: "^sa"}},
 		{"NotRegex", name.NotRegex("^sa"), types.Filter{Column: "name", Op: types.FilterOpNotRegex, Value: "^sa"}},
 		{"JSONContains", name.JSONContains("sam"), types.Filter{Column: "name", Op: types.FilterOpJSONContains, Value: "sam"}},
+		{
+			"EqCol",
+			age.EqCol(types.NewColumn[sampleTable, int]("parent_age")),
+			types.Filter{Column: "age", Op: types.FilterOpEqCol, Value: "parent_age"},
+		},
+		{"EqColWithoutParent", age.EqCol(nil), types.Filter{Column: "age", Op: types.FilterOpEqCol, Value: ""}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
@@ -117,6 +123,46 @@ func TestColumnInWithoutValues(t *testing.T) {
 	require.Equal(t,
 		types.Filter{Column: "status", Op: types.FilterOpIn, Value: []sampleStatus(nil)},
 		status.In())
+}
+
+func TestColumnBuildsTerms(t *testing.T) {
+	category := types.NewColumn[sampleTable, string]("category")
+	amount := types.NewNumericColumn[sampleTable, int64]("amount")
+	occurred := types.NewTimeColumn[sampleTable]("occurred_at")
+	// Every projection method yields the column with its table, aliased by
+	// its own name; only the function and the bucket differ.
+	term := func(fn types.TermFn, column string) types.Term {
+		return types.Term{Fn: fn, Table: "samples", Column: column, Alias: column}
+	}
+	bucket := func(b types.TimeBucket) types.Term {
+		key := term(types.FnNone, "occurred_at")
+		key.Bucket = b
+		return key
+	}
+
+	tests := []struct {
+		label string
+		got   types.Term
+		want  types.Term
+	}{
+		{"Group", category.Group(), term(types.FnNone, "category")},
+		{"Count", category.Count(), term(types.FnCount, "category")},
+		{"CountDistinct", category.CountDistinct(), term(types.FnCountDistinct, "category")},
+		{"Min", category.Min(), term(types.FnMin, "category")},
+		{"Max", category.Max(), term(types.FnMax, "category")},
+		{"Lag", category.Lag(), term(types.FnLag, "category")},
+		{"Lead", category.Lead(), term(types.FnLead, "category")},
+		{"Sum", amount.Sum(), term(types.FnSum, "amount")},
+		{"Avg", amount.Avg(), term(types.FnAvg, "amount")},
+		{"ByHour", occurred.ByHour(), bucket(types.TimeBucketHour)},
+		{"ByDay", occurred.ByDay(), bucket(types.TimeBucketDay)},
+		{"ByMonth", occurred.ByMonth(), bucket(types.TimeBucketMonth)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			require.Equal(t, tt.want, tt.got)
+		})
+	}
 }
 
 func TestColumnBuildsOrders(t *testing.T) {
