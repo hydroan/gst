@@ -37,9 +37,9 @@ type TableNamer interface {
 //
 // The type parameter is load-bearing. sealedColumn mentions T, so two column
 // references only satisfy the same ColumnRef[T] when their Go types match,
-// which is what makes correlating a string column with an integer column fail
-// to compile. The method is also unexported, so the set of implementations
-// stays closed to this package.
+// which is what makes tying a string column to an integer column with Equal
+// fail to compile. The method is also unexported, so the set of
+// implementations stays closed to this package.
 type ColumnRef[T any] interface {
 	AnyColumnRef
 	sealedColumn(T)
@@ -56,14 +56,15 @@ type ColumnRef[T any] interface {
 // column name, and a query reading the wrong one is valid SQL over the wrong
 // table, which no schema check would catch.
 //
-// The methods are typed front ends for the FilterXxx, Asc and Desc
-// constructors and produce exactly the same Filter and Order values. Code that
-// cannot reference a concrete model (generic helpers, framework internals, URL
-// parsing) keeps using those constructors with a string column name.
+// The methods are typed front ends for the FilterXxx, Asc, Desc and Assign
+// constructors and produce exactly the same Filter, Order and Assignment
+// values. Code that cannot reference a concrete model (generic helpers,
+// framework internals, URL parsing) keeps using those constructors with a
+// string column name.
 //
 // Columns whose Go type is numeric or time.Time are generated as NumericColumn
-// or TimeColumn instead, which embed this type and add the aggregate methods
-// that are only meaningful there.
+// or TimeColumn instead, which embed this type and add the functions that are
+// only meaningful there.
 type Column[T any] struct {
 	table string
 	name  string
@@ -200,11 +201,25 @@ func (c Column[T]) Desc() Order { return Desc(c.name) }
 // the model does not have fails to compile.
 func (c Column[T]) Set(value T) Assignment { return Assignment{Column: c.name, Value: value} }
 
-// The aggregate methods below are the ones that cannot be silently wrong on
-// any column type, so every column carries them. Functions that are silently
-// wrong on the wrong type live on the specialized references instead: a
-// database answers SUM over a text column with 0 rather than an error on both
-// MySQL and SQLite, which reaches a report as a wrong number.
+// The projection methods below turn the column into a Term. Every column
+// carries the ones that cannot be silently wrong on any column type; the
+// functions that are silently wrong on the wrong type live on the specialized
+// references instead: a database answers SUM over a text column with 0 rather
+// than an error on both MySQL and SQLite, which reaches a report as a wrong
+// number.
+
+// Group makes this column a group key of the projection. The framework derives
+// GROUP BY from the group keys, so a projection cannot disagree with its own
+// GROUP BY list.
+func (c Column[T]) Group() Term { return c.term(FnNone) }
+
+// exprTerm projects the column as it is stored, which is what passing a
+// column reference to Select directly means.
+func (c Column[T]) exprTerm() Term {
+	term := c.term(FnNone)
+	term.Plain = true
+	return term
+}
 
 // Count counts the rows whose value of this column is not NULL. Use the
 // package-level Count for COUNT(*), which counts every row.
@@ -230,19 +245,8 @@ func (c Column[T]) Lag() Term { return c.term(FnLag) }
 // each partition yields NULL. The rules match Lag.
 func (c Column[T]) Lead() Term { return c.term(FnLead) }
 
-// exprTerm projects the column as it is stored, which is what passing a
-// column reference to Select directly means.
-func (c Column[T]) exprTerm() Term {
-	term := c.term(FnNone)
-	term.Plain = true
-	return term
-}
-
-// Group makes this column a group key of the projection. The framework derives
-// GROUP BY from the group keys, so a projection cannot disagree with its own
-// GROUP BY list.
-func (c Column[T]) Group() Term { return c.term(FnNone) }
-
+// term builds the projection term the methods above share: the column with
+// its table, aliased by its own name until As renames it.
 func (c Column[T]) term(fn TermFn) Term {
 	return Term{Fn: fn, Table: c.table, Column: c.name, Alias: c.name}
 }

@@ -21,7 +21,7 @@ type Model interface {
 	TableName() string  // TableName returns the explicit table name; gorm's Tabler reads the same method.
 	GetID() string      // GetID returns the string form of the id, or "" when the id is unset.
 	SetID(id ...string) // SetID sets the id when unset; Base generates a UUID without an argument while AutoBase leaves generation to the database.
-	ClearID()           // ClearID always set the id to empty.
+	ClearID()           // ClearID always sets the id to empty.
 	GetCreatedBy() string
 	GetUpdatedBy() string
 	GetCreatedAt() time.Time

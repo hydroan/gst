@@ -3,8 +3,8 @@ package types
 import "github.com/hydroan/gst/types/consts"
 
 // Database defines the model-scoped database operation contract.
-// It provides CRUD operations, query builders, transactions, and optional
-// dry-run behavior for a single Model type.
+// It provides CRUD operations, query builders, and optional dry-run behavior
+// for a single Model type.
 //
 // Type Parameters:
 //   - M: Model type that implements Model interface
@@ -77,7 +77,8 @@ type Database[M Model] interface {
 // Options apply to the next terminal operation and are reset afterward. Start a
 // new chain with database.Database[M](ctx) for each independent operation.
 type DatabaseOption[M Model] interface {
-	// WithQuery adds query conditions from model fields or raw SQL configuration.
+	// WithQuery adds query conditions from the model's non-zero fields and
+	// the operator filters carried by opts.
 	WithQuery(query M, opts ...QueryOptions) Database[M]
 	// WithCursor enables cursor-based pagination for List operations.
 	WithCursor(cursor Cursor) Database[M]

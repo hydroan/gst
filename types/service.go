@@ -83,7 +83,7 @@ type Service[M Model, REQ Request, RSP Response] interface {
 	// controller-side listing runs (List and Export). The model carries the
 	// URL-decoded equality condition and the options carry the parsed operator
 	// filters; the typical use is row-level data scoping: append typed filters
-	// (e.g. Cols.GroupID.In(...)) to options.Filters or narrow the model
+	// (e.g. Cols.TenantID.In(...)) to options.Filters or narrow the model
 	// condition, then return both. Returning an error aborts the request — the
 	// correct behavior when loading the caller's data scope fails. The
 	// controller calls Filter once and shares the result between List and

@@ -175,80 +175,6 @@ func Count() Term {
 	return Term{Fn: FnCount, Alias: DefaultCountAlias}
 }
 
-// CompareOp is a comparison applied to an aggregated value. Only the six
-// orderings exist: the pattern and set operators of FilterOp have no meaning
-// over a measure.
-type CompareOp string
-
-const (
-	CompareEq  CompareOp = "eq"
-	CompareNe  CompareOp = "ne"
-	CompareGt  CompareOp = "gt"
-	CompareGte CompareOp = "gte"
-	CompareLt  CompareOp = "lt"
-	CompareLte CompareOp = "lte"
-)
-
-// Valid reports whether the comparison is one this package defines. An unknown
-// operator would otherwise fall through to equality and silently filter by the
-// wrong comparison.
-func (o CompareOp) Valid() bool {
-	switch o {
-	case CompareEq, CompareNe, CompareGt, CompareGte, CompareLt, CompareLte:
-		return true
-	default:
-		return false
-	}
-}
-
-// TermCondition is one post-aggregation condition. It carries the term itself
-// rather than an alias string, which has two consequences: a condition can
-// never name a measure the projection did not declare, and the renderer can
-// emit the full expression instead of the alias, which is required because
-// PostgreSQL does not accept an output alias in HAVING.
-type TermCondition struct {
-	Term  Term
-	Op    CompareOp
-	Value any
-}
-
-// Eq, Ne, Gt, Gte, Lt and Lte build a post-aggregation condition on the term.
-// The value type is checked when the query is built, because an aggregate's
-// value type follows its function rather than its column: COUNT always yields
-// an integer, AVG a float, and SUM widens.
-func (t Term) Eq(value any) TermCondition { return TermCondition{Term: t, Op: CompareEq, Value: value} }
-
-func (t Term) Ne(value any) TermCondition { return TermCondition{Term: t, Op: CompareNe, Value: value} }
-
-func (t Term) Gt(value any) TermCondition { return TermCondition{Term: t, Op: CompareGt, Value: value} }
-
-func (t Term) Gte(value any) TermCondition {
-	return TermCondition{Term: t, Op: CompareGte, Value: value}
-}
-
-func (t Term) Lt(value any) TermCondition { return TermCondition{Term: t, Op: CompareLt, Value: value} }
-
-func (t Term) Lte(value any) TermCondition {
-	return TermCondition{Term: t, Op: CompareLte, Value: value}
-}
-
-// TermOrder is one ORDER BY term of a select query. Unlike Order it sorts by a
-// projection term, which is what a TopN report ranks by.
-type TermOrder struct {
-	Term      Term
-	Direction OrderDirection
-}
-
-// Asc and Desc sort the result rows by this term. An output alias is legal in
-// ORDER BY on every supported dialect, so these render as the alias.
-func (t Term) Asc() TermOrder {
-	return TermOrder{Term: t, Direction: OrderAsc}
-}
-
-func (t Term) Desc() TermOrder {
-	return TermOrder{Term: t, Direction: OrderDesc}
-}
-
 // Over evaluates the term over a window instead of collapsing the rows it
 // reads: every row keeps its place and gains the function's value computed
 // over the rows the window names. It applies to the aggregate functions and
@@ -305,5 +231,81 @@ func (t Term) exprTerm() Term { return t }
 // two Ordering types. It is an accessor, not a constructor: removing it would
 // leave the database layer no way to turn a projection into terms.
 func TermOf(expr Expr) Term { return expr.exprTerm() }
+
+// CompareOp is a comparison applied to a projected term. Only the six
+// orderings exist: the pattern and set operators of FilterOp have no meaning
+// over a measure or a window function.
+type CompareOp string
+
+const (
+	CompareEq  CompareOp = "eq"
+	CompareNe  CompareOp = "ne"
+	CompareGt  CompareOp = "gt"
+	CompareGte CompareOp = "gte"
+	CompareLt  CompareOp = "lt"
+	CompareLte CompareOp = "lte"
+)
+
+// Valid reports whether the comparison is one this package defines. An unknown
+// operator would otherwise fall through to equality and silently filter by the
+// wrong comparison.
+func (o CompareOp) Valid() bool {
+	switch o {
+	case CompareEq, CompareNe, CompareGt, CompareGte, CompareLt, CompareLte:
+		return true
+	default:
+		return false
+	}
+}
+
+// TermCondition is one condition on a projected term: a Having condition on a
+// measure, or a Qualify condition on a window function. It carries the term
+// itself rather than an alias string, which has two consequences: a condition
+// can never name a term the projection did not declare, and the renderer can
+// emit the full expression instead of the alias, which HAVING requires because
+// PostgreSQL does not accept an output alias there.
+type TermCondition struct {
+	Term  Term
+	Op    CompareOp
+	Value any
+}
+
+// Eq, Ne, Gt, Gte, Lt and Lte build a Having or Qualify condition on the
+// term. The value type is checked when the query is built, because a
+// function's value type follows the function rather than its column: COUNT
+// always yields an integer, AVG a float, and SUM widens.
+func (t Term) Eq(value any) TermCondition { return TermCondition{Term: t, Op: CompareEq, Value: value} }
+
+func (t Term) Ne(value any) TermCondition { return TermCondition{Term: t, Op: CompareNe, Value: value} }
+
+func (t Term) Gt(value any) TermCondition { return TermCondition{Term: t, Op: CompareGt, Value: value} }
+
+func (t Term) Gte(value any) TermCondition {
+	return TermCondition{Term: t, Op: CompareGte, Value: value}
+}
+
+func (t Term) Lt(value any) TermCondition { return TermCondition{Term: t, Op: CompareLt, Value: value} }
+
+func (t Term) Lte(value any) TermCondition {
+	return TermCondition{Term: t, Op: CompareLte, Value: value}
+}
+
+// TermOrder is one ORDER BY term of a select or of a window. Unlike Order it
+// sorts by a projection term, which is what a TopN report ranks by.
+type TermOrder struct {
+	Term      Term
+	Direction OrderDirection
+}
+
+// Asc and Desc sort the rows by this term. In the select's ORDER BY the term
+// renders as its alias, which every supported dialect accepts there; inside a
+// window it renders as its full expression, the only form OVER accepts.
+func (t Term) Asc() TermOrder {
+	return TermOrder{Term: t, Direction: OrderAsc}
+}
+
+func (t Term) Desc() TermOrder {
+	return TermOrder{Term: t, Direction: OrderDesc}
+}
 
 func (TermOrder) sealedOrdering() {}

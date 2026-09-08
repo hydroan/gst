@@ -260,6 +260,16 @@ func FilterJSONContains(column, value string) Filter {
 	return Filter{Column: column, Op: FilterOpJSONContains, Value: value}
 }
 
+// FilterFalse matches nothing. It is the condition a permission hook returns
+// when the caller may see no row at all. Unlike an empty filter list it is a
+// real condition, so it disables the empty-query safety check; unlike a
+// filter the renderer cannot apply it is deliberate, so nothing is logged. It
+// renders as 1 = 0 on every dialect and composes like any other filter,
+// inside groups, subqueries and conditional measures included.
+func FilterFalse() Filter {
+	return Filter{Op: FilterOpFalse}
+}
+
 // FilterOr groups filters that are OR-combined with each other. The group as a
 // whole stays AND-combined with every other condition of the query, so a
 // mandatory condition such as tenant scoping can never be absorbed into the
@@ -279,16 +289,6 @@ func FilterJSONContains(column, value string) Filter {
 // fails closed.
 func FilterOr(filters ...Filter) Filter {
 	return Filter{Op: FilterOpOr, Value: filters}
-}
-
-// FilterFalse matches nothing. It is the condition a permission hook returns
-// when the caller may see no row at all. Unlike an empty filter list it is a
-// real condition, so it disables the empty-query safety check; unlike a
-// filter the renderer cannot apply it is deliberate, so nothing is logged. It
-// renders as 1 = 0 on every dialect and composes like any other filter,
-// inside groups, subqueries and conditional measures included.
-func FilterFalse() Filter {
-	return Filter{Op: FilterOpFalse}
 }
 
 // FilterAnd groups filters that are AND-combined with each other. Filters are
@@ -370,13 +370,13 @@ type Subquery struct {
 //	    ItemCols.SampleID.Equal(SampleCols.ID),
 //	    ItemCols.Status.Eq(StatusDone))
 //
-// The table names come from C and from the queried model, so a column
-// reference never has to carry a table name. A subquery without any
-// FilterEqual fails closed rather than matching every row: nothing to
-// correlate on is a mistake, not a request for a cross join.
+// The table names come from C and from the queried model; the predicate
+// carries only the two column names. A subquery without any FilterEqual fails
+// closed rather than matching every row: nothing to correlate on is a
+// mistake, not a request for a cross join.
 //
-// It is an ordinary Filter, so List, Count, Export and Aggregate all accept
-// it; it is service-only and has no URL spelling, because a client-supplied
+// It is an ordinary Filter, so List, Count, Export and Select all accept it;
+// it is service-only and has no URL spelling, because a client-supplied
 // subquery is an unbounded read of a table the endpoint never named.
 func FilterExists[C Model](filters ...Filter) Filter {
 	return subqueryFilter[C](filters, false)

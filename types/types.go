@@ -1,8 +1,7 @@
 // Package types defines the public contracts between the framework and
 // business projects: the Model, Service, Database, Selector, Cache, RBAC,
 // and Logger interfaces, the query building blocks they exchange (Filter,
-// Order, Cursor, Column, aggregate terms), and the per-request
-// ServiceContext.
+// Order, Cursor, Column, Term, Window), and the per-request ServiceContext.
 package types
 
 // Coder describes an API envelope code, HTTP status, and client-safe message.
