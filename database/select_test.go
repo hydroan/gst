@@ -150,6 +150,9 @@ func TestSelectConditional(t *testing.T) {
 		DoneAmount  int64
 		FailAmount  int64
 		DoneRecords int64
+		// None is a measure whose condition never holds: the false predicate
+		// composes into the CASE guard like any filter and counts nothing.
+		None int64
 	}
 	rows := make([]row, 0)
 	require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(),
@@ -157,15 +160,16 @@ func TestSelectConditional(t *testing.T) {
 		aggCols.Amount.Sum().Where(aggCols.Status.Eq("done")).As("done_amount"),
 		aggCols.Amount.Sum().Where(aggCols.Status.Eq("failed")).As("fail_amount"),
 		types.Count().Where(aggCols.Status.Eq("done")).As("done_records"),
+		types.Count().Where(types.FilterFalse()).As("none"),
 	).
 		OrderBy(aggCols.Category.Group().Asc()).
 		Scan(&rows))
 
 	require.Equal(t, []row{
-		{Category: "alpha", DoneAmount: 300, FailAmount: 300, DoneRecords: 2},
-		{Category: "beta", DoneAmount: 400, FailAmount: 500, DoneRecords: 1},
+		{Category: "alpha", DoneAmount: 300, FailAmount: 300, DoneRecords: 2, None: 0},
+		{Category: "beta", DoneAmount: 400, FailAmount: 500, DoneRecords: 1, None: 0},
 		// gamma has no failed row: an empty SUM is coalesced to 0, never NULL.
-		{Category: "gamma", DoneAmount: 600, FailAmount: 0, DoneRecords: 1},
+		{Category: "gamma", DoneAmount: 600, FailAmount: 0, DoneRecords: 1, None: 0},
 	}, rows)
 }
 
@@ -804,6 +808,24 @@ func TestFilterExists(t *testing.T) {
 			List(&records))
 		require.Len(t, records, 1, "a3 loses its only live vip tag")
 		require.Equal(t, "a1", records[0].ID)
+	})
+
+	// A false predicate inside the subquery is a real condition of that
+	// subquery, not a rendering failure: EXISTS then matches no row and NOT
+	// EXISTS matches every row, instead of both collapsing to nothing the way
+	// an unusable predicate does.
+	t.Run("FalseInsideSubquery", func(t *testing.T) {
+		none := types.FilterExists[*TestRecordTag](tagCols.RecordID.Equal(recordIDCol), types.FilterFalse())
+		all := types.FilterNotExists[*TestRecordTag](tagCols.RecordID.Equal(recordIDCol), types.FilterFalse())
+		records := make([]*TestAggregateRecord, 0)
+		require.NoError(t, database.Database[*TestAggregateRecord](ctx).
+			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{none}}).
+			List(&records))
+		require.Empty(t, records)
+		require.NoError(t, database.Database[*TestAggregateRecord](ctx).
+			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{all}}).
+			List(&records))
+		require.Len(t, records, 6)
 	})
 }
 

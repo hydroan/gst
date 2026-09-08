@@ -15,14 +15,14 @@ import (
 )
 
 // WithQuery sets query conditions based on the provided model struct fields.
-// It supports exact matching, field-level operator filters, and raw SQL conditions.
+// It supports exact matching and field-level operator filters.
 // Non-zero fields in the model will be used as query conditions.
 //
 // Parameters:
 //   - query: A model instance with fields set as query conditions. Can be nil to indicate empty query.
 //     When nil or all fields are zero values, it's treated as an empty query.
 //     Supported field types: string, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, bool, pointer types.
-//   - opts: Optional QueryOptions to control query behavior (empty-query safety, operator filters, raw SQL)
+//   - opts: Optional QueryOptions to control query behavior (empty-query safety, operator filters)
 //
 // Query Behavior:
 //
@@ -39,14 +39,6 @@ import (
 //	comparing. Substring matching on a JSON document goes through the
 //	like-family operator filters, which cast the column where the dialect
 //	requires it.
-//
-//	RawQuery:
-//	- When provided, it will be combined with model fields using AND logic
-//	- Works even when query is nil
-//	- Supports parameterized queries with RawQueryArgs
-//	- Example: WHERE age > ? AND status = ?
-//	- When both RawQuery and model fields are provided, they are combined with AND logic
-//	- Example: RawQuery "age > ?" + model field Name="John" → WHERE age > ? AND name IN ('John')
 //
 //	AllowEmpty:
 //	- By default (false): Empty queries are blocked for safety (adds WHERE 1 = 0)
@@ -65,11 +57,6 @@ import (
 //	// Several values for one field - the list is explicit, never comma-parsed
 //	WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.FilterIn("id", ids)}})
 //
-//		// Raw SQL query (can be combined with model fields)
-//	WithQuery(&model.User{}, types.QueryOptions{RawQuery: "age > ? AND status = ?", RawQueryArgs: []any{18, "active"}})
-//	WithQuery(nil, types.QueryOptions{RawQuery: "created_at BETWEEN ? AND ?", RawQueryArgs: []any{startDate, endDate}})
-//	WithQuery(&model.User{Name: "John"}, types.QueryOptions{RawQuery: "age > ?", RawQueryArgs: []any{18}})  // WHERE age > ? AND name = 'John'
-//
 //	// Empty query (blocked by default for safety)
 //	WithQuery(nil)  // WHERE 1 = 0 (returns no records)
 //	WithQuery(&model.User{})  // WHERE 1 = 0 (returns no records)
@@ -86,8 +73,6 @@ import (
 // NOTE: Empty query conditions (nil or zero value) are blocked by default for safety to prevent
 //
 //	catastrophic data loss (e.g., deleting all records). Use QueryOptions{AllowEmpty: true} to override.
-//
-// NOTE: When both RawQuery and model fields are provided, they are combined with AND logic.
 func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -100,15 +85,8 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 	// opt.AllowEmpty: default false (block empty queries for safety)
 
 	queryVal := reflect.ValueOf(query)
-	// Handle RawQuery first (works even if query is nil)
-	// RawQuery will be combined with model fields using AND logic if both are provided
-	hasRawQuery := len(opt.RawQuery) > 0
-	if hasRawQuery {
-		db.ins = db.ins.Where(opt.RawQuery, opt.RawQueryArgs...)
-	}
-
-	// Field-level operator conditions are always AND-combined and, like
-	// RawQuery, count as real conditions for the empty-query safety checks.
+	// Field-level operator conditions are always AND-combined and count as
+	// real conditions for the empty-query safety checks.
 	hasFilters := len(opt.Filters) > 0
 	if hasFilters {
 		db.applyFilters(opt.Filters)
@@ -118,13 +96,12 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 	var empty M
 	if queryVal.IsNil() || reflect.DeepEqual(query, empty) {
 		// Treat nil/empty as empty query
-		// If RawQuery or filters are provided, they are already
-		// applied above and alone are sufficient, so the empty query safety
-		// check is not needed.
-		if hasRawQuery || hasFilters {
+		// Filters are already applied above and alone are sufficient, so the
+		// empty query safety check is not needed.
+		if hasFilters {
 			return db
 		}
-		// No RawQuery and empty query: apply safety check
+		// No filters and empty query: apply safety check
 		if !opt.AllowEmpty {
 			logger.Database.WithContext(db.ctx, phaseWithQuery).Warnz(
 				"query is nil or empty, adding safety condition to prevent matching all records",
@@ -178,13 +155,12 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 	// To allow empty queries, use: WithQuery(nil, QueryOptions{AllowEmpty: true}) or
 	//                              WithQuery(&User{}, QueryOptions{AllowEmpty: true})
 	if len(q) == 0 {
-		// If RawQuery or filters are provided, they are already
-		// applied above and alone are sufficient, so the empty query safety
-		// check is not needed.
-		if hasRawQuery || hasFilters {
+		// Filters are already applied above and alone are sufficient, so the
+		// empty query safety check is not needed.
+		if hasFilters {
 			return db
 		}
-		// No RawQuery and empty query: apply safety check
+		// No filters and empty query: apply safety check
 		if !opt.AllowEmpty {
 			logger.Database.WithContext(db.ctx, phaseWithQuery).Warnz(
 				"all query fields are empty, adding safety condition to prevent matching all records",
@@ -221,8 +197,8 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 	// CRITICAL: Check if all query values are empty after filtering
 	// Even if query map is not empty, all values might be empty strings
 	// Example: &User{Name: "", Email: ""} has fields but all values are empty
-	// Filters applied earlier are real conditions, so they
-	// disable this safety check the same way RawQuery would.
+	// Filters applied earlier are real conditions, so they disable this
+	// safety check.
 	if !hasValidCondition && !hasFilters && !opt.AllowEmpty {
 		logger.Database.WithContext(db.ctx, phaseWithQuery).Warnz(
 			"all query values are empty, adding safety condition to prevent matching all records",

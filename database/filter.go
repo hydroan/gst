@@ -164,6 +164,10 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 			return db.failClosedFilter(f, "expects a subquery value")
 		}
 		return db.existsCondition(f, sq, scope)
+	case types.FilterOpFalse:
+		// The caller asked for the predicate that matches nothing, so it
+		// renders without the warning a filter that cannot be applied logs.
+		return falseExpr(), nil
 	}
 	if len(f.Column) == 0 {
 		return db.failClosedFilter(f, "has an empty column")
@@ -307,9 +311,10 @@ func (db *database[M]) groupCondition(f types.Filter, or bool, scope filterScope
 	return db.renderFilters(children, or, scope)
 }
 
-// failClosedExpr is the predicate that matches nothing. Narrowing to an empty
-// result is always safe; widening it is not.
-func failClosedExpr() clause.Expression { return clause.Expr{SQL: "1 = 0"} }
+// falseExpr is the predicate that matches nothing: what FilterFalse renders
+// as on purpose, and what every fail-closed answer narrows a query to.
+// Narrowing to an empty result is always safe; widening it is not.
+func falseExpr() clause.Expression { return clause.Expr{SQL: "1 = 0"} }
 
 // failClosedFilter records why a filter cannot be applied and narrows the
 // query to an empty result instead of widening it.
@@ -320,7 +325,7 @@ func (db *database[M]) failClosedFilter(f types.Filter, msg string) (clause.Expr
 		zap.String("column", f.Column),
 		zap.String("reason", msg),
 	)
-	return failClosedExpr(), errors.Wrapf(ErrUnusableFilter, "operator %q on column %q %s", f.Op, f.Column, msg)
+	return falseExpr(), errors.Wrapf(ErrUnusableFilter, "operator %q on column %q %s", f.Op, f.Column, msg)
 }
 
 // comparisonSQL renders "column op ?" for one comparison filter. A column the
@@ -512,7 +517,7 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 	// safe, widening never is, and this is the only place in the renderer where
 	// the difference is a negation away.
 	if failure != nil {
-		return failClosedExpr(), failure
+		return falseExpr(), failure
 	}
 	if sq.Negate {
 		return clause.Expr{SQL: "NOT EXISTS (?)", Vars: []any{sub}}, nil

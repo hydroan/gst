@@ -54,20 +54,25 @@ func TestDatabaseFilterGroups(t *testing.T) {
 		), "the mandatory condition must not be OR-ed away")
 	})
 
-	t.Run("RawQueryStaysAndCombinedWithGroup", func(t *testing.T) {
-		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{
-				AllowEmpty:   true,
-				RawQuery:     "name = ?",
-				RawQueryArgs: []any{u1.Name},
-				Filters: []types.Filter{types.FilterOr(
-					types.FilterEq("age", u2.Age),
-					types.FilterEq("age", u3.Age),
-				)},
-			}).
-			List(&users))
-		require.Empty(t, users, "RawQuery is a mandatory condition too")
+	// FilterFalse is the predicate that matches nothing on purpose, the way a
+	// permission hook denies every row. It is a real condition: it disables
+	// the empty-query safety check like any filter, and next to a group it
+	// stays a mandatory AND term instead of being OR-ed away.
+	t.Run("FalseMatchesNothing", func(t *testing.T) {
+		require.Empty(t, list(t, types.FilterFalse()))
+		require.Empty(t, list(t, types.FilterFalse(), types.FilterOr(
+			types.FilterEq("age", u2.Age),
+			types.FilterEq("age", u3.Age),
+		)), "the false predicate is a mandatory condition too")
+	})
+
+	// Inside an OR group the false predicate is one alternative that never
+	// holds, so the other alternatives decide alone.
+	t.Run("FalseInsideOrGroupIsInert", func(t *testing.T) {
+		require.Equal(t, []string{u2.ID}, list(t, types.FilterOr(
+			types.FilterEq("age", u2.Age),
+			types.FilterFalse(),
+		)))
 	})
 
 	t.Run("AndGroupsNestedInOrGroup", func(t *testing.T) {

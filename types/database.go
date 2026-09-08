@@ -124,17 +124,9 @@ type QueryOptions struct {
 	// AllowEmpty allows a query without any condition to match all records.
 	// By default a nil model, a zero-value model, or all-empty field values
 	// add the "1 = 0" safety condition instead, so a forgotten filter cannot
-	// return or delete the whole table. RawQuery and Filters count as
-	// real conditions and disable the safety check on their own.
+	// return or delete the whole table. Filters count as real conditions
+	// and disable the safety check on their own.
 	AllowEmpty bool
-
-	// RawQuery is a raw parameterized SQL fragment added as an extra WHERE
-	// condition. It works with a nil model and combines with model-field
-	// conditions otherwise.
-	RawQuery string
-
-	// RawQueryArgs are the values bound to the RawQuery placeholders.
-	RawQueryArgs []any
 
 	// PresentFields marks columns whose filter values were explicitly provided
 	// by the caller, keyed by snake case column name. Query construction treats

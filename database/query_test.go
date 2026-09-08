@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -338,333 +339,46 @@ func TestDatabaseWithQuery(t *testing.T) {
 		require.Equal(t, zeroAgeUser.ID, users[0].ID)
 	})
 
-	t.Run("RawQuery", func(t *testing.T) {
+	t.Run("Filters", func(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
-		users := make([]*TestUser, 0)
-
-		// Test RawQuery with nil query: age > 18
-		// Should return u2 (age=19) and u3 (age=20)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{
-				RawQuery:     "age > ?",
-				RawQueryArgs: []any{18},
-			}).
-			List(&users))
-		require.Len(t, users, 2)
-		var foundU2, foundU3 bool
-		for _, u := range users {
-			if u.ID == u2.ID {
-				foundU2 = true
-				require.NotEmpty(t, u.ID)
-				require.NotEmpty(t, u.CreatedAt)
-				require.NotEmpty(t, u.UpdatedAt)
-				require.Equal(t, u2.Name, u.Name)
-				require.Equal(t, u2.Age, u.Age)
-				require.Equal(t, u2.Email, u.Email)
-				require.Equal(t, u2.IsActive, u.IsActive)
+		ids := func(query *TestUser, filters ...types.Filter) []string {
+			users := make([]*TestUser, 0)
+			require.NoError(t, database.Database[*TestUser](context.Background()).
+				WithQuery(query, types.QueryOptions{Filters: filters}).
+				List(&users))
+			out := make([]string, 0, len(users))
+			for _, u := range users {
+				out = append(out, u.ID)
 			}
-			if u.ID == u3.ID {
-				foundU3 = true
-				require.NotEmpty(t, u.ID)
-				require.NotEmpty(t, u.CreatedAt)
-				require.NotEmpty(t, u.UpdatedAt)
-				require.Equal(t, u3.Name, u.Name)
-				require.Equal(t, u3.Age, u.Age)
-				require.Equal(t, u3.Email, u.Email)
-				require.Equal(t, u3.IsActive, u.IsActive)
-			}
+			slices.Sort(out)
+			return out
 		}
-		require.True(t, foundU2, "should find u2")
-		require.True(t, foundU3, "should find u3")
 
-		// Test RawQuery with empty struct query: age >= 19
-		// Should return u2 (age=19) and u3 (age=20)
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{}, types.QueryOptions{
-				RawQuery:     "age >= ?",
-				RawQueryArgs: []any{19},
-			}).
-			List(&users))
-		require.Len(t, users, 2)
-		foundU2, foundU3 = false, false
-		for _, u := range users {
-			if u.ID == u2.ID {
-				foundU2 = true
-				require.NotEmpty(t, u.ID)
-				require.NotEmpty(t, u.CreatedAt)
-				require.NotEmpty(t, u.UpdatedAt)
-				require.Equal(t, u2.Name, u.Name)
-				require.Equal(t, u2.Age, u.Age)
-				require.Equal(t, u2.Email, u.Email)
-			}
-			if u.ID == u3.ID {
-				foundU3 = true
-				require.NotEmpty(t, u.ID)
-				require.NotEmpty(t, u.CreatedAt)
-				require.NotEmpty(t, u.UpdatedAt)
-				require.Equal(t, u3.Name, u.Name)
-				require.Equal(t, u3.Age, u.Age)
-				require.Equal(t, u3.Email, u.Email)
-			}
-		}
-		require.True(t, foundU2, "should find u2")
-		require.True(t, foundU3, "should find u3")
+		// Filters are real conditions on their own: a nil model and an empty
+		// model both skip the empty-query safety condition once a filter is
+		// present, and the filter alone decides the rows.
+		require.Equal(t, []string{u2.ID, u3.ID}, ids(nil, types.FilterGt("age", 18)))
+		require.Equal(t, []string{u2.ID, u3.ID}, ids(&TestUser{}, types.FilterGte("age", 19)))
 
-		// Test RawQuery with multiple conditions: age BETWEEN ? AND ?
-		// Should return u2 (age=19)
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{
-				RawQuery:     "age BETWEEN ? AND ?",
-				RawQueryArgs: []any{19, 19},
-			}).
-			List(&users))
-		require.Len(t, users, 1)
-		require.NotEmpty(t, users[0].ID)
-		require.NotEmpty(t, users[0].CreatedAt)
-		require.NotEmpty(t, users[0].UpdatedAt)
-		require.Equal(t, u2.ID, users[0].ID)
-		require.Equal(t, u2.Name, users[0].Name)
-		require.Equal(t, u2.Age, users[0].Age)
-		require.Equal(t, u2.Email, users[0].Email)
-		require.Equal(t, u2.IsActive, users[0].IsActive)
+		// A range is two bounds, a set is an explicit list and a disjunction
+		// is an OR group, so no condition needs a SQL fragment.
+		require.Equal(t, []string{u2.ID}, ids(nil, types.FilterGte("age", 19), types.FilterLte("age", 19)))
+		require.Equal(t, []string{u1.ID, u3.ID}, ids(nil, types.FilterIn("age", []int{18, 20})))
+		require.Equal(t, []string{u1.ID, u2.ID}, ids(nil, types.FilterOr(types.FilterEq("name", u1.Name), types.FilterEq("age", u2.Age))))
+		require.Equal(t, []string{u2.ID}, ids(nil,
+			types.FilterOr(types.FilterEq("name", u2.Name), types.FilterEq("email", u2.Email)),
+			types.FilterGte("age", 19),
+		))
 
-		// Test RawQuery with string condition: name = ?
-		// Should return u1 (name="user1")
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{
-				RawQuery:     "name = ?",
-				RawQueryArgs: []any{u1.Name},
-			}).
-			List(&users))
-		require.Len(t, users, 1)
-		require.NotEmpty(t, users[0].ID)
-		require.NotEmpty(t, users[0].CreatedAt)
-		require.NotEmpty(t, users[0].UpdatedAt)
-		require.Equal(t, u1.ID, users[0].ID)
-		require.Equal(t, u1.Name, users[0].Name)
-		require.Equal(t, u1.Age, users[0].Age)
-		require.Equal(t, u1.Email, users[0].Email)
-		require.Equal(t, u1.IsActive, users[0].IsActive)
+		// Filters and model fields combine with AND: the model narrows what
+		// the filters admit, in both directions.
+		require.Empty(t, ids(&TestUser{Name: u1.Name}, types.FilterGt("age", 18)))
+		require.Equal(t, []string{u1.ID}, ids(&TestUser{Name: u1.Name}, types.FilterGte("age", 18)))
+		require.Equal(t, []string{u2.ID}, ids(&TestUser{Name: u2.Name, Email: u2.Email}, types.FilterGt("age", 18)))
 
-		// Test RawQuery with OR condition: name = ? OR age = ?
-		// Should return u1 (name="user1") and u2 (age=19)
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{
-				RawQuery:     "name = ? OR age = ?",
-				RawQueryArgs: []any{u1.Name, u2.Age},
-			}).
-			List(&users))
-		require.Len(t, users, 2)
-		foundU1, foundU2 := false, false
-		for _, u := range users {
-			if u.ID == u1.ID {
-				foundU1 = true
-				require.NotEmpty(t, u.ID)
-				require.NotEmpty(t, u.CreatedAt)
-				require.NotEmpty(t, u.UpdatedAt)
-				require.Equal(t, u1.Name, u.Name)
-				require.Equal(t, u1.Age, u.Age)
-				require.Equal(t, u1.Email, u.Email)
-				require.Equal(t, u1.IsActive, u.IsActive)
-			}
-			if u.ID == u2.ID {
-				foundU2 = true
-				require.NotEmpty(t, u.ID)
-				require.NotEmpty(t, u.CreatedAt)
-				require.NotEmpty(t, u.UpdatedAt)
-				require.Equal(t, u2.Name, u.Name)
-				require.Equal(t, u2.Age, u.Age)
-				require.Equal(t, u2.Email, u.Email)
-				require.Equal(t, u2.IsActive, u.IsActive)
-			}
-		}
-		require.True(t, foundU1, "should find u1")
-		require.True(t, foundU2, "should find u2")
-
-		// Test RawQuery with IN clause: age IN (?)
-		// Should return u1 (age=18) and u3 (age=20)
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{
-				RawQuery:     "age IN (?)",
-				RawQueryArgs: []any{[]int{18, 20}},
-			}).
-			List(&users))
-		require.Len(t, users, 2)
-		var foundU1_2, foundU3_2 bool
-		for _, u := range users {
-			if u.ID == u1.ID {
-				foundU1_2 = true
-				require.NotEmpty(t, u.ID)
-				require.NotEmpty(t, u.CreatedAt)
-				require.NotEmpty(t, u.UpdatedAt)
-				require.Equal(t, u1.Name, u.Name)
-				require.Equal(t, u1.Age, u.Age)
-				require.Equal(t, u1.Email, u.Email)
-				require.Equal(t, u1.IsActive, u.IsActive)
-			}
-			if u.ID == u3.ID {
-				foundU3_2 = true
-				require.NotEmpty(t, u.ID)
-				require.NotEmpty(t, u.CreatedAt)
-				require.NotEmpty(t, u.UpdatedAt)
-				require.Equal(t, u3.Name, u.Name)
-				require.Equal(t, u3.Age, u.Age)
-				require.Equal(t, u3.Email, u.Email)
-				require.Equal(t, u3.IsActive, u.IsActive)
-			}
-		}
-		require.True(t, foundU1_2, "should find u1")
-		require.True(t, foundU3_2, "should find u3")
-
-		// Test RawQuery with AND condition: name = ? AND age = ?
-		// Should return u1 (name="user1" AND age=18)
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{
-				RawQuery:     "name = ? AND age = ?",
-				RawQueryArgs: []any{u1.Name, u1.Age},
-			}).
-			List(&users))
-		require.Len(t, users, 1)
-		require.Equal(t, u1.ID, users[0].ID)
-		require.Equal(t, u1.Name, users[0].Name)
-		require.Equal(t, u1.Age, users[0].Age)
-
-		// Test RawQuery with AND condition that matches no records: name = ? AND age = ?
-		// Should return 0 records
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{
-				RawQuery:     "name = ? AND age = ?",
-				RawQueryArgs: []any{u1.Name, u2.Age},
-			}).
-			List(&users))
-		require.Empty(t, users)
-
-		// Test RawQuery with no matching condition: age > 100
-		// Should return 0 records
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{
-				RawQuery:     "age > ?",
-				RawQueryArgs: []any{100},
-			}).
-			List(&users))
-		require.Empty(t, users)
-
-		// Test RawQuery with empty RawQueryArgs (should work when query has no placeholders)
-		// Query: age = 18 (hardcoded value, no placeholders)
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{
-				RawQuery:     "age = 18",
-				RawQueryArgs: nil,
-			}).
-			List(&users))
-		require.Len(t, users, 1)
-		require.Equal(t, u1.ID, users[0].ID)
-		require.Equal(t, u1.Age, users[0].Age)
-
-		// Test RawQuery with empty RawQueryArgs slice (should work when query has no placeholders)
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{
-				RawQuery:     "age = 18",
-				RawQueryArgs: []any{},
-			}).
-			List(&users))
-		require.Len(t, users, 1)
-		require.Equal(t, u1.ID, users[0].ID)
-		require.Equal(t, u1.Age, users[0].Age)
-
-		// Test RawQuery combined with model fields: both conditions are applied with AND logic
-		// RawQuery: age > 18, Query: Name="user1"
-		// Should return 0 records (no user with name="user1" AND age > 18, since u1 has age=18)
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: u1.Name}, types.QueryOptions{
-				RawQuery:     "age > ?",
-				RawQueryArgs: []any{18},
-			}).
-			List(&users))
-		require.Empty(t, users, "RawQuery and model fields should be combined with AND logic")
-
-		// Test RawQuery combined with model fields: both conditions match
-		// RawQuery: age >= 18, Query: Name="user1"
-		// Should return u1 (name="user1" AND age >= 18)
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: u1.Name}, types.QueryOptions{
-				RawQuery:     "age >= ?",
-				RawQueryArgs: []any{18},
-			}).
-			List(&users))
-		require.Len(t, users, 1, "RawQuery and model fields should be combined with AND logic")
-		require.Equal(t, u1.ID, users[0].ID)
-		require.Equal(t, u1.Name, users[0].Name)
-		require.Equal(t, u1.Age, users[0].Age)
-
-		// Test RawQuery combined with model fields: multiple model fields
-		// RawQuery: age > 18, Query: Name="user2", Email="user2@example.com"
-		// Should return u2 (name="user2" AND email="user2@example.com" AND age > 18)
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: u2.Name, Email: u2.Email}, types.QueryOptions{
-				RawQuery:     "age > ?",
-				RawQueryArgs: []any{18},
-			}).
-			List(&users))
-		require.Len(t, users, 1, "RawQuery and multiple model fields should be combined with AND logic")
-		require.Equal(t, u2.ID, users[0].ID)
-		require.Equal(t, u2.Name, users[0].Name)
-		require.Equal(t, u2.Age, users[0].Age)
-		require.Equal(t, u2.Email, users[0].Email)
-
-		// Test RawQuery with complex condition: (name = ? OR email = ?) AND age >= ?
-		// Should return u2 (email="user2@example.com" AND age=19)
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{
-				RawQuery:     "(name = ? OR email = ?) AND age >= ?",
-				RawQueryArgs: []any{u2.Name, u2.Email, 19},
-			}).
-			List(&users))
-		require.Len(t, users, 1)
-		require.Equal(t, u2.ID, users[0].ID)
-		require.Equal(t, u2.Name, users[0].Name)
-		require.Equal(t, u2.Age, users[0].Age)
-		require.Equal(t, u2.Email, users[0].Email)
-
-		// Test RawQuery with LIKE pattern: name LIKE ?
-		// Should return all 3 records (all names contain "user")
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{
-				RawQuery:     "name LIKE ?",
-				RawQueryArgs: []any{"%user%"},
-			}).
-			List(&users))
-		require.Len(t, users, 3)
-		var foundU1_3, foundU2_3, foundU3_3 bool
-		for _, u := range users {
-			switch u.ID {
-			case u1.ID:
-				foundU1_3 = true
-			case u2.ID:
-				foundU2_3 = true
-			case u3.ID:
-				foundU3_3 = true
-			}
-		}
-		require.True(t, foundU1_3, "should find u1")
-		require.True(t, foundU2_3, "should find u2")
-		require.True(t, foundU3_3, "should find u3")
+		// A filter that matches nothing answers with no rows, not an error.
+		require.Empty(t, ids(nil, types.FilterGt("age", 100)))
 	})
 
 	t.Run("AutoBase", func(t *testing.T) {

@@ -72,6 +72,7 @@ func TestFilterConstructors(t *testing.T) {
 		{"Regex", types.FilterRegex("name", "^sam"), types.Filter{Column: "name", Op: types.FilterOpRegex, Value: "^sam"}},
 		{"NotRegex", types.FilterNotRegex("name", "^sam"), types.Filter{Column: "name", Op: types.FilterOpNotRegex, Value: "^sam"}},
 		{"JSONContains", types.FilterJSONContains("tags", "sample"), types.Filter{Column: "tags", Op: types.FilterOpJSONContains, Value: "sample"}},
+		{"False", types.FilterFalse(), types.Filter{Op: types.FilterOpFalse}},
 		{
 			"Or",
 			types.FilterOr(types.FilterEq("age", 18), types.FilterEq("name", "sample")),

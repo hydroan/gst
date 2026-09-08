@@ -145,8 +145,10 @@ func userVisibilityQueryOptions(ctx *types.ServiceContext, actor *modeliamuser.U
 	return types.QueryOptions{Filters: []types.Filter{types.FilterIn("id", subjectIDs)}}, nil
 }
 
+// emptyUserVisibilityQueryOptions denies every row: the caller has no subject
+// it may see, so the list answers with none rather than with everyone.
 func emptyUserVisibilityQueryOptions() types.QueryOptions {
-	return types.QueryOptions{RawQuery: "1 = 0", AllowEmpty: true}
+	return types.QueryOptions{Filters: []types.Filter{types.FilterFalse()}}
 }
 
 // excludeSystemRootSubjects removes subjects that tenant administrators must

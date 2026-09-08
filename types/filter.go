@@ -48,6 +48,7 @@ const (
 	FilterOpAnd          FilterOp = "and"          // group: the []Filter value is AND-combined, for nesting inside an OR group
 	FilterOpExists       FilterOp = "exists"       // correlated subquery: the Subquery value becomes EXISTS or NOT EXISTS
 	FilterOpEqual        FilterOp = "equal"        // inside a subquery: the column equals the enclosing query's column named by the string value
+	FilterOpFalse        FilterOp = "false"        // constant predicate: matches nothing, see FilterFalse
 )
 
 // filterOps indexes the URL-exposed operators for parsing; service-only
@@ -108,6 +109,7 @@ func FilterOps() []FilterOp {
 //     FilterExists.
 //   - FilterOpEqual requires a string value naming the enclosing query's
 //     column and only renders inside a subquery; see FilterEqual.
+//   - FilterOpFalse carries neither column nor value; see FilterFalse.
 //   - The comparison operators take a scalar value (string, numeric,
 //     time.Time); slices, arrays, and nil are rejected.
 //
@@ -277,6 +279,16 @@ func FilterJSONContains(column, value string) Filter {
 // fails closed.
 func FilterOr(filters ...Filter) Filter {
 	return Filter{Op: FilterOpOr, Value: filters}
+}
+
+// FilterFalse matches nothing. It is the condition a permission hook returns
+// when the caller may see no row at all. Unlike an empty filter list it is a
+// real condition, so it disables the empty-query safety check; unlike a
+// filter the renderer cannot apply it is deliberate, so nothing is logged. It
+// renders as 1 = 0 on every dialect and composes like any other filter,
+// inside groups, subqueries and conditional measures included.
+func FilterFalse() Filter {
+	return Filter{Op: FilterOpFalse}
 }
 
 // FilterAnd groups filters that are AND-combined with each other. Filters are
