@@ -314,12 +314,12 @@ func TestDatabaseWithSelect(t *testing.T) {
 	})
 
 	t.Run("column of another table fails", func(t *testing.T) {
-		// The aggregate fixture has a status column too, so the name alone
-		// would pass; the table the reference carries tells a wrong-model
-		// write from a typo.
+		// The account fixture has a name column too, so the name alone would
+		// pass; the table the reference carries tells a wrong-model write
+		// from a typo.
 		users := make([]*TestUser, 0)
 		require.ErrorIs(t,
-			database.Database[*TestUser](context.Background()).WithSelect(TestAggregateRecordCols.Status).List(&users),
+			database.Database[*TestUser](context.Background()).WithSelect(TestAccountCols.Name).List(&users),
 			database.ErrColumnTable)
 	})
 
@@ -667,12 +667,12 @@ func TestDatabaseWithOrder(t *testing.T) {
 	}
 
 	t.Run("column of another table fails", func(t *testing.T) {
-		// The aggregate fixture has a status column too, so the name alone
-		// would pass; the table the reference carries refuses it, the way
-		// WithSelect refuses a column of another model.
+		// The account fixture has a name column too, so the name alone would
+		// pass; the table the reference carries refuses it, the way WithSelect
+		// refuses a column of another model.
 		users := make([]*TestUser, 0)
 		require.ErrorIs(t,
-			database.Database[*TestUser](context.Background()).WithOrder(TestAggregateRecordCols.Status.Desc()).List(&users),
+			database.Database[*TestUser](context.Background()).WithOrder(TestAccountCols.Name.Desc()).List(&users),
 			database.ErrColumnTable)
 	})
 

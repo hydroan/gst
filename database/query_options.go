@@ -425,6 +425,10 @@ func (db *database[M]) WithOffset(offset int) types.Database[M] {
 // Note: WithExpand only affects SELECT queries (List, Get, First, Last, etc.).
 // It does not work with Create, Update, or Delete operations.
 // Note: For custom fields without GORM foreign key definitions, use GetAfter/ListAfter hooks instead.
+//
+// The orders sort the associated rows, not the model's, so the table a
+// column reference carries is not checked here, unlike WithOrder: an order
+// of the wrong model is the caller's to avoid.
 func (db *database[M]) WithExpand(expand []string, orders ...types.Order) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()

@@ -410,7 +410,7 @@ func (db *database[M]) placeFilter(f types.Filter, scope filterScope) (string, t
 // condition on the select's rows narrows the select itself; the mistake is
 // marked with the sentinel the projection reports it under.
 func (db *database[M]) derivedKeyFilter(f types.Filter, column, table string, info tableInfo) (clause.Expression, error) {
-	expr, err := db.failClosedFilter(f, fmt.Sprintf("names %q, which is not a key of the joined select over %q; the select is joined on %s, the columns a condition here may name, and a condition on its rows belongs to its own Where or Having", column, table, strings.Join(sortedColumns(info.columns), ", ")))
+	expr, err := db.failClosedFilter(f, fmt.Sprintf("names %q, which is not a key of the joined select over %q. A condition here may name the select's keys, %s. A condition on the select's rows belongs to its own Where or Having", column, table, strings.Join(sortedColumns(info.columns), ", ")))
 	return expr, errors.Join(err, ErrJoinSelectColumn)
 }
 

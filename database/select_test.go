@@ -66,10 +66,14 @@ func TestSelectScansPointerRows(t *testing.T) {
 }
 
 // RowLabel is an embedded row type carrying a method, which reflect.StructOf
-// refuses to embed anywhere but first; the sqlite stand-in names it instead.
+// cannot embed; the sqlite stand-in names it instead.
 type RowLabel struct{ Note *string }
 
 func (l RowLabel) String() string { return "label" }
+
+// RowSpan is an embedded row type carrying a time field, embedded by value,
+// through a pointer, or named under the embedded tag.
+type RowSpan struct{ First time.Time }
 
 func TestSelectScansEmbeddedRowFields(t *testing.T) {
 	defer cleanupAggregateData()
@@ -112,6 +116,45 @@ func TestSelectScansEmbeddedRowFields(t *testing.T) {
 	require.Equal(t, time.Date(2024, 1, 10, 8, 0, 0, 0, time.UTC), labeledRows[0].First.UTC())
 	require.NotNil(t, labeledRows[0].Note)
 	require.Equal(t, "failed", *labeledRows[0].Note)
+
+	// The embedding gorm reads is followed whatever its spelling: a gorm tag
+	// of the anonymous field, the embedded tag on a named field, a pointer.
+	type prefixed struct {
+		Category string
+		First    time.Time
+		RowLabel `gorm:"embeddedPrefix:p_"`
+	}
+	type named struct {
+		Category string
+		Span     RowSpan `gorm:"embedded"`
+	}
+	type pointed struct {
+		Category string
+		*RowSpan
+	}
+	prefixedRows := make([]prefixed, 0)
+	require.NoError(t, database.Select[*TestAggregateRecord, prefixed](context.Background(), TestAggregateRecordCols.Category.Group(),
+		TestAggregateRecordCols.OccurredAt.Min().As("first"), TestAggregateRecordCols.Status.Max().As("p_note")).
+		OrderBy(TestAggregateRecordCols.Category.Group().Asc()).
+		Scan(&prefixedRows))
+	require.Len(t, prefixedRows, 3)
+	require.NotNil(t, prefixedRows[0].Note)
+	require.Equal(t, "failed", *prefixedRows[0].Note)
+	namedRows := make([]named, 0)
+	require.NoError(t, database.Select[*TestAggregateRecord, named](context.Background(), TestAggregateRecordCols.Category.Group(),
+		TestAggregateRecordCols.OccurredAt.Min().As("first")).
+		OrderBy(TestAggregateRecordCols.Category.Group().Asc()).
+		Scan(&namedRows))
+	require.Len(t, namedRows, 3)
+	require.Equal(t, time.Date(2024, 1, 10, 8, 0, 0, 0, time.UTC), namedRows[0].Span.First.UTC())
+	pointedRows := make([]pointed, 0)
+	require.NoError(t, database.Select[*TestAggregateRecord, pointed](context.Background(), TestAggregateRecordCols.Category.Group(),
+		TestAggregateRecordCols.OccurredAt.Min().As("first")).
+		OrderBy(TestAggregateRecordCols.Category.Group().Asc()).
+		Scan(&pointedRows))
+	require.Len(t, pointedRows, 3)
+	require.NotNil(t, pointedRows[0].RowSpan)
+	require.Equal(t, time.Date(2024, 1, 10, 8, 0, 0, 0, time.UTC), pointedRows[0].First.UTC())
 }
 
 func TestSelectWhereReusesFilters(t *testing.T) {

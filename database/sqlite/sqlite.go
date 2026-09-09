@@ -113,7 +113,7 @@ func Init() (err error) {
 // New creates and returns a new SQLite database connection with the given configuration.
 // With tracing configured on, the returned handle carries the GORM
 // OpenTelemetry tracing plugin, so application-held instances passed to
-// DatabaseOn, SelectOn, and TransactionOn are traced like the default
+// DatabaseOn, SelectOn, UnionAllOn, and TransactionOn are traced like the default
 // database.
 // The pool runs under the connection limits of the [database] configuration
 // narrowed to a single connection, the same as the default handle.

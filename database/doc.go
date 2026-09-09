@@ -12,8 +12,8 @@
 //
 // A non-default database instance is a plain *gorm.DB the application builds
 // once, typically with a dialect New function such as clickhouse.New, and
-// holds itself. Chains reach it through DatabaseOn, SelectOn, and
-// TransactionOn; the entry point that opens a chain decides the instance,
+// holds itself. Chains reach it through DatabaseOn, SelectOn, UnionAllOn,
+// and TransactionOn; the entry point that opens a chain decides the instance,
 // never a mid-chain option. Transactions never cross instances, and the
 // application owns the instance's schema: the framework does not create
 // tables on it.

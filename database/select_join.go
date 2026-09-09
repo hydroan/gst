@@ -123,6 +123,20 @@ func (a *selector[M, R]) resolveJoins(shape *projectionShape) error {
 		if !tied {
 			return errors.Wrapf(ErrJoinNoCorrelation, "%q", jt.table)
 		}
+		// A derived table read before this source has its select's keys for
+		// columns; an ON tied to another column of that select's model has
+		// nothing to tie to, and is refused here rather than read as a key.
+		for table, columns := range jt.joinColumns {
+			other, ok := shape.joined[table]
+			if !ok || other.sub == nil {
+				continue
+			}
+			for column := range columns {
+				if _, key := keyAliasOf(other, column); !key {
+					return errors.Wrapf(ErrJoinSelectColumn, "%q ties to %q of %q, which is not a key of that joined select; the select is joined on %s", jt.table, column, table, strings.Join(sortedColumns(other.info.columns), ", "))
+				}
+			}
+		}
 		if !coversKey(pinned, keys) {
 			return errors.Wrapf(ErrJoinNotUnique, "%q is pinned on (%s), its keys are %s", jt.table, strings.Join(sortedColumns(pinned), ", "), describeKeys(keys))
 		}
@@ -513,11 +527,12 @@ func (a *selector[M, R]) derivedTerms(shape projectionShape) (map[string]*joined
 				continue
 			}
 			// A term the query could compute itself is one value whether the
-			// query or the select wrote it, and the query's own reading of it
-			// would silently become the select's; the two are told apart by
-			// alias, or the select's count is read through a column.
-			if a.ownTerm(t, shape) {
-				return nil, errors.Wrapf(ErrDuplicateAlias, "%q is a term of the query's own sources and of the joined select over %q alike; alias one of the two differently, and read a select's COUNT(*) through a column, Cols.ID.Count()", a.alias(t), jt.table)
+			// query or the select wrote it, and under its default alias the two
+			// are written independently: the query's own reading of it would
+			// silently become the select's. An alias is written on purpose, and
+			// passing the select's aliased term is reading it through.
+			if a.ownTerm(t) && defaultAlias(t) {
+				return nil, errors.Wrapf(ErrDuplicateAlias, "%q is projected by the query and by the joined select over %q alike, under its default alias; give the query's own term an alias of its own, or alias the select's term and pass it to read it through", a.alias(t), jt.table)
 			}
 			// Two selects projecting the same term would each answer for it;
 			// the query has to tell them apart by alias.
@@ -533,12 +548,38 @@ func (a *selector[M, R]) derivedTerms(shape projectionShape) (map[string]*joined
 // ownTerm reports whether the query could compute a term itself: it carries
 // no table, as a plain Count or a constant does, or the table of the queried
 // model or of a model the query joins.
-func (a *selector[M, R]) ownTerm(t types.Term, shape projectionShape) bool {
-	if len(t.Table) == 0 || t.Table == shape.main {
+func (a *selector[M, R]) ownTerm(t types.Term) bool {
+	if len(t.Table) == 0 || t.Table == a.db.outerTableName() {
 		return true
 	}
-	jt, joined := shape.joined[t.Table]
-	return joined && jt.sub == nil
+	for _, source := range a.joins {
+		if mj, ok := source.(types.ModelJoin); ok && mj.Model != nil && mj.Model.TableName() == t.Table {
+			return true
+		}
+	}
+	return false
+}
+
+// defaultAlias reports whether a term projects under the alias its
+// constructor gave it: the column's name, or the function's for a term
+// without a column. Two authors writing the term independently spell it
+// alike exactly then; an alias of the author's own tells the two apart.
+func defaultAlias(t types.Term) bool {
+	if len(t.Column) > 0 {
+		return t.Alias == t.Column
+	}
+	switch t.Fn {
+	case types.FnCount:
+		return t.Alias == types.DefaultCountAlias
+	case types.FnRowNumber:
+		return t.Alias == types.RowNumber().Alias
+	case types.FnRank:
+		return t.Alias == types.Rank().Alias
+	case types.FnDenseRank:
+		return t.Alias == types.DenseRank().Alias
+	default:
+		return false
+	}
 }
 
 // derivedOf reports the joined select a term is a column of. The alias
@@ -562,16 +603,18 @@ func (s projectionShape) tableOf(t types.Term) string {
 	return s.main
 }
 
-// readsDerived reports whether a term is one a joined select projects,
-// before the joins are resolved: what ScanOne needs to know to refuse a
-// row-level read.
+// readsDerived reports whether a term is one a joined select projects and
+// the query reads through, before the joins are resolved: what ScanOne
+// needs to know to refuse a row-level read. A term under its default alias
+// that the query could compute itself is not read through; derivedTerms
+// refuses it.
 func (a *selector[M, R]) readsDerived(t types.Term) bool {
 	for _, source := range a.joins {
 		sj, ok := source.(types.SelectJoin)
 		if !ok {
 			continue
 		}
-		if sub, ok := sj.Select.(nestedSelect); ok && sub.selects(t) {
+		if sub, ok := sj.Select.(nestedSelect); ok && sub.selects(t) && (!a.ownTerm(t) || !defaultAlias(t)) {
 			return true
 		}
 	}
@@ -607,7 +650,10 @@ func (a *selector[M, R]) groupDerivedTerms(shape *projectionShape) error {
 				}
 				remedy := "group by it"
 				if other, ok := shape.joined[table]; ok && other.sub != nil {
-					remedy = "group by it through that select's key term " + strconv.Quote(keyAliasOf(other, column))
+					remedy = "group by it through that select's key term"
+					if alias, key := keyAliasOf(other, column); key {
+						remedy += " " + strconv.Quote(alias)
+					}
 				}
 				return errors.Wrapf(ErrJoinSelectNotKeyed, "%q reads %q, which is joined on %q of %q, and the projection does not group by it; %s", a.alias(t), jt.table, column, table, remedy)
 			}
@@ -617,26 +663,29 @@ func (a *selector[M, R]) groupDerivedTerms(shape *projectionShape) error {
 }
 
 // keyAliasOf spells the alias a joined select's key column projects under,
-// which is the term the query groups by to be keyed on it.
-func keyAliasOf(jt *joinedTable, column string) string {
+// which is the term the query groups by to be keyed on it, and whether the
+// column is a key of the select at all.
+func keyAliasOf(jt *joinedTable, column string) (string, bool) {
 	for _, key := range jt.derived.keys {
 		if key.Column == column {
-			return termAlias(key)
+			return termAlias(key), true
 		}
 	}
-	return column
+	return "", false
 }
 
 // groupsBy reports whether a column of a table read by the query is one of
 // the projection's group keys: a plain key of the queried model, matched by
 // column alone or with the queried table, or a plain key of a joined table,
-// matched with its table.
+// matched with its table. A joined select's key term proves the column of
+// that select alone: a term of the same table read through another select
+// names that select's derived column, not this source's.
 func (a *selector[M, R]) groupsBy(table, column string, shape projectionShape) bool {
 	for _, key := range shape.keys {
 		// A joined select's measure is a group key under its alias, not under
 		// the column it measured; only the select's own key term names that
 		// column.
-		if _, derived := a.derivedOf(key, shape); derived && key.Fn != types.FnNone {
+		if jt, derived := a.derivedOf(key, shape); derived && (key.Fn != types.FnNone || jt.table != table) {
 			continue
 		}
 		if key.Column == column && key.Bucket == types.TimeBucketNone && shape.tableOf(key) == table {

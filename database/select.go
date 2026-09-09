@@ -70,6 +70,11 @@ type selector[M types.Model, R any] struct {
 	// builder read again runs for real, as it promises.
 	dryRun     bool
 	statements *[]types.SQLStatement
+	// describing and consuming mark the selector as being read by a query
+	// that joins it, so a select joined into itself, directly or through
+	// the selects it joins, is refused instead of recursing without end.
+	describing bool
+	consuming  bool
 
 	terms     []types.Term
 	joins     []types.JoinSource
@@ -195,11 +200,13 @@ func (a *selector[M, R]) WithDryRun(collector ...*[]types.SQLStatement) types.Se
 
 // Scan runs the select and replaces the contents of dest.
 func (a *selector[M, R]) Scan(dest *[]R) (err error) {
+	// The options are consumed even when the select never attached: this is
+	// the terminal they, and the joined selects', were set for.
+	defer a.consumeDryRun()
 	if a.err != nil {
 		return a.err
 	}
 	defer a.db.reset()
-	defer a.consumeDryRun()
 	if dest == nil {
 		return ErrNilDest
 	}
@@ -229,11 +236,11 @@ func (a *selector[M, R]) Scan(dest *[]R) (err error) {
 // ScanOne runs an ungrouped aggregation, which always produces exactly one
 // row, and fills dest with it.
 func (a *selector[M, R]) ScanOne(dest *R) (err error) {
+	defer a.consumeDryRun()
 	if a.err != nil {
 		return a.err
 	}
 	defer a.db.reset()
-	defer a.consumeDryRun()
 	if dest == nil {
 		return ErrNilDest
 	}
@@ -281,11 +288,11 @@ func (a *selector[M, R]) ScanOne(dest *R) (err error) {
 // changes how many rows exist, so pagination prepared for Scan can never skew
 // the count.
 func (a *selector[M, R]) Count(count *int) (err error) {
+	defer a.consumeDryRun()
 	if a.err != nil {
 		return a.err
 	}
 	defer a.db.reset()
-	defer a.consumeDryRun()
 	if count == nil {
 		return ErrNilCount
 	}
@@ -553,6 +560,11 @@ func compareOperator(op types.CompareOp) string {
 func (a *selector[M, R]) consumeDryRun() {
 	a.dryRun = false
 	a.statements = nil
+	if a.consuming {
+		return
+	}
+	a.consuming = true
+	defer func() { a.consuming = false }()
 	for _, source := range a.joins {
 		if sj, ok := source.(types.SelectJoin); ok {
 			if sub, ok := sj.Select.(nestedSelect); ok {

@@ -92,10 +92,9 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 		db.applyFilters(opt.Filters)
 	}
 
-	// Check if query is nil or empty
-	var empty M
-	if queryVal.IsNil() || reflect.DeepEqual(query, empty) {
-		// Treat nil/empty as empty query
+	// A nil model carries no field conditions; a model with every field at
+	// its zero value is caught below, where its fields turn out empty.
+	if queryVal.IsNil() {
 		// Filters are already applied above and alone are sufficient, so the
 		// empty query safety check is not needed.
 		if hasFilters {

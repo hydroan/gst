@@ -29,6 +29,7 @@ var (
 	nullTimeType = reflect.TypeFor[sql.NullTime]()
 
 	sqliteTimeValueType = reflect.TypeFor[sqliteTimeValue]()
+	valuerType          = reflect.TypeFor[driver.Valuer]()
 )
 
 // scanRowsInto runs the terminal scan of tx into dest, through the time
@@ -100,15 +101,14 @@ func rowStruct(row reflect.Value) reflect.Value {
 
 // sqliteTimeMirrorType returns the scan-side stand-in for a result type: the
 // same struct with every time-shaped field replaced by sqliteTimeValue, an
-// embedded struct replaced by its own stand-in when it carries one. Every
-// embedded struct becomes a named field gorm flattens through the embedded
-// tag: reflect.StructOf refuses to embed a type carrying methods anywhere
-// but first, and the caller's type may well carry some. The second return
-// is false when no stand-in is needed or possible — the type has no
-// time-shaped fields, is no struct, carries unexported fields, or embeds
-// through a pointer or an interface a type carrying methods, none of which
-// reflect.StructOf can rebuild; those types scan the regular way. A struct
-// embedded through a pointer is not descended into.
+// embedded struct, anonymous or named and tagged embedded, replaced by its
+// own stand-in when it carries one. An anonymous struct becomes a named
+// field gorm flattens through the embedded tag: reflect.StructOf cannot
+// embed a type carrying methods, wherever it stands, and the caller's type
+// may well carry some. The second return is false when no stand-in is
+// needed or possible — the type has no time-shaped fields, is no struct,
+// carries unexported fields, or embeds something that is no struct, none of
+// which reflect.StructOf can rebuild; those types scan the regular way.
 func sqliteTimeMirrorType(rt reflect.Type) (reflect.Type, bool) {
 	if rt.Kind() != reflect.Struct {
 		return nil, false
@@ -126,23 +126,14 @@ func sqliteTimeMirrorType(rt reflect.Type) (reflect.Type, bool) {
 			field.Type = sqliteTimeValueType
 			mirrored = true
 		default:
-			if !field.Anonymous {
-				break
+			mirroredField, ok := mirrorEmbeddedField(field)
+			if !ok {
+				return nil, false
 			}
-			if field.Type.Kind() != reflect.Struct {
-				if field.Type.NumMethod() > 0 {
-					return nil, false
-				}
-				break
-			}
-			if inner, ok := sqliteTimeMirrorType(field.Type); ok {
-				field.Type = inner
+			if mirroredField.Type != field.Type {
 				mirrored = true
 			}
-			field.Anonymous = false
-			if _, tagged := field.Tag.Lookup("gorm"); !tagged {
-				field.Tag = reflect.StructTag(`gorm:"embedded"`)
-			}
+			field = mirroredField
 		}
 		fields[i] = field
 	}
@@ -150,6 +141,75 @@ func sqliteTimeMirrorType(rt reflect.Type) (reflect.Type, bool) {
 		return nil, false
 	}
 	return reflect.StructOf(fields), true
+}
+
+// mirrorEmbeddedField returns the stand-in for a field that may embed a
+// struct: an anonymous struct, or a named one gorm flattens through the
+// embedded tag, descended into for its time-shaped fields and, when
+// anonymous, named so that reflect.StructOf never embeds a type carrying
+// methods; the embedded tag is added to the settings the field carries. A
+// struct gorm reads as one column, one implementing driver.Valuer, is left
+// to its own Scan under its name; an anonymous field of any other kind
+// cannot be rebuilt and reports false.
+func mirrorEmbeddedField(field reflect.StructField) (reflect.StructField, bool) {
+	if !field.Anonymous && !hasGormSetting(field.Tag, "EMBEDDED") {
+		return field, true
+	}
+	typ := field.Type
+	pointer := false
+	if typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+		pointer = true
+	}
+	if typ.Kind() != reflect.Struct {
+		return field, !field.Anonymous
+	}
+	if typ.Implements(valuerType) || reflect.PointerTo(typ).Implements(valuerType) {
+		// One column, read by name; embedding it would flatten it.
+		field.Anonymous = false
+		return field, true
+	}
+	if inner, ok := sqliteTimeMirrorType(typ); ok {
+		if pointer {
+			inner = reflect.PointerTo(inner)
+		}
+		field.Type = inner
+	}
+	if field.Anonymous {
+		field.Anonymous = false
+		if !hasGormSetting(field.Tag, "EMBEDDED") {
+			field.Tag = withGormSetting(field.Tag, "embedded")
+		}
+	}
+	return field, true
+}
+
+// hasGormSetting reports whether a gorm tag carries the setting, named as
+// gorm names it.
+func hasGormSetting(tag reflect.StructTag, name string) bool {
+	for setting := range strings.SplitSeq(tag.Get("gorm"), ";") {
+		key, _, _ := strings.Cut(setting, ":")
+		if strings.EqualFold(strings.TrimSpace(key), name) {
+			return true
+		}
+	}
+	return false
+}
+
+// withGormSetting prepends a setting to the field's gorm tag, keeping the
+// settings it already carries and the tags of other keys.
+func withGormSetting(tag reflect.StructTag, setting string) reflect.StructTag {
+	gorm := setting
+	if existing := tag.Get("gorm"); len(existing) > 0 {
+		gorm += ";" + existing
+	}
+	others := make([]string, 0, 2)
+	for pair := range strings.FieldsSeq(string(tag)) {
+		if !strings.HasPrefix(pair, "gorm:") {
+			others = append(others, pair)
+		}
+	}
+	return reflect.StructTag(strings.Join(append([]string{`gorm:"` + gorm + `"`}, others...), " "))
 }
 
 // copyMirrorRow writes one scanned mirror row into the caller's row,
@@ -163,6 +223,16 @@ func copyMirrorRow(mirror, dest reflect.Value) {
 			value, _ := reflect.TypeAssert[sqliteTimeValue](source)
 			value.assignTo(dest.Field(i))
 		case source.Type() != dest.Field(i).Type():
+			if source.Kind() == reflect.Pointer {
+				if source.IsNil() {
+					dest.Field(i).SetZero()
+					continue
+				}
+				target := reflect.New(dest.Field(i).Type().Elem())
+				copyMirrorRow(source.Elem(), target.Elem())
+				dest.Field(i).Set(target)
+				continue
+			}
 			copyMirrorRow(source, dest.Field(i))
 		default:
 			dest.Field(i).Set(source)

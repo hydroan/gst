@@ -143,21 +143,29 @@ func unionFor[R any](ctx context.Context, base *gorm.DB, branches []types.Select
 		u.err = ErrUnionNoBranch
 		return u
 	}
+	// Every branch this package built is kept even after another fails,
+	// so the terminal consumes their dry-run options whatever the outcome;
+	// the first failure is the union's.
 	for i, b := range branches {
 		member, ok := b.(nestedSelect)
 		if !ok {
-			u.err = errors.Wrapf(ErrUnionBranch, "branch %d is a %T", i, b)
-			return u
+			if u.err == nil {
+				u.err = errors.Wrapf(ErrUnionBranch, "branch %d is a %T", i, b)
+			}
+			continue
+		}
+		u.branches = append(u.branches, member)
+		if u.err != nil {
+			continue
 		}
 		if err := member.attachError(); err != nil {
 			u.err = errors.Wrapf(err, "union branch %d", i)
-			return u
-		}
-		if member.baseHandle() != base {
+		} else if member.baseHandle() != base {
 			u.err = errors.Wrapf(ErrUnionBranchInstance, "branch %d", i)
-			return u
 		}
-		u.branches = append(u.branches, member)
+	}
+	if u.err != nil {
+		return u
 	}
 	if u.chain = u.branches[0].chainFor(ctx, base); u.chain == nil {
 		// Unreachable while databaseFor returns the concrete chain, but a
@@ -221,11 +229,13 @@ func (u *union[R]) consumeDryRun() {
 // Scan runs the union and replaces the contents of dest with the stacked
 // rows.
 func (u *union[R]) Scan(dest *[]R) (err error) {
+	// The branches' options are consumed even when the union never built:
+	// this is the terminal they were set for.
+	defer u.consumeDryRun()
 	if u.err != nil {
 		return u.err
 	}
 	defer u.chain.reset()
-	defer u.consumeDryRun()
 	if dest == nil {
 		return ErrNilDest
 	}
@@ -256,11 +266,11 @@ func (u *union[R]) Scan(dest *[]R) (err error) {
 // OrderBy, Limit and Offset set on the union are ignored: none of them
 // changes how many rows exist.
 func (u *union[R]) Count(count *int) (err error) {
+	defer u.consumeDryRun()
 	if u.err != nil {
 		return u.err
 	}
 	defer u.chain.reset()
-	defer u.consumeDryRun()
 	if count == nil {
 		return ErrNilCount
 	}
@@ -513,6 +523,13 @@ func (a *selector[M, R]) termsInResultOrder(shape projectionShape) []types.Term 
 // projects and the ones that can come back NULL. The chain is prepared here
 // because no terminal of the selector runs.
 func (a *selector[M, R]) describe() (derivedInfo, error) {
+	// A select joined into itself, directly or through the selects it
+	// joins, would describe itself without end.
+	if a.describing {
+		return derivedInfo{}, errors.Wrap(ErrJoinDuplicateTable, "a select joins itself, directly or through the selects it joins")
+	}
+	a.describing = true
+	defer func() { a.describing = false }()
 	if err := a.db.prepare(); err != nil {
 		return derivedInfo{}, err
 	}

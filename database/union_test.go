@@ -102,6 +102,15 @@ func TestUnionAllDryRunAppliesToTheNextTerminalOnly(t *testing.T) {
 	require.NoError(t, perCategory.Scan(&counts))
 	require.Len(t, counts, 3)
 	require.Empty(t, statements)
+
+	// And when the union never assembled, a branch of another instance
+	// among its members: every branch this package built is consumed.
+	perCategory.WithDryRun(&statements)
+	elsewhere := database.SelectOn[*TestAggregateRecord, categoryCount](ctx, newInstance(t, "union_branch.db"), TestAggregateRecordCols.Category.Group(), types.Count().As("n"))
+	require.ErrorIs(t, database.UnionAll[categoryCount](ctx, elsewhere, perCategory).Scan(&counts), database.ErrUnionBranchInstance)
+	require.NoError(t, perCategory.Scan(&counts))
+	require.Len(t, counts, 3)
+	require.Empty(t, statements)
 }
 
 func TestUnionAllStacksBranches(t *testing.T) {

@@ -200,6 +200,8 @@ func TestSQLCommentAnnotatesSelects(t *testing.T) {
 	require.Contains(t, sql, "/* trace_id='trace-agg' */")
 	require.Less(t, strings.Index(sql, "trace_id="), strings.Index(sql, " FROM ("),
 		"the outer count must carry the comment itself, before the derived table")
+	require.Equal(t, 2, strings.Count(sql, "trace_id="),
+		"the derived table keeps its own copy inside; the count carries exactly two")
 
 	// A union builds its statement on a chain minted for it and stacks
 	// members rendered without a comment: the comment must reach the union's
