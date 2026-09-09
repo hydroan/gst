@@ -235,6 +235,22 @@ linters:
           - revive
         text: "avoid meaningless package names"
         path: "^(types|util)/|.*/(types|util)/"
+      # Constants in the configx package are named after the environment
+      # variables they stand for and hold that name as their value, so the
+      # ALL_CAPS spelling is deliberate and has to match the variable
+      # exactly, and an explicit staticcheck checks list turns off golangci's
+      # own ST1003 exclusion. The path is anchored so that packages merely
+      # named configx elsewhere in the tree stay checked.
+      - path: ^configx/
+        linters:
+          - staticcheck
+        text: "ST1003"
+      # G101 keys off names containing token/password/secret, which every
+      # credential-related environment variable name in configx matches.
+      - path: ^configx/
+        linters:
+          - gosec
+        text: "G101"
 
 issues:
   max-same-issues: 100
