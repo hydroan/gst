@@ -835,26 +835,9 @@ func TestDatabaseWithPagination(t *testing.T) {
 		assertIDs(t, runPage(t, 2, 50), []string{})
 	})
 
-	t.Run("EquivalentToOffsetAndLimit", func(t *testing.T) {
-		defer cleanupTestData()
-		records, ids := newSeqUsers("pg_offset", 9)
-		require.NoError(t, database.Database[*TestUser](context.Background()).Create(records...))
-
-		pageUsers := runPage(t, 3, 2)
-		offsetUsers := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithOrder(types.Asc("id")).
-			WithOffset(4).
-			WithLimit(2).
-			List(&offsetUsers))
-
-		assertIDs(t, pageUsers, ids[4:6])
-		assertIDs(t, offsetUsers, ids[4:6])
-	})
-
 	// Paging clauses land on the chain in call order, so when a chain mixes
-	// WithPagination with WithLimit or WithOffset the last call decides the
-	// clause it sets. Mixing them on one chain is not a supported pattern; the
+	// WithPagination with WithLimit the last call decides the clause it sets.
+	// Mixing them on one chain is not a supported pattern; the
 	// assertions only pin the resulting order down so the behavior cannot
 	// drift back to a deferred scope that always wins.
 	t.Run("LastPagingCallWins", func(t *testing.T) {
@@ -879,97 +862,6 @@ func TestDatabaseWithPagination(t *testing.T) {
 		assertIDs(t, listMixed(func(db types.Database[*TestUser]) types.Database[*TestUser] {
 			return db.WithPagination(2, 3).WithLimit(5)
 		}), ids[3:8])
-
-		// WithOffset last: it replaces the OFFSET and leaves the page LIMIT.
-		assertIDs(t, listMixed(func(db types.Database[*TestUser]) types.Database[*TestUser] {
-			return db.WithPagination(2, 3).WithOffset(6)
-		}), ids[6:9])
-	})
-}
-
-func TestDatabaseWithOffset(t *testing.T) {
-	defer cleanupTestData()
-
-	newSeqUsers := func(prefix string, count int) ([]*TestUser, []string) {
-		users := make([]*TestUser, 0, count)
-		ids := make([]string, 0, count)
-		for i := range count {
-			id := fmt.Sprintf("%s_%05d", prefix, i)
-			users = append(users, &TestUser{
-				Name:  fmt.Sprintf("%s_name_%05d", prefix, i),
-				Email: fmt.Sprintf("%s_%05d@example.com", prefix, i),
-				Age:   18 + i,
-				ID:    id,
-			})
-			ids = append(ids, id)
-		}
-		return users, ids
-	}
-	assertIDs := func(t *testing.T, users []*TestUser, expected []string) {
-		t.Helper()
-		require.Len(t, users, len(expected))
-		for i := range expected {
-			require.Equal(t, expected[i], users[i].ID)
-		}
-	}
-
-	t.Run("BasicOffset", func(t *testing.T) {
-		defer cleanupTestData()
-		records, ids := newSeqUsers("offset_basic", 8)
-		require.NoError(t, database.Database[*TestUser](context.Background()).Create(records...))
-
-		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithOrder(types.Asc("id")).
-			WithOffset(2).
-			WithLimit(3).
-			List(&users))
-
-		assertIDs(t, users, ids[2:5])
-	})
-
-	t.Run("NonPositiveOffsetDoesNotSkip", func(t *testing.T) {
-		defer cleanupTestData()
-		records, ids := newSeqUsers("offset_non_positive", 5)
-		require.NoError(t, database.Database[*TestUser](context.Background()).Create(records...))
-
-		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithOrder(types.Asc("id")).
-			WithOffset(0).
-			WithLimit(3).
-			List(&users))
-		assertIDs(t, users, ids[:3])
-
-		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithOrder(types.Asc("id")).
-			WithOffset(-10).
-			WithLimit(3).
-			List(&users))
-		assertIDs(t, users, ids[:3])
-	})
-
-	t.Run("ChainOrder", func(t *testing.T) {
-		defer cleanupTestData()
-		records, _ := newSeqUsers("offset_chain", 8)
-		require.NoError(t, database.Database[*TestUser](context.Background()).Create(records...))
-
-		users1 := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithOrder(types.Asc("id")).
-			WithOffset(3).
-			WithLimit(2).
-			List(&users1))
-
-		users2 := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithOrder(types.Asc("id")).
-			WithLimit(2).
-			WithOffset(3).
-			List(&users2))
-
-		require.Equal(t, users1, users2)
 	})
 }
 

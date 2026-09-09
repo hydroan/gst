@@ -429,8 +429,6 @@ func TestDatabaseCount(t *testing.T) {
 	// count query, whose single row an OFFSET would skip into a silent zero
 	require.NoError(t, database.Database[*TestUser](context.Background()).WithPagination(2, 2).Count(count))
 	require.Equal(t, 3, *count, "pagination should not affect count")
-	require.NoError(t, database.Database[*TestUser](context.Background()).WithOffset(2).Count(count))
-	require.Equal(t, 3, *count, "offset should not affect count")
 	require.NoError(t, database.Database[*TestUser](context.Background()).WithLimit(1).Count(count))
 	require.Equal(t, 3, *count, "limit should not affect count")
 

@@ -45,7 +45,6 @@ var databaseChainMethods = map[string]bool{
 	"WithBatchSize":  true,
 	"WithPagination": true,
 	"WithLimit":      true,
-	"WithOffset":     true,
 	"WithOrder":      true,
 	"WithExpand":     true,
 	"WithPurge":      true,

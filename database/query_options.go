@@ -332,7 +332,7 @@ func (db *database[M]) WithPagination(page, size int) types.Database[M] {
 	offset := (page - 1) * size
 	if offset <= 0 {
 		// GORM keeps a previously set offset when merging a zero one, so clear
-		// it the same way WithOffset does.
+		// it outright rather than leave a stale skip behind.
 		offset = -1
 	}
 	db.ins = db.ins.Offset(offset).Limit(size)
@@ -351,7 +351,7 @@ func (db *database[M]) WithPagination(page, size int) types.Database[M] {
 // Example:
 //
 //	WithLimit(10)  // Return at most 10 records
-//	WithLimit(100).WithOffset(20)  // Pagination: skip 20, take 100
+//	WithPagination(2, 100)  // Pagination: the second page of a hundred
 //	WithLimit(0)   // Returns all records (unlimited)
 //
 // Note: WithLimit only affects SELECT queries (List, Get, First, Last, etc.).
@@ -364,30 +364,6 @@ func (db *database[M]) WithLimit(limit int) types.Database[M] {
 		limit = defaultLimit
 	}
 	db.ins = db.ins.Limit(limit)
-	return db
-}
-
-// WithOffset adds OFFSET clause to skip records before returning query results.
-// Used together with WithLimit for offset-based pagination.
-//
-// Parameters:
-//   - offset: Number of records to skip. If offset <= 0, the offset clause is cleared.
-//
-// Returns the same database instance for method chaining.
-//
-// Example:
-//
-//	WithOffset(20).WithLimit(10)  // Skip 20 records and return at most 10 records
-//	WithOffset(0)                // Clears any previous offset
-//
-// Note: WithOffset only affects SELECT queries (List, Get, First, Last, etc.).
-func (db *database[M]) WithOffset(offset int) types.Database[M] {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	if offset <= 0 {
-		offset = -1
-	}
-	db.ins = db.ins.Offset(offset)
 	return db
 }
 

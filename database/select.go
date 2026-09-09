@@ -39,7 +39,7 @@ var (
 	ErrNullableResultField   = errors.New("result row field must be a pointer for a term that yields NULL")
 	ErrGroupedScanOne        = errors.New("ScanOne cannot run a grouped aggregation, use Scan")
 	ErrScanOneRowLevel       = errors.New("ScanOne cannot run a row-level select, use Scan")
-	ErrScanOnePaged          = errors.New("ScanOne cannot use Having, Limit or Offset, it always reads one row")
+	ErrScanOnePaged          = errors.New("ScanOne cannot use Having, Limit or Page, it always reads one row")
 	ErrUnknownTermFn         = errors.New("term function is not one the framework defines")
 	ErrUnknownTimeBucket     = errors.New("time bucket is not one the framework defines")
 	ErrUnknownCompareOp      = errors.New("having comparison is not one the framework defines")
@@ -47,7 +47,6 @@ var (
 	ErrHavingValue           = errors.New("having compares against a value SQL cannot order")
 	ErrHavingValueType       = errors.New("having or qualify compares against a value of a kind the term cannot yield; a time term takes a time.Time, which Filter.TimeValue reads from a URL filter's boundary")
 	ErrOrderTermNotSelected  = errors.New("order by references a term the projection does not declare")
-	ErrOffsetWithoutLimit    = errors.New("Offset needs a Limit")
 	ErrSelectorUnusable      = errors.New("select could not attach to the database chain")
 )
 
@@ -156,10 +155,12 @@ func (a *selector[M, R]) OrderBy(orders ...types.Ordering) types.Selector[M, R] 
 	return a
 }
 
-// Limit caps the number of result rows. A non-positive limit means no limit,
-// matching Database.WithLimit: the two would otherwise read the same and mean
+// Limit caps the number of result rows, read from the first: a Limit after a
+// Page drops the page's skip. A non-positive limit means no limit, matching
+// Database.WithLimit: the two would otherwise read the same and mean
 // opposite things.
 func (a *selector[M, R]) Limit(n int) types.Selector[M, R] {
+	a.offset = 0
 	if n <= 0 {
 		a.limit, a.hasLimit = 0, false
 		return a
@@ -168,15 +169,21 @@ func (a *selector[M, R]) Limit(n int) types.Selector[M, R] {
 	return a
 }
 
-// Offset skips result rows. It needs a Limit: an OFFSET without one is a
-// syntax error on MySQL, so the combination is rejected when the query is
-// built rather than by the database.
-func (a *selector[M, R]) Offset(n int) types.Selector[M, R] {
-	if n <= 0 {
-		a.offset = 0
+// Page keeps one page of the result rows: the limit is the page's size and
+// the offset the rows of the pages before it. A page below 1 is the first,
+// so a request's page passes straight through; a size below 1 pages
+// nothing, as Limit caps nothing then. An OFFSET never stands without a
+// LIMIT, which MySQL would refuse: the two are set together here or not at
+// all.
+func (a *selector[M, R]) Page(page, size int) types.Selector[M, R] {
+	if size <= 0 {
+		a.limit, a.offset, a.hasLimit = 0, 0, false
 		return a
 	}
-	a.offset = n
+	if page < 1 {
+		page = 1
+	}
+	a.limit, a.offset, a.hasLimit = size, (page-1)*size, true
 	return a
 }
 
@@ -265,7 +272,7 @@ func (a *selector[M, R]) ScanOne(dest *R) (err error) {
 	// An ungrouped aggregation is one row by definition, so paging or filtering
 	// groups can only turn that row into none. Rejecting the combination keeps
 	// the "always one row" contract true instead of silently returning zeros.
-	if len(a.havings) > 0 || a.hasLimit || a.offset > 0 {
+	if len(a.havings) > 0 || a.hasLimit {
 		return ErrScanOnePaged
 	}
 	tx, err := a.build(buildRead)
@@ -645,13 +652,8 @@ func (a *selector[M, R]) validate(mode buildMode) (projectionShape, error) {
 	if len(a.terms) == 0 {
 		return shape, ErrEmptyProjection
 	}
-	if mode.branch() && (len(a.orders) > 0 || a.hasLimit || a.offset > 0) {
+	if mode.branch() && (len(a.orders) > 0 || a.hasLimit) {
 		return shape, ErrNestedSelectOrdered
-	}
-	// Checked here rather than where paging renders, so Count refuses the
-	// specification Scan would: validation covers the whole of it.
-	if !mode.branch() && a.offset > 0 && !a.hasLimit {
-		return shape, ErrOffsetWithoutLimit
 	}
 	columns, err := modelschema.Columns(a.db.typ)
 	if err != nil {

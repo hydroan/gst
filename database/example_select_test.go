@@ -55,15 +55,15 @@ func ExampleSelect_scanOne() {
 	// total=2100 records=6 smallest=100 largest=600 average=350.0
 }
 
-// OrderBy sorts by a projection term, Limit caps the rows and Offset skips
-// them, which is how a report ranks groups and pages through them. A second
+// OrderBy sorts by a projection term, Limit caps the rows and Page keeps one
+// page of them, which is how a report ranks groups and pages through them. A second
 // order term breaks the tie between alpha and gamma so the page is stable.
 // Rendered for the first page:
 //
 //	SELECT `category` AS `category`, COALESCE(SUM(`amount`), 0) AS `total`
 //	FROM `test_aggregate_records` WHERE `test_aggregate_records`.`deleted_at` IS NULL
 //	GROUP BY `category` ORDER BY `total` DESC,`category` ASC LIMIT ?
-func ExampleSelect_orderByLimitOffset() {
+func ExampleSelect_orderByLimitPage() {
 	seedAggregateExample()
 	defer cleanupAggregateData()
 
@@ -81,7 +81,7 @@ func ExampleSelect_orderByLimitOffset() {
 		panic(err)
 	}
 	second := make([]row, 0)
-	if err := ranking.Offset(2).Scan(&second); err != nil {
+	if err := ranking.Page(2, 2).Scan(&second); err != nil {
 		panic(err)
 	}
 	fmt.Println("page 1:", first)
@@ -92,7 +92,7 @@ func ExampleSelect_orderByLimitOffset() {
 }
 
 // Count reports how many rows the projection produces, which is the total a
-// paginated report needs; the builder's OrderBy, Limit and Offset do not
+// paginated report needs; the builder's OrderBy, Limit and Page do not
 // apply to it, so one builder serves both the page and the total. Rendered:
 //
 //	SELECT count(*) FROM (SELECT `category` AS `category` FROM `test_aggregate_records`

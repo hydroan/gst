@@ -19,7 +19,7 @@ import (
 var (
 	ErrUnionNoBranch         = errors.New("union has no branch")
 	ErrUnionBranch           = errors.New("union branch is not a select this package built")
-	ErrNestedSelectOrdered   = errors.New("a select nested in a union or a join cannot carry OrderBy, Limit or Offset, they belong to the outer query")
+	ErrNestedSelectOrdered   = errors.New("a select nested in a union or a join cannot carry OrderBy, Limit or Page, they belong to the outer query")
 	ErrUnionBranchInstance   = errors.New("union branch was opened on another database instance")
 	ErrUnionOrderNotSelected = errors.New("union order by references a column the result row does not carry")
 	ErrUnionUnusable         = errors.New("union could not attach to the database chain")
@@ -181,9 +181,11 @@ func (u *union[R]) OrderBy(orders ...types.Ordering) types.Union[R] {
 	return u
 }
 
-// Limit caps the number of stacked rows. A non-positive limit means no limit,
-// as on a selector.
+// Limit caps the number of stacked rows, read from the first: a Limit after a
+// Page drops the page's skip. A non-positive limit means no limit, as on a
+// selector.
 func (u *union[R]) Limit(n int) types.Union[R] {
+	u.offset = 0
 	if n <= 0 {
 		u.limit, u.hasLimit = 0, false
 		return u
@@ -192,14 +194,17 @@ func (u *union[R]) Limit(n int) types.Union[R] {
 	return u
 }
 
-// Offset skips stacked rows. It needs a Limit, which is checked when the
-// query is built, as on a selector.
-func (u *union[R]) Offset(n int) types.Union[R] {
-	if n <= 0 {
-		u.offset = 0
+// Page keeps one page of the stacked rows: the limit is the page's size and
+// the offset the rows of the pages before it, as on a selector.
+func (u *union[R]) Page(page, size int) types.Union[R] {
+	if size <= 0 {
+		u.limit, u.offset, u.hasLimit = 0, 0, false
 		return u
 	}
-	u.offset = n
+	if page < 1 {
+		page = 1
+	}
+	u.limit, u.offset, u.hasLimit = size, (page-1)*size, true
 	return u
 }
 
@@ -362,9 +367,8 @@ func (u *union[R]) build(mode buildMode) (*gorm.DB, error) {
 }
 
 // validate checks the union's own clauses: every ordering names a column of
-// the result row, a term ordering names a term some branch projects, and an
-// offset comes with a limit. The branches validate themselves when they are
-// rendered.
+// the result row and a term ordering names a term some branch projects. The
+// branches validate themselves when they are rendered.
 func (u *union[R]) validate() error {
 	typ, fields, err := resultRowFields[R]()
 	if err != nil {
@@ -385,9 +389,6 @@ func (u *union[R]) validate() error {
 		if to, ok := o.(types.TermOrder); ok && !u.anyBranchSelects(to.Term) {
 			return errors.Wrapf(ErrUnionOrderNotSelected, "no branch projects the term %q", ordered.alias)
 		}
-	}
-	if u.offset > 0 && !u.hasLimit {
-		return ErrOffsetWithoutLimit
 	}
 	return nil
 }

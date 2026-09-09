@@ -339,13 +339,13 @@ func TestClickhouse(t *testing.T) {
 		rows := make([]feed, 0)
 		require.NoError(t, database.UnionAllOn[feed](ctx, ins, records, tags).
 			OrderBy(TestAggregateRecordCols.ID.Desc()).
-			Limit(3).Offset(4).
+			Page(2, 3).
 			Scan(&rows))
 		require.Equal(t, []feed{
+			{Kind: "record", ID: "a4", Category: "beta"},
 			{Kind: "record", ID: "a3", Category: "alpha"},
 			{Kind: "record", ID: "a2", Category: "alpha"},
-			{Kind: "record", ID: "a1", Category: "alpha"},
-		}, rows, "under id descending the stack reads t1 a6 a5 a4 a3 a2 a1; the page skips four")
+		}, rows, "under id descending the stack reads t1 a6 a5 a4 a3 a2 a1; the second page of three skips three")
 
 		total := 0
 		require.NoError(t, database.UnionAllOn[feed](ctx, ins, records, tags).Count(&total))

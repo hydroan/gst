@@ -419,17 +419,6 @@ func TestSelectBuildErrors(t *testing.T) {
 			Scan(&rows), database.ErrInvalidAlias)
 	})
 
-	t.Run("OffsetWithoutLimit", func(t *testing.T) {
-		// Validation covers the whole specification, so Count refuses what
-		// Scan refuses rather than answering as if the offset were not there.
-		sel := database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum().As("total")).
-			Offset(1)
-		rows := make([]row, 0)
-		require.ErrorIs(t, sel.Scan(&rows), database.ErrOffsetWithoutLimit)
-		groups := 0
-		require.ErrorIs(t, sel.Count(&groups), database.ErrOffsetWithoutLimit)
-	})
-
 	t.Run("TermWithoutAColumnOrAlias", func(t *testing.T) {
 		// A term built by hand with neither has no name to project under.
 		rows := make([]row, 0)
@@ -563,13 +552,6 @@ func TestSelectBuildErrors(t *testing.T) {
 			ScanOne(&got), database.ErrUnusableFilter)
 	})
 
-	t.Run("OffsetWithoutLimit", func(t *testing.T) {
-		rows := make([]row, 0)
-		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum().As("total")).
-			Offset(1).
-			Scan(&rows), database.ErrOffsetWithoutLimit)
-	})
-
 	t.Run("UnknownCompareOperator", func(t *testing.T) {
 		rows := make([]row, 0)
 		total := TestAggregateRecordCols.Amount.Sum().As("total")
@@ -606,8 +588,8 @@ func TestSelectBuildErrors(t *testing.T) {
 		"Limit": func(a types.Selector[*TestAggregateRecord, struct{ Total int64 }]) types.Selector[*TestAggregateRecord, struct{ Total int64 }] {
 			return a.Limit(1)
 		},
-		"Offset": func(a types.Selector[*TestAggregateRecord, struct{ Total int64 }]) types.Selector[*TestAggregateRecord, struct{ Total int64 }] {
-			return a.Limit(1).Offset(1)
+		"Page": func(a types.Selector[*TestAggregateRecord, struct{ Total int64 }]) types.Selector[*TestAggregateRecord, struct{ Total int64 }] {
+			return a.Page(2, 1)
 		},
 		"Having": func(a types.Selector[*TestAggregateRecord, struct{ Total int64 }]) types.Selector[*TestAggregateRecord, struct{ Total int64 }] {
 			return a.Having(TestAggregateRecordCols.Amount.Sum().As("total").Gt(1))

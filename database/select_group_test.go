@@ -152,12 +152,11 @@ func TestSelectHavingAndTopN(t *testing.T) {
 		require.Equal(t, []row{{Category: "beta", Total: 900}, {Category: "alpha", Total: 600}}, rows)
 	})
 
-	t.Run("OffsetPagesGroups", func(t *testing.T) {
+	t.Run("PagePagesGroups", func(t *testing.T) {
 		rows := make([]row, 0)
 		require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(), TestAggregateRecordCols.Category.Group(), total).
 			OrderBy(total.Desc(), TestAggregateRecordCols.Category.Group().Asc()).
-			Limit(1).
-			Offset(1).
+			Page(2, 1).
 			Scan(&rows))
 		require.Equal(t, []row{{Category: "alpha", Total: 600}}, rows)
 	})
@@ -189,17 +188,40 @@ func TestSelectHavingAndTopN(t *testing.T) {
 		}
 	})
 
-	// A non-positive limit means no limit and a non-positive offset no skip,
-	// matching Database.WithLimit/WithOffset so the two APIs read the same.
-	t.Run("NonPositiveLimitAndOffsetReset", func(t *testing.T) {
+	// A non-positive limit means no limit and a non-positive page size no
+	// paging, matching Database.WithLimit and WithPagination so the APIs read
+	// the same.
+	t.Run("NonPositiveLimitAndPageSizeReset", func(t *testing.T) {
 		rows := make([]row, 0)
 		require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(), TestAggregateRecordCols.Category.Group(), total).
 			OrderBy(TestAggregateRecordCols.Category.Group().Asc()).
 			Limit(1).
 			Limit(0).
-			Offset(0).
+			Page(2, 0).
 			Scan(&rows))
-		require.Len(t, rows, 3, "Limit(0) must clear the cap and Offset(0) must not skip")
+		require.Len(t, rows, 3, "Limit(0) must clear the cap and Page with no size must not page")
+	})
+
+	t.Run("PageKeepsOnePage", func(t *testing.T) {
+		// Page sets the cap and the skip together: the second page of two
+		// under the category order is the third group alone, a page below 1
+		// is the first, and a Limit after a Page reads from the first row
+		// again; Count ignores the page as it ignores a Limit.
+		ranking := database.Select[*TestAggregateRecord, row](context.Background(), TestAggregateRecordCols.Category.Group(), total).
+			OrderBy(TestAggregateRecordCols.Category.Group().Asc())
+		rows := make([]row, 0)
+		statements := make([]types.SQLStatement, 0)
+		require.NoError(t, ranking.Page(2, 2).WithDryRun(&statements).Scan(&rows))
+		require.Contains(t, statements[0].RenderedSQL, " LIMIT 2 OFFSET 2")
+		require.NoError(t, ranking.Page(2, 2).Scan(&rows))
+		require.Equal(t, []row{{Category: "gamma", Total: 600}}, rows)
+		require.NoError(t, ranking.Page(0, 2).Scan(&rows))
+		require.Equal(t, []row{{Category: "alpha", Total: 600}, {Category: "beta", Total: 900}}, rows)
+		require.NoError(t, ranking.Page(2, 2).Limit(2).Scan(&rows))
+		require.Equal(t, []row{{Category: "alpha", Total: 600}, {Category: "beta", Total: 900}}, rows)
+		groups := 0
+		require.NoError(t, ranking.Page(2, 2).Count(&groups))
+		require.Equal(t, 3, groups)
 	})
 }
 

@@ -37,12 +37,13 @@ type SelectBranch[R any] interface {
 //	    Where(RefundCols.TenantID.Eq(tenant))
 //	feed := database.UnionAll[flow](ctx, payments, refunds).
 //	    OrderBy(PaymentCols.PaidAt.As("at").Desc(), PaymentCols.ID.Desc()).
-//	    Limit(20).Offset(40)
+//	    Page(3, 20)
 //	err := feed.Scan(&rows)
 //	err = feed.Count(&total)
 //
 // Rendered, with the ordering and the page pushed into every branch — the
-// bound limit is offset plus limit, 60 here — so each branch reads its first
+// bound limit is the rows before the page plus the page, 60 here — so each
+// branch reads its first
 // sixty rows by its own index and the union sorts a hundred and twenty rows at
 // most:
 //
@@ -58,12 +59,12 @@ type SelectBranch[R any] interface {
 //
 // A branch keeps its own Where, Having and Qualify, and may be a plain
 // projection of columns, which a select on its own rejects: stacked, the rows
-// are a report rather than a List. OrderBy, Limit and Offset belong to the
+// are a report rather than a List. OrderBy, Limit and Page belong to the
 // union and are a build error on a branch. The union has no Where: a
 // condition belongs to the branch whose index serves it.
 //
 // Count adds up the counts of the branches and materializes no row. Like a
-// select's Count it ignores OrderBy, Limit and Offset.
+// select's Count it ignores OrderBy, Limit and Page.
 //
 // Every dialect renders the same statement; on ClickHouse the union is opened
 // with UnionAllOn, on the instance the branches were opened on.
@@ -74,10 +75,11 @@ type Union[R any] interface {
 	// union reads no table of its own, so the table a reference carries is
 	// not checked here.
 	OrderBy(orders ...Ordering) Union[R]
-	// Limit caps the number of stacked rows.
+	// Limit caps the number of stacked rows, read from the first; it drops
+	// the skip of a Page set before it.
 	Limit(n int) Union[R]
-	// Offset skips stacked rows; it needs a Limit.
-	Offset(n int) Union[R]
+	// Page keeps one page of the stacked rows, as Page does on a select.
+	Page(page, size int) Union[R]
 
 	// Scan runs the union and fills dest with the stacked rows.
 	Scan(dest *[]R) error

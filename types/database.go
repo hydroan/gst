@@ -93,8 +93,6 @@ type DatabaseOption[M Model] interface {
 	WithPagination(page, size int) Database[M]
 	// WithLimit restricts the number of returned records for read operations.
 	WithLimit(limit int) Database[M]
-	// WithOffset skips records before returning read operation results.
-	WithOffset(offset int) Database[M]
 	// WithOrder adds ORDER BY terms to sort query results.
 	WithOrder(orders ...Order) Database[M]
 	// WithExpand enables eager loading of specified associations.

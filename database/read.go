@@ -51,7 +51,7 @@ func (db *database[M]) applyDeletedScope() {
 //     data would trigger useless hook invocations.
 //
 // Features:
-//   - Supports pagination with WithLimit/WithOffset
+//   - Supports pagination with WithLimit/WithPagination
 //   - Supports sorting with WithOrder
 //   - Supports filtering with WithQuery
 //   - Supports eager loading with WithExpand
@@ -63,7 +63,7 @@ func (db *database[M]) applyDeletedScope() {
 //
 //	users := make([]*User, 0)
 //	WithQuery(&User{Status: "active"}).List(&users)  // Get active users
-//	WithLimit(10).WithOffset(20).List(&users)  // Paginated results
+//	WithPagination(3, 10).List(&users)  // Paginated results
 func (db *database[M]) List(dest *[]M) (err error) {
 	defer db.reset()
 

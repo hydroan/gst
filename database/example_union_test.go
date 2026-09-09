@@ -83,8 +83,8 @@ func ExampleUnionAll() {
 	// 2024-01-10 08:00 payment p1 acme 100
 }
 
-// A flow pages like a select, and with a Limit the framework pushes the
-// ordering and offset plus limit into every branch: each branch reads its
+// A flow pages like a select, and with a Page the framework pushes the
+// ordering and the page's end, offset plus limit, into every branch: each branch reads its
 // first four rows by its own index, and the union sorts eight rows at most to
 // take the page. Rendered, with 4 bound inside each member and 2 and 2
 // outside:
@@ -104,7 +104,7 @@ func ExampleUnionAll_pagination() {
 	page := make([]flow, 0)
 	if err := database.UnionAll[flow](ctx, paymentFlows(ctx), refundFlows(ctx)).
 		OrderBy(TestPaymentCols.PaidAt.As("at").Desc(), TestPaymentCols.ID.Desc()).
-		Limit(2).Offset(2).
+		Page(2, 2).
 		Scan(&page); err != nil {
 		panic(err)
 	}

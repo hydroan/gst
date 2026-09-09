@@ -150,7 +150,7 @@ func (SelectJoin) sealedJoinSource() {}
 // A condition on a joined select's measure belongs to that select's Having,
 // and a condition on its rows to its Where: the ON names its keys, and an
 // EXISTS subquery there has no row of the select's model to correlate with,
-// so it is refused. The select carries no OrderBy, Limit or Offset of its
+// so it is refused. The select carries no OrderBy, Limit or Page of its
 // own: a derived table has no use for them.
 //
 // One table backs at most one source of a query. A joined select is

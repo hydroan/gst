@@ -47,13 +47,13 @@ package types
 //
 // A Selector is also a SelectBranch: UnionAll stacks several of them, over
 // different models, into one result. In that role a plain projection of
-// columns is allowed, and OrderBy, Limit and Offset belong to the union; see
+// columns is allowed, and OrderBy, Limit and Page belong to the union; see
 // Union.
 //
 // A builder is a specification, not a live statement: it can be read more than
 // once, and each terminal renders the spec afresh, taking only the parts that
 // are meaningful to it — Scan and ScanOne render everything, Count
-// ignores OrderBy, Limit and Offset because none of them changes how many
+// ignores OrderBy, Limit and Page because none of them changes how many
 // rows exist. That is what makes the paginated-report idiom safe — Scan for
 // the page, then Count for the total, off the same builder, with the
 // pagination never skewing the count.
@@ -96,10 +96,14 @@ type Selector[M Model, R any] interface {
 	Qualify(conditions ...TermCondition) Selector[M, R]
 	// OrderBy sorts the result rows by a projected column or term.
 	OrderBy(orders ...Ordering) Selector[M, R]
-	// Limit caps the number of result rows.
+	// Limit caps the number of result rows, read from the first; it drops
+	// the skip of a Page set before it.
 	Limit(n int) Selector[M, R]
-	// Offset skips result rows, for paginating a report.
-	Offset(n int) Selector[M, R]
+	// Page keeps one page of the result rows: size rows after the first
+	// page-1 pages. A page below 1 is the first, so a request's page passes
+	// straight through; a size below 1 pages nothing, as a Limit below 1
+	// caps nothing.
+	Page(page, size int) Selector[M, R]
 
 	// Scan runs the query and fills dest with one element per result row: a
 	// group of a grouped projection, a row of a row-level one.
@@ -107,13 +111,13 @@ type Selector[M Model, R any] interface {
 	// ScanOne runs a projection of measures alone, which is one row by
 	// definition, and fills dest with it. A group key, a plain column, a
 	// window function or a joined select's term makes the read grouped or
-	// row-level and fails it, as do Having, Limit and Offset, which could
+	// row-level and fails it, as do Having, Limit and Page, which could
 	// only turn the one row into none.
 	ScanOne(dest *R) error
 	// Count reports how many rows the query produces after Having and
 	// Qualify — the groups of a grouped projection, the rows of a row-level
 	// one — which is the total a paginated report needs. OrderBy, Limit and
-	// Offset set on the builder do not apply to it.
+	// Page set on the builder do not apply to it.
 	Count(count *int) error
 
 	// WithDryRun builds the SQL without database I/O. An optional collector

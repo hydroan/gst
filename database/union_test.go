@@ -98,7 +98,7 @@ func TestUnionAllDryRunAppliesToTheNextTerminalOnly(t *testing.T) {
 	// Consumed when the union fails to build as well: the option is the
 	// union's terminal's to consume, reached or not.
 	perCategory.WithDryRun(&statements)
-	require.Error(t, database.UnionAll[categoryCount](ctx, perCategory, perLabel).Offset(2).Scan(&counts))
+	require.Error(t, database.UnionAll[categoryCount](ctx, perCategory, perLabel).OrderBy(TestAggregateRecordCols.Amount.Asc()).Scan(&counts))
 	require.NoError(t, perCategory.Scan(&counts))
 	require.Len(t, counts, 3)
 	require.Empty(t, statements)
@@ -173,19 +173,29 @@ func TestUnionAllPushesOrderAndLimitIntoBranches(t *testing.T) {
 
 	t.Run("PagesTheStackedRows", func(t *testing.T) {
 		// Under (category, id) the stack reads a1 a2 a3 t1 t2 a4 a5 t3 a6;
-		// the page skips three and takes two.
+		// the second page of three skips three.
 		rows := make([]feedRow, 0)
-		require.NoError(t, feed().Limit(2).Offset(3).Scan(&rows))
+		require.NoError(t, feed().Page(2, 3).Scan(&rows))
 		require.Equal(t, []feedRow{
 			{Kind: "tag", ID: "t1", Category: "alpha"},
 			{Kind: "tag", ID: "t2", Category: "alpha"},
+			{Kind: "record", ID: "a4", Category: "beta"},
 		}, rows)
+		// A page below 1 is the first, a size below 1 pages nothing.
+		require.NoError(t, feed().Page(0, 3).Scan(&rows))
+		require.Equal(t, []feedRow{
+			{Kind: "record", ID: "a1", Category: "alpha"},
+			{Kind: "record", ID: "a2", Category: "alpha"},
+			{Kind: "record", ID: "a3", Category: "alpha"},
+		}, rows)
+		require.NoError(t, feed().Page(2, 0).Scan(&rows))
+		require.Len(t, rows, 9)
 	})
 
 	t.Run("RendersTheOrderAndTheCapInEveryMember", func(t *testing.T) {
 		statements := make([]types.SQLStatement, 0)
 		rows := make([]feedRow, 0)
-		require.NoError(t, feed().Limit(2).Offset(3).WithDryRun(&statements).Scan(&rows))
+		require.NoError(t, feed().Page(2, 3).WithDryRun(&statements).Scan(&rows))
 		require.Len(t, statements, 1)
 		sql := statements[0].Query
 		ordered := "ORDER BY " + quoteIdent("category") + " ASC," + quoteIdent("id") + " ASC LIMIT "
@@ -194,10 +204,10 @@ func TestUnionAllPushesOrderAndLimitIntoBranches(t *testing.T) {
 		require.Contains(t, sql, " IS NULL "+ordered)
 		require.Equal(t, 1, strings.Count(sql, "OFFSET "), "the offset applies to the stacked rows alone")
 		rendered := statements[0].RenderedSQL
-		require.Equal(t, 1, strings.Count(rendered, " LIMIT 5) AS "+quoteIdent("b0")))
-		require.Equal(t, 1, strings.Count(rendered, " LIMIT 5) AS "+quoteIdent("b1")),
-			"each member reads offset plus limit rows")
-		require.Contains(t, rendered, ") AS "+quoteIdent("u")+" "+ordered+"2 OFFSET 3", "the union pages the stacked rows")
+		require.Equal(t, 1, strings.Count(rendered, " LIMIT 6) AS "+quoteIdent("b0")))
+		require.Equal(t, 1, strings.Count(rendered, " LIMIT 6) AS "+quoteIdent("b1")),
+			"each member reads the rows up to the page's end")
+		require.Contains(t, rendered, ") AS "+quoteIdent("u")+" "+ordered+"3 OFFSET 3", "the union pages the stacked rows")
 	})
 
 	t.Run("PushesTheCapAloneWithoutAnOrder", func(t *testing.T) {
@@ -328,7 +338,7 @@ func TestUnionAllCount(t *testing.T) {
 	t.Run("IgnoresOrderingAndPaging", func(t *testing.T) {
 		total := 0
 		require.NoError(t, database.UnionAll[feedRow](ctx, recordsBranch(ctx), tagsBranch(ctx)).
-			OrderBy(TestAggregateRecordCols.ID.Desc()).Limit(2).Offset(3).
+			OrderBy(TestAggregateRecordCols.ID.Desc()).Page(2, 3).
 			Count(&total))
 		require.Equal(t, 9, total)
 	})
@@ -419,7 +429,7 @@ func TestUnionAllBuildErrors(t *testing.T) {
 		for name, branch := range map[string]types.Selector[*TestAggregateRecord, feedRow]{
 			"OrderBy": recordsBranch(ctx).OrderBy(TestAggregateRecordCols.ID.Asc()),
 			"Limit":   recordsBranch(ctx).Limit(1),
-			"Offset":  recordsBranch(ctx).Offset(1),
+			"Page":    recordsBranch(ctx).Page(2, 1),
 		} {
 			t.Run(name, func(t *testing.T) {
 				err := database.UnionAll[feedRow](ctx, tagsBranch(ctx), branch).Scan(&rows)
@@ -439,10 +449,6 @@ func TestUnionAllBuildErrors(t *testing.T) {
 		// under it: the ordering would sort by something never selected.
 		require.ErrorIs(t, database.UnionAll[feedRow](ctx, recordsBranch(ctx)).
 			OrderBy(TestAggregateRecordCols.Amount.Max().As("id").Desc()).Scan(&rows), database.ErrUnionOrderNotSelected)
-	})
-
-	t.Run("OffsetWithoutLimit", func(t *testing.T) {
-		require.ErrorIs(t, database.UnionAll[feedRow](ctx, recordsBranch(ctx)).Offset(1).Scan(&rows), database.ErrOffsetWithoutLimit)
 	})
 
 	t.Run("UnionAsBranch", func(t *testing.T) {
