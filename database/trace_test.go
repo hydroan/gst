@@ -112,3 +112,47 @@ func spanAttributes(span sdktrace.ReadOnlySpan) map[string]any {
 	}
 	return attrs
 }
+
+// TestTraceSelectPhasesNameTheSpans pins the phases the select and union
+// terminals trace under: the span names, and the log phase field they
+// derive from, are what dashboards and log searches key on.
+func TestTraceSelectPhasesNameTheSpans(t *testing.T) {
+	oteltest.Enable(t)
+	recorder := oteltest.Record(t)
+	defer cleanupAggregateData()
+	defer cleanupTagData()
+	setupAggregateData(t)
+	setupTagData(t)
+	ctx := context.Background()
+
+	type total struct{ Total int64 }
+	type perCategory struct {
+		Category string
+		Total    int64
+	}
+	rows := make([]perCategory, 0)
+	require.NoError(t, database.Select[*TestAggregateRecord, perCategory](ctx, TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum().As("total")).Scan(&rows))
+	one := total{}
+	require.NoError(t, database.Select[*TestAggregateRecord, total](ctx, TestAggregateRecordCols.Amount.Sum().As("total")).ScanOne(&one))
+	groups := 0
+	require.NoError(t, database.Select[*TestAggregateRecord, perCategory](ctx, TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum().As("total")).Count(&groups))
+	feed := make([]feedRow, 0)
+	require.NoError(t, database.UnionAll[feedRow](ctx, recordsBranch(ctx), tagsBranch(ctx)).Scan(&feed))
+	stacked := 0
+	require.NoError(t, database.UnionAll[feedRow](ctx, recordsBranch(ctx), tagsBranch(ctx)).Count(&stacked))
+
+	names := oteltest.EndedNames(recorder)
+	require.Contains(t, names, "database.TestAggregateRecord.Select")
+	require.Contains(t, names, "database.TestAggregateRecord.SelectOne")
+	require.Contains(t, names, "database.TestAggregateRecord.SelectCount")
+	ends := func(suffix string) bool {
+		for _, name := range names {
+			if strings.HasSuffix(name, suffix) {
+				return true
+			}
+		}
+		return false
+	}
+	require.True(t, ends(".UnionAll"), "the union stacks under union_all: %v", names)
+	require.True(t, ends(".UnionAllCount"), "the union counts under union_all_count: %v", names)
+}
