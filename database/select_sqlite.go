@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -103,23 +104,25 @@ func rowStruct(row reflect.Value) reflect.Value {
 // same struct with every time-shaped field replaced by sqliteTimeValue, an
 // embedded struct, anonymous or named and tagged embedded, replaced by its
 // own stand-in when it carries one. An anonymous struct becomes a named
-// field gorm flattens through the embedded tag: reflect.StructOf cannot
-// embed a type carrying methods, wherever it stands, and the caller's type
-// may well carry some. The second return is false when no stand-in is
-// needed or possible — the type has no time-shaped fields, is no struct,
-// carries unexported fields, or embeds something that is no struct, none of
-// which reflect.StructOf can rebuild; those types scan the regular way.
+// field gorm flattens through the embedded tag: reflect.StructOf embeds a
+// type carrying methods in the first field alone, and a non-pointer one
+// only as the sole field, and the caller's type may well carry some.
+// Unexported fields are left out of the stand-in,
+// which reflect.StructOf cannot build with, and copied back around; gorm
+// reads none of them. The second return is false when no stand-in is needed
+// or possible — the type has no time-shaped fields, is no struct, or embeds
+// a non-struct type carrying methods or shaped like a pointer, which
+// reflect.StructOf cannot embed; those types scan the regular way.
 func sqliteTimeMirrorType(rt reflect.Type) (reflect.Type, bool) {
 	if rt.Kind() != reflect.Struct {
 		return nil, false
 	}
 
-	fields := make([]reflect.StructField, rt.NumField())
+	fields := make([]reflect.StructField, 0, rt.NumField())
 	mirrored := false
-	for i := range rt.NumField() {
-		field := rt.Field(i)
+	for field := range rt.Fields() {
 		if len(field.PkgPath) > 0 {
-			return nil, false
+			continue
 		}
 		switch field.Type {
 		case timeType, timePtrType, nullTimeType:
@@ -135,7 +138,7 @@ func sqliteTimeMirrorType(rt reflect.Type) (reflect.Type, bool) {
 			}
 			field = mirroredField
 		}
-		fields[i] = field
+		fields = append(fields, field)
 	}
 	if !mirrored {
 		return nil, false
@@ -162,7 +165,9 @@ func mirrorEmbeddedField(field reflect.StructField) (reflect.StructField, bool) 
 		pointer = true
 	}
 	if typ.Kind() != reflect.Struct {
-		return field, !field.Anonymous
+		// A non-struct embeds as it is when reflect.StructOf can embed it:
+		// carrying no methods and not shaped like a pointer.
+		return field, !field.Anonymous || (typ.NumMethod() == 0 && !pointerShaped(field.Type))
 	}
 	if typ.Implements(valuerType) || reflect.PointerTo(typ).Implements(valuerType) {
 		// One column, read by name; embedding it would flatten it.
@@ -197,19 +202,65 @@ func hasGormSetting(tag reflect.StructTag, name string) bool {
 }
 
 // withGormSetting prepends a setting to the field's gorm tag, keeping the
-// settings it already carries and the tags of other keys.
+// settings it already carries and the tags of other keys as they are.
 func withGormSetting(tag reflect.StructTag, setting string) reflect.StructTag {
-	gorm := setting
-	if existing := tag.Get("gorm"); len(existing) > 0 {
-		gorm += ";" + existing
+	value := setting
+	existing, found := tag.Lookup("gorm")
+	if len(existing) > 0 {
+		value += ";" + existing
 	}
-	others := make([]string, 0, 2)
-	for pair := range strings.FieldsSeq(string(tag)) {
-		if !strings.HasPrefix(pair, "gorm:") {
-			others = append(others, pair)
+	quoted := "gorm:" + strconv.Quote(value)
+	if !found {
+		if len(tag) == 0 {
+			return reflect.StructTag(quoted)
+		}
+		return reflect.StructTag(quoted + " " + string(tag))
+	}
+	start, end := tagKeySpan(string(tag), "gorm")
+	return reflect.StructTag(string(tag)[:start] + quoted + string(tag)[end:])
+}
+
+// tagKeySpan finds the key:"value" pair of a key in a struct tag, scanning
+// the way reflect.StructTag.Lookup does, and returns its bounds; the key is
+// known to be present.
+func tagKeySpan(tag, key string) (int, int) {
+	i := 0
+	for i < len(tag) {
+		for i < len(tag) && tag[i] == ' ' {
+			i++
+		}
+		start := i
+		for i < len(tag) && tag[i] > ' ' && tag[i] != ':' && tag[i] != '"' && tag[i] != 0x7f {
+			i++
+		}
+		name := tag[start:i]
+		if i+1 >= len(tag) || tag[i] != ':' || tag[i+1] != '"' {
+			break
+		}
+		i += 2
+		for i < len(tag) && tag[i] != '"' {
+			if tag[i] == '\\' {
+				i++
+			}
+			i++
+		}
+		i++
+		if name == key {
+			return start, i
 		}
 	}
-	return reflect.StructTag(strings.Join(append([]string{`gorm:"` + gorm + `"`}, others...), " "))
+	return len(tag), len(tag)
+}
+
+// pointerShaped reports whether a type is represented by a pointer, which
+// reflect.StructOf cannot embed beside another field.
+func pointerShaped(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Pointer, reflect.Map, reflect.Chan, reflect.Func, reflect.Interface, reflect.UnsafePointer:
+		return true
+	default:
+		return false
+	}
 }
 
 // copyMirrorRow writes one scanned mirror row into the caller's row,
@@ -217,7 +268,11 @@ func withGormSetting(tag reflect.StructTag, setting string) reflect.StructTag {
 // embedded stand-in field by field.
 func copyMirrorRow(mirror, dest reflect.Value) {
 	for i := range dest.NumField() {
-		source := mirror.Field(i)
+		field := dest.Type().Field(i)
+		if len(field.PkgPath) > 0 {
+			continue
+		}
+		source := mirror.FieldByName(field.Name)
 		switch {
 		case source.Type() == sqliteTimeValueType:
 			value, _ := reflect.TypeAssert[sqliteTimeValue](source)
