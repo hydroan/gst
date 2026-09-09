@@ -407,7 +407,9 @@ err := database.Select[*appmodel.Record, categoryTotal](ctx,
 
 要在别处再引用的项先赋给变量：`Having`、`OrderBy`、`Qualify`、窗口的 `PartitionBy` 和
 `OrderBy`、联合的排序、主查询读子投影的项，都是按项的值在投影里找同一个项，把同一个变量
-传两遍最稳，改了别名的项就不再是同一个项。
+传两遍最稳，改了别名的项就不再是同一个项。反过来，主查询自己能算出来的项（不带表的
+`types.Count()`、`Literal`，主表或主查询连入模型的项）子投影也投影了同一个，框架分不清是谁的，
+构建期报错，给其中一个换别名。
 
 几条会影响正确性的约定：
 
@@ -615,8 +617,10 @@ err := database.Select[*appmodel.Record, recordWithTags](ctx, RecordCols.ID, tag
 - 主查询本身分组时，子投影的项会成为主查询的分组键，这只在主查询按连接列分组时才成立，
   框架会检查，例如按账户分组再连每个账户的退款合计。主查询没有自己的度量时是行级读：
   每条主表行带上子投影的项，时间桶只是每行的标签；要按桶汇总就加上度量。
-- 子投影读的表不能是主查询的表，也不能是已经连进来的表，它自己通过连接读到的表也算在内：
-  临时表是通过子投影模型的列引用来寻址的，同一张表出现两次就分不清。要给每一行带上本表按某个维度的合计，用窗口
+- 子投影读的表不能是主查询的表，也不能是已经连进来的表：临时表是通过子投影模型的列引用来
+  寻址的，同一张表出现两次就分不清。子投影自己再连进来的表不受此限；但主查询自己能算出来的项
+  （不带表的 `types.Count()`、`Literal`，主表或主查询连入模型的项）子投影也投影了同一个就报
+  `ErrDuplicateAlias`，子投影的 `COUNT(*)` 要被主查询读，写成 `TagCols.ID.Count()`。要给每一行带上本表按某个维度的合计，用窗口
   `Sum().Over(PartitionBy(键))`，不用连接。
 - 子投影不能按时间桶分组后再连：桶是列的标签（如 `2024-01-10`），没有哪一列等于它，构建期报错。
 - 临时表由数据库物化，行数就是子投影的组数：条件写进子投影，物化得越少越好。
@@ -636,7 +640,7 @@ err := database.Select[*appmodel.Record, recordWithTags](ctx, RecordCols.ID, tag
 | `ErrJoinNoCorrelation` | ON 里至少一对 `EqCol` 连到主查询或更早连入的表 |
 | `ErrJoinNotUnique` | ON 用 `EqCol`、常量等值钉住子投影的全部分组键 |
 | `ErrJoinSelectColumn` | 主查询只能读子投影投影出来的项，把同一个项（共享变量）再传一遍，别改它的别名；`Where` 里只能用它的键列，别的条件写进子投影 |
-| `ErrDuplicateAlias` | 两个子投影投影了同一个项，给其中一个 `As` 别的别名 |
+| `ErrDuplicateAlias` | 两个子投影投影了同一个项，或主查询自己能算的项被子投影也投影了，给其中一个 `As` 别的别名；子投影的 `COUNT(*)` 用 `Cols.ID.Count()` |
 | `ErrJoinSelectNotKeyed` | 主查询分组时按连接列分组；连接列是另一个子投影的键时，把那个键项也投影成分组键 |
 | `ErrJoinDuplicateTable` | 一张表只能作为一个来源，同组合计用窗口 |
 | `ErrJoinMeasure` | 分组投影里被连模型的列只能做分组键或 `Min`、`Max`、`CountDistinct` |
