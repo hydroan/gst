@@ -21,12 +21,12 @@ var (
 	colCredentialUserID   = types.NewColumn[*modeliamaccount.PasswordCredential, string]("user_id")
 	colPasswordHash       = types.NewColumn[*modeliamaccount.PasswordCredential, string]("password_hash")
 	colMustChangePassword = types.NewColumn[*modeliamaccount.PasswordCredential, bool]("must_change_password")
-	colPasswordChangedAt  = types.NewColumn[*modeliamaccount.PasswordCredential, *time.Time]("password_changed_at")
+	colPasswordChangedAt  = types.NewTimeColumn[*modeliamaccount.PasswordCredential]("password_changed_at")
 	colIdentityUserID     = types.NewColumn[*modeliamaccount.EmailIdentity, string]("user_id")
 	colEmail              = types.NewColumn[*modeliamaccount.EmailIdentity, string]("email")
 	colNormalizedEmail    = types.NewColumn[*modeliamaccount.EmailIdentity, string]("normalized_email")
-	colVerifiedAt         = types.NewColumn[*modeliamaccount.EmailIdentity, *time.Time]("verified_at")
-	colLastChangedAt      = types.NewColumn[*modeliamaccount.EmailIdentity, *time.Time]("last_changed_at")
+	colVerifiedAt         = types.NewTimeColumn[*modeliamaccount.EmailIdentity]("verified_at")
+	colLastChangedAt      = types.NewTimeColumn[*modeliamaccount.EmailIdentity]("last_changed_at")
 )
 
 // iamAccountGateway adapts the framework IAM user model for the built-in email
