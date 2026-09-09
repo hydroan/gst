@@ -144,11 +144,13 @@ func (c Column[T]) Lte(value T) Filter { return c.filter(FilterOpLte, value) }
 
 // In matches rows where the column is one of values. Calling it without any
 // value matches nothing, mirroring SQL list semantics.
-func (c Column[T]) In(values ...T) Filter { return c.filter(FilterOpIn, values) }
+func (c Column[T]) In(values ...T) Filter { return c.filter(FilterOpIn, append([]T(nil), values...)) }
 
 // NotIn matches rows where the column is none of values. Calling it without
 // any value matches nothing; it does not mean "exclude nothing".
-func (c Column[T]) NotIn(values ...T) Filter { return c.filter(FilterOpNotIn, values) }
+func (c Column[T]) NotIn(values ...T) Filter {
+	return c.filter(FilterOpNotIn, append([]T(nil), values...))
+}
 
 // Like matches rows where the column contains value as a substring. The
 // pattern is a string on every column type, because substring matching runs

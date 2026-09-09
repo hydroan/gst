@@ -204,14 +204,14 @@ func FilterLte(column string, value any) Filter {
 // FilterIn matches rows where column is one of values. The slice is bound as
 // a whole; an empty slice matches nothing.
 func FilterIn[T any](column string, values []T) Filter {
-	return Filter{Column: column, Op: FilterOpIn, Value: values}
+	return Filter{Column: column, Op: FilterOpIn, Value: append([]T(nil), values...)}
 }
 
 // FilterNotIn matches rows where column is none of values. The slice is
 // bound as a whole; an empty slice matches nothing (SQL NOT IN over an empty
 // list never holds), it does not mean "exclude nothing".
 func FilterNotIn[T any](column string, values []T) Filter {
-	return Filter{Column: column, Op: FilterOpNotIn, Value: values}
+	return Filter{Column: column, Op: FilterOpNotIn, Value: append([]T(nil), values...)}
 }
 
 // FilterLike matches rows where column contains value as a substring; value
