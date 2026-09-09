@@ -16,20 +16,54 @@ const (
 	sampleUsername = "sample"
 )
 
-// withTokenLifetimes configures the durations token generation reads, which are
-// zero in a bare test process and would otherwise issue tokens already expired.
-func withTokenLifetimes(t *testing.T, access, refresh time.Duration) {
+const sampleSigningKey = "sample-signing-key"
+
+// withTokenConfig configures what token generation reads: the signing key,
+// which has no default and without which this package issues nothing, and the
+// lifetimes, which are zero in a bare test process and would otherwise issue
+// tokens already expired.
+func withTokenConfig(t *testing.T, access, refresh time.Duration) {
 	t.Helper()
 
 	previous := config.App.Auth
 	t.Cleanup(func() { config.App.Auth = previous })
+	config.App.Auth.JWTSecret = sampleSigningKey
 	config.App.Auth.AccessTokenExpireDuration = access
 	config.App.Auth.RefreshTokenExpireDuration = refresh
 }
 
+// TestSigningKeyRequired covers the deployment that never chose a key.
+//
+// Every entry point refuses it by name rather than falling back to one the
+// framework picked, because a key the framework picks is a key every deployment
+// shares and anyone with the source can compute.
+func TestSigningKeyRequired(t *testing.T) {
+	withTokenConfig(t, time.Hour, 24*time.Hour)
+	// Issue a valid pair first, then take the key away: parsing must refuse
+	// even a token this process itself signed a moment ago.
+	accessToken, refreshToken, err := jwt.GenTokens(sampleUserID, sampleUsername)
+	require.NoError(t, err)
+	config.App.Auth.JWTSecret = "   "
+
+	t.Run("refuses_to_issue", func(t *testing.T) {
+		_, _, err := jwt.GenTokens(sampleUserID, sampleUsername)
+		require.ErrorIs(t, err, jwt.ErrMissingSigningKey)
+	})
+
+	t.Run("refuses_to_parse", func(t *testing.T) {
+		_, err := jwt.ParseToken(accessToken)
+		require.ErrorIs(t, err, jwt.ErrMissingSigningKey)
+	})
+
+	t.Run("refuses_to_refresh", func(t *testing.T) {
+		_, _, err := jwt.RefreshTokens(accessToken, refreshToken)
+		require.ErrorIs(t, err, jwt.ErrMissingSigningKey)
+	})
+}
+
 func TestGenTokens(t *testing.T) {
 	t.Run("issues_a_parsable_access_token", func(t *testing.T) {
-		withTokenLifetimes(t, time.Hour, 24*time.Hour)
+		withTokenConfig(t, time.Hour, 24*time.Hour)
 
 		accessToken, refreshToken, err := jwt.GenTokens(sampleUserID, sampleUsername)
 		require.NoError(t, err)
@@ -46,7 +80,7 @@ func TestGenTokens(t *testing.T) {
 	// independent: issuing again does not disturb what was issued before, which
 	// is the property that lets them work without a shared store.
 	t.Run("does_not_invalidate_a_token_it_issued_earlier", func(t *testing.T) {
-		withTokenLifetimes(t, time.Hour, 24*time.Hour)
+		withTokenConfig(t, time.Hour, 24*time.Hour)
 
 		first, _, err := jwt.GenTokens(sampleUserID, sampleUsername)
 		require.NoError(t, err)
@@ -59,7 +93,7 @@ func TestGenTokens(t *testing.T) {
 	})
 
 	t.Run("rejects_a_user_it_cannot_name", func(t *testing.T) {
-		withTokenLifetimes(t, time.Hour, 24*time.Hour)
+		withTokenConfig(t, time.Hour, 24*time.Hour)
 
 		_, _, err := jwt.GenTokens("", sampleUsername)
 		require.Error(t, err)
@@ -69,7 +103,7 @@ func TestGenTokens(t *testing.T) {
 	// its holder a token no signature stands behind, and the holders of such a
 	// name are exactly the accounts worth forging.
 	t.Run("signs_a_token_for_every_username", func(t *testing.T) {
-		withTokenLifetimes(t, time.Hour, 24*time.Hour)
+		withTokenConfig(t, time.Hour, 24*time.Hour)
 
 		for _, username := range []string{sampleUsername, "admin", "root"} {
 			accessToken, refreshToken, err := jwt.GenTokens(sampleUserID, username)
@@ -85,7 +119,7 @@ func TestGenTokens(t *testing.T) {
 }
 
 func TestParseToken(t *testing.T) {
-	withTokenLifetimes(t, time.Hour, 24*time.Hour)
+	withTokenConfig(t, time.Hour, 24*time.Hour)
 
 	t.Run("rejects_an_empty_token", func(t *testing.T) {
 		_, err := jwt.ParseToken("")
@@ -127,8 +161,18 @@ func TestParseToken(t *testing.T) {
 		}
 	})
 
+	t.Run("rejects_a_token_signed_with_another_key", func(t *testing.T) {
+		accessToken, _, err := jwt.GenTokens(sampleUserID, sampleUsername)
+		require.NoError(t, err)
+
+		config.App.Auth.JWTSecret = sampleSigningKey + "-rotated"
+		_, err = jwt.ParseToken(accessToken)
+		require.Error(t, err)
+		config.App.Auth.JWTSecret = sampleSigningKey
+	})
+
 	t.Run("rejects_an_expired_token", func(t *testing.T) {
-		withTokenLifetimes(t, -time.Minute, 24*time.Hour)
+		withTokenConfig(t, -time.Minute, 24*time.Hour)
 
 		accessToken, _, err := jwt.GenTokens(sampleUserID, sampleUsername)
 		require.NoError(t, err)
@@ -139,7 +183,7 @@ func TestParseToken(t *testing.T) {
 }
 
 func TestParseTokenFromHeader(t *testing.T) {
-	withTokenLifetimes(t, time.Hour, 24*time.Hour)
+	withTokenConfig(t, time.Hour, 24*time.Hour)
 
 	accessToken, _, err := jwt.GenTokens(sampleUserID, sampleUsername)
 	require.NoError(t, err)
@@ -178,7 +222,7 @@ func TestParseTokenFromHeader(t *testing.T) {
 // request's browser and operating system against a stored session, which made a
 // stateless token stateful and refused a user who had merely switched browsers.
 func TestVerify(t *testing.T) {
-	withTokenLifetimes(t, time.Hour, 24*time.Hour)
+	withTokenConfig(t, time.Hour, 24*time.Hour)
 
 	t.Run("accepts_a_token_it_issued", func(t *testing.T) {
 		accessToken, _, err := jwt.GenTokens(sampleUserID, sampleUsername)
@@ -199,7 +243,7 @@ func TestVerify(t *testing.T) {
 }
 
 func TestRefreshTokens(t *testing.T) {
-	withTokenLifetimes(t, time.Hour, 24*time.Hour)
+	withTokenConfig(t, time.Hour, 24*time.Hour)
 
 	t.Run("issues_a_new_pair", func(t *testing.T) {
 		accessToken, refreshToken, err := jwt.GenTokens(sampleUserID, sampleUsername)

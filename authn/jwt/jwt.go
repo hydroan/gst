@@ -23,12 +23,39 @@ var (
 	ErrTokenExpired        = errors.New("token expired")
 	ErrTokenMalformed      = errors.New("token malformed")
 	ErrTokenNotValidYet    = errors.New("token not valid yet")
+
+	// ErrMissingSigningKey names the configuration a deployment must supply
+	// before this package will issue or accept a token.
+	ErrMissingSigningKey = errors.New("auth.jwt_secret is not configured")
 )
 
-var (
-	secret = []byte("defaultSecret")
-	issuer = consts.FrameworkName
-)
+var issuer = consts.FrameworkName
+
+// signingKey returns the key this package signs every token it issues with, and
+// verifies every token it parses against. It is the package's one point of
+// access to that key.
+//
+// The key has no default. A key shipped with the framework is a key every
+// deployment shares and anyone holding the source can compute, which makes a
+// token forgeable for any user rather than issued to one; the signature would
+// then prove nothing it is relied on to prove. An unconfigured deployment is
+// therefore refused here instead of being served with such a key.
+func signingKey() ([]byte, error) {
+	key := strings.TrimSpace(config.App.Auth.JWTSecret)
+	if len(key) == 0 {
+		return nil, ErrMissingSigningKey
+	}
+	return []byte(key), nil
+}
+
+// keyFuncFor hands an already-resolved key to the parser.
+//
+// Each entry point resolves the key once and parses with it, so every token
+// read within one call is verified against the same key even if configuration
+// changes underneath.
+func keyFuncFor(key []byte) jwt.Keyfunc {
+	return func(*jwt.Token) (any, error) { return key, nil }
+}
 
 type Claims struct {
 	UserID            string `json:"user_id,omitempty"`
@@ -62,18 +89,22 @@ func GenTokens(userID string, username string) (aToken, rToken string, err error
 	if len(userID) < MinUserIDLength || len(username) < MinUsernameLength {
 		return "", "", errors.New("invalid user id or username")
 	}
-
-	if aToken, err = genAccessToken(userID, username); err != nil {
+	key, err := signingKey()
+	if err != nil {
 		return "", "", err
 	}
-	if rToken, err = genRefreshToken(userID); err != nil {
+
+	if aToken, err = genAccessToken(key, userID, username); err != nil {
+		return "", "", err
+	}
+	if rToken, err = genRefreshToken(key, userID); err != nil {
 		return "", "", err
 	}
 
 	return aToken, rToken, nil
 }
 
-func genAccessToken(userID string, username string) (token string, err error) {
+func genAccessToken(key []byte, userID string, username string) (token string, err error) {
 	now := time.Now()
 	claims := Claims{
 		UserID:    userID,
@@ -85,24 +116,24 @@ func genAccessToken(userID string, username string) (token string, err error) {
 		Subject:   userID,
 	}
 	// NewWithClaims builds a signing object using the given signing method,
-	// SignedString signs it with the given secret and returns the fully encoded token string.
-	if token, err = jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(secret); err != nil {
+	// SignedString signs it with the given key and returns the fully encoded token string.
+	if token, err = jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(key); err != nil {
 		return "", errors.Wrap(err, "failed to generate access token")
 	}
 	return token, nil
 }
 
-func genRefreshToken(userID string) (rToken string, err error) {
+func genRefreshToken(key []byte, userID string) (rToken string, err error) {
 	now := time.Now()
 	// a refresh token carries no custom data,
-	// sign it with the given secret and return the fully encoded token string
+	// sign it with the given key and return the fully encoded token string
 	if rToken, err = jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.RegisteredClaims{
 		ExpiresAt: jwt.NewNumericDate(now.Add(config.App.Auth.RefreshTokenExpireDuration)), // expiration time
 		IssuedAt:  jwt.NewNumericDate(now),                                                 // issued at
 		NotBefore: jwt.NewNumericDate(now),                                                 // valid from
 		Issuer:    issuer,                                                                  // issuer
 		Subject:   userID,
-	}).SignedString(secret); err != nil {
+	}).SignedString(key); err != nil {
 		return "", errors.Wrap(err, "failed to generate refresh token")
 	}
 	return rToken, nil
@@ -110,10 +141,16 @@ func genRefreshToken(userID string) (rToken string, err error) {
 
 // RefreshTokens issues a new access token from the given refresh token.
 func RefreshTokens(accessToken, refreshToken string) (newAccessToken, newRefreshToken string, err error) {
+	key, err := signingKey()
+	if err != nil {
+		return "", "", err
+	}
+	keyFn := keyFuncFor(key)
+
 	// verify refresh token
 	refreshClaims := new(Claims)
 	var token *jwt.Token
-	if token, err = jwt.ParseWithClaims(refreshToken, refreshClaims, keyFunc); err != nil {
+	if token, err = jwt.ParseWithClaims(refreshToken, refreshClaims, keyFn); err != nil {
 		return "", "", errors.Wrap(err, ErrInvalidRefreshToken.Error())
 	}
 	if !token.Valid {
@@ -125,7 +162,7 @@ func RefreshTokens(accessToken, refreshToken string) (newAccessToken, newRefresh
 
 	// verify access token
 	accessClaims := new(Claims)
-	if token, err = jwt.ParseWithClaims(accessToken, accessClaims, keyFunc); err != nil {
+	if token, err = jwt.ParseWithClaims(accessToken, accessClaims, keyFn); err != nil {
 		if !errors.Is(err, jwt.ErrTokenExpired) {
 			return "", "", errors.Wrap(err, ErrInvalidAccessToken.Error())
 		}
@@ -145,8 +182,13 @@ func ParseToken(tokenStr string) (*Claims, error) {
 	if len(tokenStr) == 0 {
 		return nil, ErrTokenMalformed
 	}
+	key, err := signingKey()
+	if err != nil {
+		return nil, err
+	}
+
 	claims := new(Claims)
-	token, err := jwt.ParseWithClaims(tokenStr, claims, keyFunc)
+	token, err := jwt.ParseWithClaims(tokenStr, claims, keyFuncFor(key))
 	if err != nil {
 		switch {
 		case errors.Is(err, jwt.ErrTokenExpired):
@@ -206,7 +248,6 @@ func ParseTokenFromHeader(header http.Header) (token string, claims *Claims, err
 	claims, err = ParseToken(items[1])
 	return token, claims, err
 }
-func keyFunc(token *jwt.Token) (any, error) { return secret, nil }
 
 // Token is the OAuth 2.0 token response of RFC 6749 section 5.1, plus the
 // id_token OpenID Connect adds to it.
