@@ -966,6 +966,28 @@ func TestSelectJoinSelectReadsTheDerivedTerms(t *testing.T) {
 		require.Empty(t, statements)
 	})
 
+	t.Run("AnAliasedTermReadsThroughAnInnerJoin", func(t *testing.T) {
+		// Under an inner join the read-through carries no sign of its own:
+		// the query's count of its rows would be one per record, the
+		// select's is the tags of each, and the aliased term reads the
+		// select's.
+		n := types.Count().As("n")
+		perRecord := database.Select[*TestRecordTag, struct {
+			RecordID string
+			N        int64
+		}](ctx, TestRecordTagCols.RecordID.Group(), n)
+		type counted struct {
+			ID string
+			N  int64
+		}
+		rows := make([]counted, 0)
+		require.NoError(t, database.Select[*TestAggregateRecord, counted](ctx, TestAggregateRecordCols.ID.Group(), n).
+			Join(types.JoinSelect(perRecord, onRecord())).
+			OrderBy(TestAggregateRecordCols.ID.Group().Asc()).
+			Scan(&rows))
+		require.Equal(t, []counted{{ID: "a1", N: 1}, {ID: "a3", N: 1}, {ID: "a4", N: 1}}, rows)
+	})
+
 	t.Run("ChainedSelectsInAnyTermOrder", func(t *testing.T) {
 		// The notes are tied on the tags' key; the query groups by that key
 		// through the tags' key term, wherever in the projection it stands.
@@ -1344,28 +1366,76 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 		require.ErrorContains(t, err, "under its default alias")
 	})
 
+	t.Run("SharedConstantIsRefused", func(t *testing.T) {
+		// A constant is the query's own under any alias: written by the
+		// select too, it is refused rather than read as either, and whether
+		// a row matched is read from the select's key.
+		kind := types.Literal("tagged").As("kind")
+		perRecord := database.Select[*TestRecordTag, struct {
+			RecordID string
+			Kind     string
+		}](ctx, TestRecordTagCols.RecordID.Group(), kind)
+		type marked struct {
+			ID   string
+			Kind *string
+		}
+		err := database.Select[*TestAggregateRecord, marked](ctx, TestAggregateRecordCols.ID, kind).
+			Join(types.LeftJoinSelect(perRecord, onRecord)).
+			Scan(&[]marked{})
+		require.ErrorIs(t, err, database.ErrDuplicateAlias)
+		require.ErrorContains(t, err, "a constant is the query's own")
+	})
+
+	t.Run("TermUnderItsDefaultAliasHoweverSpelled", func(t *testing.T) {
+		// The default alias is the effective one: a term never aliased, one
+		// aliased to nothing and one aliased to its own default name are
+		// spelled as two authors would, and refused alike.
+		for _, tt := range []struct {
+			label string
+			tier  types.Term
+		}{
+			{"NeverAliased", TestAccountCols.Tier.Max()},
+			{"AliasedToNothing", TestAccountCols.Tier.Max().As("")},
+			{"AliasedToTheDefault", TestAccountCols.Tier.Max().As("tier")},
+		} {
+			t.Run(tt.label, func(t *testing.T) {
+				perCategory := database.Select[*TestRecordTag, struct {
+					Category string
+					Tier     *string
+				}](ctx, TestRecordTagCols.Category.Group(), tt.tier).
+					Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestRecordTagCols.Category)))
+				type tiered struct {
+					ID   string
+					Tier *string
+				}
+				err := database.Select[*TestAggregateRecord, tiered](ctx, TestAggregateRecordCols.ID, tt.tier).
+					Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestAggregateRecordCols.Category)),
+						types.LeftJoinSelect(perCategory, TestRecordTagCols.Category.EqCol(TestAggregateRecordCols.Category))).
+					Scan(&[]tiered{})
+				require.ErrorIs(t, err, database.ErrDuplicateAlias)
+				require.ErrorContains(t, err, "under its default alias")
+			})
+		}
+	})
+
 	t.Run("AliasedTermsReadThrough", func(t *testing.T) {
 		// An alias is written on purpose: the select's aliased Count, constant
 		// and ranking are read through, as a term of a model the query joins
 		// itself is.
 		n := types.Count().As("n")
-		kind := types.Literal("tagged").As("kind")
 		perRecord := database.Select[*TestRecordTag, struct {
 			RecordID string
 			N        int64
-			Kind     string
-		}](ctx, TestRecordTagCols.RecordID.Group(), n, kind)
+		}](ctx, TestRecordTagCols.RecordID.Group(), n)
 		type marked struct {
-			ID   string
-			N    *int64
-			Kind *string
+			ID string
+			N  *int64
 		}
 		statements := make([]types.SQLStatement, 0)
-		require.NoError(t, database.Select[*TestAggregateRecord, marked](ctx, TestAggregateRecordCols.ID, n, kind).
+		require.NoError(t, database.Select[*TestAggregateRecord, marked](ctx, TestAggregateRecordCols.ID, n).
 			Join(types.LeftJoinSelect(perRecord, onRecord)).
 			WithDryRun(&statements).Scan(&[]marked{}))
 		require.Contains(t, statements[0].Query, qualified("j0", "n")+" AS "+quoteIdent("n"))
-		require.Contains(t, statements[0].Query, qualified("j0", "kind")+" AS "+quoteIdent("kind"))
 
 		tier := TestAccountCols.Tier.Max().As("top_tier")
 		perCategory := database.Select[*TestRecordTag, struct {

@@ -25,7 +25,7 @@ import (
 var (
 	ErrJoinNotUnique        = errors.New("join must pin the joined model's primary key or one of its unique indexes, or every group key of the joined select, with equalities, or a row could match several joined rows")
 	ErrJoinNoCorrelation    = errors.New("join predicates tie the joined model to no table of the query")
-	ErrJoinDuplicateTable   = errors.New("one table backs at most one source of a query: a model is joined once, the queried model does not join itself, and a joined select reads a table no other source reads")
+	ErrJoinDuplicateTable   = errors.New("one table backs at most one source of a query: a model is joined once, the queried model does not join itself, a joined select reads a table no other source reads, and a select does not join itself, directly or through the selects it joins")
 	ErrJoinMeasure          = errors.New("a measure over a joined column must be MIN, MAX or COUNT DISTINCT, the other aggregates would count the joined row once per row of the group")
 	ErrJoinSource           = errors.New("join source is not one the framework defines")
 	ErrJoinSelectNotGrouped = errors.New("a joined select must be grouped, its group keys are what it is joined on")
@@ -532,7 +532,10 @@ func (a *selector[M, R]) derivedTerms(shape projectionShape) (map[string]*joined
 			// silently become the select's. An alias is written on purpose, and
 			// passing the select's aliased term is reading it through.
 			if a.ownTerm(t) && defaultAlias(t) {
-				return nil, errors.Wrapf(ErrDuplicateAlias, "%q is projected by the query and by the joined select over %q alike, under its default alias; give the query's own term an alias of its own, or alias the select's term and pass it to read it through", a.alias(t), jt.table)
+				if t.IsLiteral() {
+					return nil, errors.Wrapf(ErrDuplicateAlias, "the constant %q is projected by the query and by the joined select over %q alike; a constant is the query's own, and whether a row matched the select is read from the select's key, NULL when it did not", a.alias(t), jt.table)
+				}
+				return nil, errors.Wrapf(ErrDuplicateAlias, "%q is projected by the query and by the joined select over %q alike, under its default alias; give the query's own term an alias of its own, in a variable of its own, or alias the select's term and pass it to read it through", a.alias(t), jt.table)
 			}
 			// Two selects projecting the same term would each answer for it;
 			// the query has to tell them apart by alias.
@@ -563,24 +566,36 @@ func (a *selector[M, R]) ownTerm(t types.Term) bool {
 // defaultAlias reports whether a term projects under the alias its
 // constructor gave it: the column's name, or the function's for a term
 // without a column. Two authors writing the term independently spell it
-// alike exactly then; an alias of the author's own tells the two apart.
+// alike exactly then; an alias of the author's own tells the two apart. A
+// constant has no default and every author names it, so it counts as one
+// spelled alike: a constant is the query's own wherever it stands.
 func defaultAlias(t types.Term) bool {
 	if len(t.Column) > 0 {
-		return t.Alias == t.Column
+		return termAlias(t) == t.Column
 	}
 	switch t.Fn {
 	case types.FnCount:
-		return t.Alias == types.DefaultCountAlias
+		return termAlias(t) == types.DefaultCountAlias
 	case types.FnRowNumber:
-		return t.Alias == types.RowNumber().Alias
+		return termAlias(t) == rowNumberAlias
 	case types.FnRank:
-		return t.Alias == types.Rank().Alias
+		return termAlias(t) == rankAlias
 	case types.FnDenseRank:
-		return t.Alias == types.DenseRank().Alias
+		return termAlias(t) == denseRankAlias
+	case types.FnLiteral:
+		return true
 	default:
 		return false
 	}
 }
+
+// The aliases the ranking constructors give their terms, read once from the
+// constructors so that the default stays defined in one place.
+var (
+	rowNumberAlias = types.RowNumber().Alias
+	rankAlias      = types.Rank().Alias
+	denseRankAlias = types.DenseRank().Alias
+)
 
 // derivedOf reports the joined select a term is a column of. The alias
 // finds the candidate and the whole term confirms it: another term of the
@@ -651,6 +666,8 @@ func (a *selector[M, R]) groupDerivedTerms(shape *projectionShape) error {
 				remedy := "group by it"
 				if other, ok := shape.joined[table]; ok && other.sub != nil {
 					remedy = "group by it through that select's key term"
+					// resolveJoins refused a tie to a column that is no key, so
+					// the key is found; the bare wording is the harmless answer.
 					if alias, key := keyAliasOf(other, column); key {
 						remedy += " " + strconv.Quote(alias)
 					}

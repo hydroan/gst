@@ -657,10 +657,15 @@ func (a *selector[M, R]) validate(mode buildMode) (projectionShape, error) {
 	// the mistake, so it is named here. A term carrying no table is the
 	// query's own; one a select projects alike was refused above.
 	for _, t := range a.terms {
-		if _, derived := a.derivedOf(t, shape); derived || len(t.Table) == 0 {
+		if _, derived := a.derivedOf(t, shape); derived || len(t.Table) == 0 || t.Table == shape.main {
 			continue
 		}
-		if jt, ok := shape.joined[t.Table]; ok && jt.sub != nil {
+		// Every joined select is asked, the term's table being its own or one
+		// it joins itself, which the query reads through it alone.
+		for _, jt := range shape.joins {
+			if jt.sub == nil {
+				continue
+			}
 			if alias, projected := jt.sub.projectsAs(t); projected {
 				return shape, errors.Wrapf(ErrJoinSelectColumn, "%q is the term %q of the joined select over %q under another alias; pass the very term the select projects", a.alias(t), alias, jt.table)
 			}
@@ -1106,6 +1111,13 @@ func (a *selector[M, R]) nullableAliases(shape projectionShape) map[string]strin
 		case t.IsPlain():
 			if known && holdsNull(source.Type) {
 				nullable[a.alias(t)] = fmt.Sprintf("column %q, which is nullable", t.Column)
+			}
+			continue
+		case t.IsGroupKey():
+			// The rows without a value form a group of their own, keyed NULL;
+			// a bucket of NULL is NULL as well.
+			if known && holdsNull(source.Type) {
+				nullable[a.alias(t)] = fmt.Sprintf("group key %q over a nullable column, which is NULL for the group of the rows without one", t.Column)
 			}
 			continue
 		case t.Fn == types.FnLag || t.Fn == types.FnLead:
