@@ -185,16 +185,18 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		}
 
 		// 5.record operation log to database.
-		if err = am.RecordOperation(requestContext(c), m, &modellogmgmt.OperationLog{
-			OP:        consts.OP_LIST,
-			Model:     meta.name,
-			IP:        requestctx.GinClientIP(c),
-			User:      c.GetString(consts.CTX_USERNAME),
-			TraceID:   c.GetString(consts.TRACE_ID),
-			URI:       c.Request.RequestURI,
-			Method:    c.Request.Method,
-			UserAgent: c.Request.UserAgent(),
-		}); err != nil {
+		if err = am.RecordOperation(requestContext(c), m, consts.OP_LIST,
+			func() *modellogmgmt.OperationLog {
+				return &modellogmgmt.OperationLog{
+					Model:     meta.name,
+					IP:        requestctx.GinClientIP(c),
+					User:      c.GetString(consts.CTX_USERNAME),
+					TraceID:   c.GetString(consts.TRACE_ID),
+					URI:       c.Request.RequestURI,
+					Method:    c.Request.Method,
+					UserAgent: c.Request.UserAgent(),
+				}
+			}); err != nil {
 			log.Warnz("record operation log failed", zap.Error(err))
 		}
 

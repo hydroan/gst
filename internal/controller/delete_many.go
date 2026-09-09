@@ -132,19 +132,21 @@ func DeleteManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 		}
 
 		// 4.record operation log to database.
-		record, _ := json.Marshal(req)
 		m := meta.newModel()
-		if err = am.RecordOperation(requestContext(c), m, &modellogmgmt.OperationLog{
-			OP:        consts.OP_DELETE_MANY,
-			Model:     meta.name,
-			Record:    util.BytesToString(record),
-			IP:        requestctx.GinClientIP(c),
-			User:      c.GetString(consts.CTX_USERNAME),
-			TraceID:   c.GetString(consts.TRACE_ID),
-			URI:       c.Request.RequestURI,
-			Method:    c.Request.Method,
-			UserAgent: c.Request.UserAgent(),
-		}); err != nil {
+		if err = am.RecordOperation(requestContext(c), m, consts.OP_DELETE_MANY,
+			func() *modellogmgmt.OperationLog {
+				record, _ := json.Marshal(req)
+				return &modellogmgmt.OperationLog{
+					Model:     meta.name,
+					Record:    util.BytesToString(record),
+					IP:        requestctx.GinClientIP(c),
+					User:      c.GetString(consts.CTX_USERNAME),
+					TraceID:   c.GetString(consts.TRACE_ID),
+					URI:       c.Request.RequestURI,
+					Method:    c.Request.Method,
+					UserAgent: c.Request.UserAgent(),
+				}
+			}); err != nil {
 			log.Warnz("record operation log failed", zap.Error(err))
 		}
 

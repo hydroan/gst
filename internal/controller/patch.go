@@ -195,22 +195,24 @@ func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		// NOTE: We should record the `req` instead of `oldVal`, the req is `newVal`.
 		// Record and Request both carry the request payload, so one marshal
 		// feeds both columns; Response carries the resulting row instead.
-		record, _ := json.Marshal(req)
-		respData, _ := json.Marshal(cur)
-		if err := am.RecordOperation(requestContext(c), req, &modellogmgmt.OperationLog{
-			OP:        consts.OP_PATCH,
-			Model:     meta.name,
-			RecordID:  req.GetID(),
-			Record:    util.BytesToString(record),
-			Request:   util.BytesToString(record),
-			Response:  util.BytesToString(respData),
-			IP:        requestctx.GinClientIP(c),
-			User:      c.GetString(consts.CTX_USERNAME),
-			TraceID:   c.GetString(consts.TRACE_ID),
-			URI:       c.Request.RequestURI,
-			Method:    c.Request.Method,
-			UserAgent: c.Request.UserAgent(),
-		}); err != nil {
+		if err := am.RecordOperation(requestContext(c), req, consts.OP_PATCH,
+			func() *modellogmgmt.OperationLog {
+				record, _ := json.Marshal(req)
+				respData, _ := json.Marshal(cur)
+				return &modellogmgmt.OperationLog{
+					Model:     meta.name,
+					RecordID:  req.GetID(),
+					Record:    util.BytesToString(record),
+					Request:   util.BytesToString(record),
+					Response:  util.BytesToString(respData),
+					IP:        requestctx.GinClientIP(c),
+					User:      c.GetString(consts.CTX_USERNAME),
+					TraceID:   c.GetString(consts.TRACE_ID),
+					URI:       c.Request.RequestURI,
+					Method:    c.Request.Method,
+					UserAgent: c.Request.UserAgent(),
+				}
+			}); err != nil {
 			log.Warnz("record operation log failed", zap.Error(err))
 		}
 

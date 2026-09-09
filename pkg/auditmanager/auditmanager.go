@@ -11,6 +11,7 @@ import (
 	"github.com/hydroan/gst/ds/queue/circularbuffer"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/types/consts"
 	"go.uber.org/zap"
 )
 
@@ -32,20 +33,44 @@ func New(auditConfig *config.Audit, cb *circularbuffer.CircularBuffer[*modellogm
 	}
 }
 
-// RecordOperation records a single operation audit log.
-// This method is now used by all Factory functions instead of directly enqueuing OperationLog records.
-// It provides centralized audit logging with configurable filtering and supports both sync and async writing.
-func (am *AuditManager) RecordOperation(ctx context.Context, m types.Model, operationLog *modellogmgmt.OperationLog) error {
+// RecordOperation records a single operation audit log, with configurable
+// filtering and support for both synchronous and asynchronous writing.
+//
+// The entry is produced by build rather than handed in, because building one
+// is the expensive part: it serializes the record, reads the request and
+// allocates the entry. Auditing is disabled by default, and a call whose
+// argument is already built pays that price on every write request only to
+// have it discarded here. build runs once the entry is known to be wanted, so
+// a disabled audit costs this call and nothing else.
+//
+// op is taken separately for the same reason: it decides whether the operation
+// is excluded, so it has to be known before build runs. It is stamped onto the
+// entry here, which keeps the caller from naming the operation twice.
+//
+// A nil build is an error rather than a silent skip: an audit entry that was
+// asked for and never written is a gap in a security record.
+func (am *AuditManager) RecordOperation(ctx context.Context, m types.Model, op consts.OP,
+	build func() *modellogmgmt.OperationLog,
+) error {
+	// A missing build is the caller failing to say what to record, not a
+	// request to record nothing. It is refused before the configuration is
+	// consulted, so that turning the audit on is not what first surfaces it.
+	if build == nil {
+		return errors.New("audit: RecordOperation was given no build function")
+	}
+
 	// Skip if audit is disabled
 	if !am.config.Enabled {
 		return nil
 	}
 
 	// Skip if the operation is excluded.
-	if slices.Contains(am.config.ExcludeOperations, operationLog.OP) {
+	if slices.Contains(am.config.ExcludeOperations, op) {
 		return nil
 	}
 
+	operationLog := build()
+	operationLog.OP = op
 	// Record the table name; every model declares it explicitly.
 	operationLog.Table = m.TableName()
 
@@ -58,37 +83,6 @@ func (am *AuditManager) RecordOperation(ctx context.Context, m types.Model, oper
 	// Synchronous writing
 	if err := database.Database[*modellogmgmt.OperationLog](ctx).Create(operationLog); err != nil {
 		return errors.Wrap(err, "failed to write audit log")
-	}
-	return nil
-}
-
-// RecordBatchOperations records multiple operations audit logs
-func (am *AuditManager) RecordBatchOperations(ctx context.Context, m types.Model, operationLogs []*modellogmgmt.OperationLog) error {
-	if !am.config.Enabled {
-		return nil
-	}
-
-	if len(operationLogs) == 0 {
-		return nil
-	}
-
-	// Record the table name; every model declares it explicitly.
-	tableName := m.TableName()
-	for _, operationLog := range operationLogs {
-		operationLog.Table = tableName
-	}
-
-	if am.config.AsyncWrite {
-		// Enqueue all logs to circular buffer
-		for _, log := range operationLogs {
-			am.cb.Enqueue(log)
-		}
-		return nil
-	}
-
-	// Synchronous batch writing
-	if err := database.Database[*modellogmgmt.OperationLog](ctx).Create(operationLogs...); err != nil {
-		return errors.Wrap(err, "failed to write batch audit logs")
 	}
 	return nil
 }
