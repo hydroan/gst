@@ -65,6 +65,12 @@ func TestSelectScansPointerRows(t *testing.T) {
 	require.Equal(t, time.Date(2024, 1, 11, 8, 0, 0, 0, time.UTC), rows[0].Last.UTC())
 }
 
+// RowLabel is an embedded row type carrying a method, which reflect.StructOf
+// refuses to embed anywhere but first; the sqlite stand-in names it instead.
+type RowLabel struct{ Note *string }
+
+func (l RowLabel) String() string { return "label" }
+
 func TestSelectScansEmbeddedRowFields(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
@@ -89,6 +95,23 @@ func TestSelectScansEmbeddedRowFields(t *testing.T) {
 	require.Equal(t, time.Date(2024, 1, 10, 8, 0, 0, 0, time.UTC), rows[0].First.UTC())
 	require.NotNil(t, rows[0].Last)
 	require.Equal(t, time.Date(2024, 1, 11, 8, 0, 0, 0, time.UTC), rows[0].Last.UTC())
+
+	// An embedded type carrying a method, placed after the time field, is
+	// read the same way: the stand-in names it rather than embedding it.
+	type labeled struct {
+		Category string
+		First    time.Time
+		RowLabel
+	}
+	labeledRows := make([]labeled, 0)
+	require.NoError(t, database.Select[*TestAggregateRecord, labeled](context.Background(), TestAggregateRecordCols.Category.Group(),
+		TestAggregateRecordCols.OccurredAt.Min().As("first"), TestAggregateRecordCols.Status.Max().As("note")).
+		OrderBy(TestAggregateRecordCols.Category.Group().Asc()).
+		Scan(&labeledRows))
+	require.Len(t, labeledRows, 3)
+	require.Equal(t, time.Date(2024, 1, 10, 8, 0, 0, 0, time.UTC), labeledRows[0].First.UTC())
+	require.NotNil(t, labeledRows[0].Note)
+	require.Equal(t, "failed", *labeledRows[0].Note)
 }
 
 func TestSelectWhereReusesFilters(t *testing.T) {

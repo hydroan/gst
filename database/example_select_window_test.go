@@ -25,7 +25,7 @@ import (
 //	  SELECT `id` AS `id`, `category` AS `category`, `amount` AS `amount`,
 //	         ROW_NUMBER() OVER (PARTITION BY `category` ORDER BY `occurred_at` DESC, `id` ASC) AS `rn`
 //	  FROM `test_aggregate_records` WHERE `test_aggregate_records`.`deleted_at` IS NULL
-//	) AS q WHERE `q`.`rn` = ? ORDER BY `category` ASC
+//	) AS `q` WHERE `q`.`rn` = ? ORDER BY `category` ASC
 func ExampleSelect_rowNumber() {
 	seedAggregateExample()
 	defer cleanupAggregateData()
@@ -266,8 +266,8 @@ func ExampleSelect_windowOverGroups() {
 // total a paginated latest-per-group page needs; one builder serves the page
 // and the total. Rendered for the count:
 //
-//	SELECT count(*) FROM (SELECT * FROM (SELECT ... ROW_NUMBER() OVER (...) AS `rn` FROM ...) AS q
-//	  WHERE `q`.`rn` = ?) AS grouped
+//	SELECT count(*) FROM (SELECT * FROM (SELECT ... ROW_NUMBER() OVER (...) AS `rn` FROM ...) AS `q`
+//	  WHERE `q`.`rn` = ?) AS `grouped`
 func ExampleSelect_qualifyCount() {
 	seedAggregateExample()
 	defer cleanupAggregateData()

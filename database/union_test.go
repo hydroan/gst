@@ -94,6 +94,14 @@ func TestUnionAllDryRunAppliesToTheNextTerminalOnly(t *testing.T) {
 	require.Empty(t, statements)
 	require.NoError(t, perCategory.Scan(&counts))
 	require.Len(t, counts, 3)
+
+	// Consumed when the union fails to build as well: the option is the
+	// union's terminal's to consume, reached or not.
+	perCategory.WithDryRun(&statements)
+	require.Error(t, database.UnionAll[categoryCount](ctx, perCategory, perLabel).Offset(2).Scan(&counts))
+	require.NoError(t, perCategory.Scan(&counts))
+	require.Len(t, counts, 3)
+	require.Empty(t, statements)
 }
 
 func TestUnionAllStacksBranches(t *testing.T) {
@@ -177,7 +185,8 @@ func TestUnionAllPushesOrderAndLimitIntoBranches(t *testing.T) {
 		require.Contains(t, sql, " IS NULL "+ordered)
 		require.Equal(t, 1, strings.Count(sql, "OFFSET "), "the offset applies to the stacked rows alone")
 		rendered := statements[0].RenderedSQL
-		require.Equal(t, 2, strings.Count(rendered, " LIMIT 5) AS "+quoteIdent("b")[:1]),
+		require.Equal(t, 1, strings.Count(rendered, " LIMIT 5) AS "+quoteIdent("b0")))
+		require.Equal(t, 1, strings.Count(rendered, " LIMIT 5) AS "+quoteIdent("b1")),
 			"each member reads offset plus limit rows")
 		require.Contains(t, rendered, ") AS "+quoteIdent("u")+" "+ordered+"2 OFFSET 3", "the union pages the stacked rows")
 	})
@@ -281,9 +290,9 @@ func TestUnionAllStacksProjectionShapes(t *testing.T) {
 		require.NoError(t, feed.WithDryRun(&statements).Scan(&rows))
 		require.Len(t, statements, 1)
 		sql := statements[0].Query
-		require.Contains(t, sql, ") AS q WHERE "+quoteIdent("q")+"."+quoteIdent("rn")+" = ",
+		require.Contains(t, sql, ") AS "+quoteIdent("q")+" WHERE "+quoteIdent("q")+"."+quoteIdent("rn")+" = ",
 			"the qualified member keeps its own wrap")
-		qualified := strings.Index(sql, ") AS q WHERE ")
+		qualified := strings.Index(sql, ") AS "+quoteIdent("q")+" WHERE ")
 		pushed := strings.Index(sql, "ORDER BY "+quoteIdent("category")+" ASC,"+quoteIdent("id")+" ASC LIMIT ")
 		require.Less(t, qualified, pushed, "the pushed order and cap sit outside the wrap, on the qualified rows")
 		require.Less(t, pushed, strings.Index(sql, ") AS "+quoteIdent("b0")), "and inside the member")

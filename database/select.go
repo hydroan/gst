@@ -310,7 +310,7 @@ func (a *selector[M, R]) Count(count *int) (err error) {
 	// The outer count is its own statement and carries the comment after its
 	// own verb, where a database-side view reads it; the inner query keeps
 	// its copy inside the derived table.
-	outer := a.db.annotate(a.db.ins.Session(&gorm.Session{NewDB: true})).Table("(?) AS grouped", inner)
+	outer := a.db.annotate(a.db.ins.Session(&gorm.Session{NewDB: true})).Table("(?) AS "+a.db.quoteIdent("grouped"), inner)
 	if a.db.dryRun {
 		return a.db.collectSQL(dryRunSession(outer).Count(&total))
 	}
@@ -547,10 +547,19 @@ func compareOperator(op types.CompareOp) string {
 
 // consumeDryRun clears the dry-run option once a terminal has read it: the
 // option names the next terminal operation alone, so a builder read again
-// after a dry run executes for real.
+// after a dry run executes for real. The selects joined as derived tables
+// are consumed with it, whether or not the terminal reached them: their
+// terminal is this one.
 func (a *selector[M, R]) consumeDryRun() {
 	a.dryRun = false
 	a.statements = nil
+	for _, source := range a.joins {
+		if sj, ok := source.(types.SelectJoin); ok {
+			if sub, ok := sj.Select.(nestedSelect); ok {
+				sub.consumeDryRun()
+			}
+		}
+	}
 }
 
 // alias returns the name a term is projected under, defaulting to its column.
@@ -633,8 +642,8 @@ func (a *selector[M, R]) validate(mode buildMode) (projectionShape, error) {
 	// A joined select's term passed under another alias is not the term the
 	// select projects: it would read as a measure or a column of the
 	// select's model and fail on some other term of the projection, far from
-	// the mistake, so it is named here. A term carrying no table, a plain
-	// Count say, is the query's own wherever a select projects one alike.
+	// the mistake, so it is named here. A term carrying no table is the
+	// query's own; one a select projects alike was refused above.
 	for _, t := range a.terms {
 		if _, derived := a.derivedOf(t, shape); derived || len(t.Table) == 0 {
 			continue

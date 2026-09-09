@@ -86,6 +86,7 @@ type Union[R any] interface {
 
 	// WithDryRun builds the SQL without database I/O; see
 	// Selector.WithDryRun. A dry run set on a branch is the branch's own:
-	// the union's terminal runs the branch for real and consumes it.
+	// the union's terminal runs the branch for real and consumes it,
+	// whether or not the union builds.
 	WithDryRun(collector ...*[]SQLStatement) Union[R]
 }

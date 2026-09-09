@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/hydroan/gst/database"
@@ -919,7 +920,12 @@ func TestSelectJoinSelectReadsTheDerivedTerms(t *testing.T) {
 		err := sel.Where(TestRecordTagCols.Label.Eq("vip")).Scan(&rows)
 		require.ErrorIs(t, err, database.ErrUnusableFilter)
 		require.ErrorIs(t, err, database.ErrJoinSelectColumn)
-		require.ErrorContains(t, err, "the select projects record_id, tags")
+		require.ErrorContains(t, err, "the select is joined on record_id")
+		// Tied to by an EqCol as well.
+		_, sel = withTags(left, onRecord)
+		err = sel.Where(TestAggregateRecordCols.Category.EqCol(TestRecordTagCols.Label)).Scan(&rows)
+		require.ErrorIs(t, err, database.ErrJoinSelectColumn)
+		require.ErrorContains(t, err, "the select is joined on record_id")
 	})
 
 	t.Run("ConsumesTheSelectsDryRun", func(t *testing.T) {
@@ -937,6 +943,85 @@ func TestSelectJoinSelectReadsTheDerivedTerms(t *testing.T) {
 		perRecord := make([]tagsPerRecord, 0)
 		require.NoError(t, counts.Scan(&perRecord))
 		require.Len(t, perRecord, 3)
+
+		// Consumed when the query fails to build as well: the option is the
+		// query's terminal's to consume, reached or not.
+		counts.WithDryRun(&statements)
+		type short struct{ ID string }
+		require.Error(t, database.Select[*TestAggregateRecord, short](ctx, TestAggregateRecordCols.ID, tags).
+			Join(types.LeftJoinSelect(counts, onRecord())).
+			Scan(&[]short{}))
+		require.NoError(t, counts.Scan(&perRecord))
+		require.Len(t, perRecord, 3)
+		require.Empty(t, statements)
+	})
+
+	t.Run("ChainedSelectsInAnyTermOrder", func(t *testing.T) {
+		// The notes are tied on the tags' key; the query groups by that key
+		// through the tags' key term, wherever in the projection it stands.
+		noteTag := types.NewColumn[*TestTagNote, string]("tag_id")
+		notes := types.NewColumn[*TestTagNote, string]("id").Count().As("notes")
+		type chained struct {
+			ID       string
+			RecordID *string
+			Tags     *int64
+			Notes    *int64
+		}
+		for _, keyLast := range []bool{false, true} {
+			tags, counts := tagCounts(ctx)
+			perTag := database.Select[*TestTagNote, struct {
+				TagID string
+				Notes int64
+			}](ctx, noteTag.Group(), notes)
+			key := TestRecordTagCols.RecordID.Group()
+			exprs := []types.Expr{TestAggregateRecordCols.ID.Group(), key, tags, notes}
+			if keyLast {
+				exprs = []types.Expr{TestAggregateRecordCols.ID.Group(), tags, notes, key}
+			}
+			rows := make([]chained, 0)
+			require.NoError(t, database.Select[*TestAggregateRecord, chained](ctx, exprs...).
+				Join(types.LeftJoinSelect(counts, onRecord()), types.LeftJoinSelect(perTag, noteTag.EqCol(TestRecordTagCols.RecordID))).
+				OrderBy(TestAggregateRecordCols.ID.Group().Asc()).
+				Scan(&rows))
+			require.Len(t, rows, 6)
+		}
+	})
+
+	t.Run("SelectsMayJoinTheModelsTheQueryJoins", func(t *testing.T) {
+		// A select joining a model the query also joins reads that model for
+		// itself, as a second select joining it does: the spellings meet on a
+		// shared term alone, never on the table.
+		tags := TestRecordTagCols.ID.Count().As("tags")
+		perCategory := database.Select[*TestRecordTag, struct {
+			Category string
+			Tags     int64
+			Tier     *string
+		}](ctx, TestRecordTagCols.Category.Group(), tags, TestAccountCols.Tier.Max().As("tier")).
+			Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestRecordTagCols.Category)))
+		paid := TestPaymentCols.Amount.Sum().As("paid")
+		perAccount := database.Select[*TestPayment, struct {
+			Account string
+			Paid    int64
+			Name    *string
+		}](ctx, TestPaymentCols.Account.Group(), paid, TestAccountCols.Name.Max().As("name")).
+			Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestPaymentCols.Account)))
+		type accounted struct {
+			ID   string
+			Tier *string
+			Tags *int64
+			Paid *int64
+		}
+		statements := make([]types.SQLStatement, 0)
+		rows := make([]accounted, 0)
+		sel := database.Select[*TestAggregateRecord, accounted](ctx, TestAggregateRecordCols.ID, TestAccountCols.Tier.As("tier"), tags, paid).
+			Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestAggregateRecordCols.Category)),
+				types.LeftJoinSelect(perCategory, TestRecordTagCols.Category.EqCol(TestAggregateRecordCols.Category)),
+				types.LeftJoinSelect(perAccount, TestPaymentCols.Account.EqCol(TestAggregateRecordCols.Category))).
+			OrderBy(TestAggregateRecordCols.ID.Asc())
+		require.NoError(t, sel.WithDryRun(&statements).Scan(&rows))
+		require.Equal(t, 3, strings.Count(statements[0].Query, "LEFT JOIN "+quoteIdent("test_accounts")+" ON "))
+		require.NoError(t, sel.Scan(&rows))
+		require.Len(t, rows, 6)
 	})
 }
 
@@ -1197,10 +1282,10 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 		require.ErrorContains(t, err, "its own Where")
 	})
 
-	t.Run("SelectReadingTheQueriedTableThroughItsOwnJoin", func(t *testing.T) {
+	t.Run("TermOfTheQueriedTableReadThroughASelect", func(t *testing.T) {
 		// The select reads the records through a select of its own; a term
-		// of the records read that way is spelled like the query's own
-		// column, so the table counts as read twice.
+		// of the records it projects is spelled like the query's own, and
+		// that spelling is refused rather than read as either.
 		recordID := TestAggregateRecordCols.ID.Group()
 		perRecord := database.Select[*TestAggregateRecord, struct {
 			ID    string
@@ -1213,11 +1298,67 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			ID       *string
 		}](ctx, TestRecordTagCols.RecordID.Group(), tags, recordID).
 			Join(types.LeftJoinSelect(perRecord, TestAggregateRecordCols.ID.EqCol(TestRecordTagCols.RecordID)))
-		err := database.Select[*TestAggregateRecord, recordTags](ctx, TestAggregateRecordCols.ID, tags).
+		type keyed struct {
+			ID   *string
+			Tags *int64
+		}
+		err := database.Select[*TestAggregateRecord, keyed](ctx, recordID, tags).
 			Join(types.LeftJoinSelect(perTag, onRecord)).
+			Scan(&[]keyed{})
+		require.ErrorIs(t, err, database.ErrDuplicateAlias)
+		require.ErrorContains(t, err, "the query's own sources")
+		// The query's own column, spelled as its own, reads as its own.
+		statements := make([]types.SQLStatement, 0)
+		require.NoError(t, database.Select[*TestAggregateRecord, recordTags](ctx, TestAggregateRecordCols.ID, tags).
+			Join(types.LeftJoinSelect(perTag, onRecord)).
+			WithDryRun(&statements).Scan(&rows))
+		require.Contains(t, statements[0].Query, "SELECT "+qualified("test_aggregate_records", "id")+" AS ")
+	})
+
+	t.Run("OwnCountSharedWithTheSelect", func(t *testing.T) {
+		// A plain Count carries no table: written by the query and by the
+		// select, it is one value, and the query's own count would silently
+		// read as the select's.
+		perRecord := database.Select[*TestRecordTag, struct {
+			RecordID string
+			Count    int64
+		}](ctx, TestRecordTagCols.RecordID.Group(), types.Count())
+		type counted struct {
+			ID    string
+			Count *int64
+		}
+		err := database.Select[*TestAggregateRecord, counted](ctx, TestAggregateRecordCols.ID.Group(), types.Count()).
+			Join(types.LeftJoinSelect(perRecord, onRecord)).
+			Scan(&[]counted{})
+		require.ErrorIs(t, err, database.ErrDuplicateAlias)
+		require.ErrorContains(t, err, "Cols.ID.Count()")
+	})
+
+	t.Run("NonKeyColumnInTheOn", func(t *testing.T) {
+		// The ON names the select's keys; a column of its model that is no
+		// key is refused with the keys, as it is in Where.
+		tags, counts := tagCounts(ctx)
+		err := database.Select[*TestAggregateRecord, recordTags](ctx, TestAggregateRecordCols.ID, tags).
+			Join(types.LeftJoinSelect(counts, onRecord, TestRecordTagCols.Label.Eq("vip"))).
 			Scan(&rows)
-		require.ErrorIs(t, err, database.ErrJoinDuplicateTable)
-		require.ErrorContains(t, err, "through a join of its own")
+		require.ErrorIs(t, err, database.ErrJoinSelectColumn)
+		require.ErrorContains(t, err, "joined on record_id")
+	})
+
+	t.Run("PartitionByATermTheProjectionDoesNotRead", func(t *testing.T) {
+		// A select's term keys a partition once the projection reads it;
+		// unread, the message says to project it.
+		tags, counts := tagCounts(ctx)
+		type numbered struct {
+			ID string
+			Rn int64
+		}
+		err := database.Select[*TestAggregateRecord, numbered](ctx, TestAggregateRecordCols.ID,
+			types.RowNumber().Over(types.PartitionBy(tags).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn")).
+			Join(types.LeftJoinSelect(counts, onRecord)).
+			Scan(&[]numbered{})
+		require.ErrorIs(t, err, database.ErrWindowTermNotSelected)
+		require.ErrorContains(t, err, "project it")
 	})
 
 	t.Run("TermUnderAnotherAlias", func(t *testing.T) {
@@ -1236,25 +1377,25 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 	})
 
 	t.Run("TermProjectedByTwoJoinedSelects", func(t *testing.T) {
-		// One Count().As("n") shared by two selects would read from either;
-		// the query has to alias them apart.
-		n := types.Count().As("n")
+		// One MAX(label) shared by two selects, the notes reading the tags
+		// through a join of their own, would read from either; the query has
+		// to alias them apart.
+		top := TestRecordTagCols.Label.Max().As("top")
 		noteTag := types.NewColumn[*TestTagNote, string]("tag_id")
 		type keyed struct {
 			RecordID string
-			N        int64
+			Top      *string
 		}
-		perRecord := database.Select[*TestRecordTag, keyed](ctx, TestRecordTagCols.RecordID.Group(), n)
-		perTag := database.Select[*TestTagNote, keyed](ctx, noteTag.Group().As("record_id"), n)
-		err := database.Select[*TestAggregateRecord, struct {
-			ID string
-			N  *int64
-		}](ctx, TestAggregateRecordCols.ID, n).
+		perRecord := database.Select[*TestRecordTag, keyed](ctx, TestRecordTagCols.RecordID.Group(), top)
+		perTag := database.Select[*TestTagNote, keyed](ctx, noteTag.Group().As("record_id"), top).
+			Join(types.LeftJoin[*TestRecordTag](TestRecordTagCols.ID.EqCol(noteTag)))
+		type topped struct {
+			ID  string
+			Top *string
+		}
+		err := database.Select[*TestAggregateRecord, topped](ctx, TestAggregateRecordCols.ID, top).
 			Join(types.LeftJoinSelect(perRecord, onRecord), types.LeftJoinSelect(perTag, noteTag.EqCol(TestAggregateRecordCols.ID))).
-			Scan(&[]struct {
-				ID string
-				N  *int64
-			}{})
+			Scan(&[]topped{})
 		require.ErrorIs(t, err, database.ErrDuplicateAlias)
 		require.ErrorContains(t, err, "two joined selects")
 	})

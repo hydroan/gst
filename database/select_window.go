@@ -68,7 +68,7 @@ func (a *selector[M, R]) qualifyWrap(tx *gorm.DB, mode buildMode) *gorm.DB {
 	if !mode.branch() {
 		outer = a.db.annotate(outer)
 	}
-	outer = outer.Table("(?) AS "+qualifiedAlias, tx)
+	outer = outer.Table("(?) AS "+a.db.quoteIdent(qualifiedAlias), tx)
 	for _, q := range a.qualifies {
 		outer = outer.Where(clause.Expr{
 			SQL:  a.db.quoteTableColumn(qualifiedAlias, a.alias(q.Term)) + " " + compareOperator(q.Op) + " ?",
@@ -264,18 +264,25 @@ func (a *selector[M, R]) validateWindow(t types.Term, shape projectionShape) err
 		}
 		// A joined select's term the projection reads is a column of the
 		// derived table, a key in either shape of the projection, passed as
-		// it is; a measure of the projection's own is a key in neither.
+		// it is; a constant is the same on every row, and a measure of the
+		// projection's own is a key in neither shape.
 		if _, derived := a.derivedOf(key, shape); derived {
 			continue
 		}
+		if key.IsLiteral() {
+			return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by the constant '%s', which is the same on every row", a.alias(t), key.Literal)
+		}
 		if key.IsMeasure() {
+			if a.readsDerived(key) {
+				return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by %q, a term of a joined select the projection does not read; project it to partition by it", a.alias(t), a.alias(key))
+			}
 			return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by a measure %q", a.alias(t), a.alias(key))
 		}
 		if shape.grouped {
 			if _, ok := a.groupKey(key, shape); ok {
 				continue
 			}
-			return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by %q, which is not a group key; the projection groups by %s", a.alias(t), a.alias(key), a.groupKeyNames(shape))
+			return errors.Wrapf(ErrWindowTermNotSelected, "%q partitions by %q, which is not a group key; %s", a.alias(t), a.alias(key), a.groupKeysClause(shape))
 		}
 		if err := a.validateRowLevelKey(key, shape); err != nil {
 			return errors.Wrapf(err, "%q partitions by", a.alias(t))
@@ -289,7 +296,7 @@ func (a *selector[M, R]) validateWindow(t types.Term, shape projectionShape) err
 			}
 			if shape.grouped {
 				if _, ok := a.selectedColumn(o.Table, o.Column, shape.main); !ok {
-					return errors.Wrapf(ErrWindowTermNotSelected, "%q orders by column %q, which is not a group key; the projection groups by %s", a.alias(t), o.Column, a.groupKeyNames(shape))
+					return errors.Wrapf(ErrWindowTermNotSelected, "%q orders by column %q, which is not a group key; %s", a.alias(t), o.Column, a.groupKeysClause(shape))
 				}
 				continue
 			}
@@ -316,7 +323,9 @@ func (a *selector[M, R]) validateWindow(t types.Term, shape projectionShape) err
 // groupKey finds the projection's group key a window key names: the same
 // column, bucket and table, an empty table naming the queried model's, and
 // no function, because a measure over a key's column is not the key. The
-// alias and the plain flag are the caller's spelling and do not decide. The
+// callers refuse a measure before asking; the function is checked here as
+// well, so the rule stands whichever order a later change puts them in.
+// The alias and the plain flag are the caller's spelling and do not decide. The
 // table does: two tables of the query may share a column name, and a key of
 // the wrong one would partition by a column the caller never named. A
 // joined select's term is a group key under its own alias, not under the
@@ -336,14 +345,17 @@ func (a *selector[M, R]) groupKey(key types.Term, shape projectionShape) (types.
 	return types.Term{}, false
 }
 
-// groupKeyNames spells the projection's group keys for an error message, so
-// the caller sees what a window may partition or order by.
-func (a *selector[M, R]) groupKeyNames(shape projectionShape) string {
+// groupKeysClause spells what the projection groups by, for an error
+// message, so the caller sees what a window may partition or order by.
+func (a *selector[M, R]) groupKeysClause(shape projectionShape) string {
+	if len(shape.keys) == 0 {
+		return "the projection declares no group key"
+	}
 	names := make([]string, 0, len(shape.keys))
 	for _, k := range shape.keys {
 		names = append(names, a.alias(k))
 	}
-	return strings.Join(names, ", ")
+	return "the projection groups by " + strings.Join(names, ", ")
 }
 
 // validateRowLevelKey checks a partition key of a row-level window against

@@ -129,7 +129,12 @@ func (SelectJoin) sealedJoinSource() {}
 //
 // Only the select's terms are readable this way, passed as they are: its
 // model's other columns are not columns of the derived table, and the term
-// under another alias is not the term. A term read this way may also key a
+// under another alias is not the term. A term the query could compute
+// itself — one carrying no table, Count() say, or one of the queried table
+// or of a model the query joins — is refused when the select projects it
+// too: the two spellings are one value, and the query's reading of it would
+// silently become the select's; a select's COUNT(*) is read through a
+// column count, Cols.ID.Count(). A term read this way may also key a
 // window's partition or order it. In a grouped query a joined select's term
 // is projected as a group key of the query, which is exact only when the
 // query groups by the columns the select is joined on — the term is then
@@ -141,8 +146,7 @@ func (SelectJoin) sealedJoinSource() {}
 // so it is refused. The select carries no OrderBy, Limit or Offset of its
 // own: a derived table has no use for them.
 //
-// One table backs at most one source of a query, counting the tables a
-// joined select reads through joins of its own. A joined select is
+// One table backs at most one source of a query. A joined select is
 // addressed through its model's column references, so a select over the
 // queried table, or a second select over a table another source already
 // reads, could not be told apart and is refused; a per-row total over the

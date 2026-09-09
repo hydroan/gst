@@ -96,7 +96,7 @@ func ExampleSelect_orderByLimitOffset() {
 // apply to it, so one builder serves both the page and the total. Rendered:
 //
 //	SELECT count(*) FROM (SELECT `category` AS `category` FROM `test_aggregate_records`
-//	  WHERE `status` = ? AND `test_aggregate_records`.`deleted_at` IS NULL GROUP BY `category`) AS grouped
+//	  WHERE `status` = ? AND `test_aggregate_records`.`deleted_at` IS NULL GROUP BY `category`) AS `grouped`
 func ExampleSelect_countRows() {
 	seedAggregateExample()
 	defer cleanupAggregateData()

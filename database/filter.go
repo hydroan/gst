@@ -100,9 +100,6 @@ type tableInfo struct {
 	// rename maps a column name to the name it is read under, for a derived
 	// table whose key columns project under aliases; nil for a model table.
 	rename map[string]string
-	// aliases lists what a derived table projects, in order, for the message
-	// a column it does not have gets; nil for a model table.
-	aliases []string
 }
 
 // column returns the name a column is read under in this table.
@@ -386,11 +383,8 @@ func (db *database[M]) placeFilter(f types.Filter, scope filterScope) (string, t
 		}
 		if _, ok := info.columns[f.Column]; !ok {
 			if info.rename != nil {
-				// A derived table has the columns the joined select projects,
-				// and a filter names one of its keys; a condition on the
-				// select's rows narrows the select itself.
-				_, err := db.failClosedFilter(f, fmt.Sprintf("names %q, which is not a key of the joined select over %q; the select projects %s, and a condition on its rows belongs to its own Where or Having", f.Column, f.Table, strings.Join(info.aliases, ", ")))
-				return "", tableInfo{}, errors.Join(err, ErrJoinSelectColumn)
+				_, err := db.derivedKeyFilter(f, f.Column, f.Table, info)
+				return "", tableInfo{}, err
 			}
 			_, err := db.failClosedFilter(f, "names a column its table does not have")
 			return "", tableInfo{}, err
@@ -399,11 +393,25 @@ func (db *database[M]) placeFilter(f types.Filter, scope filterScope) (string, t
 	}
 	if scope.columns != nil {
 		if _, ok := scope.columns[f.Column]; !ok {
+			if scope.derived {
+				_, err := db.derivedKeyFilter(f, f.Column, scope.table, scope.own())
+				return "", tableInfo{}, err
+			}
 			_, err := db.failClosedFilter(f, fmt.Sprintf("names a column %q does not have", scope.table))
 			return "", tableInfo{}, err
 		}
 	}
 	return db.scopedColumn(f.Column, scope), scope.own(), nil
+}
+
+// derivedKeyFilter refuses a filter naming a column of a joined select's
+// model that is not one of its keys. The derived table has the select's
+// terms, its keys being the columns a condition on it may name, and a
+// condition on the select's rows narrows the select itself; the mistake is
+// marked with the sentinel the projection reports it under.
+func (db *database[M]) derivedKeyFilter(f types.Filter, column, table string, info tableInfo) (clause.Expression, error) {
+	expr, err := db.failClosedFilter(f, fmt.Sprintf("names %q, which is not a key of the joined select over %q; the select is joined on %s, the columns a condition here may name, and a condition on its rows belongs to its own Where or Having", column, table, strings.Join(sortedColumns(info.columns), ", ")))
+	return expr, errors.Join(err, ErrJoinSelectColumn)
 }
 
 // placedName spells a placed column unquoted, under the table placeFilter
@@ -489,6 +497,9 @@ func (db *database[M]) joinEqCol(f types.Filter, column, parent, parentTable str
 		info = other
 	}
 	if _, ok := info.columns[parent]; !ok {
+		if info.rename != nil {
+			return db.derivedKeyFilter(f, parent, parentTable, info)
+		}
 		return db.failClosedFilter(f, "ties to a column its table does not have")
 	}
 	return clause.Expr{SQL: column + " = " + db.tableColumn(parentTable, info, parent)}, nil

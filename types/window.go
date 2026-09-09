@@ -18,14 +18,16 @@ package types
 //	Rank().Over(OrderBy(total.Desc()))
 //	// RANK() OVER (ORDER BY COALESCE(SUM(`amount`), 0) DESC)
 type Window struct {
-	// Partition holds the partition keys. Each is a column of the queried
-	// model in a row-level projection, or one of the projection's group keys
-	// in a grouped one; the time buckets work in both.
+	// Partition holds the partition keys. Each is a column of a table the
+	// select reads, the queried model's or a joined one's, in a row-level
+	// projection, or one of the projection's group keys in a grouped one; a
+	// joined select's term the projection reads, and the time buckets, work
+	// in both.
 	Partition []Term
-	// Orders sorts each partition. A column order names a column of the
-	// queried model, or a group key in a grouped projection; a term order
-	// names a projected term, which is how a grouped projection ranks by a
-	// measure.
+	// Orders sorts each partition. A column order names a column of a table
+	// the select reads in a row-level projection, or a group key in a grouped
+	// one; a term order names a projected term, which is how a grouped
+	// projection ranks by a measure.
 	Orders []Ordering
 }
 

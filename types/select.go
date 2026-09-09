@@ -116,7 +116,7 @@ type Selector[M Model, R any] interface {
 	// option, so the builder read again executes. The terminal writes
 	// nothing: Scan leaves dest as it was and Count leaves count untouched.
 	// A builder used as a union member or a joined select is run by the
-	// enclosing query's terminal, for real, which consumes the option the
-	// same way.
+	// enclosing query's terminal, for real, which consumes the option
+	// whether or not the query builds.
 	WithDryRun(collector ...*[]SQLStatement) Selector[M, R]
 }

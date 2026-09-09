@@ -100,11 +100,15 @@ func rowStruct(row reflect.Value) reflect.Value {
 
 // sqliteTimeMirrorType returns the scan-side stand-in for a result type: the
 // same struct with every time-shaped field replaced by sqliteTimeValue, an
-// embedded struct replaced by its own stand-in when it carries one. The
-// second return is false when no stand-in is needed or possible — the type
-// has no time-shaped fields, is no struct, or carries unexported fields,
-// which reflect.StructOf cannot rebuild; those types scan the regular way.
-// A struct embedded through a pointer is not descended into.
+// embedded struct replaced by its own stand-in when it carries one. Every
+// embedded struct becomes a named field gorm flattens through the embedded
+// tag: reflect.StructOf refuses to embed a type carrying methods anywhere
+// but first, and the caller's type may well carry some. The second return
+// is false when no stand-in is needed or possible — the type has no
+// time-shaped fields, is no struct, carries unexported fields, or embeds
+// through a pointer or an interface a type carrying methods, none of which
+// reflect.StructOf can rebuild; those types scan the regular way. A struct
+// embedded through a pointer is not descended into.
 func sqliteTimeMirrorType(rt reflect.Type) (reflect.Type, bool) {
 	if rt.Kind() != reflect.Struct {
 		return nil, false
@@ -122,11 +126,22 @@ func sqliteTimeMirrorType(rt reflect.Type) (reflect.Type, bool) {
 			field.Type = sqliteTimeValueType
 			mirrored = true
 		default:
-			if field.Anonymous && field.Type.Kind() == reflect.Struct {
-				if inner, ok := sqliteTimeMirrorType(field.Type); ok {
-					field.Type = inner
-					mirrored = true
+			if !field.Anonymous {
+				break
+			}
+			if field.Type.Kind() != reflect.Struct {
+				if field.Type.NumMethod() > 0 {
+					return nil, false
 				}
+				break
+			}
+			if inner, ok := sqliteTimeMirrorType(field.Type); ok {
+				field.Type = inner
+				mirrored = true
+			}
+			field.Anonymous = false
+			if _, tagged := field.Tag.Lookup("gorm"); !tagged {
+				field.Tag = reflect.StructTag(`gorm:"embedded"`)
 			}
 		}
 		fields[i] = field

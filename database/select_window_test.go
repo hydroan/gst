@@ -65,7 +65,7 @@ func TestSelectWindowLatestPerGroup(t *testing.T) {
 			" ORDER BY "+quoteIdent("occurred_at")+" DESC, "+quoteIdent("id")+" ASC) AS "+quoteIdent("rn"),
 			"the order is completed with the primary key as the tie breaker")
 		require.NotContains(t, sql, "ROWS BETWEEN", "a ranking function takes no frame")
-		require.Contains(t, sql, ") AS q WHERE "+quoteIdent("q")+"."+quoteIdent("rn")+" = ",
+		require.Contains(t, sql, ") AS "+quoteIdent("q")+" WHERE "+quoteIdent("q")+"."+quoteIdent("rn")+" = ",
 			"Qualify filters a derived table, where the window column exists")
 		require.Contains(t, sql, "ORDER BY "+quoteIdent("category")+" ASC", "ordering applies outside the wrap")
 		require.NotContains(t, sql, "GROUP BY", "a row-level select groups nothing")
@@ -81,8 +81,8 @@ func TestSelectWindowLatestPerGroup(t *testing.T) {
 		require.NoError(t, sel.WithDryRun(&statements).Count(&total))
 		require.Len(t, statements, 1)
 		require.Contains(t, statements[0].Query, "SELECT count(*) FROM (SELECT * FROM (SELECT ")
-		require.Contains(t, statements[0].Query, ") AS q WHERE "+quoteIdent("q")+"."+quoteIdent("rn")+" = ")
-		require.Contains(t, statements[0].Query, ") AS grouped")
+		require.Contains(t, statements[0].Query, ") AS "+quoteIdent("q")+" WHERE "+quoteIdent("q")+"."+quoteIdent("rn")+" = ")
+		require.Contains(t, statements[0].Query, ") AS "+quoteIdent("grouped"))
 	})
 
 	t.Run("CountsEveryRowWithoutQualify", func(t *testing.T) {
@@ -463,7 +463,7 @@ func TestSelectWindowBuildErrors(t *testing.T) {
 			database.ErrUnknownColumn)
 	})
 
-	t.Run("GroupedWindowPartitionsByAKey", func(t *testing.T) {
+	t.Run("GroupedWindowRefusesANonKeyPartition", func(t *testing.T) {
 		type grouped struct {
 			Category string
 			Rn       int64
@@ -475,6 +475,30 @@ func TestSelectWindowBuildErrors(t *testing.T) {
 			Scan(&rows)
 		require.ErrorIs(t, err, database.ErrWindowTermNotSelected)
 		require.ErrorContains(t, err, "the projection groups by category")
+	})
+
+	t.Run("PartitionWithoutGroupKeys", func(t *testing.T) {
+		// Measures alone declare no group key a partition could name; the
+		// message says so rather than listing none.
+		type totals struct {
+			Total int64
+			X     int64
+		}
+		rows := make([]totals, 0)
+		err := database.Select[*TestAggregateRecord, totals](ctx,
+			TestAggregateRecordCols.Amount.Sum().As("total"),
+			types.Count().Over(types.PartitionBy(TestAggregateRecordCols.Category)).As("x")).
+			Scan(&rows)
+		require.ErrorIs(t, err, database.ErrWindowTermNotSelected)
+		require.ErrorContains(t, err, "declares no group key")
+	})
+
+	t.Run("PartitionByAConstant", func(t *testing.T) {
+		// A constant is the same on every row and partitions nothing.
+		err := scan(database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID,
+			types.RowNumber().Over(types.PartitionBy(types.Literal("x").As("k")).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn")))
+		require.ErrorIs(t, err, database.ErrWindowTermNotSelected)
+		require.ErrorContains(t, err, "constant")
 	})
 
 	t.Run("PartitionByAMeasureOverAKeyColumn", func(t *testing.T) {
