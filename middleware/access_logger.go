@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/logger"
 	prommetrics "github.com/hydroan/gst/metrics"
 	"github.com/hydroan/gst/types/consts"
@@ -57,7 +58,7 @@ func accessLogger(filename ...string) gin.HandlerFunc {
 			zap.String(consts.CTX_ROUTE, route),
 			zap.String(consts.CTX_PATH, path),
 			zap.String(consts.QUERY, query),
-			zap.String("ip", c.ClientIP()),
+			zap.String("ip", requestctx.GinClientIP(c)),
 			zap.String("user_agent", c.Request.UserAgent()),
 			util.LogDuration(time.Since(start)),
 		)

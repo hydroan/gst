@@ -155,6 +155,48 @@ func TestParseGinQueryReportsMalformedWithoutMemoizing(t *testing.T) {
 	require.False(t, stored, "a failed parse must not memoize a partial result")
 }
 
+// TestGinClientIPMemoizesTheResolvedAddress pins what the memo is for: gin
+// resolves the address once, forwarding headers included, and every later call
+// of one request reads that answer instead of resolving it again.
+func TestGinClientIPMemoizesTheResolvedAddress(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ginCtx.Request = httptest.NewRequest(http.MethodGet, "/api/records", nil)
+	ginCtx.Request.RemoteAddr = "192.0.2.10:54321"
+	ginCtx.Request.Header.Set("X-Forwarded-For", "203.0.113.5")
+
+	require.Equal(t, "203.0.113.5", GinClientIP(ginCtx),
+		"the resolution must be gin's own, forwarding headers included")
+
+	stored, ok := ginCtx.Get(ginClientIPKey)
+	require.True(t, ok, "the resolved address must be memoized for the rest of the request")
+	require.Equal(t, "203.0.113.5", stored)
+
+	// Rewriting what the address was resolved from proves the second call
+	// reuses the stored answer rather than resolving again.
+	ginCtx.Request.Header.Set("X-Forwarded-For", "198.51.100.7")
+	require.Equal(t, "203.0.113.5", GinClientIP(ginCtx))
+}
+
+// TestGinClientIPWithoutRequestMemoizesNothing pins the construction paths that
+// have no request behind them: they read an empty address and leave the memo
+// untouched, so a later call that does have a request still resolves one.
+func TestGinClientIPWithoutRequestMemoizesNothing(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	require.Empty(t, GinClientIP(nil))
+
+	ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	require.Empty(t, GinClientIP(ginCtx))
+	_, stored := ginCtx.Get(ginClientIPKey)
+	require.False(t, stored, "without a request there is nothing to memoize")
+
+	ginCtx.Request = httptest.NewRequest(http.MethodGet, "/api/records", nil)
+	ginCtx.Request.RemoteAddr = "192.0.2.10:54321"
+	require.Equal(t, "192.0.2.10", GinClientIP(ginCtx))
+}
+
 func TestMetadataContextRoundTrip(t *testing.T) {
 	meta := New(Fields{
 		Route:    "/api/users/:id",

@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
+	"github.com/hydroan/gst/internal/requestctx"
 	. "github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
@@ -158,7 +159,7 @@ func CreateManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg
 			Record:    util.BytesToString(record),
 			Request:   util.BytesToString(record),
 			Response:  util.BytesToString(record),
-			IP:        c.ClientIP(),
+			IP:        requestctx.GinClientIP(c),
 			User:      c.GetString(consts.CTX_USERNAME),
 			TraceID:   c.GetString(consts.TRACE_ID),
 			URI:       c.Request.RequestURI,

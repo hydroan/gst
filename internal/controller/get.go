@@ -148,7 +148,7 @@ func GetFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		if err = am.RecordOperation(requestContext(c), m, &modellogmgmt.OperationLog{
 			OP:        consts.OP_GET,
 			Model:     meta.name,
-			IP:        c.ClientIP(),
+			IP:        requestctx.GinClientIP(c),
 			User:      c.GetString(consts.CTX_USERNAME),
 			TraceID:   c.GetString(consts.TRACE_ID),
 			URI:       c.Request.RequestURI,

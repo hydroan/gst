@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/requestctx"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/hydroan/gst/util"
@@ -76,7 +77,7 @@ func tracing() gin.HandlerFunc {
 					attribute.String("http.target", c.Request.URL.Path),
 					attribute.String("http.route", c.FullPath()),
 					attribute.String("http.user_agent", c.Request.UserAgent()),
-					attribute.String("http.remote_addr", c.ClientIP()),
+					attribute.String("http.remote_addr", requestctx.GinClientIP(c)),
 				)
 
 				// Add request headers as attributes (selective)

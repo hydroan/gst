@@ -8,6 +8,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/cache/freelru"
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/types"
 	"golang.org/x/time/rate"
@@ -99,9 +100,7 @@ func RateLimiter(opts ...Option) gin.HandlerFunc {
 		conf.Burst = defaultBurst
 	}
 	if conf.KeyFunc == nil {
-		conf.KeyFunc = func(c *gin.Context) string {
-			return c.ClientIP()
-		}
+		conf.KeyFunc = requestctx.GinClientIP
 	}
 	if conf.TTL <= 0 {
 		conf.TTL = defaultTTL

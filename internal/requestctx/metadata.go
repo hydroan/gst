@@ -179,6 +179,39 @@ func ParseGinQuery(c *gin.Context) (url.Values, error) {
 	return query, nil
 }
 
+// ginClientIPKey keys the request's resolved client address on the gin context.
+const ginClientIPKey = "gst/requestctx/client_ip"
+
+// GinClientIP returns the client address gin resolved for the request,
+// resolving it on the first call and reusing that result for the rest of the
+// request.
+//
+// gin.Context.ClientIP re-resolves the address on every call: it splits the
+// host off RemoteAddr, parses it into a net.IP, matches that against the
+// trusted proxy list and formats it back into a string, allocating twice every
+// time. The answer derives from the connection, the forwarding headers and the
+// engine's trusted proxies, none of which change for the lifetime of a
+// request, so the memo is correct no matter where in the middleware chain the
+// first call happens.
+func GinClientIP(c *gin.Context) string {
+	if c == nil {
+		return ""
+	}
+	if cached, ok := c.Get(ginClientIPKey); ok {
+		if ip, ok := cached.(string); ok {
+			return ip
+		}
+	}
+	// ClientIP dereferences the request; without one there is no address to
+	// resolve and nothing worth memoizing.
+	if c.Request == nil {
+		return ""
+	}
+	ip := c.ClientIP()
+	c.Set(ginClientIPKey, ip)
+	return ip
+}
+
 func (m Metadata) Route() string     { return m.route }
 func (m Metadata) Path() string      { return m.path }
 func (m Metadata) Method() string    { return m.method }

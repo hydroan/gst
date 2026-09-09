@@ -73,7 +73,7 @@ func NewServiceContext(c *gin.Context, ctx context.Context, phase consts.Phase) 
 	}
 	if c.Request != nil {
 		serviceCtx.request = c.Request
-		serviceCtx.clientIP = c.ClientIP()
+		serviceCtx.clientIP = requestctx.GinClientIP(c)
 		serviceCtx.userAgent = c.Request.UserAgent()
 	}
 	return serviceCtx

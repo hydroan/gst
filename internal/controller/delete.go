@@ -140,7 +140,7 @@ func DeleteFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			Model:     meta.name,
 			RecordID:  m.GetID(),
 			Record:    util.BytesToString(record),
-			IP:        c.ClientIP(),
+			IP:        requestctx.GinClientIP(c),
 			User:      c.GetString(consts.CTX_USERNAME),
 			TraceID:   c.GetString(consts.TRACE_ID),
 			URI:       c.Request.RequestURI,

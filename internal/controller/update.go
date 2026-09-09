@@ -171,7 +171,7 @@ func UpdateFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			Record:    util.BytesToString(record),
 			Request:   util.BytesToString(record),
 			Response:  util.BytesToString(record),
-			IP:        c.ClientIP(),
+			IP:        requestctx.GinClientIP(c),
 			User:      c.GetString(consts.CTX_USERNAME),
 			TraceID:   c.GetString(consts.TRACE_ID),
 			URI:       c.Request.RequestURI,

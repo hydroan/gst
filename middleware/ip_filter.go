@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/response"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
@@ -139,7 +140,7 @@ func IPFilter(config *IPFilterConfig) gin.HandlerFunc {
 		// the connection unless a trusted proxy forwarded another. Whether a
 		// forwarding header counts is decided once for the whole server by
 		// server.trusted_proxies, so this filter never has to judge it.
-		clientIP := util.IPv6ToIPv4(c.ClientIP())
+		clientIP := util.IPv6ToIPv4(requestctx.GinClientIP(c))
 		ip := net.ParseIP(clientIP)
 		if ip == nil {
 			zap.S().Warnw("failed to parse client IP", "ip", clientIP)
