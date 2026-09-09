@@ -132,13 +132,16 @@ func (SelectJoin) sealedJoinSource() {}
 // under another alias is not the term. A term the query could compute
 // itself — one carrying no table, Count() say, or one of the queried table
 // or of a model the query joins — is one spelling whether the query or the
-// select wrote it: under its default alias, which two authors write
-// independently, it is refused when the select projects it too, since the
-// query's own reading of it would silently become the select's; an alias
-// is written on purpose, so the select's aliased term passed to the query
-// reads it through, and the query's own term keeps apart under an alias of
-// its own. A term read this way may also key a window's partition or order
-// it. In a grouped query a joined select's term
+// select wrote it. Under its default alias, the one its constructor gave it
+// and two authors write independently, it is refused when the select
+// projects it too, since the query's own reading of it would silently
+// become the select's; an alias is written on purpose, so the select's
+// aliased term passed to the query reads it through, and the query's own
+// term keeps apart under an alias different from the select's. A constant,
+// Literal, is the query's own under any alias, so a select's constant is
+// never read through; whether a row of the select matched is read from one
+// of its keys, NULL where none did. A term read through may also key a
+// window's partition or order it. In a grouped query a joined select's term
 // is projected as a group key of the query, which is exact only when the
 // query groups by the columns the select is joined on — the term is then
 // constant within a group — and the framework requires it; a query with no
@@ -153,8 +156,9 @@ func (SelectJoin) sealedJoinSource() {}
 // addressed through its model's column references, so a select over the
 // queried table, or a second select over a table that already backs a
 // source of the query, could not be told apart and is refused; the tables a
-// select reads through joins of its own are its own to read. A per-row total
-// over the queried table's own groups is a window instead,
+// select reads through joins of its own are its own to read, and a select
+// never joins itself, directly or through the selects it joins. A per-row
+// total over the queried table's own groups is a window instead,
 // Sum().Over(PartitionBy(key)).
 // A select grouped by a time bucket cannot be joined either: the bucket is a
 // label of the column, not a value a column of the query equals. The select

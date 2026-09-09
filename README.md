@@ -408,8 +408,12 @@ err := database.Select[*appmodel.Record, categoryTotal](ctx,
 要在别处再引用的项先赋给变量：`Having`、`OrderBy`、`Qualify`、窗口的 `PartitionBy` 和
 `OrderBy`、联合的排序、主查询读子投影的项，都是按项的值在投影里找同一个项，把同一个变量
 传两遍最稳，改了别名的项就不再是同一个项。反过来，主查询自己能算出来的项（不带表的
-`types.Count()`、排名函数，主表或主查询连入模型的项）子投影也投影了同一个，且两边都没写
-`As`，框架分不清是谁的，构建期报错：主查询自己的项起个别名，或者给子投影的项起别名再传它来读透。
+`types.Count()`、排名函数，主表或主查询连入模型的项）子投影也投影了同一个，而它还顶着构造时的
+默认别名（列名、`count`、`row_number` 这些；没写 `As` 和写了默认名都算），框架分不清是谁的，
+构建期报错。改法：想要主查询自己的，给它起个别名；想读子投影的，给子投影的项起个非默认别名再把它
+传给主查询；两个都要就两边各起一个不同的别名。只有主查询自己也能算的项才有这一步，子投影自己
+模型的项直接传即可。`types.Literal` 常量无论别名都算主查询自己的，子投影投了同一个常量就报错；
+要知道子投影有没有匹配到行，读它的键列，没匹配到的是 NULL。
 
 几条会影响正确性的约定：
 
@@ -424,9 +428,11 @@ err := database.Select[*appmodel.Record, categoryTotal](ctx,
   一列 0。
 - 聚合规格写错一律**报错**（未知列、未知函数、别名对不上、`Having` 比较 nil
   或切片等），不像客户端过滤器那样退化成空结果。
-- **群/租户隔离不会自动套用**。`List` 的隔离来自 controller 跑的 service 钩子
-  （`Filter`/`FilterRaw`），而聚合是 service 直接调用的，那些钩子不会执行——
-  每个隔离条件都必须自己写进 `Where`。漏掉一个就会跨租户聚合，且没有任何迹象。
+- **service 钩子里的隔离不会自动套用**。模型自己声明的行规则跟着模型走：软删除和模型嵌入的
+  租户作用域对投影和 `List` 一样生效，连入的模型也在 ON 里带着。不会继承的是 `List` 时由
+  controller 跑的 service 钩子（`Filter`/`FilterRaw`）加上的业务隔离：聚合是 service 直接
+  调用的，那些钩子不会执行——每个这样的条件都必须自己写进 `Where`。漏掉一个就会跨过钩子
+  划的边界聚合，且没有任何迹象。
 
 单行结果用 `ScanOne`，分页报表的总组数用 `Count`。只问「有没有相关行」的跨表条件用
 `types.FilterExists` / `FilterNotExists` 半连接；要把另一张表的字段带进结果行，看下面的
@@ -470,8 +476,8 @@ rank := types.Rank().Over(types.OrderBy(total.Desc()))
 关键字与规则：
 
 - **`RowNumber`、`Rank`、`DenseRank`** 是包级函数，必须配带 `OrderBy` 的窗口；
-  **`Lag`、`Lead`** 挂在列上，取窗内上一行、下一行的值，分区两端是 NULL，结果字段
-  必须能装 NULL。五个聚合函数加 `.Over` 即在窗口上算；`CountDistinct` 不能开窗，
+  **`Lag`、`Lead`** 挂在列上，取窗内上一行、下一行的值，同样必须配带 `OrderBy` 的窗口，
+  分区两端是 NULL，结果字段必须能装 NULL。五个聚合函数加 `.Over` 即在窗口上算；`CountDistinct` 不能开窗，
   分组键和时间桶也不能。
 - **决胜列由框架补**：带 `OrderBy` 的窗口在行级投影末尾补主键升序，在分组投影补
   分组键，同值行的编号和累计在每次运行都一样。`Rank`、`DenseRank` 不补，它们按定义
@@ -480,7 +486,7 @@ rank := types.Rank().Over(types.OrderBy(total.Desc()))
   默认的 RANGE 那样把同值行一起算进去。
 - **分组投影上的窗口读的是组**：`PartitionBy` 只能用分组键或子投影的项，度量不行，
   即便它读的列正是分组键；`OrderBy` 用分组键或已投影的度量；聚合函数在这里作用于组的度量，`Sum().Over(...)` 渲染成
-  `SUM(SUM(amount)) OVER (...)`，`Avg`、`Lag`、`Lead` 在分组投影上直接拒绝。
+  `COALESCE(SUM(SUM(amount)) OVER (...), 0)`，`Avg`、`Lag`、`Lead` 在分组投影上直接拒绝。
 - **`Qualify`** 按窗口列筛行，条件只能引用已投影的窗口项；`Where`、`Having` 留在
   内层，排序、分页和 `Count` 作用在筛完之后的行集。
 - **`ScanOne`** 只读纯度量投影；行级投影用 `Scan`。既无聚合也无窗口的独立投影仍然拒绝，
@@ -620,9 +626,10 @@ err := database.Select[*appmodel.Record, recordWithTags](ctx, RecordCols.ID, tag
   每条主表行带上子投影的项，时间桶只是每行的标签；要按桶汇总就加上度量。
 - 子投影读的表不能是主查询的表，也不能是已经连进来的表：临时表是通过子投影模型的列引用来
   寻址的，同一张表出现两次就分不清。子投影自己再连进来的表不受此限。主查询自己能算出来的项
-  （不带表的 `types.Count()`、排名函数，主表或主查询连入模型的项）子投影也投影了同一个、两边都
-  没写 `As` 时报 `ErrDuplicateAlias`，写了别名的项一律当作读透。要给每一行带上本表按某个维度的
-  合计，用窗口 `Sum().Over(PartitionBy(键))`，不用连接。子投影不能连到自己，也不能两两互连。
+  （不带表的 `types.Count()`、排名函数，主表或主查询连入模型的项）子投影也投影了同一个、还顶着
+  默认别名时报 `ErrDuplicateAlias`，起了非默认别名的项当作读透；`types.Literal` 常量无论别名都算
+  主查询自己的。要给每一行带上本表按某个维度的合计，用窗口 `Sum().Over(PartitionBy(键))`，
+  不用连接。子投影不能连到自己，也不能两两互连。
 - 子投影不能按时间桶分组后再连：桶是列的标签（如 `2024-01-10`），没有哪一列等于它，构建期报错。
 - 临时表由数据库物化，行数就是子投影的组数：条件写进子投影，物化得越少越好。
 - 派生表连接在 ClickHouse 上可用；那里的 LEFT JOIN 对不上的行也返回 NULL，框架连
@@ -642,7 +649,8 @@ err := database.Select[*appmodel.Record, recordWithTags](ctx, RecordCols.ID, tag
 | `ErrJoinNotUnique` | ON 用 `EqCol`、常量等值钉住子投影的全部分组键 |
 | `ErrJoinSelectColumn` | 主查询只能读子投影投影出来的项，把同一个项（共享变量）再传一遍，别改它的别名；ON 和 `Where` 里只能用它的键列，别的条件写进子投影 |
 | `ErrDuplicateAlias`，两个子投影投了同一个项 | 给其中一个 `As` 别的别名 |
-| `ErrDuplicateAlias`，主查询自己能算的项子投影也投了且都没写 `As` | 想要主查询自己的：给它起个别名；想读子投影的：给子投影的项起别名，再把它传给主查询 |
+| `ErrDuplicateAlias`，主查询自己能算的项子投影也投了且还顶着默认别名 | 想要主查询自己的：给它起个别名；想读子投影的：给子投影的项起个非默认别名，再把它传给主查询；两个都要就两边别名各不相同 |
+| `ErrDuplicateAlias`，主查询和子投影投了同一个 `types.Literal` 常量 | 常量算主查询自己的，换个值或别名；要知道子投影有没有匹配到行，读它的键列，没匹配到的是 NULL |
 | `ErrJoinSelectNotKeyed` | 主查询分组时按连接列分组；连接列是另一个子投影的键时，把那个键项也投影成分组键 |
 | `ErrJoinDuplicateTable` | 一张表只能作为一个来源，同组合计用窗口；子投影不能连到自己或两两互连 |
 | `ErrJoinMeasure` | 分组投影里被连模型的列只能做分组键或 `Min`、`Max`、`CountDistinct` |

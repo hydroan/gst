@@ -19,11 +19,14 @@ package types
 // The entry point is the package-level database.Select[M, R] rather than a
 // method, because a Go method cannot introduce the result type parameter.
 //
-// Row-level access rules are not inherited. A model's List gets its tenant or
-// group scoping from the Filter service hook the controller runs; a select is
-// called straight from service code, so those hooks never run and every
-// scoping condition has to be passed to Where explicitly. Forgetting one reads
-// across tenants without any sign that it did.
+// The rules a model declares on its rows travel with it: soft deletion and
+// the tenant scope a model embeds apply to a select as they do to List, and
+// a joined model carries them in its ON. What a select does not inherit is
+// the scoping a service adds in the Filter hook the controller runs for
+// List; a select is called straight from service code, so those hooks never
+// run and every such condition has to be passed to Where explicitly.
+// Forgetting one reads across the boundary the hook draws without any sign
+// that it did.
 //
 // The projection is declared at the entry point and takes one of two shapes.
 // A grouped projection carries aggregates: a term without a function is a

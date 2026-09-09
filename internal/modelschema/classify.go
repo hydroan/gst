@@ -38,9 +38,10 @@ var timeType = reflect.TypeFor[time.Time]()
 // the failure the split exists to prevent: MySQL and SQLite answer SUM over a
 // text column with 0 and a warning rather than an error, so the mistake
 // reaches a report as a plausible wrong number instead of a failure. A decimal
-// stored as a struct is therefore classified as other; summing it takes a
-// reference minted as NumericColumn by hand, whose column is checked against
-// the model schema at build time.
+// stored as a struct is therefore classified as other, and SUM or AVG over it
+// is refused at build time whichever reference names it, a NumericColumn
+// minted by hand included; a decimal that is summed is stored in a numeric Go
+// type.
 func ClassifyColumn(typ reflect.Type) ColumnClass {
 	if typ == nil {
 		return ColumnClassOther
