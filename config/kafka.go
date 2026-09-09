@@ -3,21 +3,21 @@ package config
 import "github.com/spf13/viper"
 
 const (
-	KAFKA_BROKERS   = "KAFKA_BROKERS"   //nolint:staticcheck
-	KAFKA_CLIENT_ID = "KAFKA_CLIENT_ID" //nolint:staticcheck
+	KAFKA_BROKERS   = "KAFKA_BROKERS"
+	KAFKA_CLIENT_ID = "KAFKA_CLIENT_ID"
 
-	KAFKA_SASL_ENABLED   = "KAFKA_SASL_ENABLED"   //nolint:staticcheck
-	KAFKA_SASL_MECHANISM = "KAFKA_SASL_MECHANISM" //nolint:staticcheck
-	KAFKA_SASL_USERNAME  = "KAFKA_SASL_USERNAME"  //nolint:staticcheck
-	KAFKA_SASL_PASSWORD  = "KAFKA_SASL_PASSWORD"  //nolint:staticcheck,gosec
+	KAFKA_SASL_ENABLED   = "KAFKA_SASL_ENABLED"
+	KAFKA_SASL_MECHANISM = "KAFKA_SASL_MECHANISM"
+	KAFKA_SASL_USERNAME  = "KAFKA_SASL_USERNAME"
+	KAFKA_SASL_PASSWORD  = "KAFKA_SASL_PASSWORD"
 
-	KAFKA_TLS_ENABLED          = "KAFKA_TLS_ENABLED"          //nolint:staticcheck
-	KAFKA_CERT_FILE            = "KAFKA_CERT_FILE"            //nolint:staticcheck
-	KAFKA_KEY_FILE             = "KAFKA_KEY_FILE"             //nolint:staticcheck
-	KAFKA_CA_FILE              = "KAFKA_CA_FILE"              //nolint:staticcheck
-	KAFKA_INSECURE_SKIP_VERIFY = "KAFKA_INSECURE_SKIP_VERIFY" //nolint:staticcheck
+	KAFKA_TLS_ENABLED          = "KAFKA_TLS_ENABLED"
+	KAFKA_CERT_FILE            = "KAFKA_CERT_FILE"
+	KAFKA_KEY_FILE             = "KAFKA_KEY_FILE"
+	KAFKA_CA_FILE              = "KAFKA_CA_FILE"
+	KAFKA_INSECURE_SKIP_VERIFY = "KAFKA_INSECURE_SKIP_VERIFY"
 
-	KAFKA_ENABLED = "KAFKA_ENABLED" //nolint:staticcheck
+	KAFKA_ENABLED = "KAFKA_ENABLED"
 )
 
 // Supported Kafka SASL mechanisms.

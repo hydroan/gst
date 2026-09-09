@@ -7,34 +7,34 @@ import (
 )
 
 const (
-	LDAP_HOST            = "LDAP_HOST"            //nolint:staticcheck
-	LDAP_PORT            = "LDAP_PORT"            //nolint:staticcheck
-	LDAP_BASE_DN         = "LDAP_BASE_DN"         //nolint:staticcheck
-	LDAP_BIND_DN         = "LDAP_BIND_DN"         //nolint:staticcheck
-	LDAP_BIND_PASSWORD   = "LDAP_BIND_PASSWORD"   //nolint:staticcheck,gosec
-	LDAP_ATTRIBUTES      = "LDAP_ATTRIBUTES"      //nolint:staticcheck
-	LDAP_FILTER          = "LDAP_FILTER"          //nolint:staticcheck
-	LDAP_GROUP_FILTER    = "LDAP_GROUP_FILTER"    //nolint:staticcheck
-	LDAP_USER_FILTER     = "LDAP_USER_FILTER"     //nolint:staticcheck
-	LDAP_GROUP_DN        = "LDAP_GROUP_DN"        //nolint:staticcheck
-	LDAP_USER_DN         = "LDAP_USER_DN"         //nolint:staticcheck
-	LDAP_GROUP_ATTRIBUTE = "LDAP_GROUP_ATTRIBUTE" //nolint:staticcheck
-	LDAP_USER_ATTRIBUTE  = "LDAP_USER_ATTRIBUTE"  //nolint:staticcheck
-	LDAP_SCOPE           = "LDAP_SCOPE"           //nolint:staticcheck
-	LDAP_REQUEST_TIMEOUT = "LDAP_REQUEST_TIMEOUT" //nolint:staticcheck
-	LDAP_CONN_TIMEOUT    = "LDAP_CONN_TIMEOUT"    //nolint:staticcheck
-	LDAP_REFERRALS       = "LDAP_REFERRALS"       //nolint:staticcheck
-	LDAP_DEREF           = "LDAP_DEREF"           //nolint:staticcheck
-	LDAP_PAGE_SIZE       = "LDAP_PAGE_SIZE"       //nolint:staticcheck
-	LDAP_HEARTBEAT       = "LDAP_HEARTBEAT"       //nolint:staticcheck
+	LDAP_HOST            = "LDAP_HOST"
+	LDAP_PORT            = "LDAP_PORT"
+	LDAP_BASE_DN         = "LDAP_BASE_DN"
+	LDAP_BIND_DN         = "LDAP_BIND_DN"
+	LDAP_BIND_PASSWORD   = "LDAP_BIND_PASSWORD"
+	LDAP_ATTRIBUTES      = "LDAP_ATTRIBUTES"
+	LDAP_FILTER          = "LDAP_FILTER"
+	LDAP_GROUP_FILTER    = "LDAP_GROUP_FILTER"
+	LDAP_USER_FILTER     = "LDAP_USER_FILTER"
+	LDAP_GROUP_DN        = "LDAP_GROUP_DN"
+	LDAP_USER_DN         = "LDAP_USER_DN"
+	LDAP_GROUP_ATTRIBUTE = "LDAP_GROUP_ATTRIBUTE"
+	LDAP_USER_ATTRIBUTE  = "LDAP_USER_ATTRIBUTE"
+	LDAP_SCOPE           = "LDAP_SCOPE"
+	LDAP_REQUEST_TIMEOUT = "LDAP_REQUEST_TIMEOUT"
+	LDAP_CONN_TIMEOUT    = "LDAP_CONN_TIMEOUT"
+	LDAP_REFERRALS       = "LDAP_REFERRALS"
+	LDAP_DEREF           = "LDAP_DEREF"
+	LDAP_PAGE_SIZE       = "LDAP_PAGE_SIZE"
+	LDAP_HEARTBEAT       = "LDAP_HEARTBEAT"
 
-	LDAP_TLS_ENABLED          = "LDAP_TLS_ENABLED"          //nolint:staticcheck
-	LDAP_CERT_FILE            = "LDAP_CERT_FILE"            //nolint:staticcheck
-	LDAP_KEY_FILE             = "LDAP_KEY_FILE"             //nolint:staticcheck
-	LDAP_CA_FILE              = "LDAP_CA_FILE"              //nolint:staticcheck
-	LDAP_INSECURE_SKIP_VERIFY = "LDAP_INSECURE_SKIP_VERIFY" //nolint:staticcheck
+	LDAP_TLS_ENABLED          = "LDAP_TLS_ENABLED"
+	LDAP_CERT_FILE            = "LDAP_CERT_FILE"
+	LDAP_KEY_FILE             = "LDAP_KEY_FILE"
+	LDAP_CA_FILE              = "LDAP_CA_FILE"
+	LDAP_INSECURE_SKIP_VERIFY = "LDAP_INSECURE_SKIP_VERIFY"
 
-	LDAP_ENABLED = "LDAP_ENABLED" //nolint:staticcheck
+	LDAP_ENABLED = "LDAP_ENABLED"
 )
 
 // Scope represents the search scope

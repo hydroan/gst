@@ -3,10 +3,10 @@ package config
 import "github.com/spf13/viper"
 
 const (
-	SQLITE_PATH      = "SQLITE_PATH"      //nolint:staticcheck
-	SQLITE_DATABASE  = "SQLITE_DATABASE"  //nolint:staticcheck
-	SQLITE_IS_MEMORY = "SQLITE_IS_MEMORY" //nolint:staticcheck
-	SQLITE_ENABLED   = "SQLITE_ENABLED"   //nolint:staticcheck
+	SQLITE_PATH      = "SQLITE_PATH"
+	SQLITE_DATABASE  = "SQLITE_DATABASE"
+	SQLITE_IS_MEMORY = "SQLITE_IS_MEMORY"
+	SQLITE_ENABLED   = "SQLITE_ENABLED"
 )
 
 type Sqlite struct {

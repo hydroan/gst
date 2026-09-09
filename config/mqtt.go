@@ -7,19 +7,19 @@ import (
 )
 
 const (
-	MQTT_ADDR                 = "MQTT_ADDR"                 //nolint:staticcheck
-	MQTT_USERNAME             = "MQTT_USERNAME"             //nolint:staticcheck
-	MQTT_PASSWORD             = "MQTT_PASSWORD"             //nolint:staticcheck
-	MQTT_CLIENT_PREFIX        = "MQTT_CLIENT_PREFIX"        //nolint:staticcheck
-	MQTT_CONNECT_TIMEOUT      = "MQTT_CONNECT_TIMEOUT"      //nolint:staticcheck
-	MQTT_KEEPALIVE            = "MQTT_KEEPALIVE"            //nolint:staticcheck
-	MQTT_CLEAN_SESSION        = "MQTT_CLEAN_SESSION"        //nolint:staticcheck
-	MQTT_AUTO_RECONNECT       = "MQTT_AUTO_RECONNECT"       //nolint:staticcheck
-	MQTT_USE_TLS              = "MQTT_USE_TLS"              //nolint:staticcheck
-	MQTT_CERT_FILE            = "MQTT_CERT_FILE"            //nolint:staticcheck
-	MQTT_KEY_FILE             = "MQTT_KEY_FILE"             //nolint:staticcheck
-	MQTT_INSECURE_SKIP_VERIFY = "MQTT_INSECURE_SKIP_VERIFY" //nolint:staticcheck
-	MQTT_ENABLED              = "MQTT_ENABLED"              //nolint:staticcheck
+	MQTT_ADDR                 = "MQTT_ADDR"
+	MQTT_USERNAME             = "MQTT_USERNAME"
+	MQTT_PASSWORD             = "MQTT_PASSWORD"
+	MQTT_CLIENT_PREFIX        = "MQTT_CLIENT_PREFIX"
+	MQTT_CONNECT_TIMEOUT      = "MQTT_CONNECT_TIMEOUT"
+	MQTT_KEEPALIVE            = "MQTT_KEEPALIVE"
+	MQTT_CLEAN_SESSION        = "MQTT_CLEAN_SESSION"
+	MQTT_AUTO_RECONNECT       = "MQTT_AUTO_RECONNECT"
+	MQTT_USE_TLS              = "MQTT_USE_TLS"
+	MQTT_CERT_FILE            = "MQTT_CERT_FILE"
+	MQTT_KEY_FILE             = "MQTT_KEY_FILE"
+	MQTT_INSECURE_SKIP_VERIFY = "MQTT_INSECURE_SKIP_VERIFY"
+	MQTT_ENABLED              = "MQTT_ENABLED"
 )
 
 type Mqtt struct {

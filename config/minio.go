@@ -7,31 +7,31 @@ import (
 )
 
 const (
-	MINIO_ENDPOINT      = "MINIO_ENDPOINT"      //nolint:staticcheck
-	MINIO_ACCESS_KEY    = "MINIO_ACCESS_KEY"    //nolint:staticcheck
-	MINIO_SECRET_KEY    = "MINIO_SECRET_KEY"    //nolint:staticcheck
-	MINIO_BUCKET        = "MINIO_BUCKET"        //nolint:staticcheck
-	MINIO_LOCATION      = "MINIO_LOCATION"      //nolint:staticcheck
-	MINIO_SECURE        = "MINIO_SECURE"        //nolint:staticcheck
-	MINIO_REGION        = "MINIO_REGION"        //nolint:staticcheck
-	MINIO_TIMEOUT       = "MINIO_TIMEOUT"       //nolint:staticcheck
-	MINIO_PART_SIZE     = "MINIO_PART_SIZE"     //nolint:staticcheck
-	MINIO_CONCURRENCY   = "MINIO_CONCURRENCY"   //nolint:staticcheck
-	MINIO_COMPRESS      = "MINIO_COMPRESS"      //nolint:staticcheck
-	MINIO_TRACE         = "MINIO_TRACE"         //nolint:staticcheck
-	MINIO_SESSION_TOKEN = "MINIO_SESSION_TOKEN" //nolint:staticcheck
-	MINIO_USE_IAM       = "MINIO_USE_IAM"       //nolint:staticcheck
-	MINIO_USE_STS       = "MINIO_USE_STS"       //nolint:staticcheck
-	MINIO_IAM_ENDPOINT  = "MINIO_IAM_ENDPOINT"  //nolint:staticcheck
-	MINIO_STS_ENDPOINT  = "MINIO_STS_ENDPOINT"  //nolint:staticcheck
+	MINIO_ENDPOINT      = "MINIO_ENDPOINT"
+	MINIO_ACCESS_KEY    = "MINIO_ACCESS_KEY"
+	MINIO_SECRET_KEY    = "MINIO_SECRET_KEY"
+	MINIO_BUCKET        = "MINIO_BUCKET"
+	MINIO_LOCATION      = "MINIO_LOCATION"
+	MINIO_SECURE        = "MINIO_SECURE"
+	MINIO_REGION        = "MINIO_REGION"
+	MINIO_TIMEOUT       = "MINIO_TIMEOUT"
+	MINIO_PART_SIZE     = "MINIO_PART_SIZE"
+	MINIO_CONCURRENCY   = "MINIO_CONCURRENCY"
+	MINIO_COMPRESS      = "MINIO_COMPRESS"
+	MINIO_TRACE         = "MINIO_TRACE"
+	MINIO_SESSION_TOKEN = "MINIO_SESSION_TOKEN"
+	MINIO_USE_IAM       = "MINIO_USE_IAM"
+	MINIO_USE_STS       = "MINIO_USE_STS"
+	MINIO_IAM_ENDPOINT  = "MINIO_IAM_ENDPOINT"
+	MINIO_STS_ENDPOINT  = "MINIO_STS_ENDPOINT"
 
-	MINIO_TLS_ENABLED          = "MINIO_TLS_ENABLED"          //nolint:staticcheck
-	MINIO_CERT_FILE            = "MINIO_CERT_FILE"            //nolint:staticcheck
-	MINIO_KEY_FILE             = "MINIO_KEY_FILE"             //nolint:staticcheck
-	MINIO_CA_FILE              = "MINIO_CA_FILE"              //nolint:staticcheck
-	MINIO_INSECURE_SKIP_VERIFY = "MINIO_INSECURE_SKIP_VERIFY" //nolint:staticcheck
+	MINIO_TLS_ENABLED          = "MINIO_TLS_ENABLED"
+	MINIO_CERT_FILE            = "MINIO_CERT_FILE"
+	MINIO_KEY_FILE             = "MINIO_KEY_FILE"
+	MINIO_CA_FILE              = "MINIO_CA_FILE"
+	MINIO_INSECURE_SKIP_VERIFY = "MINIO_INSECURE_SKIP_VERIFY"
 
-	MINIO_ENABLED = "MINIO_ENABLED" //nolint:staticcheck
+	MINIO_ENABLED = "MINIO_ENABLED"
 )
 
 type Minio struct {

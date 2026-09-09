@@ -10,33 +10,33 @@ import (
 
 const (
 	// OTEL_ENABLED enables OpenTelemetry tracing.
-	OTEL_ENABLED = "OTEL_ENABLED" //nolint:staticcheck
+	OTEL_ENABLED = "OTEL_ENABLED"
 	// OTEL_SERVICE_NAME configures the OpenTelemetry service.name resource attribute.
-	OTEL_SERVICE_NAME = "OTEL_SERVICE_NAME" //nolint:staticcheck
+	OTEL_SERVICE_NAME = "OTEL_SERVICE_NAME"
 	// OTEL_EXPORTER_OTLP_PROTOCOL configures the OTLP traces transport protocol.
-	OTEL_EXPORTER_OTLP_PROTOCOL = "OTEL_EXPORTER_OTLP_PROTOCOL" //nolint:staticcheck
+	OTEL_EXPORTER_OTLP_PROTOCOL = "OTEL_EXPORTER_OTLP_PROTOCOL"
 	// OTEL_EXPORTER_OTLP_TRACES_ENDPOINT configures the trace-specific OTLP endpoint.
-	OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT" //nolint:staticcheck
+	OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
 	// OTEL_EXPORTER_OTLP_HEADERS configures headers sent with OTLP trace exports.
-	OTEL_EXPORTER_OTLP_HEADERS = "OTEL_EXPORTER_OTLP_HEADERS" //nolint:staticcheck
+	OTEL_EXPORTER_OTLP_HEADERS = "OTEL_EXPORTER_OTLP_HEADERS"
 	// OTEL_EXPORTER_OTLP_COMPRESSION configures OTLP trace export compression.
-	OTEL_EXPORTER_OTLP_COMPRESSION = "OTEL_EXPORTER_OTLP_COMPRESSION" //nolint:staticcheck
+	OTEL_EXPORTER_OTLP_COMPRESSION = "OTEL_EXPORTER_OTLP_COMPRESSION"
 	// OTEL_TRACES_SAMPLER configures the OpenTelemetry traces sampler.
-	OTEL_TRACES_SAMPLER = "OTEL_TRACES_SAMPLER" //nolint:staticcheck
+	OTEL_TRACES_SAMPLER = "OTEL_TRACES_SAMPLER"
 	// OTEL_TRACES_SAMPLER_ARG configures the OpenTelemetry traces sampler argument.
-	OTEL_TRACES_SAMPLER_ARG = "OTEL_TRACES_SAMPLER_ARG" //nolint:staticcheck
+	OTEL_TRACES_SAMPLER_ARG = "OTEL_TRACES_SAMPLER_ARG"
 	// OTEL_LOG_SPANS controls whether spans are also written to the OTEL logger.
-	OTEL_LOG_SPANS = "OTEL_LOG_SPANS" //nolint:staticcheck
+	OTEL_LOG_SPANS = "OTEL_LOG_SPANS"
 	// OTEL_MAX_TAG_VALUE_LEN configures the maximum helper tag value length.
-	OTEL_MAX_TAG_VALUE_LEN = "OTEL_MAX_TAG_VALUE_LEN" //nolint:staticcheck
+	OTEL_MAX_TAG_VALUE_LEN = "OTEL_MAX_TAG_VALUE_LEN"
 	// OTEL_BSP_MAX_QUEUE_SIZE configures the BatchSpanProcessor queue capacity.
-	OTEL_BSP_MAX_QUEUE_SIZE = "OTEL_BSP_MAX_QUEUE_SIZE" //nolint:staticcheck
+	OTEL_BSP_MAX_QUEUE_SIZE = "OTEL_BSP_MAX_QUEUE_SIZE"
 	// OTEL_BSP_MAX_EXPORT_BATCH_SIZE configures the BatchSpanProcessor export batch limit.
-	OTEL_BSP_MAX_EXPORT_BATCH_SIZE = "OTEL_BSP_MAX_EXPORT_BATCH_SIZE" //nolint:staticcheck
+	OTEL_BSP_MAX_EXPORT_BATCH_SIZE = "OTEL_BSP_MAX_EXPORT_BATCH_SIZE"
 	// OTEL_BSP_SCHEDULE_DELAY configures the BatchSpanProcessor schedule delay.
-	OTEL_BSP_SCHEDULE_DELAY = "OTEL_BSP_SCHEDULE_DELAY" //nolint:staticcheck
+	OTEL_BSP_SCHEDULE_DELAY = "OTEL_BSP_SCHEDULE_DELAY"
 	// OTEL_BSP_EXPORT_TIMEOUT configures the BatchSpanProcessor export timeout.
-	OTEL_BSP_EXPORT_TIMEOUT = "OTEL_BSP_EXPORT_TIMEOUT" //nolint:staticcheck
+	OTEL_BSP_EXPORT_TIMEOUT = "OTEL_BSP_EXPORT_TIMEOUT"
 )
 
 // OTLPProtocol is the transport protocol used by OTLP trace exporters.

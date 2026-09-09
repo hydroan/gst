@@ -7,30 +7,30 @@ import (
 )
 
 const (
-	NATS_ADDRS       = "NATS_ADDRS"       //nolint:staticcheck
-	NATS_CLIENT_NAME = "NATS_CLIENT_NAME" //nolint:staticcheck
-	NATS_USERNAME    = "NATS_USERNAME"    //nolint:staticcheck
-	NATS_PASSWORD    = "NATS_PASSWORD"    //nolint:staticcheck
-	NATS_TOKEN       = "NATS_TOKEN"       //nolint:staticcheck
-	NATS_CREDENTIALS = "NATS_CREDENTIALS" //nolint:staticcheck
-	NATS_NKEY_FILE   = "NATS_NKEY_FILE"   //nolint:staticcheck
+	NATS_ADDRS       = "NATS_ADDRS"
+	NATS_CLIENT_NAME = "NATS_CLIENT_NAME"
+	NATS_USERNAME    = "NATS_USERNAME"
+	NATS_PASSWORD    = "NATS_PASSWORD"
+	NATS_TOKEN       = "NATS_TOKEN"
+	NATS_CREDENTIALS = "NATS_CREDENTIALS"
+	NATS_NKEY_FILE   = "NATS_NKEY_FILE"
 
-	NATS_MAX_RECONNECTS       = "NATS_MAX_RECONNECTS"       //nolint:staticcheck
-	NATS_RECONNECT_WAIT       = "NATS_RECONNECT_WAIT"       //nolint:staticcheck
-	NATS_RECONNECT_JITTER     = "NATS_RECONNECT_JITTER"     //nolint:staticcheck
-	NATS_RECONNECT_JITTER_TLS = "NATS_RECONNECT_JITTER_TLS" //nolint:staticcheck
+	NATS_MAX_RECONNECTS       = "NATS_MAX_RECONNECTS"
+	NATS_RECONNECT_WAIT       = "NATS_RECONNECT_WAIT"
+	NATS_RECONNECT_JITTER     = "NATS_RECONNECT_JITTER"
+	NATS_RECONNECT_JITTER_TLS = "NATS_RECONNECT_JITTER_TLS"
 
-	NATS_CONNECT_TIMEOUT       = "NATS_CONNECT_TIMEOUT"       //nolint:staticcheck
-	NATS_PING_INTERVAL         = "NATS_PING_INTERVAL"         //nolint:staticcheck
-	NATS_MAX_PINGS_OUTSTANDING = "NATS_MAX_PINGS_OUTSTANDING" //nolint:staticcheck
+	NATS_CONNECT_TIMEOUT       = "NATS_CONNECT_TIMEOUT"
+	NATS_PING_INTERVAL         = "NATS_PING_INTERVAL"
+	NATS_MAX_PINGS_OUTSTANDING = "NATS_MAX_PINGS_OUTSTANDING"
 
-	NATS_TLS_ENABLED          = "NATS_TLS_ENABLED"          //nolint:staticcheck
-	NATS_CERT_FILE            = "NATS_CERT_FILE"            //nolint:staticcheck
-	NATS_KEY_FILE             = "NATS_KEY_FILE"             //nolint:staticcheck
-	NATS_CA_FILE              = "NATS_CA_FILE"              //nolint:staticcheck
-	NATS_INSECURE_SKIP_VERIFY = "NATS_INSECURE_SKIP_VERIFY" //nolint:staticcheck
+	NATS_TLS_ENABLED          = "NATS_TLS_ENABLED"
+	NATS_CERT_FILE            = "NATS_CERT_FILE"
+	NATS_KEY_FILE             = "NATS_KEY_FILE"
+	NATS_CA_FILE              = "NATS_CA_FILE"
+	NATS_INSECURE_SKIP_VERIFY = "NATS_INSECURE_SKIP_VERIFY"
 
-	NATS_ENABLED = "NATS_ENABLED" //nolint:staticcheck
+	NATS_ENABLED = "NATS_ENABLED"
 )
 
 type Nats struct {

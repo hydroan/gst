@@ -34,30 +34,30 @@ const (
 )
 
 const (
-	MONGO_HOST          = "MONGO_HOST"          //nolint:staticcheck
-	MONGO_PORT          = "MONGO_PORT"          //nolint:staticcheck
-	MONGO_USERNAME      = "MONGO_USERNAME"      //nolint:staticcheck
-	MONGO_PASSWORD      = "MONGO_PASSWORD"      //nolint:staticcheck
-	MONGO_DATABASE      = "MONGO_DATABASE"      //nolint:staticcheck
-	MONGO_AUTH_SOURCE   = "MONGO_AUTH_SOURCE"   //nolint:staticcheck
-	MONGO_MAX_POOL_SIZE = "MONGO_MAX_POOL_SIZE" //nolint:staticcheck
-	MONGO_MIN_POOL_SIZE = "MONGO_MIN_POOL_SIZE" //nolint:staticcheck
+	MONGO_HOST          = "MONGO_HOST"
+	MONGO_PORT          = "MONGO_PORT"
+	MONGO_USERNAME      = "MONGO_USERNAME"
+	MONGO_PASSWORD      = "MONGO_PASSWORD"
+	MONGO_DATABASE      = "MONGO_DATABASE"
+	MONGO_AUTH_SOURCE   = "MONGO_AUTH_SOURCE"
+	MONGO_MAX_POOL_SIZE = "MONGO_MAX_POOL_SIZE"
+	MONGO_MIN_POOL_SIZE = "MONGO_MIN_POOL_SIZE"
 
-	MONGO_CONNECT_TIMEOUT          = "MONGO_CONNECT_TIMEOUT"          //nolint:staticcheck
-	MONGO_SERVER_SELECTION_TIMEOUT = "MONGO_SERVER_SELECTION_TIMEOUT" //nolint:staticcheck
-	MONGO_MAX_CONN_IDLE_TIME       = "MONGO_MAX_CONN_IDLE_TIME"       //nolint:staticcheck
-	MONGO_MAX_CONNECTING           = "MONGO_MAX_CONNECTING"           //nolint:staticcheck
+	MONGO_CONNECT_TIMEOUT          = "MONGO_CONNECT_TIMEOUT"
+	MONGO_SERVER_SELECTION_TIMEOUT = "MONGO_SERVER_SELECTION_TIMEOUT"
+	MONGO_MAX_CONN_IDLE_TIME       = "MONGO_MAX_CONN_IDLE_TIME"
+	MONGO_MAX_CONNECTING           = "MONGO_MAX_CONNECTING"
 
-	MONGO_READ_CONCERN  = "MONGO_READ_CONCERN"  //nolint:staticcheck
-	MONGO_WRITE_CONCERN = "MONGO_WRITE_CONCERN" //nolint:staticcheck
+	MONGO_READ_CONCERN  = "MONGO_READ_CONCERN"
+	MONGO_WRITE_CONCERN = "MONGO_WRITE_CONCERN"
 
-	MONGO_TLS_ENABLED          = "MONGO_TLS_ENABLED"          //nolint:staticcheck
-	MONGO_CERT_FILE            = "MONGO_CERT_FILE"            //nolint:staticcheck
-	MONGO_KEY_FILE             = "MONGO_KEY_FILE"             //nolint:staticcheck
-	MONGO_CA_FILE              = "MONGO_CA_FILE"              //nolint:staticcheck
-	MONGO_INSECURE_SKIP_VERIFY = "MONGO_INSECURE_SKIP_VERIFY" //nolint:staticcheck
+	MONGO_TLS_ENABLED          = "MONGO_TLS_ENABLED"
+	MONGO_CERT_FILE            = "MONGO_CERT_FILE"
+	MONGO_KEY_FILE             = "MONGO_KEY_FILE"
+	MONGO_CA_FILE              = "MONGO_CA_FILE"
+	MONGO_INSECURE_SKIP_VERIFY = "MONGO_INSECURE_SKIP_VERIFY"
 
-	MONGO_ENABLED = "MONGO_ENABLED" //nolint:staticcheck
+	MONGO_ENABLED = "MONGO_ENABLED"
 )
 
 type Mongo struct {

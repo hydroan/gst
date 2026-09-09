@@ -3,8 +3,8 @@ package config
 import "github.com/spf13/viper"
 
 const (
-	CACHE_MAX_ENTRIES = "CACHE_MAX_ENTRIES" //nolint:staticcheck
-	CACHE_TOPIC       = "CACHE_TOPIC"       //nolint:staticcheck
+	CACHE_MAX_ENTRIES = "CACHE_MAX_ENTRIES"
+	CACHE_TOPIC       = "CACHE_TOPIC"
 )
 
 type Cache struct {

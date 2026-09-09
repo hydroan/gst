@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	LOGMGMT_RETENTION    = "LOGMGMT_RETENTION"    //nolint:staticcheck
-	LOGMGMT_CLEANUP_CRON = "LOGMGMT_CLEANUP_CRON" //nolint:staticcheck
+	LOGMGMT_RETENTION    = "LOGMGMT_RETENTION"
+	LOGMGMT_CLEANUP_CRON = "LOGMGMT_CLEANUP_CRON"
 )
 
 // Logmgmt configures the log-management module.

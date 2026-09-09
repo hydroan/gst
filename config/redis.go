@@ -10,30 +10,30 @@ import (
 )
 
 const (
-	REDIS_ADDR         = "REDIS_ADDR"         //nolint:staticcheck
-	REDIS_ADDRS        = "REDIS_ADDRS"        //nolint:staticcheck
-	REDIS_DB           = "REDIS_DB"           //nolint:staticcheck
-	REDIS_PASSWORD     = "REDIS_PASSWORD"     //nolint:staticcheck
-	REDIS_NAMESPACE    = "REDIS_NAMESPACE"    //nolint:staticcheck
-	REDIS_POOL_SIZE    = "REDIS_POOL_SIZE"    //nolint:staticcheck
-	REDIS_EXPIRATION   = "REDIS_EXPIRATION"   //nolint:staticcheck
-	REDIS_CLUSTER_MODE = "REDIS_CLUSTER_MODE" //nolint:staticcheck
+	REDIS_ADDR         = "REDIS_ADDR"
+	REDIS_ADDRS        = "REDIS_ADDRS"
+	REDIS_DB           = "REDIS_DB"
+	REDIS_PASSWORD     = "REDIS_PASSWORD"
+	REDIS_NAMESPACE    = "REDIS_NAMESPACE"
+	REDIS_POOL_SIZE    = "REDIS_POOL_SIZE"
+	REDIS_EXPIRATION   = "REDIS_EXPIRATION"
+	REDIS_CLUSTER_MODE = "REDIS_CLUSTER_MODE"
 
-	REDIS_DIAL_TIMEOUT      = "REDIS_DIAL_TIMEOUT"      //nolint:staticcheck
-	REDIS_READ_TIMEOUT      = "REDIS_READ_TIMEOUT"      //nolint:staticcheck
-	REDIS_WRITE_TIMEOUT     = "REDIS_WRITE_TIMEOUT"     //nolint:staticcheck
-	REDIS_MIN_IDLE_CONNS    = "REDIS_MIN_IDLE_CONNS"    //nolint:staticcheck
-	REDIS_MAX_RETRIES       = "REDIS_MAX_RETRIES"       //nolint:staticcheck
-	REDIS_MIN_RETRY_BACKOFF = "REDIS_MIN_RETRY_BACKOFF" //nolint:staticcheck
-	REDIS_MAX_RETRY_BACKOFF = "REDIS_MAX_RETRY_BACKOFF" //nolint:staticcheck
+	REDIS_DIAL_TIMEOUT      = "REDIS_DIAL_TIMEOUT"
+	REDIS_READ_TIMEOUT      = "REDIS_READ_TIMEOUT"
+	REDIS_WRITE_TIMEOUT     = "REDIS_WRITE_TIMEOUT"
+	REDIS_MIN_IDLE_CONNS    = "REDIS_MIN_IDLE_CONNS"
+	REDIS_MAX_RETRIES       = "REDIS_MAX_RETRIES"
+	REDIS_MIN_RETRY_BACKOFF = "REDIS_MIN_RETRY_BACKOFF"
+	REDIS_MAX_RETRY_BACKOFF = "REDIS_MAX_RETRY_BACKOFF"
 
-	REDIS_TLS_ENABLED          = "REDIS_TLS_ENABLED"          //nolint:staticcheck
-	REDIS_CERT_FILE            = "REDIS_CERT_FILE"            //nolint:staticcheck
-	REDIS_KEY_FILE             = "REDIS_KEY_FILE"             //nolint:staticcheck
-	REDIS_CA_FILE              = "REDIS_CA_FILE"              //nolint:staticcheck
-	REDIS_INSECURE_SKIP_VERIFY = "REDIS_INSECURE_SKIP_VERIFY" //nolint:staticcheck
+	REDIS_TLS_ENABLED          = "REDIS_TLS_ENABLED"
+	REDIS_CERT_FILE            = "REDIS_CERT_FILE"
+	REDIS_KEY_FILE             = "REDIS_KEY_FILE"
+	REDIS_CA_FILE              = "REDIS_CA_FILE"
+	REDIS_INSECURE_SKIP_VERIFY = "REDIS_INSECURE_SKIP_VERIFY"
 
-	REDIS_ENABLED = "REDIS_ENABLED" //nolint:staticcheck
+	REDIS_ENABLED = "REDIS_ENABLED"
 )
 
 type Redis struct {

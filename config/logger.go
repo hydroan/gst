@@ -3,23 +3,23 @@ package config
 import "github.com/spf13/viper"
 
 const (
-	LOGGER_DIR                     = "LOGGER_DIR"                     //nolint:staticcheck
-	LOGGER_PREFIX                  = "LOGGER_PREFIX"                  //nolint:staticcheck
-	LOGGER_FILE                    = "LOGGER_FILE"                    //nolint:staticcheck
-	LOGGER_CONSOLE                 = "LOGGER_CONSOLE"                 //nolint:staticcheck
-	LOGGER_LEVEL                   = "LOGGER_LEVEL"                   //nolint:staticcheck
-	LOGGER_FORMAT                  = "LOGGER_FORMAT"                  //nolint:staticcheck
-	LOGGER_ERROR_STACK_DISABLED    = "LOGGER_ERROR_STACK_DISABLED"    //nolint:staticcheck
-	LOGGER_MAX_AGE                 = "LOGGER_MAX_AGE"                 //nolint:staticcheck
-	LOGGER_MAX_SIZE                = "LOGGER_MAX_SIZE"                //nolint:staticcheck
-	LOGGER_MAX_BACKUPS             = "LOGGER_MAX_BACKUPS"             //nolint:staticcheck
-	LOGGER_HTTP_BODY_ENABLED       = "LOGGER_HTTP_BODY_ENABLED"       //nolint:staticcheck
-	LOGGER_HTTP_BODY_LOG_REQUEST   = "LOGGER_HTTP_BODY_LOG_REQUEST"   //nolint:staticcheck
-	LOGGER_HTTP_BODY_LOG_RESPONSE  = "LOGGER_HTTP_BODY_LOG_RESPONSE"  //nolint:staticcheck
-	LOGGER_HTTP_BODY_MAX_BODY_SIZE = "LOGGER_HTTP_BODY_MAX_BODY_SIZE" //nolint:staticcheck
-	LOGGER_HTTP_BODY_SKIP_ROUTES   = "LOGGER_HTTP_BODY_SKIP_ROUTES"   //nolint:staticcheck
+	LOGGER_DIR                     = "LOGGER_DIR"
+	LOGGER_PREFIX                  = "LOGGER_PREFIX"
+	LOGGER_FILE                    = "LOGGER_FILE"
+	LOGGER_CONSOLE                 = "LOGGER_CONSOLE"
+	LOGGER_LEVEL                   = "LOGGER_LEVEL"
+	LOGGER_FORMAT                  = "LOGGER_FORMAT"
+	LOGGER_ERROR_STACK_DISABLED    = "LOGGER_ERROR_STACK_DISABLED"
+	LOGGER_MAX_AGE                 = "LOGGER_MAX_AGE"
+	LOGGER_MAX_SIZE                = "LOGGER_MAX_SIZE"
+	LOGGER_MAX_BACKUPS             = "LOGGER_MAX_BACKUPS"
+	LOGGER_HTTP_BODY_ENABLED       = "LOGGER_HTTP_BODY_ENABLED"
+	LOGGER_HTTP_BODY_LOG_REQUEST   = "LOGGER_HTTP_BODY_LOG_REQUEST"
+	LOGGER_HTTP_BODY_LOG_RESPONSE  = "LOGGER_HTTP_BODY_LOG_RESPONSE"
+	LOGGER_HTTP_BODY_MAX_BODY_SIZE = "LOGGER_HTTP_BODY_MAX_BODY_SIZE"
+	LOGGER_HTTP_BODY_SKIP_ROUTES   = "LOGGER_HTTP_BODY_SKIP_ROUTES"
 
-	LOGGER_SQL_CALLER_SKIP_PREFIXES = "LOGGER_SQL_CALLER_SKIP_PREFIXES" //nolint:staticcheck
+	LOGGER_SQL_CALLER_SKIP_PREFIXES = "LOGGER_SQL_CALLER_SKIP_PREFIXES"
 )
 
 // Logger represents section "logger" for client-side or server-side configuration,
