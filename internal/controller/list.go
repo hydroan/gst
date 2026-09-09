@@ -75,7 +75,7 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		// The request's memoized query parse, shared by every parser below and
 		// by each metadata construction of this request; the parsers only read
 		// the values.
-		query := requestctx.GinQueryValues(c)
+		query := requestctx.GinQuery(c)
 
 		// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
 		m := meta.newModel()

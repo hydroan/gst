@@ -105,7 +105,7 @@ func ExportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			// QUERY_FORMAT is this controller's own parameter, resolved after
 			// the export bytes exist; urlquery.Decode drops it for every
 			// caller, including virtual-resource services parsing on their own.
-			query := requestctx.GinQueryValues(c)
+			query := requestctx.GinQuery(c)
 
 			var err error
 			// A query that cannot decode is a client error, same as on the List

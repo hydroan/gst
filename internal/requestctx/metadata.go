@@ -75,7 +75,7 @@ func New(fields Fields) Metadata {
 // Metadata is constructed several times per request — the controller span,
 // every service context, and every database handle each build one — so the
 // expensive parts, parsing the query string and building the route parameter
-// map, are memoized on the gin context by GinQueryValues and GinParams.
+// map, are memoized on the gin context by GinQuery and ginParams.
 // Identity fields are deliberately read fresh on every call: they are cheap
 // context lookups, and re-reading them keeps a construction that runs before
 // the identity middleware from freezing empty identity into the constructions
@@ -106,8 +106,8 @@ func FromGin(c *gin.Context) Metadata {
 		userID:    c.GetString(consts.CTX_USER_ID),
 		sessionID: c.GetString(consts.CTX_SESSION_ID),
 		tenantID:  c.GetString(consts.CTX_TENANT_ID),
-		params:    GinParams(c),
-		query:     GinQueryValues(c),
+		params:    ginParams(c),
+		query:     GinQuery(c),
 		rawQuery:  rawQuery,
 	}
 }
@@ -115,7 +115,7 @@ func FromGin(c *gin.Context) Metadata {
 // ginQueryKey keys the request's parsed query values on the gin context.
 const ginQueryKey = "gst/requestctx/query"
 
-// GinQueryValues returns the request's parsed query parameters, parsing them
+// GinQuery returns the request's parsed query parameters, parsing them
 // on the first call and reusing that result for the rest of the request.
 //
 // url.URL.Query re-parses the raw query string on every call. Only the parsed
@@ -127,7 +127,7 @@ const ginQueryKey = "gst/requestctx/query"
 // stored. Metadata getters hand out clones, so callers of the public API
 // cannot reach it; framework code reading it directly must treat it as
 // read-only.
-func GinQueryValues(c *gin.Context) url.Values {
+func GinQuery(c *gin.Context) url.Values {
 	if c == nil {
 		return nil
 	}
@@ -144,9 +144,9 @@ func GinQueryValues(c *gin.Context) url.Values {
 	return query
 }
 
-// ParseGinQuery parses the request's query string with the error url.URL.Query
+// GinQueryStrict parses the request's query string with the error url.URL.Query
 // silently drops, and memoizes the parsed values on the gin context for
-// GinQueryValues and everything built on it to reuse.
+// GinQuery and everything built on it to reuse.
 //
 // It exists for the strict-query gate: the gate must see the parse error to
 // reject malformed input, while every consumer after it should reuse the parse
@@ -154,10 +154,10 @@ func GinQueryValues(c *gin.Context) url.Values {
 // gate runs before anything else parses the query, and overwriting with the
 // authoritative parse keeps a memo an earlier lenient parse may have stored
 // from surviving past the gate.
-func ParseGinQuery(c *gin.Context) (url.Values, error) {
+func GinQueryStrict(c *gin.Context) (url.Values, error) {
 	if c == nil || c.Request == nil || c.Request.URL == nil {
 		// Nothing to parse and nothing to memoize; empty values keep the
-		// no-request construction paths of tests working like GinQueryValues.
+		// no-request construction paths of tests working like GinQuery.
 		return url.Values{}, nil
 	}
 
@@ -173,7 +173,7 @@ func ParseGinQuery(c *gin.Context) (url.Values, error) {
 // ginParamsKey keys the request's route parameters on the gin context.
 const ginParamsKey = "gst/requestctx/params"
 
-// GinParams returns the request's route parameters, building them on the first
+// ginParams returns the request's route parameters, building them on the first
 // call and reusing that map for the rest of the request.
 //
 // Building them costs a map allocation plus a linear scan of gin's parameter
@@ -188,7 +188,7 @@ const ginParamsKey = "gst/requestctx/params"
 // stored. Metadata getters hand out clones, so callers of the public API
 // cannot reach it; framework code reading it directly must treat it as
 // read-only.
-func GinParams(c *gin.Context) map[string]string {
+func ginParams(c *gin.Context) map[string]string {
 	if c == nil {
 		return nil
 	}

@@ -113,43 +113,43 @@ func TestQueryValuesSharesTheMemoizedParse(t *testing.T) {
 	require.Equal(t, url.Values{"tag": {"blue", "green"}}, values)
 	require.Equal(t, reflect.ValueOf(values).Pointer(), reflect.ValueOf(QueryValues(ctx)).Pointer(),
 		"QueryValues must hand back the stored map, not a clone")
-	require.Equal(t, reflect.ValueOf(values).Pointer(), reflect.ValueOf(GinQueryValues(ginCtx)).Pointer(),
+	require.Equal(t, reflect.ValueOf(values).Pointer(), reflect.ValueOf(GinQuery(ginCtx)).Pointer(),
 		"every construction of one request must share one parse")
 }
 
-// TestParseGinQueryMemoizesTheAuthoritativeParse pins the strict-query gate's
-// contract with the memo: a successful parse is stored for GinQueryValues to
+// TestGinQueryStrictMemoizesTheAuthoritativeParse pins the strict-query gate's
+// contract with the memo: a successful parse is stored for GinQuery to
 // reuse, and it overwrites whatever an earlier lenient parse may have stored,
 // so everything after the gate reads the gate's own parse.
-func TestParseGinQueryMemoizesTheAuthoritativeParse(t *testing.T) {
+func TestGinQueryStrictMemoizesTheAuthoritativeParse(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	ginCtx.Request = httptest.NewRequest(http.MethodGet, "/api/records?tag=blue", nil)
 
 	// An earlier construction memoizes a lenient parse first.
-	lenient := GinQueryValues(ginCtx)
+	lenient := GinQuery(ginCtx)
 	require.Equal(t, url.Values{"tag": {"blue"}}, lenient)
 
-	parsed, err := ParseGinQuery(ginCtx)
+	parsed, err := GinQueryStrict(ginCtx)
 	require.NoError(t, err)
 	require.Equal(t, url.Values{"tag": {"blue"}}, parsed)
 	require.NotEqual(t, reflect.ValueOf(lenient).Pointer(), reflect.ValueOf(parsed).Pointer(),
 		"the gate parses unconditionally and overwrites the memo")
-	require.Equal(t, reflect.ValueOf(parsed).Pointer(), reflect.ValueOf(GinQueryValues(ginCtx)).Pointer(),
+	require.Equal(t, reflect.ValueOf(parsed).Pointer(), reflect.ValueOf(GinQuery(ginCtx)).Pointer(),
 		"everything after the gate must reuse the gate's parse")
 }
 
-// TestParseGinQueryReportsMalformedWithoutMemoizing pins the failure side: the
+// TestGinQueryStrictReportsMalformedWithoutMemoizing pins the failure side: the
 // error url.URL.Query drops is surfaced, and no partial parse is stored.
-func TestParseGinQueryReportsMalformedWithoutMemoizing(t *testing.T) {
+func TestGinQueryStrictReportsMalformedWithoutMemoizing(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	ginCtx.Request = httptest.NewRequest(http.MethodGet, "/api/records", nil)
 	ginCtx.Request.URL.RawQuery = "a=%zz"
 
-	_, err := ParseGinQuery(ginCtx)
+	_, err := GinQueryStrict(ginCtx)
 	require.Error(t, err)
 	_, stored := ginCtx.Get(ginQueryKey)
 	require.False(t, stored, "a failed parse must not memoize a partial result")
@@ -167,15 +167,15 @@ func TestGinParamsMemoizesTheRouteParameters(t *testing.T) {
 		ran = true
 		ctx.Set(consts.PARAMS, []string{"id"})
 
-		params := GinParams(ctx)
+		params := ginParams(ctx)
 		require.Equal(t, map[string]string{"id": "42"}, params)
-		require.Equal(t, reflect.ValueOf(params).Pointer(), reflect.ValueOf(GinParams(ctx)).Pointer(),
+		require.Equal(t, reflect.ValueOf(params).Pointer(), reflect.ValueOf(ginParams(ctx)).Pointer(),
 			"every construction of one request must share one map")
 
 		// Rewriting what the map was built from proves the second call reuses
 		// the stored map rather than building another.
 		ctx.Params = gin.Params{{Key: "id", Value: "99"}}
-		require.Equal(t, map[string]string{"id": "42"}, GinParams(ctx))
+		require.Equal(t, map[string]string{"id": "42"}, ginParams(ctx))
 	})
 	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/records/42", nil))
 	require.True(t, ran, "the assertions live in the handler, so it must have run")
@@ -192,12 +192,12 @@ func TestGinParamsMemoizesTheAbsenceOfParameters(t *testing.T) {
 	router := gin.New()
 	router.GET("/api/records", func(ctx *gin.Context) {
 		ran = true
-		require.Nil(t, GinParams(ctx))
+		require.Nil(t, ginParams(ctx))
 
 		cached, stored := ctx.Get(ginParamsKey)
 		require.True(t, stored, "the absence of parameters must be memoized too")
 		require.Nil(t, cached)
-		require.Nil(t, GinParams(ctx))
+		require.Nil(t, ginParams(ctx))
 	})
 	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/records", nil))
 	require.True(t, ran, "the assertions live in the handler, so it must have run")
