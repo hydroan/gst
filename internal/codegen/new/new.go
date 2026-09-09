@@ -96,7 +96,7 @@ func Run(projectName string) error {
 	clioutput.Success("CREATE", "%s", ".gitignore")
 
 	// config.ini.example
-	if err := createTeplConfig(projectDir); err != nil {
+	if err := createTemplateConfig(projectDir); err != nil {
 		return err
 	}
 	clioutput.Success("CREATE", "%s", "config.ini.example")
@@ -166,7 +166,7 @@ func createFile(path string, content string) error {
 	return os.WriteFile(path, []byte(content), constants.FileModeGenerated)
 }
 
-func createTeplConfig(appName string) error {
+func createTemplateConfig(appName string) error {
 	content := fmt.Sprintf(`[app]
 name = %s
 description = A Go application built with gst framework
@@ -175,6 +175,13 @@ description = A Go application built with gst framework
 mode = dev
 listen =
 port = 8080
+
+[auth]
+; Required before mounting middleware.JwtAuth: every token this application
+; issues is signed with this key and every token it accepts is verified against
+; it. It has no default, because a key shipped with the framework is a key every
+; deployment shares and anyone holding the framework source can compute.
+jwt_secret =
 
 [database]
 type = sqlite
