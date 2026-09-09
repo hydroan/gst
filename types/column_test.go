@@ -131,6 +131,18 @@ func TestColumnInWithoutValues(t *testing.T) {
 		status.In())
 }
 
+func TestColumnInKeepsItsOwnValues(t *testing.T) {
+	status := types.NewColumn[sampleTable, sampleStatus]("status")
+	// Two lists built from one prefix slice with spare capacity keep their
+	// own members: the second append does not rewrite the first.
+	base := make([]sampleStatus, 0, 4)
+	base = append(base, sampleStatusActive)
+	in := status.In(append(base, sampleStatusRemoved)...)
+	notIn := status.NotIn(append(base, "archived")...)
+	require.Equal(t, []sampleStatus{sampleStatusActive, sampleStatusRemoved}, in.Value)
+	require.Equal(t, []sampleStatus{sampleStatusActive, "archived"}, notIn.Value)
+}
+
 func TestColumnBuildsTerms(t *testing.T) {
 	category := types.NewColumn[sampleTable, string]("category")
 	amount := types.NewNumericColumn[sampleTable, int64]("amount")

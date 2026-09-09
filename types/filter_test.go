@@ -171,3 +171,14 @@ func TestFilterGroupsKeepTheirOwnFilters(t *testing.T) {
 	require.Equal(t, "silver", andMembers[1].Value)
 	require.Equal(t, "bronze", sub.Filters[1].Value)
 }
+
+func TestFilterListsKeepTheirOwnValues(t *testing.T) {
+	// Two lists built from one prefix slice with spare capacity keep their
+	// own members: the second append does not rewrite the first.
+	base := make([]string, 0, 4)
+	base = append(base, "done")
+	in := types.FilterIn("status", append(base, "gold"))
+	notIn := types.FilterNotIn("status", append(base, "silver"))
+	require.Equal(t, []string{"done", "gold"}, in.Value)
+	require.Equal(t, []string{"done", "silver"}, notIn.Value)
+}

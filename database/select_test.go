@@ -75,6 +75,10 @@ func (l RowLabel) String() string { return "label" }
 // through a pointer, or named under the embedded tag.
 type RowSpan struct{ First time.Time }
 
+// RowCode is a named non-struct type embedded as an anonymous field: a
+// column of its own, named after the type, not an embedding to descend into.
+type RowCode string
+
 func TestSelectScansEmbeddedRowFields(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
@@ -155,6 +159,48 @@ func TestSelectScansEmbeddedRowFields(t *testing.T) {
 	require.Len(t, pointedRows, 3)
 	require.NotNil(t, pointedRows[0].RowSpan)
 	require.Equal(t, time.Date(2024, 1, 10, 8, 0, 0, 0, time.UTC), pointedRows[0].First.UTC())
+
+	// An anonymous field of a named non-struct type is a column of its own,
+	// named after the type; an unexported field is no column and is left
+	// alone; a tag holding spaces is carried whole.
+	type coded struct {
+		RowCode
+		First time.Time
+	}
+	codedRows := make([]coded, 0)
+	require.NoError(t, database.Select[*TestAggregateRecord, coded](context.Background(), TestAggregateRecordCols.Category.Group().As("row_code"),
+		TestAggregateRecordCols.OccurredAt.Min().As("first")).
+		OrderBy(TestAggregateRecordCols.Category.Group().As("row_code").Asc()).
+		Scan(&codedRows))
+	require.Len(t, codedRows, 3)
+	require.Equal(t, RowCode("alpha"), codedRows[0].RowCode)
+	require.Equal(t, time.Date(2024, 1, 10, 8, 0, 0, 0, time.UTC), codedRows[0].First.UTC())
+	type partly struct {
+		Category string
+		First    time.Time
+		hidden   int
+	}
+	partlyRows := make([]partly, 0)
+	require.NoError(t, database.Select[*TestAggregateRecord, partly](context.Background(), TestAggregateRecordCols.Category.Group(),
+		TestAggregateRecordCols.OccurredAt.Min().As("first")).
+		OrderBy(TestAggregateRecordCols.Category.Group().Asc()).
+		Scan(&partlyRows))
+	require.Len(t, partlyRows, 3)
+	require.Equal(t, time.Date(2024, 1, 10, 8, 0, 0, 0, time.UTC), partlyRows[0].First.UTC())
+	require.Zero(t, partlyRows[0].hidden)
+	type spaced struct {
+		Category string
+		First    time.Time
+		RowLabel `gorm:"embeddedPrefix:p_;comment:a note kept" json:"label"`
+	}
+	spacedRows := make([]spaced, 0)
+	require.NoError(t, database.Select[*TestAggregateRecord, spaced](context.Background(), TestAggregateRecordCols.Category.Group(),
+		TestAggregateRecordCols.OccurredAt.Min().As("first"), TestAggregateRecordCols.Status.Max().As("p_note")).
+		OrderBy(TestAggregateRecordCols.Category.Group().Asc()).
+		Scan(&spacedRows))
+	require.Len(t, spacedRows, 3)
+	require.NotNil(t, spacedRows[0].Note)
+	require.Equal(t, "failed", *spacedRows[0].Note)
 }
 
 func TestSelectWhereReusesFilters(t *testing.T) {
@@ -362,9 +408,10 @@ func TestSelectBuildErrors(t *testing.T) {
 	})
 
 	t.Run("SumOverNonNumericColumnViaMintedReference", func(t *testing.T) {
-		// The typed path cannot express this: Column[string] has no Sum. The
-		// string constructor can, so the build-time rule table has to stop it,
-		// otherwise MySQL answers with 0 and a warning.
+		// The generated reference cannot express this: Column[string] has no
+		// Sum. A NumericColumn minted by hand over the column can, so the
+		// build-time rule table has to stop it, otherwise MySQL answers with
+		// 0 and a warning.
 		rows := make([]row, 0)
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), types.NewNumericColumn[*TestAggregateRecord, string]("status").Sum().As("total")).
 			Scan(&rows), database.ErrAggregateType)
@@ -664,6 +711,37 @@ func TestSelectNullableResultFields(t *testing.T) {
 		rows := make([]row, 0)
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.ClosedAt.Max().As("last_seen")).
 			Scan(&rows), database.ErrNullableResultField)
+	})
+
+	t.Run("NullableGroupKeyRejectsPlainField", func(t *testing.T) {
+		// The rows without a closed_at form a group of their own, keyed
+		// NULL, and a bucket of NULL is NULL as well; a pointer field reads
+		// the group, nil for those rows.
+		type keyed struct {
+			ClosedAt time.Time
+			Records  int64
+		}
+		rows := make([]keyed, 0)
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, keyed](ctx, TestAggregateRecordCols.ClosedAt.Group(), types.Count().As("records")).
+			Scan(&rows), database.ErrNullableResultField)
+		type bucketed struct {
+			Day     string
+			Records int64
+		}
+		buckets := make([]bucketed, 0)
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, bucketed](ctx, TestAggregateRecordCols.ClosedAt.ByDay().As("day"), types.Count().As("records")).
+			Scan(&buckets), database.ErrNullableResultField)
+		type pointed struct {
+			ClosedAt *time.Time
+			Records  int64
+		}
+		groups := make([]pointed, 0)
+		require.NoError(t, database.Select[*TestAggregateRecord, pointed](ctx, TestAggregateRecordCols.ClosedAt.Group(), types.Count().As("records")).
+			Where(TestAggregateRecordCols.Category.Eq("beta")).
+			Scan(&groups))
+		require.Len(t, groups, 1)
+		require.Nil(t, groups[0].ClosedAt)
+		require.EqualValues(t, 2, groups[0].Records)
 	})
 
 	t.Run("AcceptsPointerFields", func(t *testing.T) {
