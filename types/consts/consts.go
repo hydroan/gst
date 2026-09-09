@@ -1,4 +1,3 @@
-//nolint:all
 package consts
 
 import (
@@ -379,7 +378,6 @@ func (p Phase) Name() string {
 }
 
 const (
-	// Basic operations
 	Create HTTPVerb = create  // POST /resource
 	Delete HTTPVerb = delete_ // DELETE /resource, DELETE /resource/:id
 	Update HTTPVerb = update  // PUT /resource, PUT /resource/:id

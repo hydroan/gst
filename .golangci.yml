@@ -221,18 +221,19 @@ linters:
       - linters:
           - forbidigo
         path: middleware/cors\.go
-      # Constants in the config package are named after the environment
-      # variables they stand for and hold that name as their value, so the
-      # ALL_CAPS spelling is deliberate and has to match the variable exactly.
-      # ST1003 judges Go naming and G101 keys off names containing
-      # token/password/secret, so both fire on every entry there. An explicit
-      # staticcheck checks list turns off golangci's own ST1003 exclusion,
-      # hence these directory-scoped rules; the path is anchored so that
+      # Constants in these two packages are named after the string each one
+      # stands for: environment variables in config, context keys, query
+      # parameters, header names and route phases in types/consts. The
+      # ALL_CAPS and underscored spellings are deliberate and have to match
+      # those strings exactly, and an explicit staticcheck checks list turns
+      # off golangci's own ST1003 exclusion. The paths are anchored so that
       # packages merely named config elsewhere in the tree stay checked.
-      - path: ^config/
+      - path: ^(config|types/consts)/
         linters:
           - staticcheck
         text: "ST1003"
+      # G101 keys off names containing token/password/secret, which every
+      # credential-related environment variable name in config matches.
       - path: ^config/
         linters:
           - gosec
