@@ -405,6 +405,7 @@ err := database.Select[*appmodel.Record, categoryTotal](ctx,
 
 框架从分组键推导 `GROUP BY`，所以 SELECT 和 GROUP BY 不可能写不一致。
 
+**项按值比较**：同一个变量传两遍才是同一个项，`As`、`Over`、`Where` 都会造出新的项。
 要在别处再引用的项先赋给变量：`Having`、`OrderBy`、`Qualify`、窗口的 `PartitionBy` 和
 `OrderBy`、联合的排序、主查询读子投影的项，都是按项的值在投影里找同一个项，把同一个变量
 传两遍最稳，改了别名的项就不再是同一个项。反过来，主查询自己能算出来的项（不带表的
@@ -419,7 +420,10 @@ err := database.Select[*appmodel.Record, categoryTotal](ctx,
 
 - **`SUM` 空集恒为 0**（内部包了 `COALESCE`）；`AVG`/`MIN`/`MAX` 空集是 NULL，
   结果字段**必须声明成指针**，否则构建期报错。这样「没有数据」和「结果恰好
-  是 0」在报表上才可区分。
+  是 0」在报表上才可区分。可空列上的分组键、时间桶键和 `MIN`/`MAX`/`AVG` 同理：
+  没值的行自成一组、键是 NULL，结果字段也要是指针或 `sql.Null`。`Where` 里对这一列
+  写了条件就把 NULL 行排除了（`IsNotNull`、范围、等值都算，`IsNull` 除外，且不能在
+  `FilterOr` 组里），这时可以用普通字段。
 - **条件聚合**复用普通过滤器，一次扫描出多列指标：
   `Cols.Amount.Sum().Where(Cols.Status.Eq("done")).As("done_amount")`。
 - **`As` 是可选的**。默认别名是列名，`COUNT(*)` 是 `count`。只有结果字段名和
@@ -470,7 +474,7 @@ tenantTotal := RecordCols.Amount.Sum().Over(types.PartitionBy(RecordCols.TenantI
 
 // 排行：分组投影上开窗，窗口按度量排序，RANK() OVER (ORDER BY COALESCE(SUM(amount), 0) DESC)
 total := RecordCols.Amount.Sum().As("total")
-rank := types.Rank().Over(types.OrderBy(total.Desc()))
+rank := types.Rank().Over(types.OrderBy(total.Desc())) // types.OrderBy 是 types.PartitionBy().OrderBy 的短写法：只排序、不分区的窗口
 ```
 
 关键字与规则：
@@ -645,12 +649,13 @@ err := database.Select[*appmodel.Record, recordWithTags](ctx, RecordCols.ID, tag
 | `ErrJoinSelectBucketKey` | 不按时间桶分组后再连，同粒度的汇总改用窗口 |
 | `ErrNestedSelectOrdered` | 子投影去掉 `OrderBy`、`Limit`、`Offset`，它们属于主查询 |
 | `ErrJoinSelectInstance` | 子投影用 `SelectOn` 开在主查询的实例上 |
-| `ErrJoinNoCorrelation` | ON 里至少一对 `EqCol` 连到主查询或更早连入的表 |
+| `ErrJoinNoCorrelation` | ON 里至少一对 `EqCol` 连到主查询或更早声明的来源：连到后面才声明的来源就调整声明顺序；字符串版 `FilterEqCol` 不带表名连不上，改用列引用 |
 | `ErrJoinNotUnique` | ON 用 `EqCol`、常量等值钉住子投影的全部分组键 |
-| `ErrJoinSelectColumn` | 主查询只能读子投影投影出来的项，把同一个项（共享变量）再传一遍，别改它的别名；ON 和 `Where` 里只能用它的键列，别的条件写进子投影 |
+| `ErrJoinSelectColumn` | 主查询只能读子投影投影出来的项，把同一个项（共享变量）再传一遍，别改它的别名，也别加 `Over`/`Where`；ON 和 `Where` 里只能用它的键列，别的条件写进子投影 |
 | `ErrDuplicateAlias`，两个子投影投了同一个项 | 给其中一个 `As` 别的别名 |
 | `ErrDuplicateAlias`，主查询自己能算的项子投影也投了且还顶着默认别名 | 想要主查询自己的：给它起个别名；想读子投影的：给子投影的项起个非默认别名，再把它传给主查询；两个都要就两边别名各不相同 |
 | `ErrDuplicateAlias`，主查询和子投影投了同一个 `types.Literal` 常量 | 常量算主查询自己的，换个值或别名；要知道子投影有没有匹配到行，读它的键列，没匹配到的是 NULL |
+| `ErrDuplicateAlias`，子投影的项加了 `Over`/`Where` 再传给主查询 | 开窗、加条件的项不再是子投影的项：想读子投影的就原样传；主查询自己要开窗、加条件就换个别名 |
 | `ErrJoinSelectNotKeyed` | 主查询分组时按连接列分组；连接列是另一个子投影的键时，把那个键项也投影成分组键 |
 | `ErrJoinDuplicateTable` | 一张表只能作为一个来源，同组合计用窗口；子投影不能连到自己或两两互连 |
 | `ErrJoinMeasure` | 分组投影里被连模型的列只能做分组键或 `Min`、`Max`、`CountDistinct` |
