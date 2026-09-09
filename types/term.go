@@ -103,9 +103,12 @@ type Term struct {
 	// the window names instead of collapsing them; see Over.
 	Window *Window
 	// Table is the table the column belongs to, carried over from the column
-	// reference. It is empty only on COUNT(*), which names no column.
+	// reference. It is empty on the terms naming no column — COUNT(*), the
+	// ranking functions and a constant — and on a reference of a model
+	// without a table.
 	Table string
-	// Column is the snake case column name. It is empty only for COUNT(*).
+	// Column is the snake case column name. It is empty on the terms naming
+	// no column: COUNT(*), the ranking functions and a constant.
 	Column string
 	// Bucket truncates a time group key. It is only meaningful when Fn is
 	// FnNone and the column is a time column.

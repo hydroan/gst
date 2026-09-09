@@ -46,8 +46,8 @@ func PartitionBy(keys ...Expr) Window {
 	return Window{Partition: terms}
 }
 
-// OrderBy opens a window over the whole result ordered by orders, the window
-// a ranking across every row reads. It is the short spelling of
+// OrderBy returns a Window with no partition and the given orders: the
+// window a ranking across every row reads. It is the short spelling of
 // PartitionBy().OrderBy(orders...), the two building the same window; a
 // window with keys starts from PartitionBy. It orders the window, not the
 // result: the result is ordered by the Selector's OrderBy.

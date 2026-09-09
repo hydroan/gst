@@ -131,11 +131,14 @@ func (SelectJoin) sealedJoinSource() {}
 // model's other columns are not columns of the derived table, and the term
 // under another alias is not the term. A term the query could compute
 // itself — one carrying no table, Count() say, or one of the queried table
-// or of a model the query joins — is refused when the select projects it
-// too: the two spellings are one value, and the query's reading of it would
-// silently become the select's; a select's COUNT(*) is read through a
-// column count, Cols.ID.Count(). A term read this way may also key a
-// window's partition or order it. In a grouped query a joined select's term
+// or of a model the query joins — is one spelling whether the query or the
+// select wrote it: under its default alias, which two authors write
+// independently, it is refused when the select projects it too, since the
+// query's own reading of it would silently become the select's; an alias
+// is written on purpose, so the select's aliased term passed to the query
+// reads it through, and the query's own term keeps apart under an alias of
+// its own. A term read this way may also key a window's partition or order
+// it. In a grouped query a joined select's term
 // is projected as a group key of the query, which is exact only when the
 // query groups by the columns the select is joined on — the term is then
 // constant within a group — and the framework requires it; a query with no
@@ -148,9 +151,11 @@ func (SelectJoin) sealedJoinSource() {}
 //
 // One table backs at most one source of a query. A joined select is
 // addressed through its model's column references, so a select over the
-// queried table, or a second select over a table another source already
-// reads, could not be told apart and is refused; a per-row total over the
-// queried table's own groups is a window instead, Sum().Over(PartitionBy(key)).
+// queried table, or a second select over a table that already backs a
+// source of the query, could not be told apart and is refused; the tables a
+// select reads through joins of its own are its own to read. A per-row total
+// over the queried table's own groups is a window instead,
+// Sum().Over(PartitionBy(key)).
 // A select grouped by a time bucket cannot be joined either: the bucket is a
 // label of the column, not a value a column of the query equals. The select
 // is tied by its own model's group keys, each column once: a key of a table
@@ -163,7 +168,7 @@ func (SelectJoin) sealedJoinSource() {}
 // them, so the conditions belong inside it rather than on the query around
 // it.
 func JoinSelect[R any](sub SelectBranch[R], on ...Filter) JoinSource {
-	return SelectJoin{Select: sub, On: on}
+	return SelectJoin{Select: sub, On: append([]Filter(nil), on...)}
 }
 
 // LeftJoinSelect joins a grouped select as a derived table, keeping the rows
@@ -171,13 +176,15 @@ func JoinSelect[R any](sub SelectBranch[R], on ...Filter) JoinSource {
 // LEFT JOIN. The rules match JoinSelect; the result fields the select's terms
 // bind to must hold NULL.
 func LeftJoinSelect[R any](sub SelectBranch[R], on ...Filter) JoinSource {
-	return SelectJoin{Select: sub, On: on, Left: true}
+	return SelectJoin{Select: sub, On: append([]Filter(nil), on...), Left: true}
 }
 
 // modelJoin allocates the joined model, the way subqueryFilter allocates a
 // subquery's, so the database layer needs no type parameter to reach it.
+// The predicates are copied: a caller appending to the slice it passed for
+// a second join must not change the first one's ON.
 func modelJoin[C Model](on []Filter, left bool) JoinSource {
-	source := ModelJoin{On: on, Left: left}
+	source := ModelJoin{On: append([]Filter(nil), on...), Left: left}
 	typ := reflect.TypeFor[C]()
 	if typ.Kind() == reflect.Pointer {
 		if m, ok := reflect.TypeAssert[C](reflect.New(typ.Elem())); ok {

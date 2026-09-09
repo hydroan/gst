@@ -29,6 +29,25 @@ func TestJoinSources(t *testing.T) {
 		require.Equal(t, []types.Filter{on}, source.On)
 	})
 
+	t.Run("ConstructorsKeepTheirOwnOn", func(t *testing.T) {
+		// Two joins built from one prefix slice with spare capacity keep
+		// their own predicates: the second append does not rewrite the first.
+		base := make([]types.Filter, 0, 4)
+		base = append(base, on)
+		gold, ok := types.Join[*sampleRecord](append(base, types.FilterEq("tier", "gold"))...).(types.ModelJoin)
+		require.True(t, ok)
+		silver, ok := types.Join[*sampleRecord](append(base, types.FilterEq("tier", "silver"))...).(types.ModelJoin)
+		require.True(t, ok)
+		require.Equal(t, "gold", gold.On[1].Value)
+		require.Equal(t, "silver", silver.On[1].Value)
+		goldSelect, ok := types.JoinSelect[struct{ Code string }](stubBranch{}, append(base, types.FilterEq("tier", "gold"))...).(types.SelectJoin)
+		require.True(t, ok)
+		silverSelect, ok := types.LeftJoinSelect[struct{ Code string }](stubBranch{}, append(base, types.FilterEq("tier", "silver"))...).(types.SelectJoin)
+		require.True(t, ok)
+		require.Equal(t, "gold", goldSelect.On[1].Value)
+		require.Equal(t, "silver", silverSelect.On[1].Value)
+	})
+
 	t.Run("LeftJoinKeepsUnmatchedRows", func(t *testing.T) {
 		source, ok := types.LeftJoin[*sampleRecord](on).(types.ModelJoin)
 		require.True(t, ok)

@@ -152,3 +152,22 @@ func TestFilterTimeValue(t *testing.T) {
 		}
 	})
 }
+
+func TestFilterGroupsKeepTheirOwnFilters(t *testing.T) {
+	// Two groups built from one prefix slice with spare capacity keep their
+	// own members: the second append does not rewrite the first.
+	base := make([]types.Filter, 0, 4)
+	base = append(base, types.FilterEq("status", "done"))
+	or := types.FilterOr(append(base, types.FilterEq("kind", "gold"))...)
+	and := types.FilterAnd(append(base, types.FilterEq("kind", "silver"))...)
+	exists := types.FilterExists[*sampleRecord](append(base, types.FilterEq("kind", "bronze"))...)
+	orMembers, ok := or.Value.([]types.Filter)
+	require.True(t, ok)
+	andMembers, ok := and.Value.([]types.Filter)
+	require.True(t, ok)
+	sub, ok := exists.Value.(types.Subquery)
+	require.True(t, ok)
+	require.Equal(t, "gold", orMembers[1].Value)
+	require.Equal(t, "silver", andMembers[1].Value)
+	require.Equal(t, "bronze", sub.Filters[1].Value)
+}

@@ -294,7 +294,7 @@ func FilterFalse() Filter {
 // FilterAnd for the "(a AND b) OR (c AND d)" shape. A group with no children
 // fails closed.
 func FilterOr(filters ...Filter) Filter {
-	return Filter{Op: FilterOpOr, Value: filters}
+	return Filter{Op: FilterOpOr, Value: append([]Filter(nil), filters...)}
 }
 
 // FilterAnd groups filters that are AND-combined with each other. Filters are
@@ -319,7 +319,7 @@ func FilterOr(filters ...Filter) Filter {
 //
 // A group with no children fails closed.
 func FilterAnd(filters ...Filter) Filter {
-	return Filter{Op: FilterOpAnd, Value: filters}
+	return Filter{Op: FilterOpAnd, Value: append([]Filter(nil), filters...)}
 }
 
 // FilterEqCol is the predicate that ties two tables together by a column
@@ -408,7 +408,7 @@ func FilterNotExists[C Model](filters ...Filter) Filter {
 // related model is allocated here rather than at render time so the database
 // layer needs no type parameter of its own to reach the child table.
 func subqueryFilter[C Model](filters []Filter, negate bool) Filter {
-	sub := Subquery{Filters: filters, Negate: negate}
+	sub := Subquery{Filters: append([]Filter(nil), filters...), Negate: negate}
 	typ := reflect.TypeFor[C]()
 	if typ.Kind() == reflect.Pointer {
 		if m, ok := reflect.TypeAssert[C](reflect.New(typ.Elem())); ok {
