@@ -144,3 +144,14 @@ func TestTermBuildsOrders(t *testing.T) {
 	require.Equal(t, types.TermOrder{Term: total, Direction: types.OrderAsc}, total.Asc())
 	require.Equal(t, types.TermOrder{Term: total, Direction: types.OrderDesc}, total.Desc())
 }
+
+func TestTermAsEmptyKeepsTheAlias(t *testing.T) {
+	// An empty alias is not an alias: the term stays as it was, under its
+	// default or under the alias it already had.
+	amount := types.NewNumericColumn[sampleTable, int64]("amount")
+	require.Equal(t, amount.Sum(), amount.Sum().As(""))
+	require.Equal(t, amount.Sum().As("total"), amount.Sum().As("total").As(""))
+	require.Equal(t, types.Count(), types.Count().As(""))
+	require.Equal(t, amount.As("total"), amount.As("total").As(""))
+	require.Equal(t, "amount", amount.As("").Alias)
+}

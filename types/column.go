@@ -232,7 +232,9 @@ func (c Column[T]) Set(value T) Assignment {
 
 // Group makes this column a group key of the projection. The framework derives
 // GROUP BY from the group keys, so a projection cannot disagree with its own
-// GROUP BY list.
+// GROUP BY list. Over a nullable column the rows without a value form a group
+// of their own, keyed NULL, so the result field is a pointer or sql.Null type
+// unless a condition on the column in Where keeps those rows out.
 func (c Column[T]) Group() Term { return c.term(FnNone) }
 
 // exprTerm projects the column as it is stored, which is what passing a
@@ -251,12 +253,9 @@ func (c Column[T]) exprTerm() Term {
 //	RefundCols.SettledAt.As("created_at")
 //	// `settled_at` AS `created_at`
 //
-// A group key is renamed on the term instead: Cols.X.Group().As("y").
-func (c Column[T]) As(alias string) Term {
-	term := c.exprTerm()
-	term.Alias = alias
-	return term
-}
+// A group key is renamed on the term instead: Cols.X.Group().As("y"). An
+// empty alias changes nothing, as on a term.
+func (c Column[T]) As(alias string) Term { return c.exprTerm().As(alias) }
 
 // Count counts the rows whose value of this column is not NULL. Use the
 // package-level Count for COUNT(*), which counts every row.
@@ -332,7 +331,10 @@ func NewTimeColumn[M TableNamer](name string) TimeColumn {
 // ByHour, ByDay and ByMonth make this column a group key truncated to the
 // bucket, which is what a trend report groups by. The truncation expression
 // differs per dialect and is rendered by the database layer, so callers never
-// deal with a format string.
+// deal with a format string. The bucket of NULL is NULL: over a nullable
+// column the rows without a value form a group of their own, so the result
+// field is a pointer or sql.Null type unless a condition on the column in
+// Where keeps those rows out.
 func (c TimeColumn) ByHour() Term { return c.bucket(TimeBucketHour) }
 
 func (c TimeColumn) ByDay() Term { return c.bucket(TimeBucketDay) }

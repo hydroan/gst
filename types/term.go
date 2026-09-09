@@ -157,7 +157,13 @@ func (t Term) IsPlain() bool { return t.Fn == FnNone && t.Plain }
 //
 // The alias belongs to the result contract rather than to the column, which is
 // why it is applied here instead of being a parameter of the constructors.
+//
+// An empty alias changes nothing: As("") leaves the term under the alias it
+// had.
 func (t Term) As(alias string) Term {
+	if len(alias) == 0 {
+		return t
+	}
 	t.Alias = alias
 	return t
 }
