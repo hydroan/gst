@@ -155,6 +155,76 @@ func TestParseGinQueryReportsMalformedWithoutMemoizing(t *testing.T) {
 	require.False(t, stored, "a failed parse must not memoize a partial result")
 }
 
+// TestGinParamsMemoizesTheRouteParameters pins what the memo is for: the
+// parameter map is built once and every later construction of one request
+// reads that same map instead of allocating another.
+func TestGinParamsMemoizesTheRouteParameters(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	var ran bool
+	router := gin.New()
+	router.GET("/api/records/:id", func(ctx *gin.Context) {
+		ran = true
+		ctx.Set(consts.PARAMS, []string{"id"})
+
+		params := GinParams(ctx)
+		require.Equal(t, map[string]string{"id": "42"}, params)
+		require.Equal(t, reflect.ValueOf(params).Pointer(), reflect.ValueOf(GinParams(ctx)).Pointer(),
+			"every construction of one request must share one map")
+
+		// Rewriting what the map was built from proves the second call reuses
+		// the stored map rather than building another.
+		ctx.Params = gin.Params{{Key: "id", Value: "99"}}
+		require.Equal(t, map[string]string{"id": "42"}, GinParams(ctx))
+	})
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/records/42", nil))
+	require.True(t, ran, "the assertions live in the handler, so it must have run")
+}
+
+// TestGinParamsMemoizesTheAbsenceOfParameters pins the common case: a route
+// declaring no parameters stores a nil map, which keeps a map out of its
+// requests and still spares the later constructions the lookup that proved the
+// route has none.
+func TestGinParamsMemoizesTheAbsenceOfParameters(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	var ran bool
+	router := gin.New()
+	router.GET("/api/records", func(ctx *gin.Context) {
+		ran = true
+		require.Nil(t, GinParams(ctx))
+
+		cached, stored := ctx.Get(ginParamsKey)
+		require.True(t, stored, "the absence of parameters must be memoized too")
+		require.Nil(t, cached)
+		require.Nil(t, GinParams(ctx))
+	})
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/records", nil))
+	require.True(t, ran, "the assertions live in the handler, so it must have run")
+}
+
+// TestFromGinSharesTheMemoizedParams pins the reason the memo exists at all:
+// Metadata is constructed several times per request, and building the map in
+// each construction cost one allocation per construction.
+func TestFromGinSharesTheMemoizedParams(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	var ran bool
+	router := gin.New()
+	router.GET("/api/records/:id", func(ctx *gin.Context) {
+		ran = true
+		ctx.Set(consts.PARAMS, []string{"id"})
+
+		first, second := FromGin(ctx), FromGin(ctx)
+		require.Equal(t, "42", first.Param("id"))
+		require.Equal(t, "42", second.Param("id"))
+		require.Equal(t, reflect.ValueOf(first.params).Pointer(), reflect.ValueOf(second.params).Pointer(),
+			"every construction of one request must share one map")
+	})
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/records/42", nil))
+	require.True(t, ran, "the assertions live in the handler, so it must have run")
+}
+
 // TestGinClientIPMemoizesTheResolvedAddress pins what the memo is for: gin
 // resolves the address once, forwarding headers included, and every later call
 // of one request reads that answer instead of resolving it again.

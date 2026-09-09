@@ -74,28 +74,19 @@ func New(fields Fields) Metadata {
 //
 // Metadata is constructed several times per request — the controller span,
 // every service context, and every database handle each build one — so the
-// expensive part, parsing the query string, is memoized on the gin context by
-// GinQueryValues. Identity fields are deliberately read fresh on every call:
-// they are cheap context lookups, and re-reading them keeps a construction
-// that runs before the identity middleware from freezing empty identity into
-// the constructions that follow it.
+// expensive parts, parsing the query string and building the route parameter
+// map, are memoized on the gin context by GinQueryValues and GinParams.
+// Identity fields are deliberately read fresh on every call: they are cheap
+// context lookups, and re-reading them keeps a construction that runs before
+// the identity middleware from freezing empty identity into the constructions
+// that follow it.
 //
-// The struct is built without New: New defensively clones the params and
-// query maps of its caller, while both maps here are already owned — params
-// is built below and the query values are the package's own memoized parse.
+// The struct is built without New: New defensively clones the params and query
+// maps of its caller, while both maps here are the package's own memoized
+// values, which nothing writes after they are stored.
 func FromGin(c *gin.Context) Metadata {
 	if c == nil {
 		return Metadata{}
-	}
-
-	// Routes declaring no parameters are the common case; leaving params nil
-	// there keeps a map out of every one of their requests.
-	var params map[string]string
-	if keys := c.GetStringSlice(consts.PARAMS); len(keys) > 0 {
-		params = make(map[string]string, len(keys))
-		for _, key := range keys {
-			params[key] = c.Param(key)
-		}
 	}
 
 	var method, path, rawQuery string
@@ -115,7 +106,7 @@ func FromGin(c *gin.Context) Metadata {
 		userID:    c.GetString(consts.CTX_USER_ID),
 		sessionID: c.GetString(consts.CTX_SESSION_ID),
 		tenantID:  c.GetString(consts.CTX_TENANT_ID),
-		params:    params,
+		params:    GinParams(c),
 		query:     GinQueryValues(c),
 		rawQuery:  rawQuery,
 	}
@@ -177,6 +168,45 @@ func ParseGinQuery(c *gin.Context) (url.Values, error) {
 	c.Set(ginQueryKey, query)
 
 	return query, nil
+}
+
+// ginParamsKey keys the request's route parameters on the gin context.
+const ginParamsKey = "gst/requestctx/params"
+
+// GinParams returns the request's route parameters, building them on the first
+// call and reusing that map for the rest of the request.
+//
+// Building them costs a map allocation plus a linear scan of gin's parameter
+// slice for every key, and Metadata is constructed several times per request.
+// The values come from route matching, which cannot change for the lifetime of
+// a request, so the memo is correct no matter where in the middleware chain the
+// first call happens. Routes declaring no parameters are the common case and
+// memoize a nil map: it keeps a map out of their requests entirely and still
+// spares the later constructions the lookup that proved the route has none.
+//
+// The returned map is owned by this package and never written after it is
+// stored. Metadata getters hand out clones, so callers of the public API
+// cannot reach it; framework code reading it directly must treat it as
+// read-only.
+func GinParams(c *gin.Context) map[string]string {
+	if c == nil {
+		return nil
+	}
+	if cached, ok := c.Get(ginParamsKey); ok {
+		if params, ok := cached.(map[string]string); ok {
+			return params
+		}
+	}
+
+	var params map[string]string
+	if keys := c.GetStringSlice(consts.PARAMS); len(keys) > 0 {
+		params = make(map[string]string, len(keys))
+		for _, key := range keys {
+			params[key] = c.Param(key)
+		}
+	}
+	c.Set(ginParamsKey, params)
+	return params
 }
 
 // ginClientIPKey keys the request's resolved client address on the gin context.
