@@ -113,6 +113,22 @@ func TestColumns(t *testing.T) {
 	})
 }
 
+func TestColumnsReportNotNull(t *testing.T) {
+	// The schema forbids NULL on a NOT NULL column and on the primary key,
+	// whatever the Go type could hold.
+	type constrained struct {
+		ID   string  `gorm:"primaryKey"`
+		Code *string `gorm:"not null"`
+		Note *string
+	}
+	parsed, err := Columns(reflect.TypeFor[constrained]())
+	require.NoError(t, err)
+	cols := indexByQueryName(parsed)
+	require.True(t, cols["id"].NotNull)
+	require.True(t, cols["code"].NotNull)
+	require.False(t, cols["note"].NotNull)
+}
+
 func TestColumnsSkipsAssociationFields(t *testing.T) {
 	parsed, err := Columns(reflect.TypeFor[sampleAssociating]())
 	require.NoError(t, err)

@@ -31,6 +31,7 @@ type Column struct {
 	Type       reflect.Type // Go type of the underlying struct field.
 	Index      []int        // Struct field index path, usable with reflect.Value.FieldByIndex.
 	Filterable bool         // Whether clients may filter on the column through the URL.
+	NotNull    bool         // Whether the schema forbids NULL: a NOT NULL tag or the primary key.
 }
 
 // schemaCache is the parse cache gorm expects; parsing a model type is only
@@ -80,6 +81,7 @@ func Columns(typ reflect.Type) ([]Column, error) {
 			// as the soft-delete timestamp: it stays a real column, but
 			// clients must not filter on it.
 			Filterable: strings.TrimSpace(field.StructField.Tag.Get("json")) != "-",
+			NotNull:    field.NotNull || field.PrimaryKey,
 		})
 	}
 	sort.Slice(columns, func(i, j int) bool { return columns[i].DBName < columns[j].DBName })
