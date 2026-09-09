@@ -48,8 +48,9 @@ var checkCmd = &cobra.Command{
 20. Model structs embedding model.Base or model.AutoBase must declare TableName() string on the struct itself, as a single return of a non-empty string literal
 21. Gorm struct tags must not configure indexes (index, uniqueIndex, unique); models declare indexes through the Indexes() []model.Index method
 22. model.Version declarations must keep the optimistic-locking shape: on database models a named field with json:",omitempty" and gorm:"not null;default:1", and on DSL Payload/Result types (plus the same-package types reachable from their fields) a json tag of exactly "version,omitempty"
+23. Project code, tests included, must not mint column references through types.NewColumn, NewNumericColumn or NewTimeColumn; columns are read through the XxxCols variables gg gen writes, which the model schema checks, generated files excepted
 
-Model and service subtrees owned by copyable framework modules are skipped by the service test checks, the log field check, the model table name check and the gorm tag index check: copied module code is tested inside the framework repository.
+Model and service subtrees owned by copyable framework modules are skipped by the service test checks, the log field check, the model table name check, the gorm tag index check and the column reference check: copied module code is tested inside the framework repository.
 Paths ignored by the project's Git ignore rules are skipped by every check, so runtime artifacts such as log directories never fail checks.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		checkRun()
@@ -148,6 +149,7 @@ func collectProjectChecks() []projectCheckResult {
 		{Name: "Gorm tag index ban", Violations: CheckGormTagIndexBan(ignore)},
 		{Name: "Version field declaration", Violations: CheckVersionFieldDeclarations(ignore)},
 		{Name: "Module assembly", Violations: CheckModuleAssembly(ignore)},
+		{Name: "Column reference minting", Violations: CheckColumnReferenceMinting(ignore)},
 	}
 }
 

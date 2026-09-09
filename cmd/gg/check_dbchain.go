@@ -130,27 +130,7 @@ func checkFileDatabaseChains(filePath string) []string {
 // the framework database package. It parses imports only, so files that do
 // not use the package stay cheap to scan.
 func gstDatabaseImportNames(filePath string) (aliases []string, dotImport bool, found bool) {
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, filePath, nil, parser.ImportsOnly)
-	if err != nil {
-		return nil, false, false
-	}
-
-	for _, imp := range file.Imports {
-		if imp.Path == nil || imp.Path.Value != `"`+gstDatabaseImportPath+`"` {
-			continue
-		}
-		found = true
-		switch {
-		case imp.Name == nil:
-			aliases = append(aliases, "database")
-		case imp.Name.Name == ".":
-			dotImport = true
-		case imp.Name.Name != "_":
-			aliases = append(aliases, imp.Name.Name)
-		}
-	}
-	return aliases, dotImport, found
+	return importNamesOf(filePath, gstDatabaseImportPath, "database")
 }
 
 // isDatabaseChainStart reports whether call is a generic database.Database
