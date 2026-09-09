@@ -185,17 +185,6 @@ func ListFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 		}
 
 		// 5.record operation log to database.
-		// cb.Enqueue(&modellogmgmt.OperationLog{
-		// 	OP:        consts.OP_LIST,
-		// 	Model:     typ.Name(),
-		// 	Table:     tableName,
-		// 	IP:        c.ClientIP(),
-		// 	User:      c.GetString(consts.CTX_USERNAME),
-		// 	TraceID: c.GetString(consts.TRACE_ID),
-		// 	URI:       c.Request.RequestURI,
-		// 	Method:    c.Request.Method,
-		// 	UserAgent: c.Request.UserAgent(),
-		// })
 		if err = am.RecordOperation(requestContext(c), m, &modellogmgmt.OperationLog{
 			OP:        consts.OP_LIST,
 			Model:     meta.name,

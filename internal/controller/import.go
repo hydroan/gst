@@ -113,28 +113,6 @@ func ImportFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			gstotel.RecordError(span, err)
 			return
 		}
-		// // record operation log to database.
-		// typ := reflect.TypeOf(*new(M)).Elem()
-		// var tableName string
-		// items := strings.Split(typ.Name(), ".")
-		// if len(items) > 0 {
-		// 	tableName = pluralizeCli.Plural(strings.ToLower(items[len(items)-1]))
-		// }
-		// record, _ := json.Marshal(ml)
-		// if err := database.Database[*model.OperationLog]().Create(&model.OperationLog{
-		// 	Op:        model.OperationTypeImport,
-		// 	Model:     typ.Name(),
-		// 	Table:     tableName,
-		// 	Record:    util.BytesToString(record),
-		// 	IP:        c.ClientIP(),
-		// 	User:      c.GetString(consts.CTX_USERNAME),
-		// 	TraceID: c.GetString(consts.TRACE_ID),
-		// 	URI:       c.Request.RequestURI,
-		// 	Method:    c.Request.Method,
-		// 	UserAgent: c.Request.UserAgent(),
-		// }); err != nil {
-		// 	log.Error("failed to write operation log to database: ", err.Error())
-		// }
 		JSON(c, CodeSuccess)
 	}
 }
