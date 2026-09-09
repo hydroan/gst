@@ -625,7 +625,18 @@ func TestSelectJoinBuildErrors(t *testing.T) {
 	t.Run("PlainNamesCannotTie", func(t *testing.T) {
 		// The string form of EqCol carries no tables, so it cannot say which
 		// side is the joined one and proves nothing.
-		require.ErrorIs(t, withAccount(types.Join[*TestAccount](types.FilterEqCol("code", "account"))).Scan(&rows), database.ErrJoinNoCorrelation)
+		err := withAccount(types.Join[*TestAccount](types.FilterEqCol("code", "account"))).Scan(&rows)
+		require.ErrorIs(t, err, database.ErrJoinNoCorrelation)
+		require.ErrorContains(t, err, "names a column without a table")
+	})
+
+	t.Run("TiedToATableNoSourceReads", func(t *testing.T) {
+		// An ON tied to a table the query reads through no source declared
+		// before it names that table: the join is declared too early, or
+		// the table is not joined at all.
+		err := withAccount(types.Join[*TestAccount](TestAccountCols.Code.EqCol(TestRecordTagCols.Category))).Scan(&rows)
+		require.ErrorIs(t, err, database.ErrJoinNoCorrelation)
+		require.ErrorContains(t, err, `ties it to "test_record_tags", which no source declared before it reads`)
 	})
 
 	t.Run("KeyInsideAnOrGroupProvesNothing", func(t *testing.T) {
@@ -981,10 +992,13 @@ func TestSelectJoinSelectReadsTheDerivedTerms(t *testing.T) {
 			N  int64
 		}
 		rows := make([]counted, 0)
-		require.NoError(t, database.Select[*TestAggregateRecord, counted](ctx, TestAggregateRecordCols.ID.Group(), n).
+		query := database.Select[*TestAggregateRecord, counted](ctx, TestAggregateRecordCols.ID.Group(), n).
 			Join(types.JoinSelect(perRecord, onRecord())).
-			OrderBy(TestAggregateRecordCols.ID.Group().Asc()).
-			Scan(&rows))
+			OrderBy(TestAggregateRecordCols.ID.Group().Asc())
+		statements := make([]types.SQLStatement, 0)
+		require.NoError(t, query.WithDryRun(&statements).Scan(&rows))
+		require.Contains(t, statements[0].Query, qualified("j0", "n")+" AS "+quoteIdent("n"))
+		require.NoError(t, query.Scan(&rows))
 		require.Equal(t, []counted{{ID: "a1", N: 1}, {ID: "a3", N: 1}, {ID: "a4", N: 1}}, rows)
 	})
 
@@ -1387,28 +1401,29 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 	})
 
 	t.Run("TermUnderItsDefaultAliasHoweverSpelled", func(t *testing.T) {
-		// The default alias is the effective one: a term never aliased, one
-		// aliased to nothing and one aliased to its own default name are
-		// spelled as two authors would, and refused alike.
+		// The default alias is the effective one: the two sides spelled
+		// independently — never aliased, aliased to nothing, aliased to the
+		// default name, built by hand without one — are refused alike.
 		for _, tt := range []struct {
-			label string
-			tier  types.Term
+			label    string
+			own, sub types.Term
 		}{
-			{"NeverAliased", TestAccountCols.Tier.Max()},
-			{"AliasedToNothing", TestAccountCols.Tier.Max().As("")},
-			{"AliasedToTheDefault", TestAccountCols.Tier.Max().As("tier")},
+			{"NeverAliased", TestAccountCols.Tier.Max(), TestAccountCols.Tier.Max()},
+			{"AliasedToNothing", TestAccountCols.Tier.Max().As(""), TestAccountCols.Tier.Max()},
+			{"AliasedToTheDefault", TestAccountCols.Tier.Max().As("tier"), TestAccountCols.Tier.Max().As("")},
+			{"BuiltByHand", types.Term{Fn: types.FnMax, Table: "test_accounts", Column: "tier"}, TestAccountCols.Tier.Max()},
 		} {
 			t.Run(tt.label, func(t *testing.T) {
 				perCategory := database.Select[*TestRecordTag, struct {
 					Category string
 					Tier     *string
-				}](ctx, TestRecordTagCols.Category.Group(), tt.tier).
+				}](ctx, TestRecordTagCols.Category.Group(), tt.sub).
 					Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestRecordTagCols.Category)))
 				type tiered struct {
 					ID   string
 					Tier *string
 				}
-				err := database.Select[*TestAggregateRecord, tiered](ctx, TestAggregateRecordCols.ID, tt.tier).
+				err := database.Select[*TestAggregateRecord, tiered](ctx, TestAggregateRecordCols.ID, tt.own).
 					Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestAggregateRecordCols.Category)),
 						types.LeftJoinSelect(perCategory, TestRecordTagCols.Category.EqCol(TestAggregateRecordCols.Category))).
 					Scan(&[]tiered{})
@@ -1419,9 +1434,8 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 	})
 
 	t.Run("AliasedTermsReadThrough", func(t *testing.T) {
-		// An alias is written on purpose: the select's aliased Count, constant
-		// and ranking are read through, as a term of a model the query joins
-		// itself is.
+		// An alias is written on purpose: the select's aliased Count is read
+		// through, as is the aliased term of a model the query joins itself.
 		n := types.Count().As("n")
 		perRecord := database.Select[*TestRecordTag, struct {
 			RecordID string
@@ -1454,6 +1468,31 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 				types.LeftJoinSelect(perCategory, TestRecordTagCols.Category.EqCol(TestAggregateRecordCols.Category))).
 			WithDryRun(&statements).Scan(&[]tiered{}))
 		require.Contains(t, statements[0].Query, qualified("j1", "top_tier")+" AS "+quoteIdent("top_tier"))
+	})
+
+	t.Run("AJoinedModelsTermKeepsItsOwnAlias", func(t *testing.T) {
+		// The query joins the accounts itself and reads the select's aliased
+		// term of them beside its own, under an alias of its own: the two are
+		// the query's and the select's, told apart by alias.
+		subTier := TestAccountCols.Tier.Max().As("sub_tier")
+		perCategory := database.Select[*TestRecordTag, struct {
+			Category string
+			SubTier  *string
+		}](ctx, TestRecordTagCols.Category.Group(), subTier).
+			Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestRecordTagCols.Category)))
+		ownTier := TestAccountCols.Tier.Max().As("own_tier")
+		type tiered struct {
+			Category string
+			OwnTier  *string
+			SubTier  *string
+		}
+		statements := make([]types.SQLStatement, 0)
+		require.NoError(t, database.Select[*TestAggregateRecord, tiered](ctx, TestAggregateRecordCols.Category.Group(), ownTier, subTier).
+			Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestAggregateRecordCols.Category)),
+				types.LeftJoinSelect(perCategory, TestRecordTagCols.Category.EqCol(TestAggregateRecordCols.Category))).
+			WithDryRun(&statements).Scan(&[]tiered{}))
+		require.Contains(t, statements[0].Query, "MAX("+qualified("test_accounts", "tier")+") AS "+quoteIdent("own_tier"))
+		require.Contains(t, statements[0].Query, qualified("j1", "sub_tier")+" AS "+quoteIdent("sub_tier"))
 	})
 
 	t.Run("SelectJoinedIntoItself", func(t *testing.T) {
@@ -1584,6 +1623,81 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			Scan(&[]renamed{})
 		require.ErrorIs(t, err, database.ErrJoinSelectColumn)
 		require.ErrorContains(t, err, "under another alias")
+	})
+
+	t.Run("TermOfATableOnlyTheSelectJoins", func(t *testing.T) {
+		// The query does not join the accounts; the select does, and its
+		// term of them renamed is not the term it projects.
+		topTier := TestAccountCols.Tier.Max().As("top_tier")
+		perCategory := database.Select[*TestRecordTag, struct {
+			Category string
+			TopTier  *string
+		}](ctx, TestRecordTagCols.Category.Group(), topTier).
+			Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestRecordTagCols.Category)))
+		type renamed struct {
+			ID   string
+			Tier *string
+		}
+		err := database.Select[*TestAggregateRecord, renamed](ctx, TestAggregateRecordCols.ID, TestAccountCols.Tier.Max().As("tier")).
+			Join(types.LeftJoinSelect(perCategory, TestRecordTagCols.Category.EqCol(TestAggregateRecordCols.Category))).
+			Scan(&[]renamed{})
+		require.ErrorIs(t, err, database.ErrJoinSelectColumn)
+		require.ErrorContains(t, err, `"tier" is the term "top_tier" of the joined select over "test_record_tags" altered`)
+	})
+
+	t.Run("TermOfTheSecondJoinedSelectUnderAnotherAlias", func(t *testing.T) {
+		// Every joined select is asked: the term the second one projects,
+		// renamed by the query, is named as that select's.
+		tags, counts := tagCounts(ctx)
+		top := TestRecordTagCols.Label.Max().As("top")
+		noteTag := types.NewColumn[*TestTagNote, string]("tag_id")
+		perTag := database.Select[*TestTagNote, struct {
+			RecordID string
+			Top      *string
+		}](ctx, noteTag.Group().As("record_id"), top).
+			Join(types.LeftJoin[*TestRecordTag](TestRecordTagCols.ID.EqCol(noteTag)))
+		type renamed struct {
+			ID   string
+			Tags *int64
+			Best *string
+		}
+		err := database.Select[*TestAggregateRecord, renamed](ctx, TestAggregateRecordCols.ID, tags, TestRecordTagCols.Label.Max().As("best")).
+			Join(types.LeftJoinSelect(counts, onRecord), types.LeftJoinSelect(perTag, noteTag.EqCol(TestAggregateRecordCols.ID))).
+			Scan(&[]renamed{})
+		require.ErrorIs(t, err, database.ErrJoinSelectColumn)
+		require.ErrorContains(t, err, `"best" is the term "top" of the joined select over "test_tag_notes"`)
+	})
+
+	t.Run("WindowOverADerivedTermIsRefused", func(t *testing.T) {
+		// The select's term windowed or conditioned is not the term the
+		// select projects. Carrying no table, the query could compute it
+		// itself, and under the select's alias it would silently count the
+		// query's rows instead of reading the select's count; a term of the
+		// select's own table is its term altered.
+		n := types.Count().As("n")
+		perRecord := database.Select[*TestRecordTag, struct {
+			RecordID string
+			N        int64
+		}](ctx, TestRecordTagCols.RecordID.Group(), n)
+		type counted struct {
+			ID string
+			N  *int64
+		}
+		err := database.Select[*TestAggregateRecord, counted](ctx, TestAggregateRecordCols.ID, n.Over(types.PartitionBy(TestAggregateRecordCols.Category))).
+			Join(types.LeftJoinSelect(perRecord, onRecord)).
+			Scan(&[]counted{})
+		require.ErrorIs(t, err, database.ErrDuplicateAlias)
+		require.ErrorContains(t, err, "with a window or conditions of its own")
+		err = database.Select[*TestAggregateRecord, counted](ctx, TestAggregateRecordCols.ID, n.Where(TestAggregateRecordCols.Status.Eq("done"))).
+			Join(types.LeftJoinSelect(perRecord, onRecord)).
+			Scan(&[]counted{})
+		require.ErrorIs(t, err, database.ErrDuplicateAlias)
+		tags, counts := tagCounts(ctx)
+		err = database.Select[*TestAggregateRecord, recordTags](ctx, TestAggregateRecordCols.ID, tags.Over(types.PartitionBy(TestAggregateRecordCols.Category))).
+			Join(types.LeftJoinSelect(counts, onRecord)).
+			Scan(&rows)
+		require.ErrorIs(t, err, database.ErrJoinSelectColumn)
+		require.ErrorContains(t, err, "altered")
 	})
 
 	t.Run("TermProjectedByTwoJoinedSelects", func(t *testing.T) {

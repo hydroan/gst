@@ -129,7 +129,8 @@ func (SelectJoin) sealedJoinSource() {}
 //
 // Only the select's terms are readable this way, passed as they are: its
 // model's other columns are not columns of the derived table, and the term
-// under another alias is not the term. A term the query could compute
+// altered — under another alias, or with a window or conditions of its own
+// — is not the term. A term the query could compute
 // itself — one carrying no table, Count() say, or one of the queried table
 // or of a model the query joins — is one spelling whether the query or the
 // select wrote it. Under its default alias, the one its constructor gave it

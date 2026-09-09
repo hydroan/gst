@@ -12,9 +12,12 @@ package types
 // projection aliases, and a mismatch on either side is a build error rather
 // than a silently zero column. A term that can come back NULL — AVG, MIN or
 // MAX without group keys, carrying conditions, or over a nullable column; LAG
-// and LEAD; a plain column that is nullable — must bind to a pointer or
-// sql.Null field, which is again a build error rather than a zero on the
-// report.
+// and LEAD; a plain column, group key or time bucket over a nullable column,
+// whose rows without a value form a group of their own keyed NULL — must bind
+// to a pointer or sql.Null field, which is again a build error rather than a
+// zero on the report. A condition in Where on the column itself keeps its
+// NULLs out — IS NULL apart, and outside any OR group — and the field may
+// then be plain.
 //
 // The entry point is the package-level database.Select[M, R] rather than a
 // method, because a Go method cannot introduce the result type parameter.

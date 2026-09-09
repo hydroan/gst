@@ -79,6 +79,17 @@ type RowSpan struct{ First time.Time }
 // column of its own, named after the type, not an embedding to descend into.
 type RowCode string
 
+// RowMark and RowKind are named non-struct types carrying a method, unexported
+// and exported, embedded as anonymous fields: columns of their own, which the
+// sqlite stand-in names rather than embeds.
+type RowMark string
+
+func (m RowMark) lower() string { return strings.ToLower(string(m)) }
+
+type RowKind string
+
+func (k RowKind) String() string { return string(k) }
+
 func TestSelectScansEmbeddedRowFields(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
@@ -201,6 +212,24 @@ func TestSelectScansEmbeddedRowFields(t *testing.T) {
 	require.Len(t, spacedRows, 3)
 	require.NotNil(t, spacedRows[0].Note)
 	require.Equal(t, "failed", *spacedRows[0].Note)
+
+	// A named non-struct type carrying methods, exported or not, is a column
+	// like any other; the stand-in names it rather than embedding it.
+	type marked struct {
+		Category string
+		First    time.Time
+		RowMark
+		RowKind
+	}
+	markedRows := make([]marked, 0)
+	require.NoError(t, database.Select[*TestAggregateRecord, marked](context.Background(), TestAggregateRecordCols.Category.Group(),
+		TestAggregateRecordCols.OccurredAt.Min().As("first"), TestAggregateRecordCols.Status.Max().As("row_mark"), TestAggregateRecordCols.Status.Min().As("row_kind")).
+		OrderBy(TestAggregateRecordCols.Category.Group().Asc()).
+		Scan(&markedRows))
+	require.Len(t, markedRows, 3)
+	require.Equal(t, time.Date(2024, 1, 10, 8, 0, 0, 0, time.UTC), markedRows[0].First.UTC())
+	require.Equal(t, "failed", markedRows[0].lower())
+	require.Equal(t, "done", markedRows[0].RowKind.String())
 }
 
 func TestSelectWhereReusesFilters(t *testing.T) {
@@ -399,6 +428,14 @@ func TestSelectBuildErrors(t *testing.T) {
 		require.ErrorIs(t, sel.Scan(&rows), database.ErrOffsetWithoutLimit)
 		groups := 0
 		require.ErrorIs(t, sel.Count(&groups), database.ErrOffsetWithoutLimit)
+	})
+
+	t.Run("TermWithoutAColumnOrAlias", func(t *testing.T) {
+		// A term built by hand with neither has no name to project under.
+		rows := make([]row, 0)
+		err := database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), types.Term{Fn: types.FnCount}).Scan(&rows)
+		require.ErrorIs(t, err, database.ErrInvalidAlias)
+		require.ErrorContains(t, err, "named with As")
 	})
 
 	t.Run("UnknownColumn", func(t *testing.T) {
@@ -711,6 +748,11 @@ func TestSelectNullableResultFields(t *testing.T) {
 		rows := make([]row, 0)
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.ClosedAt.Max().As("last_seen")).
 			Scan(&rows), database.ErrNullableResultField)
+		// With the rows without a closed_at kept out in Where the MAX is never
+		// NULL, and the plain field is accepted.
+		require.NoError(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.ClosedAt.Max().As("last_seen")).
+			Where(TestAggregateRecordCols.ClosedAt.IsNotNull()).
+			Scan(&rows))
 	})
 
 	t.Run("NullableGroupKeyRejectsPlainField", func(t *testing.T) {
@@ -742,6 +784,47 @@ func TestSelectNullableResultFields(t *testing.T) {
 		require.Len(t, groups, 1)
 		require.Nil(t, groups[0].ClosedAt)
 		require.EqualValues(t, 2, groups[0].Records)
+		// A condition on the column in Where keeps the rows without one out,
+		// and the plain field is accepted; inside an OR group it need not
+		// hold, and the field stays a pointer.
+		require.NoError(t, database.Select[*TestAggregateRecord, keyed](ctx, TestAggregateRecordCols.ClosedAt.Group(), types.Count().As("records")).
+			Where(TestAggregateRecordCols.ClosedAt.IsNotNull()).
+			Scan(&rows))
+		require.NoError(t, database.Select[*TestAggregateRecord, bucketed](ctx, TestAggregateRecordCols.ClosedAt.ByDay().As("day"), types.Count().As("records")).
+			Where(TestAggregateRecordCols.ClosedAt.Gte(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))).
+			Scan(&buckets))
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, keyed](ctx, TestAggregateRecordCols.ClosedAt.Group(), types.Count().As("records")).
+			Where(types.FilterOr(TestAggregateRecordCols.ClosedAt.IsNotNull(), TestAggregateRecordCols.Category.Eq("beta"))).
+			Scan(&rows), database.ErrNullableResultField)
+	})
+
+	t.Run("ColumnTheSchemaForbidsNullOnNeedsNoPointer", func(t *testing.T) {
+		// A pointer column under a NOT NULL constraint never holds NULL: its
+		// group key and its MAX read into plain fields.
+		defer func() { _ = database.DB().Exec("DELETE FROM test_marked_records").Error }()
+		require.NoError(t, database.Database[*TestMarkedRecord](ctx).Create(
+			&TestMarkedRecord{Mark: new("m1"), Amount: 1},
+			&TestMarkedRecord{Mark: new("m1"), Amount: 2},
+			&TestMarkedRecord{Mark: new("m2"), Amount: 3},
+		))
+		type row struct {
+			Mark  string
+			Total int64
+		}
+		rows := make([]row, 0)
+		require.NoError(t, database.Select[*TestMarkedRecord, row](ctx, TestMarkedRecordCols.Mark.Group(), TestMarkedRecordCols.Amount.Sum().As("total")).
+			OrderBy(TestMarkedRecordCols.Mark.Group().Asc()).
+			Scan(&rows))
+		require.Equal(t, []row{{Mark: "m1", Total: 3}, {Mark: "m2", Total: 3}}, rows)
+		type peak struct {
+			Amount int64
+			Top    string
+		}
+		peaks := make([]peak, 0)
+		require.NoError(t, database.Select[*TestMarkedRecord, peak](ctx, TestMarkedRecordCols.Amount.Group(), TestMarkedRecordCols.Mark.Max().As("top")).
+			OrderBy(TestMarkedRecordCols.Amount.Group().Asc()).
+			Scan(&peaks))
+		require.Equal(t, []peak{{Amount: 1, Top: "m1"}, {Amount: 2, Top: "m1"}, {Amount: 3, Top: "m2"}}, peaks)
 	})
 
 	t.Run("AcceptsPointerFields", func(t *testing.T) {

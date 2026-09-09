@@ -24,7 +24,9 @@
 // identical behavior; the test suite runs against all three. The one stored
 // time base is the UTC wall clock, and the two documented per-dialect splits
 // are Upsert's conflict target (see Upsert) and row locks on SQLite (see
-// WithLock).
+// WithLock); SQLite also reads a result row's time fields through a stand-in
+// struct, which leaves a time inside an embedded driver.Valuer struct to that
+// struct's own Scan (see Select).
 //
 // # Error-stack contract
 //

@@ -119,9 +119,16 @@ func (a *selector[M, R]) resolveJoins(shape *projectionShape) error {
 		if _, dup := shape.joined[jt.table]; dup {
 			return errors.Wrapf(ErrJoinDuplicateTable, "%s %q, which another source reads", source, jt.table)
 		}
-		pinned, tied := pinnedColumns(jt, shape.tables)
-		if !tied {
-			return errors.Wrapf(ErrJoinNoCorrelation, "%q", jt.table)
+		pinned, ties := pinnedColumns(jt, shape.tables)
+		if !ties.tied {
+			switch {
+			case ties.bare:
+				return errors.Wrapf(ErrJoinNoCorrelation, "%q: the ON names a column without a table, which ties to nothing; write it through column references, Cols.X.EqCol(OtherCols.Y)", jt.table)
+			case len(ties.unread) > 0:
+				return errors.Wrapf(ErrJoinNoCorrelation, "%q: the ON ties it to %q, which no source declared before it reads", jt.table, ties.unread[0])
+			default:
+				return errors.Wrapf(ErrJoinNoCorrelation, "%q", jt.table)
+			}
 		}
 		// A derived table read before this source has its select's keys for
 		// columns; an ON tied to another column of that select's model has
@@ -257,17 +264,26 @@ func (a *selector[M, R]) resolveSelectJoin(sj types.SelectJoin, alias string) (*
 	}, [][]string{keyColumns}, nil
 }
 
+// joinTies is what the ON predicates of a joined table tie it with, beside
+// the columns they pin: whether any ties it to a table read before it, the
+// tables they name that no source before it reads, and whether one names a
+// column without a table, which ties to nothing.
+type joinTies struct {
+	tied   bool
+	unread []string
+	bare   bool
+}
+
 // pinnedColumns reports the columns of the joined table its ON predicates
 // pin with an equality — to a column of a table read before it, or to a
-// value — and whether any predicate ties the table to one read before it at
-// all. It also records on the joined table which columns of those earlier
-// tables the ON ties it to. Only predicates AND-combined at the top level
-// pin a column: inside an OR group a column is pinned on one branch only,
-// which proves nothing.
-func pinnedColumns(jt *joinedTable, before map[string]tableInfo) (map[string]struct{}, bool) {
+// value — and what the predicates tie the table to. It also records on the
+// joined table which columns of those earlier tables the ON ties it to.
+// Only predicates AND-combined at the top level pin a column: inside an OR
+// group a column is pinned on one branch only, which proves nothing.
+func pinnedColumns(jt *joinedTable, before map[string]tableInfo) (map[string]struct{}, joinTies) {
 	pinned := make(map[string]struct{})
 	jt.joinColumns = make(map[string]map[string]struct{})
-	tied := false
+	ties := joinTies{}
 	var walk func(filters []types.Filter)
 	walk = func(filters []types.Filter) {
 		for _, f := range filters {
@@ -285,7 +301,12 @@ func pinnedColumns(jt *joinedTable, before map[string]tableInfo) (map[string]str
 				if len(own) == 0 {
 					continue
 				}
+				if len(otherTable) == 0 {
+					ties.bare = true
+					continue
+				}
 				if _, ok := before[otherTable]; !ok {
+					ties.unread = append(ties.unread, otherTable)
 					continue
 				}
 				pinned[own] = struct{}{}
@@ -293,12 +314,12 @@ func pinnedColumns(jt *joinedTable, before map[string]tableInfo) (map[string]str
 					jt.joinColumns[otherTable] = make(map[string]struct{})
 				}
 				jt.joinColumns[otherTable][otherColumn] = struct{}{}
-				tied = true
+				ties.tied = true
 			}
 		}
 	}
 	walk(jt.on)
-	return pinned, tied
+	return pinned, ties
 }
 
 // ownsColumn reports whether a filter names a column of the table: a filter
@@ -533,9 +554,9 @@ func (a *selector[M, R]) derivedTerms(shape projectionShape) (map[string]*joined
 			// passing the select's aliased term is reading it through.
 			if a.ownTerm(t) && defaultAlias(t) {
 				if t.IsLiteral() {
-					return nil, errors.Wrapf(ErrDuplicateAlias, "the constant %q is projected by the query and by the joined select over %q alike; a constant is the query's own, and whether a row matched the select is read from the select's key, NULL when it did not", a.alias(t), jt.table)
+					return nil, errors.Wrapf(ErrDuplicateAlias, "the constant %q is projected by the query and by the joined select over %q alike; a constant is the query's own, and whether a row matched the select is read from the select's key, NULL under LeftJoinSelect where none did", a.alias(t), jt.table)
 				}
-				return nil, errors.Wrapf(ErrDuplicateAlias, "%q is projected by the query and by the joined select over %q alike, under its default alias; give the query's own term an alias of its own, in a variable of its own, or alias the select's term and pass it to read it through", a.alias(t), jt.table)
+				return nil, errors.Wrapf(ErrDuplicateAlias, "%q is projected by the query and by the joined select over %q alike, under its default alias; give the query's own term an alias of its own, or alias the select's term and pass it to read it through", a.alias(t), jt.table)
 			}
 			// Two selects projecting the same term would each answer for it;
 			// the query has to tell them apart by alias.
@@ -585,7 +606,10 @@ func defaultAlias(t types.Term) bool {
 	case types.FnLiteral:
 		return true
 	default:
-		return false
+		// No other function projects without a column today. One added later
+		// counts as default until named here: a shared spelling is then
+		// refused rather than read through unnoticed.
+		return true
 	}
 }
 

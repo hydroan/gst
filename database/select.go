@@ -577,6 +577,21 @@ func (a *selector[M, R]) consumeDryRun() {
 // alias returns the name a term is projected under, defaulting to its column.
 func (a *selector[M, R]) alias(t types.Term) string { return termAlias(t) }
 
+// termLabel names a term for a message about it, the way its author wrote
+// it: the constant, the column, or the function over the column.
+func termLabel(t types.Term) string {
+	switch {
+	case t.IsLiteral():
+		return fmt.Sprintf("constant %q", t.Literal)
+	case t.Fn == types.FnNone:
+		return fmt.Sprintf("column %q", t.Column)
+	case len(t.Column) == 0:
+		return string(t.Fn)
+	default:
+		return fmt.Sprintf("%s over %q", t.Fn, t.Column)
+	}
+}
+
 // termAlias is the name a term is projected under: its alias, or its column
 // when it has none.
 func termAlias(t types.Term) string {
@@ -651,23 +666,31 @@ func (a *selector[M, R]) validate(mode buildMode) (projectionShape, error) {
 	if shape.derived, err = a.derivedTerms(shape); err != nil {
 		return shape, err
 	}
-	// A joined select's term passed under another alias is not the term the
-	// select projects: it would read as a measure or a column of the
-	// select's model and fail on some other term of the projection, far from
-	// the mistake, so it is named here. A term carrying no table is the
-	// query's own; one a select projects alike was refused above.
+	// A joined select's term altered — passed under another alias, or with
+	// a window or conditions of its own — is not the term the select
+	// projects: it would read as a measure or a column of the select's model
+	// and fail on some other term of the projection, far from the mistake,
+	// so it is named here. A term the query could compute itself is the
+	// query's own under an alias of its own; under the select's alias it
+	// would pass for the select's term, and is refused; one a select projects
+	// alike was refused above.
 	for _, t := range a.terms {
-		if _, derived := a.derivedOf(t, shape); derived || len(t.Table) == 0 || t.Table == shape.main {
+		if _, derived := a.derivedOf(t, shape); derived {
 			continue
 		}
-		// Every joined select is asked, the term's table being its own or one
-		// it joins itself, which the query reads through it alone.
+		own := a.ownTerm(t)
+		// Every joined select is asked, whichever of them projects the term.
 		for _, jt := range shape.joins {
 			if jt.sub == nil {
 				continue
 			}
-			if alias, projected := jt.sub.projectsAs(t); projected {
-				return shape, errors.Wrapf(ErrJoinSelectColumn, "%q is the term %q of the joined select over %q under another alias; pass the very term the select projects", a.alias(t), alias, jt.table)
+			alias, projected := jt.sub.projectsAs(t)
+			switch {
+			case !projected:
+			case !own:
+				return shape, errors.Wrapf(ErrJoinSelectColumn, "%q is the term %q of the joined select over %q altered, under another alias or with a window or conditions of its own; pass the very term the select projects", a.alias(t), alias, jt.table)
+			case a.alias(t) == alias:
+				return shape, errors.Wrapf(ErrDuplicateAlias, "%q is the term the joined select over %q projects, with a window or conditions of its own: neither the select's term read through nor the query's own kept apart; pass the very term to read it through, or alias the query's own term differently", alias, jt.table)
 			}
 		}
 	}
@@ -732,8 +755,11 @@ func (a *selector[M, R]) validate(mode buildMode) (projectionShape, error) {
 			return shape, err
 		}
 		alias := a.alias(t)
+		if len(alias) == 0 {
+			return shape, errors.Wrapf(ErrInvalidAlias, "%s carries no alias; a term without a column is named with As", termLabel(t))
+		}
 		if !aliasPattern.MatchString(alias) {
-			return shape, errors.Wrapf(ErrInvalidAlias, "%q", alias)
+			return shape, errors.Wrapf(ErrInvalidAlias, "%q on %s", alias, termLabel(t))
 		}
 		if _, dup := aliases[alias]; dup {
 			return shape, errors.Wrapf(ErrDuplicateAlias, "%q", alias)
@@ -1055,10 +1081,14 @@ func resultRowFields[R any]() (reflect.Type, []modelschema.Column, error) {
 // isSelected reports whether the projection declares this exact term. Equality
 // covers the whole term rather than its alias, because HAVING and ORDER BY are
 // rendered from the term itself: an alias match alone would let a condition
-// filter by an expression the projection never selected.
+// filter by an expression the projection never selected. The alias is
+// compared as projected, so a term spelled without one is the term under
+// its default.
 func (a *selector[M, R]) isSelected(t types.Term) bool {
+	t.Alias = a.alias(t)
 	for _, selected := range a.terms {
-		if a.alias(selected) == a.alias(t) && reflect.DeepEqual(selected, t) {
+		selected.Alias = a.alias(selected)
+		if reflect.DeepEqual(selected, t) {
 			return true
 		}
 	}
@@ -1086,6 +1116,7 @@ func (a *selector[M, R]) isSelected(t types.Term) bool {
 func (a *selector[M, R]) nullableAliases(shape projectionShape) map[string]string {
 	grouped := len(shape.keys) > 0
 	nullable := make(map[string]string)
+	proven := a.notNullColumns()
 	for _, t := range a.terms {
 		// A joined select's term is NULL where a LEFT JOIN matched no group,
 		// and where the select itself answered NULL.
@@ -1109,15 +1140,15 @@ func (a *selector[M, R]) nullableAliases(shape projectionShape) map[string]strin
 		known := err == nil
 		switch {
 		case t.IsPlain():
-			if known && holdsNull(source.Type) {
-				nullable[a.alias(t)] = fmt.Sprintf("column %q, which is nullable", t.Column)
+			if known && nullableColumn(source) && !proven[a.columnKey(t.Table, t.Column)] {
+				nullable[a.alias(t)] = fmt.Sprintf("column %q, which is nullable unless a condition on it in Where keeps NULL out", t.Column)
 			}
 			continue
 		case t.IsGroupKey():
 			// The rows without a value form a group of their own, keyed NULL;
 			// a bucket of NULL is NULL as well.
-			if known && holdsNull(source.Type) {
-				nullable[a.alias(t)] = fmt.Sprintf("group key %q over a nullable column, which is NULL for the group of the rows without one", t.Column)
+			if known && nullableColumn(source) && !proven[a.columnKey(t.Table, t.Column)] {
+				nullable[a.alias(t)] = fmt.Sprintf("group key %q over a nullable column, NULL for the rows without one unless a condition on it in Where keeps them out", t.Column)
 			}
 			continue
 		case t.Fn == types.FnLag || t.Fn == types.FnLead:
@@ -1135,11 +1166,55 @@ func (a *selector[M, R]) nullableAliases(shape projectionShape) map[string]strin
 			nullable[a.alias(t)] = fmt.Sprintf("%s, which is NULL when the filters match no rows", t.Fn)
 		case len(t.Conditions) > 0:
 			nullable[a.alias(t)] = fmt.Sprintf("a conditional %s, which is NULL for a group where no row passes its conditions", t.Fn)
-		case !known || holdsNull(source.Type):
-			nullable[a.alias(t)] = fmt.Sprintf("%s over nullable column %q, which is NULL for a group holding only NULLs", t.Fn, t.Column)
+		case !known || (nullableColumn(source) && !proven[a.columnKey(t.Table, t.Column)]):
+			nullable[a.alias(t)] = fmt.Sprintf("%s over nullable column %q, NULL for a group holding only NULLs unless a condition on it in Where keeps them out", t.Fn, t.Column)
 		}
 	}
 	return nullable
+}
+
+// notNullColumns returns the columns the WHERE keeps NULL out of, keyed by
+// columnKey. A condition on a column is never true of NULL, IS NULL apart,
+// so a row whose column is NULL fails it. A condition AND-ed at the top
+// level, or inside an AND group, holds of every row read; one inside an OR
+// group need not, and a subquery says nothing of the row's own columns.
+func (a *selector[M, R]) notNullColumns() map[string]bool {
+	proven := make(map[string]bool)
+	var walk func(filters []types.Filter)
+	walk = func(filters []types.Filter) {
+		for _, f := range filters {
+			switch f.Op {
+			case types.FilterOpAnd:
+				if members, ok := f.Value.([]types.Filter); ok {
+					walk(members)
+				}
+			case types.FilterOpOr, types.FilterOpExists, types.FilterOpFalse:
+			case types.FilterOpIsNull:
+				if isNull, ok := f.Value.(bool); ok && !isNull {
+					proven[a.columnKey(f.Table, f.Column)] = true
+				}
+			default:
+				if len(f.Column) > 0 {
+					proven[a.columnKey(f.Table, f.Column)] = true
+				}
+			}
+		}
+	}
+	walk(a.filters)
+	return proven
+}
+
+// nullableColumn reports whether a model column can hold NULL: its Go type
+// tells NULL apart and the schema does not forbid it.
+func nullableColumn(c modelschema.Column) bool { return holdsNull(c.Type) && !c.NotNull }
+
+// columnKey names a column of the query by table and column, an empty
+// table meaning the queried one.
+func (a *selector[M, R]) columnKey(table, column string) string {
+	if len(table) == 0 {
+		table = a.db.outerTableName()
+	}
+	return table + "." + column
 }
 
 // session returns a statement-free handle onto the same connection. It keeps

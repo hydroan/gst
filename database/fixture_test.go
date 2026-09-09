@@ -674,6 +674,27 @@ var TestAccountCols = struct {
 	Tier: types.NewColumn[*TestAccount, string]("tier"),
 }
 
+// TestMarkedRecord is a fixture whose mark is a pointer column the schema
+// forbids NULL on: the Go type could hold NULL, the table cannot.
+type TestMarkedRecord struct {
+	Mark   *string `json:"mark" gorm:"size:191;not null"`
+	Amount int64   `json:"amount"`
+
+	model.Base
+}
+
+func (*TestMarkedRecord) TableName() string { return "test_marked_records" }
+
+// TestMarkedRecordCols mirrors the generated column references of the
+// fixture.
+var TestMarkedRecordCols = struct {
+	Mark   types.Column[string]
+	Amount types.NumericColumn[int64]
+}{
+	Mark:   types.NewColumn[*TestMarkedRecord, string]("mark"),
+	Amount: types.NewNumericColumn[*TestMarkedRecord, int64]("amount"),
+}
+
 // accountSeed is the one account the payments can join: acme, tier gold.
 func accountSeed() []*TestAccount {
 	return []*TestAccount{{ID: "acc1", Code: "acme", Name: "Acme Ltd", Tier: "gold"}}
@@ -777,6 +798,7 @@ func TestMain(m *testing.M) {
 			model.Register[*TestPayment]()
 			model.Register[*TestRefund]()
 			model.Register[*TestAccount]()
+			model.Register[*TestMarkedRecord]()
 		},
 	})
 }

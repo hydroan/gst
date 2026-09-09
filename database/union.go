@@ -40,9 +40,10 @@ type nestedSelect interface {
 	chainFor(ctx context.Context, base *gorm.DB) operationChain
 	// selects reports whether the select projects exactly this term.
 	selects(t types.Term) bool
-	// projectsAs reports whether the select projects this term under another
-	// alias, and which: the mistake a query reading the select makes when
-	// it re-aliases the term instead of passing it as it is.
+	// projectsAs reports whether the select projects this term's base, the
+	// term without its alias, window and conditions, and under which alias:
+	// the mistake a query reading the select makes when it re-aliases,
+	// windows or conditions the term instead of passing it as it is.
 	projectsAs(t types.Term) (string, bool)
 	// buildBranch renders the select as a member: read, ordered and capped
 	// as pushed down, or reduced to what decides its row count.
@@ -479,15 +480,20 @@ func (a *selector[M, R]) chainFor(ctx context.Context, base *gorm.DB) operationC
 func (a *selector[M, R]) selects(t types.Term) bool { return a.isSelected(t) }
 
 func (a *selector[M, R]) projectsAs(t types.Term) (string, bool) {
-	t.Alias = ""
+	t = termBase(t)
 	for _, selected := range a.terms {
-		alias := a.alias(selected)
-		selected.Alias = ""
-		if reflect.DeepEqual(selected, t) {
-			return alias, true
+		if reflect.DeepEqual(termBase(selected), t) {
+			return a.alias(selected), true
 		}
 	}
 	return "", false
+}
+
+// termBase is a term without its alias, window and conditions: what two
+// spellings of one term share.
+func termBase(t types.Term) types.Term {
+	t.Alias, t.Window, t.Conditions = "", nil, nil
+	return t
 }
 
 // buildBranch renders the selector as a member of a union, ordered and

@@ -111,7 +111,7 @@ func ExampleSelect_leftJoin() {
 //	FROM `test_payments`
 //	JOIN `test_accounts` ON `test_accounts`.`code` = `test_payments`.`account` AND `test_accounts`.`deleted_at` IS NULL
 //	WHERE `test_accounts`.`tier` = ? AND `test_payments`.`deleted_at` IS NULL
-//	GROUP BY `test_payments`.`account`, `test_accounts`.`name` ORDER BY `account` ASC
+//	GROUP BY `test_payments`.`account`,`test_accounts`.`name` ORDER BY `account` ASC
 func ExampleSelect_joinGrouped() {
 	seedFlowExample()
 	defer cleanupFlowData()
