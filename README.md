@@ -522,23 +522,25 @@ refunds := database.Select[*appmodel.Refund, flow](ctx,
 
 feed := database.UnionAll[flow](ctx, payments, refunds).
     OrderBy(paidAt.Desc(), PaymentCols.ID.Desc()). // 按结果列 at、id 排
-    Limit(20).Offset(40)
+    Page(3, 20) // 第 3 页、每页 20 行
 err := feed.Scan(&rows)  // 这一页
 err = feed.Count(&total) // 总数
 ```
 
 排序项按结果列名对齐：写某个分支投影过的项（值相等即可，共享变量最稳），或列名恰好等于结果
 列名的列引用（`As` 改过名的列要用共享的那个项），也可以直接按结果列名写 `types.Desc("at")`。
-联合只认结果列名，列引用所属的表在这里不参与判定。
+联合只认结果列名，列引用所属的表在这里不参与判定。分支会按条件增减时（比如只查一种类型就只放
+一条分支），别拿某张表模型的项排序，它只在自己的分支在场时才认得；用结果行模型的列引用或
+`types.Desc("列名")` 按名字排，分支怎么变都成立。
 
 规则：
 
 - **只有 `UNION ALL`**，不做去重的 UNION：两笔金额相同的记录会被去重版悄悄合并。
   INTERSECT、EXCEPT 用 `FilterExists`、`FilterNotExists` 表达。
 - **分支可以是纯列投影**，也可以分组、开窗、`Qualify`，各自带 `Where`、`Having`；
-  分支上不能写 `OrderBy`、`Limit`、`Offset`，它们属于联合，写了构建期报错。
+  分支上不能写 `OrderBy`、`Limit`、`Page`，它们属于联合，写了构建期报错。
   联合结果没有 `Where`，条件写进分支，每个分支用自己的索引。
-- **排序分页下推**：带 `Limit` 时框架把同样的排序和 `offset + limit` 下推到每个分支，
+- **排序分页下推**：带 `Limit` 或 `Page` 时框架把同样的排序和页尾行数（`offset + limit`）下推到每个分支，
   各分支按索引只读前几十行，外层最多排 N 倍这个行数。
 - **`Count` 是各分支计数相加**，不物化任何一行，同样忽略排序分页。
 - **`Literal` 的值只能是标识符**（字母、数字、下划线，不以数字开头），内联为 `'x'`
@@ -616,7 +618,7 @@ err := database.Select[*appmodel.Record, recordWithTags](ctx, RecordCols.ID, tag
 ```
 
 - 子投影必须是分组投影，ON 里的 `EqCol` 和常量等值要覆盖它的全部分组键，键通过子投影模型
-  的列引用来写；子投影自己不能带 `OrderBy`、`Limit`、`Offset`。ON 里不能写 `FilterExists`：
+  的列引用来写；子投影自己不能带 `OrderBy`、`Limit`、`Page`。ON 里不能写 `FilterExists`：
   临时表的行是子投影的组，没有可关联的行，这种条件写进子投影的 `Where`。
 - 子投影的分组键必须全是它自己模型的列，每列一次：它自己再连进来的表的列当不了键，主查询
   没法用引用指到它；它从自己连的子投影里读来的项是临时表的列，不算键。
@@ -647,7 +649,7 @@ err := database.Select[*appmodel.Record, recordWithTags](ctx, RecordCols.ID, tag
 | `ErrJoinSelectNotGrouped` | 子投影加分组键，`Cols.X.Group()` |
 | `ErrJoinSelectKey` | 子投影只按自己模型的列分组，每列一次 |
 | `ErrJoinSelectBucketKey` | 不按时间桶分组后再连，同粒度的汇总改用窗口 |
-| `ErrNestedSelectOrdered` | 子投影去掉 `OrderBy`、`Limit`、`Offset`，它们属于主查询 |
+| `ErrNestedSelectOrdered` | 子投影去掉 `OrderBy`、`Limit`、`Page`，它们属于主查询 |
 | `ErrJoinSelectInstance` | 子投影用 `SelectOn` 开在主查询的实例上 |
 | `ErrJoinNoCorrelation` | ON 里至少一对 `EqCol` 连到主查询或更早声明的来源：连到后面才声明的来源就调整声明顺序；字符串版 `FilterEqCol` 不带表名连不上，改用列引用 |
 | `ErrJoinNotUnique` | ON 用 `EqCol`、常量等值钉住子投影的全部分组键 |
