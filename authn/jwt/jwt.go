@@ -63,9 +63,6 @@ func GenTokens(userID string, username string) (aToken, rToken string, err error
 		return "", "", errors.New("invalid user id or username")
 	}
 
-	if username == config.App.Auth.NoneExpireUsername {
-		return config.App.Auth.NoneExpireToken, "", nil
-	}
 	if aToken, err = genAccessToken(userID, username); err != nil {
 		return "", "", err
 	}
@@ -148,16 +145,6 @@ func ParseToken(tokenStr string) (*Claims, error) {
 	if len(tokenStr) == 0 {
 		return nil, ErrTokenMalformed
 	}
-	if tokenStr == config.App.Auth.NoneExpireToken {
-		return &Claims{
-			UserID: "root",
-			// This must be either root or admin, but admin is reserved for regular
-			// administration, so root is used here. It pairs with casbin.
-			Username: "root",
-			Issuer:   issuer, Subject: "root",
-		}, nil
-	}
-
 	claims := new(Claims)
 	token, err := jwt.ParseWithClaims(tokenStr, claims, keyFunc)
 	if err != nil {
@@ -181,20 +168,22 @@ func ParseToken(tokenStr string) (*Claims, error) {
 	return claims, nil
 }
 
-// Verify checks an access token beyond the signature the parser already
-// validated.
+// Verify checks the claims a parsed access token carries, beyond the signature
+// the parser already validated.
 //
-// It asserts nothing about where the token is being used from. The previous
+// It takes the claims alone, and deliberately not the token string they came
+// from: a check that consults the raw string is a check that can recognize one
+// by value, and a token recognized by value is a bearer credential no signature
+// stands behind.
+//
+// It asserts nothing about where the token is being used from. An earlier
 // version compared the caller's browser and operating system against a stored
 // session, which made a stateless token stateful and answered "not match" for
 // a user who simply switched browsers; binding a token to a device is the job
 // of whoever issues it, and requires a store this package deliberately has not.
-func Verify(claims *Claims, accessToken string) error {
+func Verify(claims *Claims) error {
 	if claims == nil {
 		return errors.New("claims is nil")
-	}
-	if accessToken == config.App.Auth.NoneExpireToken {
-		return nil
 	}
 	if len(claims.UserID) < MinUserIDLength || len(claims.Username) < MinUsernameLength {
 		return ErrInvalidAccessToken

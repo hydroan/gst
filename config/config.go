@@ -20,9 +20,6 @@ import (
 )
 
 const (
-	noneExpireToken   = `fake_token`
-	noneExpireUser    = "admin"
-	noneExpirePass    = "admin"
 	baseAuthUsername  = "admin"
 	baseAuthPassword  = "admin"
 	defaultConfigName = "config"

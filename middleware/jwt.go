@@ -37,12 +37,12 @@ func abortUnauthenticatedJWT(c *gin.Context, err error) {
 // makes and the reason IAM's own sessions are not built on it.
 func JwtAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		accessToken, claims, err := jwt.ParseTokenFromHeader(c.Request.Header)
+		_, claims, err := jwt.ParseTokenFromHeader(c.Request.Header)
 		if err != nil {
 			abortUnauthenticatedJWT(c, err)
 			return
 		}
-		if err := jwt.Verify(claims, accessToken); err != nil {
+		if err := jwt.Verify(claims); err != nil {
 			abortUnauthenticatedJWT(c, err)
 			return
 		}

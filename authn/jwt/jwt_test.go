@@ -55,7 +55,7 @@ func TestGenTokens(t *testing.T) {
 
 		claims, err := jwt.ParseToken(first)
 		require.NoError(t, err)
-		require.NoError(t, jwt.Verify(claims, first))
+		require.NoError(t, jwt.Verify(claims))
 	})
 
 	t.Run("rejects_a_user_it_cannot_name", func(t *testing.T) {
@@ -63,6 +63,24 @@ func TestGenTokens(t *testing.T) {
 
 		_, _, err := jwt.GenTokens("", sampleUsername)
 		require.Error(t, err)
+	})
+
+	// No username is special. A name the issuer treats differently would hand
+	// its holder a token no signature stands behind, and the holders of such a
+	// name are exactly the accounts worth forging.
+	t.Run("signs_a_token_for_every_username", func(t *testing.T) {
+		withTokenLifetimes(t, time.Hour, 24*time.Hour)
+
+		for _, username := range []string{sampleUsername, "admin", "root"} {
+			accessToken, refreshToken, err := jwt.GenTokens(sampleUserID, username)
+			require.NoError(t, err)
+			require.NotEmpty(t, refreshToken, "username %q must get a refresh token like any other", username)
+
+			claims, err := jwt.ParseToken(accessToken)
+			require.NoError(t, err)
+			require.Equal(t, username, claims.Username)
+			require.Equal(t, sampleUserID, claims.UserID)
+		}
 	})
 }
 
@@ -97,6 +115,16 @@ func TestParseToken(t *testing.T) {
 		tampered := accessToken[:signatureStart] + string(replacement) + accessToken[signatureStart+1:]
 		_, err = jwt.ParseToken(tampered)
 		require.Error(t, err)
+	})
+
+	// Only a signature makes a token. A string the parser recognizes by value
+	// would authenticate whoever repeats it, which is what an unsigned bearer
+	// credential is.
+	t.Run("rejects_a_plain_string_that_carries_no_signature", func(t *testing.T) {
+		for _, tokenStr := range []string{"fake_token", "admin", "root"} {
+			_, err := jwt.ParseToken(tokenStr)
+			require.Error(t, err, "%q must not parse into a subject", tokenStr)
+		}
 	})
 
 	t.Run("rejects_an_expired_token", func(t *testing.T) {
@@ -158,15 +186,15 @@ func TestVerify(t *testing.T) {
 
 		claims, err := jwt.ParseToken(accessToken)
 		require.NoError(t, err)
-		require.NoError(t, jwt.Verify(claims, accessToken))
+		require.NoError(t, jwt.Verify(claims))
 	})
 
 	t.Run("rejects_claims_that_name_nobody", func(t *testing.T) {
-		require.Error(t, jwt.Verify(&jwt.Claims{}, "any-token"))
+		require.Error(t, jwt.Verify(&jwt.Claims{}))
 	})
 
 	t.Run("rejects_nil_claims", func(t *testing.T) {
-		require.Error(t, jwt.Verify(nil, "any-token"))
+		require.Error(t, jwt.Verify(nil))
 	})
 }
 
