@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"os"
 	"os/signal"
 	"sync"
@@ -148,11 +149,8 @@ func Run() error {
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-	errCh := make(chan error, 1)
 
-	go func() {
-		errCh <- ins.Go()
-	}()
+	failed := ins.Go()
 	select {
 	case sig := <-sigCh:
 		zap.S().Infow("canceled by signal", "signal", sig)
@@ -161,8 +159,10 @@ func Run() error {
 		controller.Probe.Drain()
 		awaitDrain(sigCh)
 		return nil
-	case err := <-errCh:
-		return err
+	case <-failed.Done():
+		// One of the long-running functions failed. Returning is what stops
+		// the others: the deferred clean shuts down those still serving.
+		return context.Cause(failed)
 	}
 }
 

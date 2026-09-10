@@ -16,7 +16,7 @@ var ins = new(initializer)
 
 type initializer struct {
 	fns []func() error // run init function in current goroutine.
-	gos []func() error // run init function in new goroutine and receive error in channel.
+	gos []func() error // long-running functions Go starts, each in its own goroutine.
 }
 
 func (i *initializer) Register(fn ...func() error) {
@@ -48,20 +48,32 @@ func (i *initializer) Init() error {
 	return nil
 }
 
-func (i *initializer) Go() error {
+// Go starts every registered long-running function in its own goroutine and
+// returns at once, with a context that is canceled the moment any of them
+// returns an error; that error is the context's cause.
+//
+// It does not wait for the functions to finish. They are servers that block
+// until shut down, so waiting for all of them would hold one's failure back
+// for as long as any other keeps serving: a listener failing to start beside
+// one that stays up would leave the process running with nothing to report.
+// Shutting down the ones still serving is not done here either; the caller
+// returns once the context is canceled, and its cleanup stops them.
+//
+// A function that returns nil has finished without failing — a listener that
+// is not enabled returns at once — and cancels nothing.
+func (i *initializer) Go() context.Context {
 	defer func() {
 		i.gos = make([]func() error, 0)
 	}()
 
-	g, _ := errgroup.WithContext(context.Background())
+	g, failed := errgroup.WithContext(context.Background())
 	for _, fn := range i.gos {
 		if fn == nil {
 			continue
 		}
 		g.Go(fn)
-
 	}
-	return g.Wait()
+	return failed
 }
 
 // executeWithTiming executes a function and logs its execution time
