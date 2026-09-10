@@ -132,6 +132,135 @@ func TestCounterHelpersRoundtrip(t *testing.T) {
 	}
 }
 
+// TestIncrFixedWindowBoundsTheCountToItsFirstWindow pins what a counter that
+// must reset on schedule depends on: the count starts at one with its window
+// set, later increments neither reset the count nor move the window, and a
+// count found without a ttl is given one instead of counting forever.
+func TestIncrFixedWindowBoundsTheCountToItsFirstWindow(t *testing.T) {
+	ctx := t.Context()
+
+	t.Run("first_increment_opens_the_window", func(t *testing.T) {
+		key := "redis-test:fixed-window:first"
+		clearKey(t, key)
+
+		count, err := redis.IncrFixedWindow(ctx, key, time.Hour)
+		if err != nil {
+			t.Fatalf("incr: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("want 1 from the first increment, got %d", count)
+		}
+		ttl, err := redis.TTL(ctx, key)
+		if err != nil {
+			t.Fatalf("ttl: %v", err)
+		}
+		if ttl <= 0 || ttl > time.Hour {
+			t.Fatalf("want a ttl within the window, got %v", ttl)
+		}
+	})
+
+	t.Run("later_increments_keep_the_first_window", func(t *testing.T) {
+		key := "redis-test:fixed-window:later"
+		clearKey(t, key)
+
+		if _, err := redis.IncrFixedWindow(ctx, key, time.Hour); err != nil {
+			t.Fatalf("first incr: %v", err)
+		}
+		// A day-long window on the second increment would push the ttl past
+		// the hour if the window were set again.
+		count, err := redis.IncrFixedWindow(ctx, key, 24*time.Hour)
+		if err != nil {
+			t.Fatalf("second incr: %v", err)
+		}
+		if count != 2 {
+			t.Fatalf("want 2 from the second increment, got %d", count)
+		}
+		ttl, err := redis.TTL(ctx, key)
+		if err != nil {
+			t.Fatalf("ttl: %v", err)
+		}
+		if ttl <= 0 || ttl > time.Hour {
+			t.Fatalf("want the first window kept, got ttl %v", ttl)
+		}
+	})
+
+	t.Run("a_count_without_ttl_is_given_the_window", func(t *testing.T) {
+		key := "redis-test:fixed-window:no-ttl"
+		clearKey(t, key)
+
+		// The shape a two-command increment leaves when its process stops
+		// before setting the ttl.
+		if _, err := redis.Incr(ctx, key); err != nil {
+			t.Fatalf("incr without ttl: %v", err)
+		}
+		if ttl, err := redis.TTL(ctx, key); err != nil || ttl != redis.TTLNoExpiry {
+			t.Fatalf("precondition: want a count without ttl, got %v (%v)", ttl, err)
+		}
+
+		count, err := redis.IncrFixedWindow(ctx, key, time.Minute)
+		if err != nil {
+			t.Fatalf("incr: %v", err)
+		}
+		if count != 2 {
+			t.Fatalf("want 2, got %d", count)
+		}
+		ttl, err := redis.TTL(ctx, key)
+		if err != nil {
+			t.Fatalf("ttl: %v", err)
+		}
+		if ttl <= 0 || ttl > time.Minute {
+			t.Fatalf("want the window set on the count, got ttl %v", ttl)
+		}
+	})
+
+	t.Run("rejects_a_window_redis_cannot_keep_exactly", func(t *testing.T) {
+		key := "redis-test:fixed-window:invalid"
+		clearKey(t, key)
+
+		for _, window := range []time.Duration{0, -time.Second, 500 * time.Microsecond, 1500 * time.Microsecond} {
+			if _, err := redis.IncrFixedWindow(ctx, key, window); err == nil {
+				t.Fatalf("want an error for window %v", window)
+			}
+		}
+		if ttl, err := redis.TTL(ctx, key); err != nil || ttl != redis.TTLKeyNotExists {
+			t.Fatalf("a rejected window must leave the key untouched, got ttl %v (%v)", ttl, err)
+		}
+	})
+
+	// A key holding another type makes the server refuse the increment; that
+	// refusal must reach the caller carrying the stack of its first-hand exit.
+	t.Run("reports_backend_errors_with_a_stack", func(t *testing.T) {
+		key := "redis-test:fixed-window:wrong-type"
+		clearKey(t, key)
+
+		if err := redis.ZAdd(ctx, key, 1, "member"); err != nil {
+			t.Fatalf("zadd: %v", err)
+		}
+		_, err := redis.IncrFixedWindow(ctx, key, time.Minute)
+		if err == nil {
+			t.Fatal("want the backend error for a key holding a sorted set")
+		}
+		if errors.GetReportableStackTrace(err) == nil {
+			t.Fatalf("want a run-time stack on the backend error, got none: %v", err)
+		}
+	})
+
+	t.Run("reports_redis_not_enabled", func(t *testing.T) {
+		if err := redis.Close(); err != nil {
+			t.Fatalf("close: %v", err)
+		}
+		t.Cleanup(func() {
+			if err := redis.Init(); err != nil {
+				t.Fatalf("reconnect: %v", err)
+			}
+		})
+
+		if _, err := redis.IncrFixedWindow(ctx, "redis-test:fixed-window:closed", time.Minute); !errors.Is(err, redis.ErrRedisIsDisabled) {
+			t.Fatalf("want ErrRedisIsDisabled, got %v", err)
+		}
+	})
+}
+
 // TestReadHelpersReportBackendErrors asserts that a failure the server reports
 // reaches the caller. Reading a sorted set as a string is the reproducible
 // case: the server answers WRONGTYPE, which is neither a missing key nor a

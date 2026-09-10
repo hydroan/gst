@@ -85,6 +85,45 @@ func Incr(ctx context.Context, key string) (int64, error) {
 	return count, errors.WithStack(err)
 }
 
+// IncrFixedWindow increments the integer at key by one and returns the new
+// value, bounding the count to a window that opens with its first increment.
+//
+// The window is set only while the key has no ttl — on the increment that
+// creates the key, or on one that finds a count left without a ttl — and
+// later increments never extend it, so the count always resets a fixed time
+// after it began. Extending the window on every increment would let anyone who
+// keeps incrementing hold the count up indefinitely, and a count without a ttl
+// would never reset at all.
+//
+// The increment and the ttl travel as one MULTI/EXEC transaction on a single
+// key. No process can stop between the two and leave a count that never
+// expires, and because the transaction names one key it stays on one slot in
+// cluster mode; widening it to more keys would break that.
+//
+// window must be a positive whole number of milliseconds, the precision Redis
+// keeps ttls in; any other value is rejected rather than rounded.
+func IncrFixedWindow(ctx context.Context, key string, window time.Duration) (int64, error) {
+	if window < time.Millisecond || window%time.Millisecond != 0 {
+		return 0, errors.Newf("fixed window must be a positive whole number of milliseconds, got %s", window)
+	}
+	client, err := Client()
+	if err != nil {
+		return 0, err
+	}
+	namespaced := Key(key)
+	var count *goredis.IntCmd
+	if _, err = client.TxPipelined(ctx, func(pipe goredis.Pipeliner) error {
+		count = pipe.Incr(ctx, namespaced)
+		pipe.Do(ctx, "pexpire", namespaced, window.Milliseconds(), "nx")
+		return nil
+	}); err != nil {
+		// First-hand exit of a stack-less go-redis error; see the error-stack
+		// contract in the database package doc.
+		return 0, errors.WithStack(err)
+	}
+	return count.Val(), nil
+}
+
 // GetInt get cache from redis and decode into integer.
 func GetInt(ctx context.Context, key string) (int64, error) {
 	client, err := Client()
