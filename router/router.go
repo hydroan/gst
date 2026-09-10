@@ -100,24 +100,73 @@ func Init() error {
 	// refusal, instead of gin's plain-text default — which carries no code and
 	// no trace id, so a client parsing the documented shape cannot tell it from
 	// a malformed response.
-	//
-	// A method this server has no handler for on a path it does serve lands
-	// here too, and is answered as not found rather than method not allowed.
-	// Nothing that runs before this point has authenticated anyone, so telling
-	// the two apart would let any caller enumerate the paths this server
-	// registers, one request at a time.
 	root.NoRoute(func(c *gin.Context) {
 		response.Abort(c, http.StatusNotFound, "not found")
 	})
 
+	// A path this server does serve, asked for with a method it does not, is
+	// answered as method not allowed rather than folded into not found. gin
+	// fills in the Allow header naming the methods that path accepts, which is
+	// what turns the caller's mistake into something it can read: a PUT sent to
+	// a route that only takes POST says exactly that, instead of looking like a
+	// mistyped path and sending someone to re-check the route table.
+	//
+	// Separating the two discloses nothing. /openapi.json is served on this
+	// same port without credentials and lists every route registered here, so
+	// the path a method-not-allowed confirms is already published; withholding
+	// the distinction would cost the caller its diagnosis and keep no secret.
+	//
+	// The extra lookup gin does to find those methods runs only on requests
+	// that matched nothing, never on a request that reached a handler.
+	root.HandleMethodNotAllowed = true
+	root.NoMethod(func(c *gin.Context) {
+		response.Abort(c, http.StatusMethodNotAllowed, "method not allowed")
+	})
+
+	// The operational endpoints, in one class: they are not business API, they
+	// carry no authentication, and what protects them is the network rather
+	// than this process. This is deliberate — reviewers reaching for the
+	// missing auth check should read the rest of this comment first.
+	//
+	// Everything registered under the API prefix below answers only an
+	// authenticated caller. These do not, because their readers hold no account
+	// here: an orchestrator deciding whether to route traffic to this instance,
+	// a metrics scraper, and people integrating against this service. An
+	// authentication this server enforced would be one every such reader has to
+	// be handed credentials for, and a credential the framework ships a default
+	// for is worse than none at all — it protects nothing while reading, to
+	// anyone reviewing this file, as though it did.
+	//
+	// The boundary is the deployment's. Under Kubernetes it falls out of the
+	// topology rather than out of configuration: a scraper reaches the pod's
+	// port directly, while the Ingress routes only the paths it is given, and
+	// these are not among them — route just the API prefix and this class is
+	// unreachable from outside the cluster without anyone having to remember a
+	// rule. A deployment that instead publishes this whole port at a public
+	// address publishes everything below with it.
+	//
+	// So that the decision can be made knowingly, what each one discloses:
+	//
+	//   /-/healthz, /-/readyz  Whether this process is alive, and whether it is
+	//                          draining. Nothing else; the readiness body is
+	//                          fixed text precisely because this is unguarded.
+	//   /metrics               The routes that have actually been served, as gin
+	//                          route patterns, with their request counts and
+	//                          latencies by status; the database table names
+	//                          behind the cache counters; process memory, CPU,
+	//                          uptime and build info.
+	//   /openapi.json          Every route this server registers, with the
+	//                          request and response models of each.
+	//   /docs, /redoc,         Renderings of that same document, and nothing
+	//   /scalar, /stoplight    beyond it.
 	root.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	root.GET("/-/healthz", controller.Probe.Healthz)
 	root.GET("/-/readyz", controller.Probe.Readyz)
-	root.GET("/openapi.json", middleware.BaseAuth(), gin.WrapH(openapigen.DocumentHandler()))
-	root.GET("/docs/*any", middleware.BaseAuth(), ginSwagger.WrapHandler(swaggerFiles.Handler, ginSwagger.URL("/openapi.json")))
-	root.GET("/redoc", middleware.BaseAuth(), controller.Redoc)
-	root.GET("/scalar", middleware.BaseAuth(), controller.Scalar)
-	root.GET("/stoplight", middleware.BaseAuth(), controller.Stoplight)
+	root.GET("/openapi.json", gin.WrapH(openapigen.DocumentHandler()))
+	root.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, ginSwagger.URL("/openapi.json")))
+	root.GET("/redoc", controller.Redoc)
+	root.GET("/scalar", controller.Scalar)
+	root.GET("/stoplight", controller.Stoplight)
 
 	base := root.Group(consts.APIPathPrefix)
 	auth = base.Group("")

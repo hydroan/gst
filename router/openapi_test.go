@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/router"
 	"github.com/hydroan/gst/types"
@@ -82,6 +81,32 @@ func TestOpenAPIDocumentIsStableAcrossRequests(t *testing.T) {
 	require.Equal(t, first.Info.Version, second.Info.Version)
 }
 
+// TestOpenAPIDocumentAndItsRenderingsAreServedWithoutCredentials pins the
+// contract router.Init documents where it mounts them: the document and the
+// pages that render it are answered to any caller, because the people reading
+// them — someone integrating against this service — hold no account here, and
+// what keeps them private is the deployment's network rather than this process.
+func TestOpenAPIDocumentAndItsRenderingsAreServedWithoutCredentials(t *testing.T) {
+	for _, endpoint := range []string{
+		"/openapi.json",
+		"/docs/index.html",
+		"/redoc",
+		"/scalar",
+		"/stoplight",
+	} {
+		t.Run(endpoint, func(t *testing.T) {
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+endpoint, nil)
+			require.NoError(t, err)
+
+			rsp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+			defer rsp.Body.Close()
+
+			require.Equal(t, http.StatusOK, rsp.StatusCode)
+		})
+	}
+}
+
 // openAPIDocument is the part of the served document these tests assert on.
 type openAPIDocument struct {
 	OpenAPI string `json:"openapi"`
@@ -103,7 +128,6 @@ func requireOpenAPIDocument(t *testing.T) openAPIDocument {
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/openapi.json", nil)
 	require.NoError(t, err)
-	req.SetBasicAuth(config.App.Auth.BaseAuthUsername, config.App.Auth.BaseAuthPassword)
 
 	rsp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)

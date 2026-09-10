@@ -7,8 +7,6 @@ import (
 )
 
 const (
-	AUTH_BASE_AUTH_USERNAME            = "AUTH_BASE_AUTH_USERNAME"
-	AUTH_BASE_AUTH_PASSWORD            = "AUTH_BASE_AUTH_PASSWORD"
 	AUTH_JWT_SECRET                    = "AUTH_JWT_SECRET"
 	AUTH_ACCESS_TOKEN_EXPIRE_DURATION  = "AUTH_ACCESS_TOKEN_EXPIRE_DURATION"
 	AUTH_REFRESH_TOKEN_EXPIRE_DURATION = "AUTH_REFRESH_TOKEN_EXPIRE_DURATION"
@@ -16,8 +14,6 @@ const (
 )
 
 type Auth struct {
-	BaseAuthUsername           string        `json:"base_auth_username" mapstructure:"base_auth_username" ini:"base_auth_username" yaml:"base_auth_username"`
-	BaseAuthPassword           string        `json:"base_auth_password" mapstructure:"base_auth_password" ini:"base_auth_password" yaml:"base_auth_password"`
 	JWTSecret                  string        `json:"jwt_secret" mapstructure:"jwt_secret" ini:"jwt_secret" yaml:"jwt_secret"`
 	AccessTokenExpireDuration  time.Duration `json:"access_token_expire_duration" mapstructure:"access_token_expire_duration" ini:"access_token_expire_duration" yaml:"access_token_expire_duration"`
 	RefreshTokenExpireDuration time.Duration `json:"refresh_token_expire_duration" mapstructure:"refresh_token_expire_duration" ini:"refresh_token_expire_duration" yaml:"refresh_token_expire_duration"`
@@ -26,8 +22,6 @@ type Auth struct {
 }
 
 func (*Auth) setDefault(v *viper.Viper) {
-	v.SetDefault("auth.base_auth_username", baseAuthUsername)
-	v.SetDefault("auth.base_auth_password", baseAuthPassword)
 	v.SetDefault("auth.access_token_expire_duration", "2h")
 	v.SetDefault("auth.refresh_token_expire_duration", "168h")
 

@@ -19,11 +19,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	baseAuthUsername  = "admin"
-	baseAuthPassword  = "admin"
-	defaultConfigName = "config"
-)
+const defaultConfigName = "config"
 
 var (
 	App = new(Config)
