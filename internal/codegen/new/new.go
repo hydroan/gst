@@ -172,10 +172,9 @@ name = %s
 description = A Go application built with gst framework
 
 [server]
-; The operational endpoints — /-/healthz, /-/readyz, /metrics, /openapi.json,
-; /docs, /redoc, /scalar and /stoplight — are served on this port without
-; authentication, by design: their readers hold no account here. Keep them off
-; your public address. Under Kubernetes, route only the /api prefix from the
+; The operational endpoints — /-/healthz, /-/readyz, /metrics, /openapi.json
+; and /docs — are served on this port without authentication, by design: their
+; readers hold no account here. Keep them off your public address. Under Kubernetes, route only the /api prefix from the
 ; Ingress and let the metrics scraper reach the pod port directly.
 mode = dev
 listen =
