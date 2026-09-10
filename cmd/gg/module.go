@@ -263,8 +263,9 @@ func printModuleCopyStaleServiceFiles(plan *ggmodule.CopyPlan) {
 }
 
 // printModuleCopyStaleMiddlewareFiles previews the module-owned middleware
-// files the copy execution will delete along with their register calls, under
-// the same consent contract as printModuleCopyStaleModelFiles.
+// files the copy execution will delete along with their register calls and,
+// once unused, the framework middleware import, under the same consent
+// contract as printModuleCopyStaleModelFiles.
 func printModuleCopyStaleMiddlewareFiles(plan *ggmodule.CopyPlan) {
 	staleMiddlewareFiles := plan.StaleMiddlewareTargets()
 	if len(staleMiddlewareFiles) == 0 {
@@ -276,7 +277,7 @@ func printModuleCopyStaleMiddlewareFiles(plan *ggmodule.CopyPlan) {
 	for _, file := range staleMiddlewareFiles {
 		clioutput.Item("", "%s", file)
 	}
-	clioutput.Item("", "These files will be deleted together with their register calls in middleware/middleware.go")
+	clioutput.Item("", "These files will be deleted together with their register calls in middleware/middleware.go, and the framework middleware import once nothing there uses it")
 }
 
 func printModuleCopyPostNotes(notes []string) {

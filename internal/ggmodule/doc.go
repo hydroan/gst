@@ -305,8 +305,9 @@
 //     middleware.go is project infrastructure and is never pruned. When a
 //     stale middleware file is deleted, the middleware.Register and
 //     middleware.RegisterAuth calls naming its top-level functions are
-//     removed from middleware/middleware.go in the same step, because they
-//     would break the build the moment the file is gone.
+//     removed from middleware/middleware.go in the same step, and so is the
+//     framework middleware import once no remaining code uses it, because
+//     either would break the build the moment the file is gone.
 //
 // The preview printed before the confirmation prompt lists exactly the files
 // the prune will delete, so answering yes consents to the deletions; --force

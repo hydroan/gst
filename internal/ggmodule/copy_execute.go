@@ -157,9 +157,11 @@ func (e *CopyExecution) pruneStaleFiles() error {
 }
 
 // pruneStaleMiddleware deletes stale middleware files and then drops their
-// register calls from the registration file: the calls reference handler
-// functions the deleted files declared, so leaving them behind would break
-// the project build the moment the files are gone.
+// register calls from the registration file, together with the framework
+// middleware import when those calls were its last use: the calls reference
+// handler functions the deleted files declared, and an import left without a
+// use is a compile error, so leaving either behind would break the project
+// build the moment the files are gone.
 func (e *CopyExecution) pruneStaleMiddleware(staleFiles []string) error {
 	if len(staleFiles) == 0 {
 		return nil

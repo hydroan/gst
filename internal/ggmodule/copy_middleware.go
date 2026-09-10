@@ -319,7 +319,9 @@ func topLevelFunctionNames(path string) ([]string, error) {
 // middleware.RegisterAuth calls whose zero-argument handler constructors are
 // named in handlerNames. It edits only init functions, mirrors the shape
 // matching of ensureMiddlewareRegisterCall, and leaves the registration file
-// untouched when nothing matches.
+// untouched when nothing matches. When the dropped calls were the framework
+// middleware import's last use, the import goes with them, so the file still
+// compiles.
 func (e *CopyExecution) removeMiddlewareRegistrations(handlerNames map[string]bool) error {
 	if len(handlerNames) == 0 {
 		return nil
@@ -361,6 +363,7 @@ func (e *CopyExecution) removeMiddlewareRegistrations(handlerNames map[string]bo
 	if !changed {
 		return nil
 	}
+	dropUnusedFrameworkMiddlewareImport(fset, file)
 	safePath, err := requirePathUnderRoot(targetPath, e.Plan.TargetMiddlewareDir)
 	if err != nil {
 		return err
@@ -437,6 +440,30 @@ func frameworkMiddlewareImportAlias(file *ast.File) string {
 		return "middleware"
 	}
 	return ""
+}
+
+// dropUnusedFrameworkMiddlewareImport removes the framework middleware import
+// once no remaining code in the registration file refers to it. An import
+// left without a use is a compile error, and the registration file exists
+// only to hold register calls, so their last removal must take the import
+// too. Blank and dot imports are kept: UsesImport cannot see their use and
+// reports them as used.
+func dropUnusedFrameworkMiddlewareImport(fset *token.FileSet, file *ast.File) {
+	path := frameworkModulePath + "/middleware"
+	if astutil.UsesImport(file, path) {
+		return
+	}
+	for _, spec := range file.Imports {
+		if importPath, err := strconv.Unquote(spec.Path.Value); err != nil || importPath != path {
+			continue
+		}
+		name := ""
+		if spec.Name != nil {
+			name = spec.Name.Name
+		}
+		astutil.DeleteNamedImport(fset, file, name, path)
+		return
+	}
 }
 
 func ensureMiddlewareRegisterCall(file *ast.File, importAlias string, middleware moduleCopyMiddleware) bool {

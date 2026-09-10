@@ -1,6 +1,8 @@
 package ggmodule
 
 import (
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"slices"
@@ -158,6 +160,38 @@ func CopyAuth() any {
 		t.Fatalf("BuildCopyPlan() error = %v", err)
 	}
 
+	staleTargets := plan.StaleMiddlewareTargets()
+	want := []string{filepath.Join("middleware", "old_auth.go")}
+	if !slices.Equal(staleTargets, want) {
+		t.Fatalf("StaleMiddlewareTargets() = %v, want %v", staleTargets, want)
+	}
+}
+
+// TestBuildCopyPlanCollectsStaleMiddlewareWhenManifestDeclaresNone covers a
+// module that stopped providing middleware altogether: with none declared
+// there is nothing to plan, yet the files an older copy left behind must still
+// be found so the execution can prune them.
+func TestBuildCopyPlanCollectsStaleMiddlewareWhenManifestDeclaresNone(t *testing.T) {
+	projectDir := newModuleCopyPlanProject(t)
+	writeCopyTestModuleSource(t, projectDir, nil)
+
+	projectMiddlewareDir := filepath.Join(projectDir, "middleware")
+	if err := os.MkdirAll(projectMiddlewareDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projectMiddlewareDir, "old_auth.go"), []byte(moduleCopyMiddlewareMarker("copytest")+"\n\npackage middleware\n\nfunc OldAuth() any {\n\treturn nil\n}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Chdir(projectDir)
+
+	plan, err := BuildCopyPlan("copytest", CopyOptions{Force: true})
+	if err != nil {
+		t.Fatalf("BuildCopyPlan() error = %v", err)
+	}
+	if len(plan.Middleware) != 0 {
+		t.Fatalf("plan.Middleware = %v, want none", plan.Middleware)
+	}
 	staleTargets := plan.StaleMiddlewareTargets()
 	want := []string{filepath.Join("middleware", "old_auth.go")}
 	if !slices.Equal(staleTargets, want) {
@@ -365,6 +399,74 @@ func init() {
 	}
 	if !strings.Contains(code, "middleware.RegisterAuth(ProjectOwn())") {
 		t.Fatalf("unrelated middleware registration must survive:\n%s", code)
+	}
+	if !strings.Contains(code, `"github.com/hydroan/gst/middleware"`) {
+		t.Fatalf("framework middleware import must survive while a register call still uses it:\n%s", code)
+	}
+}
+
+// TestCopyExecutionPrunesLastRegistrationAndItsImport covers a registration
+// file whose only register call belongs to the stale middleware. Dropping the
+// call without the framework middleware import would leave that import unused,
+// and the project would stop compiling the moment the copy finished.
+func TestCopyExecutionPrunesLastRegistrationAndItsImport(t *testing.T) {
+	cases := []struct {
+		name       string
+		importLine string
+		alias      string
+	}{
+		{name: "default_import", importLine: `import "github.com/hydroan/gst/middleware"`, alias: "middleware"},
+		{name: "aliased_import", importLine: `import gstmiddleware "github.com/hydroan/gst/middleware"`, alias: "gstmiddleware"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			projectDir := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(projectDir, "middleware"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			write := func(name string, content string) {
+				t.Helper()
+				if err := os.WriteFile(filepath.Join(projectDir, "middleware", name), []byte(content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			write("old_auth.go", moduleCopyMiddlewareMarker("copytest")+"\n\npackage middleware\n\nfunc OldAuth() any {\n\treturn nil\n}\n")
+			write("middleware.go", "package middleware\n\n"+tc.importLine+"\n\nfunc init() {\n\t"+tc.alias+".RegisterAuth(OldAuth())\n}\n")
+
+			t.Chdir(projectDir)
+
+			exec := &CopyExecution{
+				Plan: &CopyPlan{
+					Name:                 "copytest",
+					ModelDir:             "model",
+					ServiceDir:           "service",
+					TargetMiddlewareDir:  "middleware",
+					StaleMiddlewareFiles: []string{filepath.Join("middleware", "old_auth.go")},
+				},
+				RunGen: func() error { return nil },
+			}
+			if err := exec.Run(); err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+
+			registration, err := os.ReadFile(filepath.Join(projectDir, "middleware", "middleware.go"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			code := string(registration)
+			if strings.Contains(code, "OldAuth") {
+				t.Fatalf("pruned middleware registration call survived:\n%s", code)
+			}
+			file, err := parser.ParseFile(token.NewFileSet(), "middleware.go", registration, parser.ImportsOnly)
+			if err != nil {
+				t.Fatalf("registration file no longer parses: %v\n%s", err, code)
+			}
+			for _, spec := range file.Imports {
+				if spec.Path.Value == `"github.com/hydroan/gst/middleware"` {
+					t.Fatalf("framework middleware import survived its last use:\n%s", code)
+				}
+			}
+		})
 	}
 }
 
