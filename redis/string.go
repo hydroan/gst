@@ -54,6 +54,22 @@ func SetNX(ctx context.Context, key, value string, expiration time.Duration) (bo
 	return ok, errors.WithStack(err)
 }
 
+// SetXX sets key to value with expiration only when the key already exists,
+// and reports whether it did.
+//
+// It is the write for a key that must not come back once removed. Checking for
+// the key and then setting it are two commands a delete can fall between, and
+// the set would then recreate what was just removed; here the check and the
+// write are one Redis command.
+func SetXX(ctx context.Context, key, value string, expiration time.Duration) (bool, error) {
+	client, err := Client()
+	if err != nil {
+		return false, err
+	}
+	ok, err := client.SetXX(ctx, Key(key), value, expiration).Result()
+	return ok, errors.WithStack(err)
+}
+
 // Incr increments the integer at key by one and returns the new value,
 // creating the key at zero first when it does not exist.
 //

@@ -36,6 +36,55 @@ func TestSetNXIsExclusive(t *testing.T) {
 	}
 }
 
+// TestSetXXWritesOnlyAnExistingKey pins what a write that must not recreate a
+// removed key depends on: against an absent key it writes nothing and says so,
+// and against a present key it overwrites the value and applies the expiration
+// it was given.
+func TestSetXXWritesOnlyAnExistingKey(t *testing.T) {
+	ctx := t.Context()
+	// An earlier run in this process may have left the key behind, and the
+	// first setxx below must meet an absent key.
+	clearKey(t, "redis-test:setxx")
+
+	written, err := redis.SetXX(ctx, "redis-test:setxx", "first", time.Minute)
+	if err != nil {
+		t.Fatalf("setxx on an absent key: %v", err)
+	}
+	if written {
+		t.Fatal("want setxx to write nothing when the key does not exist")
+	}
+	if _, err = redis.Get(ctx, "redis-test:setxx"); !errors.Is(err, redis.ErrKeyNotExists) {
+		t.Fatalf("want the key to stay absent, got %v", err)
+	}
+
+	if err = redis.Set(ctx, "redis-test:setxx", "existing", time.Hour); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	written, err = redis.SetXX(ctx, "redis-test:setxx", "replaced", time.Minute)
+	if err != nil {
+		t.Fatalf("setxx on a present key: %v", err)
+	}
+	if !written {
+		t.Fatal("want setxx to overwrite a present key")
+	}
+	got, err := redis.Get(ctx, "redis-test:setxx")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if string(got) != "replaced" {
+		t.Fatalf("want %q, got %q", "replaced", got)
+	}
+	// The key was set to live an hour; a remaining lifetime within the minute
+	// passed to setxx shows the new expiration replaced the old one.
+	ttl, err := redis.TTL(ctx, "redis-test:setxx")
+	if err != nil {
+		t.Fatalf("ttl: %v", err)
+	}
+	if ttl <= 0 || ttl > time.Minute {
+		t.Fatalf("want the expiration passed to setxx, got ttl %v", ttl)
+	}
+}
+
 func TestStringHelpersRoundtrip(t *testing.T) {
 	ctx := t.Context()
 
