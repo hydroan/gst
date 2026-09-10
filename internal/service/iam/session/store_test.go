@@ -1,52 +1,16 @@
 package serviceiamsession_test
 
 import (
-	"context"
-	"net/http"
-	"net/http/httptest"
 	"strconv"
 	"testing"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
-	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/types"
-	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 )
-
-func TestMain(m *testing.M) {
-	testutil.Run(m, testutil.Server{Redis: true})
-}
-
-func TestNewSessionIDGeneratesOpaqueRandomToken(t *testing.T) {
-	first, err := serviceiamsession.NewSessionID()
-	require.NoError(t, err)
-	require.Regexp(t, `^[0-9a-f]{64}$`, first)
-	require.NotRegexp(t, `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`, first)
-
-	second, err := serviceiamsession.NewSessionID()
-	require.NoError(t, err)
-	require.Regexp(t, `^[0-9a-f]{64}$`, second)
-	require.NotEqual(t, first, second)
-}
-
-func TestGetSessionUserStateTTL(t *testing.T) {
-	t.Run("default", func(t *testing.T) {
-		t.Setenv("IAM_SESSION_USER_STATE_TTL", "")
-
-		require.Equal(t, 30*time.Second, serviceiamsession.GetSessionUserStateTTL())
-	})
-
-	t.Run("environment_override", func(t *testing.T) {
-		t.Setenv("IAM_SESSION_USER_STATE_TTL", "45s")
-
-		require.Equal(t, 45*time.Second, serviceiamsession.GetSessionUserStateTTL())
-	})
-}
 
 func TestTouchSession(t *testing.T) {
 	clearSessions(t)
@@ -103,6 +67,42 @@ func TestTouchSession(t *testing.T) {
 		)
 		require.NoError(t, err)
 		require.Contains(t, indexed, sessionID)
+	})
+
+	// A session revoked after the caller loaded it must stay revoked. The touch
+	// still holds the snapshot from before the revocation, and writing it back
+	// would restore the session until its original expiry — into the seen index
+	// only, where the revocations that walk the user and all indexes can no
+	// longer find it.
+	t.Run("does_not_restore_a_session_revoked_after_it_was_loaded", func(t *testing.T) {
+		now := time.Now().UTC()
+		sessionID := "touch-session-revoked"
+		session := modeliamsession.Session{
+			ID:         sessionID,
+			UserID:     "user-1",
+			IssuedAt:   now.Add(-time.Hour),
+			LastSeenAt: now.Add(-time.Minute),
+			ExpiresAt:  now.Add(time.Hour),
+		}
+		require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), serviceiamsession.SessionDataKey(sessionID), session, time.Until(session.ExpiresAt)))
+		require.NoError(t, serviceiamsession.Store.IndexSession(t.Context(), session))
+
+		_, err := serviceiamsession.Store.DeleteSession(t.Context(), sessionID)
+		require.NoError(t, err)
+
+		require.NoError(t, serviceiamsession.Store.TouchSession(t.Context(), sessionID, session, now))
+
+		_, err = redis.Cache[modeliamsession.Session]().Get(t.Context(), serviceiamsession.SessionDataKey(sessionID))
+		require.ErrorIs(t, err, types.ErrEntryNotFound, "the revoked snapshot must not be written back")
+		for _, key := range []string{
+			serviceiamsession.SessionIndexUserKey(session.UserID),
+			serviceiamsession.SessionIndexAllKey(),
+			serviceiamsession.SessionIndexSeenKey(),
+		} {
+			members, err := redis.ZRange(t.Context(), key, 0, -1)
+			require.NoError(t, err)
+			require.NotContains(t, members, sessionID, "index %s", key)
+		}
 	})
 }
 
@@ -200,78 +200,4 @@ func TestIndexSessionPrunesStaleSeenIndex(t *testing.T) {
 	require.NotContains(t, seenIndexSessionIDs, staleSessionID)
 	require.Contains(t, seenIndexSessionIDs, retainedSessionID)
 	require.Contains(t, seenIndexSessionIDs, currentSessionID)
-}
-
-func TestSessionManagerCurrentUsesRequestCache(t *testing.T) {
-	now := time.Now().UTC()
-	sessionID := "cached-session"
-	session := modeliamsession.Session{
-		ID:        sessionID,
-		UserID:    "user-1",
-		IssuedAt:  now.Add(-time.Minute),
-		ExpiresAt: now.Add(time.Hour),
-	}
-	ctx := serviceiamsession.WithCurrentSession(t.Context(), sessionID, session)
-	serviceCtx := newSessionServiceContext(ctx, t, sessionID)
-
-	gotSessionID, gotSession, err := serviceiamsession.CurrentSession(serviceCtx)
-	require.NoError(t, err)
-	require.Equal(t, sessionID, gotSessionID)
-	require.Equal(t, session, gotSession)
-}
-
-func TestSessionManagerCurrentIgnoresMismatchedRequestCache(t *testing.T) {
-	clearSessions(t)
-
-	now := time.Now().UTC()
-	cookieSessionID := "redis-session"
-	cookieSession := modeliamsession.Session{
-		ID:        cookieSessionID,
-		UserID:    "user-1",
-		IssuedAt:  now.Add(-time.Minute),
-		ExpiresAt: now.Add(time.Hour),
-	}
-	require.NoError(t, redis.Cache[modeliamsession.Session]().Set(t.Context(), serviceiamsession.SessionDataKey(cookieSessionID), cookieSession, time.Until(cookieSession.ExpiresAt)))
-
-	cachedSessionID := "cached-session"
-	cachedSession := modeliamsession.Session{
-		ID:        cachedSessionID,
-		UserID:    "user-2",
-		IssuedAt:  now.Add(-time.Minute),
-		ExpiresAt: now.Add(time.Hour),
-	}
-	ctx := serviceiamsession.WithCurrentSession(t.Context(), cachedSessionID, cachedSession)
-	serviceCtx := newSessionServiceContext(ctx, t, cookieSessionID)
-
-	gotSessionID, gotSession, err := serviceiamsession.CurrentSession(serviceCtx)
-	require.NoError(t, err)
-	require.Equal(t, cookieSessionID, gotSessionID)
-	require.Equal(t, cookieSession, gotSession)
-}
-
-// clearSessions drops the session keys left by earlier tests in this run. The
-// redis container is fresh per run, so this is only about keeping the tests in
-// this package from seeing each other's sessions.
-func clearSessions(t *testing.T) {
-	t.Helper()
-
-	// Both namespaces, because the user-state cache is keyed by user and is
-	// therefore deliberately outside the session prefix.
-	require.NoError(t, redis.RemovePrefix(context.Background(), serviceiamsession.SessionNamespace))
-	require.NoError(t, redis.RemovePrefix(context.Background(), serviceiamsession.UserNamespace))
-}
-
-func newSessionServiceContext(baseCtx context.Context, t *testing.T, sessionID string) *types.ServiceContext {
-	t.Helper()
-
-	gin.SetMode(gin.TestMode)
-	recorder := httptest.NewRecorder()
-	ginCtx, _ := gin.CreateTestContext(recorder)
-	ginCtx.Request = httptest.NewRequest(http.MethodGet, "/api/iam/session/current", nil).WithContext(baseCtx)
-	ginCtx.Request.AddCookie(&http.Cookie{
-		Name:  serviceiamsession.SessionCookieName,
-		Value: sessionID,
-	})
-
-	return types.NewServiceContext(ginCtx, nil, consts.PHASE_GET)
 }

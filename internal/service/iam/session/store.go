@@ -2,6 +2,7 @@ package serviceiamsession
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -344,7 +345,8 @@ func seenIndexCutoff(now time.Time) time.Time {
 
 // ---------- activity ----------
 
-// TouchSession refreshes LastSeenAt for a session at most once per touch interval.
+// TouchSession refreshes LastSeenAt for a session at most once per touch interval,
+// and only while the session is still stored.
 //
 // The interval is enforced against the snapshot the caller already holds, so a
 // request inside the interval costs nothing: the comparison happens before any
@@ -374,10 +376,25 @@ func (store) TouchSession(ctx context.Context, sessionID string, sessionData mod
 	}
 
 	sessionData.LastSeenAt = now
-	if err := redis.Cache[modeliamsession.Session]().Set(ctx, sessionDataKey(sessionID), sessionData, ttl); err != nil {
+	payload, err := json.Marshal(sessionData)
+	if err != nil {
+		return touchSessionError(errors.WithStack(err))
+	}
+	// Only a snapshot that is still stored is refreshed. The caller loaded this
+	// one before the write and the session may have been revoked since; a plain
+	// set would put it back until its original expiry, and back into the seen
+	// index alone, out of reach of the revocations that walk the user and all
+	// indexes. A snapshot already gone stays gone: this request was
+	// authenticated before the revocation, and the next one finds nothing to
+	// load. The value is the JSON redis.Cache reads the snapshot back from.
+	written, err := redis.SetXX(ctx, sessionDataKey(sessionID), string(payload), ttl)
+	if err != nil {
 		return touchSessionError(err)
 	}
-	if err := redis.ZAdd(ctx, sessionIndexSeenKey(), float64(now.UnixMilli()), sessionID); err != nil {
+	if !written {
+		return nil
+	}
+	if err = redis.ZAdd(ctx, sessionIndexSeenKey(), float64(now.UnixMilli()), sessionID); err != nil {
 		return touchSessionError(err)
 	}
 	_ = pruneIndex(ctx, sessionIndexSeenKey(), seenIndexCutoff(now))
