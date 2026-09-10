@@ -18,9 +18,11 @@ import (
 // client reading the documented envelope could not tell it from a malformed
 // response — and mistyping a path is the most common way to reach it.
 //
-// The two ways to match nothing are answered apart: a path no route serves is
-// not found, while a path that is served under another method is method not
-// allowed, carrying the Allow header that names those methods.
+// The ways to match nothing are answered apart: a path no route serves is not
+// found, while a path that is served under another method is method not
+// allowed, carrying the Allow header that names those methods. A near miss in
+// spelling, such as a trailing slash, is not redirected to the route it
+// resembles; it is not found, like any other path no route serves.
 func TestUnmatchedRequestsAnswerInTheEnvelope(t *testing.T) {
 	t.Run("a path no route serves", func(t *testing.T) {
 		cli, err := client.New(baseURL)
@@ -49,6 +51,31 @@ func TestUnmatchedRequestsAnswerInTheEnvelope(t *testing.T) {
 		require.Equal(t, http.MethodGet, rsp.Header.Get("Allow"),
 			"a method-not-allowed answer has to name the methods the path does serve")
 		requireRefusalEnvelope(t, body, "method not allowed")
+	})
+
+	// A trailing slash is not forgiven with a redirect. gin writes such a
+	// redirect from its router before any handler is chosen and never runs the
+	// middleware chain for it, so it would carry no trace id and no CORS
+	// headers. The trace id asserted here is the evidence this request went
+	// through the whole chain. The client does not follow redirects, so a
+	// redirect shows up as the wrong status instead of being followed to a 200.
+	t.Run("a served path with a trailing slash", func(t *testing.T) {
+		noRedirects := &http.Client{
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		}
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/-/healthz/", nil)
+		require.NoError(t, err)
+
+		rsp, err := noRedirects.Do(req)
+		require.NoError(t, err)
+		defer rsp.Body.Close()
+
+		body, err := io.ReadAll(rsp.Body)
+		require.NoError(t, err)
+
+		require.Equal(t, http.StatusNotFound, rsp.StatusCode,
+			"response body: %s; Location: %s", body, rsp.Header.Get("Location"))
+		requireRefusalEnvelope(t, body, "not found")
 	})
 }
 

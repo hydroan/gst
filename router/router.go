@@ -123,6 +123,35 @@ func Init() error {
 		response.Abort(c, http.StatusMethodNotAllowed, "method not allowed")
 	})
 
+	// A request is matched against its path exactly as sent. gin can loosen
+	// that three ways, and all three stay off — set here explicitly rather than
+	// left to gin's defaults, so the reason sits beside the setting and an
+	// upgrade to gin cannot quietly change what a request resolves to.
+	//
+	// RedirectTrailingSlash would answer "/items/" with a redirect to "/items".
+	// gin writes that redirect from its router, before any handler is chosen,
+	// and never runs the middleware chain for it: the redirect goes out with no
+	// access log line, no metrics, no trace id and no CORS headers. A
+	// cross-origin browser request therefore receives a redirect lacking
+	// Access-Control-Allow-Origin and the browser refuses it, so the convenience
+	// fails exactly the clients most likely to send such a path. With it off the
+	// request is not found, answered through the whole chain with everything a
+	// refusal carries.
+	//
+	// RedirectFixedPath would correct letter case and stray path segments and
+	// redirect to the result. It takes the same redirect branch with the same
+	// blind spot, and it would match paths case-insensitively where URLs are
+	// defined to be case-sensitive.
+	//
+	// RemoveExtraSlash differs in kind: it cleans the path before matching and
+	// then serves the request, so "//items//1" would be answered as "/items/1"
+	// rather than redirected there. That serves one route under several
+	// spellings, and a rule a proxy or gateway applies to the path as written
+	// does not match the other spellings the application would still answer.
+	root.RedirectTrailingSlash = false
+	root.RedirectFixedPath = false
+	root.RemoveExtraSlash = false
+
 	// The operational endpoints, in one class: they are not business API, they
 	// carry no authentication, and what protects them is the network rather
 	// than this process. This is deliberate — reviewers reaching for the
@@ -157,16 +186,18 @@ func Init() error {
 	//                          uptime and build info.
 	//   /openapi.json          Every route this server registers, with the
 	//                          request and response models of each.
-	//   /docs, /redoc,         Renderings of that same document, and nothing
-	//   /scalar, /stoplight    beyond it.
+	//   /docs                  Swagger UI rendering that same document, and
+	//                          nothing beyond it.
 	root.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	root.GET("/-/healthz", controller.Probe.Healthz)
 	root.GET("/-/readyz", controller.Probe.Readyz)
 	root.GET("/openapi.json", gin.WrapH(openapigen.DocumentHandler()))
+	// The document has one rendering, and it is this one because its assets are
+	// compiled into the binary. It therefore renders in a cluster with no egress,
+	// and it runs no script fetched at page load from a third party — a page
+	// served without credentials is the last place to run code a CDN can change
+	// underneath it.
 	root.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, ginSwagger.URL("/openapi.json")))
-	root.GET("/redoc", controller.Redoc)
-	root.GET("/scalar", controller.Scalar)
-	root.GET("/stoplight", controller.Stoplight)
 
 	base := root.Group(consts.APIPathPrefix)
 	auth = base.Group("")

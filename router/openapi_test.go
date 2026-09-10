@@ -81,18 +81,15 @@ func TestOpenAPIDocumentIsStableAcrossRequests(t *testing.T) {
 	require.Equal(t, first.Info.Version, second.Info.Version)
 }
 
-// TestOpenAPIDocumentAndItsRenderingsAreServedWithoutCredentials pins the
-// contract router.Init documents where it mounts them: the document and the
-// pages that render it are answered to any caller, because the people reading
+// TestOpenAPIDocumentAndSwaggerUIAreServedWithoutCredentials pins the contract
+// router.Init documents where it mounts them: the document and the page that
+// renders it are answered to any caller, because the people reading
 // them — someone integrating against this service — hold no account here, and
 // what keeps them private is the deployment's network rather than this process.
-func TestOpenAPIDocumentAndItsRenderingsAreServedWithoutCredentials(t *testing.T) {
+func TestOpenAPIDocumentAndSwaggerUIAreServedWithoutCredentials(t *testing.T) {
 	for _, endpoint := range []string{
 		"/openapi.json",
 		"/docs/index.html",
-		"/redoc",
-		"/scalar",
-		"/stoplight",
 	} {
 		t.Run(endpoint, func(t *testing.T) {
 			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+endpoint, nil)
