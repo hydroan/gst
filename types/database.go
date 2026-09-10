@@ -34,6 +34,10 @@ type Database[M Model] interface {
 	// database.ErrIDRequired; records without a live row fail with
 	// database.ErrRecordNotFound. created_at/created_by/deleted_at are never
 	// written; updated_at is always refreshed by the framework.
+	// Concurrent updates of one record resolve as last writer wins: each
+	// writes the whole value it holds, including columns another writer
+	// changed in between. A model declares model.Version to have the stale
+	// write refused instead.
 	Update(objs ...M) error
 	// Upsert inserts records or, on any unique-key collision, overwrites the
 	// conflicting row (INSERT ... ON DUPLICATE KEY UPDATE). It runs no model

@@ -34,6 +34,13 @@ func Patch[M types.Model, REQ types.Request, RSP types.Response](c *gin.Context)
 // that record, sets the updater field, runs patch hooks, writes the patched
 // model through the configured database handler, and records an operation log.
 //
+// The write is the whole record the handler loaded, not only the fields the
+// body carried. Concurrent patches of one record therefore resolve as last
+// writer wins: a later patch puts back the fields an earlier one changed, even
+// when the two touched different fields, and both answer success. That is the
+// default contract of every framework update, not a defect; a model that needs
+// the stale write refused instead declares model.Version.
+//
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's Patch method.
 func PatchFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {

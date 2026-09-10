@@ -34,6 +34,12 @@ func PatchMany[M types.Model, REQ types.Request, RSP types.Response](c *gin.Cont
 // the patched models through the configured database handler, records an operation
 // log, and returns the request data with a summary when a body was provided.
 //
+// Each write is the whole record the handler loaded, not only the fields its
+// item carried, so concurrent patches of one record resolve as last writer
+// wins exactly as in PatchFactory: a later patch puts back the fields an
+// earlier one changed, even different ones, and both answer success. A model
+// that needs the stale write refused instead declares model.Version.
+//
 // When REQ or RSP differs from M, the handler binds the JSON body into REQ and
 // delegates the operation to the phase service's PatchMany method.
 func PatchManyFactory[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {

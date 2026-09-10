@@ -85,6 +85,13 @@ import (
 // instead of silently overwriting the first. The same holds for a delete
 // decided over a stale screen.
 //
+// Without the field, that silent overwrite is the contract rather than a
+// defect: Update writes the whole value it holds and the framework patch
+// controllers write the whole record they loaded, so concurrent writers of one
+// row resolve as last writer wins, even over columns the later request never
+// mentioned. The lock is opt-in because not every model needs such a conflict
+// refused.
+//
 // It follows that a version is always carried FROM a read — a Get, a List, a
 // value the client sent back with the form it loaded. Making one up, or
 // reading the current version right before the write just to satisfy the
