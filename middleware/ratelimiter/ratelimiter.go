@@ -16,10 +16,11 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// The default bucket lets a key burst 50 requests and then keep up ten a
+// second, the same as WithBucket(50, 100*time.Millisecond).
 const (
-	defaultRate  = rate.Limit(10) // default: allow 10 requests per second
-	defaultBurst = 50             // default token bucket capacity
-	defaultTTL   = 24 * time.Hour // default expiration of an idle limiter
+	defaultCapacity    = 50
+	defaultRefillEvery = 100 * time.Millisecond
 )
 
 // limiterCache holds one limiter per limiter instance and key.
@@ -49,102 +50,77 @@ var limiterCache = sync.OnceValue(func() types.Cache[*rate.Limiter] {
 // which is as far as the cache reaches.
 var limiterInstances atomic.Uint64
 
-// Config holds the configuration for the RateLimiter middleware.
-type Config struct {
-	// Rate is the number of requests allowed per second.
-	// Defaults to 10 req/s if not set or non-positive.
-	Rate rate.Limit
+// config describes the limiter one RateLimiter call builds.
+type config struct {
+	capacity    int
+	refillEvery time.Duration
+	keyFunc     func(*gin.Context) string
+	skipFunc    func(*gin.Context) bool
+}
 
-	// Burst is the maximum number of requests allowed to burst above the rate.
-	// Defaults to 50 if not set or non-positive.
-	Burst int
-
-	// TTL is the duration after which an idle rate limiter is evicted from the cache.
-	// Defaults to 24h if not set or non-positive.
-	TTL time.Duration
-
-	// KeyFunc extracts a unique key from the request to identify the rate limit subject.
-	// Defaults to client IP if not set.
-	//
-	// Common examples:
-	//   c.ClientIP()                              per client IP (default)
-	//   c.GetString("user_id")                   per authenticated user
-	//   c.FullPath()                              per route
-	//   c.GetHeader("X-API-Key")                 per API key
-	//   c.FullPath() + ":" + c.GetString("user_id")  per user per route
-	KeyFunc func(*gin.Context) string
-
-	// OnLimitReached is called when the rate limit is exceeded.
-	// If set, it is responsible for writing the response; the default 429 response is skipped.
-	// Defaults to a 429 JSON response if not set.
-	OnLimitReached gin.HandlerFunc
-
-	// SkipFunc determines whether rate limiting should be skipped for a request.
-	// Returns true to bypass rate limiting (e.g. health checks, internal IPs).
-	SkipFunc func(*gin.Context) bool
+// newConfig applies opts over the default limiter: the default bucket, keyed
+// by client IP, skipping nothing. A nil option is ignored.
+func newConfig(opts []Option) *config {
+	conf := &config{
+		capacity:    defaultCapacity,
+		refillEvery: defaultRefillEvery,
+		keyFunc:     requestctx.GinClientIP,
+	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(conf)
+		}
+	}
+	return conf
 }
 
 // RateLimiter returns a gin middleware that limits request rates per configurable key.
-// Use functional options (WithRate, WithBurst, WithKeyFunc, etc.) to customize behavior.
+// Use functional options (WithBucket, WithKeyFunc, WithSkipFunc) to customize behavior;
+// a request over the limit is refused with 429.
 // Every call builds a limiter with buckets of its own, so two limiters never
 // share a bucket even when their key functions return the same key.
 //
 // Example:
 //
 //	r.Use(ratelimiter.RateLimiter(
-//	    ratelimiter.WithRate(rate.Every(100*time.Millisecond)),
-//	    ratelimiter.WithBurst(20),
+//	    ratelimiter.WithBucket(20, 100*time.Millisecond),
 //	    ratelimiter.WithKeyFunc(func(c *gin.Context) string { return c.ClientIP() }),
 //	    ratelimiter.WithSkipFunc(func(c *gin.Context) bool { return c.FullPath() == "/health" }),
 //	))
 func RateLimiter(opts ...Option) gin.HandlerFunc {
-	conf := new(Config)
-	for _, op := range opts {
-		if op == nil {
-			continue
-		}
-		op(conf)
-	}
-	if conf.Rate <= 0 {
-		conf.Rate = defaultRate
-	}
-	if conf.Burst <= 0 {
-		conf.Burst = defaultBurst
-	}
-	if conf.KeyFunc == nil {
-		conf.KeyFunc = requestctx.GinClientIP
-	}
-	if conf.TTL <= 0 {
-		conf.TTL = defaultTTL
-	}
+	conf := newConfig(opts)
+	limit := rate.Every(conf.refillEvery)
+	// A bucket left unused for capacity × refillEvery has refilled completely,
+	// so dropping it then and handing its key a fresh one later changes
+	// nothing: that is all the lifetime a bucket needs. The extra millisecond
+	// covers the cache keeping expiry to the millisecond, and WithBucket bounds
+	// the product, so it cannot overflow.
+	idleLifetime := time.Duration(conf.capacity)*conf.refillEvery + time.Millisecond
 	// Digits cannot contain the colon that ends them, so no key can make one
 	// limiter's prefix read as another's.
 	keyPrefix := strconv.FormatUint(limiterInstances.Add(1), 10) + ":"
 
 	return func(c *gin.Context) {
-		if conf.SkipFunc != nil && conf.SkipFunc(c) {
+		if conf.skipFunc != nil && conf.skipFunc(c) {
 			return
 		}
 
-		key := keyPrefix + conf.KeyFunc(c)
+		key := keyPrefix + conf.keyFunc(c)
 		limiter, err := limiterCache().Get(c.Request.Context(), key)
 		if errors.Is(err, types.ErrEntryNotFound) {
-			limiter = rate.NewLimiter(conf.Rate, conf.Burst)
-			// The backend only rejects a negative lifetime, and conf.TTL is
-			// forced positive above, so there is no failure to handle here.
-			_ = limiterCache().Set(c.Request.Context(), key, limiter, conf.TTL)
+			limiter = rate.NewLimiter(limit, conf.capacity)
 		} else if err != nil {
 			// The limiter is security state: a cache that cannot answer refuses
 			// the request rather than switching the limit off.
 			response.Abort(c, http.StatusInternalServerError, "rate limiter unavailable")
 			return
 		}
+		// Every request restarts the bucket's lifetime, the refused ones too: a
+		// lifetime counted from creation would hand a client hammering an empty
+		// bucket a full one each time it ran out. The backend only rejects a
+		// lifetime under a millisecond, and this one never is.
+		_ = limiterCache().Set(c.Request.Context(), key, limiter, idleLifetime)
 		if !limiter.Allow() {
-			if conf.OnLimitReached != nil {
-				conf.OnLimitReached(c)
-				c.Abort()
-				return
-			}
 			response.Abort(c, http.StatusTooManyRequests, "too many requests")
 			return
 		}
