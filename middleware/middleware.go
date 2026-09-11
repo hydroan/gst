@@ -225,14 +225,11 @@ func getFunctionName(fn gin.HandlerFunc) string {
 	return cleanFunctionName(funcName)
 }
 
-// cleanFunctionName removes common suffixes and returns a clean function name
+// cleanFunctionName strips the "-fm" suffix the runtime gives a method value.
+// It only ever receives a single name segment without dots, so closure
+// suffixes such as ".func1" cannot reach it.
 func cleanFunctionName(name string) string {
-	// Remove method value suffix
-	name = strings.TrimSuffix(name, "-fm")
-	// Remove other potential suffixes
-	name = strings.TrimSuffix(name, ".func1")
-	name = strings.TrimSuffix(name, ".func2")
-	return name
+	return strings.TrimSuffix(name, "-fm")
 }
 
 // isNumeric checks if a byte represents a numeric character
