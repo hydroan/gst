@@ -21,7 +21,9 @@ import (
 // password, so only an administrator can switch MFA off for such an account.
 // The reset hard-deletes every device — active or still staged — so no shared
 // secret or recovery-code hash survives, and the account logs in without a
-// second factor until it enrolls again.
+// second factor until it enrolls again. It also forgets the account's
+// verification attempt budgets, so a lockout earned while the factor was lost
+// does not follow the account into its new enrollment.
 type AdminTOTPResetService struct {
 	service.Base[*modelmfa.AdminTOTP, *model.Empty, *modelmfa.AdminTOTPResetRsp]
 }
@@ -62,6 +64,7 @@ func (a *AdminTOTPResetService) Delete(ctx *types.ServiceContext, req *model.Emp
 			zap.Error(err))
 		return nil, err
 	}
+	clearTOTPVerificationFailures(ctx, targetUserID, totpVerificationLogin, totpVerificationUnbind)
 
 	log.Infoz("totp enrollment reset by administrator",
 		zap.String("actor_user_id", ctx.UserID()),

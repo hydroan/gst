@@ -22,11 +22,14 @@ import (
 //
 // Accounts without active TOTP devices pass untouched. Enrolled accounts must
 // submit exactly one proof: a TOTP code, consumed against replay on success,
-// or a recovery code, removed transactionally. Per the authn contract the
-// verifier owns the client-facing error shape, and clients branch on status
-// plus message: the stable 401 authn.MsgSecondFactorRequired tells a login
-// UI to prompt for the code, 401 with other messages reports an invalid
-// proof, and 400 reports both proofs arriving at once.
+// or a recovery code, removed transactionally. Each proof first spends one
+// attempt from the user's login budget, and a verified proof resets it. Per
+// the authn contract the verifier owns the client-facing error shape, and
+// clients branch on status plus message: the stable 401
+// authn.MsgSecondFactorRequired tells a login UI to prompt for the code, 401
+// with other messages reports an invalid proof, 400 reports both proofs
+// arriving at once, and 429 reports a spent budget, which refuses even a
+// correct proof until its window ends.
 func LoginSecondFactorVerifier(ctx *types.ServiceContext, userID string, factor authn.LoginSecondFactor) error {
 	userID = strings.TrimSpace(userID)
 	if ctx == nil || userID == "" {
@@ -50,11 +53,21 @@ func LoginSecondFactorVerifier(ctx *types.ServiceContext, userID string, factor 
 		return service.NewError(http.StatusUnauthorized, authn.MsgSecondFactorRequired)
 	case totpCode != "" && backupCode != "":
 		return service.NewError(http.StatusBadRequest, "provide exactly one second factor")
-	case totpCode != "":
-		return verifyLoginTOTPCode(ctx, devices, totpCode)
-	default:
-		return verifyLoginBackupCode(ctx, userID, backupCode)
 	}
+
+	// Only a submitted proof spends the budget; the rejections above guess
+	// nothing. The attempt is paid before the proof is checked, so a counter
+	// that cannot be reached refuses the login without touching a recovery code.
+	if err = reserveTOTPVerificationAttempt(ctx, totpVerificationLogin, userID); err != nil {
+		if errors.Is(err, errTOTPVerificationLocked) {
+			return service.NewError(http.StatusTooManyRequests, "too many failed verification attempts")
+		}
+		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
+	}
+	if totpCode != "" {
+		return verifyLoginTOTPCode(ctx, devices, totpCode)
+	}
+	return verifyLoginBackupCode(ctx, userID, backupCode)
 }
 
 // listActiveLoginTOTPDevices loads the active devices that make login MFA mandatory.
@@ -70,7 +83,7 @@ func listActiveLoginTOTPDevices(ctx *types.ServiceContext, userID string) ([]*mo
 }
 
 // verifyLoginTOTPCode validates a login TOTP code, consumes it against replay,
-// and records the matched device usage.
+// records the matched device usage, and resets the login attempt budget.
 func verifyLoginTOTPCode(ctx *types.ServiceContext, devices []*modelmfa.TOTPDevice, code string) error {
 	device := findLoginTOTPDeviceByCode(devices, code)
 	if device == nil {
@@ -87,25 +100,27 @@ func verifyLoginTOTPCode(ctx *types.ServiceContext, devices []*modelmfa.TOTPDevi
 
 	now := time.Now().UTC()
 	device.LastUsedAt = &now
-	// Narrowed for the same reason as verify: this lock-free write must not
-	// resurrect concurrently consumed recovery-code hashes.
+	// Narrowed to the usage column: this lock-free write must not resurrect
+	// recovery-code hashes that a concurrent consumption already removed.
 	if err := database.Database[*modelmfa.TOTPDevice](ctx).
 		WithSelect(colTOTPDeviceLastUsedAt).
 		Update(device); err != nil {
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
 	}
+	clearTOTPVerificationFailures(ctx, device.UserID, totpVerificationLogin)
 	return nil
 }
 
-// verifyLoginBackupCode consumes one login recovery code and maps invalid input
-// to the login error contract.
+// verifyLoginBackupCode consumes one login recovery code, maps invalid input
+// to the login error contract, and resets the login attempt budget.
 func verifyLoginBackupCode(ctx *types.ServiceContext, userID, code string) error {
-	if err := ConsumeTOTPBackupCode(ctx, userID, code); err != nil {
+	if err := consumeTOTPBackupCode(ctx, userID, code); err != nil {
 		if errors.Is(err, errTOTPBackupCodeInvalid) {
 			return service.NewError(http.StatusUnauthorized, "invalid backup code")
 		}
 		return service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
 	}
+	clearTOTPVerificationFailures(ctx, userID, totpVerificationLogin)
 	return nil
 }
 

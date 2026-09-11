@@ -25,10 +25,14 @@ import (
 // deletion share the same transaction so the code is consumed only when the
 // unbind operation succeeds.
 //
+// Each well-formed request spends one attempt from the user's unbind budget
+// before its proof is checked, and a verified proof resets the budget.
+//
 // Failures answer through service errors like the rest of the module: 400 for
 // malformed requests, 401 for failed fresh authentication, 404 for a missing
-// target device. Credentials are always judged before the target device is
-// looked up, so an unauthenticated caller cannot probe device existence.
+// target device, 429 once the unbind budget is spent. Credentials are always
+// judged before the target device is looked up, so an unauthenticated caller
+// cannot probe device existence.
 type TOTPUnbindService struct {
 	service.Base[*modelmfa.TOTPUnbind, *modelmfa.TOTPUnbindReq, *modelmfa.TOTPUnbindRsp]
 }
@@ -52,6 +56,20 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 	}
 
 	userID := ctx.UserID()
+	// The attempt is paid before the transaction checks the proof, so a spent
+	// budget or a counter that cannot be reached refuses the request without
+	// consuming a recovery code.
+	if reserveErr := reserveTOTPVerificationAttempt(ctx, totpVerificationUnbind, userID); reserveErr != nil {
+		if errors.Is(reserveErr, errTOTPVerificationLocked) {
+			log.Warnz("too many failed verification attempts for unbind",
+				zap.String("user_id", userID),
+				zap.String("device_id", req.DeviceID))
+			return nil, service.NewError(http.StatusTooManyRequests, "too many failed verification attempts")
+		}
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify fresh authentication", reserveErr)
+	}
+
+	proofAccepted := false
 	err = database.Transaction(ctx, func(ctx context.Context) error {
 		devices := make([]*modelmfa.TOTPDevice, 0)
 		if listErr := database.Database[*modelmfa.TOTPDevice](ctx).WithLock(consts.LockUpdate).WithQuery(&modelmfa.TOTPDevice{
@@ -79,6 +97,7 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 			}
 			return service.NewErrorWithCause(http.StatusInternalServerError, "failed to verify fresh authentication", verifyErr)
 		}
+		proofAccepted = true
 
 		device := findTOTPUnbindDevice(devices, req.DeviceID)
 		if device == nil {
@@ -97,6 +116,12 @@ func (t *TOTPUnbindService) Create(ctx *types.ServiceContext, req *modelmfa.TOTP
 		}
 		return nil
 	})
+	// A verified proof resets the budget even when the unbind fails after it:
+	// the caller proved possession of the factor, and guessing it is all the
+	// budget guards against.
+	if proofAccepted {
+		clearTOTPVerificationFailures(ctx, userID, totpVerificationUnbind)
+	}
 	if err != nil {
 		log.Errorz("failed to unbind device",
 			zap.String("user_id", ctx.UserID()),

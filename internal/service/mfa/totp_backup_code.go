@@ -91,13 +91,15 @@ func matchTOTPBackupCode(secret, normalizedCode, storedHash string) bool {
 	return hmac.Equal([]byte(hashTOTPBackupCode(secret, normalizedCode)), []byte(storedHash))
 }
 
-// ConsumeTOTPBackupCode verifies and removes one recovery code for the user.
+// consumeTOTPBackupCode verifies and removes one recovery code for the user.
 //
-// The exported path opens a transaction, locks the user's active devices,
-// compares the normalized code against stored bcrypt hashes, removes the
-// matching hash, and updates LastUsedAt. Replays fail because the hash is
-// removed in the same transaction that validates the code.
-func ConsumeTOTPBackupCode(ctx *types.ServiceContext, userID, code string) error {
+// It opens a transaction, locks the user's active devices, compares the
+// normalized code against the stored HMAC digests, removes the matching
+// digest, and updates LastUsedAt. Replays fail because the digest is removed
+// in the same transaction that validates the code. It stays unexported because
+// callers must spend a verification attempt first; a public entry would let
+// recovery codes be guessed outside that budget.
+func consumeTOTPBackupCode(ctx *types.ServiceContext, userID, code string) error {
 	if ctx == nil || strings.TrimSpace(userID) == "" {
 		return service.NewError(http.StatusUnauthorized, "authentication required")
 	}

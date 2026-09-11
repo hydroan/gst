@@ -24,6 +24,7 @@ import (
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/module/mfa"
+	"github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
@@ -40,6 +41,14 @@ const (
 	unbindPath  = "/api/mfa/totp/unbind"
 	statusPath  = "/api/mfa/totp/status"
 )
+
+// totpVerificationBudget is how many second-factor proofs a user may submit to
+// login, and separately to unbind, within a window before proofs are refused.
+const totpVerificationBudget = 5
+
+// wrongBackupCode is well formed, so it reaches the recovery-code lookup, yet
+// matches no generated code with any meaningful probability.
+const wrongBackupCode = "2222-2222-2222-2222"
 
 type totpTestAccount struct {
 	Username  string
@@ -298,6 +307,79 @@ func TestTOTPLogin(t *testing.T) {
 		plain := newTOTPTestAccount(t, "totp_login_unenrolled")
 		require.NotEmpty(t, plain.SessionID)
 	})
+
+	t.Run("failed_proofs_spend_the_login_budget", func(t *testing.T) {
+		// IAM counts these failures against the account too and, at its
+		// default limit, refuses the password before this budget runs out;
+		// lifting that limit leaves the second-factor budget as the only gate.
+		t.Setenv("IAM_LOGIN_FAILURE_LIMIT", "100")
+		budgeted := newTOTPTestAccount(t, "totp_login_budget")
+		budgetedDeviceID, _, budgetedBackupCodes := bindTOTPDeviceForTest(t, budgeted.SessionID, "test-device-login-budget")
+		cli, err := client.New(baseURL)
+		require.NoError(t, err)
+		failLogin := func() {
+			t.Helper()
+			_, loginErr := cli.Do(http.MethodPost, loginPath, iam.LoginReq{
+				Username:   budgeted.Username,
+				Password:   budgeted.Password,
+				BackupCode: wrongBackupCode,
+			})
+			testutil.RequireError(t, loginErr, http.StatusUnauthorized, "invalid backup code")
+		}
+
+		// A verified proof resets the budget: without the reset, the first
+		// failure after it would already be refused.
+		for range totpVerificationBudget - 1 {
+			failLogin()
+		}
+		_ = loginSessionIDFromCookie(t, iam.LoginReq{
+			Username:   budgeted.Username,
+			Password:   budgeted.Password,
+			BackupCode: budgetedBackupCodes[0],
+		})
+		for range totpVerificationBudget {
+			failLogin()
+		}
+
+		// Once the budget is spent even a correct proof is refused, and the
+		// refused recovery code stays unspent.
+		_, err = cli.Do(http.MethodPost, loginPath, iam.LoginReq{
+			Username:   budgeted.Username,
+			Password:   budgeted.Password,
+			BackupCode: budgetedBackupCodes[1],
+		})
+		testutil.RequireError(t, err, http.StatusTooManyRequests, "too many failed verification attempts")
+		assertBackupCodeHashCount(t, budgetedDeviceID, 9)
+
+		// The unbind budget is kept apart, so the same code still unbinds.
+		_, err = mfaSessionClient(t, budgeted.SessionID).Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
+			DeviceID:   budgetedDeviceID,
+			BackupCode: budgetedBackupCodes[1],
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("unreachable_attempt_counter_refuses_without_spending_a_backup_code", func(t *testing.T) {
+		outage := newTOTPTestAccount(t, "totp_login_outage")
+		outageDeviceID, _, outageBackupCodes := bindTOTPDeviceForTest(t, outage.SessionID, "test-device-login-outage")
+		cli, err := client.New(baseURL)
+		require.NoError(t, err)
+		login := iam.LoginReq{
+			Username:   outage.Username,
+			Password:   outage.Password,
+			BackupCode: outageBackupCodes[0],
+		}
+
+		require.NoError(t, redis.Close())
+		_, err = cli.Do(http.MethodPost, loginPath, login)
+		require.NoError(t, redis.Init())
+		testutil.RequireError(t, err, http.StatusInternalServerError, "failed to verify second factor")
+		assertBackupCodeHashCount(t, outageDeviceID, 10)
+
+		// With the counter back, the code the outage refused still logs in.
+		_ = loginSessionIDFromCookie(t, login)
+		assertBackupCodeHashCount(t, outageDeviceID, 9)
+	})
 }
 
 func TestTOTPUnbind(t *testing.T) {
@@ -356,6 +438,51 @@ func TestTOTPUnbind(t *testing.T) {
 		rsp := testutil.DecodeResp[*mfa.TOTPUnbindRsp](t, resp)
 		require.Equal(t, 0, rsp.DeviceCount)
 		testutil.RequireDataFields(t, resp, "device_count")
+	})
+
+	t.Run("spent_budget_refuses_a_valid_proof_without_consuming_it", func(t *testing.T) {
+		spent := newTOTPTestAccount(t, "totp_unbind_budget_spent")
+		spentDeviceID, _, spentBackupCodes := bindTOTPDeviceForTest(t, spent.SessionID, "test-device-unbind-budget-spent")
+		spendTOTPVerificationBudgetForTest(t, "unbind", spent.UserID, totpVerificationBudget)
+
+		_, err := mfaSessionClient(t, spent.SessionID).Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
+			DeviceID:   spentDeviceID,
+			BackupCode: spentBackupCodes[0],
+		})
+		testutil.RequireError(t, err, http.StatusTooManyRequests, "too many failed verification attempts")
+		assertTOTPDeviceActive(t, spentDeviceID)
+		assertBackupCodeHashCount(t, spentDeviceID, 10)
+
+		// The login budget is kept apart, so the same code still logs in.
+		_ = loginSessionIDFromCookie(t, iam.LoginReq{
+			Username:   spent.Username,
+			Password:   spent.Password,
+			BackupCode: spentBackupCodes[0],
+		})
+		assertBackupCodeHashCount(t, spentDeviceID, 9)
+	})
+
+	t.Run("verified_proof_resets_the_budget", func(t *testing.T) {
+		resetting := newTOTPTestAccount(t, "totp_unbind_budget_reset")
+		keptDeviceID, _, resettingBackupCodes := bindTOTPDeviceForTest(t, resetting.SessionID, "test-device-unbind-budget-kept")
+		removedDeviceID, _, _ := bindTOTPDeviceForTest(t, resetting.SessionID, "test-device-unbind-budget-removed")
+		resettingCli := mfaSessionClient(t, resetting.SessionID)
+		spendTOTPVerificationBudgetForTest(t, "unbind", resetting.UserID, totpVerificationBudget-1)
+
+		_, err := resettingCli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
+			DeviceID:   removedDeviceID,
+			BackupCode: resettingBackupCodes[0],
+		})
+		require.NoError(t, err)
+
+		// Without the reset this failure would be one attempt past the budget
+		// and answer 429.
+		_, err = resettingCli.Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
+			DeviceID:   keptDeviceID,
+			BackupCode: wrongBackupCode,
+		})
+		testutil.RequireError(t, err, http.StatusUnauthorized, "invalid verification")
+		assertTOTPDeviceActive(t, keptDeviceID)
 	})
 }
 
@@ -487,6 +614,43 @@ func TestTOTPAdmin(t *testing.T) {
 		require.NoError(t, err)
 		rsp := testutil.DecodeResp[*mfa.AdminTOTPResetRsp](t, resp)
 		require.Zero(t, rsp.RemovedDeviceCount)
+	})
+
+	t.Run("reset_forgets_spent_attempt_budgets", func(t *testing.T) {
+		locked := newTOTPTestAccount(t, "totp_admin_locked_target")
+		_, _, lockedBackupCodes := bindTOTPDeviceForTest(t, locked.SessionID, "test-device-admin-locked")
+		spendTOTPVerificationBudgetForTest(t, "login", locked.UserID, totpVerificationBudget)
+		spendTOTPVerificationBudgetForTest(t, "unbind", locked.UserID, totpVerificationBudget)
+
+		cli, err := client.New(baseURL)
+		require.NoError(t, err)
+		_, err = cli.Do(http.MethodPost, loginPath, iam.LoginReq{
+			Username:   locked.Username,
+			Password:   locked.Password,
+			BackupCode: lockedBackupCodes[0],
+		})
+		testutil.RequireError(t, err, http.StatusTooManyRequests, "too many failed verification attempts")
+
+		_, err = rootCli.Do(http.MethodDelete, "/api/mfa/admin/users/"+locked.UserID+"/totp", nil)
+		require.NoError(t, err)
+
+		// Enrolling again right after the rescue must not inherit the lockout
+		// the lost factor ran into: the new device logs in and unbinds at once.
+		reenrolledSessionID := loginSessionIDFromCookie(t, iam.LoginReq{
+			Username: locked.Username,
+			Password: locked.Password,
+		})
+		reenrolledDeviceID, reenrolledSecret, reenrolledBackupCodes := bindTOTPDeviceForTest(t, reenrolledSessionID, "test-device-admin-reenrolled")
+		_ = loginSessionIDFromCookie(t, iam.LoginReq{
+			Username: locked.Username,
+			Password: locked.Password,
+			TOTPCode: nextPeriodTOTPCode(t, reenrolledSecret),
+		})
+		_, err = mfaSessionClient(t, reenrolledSessionID).Do(http.MethodPost, unbindPath, mfa.TOTPUnbindReq{
+			DeviceID:   reenrolledDeviceID,
+			BackupCode: reenrolledBackupCodes[0],
+		})
+		require.NoError(t, err)
 	})
 }
 
@@ -796,6 +960,18 @@ func nextPeriodTOTPCode(t *testing.T, secret string) string {
 	code, err := totp.GenerateCode(secret, time.Now().Add(30*time.Second))
 	require.NoError(t, err)
 	return code
+}
+
+// spendTOTPVerificationBudgetForTest records attempts straight into the counter
+// behind one purpose's verification budget. Spending a budget through the
+// routes takes a request per attempt, and the per-route throttle in front of
+// unbind admits only five quick requests in all, too few to spend the budget
+// and still observe the refusal.
+func spendTOTPVerificationBudgetForTest(t *testing.T, purpose, userID string, attempts int) {
+	t.Helper()
+
+	key := strings.Join([]string{"mfa:totp:failure", purpose, userID}, ":")
+	require.NoError(t, redis.Set(context.Background(), key, attempts, 15*time.Minute))
 }
 
 func getTOTPDeviceForTest(t *testing.T, deviceID string) *modelmfa.TOTPDevice {
