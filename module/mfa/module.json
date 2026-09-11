@@ -4,13 +4,6 @@
     "includeSourceFiles": [
       "internal/service/mfa/totp_login.go"
     ],
-    "middleware": [
-      {
-        "sourceFile": "middleware/mfa_verification.go",
-        "scope": "auth",
-        "handler": "MFAVerificationRateLimit"
-      }
-    ],
     "requiredAssembly": [
       {
         "import": "github.com/hydroan/gst/authn",

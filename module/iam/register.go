@@ -81,7 +81,7 @@ func Register() {
 	// limiter belongs on middleware.Register (global scope) rather than
 	// middleware.RegisterAuth, narrowed to this one path through
 	// ratelimiter.WithSkipFunc; the default key function is already the client
-	// IP. See module/mfa for the option shape.
+	// IP.
 	module.Use(module.NewWrapper("/login", "id", true, &serviceiamaccount.LoginService{}), module.CRUD(consts.PHASE_CREATE))
 	module.Use(module.NewWrapper("/logout", "id", false, &serviceiamaccount.LogoutService{}), module.CRUD(consts.PHASE_CREATE))
 	module.Use(module.NewWrapper("/signup", "id", true, &serviceiamaccount.SignupService{}), module.CRUD(consts.PHASE_CREATE))

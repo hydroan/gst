@@ -4,7 +4,6 @@ import (
 	"github.com/hydroan/gst/authn"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	servicemfa "github.com/hydroan/gst/internal/service/mfa"
-	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/module"
 	"github.com/hydroan/gst/types/consts"
@@ -13,12 +12,13 @@ import (
 // Register wires TOTP-based MFA into the application.
 //
 // Besides registering the routes below and the internal TOTPDevice table, it
-// throttles the endpoints that accept a guessable proof, installs the
-// framework IAM tenant-admin rules as the AccountAdministrator behind the
-// administrative routes, and installs the login second-factor gate. Every one
-// of those is an explicit call below: nothing arms itself through a package
-// import, so a copied module reproduces this list from project-owned assembly
-// code instead of inheriting hidden initialization.
+// installs the framework IAM tenant-admin rules as the AccountAdministrator
+// behind the administrative routes and installs the login second-factor gate.
+// Every one of those is an explicit call below: nothing arms itself through a
+// package import, so a copied module reproduces this list from project-owned
+// assembly code instead of inheriting hidden initialization. No middleware is
+// registered: the endpoints that accept a guessable proof bound guessing inside
+// their services, on a budget every replica shares.
 //
 // Routes:
 //   - POST   /api/mfa/totp/bind
@@ -31,8 +31,6 @@ func Register() {
 	servicemfa.SetAccountAdministrator(iamAccountAdministrator{})
 	authn.SetLoginSecondFactorVerifier(servicemfa.LoginSecondFactorVerifier)
 	model.Register[*modelmfa.TOTPDevice]()
-
-	middleware.RegisterAuth(middleware.MFAVerificationRateLimit())
 
 	module.Use(module.NewWrapper("mfa/totp/bind", "id", false, &servicemfa.TOTPBindService{}), module.CRUD(consts.PHASE_CREATE))
 	module.Use(module.NewWrapper("mfa/totp/confirm", "id", false, &servicemfa.TOTPConfirmService{}), module.CRUD(consts.PHASE_CREATE))
