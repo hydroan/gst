@@ -19,7 +19,7 @@ import (
 // current user and session, validates the submitted TOTP code against the
 // server-held secret, consumes the challenge, and then creates the active
 // device. It returns one-time recovery codes only in this response while
-// storing bcrypt hashes in the device record. Consuming the challenge before
+// storing HMAC digests in the device record. Consuming the challenge before
 // any storage work means a failure can never leave an activated device whose
 // recovery codes were generated but never delivered.
 type TOTPConfirmService struct {

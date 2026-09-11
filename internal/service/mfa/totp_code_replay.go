@@ -20,7 +20,7 @@ var errTOTPCodeReplayed = errors.New("TOTP code already used")
 //
 // RFC 6238 section 5.2 requires rejecting a second submission of the same OTP.
 // The marker is per user and code so one intercepted code cannot be replayed
-// across login, verify, unbind, and confirm within its validation window. The
+// across login, unbind, and confirm within its validation window. The
 // marker store is authoritative: when it is unreachable the code is rejected
 // instead of silently accepted (fail closed).
 func markTOTPCodeUsed(ctx context.Context, userID, code string) error {
