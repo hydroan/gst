@@ -2,7 +2,9 @@ package ratelimiter
 
 import (
 	"net/http"
+	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -20,7 +22,7 @@ const (
 	defaultTTL   = 24 * time.Hour // default expiration of an idle limiter
 )
 
-// limiterCache holds one limiter per key.
+// limiterCache holds one limiter per limiter instance and key.
 //
 // It names a backend instead of going through the cache facade on purpose. A
 // limiter is security state, and the facade's forwarded backend is a
@@ -38,6 +40,14 @@ const (
 var limiterCache = sync.OnceValue(func() types.Cache[*rate.Limiter] {
 	return freelru.Cache[*rate.Limiter]()
 })
+
+// limiterInstances numbers the limiters RateLimiter builds. limiterCache is
+// shared by the whole process, so each limiter keys its buckets under its own
+// number: two limiters whose key functions agree — both keeping the client-IP
+// default, say — would otherwise draw on one bucket, sized by whichever of them
+// created it first. The number only has to be unique within the process,
+// which is as far as the cache reaches.
+var limiterInstances atomic.Uint64
 
 // Config holds the configuration for the RateLimiter middleware.
 type Config struct {
@@ -76,6 +86,8 @@ type Config struct {
 
 // RateLimiter returns a gin middleware that limits request rates per configurable key.
 // Use functional options (WithRate, WithBurst, WithKeyFunc, etc.) to customize behavior.
+// Every call builds a limiter with buckets of its own, so two limiters never
+// share a bucket even when their key functions return the same key.
 //
 // Example:
 //
@@ -105,13 +117,16 @@ func RateLimiter(opts ...Option) gin.HandlerFunc {
 	if conf.TTL <= 0 {
 		conf.TTL = defaultTTL
 	}
+	// Digits cannot contain the colon that ends them, so no key can make one
+	// limiter's prefix read as another's.
+	keyPrefix := strconv.FormatUint(limiterInstances.Add(1), 10) + ":"
 
 	return func(c *gin.Context) {
 		if conf.SkipFunc != nil && conf.SkipFunc(c) {
 			return
 		}
 
-		key := conf.KeyFunc(c)
+		key := keyPrefix + conf.KeyFunc(c)
 		limiter, err := limiterCache().Get(c.Request.Context(), key)
 		if errors.Is(err, types.ErrEntryNotFound) {
 			limiter = rate.NewLimiter(conf.Rate, conf.Burst)
@@ -119,7 +134,9 @@ func RateLimiter(opts ...Option) gin.HandlerFunc {
 			// forced positive above, so there is no failure to handle here.
 			_ = limiterCache().Set(c.Request.Context(), key, limiter, conf.TTL)
 		} else if err != nil {
-			response.Abort(c, http.StatusBadRequest, "rate limiter unavailable")
+			// The limiter is security state: a cache that cannot answer refuses
+			// the request rather than switching the limit off.
+			response.Abort(c, http.StatusInternalServerError, "rate limiter unavailable")
 			return
 		}
 		if !limiter.Allow() {
