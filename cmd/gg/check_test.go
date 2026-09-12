@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -393,6 +394,21 @@ func writeCheckFile(t *testing.T, path string, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// sourceLine returns the 1-based number of the first line of source that
+// contains fragment, so a test can name the line a report points at without
+// restating its number.
+func sourceLine(t *testing.T, source string, fragment string) int {
+	t.Helper()
+
+	index := slices.IndexFunc(strings.Split(source, "\n"), func(line string) bool {
+		return strings.Contains(line, fragment)
+	})
+	if index < 0 {
+		t.Fatalf("no line of the source contains %q", fragment)
+	}
+	return index + 1
 }
 
 // writeCheckProjectGoMod writes the fixture project's go.mod together with the

@@ -3,7 +3,6 @@ package main
 import (
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -260,18 +259,4 @@ var defaultStatusColumn = (&Record{}).statusColumnName()
 		require.Contains(t, stderr, "sample.init()")
 		require.Contains(t, stderr, sourceFile+strconv.Itoa(sourceLine(t, source, "var defaultStatusColumn")))
 	})
-}
-
-// sourceLine returns the 1-based number of the first line of source that starts
-// with prefix.
-func sourceLine(t *testing.T, source string, prefix string) int {
-	t.Helper()
-
-	index := slices.IndexFunc(strings.Split(source, "\n"), func(line string) bool {
-		return strings.HasPrefix(line, prefix)
-	})
-	if index < 0 {
-		t.Fatalf("no line of the source starts with %q", prefix)
-	}
-	return index + 1
 }

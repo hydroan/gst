@@ -2,6 +2,8 @@ package main
 
 import (
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -147,5 +149,118 @@ func filters() []types.Filter {
 
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations, got %#v", violations)
+	}
+}
+
+func TestCheckColumnReferenceMintingAllowsGenericCodeTypeParameters(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	writeCheckProjectGoMod(t, projectDir)
+
+	// Generic code has no concrete model and so no generated Cols var: it
+	// names its own type parameter as the model, whether the function
+	// declares the parameter or its receiver does, including from a function
+	// literal inside such a function.
+	writeCheckFile(t, filepath.Join(projectDir, "helper", "retention", "retention.go"), `package retention
+
+import (
+	"time"
+
+	"github.com/hydroan/gst/types"
+)
+
+func expired[M types.Model](cutoff time.Time, ids ...string) []types.Filter {
+	byID := func() types.Filter {
+		return types.NewColumn[M, string]("id").In(ids...)
+	}
+	return []types.Filter{types.NewTimeColumn[M]("created_at").Lte(cutoff), byID()}
+}
+
+type Totals[M types.Model] struct{}
+
+func (Totals[M]) amount() types.Term {
+	return types.NewNumericColumn[M, int64]("amount").Sum()
+}
+
+func (*Totals[M]) rows() types.Term {
+	return types.NewColumn[M, string]("id").Count()
+}
+
+type Pair[M types.Model, V comparable] struct{}
+
+func (p *Pair[M, V]) match(value V) types.Filter {
+	return types.NewColumn[M, V]("value").Eq(value)
+}
+`)
+	// A dot import spells the constructor bare.
+	writeCheckFile(t, filepath.Join(projectDir, "helper", "scope", "scope.go"), `package scope
+
+import . "github.com/hydroan/gst/types"
+
+func owned[M Model](groupIDs ...string) Filter {
+	return NewColumn[M, string]("group_id").In(groupIDs...)
+}
+`)
+
+	violations := CheckColumnReferenceMinting(newProjectIgnoreMatcher())
+
+	if len(violations) != 0 {
+		t.Fatalf("expected no violations, got %#v", violations)
+	}
+}
+
+func TestCheckColumnReferenceMintingFlagsConcreteModelsInGenericCode(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	writeCheckProjectGoMod(t, projectDir)
+
+	source := `package retention
+
+import "github.com/hydroan/gst/types"
+
+type Sample struct{}
+
+func (*Sample) TableName() string { return "samples" }
+
+type M = *Sample
+
+func concrete[N types.Model]() types.Filter {
+	return types.NewColumn[*Sample, string]("code").Eq("concrete")
+}
+
+func packageLevel() types.Filter {
+	return types.NewColumn[M, string]("code").Eq("package")
+}
+
+func reused[M types.Model](local bool) types.Filter {
+	if local {
+		type M = *Sample
+		return types.NewColumn[M, string]("code").Eq("reused inside")
+	}
+	return types.NewColumn[M, string]("code").Eq("reused outside")
+}
+
+func parameter[M types.Model]() types.Filter {
+	return types.NewColumn[M, string]("code").Eq("parameter")
+}
+`
+	writeCheckFile(t, filepath.Join(projectDir, "helper", "retention", "retention.go"), source)
+
+	violations := CheckColumnReferenceMinting(newProjectIgnoreMatcher())
+
+	// A concrete model has a generated Cols var wherever the call sits, and a
+	// name that is no type parameter of the enclosing function denotes a
+	// concrete type. A type parameter name that a type declaration in the body
+	// reuses is distrusted throughout that body, outside the declaring block
+	// too. Only the call naming an untouched type parameter is left alone.
+	flagged := []string{`Eq("concrete")`, `Eq("package")`, `Eq("reused inside")`, `Eq("reused outside")`}
+	if len(violations) != len(flagged) {
+		t.Fatalf("expected %d violations, got %#v", len(flagged), violations)
+	}
+	for _, call := range flagged {
+		location := filepath.Join("helper", "retention", "retention.go") + ":" + strconv.Itoa(sourceLine(t, source, call)) + ":"
+		if !slices.ContainsFunc(violations, func(violation string) bool { return strings.HasPrefix(violation, location) }) {
+			t.Fatalf("expected a violation at %s, got %#v", location, violations)
+		}
 	}
 }
