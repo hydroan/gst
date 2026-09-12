@@ -59,6 +59,17 @@ type Order struct {
 	Direction OrderDirection
 }
 
+// SortsBy reports whether the order sorts by column. An order parsed from a
+// request names no table and matches by column name alone; an order built from
+// a column reference names its table, which has to be the column's table too.
+func (o Order) SortsBy(column AnyColumnRef) bool {
+	return namesColumn(o.Table, o.Column, column)
+}
+
+// Descending reports whether the order sorts descending. Any other direction,
+// the zero one included, sorts ascending.
+func (o Order) Descending() bool { return o.Direction == OrderDesc }
+
 // Asc builds an ascending order term for column.
 func Asc(column string) Order { return Order{Column: column, Direction: OrderAsc} }
 

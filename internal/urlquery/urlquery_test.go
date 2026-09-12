@@ -551,6 +551,47 @@ func TestOrders(t *testing.T) {
 	})
 }
 
+// TestParsedConditionsReadThroughColumnReferences pins the contract between
+// the parser and the column reference readers: what Filters and Orders produce
+// reads back through Split, Values, Bounds and SortsBy, with every value in the
+// column's own type.
+func TestParsedConditionsReadThroughColumnReferences(t *testing.T) {
+	query := url.Values{
+		"age[in]":         {"20,30"},
+		"enabled[eq]":     {"true"},
+		"expired_at[gte]": {"2026-09-01T08:00:00+08:00"},
+		"expired_at[lt]":  {"2026-10-01T00:00:00Z"},
+		"_sort_by":        {"age desc"},
+	}
+	filters, err := Filters(query, &filterTestModel{})
+	require.NoError(t, err)
+	orders, err := Orders(query, &filterTestModel{})
+	require.NoError(t, err)
+
+	age := types.NewNumericColumn[*filterTestModel, int]("age")
+	enabled := types.NewColumn[*filterTestModel, bool]("enabled")
+	expiredAt := types.NewTimeColumn[*filterTestModel]("expired_at")
+
+	own, rest := expiredAt.Split(filters)
+	require.Len(t, own, 2)
+	require.Len(t, rest, 2)
+	lower, upper, err := expiredAt.Bounds(own)
+	require.NoError(t, err)
+	require.Equal(t, types.Bound[time.Time]{Value: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), Inclusive: true, Present: true}, lower,
+		"the parser normalized the bound to the UTC wall clock, which reads back as that instant")
+	require.Equal(t, types.Bound[time.Time]{Value: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Present: true}, upper)
+
+	ages, err := age.Values(rest)
+	require.NoError(t, err)
+	require.Equal(t, []int{20, 30}, ages)
+	flags, err := enabled.Values(rest)
+	require.NoError(t, err)
+	require.Equal(t, []bool{true}, flags)
+
+	require.True(t, orders[0].SortsBy(age))
+	require.True(t, orders[0].Descending())
+}
+
 type paginatableTestModel struct {
 	modelregistry.Pagination
 	modelregistry.Base

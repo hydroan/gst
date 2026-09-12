@@ -548,7 +548,11 @@ name are left to code that learns the column only at run time, such as the
 framework's own URL parsing.
 
 A service that implements a list action itself reaches the same parsing
-through the `QueryXxx` methods on its `service.Base`. Service code also has
+through the `QueryXxx` methods on its `service.Base`, and reads one column's
+conditions back through the column reference: `Split` takes them out of the
+list, `Values` reads the eq and `in` values and `Bounds` the range, already
+converted to the column's type, while `Order.SortsBy` and `Order.Descending`
+read the sort. Service code also has
 `types.FilterOr` and `types.FilterAnd` to group filters, which is the only way
 a query expresses OR. Groups are deliberately
 not part of the URL contract: a client cannot change how conditions combine,

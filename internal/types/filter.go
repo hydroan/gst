@@ -126,6 +126,11 @@ func FilterOps() []FilterOp {
 // constructors take a plain column name for code that learns the column only
 // at run time. All of them lock the value shape at compile time, which a
 // Filter literal does not.
+//
+// A service reading the filters of a request goes through the column
+// reference as well: Split takes one column's filters out of the list, Values
+// reads the values its equality filters hold it to, and Bounds the range its
+// comparisons confine it to, each already converted to the column's type.
 type Filter struct {
 	Table  string
 	Column string
@@ -143,11 +148,14 @@ type Filter struct {
 // It is exported because the normalization is a contract of Filter, not a
 // detail of the parser: a service reading a bound back would otherwise have to
 // restate the layout, which no compiler could keep in sync with the parser.
-// Read a bound with TimeValue rather than parsing with this layout directly.
+// Read a bound through Bounds on the column reference, or with TimeValue,
+// rather than parsing with this layout directly.
 const FilterTimeLayout = "2006-01-02 15:04:05.999999999"
 
-// TimeValue returns the filter's value as a time, which is how a service reads
-// back a range it did not build itself, such as one parsed from a request.
+// TimeValue returns the filter's value as a time. A service reading a range
+// from a request goes through Bounds on the column reference instead, which
+// also tells the two ends and whether each is inclusive apart; TimeValue reads
+// the value of one filter.
 //
 // Both value shapes a time bound can have are accepted: the canonical string a
 // URL-parsed filter carries, and the time.Time a caller passes to the
