@@ -20,10 +20,13 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
+// columnInspectionPanic is what the inspection reports when it runs code that
+// needs the very column references it is resolving.
+const columnInspectionPanic = "gg gen: this function depends on generated column references, which do not exist while gg gen resolves columns"
+
 // columnInspectionPlaceholder is the body a function depending on generated
-// column references gets in the inspection build. Reaching it means the
-// inspection ran code that needs the very references it is resolving.
-const columnInspectionPlaceholder = `panic("gg gen: this function depends on generated column references, which do not exist while gg gen resolves columns")`
+// column references gets in the inspection build.
+const columnInspectionPlaceholder = `panic("` + columnInspectionPanic + `")`
 
 // columnInspectionOverlay returns the build overlay the inspection program
 // compiles the project with.

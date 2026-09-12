@@ -218,7 +218,7 @@ func CopyAuth() any {
 }
 
 func TestRunModuleCopyGenAllowsPreexistingProjectCheckViolations(t *testing.T) {
-	projectDir := newModuleCopyGenProject(t)
+	projectDir := newGenProject(t)
 	writePluralModelFile(t, projectDir, "session", "sessions.go", "Session2", "copytest/sessions")
 
 	baseline := collectProjectCheckBaseline()
@@ -240,7 +240,7 @@ func TestRunModuleCopyGenAllowsPreexistingProjectCheckViolations(t *testing.T) {
 }
 
 func TestRunModuleCopyGenFailsOnNewProjectCheckViolations(t *testing.T) {
-	projectDir := newModuleCopyGenProject(t)
+	projectDir := newGenProject(t)
 	writePluralModelFile(t, projectDir, "session", "sessions.go", "Session2", "copytest/sessions")
 
 	baseline := collectProjectCheckBaseline()
@@ -264,45 +264,6 @@ func TestRunModuleCopyGenFailsOnNewProjectCheckViolations(t *testing.T) {
 	if strings.Contains(output, "sessions.go") {
 		t.Fatalf("module-copy generation should not report pre-existing violations:\n%s", output)
 	}
-}
-
-// newModuleCopyGenProject creates a temp gst project and points the gg command
-// globals at it, so module-copy generation tests run against an isolated tree.
-func newModuleCopyGenProject(t *testing.T) string {
-	t.Helper()
-
-	oldModelDir := modelDir
-	oldServiceDir := serviceDir
-	oldRouterDir := routerDir
-	oldDaoDir := daoDir
-	oldExcludes := excludes
-	oldModule := module
-	oldPrune := prune
-	oldCleanOrphans := cleanOrphans
-	t.Cleanup(func() {
-		modelDir = oldModelDir
-		serviceDir = oldServiceDir
-		routerDir = oldRouterDir
-		daoDir = oldDaoDir
-		excludes = oldExcludes
-		module = oldModule
-		prune = oldPrune
-		cleanOrphans = oldCleanOrphans
-	})
-
-	projectDir := t.TempDir()
-	t.Chdir(projectDir)
-	modelDir = "model"
-	serviceDir = "service"
-	routerDir = "router"
-	daoDir = "dao"
-	excludes = nil
-	module = ""
-	prune = false
-	cleanOrphans = false
-
-	writeCheckProjectGoModAgainstRealFramework(t, projectDir)
-	return projectDir
 }
 
 // writePluralModelFile writes a model file whose plural file name violates the
@@ -340,31 +301,60 @@ func (`+modelName+`) Design() {
 	}
 }
 
+// captureStdout returns what fn writes to standard output.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 
-	oldStdout := os.Stdout
+	return captureStream(t, &os.Stdout, fn)
+}
+
+// captureStderr returns what fn writes to standard error, including what the
+// programs it runs write there: gg hands a child program os.Stderr as it finds
+// it when starting the program.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+
+	return captureStream(t, &os.Stderr, fn)
+}
+
+// captureStream swaps *stream for a pipe while fn runs and returns what was
+// written to it. The pipe is drained while fn runs, so a writer producing more
+// than the pipe buffer holds cannot block on it.
+func captureStream(t *testing.T, stream **os.File, fn func()) string {
+	t.Helper()
+
 	readPipe, writePipe, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
 	}
-	os.Stdout = writePipe
+	type drainResult struct {
+		output []byte
+		err    error
+	}
+	drained := make(chan drainResult, 1)
+	go func() {
+		output, readErr := io.ReadAll(readPipe)
+		drained <- drainResult{output: output, err: readErr}
+	}()
 
-	fn()
+	original := *stream
+	func() {
+		*stream = writePipe
+		defer func() { *stream = original }()
+		fn()
+	}()
 
 	if closeErr := writePipe.Close(); closeErr != nil {
 		t.Fatal(closeErr)
 	}
-	os.Stdout = oldStdout
-
-	output, err := io.ReadAll(readPipe)
-	if err != nil {
-		t.Fatal(err)
+	result := <-drained
+	if result.err != nil {
+		t.Fatal(result.err)
 	}
 	if closeErr := readPipe.Close(); closeErr != nil {
 		t.Fatal(closeErr)
 	}
-	return string(output)
+	return string(result.output)
 }
 
 func newModuleListProjectWithFramework(t *testing.T) string {

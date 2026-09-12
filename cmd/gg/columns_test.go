@@ -98,14 +98,12 @@ func TestBuildColumnsProgram(t *testing.T) {
 		require.Equal(t, program, buildColumnsProgram("tmpapp", all))
 	})
 
-	t.Run("OmitsEnumerationWhenEveryModelIsRegistered", func(t *testing.T) {
-		// Referencing modelschema.IsQueryable requires a framework version
-		// that exports it; a project without unregistered models keeps a
-		// program that never mentions it and so keeps building against older
-		// framework versions.
+	t.Run("LeavesEnumerationToTheRegistryWhenEveryModelIsRegistered", func(t *testing.T) {
+		// The registry already enumerates every migrated model, so nothing is
+		// compiled in beyond the template itself.
 		bare := buildColumnsProgram("tmpapp", []*gen.ModelInfo{registered})
-		require.NotContains(t, bare, "IsQueryable")
-		require.NotContains(t, bare, "[]any{")
+		template := strings.NewReplacer("{{MODULE}}", "tmpapp", "{{UNREGISTERED_IMPORTS}}", "", "{{UNREGISTERED_MODELS}}", "").Replace(columnsProgram)
+		require.Equal(t, template, bare)
 		_, err := parser.ParseFile(token.NewFileSet(), "main.go", bare, 0)
 		require.NoError(t, err)
 	})
@@ -143,14 +141,10 @@ func TestBuildColumnsProgramInspectsIgnoredModelsUnconditionally(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("OmitsTheGuardWhenOnlyIgnoredModelsNeedInspection", func(t *testing.T) {
-		// Same compatibility rule as the virtual-model enumeration: a project
-		// whose only extra entries are ignored models must not reference
-		// modelschema.IsQueryable at all.
-		bare := buildColumnsProgram("tmpapp", []*gen.ModelInfo{ignored})
-		require.NotContains(t, bare, "IsQueryable")
-		require.Contains(t, bare, "&vm0.User{},")
-		_, err := parser.ParseFile(token.NewFileSet(), "main.go", bare, 0)
+	t.Run("ProducesParseableSourceForIgnoredModelsAlone", func(t *testing.T) {
+		alone := buildColumnsProgram("tmpapp", []*gen.ModelInfo{ignored})
+		require.Contains(t, alone, "models = append(models,\n\t\t&vm0.User{},\n\t)")
+		_, err := parser.ParseFile(token.NewFileSet(), "main.go", alone, 0)
 		require.NoError(t, err)
 	})
 }
@@ -326,37 +320,7 @@ func TestRemoveOrphanColumnFilesRefusesHandWrittenFile(t *testing.T) {
 // and then with the previous generation stubbed out; the references the run
 // writes must then satisfy the same code in the project's own build.
 func TestGenRunGeneratesColumnsReadByHandwrittenModelCode(t *testing.T) {
-	oldModelDir := modelDir
-	oldServiceDir := serviceDir
-	oldRouterDir := routerDir
-	oldDaoDir := daoDir
-	oldExcludes := excludes
-	oldModule := module
-	oldPrune := prune
-	oldCleanOrphans := cleanOrphans
-	t.Cleanup(func() {
-		modelDir = oldModelDir
-		serviceDir = oldServiceDir
-		routerDir = oldRouterDir
-		daoDir = oldDaoDir
-		excludes = oldExcludes
-		module = oldModule
-		prune = oldPrune
-		cleanOrphans = oldCleanOrphans
-	})
-
-	projectDir := t.TempDir()
-	t.Chdir(projectDir)
-	modelDir = "model"
-	serviceDir = "service"
-	routerDir = "router"
-	daoDir = "dao"
-	excludes = nil
-	module = ""
-	prune = false
-	cleanOrphans = false
-
-	writeCheckProjectGoModAgainstRealFramework(t, projectDir)
+	projectDir := newGenProject(t)
 	writeCheckFile(t, filepath.Join(projectDir, "model", "sample", "record.go"), `package sample
 
 import (
@@ -445,7 +409,6 @@ func (i *Item) DeleteBefore(ctx context.Context) error {
 
 	cacheDir, err := columnsCacheDir()
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, os.RemoveAll(cacheDir)) })
 	recordColumnsFile := filepath.Join("model", "sample", "record.gen.go")
 	itemColumnsFile := filepath.Join("model", "item", "item.gen.go")
 

@@ -365,39 +365,7 @@ func remainingPhases(actions []*dsl.Action) []consts.Phase {
 // router/router.gen.go reflects that ignore (kept action registered, ignored
 // action absent).
 func TestGenRunAppliesRouteIgnoresFromGstYAML(t *testing.T) {
-	// Save and restore gg global flags, same pattern as
-	// TestRunModuleCopyGenKeepsQuietProjectChecks.
-	oldModelDir := modelDir
-	oldServiceDir := serviceDir
-	oldRouterDir := routerDir
-	oldDaoDir := daoDir
-	oldExcludes := excludes
-	oldModule := module
-	oldPrune := prune
-	oldCleanOrphans := cleanOrphans
-	t.Cleanup(func() {
-		modelDir = oldModelDir
-		serviceDir = oldServiceDir
-		routerDir = oldRouterDir
-		daoDir = oldDaoDir
-		excludes = oldExcludes
-		module = oldModule
-		prune = oldPrune
-		cleanOrphans = oldCleanOrphans
-	})
-
-	projectDir := t.TempDir()
-	t.Chdir(projectDir)
-	modelDir = "model"
-	serviceDir = "service"
-	routerDir = "router"
-	daoDir = "dao"
-	excludes = nil
-	module = ""
-	prune = false
-	cleanOrphans = false
-
-	writeCheckProjectGoModAgainstRealFramework(t, projectDir)
+	projectDir := newGenProject(t)
 	if err := os.WriteFile(filepath.Join(projectDir, "gst.yaml"), []byte(`version: 1
 gen:
   routes:

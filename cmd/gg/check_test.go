@@ -435,6 +435,60 @@ func writeCheckProjectGoModAgainstRealFramework(t *testing.T, projectDir string)
 	writeCheckFile(t, filepath.Join(projectDir, "go.sum"), string(goSum))
 }
 
+// newGenProject creates a temporary project for tests that run gg gen, makes
+// it the working directory and points the gg command globals at its
+// conventional layout, restoring them when the test ends. Its go.mod resolves
+// the framework to this repository, since generation compiles the column
+// inspection program against the framework for real. Generation also caches
+// that inspection under the user cache directory, keyed by project directory;
+// nothing ever reads a throwaway project's entry again, so the entry is removed
+// when the test ends.
+func newGenProject(t *testing.T) string {
+	t.Helper()
+
+	oldModelDir := modelDir
+	oldServiceDir := serviceDir
+	oldRouterDir := routerDir
+	oldDaoDir := daoDir
+	oldExcludes := excludes
+	oldModule := module
+	oldPrune := prune
+	oldCleanOrphans := cleanOrphans
+	t.Cleanup(func() {
+		modelDir = oldModelDir
+		serviceDir = oldServiceDir
+		routerDir = oldRouterDir
+		daoDir = oldDaoDir
+		excludes = oldExcludes
+		module = oldModule
+		prune = oldPrune
+		cleanOrphans = oldCleanOrphans
+	})
+
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	modelDir = "model"
+	serviceDir = "service"
+	routerDir = "router"
+	daoDir = "dao"
+	excludes = nil
+	module = ""
+	prune = false
+	cleanOrphans = false
+
+	writeCheckProjectGoModAgainstRealFramework(t, projectDir)
+	cacheDir, err := columnsCacheDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if removeErr := os.RemoveAll(cacheDir); removeErr != nil {
+			t.Error(removeErr)
+		}
+	})
+	return projectDir
+}
+
 // frameworkRepoRoot returns the absolute path of this repository's root.
 func frameworkRepoRoot(t *testing.T) string {
 	t.Helper()

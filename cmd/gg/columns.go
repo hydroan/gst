@@ -198,10 +198,6 @@ func fail(err error) {
 // Models ignored by gst.yaml gen.models.ignore are also compiled in as
 // explicit entries but skip the query-parameter gate: they remain
 // table-backed and their column files must not drift from the sources.
-//
-// When every scanned model is registered, the placeholders collapse to
-// nothing and the program never references modelschema.IsQueryable, so such
-// projects keep building against framework versions that do not export it.
 func buildColumnsProgram(module string, models []*gen.ModelInfo) string {
 	program := strings.ReplaceAll(columnsProgram, "{{MODULE}}", module)
 
@@ -214,10 +210,6 @@ func buildColumnsProgram(module string, models []*gen.ModelInfo) string {
 		case m.Design.Enabled && !m.Design.Migrate:
 			unregistered = append(unregistered, m)
 		}
-	}
-	if len(unregistered) == 0 && len(ignored) == 0 {
-		program = strings.ReplaceAll(program, "{{UNREGISTERED_IMPORTS}}", "")
-		return strings.ReplaceAll(program, "{{UNREGISTERED_MODELS}}", "")
 	}
 
 	// One deterministic alias per package: the fixed prefix cannot collide

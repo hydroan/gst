@@ -3,6 +3,8 @@ package main
 import (
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -202,4 +204,74 @@ func TestColumnInspectionOverlayLeavesUnparsableFilesToTheCompiler(t *testing.T)
 	overlay, err := columnInspectionOverlay("tmpapp", "model", models)
 	require.NoError(t, err)
 	require.Empty(t, overlay, "a file that does not parse is compiled as written, so the compiler reports it")
+}
+
+// TestGenRunReportsCodeReachingAColumnInspectionPlaceholder runs gg gen against
+// a project whose package initialization calls a method that reads generated
+// column references. Methods are never left out by name, so the call stays in
+// the inspection build and reaches the placeholder that replaced the method
+// body: generation fails, and what the terminal shows has to say why and point
+// at the source lines involved.
+func TestGenRunReportsCodeReachingAColumnInspectionPlaceholder(t *testing.T) {
+	projectDir := newGenProject(t)
+	source := `package sample
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	Status string ` + "`json:\"status\"`" + `
+
+	model.Base
+}
+
+func (Record) TableName() string { return "records" }
+
+func (Record) Design() {
+	dsl.Migrate()
+}
+
+func (r *Record) statusColumnName() string {
+	return RecordCols.Status.Name()
+}
+
+var defaultStatusColumn = (&Record{}).statusColumnName()
+`
+	writeCheckFile(t, filepath.Join(projectDir, "model", "sample", "record.go"), source)
+
+	var genErr error
+	stderr := captureStderr(t, func() {
+		genErr = genRunWithOptions(genRunOptions{Quiet: true})
+	})
+	require.ErrorContains(t, genErr, "inspect model columns")
+
+	t.Run("SaysWhyTheInspectionStopped", func(t *testing.T) {
+		require.Contains(t, stderr, "panic: "+columnInspectionPanic)
+	})
+
+	t.Run("PointsAtTheSourceLinesInvolved", func(t *testing.T) {
+		// Every rewrite keeps its line breaks, so the reported lines are the
+		// left-out method and the initialization calling it.
+		sourceFile := "model/sample/record.go:"
+		require.Contains(t, stderr, "sample.(*Record).statusColumnName(")
+		require.Contains(t, stderr, sourceFile+strconv.Itoa(sourceLine(t, source, "func (r *Record) statusColumnName() string {")))
+		require.Contains(t, stderr, "sample.init()")
+		require.Contains(t, stderr, sourceFile+strconv.Itoa(sourceLine(t, source, "var defaultStatusColumn")))
+	})
+}
+
+// sourceLine returns the 1-based number of the first line of source that starts
+// with prefix.
+func sourceLine(t *testing.T, source string, prefix string) int {
+	t.Helper()
+
+	index := slices.IndexFunc(strings.Split(source, "\n"), func(line string) bool {
+		return strings.HasPrefix(line, prefix)
+	})
+	if index < 0 {
+		t.Fatalf("no line of the source starts with %q", prefix)
+	}
+	return index + 1
 }
