@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // SchemaFingerprint returns a short hash of everything the registered models

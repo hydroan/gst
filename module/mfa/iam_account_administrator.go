@@ -1,8 +1,8 @@
 package mfa
 
 import (
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/module/iam"
-	"github.com/hydroan/gst/types"
 )
 
 // iamAccountAdministrator authorizes administrative MFA operations through the

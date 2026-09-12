@@ -19,7 +19,7 @@ package authn
 import (
 	"sync"
 
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // LoginSecondFactor carries the second-factor proof fields submitted with an

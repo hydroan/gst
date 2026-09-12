@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
+	"github.com/hydroan/gst/internal/types"
 	gstotel "github.com/hydroan/gst/otel"
-	"github.com/hydroan/gst/types"
 	"go.opentelemetry.io/otel/attribute"
 )
 

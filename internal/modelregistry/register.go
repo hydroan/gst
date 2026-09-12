@@ -5,7 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // TableChan is the internal queue for default-database table registration.

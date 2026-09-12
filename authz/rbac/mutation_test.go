@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/tenant"
-	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

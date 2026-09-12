@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // The window examples read the same six seeded rows as the aggregate examples

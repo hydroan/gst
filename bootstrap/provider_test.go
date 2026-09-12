@@ -8,8 +8,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/provider"
-	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 )
 

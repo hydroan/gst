@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // The join examples read the seeded payments beside the one seeded account

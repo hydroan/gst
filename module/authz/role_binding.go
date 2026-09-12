@@ -2,8 +2,8 @@ package authz
 
 import (
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 var _ types.Module[*RoleBinding, *RoleBinding, *RoleBinding] = (*RoleBindingModule)(nil)

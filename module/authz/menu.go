@@ -3,7 +3,7 @@ package authz
 import (
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
 	serviceauthz "github.com/hydroan/gst/internal/service/authz"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 var _ types.Module[*Menu, *Menu, *Menu] = (*MenuModule)(nil)

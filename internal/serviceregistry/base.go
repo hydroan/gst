@@ -5,7 +5,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 var _ types.Service[*modelregistry.Empty, any, any] = (*Base[*modelregistry.Empty, any, any])(nil)

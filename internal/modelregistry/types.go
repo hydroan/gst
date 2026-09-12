@@ -3,7 +3,7 @@ package modelregistry
 import (
 	"reflect"
 
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // AreTypesEqual reports whether M, REQ, and RSP are the same concrete type.

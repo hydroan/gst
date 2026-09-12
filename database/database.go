@@ -10,7 +10,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
 	"gorm.io/plugin/dbresolver"
 )

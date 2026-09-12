@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 func QueryModelsMap[M types.Model](ctx context.Context, keyFunc func(M) string, queryFunc func() M) (map[string]M, error) {

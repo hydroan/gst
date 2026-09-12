@@ -6,8 +6,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/authn"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 )
 

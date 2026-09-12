@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // The semi-join examples: FilterExists and FilterNotExists tie the records

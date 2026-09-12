@@ -1,7 +1,7 @@
 package kafka
 
 import (
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 

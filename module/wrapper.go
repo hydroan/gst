@@ -1,9 +1,9 @@
 package module
 
 import (
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 var _ types.Module[*model.Empty, *model.Empty, *model.Empty] = &Wrapper[*model.Empty, *model.Empty, *model.Empty]{}

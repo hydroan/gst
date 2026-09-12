@@ -4,8 +4,8 @@ import (
 	"reflect"
 
 	"github.com/hydroan/gst/internal/requestctx"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
-	"github.com/hydroan/gst/types"
 )
 
 // The Query methods below translate the request's URL query parameters into

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/tenant"
-	"github.com/hydroan/gst/types"
 )
 
 var (

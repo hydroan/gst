@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
 )
 

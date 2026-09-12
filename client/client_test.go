@@ -8,9 +8,9 @@ import (
 
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/internal/testutil"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/router"
-	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 )

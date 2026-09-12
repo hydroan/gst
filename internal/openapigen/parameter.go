@@ -8,7 +8,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/types/consts"
 )
 

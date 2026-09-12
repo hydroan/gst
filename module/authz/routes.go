@@ -3,8 +3,8 @@ package authz
 import (
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
 	serviceauthz "github.com/hydroan/gst/internal/service/authz"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/types"
 )
 
 var _ types.Module[*Routes, *model.Empty, *RoutesRsp] = (*RoutesModule)(nil)

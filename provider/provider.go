@@ -17,7 +17,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // Provider describes an optional capability that joins the bootstrap

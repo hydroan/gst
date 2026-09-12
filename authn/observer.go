@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/types"
 	"go.uber.org/zap"
 )
 

@@ -8,7 +8,7 @@ import (
 	"github.com/coocood/freecache"
 	"github.com/hydroan/gst/internal/cache/codec"
 	"github.com/hydroan/gst/internal/cache/registry"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // defaultCapacityBytes sizes this byte-addressed backend. The backend caps a

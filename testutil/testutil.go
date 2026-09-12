@@ -43,7 +43,7 @@ import (
 
 	"github.com/hydroan/gst/client"
 	testutil "github.com/hydroan/gst/internal/testutil"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // Server declares what a test package needs before its tests can run.

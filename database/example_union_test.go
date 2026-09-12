@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // The union examples stack the seeded payments and refunds (see paymentSeed

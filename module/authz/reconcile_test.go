@@ -8,9 +8,9 @@ import (
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/tenant"
-	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 )

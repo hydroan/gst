@@ -3,7 +3,7 @@ package column
 import (
 	"strings"
 
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 func (s *srv) Get(ctx *types.ServiceContext, req *empty) (rsp, error) {

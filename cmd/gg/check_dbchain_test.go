@@ -173,7 +173,7 @@ func keep(ctx context.Context) any {
 // types.Database and types.DatabaseOption interfaces.
 func TestDatabaseChainMethodSetsMatchTypesInterface(t *testing.T) {
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, filepath.Join("..", "..", "types", "database.go"), nil, 0)
+	file, err := parser.ParseFile(fset, filepath.Join("..", "..", "internal", "types", "database.go"), nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

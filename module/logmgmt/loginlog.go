@@ -3,7 +3,7 @@ package logmgmt
 import (
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	servicelogmgmt "github.com/hydroan/gst/internal/service/logmgmt"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 var _ types.Module[*LoginLog, *LoginLog, *LoginLog] = (*LoginLogModule)(nil)

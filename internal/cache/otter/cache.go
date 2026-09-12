@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/cache/capacity"
 	"github.com/hydroan/gst/internal/cache/registry"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/maypok86/otter/v2"
 )
 

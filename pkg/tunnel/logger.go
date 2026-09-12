@@ -3,8 +3,8 @@ package tunnel
 import (
 	"sync"
 
+	"github.com/hydroan/gst/internal/types"
 	pkgzap "github.com/hydroan/gst/logger/zap"
-	"github.com/hydroan/gst/types"
 )
 
 var (

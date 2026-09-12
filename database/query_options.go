@@ -8,7 +8,7 @@ import (
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/types/consts"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

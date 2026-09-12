@@ -6,7 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/cache/registry"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 	cmap "github.com/orcaman/concurrent-map/v2"
 )
 

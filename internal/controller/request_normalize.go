@@ -12,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin/binding"
 	ginjson "github.com/gin-gonic/gin/codec/json"
 	"github.com/hydroan/gst/internal/serviceregistry"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // This file keeps every bound request body service-safe and every body

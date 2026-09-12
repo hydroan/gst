@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 type Option func(*Client)

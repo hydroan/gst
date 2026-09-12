@@ -10,8 +10,8 @@ import (
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/internal/testutil"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/module/iam"
-	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 )
 

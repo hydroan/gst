@@ -11,7 +11,7 @@ import (
 	serviceemail "github.com/hydroan/gst/internal/service/email"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // Column references for the narrow credential and identity writes below;

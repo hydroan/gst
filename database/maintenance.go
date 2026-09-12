@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 	"gorm.io/gorm"

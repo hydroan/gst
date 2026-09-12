@@ -1,7 +1,7 @@
 package helloworld
 
 import (
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 var counter = 0

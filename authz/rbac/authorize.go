@@ -4,8 +4,8 @@ import (
 	"context"
 	"slices"
 
+	"github.com/hydroan/gst/internal/types"
 	prommetrics "github.com/hydroan/gst/metrics"
-	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 )
 

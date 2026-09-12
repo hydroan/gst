@@ -11,9 +11,9 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/testutil"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/tenant"
-	"github.com/hydroan/gst/types"
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
 )

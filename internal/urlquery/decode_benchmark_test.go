@@ -6,7 +6,7 @@ import (
 
 	"github.com/gorilla/schema"
 	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/types/consts"
 )
 

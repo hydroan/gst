@@ -8,8 +8,8 @@ import (
 	"github.com/cockroachdb/errors"
 
 	"github.com/hydroan/gst/internal/modelschema"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/types"
 	"go.uber.org/zap"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"

@@ -1,6 +1,6 @@
 package helloworld
 
-import "github.com/hydroan/gst/types"
+import "github.com/hydroan/gst/internal/types"
 
 func (s *Service2) CreateBefore(ctx *types.ServiceContext, hw *Helloworld2) error {
 	log := s.WithContext(ctx, ctx.Phase())

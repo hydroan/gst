@@ -7,7 +7,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/internal/cache/tracing"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 	goredis "github.com/redis/go-redis/v9"
 )
 

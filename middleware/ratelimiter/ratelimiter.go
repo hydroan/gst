@@ -11,8 +11,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/cache/freelru"
 	"github.com/hydroan/gst/internal/requestctx"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/response"
-	"github.com/hydroan/gst/types"
 	"golang.org/x/time/rate"
 )
 

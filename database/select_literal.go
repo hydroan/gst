@@ -2,7 +2,7 @@ package database
 
 import (
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // This file is the constant side of the select builder: how a Literal renders

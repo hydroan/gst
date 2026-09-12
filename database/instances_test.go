@@ -11,7 +11,7 @@ import (
 	gstmysql "github.com/hydroan/gst/database/mysql"
 	gstpostgres "github.com/hydroan/gst/database/postgres"
 	"github.com/hydroan/gst/database/sqlite"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )

@@ -8,8 +8,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/cache/cachetest"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/redis"
-	"github.com/hydroan/gst/types"
 )
 
 // TestCacheConformance runs the shared types.Cache conformance suite against

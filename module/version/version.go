@@ -6,9 +6,9 @@ import (
 
 	"github.com/hydroan/gst/config"
 	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 )
 
 var startTime = time.Now()

@@ -20,7 +20,7 @@ import (
 	"github.com/dgraph-io/ristretto/v2"
 	"github.com/hydroan/gst/internal/cache/capacity"
 	"github.com/hydroan/gst/internal/cache/registry"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 var store = registry.New()

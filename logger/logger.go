@@ -2,7 +2,7 @@
 package logger
 
 import (
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 	"go.uber.org/zap"
 	gorml "gorm.io/gorm/logger"
 )

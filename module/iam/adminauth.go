@@ -3,7 +3,7 @@ package iam
 import (
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	"github.com/hydroan/gst/internal/service/iam/adminauth"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // EnsureAdminOnUser reports whether the acting user may administer the target

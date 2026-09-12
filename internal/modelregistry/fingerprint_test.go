@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 

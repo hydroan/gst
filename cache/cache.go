@@ -75,7 +75,7 @@ package cache
 
 import (
 	"github.com/hydroan/gst/internal/cache/freelru"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // Cache returns the process-wide typed cache backed by the forwarded backend.
