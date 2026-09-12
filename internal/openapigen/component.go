@@ -8,7 +8,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/types"
+	"github.com/hydroan/gst/internal/types"
 	"go.uber.org/zap"
 )
 
@@ -32,7 +32,7 @@ func schemaComponentName(typ reflect.Type) string {
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
-	return schemaComponentNameFromPath(typ.PkgPath(), typ.Name())
+	return schemaComponentNameFromPath(documentedPkgPath(typ), typ.Name())
 }
 
 // schemaComponentNameFromPath implements the naming rule of
@@ -57,6 +57,24 @@ func schemaComponentNameFromPath(pkgPath, name string) string {
 	return strings.Join(segments, ".") + "." + name
 }
 
+// Package paths of the framework's contracts: where they are defined, and
+// where business code imports them from.
+const (
+	internalTypesPkgPath = "github.com/hydroan/gst/internal/types"
+	publicTypesPkgPath   = "github.com/hydroan/gst/types"
+)
+
+// documentedPkgPath returns the package path a type is named after in the
+// document, which is the path business code imports it from. The framework's
+// contracts are defined in internal/types, but projects reach every exported
+// one of them through the public types package under the same name.
+func documentedPkgPath(typ reflect.Type) string {
+	if pkgPath := typ.PkgPath(); pkgPath != internalTypesPkgPath {
+		return pkgPath
+	}
+	return publicTypesPkgPath
+}
+
 // uniqueComponentName returns the component name for a type, guaranteeing
 // that two different packages never resolve to the same name: the second
 // package to claim a name falls back to its fully qualified package path.
@@ -65,7 +83,7 @@ func uniqueComponentName(typ reflect.Type) string {
 		typ = typ.Elem()
 	}
 	name := schemaComponentName(typ)
-	pkgPath := typ.PkgPath()
+	pkgPath := documentedPkgPath(typ)
 	if pkgPath == "" || name == "" {
 		return name
 	}

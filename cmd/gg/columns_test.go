@@ -438,3 +438,41 @@ func (i *Item) DeleteBefore(ctx context.Context) error {
 	require.NoError(t, err)
 	require.Equal(t, string(itemColumns), string(regeneratedItemColumns))
 }
+
+// TestGenRunReferencesFrameworkTypesThroughThePublicPackage runs gg gen
+// against a model whose column is typed by the framework's types package. The
+// generated reference names the type the way the model source does, under the
+// import path a business project can reach.
+func TestGenRunReferencesFrameworkTypesThroughThePublicPackage(t *testing.T) {
+	projectDir := newGenProject(t)
+	writeCheckFile(t, filepath.Join(projectDir, "model", "sample", "rule.go"), `package sample
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/types"
+)
+
+type Rule struct {
+	Comparison types.CompareOp `+"`json:\"comparison\"`"+`
+
+	model.Base
+}
+
+func (Rule) TableName() string { return "rules" }
+
+func (Rule) Design() {
+	dsl.Migrate()
+}
+`)
+
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+	columns, err := os.ReadFile(filepath.Join("model", "sample", "rule.gen.go"))
+	require.NoError(t, err)
+	require.Contains(t, string(columns), `types.NewColumn[*Rule, types.CompareOp]("comparison")`)
+
+	// The project only builds when every import the generated file carries is
+	// one it can reach.
+	output, err := exec.Command("go", "build", "-mod=mod", "./...").CombinedOutput()
+	require.NoError(t, err, "go build:\n%s", output)
+}

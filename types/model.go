@@ -1,46 +1,11 @@
 package types
 
 import (
-	"context"
-	"time"
+	itypes "github.com/hydroan/gst/internal/types"
 )
 
 // Model defines the framework contract for database-backed and action models.
 // Typical database resources embed model.Base (UUIDv7 string primary key) or
 // model.AutoBase (auto-increment integer primary key). Action-only models may
 // use model.Empty when they do not represent persistent rows.
-//
-// Type Requirements:
-//   - Must be a pointer to struct (e.g., *User)
-//   - Database resources should expose an ID primary key through GetID/SetID/ClearID
-//   - Database resources must override TableName with an explicit non-empty
-//     name: gorm's Tabler reads the same method, and the base default "" is
-//     rejected at table preparation and inside gg migrate
-//   - Hooks should be idempotent enough to run as part of framework CRUD phases
-type Model interface {
-	TableName() string  // TableName returns the explicit table name; gorm's Tabler reads the same method.
-	GetID() string      // GetID returns the string form of the id, or "" when the id is unset.
-	SetID(id ...string) // SetID sets the id when unset; Base generates a UUID without an argument while AutoBase leaves generation to the database.
-	ClearID()           // ClearID always sets the id to empty.
-	GetCreatedBy() string
-	GetUpdatedBy() string
-	GetCreatedAt() time.Time
-	GetUpdatedAt() time.Time
-	SetCreatedBy(string)
-	SetUpdatedBy(string)
-	SetCreatedAt(time.Time)
-	SetUpdatedAt(time.Time)
-	Expands() []string // Expands returns association paths that should be preloaded by default.
-	Purge() bool       // Purge indicates whether to permanently delete records (hard delete). Default is false (soft delete).
-
-	CreateBefore(context.Context) error
-	CreateAfter(context.Context) error
-	DeleteBefore(context.Context) error
-	DeleteAfter(context.Context) error
-	UpdateBefore(context.Context) error
-	UpdateAfter(context.Context) error
-	ListBefore(context.Context) error
-	ListAfter(context.Context) error
-	GetBefore(context.Context) error
-	GetAfter(context.Context) error
-}
+type Model = itypes.Model

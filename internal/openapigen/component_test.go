@@ -3,6 +3,8 @@ package openapigen
 import (
 	"reflect"
 	"testing"
+
+	"github.com/hydroan/gst/internal/types"
 )
 
 func TestSchemaComponentName(t *testing.T) {
@@ -24,6 +26,17 @@ func TestSchemaComponentName(t *testing.T) {
 				t.Fatalf("schemaComponentName(%s.%s) = %q, want %q", tt.pkgPath, tt.typName, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestSchemaComponentNameNamesFrameworkTypesByTheirPublicPackage(t *testing.T) {
+	// Business code reaches the framework's query contracts through the public
+	// types package, so the document names them after that package.
+	if got := schemaComponentName(reflect.TypeFor[types.CompareOp]()); got != "gst.types.CompareOp" {
+		t.Fatalf("schemaComponentName(types.CompareOp) = %q, want %q", got, "gst.types.CompareOp")
+	}
+	if got := uniqueComponentName(reflect.TypeFor[types.CompareOp]()); got != "gst.types.CompareOp" {
+		t.Fatalf("uniqueComponentName(types.CompareOp) = %q, want %q", got, "gst.types.CompareOp")
 	}
 }
 

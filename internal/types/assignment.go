@@ -1,9 +1,5 @@
 package types
 
-import (
-	itypes "github.com/hydroan/gst/internal/types"
-)
-
 // Assignment is one column-value write, the unit UpdateByID accepts. Service
 // code should build assignments through the generated column references
 // (SampleCols.Status.Set(v)), whose typed front end stops a wrong-typed value
@@ -11,10 +7,21 @@ import (
 // reference minted for its type parameter. The Assign constructor takes a
 // plain column name and exists for code that learns the column only at run
 // time: framework internals and dynamic column loops.
-type Assignment = itypes.Assignment
+//
+// An Assignment never holds SQL. Column names are quoted by the database
+// layer and values bind as statement parameters.
+type Assignment struct {
+	// Table is the table the column belongs to: filled in by a column
+	// reference, empty from Assign, which names the chain's own model. A
+	// write refuses an assignment of another model's column, which may well
+	// share the name with one of its own.
+	Table  string
+	Column string
+	Value  any
+}
 
 // Assign builds an assignment of value to the named database column of the
 // chain's own model.
 func Assign(column string, value any) Assignment {
-	return itypes.Assign(column, value)
+	return Assignment{Column: column, Value: value}
 }

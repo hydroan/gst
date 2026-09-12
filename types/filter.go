@@ -1,81 +1,49 @@
 package types
 
 import (
-	"reflect"
-	"time"
+	itypes "github.com/hydroan/gst/internal/types"
 )
 
 // FilterOp is a field-level filter operator applied by WithQuery as an
 // additional AND condition. Operators never widen a query: unknown values
 // are rejected during parsing, and the database layer fails closed on
 // conditions it does not recognize.
-//
-// Operators come in two tiers, and the split is load-bearing:
-//
-//   - URL-exposed operators are registered in the filterOps parse map and
-//     carried by the List/Export query parameter syntax "field[op]=value";
-//     FilterOps returns them for API documentation.
-//   - Service-only operators exist as constants and execute in the database
-//     layer, but are intentionally absent from the parse map: they never
-//     validate column types or values at the URL boundary, so exposing one
-//     requires adding that validation first, not just registering the name.
-type FilterOp string
+type FilterOp = itypes.FilterOp
 
 // URL-exposed operators.
 const (
-	FilterOpEq         FilterOp = "eq"         // equal: column = value
-	FilterOpNe         FilterOp = "ne"         // not equal: column <> value
-	FilterOpGt         FilterOp = "gt"         // greater than: column > value
-	FilterOpGte        FilterOp = "gte"        // greater than or equal: column >= value
-	FilterOpLt         FilterOp = "lt"         // less than: column < value
-	FilterOpLte        FilterOp = "lte"        // less than or equal: column <= value
-	FilterOpIn         FilterOp = "in"         // set membership: column IN (comma-separated values)
-	FilterOpNotIn      FilterOp = "notin"      // set exclusion: column NOT IN (comma-separated values)
-	FilterOpLike       FilterOp = "like"       // substring match: column LIKE %value%
-	FilterOpNotLike    FilterOp = "notlike"    // substring exclusion: column NOT LIKE %value%
-	FilterOpStartsWith FilterOp = "startswith" // prefix match: column LIKE value% (can use an index)
-	FilterOpEndsWith   FilterOp = "endswith"   // suffix match: column LIKE %value
-	FilterOpIsNull     FilterOp = "isnull"     // null check: value true means IS NULL, false means IS NOT NULL
+	FilterOpEq         = itypes.FilterOpEq         // equal: column = value
+	FilterOpNe         = itypes.FilterOpNe         // not equal: column <> value
+	FilterOpGt         = itypes.FilterOpGt         // greater than: column > value
+	FilterOpGte        = itypes.FilterOpGte        // greater than or equal: column >= value
+	FilterOpLt         = itypes.FilterOpLt         // less than: column < value
+	FilterOpLte        = itypes.FilterOpLte        // less than or equal: column <= value
+	FilterOpIn         = itypes.FilterOpIn         // set membership: column IN (comma-separated values)
+	FilterOpNotIn      = itypes.FilterOpNotIn      // set exclusion: column NOT IN (comma-separated values)
+	FilterOpLike       = itypes.FilterOpLike       // substring match: column LIKE %value%
+	FilterOpNotLike    = itypes.FilterOpNotLike    // substring exclusion: column NOT LIKE %value%
+	FilterOpStartsWith = itypes.FilterOpStartsWith // prefix match: column LIKE value% (can use an index)
+	FilterOpEndsWith   = itypes.FilterOpEndsWith   // suffix match: column LIKE %value
+	FilterOpIsNull     = itypes.FilterOpIsNull     // null check: value true means IS NULL, false means IS NOT NULL
 )
 
 // Service-only operators: for service code building Filters
 // directly, reusable and injection-safe alternatives to raw SQL fragments.
 const (
-	FilterOpRegex        FilterOp = "regex"        // regular expression match: column REGEXP value (dialect-aware)
-	FilterOpNotRegex     FilterOp = "notregex"     // regular expression exclusion: NOT (column REGEXP value)
-	FilterOpJSONContains FilterOp = "jsoncontains" // JSON array membership: value is a member of the JSON array column
-	FilterOpOr           FilterOp = "or"           // group: the []Filter value is OR-combined, the group itself AND-combined
-	FilterOpAnd          FilterOp = "and"          // group: the []Filter value is AND-combined, for nesting inside an OR group
-	FilterOpExists       FilterOp = "exists"       // correlated subquery: the Subquery value becomes EXISTS or NOT EXISTS
-	FilterOpEqCol        FilterOp = "eqcol"        // column equals another column, named by the value as a plain name or a column reference: the enclosing query's inside a subquery, a table read beside it inside a join
-	FilterOpFalse        FilterOp = "false"        // constant predicate: matches nothing, see FilterFalse
+	FilterOpRegex        = itypes.FilterOpRegex        // regular expression match: column REGEXP value (dialect-aware)
+	FilterOpNotRegex     = itypes.FilterOpNotRegex     // regular expression exclusion: NOT (column REGEXP value)
+	FilterOpJSONContains = itypes.FilterOpJSONContains // JSON array membership: value is a member of the JSON array column
+	FilterOpOr           = itypes.FilterOpOr           // group: the []Filter value is OR-combined, the group itself AND-combined
+	FilterOpAnd          = itypes.FilterOpAnd          // group: the []Filter value is AND-combined, for nesting inside an OR group
+	FilterOpExists       = itypes.FilterOpExists       // correlated subquery: the Subquery value becomes EXISTS or NOT EXISTS
+	FilterOpEqCol        = itypes.FilterOpEqCol        // column equals another column, named by the value as a plain name or a column reference: the enclosing query's inside a subquery, a table read beside it inside a join
+	FilterOpFalse        = itypes.FilterOpFalse        // constant predicate: matches nothing, see FilterFalse
 )
-
-// filterOps indexes the URL-exposed operators for parsing; service-only
-// operators are deliberately absent (see the FilterOp tier note). Matching is
-// exact and case-sensitive: URL query keys are contract surface, not
-// free-form input.
-var filterOps = map[string]FilterOp{
-	string(FilterOpEq):         FilterOpEq,
-	string(FilterOpNe):         FilterOpNe,
-	string(FilterOpGt):         FilterOpGt,
-	string(FilterOpGte):        FilterOpGte,
-	string(FilterOpLt):         FilterOpLt,
-	string(FilterOpLte):        FilterOpLte,
-	string(FilterOpIn):         FilterOpIn,
-	string(FilterOpNotIn):      FilterOpNotIn,
-	string(FilterOpLike):       FilterOpLike,
-	string(FilterOpNotLike):    FilterOpNotLike,
-	string(FilterOpStartsWith): FilterOpStartsWith,
-	string(FilterOpEndsWith):   FilterOpEndsWith,
-	string(FilterOpIsNull):     FilterOpIsNull,
-}
 
 // ParseFilterOp converts an operator token from a "field[op]" query key into
 // a FilterOp, reporting whether the token is a known operator.
 func ParseFilterOp(s string) (FilterOp, bool) {
-	op, ok := filterOps[s]
-	return op, ok
+	return itypes.ParseFilterOp(s)
 }
 
 // FilterOps returns every URL-exposed operator in a stable order, for API
@@ -83,13 +51,7 @@ func ParseFilterOp(s string) (FilterOp, bool) {
 // Service-only operators are excluded on purpose: they are not part of the
 // URL contract.
 func FilterOps() []FilterOp {
-	return []FilterOp{
-		FilterOpEq, FilterOpNe,
-		FilterOpGt, FilterOpGte, FilterOpLt, FilterOpLte,
-		FilterOpIn, FilterOpNotIn,
-		FilterOpLike, FilterOpNotLike, FilterOpStartsWith, FilterOpEndsWith,
-		FilterOpIsNull,
-	}
+	return itypes.FilterOps()
 }
 
 // Filter is one field-level filter to apply as an AND condition.
@@ -100,38 +62,8 @@ func FilterOps() []FilterOp {
 // and URL parsing leave it empty, which names the queried model's own table.
 // A filter carrying another table is applied to that table when the query
 // joins it and fails closed otherwise. Value holds a normalized typed value
-// and is always bound as a statement parameter:
-//
-//   - FilterOpIn and FilterOpNotIn require a slice or array value.
-//   - FilterOpIsNull requires a bool value.
-//   - FilterOpLike, FilterOpNotLike, FilterOpStartsWith, FilterOpEndsWith,
-//     FilterOpRegex, FilterOpNotRegex, and FilterOpJSONContains require a
-//     string value.
-//   - FilterOpOr and FilterOpAnd require a non-empty []Filter value and carry
-//     no column: they group their children instead of naming one themselves.
-//   - FilterOpExists requires a Subquery value and carries no column; see
-//     FilterExists.
-//   - FilterOpEqCol requires the other column: its name as a string, or the
-//     column reference itself, which also carries its table. It renders
-//     inside a subquery and inside a join; see FilterEqCol.
-//   - FilterOpFalse carries neither column nor value; see FilterFalse.
-//   - The comparison operators take a scalar value (string, numeric,
-//     time.Time); slices, arrays, and nil are rejected.
-//
-// A value that violates these rules fails closed in the database layer.
-// Service code builds filters through the generated column references
-// (SampleCols.Status.Eq(v)), which check the column name and the value type at
-// compile time, and generic code through a reference minted for its type
-// parameter (NewColumn[M, string]("id").In(ids...)). The FilterEq/FilterIn/...
-// constructors take a plain column name for code that learns the column only
-// at run time. All of them lock the value shape at compile time, which a
-// Filter literal does not.
-type Filter struct {
-	Table  string
-	Column string
-	Op     FilterOp
-	Value  any
-}
+// and is always bound as a statement parameter.
+type Filter = itypes.Filter
 
 // FilterTimeLayout is the canonical layout a time-typed filter value parsed
 // from a URL is normalized to. The value travels as a string rather than a
@@ -139,140 +71,101 @@ type Filter struct {
 // in its own location, while the string pins the wall-clock time the parser
 // resolved. The pinned wall clock is UTC, the one wall clock the framework
 // stores on every dialect.
-//
-// It is exported because the normalization is a contract of Filter, not a
-// detail of the parser: a service reading a bound back would otherwise have to
-// restate the layout, which no compiler could keep in sync with the parser.
-// Read a bound with TimeValue rather than parsing with this layout directly.
-const FilterTimeLayout = "2006-01-02 15:04:05.999999999"
-
-// TimeValue returns the filter's value as a time, which is how a service reads
-// back a range it did not build itself, such as one parsed from a request.
-//
-// Both value shapes a time bound can have are accepted: the canonical string a
-// URL-parsed filter carries, and the time.Time a caller passes to the
-// comparison constructors directly. It reports false for a value that is
-// neither, including a malformed string, so a caller that must distinguish
-// "no bound" from "some other value" can.
-func (f Filter) TimeValue() (time.Time, bool) {
-	switch value := f.Value.(type) {
-	case time.Time:
-		return value, true
-	case string:
-		parsed, err := time.ParseInLocation(FilterTimeLayout, value, time.UTC)
-		if err != nil {
-			return time.Time{}, false
-		}
-		return parsed, true
-	default:
-		return time.Time{}, false
-	}
-}
-
-// The Filter constructors below build one Filter per operator from a plain
-// column name. They serve code that learns the column only at run time, such
-// as framework internals reading it from a request; code on a concrete model
-// reaches the same operators through the generated column references, and
-// generic code through a reference minted for its type parameter, see Column.
-// The grouping, subquery and constant constructors have no column-reference
-// form and serve every caller. Each signature locks the value shape its operator
-// expects, so a malformed filter cannot be expressed without bypassing the
-// constructors. Column is a snake case column name; validating it against the
-// model's queryable columns remains the caller's responsibility.
+const FilterTimeLayout = itypes.FilterTimeLayout
 
 // FilterEq matches rows where column equals value.
 func FilterEq(column string, value any) Filter {
-	return Filter{Column: column, Op: FilterOpEq, Value: value}
+	return itypes.FilterEq(column, value)
 }
 
 // FilterNe matches rows where column does not equal value.
 func FilterNe(column string, value any) Filter {
-	return Filter{Column: column, Op: FilterOpNe, Value: value}
+	return itypes.FilterNe(column, value)
 }
 
 // FilterGt matches rows where column is greater than value.
 func FilterGt(column string, value any) Filter {
-	return Filter{Column: column, Op: FilterOpGt, Value: value}
+	return itypes.FilterGt(column, value)
 }
 
 // FilterGte matches rows where column is greater than or equal to value.
 func FilterGte(column string, value any) Filter {
-	return Filter{Column: column, Op: FilterOpGte, Value: value}
+	return itypes.FilterGte(column, value)
 }
 
 // FilterLt matches rows where column is less than value.
 func FilterLt(column string, value any) Filter {
-	return Filter{Column: column, Op: FilterOpLt, Value: value}
+	return itypes.FilterLt(column, value)
 }
 
 // FilterLte matches rows where column is less than or equal to value.
 func FilterLte(column string, value any) Filter {
-	return Filter{Column: column, Op: FilterOpLte, Value: value}
+	return itypes.FilterLte(column, value)
 }
 
 // FilterIn matches rows where column is one of values. The slice is bound as
 // a whole; an empty slice matches nothing.
 func FilterIn[T any](column string, values []T) Filter {
-	return Filter{Column: column, Op: FilterOpIn, Value: append([]T(nil), values...)}
+	return itypes.FilterIn[T](column, values)
 }
 
 // FilterNotIn matches rows where column is none of values. The slice is
 // bound as a whole; an empty slice matches nothing (SQL NOT IN over an empty
 // list never holds), it does not mean "exclude nothing".
 func FilterNotIn[T any](column string, values []T) Filter {
-	return Filter{Column: column, Op: FilterOpNotIn, Value: append([]T(nil), values...)}
+	return itypes.FilterNotIn[T](column, values)
 }
 
 // FilterLike matches rows where column contains value as a substring; value
 // is escaped and matches literally.
-func FilterLike(column, value string) Filter {
-	return Filter{Column: column, Op: FilterOpLike, Value: value}
+func FilterLike(column string, value string) Filter {
+	return itypes.FilterLike(column, value)
 }
 
 // FilterNotLike matches rows where column does not contain value as a
 // substring; value is escaped and matches literally.
-func FilterNotLike(column, value string) Filter {
-	return Filter{Column: column, Op: FilterOpNotLike, Value: value}
+func FilterNotLike(column string, value string) Filter {
+	return itypes.FilterNotLike(column, value)
 }
 
 // FilterStartsWith matches rows where column starts with value; value is
 // escaped and matches literally, and the prefix form can use an index.
-func FilterStartsWith(column, value string) Filter {
-	return Filter{Column: column, Op: FilterOpStartsWith, Value: value}
+func FilterStartsWith(column string, value string) Filter {
+	return itypes.FilterStartsWith(column, value)
 }
 
 // FilterEndsWith matches rows where column ends with value; value is escaped
 // and matches literally.
-func FilterEndsWith(column, value string) Filter {
-	return Filter{Column: column, Op: FilterOpEndsWith, Value: value}
+func FilterEndsWith(column string, value string) Filter {
+	return itypes.FilterEndsWith(column, value)
 }
 
 // FilterIsNull matches rows whose column is NULL.
 func FilterIsNull(column string) Filter {
-	return Filter{Column: column, Op: FilterOpIsNull, Value: true}
+	return itypes.FilterIsNull(column)
 }
 
 // FilterIsNotNull matches rows whose column is not NULL.
 func FilterIsNotNull(column string) Filter {
-	return Filter{Column: column, Op: FilterOpIsNull, Value: false}
+	return itypes.FilterIsNotNull(column)
 }
 
 // FilterRegex matches rows where column matches the regular expression expr
 // (dialect-aware REGEXP).
-func FilterRegex(column, expr string) Filter {
-	return Filter{Column: column, Op: FilterOpRegex, Value: expr}
+func FilterRegex(column string, expr string) Filter {
+	return itypes.FilterRegex(column, expr)
 }
 
 // FilterNotRegex matches rows where column does not match the regular
 // expression expr.
-func FilterNotRegex(column, expr string) Filter {
-	return Filter{Column: column, Op: FilterOpNotRegex, Value: expr}
+func FilterNotRegex(column string, expr string) Filter {
+	return itypes.FilterNotRegex(column, expr)
 }
 
 // FilterJSONContains matches rows whose JSON array column contains value as
 // a member.
-func FilterJSONContains(column, value string) Filter {
-	return Filter{Column: column, Op: FilterOpJSONContains, Value: value}
+func FilterJSONContains(column string, value string) Filter {
+	return itypes.FilterJSONContains(column, value)
 }
 
 // FilterFalse matches nothing. It is the condition a permission hook returns
@@ -282,53 +175,22 @@ func FilterJSONContains(column, value string) Filter {
 // renders as 1 = 0 on every dialect and composes like any other filter,
 // inside groups, subqueries and conditional measures included.
 func FilterFalse() Filter {
-	return Filter{Op: FilterOpFalse}
+	return itypes.FilterFalse()
 }
 
 // FilterOr groups filters that are OR-combined with each other. The group as a
 // whole stays AND-combined with every other condition of the query, so a
 // mandatory condition such as tenant scoping can never be absorbed into the
-// alternatives:
-//
-//	Filters: []types.Filter{
-//	    SampleCols.TenantID.Eq(tenant),
-//	    types.FilterOr(
-//	        SampleCols.Name.Like(keyword),
-//	        SampleCols.Code.Like(keyword),
-//	    ),
-//	}
-//	// WHERE tenant_id = ? AND (name LIKE ? OR code LIKE ?)
-//
-// Children may themselves be groups, which is how nesting is expressed; see
-// FilterAnd for the "(a AND b) OR (c AND d)" shape. A group with no children
-// fails closed.
+// alternatives.
 func FilterOr(filters ...Filter) Filter {
-	return Filter{Op: FilterOpOr, Value: append([]Filter(nil), filters...)}
+	return itypes.FilterOr(filters...)
 }
 
 // FilterAnd groups filters that are AND-combined with each other. Filters are
 // already AND-combined at the top level, so the group exists to nest an AND
-// inside an OR group:
-//
-//	Filters: []types.Filter{
-//	    SampleCols.TenantID.Eq(tenant),
-//	    types.FilterOr(
-//	        types.FilterAnd(
-//	            SampleCols.Kind.Eq(KindPrimary),
-//	            SampleCols.Status.Eq(StatusDone),
-//	        ),
-//	        types.FilterAnd(
-//	            SampleCols.Kind.Eq(KindSecondary),
-//	            SampleCols.Status.Eq(StatusPending),
-//	        ),
-//	    ),
-//	}
-//	// WHERE tenant_id = ?
-//	//   AND ((kind = ? AND status = ?) OR (kind = ? AND status = ?))
-//
-// A group with no children fails closed.
+// inside an OR group.
 func FilterAnd(filters ...Filter) Filter {
-	return Filter{Op: FilterOpAnd, Value: append([]Filter(nil), filters...)}
+	return itypes.FilterAnd(filters...)
 }
 
 // FilterEqCol is the predicate that ties two tables together by a column
@@ -342,65 +204,21 @@ func FilterAnd(filters ...Filter) Filter {
 // Inside a join only the pairs at the top level of the ON count toward the
 // key the join is proved unique on: one inside a FilterOr group narrows the
 // match but proves nothing.
-//
-// The string form names the columns alone, which a subquery can place because
-// both of its tables are known; a join needs the tables too, so its predicates
-// are written with Column.EqCol, the typed front end that keeps the two
-// columns of the same Go type and carries both tables.
-func FilterEqCol(column, parent string) Filter {
-	return Filter{Column: column, Op: FilterOpEqCol, Value: parent}
+func FilterEqCol(column string, parent string) Filter {
+	return itypes.FilterEqCol(column, parent)
 }
 
 // Subquery is the correlated EXISTS subquery carried by FilterOpExists. It
 // names the related model and the predicates narrowing its rows, at least one
 // of which must be a FilterEqCol tying them to the enclosing query.
-//
-// A semi join is used rather than a real join on purpose: EXISTS matches a row
-// at most once, so an aggregate over the outer table keeps counting each row
-// once. A join to a one-to-many child multiplies the outer rows instead, and a
-// SUM over that silently doubles.
-type Subquery struct {
-	// Model is an allocated instance of the related model. It carries the
-	// child table name and its soft-delete scope, so a subquery hides the same
-	// rows a List on that model hides.
-	Model Model
-	// Filters narrow the related rows. They must include a FilterEqCol,
-	// directly or inside a group: without one the subquery would be a cross
-	// join, so it fails closed instead.
-	Filters []Filter
-	// Negate turns the condition into NOT EXISTS.
-	Negate bool
-}
+type Subquery = itypes.Subquery
 
 // FilterExists matches rows of the queried model that have at least one
 // related row in C satisfying filters. EqCol predicates tie the related
 // rows to the queried row, one per column pair, next to the ordinary
-// conditions narrowing them:
-//
-//	types.FilterExists[*Item](
-//	    ItemCols.SampleID.EqCol(SampleCols.ID),
-//	    ItemCols.Status.Eq(StatusDone))
-//	// EXISTS (SELECT 1 FROM `items`
-//	//         WHERE `items`.`sample_id` = `samples`.`id`
-//	//           AND `items`.`status` = ? AND `items`.`deleted_at` IS NULL)
-//
-// A composite key is just more pairs, rendered in the order given:
-//
-//	types.FilterExists[*Item](
-//	    ItemCols.TenantID.EqCol(SampleCols.TenantID),
-//	    ItemCols.SampleID.EqCol(SampleCols.ID),
-//	    ItemCols.Status.Eq(StatusDone))
-//
-// The table names come from C and from the queried model; the predicate
-// carries only the two column names. A subquery without any FilterEqCol fails
-// closed rather than matching every row: nothing to correlate on is a
-// mistake, not a request for a cross join.
-//
-// It is an ordinary Filter, so List, Count, Export and Select all accept it;
-// it is service-only and has no URL spelling, because a client-supplied
-// subquery is an unbounded read of a table the endpoint never named.
+// conditions narrowing them.
 func FilterExists[C Model](filters ...Filter) Filter {
-	return subqueryFilter[C](filters, false)
+	return itypes.FilterExists[C](filters...)
 }
 
 // FilterNotExists matches rows that have no related row in C satisfying
@@ -410,19 +228,5 @@ func FilterExists[C Model](filters ...Filter) Filter {
 // fails closed here as well: negating "match nothing" would otherwise widen
 // into "match everything".
 func FilterNotExists[C Model](filters ...Filter) Filter {
-	return subqueryFilter[C](filters, true)
-}
-
-// subqueryFilter builds the shared value of both subquery constructors. The
-// related model is allocated here rather than at render time so the database
-// layer needs no type parameter of its own to reach the child table.
-func subqueryFilter[C Model](filters []Filter, negate bool) Filter {
-	sub := Subquery{Filters: append([]Filter(nil), filters...), Negate: negate}
-	typ := reflect.TypeFor[C]()
-	if typ.Kind() == reflect.Pointer {
-		if m, ok := reflect.TypeAssert[C](reflect.New(typ.Elem())); ok {
-			sub.Model = m
-		}
-	}
-	return Filter{Op: FilterOpExists, Value: sub}
+	return itypes.FilterNotExists[C](filters...)
 }
