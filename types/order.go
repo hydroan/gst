@@ -49,9 +49,10 @@ func (d OrderDirection) Flip() OrderDirection {
 //
 // Service code should build orders through the generated column references
 // (SampleCols.CreatedAt.Desc()), which cannot name a column the model does not
-// have. The Asc and Desc constructors take a plain column name and exist for
-// code that cannot reference a concrete model: generic helpers, framework
-// internals, and URL parsing.
+// have, and generic code through a reference minted for its type parameter.
+// The Asc and Desc constructors take a plain column name and exist for code
+// that learns the column only at run time: framework internals and URL
+// parsing.
 type Order struct {
 	Table     string
 	Column    string

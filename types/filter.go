@@ -121,9 +121,11 @@ func FilterOps() []FilterOp {
 // A value that violates these rules fails closed in the database layer.
 // Service code builds filters through the generated column references
 // (SampleCols.Status.Eq(v)), which check the column name and the value type at
-// compile time; code that cannot reference a concrete model uses the
-// FilterEq/FilterIn/... constructors instead. Both lock the value shape at
-// compile time, which a Filter literal does not.
+// compile time, and generic code through a reference minted for its type
+// parameter (NewColumn[M, string]("id").In(ids...)). The FilterEq/FilterIn/...
+// constructors take a plain column name for code that learns the column only
+// at run time. All of them lock the value shape at compile time, which a
+// Filter literal does not.
 type Filter struct {
 	Table  string
 	Column string
@@ -168,11 +170,12 @@ func (f Filter) TimeValue() (time.Time, bool) {
 }
 
 // The Filter constructors below build one Filter per operator from a plain
-// column name. They serve code that cannot reference a concrete model, such as
-// a helper generic over its model; service code on a concrete model reaches
-// the same operators through the generated column references, see Column. The
-// grouping, subquery and constant constructors have no column-reference form
-// and serve every caller. Each signature locks the value shape its operator
+// column name. They serve code that learns the column only at run time, such
+// as framework internals reading it from a request; code on a concrete model
+// reaches the same operators through the generated column references, and
+// generic code through a reference minted for its type parameter, see Column.
+// The grouping, subquery and constant constructors have no column-reference
+// form and serve every caller. Each signature locks the value shape its operator
 // expects, so a malformed filter cannot be expressed without bypassing the
 // constructors. Column is a snake case column name; validating it against the
 // model's queryable columns remains the caller's responsibility.

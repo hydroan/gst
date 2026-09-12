@@ -3,6 +3,7 @@ package types
 import (
 	"fmt"
 	"reflect"
+	"sync"
 	"time"
 )
 
@@ -59,9 +60,10 @@ type ColumnRef[T any] interface {
 //
 // The methods are typed front ends for the FilterXxx, Asc, Desc and Assign
 // constructors and produce the same Filter, Order and Assignment values, with
-// the table the reference was built for filled in. Code that cannot reference
-// a concrete model (generic helpers, framework internals) keeps using those
-// constructors with a string column name.
+// the table the reference was built for filled in. Generic code builds its
+// references with its type parameter as the model, see NewColumn; the
+// plain-name constructors are left to code that learns the column only at run
+// time, such as framework internals reading it from a request.
 //
 // Columns whose Go type is numeric or time.Time are generated as NumericColumn
 // or TimeColumn instead, which embed this type and add the functions that are
@@ -75,12 +77,13 @@ type Column[T any] struct {
 // emits the calls in each model's generated file, naming the model as the
 // first type argument, so the table comes from the model's own TableName and
 // is never restated as a literal. Handwritten code, model hooks included,
-// reads those generated Cols vars rather than minting references. Code that
-// cannot reference a concrete model keeps using the FilterXxx, Asc, Desc and
-// Assign constructors with a plain column name, and module sources, which
-// have no generated file, mint references the way gg gen does, with their
-// model. The fields are unexported so a shared reference cannot be repointed
-// at another column after construction.
+// reads those generated Cols vars; gg check flags project code that mints a
+// reference instead, with two exceptions. Generic code has no concrete model
+// and so no Cols var: it names its type parameter as the model, and
+// NewColumn[M, string]("id").In(ids...) keeps the value type checked where a
+// plain column name would not. Module sources have no generated file and
+// name their model the way gg gen does. The fields are unexported so a shared
+// reference cannot be repointed at another column after construction.
 //
 // A virtual model, one embedding model.Empty, has no table and reports an
 // empty TableName; its references carry no table and resolve to the table of
@@ -96,13 +99,28 @@ func NewColumn[M TableNamer, T any](name string) Column[T] {
 	return Column[T]{table: tableNameOf[M](), name: name}
 }
 
-// tableNameOf reads the table name of M from a fresh value of it. A pointer
-// model is instantiated through its pointee rather than left at its nil zero
-// value, so TableName runs on a real value whatever receiver it declares: a
-// value-receiver method reached through a nil pointer would dereference it.
+// tableNames caches the table name of every model type a reference has been
+// built for. A model's table is fixed per type: gorm resolves TableName once
+// per type and caches it, and gg check holds table-backed models to a string
+// literal. Resolving it once spares every later reference the fresh model
+// value the lookup instantiates, which generic code would otherwise pay each
+// time it names its type parameter as the model.
+var tableNames sync.Map // reflect.Type -> string
+
+// tableNameOf reads the table name of M, from a fresh value of it the first
+// time M is seen. A pointer model is instantiated through its pointee rather
+// than left at its nil zero value, so TableName runs on a real value whatever
+// receiver it declares: a value-receiver method reached through a nil pointer
+// would dereference it.
 func tableNameOf[M TableNamer]() string {
+	typ := reflect.TypeFor[M]()
+	if cached, found := tableNames.Load(typ); found {
+		if name, isName := cached.(string); isName {
+			return name
+		}
+	}
 	var m M
-	if typ := reflect.TypeFor[M](); typ.Kind() == reflect.Pointer {
+	if typ.Kind() == reflect.Pointer {
 		instance, ok := reflect.TypeAssert[M](reflect.New(typ.Elem()))
 		if !ok {
 			// Unreachable: New returns exactly the pointer type M names.
@@ -110,7 +128,9 @@ func tableNameOf[M TableNamer]() string {
 		}
 		m = instance
 	}
-	return m.TableName()
+	name := m.TableName()
+	tableNames.Store(typ, name)
+	return name
 }
 
 // Name returns the database column name resolved by gorm. It is also what the

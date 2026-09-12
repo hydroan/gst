@@ -260,8 +260,9 @@ func (db *database[M]) WithLock(mode ...consts.LockMode) types.Database[M] {
 // the primary sort key.
 //
 // Orders are built from the generated column references, which cannot name a
-// column the model does not have; the types.Asc and types.Desc constructors
-// take a plain column name for code that cannot reference a concrete model.
+// column the model does not have, or, in generic code, from a reference minted
+// for the type parameter; the types.Asc and types.Desc constructors take a
+// plain column name for code that learns the column only at run time.
 // Column names are quoted with dialect-appropriate identifiers, and the
 // direction comes from a closed set, so neither part can carry SQL.
 //

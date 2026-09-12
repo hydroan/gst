@@ -72,6 +72,20 @@ func TestNewColumnReferences(t *testing.T) {
 	})
 }
 
+// columnSink keeps each reference a benchmark builds, so the compiler cannot
+// drop the work as unused.
+var columnSink types.Column[string]
+
+// BenchmarkNewColumn measures minting a reference for a model with a typical
+// footprint, the cost generic code pays each time it names its type parameter
+// as the model.
+func BenchmarkNewColumn(b *testing.B) {
+	b.ReportAllocs()
+	for b.Loop() {
+		columnSink = types.NewColumn[*sampleRecord, string]("code")
+	}
+}
+
 func TestColumnBuildsFilters(t *testing.T) {
 	age := types.NewColumn[sampleTable, int]("age")
 	status := types.NewColumn[sampleTable, sampleStatus]("status")

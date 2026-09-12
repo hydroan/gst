@@ -540,9 +540,12 @@ Service code builds the same filters through the typed column references
 `gg gen` generates next to each model, for example
 `sample.RecordCols.Status.In(sample.RecordStatusPending)`: the column name and the
 value type are both checked by the compiler, so a renamed column or a wrong
-value type fails the build instead of the query. Code that cannot name a
-concrete model (generic helpers, framework internals) uses the
-`types.FilterXxx` constructors with a string column name instead.
+value type fails the build instead of the query. Generic code, which has no
+concrete model and so no generated references, mints one for its type
+parameter, for example `types.NewColumn[M, string]("id").In(ids...)`, and keeps
+the value type checked. The `types.FilterXxx` constructors with a string column
+name are left to code that learns the column only at run time, such as the
+framework's own URL parsing.
 
 A service that implements a list action itself reaches the same parsing
 through the `QueryXxx` methods on its `service.Base`. Service code also has

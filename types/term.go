@@ -80,12 +80,12 @@ func (b TimeBucket) Valid() bool {
 // otherwise, and a window function when Window is set.
 //
 // Terms are built through the column references: the generated Cols vars,
-// or references minted with NewColumn and its siblings by code that has no
-// generated file, such as framework module sources. A generated reference
-// cannot express a function its column type does not support, because it
-// does not carry the method; a minted reference names whatever type its
-// author chose, so the column and its type are checked against the model
-// schema when the query is built.
+// or references minted with NewColumn and its siblings by code without a Cols
+// var to read, which is generic code naming its type parameter and framework
+// module sources. A generated reference cannot express a function its column
+// type does not support, because it does not carry the method; a minted
+// reference names whatever type its author chose, so the column and its type
+// are checked against the model schema when the query is built.
 //
 // A term never holds SQL. Column names are quoted by the database layer,
 // values bind as statement parameters, and Fn and Bucket come from closed sets.
