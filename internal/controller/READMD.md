@@ -1,5 +1,7 @@
 ## Create
 
+The id is optional: one left out of the body is generated.
+
 > `Request`
 >
 > ```bash
@@ -20,12 +22,13 @@
 >   "code": 0,
 >   "data": {
 >     "id": "user01",
->     "created_at": "2024-12-25T12:43:21.250766+08:00",
->     "updated_at": "2024-12-25T12:43:21.241+08:00",
+>     "created_at": "2024-12-25T04:43:21.241Z",
+>     "updated_at": "2024-12-25T04:43:21.241Z",
 >     "name": "user01",
 >     "email": "user01@gmail.com"
 >   },
->   "msg": "success"
+>   "msg": "success",
+>   "trace_id": "..."
 > }
 > ```
 >
@@ -36,13 +39,14 @@
 > user.ID = "user01"
 > user.Name = "user01"
 > user.Email = "user01@gmail.com"
-> database.Database[*model.User]().Create(user)
+> database.Database[*model.User](ctx).Create(user)
 > ```
 
 ## Delete
 
 The resource id comes from the route parameter only. Batch deletion should use
-the `DeleteMany` action instead.
+the `DeleteMany` action instead. Whether the row is removed or soft deleted
+follows the model's `Purge` setting.
 
 > `Request`
 >
@@ -57,8 +61,9 @@ the `DeleteMany` action instead.
 > ```json
 > {
 >     "code": 0,
->     "data": "",
->     "msg": "success"
+>     "data": null,
+>     "msg": "success",
+>     "trace_id": "..."
 > }
 > ```
 >
@@ -67,10 +72,14 @@ the `DeleteMany` action instead.
 > ```go
 > user := new(model.User)
 > user.SetID("user01")
-> database.Database[*model.User]().Delete(user)
+> database.Database[*model.User](ctx).Delete(user)
 > ```
 
 ## Update
+
+PUT replaces the whole record: a field the body leaves out is written as its
+zero value. The resource id comes from the route parameter only, and a missing
+record answers 404.
 
 > `Request`
 >
@@ -79,8 +88,8 @@ the `DeleteMany` action instead.
 > --header 'Content-Type: application/json' \
 > --header 'Authorization: Bearer -' \
 > --data-raw '{
->    "name": "user01_modifed",
->    "email": "user01_modifed@gmail.com"
+>    "name": "user01_modified",
+>    "email": "user01_modified@gmail.com"
 > }'
 > ```
 >
@@ -91,12 +100,13 @@ the `DeleteMany` action instead.
 >     "code": 0,
 >     "data": {
 >        "id": "user01",
->        "created_at": "2024-12-25T13:01:01.634+08:00",
->        "updated_at": "2024-12-25T13:26:18.307+08:00",
->        "name": "user01_modifed",
->        "email": "user01_modifed@gmail.com"
+>        "created_at": "2024-12-25T05:01:01.634Z",
+>        "updated_at": "2024-12-25T05:26:18.307Z",
+>        "name": "user01_modified",
+>        "email": "user01_modified@gmail.com"
 >     },
->     "msg": "success"
+>     "msg": "success",
+>     "trace_id": "..."
 > }
 > ```
 >
@@ -105,15 +115,17 @@ the `DeleteMany` action instead.
 > ```go
 > user := new(model.User)
 > user.ID = "user01"
-> user.Name = "user01_modifed"
-> user.Email = "user01_modifed@gmail.com"
-> database.Database[*model.User]().Update(user)
+> user.Name = "user01_modified"
+> user.Email = "user01_modified@gmail.com"
+> database.Database[*model.User](ctx).Update(user)
 > ```
 
 ## UpdatePartial
 
 The resource id comes from the route parameter only. The id carried by the
-http body is ignored.
+http body is ignored. The handler loads the record, copies the fields present
+in the body onto it and saves the whole record, so concurrent patches of one
+record resolve as last writer wins unless the model declares `model.Version`.
 
 > `Request`
 >
@@ -123,7 +135,7 @@ http body is ignored.
 > --header 'Authorization: Bearer -' \
 > --data-raw '{
 >    "name": "user01_modified",
->    "email": "user01_modifed@gmail.com"
+>    "email": "user01_modified@gmail.com"
 > }'
 > ```
 >
@@ -134,23 +146,27 @@ http body is ignored.
 >     "code": 0,
 >     "data": {
 >        "id": "user01",
->        "created_at": "2024-12-25T17:22:28.558+08:00",
->        "updated_at": "2024-12-26T10:29:32.837+08:00",
+>        "created_at": "2024-12-25T09:22:28.558Z",
+>        "updated_at": "2024-12-26T02:29:32.837Z",
 >        "name": "user01_modified",
->        "email": "user01_modifed@gmail.com",
->        "avatar": "https://myavataor.com",
->        "sunname": "mysunname",
+>        "email": "user01_modified@gmail.com",
+>        "avatar": "https://myavatar.com",
+>        "surname": "mysurname",
 >        "nickname": "mynickname"
 >     },
->     "msg": "success"
+>     "msg": "success",
+>     "trace_id": "..."
 > }
 > ```
 >
 > `Database equivalent`
 >
 > ```go
-> database.Database[*model.User]().UpdateById("user01", "name", "user01_modified")
-> database.Database[*model.User]().UpdateById("user01", "email", "user01_modified@gmail.com")
+> user := new(model.User)
+> database.Database[*model.User](ctx).Get(user, "user01")
+> user.Name = "user01_modified"
+> user.Email = "user01_modified@gmail.com"
+> database.Database[*model.User](ctx).Update(user)
 > ```
 
 ## List
@@ -171,28 +187,32 @@ http body is ignored.
 >     "items": [
 >       {
 >         "id": "user01",
->         "created_at": "2024-12-25T11:21:21.134+08:00",
->         "updated_at": "2024-12-25T11:21:21.135+08:00",
+>         "created_at": "2024-12-25T03:21:21.134Z",
+>         "updated_at": "2024-12-25T03:21:21.134Z",
 >         "name": "user01",
 >         "email": "user01@gmail.com"
 >       },
 >       {
 >         "id": "user02",
->         "created_at": "2024-12-25T11:23:18.017+08:00",
->         "updated_at": "2024-12-25T11:23:18.017+08:00",
+>         "created_at": "2024-12-25T03:23:18.017Z",
+>         "updated_at": "2024-12-25T03:23:18.017Z",
 >         "name": "user02",
 >         "email": "user02@gmail.com"
 >       }
 >     ],
 >     "total": 2
 >   },
->   "msg": "success"
+>   "msg": "success",
+>   "trace_id": "..."
 > }
 > ```
 
 ### Query Parameters
 
 #### `_page=number`, `_size=number` for pagination.
+
+Paging requires the model to embed `model.Pagination`, which `model.Query`
+includes.
 
 > `Request`
 >
@@ -204,12 +224,15 @@ http body is ignored.
 > `Database equivalent`
 >
 > ```go
-> database.Database[*model.User]().WithPagination(1, 20).List(&users)
+> database.Database[*model.User](ctx).WithPagination(1, 10).List(&users)
 > ```
 
-#### `_expand=parent,children`
+#### `_expand=all`
 
-NOTE: set value to `all` to expand all field.
+`_expand` preloads the associations the model lists in `Expands()`. Names match
+ignoring case and snake case punctuation, several names are comma-separated,
+and `all` selects every association. List accepts it when the model embeds
+`model.Query`; Get accepts it as well, and the examples below read one record.
 
 > `Request`
 >
@@ -225,24 +248,24 @@ NOTE: set value to `all` to expand all field.
 > "code": 0,
 > "data": {
 >  "id": "fruit",
->  "created_at": "2024-12-25T15:36:25.156+08:00",
->  "updated_at": "2024-12-25T15:36:25.156+08:00",
+>  "created_at": "2024-12-25T07:36:25.156Z",
+>  "updated_at": "2024-12-25T07:36:25.156Z",
 >  "name": "fruit",
 >  "status": 1,
 >  "parent_id": "root",
 >  "children": [
 >    {
 >      "id": "apple",
->      "created_at": "2024-12-25T15:36:25.156+08:00",
->      "updated_at": "2024-12-25T15:36:25.156+08:00",
+>      "created_at": "2024-12-25T07:36:25.156Z",
+>      "updated_at": "2024-12-25T07:36:25.156Z",
 >      "name": "apple",
 >      "status": 1,
 >      "parent_id": "fruit"
 >    },
 >    {
 >      "id": "banana",
->      "created_at": "2024-12-25T15:36:25.156+08:00",
->      "updated_at": "2024-12-25T15:36:25.156+08:00",
+>      "created_at": "2024-12-25T07:36:25.156Z",
+>      "updated_at": "2024-12-25T07:36:25.156Z",
 >      "name": "banana",
 >      "status": 1,
 >      "parent_id": "fruit"
@@ -250,29 +273,26 @@ NOTE: set value to `all` to expand all field.
 >  ],
 >  "parent": {
 >    "id": "root",
->    "created_at": "2024-12-25T15:36:25.156+08:00",
->    "updated_at": "2024-12-25T15:36:25.156+08:00",
+>    "created_at": "2024-12-25T07:36:25.156Z",
+>    "updated_at": "2024-12-25T07:36:25.156Z",
 >    "name": "root",
 >    "status": 0,
 >    "parent_id": "root"
 >  }
 > },
-> "msg": "success"
+> "msg": "success",
+> "trace_id": "..."
 > }
 > ```
 >
 > `Database equivalent`
 >
 > ```go
-> categories := make([]*model.Category, 0)
-> database.Database[*model.Category]().WithExpand(new(model.Category).Expands()).List(&categories)
+> category := new(model.Category)
+> database.Database[*model.Category](ctx).WithExpand(category.Expands()).Get(category, "fruit")
 > ```
 
 #### `_expand=children`
-
-```go
-database.Database[*model.Category]().WithExpand(new(model.Category).Expands()).List(&categories)
-```
 
 > `Request`
 >
@@ -288,46 +308,47 @@ database.Database[*model.Category]().WithExpand(new(model.Category).Expands()).L
 > "code": 0,
 > "data": {
 >  "id": "fruit",
->  "created_at": "2024-12-25T15:36:25.156+08:00",
->  "updated_at": "2024-12-25T15:36:25.156+08:00",
+>  "created_at": "2024-12-25T07:36:25.156Z",
+>  "updated_at": "2024-12-25T07:36:25.156Z",
 >  "name": "fruit",
 >  "status": 1,
 >  "parent_id": "root",
 >  "children": [
 >    {
 >      "id": "apple",
->      "created_at": "2024-12-25T15:36:25.156+08:00",
->      "updated_at": "2024-12-25T15:36:25.156+08:00",
+>      "created_at": "2024-12-25T07:36:25.156Z",
+>      "updated_at": "2024-12-25T07:36:25.156Z",
 >      "name": "apple",
 >      "status": 1,
 >      "parent_id": "fruit"
 >    },
 >    {
 >      "id": "banana",
->      "created_at": "2024-12-25T15:36:25.156+08:00",
->      "updated_at": "2024-12-25T15:36:25.156+08:00",
+>      "created_at": "2024-12-25T07:36:25.156Z",
+>      "updated_at": "2024-12-25T07:36:25.156Z",
 >      "name": "banana",
 >      "status": 1,
 >      "parent_id": "fruit"
 >    }
 >  ]
 > },
-> "msg": "success"
+> "msg": "success",
+> "trace_id": "..."
 > }
 > ```
 >
 > `Database equivalent`
 >
 > ```go
-> categories := make([]*model.Category, 0)
-> database.Database[*model.Category]().WithExpand([]string{"Children"}).List(&categories)
+> category := new(model.Category)
+> database.Database[*model.Category](ctx).WithExpand([]string{"Children"}).Get(category, "fruit")
 > ```
->
-> 
 
 #### `_expand=children`,`_depth=3`
 
-\_depth specify the depth to expand.
+`_depth` expands a slice association such as `children` that many levels deep,
+from 1 to 10; a missing or out-of-range value means 1, and a non-slice
+association such as `parent` ignores it.
 
 > `Request`
 >
@@ -343,32 +364,32 @@ database.Database[*model.Category]().WithExpand(new(model.Category).Expands()).L
 > "code": 0,
 > "data": {
 >  "id": "fruit",
->  "created_at": "2024-12-25T15:36:25.156+08:00",
->  "updated_at": "2024-12-25T15:36:25.156+08:00",
+>  "created_at": "2024-12-25T07:36:25.156Z",
+>  "updated_at": "2024-12-25T07:36:25.156Z",
 >  "name": "fruit",
 >  "status": 1,
 >  "parent_id": "root",
 >  "children": [
 >    {
 >      "id": "apple",
->      "created_at": "2024-12-25T15:36:25.156+08:00",
->      "updated_at": "2024-12-25T15:36:25.156+08:00",
+>      "created_at": "2024-12-25T07:36:25.156Z",
+>      "updated_at": "2024-12-25T07:36:25.156Z",
 >      "name": "apple",
 >      "status": 1,
 >      "parent_id": "fruit",
 >      "children": [
 >        {
 >          "id": "apple1",
->          "created_at": "2024-12-25T15:36:25.156+08:00",
->          "updated_at": "2024-12-25T15:36:25.156+08:00",
+>          "created_at": "2024-12-25T07:36:25.156Z",
+>          "updated_at": "2024-12-25T07:36:25.156Z",
 >          "name": "apple1",
 >          "status": 1,
 >          "parent_id": "apple"
 >        },
 >        {
 >          "id": "apple2",
->          "created_at": "2024-12-25T15:36:25.156+08:00",
->          "updated_at": "2024-12-25T15:36:25.156+08:00",
+>          "created_at": "2024-12-25T07:36:25.156Z",
+>          "updated_at": "2024-12-25T07:36:25.156Z",
 >          "name": "apple2",
 >          "status": 1,
 >          "parent_id": "apple"
@@ -377,24 +398,24 @@ database.Database[*model.Category]().WithExpand(new(model.Category).Expands()).L
 >    },
 >    {
 >      "id": "banana",
->      "created_at": "2024-12-25T15:36:25.156+08:00",
->      "updated_at": "2024-12-25T15:36:25.156+08:00",
+>      "created_at": "2024-12-25T07:36:25.156Z",
+>      "updated_at": "2024-12-25T07:36:25.156Z",
 >      "name": "banana",
 >      "status": 1,
 >      "parent_id": "fruit",
 >      "children": [
 >        {
 >          "id": "banana1",
->          "created_at": "2024-12-25T15:36:25.156+08:00",
->          "updated_at": "2024-12-25T15:36:25.156+08:00",
+>          "created_at": "2024-12-25T07:36:25.156Z",
+>          "updated_at": "2024-12-25T07:36:25.156Z",
 >          "name": "banana1",
 >          "status": 1,
 >          "parent_id": "banana"
 >        },
 >        {
 >          "id": "banana2",
->          "created_at": "2024-12-25T15:36:25.156+08:00",
->          "updated_at": "2024-12-25T15:36:25.156+08:00",
+>          "created_at": "2024-12-25T07:36:25.156Z",
+>          "updated_at": "2024-12-25T07:36:25.156Z",
 >          "name": "banana2",
 >          "status": 1,
 >          "parent_id": "banana"
@@ -403,30 +424,34 @@ database.Database[*model.Category]().WithExpand(new(model.Category).Expands()).L
 >    }
 >  ]
 > },
-> "msg": "success"
+> "msg": "success",
+> "trace_id": "..."
 > }
 > ```
 >
 > `Database equivalent`
 >
 > ```go
-> categories := make([]*model.Category, 0)
-> database.Database[*model.Category]().WithExpand([]string{"Children.Children.Children"}).List(&categories)
+> category := new(model.Category)
+> database.Database[*model.Category](ctx).WithExpand([]string{"Children.Children.Children"}).Get(category, "fruit")
 > ```
 
 #### `field_name=value`
 
-NOTE: you should always make sure the model field has `schema` tag. for example:
+Bare keys are exact-match filters on the model's fields. A field's URL name is
+its `query` tag, falling back to its `json` tag name and then to a name derived
+from the field name; `query:"-"` keeps a field out of URL filtering. For
+example:
 
 ```golang
 type User struct {
 	model.Base
 
-	Name     *string `json:"name,omitempty" schema:"name"`
-	Email    *string `json:"email,omitempty" schema:"email"`
-	Avatar   *string `json:"avatar,omitempty" schema:"avatar"`
-	Sunname  *string `json:"sunname,omitempty" schema:"sunname"`
-	Nickname *string `json:"nickname,omitempty" schema:"nickname"`
+	Name     string `json:"name,omitempty" query:"name"`
+	Email    string `json:"email,omitempty" query:"email"`
+	Avatar   string `json:"avatar,omitempty" query:"avatar"`
+	Surname  string `json:"surname,omitempty" query:"surname"`
+	Nickname string `json:"nickname,omitempty" query:"nickname"`
 }
 ```
 
@@ -439,66 +464,64 @@ type User struct {
 >
 > `Response`
 >
-> ```bash
+> ```json
 > {
 >  "code": 0,
 >  "data": {
 >      "items": [
 >          {
 >              "id": "user01",
->              "created_at": "2024-12-25T17:22:28.558+08:00",
->              "updated_at": "2024-12-25T17:22:28.558+08:00",
+>              "created_at": "2024-12-25T09:22:28.558Z",
+>              "updated_at": "2024-12-25T09:22:28.558Z",
 >              "name": "user01",
 >              "email": "user01@gmail.com"
 >          }
 >      ],
 >      "total": 1
 >  },
->  "msg": "success"
+>  "msg": "success",
+>  "trace_id": "..."
 > }
 > ```
 >
 > `Database equivalent`
 >
 > ```go
-> database.Database[*model.User]().WithQuery(&model.User{Name: util.ValueOf("user01")}).List(&users)
+> database.Database[*model.User](ctx).WithQuery(&model.User{Name: "user01"}).List(&users)
 > ```
 
-Bare keys are exact-match filters. For substring (fuzzy) matching on a single
-field, use the field operator filter syntax instead: `?name[like]=user01`
-(see the `field[op]=value` section below).
+For substring (fuzzy) matching on a single field, use the field operator filter
+syntax instead: `?name[like]=user01` (see the `field[op]=value` section below).
 
 #### `_sort_by=xxx`
 
->   `Request`
+> `Request`
 >
->   ```bash
->   # _sort_by=name
->   curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_sort_by=name' \
->   --header 'Authorization: Bearer -'
->   
->   # _sort_by=name desc
->   curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_sort_by=name%20desc' \
->   --header 'Authorization: Bearer -'
->   
->   # _sort_by=name desc, created_at
->   curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_sort_by=name%20desc%2C%20created_at' \
->   --header 'Authorization: Bearer -'
->   
->   # _sort_by=name desc, created_at asc
->   curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_sort_by=name%20desc%2C%20created_at%20asc' \
->   --header 'Authorization: Bearer -'
->   ```
+> ```bash
+> # _sort_by=name
+> curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_sort_by=name' \
+> --header 'Authorization: Bearer -'
 >
->   `Database equivalent`
+> # _sort_by=name desc
+> curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_sort_by=name%20desc' \
+> --header 'Authorization: Bearer -'
 >
->   ```go
->   database.Database[*model.User]().WithOrder(types.Asc("name")).List(&users)
->   database.Database[*model.User]().WithOrder(types.Desc("name")).List(&users)
->   database.Database[*model.User]().WithOrder(types.Desc("name"), types.Asc("created_at")).List(&users)
->   ```
-
-
+> # _sort_by=name desc, created_at
+> curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_sort_by=name%20desc%2C%20created_at' \
+> --header 'Authorization: Bearer -'
+>
+> # _sort_by=name desc, created_at asc
+> curl --silent --location --request GET 'http://localhost:8080/api/user?name=user01&_sort_by=name%20desc%2C%20created_at%20asc' \
+> --header 'Authorization: Bearer -'
+> ```
+>
+> `Database equivalent`
+>
+> ```go
+> database.Database[*model.User](ctx).WithQuery(&model.User{Name: "user01"}).WithOrder(types.Asc("name")).List(&users)
+> database.Database[*model.User](ctx).WithQuery(&model.User{Name: "user01"}).WithOrder(types.Desc("name")).List(&users)
+> database.Database[*model.User](ctx).WithQuery(&model.User{Name: "user01"}).WithOrder(types.Desc("name"), types.Asc("created_at")).List(&users)
+> ```
 
 #### `field[op]=value` (field operator filters)
 
@@ -530,35 +553,52 @@ so a mandatory service-side filter can never be OR-ed away.
 
 Values are validated against the field's Go type and rejected with 400 when
 malformed. Numeric fields require numeric values. Time fields accept the
-comparison operators only, with the formats parsed by `parseQueryTime`:
-`2006-01-02 15:04:05`, `2006-01-02T15:04[:05]`, `2006-01-02`, RFC 3339 with
-explicit offset, and unix seconds/milliseconds; zone-less layouts use the
-server's local zone, and a date-only value extends to the end of the day as an
-`lte` or `gt` bound. Time ranges combine `gte` and `lte` on the same field;
-the framework-managed `created_at`/`updated_at` columns are reachable through
-operator filters only.
+comparison operators only, and `parseQueryTime` accepts RFC 3339 alone, with
+an explicit offset and fractional seconds up to nanoseconds: zone-less
+spellings, date-only values and unix timestamps return 400, because a
+zone-less value names a different instant in every server zone. A `+` offset
+must be percent-encoded as `%2B` in the query string (or written as `Z` or a
+negative offset). The bound reaches the database as the UTC wall clock in
+`types.FilterTimeLayout`. Time ranges combine `gte` and `lte` on the same
+field; the framework-managed `created_at`/`updated_at` columns also take their
+bare key as an exact-match filter.
 
 >`Request`
 >
 >```bash
 ># created_at range for July 2024 plus a numeric lower bound
->curl --silent --location --request GET 'http://localhost:8080/api/user?age%5Bgte%5D=18&created_at%5Bgte%5D=2024-07-01&created_at%5Blte%5D=2024-07-31' \
+>curl --silent --location --request GET 'http://localhost:8080/api/user?age%5Bgte%5D=18&created_at%5Bgte%5D=2024-07-01T00:00:00Z&created_at%5Blte%5D=2024-07-31T23:59:59Z' \
 >--header 'Authorization: Bearer -'
 >```
 >
 >`Database equivalent`
 >
 >```go
->database.Database[*model.User]().WithQuery(nil, types.QueryOptions{
+>database.Database[*model.User](ctx).WithQuery(nil, types.QueryOptions{
 >	AllowEmpty: true,
 >	Filters: []types.Filter{
 >		types.FilterGte("age", "18"),
 >		types.FilterGte("created_at", "2024-07-01 00:00:00"),
->		types.FilterLte("created_at", "2024-07-31 23:59:59.999999999"),
+>		types.FilterLte("created_at", "2024-07-31 23:59:59"),
 >	},
 >}).List(&users)
 >```
 
-### query parameters
+## Get
 
-The useage of `_expand` and `_depth` is the same as List query parameters.
+`GET /api/user/:id` reads one record by the route id. It takes `_expand` and
+`_depth` the same way List does; see the examples above.
+
+> `Request`
+>
+> ```bash
+> curl --silent --location --request GET 'http://localhost:8080/api/user/user01' \
+> --header 'Authorization: Bearer -'
+> ```
+>
+> `Database equivalent`
+>
+> ```go
+> user := new(model.User)
+> database.Database[*model.User](ctx).Get(user, "user01")
+> ```
