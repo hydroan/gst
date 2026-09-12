@@ -283,23 +283,33 @@ OR 掉：
 
 ```go
 Filters: []types.Filter{
-	types.FilterEq("tenant_id", tenant),          // 强制条件，始终 AND
+	appmodel.SampleCols.TenantID.Eq(tenant),      // 强制条件，始终 AND
 	types.FilterOr(                               // 一个搜索词横跨多列
-		types.FilterLike("name", keyword),
-		types.FilterLike("code", keyword),
+		appmodel.SampleCols.Name.Like(keyword),
+		appmodel.SampleCols.Code.Like(keyword),
 	),
 }
 // WHERE tenant_id = ? AND (name LIKE ? OR code LIKE ?)
 ```
 
+条件用 `gg gen` 为模型生成的列引用来写（上例的 `appmodel.SampleCols`），列名和值类型都在
+编译期校验；拿不到具体模型的代码（例如对模型泛型的工具函数）改用 `types.FilterEq`、
+`types.FilterLike` 这类接收字符串列名的构造器。
+
 `types.FilterAnd` 用于在 OR 组内嵌套 AND，配合出 `(a AND b) OR (c AND d)`：
 
 ```go
 Filters: []types.Filter{
-	types.FilterEq("tenant_id", tenant),
+	appmodel.SampleCols.TenantID.Eq(tenant),
 	types.FilterOr(
-		types.FilterAnd(types.FilterEq("kind", KindPrimary), types.FilterEq("status", StatusDone)),
-		types.FilterAnd(types.FilterEq("kind", KindSecondary), types.FilterEq("status", StatusPending)),
+		types.FilterAnd(
+			appmodel.SampleCols.Kind.Eq(KindPrimary),
+			appmodel.SampleCols.Status.Eq(StatusDone),
+		),
+		types.FilterAnd(
+			appmodel.SampleCols.Kind.Eq(KindSecondary),
+			appmodel.SampleCols.Status.Eq(StatusPending),
+		),
 	),
 }
 // WHERE tenant_id = ? AND ((kind = ? AND status = ?) OR (kind = ? AND status = ?))

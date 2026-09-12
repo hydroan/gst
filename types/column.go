@@ -60,8 +60,8 @@ type ColumnRef[T any] interface {
 // The methods are typed front ends for the FilterXxx, Asc, Desc and Assign
 // constructors and produce the same Filter, Order and Assignment values, with
 // the table the reference was built for filled in. Code that cannot reference
-// a concrete model (generic helpers, framework internals, URL parsing) keeps
-// using those constructors with a string column name.
+// a concrete model (generic helpers, framework internals) keeps using those
+// constructors with a string column name.
 //
 // Columns whose Go type is numeric or time.Time are generated as NumericColumn
 // or TimeColumn instead, which embed this type and add the functions that are

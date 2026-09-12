@@ -119,8 +119,11 @@ func FilterOps() []FilterOp {
 //     time.Time); slices, arrays, and nil are rejected.
 //
 // A value that violates these rules fails closed in the database layer.
-// Service code should build filters with the FilterEq/FilterIn/... helper
-// constructors: their signatures enforce the value shape at compile time.
+// Service code builds filters through the generated column references
+// (SampleCols.Status.Eq(v)), which check the column name and the value type at
+// compile time; code that cannot reference a concrete model uses the
+// FilterEq/FilterIn/... constructors instead. Both lock the value shape at
+// compile time, which a Filter literal does not.
 type Filter struct {
 	Table  string
 	Column string
@@ -164,12 +167,15 @@ func (f Filter) TimeValue() (time.Time, bool) {
 	}
 }
 
-// The Filter constructors below build one Filter per operator and are the
-// intended way for service code to produce filters: each signature locks the
-// value shape its operator expects, so a malformed filter cannot be expressed
-// without bypassing the constructors. Column is a snake case column name;
-// validating it against the model's queryable columns remains the caller's
-// responsibility.
+// The Filter constructors below build one Filter per operator from a plain
+// column name. They serve code that cannot reference a concrete model, such as
+// a helper generic over its model; service code on a concrete model reaches
+// the same operators through the generated column references, see Column. The
+// grouping, subquery and constant constructors have no column-reference form
+// and serve every caller. Each signature locks the value shape its operator
+// expects, so a malformed filter cannot be expressed without bypassing the
+// constructors. Column is a snake case column name; validating it against the
+// model's queryable columns remains the caller's responsibility.
 
 // FilterEq matches rows where column equals value.
 func FilterEq(column string, value any) Filter {
@@ -282,10 +288,10 @@ func FilterFalse() Filter {
 // alternatives:
 //
 //	Filters: []types.Filter{
-//	    types.FilterEq("tenant_id", tenant),
+//	    SampleCols.TenantID.Eq(tenant),
 //	    types.FilterOr(
-//	        types.FilterLike("name", keyword),
-//	        types.FilterLike("code", keyword),
+//	        SampleCols.Name.Like(keyword),
+//	        SampleCols.Code.Like(keyword),
 //	    ),
 //	}
 //	// WHERE tenant_id = ? AND (name LIKE ? OR code LIKE ?)
@@ -302,15 +308,15 @@ func FilterOr(filters ...Filter) Filter {
 // inside an OR group:
 //
 //	Filters: []types.Filter{
-//	    types.FilterEq("tenant_id", tenant),
+//	    SampleCols.TenantID.Eq(tenant),
 //	    types.FilterOr(
 //	        types.FilterAnd(
-//	            types.FilterEq("kind", KindPrimary),
-//	            types.FilterEq("status", StatusDone),
+//	            SampleCols.Kind.Eq(KindPrimary),
+//	            SampleCols.Status.Eq(StatusDone),
 //	        ),
 //	        types.FilterAnd(
-//	            types.FilterEq("kind", KindSecondary),
-//	            types.FilterEq("status", StatusPending),
+//	            SampleCols.Kind.Eq(KindSecondary),
+//	            SampleCols.Status.Eq(StatusPending),
 //	        ),
 //	    ),
 //	}

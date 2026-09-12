@@ -31,7 +31,7 @@ import (
 //	- Multiple fields combine with AND logic (WHERE name = 'John' AND age = 18)
 //	- The value is a literal: a comma is data, never a list separator. A
 //	  query for several values uses the in operator filter instead
-//	  (types.FilterIn, URL form "field[in]=a,b"), where the list is explicit.
+//	  (types.Column.In, URL form "field[in]=a,b"), where the list is explicit.
 //
 //	JSON columns (fields whose type declares a JSON gorm data type, such as
 //	the gorm.io/datatypes types): a JSON document is not a scalar, so an
@@ -55,7 +55,7 @@ import (
 //	WithQuery(&model.User{Name: "John", Age: 18})  // WHERE name = 'John' AND age = 18
 //
 //	// Several values for one field - the list is explicit, never comma-parsed
-//	WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.FilterIn("id", ids)}})
+//	WithQuery(nil, types.QueryOptions{Filters: []types.Filter{model.UserCols.ID.In(ids...)}})
 //
 //	// Empty query (blocked by default for safety)
 //	WithQuery(nil)  // WHERE 1 = 0 (returns no records)
