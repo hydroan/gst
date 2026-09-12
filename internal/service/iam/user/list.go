@@ -14,6 +14,14 @@ import (
 	"github.com/hydroan/gst/types/consts"
 )
 
+// Column references for the visibility scope and the default order below;
+// module sources carry no generated Cols vars, so the references are declared
+// here.
+var (
+	colUserID        = types.NewColumn[*modeliamuser.User, string]("id")
+	colUserCreatedAt = types.NewTimeColumn[*modeliamuser.User]("created_at")
+)
+
 // AdminUserListService handles GET /iam/admin/users for privileged administrators.
 //
 // Authorization is split into two steps: List first checks whether the actor may
@@ -96,7 +104,7 @@ func (a *AdminUserListService) listUsers(ctx *types.ServiceContext, actor *model
 	}
 
 	if len(orders) == 0 {
-		orders = []types.Order{types.Desc("created_at")}
+		orders = []types.Order{colUserCreatedAt.Desc()}
 	}
 	page, size := a.QueryPagination(ctx)
 	users := make([]*modeliamuser.User, 0)
@@ -142,7 +150,7 @@ func userVisibilityQueryOptions(ctx *types.ServiceContext, actor *modeliamuser.U
 	if len(subjectIDs) == 0 {
 		return emptyUserVisibilityQueryOptions(), nil
 	}
-	return types.QueryOptions{Filters: []types.Filter{types.FilterIn("id", subjectIDs)}}, nil
+	return types.QueryOptions{Filters: []types.Filter{colUserID.In(subjectIDs...)}}, nil
 }
 
 // emptyUserVisibilityQueryOptions denies every row: the caller has no subject
