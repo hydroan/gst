@@ -4,6 +4,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -284,30 +285,6 @@ func TestRenderColumnsFileRejectsImportAliasCollision(t *testing.T) {
 	require.Error(t, err, "two packages cannot share one import alias")
 }
 
-func TestGeneratedColumnFileStubs(t *testing.T) {
-	dir := t.TempDir()
-	sampleDir := filepath.Join(dir, "model", "sample")
-	require.NoError(t, os.MkdirAll(sampleDir, 0o750))
-
-	generated := consts.CodeGeneratedComment() + "\n// source: model/sample/record.go\n\npackage sample\n\nvar RecordCols = struct{}{}\n"
-	columns := filepath.Join(sampleDir, "record.gen.go")
-	handwritten := filepath.Join(sampleDir, "handwritten.gen.go")
-	registration := filepath.Join(dir, "model", constants.FileModelGen)
-	source := filepath.Join(sampleDir, "record.go")
-	require.NoError(t, os.WriteFile(columns, []byte(generated), 0o600))
-	require.NoError(t, os.WriteFile(handwritten, []byte("package sample\n"), 0o600))
-	require.NoError(t, os.WriteFile(registration, []byte(generated), 0o600))
-	require.NoError(t, os.WriteFile(source, []byte("package sample\n"), 0o600))
-
-	stubs, err := generatedColumnFileStubs(filepath.Join(dir, "model"))
-	require.NoError(t, err)
-
-	// Only the framework-owned column file collapses to its package clause:
-	// the inspection build must not depend on previously generated column
-	// references, while every other file keeps participating as-is.
-	require.Equal(t, map[string]string{columns: "package sample\n"}, stubs)
-}
-
 func TestRemoveOrphanColumnFiles(t *testing.T) {
 	dir := t.TempDir()
 	sampleDir := filepath.Join(dir, "model", "sample")
@@ -339,4 +316,162 @@ func TestRemoveOrphanColumnFilesRefusesHandWrittenFile(t *testing.T) {
 	err := removeOrphanColumnFiles(scanDir, map[string]struct{}{}, true)
 	require.Error(t, err, "a file without the generated header must not be deleted")
 	require.FileExists(t, intruder)
+}
+
+// TestGenRunGeneratesColumnsReadByHandwrittenModelCode runs gg gen against a
+// project whose handwritten model code reads generated column references: a
+// hook, package-level vars read by an init function and by other functions,
+// and a hook of another model package. The inspection build compiles that
+// code before the run writes the references, first with no column file at all
+// and then with the previous generation stubbed out; the references the run
+// writes must then satisfy the same code in the project's own build.
+func TestGenRunGeneratesColumnsReadByHandwrittenModelCode(t *testing.T) {
+	oldModelDir := modelDir
+	oldServiceDir := serviceDir
+	oldRouterDir := routerDir
+	oldDaoDir := daoDir
+	oldExcludes := excludes
+	oldModule := module
+	oldPrune := prune
+	oldCleanOrphans := cleanOrphans
+	t.Cleanup(func() {
+		modelDir = oldModelDir
+		serviceDir = oldServiceDir
+		routerDir = oldRouterDir
+		daoDir = oldDaoDir
+		excludes = oldExcludes
+		module = oldModule
+		prune = oldPrune
+		cleanOrphans = oldCleanOrphans
+	})
+
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	modelDir = "model"
+	serviceDir = "service"
+	routerDir = "router"
+	daoDir = "dao"
+	excludes = nil
+	module = ""
+	prune = false
+	cleanOrphans = false
+
+	writeCheckProjectGoModAgainstRealFramework(t, projectDir)
+	writeCheckFile(t, filepath.Join(projectDir, "model", "sample", "record.go"), `package sample
+
+import (
+	"context"
+
+	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	Status string `+"`json:\"status\"`"+`
+	Score  int64  `+"`json:\"score\"`"+`
+
+	model.Base
+}
+
+func (Record) TableName() string { return "records" }
+
+func (Record) Design() {
+	dsl.Migrate()
+}
+
+func (r *Record) CreateBefore(ctx context.Context) error {
+	return database.Database[*Record](ctx).UpdateByID(r.ID, RecordCols.Status.Set("active"))
+}
+`)
+	writeCheckFile(t, filepath.Join(projectDir, "model", "sample", "status.go"), `package sample
+
+import (
+	"math/rand/v2"
+	"strings"
+
+	"github.com/hydroan/gst/types"
+)
+
+var (
+	defaultStatus = "active"
+	statusColumn  = RecordCols.Status
+)
+
+var sortableColumns = []types.AnyColumnRef{statusColumn, RecordCols.Score}
+
+func init() {
+	if strings.TrimSpace(statusColumn.Name()) == "" {
+		panic("status column has no name")
+	}
+}
+
+func statusFilter() types.Filter {
+	return statusColumn.Eq(defaultStatus + strings.Repeat("!", rand.IntN(2)))
+}
+
+func sortColumns() []types.AnyColumnRef {
+	return sortableColumns
+}
+`)
+	writeCheckFile(t, filepath.Join(projectDir, "model", "item", "item.go"), `package item
+
+import (
+	"context"
+
+	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+
+	recordmodel "tmpapp/model/sample"
+)
+
+type Item struct {
+	RecordID string `+"`json:\"record_id\"`"+`
+
+	model.Base
+}
+
+func (Item) TableName() string { return "items" }
+
+func (Item) Design() {
+	dsl.Migrate()
+}
+
+func (i *Item) DeleteBefore(ctx context.Context) error {
+	return database.Database[*recordmodel.Record](ctx).UpdateByID(i.RecordID, recordmodel.RecordCols.Status.Set("detached"))
+}
+`)
+
+	cacheDir, err := columnsCacheDir()
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, os.RemoveAll(cacheDir)) })
+	recordColumnsFile := filepath.Join("model", "sample", "record.gen.go")
+	itemColumnsFile := filepath.Join("model", "item", "item.gen.go")
+
+	// First run: no column file exists yet, so nothing declares the
+	// references the handwritten code reads.
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+	recordColumns, err := os.ReadFile(recordColumnsFile)
+	require.NoError(t, err)
+	require.Contains(t, string(recordColumns), "var RecordCols = struct")
+	itemColumns, err := os.ReadFile(itemColumnsFile)
+	require.NoError(t, err)
+	require.Contains(t, string(itemColumns), "var ItemCols = struct")
+
+	// The written references satisfy the handwritten readers.
+	output, err := exec.Command("go", "build", "-mod=mod", "./...").CombinedOutput()
+	require.NoError(t, err, "go build:\n%s", output)
+
+	// Second run: the previous column files are stubbed out of the inspection
+	// build, which has to resolve the same columns again. Dropping the cached
+	// result makes the inspection actually run.
+	require.NoError(t, os.RemoveAll(cacheDir))
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+	regeneratedRecordColumns, err := os.ReadFile(recordColumnsFile)
+	require.NoError(t, err)
+	require.Equal(t, string(recordColumns), string(regeneratedRecordColumns))
+	regeneratedItemColumns, err := os.ReadFile(itemColumnsFile)
+	require.NoError(t, err)
+	require.Equal(t, string(itemColumns), string(regeneratedItemColumns))
 }

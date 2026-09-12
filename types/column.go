@@ -74,10 +74,11 @@ type Column[T any] struct {
 // NewColumn returns a typed reference to the named column of M's table. gg gen
 // emits the calls in each model's generated file, naming the model as the
 // first type argument, so the table comes from the model's own TableName and
-// is never restated as a literal. Handwritten code that cannot reference a
-// generated Cols var should keep using the FilterXxx, Asc, Desc and Assign
-// constructors with a plain column name instead of minting references; module
-// sources, which have no generated file, mint them the same way with their
+// is never restated as a literal. Handwritten code, model hooks included,
+// reads those generated Cols vars rather than minting references. Code that
+// cannot reference a concrete model keeps using the FilterXxx, Asc, Desc and
+// Assign constructors with a plain column name, and module sources, which
+// have no generated file, mint references the way gg gen does, with their
 // model. The fields are unexported so a shared reference cannot be repointed
 // at another column after construction.
 //
