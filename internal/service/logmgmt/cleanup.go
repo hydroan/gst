@@ -42,7 +42,7 @@ func Cleanup(ctx context.Context) error {
 // a single long transaction grows with the backlog. Both log models purge on
 // delete, so each round physically reclaims space.
 func cleanupExpired[M types.Model](ctx context.Context, cutoff time.Time) error {
-	expired := types.QueryOptions{Filters: []types.Filter{types.FilterLte("created_at", cutoff)}}
+	expired := types.QueryOptions{Filters: []types.Filter{types.NewTimeColumn[M]("created_at").Lte(cutoff)}}
 	for {
 		batch := make([]M, 0, cleanupBatchSize)
 		if err := database.Database[M](ctx).
