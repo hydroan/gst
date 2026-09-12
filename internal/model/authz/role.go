@@ -17,6 +17,11 @@ import (
 	"gorm.io/datatypes"
 )
 
+// colMenuID references the menu primary key the bound-menu lookups below filter
+// on; module sources carry no generated Cols vars, so the reference is declared
+// here.
+var colMenuID = types.NewColumn[*Menu, string](KeyID)
+
 type Role struct {
 	tenant.Scope
 
@@ -145,7 +150,7 @@ func (r *Role) validateMenuIDs(ctx context.Context) error {
 	menus := make([]*Menu, 0)
 	if err := database.Database[*Menu](ctx).WithQuery(&Menu{}, types.QueryOptions{
 		AllowEmpty: true,
-		Filters:    []types.Filter{types.FilterIn("id", r.MenuIDs)},
+		Filters:    []types.Filter{colMenuID.In(r.MenuIDs...)},
 	}).List(&menus); err != nil {
 		return err
 	}
@@ -280,7 +285,7 @@ func (r *Role) syncPermissions(ctx context.Context) error {
 	if len(r.MenuIDs) > 0 {
 		if err := database.Database[*Menu](ctx).WithQuery(&Menu{}, types.QueryOptions{
 			AllowEmpty: true,
-			Filters:    []types.Filter{types.FilterIn("id", r.MenuIDs)},
+			Filters:    []types.Filter{colMenuID.In(r.MenuIDs...)},
 		}).List(&newMenus); err != nil {
 			return err
 		}

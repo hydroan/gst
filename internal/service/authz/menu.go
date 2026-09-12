@@ -12,6 +12,13 @@ import (
 	"github.com/samber/lo"
 )
 
+// Column references for the visibility conditions below; module sources carry
+// no generated Cols vars, so the references are declared here.
+var (
+	colMenuID = types.NewColumn[*modelauthz.Menu, string](modelauthz.KeyID)
+	colRoleID = types.NewColumn[*modelauthz.Role, string](modelauthz.KeyID)
+)
+
 type MenuService struct {
 	service.Base[*modelauthz.Menu, *modelauthz.Menu, *modelauthz.Menu]
 }
@@ -28,15 +35,15 @@ func (m *MenuService) Filter(ctx *types.ServiceContext, menu *modelauthz.Menu, o
 	// are tree bookkeeping, not menus anyone manages. They stay hidden from
 	// every caller, including system_root, which the visibility filter below
 	// deliberately never restricts.
-	opts.Filters = append(opts.Filters, types.FilterNotIn(modelauthz.KeyID,
-		[]string{modelauthz.RootID, modelauthz.UnknownID, modelauthz.NoneID}))
+	opts.Filters = append(opts.Filters,
+		colMenuID.NotIn(modelauthz.RootID, modelauthz.UnknownID, modelauthz.NoneID))
 
 	menuIDs, restricted, err := visibleMenuIDs(ctx, m.WithContext(ctx, ctx.Phase()))
 	if err != nil {
 		return menu, opts, err
 	}
 	if restricted {
-		opts.Filters = append(opts.Filters, types.FilterIn(modelauthz.KeyID, menuIDs))
+		opts.Filters = append(opts.Filters, colMenuID.In(menuIDs...))
 	}
 
 	return menu, opts, nil
@@ -114,7 +121,7 @@ func visibleMenuIDs(ctx *types.ServiceContext, log types.Logger) ([]string, bool
 			return nil, true, nil
 		}
 		if err := database.Database[*modelauthz.Role](ctx).
-			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.FilterIn(modelauthz.KeyID, roleIDs)}}).
+			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{colRoleID.In(roleIDs...)}}).
 			List(&roles); err != nil {
 			return nil, false, service.NewErrorWithCause(http.StatusInternalServerError, "failed to load roles", err)
 		}
