@@ -3,20 +3,9 @@ package types_test
 import (
 	"testing"
 
-	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
-
-// sampleRecord is a model a join can name: Join needs the full model
-// contract, which sampleTable, a bare table namer, does not carry.
-type sampleRecord struct {
-	Code string `json:"code"`
-
-	modelregistry.Base
-}
-
-func (*sampleRecord) TableName() string { return "sample_records" }
 
 func TestJoinSources(t *testing.T) {
 	on := types.NewColumn[*sampleRecord, string]("code").EqCol(types.NewColumn[sampleTable, string]("record_code"))

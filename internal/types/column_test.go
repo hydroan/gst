@@ -7,20 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// sampleStatus is a named string type, standing in for a model enum.
-type sampleStatus string
-
-const (
-	sampleStatusActive  sampleStatus = "active"
-	sampleStatusRemoved sampleStatus = "removed"
-)
-
-// sampleTable stands in for the model a column reference is generated for;
-// only its table name takes part.
-type sampleTable struct{}
-
-func (sampleTable) TableName() string { return "samples" }
-
 // nameless stands in for a virtual model: it declares no table, the way a
 // model embedding model.Empty reports none.
 type nameless struct{}

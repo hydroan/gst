@@ -127,3 +127,10 @@ type ControllerConfig[M Model] struct {
 	// handler falls back to the no-op default service.
 	Route string
 }
+
+// Coder describes an API envelope code, HTTP status, and client-safe message.
+type Coder interface {
+	Code() int
+	Status() int
+	Msg() string
+}

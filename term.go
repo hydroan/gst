@@ -52,15 +52,3 @@ func Literal(value string) Term {
 // reference, projected as it is stored, or a Term. The set is closed to the
 // framework, so a projection can never carry SQL text.
 type Expr = types.Expr
-
-// TermCondition is one condition on a projected term: a Having condition on a
-// measure, or a Qualify condition on a window function. It carries the term
-// itself rather than an alias string, which has two consequences: a condition
-// can never name a term the projection did not declare, and the renderer can
-// emit the full expression instead of the alias, which HAVING requires because
-// PostgreSQL does not accept an output alias there.
-type TermCondition = types.TermCondition
-
-// TermOrder is one ORDER BY term of a select or of a window. Unlike Order it
-// sorts by a projection term, which is what a TopN report ranks by.
-type TermOrder = types.TermOrder
