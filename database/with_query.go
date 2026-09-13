@@ -3,7 +3,9 @@ package database
 import (
 	"context"
 	"fmt"
+	"maps"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -175,9 +177,12 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 	// Every non-zero field is one equality condition. The value binds as a
 	// literal: a comma is data, never a list separator, so a value that
 	// happens to contain one stays queryable. An explicit list of values is
-	// the in operator filter's job.
+	// the in operator filter's job. The conditions go out in column name
+	// order: ranging over the map would order them differently on every run,
+	// so one query would render as a different statement each time.
 	hasValidCondition := false
-	for k, v := range q {
+	for _, k := range slices.Sorted(maps.Keys(q)) {
+		v := q[k]
 		if len(v) == 0 {
 			continue
 		}

@@ -3,6 +3,7 @@ package database_test
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +14,30 @@ import (
 )
 
 func TestDatabaseWithQuery(t *testing.T) {
+	t.Run("ConditionsRenderInColumnOrder", func(t *testing.T) {
+		// Every non-zero field of the model becomes one condition, rendered in
+		// column name order: the same query is the same statement on every
+		// run, whatever order a map would hand the columns out in.
+		var first string
+		for range 20 {
+			statements := make([]types.SQLStatement, 0)
+			users := make([]*TestUser, 0)
+			require.NoError(t, database.Database[*TestUser](context.Background()).
+				WithDryRun(&statements).
+				WithQuery(&TestUser{Name: "name", Email: "email", Age: 18}).
+				List(&users))
+			require.Len(t, statements, 1)
+			if first == "" {
+				first = statements[0].Query
+			}
+			require.Equal(t, first, statements[0].Query)
+		}
+		age := strings.Index(first, quoteIdent("age"))
+		email := strings.Index(first, quoteIdent("email"))
+		name := strings.Index(first, quoteIdent("name"))
+		require.True(t, age >= 0 && age < email && email < name, "conditions must follow column name order: %s", first)
+	})
+
 	t.Run("ExactMatch", func(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
