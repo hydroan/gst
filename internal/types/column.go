@@ -58,12 +58,12 @@ type ColumnRef[T any] interface {
 // column name, and a query reading the wrong one is valid SQL over the wrong
 // table, which no schema check would catch.
 //
-// The methods are typed front ends for the FilterXxx, Asc, Desc and Assign
-// constructors and produce the same Filter, Order and Assignment values, with
-// the table the reference was built for filled in. Generic code builds its
-// references with its type parameter as the model, see NewColumn; the
-// plain-name constructors are left to code that learns the column only at run
-// time, such as framework internals reading it from a request.
+// The methods are typed front ends for the FilterXxx, Asc, Desc and
+// NewAssignment constructors and produce the same Filter, Order and Assignment
+// values, with the table the reference was built for filled in. Generic code
+// builds its references with its type parameter as the model, see NewColumn;
+// the plain-name constructors are left to code that learns the column only at
+// run time, such as framework internals reading it from a request.
 //
 // Columns whose Go type is numeric or time.Time are generated as NumericColumn
 // or TimeColumn instead, which embed this type and add the functions that are

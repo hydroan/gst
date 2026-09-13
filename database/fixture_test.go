@@ -742,7 +742,7 @@ func (g *TestHookGroup) CreateAfter(ctx context.Context) error {
 	if strings.TrimSpace(g.ConfigID) == "" {
 		return nil
 	}
-	if err := database.Database[*TestHookConfig](ctx).UpdateByID(g.ConfigID, types.Assign("value", g.Value)); err != nil {
+	if err := database.Database[*TestHookConfig](ctx).UpdateByID(g.ConfigID, types.NewAssignment("", "value", g.Value)); err != nil {
 		return err
 	}
 	return errTestHookGroupCreateAfter

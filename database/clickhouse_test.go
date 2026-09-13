@@ -224,7 +224,7 @@ func TestClickhouse(t *testing.T) {
 			return got.Status == "after"
 		}, 5*time.Second, 50*time.Millisecond, "the accepted mutation must eventually rewrite the row")
 
-		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).UpdateByID(row.ID, types.Assign("status", "byid")))
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).UpdateByID(row.ID, types.NewAssignment("", "status", "byid")))
 		require.Eventually(t, func() bool {
 			got := new(TestAggregateRecord)
 			if err := database.DatabaseOn[*TestAggregateRecord](ctx, ins).Get(got, row.ID); err != nil {

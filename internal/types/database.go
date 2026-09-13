@@ -46,9 +46,9 @@ type Database[M Model] interface {
 	Upsert(objs ...M) error
 	// UpdateByID updates database columns of a record by its ID in one
 	// UPDATE statement, without running model hooks. Assignments come from
-	// the generated column references (SampleCols.Status.Set(v)) or the
-	// Assign constructor for dynamic columns; at least one is required, and
-	// empty columns, nil values and a column assigned twice are rejected.
+	// column references, such as SampleCols.Status.Set(v); at least one is
+	// required, and empty columns, nil values and a column assigned twice are
+	// rejected.
 	UpdateByID(id string, assignments ...Assignment) error
 	// List retrieves multiple records matching the query conditions.
 	// dest must be a non-nil pointer to a slice; the slice value itself may be

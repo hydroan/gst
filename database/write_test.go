@@ -759,11 +759,11 @@ func TestDatabaseUpdateByID(t *testing.T) {
 	require.Error(t, err, "should return error when id is empty")
 	require.ErrorIs(t, err, database.ErrIDRequired, "error should be ErrIDRequired")
 
-	err = database.Database[*TestUser](context.Background()).UpdateByID("id", types.Assign("", "value"))
+	err = database.Database[*TestUser](context.Background()).UpdateByID("id", types.NewAssignment("", "", "value"))
 	require.Error(t, err, "should return error when name is empty")
 	require.ErrorIs(t, err, database.ErrEmptyFieldName, "error should be ErrEmptyFieldName")
 
-	err = database.Database[*TestUser](context.Background()).UpdateByID("id", types.Assign("name", nil))
+	err = database.Database[*TestUser](context.Background()).UpdateByID("id", types.NewAssignment("", "name", nil))
 	require.Error(t, err, "should return error when value is nil")
 	require.ErrorIs(t, err, database.ErrNilValue, "error should be ErrNilValue")
 
