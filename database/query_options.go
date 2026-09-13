@@ -261,17 +261,15 @@ func (db *database[M]) WithLock(mode ...consts.LockMode) types.Database[M] {
 //
 // Orders are built from the generated column references, which cannot name a
 // column the model does not have, or, in generic code, from a reference minted
-// for the type parameter; the types.Asc and types.Desc constructors take a
-// plain column name for code that learns the column only at run time.
-// Column names are quoted with dialect-appropriate identifiers, and the
-// direction comes from a closed set, so neither part can carry SQL.
+// for the type parameter. Column names are quoted with dialect-appropriate
+// identifiers, and the direction comes from a closed set, so neither part can
+// carry SQL.
 //
 // Examples:
 //
 //	WithOrder(SampleCols.Name.Asc())                          // ORDER BY `name` ASC
 //	WithOrder(SampleCols.CreatedAt.Desc())                    // ORDER BY `created_at` DESC
 //	WithOrder(SampleCols.Age.Desc(), SampleCols.Name.Asc())   // ORDER BY `age` DESC, `name` ASC
-//	WithOrder(types.Desc("created_at"))                       // same, by column name
 //
 // Calling WithOrder without any term, or with a term whose column is empty,
 // adds nothing. A reference of another model's column fails the chain with
@@ -391,7 +389,7 @@ func (db *database[M]) WithLimit(limit int) types.Database[M] {
 //	db.WithExpand([]string{"Posts"})
 //
 //	// Load user with posts ordered by creation date
-//	db.WithExpand([]string{"Posts"}, types.Desc("created_at"))
+//	db.WithExpand([]string{"Posts"}, PostCols.CreatedAt.Desc())
 //
 //	// Load nested relationships
 //	db.WithExpand([]string{"Posts.Comments", "Profile"})

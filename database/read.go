@@ -290,7 +290,7 @@ func (db *database[M]) Count(count *int) (err error) {
 //	var user User
 //	First(&user)  // Get first user by primary key
 //	WithQuery(&User{Status: "active"}).First(&user)  // Get first active user
-//	WithOrder(types.Desc("created_at")).First(&user)  // Get newest user
+//	WithOrder(UserCols.CreatedAt.Desc()).First(&user)  // Get newest user
 func (db *database[M]) First(dest M) (err error) {
 	defer db.reset()
 
@@ -355,7 +355,7 @@ func (db *database[M]) First(dest M) (err error) {
 //	var user User
 //	Last(&user)  // Get last user by primary key
 //	WithQuery(&User{Status: "active"}).Last(&user)  // Get last active user
-//	WithOrder(types.Asc("created_at")).Last(&user)  // Get oldest user (with custom order)
+//	WithOrder(UserCols.CreatedAt.Asc()).Last(&user)  // Get oldest user (with custom order)
 func (db *database[M]) Last(dest M) (err error) {
 	defer db.reset()
 

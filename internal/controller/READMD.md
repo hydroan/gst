@@ -518,9 +518,9 @@ syntax instead: `?name[like]=user01` (see the `field[op]=value` section below).
 > `Database equivalent`
 >
 > ```go
-> database.Database[*model.User](ctx).WithQuery(&model.User{Name: "user01"}).WithOrder(types.Asc("name")).List(&users)
-> database.Database[*model.User](ctx).WithQuery(&model.User{Name: "user01"}).WithOrder(types.Desc("name")).List(&users)
-> database.Database[*model.User](ctx).WithQuery(&model.User{Name: "user01"}).WithOrder(types.Desc("name"), types.Asc("created_at")).List(&users)
+> database.Database[*model.User](ctx).WithQuery(&model.User{Name: "user01"}).WithOrder(model.UserCols.Name.Asc()).List(&users)
+> database.Database[*model.User](ctx).WithQuery(&model.User{Name: "user01"}).WithOrder(model.UserCols.Name.Desc()).List(&users)
+> database.Database[*model.User](ctx).WithQuery(&model.User{Name: "user01"}).WithOrder(model.UserCols.Name.Desc(), model.UserCols.CreatedAt.Asc()).List(&users)
 > ```
 
 #### `field[op]=value` (field operator filters)
