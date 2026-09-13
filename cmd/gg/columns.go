@@ -403,6 +403,19 @@ func columnVarName(model string) string {
 	return model + "Cols"
 }
 
+// importSpec renders one import line of a generated file. The package name is
+// written only when it cannot be inferred from the path: gofmt never spells a
+// name it can read off the last segment, and a redundant one reads as if the
+// package were called something else. A versioned path such as .../v2, or a
+// package whose name differs from its directory, keeps the name, without which
+// the generated file would not compile.
+func importSpec(name, path string) string {
+	if name == path[strings.LastIndex(path, "/")+1:] {
+		return fmt.Sprintf("\t%q\n", path)
+	}
+	return fmt.Sprintf("\t%s %q\n", name, path)
+}
+
 // renderColumnsFile builds the generated source for one model source file.
 func renderColumnsFile(module string, pkgName string, source string, models []modelColumns) (string, error) {
 	imports := map[string]string{constants.ImportPathGst: "gst"}
@@ -456,13 +469,13 @@ func renderColumnsFile(module string, pkgName string, source string, models []mo
 	buf.WriteString(consts.CodeGeneratedComment())
 	fmt.Fprintf(&buf, "\n// source: %s\n\npackage %s\n\nimport (\n", filepath.ToSlash(source), pkgName)
 	for _, path := range stdlib {
-		fmt.Fprintf(&buf, "\t%s %q\n", imports[path], path)
+		buf.WriteString(importSpec(imports[path], path))
 	}
 	if len(stdlib) > 0 && len(external) > 0 {
 		buf.WriteString("\n")
 	}
 	for _, path := range external {
-		fmt.Fprintf(&buf, "\t%s %q\n", imports[path], path)
+		buf.WriteString(importSpec(imports[path], path))
 	}
 	buf.WriteString(")\n")
 

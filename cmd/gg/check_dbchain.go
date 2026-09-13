@@ -18,7 +18,7 @@ import (
 const gstDatabaseImportPath = "github.com/hydroan/gst/database"
 
 // databaseTerminalMethods lists the gst.Database methods that finish an
-// operation chain. TestDatabaseChainMethodSetsMatchTypesInterface guards this
+// operation chain. TestDatabaseChainMethodSetsMatchDatabaseInterfaces guards this
 // set against drifting from the interface declaration.
 var databaseTerminalMethods = map[string]bool{
 	"Create":     true,
@@ -35,7 +35,7 @@ var databaseTerminalMethods = map[string]bool{
 }
 
 // databaseChainMethods lists the gst.DatabaseOption methods that keep the
-// chain open. TestDatabaseChainMethodSetsMatchTypesInterface guards this set
+// chain open. TestDatabaseChainMethodSetsMatchDatabaseInterfaces guards this set
 // against drifting from the interface declaration.
 var databaseChainMethods = map[string]bool{
 	"WithQuery":      true,

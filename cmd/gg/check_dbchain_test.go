@@ -168,10 +168,10 @@ func keep(ctx context.Context) any {
 	}
 }
 
-// TestDatabaseChainMethodSetsMatchTypesInterface guards the hardcoded method
+// TestDatabaseChainMethodSetsMatchDatabaseInterfaces guards the hardcoded method
 // sets against drift when methods are added to or removed from the
 // gst.Database and gst.DatabaseOption interfaces.
-func TestDatabaseChainMethodSetsMatchTypesInterface(t *testing.T) {
+func TestDatabaseChainMethodSetsMatchDatabaseInterfaces(t *testing.T) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, filepath.Join("..", "..", "internal", "types", "database.go"), nil, 0)
 	if err != nil {

@@ -231,11 +231,11 @@ func TestRenderColumnsFile(t *testing.T) {
 	})
 
 	t.Run("ImportsOnlyWhatItUses", func(t *testing.T) {
-		require.Contains(t, rendered, `gst "github.com/hydroan/gst"`)
+		require.Contains(t, rendered, `"github.com/hydroan/gst"`)
 		// The time column renders as NewTimeColumn without a type argument,
 		// so the file no longer references time.Time; emitting the import
 		// anyway would be an unused import that fails to compile.
-		require.NotContains(t, rendered, `time "time"`)
+		require.NotContains(t, rendered, "\n\t\"time\"\n")
 		require.NotContains(t, rendered, "gorm.io/datatypes")
 	})
 
@@ -262,7 +262,7 @@ func TestRenderColumnsFileKeepsImportsUsedByTypeArguments(t *testing.T) {
 	rendered, err := renderColumnsFile("tmpapp", "sample", "model/sample/record.go", models)
 	require.NoError(t, err)
 	require.Contains(t, rendered, `gst.NewNumericColumn[*Record, time.Duration]("elapsed")`)
-	require.Contains(t, rendered, `time "time"`)
+	require.Contains(t, rendered, "import (\n\t\"time\"\n", "the standard library import is kept, with the name left to the path")
 }
 
 func TestRenderColumnsFileRejectsImportAliasCollision(t *testing.T) {
@@ -439,11 +439,11 @@ func (i *Item) DeleteBefore(ctx context.Context) error {
 	require.Equal(t, string(itemColumns), string(regeneratedItemColumns))
 }
 
-// TestGenRunReferencesFrameworkTypesThroughThePublicPackage runs gg gen
+// TestGenRunReferencesFrameworkTypesThroughTheRootPackage runs gg gen
 // against a model whose column is typed by the framework's root package. The
 // generated reference names the type the way the model source does, under the
 // import path a business project can reach.
-func TestGenRunReferencesFrameworkTypesThroughThePublicPackage(t *testing.T) {
+func TestGenRunReferencesFrameworkTypesThroughTheRootPackage(t *testing.T) {
 	projectDir := newGenProject(t)
 	writeCheckFile(t, filepath.Join(projectDir, "model", "sample", "rule.go"), `package sample
 

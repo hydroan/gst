@@ -29,7 +29,7 @@ func TestSchemaComponentName(t *testing.T) {
 	}
 }
 
-func TestSchemaComponentNameNamesFrameworkTypesByTheirPublicPackage(t *testing.T) {
+func TestSchemaComponentNameNamesFrameworkTypesByTheRootPackage(t *testing.T) {
 	// Business code reaches the framework's query contracts through the public
 	// root gst package, so the document names them after that package.
 	if got := schemaComponentName(reflect.TypeFor[types.CompareOp]()); got != "gst.CompareOp" {
