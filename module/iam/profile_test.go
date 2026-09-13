@@ -100,6 +100,30 @@ func TestProfilePatch(t *testing.T) {
 		require.Equal(t, "https://example.com/other.png", rsp.Avatar)
 		require.Equal(t, metadata, rsp.Metadata)
 	})
+
+	t.Run("patch_several_fields_at_once", func(t *testing.T) {
+		displayName := "Renamed Profile"
+		avatar := "https://example.com/third.png"
+		metadata := datatypes.JSONMap{
+			"locale": "zh-CN",
+		}
+
+		_, err := cli.Patch[iam.ProfilePatchRsp](profilePath, &iam.ProfilePatchReq{
+			DisplayName: &displayName,
+			Avatar:      &avatar,
+			Metadata:    metadata,
+		})
+		require.NoError(t, err)
+
+		// The patch response echoes the record the handler holds in memory, so
+		// the stored row is read back through the profile route instead.
+		rsp, err := cli.Get[iam.ProfileGetRsp](profilePath)
+		require.NoError(t, err)
+		require.Equal(t, displayName, rsp.DisplayName)
+		require.Equal(t, avatar, rsp.Avatar)
+		require.Equal(t, metadata, rsp.Metadata)
+		require.Equal(t, 1, profileCountForUser(t, account.UserID))
+	})
 }
 
 func newProfileTestAccount(t *testing.T) profileTestAccount {
