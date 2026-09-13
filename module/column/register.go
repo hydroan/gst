@@ -14,6 +14,10 @@ var tableColumns = make(map[string][]string)
 // m key is the table name, value is the table's columns name.
 // for example: Register(map[string][]string{"user": {"name", "email"}})
 //
+// The registered columns are also the filters the endpoint accepts: a query
+// parameter naming none of them is refused, so a request never reaches the
+// database with a column of its own choosing.
+//
 // Models: no
 //
 // Routes:
