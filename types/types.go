@@ -8,9 +8,6 @@ import (
 	itypes "github.com/hydroan/gst/internal/types"
 )
 
-// Coder describes an API envelope code, HTTP status, and client-safe message.
-type Coder = itypes.Coder
-
 // ESDocumenter represents a document that can be indexed into Elasticsearch.
 // Types implementing this interface should be able to convert themselves
 // into a document format suitable for Elasticsearch indexing.

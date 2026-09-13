@@ -5,14 +5,9 @@ import (
 )
 
 // JoinSource is a source a select joins to its model. The set is closed to
-// the framework: a ModelJoin, built by Join and LeftJoin, joins a model on a
-// unique key; a SelectJoin, built by JoinSelect and LeftJoinSelect, joins a
-// grouped select on its group keys.
+// the framework: Join and LeftJoin join a model on a unique key, JoinSelect
+// and LeftJoinSelect join a grouped select on its group keys.
 type JoinSource = itypes.JoinSource
-
-// ModelJoin is a model joined on a unique key; see JoinSource. Join and
-// LeftJoin build it.
-type ModelJoin = itypes.ModelJoin
 
 // Join joins model C on a unique key: JOIN, keeping only the rows of the
 // query that match a row of C. The predicates are the ON condition.
@@ -26,10 +21,6 @@ func Join[C Model](on ...Filter) JoinSource {
 func LeftJoin[C Model](on ...Filter) JoinSource {
 	return itypes.LeftJoin[C](on...)
 }
-
-// SelectJoin is a grouped select joined on its group keys as a derived
-// table; see JoinSource. JoinSelect and LeftJoinSelect build it.
-type SelectJoin = itypes.SelectJoin
 
 // JoinSelect joins a grouped select as a derived table, JOIN (SELECT ...) AS
 // jN ON ..., keeping only the rows of the query that match one of its

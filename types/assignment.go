@@ -5,16 +5,8 @@ import (
 )
 
 // Assignment is one column-value write, the unit UpdateByID accepts. Service
-// code should build assignments through the generated column references
+// code builds assignments through the generated column references
 // (SampleCols.Status.Set(v)), whose typed front end stops a wrong-typed value
 // or a misspelled column at compile time; generic code assigns through a
-// reference minted for its type parameter. The Assign constructor takes a
-// plain column name and exists for code that learns the column only at run
-// time: framework internals and dynamic column loops.
+// reference minted for its type parameter.
 type Assignment = itypes.Assignment
-
-// Assign builds an assignment of value to the named database column of the
-// chain's own model.
-func Assign(column string, value any) Assignment {
-	return itypes.Assign(column, value)
-}

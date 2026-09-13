@@ -454,7 +454,7 @@ import (
 )
 
 type Rule struct {
-	Comparison types.CompareOp `+"`json:\"comparison\"`"+`
+	Permission types.Permission `+"`json:\"permission\" gorm:\"serializer:json\"`"+`
 
 	model.Base
 }
@@ -469,7 +469,7 @@ func (Rule) Design() {
 	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
 	columns, err := os.ReadFile(filepath.Join("model", "sample", "rule.gen.go"))
 	require.NoError(t, err)
-	require.Contains(t, string(columns), `types.NewColumn[*Rule, types.CompareOp]("comparison")`)
+	require.Contains(t, string(columns), `types.NewColumn[*Rule, types.Permission]("permission")`)
 
 	// The project only builds when every import the generated file carries is
 	// one it can reach.

@@ -543,9 +543,8 @@ value type are both checked by the compiler, so a renamed column or a wrong
 value type fails the build instead of the query. Generic code, which has no
 concrete model and so no generated references, mints one for its type
 parameter, for example `types.NewColumn[M, string]("id").In(ids...)`, and keeps
-the value type checked. The `types.FilterXxx` constructors with a string column
-name are left to code that learns the column only at run time, such as the
-framework's own URL parsing.
+the value type checked. Only the framework's own URL parsing builds a filter
+from a plain column name.
 
 A service that implements a list action itself reaches the same parsing
 through the `QueryXxx` methods on its `service.Base`, and reads one column's
@@ -565,10 +564,10 @@ an explicit offset and fractional seconds up to nanoseconds: zone-less
 spellings, date-only values and unix timestamps return 400, because a
 zone-less value names a different instant in every server zone. A `+` offset
 must be percent-encoded as `%2B` in the query string (or written as `Z` or a
-negative offset). The bound reaches the database as the UTC wall clock in
-`types.FilterTimeLayout`. Time ranges combine `gte` and `lte` on the same
-field; the framework-managed `created_at`/`updated_at` columns also take their
-bare key as an exact-match filter.
+negative offset). The bound reaches the database as its UTC wall clock. Time
+ranges combine `gte` and `lte` on the same field; the framework-managed
+`created_at`/`updated_at` columns also take their bare key as an exact-match
+filter.
 
 >`Request`
 >
@@ -584,9 +583,9 @@ bare key as an exact-match filter.
 >database.Database[*model.User](ctx).WithQuery(nil, types.QueryOptions{
 >	AllowEmpty: true,
 >	Filters: []types.Filter{
->		types.FilterGte("age", "18"),
->		types.FilterGte("created_at", "2024-07-01 00:00:00"),
->		types.FilterLte("created_at", "2024-07-31 23:59:59"),
+>		model.UserCols.Age.Gte(18),
+>		model.UserCols.CreatedAt.Gte(time.Date(2024, 7, 1, 0, 0, 0, 0, time.UTC)),
+>		model.UserCols.CreatedAt.Lte(time.Date(2024, 7, 31, 23, 59, 59, 0, time.UTC)),
 >	},
 >}).List(&users)
 >```

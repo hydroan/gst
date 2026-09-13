@@ -4,19 +4,6 @@ import (
 	itypes "github.com/hydroan/gst/internal/types"
 )
 
-// OrderDirection is the sort direction of one ORDER BY term. The set is
-// closed, so a direction can never carry SQL the way a free-form order string
-// could.
-type OrderDirection = itypes.OrderDirection
-
-const (
-	// OrderAsc sorts ascending. The zero OrderDirection is also read as
-	// ascending, matching SQL's own default for an ORDER BY term.
-	OrderAsc = itypes.OrderAsc
-	// OrderDesc sorts descending.
-	OrderDesc = itypes.OrderDesc
-)
-
 // Order is one ORDER BY term: a column and the direction to sort it by.
 // Column must already be validated against the model's queryable columns by
 // the producer (the List controller validates URL input; service code passing

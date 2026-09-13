@@ -1,13 +1,21 @@
 package serviceiamprofile
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/hydroan/gst/database"
 	modeliamprofile "github.com/hydroan/gst/internal/model/iam/profile"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/types"
+	"gorm.io/datatypes"
+)
+
+// Column references for the patch writes below; module sources carry no
+// generated Cols vars, so the references are declared here.
+var (
+	colProfileDisplayName = types.NewColumn[*modeliamprofile.Profile, string]("display_name")
+	colProfileAvatar      = types.NewColumn[*modeliamprofile.Profile, string]("avatar")
+	colProfileMetadata    = types.NewColumn[*modeliamprofile.Profile, datatypes.JSONMap]("metadata")
 )
 
 func loadProfileByUserID(ctx *types.ServiceContext, userID string) (*modeliamprofile.Profile, bool, error) {
@@ -24,51 +32,23 @@ func loadProfileByUserID(ctx *types.ServiceContext, userID string) (*modeliampro
 	return profiles[0], true, nil
 }
 
-func updateProfileColumns(ctx *types.ServiceContext, record *modeliamprofile.Profile, columns []string) error {
-	if record == nil {
-		return nil
-	}
-	return database.Transaction(ctx, func(ctx context.Context) error {
-		for _, column := range columns {
-			if err := database.Database[*modeliamprofile.Profile](ctx).
-				UpdateByID(record.ID, types.Assign(column, profileColumnValue(record, column))); err != nil {
-				return service.NewErrorWithCause(http.StatusInternalServerError, "failed to update profile", err)
-			}
-		}
-		return nil
-	})
-}
-
-func applyProfilePatch(record *modeliamprofile.Profile, req *modeliamprofile.ProfilePatchReq) []string {
+func applyProfilePatch(record *modeliamprofile.Profile, req *modeliamprofile.ProfilePatchReq) []types.Assignment {
 	if record == nil || req == nil {
 		return nil
 	}
 
-	columns := make([]string, 0, 3)
+	assignments := make([]types.Assignment, 0, 3)
 	if req.DisplayName != nil {
 		record.DisplayName = *req.DisplayName
-		columns = append(columns, "display_name")
+		assignments = append(assignments, colProfileDisplayName.Set(record.DisplayName))
 	}
 	if req.Avatar != nil {
 		record.Avatar = *req.Avatar
-		columns = append(columns, "avatar")
+		assignments = append(assignments, colProfileAvatar.Set(record.Avatar))
 	}
 	if req.Metadata != nil {
 		record.Metadata = req.Metadata
-		columns = append(columns, "metadata")
+		assignments = append(assignments, colProfileMetadata.Set(record.Metadata))
 	}
-	return columns
-}
-
-func profileColumnValue(record *modeliamprofile.Profile, column string) any {
-	switch column {
-	case "display_name":
-		return record.DisplayName
-	case "avatar":
-		return record.Avatar
-	case "metadata":
-		return record.Metadata
-	default:
-		return nil
-	}
+	return assignments
 }

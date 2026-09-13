@@ -4,55 +4,9 @@ import (
 	itypes "github.com/hydroan/gst/internal/types"
 )
 
-// TermFn is the function applied to one projection term. The set is
-// closed, so a projection can never carry SQL the way a free-form select
-// string could: the renderer maps each constant to a fixed expression and
-// rejects anything else.
-type TermFn = itypes.TermFn
-
-const (
-	// FnNone marks a group key rather than a measure. A projection term
-	// without an aggregate function is what the framework derives GROUP BY
-	// from, so the SELECT and GROUP BY lists can never disagree.
-	FnNone          = itypes.FnNone
-	FnCount         = itypes.FnCount
-	FnCountDistinct = itypes.FnCountDistinct
-	FnSum           = itypes.FnSum
-	FnAvg           = itypes.FnAvg
-	FnMin           = itypes.FnMin
-	FnMax           = itypes.FnMax
-	// FnRowNumber, FnRank, FnDenseRank, FnLag and FnLead are the window
-	// functions, only meaningful over a window, which Term.Over declares. A
-	// term carrying one of them without a window is a build error, as is
-	// COUNT DISTINCT over a window, which no dialect supports.
-	FnRowNumber = itypes.FnRowNumber
-	FnRank      = itypes.FnRank
-	FnDenseRank = itypes.FnDenseRank
-	FnLag       = itypes.FnLag
-	FnLead      = itypes.FnLead
-	// FnLiteral marks a constant projected as a column, which Literal
-	// builds. Like FnNone it is a kind rather than a function: the term
-	// carries its value in Literal and names no column.
-	FnLiteral = itypes.FnLiteral
-)
-
-// TimeBucket is the truncation granularity of a time group key. Bucketing is
-// the one place where the same intent needs a different expression per
-// dialect, so the constant travels through the builder and the database layer
-// renders it; callers never see a format string.
-type TimeBucket = itypes.TimeBucket
-
-const (
-	// TimeBucketNone groups by the raw column value.
-	TimeBucketNone  = itypes.TimeBucketNone
-	TimeBucketHour  = itypes.TimeBucketHour
-	TimeBucketDay   = itypes.TimeBucketDay
-	TimeBucketMonth = itypes.TimeBucketMonth
-)
-
-// Term is one term of a projection: a group key when Fn is FnNone, a plain
-// column when Plain is also set, a constant when Fn is FnLiteral, a measure
-// otherwise, and a window function when Window is set.
+// Term is one term of a projection: a group key, a plain column, a constant, a
+// measure, or a window function. Column references build it, as do Count, the
+// ranking functions and Literal below.
 type Term = itypes.Term
 
 // DefaultCountAlias is the alias COUNT(*) projects under when the caller does
@@ -98,26 +52,6 @@ func Literal(value string) Term {
 // reference, projected as it is stored, or a Term. The set is closed to the
 // framework, so a projection can never carry SQL text.
 type Expr = itypes.Expr
-
-// TermOf returns the term an expression selects as: a term unchanged, a column
-// reference as the plain projection of that column.
-func TermOf(expr Expr) Term {
-	return itypes.TermOf(expr)
-}
-
-// CompareOp is a comparison applied to a projected term. Only the six
-// orderings exist: the pattern and set operators of FilterOp have no meaning
-// over a measure or a window function.
-type CompareOp = itypes.CompareOp
-
-const (
-	CompareEq  = itypes.CompareEq
-	CompareNe  = itypes.CompareNe
-	CompareGt  = itypes.CompareGt
-	CompareGte = itypes.CompareGte
-	CompareLt  = itypes.CompareLt
-	CompareLte = itypes.CompareLte
-)
 
 // TermCondition is one condition on a projected term: a Having condition on a
 // measure, or a Qualify condition on a window function. It carries the term

@@ -10,8 +10,8 @@ import (
 	"github.com/gin-gonic/gin"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/redis"
-	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 )

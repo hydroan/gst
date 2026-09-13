@@ -35,12 +35,12 @@ func (p *ProfilePatchService) Patch(ctx *types.ServiceContext, req *modeliamprof
 		return record, nil
 	}
 
-	columns := applyProfilePatch(record, req)
-	if len(columns) == 0 {
+	assignments := applyProfilePatch(record, req)
+	if len(assignments) == 0 {
 		return record, nil
 	}
-	if err = updateProfileColumns(ctx, record, columns); err != nil {
-		return nil, err
+	if err = database.Database[*modeliamprofile.Profile](ctx).UpdateByID(record.ID, assignments...); err != nil {
+		return nil, service.NewErrorWithCause(http.StatusInternalServerError, "failed to update profile", err)
 	}
 
 	return record, nil

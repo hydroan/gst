@@ -593,8 +593,8 @@ func (db *database[M]) updateRowStatement(session *gorm.DB, obj M) *gorm.DB {
 // Parameters:
 //   - id: The primary key of the record to update. Must not be empty.
 //   - assignments: The column-value writes, built through the generated
-//     column references (SampleCols.Status.Set(v)) or Assign for dynamic
-//     columns. At least one is required.
+//     column references (SampleCols.Status.Set(v)), or in generic code through
+//     a reference minted for the type parameter. At least one is required.
 //
 // Behavior:
 //   - Automatically updates the updated_at timestamp

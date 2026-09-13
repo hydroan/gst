@@ -10,9 +10,9 @@ import (
 	"github.com/cockroachdb/errors"
 	modelemail "github.com/hydroan/gst/internal/model/email"
 	"github.com/hydroan/gst/internal/requestctx"
+	"github.com/hydroan/gst/internal/types"
 	loggerzap "github.com/hydroan/gst/logger/zap"
 	"github.com/hydroan/gst/service"
-	"github.com/hydroan/gst/types"
 	"github.com/hydroan/gst/types/consts"
 	"github.com/stretchr/testify/require"
 )

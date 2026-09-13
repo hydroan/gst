@@ -293,8 +293,8 @@ Filters: []types.Filter{
 ```
 
 条件用 `gg gen` 为模型生成的列引用来写（上例的 `appmodel.SampleCols`），列名和值类型都在
-编译期校验；拿不到具体模型的代码（例如对模型泛型的工具函数）改用 `types.FilterEq`、
-`types.FilterLike` 这类接收字符串列名的构造器。
+编译期校验；拿不到具体模型的泛型工具函数用自己的类型参数现造列引用，例如
+`types.NewColumn[M, string]("id").In(ids...)`，值类型同样在编译期校验。
 
 `types.FilterAnd` 用于在 OR 组内嵌套 AND，配合出 `(a AND b) OR (c AND d)`：
 
@@ -452,7 +452,7 @@ err := database.Select[*appmodel.Record, categoryTotal](ctx,
 `types.FilterExists` / `FilterNotExists` 半连接；要把另一张表的字段带进结果行，看下面的
 「连接」小节，框架只放行每行最多对上一行的连接，join 到一对多子表让 `SUM` 静默翻倍的
 那条路写不出来。子表与外层的关联列对用 `子表列.EqCol(外层列)`
-作为谓词传入（字符串列写 `types.FilterEqCol`），复合键就多传几对，每一对都
+作为谓词传入，复合键就多传几对，每一对都
 必须成立；没有任何关联对的子查询按 fail closed 处理。它们是普通的 `Filter` 算子，
 `List`/`Count`/`Export` 同样能用。
 
@@ -661,7 +661,7 @@ err := database.Select[*appmodel.Record, recordWithTags](ctx, RecordCols.ID, tag
 | `ErrJoinSelectBucketKey` | 不按时间桶分组后再连，同粒度的汇总改用窗口 |
 | `ErrNestedSelectOrdered` | 子投影去掉 `OrderBy`、`Limit`、`Page`，它们属于主查询 |
 | `ErrJoinSelectInstance` | 子投影用 `SelectOn` 开在主查询的实例上 |
-| `ErrJoinNoCorrelation` | ON 里至少一对 `EqCol` 连到主查询或更早声明的来源：连到后面才声明的来源就调整声明顺序；字符串版 `FilterEqCol` 不带表名连不上，改用列引用 |
+| `ErrJoinNoCorrelation` | ON 里至少一对 `EqCol` 连到主查询或更早声明的来源：连到后面才声明的来源就调整声明顺序 |
 | `ErrJoinNotUnique` | ON 用 `EqCol`、常量等值钉住子投影的全部分组键 |
 | `ErrJoinSelectColumn` | 主查询只能读子投影投影出来的项，把同一个项（共享变量）再传一遍，别改它的别名，也别加 `Over`/`Where`；ON 和 `Where` 里只能用它的键列，别的条件写进子投影 |
 | `ErrDuplicateAlias`，两个子投影投了同一个项 | 给其中一个 `As` 别的别名 |
