@@ -462,6 +462,15 @@ func TestSelectBuildErrors(t *testing.T) {
 		rows := make([]missing, 0)
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, missing](ctx, TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum().As("total")).
 			Scan(&rows), database.ErrResultFieldMissing)
+
+		// Two aliases without a field name the same one on every build: the
+		// aliases are walked in order, not in the order a map yields them.
+		for range 20 {
+			err := database.Select[*TestAggregateRecord, missing](ctx, TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum().As("total"), TestAggregateRecordCols.Amount.Max().As("peak")).
+				Scan(&rows)
+			require.ErrorIs(t, err, database.ErrResultFieldMissing)
+			require.ErrorContains(t, err, `has no field for "peak"`)
+		}
 	})
 
 	t.Run("ProjectionMissingAliasForResultField", func(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"maps"
 	"reflect"
 	"regexp"
 	"slices"
@@ -1032,7 +1033,9 @@ func (a *selector[M, R]) validateResultRow(aliases map[string]struct{}, shape pr
 		order = append(order, f.DBName)
 		byName[f.DBName] = struct{}{}
 	}
-	for alias := range aliases {
+	// The aliases are walked in order, so a result row missing several of them
+	// always names the same one instead of whichever the map yielded first.
+	for _, alias := range slices.Sorted(maps.Keys(aliases)) {
 		if _, ok := byName[alias]; !ok {
 			return nil, errors.Wrapf(ErrResultFieldMissing, "%s has no field for %q", typ, alias)
 		}

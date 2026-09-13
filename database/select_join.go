@@ -1,7 +1,9 @@
 package database
 
 import (
+	"maps"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -133,12 +135,14 @@ func (a *selector[M, R]) resolveJoins(shape *projectionShape) error {
 		// A derived table read before this source has its select's keys for
 		// columns; an ON tied to another column of that select's model has
 		// nothing to tie to, and is refused here rather than read as a key.
-		for table, columns := range jt.joinColumns {
+		// The ON columns are walked in order, so a source tied to several
+		// columns that are no keys always reports the same one.
+		for _, table := range slices.Sorted(maps.Keys(jt.joinColumns)) {
 			other, ok := shape.joined[table]
 			if !ok || other.sub == nil {
 				continue
 			}
-			for column := range columns {
+			for _, column := range slices.Sorted(maps.Keys(jt.joinColumns[table])) {
 				if _, key := keyAliasOf(other, column); !key {
 					return errors.Wrapf(ErrJoinSelectColumn, "%q ties to %q of %q, which is not a key of that joined select; the select is joined on %s", jt.table, column, table, strings.Join(sortedColumns(other.info.columns), ", "))
 				}
@@ -682,8 +686,10 @@ func (a *selector[M, R]) groupDerivedTerms(shape *projectionShape) error {
 	shape.keys = append(shape.keys, derived...)
 	for _, t := range derived {
 		jt, _ := a.derivedOf(t, *shape)
-		for table, columns := range jt.joinColumns {
-			for column := range columns {
+		// Walked in order, so a projection that groups by none of several
+		// joined-on columns always reports the same one.
+		for _, table := range slices.Sorted(maps.Keys(jt.joinColumns)) {
+			for _, column := range slices.Sorted(maps.Keys(jt.joinColumns[table])) {
 				if a.groupsBy(table, column, *shape) {
 					continue
 				}
