@@ -89,6 +89,53 @@ func TestColumnValues(t *testing.T) {
 	})
 }
 
+func TestColumnExcludedValues(t *testing.T) {
+	status := types.NewColumn[sampleTable, sampleStatus]("status")
+
+	t.Run("ReadsParsedAndBuiltExclusionFilters", func(t *testing.T) {
+		values, err := status.ExcludedValues([]types.Filter{
+			types.NewFilter("", "status", types.FilterOpNe, "active"),
+			types.NewFilter("", "amount", types.FilterOpGt, "1"),
+			types.NewFilter("", "status", types.FilterOpNotIn, []string{"removed", "active"}),
+			status.NotIn(sampleStatusRemoved),
+		})
+		require.NoError(t, err)
+		require.Equal(t, []sampleStatus{sampleStatusActive, sampleStatusRemoved, sampleStatusActive, sampleStatusRemoved}, values,
+			"filters on other columns are ignored and the values keep filter order")
+	})
+
+	t.Run("ConvertsParsedValuesToTheColumnType", func(t *testing.T) {
+		// A parsed filter carries the canonical form the URL parser
+		// normalized it to: the UTC wall clock in FilterTimeLayout for a time,
+		// the string spellings of a number for the members of a notin.
+		at := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
+		times, err := types.NewTimeColumn[sampleTable]("created_at").ExcludedValues([]types.Filter{
+			types.NewFilter("", "created_at", types.FilterOpNe, at.Format(types.FilterTimeLayout)),
+		})
+		require.NoError(t, err)
+		require.Equal(t, []time.Time{at}, times)
+
+		amounts, err := types.NewNumericColumn[sampleTable, int64]("amount").ExcludedValues([]types.Filter{
+			types.NewFilter("", "amount", types.FilterOpNotIn, []string{"10", "-3"}),
+		})
+		require.NoError(t, err)
+		require.Equal(t, []int64{10, -3}, amounts)
+	})
+
+	t.Run("RefusesOtherOperators", func(t *testing.T) {
+		_, err := status.ExcludedValues([]types.Filter{status.Eq(sampleStatusActive)})
+		require.ErrorContains(t, err, `operator "eq" is not an exclusion filter`)
+	})
+
+	t.Run("RefusesValuesThatDoNotConvert", func(t *testing.T) {
+		amount := types.NewNumericColumn[sampleTable, int8]("amount")
+		_, err := amount.ExcludedValues([]types.Filter{types.NewFilter("", "amount", types.FilterOpNe, "ten")})
+		require.ErrorContains(t, err, `column "amount"`)
+		_, err = amount.ExcludedValues([]types.Filter{types.NewFilter("", "amount", types.FilterOpNotIn, "1,2")})
+		require.ErrorContains(t, err, "is not a list")
+	})
+}
+
 func TestColumnBounds(t *testing.T) {
 	createdAt := types.NewTimeColumn[sampleTable]("created_at")
 	from := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)

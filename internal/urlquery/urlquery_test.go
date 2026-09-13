@@ -553,15 +553,17 @@ func TestOrders(t *testing.T) {
 
 // TestParsedConditionsReadThroughColumnReferences pins the contract between
 // the parser and the column reference readers: what Filters and Orders produce
-// reads back through Split, Values, Bounds and SortsBy, with every value in the
-// column's own type.
+// reads back through Split, Values, ExcludedValues, Bounds and SortsBy, with
+// every value in the column's own type.
 func TestParsedConditionsReadThroughColumnReferences(t *testing.T) {
 	query := url.Values{
-		"age[in]":         {"20,30"},
-		"enabled[eq]":     {"true"},
-		"expired_at[gte]": {"2026-09-01T08:00:00+08:00"},
-		"expired_at[lt]":  {"2026-10-01T00:00:00Z"},
-		"_sort_by":        {"age desc"},
+		"age[in]":           {"20,30"},
+		"enabled[eq]":       {"true"},
+		"expired_at[gte]":   {"2026-09-01T08:00:00+08:00"},
+		"expired_at[lt]":    {"2026-10-01T00:00:00Z"},
+		"item_count[notin]": {"1,2"},
+		"remark[ne]":        {"draft"},
+		"_sort_by":          {"age desc"},
 	}
 	filters, err := Filters(query, &filterTestModel{})
 	require.NoError(t, err)
@@ -571,10 +573,12 @@ func TestParsedConditionsReadThroughColumnReferences(t *testing.T) {
 	age := types.NewNumericColumn[*filterTestModel, int]("age")
 	enabled := types.NewColumn[*filterTestModel, bool]("enabled")
 	expiredAt := types.NewTimeColumn[*filterTestModel]("expired_at")
+	itemCount := types.NewNumericColumn[*filterTestModel, int]("item_count")
+	remark := types.NewColumn[*filterTestModel, string]("remark")
 
 	own, rest := expiredAt.Split(filters)
 	require.Len(t, own, 2)
-	require.Len(t, rest, 2)
+	require.Len(t, rest, 4)
 	lower, upper, err := expiredAt.Bounds(own)
 	require.NoError(t, err)
 	require.Equal(t, types.Bound[time.Time]{Value: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), Inclusive: true, Present: true}, lower,
@@ -587,6 +591,13 @@ func TestParsedConditionsReadThroughColumnReferences(t *testing.T) {
 	flags, err := enabled.Values(rest)
 	require.NoError(t, err)
 	require.Equal(t, []bool{true}, flags)
+
+	counts, err := itemCount.ExcludedValues(rest)
+	require.NoError(t, err)
+	require.Equal(t, []int{1, 2}, counts, "the members of a numeric notin read back in the column's own type")
+	remarks, err := remark.ExcludedValues(rest)
+	require.NoError(t, err)
+	require.Equal(t, []string{"draft"}, remarks)
 
 	require.True(t, orders[0].SortsBy(age))
 	require.True(t, orders[0].Descending())

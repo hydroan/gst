@@ -98,9 +98,9 @@ func FilterOps() []FilterOp {
 // keep it well formed: the generated column references, a reference minted
 // for a type parameter in generic code, the grouping, subquery and constant
 // constructors, and the plain-name constructors the framework parses requests
-// with. Table, Column, Op and Value read a filter back; Split, Values and
-// Bounds on a column reference read one column's filters converted to the
-// column's type.
+// with. Table, Column, Op and Value read a filter back; Split, Values,
+// ExcludedValues and Bounds on a column reference read one column's filters
+// converted to the column's type.
 //
 // Table is filled in by a column reference and left empty by the plain-name
 // constructors, which names the queried model's own table. A filter carrying
@@ -147,9 +147,9 @@ func (f Filter) Op() FilterOp { return f.op }
 // Filter. A filter parsed from a request carries the value the parser
 // normalized: the string spelling of a number, the UTC wall clock in
 // FilterTimeLayout for a time, and a []string for the members of in and notin.
-// Values and Bounds on a column reference convert it to the column's type. A
-// slice, group or subquery value is shared with the filter and must not be
-// modified.
+// Values, ExcludedValues and Bounds on a column reference convert it to the
+// column's type. A slice, group or subquery value is shared with the filter
+// and must not be modified.
 func (f Filter) Value() any { return f.value }
 
 // NewFilter builds a filter from its parts, without the shape checks the
@@ -167,9 +167,9 @@ func NewFilter(table, column string, op FilterOp, value any) Filter {
 // resolved. The pinned wall clock is UTC, the one wall clock the framework
 // stores on every dialect.
 //
-// The URL parser writes the layout and Values and Bounds on a column reference
-// read it back, so a service reading a bound goes through them rather than
-// parsing with the layout directly.
+// The URL parser writes the layout and Values, ExcludedValues and Bounds on a
+// column reference read it back, so a service reading a time goes through
+// them rather than parsing with the layout directly.
 const FilterTimeLayout = "2006-01-02 15:04:05.999999999"
 
 // The Filter constructors below build one Filter per operator from a plain

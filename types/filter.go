@@ -44,11 +44,11 @@ const (
 // fields are unexported, so a filter comes from the generated column
 // references, a reference minted for a type parameter, the grouping, subquery
 // and constant constructors below, or the framework's URL parsing. Table,
-// Column, Op and Value read it back; Split, Values and Bounds on a column
-// reference read one column's filters converted to the column's type. A filter
-// carrying another table is applied to that table when the query joins it and
-// fails closed otherwise, and the value is always bound as a statement
-// parameter.
+// Column, Op and Value read it back; Split, Values, ExcludedValues and Bounds
+// on a column reference read one column's filters converted to the column's
+// type. A filter carrying another table is applied to that table when the
+// query joins it and fails closed otherwise, and the value is always bound as
+// a statement parameter.
 type Filter = itypes.Filter
 
 // FilterFalse matches nothing. It is the condition a permission hook returns

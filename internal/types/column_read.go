@@ -47,26 +47,42 @@ func (c Column[T]) Split(filters []Filter) (own, rest []Filter) {
 // not convert: a condition the caller cannot honor is refused rather than
 // dropped, which would widen the result.
 func (c Column[T]) Values(filters []Filter) ([]T, error) {
+	return c.listValues(filters, FilterOpEq, FilterOpIn, "an equality")
+}
+
+// ExcludedValues returns the values this column's exclusion filters keep it
+// away from: the value of each ne filter and the members of each notin filter,
+// in filter order and converted to the column's type. It is the counterpart of
+// Values: filters on other columns are ignored, and any other operator on this
+// column is an error, as is a value that does not convert.
+func (c Column[T]) ExcludedValues(filters []Filter) ([]T, error) {
+	return c.listValues(filters, FilterOpNe, FilterOpNotIn, "an exclusion")
+}
+
+// listValues reads the values this column's filters carry under a pair of
+// operators: single, whose filter holds one value, and list, whose filter
+// holds several. kind names the pair in the error for any other operator.
+func (c Column[T]) listValues(filters []Filter, single, list FilterOp, kind string) ([]T, error) {
 	var values []T
 	for _, f := range filters {
 		if !namesColumn(f.table, f.column, c) {
 			continue
 		}
 		switch f.op {
-		case FilterOpEq:
+		case single:
 			value, err := filterValueAs[T](f.value)
 			if err != nil {
 				return nil, errors.Wrapf(err, "column %q", c.name)
 			}
 			values = append(values, value)
-		case FilterOpIn:
+		case list:
 			members, err := filterMembersAs[T](f.value)
 			if err != nil {
 				return nil, errors.Wrapf(err, "column %q", c.name)
 			}
 			values = append(values, members...)
 		default:
-			return nil, errors.Newf("column %q: operator %q is not an equality filter", c.name, f.op)
+			return nil, errors.Newf("column %q: operator %q is not %s filter", c.name, f.op, kind)
 		}
 	}
 	return values, nil
